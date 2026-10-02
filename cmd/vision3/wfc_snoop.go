@@ -1,0 +1,204 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"sync/atomic"
+	"time"
+
+	"github.com/gliderlabs/ssh"
+	gossh "golang.org/x/crypto/ssh"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
+	"github.com/ViSiON-3/vision-3-bbs/internal/session"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
+)
+
+// chatStartWait bounds how long a chat request waits for the caller's
+// session to reach an input point.
+const chatStartWait = 3 * time.Second
+
+// snoopRefuseWait bounds how long a refused wfc-snoop channel waits for the
+// client's request line before answering.
+const snoopRefuseWait = 2 * time.Second
+
+// nodeTap finds the tap of the caller on nodeID whose session started at
+// connectedAt, refusing a node that now holds someone else.
+func nodeTap(reg *session.SessionRegistry, nodeID int, connectedAt time.Time) (*session.BbsSession, *snoop.Tap, error) {
+	s := reg.Get(nodeID)
+	if s == nil {
+		return nil, nil, fmt.Errorf("no caller on node %d", nodeID)
+	}
+	s.Mutex.RLock()
+	started, tap := s.StartTime, s.Tap
+	s.Mutex.RUnlock()
+	if !connectedAt.IsZero() && !started.Equal(connectedAt) {
+		return nil, nil, fmt.Errorf("node %d now has a different caller; select again", nodeID)
+	}
+	if tap == nil {
+		return nil, nil, fmt.Errorf("node %d cannot be snooped", nodeID)
+	}
+	return s, tap, nil
+}
+
+func snoopTarget(reg *session.SessionRegistry) admin.SnoopTarget {
+	return func(req admin.SnoopRequest) (*snoop.Tap, admin.SnoopHeader, error) {
+		s, tap, err := nodeTap(reg, req.NodeID, req.ConnectedAt)
+		if err != nil {
+			return nil, admin.SnoopHeader{}, err
+		}
+		hdr := admin.SnoopHeader{OutputMode: "utf8"}
+		hdr.Width, hdr.Height = s.TermSize()
+		s.Mutex.RLock()
+		if s.User != nil {
+			hdr.Handle = s.User.Handle
+		}
+		s.Mutex.RUnlock()
+		if tap.CP437() {
+			hdr.OutputMode = "cp437"
+		}
+		return tap, hdr, nil
+	}
+}
+
+// liveTermSize reports the caller's terminal size. The width is the window's
+// physical width: termWidth becomes the user's saved width preference after
+// login, which can be narrower than the window, and the snoop console must
+// wrap where the caller's terminal does. Resizes and the post-login size
+// prompts keep height current.
+func liveTermSize(physicalWidth, height *atomic.Int32) func() (int, int) {
+	return func() (int, int) { return int(physicalWidth.Load()), int(height.Load()) }
+}
+
+func typeInHook(reg *session.SessionRegistry) func(string, int, time.Time, bool) error {
+	return func(sysop string, nodeID int, connectedAt time.Time, on bool) error {
+		_, tap, err := nodeTap(reg, nodeID, connectedAt)
+		if err != nil {
+			return err
+		}
+		if !on {
+			held, injected, ok := tap.ReleaseKeyboard(sysop)
+			if !ok {
+				return snoop.ErrNotHolder
+			}
+			slog.Info("wfc-snoop: type-in off", "sysop", sysop, "node", nodeID,
+				"duration", held.Round(time.Second), "bytes", injected)
+			return nil
+		}
+		if err := tap.TakeKeyboard(sysop); err != nil {
+			return err
+		}
+		slog.Info("wfc-snoop: type-in on", "sysop", sysop, "node", nodeID)
+		return nil
+	}
+}
+
+func chatHook(reg *session.SessionRegistry) func(string, int, time.Time, bool) (bool, error) {
+	return func(sysop string, nodeID int, connectedAt time.Time, start bool) (bool, error) {
+		s, tap, err := nodeTap(reg, nodeID, connectedAt)
+		if err != nil {
+			return false, err
+		}
+		if !start {
+			if err := tap.StopChat(sysop); err != nil {
+				return false, err
+			}
+			slog.Info("wfc-snoop: chat end requested", "sysop", sysop, "node", nodeID)
+			return false, nil
+		}
+		started, err := tap.RequestChat(sysop, chatStartWait)
+		if err != nil {
+			return false, err
+		}
+		if !started {
+			return false, nil
+		}
+		slog.Info("wfc-snoop: chat requested", "sysop", sysop, "node", nodeID)
+		if adminServer != nil {
+			var handle string
+			s.Mutex.RLock()
+			if s.User != nil {
+				handle = s.User.Handle
+			}
+			s.Mutex.RUnlock()
+			adminServer.ClearPage(nodeID, handle, "answered")
+		}
+		return true, nil
+	}
+}
+
+// wfcSnoopSubsystem serves one wfc-snoop channel. Authorization matches
+// wfc-admin and is re-checked for the life of the channel. A read-only
+// account is refused, and loses an open channel at the next re-check.
+func wfcSnoopSubsystem(sess ssh.Session) {
+	handle, keyBytes := wfcVerifiedIdentity(sess.Context())
+	if handle == "" || !authorizeAdminKey(handle, keyBytes) {
+		slog.Warn("wfc-snoop: access denied", "user", handle, "addr", sess.RemoteAddr())
+		_ = admin.RefuseSnoop(sess, "access denied", snoopRefuseWait) // best-effort notice to client
+		return
+	}
+	if wfcReadOnly(handle) {
+		slog.Warn("wfc-snoop: refused, read-only account", "user", handle, "addr", sess.RemoteAddr())
+		_ = admin.RefuseSnoop(sess, admin.ErrReadOnly.Error(), snoopRefuseWait) // best-effort notice to client
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// A vanished console must release the keyboard it may hold.
+	if conn, ok := sess.Context().Value(ssh.ContextKeyConn).(*gossh.ServerConn); ok && conn != nil {
+		stopKA := admin.KeepAlive(conn, admin.DefaultKeepAliveInterval, admin.DefaultKeepAliveTimeout, func(err error) {
+			slog.Info("wfc-snoop: console stopped responding, closing session",
+				"user", handle, "addr", sess.RemoteAddr(), "reason", err)
+			_ = sess.Close()
+			_ = conn.Close()
+		})
+		defer stopKA()
+	}
+	// Becoming read-only ends the snoop the way a revocation does.
+	refusal := func(h string) string {
+		switch {
+		case !authorizeAdminKey(h, keyBytes):
+			return "revoked"
+		case wfcReadOnly(h):
+			return "read-only"
+		}
+		return ""
+	}
+	// The watcher reads the user record; it must not outlive the session.
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		watchAdminAuthorization(ctx, handle, wfcReauthInterval, refusal, func(reason string) {
+			slog.Warn("wfc-snoop: closing channel", "user", handle, "reason", reason)
+			_ = sess.Close()
+		})
+	}()
+	defer func() {
+		cancel()
+		<-watchDone
+	}()
+	audit := func(msg string, args ...any) { slog.Info("wfc-snoop: "+msg, args...) }
+	if err := admin.ServeSnoop(sess, handle, snoopTarget(sessionRegistry), audit); err != nil {
+		slog.Info("wfc-snoop: channel closed", "user", handle, "reason", err)
+	}
+}
+
+// chatCreditHook reports the sysop chat time credited to the caller on a
+// node, so the WFC time left matches what the caller is allowed.
+func chatCreditHook(reg *session.SessionRegistry) func(int) time.Duration {
+	return func(nodeID int) time.Duration {
+		s := reg.Get(nodeID)
+		if s == nil {
+			return 0
+		}
+		s.Mutex.RLock()
+		credit := s.ChatCredit
+		s.Mutex.RUnlock()
+		if credit == nil {
+			return 0
+		}
+		return credit()
+	}
+}

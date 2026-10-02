@@ -15,6 +15,7 @@ import (
 	"golang.org/x/term"
 
 	// "github.com/ViSiON-3/vision-3-bbs/internal/menu" // Removed menu import
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/types" // Import the new types package
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	// Remove main import main "github.com/ViSiON-3/vision-3-bbs"
@@ -45,6 +46,22 @@ type BbsSession struct {
 	LastActivity time.Time            // Tracks last user input for idle calculation
 	PendingPages []string             // Queued page messages for delivery at next prompt
 	Invisible    bool                 // True if user logged in invisibly (SysOp/CoSysOp only)
+	Tap          *snoop.Tap           // WFC snoop point for this node; nil in tests
+	ChatCredit   func() time.Duration // Sysop chat time credited to the caller; nil means none
+	// Size returns the caller's live terminal size. The SSH session handler
+	// sets it; sessions built without it (tests) report Width and Height.
+	Size func() (width, height int)
+}
+
+// TermSize returns the caller's current terminal size.
+func (s *BbsSession) TermSize() (width, height int) {
+	s.Mutex.RLock()
+	size, width, height := s.Size, s.Width, s.Height
+	s.Mutex.RUnlock()
+	if size != nil {
+		return size()
+	}
+	return width, height
 }
 
 // AddPage queues a page message for delivery at the user's next menu prompt.

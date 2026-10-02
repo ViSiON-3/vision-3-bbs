@@ -118,7 +118,7 @@ func TestViewMockupGeometry(t *testing.T) {
 	if !strings.HasPrefix(r[23], "   └") {
 		t.Errorf("event box bottom: %q", r[23])
 	}
-	want := "[↑/↓] select [TAB] view [PgUp/PgDn] scroll [ENTER] details [Q] quit [K] kick"
+	want := "[↑↓] [TAB] view [PgUp/Dn] [ENTER] details [K] kick [S] snoop [P] pages [Q] quit"
 	if !strings.Contains(r[24], want) || !centred(r[24], want, 2) {
 		t.Errorf("command bar:\n got %q\nwant centred %q", r[24], want)
 	}
@@ -609,6 +609,17 @@ func TestHostOnly(t *testing.T) {
 	for in, want := range cases {
 		if got := hostOnly(in); got != want {
 			t.Errorf("hostOnly(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestEventTextChatState(t *testing.T) {
+	for msg, want := range map[string]string{
+		"on SysOp": "Chat with SysOp started",
+		"off":      "Chat ended",
+	} {
+		if got := eventText(admin.Event{Type: admin.EventChatState, Message: msg}); got != want {
+			t.Errorf("eventText(%q) = %q, want %q", msg, got, want)
 		}
 	}
 }

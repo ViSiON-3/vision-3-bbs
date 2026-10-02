@@ -222,6 +222,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["CFG_AUTOSIG"] = runCfgAutoSig
 	registry["CHAT"] = runChat
 	registry["PAGE"] = runPage
+	registry["PAGESYSOP"] = runPageSysop                     // Page the SysOp: WFC alert, countdown, split-screen chat
 	registry["SPONSORMENU"] = runSponsorMenu                 // Sponsor menu (% key in Messages Menu)
 	registry["SPONSOREDITAREA"] = runSponsorEditArea         // Edit current message area fields
 	registry["PRINTNEWS"] = runPrintNews                     // Display news new since last login (login sequence)

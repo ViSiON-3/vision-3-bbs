@@ -121,17 +121,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 		"|NU": strconv.Itoa(currentUser.NumUploads),
 		"|DK": "0", "|ND": "0", "|TP": "0", "|NM": "0", "|LC": "N/A",
 	}
-	if limit := e.timeLimit(currentUser); limit <= 0 {
-		placeholders["|TL"] = "Unlimited"
-	} else {
-		elapsedSeconds := time.Since(sessionStartTime).Seconds()
-		totalSeconds := float64(limit * 60)
-		remainingSeconds := totalSeconds - elapsedSeconds
-		if remainingSeconds < 0 {
-			remainingSeconds = 0
-		}
-		placeholders["|TL"] = strconv.Itoa(int(remainingSeconds / 60))
-	}
+	placeholders["|TL"] = e.timeLeftPlaceholder(s, currentUser, sessionStartTime)
 
 	// Branch based on output mode to preserve encoding correctness
 	slog.Debug("showstats output mode", "node", nodeNumber, "outputMode", outputMode)

@@ -67,6 +67,7 @@ func sysopOwnedFields(dst, src *User) {
 	// Credentials
 	dst.PasswordHash = src.PasswordHash
 	dst.PublicKeys = src.PublicKeys
+	dst.WFCReadOnly = src.WFCReadOnly
 
 	// Terminal and display preferences
 	dst.ScreenWidth = src.ScreenWidth

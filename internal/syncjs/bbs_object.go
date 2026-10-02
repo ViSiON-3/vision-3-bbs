@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
+	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 	"github.com/dop251/goja"
 )
 
@@ -37,14 +38,13 @@ func registerBBS(vm *goja.Runtime, eng *Engine) {
 
 	// bbs.get_time_left() — seconds remaining in session
 	jsutil.Set(obj, "get_time_left", func(call goja.FunctionCall) goja.Value {
-		elapsed := time.Since(eng.session.SessionStartTime)
-		limit := time.Duration(eng.session.TimeLimit) * time.Minute
-		if limit <= 0 {
-			return vm.ToValue(3600) // default 1 hour if no limit
+		var credit time.Duration
+		if eng.session.ChatCredit != nil {
+			credit = eng.session.ChatCredit()
 		}
-		remaining := limit - elapsed
-		if remaining < 0 {
-			remaining = 0
+		remaining, limited := timeleft.Remaining(eng.session.TimeLimit, eng.session.SessionStartTime, time.Now(), credit)
+		if !limited {
+			return vm.ToValue(3600) // default 1 hour if no limit
 		}
 		return vm.ToValue(int(remaining.Seconds()))
 	})

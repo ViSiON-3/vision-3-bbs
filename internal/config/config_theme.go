@@ -14,6 +14,8 @@ import (
 type ThemeConfig struct {
 	YesNoHighlightColor int `json:"yesNoHighlightColor"`
 	YesNoRegularColor   int `json:"yesNoRegularColor"`
+	ChatSysopColor      int `json:"chatSysopColor"` // sysop pane in split-screen chat
+	ChatUserColor       int `json:"chatUserColor"`  // caller pane in split-screen chat
 	// Add other theme elements here as needed (e.g., default menu colors)
 }
 
@@ -28,6 +30,8 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 	defaultTheme := ThemeConfig{
 		YesNoHighlightColor: 112, // White on Black (inverse)
 		YesNoRegularColor:   15,  // Bright White on Black
+		ChatSysopColor:      11,  // Light cyan
+		ChatUserColor:       10,  // Light green
 	}
 
 	if resolveErr != nil {

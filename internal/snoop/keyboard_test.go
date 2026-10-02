@@ -1,0 +1,626 @@
+package snoop
+
+import (
+	"errors"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestInjectDroppedWithoutKeyboard(t *testing.T) {
+	tp := NewTap()
+	if n := tp.Inject("sysop", []byte("x")); n != 0 {
+		t.Fatalf("accepted %d bytes without the keyboard", n)
+	}
+}
+
+func TestOnlyOneHolder(t *testing.T) {
+	tp := newWatchedTap("a", "b")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tp.TakeKeyboard("b"); !errors.Is(err, ErrKeyboardHeld) {
+		t.Fatalf("second take = %v; want ErrKeyboardHeld", err)
+	}
+	if n := tp.Inject("b", []byte("x")); n != 0 {
+		t.Fatal("non-holder injected")
+	}
+	if n := tp.Inject("a", []byte("hi")); n != 2 {
+		t.Fatalf("holder injected %d", n)
+	}
+	if got := <-tp.Input(); string(got) != "hi" {
+		t.Fatalf("Input = %q", got)
+	}
+	tp.ReleaseKeyboard("a")
+	if err := tp.TakeKeyboard("b"); err != nil {
+		t.Fatalf("take after release: %v", err)
+	}
+}
+
+// frozenClock makes tp's clock stand still until advance is called, like a
+// coarse Windows clock over a short hold.
+func frozenClock(tp *Tap) (advance func(time.Duration)) {
+	t0 := time.Unix(1_700_000_000, 0)
+	tp.mu.Lock()
+	tp.kb.now = func() time.Time { return t0 }
+	tp.mu.Unlock()
+	return func(d time.Duration) {
+		tp.mu.Lock()
+		t0 = t0.Add(d)
+		tp.mu.Unlock()
+	}
+}
+
+func TestReleaseKeyboardReportsHoldAndBytes(t *testing.T) {
+	tp := newWatchedTap("a", "b")
+	advance := frozenClock(tp)
+	if held, n, ok := tp.ReleaseKeyboard("a"); ok || held != 0 || n != 0 {
+		t.Fatalf("release without holding = %v, %d, %v; want 0, 0, false", held, n, ok)
+	}
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	tp.Inject("a", []byte("abc"))
+	tp.Inject("a", []byte("de"))
+	tp.Inject("b", []byte("zzz"))
+	advance(3 * time.Second)
+	if held, n, ok := tp.ReleaseKeyboard("b"); ok || held != 0 || n != 0 {
+		t.Fatalf("non-holder release = %v, %d, %v; want 0, 0, false", held, n, ok)
+	}
+	held, n, ok := tp.ReleaseKeyboard("a")
+	if !ok || held != 3*time.Second || n != 5 {
+		t.Fatalf("release = %v, %d, %v; want 3s, 5, true", held, n, ok)
+	}
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	if held, n, ok := tp.ReleaseKeyboard("a"); !ok || n != 0 || held != 0 {
+		t.Fatalf("second hold = %v, %d, %v; counters were not reset", held, n, ok)
+	}
+}
+
+// A hold too short for the clock to tick still reports that it was held.
+func TestReleaseKeyboardReportsZeroLengthHold(t *testing.T) {
+	tp := newWatchedTap("a")
+	frozenClock(tp)
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	held, n, ok := tp.ReleaseKeyboard("a")
+	if !ok || held != 0 || n != 0 {
+		t.Fatalf("release = %v, %d, %v; want 0, 0, true", held, n, ok)
+	}
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q after release", h)
+	}
+}
+
+func TestRequestChatRefusedInDoorAndTransfer(t *testing.T) {
+	for _, m := range []Mode{ModeDoor, ModeTransfer} {
+		tp := newWatchedTap("a", "b")
+		tp.SetMode(m)
+		_, err := tp.RequestChat("a", 50*time.Millisecond)
+		if !errors.Is(err, ErrBusy) {
+			t.Fatalf("mode %v: err = %v; want ErrBusy", m, err)
+		}
+	}
+}
+
+func TestRequestChatTimesOutWhenNobodyServicesBreakIn(t *testing.T) {
+	tp := newWatchedTap("a", "b")
+	_, err := tp.RequestChat("a", 50*time.Millisecond)
+	if !errors.Is(err, ErrChatNotStarted) {
+		t.Fatalf("err = %v; want ErrChatNotStarted", err)
+	}
+	select {
+	case <-tp.BreakIn():
+		t.Fatal("stale break-in left pending after timeout")
+	default:
+	}
+	if tp.KeyboardHolder() != "" {
+		t.Fatal("keyboard not released after failed chat")
+	}
+}
+
+func TestChatHandshakeAndRouting(t *testing.T) {
+	tp := newWatchedTap("a", "b")
+	go func() {
+		<-tp.BreakIn()
+		tp.ChatBegan()
+	}()
+	if _, err := tp.RequestChat("a", time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if !tp.Chatting() {
+		t.Fatal("not chatting")
+	}
+	tp.Inject("a", []byte("yo"))
+	if got := <-tp.ChatInput(); string(got) != "yo" {
+		t.Fatalf("ChatInput = %q", got)
+	}
+	if err := tp.StopChat("a"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-tp.EndChat():
+	case <-time.After(time.Second):
+		t.Fatal("EndChat not closed")
+	}
+	tp.ChatEnded()
+	if tp.Chatting() {
+		t.Fatal("still chatting")
+	}
+}
+
+func TestReleaseKeyboardEndsChat(t *testing.T) {
+	tp := newWatchedTap("a", "b")
+	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
+	if _, err := tp.RequestChat("a", time.Second); err != nil {
+		t.Fatal(err)
+	}
+	end := tp.EndChat()
+	tp.ReleaseKeyboard("a")
+	select {
+	case <-end:
+	case <-time.After(time.Second):
+		t.Fatal("dropping the sysop must end chat")
+	}
+}
+
+func TestLateChatBeganAfterTimeoutIsRefused(t *testing.T) {
+	tp := newWatchedTap("a", "b")
+	serviced := make(chan struct{})
+	go func() { <-tp.BreakIn(); close(serviced) }()
+	_, err := tp.RequestChat("a", 50*time.Millisecond)
+	if !errors.Is(err, ErrChatNotStarted) {
+		t.Fatalf("err = %v; want ErrChatNotStarted", err)
+	}
+	<-serviced
+	if tp.ChatBegan() {
+		t.Fatal("ChatBegan accepted a request that already timed out")
+	}
+	if tp.Chatting() {
+		t.Fatal("chatting after a refused ChatBegan")
+	}
+
+	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
+	if _, err := tp.RequestChat("b", time.Second); err != nil {
+		t.Fatalf("fresh request: %v", err)
+	}
+	if !tp.Chatting() || tp.KeyboardHolder() != "b" {
+		t.Fatalf("chatting=%v holder=%q; want true, b", tp.Chatting(), tp.KeyboardHolder())
+	}
+}
+
+func TestTimeoutClosesEndChat(t *testing.T) {
+	tp := newWatchedTap("a", "b")
+	done := make(chan error, 1)
+	go func() { _, err := tp.RequestChat("a", 50*time.Millisecond); done <- err }()
+	<-tp.BreakIn()
+	end := tp.EndChat()
+	if err := <-done; !errors.Is(err, ErrChatNotStarted) {
+		t.Fatalf("err = %v", err)
+	}
+	select {
+	case <-end:
+	default:
+		t.Fatal("EndChat of the expired request not closed")
+	}
+}
+
+func TestInputReadyFiresOnInject(t *testing.T) {
+	tp := newWatchedTap("a", "b")
+	_ = tp.TakeKeyboard("a")
+	tp.Inject("a", []byte("x"))
+	select {
+	case <-tp.InputReady():
+	default:
+		t.Fatal("InputReady not signalled")
+	}
+}
+
+// newWatchedTap returns a tap with one open watch per handle.
+func newWatchedTap(handles ...string) *Tap {
+	tp := NewTap()
+	for _, h := range handles {
+		tp.AttachAs(h)
+	}
+	return tp
+}
+
+func TestTakeKeyboardNeedsWatch(t *testing.T) {
+	tp := NewTap()
+	if err := tp.TakeKeyboard("a"); !errors.Is(err, ErrNotWatching) {
+		t.Fatalf("TakeKeyboard err = %v, want ErrNotWatching", err)
+	}
+	if _, err := tp.RequestChat("a", 50*time.Millisecond); !errors.Is(err, ErrNotWatching) {
+		t.Fatalf("RequestChat err = %v, want ErrNotWatching", err)
+	}
+	tp.Attach() // an anonymous watch does not count for a handle
+	if err := tp.TakeKeyboard("a"); !errors.Is(err, ErrNotWatching) {
+		t.Fatalf("TakeKeyboard with anonymous watch err = %v", err)
+	}
+}
+
+func TestLastWatcherClosingReleasesKeyboardAndChat(t *testing.T) {
+	tp := NewTap()
+	w := tp.AttachAs("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	end := tp.EndChat()
+	w.Close()
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q after last watcher closed", h)
+	}
+	select {
+	case <-end:
+	default:
+		t.Fatal("EndChat not closed")
+	}
+}
+
+func TestOtherWatcherClosingKeepsKeyboard(t *testing.T) {
+	tp := NewTap()
+	w1, w2 := tp.AttachAs("a"), tp.AttachAs("a")
+	other := tp.AttachAs("b")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	w1.Close()
+	other.Close()
+	if h := tp.KeyboardHolder(); h != "a" {
+		t.Fatalf("holder = %q, want a", h)
+	}
+	w2.Close()
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q after last watcher closed", h)
+	}
+}
+
+func TestTapCloseDropsKeyboardAndEndsChat(t *testing.T) {
+	tp := NewTap()
+	tp.AttachAs("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	end := tp.EndChat()
+	tp.Close()
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q after Close", h)
+	}
+	select {
+	case <-end:
+	default:
+		t.Fatal("EndChat not closed")
+	}
+}
+
+func beginChat(t *testing.T, tp *Tap, handle string) {
+	t.Helper()
+	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
+	if _, err := tp.RequestChat(handle, time.Second); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestChatEndedReleasesKeyboardChatTook(t *testing.T) {
+	tp := newWatchedTap("a")
+	beginChat(t, tp, "a")
+	tp.ChatEnded()
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder after chat = %q; want none", h)
+	}
+	if n := tp.Inject("a", []byte("x")); n != 0 {
+		t.Fatal("sysop keys became type-in after chat")
+	}
+}
+
+func TestChatEndedByHolderKeepsTypeInHold(t *testing.T) {
+	tp := newWatchedTap("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	beginChat(t, tp, "a")
+	if err := tp.StopChat("a"); err != nil {
+		t.Fatal(err)
+	}
+	tp.ChatEnded()
+	if h := tp.KeyboardHolder(); h != "a" {
+		t.Fatalf("holder after chat = %q; want a", h)
+	}
+}
+
+func TestChatEndedByCallerDropsTypeInHold(t *testing.T) {
+	tp := newWatchedTap("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	beginChat(t, tp, "a")
+	tp.ChatEnded() // the caller pressed ESC ESC
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder after caller ended chat = %q; want none", h)
+	}
+	if n := tp.Inject("a", []byte("ok, bye\r")); n != 0 {
+		t.Fatalf("Inject after caller ended chat = %d; want 0", n)
+	}
+	select {
+	case b := <-tp.Input():
+		t.Fatalf("type-in queued after caller ended chat: %q", b)
+	default:
+	}
+}
+
+func TestChatBeganDropsQueuedTypeIn(t *testing.T) {
+	tp := newWatchedTap("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	tp.Inject("a", []byte("queued"))
+	beginChat(t, tp, "a")
+	select {
+	case b := <-tp.Input():
+		t.Fatalf("type-in still queued in chat: %q", b)
+	default:
+	}
+	select {
+	case <-tp.InputReady():
+		t.Fatal("ready token left after drain")
+	default:
+	}
+}
+
+func TestRequestChatRefusedInTeleconference(t *testing.T) {
+	tp := newWatchedTap("a")
+	tp.SetMode(ModeTeleconf)
+	_, err := tp.RequestChat("a", 50*time.Millisecond)
+	if !errors.Is(err, ErrBusy) {
+		t.Fatalf("err = %v; want ErrBusy", err)
+	}
+	if want := "caller is busy: in a teleconference"; err.Error() != want {
+		t.Fatalf("err = %q; want %q", err, want)
+	}
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatalf("type-in refused in teleconference: %v", err)
+	}
+}
+
+func TestChatEndedLeavesLaterHolder(t *testing.T) {
+	tp := newWatchedTap("a", "b")
+	beginChat(t, tp, "a")
+	tp.ReleaseKeyboard("a")
+	if err := tp.TakeKeyboard("b"); err != nil {
+		t.Fatal(err)
+	}
+	tp.ChatEnded()
+	if h := tp.KeyboardHolder(); h != "b" {
+		t.Fatalf("holder after chat = %q; want b", h)
+	}
+}
+
+func TestChatBeganDropsStaleChatInput(t *testing.T) {
+	tp := newWatchedTap("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	beginChat(t, tp, "a")
+	tp.Inject("a", []byte("stale"))
+	tp.ChatEnded()
+	beginChat(t, tp, "a")
+	tp.Inject("a", []byte("fresh"))
+	if got := <-tp.ChatInput(); string(got) != "fresh" {
+		t.Fatalf("ChatInput = %q; want fresh", got)
+	}
+}
+
+func TestChatEndedKeepsHoldRetakenForTypeIn(t *testing.T) {
+	tp := newWatchedTap("a")
+	beginChat(t, tp, "a")
+	tp.ReleaseKeyboard("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	tp.ChatEnded()
+	if h := tp.KeyboardHolder(); h != "a" {
+		t.Fatalf("holder after chat = %q; want a", h)
+	}
+}
+
+func TestChatsCountsStartedChats(t *testing.T) {
+	tp := newWatchedTap("a", "b")
+	if tp.Chats() != 0 {
+		t.Fatal("fresh tap has chats")
+	}
+	if tp.ChatBegan() {
+		t.Fatal("ChatBegan true with no request")
+	}
+	if tp.Chats() != 0 {
+		t.Fatal("refused ChatBegan was counted")
+	}
+	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
+	if _, err := tp.RequestChat("a", time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if tp.Chats() != 1 {
+		t.Fatalf("chats %d, want 1", tp.Chats())
+	}
+}
+
+func TestChatEndedReportsHoldDroppedWhenCallerEnds(t *testing.T) {
+	tp := newWatchedTap("a")
+	frozenClock(tp) // a zero-length hold must still be reported
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	if n := tp.Inject("a", []byte("hello")); n != 5 {
+		t.Fatalf("Inject = %d", n)
+	}
+	beginChat(t, tp, "a")
+	dropped, held, injected := tp.ChatEnded()
+	if dropped != "a" || injected != 5 || held != 0 {
+		t.Fatalf("ChatEnded = %q, %v, %d; want a, 0, 5", dropped, held, injected)
+	}
+}
+
+func TestChatEndedReportsNothingForChatOnlyHold(t *testing.T) {
+	tp := newWatchedTap("a")
+	beginChat(t, tp, "a") // RequestChat took the free keyboard
+	if dropped, _, _ := tp.ChatEnded(); dropped != "" {
+		t.Fatalf("dropped = %q for a hold taken only for chat", dropped)
+	}
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q", h)
+	}
+}
+
+func TestChatEndedReportsNothingWhenHolderEnds(t *testing.T) {
+	tp := newWatchedTap("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	beginChat(t, tp, "a")
+	if err := tp.StopChat("a"); err != nil {
+		t.Fatal(err)
+	}
+	if dropped, _, _ := tp.ChatEnded(); dropped != "" {
+		t.Fatalf("dropped = %q after the holder ended chat", dropped)
+	}
+}
+
+func TestChatBeganRefusedWhenCallerLeftBBS(t *testing.T) {
+	tp := newWatchedTap("a")
+	accepted := make(chan bool, 1)
+	go func() {
+		<-tp.BreakIn()
+		tp.SetMode(ModeDoor)
+		accepted <- tp.ChatBegan()
+	}()
+	start := time.Now()
+	started, err := tp.RequestChat("a", 5*time.Second)
+	select {
+	case ok := <-accepted:
+		if ok {
+			t.Fatal("ChatBegan accepted after the caller entered a door")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("ChatBegan never returned")
+	}
+	if !errors.Is(err, ErrBusy) || !strings.Contains(err.Error(), "door") {
+		t.Fatalf("err = %v, want ErrBusy naming the door", err)
+	}
+	if started {
+		t.Fatal("started with an error")
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatalf("refusal took %v; RequestChat waited for the timeout", time.Since(start))
+	}
+	if tp.Chatting() || tp.Chats() != 0 {
+		t.Fatal("a chat opened")
+	}
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q; the request's keyboard was not released", h)
+	}
+	select {
+	case <-tp.BreakIn():
+		t.Fatal("break-in still pending")
+	default:
+	}
+}
+
+func TestChatBeganRefusalKeepsTypeInHold(t *testing.T) {
+	tp := newWatchedTap("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		<-tp.BreakIn()
+		tp.SetMode(ModeTransfer)
+		tp.ChatBegan()
+	}()
+	if _, err := tp.RequestChat("a", 5*time.Second); !errors.Is(err, ErrBusy) {
+		t.Fatalf("err = %v, want ErrBusy", err)
+	}
+	if h := tp.KeyboardHolder(); h != "a" {
+		t.Fatalf("holder = %q; want the earlier type-in hold kept", h)
+	}
+}
+
+func TestRequestChatOnRunningChatIsNotStarted(t *testing.T) {
+	tp := newWatchedTap("a")
+	beginChat(t, tp, "a")
+	started, err := tp.RequestChat("a", 50*time.Millisecond)
+	if err != nil || started {
+		t.Fatalf("RequestChat on running chat = %v, %v; want false, nil", started, err)
+	}
+}
+
+// A refusal that lands after RequestChat's timer fired, but before it took
+// the lock, must still be the error RequestChat returns.
+func TestRequestChatReturnsRefusalThatTiesWithTimeout(t *testing.T) {
+	tp := newWatchedTap("a")
+	type result struct {
+		started bool
+		err     error
+	}
+	got := make(chan result, 1)
+	go func() {
+		started, err := tp.RequestChat("a", 20*time.Millisecond)
+		got <- result{started, err}
+	}()
+	<-tp.BreakIn()
+	tp.SetMode(ModeDoor)
+	tp.mu.Lock()
+	time.Sleep(100 * time.Millisecond) // the timer fires while the lock is held
+	accepted := tp.chatBeganLocked()
+	tp.mu.Unlock()
+	if accepted {
+		t.Fatal("ChatBegan accepted after the caller entered a door")
+	}
+	r := <-got
+	if r.started || !errors.Is(r.err, ErrBusy) {
+		t.Fatalf("RequestChat = %v, %v; want ErrBusy", r.started, r.err)
+	}
+	if h := tp.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q; the request's keyboard was not released", h)
+	}
+}
+
+func TestRequestChatRefusedWhilePending(t *testing.T) {
+	tp := newWatchedTap("a")
+	first := make(chan error, 1)
+	go func() {
+		started, err := tp.RequestChat("a", 5*time.Second)
+		if err == nil && !started {
+			err = errors.New("not started")
+		}
+		first <- err
+	}()
+	for pending := false; !pending; {
+		tp.mu.Lock()
+		pending = tp.kb.req != nil
+		tp.mu.Unlock()
+		if !pending {
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	if started, err := tp.RequestChat("a", time.Second); started || !errors.Is(err, ErrChatPending) {
+		t.Fatalf("second RequestChat = %v, %v; want false, ErrChatPending", started, err)
+	}
+	end := tp.EndChat()
+	<-tp.BreakIn()
+	if !tp.ChatBegan() {
+		t.Fatal("ChatBegan refused the first request")
+	}
+	if err := <-first; err != nil {
+		t.Fatalf("first RequestChat: %v", err)
+	}
+	select {
+	case <-end:
+		t.Fatal("chat ended by the refused request")
+	default:
+	}
+	if !tp.Chatting() || tp.KeyboardHolder() != "a" {
+		t.Fatalf("chatting=%v holder=%q; want true, a", tp.Chatting(), tp.KeyboardHolder())
+	}
+}

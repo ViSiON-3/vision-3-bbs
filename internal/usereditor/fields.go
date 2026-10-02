@@ -146,7 +146,7 @@ func editFields() []fieldDef {
 			},
 		},
 
-		// Right column (x=50, rows 4-16)
+		// Right column (x=50, rows 4-15)
 		{
 			Label: "Validated", Type: ftYesNo, Col: 50, Row: 4, Width: 1,
 			Get: func(u *user.User) string { return uitext.BoolToYN(u.Validated) },
@@ -238,6 +238,13 @@ func editFields() []fieldDef {
 		{
 			Label: "Auto Purge", Type: ftDisplay, Col: 50, Row: 14, Width: 16,
 			// Get is set dynamically by Model after creation (needs retentionDays)
+		},
+		{
+			// Limits the account's WFC console to watching; the daemon
+			// refuses its kick, snoop, type-in and chat.
+			Label: "WFC Read Only", Type: ftYesNo, Col: 50, Row: 15, Width: 1,
+			Get: func(u *user.User) string { return uitext.BoolToYN(u.WFCReadOnly) },
+			Set: func(u *user.User, val string) error { u.WFCReadOnly = uitext.YNToBool(val); return nil },
 		},
 
 		// Row 17: separator rendered by view_edit.go

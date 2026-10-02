@@ -337,7 +337,7 @@ func TestDoorDeadline(t *testing.T) {
 	start := now.Add(-10 * time.Minute)
 
 	t.Run("no limit means no deadline", func(t *testing.T) {
-		deadline, timeout, expired := doorDeadline(0, start, 0, now)
+		deadline, timeout, expired := doorDeadline(0, start, 0, now, 0)
 		if !deadline.IsZero() || expired {
 			t.Errorf("got deadline=%v expired=%v, want no limit", deadline, expired)
 		}
@@ -347,7 +347,7 @@ func TestDoorDeadline(t *testing.T) {
 	})
 
 	t.Run("deadline is absolute, not relative to the dial", func(t *testing.T) {
-		deadline, _, expired := doorDeadline(30, start, 0, now)
+		deadline, _, expired := doorDeadline(30, start, 0, now, 0)
 		if expired {
 			t.Fatal("expired with 20 minutes left")
 		}
@@ -358,17 +358,17 @@ func TestDoorDeadline(t *testing.T) {
 	})
 
 	t.Run("exhausted limit is refused", func(t *testing.T) {
-		if _, _, expired := doorDeadline(10, start, 0, now); !expired {
+		if _, _, expired := doorDeadline(10, start, 0, now, 0); !expired {
 			t.Error("a caller whose limit ran out exactly now should be refused")
 		}
-		if _, _, expired := doorDeadline(5, start, 0, now); !expired {
+		if _, _, expired := doorDeadline(5, start, 0, now, 0); !expired {
 			t.Error("a caller past their limit should be refused")
 		}
 	})
 
 	t.Run("connect timeout is capped to the time left", func(t *testing.T) {
 		// 30s left, but the door is configured to wait two minutes.
-		_, timeout, expired := doorDeadline(10, now.Add(-9*time.Minute-30*time.Second), 120, now)
+		_, timeout, expired := doorDeadline(10, now.Add(-9*time.Minute-30*time.Second), 120, now, 0)
 		if expired {
 			t.Fatal("expired with 30s left")
 		}
@@ -378,7 +378,7 @@ func TestDoorDeadline(t *testing.T) {
 	})
 
 	t.Run("configured timeout is kept when it fits", func(t *testing.T) {
-		_, timeout, _ := doorDeadline(30, start, 5, now)
+		_, timeout, _ := doorDeadline(30, start, 5, now, 0)
 		if timeout != 5*time.Second {
 			t.Errorf("timeout = %v, want the configured 5s", timeout)
 		}
@@ -396,7 +396,7 @@ func TestDoorDeadline(t *testing.T) {
 			{"well past the limit", 1, start},
 			{"a hair left", 10, start.Add(time.Nanosecond)},
 		} {
-			_, timeout, expired := doorDeadline(tc.limit, tc.start, 60, now)
+			_, timeout, expired := doorDeadline(tc.limit, tc.start, 60, now, 0)
 			if expired {
 				continue // refused before dialling, which is the point
 			}

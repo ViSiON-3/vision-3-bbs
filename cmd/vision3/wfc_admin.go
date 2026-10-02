@@ -4,20 +4,23 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // wfcReauthInterval is how often an open admin session re-checks that its
 // authorization still holds (key not revoked, level not lowered, WFC not
 // disabled). Revocation therefore takes effect within this window instead of
-// only at the next connection.
-const wfcReauthInterval = 30 * time.Second
+// only at the next connection. Tests shorten it.
+var wfcReauthInterval = 30 * time.Second
 
 // adminServer is the WFC admin server instance shared across all admin sessions.
 var adminServer *admin.Server
@@ -32,51 +35,118 @@ var adminMinLevel func() int
 // without a restart. Nil (not yet wired, or a test that left it unset) denies.
 var wfcEnabled func() bool
 
-// wfcAdminHandleKey is the context key used to stash the admin handle during
-// public-key authentication so wfcAdminSubsystem can re-verify it.
-type wfcAdminHandleKey struct{}
+// Connection permission extensions set by wfcVerifiedKey. They exist only
+// on a connection whose client signed with a WFC admin key.
+const (
+	wfcHandleExt = "wfc-handle"
+	wfcKeyExt    = "wfc-key" // marshaled public key
+)
 
-// wfcAdminPubKey is the context key used to stash the marshaled public key that
-// authenticated the session, so authorization can be re-verified against the
-// key itself — not just the account — for the life of the session.
-type wfcAdminPubKey struct{}
-
-// wfcPublicKeyHandler is the SSH-level public-key auth handler for admin clients.
-// If the key is registered to a BBS user with sufficient access level, the
-// handle is stashed in the context and the function returns true (allowing the
-// connection). Otherwise it returns false so non-admin keys fall through to the
-// normal caller login flow via password auth.
-func wfcPublicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
-	if userMgr == nil {
-		return false
+// syncWFCUsers folds ./ue and helper edits to users.json into userMgr before
+// a WFC access check, so they apply with no caller online. It reads the file
+// at most once a second.
+func syncWFCUsers() {
+	if userMgr != nil {
+		userMgr.SyncFromDisk()
 	}
+}
+
+// wfcKeyAdmin returns the admin who owns key, or a reason for refusing it:
+// "unregistered", "disabled" or "level".
+func wfcKeyAdmin(key gossh.PublicKey) (*user.User, string) {
+	if userMgr == nil {
+		return nil, "unregistered"
+	}
+	syncWFCUsers()
 	u, found := userMgr.FindByAuthorizedKey(key.Marshal())
 	if !found || u == nil {
+		return nil, "unregistered"
+	}
+	if !authorizeAdmin(u.Handle) {
+		if wfcEnabled == nil || !wfcEnabled() {
+			return u, "disabled"
+		}
+		return u, "level"
+	}
+	return u, ""
+}
+
+// wfcVerifiedKey runs once the client has signed with a key that
+// wfcPublicKeyHandler accepted. It resolves the admin from that key and
+// records the identity in the connection's permissions, where the WFC
+// subsystems read it. wfcPublicKeyHandler also runs for unsigned key
+// queries, so nothing it sees can name the admin.
+func wfcVerifiedKey(conn gossh.ConnMetadata, key gossh.PublicKey, perms *gossh.Permissions, _ string) (*gossh.Permissions, error) {
+	var addr net.Addr
+	if conn != nil {
+		addr = conn.RemoteAddr()
+	}
+	u, deny := wfcKeyAdmin(key)
+	if deny != "" {
+		slog.Info("wfc-admin: signed key refused", "reason", deny,
+			"fingerprint", gossh.FingerprintSHA256(key), "addr", addr)
+		return nil, fmt.Errorf("wfc-admin: key no longer authorized (%s)", deny)
+	}
+	slog.Info("wfc-admin: public key accepted", "user", u.Handle, "addr", addr)
+	out := &gossh.Permissions{Extensions: map[string]string{}}
+	if perms != nil {
+		out.CriticalOptions = perms.CriticalOptions
+		out.ExtraData = perms.ExtraData
+		for k, v := range perms.Extensions {
+			out.Extensions[k] = v
+		}
+	}
+	out.Extensions[wfcHandleExt] = u.Handle
+	out.Extensions[wfcKeyExt] = string(key.Marshal())
+	return out, nil
+}
+
+// wfcVerifiedIdentity returns the admin handle and marshaled key recorded by
+// wfcVerifiedKey, or empty values when the connection did not sign with an
+// admin key. gliderlabs sets ContextKeyPublicKey (sess.PublicKey()) for
+// unsigned queries too, so only these extensions prove a signature.
+func wfcVerifiedIdentity(ctx ssh.Context) (string, []byte) {
+	conn, ok := ctx.Value(ssh.ContextKeyConn).(*gossh.ServerConn)
+	if !ok || conn == nil || conn.Permissions == nil {
+		return "", nil
+	}
+	handle, key := conn.Permissions.Extensions[wfcHandleExt], conn.Permissions.Extensions[wfcKeyExt]
+	if handle == "" || key == "" {
+		return "", nil
+	}
+	return handle, []byte(key)
+}
+
+// wfcPublicKeyHandler is the SSH-level public-key auth handler for admin
+// clients. It accepts a key registered to a BBS user with sufficient access
+// level. Other keys are refused so callers fall through to password auth.
+// It also runs for unsigned key queries; the identity comes from
+// wfcVerifiedKey.
+func wfcPublicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
+	u, deny := wfcKeyAdmin(key)
+	switch deny {
+	case "":
+		// Unsigned queries land here too; wfcVerifiedKey logs the acceptance.
+		slog.Debug("wfc-admin: public key offered", "user", u.Handle, "addr", ctx.RemoteAddr())
+		return true
+	case "unregistered":
 		// Debug level: unknown keys are routine (every non-WFC pubkey offer
 		// lands here), but the fingerprint makes key-scanning visible when
 		// debug logging is enabled.
 		slog.Debug("wfc-admin: public key not registered",
 			"fingerprint", gossh.FingerprintSHA256(key), "addr", ctx.RemoteAddr())
-		return false
-	}
-	if !authorizeAdmin(u.Handle) {
-		if wfcEnabled == nil || !wfcEnabled() {
-			slog.Info("wfc-admin: public key rejected, wfc access disabled",
-				"user", u.Handle, "addr", ctx.RemoteAddr())
-			return false
-		}
+	case "disabled":
+		slog.Info("wfc-admin: public key rejected, wfc access disabled",
+			"user", u.Handle, "addr", ctx.RemoteAddr())
+	default:
 		minLevel := 0
 		if adminMinLevel != nil {
 			minLevel = adminMinLevel()
 		}
 		slog.Info("wfc-admin: public key rejected, insufficient access level",
 			"user", u.Handle, "level", u.AccessLevel, "required", minLevel)
-		return false
 	}
-	ctx.SetValue(wfcAdminHandleKey{}, u.Handle)
-	ctx.SetValue(wfcAdminPubKey{}, key.Marshal())
-	slog.Info("wfc-admin: public key accepted", "user", u.Handle, "addr", ctx.RemoteAddr())
-	return true
+	return false
 }
 
 // authorizeAdmin returns true when WFC admin access is enabled and the user
@@ -103,6 +173,7 @@ func authorizeAdminKey(handle string, keyBytes []byte) bool {
 	if userMgr == nil || adminMinLevel == nil || wfcEnabled == nil || !wfcEnabled() {
 		return false
 	}
+	syncWFCUsers()
 	u, found := userMgr.FindByAuthorizedKey(keyBytes)
 	if !found || u == nil {
 		return false
@@ -113,10 +184,25 @@ func authorizeAdminKey(handle string, keyBytes []byte) bool {
 	return u.AccessLevel >= adminMinLevel()
 }
 
-// watchAdminAuthorization re-checks authorized(handle) every interval and
-// calls kick once when it stops holding. It exits on ctx cancellation (normal
-// session end) without kicking.
-func watchAdminAuthorization(ctx context.Context, handle string, interval time.Duration, authorized func(string) bool, kick func()) {
+// wfcReadOnly reports whether handle's WFC console is limited to watching.
+// It reads the user record on every call, so a change applies to open
+// sessions. An account that cannot be found is treated as read-only.
+func wfcReadOnly(handle string) bool {
+	if userMgr == nil {
+		return true
+	}
+	syncWFCUsers()
+	u, found := userMgr.GetUser(handle)
+	if !found || u == nil {
+		return true
+	}
+	return u.WFCReadOnly
+}
+
+// watchAdminAuthorization runs refusal(handle) every interval and calls kick
+// with its reason once it returns one ("" means still authorized). It exits
+// on ctx cancellation (normal session end) without kicking.
+func watchAdminAuthorization(ctx context.Context, handle string, interval time.Duration, refusal func(string) string, kick func(reason string)) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
@@ -124,8 +210,8 @@ func watchAdminAuthorization(ctx context.Context, handle string, interval time.D
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if !authorized(handle) {
-				kick()
+			if reason := refusal(handle); reason != "" {
+				kick(reason)
 				return
 			}
 		}
@@ -133,19 +219,19 @@ func watchAdminAuthorization(ctx context.Context, handle string, interval time.D
 }
 
 // wfcAdminSubsystem handles an SSH "wfc-admin" subsystem session by serving
-// the binary admin RPC protocol over the session stream. Access is re-checked
-// against the stashed handle and public key before any data is exchanged, and
-// periodically for the life of the session.
+// the binary admin RPC protocol over the session stream. Access is checked
+// against the admin and key the client signed with before any data is
+// exchanged, and periodically for the life of the session.
 func wfcAdminSubsystem(sess ssh.Session) {
-	handle, _ := sess.Context().Value(wfcAdminHandleKey{}).(string)
-	keyBytes, _ := sess.Context().Value(wfcAdminPubKey{}).([]byte)
-	if handle == "" || len(keyBytes) == 0 || !authorizeAdminKey(handle, keyBytes) {
+	handle, keyBytes := wfcVerifiedIdentity(sess.Context())
+	if handle == "" || !authorizeAdminKey(handle, keyBytes) {
 		slog.Warn("wfc-admin: subsystem access denied", "user", handle, "addr", sess.RemoteAddr())
 		_, _ = fmt.Fprintf(sess, "access denied\n") // best-effort notice to client
 		return
 	}
 
-	slog.Info("wfc-admin: session opened", "user", handle, "addr", sess.RemoteAddr())
+	openedReadOnly := wfcReadOnly(handle)
+	slog.Info("wfc-admin: session opened", "user", handle, "addr", sess.RemoteAddr(), "readOnly", openedReadOnly)
 
 	audit := func(cmd string) {
 		slog.Info("wfc-admin: command", "user", handle, "addr", sess.RemoteAddr(), "cmd", cmd)
@@ -175,15 +261,40 @@ func wfcAdminSubsystem(sess ssh.Session) {
 		})
 		defer stopKA()
 	}
-	stillAuthorized := func(h string) bool { return authorizeAdminKey(h, keyBytes) }
-	go watchAdminAuthorization(ctx, handle, wfcReauthInterval, stillAuthorized, func() {
-		slog.Warn("wfc-admin: session revoked, disconnecting", "user", handle, "addr", sess.RemoteAddr())
-		_ = sess.Close() // unblocks ServeRPC's read loop
-	})
+	refusal := func(h string) string {
+		if !authorizeAdminKey(h, keyBytes) {
+			return "revoked"
+		}
+		return ""
+	}
+	// The watcher reads the user record; it must not outlive the session.
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		watchAdminAuthorization(ctx, handle, wfcReauthInterval, refusal, func(reason string) {
+			slog.Warn("wfc-admin: session revoked, disconnecting", "user", handle, "addr", sess.RemoteAddr(), "reason", reason)
+			_ = sess.Close() // unblocks ServeRPC's read loop
+		})
+	}()
+	defer func() {
+		cancel()
+		<-watchDone
+	}()
 
 	// ServeRPC's context governs only the internal subscriber goroutine; connection
 	// lifetime is enforced by the SSH session closing, which unblocks the read loop.
-	if err := admin.ServeRPC(ctx, sess, adminServer, audit); err != nil {
+	// The read-only flag is read for every command and snapshot. Both ServeRPC
+	// goroutines call it, hence the atomic.
+	var wasReadOnly atomic.Bool
+	wasReadOnly.Store(openedReadOnly)
+	readOnly := func() bool {
+		ro := wfcReadOnly(handle)
+		if wasReadOnly.Swap(ro) != ro {
+			slog.Info("wfc-admin: read-only changed", "user", handle, "addr", sess.RemoteAddr(), "readOnly", ro)
+		}
+		return ro
+	}
+	if err := admin.ServeRPC(ctx, sess, adminServer, handle, readOnly, audit); err != nil {
 		slog.Info("wfc-admin: session closed", "user", handle, "addr", sess.RemoteAddr(), "reason", err)
 	} else {
 		slog.Info("wfc-admin: session closed", "user", handle, "addr", sess.RemoteAddr())

@@ -76,6 +76,9 @@ type SystemSnapshot struct {
 	// run history, for the console's Events tab. Nil when the daemon has no
 	// scheduler.
 	ScheduledEvents []ScheduledEvent `json:"scheduledEvents,omitempty"`
+	// ReadOnly tells the receiving console that its account may watch but
+	// not kick, snoop, type in or chat. ServeRPC sets it per console.
+	ReadOnly bool `json:"readOnly,omitempty"`
 }
 
 // ScheduledEvent is one event-scheduler entry as shown on the console.
@@ -120,6 +123,12 @@ const (
 	// EventNodeKicked is emitted by the server when an admin command
 	// disconnects a caller, so every console sees who was dropped and why.
 	EventNodeKicked EventType = "node.kicked"
+	// EventPage is emitted when a caller pages the sysop; Message is the reason.
+	EventPage EventType = "node.page"
+	// EventPageCleared withdraws a page; Message is answered, timeout or logoff.
+	EventPageCleared EventType = "node.page.cleared"
+	// EventChatState reports chat changes; Message is "on <sysop>" or "off".
+	EventChatState EventType = "node.chat.state"
 )
 
 // Event is a single entry in the live event feed.
@@ -140,6 +149,10 @@ const (
 	CommandRefresh CommandType = "system.refresh"
 	// CommandKick disconnects the caller on AdminCommand.NodeID.
 	CommandKick CommandType = "node.kick"
+	// CommandTypeIn turns sysop type-in on or off. Payload {"on": bool}.
+	CommandTypeIn CommandType = "node.typein"
+	// CommandChat starts or ends split-screen chat. Payload {"start": bool}.
+	CommandChat CommandType = "node.chat"
 )
 
 // AdminCommand is a request to the server to perform an action.
@@ -166,6 +179,12 @@ type AdminClient interface {
 	Subscribe(ctx context.Context) (<-chan Event, error)
 	Execute(ctx context.Context, cmd AdminCommand) (*Result, error)
 	Close() error
+}
+
+// Snooper is optionally implemented by clients that can open a live view of a
+// caller's session.
+type Snooper interface {
+	OpenSnoop(ctx context.Context, nodeID int, connectedAt time.Time) (*SnoopStream, error)
 }
 
 // Liveness is optionally implemented by clients whose transport can die

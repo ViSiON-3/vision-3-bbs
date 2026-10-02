@@ -6,6 +6,7 @@
 package sshserver
 
 import (
+	"bytes"
 	"fmt"
 	"log/slog"
 	"net"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 )
 
 // ErrReadInterrupted is returned by BBSSession.Read when a read interrupt fires.
@@ -34,6 +37,10 @@ type Config struct {
 	// PublicKeyHandler, when non-nil, is called to authenticate connecting
 	// clients by their public key. Return true to allow access.
 	PublicKeyHandler func(ctx ssh.Context, key ssh.PublicKey) bool
+	// VerifiedPublicKeyCallback, when non-nil, runs only after a client has
+	// signed with a key PublicKeyHandler accepted. The permissions it returns
+	// become the connection's (gossh.ServerConn.Permissions).
+	VerifiedPublicKeyCallback func(conn gossh.ConnMetadata, key gossh.PublicKey, perms *gossh.Permissions, algo string) (*gossh.Permissions, error)
 	// SubsystemHandlers maps SSH subsystem names (e.g. "wfc-admin") to their
 	// handler functions. Clients may request a subsystem via the SSH protocol.
 	SubsystemHandlers map[string]func(ssh.Session)
@@ -86,8 +93,11 @@ func NewServer(cfg Config) (*Server, error) {
 	// (diffie-hellman-group1-sha1, 3des-cbc, hmac-sha1, ssh-rsa)
 	// required by retro BBS clients.
 	legacy := cfg.LegacySSHAlgorithms
+	verified := cfg.VerifiedPublicKeyCallback
 	srv.ServerConfigCallback = func(ctx ssh.Context) *gossh.ServerConfig {
-		sc := &gossh.ServerConfig{}
+		// gliderlabs adds its auth callbacks to this config but leaves
+		// VerifiedPublicKeyCallback alone.
+		sc := &gossh.ServerConfig{VerifiedPublicKeyCallback: verified}
 		if legacy {
 			slog.Debug("SSH legacy algorithms enabled for retro BBS client compatibility")
 			sc.KeyExchanges = []string{
@@ -177,6 +187,9 @@ type BBSSession struct {
 	// repaint on window resize) because session.Write() does CRLF conversion
 	// that would interleave with RawWrite binary data on the same channel.
 	transferActive atomic.Int32
+	// tap, when set, receives a copy of everything written to the caller
+	// and supplies sysop keystrokes to Read (see internal/snoop).
+	tap atomic.Pointer[snoop.Tap]
 }
 
 // WrapSession wraps a gliderlabs ssh.Session to add BBS-specific features
@@ -229,20 +242,73 @@ func extractRawChannel(s ssh.Session) gossh.Channel {
 // ZMODEM, YMODEM, or XMODEM frames. Falls back to session.Write() when the
 // raw channel is unavailable (e.g. in tests using mock sessions).
 func (s *BBSSession) RawWrite(p []byte) (int, error) {
+	var n int
+	var err error
 	if s.rawCh != nil {
-		return s.rawCh.Write(p)
+		n, err = s.rawCh.Write(p)
+	} else {
+		n, err = s.Session.Write(p) //nolint:staticcheck // explicit: bypasses BBSSession wrappers
 	}
-	return s.Session.Write(p) //nolint:staticcheck // explicit: bypasses BBSSession wrappers
+	if t := s.tap.Load(); t != nil && n > 0 {
+		if s.IsTransferActive() {
+			t.TransferStarted()
+		} else {
+			t.Output(p[:n])
+		}
+	}
+	return n, err
+}
+
+// SetTap attaches the node's snoop tap.
+func (s *BBSSession) SetTap(t *snoop.Tap) { s.tap.Store(t) }
+
+// Tap returns the node's snoop tap, or nil.
+func (s *BBSSession) Tap() *snoop.Tap { return s.tap.Load() }
+
+// Write sends p to the caller and copies it to the snoop tap.
+func (s *BBSSession) Write(p []byte) (int, error) {
+	n, err := s.Session.Write(p)
+	if t := s.tap.Load(); t != nil && n > 0 {
+		if s.IsTransferActive() {
+			t.TransferStarted()
+		} else if _, _, isPty := s.Pty(); isPty {
+			t.Output(normalizeNewlines(p[:n]))
+		} else {
+			t.Output(p[:n])
+		}
+	}
+	return n, err
+}
+
+// normalizeNewlines mirrors gliderlabs' PTY output conversion so the tap
+// sees the bytes the caller's terminal received.
+func normalizeNewlines(p []byte) []byte {
+	if !bytes.Contains(p, []byte{'\n'}) {
+		return p
+	}
+	out := make([]byte, 0, len(p)+8)
+	for i, b := range p {
+		if b == '\n' && (i == 0 || p[i-1] != '\r') {
+			out = append(out, '\r')
+		}
+		out = append(out, b)
+	}
+	return out
 }
 
 // SetTransferActive marks/unmarks the session as being in a binary transfer.
 // While active, nothing should write to the session via session.Write()
 // (which does CRLF conversion) because it would corrupt the binary stream.
+// The tap mode change is left to Tap.SetTransfer, which never leaves ModeDoor.
+// Output suppression during a transfer relies on IsTransferActive, not the mode.
 func (s *BBSSession) SetTransferActive(active bool) {
 	if active {
 		s.transferActive.Store(1)
 	} else {
 		s.transferActive.Store(0)
+	}
+	if t := s.tap.Load(); t != nil {
+		t.SetTransfer(active)
 	}
 }
 
@@ -273,6 +339,12 @@ func (s *BBSSession) Read(p []byte) (int, error) {
 	}
 	s.readMu.Lock()
 	defer s.readMu.Unlock()
+
+	// nil when no tap is set, so the select case below never fires.
+	var tapInput <-chan []byte
+	if t := s.tap.Load(); t != nil {
+		tapInput = t.Input()
+	}
 
 	for {
 		s.riMu.Lock()
@@ -321,6 +393,9 @@ func (s *BBSSession) Read(p []byte) (int, error) {
 			s.readCh = nil
 			s.pending = &res
 			// Check the current interrupt before delivering the received bytes.
+		case b := <-tapInput:
+			// Deliver through the pending branch so the interrupt is re-checked.
+			s.pending = &readResult{data: b}
 		}
 	}
 }

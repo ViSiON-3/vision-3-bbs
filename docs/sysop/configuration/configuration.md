@@ -57,7 +57,7 @@ Choosing **Access & Security** (key 2) opens an inner menu of five numbered item
 
 | Item | Name | Fields |
 |------|------|--------|
-| 1 | Access Levels | SysOp Level, CoSysOp Level, WFC Access, Invisible Level, New User Level, Auto Validate, Notify SysOp, Regular Level, Logon Level, Anonymous Level |
+| 1 | Access Levels | SysOp Level, CoSysOp Level, WFC Access, Invisible Level, New User Level, Auto Validate, Notify SysOp, Regular Level, Logon Level, Anonymous Level, Page Timeout, Page Cooldown |
 | 2 | Connection Limits | Max Nodes, Max Per IP, Failed Logins (0=off), Lockout Minutes, Idle Timeout, Transfer Timeout |
 | 3 | Bot Defense | Challenge gate (enable, art file, key, timeout, required presses, stray keys, live countdown) and connection-rate limiter (enable, hits, window, ban minutes). See [Security](configuration/security.md#bot-defense) |
 | 4 | IP Blocklist/Allowlist | Blocklist Path, Allowlist Path |
@@ -502,9 +502,15 @@ built-in defaults and overlays whatever the file provides.
 | `logonLevel` | `10` | `10` | Minimum level required to log in |
 | `anonymousLevel` | `50` | `5` | Minimum level to post anonymously (`0` = disabled) |
 | `notifySysopNewUser` | `true` | `true` | Page every co-sysop-or-above who is online when a signup completes |
+| `pageSysopTimeout` | `60` | `60` | Seconds a caller waits for a sysop to answer a `PAGESYSOP` page before being told the SysOp is not available. Shown as **Page Timeout** in the config TUI, which accepts 5–600 |
+| `pageSysopCooldown` | `300` | `300` | Seconds a caller must wait between pages; `0` disables the cooldown. Shown as **Page Cooldown** in the config TUI, which accepts 0–86400 |
 
 See [User Management](users/user-management.md#system-access-levels) for how
 these interact, and what happens at signup.
+
+The two page settings are picked up on config reload without a restart. See
+[Pages](how-to-guides/wfc-console.md#pages) for what the caller and the sysop
+see.
 
 `notifySysopNewUser` is deliberately independent of `autoValidateNewUsers`. An
 auto-validated signup leaves nothing to review, but somebody joining is still
@@ -932,7 +938,9 @@ The `menus/v3/theme.json` file controls color schemes:
 ```json
 {
   "yesNoHighlightColor": 31,
-  "yesNoRegularColor": 15
+  "yesNoRegularColor": 15,
+  "chatSysopColor": 11,
+  "chatUserColor": 10
 }
 ```
 
@@ -940,6 +948,10 @@ The `menus/v3/theme.json` file controls color schemes:
 
 - `yesNoHighlightColor` - DOS color code for highlighted yes/no prompts
 - `yesNoRegularColor` - DOS color code for regular yes/no prompts
+- `chatSysopColor` - color of the sysop's pane in split-screen chat (default `11`)
+- `chatUserColor` - color of the caller's pane in split-screen chat (default `10`)
+
+A copy at `menus.d/<set>/theme.json` overrides the one in `menus/<set>/`.
 
 Standard DOS color codes range from 0-255, where:
 

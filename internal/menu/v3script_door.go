@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
@@ -58,6 +59,7 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		ArtWidth:         artWidth(ctx.Terminal, ctx.User.ScreenWidth),
 		NodeNumber:       ctx.NodeNumber,
 		SessionStartTime: ctx.SessionStartTime,
+		ChatCredit:       func() time.Duration { return chatCredit(ctx.Session) },
 		BoardName:        ctx.Executor.GetServerConfig().BoardName,
 		SysOpName:        ctx.Executor.GetServerConfig().SysOpName,
 		BBSVersion:       version.Number,

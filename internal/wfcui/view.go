@@ -175,6 +175,9 @@ func (m Model) View() string {
 	if m.mode == modeDetails {
 		m.drawDetails(s, g)
 	}
+	if m.mode == modePages {
+		m.drawPages(s, g)
+	}
 	m.drawCmdBar(s, g)
 	return s.render(st)
 }
@@ -213,11 +216,23 @@ func (m Model) drawTitle(s *screen, g geometry) {
 	}
 	s.textCenter(0, titleY, g.w, name, cWhite, cBlue)
 
+	noteX := boxX
+	if n := m.pendingPages(); n > 0 {
+		badge := fmt.Sprintf(" PAGE %d ", n)
+		s.text(boxX, titleY, badge, cBlue, cLightGray, g.w)
+		noteX += runeCount(badge) + 1
+	}
+	if m.readOnly() {
+		note := "READ-ONLY"
+		s.text(noteX, titleY, note, cYellow, cBlue, g.w/2-runeCount(name)/2-1)
+		noteX += runeCount(note) + 1
+	}
+
 	if m.snapshot != nil && len(m.snapshot.PendingReloads) > 0 {
 		// A structural config change is queued for the next idle window;
 		// the sysop should know saves are pending rather than silently held.
 		note := "RELOAD PENDING: " + sanitizeTerminal(strings.Join(m.snapshot.PendingReloads, ", "))
-		s.text(boxX, titleY, note, cYellow, cBlue, g.w/2-runeCount(name)/2-1)
+		s.text(noteX, titleY, note, cYellow, cBlue, g.w/2-runeCount(name)/2-1)
 	}
 
 	// The state segment must not run into the centred name; it gets the
@@ -724,6 +739,17 @@ func eventText(ev admin.Event) string {
 		return msg
 	case admin.EventNodeKicked:
 		return "Kicked by sysop"
+	case admin.EventPage:
+		return "Paged sysop: " + msg
+	case admin.EventPageCleared:
+		return "Page " + msg
+	case admin.EventChatState:
+		if sysop, ok := strings.CutPrefix(msg, "on "); ok {
+			return "Chat with " + sysop + " started"
+		}
+		if msg == "off" {
+			return "Chat ended"
+		}
 	}
 	return msg
 }
@@ -780,13 +806,20 @@ func (m Model) drawCmdBar(s *screen, g geometry) {
 		drawSegments(s, y, []segment{{m.status, fg}}, cBlue)
 		return
 	}
-	canKick := !m.opts.ReadOnly && !m.focusBottom()
+	canKick := !m.readOnly() && !m.focusBottom()
 	var segs []segment
 	switch {
+	case m.mode == modePages:
+		if !m.readOnly() {
+			segs = append(segs, keySeg("ENTER", "answer")...)
+		}
+		segs = append(segs, keySeg("ESC", "back")...)
+		segs = append(segs, keySeg("Q", "quit")...)
 	case m.mode == modeDetails:
 		segs = append(segs, keySeg("ESC", "back")...)
 		if canKick {
 			segs = append(segs, keySeg("K", "kick")...)
+			segs = append(segs, keySeg("S", "snoop")...)
 		}
 		segs = append(segs, keySeg("Q", "quit")...)
 	case m.conn != connConnected:
@@ -799,22 +832,52 @@ func (m Model) drawCmdBar(s *screen, g geometry) {
 	default:
 		// R (refresh now) still works but is left off the bar: the screen
 		// refreshes every second on its own and the row is full at 80 cols.
-		segs = append(segs,
-			segment{"[", cCyan}, segment{string(gUp), cYellow}, segment{"/", cWhite},
-			segment{string(gDown), cYellow}, segment{"] select ", cCyan})
-		segs = append(segs, keySeg("TAB", "view")...)
-		segs = append(segs, keySeg("PgUp/PgDn", "scroll")...)
-		segs = append(segs, keySeg("ENTER", "details")...)
-		segs = append(segs, keySeg("Q", "quit")...)
-		if canKick {
-			segs = append(segs, keySeg("K", "kick")...)
-		}
+		segs = m.listBar(g.w)
 	}
 	// Drop the trailing space so the block centres on its visible text.
 	if n := len(segs); n > 0 {
 		segs[n-1].text = strings.TrimRight(segs[n-1].text, " ")
 	}
 	drawSegments(s, y, segs, cBlue)
+}
+
+// listBar is the key bar for the callers and events lists. At narrow widths
+// it switches to a compact wording so the S and P keys still fit.
+func (m Model) listBar(w int) []segment {
+	arrows := []segment{
+		{"[", cCyan}, {string(gUp), cYellow}, {"/", cWhite},
+		{string(gDown), cYellow}, {"] select ", cCyan}}
+	actions := func() []segment {
+		var out []segment
+		if !m.readOnly() && !m.focusBottom() {
+			out = append(out, keySeg("K", "kick")...)
+			out = append(out, keySeg("S", "snoop")...)
+		}
+		return append(out, keySeg("P", "pages")...)
+	}
+	full := append(arrows, keySeg("TAB", "view")...)
+	full = append(full, keySeg("PgUp/PgDn", "scroll")...)
+	full = append(full, keySeg("ENTER", "details")...)
+	full = append(full, keySeg("Q", "quit")...)
+	full = append(full, actions()...)
+	if barWidth(full) <= w {
+		return full
+	}
+	compact := []segment{
+		{"[", cCyan}, {string(gUp) + string(gDown), cYellow}, {"] ", cCyan}}
+	compact = append(compact, keySeg("TAB", "view")...)
+	compact = append(compact, segment{"[", cCyan}, segment{"PgUp/Dn", cYellow}, segment{"] ", cCyan})
+	compact = append(compact, keySeg("ENTER", "details")...)
+	compact = append(compact, actions()...)
+	return append(compact, keySeg("Q", "quit")...)
+}
+
+func barWidth(segs []segment) int {
+	n := 0
+	for _, sg := range segs {
+		n += runeCount(sg.text)
+	}
+	return n
 }
 
 // formatUptime renders seconds as HH:MM:SS, prefixed with days past 24h.

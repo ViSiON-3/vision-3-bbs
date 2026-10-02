@@ -13,6 +13,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeConfirmKick {
 		return m.handleKeyConfirmKick(msg)
 	}
+	if m.mode == modePages {
+		return m.handleKeyPages(msg)
+	}
 	switch msg.Type {
 	case tea.KeyTab:
 		return m.nextTab(1), nil
@@ -30,6 +33,17 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.refreshOrRetry()
 		case "k", "K":
 			return m.beginKick()
+		case "s", "S":
+			return m.handleKeySnoop()
+		case "p", "P":
+			if len(m.pages) == 0 {
+				m.setStatus("No pages", false)
+				return m, nil
+			}
+			m.prevMode = m.mode
+			m.mode = modePages
+			m.clampPageSel()
+			return m, nil
 		}
 	}
 	switch m.mode {
@@ -84,7 +98,7 @@ func (m Model) refreshOrRetry() (tea.Model, tea.Cmd) {
 
 // beginKick is K: open the confirm prompt for the selected connection.
 func (m Model) beginKick() (tea.Model, tea.Cmd) {
-	if m.opts.ReadOnly {
+	if m.readOnly() {
 		m.setStatus("Read-only console: kick is disabled", true)
 		return m, nil
 	}

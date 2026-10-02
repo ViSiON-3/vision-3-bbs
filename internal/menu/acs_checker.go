@@ -13,6 +13,7 @@ import (
 
 	// Update local imports
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -403,11 +404,10 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 				slog.Debug("ACS 'T' check: user has no time limit, passing", "timeLimit", u.TimeLimit, "level", u.AccessLevel)
 				result = true
 			} else {
-				elapsedSeconds := time.Since(startTime).Seconds()
-				timeLeftSeconds := float64(u.TimeLimit*60) - elapsedSeconds
-				thresholdSeconds := float64(minutesLeftThreshold * 60)
-				result = timeLeftSeconds >= thresholdSeconds
-				slog.Debug("ACS 'T' check", "limitMin", u.TimeLimit, "elapsedSec", elapsedSeconds, "leftSec", timeLeftSeconds, "thresholdSec", int(thresholdSeconds), "result", result)
+				left, _ := timeleft.Remaining(u.TimeLimit, startTime, time.Now(), chatCredit(s))
+				threshold := time.Duration(minutesLeftThreshold) * time.Minute
+				result = left >= threshold
+				slog.Debug("ACS 'T' check", "limitMin", u.TimeLimit, "left", left, "threshold", threshold, "result", result)
 			}
 		}
 	case "W": // Day of Week == value (0=Sun, 1=Mon, ... 6=Sat)

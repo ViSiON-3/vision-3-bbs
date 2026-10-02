@@ -220,3 +220,17 @@ func (s *sshSessionRWC) Close() error {
 	}
 	return s.sess.Close()
 }
+
+// OpenSnoop implements Snooper: it opens a wfc-snoop subsystem session on
+// the console's existing SSH connection.
+func (c *SSHChannelClient) OpenSnoop(ctx context.Context, nodeID int, connectedAt time.Time) (*SnoopStream, error) {
+	sess, err := c.conn.NewSession()
+	if err != nil {
+		return nil, fmt.Errorf("admin: snoop session: %w", err)
+	}
+	if err := sess.RequestSubsystem("wfc-snoop"); err != nil {
+		_ = sess.Close()
+		return nil, fmt.Errorf("admin: request wfc-snoop subsystem: %w", err)
+	}
+	return ClientSnoop(&sshSessionRWC{sess: sess}, SnoopRequest{NodeID: nodeID, ConnectedAt: connectedAt})
+}

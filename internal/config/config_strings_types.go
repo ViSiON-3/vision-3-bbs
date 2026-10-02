@@ -225,6 +225,12 @@ type StringsConfig struct {
 	PageOnlineNodesHeader string `json:"pageOnlineNodesHeader"`
 	PageNodeListEntry     string `json:"pageNodeListEntry"`
 	PageWhichNodePrompt   string `json:"pageWhichNodePrompt"`
+	PageSysopReasonPrompt string `json:"pageSysopReasonPrompt"`
+	PageSysopPaging       string `json:"pageSysopPaging"`
+	PageSysopUnavailable  string `json:"pageSysopUnavailable"`
+	PageSysopCooldown     string `json:"pageSysopCooldown"`
+	SysopChatHeader       string `json:"sysopChatHeader"`
+	SysopChatBack         string `json:"sysopChatBack"`
 	PageMessagePrompt     string `json:"pageMessagePrompt"`
 	PageMessageFormat     string `json:"pageMessageFormat"`
 	PageSent              string `json:"pageSent"`

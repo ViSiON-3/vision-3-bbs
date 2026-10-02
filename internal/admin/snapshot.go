@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
+	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -18,13 +19,19 @@ type RegistrySource interface {
 // the registry cannot derive (-1 where unavailable); ActiveNodes is always
 // overwritten with the live count. timeLimit gives a caller's effective time
 // limit in minutes (see ServerConfig.TimeLimit); nil uses the stored one.
-func BuildSnapshot(reg RegistrySource, systemName string, startedAt, now time.Time, counters Counters, timeLimit func(*user.User) int) *SystemSnapshot {
+// chatCredit gives the sysop chat time credited to a node's caller, added to
+// the time left; nil means none.
+func BuildSnapshot(reg RegistrySource, systemName string, startedAt, now time.Time, counters Counters, timeLimit func(*user.User) int, chatCredit func(nodeID int) time.Duration) *SystemSnapshot {
 	if timeLimit == nil {
 		timeLimit = func(u *user.User) int { return u.TimeLimit }
 	}
 	sessions := reg.ListActive()
 	nodes := make([]NodeState, 0, len(sessions))
 	for _, s := range sessions {
+		var (
+			limitMins int
+			started   time.Time
+		)
 		s.Mutex.RLock()
 		ns := NodeState{
 			NodeID:       s.NodeID,
@@ -49,17 +56,18 @@ func BuildSnapshot(reg RegistrySource, systemName string, startedAt, now time.Ti
 			if limit := timeLimit(s.User); limit <= 0 {
 				ns.TimeUnlimited = true
 			} else if !s.StartTime.IsZero() {
-				used := int(now.Sub(s.StartTime).Minutes())
-				left := limit - used
-				if left < 0 {
-					left = 0
-				}
-				ns.TimeLeftMins = left
+				ns.TimeLeftMins, _ = timeleft.Minutes(limit, s.StartTime, now, 0)
+				limitMins, started = limit, s.StartTime
 			}
 		} else {
 			ns.Status = StatusLogin
 		}
 		s.Mutex.RUnlock()
+		// The hook takes the session's lock itself, so it runs after ours
+		// is released.
+		if limitMins > 0 && chatCredit != nil {
+			ns.TimeLeftMins, _ = timeleft.Minutes(limitMins, started, now, chatCredit(ns.NodeID))
+		}
 		nodes = append(nodes, ns)
 	}
 	counters.ActiveNodes = len(nodes)

@@ -187,3 +187,21 @@ func TestCtrlAToANSICodes(t *testing.T) {
 		}
 	}
 }
+
+// TestTimeLeftIncludesChatCredit: sysop chat time is not charged, so
+// get_time_left grows by the credit, read live.
+func TestTimeLeftIncludesChatCredit(t *testing.T) {
+	credit := 0 * time.Minute
+	h := newDoor(t, doorOpts{session: func(sc *SessionContext) {
+		sc.TimeLimit = 5
+		sc.SessionStartTime = time.Now().Add(-4 * time.Minute)
+		sc.ChatCredit = func() time.Duration { return credit }
+	}})
+	if got := h.eval(`bbs.get_time_left()`).ToInteger(); got > 60 {
+		t.Fatalf("get_time_left = %d before credit, want <= 60", got)
+	}
+	credit = 10 * time.Minute
+	if got := h.eval(`bbs.get_time_left()`).ToInteger(); got < 10*60 || got > 11*60 {
+		t.Errorf("get_time_left = %d with credit, want ~660", got)
+	}
+}

@@ -8,8 +8,7 @@ ViSiON/3 daemon over the BBS's **existing SSH server** — so it works the same
 whether the BBS is on localhost or hosted in the cloud.
 
 If the link to the BBS drops, the console **reconnects on its own** and keeps
-going; you never have to restart it. Sysop chat and paging a caller are not in
-this release.
+going; you never have to restart it.
 
 ## Requirements to access WFC
 
@@ -29,6 +28,10 @@ A user account can open the WFC console only when **all** of these are true:
 A key that isn't registered, belongs to a below-CoSysOp user, or arrives while
 WFC Access is disabled simply falls through to the **normal caller login**.
 Adding WFC access never affects regular logins.
+
+An account can also be marked **WFC Read Only**. Its console shows the
+dashboard, logs, events and page list, but the daemon refuses its kick, snoop,
+type-in and chat. See [Read-only accounts](#read-only-accounts).
 
 ## Getting an SSH key onto the server
 
@@ -63,7 +66,7 @@ A public key is a single line starting `ssh-ed25519 AAAA…` ending in a
 comment. If you're onboarding a remote co-sysop, this is the line they email
 or DM you.
 
-### 3. Register it and restart (on the server)
+### 3. Register it (on the server)
 
 ```bash
 helper users addkey "J0hnny A1pha" /tmp/my.pub   # quote handles with spaces
@@ -71,7 +74,8 @@ helper users listkeys "J0hnny A1pha"             # confirm it landed
 ```
 
 Or pipe the pasted line via stdin: `helper users addkey "J0hnny A1pha" -`.
-Then **restart the BBS** — the daemon reads `users.json` at startup only.
+The running BBS picks the key up on the next WFC connection; no restart is
+needed (see [When edits take effect](#when-edits-take-effect)).
 
 ## Enabling access for a sysop
 
@@ -108,10 +112,33 @@ You can still edit `data/users/users.json` by hand if you prefer — add a
 > Keep your **private** key on your own machine only. Only the **public** key
 > (`.pub`) goes into `users.json`.
 
-> **Restart note:** `ue` and `helper` are separate programs that edit
-> `users.json`; the running BBS loads users at startup and does **not**
-> hot-reload that file. After adding or removing a key while the BBS is running,
-> **restart the BBS** for the change to take effect.
+### When edits take effect
+
+`ue` and `helper` are separate programs that write `users.json`. The running
+BBS reads the file again, at most once a second, when it saves users, when a
+caller changes menu, and on every WFC check: a new connection, each console
+command and snapshot, and the 30-second re-check of an open session. A key
+added, removed or moved, a level change, a deletion, or the **WFC Read Only**
+flag therefore applies without a restart:
+
+- A new connection sees the change at once (allow a second if the file was
+  read just before).
+- An open console's commands follow the change at once.
+- An open console or snoop that is no longer authorized is closed within 30
+  seconds.
+
+### Read-only accounts
+
+Set **WFC Read Only** to `Y` in `ue` (right column of the user's edit screen),
+or add `"wfcReadOnly": true` to the account in `users.json`. A read-only
+console can watch the dashboard, the logs, the events and the page list.
+The daemon refuses everything that acts on a caller: kick, snoop, type-in and
+chat. The console shows `READ-ONLY` in its title bar and hides those keys.
+
+Setting the flag on a connected console stops its commands at once, and an
+open snoop is closed within 30 seconds. Clearing it restores the commands
+without a reconnect. Both apply to edits made with `ue` while the BBS is
+running; see [When edits take effect](#when-edits-take-effect).
 
 ## Getting `wfc`
 
@@ -166,7 +193,7 @@ wfc --connect ssh://Felonius@your-bbs-host:2222 --identity ~/.ssh/id_ed25519
 | `--no-color` | Disable color |
 | `--refresh <ms>` | Snapshot poll interval in milliseconds (default 1000) |
 | `--max-events <n>` | Events kept in the feed (default 200) |
-| `--readonly` | View-only: hides and disables the kick command |
+| `--readonly` | View-only on this console: disables kick and snoop (and so type-in and chat). It is a client setting; use a [read-only account](#read-only-accounts) to restrict another sysop |
 | `--version` / `--help` | Print version / usage |
 
 ## Console functions
@@ -183,7 +210,9 @@ refreshes on its own (once a second by default; tune with `--refresh`).
 The title bar shows the BBS name (from `config.json`; `ViSiON/3 WFC` until the
 first snapshot arrives) and, at the right, the console version — or the link
 state when something is wrong (see [Reconnecting](#reconnecting) below). A
-queued structural config reload is flagged here as `RELOAD PENDING`.
+queued structural config reload is flagged here as `RELOAD PENDING`, and a
+console started with `--readonly` or signed in with a read-only account shows
+`READ-ONLY`.
 
 The counter row underneath:
 
@@ -281,8 +310,119 @@ select again. The caller sees a short
 "disconnected by the SysOp" notice, their session ends through the normal
 hang-up path (so the disconnect is logged and the node is freed), and every
 connected console gets a `Kicked by sysop` line in its Callers log. Kicks are
-audited in the BBS log with the admin's handle. `--readonly` hides the command
-entirely.
+audited in the BBS log with the admin's handle. `--readonly` and read-only
+accounts hide the command, and the daemon refuses it from a read-only account.
+
+### Watching a node
+
+`S` on a caller in the Callers list or the details view opens a snoop on that
+node. It uses a second SSH channel (the `wfc-snoop` subsystem) on the
+console's existing connection, under the same access rule as the console:
+CoSysOp level or above, a registered SSH key, WFC Access on. A
+[read-only account](#read-only-accounts) is refused. The rule is re-checked
+every 30 seconds, and a snoop whose account has become read-only is closed.
+
+You see the caller's current screen straight away (up to 64 KiB of output since
+their last clear-screen), then everything they see from then on. CP437 callers
+display correctly on a UTF-8 terminal. During a binary file transfer the screen
+shows `[transfer in progress]` instead of the transfer data.
+
+When your terminal is taller than the caller's screen, a status bar on your
+bottom row shows the node, handle, caller screen size, mode (`WATCH`, `TYPE` or
+`CHAT`), the hotkeys and the last error. Otherwise it is hidden. `Alt-H`
+toggles it.
+
+| Key | Action |
+|-----|--------|
+| `Alt-X` | Leave the snoop and return to the dashboard |
+| `Alt-H` | Show or hide the status bar |
+| `Alt-T` | Type for the caller (see below) |
+| `Alt-C` | Start or end chat (see below) |
+
+If the caller disconnects, `wfc` returns to the dashboard with
+`node N disconnected`. The status bar follows your terminal size: it shows when
+the terminal is taller than the caller's screen and moves to the new last row
+when you resize. `Alt-H` overrides the size rule until you leave the snoop.
+The bar waits to redraw while the caller's cursor position is unknown (after an
+escape sequence `wfc` does not track) until the caller addresses the cursor
+again.
+Resize tracking needs a Unix terminal; on Windows the size is read once when the
+snoop opens.
+
+The caller is not told they are being watched. Attach and detach are written
+to the BBS log with your handle.
+
+### Typing for the caller
+
+`Alt-T` toggles type-in. While it is on, your keystrokes reach the caller's
+session as if they had typed them, including inside doors. You must be watching
+the node first, and closing your snoop channel releases the keyboard.
+
+Only one sysop can type on a node at a time. A second sysop who tries gets an
+error naming who has it.
+
+In type-in a plain `Esc` is sent after 300 ms, `Esc Esc` sends a single `Esc`,
+and `Alt-T`, `Alt-C`, `Alt-X` and `Alt-H` stay hotkeys. The log records
+type-in on and off with how long it lasted and how many bytes were sent. It
+never records the keystrokes.
+
+### Chat
+
+`Alt-C` toggles chat. It opens the classic split screen on the caller's
+terminal: your text on top, the caller's below, and a bar between them with
+both handles and the time (`HH:MM`). Each pane word-wraps and scrolls on its
+own. Pane colors come from `chatSysopColor` and `chatUserColor` in
+[`theme.json`](menus/menu-system.md#theme-themejson).
+
+Chat works only while the caller is in the BBS: menus, prompts, the message
+reader, the editor. It is refused while they are in a door, a file transfer or
+the teleconference (`CHAT`), and the reason shows in your status bar. Watching and type-in still work there.
+Chat opens as soon as the caller's session is waiting for a key. If that takes
+more than 3 seconds the request is refused.
+
+Chat ends when you press `Alt-C` again, when the caller presses `Esc` twice (it
+closes about half a second after the second `Esc`), or when your snoop channel
+closes. The caller's screen is put back as it was, including a half-typed line.
+If more than 64 KiB was drawn since their last clear-screen it cannot be
+restored, and they see `[back from chat, press Enter]`.
+
+Chat time is not charged to the caller's time limit, and the idle timeout is
+paused. If you end chat with `Alt-C` and were typing for the caller before it,
+you return to type-in; otherwise to watching.
+
+When the caller ends chat with `Esc` `Esc`, you lose the keyboard, including a
+type-in you had before chat. Anything you type after that is thrown away
+rather than landing on the caller's prompt. The snoop screen still shows
+`CHAT` until you press `Alt-C`, which returns you to watching with "chat ended
+by caller" in the status bar. The event log shows "Chat with <sysop> started"
+and "Chat ended" for each chat.
+
+### Pages
+
+A caller pages you with the [`PAGESYSOP`](reference/menu-commands.md) menu
+command and gives a one-line reason. With no `wfc` console connected they see
+"The SysOp is not available right now." immediately.
+
+Otherwise every connected console shows a `PAGE` badge with the number of
+waiting pages and rings the terminal bell once for each new page. The caller
+sees "Paging SysOp..." with a countdown and a bell each second. They can cancel
+by pressing a key; a caller who cancels this way gets no message. After `pageSysopTimeout` seconds with no answer they see the
+not-available message. A caller can send one page per `pageSysopCooldown`
+seconds.
+
+`P` opens the page list: node, handle, reason and age. `Enter` opens the snoop
+on that node and starts chat; `Esc` goes back. A `--readonly` console, or one signed in with a read-only account, can open the list but cannot answer: `Enter` is refused. Pages that were answered, timed
+out or cancelled stay in the list, marked, until the caller logs off.
+
+The Alt keys arrive as `ESC` followed by a letter. In macOS Terminal and iTerm,
+set the Option key to send Meta or Esc+, or press `Esc` and then the letter.
+
+`pageSysopTimeout` (default 60) and `pageSysopCooldown` (default 300) are in
+`config.json` and in the config TUI under **Access & Security → Access Levels**
+as **Page Timeout** and **Page Cooldown**; see
+[Configuration](configuration/configuration.md). Changes apply on config
+reload with no restart. The caller's prompts are in the string editor; see
+[String Editor](advanced/string-editor.md#strings-for-sysop-chat-and-paging).
 
 ### Scrolling the logs
 
@@ -331,9 +471,13 @@ reported plainly instead of turning into a retry loop.
 | `Enter` | Show details for the selected row |
 | `Esc` | Close the details overlay |
 | `K` | Kick the selected caller (asks `Y`/`N` first) |
+| `S` | Watch the selected caller (snoop) |
+| `P` | Open the page list |
 | `PgUp` / `PgDn` | Scroll the log back / forward (page the cursor on Events) |
 | `R` | Refresh now (not shown on the bar); retry the connection now when offline |
 | `Q` / `Ctrl+C` | Quit |
+
+On the snoop screen: `Alt-X` dashboard, `Alt-T` type-in, `Alt-C` chat, `Alt-H` status bar.
 
 ## Troubleshooting
 
@@ -342,8 +486,7 @@ publickey], no supported methods remain`** — the server saw your key and
 declined it. `wfc` has no password fallback, so the connection ends. In order
 of likelihood:
 
-1. The public key isn't registered on the account — or was registered but the
-   **BBS wasn't restarted** afterward.
+1. The public key isn't registered on the account.
 2. The key was added to a different account than you're thinking of, or the
    account's `accessLevel` is below `coSysOpLevel` (default 250).
 3. `wfcEnabled` is toggled off in the server config.
@@ -380,11 +523,9 @@ login because it didn't match a qualifying account.
   to the normal caller login; existing logins are unchanged.
 - **Re-checked while connected.** An open WFC session re-verifies every 30
   seconds that the *key* it authenticated with is still registered to a
-  qualifying account. Turning **WFC Access** off, or banning, demoting, or
-  deleting the user in the running BBS, disconnects their console within that
-  window. Key edits made with `ue` or `helper` change `users.json` on disk,
-  which the daemon only reads at startup — so revoking a key that way still
-  requires a **BBS restart** to take effect.
+  qualifying account. Turning **WFC Access** off, removing the key, or banning,
+  demoting or deleting the user disconnects their console within that window,
+  whether the change is made in the running BBS or with `ue` or `helper`.
 - **Everything is visible to every qualifying account.** The console shows all
   active sessions — including **invisible** ones — with each caller's handle,
   IP address, and activity, to *any* account at or above `coSysOpLevel`.
@@ -396,9 +537,13 @@ login because it didn't match a qualifying account.
   each kick, with the admin's handle and address — is written to the BBS log
   via structured logging. Unknown public-key offers are logged at debug level
   with the key fingerprint.
-- **Kick is the only mutation.** Any account that can open the console can
-  disconnect any node; there is no separate permission level. Run remote
-  consoles with `--readonly` if a co-sysop should only watch.
+- **Kick, type-in and chat change things.** Any account that can open the console can
+  disconnect any node, watch it, type for the caller and chat, unless the
+  account is marked **WFC Read Only**. Watching is not shown to the caller.
+  Mark a co-sysop's account read-only if they should only look at the
+  dashboard. The daemon enforces it on the admin channel and the snoop
+  channel. `--readonly` only changes the console it is passed to, so it does
+  not restrict anyone else.
 - **Host-key verified.** The client checks the daemon's SSH host key against
   `known_hosts` unless you pass `--insecure`.
 

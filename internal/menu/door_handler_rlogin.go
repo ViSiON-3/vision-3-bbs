@@ -48,7 +48,8 @@ func executeRLoginDoor(ctx *DoorCtx) error {
 	}
 
 	deadline, timeout, expired := doorDeadline(
-		ctx.User.TimeLimit, ctx.SessionStartTime, doorConfig.ConnectTimeout, time.Now())
+		ctx.User.TimeLimit, ctx.SessionStartTime, doorConfig.ConnectTimeout, time.Now(),
+		chatCredit(ctx.Session))
 	if expired {
 		// Opening a connection only to drop it immediately wastes a slot and
 		// litters the door server's log.

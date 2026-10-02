@@ -3,6 +3,7 @@ package telnetserver
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -86,6 +87,10 @@ type TelnetConn struct {
 	// short read deadline on the conn to unblock any pending Read().
 	readInterrupt <-chan struct{}
 	riMu          sync.Mutex
+
+	// woken is set by Wake so the deadline error it causes is reported as
+	// ErrWoken rather than a timeout.
+	woken atomic.Bool
 }
 
 // NewTelnetConn wraps an existing net.Conn with telnet protocol handling.
@@ -323,13 +328,48 @@ func (tc *TelnetConn) SetReadInterrupt(ch <-chan struct{}) {
 	// Watch for the interrupt and unblock the read when it fires
 	go func(ch <-chan struct{}) {
 		<-ch
+		// Set the deadline under riMu so a wake cannot clear it between its
+		// fired-check and its own SetReadDeadline.
 		tc.riMu.Lock()
-		stillCurrent := tc.readInterrupt == ch
-		tc.riMu.Unlock()
-		if stillCurrent {
+		if tc.readInterrupt == ch {
 			_ = tc.conn.SetReadDeadline(time.Now()) // best-effort negotiation deadline
 		}
+		tc.riMu.Unlock()
 	}(ch)
+}
+
+// ErrWoken is returned by Read when Wake cut a blocked read short. No data
+// was consumed; the caller may read again.
+var ErrWoken = errors.New("telnet: read woken")
+
+// Wake makes a blocked Read return ErrWoken, using the same past-deadline
+// mechanism as SetReadInterrupt.
+func (tc *TelnetConn) Wake() {
+	tc.woken.Store(true)
+	_ = tc.conn.SetReadDeadline(time.Now()) // best-effort wake
+}
+
+// clearWakeDeadline removes the past deadline a wake set. The check and the
+// clear happen under riMu, so a fired read interrupt keeps its own deadline.
+func (tc *TelnetConn) clearWakeDeadline() {
+	tc.riMu.Lock()
+	defer tc.riMu.Unlock()
+	if tc.readInterrupt != nil {
+		select {
+		case <-tc.readInterrupt:
+			return
+		default:
+		}
+	}
+	_ = tc.conn.SetReadDeadline(time.Time{}) // best-effort wake
+}
+
+// clearWake drops a wake that arrived after Read had already returned data,
+// so its past deadline does not fail the next read.
+func (tc *TelnetConn) clearWake() {
+	if tc.woken.Swap(false) {
+		tc.clearWakeDeadline()
+	}
 }
 
 // Read reads data from the telnet connection, stripping IAC commands transparently.
@@ -431,6 +471,17 @@ func (tc *TelnetConn) Read(p []byte) (int, error) {
 					}
 					return 0, io.EOF
 				default:
+				}
+			}
+
+			if tc.woken.Swap(false) {
+				var ne net.Error
+				if errors.As(err, &ne) && ne.Timeout() {
+					tc.clearWakeDeadline()
+					if written > 0 {
+						return written, nil
+					}
+					return 0, ErrWoken
 				}
 			}
 

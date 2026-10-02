@@ -38,6 +38,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwkservice"
 	"github.com/ViSiON-3/vision-3-bbs/internal/scheduler"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/telnetserver"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tosser"
@@ -852,6 +853,11 @@ func (ct *ConnectionTracker) StopWatching() {
 // --- BBS sessionHandler (Original logic) ---
 func sessionHandler(s ssh.Session) {
 	nodeID := allocateNodeIDForSession(s)
+	tap := snoop.NewTap()
+	defer tap.Close()
+	if ts, ok := s.(interface{ SetTap(*snoop.Tap) }); ok {
+		ts.SetTap(tap)
+	}
 	remoteAddr := s.RemoteAddr().String()
 
 	// Extract session ID if available (type-specific)
@@ -880,6 +886,9 @@ func sessionHandler(s ssh.Session) {
 		menu.ClearSessionIdleTimeout(s)
 		if sessionRegistry != nil {
 			sessionRegistry.Unregister(int(nodeID))
+		}
+		if adminServer != nil && authenticatedUser != nil {
+			adminServer.ClearPage(int(nodeID), authenticatedUser.Handle, "logoff")
 		}
 
 		// V3Net logoff notification
@@ -1188,6 +1197,8 @@ func sessionHandler(s ssh.Session) {
 	sessionStartTime := time.Now()
 
 	bbsSession = &session.BbsSession{
+		Tap:          tap,
+		ChatCredit:   func() time.Duration { return menu.ChatCredit(s) },
 		NodeID:       int(nodeID),
 		StartTime:    sessionStartTime,
 		LastActivity: sessionStartTime,
@@ -1196,6 +1207,8 @@ func sessionHandler(s ssh.Session) {
 		// The channel lets the WFC console drop this caller (kick): closing
 		// it makes the session's next read return EOF and unwind normally.
 		Channel: s,
+		// Live size for the WFC snoop header and teleconference.
+		Size: liveTermSize(&physicalWidth, &termHeight),
 	}
 	sessionRegistry.Register(bbsSession)
 
@@ -1953,8 +1966,13 @@ func main() {
 		Kick: func(nodeID int, connectedAt time.Time) error {
 			return kickNode(sessionRegistry, nodeID, connectedAt)
 		},
-		TimeLimit: menuExecutor.TimeLimit,
+		TimeLimit:  menuExecutor.TimeLimit,
+		ChatCredit: chatCreditHook(sessionRegistry),
+		TypeIn:     typeInHook(sessionRegistry),
+		Chat:       chatHook(sessionRegistry),
+		Snoop:      snoopTarget(sessionRegistry),
 	})
+	menuExecutor.Pager = adminServer
 	go adminServer.Run(context.Background())
 
 	if ftnErr == nil && len(ftnConfig.Networks) > 0 && !ftnConfig.Binkd.Enabled {

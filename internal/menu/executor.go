@@ -15,6 +15,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -76,6 +77,7 @@ type MenuExecutor struct {
 	ChatLeaves      ChatLeafProvider              // V3Net chat leaf provider (nil = local only)
 	V3NetReload     func() error                  // Applies v3net.json subscription changes live (nil = restart required)
 	V3NetStatus     V3NetStatusProvider           // V3Net service status (nil if disabled)
+	Pager           SysopPager                    // WFC side of PAGESYSOP (nil = no console)
 
 	// Hot-reloadable configuration.
 	//
@@ -130,7 +132,65 @@ func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners [
 	e.SetServerConfig(serverCfg)
 	e.SetLoginSequence(loginSequence)
 	e.SetProtocols(protocols)
+	SetSysopChatEnv(chatEnv{theme: e.Theme, strings: e.Strings, caller: e.chatCaller, ended: e.chatEnded, holdDropped: e.chatHoldDropped})
 	return e
+}
+
+// chatCaller returns the handle and saved screen size of the logged-in user
+// on the session carrying tap, or zero values when there is none.
+func (e *MenuExecutor) chatCaller(tap *snoop.Tap) (handle string, width, height int) {
+	for _, bs := range e.activeSessions() {
+		if bs.Tap != tap {
+			continue
+		}
+		bs.Mutex.RLock()
+		defer bs.Mutex.RUnlock()
+		if bs.User == nil {
+			return "", 0, 0
+		}
+		return bs.User.Handle, bs.User.ScreenWidth, bs.User.ScreenHeight
+	}
+	return "", 0, 0
+}
+
+// chatEnded tells the WFC consoles, through Pager, that chat on the session
+// carrying tap is over.
+func (e *MenuExecutor) chatEnded(tap *snoop.Tap) {
+	p, ok := e.Pager.(interface {
+		ChatEnded(nodeID int, handle string)
+	})
+	if !ok {
+		return
+	}
+	for _, bs := range e.activeSessions() {
+		if bs.Tap != tap {
+			continue
+		}
+		bs.Mutex.RLock()
+		node, handle := bs.NodeID, ""
+		if bs.User != nil {
+			handle = bs.User.Handle
+		}
+		bs.Mutex.RUnlock()
+		p.ChatEnded(node, handle)
+		return
+	}
+}
+
+// chatHoldDropped logs the end of a type-in hold that the caller's end of
+// chat dropped. It records no keystrokes.
+func (e *MenuExecutor) chatHoldDropped(tap *snoop.Tap, sysop string, held time.Duration, injected int) {
+	node := 0
+	for _, bs := range e.activeSessions() {
+		if bs.Tap == tap {
+			bs.Mutex.RLock()
+			node = bs.NodeID
+			bs.Mutex.RUnlock()
+			break
+		}
+	}
+	slog.Info("wfc-snoop: type-in off", "sysop", sysop, "node", node,
+		"duration", held.Round(time.Second), "bytes", injected)
 }
 
 // --- Hot Reload Methods ---
@@ -394,7 +454,7 @@ func (e *MenuExecutor) handleIdleTimeout(terminal *term.Terminal, outputMode ans
 
 // timeLimitReached reports whether s has a time limit and it has run out.
 func timeLimitReached(s ssh.Session) bool {
-	d, ok := sessionDeadlines.Load(s)
+	d, ok := sessionDeadlines.Load(unwrapSession(s))
 	return ok && !time.Now().Before(d.(time.Time))
 }
 
@@ -420,7 +480,7 @@ const timeLimitWarnWindow = 5 * time.Minute
 // limit. Part of a minute counts as a whole one, so the last warning says 1
 // rather than 0.
 func (e *MenuExecutor) timeLeftWarning(s ssh.Session) (string, bool) {
-	d, ok := sessionDeadlines.Load(s)
+	d, ok := sessionDeadlines.Load(unwrapSession(s))
 	if !ok {
 		return "", false
 	}

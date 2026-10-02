@@ -432,3 +432,49 @@ func TestRefreshThrottlesDiskReads(t *testing.T) {
 			after.AccessLevel)
 	}
 }
+
+// A sync waiting on um.mu must not be holding the users.json lock. SaveUsers
+// takes um.mu first and the file lock second, so a sync that held the file
+// lock while waiting would stall the save for filelock.DefaultTimeout and
+// then let it write unlocked.
+func TestSyncDoesNotHoldFileLockWhileWaitingForManager(t *testing.T) {
+	um := refreshMgr(t, &User{ID: 1, Handle: "Felonius", AccessLevel: 255})
+
+	um.mu.Lock()
+	done := make(chan struct{})
+	go func() {
+		um.syncFromDisk()
+		close(done)
+	}()
+
+	// lastSync is stamped just before the file lock is tried; give the sync
+	// time to get from there to its wait on um.mu.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		sessionRefresh.mu.Lock()
+		started := !sessionRefresh.lastSync.IsZero()
+		sessionRefresh.mu.Unlock()
+		if started {
+			break
+		}
+		if time.Now().After(deadline) {
+			um.mu.Unlock()
+			t.Fatal("sync never started")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	start := time.Now()
+	err := um.saveUsersLocked()
+	took := time.Since(start)
+	um.mu.Unlock()
+	<-done
+
+	if err != nil {
+		t.Fatalf("saveUsersLocked: %v", err)
+	}
+	if took > time.Second {
+		t.Errorf("save waited %s for the file lock held by a blocked sync", took)
+	}
+}

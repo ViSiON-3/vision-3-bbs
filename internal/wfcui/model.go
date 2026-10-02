@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,6 +20,7 @@ const (
 	modeList viewMode = iota
 	modeDetails
 	modeConfirmKick
+	modePages // the list of caller pages
 )
 
 // group is one of the tabbed views in the lower box. The upper box always
@@ -95,6 +97,8 @@ type Options struct {
 	NoColor   bool
 	ReadOnly  bool
 	MaxEvents int
+	// NoBell silences the terminal bell on a new page.
+	NoBell bool
 	// Refresh is the poll interval. If zero, defaults to 1 second.
 	Refresh time.Duration
 	// Version is shown in the title bar ("WFC v1.2.3").
@@ -106,6 +110,9 @@ type Options struct {
 
 	// now is the clock; tests override it. Nil means time.Now.
 	now func() time.Time
+	// bell rings the terminal bell; tests override it. Nil writes BEL to
+	// stdout.
+	bell func()
 }
 
 // Model is the WFC TUI model.
@@ -122,8 +129,16 @@ type Model struct {
 	// prompt acts on this, not on whatever the cursor index points at by
 	// the time Y is pressed, since a snapshot can reorder the list meanwhile.
 	kickTarget admin.NodeState
-	width      int
-	height     int
+	// pages are the callers' page requests, one per node. A cleared page
+	// stays listed with Type EventPageCleared until the caller logs off.
+	pages []admin.Event
+	// seenPages holds the pages this console has seen, by node and time, so
+	// replayed history never rings the bell. It survives reconnects.
+	seenPages    map[pageKey]time.Time
+	snoopPending bool // a snoop is opening or running
+	pageSel      int
+	width        int
+	height       int
 	// scrollBack is how many log lines the lower box is held back from
 	// the newest entry (PgUp/PgDn); zero follows the tail.
 	scrollBack int
@@ -161,7 +176,10 @@ func New(client admin.AdminClient, opts Options) Model {
 	if opts.now == nil {
 		opts.now = time.Now
 	}
-	m := Model{client: client, opts: opts, mode: modeList, conn: connLost}
+	if opts.bell == nil {
+		opts.bell = func() { _, _ = fmt.Fprint(os.Stdout, "\a") }
+	}
+	m := Model{client: client, opts: opts, mode: modeList, conn: connLost, seenPages: map[pageKey]time.Time{}}
 	if client != nil {
 		m.conn = connConnected
 		m.everLinked = true
@@ -441,6 +459,12 @@ func (m *Model) clampScroll() {
 	}
 }
 
+// readOnly reports whether node control (kick, snoop, type-in, chat) is off:
+// asked for with --readonly, or the daemon marks the account read-only.
+func (m Model) readOnly() bool {
+	return m.opts.ReadOnly || (m.snapshot != nil && m.snapshot.ReadOnly)
+}
+
 // hasSchema reports whether the daemon stamps snapshots with at least
 // schema n, i.e. whether it reports the fields that version added.
 func (m Model) hasSchema(n int) bool { return m.snapshot != nil && m.snapshot.Schema >= n }
@@ -567,6 +591,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lastSnapAt = m.now()
 			}
 			m.clampSelection()
+			m.dropGonePages()
 		}
 		return m, nil
 
@@ -587,7 +612,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.loseConnection(errEventStreamClosed)
 		}
 		m.appendServerEvent(msg.ev)
-		return m, waitForEvent(msg.connID, msg.ch)
+		next := waitForEvent(msg.connID, msg.ch)
+		if m.applyPageEvent(msg.ev) && !m.opts.NoBell {
+			return m, tea.Batch(next, m.ringBell())
+		}
+		return m, next
 
 	case connLostMsg:
 		if msg.connID != m.connID {
@@ -652,6 +681,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setStatus("Kicked "+who, false)
 		m.pushLocalEvent("Kicked " + who)
 		return m, m.readSnapshot()
+
+	case snoopOpenedMsg:
+		return m.snoopOpened(msg)
+
+	case snoopResult:
+		m.snoopPending = false
+		if msg.reason != "" {
+			m.setStatus(msg.reason, false)
+		}
+		return m, m.refreshNow()
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)

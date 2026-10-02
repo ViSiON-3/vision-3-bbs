@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -39,10 +40,20 @@ type ServerConfig struct {
 	// have no limit whatever their record says). Nil means u.TimeLimit as
 	// stored.
 	TimeLimit func(u *user.User) int
+	// ChatCredit reports the sysop chat time credited to the caller on
+	// nodeID, which the time left adds back. Nil means none.
+	ChatCredit func(nodeID int) time.Duration
 	// Kick disconnects the caller on nodeID whose session started at
 	// connectedAt (a zero time skips that check). Nil means the server
 	// rejects CommandKick as unsupported.
 	Kick func(nodeID int, connectedAt time.Time) error
+	// TypeIn turns sysop type-in on or off for the caller on nodeID whose
+	// session started at connectedAt. Nil means unsupported.
+	TypeIn func(sysop string, nodeID int, connectedAt time.Time, on bool) error
+	// Chat starts or ends split-screen chat. Nil means unsupported.
+	Chat func(sysop string, nodeID int, connectedAt time.Time, start bool) (started bool, err error)
+	// Snoop resolves wfc-snoop requests; used by the in-process client.
+	Snoop SnoopTarget
 }
 
 // Server polls SessionRegistry, keeps the latest snapshot, and fans out
@@ -55,6 +66,7 @@ type Server struct {
 	ring     []Event
 	subs     map[chan Event]struct{}
 	lastTick time.Time
+	pages    map[int]time.Time // node -> when its outstanding page was raised
 }
 
 // RefreshInterval returns the configured polling interval.
@@ -68,7 +80,7 @@ func NewServer(cfg ServerConfig) *Server {
 	if cfg.Refresh <= 0 {
 		cfg.Refresh = time.Second
 	}
-	return &Server{cfg: cfg, subs: make(map[chan Event]struct{})}
+	return &Server{cfg: cfg, subs: make(map[chan Event]struct{}), pages: make(map[int]time.Time)}
 }
 
 // Run polls until ctx is cancelled.
@@ -132,7 +144,7 @@ func (s *Server) tickLocked(now time.Time) {
 	if s.cfg.PendingReloads != nil {
 		pending = s.cfg.PendingReloads()
 	}
-	snap := BuildSnapshot(s.cfg.Reg, s.cfg.SystemName, s.cfg.StartedAt, now, counters, s.cfg.TimeLimit)
+	snap := BuildSnapshot(s.cfg.Reg, s.cfg.SystemName, s.cfg.StartedAt, now, counters, s.cfg.TimeLimit, s.cfg.ChatCredit)
 	snap.Schema = SnapshotSchema
 	snap.PendingReloads = pending
 	if s.cfg.MaxNodes != nil {
@@ -236,8 +248,21 @@ func (s *Server) Subscribe(ctx context.Context) <-chan Event {
 // Kick hook wired.
 var ErrKickUnsupported = errors.New("admin: kick not supported by this server")
 
-// Execute runs an admin command.
-func (s *Server) Execute(cmd AdminCommand) (*Result, error) {
+var errNoSysop = errors.New("admin: sysop identity required")
+
+// ErrReadOnly refuses every command but refresh from a read-only WFC account.
+var ErrReadOnly = errors.New("read-only WFC account")
+
+// Execute runs cmd with no sysop identity; node-control commands refuse it.
+func (s *Server) Execute(cmd AdminCommand) (*Result, error) { return s.ExecuteAs("", cmd) }
+
+func payloadBool(p map[string]any, key string) bool {
+	v, _ := p[key].(bool)
+	return v
+}
+
+// ExecuteAs runs an admin command on behalf of sysop.
+func (s *Server) ExecuteAs(sysop string, cmd AdminCommand) (*Result, error) {
 	switch cmd.Command {
 	case CommandRefresh:
 		// Rate-limit forced ticks: a client spamming refresh must not drive
@@ -260,7 +285,75 @@ func (s *Server) Execute(cmd AdminCommand) (*Result, error) {
 		// rather than on the next scheduled tick.
 		s.refreshIfDue()
 		return &Result{OK: true, Message: fmt.Sprintf("node %d disconnected", cmd.NodeID)}, nil
+	case CommandTypeIn:
+		if s.cfg.TypeIn == nil {
+			return nil, fmt.Errorf("admin: type-in not supported by this server")
+		}
+		if sysop == "" {
+			return nil, errNoSysop
+		}
+		on := payloadBool(cmd.Payload, "on")
+		if err := s.cfg.TypeIn(sysop, cmd.NodeID, cmd.ConnectedAt, on); err != nil {
+			return nil, err
+		}
+		return &Result{OK: true}, nil
+	case CommandChat:
+		if s.cfg.Chat == nil {
+			return nil, fmt.Errorf("admin: chat not supported by this server")
+		}
+		if sysop == "" {
+			return nil, errNoSysop
+		}
+		start := payloadBool(cmd.Payload, "start")
+		started, err := s.cfg.Chat(sysop, cmd.NodeID, cmd.ConnectedAt, start)
+		if err != nil {
+			return nil, err
+		}
+		// The end of chat is reported by ChatEnded, from the caller's
+		// session, however it ended.
+		if start && started {
+			handle, _ := s.nodeIdentity(cmd.NodeID, cmd.ConnectedAt)
+			s.emit(Event{Time: timeNow(), Type: EventChatState, NodeID: cmd.NodeID, Handle: handle, Message: "on " + sysop})
+		}
+		return &Result{OK: true}, nil
 	default:
 		return nil, fmt.Errorf("admin: unsupported command: %s", cmd.Command)
 	}
+}
+
+// RaisePage tells every console that the caller on nodeID paged the sysop.
+func (s *Server) RaisePage(nodeID int, handle, reason string) {
+	now := timeNow()
+	s.mu.Lock()
+	s.pages[nodeID] = now
+	s.publishLocked([]Event{{Time: now, Type: EventPage, NodeID: nodeID, Handle: handle, Message: reason}})
+	s.mu.Unlock()
+	slog.Info("page raised", "node", nodeID, "handle", handle, "reason", reason)
+}
+
+// ClearPage withdraws nodeID's outstanding page; why is answered, cancelled,
+// timeout or logoff. It does nothing when the node has no page outstanding.
+func (s *Server) ClearPage(nodeID int, handle, why string) {
+	s.mu.Lock()
+	if _, ok := s.pages[nodeID]; !ok {
+		s.mu.Unlock()
+		return
+	}
+	delete(s.pages, nodeID)
+	s.publishLocked([]Event{{Time: timeNow(), Type: EventPageCleared, NodeID: nodeID, Handle: handle, Message: why}})
+	s.mu.Unlock()
+	slog.Info("page cleared", "node", nodeID, "handle", handle, "why", why)
+}
+
+// ChatEnded tells every console that sysop chat on nodeID is over, whoever
+// ended it.
+func (s *Server) ChatEnded(nodeID int, handle string) {
+	s.emit(Event{Time: timeNow(), Type: EventChatState, NodeID: nodeID, Handle: handle, Message: "off"})
+}
+
+// Consoles reports how many event subscribers (WFC consoles) are attached.
+func (s *Server) Consoles() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.subs)
 }

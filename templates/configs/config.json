@@ -4,6 +4,8 @@
   "timezone": "America/Chicago",
   "sysOpLevel": 255,
   "coSysOpLevel": 250,
+  "pageSysopTimeout": 60,
+  "pageSysopCooldown": 300,
   "invisibleLevel": 250,
   "newUserLevel": 10,
   "autoValidateNewUsers": false,

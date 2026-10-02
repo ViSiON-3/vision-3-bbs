@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/syncjs"
 )
@@ -74,6 +75,7 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 		ScreenHeight:     ctx.User.ScreenHeight,
 		NodeNumber:       ctx.NodeNumber,
 		SessionStartTime: ctx.SessionStartTime,
+		ChatCredit:       func() time.Duration { return chatCredit(ctx.Session) },
 		BoardName:        ctx.Executor.GetServerConfig().BoardName,
 		SysOpName:        ctx.Executor.GetServerConfig().SysOpName,
 	}

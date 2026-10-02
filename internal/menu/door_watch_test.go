@@ -12,6 +12,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 )
 
 func TestDoorWatchIdle(t *testing.T) {
@@ -365,5 +366,60 @@ func TestRemoteDoorTimeLimitWinsRace(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("RLogin door outlived the time limit")
+	}
+}
+
+// The snoop tap and the chat credit belong to the transport session, and are
+// still found through the wrapper a door runs under.
+func TestWrappedSessionKeepsTapAndChatCredit(t *testing.T) {
+	tap := snoop.NewTap()
+	base := &tappedSession{t: tap}
+	w := newDoorWatch(0, time.Time{})
+	defer w.freeze()
+	ws := wrapDoorSession(base, w)
+
+	if got := tapOf(ws); got != tap {
+		t.Errorf("tapOf(wrapped) = %p, want %p", got, tap)
+	}
+
+	defer ClearSessionIdleTimeout(base)
+	addChatCredit(base, 7*time.Minute)
+	if got := chatCredit(ws); got != 7*time.Minute {
+		t.Errorf("chatCredit(wrapped) = %v, want 7m", got)
+	}
+	addChatCredit(ws, time.Minute)
+	if got := chatCredit(base); got != 8*time.Minute {
+		t.Errorf("credit added through the wrapper = %v, want 8m on the transport", got)
+	}
+}
+
+// Chat time is not charged to the caller, so it pushes the door's deadline out.
+func TestDoorTimeLimitDeadlineIncludesChatCredit(t *testing.T) {
+	base := plainReadSession{r: strings.NewReader("")}
+	defer ClearSessionIdleTimeout(base)
+	start := time.Now().Add(-20 * time.Minute)
+	ctx := &DoorCtx{SessionStartTime: start, Session: base}
+	ctx.User.TimeLimit = 30
+
+	plain := doorTimeLimitDeadline(ctx)
+	addChatCredit(base, 10*time.Minute)
+	ctx.Session = wrapDoorSession(base, newDoorWatch(0, time.Time{}))
+	credited := doorTimeLimitDeadline(ctx)
+	if d := credited.Sub(plain); d < 10*time.Minute-time.Second || d > 10*time.Minute+time.Second {
+		t.Errorf("deadline moved by %v, want 10m", d)
+	}
+}
+
+// A caller whose base limit has passed but who chatted with the sysop is let in.
+func TestRunDoorWatchedAdmitsCreditedCaller(t *testing.T) {
+	base := plainReadSession{r: strings.NewReader("")}
+	defer ClearSessionIdleTimeout(base)
+	addChatCredit(base, 10*time.Minute)
+	ctx := &DoorCtx{SessionStartTime: time.Now().Add(-31 * time.Minute), Session: base}
+	ctx.User.TimeLimit = 30
+	ran := false
+	err := runDoorWatched(ctx, func(*DoorCtx) error { ran = true; return nil })
+	if err != nil || !ran {
+		t.Errorf("err=%v ran=%v, want the door to run", err, ran)
 	}
 }

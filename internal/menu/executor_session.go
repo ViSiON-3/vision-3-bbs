@@ -9,6 +9,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
@@ -48,6 +49,7 @@ func clearSessionIdleTimeout(s ssh.Session) {
 func ClearSessionIdleTimeout(s ssh.Session) {
 	clearSessionIdleTimeout(s)
 	sessionDeadlines.Delete(s)
+	sessionChatCredits.Delete(s)
 }
 
 // sessionDeadlines remembers when each session's time limit runs out, for the
@@ -55,9 +57,46 @@ func ClearSessionIdleTimeout(s ssh.Session) {
 // recreated InputHandler. A session with no limit has no entry.
 var sessionDeadlines sync.Map
 
-// applySessionDeadline records the time-limit deadline for s and applies it to
-// the current InputHandler. The zero time means no limit.
+// sessionChatCredits holds, per session, the time spent in sysop chat. Chat
+// is not charged to the caller, so it is added to every deadline armed for
+// the session. It outlives MenuExecutor.Run, which runs once per menu.
+var sessionChatCredits sync.Map
+
+// chatCredit and the other per-session lookups key on the transport session,
+// so a door's wrapper is unwrapped first.
+func chatCredit(s ssh.Session) time.Duration {
+	s = unwrapSession(s)
+	if v, ok := sessionChatCredits.Load(s); ok {
+		return v.(time.Duration)
+	}
+	return 0
+}
+
+// ChatCredit returns the sysop chat time credited to s, for time-left values
+// computed outside the menu package.
+func ChatCredit(s ssh.Session) time.Duration { return chatCredit(s) }
+
+// addChatCredit credits d of chat to s and moves its recorded deadline out
+// by d. The InputHandler's own deadline is moved by the break-in itself.
+func addChatCredit(s ssh.Session, d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	s = unwrapSession(s)
+	sessionChatCredits.Store(s, chatCredit(s)+d)
+	if v, ok := sessionDeadlines.Load(s); ok {
+		sessionDeadlines.Store(s, v.(time.Time).Add(d))
+	}
+}
+
+// applySessionDeadline records the time-limit deadline for s, extended by
+// its chat credit, and applies it to the current InputHandler. The zero time
+// means no limit.
 func applySessionDeadline(s ssh.Session, deadline time.Time) {
+	s = unwrapSession(s)
+	if !deadline.IsZero() {
+		deadline = deadline.Add(chatCredit(s))
+	}
 	if deadline.IsZero() {
 		sessionDeadlines.Delete(s)
 	} else {
@@ -97,6 +136,18 @@ var sessionOutputModes sync.Map
 // with the same encoding the terminal is using for output.
 func SetSessionOutputMode(s ssh.Session, mode ansi.OutputMode) {
 	sessionOutputModes.Store(s, mode)
+	if t := tapOf(s); t != nil {
+		t.SetCP437(mode == ansi.OutputModeCP437)
+	}
+}
+
+// tapOf returns the snoop tap carried by s, or nil.
+func tapOf(s ssh.Session) *snoop.Tap {
+	s = unwrapSession(s)
+	if tp, ok := s.(snoop.Tapped); ok {
+		return tp.Tap()
+	}
+	return nil
 }
 
 // sessionOutputMode returns the recorded output mode for s, defaulting to
@@ -156,6 +207,9 @@ func getSessionIH(s ssh.Session) *editor.InputHandler {
 	}
 	if d, ok := sessionDeadlines.Load(s); ok {
 		ih.SetSessionDeadline(d.(time.Time))
+	}
+	if tap := tapOf(s); tap != nil {
+		ih.SetBreakIn(tap.BreakIn(), func() { serviceSysopChat(s, ih, tap) })
 	}
 	sessionInputHandlers.Store(s, ih)
 	return ih

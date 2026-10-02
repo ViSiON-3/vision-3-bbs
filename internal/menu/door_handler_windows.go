@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -201,6 +202,11 @@ func executeDoor(ctx *DoorCtx) error {
 			return fmt.Errorf("failed to acquire door lock: %w", err)
 		}
 		defer releaseDoorLock(ctx.DoorName, ctx.NodeNumber)
+	}
+
+	if t := tapOf(ctx.Session); t != nil {
+		t.SetMode(snoop.ModeDoor)
+		defer t.SetMode(snoop.ModeBBS)
 	}
 
 	// The idle timeout and time limit are enforced in the BBS's input loops,

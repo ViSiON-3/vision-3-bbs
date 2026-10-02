@@ -188,8 +188,8 @@ func TestYesNoFieldAutoConfirms(t *testing.T) {
 func TestCtrlHomeEndJump(t *testing.T) {
 	m, _ := editBob(t)
 	m = press(t, m, key(tea.KeyCtrlEnd))
-	if m.label() != "Output Mode" {
-		t.Errorf("Ctrl+End = %q, want Output Mode", m.label())
+	if m.label() != "WFC Read Only" {
+		t.Errorf("Ctrl+End = %q, want WFC Read Only", m.label())
 	}
 	m = press(t, m, key(tea.KeyCtrlHome))
 	if m.label() != "Handle" {

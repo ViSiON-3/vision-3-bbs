@@ -53,7 +53,7 @@ func TestSSHChannelClient_SnapshotOverSSH(t *testing.T) {
 		PublicKeyHandler: func(_ gliderssh.Context, _ gliderssh.PublicKey) bool { return true },
 		SubsystemHandlers: map[string]gliderssh.SubsystemHandler{
 			"wfc-admin": func(s gliderssh.Session) {
-				_ = ServeRPC(ctx, s, srv, nil)
+				_ = ServeRPC(ctx, s, srv, "sysop", nil, nil)
 			},
 		},
 	}
@@ -116,7 +116,7 @@ func TestSSHDialConfig_InsecureIgnoresKnownHosts(t *testing.T) {
 		PublicKeyHandler: func(_ gliderssh.Context, _ gliderssh.PublicKey) bool { return true },
 		SubsystemHandlers: map[string]gliderssh.SubsystemHandler{
 			"wfc-admin": func(s gliderssh.Session) {
-				_ = ServeRPC(ctx, s, srv, nil)
+				_ = ServeRPC(ctx, s, srv, "sysop", nil, nil)
 			},
 		},
 	}
@@ -160,7 +160,7 @@ func startSSHTestServer(t *testing.T, ctx context.Context, srv *Server, hostSign
 		PublicKeyHandler: func(_ gliderssh.Context, _ gliderssh.PublicKey) bool { return true },
 		SubsystemHandlers: map[string]gliderssh.SubsystemHandler{
 			"wfc-admin": func(s gliderssh.Session) {
-				_ = ServeRPC(ctx, s, srv, nil)
+				_ = ServeRPC(ctx, s, srv, "sysop", nil, nil)
 			},
 		},
 	}
