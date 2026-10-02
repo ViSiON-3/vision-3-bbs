@@ -45,10 +45,12 @@ type TossResult struct {
 	Errors           []string
 
 	// File echoes (see tic.go): files delivered into file areas, dropped as
-	// duplicates, and moved aside as undeliverable.
+	// duplicates, moved aside as undeliverable, and removed from their area
+	// because a newer file's TIC said it replaces them.
 	FilesImported int
 	FilesDuped    int
 	FilesBad      int
+	FilesRemoved  int
 
 	// WaitingTICs are TICs this network claimed whose file has not arrived
 	// yet. They stay in the inbound but are not unclaimed: FindUnclaimed's

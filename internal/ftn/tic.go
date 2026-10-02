@@ -6,6 +6,7 @@ import (
 	"hash/crc32"
 	"io"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -14,8 +15,8 @@ import (
 // file distributed through an FTN file echo. Each line is a keyword and its
 // value; keywords are case-insensitive, and several may repeat.
 //
-// Keywords the inbound processor has no use for (Magic, Replaces, Date,
-// Created, ...) are ignored.
+// Keywords the inbound processor has no use for (Magic, Date, Created, ...)
+// are ignored.
 type TIC struct {
 	Area     string   // file echo tag, e.g. "TQW_LINUXFILES"
 	AreaDesc string   // Areadesc: the echo's description
@@ -29,6 +30,7 @@ type TIC struct {
 	Path     []string // systems the file has passed through
 	SeenBy   []string // systems that have the file
 	Password string   // Pw: the password agreed with the sending link
+	Replaces []string // files in the area this one supersedes; may hold * and ? wildcards
 
 	Size   int64 // -1 when the TIC has no Size line
 	CRC    uint32
@@ -77,6 +79,10 @@ func ParseTIC(r io.Reader) (*TIC, error) {
 			t.SeenBy = append(t.SeenBy, value)
 		case "pw":
 			t.Password = value
+		case "replaces":
+			if value != "" {
+				t.Replaces = append(t.Replaces, value)
+			}
 		case "size":
 			n, err := strconv.ParseInt(value, 10, 64)
 			if err != nil || n < 0 {
@@ -143,6 +149,31 @@ func (t *TIC) Description() string {
 		return strings.Join(t.LDesc, "\n")
 	}
 	return strings.Join(t.Desc, "\n")
+}
+
+// ReplacesFile reports whether name is a file one of the TIC's Replaces lines
+// names. Names compare case-insensitively, and * and ? are the only
+// wildcards: a file name may itself hold the other characters path.Match
+// treats specially.
+func (t *TIC) ReplacesFile(name string) bool {
+	for _, pattern := range t.Replaces {
+		if matchFileName(pattern, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchFileName(pattern, name string) bool {
+	var b strings.Builder
+	for _, r := range strings.ToUpper(pattern) {
+		if r == '[' || r == ']' || r == '\\' {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	ok, err := path.Match(b.String(), strings.ToUpper(name))
+	return err == nil && ok
 }
 
 // FromAddress parses the From line, ignoring any "@domain" suffix.

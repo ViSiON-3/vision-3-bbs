@@ -120,3 +120,41 @@ func TestFileCRC32(t *testing.T) {
 		t.Errorf("CRC = %s, want CBF43926", got)
 	}
 }
+
+func TestParseTICReplaces(t *testing.T) {
+	tic, err := ParseTIC(strings.NewReader("Area X\nFile NODELIST.Z19\nCrc 0\nReplaces NODELIST.*\nREPLACES old[1].zip\nReplaces\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(tic.Replaces, "|") != "NODELIST.*|old[1].zip" {
+		t.Errorf("Replaces = %q", tic.Replaces)
+	}
+	cases := []struct {
+		name string
+		want bool
+	}{
+		{"NODELIST.Z12", true},
+		{"nodelist.z12", true}, // case-insensitive
+		{"NODELIST", false},
+		{"NODEDIFF.Z12", false},
+		{"OLD[1].ZIP", true}, // brackets are literal, not a character class
+		{"old1.zip", false},
+	}
+	for _, c := range cases {
+		if got := tic.ReplacesFile(c.name); got != c.want {
+			t.Errorf("ReplacesFile(%q) = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestTICReplacesWildcards(t *testing.T) {
+	tic := &TIC{Replaces: []string{"FSXNET.Z??"}}
+	for name, want := range map[string]bool{"FSXNET.Z75": true, "fsxnet.z82": true, "FSXNET.Z7": false, "FSXNET.ZIP7": false} {
+		if got := tic.ReplacesFile(name); got != want {
+			t.Errorf("ReplacesFile(%q) = %v, want %v", name, got, want)
+		}
+	}
+	if (&TIC{}).ReplacesFile("ANY.ZIP") {
+		t.Error("a TIC with no Replaces line replaces nothing")
+	}
+}

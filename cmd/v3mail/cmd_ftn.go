@@ -102,6 +102,9 @@ func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *to
 			if n := result.FilesImported + result.FilesDuped + result.FilesBad; n > 0 {
 				fmt.Printf("; file echoes: %d received, %d dupes, %d bad",
 					result.FilesImported, result.FilesDuped, result.FilesBad)
+				if result.FilesRemoved > 0 {
+					fmt.Printf(", %d replaced files removed", result.FilesRemoved)
+				}
 			}
 			if len(result.Errors) > 0 {
 				fmt.Printf(", %d errors", len(result.Errors))
