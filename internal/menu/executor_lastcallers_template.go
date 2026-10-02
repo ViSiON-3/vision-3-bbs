@@ -137,6 +137,14 @@ func stripSauceMetadata(input []byte) []byte {
 //
 // Examples: @RR@, @RR:60@, @RR|C:60@, @RR|C##########@, @RR|R8@
 func replaceMenuATCode(content []byte, code string, value string) []byte {
+	return replaceMenuATCodeEncoded(content, code, value, nil)
+}
+
+// replaceMenuATCodeEncoded is replaceMenuATCode for content that is not
+// UTF-8: encode, when non-nil, converts the UTF-8 value once it has been
+// fitted to its field, so the width is measured in characters rather than in
+// the bytes of the target encoding.
+func replaceMenuATCodeEncoded(content []byte, code string, value string, encode func(string) string) []byte {
 	pat := regexp.MustCompile(`@` + regexp.QuoteMeta(code) + `(?:\|([LRC])(\d+)?)?(?::(\d+)|(#+))?@`)
 	return pat.ReplaceAllFunc(content, func(match []byte) []byte {
 		parts := pat.FindSubmatch(match)
@@ -164,6 +172,9 @@ func replaceMenuATCode(content []byte, code string, value string) []byte {
 		result := value
 		if width > 0 {
 			result = ansi.ApplyWidthConstraintAligned(value, width, alignMode)
+		}
+		if encode != nil {
+			result = encode(result)
 		}
 		return []byte(result)
 	})

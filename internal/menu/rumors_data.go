@@ -168,11 +168,20 @@ func rumorAnonName(e *MenuExecutor) string {
 // expandRandomRumorATCode replaces @RR@ AT-codes in content with a random
 // visible rumor. Centralises the Contains guard + level resolution so callers
 // don't duplicate the pattern.
-func expandRandomRumorATCode(content []byte, dataDir string, userLevel int) []byte {
+//
+// Rumors are stored as UTF-8. Set cp437 when content is raw CP437 art, so the
+// rumor is converted to match; inserted as UTF-8 it would be converted a
+// second time along with the art, garbling any non-ASCII character and
+// pushing the rest of the line out of place.
+func expandRandomRumorATCode(content []byte, dataDir string, userLevel int, cp437 bool) []byte {
 	if !bytes.Contains(content, []byte("@RR")) {
 		return content
 	}
-	return replaceMenuATCode(content, "RR", getRandomRumorText(dataDir, userLevel))
+	var encode func(string) string
+	if cp437 {
+		encode = toCP437Safe
+	}
+	return replaceMenuATCodeEncoded(content, "RR", getRandomRumorText(dataDir, userLevel), encode)
 }
 
 // getRandomRumorText returns a random visible rumor's text for MCI substitution.

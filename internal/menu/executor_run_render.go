@@ -55,14 +55,17 @@ func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 			newUsersVal = "YES"
 		}
 		rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|NEWUSERS"), []byte(newUsersVal))
+		// The menu art is raw CP437 until it is converted for output below, so
+		// every value substituted into it is converted to CP437 first. A UTF-8
+		// value left as it is would be converted a second time with the art.
 		currentAreaTag, currentAreaDisplayName := e.resolveCurrentAreaTokens(st.currentUser, st.currentAreaName)
 		currentFileAreaTag, currentFileAreaDisplayName := e.resolveCurrentFileAreaTokens(st.currentUser)
 		// Replace longer tokens first to avoid partial replacement conflicts (e.g. |FCONFPATH, |CFAN vs |CFA vs |CAN vs |CA).
-		rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|FCONFPATH"), []byte(e.resolveFileConferencePath(st.currentUser)))
-		rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CFAN"), []byte(currentFileAreaDisplayName))
-		rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CFA"), []byte(currentFileAreaTag))
-		rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CAN"), []byte(currentAreaDisplayName))
-		rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CA"), []byte(currentAreaTag))
+		rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|FCONFPATH"), []byte(toCP437Safe(e.resolveFileConferencePath(st.currentUser))))
+		rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CFAN"), []byte(toCP437Safe(currentFileAreaDisplayName)))
+		rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CFA"), []byte(toCP437Safe(currentFileAreaTag)))
+		rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CAN"), []byte(toCP437Safe(currentAreaDisplayName)))
+		rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CA"), []byte(toCP437Safe(currentAreaTag)))
 		rawAnsiContent = replaceMenuATCode(rawAnsiContent, "UC", strconv.Itoa(userManager.GetUserCount()))
 		rawAnsiContent = replaceMenuATCode(rawAnsiContent, "U", strconv.Itoa(e.activeNodeCount()))
 		// @RR@ — Random Rumor text (supports @RR@, @RR:50@, @RR######@)
@@ -70,7 +73,7 @@ func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 		if st.currentUser != nil {
 			rumorLevel = st.currentUser.AccessLevel
 		}
-		rawAnsiContent = expandRandomRumorATCode(rawAnsiContent, e.dataDir(), rumorLevel)
+		rawAnsiContent = expandRandomRumorATCode(rawAnsiContent, e.dataDir(), rumorLevel, true)
 	}
 	var ansiProcessResult ansi.ProcessAnsiResult
 	var processErr error
