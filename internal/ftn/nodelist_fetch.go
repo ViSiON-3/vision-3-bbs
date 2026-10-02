@@ -58,13 +58,7 @@ func DownloadNodelist(ctx context.Context, url string) (*Nodelist, error) {
 		return nil, fmt.Errorf("nodelist exceeds %d-byte limit", maxNodelistBytes)
 	}
 
-	if isZipData(data) {
-		data, err = extractNodelistMember(data)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return ParseNodelist(bytes.NewReader(data))
+	return parseNodelistPayload(data, url)
 }
 
 // isZipData reports whether data starts with the zip local-file magic.

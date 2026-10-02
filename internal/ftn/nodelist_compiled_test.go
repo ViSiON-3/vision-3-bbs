@@ -198,3 +198,21 @@ func TestNodelistIndexLookup(t *testing.T) {
 		t.Error("a node added in the new list was not found")
 	}
 }
+
+// A downloaded nodediff is refused like one read from a file, plain or zipped:
+// an added Zone line would otherwise pass the zone check and replace the full
+// list with only the lines that changed.
+func TestDownloadNodelistRefusesNodediff(t *testing.T) {
+	diff := header275 + "\r\nD1\r\nA2\r\n;A fsxNet Nodelist for Friday, October 9, 2026 -- Day number 282 : 1\r\n" +
+		"Zone,21,fsxNet,New_Zealand,Zone_Coordinator,-Unpublished-,300,CM\r\nC3\r\n"
+	for name, body := range map[string][]byte{
+		"plain":  []byte(diff),
+		"zipped": zipOf(t, map[string]string{"FSXNET.D82": diff}),
+	} {
+		srv := serveBytes(t, body)
+		_, err := DownloadNodelist(t.Context(), srv.URL)
+		if err == nil || !strings.Contains(err.Error(), "nodediff") {
+			t.Errorf("%s: err = %v, want a nodediff refusal", name, err)
+		}
+	}
+}

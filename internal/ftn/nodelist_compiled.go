@@ -105,13 +105,21 @@ func ReadNodelistFile(path string) (*Nodelist, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseNodelistPayload(data, filepath.Base(path))
+}
+
+// parseNodelistPayload parses a nodelist as read from a file or downloaded:
+// plain text, or a ZIP holding it. A nodediff is refused; name says what was
+// read, for the error.
+func parseNodelistPayload(data []byte, name string) (*Nodelist, error) {
 	if isZipData(data) {
+		var err error
 		if data, err = extractNodelistMember(data); err != nil {
 			return nil, err
 		}
 	}
 	if isNodediff(data) {
-		return nil, fmt.Errorf("%s is a nodediff, not a full nodelist", filepath.Base(path))
+		return nil, fmt.Errorf("%s is a nodediff, not a full nodelist", name)
 	}
 	return ParseNodelist(bytes.NewReader(data))
 }
