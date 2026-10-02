@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -75,11 +76,18 @@ func wfcKeyAdmin(key gossh.PublicKey) (*user.User, string) {
 // records the identity in the connection's permissions, where the WFC
 // subsystems read it. wfcPublicKeyHandler also runs for unsigned key
 // queries, so nothing it sees can name the admin.
-func wfcVerifiedKey(_ gossh.ConnMetadata, key gossh.PublicKey, perms *gossh.Permissions, _ string) (*gossh.Permissions, error) {
+func wfcVerifiedKey(conn gossh.ConnMetadata, key gossh.PublicKey, perms *gossh.Permissions, _ string) (*gossh.Permissions, error) {
+	var addr net.Addr
+	if conn != nil {
+		addr = conn.RemoteAddr()
+	}
 	u, deny := wfcKeyAdmin(key)
 	if deny != "" {
+		slog.Info("wfc-admin: signed key refused", "reason", deny,
+			"fingerprint", gossh.FingerprintSHA256(key), "addr", addr)
 		return nil, fmt.Errorf("wfc-admin: key no longer authorized (%s)", deny)
 	}
+	slog.Info("wfc-admin: public key accepted", "user", u.Handle, "addr", addr)
 	out := &gossh.Permissions{Extensions: map[string]string{}}
 	if perms != nil {
 		out.CriticalOptions = perms.CriticalOptions
@@ -95,7 +103,8 @@ func wfcVerifiedKey(_ gossh.ConnMetadata, key gossh.PublicKey, perms *gossh.Perm
 
 // wfcVerifiedIdentity returns the admin handle and marshaled key recorded by
 // wfcVerifiedKey, or empty values when the connection did not sign with an
-// admin key.
+// admin key. gliderlabs sets ContextKeyPublicKey (sess.PublicKey()) for
+// unsigned queries too, so only these extensions prove a signature.
 func wfcVerifiedIdentity(ctx ssh.Context) (string, []byte) {
 	conn, ok := ctx.Value(ssh.ContextKeyConn).(*gossh.ServerConn)
 	if !ok || conn == nil || conn.Permissions == nil {
@@ -117,7 +126,8 @@ func wfcPublicKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 	u, deny := wfcKeyAdmin(key)
 	switch deny {
 	case "":
-		slog.Info("wfc-admin: public key accepted", "user", u.Handle, "addr", ctx.RemoteAddr())
+		// Unsigned queries land here too; wfcVerifiedKey logs the acceptance.
+		slog.Debug("wfc-admin: public key offered", "user", u.Handle, "addr", ctx.RemoteAddr())
 		return true
 	case "unregistered":
 		// Debug level: unknown keys are routine (every non-WFC pubkey offer
