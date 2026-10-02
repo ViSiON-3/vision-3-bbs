@@ -85,6 +85,27 @@ goes through its host. Nothing is refused: the list can be a week old, and a
 new system may not be in it yet. Nothing is shown when the network has no
 compiled nodelist, or the address is in a zone the list does not cover.
 
+### Message headers
+
+Two message header placeholders give the system names for a message's
+addresses, looked up in its area network's nodelist:
+
+| Code  | Replaced with                         |
+| ----- | ------------------------------------- |
+| `@Y@` | The origin system's name (`@O@`)      |
+| `@R@` | The destination system's name (`@A@`) |
+
+A point gets its node's name. Both are blank when the address is not listed,
+the area is not an FTN area, or the network has no compiled nodelist, so wrap
+them in an optional group to hide the label too:
+
+```text
+From: @F@|{ at @Y@|}
+```
+
+The default header templates do not use them yet; see
+[Message Header Placeholders](messages/placeholders.md).
+
 ## `helper nodelist import`
 
 Compiles a network's nodelist by hand: the first time, after changing the

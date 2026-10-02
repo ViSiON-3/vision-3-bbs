@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -23,7 +24,8 @@ func convertSubsToCP437(subs map[byte]string) map[byte]string {
 }
 
 // buildMsgSubstitutions creates the Pascal-style substitution map for MSGHDR templates.
-func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, totalMsgs int, includeNoteInFrom bool, replyCount int, confName string, areaName string, msgMgr *message.MessageManager, areaID int, userMgr *user.UserMgr, nodeNumber int, v3netStatus V3NetStatusProvider) map[byte]string {
+// nodelists, when not nil, supplies the system names for @Y@ and @R@.
+func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, totalMsgs int, includeNoteInFrom bool, replyCount int, confName string, areaName string, msgMgr *message.MessageManager, areaID int, userMgr *user.UserMgr, nodeNumber int, v3netStatus V3NetStatusProvider, nodelists *ftn.NodelistIndex) map[byte]string {
 	// Import jam constants
 	const (
 		msgTypeEcho = 0x01000000
@@ -150,6 +152,15 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 		originAddr = v3netNodeID
 	}
 
+	// System names for the FTN addresses, from the area network's nodelist.
+	var origSystem, destSystem string
+	if !isV3Net && nodelists != nil && msgMgr != nil {
+		if area, ok := msgMgr.GetAreaByID(areaID); ok && area.Network != "" {
+			origSystem = nodelistSystemName(nodelists, area.Network, msg.OrigAddr)
+			destSystem = nodelistSystemName(nodelists, area.Network, msg.DestAddr)
+		}
+	}
+
 	return map[byte]string{
 		'B': areaTag,
 		'T': msg.Subject,
@@ -172,7 +183,26 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 		'X': fmt.Sprintf("%s > %s [%d/%d]", confName, areaName, msgNum, totalMsgs), // Conference > Area [current/total]
 		'K': strconv.Itoa(nodeNumber),                                              // Node number
 		'I': v3netNetwork,                                                          // V3Net network name (empty if not V3Net)
+		'Y': origSystem,                                                            // Origin system name from the nodelist
+		'R': destSystem,                                                            // Destination system name from the nodelist
 	}
+}
+
+// nodelistSystemName returns the name the network's compiled nodelist gives
+// the system at addr, or "" when addr is empty or not listed. A point has no
+// entry of its own, so it gets its node's name.
+func nodelistSystemName(nodelists *ftn.NodelistIndex, network, addr string) string {
+	if addr == "" {
+		return ""
+	}
+	a, err := ftn.ParseAddress(addr)
+	if err != nil {
+		return ""
+	}
+	if node, ok := nodelists.Lookup(network, a); ok {
+		return node.Name
+	}
+	return ""
 }
 
 // buildNameWithAddr combines a display name with an FTN address suffix like "Name (21:4/158)".
