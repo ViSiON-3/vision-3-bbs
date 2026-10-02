@@ -48,8 +48,8 @@ type BbsSession struct {
 	Invisible    bool                 // True if user logged in invisibly (SysOp/CoSysOp only)
 	Tap          *snoop.Tap           // WFC snoop point for this node; nil in tests
 	ChatCredit   func() time.Duration // Sysop chat time credited to the caller; nil means none
-	// Size returns the caller's current terminal size. nil means Width and
-	// Height hold it.
+	// Size returns the caller's live terminal size. The SSH session handler
+	// sets it; sessions built without it (tests) report Width and Height.
 	Size func() (width, height int)
 }
 

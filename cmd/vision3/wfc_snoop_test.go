@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -54,6 +55,20 @@ func TestSnoopTargetHeaderUsesLiveSize(t *testing.T) {
 	}
 	if hdr.Width != 132 || hdr.Height != 50 {
 		t.Fatalf("header size %dx%d, want 132x50", hdr.Width, hdr.Height)
+	}
+}
+
+func TestLiveTermSizeUsesPhysicalWidth(t *testing.T) {
+	var phys, termW, termH atomic.Int32
+	phys.Store(132)
+	termW.Store(80) // the user's saved width preference
+	termH.Store(50)
+	if w, h := liveTermSize(&phys, &termH)(); w != 132 || h != 50 {
+		t.Fatalf("size %dx%d, want 132x50", w, h)
+	}
+	phys.Store(100) // window resize
+	if w, _ := liveTermSize(&phys, &termH)(); w != 100 {
+		t.Fatalf("width %d after resize, want 100", w)
 	}
 }
 

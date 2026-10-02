@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -59,6 +60,15 @@ func snoopTarget(reg *session.SessionRegistry) admin.SnoopTarget {
 		}
 		return tap, hdr, nil
 	}
+}
+
+// liveTermSize reports the caller's terminal size. The width is the window's
+// physical width: termWidth becomes the user's saved width preference after
+// login, which can be narrower than the window, and the snoop console must
+// wrap where the caller's terminal does. Resizes and the post-login size
+// prompts keep height current.
+func liveTermSize(physicalWidth, height *atomic.Int32) func() (int, int) {
+	return func() (int, int) { return int(physicalWidth.Load()), int(height.Load()) }
 }
 
 func typeInHook(reg *session.SessionRegistry) func(string, int, time.Time, bool) error {

@@ -272,11 +272,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	if termHeight > 0 {
 		height = termHeight
 	} else if sess := e.nodeSession(nodeNumber); sess != nil {
-		sess.Mutex.RLock()
-		if sess.Height > 0 {
-			height = sess.Height
+		if _, h := sess.TermSize(); h > 0 {
+			height = h
 		}
-		sess.Mutex.RUnlock()
 	}
 
 	// Screen layout (Retrograde MRC-style, 5-row ANSI art header):

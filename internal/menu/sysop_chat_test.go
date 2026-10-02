@@ -595,8 +595,13 @@ func TestChatPaneNeverEchoesEscape(t *testing.T) {
 		got := out.String()
 		// Only the pane's own cursor moves and colours may carry ESC.
 		body := regexp.MustCompile("\x1b\\[[0-9;]*[Hm]").ReplaceAllString(got, "")
-		// 0x9b is the 8-bit CSI, as a raw byte or as U+009B.
-		if strings.ContainsAny(body, "\x1b\x07\x01\u009b") || strings.Contains(body, "\x9b") {
+		// The 8-bit CSI is the raw byte 0x9b in CP437 and U+009B in UTF-8,
+		// where a 0x9b byte can be a continuation byte of another rune.
+		csi := strings.ContainsRune(body, '\u009b')
+		if mode == ansi.OutputModeCP437 {
+			csi = strings.IndexByte(body, 0x9b) >= 0
+		}
+		if csi || strings.ContainsAny(body, "\x1b\x07\x01") {
 			t.Fatalf("mode %v echoed a control byte: %q", mode, got)
 		}
 	}
