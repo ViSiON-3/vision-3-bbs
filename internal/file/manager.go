@@ -29,19 +29,17 @@ import (
 // TestNoDeadlockUnderConcurrentAreaWriteLock guards against its return.
 //
 // Operations needing data from both domains copy what they need under one
-// lock, release it, then take the other. The price is that the combined view
-// is not atomic: a record found under muFiles may be gone by the time the
-// write lock is retaken, so mutators re-search by ID under the write lock
-// before touching anything, and treat "no longer there" as not-found. Area
-// paths read this way can in principle go stale against a future area
-// reload; such a reload is expected to run only with no sessions active
-// (see issue #323), which is also what keeps the rest of a reload's
-// consequences — removed areas' records, changed paths — tractable. The
-// same constraint covers in-flight mutators: DeleteFileRecord and
-// MoveFileRecord release muFiles between their in-memory update and
-// saveFileRecords, so a reload landing in that window would re-read
-// metadata.json — still holding the pre-mutation list — and revert the
-// update after the disk operation has already run.
+// lock, release it, then take the other. Area paths read this way can in
+// principle go stale against a future area reload; such a reload is expected
+// to run only with no sessions active (see issue #323), which is also what
+// keeps the rest of a reload's consequences — removed areas' records,
+// changed paths — tractable.
+//
+// File records are a cache of each area's metadata.json, which other
+// processes write too. Mutators never edit the cache and save it; they go
+// through mutateAreas, which applies the change to the list on disk under a
+// cross-process file lock, and readers refresh an area whose file changed
+// before reading it. See manager_store.go.
 type FileManager struct {
 	basePath    string               // Base directory for all file areas (e.g., "data/files")
 	configPath  string               // Path to file_areas.json
@@ -50,6 +48,7 @@ type FileManager struct {
 	fileAreas   map[int]*FileArea    // Map AreaID to FileArea definition
 	fileTags    map[string]int       // Map Area Tag (uppercase) to AreaID
 	fileRecords map[int][]FileRecord // Map AreaID to a slice of its FileRecords
+	stamps      map[int]os.FileInfo  // Stat of each area's metadata.json as cached (nil: absent); guarded by muFiles
 }
 
 // NewFileManager creates and initializes a new FileManager.
@@ -60,6 +59,7 @@ func NewFileManager(baseDataPath, baseConfigPath string) (*FileManager, error) {
 		fileAreas:   make(map[int]*FileArea),
 		fileTags:    make(map[string]int),
 		fileRecords: make(map[int][]FileRecord),
+		stamps:      make(map[int]os.FileInfo),
 	}
 
 	slog.Info("loading file areas", "path", fm.configPath)

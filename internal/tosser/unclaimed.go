@@ -110,15 +110,27 @@ func FindUnclaimed(ftnCfg config.FTNConfig, skippedByFile map[string]map[string]
 		if err != nil {
 			continue // a missing inbound directory is not this function's problem
 		}
+		ticFiles := ticReferencedFiles(dir, entries)
 		for _, entry := range entries {
 			if entry.IsDir() {
 				continue
 			}
 			nameLower := strings.ToLower(entry.Name())
-			if !ftn.BundleExtension(nameLower) && !strings.HasSuffix(nameLower, ".pkt") {
+			path := filepath.Join(dir, entry.Name())
+			if ticFiles[nameLower] {
+				continue // goes with its TIC, which is reported (and moved) instead
+			}
+			if isTICName(nameLower) {
+				// A TIC is only unclaimed once a network has declined it:
+				// one still waiting for its file was claimed (the caller
+				// drops those), and TICs a run without file areas never
+				// looked at are not news.
+				if len(skippedByFile[path]) == 0 {
+					continue
+				}
+			} else if !ftn.BundleExtension(nameLower) && !strings.HasSuffix(nameLower, ".pkt") {
 				continue
 			}
-			path := filepath.Join(dir, entry.Name())
 			if isHeldForDisabledNetwork(skippedByFile[path], held, anyDisabled, allDisabled) {
 				report.Held = append(report.Held, path)
 				continue
@@ -225,6 +237,14 @@ func (r *UnclaimedReport) QuarantineStale(tempPath string) {
 			slog.Warn("cannot create unclaimed directory, leaving mail in place", "dir", dest, "error", err)
 			return
 		}
+		// A TIC takes its file along, so the pair can be moved back together.
+		var dataPath string
+		if isTICName(path) {
+			// Even a TIC that does not parse names its file, as far as it got.
+			if tic, _ := ftn.ReadTIC(path); tic != nil {
+				_, dataPath, _ = findTICFile(filepath.Dir(path), tic)
+			}
+		}
 		target := filepath.Join(dest, filepath.Base(path))
 		if err := os.Rename(path, target); err != nil {
 			// Leave it where it is: an unclaimed bundle in the inbound
@@ -232,6 +252,11 @@ func (r *UnclaimedReport) QuarantineStale(tempPath string) {
 			slog.Warn("cannot quarantine unclaimed mail, leaving it in place", "path", path, "error", err)
 			kept = append(kept, path)
 			continue
+		}
+		if dataPath != "" {
+			if _, err := moveAside(dataPath, dest); err != nil {
+				slog.Warn("cannot quarantine the file of an unclaimed TIC, leaving it in place", "path", dataPath, "error", err)
+			}
 		}
 		r.Quarantined = append(r.Quarantined, target)
 	}

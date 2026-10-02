@@ -17,6 +17,17 @@ type FileArea struct {
 	ACSUpload    string `json:"acs_upload"`              // ACS to upload to this area
 	ACSDownload  string `json:"acs_download"`            // ACS to download from this area
 	ConferenceID int    `json:"conference_id,omitempty"` // Conference this area belongs to (0=ungrouped)
+
+	// Network and FileEcho link the area to an FTN file echo: files arriving
+	// by TIC for that echo from one of the network's links land here. Both
+	// empty means a local area. Network is a network name in ftn.json.
+	Network  string `json:"network,omitempty"`
+	FileEcho string `json:"file_echo,omitempty"` // e.g. "TQW_LINUXFILES"
+}
+
+// IsFileEcho reports whether the area is fed by an FTN file echo.
+func (a FileArea) IsFileEcho() bool {
+	return a.Network != "" && a.FileEcho != ""
 }
 
 // FileRecord holds metadata about a specific file within a FileArea.
@@ -30,6 +41,9 @@ type FileRecord struct {
 	UploadedBy    string    `json:"uploaded_by"` // User Handle
 	DownloadCount int       `json:"download_count"`
 	Reviewed      bool      `json:"reviewed,omitempty"`
+	// CRC32 is the file's CRC-32 as 8 uppercase hex digits, recorded for
+	// files that arrived by TIC, whose control file carries it. Empty for
+	// other files.
+	CRC32 string `json:"crc32,omitempty"`
 	// TODO: Add []string Tags for keyword tagging later if needed
-	// TODO: Add hash?
 }

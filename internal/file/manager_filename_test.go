@@ -62,9 +62,7 @@ func TestDeleteFileRecordRefusesDiskDeleteForUnsafeFilename(t *testing.T) {
 	fm := setupTestFileManager(t, []FileArea{{ID: 1, Tag: "UTILS", Name: "Utilities", Path: "utils"}})
 
 	id := uuid.New()
-	fm.muFiles.Lock()
-	fm.fileRecords[1] = append(fm.fileRecords[1], FileRecord{ID: id, AreaID: 1, Filename: ".."})
-	fm.muFiles.Unlock()
+	seedRecords(t, fm, 1, FileRecord{ID: id, AreaID: 1, Filename: ".."})
 
 	err := fm.DeleteFileRecord(id, true)
 	if err == nil {
@@ -91,9 +89,7 @@ func TestMoveFileRecordRejectsUnsafeFilename(t *testing.T) {
 	})
 
 	id := uuid.New()
-	fm.muFiles.Lock()
-	fm.fileRecords[1] = append(fm.fileRecords[1], FileRecord{ID: id, AreaID: 1, Filename: ".."})
-	fm.muFiles.Unlock()
+	seedRecords(t, fm, 1, FileRecord{ID: id, AreaID: 1, Filename: ".."})
 
 	err := fm.MoveFileRecord(id, 2)
 	if err == nil {
@@ -111,9 +107,7 @@ func TestGetFilePathAllowsDotsInsideFilename(t *testing.T) {
 	fm := setupTestFileManager(t, []FileArea{{ID: 1, Tag: "UTILS", Name: "Utilities", Path: "utils"}})
 
 	id := uuid.New()
-	fm.muFiles.Lock()
-	fm.fileRecords[1] = append(fm.fileRecords[1], FileRecord{ID: id, AreaID: 1, Filename: "patch..v2.zip"})
-	fm.muFiles.Unlock()
+	seedRecords(t, fm, 1, FileRecord{ID: id, AreaID: 1, Filename: "patch..v2.zip"})
 
 	got, err := fm.GetFilePath(id)
 	if err != nil {
@@ -128,9 +122,7 @@ func TestGetFilePathRejectsTraversalRecord(t *testing.T) {
 	fm := setupTestFileManager(t, []FileArea{{ID: 1, Tag: "UTILS", Name: "Utilities", Path: "utils"}})
 
 	id := uuid.New()
-	fm.muFiles.Lock()
-	fm.fileRecords[1] = append(fm.fileRecords[1], FileRecord{ID: id, AreaID: 1, Filename: ".."})
-	fm.muFiles.Unlock()
+	seedRecords(t, fm, 1, FileRecord{ID: id, AreaID: 1, Filename: ".."})
 
 	if _, err := fm.GetFilePath(id); err == nil {
 		t.Fatal(`GetFilePath accepted a record with filename ".."`)
@@ -142,11 +134,9 @@ func TestGetFilePathRejectsTraversalRecord(t *testing.T) {
 // arithmetic it protects. This pins it there.
 func TestGetFilesForAreaPaginatedHandlesNonPositiveArgs(t *testing.T) {
 	fm := setupTestFileManager(t, []FileArea{{ID: 1, Tag: "UTILS", Name: "Utilities", Path: "utils"}})
-	fm.muFiles.Lock()
 	for i := 0; i < 3; i++ {
-		fm.fileRecords[1] = append(fm.fileRecords[1], FileRecord{ID: uuid.New(), AreaID: 1, Filename: "a.zip"})
+		seedRecords(t, fm, 1, FileRecord{ID: uuid.New(), AreaID: 1, Filename: "a.zip"})
 	}
-	fm.muFiles.Unlock()
 
 	cases := []struct{ page, pageSize int }{{0, 10}, {-1, 10}, {1, 0}, {1, -5}, {-100, -100}}
 	for _, c := range cases {
@@ -154,32 +144,6 @@ func TestGetFilesForAreaPaginatedHandlesNonPositiveArgs(t *testing.T) {
 		if err == nil && len(got) != 0 {
 			t.Errorf("page=%d pageSize=%d returned %d records with no error", c.page, c.pageSize, len(got))
 		}
-	}
-}
-
-// The rollback used to truncate the target slice by position. muFiles is
-// released around the saves just above it, so a record added in that window is
-// what the truncation would drop. Removal is by identity now; this covers the
-// helper directly, since the race itself cannot be scheduled deterministically.
-func TestRemoveRecordByID(t *testing.T) {
-	a, b, c := uuid.New(), uuid.New(), uuid.New()
-	records := []FileRecord{{ID: a, Filename: "a.zip"}, {ID: b, Filename: "b.zip"}, {ID: c, Filename: "c.zip"}}
-
-	got := removeRecordByID(records, b)
-	if len(got) != 2 {
-		t.Fatalf("got %d records, want 2", len(got))
-	}
-	for _, r := range got {
-		if r.ID == b {
-			t.Error("the named record is still present")
-		}
-	}
-	if got[0].ID != a || got[1].ID != c {
-		t.Error("the other records were reordered or replaced")
-	}
-
-	if n := len(removeRecordByID(records, uuid.New())); n != 3 {
-		t.Errorf("removing an absent ID changed the slice length to %d", n)
 	}
 }
 
@@ -192,9 +156,7 @@ func TestMoveFileRecordRollsBackOnTargetSaveFailure(t *testing.T) {
 	})
 
 	movedID := uuid.New()
-	fm.muFiles.Lock()
-	fm.fileRecords[1] = append(fm.fileRecords[1], FileRecord{ID: movedID, AreaID: 1, Filename: "moved.zip"})
-	fm.muFiles.Unlock()
+	seedRecords(t, fm, 1, FileRecord{ID: movedID, AreaID: 1, Filename: "moved.zip"})
 
 	srcDir, err := fm.GetAreaUploadPath(1)
 	if err != nil {
@@ -237,5 +199,20 @@ func TestMoveFileRecordRollsBackOnTargetSaveFailure(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(srcDir, "moved.zip")); err != nil {
 		t.Errorf("the file was not renamed back into the source area: %v", err)
+	}
+}
+
+// seedRecords stores records in an area's metadata.json, the way another
+// process would, bypassing the validation AddFileRecord applies. Records
+// injected into the cache alone are not enough: mutators work on the list on
+// disk.
+func seedRecords(t *testing.T, fm *FileManager, areaID int, records ...FileRecord) {
+	t.Helper()
+	err := fm.mutateAreas([]int{areaID}, func(lists map[int][]FileRecord) (func(), error) {
+		lists[areaID] = append(lists[areaID], records...)
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatalf("seed records: %v", err)
 	}
 }

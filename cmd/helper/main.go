@@ -100,6 +100,8 @@ func main() {
 	switch cmd {
 	case "ftnsetup":
 		cmdFTNSetup(os.Args[2:])
+	case "fileecho":
+		cmdFileEcho(os.Args[2:])
 	case "areafix", "aerafix":
 		cmdAreafix(os.Args[2:])
 	case "users":
@@ -125,6 +127,7 @@ func printUsage(errMsg string) {
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintf(w, "  %sFTN Commands:%s\n", clrBold, clrReset)
 	_, _ = fmt.Fprintln(w, helpcmd("FTNSETUP", "Import FTN echo areas from a FIDONET.NA file"))
+	_, _ = fmt.Fprintln(w, helpcmd("FILEECHO", "Create file areas for a network's file echo list"))
 	_, _ = fmt.Fprintln(w, helpcmd("AREAFIX", "Send an AreaFix netmail command to a network hub"))
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintf(w, "  %sUser Commands:%s\n", clrBold, clrReset)
@@ -1066,7 +1069,8 @@ func parseNAFile(path string) ([]naArea, error) {
 		// importing it would silently create that many junk areas.
 		if seen[strings.ToUpper(tag)] {
 			return nil, fmt.Errorf("duplicate area tag %q on line %q — this does not look like an echomail area list "+
-				"(a file echo list will do this, its lines starting with the literal word \"Area\")", tag, line)
+				"(a file echo list will do this, its lines starting with the literal word \"Area\"; "+
+				"import one with helper fileecho instead)", tag, line)
 		}
 		seen[strings.ToUpper(tag)] = true
 

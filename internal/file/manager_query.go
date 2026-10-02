@@ -11,6 +11,7 @@ import (
 
 // GetFileRecordByID looks up a file record by UUID across all areas.
 func (fm *FileManager) GetFileRecordByID(fileID uuid.UUID) (*FileRecord, error) {
+	fm.refreshAll()
 	fm.muFiles.RLock()
 	defer fm.muFiles.RUnlock()
 
@@ -28,6 +29,7 @@ func (fm *FileManager) GetFileRecordByID(fileID uuid.UUID) (*FileRecord, error) 
 // SearchFiles returns file records whose filename or description contains
 // query (case-insensitive) across all areas.
 func (fm *FileManager) SearchFiles(query string) []FileRecord {
+	fm.refreshAll()
 	fm.muFiles.RLock()
 	defer fm.muFiles.RUnlock()
 
@@ -46,6 +48,7 @@ func (fm *FileManager) SearchFiles(query string) []FileRecord {
 
 // GetFilesNewerThan returns file records in the given area uploaded after since.
 func (fm *FileManager) GetFilesNewerThan(areaID int, since time.Time) []FileRecord {
+	fm.refreshArea(areaID)
 	fm.muFiles.RLock()
 	defer fm.muFiles.RUnlock()
 
@@ -60,6 +63,7 @@ func (fm *FileManager) GetFilesNewerThan(areaID int, since time.Time) []FileReco
 
 // GetUnreviewedFiles returns file records in the given area where Reviewed is false.
 func (fm *FileManager) GetUnreviewedFiles(areaID int) []FileRecord {
+	fm.refreshArea(areaID)
 	fm.muFiles.RLock()
 	defer fm.muFiles.RUnlock()
 
@@ -75,6 +79,7 @@ func (fm *FileManager) GetUnreviewedFiles(areaID int) []FileRecord {
 // GetFilesForArea returns a slice of FileRecord for a given area ID.
 // Returns an empty slice if the area doesn't exist or has no files.
 func (fm *FileManager) GetFilesForArea(areaID int) []FileRecord {
+	fm.refreshArea(areaID)
 	fm.muFiles.RLock()
 	defer fm.muFiles.RUnlock()
 
@@ -93,6 +98,7 @@ func (fm *FileManager) GetFilesForArea(areaID int) []FileRecord {
 // GetFileCountForArea returns the total number of file records for a given area ID.
 // Returns 0 if the area doesn't exist or has no files.
 func (fm *FileManager) GetFileCountForArea(areaID int) (int, error) {
+	fm.refreshArea(areaID)
 	fm.muFiles.RLock()         // Acquire read lock for accessing file records
 	defer fm.muFiles.RUnlock() // Ensure lock is released
 
@@ -125,6 +131,7 @@ func (fm *FileManager) GetTotalFileCount() int {
 // limited to the specified page and pageSize.
 // Returns an empty slice if the area doesn't exist, has no files, or the page is out of bounds.
 func (fm *FileManager) GetFilesForAreaPaginated(areaID int, page int, pageSize int) ([]FileRecord, error) {
+	fm.refreshArea(areaID)
 	fm.muFiles.RLock()
 	defer fm.muFiles.RUnlock()
 

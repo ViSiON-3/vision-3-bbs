@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -20,7 +21,7 @@ import (
 )
 
 // scanDirectoryFiles returns a map of filename -> file size for all files in a directory,
-// excluding metadata.json.
+// excluding the area's own metadata files.
 func scanDirectoryFiles(dir string) (map[string]int64, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -28,7 +29,7 @@ func scanDirectoryFiles(dir string) (map[string]int64, error) {
 	}
 	files := make(map[string]int64)
 	for _, entry := range entries {
-		if entry.IsDir() || entry.Name() == "metadata.json" {
+		if entry.IsDir() || file.IsMetadataFile(entry.Name()) {
 			continue
 		}
 		if entry.Type()&os.ModeSymlink != 0 {

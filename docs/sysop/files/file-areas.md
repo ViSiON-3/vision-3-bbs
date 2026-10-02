@@ -39,6 +39,9 @@ File areas are defined in `configs/file_areas.json`:
 - `acs_list` - ACS required to list files
 - `acs_upload` - ACS required to upload
 - `acs_download` - ACS required to download
+- `conference_id` - Conference the area belongs to (0 = ungrouped)
+- `network` / `file_echo` - FTN network and file echo tag feeding the area by
+  TIC; both empty for a local area. See [File Echoes](files/file-echoes.md).
 
 ## File Storage
 
@@ -78,6 +81,7 @@ Each area's `metadata.json` contains:
 - `uploaded_at` - Upload timestamp
 - `uploaded_by` - User handle who uploaded
 - `download_count` - Number of downloads
+- `crc32` - CRC-32 of the file, for files that arrived by TIC
 
 ## File Functions
 
