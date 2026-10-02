@@ -243,6 +243,8 @@ Per-link fields (`networks.<key>.links[]`):
 ```text
 Inbound:
   binkd → secure_in/ → v3mail toss → JAM bases → Vision/3 users
+                                   → file areas (file echoes, by .TIC)
+                                   → data/ftn/nodelist/ (nodelists among them)
 
 Outbound:
   Users post → JAM bases → v3mail scan → temp_out/*.pkt
@@ -302,6 +304,21 @@ The echo area tag in the inbound packet does not match any area in `configs/mess
 
 **High duplicate rate**
 Search `v3mail.log` for `dupe message`: each line names the echo, MSGID, packet, sending link and when the message was first seen. Dupes from a second uplink, or a bundle resent after a dropped session, are normal. Set `dupe_area_tag` to keep a copy of every dupe for inspection. The size of `data/ftn/dupes.json` is not a dupe count: it holds every message seen in the last 30 days.
+
+**File echo files not arriving in their area**
+The toss prints an error for each TIC it could not deliver, saying why, and
+moves the TIC and its file to `temp_path/badtic`: usually no file area linked
+to the echo, or a `tic_password` mismatch. Fix the cause, move both files back
+into the inbound and toss again. See
+[Undeliverable TICs](files/file-echoes.md#undeliverable-tics).
+
+**Nodelist not compiled**
+Check that the network's `nodelist.file_echo` matches the echo's tag and that
+`nodelist.file_pattern` matches the file's name in the area. A file that
+matches the pattern but cannot be compiled is a toss error saying why (not a
+nodelist, a nodediff, or another zone's list). An older list than the one
+already compiled is skipped and logged. Compile one by hand with
+`helper nodelist import`. See [FTN Nodelists](messages/nodelists.md).
 
 ## See Also
 
