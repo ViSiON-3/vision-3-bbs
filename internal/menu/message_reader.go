@@ -280,7 +280,11 @@ readerLoop:
 				replyCount = count
 			}
 		}
-		substitutions := buildMsgSubstitutions(currentMsg, currentAreaTag, currentMsgNum, totalMsgCount, !templateUsesUserNote, replyCount, confName, areaName, e.MessageMgr, currentAreaID, userManager, nodeNumber, e.V3NetStatus, e.Nodelists)
+		nodelists := e.Nodelists
+		if !headerTemplateUsesSystemNames(hdrTemplateBytes) {
+			nodelists = nil // no @Y@ or @R@ to fill
+		}
+		substitutions := buildMsgSubstitutions(currentMsg, currentAreaTag, currentMsgNum, totalMsgCount, !templateUsesUserNote, replyCount, confName, areaName, e.MessageMgr, currentAreaID, userManager, nodeNumber, e.V3NetStatus, nodelists)
 		// For CP437 terminals, convert UTF-8 substitution values to CP437 bytes so that
 		// multi-byte runes (e.g. Cyrillic from FTN UTF-8 messages) render as '?' instead
 		// of raw UTF-8 bytes that display as CP437 box-drawing characters.

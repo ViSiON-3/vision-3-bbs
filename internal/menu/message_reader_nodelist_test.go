@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
 
@@ -35,12 +36,24 @@ func TestMsgHeaderSystemNames(t *testing.T) {
 		t.Errorf("@Y@ = %q, @R@ = %q; want Risa HUB and Example BBS", subs['Y'], subs['R'])
 	}
 
-	// Unlisted addresses, a local area, and no nodelists all leave them blank.
+	// Unlisted addresses, non-FTN areas, and no nodelists all leave them
+	// blank. QWK areas name a network too, and an area changed to local
+	// keeps the one it had.
+	qwkID, err := mm.AddArea(message.MessageArea{Tag: "QWK_GEN", Name: "QWK", AreaType: "qwknet", Network: "fsxnet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wasFTNID, err := mm.AddArea(message.MessageArea{Tag: "OLD_FSX", Name: "Old", AreaType: "local", Network: "fsxnet"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	unlisted := &message.DisplayMessage{From: "Joe", To: "All", OrigAddr: "21:4/999"}
 	cases := map[string]map[byte]string{
-		"unlisted":     buildMsgSubstitutions(unlisted, "FSX_NET", 1, 1, false, 0, "", "", mm, netmailID, nil, 1, nil, e.Nodelists),
-		"local area":   buildMsgSubstitutions(msg, "GENERAL", 1, 1, false, 0, "", "", mm, localID, nil, 1, nil, e.Nodelists),
-		"no nodelists": buildMsgSubstitutions(msg, "FSX_NET", 1, 1, false, 0, "", "", mm, netmailID, nil, 1, nil, nil),
+		"unlisted":          buildMsgSubstitutions(unlisted, "FSX_NET", 1, 1, false, 0, "", "", mm, netmailID, nil, 1, nil, e.Nodelists),
+		"local area":        buildMsgSubstitutions(msg, "GENERAL", 1, 1, false, 0, "", "", mm, localID, nil, 1, nil, e.Nodelists),
+		"qwk area":          buildMsgSubstitutions(msg, "QWK_GEN", 1, 1, false, 0, "", "", mm, qwkID, nil, 1, nil, e.Nodelists),
+		"formerly FTN area": buildMsgSubstitutions(msg, "OLD_FSX", 1, 1, false, 0, "", "", mm, wasFTNID, nil, 1, nil, e.Nodelists),
+		"no nodelists":      buildMsgSubstitutions(msg, "FSX_NET", 1, 1, false, 0, "", "", mm, netmailID, nil, 1, nil, nil),
 	}
 	for name, subs := range cases {
 		if subs['Y'] != "" || subs['R'] != "" {
@@ -79,5 +92,33 @@ func TestMsgHeaderV3NetNetworkPlaceholder(t *testing.T) {
 	got = string(processTemplate([]byte("@B@|{ via @I@|}"), subs, buildAutoWidths(subs, 1, 80, false), false))
 	if strings.Contains(got, "via") {
 		t.Errorf("blank @I@ in a group: got %q", got)
+	}
+}
+
+func TestHeaderTemplateUsesSystemNames(t *testing.T) {
+	for tpl, want := range map[string]bool{
+		"@F@ @S@ @O@":  false,
+		"@F@ at @Y@":   true,
+		"to @R:20@":    true,
+		"@Y*@":         true,
+		"|F |Y legacy": true,
+		"@T@ YR":       false,
+	} {
+		if got := headerTemplateUsesSystemNames([]byte(tpl)); got != want {
+			t.Errorf("%q: %v, want %v", tpl, got, want)
+		}
+	}
+}
+
+// A system name from a nodelist reaches the terminal as it is in a header, so
+// control characters are dropped.
+func TestMsgHeaderSystemNameStripsControlCharacters(t *testing.T) {
+	dir := t.TempDir()
+	list := &ftn.CompiledNodelist{Network: "fsxnet", Nodes: []ftn.CompiledNode{{Address: "21:1/100", Name: "Evil\x1b[2JBBS"}}}
+	if _, _, err := ftn.SaveCompiledNodelist(dir, "fsxnet", list, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := nodelistSystemName(ftn.NewNodelistIndex(dir), "fsxnet", "21:1/100"); got != "Evil[2JBBS" {
+		t.Errorf("got %q", got)
 	}
 }

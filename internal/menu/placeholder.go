@@ -257,6 +257,22 @@ func headerTemplateUsesUserNote(template []byte) bool {
 	return false
 }
 
+// headerTemplateUsesSystemNames reports whether a header template shows the
+// nodelist system names (@Y@ or @R@, or |Y / |R in a legacy template). Looking
+// them up costs a nodelist check per message, so it is skipped when the
+// template has no use for them.
+func headerTemplateUsesSystemNames(template []byte) bool {
+	if bytes.Contains(template, []byte("|Y")) || bytes.Contains(template, []byte("|R")) {
+		return true
+	}
+	for _, m := range parsePlaceholders(template) {
+		if m.Code == "Y" || m.Code == "R" {
+			return true
+		}
+	}
+	return false
+}
+
 // Width helpers for substituted values. The message reader converts values to
 // CP437 bytes for CP437 sessions, and there every byte is one cell. The ansi
 // helpers decode UTF-8 instead, and plenty of CP437 byte pairs happen to be

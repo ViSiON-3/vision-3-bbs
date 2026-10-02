@@ -155,7 +155,7 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 	// System names for the FTN addresses, from the area network's nodelist.
 	var origSystem, destSystem string
 	if !isV3Net && nodelists != nil && msgMgr != nil {
-		if area, ok := msgMgr.GetAreaByID(areaID); ok && area.Network != "" {
+		if area, ok := msgMgr.GetAreaByID(areaID); ok && isFTNArea(area) && area.Network != "" {
 			origSystem = nodelistSystemName(nodelists, area.Network, msg.OrigAddr)
 			destSystem = nodelistSystemName(nodelists, area.Network, msg.DestAddr)
 		}
@@ -200,9 +200,27 @@ func nodelistSystemName(nodelists *ftn.NodelistIndex, network, addr string) stri
 		return ""
 	}
 	if node, ok := nodelists.Lookup(network, a); ok {
-		return node.Name
+		// Header values reach the terminal as they are; the name comes from
+		// another system, so no control character in it may.
+		return strings.Map(func(r rune) rune {
+			if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+				return -1
+			}
+			return r
+		}, node.Name)
 	}
 	return ""
+}
+
+// isFTNArea reports whether area carries FTN echomail or netmail. QWK and
+// V3Net areas name a network too, and an area changed to local keeps the one
+// it had, so the network alone does not say the addresses are FTN ones.
+func isFTNArea(area *message.MessageArea) bool {
+	switch strings.ToLower(strings.TrimSpace(area.AreaType)) {
+	case "echo", "echomail", "netmail", "direct":
+		return true
+	}
+	return false
 }
 
 // buildNameWithAddr combines a display name with an FTN address suffix like "Name (21:4/158)".
