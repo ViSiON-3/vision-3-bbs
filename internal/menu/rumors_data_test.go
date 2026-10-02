@@ -255,7 +255,7 @@ func TestExpandRandomRumorATCode(t *testing.T) {
 		content := []byte("hello world, no code here")
 		// Intentionally nonexistent path — if this were touched, loadRumorsData
 		// would return an error and the guard would have failed to short-circuit.
-		got := expandRandomRumorATCode(content, "/nonexistent/path/that/does/not/exist", 10)
+		got := expandRandomRumorATCode(content, "/nonexistent/path/that/does/not/exist", 10, false)
 		if string(got) != string(content) {
 			t.Errorf("got %q, want unchanged %q", got, content)
 		}
@@ -276,10 +276,38 @@ func TestExpandRandomRumorATCode(t *testing.T) {
 		}
 
 		content := []byte("hello @RR@ world")
-		got := expandRandomRumorATCode(content, dataDir, 10)
+		got := expandRandomRumorATCode(content, dataDir, 10, false)
 		want := "hello life is a test world"
 		if string(got) != want {
 			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("cp437 content gets the rumor in CP437, fitted by characters", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		dataDir := filepath.Join(tmpDir, "data")
+		if err := os.MkdirAll(dataDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		rd := &rumorsData{
+			NextID: 2,
+			Rumors: []RumorRecord{{ID: 1, Text: "Café ½", MinLevel: 0}},
+		}
+		if err := saveRumorsData(dataDir, rd); err != nil {
+			t.Fatal(err)
+		}
+
+		// The field is 8 characters; measured in UTF-8 bytes the rumor would
+		// already fill it and get no padding.
+		got := expandRandomRumorATCode([]byte("\xdb@RR:8@\xdb"), dataDir, 10, true)
+		want := "\xdbCaf\x82 \xab  \xdb"
+		if string(got) != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+
+		got = expandRandomRumorATCode([]byte("[@RR@]"), dataDir, 10, false)
+		if want := "[Café ½]"; string(got) != want {
+			t.Errorf("utf-8 content: got %q, want %q", got, want)
 		}
 	})
 }

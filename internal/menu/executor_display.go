@@ -228,7 +228,8 @@ func (e *MenuExecutor) writeDisplayFile(terminal *term.Terminal, filename, fileP
 
 	// Expand AT-codes before pipe code processing.
 	// Use level 1 (default MinLevel) since displayFile lacks user context.
-	data = expandRandomRumorATCode(data, e.dataDir(), 1)
+	// The art is still CP437 on a CP437 terminal, so the rumor must be too.
+	data = expandRandomRumorATCode(data, e.dataDir(), 1, outputMode == ansi.OutputModeCP437)
 
 	// Process pipe codes before output — ANSI escape sequences produced are
 	// ASCII-safe and work correctly in both CP437 and UTF-8 output modes.
@@ -496,7 +497,7 @@ func (e *MenuExecutor) renderPromptText(prompt string, placeholders map[string]s
 
 	out := replaceMenuATCode([]byte(prompt), "UC", strconv.Itoa(userCount))
 	out = replaceMenuATCode(out, "U", strconv.Itoa(activeCount))
-	out = expandRandomRumorATCode(out, e.dataDir(), rumorLevel)
+	out = expandRandomRumorATCode(out, e.dataDir(), rumorLevel, false)
 
 	return ansi.ReplacePipeCodes(out)
 }

@@ -77,6 +77,11 @@ type TelnetConn struct {
 	termType     string
 	termTypeMu   sync.RWMutex
 	willTermType bool // true after client responds WILL TERM_TYPE
+	// termTypeAnswered is set by WILL or WONT TERM_TYPE, and termTypeReported
+	// once a non-empty IS <type> is accepted, so Negotiate knows when to stop
+	// waiting.
+	termTypeAnswered bool
+	termTypeReported bool
 
 	// Read interrupt: when the channel is closed, a goroutine sets a
 	// short read deadline on the conn to unblock any pending Read().
@@ -100,10 +105,17 @@ func NewTelnetConn(conn net.Conn) *TelnetConn {
 	}
 }
 
+// negotiationTimeout bounds each phase of Negotiate. A client normally
+// answers within a round trip, so this is only reached by one that never
+// answers at all, such as a raw TCP connection.
+const negotiationTimeout = 2 * time.Second
+
 // Negotiate sends telnet option negotiations and waits for client responses.
-// Phase 1: sends DO NAWS + DO TERM_TYPE, drains responses (500ms).
+// Phase 1: sends DO NAWS + DO TERM_TYPE and reads until the client has
+// answered TERM_TYPE (WILL or WONT).
 // Phase 2: if client responded WILL TERM_TYPE, sends SB TERM_TYPE SEND and
-// drains again (500ms) to collect the IS <string> subnegotiation.
+// reads until the IS <string> subnegotiation arrives.
+// Each phase gives up after negotiationTimeout.
 func (tc *TelnetConn) Negotiate() error {
 	// Send telnet option negotiations:
 	// IAC WILL ECHO       - server will echo input
@@ -128,10 +140,8 @@ func (tc *TelnetConn) Negotiate() error {
 		return fmt.Errorf("failed to send telnet negotiations: %w", err)
 	}
 
-	// Phase 1: wait for NAWS and WILL TERM_TYPE responses
-	_ = tc.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond)) // best-effort negotiation deadline
-	tc.drainNegotiations()
-	_ = tc.conn.SetReadDeadline(time.Time{}) // best-effort negotiation deadline
+	// Phase 1: wait for the client's answer to DO TERM_TYPE
+	tc.drainNegotiations(func() bool { return tc.termTypeAnswered })
 
 	// Phase 2: if client agreed to send terminal type, request it
 	if tc.willTermType {
@@ -144,28 +154,32 @@ func (tc *TelnetConn) Negotiate() error {
 		}
 
 		// Wait for the IS <string> subnegotiation response
-		_ = tc.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond)) // best-effort negotiation deadline
-		tc.drainNegotiations()
-		_ = tc.conn.SetReadDeadline(time.Time{}) // best-effort negotiation deadline
+		tc.drainNegotiations(func() bool { return tc.termTypeReported })
 	}
 
 	return nil
 }
 
-// drainNegotiations reads and processes any pending telnet negotiation responses.
-func (tc *TelnetConn) drainNegotiations() {
+// drainNegotiations reads and processes telnet negotiation responses until
+// done reports true, then processes whatever else has already arrived. It
+// gives up after negotiationTimeout or on a read error.
+//
+// It must keep reading until done rather than stop at the first pause: the
+// client's replies can arrive in several packets on a real network, and
+// stopping after the first one lost the terminal type, so a UTF-8 terminal
+// was taken for a CP437 one and sent raw CP437 art.
+func (tc *TelnetConn) drainNegotiations(done func() bool) {
+	_ = tc.conn.SetReadDeadline(time.Now().Add(negotiationTimeout)) // best-effort negotiation deadline
+	defer func() { _ = tc.conn.SetReadDeadline(time.Time{}) }()     // best-effort negotiation deadline
+
 	buf := make([]byte, 64)
-	for {
+	for !done() || tc.reader.Buffered() > 0 {
 		n, err := tc.reader.Read(buf)
 		if n > 0 {
 			tc.processNegotiationBytes(buf[:n])
 		}
 		if err != nil {
-			break // Timeout or error, done draining
-		}
-		// If there's more buffered data, keep reading
-		if tc.reader.Buffered() == 0 {
-			break
+			return // Timeout or error, done draining
 		}
 	}
 }
@@ -205,8 +219,9 @@ func (tc *TelnetConn) processNegotiationBytes(data []byte) {
 		case stateWill, stateWont, stateDo, stateDont:
 			// Consume the option byte
 			slog.Debug("telnet negotiation", "cmd", tc.state, "option", b)
-			if tc.state == stateWill && b == OptTermType {
-				tc.willTermType = true
+			if b == OptTermType && (tc.state == stateWill || tc.state == stateWont) {
+				tc.willTermType = tc.state == stateWill
+				tc.termTypeAnswered = true
 			}
 			tc.state = stateData
 
@@ -285,6 +300,7 @@ func (tc *TelnetConn) handleSubnegotiation() {
 				tc.termTypeMu.Lock()
 				tc.termType = t
 				tc.termTypeMu.Unlock()
+				tc.termTypeReported = true
 				slog.Info("telnet terminal type", "term", t)
 			}
 		}
