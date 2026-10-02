@@ -264,17 +264,36 @@ func TestRefuseSnoopAnswersASilentClient(t *testing.T) {
 func TestSnoopSecondConsoleKeepsKeyboard(t *testing.T) {
 	var mu sync.Mutex
 	var offs []string
+	detaches := 0
 	audit := func(msg string, args ...any) {
-		if msg == "type-in off" {
-			mu.Lock()
-			offs = append(offs, fmt.Sprintln(args...))
-			mu.Unlock()
-		}
-	}
-	offCount := func() int {
 		mu.Lock()
 		defer mu.Unlock()
-		return len(offs)
+		switch msg {
+		case "type-in off":
+			offs = append(offs, fmt.Sprintln(args...))
+		case "snoop detach":
+			detaches++
+		}
+	}
+	state := func() (int, int) {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(offs), detaches
+	}
+	// waitDetaches polls until n channels have finished detaching. The
+	// detach audit follows the type-in audit in ServeSnoop's cleanup.
+	waitDetaches := func(n int) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			if _, d := state(); d >= n {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %d detaches", n)
+			}
+			time.Sleep(time.Millisecond)
+		}
 	}
 	tap := snoop.NewTap()
 	st1, err := startSnoopAudit(t, tap, nil, audit)
@@ -293,24 +312,19 @@ func TestSnoopSecondConsoleKeepsKeyboard(t *testing.T) {
 	}
 
 	st1.Close()
-	// Wait for the first channel's detach to land, then check the hold.
-	time.Sleep(100 * time.Millisecond)
+	waitDetaches(1)
 	if h := tap.KeyboardHolder(); h != "sysop" {
 		t.Fatalf("holder = %q after one console closed, want sysop", h)
 	}
 	if n := tap.Inject("sysop", []byte("de")); n != 2 {
 		t.Fatalf("inject after first close = %d, want 2", n)
 	}
-	if n := offCount(); n != 0 {
+	if n, _ := state(); n != 0 {
 		t.Fatalf("type-in off audited %d times after first close", n)
 	}
 
 	st2.Close()
-	deadline := time.Now().Add(2 * time.Second)
-	for offCount() == 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	time.Sleep(50 * time.Millisecond)
+	waitDetaches(2)
 	mu.Lock()
 	defer mu.Unlock()
 	if len(offs) != 1 || !strings.Contains(offs[0], "bytes 5") {
