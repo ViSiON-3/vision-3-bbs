@@ -85,13 +85,12 @@ func ServeSnoop(rw io.ReadWriteCloser, sysop string, resolve SnoopTarget, audit 
 	start := time.Now()
 	audit("snoop attach", "sysop", sysop, "node", req.NodeID, "caller", hdr.Handle)
 	defer func() {
-		// Release first for the held/injected counts; closing the last
-		// watch would release the keyboard without reporting them.
-		if held, injected, ok := tap.ReleaseKeyboard(sysop); ok {
+		// Closing the sysop's last watch releases the keyboard; a sysop
+		// with another console on this node keeps type-in there.
+		if released, held, injected := w.CloseReport(); released {
 			audit("type-in off", "sysop", sysop, "node", req.NodeID,
 				"duration", held.Round(time.Second), "bytes", injected)
 		}
-		w.Close()
 		audit("snoop detach", "sysop", sysop, "node", req.NodeID, "caller", hdr.Handle,
 			"duration", time.Since(start).Round(time.Second))
 	}()

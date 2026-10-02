@@ -3,6 +3,7 @@ package snoop
 import (
 	"bytes"
 	"sync"
+	"time"
 )
 
 // Mode is what the caller's session is doing, as far as snoop cares.
@@ -100,16 +101,24 @@ func (t *Tap) resync(w *Watcher) {
 func (w *Watcher) C() <-chan []byte { return w.ch }
 
 // Close detaches the watcher. Safe to call more than once.
-func (w *Watcher) Close() {
+func (w *Watcher) Close() { w.CloseReport() }
+
+// CloseReport detaches the watcher like Close. When it was the last watcher
+// of a handle that held the keyboard, the detach releases the hold, and
+// CloseReport reports it with the hold's duration and injected byte count.
+// A repeated call, or a close that leaves another watcher attached, reports
+// released false.
+func (w *Watcher) CloseReport() (released bool, held time.Duration, injected int) {
 	w.once.Do(func() {
 		w.tap.mu.Lock()
+		defer w.tap.mu.Unlock()
 		if _, ok := w.tap.watchers[w]; ok {
 			delete(w.tap.watchers, w)
 			close(w.ch)
-			w.tap.lostWatcherLocked(w.handle)
+			released, held, injected = w.tap.lostWatcherLocked(w.handle)
 		}
-		w.tap.mu.Unlock()
 	})
+	return released, held, injected
 }
 
 // watchingLocked reports whether handle has an attached watcher.
@@ -124,12 +133,13 @@ func (t *Tap) watchingLocked(handle string) bool {
 
 // lostWatcherLocked releases handle's keyboard and chat once its last watcher
 // is gone, so a sysop who stops watching cannot keep typing into the node.
-func (t *Tap) lostWatcherLocked(handle string) {
+func (t *Tap) lostWatcherLocked(handle string) (released bool, held time.Duration, injected int) {
 	if handle == "" || t.kb.holder != handle || t.watchingLocked(handle) {
-		return
+		return false, 0, 0
 	}
-	t.kb.drop()
+	held, injected = t.kb.drop()
 	t.stopChatLocked()
+	return true, held, injected
 }
 
 // Attach adds an anonymous watcher primed with the current screen. On a

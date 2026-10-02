@@ -194,3 +194,37 @@ func TestResyncKeepsOwnClearScreen(t *testing.T) {
 		t.Fatalf("resync snapshot = %q; want the buffer's own clear first", first[:min(len(first), 12)])
 	}
 }
+
+func TestCloseReportReportsOnlyLastWatchRelease(t *testing.T) {
+	tp := NewTap()
+	advance := frozenClock(tp)
+	w1, w2 := tp.AttachAs("a"), tp.AttachAs("a")
+	if err := tp.TakeKeyboard("a"); err != nil {
+		t.Fatal(err)
+	}
+	advance(5 * time.Second)
+	if n := tp.Inject("a", []byte("abc")); n != 3 {
+		t.Fatalf("inject = %d, want 3", n)
+	}
+	if released, _, _ := w1.CloseReport(); released {
+		t.Fatal("first close reported a release while another watch remains")
+	}
+	if h := tp.KeyboardHolder(); h != "a" {
+		t.Fatalf("holder = %q after first close, want a", h)
+	}
+	released, held, injected := w2.CloseReport()
+	if !released || held != 5*time.Second || injected != 3 {
+		t.Fatalf("last close = %v, %v, %d; want true, 5s, 3", released, held, injected)
+	}
+	if released, _, _ := w2.CloseReport(); released {
+		t.Fatal("repeated close reported a release")
+	}
+}
+
+func TestCloseReportWithoutHoldReportsNothing(t *testing.T) {
+	tp := NewTap()
+	w := tp.AttachAs("a")
+	if released, _, _ := w.CloseReport(); released {
+		t.Fatal("close without a hold reported a release")
+	}
+}

@@ -260,3 +260,63 @@ func TestRefuseSnoopAnswersASilentClient(t *testing.T) {
 		t.Fatalf("line %q err %v", line, err)
 	}
 }
+
+func TestSnoopSecondConsoleKeepsKeyboard(t *testing.T) {
+	var mu sync.Mutex
+	var offs []string
+	audit := func(msg string, args ...any) {
+		if msg == "type-in off" {
+			mu.Lock()
+			offs = append(offs, fmt.Sprintln(args...))
+			mu.Unlock()
+		}
+	}
+	offCount := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(offs)
+	}
+	tap := snoop.NewTap()
+	st1, err := startSnoopAudit(t, tap, nil, audit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st2, err := startSnoopAudit(t, tap, nil, audit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tap.TakeKeyboard("sysop"); err != nil {
+		t.Fatal(err)
+	}
+	if n := tap.Inject("sysop", []byte("abc")); n != 3 {
+		t.Fatalf("inject = %d, want 3", n)
+	}
+
+	st1.Close()
+	// Wait for the first channel's detach to land, then check the hold.
+	time.Sleep(100 * time.Millisecond)
+	if h := tap.KeyboardHolder(); h != "sysop" {
+		t.Fatalf("holder = %q after one console closed, want sysop", h)
+	}
+	if n := tap.Inject("sysop", []byte("de")); n != 2 {
+		t.Fatalf("inject after first close = %d, want 2", n)
+	}
+	if n := offCount(); n != 0 {
+		t.Fatalf("type-in off audited %d times after first close", n)
+	}
+
+	st2.Close()
+	deadline := time.Now().Add(2 * time.Second)
+	for offCount() == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(offs) != 1 || !strings.Contains(offs[0], "bytes 5") {
+		t.Fatalf("type-in off audits = %v; want one with bytes 5", offs)
+	}
+	if h := tap.KeyboardHolder(); h != "" {
+		t.Fatalf("holder = %q after last console closed", h)
+	}
+}
