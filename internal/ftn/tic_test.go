@@ -158,3 +158,29 @@ func TestTICReplacesWildcards(t *testing.T) {
 		t.Error("a TIC with no Replaces line replaces nothing")
 	}
 }
+
+func TestMatchFileName(t *testing.T) {
+	cases := []struct {
+		pattern, name string
+		want          bool
+	}{
+		{"*", "", true},
+		{"", "", true},
+		{"", "A", false},
+		{"A*B*C", "AxxBxxC", true},
+		{"A*B*C", "AxxBxxCx", false},
+		{"*.Z??", "nodelist.z12", true},
+		{"a*a", "aaa", true},
+		{"a*a", "ab", false},
+		{"[1].ZIP", "[1].zip", true},
+		{"\\X", "\\x", true},
+		// Case is folded as strings.EqualFold does: the Kelvin sign and k.
+		{"k.TXT", "\u212a.txt", true},
+		{"STRASSE.*", "strasse.zip", true},
+	}
+	for _, c := range cases {
+		if got := MatchFileName(c.pattern, c.name); got != c.want {
+			t.Errorf("MatchFileName(%q, %q) = %v, want %v", c.pattern, c.name, got, c.want)
+		}
+	}
+}

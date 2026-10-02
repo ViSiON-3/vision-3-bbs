@@ -1,6 +1,7 @@
 package file
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -41,22 +42,36 @@ func (fm *FileManager) areaDir(areaID int) (string, error) {
 // DeleteFileRecord removes a file record by ID. If deleteFromDisk is true,
 // the physical file is also removed from the filesystem.
 func (fm *FileManager) DeleteFileRecord(fileID uuid.UUID, deleteFromDisk bool) error {
+	_, err := fm.DeleteFileRecordIf(fileID, deleteFromDisk, nil)
+	return err
+}
+
+// errKeepRecord stops a conditional delete whose condition no longer holds.
+var errKeepRecord = errors.New("record no longer matches the delete condition")
+
+// DeleteFileRecordIf is DeleteFileRecord for a caller that chose the record
+// from an earlier look at the list: cond is checked against the record as it
+// is on disk, under the same lock as the delete, and the record is deleted
+// only if it returns true. A rename or move since the caller looked cannot
+// make it delete a record it would not have chosen. deleted is false, with no
+// error, when cond refused. A nil cond always deletes.
+func (fm *FileManager) DeleteFileRecordIf(fileID uuid.UUID, deleteFromDisk bool, cond func(FileRecord) bool) (deleted bool, err error) {
 	foundAreaID := fm.findRecordArea(fileID)
 	if foundAreaID == -1 {
-		return fmt.Errorf("file record with ID %s not found", fileID)
+		return false, fmt.Errorf("file record with ID %s not found", fileID)
 	}
 
 	var areaDir string
 	if deleteFromDisk {
 		dir, err := fm.areaDir(foundAreaID)
 		if err != nil {
-			return fmt.Errorf("internal inconsistency: %w", err)
+			return false, fmt.Errorf("internal inconsistency: %w", err)
 		}
 		areaDir = dir
 	}
 
 	var filename, staged string
-	err := fm.mutateAreas([]int{foundAreaID}, func(lists map[int][]FileRecord) (func(), error) {
+	err = fm.mutateAreas([]int{foundAreaID}, func(lists map[int][]FileRecord) (func(), error) {
 		records := lists[foundAreaID]
 		idx := indexOfRecord(records, fileID)
 		if idx == -1 {
@@ -67,6 +82,9 @@ func (fm *FileManager) DeleteFileRecord(fileID uuid.UUID, deleteFromDisk bool) e
 		// have renamed it. A stale name here could delete a different file
 		// that has since taken it over.
 		filename = records[idx].Filename
+		if cond != nil && !cond(records[idx]) {
+			return nil, errKeepRecord
+		}
 
 		// The file is only renamed out of the way here, and removed once the
 		// list without its record is saved: if that save fails, the undo
@@ -101,9 +119,12 @@ func (fm *FileManager) DeleteFileRecord(fileID uuid.UUID, deleteFromDisk bool) e
 		lists[foundAreaID] = append(records[:idx], records[idx+1:]...)
 		return undo, nil
 	})
+	if errors.Is(err, errKeepRecord) {
+		return false, nil
+	}
 	if err != nil {
 		slog.Error("failed to delete file record", "id", fileID, "error", err)
-		return err
+		return false, err
 	}
 	if staged != "" {
 		if err := os.Remove(staged); err != nil {
@@ -114,7 +135,7 @@ func (fm *FileManager) DeleteFileRecord(fileID uuid.UUID, deleteFromDisk bool) e
 	}
 
 	slog.Info("deleted file record", "file", filename, "id", fileID, "area", foundAreaID)
-	return nil
+	return true, nil
 }
 
 // MoveFileRecord moves a file record to a different area, renaming the file on disk.

@@ -152,8 +152,10 @@ ignoring case.
 Because the sending system decides what is removed, only files that came in
 by TIC are removed this way; a file you added to the area yourself stays,
 whatever the pattern says. The new file itself is never removed. Each removal
-is logged, and the toss reports how many files were removed. A duplicate
-removes nothing.
+is logged, and the toss reports how many files were removed. A duplicate's
+`Replaces` lines apply too, so if a removal fails (it is reported as a toss
+error), the hub resending the TIC retries it, as does next week's file naming
+the same pattern.
 
 ### Undeliverable TICs
 

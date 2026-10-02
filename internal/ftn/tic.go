@@ -6,9 +6,9 @@ import (
 	"hash/crc32"
 	"io"
 	"os"
-	"path"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // TIC is a parsed .TIC control file: the description that travels with a
@@ -152,28 +152,58 @@ func (t *TIC) Description() string {
 }
 
 // ReplacesFile reports whether name is a file one of the TIC's Replaces lines
-// names. Names compare case-insensitively, and * and ? are the only
-// wildcards: a file name may itself hold the other characters path.Match
-// treats specially.
+// names, by MatchFileName.
 func (t *TIC) ReplacesFile(name string) bool {
 	for _, pattern := range t.Replaces {
-		if matchFileName(pattern, name) {
+		if MatchFileName(pattern, name) {
 			return true
 		}
 	}
 	return false
 }
 
-func matchFileName(pattern, name string) bool {
-	var b strings.Builder
-	for _, r := range strings.ToUpper(pattern) {
-		if r == '[' || r == ']' || r == '\\' {
-			b.WriteByte('\\')
+// MatchFileName reports whether a file name matches a pattern in which * (any
+// run of characters) and ? (any one character) are the only wildcards. Other
+// characters match themselves, ignoring case the way strings.EqualFold does,
+// so this agrees with the case-insensitive name comparisons elsewhere.
+func MatchFileName(pattern, name string) bool {
+	p, n := []rune(pattern), []rune(name)
+	pi, ni := 0, 0
+	star, resume := -1, 0 // last * seen, and where in name it is matching from
+	for ni < len(n) {
+		switch {
+		case pi < len(p) && p[pi] == '*':
+			star, resume = pi, ni
+			pi++
+		case pi < len(p) && (p[pi] == '?' || equalFoldRune(p[pi], n[ni])):
+			pi++
+			ni++
+		case star >= 0:
+			// Let the last * take one more character and try again.
+			resume++
+			pi, ni = star+1, resume
+		default:
+			return false
 		}
-		b.WriteRune(r)
 	}
-	ok, err := path.Match(b.String(), strings.ToUpper(name))
-	return err == nil && ok
+	for pi < len(p) && p[pi] == '*' {
+		pi++
+	}
+	return pi == len(p)
+}
+
+// equalFoldRune reports whether a and b are equal under Unicode simple case
+// folding.
+func equalFoldRune(a, b rune) bool {
+	if a == b {
+		return true
+	}
+	for r := unicode.SimpleFold(a); r != a; r = unicode.SimpleFold(r) {
+		if r == b {
+			return true
+		}
+	}
+	return false
 }
 
 // FromAddress parses the From line, ignoring any "@domain" suffix.

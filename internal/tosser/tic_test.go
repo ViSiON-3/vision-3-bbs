@@ -548,8 +548,9 @@ func TestTICReplacesLeavesOtherFilesAlone(t *testing.T) {
 	}
 }
 
-// A duplicate delivers nothing, so it removes nothing either.
-func TestTICDuplicateReplacesNothing(t *testing.T) {
+// A duplicate is already in the area, so its Replaces lines apply too: a hub
+// resending the TIC retries a removal that failed the first time.
+func TestTICDuplicateAppliesReplaces(t *testing.T) {
 	e := setupTICEnv(t, hub())
 	writeTIC(t, e.inboundDir, "a.tic", "nodelist.z12", "week twelve")
 	writeTIC(t, e.inboundDir, "b.tic", "nodelist.z19", "week nineteen")
@@ -558,8 +559,37 @@ func TestTICDuplicateReplacesNothing(t *testing.T) {
 	writeTIC(t, e.inboundDir, "c.tic", "nodelist.z19", "week nineteen", "Replaces NODELIST.*")
 	result := e.tosser.ProcessInbound()
 
-	if result.FilesDuped != 1 || result.FilesRemoved != 0 || len(e.files.GetFilesForArea(1)) != 2 {
-		t.Errorf("FilesDuped = %d, FilesRemoved = %d, records %d; want 1, 0, 2",
-			result.FilesDuped, result.FilesRemoved, len(e.files.GetFilesForArea(1)))
+	recs := e.files.GetFilesForArea(1)
+	if result.FilesDuped != 1 || result.FilesRemoved != 1 || len(recs) != 1 || recs[0].Filename != "nodelist.z19" {
+		t.Errorf("FilesDuped = %d, FilesRemoved = %d, records %+v; want 1, 1, nodelist.z19 only",
+			result.FilesDuped, result.FilesRemoved, recs)
+	}
+}
+
+// deletesRenamed is a file area store that renames each record just before
+// the tosser deletes it, as a sysop could between the tosser reading the list
+// and the delete taking the lock.
+type deletesRenamed struct{ *file.FileManager }
+
+func (d deletesRenamed) DeleteFileRecordIf(id uuid.UUID, fromDisk bool, cond func(file.FileRecord) bool) (bool, error) {
+	if err := d.UpdateFileRecord(id, func(r *file.FileRecord) { r.Filename = "keepme.zip" }); err != nil {
+		return false, err
+	}
+	return d.FileManager.DeleteFileRecordIf(id, fromDisk, cond)
+}
+
+// The replacement condition is checked again as the record is deleted.
+func TestTICReplacesRechecksUnderTheLock(t *testing.T) {
+	e := setupTICEnv(t, hub())
+	writeTIC(t, e.inboundDir, "a.tic", "nodelist.z12", "week twelve")
+	e.tosser.ProcessInbound()
+
+	e.tosser.SetFileAreas(deletesRenamed{e.files})
+	writeTIC(t, e.inboundDir, "b.tic", "nodelist.z19", "week nineteen", "Replaces NODELIST.*")
+	result := e.tosser.ProcessInbound()
+
+	if result.FilesRemoved != 0 || len(result.Errors) != 0 || len(e.files.GetFilesForArea(1)) != 2 {
+		t.Errorf("FilesRemoved = %d, errors %v, records %d; want the renamed record kept",
+			result.FilesRemoved, result.Errors, len(e.files.GetFilesForArea(1)))
 	}
 }
