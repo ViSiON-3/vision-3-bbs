@@ -85,7 +85,7 @@ func cmdFilesImport(args []string) {
 		os.Exit(1)
 	}
 
-	existingRecords, err := loadMetadata(areaDir)
+	existingRecords, err := file.ReadAreaMetadata(areaDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading metadata for area %s: %v\n", area.Tag, err)
 		os.Exit(1)
@@ -216,8 +216,12 @@ func cmdFilesImport(args []string) {
 	}
 
 	if !*dryRun && len(newRecords) > 0 {
-		allRecords := append(existingRecords, newRecords...)
-		if err := saveMetadata(areaDir, allRecords); err != nil {
+		// Appended to the list as it is on disk now, under its lock: the BBS
+		// or v3mail may have changed it since it was read above.
+		err := file.UpdateAreaMetadata(areaDir, func(records []file.FileRecord) ([]file.FileRecord, error) {
+			return append(records, newRecords...), nil
+		})
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "\nError saving metadata: %v\n", err)
 			os.Exit(1)
 		}
@@ -231,10 +235,10 @@ func cmdFilesImport(args []string) {
 
 func shouldSkipFile(name string) bool {
 	lower := strings.ToLower(name)
-	if strings.HasPrefix(name, ".") {
+	if strings.HasPrefix(name, ".") || file.IsMetadataFile(name) {
 		return true
 	}
-	skipNames := []string{"files.bbs", "metadata.json", "thumbs.db", ".ds_store", "desktop.ini"}
+	skipNames := []string{"files.bbs", "thumbs.db", ".ds_store", "desktop.ini"}
 	for _, skip := range skipNames {
 		if lower == skip {
 			return true
@@ -264,46 +268,6 @@ func loadFileAreas(configDir string) ([]file.FileArea, error) {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 	return areas, nil
-}
-
-func loadMetadata(areaDir string) ([]file.FileRecord, error) {
-	path := filepath.Join(areaDir, "metadata.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	var records []file.FileRecord
-	if err := json.Unmarshal(data, &records); err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", path, err)
-	}
-	return records, nil
-}
-
-func saveMetadata(areaDir string, records []file.FileRecord) error {
-	path := filepath.Join(areaDir, "metadata.json")
-	data, err := json.MarshalIndent(records, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		if cpErr := copyFile(tmp, path); cpErr != nil {
-			if rmErr := os.Remove(tmp); rmErr != nil {
-				return fmt.Errorf("rename %v; copy fallback %v; cleanup %v", err, cpErr, rmErr)
-			}
-			return fmt.Errorf("rename %v; copy fallback %v", err, cpErr)
-		}
-		if rmErr := os.Remove(tmp); rmErr != nil {
-			return fmt.Errorf("removing temp file after copy: %w", rmErr)
-		}
-	}
-	return nil
 }
 
 func copyFile(src, dst string) error {

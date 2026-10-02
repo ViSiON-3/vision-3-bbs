@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 // validateFilename checks that name is a plain file name that stays inside the
@@ -39,17 +37,10 @@ func validateFilename(name string) (string, error) {
 	return name, nil
 }
 
-// removeRecordByID returns records without the entry whose ID matches, leaving
-// the remaining order intact. Removing by identity rather than by position
-// matters during rollback: muFiles is released while records are persisted, so
-// the slice may have grown since the index was taken.
-func removeRecordByID(records []FileRecord, id uuid.UUID) []FileRecord {
-	out := make([]FileRecord, 0, len(records))
-	for _, r := range records {
-		if r.ID == id {
-			continue
-		}
-		out = append(out, r)
-	}
-	return out
+// CheckFilename reports whether name is a plain file name that stays inside
+// the area directory it is joined to. Callers placing a file named by someone
+// else (a TIC, say) into an area check it before touching the disk.
+func CheckFilename(name string) error {
+	_, err := validateFilename(name)
+	return err
 }

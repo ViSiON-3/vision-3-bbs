@@ -64,36 +64,6 @@ func TestFindAreaByTag(t *testing.T) {
 	}
 }
 
-func TestLoadAndSaveMetadata(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	records, err := loadMetadata(tmpDir)
-	if err != nil {
-		t.Fatalf("loadMetadata on empty dir: %v", err)
-	}
-	if len(records) != 0 {
-		t.Errorf("expected 0 records, got %d", len(records))
-	}
-
-	testRecords := []file.FileRecord{
-		{Filename: "test.zip", Size: 1024, UploadedBy: "Sysop"},
-	}
-	if err := saveMetadata(tmpDir, testRecords); err != nil {
-		t.Fatalf("saveMetadata: %v", err)
-	}
-
-	loaded, err := loadMetadata(tmpDir)
-	if err != nil {
-		t.Fatalf("loadMetadata after save: %v", err)
-	}
-	if len(loaded) != 1 {
-		t.Fatalf("expected 1 record, got %d", len(loaded))
-	}
-	if loaded[0].Filename != "test.zip" {
-		t.Errorf("filename = %q, want %q", loaded[0].Filename, "test.zip")
-	}
-}
-
 func TestLoadFileAreas(t *testing.T) {
 	tmpDir := t.TempDir()
 	areas := []file.FileArea{

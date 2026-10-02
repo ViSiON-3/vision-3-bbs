@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
+	"github.com/google/uuid"
 )
 
 func cmdFilesReextractDIZ(args []string) {
@@ -56,7 +58,7 @@ func cmdFilesReextractDIZ(args []string) {
 
 	for _, area := range areas {
 		areaDir := filepath.Join(*dataDir, "files", area.Path)
-		records, err := loadMetadata(areaDir)
+		records, err := file.ReadAreaMetadata(areaDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading metadata for %s: %v\n", area.Tag, err)
 			continue
@@ -67,6 +69,7 @@ func cmdFilesReextractDIZ(args []string) {
 
 		fmt.Printf("Area: %s (%s) — %d files\n", area.Name, area.Tag, len(records))
 		updated := 0
+		newDesc := make(map[uuid.UUID]string)
 
 		for i := range records {
 			rec := &records[i]
@@ -101,14 +104,25 @@ func cmdFilesReextractDIZ(args []string) {
 			if *dryRun {
 				fmt.Printf("  UPD   %-40s [DIZ: %s]\n", rec.Filename, firstLine)
 			} else {
-				rec.Description = diz
+				newDesc[rec.ID] = diz
 				fmt.Printf("  UPD   %-40s [DIZ: %s]\n", rec.Filename, firstLine)
 			}
 			updated++
 		}
 
 		if !*dryRun && updated > 0 {
-			if err := saveMetadata(areaDir, records); err != nil {
+			// Applied by record ID to the list as it is on disk now, under
+			// its lock: DIZ extraction is slow, and the BBS may have changed
+			// the list meanwhile.
+			err := file.UpdateAreaMetadata(areaDir, func(current []file.FileRecord) ([]file.FileRecord, error) {
+				for i := range current {
+					if d, ok := newDesc[current[i].ID]; ok {
+						current[i].Description = d
+					}
+				}
+				return current, nil
+			})
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "  Error saving metadata for %s: %v\n", area.Tag, err)
 				continue
 			}
