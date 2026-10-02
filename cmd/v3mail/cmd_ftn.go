@@ -3,10 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tosser"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -26,7 +28,7 @@ func cmdToss(args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	if tossFTN(ftnCfg, msgMgr, dupeDB, loadRecipients(*dataDir), *networkName, *quiet) {
+	if tossFTN(ftnCfg, msgMgr, dupeDB, loadRecipients(*dataDir), loadFileAreas(*dataDir, *configDir), *networkName, *quiet) {
 		os.Exit(1)
 	}
 }
@@ -35,11 +37,16 @@ func cmdToss(args []string) {
 // when set, and reports whether the run failed: a toss error, or mail left
 // unclaimed long enough to be quarantined. Netmail for this system is
 // addressed to the handle recipients resolves its To to; recipients may be nil
-// (see tosser.Tosser.SetRecipientResolver).
-func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *tosser.DupeDB, recipients user.RecipientResolver, networkName string, quiet bool) bool {
+// (see tosser.Tosser.SetRecipientResolver). Inbound file echoes are delivered
+// into fileAreas; nil leaves TICs in the inbound (see tosser.Tosser.SetFileAreas).
+func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *tosser.DupeDB, recipients user.RecipientResolver, fileAreas tosser.FileAreaStore, networkName string, quiet bool) bool {
 	tosser.WarnOrphanFTNAreas(ftnCfg, msgMgr.ListAreas())
 
 	totalImported, totalDupes, totalPackets := 0, 0, 0
+	totalFiles, totalFileDupes, totalFilesBad := 0, 0, 0
+	// TICs some network claimed and is holding until its file arrives. Any
+	// other network that declined them must not get them reported unclaimed.
+	waitingTICs := map[string]bool{}
 	hadErrors := false
 	// Merged across networks and keyed by inbound file, so the whole-pass
 	// check can discard the origins of anything a later network claimed.
@@ -66,11 +73,20 @@ func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *to
 			continue
 		}
 		t.SetRecipientResolver(recipients)
+		if fileAreas != nil {
+			t.SetFileAreas(fileAreas)
+		}
 
 		result := t.ProcessInbound()
 		totalPackets += result.PacketsProcessed
 		totalImported += result.MessagesImported
 		totalDupes += result.DupesSkipped
+		totalFiles += result.FilesImported
+		totalFileDupes += result.FilesDuped
+		totalFilesBad += result.FilesBad
+		for _, p := range result.WaitingTICs {
+			waitingTICs[p] = true
+		}
 		// Replace rather than sum: every enabled network passes over the same
 		// packets in a shared inbound directory and reports the same origins
 		// for the same file.
@@ -83,6 +99,10 @@ func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *to
 		if !quiet {
 			fmt.Printf("[%s] toss: %d packets, %d imported, %d dupes",
 				name, result.PacketsProcessed, result.MessagesImported, result.DupesSkipped)
+			if n := result.FilesImported + result.FilesDuped + result.FilesBad; n > 0 {
+				fmt.Printf("; file echoes: %d received, %d dupes, %d bad",
+					result.FilesImported, result.FilesDuped, result.FilesBad)
+			}
 			if len(result.Errors) > 0 {
 				fmt.Printf(", %d errors", len(result.Errors))
 			}
@@ -100,6 +120,9 @@ func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *to
 	// about what the others would have claimed.
 	var unclaimed tosser.UnclaimedReport
 	if ranAllNetworks {
+		for p := range waitingTICs {
+			delete(skippedByFile, p)
+		}
 		unclaimed = tosser.FindUnclaimed(ftnCfg, skippedByFile)
 		unclaimed.QuarantineStale(ftnCfg.TempPath)
 		unclaimed.Log()
@@ -108,6 +131,14 @@ func tossFTN(ftnCfg config.FTNConfig, msgMgr *message.MessageManager, dupeDB *to
 	if !quiet {
 		fmt.Printf("Toss complete: %d packets, %d messages imported, %d dupes skipped\n",
 			totalPackets, totalImported, totalDupes)
+		if n := totalFiles + totalFileDupes + totalFilesBad; n > 0 {
+			fmt.Printf("File echoes: %d files received, %d dupes dropped, %d undeliverable",
+				totalFiles, totalFileDupes, totalFilesBad)
+			if totalFilesBad > 0 {
+				fmt.Printf(" (moved to %s)", filepath.Join(ftnCfg.TempPath, tosser.BadTICDirName))
+			}
+			fmt.Println()
+		}
 		if n := len(unclaimed.Held); n > 0 {
 			// Stated plainly rather than as a warning: this mail waits because
 			// the sysop switched the network off, and it tosses normally once
@@ -317,4 +348,21 @@ func loadFTNDeps(configDir, dataDir string) (config.FTNConfig, *message.MessageM
 	}
 
 	return ftnCfg, msgMgr, dupeDB, nil
+}
+
+// loadFileAreas loads the file areas that inbound file echoes are delivered
+// into. It returns nil — TICs are then left in the inbound — when the BBS has
+// no file areas configured or they cannot be loaded.
+func loadFileAreas(dataDir, configDir string) tosser.FileAreaStore {
+	// Checked first because NewFileManager creates a missing file_areas.json,
+	// and a mail run has no business doing that.
+	if _, err := os.Stat(filepath.Join(configDir, "file_areas.json")); err != nil {
+		return nil
+	}
+	fm, err := file.NewFileManager(dataDir, configDir)
+	if err != nil {
+		slog.Warn("inbound file echoes will not be delivered: cannot load file areas", "error", err)
+		return nil
+	}
+	return fm
 }

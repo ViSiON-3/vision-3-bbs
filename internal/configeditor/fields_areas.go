@@ -297,6 +297,17 @@ func (m *Model) fieldsFileArea() []fieldDef {
 				return m.buildConferenceLookupItems()
 			},
 		},
+		{
+			Label: "Network", Help: "FTN network feeding this area by TIC (ftn.json key); empty = local area", Type: ftLookup, Col: 3, Row: 9, Width: 20,
+			Get:         func() string { return a.Network },
+			Set:         func(val string) error { a.Network = strings.TrimSpace(val); return nil },
+			LookupItems: func() []LookupItem { return m.buildFTNNetworkLookupItems() },
+		},
+		{
+			Label: "File Echo", Help: "File echo tag whose TICs land here (e.g. TQW_LINUXFILES); empty = local area", Type: ftString, Col: 3, Row: 10, Width: 30,
+			Get: func() string { return a.FileEcho },
+			Set: func(val string) error { a.FileEcho = strings.ToUpper(strings.TrimSpace(val)); return nil },
+		},
 	}
 }
 

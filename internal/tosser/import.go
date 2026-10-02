@@ -1,7 +1,8 @@
 // Package tosser moves FidoNet-style (FTN) echomail and netmail between
 // packets on disk and the BBS's JAM message bases, one Tosser per configured
 // network. ProcessInbound imports inbound .PKT files and bundles, with SEEN-BY,
-// PATH and a shared DupeDB guarding against loops and duplicates;
+// PATH and a shared DupeDB guarding against loops and duplicates, and
+// delivers inbound file echo files (.TIC) into their file areas;
 // ScanAndExport writes new local messages to outbound packets; PackOutbound
 // bundles those packets for binkd. FindUnclaimed reports inbound mail that no
 // network accepted. All three passes serialise on a cross-process mail lock.
@@ -42,6 +43,18 @@ type TossResult struct {
 	MessagesExported int
 	DupesSkipped     int
 	Errors           []string
+
+	// File echoes (see tic.go): files delivered into file areas, dropped as
+	// duplicates, and moved aside as undeliverable.
+	FilesImported int
+	FilesDuped    int
+	FilesBad      int
+
+	// WaitingTICs are TICs this network claimed whose file has not arrived
+	// yet. They stay in the inbound but are not unclaimed: FindUnclaimed's
+	// caller drops them from SkippedByFile, where a network that declined
+	// them first would have put them.
+	WaitingTICs []string
 
 	// SkippedByFile records packets left for another network's tosser: inbound
 	// file path, then origin address that matched none of this network's
@@ -85,6 +98,7 @@ type Tosser struct {
 	dupeDB         *DupeDB
 	ownAddr        *jam.FidoAddress
 	recipients     user.RecipientResolver // nil: netmail To is stored as received
+	fileAreas      FileAreaStore          // nil: inbound TICs are left alone
 }
 
 // New creates a new Tosser instance for a single FTN network.
@@ -139,8 +153,9 @@ func NewDupeDBFromPath(dupeDBPath string) (*DupeDB, error) {
 	return NewDupeDB(dupeDBPath, maxAge)
 }
 
-// ProcessInbound scans all configured inbound directories for .PKT files and
-// ZIP bundles, unpacking bundles as needed, then tosses each packet.
+// ProcessInbound scans all configured inbound directories for .TIC files
+// (when SetFileAreas was called), .PKT files and ZIP bundles, delivering each
+// TIC's file and unpacking bundles as needed, then tosses each packet.
 func (t *Tosser) ProcessInbound() TossResult {
 	result := TossResult{}
 	release, err := t.lockMail()
@@ -160,6 +175,9 @@ func (t *Tosser) ProcessInbound() TossResult {
 	}
 
 	for _, inboundDir := range t.inboundDirs() {
+		if t.fileAreas != nil {
+			t.processTICs(inboundDir, &result)
+		}
 		t.processInboundDir(inboundDir, &result)
 	}
 
@@ -182,6 +200,7 @@ func (t *Tosser) processInboundDir(dir string, result *TossResult) {
 		return
 	}
 
+	ticFiles := ticReferencedFiles(dir, entries)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -189,6 +208,9 @@ func (t *Tosser) processInboundDir(dir string, result *TossResult) {
 		name := entry.Name()
 		nameLower := strings.ToLower(name)
 		path := filepath.Join(dir, name)
+		if ticFiles[nameLower] {
+			continue // a file echo's file, waiting for its TIC to be processed
+		}
 
 		if strings.HasSuffix(nameLower, ".pkt") {
 			// Direct .PKT file: it is its own inbound file.
@@ -224,6 +246,15 @@ func (t *Tosser) processBundle(path, name string, result *TossResult) {
 		if renErr := os.Rename(path, badPath); renErr != nil {
 			slog.Warn("failed to move bad bundle", "path", path, "error", renErr)
 		}
+		return
+	}
+
+	// A ZIP with no packets in it is not mail, whatever its name — most
+	// likely a file that arrived without (or ahead of) its TIC. Removing it
+	// below would destroy it, so it is left for the sysop, and reported as
+	// unclaimed if it stays.
+	if len(pktPaths) == 0 {
+		slog.Info("ZIP in the inbound holds no packets, leaving it in place", "network", t.networkName, "file", name)
 		return
 	}
 
