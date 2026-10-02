@@ -1912,6 +1912,9 @@ func main() {
 	// Initialize MenuExecutor with new paths, loaded theme, server config, message manager, and connection tracker
 	serverConfig.DataDir = dataPath
 	menuExecutor = menu.NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath, oneliners, loadedDoors, loadedStrings, loadedTheme, serverConfig, messageMgr, fileMgr, confMgr, connectionTracker, loginSequence, sessionRegistry, loadedProtocols)
+	// Compiled by v3mail toss as each network's nodelist arrives; reloaded
+	// as the files change.
+	menuExecutor.Nodelists = ftn.NewNodelistIndex(ftn.NodelistDir(dataPath))
 
 	// Initialize configuration file watcher for hot reload
 	var serverConfigMu sync.RWMutex

@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
@@ -153,23 +154,29 @@ func (e *MenuExecutor) promptComposeRecipient(s ssh.Session, terminal *term.Term
 			// links whatever the zone, so an address in another zone is
 			// probably a mistake. Ask rather than refuse: some networks
 			// span several zones.
-			ownZone, ok := netmailZone(area)
-			if !ok || addrZone(addr) == ownZone {
-				break
+			if ownZone, ok := netmailZone(area); ok && addrZone(addr) != ownZone {
+				network := area.Network
+				if network == "" {
+					network = "this network"
+				}
+				q := fmt.Sprintf("|07%s is not in %s (zone %d). Send anyway? @", addr, network, ownZone)
+				yes, err := e.PromptYesNo(s, terminal, q, outputMode, nodeNumber, termWidth, termHeight, false)
+				if err != nil {
+					return "", "", false, err
+				}
+				if !yes {
+					addr = "" // ask for the address again
+					continue
+				}
 			}
-			network := area.Network
-			if network == "" {
-				network = "this network"
-			}
-			q := fmt.Sprintf("|07%s is not in %s (zone %d). Send anyway? @", addr, network, ownZone)
-			yes, err := e.PromptYesNo(s, terminal, q, outputMode, nodeNumber, termWidth, termHeight, false)
+			send, err := e.confirmNetmailNode(s, terminal, area, addr, outputMode, nodeNumber, termWidth, termHeight)
 			if err != nil {
 				return "", "", false, err
 			}
-			if yes {
+			if send {
 				break
 			}
-			addr = "" // ask for the address again
+			addr = ""
 		}
 		return name + "@" + addr, name, false, nil
 
@@ -183,6 +190,76 @@ func (e *MenuExecutor) promptComposeRecipient(s ssh.Session, terminal *term.Term
 		}
 		return val, val, false, nil
 	}
+}
+
+// confirmNetmailNode looks addr up in the nodelist of area's network and
+// says which system the netmail is going to. An address the nodelist does
+// not list, or lists as Down, is asked about rather than refused: the list
+// can be a week old, and the mail goes through the hub either way. send is
+// false when the caller answered No and the address should be asked again.
+//
+// Nothing is shown or asked when the network has no compiled nodelist, or
+// when the list does not cover the address's zone.
+func (e *MenuExecutor) confirmNetmailNode(s ssh.Session, terminal *term.Terminal, area *message.MessageArea, addr string, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) (send bool, err error) {
+	if e.Nodelists == nil || area.Network == "" {
+		return true, nil
+	}
+	a, err := ftn.ParseAddress(addr)
+	if err != nil {
+		return true, nil
+	}
+	list := e.Nodelists.List(area.Network)
+	if list == nil || !list.HasZone(a.Zone) {
+		return true, nil
+	}
+	say := func(text string) {
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(text)), outputMode)
+	}
+	ask := func(q string) (bool, error) {
+		return e.PromptYesNo(s, terminal, q, outputMode, nodeNumber, termWidth, termHeight, false)
+	}
+
+	node, ok := e.Nodelists.Lookup(area.Network, a)
+	if !ok {
+		listed := a
+		listed.Point = 0
+		what := addr
+		if a.Point != 0 {
+			what = fmt.Sprintf("%s (the node %s)", addr, listed)
+		}
+		return ask(fmt.Sprintf("|07%s is not in the %s nodelist%s. Send anyway? @", what, area.Network, nodelistDated(list)))
+	}
+
+	system := "|15" + node.Name + "|07"
+	if node.Location != "" {
+		system += ", " + node.Location
+	}
+	if node.Sysop != "" {
+		system += " (" + node.Sysop + ")"
+	}
+	if a.Point != 0 {
+		say(fmt.Sprintf("|07Sending to a point of %s\r\n", system))
+	} else {
+		say(fmt.Sprintf("|07Sending to %s\r\n", system))
+	}
+
+	switch node.Status {
+	case "Down":
+		return ask(fmt.Sprintf("|07%s is listed as Down in the %s nodelist. Send anyway? @", node.Address, area.Network))
+	case "Hold":
+		say("|08Listed as Hold: its mail waits at its host until it calls in.|07\r\n")
+	case "Pvt":
+		say("|08Listed as Private: its mail goes through its host.|07\r\n")
+	}
+	return true, nil
+}
+
+// nodelistDated describes a compiled nodelist's date for a prompt.
+func nodelistDated(list *ftn.CompiledNodelist) string {
+	if list.Date.IsZero() {
+		return ""
+	}
+	return " of " + list.Date.Format("2006-01-02")
 }
 
 // netmailZone returns the zone of this BBS's own address on area's network,
