@@ -222,6 +222,7 @@ func (t *Tosser) processTIC(dir, ticName string, secure bool, areas map[string]f
 		result.FilesImported++
 		slog.Info("received file echo file", "network", t.networkName, "echo", tic.Area, "file", dataName,
 			"area", area.Tag, "size", info.Size(), "replaced", outcome == ticReplaced)
+		t.compileNodelist(area, dataName, tic, result)
 	}
 	t.removeReplaced(area, dataName, tic, result)
 }

@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // NodelistEntry is one parsed line of an FTS-5000 nodelist.
@@ -22,6 +24,30 @@ type NodelistEntry struct {
 // expresses segment structure (which hub a node belongs to) purely by order.
 type Nodelist struct {
 	Entries []NodelistEntry
+
+	// From the header line, e.g. ";A fsxNet Nodelist for Friday, October 2,
+	// 2026 -- Day number 275 : 59569". Zero when the list has no header in
+	// that form.
+	Date      time.Time
+	DayNumber int
+}
+
+// nodelistHeaderRe matches the date and day number in a nodelist's first line.
+var nodelistHeaderRe = regexp.MustCompile(`(?i)\bfor\s+\w+,\s+(\w+\s+\d{1,2},\s+\d{4})(?:\s+--\s+day\s+number\s+(\d{1,3}))?`)
+
+// parseNodelistHeader reads the publication date and day number from a
+// nodelist header line.
+func parseNodelistHeader(line string) (time.Time, int) {
+	m := nodelistHeaderRe.FindStringSubmatch(line)
+	if m == nil {
+		return time.Time{}, 0
+	}
+	date, err := time.Parse("January 2, 2006", strings.Join(strings.Fields(m[1]), " "))
+	if err != nil {
+		return time.Time{}, 0
+	}
+	day, _ := strconv.Atoi(m[2])
+	return date, day
 }
 
 // ParseNodelist parses an FTS-5000 distribution nodelist. Comment lines
@@ -33,8 +59,13 @@ func ParseNodelist(r io.Reader) (*Nodelist, error) {
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	zone, net := 0, 0
+	first := true
 	for scanner.Scan() {
 		line := strings.TrimRight(scanner.Text(), "\r\x1a")
+		if first {
+			first = false
+			nl.Date, nl.DayNumber = parseNodelistHeader(line)
+		}
 		if line == "" || strings.HasPrefix(line, ";") {
 			continue
 		}

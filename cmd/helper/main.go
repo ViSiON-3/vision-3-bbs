@@ -1,8 +1,9 @@
 // Command helper is the ViSiON/3 sysop maintenance utility. Its subcommands
 // (matched case-insensitively) import FTN echo areas from a FIDONET.NA file
-// (ftnsetup), send AreaFix netmail to a hub (areafix), list or purge
-// soft-deleted user accounts (users), and bulk-import files into a file area
-// or re-extract FILE_ID.DIZ descriptions (files). It works directly on the
+// (ftnsetup), send AreaFix netmail to a hub (areafix), compile and query
+// nodelists (nodelist), list or purge soft-deleted user accounts (users), and
+// bulk-import files into a file area or re-extract FILE_ID.DIZ descriptions
+// (files). It works directly on the
 // configs and data directories, selectable with --config and --data.
 package main
 
@@ -102,6 +103,8 @@ func main() {
 		cmdFTNSetup(os.Args[2:])
 	case "fileecho":
 		cmdFileEcho(os.Args[2:])
+	case "nodelist":
+		cmdNodelist(os.Args[2:])
 	case "areafix", "aerafix":
 		cmdAreafix(os.Args[2:])
 	case "users":
@@ -129,6 +132,8 @@ func printUsage(errMsg string) {
 	_, _ = fmt.Fprintln(w, helpcmd("FTNSETUP", "Import FTN echo areas from a FIDONET.NA file"))
 	_, _ = fmt.Fprintln(w, helpcmd("FILEECHO", "Create file areas for a network's file echo list"))
 	_, _ = fmt.Fprintln(w, helpcmd("AREAFIX", "Send an AreaFix netmail command to a network hub"))
+	_, _ = fmt.Fprintln(w, helpcmd("NODELIST IMPORT", "Compile a network's nodelist for lookups"))
+	_, _ = fmt.Fprintln(w, helpcmd("NODELIST LOOKUP", "Look systems up in the compiled nodelists"))
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintf(w, "  %sUser Commands:%s\n", clrBold, clrReset)
 	_, _ = fmt.Fprintln(w, helpcmd("USERS PURGE", "Permanently remove soft-deleted users past retention"))

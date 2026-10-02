@@ -18,6 +18,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 )
 
 // cmdPoll implements 'v3mail poll': fetch and send mail for every network in
@@ -233,7 +234,7 @@ func pollFTN(ctx context.Context, configDir, dataDir, only string, timeout time.
 
 	// Every enabled network tosses, not just the one polled: networks can
 	// share an inbound, and a packet is only claimed by its own network.
-	if tossFTN(ftnCfg, msgMgr, dupeDB, loadRecipients(dataDir), loadFileAreas(dataDir, configDir), "", false) {
+	if tossFTN(ftnCfg, msgMgr, dupeDB, loadRecipients(dataDir), loadFileAreas(dataDir, configDir), ftn.NodelistDir(dataDir), "", false) {
 		failed = true
 	}
 	return failed

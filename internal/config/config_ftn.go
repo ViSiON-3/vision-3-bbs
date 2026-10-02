@@ -175,6 +175,22 @@ type FTNNetworkConfig struct {
 	// one filename and one network's mail is handed to the other's hub.
 	// Separate outbounds are also how binkd itself tells two domains apart.
 	BinkdOutboundPath string `json:"binkd_outbound_path,omitempty"`
+
+	// Nodelist names the file echo that carries this network's nodelist.
+	// v3mail toss compiles each one that arrives into the lookup the BBS
+	// uses for system names (see ftn.CompiledNodelist).
+	Nodelist FTNNodelistConfig `json:"nodelist,omitzero"`
+}
+
+// FTNNodelistConfig says where a network's weekly nodelist comes from.
+type FTNNodelistConfig struct {
+	// FileEcho is the file echo the nodelist arrives in, e.g. "FSX_NODE".
+	// Empty: nodelists are not compiled automatically.
+	FileEcho string `json:"file_echo,omitempty"`
+	// FilePattern picks the nodelist out of the other files the echo carries
+	// (nodediffs, other networks' lists), e.g. "FSXNET.Z*". * and ? are
+	// wildcards; names compare ignoring case. Empty takes every file.
+	FilePattern string `json:"file_pattern,omitempty"`
 }
 
 // BinkdServerConfig controls the integrated binkd mailer daemon.

@@ -52,6 +52,10 @@ type TossResult struct {
 	FilesBad      int
 	FilesRemoved  int
 
+	// NodelistsCompiled counts nodelists delivered by file echo and compiled
+	// for lookups (see nodelist.go).
+	NodelistsCompiled int
+
 	// WaitingTICs are TICs this network claimed whose file has not arrived
 	// yet. They stay in the inbound but are not unclaimed: FindUnclaimed's
 	// caller drops them from SkippedByFile, where a network that declined
@@ -101,6 +105,7 @@ type Tosser struct {
 	ownAddr        *jam.FidoAddress
 	recipients     user.RecipientResolver // nil: netmail To is stored as received
 	fileAreas      FileAreaStore          // nil: inbound TICs are left alone
+	nodelistDir    string                 // "": nodelists delivered by TIC are not compiled
 }
 
 // New creates a new Tosser instance for a single FTN network.

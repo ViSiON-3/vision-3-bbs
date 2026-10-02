@@ -162,6 +162,24 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 				return nil
 			},
 		},
+		{
+			Label: "Nodelist Echo", Help: "File echo this network's nodelist arrives in, e.g. FSX_NODE; v3mail toss compiles each one (empty = off)", Type: ftString, Col: 3, Row: 6, Width: 30,
+			Get: func() string { return netPtr.Nodelist.FileEcho },
+			Set: func(val string) error {
+				val = strings.ToUpper(strings.TrimSpace(val))
+				if strings.ContainsAny(val, " \t") {
+					return fmt.Errorf("a file echo tag has no spaces")
+				}
+				netPtr.Nodelist.FileEcho = val
+				save()
+				return nil
+			},
+		},
+		{
+			Label: "Nodelist Files", Help: "Which files in that echo are the nodelist, e.g. FSXNET.Z* (* and ? wildcards; empty = any)", Type: ftString, Col: 3, Row: 7, Width: 30,
+			Get: func() string { return netPtr.Nodelist.FilePattern },
+			Set: func(val string) error { netPtr.Nodelist.FilePattern = strings.TrimSpace(val); save(); return nil },
+		},
 	}
 }
 
