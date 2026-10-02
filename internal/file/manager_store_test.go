@@ -1,7 +1,10 @@
 package file
 
 import (
+	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -95,7 +98,7 @@ func TestUpdateOfRecordRemovedByAnotherProcessFails(t *testing.T) {
 }
 
 func TestIsMetadataFile(t *testing.T) {
-	for _, name := range []string{"metadata.json", "metadata.json.lock", "metadata.json.tmp-12345"} {
+	for _, name := range []string{"metadata.json", "metadata.json.lock", "metadata.json.tmp-12345", "METADATA.JSON", "Metadata.Json.Lock"} {
 		if !IsMetadataFile(name) {
 			t.Errorf("IsMetadataFile(%q) = false", name)
 		}
@@ -103,6 +106,46 @@ func TestIsMetadataFile(t *testing.T) {
 	for _, name := range []string{"METADATA.ZIP", "file.zip", "metadata.txt"} {
 		if IsMetadataFile(name) {
 			t.Errorf("IsMetadataFile(%q) = true", name)
+		}
+	}
+}
+
+// GetFilePath resolves a record another process added, without some other
+// query having refreshed the cache first.
+func TestGetFilePathFindsRecordAddedByAnotherProcess(t *testing.T) {
+	fm := setupTestFileManager(t, []FileArea{{ID: 1, Tag: "UTILS", Name: "Utilities", Path: "utils"}})
+	id := uuid.New()
+	addExternally(t, fm, "utils", FileRecord{ID: id, AreaID: 1, Filename: "TIC.ZIP"})
+	if _, err := fm.GetFilePath(id); err != nil {
+		t.Fatalf("GetFilePath: %v", err)
+	}
+}
+
+// If the list without the record cannot be saved, the file is put back: the
+// record still names it.
+func TestDeleteRestoresFileWhenMetadataSaveFails(t *testing.T) {
+	fm := setupTestFileManager(t, []FileArea{{ID: 1, Tag: "UTILS", Name: "Utilities", Path: "utils"}})
+	dir := filepath.Join(fm.basePath, "utils")
+	if err := os.WriteFile(filepath.Join(dir, "KEEP.ZIP"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	id := uuid.New()
+	if err := fm.AddFileRecord(FileRecord{ID: id, AreaID: 1, Filename: "KEEP.ZIP"}); err != nil {
+		t.Fatal(err)
+	}
+	saveList = func(string, []FileRecord) (os.FileInfo, error) { return nil, errors.New("disk full") }
+	defer func() { saveList = writeMetadata }()
+
+	if err := fm.DeleteFileRecord(id, true); err == nil {
+		t.Fatal("delete succeeded although the metadata could not be saved")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "KEEP.ZIP")); err != nil {
+		t.Errorf("the file is gone although its record remains: %v", err)
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".deleting-") {
+			t.Errorf("staged copy %s left behind", e.Name())
 		}
 	}
 }

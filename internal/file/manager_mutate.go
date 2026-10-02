@@ -55,7 +55,7 @@ func (fm *FileManager) DeleteFileRecord(fileID uuid.UUID, deleteFromDisk bool) e
 		areaDir = dir
 	}
 
-	var filename string
+	var filename, staged string
 	err := fm.mutateAreas([]int{foundAreaID}, func(lists map[int][]FileRecord) (func(), error) {
 		records := lists[foundAreaID]
 		idx := indexOfRecord(records, fileID)
@@ -68,8 +68,10 @@ func (fm *FileManager) DeleteFileRecord(fileID uuid.UUID, deleteFromDisk bool) e
 		// that has since taken it over.
 		filename = records[idx].Filename
 
-		// Delete from disk first — before touching metadata. A failure
-		// leaves metadata intact and the operation is retryable.
+		// The file is only renamed out of the way here, and removed once the
+		// list without its record is saved: if that save fails, the undo
+		// puts the file back under its record.
+		var undo func()
 		if deleteFromDisk {
 			// Only gate the disk delete: a record with a corrupt filename
 			// must still be removable from metadata (deleteFromDisk=false),
@@ -79,19 +81,36 @@ func (fm *FileManager) DeleteFileRecord(fileID uuid.UUID, deleteFromDisk bool) e
 				return nil, fmt.Errorf("refusing to delete from disk: %w", err)
 			}
 			fullPath := filepath.Join(areaDir, safeName)
-			if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
-				slog.Warn("failed to delete file from disk", "path", fullPath, "error", err)
-				return nil, fmt.Errorf("failed to delete file from disk: %w", err)
+			tmp := filepath.Join(areaDir, ".deleting-"+uuid.NewString())
+			if err := os.Rename(fullPath, tmp); err != nil {
+				if !os.IsNotExist(err) {
+					slog.Warn("failed to delete file from disk", "path", fullPath, "error", err)
+					return nil, fmt.Errorf("failed to delete file from disk: %w", err)
+				}
+			} else {
+				staged = tmp
+				undo = func() {
+					if err := os.Rename(tmp, fullPath); err != nil {
+						slog.Error("failed to restore file after metadata save failure", "path", fullPath, "staged", tmp, "error", err)
+					}
+					staged = ""
+				}
 			}
-			slog.Info("deleted file from disk", "path", fullPath)
 		}
 
 		lists[foundAreaID] = append(records[:idx], records[idx+1:]...)
-		return nil, nil
+		return undo, nil
 	})
 	if err != nil {
 		slog.Error("failed to delete file record", "id", fileID, "error", err)
 		return err
+	}
+	if staged != "" {
+		if err := os.Remove(staged); err != nil {
+			slog.Warn("record deleted but its file could not be removed", "path", staged, "error", err)
+		} else {
+			slog.Info("deleted file from disk", "file", filename, "area", foundAreaID)
+		}
 	}
 
 	slog.Info("deleted file record", "file", filename, "id", fileID, "area", foundAreaID)

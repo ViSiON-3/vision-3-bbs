@@ -17,6 +17,9 @@ import (
 // It does NOT check that the file exists on disk -- callers that need that must
 // stat the returned path themselves.
 func (fm *FileManager) GetFilePath(fileID uuid.UUID) (string, error) {
+	// A record another process added is found too.
+	fm.refreshAll()
+
 	// muAreas and muFiles are never held together (see the FileManager doc
 	// comment): copy what is needed from each domain under its own lock.
 	fm.muFiles.RLock()

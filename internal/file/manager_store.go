@@ -39,8 +39,10 @@ const MetadataFileName = "metadata.json"
 
 // IsMetadataFile reports whether name, a file in an area directory, belongs
 // to the area's bookkeeping rather than being a file in the area: the list
-// itself, its lock sidecar, or a temp file left by an interrupted write.
+// itself, its lock sidecar, or a temp file left by an interrupted write. Case
+// is ignored: on a case-insensitive filesystem METADATA.JSON is the same file.
 func IsMetadataFile(name string) bool {
+	name = strings.ToLower(name)
 	return name == MetadataFileName ||
 		name == filelock.SidecarPath(MetadataFileName) ||
 		strings.HasPrefix(name, MetadataFileName+".tmp")
@@ -88,6 +90,10 @@ func writeMetadata(path string, records []FileRecord) (os.FileInfo, error) {
 	}
 	return os.Stat(path)
 }
+
+// saveList is how mutateAreas writes a list; a test replaces it to make the
+// save fail after a mutation has already acted on the disk.
+var saveList = writeMetadata
 
 // sameStamp reports whether two stats of a file list describe the same
 // contents. Both nil means the file was missing both times.
@@ -262,7 +268,7 @@ func (fm *FileManager) mutateAreas(areaIDs []int, fn func(map[int][]FileRecord) 
 
 	var written []int
 	for _, id := range ids {
-		info, err := writeMetadata(paths[id], lists[id])
+		info, err := saveList(paths[id], lists[id])
 		if err != nil {
 			if undo != nil {
 				undo()
