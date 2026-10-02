@@ -77,7 +77,8 @@ type TelnetConn struct {
 	termTypeMu   sync.RWMutex
 	willTermType bool // true after client responds WILL TERM_TYPE
 	// termTypeAnswered is set by WILL or WONT TERM_TYPE, and termTypeReported
-	// by any TERM_TYPE subnegotiation, so Negotiate knows when to stop waiting.
+	// once a non-empty IS <type> is accepted, so Negotiate knows when to stop
+	// waiting.
 	termTypeAnswered bool
 	termTypeReported bool
 
@@ -287,7 +288,6 @@ func (tc *TelnetConn) handleSubnegotiation() {
 		}
 
 	case OptTermType:
-		tc.termTypeReported = true
 		// sbData[0] is TermTypeIs (0); terminal type string follows
 		if len(tc.sbData) >= 1 && tc.sbData[0] == TermTypeIs {
 			t := strings.ToLower(strings.TrimSpace(string(tc.sbData[1:])))
@@ -295,6 +295,7 @@ func (tc *TelnetConn) handleSubnegotiation() {
 				tc.termTypeMu.Lock()
 				tc.termType = t
 				tc.termTypeMu.Unlock()
+				tc.termTypeReported = true
 				slog.Info("telnet terminal type", "term", t)
 			}
 		}
