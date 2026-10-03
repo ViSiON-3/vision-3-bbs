@@ -290,7 +290,7 @@ func konfigSections() [2][]konfigSection {
 					value: func(st *konfigState) konfigValue { return numValue(st.user().ScreenHeight, 25) },
 					edit:  editScreenHeight},
 				{key: 'C', label: "Encoding", flips: true,
-					help:  "CP437 for SyncTERM, NetRunner and friends; UTF-8 for modern terminals.",
+					help:  "Auto detects it on every call. Force UTF-8 or CP437 only if Auto is wrong.",
 					value: encodingValue,
 					edit:  toggleEncoding},
 				{key: 'D', label: "Hot Keys", flips: true,
@@ -390,17 +390,12 @@ func onOffValue(on bool) konfigValue {
 	return konfigValue{"Off", toneOff}
 }
 
-// effectiveEncoding is the encoding the caller has chosen, or the one this
-// session negotiated when they have not chosen.
-func (st *konfigState) effectiveEncoding() (enc string, chosen bool) {
-	switch st.user().PreferredEncoding {
-	case "utf8", "cp437":
-		return st.user().PreferredEncoding, true
-	}
+// sessionEncoding is the encoding this session is using.
+func (st *konfigState) sessionEncoding() string {
 	if st.c.outputMode == ansi.OutputModeUTF8 {
-		return "utf8", false
+		return "utf8"
 	}
-	return "cp437", false
+	return "cp437"
 }
 
 // fileListModeDisplay names a file listing mode for display. Anything but
@@ -420,11 +415,11 @@ func encodingName(enc string) string {
 }
 
 func encodingValue(st *konfigState) konfigValue {
-	enc, chosen := st.effectiveEncoding()
-	if !chosen {
-		return konfigValue{encodingName(enc) + " (auto)", toneDim}
+	switch enc := st.user().PreferredEncoding; enc {
+	case "utf8", "cp437":
+		return konfigValue{encodingName(enc), toneValue}
 	}
-	return konfigValue{encodingName(enc), toneValue}
+	return konfigValue{"Auto (" + encodingName(st.sessionEncoding()) + ")", toneDim}
 }
 
 // effectiveListingMode resolves the caller's file listing mode against the
@@ -552,17 +547,38 @@ func toggleHotKeys(st *konfigState) error {
 	return nil
 }
 
+// toggleEncoding cycles Auto, the encoding this session is using, the other
+// one, and back to Auto, so the first press never changes what the caller
+// sees. Auto detects the encoding on every call.
 func toggleEncoding(st *konfigState) error {
-	cur, _ := st.effectiveEncoding()
-	next := "utf8"
-	if cur == "utf8" {
-		next = "cp437"
+	session := st.sessionEncoding()
+	other := "cp437"
+	if session == "cp437" {
+		other = "utf8"
 	}
 	old := st.user().PreferredEncoding
-	if st.commit("Encoding",
+	var next string
+	switch old {
+	case session:
+		next = other
+	case other:
+		next = ""
+	default:
+		next = session
+	}
+	if !st.commit("Encoding",
 		func(u *user.User) { u.PreferredEncoding = next },
 		func(u *user.User) { u.PreferredEncoding = old }) {
+		return nil
+	}
+	switch next {
+	case "":
+		st.status = "|10Saved.|07 Encoding is now |15Auto|07, detected on every call."
+	case session:
 		st.status = fmt.Sprintf("|10Saved.|07 Encoding is now |15%s|07, starting with your next login.", encodingName(next))
+	default:
+		st.status = fmt.Sprintf("|12Saved, but this terminal is using %s.|07 |15%s|07 starts next login.",
+			encodingName(session), encodingName(next))
 	}
 	return nil
 }

@@ -26,6 +26,12 @@ const (
 // screen, the user it handed back, and its next action.
 func runKonfig(t *testing.T, um *user.UserMgr, u *user.User, keys string, args string) (*testterm.Term, *user.User, string) {
 	t.Helper()
+	return runKonfigMode(t, um, u, keys, args, ansi.OutputModeUTF8)
+}
+
+// runKonfigMode is runKonfig on a session using the given encoding.
+func runKonfigMode(t *testing.T, um *user.UserMgr, u *user.User, keys, args string, mode ansi.OutputMode) (*testterm.Term, *user.User, string) {
+	t.Helper()
 	screen := testterm.New(80, 24)
 	sess := testterm.NewSession(screen, keys)
 	t.Cleanup(func() {
@@ -39,7 +45,7 @@ func runKonfig(t *testing.T, um *user.UserMgr, u *user.User, keys string, args s
 		userManager: um,
 		currentUser: u,
 		nodeNumber:  1,
-		outputMode:  ansi.OutputModeUTF8,
+		outputMode:  mode,
 		termWidth:   80,
 		termHeight:  24,
 	}
@@ -299,17 +305,63 @@ func TestKonfigScreenWidthRangeAndLiveApply(t *testing.T) {
 	}
 }
 
-func TestKonfigEncodingSwitchesFromTheNegotiatedMode(t *testing.T) {
+// Encoding cycles Auto, the encoding the session is using, the other one,
+// then back to Auto. The first press never changes what the caller sees.
+func TestKonfigEncodingCycle(t *testing.T) {
+	for _, tc := range []struct {
+		mode ansi.OutputMode
+		want []string
+	}{
+		{ansi.OutputModeUTF8, []string{"utf8", "cp437", ""}},
+		{ansi.OutputModeCP437, []string{"cp437", "utf8", ""}},
+	} {
+		um, u := newUserConfigTestUser(t)
+		for _, want := range tc.want {
+			_, u, _ = runKonfigMode(t, um, u, "cq", "", tc.mode)
+			if u.PreferredEncoding != want || reloadUser(t, um).PreferredEncoding != want {
+				t.Fatalf("session %v: PreferredEncoding = %q, want %q", tc.mode, u.PreferredEncoding, want)
+			}
+		}
+	}
+}
+
+func TestKonfigEncodingWarnsOnMismatch(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
-	// Unset, on a UTF-8 session: the first switch goes to CP437.
-	_, got, _ := runKonfig(t, um, u, "cq", "")
-	if got.PreferredEncoding != "cp437" {
-		t.Fatalf("PreferredEncoding = %q, want cp437", got.PreferredEncoding)
+	screen, u, _ := runKonfig(t, um, u, "cq", "") // utf8 on a UTF-8 session
+	if row := screen.Row(konfigEditRow); strings.Contains(row, "this terminal is using") {
+		t.Errorf("matching choice warned: %q", row)
 	}
-	_, got, _ = runKonfig(t, um, got, "cq", "")
-	if got.PreferredEncoding != "utf8" || reloadUser(t, um).PreferredEncoding != "utf8" {
-		t.Fatalf("PreferredEncoding = %q, want utf8", got.PreferredEncoding)
+	screen, _, _ = runKonfig(t, um, u, "cq", "") // cp437 on a UTF-8 session
+	if row := screen.Row(konfigEditRow); !strings.Contains(row, "this terminal is using UTF-8") {
+		t.Errorf("mismatch not warned: %q", row)
 	}
+}
+
+func TestKonfigEncodingValue(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	for _, tc := range []struct {
+		pref, want string
+	}{
+		{"", "Auto (UTF-8)"},
+		{"utf8", "UTF-8"},
+		{"cp437", "CP437"},
+	} {
+		u.PreferredEncoding = tc.pref
+		screen, _, _ := runKonfig(t, um, u, "q", "")
+		if got := konfigFieldText(screen, "[C] Encoding"); !strings.HasPrefix(got, tc.want) {
+			t.Errorf("pref %q: Encoding shows %q, want %q", tc.pref, got, tc.want)
+		}
+	}
+}
+
+// konfigFieldText returns what follows label on the screen row that has it.
+func konfigFieldText(screen *testterm.Term, label string) string {
+	for row := 1; row <= 24; row++ {
+		if _, after, ok := strings.Cut(screen.Row(row), label); ok {
+			return strings.TrimSpace(after)
+		}
+	}
+	return ""
 }
 
 func TestKonfigListingModeSwitches(t *testing.T) {
