@@ -378,12 +378,21 @@ Download SyncTerm: https://syncterm.bbsdev.net/
 
 ```bash
 ./vision3 --output-mode=auto
+./vision3 --doctor
+./vision3 doctor --json
+./vision3 --doctor --fix --dry-run
 ```
 
 - `--output-mode`: Terminal output mode (`auto` / `utf8` / `cp437`)
   - `auto`: Automatically detect based on terminal type (default)
   - `utf8`: Force UTF-8 output
   - `cp437`: Force CP437 output for authentic DOS/BBS experience
+- `--doctor` / `doctor`: Check the current board's configuration and exit without starting listeners
+- `--json` (with doctor): Write the diagnostic report as JSON
+- `--fix` (with doctor): Create missing standard data directories
+- `--dry-run` (with `--fix`): Preview those directory creations without changing files
+
+Doctor exits with status `0` when checks pass, `1` when there are warnings, and `2` when a check fails. It is read-only by default; `--fix` only creates missing standard data directories, and `--dry-run` previews those changes.
 
 ## Configuration
 
