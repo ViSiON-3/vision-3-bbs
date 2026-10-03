@@ -68,6 +68,23 @@ func TestReadNodelistFile(t *testing.T) {
 	}
 }
 
+// AmigaNet packs its nodelist with LHA: AMYLIST.L55 holds AmyList.255.
+// multi.lzh holds a FILE_ID.DIZ beside it, which is passed over.
+func TestReadNodelistFileLHA(t *testing.T) {
+	for _, name := range []string{"AMYLIST.L55", "multi.lzh"} {
+		nl, err := ReadNodelistFile(filepath.Join("..", "lha", "testdata", name))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if len(nl.Entries) != 28 || nl.DayNumber != 255 {
+			t.Errorf("%s: %d entries, day %d; want 28 and 255", name, len(nl.Entries), nl.DayNumber)
+		}
+		if !CompileNodelist(nl, "amiganet", name).HasZone(39) {
+			t.Errorf("%s: compiled list has no zone 39", name)
+		}
+	}
+}
+
 // A nodediff's added lines would parse as a nodelist short of every line that
 // did not change.
 func TestReadNodelistFileRefusesNodediff(t *testing.T) {

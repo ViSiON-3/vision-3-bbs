@@ -1,0 +1,33 @@
+;A AmigaNet Nodelist for Friday, September 12, 2025 -- Day number 255 : 12345
+;A
+;S Synthetic test list for ViSiON/3
+;A
+Zone,39,AmigaNet_Zone_39,Somewhere,Zone_Coordinator,-Unpublished-,300,IBN,INA:amiga.example
+Host,101,Mito_Net,Onra_Ba,Bo_Igis,-Unpublished-,300,CM,IBN,INA:net1.example
+Hold,1,Boka_BBS,Neis_Ne,Is_Lura,-Unpublished-,300,IBN,LO,XA
+Hold,2,Neon_BBS,Iglu_Ur,Bo_Kaka,-Unpublished-,300,V34,IBN,LO
+,3,Luurar_BBS,Zeig_Ka,Ze_Arto,-Unpublished-,300,LO,IBN,XA
+,4,Ka_BBS,Miis_Bo,Ba_Toel,-Unpublished-,300,CM,INA:bbs4.example,LO
+,5,Kabaar_BBS,Arze_Lu,Ar_Igig,-Unpublished-,300,MO,XA,CM
+,6,El_BBS,Amel_To,Ba_Onka,-Unpublished-,300,XA
+,7,Am_BBS,Lumi_To,Ig_Arba,-Unpublished-,300,CM,V34,XA
+Hold,8,Igmi_BBS,Ralu_On,Ra_Kaze,-Unpublished-,300,V34,ITN
+Host,102,Iska_Net,Luur_Mi,El_Boto,-Unpublished-,300,CM,IBN,INA:net2.example
+Hold,1,Kato_BBS,Urur_Ig,Am_Ellu,-Unpublished-,300,V34,MO,XA
+,2,Igba_BBS,Igur_Ze,Ne_Isis,-Unpublished-,300,XA
+,3,El_BBS,Baka_Ka,Ne_Kalu,-Unpublished-,300,IBN
+,4,To_BBS,Elar_Is,Ne_Raba,-Unpublished-,300,CM,XA
+Hold,5,Zetoto_BBS,Iska_Ba,Ra_Bora,-Unpublished-,300,MO,ITN,INA:bbs5.example
+,6,Neam_BBS,Amel_El,On_Onbo,-Unpublished-,300,IBN,ITN
+,7,Neze_BBS,Isam_El,Ur_Arur,-Unpublished-,300,XA,ITN,IBN,LO
+,8,Kaelon_BBS,Lubo_El,Ne_Boar,-Unpublished-,300,INA:bbs8.example
+Host,103,Onur_Net,Elam_Ka,Ka_Tour,-Unpublished-,300,CM,IBN,INA:net3.example
+Hold,1,Bone_BBS,Boar_On,Ur_Arur,-Unpublished-,300,ITN,IBN
+,2,Igka_BBS,Kael_Mi,To_Amka,-Unpublished-,300,INA:bbs2.example,ITN
+,3,Amuram_BBS,Ellu_Ur,Ka_Isis,-Unpublished-,300,XA,INA:bbs3.example,LO,V34
+Hold,4,Igig_BBS,Neka_Ze,To_Elam,-Unpublished-,300,LO
+,5,Zenebo_BBS,Neur_On,Am_Toon,-Unpublished-,300,LO
+,6,Urze_BBS,Neze_Ne,Bo_Onra,-Unpublished-,300,V34
+Hold,7,Boisne_BBS,Bobo_Ka,El_Nelu,-Unpublished-,300,LO,INA:bbs7.example,IBN,CM
+Hold,8,Ka_BBS,Mion_Lu,Is_Baur,-Unpublished-,300,CM,INA:bbs8.example
+

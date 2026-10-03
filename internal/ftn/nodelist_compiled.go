@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
+	"github.com/ViSiON-3/vision-3-bbs/internal/lha"
 )
 
 // A compiled nodelist is a network's nodelist reduced to what the BBS looks
@@ -121,14 +122,18 @@ func ReadNodelistFile(path string) (*Nodelist, error) {
 }
 
 // parseNodelistPayload parses a nodelist as read from a file or downloaded:
-// plain text, or a ZIP holding it. A nodediff is refused; name says what was
-// read, for the error.
+// plain text, or a ZIP or LHA archive holding it. A nodediff is refused; name
+// says what was read, for the error.
 func parseNodelistPayload(data []byte, name string) (*Nodelist, error) {
-	if isZipData(data) {
-		var err error
-		if data, err = extractNodelistMember(data); err != nil {
-			return nil, err
-		}
+	var err error
+	switch {
+	case isZipData(data):
+		data, err = extractNodelistMember(data)
+	case lha.IsArchive(data):
+		data, err = extractLHANodelistMember(data)
+	}
+	if err != nil {
+		return nil, err
 	}
 	if isNodediff(data) {
 		return nil, fmt.Errorf("%s is a nodediff, not a full nodelist", name)
