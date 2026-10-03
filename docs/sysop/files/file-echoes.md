@@ -21,6 +21,20 @@ must be delivering into the inbound directory. See
 
 ## Setting up file echo areas
 
+### From the FTN Setup Wizard
+
+If the network's entry in the built-in registry names its file echo list —
+tqwNet's does — the FTN Setup Wizard (Configuration Editor → Echomail) has a
+**File Echoes** row. Enter downloads the list and shows the echoes; tick the
+ones to carry and save. Each gets a file area linked to its echo, exactly as
+`helper fileecho` would create it below, in the network's conference, listed
+at `s10`, downloadable at `s20`, upload `s250`. Re-entering the wizard on the
+network shows the echoes already carried ticked; unticking one leaves its file
+area in place.
+
+Then continue at [step 3](#3-set-the-tic-password). For any other network,
+get the list and use `helper fileecho`, steps 1 and 2.
+
 ### 1. Get the network's file echo list
 
 Networks publish their file echoes as a list much like the echomail `.na`

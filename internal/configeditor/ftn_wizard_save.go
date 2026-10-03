@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
@@ -170,6 +171,9 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		)
 	}
 
+	// 4b. File areas for each selected file echo.
+	fileAreasAdded, fileEchoNote := m.createFTNFileEchoAreas(netKey, confID)
+
 	// 5. Update binkd.conf.
 	bbsRoot := filepath.Join(m.configPath, "..")
 	absRoot, err := filepath.Abs(bbsRoot)
@@ -239,12 +243,19 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		// Saving with no echoes is allowed (the echolist may be unavailable),
 		// so point at where they get added rather than leaving the operator
 		// wondering whether the save was incomplete.
-		m.message = fmt.Sprintf("FTN network %q saved with netmail only — add echo areas under Message Areas "+
-			"or re-run the wizard. Restart BBS to activate.", w.networkName)
+		carried := "netmail only"
+		if fileAreasAdded > 0 {
+			carried = "no echo areas"
+		}
+		m.message = fmt.Sprintf("FTN network %q saved with %s — add echo areas under Message Areas "+
+			"or re-run the wizard. Restart BBS to activate.", w.networkName, carried)
 	} else {
 		m.message = fmt.Sprintf("FTN network %q saved — %d area(s) created. Restart BBS to activate.", w.networkName, selectedCount)
 	}
-	m.message += nodelistNote + binkdWarning
+	m.message += fileEchoNote + nodelistNote + binkdWarning
+	if fileAreasAdded > 0 {
+		m.message += fmt.Sprintf(" Subscribe to the file echoes at your %s hub.", w.networkName)
+	}
 	m.mode = modeCategoryMenu
 	return m, nil
 }
@@ -414,4 +425,43 @@ func (m *Model) ensureFTNRejectAreas() {
 		})
 		*r.tag = r.newTag
 	}
+}
+
+// createFTNFileEchoAreas adds a file area, linked to its echo, for each
+// selected file echo this network does not already feed to one — what helper
+// fileecho does from the command line. It returns how many it added and a
+// note for the status message. Unticking an echo already carried never
+// removes its area, which may hold files.
+func (m *Model) createFTNFileEchoAreas(netKey string, confID int) (int, string) {
+	w := m.ftnWizard
+	var echoes []ftn.EchoArea
+	for i, sel := range w.selectedFileEchoes {
+		if sel && i < len(w.availableFileEchoes) {
+			echoes = append(echoes, w.availableFileEchoes[i])
+		}
+	}
+	dropped := ""
+	if n := w.uncarriedFileEchoCount(); n > 0 {
+		dropped = fmt.Sprintf(" %d existing file area(s) left in place: remove them under File Areas.", n)
+	}
+	if len(echoes) == 0 {
+		return 0, dropped
+	}
+	// The network key becomes a directory under the file base.
+	if err := file.CheckFilename(netKey); err != nil || strings.Trim(netKey, ".") == "" {
+		return 0, fmt.Sprintf(" File areas not created: network name %q cannot be a directory name.", netKey) + dropped
+	}
+	added, _ := ftn.PlanFileEchoAreas(m.configs.FileAreas, echoes, ftn.FileEchoAreaOptions{
+		Network:      netKey,
+		ConferenceID: confID,
+		ACSList:      "s10",
+		ACSDownload:  "s20",
+		// Fed by the network, not by callers.
+		ACSUpload: "s250",
+	})
+	if len(added) == 0 {
+		return 0, dropped
+	}
+	m.configs.FileAreas = append(m.configs.FileAreas, added...)
+	return len(added), fmt.Sprintf(" %d file area(s) created.", len(added)) + dropped
 }

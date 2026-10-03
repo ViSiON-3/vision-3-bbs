@@ -46,7 +46,7 @@ func ParseFileEchoList(r io.Reader) ([]EchoArea, error) {
 		if !isFileEchoTag(tag) {
 			continue
 		}
-		desc := strings.TrimSpace(strings.TrimPrefix(strings.Join(rest, " "), "-"))
+		desc := cleanAreaDescription(strings.TrimPrefix(strings.Join(rest, " "), "-"))
 
 		key := strings.ToUpper(tag)
 		if seen[key] {

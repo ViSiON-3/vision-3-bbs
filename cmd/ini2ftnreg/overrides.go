@@ -36,10 +36,12 @@ type override struct {
 
 	EcholistURL string `json:"echolist_url,omitempty"`
 	NodelistURL string `json:"nodelist_url,omitempty"`
-	PackURL     string `json:"pack_url,omitempty"`
-	InfoURL     string `json:"info_url,omitempty"`
-	HubAddress  string `json:"hub_address,omitempty"`
-	HubHostname string `json:"hub_hostname,omitempty"`
+	// FileEchoListURL has no counterpart in the ini, so every value is here.
+	FileEchoListURL string `json:"fileecho_list_url,omitempty"`
+	PackURL         string `json:"pack_url,omitempty"`
+	InfoURL         string `json:"info_url,omitempty"`
+	HubAddress      string `json:"hub_address,omitempty"`
+	HubHostname     string `json:"hub_hostname,omitempty"`
 }
 
 // applyOverrides patches the parsed networks and reports what it changed, so a
@@ -79,6 +81,7 @@ func applyOverrides(networks []Network) ([]Network, []string, error) {
 		}{
 			{"echolist_url", o.EcholistURL, &n.EcholistURL},
 			{"nodelist_url", o.NodelistURL, &n.NodelistURL},
+			{"fileecho_list_url", o.FileEchoListURL, &n.FileEchoListURL},
 			{"hub_address", o.HubAddress, &n.HubAddress},
 			{"pack_url", o.PackURL, &n.PackURL},
 			{"info_url", o.InfoURL, &n.InfoURL},

@@ -8,19 +8,23 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 )
 
-// ftnEcholistMsg is the result of downloading and parsing an FTN echolist.
+// ftnEcholistMsg is the result of downloading and parsing an FTN echolist,
+// or with fileEchoes set, a file echo list.
 type ftnEcholistMsg struct {
-	areas []ftn.EchoArea
-	err   error
+	url        string // the URL this result was fetched from, for staleness checks
+	generation uint64 // identifies the download attempt
+	fileEchoes bool
+	areas      []ftn.EchoArea
+	err        error
 }
 
 // fetchFTNEcholist returns a tea.Cmd that downloads and parses a backbone.na
 // echolist, applying network-specific cleanup rules from the registry entry.
-func fetchFTNEcholist(url string, reg *ftn.RegistryNetwork) tea.Cmd {
+func fetchFTNEcholist(url string, reg *ftn.RegistryNetwork, generation uint64) tea.Cmd {
 	return func() tea.Msg {
 		areas, err := ftn.DownloadEcholist(context.Background(), url)
 		if err != nil {
-			return ftnEcholistMsg{err: err}
+			return ftnEcholistMsg{url: url, generation: generation, err: err}
 		}
 
 		// Apply cleanup rules if we have registry data.
@@ -28,7 +32,7 @@ func fetchFTNEcholist(url string, reg *ftn.RegistryNetwork) tea.Cmd {
 			areas = ftn.CleanEcholist(areas, reg.AreatagExclude, reg.AreatitlePrefix)
 		}
 
-		return ftnEcholistMsg{areas: areas}
+		return ftnEcholistMsg{url: url, generation: generation, areas: areas}
 	}
 }
 
@@ -50,5 +54,14 @@ func fetchFTNNodelist(ctx context.Context, url string, generation uint64) tea.Cm
 	return func() tea.Msg {
 		nl, err := ftn.DownloadNodelist(ctx, url)
 		return ftnNodelistMsg{url: url, generation: generation, nodelist: nl, err: err}
+	}
+}
+
+// fetchFTNFileEchoList returns a tea.Cmd that downloads and parses a
+// network's file echo list.
+func fetchFTNFileEchoList(url string, generation uint64) tea.Cmd {
+	return func() tea.Msg {
+		echoes, err := ftn.DownloadFileEchoList(context.Background(), url)
+		return ftnEcholistMsg{url: url, generation: generation, fileEchoes: true, areas: echoes, err: err}
 	}
 }

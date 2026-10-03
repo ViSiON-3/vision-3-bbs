@@ -90,9 +90,10 @@
   {
     "zone": 1337,
     "name": "tqwNet",
-    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it. Upstream's value is unusable; corrected here. Upstream records the echolist as the bare filename \"tqwnet.na\", which cannot be fetched, so the wizard reports the area list as unavailable (ViSiON-3/vision-3-bbs#275). tqwNet does publish it, in the infopack repo. Note that repo also carries tqw_file.na, the *file* echo list; this is the echomail list.",
+    "reason": "init-fidonet.ini has no nodelist field at all, so every nodelist_url is curated here; without an entry, regenerating drops it. Upstream's value is unusable; corrected here. Upstream records the echolist as the bare filename \"tqwnet.na\", which cannot be fetched, so the wizard reports the area list as unavailable (ViSiON-3/vision-3-bbs#275). tqwNet does publish it, in the infopack repo. Note that repo also carries tqw_file.na, the *file* echo list; this is the echomail list. The ini has no file echo list field, so fileecho_list_url is curated here too (#570).",
     "nodelist_url": "https://www.erb.pw/tqwinfo.zip",
-    "echolist_url": "https://raw.githubusercontent.com/christiansacks/tqwnet_infopack/master/tqwnet.na"
+    "echolist_url": "https://raw.githubusercontent.com/christiansacks/tqwnet_infopack/master/tqwnet.na",
+    "fileecho_list_url": "https://raw.githubusercontent.com/christiansacks/tqwnet_infopack/master/tqw_file.na"
   },
   {
     "zone": 77,

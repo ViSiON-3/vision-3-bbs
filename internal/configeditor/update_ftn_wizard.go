@@ -117,6 +117,8 @@ func (m Model) startFTNWizardEdit(netKey string) (Model, tea.Cmd) {
 		autoJoinAreas:  true,
 		rejectAreas:    m.ftnRejectAreasMissing(),
 		subscribedTags: make(map[string]bool),
+
+		carriedFileEchoes: make(map[string]bool),
 	}
 
 	// Zone comes from the configured address, since ftn.json does not store
@@ -162,28 +164,56 @@ func (m Model) startFTNWizardEdit(netKey string) (Model, tea.Cmd) {
 		}
 	}
 
-	// Registry data (echolist and nodelist URLs, description) if this network
-	// is one we ship an entry for, so Echo Areas and Node Lookup still work.
-	if regNets, err := ftn.LoadRegistry(); err == nil {
-		for i := range regNets {
-			if !strings.EqualFold(regNets[i].Name, netKey) {
+	// File echoes this network already feeds to file areas.
+	for _, area := range m.configs.FileAreas {
+		if area.IsFileEcho() && strings.EqualFold(area.Network, netKey) {
+			w.carriedFileEchoes[strings.ToUpper(area.FileEcho)] = true
+		}
+	}
+
+	// Registry data (echolist, file echo list and nodelist URLs, description)
+	// if this network has an entry, so Echo Areas, File Echoes and Node Lookup
+	// still work. Sysop entries take precedence, with omitted list URLs
+	// falling back to the built-in entry.
+	regNets := m.loadFTNOverrideNetworks()
+	builtin, err := ftn.LoadRegistry()
+	if err == nil {
+		regNets = append(regNets, builtin...)
+	}
+	for i := range regNets {
+		if !strings.EqualFold(regNets[i].Name, netKey) {
+			continue
+		}
+		reg := regNets[i]
+		for _, base := range builtin {
+			if !strings.EqualFold(base.Name, reg.Name) {
 				continue
 			}
-			reg := regNets[i]
-			w.registryEntry = &reg
-			w.echolistURL = reg.EcholistURL
-			w.nodelistURL = reg.NodelistURL
-			w.coordinator = reg.Coordinator
-			w.coordinatorEmail = reg.CoordinatorEmail
-			w.infoURL = reg.InfoURL
-			if w.networkDesc == "" {
-				w.networkDesc = reg.Description
+			if reg.EcholistURL == "" {
+				reg.EcholistURL = base.EcholistURL
 			}
-			if w.zone == 0 {
-				w.zone = reg.Zone
+			if reg.FileEchoListURL == "" {
+				reg.FileEchoListURL = base.FileEchoListURL
+			}
+			if reg.NodelistURL == "" {
+				reg.NodelistURL = base.NodelistURL
 			}
 			break
 		}
+		w.registryEntry = &reg
+		w.echolistURL = reg.EcholistURL
+		w.fileEchoListURL = reg.FileEchoListURL
+		w.nodelistURL = reg.NodelistURL
+		w.coordinator = reg.Coordinator
+		w.coordinatorEmail = reg.CoordinatorEmail
+		w.infoURL = reg.InfoURL
+		if w.networkDesc == "" {
+			w.networkDesc = reg.Description
+		}
+		if w.zone == 0 {
+			w.zone = reg.Zone
+		}
+		break
 	}
 
 	m.ftnWizard = w
@@ -230,6 +260,11 @@ func (m Model) updateFTNWizardForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// "Echo Areas" field → download echolist and open area browser.
 		if f.Type == ftDisplay && f.Label == "Echo Areas" {
 			return m.enterFTNAreaBrowser()
+		}
+
+		// "File Echoes" field → download the file echo list and browse it.
+		if f.Type == ftDisplay && f.Label == "File Echoes" {
+			return m.enterFTNFileEchoBrowser()
 		}
 
 		// "Node Lookup" field → run nodelist lookup.
@@ -482,15 +517,7 @@ func (m Model) enterFTNAreaBrowser() (Model, tea.Cmd) {
 
 	// If areas already fetched, go straight to browser.
 	if w.areasFetched {
-		m.ftnAreaBrowserAreas = w.availableAreas
-		// Copy, as handleFTNEcholistMsg does: sharing the wizard's slice
-		// would let toggles survive an ESC that is meant to discard them.
-		m.ftnAreaBrowserSelected = append([]bool(nil), w.selectedAreas...)
-		m.ftnAreaBrowserCursor = 0
-		m.ftnAreaBrowserScroll = 0
-		m.ftnAreaBrowserError = ""
-		m.mode = modeFTNAreaBrowser
-		return m, nil
+		return m.openFTNAreaBrowser(false), nil
 	}
 
 	// Need an echolist URL we can actually fetch.
@@ -504,8 +531,51 @@ func (m Model) enterFTNAreaBrowser() (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	m.ftnAreaBrowserFiles = false
 	m.ftnAreaBrowserLoading = true
 	m.ftnAreaBrowserError = ""
 	m.mode = modeFTNAreaDownloading
-	return m, fetchFTNEcholist(url, w.registryEntry)
+	cmd := m.ftnWizardListFetch(false)
+	return m, cmd
+}
+
+// enterFTNFileEchoBrowser starts the file echo list download, or opens the
+// browser on the list already downloaded.
+func (m Model) enterFTNFileEchoBrowser() (Model, tea.Cmd) {
+	w := m.ftnWizard
+	if w.fileEchoesFetched {
+		return m.openFTNAreaBrowser(true), nil
+	}
+
+	url := w.fileEchoListURL
+	if url == "" {
+		m.message = "No file echo list known for this network — add file areas later with helper fileecho"
+		return m, nil
+	}
+	cmd := m.ftnWizardListFetch(true)
+	if cmd == nil {
+		m.message = fmt.Sprintf("%s comes from your hub, not the web — get it from them, then run helper fileecho", url)
+		return m, nil
+	}
+
+	m.ftnAreaBrowserFiles = true
+	m.ftnAreaBrowserLoading = true
+	m.ftnAreaBrowserError = ""
+	m.mode = modeFTNAreaDownloading
+	return m, cmd
+}
+
+// openFTNAreaBrowser shows an already-downloaded list in the area browser.
+func (m Model) openFTNAreaBrowser(fileEchoes bool) Model {
+	l := m.ftnWizard.list(fileEchoes)
+	m.ftnAreaBrowserFiles = fileEchoes
+	m.ftnAreaBrowserAreas = *l.available
+	// Copy, as handleFTNEcholistMsg does: sharing the wizard's slice would
+	// let toggles survive an ESC that is meant to discard them.
+	m.ftnAreaBrowserSelected = append([]bool(nil), *l.selected...)
+	m.ftnAreaBrowserCursor = 0
+	m.ftnAreaBrowserScroll = 0
+	m.ftnAreaBrowserError = ""
+	m.mode = modeFTNAreaBrowser
+	return m
 }

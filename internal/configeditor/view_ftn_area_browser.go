@@ -2,7 +2,8 @@ package configeditor
 
 import "fmt"
 
-// viewFTNAreaBrowser renders the FTN echo area browser screen.
+// viewFTNAreaBrowser renders the FTN echo area browser screen, which also
+// serves the wizard's file echo list.
 func (m Model) viewFTNAreaBrowser() string {
 	boxW := 70
 	total := len(m.ftnAreaBrowserAreas)
@@ -13,11 +14,16 @@ func (m Model) viewFTNAreaBrowser() string {
 		netName = m.ftnWizard.networkName
 	}
 
+	title, listName, noun, later := "Echo Areas", "echolist", "areas", "add echo areas later under Message Areas."
+	if m.ftnAreaBrowserFiles {
+		title, listName, noun, later = "File Echoes", "file echo list", "file echoes", "add file areas later with helper fileecho."
+	}
+
 	lb.topBorder()
-	lb.title(fmt.Sprintf("Echo Areas — %s", netName))
+	lb.title(fmt.Sprintf("%s — %s", title, netName))
 
 	if m.ftnAreaBrowserLoading {
-		return lb.statusScreen(menuItemStyle.Render(centerText("Downloading echolist...", boxW)),
+		return lb.statusScreen(menuItemStyle.Render(centerText("Downloading "+listName+"...", boxW)),
 			ftnAreaBrowserListVisible, 2, "ESC - Cancel")
 	}
 
@@ -27,7 +33,7 @@ func (m Model) viewFTNAreaBrowser() string {
 		// far and saving no longer needs a single echo area.
 		lb.row(lb.errorRow(m.ftnAreaBrowserError))
 		lb.row(menuItemStyle.Render(padRight("  ESC keeps what you entered — you can save the network now", boxW)))
-		lb.row(menuItemStyle.Render(padRight("  and add echo areas later under Message Areas.", boxW)))
+		lb.row(menuItemStyle.Render(padRight("  and "+later, boxW)))
 		lb.emptyRows(ftnAreaBrowserListVisible - 1)
 		lb.bottomBorder()
 		lb.bgRows(lb.bottomPad + 2)
@@ -63,7 +69,7 @@ func (m Model) viewFTNAreaBrowser() string {
 			selected++
 		}
 	}
-	countMsg := fmt.Sprintf("%d of %d areas selected", selected, total)
+	countMsg := fmt.Sprintf("%d of %d %s selected", selected, total, noun)
 	lb.line(lb.pad(editInfoValueStyle.Render(centerText(countMsg, boxW+2))))
 	lb.bgRows(1)
 

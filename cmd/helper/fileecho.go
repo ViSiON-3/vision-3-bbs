@@ -91,13 +91,13 @@ func cmdFileEcho(args []string) {
 		areas = nil
 	}
 
-	added, linked := planFileEchoAreas(areas, echoes, fileEchoOptions{
-		network:      netName,
-		tagPrefix:    *tagPrefix,
-		conferenceID: *conferenceID,
-		acsList:      *acsList,
-		acsDownload:  *acsDownload,
-		acsUpload:    *acsUpload,
+	added, linked := ftn.PlanFileEchoAreas(areas, echoes, ftn.FileEchoAreaOptions{
+		Network:      netName,
+		TagPrefix:    *tagPrefix,
+		ConferenceID: *conferenceID,
+		ACSList:      *acsList,
+		ACSDownload:  *acsDownload,
+		ACSUpload:    *acsUpload,
 	})
 
 	fmt.Printf("Parsed %d file echoes from %s\n", len(echoes), *naFile)
@@ -147,86 +147,4 @@ func findNetwork(cfg ftnConfig, name string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-type fileEchoOptions struct {
-	network      string
-	tagPrefix    string
-	conferenceID int
-	acsList      string
-	acsDownload  string
-	acsUpload    string
-}
-
-// planFileEchoAreas returns the file areas to add for the echoes that no area
-// is linked to yet, and the existing areas that already carry one. A new
-// area's tag is the prefix and echo tag, made unique against every tag in
-// use; its directory is <network>/<echo tag>, lower-cased.
-func planFileEchoAreas(existing []file.FileArea, echoes []ftn.EchoArea, opt fileEchoOptions) (added, linked []file.FileArea) {
-	usedTags := map[string]bool{}
-	usedPaths := map[string]bool{}
-	carried := map[string]file.FileArea{}
-	maxID := 0
-	for _, a := range existing {
-		usedTags[strings.ToUpper(a.Tag)] = true
-		usedPaths[strings.ToLower(filepath.ToSlash(filepath.Clean(a.Path)))] = true
-		if a.ID > maxID {
-			maxID = a.ID
-		}
-		if a.IsFileEcho() && strings.EqualFold(a.Network, opt.network) {
-			carried[strings.ToUpper(a.FileEcho)] = a
-		}
-	}
-
-	for _, e := range echoes {
-		echo := strings.ToUpper(e.Tag)
-		if a, ok := carried[echo]; ok {
-			linked = append(linked, a)
-			continue
-		}
-		// Parsed tags are never dots alone, but this is also the last
-		// check before a tag becomes a directory.
-		if file.CheckFilename(e.Tag) != nil || strings.Trim(e.Tag, ".") == "" {
-			continue
-		}
-		tag := uniqueName(strings.ToUpper(opt.tagPrefix+e.Tag), usedTags, "_")
-		usedTags[tag] = true
-		path := uniqueName(strings.ToLower(opt.network+"/"+e.Tag), usedPaths, "_")
-		usedPaths[path] = true
-
-		name := e.Description
-		if name == "" {
-			name = e.Tag
-		}
-		maxID++
-		added = append(added, file.FileArea{
-			ID:           maxID,
-			Tag:          tag,
-			Name:         name,
-			Description:  fmt.Sprintf("%s file echo %s", opt.network, e.Tag),
-			Path:         path,
-			ACSList:      opt.acsList,
-			ACSUpload:    opt.acsUpload,
-			ACSDownload:  opt.acsDownload,
-			ConferenceID: opt.conferenceID,
-			Network:      opt.network,
-			FileEcho:     echo,
-		})
-		carried[echo] = added[len(added)-1]
-	}
-	return added, linked
-}
-
-// uniqueName returns base, or base with a numeric suffix, whichever is not in
-// used. Keys of used are compared as stored, so callers normalise case first.
-func uniqueName(base string, used map[string]bool, sep string) string {
-	if !used[base] {
-		return base
-	}
-	for i := 2; ; i++ {
-		candidate := fmt.Sprintf("%s%s%d", base, sep, i)
-		if !used[candidate] {
-			return candidate
-		}
-	}
 }

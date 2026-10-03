@@ -77,13 +77,15 @@ Choosing **Access & Security** (key 2) opens an inner menu of five numbered item
 |------|---------------|
 | Echomail Networks | Global FTN paths (inbound, outbound, temp, bad/dupe tags) and per-network settings (own address, tosser enable, origin line); hub polling is configured under Events |
 | Echomail Links | Per-hub link settings (address, packet/session/AreaFix passwords, flavour) |
-| FTN Setup Wizard | Guided flow: downloads a network's echolist, lets you browse and subscribe to areas, then writes `ftn.json`, `message_areas.json`, and `conferences.json` automatically |
+| FTN Setup Wizard | Guided flow: downloads a network's echolist, lets you browse and subscribe to areas, then writes `ftn.json`, `message_areas.json`, and `conferences.json` (and `file_areas.json` for any file echoes chosen) automatically |
 
 #### FTN Setup Wizard Flow
 
 **Node Lookup.** After entering your FTN address, select the *Node Lookup* row and press Enter. The wizard downloads the network's nodelist, finds your node, and fills in your uplink hub's address, hostname, and BinkP port automatically. If your node isn't listed yet (new nodes appear in the next weekly nodelist), the hub is inferred from your net's Host/Hub entries. Networks without a published nodelist URL skip this feature; hub details can always be entered manually.
 
 **Echo Areas.** Selecting the *Echo Areas* row downloads the network's echolist so you can tick the echoes you want. Echo areas are optional: not every network publishes its `.NA` file on the web (some hand it out through the network itself, via AreaFix), and web-hosted lists do go offline. If the download fails, press ESC — everything you entered is still on the form — and save. You get the network, its hub link, the netmail area and an updated `binkd.conf`; echoes can be added later under *Message Areas*, or by re-entering the wizard and choosing the network to edit.
+
+**File Echoes.** For networks whose registry entry names a file echo list (`fileecho_list_url`), selecting the *File Echoes* row downloads it so you can tick the file echoes to carry. Saving creates one file area per ticked echo, linked to it so `v3mail toss` delivers inbound TIC files there. This step is optional; without it, use `helper fileecho` later (see [FTN File Echoes](files/file-echoes.md)).
 
 ### QWK Networking Sub-menu
 
