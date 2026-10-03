@@ -9,7 +9,8 @@ ViSiON/3 compiles each network's nodelist into
 `data/ftn/nodelist/<network>.json`, and looks systems up in it, for example
 when a caller writes netmail. `v3mail toss`
 does this whenever a new nodelist arrives by file echo; `helper nodelist
-import` does it by hand.
+import` does it by hand. The FTN setup wizard also saves the nodelist it
+downloads when you use **Node Lookup**, so a new network has one from the start.
 
 ## Compiling nodelists as they arrive
 
@@ -37,6 +38,7 @@ echo's file area once a week's list has arrived. Common ones:
 
 | Network  | Echo       | Pattern       |
 | -------- | ---------- | ------------- |
+| FidoNet  | `NODELIST` | `NODELIST.Z*` |
 | fsxNet   | `FSX_NODE` | `FSXNET.Z*`   |
 | tqwNet   | `TQW_NODE` | `TQWNET.Z*`   |
 | Agoranet | `AGN_NODE` | `AGORANET.Z*` |
