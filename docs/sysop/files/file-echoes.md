@@ -99,7 +99,7 @@ Echomail Links → **TIC Password**, or in `ftn.json`:
 ```
 
 When `tic_password` is set, a TIC from that link without the matching
-password (compared case-insensitively) is refused. When it is empty, TICs
+password (compared case-insensitively) is refused. A value ends at the first NUL byte, so the padding some Mystic versions write after the password does not count. When it is empty, TICs
 from that link are accepted only from the **secure** inbound
 (`secure_inbound_path`, binkd's `inbound`), which only sessions that passed
 the link's session password can write to. A TIC's `From` line is just text,

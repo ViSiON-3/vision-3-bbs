@@ -50,6 +50,13 @@ func ParseTIC(r io.Reader) (*TIC, error) {
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimRight(scanner.Text(), "\r\x1a")
+		// A line ends at its first NUL. Some tossers write a value from a
+		// fixed-size field with its padding (Mystic has been seen to send
+		// "Pw SECRET" followed by NULs and stray bytes); C-based readers stop
+		// at the NUL, and no TIC value can contain one.
+		if i := strings.IndexByte(line, 0); i >= 0 {
+			line = line[:i]
+		}
 		key, value := splitTICLine(line)
 		if key == "" {
 			continue

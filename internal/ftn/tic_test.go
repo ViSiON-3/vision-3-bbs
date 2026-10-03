@@ -184,3 +184,17 @@ func TestMatchFileName(t *testing.T) {
 		}
 	}
 }
+
+// A value padded with NULs and junk after them, as Mystic has been seen to
+// write the Pw line, reads as the text before the first NUL.
+func TestParseTICValueEndsAtNUL(t *testing.T) {
+	padding := "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x01" + strings.Repeat("\x00", 24)
+	tic, err := ParseTIC(strings.NewReader("Area FSX_NODE\r\nFile FSXNET.Z75\r\nCrc 673db025\r\n" +
+		"Pw SECRET" + padding + "\r\nDesc Weekly nodelist\x00junk\r\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tic.Password != "SECRET" || strings.Join(tic.Desc, "|") != "Weekly nodelist" {
+		t.Errorf("Password = %q, Desc = %q", tic.Password, tic.Desc)
+	}
+}
