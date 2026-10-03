@@ -294,6 +294,11 @@ func TestTapCloseDropsKeyboardAndEndsChat(t *testing.T) {
 	default:
 		t.Fatal("EndChat not closed")
 	}
+	select {
+	case <-tp.Done():
+	default:
+		t.Fatal("Done not closed before EndChat")
+	}
 }
 
 func beginChat(t *testing.T, tp *Tap, handle string) {
