@@ -463,18 +463,22 @@ func (m *Model) fieldsDoor() []fieldDef {
 			},
 		})
 
-		row++
-		fields = append(fields, fieldDef{
-			Label: "Dropfile Location", Help: "Where to write dropfile", Type: ftLookup, Col: 3, Row: row, Width: 10,
-			Get: func() string { return dPtr.DropfileLocation },
-			Set: func(val string) error { dPtr.DropfileLocation = val; save(); return nil },
-			LookupItems: func() []LookupItem {
-				return []LookupItem{
-					{Value: "startup", Display: "startup - Working directory (or node)"},
-					{Value: "node", Display: "node - Per-node temp directory"},
-				}
-			},
-		})
+		// DOS doors always get their dropfiles in C:\NODES\TEMPn inside
+		// drive_c, whatever this says, so hide it for DOS.
+		if !dPtr.IsDOS {
+			row++
+			fields = append(fields, fieldDef{
+				Label: "Dropfile Location", Help: "Where to write dropfile", Type: ftLookup, Col: 3, Row: row, Width: 10,
+				Get: func() string { return dPtr.DropfileLocation },
+				Set: func(val string) error { dPtr.DropfileLocation = val; save(); return nil },
+				LookupItems: func() []LookupItem {
+					return []LookupItem{
+						{Value: "startup", Display: "startup - Working directory (or node)"},
+						{Value: "node", Display: "node - Per-node temp directory"},
+					}
+				},
+			})
+		}
 
 		// Offered for every native and DOS door: a DOS door is given every
 		// dropfile format, DROPFILE.INI included, whatever its type says.
