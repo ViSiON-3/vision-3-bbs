@@ -39,7 +39,7 @@ func runKonfigMode(t *testing.T, um *user.UserMgr, u *user.User, keys, args stri
 		sessionTermSizes.Delete(sess)
 	})
 	c := &cmdCtx{
-		e:           &MenuExecutor{},
+		e:           konfigTestExecutor(t),
 		s:           sess,
 		terminal:    term.NewTerminal(sess, ""),
 		userManager: um,
@@ -113,7 +113,7 @@ func TestKonfigStockHeaderArtFits(t *testing.T) {
 		screen := testterm.New(80, 24, opts...)
 		sess := testterm.NewSession(screen, "q")
 		t.Cleanup(func() { resetSessionIH(sess) })
-		c := &cmdCtx{e: &MenuExecutor{MenuSetPath: "../../menus/v3"}, s: sess,
+		c := &cmdCtx{e: konfigStockExecutor(t), s: sess,
 			terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u,
 			outputMode: mode, termWidth: 80, termHeight: 24}
 		if _, _, err := runUserKonfig(c, ""); err != nil {
@@ -151,7 +151,7 @@ func TestKonfigLayoutFitsMinimumHeight(t *testing.T) {
 	if konfigLastRow > konfigMinHeight {
 		t.Fatalf("form needs %d rows; the smallest allowed screen has %d", konfigLastRow, konfigMinHeight)
 	}
-	items, headings := layoutKonfig(konfigSections())
+	items, headings := layoutKonfig(konfigSections(konfigTestExecutor(t).Strings()))
 	for _, h := range headings {
 		if h.row < konfigTopRow || h.row >= konfigRuleRow {
 			t.Errorf("heading %q on row %d, outside rows %d-%d", h.title, h.row, konfigTopRow, konfigRuleRow-1)
@@ -174,10 +174,10 @@ func TestKonfigRepaintHidesCursor(t *testing.T) {
 	screen := testterm.New(80, 24)
 	sess := testterm.NewSession(screen, "")
 	t.Cleanup(func() { resetSessionIH(sess) })
-	c := &cmdCtx{e: &MenuExecutor{}, s: sess, terminal: term.NewTerminal(sess, ""),
+	c := &cmdCtx{e: konfigTestExecutor(t), s: sess, terminal: term.NewTerminal(sess, ""),
 		userManager: um, currentUser: u, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
 	st := &konfigState{c: c}
-	st.items, st.headings = layoutKonfig(konfigSections())
+	st.items, st.headings = layoutKonfig(konfigSections(konfigTestExecutor(t).Strings()))
 
 	_, _ = sess.Write([]byte("\x1b[?25h")) // as the header picker leaves it
 	if err := st.renderAll(); err != nil {
@@ -194,7 +194,7 @@ func TestKonfigShowsHeaderStyleName(t *testing.T) {
 	screen := testterm.New(80, 24)
 	sess := testterm.NewSession(screen, "q")
 	t.Cleanup(func() { resetSessionIH(sess) })
-	c := &cmdCtx{e: &MenuExecutor{MenuSetPath: "../../menus/v3"}, s: sess,
+	c := &cmdCtx{e: konfigStockExecutor(t), s: sess,
 		terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u,
 		outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
 	if _, _, err := runUserKonfig(c, ""); err != nil {
@@ -290,7 +290,7 @@ func TestKonfigScreenWidthRangeAndLiveApply(t *testing.T) {
 
 	sess := testterm.NewSession(testterm.New(80, 24), "a"+keyClear+"132\rq")
 	t.Cleanup(func() { resetSessionIH(sess); sessionTermSizes.Delete(sess) })
-	c := &cmdCtx{e: &MenuExecutor{}, s: sess, terminal: term.NewTerminal(sess, ""),
+	c := &cmdCtx{e: konfigTestExecutor(t), s: sess, terminal: term.NewTerminal(sess, ""),
 		userManager: um, currentUser: got, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
 	got, _, err := runUserKonfig(c, "")
 	if err != nil {

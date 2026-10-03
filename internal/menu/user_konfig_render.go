@@ -69,9 +69,10 @@ func (st *konfigState) renderAll() error {
 		b.WriteString(clearRow(row))
 	}
 	for _, h := range st.headings {
+		title := ansi.TruncateRunes(h.title, konfigColWidth-2, "..")
 		b.WriteString(moveTo(h.row, h.col))
-		b.WriteString(pc(11) + h.title + " " + pc(1))
-		b.WriteString(strings.Repeat("─", konfigColWidth-utf8.RuneCountInString(h.title)-1))
+		b.WriteString(pc(11) + title + " " + pc(1))
+		b.WriteString(strings.Repeat("─", konfigColWidth-utf8.RuneCountInString(title)-1))
 	}
 	for i, it := range st.items {
 		b.WriteString(moveTo(it.row, it.col))
@@ -79,8 +80,7 @@ func (st *konfigState) renderAll() error {
 	}
 	b.WriteString(moveTo(konfigRuleRow, 1) + pc(8) + strings.Repeat("─", 79))
 	b.WriteString(moveTo(konfigLegendRow, 2))
-	b.WriteString(pc(8) + "[" + pc(15) + "Q" + pc(8) + "/" + pc(15) + "ESC" + pc(8) + "] " +
-		pc(7) + "Done" + konfigReset)
+	b.WriteString(st.line(st.c.e.Strings().KonfigLegend) + konfigReset)
 	if err := st.raw(b.String()); err != nil {
 		return err
 	}
@@ -117,8 +117,9 @@ func (st *konfigState) renderHeader() error {
 		}
 		slog.Warn("failed to read KONFIG.ANS", "node", st.c.nodeNumber, "error", err)
 	}
-	return st.raw(ansi.ClearScreen() + moveTo(2, 2) + pc(15) + "User Konfig" +
-		moveTo(3, 2) + pc(8) + strings.Repeat("─", 11) + konfigReset)
+	title := ansi.TruncateRunes(st.c.e.Strings().KonfigTitle, konfigLineWidth, "..")
+	return st.raw(ansi.ClearScreen() + moveTo(2, 2) + pc(15) + title +
+		moveTo(3, 2) + pc(8) + strings.Repeat("─", utf8.RuneCountInString(title)) + konfigReset)
 }
 
 // itemCell is the fixed-width text for one item, so repainting it always
@@ -140,8 +141,8 @@ func (st *konfigState) renderItem(i int) error {
 }
 
 func (st *konfigState) renderHelp() error {
-	return st.raw(clearRow(konfigHelpRow) + moveTo(konfigHelpRow, 2) + pc(7) +
-		st.items[st.sel].help + konfigReset)
+	return st.raw(clearRow(konfigHelpRow) + moveTo(konfigHelpRow, 2) +
+		st.line("|07"+st.items[st.sel].help) + konfigReset)
 }
 
 // renderStatus shows st.status on the edit row, or clears it.
@@ -149,7 +150,16 @@ func (st *konfigState) renderStatus() error {
 	if st.status == "" {
 		return st.raw(clearRow(konfigEditRow))
 	}
-	return st.pipe(clearRow(konfigEditRow) + moveTo(konfigEditRow, 2) + st.status + "|07")
+	return st.raw(clearRow(konfigEditRow) + moveTo(konfigEditRow, 2) + st.line(st.status+"|07"))
+}
+
+// konfigLineWidth is the room on a row that starts at column 2.
+const konfigLineWidth = 78
+
+// line expands the pipe codes in a configured string and cuts it to the
+// width of a row, so a long translation cannot wrap onto the next one.
+func (st *konfigState) line(s string) string {
+	return ansi.TruncateVisible(string(ansi.ReplacePipeCodes([]byte(s))), konfigLineWidth)
 }
 
 func (st *konfigState) showCursor(on bool) {
@@ -278,7 +288,7 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 // readChoice shows prompt on the edit row and waits for one of keys (upper
 // case). It returns 0 for Esc, Enter or Q.
 func (st *konfigState) readChoice(prompt, keys string) (byte, error) {
-	if err := st.pipe(clearRow(konfigEditRow) + moveTo(konfigEditRow, 2) + prompt + "|07"); err != nil {
+	if err := st.raw(clearRow(konfigEditRow) + moveTo(konfigEditRow, 2) + st.line(prompt+"|07")); err != nil {
 		return 0, err
 	}
 	for {
@@ -315,21 +325,23 @@ func editFileColumns(st *konfigState) error {
 	line := func(row int, s string) string {
 		return moveTo(row, colBoxLeft) + pc(9) + "│" + s + pc(9) + "│"
 	}
+	str := st.c.e.Strings()
 	cell := func(i int) string {
 		fc := fileColumns[i]
 		u := st.user()
 		on := fileColumnsAllDefault(u) || *fc.get(u)
-		v := onOffValue(on)
+		v := st.onOffValue(on)
+		label := padRunes(fc.label(str), 14)
 		if i == sel {
-			return konfigBarStyle + padRunes(fmt.Sprintf(" [%c] %-14s%s", fc.key, fc.label, v.text), inner) + konfigReset
+			return konfigBarStyle + padRunes(fmt.Sprintf(" [%c] %s%s", fc.key, label, v.text), inner) + konfigReset
 		}
 		return pc(8) + " [" + pc(15) + string(fc.key) + pc(8) + "] " + pc(7) +
-			fmt.Sprintf("%-14s", fc.label) + toneColor(v.tone) + padRunes(v.text, inner-20) + konfigReset
+			label + toneColor(v.tone) + padRunes(v.text, inner-20) + konfigReset
 	}
 	drawItem := func(i int) error {
 		return st.raw(line(colBoxTop+1+i, cell(i)))
 	}
-	title := " File Columns "
+	title := " " + ansi.TruncateRunes(str.KonfigColumnsTitle, inner-3, "..") + " "
 	rule := strings.Repeat("─", inner-utf8.RuneCountInString(title)-1)
 	var b strings.Builder
 	b.WriteString(moveTo(colBoxTop, colBoxLeft) + pc(9) + "┌─" + pc(15) + title + pc(9) + rule + "┐")
@@ -338,7 +350,7 @@ func editFileColumns(st *konfigState) error {
 	}
 	hintRow := colBoxTop + 1 + len(fileColumns)
 	b.WriteString(line(hintRow, konfigReset+strings.Repeat(" ", inner)))
-	b.WriteString(line(hintRow+1, pc(8)+padRunes(" Enter switches   Esc when done", inner)))
+	b.WriteString(line(hintRow+1, pc(8)+padRunes(" "+str.KonfigColumnsHint, inner)))
 	b.WriteString(moveTo(hintRow+2, colBoxLeft) + pc(9) + "└" + strings.Repeat("─", inner) + "┘" + konfigReset)
 	if err := st.raw(b.String()); err != nil {
 		return err
@@ -360,17 +372,17 @@ func editFileColumns(st *konfigState) error {
 			}
 		}
 		if count == 0 {
-			st.status = "|12At least one column has to stay on.|07"
+			st.status = str.KonfigColumnsKeepOne
 			return
 		}
-		if st.commit("File Columns",
+		if st.commit(str.KonfigFileColumnsLabel,
 			func(u *user.User) {
 				for j, fc := range fileColumns {
 					*fc.get(u) = shown[j]
 				}
 			},
 			func(u *user.User) { u.FileListColumns = old }) {
-			st.saved(fileColumns[i].label+" column", onOffValue(shown[i]).text)
+			st.status = fmt.Sprintf(st.c.e.Strings().KonfigColumnSaved, fileColumns[i].label(str), st.onOffValue(shown[i]).text)
 		}
 	}
 
