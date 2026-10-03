@@ -1,6 +1,9 @@
 package ftn
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -64,5 +67,29 @@ func TestParseFileEchoListRejectsRepeats(t *testing.T) {
 	}
 	if _, err := ParseFileEchoList(strings.NewReader("; nothing\n")); err == nil {
 		t.Error("an empty list was accepted")
+	}
+}
+
+func TestDownloadFileEchoList(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/tqw_file.na" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte("% tqwNet Fileecho List\nArea TQW_NODE\t\t0\t!\tWeekly Nodelists\nArea TQW_TEST\t\t0\t!\tTesting only\n"))
+	}))
+	defer srv.Close()
+
+	echoes, err := DownloadFileEchoList(context.Background(), srv.URL+"/tqw_file.na")
+	if err != nil {
+		t.Fatalf("DownloadFileEchoList: %v", err)
+	}
+	if len(echoes) != 2 || echoes[0].Tag != "TQW_NODE" || echoes[0].Description != "Weekly Nodelists" {
+		t.Errorf("echoes = %+v", echoes)
+	}
+
+	_, err = DownloadFileEchoList(context.Background(), srv.URL+"/missing.na")
+	if err == nil || !strings.Contains(err.Error(), "file echo list download returned status 404") {
+		t.Errorf("missing list: err = %v", err)
 	}
 }

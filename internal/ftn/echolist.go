@@ -97,6 +97,27 @@ func EcholistIsDownloadable(url string) bool {
 // DownloadEcholist fetches an echolist from a URL, parses it, and returns
 // the areas. The request is bounded by the given context.
 func DownloadEcholist(ctx context.Context, url string) ([]EchoArea, error) {
+	data, err := downloadAreaList(ctx, url, "echolist")
+	if err != nil {
+		return nil, err
+	}
+	return ParseEcholist(strings.NewReader(string(data)))
+}
+
+// DownloadFileEchoList fetches a network's file echo list from a URL and
+// parses it with ParseFileEchoList. The request is bounded by the given
+// context.
+func DownloadFileEchoList(ctx context.Context, url string) ([]EchoArea, error) {
+	data, err := downloadAreaList(ctx, url, "file echo list")
+	if err != nil {
+		return nil, err
+	}
+	return ParseFileEchoList(strings.NewReader(string(data)))
+}
+
+// downloadAreaList fetches a .na-style list over HTTP(S). what names the list
+// in errors.
+func downloadAreaList(ctx context.Context, url, what string) ([]byte, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -106,23 +127,23 @@ func DownloadEcholist(ctx context.Context, url string) ([]EchoArea, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetching echolist: %w", err)
+		return nil, fmt.Errorf("fetching %s: %w", what, err)
 	}
 	defer func() { _ = resp.Body.Close() }() // read-only
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("echolist download returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("%s download returned status %d", what, resp.StatusCode)
 	}
 
 	// Limit to 2MB to prevent abuse; error rather than silently truncate so we
-	// never parse a half-downloaded echolist as if it were complete.
-	const maxEcholist = 2 * 1024 * 1024
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxEcholist+1))
+	// never parse a half-downloaded list as if it were complete.
+	const maxList = 2 * 1024 * 1024
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxList+1))
 	if err != nil {
-		return nil, fmt.Errorf("reading echolist: %w", err)
+		return nil, fmt.Errorf("reading %s: %w", what, err)
 	}
-	if len(data) > maxEcholist {
-		return nil, fmt.Errorf("echolist exceeds %d-byte limit", maxEcholist)
+	if len(data) > maxList {
+		return nil, fmt.Errorf("%s exceeds %d-byte limit", what, maxList)
 	}
-	return ParseEcholist(strings.NewReader(string(data)))
+	return data, nil
 }
