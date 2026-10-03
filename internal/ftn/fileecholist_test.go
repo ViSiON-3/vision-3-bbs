@@ -57,6 +57,22 @@ func TestParseFileEchoListOptionalColumns(t *testing.T) {
 	}
 }
 
+// Descriptions come from the web and reach the sysop's terminal, so control
+// characters are dropped from both list shapes.
+func TestAreaListsDropControlCharacters(t *testing.T) {
+	files, err := ParseFileEchoList(strings.NewReader("TQW_NODE Weekly\x1b[2J Nodelists\x07\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	echoes, err := ParseEcholist(strings.NewReader("FSX_GEN \x1b]0;pwned\x07General\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if files[0].Description != "Weekly[2J Nodelists" || echoes[0].Description != "]0;pwnedGeneral" {
+		t.Errorf("descriptions = %q, %q", files[0].Description, echoes[0].Description)
+	}
+}
+
 func TestParseFileEchoListRejectsRepeats(t *testing.T) {
 	if _, err := ParseFileEchoList(strings.NewReader("TQW_NODE a\ntqw_node b\n")); err == nil {
 		t.Error("a repeated tag was accepted")

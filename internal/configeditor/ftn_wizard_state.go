@@ -120,6 +120,14 @@ type ftnWizardList struct {
 	existing  map[string]bool // tags already configured, upper-cased
 }
 
+// listURL returns the echolist URL, or the file echo list URL if fileEchoes.
+func (s *ftnWizardState) listURL(fileEchoes bool) string {
+	if fileEchoes {
+		return s.fileEchoListURL
+	}
+	return s.echolistURL
+}
+
 // list returns the echo area list, or the file echo list if fileEchoes.
 func (s *ftnWizardState) list(fileEchoes bool) ftnWizardList {
 	if fileEchoes {

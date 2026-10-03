@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // EchoArea represents a single area from a backbone.na file.
@@ -47,7 +48,7 @@ func ParseEcholist(r io.Reader) ([]EchoArea, error) {
 
 		desc := ""
 		if len(fields) == 2 {
-			desc = strings.TrimSpace(fields[1])
+			desc = cleanAreaDescription(fields[1])
 		}
 
 		areas = append(areas, EchoArea{Tag: tag, Description: desc})
@@ -58,6 +59,18 @@ func ParseEcholist(r io.Reader) ([]EchoArea, error) {
 	}
 
 	return areas, nil
+}
+
+// cleanAreaDescription drops control characters from a description read out
+// of a downloaded area list. The text ends up on the sysop's terminal and in
+// area names shown to callers, so an ESC in it would be a terminal sequence.
+func cleanAreaDescription(desc string) string {
+	return strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, desc))
 }
 
 // CleanEcholist applies network-specific cleanup rules to a parsed echolist.

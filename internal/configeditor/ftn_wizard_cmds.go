@@ -11,6 +11,7 @@ import (
 // ftnEcholistMsg is the result of downloading and parsing an FTN echolist,
 // or with fileEchoes set, a file echo list.
 type ftnEcholistMsg struct {
+	url        string // the URL this result was fetched from, for staleness checks
 	fileEchoes bool
 	areas      []ftn.EchoArea
 	err        error
@@ -22,7 +23,7 @@ func fetchFTNEcholist(url string, reg *ftn.RegistryNetwork) tea.Cmd {
 	return func() tea.Msg {
 		areas, err := ftn.DownloadEcholist(context.Background(), url)
 		if err != nil {
-			return ftnEcholistMsg{err: err}
+			return ftnEcholistMsg{url: url, err: err}
 		}
 
 		// Apply cleanup rules if we have registry data.
@@ -30,7 +31,7 @@ func fetchFTNEcholist(url string, reg *ftn.RegistryNetwork) tea.Cmd {
 			areas = ftn.CleanEcholist(areas, reg.AreatagExclude, reg.AreatitlePrefix)
 		}
 
-		return ftnEcholistMsg{areas: areas}
+		return ftnEcholistMsg{url: url, areas: areas}
 	}
 }
 
@@ -60,6 +61,6 @@ func fetchFTNNodelist(ctx context.Context, url string, generation uint64) tea.Cm
 func fetchFTNFileEchoList(url string) tea.Cmd {
 	return func() tea.Msg {
 		echoes, err := ftn.DownloadFileEchoList(context.Background(), url)
-		return ftnEcholistMsg{fileEchoes: true, areas: echoes, err: err}
+		return ftnEcholistMsg{url: url, fileEchoes: true, areas: echoes, err: err}
 	}
 }

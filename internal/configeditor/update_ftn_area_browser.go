@@ -26,8 +26,11 @@ func (m Model) updateFTNAreaDownloading(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleFTNEcholistMsg(msg ftnEcholistMsg) (tea.Model, tea.Cmd) {
 	// If the user pressed ESC during the download they've already returned to
 	// the wizard form; drop this late result instead of yanking them into the
-	// area browser. Likewise a late result for the other list.
-	if m.mode != modeFTNAreaDownloading || msg.fileEchoes != m.ftnAreaBrowserFiles {
+	// area browser. Likewise a late result for the other list, or for a
+	// network the sysop has since moved off (cancelled, picked another, and
+	// started its download): its areas must not be saved under this one.
+	if m.mode != modeFTNAreaDownloading || msg.fileEchoes != m.ftnAreaBrowserFiles ||
+		msg.url != m.ftnWizard.listURL(msg.fileEchoes) {
 		return m, nil
 	}
 	m.ftnAreaBrowserLoading = false

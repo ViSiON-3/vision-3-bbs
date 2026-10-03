@@ -171,29 +171,33 @@ func (m Model) startFTNWizardEdit(netKey string) (Model, tea.Cmd) {
 		}
 	}
 
-	// Registry data (echolist and nodelist URLs, description) if this network
-	// is one we ship an entry for, so Echo Areas and Node Lookup still work.
-	if regNets, err := ftn.LoadRegistry(); err == nil {
-		for i := range regNets {
-			if !strings.EqualFold(regNets[i].Name, netKey) {
-				continue
-			}
-			reg := regNets[i]
-			w.registryEntry = &reg
-			w.echolistURL = reg.EcholistURL
-			w.fileEchoListURL = reg.FileEchoListURL
-			w.nodelistURL = reg.NodelistURL
-			w.coordinator = reg.Coordinator
-			w.coordinatorEmail = reg.CoordinatorEmail
-			w.infoURL = reg.InfoURL
-			if w.networkDesc == "" {
-				w.networkDesc = reg.Description
-			}
-			if w.zone == 0 {
-				w.zone = reg.Zone
-			}
-			break
+	// Registry data (echolist, file echo list and nodelist URLs, description)
+	// if this network has an entry, so Echo Areas, File Echoes and Node Lookup
+	// still work. The sysop's ftn_networks.json wins over the built-in entry,
+	// as it does for helper nodelist.
+	regNets := m.loadFTNOverrideNetworks()
+	if builtin, err := ftn.LoadRegistry(); err == nil {
+		regNets = append(regNets, builtin...)
+	}
+	for i := range regNets {
+		if !strings.EqualFold(regNets[i].Name, netKey) {
+			continue
 		}
+		reg := regNets[i]
+		w.registryEntry = &reg
+		w.echolistURL = reg.EcholistURL
+		w.fileEchoListURL = reg.FileEchoListURL
+		w.nodelistURL = reg.NodelistURL
+		w.coordinator = reg.Coordinator
+		w.coordinatorEmail = reg.CoordinatorEmail
+		w.infoURL = reg.InfoURL
+		if w.networkDesc == "" {
+			w.networkDesc = reg.Description
+		}
+		if w.zone == 0 {
+			w.zone = reg.Zone
+		}
+		break
 	}
 
 	m.ftnWizard = w

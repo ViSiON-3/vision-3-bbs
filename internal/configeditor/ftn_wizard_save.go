@@ -243,8 +243,12 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		// Saving with no echoes is allowed (the echolist may be unavailable),
 		// so point at where they get added rather than leaving the operator
 		// wondering whether the save was incomplete.
-		m.message = fmt.Sprintf("FTN network %q saved with netmail only — add echo areas under Message Areas "+
-			"or re-run the wizard. Restart BBS to activate.", w.networkName)
+		carried := "netmail only"
+		if fileAreasAdded > 0 {
+			carried = "no echo areas"
+		}
+		m.message = fmt.Sprintf("FTN network %q saved with %s — add echo areas under Message Areas "+
+			"or re-run the wizard. Restart BBS to activate.", w.networkName, carried)
 	} else {
 		m.message = fmt.Sprintf("FTN network %q saved — %d area(s) created. Restart BBS to activate.", w.networkName, selectedCount)
 	}

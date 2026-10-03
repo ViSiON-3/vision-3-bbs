@@ -85,7 +85,7 @@ Choosing **Access & Security** (key 2) opens an inner menu of five numbered item
 
 **Echo Areas.** Selecting the *Echo Areas* row downloads the network's echolist so you can tick the echoes you want. Echo areas are optional: not every network publishes its `.NA` file on the web (some hand it out through the network itself, via AreaFix), and web-hosted lists do go offline. If the download fails, press ESC — everything you entered is still on the form — and save. You get the network, its hub link, the netmail area and an updated `binkd.conf`; echoes can be added later under *Message Areas*, or by re-entering the wizard and choosing the network to edit.
 
-**File Echoes.** For networks whose registry entry names a file echo list (`fileecho_list_url`), selecting the *File Echoes* row downloads it so you can tick the file echoes to carry. Saving creates one file area per ticked echo, linked to it so `v3mail toss` delivers inbound TIC files there. This step is optional; without it, use `helper fileecho` later (see [FTN File Echoes](../files/file-echoes.md)).
+**File Echoes.** For networks whose registry entry names a file echo list (`fileecho_list_url`), selecting the *File Echoes* row downloads it so you can tick the file echoes to carry. Saving creates one file area per ticked echo, linked to it so `v3mail toss` delivers inbound TIC files there. This step is optional; without it, use `helper fileecho` later (see [FTN File Echoes](files/file-echoes.md)).
 
 ### QWK Networking Sub-menu
 

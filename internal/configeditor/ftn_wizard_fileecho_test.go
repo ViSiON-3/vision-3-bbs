@@ -1,6 +1,8 @@
 package configeditor
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -33,12 +35,18 @@ func TestFTNWizard_FileEchoesCreateLinkedFileAreas(t *testing.T) {
 	wantScreen(t, m, "Downloading file echo list...")
 
 	// A late echolist result must not land in the file echo browser.
-	m = asModel(t, first(m.Update(ftnEcholistMsg{areas: []ftn.EchoArea{{Tag: "TQW_CHAT"}}})))
+	m = asModel(t, first(m.Update(ftnEcholistMsg{url: m.ftnWizard.echolistURL, areas: []ftn.EchoArea{{Tag: "TQW_CHAT"}}})))
 	if m.mode != modeFTNAreaDownloading || m.ftnWizard.areasFetched {
 		t.Fatalf("echolist result taken while downloading file echoes: mode=%v", m.mode)
 	}
+	// Nor may a late file echo list from a network the sysop moved off.
+	m = asModel(t, first(m.Update(ftnEcholistMsg{url: "https://example.test/other_file.na", fileEchoes: true,
+		areas: []ftn.EchoArea{{Tag: "OTHER_FILES"}}})))
+	if m.mode != modeFTNAreaDownloading || m.ftnWizard.fileEchoesFetched {
+		t.Fatalf("another network's file echo list was taken: mode=%v", m.mode)
+	}
 
-	m = asModel(t, first(m.Update(ftnEcholistMsg{fileEchoes: true, areas: tqwFileEchoes})))
+	m = asModel(t, first(m.Update(ftnEcholistMsg{url: m.ftnWizard.fileEchoListURL, fileEchoes: true, areas: tqwFileEchoes})))
 	if m.mode != modeFTNAreaBrowser || len(m.ftnAreaBrowserAreas) != 3 {
 		t.Fatalf("mode=%v echoes=%d", m.mode, len(m.ftnAreaBrowserAreas))
 	}
@@ -62,7 +70,7 @@ func TestFTNWizard_FileEchoesCreateLinkedFileAreas(t *testing.T) {
 	if _, ok := m.configs.FTN.Networks["tqwnet"]; !ok {
 		t.Fatalf("network not added: %q", m.message)
 	}
-	if !strings.Contains(m.message, "2 file area(s) created") {
+	if !strings.Contains(m.message, "2 file area(s) created") || !strings.Contains(m.message, "saved with no echo areas") {
 		t.Errorf("save message = %q", m.message)
 	}
 
@@ -98,18 +106,26 @@ func TestFTNWizard_EditTicksCarriedFileEchoes(t *testing.T) {
 		t.Fatalf("setup save failed: %q", m.message)
 	}
 
+	// The sysop's ftn_networks.json entry wins over the built-in one.
+	override := `[{"name": "tqwNet", "fileecho_list_url": "https://example.test/tqw_file.na"}]`
+	if err := os.WriteFile(filepath.Join(m.configPath, "ftn_networks.json"), []byte(override), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	m, _ = m.startFTNWizardEdit("tqwnet")
 	for _, f := range m.ftnWizardFields {
 		if f.Label == "File Echoes" && !strings.HasPrefix(f.Get(), "2 already carried") {
 			t.Errorf("File Echoes field = %q, want the carried count", f.Get())
 		}
 	}
-	m.ftnWizard.fileEchoListURL = "https://example.test/tqw_file.na"
+	if got := m.ftnWizard.fileEchoListURL; got != "https://example.test/tqw_file.na" {
+		t.Fatalf("file echo list URL = %q, want the ftn_networks.json one", got)
+	}
 	m, cmd := m.enterFTNFileEchoBrowser()
 	if cmd == nil || m.mode != modeFTNAreaDownloading {
 		t.Fatalf("no download started: mode=%v msg=%q", m.mode, m.message)
 	}
-	m = asModel(t, first(m.Update(ftnEcholistMsg{fileEchoes: true, areas: tqwFileEchoes})))
+	m = asModel(t, first(m.Update(ftnEcholistMsg{url: m.ftnWizard.fileEchoListURL, fileEchoes: true, areas: tqwFileEchoes})))
 	if sel := m.ftnAreaBrowserSelected; !sel[0] || !sel[1] || sel[2] {
 		t.Fatalf("browser selection = %v, want the carried echoes ticked", sel)
 	}

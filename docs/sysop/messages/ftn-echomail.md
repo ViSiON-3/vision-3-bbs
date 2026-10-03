@@ -135,7 +135,7 @@ The wizard walks you through:
    (`backbone.na`) and lets you check the areas you want to carry.
    **File Echoes** does the same for the network's file echo list, when the
    registry knows one (tqwNet's `tqw_file.na`, for example); it is optional.
-   See [FTN File Echoes](../files/file-echoes.md).
+   See [FTN File Echoes](files/file-echoes.md).
 4. **Save** — it then creates everything for you:
    - the network and uplink in `configs/ftn.json`
    - a single conference for the network, plus one message area per selected echo
