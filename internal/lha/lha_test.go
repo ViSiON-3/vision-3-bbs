@@ -117,6 +117,23 @@ func TestExtractRefusesBadData(t *testing.T) {
 	}
 }
 
+func TestReadRefusesDamagedHeader(t *testing.T) {
+	// AMYLIST.L55 has a level 1 header: its name starts at byte 22.
+	archive := bytes.Clone(readTestdata(t, "AMYLIST.L55"))
+	archive[22] = 'X'
+	if _, err := Read(archive); err == nil || !strings.Contains(err.Error(), "checksum") {
+		t.Errorf("damaged name: err = %v, want a checksum error", err)
+	}
+
+	// A packed size near the top of the 32-bit range must not overflow the
+	// bounds check.
+	archive = bytes.Clone(readTestdata(t, "lh0-level2.lzh"))
+	copy(archive[7:11], []byte{0xF0, 0xFF, 0xFF, 0x7F})
+	if _, err := Read(archive); err == nil {
+		t.Error("huge packed size read without an error")
+	}
+}
+
 func TestExtractUnsupportedMethod(t *testing.T) {
 	archive := bytes.Clone(readTestdata(t, "lh0-level2.lzh"))
 	copy(archive[2:7], "-lh1-")

@@ -95,7 +95,9 @@ func readHeader(data []byte, off int) (File, int, error) {
 		Method: string(h[2:7]),
 		Size:   int64(binary.LittleEndian.Uint32(h[11:15])),
 	}
-	packed := int(binary.LittleEndian.Uint32(h[7:11]))
+	// int64, so a corrupt size cannot overflow the bounds checks below on a
+	// 32-bit build.
+	packed := int64(binary.LittleEndian.Uint32(h[7:11]))
 
 	var (
 		dataStart int
@@ -108,6 +110,15 @@ func readHeader(data []byte, off int) (File, int, error) {
 		size := int(h[0]) + 2
 		if size < 24 || size > len(h) {
 			return File{}, 0, errors.New("lha: bad member header size")
+		}
+		// The second byte is the sum of the bytes after it, so a damaged
+		// name or size is caught before it is used.
+		var sum byte
+		for _, b := range h[2:size] {
+			sum += b
+		}
+		if sum != h[1] {
+			return File{}, 0, fmt.Errorf("lha: member header at offset %d is damaged (bad checksum)", off)
 		}
 		nameLen := int(h[21])
 		if 22+nameLen+2 > size {
@@ -130,7 +141,7 @@ func readHeader(data []byte, off int) (File, int, error) {
 					name = n
 				}
 				pos += next
-				packed -= next
+				packed -= int64(next)
 				next = int(binary.LittleEndian.Uint16(h[pos-2:]))
 			}
 			if packed < 0 {
@@ -162,12 +173,13 @@ func readHeader(data []byte, off int) (File, int, error) {
 		return File{}, 0, fmt.Errorf("lha: header level %d is not supported", level)
 	}
 
-	if packed < 0 || dataStart+packed > len(h) {
+	if packed < 0 || packed > int64(len(h)-dataStart) {
 		return File{}, 0, errors.New("lha: member data runs past the end of the archive")
 	}
+	end := dataStart + int(packed)
 	f.Name = baseName(name)
-	f.data = h[dataStart : dataStart+packed]
-	return f, off + dataStart + packed, nil
+	f.data = h[dataStart:end]
+	return f, off + end, nil
 }
 
 // extName returns the file name an extended header carries (type 1), or "".
