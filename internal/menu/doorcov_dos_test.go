@@ -216,7 +216,7 @@ echo "BOOT-CHATTER"
 printf '\033[2J'
 echo "ARGS:$args"
 echo "CWD:$(pwd -P) QUIET:$DOSEMU_QUIET"
-echo "FILES:$(ls "$node" | tr '\n' ' ')"
+echo "FILES:$(LC_ALL=C ls "$node" | tr '\n' ' ')"
 echo "BATCH:$(tr -d '\r' < "$node/EXTERNAL.BAT" | tr '\n' '|')"
 echo "RC:$(grep -c '_term_color' "$node/dosemurc")"
 printf 'KEY?'
