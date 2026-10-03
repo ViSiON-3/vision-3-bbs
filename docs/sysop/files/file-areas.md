@@ -125,7 +125,8 @@ tagged. `SETFILESCANDATE` lets a user override that cutoff:
 - `A` — show all files regardless of date
 - `R` — reset to the default ("since your previous logon")
 
-The choice persists on the user record (`fileNewscanSince`) until changed. In the
+The choice is saved on the user record (`fileNewscanSince`) and lasts until the
+caller logs off: the next logon goes back to "since your previous logon". In the
 shipped `FILEM.CFG` it is on **Y** (the message menu keeps it on **U**, which the
 file menu uses for Upload); prompt text is the `fileScanDatePrompt` string.
 

@@ -26,8 +26,9 @@ func fileNewscanCutoff(u *user.User) time.Time {
 // runSetFileScanDate lets the caller choose the cutoff the file newscan uses to
 // decide what counts as "new". It is the file-menu counterpart to the message
 // menu's Set Scan Date (UPDATENEWSCAN), adapted to the file model: files have no
-// per-area read pointers, so this sets one persistent cutoff (User.FileNewscan-
-// Since) instead of per-area pointers.
+// per-area read pointers, so this sets one cutoff (User.FileNewscanSince)
+// instead of per-area pointers. The cutoff lasts until the caller's next
+// logon, when UserMgr.BeginSession clears it.
 //
 // Input: a date (MM/DD/YY), "A" for all files, or "R" to reset to the default
 // ("since your previous logon"). Empty or ESC cancels.

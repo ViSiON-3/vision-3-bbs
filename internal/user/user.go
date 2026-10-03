@@ -53,6 +53,7 @@ type User struct {
 	// newscan scans "since your previous logon" (PreviousLogin); when set, it
 	// scans files uploaded on/after this date. The SETFILESCANDATE command sets
 	// it (a date or "all"), and "reset" clears it back to the default.
+	// BeginSession clears it, so it lasts only for the session it was set in.
 	FileNewscanSince *time.Time `json:"fileNewscanSince,omitempty"`
 	TimesCalled      int        `json:"timesCalled"` // Used for E (NumLogons)
 	LastBulletinRead time.Time  `json:"lastBulletinRead"`

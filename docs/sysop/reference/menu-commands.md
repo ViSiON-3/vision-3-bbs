@@ -133,7 +133,7 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | `UPLOADFILE` | none | ZMODEM upload into the current area, then duplicate check and description prompts. | Area upload ACS |
 | `FILE_NEWSCAN` | `CURRENT` to scan only the current area. Anything else scans the areas tagged in `FILENEWSCANCONFIG`, or every listable area when nothing is tagged. | Lists files uploaded since the newscan cutoff, grouped by area, from the `FILESCAN` templates. The cutoff is set by `SETFILESCANDATE`, or the previous logon. | Area list ACS |
 | `FILENEWSCANCONFIG` | none | Tag and untag file areas for the file newscan. | |
-| `SETFILESCANDATE` | none | Sets the file newscan cutoff. Accepts a date as MM/DD/YY, `A` for all files, or `R` to reset to the previous logon. | |
+| `SETFILESCANDATE` | none | Sets the file newscan cutoff until the caller logs off. Accepts a date as MM/DD/YY, `A` for all files, or `R` to reset to the previous logon. | |
 | `WANTLIST` | none | For CoSysOp+, manages the file want list. For everyone else, asks for a filename and reason and adds a request. Stock menus restrict it to sysops. | Branches on CoSysOp+ |
 | `EDITFILERECORD` | none | Upload review queue. Asks whether to review all areas or the current one, then edits, moves, or deletes each unreviewed file. | CoSysOp+ |
 

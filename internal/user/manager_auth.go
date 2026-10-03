@@ -73,6 +73,10 @@ func (um *UserMgr) BeginSession(handle string) (*User, bool) {
 	user.PreviousLogin = user.LastLogin
 	user.LastLogin = time.Now()
 	user.TimesCalled++
+	// A file newscan date set with SETFILESCANDATE lasts for the session it
+	// was set in. Kept across logons it never moved forward, so a caller who
+	// once chose "all files" saw every file at every later newscan.
+	user.FileNewscanSince = nil
 	// Snapshot under the same lock that set the fields. Re-reading after the
 	// unlock would let a concurrent login for this handle overwrite
 	// PreviousLogin first, and this session would then measure "new since your
