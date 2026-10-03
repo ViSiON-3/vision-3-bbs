@@ -187,8 +187,8 @@ func TestDoorcovDoorInfo(t *testing.T) {
 		not  []string
 	}{
 		{"lord", []string{"Door: LORD", "Type: DOS (dosemu2)", "Commands: START.BAT {NODE}, CLEAN.EXE",
-			`Directory: C:\LORD`, "Dropfile: DOOR.SYS (startup)", "Single Instance: Yes"},
-			[]string{"Server:", "I/O Mode:", "Min Access:", "Use Shell:", "Cleanup:"}},
+			`Directory: C:\LORD`, "Dropfile: DOOR.SYS", "Single Instance: Yes"},
+			[]string{"(startup)", "Server:", "I/O Mode:", "Min Access:", "Use Shell:", "Cleanup:"}},
 		{"NATIVE", []string{"Door: NATIVE", "Type: Native Linux", "Commands: /opt/game/run, -n, {NODE}",
 			"Dropfile: DOOR32.SYS (node)", "I/O Mode: SOCKET", "Min Access: 5", "Use Shell: Yes", "Cleanup: /opt/game/tidy"},
 			[]string{"Directory:", "Single Instance:", "Server:"}},

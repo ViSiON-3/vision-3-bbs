@@ -156,13 +156,12 @@ func TestDoorFields_DOS(t *testing.T) {
 	m, dir := newDoorRecord(t)
 	m = pickRecField(t, m, "Type", "dos")
 	for _, f := range m.recordFields {
-		if f.Label == "Dropfile Case" || f.Label == "I/O Mode" {
+		if f.Label == "Dropfile Case" || f.Label == "Dropfile Location" || f.Label == "I/O Mode" {
 			t.Errorf("DOS door shows %q", f.Label)
 		}
 	}
 	m = setRecField(t, m, "Commands", "CD GAME, GAME.EXE")
 	m = pickRecField(t, m, "Dropfile Type", "DOOR.SYS")
-	m = pickRecField(t, m, "Dropfile Location", "node")
 	// A DOS door gets every dropfile, DROPFILE.INI included, so it offers
 	// the DROPFILE.INI privacy switch whatever its dropfile type.
 	m = press(t, gotoField(t, m, "Hide Personal"), "space")
@@ -180,7 +179,7 @@ func TestDoorFields_DOS(t *testing.T) {
 	wantScreen(t, m, "/dos/c")
 	d := savedDoor(t, m, dir)
 	if !d.IsDOS || strings.Join(d.Commands, "|") != "CD GAME|GAME.EXE" || d.DropfileType != "DOOR.SYS" ||
-		d.DropfileLocation != "node" || d.DriveCPath != "/dos/c" || d.DOSEmulator != "dosemu" ||
+		d.DriveCPath != "/dos/c" || d.DOSEmulator != "dosemu" ||
 		d.FossilDriver != `C:\X00.EXE` || d.DosemuConfig != "my.rc" || !d.DropfileHidePersonal {
 		t.Errorf("door = %+v", d)
 	}

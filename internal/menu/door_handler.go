@@ -444,11 +444,17 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 			info += fmt.Sprintf("|15Directory: |07%s\r\n", doorConfig.WorkingDirectory)
 		}
 		if doorConfig.DropfileType != "" {
-			dropLoc := doorConfig.DropfileLocation
-			if dropLoc == "" {
-				dropLoc = "startup"
+			// A DOS door's dropfiles always go in C:\NODES\TEMPn, so its
+			// dropfile_location means nothing and is not shown.
+			if doorConfig.IsDOS {
+				info += fmt.Sprintf("|15Dropfile: |07%s\r\n", doorConfig.DropfileType)
+			} else {
+				dropLoc := doorConfig.DropfileLocation
+				if dropLoc == "" {
+					dropLoc = "startup"
+				}
+				info += fmt.Sprintf("|15Dropfile: |07%s |08(%s)|07\r\n", doorConfig.DropfileType, dropLoc)
 			}
-			info += fmt.Sprintf("|15Dropfile: |07%s |08(%s)|07\r\n", doorConfig.DropfileType, dropLoc)
 		}
 		if doorConfig.IOMode != "" {
 			info += fmt.Sprintf("|15I/O Mode: |07%s\r\n", doorConfig.IOMode)
