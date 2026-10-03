@@ -198,6 +198,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["DISPLAYFILE"] = runLoginDisplayFile                    // Display ANSI file
 	registry["RUNDOOR"] = runLoginDoor                               // Run external script/door
 	registry["FASTLOGIN"] = runFastLogin                             // Inline fast login menu
+	registry["DOORMENU"] = runDoorMenu                               // Generated door picker
 	registry["LISTDOORS"] = runListDoors                             // List available doors
 	registry["OPENDOOR"] = runOpenDoor                               // Prompt and open a door
 	registry["DOORINFO"] = runDoorInfo                               // Show door information

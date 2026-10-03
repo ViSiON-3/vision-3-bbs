@@ -1,6 +1,8 @@
 [
     {
         "code": "HELLO",
+        "category": "EXAMPLES",
+        "description": "A simple example script door",
         "name": "Hello World Example",
         "type": "v3_script",
         "script": "hello.js",

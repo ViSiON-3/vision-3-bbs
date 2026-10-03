@@ -11,6 +11,10 @@ import (
 // Placeholders: ^ID = display index, ^CO = internal code (what the user
 // types at the door prompt), ^NA = display name, ^TY = door type.
 func formatDoorListLine(template string, displayIdx int, code string, d config.DoorConfig) string {
+	return formatDoorMenuLine(template, displayIdx, code, d, "", "")
+}
+
+func formatDoorMenuLine(template string, displayIdx int, code string, d config.DoorConfig, description, category string) string {
 	doorType := "Native"
 	switch {
 	case d.Type == "v3_script":
@@ -30,5 +34,7 @@ func formatDoorListLine(template string, displayIdx int, code string, d config.D
 		"^CO", fmt.Sprintf("%-16s", code),
 		"^NA", fmt.Sprintf("%-30s", d.Name),
 		"^TY", doorType,
+		"^DS", description,
+		"^CN", category,
 	).Replace(template)
 }

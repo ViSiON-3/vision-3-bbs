@@ -26,6 +26,11 @@
   "maxFailedLogins": 5,
   "lockoutMinutes": 30,
   "fileListingMode": "lightbar",
+  "doorMenuMode": "lightbar",
+  "doorMenuSort": "name",
+  "doorCategories": [
+    {"code": "EXAMPLES", "name": "Example Doors", "description": "Bundled example scripts", "sort_order": 0}
+  ],
   "legacySSHAlgorithms": true,
   "allowNewUsers": true,
   "enableChallengeGate": false,

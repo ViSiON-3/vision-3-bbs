@@ -24,6 +24,9 @@ import (
 // (see commandFailure). resultingUser may be nil when a handler returned no
 // user; the Run loop reads that as "unchanged".
 func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, outputMode ansi.OutputMode, termWidth int, termHeight int) (actionType string, nextMenu string, userResult *user.User) {
+	if action == "DOORMENU" || strings.HasPrefix(action, "DOORMENU:") {
+		action = "RUN:DOORMENU " + strings.TrimPrefix(strings.TrimPrefix(action, "DOORMENU"), ":")
+	}
 	if strings.HasPrefix(action, "GOTO:") {
 		nextMenu = strings.ToUpper(strings.TrimPrefix(action, "GOTO:"))
 		return "GOTO", nextMenu, currentUser
@@ -32,6 +35,10 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 	} else if strings.HasPrefix(action, "RUN:") {
 		parts := strings.SplitN(strings.TrimPrefix(action, "RUN:"), " ", 2)
 		runTarget := strings.ToUpper(parts[0])
+		if strings.HasPrefix(runTarget, "DOORMENU:") {
+			parts = []string{"DOORMENU", strings.TrimPrefix(runTarget, "DOORMENU:")}
+			runTarget = "DOORMENU"
+		}
 		var runArgs string
 		if len(parts) > 1 {
 			runArgs = parts[1]

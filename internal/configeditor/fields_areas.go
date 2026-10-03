@@ -16,6 +16,8 @@ func (m *Model) buildRecordFields() []fieldDef {
 		return m.fieldsFileArea()
 	case "conference":
 		return m.fieldsConference()
+	case "doorcategory":
+		return m.fieldsDoorCategory()
 	case "door":
 		return m.fieldsDoor()
 	case "event":

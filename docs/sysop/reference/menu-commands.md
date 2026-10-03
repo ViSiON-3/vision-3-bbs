@@ -153,6 +153,7 @@ All of these apply to the logged-in user. The stock main menu binds `K` to `USER
 | Command | Data | What it does | Access |
 | --- | --- | --- | --- |
 | `DOOR:` | Door code, written as `DOOR:CODE` rather than `RUN:` | Launches a configured door. See [Door Programs](doors/doors.md). | Per-door minimum level, single-instance lock |
+| `DOORMENU` | optional category code | Opt-in generated door picker with categories, terminal-sized pages, and lightbar or numbered input. Also accepts `RUN:DOORMENU:CODE` or `DOORMENU:CODE`. See [Generated door menus](../doors/generated-menu.md). | |
 | `LISTDOORS` | none | Sorted door list from the `DOORLIST` templates. Doors above the caller's level are hidden. Not bound in the stock menus. | |
 | `OPENDOOR` | none | Asks for a door code, `?` to list, `Q` to quit, then launches it. Not bound in the stock menus. | Per-door minimum level |
 | `DOORINFO` | none | Asks for a door code and prints its configuration. Not bound in the stock menus. | |

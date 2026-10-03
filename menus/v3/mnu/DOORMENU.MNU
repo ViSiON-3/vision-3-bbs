@@ -1,0 +1,9 @@
+{
+  "TITLE": "Doors",
+  "CLR": true,
+  "USEPROMPT": true,
+  "PROMPT1": "|08[|07|TIME|08] |15Selection|08: |07",
+  "PROMPT2": "",
+  "FALLBACK": "",
+  "ACS": ""
+}
