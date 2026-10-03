@@ -11,6 +11,7 @@ import (
 	"testing"
 	"unicode"
 
+	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -299,5 +300,51 @@ func TestKonfigLongStringsKeepLayout(t *testing.T) {
 				t.Errorf("Screen Width row lost its value: %q", line)
 			}
 		}
+	}
+}
+
+// A configured label longer than the edit row must not break the field
+// editor: the label is cut so the box keeps room to type in.
+func TestKonfigLongLabelEditing(t *testing.T) {
+	strs := konfigTestStrings(t)
+	long := strings.Repeat("W", 120)
+	strs.KonfigScreenWidthLabel = long
+	strs.KonfigRealNameLabel = long
+	strs.KonfigPwCurrent = long
+	um, u := newUserConfigTestUser(t)
+	got, out := runKonfigCapture(t, um, u, "a"+keyClear+"100\r"+"g"+keyEsc+"jx"+keyEsc+"q", strs)
+	if got.ScreenWidth != 100 {
+		t.Errorf("ScreenWidth = %d, want 100: the field could not be edited", got.ScreenWidth)
+	}
+	screen := testterm.New(80, 24)
+	_, _ = screen.Write([]byte(out))
+	if n := len([]rune(screen.Row(konfigEditRow))); n > 80 {
+		t.Errorf("edit row is %d columns wide", n)
+	}
+}
+
+// Fixed-width cells are measured in terminal cells: a double-width glyph
+// takes two, so rune counting would let a title or label overrun its cell.
+func TestKonfigWideTextFitsCells(t *testing.T) {
+	wide := strings.Repeat("界", 60)
+	st := &konfigState{c: &cmdCtx{e: konfigTestExecutor(t), outputMode: ansi.OutputModeUTF8}}
+	for _, n := range []int{konfigLabelWidth, konfigValueWidth, 14} {
+		if got := runewidth.StringWidth(st.fit(wide, n)); got != n {
+			t.Errorf("fit(wide, %d) is %d cells", n, got)
+		}
+		if got := runewidth.StringWidth(st.fit("ab", n)); got != n {
+			t.Errorf("fit(ab, %d) is %d cells", n, got)
+		}
+	}
+	if got := runewidth.StringWidth(stripEscapes(st.heading(wide))); got != konfigColWidth {
+		t.Errorf("heading is %d cells, want %d", got, konfigColWidth)
+	}
+	if got := runewidth.StringWidth(stripEscapes(st.line("|07" + wide))); got > konfigLineWidth {
+		t.Errorf("line is %d cells, want at most %d", got, konfigLineWidth)
+	}
+	// A CP437 session has no double-width glyphs: each character is one cell.
+	st.c.outputMode = ansi.OutputModeCP437
+	if got := len([]rune(st.fit(wide, konfigLabelWidth))); got != konfigLabelWidth {
+		t.Errorf("CP437 fit is %d characters, want %d", got, konfigLabelWidth)
 	}
 }
