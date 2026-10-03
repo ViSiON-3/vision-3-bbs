@@ -103,7 +103,7 @@ Users are stored as a JSON array. Each user account contains:
 
 - `screenWidth` - Preferred terminal width (0 = use detected PTY width)
 - `screenHeight` - Preferred terminal height (0 = use detected PTY height)
-- `preferredEncoding` - Encoding preference: `"utf8"`, `"cp437"`, or `""` (not set)
+- `preferredEncoding` - `""` (Auto) detects the encoding on every call: the board draws one box-drawing character and asks the terminal where its cursor ended up, falling back to the terminal type when it gets no answer. `"utf8"` or `"cp437"` forces that encoding from the next login, on every terminal the caller uses.
 - `msgHdr` - Selected message header style; valid values are whatever `MSGHDR.<n>.ans` templates the menu set ships (0 = unset, defaults to style 1)
 
 After authentication, the system applies these preferences: if a user's stored screen dimensions are smaller than the detected PTY size (or the PTY defaults to 80x25), the stored values cap the effective terminal dimensions. ANSI art is truncated to fit the effective height to prevent scrolling.
@@ -126,7 +126,7 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). F
 | Setting | Field |
 | --- | --- |
 | Screen Width, Screen Height | `screenWidth`, `screenHeight` (applies straight away) |
-| Encoding | `preferredEncoding` (applies from the next login) |
+| Encoding | `preferredEncoding`: each press goes Auto → the encoding the session is using → the other one → Auto (applies from the next login) |
 | Hot Keys | `hotKeys` |
 | Header Style | `msgHdr` |
 | Auto-Signature | `autoSignature` |
