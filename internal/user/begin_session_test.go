@@ -118,3 +118,22 @@ func TestBeginSessionUnknownHandle(t *testing.T) {
 		t.Error("BeginSession succeeded for a handle that does not exist")
 	}
 }
+
+// A file newscan date set with SETFILESCANDATE lasts for one session. If it
+// survived the next logon it would never move forward, and a caller who once
+// chose "all files" would be shown every file at every later newscan.
+func TestBeginSessionClearsFileNewscanDate(t *testing.T) {
+	all := time.Time{}
+	um := mgrWithAccount(t, &User{ID: 1, Handle: "Scanner", LastLogin: time.Now().Add(-time.Hour), FileNewscanSince: &all})
+
+	got, ok := um.BeginSession("Scanner")
+	if !ok {
+		t.Fatal("BeginSession failed")
+	}
+	if got.FileNewscanSince != nil {
+		t.Errorf("FileNewscanSince = %v, want nil after a new logon", got.FileNewscanSince)
+	}
+	if stored, _ := um.GetUser("Scanner"); stored.FileNewscanSince != nil {
+		t.Errorf("stored FileNewscanSince = %v, want nil", stored.FileNewscanSince)
+	}
+}

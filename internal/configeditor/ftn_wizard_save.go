@@ -219,6 +219,8 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 		binkdWarning = fmt.Sprintf(" Warning: binkd.conf sync failed: %v — fix it before restarting.", m.binkdSyncErr)
 	}
 
+	nodelistNote := m.saveFTNWizardNodelist(netKey)
+
 	selectedCount := w.selectedAreaCount()
 	if editing {
 		// Areas are only ever added here. Removing one would mean deleting a
@@ -242,9 +244,43 @@ func (m Model) confirmFTNWizard() (Model, tea.Cmd) {
 	} else {
 		m.message = fmt.Sprintf("FTN network %q saved — %d area(s) created. Restart BBS to activate.", w.networkName, selectedCount)
 	}
-	m.message += binkdWarning
+	m.message += nodelistNote + binkdWarning
 	m.mode = modeCategoryMenu
 	return m, nil
+}
+
+// saveFTNWizardNodelist compiles the nodelist the wizard downloaded for Node
+// Lookup into <data>/ftn/nodelist/<netKey>.json, so the BBS can look systems
+// up from the start instead of waiting for the first one to arrive by file
+// echo. It returns a note for the status message, or "" when there was no
+// nodelist to save. A failure is reported in the note and never undoes the
+// save: the nodelist can still be imported later.
+func (m Model) saveFTNWizardNodelist(netKey string) string {
+	w := m.ftnWizard
+	if w.nodelist == nil {
+		return ""
+	}
+	// The zone of the address being saved, not w.zone: the address can be
+	// edited after the lookup, and v3mail toss checks a delivered nodelist
+	// against the own address too.
+	own, err := ftn.ParseAddress(w.ownAddress)
+	if err != nil {
+		return ""
+	}
+	compiled := ftn.CompileNodelist(w.nodelist, netKey, w.nodelistURL)
+	if !compiled.HasZone(own.Zone) {
+		// Another network's list; saving it would make lookups answer for
+		// the wrong systems.
+		return ""
+	}
+	saved, _, err := ftn.SaveCompiledNodelist(ftn.NodelistDir(m.dataPath()), netKey, compiled, false)
+	switch {
+	case err != nil:
+		return fmt.Sprintf(" Nodelist not saved: %v.", err)
+	case saved:
+		return fmt.Sprintf(" Nodelist saved (%d systems).", len(compiled.Nodes))
+	}
+	return "" // a newer compiled nodelist is already there
 }
 
 // replaceHubLink updates the hub entry in a link list, leaving every other link
