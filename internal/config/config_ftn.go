@@ -23,11 +23,35 @@ type FTNLinkConfig struct {
 	SessionPassword string `json:"session_password,omitempty"` // BinkP session/connection password
 	AreafixPassword string `json:"areafix_password,omitempty"` // Password for AreaFix netmail (subject line)
 	TICPassword     string `json:"tic_password,omitempty"`     // Password inbound TIC files from this link must carry (Pw line); empty = accepted only from the secure inbound
+	FilefixPassword string `json:"filefix_password,omitempty"` // Password for FileFix netmail (subject line); empty = TICPassword
+	FilefixName     string `json:"filefix_name,omitempty"`     // Name of the hub's file echo robot (FileFix, AllFix, Filemgr); empty = DefaultFilefixName
 	Name            string `json:"name"`                       // Human-readable name
 	Flavour         string `json:"flavour,omitempty"`          // Delivery flavour: Normal (default), Crash, Hold, Direct
 	Hostname        string `json:"hostname,omitempty"`         // Hub BinkP hostname; source of truth for the binkd.conf node line
 	Port            int    `json:"port,omitempty"`             // Hub BinkP port (default 24554 when Hostname is set)
 	IPFamily        string `json:"ip_family,omitempty"`        // Address family binkd calls the hub over: "" (auto), "ipv4" or "ipv6"
+}
+
+// DefaultFilefixName is the robot file echo requests are addressed to when a
+// link sets no filefix_name.
+const DefaultFilefixName = "FileFix"
+
+// FilefixRobot returns the name FileFix netmail to this link is addressed to.
+func (c FTNLinkConfig) FilefixRobot() string {
+	if n := strings.TrimSpace(c.FilefixName); n != "" {
+		return n
+	}
+	return DefaultFilefixName
+}
+
+// FilefixPass returns the password FileFix netmail to this link carries in
+// its subject, falling back to the TIC password: many hubs use one password
+// for both.
+func (c FTNLinkConfig) FilefixPass() string {
+	if p := strings.TrimSpace(c.FilefixPassword); p != "" {
+		return p
+	}
+	return strings.TrimSpace(c.TICPassword)
 }
 
 // Address families a link can be called over (FTNLinkConfig.IPFamily).
@@ -124,6 +148,8 @@ func (c *FTNLinkConfig) UnmarshalJSON(data []byte) error {
 		SessionPassword string  `json:"session_password,omitempty"`
 		AreafixPassword string  `json:"areafix_password,omitempty"`
 		TICPassword     string  `json:"tic_password,omitempty"`
+		FilefixPassword string  `json:"filefix_password,omitempty"`
+		FilefixName     string  `json:"filefix_name,omitempty"`
 		Name            string  `json:"name"`
 		Flavour         string  `json:"flavour,omitempty"`
 		Hostname        string  `json:"hostname,omitempty"`
@@ -138,6 +164,8 @@ func (c *FTNLinkConfig) UnmarshalJSON(data []byte) error {
 	c.SessionPassword = r.SessionPassword
 	c.AreafixPassword = r.AreafixPassword
 	c.TICPassword = r.TICPassword
+	c.FilefixPassword = r.FilefixPassword
+	c.FilefixName = r.FilefixName
 	c.Name = r.Name
 	c.Flavour = r.Flavour
 	c.Hostname = r.Hostname

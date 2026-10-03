@@ -366,12 +366,22 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 			Set: func(val string) error { linkPtr.TICPassword = strings.TrimSpace(val); save(); return nil },
 		},
 		{
-			Label: "Name", Help: "Descriptive name for this link (e.g. FSXNet Hub)", Type: ftString, Col: 3, Row: 7, Width: 40,
+			Label: "FileFix Password", Help: "Password for FileFix netmail (subject line); empty = use the TIC Password", Type: ftString, Col: 3, Row: 7, Width: 20, Masked: true,
+			Get: func() string { return linkPtr.FilefixPassword },
+			Set: func(val string) error { linkPtr.FilefixPassword = strings.TrimSpace(val); save(); return nil },
+		},
+		{
+			Label: "FileFix Robot", Help: "Name the hub's file echo robot answers to (FileFix, AllFix, Filemgr); empty = FileFix", Type: ftString, Col: 3, Row: 8, Width: 20,
+			Get: func() string { return linkPtr.FilefixName },
+			Set: func(val string) error { linkPtr.FilefixName = strings.TrimSpace(val); save(); return nil },
+		},
+		{
+			Label: "Name", Help: "Descriptive name for this link (e.g. FSXNet Hub)", Type: ftString, Col: 3, Row: 9, Width: 40,
 			Get: func() string { return linkPtr.Name },
 			Set: func(val string) error { linkPtr.Name = val; save(); return nil },
 		},
 		{
-			Label: "Hostname", Help: "Hub BinkP hostname; synced to the binkd.conf node line on save. Empty = receive-only: binkd cannot call this link", Type: ftString, Col: 3, Row: 8, Width: 40,
+			Label: "Hostname", Help: "Hub BinkP hostname; synced to the binkd.conf node line on save. Empty = receive-only: binkd cannot call this link", Type: ftString, Col: 3, Row: 10, Width: 40,
 			Get: func() string { return linkPtr.Hostname },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -395,7 +405,7 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 			},
 		},
 		{
-			Label: "Port", Help: "Hub BinkP port (default 24554)", Type: ftInteger, Col: 3, Row: 9, Width: 6, Min: 0, Max: 65535,
+			Label: "Port", Help: "Hub BinkP port (default 24554)", Type: ftInteger, Col: 3, Row: 11, Width: 6, Min: 0, Max: 65535,
 			Get: func() string {
 				if linkPtr.Port == 0 {
 					return ""
@@ -419,7 +429,7 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 			},
 		},
 		{
-			Label: "Flavour", Help: "Delivery flavour: Normal, Crash, Hold, Direct", Type: ftLookup, Col: 3, Row: 10, Width: 10,
+			Label: "Flavour", Help: "Delivery flavour: Normal, Crash, Hold, Direct", Type: ftLookup, Col: 3, Row: 12, Width: 10,
 			Get: func() string {
 				if linkPtr.Flavour == "" {
 					return "Normal"
@@ -437,7 +447,7 @@ func (m *Model) fieldsFTNLinkEdit() []fieldDef {
 			},
 		},
 		{
-			Label: "IP Family", Help: ipFamilyHelp, Type: ftLookup, Col: 3, Row: 11, Width: 6,
+			Label: "IP Family", Help: ipFamilyHelp, Type: ftLookup, Col: 3, Row: 13, Width: 6,
 			Get: func() string { return ipFamilyLabel(linkPtr.IPFamily) },
 			Set: func(val string) error {
 				fam, err := parseIPFamilyField(val, linkPtr.Hostname)

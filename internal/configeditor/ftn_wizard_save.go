@@ -304,6 +304,9 @@ func replaceHubLink(links []config.FTNLinkConfig, hub config.FTNLinkConfig) []co
 		if strings.EqualFold(links[i].Address, hub.Address) {
 			// Preserve fields the wizard does not ask about.
 			hub.Flavour = links[i].Flavour
+			hub.TICPassword = links[i].TICPassword
+			hub.FilefixPassword = links[i].FilefixPassword
+			hub.FilefixName = links[i].FilefixName
 			if links[i].Name != "" {
 				hub.Name = links[i].Name
 			}

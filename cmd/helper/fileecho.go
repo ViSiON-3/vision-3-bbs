@@ -121,7 +121,30 @@ func cmdFileEcho(args []string) {
 		os.Exit(1)
 	}
 	fmt.Printf("Added %d file areas to %s.\n", len(added), areasPath)
-	fmt.Printf("Subscribe to the echoes at your %s hub, and set each link's tic_password if the hub uses one.\n", netName)
+	fmt.Printf("Set the hub link's tic_password if the hub uses one, and its filefix_password if the\n")
+	fmt.Printf("hub's FileFix password differs (or filefix_name if its robot is not FileFix), then\n")
+	fmt.Printf("subscribe to the echoes with:\n")
+	fmt.Printf("  %s\n", filefixSeedCommand(netName, *configDir))
+}
+
+// filefixSeedCommand is the helper filefix command that subscribes to a
+// network's file echoes, carrying --config along when it is not the default
+// so that the command reads the file_areas.json just written.
+func filefixSeedCommand(network, configDir string) string {
+	cmd := "helper filefix --network " + shellQuote(network) + " --seed"
+	if configDir != "configs" {
+		cmd += " --config " + shellQuote(configDir)
+	}
+	return cmd
+}
+
+// shellQuote single-quotes s for a POSIX shell when it holds anything but
+// plain path characters.
+func shellQuote(s string) string {
+	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./:@+=,") == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // checkConference reports an error unless conferences.json defines id.

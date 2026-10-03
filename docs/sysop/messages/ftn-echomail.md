@@ -407,6 +407,9 @@ The command creates a netmail packet in the outbound directory. Run `v3mail ftn-
 ./helper areafix --network fidonet --seed --seed-messages 50
 ```
 
+**File echoes** are subscribed the same way with `helper filefix`, which
+addresses the hub's FileFix robot. See [File Echoes](files/file-echoes.md#4-subscribe-at-your-hub).
+
 ### Step 4: Configure Your Mailer (binkd example)
 
 The following is a binkd configuration. If you're using a different mailer, consult
@@ -697,6 +700,8 @@ scan/pack frequency; neither is a hub poll schedule.
 | `packet_password`  | Packet password shared with hub                          |
 | `areafix_password` | Password for AreaFix netmail (subject line; set by hub)  |
 | `tic_password`     | Password inbound file echo TICs from this link must carry; empty = accepted from the secure inbound only ([File Echoes](files/file-echoes.md)) |
+| `filefix_password` | Password for FileFix netmail (subject line); empty = `tic_password` ([File Echoes](files/file-echoes.md)) |
+| `filefix_name`     | Name of the hub's file echo robot: `FileFix` (default), `AllFix`, `Filemgr` |
 | `name`             | Human-readable hub label                                 |
 | `flavour`          | Delivery mode: `Normal`, `Crash`, `Hold`, `Direct`       |
 | `hostname`         | Hub BinkP hostname or IP address; written to the binkd `node` line (an IPv6 address is bracketed for you) |
@@ -1067,4 +1072,7 @@ bin/binkd -c data/ftn/binkd.conf
 
 # Seed new echomail network (subscribe to all areas in message_areas.json)
 ./helper areafix --network fidonet --seed
+
+# Subscribe to every file echo with a linked file area
+./helper filefix --network fidonet --seed
 ```
