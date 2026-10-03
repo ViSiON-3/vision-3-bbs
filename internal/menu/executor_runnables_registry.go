@@ -12,6 +12,17 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
+// IsKnownRunnableTarget reports whether target is registered for a RUN: menu
+// command. Built-in placeholders count because they are intentionally
+// registered runtime handlers, even when their behavior is not implemented.
+func IsKnownRunnableTarget(target string) bool {
+	registry := make(map[string]RunnableFunc)
+	registerPlaceholderRunnables(registry)
+	registerAppRunnables(registry)
+	_, ok := registry[strings.ToUpper(strings.TrimSpace(target))]
+	return ok
+}
+
 // registerPlaceholderRunnables registers the runnables that are implemented
 // inline here rather than in their own file, including the production "DOOR:"
 // handler and the READMAIL placeholder.

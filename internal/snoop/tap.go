@@ -273,8 +273,10 @@ func (t *Tap) Close() {
 	if t.kb.holder != "" {
 		t.kb.drop()
 	}
-	t.stopChatLocked()
+	// Publish the caller disconnect before ending chat. The chat handler treats
+	// EndChat as a normal sysop stop unless Done already reports the caller gone.
 	close(t.done)
+	t.stopChatLocked()
 	t.mu.Unlock()
 }
 

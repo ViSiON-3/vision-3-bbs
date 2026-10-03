@@ -1,0 +1,8 @@
+; badusers.txt - handles new users may not register
+; One name or wildcard pattern per line. Matching is case-insensitive.
+; * matches any run of characters. Blank lines and lines starting with ; or # are ignored.
+root
+admin*
+*sysop*
+guest
+anonymous
