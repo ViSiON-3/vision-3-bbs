@@ -46,8 +46,33 @@ func TestMessageKludgeLines(t *testing.T) {
 		t.Error("control character reached the output")
 	}
 	// Wire order: MSGID before the other kludges, SEEN-BY before PATH last.
-	idx := func(s string) int { return strings.Index(joined, s) }
-	if !(idx("MSGID:") < idx("TZUTC:") && idx("TZUTC:") < idx("SEEN-BY:") && idx("SEEN-BY:") < idx("PATH:")) {
-		t.Errorf("lines out of order:\n%s", joined)
+	order := []string{"MSGID:", "TZUTC:", "SEEN-BY:", "PATH:"}
+	for i := 1; i < len(order); i++ {
+		if strings.Index(joined, order[i-1]) > strings.Index(joined, order[i]) {
+			t.Errorf("%s comes after %s:\n%s", order[i-1], order[i], joined)
+		}
+	}
+}
+
+// Body kludges join the same groups as header fields, and values keep their
+// raw CP437 bytes.
+func TestMessageKludgeLines_BodyGroupingAndCP437(t *testing.T) {
+	msg := &jam.Message{
+		Header: &jam.MessageHeader{},
+		Text: "\x01MSGID: 2:250/1 abc\r\x01PATH: 250/1 153/757\r\x01CHRS: CP437 2\r" +
+			"\x01NOTE: Caf\x82\rHi\r--- x\rSEEN-BY: 1/2\rPATH: 3/4\r@PATH: 5/6\r",
+	}
+	joined := strings.Join(messageKludgeLines(msg), "\n")
+	for _, want := range []string{"MSGID: 2:250/1 abc", "PATH: 250/1 153/757", "CHRS: CP437 2",
+		"NOTE: Caf\x82", "SEEN-BY: 1/2", "PATH: 3/4", "@PATH: 5/6"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %q in:\n%q", want, joined)
+		}
+	}
+	order := []string{"MSGID:", "CHRS:", "SEEN-BY:", "PATH: 250/1"}
+	for i := 1; i < len(order); i++ {
+		if strings.Index(joined, order[i-1]) > strings.Index(joined, order[i]) {
+			t.Errorf("%s comes after %s:\n%s", order[i-1], order[i], joined)
+		}
 	}
 }

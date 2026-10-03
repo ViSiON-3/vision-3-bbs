@@ -70,14 +70,24 @@ func messageKludgeLines(msg *jam.Message) []string {
 		}
 	}
 
-	// Kludges stored in the body text rather than in subfields. Text after
-	// the tear line holds SEEN-BY and PATH on systems that keep them there.
+	// Kludges stored in the body text rather than in subfields go in the same
+	// groups as their header counterparts. Text after the tear line holds
+	// SEEN-BY and PATH on systems that keep them there; @PATH is the form
+	// some keep for a message's own routing record.
 	for _, line := range strings.Split(strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(msg.Text), "\n") {
+		kludge := strings.HasPrefix(line, "\x01")
+		val := cleanKludge(line)
 		switch {
-		case strings.HasPrefix(line, "\x01"):
-			other = append(other, cleanKludge(line))
+		case kludge && hasAnyPrefix(val, "MSGID:", "REPLY:", "PID:"):
+			ids = append(ids, val)
+		case kludge && strings.HasPrefix(val, "PATH:"):
+			paths = append(paths, val)
+		case kludge:
+			other = append(other, val)
 		case strings.HasPrefix(line, "SEEN-BY:"):
-			seenBys = append(seenBys, cleanKludge(line))
+			seenBys = append(seenBys, val)
+		case strings.HasPrefix(line, "PATH:"), strings.HasPrefix(line, "@PATH:"):
+			paths = append(paths, val)
 		}
 	}
 
@@ -95,15 +105,29 @@ func messageKludgeLines(msg *jam.Message) []string {
 	return append(lines, paths...)
 }
 
-// cleanKludge drops the ^A lead-in and any other control characters, which
-// would otherwise reach the terminal.
+// cleanKludge drops the ^A lead-in and any other ASCII control bytes, which
+// would otherwise reach the terminal, and trims surrounding spaces. It works
+// on bytes: values are the sender's raw text, often CP437, and decoding them
+// as UTF-8 would turn every byte above 0x7F into U+FFFD before the writer
+// could convert it.
 func cleanKludge(s string) string {
-	return strings.TrimSpace(strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
-			return -1
+	b := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; c >= 0x20 && c != 0x7f {
+			b = append(b, c)
 		}
-		return r
-	}, s))
+	}
+	return strings.Trim(string(b), " ")
+}
+
+// hasAnyPrefix reports whether s starts with one of prefixes.
+func hasAnyPrefix(s string, prefixes ...string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // jamTime formats a JAM timestamp, which is stored as local time without a

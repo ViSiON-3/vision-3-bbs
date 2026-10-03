@@ -3,6 +3,7 @@ package menu
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -26,7 +27,7 @@ type keyReader interface {
 func showKludgeView(ih keyReader, terminal *term.Terminal, outputMode ansi.OutputMode,
 	msgNum int, kludges []string, termWidth, termHeight int) error {
 	width := max(termWidth, 40) - 1 // stay clear of the last column
-	rows := wrapKludgeLines(kludges, width)
+	rows := wrapKludgeLines(kludges, width, outputMode)
 	if len(rows) == 0 {
 		rows = []string{"(no control information)"}
 	}
@@ -37,10 +38,20 @@ func showKludgeView(ih keyReader, terminal *term.Terminal, outputMode ansi.Outpu
 	for {
 		var b strings.Builder
 		b.WriteString(ansi.ClearScreen())
-		fmt.Fprintf(&b, "\x1b[1;37mMessage #%d control information\x1b[0;37m", msgNum)
+		// One row only, or a narrow terminal wraps it and the page overruns
+		// the footer: drop the page counter, then clip the title, to fit.
+		title := fmt.Sprintf("Message #%d control information", msgNum)
+		counter := ""
 		if pages > 1 {
-			fmt.Fprintf(&b, "  \x1b[1;30m(page %d of %d)", page+1, pages)
+			counter = fmt.Sprintf("  (page %d of %d)", page+1, pages)
 		}
+		if len(title)+len(counter) > width {
+			counter = ""
+		}
+		if len(title) > width {
+			title = title[:width]
+		}
+		b.WriteString("\x1b[1;37m" + title + "\x1b[1;30m" + counter + "\x1b[0;37m")
 		b.WriteString("\r\n\x1b[1;30m" + strings.Repeat("-", min(width, 79)) + "\x1b[0;37m\r\n")
 		end := min((page+1)*perPage, len(rows))
 		for _, row := range rows[page*perPage : end] {
@@ -86,39 +97,26 @@ func kludgeRowColour(row string) string {
 	return "\x1b[0;37m" + row
 }
 
-// wrapKludgeLines fits each line to width, breaking long ones (SEEN-BY,
-// PATH) at spaces where possible and indenting the continuation rows.
-func wrapKludgeLines(lines []string, width int) []string {
+// wrapKludgeLines fits each line to width columns, breaking long ones
+// (SEEN-BY, PATH) at spaces and indenting the continuation rows. Columns are
+// measured as the writer renders them for mode (see columnWidth): kludge
+// values are the sender's raw bytes, CP437 or UTF-8, and a wide UTF-8
+// character takes two columns. A run with no space to break at is cut.
+func wrapKludgeLines(lines []string, width int, mode ansi.OutputMode) []string {
 	const indent = "    "
 	var out []string
 	for _, line := range lines {
-		first := true
-		for {
-			w := width
-			if !first {
-				w -= len(indent)
+		asUTF8 := utf8.ValidString(line)
+		if columnWidth(line, asUTF8, mode) <= width {
+			out = append(out, line)
+			continue
+		}
+		inner := max(width-len(indent), 1)
+		for i, row := range breakOversizedLines(wrapVisualLine(line, inner, asUTF8, mode), inner, mode) {
+			if i > 0 {
+				row = indent + strings.TrimLeft(row, " ")
 			}
-			r := []rune(line)
-			if len(r) <= w {
-				if first {
-					out = append(out, line)
-				} else {
-					out = append(out, indent+line)
-				}
-				break
-			}
-			cut := w
-			if sp := strings.LastIndex(string(r[:w]), " "); sp > 0 {
-				cut = len([]rune(string(r[:w])[:sp]))
-			}
-			chunk := strings.TrimRight(string(r[:cut]), " ")
-			if first {
-				out = append(out, chunk)
-			} else {
-				out = append(out, indent+chunk)
-			}
-			line = strings.TrimLeft(string(r[cut:]), " ")
-			first = false
+			out = append(out, row)
 		}
 	}
 	return out
