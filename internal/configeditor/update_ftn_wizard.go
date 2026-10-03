@@ -173,10 +173,11 @@ func (m Model) startFTNWizardEdit(netKey string) (Model, tea.Cmd) {
 
 	// Registry data (echolist, file echo list and nodelist URLs, description)
 	// if this network has an entry, so Echo Areas, File Echoes and Node Lookup
-	// still work. The sysop's ftn_networks.json wins over the built-in entry,
-	// as it does for helper nodelist.
+	// still work. Sysop entries take precedence, with omitted list URLs
+	// falling back to the built-in entry.
 	regNets := m.loadFTNOverrideNetworks()
-	if builtin, err := ftn.LoadRegistry(); err == nil {
+	builtin, err := ftn.LoadRegistry()
+	if err == nil {
 		regNets = append(regNets, builtin...)
 	}
 	for i := range regNets {
@@ -184,6 +185,21 @@ func (m Model) startFTNWizardEdit(netKey string) (Model, tea.Cmd) {
 			continue
 		}
 		reg := regNets[i]
+		for _, base := range builtin {
+			if !strings.EqualFold(base.Name, reg.Name) {
+				continue
+			}
+			if reg.EcholistURL == "" {
+				reg.EcholistURL = base.EcholistURL
+			}
+			if reg.FileEchoListURL == "" {
+				reg.FileEchoListURL = base.FileEchoListURL
+			}
+			if reg.NodelistURL == "" {
+				reg.NodelistURL = base.NodelistURL
+			}
+			break
+		}
 		w.registryEntry = &reg
 		w.echolistURL = reg.EcholistURL
 		w.fileEchoListURL = reg.FileEchoListURL
@@ -519,7 +535,8 @@ func (m Model) enterFTNAreaBrowser() (Model, tea.Cmd) {
 	m.ftnAreaBrowserLoading = true
 	m.ftnAreaBrowserError = ""
 	m.mode = modeFTNAreaDownloading
-	return m, fetchFTNEcholist(url, w.registryEntry)
+	cmd := m.ftnWizardListFetch(false)
+	return m, cmd
 }
 
 // enterFTNFileEchoBrowser starts the file echo list download, or opens the

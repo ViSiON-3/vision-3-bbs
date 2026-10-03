@@ -304,13 +304,14 @@ type Model struct {
 	qwkWizardPickerScroll int
 
 	// FTN area browser state
-	ftnAreaBrowserAreas    []ftn.EchoArea // parsed from downloaded echolist
-	ftnAreaBrowserSelected []bool         // parallel array, true = subscribed
-	ftnAreaBrowserCursor   int
-	ftnAreaBrowserScroll   int
-	ftnAreaBrowserLoading  bool
-	ftnAreaBrowserError    string
-	ftnAreaBrowserFiles    bool // browsing file echoes rather than echo areas
+	ftnAreaBrowserAreas      []ftn.EchoArea // parsed from downloaded echolist
+	ftnAreaBrowserSelected   []bool         // parallel array, true = subscribed
+	ftnAreaBrowserCursor     int
+	ftnAreaBrowserScroll     int
+	ftnAreaBrowserLoading    bool
+	ftnAreaBrowserError      string
+	ftnAreaBrowserGeneration uint64 // monotonic across wizard sessions
+	ftnAreaBrowserFiles      bool   // browsing file echoes rather than echo areas
 
 	// Seed phrase interstitial (shown after first-time wizard save)
 	showSeedInterstitial   bool

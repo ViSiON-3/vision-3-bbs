@@ -30,7 +30,7 @@ func (m Model) handleFTNEcholistMsg(msg ftnEcholistMsg) (tea.Model, tea.Cmd) {
 	// network the sysop has since moved off (cancelled, picked another, and
 	// started its download): its areas must not be saved under this one.
 	if m.mode != modeFTNAreaDownloading || msg.fileEchoes != m.ftnAreaBrowserFiles ||
-		msg.url != m.ftnWizard.listURL(msg.fileEchoes) {
+		msg.generation != m.ftnAreaBrowserGeneration || msg.url != m.ftnWizard.listURL(msg.fileEchoes) {
 		return m, nil
 	}
 	m.ftnAreaBrowserLoading = false
@@ -144,19 +144,22 @@ func (m Model) updateFTNAreaBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// ftnWizardListFetch returns the command that downloads the wizard's echo
-// area list, or its file echo list if fileEchoes, or nil when the URL is not
-// something the wizard can fetch.
-func (m Model) ftnWizardListFetch(fileEchoes bool) tea.Cmd {
+// ftnWizardListFetch starts a fresh download attempt, clearing only the browser
+// state so a failure cannot display entries from a previously browsed list.
+// The generation lives on Model so it remains unique across wizard sessions.
+func (m *Model) ftnWizardListFetch(fileEchoes bool) tea.Cmd {
 	w := m.ftnWizard
-	if fileEchoes {
-		if !ftn.EcholistIsDownloadable(w.fileEchoListURL) {
-			return nil
-		}
-		return fetchFTNFileEchoList(w.fileEchoListURL)
-	}
-	if !ftn.EcholistIsDownloadable(w.echolistURL) {
+	url := w.listURL(fileEchoes)
+	if !ftn.EcholistIsDownloadable(url) {
 		return nil
 	}
-	return fetchFTNEcholist(w.echolistURL, w.registryEntry)
+	m.ftnAreaBrowserGeneration++
+	m.ftnAreaBrowserAreas = nil
+	m.ftnAreaBrowserSelected = nil
+	m.ftnAreaBrowserCursor = 0
+	m.ftnAreaBrowserScroll = 0
+	if fileEchoes {
+		return fetchFTNFileEchoList(url, m.ftnAreaBrowserGeneration)
+	}
+	return fetchFTNEcholist(url, w.registryEntry, m.ftnAreaBrowserGeneration)
 }

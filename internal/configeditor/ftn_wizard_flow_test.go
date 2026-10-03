@@ -78,7 +78,7 @@ func TestFTNWizard_KeyboardFlowSavesNetwork(t *testing.T) {
 	}
 	wantScreen(t, m, "Downloading echolist...")
 	areas := []ftn.EchoArea{{Tag: "FSX_GEN", Description: "General"}, {Tag: "FSX_BBS", Description: "BBS talk"}, {Tag: "FSX_TST", Description: "Test"}}
-	m = asModel(t, first(m.Update(ftnEcholistMsg{url: m.ftnWizard.echolistURL, areas: areas})))
+	m = asModel(t, first(m.Update(ftnEcholistMsg{generation: m.ftnAreaBrowserGeneration, url: m.ftnWizard.echolistURL, areas: areas})))
 	if m.mode != modeFTNAreaBrowser || len(m.ftnAreaBrowserAreas) != 3 {
 		t.Fatalf("mode=%v areas=%d", m.mode, len(m.ftnAreaBrowserAreas))
 	}
@@ -255,13 +255,13 @@ func TestFTNWizard_EchoAreasWithoutEcholist(t *testing.T) {
 	if m.mode != modeFTNWizardForm {
 		t.Fatalf("esc: mode = %v", m.mode)
 	}
-	m = asModel(t, first(m.Update(ftnEcholistMsg{url: m.ftnWizard.echolistURL, areas: []ftn.EchoArea{{Tag: "LATE"}}})))
+	m = asModel(t, first(m.Update(ftnEcholistMsg{generation: m.ftnAreaBrowserGeneration, url: m.ftnWizard.echolistURL, areas: []ftn.EchoArea{{Tag: "LATE"}}})))
 	if m.mode != modeFTNWizardForm || m.ftnWizard.areasFetched {
 		t.Fatalf("late result applied: mode=%v", m.mode)
 	}
 
 	m = press(t, m, "enter")
-	m = asModel(t, first(m.Update(ftnEcholistMsg{url: m.ftnWizard.echolistURL, err: os.ErrDeadlineExceeded})))
+	m = asModel(t, first(m.Update(ftnEcholistMsg{generation: m.ftnAreaBrowserGeneration, url: m.ftnWizard.echolistURL, err: os.ErrDeadlineExceeded})))
 	if m.mode != modeFTNAreaBrowser || !strings.HasPrefix(m.ftnAreaBrowserError, "Download failed") {
 		t.Fatalf("mode=%v err=%q", m.mode, m.ftnAreaBrowserError)
 	}
