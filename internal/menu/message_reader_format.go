@@ -72,8 +72,17 @@ func detectAnsiArtInMessage(text string) bool {
 	// 1. Home cursor without row/col (ESC[H)
 	// 2. Explicit cursor positioning (ESC[f)
 	// 3. Cursor movement with digits (ESC[5A, ESC[10;20H, etc.)
+	// 4. Cursor save/restore (ESC[s / ESC[u, ESC 7 / ESC 8). Art posted from
+	//    some systems uses nothing else: it splits each autowrapped row into
+	//    short message lines with ESC[s CR ESC[u, which resumes exactly where
+	//    the line was cut. Read as text, every piece becomes its own line and
+	//    its ESC[u jumps to a stale position once the reader scrolls.
 	return strings.Contains(text, "\x1b[H") ||
 		strings.Contains(text, "\x1b[f") ||
+		strings.Contains(text, "\x1b[s") ||
+		strings.Contains(text, "\x1b[u") ||
+		strings.Contains(text, "\x1b7") ||
+		strings.Contains(text, "\x1b8") ||
 		hasANSICursorMovement(text)
 }
 

@@ -324,7 +324,11 @@ readerLoop:
 			// margin does not gain a blank row after it. Art can turn wrapping
 			// off with ESC[?7l, and much of this echo's art turns it on with
 			// ESC[?7h.
-			wrappedBodyLines = RenderANSIArtToLines(processedBodyStr, termWidth, 500)
+			//
+			// Message art is drawn for 80 columns and much of it relies on
+			// wrapping there, so a wider terminal still renders it at 80;
+			// wrapping at the terminal's width would shear it.
+			wrappedBodyLines = RenderANSIArtToLines(processedBodyStr, min(termWidth, ansi.ArtWidth), 500)
 
 			// Convert CP437 bytes to UTF-8 for modern terminals
 			for i, line := range wrappedBodyLines {
