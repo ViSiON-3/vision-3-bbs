@@ -108,7 +108,8 @@ func TestLoadOverrideRegistryTrimsURLs(t *testing.T) {
 	dir := t.TempDir()
 	body := `[{"zone": 21, "name": "fsxNet",
 	  "echolist_url": "  https://example.test/fsxnet.na  ",
-	  "nodelist_url": "\thttps://example.test/fsxnet.zip\n"},
+	  "nodelist_url": "\thttps://example.test/fsxnet.zip\n",
+	  "fileecho_list_url": " https://example.test/fsx_file.na "},
 	 {"zone": 25, "name": "Blank", "echolist_url": "   "}]`
 	if err := os.WriteFile(filepath.Join(dir, "ftn_networks.json"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -127,6 +128,9 @@ func TestLoadOverrideRegistryTrimsURLs(t *testing.T) {
 	}
 	if got := networks[0].NodelistURL; got != "https://example.test/fsxnet.zip" {
 		t.Errorf("NodelistURL = %q, want it trimmed", got)
+	}
+	if got := networks[0].FileEchoListURL; got != "https://example.test/fsx_file.na" {
+		t.Errorf("FileEchoListURL = %q, want it trimmed", got)
 	}
 	if _, err := http.NewRequest(http.MethodGet, networks[0].EcholistURL, nil); err != nil {
 		t.Errorf("trimmed URL should build a request: %v", err)
@@ -148,5 +152,27 @@ func TestEmbeddedRegistryURLsAreTrimmed(t *testing.T) {
 		if n.NodelistURL != strings.TrimSpace(n.NodelistURL) {
 			t.Errorf("%s zone %d: nodelist_url has surrounding whitespace: %q", n.Name, n.Zone, n.NodelistURL)
 		}
+		if n.FileEchoListURL != strings.TrimSpace(n.FileEchoListURL) {
+			t.Errorf("%s zone %d: fileecho_list_url has surrounding whitespace: %q", n.Name, n.Zone, n.FileEchoListURL)
+		}
 	}
+}
+
+// tqwNet publishes its file echo list on the web, so the wizard can offer its
+// file echoes (#570).
+func TestEmbeddedRegistryTqwNetHasFileEchoList(t *testing.T) {
+	nets, err := LoadRegistry()
+	if err != nil {
+		t.Fatalf("LoadRegistry: %v", err)
+	}
+	for _, n := range nets {
+		if n.Zone != 1337 {
+			continue
+		}
+		if !EcholistIsDownloadable(n.FileEchoListURL) {
+			t.Errorf("tqwNet fileecho_list_url = %q, want a downloadable URL", n.FileEchoListURL)
+		}
+		return
+	}
+	t.Error("tqwNet (zone 1337) registry entry not found")
 }

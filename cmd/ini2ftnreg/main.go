@@ -38,7 +38,9 @@ type Network struct {
 	// NodelistURL has no counterpart in init-fidonet.ini; every value comes
 	// from overrides.json. Without the field here, regenerating the registry
 	// would drop the nodelist URL of every network that has one.
-	NodelistURL     string   `json:"nodelist_url,omitempty"`
+	NodelistURL string `json:"nodelist_url,omitempty"`
+	// FileEchoListURL likewise has no counterpart in the ini.
+	FileEchoListURL string   `json:"fileecho_list_url,omitempty"`
 	AreatagPrefix   string   `json:"areatag_prefix,omitempty"`
 	AreatagExclude  []string `json:"areatag_exclude,omitempty"`
 	AreatitlePrefix string   `json:"areatitle_prefix,omitempty"`

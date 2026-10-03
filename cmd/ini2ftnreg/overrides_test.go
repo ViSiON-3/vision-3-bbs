@@ -108,6 +108,7 @@ func TestEveryOverrideMatchesAShippedNetwork(t *testing.T) {
 		}{
 			{"echolist_url", o.EcholistURL, n.EcholistURL},
 			{"nodelist_url", o.NodelistURL, n.NodelistURL},
+			{"fileecho_list_url", o.FileEchoListURL, n.FileEchoListURL},
 			{"pack_url", o.PackURL, n.PackURL},
 			{"info_url", o.InfoURL, n.InfoURL},
 			{"hub_address", o.HubAddress, n.HubAddress},

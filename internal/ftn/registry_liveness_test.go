@@ -7,7 +7,7 @@
 //	go test -tags urlcheck ./internal/ftn/ -run TestRegistryURLsLive -v
 //
 // It fetches every http(s) URL in the registry and reports anything that is not
-// reachable, split into fetch-critical fields (echolist/nodelist/pack — the
+// reachable, split into fetch-critical fields (echolist/nodelist/fileecho list/pack — the
 // files a sysop actually downloads) and info-only fields. It logs rather than
 // hard-fails, so one flaky host does not block a run; read the summary.
 package ftn
@@ -49,6 +49,7 @@ func TestRegistryURLsLive(t *testing.T) {
 		fields := []field{
 			{"echolist_url", n.EcholistURL, true},
 			{"nodelist_url", n.NodelistURL, true},
+			{"fileecho_list_url", n.FileEchoListURL, true},
 			{"pack_url", n.PackURL, true},
 			{"info_url", n.InfoURL, false},
 		}

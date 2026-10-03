@@ -292,6 +292,7 @@
     "hub_hostname": "hub.ca.erb.pw",
     "echolist_url": "https://raw.githubusercontent.com/christiansacks/tqwnet_infopack/master/tqwnet.na",
     "nodelist_url": "https://www.erb.pw/tqwinfo.zip",
+    "fileecho_list_url": "https://raw.githubusercontent.com/christiansacks/tqwnet_infopack/master/tqw_file.na",
     "areatag_prefix": "TQW_"
   },
   {
