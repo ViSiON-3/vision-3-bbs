@@ -561,7 +561,7 @@ readerLoop:
 					singleKey := rune(key)
 					// Check if it's a direct command key
 					switch unicode.ToUpper(singleKey) {
-					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', '?':
+					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'K', '?':
 						selectedKey = unicode.ToUpper(singleKey)
 					default:
 						// Not a recognized command, show lightbar
@@ -767,6 +767,28 @@ readerLoop:
 					break readerLoop
 				}
 				break scrollLoop
+
+			case 'K': // Kludges: control information (sysop/co-sysop only)
+				if !isSysop {
+					continue
+				}
+				kludges, kErr := e.MessageMgr.GetMessageKludges(currentAreaID, currentMsg.MsgNum)
+				if kErr != nil {
+					slog.Error("read message kludges", "node", nodeNumber, "msg", currentMsg.MsgNum, "area", currentAreaID, "error", kErr)
+					showReaderNotice(terminal, outputMode, "|01Could not read this message's control information.|07", termHeight)
+					needsRedraw = true
+					continue
+				}
+				if vErr := showKludgeView(sessionIH, terminal, outputMode, currentMsg.MsgNum, kludges, termWidth, termHeight); vErr != nil {
+					if errors.Is(vErr, editor.ErrIdleTimeout) {
+						return nil, "LOGOFF", editor.ErrIdleTimeout
+					}
+					if errors.Is(vErr, io.EOF) {
+						return nil, "LOGOFF", io.EOF
+					}
+				}
+				needsRedraw = true
+				continue
 
 			case 'Q': // Quit
 				quitNewscan = true

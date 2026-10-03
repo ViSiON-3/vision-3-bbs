@@ -294,7 +294,7 @@ func displayReaderHelp(terminal *term.Terminal, outputMode ansi.OutputMode, isSy
 		"|15J|07ump to Message #     |15M|07ail Reply\r\n" +
 		"|15L|07ist Titles           |15Q|07uit Reader\r\n"
 	if isSysop {
-		help += "|01D|07elete Message\r\n"
+		help += "|01D|07elete Message        |01K|07ludges / Control Info\r\n"
 	}
 	help += "|08" + strings.Repeat("-", 40) + "|07\r\n"
 
