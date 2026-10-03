@@ -35,6 +35,7 @@ V3Net settings live in two places in the TUI config editor (`./config`):
 │  Hub Data Dir    :                                                   │
 │  Auto Approve    : N                                                 │
 │  Auto Approve Areas : N                                              │
+│  Signed Subscribe : N                                                │
 │                                                                      │
 │                          Screen 2 of 8                               │
 └──────────────────────────────────────────────────────────────────────┘
@@ -53,6 +54,7 @@ Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return
 | **Hub Data Dir** | Directory for hub database and NAL files. Recommended: `data/v3net_hub` |
 | **Auto Approve** | When `Y`, new leaf subscriptions are approved automatically. |
 | **Auto Approve Areas** | When `Y`, area proposals are added to the network straight away instead of waiting in the Coordinator Panel. If `autoApproveAreas` has never been set, it follows **Auto Approve**, which used to cover proposals too. Changing **Auto Approve** in the editor saves the area setting as it stood, so it no longer follows. |
+| **Signed Subscribe** | Default `N` preserves compatibility with older leaves. Set `Y` to reject unsigned subscriptions after leaves have upgraded. Save and restart the BBS to apply. See [Independent hub and leaf upgrades](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently). |
 
 Press **S** to save after making changes.
 
@@ -273,7 +275,7 @@ no automatic deadline or switch to strict mode.
    `data/v3net.key`), and configured V3Net data directory.
 2. Update, run `./build.sh`, and restart using the same configuration, key,
    and data. Leave **Signed Subscribe** at **N** in the config editor's
-   System Configuration network settings.
+   **System Setup → Server Setup** screen.
 3. Leaf sysops can update, rebuild, and restart independently, keeping their
    existing configuration, node key, and data. Updated BBS binaries and config
    editors sign subscriptions automatically. No re-registration or re-approval
