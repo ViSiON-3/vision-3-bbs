@@ -46,7 +46,8 @@ func TestFTNWizardSavesDownloadedNodelist(t *testing.T) {
 }
 
 // TestFTNWizardSkipsOtherZoneNodelist pins that a downloaded list without the
-// network's own zone is not saved as its nodelist.
+// zone of the address being saved is not saved as its nodelist, even when
+// the address was changed to another zone after the lookup.
 func TestFTNWizardSkipsOtherZoneNodelist(t *testing.T) {
 	m := wizardReadyToSave(t)
 	root := t.TempDir()
@@ -59,7 +60,7 @@ func TestFTNWizardSkipsOtherZoneNodelist(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.ftnWizard.nodelist = nl
-	m.ftnWizard.zone = 1
+	m.ftnWizard.ownAddress = "1:2/3"
 
 	result, _ := m.submitFTNWizardForm()
 

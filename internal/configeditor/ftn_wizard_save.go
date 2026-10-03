@@ -260,10 +260,17 @@ func (m Model) saveFTNWizardNodelist(netKey string) string {
 	if w.nodelist == nil {
 		return ""
 	}
+	// The zone of the address being saved, not w.zone: the address can be
+	// edited after the lookup, and v3mail toss checks a delivered nodelist
+	// against the own address too.
+	own, err := ftn.ParseAddress(w.ownAddress)
+	if err != nil {
+		return ""
+	}
 	compiled := ftn.CompileNodelist(w.nodelist, netKey, w.nodelistURL)
-	if !compiled.HasZone(w.zone) {
-		// The registry handed us another network's list; saving it would
-		// make lookups answer for the wrong systems.
+	if !compiled.HasZone(own.Zone) {
+		// Another network's list; saving it would make lookups answer for
+		// the wrong systems.
 		return ""
 	}
 	saved, _, err := ftn.SaveCompiledNodelist(ftn.NodelistDir(m.dataPath()), netKey, compiled, false)
