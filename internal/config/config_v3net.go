@@ -60,6 +60,9 @@ type V3NetHubConfig struct {
 	// AutoApprove activates new leaf subscriptions without the coordinator
 	// approving each node.
 	AutoApprove bool `json:"autoApprove"`
+	// RequireSignedSubscribe rejects legacy unsigned registrations when enabled.
+	// Default false keeps existing networks working during rolling upgrades.
+	RequireSignedSubscribe bool `json:"requireSignedSubscribe"`
 	// AutoApproveAreas adds proposed areas to the NAL without the coordinator
 	// reviewing them. Unset follows AutoApprove, which used to cover both;
 	// see AreaProposalsAutoApproved.

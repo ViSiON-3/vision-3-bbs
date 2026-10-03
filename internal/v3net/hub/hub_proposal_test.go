@@ -22,11 +22,12 @@ func setupTestHubManual(t *testing.T) (*Hub, *keystore.Keystore) {
 		t.Fatalf("load hub keystore: %v", err)
 	}
 	cfg := Config{
-		ListenAddr:  ":0",
-		DataDir:     dir,
-		Keystore:    ks,
-		AutoApprove: false,
-		Networks:    []NetworkConfig{{Name: "testnet", Description: "Test network"}},
+		ListenAddr:             ":0",
+		DataDir:                dir,
+		Keystore:               ks,
+		AutoApprove:            false,
+		RequireSignedSubscribe: true,
+		Networks:               []NetworkConfig{{Name: "testnet", Description: "Test network"}},
 	}
 	h, err := New(cfg)
 	if err != nil {

@@ -40,6 +40,7 @@ configuration to join an existing network.
 | `dataDir` | string | `""` | Directory for hub data (SQLite database, NAL files). Example: `"data/v3net_hub"` |
 | `autoApprove` | bool | `false` | When `true`, new subscriber registrations are approved automatically. |
 | `autoApproveAreas` | bool | unset | When `true`, area proposals are added to the NAL on arrival; when `false`, they wait for the coordinator in the Coordinator Panel. Unset follows `autoApprove`, which covered proposals too before this setting existed. Recommended `false` outside testing. |
+| `requireSignedSubscribe` | bool | `false` | Require signed subscriptions. Leave false during rolling upgrades; true rejects older unsigned leaves with HTTP 401. Restart to apply. |
 | `networks` | array | `[]` | List of networks hosted by this hub. See below. |
 | `initialAreas` | array | `[]` | Area specs for the initial NAL seed. Consumed once on first hub start, then removed automatically. See below. |
 

@@ -72,10 +72,11 @@ func setupIntegration(t *testing.T) (
 	}
 
 	hubCfg := hub.Config{
-		ListenAddr:  ":0",
-		DataDir:     dir,
-		Keystore:    hubKS,
-		AutoApprove: true,
+		ListenAddr:             ":0",
+		DataDir:                dir,
+		Keystore:               hubKS,
+		AutoApprove:            true,
+		RequireSignedSubscribe: true,
 		Networks: []hub.NetworkConfig{
 			{Name: "testnet", Description: "Integration test network"},
 		},

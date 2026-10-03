@@ -19,7 +19,8 @@ func TestSubscribeToAreas_StrictHub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := hub.New(hub.Config{DataDir: dir, Keystore: hubKS, AutoApprove: true, Networks: []hub.NetworkConfig{{Name: "testnet"}}})
+	h, err := hub.New(hub.Config{DataDir: dir, Keystore: hubKS, AutoApprove: true,
+		RequireSignedSubscribe: true, Networks: []hub.NetworkConfig{{Name: "testnet"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

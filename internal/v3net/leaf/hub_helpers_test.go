@@ -26,12 +26,13 @@ func newTestHub(t *testing.T, autoApprove bool) (*httptest.Server, *hub.Hub, *ke
 		t.Fatalf("load hub keystore: %v", err)
 	}
 	h, err := hub.New(hub.Config{
-		ListenAddr:       ":0",
-		DataDir:          dir,
-		Keystore:         ks,
-		AutoApprove:      autoApprove,
-		AutoApproveAreas: true,
-		Networks:         []hub.NetworkConfig{{Name: "testnet", Description: "Test network"}},
+		ListenAddr:             ":0",
+		DataDir:                dir,
+		Keystore:               ks,
+		AutoApprove:            autoApprove,
+		RequireSignedSubscribe: true,
+		AutoApproveAreas:       true,
+		Networks:               []hub.NetworkConfig{{Name: "testnet", Description: "Test network"}},
 	})
 	if err != nil {
 		t.Fatalf("create hub: %v", err)

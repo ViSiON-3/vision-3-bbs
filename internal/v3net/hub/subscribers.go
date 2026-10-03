@@ -43,8 +43,10 @@ type Subscriber struct {
 	Status    string // "active", "pending", "banned"
 	CreatedAt string // populated by List only
 
-	// RequestedAreas preserves the first registration's area tags for database
-	// compatibility with older hubs. Current hubs require signed re-subscription.
+	// RequestedAreas are the area tags the node's first registration asked
+	// for. A node on a hub that approves nodes by hand is pending at first,
+	// so those areas are only subscribed when it re-subscribes after
+	// approval; older leaves do that unsigned, and may apply these tags.
 	RequestedAreas []string
 }
 

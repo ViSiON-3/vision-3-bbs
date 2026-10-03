@@ -28,11 +28,12 @@ func setupTestHub(t *testing.T) (*Hub, *keystore.Keystore) {
 	}
 
 	cfg := Config{
-		ListenAddr:       ":0",
-		DataDir:          dir,
-		Keystore:         ks,
-		AutoApprove:      true,
-		AutoApproveAreas: true,
+		ListenAddr:             ":0",
+		DataDir:                dir,
+		Keystore:               ks,
+		AutoApprove:            true,
+		RequireSignedSubscribe: true,
+		AutoApproveAreas:       true,
 		Networks: []NetworkConfig{
 			{Name: "testnet", Description: "Test network"},
 		},

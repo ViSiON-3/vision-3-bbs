@@ -143,12 +143,17 @@ func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Binkd Mailer", Help: "Run bundled binkd FTN mailer at startup", Type: ftYesNo, Col: 3, Row: 21, Width: 1,
+			Label: "Signed Subscribe", Help: "Require signed subscriptions; leave N until older leaves have upgraded. Restart to apply.", Type: ftYesNo, Col: 3, Row: 21, Width: 1,
+			Get: func() string { return uitext.BoolToYN(hub.RequireSignedSubscribe) },
+			Set: func(val string) error { hub.RequireSignedSubscribe = uitext.YNToBool(val); return nil },
+		},
+		{
+			Label: "Binkd Mailer", Help: "Run bundled binkd FTN mailer at startup", Type: ftYesNo, Col: 3, Row: 22, Width: 1,
 			Get: func() string { return uitext.BoolToYN(binkd.Enabled) },
 			Set: func(val string) error { binkd.Enabled = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Binkd Port", Help: "binkp listen port (default: 24554)", Type: ftInteger, Col: 3, Row: 22, Width: 5, Min: 1, Max: 65535,
+			Label: "Binkd Port", Help: "binkp listen port (default: 24554)", Type: ftInteger, Col: 3, Row: 23, Width: 5, Min: 1, Max: 65535,
 			Get: func() string { return strconv.Itoa(binkd.Port) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -160,12 +165,12 @@ func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Binkd Binary", Help: "Path to binkd binary (default: bin/binkd)", Type: ftString, Col: 3, Row: 23, Width: 40,
+			Label: "Binkd Binary", Help: "Path to binkd binary (default: bin/binkd)", Type: ftString, Col: 3, Row: 24, Width: 40,
 			Get: func() string { return binkd.BinaryPath },
 			Set: func(val string) error { binkd.BinaryPath = val; return nil },
 		},
 		{
-			Label: "Binkd Log Lvl", Help: "binkd loglevel 1-9 (default: 4)", Type: ftInteger, Col: 3, Row: 24, Width: 2, Min: 1, Max: 9,
+			Label: "Binkd Log Lvl", Help: "binkd loglevel 1-9 (default: 4)", Type: ftInteger, Col: 3, Row: 25, Width: 2, Min: 1, Max: 9,
 			Get: func() string { return strconv.Itoa(binkd.LogLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -177,7 +182,7 @@ func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Export Secs", Help: "Outbound scan/pack interval in seconds (default: 300)", Type: ftInteger, Col: 3, Row: 25, Width: 6, Min: 30, Max: 86400,
+			Label: "Export Secs", Help: "Outbound scan/pack interval in seconds (default: 300)", Type: ftInteger, Col: 3, Row: 26, Width: 6, Min: 30, Max: 86400,
 			Get: func() string { return strconv.Itoa(binkd.ExportSecs) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -189,7 +194,7 @@ func (m *Model) sysFieldsNetwork(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "No CRAM-MD5", Help: "Plaintext binkp passwords both ways; for a hub whose CRAM-MD5 fails", Type: ftYesNo, Col: 3, Row: 26, Width: 1,
+			Label: "No CRAM-MD5", Help: "Plaintext binkp passwords both ways; for a hub whose CRAM-MD5 fails", Type: ftYesNo, Col: 3, Row: 27, Width: 1,
 			Get: func() string { return uitext.BoolToYN(binkd.DisableCramMD5) },
 			Set: func(val string) error { binkd.DisableCramMD5 = uitext.YNToBool(val); return nil },
 		},

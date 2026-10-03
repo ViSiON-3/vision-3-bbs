@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -257,8 +258,12 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// handleSubscribe requires proof of possession of the submitted node key.
-// It cannot use authMiddleware because the node may not be registered yet.
+// handleSubscribe registers a leaf node. It is the bootstrap step, so it
+// does not use authMiddleware: the hub may not know the node yet. A request
+// may instead be signed with the key it submits (see verifySubscribeSignature),
+// proving the caller holds that key. Node keys are public, so an unsigned
+// request in compatibility mode cannot change an existing profile or request
+// new areas. RequireSignedSubscribe rejects unsigned requests entirely.
 func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 8*1024) // 8KB limit for subscribe
 
@@ -291,10 +296,19 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if msg := verifySubscribeSignature(r, body, req.NodeID, pubKeyBytes); msg != "" {
-		slog.Warn("v3net hub: rejected subscribe authentication", "claimed_node", req.NodeID, "network", req.Network, "reason", msg)
+	signed, msg := verifySubscribeSignature(r, body, req.NodeID, pubKeyBytes)
+	if msg != "" {
 		http.Error(w, msg, http.StatusUnauthorized)
 		return
+	}
+
+	if !signed {
+		slog.Warn("v3net hub: unsigned subscribe", "claimed_node", req.NodeID, "network", req.Network,
+			"known_node", h.subscribers.Get(req.NodeID, req.Network) != nil, "rejected", h.cfg.RequireSignedSubscribe)
+		if h.cfg.RequireSignedSubscribe {
+			http.Error(w, `{"error":"signed subscribe required: upgrade the leaf and config editor, preserving the existing node key"}`, http.StatusUnauthorized)
+			return
+		}
 	}
 
 	// Node IDs are a 64-bit truncation of the key hash, so check the
@@ -332,7 +346,7 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 
 	// A signed re-subscribe updates the node's name and host. Banned nodes
 	// keep the details they were banned under.
-	if existing != nil &&
+	if existing != nil && signed &&
 		(existing.BBSName != req.BBSName || existing.BBSHost != req.BBSHost) {
 		if _, err := h.subscribers.SetProfileUnlessBanned(req.NodeID, req.Network, req.BBSName, req.BBSHost); err != nil {
 			slog.Error("v3net hub: update subscriber profile", "node", req.NodeID, "error", err)
@@ -341,7 +355,29 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Anyone can build an unsigned request for a known node, so one must not
+	// change an existing node's area subscriptions or file access requests
+	// in its name. It may only apply the areas the node's first registration
+	// asked for: an older leaf on a hub that approves nodes by hand gets
+	// none while pending, and re-sends that same request once approved.
+	// Replaying the node's own request grants nothing new.
 	areaTags := req.AreaTags
+	if existing != nil && !signed {
+		areaTags = nil
+		for _, tag := range req.AreaTags {
+			if slices.Contains(existing.RequestedAreas, tag) {
+				areaTags = append(areaTags, tag)
+			}
+		}
+		if len(areaTags) < len(req.AreaTags) {
+			slog.Warn("v3net hub: ignoring area_tags not in the node's first registration on unsigned re-subscribe",
+				"node", req.NodeID, "network", req.Network)
+		}
+		if len(areaTags) == 0 && len(req.AreaTags) > 0 {
+			writeJSON(w, http.StatusOK, protocol.SubscribeResponse{OK: true, Status: actualStatus})
+			return
+		}
+	}
 
 	// If area_tags are provided, process area subscriptions.
 	// Only process area subscriptions for active network subscribers.
@@ -435,7 +471,8 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
-		// Use the persisted registration name for access requests.
+		// Name the node as the hub has it registered: an unsigned request's
+		// bbs_name was never checked.
 		bbsName := req.BBSName
 		if reg := h.subscribers.Get(req.NodeID, req.Network); reg != nil {
 			bbsName = reg.BBSName
@@ -496,23 +533,28 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	}
 }
 
-// verifySubscribeSignature uses the normal request-signing scheme, verified
-// against the submitted key because the hub may not have it stored yet.
-// An empty message means authentication succeeded.
-func verifySubscribeSignature(r *http.Request, body []byte, nodeID string, pubKey ed25519.PublicKey) string {
+// verifySubscribeSignature checks an optional signature on a subscribe
+// request, made with the same scheme as authenticated endpoints but verified
+// against the submitted key, since the hub may not have one stored yet.
+// It reports whether the request was signed; a non-empty message means a
+// signature was present but invalid.
+func verifySubscribeSignature(r *http.Request, body []byte, nodeID string, pubKey ed25519.PublicKey) (bool, string) {
 	headerNode := r.Header.Get(headerNodeID)
 	sig := r.Header.Get(headerSignature)
+	if headerNode == "" && sig == "" {
+		return false, ""
+	}
 	if headerNode == "" || sig == "" || r.Header.Get("Date") == "" {
-		return `{"error":"signed subscribe required: upgrade the leaf and config editor, preserving the existing node key"}`
+		return false, `{"error":"missing auth headers"}`
 	}
 	if headerNode != nodeID {
-		return `{"error":"node ID header does not match node_id"}`
+		return false, `{"error":"node ID header does not match node_id"}`
 	}
 	if msg := checkRequestDate(r.Header.Get("Date")); msg != "" {
-		return msg
+		return false, msg
 	}
 	if !signatureValid(r, body, pubKey) {
-		return `{"error":"invalid signature"}`
+		return false, `{"error":"invalid signature"}`
 	}
-	return ""
+	return true, ""
 }
