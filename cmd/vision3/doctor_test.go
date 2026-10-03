@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestCheckFTNRuntimeReportsInvalidLinkAddress(t *testing.T) {
@@ -88,13 +90,14 @@ func TestCheckAreasAndConferencesReportsNetworkRoutingProblems(t *testing.T) {
 
 func TestCheckV3NetReportsInvalidLeafSettings(t *testing.T) {
 	configDir := t.TempDir()
+	root := filepath.Dir(configDir)
 	writeDoctorFixture(t, filepath.Join(configDir, "v3net.json"), `{
   "enabled": true,
   "leaves": [{"hubUrl":"not-a-url", "network":"demo-net", "boards":["GENERAL"], "pollInterval":"soon"}]
 }`)
 
 	var checks []doctorCheck
-	checkV3Net(configDir, func(name string, status doctorSeverity, message, fix string) {
+	checkV3Net(configDir, root, func(name string, status doctorSeverity, message, fix string) {
 		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
 	})
 	if !hasDoctorCheck(checks, "V3Net configuration", doctorWarn, "invalid hubUrl") {
@@ -102,6 +105,161 @@ func TestCheckV3NetReportsInvalidLeafSettings(t *testing.T) {
 	}
 	if !hasDoctorCheck(checks, "V3Net configuration", doctorWarn, "invalid pollInterval") {
 		t.Errorf("expected invalid poll interval warning, got %#v", checks)
+	}
+	if !hasDoctorCheck(checks, "V3Net identity", doctorWarn, "keystore is missing") {
+		t.Errorf("expected missing identity warning without creating a replacement key, got %#v", checks)
+	}
+	if _, err := os.Stat(filepath.Join(root, "data", "v3net.key")); !os.IsNotExist(err) {
+		t.Errorf("doctor created a missing V3Net key or stat failed unexpectedly: %v", err)
+	}
+}
+
+func TestCheckMenuFilesReportsDanglingCommandReferences(t *testing.T) {
+	root := t.TempDir()
+	menus := filepath.Join(root, "menus", "v3")
+	configDir := filepath.Join(root, "configs")
+	if err := os.MkdirAll(menus, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeDoctorFixture(t, filepath.Join(menus, "MAIN.CFG"), `[
+  {"KEYS":"A", "CMD":"GOTO:MISSING"},
+  {"KEYS":"B", "CMD":"DOOR:UNKNOWN"},
+  {"KEYS":"C", "CMD":"RUN:NOTAREALRUNNABLE"},
+  {"KEYS":"D", "CMD":"MSGAREA:NO_AREA"}
+]`)
+	writeDoctorFixture(t, filepath.Join(menus, "MAIN.MNU"), `{}`)
+	writeDoctorFixture(t, filepath.Join(configDir, "doors.json"), `{}`)
+	writeDoctorFixture(t, filepath.Join(configDir, "message_areas.json"), `[]`)
+	var checks []doctorCheck
+	checkMenuFiles(menus, configDir, func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	for _, ref := range []string{`menu "MISSING"`, `door "UNKNOWN"`, `RUN target "NOTAREALRUNNABLE"`, `message area "NO_AREA"`} {
+		if !hasDoctorCheck(checks, "menu references", doctorWarn, ref) {
+			t.Errorf("missing reference warning for %s: %#v", ref, checks)
+		}
+	}
+}
+
+func TestCheckBinkdAgreementReportsMismatchedHubAndNodeSettings(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.FTNConfig{
+		SecureInboundPath: filepath.Join(root, "secure"),
+		InboundPath:       filepath.Join(root, "in"),
+		BinkdOutboundPath: filepath.Join(root, "out"),
+		Networks: map[string]config.FTNNetworkConfig{"fsxnet": {
+			OwnAddress: "21:1/100",
+			Links:      []config.FTNLinkConfig{{Address: "21:1/200", PacketPassword: "pkt", SessionPassword: "session", Hostname: "hub.example", Port: 24554}},
+		}},
+	}
+	data := "domain fsxnet " + filepath.Join(root, "out") + " 21\n" +
+		"address 21:1/100@fsxnet\nnode 21:1/200@fsxnet hub.example:24554 wrong-session\n" +
+		"inbound " + filepath.Join(root, "secure") + "\ninbound-nonsecure " + filepath.Join(root, "in") + "\n"
+	var checks []doctorCheck
+	checkBinkdAgreement(data, cfg, root, func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	if !hasDoctorCheck(checks, "binkd.conf agreement", doctorWarn, "session password does not match") {
+		t.Fatalf("expected session-password mismatch: %#v", checks)
+	}
+}
+
+func TestCheckInfoFormsChecksRequiredLoginHookAndTemplates(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "configs")
+	formsDir := filepath.Join(root, "data", "infoforms")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(formsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeDoctorFixture(t, filepath.Join(formsDir, "config.json"), `{"required_forms":"15"}`)
+	writeDoctorFixture(t, filepath.Join(configDir, "login.json"), `[]`)
+	var checks []doctorCheck
+	checkInfoFormSetup(configDir, root, config.ServerConfig{SysOpLevel: 255, CoSysOpLevel: 250}, func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	if !hasDoctorCheck(checks, "InfoForms", doctorWarn, "does not run INFOFORMREQUIRED") {
+		t.Errorf("expected missing login hook warning: %#v", checks)
+	}
+	if !hasDoctorCheck(checks, "InfoForms", doctorWarn, "required form 1 template is missing") {
+		t.Errorf("expected required form template warning: %#v", checks)
+	}
+	if !hasDoctorCheck(checks, "InfoForms", doctorWarn, "required form 5 template is missing") {
+		t.Errorf("expected required form template warning: %#v", checks)
+	}
+}
+
+func TestCheckDefaultSysopPasswordFindsBootstrapCredential(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "data", "users", "users.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeDoctorFixture(t, path, `[{"handle":"Felonius","accessLevel":255,"passwordHash":"`+string(hash)+`"}]`)
+	var checks []doctorCheck
+	checkDefaultSysopPassword(root, config.ServerConfig{SysOpLevel: 255}, func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	if !hasDoctorCheck(checks, "default sysop credentials", doctorWarn, "published default password") {
+		t.Fatalf("expected default-password warning: %#v", checks)
+	}
+}
+
+func TestCheckShippedMenuReferencesResolve(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	var checks []doctorCheck
+	checkMenuFiles(filepath.Join(root, "menus", "v3"), filepath.Join(root, "templates", "configs"), func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	for _, check := range checks {
+		if check.Name == "menu references" && check.Status != doctorOK {
+			t.Errorf("shipped menu reference check is %s: %s", check.Status, check.Message)
+		}
+	}
+}
+
+func TestCheckBadUserNamesRequiresAtLeastOnePattern(t *testing.T) {
+	configDir := t.TempDir()
+	path := filepath.Join(configDir, "badusers.txt")
+	writeDoctorFixture(t, path, "; comments only\n# no rules\n\n")
+	var checks []doctorCheck
+	checkBadUserNames(configDir, func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	if !hasDoctorCheck(checks, "bad user names", doctorWarn, "no blocked names") {
+		t.Fatalf("expected empty-list warning: %#v", checks)
+	}
+	writeDoctorFixture(t, path, "admin*\n")
+	checks = nil
+	checkBadUserNames(configDir, func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	if !hasDoctorCheck(checks, "bad user names", doctorOK, "1 blocked name pattern") {
+		t.Fatalf("expected non-empty list pass: %#v", checks)
+	}
+}
+
+func TestCheckUnknownTopLevelKeysFindsNestedTypos(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ftn.json")
+	writeDoctorFixture(t, path, `{"_comment":"allowed metadata","networks":{"fsxnet":{"own_addres":"21:1/100"}}}`)
+	var checks []doctorCheck
+	checkUnknownTopLevelKeys(path, reflect.TypeOf(config.FTNConfig{}), func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	if !hasDoctorCheck(checks, "configs/ftn.json", doctorWarn, "networks.fsxnet.own_addres") {
+		t.Fatalf("expected nested key typo warning: %#v", checks)
+	}
+	if strings.Contains(checks[0].Message, "_comment") {
+		t.Fatalf("expected _comment to be accepted: %#v", checks)
 	}
 }
 

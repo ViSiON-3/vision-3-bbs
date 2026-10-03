@@ -394,6 +394,8 @@ Download SyncTerm: https://syncterm.bbsdev.net/
 
 Doctor exits with status `0` when checks pass, `1` when there are warnings, and `2` when a check fails. It is read-only by default; `--fix` only creates missing standard data directories, and `--dry-run` previews those changes.
 
+The report also checks FTN/BinkD configuration agreement, QWKnet and V3Net setup, message/file area routing and paths, menu command targets, door programs, InfoForms, signup settings, default sysop credentials, bad-name lists, and secret-file permissions. Writable-path checks use the account running `vision3`; on Windows they are a permission-bit hint because Windows ACLs are not evaluated.
+
 ## Configuration
 
 All configuration files live in `configs/` and are generated from templates in `templates/configs/` during setup. See the [SysOp Documentation](https://vision3bbs.com/sysop/) for full configuration reference.

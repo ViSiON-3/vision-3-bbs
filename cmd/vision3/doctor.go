@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,6 +26,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 )
 
@@ -367,13 +371,16 @@ func inspectBoard(root string) doctorReport {
 
 	checkAreasAndConferences(configDir, root, ftnCfg, add)
 	checkQWKNet(configDir, serverCfg, serverErr, root, add)
-	checkV3Net(configDir, add)
+	checkV3Net(configDir, root, add)
 	checkFTNRuntime(ftnCfg, root, add)
 	if serverErr == nil {
 		checkIPLists(serverCfg, root, add)
+		checkUserAndSecurity(configDir, root, serverCfg, add)
+		checkBadUserNames(configDir, add)
 	}
-	checkMenuFiles(filepath.Join(root, "menus", "v3"), add)
+	checkMenuFiles(filepath.Join(root, "menus", "v3"), configDir, add)
 	checkDoors(configDir, root, add)
+	checkWritablePaths(root, add)
 	return report
 }
 
@@ -419,31 +426,158 @@ func checkFTNRuntime(cfg config.FTNConfig, root string, add func(string, doctorS
 			}
 		}
 	}
-	if !cfg.Binkd.Enabled {
-		return
-	}
-	binkdPath := cfg.Binkd.BinaryPath
-	if !filepath.IsAbs(binkdPath) {
-		binkdPath = filepath.Join(root, binkdPath)
-	}
-	info, err := os.Stat(binkdPath)
-	if err != nil {
-		add("binkd binary", doctorWarn, fmt.Sprintf("not found at %s", binkdPath), "Install binkd or correct binkd.binary_path in configs/ftn.json.")
-	} else if !info.Mode().IsRegular() {
-		add("binkd binary", doctorWarn, fmt.Sprintf("%s is not a regular file", binkdPath), "Point binkd.binary_path at the binkd executable.")
-	} else if runtime.GOOS != "windows" && info.Mode()&0111 == 0 {
-		add("binkd binary", doctorWarn, fmt.Sprintf("%s is not executable", binkdPath), "Make the binkd binary executable or correct binkd.binary_path.")
-	} else {
-		add("binkd binary", doctorOK, binkdPath, "")
+	if cfg.Binkd.Enabled {
+		binkdPath := cfg.Binkd.BinaryPath
+		if !filepath.IsAbs(binkdPath) {
+			binkdPath = filepath.Join(root, binkdPath)
+		}
+		info, err := os.Stat(binkdPath)
+		if err != nil {
+			add("binkd binary", doctorWarn, fmt.Sprintf("not found at %s", binkdPath), "Install binkd or correct binkd.binary_path in configs/ftn.json.")
+		} else if !info.Mode().IsRegular() {
+			add("binkd binary", doctorWarn, fmt.Sprintf("%s is not a regular file", binkdPath), "Point binkd.binary_path at the binkd executable.")
+		} else if runtime.GOOS != "windows" && info.Mode()&0111 == 0 {
+			add("binkd binary", doctorWarn, fmt.Sprintf("%s is not executable", binkdPath), "Make the binkd binary executable or correct binkd.binary_path.")
+		} else {
+			add("binkd binary", doctorOK, binkdPath, "")
+		}
 	}
 	confPath := filepath.Join(root, "data", "ftn", "binkd.conf")
 	data, err := os.ReadFile(confPath)
 	if err != nil {
-		add("binkd.conf", doctorWarn, fmt.Sprintf("cannot read %s: %v", confPath, err), "Run the FTN Setup Wizard or restore data/ftn/binkd.conf.")
+		if len(cfg.Networks) > 0 || cfg.Binkd.Enabled {
+			add("binkd.conf", doctorWarn, fmt.Sprintf("cannot read %s: %v", confPath, err), "Run the FTN Setup Wizard or restore data/ftn/binkd.conf.")
+		}
 	} else if ftn.HasPlaceholders(string(data), root) {
 		add("binkd.conf", doctorWarn, "still contains template placeholders", "Run the FTN Setup Wizard and fill in the network's identity and link settings.")
 	} else {
 		add("binkd.conf", doctorOK, "contains no template placeholders", "")
+		checkBinkdAgreement(string(data), cfg, root, add)
+	}
+}
+
+func checkBinkdAgreement(contents string, cfg config.FTNConfig, root string, add func(string, doctorSeverity, string, string)) {
+	addresses, nodes, domains := map[string]string{}, map[string]string{}, map[string]string{}
+	inbound, insecureInbound := "", ""
+	for _, line := range strings.Split(contents, "\n") {
+		line = strings.TrimSpace(strings.SplitN(line, "#", 2)[0])
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		switch strings.ToLower(fields[0]) {
+		case "address":
+			if len(fields) >= 2 {
+				addresses[strings.ToLower(fields[1])] = fields[1]
+			}
+		case "node":
+			if len(fields) >= 2 {
+				nodes[strings.ToLower(fields[1])] = strings.Join(fields[2:], " ")
+			}
+		case "domain":
+			if len(fields) >= 3 {
+				domains[strings.ToLower(fields[1])] = fields[2]
+			}
+		case "inbound":
+			inbound = fields[1]
+		case "inbound-nonsecure":
+			insecureInbound = fields[1]
+		}
+	}
+	issues := 0
+	expectedAddresses, expectedNodes, expectedDomains := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for network, netCfg := range cfg.Networks {
+		if addr := strings.TrimSpace(netCfg.OwnAddress); addr != "" {
+			key := strings.ToLower(addr + "@" + network)
+			expectedAddresses[key] = true
+			expectedDomains[strings.ToLower(network)] = true
+			if _, ok := addresses[key]; !ok {
+				add("binkd.conf agreement", doctorWarn, fmt.Sprintf("network %q own_address %q is missing from binkd.conf address directives", network, addr), "Run the FTN setup wizard to synchronize data/ftn/binkd.conf.")
+				issues++
+			}
+		}
+		if expected := cfg.BinkdOutboundFor(network); expected != "" {
+			if got, ok := domains[strings.ToLower(network)]; !ok || filepath.Clean(resolveFromRoot(root, got)) != filepath.Clean(expected) {
+				add("binkd.conf agreement", doctorWarn, fmt.Sprintf("network %q domain outbound path does not match configs/ftn.json (binkd.conf: %q, config: %q)", network, got, expected), "Run the FTN setup wizard to synchronize domain outbound paths.")
+				issues++
+			}
+		}
+		for _, link := range netCfg.Links {
+			if strings.TrimSpace(link.Address) == "" {
+				continue
+			}
+			if strings.TrimSpace(link.PacketPassword) == "" {
+				add("FTN packet password", doctorWarn, fmt.Sprintf("network %q link %q has no packet password", network, link.Address), "Confirm the hub permits passwordless packets, or configure packet_password from the hub operator.")
+				issues++
+			}
+			key := strings.ToLower(strings.TrimSpace(link.Address) + "@" + network)
+			if link.HostPort() != "" {
+				expectedNodes[key] = true
+			}
+			args, ok := nodes[key]
+			if link.HostPort() == "" {
+				continue
+			}
+			if !ok {
+				add("binkd.conf agreement", doctorWarn, fmt.Sprintf("network %q link %q has no matching node directive", network, link.Address), "Run the FTN setup wizard to synchronize link nodes.")
+				issues++
+				continue
+			}
+			fields := strings.Fields(args)
+			if link.Hostname != "" && len(fields) >= 2 && !strings.EqualFold(fields[len(fields)-2], link.HostPort()) {
+				// Node syntax may include an address-family option before host:port.
+				add("binkd.conf agreement", doctorWarn, fmt.Sprintf("link %q node host/port %q does not match configs/ftn.json %q", link.Address, fields[len(fields)-2], link.HostPort()), "Run the FTN setup wizard to synchronize BinkP host settings.")
+				issues++
+			}
+			wantPassword := link.SessionPassword
+			if wantPassword == "" {
+				wantPassword = "-"
+			}
+			if len(fields) == 0 || fields[len(fields)-1] != wantPassword {
+				add("binkd.conf agreement", doctorWarn, fmt.Sprintf("link %q node session password does not match configs/ftn.json", link.Address), "Synchronize the BinkP session password in the FTN setup wizard; the packet password is separate.")
+				issues++
+			}
+		}
+	}
+	for key := range addresses {
+		if !expectedAddresses[key] {
+			add("binkd.conf agreement", doctorWarn, fmt.Sprintf("binkd.conf address %q has no matching own_address in configs/ftn.json", addresses[key]), "Remove the stale address or restore the matching FTN network configuration.")
+			issues++
+		}
+	}
+	for key := range nodes {
+		if !expectedNodes[key] {
+			add("binkd.conf agreement", doctorWarn, fmt.Sprintf("binkd.conf node %q has no matching link in configs/ftn.json", key), "Remove the stale node directive or restore the matching link configuration.")
+			issues++
+		}
+	}
+	for key := range domains {
+		if !expectedDomains[key] {
+			add("binkd.conf agreement", doctorWarn, fmt.Sprintf("binkd.conf domain %q has no matching FTN network", key), "Remove the stale domain or restore the matching FTN network configuration.")
+			issues++
+		}
+	}
+	wantSecure := filepath.Join(root, "data", "ftn", "secure_in")
+	if cfg.SecureInboundPath != "" {
+		wantSecure = cfg.SecureInboundPath
+	}
+	wantInbound := cfg.InboundPath
+	if got := strings.TrimSpace(inbound); got == "" {
+		add("binkd.conf agreement", doctorWarn, "binkd.conf is missing the inbound directive", "Run the FTN setup wizard to restore inbound paths.")
+		issues++
+	} else if filepath.Clean(resolveFromRoot(root, got)) != filepath.Clean(wantSecure) {
+		add("binkd.conf agreement", doctorWarn, fmt.Sprintf("inbound path %q does not match configured secure inbound path %q", got, wantSecure), "Run the FTN setup wizard to synchronize inbound paths.")
+		issues++
+	}
+	if wantInbound != "" && strings.TrimSpace(insecureInbound) == "" {
+		add("binkd.conf agreement", doctorWarn, "binkd.conf is missing the inbound-nonsecure directive", "Run the FTN setup wizard to restore inbound paths.")
+		issues++
+	} else if got := strings.TrimSpace(insecureInbound); got != "" && wantInbound != "" && filepath.Clean(resolveFromRoot(root, got)) != filepath.Clean(wantInbound) {
+		add("binkd.conf agreement", doctorWarn, fmt.Sprintf("inbound-nonsecure path %q does not match configured inbound path %q", got, wantInbound), "Run the FTN setup wizard to synchronize inbound paths.")
+		issues++
+	}
+	if issues == 0 {
+		add("binkd.conf agreement", doctorOK, "addresses, links, passwords, and configured paths agree", "")
 	}
 }
 
@@ -488,7 +622,7 @@ func checkIPLists(cfg config.ServerConfig, root string, add func(string, doctorS
 	if info, err := os.Stat(sshPath); err == nil && info.Mode().Perm()&0o077 != 0 {
 		add("SSH host key permissions", doctorWarn, fmt.Sprintf("%s is accessible by group or other users (%04o)", sshPath, info.Mode().Perm()), "Restrict the host key to its owner, for example chmod 600 configs/ssh_host_rsa_key.")
 	}
-	for _, file := range []string{"ftn.json", "doors.json"} {
+	for _, file := range []string{"ftn.json", "doors.json", "qwknet.json"} {
 		path := filepath.Join(root, "configs", file)
 		if info, err := os.Stat(path); err == nil && info.Mode().Perm()&0o004 != 0 {
 			add(filepath.ToSlash(filepath.Join("configs", file))+" permissions", doctorWarn, "file is readable by all local users and may contain network credentials", "Restrict file permissions to the BBS operator, for example chmod 600 "+filepath.ToSlash(filepath.Join("configs", file))+".")
@@ -496,8 +630,156 @@ func checkIPLists(cfg config.ServerConfig, root string, add func(string, doctorS
 	}
 }
 
-func checkMenuFiles(menuRoot string, add func(string, doctorSeverity, string, string)) {
+func checkUserAndSecurity(configDir, root string, cfg config.ServerConfig, add func(string, doctorSeverity, string, string)) {
+	if cfg.SysOpLevel <= cfg.CoSysOpLevel {
+		add("ACS access levels", doctorWarn, fmt.Sprintf("sysOpLevel %d should be higher than coSysOpLevel %d; SYSOP and COSYSOP will overlap", cfg.SysOpLevel, cfg.CoSysOpLevel), "Set sysOpLevel above coSysOpLevel in configs/config.json.")
+	} else {
+		add("ACS access levels", doctorOK, fmt.Sprintf("SYSOP uses level %d and COSYSOP uses level %d", cfg.SysOpLevel, cfg.CoSysOpLevel), "")
+	}
+	if cfg.AllowNewUsers {
+		add("new user settings", doctorInfo, fmt.Sprintf("signups are enabled at level %d; regular users are level %d; logon threshold is %d; auto-validation is %t", cfg.NewUserLevel, cfg.RegularUserLevel, cfg.LogonLevel, cfg.AutoValidateNewUsers), "Confirm these levels and the validation policy match your signup workflow.")
+		if cfg.NewUserLevel < cfg.LogonLevel {
+			add("new user settings", doctorWarn, fmt.Sprintf("new users start at level %d, below the logon threshold %d", cfg.NewUserLevel, cfg.LogonLevel), "Raise newUserLevel or lower logonLevel if new signups should be able to log in immediately.")
+		}
+	} else {
+		add("new user settings", doctorInfo, "new signups are disabled", "Enable allowNewUsers when you are ready to accept registrations.")
+	}
+	checkInfoFormSetup(configDir, root, cfg, add)
+	checkDefaultSysopPassword(root, cfg, add)
+}
+
+func checkBadUserNames(configDir string, add func(string, doctorSeverity, string, string)) {
+	path := filepath.Join(configDir, "badusers.txt")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		add("bad user names", doctorWarn, fmt.Sprintf("configs/badusers.txt is missing or unreadable: %v", err), "Restore configs/badusers.txt; the companion signup check uses it to block reserved handles.")
+		return
+	}
 	count := 0
+	for _, line := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		count++
+	}
+	if count == 0 {
+		add("bad user names", doctorWarn, "configs/badusers.txt has no blocked names", "Add at least one reserved handle pattern, one per line.")
+		return
+	}
+	add("bad user names", doctorOK, fmt.Sprintf("configs/badusers.txt contains %d blocked name pattern(s)", count), "")
+}
+
+func checkInfoFormSetup(configDir, root string, cfg config.ServerConfig, add func(string, doctorSeverity, string, string)) {
+	path := filepath.Join(root, "data", "infoforms", "config.json")
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		if cfg.UseNUV && cfg.NUVForm > 0 {
+			add("InfoForms", doctorWarn, fmt.Sprintf("NUV displays form %d but %s is missing", cfg.NUVForm, filepath.ToSlash(filepath.Join("data", "infoforms", "templates", fmt.Sprintf("form_%d.txt", cfg.NUVForm)))), "Restore that InfoForm template or set nuvForm to 0 in configs/config.json.")
+		}
+		return
+	}
+	if err != nil {
+		add("InfoForms", doctorWarn, "cannot read data/infoforms/config.json: "+err.Error(), "Check the file permissions and restore the InfoForms configuration if needed.")
+		return
+	}
+	var formCfg menu.InfoFormConfig
+	if err := json.Unmarshal(data, &formCfg); err != nil {
+		add("InfoForms", doctorFail, "data/infoforms/config.json: "+jsonErrorLocation(data, err), "Fix the InfoForms configuration JSON.")
+		return
+	}
+	requiredByLogin := false
+	sequence, loginErr := config.LoadLoginSequence(configDir)
+	if loginErr == nil {
+		for _, item := range sequence {
+			if strings.EqualFold(item.Command, "INFOFORMREQUIRED") {
+				requiredByLogin = true
+			}
+		}
+	}
+	issues := 0
+	forms := strings.TrimSpace(formCfg.RequiredForms)
+	if forms != "" && !requiredByLogin {
+		add("InfoForms", doctorWarn, "required_forms is set but login.json does not run INFOFORMREQUIRED", "Add INFOFORMREQUIRED to configs/login.json if users must complete these forms during login.")
+		issues++
+	}
+	checked := map[int]bool{}
+	for _, r := range forms {
+		if r < '1' || r > '5' {
+			add("InfoForms", doctorWarn, fmt.Sprintf("required_forms contains invalid form number %q", r), "Use only form numbers 1 through 5 in data/infoforms/config.json.")
+			issues++
+			continue
+		}
+		n := int(r - '0')
+		if checked[n] {
+			continue
+		}
+		checked[n] = true
+		template := filepath.Join(root, "data", "infoforms", "templates", fmt.Sprintf("form_%d.txt", n))
+		if info, statErr := os.Stat(template); statErr != nil || !info.Mode().IsRegular() {
+			add("InfoForms", doctorWarn, fmt.Sprintf("required form %d template is missing: %s", n, template), "Restore or create the required form template.")
+			issues++
+		}
+	}
+	if cfg.UseNUV && cfg.NUVForm > 0 {
+		template := filepath.Join(root, "data", "infoforms", "templates", fmt.Sprintf("form_%d.txt", cfg.NUVForm))
+		if cfg.NUVForm > 5 {
+			add("InfoForms", doctorWarn, fmt.Sprintf("nuvForm %d is outside the supported range 1–5", cfg.NUVForm), "Set nuvForm to a form number from 1 through 5, or 0 to disable.")
+			issues++
+		} else if _, statErr := os.Stat(template); statErr != nil {
+			add("InfoForms", doctorWarn, fmt.Sprintf("NUV form template is missing: %s", template), "Restore the selected InfoForm template or disable NUV form display.")
+			issues++
+		}
+	}
+	if issues == 0 && (forms != "" || (cfg.UseNUV && cfg.NUVForm > 0)) {
+		add("InfoForms", doctorOK, "configured required and NUV forms have templates", "")
+	}
+}
+
+func checkDefaultSysopPassword(root string, cfg config.ServerConfig, add func(string, doctorSeverity, string, string)) {
+	path := filepath.Join(root, "data", "users", "users.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var users []struct {
+		Handle       string `json:"handle"`
+		AccessLevel  int    `json:"accessLevel"`
+		PasswordHash string `json:"passwordHash"`
+	}
+	if json.Unmarshal(data, &users) != nil {
+		return
+	}
+	for _, u := range users {
+		if u.AccessLevel < cfg.SysOpLevel || !strings.EqualFold(strings.TrimSpace(u.Handle), "Felonius") {
+			continue
+		}
+		if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte("password")) == nil {
+			add("default sysop credentials", doctorWarn, "Felonius still uses the published default password", "Log in and change the password, or update the account with ./ue.")
+			return
+		}
+	}
+	add("default sysop credentials", doctorOK, "no published default sysop password detected", "")
+}
+
+func checkWritablePaths(root string, add func(string, doctorSeverity, string, string)) {
+	for _, rel := range []string{"data", "data/users", "data/logs", "data/msgbases", "data/files"} {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		info, err := os.Stat(path)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		if !doctorPathWritable(info) {
+			add("writable paths", doctorWarn, fmt.Sprintf("%s does not appear writable by the account running the doctor", rel), "Grant the BBS service account write and execute access to this directory.")
+		}
+	}
+}
+
+func checkMenuFiles(menuRoot, configDir string, add func(string, doctorSeverity, string, string)) {
+	count := 0
+	menuCFGs, menuMNU := make(map[string]bool), make(map[string]bool)
+	type menuCommand struct{ file, command string }
+	var menuCommands []menuCommand
 	err := filepath.WalkDir(menuRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -506,6 +788,14 @@ func checkMenuFiles(menuRoot string, add func(string, doctorSeverity, string, st
 			return nil
 		}
 		ext := strings.ToUpper(filepath.Ext(entry.Name()))
+		if ext == ".CFG" || ext == ".MNU" {
+			key := strings.ToUpper(strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name())))
+			if ext == ".CFG" {
+				menuCFGs[key] = true
+			} else {
+				menuMNU[key] = true
+			}
+		}
 		if ext != ".CFG" && ext != ".MNU" {
 			return nil
 		}
@@ -521,8 +811,13 @@ func checkMenuFiles(menuRoot string, add func(string, doctorSeverity, string, st
 		switch ext {
 		case ".CFG":
 			if len(data) != 0 {
-				var commands []menu.CommandRecord
-				parseErr = json.Unmarshal(data, &commands)
+				var records []menu.CommandRecord
+				parseErr = json.Unmarshal(data, &records)
+				if parseErr == nil {
+					for _, command := range records {
+						menuCommands = append(menuCommands, menuCommand{file: name, command: command.Command})
+					}
+				}
 			}
 		case ".MNU":
 			var menuRecord menu.MenuRecord
@@ -540,6 +835,73 @@ func checkMenuFiles(menuRoot string, add func(string, doctorSeverity, string, st
 	} else if count == 0 {
 		add("menus/v3", doctorWarn, "no .CFG or .MNU files found", "Restore the menu set or run setup.")
 	}
+	areas := loadDoctorAreaTags(configDir)
+	doors, _ := config.LoadDoors(filepath.Join(configDir, "doors.json"))
+	issues := 0
+	for _, item := range menuCommands {
+		parts := strings.SplitN(strings.TrimSpace(item.command), ":", 2)
+		if len(parts) != 2 {
+			action := strings.ToUpper(strings.TrimSpace(item.command))
+			switch action {
+			case "LOGOFF", "LOGIN", "NEWUSER", "CHECKACCESS", "DISCONNECT", "QUIT":
+			default:
+				add("menu references", doctorWarn, fmt.Sprintf("%s references unknown command action %q", item.file, item.command), "Correct the command to a supported ViSiON/3 menu action.")
+				issues++
+			}
+			continue
+		}
+		action, target := strings.ToUpper(strings.TrimSpace(parts[0])), strings.TrimSpace(parts[1])
+		missing := ""
+		switch action {
+		case "GOTO":
+			if !menuCFGs[strings.ToUpper(target)] || !menuMNU[strings.ToUpper(target)] {
+				missing = fmt.Sprintf("menu %q", target)
+			}
+		case "DOOR":
+			doorName := strings.Fields(target)
+			if len(doorName) == 0 {
+				missing = "door with an empty name"
+			} else if _, ok := doors[strings.ToUpper(doorName[0])]; !ok {
+				missing = fmt.Sprintf("door %q", doorName[0])
+			}
+		case "RUN":
+			runTarget := strings.Fields(target)
+			if len(runTarget) == 0 {
+				missing = "RUN target with an empty name"
+			} else if !menu.IsKnownRunnableTarget(runTarget[0]) {
+				missing = fmt.Sprintf("RUN target %q", runTarget[0])
+			}
+		case "MSGAREA":
+			if !areas[strings.ToLower(target)] {
+				missing = fmt.Sprintf("message area %q", target)
+			}
+		default:
+			missing = fmt.Sprintf("command action %q", action)
+		}
+		if missing != "" {
+			add("menu references", doctorWarn, fmt.Sprintf("%s references missing %s", item.file, missing), "Correct the command or add the referenced menu, door, runnable, or message area.")
+			issues++
+		}
+	}
+	if count > 0 && issues == 0 {
+		add("menu references", doctorOK, "GOTO, DOOR, RUN, and MSGAREA targets resolve", "")
+	}
+}
+
+func loadDoctorAreaTags(configDir string) map[string]bool {
+	data, err := os.ReadFile(filepath.Join(configDir, "message_areas.json"))
+	if err != nil {
+		return nil
+	}
+	var areas []message.MessageArea
+	if json.Unmarshal(data, &areas) != nil {
+		return nil
+	}
+	tags := make(map[string]bool, len(areas))
+	for _, area := range areas {
+		tags[strings.ToLower(strings.TrimSpace(area.Tag))] = true
+	}
+	return tags
 }
 
 func checkDoors(configDir, root string, add func(string, doctorSeverity, string, string)) {
@@ -736,12 +1098,26 @@ func checkAreasAndConferences(configDir, root string, ftnCfg config.FTNConfig, a
 			if info, statErr := os.Stat(path); statErr != nil {
 				if errors.Is(statErr, os.ErrNotExist) {
 					add("message bases", doctorInfo, fmt.Sprintf("area %q base directory is not created yet: %s", area.Tag, path), "The message base is created when the area is first opened; check this path if messages fail to load.")
+					parent := path
+					for parent != filepath.Dir(parent) {
+						parent = filepath.Dir(parent)
+						if parentInfo, parentErr := os.Stat(parent); parentErr == nil && parentInfo.IsDir() {
+							if !doctorPathWritable(parentInfo) {
+								add("message bases", doctorWarn, fmt.Sprintf("area %q base cannot be created under non-writable directory %s", area.Tag, parent), "Grant the BBS service account write and execute access to the parent directory.")
+								issues++
+							}
+							break
+						}
+					}
 				} else {
 					add("message bases", doctorWarn, fmt.Sprintf("cannot access area %q base path %s: %v", area.Tag, path, statErr), "Check the path and filesystem permissions for the BBS process.")
 					issues++
 				}
 			} else if !info.IsDir() {
 				add("message bases", doctorWarn, fmt.Sprintf("area %q base path is not a directory: %s", area.Tag, path), "Move or rename the conflicting file and let ViSiON/3 create the message base directory.")
+				issues++
+			} else if !doctorPathWritable(info) {
+				add("message bases", doctorWarn, fmt.Sprintf("area %q base directory is not writable by the account running the doctor", area.Tag), "Grant the BBS service account write and execute access to this directory.")
 				issues++
 			}
 		}
@@ -889,7 +1265,7 @@ func lookupKey(networks map[string]config.QWKNetworkConfig, name string) string 
 	return name
 }
 
-func checkV3Net(configDir string, add func(string, doctorSeverity, string, string)) {
+func checkV3Net(configDir, root string, add func(string, doctorSeverity, string, string)) {
 	cfg, err := config.LoadV3NetConfig(configDir)
 	if err != nil {
 		add("V3Net configuration", doctorFail, "configs/v3net.json: "+err.Error(), "Fix configs/v3net.json.")
@@ -899,6 +1275,36 @@ func checkV3Net(configDir string, add func(string, doctorSeverity, string, strin
 		return
 	}
 	issues := 0
+	keyPath := strings.TrimSpace(cfg.KeystorePath)
+	if keyPath == "" {
+		keyPath = filepath.Join("data", "v3net.key")
+	}
+	keyPath = resolveFromRoot(root, keyPath)
+	keyData, keyErr := os.ReadFile(keyPath)
+	if keyErr != nil {
+		add("V3Net identity", doctorWarn, fmt.Sprintf("keystore is missing or unreadable at %s: %v", keyPath, keyErr), "Configure or restore the V3Net identity keystore; the doctor will not generate a replacement key.")
+		issues++
+	} else {
+		var key struct {
+			Private string `json:"privkey_b64"`
+			Public  string `json:"pubkey_b64"`
+		}
+		parseErr := json.Unmarshal(keyData, &key)
+		private, privateErr := base64.StdEncoding.DecodeString(key.Private)
+		public, publicErr := base64.StdEncoding.DecodeString(key.Public)
+		if parseErr != nil || privateErr != nil || publicErr != nil || len(private) != ed25519.PrivateKeySize || len(public) != ed25519.PublicKeySize || !bytes.Equal(ed25519.PrivateKey(private).Public().(ed25519.PublicKey), ed25519.PublicKey(public)) {
+			add("V3Net identity", doctorWarn, "keystore is not a valid Ed25519 identity keypair", "Restore the matching keystore backup; generating a new identity changes this board's V3Net identity.")
+			issues++
+		} else {
+			add("V3Net identity", doctorOK, "Ed25519 keypair is present and structurally valid", "")
+			if runtime.GOOS != "windows" {
+				if info, statErr := os.Stat(keyPath); statErr == nil && info.Mode().Perm()&0o077 != 0 {
+					add("V3Net keystore permissions", doctorWarn, fmt.Sprintf("private key is accessible by group or other users (%04o)", info.Mode().Perm()), "Restrict the keystore to the BBS operator, for example chmod 600 "+keyPath+".")
+					issues++
+				}
+			}
+		}
+	}
 	seen := map[string]bool{}
 	for _, network := range cfg.Hub.Networks {
 		key := strings.ToLower(strings.TrimSpace(network.Name))
@@ -978,28 +1384,91 @@ func checkUnknownTopLevelKeys(path string, typ reflect.Type, add func(string, do
 	if err != nil {
 		return
 	}
-	var values map[string]json.RawMessage
-	if err := json.Unmarshal(data, &values); err != nil || values == nil {
-		return
-	}
-	known := make(map[string]bool)
-	for i := 0; i < typ.NumField(); i++ {
-		name := strings.Split(typ.Field(i).Tag.Get("json"), ",")[0]
-		if name != "" && name != "-" {
-			known[name] = true
-		}
-	}
-	unknown := make([]string, 0)
-	for key := range values {
-		if !known[key] && key != "_comment" {
-			unknown = append(unknown, key)
-		}
-	}
+	var value json.RawMessage = data
+	unknown := collectUnknownJSONKeys(value, typ, "")
 	if len(unknown) == 0 {
 		return
 	}
 	sort.Strings(unknown)
-	add(filepath.ToSlash(filepath.Join("configs", filepath.Base(path))), doctorWarn, "unknown top-level key(s): "+strings.Join(unknown, ", "), "Check for misspelled or obsolete setting names.")
+	add(filepath.ToSlash(filepath.Join("configs", filepath.Base(path))), doctorWarn, "unknown key(s): "+strings.Join(unknown, ", "), "Check for misspelled or obsolete setting names.")
+}
+
+func collectUnknownJSONKeys(raw json.RawMessage, typ reflect.Type, prefix string) []string {
+	if len(raw) == 0 || typ == nil || typ == reflect.TypeOf(json.RawMessage{}) {
+		return nil
+	}
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	switch typ.Kind() {
+	case reflect.Struct:
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) != nil || fields == nil {
+			return nil
+		}
+		known := make(map[string]reflect.Type, typ.NumField())
+		for i := 0; i < typ.NumField(); i++ {
+			field := typ.Field(i)
+			name := strings.Split(field.Tag.Get("json"), ",")[0]
+			if name == "" {
+				name = field.Name
+			}
+			if name != "-" {
+				known[name] = field.Type
+			}
+		}
+		keys := make([]string, 0, len(fields))
+		for key := range fields {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		var unknown []string
+		for _, key := range keys {
+			if key == "_comment" {
+				continue
+			}
+			fieldType, ok := known[key]
+			path := key
+			if prefix != "" {
+				path = prefix + "." + key
+			}
+			if !ok {
+				unknown = append(unknown, path)
+				continue
+			}
+			unknown = append(unknown, collectUnknownJSONKeys(fields[key], fieldType, path)...)
+		}
+		return unknown
+	case reflect.Slice, reflect.Array:
+		if typ.Elem().Kind() == reflect.Uint8 {
+			return nil
+		}
+		var values []json.RawMessage
+		if json.Unmarshal(raw, &values) != nil {
+			return nil
+		}
+		var unknown []string
+		for i, value := range values {
+			path := fmt.Sprintf("%s[%d]", prefix, i)
+			unknown = append(unknown, collectUnknownJSONKeys(value, typ.Elem(), path)...)
+		}
+		return unknown
+	case reflect.Map:
+		var values map[string]json.RawMessage
+		if json.Unmarshal(raw, &values) != nil {
+			return nil
+		}
+		var unknown []string
+		for key, value := range values {
+			path := key
+			if prefix != "" {
+				path = prefix + "." + key
+			}
+			unknown = append(unknown, collectUnknownJSONKeys(value, typ.Elem(), path)...)
+		}
+		return unknown
+	}
+	return nil
 }
 
 func jsonLocationError(data []byte) string {
