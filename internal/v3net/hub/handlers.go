@@ -262,8 +262,8 @@ func (h *Hub) handlePresence(w http.ResponseWriter, r *http.Request) {
 // does not use authMiddleware: the hub may not know the node yet. A request
 // may instead be signed with the key it submits (see verifySubscribeSignature),
 // proving the caller holds that key. Node keys are public, so an unsigned
-// request can only register a new node; changing an existing registration
-// (its BBS name and host, or its area subscriptions) requires a signature.
+// request in compatibility mode cannot change an existing profile or request
+// new areas. RequireSignedSubscribe rejects unsigned requests entirely.
 func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 8*1024) // 8KB limit for subscribe
 
@@ -300,6 +300,15 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	if msg != "" {
 		http.Error(w, msg, http.StatusUnauthorized)
 		return
+	}
+
+	if !signed {
+		slog.Warn("v3net hub: unsigned subscribe", "claimed_node", req.NodeID, "network", req.Network,
+			"known_node", h.subscribers.Get(req.NodeID, req.Network) != nil, "rejected", h.cfg.RequireSignedSubscribe)
+		if h.cfg.RequireSignedSubscribe {
+			http.Error(w, `{"error":"signed subscribe required: upgrade the leaf and config editor, preserving the existing node key"}`, http.StatusUnauthorized)
+			return
+		}
 	}
 
 	// Node IDs are a 64-bit truncation of the key hash, so check the

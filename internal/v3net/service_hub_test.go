@@ -3,9 +3,12 @@ package v3net
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -39,14 +42,15 @@ func newHubService(t *testing.T, port int) (*Service, *httptest.Server) {
 		KeystorePath: filepath.Join(dir, "v3net.key"),
 		DedupDBPath:  filepath.Join(dir, "dedup.sqlite"),
 		Hub: config.V3NetHubConfig{
-			Enabled:          true,
-			Host:             "127.0.0.1",
-			Port:             port,
-			DataDir:          filepath.Join(dir, "hub"),
-			AutoApprove:      true,
-			AutoApproveAreas: &reviewAreas,
-			Networks:         []config.V3NetHubNetwork{{Name: "testnet"}},
-			InitialAreas:     []config.V3NetHubArea{{Tag: "gen.general", Name: "General"}},
+			Enabled:                true,
+			Host:                   "127.0.0.1",
+			Port:                   port,
+			DataDir:                filepath.Join(dir, "hub"),
+			AutoApprove:            true,
+			RequireSignedSubscribe: true,
+			AutoApproveAreas:       &reviewAreas,
+			Networks:               []config.V3NetHubNetwork{{Name: "testnet"}},
+			InitialAreas:           []config.V3NetHubArea{{Tag: "gen.general", Name: "General"}},
 		},
 	})
 	if err != nil {
@@ -86,7 +90,20 @@ func newRemoteNode(t *testing.T, hubURL, bbsName string, onEvent func(protocol.E
 		Network: "testnet", NodeID: ks.NodeID(), PubKeyB64: ks.PubKeyBase64(),
 		BBSName: bbsName, BBSHost: bbsName + ".example.net", AreaTags: areaTags,
 	})
-	resp, err := http.Post(hubURL+"/v3net/v1/subscribe", "application/json", bytes.NewReader(body))
+	req, err := http.NewRequest("POST", hubURL+"/v3net/v1/subscribe", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	date := time.Now().UTC().Format(http.TimeFormat)
+	hash := sha256.Sum256(body)
+	req.Header.Set("Date", date)
+	req.Header.Set("X-V3Net-Node-ID", ks.NodeID())
+	sig, err := ks.Sign("POST", "/v3net/v1/subscribe", date, hex.EncodeToString(hash[:]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-V3Net-Signature", sig)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("subscribe %s: %v", bbsName, err)
 	}
@@ -808,5 +825,97 @@ func TestSyncAreas_InfersConference(t *testing.T) {
 		if area.ConferenceID != w.conf || area.Name != w.name {
 			t.Errorf("%s: conference %d, name %q; want %d, %q", tag, area.ConferenceID, area.Name, w.conf, w.name)
 		}
+	}
+}
+
+// Old JSON configs remain compatible; enabling enforcement reaches the actual
+// HTTP handler, and a bad signature never falls back to unsigned registration.
+func TestHubSubscribeEnforcementConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name, hubJSON string
+		want          int
+	}{
+		{"existing config", `{"enabled":true,"autoApprove":true}`, http.StatusOK},
+		{"explicit compatibility", `{"enabled":true,"autoApprove":true,"requireSignedSubscribe":false}`, http.StatusOK},
+		{"strict", `{"enabled":true,"autoApprove":true,"requireSignedSubscribe":true}`, http.StatusUnauthorized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			var hubCfg config.V3NetHubConfig
+			if err := json.Unmarshal([]byte(tc.hubJSON), &hubCfg); err != nil {
+				t.Fatal(err)
+			}
+			hubCfg.DataDir = filepath.Join(dir, "hub")
+			hubCfg.Networks = []config.V3NetHubNetwork{{Name: "testnet"}}
+			// Config editor saves must preserve the selected policy.
+			saved, err := json.Marshal(hubCfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(saved, &hubCfg); err != nil {
+				t.Fatal(err)
+			}
+			svc, err := New(config.V3NetConfig{Enabled: true, KeystorePath: filepath.Join(dir, "hub.key"), DedupDBPath: filepath.Join(dir, "dedup.sqlite"), Hub: hubCfg})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer svc.Close()
+			ts := httptest.NewServer(svc.Hub().Mux())
+			defer ts.Close()
+			ks, _, err := keystore.Load(filepath.Join(dir, "leaf.key"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, err := json.Marshal(protocol.SubscribeRequest{Network: "testnet", NodeID: ks.NodeID(), PubKeyB64: ks.PubKeyBase64(), BBSName: "Legacy"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// First registration and a restart/re-subscribe both work by default.
+			for i := 0; i < 2; i++ {
+				resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", bytes.NewReader(body))
+				if err != nil {
+					t.Fatal(err)
+				}
+				resp.Body.Close()
+				if resp.StatusCode != tc.want {
+					t.Fatalf("unsigned attempt %d: %d, want %d", i, resp.StatusCode, tc.want)
+				}
+			}
+			req, err := http.NewRequest("POST", ts.URL+"/v3net/v1/subscribe", bytes.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+			req.Header.Set("X-V3Net-Node-ID", ks.NodeID())
+			req.Header.Set("X-V3Net-Signature", "invalid")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusUnauthorized {
+				t.Fatalf("bad signature: %d, want 401", resp.StatusCode)
+			}
+			// Upgrading the leaf requires only signing with its existing key.
+			hash := sha256.Sum256(body)
+			sig, err := ks.Sign("POST", req.URL.Path, req.Header.Get("Date"), hex.EncodeToString(hash[:]))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Body = io.NopCloser(bytes.NewReader(body))
+			req.Header.Set("X-V3Net-Signature", sig)
+			resp, err = http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("upgraded leaf: %d, want 200", resp.StatusCode)
+			}
+			sub := svc.Hub().Subscribers().Get(ks.NodeID(), "testnet")
+			if sub == nil || sub.Status != "active" || sub.PubKeyB64 != ks.PubKeyBase64() {
+				t.Fatalf("registration: %+v", sub)
+			}
+		})
 	}
 }

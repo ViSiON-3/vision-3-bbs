@@ -188,6 +188,22 @@ FelonyNet uses auto-approve, so you start receiving messages immediately.
 
 ---
 
+## Updating an Existing FelonyNet Node
+
+For a source checkout, pull the latest code, run `./build.sh`, and restart the
+BBS. This rebuilds both the BBS and config editor. Keep your existing
+configuration, node key, and data: updated clients sign subscriptions
+automatically with that key, without re-registration or re-approval.
+
+Hub and leaf updates can happen independently while the hub keeps
+**Signed Subscribe** at its default **N**. A hub rebuild does not automatically
+enforce signatures. Hub operators can enable enforcement later; older unsigned
+clients must update before connecting to a hub that requires signatures.
+See [Independent hub and leaf upgrades](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently)
+for the hub procedure and compatibility setting.
+
+---
+
 ## Troubleshooting
 
 **"V3Net networking disabled"** — V3Net is not enabled. Go back to Step 1 and
@@ -200,6 +216,14 @@ verify the local board mapping.
 **No messages arriving** — Check that `felonynet.org` is reachable. Look for
 `leaf: poll failed` warnings in the log. Verify your node is approved by
 checking the V3Net Status screen (`V3NETSTATUS`).
+
+**"signed subscribe required" / subscription HTTP 401** — If the hub requires
+signed subscriptions, update both the BBS and config editor and restart with
+your existing key. Do not delete your registration or generate a new key.
+If an updated client still gets 401, check the hub's error details: invalid
+signatures or stale request dates may indicate a signing or clock problem.
+The hub operator can restore older-client compatibility by setting **Signed
+Subscribe** to **N** and restarting.
 
 **Lost keypair** — If you have your 24-word recovery seed phrase, restore it
 via `./config → 4 → Node Identity → [R] Recover`. If you have lost both the

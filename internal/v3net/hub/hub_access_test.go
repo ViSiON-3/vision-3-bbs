@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
@@ -41,7 +40,7 @@ func registerHubAsLeaf(t *testing.T, ts *httptest.Server, hubKS *keystore.Keysto
 	t.Helper()
 	body := fmt.Sprintf(`{"network":"testnet","node_id":%q,"pubkey_b64":%q,"bbs_name":"Hub BBS","bbs_host":"hub.example.net"}`,
 		hubKS.NodeID(), hubKS.PubKeyBase64())
-	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", strings.NewReader(body))
+	resp, err := http.DefaultClient.Do(signedRequest(t, hubKS, "POST", ts.URL+"/v3net/v1/subscribe", body))
 	if err != nil {
 		t.Fatalf("register hub as leaf: %v", err)
 	}
@@ -355,7 +354,7 @@ func TestSubscribeWithAreaTags_OpenArea(t *testing.T) {
 
 	body := fmt.Sprintf(`{"network":"testnet","node_id":%q,"pubkey_b64":%q,"bbs_name":"Test BBS","bbs_host":"test.example.net","area_tags":["gen.general"]}`,
 		leafKS.NodeID(), leafKS.PubKeyBase64())
-	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", strings.NewReader(body))
+	resp, err := http.DefaultClient.Do(signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/subscribe", body))
 	if err != nil {
 		t.Fatalf("POST subscribe: %v", err)
 	}
@@ -405,7 +404,7 @@ func TestSubscribeWithAreaTags_ApprovalArea(t *testing.T) {
 
 	body := fmt.Sprintf(`{"network":"testnet","node_id":%q,"pubkey_b64":%q,"bbs_name":"Test BBS","bbs_host":"test.example.net","area_tags":["gen.general"]}`,
 		leafKS.NodeID(), leafKS.PubKeyBase64())
-	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", strings.NewReader(body))
+	resp, err := http.DefaultClient.Do(signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/subscribe", body))
 	if err != nil {
 		t.Fatalf("POST subscribe: %v", err)
 	}
@@ -449,7 +448,7 @@ func TestSubscribeWithAreaTags_ClosedDenied(t *testing.T) {
 
 	body := fmt.Sprintf(`{"network":"testnet","node_id":%q,"pubkey_b64":%q,"bbs_name":"Test BBS","bbs_host":"test.example.net","area_tags":["gen.general"]}`,
 		leafKS.NodeID(), leafKS.PubKeyBase64())
-	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", strings.NewReader(body))
+	resp, err := http.DefaultClient.Do(signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/subscribe", body))
 	if err != nil {
 		t.Fatalf("POST subscribe: %v", err)
 	}
@@ -485,7 +484,7 @@ func TestSubscribeWithAreaTags_DenyList(t *testing.T) {
 
 	body := fmt.Sprintf(`{"network":"testnet","node_id":%q,"pubkey_b64":%q,"bbs_name":"Test BBS","bbs_host":"test.example.net","area_tags":["gen.general"]}`,
 		leafKS.NodeID(), leafKS.PubKeyBase64())
-	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", strings.NewReader(body))
+	resp, err := http.DefaultClient.Do(signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/subscribe", body))
 	if err != nil {
 		t.Fatalf("POST subscribe: %v", err)
 	}

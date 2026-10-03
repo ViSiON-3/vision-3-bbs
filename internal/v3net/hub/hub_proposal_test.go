@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -23,11 +22,12 @@ func setupTestHubManual(t *testing.T) (*Hub, *keystore.Keystore) {
 		t.Fatalf("load hub keystore: %v", err)
 	}
 	cfg := Config{
-		ListenAddr:  ":0",
-		DataDir:     dir,
-		Keystore:    ks,
-		AutoApprove: false,
-		Networks:    []NetworkConfig{{Name: "testnet", Description: "Test network"}},
+		ListenAddr:             ":0",
+		DataDir:                dir,
+		Keystore:               ks,
+		AutoApprove:            false,
+		RequireSignedSubscribe: true,
+		Networks:               []NetworkConfig{{Name: "testnet", Description: "Test network"}},
 	}
 	h, err := New(cfg)
 	if err != nil {
@@ -74,7 +74,7 @@ func registerAndActivate(t *testing.T, ts *httptest.Server, h *Hub, ks *keystore
 	t.Helper()
 	body := fmt.Sprintf(`{"network":"testnet","node_id":%q,"pubkey_b64":%q,"bbs_name":%q,"bbs_host":%q}`,
 		ks.NodeID(), ks.PubKeyBase64(), bbsName, bbsHost)
-	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", strings.NewReader(body))
+	resp, err := http.DefaultClient.Do(signedRequest(t, ks, "POST", ts.URL+"/v3net/v1/subscribe", body))
 	if err != nil {
 		t.Fatalf("subscribe %s: %v", bbsName, err)
 	}

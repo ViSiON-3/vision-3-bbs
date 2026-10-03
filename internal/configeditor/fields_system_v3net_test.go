@@ -57,3 +57,25 @@ func TestAutoApproveEditKeepsExplicitAreaSetting(t *testing.T) {
 		t.Errorf("Auto Approve Areas = %q, want Y", got)
 	}
 }
+
+func TestSignedSubscribeSetting(t *testing.T) {
+	m := Model{configs: &allConfigs{}}
+	for _, f := range m.sysFieldsNetwork(&config.ServerConfig{}) {
+		if f.Label != "Signed Subscribe" {
+			continue
+		}
+		if got := f.Get(); got != "N" {
+			t.Fatalf("old config default=%q, want N", got)
+		}
+		for _, value := range []string{"Y", "N"} {
+			if err := f.Set(value); err != nil {
+				t.Fatal(err)
+			}
+			if got := f.Get(); got != value {
+				t.Fatalf("got %q, want %q", got, value)
+			}
+		}
+		return
+	}
+	t.Fatal("missing Signed Subscribe field")
+}

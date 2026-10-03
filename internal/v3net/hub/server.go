@@ -16,7 +16,7 @@ func (h *Hub) newMux() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimRight(r.URL.Path, "/")
 
-		// Public endpoints (no auth).
+		// Public discovery and bootstrap (subscribe verifies its own signature).
 		switch {
 		case path == "/v3net/v1/networks" && r.Method == http.MethodGet:
 			h.handleNetworks(w, r)

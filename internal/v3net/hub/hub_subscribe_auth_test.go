@@ -104,33 +104,40 @@ func TestSubscribe_BannedNodeKeepsProfile(t *testing.T) {
 	assertProfile(t, h, leafKS.NodeID(), "Test BBS", "test.example.net")
 }
 
-// Node keys are public, so an unsigned request naming a known node must not
-// change anything about it.
-func TestSubscribe_UnsignedResubscribeChangesNothing(t *testing.T) {
-	h, hubKS := setupTestHub(t)
-	ts := httptest.NewServer(h.newMux())
-	defer ts.Close()
-	seedTestNAL(t, h, hubKS)
-	leafKS := loadTestKeystore(t, "leaf.key")
-	registerLeaf(t, ts, leafKS)
-
-	body := subscribeBody(t, leafKS, "Impostor", "evil.example.net", "gen.general")
-	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("POST subscribe: %v", err)
-	}
-	defer resp.Body.Close()
-	var out protocol.SubscribeWithAreasResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK || out.Status != "active" || len(out.Areas) != 0 {
-		t.Errorf("status %d, response %+v; want 200, active, no areas", resp.StatusCode, out)
-	}
-
-	assertProfile(t, h, leafKS.NodeID(), "Test BBS", "test.example.net")
-	if subs, _ := h.areaSubscriptions.ListForNode(leafKS.NodeID(), "testnet"); len(subs) != 0 {
-		t.Errorf("unsigned re-subscribe changed area subscriptions: %+v", subs)
+// Reject unsigned requests before they can create or mutate any registration.
+func TestSubscribe_RejectsUnsigned(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		t.Run(fmt.Sprintf("existing=%v", existing), func(t *testing.T) {
+			h, hubKS := setupTestHub(t)
+			ts := httptest.NewServer(h.newMux())
+			defer ts.Close()
+			seedTestNAL(t, h, hubKS)
+			ks := loadTestKeystore(t, "leaf.key")
+			if existing {
+				registerLeaf(t, ts, ks)
+			}
+			for _, tags := range [][]string{nil, {"gen.general"}} {
+				body := subscribeBody(t, ks, "Impostor", "evil.example.net", tags...)
+				req, err := http.NewRequest("POST", ts.URL+"/v3net/v1/subscribe", strings.NewReader(body))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if code := postSubscribe(t, req); code != http.StatusUnauthorized {
+					t.Fatalf("unsigned subscribe: got %d, want 401", code)
+				}
+			}
+			if existing {
+				assertProfile(t, h, ks.NodeID(), "Test BBS", "test.example.net")
+			} else if h.subscribers.Get(ks.NodeID(), "testnet") != nil {
+				t.Fatal("unsigned request created a subscriber")
+			}
+			if subs, err := h.areaSubscriptions.ListForNode(ks.NodeID(), "testnet"); err != nil || len(subs) != 0 {
+				t.Fatalf("area subscriptions = %+v, error %v", subs, err)
+			}
+			if requests, err := h.accessRequests.ListPending("testnet", "gen.general"); err != nil || len(requests) != 0 {
+				t.Fatalf("access requests = %+v, error %v", requests, err)
+			}
+		})
 	}
 }
 
@@ -166,6 +173,11 @@ func TestSubscribe_RejectsBadSignatures(t *testing.T) {
 		{"stale Date", func() *http.Request {
 			r := signedRequest(t, leafKS, "POST", url, body)
 			r.Header.Set("Date", time.Now().Add(-time.Hour).UTC().Format(http.TimeFormat))
+			return r
+		}},
+		{"node ID without signature", func() *http.Request {
+			r := signedRequest(t, leafKS, "POST", url, body)
+			r.Header.Del(headerSignature)
 			return r
 		}},
 		{"signature without Date", func() *http.Request {
@@ -259,72 +271,53 @@ func TestSubscribe_ActiveAreaNotDowngradedByModeChange(t *testing.T) {
 	}
 }
 
-// An older leaf on a hub that approves nodes by hand registers unsigned and
-// is pending, so its areas are skipped. Once approved it re-sends the same
-// unsigned request, which must then subscribe the areas it first asked for,
-// and nothing more.
-func TestSubscribe_LegacyLeafGetsAreasAfterManualApproval(t *testing.T) {
-	h, hubKS := setupTestHubManual(t)
-	ts := httptest.NewServer(h.newMux())
-	defer ts.Close()
-	leafKS := loadTestKeystore(t, "leaf.key")
-	seedNALWithAreas(t, h, hubKS, []protocol.Area{
-		{Tag: "gen.general", Name: "General", Language: "en", Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen}},
-		{Tag: "gen.private", Name: "Private", Language: "en", Access: protocol.AreaAccess{Mode: protocol.AccessModeApproval}},
-		{Tag: "gen.extra", Name: "Extra", Language: "en", Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen}},
-	})
-	url := ts.URL + "/v3net/v1/subscribe"
-	post := func(body string) protocol.SubscribeWithAreasResponse {
-		t.Helper()
-		resp, err := http.Post(url, "application/json", strings.NewReader(body))
-		if err != nil {
-			t.Fatalf("POST subscribe: %v", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("subscribe: expected 200, got %d", resp.StatusCode)
-		}
-		var out protocol.SubscribeWithAreasResponse
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-			t.Fatalf("decode: %v", err)
-		}
-		return out
+// Existing records may predate signed subscriptions. Reopen the persisted
+// stores and prove that the same key resumes without resetting approvals.
+func TestSubscribe_ExistingNodeUpgrade(t *testing.T) {
+	for _, status := range []string{"active", "pending", "banned"} {
+		t.Run(status, func(t *testing.T) {
+			h, hubKS := setupTestHubManual(t)
+			ks := loadTestKeystore(t, "leaf.key")
+			seedNALWithAreas(t, h, hubKS, []protocol.Area{
+				{Tag: "gen.general", Name: "General", Language: "en", Access: protocol.AreaAccess{Mode: protocol.AccessModeApproval}},
+			})
+			// Seed precisely the persisted identity of a pre-upgrade registration.
+			if _, err := h.subscribers.Add(Subscriber{NodeID: ks.NodeID(), Network: "testnet", PubKeyB64: ks.PubKeyBase64(), BBSName: "Old BBS", BBSHost: "old.example.net", Status: status}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := h.areaSubscriptions.Upsert(ks.NodeID(), "testnet", "gen.general", "active"); err != nil {
+				t.Fatal(err)
+			}
+			cfg := h.cfg
+			if err := h.Close(); err != nil {
+				t.Fatal(err)
+			}
+			reopened, err := New(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer reopened.Close()
+			ts := httptest.NewServer(reopened.newMux())
+			defer ts.Close()
+			code, out := subscribeWithAreas(t, ts, ks, "gen.general")
+			if code != http.StatusOK || out.Status != status {
+				t.Fatalf("upgraded subscribe: %d %+v, want %s", code, out, status)
+			}
+			if active, err := reopened.areaSubscriptions.IsActive(ks.NodeID(), "testnet", "gen.general"); err != nil || !active {
+				t.Fatalf("approval lost: active=%v, error=%v", active, err)
+			}
+			if status == "pending" {
+				activateSubscriber(t, reopened, ks.NodeID(), "testnet")
+				code, out = subscribeWithAreas(t, ts, ks, "gen.general")
+				if code != http.StatusOK || out.Status != "active" || len(out.Areas) != 1 || out.Areas[0].Status != "active" {
+					t.Fatalf("after manual approval: %d %+v", code, out)
+				}
+			}
+			if requests, err := reopened.accessRequests.ListPending("testnet", "gen.general"); err != nil || len(requests) != 0 {
+				t.Fatalf("duplicate approval requests: %+v, %v", requests, err)
+			}
+		})
 	}
-
-	first := subscribeBody(t, leafKS, "Test BBS", "test.example.net", "gen.general", "gen.private")
-	if out := post(first); out.Status != "pending" || len(out.Areas) != 0 {
-		t.Fatalf("first subscribe = %+v, want pending with no areas", out)
-	}
-	activateSubscriber(t, h, leafKS.NodeID(), "testnet")
-
-	// The retry also names an area the first request did not, and a
-	// different BBS name; neither is taken from an unsigned request.
-	retry := subscribeBody(t, leafKS, "Impostor", "evil.example.net", "gen.general", "gen.private", "gen.extra")
-	out := post(retry)
-	if out.Status != "active" || len(out.Areas) != 2 {
-		t.Fatalf("retry after approval = %+v, want active with 2 areas", out)
-	}
-	want := map[string]string{"gen.general": "active", "gen.private": "pending"}
-	subs, err := h.areaSubscriptions.ListForNode(leafKS.NodeID(), "testnet")
-	if err != nil {
-		t.Fatalf("list area subscriptions: %v", err)
-	}
-	if len(subs) != len(want) {
-		t.Errorf("area subscriptions = %+v, want %v", subs, want)
-	}
-	for _, sub := range subs {
-		if want[sub.Tag] != sub.Status {
-			t.Errorf("area %s = %q, want %q", sub.Tag, sub.Status, want[sub.Tag])
-		}
-	}
-	pending, err := h.accessRequests.ListPending("testnet", "gen.private")
-	if err != nil {
-		t.Fatalf("list access requests: %v", err)
-	}
-	if len(pending) != 1 || pending[0].BBSName != "Test BBS" {
-		t.Errorf("access requests = %+v, want one under the registered name", pending)
-	}
-	assertProfile(t, h, leafKS.NodeID(), "Test BBS", "test.example.net")
 }
 
 func TestSubscriberStore_RequestedAreasSurviveReload(t *testing.T) {
@@ -423,4 +416,98 @@ func TestSubscriberStore_MigratesRequestedAreasColumn(t *testing.T) {
 	if _, err := NewSubscriberStore(db); err != nil {
 		t.Errorf("reopen migrated database: %v", err)
 	}
+}
+
+func TestSubscribe_UnsignedResubscribeChangesNothing(t *testing.T) {
+	h, hubKS := setupTestHub(t)
+	h.cfg.RequireSignedSubscribe = false
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+	seedTestNAL(t, h, hubKS)
+	leafKS := loadTestKeystore(t, "leaf.key")
+	registerLeaf(t, ts, leafKS)
+
+	body := subscribeBody(t, leafKS, "Impostor", "evil.example.net", "gen.general")
+	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST subscribe: %v", err)
+	}
+	defer resp.Body.Close()
+	var out protocol.SubscribeWithAreasResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK || out.Status != "active" || len(out.Areas) != 0 {
+		t.Errorf("status %d, response %+v; want 200, active, no areas", resp.StatusCode, out)
+	}
+
+	assertProfile(t, h, leafKS.NodeID(), "Test BBS", "test.example.net")
+	if subs, _ := h.areaSubscriptions.ListForNode(leafKS.NodeID(), "testnet"); len(subs) != 0 {
+		t.Errorf("unsigned re-subscribe changed area subscriptions: %+v", subs)
+	}
+}
+
+func TestSubscribe_LegacyLeafGetsAreasAfterManualApproval(t *testing.T) {
+	h, hubKS := setupTestHubManual(t)
+	h.cfg.RequireSignedSubscribe = false
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+	leafKS := loadTestKeystore(t, "leaf.key")
+	seedNALWithAreas(t, h, hubKS, []protocol.Area{
+		{Tag: "gen.general", Name: "General", Language: "en", Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen}},
+		{Tag: "gen.private", Name: "Private", Language: "en", Access: protocol.AreaAccess{Mode: protocol.AccessModeApproval}},
+		{Tag: "gen.extra", Name: "Extra", Language: "en", Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen}},
+	})
+	url := ts.URL + "/v3net/v1/subscribe"
+	post := func(body string) protocol.SubscribeWithAreasResponse {
+		t.Helper()
+		resp, err := http.Post(url, "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("POST subscribe: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("subscribe: expected 200, got %d", resp.StatusCode)
+		}
+		var out protocol.SubscribeWithAreasResponse
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return out
+	}
+
+	first := subscribeBody(t, leafKS, "Test BBS", "test.example.net", "gen.general", "gen.private")
+	if out := post(first); out.Status != "pending" || len(out.Areas) != 0 {
+		t.Fatalf("first subscribe = %+v, want pending with no areas", out)
+	}
+	activateSubscriber(t, h, leafKS.NodeID(), "testnet")
+
+	// The retry also names an area the first request did not, and a
+	// different BBS name; neither is taken from an unsigned request.
+	retry := subscribeBody(t, leafKS, "Impostor", "evil.example.net", "gen.general", "gen.private", "gen.extra")
+	out := post(retry)
+	if out.Status != "active" || len(out.Areas) != 2 {
+		t.Fatalf("retry after approval = %+v, want active with 2 areas", out)
+	}
+	want := map[string]string{"gen.general": "active", "gen.private": "pending"}
+	subs, err := h.areaSubscriptions.ListForNode(leafKS.NodeID(), "testnet")
+	if err != nil {
+		t.Fatalf("list area subscriptions: %v", err)
+	}
+	if len(subs) != len(want) {
+		t.Errorf("area subscriptions = %+v, want %v", subs, want)
+	}
+	for _, sub := range subs {
+		if want[sub.Tag] != sub.Status {
+			t.Errorf("area %s = %q, want %q", sub.Tag, sub.Status, want[sub.Tag])
+		}
+	}
+	pending, err := h.accessRequests.ListPending("testnet", "gen.private")
+	if err != nil {
+		t.Fatalf("list access requests: %v", err)
+	}
+	if len(pending) != 1 || pending[0].BBSName != "Test BBS" {
+		t.Errorf("access requests = %+v, want one under the registered name", pending)
+	}
+	assertProfile(t, h, leafKS.NodeID(), "Test BBS", "test.example.net")
 }

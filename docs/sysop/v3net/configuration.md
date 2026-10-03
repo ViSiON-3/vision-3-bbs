@@ -35,6 +35,7 @@ V3Net settings live in two places in the TUI config editor (`./config`):
 │  Hub Data Dir    :                                                   │
 │  Auto Approve    : N                                                 │
 │  Auto Approve Areas : N                                              │
+│  Signed Subscribe : N                                                │
 │                                                                      │
 │                          Screen 2 of 8                               │
 └──────────────────────────────────────────────────────────────────────┘
@@ -53,6 +54,7 @@ Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return
 | **Hub Data Dir** | Directory for hub database and NAL files. Recommended: `data/v3net_hub` |
 | **Auto Approve** | When `Y`, new leaf subscriptions are approved automatically. |
 | **Auto Approve Areas** | When `Y`, area proposals are added to the network straight away instead of waiting in the Coordinator Panel. If `autoApproveAreas` has never been set, it follows **Auto Approve**, which used to cover proposals too. Changing **Auto Approve** in the editor saves the area setting as it stood, so it no longer follows. |
+| **Signed Subscribe** | Default `N` preserves compatibility with older leaves. Set `Y` to reject unsigned subscriptions after leaves have upgraded. Save and restart the BBS to apply. See [Independent hub and leaf upgrades](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently). |
 
 Press **S** to save after making changes.
 
@@ -261,3 +263,44 @@ Restrict file permissions appropriately and consider the security of any backup 
 - [Network Area List (NAL)](v3net/nal.md) — area subscriptions, access modes, and proposals
 - [V3Net Key Recovery](v3net/recovery.md) — backing up and restoring your node identity
 - [Manual Configuration Reference](v3net/manual-config.md) — JSON field reference for `v3net.json`
+
+## Upgrading hub and leaf nodes independently
+
+Existing hubs can be rebuilt and restarted before their leaves upgrade.
+**Signed Subscribe defaults to N** (`hub.requireSignedSubscribe: false`),
+including when the setting is absent from an older configuration. There is
+no automatic deadline or switch to strict mode.
+
+1. Stop the BBS and back up its configuration, node key (normally
+   `data/v3net.key`), and configured V3Net data directory.
+2. Update, run `./build.sh`, and restart using the same configuration, key,
+   and data. Leave **Signed Subscribe** at **N** in the config editor's
+   **System Setup → Server Setup** screen.
+3. Leaf sysops can update, rebuild, and restart independently, keeping their
+   existing configuration, node key, and data. Updated BBS binaries and config
+   editors sign subscriptions automatically. No re-registration or re-approval
+   is needed; existing node statuses and area approvals remain in place.
+
+In compatibility mode, unsigned requests retain the older hub behavior: they
+can register a new node but cannot change an existing node's name or host.
+An unsigned re-subscribe can apply only area tags saved in the first
+registration, allowing manually approved legacy nodes to finish subscribing.
+Changing an existing node's requested areas requires an updated, signing client.
+Malformed or invalid signatures are rejected in both modes.
+
+The hub logs **every unsigned subscription**, even without area tags, as
+`v3net hub: unsigned subscribe`, with `claimed_node`, `network`, `known_node`,
+and `rejected`. These logs identify claimed legacy identities, not verified
+callers. A quiet log alone does not prove all nodes have upgraded: an offline
+node may return later. Coordinate with those sysops before enforcing signatures.
+
+When you choose to require signatures, set **Signed Subscribe** to **Y**
+(or `hub.requireSignedSubscribe` to `true` in `configs/v3net.json`) and restart
+the BBS. All unsigned subscriptions then receive HTTP 401 without changing
+hub data, with a response explaining how to upgrade while preserving the key.
+Signed first registrations work without prior approval; normal hub approval
+policy still determines whether the registration becomes active.
+
+If an older leaf is still needed, set the option back to **N** and restart.
+Its registration remains intact. Neither enabling nor disabling enforcement
+requires database cleanup, key rotation, or a binary rollback.

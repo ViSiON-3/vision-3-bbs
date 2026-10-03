@@ -3,6 +3,8 @@ package v3net_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -70,10 +72,11 @@ func setupIntegration(t *testing.T) (
 	}
 
 	hubCfg := hub.Config{
-		ListenAddr:  ":0",
-		DataDir:     dir,
-		Keystore:    hubKS,
-		AutoApprove: true,
+		ListenAddr:             ":0",
+		DataDir:                dir,
+		Keystore:               hubKS,
+		AutoApprove:            true,
+		RequireSignedSubscribe: true,
 		Networks: []hub.NetworkConfig{
 			{Name: "testnet", Description: "Integration test network"},
 		},
@@ -125,8 +128,7 @@ func setupIntegration(t *testing.T) (
 		BBSHost:   "test.example.net",
 		AreaTags:  []string{"gen.general"},
 	})
-	resp, err := ts.Client().Post(ts.URL+"/v3net/v1/subscribe", "application/json",
-		bytes.NewReader(registerBody))
+	resp, err := ts.Client().Do(signedSubscribeRequest(t, leafKS, ts.URL, registerBody))
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
@@ -390,8 +392,7 @@ func TestIntegration_AreaFilteredPolling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal leaf2 subscribe: %v", err)
 	}
-	resp2, err := ts.Client().Post(ts.URL+"/v3net/v1/subscribe", "application/json",
-		bytes.NewReader(registerBody2))
+	resp2, err := ts.Client().Do(signedSubscribeRequest(t, leaf2KS, ts.URL, registerBody2))
 	if err != nil {
 		t.Fatalf("subscribe leaf2: %v", err)
 	}
@@ -489,4 +490,23 @@ func TestIntegration_PresenceEvents(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Error("timed out waiting for logoff event")
 	}
+}
+
+func signedSubscribeRequest(t *testing.T, ks *keystore.Keystore, hubURL string, body []byte) *http.Request {
+	t.Helper()
+	req, err := http.NewRequest("POST", hubURL+"/v3net/v1/subscribe", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	date := time.Now().UTC().Format(http.TimeFormat)
+	hash := sha256.Sum256(body)
+	sig, err := ks.Sign("POST", req.URL.Path, date, hex.EncodeToString(hash[:]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Date", date)
+	req.Header.Set("X-V3Net-Node-ID", ks.NodeID())
+	req.Header.Set("X-V3Net-Signature", sig)
+	return req
 }

@@ -28,11 +28,12 @@ func setupTestHub(t *testing.T) (*Hub, *keystore.Keystore) {
 	}
 
 	cfg := Config{
-		ListenAddr:       ":0",
-		DataDir:          dir,
-		Keystore:         ks,
-		AutoApprove:      true,
-		AutoApproveAreas: true,
+		ListenAddr:             ":0",
+		DataDir:                dir,
+		Keystore:               ks,
+		AutoApprove:            true,
+		RequireSignedSubscribe: true,
+		AutoApproveAreas:       true,
 		Networks: []NetworkConfig{
 			{Name: "testnet", Description: "Test network"},
 		},
@@ -56,7 +57,7 @@ func registerLeaf(t *testing.T, ts *httptest.Server, leafKS *keystore.Keystore) 
 		"bbs_host": "test.example.net"
 	}`, leafKS.NodeID(), leafKS.PubKeyBase64())
 
-	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", strings.NewReader(body))
+	resp, err := http.DefaultClient.Do(signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/subscribe", body))
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}

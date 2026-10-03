@@ -12,6 +12,9 @@ type Config struct {
 	Keystore   *keystore.Keystore
 	// AutoApprove activates new subscribers on registration.
 	AutoApprove bool
+	// RequireSignedSubscribe opts into rejecting legacy unsigned subscriptions.
+	// False preserves compatibility while leaves upgrade independently.
+	RequireSignedSubscribe bool
 	// AutoApproveAreas adds area proposals to the NAL on arrival instead of
 	// queueing them for the coordinator.
 	AutoApproveAreas bool
