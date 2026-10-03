@@ -103,7 +103,7 @@ func (l *Leaf) NewChatSession(handle string) *ChatSession {
 func (l *Leaf) Start(ctx context.Context) {
 	slog.Info("leaf: starting", "network", l.cfg.Network, "hub", l.cfg.HubURL)
 
-	// Subscribe to the hub (bootstrap — no auth required).
+	// Subscribe to the hub (bootstrap — signed with the existing node key).
 	// Retry with exponential backoff if the hub is temporarily unreachable.
 	subscribeBackoff := 5 * time.Second
 	for {

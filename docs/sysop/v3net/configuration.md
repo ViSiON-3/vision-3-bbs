@@ -261,3 +261,38 @@ Restrict file permissions appropriately and consider the security of any backup 
 - [Network Area List (NAL)](v3net/nal.md) — area subscriptions, access modes, and proposals
 - [V3Net Key Recovery](v3net/recovery.md) — backing up and restoring your node identity
 - [Manual Configuration Reference](v3net/manual-config.md) — JSON field reference for `v3net.json`
+
+## Upgrading to required subscription signatures
+
+Hubs now require signed `POST /v3net/v1/subscribe` requests, including the
+first registration. The signature proves possession of the submitted node key;
+it does not require a pre-approved registration. Unsigned requests receive
+HTTP 401 without changing hub data.
+
+For an uninterrupted rollout:
+
+1. Back up each node's configuration, existing node key (normally
+   `data/v3net.key`), and V3Net data directory with the service stopped.
+2. Upgrade leaf BBS binaries and their config editors first. Releases containing
+   the signed-subscribe change from #536 already sign automatically and can
+   talk to the older hub. Restart the leaves with their existing configuration
+   and key, and verify that they connect and can use their subscribed areas.
+   Include the hub's own BBS if it also runs a leaf.
+3. Once all leaves and config editors send signed subscriptions, upgrade and
+   restart the hub using its existing key, configuration, and data directory.
+   No key rotation, registration reset, database cleanup, or re-approval is
+   needed. Existing active, pending, and banned registrations retain their
+   status; existing area approvals remain in place.
+
+Very old leaves that send unsigned subscriptions must be upgraded before the
+hub. A strict hub cannot accept their unsigned registration safely. If the hub
+was upgraded first, upgrade the affected leaf and config editor and restart
+with the same node key; do not delete its registration or generate a new key.
+The hub logs rejected authentication with `claimed_node`, network, and reason
+(the claimed ID is unverified). A missing-signature response also tells the
+caller to upgrade while preserving the key. Invalid signatures or stale dates
+still require fixing the key/signing configuration or system clock.
+
+Existing database fields are retained, so this change does not require a
+schema downgrade if the hub binary is rolled back. Restoring an older hub
+also restores that version's permissive unsigned-subscribe behavior.

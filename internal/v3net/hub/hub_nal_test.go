@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -99,7 +98,7 @@ func TestPostNAL_Coordinator(t *testing.T) {
 	// Register the hub keystore as a subscriber so auth passes.
 	body := fmt.Sprintf(`{"network":"testnet","node_id":%q,"pubkey_b64":%q,"bbs_name":"Hub BBS","bbs_host":"hub.example.net"}`,
 		hubKS.NodeID(), hubKS.PubKeyBase64())
-	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", strings.NewReader(body))
+	resp, err := http.DefaultClient.Do(signedRequest(t, hubKS, "POST", ts.URL+"/v3net/v1/subscribe", body))
 	if err != nil {
 		t.Fatalf("subscribe hub: %v", err)
 	}

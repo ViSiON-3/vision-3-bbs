@@ -3,6 +3,8 @@ package v3net
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -86,7 +88,20 @@ func newRemoteNode(t *testing.T, hubURL, bbsName string, onEvent func(protocol.E
 		Network: "testnet", NodeID: ks.NodeID(), PubKeyB64: ks.PubKeyBase64(),
 		BBSName: bbsName, BBSHost: bbsName + ".example.net", AreaTags: areaTags,
 	})
-	resp, err := http.Post(hubURL+"/v3net/v1/subscribe", "application/json", bytes.NewReader(body))
+	req, err := http.NewRequest("POST", hubURL+"/v3net/v1/subscribe", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	date := time.Now().UTC().Format(http.TimeFormat)
+	hash := sha256.Sum256(body)
+	req.Header.Set("Date", date)
+	req.Header.Set("X-V3Net-Node-ID", ks.NodeID())
+	sig, err := ks.Sign("POST", "/v3net/v1/subscribe", date, hex.EncodeToString(hash[:]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-V3Net-Signature", sig)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("subscribe %s: %v", bbsName, err)
 	}
