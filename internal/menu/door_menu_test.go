@@ -368,3 +368,23 @@ func TestDoorMenuRenderedPagesFitTerminal(t *testing.T) {
 		}
 	}
 }
+
+// Paging help is noise when every door fits on one screen: header and footer
+// lines that show the page number or count appear only with several pages.
+func TestDoorMenuPagingHelpOnlyWithSeveralPages(t *testing.T) {
+	for _, tc := range []struct {
+		doors int
+		want  bool
+	}{{3, false}, {100, true}} {
+		c, s, _ := doorMenuHarness(t, "lightbar", "q", tc.doors)
+		if _, _, err := runDoorMenu(c, ""); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(s.output(), "Page"); got != tc.want {
+			t.Errorf("%d doors: paging help shown=%v, want %v\n%q", tc.doors, got, tc.want, s.output())
+		}
+	}
+	if got := doorMenuDropPaging("head\r\nPage ^PG of ^PT\r\nfoot"); got != "head\r\nfoot" {
+		t.Errorf("doorMenuDropPaging = %q", got)
+	}
+}

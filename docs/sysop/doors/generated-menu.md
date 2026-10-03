@@ -113,6 +113,9 @@ Row placeholders are `^ID` (number), `^CO` (code), `^NA` (name), `^TY` (door
 runtime type), `^DS` (description), and `^CN` (current category name).
 `^TI` is the MNU title; `^PG` and `^PT` are current/total pages. Page and title
 placeholders work in TOP/MID/BOT; common menu template tokens also work.
+When every entry fits on one page, any TOP or BOT line containing `^PG` or
+`^PT` is left out, so paging help appears only when there is more than one
+page.
 Category rows use `^ID`, `^CO`, `^NA`, and `^DS`.
 
 The string table supplies `doorMenuEmpty`, `doorMenuDenied`, and

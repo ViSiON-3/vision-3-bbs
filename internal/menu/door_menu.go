@@ -64,6 +64,20 @@ func (e *MenuExecutor) doorMenuTemplate(category, part string, categories bool) 
 	return readTemplateFile(e.templateFile(base + "." + part))
 }
 
+// doorMenuDropPaging leaves out every line of a header or footer that shows
+// the page number or count, so paging help appears only when there is more
+// than one page.
+func doorMenuDropPaging(s string) string {
+	lines := strings.SplitAfter(s, "\n")
+	kept := lines[:0]
+	for _, l := range lines {
+		if !strings.Contains(l, "^PG") && !strings.Contains(l, "^PT") {
+			kept = append(kept, l)
+		}
+	}
+	return strings.Join(kept, "")
+}
+
 // doorMenuLines measures flowing template text, including wrapped lines.
 // MID templates may span multiple lines. Leave the last terminal column free
 // in shipped art to avoid terminal-dependent autowrap at exactly the margin.
@@ -172,6 +186,14 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 			s = strings.NewReplacer("^CN", name, "^TI", rec.Title, "^PG", strconv.Itoa(pg), "^PT", strconv.Itoa(pt)).Replace(s)
 			return string(e.applyCommonTemplateTokens([]byte(s), c.currentUser, c.nodeNumber))
 		}
+		// frame expands the header or footer, without its paging lines when
+		// everything fits on one page.
+		frame := func(s string, pg, pt int) string {
+			if pt <= 1 {
+				s = doorMenuDropPaging(s)
+			}
+			return expand(s, pg, pt)
+		}
 		line := func(entry doorMenuEntry, idx, pg, pt int) string {
 			d := entry.door
 			if entry.category {
@@ -193,7 +215,7 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 		for i, entry := range entries {
 			rowHeight = max(rowHeight, doorMenuLines(line(entry, i+1, maxPage, maxPage), w))
 		}
-		size := doorMenuPageSize(h, doorMenuLines(expand(art[0], maxPage, maxPage), w), doorMenuLines(expand(art[2], maxPage, maxPage), w), doorMenuLines(prompt.String()+strings.Repeat("X", 16), w), rowHeight)
+		size := doorMenuPageSize(h, doorMenuLines(frame(art[0], maxPage, maxPage), w), doorMenuLines(frame(art[2], maxPage, maxPage), w), doorMenuLines(prompt.String()+strings.Repeat("X", 16), w), rowHeight)
 		pages := max(1, (len(entries)+size-1)/size)
 		page := selected / size
 		start := page * size
@@ -217,7 +239,7 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			return write(s + "\r\n")
 		}
-		if err := block(expand(art[0], page+1, pages)); err != nil {
+		if err := block(frame(art[0], page+1, pages)); err != nil {
 			return c.currentUser, "", err
 		}
 		if len(entries) == 0 {
@@ -239,7 +261,7 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 				return c.currentUser, "", err
 			}
 		}
-		if err := block(expand(art[2], page+1, pages)); err != nil {
+		if err := block(frame(art[2], page+1, pages)); err != nil {
 			return c.currentUser, "", err
 		}
 		if _, err := c.terminal.Write(prompt.Bytes()); err != nil {
