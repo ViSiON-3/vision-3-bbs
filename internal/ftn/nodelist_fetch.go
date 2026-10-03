@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/lha"
 )
 
 // maxNodelistBytes caps nodelist downloads and zip members. The FidoNet
@@ -120,7 +122,30 @@ func extractZipMember(data []byte, depth int) ([]byte, error) {
 	return member, nil
 }
 
-// memberScore ranks a zip member name by nodelist likelihood.
+// extractLHANodelistMember reads the most nodelist-looking member of an LHA
+// archive, ranked as for a zip: AmigaNet's AMYLIST.L55 holds AmyList.255.
+func extractLHANodelistMember(data []byte) ([]byte, error) {
+	files, err := lha.Read(data)
+	if err != nil {
+		return nil, fmt.Errorf("opening nodelist archive: %w", err)
+	}
+	best, bestScore := -1, -1
+	for i, f := range files {
+		if f.Method == "-lhd-" || f.Size > maxNodelistBytes { // -lhd- is a directory
+			continue
+		}
+		score := memberScore(f.Name)
+		if score > bestScore || (score == bestScore && f.Size > files[best].Size) {
+			best, bestScore = i, score
+		}
+	}
+	if best < 0 {
+		return nil, fmt.Errorf("nodelist archive has no usable members")
+	}
+	return files[best].Extract(maxNodelistBytes)
+}
+
+// memberScore ranks an archive member name by nodelist likelihood.
 func memberScore(name string) int {
 	lower := strings.ToLower(name)
 	switch {

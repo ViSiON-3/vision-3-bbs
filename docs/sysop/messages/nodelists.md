@@ -40,12 +40,15 @@ echo's file area once a week's list has arrived. Common ones:
 | fsxNet   | `FSX_NODE` | `FSXNET.Z*`   |
 | tqwNet   | `TQW_NODE` | `TQWNET.Z*`   |
 | Agoranet | `AGN_NODE` | `AGORANET.Z*` |
+| AmigaNet | `AMYLIST`  | `AMYLIST.L*`  |
 
 After each file is delivered, `v3mail toss` checks that it belongs to the
 nodelist echo and matches the pattern, then compiles it:
 
-- A plain-text nodelist or a ZIP holding one (`FSXNET.Z75` holds `FSXNET.275`)
-  is read. A nodediff is refused: it only holds the lines that changed.
+- A plain-text nodelist, or a ZIP or LHA archive holding one, is read
+  (`FSXNET.Z75` is a ZIP holding `FSXNET.275`; AmigaNet's `AMYLIST.L55` is an
+  LHA archive holding `AmyList.255`). A nodediff is refused: it only holds the
+  lines that changed.
 - The list must have an entry for the zone of the network's own address, so
   another network's nodelist sent through the same echo is never compiled in
   its place.
@@ -125,7 +128,7 @@ settings above, or for a network whose nodelist does not come by file echo.
 | Flag              | Description                                                                |
 | ----------------- | -------------------------------------------------------------------------- |
 | `--network <name>`| Network name in `ftn.json` (required)                                      |
-| `--file <path>`   | Nodelist file: plain text, or a ZIP holding it                             |
+| `--file <path>`   | Nodelist file: plain text, or a ZIP or LHA archive holding it              |
 | `--url <url>`     | Download the nodelist from this URL                                        |
 | `--registry`      | Download from the registry's nodelist URL for the network's zone; the URL in `ftn_networks.json` comes first |
 | `--force`         | Replace the compiled nodelist even if it is newer                          |

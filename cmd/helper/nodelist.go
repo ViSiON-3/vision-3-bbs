@@ -57,7 +57,7 @@ func printNodelistHelp(errMsg string) {
 func cmdNodelistImport(args []string) {
 	fs := flag.NewFlagSet("nodelist import", flag.ExitOnError)
 	network := fs.String("network", "", "Network name in ftn.json (required)")
-	fromFile := fs.String("file", "", "Nodelist file: plain text, or a ZIP holding it (e.g. FSXNET.Z75)")
+	fromFile := fs.String("file", "", "Nodelist file: plain text, or a ZIP or LHA archive holding it (e.g. FSXNET.Z75)")
 	fromURL := fs.String("url", "", "Download the nodelist from this URL")
 	fromRegistry := fs.Bool("registry", false, "Download the nodelist from the network registry's nodelist URL")
 	force := fs.Bool("force", false, "Replace the compiled nodelist even if it is newer than this one")
