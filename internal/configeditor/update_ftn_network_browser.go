@@ -97,6 +97,7 @@ func (m *Model) populateFTNWizardFromRegistry(net *ftn.RegistryNetwork) {
 		w.hubPort = net.HubPort
 	}
 	w.echolistURL = net.EcholistURL
+	w.fileEchoListURL = net.FileEchoListURL
 	w.registryEntry = net
 
 	// Nodelist lookup state is per-network. Cancel any in-flight fetch from
@@ -125,6 +126,9 @@ func (m *Model) populateFTNWizardFromRegistry(net *ftn.RegistryNetwork) {
 	w.selectedAreas = nil
 	w.areasFetched = false
 	w.areasFetchErr = ""
+	w.availableFileEchoes = nil
+	w.selectedFileEchoes = nil
+	w.fileEchoesFetched = false
 
 	// Refresh field definitions so closures point to updated state.
 	m.ftnWizardFields = m.fieldsFTNWizard()

@@ -133,10 +133,16 @@ The wizard walks you through:
    [Bad/undeliverable messages](#badundeliverable-messages).
 3. **Select echo areas** — the wizard downloads the network's echo list
    (`backbone.na`) and lets you check the areas you want to carry.
+   **File Echoes** does the same for the network's file echo list, when the
+   registry knows one (tqwNet's `tqw_file.na`, for example); it is optional.
+   See [FTN File Echoes](../files/file-echoes.md).
 4. **Save** — it then creates everything for you:
    - the network and uplink in `configs/ftn.json`
    - a single conference for the network, plus one message area per selected echo
    - a netmail area for the network
+   - one file area per selected file echo, linked to the echo so `v3mail toss`
+     delivers its files there (stored under `<network>/<echo>`, list `s10`,
+     download `s20`, upload `s250`)
    - with Bad/Dupe Areas on, `ftn_bad` and `ftn_dupe` message areas (local,
      ungrouped, read and post access `SYSOP`), set as `bad_area_tag` and
      `dupe_area_tag`. A setting that already names an existing area is kept.
@@ -171,7 +177,8 @@ Selecting an existing network from the picker loads its address, hub details and
 AreaFix / session / packet passwords into the same form, so you can see what was
 originally set up and change it. Opening **Echo Areas** downloads the current
 echo list with the areas you already carry ticked, so you can add more without
-re-picking the ones you have.
+re-picking the ones you have. **File Echoes** works the same way for the file
+echoes the network already feeds to file areas.
 
 Saving an edit updates `configs/ftn.json`, the hub's `node` line in
 `data/ftn/binkd.conf`, and the network's poll event, and creates a message area

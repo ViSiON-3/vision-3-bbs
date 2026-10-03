@@ -21,47 +21,53 @@ func (m Model) updateFTNAreaDownloading(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleFTNEcholistMsg processes the echolist download result.
+// handleFTNEcholistMsg processes the echolist or file echo list download
+// result.
 func (m Model) handleFTNEcholistMsg(msg ftnEcholistMsg) (tea.Model, tea.Cmd) {
 	// If the user pressed ESC during the download they've already returned to
 	// the wizard form; drop this late result instead of yanking them into the
-	// area browser.
-	if m.mode != modeFTNAreaDownloading {
+	// area browser. Likewise a late result for the other list.
+	if m.mode != modeFTNAreaDownloading || msg.fileEchoes != m.ftnAreaBrowserFiles {
 		return m, nil
 	}
 	m.ftnAreaBrowserLoading = false
 
 	if msg.err != nil {
 		m.ftnAreaBrowserError = fmt.Sprintf("Download failed: %v", msg.err)
-		m.ftnWizard.areasFetchErr = m.ftnAreaBrowserError
+		if !msg.fileEchoes {
+			m.ftnWizard.areasFetchErr = m.ftnAreaBrowserError
+		}
 		m.mode = modeFTNAreaBrowser
 		return m, nil
 	}
 
 	// Populate wizard state.
-	m.ftnWizard.availableAreas = msg.areas
-	m.ftnWizard.areasFetched = true
-	m.ftnWizard.areasFetchErr = ""
+	l := m.ftnWizard.list(msg.fileEchoes)
+	*l.available = msg.areas
+	*l.fetched = true
+	if !msg.fileEchoes {
+		m.ftnWizard.areasFetchErr = ""
+	}
 
 	// Preserve existing selections if re-downloading.
-	if len(m.ftnWizard.selectedAreas) != len(msg.areas) {
-		m.ftnWizard.selectedAreas = make([]bool, len(msg.areas))
+	if len(*l.selected) != len(msg.areas) {
+		*l.selected = make([]bool, len(msg.areas))
 
 		// Editing an existing network: start from what is actually
 		// configured, so the list shows the current subscriptions rather
 		// than an empty slate the sysop would have to re-tick from memory.
 		for i, area := range msg.areas {
-			if m.ftnWizard.subscribedTags[strings.ToUpper(area.Tag)] {
-				m.ftnWizard.selectedAreas[i] = true
+			if l.existing[strings.ToUpper(area.Tag)] {
+				(*l.selected)[i] = true
 			}
 		}
 	}
 
-	// Copy to browser state. selectedAreas must be a distinct copy so that
+	// Copy to browser state. The selection must be a distinct copy so that
 	// toggling in the browser and then pressing ESC discards the changes
 	// (confirm writes the browser selection back to the wizard explicitly).
-	m.ftnAreaBrowserAreas = m.ftnWizard.availableAreas
-	m.ftnAreaBrowserSelected = append([]bool(nil), m.ftnWizard.selectedAreas...)
+	m.ftnAreaBrowserAreas = *l.available
+	m.ftnAreaBrowserSelected = append([]bool(nil), *l.selected...)
 	m.ftnAreaBrowserCursor = 0
 	m.ftnAreaBrowserScroll = 0
 	m.ftnAreaBrowserError = ""
@@ -81,11 +87,13 @@ func (m Model) updateFTNAreaBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		default:
 			key := strings.ToUpper(msg.String())
-			if key == "R" && ftn.EcholistIsDownloadable(m.ftnWizard.echolistURL) {
-				m.ftnAreaBrowserLoading = true
-				m.ftnAreaBrowserError = ""
-				m.mode = modeFTNAreaDownloading
-				return m, fetchFTNEcholist(m.ftnWizard.echolistURL, m.ftnWizard.registryEntry)
+			if key == "R" {
+				if cmd := m.ftnWizardListFetch(m.ftnAreaBrowserFiles); cmd != nil {
+					m.ftnAreaBrowserLoading = true
+					m.ftnAreaBrowserError = ""
+					m.mode = modeFTNAreaDownloading
+					return m, cmd
+				}
 			}
 		}
 		return m, nil
@@ -105,7 +113,7 @@ func (m Model) updateFTNAreaBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyEnter:
 		// Confirm selection, copy back to wizard state, return.
-		m.ftnWizard.selectedAreas = append([]bool(nil), m.ftnAreaBrowserSelected...)
+		*m.ftnWizard.list(m.ftnAreaBrowserFiles).selected = append([]bool(nil), m.ftnAreaBrowserSelected...)
 		m.ftnWizardFields = m.fieldsFTNWizard() // refresh display
 		m.mode = modeFTNWizardForm
 		return m, nil
@@ -131,4 +139,21 @@ func (m Model) updateFTNAreaBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// ftnWizardListFetch returns the command that downloads the wizard's echo
+// area list, or its file echo list if fileEchoes, or nil when the URL is not
+// something the wizard can fetch.
+func (m Model) ftnWizardListFetch(fileEchoes bool) tea.Cmd {
+	w := m.ftnWizard
+	if fileEchoes {
+		if !ftn.EcholistIsDownloadable(w.fileEchoListURL) {
+			return nil
+		}
+		return fetchFTNFileEchoList(w.fileEchoListURL)
+	}
+	if !ftn.EcholistIsDownloadable(w.echolistURL) {
+		return nil
+	}
+	return fetchFTNEcholist(w.echolistURL, w.registryEntry)
 }

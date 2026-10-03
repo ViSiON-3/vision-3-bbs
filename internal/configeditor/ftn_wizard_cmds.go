@@ -8,10 +8,12 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 )
 
-// ftnEcholistMsg is the result of downloading and parsing an FTN echolist.
+// ftnEcholistMsg is the result of downloading and parsing an FTN echolist,
+// or with fileEchoes set, a file echo list.
 type ftnEcholistMsg struct {
-	areas []ftn.EchoArea
-	err   error
+	fileEchoes bool
+	areas      []ftn.EchoArea
+	err        error
 }
 
 // fetchFTNEcholist returns a tea.Cmd that downloads and parses a backbone.na
@@ -50,5 +52,14 @@ func fetchFTNNodelist(ctx context.Context, url string, generation uint64) tea.Cm
 	return func() tea.Msg {
 		nl, err := ftn.DownloadNodelist(ctx, url)
 		return ftnNodelistMsg{url: url, generation: generation, nodelist: nl, err: err}
+	}
+}
+
+// fetchFTNFileEchoList returns a tea.Cmd that downloads and parses a
+// network's file echo list.
+func fetchFTNFileEchoList(url string) tea.Cmd {
+	return func() tea.Msg {
+		echoes, err := ftn.DownloadFileEchoList(context.Background(), url)
+		return ftnEcholistMsg{fileEchoes: true, areas: echoes, err: err}
 	}
 }

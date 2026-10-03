@@ -310,6 +310,7 @@ type Model struct {
 	ftnAreaBrowserScroll   int
 	ftnAreaBrowserLoading  bool
 	ftnAreaBrowserError    string
+	ftnAreaBrowserFiles    bool // browsing file echoes rather than echo areas
 
 	// Seed phrase interstitial (shown after first-time wizard save)
 	showSeedInterstitial   bool

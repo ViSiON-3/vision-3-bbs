@@ -244,6 +244,24 @@ func (m *Model) fieldsFTNWizard() []fieldDef {
 				return fmt.Sprintf("%d area(s) selected", n)
 			},
 		},
+		{
+			Label: "File Echoes", Help: "Press Enter to download the network's file echo list and pick file echoes to carry (optional)",
+			Type: ftDisplay, Col: 3, Row: 20, Width: 40,
+			Get: func() string {
+				if n := w.selectedFileEchoCount(); n > 0 {
+					return fmt.Sprintf("%d file echo(es) selected", n)
+				}
+				switch {
+				case w.fileEchoesFetched:
+					return "(none selected — press Enter to browse)"
+				case len(w.carriedFileEchoes) > 0:
+					return fmt.Sprintf("%d already carried — press Enter to change", len(w.carriedFileEchoes))
+				case w.fileEchoListURL == "":
+					return "(no file echo list for this network)"
+				}
+				return "(press Enter to download file echo list)"
+			},
+		},
 	}
 }
 
