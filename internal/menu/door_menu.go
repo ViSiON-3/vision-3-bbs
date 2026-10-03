@@ -12,6 +12,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"golang.org/x/term"
@@ -31,16 +32,33 @@ func (e *MenuExecutor) doorMenuTemplate(category, part string, categories bool) 
 			return nil, err
 		}
 		name := base + "_" + code + "." + part
-		path, err := e.Menus().ResolveFirst("templates", name, name+".ANS", name+".ans")
-		if err != nil {
-			return nil, err
+		names := []string{name, name + ".ANS", name + ".ans"}
+		// Search the overlay under every spelling before the shipped tree,
+		// so a sysop's copy wins whatever its suffix. ResolveFirst checks
+		// both layers per spelling, which lets a shipped .ANS beat an
+		// overlay .ans.
+		set := e.Menus()
+		layers := []menuset.Set{menuset.Bare(set.Base)}
+		if set.HasOverlay() {
+			layers = []menuset.Set{menuset.Bare(set.Overlay), layers[0]}
 		}
-		b, err := readTemplateFile(path)
-		if err == nil {
-			return b, nil
-		}
-		if !os.IsNotExist(err) {
-			return nil, err
+		for _, layer := range layers {
+			for _, n := range names {
+				path, _, ok, err := layer.Locate("templates", n)
+				if err != nil {
+					return nil, err
+				}
+				if !ok {
+					continue
+				}
+				b, err := readTemplateFile(path)
+				if err == nil {
+					return b, nil
+				}
+				if !os.IsNotExist(err) {
+					return nil, err
+				}
+			}
 		}
 	}
 	return readTemplateFile(e.templateFile(base + "." + part))
