@@ -166,6 +166,19 @@ func TestReplaceHubLinkKeepsDownstreamLinks(t *testing.T) {
 	}
 }
 
+// The wizard asks for none of the file echo passwords, so re-running it on a
+// network must not wipe the ones set in the link editor.
+func TestReplaceHubLinkKeepsFileEchoSettings(t *testing.T) {
+	links := []config.FTNLinkConfig{{Address: "21:1/100", TICPassword: "tic", FilefixPassword: "ff", FilefixName: "AllFix"}}
+	hub := config.FTNLinkConfig{Address: "21:1/100", Hostname: "new.host"}
+
+	got := replaceHubLink(links, hub)
+
+	if got[0].TICPassword != "tic" || got[0].FilefixPassword != "ff" || got[0].FilefixName != "AllFix" {
+		t.Errorf("file echo settings lost: tic %q filefix %q robot %q", got[0].TICPassword, got[0].FilefixPassword, got[0].FilefixName)
+	}
+}
+
 // TestReplaceHubLinkHandlesChangedHubAddress covers moving to a different hub.
 func TestReplaceHubLinkHandlesChangedHubAddress(t *testing.T) {
 	links := []config.FTNLinkConfig{{Address: "21:1/100", Hostname: "old.host", Flavour: "Crash"}}

@@ -8,9 +8,9 @@ agreed with the sending link.
 
 ViSiON/3 receives file echoes. `v3mail toss` checks every `.TIC` in the inbound
 directory and moves its file into the file area linked to that echo, with a
-file record carrying the TIC's description. Sending files to a file echo
-(hatching) and subscribing to file echoes by AreaFix-style netmail are not
-supported yet.
+file record carrying the TIC's description. `helper filefix` subscribes to
+file echoes at your hub by netmail. Sending files to a file echo (hatching)
+is not supported yet.
 
 ## Before you start
 
@@ -122,9 +122,51 @@ could pose as your hub.
 
 ### 4. Subscribe at your hub
 
-Ask your hub to send you the echoes, or use its file echo manager (often
-called FileFix or AllFix) by netmail. Files start arriving with the next
-poll.
+Hubs take file echo requests by netmail to a robot usually named FileFix,
+AllFix or Filemgr, the file echo counterpart of AreaFix. `helper filefix`
+writes that netmail. To subscribe to every echo that has a linked file area
+for the network:
+
+```bash
+./helper filefix --network tqwnet --seed
+```
+
+or to send a single command:
+
+```bash
+./helper filefix --network tqwnet --command "%LIST"
+./helper filefix --network tqwnet --command "+TQW_NODE"
+```
+
+The netmail is addressed to the link's **FileFix Robot** (`filefix_name`,
+default `FileFix`) with its **FileFix Password** (`filefix_password`) as the
+subject. Many hubs use one password for TICs and FileFix, so with no
+`filefix_password` the link's `tic_password` is used. Set either in the
+Configuration Editor, Echomail Links, or in `ftn.json`:
+
+```json
+"links": [
+    {
+        "address": "1337:1/100",
+        "tic_password": "TICPASS",
+        "filefix_password": "FFPASS",
+        "filefix_name": "AllFix"
+    }
+]
+```
+
+| Flag               | Required | Description                                                                 |
+| ------------------ | -------- | --------------------------------------------------------------------------- |
+| `--network <name>` | Yes      | Network name in `ftn.json`                                                  |
+| `--command <cmd>`  | Yes*     | FileFix command (`%HELP`, `%LIST`, `%QUERY`, `%UNLINKED`, `+ECHO`, `-ECHO`); not required with `--seed` |
+| `--seed`           | No       | Subscribe (`+ECHO`) to every file echo linked to a file area for this network |
+| `--link <addr>`    | No       | Hub address (default: first link in the network)                            |
+| `--config <dir>`   | No       | Config directory (default: `configs`)                                       |
+
+The packet is written to the outbound directory; `v3mail ftn-pack` and the
+next binkd poll send it, and the hub's reply arrives as netmail to the
+sysop. Files start arriving with the following polls. If your hub has no
+file echo robot, ask its sysop to link you instead.
 
 ### 5. Nodelists
 

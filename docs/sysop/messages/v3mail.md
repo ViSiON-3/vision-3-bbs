@@ -235,6 +235,8 @@ Per-link fields (`networks.<key>.links[]`):
 | `packet_password`      | Packet password shared with hub (empty for no auth)             |
 | `areafix_password`     | Password for AreaFix netmail (subject line; set by hub)         |
 | `tic_password`         | Password inbound file echo TICs from this link must carry       |
+| `filefix_password`     | Password for FileFix netmail (subject line); empty = `tic_password` |
+| `filefix_name`         | Hub's file echo robot name (default `FileFix`)                  |
 | `name`                 | Human-readable label for this link                              |
 | `flavour`              | Delivery mode: `Normal` (default), `Crash`, `Hold`, `Direct`    |
 

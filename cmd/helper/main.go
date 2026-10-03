@@ -1,6 +1,7 @@
 // Command helper is the ViSiON/3 sysop maintenance utility. Its subcommands
 // (matched case-insensitively) import FTN echo areas from a FIDONET.NA file
-// (ftnsetup), send AreaFix netmail to a hub (areafix), compile and query
+// (ftnsetup), create file areas for file echoes (fileecho), send AreaFix and
+// FileFix netmail to a hub (areafix, filefix), compile and query
 // nodelists (nodelist), list or purge soft-deleted user accounts (users), and
 // bulk-import files into a file area or re-extract FILE_ID.DIZ descriptions
 // (files). It works directly on the
@@ -107,6 +108,8 @@ func main() {
 		cmdNodelist(os.Args[2:])
 	case "areafix", "aerafix":
 		cmdAreafix(os.Args[2:])
+	case "filefix":
+		cmdFilefix(os.Args[2:])
 	case "users":
 		cmdUsers(os.Args[2:])
 	case "files":
@@ -132,6 +135,7 @@ func printUsage(errMsg string) {
 	_, _ = fmt.Fprintln(w, helpcmd("FTNSETUP", "Import FTN echo areas from a FIDONET.NA file"))
 	_, _ = fmt.Fprintln(w, helpcmd("FILEECHO", "Create file areas for a network's file echo list"))
 	_, _ = fmt.Fprintln(w, helpcmd("AREAFIX", "Send an AreaFix netmail command to a network hub"))
+	_, _ = fmt.Fprintln(w, helpcmd("FILEFIX", "Send a FileFix netmail command to subscribe to file echoes"))
 	_, _ = fmt.Fprintln(w, helpcmd("NODELIST IMPORT", "Compile a network's nodelist for lookups"))
 	_, _ = fmt.Fprintln(w, helpcmd("NODELIST LOOKUP", "Look systems up in the compiled nodelists"))
 	_, _ = fmt.Fprintln(w)
@@ -831,6 +835,7 @@ func cmdAreafix(args []string) {
 		_, _ = fmt.Fprintf(os.Stderr, "  helper areafix --network fidonet --command \"%%LIST\"\n")
 		_, _ = fmt.Fprintf(os.Stderr, "  helper areafix --network fidonet --seed\n")
 		_, _ = fmt.Fprintf(os.Stderr, "  helper areafix --network fidonet --seed --seed-messages 50\n")
+		_, _ = fmt.Fprintf(os.Stderr, "\nFor file echoes, use helper filefix.\n")
 	}
 	_ = fs.Parse(args) // ExitOnError: Parse exits the program on failure
 
@@ -845,68 +850,9 @@ func cmdAreafix(args []string) {
 		os.Exit(1)
 	}
 
-	ftnPath := filepath.Join(*configDir, "ftn.json")
-	ftnCfg, err := loadFTNConfig(ftnPath)
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", ftnPath, err)
-		os.Exit(1)
-	}
-
-	// Find network (case-insensitive)
-	netKey := ""
-	for k := range ftnCfg.Networks {
-		if strings.EqualFold(k, *network) {
-			netKey = k
-			break
-		}
-	}
-	if netKey == "" {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: network %q not found in %s\n", *network, ftnPath)
-		os.Exit(1)
-	}
-
-	netCfg := ftnCfg.Networks[netKey]
-	if len(netCfg.Links) == 0 {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: network %s has no links\n", netKey)
-		os.Exit(1)
-	}
-
-	var link *config.FTNLinkConfig
-	if *linkAddr != "" {
-		for i := range netCfg.Links {
-			if netCfg.Links[i].Address == *linkAddr {
-				link = &netCfg.Links[i]
-				break
-			}
-		}
-		if link == nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Error: link %s not found in network %s\n", *linkAddr, netKey)
-			os.Exit(1)
-		}
-	} else {
-		link = &netCfg.Links[0]
-	}
-
-	if link.AreafixPassword == "" {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: link %s has no areafix_password configured\n", link.Address)
-		os.Exit(1)
-	}
-
-	// Use SysOp name from config so return messages reach the SysOp's inbox
-	fromName := "SysOp"
-	if cfg, err := config.LoadServerConfig(*configDir); err == nil && cfg.SysOpName != "" {
-		fromName = cfg.SysOpName
-	}
-
-	ownAddr, err := jam.ParseAddress(netCfg.OwnAddress)
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: invalid own_address %q: %v\n", netCfg.OwnAddress, err)
-		os.Exit(1)
-	}
-
-	destAddr, err := jam.ParseAddress(link.Address)
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: invalid link address %q: %v\n", link.Address, err)
+	hub := mustResolveHub(*configDir, *network, *linkAddr)
+	if hub.link.AreafixPassword == "" {
+		_, _ = fmt.Fprintf(os.Stderr, "Error: link %s has no areafix_password configured\n", hub.link.Address)
 		os.Exit(1)
 	}
 
@@ -922,7 +868,7 @@ func cmdAreafix(args []string) {
 		}
 		var lines []string
 		for _, a := range areas {
-			if (a.AreaType != "echomail" && a.AreaType != "echo") || !strings.EqualFold(a.Network, netKey) {
+			if (a.AreaType != "echomail" && a.AreaType != "echo") || !strings.EqualFold(a.Network, hub.netKey) {
 				continue
 			}
 			tag := a.EchoTag
@@ -935,14 +881,108 @@ func cmdAreafix(args []string) {
 			lines = append(lines, fmt.Sprintf("+%s,R=%d", tag, *seedMessages))
 		}
 		if len(lines) == 0 {
-			_, _ = fmt.Fprintf(os.Stderr, "Error: no echomail areas found for network %s in message_areas.json\n", netKey)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: no echomail areas found for network %s in message_areas.json\n", hub.netKey)
 			os.Exit(1)
 		}
 		seedCount = len(lines)
-		body = strings.Join(lines, "\r") + "\r---\r"
-		fmt.Printf("Seeding %d areas with +area,R=%d for network %s\n", seedCount, *seedMessages, netKey)
+		body = robotBody(lines)
+		fmt.Printf("Seeding %d areas with +area,R=%d for network %s\n", seedCount, *seedMessages, hub.netKey)
 	} else {
-		body = strings.TrimRight(*command, "\r\n") + "\r---\r"
+		body = robotBody([]string{*command})
+	}
+
+	pktPath, err := writeRobotNetmail(*configDir, hub, "AreaFix", hub.link.AreafixPassword, body, "areafix_*.pkt")
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("AreaFix netmail written to %s\n", pktPath)
+	fmt.Printf("  To: AreaFix @ %s\n", hub.link.Address)
+	if *seed {
+		fmt.Printf("  Seeded %d areas with R=%d messages each\n", seedCount, *seedMessages)
+	} else {
+		fmt.Printf("  Command: %s\n", *command)
+	}
+}
+
+// hubTarget is the network and link a robot netmail (AreaFix, FileFix) goes to.
+type hubTarget struct {
+	ftnCfg ftnConfig
+	netKey string
+	netCfg ftnNetworkConfig
+	link   *linkConfig
+}
+
+// mustResolveHub finds the network (case-insensitively) and the link to send
+// to in ftn.json — the one at linkAddr, or the network's first link — and
+// exits with an error when either is missing.
+func mustResolveHub(configDir, network, linkAddr string) hubTarget {
+	ftnPath := filepath.Join(configDir, "ftn.json")
+	ftnCfg, err := loadFTNConfig(ftnPath)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", ftnPath, err)
+		os.Exit(1)
+	}
+
+	netKey, ok := findNetwork(ftnCfg, network)
+	if !ok {
+		_, _ = fmt.Fprintf(os.Stderr, "Error: network %q not found in %s\n", network, ftnPath)
+		os.Exit(1)
+	}
+
+	netCfg := ftnCfg.Networks[netKey]
+	if len(netCfg.Links) == 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "Error: network %s has no links\n", netKey)
+		os.Exit(1)
+	}
+
+	var link *config.FTNLinkConfig
+	if linkAddr != "" {
+		for i := range netCfg.Links {
+			if netCfg.Links[i].Address == linkAddr {
+				link = &netCfg.Links[i]
+				break
+			}
+		}
+		if link == nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error: link %s not found in network %s\n", linkAddr, netKey)
+			os.Exit(1)
+		}
+	} else {
+		link = &netCfg.Links[0]
+	}
+	return hubTarget{ftnCfg: ftnCfg, netKey: netKey, netCfg: netCfg, link: link}
+}
+
+// robotBody builds an AreaFix/FileFix netmail body: one command per line,
+// ended by the "---" tear line that stops the robot reading further.
+func robotBody(lines []string) string {
+	cmds := make([]string, 0, len(lines))
+	for _, l := range lines {
+		cmds = append(cmds, strings.TrimRight(l, "\r\n"))
+	}
+	return strings.Join(cmds, "\r") + "\r---\r"
+}
+
+// writeRobotNetmail writes a netmail to the robot named to at the hub, with
+// password as its subject, into a new packet in the outbound directory, and
+// returns the packet's path. The next v3mail ftn-pack + binkd run sends it.
+func writeRobotNetmail(configDir string, hub hubTarget, to, password, body, pktPattern string) (string, error) {
+	// Use SysOp name from config so return messages reach the SysOp's inbox
+	fromName := "SysOp"
+	if cfg, err := config.LoadServerConfig(configDir); err == nil && cfg.SysOpName != "" {
+		fromName = cfg.SysOpName
+	}
+
+	ownAddr, err := jam.ParseAddress(hub.netCfg.OwnAddress)
+	if err != nil {
+		return "", fmt.Errorf("invalid own_address %q: %w", hub.netCfg.OwnAddress, err)
+	}
+
+	destAddr, err := jam.ParseAddress(hub.link.Address)
+	if err != nil {
+		return "", fmt.Errorf("invalid link address %q: %w", hub.link.Address, err)
 	}
 
 	// Netmail has no AREA kludge; add INTL, FMPT/TOPT (for points), MSGID, PID for routing
@@ -965,7 +1005,7 @@ func cmdAreafix(args []string) {
 	}
 
 	// MSGID and PID
-	msgID := fmt.Sprintf("%s %08X", netCfg.OwnAddress, uint32(time.Now().UnixNano()&0xFFFFFFFF))
+	msgID := fmt.Sprintf("%s %08X", hub.netCfg.OwnAddress, uint32(time.Now().UnixNano()&0xFFFFFFFF))
 	kludges = append(kludges, "MSGID: "+msgID)
 	kludges = append(kludges, "PID: "+jam.FormatPID())
 
@@ -984,52 +1024,41 @@ func cmdAreafix(args []string) {
 		Attr:     ftn.MsgAttrLocal | ftn.MsgAttrCrash,
 		Cost:     0,
 		DateTime: ftn.FormatFTNDateTime(time.Now()),
-		To:       "AreaFix",
+		To:       to,
 		From:     fromName,
-		Subject:  link.AreafixPassword,
+		Subject:  password,
 		Body:     bodyBytes,
 	}
 
 	hdr := ftn.NewPacketHeader(
 		uint16(ownAddr.Zone), uint16(ownAddr.Net), uint16(ownAddr.Node), uint16(ownAddr.Point),
 		uint16(destAddr.Zone), uint16(destAddr.Net), uint16(destAddr.Node), uint16(destAddr.Point),
-		link.PacketPassword,
+		hub.link.PacketPassword,
 	)
 
-	outboundPath := ftnCfg.OutboundPath
+	outboundPath := hub.ftnCfg.OutboundPath
 	if outboundPath == "" {
 		outboundPath = "data/ftn/temp_out"
 	}
 	if err := os.MkdirAll(outboundPath, 0755); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error creating outbound dir: %v\n", err)
-		os.Exit(1)
+		return "", fmt.Errorf("creating outbound dir: %w", err)
 	}
 
-	f, err := os.CreateTemp(outboundPath, "areafix_*.pkt")
+	f, err := os.CreateTemp(outboundPath, pktPattern)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error creating packet: %v\n", err)
-		os.Exit(1)
+		return "", fmt.Errorf("creating packet: %w", err)
 	}
 	pktPath := f.Name()
 	if err := ftn.WritePacket(f, hdr, []*ftn.PackedMessage{msg}); err != nil {
 		_ = f.Close()          // cleanup on error path
 		_ = os.Remove(pktPath) // cleanup on error path
-		_, _ = fmt.Fprintf(os.Stderr, "Error writing packet: %v\n", err)
-		os.Exit(1)
+		return "", fmt.Errorf("writing packet: %w", err)
 	}
 	if err := f.Close(); err != nil {
 		_ = os.Remove(pktPath) // cleanup on error path
-		_, _ = fmt.Fprintf(os.Stderr, "Error finalizing packet: %v\n", err)
-		os.Exit(1)
+		return "", fmt.Errorf("finalizing packet: %w", err)
 	}
-
-	fmt.Printf("AreaFix netmail written to %s\n", pktPath)
-	fmt.Printf("  To: AreaFix @ %s\n", link.Address)
-	if *seed {
-		fmt.Printf("  Seeded %d areas with R=%d messages each\n", seedCount, *seedMessages)
-	} else {
-		fmt.Printf("  Command: %s\n", *command)
-	}
+	return pktPath, nil
 }
 
 // --- NA file parser ---

@@ -121,7 +121,8 @@ func cmdFileEcho(args []string) {
 		os.Exit(1)
 	}
 	fmt.Printf("Added %d file areas to %s.\n", len(added), areasPath)
-	fmt.Printf("Subscribe to the echoes at your %s hub, and set each link's tic_password if the hub uses one.\n", netName)
+	fmt.Printf("Set the hub link's tic_password if the hub uses one, then subscribe to the echoes with:\n")
+	fmt.Printf("  helper filefix --network %s --seed\n", netName)
 }
 
 // checkConference reports an error unless conferences.json defines id.
