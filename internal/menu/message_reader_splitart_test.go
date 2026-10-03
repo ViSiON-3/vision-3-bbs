@@ -52,3 +52,29 @@ func TestRenderSplitArt_RowsAreWholeAndSelfContained(t *testing.T) {
 		}
 	}
 }
+
+// ESC 7 / ESC 8 split art the same way ESC[s / ESC[u does, with or without
+// any CSI sequence in the message, and DECRC brings back the colour too.
+func TestSplitArt_DECSaveRestore(t *testing.T) {
+	for name, body := range map[string]string{
+		"no CSI":   "AB\x1b7\n\x1b8CD\n",
+		"with CSI": "\x1b[31mAB\x1b7\n\x1b8CD\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if !detectAnsiArtInMessage(body) {
+				t.Fatal("not detected as ANSI art")
+			}
+			lines := RenderANSIArtToLines(body, 80, 10)
+			if got := strings.TrimRight(regexp.MustCompile("\x1b\\[[0-9;?]*[A-Za-z]").ReplaceAllString(lines[0], ""), " "); got != "ABCD" {
+				t.Errorf("row 1 = %q, want ABCD", got)
+			}
+		})
+	}
+
+	// The colour saved with the cursor comes back with it.
+	r := NewANSIRenderer(20, 3)
+	r.Render("\x1b[31m\x1b7\x1b[34mA\x1b8B")
+	if c := r.Buffer[0][0]; c.Char != 'B' || !strings.Contains(c.Style, "31") {
+		t.Errorf("cell 0 = %q in %q; want B in the red saved by ESC 7", c.Char, c.Style)
+	}
+}

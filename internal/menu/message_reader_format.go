@@ -63,8 +63,9 @@ func hasANSICursorMovement(text string) bool {
 
 // detectAnsiArtInMessage checks if message body contains ANSI art
 func detectAnsiArtInMessage(text string) bool {
-	// Must contain ANSI codes
-	if !strings.Contains(text, "\x1b[") {
+	// Must contain ANSI codes. ESC 7 / ESC 8 are not CSI sequences, so art
+	// that positions with nothing else would otherwise stop here.
+	if !strings.Contains(text, "\x1b[") && !strings.Contains(text, "\x1b7") && !strings.Contains(text, "\x1b8") {
 		return false
 	}
 
