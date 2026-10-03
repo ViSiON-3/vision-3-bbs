@@ -140,6 +140,18 @@ each network looks at the `.TIC` files in the inbound directories:
 6. **Delivery** — the file is moved into the area and recorded, with the
    TIC's long description (or its one-line description), uploaded by the
    address that hatched it, and marked reviewed. The TIC is deleted.
+7. **Replaced files** — files in the area that the TIC's `Replaces` lines
+   name are removed (see [Replaced files](#replaced-files) below).
+8. **Nodelist** — when the area is the network's nodelist echo and the file
+   matches its nodelist pattern, the nodelist is compiled for lookups (see
+   [FTN Nodelists](messages/nodelists.md)).
+
+The toss reports the files received, dropped as duplicates, moved aside as
+bad, and removed as replaced, and says when it compiled a nodelist:
+
+```text
+[fsxnet] toss: 3 packets, 41 imported, 0 dupes; file echoes: 2 received, 0 dupes, 0 bad, 1 replaced files removed, nodelist compiled
+```
 
 A file the area already holds under the same name is a **duplicate** when
 its CRC matches — it is dropped — and a **new version** when it does not: it

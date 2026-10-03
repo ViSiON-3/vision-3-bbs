@@ -103,7 +103,7 @@ the menu entry per hub).
 
 | Command    | Description                                                                |
 | ---------- | -------------------------------------------------------------------------- |
-| `toss`     | Unpack inbound ZIP bundles and toss `.pkt` files into JAM message bases    |
+| `toss`     | Unpack inbound ZIP bundles and toss `.pkt` files into JAM message bases; deliver inbound file echo files (`.TIC`) into their file areas and compile nodelists among them |
 | `scan`     | Scan JAM bases for new outbound echomail and create staging `.pkt` files   |
 | `ftn-pack` | Pack staged `.pkt` files into ZIP bundles for binkd; writes BSO flow files |
 
@@ -220,6 +220,7 @@ Per-network fields (`networks.<key>`):
 | `internal_tosser_enabled`   | Set `true` to enable `v3mail` for this network                  |
 | `origin`                    | Origin line text (empty = board name)                           |
 | `binkd_outbound_path`       | Optional: this network's own BSO outbound (`ftn-pack` output); empty = the global one. Use one per network when carrying several. |
+| `nodelist`                  | Optional: `file_echo` and `file_pattern` naming the file echo and files the network's nodelist arrives as; `toss` compiles each one into `data/ftn/nodelist/<network>.json`. See [FTN Nodelists](messages/nodelists.md). |
 
 Hub polling is scheduled through **Events**, using the per-network
 `echomail_poll_<network>` event created by the FTN wizard. See
@@ -242,6 +243,8 @@ Per-link fields (`networks.<key>.links[]`):
 ```text
 Inbound:
   binkd → secure_in/ → v3mail toss → JAM bases → Vision/3 users
+                                   → file areas (file echoes, by .TIC)
+                                   → data/ftn/nodelist/ (nodelists among them)
 
 Outbound:
   Users post → JAM bases → v3mail scan → temp_out/*.pkt
@@ -302,9 +305,26 @@ The echo area tag in the inbound packet does not match any area in `configs/mess
 **High duplicate rate**
 Search `v3mail.log` for `dupe message`: each line names the echo, MSGID, packet, sending link and when the message was first seen. Dupes from a second uplink, or a bundle resent after a dropped session, are normal. Set `dupe_area_tag` to keep a copy of every dupe for inspection. The size of `data/ftn/dupes.json` is not a dupe count: it holds every message seen in the last 30 days.
 
+**File echo files not arriving in their area**
+The toss prints an error for each TIC it could not deliver, saying why, and
+moves the TIC and its file to `temp_path/badtic`: usually no file area linked
+to the echo, or a `tic_password` mismatch. Fix the cause, move both files back
+into the inbound and toss again. See
+[Undeliverable TICs](files/file-echoes.md#undeliverable-tics).
+
+**Nodelist not compiled**
+Check that the network's `nodelist.file_echo` matches the echo's tag and that
+`nodelist.file_pattern` matches the file's name in the area. A file that
+matches the pattern but cannot be compiled is a toss error saying why (not a
+nodelist, a nodediff, or another zone's list). An older list than the one
+already compiled is skipped and logged. Compile one by hand with
+`helper nodelist import`. See [FTN Nodelists](messages/nodelists.md).
+
 ## See Also
 
 - [FTN Echomail](messages/ftn-echomail.md) — End-to-end FTN setup guide
+- [FTN File Echoes](files/file-echoes.md) — Inbound TIC processing during `toss`
+- [FTN Nodelists](messages/nodelists.md) — Nodelist compiling during `toss`, and `helper nodelist`
 - [JAM Echomail](messages/jam-echomail.md) — JAM message base internals
 - [Event Scheduler](advanced/event-scheduler.md) — Scheduling v3mail commands
 - [Message Areas](messages/message-areas.md) — Configuring message areas

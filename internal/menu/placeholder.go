@@ -28,7 +28,7 @@ type PlaceholderMatch struct {
 //	4=:WIDTH (optional), 5=### (optional), 6=* (optional), 7=<MAXWIDTH (optional)
 //
 // G = gap fill: fills remaining line width with ─ (CP437 0xC4) characters.
-var placeholderRegex = regexp.MustCompile(`@([BTFSUL#NDWPEOMAZCXGVK])(?:\|([LRC])(\d+)?)?(?::(\d+)|([#]+)|(\*)|<(\d+))?@`)
+var placeholderRegex = regexp.MustCompile(`@([BTFSUL#NDWPEOMAZCXGVKIYR])(?:\|([LRC])(\d+)?)?(?::(\d+)|([#]+)|(\*)|<(\d+))?@`)
 
 // parsePlaceholders extracts all @CODE@ patterns from template bytes.
 func parsePlaceholders(template []byte) []PlaceholderMatch {
@@ -251,6 +251,22 @@ func headerTemplateUsesUserNote(template []byte) bool {
 	}
 	for _, m := range parsePlaceholders(template) {
 		if m.Code == "U" {
+			return true
+		}
+	}
+	return false
+}
+
+// headerTemplateUsesSystemNames reports whether a header template shows the
+// nodelist system names (@Y@ or @R@, or |Y / |R in a legacy template). Looking
+// them up costs a nodelist check per message, so it is skipped when the
+// template has no use for them.
+func headerTemplateUsesSystemNames(template []byte) bool {
+	if bytes.Contains(template, []byte("|Y")) || bytes.Contains(template, []byte("|R")) {
+		return true
+	}
+	for _, m := range parsePlaceholders(template) {
+		if m.Code == "Y" || m.Code == "R" {
 			return true
 		}
 	}
