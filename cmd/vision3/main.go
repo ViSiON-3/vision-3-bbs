@@ -1015,6 +1015,15 @@ func sessionHandler(s ssh.Session) {
 				slog.Info("auto mode selecting UTF-8 for modern terminal", "node", nodeID, "term", termType)
 				effectiveMode = ansi.OutputModeUTF8
 			}
+
+			// The terminal type is a guess at the encoding; ask the terminal.
+			probed := menu.ProbeSessionEncoding(s, encodingProbeTimeout)
+			if probed == ansi.OutputModeAuto {
+				slog.Info("encoding probe got no answer, keeping terminal type guess", "node", nodeID)
+			} else if probed != effectiveMode {
+				slog.Info("encoding probe overrides terminal type guess", "node", nodeID, "term", termType, "utf8", probed == ansi.OutputModeUTF8)
+			}
+			effectiveMode = connectEncoding(effectiveMode, probed)
 		} else {
 			// No PTY, safer to default to UTF-8? Or CP437?
 			// Let's default to UTF-8 for non-PTY as it's more common for raw streams.
@@ -1435,7 +1444,7 @@ func sessionHandler(s ssh.Session) {
 	effectiveHeight := int(termHeight.Load())
 
 	// Capture whether user needs first-time setup BEFORE auto-saving dimensions
-	needsSetup := (authenticatedUser.ScreenWidth == 0 || authenticatedUser.ScreenHeight == 0 || authenticatedUser.PreferredEncoding == "")
+	needsSetup := needsFirstLoginSetup(authenticatedUser)
 
 	if authenticatedUser.ScreenWidth > 0 && authenticatedUser.ScreenHeight > 0 {
 		detectedW := effectiveWidth
@@ -1519,45 +1528,11 @@ func sessionHandler(s ssh.Session) {
 	slog.Info("effective terminal size", "node", nodeID, "user", authenticatedUser.Handle, "width", effectiveWidth, "height", effectiveHeight)
 
 	// --- Post-Auth Terminal Setup Prompts ---
-	// If user doesn't have saved preferences, prompt for encoding and terminal size configuration
+	// If the user has no saved screen size, prompt for the terminal height.
 	// needsSetup was captured above BEFORE auto-saving PTY dimensions, so it reflects the original state
 
 	if needsSetup && isPty && outputModeFlag == "auto" {
-		termType := strings.ToLower(ptyReq.Term)
 		setupChanged := false
-
-		// Encoding Selection Prompt (for ambiguous terminals like xterm)
-		if effectiveMode == ansi.OutputModeUTF8 && termType == "xterm" && authenticatedUser.PreferredEncoding == "" {
-			_, _ = terminal.Write([]byte("\r\n"))                                                                                                    // best-effort display
-			_, _ = terminal.Write([]byte("\x1b[1;36m CHARACTER ENCODING SELECTION\x1b[0m\r\n"))                                                      // best-effort display
-			_, _ = terminal.Write([]byte("\x1b[1;33m ----------------------------\x1b[0m\r\n"))                                                      // best-effort display
-			_, _ = terminal.Write([]byte("\r\n"))                                                                                                    // best-effort display
-			_, _ = terminal.Write([]byte("Your terminal reported as '\x1b[1m" + termType + "\x1b[0m' which can support multiple encodings.\r\n"))    // best-effort display
-			_, _ = terminal.Write([]byte("\r\n"))                                                                                                    // best-effort display
-			_, _ = terminal.Write([]byte("\x1b[1;32m[U]\x1b[0m Continue with \x1b[1mUTF-8\x1b[0m (modern terminals, Unicode support)\r\n"))          // best-effort display
-			_, _ = terminal.Write([]byte("\x1b[1;32m[C]\x1b[0m Switch to \x1b[1mCP437\x1b[0m (retro BBS terminals: SyncTerm, NetRunner, etc.)\r\n")) // best-effort display
-			_, _ = terminal.Write([]byte("\r\n"))                                                                                                    // best-effort display
-			_, _ = terminal.Write([]byte("Choice \x1b[1;33m[U/C]\x1b[0m: "))                                                                         // best-effort display
-
-			choice, err := terminal.ReadLine()
-			if err == nil {
-				choice = strings.TrimSpace(strings.ToUpper(choice))
-				if choice == "C" || choice == "CP437" {
-					slog.Info("user selected CP437 encoding", "node", nodeID)
-					effectiveMode = ansi.OutputModeCP437
-					authenticatedUser.PreferredEncoding = "cp437"
-					setupChanged = true
-					// Restore the terminal's palette before the rest of setup is drawn.
-					applyPalette()
-					_, _ = terminal.Write([]byte("\r\n\x1b[1;32m[OK]\x1b[0m Switched to CP437 encoding for retro BBS experience.\r\n")) // best-effort display
-				} else {
-					slog.Info("user selected UTF-8 encoding", "node", nodeID)
-					authenticatedUser.PreferredEncoding = "utf8"
-					setupChanged = true
-					_, _ = terminal.Write([]byte("\r\n\x1b[1;32m[OK]\x1b[0m Continuing with UTF-8 encoding.\r\n")) // best-effort display
-				}
-			}
-		}
 
 		// Terminal Height Adjustment Prompt
 		detectedHeight := int(termHeight.Load())
@@ -1618,21 +1593,17 @@ func sessionHandler(s ssh.Session) {
 			}
 			_, _ = terminal.Write([]byte("\r\n")) // best-effort display
 		}
-	} else if authenticatedUser.PreferredEncoding != "" {
-		// User has saved encoding preference - apply it
-		switch authenticatedUser.PreferredEncoding {
-		case "cp437":
-			effectiveMode = ansi.OutputModeCP437
-			slog.Info("using saved encoding preference", "node", nodeID, "encoding", "cp437")
-		case "utf8":
-			effectiveMode = ansi.OutputModeUTF8
-			slog.Info("using saved encoding preference", "node", nodeID, "encoding", "utf8")
-		}
 	}
 
-	// effectiveMode may have just changed (encoding prompt above, or a saved
-	// user preference) — re-record it so post-auth input decodes extended
-	// characters with the mode actually in effect for the rest of the session.
+	// An unset encoding (Auto) keeps what was detected at connect.
+	if authenticatedUser.PreferredEncoding != "" {
+		effectiveMode = loginEncoding(effectiveMode, authenticatedUser.PreferredEncoding)
+		slog.Info("using saved encoding preference", "node", nodeID, "encoding", authenticatedUser.PreferredEncoding)
+	}
+
+	// effectiveMode may have just changed (a saved user preference) — re-record
+	// it so post-auth input decodes extended characters with the mode actually
+	// in effect for the rest of the session.
 	menu.SetSessionOutputMode(s, effectiveMode)
 	applyPalette()
 
