@@ -37,12 +37,17 @@ type ANSIRenderer struct {
 	// eagerly instead would insert a blank row after every full-width line.
 	pendingWrap bool
 	// Cursor position stashed by ESC[s and brought back by ESC[u. ANSI.SYS
-	// semantics: position only, not the graphic attributes (that is DECSC,
-	// ESC 7, which the art in these messages does not use). savedValid keeps a
+	// semantics: position only, not the graphic attributes. savedValid keeps a
 	// restore before any save from jumping the cursor to the origin.
 	savedX     int
 	savedY     int
 	savedValid bool
+	// DECSC (ESC 7) / DECRC (ESC 8): a separate slot, as on a real terminal,
+	// that saves the graphic attributes along with the position.
+	decX, decY int
+	decSGR     ansi.SGRState
+	decStyle   string
+	decValid   bool
 }
 
 // NewANSIRenderer creates a new renderer with given dimensions
@@ -224,6 +229,21 @@ func (r *ANSIRenderer) parseEscapeSequence(text string) (string, int) {
 func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 	if len(seq) < 2 {
 		return false
+	}
+
+	switch seq {
+	case "\x1b7": // DECSC: save cursor and graphic attributes
+		r.decX, r.decY = r.CursorX, r.CursorY
+		r.decSGR, r.decStyle = r.sgr, r.CurrentStyle
+		r.decValid = true
+		return false
+	case "\x1b8": // DECRC: restore them; a no-op with nothing saved
+		if r.decValid {
+			r.CursorX, r.CursorY = r.decX, r.decY
+			r.sgr, r.CurrentStyle = r.decSGR, r.decStyle
+			r.pendingWrap = false
+		}
+		return true
 	}
 
 	// CSI sequences (ESC [)
