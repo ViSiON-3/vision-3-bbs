@@ -62,11 +62,17 @@ func decode(data []byte, size, dicBits int) ([]byte, error) {
 			dist = 1<<(dist-1) + r.bits(dist-1)
 		}
 		from := len(out) - dist - 1
-		if from < 0 || len(out)+length > size {
+		if len(out)+length > size {
 			return nil, errCorrupt
 		}
 		for i := range length {
-			out = append(out, out[from+i])
+			// The window starts out full of spaces, and a match near the
+			// start of the data may copy some of them.
+			b := byte(' ')
+			if from+i >= 0 {
+				b = out[from+i]
+			}
+			out = append(out, b)
 		}
 	}
 	if r.over > 16 {
