@@ -28,6 +28,7 @@
   "fileListingMode": "lightbar",
   "doorMenuMode": "lightbar",
   "doorMenuSort": "name",
+  "doorMenuColumns": 1,
   "doorCategories": [
     {"code": "EXAMPLES", "name": "Example Doors", "description": "Bundled example scripts", "sort_order": 0}
   ],

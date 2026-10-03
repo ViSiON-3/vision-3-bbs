@@ -11,6 +11,33 @@ func doorSortItems() []LookupItem {
 	return []LookupItem{{Value: "", Display: "Default (name, or global setting)"}, {Value: "name", Display: "Name"}, {Value: "code", Display: "Code"}, {Value: "config", Display: "Config file order"}, {Value: "manual", Display: "Manual sort order"}}
 }
 
+// doorColumnItems lists the column counts; withDefault adds an inherit entry
+// stored as an empty value (0).
+func doorColumnItems(withDefault bool) func() []LookupItem {
+	return func() []LookupItem {
+		items := []LookupItem{}
+		if withDefault {
+			items = append(items, LookupItem{Value: "", Display: "Default (global setting)"})
+		}
+		for n := 1; n <= config.MaxDoorMenuColumns; n++ {
+			items = append(items, LookupItem{Value: strconv.Itoa(n), Display: strconv.Itoa(n)})
+		}
+		return items
+	}
+}
+
+// parseDoorColumns reads a column lookup value; empty means inherit (0).
+func parseDoorColumns(v string) (int, error) {
+	if v == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 || n > config.MaxDoorMenuColumns {
+		return 0, fmt.Errorf("columns must be 1 to %d", config.MaxDoorMenuColumns)
+	}
+	return n, nil
+}
+
 func nextDoorConfigOrder(doors map[string]config.DoorConfig) int {
 	n := 0
 	for _, d := range doors {
@@ -68,5 +95,18 @@ func (m *Model) fieldsDoorCategory() []fieldDef {
 			return nil
 		}},
 		{Label: "Door Sort", Help: "Ordering inside this category", Type: ftLookup, Col: 3, Row: 7, Width: 15, Get: func() string { return c.Sort }, Set: func(v string) error { c.Sort = v; return nil }, LookupItems: doorSortItems},
+		{Label: "Columns", Help: "Columns for this category's door list", Type: ftLookup, Col: 3, Row: 8, Width: 15, Get: func() string {
+			if c.Columns == 0 {
+				return ""
+			}
+			return strconv.Itoa(c.Columns)
+		}, Set: func(v string) error {
+			n, err := parseDoorColumns(v)
+			if err != nil {
+				return err
+			}
+			c.Columns = n
+			return nil
+		}, LookupItems: doorColumnItems(true)},
 	}
 }

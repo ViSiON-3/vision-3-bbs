@@ -182,6 +182,21 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			art[i] = string(b)
 		}
+		// Columns need one-line rows. A COL template, when present, is the
+		// row for a column layout; it is usually narrower than MID.
+		cols := doorMenuFitColumns(cfg.DoorMenuColumnsFor(category), min(w, ansi.ArtWidth))
+		if cols > 1 {
+			b, err := e.doorMenuTemplate(category, "COL", categories)
+			switch {
+			case err == nil:
+				art[1] = string(b)
+			case !os.IsNotExist(err):
+				return c.currentUser, "", err
+			}
+			if strings.Contains(strings.TrimRight(art[1], "\r\n"), "\n") {
+				cols = 1
+			}
+		}
 		expand := func(s string, pg, pt int) string {
 			s = strings.NewReplacer("^CN", name, "^TI", rec.Title, "^PG", strconv.Itoa(pg), "^PT", strconv.Itoa(pt)).Replace(s)
 			return string(e.applyCommonTemplateTokens([]byte(s), c.currentUser, c.nodeNumber))
@@ -212,13 +227,21 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		maxPage := max(1, len(entries))
 		rowHeight := 1
-		for i, entry := range entries {
-			rowHeight = max(rowHeight, doorMenuLines(line(entry, i+1, maxPage, maxPage), w))
+		if cols == 1 {
+			for i, entry := range entries {
+				rowHeight = max(rowHeight, doorMenuLines(line(entry, i+1, maxPage, maxPage), w))
+			}
 		}
-		size := doorMenuPageSize(h, doorMenuLines(frame(art[0], maxPage, maxPage), w), doorMenuLines(frame(art[2], maxPage, maxPage), w), doorMenuLines(prompt.String()+strings.Repeat("X", 16), w), rowHeight)
+		rows := doorMenuPageSize(h, doorMenuLines(frame(art[0], maxPage, maxPage), w), doorMenuLines(frame(art[2], maxPage, maxPage), w), doorMenuLines(prompt.String()+strings.Repeat("X", 16), w), rowHeight)
+		size := rows * cols
 		pages := max(1, (len(entries)+size-1)/size)
 		page := selected / size
 		start := page * size
+		// Entries run down each column. A page that is not full is split
+		// evenly across the columns rather than filling the first one.
+		onPage := min(size, len(entries)-start)
+		rowsOnPage := max(1, (onPage+cols-1)/cols)
+		cellWidth := (min(w, ansi.ArtWidth) - 1) / cols
 		lightbar := cfg.DoorMenuMode != "list"
 		barColors := false
 		hi, normal := colorCodeToAnsi(e.Theme().YesNoHighlightColor), "\x1b[0m"
@@ -247,19 +270,63 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 				return c.currentUser, "", err
 			}
 		}
-		for i := start; i < min(start+size, len(entries)); i++ {
+		// cell renders entry i as drawn: the whole row in one column, or a
+		// cell cut and padded to cellWidth in a column layout. It reads
+		// selected when called, so it also redraws a cell after a move.
+		cell := func(i int) string {
 			s := strings.TrimRight(line(entries[i], i+1, page+1, pages), "\r\n")
-			color := normal
-			if barColors {
-				s = doorMenuSGR.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(s))), "")
-			}
+			color, plain := normal, barColors
 			if lightbar && i == selected {
-				color = hi
-				s = doorMenuSGR.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(s))), "")
+				color, plain = hi, true
 			}
-			if err := block(color + s + "\x1b[0m"); err != nil {
+			if plain || cols > 1 {
+				s = string(ansi.ReplacePipeCodes([]byte(s)))
+			}
+			if plain {
+				s = doorMenuSGR.ReplaceAllString(s, "")
+			}
+			if cols == 1 {
+				return color + s + "\x1b[0m"
+			}
+			s = ansi.PadVisible(ansi.TruncateVisible(s, cellWidth-1), cellWidth-1, ' ')
+			return color + s + "\x1b[0m "
+		}
+		for r := 0; r < rowsOnPage; r++ {
+			var row strings.Builder
+			for k := 0; k < cols; k++ {
+				if i := start + k*rowsOnPage + r; i < start+onPage {
+					row.WriteString(cell(i))
+				}
+			}
+			if err := block(row.String()); err != nil {
 				return c.currentUser, "", err
 			}
+		}
+		// A move within the page repaints just the two cells involved. That
+		// needs known screen positions: the screen was cleared and every row
+		// is one line, so entry i sits below the header at its row and column.
+		inPlace := lightbar && rec.GetClrScrBefore() && rowHeight == 1 && onPage > 0
+		topRows := doorMenuLines(frame(art[0], page+1, pages), w)
+		at := func(i int) string {
+			off := i - start
+			return ansi.MoveCursor(1+topRows+off%rowsOnPage, 1+(off/rowsOnPage)*cellWidth)
+		}
+		// move selects entry to. It reports true when the screen is up to date
+		// (a repaint in place, or nothing to do) and false when the page must
+		// be redrawn.
+		move := func(to int) (bool, error) {
+			to = max(0, min(to, len(entries)-1))
+			if to == selected {
+				return true, nil
+			}
+			from := selected
+			selected = to
+			if !inPlace || to < start || to >= start+onPage {
+				return false, nil
+			}
+			out := strings.Repeat("\b \b", len(typed)) + ansi.SaveCursor() + at(from) + cell(from) + at(to) + cell(to) + ansi.RestoreCursor()
+			typed = ""
+			return true, write(out)
 		}
 		if err := block(frame(art[2], page+1, pages)); err != nil {
 			return c.currentUser, "", err
@@ -279,21 +346,37 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 			switch key {
 			case editor.KeyEsc:
 				back = true
-			case editor.KeyArrowUp:
-				if lightbar {
-					selected--
+			case editor.KeyArrowUp, editor.KeyArrowDown, editor.KeyArrowLeft, editor.KeyArrowRight, editor.KeyHome, editor.KeyEnd:
+				to, ok := selected, true
+				switch key {
+				case editor.KeyArrowUp:
+					to, ok = selected-1, lightbar
+				case editor.KeyArrowDown:
+					to, ok = selected+1, lightbar
+				case editor.KeyArrowLeft:
+					// Same row, previous column.
+					to, ok = selected-rowsOnPage, lightbar && selected-rowsOnPage >= start
+				case editor.KeyArrowRight:
+					// Same row, next column; the last entry when that column
+					// is shorter.
+					last := start + onPage - 1
+					to = min(selected+rowsOnPage, last)
+					ok = lightbar && (selected-start)/rowsOnPage < (last-start)/rowsOnPage
+				case editor.KeyHome:
+					to = 0
+				case editor.KeyEnd:
+					to = len(entries) - 1
 				}
-				typed = ""
-			case editor.KeyArrowDown:
-				if lightbar {
-					selected++
+				if !ok {
+					continue
 				}
-				typed = ""
-			case editor.KeyHome:
-				selected = 0
-				typed = ""
-			case editor.KeyEnd:
-				selected = len(entries) - 1
+				done, err := move(to)
+				if err != nil {
+					return c.currentUser, "", err
+				}
+				if done {
+					continue
+				}
 				typed = ""
 			case editor.KeyPageUp, '[':
 				selected = max(0, start-size)

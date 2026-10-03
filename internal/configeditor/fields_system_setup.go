@@ -107,6 +107,14 @@ func sysFieldsDefaults(cfg *config.ServerConfig) []fieldDef {
 			return []LookupItem{{Value: "lightbar", Display: "lightbar"}, {Value: "list", Display: "list"}}
 		}},
 		fieldDef{Label: "Door Menu Sort", Help: "Default generated door ordering", Type: ftLookup, Col: 3, Row: row + 1, Width: 15, Get: func() string { return cfg.DoorMenuSort }, Set: func(v string) error { cfg.DoorMenuSort = v; return nil }, LookupItems: doorSortItems},
+		fieldDef{Label: "Door Menu Cols", Help: "Columns in the generated door menu", Type: ftLookup, Col: 3, Row: row + 2, Width: 15, Get: func() string { return strconv.Itoa(max(1, cfg.DoorMenuColumns)) }, Set: func(v string) error {
+			n, err := parseDoorColumns(v)
+			if err != nil {
+				return err
+			}
+			cfg.DoorMenuColumns = n
+			return nil
+		}, LookupItems: doorColumnItems(false)},
 	)
 	return fields
 }

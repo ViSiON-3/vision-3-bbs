@@ -23,6 +23,7 @@ In `config.json`:
 {
   "doorMenuMode": "lightbar",
   "doorMenuSort": "name",
+  "doorMenuColumns": 1,
   "doorCategories": [
     {
       "code": "GAMES",
@@ -31,7 +32,8 @@ In `config.json`:
       "min_access_level": 10,
       "acs": "",
       "sort_order": 0,
-      "sort": "name"
+      "sort": "name",
+      "columns": 2
     }
   ]
 }
@@ -40,7 +42,15 @@ In `config.json`:
 `doorMenuMode` is `lightbar` (also the default when absent) or `list`.
 `doorMenuSort` is `name` (default), `code`, `config` (original order in
 `doors.json`), or `manual` (ascending `sort_order`, then code). A category's
-`sort` overrides that default. Categories sort by `sort_order`, then name and
+`sort` overrides that default.
+
+`doorMenuColumns` lays the list out in 1 to 4 columns (default 1), and a
+category's `columns` overrides it for that category's door list; the category
+picker uses the global setting. Entries are numbered down each column, and a
+page that is not full is split evenly across the columns. A terminal too
+narrow for the setting gets as many columns as fit, at least 20 characters
+each, and a row template that spans more than one line always gets one
+column. Categories sort by `sort_order`, then name and
 code. Category codes use the same 1–16 character uppercase slug rules as door
 codes; `OTHER` is reserved.
 
@@ -70,8 +80,10 @@ Reload configuration through the board's existing configuration reload flow
 
 In the config editor:
 
-- **System Setup → Default Settings** sets the menu mode and default sort.
-- **C — Door Categories** adds, edits, and deletes categories. Renaming updates
+- **System Setup → Default Settings** sets the menu mode, default sort and
+  column count.
+- **C — Door Categories** adds, edits, and deletes categories, including a
+  per-category column count. Renaming updates
   door references; deleting moves those doors to Other.
 - **7 — Door Programs** includes a category picker, description, hidden flag,
   and manual sort order. Saving preserves the original configuration order.
@@ -83,7 +95,10 @@ Enter. Numbers are global across pages. `[` / `]` or PgUp/PgDn change pages;
 Home/End jump to the beginning/end. Q or Esc goes back. Q is reserved when the
 input is empty; select a code starting with Q using its displayed number.
 
-Lightbar mode also accepts Up/Down and Enter to launch the highlighted entry.
+Lightbar mode also accepts Up/Down and Enter to launch the highlighted entry,
+and Left/Right to move between columns. Moving within a page repaints only the
+entries involved when the MNU clears the screen (`CLR`); with `CLR` off, or
+with multi-line rows, each move redraws the page.
 List mode waits for a typed selection followed by Enter. There is no per-user
 mode override in this version.
 
@@ -101,6 +116,11 @@ file resolves through the usual menu-set overlay before shipped files.
 - `templates/DOORMENU_GAMES.TOP`, `.MID`, `.BOT`: optional per-category art.
   Each missing part independently falls back to the generic file.
 - `templates/DOORCAT.TOP`, `.MID`, `.BOT`: category picker art.
+- `templates/DOORMENU.COL`, `DOORMENU_GAMES.COL`, `DOORCAT.COL`: the row used
+  in a column layout, falling back to `.MID`. Each cell is cut and padded to
+  its column, so keep it narrow; the shipped one shows the number and name.
+  Column titles in a TOP template describe the one-column row and may need
+  their own per-category TOP for a column layout.
 
 Template filenames may also have `.ANS` or `.ans` suffixes. SAUCE metadata is
 removed through the shared template reader. Keep these templates as flowing
@@ -125,5 +145,5 @@ The shipped menu set includes generic art and an `EXAMPLES` category header.
 The default configuration puts the Hello World door in that category. The
 stock hand-drawn Doors menu is unchanged; bind `RUN:DOORMENU` to use the picker.
 
-Multi-column layout, per-door custom hotkeys, dimmed locked entries, favourites,
+Per-door custom hotkeys, dimmed locked entries, favourites,
 search, and launch statistics are not part of this version.

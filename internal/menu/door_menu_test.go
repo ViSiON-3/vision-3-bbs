@@ -388,3 +388,82 @@ func TestDoorMenuPagingHelpOnlyWithSeveralPages(t *testing.T) {
 		t.Errorf("doorMenuDropPaging = %q", got)
 	}
 }
+
+// withDoorColumns sets the harness's global column count.
+func withDoorColumns(c *cmdCtx, n int) {
+	cfg := c.e.GetServerConfig()
+	cfg.DoorMenuColumns = n
+	c.e.SetServerConfig(cfg)
+}
+
+// Entries run down each column, and a page that is not full splits evenly:
+// seven doors in two columns are four rows, D01 beside D05.
+func TestDoorMenuColumnsLayout(t *testing.T) {
+	c, s, _ := doorMenuHarness(t, "list", "q", 7)
+	withDoorColumns(c, 2)
+	if _, _, err := runDoorMenu(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	var rows []string
+	for _, l := range strings.Split(ansi.StripAnsi(s.output()), "\r\n") {
+		if strings.Contains(l, "Door D") {
+			rows = append(rows, l)
+		}
+		if ansi.VisibleLength(l) > 79 {
+			t.Errorf("line reaches the last column: %q", l)
+		}
+	}
+	if len(rows) != 4 || !strings.Contains(rows[0], "D01") || !strings.Contains(rows[0], "D05") || strings.Contains(rows[3], "D08") {
+		t.Fatalf("unexpected column layout:\n%s", strings.Join(rows, "\n"))
+	}
+}
+
+// Left and Right move between columns on the same row; Right from a row the
+// shorter last column lacks lands on the last entry.
+func TestDoorMenuColumnsArrowKeys(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{"\x1b[C\r", "D05"},
+		{"\x1b[C\x1b[D\r", "D01"},
+		{"\x1b[B\x1b[B\x1b[B\x1b[C\r", "D07"},
+		{"\x1b[C\x1b[C\r", "D05"},
+		{"\x1b[D\r", "D01"},
+	} {
+		c, _, calls := doorMenuHarness(t, "lightbar", tc.input+"q", 7)
+		withDoorColumns(c, 2)
+		if _, _, err := runDoorMenu(c, ""); err != nil {
+			t.Fatal(err)
+		}
+		if len(*calls) != 1 || (*calls)[0] != tc.want {
+			t.Errorf("%q: launched %v, want %s", tc.input, *calls, tc.want)
+		}
+	}
+}
+
+// Moving the bar within a page repaints the two cells involved instead of
+// clearing and redrawing the screen; changing page still redraws it.
+func TestDoorMenuLightbarRepaintsInPlace(t *testing.T) {
+	for _, tc := range []struct {
+		input  string
+		clears int
+	}{{"\x1b[B\x1b[B\x1b[Aq", 1}, {"]q", 2}} {
+		c, s, _ := doorMenuHarness(t, "lightbar", tc.input, 30)
+		if _, _, err := runDoorMenu(c, ""); err != nil {
+			t.Fatal(err)
+		}
+		out := s.output()
+		if got := strings.Count(out, ansi.ClearScreen()); got != tc.clears {
+			t.Errorf("%q: %d screen clears, want %d", tc.input, got, tc.clears)
+		}
+		if tc.clears == 1 && !strings.Contains(out, ansi.SaveCursor()+ansi.MoveCursor(3, 1)) {
+			t.Errorf("%q: no in-place repaint of the first row", tc.input)
+		}
+	}
+}
+
+func TestDoorMenuFitColumns(t *testing.T) {
+	for _, tc := range []struct{ cols, width, want int }{{2, 80, 2}, {4, 80, 3}, {4, 40, 1}, {1, 80, 1}, {3, 10, 1}} {
+		if got := doorMenuFitColumns(tc.cols, tc.width); got != tc.want {
+			t.Errorf("doorMenuFitColumns(%d, %d) = %d, want %d", tc.cols, tc.width, got, tc.want)
+		}
+	}
+}

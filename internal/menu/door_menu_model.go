@@ -98,3 +98,13 @@ func doorMenuPageSize(height, top, bottom, prompt, rowHeight int) int {
 	// One spare line keeps the last prompt off the scrolling bottom row.
 	return max(1, (height-top-bottom-prompt-1)/rowHeight)
 }
+
+// doorMenuMinCellWidth is the narrowest column worth drawing. A terminal too
+// narrow for the configured columns gets as many as fit, and at least one.
+const doorMenuMinCellWidth = 20
+
+// doorMenuFitColumns returns how many of cols columns fit in width, leaving
+// the last column free as the rest of the layout does.
+func doorMenuFitColumns(cols, width int) int {
+	return max(1, min(cols, (width-1)/doorMenuMinCellWidth))
+}

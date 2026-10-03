@@ -52,6 +52,7 @@ type ServerConfig struct {
 	FileListingMode     string `json:"fileListingMode"`
 	DoorMenuMode        string `json:"doorMenuMode,omitempty"`
 	DoorMenuSort        string `json:"doorMenuSort,omitempty"`
+	DoorMenuColumns     int    `json:"doorMenuColumns,omitempty"`
 	LegacySSHAlgorithms bool   `json:"legacySSHAlgorithms"`
 	AllowNewUsers       bool   `json:"allowNewUsers"`
 
