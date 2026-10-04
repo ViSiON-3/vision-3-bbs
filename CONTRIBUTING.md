@@ -3,6 +3,21 @@
 Contributions are welcome. Open an issue or a pull request; CI runs
 `gofmt`, `go vet`, `go test` and `golangci-lint` on every PR.
 
+## Tests for behavior changes
+
+When a code change alters behavior users can see or rely on—including screen
+presentation, calculations, command handling, or state changes—add or update a
+test that demonstrates the expected behavior. Prefer a unit test for a rule,
+calculation, parser, or state transition. Add an integration or terminal
+regression test when the change affects how components work together or what a
+caller sees and can do. Bug fixes should include a test that fails before the
+fix and passes after it.
+
+For menu work, cover the action's outcome, not only that its menu opens. Keep
+the test isolated from live users, real file transfers, and external services.
+The [terminal regression guide](docs/development/mcp-regression.md) describes
+the live test rig and its current coverage.
+
 ## Doc comments
 
 Every package and every exported identifier (type, function, method,

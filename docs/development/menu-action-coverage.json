@@ -1,0 +1,1909 @@
+[
+  {
+    "menu": "ADMIN",
+    "index": 0,
+    "keys": "V",
+    "command": "RUN:VALIDATEUSER",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/sysop_readonly_actions",
+    "handlerTests": [
+      "TestValidateUser_EmptyQueue",
+      "TestValidateUser_QueueListsOnlyPending",
+      "TestValidateUser_ValidatesAndEmptiesQueue"
+    ]
+  },
+  {
+    "menu": "ADMIN",
+    "index": 1,
+    "keys": "E",
+    "command": "RUN:ADMINLISTUSERS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/sysop_readonly_actions",
+    "handlerTests": [
+      "TestUserEditor_BanUnbanAndDeleteToggles",
+      "TestUserEditor_BlankHandleIsNotSaved",
+      "TestUserEditor_DisconnectLogsOff",
+      "TestUserEditor_EditsTextFieldsAndSaves",
+      "TestUserEditor_EmptyPasswordCancels",
+      "TestUserEditor_LevelInputValidation",
+      "TestUserEditor_PasswordChangeIsMaskedAndHashed",
+      "TestUserEditor_SaveKeyMovesWhenNothingStaged",
+      "TestUserEditor_ToggleValidatedAndProtectUserOne",
+      "TestUserEditor_UnchangedAndCancelledEditsStageNothing",
+      "TestUserEditor_UnsavedChangesGuardQuitAndDiscard"
+    ]
+  },
+  {
+    "menu": "ADMIN",
+    "index": 2,
+    "keys": "N",
+    "command": "RUN:TOGGLEALLOWNEWUSERS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/sysop_toggle_new_users_and_restore",
+    "handlerTests": [
+      "TestToggleAllowNewUsers_PersistsFlag"
+    ]
+  },
+  {
+    "menu": "ADMIN",
+    "index": 3,
+    "keys": "P",
+    "command": "RUN:PURGEUSERS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/sysop_readonly_actions",
+    "handlerTests": [
+      "TestPurgeUsers_DeclineKeepsEveryone",
+      "TestPurgeUsers_DisabledByDefault",
+      "TestPurgeUsers_NothingEligible",
+      "TestPurgeUsers_RemovesOnlyExpiredDeletions"
+    ]
+  },
+  {
+    "menu": "ADMIN",
+    "index": 4,
+    "keys": "T",
+    "command": "RUN:VOTE",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/sysop_voting_decline_first_topic",
+    "handlerTests": [
+      "TestVote_CastOnceAndResults",
+      "TestVote_NavigateAndList",
+      "TestVote_NoTopicsAndSysopCreatesFirst",
+      "TestVote_SysopDeletesTopics",
+      "TestVote_UserAddsChoice",
+      "TestVotingUsesServerDataDir"
+    ]
+  },
+  {
+    "menu": "ADMIN",
+    "index": 5,
+    "keys": "W",
+    "command": "RUN:EDITNEWS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/sysop_readonly_actions",
+    "handlerTests": [
+      "TestEditNewsAddAbandoned",
+      "TestEditNewsAddItem",
+      "TestEditNewsDeleteItem",
+      "TestEditNewsEditDisconnectDiscards",
+      "TestEditNewsEditItem",
+      "TestEditNewsEmpty",
+      "TestEditNewsListAndView",
+      "TestEditNewsNormalizesIDs",
+      "TestEditNewsRequiresCoSysOp",
+      "TestEditNewsTitleCapByRune"
+    ]
+  },
+  {
+    "menu": "ADMIN",
+    "index": 6,
+    "keys": "U",
+    "command": "RUN:LISTNUV",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestLISTNUV_ListsTallies",
+      "TestLISTNUV_SysopManagesQueue",
+      "TestNUVUsesServerDataDir",
+      "TestNUVVote_InfoformKey",
+      "TestNUVVote_ScreenKeysAndChangingVote"
+    ]
+  },
+  {
+    "menu": "ADMIN",
+    "index": 7,
+    "keys": "M",
+    "command": "RUN:MAILPOLL",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExecMailPoll",
+      "TestRunMailPollShowsMissingExecutable",
+      "TestRunMailPollRendersChildOutputAndStatus"
+    ]
+  },
+  {
+    "menu": "ADMIN",
+    "index": 8,
+    "keys": "3",
+    "command": "GOTO:V3NETM",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/v3net_menu",
+    "handlerTests": [
+      "TestExeccovRun_GotoThenLogoff"
+    ]
+  },
+  {
+    "menu": "ADMIN",
+    "index": 9,
+    "keys": "Q",
+    "command": "GOTO:MAIN",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/sysop_menu",
+    "handlerTests": []
+  },
+  {
+    "menu": "BBSLISTM",
+    "index": 0,
+    "keys": "L",
+    "command": "RUN:BBSLIST",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/bbs_directory_actions",
+    "terminalOutput": "No BBS listings yet",
+    "handlerTests": [
+      "TestBBSListBrowseAsCaller",
+      "TestBBSListBrowseAsSysop",
+      "TestBBSListBrowseColumnsCutByRune",
+      "TestBBSListBrowseDeleteLastEntryExits",
+      "TestBBSListBrowseDisconnect",
+      "TestBBSListUsesServerDataDir"
+    ]
+  },
+  {
+    "menu": "BBSLISTM",
+    "index": 1,
+    "keys": "A",
+    "command": "RUN:BBSLISTADD",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/bbs_directory_actions",
+    "terminalOutput": "BBS List",
+    "handlerTests": [
+      "TestBBSListAddCapsFieldsByRune",
+      "TestBBSListAddRequiresNameAndAddress",
+      "TestBBSListAddStoresEntry",
+      "TestBBSListUsesServerDataDir"
+    ]
+  },
+  {
+    "menu": "BBSLISTM",
+    "index": 2,
+    "keys": "C",
+    "command": "RUN:BBSLISTEDIT",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/bbs_directory_actions",
+    "handlerTests": [
+      "TestBBSListEditAccessAndValidation",
+      "TestBBSListEditCapsFieldsByRune",
+      "TestBBSListEditDisconnectDiscards",
+      "TestBBSListEditOwnEntry"
+    ]
+  },
+  {
+    "menu": "BBSLISTM",
+    "index": 3,
+    "keys": "D",
+    "command": "RUN:BBSLISTDELETE",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/bbs_directory_actions",
+    "handlerTests": [
+      "TestBBSListDelete"
+    ]
+  },
+  {
+    "menu": "BBSLISTM",
+    "index": 4,
+    "keys": "V",
+    "command": "RUN:BBSLISTVERIFY",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/bbs_directory_actions",
+    "handlerTests": [
+      "TestBBSListVerifyToggles"
+    ]
+  },
+  {
+    "menu": "BBSLISTM",
+    "index": 5,
+    "keys": "Q",
+    "command": "GOTO:MAIN",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/bbs_directory",
+    "handlerTests": []
+  },
+  {
+    "menu": "BBSLISTM",
+    "index": 6,
+    "keys": "G",
+    "command": "RUN:MAINLOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "BBSLISTM",
+    "index": 7,
+    "keys": "/G",
+    "command": "RUN:IMMEDIATELOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "DOORSM",
+    "index": 0,
+    "keys": "H",
+    "command": "DOOR:HELLO",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/door_actions",
+    "handlerTests": [
+      "TestExeccovRun_DoorCommand"
+    ]
+  },
+  {
+    "menu": "DOORSM",
+    "index": 1,
+    "keys": "O",
+    "command": "DOOR:ONELINERS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/door_actions",
+    "handlerTests": [
+      "TestExeccovRun_DoorCommand"
+    ]
+  },
+  {
+    "menu": "DOORSM",
+    "index": 2,
+    "keys": "V",
+    "command": "DOOR:VOTING",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/door_actions",
+    "handlerTests": [
+      "TestExeccovRun_DoorCommand"
+    ]
+  },
+  {
+    "menu": "DOORSM",
+    "index": 3,
+    "keys": "Y",
+    "command": "DOOR:STATS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/door_actions",
+    "handlerTests": [
+      "TestExeccovRun_DoorCommand"
+    ]
+  },
+  {
+    "menu": "DOORSM",
+    "index": 4,
+    "keys": "A",
+    "command": "DOOR:AUTOMSG",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/door_actions",
+    "handlerTests": [
+      "TestExeccovRun_DoorCommand"
+    ]
+  },
+  {
+    "menu": "DOORSM",
+    "index": 5,
+    "keys": "U",
+    "command": "DOOR:USERSTATS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/door_actions",
+    "handlerTests": [
+      "TestExeccovRun_DoorCommand"
+    ]
+  },
+  {
+    "menu": "DOORSM",
+    "index": 6,
+    "keys": "T",
+    "command": "DOOR:LAST10",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/door_actions",
+    "handlerTests": [
+      "TestExeccovRun_DoorCommand"
+    ]
+  },
+  {
+    "menu": "DOORSM",
+    "index": 7,
+    "keys": "Q",
+    "command": "GOTO:MAIN",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/door_menu",
+    "handlerTests": []
+  },
+  {
+    "menu": "DOORSM",
+    "index": 8,
+    "keys": "G",
+    "command": "RUN:MAINLOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "DOORSM",
+    "index": 9,
+    "keys": "/G",
+    "command": "RUN:IMMEDIATELOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "EMAILM",
+    "index": 0,
+    "keys": "S",
+    "command": "RUN:SENDPRIVMAIL",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/private_mail_menu",
+    "terminalOutput": "Send private mail to:",
+    "handlerTests": [
+      "TestSendPrivMailRefusesDeletedUser",
+      "TestSendPrivateMailAbandoned",
+      "TestSendPrivateMailDelivers"
+    ]
+  },
+  {
+    "menu": "EMAILM",
+    "index": 1,
+    "keys": "R",
+    "command": "RUN:READPRIVMAIL",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/private_mail_menu",
+    "terminalOutput": "No private mail found",
+    "handlerTests": [
+      "TestPrivateMailRoundTripByHandle",
+      "TestPrivateReplyToRealNameResolvesToHandle",
+      "TestPrivateReplyToUnidentifiedSenderRefused",
+      "TestReadPrivateMailNoneForYou",
+      "TestReadPrivateMailReplyStaysPrivate",
+      "TestReadPrivateMailShowsOnlyOwnMail",
+      "TestReadPrivateMailStartsAtFirstUnread",
+      "TestReplyThenNextShowsNextMessage"
+    ]
+  },
+  {
+    "menu": "EMAILM",
+    "index": 2,
+    "keys": "L",
+    "command": "RUN:LISTPRIVMAIL",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/private_mail_menu",
+    "terminalOutput": "No messages in this area",
+    "handlerTests": [
+      "TestListPrivateMailShowsOnlyOwnMail"
+    ]
+  },
+  {
+    "menu": "EMAILM",
+    "index": 3,
+    "keys": "Q",
+    "command": "GOTO:MAIN",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/private_mail_menu",
+    "handlerTests": []
+  },
+  {
+    "menu": "FASTLOGN",
+    "index": 0,
+    "keys": "1",
+    "command": "RUN:FULL_LOGIN_SEQUENCE",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestFastLogin_LightbarChoices"
+    ]
+  },
+  {
+    "menu": "FASTLOGN",
+    "index": 1,
+    "keys": "2",
+    "command": "GOTO:MAIN",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalFastLoginChoices/fast_login_main",
+    "handlerTests": [
+      "TestFastLogin_LightbarChoices"
+    ]
+  },
+  {
+    "menu": "FASTLOGN",
+    "index": 2,
+    "keys": "3",
+    "command": "GOTO:FILEM",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalFastLoginChoices/fast_login_file_menu",
+    "handlerTests": [
+      "TestFastLogin_LightbarChoices"
+    ]
+  },
+  {
+    "menu": "FASTLOGN",
+    "index": 3,
+    "keys": "4",
+    "command": "GOTO:MSGMENU",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalFastLoginChoices/fast_login_message_menu",
+    "handlerTests": [
+      "TestFastLogin_LightbarChoices"
+    ]
+  },
+  {
+    "menu": "FASTLOGN",
+    "index": 4,
+    "keys": "G",
+    "command": "RUN:MAINLOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "FASTLOGN",
+    "index": 5,
+    "keys": "/G",
+    "command": "RUN:IMMEDIATELOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 0,
+    "keys": "A *",
+    "command": "RUN:SELECTFILEAREA",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_menu",
+    "handlerTests": [
+      "TestSelectFileAreaClassicPromptCommands",
+      "TestSelectFileAreaClassicRefusesThenSelects",
+      "TestSelectFileAreaLightbarJoinsSelectedArea",
+      "TestSelectFileAreaLightbarNavigatesWithoutJoining"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 1,
+    "keys": "B",
+    "command": "RUN:BATCHDOWNLOAD",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
+    "handlerTests": [
+      "TestBatchDownloadCancelAtProtocolKeepsBatch",
+      "TestBatchDownloadDropsUnresolvableBatch",
+      "TestBatchDownloadNoProtocolsKeepsBatch",
+      "TestBatchDownloadFailedTransferShowsFailureWithoutCountingDownload",
+      "TestBatchDownloadSuccessfulTransferClearsQueueAndCountsDownload"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 2,
+    "keys": "C",
+    "command": "RUN:CHANGEFILECONF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestSponsorFileConfGuards",
+      "TestSponsorFileConfJoinAppliesToBothMenus",
+      "TestSponsorFileConfJoinRespectsAreaAccess",
+      "TestSponsorFileConfQuitChangesNothing",
+      "TestSponsorFileConfSaveFailureRevertsSelection",
+      "TestSponsorFileConfUsesOwnTemplates"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 3,
+    "keys": "]",
+    "command": "RUN:NEXTFILEAREA",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestNextPrevFileAreaWrapsAndSaves"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 4,
+    "keys": "[",
+    "command": "RUN:PREVFILEAREA",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestNextPrevFileAreaWrapsAndSaves"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 5,
+    "keys": "}",
+    "command": "RUN:NEXTFILECONF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestNextPrevFileConfJoinsBothMenus"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 6,
+    "keys": "{",
+    "command": "RUN:PREVFILECONF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestNextPrevFileConfJoinsBothMenus"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 7,
+    "keys": "D",
+    "command": "RUN:DOWNLOADFILE",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
+    "handlerTests": [
+      "TestDownloadFileAddMoreFromBatchMenu",
+      "TestDownloadFileBlankCancels",
+      "TestDownloadFileTagsNamedFile"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 8,
+    "keys": "E",
+    "command": "RUN:EDITFILERECORD",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestEditFileRecordBlankDescriptionKeepsOld",
+      "TestEditFileRecordChangeDescription",
+      "TestEditFileRecordDelete",
+      "TestEditFileRecordMove",
+      "TestEditFileRecordMoveBadTargets",
+      "TestEditFileRecordNoReviewPromptAfterNoChange",
+      "TestEditFileRecordRename",
+      "TestEditFileRecordRenameRejectsPaths",
+      "TestEditFileRecordRequiresCoSysop",
+      "TestEditFileRecordSkipAndQuit"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 9,
+    "keys": "F L",
+    "command": "RUN:LISTFILES",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestFileLightbarDownloadFlow",
+      "TestFileLightbarDownloadProtocolStep",
+      "TestFileLightbarSpaceMarkPersists",
+      "TestFileLightbarSysopEditsDescription",
+      "TestFileLightbarSysopKeysIgnoredForCaller",
+      "TestFileLightbarSysopKillsFile",
+      "TestFileLightbarSysopMovesFile",
+      "TestFileLightbarSysopRenamesFile",
+      "TestFileLightbarUploadCancels",
+      "TestFileLightbarViewsSelectedFile",
+      "TestListFilesClassicDownloadDeclined",
+      "TestListFilesClassicDownloadMissingFiles",
+      "TestListFilesClassicDownloadNothingMarked",
+      "TestListFilesClassicDownloadProtocolOutcomes",
+      "TestListFilesClassicPagesThroughArea",
+      "TestListFilesClassicUploadCommand",
+      "TestListFilesClassicViewCommand",
+      "TestListFilesExtendedShowsAllColumns",
+      "TestListFilesRefusesWithoutArea"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 10,
+    "keys": "G",
+    "command": "LOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovRun_GlobalLogoffKeys"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 11,
+    "keys": "I",
+    "command": "RUN:SHOWFILEINFO",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
+    "handlerTests": [
+      "TestShowFileInfoDisplaysRecord",
+      "TestShowFileInfoEdgeCases"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 12,
+    "keys": "K",
+    "command": "RUN:CFG_FILECOLUMNS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
+    "handlerTests": [
+      "TestCfgFileColumnsTogglesAndSaves"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 13,
+    "keys": "M",
+    "command": "GOTO:MSGMENU",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_to_message_menu",
+    "handlerTests": [
+      "TestExeccovRun_GotoThenLogoff"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 14,
+    "keys": "N",
+    "command": "RUN:FILE_NEWSCAN",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
+    "handlerTests": [
+      "TestFileNewscanHonoursTagsAndCurrent",
+      "TestFileNewscanListsFilesSinceCutoff",
+      "TestFileNewscanPausesLongResults"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 15,
+    "keys": "Q",
+    "command": "GOTO:MAIN",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_menu",
+    "handlerTests": [
+      "TestExeccovRun_GotoThenLogoff"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 16,
+    "keys": "S",
+    "command": "RUN:SEARCH_FILES",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
+    "handlerTests": [
+      "TestSearchFilesMatchesAcrossReadableAreas",
+      "TestSearchFilesPagesLongResults",
+      "TestSearchFilesRejectsShortAndEmptyQueries"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 17,
+    "keys": "T",
+    "command": "RUN:TYPE_TEXT_FILE",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestTypeTextFileShowsFileAsText"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 18,
+    "keys": "U",
+    "command": "RUN:UPLOADFILE",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
+    "handlerTests": [
+      "TestUploadFileCancelPaths",
+      "TestUploadFileRefusals"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 19,
+    "keys": "V",
+    "command": "RUN:VIEW_FILE",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
+    "handlerTests": [
+      "TestViewFilePagesLongFile",
+      "TestViewFilePromptEdgeCases",
+      "TestViewFileShowsTextFile"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 20,
+    "keys": "W",
+    "command": "RUN:LISTFILES_EXTENDED",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
+    "handlerTests": [
+      "TestListFilesExtendedShowsAllColumns"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 21,
+    "keys": "X",
+    "command": "RUN:WANTLIST",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestWantListCallerSubmitsRequest",
+      "TestWantListCorruptFileReportsError",
+      "TestWantListSysopReviewsAndDeletes",
+      "TestWantListUsesServerDataDir"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 22,
+    "keys": "Z",
+    "command": "RUN:FILENEWSCANCONFIG",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
+    "handlerTests": [
+      "TestFileNewscanConfigAllNoneAndExit",
+      "TestFileNewscanConfigNoAccessibleAreas",
+      "TestFileNewscanConfigTogglesAndSaves"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 23,
+    "keys": "Y",
+    "command": "RUN:SETFILESCANDATE",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestSetFileScanDatePersists",
+      "TestSetFileScanDateRejectsAndCancels"
+    ]
+  },
+  {
+    "menu": "FILEM",
+    "index": 24,
+    "keys": "-",
+    "command": "RUN:CLEAR_BATCH",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
+    "handlerTests": [
+      "TestClearBatchEmptiesQueue",
+      "TestClearBatchEmptyQueueReportsEmpty"
+    ]
+  },
+  {
+    "menu": "INFORMM",
+    "index": 0,
+    "keys": "I",
+    "command": "RUN:INFOFORMS",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestInfoFormsDisconnectMidFormSavesNothing",
+      "TestInfoFormsFillSavesAnswers",
+      "TestInfoFormsHonoursMinLevel",
+      "TestInfoFormsNewUserPromptAndBadConfig",
+      "TestInfoFormsQuitBlockedByRequiredForm",
+      "TestInfoFormsRefillAsksBeforeReplacing",
+      "TestInfoFormsRequiredFieldReprompts",
+      "TestInfoFormsViewRejectsBadNumbers",
+      "TestInfoFormsViewShowsAnswers"
+    ]
+  },
+  {
+    "menu": "INFORMM",
+    "index": 1,
+    "keys": "V",
+    "command": "RUN:INFOFORMVIEW",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestInfoFormViewRejectsBadNumber",
+      "TestShowInfoFormMissingPieces",
+      "TestShowInfoFormPagesAndStops"
+    ]
+  },
+  {
+    "menu": "INFORMM",
+    "index": 2,
+    "keys": "H",
+    "command": "RUN:INFOFORMHUNT",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestInfoFormHuntEmptyAndInvalid",
+      "TestInfoFormHuntListsEveryUsersResponse",
+      "TestInfoFormHuntSysopOnly"
+    ]
+  },
+  {
+    "menu": "INFORMM",
+    "index": 3,
+    "keys": "*",
+    "command": "RUN:INFOFORMNUKE",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestInfoFormNukeErasesAllForms",
+      "TestInfoFormNukeRefusals"
+    ]
+  },
+  {
+    "menu": "INFORMM",
+    "index": 4,
+    "keys": "Q",
+    "command": "GOTO:MAIN",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/infoforms_menu",
+    "handlerTests": []
+  },
+  {
+    "menu": "INFORMM",
+    "index": 5,
+    "keys": "G",
+    "command": "RUN:MAINLOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "INFORMM",
+    "index": 6,
+    "keys": "/G",
+    "command": "RUN:IMMEDIATELOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "LOGIN",
+    "index": 0,
+    "keys": "Q",
+    "command": "LOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovRun_GlobalLogoffKeys"
+    ]
+  },
+  {
+    "menu": "LOGIN",
+    "index": 1,
+    "keys": "",
+    "command": "RUN:AUTHENTICATE",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestAuthenticate_AbortPrompts",
+      "TestAuthenticate_AlreadyLoggedIn",
+      "TestAuthenticate_BlankUsernameAndDisconnect",
+      "TestAuthenticate_NewStartsSignupAndContinues"
+    ]
+  },
+  {
+    "menu": "LOGIN",
+    "index": 2,
+    "keys": "",
+    "command": "GOTO:FASTLOGN",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogin_PostAuthAction"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 0,
+    "keys": "//",
+    "command": "RUN:PENDINGVALIDATIONNOTICE",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestPendingValidationNotice"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 1,
+    "keys": "B",
+    "command": "GOTO:BBSLISTM",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/bbs_directory",
+    "handlerTests": []
+  },
+  {
+    "menu": "MAIN",
+    "index": 2,
+    "keys": "J",
+    "command": "RUN:LISTNEWS",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestListNewsNothingVisible",
+      "TestListNewsReadMarksSeen",
+      "TestNewsUsesServerDataDir",
+      "TestPrintNewsQuietCases"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 3,
+    "keys": "C",
+    "command": "RUN:CHAT",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/main_chat_join_and_quit",
+    "handlerTests": [
+      "TestTeleconferenceSetsSnoopMode"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 4,
+    "keys": "E",
+    "command": "GOTO:EMAILM",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/private_mail_menu",
+    "handlerTests": [
+      "TestExeccovRun_GotoThenLogoff"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 5,
+    "keys": "G",
+    "command": "RUN:MAINLOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 6,
+    "keys": "I",
+    "command": "GOTO:INFORMM",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/infoforms_menu",
+    "handlerTests": []
+  },
+  {
+    "menu": "MAIN",
+    "index": 7,
+    "keys": "K",
+    "command": "RUN:USERCONFIG",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/user_settings",
+    "handlerTests": [
+      "TestKonfigAutoSigCreateEditDelete",
+      "TestKonfigAutoSigTruncatesAndAbandons",
+      "TestKonfigHeaderStylePicksAndSaves",
+      "TestKonfigScreenHeightEditsAndRejects"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 8,
+    "keys": "L",
+    "command": "RUN:LISTUSERS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/user_directory",
+    "handlerTests": [
+      "TestListUsers_DisconnectAtPauseLogsOff",
+      "TestListUsers_ShowsSeededUsers"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 9,
+    "keys": "M",
+    "command": "GOTO:MSGMENU",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/message_menu_and_areas",
+    "handlerTests": []
+  },
+  {
+    "menu": "MAIN",
+    "index": 10,
+    "keys": "N",
+    "command": "RUN:LISTNEWS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/news",
+    "handlerTests": [
+      "TestListNewsNothingVisible",
+      "TestListNewsReadMarksSeen",
+      "TestNewsUsesServerDataDir",
+      "TestPrintNewsQuietCases"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 11,
+    "keys": "O",
+    "command": "RUN:ONELINER",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/oneliner_readonly",
+    "terminalOutput": "No one-liners yet",
+    "handlerTests": [
+      "TestOnelinerAddAnonymousAsSysop",
+      "TestOnelinerAddAsCaller",
+      "TestOnelinerDisconnect",
+      "TestOnelinerEmptyWallDecline",
+      "TestOnelinerRejectsBlank",
+      "TestOnelinerRejectsDisallowedColour",
+      "TestOnelinerShowsNewestTenAndHidesAnonymousPoster"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 12,
+    "keys": "D",
+    "command": "GOTO:DOORSM",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/door_menu",
+    "handlerTests": []
+  },
+  {
+    "menu": "MAIN",
+    "index": 13,
+    "keys": "R",
+    "command": "GOTO:RUMORM",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/rumor_listing",
+    "handlerTests": []
+  },
+  {
+    "menu": "MAIN",
+    "index": 14,
+    "keys": "S",
+    "command": "RUN:SYSTEMSTATS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/system_stats",
+    "handlerTests": [
+      "TestSystemStats_ReportsBoardTotals",
+      "TestSystemStats_RequiresLogin"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 15,
+    "keys": "T",
+    "command": "GOTO:FILEM",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_menu",
+    "handlerTests": []
+  },
+  {
+    "menu": "MAIN",
+    "index": 16,
+    "keys": "U",
+    "command": "RUN:CFG_AUTOSIG",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/autosig_settings_cancel",
+    "handlerTests": [
+      "TestCfgAutoSigCreateAndDelete",
+      "TestCfgAutoSigTruncatesAndAbandons"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 17,
+    "keys": "V VOTE",
+    "command": "RUN:VOTE",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/main_vote_decline_create",
+    "handlerTests": [
+      "TestVote_CastOnceAndResults",
+      "TestVote_NavigateAndList",
+      "TestVote_NoTopicsAndSysopCreatesFirst",
+      "TestVote_SysopDeletesTopics",
+      "TestVote_UserAddsChoice",
+      "TestVotingUsesServerDataDir"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 18,
+    "keys": "H NUV",
+    "command": "RUN:SCANNUV",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestNUVVote_ThresholdOutcomes",
+      "TestNUVVote_ValidateMissingAccountKeepsCandidate",
+      "TestNUVVote_YesThresholdValidates",
+      "TestNUVVote_YesWithCommentPersisted",
+      "TestSCANNUV_Gates",
+      "TestSCANNUV_SkipsAlreadyVoted"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 19,
+    "keys": "/SYSOP",
+    "command": "GOTO:ADMIN",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/sysop_command_aliases",
+    "handlerTests": [
+      "TestExeccovRun_GotoThenLogoff"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 20,
+    "keys": "W LC",
+    "command": "RUN:LASTCALLERS 20",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/last_callers",
+    "handlerTests": [
+      "TestLastCallers_ArgumentLimitsRows",
+      "TestLastCallers_ListsRecentVisibleCalls"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 21,
+    "keys": "Y",
+    "command": "RUN:SHOWSTATS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/user_stats",
+    "handlerTests": [
+      "TestExeccovShowStats_ScreenVariants",
+      "TestShowStats_HarnessUTF8",
+      "TestShowStats_RequiresLogin"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 22,
+    "keys": "X",
+    "command": "GOTO:ADMIN",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/sysop_menu",
+    "handlerTests": []
+  },
+  {
+    "menu": "MAIN",
+    "index": 23,
+    "keys": "%",
+    "command": "GOTO:ADMIN",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/sysop_command_aliases",
+    "handlerTests": [
+      "TestExeccovRun_GotoThenLogoff"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 24,
+    "keys": "!",
+    "command": "RUN:CHAT",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestTeleconferenceSetsSnoopMode"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 25,
+    "keys": "+",
+    "command": "RUN:CFG_PASSWORD",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestCfgPasswordChangesAfterVerifying",
+      "TestCfgPasswordDisconnects"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 26,
+    "keys": "^",
+    "command": "RUN:SHOWVERSION",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/version_info",
+    "handlerTests": [
+      "TestExeccovShowVersion"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 27,
+    "keys": "/W",
+    "command": "RUN:WHOISONLINE",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/who_is_online",
+    "handlerTests": [
+      "TestWhoIsOnline_CoSysOpSeesInvisible",
+      "TestWhoIsOnline_DisconnectAtPauseLogsOff",
+      "TestWhoIsOnline_RegularCallerSkipsInvisible"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 28,
+    "keys": "P",
+    "command": "RUN:PAGE",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/page_prompt_cancel",
+    "handlerTests": [
+      "TestChatcovPageDeliversToTargetNode"
+    ]
+  },
+  {
+    "menu": "MAIN",
+    "index": 29,
+    "keys": "/G",
+    "command": "RUN:IMMEDIATELOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 0,
+    "keys": "*",
+    "command": "RUN:LISTMSGAR",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/message_menu_and_areas",
+    "handlerTests": [
+      "TestAreaListsExpandEmptyListNotices",
+      "TestListMessageAreasFiltersToCurrentConference",
+      "TestListMessageAreasHidesUnreadableAreas",
+      "TestListMessageAreasWaitsForEnter"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 1,
+    "keys": "C",
+    "command": "RUN:CHANGEMSGCONF",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/message_conference_picker_cancel",
+    "handlerTests": [
+      "TestChangeMessageConferenceCommandRendersLightbar",
+      "TestChangeMsgConferenceJoinsAndPersists",
+      "TestChangeMessageConferenceCommandJoinsSelectedConference",
+      "TestChangeMessageConferenceCommandRollsBackIfSaveFails"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 2,
+    "keys": "A",
+    "command": "RUN:SELECTMSGAREA",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/message_area_picker_cancel",
+    "handlerTests": [
+      "TestSelectMessageAreaLightbarConferenceSwitch",
+      "TestSelectMessageAreaLightbarJoinsSelectedArea",
+      "TestSelectMessageAreaLightbarQuitKeepsArea"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 3,
+    "keys": "]",
+    "command": "RUN:NEXTMSGAREA",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/message_area_navigation",
+    "handlerTests": [
+      "TestNextPrevMsgAreaWrapsWithinConference"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 4,
+    "keys": "[",
+    "command": "RUN:PREVMSGAREA",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/message_area_navigation",
+    "handlerTests": [
+      "TestNextPrevMsgAreaWrapsWithinConference"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 5,
+    "keys": "}",
+    "command": "RUN:NEXTMSGCONF",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/message_conference_next_previous",
+    "handlerTests": [
+      "TestNextPrevMsgConfJoinsBothMenus",
+      "TestNextPrevMsgConfWraps"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 6,
+    "keys": "{",
+    "command": "RUN:PREVMSGCONF",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/message_conference_next_previous",
+    "handlerTests": [
+      "TestNextPrevMsgConfJoinsBothMenus"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 7,
+    "keys": "N",
+    "command": "RUN:NEWSCAN",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestNewscanBarJumpMarksEarlierRead",
+      "TestNewscanBarPostThenNextArea",
+      "TestNewscanBarQuitAndNonStop",
+      "TestNewscanCommandCurrentArea",
+      "TestNewscanConferenceScope",
+      "TestNewscanNothingTagged",
+      "TestNewscanTaggedAreasReadSkipQuit",
+      "TestNewscanUpdatePointersOffRestores"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 8,
+    "keys": "Z",
+    "command": "RUN:NEWSCANCONFIG",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestNewscanConfigListsOnlyReadableAreas",
+      "TestNewscanConfigTogglesAndPersists"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 9,
+    "keys": "U",
+    "command": "RUN:UPDATENEWSCAN",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestUpdateNewscanPointersByDate",
+      "TestUpdateNewscanPointersCancelled",
+      "TestUpdateNewscanPointersCurrentConference",
+      "TestUpdateNewscanPointersMarkAllReadAndAllNew"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 10,
+    "keys": "P",
+    "command": "RUN:COMPOSEMSG",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/compose_message_blank_title_abort",
+    "handlerTests": [
+      "TestComposeMessageAbandoned",
+      "TestComposeMessageAnonymous",
+      "TestComposeMessagePostsToNamedArea",
+      "TestComposeMessagePrivateAreaIsPrivate",
+      "TestComposeMessageRefusals",
+      "TestComposeMessageUsesCurrentAreaAndSignature",
+      "TestComposePrivateMailNotAnonymous",
+      "TestComposePublicRealNameOnlyKeepsRealName",
+      "TestPrivateMailRoundTripByHandle"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 11,
+    "keys": "R",
+    "command": "RUN:READMSGS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/message_header_picker_and_empty_reader",
+    "handlerTests": [
+      "TestMessageReaderCP437",
+      "TestMessageReaderHeaderShowsAuthorLevel",
+      "TestMessageReaderHelpMailAndEsc",
+      "TestMessageReaderJump",
+      "TestMessageReaderKludgeView",
+      "TestMessageReaderLightbarSelectsCommand",
+      "TestMessageReaderListCommand",
+      "TestMessageReaderNextAdvancesAndPersistsLastRead",
+      "TestMessageReaderPostFromReader",
+      "TestMessageReaderPrevAndFirstMessage",
+      "TestMessageReaderReplyAbortedPostsNothing",
+      "TestMessageReaderReplyAppendsSignature",
+      "TestMessageReaderReplyPostsThreadedReply",
+      "TestMessageReaderScrollsLongBody",
+      "TestMessageReaderSysopDelete",
+      "TestMessageReaderSysopDeleteLastMessageEndsReader",
+      "TestMessageReaderThread",
+      "TestReadMsgsGuards",
+      "TestReadMsgsNothingNewAsksForMessageNumber",
+      "TestReadMsgsPicksHeaderStyleFirst",
+      "TestReplyThenNextShowsNextMessage"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 12,
+    "keys": "L",
+    "command": "RUN:LISTMSGS",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/message_empty_list_and_autosig",
+    "handlerTests": [
+      "TestListMsgsDeleteLastMessageEmptiesList",
+      "TestListMsgsGuards",
+      "TestListMsgsReadMarksAndRedraws",
+      "TestMessageListUTF8FieldsKeepAccents"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 13,
+    "keys": "H",
+    "command": "RUN:GETHEADERTYPE",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/message_header_picker_and_empty_reader",
+    "handlerTests": [
+      "TestGetHeaderTypeNoUser",
+      "TestGetHeaderTypePreviewShowsSampleAndCP437",
+      "TestGetHeaderTypeSelection"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 14,
+    "keys": "%",
+    "command": "RUN:SPONSORMENU",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestSponsorMenuAreaNavigation",
+      "TestSponsorMenuCommandLoop",
+      "TestSponsorMenuEditCommand",
+      "TestSponsorMenuFallbackPrompt",
+      "TestSponsorMenuGuards",
+      "TestSponsorMenuNavigationEdgeCases",
+      "TestSponsorMenuReposition",
+      "TestSponsorMenuRepositionAsSponsor",
+      "TestSponsorMenuRepositionDisconnect",
+      "TestSponsorMenuRepositionNeedsTwoAreas",
+      "TestSponsorMenuRepositionPagesLongLists",
+      "TestSponsorMenuRepositionRejectsBadInput",
+      "TestSponsorMenuRepositionSaveFailure"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 15,
+    "keys": "W",
+    "command": "GOTO:QWKM",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/qwk_menu",
+    "handlerTests": []
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 16,
+    "keys": "S",
+    "command": "RUN:CFG_AUTOSIG",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/message_empty_list_and_autosig",
+    "handlerTests": [
+      "TestCfgAutoSigCreateAndDelete",
+      "TestCfgAutoSigTruncatesAndAbandons"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 17,
+    "keys": "Q",
+    "command": "GOTO:MAIN",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/message_header_picker_and_empty_reader",
+    "handlerTests": [
+      "TestExeccovRun_GotoThenLogoff"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 18,
+    "keys": "G",
+    "command": "RUN:MAINLOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "MSGMENU",
+    "index": 19,
+    "keys": "/G",
+    "command": "RUN:IMMEDIATELOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "PDMATRIX",
+    "index": 0,
+    "keys": "J",
+    "command": "LOGIN",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestChatcovMatrixLoginShowsPrelogon"
+    ]
+  },
+  {
+    "menu": "PDMATRIX",
+    "index": 1,
+    "keys": "C",
+    "command": "NEWUSER",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestChatcovMatrixNewUser"
+    ]
+  },
+  {
+    "menu": "PDMATRIX",
+    "index": 2,
+    "keys": "A",
+    "command": "CHECKACCESS",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestChatcovMatrixCheckAccess"
+    ]
+  },
+  {
+    "menu": "PDMATRIX",
+    "index": 3,
+    "keys": "D",
+    "command": "DISCONNECT",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestChatcovMatrixDisconnectOnEOF"
+    ]
+  },
+  {
+    "menu": "QWKM",
+    "index": 0,
+    "keys": "C",
+    "command": "RUN:NEWSCANCONFIG",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestNewscanConfigListsOnlyReadableAreas",
+      "TestNewscanConfigTogglesAndPersists"
+    ]
+  },
+  {
+    "menu": "QWKM",
+    "index": 1,
+    "keys": "D",
+    "command": "RUN:QWKDOWNLOAD",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestDoorcovQWKDownloadBuildError",
+      "TestDoorcovQWKDownloadNothingNew",
+      "TestDoorcovQWKDownloadTaggedAreasOnly"
+    ]
+  },
+  {
+    "menu": "QWKM",
+    "index": 2,
+    "keys": "U",
+    "command": "RUN:QWKUPLOAD",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestDoorcovQWKUploadProtocolPrompt"
+    ]
+  },
+  {
+    "menu": "QWKM",
+    "index": 3,
+    "keys": "Q",
+    "command": "GOTO:MSGMENU",
+    "coverage": "terminal",
+    "terminalTest": "TestLocalTerminalRegressionSuite/qwk_menu",
+    "handlerTests": []
+  },
+  {
+    "menu": "RUMORM",
+    "index": 0,
+    "keys": "L",
+    "command": "RUN:RUMORSLIST",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/rumor_listing",
+    "handlerTests": [
+      "TestRumorsListEmptyAndLoggedOut",
+      "TestRumorsListHonoursLevelAndAnonymity",
+      "TestRumorsListWidePosterFits",
+      "TestRumorsUnmaskEarlierAnonymousName",
+      "TestRumorsUseServerDataDir"
+    ]
+  },
+  {
+    "menu": "RUMORM",
+    "index": 1,
+    "keys": "A",
+    "command": "RUN:RUMORSADD",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/rumor_add_cancel",
+    "handlerTests": [
+      "TestRumorsAddAnonymousWithLevel",
+      "TestRumorsAddBlankTextSavesNothing",
+      "TestRumorsAddRefusesLevelBelowTwo",
+      "TestRumorsAddRefusesWhenFull"
+    ]
+  },
+  {
+    "menu": "RUMORM",
+    "index": 2,
+    "keys": "N",
+    "command": "RUN:RUMORSNEWSCAN",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/rumor_empty_actions",
+    "handlerTests": [
+      "TestRumorsNewscanUsesPreviousLogin"
+    ]
+  },
+  {
+    "menu": "RUMORM",
+    "index": 3,
+    "keys": "S",
+    "command": "RUN:RUMORSSEARCH",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/rumor_empty_actions",
+    "handlerTests": [
+      "TestRumorsSearch",
+      "TestRumorsUnmaskEarlierAnonymousName"
+    ]
+  },
+  {
+    "menu": "RUMORM",
+    "index": 4,
+    "keys": "D",
+    "command": "RUN:RUMORSDELETE",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/rumor_empty_actions",
+    "handlerTests": [
+      "TestRumorsDeleteDeclined",
+      "TestRumorsDeleteEmptyAndDisconnect",
+      "TestRumorsDeleteLegacyOwnerBackfill",
+      "TestRumorsDeleteOwnRumor",
+      "TestRumorsDeleteRefusals",
+      "TestRumorsDeleteSysopDeletesAnyone"
+    ]
+  },
+  {
+    "menu": "RUMORM",
+    "index": 5,
+    "keys": "*",
+    "command": "RUN:RANDOMRUMOR",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/rumor_empty_actions",
+    "handlerTests": [
+      "TestRandomRumor"
+    ]
+  },
+  {
+    "menu": "RUMORM",
+    "index": 6,
+    "keys": "Q",
+    "command": "GOTO:MAIN",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/rumor_listing",
+    "handlerTests": [
+      "TestExeccovRun_GotoThenLogoff"
+    ]
+  },
+  {
+    "menu": "RUMORM",
+    "index": 7,
+    "keys": "G",
+    "command": "RUN:MAINLOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "RUMORM",
+    "index": 8,
+    "keys": "/G",
+    "command": "RUN:IMMEDIATELOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "SPONSORM",
+    "index": 0,
+    "keys": "E",
+    "command": "RUN:SPONSOREDITAREA",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestSponsorEditAreaAllowAnon",
+      "TestSponsorEditAreaAreaType",
+      "TestSponsorEditAreaClearsOptionalFields",
+      "TestSponsorEditAreaConferenceID",
+      "TestSponsorEditAreaDiscard",
+      "TestSponsorEditAreaDisconnect",
+      "TestSponsorEditAreaFieldLengthCap",
+      "TestSponsorEditAreaGuards",
+      "TestSponsorEditAreaNavigation",
+      "TestSponsorEditAreaNavigationNowhereToGo",
+      "TestSponsorEditAreaNavigationWithPendingEdits",
+      "TestSponsorEditAreaNumericFields",
+      "TestSponsorEditAreaRenamePersistsUser",
+      "TestSponsorEditAreaSaveFailureRollsBack",
+      "TestSponsorEditAreaShowsFields",
+      "TestSponsorEditAreaSponsorField",
+      "TestSponsorEditAreaSponsorRestrictions",
+      "TestSponsorEditAreaSysopEditsEveryField",
+      "TestSponsorEditAreaUpdateRejected",
+      "TestSponsorEditAreaYesNoFields"
+    ]
+  },
+  {
+    "menu": "SPONSORM",
+    "index": 1,
+    "keys": "Q",
+    "command": "QUIT",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestSponsorMenuCommandLoop"
+    ]
+  },
+  {
+    "menu": "V3NETM",
+    "index": 0,
+    "keys": "S",
+    "command": "RUN:V3NETSTATUS",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestV3NetStatusScreenReportsConfiguredState"
+    ]
+  },
+  {
+    "menu": "V3NETM",
+    "index": 1,
+    "keys": "A",
+    "command": "RUN:V3NETAREAS",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestV3NetAreasMessages",
+      "TestV3NetAreasNavigatesLongList",
+      "TestV3NetAreasReloadFailureSaysRestart",
+      "TestV3NetAreasSubscribeAndUnsubscribe"
+    ]
+  },
+  {
+    "menu": "V3NETM",
+    "index": 2,
+    "keys": "P",
+    "command": "RUN:V3NETPROPOSE",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestV3NetProposeMalformedTag",
+      "TestV3NetProposeNavigationAndExits",
+      "TestV3NetProposeSubmitsForm",
+      "TestV3NetProposeValidates"
+    ]
+  },
+  {
+    "menu": "V3NETM",
+    "index": 3,
+    "keys": "R",
+    "command": "RUN:V3NETACCESSREQUESTS",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestAccessRequestsListsOnlyManagedAreasAndApproves"
+    ]
+  },
+  {
+    "menu": "V3NETM",
+    "index": 4,
+    "keys": "C",
+    "command": "RUN:V3NETCOORDINATOR",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestCoordinatorPanelApprovesAndRejectsProposals"
+    ]
+  },
+  {
+    "menu": "V3NETM",
+    "index": 5,
+    "keys": "N",
+    "command": "RUN:V3NETREGISTRY",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestV3NetRegistryScreenListsAndMarksSubscriptions"
+    ]
+  },
+  {
+    "menu": "V3NETM",
+    "index": 6,
+    "keys": "Q",
+    "command": "GOTO:ADMIN",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/v3net_menu",
+    "handlerTests": [
+      "TestExeccovRun_GotoThenLogoff"
+    ]
+  },
+  {
+    "menu": "V3NETM",
+    "index": 7,
+    "keys": "G",
+    "command": "RUN:MAINLOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  },
+  {
+    "menu": "V3NETM",
+    "index": 8,
+    "keys": "/G",
+    "command": "RUN:IMMEDIATELOGOFF",
+    "coverage": "handler",
+    "terminalTest": "",
+    "handlerTests": [
+      "TestExeccovLogoffCommands"
+    ]
+  }
+]

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/gliderlabs/ssh"
 )
 
 func TestCRLFWriter(t *testing.T) {
@@ -67,6 +69,101 @@ func TestExecMailPoll(t *testing.T) {
 		}
 	}
 }
+
+func TestRunMailPollShowsMissingExecutable(t *testing.T) {
+	env := newMenuEnv(t)
+	r := env.runCmd("MAILPOLL", env.sysop, "", "\r")
+	if r.err != nil {
+		t.Fatalf("MAILPOLL: %v", r.err)
+	}
+	if !r.has("Poll Mail Networks", "v3mail not found at") {
+		t.Fatalf("missing-executable screen was not rendered:\n%s", r.text())
+	}
+}
+
+func TestRunMailPollRendersChildOutputAndStatus(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as a stand-in for v3mail")
+	}
+	env := newMenuEnv(t)
+	fake := filepath.Join(filepath.Dir(env.e.RootConfigPath), "v3mail")
+
+	for _, tc := range []struct {
+		name, exit, status string
+	}{
+		{name: "success", exit: "0", status: "Poll complete."},
+		{name: "nonzero exit", exit: "7", status: "Poll finished with errors"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			script := "#!/bin/sh\nprintf 'mail-poll-output\\n'\nexit " + tc.exit + "\n"
+			if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			input, answer := io.Pipe()
+			t.Cleanup(func() {
+				_ = input.Close()
+				_ = answer.Close()
+			})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			session := &mailPollContextSession{
+				testSession: newTestSession(""),
+				input:       input,
+				ctx:         &mailPollSSHContext{Context: ctx},
+			}
+			session.whenOutput(tc.status, func() {
+				go func() { _, _ = answer.Write([]byte("\r")) }()
+			})
+			SetSessionOutputMode(session, env.outputMode)
+			t.Cleanup(func() {
+				resetSessionIH(session)
+				ClearSessionOutputMode(session)
+			})
+			c := &cmdCtx{
+				e: env.e, s: session, terminal: newTestTerminal(session.testSession),
+				userManager: env.um, currentUser: env.sysop, nodeNumber: 1,
+				sessionStartTime: time.Now(), outputMode: env.outputMode,
+				termWidth: 80, termHeight: 24,
+			}
+			_, next, err := runMailPoll(c, "--network regression")
+			if err != nil || next != "" {
+				t.Fatalf("runMailPoll = (next %q, err %v), want to return to menu", next, err)
+			}
+			got := testAnsiEscape.ReplaceAllString(session.output(), "")
+			for _, want := range []string{"Poll Mail Networks", "mail-poll-output", tc.status, "Press"} {
+				if !strings.Contains(got, want) {
+					t.Errorf("screen missing %q:\n%s", want, got)
+				}
+			}
+		})
+	}
+}
+
+// mailPollContextSession gives this command a live-style cancellable session
+// context; the ordinary testSession intentionally returns nil from Context.
+type mailPollContextSession struct {
+	*testSession
+	input io.Reader
+	ctx   ssh.Context
+}
+
+func (s *mailPollContextSession) Context() ssh.Context { return s.ctx }
+
+func (s *mailPollContextSession) Read(p []byte) (int, error) { return s.input.Read(p) }
+
+type mailPollSSHContext struct {
+	context.Context
+	sync.Mutex
+}
+
+func (*mailPollSSHContext) User() string                      { return "" }
+func (*mailPollSSHContext) SessionID() string                 { return "" }
+func (*mailPollSSHContext) ClientVersion() string             { return "" }
+func (*mailPollSSHContext) ServerVersion() string             { return "" }
+func (*mailPollSSHContext) RemoteAddr() net.Addr              { return nil }
+func (*mailPollSSHContext) LocalAddr() net.Addr               { return nil }
+func (*mailPollSSHContext) Permissions() *ssh.Permissions     { return nil }
+func (*mailPollSSHContext) SetValue(interface{}, interface{}) {}
 
 // A partial line is held until its newline, so a multi-byte character split
 // across two writes reaches the terminal whole; Flush sends what is left.

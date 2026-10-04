@@ -1,6 +1,9 @@
 package menu
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -21,6 +24,33 @@ func addDownloadRecords(t *testing.T, env *menuEnv, names ...string) []uuid.UUID
 		}
 	}
 	return ids
+}
+
+func addPhysicalDownloadRecord(t *testing.T, env *menuEnv, name string) uuid.UUID {
+	t.Helper()
+	ids := addDownloadRecords(t, env, name)
+	areaPath, err := env.e.FileMgr.GetAreaUploadPath(1)
+	if err != nil {
+		t.Fatalf("GetAreaUploadPath: %v", err)
+	}
+	if err := os.MkdirAll(areaPath, 0o755); err != nil {
+		t.Fatalf("create file area: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(areaPath, name), []byte("test download contents"), 0o644); err != nil {
+		t.Fatalf("write download fixture: %v", err)
+	}
+	return ids[0]
+}
+
+func setTestDownloadProtocol(t *testing.T, env *menuEnv, exitStatus int) {
+	t.Helper()
+	script := filepath.Join(t.TempDir(), "send.sh")
+	if err := os.WriteFile(script, []byte(fmt.Sprintf("#!/bin/sh\nexit %d\n", exitStatus)), 0o755); err != nil {
+		t.Fatalf("write transfer command: %v", err)
+	}
+	env.e.SetProtocols([]transfer.ProtocolConfig{{
+		Key: "T", Name: "Testmodem", SendCmd: "/bin/sh", SendArgs: []string{script}, Default: true,
+	}})
 }
 
 // TestDownloadFileTagsNamedFile pins DOWNLOADFILE's add step: a filename
@@ -98,6 +128,60 @@ func TestBatchDownloadCancelAtProtocolKeepsBatch(t *testing.T) {
 	}
 }
 
+// TestBatchDownloadSuccessfulTransferClearsQueueAndCountsDownload exercises
+// the full BATCHDOWNLOAD success path with a local transfer command. It checks
+// the caller-visible completion message and persisted batch, user, and file
+// download counters.
+func TestBatchDownloadSuccessfulTransferClearsQueueAndCountsDownload(t *testing.T) {
+	env := newMenuEnv(t)
+	id := addPhysicalDownloadRecord(t, env, "GAME.ZIP")
+	env.sysop.TaggedFileIDs = []uuid.UUID{id}
+	setTestDownloadProtocol(t, env, 0)
+
+	r := env.runCmd("BATCHDOWNLOAD", env.sysop, "", "C\r\r")
+	if r.err != nil || r.user != env.sysop {
+		t.Fatalf("result = (user %v, err %v), want caller and no error", r.user, r.err)
+	}
+	if !r.has("Initiating Testmodem transfer", "GAME.ZIP: OK", "Download complete: 1 succeeded, 0 failed.") {
+		t.Errorf("successful transfer messages missing:\n%s", r.text())
+	}
+	if saved := env.mustDiskUser(env.sysop.ID); len(saved.TaggedFileIDs) != 0 || saved.NumDownloads != 1 {
+		t.Errorf("saved user tags=%v downloads=%d, want empty batch and 1 download", saved.TaggedFileIDs, saved.NumDownloads)
+	}
+	record, err := env.e.FileMgr.GetFileRecordByID(id)
+	if err != nil {
+		t.Fatalf("GetFileRecordByID: %v", err)
+	}
+	if record.DownloadCount != 1 {
+		t.Errorf("file download count = %d, want 1", record.DownloadCount)
+	}
+}
+
+func TestBatchDownloadFailedTransferShowsFailureWithoutCountingDownload(t *testing.T) {
+	env := newMenuEnv(t)
+	id := addPhysicalDownloadRecord(t, env, "GAME.ZIP")
+	env.sysop.TaggedFileIDs = []uuid.UUID{id}
+	setTestDownloadProtocol(t, env, 7)
+
+	r := env.runCmd("BATCHDOWNLOAD", env.sysop, "", "C\r\r")
+	if r.err != nil || r.user != env.sysop {
+		t.Fatalf("result = (user %v, err %v), want caller and no error", r.user, r.err)
+	}
+	if !r.has("GAME.ZIP: FAILED", "Download complete: 0 succeeded, 1 failed.") {
+		t.Errorf("failed transfer messages missing:\n%s", r.text())
+	}
+	if saved := env.mustDiskUser(env.sysop.ID); saved.NumDownloads != 0 {
+		t.Errorf("saved download count = %d, want 0 after failed transfer", saved.NumDownloads)
+	}
+	record, err := env.e.FileMgr.GetFileRecordByID(id)
+	if err != nil {
+		t.Fatalf("GetFileRecordByID: %v", err)
+	}
+	if record.DownloadCount != 0 {
+		t.Errorf("file download count = %d, want 0 after failed transfer", record.DownloadCount)
+	}
+}
+
 // TestBatchDownloadNoProtocolsKeepsBatch pins that with no protocol usable
 // on the connection the download is abandoned, the caller is told why, and
 // the batch is left intact.
@@ -139,8 +223,28 @@ func TestClearBatchEmptiesQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	env.runCmd("CLEAR_BATCH", env.sysop, "", "")
+	r := env.runCmd("CLEAR_BATCH", env.sysop, "", "")
+	if r.err != nil || r.user != env.sysop {
+		t.Fatalf("result = (user %v, err %v), want the caller and no error", r.user, r.err)
+	}
+	if !r.has("Cleared 2 file(s) from the batch queue.") {
+		t.Errorf("success message missing:\n%s", r.text())
+	}
 	if saved := env.mustDiskUser(env.sysop.ID); len(saved.TaggedFileIDs) != 0 {
 		t.Errorf("saved tags = %v, want cleared", saved.TaggedFileIDs)
+	}
+}
+
+func TestClearBatchEmptyQueueReportsEmpty(t *testing.T) {
+	env := newMenuEnv(t)
+	r := env.runCmd("CLEAR_BATCH", env.sysop, "", "")
+	if r.err != nil || r.user != env.sysop {
+		t.Fatalf("result = (user %v, err %v), want the caller and no error", r.user, r.err)
+	}
+	if !r.has("Your batch queue is empty.") {
+		t.Errorf("empty-queue message missing:\n%s", r.text())
+	}
+	if saved := env.mustDiskUser(env.sysop.ID); len(saved.TaggedFileIDs) != 0 {
+		t.Errorf("empty batch changed saved tags: %v", saved.TaggedFileIDs)
 	}
 }

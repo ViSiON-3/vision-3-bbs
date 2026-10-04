@@ -1,6 +1,8 @@
 package menu
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -101,6 +103,90 @@ func TestSelectMessageAreaLightbarConferenceSwitch(t *testing.T) {
 	if env.sysop.CurrentMessageAreaID != 0 || env.sysop.CurrentMsgConferenceID != 1 {
 		t.Errorf("side navigation changed the selection: area=%d conf=%d",
 			env.sysop.CurrentMessageAreaID, env.sysop.CurrentMsgConferenceID)
+	}
+}
+
+func TestChangeMessageConferenceCommandRendersLightbar(t *testing.T) {
+	env := newMenuEnv(t)
+	before := env.sysop.CurrentMsgConferenceID
+	r := env.runCmd("CHANGEMSGCONF", env.sysop, "", "q")
+	if r.err != nil {
+		t.Fatalf("CHANGEMSGCONF: %v", r.err)
+	}
+	if !r.has("Local Areas", "FelonyNet", "Select", "Quit") {
+		t.Fatalf("conference command did not render its picker:\n%s", r.text())
+	}
+	if env.sysop.CurrentMsgConferenceID != before {
+		t.Fatalf("quitting the picker changed conference from %d to %d", before, env.sysop.CurrentMsgConferenceID)
+	}
+}
+
+// TestChangeMessageConferenceCommandJoinsSelectedConference checks the
+// shipped lightbar action's outcome: selecting FelonyNet updates the active
+// conference for both message and file areas and persists the choice.
+func TestChangeMessageConferenceCommandJoinsSelectedConference(t *testing.T) {
+	env := newMenuEnv(t)
+	env.sysop.CurrentMsgConferenceID = 1
+	env.sysop.CurrentFileConferenceID = 1
+
+	r := env.runCmd("CHANGEMSGCONF", env.sysop, "", "\x1b[B\r")
+	if r.err != nil || r.user != env.sysop {
+		t.Fatalf("result = (user %v, err %v), want the sysop and no error", r.user, r.err)
+	}
+	if !r.has("FelonyNet", "Conference Joined!") {
+		t.Errorf("selected conference confirmation missing:\n%s", r.text())
+	}
+	saved := env.mustDiskUser(env.sysop.ID)
+	if saved.CurrentMsgConferenceID != 2 || saved.CurrentFileConferenceID != 2 {
+		t.Errorf("saved message/file conferences = %d/%d, want 2/2", saved.CurrentMsgConferenceID, saved.CurrentFileConferenceID)
+	}
+	if saved.CurrentMessageAreaID != 0 || saved.CurrentFileAreaID != 0 {
+		t.Errorf("conference without areas retained selections %d/%d, want 0/0", saved.CurrentMessageAreaID, saved.CurrentFileAreaID)
+	}
+}
+
+func TestChangeMessageConferenceCommandRollsBackIfSaveFails(t *testing.T) {
+	env := newMenuEnv(t)
+	usersPath := filepath.Join(env.dataDir(), "users.json")
+	original, err := os.ReadFile(usersPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restoreUsersFile := func() {
+		if err := os.RemoveAll(usersPath); err != nil {
+			t.Errorf("remove save-failure fixture: %v", err)
+			return
+		}
+		if err := os.WriteFile(usersPath, original, 0o644); err != nil {
+			t.Errorf("restore users.json: %v", err)
+		}
+	}
+	t.Cleanup(restoreUsersFile)
+	if err := os.Remove(usersPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(usersPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	before := snapshotConfSelection(env.sysop)
+	r := env.runCmd("CHANGEMSGCONF", env.sysop, "", "\x1b[B\r")
+	if r.err != nil || r.user != env.sysop {
+		t.Fatalf("result = (user %v, err %v), want the sysop and no error", r.user, r.err)
+	}
+	if !r.has("Could not save the conference change.") {
+		t.Errorf("save-failure message missing:\n%s", r.text())
+	}
+	if got := snapshotConfSelection(env.sysop); got != before {
+		t.Errorf("session selection after save failure = %+v, want prior %+v", got, before)
+	}
+	if got, ok := env.um.GetUser("Sysop"); !ok || snapshotConfSelection(got) != before {
+		t.Errorf("cached selection after save failure = %+v (found %v), want prior %+v", snapshotConfSelection(got), ok, before)
+	}
+
+	restoreUsersFile()
+	if saved := env.mustDiskUser(env.sysop.ID); snapshotConfSelection(saved) != before {
+		t.Errorf("disk selection after save failure = %+v, want prior %+v", snapshotConfSelection(saved), before)
 	}
 }
 

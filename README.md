@@ -389,6 +389,10 @@ Download SyncTerm: https://syncterm.bbsdev.net/
 
 All configuration files live in `configs/` and are generated from templates in `templates/configs/` during setup. See the [SysOp Documentation](https://vision3bbs.com/sysop/) for full configuration reference.
 
+## Regression Testing
+
+The MCP terminal rig can drive a disposable BBS over Telnet or SSH and assert on rendered screens across login, menus, and read-only user journeys. See [MCP terminal regression suite](docs/development/mcp-regression.md) for setup, coverage, and commands.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests. See [CONTRIBUTING.md](CONTRIBUTING.md) for the doc-comment conventions enforced by CI.
