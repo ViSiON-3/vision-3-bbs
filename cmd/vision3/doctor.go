@@ -24,6 +24,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 	"golang.org/x/crypto/bcrypt"
@@ -777,62 +778,50 @@ func checkWritablePaths(root string, add func(string, doctorSeverity, string, st
 
 func checkMenuFiles(menuRoot, configDir string, add func(string, doctorSeverity, string, string)) {
 	count := 0
-	menuCFGs, menuMNU := make(map[string]bool), make(map[string]bool)
+	menuSet := menuset.FromPath(menuRoot)
 	type menuCommand struct{ file, command string }
 	var menuCommands []menuCommand
-	err := filepath.WalkDir(menuRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
+	for _, subdir := range []string{"cfg", "mnu"} {
+		entries, err := menuSet.ReadDir(subdir)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			add(filepath.ToSlash(filepath.Join("menus", filepath.Base(menuRoot), subdir)), doctorFail, err.Error(), "Check the menu directory and its permissions.")
+			continue
 		}
-		if entry.IsDir() {
-			return nil
-		}
-		ext := strings.ToUpper(filepath.Ext(entry.Name()))
-		if ext == ".CFG" || ext == ".MNU" {
-			key := strings.ToUpper(strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name())))
-			if ext == ".CFG" {
-				menuCFGs[key] = true
-			} else {
-				menuMNU[key] = true
+		for _, entry := range entries {
+			ext := strings.ToUpper(filepath.Ext(entry.Name))
+			if (subdir == "cfg" && ext != ".CFG") || (subdir == "mnu" && ext != ".MNU") {
+				continue
 			}
-		}
-		if ext != ".CFG" && ext != ".MNU" {
-			return nil
-		}
-		count++
-		data, err := os.ReadFile(path)
-		name, _ := filepath.Rel(filepath.Dir(menuRoot), path)
-		name = filepath.ToSlash(name)
-		if err != nil {
-			add(name, doctorFail, err.Error(), "Check file permissions and restore the menu file if missing.")
-			return nil
-		}
-		var parseErr error
-		switch ext {
-		case ".CFG":
-			if len(data) != 0 {
-				var records []menu.CommandRecord
-				parseErr = json.Unmarshal(data, &records)
-				if parseErr == nil {
-					for _, command := range records {
-						menuCommands = append(menuCommands, menuCommand{file: name, command: command.Command})
+			count++
+			name := filepath.ToSlash(filepath.Join("menus", filepath.Base(menuRoot), subdir, entry.Name))
+			data, err := os.ReadFile(entry.Path)
+			if err != nil {
+				add(name, doctorFail, err.Error(), "Check file permissions and restore the menu file if missing.")
+				continue
+			}
+			var parseErr error
+			if subdir == "cfg" {
+				if len(data) != 0 {
+					var records []menu.CommandRecord
+					parseErr = json.Unmarshal(data, &records)
+					if parseErr == nil {
+						for _, command := range records {
+							menuCommands = append(menuCommands, menuCommand{file: name, command: command.Command})
+						}
 					}
 				}
+			} else {
+				var menuRecord menu.MenuRecord
+				parseErr = json.Unmarshal(data, &menuRecord)
 			}
-		case ".MNU":
-			var menuRecord menu.MenuRecord
-			parseErr = json.Unmarshal(data, &menuRecord)
+			if parseErr != nil {
+				add(name, doctorFail, jsonErrorLocation(data, parseErr), "Fix the menu data at the reported line and column.")
+				continue
+			}
+			add(name, doctorOK, "parses", "")
 		}
-		if parseErr != nil {
-			add(name, doctorFail, jsonErrorLocation(data, parseErr), "Fix the menu data at the reported line and column.")
-			return nil
-		}
-		add(name, doctorOK, "parses", "")
-		return nil
-	})
-	if err != nil {
-		add("menus/v3", doctorFail, err.Error(), "Check the menu directory and its permissions.")
-	} else if count == 0 {
+	}
+	if count == 0 {
 		add("menus/v3", doctorWarn, "no .CFG or .MNU files found", "Restore the menu set or run setup.")
 	}
 	areas := loadDoctorAreaTags(configDir)
@@ -854,7 +843,10 @@ func checkMenuFiles(menuRoot, configDir string, add func(string, doctorSeverity,
 		missing := ""
 		switch action {
 		case "GOTO":
-			if !menuCFGs[strings.ToUpper(target)] || !menuMNU[strings.ToUpper(target)] {
+			exists, err := menuSet.Exists("mnu", strings.ToUpper(target)+".MNU")
+			if err != nil {
+				missing = fmt.Sprintf("menu %q (could not inspect: %v)", target, err)
+			} else if !exists {
 				missing = fmt.Sprintf("menu %q", target)
 			}
 		case "DOOR":
