@@ -516,3 +516,49 @@ func TestDoorMenuHighlightFollowsTheme(t *testing.T) {
 		t.Fatalf("highlight does not use the theme colour:\n%q", s.output())
 	}
 }
+
+// The column heading follows the layout: the one-column heading once, or
+// the column heading over each column in use.
+func TestDoorMenuHeadingFollowsLayout(t *testing.T) {
+	for _, tc := range []struct {
+		cols       int
+		want, miss string
+	}{{1, "  #   Code              Door", " #   Door"}, {2, " #   Door", "Code"}} {
+		c, s, _ := doorMenuHarness(t, "list", "q", 7)
+		withDoorColumns(c, tc.cols)
+		if _, _, err := runDoorMenu(c, ""); err != nil {
+			t.Fatal(err)
+		}
+		out := ansi.StripAnsi(s.output())
+		var heading string
+		for _, l := range strings.Split(out, "\r\n") {
+			if strings.Contains(l, "#") {
+				heading = l
+				break
+			}
+		}
+		if !strings.Contains(heading, tc.want) || (tc.cols > 1 && strings.Count(heading, tc.want) != tc.cols) || strings.Contains(heading, tc.miss) {
+			t.Errorf("%d columns: heading %q", tc.cols, heading)
+		}
+	}
+}
+
+// Categories are picked by number or bar; their codes are not shown.
+func TestDoorMenuCategoryPickerHidesCodes(t *testing.T) {
+	c, s, _ := doorMenuHarness(t, "list", "q", 2)
+	cfg := c.e.GetServerConfig()
+	cfg.DoorCategories = []config.DoorCategory{{Code: "GAMES", Name: "Fun Things"}}
+	c.e.SetServerConfig(cfg)
+	doors := c.e.DoorRegistry()
+	d := doors["D01"]
+	d.Category = "GAMES"
+	doors["D01"] = d
+	c.e.SetDoorRegistry(doors)
+	if _, _, err := runDoorMenu(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	out := ansi.StripAnsi(s.output())
+	if !strings.Contains(out, "Fun Things") || strings.Contains(out, "GAMES") || strings.Contains(out, "Code") {
+		t.Fatalf("category picker shows codes:\n%s", out)
+	}
+}

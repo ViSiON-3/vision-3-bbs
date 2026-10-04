@@ -123,12 +123,19 @@ file resolves through the usual menu-set overlay before shipped files.
   a flat menu.
 - `templates/DOORMENU_GAMES.TOP`, `.MID`, `.BOT`: optional per-category art.
   Each missing part independently falls back to the generic file.
-- `templates/DOORCAT.TOP`, `.MID`, `.BOT`: category picker art.
+- `templates/DOORCAT.TOP`, `.MID`, `.BOT`: category picker art. The shipped
+  row shows the number and name; a category's code is not shown but can
+  still be typed.
+- `templates/DOORMENU.HDR`, `.CHD` (and `DOORMENU_GAMES.*`, `DOORCAT.*`): the
+  column heading drawn between the header and the rows, so it matches the
+  layout. `.HDR` is used above a one-column list; the first line of `.CHD` is
+  repeated over each column of a column layout and cut to the column width.
+  Both are optional, and are left out when the list is empty.
 - `templates/DOORMENU.COL`, `DOORMENU_GAMES.COL`, `DOORCAT.COL`: the row used
   in a column layout, falling back to `.MID`. Each cell is cut and padded to
   its column, so keep it narrow; the shipped one shows the number and name.
-  Column titles in a TOP template describe the one-column row and may need
-  their own per-category TOP for a column layout.
+  Keep column titles out of TOP, which is the same in every layout, and put
+  them in `.HDR` and `.CHD` instead.
 
 Template filenames may also have `.ANS` or `.ans` suffixes. To override a
 shipped template, give the overlay copy the same name: an overlay

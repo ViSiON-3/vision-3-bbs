@@ -200,6 +200,23 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 				cols = 1
 			}
 		}
+		// The column heading sits between the header and the rows, so it
+		// can follow the layout: HDR above a one-column list, the first line
+		// of CHD repeated over each column. Both are optional.
+		headPart := "HDR"
+		if cols > 1 {
+			headPart = "CHD"
+		}
+		heading := ""
+		switch b, err := e.doorMenuTemplate(category, headPart, categories); {
+		case err == nil:
+			heading = strings.TrimRight(string(b), "\r\n")
+		case !os.IsNotExist(err):
+			return c.currentUser, "", err
+		}
+		if cols > 1 {
+			heading, _, _ = strings.Cut(strings.ReplaceAll(heading, "\r", ""), "\n")
+		}
 		expand := func(s string, pg, pt int) string {
 			s = strings.NewReplacer("^CN", name, "^TI", rec.Title, "^PG", strconv.Itoa(pg), "^PT", strconv.Itoa(pt)).Replace(s)
 			return string(e.applyCommonTemplateTokens([]byte(s), c.currentUser, c.nodeNumber))
@@ -235,7 +252,14 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 				rowHeight = max(rowHeight, doorMenuLines(line(entry, i+1, maxPage, maxPage), w))
 			}
 		}
-		rows := doorMenuPageSize(h, doorMenuLines(frame(art[0], maxPage, maxPage), w), doorMenuLines(frame(art[2], maxPage, maxPage), w), doorMenuLines(prompt.String()+strings.Repeat("X", 16), w), rowHeight)
+		headRows := 0
+		if heading != "" {
+			headRows = 1
+			if cols == 1 {
+				headRows = doorMenuLines(expand(heading, maxPage, maxPage), w)
+			}
+		}
+		rows := doorMenuPageSize(h, doorMenuLines(frame(art[0], maxPage, maxPage), w)+headRows, doorMenuLines(frame(art[2], maxPage, maxPage), w), doorMenuLines(prompt.String()+strings.Repeat("X", 16), w), rowHeight)
 		size := rows * cols
 		pages := max(1, (len(entries)+size-1)/size)
 		page := selected / size
@@ -273,6 +297,12 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 				return c.currentUser, "", err
 			}
 		}
+		// fit cuts and pads one column's text to the cell width, leaving a
+		// space before the next column.
+		fit := func(s string) string {
+			s = ansi.PadVisible(ansi.TruncateVisible(s, cellWidth-1), cellWidth-1, ' ')
+			return s + "\x1b[0m "
+		}
 		// cell renders entry i as drawn: the whole row in one column, or a
 		// cell cut and padded to cellWidth in a column layout. It reads
 		// selected when called, so it also redraws a cell after a move.
@@ -291,8 +321,17 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 			if cols == 1 {
 				return color + s + "\x1b[0m"
 			}
-			s = ansi.PadVisible(ansi.TruncateVisible(s, cellWidth-1), cellWidth-1, ' ')
-			return color + s + "\x1b[0m "
+			return color + fit(s)
+		}
+		if heading != "" && onPage > 0 {
+			head := expand(heading, page+1, pages)
+			if cols > 1 {
+				one := string(ansi.ReplacePipeCodes([]byte(head)))
+				head = strings.Repeat(fit(one), (onPage+rowsOnPage-1)/rowsOnPage)
+			}
+			if err := block(head); err != nil {
+				return c.currentUser, "", err
+			}
 		}
 		for r := 0; r < rowsOnPage; r++ {
 			var row strings.Builder
@@ -309,7 +348,7 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 		// needs known screen positions: the screen was cleared and every row
 		// is one line, so entry i sits below the header at its row and column.
 		inPlace := lightbar && rec.GetClrScrBefore() && rowHeight == 1 && onPage > 0
-		topRows := doorMenuLines(frame(art[0], page+1, pages), w)
+		topRows := doorMenuLines(frame(art[0], page+1, pages), w) + headRows
 		at := func(i int) string {
 			off := i - start
 			return ansi.MoveCursor(1+topRows+off%rowsOnPage, 1+(off/rowsOnPage)*cellWidth)
