@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -60,7 +61,7 @@ func cmdRedditDump(args []string) int {
 	if cfg, err := reddit.LoadConfig(*configDir); err == nil {
 		debugURL = cfg.ChromeDebugURL
 	}
-	f, err := reddit.NewChromeFetcher(debugURL, sel, 60*time.Second)
+	f, err := reddit.NewChromeFetcher(debugURL, sel, reddit.PageTimeout)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
@@ -89,7 +90,7 @@ func cmdRedditSync(args []string) int {
 	fs.BoolVar(&o.DryRun, "dry-run", false, "Print what would be imported without writing")
 	_ = fs.Parse(args) // ExitOnError
 	return runRedditSync(o, func(debugURL string, sel reddit.Selectors) (reddit.Fetcher, error) {
-		return reddit.NewChromeFetcher(debugURL, sel, 60*time.Second)
+		return reddit.NewChromeFetcher(debugURL, sel, reddit.PageTimeout)
 	}, os.Stdout)
 }
 
@@ -140,10 +141,24 @@ func runRedditSync(o redditSyncOpts, newFetcher func(debugURL string, sel reddit
 	}
 	defer f.Close()
 
-	im := &reddit.Importer{MM: mm, Fetcher: f, Sel: sel, Cfg: cfg, Store: store, Sleep: time.Sleep, DryRun: o.DryRun, Out: out}
+	im := &reddit.Importer{MM: mm, Fetcher: f, Sel: sel, Cfg: cfg, Store: store, Sleep: time.Sleep, DryRun: o.DryRun, Out: out,
+		Deadline: time.Now().Add(cfg.MaxRun())}
 	status := 0
-	for _, m := range subs {
+	for i, m := range subs {
 		r := im.SyncSubreddit(m)
+		if errors.Is(r.Err, reddit.ErrRunTimeLimit) {
+			// Not a failure: the next run carries on from here.
+			if !o.DryRun {
+				if err := store.RecordRun(r, time.Now()); err != nil {
+					_, _ = fmt.Fprintf(out, "r/%s: could not log the run: %v\n", r.Subreddit, err)
+				}
+			}
+			_, _ = fmt.Fprintf(out, "r/%s -> %s: %d posts, %d comments, %d pages; %v\n", r.Subreddit, r.AreaTag, r.Posts, r.Comments, r.Pages, r.Err)
+			for _, rest := range subs[i+1:] {
+				_, _ = fmt.Fprintf(out, "r/%s: not reached this run\n", rest.Subreddit)
+			}
+			break
+		}
 		if !o.DryRun {
 			if err := store.RecordRun(r, time.Now()); err != nil {
 				_, _ = fmt.Fprintf(out, "r/%s: could not log the run: %v\n", r.Subreddit, err)

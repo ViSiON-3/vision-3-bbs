@@ -100,6 +100,7 @@ default `chrome_debug_url`.
    | `chrome_debug_url`      | `http://127.0.0.1:9222` | Where the logged-in Chrome is reached                     |
    | `page_delay_seconds`    | `20`                    | Pause between page loads                                  |
    | `max_posts_per_sync`    | `25`                    | Newest posts looked at per subreddit per run              |
+   | `max_run_seconds`       | `540`                   | Longest a run may take; keep it under the event's timeout |
    | `subreddits[].subreddit`| —                       | Subreddit name, without `r/`                              |
    | `subreddits[].area_tag` | —                       | Message area to file it into; it must exist               |
    | `subreddits[].enabled`  | —                       | `false` skips it                                          |
@@ -121,6 +122,12 @@ default `chrome_debug_url`.
    event, disabled; enable it in `./config` under Event Scheduler. On an
    existing board, add the event there: command `{BBS_ROOT}/helper`,
    arguments `reddit sync`, schedule `*/15 * * * *`, timeout 600 seconds.
+
+A run never starts a page load that could carry it past `max_run_seconds`.
+Each page costs up to `page_delay_seconds` plus a minute, so a first sync of
+25 posts takes several runs; each stops cleanly, and the next continues where
+it left off. Keep `max_run_seconds` below the event's `timeout_seconds` (600):
+a run the scheduler kills leaves a tab open in the Chrome.
 
 The first run imports the subreddit's newest posts (up to
 `max_posts_per_sync`) with their comments. Later runs import only new posts,

@@ -2,6 +2,7 @@
   "chrome_debug_url": "http://127.0.0.1:9222",
   "page_delay_seconds": 20,
   "max_posts_per_sync": 25,
+  "max_run_seconds": 540,
   "subreddits": [
     {"subreddit": "bbs", "area_tag": "REDDIT_BBS", "enabled": false}
   ]

@@ -2,6 +2,7 @@ package reddit
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -246,5 +247,41 @@ func TestStorePersistsCountsAndRuns(t *testing.T) {
 	last, at, ok, err := st.LastRun("bbs")
 	if err != nil || !ok || !at.Equal(when.Add(time.Hour)) || last.Err == nil || last.Err.Error() != "boom" {
 		t.Errorf("LastRun = %+v at %v, ok=%v err=%v", last, at, ok, err)
+	}
+}
+
+// A run stops before a page load that could carry it past its deadline, so
+// the scheduler never kills it mid-run (which would leave a tab open in the
+// person's Chrome). The next run picks up what was left.
+func TestSyncStopsAtRunDeadline(t *testing.T) {
+	mm := newTestArea(t)
+	f := &fakeFetcher{pages: miniPages(t)}
+	im := newTestImporter(t, mm, f)
+	clock := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	im.Now = func() time.Time { return clock }
+	im.Sleep = func(d time.Duration) { clock = clock.Add(d) }
+	im.Cfg.PageDelaySeconds = 20
+	// A load is only started if the pause before it plus PageTimeout fits
+	// before the deadline. The fake fetch takes no time, so only pauses move
+	// the clock: the third load would be checked at +20s and could end at
+	// +100s, so a deadline of +99s allows the listing and one post page.
+	im.Deadline = clock.Add(2*20*time.Second + PageTimeout - time.Second)
+
+	res := im.SyncSubreddit(bbs)
+	if !errors.Is(res.Err, ErrRunTimeLimit) {
+		t.Fatalf("err = %v, want ErrRunTimeLimit", res.Err)
+	}
+	if len(f.calls) != 2 {
+		t.Fatalf("loaded %v, want the listing and one post page", f.calls)
+	}
+
+	// The next run, with time to spare, finishes the job without duplicates.
+	im.Deadline = time.Time{}
+	res = im.SyncSubreddit(bbs)
+	if res.Err != nil {
+		t.Fatal(res.Err)
+	}
+	if n, _ := mm.GetMessageCountForArea(1); n != 6 {
+		t.Errorf("area holds %d messages after the follow-up run, want 6", n)
 	}
 }

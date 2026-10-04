@@ -20,10 +20,13 @@ import (
 type Config struct {
 	// ChromeDebugURL is the attached Chrome's debugging endpoint, normally
 	// the local end of an SSH tunnel to the machine running Chrome.
-	ChromeDebugURL   string    `json:"chrome_debug_url"`
-	PageDelaySeconds int       `json:"page_delay_seconds"`
-	MaxPostsPerSync  int       `json:"max_posts_per_sync"`
-	Subreddits       []Mapping `json:"subreddits"`
+	ChromeDebugURL   string `json:"chrome_debug_url"`
+	PageDelaySeconds int    `json:"page_delay_seconds"`
+	MaxPostsPerSync  int    `json:"max_posts_per_sync"`
+	// MaxRunSeconds caps a whole run. Keep it under the scheduler event's
+	// timeout: a killed run leaves a tab open in the person's Chrome.
+	MaxRunSeconds int       `json:"max_run_seconds"`
+	Subreddits    []Mapping `json:"subreddits"`
 }
 
 // Mapping files one subreddit into one message area.
@@ -77,6 +80,9 @@ func LoadConfig(configDir string) (Config, error) {
 	if cfg.MaxPostsPerSync <= 0 {
 		cfg.MaxPostsPerSync = 25
 	}
+	if cfg.MaxRunSeconds <= 0 {
+		cfg.MaxRunSeconds = 540
+	}
 	if cfg.ChromeDebugURL == "" {
 		cfg.ChromeDebugURL = "http://127.0.0.1:9222"
 	}
@@ -89,6 +95,11 @@ func LoadConfig(configDir string) (Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// MaxRun is the most time one run may take.
+func (c Config) MaxRun() time.Duration {
+	return time.Duration(c.MaxRunSeconds) * time.Second
 }
 
 // PageDelay is the pause between page loads.

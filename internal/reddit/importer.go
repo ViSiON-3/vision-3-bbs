@@ -1,6 +1,7 @@
 package reddit
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -17,9 +18,13 @@ type Importer struct {
 	Cfg     Config
 	Store   *Store
 	Sleep   func(time.Duration) // time.Sleep in production
-	DryRun  bool
-	Out     io.Writer // where a dry run prints
-	fetched int
+	Now     func() time.Time    // time.Now when nil
+	// Deadline, when set, is when the run must be finished: no page load
+	// starts unless the pause before it plus PageTimeout fits before it.
+	Deadline time.Time
+	DryRun   bool
+	Out      io.Writer // where a dry run prints
+	fetched  int
 }
 
 // SubResult is what one subreddit's sync did.
@@ -31,10 +36,31 @@ type SubResult struct {
 
 func msgIDFor(redditID string) string { return redditID + "@reddit" }
 
+// PageTimeout bounds one page load.
+const PageTimeout = 60 * time.Second
+
+// ErrRunTimeLimit stops a run that could not finish another page load before
+// its deadline. What was imported stays; the next run continues from there.
+var ErrRunTimeLimit = errors.New("stopped at the run time limit; the next run continues")
+
+func (im *Importer) now() time.Time {
+	if im.Now != nil {
+		return im.Now()
+	}
+	return time.Now()
+}
+
 // fetch loads a page, pausing between loads.
 func (im *Importer) fetch(url string, res *SubResult) (string, error) {
-	if im.fetched > 0 && im.Sleep != nil {
-		im.Sleep(im.Cfg.PageDelay())
+	pause := time.Duration(0)
+	if im.fetched > 0 {
+		pause = im.Cfg.PageDelay()
+	}
+	if !im.Deadline.IsZero() && im.now().Add(pause+PageTimeout).After(im.Deadline) {
+		return "", ErrRunTimeLimit
+	}
+	if pause > 0 && im.Sleep != nil {
+		im.Sleep(pause)
 	}
 	im.fetched++
 	res.Pages++

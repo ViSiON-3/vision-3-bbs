@@ -87,4 +87,9 @@ func TestLoadConfigDefaultDebugURL(t *testing.T) {
 	if cfg.ChromeDebugURL != "http://127.0.0.1:9222" {
 		t.Errorf("ChromeDebugURL = %q", cfg.ChromeDebugURL)
 	}
+	// Under the shipped reddit_sync event's 600s timeout, so the scheduler
+	// never kills a run (which would leave a tab open in the person's Chrome).
+	if cfg.MaxRun() != 540*time.Second {
+		t.Errorf("MaxRun = %v, want 9m0s", cfg.MaxRun())
+	}
 }
