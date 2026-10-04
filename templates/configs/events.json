@@ -199,6 +199,20 @@
       "working_directory": "{BBS_ROOT}",
       "timeout_seconds": 3600,
       "enabled": false
+    },
+    {
+      "id": "reddit_sync",
+      "name": "Reddit sync",
+      "schedule": "*/15 * * * *",
+      "comment": "Imports the subreddits in reddit.json through the logged-in Chrome at chrome_debug_url. See docs/sysop/messages/reddit-gateway.md",
+      "command": "{BBS_ROOT}/helper",
+      "args": [
+        "reddit",
+        "sync"
+      ],
+      "working_directory": "{BBS_ROOT}",
+      "timeout_seconds": 600,
+      "enabled": false
     }
   ]
 }

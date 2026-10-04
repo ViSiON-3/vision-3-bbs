@@ -64,6 +64,7 @@
 * [Tosser (v3mail)](messages/ftn-echomail.md#tosser-internal--v3mail)
 * [Mailer (binkd)](messages/ftn-echomail.md#mailer-external--binkd)
 * [FTN Nodelists](messages/nodelists.md)
+* [Reddit Gateway](messages/reddit-gateway.md)
 * [JAM Echomail](messages/jam-echomail.md)
 * [V3Net Networking](v3net/message-areas.md)
 * [V3Net Chat](v3net/chat.md)
