@@ -3,7 +3,6 @@ package ziplab
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -268,9 +266,9 @@ func TestFormatArchiveListing_ManyFiles(t *testing.T) {
 }
 
 // zipLabViewSig pins RunZipLabView's signature so any change fails compilation.
-type zipLabViewSig = func(ctx context.Context, s ssh.Session, terminal *term.Terminal,
+type zipLabViewSig = func(terminal *term.Terminal,
 	filePath, filename string, outputMode ansi.OutputMode,
-	readLine ReadLineFunc, readKey ReadKeyFunc)
+	readLine ReadLineFunc, readKey ReadKeyFunc, send SendFunc)
 
 func TestRunZipLabView_Exists(t *testing.T) {
 	// The conversion compiles only while RunZipLabView matches the pinned

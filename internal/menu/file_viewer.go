@@ -32,6 +32,39 @@ func sessionReadKey(s ssh.Session) ziplab.ReadKeyFunc {
 	return func() (int, error) { return getSessionIH(s).ReadKey() }
 }
 
+// zipLabSender returns the ZipLab callback that sends one archive member
+// from record's area. Like the other download paths it re-checks the area's
+// download ACS and lets the user pick a protocol — both before the member
+// is extracted — then hands the session to the transfer program through
+// runTransferSend, which stops the shared InputHandler first so it cannot
+// steal the protocol's bytes.
+func (e *MenuExecutor) zipLabSender(s ssh.Session, terminal *term.Terminal, record *file.FileRecord, u *user.User, nodeNumber int, sessionStartTime time.Time, outputMode ansi.OutputMode) ziplab.SendFunc {
+	return func(extract ziplab.ExtractFunc) {
+		area, ok := e.FileMgr.GetAreaByID(record.AreaID)
+		if !ok || u == nil || (area.ACSDownload != "" && !checkACS(area.ACSDownload, u, s, terminal, sessionStartTime)) {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().YouCantDownloadHere)), outputMode)
+			return
+		}
+		proto, protoOK, protoErr := e.selectTransferProtocol(s, terminal, outputMode)
+		if protoErr != nil {
+			if !errors.Is(protoErr, io.EOF) {
+				slog.Error("protocol selection error", "node", nodeNumber, "error", protoErr)
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01"+protocolSelectionErrorText(protoErr)+"|07\r\n")), outputMode)
+			}
+			return
+		}
+		if !protoOK {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Download cancelled.|07\r\n")), outputMode)
+			return
+		}
+		path, err := extract()
+		if err != nil {
+			return
+		}
+		e.runTransferSend(s, terminal, proto, []string{path}, nil, outputMode, nodeNumber)
+	}
+}
+
 // findFileInArea searches for a file by name (case-insensitive) in the given area.
 func findFileInArea(fm *file.FileManager, areaID int, filename string) (*file.FileRecord, error) {
 	files := fm.GetFilesForArea(areaID)
@@ -113,9 +146,8 @@ func runViewFile(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if e.FileMgr.IsSupportedArchive(record.Filename) {
-		ctx, cancel := e.transferContext(s.Context())
-		defer cancel()
-		ziplab.RunZipLabView(ctx, s, terminal, filePath, record.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s))
+		send := e.zipLabSender(s, terminal, record, currentUser, nodeNumber, c.sessionStartTime, outputMode)
+		ziplab.RunZipLabView(terminal, filePath, record.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s), send)
 	} else {
 		if termHeight <= 0 {
 			_, termHeight = getTerminalSize(s)
@@ -157,8 +189,9 @@ func runTypeTextFile(c *cmdCtx, args string) (*user.User, string, error) {
 	return currentUser, "", nil
 }
 
-// viewFileByRecord displays a file given its record, used from the lightbar file list.
-func viewFileByRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, record *file.FileRecord, outputMode ansi.OutputMode, termWidth int, termHeight int) {
+// viewFileByRecord displays a file given its record, used from the file
+// lists: archives open in ZipLab, extracting members through send.
+func viewFileByRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, record *file.FileRecord, outputMode ansi.OutputMode, termWidth int, termHeight int, send ziplab.SendFunc) {
 	filePath, err := e.FileMgr.GetFilePath(record.ID)
 	if err != nil {
 		slog.Error("failed to get path for file", "id", record.ID, "error", err)
@@ -168,9 +201,7 @@ func viewFileByRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, r
 	}
 
 	if e.FileMgr.IsSupportedArchive(record.Filename) {
-		ctx, cancel := e.transferContext(s.Context())
-		defer cancel()
-		ziplab.RunZipLabView(ctx, s, terminal, filePath, record.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s))
+		ziplab.RunZipLabView(terminal, filePath, record.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s), send)
 	} else {
 		if termHeight <= 0 {
 			_, termHeight = getTerminalSize(s)

@@ -3,7 +3,6 @@ package ziplab
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,14 +10,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
-	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 )
 
@@ -89,6 +85,10 @@ func formatArchiveListing(w io.Writer, zipPath string, filename string, termHeig
 // Returns the path to the extracted file, a cleanup function that removes the
 // temp directory, and any error. On error, cleanup is handled internally and
 // the returned cleanup is a no-op.
+// maxExtractBytes is the largest archive member ZipLab will unpack for a
+// caller to download.
+var maxExtractBytes uint64 = 256 << 20
+
 func extractSingleEntry(zipPath string, entryNum int) (string, func(), error) {
 	noop := func() {}
 
@@ -110,6 +110,11 @@ func extractSingleEntry(zipPath string, entryNum int) (string, func(), error) {
 
 	if entry.FileInfo().IsDir() {
 		return "", noop, fmt.Errorf("entry %d is a directory", entryNum)
+	}
+	// archive/zip refuses to inflate past the declared size, so capping the
+	// declared size bounds what one extraction can write to the temp dir.
+	if entry.UncompressedSize64 > maxExtractBytes {
+		return "", noop, fmt.Errorf("entry %d is %d bytes, over the %d-byte extraction limit", entryNum, entry.UncompressedSize64, maxExtractBytes)
 	}
 
 	tmpDir, err := os.MkdirTemp("", "ziplab-extract-*")
@@ -147,12 +152,22 @@ func extractSingleEntry(zipPath string, entryNum int) (string, func(), error) {
 	return destPath, cleanup, nil
 }
 
+// ExtractFunc unpacks the member the caller picked into a temp file and
+// returns its path. It reports a failure to the caller itself.
+type ExtractFunc func() (path string, err error)
+
+// SendFunc transfers one archive member to the caller. It owns the download
+// access check, protocol selection, handing the session over to the
+// transfer program and reporting the outcome, and calls extract only once
+// the transfer is going ahead, so a refused or cancelled download never
+// unpacks anything. The extracted file is removed once it returns.
+type SendFunc func(extract ExtractFunc)
+
 // RunZipLabView presents an interactive archive viewer that lets the user
-// browse entries and extract individual files via ZMODEM.
-// ctx controls transfer timeout; pass nil for default 30-minute timeout.
+// browse entries and extract individual files through send.
 // readLine and readKey must use the session's shared InputHandler to avoid
 // leaving stale bytes in the input stream for subsequent readers.
-func RunZipLabView(ctx context.Context, s ssh.Session, terminal *term.Terminal, filePath string, filename string, outputMode ansi.OutputMode, readLine ReadLineFunc, readKey ReadKeyFunc) {
+func RunZipLabView(terminal *term.Terminal, filePath string, filename string, outputMode ansi.OutputMode, readLine ReadLineFunc, readKey ReadKeyFunc, send SendFunc) {
 	// Build the listing into a buffer to get the file count.
 	var buf bytes.Buffer
 	fileCount, err := formatArchiveListing(&buf, filePath, filename, 24)
@@ -199,39 +214,18 @@ func RunZipLabView(ctx context.Context, s ssh.Session, terminal *term.Terminal, 
 			continue
 		}
 
-		extractedPath, cleanup, err := extractSingleEntry(filePath, num)
-		if err != nil {
-			slog.Error("extraction failed", "error", err)
-			msg := "\r\n|01Extraction failed.|07\r\n"
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-			continue
-		}
-
-		baseName := sanitizeEntryName(filepath.Base(extractedPath))
-		sendMsg := fmt.Sprintf("\r\n|07Sending |15%s|07 via ZMODEM...\r\n", baseName)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(sendMsg)), outputMode)
-
-		sendCtx := ctx
-		if sendCtx == nil {
-			sendCtx = context.Background()
-		}
-		var cancel context.CancelFunc
-		if _, hasDeadline := sendCtx.Deadline(); !hasDeadline {
-			sendCtx, cancel = context.WithTimeout(sendCtx, 30*time.Minute)
-		}
-		sendErr := transfer.ExecuteZmodemSend(sendCtx, s, extractedPath)
-		if cancel != nil {
-			cancel()
-		}
-		if sendErr != nil {
-			slog.Error("zmodem send failed", "error", sendErr)
-			msg := "\r\n|01Transfer failed.|07\r\n"
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		} else {
-			msg := "\r\n|10Transfer complete.|07\r\n"
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		}
-
+		cleanup := func() {}
+		send(func() (string, error) {
+			extractedPath, done, err := extractSingleEntry(filePath, num)
+			if err != nil {
+				slog.Error("extraction failed", "error", err)
+				msg := "\r\n|01Extraction failed.|07\r\n"
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+				return "", err
+			}
+			cleanup = done
+			return extractedPath, nil
+		})
 		cleanup()
 	}
 }

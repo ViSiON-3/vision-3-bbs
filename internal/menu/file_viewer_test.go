@@ -367,7 +367,7 @@ func TestViewFileByRecordMissingPath(t *testing.T) {
 	env := newMenuEnv(t)
 	rec := &file.FileRecord{ID: uuid.New(), AreaID: 99, Filename: "GONE.TXT"}
 	r := env.run(func(c *cmdCtx, _ string) (*user.User, string, error) {
-		viewFileByRecord(c.e, c.s, c.terminal, rec, c.outputMode, 80, 0)
+		viewFileByRecord(c.e, c.s, c.terminal, rec, c.outputMode, 80, 0, nil)
 		return nil, "", nil
 	}, env.caller, "", "")
 	if !strings.Contains(r.text(), stripPipes(env.e.Strings().FileLocateError)) {

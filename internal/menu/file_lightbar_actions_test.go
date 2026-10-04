@@ -3,6 +3,7 @@ package menu
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -197,5 +198,90 @@ func TestFileLightbarUploadCancels(t *testing.T) {
 	}
 	if n, _ := env.e.FileMgr.GetFileCountForArea(1); n != 0 {
 		t.Errorf("area has %d files after cancel", n)
+	}
+}
+
+// TestFileLightbarZipLabExtractUsesTransferFlow pins extracting an archive
+// member from the lightbar's ZipLab view: it goes through the download ACS
+// and protocol menu like any download, and once the transfer program exits
+// the viewer and the list keep reading keys instead of logging the caller
+// off (the transfer used to run beside the live InputHandler).
+func TestFileLightbarZipLabExtractUsesTransferFlow(t *testing.T) {
+	env := lightbarListEnv(t)
+	addFileWithContent(t, env, 1, "B.ZIP", zipBytes(t, map[string]string{"FILE_ID.DIZ": "x"}))
+
+	env.e.SetProtocols([]transfer.ProtocolConfig{{Key: "Z", Name: "Zmodem", SendCmd: "/nonexistent/sz", Default: true}})
+	// The sysop passes the area's download ACS.
+	r := env.runCmd("LISTFILES", env.sysop, "", "v1\rQ\rQ\rq")
+	if !r.has("FILE_ID.DIZ", "Transfer Protocols:", "Download cancelled.") {
+		t.Errorf("protocol cancel:\n%s", r.text())
+	}
+	if r.next != "" || r.err != nil {
+		t.Errorf("after cancel: next=%q err=%v", r.next, r.err)
+	}
+
+	// The transfer program's stdin pump swallows whatever scripted input
+	// follows, so this run ends on EOF; it pins that the selected member was
+	// transferred and the viewer was back at its prompt afterwards.
+	received := zipLabReceiveProtocol(t, env)
+	r = env.runCmd("LISTFILES", env.sysop, "", "v1\rZ\r")
+	_, after, ok := strings.Cut(r.text(), "[1/1] FILE_ID.DIZ: OK")
+	if !ok || !strings.Contains(after, "ZipLab [#/Q]:") {
+		t.Errorf("transfer outcome:\n%s", r.text())
+	}
+	if got, err := os.ReadFile(filepath.Join(received, "FILE_ID.DIZ")); err != nil || string(got) != "x" {
+		t.Errorf("received FILE_ID.DIZ = %q, %v; want the member's content", got, err)
+	}
+
+	// The caller does not, so nothing is offered for transfer.
+	r = env.runCmd("LISTFILES", env.caller, "", "v1\rQ\rq")
+	if !r.has(stripPipes(env.e.Strings().YouCantDownloadHere)) || r.has("Transfer Protocols:") {
+		t.Errorf("download ACS not enforced:\n%s", r.text())
+	}
+}
+
+// zipLabReceiveEnv names the directory TestZipLabReceiveHelper copies the
+// sent file into; the helper does nothing unless it is set.
+const zipLabReceiveEnv = "VISION3_ZIPLAB_RECEIVE_DIR"
+
+// zipLabReceiveProtocol installs a transfer protocol whose "send" re-runs
+// this test binary as TestZipLabReceiveHelper, standing in for the caller's
+// terminal receiving the file on every platform. It returns the directory
+// the received file lands in.
+func zipLabReceiveProtocol(t *testing.T, env *menuEnv) string {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dest := t.TempDir()
+	t.Setenv(zipLabReceiveEnv, dest)
+	env.e.SetProtocols([]transfer.ProtocolConfig{{
+		Key: "Z", Name: "Zmodem", SendCmd: exe,
+		SendArgs: []string{"-test.run=^TestZipLabReceiveHelper$", "--", "{filePath}"}, Default: true,
+	}})
+	return dest
+}
+
+// TestZipLabReceiveHelper is the transfer program for zipLabReceiveProtocol:
+// it copies the file named after "--" into $VISION3_ZIPLAB_RECEIVE_DIR.
+func TestZipLabReceiveHelper(t *testing.T) {
+	dest := os.Getenv(zipLabReceiveEnv)
+	if dest == "" {
+		t.Skip("transfer-program helper; run by zipLabReceiveProtocol")
+	}
+	args := os.Args
+	for len(args) > 0 && args[0] != "--" {
+		args = args[1:]
+	}
+	if len(args) != 2 {
+		t.Fatalf("want one file after --, got %q", os.Args)
+	}
+	data, err := os.ReadFile(args[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dest, filepath.Base(args[1])), data, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

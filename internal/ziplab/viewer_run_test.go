@@ -2,45 +2,23 @@ package ziplab
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
-// viewerSession is the minimum ssh.Session a ZMODEM send needs: it has no
-// PTY, offers no input, and records what the transfer program sends.
-type viewerSession struct {
-	ssh.Session
-	mu  sync.Mutex
-	out bytes.Buffer
-}
-
-func (s *viewerSession) Read([]byte) (int, error) { return 0, io.EOF }
-
-func (s *viewerSession) Write(p []byte) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.out.Write(p)
-}
-
-func (s *viewerSession) Pty() (ssh.Pty, <-chan ssh.Window, bool) { return ssh.Pty{}, nil, false }
-
-func (s *viewerSession) sent() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.out.String()
+// sentEntry is one extracted member handed to the viewer's send callback:
+// its path and its content as read while the file still existed.
+type sentEntry struct {
+	path, content string
 }
 
 // viewerHarness drives RunZipLabView with scripted line and key input and
@@ -48,14 +26,14 @@ func (s *viewerSession) sent() string {
 type viewerHarness struct {
 	screen   bytes.Buffer
 	terminal *term.Terminal
-	session  *viewerSession
+	sends    []sentEntry
 	lines    []string // returned by readLine in order; then an error
 	keys     []int    // returned by readKey in order; then an error
 	keyReads int
 }
 
 func newViewerHarness(lines []string, keys []int) *viewerHarness {
-	h := &viewerHarness{session: &viewerSession{}, lines: lines, keys: keys}
+	h := &viewerHarness{lines: lines, keys: keys}
 	h.terminal = term.NewTerminal(struct {
 		io.Reader
 		io.Writer
@@ -82,23 +60,20 @@ func (h *viewerHarness) readKey() (int, error) {
 	return key, nil
 }
 
-func (h *viewerHarness) run(ctx context.Context, zipPath, name string) {
-	RunZipLabView(ctx, h.session, h.terminal, zipPath, name, ansi.OutputModeUTF8, h.readLine, h.readKey)
+func (h *viewerHarness) send(extract ExtractFunc) {
+	path, err := extract()
+	if err != nil {
+		return
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		content = []byte("read error: " + err.Error())
+	}
+	h.sends = append(h.sends, sentEntry{path: path, content: string(content)})
 }
 
-// fakeSZ puts a stand-in for lrzsz's sz alone on PATH. It sends the file it
-// is asked to transfer, followed by the path it was given.
-func fakeSZ(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("uses a POSIX shell script as the sz stand-in")
-	}
-	dir := t.TempDir()
-	script := "#!/bin/sh\n/bin/cat \"$2\"\nprintf '|path=%s' \"$2\"\n"
-	if err := os.WriteFile(filepath.Join(dir, "sz"), []byte(script), 0755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir)
+func (h *viewerHarness) run(zipPath, name string) {
+	RunZipLabView(h.terminal, zipPath, name, ansi.OutputModeUTF8, h.readLine, h.readKey, h.send)
 }
 
 func viewerTestZip(t *testing.T) string {
@@ -115,7 +90,7 @@ func viewerTestZip(t *testing.T) string {
 func TestRunZipLabView_UnreadableArchive(t *testing.T) {
 	// Any key but ENTER is ignored at the pause prompt.
 	h := newViewerHarness(nil, []int{'x', ' ', '\r', 'y'})
-	h.run(context.Background(), filepath.Join(t.TempDir(), "missing.zip"), "MISSING.ZIP")
+	h.run(filepath.Join(t.TempDir(), "missing.zip"), "MISSING.ZIP")
 
 	screen := h.screen.String()
 	if !strings.Contains(screen, "Error reading archive.") {
@@ -138,7 +113,7 @@ func TestRunZipLabView_EmptyArchive(t *testing.T) {
 
 	// The caller hanging up at the pause prompt ends the viewer.
 	h := newViewerHarness([]string{"1"}, nil)
-	h.run(context.Background(), zipPath, "EMPTY.ZIP")
+	h.run(zipPath, "EMPTY.ZIP")
 
 	screen := h.screen.String()
 	if !strings.Contains(screen, "Archive is empty.") {
@@ -155,7 +130,7 @@ func TestRunZipLabView_MenuInput(t *testing.T) {
 	// Blank redisplays the listing, junk and out-of-range numbers are
 	// rejected, a directory entry cannot be extracted, and q leaves.
 	h := newViewerHarness([]string{"", "abc", "0", "4", " 2 ", "q", "1"}, nil)
-	h.run(context.Background(), zipPath, "VIEW.ZIP")
+	h.run(zipPath, "VIEW.ZIP")
 
 	screen := h.screen.String()
 	if got := strings.Count(screen, "Archive Contents: VIEW.ZIP"); got != 2 {
@@ -170,75 +145,42 @@ func TestRunZipLabView_MenuInput(t *testing.T) {
 	if got := strings.Count(screen, "Extraction failed."); got != 1 {
 		t.Errorf("extraction failure shown %d times, want 1", got)
 	}
-	if strings.Contains(screen, "via ZMODEM") {
-		t.Errorf("a transfer was started: %q", screen)
+	if len(h.sends) != 0 {
+		t.Errorf("sent %d entries, want none", len(h.sends))
 	}
 	// q ended the viewer before the last scripted line was read.
 	if len(h.lines) != 1 {
 		t.Errorf("%d scripted lines left unread, want 1", len(h.lines))
 	}
-	if got := h.session.sent(); got != "" {
-		t.Errorf("session received %q, want nothing", got)
-	}
 }
 
 func TestRunZipLabView_SendsSelectedEntry(t *testing.T) {
-	fakeSZ(t)
 	zipPath := viewerTestZip(t)
 
-	// One send with no context (the viewer supplies its own timeout) and
-	// one with a caller deadline; input then ends, which closes the viewer.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	for _, tc := range []struct {
-		name string
-		ctx  context.Context
-	}{{"no context", nil}, {"caller deadline", ctx}} {
-		t.Run(tc.name, func(t *testing.T) {
-			h := newViewerHarness([]string{"3"}, nil)
-			h.run(tc.ctx, zipPath, "VIEW.ZIP")
+	// The selected member is extracted and handed to send, then the viewer
+	// returns to its prompt; input then ends, which closes the viewer.
+	h := newViewerHarness([]string{"3", "1"}, nil)
+	h.run(zipPath, "VIEW.ZIP")
 
-			screen := h.screen.String()
-			if !strings.Contains(screen, "manual.txt") || !strings.Contains(screen, "via ZMODEM...") {
-				t.Errorf("screen missing send notice: %q", screen)
-			}
-			if !strings.Contains(screen, "Transfer complete.") || strings.Contains(screen, "Transfer failed.") {
-				t.Errorf("screen does not report a completed transfer: %q", screen)
-			}
-
-			content, sentPath, ok := strings.Cut(h.session.sent(), "|path=")
-			if !ok || content != "the manual" {
-				t.Fatalf("session received %q, want the entry's content and its path", h.session.sent())
-			}
-			// Only the base name is used, and the temp copy is gone afterwards.
-			if filepath.Base(sentPath) != "manual.txt" {
-				t.Errorf("sent file %q, want base name manual.txt", sentPath)
-			}
-			if _, err := os.Stat(filepath.Dir(sentPath)); !errors.Is(err, os.ErrNotExist) {
-				t.Errorf("temp dir %s not cleaned up after send (stat err = %v)", filepath.Dir(sentPath), err)
-			}
-		})
+	if len(h.sends) != 2 {
+		t.Fatalf("sent %d entries, want 2", len(h.sends))
 	}
-}
-
-func TestRunZipLabView_TransferFailure(t *testing.T) {
-	// With no sz on PATH the send cannot start; the viewer reports it and
-	// returns to its prompt.
-	t.Setenv("PATH", t.TempDir())
-	zipPath := viewerTestZip(t)
-
-	h := newViewerHarness([]string{"1", "Q"}, nil)
-	h.run(context.Background(), zipPath, "VIEW.ZIP")
-
-	screen := h.screen.String()
-	if !strings.Contains(screen, "Transfer failed.") || strings.Contains(screen, "Transfer complete.") {
-		t.Errorf("screen does not report a failed transfer: %q", screen)
+	got := h.sends[0]
+	if got.content != "the manual" {
+		t.Errorf("sent content %q, want the entry's content", got.content)
 	}
-	if got := strings.Count(screen, "ZipLab ["); got != 2 {
-		t.Errorf("selection prompt shown %d times, want 2", got)
+	// Only the base name is used, and the temp copy is gone afterwards.
+	if filepath.Base(got.path) != "manual.txt" {
+		t.Errorf("sent file %q, want base name manual.txt", got.path)
 	}
-	if len(h.lines) != 0 {
-		t.Errorf("%d scripted lines left unread, want 0", len(h.lines))
+	if _, err := os.Stat(filepath.Dir(got.path)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("temp dir %s not cleaned up after send (stat err = %v)", filepath.Dir(got.path), err)
+	}
+	if h.sends[1].content != "read me first" {
+		t.Errorf("second send content %q, want readme.txt's", h.sends[1].content)
+	}
+	if got := strings.Count(h.screen.String(), "ZipLab ["); got != 3 {
+		t.Errorf("selection prompt shown %d times, want 3", got)
 	}
 }
 
@@ -299,5 +241,43 @@ func TestExtractSingleEntry_FlattensNestedPath(t *testing.T) {
 	data, err := os.ReadFile(path)
 	if err != nil || string(data) != "the manual" {
 		t.Errorf("extracted content = %q, err %v", data, err)
+	}
+}
+
+func TestRunZipLabView_DeclinedSendExtractsNothing(t *testing.T) {
+	zipPath := viewerTestZip(t)
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("TMP", tmp)
+	t.Setenv("TEMP", tmp)
+
+	// A sender that refuses (no access, or a cancelled protocol menu) never
+	// calls extract, so nothing is unpacked.
+	h := newViewerHarness([]string{"1", "3"}, nil)
+	calls := 0
+	RunZipLabView(h.terminal, zipPath, "VIEW.ZIP", ansi.OutputModeUTF8, h.readLine, h.readKey, func(ExtractFunc) { calls++ })
+
+	if calls != 2 {
+		t.Errorf("send called %d times, want 2", calls)
+	}
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("temp dir holds %d entries after declined sends, want none", len(entries))
+	}
+}
+
+func TestExtractSingleEntry_SizeLimit(t *testing.T) {
+	zipPath := viewerTestZip(t)
+	old := maxExtractBytes
+	maxExtractBytes = 4
+	t.Cleanup(func() { maxExtractBytes = old })
+
+	// readme.txt declares 13 bytes, over the lowered limit.
+	if _, cleanup, err := extractSingleEntry(zipPath, 1); err == nil || !strings.Contains(err.Error(), "extraction limit") {
+		cleanup()
+		t.Fatalf("err = %v, want extraction-limit refusal", err)
 	}
 }
