@@ -46,11 +46,17 @@ In `config.json`:
 code. Category codes use the same 1–16 character uppercase slug rules as door
 codes; `OTHER` is reserved.
 
+An invalid value in a hand-edited file does not stop the BBS from starting.
+At load, a bad mode, sort or column count falls back to its default; a
+category with a bad, reserved or repeated code is dropped; and a door whose
+`category` is not a valid code is listed under Other. Each repair is logged
+as a warning. The config editor still refuses to save invalid values.
+
 `doorMenuColumns` lays the list out in 1 to 4 columns (default 1), and a
 category's `columns` overrides it for that category's door list; the category
 picker uses the global setting. Entries are numbered down each column, and a
 page that is not full is split evenly across the columns. A terminal too
-narrow for the setting gets as many columns as fit, at least 20 characters
+narrow for the setting gets as many columns as fit, at least 19 characters
 each, and a row template that spans more than one line always gets one
 column.
 

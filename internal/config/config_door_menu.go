@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"log/slog"
+)
 
 // DoorCategory groups generated-menu entries. Categories live in config.json;
 // a door belongs to at most one category. Empty categories are not displayed.
@@ -76,4 +79,50 @@ func (c *ServerConfig) ValidateDoorMenu() error {
 		seen[code] = true
 	}
 	return nil
+}
+
+// SanitizeDoorMenu repairs invalid door-menu settings after a load, so a
+// hand-edited typo cannot stop the BBS or the config editor from starting.
+// Each repair is logged: a bad mode, sort or column count falls back to its
+// default, and a category with a bad, reserved or repeated code is dropped,
+// which moves its doors under Other. Saving still validates strictly with
+// ValidateDoorMenu.
+func (c *ServerConfig) SanitizeDoorMenu() {
+	if c.DoorMenuMode != "" && c.DoorMenuMode != "lightbar" && c.DoorMenuMode != "list" {
+		slog.Warn("invalid doorMenuMode; using lightbar", "value", c.DoorMenuMode)
+		c.DoorMenuMode = ""
+	}
+	if !ValidDoorMenuSort(c.DoorMenuSort) {
+		slog.Warn("invalid doorMenuSort; using the default", "value", c.DoorMenuSort)
+		c.DoorMenuSort = ""
+	}
+	if !validDoorMenuColumns(c.DoorMenuColumns) {
+		slog.Warn("invalid doorMenuColumns; using 1", "value", c.DoorMenuColumns, "max", MaxDoorMenuColumns)
+		c.DoorMenuColumns = 0
+	}
+	seen := map[string]bool{}
+	kept := make([]DoorCategory, 0, len(c.DoorCategories))
+	for _, cat := range c.DoorCategories {
+		code, err := NormalizeDoorCode(cat.Code)
+		if err != nil {
+			slog.Warn("dropping door category with an invalid code; its doors move to Other", "code", cat.Code, "error", err)
+			continue
+		}
+		if code == "OTHER" || seen[code] {
+			slog.Warn("dropping duplicate or reserved door category; its doors move to Other", "code", code)
+			continue
+		}
+		if !ValidDoorMenuSort(cat.Sort) {
+			slog.Warn("invalid sort for door category; using the default", "code", code, "value", cat.Sort)
+			cat.Sort = ""
+		}
+		if !validDoorMenuColumns(cat.Columns) {
+			slog.Warn("invalid columns for door category; inheriting doorMenuColumns", "code", code, "value", cat.Columns)
+			cat.Columns = 0
+		}
+		cat.Code = code
+		seen[code] = true
+		kept = append(kept, cat)
+	}
+	c.DoorCategories = kept
 }

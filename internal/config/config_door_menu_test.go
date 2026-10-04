@@ -62,3 +62,44 @@ func TestDoorMenuColumnsFor(t *testing.T) {
 		t.Errorf("unset: got %d want 1", got)
 	}
 }
+
+// TestLoadRepairsInvalidDoorMenuSettings pins that a hand-edited typo in the
+// door-menu settings is repaired on load instead of stopping the BBS: bad
+// values fall back to their defaults, unusable categories are dropped, and
+// a door with a bad category is listed under Other.
+func TestLoadRepairsInvalidDoorMenuSettings(t *testing.T) {
+	dir := t.TempDir()
+	cfgJSON := `{"doorMenuMode":"bad","doorMenuSort":"bad","doorMenuColumns":9,
+		"doorCategories":[{"code":" games ","sort":"bad","columns":7},{"code":"GAMES"},{"code":"other"},{"code":"../x"}]}`
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(cfgJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadServerConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadServerConfig: %v", err)
+	}
+	if cfg.DoorMenuMode != "" || cfg.DoorMenuSort != "" || cfg.DoorMenuColumns != 0 {
+		t.Errorf("mode/sort/columns = %q/%q/%d, want defaults", cfg.DoorMenuMode, cfg.DoorMenuSort, cfg.DoorMenuColumns)
+	}
+	if len(cfg.DoorCategories) != 1 {
+		t.Fatalf("categories = %+v, want only GAMES", cfg.DoorCategories)
+	}
+	if c := cfg.DoorCategories[0]; c.Code != "GAMES" || c.Sort != "" || c.Columns != 0 {
+		t.Errorf("GAMES = %+v, want normalized code with default sort and columns", c)
+	}
+	if err := cfg.ValidateDoorMenu(); err != nil {
+		t.Errorf("repaired config fails validation: %v", err)
+	}
+
+	p := filepath.Join(dir, "doors.json")
+	if err := os.WriteFile(p, []byte(`[{"code":"a","category":"../bad"}]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	doors, err := LoadDoors(p)
+	if err != nil {
+		t.Fatalf("LoadDoors: %v", err)
+	}
+	if doors["A"].Category != "" {
+		t.Errorf("door category = %q, want cleared", doors["A"].Category)
+	}
+}

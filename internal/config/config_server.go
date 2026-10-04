@@ -281,9 +281,7 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		config.AutoValidateNewUsers = false
 	}
 
-	if err := config.ValidateDoorMenu(); err != nil {
-		return config, err
-	}
+	config.SanitizeDoorMenu()
 	return config, nil
 }
 

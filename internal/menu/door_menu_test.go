@@ -461,7 +461,7 @@ func TestDoorMenuLightbarRepaintsInPlace(t *testing.T) {
 }
 
 func TestDoorMenuFitColumns(t *testing.T) {
-	for _, tc := range []struct{ cols, width, want int }{{2, 80, 2}, {4, 80, 3}, {4, 40, 1}, {1, 80, 1}, {3, 10, 1}} {
+	for _, tc := range []struct{ cols, width, want int }{{2, 80, 2}, {4, 80, 4}, {4, 77, 4}, {4, 76, 3}, {4, 40, 2}, {4, 38, 1}, {1, 80, 1}, {3, 10, 1}} {
 		if got := doorMenuFitColumns(tc.cols, tc.width); got != tc.want {
 			t.Errorf("doorMenuFitColumns(%d, %d) = %d, want %d", tc.cols, tc.width, got, tc.want)
 		}
@@ -560,5 +560,62 @@ func TestDoorMenuCategoryPickerHidesCodes(t *testing.T) {
 	out := ansi.StripAnsi(s.output())
 	if !strings.Contains(out, "Fun Things") || strings.Contains(out, "GAMES") || strings.Contains(out, "Code") {
 		t.Fatalf("category picker shows codes:\n%s", out)
+	}
+}
+
+// TestDoorMenuReloadsMNUAfterLaunch pins the MNU hot reload: an edit made
+// while a caller is in a door (here a tighter ACS and a fallback) applies
+// when they return, instead of the menu running on the file it first read.
+func TestDoorMenuReloadsMNUAfterLaunch(t *testing.T) {
+	c, s, calls := doorMenuHarness(t, "lightbar", "\r\rq", 1)
+	root := filepath.Join(t.TempDir(), "menus", "v3")
+	if err := os.CopyFS(root, os.DirFS(c.e.MenuSetPath)); err != nil {
+		t.Fatal(err)
+	}
+	c.e.MenuSetPath = root
+	launch := c.e.RunRegistry["DOOR:"]
+	c.e.RunRegistry["DOOR:"] = func(c *cmdCtx, code string) (*user.User, string, error) {
+		mnu := filepath.Join(root, "mnu", "DOORMENU.MNU")
+		if err := os.WriteFile(mnu, []byte(`{"TITLE":"Doors","ACS":"s100","FALLBACK":"MAIN"}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return launch(c, code)
+	}
+	_, next, err := runDoorMenu(c, "")
+	if err != nil || next != "GOTO:MAIN" {
+		t.Fatalf("next=%q err=%v, want GOTO:MAIN", next, err)
+	}
+	if !reflect.DeepEqual(*calls, []string{"D01"}) {
+		t.Errorf("launches = %v, want only the first", *calls)
+	}
+	if !strings.Contains(s.output(), "Denied") {
+		t.Error("no denied message after the MNU tightened")
+	}
+}
+
+// TestDoorMenuNoPagingAtOnePageBoundary pins that the paging lines are not
+// what pushes a list onto a second page: the largest list that fits with
+// the paging lines dropped is drawn on one page, without them.
+func TestDoorMenuNoPagingAtOnePageBoundary(t *testing.T) {
+	fits := func(n int) (onePage bool, out string) {
+		c, s, _ := doorMenuHarness(t, "list", "q", n)
+		if _, _, err := runDoorMenu(c, ""); err != nil {
+			t.Fatal(err)
+		}
+		out = s.output()
+		return !strings.Contains(out, "Page") && strings.Contains(out, fmt.Sprintf("D%02d", n)), out
+	}
+	n := 1
+	for ok, _ := fits(n + 1); ok; ok, _ = fits(n + 1) {
+		n++
+	}
+	// With the stock 24-row layout, 19 one-line doors fit once the paging
+	// footer is dropped.
+	if n != 19 {
+		_, out := fits(n + 1)
+		t.Fatalf("largest one-page list = %d doors, want 19; %d doors drew:\n%q", n, n+1, out)
+	}
+	if _, out := fits(n); func() bool { rows, _ := ansi.ArtGeometry([]byte(out), 80); return rows >= 24 }() {
+		t.Errorf("%d-door page reaches the bottom row", n)
 	}
 }

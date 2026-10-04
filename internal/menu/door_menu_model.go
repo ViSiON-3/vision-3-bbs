@@ -99,9 +99,11 @@ func doorMenuPageSize(height, top, bottom, prompt, rowHeight int) int {
 	return max(1, (height-top-bottom-prompt-1)/rowHeight)
 }
 
-// doorMenuMinCellWidth is the narrowest column worth drawing. A terminal too
-// narrow for the configured columns gets as many as fit, and at least one.
-const doorMenuMinCellWidth = 20
+// doorMenuMinCellWidth is the narrowest column worth drawing, separator
+// included. It is 19 so the maximum of four columns fits in 80 columns with
+// the last one left free. A terminal too narrow for the configured columns
+// gets as many as fit, and at least one.
+const doorMenuMinCellWidth = 19
 
 // doorMenuFitColumns returns how many of cols columns fit in width, leaving
 // the last column free as the rest of the layout does.

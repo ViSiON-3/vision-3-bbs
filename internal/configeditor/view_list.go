@@ -291,7 +291,7 @@ func (m Model) renderRecordRow(idx, boxW int) string {
 	case "doorcategory":
 		if idx < len(m.configs.Server.DoorCategories) {
 			c := m.configs.Server.DoorCategories[idx]
-			content = fmt.Sprintf("  %-16s  %-32s  %d %s", c.Code, c.Name, c.MinAccessLevel, c.ACS)
+			content = fmt.Sprintf("  %-16s  %-32s  %d %s", padRight(c.Code, 16), padRight(c.Name, 32), c.MinAccessLevel, c.ACS)
 		}
 	case "door":
 		keys := m.doorKeys()

@@ -98,6 +98,9 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 	e := c.e
+	// rec is re-read before every full redraw, so MNU edits (a tighter ACS,
+	// a new fallback or prompt) take effect when a caller comes back from a
+	// door or changes page, as they do for ordinary menus.
 	rec, err := LoadMenu("DOORMENU", e.Menus())
 	if err != nil {
 		return c.currentUser, "", err
@@ -126,8 +129,13 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 	direct := category != ""
 	selected, rootSelected := 0, 0
 	typed := ""
-	for {
+	for first := true; ; first = false {
 		cfg := e.GetServerConfig()
+		if !first {
+			if rec, err = LoadMenu("DOORMENU", e.Menus()); err != nil {
+				return c.currentUser, "", err
+			}
+		}
 		if !allows(rec.ACS) {
 			return denied()
 		}
@@ -259,7 +267,16 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 				headRows = doorMenuLines(expand(heading, maxPage, maxPage), w)
 			}
 		}
-		rows := doorMenuPageSize(h, doorMenuLines(frame(art[0], maxPage, maxPage), w)+headRows, doorMenuLines(frame(art[2], maxPage, maxPage), w), doorMenuLines(prompt.String()+strings.Repeat("X", 16), w), rowHeight)
+		promptRows := doorMenuLines(prompt.String()+strings.Repeat("X", 16), w)
+		// Size the page without the paging lines first; only a list that
+		// overflows that needs them, and then the page is sized with them.
+		pageRows := func(pt int) int {
+			return doorMenuPageSize(h, doorMenuLines(frame(art[0], pt, pt), w)+headRows, doorMenuLines(frame(art[2], pt, pt), w), promptRows, rowHeight)
+		}
+		rows := pageRows(1)
+		if len(entries) > rows*cols {
+			rows = pageRows(maxPage)
+		}
 		size := rows * cols
 		pages := max(1, (len(entries)+size-1)/size)
 		page := selected / size

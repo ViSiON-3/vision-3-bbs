@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"regexp"
 	"strings"
@@ -182,9 +183,12 @@ func LoadDoors(filePath string) (map[string]DoorConfig, error) {
 	for position, door := range doors {
 		door.ConfigOrder = position
 		if door.Category != "" {
+			// An unusable category is not worth refusing every door over:
+			// clear it, which lists the door under Other.
 			normalized, err := NormalizeDoorCode(door.Category)
 			if err != nil {
-				return nil, fmt.Errorf("door %q category: %w", door.Code, err)
+				slog.Warn("door has an invalid category; listing it under Other", "door", door.Code, "category", door.Category, "error", err)
+				normalized = ""
 			}
 			door.Category = normalized
 		}
