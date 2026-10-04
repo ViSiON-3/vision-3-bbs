@@ -137,7 +137,7 @@ func TestResolveFirst(t *testing.T) {
 		t.Errorf("ResolveFirst = %q", got)
 	}
 	// An overlay copy under the *other* candidate name still wins — the
-	// candidate order is by name, the layer order within each name.
+	// overlay is searched under every candidate name before the shipped set.
 	write(t, filepath.Join(s.Overlay, "templates", "FILEAREA.TOP"), "mine")
 	got, err = s.ResolveFirst("templates", "FILEAREA.TOP", "FILEAREA.TOP.ANS")
 	if err != nil {
@@ -153,6 +153,45 @@ func TestResolveFirst(t *testing.T) {
 	}
 	if got != filepath.Join(s.Base, "templates", "NOPE.TOP") {
 		t.Errorf("ResolveFirst(missing) = %q", got)
+	}
+}
+
+// A later spelling in the overlay must beat an earlier spelling in the base.
+func TestResolveFirstLayerPrecedence(t *testing.T) {
+	for _, suffix := range []string{".ANS", ".ans"} {
+		t.Run(suffix, func(t *testing.T) {
+			s := fixture(t)
+			write(t, s.Path(LayerBase, "templates", "X.TOP"), "shipped")
+			want := s.Path(LayerOverlay, "templates", "X.TOP"+suffix)
+			write(t, want, "override")
+			// Test the exact spelling first so this also works on case-insensitive filesystems.
+			got, err := s.ResolveFirst("templates", "X.TOP", "X.TOP"+suffix)
+			if err != nil || got != want {
+				t.Fatalf("ResolveFirst = %q, %v; want %q", got, err, want)
+			}
+			// Candidate order is retained within a layer.
+			want = s.Path(LayerOverlay, "templates", "X.TOP")
+			write(t, want, "bare override")
+			got, err = s.ResolveFirst("templates", "X.TOP", "X.TOP"+suffix)
+			if err != nil || got != want {
+				t.Fatalf("ResolveFirst = %q, %v; want %q", got, err, want)
+			}
+		})
+	}
+}
+
+func TestResolveFirstLaterOverlayErrorDoesNotFallBack(t *testing.T) {
+	s := fixture(t)
+	write(t, s.Path(LayerBase, "templates", "X.TOP"), "shipped")
+	path := s.Path(LayerOverlay, "templates", "X.TOP.ans")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("missing-target", path); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if got, err := s.ResolveFirst("templates", "X.TOP", "X.TOP.ans"); err == nil || got != path {
+		t.Fatalf("ResolveFirst = %q, %v; want failing overlay path %q", got, err, path)
 	}
 }
 

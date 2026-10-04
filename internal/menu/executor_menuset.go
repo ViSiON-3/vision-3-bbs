@@ -29,7 +29,7 @@ func (e *MenuExecutor) menuFile(elem ...string) string {
 
 // templateFile resolves a template by its bare name, accepting the .ANS/.ans
 // suffixed spellings the shipped set uses for some screens (FILEAREA.TOP.ANS).
-// Each spelling is tried in the overlay before the shipped set. readTemplateFile
+// All spellings are tried in the overlay before the shipped set. readTemplateFile
 // probes the same suffixes itself, so passing its result on is safe either way.
 func (e *MenuExecutor) templateFile(name string) string {
 	path, err := e.Menus().ResolveFirst("templates", name, name+".ANS", name+".ans")
