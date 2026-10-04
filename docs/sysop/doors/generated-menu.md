@@ -6,7 +6,7 @@
 Add a command to any menu's CFG:
 
 ```json
-{"KEYS":"D", "COMMAND":"RUN:DOORMENU", "ACS":""}
+{"KEYS":"D", "CMD":"RUN:DOORMENU", "ACS":""}
 ```
 
 Use `RUN:DOORMENU GAMES` to open a category directly. `RUN:DOORMENU:GAMES` and
@@ -42,7 +42,9 @@ In `config.json`:
 `doorMenuMode` is `lightbar` (also the default when absent) or `list`.
 `doorMenuSort` is `name` (default), `code`, `config` (original order in
 `doors.json`), or `manual` (ascending `sort_order`, then code). A category's
-`sort` overrides that default.
+`sort` overrides that default. Categories sort by `sort_order`, then name and
+code. Category codes use the same 1–16 character uppercase slug rules as door
+codes; `OTHER` is reserved.
 
 `doorMenuColumns` lays the list out in 1 to 4 columns (default 1), and a
 category's `columns` overrides it for that category's door list; the category
@@ -50,9 +52,7 @@ picker uses the global setting. Entries are numbered down each column, and a
 page that is not full is split evenly across the columns. A terminal too
 narrow for the setting gets as many columns as fit, at least 20 characters
 each, and a row template that spans more than one line always gets one
-column. Categories sort by `sort_order`, then name and
-code. Category codes use the same 1–16 character uppercase slug rules as door
-codes; `OTHER` is reserved.
+column.
 
 A door can have these additional fields:
 
@@ -75,8 +75,10 @@ Inaccessible doors and categories are omitted; empty categories are omitted.
 commands still work. Category access governs this picker, while the normal
 per-door minimum access still governs direct launches.
 
-Reload configuration through the board's existing configuration reload flow
-(or restart) after editing JSON. No per-door CFG entry or art edit is needed.
+No restart is needed. The board checks `config.json` and `doors.json` every
+couple of seconds and reloads them, even with callers online, and the menu
+reads its settings, `DOORMENU.MNU` and its templates each time it draws. No
+per-door CFG entry or art edit is needed.
 
 In the config editor:
 
@@ -109,11 +111,16 @@ file resolves through the usual menu-set overlay before shipped files.
 
 - `mnu/DOORMENU.MNU`: `TITLE`, `PROMPT1`, `PROMPT2`, `USEPROMPT`, `CLR`/`CLS`,
   `ACS`, and access-denied `FALLBACK`. Prompts use the normal MCI pipeline.
+  `menuedit` lists it with the other menus and edits these fields, saving to
+  the overlay. It has no `.CFG`: the entries come from `doors.json`, so
+  commands added under F10 are never read.
 - `bar/DOORMENUHI.BAR` (optional, not shipped): the first record supplies
   highlight and regular colors for this menu only; coordinates are ignored.
   Without it the highlight is the theme's `yesNoHighlightColor`, as in the
   other lightbars, and rows keep their template colors.
-- `templates/DOORMENU.TOP`, `.MID`, `.BOT`: door header, repeated row, footer.
+- `templates/DOORMENU.TOP`, `.MID`, `.BOT`: door header, repeated row, footer,
+  used for any list without its own per-category art, including **Other** and
+  a flat menu.
 - `templates/DOORMENU_GAMES.TOP`, `.MID`, `.BOT`: optional per-category art.
   Each missing part independently falls back to the generic file.
 - `templates/DOORCAT.TOP`, `.MID`, `.BOT`: category picker art.
@@ -123,7 +130,11 @@ file resolves through the usual menu-set overlay before shipped files.
   Column titles in a TOP template describe the one-column row and may need
   their own per-category TOP for a column layout.
 
-Template filenames may also have `.ANS` or `.ans` suffixes. SAUCE metadata is
+Template filenames may also have `.ANS` or `.ans` suffixes. To override a
+shipped template, give the overlay copy the same name: an overlay
+`DOORMENU.TOP` replaces the shipped `DOORMENU.TOP`, but an overlay
+`DOORMENU.TOP.ans` does not (issue #612). Per-category templates are the
+exception and prefer the overlay under any suffix. SAUCE metadata is
 removed through the shared template reader. Keep these templates as flowing
 rows; absolute cursor positioning is unsuitable for a generated list. Avoid
 filling the final terminal column to prevent terminal-dependent autowrap.

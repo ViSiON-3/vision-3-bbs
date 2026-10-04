@@ -476,4 +476,4 @@ Example:
 
 ## Generated door menus
 
-For automatic door lists, categories, paging, and lightbar or numbered input, see [Generated door menus](generated-menu.md). Existing hand-built menus remain supported.
+For automatic door lists, categories, paging, and lightbar or numbered input, see [Generated door menus](doors/generated-menu.md). Existing hand-built menus remain supported.

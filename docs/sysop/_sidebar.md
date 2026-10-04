@@ -83,6 +83,7 @@
 * **DOORS**
 * [Setting Up Doors (How-To)](how-to-guides/doors.md)
 * [Door Programs](doors/doors.md)
+* [Generated Door Menus](doors/generated-menu.md)
 * [Synchronet JS Doors](doors/synchronet-js-doors.md)
 * [Door Servers (RLogin, Telnet)](doors/door-servers.md)
 
