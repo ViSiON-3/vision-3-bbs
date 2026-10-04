@@ -120,14 +120,21 @@ func (s Set) Locate(elem ...string) (path string, layer Layer, ok bool, err erro
 	return p, LayerBase, exists, err
 }
 
-// ResolveFirst tries names in order, overlay before base within each name.
+// ResolveFirst tries all names in the overlay before trying the base, preserving
+// the supplied name order within each layer.
 // A non-missing error stops lookup before trying another spelling. If no name
 // exists, it returns the shipped path of the first name without an error.
 func (s Set) ResolveFirst(sub string, names ...string) (string, error) {
-	for _, n := range names {
-		p, _, ok, err := s.Locate(sub, n)
-		if err != nil || ok {
-			return p, err
+	for _, layer := range []Layer{LayerOverlay, LayerBase} {
+		if layer == LayerOverlay && !s.HasOverlay() {
+			continue
+		}
+		for _, n := range names {
+			p := s.Path(layer, sub, n)
+			ok, err := statFile(p)
+			if err != nil || ok {
+				return p, err
+			}
 		}
 	}
 	if len(names) == 0 {
