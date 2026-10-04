@@ -503,3 +503,16 @@ func TestDoorMenuRepaintBelowWideHeader(t *testing.T) {
 		t.Fatalf("repaint not on rows 5 and 6:\n%q", out)
 	}
 }
+
+// With no DOORMENUHI.BAR the bar follows the theme, like the other lightbars,
+// so a sysop recolours the board in one place.
+func TestDoorMenuHighlightFollowsTheme(t *testing.T) {
+	c, s, _ := doorMenuHarness(t, "lightbar", "q", 3)
+	c.e.SetTheme(config.ThemeConfig{YesNoHighlightColor: 47})
+	if _, _, err := runDoorMenu(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s.output(), colorCodeToAnsi(47)) {
+		t.Fatalf("highlight does not use the theme colour:\n%q", s.output())
+	}
+}

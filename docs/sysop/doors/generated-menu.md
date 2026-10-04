@@ -109,9 +109,10 @@ file resolves through the usual menu-set overlay before shipped files.
 
 - `mnu/DOORMENU.MNU`: `TITLE`, `PROMPT1`, `PROMPT2`, `USEPROMPT`, `CLR`/`CLS`,
   `ACS`, and access-denied `FALLBACK`. Prompts use the normal MCI pipeline.
-- `bar/DOORMENUHI.BAR`: the first record supplies highlight and regular colors;
-  coordinates are ignored. Without this file, theme highlight and row colors
-  are used.
+- `bar/DOORMENUHI.BAR` (optional, not shipped): the first record supplies
+  highlight and regular colors for this menu only; coordinates are ignored.
+  Without it the highlight is the theme's `yesNoHighlightColor`, as in the
+  other lightbars, and rows keep their template colors.
 - `templates/DOORMENU.TOP`, `.MID`, `.BOT`: door header, repeated row, footer.
 - `templates/DOORMENU_GAMES.TOP`, `.MID`, `.BOT`: optional per-category art.
   Each missing part independently falls back to the generic file.
