@@ -13,7 +13,6 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
-	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
 )
 
 // fileLightbar user-facing actions: mark toggle, view, download, upload.
@@ -55,32 +54,23 @@ func (lb *fileLightbar) toggleMark() {
 
 // viewFile displays the selected file — the ziplab viewer for supported
 // archives, or the plain file viewer otherwise — and reports whether run()
-// should do a full redraw afterward. refresh is false only when the file's
-// on-disk path couldn't be resolved (matching the original inline case,
-// which skipped the redraw in that case).
+// should do a full redraw afterward.
 func (lb *fileLightbar) viewFile() (refresh bool) {
-	if len(lb.allFiles) > 0 {
-		sel := &lb.allFiles[lb.selectedIndex]
-		filePath, pathErr := lb.e.FileMgr.GetFilePath(sel.ID)
-		if pathErr != nil {
-			slog.Error("failed to get path for file", "node", lb.nodeNumber, "id", sel.ID, "error", pathErr)
-			return false
-		}
-		// Show cursor for the viewer.
-		_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
-		if lb.e.FileMgr.IsSupportedArchive(sel.Filename) {
-			ctx, cancel := lb.e.transferContext(lb.s.Context())
-			ziplab.RunZipLabView(ctx, lb.s, lb.terminal, filePath, sel.Filename, lb.outputMode, sessionReadLine(lb.s, lb.terminal), sessionReadKey(lb.s))
-			cancel()
-		} else {
-			tw, th := getTerminalSize(lb.s)
-			viewFileByRecord(lb.e, lb.s, lb.terminal, sel, lb.outputMode, tw, th)
-		}
-		// Hide cursor again.
-		lb.endFooterPrompt()
-		return true
+	if len(lb.allFiles) == 0 {
+		return false
 	}
-	return false
+	sel := &lb.allFiles[lb.selectedIndex]
+	// Show cursor for the viewer.
+	_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
+	tw, th := getTerminalSize(lb.s)
+	send := lb.e.zipLabSender(lb.s, lb.terminal, sel, lb.currentUser, lb.nodeNumber, lb.sessionStartTime, lb.outputMode)
+	viewFileByRecord(lb.e, lb.s, lb.terminal, sel, lb.outputMode, tw, th, send)
+	// A ZipLab extraction replaces the session InputHandler around the
+	// transfer, so the cached one is stale.
+	lb.ih = getSessionIH(lb.s)
+	// Hide cursor again.
+	lb.endFooterPrompt()
+	return true
 }
 
 // confirmDownload prompts the user to confirm downloading the currently

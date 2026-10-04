@@ -3,7 +3,6 @@ package ziplab
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,14 +10,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
-	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 )
 
@@ -147,12 +143,16 @@ func extractSingleEntry(zipPath string, entryNum int) (string, func(), error) {
 	return destPath, cleanup, nil
 }
 
+// SendFunc transfers one extracted archive member to the caller. It owns
+// protocol selection, handing the session over to the transfer program and
+// reporting the outcome; the extracted file is removed once it returns.
+type SendFunc func(path string)
+
 // RunZipLabView presents an interactive archive viewer that lets the user
-// browse entries and extract individual files via ZMODEM.
-// ctx controls transfer timeout; pass nil for default 30-minute timeout.
+// browse entries and extract individual files through send.
 // readLine and readKey must use the session's shared InputHandler to avoid
 // leaving stale bytes in the input stream for subsequent readers.
-func RunZipLabView(ctx context.Context, s ssh.Session, terminal *term.Terminal, filePath string, filename string, outputMode ansi.OutputMode, readLine ReadLineFunc, readKey ReadKeyFunc) {
+func RunZipLabView(terminal *term.Terminal, filePath string, filename string, outputMode ansi.OutputMode, readLine ReadLineFunc, readKey ReadKeyFunc, send SendFunc) {
 	// Build the listing into a buffer to get the file count.
 	var buf bytes.Buffer
 	fileCount, err := formatArchiveListing(&buf, filePath, filename, 24)
@@ -207,31 +207,7 @@ func RunZipLabView(ctx context.Context, s ssh.Session, terminal *term.Terminal, 
 			continue
 		}
 
-		baseName := sanitizeEntryName(filepath.Base(extractedPath))
-		sendMsg := fmt.Sprintf("\r\n|07Sending |15%s|07 via ZMODEM...\r\n", baseName)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(sendMsg)), outputMode)
-
-		sendCtx := ctx
-		if sendCtx == nil {
-			sendCtx = context.Background()
-		}
-		var cancel context.CancelFunc
-		if _, hasDeadline := sendCtx.Deadline(); !hasDeadline {
-			sendCtx, cancel = context.WithTimeout(sendCtx, 30*time.Minute)
-		}
-		sendErr := transfer.ExecuteZmodemSend(sendCtx, s, extractedPath)
-		if cancel != nil {
-			cancel()
-		}
-		if sendErr != nil {
-			slog.Error("zmodem send failed", "error", sendErr)
-			msg := "\r\n|01Transfer failed.|07\r\n"
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		} else {
-			msg := "\r\n|10Transfer complete.|07\r\n"
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
-		}
-
+		send(extractedPath)
 		cleanup()
 	}
 }

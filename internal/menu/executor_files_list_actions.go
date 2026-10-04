@@ -15,7 +15,6 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
-	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
 )
 
 // fetchPage re-fetches the current page's files from the file manager into
@@ -209,20 +208,8 @@ func (st *fileListState) handleFileView() (logoff bool, err error) {
 		return false, nil
 	}
 	fileToView := st.filesOnPage[viewIndex]
-	if st.e.FileMgr.IsSupportedArchive(fileToView.Filename) {
-		viewFilePath, pathErr := st.e.FileMgr.GetFilePath(fileToView.ID)
-		if pathErr != nil {
-			slog.Error("failed to get path for file", "node", st.nodeNumber, "fileID", fileToView.ID, "error", pathErr)
-			terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error locating file.|07\r\n")), st.outputMode)
-			uiPause(1 * time.Second)
-		} else {
-			ctx, cancel := st.e.transferContext(st.s.Context())
-			ziplab.RunZipLabView(ctx, st.s, st.terminal, viewFilePath, fileToView.Filename, st.outputMode, sessionReadLine(st.s, st.terminal), sessionReadKey(st.s))
-			cancel()
-		}
-	} else {
-		viewFileByRecord(st.e, st.s, st.terminal, &fileToView, st.outputMode, st.termWidth, st.termHeight)
-	}
+	send := st.e.zipLabSender(st.s, st.terminal, &fileToView, st.currentUser, st.nodeNumber, st.sessionStartTime, st.outputMode)
+	viewFileByRecord(st.e, st.s, st.terminal, &fileToView, st.outputMode, st.termWidth, st.termHeight, send)
 	return false, nil
 }
 
