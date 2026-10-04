@@ -86,6 +86,9 @@ func doorMenuLines(s string, width int) int {
 	if s == "" {
 		return 0
 	}
+	// The terminal layer sends a bare LF as CRLF; measure what is sent, or
+	// each line after a long one is counted from where that one ended.
+	s = strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\n", "\r\n")
 	rows, _ := ansi.ArtGeometry(ansi.ReplacePipeCodes([]byte(s)), width)
 	return rows
 }

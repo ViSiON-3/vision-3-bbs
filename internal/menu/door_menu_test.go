@@ -77,7 +77,7 @@ func TestDoorMenuPageGeometry(t *testing.T) {
 	for _, tc := range []struct {
 		text        string
 		width, want int
-	}{{"a\r\nb\r\n", 80, 2}, {"header", 80, 1}, {"123456789", 5, 2}, {"\x1b[79Cx", 80, 2}, {"", 80, 0}} {
+	}{{"a\r\nb\r\n", 80, 2}, {"header", 80, 1}, {"123456789", 5, 2}, {"\x1b[79Cx", 80, 2}, {"", 80, 0}, {strings.Repeat("=", 78) + "\n" + strings.Repeat("-", 41) + "\n" + strings.Repeat("=", 78), 80, 3}} {
 		if got := doorMenuLines(tc.text, tc.width); got != tc.want {
 			t.Errorf("%q: %d want %d", tc.text, got, tc.want)
 		}
@@ -465,5 +465,41 @@ func TestDoorMenuFitColumns(t *testing.T) {
 		if got := doorMenuFitColumns(tc.cols, tc.width); got != tc.want {
 			t.Errorf("doorMenuFitColumns(%d, %d) = %d, want %d", tc.cols, tc.width, got, tc.want)
 		}
+	}
+}
+
+// A header of full-width lines separated by bare LFs, like the block-bar art
+// sysops draw, must not throw the in-place repaint off: entries start on the
+// row right after the header.
+func TestDoorMenuRepaintBelowWideHeader(t *testing.T) {
+	c, s, _ := doorMenuHarness(t, "lightbar", "\x1b[Bq", 3)
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "templates"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	header := strings.Repeat("=", 78) + "\n" + strings.Repeat("-", 41) + "\n" + strings.Repeat("=", 78) + "\n  #   Code   Door\n"
+	if err := os.WriteFile(filepath.Join(root, "templates", "DOORMENU.TOP"), []byte(header), 0644); err != nil {
+		t.Fatal(err)
+	}
+	shipped := c.e.MenuSetPath
+	c.e.MenuSetPath = root
+	for _, name := range []string{"mnu/DOORMENU.MNU", "templates/DOORMENU.MID", "templates/DOORMENU.BOT"} {
+		b, err := os.ReadFile(filepath.Join(shipped, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, name)), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, name), b, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := runDoorMenu(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	// Four header rows: the first entry is row 5, the second row 6.
+	if out := s.output(); !strings.Contains(out, ansi.MoveCursor(5, 1)) || !strings.Contains(out, ansi.MoveCursor(6, 1)) {
+		t.Fatalf("repaint not on rows 5 and 6:\n%q", out)
 	}
 }
