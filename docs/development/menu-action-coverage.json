@@ -1625,6 +1625,10 @@
     "handlerTests": [
       "TestDoorcovQWKDownloadBuildError",
       "TestDoorcovQWKDownloadNothingNew",
+      "TestDoorcovQWKDownloadNotSent",
+      "TestDoorcovQWKDownloadNoTempSpace",
+      "TestDoorcovQWKDownloadRenameFails",
+      "TestDoorcovQWKDownloadSendsPacket",
       "TestDoorcovQWKDownloadTaggedAreasOnly"
     ]
   },
@@ -1636,7 +1640,12 @@
     "coverage": "handler",
     "terminalTest": "",
     "handlerTests": [
-      "TestDoorcovQWKUploadProtocolPrompt"
+      "TestDoorcovQWKUploadPostsReplies",
+      "TestDoorcovQWKUploadProtocolPrompt",
+      "TestDoorcovQWKUploadRejected",
+      "TestDoorcovQWKUploadRespectsWriteACS",
+      "TestDoorcovQWKUploadTransferFails",
+      "TestDoorcovQWKUploadUnreadableREP"
     ]
   },
   {
