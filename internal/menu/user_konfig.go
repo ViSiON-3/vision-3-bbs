@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -23,6 +24,8 @@ import (
 //
 // Every change is written as soon as it is confirmed, so a dropped carrier
 // never loses an edit. Each individual edit can be abandoned with Esc.
+//
+// All of its text comes from the konfig* strings in strings.json.
 //
 // Only settings the board actually honours are offered. User.OutputMode,
 // MorePrompts, CustomPrompt and Colors are stored but nothing reads them, so
@@ -133,7 +136,7 @@ func runUserKonfig(c *cmdCtx, args string) (*user.User, string, error) {
 	// Work on a copy of the context: edits update the size it carries.
 	ctx := *c
 	st := &konfigState{c: &ctx, ih: getSessionIH(c.s)}
-	st.items, st.headings = layoutKonfig(konfigSections())
+	st.items, st.headings = layoutKonfig(konfigSections(c.e.Strings()))
 
 	hidden := c.e.hideCursorIfNeeded(c.terminal, c.outputMode, cursorHideContextDefault)
 	defer c.e.showCursorIfHidden(c.terminal, c.outputMode, hidden)
@@ -264,7 +267,7 @@ func (st *konfigState) commit(what string, mutate, undo func(u *user.User)) bool
 	if err := st.c.userManager.UpdateUser(u); err != nil {
 		undo(u)
 		slog.Error("failed to save user setting", "node", st.c.nodeNumber, "field", what, "error", err)
-		st.status = fmt.Sprintf("|12Couldn't save %s. Please try again.|07", what)
+		st.status = fmt.Sprintf(st.c.e.Strings().KonfigSaveError, what)
 		return false
 	}
 	return true
@@ -272,69 +275,69 @@ func (st *konfigState) commit(what string, mutate, undo func(u *user.User)) bool
 
 // saved sets the standard confirmation for a changed setting.
 func (st *konfigState) saved(label, value string) {
-	st.status = fmt.Sprintf("|10Saved.|07 %s is now |15%s|07.", label, value)
+	st.status = fmt.Sprintf(st.c.e.Strings().KonfigSavedFormat, label, value)
 }
 
 // --- Field definitions -----------------------------------------------------
 
-func konfigSections() [2][]konfigSection {
+func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 	return [2][]konfigSection{
 		{
-			{title: "Terminal", items: []*konfigItem{
-				{key: 'A', label: "Screen Width",
-					help:  "Columns your terminal shows (40-255). Used for layout and word wrap.",
-					value: func(st *konfigState) konfigValue { return numValue(st.user().ScreenWidth, 80) },
+			{title: str.KonfigSectionTerminal, items: []*konfigItem{
+				{key: 'A', label: str.KonfigScreenWidthLabel,
+					help:  str.KonfigScreenWidthHelp,
+					value: func(st *konfigState) konfigValue { return st.numValue(st.user().ScreenWidth, 80) },
 					edit:  editScreenWidth},
-				{key: 'B', label: "Screen Height",
-					help:  "Rows your terminal shows (21-60). Used for paging and full-screen views.",
-					value: func(st *konfigState) konfigValue { return numValue(st.user().ScreenHeight, 25) },
+				{key: 'B', label: str.KonfigScreenHeightLabel,
+					help:  str.KonfigScreenHeightHelp,
+					value: func(st *konfigState) konfigValue { return st.numValue(st.user().ScreenHeight, 25) },
 					edit:  editScreenHeight},
-				{key: 'C', label: "Encoding", flips: true,
-					help:  "Auto detects it on every call. Force UTF-8 or CP437 only if Auto is wrong.",
+				{key: 'C', label: str.KonfigEncodingLabel, flips: true,
+					help:  str.KonfigEncodingHelp,
 					value: encodingValue,
 					edit:  toggleEncoding},
-				{key: 'D', label: "Hot Keys", flips: true,
-					help:  "On: menu commands run the moment you press their key, no Enter needed.",
-					value: func(st *konfigState) konfigValue { return onOffValue(st.user().HotKeys) },
+				{key: 'D', label: str.KonfigHotKeysLabel, flips: true,
+					help:  str.KonfigHotKeysHelp,
+					value: func(st *konfigState) konfigValue { return st.onOffValue(st.user().HotKeys) },
 					edit:  toggleHotKeys},
 			}},
-			{title: "Messages", items: []*konfigItem{
-				{key: 'E', label: "Header Style",
-					help:  "How message headers look in the reader. Opens the style picker.",
+			{title: str.KonfigSectionMessages, items: []*konfigItem{
+				{key: 'E', label: str.KonfigHeaderStyleLabel,
+					help:  str.KonfigHeaderStyleHelp,
 					value: headerStyleValue,
 					edit:  editHeaderStyle},
-				{key: 'F', label: "Auto-Signature",
-					help:  "Up to 5 lines added to the end of every message you post.",
+				{key: 'F', label: str.KonfigAutoSigLabel,
+					help:  str.KonfigAutoSigHelp,
 					value: autoSigValue,
 					edit:  editAutoSig},
 			}},
 		},
 		{
-			{title: "Personal", items: []*konfigItem{
-				{key: 'G', label: "Real Name",
-					help:  "Used in areas that require real names. First and last name.",
-					value: func(st *konfigState) konfigValue { return textValue(st.user().RealName) },
+			{title: str.KonfigSectionPersonal, items: []*konfigItem{
+				{key: 'G', label: str.KonfigRealNameLabel,
+					help:  str.KonfigRealNameHelp,
+					value: func(st *konfigState) konfigValue { return st.textValue(st.user().RealName) },
 					edit:  editRealName},
-				{key: 'H', label: "Location",
-					help:  "Your group or location, shown in user lists and last callers.",
-					value: func(st *konfigState) konfigValue { return textValue(st.user().GroupLocation) },
+				{key: 'H', label: str.KonfigLocationLabel,
+					help:  str.KonfigLocationHelp,
+					value: func(st *konfigState) konfigValue { return st.textValue(st.user().GroupLocation) },
 					edit:  editLocation},
-				{key: 'I', label: "User Note",
-					help:  "A short line about you, shown in user lists and last callers.",
-					value: func(st *konfigState) konfigValue { return textValue(st.user().PrivateNote) },
+				{key: 'I', label: str.KonfigUserNoteLabel,
+					help:  str.KonfigUserNoteHelp,
+					value: func(st *konfigState) konfigValue { return st.textValue(st.user().PrivateNote) },
 					edit:  editNote},
-				{key: 'J', label: "Password",
-					help:  "Change your login password. You'll need your current one.",
+				{key: 'J', label: str.KonfigPasswordLabel,
+					help:  str.KonfigPasswordHelp,
 					value: func(*konfigState) konfigValue { return konfigValue{"********", toneDim} },
 					edit:  editPassword},
 			}},
-			{title: "Files", items: []*konfigItem{
-				{key: 'K', label: "Listing Mode", flips: true,
-					help:  "Lightbar: arrow-key file browser. Classic: scrolling text list.",
+			{title: str.KonfigSectionFiles, items: []*konfigItem{
+				{key: 'K', label: str.KonfigListingModeLabel, flips: true,
+					help:  str.KonfigListingModeHelp,
 					value: listingModeValue,
 					edit:  toggleListingMode},
-				{key: 'L', label: "File Columns",
-					help:  "Choose which columns the file listing shows.",
+				{key: 'L', label: str.KonfigFileColumnsLabel,
+					help:  str.KonfigFileColumnsHelp,
 					value: fileColumnsValue,
 					edit:  editFileColumns},
 			}},
@@ -369,25 +372,25 @@ func layoutKonfig(cols [2][]konfigSection) ([]*konfigItem, []konfigHeading) {
 
 // --- Values ----------------------------------------------------------------
 
-func numValue(v, def int) konfigValue {
+func (st *konfigState) numValue(v, def int) konfigValue {
 	if v == 0 {
-		return konfigValue{strconv.Itoa(def) + " (default)", toneDim}
+		return konfigValue{fmt.Sprintf(st.c.e.Strings().KonfigDefaultFormat, strconv.Itoa(def)), toneDim}
 	}
 	return konfigValue{strconv.Itoa(v), toneValue}
 }
 
-func textValue(s string) konfigValue {
+func (st *konfigState) textValue(s string) konfigValue {
 	if strings.TrimSpace(s) == "" {
-		return konfigValue{"(not set)", toneDim}
+		return konfigValue{st.c.e.Strings().KonfigNotSet, toneDim}
 	}
 	return konfigValue{s, toneValue}
 }
 
-func onOffValue(on bool) konfigValue {
+func (st *konfigState) onOffValue(on bool) konfigValue {
 	if on {
-		return konfigValue{"On", toneOn}
+		return konfigValue{st.c.e.Strings().KonfigOn, toneOn}
 	}
-	return konfigValue{"Off", toneOff}
+	return konfigValue{st.c.e.Strings().KonfigOff, toneOff}
 }
 
 // sessionEncoding is the encoding this session is using.
@@ -400,11 +403,11 @@ func (st *konfigState) sessionEncoding() string {
 
 // fileListModeDisplay names a file listing mode for display. Anything but
 // "classic" is the lightbar browser.
-func fileListModeDisplay(mode string) string {
+func (st *konfigState) fileListModeDisplay(mode string) string {
 	if strings.EqualFold(mode, "classic") {
-		return "Classic"
+		return st.c.e.Strings().KonfigClassic
 	}
-	return "Lightbar"
+	return st.c.e.Strings().KonfigLightbar
 }
 
 func encodingName(enc string) string {
@@ -419,7 +422,7 @@ func encodingValue(st *konfigState) konfigValue {
 	case "utf8", "cp437":
 		return konfigValue{encodingName(enc), toneValue}
 	}
-	return konfigValue{"Auto (" + encodingName(st.sessionEncoding()) + ")", toneDim}
+	return konfigValue{fmt.Sprintf(st.c.e.Strings().KonfigAutoFormat, encodingName(st.sessionEncoding())), toneDim}
 }
 
 // effectiveListingMode resolves the caller's file listing mode against the
@@ -439,20 +442,20 @@ func (st *konfigState) effectiveListingMode() (mode string, chosen bool) {
 func listingModeValue(st *konfigState) konfigValue {
 	mode, chosen := st.effectiveListingMode()
 	if !chosen {
-		return konfigValue{fileListModeDisplay(mode) + " (default)", toneDim}
+		return konfigValue{fmt.Sprintf(st.c.e.Strings().KonfigDefaultFormat, st.fileListModeDisplay(mode)), toneDim}
 	}
-	return konfigValue{fileListModeDisplay(mode), toneValue}
+	return konfigValue{st.fileListModeDisplay(mode), toneValue}
 }
 
 func headerStyleValue(st *konfigState) konfigValue {
 	n := st.user().MsgHdr
 	if n <= 0 {
-		return konfigValue{"(not chosen)", toneDim}
+		return konfigValue{st.c.e.Strings().KonfigNotChosen, toneDim}
 	}
 	if name := st.headerStyleNames()[strconv.Itoa(n)]; name != "" {
 		return konfigValue{name, toneValue}
 	}
-	return konfigValue{fmt.Sprintf("Style %d", n), toneValue}
+	return konfigValue{fmt.Sprintf(st.c.e.Strings().KonfigStyleFormat, n), toneValue}
 }
 
 // headerStyleNames maps each MSGHDR.BAR return value to its display text,
@@ -483,28 +486,28 @@ func (st *konfigState) headerStyleNames() map[string]string {
 func autoSigValue(st *konfigState) konfigValue {
 	sig := strings.TrimRight(st.user().AutoSignature, "\r\n")
 	if sig == "" {
-		return konfigValue{"(none)", toneDim}
+		return konfigValue{st.c.e.Strings().KonfigNone, toneDim}
 	}
 	n := strings.Count(sig, "\n") + 1
 	if n == 1 {
-		return konfigValue{"1 line", toneValue}
+		return konfigValue{st.c.e.Strings().KonfigOneLine, toneValue}
 	}
-	return konfigValue{fmt.Sprintf("%d lines", n), toneValue}
+	return konfigValue{fmt.Sprintf(st.c.e.Strings().KonfigLinesFormat, n), toneValue}
 }
 
 // fileColumns lists the file-listing columns in display order, with the
 // hotkey the column box uses for each.
 var fileColumns = []struct {
 	key   byte
-	label string
+	label func(str *config.StringsConfig) string
 	get   func(u *user.User) *bool
 }{
-	{'N', "Name", func(u *user.User) *bool { return &u.FileListColumns.Name }},
-	{'S', "Size", func(u *user.User) *bool { return &u.FileListColumns.Size }},
-	{'D', "Date", func(u *user.User) *bool { return &u.FileListColumns.Date }},
-	{'L', "Downloads", func(u *user.User) *bool { return &u.FileListColumns.Downloads }},
-	{'U', "Uploader", func(u *user.User) *bool { return &u.FileListColumns.Uploader }},
-	{'E', "Description", func(u *user.User) *bool { return &u.FileListColumns.Description }},
+	{'N', func(str *config.StringsConfig) string { return str.KonfigColumnName }, func(u *user.User) *bool { return &u.FileListColumns.Name }},
+	{'S', func(str *config.StringsConfig) string { return str.KonfigColumnSize }, func(u *user.User) *bool { return &u.FileListColumns.Size }},
+	{'D', func(str *config.StringsConfig) string { return str.KonfigColumnDate }, func(u *user.User) *bool { return &u.FileListColumns.Date }},
+	{'L', func(str *config.StringsConfig) string { return str.KonfigColumnDownloads }, func(u *user.User) *bool { return &u.FileListColumns.Downloads }},
+	{'U', func(str *config.StringsConfig) string { return str.KonfigColumnUploader }, func(u *user.User) *bool { return &u.FileListColumns.Uploader }},
+	{'E', func(str *config.StringsConfig) string { return str.KonfigColumnDescription }, func(u *user.User) *bool { return &u.FileListColumns.Description }},
 }
 
 // fileColumnsAllDefault reports the "nothing chosen" state, in which the
@@ -521,7 +524,7 @@ func fileColumnsAllDefault(u *user.User) bool {
 func fileColumnsValue(st *konfigState) konfigValue {
 	u := st.user()
 	if fileColumnsAllDefault(u) {
-		return konfigValue{"All", toneDim}
+		return konfigValue{st.c.e.Strings().KonfigAll, toneDim}
 	}
 	shown := 0
 	for _, fc := range fileColumns {
@@ -530,19 +533,20 @@ func fileColumnsValue(st *konfigState) konfigValue {
 		}
 	}
 	if shown == len(fileColumns) {
-		return konfigValue{"All", toneValue}
+		return konfigValue{st.c.e.Strings().KonfigAll, toneValue}
 	}
-	return konfigValue{fmt.Sprintf("%d of %d", shown, len(fileColumns)), toneValue}
+	return konfigValue{fmt.Sprintf(st.c.e.Strings().KonfigCountFormat, shown, len(fileColumns)), toneValue}
 }
 
 // --- Toggles ---------------------------------------------------------------
 
 func toggleHotKeys(st *konfigState) error {
 	old := st.user().HotKeys
-	if st.commit("Hot Keys",
+	label := st.c.e.Strings().KonfigHotKeysLabel
+	if st.commit(label,
 		func(u *user.User) { u.HotKeys = !old },
 		func(u *user.User) { u.HotKeys = old }) {
-		st.saved("Hot Keys", onOffValue(!old).text)
+		st.saved(label, st.onOffValue(!old).text)
 	}
 	return nil
 }
@@ -566,19 +570,19 @@ func toggleEncoding(st *konfigState) error {
 	default:
 		next = session
 	}
-	if !st.commit("Encoding",
+	str := st.c.e.Strings()
+	if !st.commit(str.KonfigEncodingLabel,
 		func(u *user.User) { u.PreferredEncoding = next },
 		func(u *user.User) { u.PreferredEncoding = old }) {
 		return nil
 	}
 	switch next {
 	case "":
-		st.status = "|10Saved.|07 Encoding is now |15Auto|07, detected on every call."
+		st.status = str.KonfigEncodingAuto
 	case session:
-		st.status = fmt.Sprintf("|10Saved.|07 Encoding is now |15%s|07, starting with your next login.", encodingName(next))
+		st.status = fmt.Sprintf(str.KonfigEncodingSaved, encodingName(next))
 	default:
-		st.status = fmt.Sprintf("|12Saved, but this terminal is using %s.|07 |15%s|07 starts next login.",
-			encodingName(session), encodingName(next))
+		st.status = fmt.Sprintf(str.KonfigEncodingMismatch, encodingName(session), encodingName(next))
 	}
 	return nil
 }
@@ -590,10 +594,11 @@ func toggleListingMode(st *konfigState) error {
 		next = "lightbar"
 	}
 	old := st.user().FileListingMode
-	if st.commit("Listing Mode",
+	label := st.c.e.Strings().KonfigListingModeLabel
+	if st.commit(label,
 		func(u *user.User) { u.FileListingMode = next },
 		func(u *user.User) { u.FileListingMode = old }) {
-		st.saved("Listing Mode", fileListModeDisplay(next))
+		st.saved(label, st.fileListModeDisplay(next))
 	}
 	return nil
 }
@@ -601,12 +606,12 @@ func toggleListingMode(st *konfigState) error {
 // --- Line-edited fields ----------------------------------------------------
 
 func editScreenWidth(st *konfigState) error {
-	return st.editNumber("Screen Width", konfigMinWidth, konfigMaxWidth,
+	return st.editNumber(st.c.e.Strings().KonfigScreenWidthLabel, konfigMinWidth, konfigMaxWidth,
 		func(u *user.User) *int { return &u.ScreenWidth }, 80)
 }
 
 func editScreenHeight(st *konfigState) error {
-	return st.editNumber("Screen Height", konfigMinHeight, konfigMaxHeight,
+	return st.editNumber(st.c.e.Strings().KonfigScreenHeightLabel, konfigMinHeight, konfigMaxHeight,
 		func(u *user.User) *int { return &u.ScreenHeight }, 25)
 }
 
@@ -617,13 +622,14 @@ func (st *konfigState) editNumber(label string, lo, hi int, field func(u *user.U
 	if cur == 0 {
 		cur = def
 	}
-	input, ok, err := st.readField(label, strconv.Itoa(cur), 3, false, fmt.Sprintf("|08(%d-%d)", lo, hi))
+	str := st.c.e.Strings()
+	input, ok, err := st.readField(label, strconv.Itoa(cur), 3, false, fmt.Sprintf(str.KonfigRangeHint, lo, hi))
 	if err != nil || !ok {
 		return err
 	}
 	v, convErr := strconv.Atoi(strings.TrimSpace(input))
 	if convErr != nil || v < lo || v > hi {
-		st.status = fmt.Sprintf("|12%s must be a number from %d to %d.|07", label, lo, hi)
+		st.status = fmt.Sprintf(str.KonfigRangeError, label, lo, hi)
 		return nil
 	}
 	old := *field(st.user())
@@ -657,17 +663,17 @@ func (st *konfigState) applyTermSize() {
 }
 
 func editRealName(st *konfigState) error {
-	return st.editText("Real Name", newUserRealNameMaxLen,
+	return st.editText(st.c.e.Strings().KonfigRealNameLabel, newUserRealNameMaxLen,
 		func(u *user.User) *string { return &u.RealName }, user.ValidateRealName)
 }
 
 func editLocation(st *konfigState) error {
-	return st.editText("Location", newUserLocationMaxLen,
+	return st.editText(st.c.e.Strings().KonfigLocationLabel, newUserLocationMaxLen,
 		func(u *user.User) *string { return &u.GroupLocation }, nil)
 }
 
 func editNote(st *konfigState) error {
-	return st.editText("User Note", newUserNoteMaxLen,
+	return st.editText(st.c.e.Strings().KonfigUserNoteLabel, newUserNoteMaxLen,
 		func(u *user.User) *string { return &u.PrivateNote }, nil)
 }
 
@@ -688,9 +694,10 @@ func (st *konfigState) editText(label string, maxLen int, field func(u *user.Use
 	if v == old {
 		return nil
 	}
+	str := st.c.e.Strings()
 	if validate != nil {
 		if vErr := validate(v); vErr != nil {
-			st.status = "|12" + capitalizeFirst(vErr.Error()) + ".|07"
+			st.status = st.validationMessage(vErr)
 			return nil
 		}
 	}
@@ -698,62 +705,70 @@ func (st *konfigState) editText(label string, maxLen int, field func(u *user.Use
 		func(u *user.User) { *field(u) = v },
 		func(u *user.User) { *field(u) = old }) {
 		if v == "" {
-			st.status = fmt.Sprintf("|10Saved.|07 %s cleared.", label)
+			st.status = fmt.Sprintf(str.KonfigClearedFormat, label)
 		} else {
-			st.status = fmt.Sprintf("|10Saved.|07 %s updated.", label)
+			st.status = fmt.Sprintf(str.KonfigUpdatedFormat, label)
 		}
 	}
 	return nil
 }
 
-func capitalizeFirst(s string) string {
-	if s == "" {
-		return s
+// validationMessage is the configured text for a validator's error. The real
+// name is the only validated field.
+func (st *konfigState) validationMessage(err error) string {
+	str := st.c.e.Strings()
+	switch {
+	case errors.Is(err, user.ErrRealNameRequired):
+		return str.KonfigRealNameRequired
+	case errors.Is(err, user.ErrRealNameTooShort):
+		return fmt.Sprintf(str.KonfigRealNameTooShort, user.RealNameMinLen)
+	default:
+		return str.KonfigRealNameNeedsSpace
 	}
-	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 func editPassword(st *konfigState) error {
-	current, ok, err := st.readField("Current password", "", konfigMaxPassword, true, "")
+	str := st.c.e.Strings()
+	current, ok, err := st.readField(str.KonfigPwCurrent, "", konfigMaxPassword, true, "")
 	if err != nil || !ok {
 		return err
 	}
 	if bcryptErr := bcrypt.CompareHashAndPassword([]byte(st.user().PasswordHash), []byte(current)); bcryptErr != nil {
-		st.status = "|12Incorrect password.|07 Nothing was changed."
+		st.status = str.KonfigPwIncorrect
 		return nil
 	}
-	newPw, ok, err := st.readField("New password", "", konfigMaxPassword, true, "")
+	newPw, ok, err := st.readField(str.KonfigPwNew, "", konfigMaxPassword, true, "")
 	if err != nil || !ok {
 		return err
 	}
 	if len([]rune(newPw)) < konfigMinPassword {
-		st.status = fmt.Sprintf("|12Passwords must be at least %d characters.|07 Nothing was changed.", konfigMinPassword)
+		st.status = fmt.Sprintf(str.KonfigPwTooShort, konfigMinPassword)
 		return nil
 	}
 	if len(newPw) > konfigMaxPassword {
-		st.status = fmt.Sprintf("|12Passwords can be at most %d bytes.|07 Nothing was changed.", konfigMaxPassword)
+		st.status = fmt.Sprintf(str.KonfigPwTooLong, konfigMaxPassword)
 		return nil
 	}
-	confirm, ok, err := st.readField("Type it again", "", konfigMaxPassword, true, "")
+	confirm, ok, err := st.readField(str.KonfigPwAgain, "", konfigMaxPassword, true, "")
 	if err != nil || !ok {
 		return err
 	}
 	if confirm != newPw {
-		st.status = "|12The passwords didn't match.|07 Nothing was changed."
+		st.status = str.KonfigPwMismatch
 		return nil
 	}
 	hashBytes, hashErr := bcrypt.GenerateFromPassword([]byte(newPw), bcrypt.DefaultCost)
 	if hashErr != nil {
 		slog.Error("failed to hash new password", "node", st.c.nodeNumber, "error", hashErr)
-		st.status = "|12Couldn't change your password. Please try again.|07"
+		st.status = str.KonfigPwFailed
 		return nil
 	}
 	hashed := string(hashBytes)
 	old := st.user().PasswordHash
-	if st.commit("your password",
+	if st.commit(str.KonfigPasswordLabel,
 		func(u *user.User) { u.PasswordHash = hashed },
 		func(u *user.User) { u.PasswordHash = old }) {
-		st.status = "|10Saved.|07 Your password has been changed."
+		st.status = str.KonfigPwChanged
 	}
 	return nil
 }
@@ -771,24 +786,26 @@ func editHeaderStyle(st *konfigState) error {
 		st.c.currentUser = u
 	}
 	if st.user().MsgHdr != old {
-		st.saved("Header Style", headerStyleValue(st).text)
+		st.saved(st.c.e.Strings().KonfigHeaderStyleLabel, headerStyleValue(st).text)
 	}
 	return nil
 }
 
 func editAutoSig(st *konfigState) error {
+	str := st.c.e.Strings()
+	label := str.KonfigAutoSigLabel
 	if strings.TrimSpace(st.user().AutoSignature) != "" {
-		choice, err := st.readChoice("|15Auto-Signature|08: |08[|15E|08]|07dit  |08[|15D|08]|07elete  |08[|15Esc|08]|07 Cancel", "ED")
+		choice, err := st.readChoice(str.KonfigAutoSigChoice, "ED")
 		if err != nil {
 			return err
 		}
 		switch choice {
 		case 'D':
 			old := st.user().AutoSignature
-			if st.commit("Auto-Signature",
+			if st.commit(label,
 				func(u *user.User) { u.AutoSignature = "" },
 				func(u *user.User) { u.AutoSignature = old }) {
-				st.status = "|10Saved.|07 Auto-Signature deleted."
+				st.status = str.KonfigAutoSigDeleted
 			}
 			return nil
 		case 'E':
@@ -801,28 +818,28 @@ func editAutoSig(st *konfigState) error {
 	body, saved, truncated, err := runAutoSigEditor(st.c, st.user())
 	if err != nil {
 		if errors.Is(err, errAutoSigEditorFailed) {
-			st.status = "|12The editor couldn't start.|07 Nothing was changed."
+			st.status = str.KonfigAutoSigEditorFailed
 			return nil
 		}
 		return err
 	}
 	if !saved {
-		st.status = "|07Auto-Signature not changed."
+		st.status = str.KonfigAutoSigUnchanged
 		return nil
 	}
 	old := st.user().AutoSignature
-	if !st.commit("Auto-Signature",
+	if !st.commit(label,
 		func(u *user.User) { u.AutoSignature = body },
 		func(u *user.User) { u.AutoSignature = old }) {
 		return nil
 	}
 	switch {
 	case body == "":
-		st.status = "|10Saved.|07 Auto-Signature cleared."
+		st.status = str.KonfigAutoSigCleared
 	case truncated:
-		st.status = fmt.Sprintf("|10Saved.|07 Auto-Signature kept to its first %d lines.", maxAutoSigLines)
+		st.status = fmt.Sprintf(str.KonfigAutoSigTruncated, maxAutoSigLines)
 	default:
-		st.status = "|10Saved.|07 Auto-Signature updated."
+		st.status = str.KonfigAutoSigUpdated
 	}
 	return nil
 }

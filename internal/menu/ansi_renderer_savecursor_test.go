@@ -71,3 +71,28 @@ func TestANSIRendererSaveDoesNotMoveTheCursor(t *testing.T) {
 		t.Errorf("ESC[s changed the output:\n with %q\n without %q", a, b)
 	}
 }
+
+// Art posted from Synchronet splits each 80-column row into short message
+// lines joined by ESC[s CR ESC[u. When the cut falls right after the 80th
+// column the wrap is armed but not taken; the restore must bring it back, or
+// the next row starts on the last column of this one and every row below
+// shifts a column left (the FuNToPiA BBS ad in FSX_ADS).
+func TestANSIRendererRestoreKeepsPendingWrap(t *testing.T) {
+	row := strings.Repeat(" ", 18) + strings.Repeat("=", 62)
+	split := func(s string) string { return s[:41] + "\x1b[s\r\x1b[u" + s[41:] + "\x1b[s\r\x1b[u" }
+	for _, tc := range []struct{ name, save, restore string }{
+		{"SCO", "\x1b[s", "\x1b[u"},
+		{"DEC", "\x1b7", "\x1b8"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			art := strings.ReplaceAll(split(row)+split(row), "\x1b[s", tc.save)
+			art = strings.ReplaceAll(art, "\x1b[u", tc.restore)
+			lines := RenderANSIArtToLines(art, 80, 10)
+			for n := 0; n < 2; n++ {
+				if got := plainRow(lines, n); got != row {
+					t.Errorf("row %d:\n got  %q\n want %q", n, got, row)
+				}
+			}
+		})
+	}
+}

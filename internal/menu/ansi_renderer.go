@@ -39,12 +39,20 @@ type ANSIRenderer struct {
 	// Cursor position stashed by ESC[s and brought back by ESC[u. ANSI.SYS
 	// semantics: position only, not the graphic attributes. savedValid keeps a
 	// restore before any save from jumping the cursor to the origin.
+	//
+	// Both slots also keep the deferred wrap, as xterm does. Art split into
+	// short message lines with ESC[s CR ESC[u often cuts a row right after
+	// its 80th column; the CR clears the armed wrap, and unless the restore
+	// brings it back the next row starts on the last column of this one and
+	// everything below shifts a column left.
 	savedX     int
 	savedY     int
+	savedWrap  bool
 	savedValid bool
 	// DECSC (ESC 7) / DECRC (ESC 8): a separate slot, as on a real terminal,
 	// that saves the graphic attributes along with the position.
 	decX, decY int
+	decWrap    bool
 	decSGR     ansi.SGRState
 	decStyle   string
 	decValid   bool
@@ -233,7 +241,7 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 
 	switch seq {
 	case "\x1b7": // DECSC: save cursor and graphic attributes
-		r.decX, r.decY = r.CursorX, r.CursorY
+		r.decX, r.decY, r.decWrap = r.CursorX, r.CursorY, r.pendingWrap
 		r.decSGR, r.decStyle = r.sgr, r.CurrentStyle
 		r.decValid = true
 		return false
@@ -241,7 +249,7 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 		if r.decValid {
 			r.CursorX, r.CursorY = r.decX, r.decY
 			r.sgr, r.CurrentStyle = r.decSGR, r.decStyle
-			r.pendingWrap = false
+			r.pendingWrap = r.decWrap && r.autoWrap
 		}
 		return true
 	}
@@ -411,7 +419,7 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 			return false
 
 		case 's': // Save cursor position
-			r.savedX, r.savedY = r.CursorX, r.CursorY
+			r.savedX, r.savedY, r.savedWrap = r.CursorX, r.CursorY, r.pendingWrap
 			r.savedValid = true
 			return false // stashes the cursor, does not move it
 
@@ -421,7 +429,7 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 			// expects.
 			if r.savedValid {
 				r.CursorX, r.CursorY = r.savedX, r.savedY
-				r.pendingWrap = false
+				r.pendingWrap = r.savedWrap && r.autoWrap
 			}
 			return true
 		}
