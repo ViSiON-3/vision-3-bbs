@@ -54,22 +54,37 @@ func TestLoadSelectorsFallsBackToShippedCopy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sel.PostElement != "shreddit-post" || sel.CommentAttrs.ID != "thingid" {
+	if sel.PostType != "link" || sel.IDAttr != "data-fullname" || sel.ChildClass != "child" {
 		t.Errorf("shipped selectors not loaded: %+v", sel)
 	}
-	if got := sel.ListingURLFor("bbs"); got != "https://www.reddit.com/r/bbs/new/" {
+	if got := sel.ListingURLFor("bbs"); got != "https://old.reddit.com/r/bbs/new/" {
 		t.Errorf("ListingURLFor = %q", got)
+	}
+	if got := sel.PageURL("/r/bbs/comments/x/y/"); got != "https://old.reddit.com/r/bbs/comments/x/y/" {
+		t.Errorf("PageURL = %q", got)
 	}
 }
 
 func TestLoadSelectorsLocalFileWins(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "reddit_selectors.json", `{"listing_url":"https://x/r/{sub}/","post_element":"p-x","comment_element":"c-x","ready_selector":"p-x","post_attrs":{"id":"id"},"comment_attrs":{"id":"tid"}}`)
+	writeFile(t, dir, "reddit_selectors.json", `{"listing_url":"https://x/r/{sub}/","page_origin":"https://x","content_selector":"main","ready_selector":"main","thing_element":"div","type_attr":"t","post_type":"p","comment_type":"c","id_attr":"id"}`)
 	sel, err := LoadSelectors(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sel.PostElement != "p-x" || !strings.HasPrefix(sel.ListingURLFor("a"), "https://x/r/a") {
+	if sel.PostType != "p" || !strings.HasPrefix(sel.ListingURLFor("a"), "https://x/r/a") {
 		t.Errorf("local selectors not used: %+v", sel)
+	}
+}
+
+func TestLoadConfigDefaultDebugURL(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "reddit.json", `{"subreddits":[]}`)
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ChromeDebugURL != "http://127.0.0.1:9222" {
+		t.Errorf("ChromeDebugURL = %q", cfg.ChromeDebugURL)
 	}
 }

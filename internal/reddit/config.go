@@ -1,6 +1,6 @@
 // Package reddit imports subreddit posts and comments into read-only message
-// areas. It reads Reddit's rendered pages through headless Chrome; nothing is
-// ever posted back.
+// areas. It reads old Reddit pages through a logged-in Chrome on another
+// machine; nothing is ever posted back.
 package reddit
 
 import (
@@ -18,7 +18,9 @@ import (
 
 // Config is configs/reddit.json.
 type Config struct {
-	ChromePath       string    `json:"chrome_path"`
+	// ChromeDebugURL is the attached Chrome's debugging endpoint, normally
+	// the local end of an SSH tunnel to the machine running Chrome.
+	ChromeDebugURL   string    `json:"chrome_debug_url"`
 	PageDelaySeconds int       `json:"page_delay_seconds"`
 	MaxPostsPerSync  int       `json:"max_posts_per_sync"`
 	Subreddits       []Mapping `json:"subreddits"`
@@ -31,38 +33,30 @@ type Mapping struct {
 	Enabled   bool   `json:"enabled"`
 }
 
-// Selectors is configs/reddit_selectors.json: every name that depends on
-// Reddit's page markup, so a front-end change is a file edit.
+// Selectors is configs/reddit_selectors.json: every name that depends on old
+// Reddit's markup, so a markup change is a file edit.
 type Selectors struct {
-	ListingURL      string       `json:"listing_url"`
-	PostElement     string       `json:"post_element"`
-	PostAttrs       PostAttrs    `json:"post_attrs"`
-	PostBodySlot    string       `json:"post_body_slot"`
-	CommentElement  string       `json:"comment_element"`
-	CommentAttrs    CommentAttrs `json:"comment_attrs"`
-	CommentBodySlot string       `json:"comment_body_slot"`
-	ReadySelector   string       `json:"ready_selector"`
-}
-
-// PostAttrs names the post element's attributes.
-type PostAttrs struct {
-	ID           string `json:"id"`
-	Permalink    string `json:"permalink"`
-	Title        string `json:"title"`
-	Author       string `json:"author"`
-	Created      string `json:"created"`
-	CommentCount string `json:"comment_count"`
-	ContentHref  string `json:"content_href"`
-	PostType     string `json:"post_type"`
-}
-
-// CommentAttrs names the comment element's attributes.
-type CommentAttrs struct {
-	ID      string `json:"id"`
-	Parent  string `json:"parent"`
-	Author  string `json:"author"`
-	Created string `json:"created"`
-	Depth   string `json:"depth"`
+	ListingURL       string `json:"listing_url"`
+	PageOrigin       string `json:"page_origin"`
+	ContentSelector  string `json:"content_selector"`
+	ReadySelector    string `json:"ready_selector"`
+	ThingElement     string `json:"thing_element"`
+	TypeAttr         string `json:"type_attr"`
+	PostType         string `json:"post_type"`
+	CommentType      string `json:"comment_type"`
+	PromotedAttr     string `json:"promoted_attr"`
+	IDAttr           string `json:"id_attr"`
+	AuthorAttr       string `json:"author_attr"`
+	PermalinkAttr    string `json:"permalink_attr"`
+	CommentCountAttr string `json:"comment_count_attr"`
+	TimestampMsAttr  string `json:"timestamp_ms_attr"`
+	URLAttr          string `json:"url_attr"`
+	TitleElement     string `json:"title_element"`
+	TitleClass       string `json:"title_class"`
+	BodyClass        string `json:"body_class"`
+	ChildClass       string `json:"child_class"`
+	TimeElement      string `json:"time_element"`
+	TimeAttr         string `json:"time_attr"`
 }
 
 var subredditName = regexp.MustCompile(`^[A-Za-z0-9_]{2,21}$`)
@@ -82,6 +76,9 @@ func LoadConfig(configDir string) (Config, error) {
 	}
 	if cfg.MaxPostsPerSync <= 0 {
 		cfg.MaxPostsPerSync = 25
+	}
+	if cfg.ChromeDebugURL == "" {
+		cfg.ChromeDebugURL = "http://127.0.0.1:9222"
 	}
 	for i, m := range cfg.Subreddits {
 		if !subredditName.MatchString(m.Subreddit) {
@@ -113,9 +110,9 @@ func LoadSelectors(configDir string) (Selectors, error) {
 	if err := json.Unmarshal(data, &sel); err != nil {
 		return sel, fmt.Errorf("parsing reddit_selectors.json: %w", err)
 	}
-	if sel.ListingURL == "" || sel.PostElement == "" || sel.CommentElement == "" ||
-		sel.ReadySelector == "" || sel.PostAttrs.ID == "" || sel.CommentAttrs.ID == "" {
-		return sel, errors.New("reddit_selectors.json: listing_url, post_element, comment_element, ready_selector and both id attributes are required")
+	if sel.ListingURL == "" || sel.PageOrigin == "" || sel.ContentSelector == "" || sel.ReadySelector == "" ||
+		sel.ThingElement == "" || sel.TypeAttr == "" || sel.PostType == "" || sel.CommentType == "" || sel.IDAttr == "" {
+		return sel, errors.New("reddit_selectors.json: listing_url, page_origin, content_selector, ready_selector, thing_element, type_attr, post_type, comment_type and id_attr are required")
 	}
 	return sel, nil
 }
@@ -123,4 +120,9 @@ func LoadSelectors(configDir string) (Selectors, error) {
 // ListingURLFor fills the subreddit into the listing URL.
 func (s Selectors) ListingURLFor(sub string) string {
 	return strings.ReplaceAll(s.ListingURL, "{sub}", sub)
+}
+
+// PageURL is the page to load for a post's permalink.
+func (s Selectors) PageURL(permalink string) string {
+	return strings.TrimRight(s.PageOrigin, "/") + permalink
 }

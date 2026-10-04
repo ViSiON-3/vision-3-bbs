@@ -114,6 +114,8 @@ func main() {
 		cmdUsers(os.Args[2:])
 	case "files":
 		cmdFiles(os.Args[2:])
+	case "reddit":
+		cmdReddit(os.Args[2:])
 	default:
 		printUsage(fmt.Sprintf("Unknown command: %s", os.Args[1]))
 		os.Exit(1)
@@ -146,6 +148,9 @@ func printUsage(errMsg string) {
 	_, _ = fmt.Fprintf(w, "  %sFile Commands:%s\n", clrBold, clrReset)
 	_, _ = fmt.Fprintln(w, helpcmd("FILES IMPORT", "Bulk import files from a directory into a file area"))
 	_, _ = fmt.Fprintln(w, helpcmd("FILES REEXTRACTDIZ", "Re-extract FILE_ID.DIZ and update descriptions"))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sReddit Commands:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, helpcmd("REDDIT DUMP", "Print a Reddit page's content section"))
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintf(w, "  %sGlobal Options:%s\n", clrBold, clrReset)
 	_, _ = fmt.Fprintln(w, helpopt("--config DIR", "Config directory (default: configs)"))

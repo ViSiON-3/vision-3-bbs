@@ -1,25 +1,23 @@
 {
-  "listing_url": "https://www.reddit.com/r/{sub}/new/",
-  "post_element": "shreddit-post",
-  "post_attrs": {
-    "id": "id",
-    "permalink": "permalink",
-    "title": "post-title",
-    "author": "author",
-    "created": "created-timestamp",
-    "comment_count": "comment-count",
-    "content_href": "content-href",
-    "post_type": "post-type"
-  },
-  "post_body_slot": "text-body",
-  "comment_element": "shreddit-comment",
-  "comment_attrs": {
-    "id": "thingid",
-    "parent": "parentid",
-    "author": "author",
-    "created": "created",
-    "depth": "depth"
-  },
-  "comment_body_slot": "comment",
-  "ready_selector": "shreddit-post"
+  "listing_url": "https://old.reddit.com/r/{sub}/new/",
+  "page_origin": "https://old.reddit.com",
+  "content_selector": "div.content[role=\"main\"]",
+  "ready_selector": "div.content[role=\"main\"] div.thing[data-fullname^=\"t3_\"]",
+  "thing_element": "div",
+  "type_attr": "data-type",
+  "post_type": "link",
+  "comment_type": "comment",
+  "promoted_attr": "data-promoted",
+  "id_attr": "data-fullname",
+  "author_attr": "data-author",
+  "permalink_attr": "data-permalink",
+  "comment_count_attr": "data-comments-count",
+  "timestamp_ms_attr": "data-timestamp",
+  "url_attr": "data-url",
+  "title_element": "a",
+  "title_class": "title",
+  "body_class": "md",
+  "child_class": "child",
+  "time_element": "time",
+  "time_attr": "datetime"
 }
