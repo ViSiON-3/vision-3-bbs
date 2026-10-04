@@ -60,7 +60,11 @@ func (h *viewerHarness) readKey() (int, error) {
 	return key, nil
 }
 
-func (h *viewerHarness) send(path string) {
+func (h *viewerHarness) send(extract ExtractFunc) {
+	path, err := extract()
+	if err != nil {
+		return
+	}
 	content, err := os.ReadFile(path)
 	if err != nil {
 		content = []byte("read error: " + err.Error())
@@ -237,5 +241,43 @@ func TestExtractSingleEntry_FlattensNestedPath(t *testing.T) {
 	data, err := os.ReadFile(path)
 	if err != nil || string(data) != "the manual" {
 		t.Errorf("extracted content = %q, err %v", data, err)
+	}
+}
+
+func TestRunZipLabView_DeclinedSendExtractsNothing(t *testing.T) {
+	zipPath := viewerTestZip(t)
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("TMP", tmp)
+	t.Setenv("TEMP", tmp)
+
+	// A sender that refuses (no access, or a cancelled protocol menu) never
+	// calls extract, so nothing is unpacked.
+	h := newViewerHarness([]string{"1", "3"}, nil)
+	calls := 0
+	RunZipLabView(h.terminal, zipPath, "VIEW.ZIP", ansi.OutputModeUTF8, h.readLine, h.readKey, func(ExtractFunc) { calls++ })
+
+	if calls != 2 {
+		t.Errorf("send called %d times, want 2", calls)
+	}
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("temp dir holds %d entries after declined sends, want none", len(entries))
+	}
+}
+
+func TestExtractSingleEntry_SizeLimit(t *testing.T) {
+	zipPath := viewerTestZip(t)
+	old := maxExtractBytes
+	maxExtractBytes = 4
+	t.Cleanup(func() { maxExtractBytes = old })
+
+	// readme.txt declares 13 bytes, over the lowered limit.
+	if _, cleanup, err := extractSingleEntry(zipPath, 1); err == nil || !strings.Contains(err.Error(), "extraction limit") {
+		cleanup()
+		t.Fatalf("err = %v, want extraction-limit refusal", err)
 	}
 }

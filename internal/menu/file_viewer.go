@@ -32,13 +32,14 @@ func sessionReadKey(s ssh.Session) ziplab.ReadKeyFunc {
 	return func() (int, error) { return getSessionIH(s).ReadKey() }
 }
 
-// zipLabSender returns the ZipLab callback that sends one extracted archive
-// member from record's area. Like the other download paths it re-checks the
-// area's download ACS, lets the user pick a protocol, and hands the session
-// to the transfer program through runTransferSend, which stops the shared
-// InputHandler first so it cannot steal the protocol's bytes.
+// zipLabSender returns the ZipLab callback that sends one archive member
+// from record's area. Like the other download paths it re-checks the area's
+// download ACS and lets the user pick a protocol — both before the member
+// is extracted — then hands the session to the transfer program through
+// runTransferSend, which stops the shared InputHandler first so it cannot
+// steal the protocol's bytes.
 func (e *MenuExecutor) zipLabSender(s ssh.Session, terminal *term.Terminal, record *file.FileRecord, u *user.User, nodeNumber int, sessionStartTime time.Time, outputMode ansi.OutputMode) ziplab.SendFunc {
-	return func(path string) {
+	return func(extract ziplab.ExtractFunc) {
 		area, ok := e.FileMgr.GetAreaByID(record.AreaID)
 		if !ok || u == nil || (area.ACSDownload != "" && !checkACS(area.ACSDownload, u, s, terminal, sessionStartTime)) {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().YouCantDownloadHere)), outputMode)
@@ -54,6 +55,10 @@ func (e *MenuExecutor) zipLabSender(s ssh.Session, terminal *term.Terminal, reco
 		}
 		if !protoOK {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|07Download cancelled.|07\r\n")), outputMode)
+			return
+		}
+		path, err := extract()
+		if err != nil {
 			return
 		}
 		e.runTransferSend(s, terminal, proto, []string{path}, nil, outputMode, nodeNumber)
