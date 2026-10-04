@@ -191,7 +191,7 @@ func cmdUsers(args []string) {
 	}
 
 	sub := args[0]
-	switch sub {
+	switch strings.ToLower(sub) {
 	case "purge":
 		cmdUsersPurge(args[1:])
 	case "list":
@@ -248,7 +248,7 @@ func cmdFiles(args []string) {
 	}
 
 	sub := args[0]
-	switch sub {
+	switch strings.ToLower(sub) {
 	case "import":
 		cmdFilesImport(args[1:])
 	case "reextractdiz":
