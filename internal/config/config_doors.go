@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"regexp"
 	"strings"
@@ -10,6 +11,12 @@ import (
 
 // DoorConfig defines the configuration for a single external door program.
 type DoorConfig struct {
+	Category    string `json:"category,omitempty"`
+	Description string `json:"description,omitempty"`
+	Hidden      bool   `json:"hidden,omitempty"`
+	SortOrder   int    `json:"sort_order,omitempty"`
+	ConfigOrder int    `json:"-"` // Original position in doors.json, retained by the editor.
+
 	Code                 string            `json:"code"`                             // Unique internal code used in DOOR:CODE commands (uppercase slug)
 	Name                 string            `json:"name"`                             // Display label shown to users (free-form, case preserved)
 	WorkingDirectory     string            `json:"working_directory,omitempty"`      // Directory to run the command in (optional)
@@ -173,7 +180,18 @@ func LoadDoors(filePath string) (map[string]DoorConfig, error) {
 	// consulting the registry, so codes must normalize or the door is
 	// unreachable. Name is a display label and is left untouched.
 	doorMap := make(map[string]DoorConfig)
-	for _, door := range doors {
+	for position, door := range doors {
+		door.ConfigOrder = position
+		if door.Category != "" {
+			// An unusable category is not worth refusing every door over:
+			// clear it, which lists the door under Other.
+			normalized, err := NormalizeDoorCode(door.Category)
+			if err != nil {
+				slog.Warn("door has an invalid category; listing it under Other", "door", door.Code, "category", door.Category, "error", err)
+				normalized = ""
+			}
+			door.Category = normalized
+		}
 		code, err := NormalizeDoorCode(door.Code)
 		if err != nil {
 			return nil, fmt.Errorf("door %q in %s: %w", door.Name, filePath, err)

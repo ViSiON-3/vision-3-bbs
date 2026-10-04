@@ -50,8 +50,15 @@ type ServerConfig struct {
 	MaxFailedLogins     int    `json:"maxFailedLogins"`
 	LockoutMinutes      int    `json:"lockoutMinutes"`
 	FileListingMode     string `json:"fileListingMode"`
+	DoorMenuMode        string `json:"doorMenuMode,omitempty"`
+	DoorMenuSort        string `json:"doorMenuSort,omitempty"`
+	DoorMenuColumns     int    `json:"doorMenuColumns,omitempty"`
 	LegacySSHAlgorithms bool   `json:"legacySSHAlgorithms"`
 	AllowNewUsers       bool   `json:"allowNewUsers"`
+
+	// DoorCategories optionally groups the generated door picker.
+	DoorCategories []DoorCategory `json:"doorCategories,omitempty"`
+
 	// RequireNewUserEmail makes the final step of signup a private message to
 	// the SysOp: the caller is shown NUEMAIL.ANS (customizable) with a pause,
 	// then dropped straight into the message editor addressed to the SysOp.
@@ -274,6 +281,7 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		config.AutoValidateNewUsers = false
 	}
 
+	config.SanitizeDoorMenu()
 	return config, nil
 }
 
@@ -333,6 +341,10 @@ func (c *ServerConfig) SanitizeChallengeGate() {
 
 // SaveServerConfig writes the ServerConfig back to config.json in the given configPath directory.
 func SaveServerConfig(configPath string, cfg ServerConfig) error {
+	cfg.DoorCategories = append([]DoorCategory(nil), cfg.DoorCategories...)
+	if err := cfg.ValidateDoorMenu(); err != nil {
+		return err
+	}
 	filePath := filepath.Join(configPath, "config.json")
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {

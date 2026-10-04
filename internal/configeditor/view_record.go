@@ -221,6 +221,10 @@ func (m Model) recordEditHeader() string {
 			c := m.configs.Conferences[m.recordEditIdx]
 			return fmt.Sprintf("%s  (ID: %d)", c.Name, c.ID)
 		}
+	case "doorcategory":
+		if m.recordEditIdx < len(m.configs.Server.DoorCategories) {
+			return m.configs.Server.DoorCategories[m.recordEditIdx].Name
+		}
 	case "door":
 		keys := m.doorKeys()
 		if m.recordEditIdx < len(keys) {

@@ -556,6 +556,9 @@ func stringCatalog() []StringEntry {
 		{Label: "Door: Disconnected", Key: "doorRemoteDisconnected", Description: "Shown after a remote door session ends (%s=door name)"},
 		{Label: "V3Net: New Area Notice", Key: "v3netNewAreaNotice", Description: "Login question when a hub adds a V3Net area; Yes subscribes (%s=network, %s=area)"},
 		{Label: "V3Net: New Area Declined", Key: "v3netNewAreaDeclined", Description: "Shown after No to a new V3Net area: not asked again, how to add it later (%s=area tag)"},
+		{Label: "Door Menu: Empty", Key: "doorMenuEmpty", Description: "Shown when the generated door menu has no accessible entries"},
+		{Label: "Door Menu: Denied", Key: "doorMenuDenied", Description: "Shown when the generated menu or a direct category cannot be accessed"},
+		{Label: "Door Menu: Other", Key: "doorMenuOther", Description: "Name of the generated menu's uncategorized group"},
 
 		// User Konfig (K) form (V3)
 		{Label: "Konfig: Title", Key: "konfigTitle", Description: "Title drawn when the menu set has no KONFIG.ANS. Plain text, no colour codes"},

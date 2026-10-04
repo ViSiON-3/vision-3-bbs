@@ -66,7 +66,7 @@ func sysFieldsRegistration(cfg *config.ServerConfig) []fieldDef {
 
 // sysFieldsDefaults returns fields for Default Settings sub-screen.
 func sysFieldsDefaults(cfg *config.ServerConfig) []fieldDef {
-	return []fieldDef{
+	fields := []fieldDef{
 		{
 			Label: "Allow New Users", Help: "Allow new user registration", Type: ftYesNo, Col: 3, Row: 1, Width: 1,
 			Get: func() string { return uitext.BoolToYN(cfg.AllowNewUsers) },
@@ -101,6 +101,22 @@ func sysFieldsDefaults(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 	}
+	row := len(fields) + 1
+	fields = append(fields,
+		fieldDef{Label: "Door Menu Mode", Help: "Generated door menu input style", Type: ftLookup, Col: 3, Row: row, Width: 15, Get: func() string { return cfg.DoorMenuMode }, Set: func(v string) error { cfg.DoorMenuMode = v; return nil }, LookupItems: func() []LookupItem {
+			return []LookupItem{{Value: "lightbar", Display: "lightbar"}, {Value: "list", Display: "list"}}
+		}},
+		fieldDef{Label: "Door Menu Sort", Help: "Default generated door ordering", Type: ftLookup, Col: 3, Row: row + 1, Width: 15, Get: func() string { return cfg.DoorMenuSort }, Set: func(v string) error { cfg.DoorMenuSort = v; return nil }, LookupItems: doorSortItems},
+		fieldDef{Label: "Door Menu Cols", Help: "Columns in the generated door menu", Type: ftLookup, Col: 3, Row: row + 2, Width: 15, Get: func() string { return strconv.Itoa(max(1, cfg.DoorMenuColumns)) }, Set: func(v string) error {
+			n, err := parseDoorColumns(v)
+			if err != nil {
+				return err
+			}
+			cfg.DoorMenuColumns = n
+			return nil
+		}, LookupItems: doorColumnItems(false)},
+	)
+	return fields
 }
 
 // sysFieldsDOS returns fields for DOS Emulation sub-screen.

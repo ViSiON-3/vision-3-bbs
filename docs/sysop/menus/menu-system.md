@@ -261,14 +261,37 @@ for `yesNoHighlightColor`.
 
 | Field | Default | Meaning |
 |-------|---------|---------|
-| `yesNoHighlightColor` | `112` | Highlighted yes/no prompts |
-| `yesNoRegularColor` | `15` | Regular yes/no prompts |
+| `yesNoHighlightColor` | `112` | The highlight bar in lightbars (message reader, message and file area lists, BBS list, message scan, file command bar, generated door menu) and the highlighted yes/no choice |
+| `yesNoRegularColor` | `15` | The unhighlighted yes/no choice and command bar options |
 | `chatSysopColor` | `11` | Sysop's pane in [split-screen chat](how-to-guides/wfc-console.md#chat) |
 | `chatUserColor` | `10` | Caller's pane in split-screen chat |
 
 The defaults apply to fields missing from `theme.json`. The shipped `v3`
 set's `theme.json` sets `yesNoHighlightColor` to `31` and
 `yesNoRegularColor` to `13`.
+
+A color number is the background times 16 plus the foreground, using the 16
+DOS colors: `31` is bright white (15) on blue (1).
+
+### Per-screen lightbar colors
+
+Some lists can have their own highlight instead of the theme's. The first
+record of a `bar/<NAME>.BAR` file sets it from its highlight color field; the
+coordinates are ignored. The generated door menu also uses the record's
+regular color for its rows. Like any menu file, a copy in
+`menus.d/<set>/bar/` overrides a shipped one.
+
+| File | Screen | Shipped |
+|------|--------|---------|
+| `FILELISTHI.BAR` | File listing | Yes |
+| `FILEAREAHI.BAR` | File area list | No |
+| `MSGAREAHI.BAR` | Message area list | Yes |
+| `MSGCONFHI.BAR` | Message conference list | Yes |
+| `DOORMENUHI.BAR` | [Generated door menu](doors/generated-menu.md) | No |
+
+A screen with one of these files keeps its highlight when the theme changes.
+Delete the file, or your overlay copy of it, to have that screen follow the
+theme. There is no editor for these colors yet; see issue #611.
 
 ## Menu Configuration Files (.MNU)
 

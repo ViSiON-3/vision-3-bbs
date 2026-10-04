@@ -175,11 +175,17 @@ func saveJSONSlice[T any](configPath, filename string, data []T) error {
 
 // saveDoors writes doors config back to disk as a JSON array (matching LoadDoors format).
 func saveDoors(configPath string, doors map[string]config.DoorConfig) error {
-	// LoadDoors reads a JSON array and keys by Name, so we save as an array
+	// LoadDoors reads a JSON array keyed by Code; preserve its original order.
 	doorSlice := make([]config.DoorConfig, 0, len(doors))
 	for _, d := range doors {
 		doorSlice = append(doorSlice, d)
 	}
+	sort.Slice(doorSlice, func(i, j int) bool {
+		if doorSlice[i].ConfigOrder != doorSlice[j].ConfigOrder {
+			return doorSlice[i].ConfigOrder < doorSlice[j].ConfigOrder
+		}
+		return doorSlice[i].Code < doorSlice[j].Code
+	})
 	return saveJSONSlice(configPath, "doors.json", doorSlice)
 }
 

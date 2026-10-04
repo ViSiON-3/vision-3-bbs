@@ -422,8 +422,12 @@ func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, men
 	if currentUser != nil {
 		rumorLevel = currentUser.AccessLevel
 	}
+	userCount := 0
+	if userManager != nil {
+		userCount = userManager.GetUserCount()
+	}
 	rawPromptBytes := e.renderPromptText(promptString, placeholders,
-		userManager.GetUserCount(), e.activeNodeCount(), rumorLevel)
+		userCount, e.activeNodeCount(), rumorLevel)
 
 	// 4. Process character encoding based on outputMode (Reverted to manual loop)
 	var finalBuf bytes.Buffer

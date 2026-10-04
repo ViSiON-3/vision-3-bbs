@@ -219,6 +219,8 @@ func (m Model) recordCount() int {
 		return len(m.configs.FileAreas)
 	case "conference":
 		return len(m.configs.Conferences)
+	case "doorcategory":
+		return len(m.configs.Server.DoorCategories)
 	case "door":
 		return len(m.configs.Doors)
 	case "event":
@@ -288,6 +290,20 @@ func (m *Model) insertRecord() {
 			Position: newPos,
 			Name:     "New Conference",
 		})
+	case "doorcategory":
+		for n := 1; ; n++ {
+			code := fmt.Sprintf("CATEGORY%d", n)
+			exists := false
+			for _, c := range m.configs.Server.DoorCategories {
+				if c.Code == code {
+					exists = true
+				}
+			}
+			if !exists {
+				m.configs.Server.DoorCategories = append(m.configs.Server.DoorCategories, config.DoorCategory{Code: code, Name: "New Category"})
+				break
+			}
+		}
 	case "door":
 		// Key and Code must match: doors.json is saved as an array and re-keyed
 		// by Code on load, so a divergent key would vanish on reload.
@@ -295,8 +311,9 @@ func (m *Model) insertRecord() {
 			code := fmt.Sprintf("NEWDOOR%d", i)
 			if _, exists := m.configs.Doors[code]; !exists {
 				m.configs.Doors[code] = config.DoorConfig{
-					Code: code,
-					Name: "New Door",
+					Code:        code,
+					ConfigOrder: nextDoorConfigOrder(m.configs.Doors),
+					Name:        "New Door",
 				}
 				break
 			}
@@ -395,6 +412,18 @@ func (m *Model) deleteRecord() {
 	case "conference":
 		if idx >= 0 && idx < len(m.configs.Conferences) {
 			m.configs.Conferences = append(m.configs.Conferences[:idx], m.configs.Conferences[idx+1:]...)
+		}
+	case "doorcategory":
+		cats := m.configs.Server.DoorCategories
+		if idx >= 0 && idx < len(cats) {
+			code := cats[idx].Code
+			for key, d := range m.configs.Doors {
+				if d.Category == code {
+					d.Category = ""
+					m.configs.Doors[key] = d
+				}
+			}
+			m.configs.Server.DoorCategories = append(cats[:idx], cats[idx+1:]...)
 		}
 	case "door":
 		keys := m.doorKeys()

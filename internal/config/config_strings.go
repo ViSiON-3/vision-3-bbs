@@ -201,6 +201,9 @@ var StringFallbacks = map[string]string{
 	"cfgFileColumnsSaved":  "\r\n|10Column preferences saved.|07\r\n",
 
 	// Door access control
+	"doorMenuEmpty":    "|08No doors available.|07\r\n",
+	"doorMenuDenied":   "|14This door menu is not available.|07\r\n",
+	"doorMenuOther":    "Other",
 	"doorAccessDenied": "\r\n|14Access denied to door: |11%s|07\r\n",
 	"doorBusyFormat":   "\r\n|14Door is currently in use: |11%s|07\r\n",
 

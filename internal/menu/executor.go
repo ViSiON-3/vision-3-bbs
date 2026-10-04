@@ -288,6 +288,7 @@ func (e *MenuExecutor) Theme() *config.ThemeConfig {
 // from the config editor and reloads, and the handlers and ACS keywords
 // must agree on them.
 func (e *MenuExecutor) SetServerConfig(serverCfg config.ServerConfig) {
+	serverCfg.DoorCategories = append([]config.DoorCategory(nil), serverCfg.DoorCategories...)
 	serverCfg.SanitizeAccessLevels()
 	e.serverCfg.Store(&serverCfg)
 	setACSSysOpLevels(serverCfg.SysOpLevel, serverCfg.CoSysOpLevel)
@@ -300,7 +301,9 @@ func (e *MenuExecutor) SetServerConfig(serverCfg config.ServerConfig) {
 // corrupt the shared snapshot if they held a pointer into it.
 func (e *MenuExecutor) GetServerConfig() config.ServerConfig {
 	if p := e.serverCfg.Load(); p != nil {
-		return *p
+		cfg := *p
+		cfg.DoorCategories = append([]config.DoorCategory(nil), cfg.DoorCategories...)
+		return cfg
 	}
 	return config.ServerConfig{}
 }

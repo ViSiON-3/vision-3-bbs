@@ -658,5 +658,27 @@ func (m *Model) fieldsDoor() []fieldDef {
 		})
 	}
 
+	fields = append(fields,
+		fieldDef{Label: "Category", Help: "Generated menu category (empty = Other)", Type: ftLookup, Col: 3, Row: row + 1, Width: 16,
+			Get: func() string { return dPtr.Category }, Set: func(v string) error { dPtr.Category = v; save(); return nil },
+			LookupItems: func() []LookupItem {
+				items := []LookupItem{{Value: "", Display: "Other (uncategorized)"}}
+				for _, c := range m.configs.Server.DoorCategories {
+					items = append(items, LookupItem{Value: c.Code, Display: c.Code + " - " + c.Name})
+				}
+				return items
+			}},
+		fieldDef{Label: "Description", Help: "Generated menu description (^DS)", Type: ftString, Col: 3, Row: row + 2, Width: 45, Get: func() string { return dPtr.Description }, Set: func(v string) error { dPtr.Description = v; save(); return nil }},
+		fieldDef{Label: "Hidden", Help: "Hide from the generated menu; DOOR:CODE still works", Type: ftYesNo, Col: 3, Row: row + 3, Width: 1, Get: func() string { return uitext.BoolToYN(dPtr.Hidden) }, Set: func(v string) error { dPtr.Hidden = uitext.YNToBool(v); save(); return nil }},
+		fieldDef{Label: "Sort Order", Help: "Position when generated menu sort is manual", Type: ftInteger, Col: 3, Row: row + 4, Width: 6, Min: 0, Max: 999999, Get: func() string { return strconv.Itoa(dPtr.SortOrder) }, Set: func(v string) error {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return err
+			}
+			dPtr.SortOrder = n
+			save()
+			return nil
+		}},
+	)
 	return fields
 }

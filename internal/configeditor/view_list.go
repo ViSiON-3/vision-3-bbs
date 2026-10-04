@@ -203,6 +203,8 @@ func (m Model) recordTypeTitle() string {
 		return "File Areas"
 	case "conference":
 		return "Conferences"
+	case "doorcategory":
+		return "Door Categories"
 	case "door":
 		return "Door Programs"
 	case "event":
@@ -236,6 +238,8 @@ func (m Model) recordColumnHeader(boxW int) string {
 		return "  #  Tag                  Name                         Path"
 	case "conference":
 		return " Pos  #  Tag               Name                         ACS"
+	case "doorcategory":
+		return "  Code              Name                              Access"
 	case "door":
 		// Code is capped at 16 chars and type labels at 6 ("SyncJS"/"Native"),
 		// so both columns are sized tight and Name gets the remaining width.
@@ -283,6 +287,11 @@ func (m Model) renderRecordRow(idx, boxW int) string {
 		if idx < len(m.configs.Conferences) {
 			c := m.configs.Conferences[idx]
 			content = fmt.Sprintf(" %3d %3d  %-17s %-28s %s", c.Position, c.ID, padRight(c.Tag, 17), padRight(c.Name, 28), c.ACS)
+		}
+	case "doorcategory":
+		if idx < len(m.configs.Server.DoorCategories) {
+			c := m.configs.Server.DoorCategories[idx]
+			content = fmt.Sprintf("  %-16s  %-32s  %d %s", padRight(c.Code, 16), padRight(c.Name, 32), c.MinAccessLevel, c.ACS)
 		}
 	case "door":
 		keys := m.doorKeys()

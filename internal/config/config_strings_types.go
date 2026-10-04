@@ -433,6 +433,9 @@ type StringsConfig struct {
 	DoorNoneConfigured      string `json:"doorNoneConfigured"`
 	DoorTemplateError       string `json:"doorTemplateError"`
 	DoorInfoLoginRequired   string `json:"doorInfoLoginRequired"`
+	DoorMenuEmpty           string `json:"doorMenuEmpty"`
+	DoorMenuDenied          string `json:"doorMenuDenied"`
+	DoorMenuOther           string `json:"doorMenuOther"`
 	DoorAccessDenied        string `json:"doorAccessDenied"`
 	DoorBusyFormat          string `json:"doorBusyFormat"`
 	DoorRemoteConnecting    string `json:"doorRemoteConnecting"`

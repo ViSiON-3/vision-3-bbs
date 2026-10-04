@@ -5,6 +5,7 @@ package menu
 // MenuRecord adapted for JSON parsing of .MNU files.
 // Assumes JSON keys match the tags.
 type MenuRecord struct {
+	Title string `json:"TITLE"`
 	// Fields expected from JSON .MNU
 	ClrScrBefore bool   `json:"CLR"`
 	ClsScrBefore bool   `json:"CLS"`
