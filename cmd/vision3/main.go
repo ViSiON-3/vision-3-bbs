@@ -1694,8 +1694,37 @@ func main() {
 	// Define and parse the --colortest flag REMOVED
 	// flag.BoolVar(&colorTestMode, "colortest", false, "Run ANSI color test mode instead of BBS")
 	// Define output mode flag
+	doctorMode := false
+	doctorJSON := false
+	doctorFix := false
+	doctorDryRun := false
+	if len(os.Args) > 1 && os.Args[1] == "doctor" {
+		// Accept both `vision3 doctor --json` and the flag form below.
+		os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
+		doctorMode = true
+	}
 	flag.StringVar(&outputModeFlag, "output-mode", "auto", "Terminal output mode: auto (default), utf8, cp437")
+	flag.BoolVar(&doctorMode, "doctor", doctorMode, "Check the current board configuration and exit")
+	flag.BoolVar(&doctorJSON, "json", false, "Write doctor output as JSON")
+	flag.BoolVar(&doctorFix, "fix", false, "Apply safe doctor repairs (requires --doctor)")
+	flag.BoolVar(&doctorDryRun, "dry-run", false, "Preview safe doctor repairs without applying them (requires --fix)")
 	flag.Parse()
+	if (doctorFix || doctorDryRun) && !doctorMode {
+		fmt.Fprintln(os.Stderr, "vision3: --fix and --dry-run require --doctor")
+		os.Exit(2)
+	}
+	if doctorDryRun && !doctorFix {
+		fmt.Fprintln(os.Stderr, "vision3: --dry-run requires --fix")
+		os.Exit(2)
+	}
+	if doctorMode {
+		basePath, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "vision3 doctor: cannot determine board directory: %v\n", err)
+			os.Exit(2)
+		}
+		os.Exit(runDoctor(basePath, doctorJSON, doctorFix, doctorDryRun, os.Stdout, os.Stderr))
+	}
 
 	// Validate output mode flag
 	outputModeFlag = strings.ToLower(outputModeFlag)
