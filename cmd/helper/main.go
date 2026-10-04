@@ -150,6 +150,7 @@ func printUsage(errMsg string) {
 	_, _ = fmt.Fprintln(w, helpcmd("FILES REEXTRACTDIZ", "Re-extract FILE_ID.DIZ and update descriptions"))
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintf(w, "  %sReddit Commands:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, helpcmd("REDDIT SYNC", "Import subreddits into read-only message areas"))
 	_, _ = fmt.Fprintln(w, helpcmd("REDDIT DUMP", "Print a Reddit page's content section"))
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintf(w, "  %sGlobal Options:%s\n", clrBold, clrReset)
