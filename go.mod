@@ -16,6 +16,7 @@ require (
 	github.com/muesli/cancelreader v0.2.2
 	github.com/muesli/termenv v0.16.0
 	golang.org/x/crypto v0.45.0
+	golang.org/x/net v0.47.0
 	golang.org/x/term v0.37.0
 	golang.org/x/text v0.31.0
 	modernc.org/sqlite v1.46.2
