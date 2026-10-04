@@ -9,6 +9,8 @@
 package tosser
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"os"
@@ -432,6 +434,22 @@ func echoDupeKey(areaTag, msgID string) string {
 	return strings.ToUpper(strings.TrimSpace(areaTag)) + " " + msgID
 }
 
+// contentDupeKey is the dupe DB key for an echomail message that carries no
+// MSGID: the echo tag, upper-cased, then a hash of the parts of the message
+// its author wrote — from, to, subject, date written and body text. Kludges,
+// SEEN-BY and PATH are left out because systems along the way add to them (a
+// hub's TID or DBID), so two copies of one message can differ there. The
+// "NOMSGID" marker keeps these keys apart from MSGID-based ones, which always
+// start with an address.
+func contentDupeKey(areaTag string, msg *ftn.PackedMessage, text string) string {
+	h := sha256.New()
+	for _, part := range []string{msg.From, msg.To, msg.Subject, strings.Trim(msg.DateTime, " \x00"), text} {
+		h.Write([]byte(part))
+		h.Write([]byte{0})
+	}
+	return strings.ToUpper(strings.TrimSpace(areaTag)) + " NOMSGID " + hex.EncodeToString(h.Sum(nil)[:16])
+}
+
 // isPacketFromKnownLink checks whether a packet header's source address matches
 // any configured link for this network. Compares zone, net, and node; point is
 // ignored since hub packets typically originate from the main node address.
@@ -515,9 +533,12 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader, p
 		return nil
 	}
 
-	// Dupe check (only meaningful if message has a MSGID)
+	// Dupe check. A message with no MSGID (TriToss sends none) is keyed on
+	// its content instead, so a second copy is still caught.
 	if msgID != "" {
 		dupeKey = echoDupeKey(parsed.Area, msgID)
+	} else {
+		dupeKey = contentDupeKey(parsed.Area, msg, parsed.Text)
 	}
 	if firstSeen, seen := t.dupeDB.FirstSeen(dupeKey); seen {
 		// Info, not Debug: a sysop asking why mail seems to be missing needs
@@ -641,12 +662,12 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader, p
 
 	// Write to JAM base with echomail handling
 	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
-	msgNum, err := base.WriteMessageExt(jamMsg, msgType, area.EchoTag, "")
+	msgNum, err := base.WriteReceivedMessage(jamMsg, msgType)
 	if err != nil {
 		return fmt.Errorf("write to JAM: %w", err)
 	}
 
-	// WriteMessageExt sets DateProcessed=0 for echomail to signal "needs export".
+	// WriteReceivedMessage leaves DateProcessed=0 for echomail to signal "needs export".
 	// Inbound messages have already been processed by the network, so mark them
 	// as processed now to prevent v3mail scan from re-exporting them to the uplink.
 	if hdr, herr := base.ReadMessageHeader(msgNum); herr == nil {
@@ -733,7 +754,7 @@ func (t *Tosser) writeMsgToArea(areaTag string, msg *ftn.PackedMessage, pktHdr *
 	if msgType.IsNetmail() && t.addressedToUs(jamMsg.DestAddr) {
 		jamMsg.To = user.AddressByHandle(t.recipients, jamMsg.To)
 	}
-	msgNum, err := base.WriteMessageExt(jamMsg, msgType, area.EchoTag, "")
+	msgNum, err := base.WriteReceivedMessage(jamMsg, msgType)
 	if err != nil {
 		return err
 	}

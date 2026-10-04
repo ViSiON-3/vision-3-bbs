@@ -216,3 +216,37 @@ func TestIsAreaKludge(t *testing.T) {
 		}
 	}
 }
+
+// TestWriteReceivedMessage verifies a received echomail message is stored as
+// it arrived: no MSGID generated when it has none, and no PID/TID of ours.
+func TestWriteReceivedMessage(t *testing.T) {
+	b := openTestBase(t)
+
+	msg := NewMessage()
+	msg.From = "Merlin"
+	msg.To = "All"
+	msg.Subject = "Testing editors"
+	msg.Text = "Testing external editors with TriBBS."
+	msg.OrigAddr = "21:2/137"
+	msg.Kludges = []string{"NOTE: DCTEdit v0.04 [0]"}
+
+	if _, err := b.WriteReceivedMessage(msg, MsgTypeEchomailMsg); err != nil {
+		t.Fatalf("WriteReceivedMessage: %v", err)
+	}
+	got, err := b.ReadMessage(1)
+	if err != nil {
+		t.Fatalf("ReadMessage: %v", err)
+	}
+	if got.MsgID != "" {
+		t.Errorf("MsgID = %q, want none", got.MsgID)
+	}
+	if got.PID != "" {
+		t.Errorf("PID = %q, want none", got.PID)
+	}
+	if len(got.Kludges) != 1 || got.Kludges[0] != "NOTE: DCTEdit v0.04 [0]" {
+		t.Errorf("Kludges = %q, want only the NOTE kludge", got.Kludges)
+	}
+	if got.Text != msg.Text {
+		t.Errorf("Text = %q, want %q (no tearline or origin added)", got.Text, msg.Text)
+	}
+}

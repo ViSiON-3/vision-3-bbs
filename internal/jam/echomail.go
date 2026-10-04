@@ -25,6 +25,24 @@ func isAreaKludge(kludge string) bool {
 //
 // For local messages this behaves identically to WriteMessage.
 func (b *Base) WriteMessageExt(msg *Message, msgType MessageType, echoTag, originText string) (int, error) {
+	return b.writeMessageExt(msg, msgType, originText, true)
+}
+
+// WriteReceivedMessage stores a message that arrived from a network (an FTN
+// or QWK import) exactly as received. Unlike WriteMessageExt it neither
+// invents a MSGID for an echomail message that came without one nor stamps
+// our PID/TID on it: both would claim the message for this system, and a
+// made-up MSGID differs on every system that receives the message, so it
+// threads with nothing. DateProcessed is left at 0 as WriteMessageExt does;
+// the importer marks the message processed once it is stored.
+func (b *Base) WriteReceivedMessage(msg *Message, msgType MessageType) (int, error) {
+	return b.writeMessageExt(msg, msgType, "", false)
+}
+
+// writeMessageExt is the shared body of WriteMessageExt and
+// WriteReceivedMessage. local selects the additions made only to messages
+// written here: a generated MSGID and our PID/TID kludges.
+func (b *Base) writeMessageExt(msg *Message, msgType MessageType, originText string, local bool) (int, error) {
 	var msgNum int
 	err := b.withFileLock(func() error {
 		b.mu.Lock()
@@ -80,7 +98,7 @@ func (b *Base) WriteMessageExt(msg *Message, msgType MessageType, echoTag, origi
 
 		// Echomail-specific kludges and formatting
 		if msgType.IsEchomail() {
-			if msg.MsgID == "" && msg.OrigAddr != "" {
+			if local && msg.MsgID == "" && msg.OrigAddr != "" {
 				msgID, err := b.generateMSGIDLocked(msg.OrigAddr)
 				if err != nil {
 					return fmt.Errorf("jam: MSGID generation failed: %w", err)
@@ -91,8 +109,10 @@ func (b *Base) WriteMessageExt(msg *Message, msgType MessageType, echoTag, origi
 				hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldMsgID, msg.MsgID))
 				hdr.MSGIDcrc = CRC32String(msg.MsgID)
 			}
-			hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldPID, FormatPID()))
-			hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldFTSKludge, "TID: "+FormatTID()))
+			if local {
+				hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldPID, FormatPID()))
+				hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldFTSKludge, "TID: "+FormatTID()))
+			}
 
 			if originText != "" && msg.OrigAddr != "" {
 				msg.Text = AddTearline(msg.Text)
