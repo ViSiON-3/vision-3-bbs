@@ -1,0 +1,8 @@
+{
+  "chrome_path": "",
+  "page_delay_seconds": 20,
+  "max_posts_per_sync": 25,
+  "subreddits": [
+    {"subreddit": "bbs", "area_tag": "REDDIT_BBS", "enabled": false}
+  ]
+}
