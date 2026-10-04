@@ -117,20 +117,25 @@ func TestCheckV3NetReportsInvalidLeafSettings(t *testing.T) {
 func TestCheckMenuFilesReportsDanglingCommandReferences(t *testing.T) {
 	root := t.TempDir()
 	menus := filepath.Join(root, "menus", "v3")
+	cfgDir := filepath.Join(menus, "cfg")
+	mnuDir := filepath.Join(menus, "mnu")
 	configDir := filepath.Join(root, "configs")
-	if err := os.MkdirAll(menus, 0o755); err != nil {
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(mnuDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeDoctorFixture(t, filepath.Join(menus, "MAIN.CFG"), `[
+	writeDoctorFixture(t, filepath.Join(cfgDir, "MAIN.CFG"), `[
   {"KEYS":"A", "CMD":"GOTO:MISSING"},
   {"KEYS":"B", "CMD":"DOOR:UNKNOWN"},
   {"KEYS":"C", "CMD":"RUN:NOTAREALRUNNABLE"},
   {"KEYS":"D", "CMD":"MSGAREA:NO_AREA"}
 ]`)
-	writeDoctorFixture(t, filepath.Join(menus, "MAIN.MNU"), `{}`)
+	writeDoctorFixture(t, filepath.Join(mnuDir, "MAIN.MNU"), `{}`)
 	writeDoctorFixture(t, filepath.Join(configDir, "doors.json"), `{}`)
 	writeDoctorFixture(t, filepath.Join(configDir, "message_areas.json"), `[]`)
 	var checks []doctorCheck
