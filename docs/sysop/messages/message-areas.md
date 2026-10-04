@@ -291,7 +291,7 @@ Both limits can be set simultaneously. Age is applied first; if the remaining co
 
 ### Dupe Database
 
-The FTN dupe database (`data/ftn/dupes.json`) tracks MSGIDs to prevent duplicate imports. Old entries are automatically purged after 30 days.
+The FTN dupe database (`data/ftn/dupes.json`) tracks MSGIDs to prevent duplicate imports. Some software (TriToss, for example) sends echomail with no MSGID; those messages are tracked by a hash of their sender, recipient, subject, date and text instead. Old entries are automatically purged after 30 days.
 
 ---
 

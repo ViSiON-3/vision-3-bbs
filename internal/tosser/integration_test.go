@@ -870,6 +870,13 @@ func makePktSimpleNetmail(t *testing.T, from, to, subject, body, msgID string) [
 // makePktSimple creates a test FTN packet (Type-2+) with one message.
 func makePktSimple(t *testing.T, areaTag, from, to, subject, body, msgID string) []byte {
 	t.Helper()
+	return makePktKludges(t, areaTag, from, to, subject, body, []string{"MSGID: " + msgID})
+}
+
+// makePktKludges is makePktSimple with the message's kludge lines given
+// outright, for messages that carry no MSGID or carry extra kludges.
+func makePktKludges(t *testing.T, areaTag, from, to, subject, body string, kludges []string) []byte {
+	t.Helper()
 
 	// Packet header: from the hub (21:4/158) to our point (21:4/158.1).
 	hdr := ftn.NewPacketHeader(21, 4, 158, 0, 21, 4, 158, 1, "")
@@ -877,7 +884,7 @@ func makePktSimple(t *testing.T, areaTag, from, to, subject, body, msgID string)
 	parsedBody := &ftn.ParsedBody{
 		Area:    areaTag,
 		Text:    body,
-		Kludges: []string{"MSGID: " + msgID},
+		Kludges: kludges,
 		SeenBy:  []string{"4/100"},
 		Path:    []string{"4/100"},
 	}

@@ -328,7 +328,7 @@ func (n *Node) importMessage(base *jam.Base, area *message.MessageArea, m qwk.Ne
 		jm.To = user.AddressByHandle(n.recipients, jm.To)
 	}
 
-	num, err := base.WriteMessageExt(jm, jam.MsgTypeEchomailMsg, "", "")
+	num, err := base.WriteReceivedMessage(jm, jam.MsgTypeEchomailMsg)
 	if err != nil {
 		return 0, err
 	}
