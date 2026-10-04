@@ -120,9 +120,10 @@ func TestFileListModeDisplay(t *testing.T) {
 		{"unknown value", "grid", "Lightbar"},
 		{"empty string", "", "Lightbar"},
 	}
+	st := &konfigState{c: &cmdCtx{e: konfigTestExecutor(t)}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := fileListModeDisplay(tt.mode); got != tt.want {
+			if got := st.fileListModeDisplay(tt.mode); got != tt.want {
 				t.Errorf("fileListModeDisplay(%q) = %q, want %q", tt.mode, got, tt.want)
 			}
 		})

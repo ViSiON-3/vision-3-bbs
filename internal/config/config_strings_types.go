@@ -523,6 +523,91 @@ type StringsConfig struct {
 	DefColor5 uint8 `json:"defColor5"`
 	DefColor6 uint8 `json:"defColor6"`
 	DefColor7 uint8 `json:"defColor7"`
+
+	// User Konfig (K) form, USERCONFIG. Labels, section titles and values
+	// are plain text drawn into fixed-width cells; the rest take pipe codes.
+	KonfigTitle               string `json:"konfigTitle"`
+	KonfigLegend              string `json:"konfigLegend"`
+	KonfigSectionTerminal     string `json:"konfigSectionTerminal"`
+	KonfigSectionMessages     string `json:"konfigSectionMessages"`
+	KonfigSectionPersonal     string `json:"konfigSectionPersonal"`
+	KonfigSectionFiles        string `json:"konfigSectionFiles"`
+	KonfigScreenWidthLabel    string `json:"konfigScreenWidthLabel"`
+	KonfigScreenWidthHelp     string `json:"konfigScreenWidthHelp"`
+	KonfigScreenHeightLabel   string `json:"konfigScreenHeightLabel"`
+	KonfigScreenHeightHelp    string `json:"konfigScreenHeightHelp"`
+	KonfigEncodingLabel       string `json:"konfigEncodingLabel"`
+	KonfigEncodingHelp        string `json:"konfigEncodingHelp"`
+	KonfigHotKeysLabel        string `json:"konfigHotKeysLabel"`
+	KonfigHotKeysHelp         string `json:"konfigHotKeysHelp"`
+	KonfigHeaderStyleLabel    string `json:"konfigHeaderStyleLabel"`
+	KonfigHeaderStyleHelp     string `json:"konfigHeaderStyleHelp"`
+	KonfigAutoSigLabel        string `json:"konfigAutoSigLabel"`
+	KonfigAutoSigHelp         string `json:"konfigAutoSigHelp"`
+	KonfigRealNameLabel       string `json:"konfigRealNameLabel"`
+	KonfigRealNameHelp        string `json:"konfigRealNameHelp"`
+	KonfigLocationLabel       string `json:"konfigLocationLabel"`
+	KonfigLocationHelp        string `json:"konfigLocationHelp"`
+	KonfigUserNoteLabel       string `json:"konfigUserNoteLabel"`
+	KonfigUserNoteHelp        string `json:"konfigUserNoteHelp"`
+	KonfigPasswordLabel       string `json:"konfigPasswordLabel"`
+	KonfigPasswordHelp        string `json:"konfigPasswordHelp"`
+	KonfigListingModeLabel    string `json:"konfigListingModeLabel"`
+	KonfigListingModeHelp     string `json:"konfigListingModeHelp"`
+	KonfigFileColumnsLabel    string `json:"konfigFileColumnsLabel"`
+	KonfigFileColumnsHelp     string `json:"konfigFileColumnsHelp"`
+	KonfigDefaultFormat       string `json:"konfigDefaultFormat"`
+	KonfigNotSet              string `json:"konfigNotSet"`
+	KonfigOn                  string `json:"konfigOn"`
+	KonfigOff                 string `json:"konfigOff"`
+	KonfigAutoFormat          string `json:"konfigAutoFormat"`
+	KonfigLightbar            string `json:"konfigLightbar"`
+	KonfigClassic             string `json:"konfigClassic"`
+	KonfigNotChosen           string `json:"konfigNotChosen"`
+	KonfigStyleFormat         string `json:"konfigStyleFormat"`
+	KonfigNone                string `json:"konfigNone"`
+	KonfigOneLine             string `json:"konfigOneLine"`
+	KonfigLinesFormat         string `json:"konfigLinesFormat"`
+	KonfigAll                 string `json:"konfigAll"`
+	KonfigCountFormat         string `json:"konfigCountFormat"`
+	KonfigSaveError           string `json:"konfigSaveError"`
+	KonfigSavedFormat         string `json:"konfigSavedFormat"`
+	KonfigClearedFormat       string `json:"konfigClearedFormat"`
+	KonfigUpdatedFormat       string `json:"konfigUpdatedFormat"`
+	KonfigRangeError          string `json:"konfigRangeError"`
+	KonfigRangeHint           string `json:"konfigRangeHint"`
+	KonfigEncodingAuto        string `json:"konfigEncodingAuto"`
+	KonfigEncodingSaved       string `json:"konfigEncodingSaved"`
+	KonfigEncodingMismatch    string `json:"konfigEncodingMismatch"`
+	KonfigRealNameRequired    string `json:"konfigRealNameRequired"`
+	KonfigRealNameTooShort    string `json:"konfigRealNameTooShort"`
+	KonfigRealNameNeedsSpace  string `json:"konfigRealNameNeedsSpace"`
+	KonfigPwCurrent           string `json:"konfigPwCurrent"`
+	KonfigPwNew               string `json:"konfigPwNew"`
+	KonfigPwAgain             string `json:"konfigPwAgain"`
+	KonfigPwIncorrect         string `json:"konfigPwIncorrect"`
+	KonfigPwTooShort          string `json:"konfigPwTooShort"`
+	KonfigPwTooLong           string `json:"konfigPwTooLong"`
+	KonfigPwMismatch          string `json:"konfigPwMismatch"`
+	KonfigPwFailed            string `json:"konfigPwFailed"`
+	KonfigPwChanged           string `json:"konfigPwChanged"`
+	KonfigAutoSigChoice       string `json:"konfigAutoSigChoice"`
+	KonfigAutoSigDeleted      string `json:"konfigAutoSigDeleted"`
+	KonfigAutoSigEditorFailed string `json:"konfigAutoSigEditorFailed"`
+	KonfigAutoSigUnchanged    string `json:"konfigAutoSigUnchanged"`
+	KonfigAutoSigCleared      string `json:"konfigAutoSigCleared"`
+	KonfigAutoSigTruncated    string `json:"konfigAutoSigTruncated"`
+	KonfigAutoSigUpdated      string `json:"konfigAutoSigUpdated"`
+	KonfigColumnsTitle        string `json:"konfigColumnsTitle"`
+	KonfigColumnsHint         string `json:"konfigColumnsHint"`
+	KonfigColumnsKeepOne      string `json:"konfigColumnsKeepOne"`
+	KonfigColumnSaved         string `json:"konfigColumnSaved"`
+	KonfigColumnName          string `json:"konfigColumnName"`
+	KonfigColumnSize          string `json:"konfigColumnSize"`
+	KonfigColumnDate          string `json:"konfigColumnDate"`
+	KonfigColumnDownloads     string `json:"konfigColumnDownloads"`
+	KonfigColumnUploader      string `json:"konfigColumnUploader"`
+	KonfigColumnDescription   string `json:"konfigColumnDescription"`
 }
 
 // GlobalStrings holds the loaded configuration.
