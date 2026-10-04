@@ -1087,37 +1087,86 @@ func checkAreasAndConferences(configDir, root string, ftnCfg config.FTNConfig, a
 			if !filepath.IsAbs(path) {
 				path = filepath.Join(root, "data", path)
 			}
-			if info, statErr := os.Stat(path); statErr != nil {
-				if errors.Is(statErr, os.ErrNotExist) {
-					add("message bases", doctorInfo, fmt.Sprintf("area %q base directory is not created yet: %s", area.Tag, path), "The message base is created when the area is first opened; check this path if messages fail to load.")
-					parent := path
-					for parent != filepath.Dir(parent) {
-						parent = filepath.Dir(parent)
-						if parentInfo, parentErr := os.Stat(parent); parentErr == nil && parentInfo.IsDir() {
-							if !doctorPathWritable(parentInfo) {
-								add("message bases", doctorWarn, fmt.Sprintf("area %q base cannot be created under non-writable directory %s", area.Tag, parent), "Grant the BBS service account write and execute access to the parent directory.")
-								issues++
-							}
-							break
-						}
-					}
-				} else {
-					add("message bases", doctorWarn, fmt.Sprintf("cannot access area %q base path %s: %v", area.Tag, path, statErr), "Check the path and filesystem permissions for the BBS process.")
-					issues++
-				}
-			} else if !info.IsDir() {
-				add("message bases", doctorWarn, fmt.Sprintf("area %q base path is not a directory: %s", area.Tag, path), "Move or rename the conflicting file and let ViSiON/3 create the message base directory.")
-				issues++
-			} else if !doctorPathWritable(info) {
-				add("message bases", doctorWarn, fmt.Sprintf("area %q base directory is not writable by the account running the doctor", area.Tag), "Grant the BBS service account write and execute access to this directory.")
-				issues++
-			}
+			issues += checkDoctorJAMBase(area.Tag, path, add)
 		}
 	}
 	issues += checkFileEchoAreas(configDir, ftnCfg, conferences, add)
 	if issues == 0 {
 		add("message areas", doctorOK, "conference references, tags, base paths, and FTN network references are consistent", "")
 	}
+}
+
+// checkDoctorJAMBase checks the four files used by a JAM base without opening
+// the base through jam.Open, which may create or recreate files as a side effect.
+func checkDoctorJAMBase(areaTag, basePath string, add func(string, doctorSeverity, string, string)) int {
+	const fixAccess = "Check the path and filesystem permissions for the BBS process."
+	suffixes := []string{".jhr", ".jdt", ".jdx", ".jlr"}
+	paths := make([]string, len(suffixes))
+	infos := make([]os.FileInfo, len(suffixes))
+	missing := make([]string, 0, len(suffixes))
+	issues := 0
+
+	for i, suffix := range suffixes {
+		paths[i] = basePath + suffix
+		info, err := os.Stat(paths[i])
+		if errors.Is(err, os.ErrNotExist) {
+			missing = append(missing, suffix)
+			continue
+		}
+		if err != nil {
+			add("message bases", doctorWarn, fmt.Sprintf("cannot access area %q JAM file %s: %v", areaTag, paths[i], err), fixAccess)
+			issues++
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			add("message bases", doctorWarn, fmt.Sprintf("area %q JAM path is not a regular file: %s", areaTag, paths[i]), "Replace the non-regular path with the corresponding JAM base file.")
+			issues++
+			continue
+		}
+		infos[i] = info
+	}
+
+	if len(missing) == len(suffixes) {
+		add("message bases", doctorInfo, fmt.Sprintf("area %q JAM base is not created yet: %s", areaTag, basePath), "The message base is created when the area is first opened; check this path if messages fail to load.")
+		parent := filepath.Dir(basePath)
+		for {
+			if parentInfo, err := os.Stat(parent); err == nil && parentInfo.IsDir() {
+				if !doctorPathWritable(parentInfo) {
+					add("message bases", doctorWarn, fmt.Sprintf("area %q base cannot be created under non-writable directory %s", areaTag, parent), "Grant the BBS service account write and execute access to the parent directory.")
+					issues++
+				}
+				break
+			}
+			next := filepath.Dir(parent)
+			if next == parent {
+				break
+			}
+			parent = next
+		}
+		return issues
+	}
+
+	if len(missing) > 0 {
+		add("message bases", doctorWarn, fmt.Sprintf("area %q JAM base is incomplete; missing %s", areaTag, strings.Join(missing, ", ")), "Restore the missing JAM files from backup or move the incomplete base aside before allowing it to be recreated.")
+		issues++
+	}
+
+	for i, info := range infos {
+		if info == nil {
+			continue
+		}
+		file, err := os.OpenFile(paths[i], os.O_RDWR, 0)
+		if err != nil {
+			add("message bases", doctorWarn, fmt.Sprintf("area %q JAM file is not accessible for read/write: %s: %v", areaTag, paths[i], err), fixAccess)
+			issues++
+			continue
+		}
+		if err := file.Close(); err != nil {
+			add("message bases", doctorWarn, fmt.Sprintf("cannot close area %q JAM file %s: %v", areaTag, paths[i], err), fixAccess)
+			issues++
+		}
+	}
+	return issues
 }
 
 func checkFileEchoAreas(configDir string, ftnCfg config.FTNConfig, conferences map[int]bool, add func(string, doctorSeverity, string, string)) int {
@@ -1284,7 +1333,12 @@ func checkV3Net(configDir, root string, add func(string, doctorSeverity, string,
 		parseErr := json.Unmarshal(keyData, &key)
 		private, privateErr := base64.StdEncoding.DecodeString(key.Private)
 		public, publicErr := base64.StdEncoding.DecodeString(key.Public)
-		if parseErr != nil || privateErr != nil || publicErr != nil || len(private) != ed25519.PrivateKeySize || len(public) != ed25519.PublicKeySize || !bytes.Equal(ed25519.PrivateKey(private).Public().(ed25519.PublicKey), ed25519.PublicKey(public)) {
+		validKeypair := parseErr == nil && privateErr == nil && publicErr == nil && len(private) == ed25519.PrivateKeySize && len(public) == ed25519.PublicKeySize
+		if validKeypair {
+			derivedPrivate := ed25519.NewKeyFromSeed(private[:ed25519.SeedSize])
+			validKeypair = bytes.Equal(private, derivedPrivate) && bytes.Equal(public, derivedPrivate.Public().(ed25519.PublicKey))
+		}
+		if !validKeypair {
 			add("V3Net identity", doctorWarn, "keystore is not a valid Ed25519 identity keypair", "Restore the matching keystore backup; generating a new identity changes this board's V3Net identity.")
 			issues++
 		} else {
