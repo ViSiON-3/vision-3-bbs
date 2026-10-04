@@ -216,3 +216,56 @@ func TestStopWatchingWithoutWatcher(t *testing.T) {
 	ct := newConfigTracker(0, 0)
 	ct.StopWatching() // must not panic
 }
+
+// TestAutoBlockSurvivesReload is the regression test for issue #617: the
+// line AppendToBlocklist writes carries an inline comment, and reloading the
+// list (on restart or when the watcher sees the write) must keep the IP
+// blocked rather than skip the line as invalid.
+func TestAutoBlockSurvivesReload(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "blocklist.txt")
+	if err := os.WriteFile(path, []byte("# sysop notes\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ct := newConfigTracker(0, 0)
+	ct.SetIPListPaths(path, "")
+	defer ct.StopWatching()
+
+	if err := ct.AppendToBlocklist("203.0.113.50"); err != nil {
+		t.Fatal(err)
+	}
+	ct.reloadIPLists()
+	if ok, _ := ct.CanAccept(addr("203.0.113.50")); ok {
+		t.Error("auto-blocked IP accepted after the blocklist was reloaded")
+	}
+
+	// A restart loads the file from scratch.
+	restarted := newConfigTracker(0, 0)
+	restarted.SetIPListPaths(path, "")
+	defer restarted.StopWatching()
+	if ok, _ := restarted.CanAccept(addr("203.0.113.50")); ok {
+		t.Error("auto-blocked IP accepted after a restart")
+	}
+}
+
+// TestLoadIPListInlineComments pins the list format: # starts a comment
+// anywhere on a line, for single IPs and CIDR ranges alike.
+func TestLoadIPListInlineComments(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "list.txt")
+	body := "# header\n203.0.113.60 # auto-blocked 2026-10-01 20:46:21: too many failed logins\n" +
+		"  198.51.100.0/24\t# a range  \n2001:db8::1#v6\n   # indented comment\nnot-an-ip # junk\n"
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+	list, err := LoadIPList(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ip := range []string{"203.0.113.60", "198.51.100.7", "2001:db8::1"} {
+		if !list.Contains(ip) {
+			t.Errorf("%s not in list", ip)
+		}
+	}
+	if len(list.ips) != 2 || len(list.networks) != 1 {
+		t.Errorf("loaded %d IPs and %d ranges, want 2 and 1", len(list.ips), len(list.networks))
+	}
+}

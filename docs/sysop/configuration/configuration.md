@@ -579,12 +579,12 @@ See [Logging](#logging) for full details and examples.
 Both blocklist and allowlist files use the same format:
 
 ```text
-# Comments start with #
+# Comments start with #, on their own line or after an entry
 # One IP or CIDR range per line
 
 # Block specific IPs
 192.168.1.100
-10.0.0.50
+10.0.0.50    # comment after an entry
 
 # Block entire subnets
 192.168.100.0/24

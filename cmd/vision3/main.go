@@ -185,7 +185,8 @@ func NewConnectionTracker(maxNodes, maxConnectionsPerIP, maxFailedLogins, lockou
 }
 
 // LoadIPList loads an IP list from a file
-// File format: one IP or CIDR range per line, # for comments
+// File format: one IP or CIDR range per line; # starts a comment, either on
+// its own line or after the entry (as AppendToBlocklist writes it).
 func LoadIPList(filePath string) (*IPList, error) {
 	if filePath == "" {
 		return nil, nil
@@ -206,11 +207,12 @@ func LoadIPList(filePath string) (*IPList, error) {
 
 	lines := strings.Split(string(data), "\n")
 	for lineNum, line := range lines {
-		// Trim whitespace
+		// Drop any comment, then surrounding whitespace.
+		line, _, _ = strings.Cut(line, "#")
 		line = strings.TrimSpace(line)
 
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
+		// Skip empty and comment-only lines
+		if line == "" {
 			continue
 		}
 

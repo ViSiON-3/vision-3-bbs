@@ -237,7 +237,7 @@ Allow specific IPs to bypass all connection limits.
 Both blocklist and allowlist use the same simple format:
 
 ```text
-# Comments start with # (entire line)
+# Comments start with #, on their own line or after an entry
 # Blank lines are ignored
 
 # Individual IPv4 addresses
