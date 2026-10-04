@@ -142,6 +142,9 @@ func printUsage(errMsg string) {
 	_, _ = fmt.Fprintf(w, "  %sUser Commands:%s\n", clrBold, clrReset)
 	_, _ = fmt.Fprintln(w, helpcmd("USERS PURGE", "Permanently remove soft-deleted users past retention"))
 	_, _ = fmt.Fprintln(w, helpcmd("USERS LIST", "List user accounts"))
+	_, _ = fmt.Fprintln(w, helpcmd("USERS ADDKEY", "Register a WFC SSH public key for a user"))
+	_, _ = fmt.Fprintln(w, helpcmd("USERS LISTKEYS", "List a user's WFC public keys"))
+	_, _ = fmt.Fprintln(w, helpcmd("USERS DELKEY", "Remove a WFC public key from a user"))
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintf(w, "  %sFile Commands:%s\n", clrBold, clrReset)
 	_, _ = fmt.Fprintln(w, helpcmd("FILES IMPORT", "Bulk import files from a directory into a file area"))
@@ -188,7 +191,7 @@ func cmdUsers(args []string) {
 	}
 
 	sub := args[0]
-	switch sub {
+	switch strings.ToLower(sub) {
 	case "purge":
 		cmdUsersPurge(args[1:])
 	case "list":
@@ -245,7 +248,7 @@ func cmdFiles(args []string) {
 	}
 
 	sub := args[0]
-	switch sub {
+	switch strings.ToLower(sub) {
 	case "import":
 		cmdFilesImport(args[1:])
 	case "reextractdiz":
