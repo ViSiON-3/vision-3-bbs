@@ -121,6 +121,81 @@ jobs:
             echo "::endgroup::"
           done
 
+  terminal-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Build a fresh, seeded instance outside the checkout so the live MCP
+      # journeys can only mutate disposable files.
+      - name: Create disposable BBS
+        run: ./dev-setup.sh "$RUNNER_TEMP/vision3-regression"
+
+      - name: Bind test instance to loopback
+        run: |
+          python3 - "$RUNNER_TEMP/vision3-regression/configs/config.json" <<'PY'
+          import json
+          import sys
+
+          path = sys.argv[1]
+          with open(path, encoding="utf-8") as config_file:
+              config = json.load(config_file)
+          config["telnetHost"] = "127.0.0.1"
+          config["sshHost"] = "127.0.0.1"
+          with open(path, "w", encoding="utf-8") as config_file:
+              json.dump(config, config_file, indent=2)
+              config_file.write("\n")
+          PY
+
+      - name: Run live terminal regression journeys
+        env:
+          BBS_REGRESSION_HOST: 127.0.0.1
+          BBS_REGRESSION_PORT: 2323
+          BBS_REGRESSION_HANDLE: Felonius
+          BBS_REGRESSION_PASSWORD: password
+        run: |
+          set -euo pipefail
+          bbs_dir="$RUNNER_TEMP/vision3-regression"
+          bbs_log="$RUNNER_TEMP/vision3-regression.log"
+          cd "$bbs_dir"
+          ./vision3 > "$bbs_log" 2>&1 &
+          server_pid=$!
+          cleanup() {
+            result=$?
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+            if [ "$result" -ne 0 ]; then
+              tail -n 250 "$bbs_log"
+            fi
+          }
+          trap cleanup EXIT
+
+          ready=0
+          for _ in $(seq 1 30); do
+            if grep -q '"msg":"telnet server listening"' "$bbs_log"; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo "Disposable BBS exited before it was ready"
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "Timed out waiting for the disposable BBS"
+            exit 1
+          fi
+
+          cd "$GITHUB_WORKSPACE"
+          go test -tags bbsregression ./internal/bbsregression -run '^TestLocal' -count=1 -v
+
   # The Docker image went unbuildable for ~6 months: go.mod moved to go 1.25.0
   # (a78bfce) while the Dockerfile stayed on golang:1.24-alpine, and the official
   # golang images pin GOTOOLCHAIN=local, so `go mod download` failed outright

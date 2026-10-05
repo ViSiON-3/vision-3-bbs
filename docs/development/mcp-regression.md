@@ -44,7 +44,7 @@ shipped menu binding and links current terminal journeys and command-handler
 tests in `internal/menu`. The inventory test fails if the list drifts from
 `menus/v3/cfg` or a referenced test is renamed, and it checks that `RUN:` rows
 link to a test of the registered handler. It currently records all 151
-bindings: 90 with terminal journeys, 137 with handler-test references, and
+bindings: 92 with terminal journeys, 137 with handler-test references, and
 none without a test reference. A separate shipped-config matcher test now
 checks all 153 selectable key bindings across those menu configs and confirms
 each resolves to its configured command. A second test follows the 148 direct
@@ -89,6 +89,12 @@ auto-message prompts are cancelled. The journeys cover:
   navigation. Read-only SysOp journeys also check the validation queue, user
   editor, disabled user-purge state, and news listing screens.
 - Logoff confirmation and cancellation.
+
+GitHub Actions runs these live journeys in a separate `terminal-regression`
+job. It provisions a fresh board under the runner's temporary directory,
+binds its listeners to loopback, connects with the seeded disposable sysop,
+and stops the server even when the test fails. This job runs on pull requests
+and pushes to `main`; it does not need credentials for a shared board.
 
 `TestLocalRejectedPasswordRegression` is opt-in because an incorrect password
 increments the BBS failed-login counter and repeated runs can trigger the
