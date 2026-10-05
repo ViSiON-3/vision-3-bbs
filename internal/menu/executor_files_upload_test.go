@@ -40,12 +40,13 @@ func TestUploadFileRegistersReceivedFile(t *testing.T) {
 	env.caller.CurrentFileAreaID = 2
 	env.caller.CurrentFileAreaTag = "UPLOADS"
 
-	receiver := filepath.Join(t.TempDir(), "receive.sh")
-	if err := os.WriteFile(receiver, []byte("#!/bin/sh\nprintf 'received payload' > \"$1/UPLOADED.TXT\"\n"), 0o755); err != nil {
-		t.Fatalf("write receive command: %v", err)
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("find test executable: %v", err)
 	}
 	env.e.SetProtocols([]transfer.ProtocolConfig{{
-		Key: "T", Name: "Testmodem", RecvCmd: "/bin/sh", RecvArgs: []string{receiver, "{targetDir}"}, Default: true,
+		Key: "T", Name: "Testmodem", RecvCmd: executable,
+		RecvArgs: []string{"-test.run=^TestTransferCommandHelper$", "--", "vision3-transfer-helper", "receive"}, Default: true,
 	}})
 
 	r := env.runCmd("UPLOADFILE", env.caller, "", "\r\r\r\r")

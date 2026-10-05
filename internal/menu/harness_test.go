@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -16,9 +17,10 @@ import (
 // only methods a function under test actually calls need to be overridden here.
 type testSession struct {
 	ssh.Session
-	in   *bytes.Reader
-	out  bytes.Buffer
-	addr net.Addr // RemoteAddr result; nil means 127.0.0.1
+	in     *bytes.Reader
+	readMu sync.Mutex
+	out    bytes.Buffer
+	addr   net.Addr // RemoteAddr result; nil means 127.0.0.1
 
 	// hooks run once each, from Write, as soon as the output first contains
 	// their marker. See whenOutput.
@@ -35,7 +37,11 @@ func newTestSession(input string) *testSession {
 	return &testSession{in: bytes.NewReader([]byte(input))}
 }
 
-func (ts *testSession) Read(p []byte) (int, error) { return ts.in.Read(p) }
+func (ts *testSession) Read(p []byte) (int, error) {
+	ts.readMu.Lock()
+	defer ts.readMu.Unlock()
+	return ts.in.Read(p)
+}
 
 func (ts *testSession) Write(p []byte) (int, error) {
 	n, err := ts.out.Write(p)

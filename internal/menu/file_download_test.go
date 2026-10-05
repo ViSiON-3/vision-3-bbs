@@ -1,9 +1,10 @@
 package menu
 
 import (
-	"fmt"
+	"flag"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/google/uuid"
@@ -44,13 +45,43 @@ func addPhysicalDownloadRecord(t *testing.T, env *menuEnv, name string) uuid.UUI
 
 func setTestDownloadProtocol(t *testing.T, env *menuEnv, exitStatus int) {
 	t.Helper()
-	script := filepath.Join(t.TempDir(), "send.sh")
-	if err := os.WriteFile(script, []byte(fmt.Sprintf("#!/bin/sh\nexit %d\n", exitStatus)), 0o755); err != nil {
-		t.Fatalf("write transfer command: %v", err)
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("find test executable: %v", err)
 	}
+	args := []string{"-test.run=^TestTransferCommandHelper$", "--", "vision3-transfer-helper", "send", strconv.Itoa(exitStatus)}
 	env.e.SetProtocols([]transfer.ProtocolConfig{{
-		Key: "T", Name: "Testmodem", SendCmd: "/bin/sh", SendArgs: []string{script}, Default: true,
+		Key: "T", Name: "Testmodem", SendCmd: executable, SendArgs: args, Default: true,
 	}})
+}
+
+// TestTransferCommandHelper is invoked as a subprocess by transfer tests. It
+// provides portable no-op/failure send commands and a deterministic receive
+// fixture without depending on a platform shell.
+func TestTransferCommandHelper(t *testing.T) {
+	args := flag.Args()
+	if len(args) < 2 || args[0] != "vision3-transfer-helper" {
+		return
+	}
+	switch args[1] {
+	case "send":
+		if len(args) < 3 {
+			t.Fatal("send helper requires an exit status")
+		}
+		exitStatus, err := strconv.Atoi(args[2])
+		if err != nil {
+			t.Fatalf("invalid helper exit status %q: %v", args[2], err)
+		}
+		if exitStatus != 0 {
+			t.Fatalf("simulated transfer exit status %d", exitStatus)
+		}
+	case "receive":
+		if err := os.WriteFile(filepath.Join(".", "UPLOADED.TXT"), []byte("received payload"), 0o644); err != nil {
+			t.Fatalf("write received file: %v", err)
+		}
+	default:
+		t.Fatalf("unknown transfer helper action %q", args[1])
+	}
 }
 
 // TestDownloadFileTagsNamedFile pins DOWNLOADFILE's add step: a filename
