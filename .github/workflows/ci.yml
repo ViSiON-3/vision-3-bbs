@@ -98,7 +98,7 @@ jobs:
         if: matrix.os != 'ubuntu-latest'
         run: go test ./...
       - name: Native script-store ACL regression
-        run: go test -v ./internal/scripting -run '^TestDataStoreCustomizedACLRejectsUpdates$' -count=1
+        run: go test -v ./internal/scripting -run '^TestDataStoreCustomized(D)?ACLRejectsUpdates$' -count=1
         env:
           VISION_REQUIRE_DATA_ACL: "1"
       # Same run on Linux, with a coverage profile. The floor is a ratchet on

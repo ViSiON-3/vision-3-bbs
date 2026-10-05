@@ -165,7 +165,10 @@ func (ds *dataStore) loadFile() (map[string]any, error) {
 	data := make(map[string]any)
 	raw, err := os.ReadFile(ds.path)
 	if errors.Is(err, os.ErrNotExist) {
-		return data, nil
+		// A dangling symlink is an unreadable store, not a missing store.
+		if _, statErr := os.Lstat(ds.path); errors.Is(statErr, os.ErrNotExist) {
+			return data, nil
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read script data %s: %w", ds.path, err)
@@ -187,6 +190,13 @@ func (ds *dataStore) saveFile(data map[string]any) error {
 	raw, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return err
+	}
+	info, err := os.Lstat(ds.path)
+	if err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("cannot safely replace script data at a symbolic link: %s", ds.path)
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect script data destination %s: %w", ds.path, err)
 	}
 	// A data-free probe discovers the creation mode after the process umask.
 	// It also provides the inherited ACL a replacement would receive.
