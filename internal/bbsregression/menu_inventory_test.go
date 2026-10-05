@@ -31,8 +31,9 @@ type menuActionCoverage struct {
 
 // TestShippedMenuActionsHaveCoverageInventory keeps the action audit in sync
 // with the shipped .CFG files. Every action must link to a terminal journey or
-// command-handler test, so config changes cannot silently evade regression
-// coverage.
+// command-handler test, so config changes cannot silently evade the test
+// inventory. This checks links and selected route/output evidence; it does not
+// prove each linked test asserts the action's full behavior.
 func TestShippedMenuActionsHaveCoverageInventory(t *testing.T) {
 	root := filepath.Join("..", "..", "menus", "v3")
 	coveragePath := filepath.Join("..", "..", "docs", "development", "menu-action-coverage.json")
@@ -114,7 +115,7 @@ func TestShippedMenuActionsHaveCoverageInventory(t *testing.T) {
 			t.Errorf("%s coverage = %q, want %q from its test references", id, action.Coverage, wantCoverage)
 		}
 		if wantCoverage == "uncovered" {
-			t.Errorf("%s (%s) has no behavioral test reference", id, action.Command)
+			t.Errorf("%s (%s) has no linked test reference", id, action.Command)
 		}
 		byAction[id] = action
 	}
@@ -178,7 +179,7 @@ func TestShippedMenuActionsHaveCoverageInventory(t *testing.T) {
 			withHandler++
 		}
 	}
-	t.Logf("shipped menu action inventory: %d total, %d with terminal journeys, %d with handler tests, %d without behavioral test references", len(byAction), withTerminal, withHandler, uncovered)
+	t.Logf("shipped menu action inventory: %d total, %d with terminal journey links, %d with handler test links, %d without test links", len(byAction), withTerminal, withHandler, uncovered)
 	if uncovered > 0 {
 		t.Logf("action gaps are listed in %s", coveragePath)
 	}
