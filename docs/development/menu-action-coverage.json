@@ -119,7 +119,14 @@
     "handlerTests": [
       "TestExecMailPoll",
       "TestRunMailPollShowsMissingExecutable",
-      "TestRunMailPollRendersChildOutputAndStatus"
+      "TestRunMailPollRendersChildOutputAndStatus",
+      "TestCRLFWriter",
+      "TestCRLFWriterHoldsPartialLines",
+      "TestExecMailPollStopsWithSIGTERM",
+      "TestMailPollDeadlineScalesWithHubs",
+      "TestMailPollDeadlineUsesMenuTimeout",
+      "TestWatchPollStopKey",
+      "TestWatchPollStopKeyOnDisconnect"
     ]
   },
   {
@@ -413,7 +420,12 @@
     "coverage": "handler",
     "terminalTest": "",
     "handlerTests": [
-      "TestFastLogin_LightbarChoices"
+      "TestFastLogin_LightbarChoices",
+      "TestExeccovLoginSequence_Items",
+      "TestExeccovLoginSequence_DoorItem",
+      "TestExeccovLoginSequence_RunDoorScript",
+      "TestShippedLoginSequencesAreDispatchable",
+      "TestShippedLoginSequencesLeadWithPriorityItems"
     ]
   },
   {
@@ -701,6 +713,7 @@
     "coverage": "terminal+handler",
     "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
     "handlerTests": [
+      "TestRunSearchFilesFilenameClampedByRunes",
       "TestSearchFilesMatchesAcrossReadableAreas",
       "TestSearchFilesPagesLongResults",
       "TestSearchFilesRejectsShortAndEmptyQueries"
@@ -715,7 +728,9 @@
     "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
     "terminalOutput": "Enter filename to type",
     "handlerTests": [
-      "TestTypeTextFileShowsFileAsText"
+      "TestTypeTextFileShowsFileAsText",
+      "TestDisplayTextWithPagingRefusesHugeFile",
+      "TestDisplayTextWithPaging_ShowsEveryLineAndPagesCorrectly"
     ]
   },
   {
@@ -738,9 +753,13 @@
     "coverage": "terminal+handler",
     "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
     "handlerTests": [
+      "TestViewFileByRecordMissingPath",
+      "TestViewFileListsArchive",
       "TestViewFilePagesLongFile",
       "TestViewFilePromptEdgeCases",
-      "TestViewFileShowsTextFile"
+      "TestViewFileShowsTextFile",
+      "TestDisplayTextWithPagingRefusesHugeFile",
+      "TestDisplayTextWithPaging_ShowsEveryLineAndPagesCorrectly"
     ]
   },
   {
@@ -762,6 +781,8 @@
     "coverage": "handler",
     "terminalTest": "",
     "handlerTests": [
+      "TestWantListDeleteHitsChosenEntryAfterConcurrentDelete",
+      "TestWantListDeleteIdenticalEntriesByID",
       "TestWantListCallerSubmitsRequest",
       "TestWantListCorruptFileReportsError",
       "TestWantListSysopReviewsAndDeletes",
@@ -1074,7 +1095,9 @@
       "TestOnelinerEmptyWallDecline",
       "TestOnelinerRejectsBlank",
       "TestOnelinerRejectsDisallowedColour",
-      "TestOnelinerShowsNewestTenAndHidesAnonymousPoster"
+      "TestOnelinerShowsNewestTenAndHidesAnonymousPoster",
+      "TestRunOneliners_UsesServerDataDir",
+      "TestOnelinerTruncateRunes"
     ]
   },
   {
@@ -1271,7 +1294,11 @@
     "coverage": "terminal+handler",
     "terminalTest": "TestLocalTerminalRegressionSuite/page_prompt_cancel",
     "handlerTests": [
-      "TestChatcovPageDeliversToTargetNode"
+      "TestChatcovPageDeliversToTargetNode",
+      "TestChatcovPageRejectsBadTargets",
+      "TestChatcovPageCancelAtNodePrompt",
+      "TestChatcovPageInvisibleNode",
+      "TestChatcovPageDisconnects"
     ]
   },
   {
@@ -1310,7 +1337,8 @@
       "TestChangeMessageConferenceCommandRendersLightbar",
       "TestChangeMsgConferenceJoinsAndPersists",
       "TestChangeMessageConferenceCommandJoinsSelectedConference",
-      "TestChangeMessageConferenceCommandRollsBackIfSaveFails"
+      "TestChangeMessageConferenceCommandRollsBackIfSaveFails",
+      "TestChangeMsgConferencePromptLoop"
     ]
   },
   {
@@ -1323,7 +1351,10 @@
     "handlerTests": [
       "TestSelectMessageAreaLightbarConferenceSwitch",
       "TestSelectMessageAreaLightbarJoinsSelectedArea",
-      "TestSelectMessageAreaLightbarQuitKeepsArea"
+      "TestSelectMessageAreaLightbarQuitKeepsArea",
+      "TestSelectMessageAreaClassicPromptNavigation",
+      "TestSelectMessageAreaClassicRefusesThenSelects",
+      "TestSelectMessageAreaClassicDisconnect"
     ]
   },
   {
@@ -1334,7 +1365,8 @@
     "coverage": "terminal+handler",
     "terminalTest": "TestLocalTerminalRegressionSuite/message_area_navigation",
     "handlerTests": [
-      "TestNextPrevMsgAreaWrapsWithinConference"
+      "TestNextPrevMsgAreaWrapsWithinConference",
+      "TestNextMsgAreaSkipsUnreadableAreas"
     ]
   },
   {
@@ -1345,7 +1377,8 @@
     "coverage": "terminal+handler",
     "terminalTest": "TestLocalTerminalRegressionSuite/message_area_navigation",
     "handlerTests": [
-      "TestNextPrevMsgAreaWrapsWithinConference"
+      "TestNextPrevMsgAreaWrapsWithinConference",
+      "TestNextMsgAreaSkipsUnreadableAreas"
     ]
   },
   {
@@ -1368,7 +1401,8 @@
     "coverage": "terminal+handler",
     "terminalTest": "TestLocalTerminalRegressionSuite/message_conference_next_previous",
     "handlerTests": [
-      "TestNextPrevMsgConfJoinsBothMenus"
+      "TestNextPrevMsgConfJoinsBothMenus",
+      "TestNextPrevMsgConfWraps"
     ]
   },
   {
@@ -1687,7 +1721,8 @@
       "TestRumorsListHonoursLevelAndAnonymity",
       "TestRumorsListWidePosterFits",
       "TestRumorsUnmaskEarlierAnonymousName",
-      "TestRumorsUseServerDataDir"
+      "TestRumorsUseServerDataDir",
+      "TestRumorsHandlersReportCorruptFile"
     ]
   },
   {
@@ -1701,7 +1736,8 @@
       "TestRumorsAddAnonymousWithLevel",
       "TestRumorsAddBlankTextSavesNothing",
       "TestRumorsAddRefusesLevelBelowTwo",
-      "TestRumorsAddRefusesWhenFull"
+      "TestRumorsAddRefusesWhenFull",
+      "TestRumorsHandlersReportCorruptFile"
     ]
   },
   {
@@ -1712,7 +1748,8 @@
     "coverage": "terminal+handler",
     "terminalTest": "TestLocalTerminalRegressionSuite/rumor_empty_actions",
     "handlerTests": [
-      "TestRumorsNewscanUsesPreviousLogin"
+      "TestRumorsNewscanUsesPreviousLogin",
+      "TestRumorsHandlersReportCorruptFile"
     ]
   },
   {
@@ -1724,7 +1761,8 @@
     "terminalTest": "TestLocalTerminalRegressionSuite/rumor_empty_actions",
     "handlerTests": [
       "TestRumorsSearch",
-      "TestRumorsUnmaskEarlierAnonymousName"
+      "TestRumorsUnmaskEarlierAnonymousName",
+      "TestRumorsHandlersReportCorruptFile"
     ]
   },
   {
@@ -1740,7 +1778,8 @@
       "TestRumorsDeleteLegacyOwnerBackfill",
       "TestRumorsDeleteOwnRumor",
       "TestRumorsDeleteRefusals",
-      "TestRumorsDeleteSysopDeletesAnyone"
+      "TestRumorsDeleteSysopDeletesAnyone",
+      "TestRumorsHandlersReportCorruptFile"
     ]
   },
   {
@@ -1836,7 +1875,8 @@
     "coverage": "handler",
     "terminalTest": "",
     "handlerTests": [
-      "TestV3NetStatusScreenReportsConfiguredState"
+      "TestV3NetStatusScreenReportsConfiguredState",
+      "TestV3NetStatusScreenReportsDisabledService"
     ]
   },
   {
@@ -1850,7 +1890,8 @@
       "TestV3NetAreasMessages",
       "TestV3NetAreasNavigatesLongList",
       "TestV3NetAreasReloadFailureSaysRestart",
-      "TestV3NetAreasSubscribeAndUnsubscribe"
+      "TestV3NetAreasSubscribeAndUnsubscribe",
+      "TestRunV3NetAreasRowNotSplitMidRune"
     ]
   },
   {
@@ -1864,7 +1905,8 @@
       "TestV3NetProposeMalformedTag",
       "TestV3NetProposeNavigationAndExits",
       "TestV3NetProposeSubmitsForm",
-      "TestV3NetProposeValidates"
+      "TestV3NetProposeValidates",
+      "TestCycleAccessMode"
     ]
   },
   {
@@ -1875,7 +1917,13 @@
     "coverage": "handler",
     "terminalTest": "",
     "handlerTests": [
-      "TestAccessRequestsListsOnlyManagedAreasAndApproves"
+      "TestAccessRequestsListsOnlyManagedAreasAndApproves",
+      "TestAccessRequestsDenyCarriesReason",
+      "TestAccessRequestsRejectsBadCommandWithoutCallingHub",
+      "TestAccessRequestsWhenNothingManaged",
+      "TestParseListCommand",
+      "TestV3NetAgoAcceptsHubAndRFC3339Timestamps",
+      "TestV3NetRolesToleratesNilNAL"
     ]
   },
   {
@@ -1886,7 +1934,12 @@
     "coverage": "handler",
     "terminalTest": "",
     "handlerTests": [
-      "TestCoordinatorPanelApprovesAndRejectsProposals"
+      "TestCoordinatorPanelApprovesAndRejectsProposals",
+      "TestCoordinatorPanelRefusesNonCoordinator",
+      "TestCoordinatorPanelApprovesWithAccessModeOverride",
+      "TestCoordinatorPanelReassignsAreaManager",
+      "TestCoordinatorPanelShowsHubError",
+      "TestV3NetRolesToleratesNilNAL"
     ]
   },
   {
@@ -1897,7 +1950,8 @@
     "coverage": "handler",
     "terminalTest": "",
     "handlerTests": [
-      "TestV3NetRegistryScreenListsAndMarksSubscriptions"
+      "TestV3NetRegistryScreenListsAndMarksSubscriptions",
+      "TestV3NetRegistryScreenReportsFetchFailure"
     ]
   },
   {
