@@ -108,6 +108,7 @@ Thumbs.db
 .superpowers/
 /docs/superpowers/
 /docs-internal/
+/docs/development/menu-action-behavior-coverage-plan.md
 .remember/
 .aider*
 .mcp.json

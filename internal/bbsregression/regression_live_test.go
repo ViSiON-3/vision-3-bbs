@@ -262,6 +262,16 @@ func TestLocalTerminalRegressionSuite(t *testing.T) {
 
 		board.sendExpect(t, "W{enter}", `(?i)No files in this area`, 8)
 		board.sendExpect(t, "Q", fileMenu, 8)
+
+		// Typing a file is a distinct menu action from viewing it. Blank input
+		// must return to the menu without trying to open a file.
+		board.sendExpect(t, "T{enter}", `(?i)Enter filename to type`, 8)
+		board.sendExpect(t, "{enter}", fileMenu, 8)
+
+		// Blank scan-date input cancels without changing the caller's cutoff.
+		board.sendExpect(t, "Y{enter}", `(?i)File newscan since`, 8)
+		board.sendExpect(t, "{enter}", fileMenu, 8)
+
 		board.sendExpect(t, "Q{enter}", regressionMainMenu, 8)
 	}) {
 		return

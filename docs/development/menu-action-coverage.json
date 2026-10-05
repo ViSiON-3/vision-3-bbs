@@ -707,8 +707,9 @@
     "index": 17,
     "keys": "T",
     "command": "RUN:TYPE_TEXT_FILE",
-    "coverage": "handler",
-    "terminalTest": "",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
+    "terminalOutput": "Enter filename to type",
     "handlerTests": [
       "TestTypeTextFileShowsFileAsText"
     ]
@@ -781,8 +782,9 @@
     "index": 23,
     "keys": "Y",
     "command": "RUN:SETFILESCANDATE",
-    "coverage": "handler",
-    "terminalTest": "",
+    "coverage": "terminal+handler",
+    "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
+    "terminalOutput": "File newscan since",
     "handlerTests": [
       "TestSetFileScanDatePersists",
       "TestSetFileScanDateRejectsAndCancels"
