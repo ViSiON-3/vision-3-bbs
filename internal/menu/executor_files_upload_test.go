@@ -1,7 +1,9 @@
 package menu
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
@@ -27,6 +29,49 @@ func TestUploadFileRefusals(t *testing.T) {
 	env.caller.CurrentFileAreaID = 42
 	if r := env.runCmd("UPLOADFILE", env.caller, "", "\r"); r.has("Transfer Protocols:") || r.user == nil {
 		t.Errorf("missing area should end quietly:\n%s", r.text())
+	}
+}
+
+// TestUploadFileRegistersReceivedFile pins a successful UPLOADFILE journey:
+// the receive command writes into staging, the file and fallback metadata
+// move into the area, and the upload credit persists.
+func TestUploadFileRegistersReceivedFile(t *testing.T) {
+	env := newMenuEnv(t)
+	env.caller.CurrentFileAreaID = 2
+	env.caller.CurrentFileAreaTag = "UPLOADS"
+
+	receiver := filepath.Join(t.TempDir(), "receive.sh")
+	if err := os.WriteFile(receiver, []byte("#!/bin/sh\nprintf 'received payload' > \"$1/UPLOADED.TXT\"\n"), 0o755); err != nil {
+		t.Fatalf("write receive command: %v", err)
+	}
+	env.e.SetProtocols([]transfer.ProtocolConfig{{
+		Key: "T", Name: "Testmodem", RecvCmd: "/bin/sh", RecvArgs: []string{receiver, "{targetDir}"}, Default: true,
+	}})
+
+	r := env.runCmd("UPLOADFILE", env.caller, "", "\r\r\r\r")
+	if r.err != nil || r.user == nil || r.user.ID != env.caller.ID {
+		t.Fatalf("result = (user %v, err %v), want reloaded caller and no error", r.user, r.err)
+	}
+	if !r.has("Starting Testmodem receive", "UPLOADED.TXT", "Upload complete.", "Added: 1") {
+		t.Errorf("successful upload output missing:\n%s", r.text())
+	}
+	areaPath, err := env.e.FileMgr.GetAreaUploadPath(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(areaPath, "UPLOADED.TXT"))
+	if err != nil || string(got) != "received payload" {
+		t.Errorf("installed file = %q, err %v", got, err)
+	}
+	records := env.e.FileMgr.GetFilesForArea(2)
+	if len(records) != 1 || records[0].Filename != "UPLOADED.TXT" || records[0].Description != "No description" || records[0].Size != int64(len("received payload")) || records[0].UploadedBy != env.caller.Handle {
+		t.Errorf("registered records = %+v", records)
+	}
+	if saved := env.mustDiskUser(env.caller.ID); saved.NumUploads != 1 {
+		t.Errorf("saved NumUploads = %d, want 1", saved.NumUploads)
+	}
+	if matches, _ := filepath.Glob(filepath.Join(areaPath, ".incoming-*")); len(matches) != 0 {
+		t.Errorf("staging directories left behind: %s", strings.Join(matches, ", "))
 	}
 }
 

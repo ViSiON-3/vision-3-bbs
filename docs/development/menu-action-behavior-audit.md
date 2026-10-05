@@ -2,7 +2,7 @@
 
 Source mappings: [`menu-action-coverage.json`](menu-action-coverage.json). One row per distinct shipped `RUN` target; inspect every linked test named by the source mapping before marking a row verified.
 
-**Progress:** 91 targets; 85 verified; 6 open gaps recorded; 0 unreviewed. The linked test counts below are distinct test functions per target and may overlap across targets.
+**Progress:** 91 targets; 91 verified; 0 open gaps; 0 unreviewed. The linked test counts below are distinct test functions per target and may overlap across targets.
 
 | RUN target | Shipped action rows | Linked test functions | Audited outcomes / gaps | Status |
 |---|---|---:|---|---|
@@ -19,10 +19,10 @@ Source mappings: [`menu-action-coverage.json`](menu-action-coverage.json). One r
 | `CFG_PASSWORD` | MAIN[25] + | 2 | Wrong current password and disconnect preserve the old hash; valid change is masked, persisted as a new hash, and verifies only for the new password. | verified |
 | `CHANGEFILECONF` | FILEM[2] C | 6 | Login/config/template guards; accessible conference selection updates file and message conference/area state on disk; quit and save failure preserve prior selection. | verified |
 | `CHANGEMSGCONF` | MSGMENU[1] C | 5 | Lightbar and classic selectors render, accept/reject inputs, and quit without mutation; joining persists both message/file conference state and clears invalid area state; save failure rolls back memory and disk state. | verified |
-| `CHAT` | MAIN[3] C<br>MAIN[24] ! | 1 | The test checks that snoop mode enters teleconference during the join and returns to BBS mode afterward. Gap: no linked test asserts chat input/output, peer delivery, or terminal exit behavior. | gap |
+| `CHAT` | MAIN[3] C<br>MAIN[24] ! | 2 | Teleconference snoop mode enters and restores; the local chat journey asserts message echo/history, room and topic commands, scrollback, and room cleanup on exit. | verified |
 | `CLEAR_BATCH` | FILEM[24] - | 2 | Nonempty queues clear and persist with a count; empty queues report empty and remain unchanged. | verified |
 | `COMPOSEMSG` | MSGMENU[10] P | 9 | Public/private posts assert stored author/recipient/body/privacy and counters; signature/anonymity/real-name rules and abort/access refusals are covered. | verified |
-| `DOWNLOADFILE` | FILEM[7] D | 3 | Valid case-insensitive filenames are added and persisted; blank input cancels and batch-menu add-more works. Gap: no test asserts the response and unchanged batch for an unknown filename. | gap |
+| `DOWNLOADFILE` | FILEM[7] D | 4 | Valid case-insensitive filenames are added and persisted; blank input cancels, batch-menu add-more works, and an unknown name shows not-found feedback before a valid retry leaves only the valid ID persisted. | verified |
 | `EDITFILERECORD` | FILEM[8] E | 10 | Description, rename, move, review, and delete effects are reloaded from disk; invalid/declined/failed operations preserve records/files; CoSysOp gate and audit-screen details checked. | verified |
 | `EDITNEWS` | ADMIN[5] W | 10 | CoSysOp gate; add/edit/delete persist fields and IDs; cancelled/disconnected adds and edits do not save; invalid levels/selections are rejected; Unicode title caps, list/view, and empty-state behavior are asserted. | verified |
 | `FILENEWSCANCONFIG` | FILEM[22] Z | 3 | Toggle/navigation/all/none choices persist; inaccessible-area and disconnect paths do not save unintended tags. | verified |
@@ -35,7 +35,7 @@ Source mappings: [`menu-action-coverage.json`](menu-action-coverage.json). One r
 | `INFOFORMS` | INFORMM[0] I | 9 | Answers persist only on completion; required/refill/min-level rules are asserted; view output and pagination checked; disconnect and refusals avoid partial or unauthorized data. | verified |
 | `INFOFORMVIEW` | INFORMM[1] V | 3 | Invalid numbers, missing response/template, replayed answers, pagination and stop/continue behavior are asserted. | verified |
 | `LASTCALLERS` | MAIN[20] W LC | 2 | Visible recent callers render oldest-to-newest with duration/note and user count; invisible sessions are hidden; numeric argument limits rows, junk uses the default, and disconnect logs off. | verified |
-| `LISTFILES` | FILEM[9] F L | 19 | Classic/lightbar paging, selection, text/archive viewing, persisted tagging, caller/sysop permissions, file edit/delete/move/rename, cancel/failure download paths, upload refusal/cancel, and invalid area guards are asserted. Gap: neither listing mode checks a successful transfer initiated from its own download action. | gap |
+| `LISTFILES` | FILEM[9] F L | 21 | Classic/lightbar paging, selection, text/archive viewing, persisted tagging, caller/sysop permissions, file edit/delete/move/rename, cancel/failure paths, and invalid area guards are asserted. Both listing modes initiate a successful local transfer and persist cleared tags plus user/file download counters. | verified |
 | `LISTFILES_EXTENDED` | FILEM[20] W | 1 | Extended listing displays description/size columns regardless of saved column choices. | verified |
 | `LISTMSGAR` | MSGMENU[0] * | 4 | Lists only the current conference and readable areas; empty-list colors render correctly; pause waits for Enter and reports disconnect. | verified |
 | `LISTMSGS` | MSGMENU[12] L | 7 | Private mail from other users is omitted from lists even when the reader passes area ACS or adopts a recipient's real name; public posts and the user's own private mail remain visible. Empty/no-area/anonymous guards, selection and paging, read-pointer persistence, redraw, deletion, and UTF-8 fields are asserted. | verified |
@@ -84,11 +84,11 @@ Source mappings: [`menu-action-coverage.json`](menu-action-coverage.json). One r
 | `TOGGLEALLOWNEWUSERS` | ADMIN[2] N | 1 | Sysop toggle updates live config, persists `AllowNewUsers` to disk, and reports the new state; logged-out invocation has no effect. | verified |
 | `TYPE_TEXT_FILE` | FILEM[17] T | 3 | Text and archive bytes are displayed raw with end marker; blank input opens nothing; shared paging preserves all lines and rejects oversized files. | verified |
 | `UPDATENEWSCAN` | MSGMENU[9] U | 4 | Mark-all-read/all-new/date and current-conference scope are verified in persisted pointers; blank/invalid/ESC and anonymous paths preserve or refuse changes. | verified |
-| `UPLOADFILE` | FILEM[18] U | 2 | Login/area/ACS gates and no-protocol, protocol-quit, start-prompt-quit, disconnect, staging cleanup, and no-record outcomes are asserted. Gap: no successful receive/record persistence journey is linked. | gap |
+| `UPLOADFILE` | FILEM[18] U | 3 | Login/area/ACS gates, cancellation/disconnect cleanup, and a successful local receive are asserted; the received bytes, file record metadata, uploader credit, and staging cleanup are verified. | verified |
 | `USERCONFIG` | MAIN[7] K | 4 | Autosignature create/delete/truncate/cancel, header selection, and screen-height validation assert rendered feedback and reloaded saved state. | verified |
-| `V3NETACCESSREQUESTS` | V3NETM[3] R | 7 | Managed-area filtering, relative ages, approve/deny payloads, reason forwarding, invalid commands, no-managed-area, parser, and nil-NAL cases are covered. Gap: hub list and approve/deny failures lack assertions. | gap |
+| `V3NETACCESSREQUESTS` | V3NETM[3] R | 9 | Managed-area filtering, relative ages, approve/deny payloads, reason forwarding, invalid commands, list failures, approve/deny failures with retained requests, no-managed-area, parser, and nil-NAL cases are covered. | verified |
 | `V3NETAREAS` | V3NETM[1] A | 5 | Subscribe/unsubscribe persists leaves and local areas; auto-join choice, reload/no-reload failures, NAL errors/empty state, paging/disconnect, and rune-safe row rendering are checked. | verified |
-| `V3NETCOORDINATOR` | V3NETM[4] C | 6 | Non-coordinator gate, proposal listing/approve/reject/mode override, manager reassignment and errors, and hub listing errors are checked. Gap: approve/reject hub failures lack assertions. | gap |
+| `V3NETCOORDINATOR` | V3NETM[4] C | 7 | Non-coordinator gate, proposal listing/approve/reject/mode override, manager reassignment and errors, hub listing errors, and approve/reject failures with retained proposals are checked. | verified |
 | `V3NETPROPOSE` | V3NETM[2] P | 5 | Editable form submission, access-mode cycling, required/malformed field validation, hub errors, wrap navigation, cancel/disconnect, no-network and disabled states are asserted. | verified |
 | `V3NETREGISTRY` | V3NETM[5] N | 2 | Registry entries, descriptions, URLs, counts, and subscription markers render; HTTP failure shows an error screen. | verified |
 | `V3NETSTATUS` | V3NETM[0] S | 2 | Configured node/hub/subscription state renders; disabled service shows an explicit disabled-state screen. | verified |

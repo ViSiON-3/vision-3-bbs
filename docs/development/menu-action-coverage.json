@@ -584,7 +584,8 @@
     "handlerTests": [
       "TestDownloadFileAddMoreFromBatchMenu",
       "TestDownloadFileBlankCancels",
-      "TestDownloadFileTagsNamedFile"
+      "TestDownloadFileTagsNamedFile",
+      "TestDownloadFileUnknownNamePreservesBatch"
     ]
   },
   {
@@ -633,7 +634,9 @@
       "TestListFilesClassicUploadCommand",
       "TestListFilesClassicViewCommand",
       "TestListFilesExtendedShowsAllColumns",
-      "TestListFilesRefusesWithoutArea"
+      "TestListFilesRefusesWithoutArea",
+      "TestFileLightbarSuccessfulDownloadRoutesThroughTransfer",
+      "TestListFilesClassicSuccessfulDownloadRoutesThroughTransfer"
     ]
   },
   {
@@ -742,7 +745,8 @@
     "terminalTest": "TestLocalTerminalRegressionSuite/file_actions_empty_states",
     "handlerTests": [
       "TestUploadFileCancelPaths",
-      "TestUploadFileRefusals"
+      "TestUploadFileRefusals",
+      "TestUploadFileRegistersReceivedFile"
     ]
   },
   {
@@ -997,7 +1001,8 @@
     "coverage": "terminal+handler",
     "terminalTest": "TestLocalTerminalRegressionSuite/main_chat_join_and_quit",
     "handlerTests": [
-      "TestTeleconferenceSetsSnoopMode"
+      "TestTeleconferenceSetsSnoopMode",
+      "TestChatcovLocalSession"
     ]
   },
   {
@@ -1247,7 +1252,8 @@
     "coverage": "handler",
     "terminalTest": "",
     "handlerTests": [
-      "TestTeleconferenceSetsSnoopMode"
+      "TestTeleconferenceSetsSnoopMode",
+      "TestChatcovLocalSession"
     ]
   },
   {
@@ -1923,7 +1929,9 @@
       "TestAccessRequestsWhenNothingManaged",
       "TestParseListCommand",
       "TestV3NetAgoAcceptsHubAndRFC3339Timestamps",
-      "TestV3NetRolesToleratesNilNAL"
+      "TestV3NetRolesToleratesNilNAL",
+      "TestAccessRequestsShowsListFailure",
+      "TestAccessRequestsShowsMutationFailures"
     ]
   },
   {
@@ -1939,7 +1947,8 @@
       "TestCoordinatorPanelApprovesWithAccessModeOverride",
       "TestCoordinatorPanelReassignsAreaManager",
       "TestCoordinatorPanelShowsHubError",
-      "TestV3NetRolesToleratesNilNAL"
+      "TestV3NetRolesToleratesNilNAL",
+      "TestCoordinatorPanelShowsProposalMutationFailures"
     ]
   },
   {

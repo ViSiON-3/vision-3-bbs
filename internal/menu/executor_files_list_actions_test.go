@@ -183,6 +183,24 @@ func TestListFilesClassicDownloadMissingFiles(t *testing.T) {
 	}
 }
 
+// TestListFilesClassicSuccessfulDownloadRoutesThroughTransfer pins the
+// classic lister's confirmed D action through transfer completion and saved
+// download counters.
+func TestListFilesClassicSuccessfulDownloadRoutesThroughTransfer(t *testing.T) {
+	env := classicListEnv(t)
+	id := addPhysicalDownloadRecord(t, env, "CLASSIC.ZIP")
+	setTestDownloadProtocol(t, env, 0)
+
+	r := env.runCmd("LISTFILES", env.caller, "", "1\rD\rY\r\r\rQ\r")
+	if r.err != nil {
+		t.Fatalf("result error = %v", r.err)
+	}
+	if !r.has("Initiating Testmodem transfer", "CLASSIC.ZIP: OK", "Success: 1, Failed: 0.") {
+		t.Errorf("successful classic download output missing:\n%s", r.text())
+	}
+	assertListedDownloadCount(t, env, id)
+}
+
 // TestListFilesClassicViewCommand pins V: an out-of-range or non-numeric
 // number is refused, a text file is shown, and an archive is listed.
 func TestListFilesClassicViewCommand(t *testing.T) {

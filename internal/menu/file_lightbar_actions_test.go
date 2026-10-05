@@ -185,6 +185,39 @@ func TestFileLightbarDownloadProtocolStep(t *testing.T) {
 	}
 }
 
+// TestFileLightbarSuccessfulDownloadRoutesThroughTransfer pins the lightbar
+// d action through confirmation, protocol execution, and saved download
+// counters.
+func TestFileLightbarSuccessfulDownloadRoutesThroughTransfer(t *testing.T) {
+	env := lightbarListEnv(t)
+	id := addPhysicalDownloadRecord(t, env, "LIGHTBAR.ZIP")
+	env.caller.TaggedFileIDs = []uuid.UUID{id}
+	setTestDownloadProtocol(t, env, 0)
+
+	r := env.runCmd("LISTFILES", env.caller, "", "dY\r\r\rq")
+	if r.err != nil {
+		t.Fatalf("result error = %v", r.err)
+	}
+	if !r.has("Initiating Testmodem transfer", "LIGHTBAR.ZIP: OK", "Success: 1, Failed: 0.") {
+		t.Errorf("successful lightbar download output missing:\n%s", r.text())
+	}
+	assertListedDownloadCount(t, env, id)
+}
+
+func assertListedDownloadCount(t *testing.T, env *menuEnv, id uuid.UUID) {
+	t.Helper()
+	if saved := env.mustDiskUser(env.caller.ID); saved.NumDownloads != 1 || len(saved.TaggedFileIDs) != 0 {
+		t.Errorf("saved user downloads=%d tags=%v, want 1 and empty", saved.NumDownloads, saved.TaggedFileIDs)
+	}
+	record, err := env.e.FileMgr.GetFileRecordByID(id)
+	if err != nil {
+		t.Fatalf("GetFileRecordByID: %v", err)
+	}
+	if record.DownloadCount != 1 {
+		t.Errorf("file download count = %d, want 1", record.DownloadCount)
+	}
+}
+
 // TestFileLightbarUploadCancels pins "u": the sysop reaches the upload start
 // prompt and Q there returns to the list with no transfer and no new file.
 func TestFileLightbarUploadCancels(t *testing.T) {

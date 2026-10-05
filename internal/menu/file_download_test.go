@@ -106,6 +106,27 @@ func TestDownloadFileAddMoreFromBatchMenu(t *testing.T) {
 	}
 }
 
+// TestDownloadFileUnknownNamePreservesBatch pins the failed lookup path: the
+// user sees a not-found notice, can retry with a valid name, and only the
+// valid file is persisted in the batch.
+func TestDownloadFileUnknownNamePreservesBatch(t *testing.T) {
+	env := newMenuEnv(t)
+	ids := addDownloadRecords(t, env, "GAME.ZIP")
+	env.sysop.CurrentFileAreaID = 1
+
+	r := env.runCmd("DOWNLOADFILE", env.sysop, "", "MISSING.ZIP\rGAME.ZIP\rX\r")
+	if r.err != nil || r.user != env.sysop {
+		t.Fatalf("result = (user %v, err %v)", r.user, r.err)
+	}
+	if !r.has("MISSING.ZIP", "not found", "GAME.ZIP") {
+		t.Errorf("missing lookup/retry output:\n%s", r.text())
+	}
+	saved := env.mustDiskUser(env.sysop.ID)
+	if len(saved.TaggedFileIDs) != 1 || saved.TaggedFileIDs[0] != ids[0] {
+		t.Errorf("saved tags = %v, want only valid file %v", saved.TaggedFileIDs, ids[0])
+	}
+}
+
 // TestBatchDownloadCancelAtProtocolKeepsBatch pins BATCHDOWNLOAD up to the
 // protocol menu without running a transfer: an unknown protocol key is
 // refused, Q cancels back to the batch menu, and the batch is kept.

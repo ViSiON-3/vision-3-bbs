@@ -17,11 +17,15 @@ import (
 // the screen tests can assert what reached the hub.
 type manageFake struct {
 	fakeV3NetStatus
-	proposals  []protocol.AreaProposal
-	requests   map[string][]protocol.AccessRequest // by area tag
-	calls      []string
-	listErr    error
-	managerErr error
+	proposals          []protocol.AreaProposal
+	requests           map[string][]protocol.AccessRequest // by area tag
+	calls              []string
+	listErr            error
+	managerErr         error
+	approveProposalErr error
+	rejectProposalErr  error
+	approveAccessErr   error
+	denyAccessErr      error
 }
 
 func (f *manageFake) ListProposals(context.Context, string) ([]protocol.AreaProposal, error) {
@@ -33,6 +37,9 @@ func (f *manageFake) ApproveProposal(_ context.Context, net, id string, req prot
 		call += " " + req.AccessMode
 	}
 	f.calls = append(f.calls, call)
+	if f.approveProposalErr != nil {
+		return f.approveProposalErr
+	}
 	f.proposals = nil
 	return nil
 }
@@ -50,6 +57,9 @@ func (f *manageFake) SetAreaManager(_ context.Context, net, tag, nodeID string) 
 }
 func (f *manageFake) RejectProposal(_ context.Context, net, id string, req protocol.ProposalRejectRequest) error {
 	f.calls = append(f.calls, "reject-proposal "+net+" "+id+" "+req.Reason)
+	if f.rejectProposalErr != nil {
+		return f.rejectProposalErr
+	}
 	f.proposals = nil
 	return nil
 }
@@ -58,11 +68,17 @@ func (f *manageFake) ListAccessRequests(_ context.Context, _, tag string) ([]pro
 }
 func (f *manageFake) ApproveAccess(_ context.Context, net, tag string, ids []string) error {
 	f.calls = append(f.calls, "approve-access "+net+" "+tag+" "+strings.Join(ids, ","))
+	if f.approveAccessErr != nil {
+		return f.approveAccessErr
+	}
 	delete(f.requests, tag)
 	return nil
 }
 func (f *manageFake) DenyAccess(_ context.Context, net, tag string, ids []string, reason string) error {
 	f.calls = append(f.calls, "deny-access "+net+" "+tag+" "+strings.Join(ids, ",")+" "+reason)
+	if f.denyAccessErr != nil {
+		return f.denyAccessErr
+	}
 	delete(f.requests, tag)
 	return nil
 }
@@ -156,6 +172,45 @@ func TestAccessRequestsWhenNothingManaged(t *testing.T) {
 	}
 }
 
+func TestAccessRequestsShowsListFailure(t *testing.T) {
+	fake := newManageFake(false)
+	fake.listErr = errors.New("request list unavailable")
+	out := runManageScreen(t, fake, "\r", runV3NetAccessRequests)
+	if !strings.Contains(out, "testnet/test.mine: request list unavailable") {
+		t.Errorf("expected area list error on screen, got %q", out)
+	}
+	if len(fake.calls) != 0 {
+		t.Errorf("list failure must not mutate hub state, calls=%v", fake.calls)
+	}
+}
+
+func TestAccessRequestsShowsMutationFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name, input, call string
+		setErr            func(*manageFake)
+	}{
+		{"approve", "A 1\rq\r", "approve-access testnet test.mine AAAA1111", func(f *manageFake) { f.approveAccessErr = errors.New("approval rejected") }},
+		{"deny", "D 1\rspam\rq\r", "deny-access testnet test.mine AAAA1111 spam", func(f *manageFake) { f.denyAccessErr = errors.New("denial rejected") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := newManageFake(false)
+			fake.requests["test.mine"] = []protocol.AccessRequest{{NodeID: "AAAA1111", BBSName: "Sector 7"}}
+			tc.setErr(fake)
+			out := runManageScreen(t, fake, tc.input, runV3NetAccessRequests)
+			plain := ansi.StripAnsi(out)
+			if !strings.Contains(plain, "rejected") || !strings.Contains(plain, "Sector 7") {
+				t.Errorf("failure status/request missing, got %q", out)
+			}
+			if len(fake.calls) != 1 || fake.calls[0] != tc.call {
+				t.Errorf("hub calls=%v, want [%s]", fake.calls, tc.call)
+			}
+			if got := len(fake.requests["test.mine"]); got != 1 {
+				t.Errorf("failed mutation removed request; remaining=%d", got)
+			}
+		})
+	}
+}
+
 func TestCoordinatorPanelRefusesNonCoordinator(t *testing.T) {
 	fake := newManageFake(false)
 	out := runManageScreen(t, fake, "\r", runV3NetCoordinator)
@@ -241,6 +296,33 @@ func TestCoordinatorPanelShowsHubError(t *testing.T) {
 	out := runManageScreen(t, fake, "q\r", runV3NetCoordinator)
 	if !strings.Contains(out, "coordinator only") {
 		t.Errorf("expected the hub error on screen, got %q", out)
+	}
+}
+
+func TestCoordinatorPanelShowsProposalMutationFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name, input, call string
+		setErr            func(*manageFake)
+	}{
+		{"approve", "p\ra1\r\rq\rq\r", "approve-proposal testnet p1", func(f *manageFake) { f.approveProposalErr = errors.New("approval rejected") }},
+		{"reject", "p\rR 1\rnope\rq\rq\r", "reject-proposal testnet p1 nope", func(f *manageFake) { f.rejectProposalErr = errors.New("rejection rejected") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := newManageFake(true)
+			fake.proposals = []protocol.AreaProposal{{ID: "p1", Tag: "test.chat", Name: "Chat", Status: "pending"}}
+			tc.setErr(fake)
+			out := runManageScreen(t, fake, tc.input, runV3NetCoordinator)
+			plain := ansi.StripAnsi(out)
+			if !strings.Contains(plain, "rejected") || !strings.Contains(plain, "test.chat") {
+				t.Errorf("failure status/proposal missing, got %q", out)
+			}
+			if len(fake.calls) != 1 || fake.calls[0] != tc.call {
+				t.Errorf("hub calls=%v, want [%s]", fake.calls, tc.call)
+			}
+			if len(fake.proposals) != 1 {
+				t.Errorf("failed mutation removed proposal; remaining=%d", len(fake.proposals))
+			}
+		})
 	}
 }
 
