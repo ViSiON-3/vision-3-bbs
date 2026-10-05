@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 )
 
 // V3NetConfig holds V3Net networking configuration.
@@ -87,7 +89,7 @@ func (c *V3NetHubConfig) ListenAddr() string {
 	if port == 0 {
 		port = 8765
 	}
-	return fmt.Sprintf("%s:%d", c.Host, port)
+	return util.ListenAddress(c.Host, port)
 }
 
 // V3NetHubNetwork defines a network hosted by this hub.
