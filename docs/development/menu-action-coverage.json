@@ -375,6 +375,7 @@
       "TestPrivateMailRoundTripByHandle",
       "TestPrivateReplyToRealNameResolvesToHandle",
       "TestPrivateReplyToUnidentifiedSenderRefused",
+      "TestPrivateReplyHandleAccountBeatsAnonymousName",
       "TestReadPrivateMailNoneForYou",
       "TestReadPrivateMailReplyStaysPrivate",
       "TestReadPrivateMailShowsOnlyOwnMail",
@@ -391,7 +392,8 @@
     "terminalTest": "TestLocalTerminalRegressionSuite/private_mail_menu",
     "terminalOutput": "No messages in this area",
     "handlerTests": [
-      "TestListPrivateMailShowsOnlyOwnMail"
+      "TestListPrivateMailShowsOnlyOwnMail",
+      "TestWithPrivacyNilUserSeesNoPrivateMail"
     ]
   },
   {
@@ -522,7 +524,8 @@
     "coverage": "handler",
     "terminalTest": "",
     "handlerTests": [
-      "TestNextPrevFileAreaWrapsAndSaves"
+      "TestNextPrevFileAreaWrapsAndSaves",
+      "TestNextFileAreaSkipsUnlistableAreas"
     ]
   },
   {
@@ -533,7 +536,8 @@
     "coverage": "handler",
     "terminalTest": "",
     "handlerTests": [
-      "TestNextPrevFileAreaWrapsAndSaves"
+      "TestNextPrevFileAreaWrapsAndSaves",
+      "TestNextFileAreaSkipsUnlistableAreas"
     ]
   },
   {
@@ -912,7 +916,11 @@
       "TestAuthenticate_AbortPrompts",
       "TestAuthenticate_AlreadyLoggedIn",
       "TestAuthenticate_BlankUsernameAndDisconnect",
-      "TestAuthenticate_NewStartsSignupAndContinues"
+      "TestAuthenticate_NewStartsSignupAndContinues",
+      "TestAuthenticate_CorrectPasswordLogsIn",
+      "TestAuthenticate_WrongPasswordRefusedAndCounted",
+      "TestAuthenticate_LockedIPRefusedEvenWithRightPassword",
+      "TestAuthenticate_BelowLogonLevelDenied"
     ]
   },
   {
@@ -1378,6 +1386,7 @@
       "TestNewscanConferenceScope",
       "TestNewscanNothingTagged",
       "TestNewscanTaggedAreasReadSkipQuit",
+      "TestNewscanHidesOthersPrivateMail",
       "TestNewscanUpdatePointersOffRestores"
     ]
   },
@@ -1452,8 +1461,12 @@
       "TestMessageReaderSysopDeleteLastMessageEndsReader",
       "TestMessageReaderThread",
       "TestReadMsgsGuards",
+      "TestReadMsgsHidesOthersPrivateMail",
+      "TestReadMsgsShowsPrivateMailToItsParties",
       "TestReadMsgsNothingNewAsksForMessageNumber",
       "TestReadMsgsPicksHeaderStyleFirst",
+      "TestAdoptingARealNameGrantsNoMail",
+      "TestWithPrivacyNilUserSeesNoPrivateMail",
       "TestReplyThenNextShowsNextMessage"
     ]
   },
@@ -1467,8 +1480,11 @@
     "handlerTests": [
       "TestListMsgsDeleteLastMessageEmptiesList",
       "TestListMsgsGuards",
+      "TestListMsgsHidesOthersPrivateMail",
       "TestListMsgsReadMarksAndRedraws",
-      "TestMessageListUTF8FieldsKeepAccents"
+      "TestMessageListUTF8FieldsKeepAccents",
+      "TestAdoptingARealNameGrantsNoMail",
+      "TestWithPrivacyNilUserSeesNoPrivateMail"
     ]
   },
   {
