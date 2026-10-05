@@ -2,17 +2,20 @@ package scripting
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
 // globalDataLocks provides per-file-path mutexes so concurrent sessions writing
-// the same script's data file do not overwrite each other.
+// the same script's data file serialize each individual operation.
 var globalDataLocks sync.Map // map[string]*sync.Mutex
 
 func dataFileLock(path string) *sync.Mutex {
@@ -44,8 +47,11 @@ func registerData(v3 *goja.Object, eng *Engine) {
 		key := call.Arguments[0].String()
 		mu := dataFileLock(store.path)
 		mu.Lock()
-		data := store.loadFile()
+		data, err := store.loadFile()
 		mu.Unlock()
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
 		val, ok := data[key]
 		if !ok {
 			return goja.Undefined()
@@ -63,7 +69,10 @@ func registerData(v3 *goja.Object, eng *Engine) {
 		mu := dataFileLock(store.path)
 		mu.Lock()
 		defer mu.Unlock()
-		data := store.loadFile()
+		data, err := store.loadFile()
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
 		data[key] = value
 		if err := store.saveFile(data); err != nil {
 			panic(vm.NewGoError(err))
@@ -80,7 +89,10 @@ func registerData(v3 *goja.Object, eng *Engine) {
 		mu := dataFileLock(store.path)
 		mu.Lock()
 		defer mu.Unlock()
-		data := store.loadFile()
+		data, err := store.loadFile()
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
 		delete(data, key)
 		if err := store.saveFile(data); err != nil {
 			panic(vm.NewGoError(err))
@@ -92,8 +104,11 @@ func registerData(v3 *goja.Object, eng *Engine) {
 	jsutil.Set(obj, "keys", func(call goja.FunctionCall) goja.Value {
 		mu := dataFileLock(store.path)
 		mu.Lock()
-		data := store.loadFile()
+		data, err := store.loadFile()
 		mu.Unlock()
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
 		arr := vm.NewArray()
 		i := 0
 		for k := range data {
@@ -107,8 +122,11 @@ func registerData(v3 *goja.Object, eng *Engine) {
 	jsutil.Set(obj, "getAll", func(call goja.FunctionCall) goja.Value {
 		mu := dataFileLock(store.path)
 		mu.Lock()
-		data := store.loadFile()
+		data, err := store.loadFile()
 		mu.Unlock()
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
 		return vm.ToValue(data)
 	})
 
@@ -143,14 +161,25 @@ func resolveDataDir(workingDir string) string {
 }
 
 // loadFile reads the data file without acquiring the mutex (caller must hold it).
-func (ds *dataStore) loadFile() map[string]any {
+func (ds *dataStore) loadFile() (map[string]any, error) {
 	data := make(map[string]any)
 	raw, err := os.ReadFile(ds.path)
-	if err != nil {
-		return data
+	if errors.Is(err, os.ErrNotExist) {
+		// A dangling symlink is an unreadable store, not a missing store.
+		if _, statErr := os.Lstat(ds.path); errors.Is(statErr, os.ErrNotExist) {
+			return data, nil
+		}
 	}
-	json.Unmarshal(raw, &data) //nolint:errcheck
-	return data
+	if err != nil {
+		return nil, fmt.Errorf("read script data %s: %w", ds.path, err)
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, fmt.Errorf("decode script data %s: %w", ds.path, err)
+	}
+	if data == nil {
+		return nil, fmt.Errorf("decode script data %s: expected JSON object, got null", ds.path)
+	}
+	return data, nil
 }
 
 // saveFile writes the data file without acquiring the mutex (caller must hold it).
@@ -162,9 +191,69 @@ func (ds *dataStore) saveFile(data map[string]any) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(ds.path, raw, 0o644)
+	info, err := os.Lstat(ds.path)
+	if err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("cannot safely replace script data at a symbolic link: %s", ds.path)
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect script data destination %s: %w", ds.path, err)
+	}
+	// A data-free probe discovers the creation mode after the process umask.
+	// It also provides the inherited ACL a replacement would receive.
+	probe, err := dataModeProbe(ds.path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = probe.Close(); _ = os.Remove(probe.Name()) }()
+	probeInfo, err := probe.Stat()
+	if err != nil {
+		return fmt.Errorf("stat script data mode probe: %w", err)
+	}
+	perm := probeInfo.Mode().Perm()
+	// Opening without truncation preserves the old write-access check.
+	f, err := os.OpenFile(ds.path, os.O_WRONLY, 0)
+	if err == nil {
+		info, statErr := f.Stat()
+		if statErr == nil {
+			statErr = checkDataReplacementAccess(f, probe)
+		}
+		closeErr := f.Close()
+		if statErr != nil {
+			return fmt.Errorf("prepare script data replacement %s: %w", ds.path, statErr)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("close script data %s: %w", ds.path, closeErr)
+		}
+		perm = info.Mode().Perm()
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("open script data for writing %s: %w", ds.path, err)
+	}
+	return atomicfile.WriteFile(ds.path, raw, perm)
 }
 
 func intToDataStr(i int) string {
 	return itoa(i)
+}
+
+// dataModeProbe creates an empty file with the same requested mode as the
+// former os.WriteFile path, without changing the process-wide umask.
+func dataModeProbe(path string) (*os.File, error) {
+	probe, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".mode-*")
+	if err != nil {
+		return nil, fmt.Errorf("create temp file for script data mode: %w", err)
+	}
+	name := probe.Name()
+	if err := probe.Close(); err != nil {
+		_ = os.Remove(name)
+		return nil, err
+	}
+	if err := os.Remove(name); err != nil {
+		return nil, err
+	}
+	// O_EXCL prevents following or modifying any file created in the interval.
+	probe, err = os.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("create script data mode probe: %w", err)
+	}
+	return probe, nil
 }

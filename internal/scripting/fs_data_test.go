@@ -137,27 +137,85 @@ func TestDataStore(t *testing.T) {
 	}
 }
 
-// TestDataStoreCorruptAndUnwritable: a corrupt file reads as empty, and a
-// failed save throws to JS.
-func TestDataStoreCorruptAndUnwritable(t *testing.T) {
-	h := newHarness(t, harnessOpts{})
-	h.writeFile("scripts/data/test.json", "{not json")
-	if got := h.eval(`v3.data.keys().length`).ToInteger(); got != 0 {
-		t.Errorf("corrupt store has %d keys, want 0", got)
+// TestDataStoreInvalidOrUnreadable rejects damaged stores for every operation.
+func TestDataStoreInvalidOrUnreadable(t *testing.T) {
+	for _, raw := range []string{"{not json", `{"kept":1, "broken":}`, "null", "[]", "42", "", `{"kept":1} {}`} {
+		t.Run(raw, func(t *testing.T) {
+			h := newHarness(t, harnessOpts{})
+			h.writeFile("scripts/data/test.json", raw)
+			for _, expr := range []string{`v3.data.get("k")`, `v3.data.keys()`, `v3.data.getAll()`, `v3.data.set("k", 1)`, `v3.data.delete("k")`} {
+				if got := h.evalErr(expr); !strings.Contains(got, "decode script data") {
+					t.Errorf("%s: %s", expr, got)
+				}
+				got, err := os.ReadFile(filepath.Join(h.dataDir, "test.json"))
+				if err != nil || string(got) != raw {
+					t.Fatalf("store changed: %q, %v", got, err)
+				}
+			}
+			// A caught error must release the lock and allow a subsequent operation.
+			h.writeFile("scripts/data/test.json", `{"kept":1}`)
+			h.mustRun(`v3.data.set("next", 2)`)
+		})
 	}
-	// Replace the data dir with a file so MkdirAll fails.
-	if err := os.RemoveAll(h.dataDir); err != nil {
+	h := newHarness(t, harnessOpts{})
+	if err := os.MkdirAll(filepath.Join(h.dataDir, "test.json"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	h.writeFile("scripts/data", "blocker")
-	want := "not a directory"
-	if runtime.GOOS == "windows" {
-		want = "cannot find the path specified"
-	}
-	for _, expr := range []string{`v3.data.set("k", 1)`, `v3.data.delete("k")`} {
-		if got := h.evalErr(expr); !strings.Contains(got, want) {
-			t.Errorf("%s threw %q, want a save error", expr, got)
+	for _, expr := range []string{`v3.data.get("k")`, `v3.data.keys()`, `v3.data.getAll()`, `v3.data.set("k", 1)`, `v3.data.delete("k")`} {
+		if got := h.evalErr(expr); !strings.Contains(got, "read script data") {
+			t.Errorf("%s: %s", expr, got)
 		}
+	}
+}
+
+// TestDataStoreMissing retains first-use and missing-key behavior.
+func TestDataStoreMissing(t *testing.T) {
+	h := newHarness(t, harnessOpts{})
+	h.mustRun(`if (v3.data.get("absent") !== undefined || v3.data.keys().length !== 0 || Object.keys(v3.data.getAll()).length !== 0) throw Error("missing store"); v3.data.delete("absent"); v3.data.set("k", 1)`)
+	if got := h.eval(`v3.data.get("k")`).ToInteger(); got != 1 {
+		t.Fatal(got)
+	}
+}
+
+// TestDataStoreFailedEncodingPreservesStore exercises failure through JavaScript.
+func TestDataStoreFailedEncodingPreservesStore(t *testing.T) {
+	h := newHarness(t, harnessOpts{})
+	h.mustRun(`v3.data.set("kept", 1)`)
+	path := filepath.Join(h.dataDir, "test.json")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.mustRun(`try { v3.data.set("bad", NaN); throw Error("save succeeded"); } catch (e) { if (!String(e).includes("unsupported value")) throw e; }`)
+	after, err := os.ReadFile(path)
+	if err != nil || string(before) != string(after) {
+		t.Fatalf("store changed: %q, %v", after, err)
+	}
+	h.mustRun(`v3.data.set("next", 2)`)
+}
+
+// TestDataStoreInvalidDestinationPreservesContents rejects a non-file target.
+func TestDataStoreInvalidDestinationPreservesContents(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "store.json")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(path, "kept")
+	if err := os.WriteFile(sentinel, []byte("valid prior contents"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ds := dataStore{path: path}
+	if err := ds.saveFile(map[string]any{"k": 1}); err == nil {
+		t.Fatal("replacement unexpectedly succeeded")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("temporary files remain: %v, %v", entries, err)
+	}
+	got, err := os.ReadFile(sentinel)
+	if err != nil || string(got) != "valid prior contents" {
+		t.Fatalf("destination changed: %q, %v", got, err)
 	}
 }
 
@@ -192,5 +250,86 @@ func TestDataFromSubdirWorkingDir(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(h.dataDir, "f.txt")); err != nil {
 		t.Errorf("fs sandbox not in scripts/data: %v", err)
+	}
+}
+
+// TestDataStoreUnwritableDirectoryPreservesStore forces temp creation to fail
+// with a valid, readable destination that a direct WriteFile could truncate.
+func TestDataStoreUnwritableDirectoryPreservesStore(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permission bits are not enforced on Windows")
+	}
+	h := newHarness(t, harnessOpts{})
+	h.mustRun(`v3.data.set("kept", 1)`)
+	path := filepath.Join(h.dataDir, "test.json")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(h.dataDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(h.dataDir, 0o755) })
+	probe, err := os.CreateTemp(h.dataDir, "probe")
+	if err == nil {
+		_ = probe.Close()
+		_ = os.Remove(probe.Name())
+		t.Skip("process can bypass directory permissions")
+	}
+	for _, expr := range []string{`v3.data.set("k", 2)`, `v3.data.delete("kept")`} {
+		if got := h.evalErr(expr); !strings.Contains(got, "create temp file") {
+			t.Errorf("%s: %s", expr, got)
+		}
+		after, err := os.ReadFile(path)
+		if err != nil || string(before) != string(after) {
+			t.Fatalf("store changed: %q, %v", after, err)
+		}
+	}
+	entries, err := os.ReadDir(h.dataDir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("temporary files remain: %v, %v", entries, err)
+	}
+}
+
+// TestDataStorePreservesPermissions covers both mutation operations on a
+// restricted store and verifies that an OS read-only rejection is preserved.
+func TestDataStorePreservesPermissions(t *testing.T) {
+	h := newHarness(t, harnessOpts{})
+	h.mustRun(`v3.data.set("kept", 1)`)
+	path := filepath.Join(h.dataDir, "test.json")
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+	for _, expr := range []string{`v3.data.set("next", 2)`, `v3.data.delete("next")`} {
+		h.mustRun(expr)
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
+			t.Fatalf("mode = %o, want 600", info.Mode().Perm())
+		}
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	probe, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err == nil {
+		_ = probe.Close()
+		t.Skip("process can bypass read-only file protection")
+	}
+	for _, expr := range []string{`v3.data.set("k", 2)`, `v3.data.delete("kept")`} {
+		if got := h.evalErr(expr); !strings.Contains(got, "open script data for writing") {
+			t.Errorf("%s: %s", expr, got)
+		}
+		after, err := os.ReadFile(path)
+		if err != nil || string(after) != string(before) {
+			t.Fatalf("read-only store changed: %q, %v", after, err)
+		}
 	}
 }
