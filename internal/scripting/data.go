@@ -2,17 +2,20 @@ package scripting
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
 )
 
 // globalDataLocks provides per-file-path mutexes so concurrent sessions writing
-// the same script's data file do not overwrite each other.
+// the same script's data file serialize each individual operation.
 var globalDataLocks sync.Map // map[string]*sync.Mutex
 
 func dataFileLock(path string) *sync.Mutex {
@@ -44,8 +47,11 @@ func registerData(v3 *goja.Object, eng *Engine) {
 		key := call.Arguments[0].String()
 		mu := dataFileLock(store.path)
 		mu.Lock()
-		data := store.loadFile()
+		data, err := store.loadFile()
 		mu.Unlock()
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
 		val, ok := data[key]
 		if !ok {
 			return goja.Undefined()
@@ -63,7 +69,10 @@ func registerData(v3 *goja.Object, eng *Engine) {
 		mu := dataFileLock(store.path)
 		mu.Lock()
 		defer mu.Unlock()
-		data := store.loadFile()
+		data, err := store.loadFile()
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
 		data[key] = value
 		if err := store.saveFile(data); err != nil {
 			panic(vm.NewGoError(err))
@@ -80,7 +89,10 @@ func registerData(v3 *goja.Object, eng *Engine) {
 		mu := dataFileLock(store.path)
 		mu.Lock()
 		defer mu.Unlock()
-		data := store.loadFile()
+		data, err := store.loadFile()
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
 		delete(data, key)
 		if err := store.saveFile(data); err != nil {
 			panic(vm.NewGoError(err))
@@ -92,8 +104,11 @@ func registerData(v3 *goja.Object, eng *Engine) {
 	jsutil.Set(obj, "keys", func(call goja.FunctionCall) goja.Value {
 		mu := dataFileLock(store.path)
 		mu.Lock()
-		data := store.loadFile()
+		data, err := store.loadFile()
 		mu.Unlock()
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
 		arr := vm.NewArray()
 		i := 0
 		for k := range data {
@@ -107,8 +122,11 @@ func registerData(v3 *goja.Object, eng *Engine) {
 	jsutil.Set(obj, "getAll", func(call goja.FunctionCall) goja.Value {
 		mu := dataFileLock(store.path)
 		mu.Lock()
-		data := store.loadFile()
+		data, err := store.loadFile()
 		mu.Unlock()
+		if err != nil {
+			panic(vm.NewGoError(err))
+		}
 		return vm.ToValue(data)
 	})
 
@@ -143,14 +161,22 @@ func resolveDataDir(workingDir string) string {
 }
 
 // loadFile reads the data file without acquiring the mutex (caller must hold it).
-func (ds *dataStore) loadFile() map[string]any {
+func (ds *dataStore) loadFile() (map[string]any, error) {
 	data := make(map[string]any)
 	raw, err := os.ReadFile(ds.path)
-	if err != nil {
-		return data
+	if errors.Is(err, os.ErrNotExist) {
+		return data, nil
 	}
-	json.Unmarshal(raw, &data) //nolint:errcheck
-	return data
+	if err != nil {
+		return nil, fmt.Errorf("read script data %s: %w", ds.path, err)
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, fmt.Errorf("decode script data %s: %w", ds.path, err)
+	}
+	if data == nil {
+		return nil, fmt.Errorf("decode script data %s: expected JSON object, got null", ds.path)
+	}
+	return data, nil
 }
 
 // saveFile writes the data file without acquiring the mutex (caller must hold it).
@@ -162,7 +188,7 @@ func (ds *dataStore) saveFile(data map[string]any) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(ds.path, raw, 0o644)
+	return atomicfile.WriteFile(ds.path, raw, 0o644)
 }
 
 func intToDataStr(i int) string {
