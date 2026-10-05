@@ -97,6 +97,10 @@ jobs:
       - name: go test
         if: matrix.os != 'ubuntu-latest'
         run: go test ./...
+      - name: Native script-store ACL regression
+        run: go test -v ./internal/scripting -run '^TestDataStoreCustomizedACLRejectsUpdates$' -count=1
+        env:
+          VISION_REQUIRE_DATA_ACL: "1"
       # Same run on Linux, with a coverage profile. The floor is a ratchet on
       # internal/ only; see scripts/coverage-check.sh for why and how to raise it.
       - name: go test (coverage)
@@ -120,6 +124,22 @@ jobs:
             (cd "$m" && go vet ./... && go test ./...) || exit 1
             echo "::endgroup::"
           done
+
+  # Script-store replacement inspects native ACLs on every released OS.
+  # Linux and Windows are covered above; macOS needs its own native run.
+  scripting-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Script storage vet and race tests
+        run: |
+          go vet ./internal/scripting ./internal/atomicfile
+          go test -race -v ./internal/scripting ./internal/atomicfile
 
   # The Docker image went unbuildable for ~6 months: go.mod moved to go 1.25.0
   # (a78bfce) while the Dockerfile stayed on golang:1.24-alpine, and the official

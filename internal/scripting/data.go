@@ -188,15 +188,28 @@ func (ds *dataStore) saveFile(data map[string]any) error {
 	if err != nil {
 		return err
 	}
-	// Opening without truncation preserves the old write-access check, including
-	// read-only files and ACLs, before replacing the directory entry.
-	perm := os.FileMode(0o644)
+	// A data-free probe discovers the creation mode after the process umask.
+	// It also provides the inherited ACL a replacement would receive.
+	probe, err := dataModeProbe(ds.path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = probe.Close(); _ = os.Remove(probe.Name()) }()
+	probeInfo, err := probe.Stat()
+	if err != nil {
+		return fmt.Errorf("stat script data mode probe: %w", err)
+	}
+	perm := probeInfo.Mode().Perm()
+	// Opening without truncation preserves the old write-access check.
 	f, err := os.OpenFile(ds.path, os.O_WRONLY, 0)
 	if err == nil {
 		info, statErr := f.Stat()
+		if statErr == nil {
+			statErr = checkDataReplacementAccess(f, probe)
+		}
 		closeErr := f.Close()
 		if statErr != nil {
-			return fmt.Errorf("stat script data %s: %w", ds.path, statErr)
+			return fmt.Errorf("prepare script data replacement %s: %w", ds.path, statErr)
 		}
 		if closeErr != nil {
 			return fmt.Errorf("close script data %s: %w", ds.path, closeErr)
@@ -210,4 +223,27 @@ func (ds *dataStore) saveFile(data map[string]any) error {
 
 func intToDataStr(i int) string {
 	return itoa(i)
+}
+
+// dataModeProbe creates an empty file with the same requested mode as the
+// former os.WriteFile path, without changing the process-wide umask.
+func dataModeProbe(path string) (*os.File, error) {
+	probe, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".mode-*")
+	if err != nil {
+		return nil, fmt.Errorf("create temp file for script data mode: %w", err)
+	}
+	name := probe.Name()
+	if err := probe.Close(); err != nil {
+		_ = os.Remove(name)
+		return nil, err
+	}
+	if err := os.Remove(name); err != nil {
+		return nil, err
+	}
+	// O_EXCL prevents following or modifying any file created in the interval.
+	probe, err = os.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("create script data mode probe: %w", err)
+	}
+	return probe, nil
 }
