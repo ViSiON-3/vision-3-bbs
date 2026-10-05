@@ -449,3 +449,40 @@ func TestDisplayTextWithPaging_ShowsEveryLineAndPagesCorrectly(t *testing.T) {
 		t.Errorf("end-of-file marker missing:\n%q", out)
 	}
 }
+
+func TestViewMisnamedArchive(t *testing.T) {
+	for _, byRecord := range []bool{false, true} {
+		t.Run(fmt.Sprint(byRecord), func(t *testing.T) {
+			env := newMenuEnv(t)
+			addFileWithContent(t, env, 1, "NODELIST.Z75", zipBytes(t, map[string]string{"NODELIST.275": "hello"}))
+			env.caller.CurrentFileAreaID = 1
+			fn := runViewFile
+			input := "NODELIST.Z75\rQ\r"
+			if byRecord {
+				input = "Q\r"
+				fn = func(c *cmdCtx, _ string) (*user.User, string, error) {
+					rec, err := findFileInArea(c.e.FileMgr, 1, "NODELIST.Z75")
+					if err != nil {
+						return nil, "", err
+					}
+					viewFileByRecord(c.e, c.s, c.terminal, rec, c.outputMode, 80, 24, nil)
+					return c.currentUser, "", nil
+				}
+			}
+			r := env.run(fn, env.caller, "", input)
+			if r.err != nil || !r.has("ZipLab", "NODELIST.275") || r.has("Viewing:") {
+				t.Fatalf("misnamed ZIP: err=%v\n%s", r.err, r.text())
+			}
+		})
+	}
+}
+
+func TestViewCorruptMisnamedArchive(t *testing.T) {
+	env := newMenuEnv(t)
+	addFileWithContent(t, env, 1, "BROKEN.Z75", []byte("PK\x03\x04corrupt"))
+	env.caller.CurrentFileAreaID = 1
+	r := env.run(runViewFile, env.caller, "", "BROKEN.Z75\r\r")
+	if r.err != nil || !r.has("Error reading archive") || r.has("Viewing:") {
+		t.Fatalf("corrupt ZIP: err=%v\n%s", r.err, r.text())
+	}
+}
