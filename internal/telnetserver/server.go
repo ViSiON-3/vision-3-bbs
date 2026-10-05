@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 )
 
 // SessionHandler is called when a new telnet session is established.
@@ -42,7 +44,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 // ListenAndServe starts listening for telnet connections and blocks.
 func (s *Server) ListenAndServe() error {
-	addr := fmt.Sprintf("%s:%d", s.config.Host, s.config.Port)
+	addr := util.ListenAddress(s.config.Host, s.config.Port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", addr, err)

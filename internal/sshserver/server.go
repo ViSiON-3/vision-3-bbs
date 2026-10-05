@@ -19,6 +19,7 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
+	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 )
 
 // ErrReadInterrupted is returned by BBSSession.Read when a read interrupt fires.
@@ -53,7 +54,7 @@ type Server struct {
 
 // NewServer creates and configures a new SSH server.
 func NewServer(cfg Config) (*Server, error) {
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	addr := util.ListenAddress(cfg.Host, cfg.Port)
 
 	// Read host key
 	keyBytes, err := os.ReadFile(cfg.HostKeyPath)
