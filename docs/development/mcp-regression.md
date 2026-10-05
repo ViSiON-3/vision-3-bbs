@@ -94,7 +94,8 @@ GitHub Actions runs these live journeys in a separate `terminal-regression`
 job. It provisions a fresh board under the runner's temporary directory,
 binds its listeners to loopback, connects with the seeded disposable sysop,
 and stops the server even when the test fails. This job runs on pull requests
-and pushes to `main`; it does not need credentials for a shared board.
+and pushes to `main`, and can be run manually from a feature branch; it does
+not need credentials for a shared board.
 
 `TestLocalRejectedPasswordRegression` is opt-in because an incorrect password
 increments the BBS failed-login counter and repeated runs can trigger the
