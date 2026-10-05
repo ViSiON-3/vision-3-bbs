@@ -99,8 +99,9 @@ func (fm *FileManager) GetAreaUploadPath(areaID int) (string, error) {
 	return fullPath, nil
 }
 
-// IsSupportedArchive detects an archive from the file at path using the manager's
-// configured archivers directory. Content signatures take priority over suffixes.
+// IsSupportedArchive reports whether the file at path can be listed by the
+// ZIP-only View. Detection uses the manager's configured archivers directory,
+// with content signatures taking priority over suffixes.
 // Detection errors return false; the viewer reports file-open errors as usual.
 func (fm *FileManager) IsSupportedArchive(path string) bool {
 	arcCfg, err := archiver.LoadConfig(filepath.Dir(fm.configPath))
@@ -108,10 +109,10 @@ func (fm *FileManager) IsSupportedArchive(path string) bool {
 		slog.Warn("failed to load archivers config, falling back to ZIP defaults", "error", err)
 		arcCfg = archiver.Config{Archivers: archiver.DefaultConfig().Archivers[:1]}
 	}
-	_, ok, err := arcCfg.DetectFile(path)
+	a, ok, err := arcCfg.DetectFile(path)
 	if err != nil {
 		slog.Warn("failed to detect archive", "path", path, "error", err)
 		return false
 	}
-	return ok
+	return ok && strings.EqualFold(a.ID, "zip")
 }
