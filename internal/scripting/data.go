@@ -188,7 +188,24 @@ func (ds *dataStore) saveFile(data map[string]any) error {
 	if err != nil {
 		return err
 	}
-	return atomicfile.WriteFile(ds.path, raw, 0o644)
+	// Opening without truncation preserves the old write-access check, including
+	// read-only files and ACLs, before replacing the directory entry.
+	perm := os.FileMode(0o644)
+	f, err := os.OpenFile(ds.path, os.O_WRONLY, 0)
+	if err == nil {
+		info, statErr := f.Stat()
+		closeErr := f.Close()
+		if statErr != nil {
+			return fmt.Errorf("stat script data %s: %w", ds.path, statErr)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("close script data %s: %w", ds.path, closeErr)
+		}
+		perm = info.Mode().Perm()
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("open script data for writing %s: %w", ds.path, err)
+	}
+	return atomicfile.WriteFile(ds.path, raw, perm)
 }
 
 func intToDataStr(i int) string {

@@ -194,8 +194,8 @@ func TestDataStoreFailedEncodingPreservesStore(t *testing.T) {
 	h.mustRun(`v3.data.set("next", 2)`)
 }
 
-// TestDataStoreFailedReplacementCleansTemp exercises an actual rename failure.
-func TestDataStoreFailedReplacementCleansTemp(t *testing.T) {
+// TestDataStoreInvalidDestinationPreservesContents rejects a non-file target.
+func TestDataStoreInvalidDestinationPreservesContents(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "store.json")
 	if err := os.Mkdir(path, 0o755); err != nil {
@@ -288,5 +288,48 @@ func TestDataStoreUnwritableDirectoryPreservesStore(t *testing.T) {
 	entries, err := os.ReadDir(h.dataDir)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("temporary files remain: %v, %v", entries, err)
+	}
+}
+
+// TestDataStorePreservesPermissions covers both mutation operations on a
+// restricted store and verifies that an OS read-only rejection is preserved.
+func TestDataStorePreservesPermissions(t *testing.T) {
+	h := newHarness(t, harnessOpts{})
+	h.mustRun(`v3.data.set("kept", 1)`)
+	path := filepath.Join(h.dataDir, "test.json")
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+	for _, expr := range []string{`v3.data.set("next", 2)`, `v3.data.delete("next")`} {
+		h.mustRun(expr)
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
+			t.Fatalf("mode = %o, want 600", info.Mode().Perm())
+		}
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	probe, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err == nil {
+		_ = probe.Close()
+		t.Skip("process can bypass read-only file protection")
+	}
+	for _, expr := range []string{`v3.data.set("k", 2)`, `v3.data.delete("kept")`} {
+		if got := h.evalErr(expr); !strings.Contains(got, "open script data for writing") {
+			t.Errorf("%s: %s", expr, got)
+		}
+		after, err := os.ReadFile(path)
+		if err != nil || string(after) != string(before) {
+			t.Fatalf("read-only store changed: %q, %v", after, err)
+		}
 	}
 }
