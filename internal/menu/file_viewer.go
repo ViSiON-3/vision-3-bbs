@@ -145,7 +145,7 @@ func runViewFile(c *cmdCtx, args string) (*user.User, string, error) {
 		return retUser, retAction, retErr
 	}
 
-	if e.FileMgr.IsSupportedArchive(record.Filename) {
+	if e.FileMgr.IsSupportedArchive(filePath) {
 		send := e.zipLabSender(s, terminal, record, currentUser, nodeNumber, c.sessionStartTime, outputMode)
 		ziplab.RunZipLabView(terminal, filePath, record.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s), send)
 	} else {
@@ -200,7 +200,7 @@ func viewFileByRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, r
 		return
 	}
 
-	if e.FileMgr.IsSupportedArchive(record.Filename) {
+	if e.FileMgr.IsSupportedArchive(filePath) {
 		ziplab.RunZipLabView(terminal, filePath, record.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s), send)
 	} else {
 		if termHeight <= 0 {
