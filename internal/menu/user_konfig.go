@@ -7,9 +7,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 	"unicode/utf8"
 
-	"github.com/gliderlabs/ssh"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -124,7 +125,7 @@ type konfigState struct {
 	// file-column box).
 	redraw        bool
 	physicalWidth int
-	windows       <-chan ssh.Window
+	resizeUpdates <-chan struct{}
 }
 
 func (st *konfigState) user() *user.User { return st.c.currentUser }
@@ -139,10 +140,11 @@ func runUserKonfig(c *cmdCtx, args string) (*user.User, string, error) {
 	// Work on a copy of the context: edits update the size it carries.
 	ctx := *c
 	st := &konfigState{c: &ctx, ih: getSessionIH(c.s)}
-	pty, windows, ok := c.s.Pty()
-	if ok {
-		st.physicalWidth, st.windows = pty.Window.Width, windows
-	}
+	st.physicalWidth = st.reportedWidth()
+	// main owns the PTY resize channel and updates the shared physical width.
+	// Poll that state while awaiting keys; never compete for its events.
+	stopWatching := st.watchWidth()
+	defer stopWatching()
 	st.relayout()
 
 	hidden := c.e.hideCursorIfNeeded(c.terminal, c.outputMode, cursorHideContextDefault)
@@ -660,6 +662,7 @@ func (st *konfigState) editNumber(label string, lo, hi int, field func(u *user.U
 		return nil
 	}
 	st.applyTermSize()
+	st.relayout()
 	st.redraw = true
 	st.saved(label, strconv.Itoa(v))
 	return nil
@@ -907,21 +910,18 @@ func (st *konfigState) lineWidth() int { return st.width() - 2 }
 // editor after a PTY resize without losing its selection or edit buffer.
 func (st *konfigState) readKey(redraw func() error) (int, error) {
 	for {
-		key, win, event, err := editor.ReadRawKeyOrEvent(st.ih, st.windows)
+		key, _, event, err := editor.ReadRawKeyOrEvent(st.ih, st.resizeUpdates)
 		if err != nil {
 			return 0, err
 		}
 		if !event {
 			return key, nil
 		}
-		if win.Width == 0 && win.Height == 0 {
-			st.windows = nil // A closed channel yields the zero window.
+		width := st.reportedWidth()
+		if width == st.physicalWidth {
 			continue
 		}
-		if win.Width <= 0 || win.Height <= 0 {
-			continue
-		}
-		st.physicalWidth = win.Width
+		st.physicalWidth = width
 		st.relayout()
 		if err := st.renderAll(); err != nil {
 			return 0, err
@@ -932,4 +932,51 @@ func (st *konfigState) readKey(redraw func() error) (int, error) {
 			}
 		}
 	}
+}
+
+// reportedWidth follows the session handler's live physical width. The PTY
+// snapshot is only a fallback for standalone callers without that registry.
+func (st *konfigState) reportedWidth() int {
+	if value, ok := terminalPhysicalWidths.Load(st.c.terminal); ok {
+		if width := int(value.(*atomic.Int32).Load()); width > 0 {
+			return width
+		}
+	}
+	if pty, _, ok := st.c.s.Pty(); ok && pty.Window.Width > 0 {
+		return pty.Window.Width
+	}
+	return 0
+}
+
+// watchWidth signals only actual width changes. Periodic events delivered to
+// the key reader would restart its idle timeout even while the caller is idle.
+func (st *konfigState) watchWidth() func() {
+	updates := make(chan struct{}, 1)
+	stop, done := make(chan struct{}), make(chan struct{})
+	previous := st.physicalWidth
+	st.resizeUpdates = updates
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				width := st.reportedWidth()
+				if width == previous {
+					continue
+				}
+				previous = width
+				// The key reader uses the latest shared width, so one pending signal
+				// also covers changes while a field hands off to another screen.
+				select {
+				case updates <- struct{}{}:
+				default:
+				}
+			}
+		}
+	}()
+	return func() { close(stop); <-done }
 }

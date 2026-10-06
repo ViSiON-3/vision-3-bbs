@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor/testterm"
 )
 
@@ -162,6 +164,25 @@ func TestKonfigResizeRetainsFocusAndEditors(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	sess := &konfigPTY{Session: testterm.NewSession(nil, ""), screen: testterm.New(80, 24), window: ssh.Window{Width: 80, Height: 24}, events: make(chan ssh.Window, 1)}
 	c := &cmdCtx{e: konfigTestExecutor(t), s: sess, terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
+	// Model production: main is the sole consumer and updates shared state.
+	var physicalWidth, mainResizes atomic.Int32
+	physicalWidth.Store(80)
+	RegisterTerminalPhysicalWidth(c.terminal, &physicalWidth)
+	mainDone := make(chan struct{})
+	var closeEvents sync.Once
+	go func() {
+		defer close(mainDone)
+		for win := range sess.events {
+			physicalWidth.Store(int32(win.Width))
+			_ = c.terminal.SetSize(win.Width, win.Height)
+			mainResizes.Add(1)
+		}
+	}()
+	t.Cleanup(func() {
+		closeEvents.Do(func() { close(sess.events) })
+		<-mainDone
+		ClearTerminalPhysicalWidth(c.terminal)
+	})
 	done := make(chan error, 1)
 	go func() { _, _, err := runUserKonfig(c, ""); done <- err }()
 	t.Cleanup(func() { sess.Send("q"); resetSessionIH(sess); sessionTermSizes.Delete(sess) })
@@ -193,7 +214,7 @@ func TestKonfigResizeRetainsFocusAndEditors(t *testing.T) {
 	waitKonfigScreen(t, sess, func(s *testterm.Term) bool {
 		return strings.Contains(s.Row(17), "[L] File Columns") && !strings.Contains(s.Snapshot(), "┌")
 	})
-	close(sess.events) // Closed resize channels must not spin or prevent exit.
+	closeEvents.Do(func() { close(sess.events) }) // Main can close its channel without blocking Konfig.
 	sess.Send("q")
 	select {
 	case err := <-done:
@@ -205,6 +226,9 @@ func TestKonfigResizeRetainsFocusAndEditors(t *testing.T) {
 	}
 	if reloadUser(t, um).RealName != "Unfinished Name" {
 		t.Fatal("resize lost edited text")
+	}
+	if mainResizes.Load() != 5 || physicalWidth.Load() != 40 {
+		t.Fatalf("main missed resizes: count=%d, width=%d", mainResizes.Load(), physicalWidth.Load())
 	}
 }
 
@@ -240,5 +264,44 @@ func TestKonfigCompactFieldScrollsWithoutTruncatingValue(t *testing.T) {
 	}
 	if !strings.Contains(screen.Row(21), "ESC") {
 		t.Fatalf("field wrapped over legend:\n%s", screen.Snapshot())
+	}
+}
+
+func TestKonfigUsesLiveWidthWhenPTYSnapshotIsStale(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	screen := testterm.New(40, 21)
+	sess := &konfigPTY{Session: testterm.NewSession(nil, "q"), screen: screen, window: ssh.Window{Width: 80, Height: 24}}
+	t.Cleanup(func() { resetSessionIH(sess) })
+	c := &cmdCtx{e: konfigTestExecutor(t), s: sess, terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
+	var physicalWidth atomic.Int32
+	physicalWidth.Store(40)
+	RegisterTerminalPhysicalWidth(c.terminal, &physicalWidth)
+	defer ClearTerminalPhysicalWidth(c.terminal)
+	if _, _, err := runUserKonfig(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(screen.Row(17), "[L] File Columns") || !strings.Contains(screen.Row(1), "User Konfig") {
+		t.Fatalf("stale PTY hid compact layout:\n%s", screen.Snapshot())
+	}
+}
+
+func TestKonfigWidthWatcherPreservesIdleTimeout(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	sess := testterm.NewSession(testterm.New(80, 24), "")
+	t.Cleanup(func() { resetSessionIH(sess) })
+	c := &cmdCtx{e: konfigTestExecutor(t), s: sess, terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
+	var physicalWidth atomic.Int32
+	physicalWidth.Store(80)
+	RegisterTerminalPhysicalWidth(c.terminal, &physicalWidth)
+	defer ClearTerminalPhysicalWidth(c.terminal)
+	st := &konfigState{c: c, ih: getSessionIH(sess), physicalWidth: 80}
+	stopWatching := st.watchWidth()
+	defer stopWatching()
+	// Longer than a polling tick: unchanged widths must never wake the reader
+	// and restart its idle timer. The deadline bounds a regression's failure.
+	st.ih.SetSessionIdleTimeout(250 * time.Millisecond)
+	st.ih.SetSessionDeadline(time.Now().Add(time.Second))
+	if _, err := st.readKey(nil); err != editor.ErrIdleTimeout {
+		t.Fatalf("idle timeout defeated by width watcher: %v", err)
 	}
 }
