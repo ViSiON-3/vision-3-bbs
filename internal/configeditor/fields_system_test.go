@@ -103,6 +103,8 @@ func TestSysFieldsLevels_WFCAccess(t *testing.T) {
 	}
 }
 
+// TestMenuListsPartitionAllScreens checks the system and security screen lists,
+// including the Bad User Names security entry.
 func TestMenuListsPartitionAllScreens(t *testing.T) {
 	sys := systemConfigMenuItems()
 	sec := securityMenuItems()

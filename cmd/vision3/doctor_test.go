@@ -340,6 +340,8 @@ func writeDoctorFixture(t *testing.T, path, content string) {
 	}
 }
 
+// TestCheckBadUserNamesConfiguredInvalidFile checks that doctor uses the selected
+// rules file and reports invalid content as a warning.
 func TestCheckBadUserNamesConfiguredInvalidFile(t *testing.T) {
 	dir := t.TempDir()
 	custom := filepath.Join(dir, "custom.txt")

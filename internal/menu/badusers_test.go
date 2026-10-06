@@ -8,6 +8,8 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
+// TestSignupBadUserNamesAndFailurePolicy checks configured signup rejections,
+// custom paths, and preservation of existing checks when the list is unavailable or invalid.
 func TestSignupBadUserNamesAndFailurePolicy(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "badusers.txt")
@@ -46,6 +48,8 @@ func TestSignupBadUserNamesAndFailurePolicy(t *testing.T) {
 	check("Admin", true)
 }
 
+// TestNewUser_BadNameRetriesThroughMenuCommand checks that NEWUSER retries a blocked
+// handle and creates the account only after an allowed handle is entered.
 func TestNewUser_BadNameRetriesThroughMenuCommand(t *testing.T) {
 	env := newMenuEnv(t)
 	if err := os.WriteFile(filepath.Join(env.e.RootConfigPath, "badusers.txt"), []byte("admin*\n"), 0600); err != nil {
@@ -62,6 +66,8 @@ func TestNewUser_BadNameRetriesThroughMenuCommand(t *testing.T) {
 	mustGetUser(t, env, "Legitimate")
 }
 
+// TestUserEditor_BadNameWarnsAndAllowsOverride checks that the online sysop editor
+// warns about a blocked handle while allowing the override to be saved.
 func TestUserEditor_BadNameWarnsAndAllowsOverride(t *testing.T) {
 	env := newMenuEnv(t)
 	if err := os.WriteFile(filepath.Join(env.e.RootConfigPath, "badusers.txt"), []byte("admin*"), 0600); err != nil {

@@ -287,6 +287,7 @@ func doctorSection(name string) string {
 	}
 }
 
+// inspectBoard collects configuration, data, and runtime readiness checks for a board.
 func inspectBoard(root string) doctorReport {
 	previousLogger := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -649,6 +650,8 @@ func checkUserAndSecurity(configDir, root string, cfg config.ServerConfig, add f
 	checkDefaultSysopPassword(root, cfg, add)
 }
 
+// checkBadUserNames validates and counts rules in the configured bad-name list.
+// Omitting configs uses the default list path under configDir.
 func checkBadUserNames(configDir string, add func(string, doctorSeverity, string, string), configs ...config.ServerConfig) {
 	cfg := config.ServerConfig{}
 	if len(configs) > 0 {

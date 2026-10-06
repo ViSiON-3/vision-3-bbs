@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+// TestBadUserNamesMatching checks whole-handle wildcard and literal matching,
+// case folding, whitespace trimming, and the absence of Unicode normalization.
 func TestBadUserNamesMatching(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "names.txt")
 	if err := os.WriteFile(path, []byte(" ; comment\r\n # comment\r\n\r\nroot\r\n admin* \r\n*sysop*\r\nguest\r\nÉmile\r\na.b\r\nx?y\r\n[a]\r\n"), 0600); err != nil {
@@ -28,6 +30,8 @@ func TestBadUserNamesMatching(t *testing.T) {
 	}
 }
 
+// TestBadUserNamesReloadAndInvalidFiles checks live reloads and rejection of
+// invalid content, missing files, and directory paths.
 func TestBadUserNamesReloadAndInvalidFiles(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "names.txt")
 	for _, tc := range []struct {
@@ -60,6 +64,8 @@ func TestBadUserNamesReloadAndInvalidFiles(t *testing.T) {
 	}
 }
 
+// TestBadUsersFilePaths checks selected-directory defaults, custom paths,
+// and the default value loaded from server configuration.
 func TestBadUsersFilePaths(t *testing.T) {
 	dir := t.TempDir()
 	for _, tc := range []struct{ configured, want string }{

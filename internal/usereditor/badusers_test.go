@@ -9,6 +9,8 @@ import (
 	"testing"
 )
 
+// TestHandleEditWarnsAndAllowsBadName checks that local handle edits remain allowed
+// with warnings for blocked names and missing rules files.
 func TestHandleEditWarnsAndAllowsBadName(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "configs")
@@ -48,6 +50,8 @@ func TestHandleEditWarnsAndAllowsBadName(t *testing.T) {
 	t.Fatal("Handle field missing")
 }
 
+// TestAlternateUsersPathUsesExplicitBoardConfig checks that external users files
+// use the selected board configuration for blocked-name warnings and retention settings.
 func TestAlternateUsersPathUsesExplicitBoardConfig(t *testing.T) {
 	board := t.TempDir()
 	t.Chdir(board)

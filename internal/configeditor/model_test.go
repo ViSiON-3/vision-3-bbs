@@ -196,6 +196,8 @@ func TestConfigEditorViewSmoke(t *testing.T) {
 	}
 }
 
+// TestTopMenuAccessSecurityEntry checks security submenu selection and screen count,
+// along with the top-level login and networking entries.
 func TestTopMenuAccessSecurityEntry(t *testing.T) {
 	m, err := New(t.TempDir())
 	if err != nil {

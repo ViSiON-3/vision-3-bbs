@@ -5,6 +5,8 @@ import (
 	"log/slog"
 )
 
+// badUserNameRule reads the selected list and returns the matching rule.
+// Read or validation failures log a warning and return no match.
 func (e *MenuExecutor) badUserNameRule(handle string) string {
 	path := e.GetServerConfig().BadUsersFile(e.RootConfigPath)
 	rule, err := config.MatchBadUserName(path, handle)
@@ -14,6 +16,8 @@ func (e *MenuExecutor) badUserNameRule(handle string) string {
 	return rule
 }
 
+// validateSignupHandle applies existing handle checks and the configured bad-name
+// rules, logging rejected handles and their matching rules at INFO.
 func (e *MenuExecutor) validateSignupHandle(handle string) bool {
 	if !validateHandle(handle) {
 		return false

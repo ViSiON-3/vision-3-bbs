@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestBadUserNamesPathField checks rules-path editing and its security menu entry.
 func TestBadUserNamesPathField(t *testing.T) {
 	cfg := config.ServerConfig{BadUsersPath: "configs/badusers.txt"}
 	f := sysFieldsBadUserNames(&cfg)[0]
