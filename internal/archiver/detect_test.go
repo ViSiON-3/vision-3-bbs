@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+// TestDetectFile checks signature precedence, enabled extension fallback,
+// and handling of invalid signatures, short inputs, and inaccessible files.
 func TestDetectFile(t *testing.T) {
 	cfg := Config{Archivers: []Archiver{
 		{ID: "zip", Extension: ".zip", Magic: "504B0304", Enabled: true},

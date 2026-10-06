@@ -450,6 +450,8 @@ func TestDisplayTextWithPaging_ShowsEveryLineAndPagesCorrectly(t *testing.T) {
 	}
 }
 
+// TestViewMisnamedArchive checks that command and file-list View routes
+// list a ZIP with a nonstandard suffix through ZipLab.
 func TestViewMisnamedArchive(t *testing.T) {
 	for _, byRecord := range []bool{false, true} {
 		t.Run(fmt.Sprint(byRecord), func(t *testing.T) {
@@ -477,6 +479,8 @@ func TestViewMisnamedArchive(t *testing.T) {
 	}
 }
 
+// TestViewCorruptMisnamedArchive checks that a detected but corrupt ZIP
+// reports an archive-reading error instead of displaying its bytes as text.
 func TestViewCorruptMisnamedArchive(t *testing.T) {
 	env := newMenuEnv(t)
 	addFileWithContent(t, env, 1, "BROKEN.Z75", []byte("PK\x03\x04corrupt"))

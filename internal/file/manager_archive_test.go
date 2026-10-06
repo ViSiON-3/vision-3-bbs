@@ -9,6 +9,8 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
 )
 
+// TestArchiveDetectionUsesConfiguredDirectory checks that View detection uses
+// the manager's archiver configuration, including disabled ZIP definitions.
 func TestArchiveDetectionUsesConfiguredDirectory(t *testing.T) {
 	dir := t.TempDir()
 	fm := &FileManager{configPath: filepath.Join(dir, "file_areas.json")}
