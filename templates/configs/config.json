@@ -21,6 +21,7 @@
   "telnetHost": "0.0.0.0",
   "maxNodes": 10,
   "maxConnectionsPerIP": 3,
+  "badUsersPath": "configs/badusers.txt",
   "ipBlocklistPath": "configs/blocklist.txt",
   "ipAllowlistPath": "configs/allowlist.txt",
   "maxFailedLogins": 5,

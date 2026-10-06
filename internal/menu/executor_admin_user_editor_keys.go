@@ -64,6 +64,9 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 			if trimmedHandle != sel.Handle {
 				st.pendingChanges["handle"] = trimmedHandle
 				st.statusMessage = "|10Field marked for update.|07"
+				if rule := st.e.badUserNameRule(trimmedHandle); rule != "" {
+					st.statusMessage = "|11Warning: handle matches bad user names list; sysop override allowed.|07"
+				}
 			} else {
 				delete(st.pendingChanges, "handle")
 				st.statusMessage = "|08No change.|07"

@@ -339,3 +339,25 @@ func writeDoctorFixture(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+// TestCheckBadUserNamesConfiguredInvalidFile checks that doctor uses the selected
+// rules file and reports invalid content as a warning.
+func TestCheckBadUserNamesConfiguredInvalidFile(t *testing.T) {
+	dir := t.TempDir()
+	custom := filepath.Join(dir, "custom.txt")
+	writeDoctorFixture(t, custom, "admin*\n")
+	var checks []doctorCheck
+	add := func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	}
+	checkBadUserNames(dir, add, config.ServerConfig{BadUsersPath: custom})
+	if !hasDoctorCheck(checks, "bad user names", doctorOK, "1 blocked name pattern") {
+		t.Fatalf("configured file: %#v", checks)
+	}
+	writeDoctorFixture(t, custom, "admin*\n\xff")
+	checks = nil
+	checkBadUserNames(dir, add, config.ServerConfig{BadUsersPath: custom})
+	if !hasDoctorCheck(checks, "bad user names", doctorWarn, "invalid") {
+		t.Fatalf("invalid file: %#v", checks)
+	}
+}

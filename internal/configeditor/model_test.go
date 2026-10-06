@@ -196,6 +196,8 @@ func TestConfigEditorViewSmoke(t *testing.T) {
 	}
 }
 
+// TestTopMenuAccessSecurityEntry checks security submenu selection and screen count,
+// along with the top-level login and networking entries.
 func TestTopMenuAccessSecurityEntry(t *testing.T) {
 	m, err := New(t.TempDir())
 	if err != nil {
@@ -207,7 +209,7 @@ func TestTopMenuAccessSecurityEntry(t *testing.T) {
 		t.Fatalf("topItems[1].Label = %q, want %q", got, "Access & Security")
 	}
 
-	// Selecting it loads the 5 security screens with the right title.
+	// Selecting it loads the 6 security screens with the right title.
 	m.topCursor = 1
 	updated, _ := m.selectTopMenuItem()
 	m = updated
@@ -217,8 +219,8 @@ func TestTopMenuAccessSecurityEntry(t *testing.T) {
 	if m.sysMenuTitle != "Access & Security" {
 		t.Errorf("sysMenuTitle = %q, want %q", m.sysMenuTitle, "Access & Security")
 	}
-	if len(m.sysMenuItems) != 5 {
-		t.Fatalf("len(sysMenuItems) = %d, want 5", len(m.sysMenuItems))
+	if len(m.sysMenuItems) != 6 {
+		t.Fatalf("len(sysMenuItems) = %d, want 6", len(m.sysMenuItems))
 	}
 	if m.sysMenuItems[0].Label != "Access Levels" {
 		t.Errorf("first security item = %q, want %q", m.sysMenuItems[0].Label, "Access Levels")

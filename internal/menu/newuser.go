@@ -397,7 +397,7 @@ func (e *MenuExecutor) promptForHandle(
 		}
 
 		// Validate handle format
-		if !validateHandle(handle) {
+		if !e.validateSignupHandle(handle) {
 			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(invalidMsg+"\r\n")), outputMode)
 			uiPause(500 * time.Millisecond)
 			continue

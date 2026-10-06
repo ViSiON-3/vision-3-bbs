@@ -63,6 +63,7 @@ type Model struct {
 	origUsers     []*user.User // Snapshot at load time (for dirty tracking)
 	filePath      string
 	dataDir       string // Root data directory (parent of users/, infoforms/, etc.)
+	configDir     string // Board configuration directory, independent of users storage
 	fileFP        string // content fingerprint at load, for optimistic concurrency
 	quitAfterSave bool   // an exit raised the overwrite prompt; quit once it is answered
 	dirty         bool
@@ -122,6 +123,21 @@ type Model struct {
 // New creates a new user editor model.
 // dataDir is the root data directory (e.g., "data/") containing users/, infoforms/, etc.
 func New(filePath string, dataDir ...string) (Model, error) {
+	dd := filepath.Dir(filepath.Dir(filePath))
+	if len(dataDir) > 0 && dataDir[0] != "" {
+		dd = dataDir[0]
+	}
+	return NewWithConfig(filePath, filepath.Join(dd, "..", "configs"), dataDir...)
+}
+
+// NewWithConfig creates a user editor using an explicit board configuration
+// directory, independent of the users file location. Blank configDir defaults
+// to configs relative to the working directory. The optional dataDir has the
+// same meaning as in New; existing callers of New retain their path behavior.
+func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error) {
+	if configDir == "" {
+		configDir = "configs"
+	}
 	users, fingerprint, err := LoadUsers(filePath)
 	if err != nil {
 		return Model{}, fmt.Errorf("loading users: %w", err)
@@ -159,7 +175,6 @@ func New(filePath string, dataDir ...string) (Model, error) {
 
 	// Load retention days from config (best effort)
 	retDays := -1
-	configDir := filepath.Join(dd, "..", "configs")
 	if cfg, err := config.LoadServerConfig(configDir); err == nil {
 		retDays = cfg.DeletedUserRetentionDays
 	}
@@ -204,6 +219,7 @@ func New(filePath string, dataDir ...string) (Model, error) {
 		origUsers:     origUsers,
 		filePath:      filePath,
 		dataDir:       dd,
+		configDir:     configDir,
 		fileFP:        fingerprint,
 		retentionDays: retDays,
 		cursor:        0,
@@ -859,6 +875,23 @@ func (m *Model) applyFieldValue(f fieldDef) error {
 		m.dirty = true
 		m.editDirty = true
 		m.message = ""
+		if f.Label == "Handle" {
+			configDir := m.configDir
+			if configDir == "" {
+				configDir = "configs"
+			}
+			cfg, err := config.LoadServerConfig(configDir)
+			if err != nil {
+				m.message = "Warning: cannot load bad user names configuration; override allowed"
+			} else {
+				rule, err := config.MatchBadUserName(cfg.BadUsersFile(configDir), val)
+				if err != nil {
+					m.message = "Warning: cannot read bad user names list; override allowed"
+				} else if rule != "" {
+					m.message = "Warning: handle matches bad user names list; sysop override allowed"
+				}
+			}
+		}
 	}
 	return nil
 }

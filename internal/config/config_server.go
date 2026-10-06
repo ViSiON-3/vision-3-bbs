@@ -47,6 +47,7 @@ type ServerConfig struct {
 	MaxConnectionsPerIP int    `json:"maxConnectionsPerIP"`
 	IPBlocklistPath     string `json:"ipBlocklistPath"`
 	IPAllowlistPath     string `json:"ipAllowlistPath"`
+	BadUsersPath        string `json:"badUsersPath"` // Blank uses badusers.txt in the selected config directory
 	MaxFailedLogins     int    `json:"maxFailedLogins"`
 	LockoutMinutes      int    `json:"lockoutMinutes"`
 	FileListingMode     string `json:"fileListingMode"`
@@ -203,6 +204,7 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 		TelnetEnabled:                false,
 		MaxNodes:                     10,
 		MaxConnectionsPerIP:          3,
+		BadUsersPath:                 "configs/badusers.txt",
 		MaxFailedLogins:              5,
 		LockoutMinutes:               30,
 		AllowNewUsers:                true,

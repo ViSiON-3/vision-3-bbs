@@ -1115,3 +1115,32 @@ For the changes that need it:
 # (Ctrl+C to stop, then:)
 ./vision3
 ```
+
+### Bad user names
+
+`badUsersPath` defaults to `configs/badusers.txt`. The default (or a blank value)
+uses `badusers.txt` in the selected config directory. Custom relative paths are
+relative to the working directory; absolute paths are supported. Access & Security
+→ Bad User Names in `./config` provides the path to edit externally.
+
+Use one whole-handle rule per line, case-insensitive. Only `*` is a wildcard,
+matching zero or more characters; other punctuation is literal. Blank lines and
+trimmed lines beginning with `;` or `#` are ignored. Leading and trailing whitespace
+is trimmed; no accent, punctuation or Unicode composition normalization is applied.
+The file is re-read on every handle check, so edits take effect without restart.
+
+Signup retains the existing reserved `new`, `q` and `sysop` names and format rules.
+Blocked handles receive the existing invalid-name message; the attempted handle
+and matching rule are logged at INFO. Missing, unreadable or invalid UTF-8/control
+character rules produce a warning and preserve signup functionality. Empty or
+comment-only files add no restrictions. `--doctor` checks the selected file.
+
+The local and online sysop editors warn on blocked handles but allow overrides.
+There is currently no self-service handle rename flow. Existing accounts can still
+log in; the list does not retroactively ban users.
+
+The local user editor uses `./ue --config configs` by default, independently of
+`--data` (the users directory). For an alternate installation, use
+`./ue --data /path/to/accounts --config /path/to/board/configs` so handle warnings
+and retention settings read that board's configuration. Existing `--data` usage
+and the default `data/users` location remain supported.
