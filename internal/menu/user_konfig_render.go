@@ -167,6 +167,7 @@ func (st *konfigState) itemCell(it *konfigItem, selected bool) string {
 		toneColor(v.tone) + value + konfigReset
 }
 
+// renderItem repaints one item with its current selection state.
 func (st *konfigState) renderItem(i int) error {
 	it := st.items[i]
 	return st.raw(moveTo(it.row, it.col) + st.itemCell(it, i == st.sel))

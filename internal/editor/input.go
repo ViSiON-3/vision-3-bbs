@@ -701,6 +701,8 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (int, T, bool, err
 	return readKeyOrEventWithMode(ih, events, true)
 }
 
+// readKeyOrEventWithMode waits for a key or event using the existing session
+// timeout rules, optionally translating the parsed key.
 func readKeyOrEventWithMode[T any](ih *InputHandler, events <-chan T, translated bool) (key int, ev T, isEvent bool, err error) {
 	if len(ih.unreadBuf) == 0 {
 		var idle <-chan time.Time

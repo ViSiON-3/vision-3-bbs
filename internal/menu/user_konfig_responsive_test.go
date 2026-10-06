@@ -25,21 +25,25 @@ type konfigPTY struct {
 	events chan ssh.Window
 }
 
+// Pty returns the synchronized test PTY snapshot and resize channel.
 func (s *konfigPTY) Pty() (ssh.Pty, <-chan ssh.Window, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return ssh.Pty{Window: s.window}, s.events, true
 }
+// Write writes output to the current test screen under the resize lock.
 func (s *konfigPTY) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.screen.Write(p)
 }
+// terminal returns the current test screen under the resize lock.
 func (s *konfigPTY) terminal() *testterm.Term {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.screen
 }
+// resize replaces the test screen and sends a PTY resize event.
 func (s *konfigPTY) resize(width, height int) {
 	s.mu.Lock()
 	s.window = ssh.Window{Width: width, Height: height}
@@ -49,6 +53,8 @@ func (s *konfigPTY) resize(width, height int) {
 	s.events <- win
 }
 
+// TestKonfigResponsiveTerminalSizes checks compact and wide layouts across terminal
+// sizes in UTF-8 and CP437, including labels, help, and exit controls.
 func TestKonfigResponsiveTerminalSizes(t *testing.T) {
 	for _, size := range [][2]int{{40, 21}, {60, 21}, {79, 21}, {80, 21}, {132, 25}, {255, 60}} {
 		for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
@@ -95,6 +101,8 @@ func TestKonfigResponsiveTerminalSizes(t *testing.T) {
 	}
 }
 
+// TestKonfigCompactLayoutFitsMinimumHeight checks that all sections and items
+// fit above the controls in the minimum 40-by-21 layout.
 func TestKonfigCompactLayoutFitsMinimumHeight(t *testing.T) {
 	items, headings := layoutKonfig(konfigSections(konfigTestExecutor(t).Strings()), 40)
 	if len(headings) != 4 || len(items) != 12 {
@@ -115,6 +123,8 @@ func TestKonfigCompactLayoutFitsMinimumHeight(t *testing.T) {
 	}
 }
 
+// TestKonfigCompactEditingAndWidthRecovery checks repeated narrow-screen visits,
+// field cancellation, saved edits, file-column toggles, and stored-width recovery.
 func TestKonfigCompactEditingAndWidthRecovery(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	for visit := 0; visit < 3; visit++ {
@@ -148,6 +158,7 @@ func TestKonfigCompactEditingAndWidthRecovery(t *testing.T) {
 	}
 }
 
+// waitKonfigScreen waits for a screen predicate with a bounded failure deadline.
 func waitKonfigScreen(t *testing.T, sess *konfigPTY, ready func(*testterm.Term) bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -160,6 +171,8 @@ func waitKonfigScreen(t *testing.T, sess *konfigPTY, ready func(*testterm.Term) 
 	t.Fatalf("timed out waiting for Konfig:\n%s", sess.terminal().Snapshot())
 }
 
+// TestKonfigResizeRetainsFocusAndEditors checks repeated resize redraws preserve
+// focus and edits while the modeled session handler receives every PTY event.
 func TestKonfigResizeRetainsFocusAndEditors(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	sess := &konfigPTY{Session: testterm.NewSession(nil, ""), screen: testterm.New(80, 24), window: ssh.Window{Width: 80, Height: 24}, events: make(chan ssh.Window, 1)}
@@ -232,6 +245,8 @@ func TestKonfigResizeRetainsFocusAndEditors(t *testing.T) {
 	}
 }
 
+// TestKonfigRealWidthOverridesSmallerStoredWidth checks that an 80-column terminal
+// retains the normal layout despite a smaller saved width.
 func TestKonfigRealWidthOverridesSmallerStoredWidth(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	u.ScreenWidth = 40
@@ -247,6 +262,8 @@ func TestKonfigRealWidthOverridesSmallerStoredWidth(t *testing.T) {
 	}
 }
 
+// TestKonfigCompactFieldScrollsWithoutTruncatingValue checks horizontal field
+// scrolling preserves the complete value and leaves the exit legend visible.
 func TestKonfigCompactFieldScrollsWithoutTruncatingValue(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	screen := testterm.New(40, 21)
@@ -267,6 +284,8 @@ func TestKonfigCompactFieldScrollsWithoutTruncatingValue(t *testing.T) {
 	}
 }
 
+// TestKonfigUsesLiveWidthWhenPTYSnapshotIsStale checks that shared physical width
+// takes precedence over an outdated initial PTY snapshot.
 func TestKonfigUsesLiveWidthWhenPTYSnapshotIsStale(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	screen := testterm.New(40, 21)
@@ -285,6 +304,8 @@ func TestKonfigUsesLiveWidthWhenPTYSnapshotIsStale(t *testing.T) {
 	}
 }
 
+// TestKonfigWidthWatcherPreservesIdleTimeout checks unchanged polling ticks
+// do not wake the key reader or restart its idle timer.
 func TestKonfigWidthWatcherPreservesIdleTimeout(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	sess := testterm.NewSession(testterm.New(80, 24), "")

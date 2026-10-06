@@ -880,30 +880,37 @@ func (st *konfigState) width() int {
 	return w
 }
 
+// relayout rebuilds item and heading positions for the current terminal width.
 func (st *konfigState) relayout() {
 	st.items, st.headings = layoutKonfig(konfigSections(st.c.e.Strings()), st.width())
 }
 
+// ruleRow returns the separator row for the active layout.
 func (st *konfigState) ruleRow() int {
 	if st.width() < 80 {
 		return 18
 	}
 	return konfigRuleRow
 }
+// helpRow returns the help row immediately below the separator.
 func (st *konfigState) helpRow() int { return st.ruleRow() + 1 }
+// editRow returns the input and status row below the help text.
 func (st *konfigState) editRow() int { return st.ruleRow() + 2 }
+// legendRow returns the exit-key legend row for the active layout.
 func (st *konfigState) legendRow() int {
 	if st.width() < 80 {
 		return 21
 	}
 	return konfigLegendRow
 }
+// columnWidth returns the available item width for the active layout.
 func (st *konfigState) columnWidth() int {
 	if st.width() < 80 {
 		return st.width() - 2
 	}
 	return konfigColWidth
 }
+// lineWidth returns the terminal width excluding the side margins.
 func (st *konfigState) lineWidth() int { return st.width() - 2 }
 
 // readKey keeps the shared session input handler and redraws the active

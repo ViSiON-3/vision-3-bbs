@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+// TestReadRawKeyOrEventPreservesNavigationAndControlKeys checks that raw event
+// reads preserve navigation and control-key identities.
 func TestReadRawKeyOrEventPreservesNavigationAndControlKeys(t *testing.T) {
 	ih := NewInputHandler(bytes.NewBufferString("\x1b[A\x1b[B\x1b[C\x1b[D\x1b[H\x1b[F\x1b[3~\x17\x13"))
 	defer ih.Close()
@@ -19,6 +21,8 @@ func TestReadRawKeyOrEventPreservesNavigationAndControlKeys(t *testing.T) {
 	}
 }
 
+// TestReadRawKeyOrEventHandlesEventsAndIdleTimeout checks queued event delivery
+// and idle expiration when no input arrives.
 func TestReadRawKeyOrEventHandlesEventsAndIdleTimeout(t *testing.T) {
 	reader, writer := io.Pipe()
 	defer reader.Close()
