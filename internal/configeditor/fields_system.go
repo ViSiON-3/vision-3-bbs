@@ -103,5 +103,6 @@ func securityMenuItems() []sysConfigMenuItem {
 		{Label: "Bot Defense", Build: func(m *Model) []fieldDef { return sysFieldsBotDefense(&m.configs.Server) }},
 		{Label: "IP Blocklist/Allowlist", Build: func(m *Model) []fieldDef { return sysFieldsIPLists(&m.configs.Server) }},
 		{Label: "New User Voting (NUV)", Build: func(m *Model) []fieldDef { return sysFieldsNUV(&m.configs.Server) }},
+		{Label: "Bad User Names", Build: func(m *Model) []fieldDef { return sysFieldsBadUserNames(&m.configs.Server) }},
 	}
 }
