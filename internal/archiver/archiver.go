@@ -9,8 +9,11 @@
 package archiver
 
 import (
+	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -344,4 +347,45 @@ func (c *Config) FindByID(id string) (Archiver, bool) {
 func (c *Config) IsSupported(filename string) bool {
 	_, ok := c.FindByExtension(filename)
 	return ok
+}
+
+// DetectFile identifies an enabled archive by its configured offset-zero magic,
+// falling back to its extension when no signature matches. It reads at most the
+// longest valid configured signature; detection does not validate the archive.
+// Invalid hex signatures are ignored. File open/read errors are returned without
+// extension fallback so callers can distinguish inaccessible files from unknowns.
+func (c *Config) DetectFile(path string) (Archiver, bool, error) {
+	signatures := make([][]byte, len(c.Archivers))
+	maxSize := 0
+	for i, a := range c.Archivers {
+		if !a.Enabled {
+			continue
+		}
+		signature, err := hex.DecodeString(a.Magic)
+		if err != nil {
+			continue
+		}
+		signatures[i] = signature
+		if len(signature) > maxSize {
+			maxSize = len(signature)
+		}
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return Archiver{}, false, err
+	}
+	defer func() { _ = f.Close() }()
+	header := make([]byte, maxSize)
+	n, err := io.ReadFull(f, header)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return Archiver{}, false, err
+	}
+	header = header[:n]
+	for i, signature := range signatures {
+		if len(signature) > 0 && bytes.HasPrefix(header, signature) {
+			return c.Archivers[i], true, nil
+		}
+	}
+	a, ok := c.FindByExtension(path)
+	return a, ok, nil
 }

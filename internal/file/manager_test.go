@@ -377,8 +377,10 @@ func TestIncrementDownloadCount(t *testing.T) {
 	}
 }
 
+// TestIsSupportedArchive checks case-insensitive ZIP extension fallback
+// and rejects unsupported suffixes and paths that cannot be read.
 func TestIsSupportedArchive(t *testing.T) {
-	fm := &FileManager{}
+	fm := &FileManager{configPath: filepath.Join(t.TempDir(), "file_areas.json")}
 
 	tests := []struct {
 		filename string
@@ -393,7 +395,13 @@ func TestIsSupportedArchive(t *testing.T) {
 		{"", false},
 	}
 	for _, tt := range tests {
-		got := fm.IsSupportedArchive(tt.filename)
+		path := filepath.Join(t.TempDir(), tt.filename)
+		if tt.filename != "" {
+			if err := os.WriteFile(path, []byte("plain text"), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got := fm.IsSupportedArchive(path)
 		if got != tt.want {
 			t.Errorf("IsSupportedArchive(%q) = %v, want %v", tt.filename, got, tt.want)
 		}
