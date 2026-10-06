@@ -377,7 +377,7 @@ func inspectBoard(root string) doctorReport {
 	if serverErr == nil {
 		checkIPLists(serverCfg, root, add)
 		checkUserAndSecurity(configDir, root, serverCfg, add)
-		checkBadUserNames(configDir, add)
+		checkBadUserNames(configDir, add, serverCfg)
 	}
 	checkMenuFiles(filepath.Join(root, "menus", "v3"), configDir, add)
 	checkDoors(configDir, root, add)
@@ -649,8 +649,16 @@ func checkUserAndSecurity(configDir, root string, cfg config.ServerConfig, add f
 	checkDefaultSysopPassword(root, cfg, add)
 }
 
-func checkBadUserNames(configDir string, add func(string, doctorSeverity, string, string)) {
-	path := filepath.Join(configDir, "badusers.txt")
+func checkBadUserNames(configDir string, add func(string, doctorSeverity, string, string), configs ...config.ServerConfig) {
+	cfg := config.ServerConfig{}
+	if len(configs) > 0 {
+		cfg = configs[0]
+	}
+	path := cfg.BadUsersFile(configDir)
+	if _, err := config.MatchBadUserName(path, ""); err != nil {
+		add("bad user names", doctorWarn, fmt.Sprintf("%s is missing, unreadable or invalid: %v", path, err), "Repair the bad user names list; signups retain their existing checks until repaired.")
+		return
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		add("bad user names", doctorWarn, fmt.Sprintf("configs/badusers.txt is missing or unreadable: %v", err), "Restore configs/badusers.txt; the companion signup check uses it to block reserved handles.")
@@ -665,10 +673,10 @@ func checkBadUserNames(configDir string, add func(string, doctorSeverity, string
 		count++
 	}
 	if count == 0 {
-		add("bad user names", doctorWarn, "configs/badusers.txt has no blocked names", "Add at least one reserved handle pattern, one per line.")
+		add("bad user names", doctorWarn, fmt.Sprintf("%s has no blocked names", path), "Add at least one reserved handle pattern, one per line.")
 		return
 	}
-	add("bad user names", doctorOK, fmt.Sprintf("configs/badusers.txt contains %d blocked name pattern(s)", count), "")
+	add("bad user names", doctorOK, fmt.Sprintf("%s contains %d blocked name pattern(s)", path, count), "")
 }
 
 func checkInfoFormSetup(configDir, root string, cfg config.ServerConfig, add func(string, doctorSeverity, string, string)) {
