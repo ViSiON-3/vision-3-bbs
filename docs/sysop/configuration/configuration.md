@@ -1138,3 +1138,9 @@ comment-only files add no restrictions. `--doctor` checks the selected file.
 The local and online sysop editors warn on blocked handles but allow overrides.
 There is currently no self-service handle rename flow. Existing accounts can still
 log in; the list does not retroactively ban users.
+
+The local user editor uses `./ue --config configs` by default, independently of
+`--data` (the users directory). For an alternate installation, use
+`./ue --data /path/to/accounts --config /path/to/board/configs` so handle warnings
+and retention settings read that board's configuration. Existing `--data` usage
+and the default `data/users` location remain supported.
