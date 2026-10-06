@@ -4,7 +4,7 @@
 //
 // Usage:
 //
-//	./ue [--data path/to/users/directory]
+//	./ue [--data path/to/users/directory] [--config path/to/configs]
 //
 // If no --data flag is provided, it looks for data/users/users.json
 // relative to the current working directory.
@@ -23,6 +23,7 @@ import (
 
 func main() {
 	dataPath := flag.String("data", "", "Path to users directory (default: data/users/)")
+	configPath := flag.String("config", "configs", "Path to board configuration directory")
 	flag.Parse()
 
 	// Resolve data path
@@ -46,7 +47,7 @@ func main() {
 	}
 
 	// Create the editor model
-	model, err := usereditor.New(usersFile)
+	model, err := usereditor.NewWithConfig(usersFile, *configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing editor: %v\n", err)
 		os.Exit(1)
