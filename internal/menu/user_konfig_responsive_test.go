@@ -177,6 +177,10 @@ func TestKonfigResizeRetainsFocusAndEditors(t *testing.T) {
 	waitKonfigScreen(t, sess, func(s *testterm.Term) bool { return strings.Contains(s.Row(20), "Unfinished") })
 	sess.resize(80, 24)
 	waitKonfigScreen(t, sess, func(s *testterm.Term) bool { return strings.Contains(s.Row(19), "Unfinished") && s.CursorVisible() })
+	sess.resize(40, 21)
+	waitKonfigScreen(t, sess, func(s *testterm.Term) bool { return strings.Contains(s.Row(20), "Unfinished") && s.CursorVisible() })
+	sess.resize(80, 24)
+	waitKonfigScreen(t, sess, func(s *testterm.Term) bool { return strings.Contains(s.Row(19), "Unfinished") && s.CursorVisible() })
 	sess.Send(" Name\r")
 	waitKonfigScreen(t, sess, func(s *testterm.Term) bool {
 		return strings.Contains(s.Snapshot(), "Unfinished Name") && !s.CursorVisible()
@@ -201,5 +205,40 @@ func TestKonfigResizeRetainsFocusAndEditors(t *testing.T) {
 	}
 	if reloadUser(t, um).RealName != "Unfinished Name" {
 		t.Fatal("resize lost edited text")
+	}
+}
+
+func TestKonfigRealWidthOverridesSmallerStoredWidth(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	u.ScreenWidth = 40
+	screen := testterm.New(80, 21)
+	sess := &konfigPTY{Session: testterm.NewSession(nil, "q"), screen: screen, window: ssh.Window{Width: 80, Height: 21}}
+	t.Cleanup(func() { resetSessionIH(sess) })
+	c := &cmdCtx{e: konfigStockExecutor(t), s: sess, terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u, outputMode: ansi.OutputModeUTF8, termWidth: 40, termHeight: 21}
+	if _, _, err := runUserKonfig(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(screen.Row(konfigTopRow), "Personal") || !strings.HasSuffix(screen.Row(1), "[ViSiON/3]") {
+		t.Fatalf("smaller stored width changed normal layout:\n%s", screen.Snapshot())
+	}
+}
+
+func TestKonfigCompactFieldScrollsWithoutTruncatingValue(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	screen := testterm.New(40, 21)
+	sess := testterm.NewSession(screen, "\x1b[D\x7fZ\r")
+	t.Cleanup(func() { resetSessionIH(sess) })
+	c := &cmdCtx{e: konfigTestExecutor(t), s: sess, terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u, outputMode: ansi.OutputModeUTF8, termWidth: 40, termHeight: 21}
+	st := &konfigState{c: c, ih: getSessionIH(sess)}
+	st.relayout()
+	if err := st.renderAll(); err != nil {
+		t.Fatal(err)
+	}
+	value, ok, err := st.readField("Long field", strings.Repeat("x", 64), 72, false, "")
+	if err != nil || !ok || value != strings.Repeat("x", 62)+"Zx" {
+		t.Fatalf("field=%q (%v), error=%v", value, ok, err)
+	}
+	if !strings.Contains(screen.Row(21), "ESC") {
+		t.Fatalf("field wrapped over legend:\n%s", screen.Snapshot())
 	}
 }
