@@ -113,7 +113,7 @@ func TestMenuListsPartitionAllScreens(t *testing.T) {
 	}
 	wantSec := []string{
 		"Access Levels", "Connection Limits", "Bot Defense",
-		"IP Blocklist/Allowlist", "New User Voting (NUV)",
+		"IP Blocklist/Allowlist", "New User Voting (NUV)", "Bad User Names",
 	}
 
 	gotSys := make([]string, len(sys))
