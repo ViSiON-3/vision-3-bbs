@@ -907,7 +907,7 @@ func (st *konfigState) lineWidth() int { return st.width() - 2 }
 // editor after a PTY resize without losing its selection or edit buffer.
 func (st *konfigState) readKey(redraw func() error) (int, error) {
 	for {
-		key, win, event, err := editor.ReadKeyOrEvent(st.ih, st.windows)
+		key, win, event, err := editor.ReadRawKeyOrEvent(st.ih, st.windows)
 		if err != nil {
 			return 0, err
 		}

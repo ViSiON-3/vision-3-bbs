@@ -690,7 +690,18 @@ func (ih *InputHandler) ReadKeyTranslated() (int, error) {
 // returned with isEvent set and no input is consumed. Once a byte has arrived
 // the rest of the key is read as usual. A nil events channel is never ready,
 // so the call then behaves exactly like ReadKeyTranslated.
-func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, isEvent bool, err error) {
+// ReadRawKeyOrEvent reads an untranslated key or an event while preserving
+// InputHandler's escape parsing, idle timeout and session deadline behavior.
+// A nil events channel disables event handling.
+func ReadRawKeyOrEvent[T any](ih *InputHandler, events <-chan T) (int, T, bool, error) {
+	return readKeyOrEventWithMode(ih, events, false)
+}
+
+func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (int, T, bool, error) {
+	return readKeyOrEventWithMode(ih, events, true)
+}
+
+func readKeyOrEventWithMode[T any](ih *InputHandler, events <-chan T, translated bool) (key int, ev T, isEvent bool, err error) {
 	if len(ih.unreadBuf) == 0 {
 		var idle <-chan time.Time
 		wait, onTimeout, expired := ih.keyWait()
@@ -751,7 +762,11 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 			}
 		}
 	}
-	key, err = ih.ReadKeyTranslated()
+	if translated {
+		key, err = ih.ReadKeyTranslated()
+	} else {
+		key, err = ih.ReadKey()
+	}
 	return key, ev, false, err
 }
 
