@@ -248,3 +248,9 @@ func sysFieldsIPLists(cfg *config.ServerConfig) []fieldDef {
 		},
 	}
 }
+
+// sysFieldsBadUserNames points the sysop to the live signup list.
+func sysFieldsBadUserNames(cfg *config.ServerConfig) []fieldDef {
+	return []fieldDef{{Label: "Bad Names Path", Help: "Edit this file: one name per line; * wildcard; ;/# comments; live reload", Type: ftString, Col: 3, Row: 1, Width: 45,
+		Get: func() string { return cfg.BadUsersPath }, Set: func(val string) error { cfg.BadUsersPath = val; return nil }}}
+}
