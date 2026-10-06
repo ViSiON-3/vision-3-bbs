@@ -75,8 +75,9 @@ func TestSysConfigEdit_PageBetweenSubScreens(t *testing.T) {
 	if m.sysSubScreen != len(m.sysMenuItems)-1 {
 		t.Errorf("pgdown stops at last screen, got %d", m.sysSubScreen)
 	}
-	wantScreen(t, m, "New User Voting")
+	wantScreen(t, m, "Bad User Names")
 	m = press(t, m, "pgup")
+	wantScreen(t, m, "New User Voting")
 	if m.sysSubScreen != len(m.sysMenuItems)-2 || m.editField != 0 {
 		t.Errorf("pgup: sub=%d field=%d", m.sysSubScreen, m.editField)
 	}
