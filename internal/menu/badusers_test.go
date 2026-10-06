@@ -61,3 +61,22 @@ func TestNewUser_BadNameRetriesThroughMenuCommand(t *testing.T) {
 	}
 	mustGetUser(t, env, "Legitimate")
 }
+
+func TestUserEditor_BadNameWarnsAndAllowsOverride(t *testing.T) {
+	env := newMenuEnv(t)
+	if err := os.WriteFile(filepath.Join(env.e.RootConfigPath, "badusers.txt"), []byte("admin*"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	input := "j" + "a" + ueClear(6) + "Admin Jane\r" + "s" + "q"
+	r := env.runCmd("ADMINLISTUSERS", env.sysop, "", input)
+	if r.err != nil {
+		t.Fatal(r.err)
+	}
+	if !r.has("Warning: handle matches bad user names list", "Changes saved for Admin Jane.") {
+		t.Fatalf("output: %s", r.text())
+	}
+	u, ok := env.diskUser(2)
+	if !ok || u.Handle != "Admin Jane" {
+		t.Fatalf("override not saved: %+v", u)
+	}
+}
