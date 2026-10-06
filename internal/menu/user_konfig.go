@@ -892,10 +892,13 @@ func (st *konfigState) ruleRow() int {
 	}
 	return konfigRuleRow
 }
+
 // helpRow returns the help row immediately below the separator.
 func (st *konfigState) helpRow() int { return st.ruleRow() + 1 }
+
 // editRow returns the input and status row below the help text.
 func (st *konfigState) editRow() int { return st.ruleRow() + 2 }
+
 // legendRow returns the exit-key legend row for the active layout.
 func (st *konfigState) legendRow() int {
 	if st.width() < 80 {
@@ -903,6 +906,7 @@ func (st *konfigState) legendRow() int {
 	}
 	return konfigLegendRow
 }
+
 // columnWidth returns the available item width for the active layout.
 func (st *konfigState) columnWidth() int {
 	if st.width() < 80 {
@@ -910,6 +914,7 @@ func (st *konfigState) columnWidth() int {
 	}
 	return konfigColWidth
 }
+
 // lineWidth returns the terminal width excluding the side margins.
 func (st *konfigState) lineWidth() int { return st.width() - 2 }
 

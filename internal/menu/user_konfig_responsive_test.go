@@ -31,18 +31,21 @@ func (s *konfigPTY) Pty() (ssh.Pty, <-chan ssh.Window, bool) {
 	defer s.mu.Unlock()
 	return ssh.Pty{Window: s.window}, s.events, true
 }
+
 // Write writes output to the current test screen under the resize lock.
 func (s *konfigPTY) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.screen.Write(p)
 }
+
 // terminal returns the current test screen under the resize lock.
 func (s *konfigPTY) terminal() *testterm.Term {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.screen
 }
+
 // resize replaces the test screen and sends a PTY resize event.
 func (s *konfigPTY) resize(width, height int) {
 	s.mu.Lock()
