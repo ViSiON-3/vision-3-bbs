@@ -684,13 +684,26 @@ func (ih *InputHandler) ReadKeyTranslated() (int, error) {
 	return TranslateToWordStar(key), nil
 }
 
+// ReadRawKeyOrEvent reads an untranslated key or an event while preserving
+// InputHandler's escape parsing, idle timeout and session deadline behavior.
+// A nil events channel disables event handling.
+func ReadRawKeyOrEvent[T any](ih *InputHandler, events <-chan T) (int, T, bool, error) {
+	return readKeyOrEventWithMode(ih, events, false)
+}
+
 // readKeyOrEvent is ReadKeyTranslated for a reader that also has to react to
 // events from another goroutine, such as terminal resizes. While it waits for
 // the first byte of a key it also watches events; if one arrives first it is
 // returned with isEvent set and no input is consumed. Once a byte has arrived
 // the rest of the key is read as usual. A nil events channel is never ready,
 // so the call then behaves exactly like ReadKeyTranslated.
-func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, isEvent bool, err error) {
+func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (int, T, bool, error) {
+	return readKeyOrEventWithMode(ih, events, true)
+}
+
+// readKeyOrEventWithMode waits for a key or event using the existing session
+// timeout rules, optionally translating the parsed key.
+func readKeyOrEventWithMode[T any](ih *InputHandler, events <-chan T, translated bool) (key int, ev T, isEvent bool, err error) {
 	if len(ih.unreadBuf) == 0 {
 		var idle <-chan time.Time
 		wait, onTimeout, expired := ih.keyWait()
@@ -751,7 +764,11 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 			}
 		}
 	}
-	key, err = ih.ReadKeyTranslated()
+	if translated {
+		key, err = ih.ReadKeyTranslated()
+	} else {
+		key, err = ih.ReadKey()
+	}
 	return key, ev, false, err
 }
 
