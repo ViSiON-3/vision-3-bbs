@@ -859,6 +859,20 @@ func (m *Model) applyFieldValue(f fieldDef) error {
 		m.dirty = true
 		m.editDirty = true
 		m.message = ""
+		if f.Label == "Handle" {
+			configDir := filepath.Join(m.dataDir, "..", "configs")
+			cfg, err := config.LoadServerConfig(configDir)
+			if err != nil {
+				m.message = "Warning: cannot load bad user names configuration; override allowed"
+			} else {
+				rule, err := config.MatchBadUserName(cfg.BadUsersFile(configDir), val)
+				if err != nil {
+					m.message = "Warning: cannot read bad user names list; override allowed"
+				} else if rule != "" {
+					m.message = "Warning: handle matches bad user names list; sysop override allowed"
+				}
+			}
+		}
 	}
 	return nil
 }
