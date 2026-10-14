@@ -117,7 +117,7 @@ func runDoorByType(ctx *DoorCtx) error {
 	case ctx.Config.IsDOS:
 		return executeDOSDoor(ctx)
 	}
-	return executeNativeDoor(ctx)
+	return nativeDoorResult(ctx, executeNativeDoor(ctx))
 }
 
 // runDoorCleanup runs the post-door cleanup command. It exists so the
@@ -129,13 +129,16 @@ func runDoorCleanup(ctx *DoorCtx) {
 
 // --- Door Post-Execution ---
 
-// doorErrorMessage sends a formatted error message to the user.
+// doorErrorMessage sends a formatted error message to the user and waits
+// for the Enter it asks for.
 func doorErrorMessage(ctx *DoorCtx, msg string) {
 	errMsg := fmt.Sprintf(ctx.Executor.Strings().DoorErrorFormat, msg)
 	wErr := terminalio.WriteProcessedBytes(ctx.Session.Stderr(), ansi.ReplacePipeCodes([]byte(errMsg)), ctx.OutputMode)
 	if wErr != nil {
 		slog.Error("failed writing door error message", "error", wErr)
+		return
 	}
+	waitDoorErrorEnter(ctx.Session)
 }
 
 // --- Door Menu Runnables ---

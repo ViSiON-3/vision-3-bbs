@@ -229,7 +229,7 @@ func runDoorByType(ctx *DoorCtx) error {
 	case ctx.Config.IsDOS:
 		return fmt.Errorf("DOS doors are not yet supported on Windows; use dosemu2 on Linux (NTVDM support is planned)")
 	}
-	return executeNativeDoorWindows(ctx)
+	return nativeDoorResult(ctx, executeNativeDoorWindows(ctx))
 }
 
 // cleanupTimeout is the maximum time allowed for a cleanup command to run.
@@ -289,13 +289,16 @@ func executeCleanupWindows(ctx *DoorCtx) {
 	}
 }
 
-// doorErrorMessage writes a formatted error message to the session.
+// doorErrorMessage writes a formatted error message to the session and
+// waits for the Enter it asks for.
 func doorErrorMessage(ctx *DoorCtx, msg string) {
 	errMsg := fmt.Sprintf(ctx.Executor.Strings().DoorErrorFormat, msg)
 	wErr := terminalio.WriteProcessedBytes(ctx.Session.Stderr(), ansi.ReplacePipeCodes([]byte(errMsg)), ctx.OutputMode)
 	if wErr != nil {
 		slog.Error("failed writing door error message", "error", wErr)
+		return
 	}
+	waitDoorErrorEnter(ctx.Session)
 }
 
 // runListDoors lists configured doors from the door registry on Windows.
