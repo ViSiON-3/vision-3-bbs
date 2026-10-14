@@ -25,13 +25,18 @@ func nativeDoorResult(ctx *DoorCtx, err error) error {
 // waitDoorErrorEnter waits for the Enter the door error message asks for.
 // Without it the key reaches the menu, where a lightbar still on the door
 // launches it again. s may be a door's wrapped session: the keys are read
-// through the real session's input handler, which the menu reads next.
-func waitDoorErrorEnter(s ssh.Session) {
+// through the real session's input handler, which the menu reads next. The
+// read error is returned, so a caller who idles here or hangs up is logged
+// off (see isSessionFatal).
+func waitDoorErrorEnter(s ssh.Session) error {
 	ih := getSessionIH(unwrapSession(s))
 	for {
 		key, err := ih.ReadKey()
-		if err != nil || key == '\r' || key == '\n' {
-			return
+		if err != nil {
+			return err
+		}
+		if key == '\r' || key == '\n' {
+			return nil
 		}
 	}
 }
