@@ -45,6 +45,9 @@ func TestDoorCommandsGetSet(t *testing.T) {
 		{"native empty", false, "", nil, ""},
 		{"native command only", false, "lord", []string{"lord"}, "lord"},
 		{"native with args", false, "lord /n1, /p2", []string{"lord", "/n1", "/p2"}, "lord /n1, /p2"},
+		{"native space-separated args", false, "./ny2008  -N{NODE} -P{DROPFILE}", []string{"./ny2008", "-N{NODE}", "-P{DROPFILE}"}, "./ny2008 -N{NODE}, -P{DROPFILE}"},
+		{"native comma arg with spaces", false, "door -t, My Game, x", []string{"door", "-t", "My Game", "x"}, "door -t, My Game, x"},
+		{"native lone arg with spaces", false, "door My Game,", []string{"door", "My Game"}, "door My Game,"},
 		{"dos batch lines", true, "cd door, run.bat", []string{"cd door", "run.bat"}, "cd door, run.bat"},
 		{"dos empty", true, "", nil, ""},
 	}

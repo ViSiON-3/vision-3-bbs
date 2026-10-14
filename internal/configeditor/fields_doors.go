@@ -47,31 +47,54 @@ func doorCommandsGet(d *doorEditProxy) string {
 		return sliceToCSV(d.Commands)
 	}
 	// Native: first entry is command, rest are args
-	if len(d.Commands) == 1 {
-		return d.Commands[0]
+	return cmdArgsGet(d.Commands[0], d.Commands[1:])
+}
+
+// cmdArgsGet formats a native command and its args as "cmd arg1, arg2".
+// A lone arg holding whitespace gets a trailing comma so cmdArgsSplit
+// reads it back as one arg rather than splitting it on the spaces.
+func cmdArgsGet(cmd string, args []string) string {
+	switch {
+	case len(args) == 0:
+		return cmd
+	case len(args) == 1 && strings.ContainsAny(args[0], " \t"):
+		return cmd + " " + args[0] + ","
 	}
-	return d.Commands[0] + " " + sliceToCSV(d.Commands[1:])
+	return cmd + " " + sliceToCSV(args)
+}
+
+// cmdArgsSplit parses "cmd args..." into the command and its args. Args are
+// comma-separated when the text has a comma, so one arg can hold spaces;
+// otherwise they are space-separated, as on a shell command line.
+func cmdArgsSplit(val string) (string, []string) {
+	fields := strings.Fields(val)
+	if len(fields) == 0 {
+		return "", nil
+	}
+	rest := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(val), fields[0]))
+	if strings.Contains(rest, ",") {
+		return fields[0], csvToSlice(rest)
+	}
+	if len(fields) == 1 {
+		return fields[0], nil
+	}
+	return fields[0], fields[1:]
 }
 
 // doorCommandsSet parses the command string back into the Commands field.
-// Native doors: first token is command, rest are comma-separated args.
+// Native doors: first token is command, rest are args (see cmdArgsSplit).
 // DOS doors: comma-separated list of batch commands.
 func doorCommandsSet(d *doorEditProxy, val string) {
 	if d.IsDOS {
 		d.Commands = csvToSlice(val)
 		return
 	}
-	val = strings.TrimSpace(val)
-	if val == "" {
+	cmd, args := cmdArgsSplit(val)
+	if cmd == "" {
 		d.Commands = nil
 		return
 	}
-	// Split first space-separated token as the command
-	parts := strings.SplitN(val, " ", 2)
-	d.Commands = []string{parts[0]}
-	if len(parts) > 1 {
-		d.Commands = append(d.Commands, csvToSlice(parts[1])...)
-	}
+	d.Commands = append([]string{cmd}, args...)
 }
 
 // envMapToCSV serializes a map[string]string as "KEY=VALUE, KEY2=VALUE2" for display.
@@ -441,7 +464,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 		// Native and DOS doors have commands and dropfiles
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Commands", Help: "Native: cmd + comma-sep args. Placeholders: {NODEDIR} {DROPFILE} {NODE} {PORT} — add trailing / if the door needs it, e.g. {NODEDIR}/", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Commands", Help: "Native: cmd + args (space- or comma-sep). Placeholders: {NODEDIR} {DROPFILE} {NODE} {PORT} — add trailing / if the door needs it, e.g. {NODEDIR}/", Type: ftString, Col: 3, Row: row, Width: 45,
 			Get: func() string { return doorCommandsGet(dPtr) },
 			Set: func(val string) error { doorCommandsSet(dPtr, val); save(); return nil },
 		})
@@ -548,31 +571,15 @@ func (m *Model) fieldsDoor() []fieldDef {
 		// Cleanup and env vars for native/DOS doors only
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Cleanup Command", Help: "Command to run after door exits (blank=none)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Cleanup Command", Help: "Command to run after door exits (blank=none); args space- or comma-sep", Type: ftString, Col: 3, Row: row, Width: 45,
 			Get: func() string {
 				if dPtr.CleanupCommand == "" {
 					return ""
 				}
-				if len(dPtr.CleanupArgs) == 0 {
-					return dPtr.CleanupCommand
-				}
-				return dPtr.CleanupCommand + " " + sliceToCSV(dPtr.CleanupArgs)
+				return cmdArgsGet(dPtr.CleanupCommand, dPtr.CleanupArgs)
 			},
 			Set: func(val string) error {
-				val = strings.TrimSpace(val)
-				if val == "" {
-					dPtr.CleanupCommand = ""
-					dPtr.CleanupArgs = nil
-					save()
-					return nil
-				}
-				parts := strings.SplitN(val, " ", 2)
-				dPtr.CleanupCommand = parts[0]
-				if len(parts) > 1 {
-					dPtr.CleanupArgs = csvToSlice(parts[1])
-				} else {
-					dPtr.CleanupArgs = nil
-				}
+				dPtr.CleanupCommand, dPtr.CleanupArgs = cmdArgsSplit(val)
 				save()
 				return nil
 			},

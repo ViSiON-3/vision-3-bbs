@@ -141,8 +141,9 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 				uiPause(1 * time.Second)
 			} else {
 				slog.Error("door execution failed", "node", nodeNumber, "handle", currentUser.Handle, "door", doorName, "error", cmdErr)
-				doorErrorMessage(ctx, fmt.Sprintf("Error running external program '%s': %v", doorName, cmdErr))
-				uiPause(2 * time.Second)
+				if err := doorErrorMessage(ctx, fmt.Sprintf("Error running external program '%s': %v", doorName, cmdErr)); isSessionFatal(err) {
+					return currentUser, "LOGOFF", err
+				}
 			}
 		} else {
 			slog.Info("door completed", "node", nodeNumber, "handle", currentUser.Handle, "door", doorName)

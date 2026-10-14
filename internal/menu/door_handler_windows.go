@@ -229,7 +229,7 @@ func runDoorByType(ctx *DoorCtx) error {
 	case ctx.Config.IsDOS:
 		return fmt.Errorf("DOS doors are not yet supported on Windows; use dosemu2 on Linux (NTVDM support is planned)")
 	}
-	return executeNativeDoorWindows(ctx)
+	return nativeDoorResult(ctx, executeNativeDoorWindows(ctx))
 }
 
 // cleanupTimeout is the maximum time allowed for a cleanup command to run.
@@ -289,13 +289,16 @@ func executeCleanupWindows(ctx *DoorCtx) {
 	}
 }
 
-// doorErrorMessage writes a formatted error message to the session.
-func doorErrorMessage(ctx *DoorCtx, msg string) {
+// doorErrorMessage writes a formatted error message to the session and
+// waits for the Enter it asks for, returning the error reading it.
+func doorErrorMessage(ctx *DoorCtx, msg string) error {
 	errMsg := fmt.Sprintf(ctx.Executor.Strings().DoorErrorFormat, msg)
 	wErr := terminalio.WriteProcessedBytes(ctx.Session.Stderr(), ansi.ReplacePipeCodes([]byte(errMsg)), ctx.OutputMode)
 	if wErr != nil {
 		slog.Error("failed writing door error message", "error", wErr)
+		return nil
 	}
+	return waitDoorErrorEnter(ctx.Session)
 }
 
 // runListDoors lists configured doors from the door registry on Windows.
@@ -484,7 +487,9 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 				uiPause(1 * time.Second)
 			} else {
 				slog.Error("door execution failed", "node", nodeNumber, "user", currentUser.Handle, "door", upperInput, "error", cmdErr)
-				doorErrorMessage(ctx, fmt.Sprintf("Error running door '%s': %v", upperInput, cmdErr))
+				if err := doorErrorMessage(ctx, fmt.Sprintf("Error running door '%s': %v", upperInput, cmdErr)); isSessionFatal(err) {
+					return currentUser, "LOGOFF", err
+				}
 			}
 		} else {
 			slog.Info("door completed", "node", nodeNumber, "user", currentUser.Handle, "door", upperInput)

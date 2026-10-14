@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 )
 
 // doorcovRegistry is a door list covering every door type, one of them
@@ -271,7 +273,10 @@ func TestDoorcovOpenDoorReportsFailure(t *testing.T) {
 	env := newMenuEnv(t)
 	env.e.SetDoorRegistry(map[string]config.DoorConfig{"BROKEN": {Commands: []string{"/nonexistent/door"}}})
 
-	r := doorcovRun(env, newDoorcovScripted("broken\r"), runOpenDoor, env.caller, "")
+	s := newDoorcovSession()
+	s.send("broken\r")
+	s.whenOutput("Press Enter to continue...", func() { s.send("\r") })
+	r := doorcovRun(env, s, runOpenDoor, env.caller, "")
 	if r.err != nil || r.user != env.caller || r.next != "" {
 		t.Errorf("err=%v user=%v next=%q", r.err, r.user, r.next)
 	}
@@ -383,5 +388,56 @@ func TestDoorcovRunDoorCleanup(t *testing.T) {
 	got, err := os.ReadFile(filepath.Join(wd, "ran"))
 	if want := "Neo@203.0.113.7|" + wd + "\n"; err != nil || string(got) != want {
 		t.Errorf("cleanup wrote %q, err %v; want %q", got, err, want)
+	}
+}
+
+// A native door that runs and exits nonzero has finished, not failed: the
+// caller is not shown an error for it.
+func TestDoorcovNativeDoorExitStatusIsNotAFailure(t *testing.T) {
+	env := newMenuEnv(t)
+	env.e.SetDoorRegistry(map[string]config.DoorConfig{"GAME": {Commands: []string{"/bin/sh", "-c", "exit 3"}}})
+
+	s := newDoorcovSession() // still connected: see TestDoorcovOpenDoorRunsDoor
+	s.send("game\r")
+	r := doorcovRun(env, s, runOpenDoor, env.caller, "")
+	if r.err != nil || r.next != "" {
+		t.Errorf("err=%v next=%q", r.err, r.next)
+	}
+	if r.has("Error running door") {
+		t.Errorf("nonzero exit reported as a failure:\n%s", r.text())
+	}
+}
+
+// The door error message asks for Enter, so it waits for one: otherwise the
+// Enter falls through to the menu, where a lightbar still on the door
+// launches it again.
+func TestDoorcovDoorErrorWaitsForEnter(t *testing.T) {
+	env := newMenuEnv(t)
+	env.e.SetDoorRegistry(map[string]config.DoorConfig{"BROKEN": {Commands: []string{"/nonexistent/door"}}})
+
+	s := newDoorcovSession()
+	s.send("\r")
+	s.send("Q")
+	r := doorcovRun(env, s, env.e.RunRegistry["DOOR:"], env.caller, "BROKEN")
+	if !r.has("Error running external program 'BROKEN':", "Press Enter to continue...") {
+		t.Fatalf("failure not reported:\n%s", r.text())
+	}
+	if key, err := getSessionIH(s).ReadKey(); err != nil || key != 'Q' {
+		t.Errorf("next key = %q, %v; want 'Q' (the Enter consumed by the prompt)", key, err)
+	}
+}
+
+// A caller who idles at the door error prompt is logged off, as at any
+// other prompt, rather than starting a fresh idle interval at the menu.
+func TestDoorcovDoorErrorPromptIdleLogsOff(t *testing.T) {
+	env := newMenuEnv(t)
+	env.e.SetDoorRegistry(map[string]config.DoorConfig{"BROKEN": {Commands: []string{"/nonexistent/door"}}})
+
+	s := newDoorcovSession()
+	t.Cleanup(func() { ClearSessionIdleTimeout(s) })
+	applySessionIdleTimeout(s, 200*time.Millisecond)
+	r := doorcovRun(env, s, env.e.RunRegistry["DOOR:"], env.caller, "BROKEN")
+	if !errors.Is(r.err, editor.ErrIdleTimeout) || r.next != "LOGOFF" {
+		t.Errorf("err=%v next=%q; want editor.ErrIdleTimeout and LOGOFF", r.err, r.next)
 	}
 }
