@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/configmerge"
 	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 )
 
@@ -105,6 +106,7 @@ func WriteAreasFile(path string, areas []MessageArea) ([]byte, error) {
 // renames it into place, so readers see the whole old file or the whole new
 // one.
 func writeFileAtomic(path string, data []byte) error {
+	mode := configmerge.FileMode(path, 0o644) // keep an existing file's mode
 	tmp, err := os.CreateTemp(filepath.Dir(path), "message_areas_*.json.tmp")
 	if err != nil {
 		return fmt.Errorf("create temp areas file: %w", err)
@@ -124,8 +126,8 @@ func writeFileAtomic(path string, data []byte) error {
 		_ = os.Remove(tmpName)
 		return fmt.Errorf("close temp areas file: %w", err)
 	}
-	// CreateTemp makes the file 0600; keep the file readable as before.
-	_ = os.Chmod(tmpName, 0o644)
+	// CreateTemp makes the file 0600; give it the mode the file had.
+	_ = os.Chmod(tmpName, mode)
 	if err = os.Rename(tmpName, path); err != nil {
 		_ = os.Remove(tmpName)
 		return fmt.Errorf("rename temp areas file: %w", err)

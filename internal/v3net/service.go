@@ -178,10 +178,13 @@ func hubAutoInit(cfg config.V3NetConfig, h *hub.Hub, ks *keystore.Keystore) {
 	}
 
 	// Clear initialAreas from the saved config file so we don't re-seed.
-	updatedCfg := cfg
-	updatedCfg.Hub.InitialAreas = nil
+	// Edit the file as it is now, not this startup snapshot of it, so a
+	// change saved since startup (config editor, area subscriptions) is kept.
 	if cfg.ConfigPath != "" {
-		if err := config.SaveV3NetConfig(cfg.ConfigPath, updatedCfg); err != nil {
+		if err := config.UpdateV3NetConfig(cfg.ConfigPath, func(c *config.V3NetConfig) error {
+			c.Hub.InitialAreas = nil
+			return nil
+		}); err != nil {
 			slog.Warn("v3net: could not remove initialAreas from config after seeding", "error", err)
 		}
 	}

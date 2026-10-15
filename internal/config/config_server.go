@@ -2,11 +2,15 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
+	"github.com/ViSiON-3/vision-3-bbs/internal/configmerge"
 )
 
 // ServerConfig defines server-wide settings
@@ -176,13 +180,14 @@ func (c *LoggingConfig) Normalize() {
 	}
 }
 
-// LoadServerConfig loads the server configuration from config.json
-func LoadServerConfig(configPath string) (ServerConfig, error) {
-	filePath := filepath.Join(configPath, "config.json")
-	slog.Info("loading server configuration", "path", filePath)
+// ErrNoChange is returned by an Update*Config callback that decides there is
+// nothing to write; the update then returns it without touching the file.
+var ErrNoChange = errors.New("no change")
 
-	// Default config values
-	defaultConfig := ServerConfig{
+// defaultServerConfig is the configuration used where config.json does not
+// set a value.
+func defaultServerConfig() ServerConfig {
+	return ServerConfig{
 		BoardName:                    "ViSiON/3 BBS",
 		Timezone:                     "",
 		SysOpLevel:                   DefaultSysOpLevel,
@@ -242,24 +247,16 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 			MaxSizeKB: DefaultLogMaxSizeKB,
 		},
 	}
+}
 
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			slog.Warn("config.json not found, using default settings", "path", filePath)
-			return defaultConfig, nil
-		}
-		return defaultConfig, fmt.Errorf("failed to read config file %s: %w", filePath, err)
+// ParseServerConfig parses config.json's contents over the defaults and
+// sanitizes the result the way LoadServerConfig does, without logging. The
+// config editor uses it to read the file as the BBS would.
+func ParseServerConfig(data []byte) (ServerConfig, error) {
+	config := defaultServerConfig()
+	if err := json.Unmarshal(data, &config); err != nil {
+		return defaultServerConfig(), err
 	}
-
-	// Initialize with defaults before unmarshalling
-	config := defaultConfig
-	err = json.Unmarshal(data, &config)
-	if err != nil {
-		slog.Error("failed to parse config JSON, using default settings", "path", filePath, "error", err)
-		return defaultConfig, fmt.Errorf("failed to parse config JSON from %s: %w", filePath, err)
-	}
-
 	if config.PageSysopTimeoutSeconds <= 0 {
 		config.PageSysopTimeoutSeconds = 60
 	}
@@ -268,7 +265,6 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 	}
 	config.SanitizeChallengeGate()
 	config.SanitizeAccessLevels()
-	slog.Info("loaded server configuration", "path", filePath)
 	// New User Voting and auto-validation are mutually exclusive: a candidate
 	// that arrives already validated leaves the vote nothing to decide. The
 	// config editor refuses to enable either while the other is on, but a
@@ -278,12 +274,41 @@ func LoadServerConfig(configPath string) (ServerConfig, error) {
 	// two outcomes; silently validating every signup is not something to fall
 	// into by way of a typo.
 	if config.UseNUV && config.AutoValidateNewUsers {
-		slog.Error("autoValidateNewUsers and useNuv are mutually exclusive; disabling autoValidateNewUsers for this run",
-			"path", filePath, "fix", "set one of them to false in config.json")
 		config.AutoValidateNewUsers = false
 	}
-
 	config.SanitizeDoorMenu()
+	return config, nil
+}
+
+// LoadServerConfig loads the server configuration from config.json
+func LoadServerConfig(configPath string) (ServerConfig, error) {
+	filePath := filepath.Join(configPath, "config.json")
+	slog.Info("loading server configuration", "path", filePath)
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			slog.Warn("config.json not found, using default settings", "path", filePath)
+			return defaultServerConfig(), nil
+		}
+		return defaultServerConfig(), fmt.Errorf("failed to read config file %s: %w", filePath, err)
+	}
+
+	config, err := ParseServerConfig(data)
+	if err != nil {
+		slog.Error("failed to parse config JSON, using default settings", "path", filePath, "error", err)
+		return config, fmt.Errorf("failed to parse config JSON from %s: %w", filePath, err)
+	}
+	slog.Info("loaded server configuration", "path", filePath)
+
+	var raw struct {
+		UseNUV               bool `json:"useNuv"`
+		AutoValidateNewUsers bool `json:"autoValidateNewUsers"`
+	}
+	if json.Unmarshal(data, &raw) == nil && raw.UseNUV && raw.AutoValidateNewUsers {
+		slog.Error("autoValidateNewUsers and useNuv are mutually exclusive; disabling autoValidateNewUsers for this run",
+			"path", filePath, "fix", "set one of them to false in config.json")
+	}
 	return config, nil
 }
 
@@ -341,20 +366,78 @@ func (c *ServerConfig) SanitizeChallengeGate() {
 	}
 }
 
-// SaveServerConfig writes the ServerConfig back to config.json in the given configPath directory.
-func SaveServerConfig(configPath string, cfg ServerConfig) error {
+// ServerConfigFile describes config.json for configmerge.SaveFile.
+func ServerConfigFile(configPath string) configmerge.File[ServerConfig] {
+	return configmerge.File[ServerConfig]{
+		Path:    filepath.Join(configPath, "config.json"),
+		Parse:   ParseServerConfig,
+		Marshal: marshalServerConfig,
+	}
+}
+
+func marshalServerConfig(cfg ServerConfig) ([]byte, error) {
 	cfg.DoorCategories = append([]DoorCategory(nil), cfg.DoorCategories...)
 	if err := cfg.ValidateDoorMenu(); err != nil {
-		return err
+		return nil, err
 	}
-	filePath := filepath.Join(configPath, "config.json")
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal server config: %w", err)
+		return nil, fmt.Errorf("failed to marshal server config: %w", err)
 	}
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	return data, nil
+}
+
+// SaveServerConfig writes the ServerConfig back to config.json in the given
+// configPath directory, under the file's cross-process lock. It replaces the
+// whole file; to change a setting in place use UpdateServerConfig, which
+// keeps changes other programs made.
+func SaveServerConfig(configPath string, cfg ServerConfig) error {
+	f := ServerConfigFile(configPath)
+	lock, err := configmerge.Lock(f.Path)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+	return writeServerConfig(f.Path, cfg)
+}
+
+func writeServerConfig(filePath string, cfg ServerConfig) error {
+	data, err := marshalServerConfig(cfg)
+	if err != nil {
+		return err
+	}
+	if err := atomicfile.WriteFile(filePath, data, configmerge.FileMode(filePath, 0644)); err != nil {
 		return fmt.Errorf("failed to write config file %s: %w", filePath, err)
 	}
 	slog.Info("server configuration saved", "path", filePath)
 	return nil
+}
+
+// UpdateServerConfig applies fn to config.json as it is on disk now and
+// writes the result, holding the file's lock throughout, so another
+// program's change made since this process loaded the file is kept. It
+// returns the configuration written. fn may return ErrNoChange to leave the
+// file as it is; UpdateServerConfig then returns ErrNoChange.
+func UpdateServerConfig(configPath string, fn func(*ServerConfig) error) (ServerConfig, error) {
+	f := ServerConfigFile(configPath)
+	lock, err := configmerge.Lock(f.Path)
+	if err != nil {
+		return ServerConfig{}, err
+	}
+	defer lock.Release()
+
+	cfg := defaultServerConfig()
+	data, err := os.ReadFile(f.Path)
+	switch {
+	case err == nil:
+		if cfg, err = ParseServerConfig(data); err != nil {
+			return ServerConfig{}, fmt.Errorf("failed to parse config JSON from %s: %w", f.Path, err)
+		}
+	case !os.IsNotExist(err):
+		return ServerConfig{}, err
+	}
+	if err := fn(&cfg); err != nil {
+		return cfg, err // ErrNoChange included: nothing is written
+	}
+	return cfg, writeServerConfig(f.Path, cfg)
 }

@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,7 +25,11 @@ func boardWithBinkdConf(t *testing.T, m *Model, binkdConf string) (binkdPath, wr
 			t.Fatal(err)
 		}
 	}
-	if err := saveFTNConfig(configPath, m.configs.FTN); err != nil {
+	data, err := json.MarshalIndent(m.configs.FTN, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configPath, "ftn.json"), data, 0644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(binkdPath, []byte(written), 0600); err != nil {

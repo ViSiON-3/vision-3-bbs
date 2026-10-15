@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/configmerge"
+	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -553,23 +555,18 @@ func cmdFTNSetup(args []string) {
 	areasPath := filepath.Join(*configDir, "message_areas.json")
 	confsPath := filepath.Join(*configDir, "conferences.json")
 
+	// Hold the files' locks from these reads to the writes below, so a save
+	// by the running BBS or the config editor in between is not overwritten.
+	// A dry run writes nothing, so it takes no lock (which would create the
+	// sidecar files, and fail on a read-only config directory).
+	if !*dryRun {
+		defer lockConfigFiles(ftnPath, areasPath, confsPath)()
+	}
+
 	ftn, err := loadFTNConfig(ftnPath)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error loading %s: %v\n", ftnPath, err)
 		os.Exit(1)
-	}
-
-	// Hold the areas lock from this read to the write below, so a save by
-	// the running BBS or the config editor in between is not overwritten. A
-	// dry run writes nothing, so it takes no lock (which would create the
-	// sidecar file, and fail on a read-only config directory).
-	if !*dryRun {
-		areasLock, err := message.LockAreasFile(areasPath)
-		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Error locking %s: %v\n", areasPath, err)
-			os.Exit(1)
-		}
-		defer areasLock.Release()
 	}
 
 	existingAreas, err := loadAreas(areasPath)
@@ -1155,6 +1152,29 @@ func isValidEchoTag(tag string) bool {
 }
 
 // --- Config I/O ---
+
+// lockConfigFiles takes the cross-process lock on each config file the
+// command is about to read and rewrite, exiting on failure, and returns a
+// function releasing them all. The BBS and the config editor take the same
+// locks around their own saves.
+func lockConfigFiles(paths ...string) func() {
+	var locks []*filelock.Lock
+	release := func() {
+		for _, l := range locks {
+			l.Release()
+		}
+	}
+	for _, p := range paths {
+		l, err := configmerge.Lock(p)
+		if err != nil {
+			release()
+			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		locks = append(locks, l)
+	}
+	return release
+}
 
 func loadFTNConfig(path string) (ftnConfig, error) {
 	var cfg ftnConfig

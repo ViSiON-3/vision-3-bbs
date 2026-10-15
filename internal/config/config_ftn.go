@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
+	"github.com/ViSiON-3/vision-3-bbs/internal/configmerge"
 	"log/slog"
 	"net/netip"
 	"os"
@@ -289,15 +290,10 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 		return defaultConfig, fmt.Errorf("failed to read FTN config file %s: %w", filePath, err)
 	}
 
-	var config FTNConfig
-	err = json.Unmarshal(data, &config)
+	config, assigned, err := parseFTNConfig(data)
 	if err != nil {
 		slog.Error("failed to parse FTN config JSON", "path", filePath, "error", err)
 		return defaultConfig, fmt.Errorf("failed to parse FTN config JSON from %s: %w", filePath, err)
-	}
-
-	if config.Networks == nil {
-		config.Networks = make(map[string]FTNNetworkConfig)
 	}
 
 	enabledCount := 0
@@ -310,15 +306,45 @@ func LoadFTNConfig(configPath string) (FTNConfig, error) {
 	}
 	slog.Info("loaded FTN configuration", "networks", len(config.Networks), "tosserEnabled", enabledCount)
 
-	for _, a := range config.AssignSharedOutbounds() {
+	for _, a := range assigned {
 		slog.Warn("ftn network was sharing a binkd outbound with another network; giving it its own "+
 			"(set binkd_outbound_path on the network to choose a different one). "+
 			"Mail it had already queued stays in the shared outbound — check there if anything for it goes missing",
 			"network", a.Network, "outbound", a.Path, "shared_outbound", a.SharedPath, "kept_by", a.KeptBy)
 	}
-
-	applyBinkdDefaults(&config.Binkd)
 	return config, nil
+}
+
+// ParseFTNConfig parses ftn.json's contents and normalizes them the way
+// LoadFTNConfig does (shared outbounds split, binkd defaults), without
+// logging. The config editor uses it to read the file as the BBS would.
+func ParseFTNConfig(data []byte) (FTNConfig, error) {
+	cfg, _, err := parseFTNConfig(data)
+	return cfg, err
+}
+
+func parseFTNConfig(data []byte) (FTNConfig, []OutboundAssignment, error) {
+	var config FTNConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return FTNConfig{Networks: make(map[string]FTNNetworkConfig)}, nil, err
+	}
+	if config.Networks == nil {
+		config.Networks = make(map[string]FTNNetworkConfig)
+	}
+	assigned := config.AssignSharedOutbounds()
+	applyBinkdDefaults(&config.Binkd)
+	return config, assigned, nil
+}
+
+// FTNConfigFile describes ftn.json for configmerge.SaveFile.
+func FTNConfigFile(configPath string) configmerge.File[FTNConfig] {
+	return configmerge.File[FTNConfig]{
+		Path:  filepath.Join(configPath, "ftn.json"),
+		Parse: ParseFTNConfig,
+		Marshal: func(cfg FTNConfig) ([]byte, error) {
+			return json.MarshalIndent(cfg, "", "  ")
+		},
+	}
 }
 
 // warnPointWithoutBossLink logs a warning when a network posts from a point
@@ -560,6 +586,13 @@ func (c *FTNConfig) AssignSharedOutbounds() []OutboundAssignment {
 // editor writes it.
 func SaveOutboundSplit(configDir string) ([]OutboundAssignment, error) {
 	path := filepath.Join(configDir, "ftn.json")
+	// Read-modify-write: hold the lock so a concurrent save (config editor,
+	// helper ftnsetup) is neither overwritten nor overwrites this.
+	lock, err := configmerge.Lock(path)
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Release()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -579,7 +612,7 @@ func SaveOutboundSplit(configDir string) ([]OutboundAssignment, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := atomicfile.WriteFile(path, out, 0o644); err != nil {
+	if err := atomicfile.WriteFile(path, out, configmerge.FileMode(path, 0o644)); err != nil {
 		return nil, err
 	}
 	return assigned, nil

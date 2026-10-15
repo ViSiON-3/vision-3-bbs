@@ -82,6 +82,12 @@ func cmdFileEcho(args []string) {
 	}
 
 	areasPath := filepath.Join(*configDir, "file_areas.json")
+	// Hold the lock from this read to the write below, so a save by the
+	// config editor in between is not overwritten. A dry run writes nothing
+	// and takes no lock.
+	if !*dryRun {
+		defer lockConfigFiles(areasPath)()
+	}
 	areas, err := loadFileAreas(*configDir)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {

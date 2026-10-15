@@ -389,30 +389,23 @@ func v3netHasLeaf(configPath, network string) bool {
 // leaf already exists for the network, its own AutoJoinAreas setting is used
 // instead so the sysop's original choice is respected.
 func v3netSubscribe(configPath string, mgr *message.MessageManager, network, hubURL string, area protocol.Area, autoJoin bool) error {
-	cfg, err := config.LoadV3NetConfig(configPath)
-	if err != nil {
-		return err
-	}
-
-	// Check if already subscribed.
-	for _, l := range cfg.Leaves {
-		if l.Network == network && containsBoard(l.Boards, area.Tag) {
-			return nil
-		}
-	}
-
-	// Append to existing leaf for this network, or create a new one.
 	effectiveAutoJoin := autoJoin
-	found := false
-	for i, l := range cfg.Leaves {
-		if l.Network == network {
-			cfg.Leaves[i].Boards = append(cfg.Leaves[i].Boards, area.Tag)
-			effectiveAutoJoin = l.AutoJoinEnabled()
-			found = true
-			break
+	err := config.UpdateV3NetConfig(configPath, func(cfg *config.V3NetConfig) error {
+		// Check if already subscribed.
+		for _, l := range cfg.Leaves {
+			if l.Network == network && containsBoard(l.Boards, area.Tag) {
+				return config.ErrNoChange
+			}
 		}
-	}
-	if !found {
+
+		// Append to existing leaf for this network, or create a new one.
+		for i, l := range cfg.Leaves {
+			if l.Network == network {
+				cfg.Leaves[i].Boards = append(cfg.Leaves[i].Boards, area.Tag)
+				effectiveAutoJoin = l.AutoJoinEnabled()
+				return nil
+			}
+		}
 		cfg.Leaves = append(cfg.Leaves, config.V3NetLeafConfig{
 			HubURL:        hubURL,
 			Network:       network,
@@ -420,9 +413,12 @@ func v3netSubscribe(configPath string, mgr *message.MessageManager, network, hub
 			PollInterval:  "5m",
 			AutoJoinAreas: &autoJoin,
 		})
+		return nil
+	})
+	if errors.Is(err, config.ErrNoChange) {
+		return nil
 	}
-
-	if err := config.SaveV3NetConfig(configPath, cfg); err != nil {
+	if err != nil {
 		return fmt.Errorf("save v3net.json: %w", err)
 	}
 
@@ -460,29 +456,25 @@ func v3netSubscribe(configPath string, mgr *message.MessageManager, network, hub
 // network. Removes the entire leaf entry if it has no remaining boards.
 // Does not delete the message area.
 func v3netUnsubscribe(configPath, network, tag string) error {
-	cfg, err := config.LoadV3NetConfig(configPath)
-	if err != nil {
-		return err
-	}
-
-	for i, l := range cfg.Leaves {
-		if l.Network == network {
-			var filtered []string
-			for _, b := range l.Boards {
-				if b != tag {
-					filtered = append(filtered, b)
+	return config.UpdateV3NetConfig(configPath, func(cfg *config.V3NetConfig) error {
+		for i, l := range cfg.Leaves {
+			if l.Network == network {
+				var filtered []string
+				for _, b := range l.Boards {
+					if b != tag {
+						filtered = append(filtered, b)
+					}
 				}
+				if len(filtered) == 0 {
+					cfg.Leaves = append(cfg.Leaves[:i], cfg.Leaves[i+1:]...)
+				} else {
+					cfg.Leaves[i].Boards = filtered
+				}
+				break
 			}
-			if len(filtered) == 0 {
-				cfg.Leaves = append(cfg.Leaves[:i], cfg.Leaves[i+1:]...)
-			} else {
-				cfg.Leaves[i].Boards = filtered
-			}
-			break
 		}
-	}
-
-	return config.SaveV3NetConfig(configPath, cfg)
+		return nil
+	})
 }
 
 // containsBoard reports whether boards contains the given tag.
