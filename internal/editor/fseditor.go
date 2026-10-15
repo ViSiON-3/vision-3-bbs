@@ -127,6 +127,12 @@ func (e *FSEditor) SetQuoteStrings(top, bottom, prefix string) {
 	e.commands.SetQuoteStrings(top, bottom, prefix)
 }
 
+// SetNetworkQuoteStrings sets the quote banners for a networked area, where
+// an empty value leaves that banner out.
+func (e *FSEditor) SetNetworkQuoteStrings(top, bottom string) {
+	e.commands.SetNetworkQuoteStrings(top, bottom)
+}
+
 // LoadContent loads initial content into the editor
 func (e *FSEditor) LoadContent(content string) {
 	e.buffer.LoadContent(content)

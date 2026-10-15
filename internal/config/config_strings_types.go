@@ -57,6 +57,8 @@ type StringsConfig struct {
 	ReEnterPassword         string `json:"reEnterPassword"`
 	QuoteTop                string `json:"quoteTop"`
 	QuoteBottom             string `json:"quoteBottom"`
+	QuoteTopNet             string `json:"quoteTopNet"`
+	QuoteBottomNet          string `json:"quoteBottomNet"`
 	AskOneLiner             string `json:"askOneLiner"`
 	OneLinerAnonymousPrompt string `json:"oneLinerAnonymousPrompt"`
 	EnterOneLiner           string `json:"enterOneLiner"`

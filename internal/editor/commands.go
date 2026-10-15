@@ -59,6 +59,13 @@ type CommandHandler struct {
 	quoteTopStr    string // banner above the quoted lines, supports ^N/^T/^D/^W
 	quoteBottomStr string // banner below the quoted lines
 	quotePrefixStr string // per-line prefix template, supports ^I (initials) and ^N
+
+	// Networked areas (echomail, netmail, QWK) use their own banners: other
+	// systems read a line starting "---" as a tearline and don't render our
+	// color codes, so these default to plain text and may be left out.
+	networked         bool
+	quoteTopNetStr    string // banner above the quoted lines; empty = no banner
+	quoteBottomNetStr string // banner below the quoted lines; empty = no banner
 }
 
 // Built-in quote block styling, used when strings.json supplies none.
@@ -108,6 +115,15 @@ func (ch *CommandHandler) SetQuoteStrings(top, bottom, prefix string) {
 	ch.quoteTopStr = top
 	ch.quoteBottomStr = bottom
 	ch.quotePrefixStr = prefix
+}
+
+// SetNetworkQuoteStrings marks the message as bound for a networked area and
+// sets the banners used there. Unlike SetQuoteStrings, an empty value means
+// no banner rather than the built-in default.
+func (ch *CommandHandler) SetNetworkQuoteStrings(top, bottom string) {
+	ch.networked = true
+	ch.quoteTopNetStr = top
+	ch.quoteBottomNetStr = bottom
 }
 
 // HandleSave handles the Save command (CTRL-Z).

@@ -148,6 +148,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		NodeNumber: nodeNumber,
 		NextMsgNum: replyNextMsg,
 		ConfArea:   fmt.Sprintf("%s > %s", confName, areaName),
+		Networked:  isNetworkedArea(replyArea),
 	}
 	replyBody, saved, editErr := editor.RunEditorWithMetadata("", s, sessionOutput(s), outputMode, newSubject, replyName, currentUser.Handle, false,
 		currentMsg.From, currentMsg.Subject, quoteDate, quoteTime, false, quoteLines, ih, replyCtx)

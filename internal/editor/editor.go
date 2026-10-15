@@ -26,6 +26,7 @@ type EditorContext struct {
 	NodeNumber int    // Current node number (@K@)
 	NextMsgNum int    // Next message number in the area (@#@)
 	ConfArea   string // "Conference > Area" combined string (@Z@)
+	Networked  bool   // area is echoed off the BBS: quote with the quote*Net strings
 }
 
 func resolveEditorPaths() (menuSetPath, rootConfigPath string) {
@@ -101,10 +102,12 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 	yesText := "Yes"
 	noText := "No"
 	abortText := "|07Abort Message & Quit, Are You Sure|09?"
-	var quoteTop, quoteBottom, quotePrefix string
+	var quoteTop, quoteBottom, quotePrefix, quoteTopNet, quoteBottomNet string
 	if stringsErr == nil {
 		quoteTop = strings.TrimRight(stringsCfg.QuoteTop, " ")
 		quoteBottom = strings.TrimRight(stringsCfg.QuoteBottom, " ")
+		quoteTopNet = stringsCfg.QuoteTopNet
+		quoteBottomNet = stringsCfg.QuoteBottomNet
 		quotePrefix = stringsCfg.QuotePrefix
 		if v := strings.TrimSpace(stringsCfg.YesPromptText); v != "" {
 			yesText = v
@@ -146,6 +149,9 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 
 	// Quote block styling from strings.json (empty values keep the defaults)
 	editor.SetQuoteStrings(quoteTop, quoteBottom, quotePrefix)
+	if len(ctx) > 0 && ctx[0].Networked {
+		editor.SetNetworkQuoteStrings(quoteTopNet, quoteBottomNet)
+	}
 
 	// Set quote data for /Q command
 	if len(quoteLines) > 0 {
