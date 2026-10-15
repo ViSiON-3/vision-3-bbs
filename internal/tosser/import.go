@@ -40,14 +40,25 @@ func (t *Tosser) inboundDirs() []string {
 
 // isSecureInbound reports whether dir is the secure inbound, which only
 // binkd sessions that passed its password check write to. A secure inbound
-// that is the same directory as the unsecured one proves nothing, since
-// anyone can write there.
+// that is the same directory as the unsecured one, by path or through a
+// symlink, proves nothing, since anyone can write there.
 func (t *Tosser) isSecureInbound(dir string) bool {
 	secure := t.paths.SecureInboundPath
 	if secure == "" || filepath.Clean(dir) != filepath.Clean(secure) {
 		return false
 	}
-	return t.paths.InboundPath == "" || filepath.Clean(secure) != filepath.Clean(t.paths.InboundPath)
+	return t.paths.InboundPath == "" || !sameDir(secure, t.paths.InboundPath)
+}
+
+// sameDir reports whether a and b name the same directory. When either
+// can't be read, it falls back to comparing the paths.
+func sameDir(a, b string) bool {
+	if filepath.Clean(a) == filepath.Clean(b) {
+		return true
+	}
+	ai, errA := os.Stat(a)
+	bi, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(ai, bi)
 }
 
 // TossResult holds the results of a toss/scan cycle.

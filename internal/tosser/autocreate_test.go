@@ -243,3 +243,41 @@ func TestAutoCreateFallsBackToBad(t *testing.T) {
 		})
 	}
 }
+
+// A secure inbound is only trusted when it is a different directory from the
+// unsecured one, whether the two are named alike or one is a symlink to the
+// other.
+func TestIsSecureInbound(t *testing.T) {
+	dir := t.TempDir()
+	unsecured := filepath.Join(dir, "in")
+	secure := filepath.Join(dir, "secure_in")
+	for _, d := range []string{unsecured, secure} {
+		if err := os.Mkdir(d, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	alias := filepath.Join(dir, "alias_in")
+	symlinked := os.Symlink(unsecured, alias) == nil
+
+	for _, tc := range []struct {
+		name, inbound, secure, dir string
+		want                       bool
+		needSymlink                bool
+	}{
+		{"secure inbound", unsecured, secure, secure, true, false},
+		{"unsecured inbound", unsecured, secure, unsecured, false, false},
+		{"no secure inbound", unsecured, "", unsecured, false, false},
+		{"same path", unsecured, unsecured + "/", unsecured, false, false},
+		{"symlink to the unsecured one", unsecured, alias, alias, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.needSymlink && !symlinked {
+				t.Skip("symlinks unavailable")
+			}
+			tsr := &Tosser{paths: pathConfig{InboundPath: tc.inbound, SecureInboundPath: tc.secure}}
+			if got := tsr.isSecureInbound(tc.dir); got != tc.want {
+				t.Errorf("isSecureInbound(%q) = %v, want %v", tc.dir, got, tc.want)
+			}
+		})
+	}
+}
