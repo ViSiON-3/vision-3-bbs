@@ -2,7 +2,7 @@
 // (matched case-insensitively) import FTN echo areas from a FIDONET.NA file
 // (ftnsetup), create file areas for file echoes (fileecho), send AreaFix and
 // FileFix netmail to a hub (areafix, filefix), compile and query
-// nodelists (nodelist), list or purge soft-deleted user accounts (users), and
+// nodelists (nodelist), list or bulk-edit message areas (areas), list or purge soft-deleted user accounts (users), and
 // bulk-import files into a file area or re-extract FILE_ID.DIZ descriptions
 // (files). It works directly on the
 // configs and data directories, selectable with --config and --data.
@@ -114,6 +114,8 @@ func main() {
 		cmdUsers(os.Args[2:])
 	case "files":
 		cmdFiles(os.Args[2:])
+	case "areas":
+		cmdAreas(os.Args[2:])
 	default:
 		printUsage(fmt.Sprintf("Unknown command: %s", os.Args[1]))
 		os.Exit(1)
@@ -138,6 +140,10 @@ func printUsage(errMsg string) {
 	_, _ = fmt.Fprintln(w, helpcmd("FILEFIX", "Send a FileFix netmail command to subscribe to file echoes"))
 	_, _ = fmt.Fprintln(w, helpcmd("NODELIST IMPORT", "Compile a network's nodelist for lookups"))
 	_, _ = fmt.Fprintln(w, helpcmd("NODELIST LOOKUP", "Look systems up in the compiled nodelists"))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sMessage Area Commands:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, helpcmd("AREAS LIST", "List message areas by conference, network, or type"))
+	_, _ = fmt.Fprintln(w, helpcmd("AREAS SET", "Bulk-change settings (e.g. real names) on matching areas"))
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintf(w, "  %sUser Commands:%s\n", clrBold, clrReset)
 	_, _ = fmt.Fprintln(w, helpcmd("USERS PURGE", "Permanently remove soft-deleted users past retention"))
