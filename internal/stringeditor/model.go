@@ -555,6 +555,9 @@ func (m Model) defaultFor(key string) (string, bool) {
 	if def, ok := config.StringFallbacks[key]; ok {
 		return def, true
 	}
+	if def, ok := config.StringMissingDefaults[key]; ok {
+		return def, true
+	}
 	return "", false
 }
 

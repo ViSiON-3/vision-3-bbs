@@ -31,6 +31,9 @@ func LoadStrings(configPath string) (StringsConfig, error) { // Return the loade
 	}
 
 	applyStringDefaults(&loadedConfig)
+	if values, err := stringValues(data); err == nil {
+		applyMissingStringDefaults(&loadedConfig, values)
+	}
 	warnFormatMismatches(data, filePath)
 	slog.Info("successfully loaded strings configuration")
 	return loadedConfig, nil // Return the loaded struct
@@ -317,6 +320,35 @@ var StringFallbacks = map[string]string{
 
 // applyStringDefaults fills in StringFallbacks values for any string field that
 // is empty, matching each map key against the struct's json tags.
+// StringMissingDefaults maps a strings.json key to the value the runtime uses
+// when the key is absent from the file. Unlike StringFallbacks, a key that is
+// present but blank stays blank, so the sysop can switch the string off.
+var StringMissingDefaults = map[string]string{
+	// Quote banner for echomail/netmail/QWK replies (#632). Blank means no
+	// banner, so only an installation that predates the key gets the default.
+	"quoteTopNet": "^N wrote:",
+}
+
+// applyMissingStringDefaults fills in StringMissingDefaults values for keys
+// absent from the parsed file values.
+func applyMissingStringDefaults(c *StringsConfig, values map[string]string) {
+	v := reflect.ValueOf(c).Elem()
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		field := v.Field(i)
+		if field.Kind() != reflect.String || !field.CanSet() {
+			continue
+		}
+		key, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+		if _, present := values[key]; present {
+			continue
+		}
+		if def, ok := StringMissingDefaults[key]; ok {
+			field.SetString(def)
+		}
+	}
+}
+
 func applyStringDefaults(c *StringsConfig) {
 	v := reflect.ValueOf(c).Elem()
 	t := v.Type()

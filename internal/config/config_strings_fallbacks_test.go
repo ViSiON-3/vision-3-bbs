@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -22,6 +24,37 @@ func TestStringFallbacksMatchFields(t *testing.T) {
 		if !known[key] {
 			t.Errorf("StringFallbacks key %q has no StringsConfig field", key)
 		}
+	}
+	for key := range StringMissingDefaults {
+		if !known[key] {
+			t.Errorf("StringMissingDefaults key %q has no StringsConfig field", key)
+		}
+	}
+}
+
+// TestLoadStringsMissingDefaults checks that quoteTopNet gets its default only
+// when the key is absent: a sysop who blanks it has turned the banner off.
+func TestLoadStringsMissingDefaults(t *testing.T) {
+	for _, tc := range []struct {
+		name, json, want string
+	}{
+		{"absent", `{}`, StringMissingDefaults["quoteTopNet"]},
+		{"blank", `{"quoteTopNet": ""}`, ""},
+		{"set", `{"quoteTopNet": "^N said:"}`, "^N said:"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "strings.json"), []byte(tc.json), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			c, err := LoadStrings(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.QuoteTopNet != tc.want {
+				t.Errorf("QuoteTopNet = %q, want %q", c.QuoteTopNet, tc.want)
+			}
+		})
 	}
 }
 
