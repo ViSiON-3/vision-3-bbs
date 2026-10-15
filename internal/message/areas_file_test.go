@@ -223,3 +223,44 @@ func TestAddAreaReturnsRenumberedID(t *testing.T) {
 		t.Errorf("area 2 in memory = %+v", a)
 	}
 }
+
+// Two tools adding the same echo must not leave two areas with one tag.
+func TestMergeAreasSameTagAddedTwice(t *testing.T) {
+	t.Run("same ID merges fields", func(t *testing.T) {
+		ours := []MessageArea{{ID: 3, Tag: "FD_X", Name: "Mine", MaxMessages: 100}}
+		theirs := []MessageArea{{ID: 3, Tag: "FD_X", Name: "Theirs", RealNameOnly: true}}
+		res, err := MergeAreas(nil, ours, theirs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Areas) != 1 {
+			t.Fatalf("areas = %+v, want one", res.Areas)
+		}
+		a := res.Areas[0]
+		if a.Name != "Mine" || a.MaxMessages != 100 || !a.RealNameOnly {
+			t.Errorf("merged = %+v", a)
+		}
+	})
+	t.Run("different IDs keep theirs", func(t *testing.T) {
+		ours := []MessageArea{{ID: 4, Tag: "FD_X", Name: "Mine"}}
+		theirs := []MessageArea{{ID: 3, Tag: "FD_X", Name: "Theirs"}}
+		res, err := MergeAreas(nil, ours, theirs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Areas) != 1 || res.Areas[0].ID != 3 || res.Renumbered[4] != 3 {
+			t.Errorf("areas = %+v, renumbered = %v", res.Areas, res.Renumbered)
+		}
+	})
+	t.Run("ID taken by a different tag", func(t *testing.T) {
+		ours := []MessageArea{{ID: 3, Tag: "FD_MINE"}}
+		theirs := []MessageArea{{ID: 3, Tag: "FD_X"}, {ID: 4, Tag: "FD_MINE"}}
+		res, err := MergeAreas(nil, ours, theirs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Areas) != 2 || res.Renumbered[3] != 4 {
+			t.Errorf("areas = %+v, renumbered = %v", res.Areas, res.Renumbered)
+		}
+	})
+}

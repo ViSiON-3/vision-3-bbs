@@ -210,6 +210,11 @@ func (mm *MessageManager) UpdateAreaByID(id int, updated MessageArea) error {
 // and Position. The area's Tag must be unique. After insertion the area list
 // is persisted to disk. Returns the assigned ID.
 func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
+	// Held from ID allocation through the save, so no other save can run in
+	// between and renumber this area without this call hearing of it.
+	mm.saveMu.Lock()
+	defer mm.saveMu.Unlock()
+
 	mm.mu.Lock()
 
 	// Check tag uniqueness.
@@ -257,7 +262,7 @@ func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
 
 	slog.Info("auto-created message area", "id", area.ID, "tag", area.Tag, "type", area.AreaType)
 
-	renumbered, err := mm.saveAreas()
+	renumbered, err := mm.saveAreasLocked()
 	if err != nil {
 		// Rollback in-memory state so it stays consistent with disk.
 		mm.mu.Lock()

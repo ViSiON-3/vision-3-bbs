@@ -230,16 +230,20 @@ func (mm *MessageManager) SaveAreas() error {
 func (mm *MessageManager) saveAreas() (map[int]int, error) {
 	mm.saveMu.Lock()
 	defer mm.saveMu.Unlock()
+	return mm.saveAreasLocked()
+}
 
-	// If the lock cannot be taken, save anyway rather than lose the change:
-	// that is the old, unlocked behaviour, and the merge below still catches
-	// any write that landed before ours.
-	lock, lockErr := LockAreasFile(mm.areasPath)
-	if lockErr != nil {
-		slog.Warn("saving message areas without the cross-process lock; a concurrent write could be lost",
-			"path", mm.areasPath, "error", lockErr)
+// saveAreasLocked is saveAreas for a caller already holding mm.saveMu.
+func (mm *MessageManager) saveAreasLocked() (map[int]int, error) {
+	// Without the lock, another writer may be mid-save with an older
+	// snapshot and would overwrite this one when it finishes; no merge here
+	// can guard against a write that lands afterwards. Fail the save, which
+	// the caller reports, rather than lose it silently.
+	lock, err := LockAreasFile(mm.areasPath)
+	if err != nil {
+		return nil, fmt.Errorf("locking message areas: %w", err)
 	}
-	defer lock.Release() // nil-safe
+	defer lock.Release()
 
 	// Held across read, merge, write, and install so an update made between
 	// the snapshot and the install cannot be dropped from memory.

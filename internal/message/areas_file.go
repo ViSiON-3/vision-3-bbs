@@ -181,6 +181,9 @@ type AreaMergeResult struct {
 //   - A field both sides changed differently keeps ours and is reported.
 //   - An area deleted on one side and edited on the other is kept, edited
 //     (a deletion is easy to redo; a lost edit is not), and reported.
+//   - An area both sides added with the same tag is one area: under the same
+//     ID its fields merge; under different IDs theirs is kept and ours' ID
+//     maps to it in Renumbered. No merge produces a duplicate tag.
 //   - Two different areas added under the same ID: theirs keeps the ID and
 //     ours is given the next free one, reported in Renumbered.
 //
@@ -225,7 +228,7 @@ func MergeAreas(base, ours, theirs []MessageArea) (AreaMergeResult, error) {
 	sort.Ints(sortedIDs)
 
 	var merged []MessageArea
-	var renumber []MessageArea
+	var added []MessageArea
 	for _, id := range sortedIDs {
 		b, inB := bm[id]
 		o, inO := om[id]
@@ -256,17 +259,59 @@ func MergeAreas(base, ours, theirs []MessageArea) (AreaMergeResult, error) {
 			}
 		case inB: // deleted on both sides
 		case inO && inT: // added on both sides
-			merged = append(merged, theirsByID[id])
-			if !fieldsEqual(o, t) {
-				renumber = append(renumber, oursByID[id])
+			switch {
+			case fieldsEqual(o, t):
+				merged = append(merged, theirsByID[id])
+			case oursByID[id].Tag == theirsByID[id].Tag:
+				// The same area, added by both: merge its fields as if
+				// from empty.
+				fields, conflicts := mergeFields(map[string]json.RawMessage{}, o, t)
+				a, err := fieldsToArea(fields)
+				if err != nil {
+					return res, err
+				}
+				for _, f := range conflicts {
+					res.Conflicts = append(res.Conflicts, AreaMergeConflict{ID: id, Tag: a.Tag, Field: f,
+						What: fmt.Sprintf("area %s (%d) was added here and elsewhere: %s differs; kept this save's value", a.Tag, id, f)})
+				}
+				merged = append(merged, a)
+			default:
+				merged = append(merged, theirsByID[id])
+				added = append(added, oursByID[id])
 			}
 		case inO:
-			merged = append(merged, oursByID[id])
+			added = append(added, oursByID[id])
 		case inT:
 			merged = append(merged, theirsByID[id])
 		}
 	}
-	for _, a := range renumber {
+
+	// Areas ours added that theirs does not already have under their ID. An
+	// area theirs added with the same tag is the same area added twice (two
+	// tools importing one echo): keep theirs rather than create a duplicate
+	// tag, which the BBS cannot route. One whose ID theirs took for a
+	// different area moves to the next free ID.
+	byTag := make(map[string]int, len(merged))
+	for _, a := range merged {
+		byTag[a.Tag] = a.ID
+	}
+	for _, a := range added {
+		if otherID, dup := byTag[a.Tag]; dup {
+			if otherID != a.ID {
+				if res.Renumbered == nil {
+					res.Renumbered = make(map[int]int)
+				}
+				res.Renumbered[a.ID] = otherID
+			}
+			res.Conflicts = append(res.Conflicts, AreaMergeConflict{ID: otherID, Tag: a.Tag,
+				What: fmt.Sprintf("area %s was added here and elsewhere; kept the other copy (ID %d)", a.Tag, otherID)})
+			continue
+		}
+		if _, taken := theirsByID[a.ID]; !taken {
+			merged = append(merged, a)
+			byTag[a.Tag] = a.ID
+			continue
+		}
 		maxID++
 		if res.Renumbered == nil {
 			res.Renumbered = make(map[int]int)
@@ -281,6 +326,7 @@ func MergeAreas(base, ours, theirs []MessageArea) (AreaMergeResult, error) {
 		}
 		a.ID = maxID
 		merged = append(merged, a)
+		byTag[a.Tag] = a.ID
 	}
 	sortAreas(merged)
 	res.Areas = merged
