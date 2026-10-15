@@ -51,7 +51,15 @@ const messageAreaFile = "message_areas.json"
 // Bases are opened on-demand and closed after each operation to allow
 // v3mail and other external tools concurrent access.
 type MessageManager struct {
-	mu         sync.RWMutex
+	mu sync.RWMutex
+	// saveMu serialises SaveAreas and Reload, which each read and replace the
+	// whole areas file and in-memory set.
+	saveMu sync.Mutex
+	// diskBase and diskBytes are the areas file as this manager last read or
+	// wrote it: the merge base for the next save, and how it tells whether
+	// another program has written the file since.
+	diskBase   []MessageArea
+	diskBytes  []byte
 	dataPath   string // Base data directory (e.g., "data")
 	areasPath  string // Full path to message_areas.json
 	areasByID  map[int]*MessageArea

@@ -74,6 +74,9 @@ internal/configeditor/reload.now
 /configs/reload.now
 /configs/reload.force
 
+# Cross-process lock sidecars (e.g. message_areas.json.lock)
+/configs/*.lock
+
 # Logs and debug files
 *.log
 log/

@@ -124,9 +124,14 @@ Filters combine (an area must match all of them); `set` refuses to run
 without a filter unless `--all` is given. Settings: `--real-name`,
 `--anonymous`, `--auto-join` (`on`/`off`), `--acs-read`, `--acs-write`,
 `--max-messages`, `--max-age`, and `--sponsor`. Only the settings you pass
-are changed. A running BBS reloads `message_areas.json` on its own; avoid
-running this while a sysop has the config editor open, since its save
-would overwrite the change.
+are changed. A running BBS reloads `message_areas.json` on its own.
+
+It is safe to run while the BBS is up or the config editor is open. Every
+program that writes `message_areas.json` takes a shared lock
+(`message_areas.json.lock`) and, before saving, merges in changes others made
+since it loaded the file, so one tool does not undo another's edits. If the
+same setting on the same area was changed in two places, the most recent save
+wins, and the BBS log or the config editor's status line says so.
 
 ---
 

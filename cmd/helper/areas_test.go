@@ -99,6 +99,9 @@ func TestAreasSetDryRunWritesNothing(t *testing.T) {
 	if string(before) != string(after) {
 		t.Error("dry run modified message_areas.json")
 	}
+	if _, err := os.Stat(path + ".lock"); err == nil {
+		t.Error("dry run created the lock sidecar")
+	}
 }
 
 func TestAreasSetRejectsBadInput(t *testing.T) {
