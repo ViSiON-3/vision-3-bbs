@@ -291,6 +291,7 @@ func saveMsgAreas(configPath string, ac *allConfigs) ([]string, error) {
 	}
 
 	var conflicts []string
+	var merged []message.MessageArea
 	err := message.UpdateAreasFile(path, func(disk []message.MessageArea) ([]message.MessageArea, bool, error) {
 		res, err := message.MergeAreas(ac.msgAreasBase, ac.MsgAreas, disk)
 		if err != nil {
@@ -299,10 +300,7 @@ func saveMsgAreas(configPath string, ac *allConfigs) ([]string, error) {
 		for _, c := range res.Conflicts {
 			conflicts = append(conflicts, c.What)
 		}
-		merged := res.Areas
-		ac.msgAreasBase = message.CloneAreas(merged)
-		ac.MsgAreas = message.CloneAreas(merged)
-		sortMsgAreasByConference(ac.MsgAreas, ac.Conferences)
+		merged = res.Areas
 		// Nothing to add to what is on disk: leave the file, and a running
 		// BBS, alone.
 		diskData, err1 := message.MarshalAreas(disk)
@@ -312,7 +310,16 @@ func saveMsgAreas(configPath string, ac *allConfigs) ([]string, error) {
 		}
 		return merged, true, nil
 	})
-	return conflicts, err
+	if err != nil {
+		// Leave the editor's areas and base as they were: recording the
+		// unsaved merge as the base would make a retry read the sysop's edits
+		// as unchanged and drop them in favour of the disk.
+		return nil, err
+	}
+	ac.msgAreasBase = message.CloneAreas(merged)
+	ac.MsgAreas = message.CloneAreas(merged)
+	sortMsgAreasByConference(ac.MsgAreas, ac.Conferences)
+	return conflicts, nil
 }
 
 // saveFileAreas writes file areas back to disk.

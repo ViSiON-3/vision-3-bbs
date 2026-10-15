@@ -560,13 +560,17 @@ func cmdFTNSetup(args []string) {
 	}
 
 	// Hold the areas lock from this read to the write below, so a save by
-	// the running BBS or the config editor in between is not overwritten.
-	areasLock, err := message.LockAreasFile(areasPath)
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error locking %s: %v\n", areasPath, err)
-		os.Exit(1)
+	// the running BBS or the config editor in between is not overwritten. A
+	// dry run writes nothing, so it takes no lock (which would create the
+	// sidecar file, and fail on a read-only config directory).
+	if !*dryRun {
+		areasLock, err := message.LockAreasFile(areasPath)
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error locking %s: %v\n", areasPath, err)
+			os.Exit(1)
+		}
+		defer areasLock.Release()
 	}
-	defer areasLock.Release()
 
 	existingAreas, err := loadAreas(areasPath)
 	if err != nil {

@@ -96,3 +96,34 @@ func TestSaveMsgAreasUnchangedLeavesFile(t *testing.T) {
 		t.Error("message_areas.json was rewritten although nothing changed")
 	}
 }
+
+// A failed write must leave the editor's areas and merge base untouched, or a
+// retry would read the sysop's edits as unchanged and drop them.
+func TestSaveMsgAreasFailedWriteKeepsEdits(t *testing.T) {
+	dir := t.TempDir()
+	writeAreasFile(t, dir, []message.MessageArea{{ID: 1, Position: 1, Tag: "ONE", Name: "One", AreaType: "local"}})
+	ac, err := loadAllConfigs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ac.MsgAreas[0].Name = "Edited"
+
+	// Make the write fail: a directory where the temp file would go.
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	_, saveErr := saveMsgAreas(dir, &ac)
+	_ = os.Chmod(dir, 0o755)
+	if saveErr == nil {
+		t.Skip("directory permissions not enforced (running as root?)")
+	}
+	if ac.MsgAreas[0].Name != "Edited" || ac.msgAreasBase[0].Name != "One" {
+		t.Fatalf("failed save changed editor state: areas=%q base=%q", ac.MsgAreas[0].Name, ac.msgAreasBase[0].Name)
+	}
+	if _, err := saveMsgAreas(dir, &ac); err != nil {
+		t.Fatal(err)
+	}
+	if got := reloadConfigs(t, dir).MsgAreas[0].Name; got != "Edited" {
+		t.Errorf("retry saved %q, want the edit", got)
+	}
+}

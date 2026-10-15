@@ -431,13 +431,17 @@ func runAreasSet(args []string) int {
 	}
 
 	// Hold the areas lock from the read to the write, so a save by the
-	// running BBS or the config editor in between is not overwritten.
-	areasLock, err := message.LockAreasFile(filepath.Join(*configDir, "message_areas.json"))
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: locking message areas: %v\n", err)
-		return 1
+	// running BBS or the config editor in between is not overwritten. A dry
+	// run writes nothing, so it takes no lock (which would create the sidecar
+	// file, and fail on a read-only config directory).
+	if !*dryRun {
+		areasLock, err := message.LockAreasFile(filepath.Join(*configDir, "message_areas.json"))
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error: locking message areas: %v\n", err)
+			return 1
+		}
+		defer areasLock.Release()
 	}
-	defer areasLock.Release()
 
 	areasPath, areas, confs, err := loadAreaConfigs(*configDir)
 	if err != nil {
