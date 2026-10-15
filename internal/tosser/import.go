@@ -570,6 +570,9 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader, p
 		area, found = t.msgMgr.FindEchoAreaFold(parsed.Area, t.networkName)
 	}
 	if !found {
+		area, found = t.autoCreateArea(parsed.Area)
+	}
+	if !found {
 		slog.Warn("unknown echo area", "area", parsed.Area, "from", msg.From)
 		if t.paths.BadAreaTag != "" {
 			if err := t.writeMsgToArea(t.paths.BadAreaTag, msg, pktHdr, parsed, msgID); err != nil {

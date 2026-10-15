@@ -209,6 +209,51 @@ type FTNNetworkConfig struct {
 	// v3mail toss compiles each one that arrives into the lookup the BBS
 	// uses for system names (see ftn.CompiledNodelist).
 	Nodelist FTNNodelistConfig `json:"nodelist,omitzero"`
+
+	// AutoCreate lets v3mail toss create a message area for echomail that
+	// arrives in an echo with no area, instead of sending it to the bad area.
+	AutoCreate FTNAutoCreateConfig `json:"auto_create,omitzero"`
+}
+
+// FTNAutoCreateConfig controls how v3mail toss creates message areas for
+// echoes a link sends that the BBS does not carry yet. Backbone lists such as
+// Fidonet's backbone.na are often out of date, so a sysop can turn this on
+// instead of guessing which areas to add by hand.
+type FTNAutoCreateConfig struct {
+	Enabled bool `json:"enabled"`
+	// ACSRead and ACSWrite are the new area's access strings (empty = s10
+	// and s20, as the setup wizard uses).
+	ACSRead  string `json:"acs_read,omitempty"`
+	ACSWrite string `json:"acs_write,omitempty"`
+	// ConferenceID puts new areas in that conference. 0 uses the conference
+	// of the network's other echomail areas.
+	ConferenceID int `json:"conference_id,omitempty"`
+	// MaxMessages and MaxAge are the new area's purge limits (0 = none).
+	MaxMessages int  `json:"max_messages,omitempty"`
+	MaxAge      int  `json:"max_age,omitempty"`
+	AutoJoin    bool `json:"auto_join,omitempty"` // users join the new area automatically
+}
+
+// Default access strings for auto-created areas.
+const (
+	DefaultAutoCreateACSRead  = "s10"
+	DefaultAutoCreateACSWrite = "s20"
+)
+
+// ReadACS returns the read ACS for an auto-created area.
+func (c FTNAutoCreateConfig) ReadACS() string {
+	if c.ACSRead == "" {
+		return DefaultAutoCreateACSRead
+	}
+	return c.ACSRead
+}
+
+// WriteACS returns the write ACS for an auto-created area.
+func (c FTNAutoCreateConfig) WriteACS() string {
+	if c.ACSWrite == "" {
+		return DefaultAutoCreateACSWrite
+	}
+	return c.ACSWrite
 }
 
 // FTNNodelistConfig says where a network's weekly nodelist comes from.

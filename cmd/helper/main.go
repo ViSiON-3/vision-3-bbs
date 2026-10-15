@@ -1139,17 +1139,9 @@ func parseNAFile(path string) ([]naArea, error) {
 	return areas, nil
 }
 
-func isValidEchoTag(tag string) bool {
-	if tag == "" || len(tag) > 50 {
-		return false
-	}
-	for _, r := range tag {
-		if (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_' && r != '-' && r != '.' {
-			return false
-		}
-	}
-	return true
-}
+// isValidEchoTag is ftn.ValidEchoTag, under a name ftnsetup can call where a
+// local variable shadows the ftn package.
+var isValidEchoTag = ftn.ValidEchoTag
 
 // --- Config I/O ---
 

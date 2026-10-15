@@ -180,8 +180,80 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			Get: func() string { return netPtr.Nodelist.FilePattern },
 			Set: func(val string) error { netPtr.Nodelist.FilePattern = strings.TrimSpace(val); save(); return nil },
 		},
+		{
+			Label: "Auto-Create", Help: "Create a message area for echomail in an echo you don't carry, instead of sending it to the bad area", Type: ftYesNo, Col: 3, Row: 8, Width: 1,
+			Get: func() string { return uitext.BoolToYN(netPtr.AutoCreate.Enabled) },
+			Set: func(val string) error { netPtr.AutoCreate.Enabled = uitext.YNToBool(val); save(); return nil },
+		},
+		{
+			Label: "  ACS Read", Help: "Read access for auto-created areas (empty = " + config.DefaultAutoCreateACSRead + ")", Type: ftString, Col: 3, Row: 9, Width: 20,
+			Get: func() string { return netPtr.AutoCreate.ACSRead },
+			Set: func(val string) error { netPtr.AutoCreate.ACSRead = strings.TrimSpace(val); save(); return nil },
+		},
+		{
+			Label: "  ACS Write", Help: "Post access for auto-created areas (empty = " + config.DefaultAutoCreateACSWrite + ")", Type: ftString, Col: 3, Row: 10, Width: 20,
+			Get: func() string { return netPtr.AutoCreate.ACSWrite },
+			Set: func(val string) error { netPtr.AutoCreate.ACSWrite = strings.TrimSpace(val); save(); return nil },
+		},
+		{
+			Label: "  Conference", Help: "Conference for auto-created areas", Type: ftLookup, Col: 3, Row: 11, Width: 40,
+			Get: func() string {
+				if netPtr.AutoCreate.ConferenceID == 0 {
+					return autoCreateConfDefault
+				}
+				return m.conferenceName(netPtr.AutoCreate.ConferenceID)
+			},
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				netPtr.AutoCreate.ConferenceID = n
+				save()
+				return nil
+			},
+			LookupItems: func() []LookupItem {
+				items := m.buildConferenceLookupItems()
+				items[0] = LookupItem{Value: "0", Display: autoCreateConfDefault}
+				return items
+			},
+		},
+		{
+			Label: "  Max Messages", Help: "Maximum messages before purging in auto-created areas (0=unlimited)", Type: ftInteger, Col: 3, Row: 12, Width: 6, Min: 0, Max: 999999,
+			Get: func() string { return strconv.Itoa(netPtr.AutoCreate.MaxMessages) },
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				netPtr.AutoCreate.MaxMessages = n
+				save()
+				return nil
+			},
+		},
+		{
+			Label: "  Max Age", Help: "Maximum age in days before purging in auto-created areas (0=unlimited)", Type: ftInteger, Col: 3, Row: 13, Width: 5, Min: 0, Max: 99999,
+			Get: func() string { return strconv.Itoa(netPtr.AutoCreate.MaxAge) },
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				netPtr.AutoCreate.MaxAge = n
+				save()
+				return nil
+			},
+		},
+		{
+			Label: "  Auto Join", Help: "Join users to auto-created areas automatically", Type: ftYesNo, Col: 3, Row: 14, Width: 1,
+			Get: func() string { return uitext.BoolToYN(netPtr.AutoCreate.AutoJoin) },
+			Set: func(val string) error { netPtr.AutoCreate.AutoJoin = uitext.YNToBool(val); save(); return nil },
+		},
 	}
 }
+
+// autoCreateConfDefault is how the auto-create conference field shows 0.
+const autoCreateConfDefault = "Same as network's other areas"
 
 // fieldsFTNGlobal returns fields for editing the global FTN path and storage settings.
 func (m *Model) fieldsFTNGlobal() []fieldDef {

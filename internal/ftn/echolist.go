@@ -17,6 +17,20 @@ type EchoArea struct {
 	Description string
 }
 
+// ValidEchoTag reports whether tag is usable as an echo area tag: 1-50
+// letters, digits, '_', '-' or '.'.
+func ValidEchoTag(tag string) bool {
+	if tag == "" || len(tag) > 50 {
+		return false
+	}
+	for _, r := range tag {
+		if (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_' && r != '-' && r != '.' {
+			return false
+		}
+	}
+	return true
+}
+
 // ParseEcholist parses a backbone.na format file.
 // Format: TAG<whitespace>Description (one per line).
 // Lines starting with ';' are comments. Blank lines are skipped.
