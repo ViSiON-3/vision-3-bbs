@@ -220,34 +220,39 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 		},
 		{
 			Label: "  Max Messages", Help: "Maximum messages before purging in auto-created areas (0=unlimited)", Type: ftInteger, Col: 3, Row: 12, Width: 6, Min: 0, Max: 999999,
-			Get: func() string { return strconv.Itoa(netPtr.AutoCreate.MaxMessages) },
+			Get: func() string { return strconv.Itoa(netPtr.AutoCreate.MaxMessagesOrDefault()) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
 				if err != nil {
 					return err
 				}
-				netPtr.AutoCreate.MaxMessages = n
+				netPtr.AutoCreate.MaxMessages = &n
 				save()
 				return nil
 			},
 		},
 		{
 			Label: "  Max Age", Help: "Maximum age in days before purging in auto-created areas (0=unlimited)", Type: ftInteger, Col: 3, Row: 13, Width: 5, Min: 0, Max: 99999,
-			Get: func() string { return strconv.Itoa(netPtr.AutoCreate.MaxAge) },
+			Get: func() string { return strconv.Itoa(netPtr.AutoCreate.MaxAgeOrDefault()) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
 				if err != nil {
 					return err
 				}
-				netPtr.AutoCreate.MaxAge = n
+				netPtr.AutoCreate.MaxAge = &n
 				save()
 				return nil
 			},
 		},
 		{
-			Label: "  Auto Join", Help: "Join users to auto-created areas automatically", Type: ftYesNo, Col: 3, Row: 14, Width: 1,
-			Get: func() string { return uitext.BoolToYN(netPtr.AutoCreate.AutoJoin) },
-			Set: func(val string) error { netPtr.AutoCreate.AutoJoin = uitext.YNToBool(val); save(); return nil },
+			Label: "  Auto Join", Help: "Join new users to auto-created areas automatically", Type: ftYesNo, Col: 3, Row: 14, Width: 1,
+			Get: func() string { return uitext.BoolToYN(netPtr.AutoCreate.AutoJoinOrDefault()) },
+			Set: func(val string) error { b := uitext.YNToBool(val); netPtr.AutoCreate.AutoJoin = &b; save(); return nil },
+		},
+		{
+			Label: "  Real Names", Help: "Auto-created areas post under users' real names instead of handles", Type: ftYesNo, Col: 3, Row: 15, Width: 1,
+			Get: func() string { return uitext.BoolToYN(netPtr.AutoCreate.RealNameOnly) },
+			Set: func(val string) error { netPtr.AutoCreate.RealNameOnly = uitext.YNToBool(val); save(); return nil },
 		},
 	}
 }

@@ -1044,9 +1044,10 @@ tosses the message into it.
       "acs_read": "s10",
       "acs_write": "s20",
       "conference_id": 0,
-      "max_messages": 1000,
+      "max_messages": 500,
       "max_age": 365,
-      "auto_join": false
+      "auto_join": true,
+      "real_name_only": false
     }
   }
 }
@@ -1058,9 +1059,15 @@ tosses the message into it.
 | `acs_read`      | `s10`   | Read access for new areas. |
 | `acs_write`     | `s20`   | Post access for new areas. |
 | `conference_id` | `0`     | Conference for new areas. `0` uses the conference of the network's other echomail areas. |
-| `max_messages`  | `0`     | Purge limit for new areas (`0` = unlimited). |
-| `max_age`       | `0`     | Purge age in days for new areas (`0` = unlimited). |
-| `auto_join`     | `false` | Join users to new areas automatically. |
+| `max_messages`  | `500`   | Purge limit for new areas (`0` = unlimited). |
+| `max_age`       | `365`   | Purge age in days for new areas (`0` = unlimited). |
+| `auto_join`     | `true`  | Join new users to new areas automatically. |
+| `real_name_only` | `false` | Posts in new areas use real names instead of handles. |
+
+The defaults are the ones Mystic's MUTIL uses for the bases it auto-creates
+(`acs_read`, `acs_post`, `max_msgs`, `max_msgs_age`, `new_scan`,
+`use_realname`), so a board moving from Mystic gets the areas it is used to.
+Unlike Mystic, auto-create is off until you turn it on.
 
 New areas are named the way the setup wizard names its areas: the tag is
 `<network>_<echo>` in lower case (e.g. `fidonet_linux`), the name is the echo

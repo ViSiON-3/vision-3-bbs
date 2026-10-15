@@ -42,9 +42,10 @@ func (t *Tosser) autoCreateArea(echoTag string) (*message.MessageArea, bool) {
 		ACSRead:      ac.ReadACS(),
 		ACSWrite:     ac.WriteACS(),
 		ConferenceID: t.autoCreateConferenceID(),
-		MaxMessages:  ac.MaxMessages,
-		MaxAge:       ac.MaxAge,
-		AutoJoin:     ac.AutoJoin,
+		MaxMessages:  ac.MaxMessagesOrDefault(),
+		MaxAge:       ac.MaxAgeOrDefault(),
+		AutoJoin:     ac.AutoJoinOrDefault(),
+		RealNameOnly: ac.RealNameOnly,
 		BasePath:     filepath.Join("msgbases", "fn."+netKey+"_"+lowerEcho),
 	}
 

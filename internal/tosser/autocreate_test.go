@@ -27,7 +27,8 @@ func TestTossAutoCreatesUnknownArea(t *testing.T) {
 	env := setupTestEnv(t)
 	env.netCfg.AutoCreate.Enabled = true
 	env.netCfg.AutoCreate.ConferenceID = 7
-	env.netCfg.AutoCreate.MaxMessages = 500
+	maxMsgs := 200
+	env.netCfg.AutoCreate.MaxMessages = &maxMsgs
 	tsr, err := New("testnet", env.netCfg, env.globalCfg, env.dupeDB, env.msgMgr)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -47,8 +48,12 @@ func TestTossAutoCreatesUnknownArea(t *testing.T) {
 	if area.ACSRead != "s10" || area.ACSWrite != "s20" {
 		t.Errorf("ACS %q/%q, want the s10/s20 defaults", area.ACSRead, area.ACSWrite)
 	}
-	if area.ConferenceID != 7 || area.MaxMessages != 500 {
-		t.Errorf("conference %d, max messages %d; want 7 and 500", area.ConferenceID, area.MaxMessages)
+	if area.ConferenceID != 7 || area.MaxMessages != 200 {
+		t.Errorf("conference %d, max messages %d; want 7 and 200", area.ConferenceID, area.MaxMessages)
+	}
+	if area.MaxAge != 365 || !area.AutoJoin || area.RealNameOnly {
+		t.Errorf("max age %d, auto join %v, real names %v; want the Mystic defaults 365, true, false",
+			area.MaxAge, area.AutoJoin, area.RealNameOnly)
 	}
 	if area.OriginAddr != env.netCfg.OwnAddress {
 		t.Errorf("origin address %q, want %q", area.OriginAddr, env.netCfg.OwnAddress)

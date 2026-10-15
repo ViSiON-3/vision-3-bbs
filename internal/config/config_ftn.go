@@ -228,17 +228,44 @@ type FTNAutoCreateConfig struct {
 	// ConferenceID puts new areas in that conference. 0 uses the conference
 	// of the network's other echomail areas.
 	ConferenceID int `json:"conference_id,omitempty"`
-	// MaxMessages and MaxAge are the new area's purge limits (0 = none).
-	MaxMessages int  `json:"max_messages,omitempty"`
-	MaxAge      int  `json:"max_age,omitempty"`
-	AutoJoin    bool `json:"auto_join,omitempty"` // users join the new area automatically
+	// MaxMessages and MaxAge are the new area's purge limits, in messages
+	// and days (nil = 500 and 365, as Mystic's MUTIL uses; 0 = no limit).
+	MaxMessages *int `json:"max_messages,omitempty"`
+	MaxAge      *int `json:"max_age,omitempty"`
+	// AutoJoin joins new users to the area (nil = yes, as Mystic puts an
+	// auto-created base in everyone's new scan).
+	AutoJoin     *bool `json:"auto_join,omitempty"`
+	RealNameOnly bool  `json:"real_name_only,omitempty"` // posts use real names, not handles
 }
 
-// Default access strings for auto-created areas.
+// Defaults for auto-created areas, matching Mystic's MUTIL ImportEchoMail.
 const (
-	DefaultAutoCreateACSRead  = "s10"
-	DefaultAutoCreateACSWrite = "s20"
+	DefaultAutoCreateACSRead     = "s10"
+	DefaultAutoCreateACSWrite    = "s20"
+	DefaultAutoCreateMaxMessages = 500
+	DefaultAutoCreateMaxAge      = 365
 )
+
+// MaxMessagesOrDefault returns the message limit for an auto-created area.
+func (c FTNAutoCreateConfig) MaxMessagesOrDefault() int {
+	if c.MaxMessages == nil {
+		return DefaultAutoCreateMaxMessages
+	}
+	return *c.MaxMessages
+}
+
+// MaxAgeOrDefault returns the age limit in days for an auto-created area.
+func (c FTNAutoCreateConfig) MaxAgeOrDefault() int {
+	if c.MaxAge == nil {
+		return DefaultAutoCreateMaxAge
+	}
+	return *c.MaxAge
+}
+
+// AutoJoinOrDefault reports whether new users join an auto-created area.
+func (c FTNAutoCreateConfig) AutoJoinOrDefault() bool {
+	return c.AutoJoin == nil || *c.AutoJoin
+}
 
 // ReadACS returns the read ACS for an auto-created area.
 func (c FTNAutoCreateConfig) ReadACS() string {
