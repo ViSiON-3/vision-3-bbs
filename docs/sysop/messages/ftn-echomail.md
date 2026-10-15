@@ -1075,11 +1075,20 @@ tag, and the message base is `msgbases/fn.<network>_<echo>`. Rename an area or
 give it a description under Message Areas afterwards. The running BBS picks the
 new area up without a restart.
 
-An area is only created for mail from one of the network's configured links
-(packets from other addresses are already skipped), and only for a valid echo
-tag (letters, digits, `_`, `-` and `.`, at most 50 characters). Anything else
-still goes to the bad area. Each new area is logged as `auto-created echomail
-area`.
+Creating an area changes your configuration, so the packet must prove it came
+from your hub. The address in a packet header is whatever the sender wrote, so
+it isn't enough on its own. Mail can create an area only when the packet is
+from one of the network's configured links and:
+
+- the link has a `packet_password` and the packet carries it, or
+- the link has no `packet_password` and the packet arrived in the
+  `secure_inbound_path`, which binkd only writes for password-checked sessions.
+
+This is the same rule `v3mail toss` applies to TIC files. The echo tag must also
+be valid: letters, digits, `_`, `-` and `.`, at most 50 characters. Mail that
+fails any of these checks goes to the bad area, and the log line `auto-create:
+not creating an area` gives the reason. Each new area is logged as
+`auto-created echomail area`.
 
 Auto-create doesn't send an AreaFix request. The hub is already sending the
 echo, so you're subscribed to it. To drop an echo you don't want, unsubscribe

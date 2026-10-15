@@ -58,7 +58,7 @@ func (t *Tosser) ScanAndExport() TossResult {
 	}()
 
 	for _, area := range areas {
-		if area.AreaType != "echomail" && area.AreaType != "echo" {
+		if !isEchoAreaType(area.AreaType) {
 			continue
 		}
 
