@@ -102,6 +102,32 @@ See [Sponsor Menus](users/sponsor-menus.md) for the full key reference and field
 
 > **Sysop access:** SysOps and Co-SysOps automatically have sponsor access to all areas. The `%` key is hidden from the menu listing — press it directly.
 
+## Changing Many Areas at Once
+
+After importing a network's echoes, editing each area one by one is tedious.
+`helper areas set` applies a setting to every area matching a filter —
+by conference (tag or ID), network, area type, or tag pattern:
+
+```bash
+# Preview, then require real names in every Fidonet echo
+./helper areas set --conference FIDONET --type echomail --real-name on --dry-run
+./helper areas set --conference FIDONET --type echomail --real-name on
+
+# Several settings in one pass, matched by tag pattern
+./helper areas set --tag 'FD_*' --max-messages 500 --acs-write s20
+
+# See what a filter matches
+./helper areas list --network fidonet
+```
+
+Filters combine (an area must match all of them); `set` refuses to run
+without a filter unless `--all` is given. Settings: `--real-name`,
+`--anonymous`, `--auto-join` (`on`/`off`), `--acs-read`, `--acs-write`,
+`--max-messages`, `--max-age`, and `--sponsor`. Only the settings you pass
+are changed. A running BBS reloads `message_areas.json` on its own; avoid
+running this while a sysop has the config editor open, since its save
+would overwrite the change.
+
 ---
 
 ## Creating a New Message Area

@@ -350,6 +350,11 @@ Each line has an echo tag followed by a description.
 
 With `--tag-prefix fd_`, areas get prefixed tags (e.g. `FD_LINUX`) and base paths (e.g. `msgbases/fd_linux`), useful to avoid conflicts with local areas when importing Fidonet.
 
+**Area settings in bulk:** imported areas get default settings. To change
+them all at once — for example, requiring real names in every echo of the
+new conference — use `helper areas set --conference <TAG> --real-name on`.
+See [Changing Many Areas at Once](messages/message-areas.md#changing-many-areas-at-once).
+
 **File echoes:** some networks also publish a *file* echo list, sometimes
 also named `.na` (tqwNet's `tqw_file.na`, with lines like
 `Area TQW_NODE 0 ! Weekly Nodelists`). `helper ftnsetup` refuses it; import
