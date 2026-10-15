@@ -268,10 +268,10 @@ func TestQuoteModeInsertsSelectedLinesWithBannerAndPrefix(t *testing.T) {
 
 	got := stripANSI(ch.buffer.GetContent())
 	want := []string{
-		"--- Bucko Said ---",
+		"[Bucko Said]",
 		"Bu> On 28 Aug 2026, Shurato said the following...",
 		"Bu> Sh> I'd be interested in this as well", // the source line's own indent is dropped
-		"--- Bucko Done ---",
+		"[Bucko Done]",
 	}
 	gotLines := strings.Split(got, "\n")
 	if len(gotLines) < len(want) {
@@ -311,10 +311,10 @@ func TestQuoteModeLeavesOneBlankLineAfterBlock(t *testing.T) {
 
 			got := strings.Split(stripANSI(ch.buffer.GetContent()), "\n")
 			want := []string{
-				"--- Bucko Said ---",
+				"[Bucko Said]",
 				"Bu> On 28 Aug 2026, Shurato said the following...",
 				"Bu> Sh> I'd be interested in this as well",
-				"--- Bucko Done ---",
+				"[Bucko Done]",
 				"",
 				"my own words",
 			}

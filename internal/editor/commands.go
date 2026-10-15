@@ -70,8 +70,8 @@ type CommandHandler struct {
 
 // Built-in quote block styling, used when strings.json supplies none.
 const (
-	defaultQuoteTop    = "|08--- |15^N |07Said |08---"
-	defaultQuoteBottom = "|08--- |15^N |07Done |08---|07"
+	defaultQuoteTop    = "|08[|15^N |07Said|08]"
+	defaultQuoteBottom = "|08[|15^N |07Done|08]|07"
 	defaultQuotePrefix = "^I> "
 )
 
