@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -164,6 +165,9 @@ func TestSaveFileMergesAndSkipsNoOps(t *testing.T) {
 // A merged save keeps the file's mode: ftn.json made 0600 to hide its
 // passwords must not come back 0644.
 func TestSaveFileKeepsFileMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no Unix permission bits")
+	}
 	path := filepath.Join(t.TempDir(), "items.json")
 	if err := os.WriteFile(path, []byte(`[{"id":1,"tag":"A"}]`), 0o600); err != nil {
 		t.Fatal(err)
