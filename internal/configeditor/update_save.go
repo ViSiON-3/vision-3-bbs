@@ -30,24 +30,29 @@ func (m *Model) saveAll() bool {
 	}
 	m.binkdSyncErr = nil
 
-	if err := saveServerConfig(m.configPath, m.configs.Server); err != nil {
-		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
+	// Files other programs also write are merged, not overwritten: see
+	// saveMergedFile. Their conflicts are collected for the status line.
+	b := &m.configs.bases
+	var conflicts []string
+	merge := func(c []string, err error) bool {
+		if err != nil {
+			m.message = fmt.Sprintf("SAVE ERROR: %v", err)
+			return false
+		}
+		conflicts = append(conflicts, c...)
+		return true
+	}
+	if !merge(saveMergedFile(config.ServerConfigFile(m.configPath), b.known, &b.server, &m.configs.Server)) {
 		return false
 	}
-	if err := saveConferences(m.configPath, m.configs.Conferences); err != nil {
-		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
+	if !merge(saveMergedFile(conferencesFile(m.configPath), b.known, &b.conferences, &m.configs.Conferences)) {
 		return false
 	}
-	areaConflicts, err := saveMsgAreas(m.configPath, m.configs)
-	if err != nil {
-		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
+	normalizeConferenceOrder(m.configs.Conferences)
+	if !merge(saveMsgAreas(m.configPath, m.configs)) {
 		return false
 	}
-	for _, c := range areaConflicts {
-		slog.Warn("message areas merge conflict", "detail", c)
-	}
-	if err := saveFileAreas(m.configPath, m.configs.FileAreas); err != nil {
-		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
+	if !merge(saveMergedFile(fileAreasFile(m.configPath), b.known, &b.fileAreas, &m.configs.FileAreas)) {
 		return false
 	}
 	if err := saveDoors(m.configPath, m.configs.Doors); err != nil {
@@ -68,8 +73,7 @@ func (m *Model) saveAll() bool {
 	// FTN before events: the FTN wizard enables a hub-poll event for the
 	// network it saves, so if the sequence fails midway the poll must not be
 	// persisted for a network that never made it to ftn.json.
-	if err := saveFTNConfig(m.configPath, m.configs.FTN); err != nil {
-		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
+	if !merge(saveMergedFile(ftnFile(m.configPath), b.known, &b.ftn, &m.configs.FTN)) {
 		return false
 	}
 	// QWK networks likewise go before events, and only when a network is
@@ -153,8 +157,7 @@ func (m *Model) saveAll() bool {
 				ftn.BinkdOutboundFor(bbsRoot, m.configs.FTN))
 		}
 	}
-	if err := config.SaveV3NetConfig(m.configPath, m.configs.V3Net); err != nil {
-		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
+	if !merge(saveMergedFile(config.V3NetConfigFile(m.configPath), b.known, &b.v3net, &m.configs.V3Net)) {
 		return false
 	}
 	if err := saveProtocols(m.configPath, m.configs.Protocols); err != nil {
@@ -189,12 +192,15 @@ func (m *Model) saveAll() bool {
 		slog.Warn("failed to signal config reload", "error", err)
 	}
 
+	for _, c := range conflicts {
+		slog.Warn("config merge conflict", "detail", c)
+	}
 	m.binkdSyncErr = binkdSyncErr
 	if binkdSyncErr != nil {
 		m.message = fmt.Sprintf("Saved (warning: binkd.conf sync failed: %v)", binkdSyncErr)
-	} else if len(areaConflicts) > 0 {
-		m.message = fmt.Sprintf("Saved; %d message area change(s) made elsewhere were overridden: %s",
-			len(areaConflicts), areaConflicts[0])
+	} else if len(conflicts) > 0 {
+		m.message = fmt.Sprintf("Saved; %d change(s) made elsewhere were overridden: %s",
+			len(conflicts), conflicts[0])
 	} else {
 		m.message = "All configurations saved successfully"
 	}

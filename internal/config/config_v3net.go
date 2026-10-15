@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
+	"github.com/ViSiON-3/vision-3-bbs/internal/configmerge"
 	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 )
 
@@ -151,15 +153,73 @@ func LoadV3NetConfig(configPath string) (V3NetConfig, error) {
 	return cfg, nil
 }
 
-// SaveV3NetConfig writes the V3NetConfig back to v3net.json in the given configPath directory.
+// ParseV3NetConfig parses v3net.json's contents.
+func ParseV3NetConfig(data []byte) (V3NetConfig, error) {
+	var cfg V3NetConfig
+	err := json.Unmarshal(data, &cfg)
+	return cfg, err
+}
+
+// V3NetConfigFile describes v3net.json for configmerge.SaveFile.
+func V3NetConfigFile(configPath string) configmerge.File[V3NetConfig] {
+	return configmerge.File[V3NetConfig]{
+		Path:  filepath.Join(configPath, "v3net.json"),
+		Parse: ParseV3NetConfig,
+		Marshal: func(cfg V3NetConfig) ([]byte, error) {
+			return json.MarshalIndent(cfg, "", "  ")
+		},
+	}
+}
+
+// SaveV3NetConfig writes cfg to v3net.json under the file's cross-process
+// lock, replacing the whole file. To change part of it use
+// UpdateV3NetConfig, which keeps changes other programs made.
 func SaveV3NetConfig(configPath string, cfg V3NetConfig) error {
-	filePath := filepath.Join(configPath, "v3net.json")
+	path := filepath.Join(configPath, "v3net.json")
+	lock, err := configmerge.Lock(path)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+	return writeV3NetConfig(path, cfg)
+}
+
+func writeV3NetConfig(filePath string, cfg V3NetConfig) error {
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal V3Net config: %w", err)
 	}
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := atomicfile.WriteFile(filePath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write V3Net config to %s: %w", filePath, err)
 	}
 	return nil
+}
+
+// UpdateV3NetConfig applies fn to v3net.json as it is on disk now and writes
+// the result, holding the file's lock throughout, so a change another
+// program made since this process loaded the file is kept. A missing file
+// starts from an empty configuration. fn may return ErrNoChange to leave
+// the file as it is; UpdateV3NetConfig then returns ErrNoChange.
+func UpdateV3NetConfig(configPath string, fn func(*V3NetConfig) error) error {
+	path := filepath.Join(configPath, "v3net.json")
+	lock, err := configmerge.Lock(path)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+
+	var cfg V3NetConfig
+	data, err := os.ReadFile(path)
+	switch {
+	case err == nil:
+		if cfg, err = ParseV3NetConfig(data); err != nil {
+			return fmt.Errorf("failed to parse V3Net config JSON from %s: %w", path, err)
+		}
+	case !os.IsNotExist(err):
+		return err
+	}
+	if err := fn(&cfg); err != nil {
+		return err // ErrNoChange included: nothing is written
+	}
+	return writeV3NetConfig(path, cfg)
 }

@@ -390,7 +390,12 @@ func runAdminToggleAllowNewUsers(c *cmdCtx, args string) (*user.User, string, er
 	cfg := e.GetServerConfig()
 	cfg.AllowNewUsers = !cfg.AllowNewUsers
 
-	if err := config.SaveServerConfig(e.RootConfigPath, cfg); err != nil {
+	// Change the one setting in config.json as it is now, rather than
+	// writing this session's whole copy over edits saved since it loaded.
+	if _, err := config.UpdateServerConfig(e.RootConfigPath, func(c *config.ServerConfig) error {
+		c.AllowNewUsers = cfg.AllowNewUsers
+		return nil
+	}); err != nil {
 		slog.Error("failed to save config after toggling allowNewUsers", "node", nodeNumber, "error", err)
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Error saving config.|07\r\n")), outputMode)
 		uiPause(1 * time.Second)

@@ -12,8 +12,10 @@ import (
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/configmerge"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -32,18 +34,55 @@ type allConfigs struct {
 	// loaded from disk, which then save by plain overwrite.
 	msgAreasBase      []message.MessageArea
 	msgAreasBaseKnown bool
-	FileAreas         []file.FileArea
-	Doors             map[string]config.DoorConfig
-	Events            config.EventsConfig
-	FTN               config.FTNConfig
-	V3Net             config.V3NetConfig
-	QWKNet            config.QWKNetConfig
-	Protocols         []transfer.ProtocolConfig
-	Archivers         archiver.Config
-	LoginSeq          []config.LoginItem
+	// bases holds the other shared files as last loaded or saved, for the
+	// same merge (saveMergedFile). Zero for configs not loaded from disk.
+	bases     configBases
+	FileAreas []file.FileArea
+	Doors     map[string]config.DoorConfig
+	Events    config.EventsConfig
+	FTN       config.FTNConfig
+	V3Net     config.V3NetConfig
+	QWKNet    config.QWKNetConfig
+	Protocols []transfer.ProtocolConfig
+	Archivers archiver.Config
+	LoginSeq  []config.LoginItem
 	// ZipLab is ziplab.json alone. Its ArchiveTypes is left at the default:
 	// ZipLab takes archive formats from archivers.json when the BBS loads it.
 	ZipLab ziplab.Config
+}
+
+// configBases are the snapshots saveMergedFile merges against: each shared
+// config file as the editor last loaded or saved it.
+type configBases struct {
+	known       bool
+	server      config.ServerConfig
+	conferences []conference.Conference
+	fileAreas   []file.FileArea
+	ftn         config.FTNConfig
+	v3net       config.V3NetConfig
+}
+
+// snapshotBases records ac's current values as the merge bases.
+func (ac *allConfigs) snapshotBases() error {
+	var err error
+	b := configBases{known: true}
+	if b.server, err = configmerge.Clone(ac.Server); err != nil {
+		return err
+	}
+	if b.conferences, err = configmerge.Clone(ac.Conferences); err != nil {
+		return err
+	}
+	if b.fileAreas, err = configmerge.Clone(ac.FileAreas); err != nil {
+		return err
+	}
+	if b.ftn, err = configmerge.Clone(ac.FTN); err != nil {
+		return err
+	}
+	if b.v3net, err = configmerge.Clone(ac.V3Net); err != nil {
+		return err
+	}
+	ac.bases = b
+	return nil
 }
 
 // loadAllConfigs loads all configuration files from the given directory.
@@ -145,6 +184,9 @@ func loadAllConfigs(configPath string) (allConfigs, error) {
 		ac.LoginSeq = nil
 	}
 
+	if err := ac.snapshotBases(); err != nil {
+		return ac, fmt.Errorf("snapshotting configs: %w", err)
+	}
 	return ac, nil
 }
 
@@ -165,9 +207,90 @@ func loadJSONSlice[T any](configPath, filename string) ([]T, error) {
 	return result, nil
 }
 
-// saveServerConfig writes the server config back to disk.
-func saveServerConfig(configPath string, cfg config.ServerConfig) error {
-	return config.SaveServerConfig(configPath, cfg)
+// saveMergedFile saves *cur to a config file other programs also write,
+// merging in their changes made since *base was read (configmerge.SaveFile).
+// On success *cur and *base become what is now on disk; on failure both are
+// left alone, so a retry still sees the sysop's edits as edits. It returns a
+// description of each merge conflict. Configs that were not loaded from
+// disk (known false) are written as they are.
+func saveMergedFile[T any](f configmerge.File[T], known bool, base, cur *T) ([]string, error) {
+	if !known {
+		lock, err := configmerge.Lock(f.Path)
+		if err != nil {
+			return nil, err
+		}
+		defer lock.Release()
+		data, err := f.Marshal(*cur)
+		if err != nil {
+			return nil, err
+		}
+		return nil, atomicfile.WriteFile(f.Path, data, 0o644)
+	}
+	merged, res, err := configmerge.SaveFile(f, *base, *cur)
+	if err != nil {
+		return nil, err
+	}
+	newBase, err := configmerge.Clone(merged)
+	if err != nil {
+		return nil, err
+	}
+	*cur, *base = merged, newBase
+	var conflicts []string
+	for _, c := range res.Conflicts {
+		conflicts = append(conflicts, filepath.Base(f.Path)+": "+c.What)
+	}
+	return conflicts, nil
+}
+
+func marshalIndented[T any](v T) ([]byte, error) {
+	return json.MarshalIndent(v, "", "  ")
+}
+
+// conferencesFile describes conferences.json, read the way loadAllConfigs
+// reads it.
+func conferencesFile(configPath string) configmerge.File[[]conference.Conference] {
+	return configmerge.File[[]conference.Conference]{
+		Path: filepath.Join(configPath, "conferences.json"),
+		Parse: func(data []byte) ([]conference.Conference, error) {
+			var confs []conference.Conference
+			if err := json.Unmarshal(data, &confs); err != nil {
+				return nil, err
+			}
+			normalizeConferenceOrder(confs)
+			return confs, nil
+		},
+		Marshal: marshalIndented[[]conference.Conference],
+	}
+}
+
+// fileAreasFile describes file_areas.json.
+func fileAreasFile(configPath string) configmerge.File[[]file.FileArea] {
+	return configmerge.File[[]file.FileArea]{
+		Path: filepath.Join(configPath, "file_areas.json"),
+		Parse: func(data []byte) ([]file.FileArea, error) {
+			var areas []file.FileArea
+			err := json.Unmarshal(data, &areas)
+			return areas, err
+		},
+		Marshal: marshalIndented[[]file.FileArea],
+	}
+}
+
+// ftnFile describes ftn.json, read the way loadAllConfigs reads it: link
+// address families are adopted from binkd.conf, or the merge would read the
+// editor's adopted values as edits.
+func ftnFile(configPath string) configmerge.File[config.FTNConfig] {
+	f := config.FTNConfigFile(configPath)
+	parse := f.Parse
+	f.Parse = func(data []byte) (config.FTNConfig, error) {
+		cfg, err := parse(data)
+		if err != nil {
+			return cfg, err
+		}
+		adoptBinkdIPFamilies(&cfg, filepath.Join(configPath, "..", "data", "ftn", "binkd.conf"))
+		return cfg, nil
+	}
+	return f
 }
 
 // saveJSONSlice writes a slice as a JSON array to a file.
@@ -212,19 +335,6 @@ func saveEventsConfig(configPath string, cfg config.EventsConfig) error {
 	return nil
 }
 
-// saveFTNConfig writes FTN config back to disk.
-func saveFTNConfig(configPath string, cfg config.FTNConfig) error {
-	filePath := filepath.Join(configPath, "ftn.json")
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling ftn: %w", err)
-	}
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
-		return fmt.Errorf("writing %s: %w", filePath, err)
-	}
-	return nil
-}
-
 // savedFTNOwnAddresses returns each network's own address as ftn.json holds
 // it on disk, keyed by network name. It reads the file directly rather than
 // through config.LoadFTNConfig, which logs every network and reassigns shared
@@ -262,11 +372,6 @@ func saveArchivers(configPath string, cfg archiver.Config) error {
 // saveProtocols writes protocols config back to disk.
 func saveProtocols(configPath string, protocols []transfer.ProtocolConfig) error {
 	return saveJSONSlice(configPath, "protocols.json", protocols)
-}
-
-// saveConferences writes conferences back to disk.
-func saveConferences(configPath string, confs []conference.Conference) error {
-	return saveJSONSlice(configPath, "conferences.json", confs)
 }
 
 // saveMsgAreas writes message areas back to disk, returning a description of
@@ -320,11 +425,6 @@ func saveMsgAreas(configPath string, ac *allConfigs) ([]string, error) {
 	ac.MsgAreas = message.CloneAreas(merged)
 	sortMsgAreasByConference(ac.MsgAreas, ac.Conferences)
 	return conflicts, nil
-}
-
-// saveFileAreas writes file areas back to disk.
-func saveFileAreas(configPath string, areas []file.FileArea) error {
-	return saveJSONSlice(configPath, "file_areas.json", areas)
 }
 
 // saveLoginSeq writes login sequence back to disk.

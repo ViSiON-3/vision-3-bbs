@@ -119,6 +119,16 @@ Choosing **Access & Security** (key 2) opens an inner menu of five numbered item
 
 The editor tracks unsaved changes. When you quit with pending changes, you are prompted to save, and confirmed changes are then written to the appropriate configuration files.
 
+It is safe to keep the editor open while the BBS runs or while you use
+`helper` (for example `helper ftnsetup`, `helper fileecho`, or
+`helper areas set`). The files those also write — `config.json`,
+`conferences.json`, `message_areas.json`, `file_areas.json`, `ftn.json`, and
+`v3net.json` — are not simply overwritten on save. The editor locks each one
+(a `<file>.lock` file beside it) and merges in whatever changed on disk since
+it loaded it, so a conference added by `helper ftnsetup` or a V3Net
+subscription made on the BBS survives. Only a setting changed both in the
+editor and elsewhere takes the editor's value; the status line reports it.
+
 ## Configuration Files Overview
 
 Configuration files are split between two directories:
