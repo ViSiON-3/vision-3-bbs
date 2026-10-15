@@ -193,7 +193,11 @@ func TestForwardResizes(t *testing.T) {
 // A key already waiting is read before a pending window change, and the
 // change is still delivered on the next call.
 func TestReadKeyOrEventPrefersBufferedKey(t *testing.T) {
-	ih := NewInputHandler(strings.NewReader(""))
+	// Input that stays open until the test closes it. An empty reader would
+	// hit EOF at once, and with both the closed input and the window change
+	// ready the second call's select could take either.
+	pr, pw := io.Pipe()
+	ih := NewInputHandler(pr)
 	ih.unreadByte('a')
 	events := make(chan ssh.Window, 1)
 	events <- ssh.Window{Width: 100, Height: 30}
@@ -206,6 +210,7 @@ func TestReadKeyOrEventPrefersBufferedKey(t *testing.T) {
 	if err != nil || !isEvent || win.Width != 100 {
 		t.Fatalf("second call = (%+v, event=%v, %v), want the window change", win, isEvent, err)
 	}
+	_ = pw.Close()
 	if _, _, _, err := readKeyOrEvent(ih, events); err != io.EOF {
 		t.Errorf("after input ends: err = %v, want io.EOF", err)
 	}
