@@ -115,7 +115,7 @@ func (t *Tosser) processTICs(dir string, result *TossResult) {
 
 	// Only the secure inbound is written by sessions that passed binkd's
 	// password check. A TIC anywhere else is trusted only on its own Pw line.
-	secure := t.paths.SecureInboundPath != "" && dir == t.paths.SecureInboundPath
+	secure := t.isSecureInbound(dir)
 	for _, name := range tics {
 		t.processTIC(dir, name, secure, areas, result)
 	}

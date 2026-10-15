@@ -38,6 +38,18 @@ func (t *Tosser) inboundDirs() []string {
 	return dirs
 }
 
+// isSecureInbound reports whether dir is the secure inbound, which only
+// binkd sessions that passed its password check write to. A secure inbound
+// that is the same directory as the unsecured one proves nothing, since
+// anyone can write there.
+func (t *Tosser) isSecureInbound(dir string) bool {
+	secure := t.paths.SecureInboundPath
+	if secure == "" || filepath.Clean(dir) != filepath.Clean(secure) {
+		return false
+	}
+	return t.paths.InboundPath == "" || filepath.Clean(secure) != filepath.Clean(t.paths.InboundPath)
+}
+
 // TossResult holds the results of a toss/scan cycle.
 type TossResult struct {
 	PacketsProcessed int
@@ -211,7 +223,7 @@ func (t *Tosser) processInboundDir(dir string, result *TossResult) {
 
 	// As for TICs: only the secure inbound is written by sessions that
 	// passed binkd's password check, which lets their mail create areas.
-	secure := t.paths.SecureInboundPath != "" && dir == t.paths.SecureInboundPath
+	secure := t.isSecureInbound(dir)
 	ticFiles := ticReferencedFiles(dir, entries)
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -308,8 +320,10 @@ func (t *Tosser) processBundle(path, name string, secure bool, result *TossResul
 	// is removed below but skipped packets would otherwise strand in unpack/ forever
 	// since no tosser rescans that directory. Move them back to the inbound dir so
 	// the appropriate tosser picks them up on this or a future toss cycle.
+	// They go back to the directory the bundle was in, so a packet from the
+	// secure inbound stays trusted there.
 	for _, pktPath := range skippedPkts {
-		destPath := filepath.Join(t.paths.InboundPath, filepath.Base(pktPath))
+		destPath := filepath.Join(filepath.Dir(path), filepath.Base(pktPath))
 		if err := os.Rename(pktPath, destPath); err != nil {
 			// Do not delete on rename failure — a stranded packet in unpack/ is
 			// recoverable; a deleted packet is not.

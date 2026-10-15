@@ -1083,6 +1083,8 @@ from one of the network's configured links and:
 - the link has a `packet_password` and the packet carries it, or
 - the link has no `packet_password` and the packet arrived in the
   `secure_inbound_path`, which binkd only writes for password-checked sessions.
+  It must be a different directory from `inbound_path`; if the two are the
+  same, nothing counts as secure.
 
 This is the same rule `v3mail toss` applies to TIC files. The echo tag must also
 be valid: letters, digits, `_`, `-` and `.`, at most 50 characters. Mail that

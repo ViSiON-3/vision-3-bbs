@@ -156,6 +156,30 @@ func TestMixedBundleRequeuesForeignPacket(t *testing.T) {
 	}
 }
 
+// A packet re-queued from a bundle in the secure inbound goes back to the
+// secure inbound, not the unsecured one, so it keeps the trust a
+// password-checked session gave it.
+func TestMixedBundleRequeuesToBundleDir(t *testing.T) {
+	env := setupTestEnv(t)
+	unsecured := env.inboundDir
+	useSecureInbound(t, env)
+	tosser := newTestTosser(t, env)
+
+	staging := t.TempDir()
+	bundlePath := filepath.Join(env.inboundDir, "0004009e.tu0")
+	bundlePackets(t, bundlePath,
+		writeGoodPacket(t, staging, "ours0001.pkt", 21, 4, 158),
+		writeGoodPacket(t, staging, "them0001.pkt", 3, 633, 2744))
+
+	tosser.ProcessInbound()
+	if got := dirNames(t, env.inboundDir); len(got) != 1 || got[0] != "them0001.pkt" {
+		t.Errorf("secure inbound = %v, want only the re-queued them0001.pkt", got)
+	}
+	if got := dirNames(t, unsecured); len(got) != 0 {
+		t.Errorf("unsecured inbound = %v, want empty", got)
+	}
+}
+
 // A file with a bundle name and ZIP magic that does not unzip is moved to the
 // temp path for inspection rather than retried every cycle.
 func TestCorruptBundleIsMovedAside(t *testing.T) {

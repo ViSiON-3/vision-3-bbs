@@ -41,14 +41,26 @@ func tossOnePw(t *testing.T, tsr *Tosser, env *testEnv, name, area, msgID, passw
 	return tsr.ProcessInbound()
 }
 
-// setupAutoCreateEnv is setupTestEnv with auto-create on and the inbound
-// treated as the secure one, so packets from the hub may create areas.
+// setupAutoCreateEnv is setupTestEnv with auto-create on and packets written
+// to a secure inbound, so packets from the hub may create areas.
 func setupAutoCreateEnv(t *testing.T) *testEnv {
 	t.Helper()
 	env := setupTestEnv(t)
 	env.netCfg.AutoCreate.Enabled = true
-	env.globalCfg.SecureInboundPath = env.inboundDir
+	useSecureInbound(t, env)
 	return env
+}
+
+// useSecureInbound gives env a secure inbound apart from the unsecured one
+// and has the test write its packets there.
+func useSecureInbound(t *testing.T, env *testEnv) {
+	t.Helper()
+	secure := filepath.Join(env.dataDir, "ftn", "secure_in")
+	if err := os.MkdirAll(secure, 0755); err != nil {
+		t.Fatal(err)
+	}
+	env.globalCfg.SecureInboundPath = secure
+	env.inboundDir = secure
 }
 
 // With auto_create on, mail in an echo the BBS doesn't carry creates an area
@@ -157,6 +169,7 @@ func TestAutoCreateRequiresTrustedPacket(t *testing.T) {
 		linkPw     string
 		pktPw      string
 		badLink    bool
+		sameDir    bool
 		wantCreate bool
 	}{
 		{name: "secure inbound", secure: true, wantCreate: true},
@@ -165,12 +178,16 @@ func TestAutoCreateRequiresTrustedPacket(t *testing.T) {
 		{name: "unsecured, wrong password", linkPw: "secret", pktPw: "guess"},
 		{name: "secure, wrong password", secure: true, linkPw: "secret", pktPw: "guess"},
 		{name: "secure, no valid link", secure: true, badLink: true},
+		{name: "secure inbound is the unsecured one", sameDir: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			env := setupTestEnv(t)
 			env.netCfg.AutoCreate.Enabled = true
 			if tc.secure {
-				env.globalCfg.SecureInboundPath = env.inboundDir
+				useSecureInbound(t, env)
+			}
+			if tc.sameDir {
+				env.globalCfg.SecureInboundPath = env.globalCfg.InboundPath
 			}
 			env.netCfg.Links = []config.FTNLinkConfig{{Address: "21:4/158", PacketPassword: tc.linkPw}}
 			if tc.badLink {
