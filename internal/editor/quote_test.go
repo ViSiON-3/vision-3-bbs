@@ -159,6 +159,19 @@ func TestStripANSI(t *testing.T) {
 	if got := stripANSI("plain"); got != "plain" {
 		t.Errorf("stripANSI() = %q, want %q", got, "plain")
 	}
+	// OSC and the other string escapes go whole, whichever terminator they use.
+	for _, tc := range []struct{ in, want string }{
+		{"a\x1b]10;red\x07b", "ab"},
+		{"a\x1b]0;title\x1b\\b", "ab"},
+		{"a\x1bPq#0\x1b\\b", "ab"},
+		{"a\x1bcb", "ab"},
+		{"a\x1b]unterminated", "a"},
+		{"héllo\x1b", "héllo"},
+	} {
+		if got := stripANSI(tc.in); got != tc.want {
+			t.Errorf("stripANSI(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
 }
 
 // newQuoteHarness wires a CommandHandler to a fake terminal and a scripted
@@ -518,6 +531,13 @@ func TestQuoteModeNetworkedBanners(t *testing.T) {
 			"",
 			"draft",
 		}, 4},
+		{"escapes stripped", "^N\x1b]10;red\x07 wrote:\x1b]0;x\x1b\\", "", []string{
+			"Bucko wrote:",
+			"Bu> On 28 Aug 2026, Shurato said the following...",
+			"Bu> Sh> I'd be interested in this as well",
+			"",
+			"draft",
+		}, 5},
 		{"colors stripped", "|15^N |07wrote:|07", "|08-- end --", []string{
 			"Bucko wrote:",
 			"Bu> On 28 Aug 2026, Shurato said the following...",

@@ -5,8 +5,6 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
-
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // The split-pane quote picker used by CTRL-Q.
@@ -665,7 +663,8 @@ func (ch *CommandHandler) quotePrefix() string {
 
 // quoteBanners returns the "Said" and "Done" lines ready for the buffer. An
 // empty result means that banner is left out. Networked areas get plain text:
-// color codes are stripped so no ANSI leaves the BBS.
+// escapes and control characters are stripped so none leave the BBS, including
+// any carried in by the quoted message's author or subject.
 func (ch *CommandHandler) quoteBanners() (top, bottom string) {
 	if !ch.networked {
 		return ch.processForBuffer(ch.processQuoteCodes(ch.quoteTopText())),
@@ -675,7 +674,7 @@ func (ch *CommandHandler) quoteBanners() (top, bottom string) {
 		if strings.TrimSpace(tmpl) == "" {
 			return ""
 		}
-		return strings.TrimRight(ansi.StripAnsi(ch.processForBuffer(ch.processQuoteCodes(tmpl))), " ")
+		return strings.TrimRight(stripControl(stripANSI(ch.processForBuffer(ch.processQuoteCodes(tmpl)))), " ")
 	}
 	return plain(ch.quoteTopNetStr), plain(ch.quoteBottomNetStr)
 }
@@ -940,31 +939,63 @@ func isQuoteTrailerLine(line string) bool {
 	return false
 }
 
-// stripANSI removes CSI escape sequences so raw ANSI in a message body cannot
-// bleed colors into the quote pane or the composed reply.
+// stripANSI removes terminal escape sequences so raw ANSI in a message body
+// cannot bleed colors into the quote pane or the composed reply: CSI
+// sequences, the OSC/DCS/SOS/PM/APC strings (ended by BEL or ESC \), and
+// two-byte escapes such as ESC c. An unterminated string runs to the end.
 func stripANSI(s string) string {
 	if !strings.ContainsRune(s, 0x1B) {
 		return s
 	}
 	var b strings.Builder
 	for i := 0; i < len(s); {
-		if s[i] == 0x1B {
+		if s[i] != 0x1B {
+			b.WriteByte(s[i])
 			i++
-			if i < len(s) && s[i] == '[' {
-				i++
-				for i < len(s) && (s[i] < 0x40 || s[i] > 0x7E) {
-					i++
-				}
-				if i < len(s) {
-					i++ // final byte
-				}
-			}
 			continue
 		}
-		b.WriteByte(s[i])
 		i++
+		if i >= len(s) {
+			break
+		}
+		switch c := s[i]; {
+		case c == '[':
+			i++
+			for i < len(s) && (s[i] < 0x40 || s[i] > 0x7E) {
+				i++
+			}
+			if i < len(s) {
+				i++ // final byte
+			}
+		case c == ']' || c == 'P' || c == 'X' || c == '^' || c == '_':
+			i++
+			for i < len(s) {
+				if s[i] == 0x07 {
+					i++
+					break
+				}
+				if s[i] == 0x1B && i+1 < len(s) && s[i+1] == '\\' {
+					i += 2
+					break
+				}
+				i++
+			}
+		case c >= 0x20 && c <= 0x7E:
+			i++ // two-byte escape
+		}
 	}
 	return b.String()
+}
+
+// stripControl removes the C0 control characters and DEL that stripANSI
+// leaves behind, such as a stray BEL.
+func stripControl(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7F {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 func runeLen(s string) int {
