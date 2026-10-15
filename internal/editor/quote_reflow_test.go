@@ -113,11 +113,11 @@ func assertFilledParagraph(t *testing.T, lines []string, prefix, want string) {
 func quotedBlock(t *testing.T, ch *CommandHandler) []string {
 	t.Helper()
 	lines := strings.Split(stripANSI(ch.buffer.GetContent()), "\n")
-	if len(lines) < 2 || lines[0] != "--- Bucko Said ---" {
+	if len(lines) < 2 || lines[0] != "[Bucko Said]" {
 		t.Fatalf("buffer = %q, want it to open with the Said banner", lines)
 	}
 	for i, line := range lines {
-		if line == "--- Bucko Done ---" {
+		if line == "[Bucko Done]" {
 			return lines[1:i]
 		}
 	}

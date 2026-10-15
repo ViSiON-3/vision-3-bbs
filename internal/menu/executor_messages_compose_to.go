@@ -50,6 +50,12 @@ func isNetmailArea(area *message.MessageArea) bool {
 	return area != nil && jam.DetermineMessageType(area.AreaType, area.EchoTag).IsNetmail()
 }
 
+// isNetworkedArea reports whether area's messages leave the BBS over FTN or
+// QWK (echomail, netmail, qwknet), where they are read by other software.
+func isNetworkedArea(area *message.MessageArea) bool {
+	return area != nil && !jam.DetermineMessageType(area.AreaType, area.EchoTag).IsLocal()
+}
+
 const (
 	// netmailNameMaxLen is the FTN limit on a netmail's to-name.
 	netmailNameMaxLen = 36

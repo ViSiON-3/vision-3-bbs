@@ -77,6 +77,9 @@ func (m Model) stateOf(key string) valueState {
 		return stateCustom
 	}
 	// Blank, either because the key is absent or because it is set to "".
+	if _, ok := config.StringMissingDefaults[key]; ok && !present {
+		return stateFallback
+	}
 	if _, ok := config.StringFallbacks[key]; ok {
 		return stateFallback
 	}
@@ -94,6 +97,11 @@ func (m Model) previewValue(key string) (string, bool) {
 	}
 	if fb, ok := config.StringFallbacks[key]; ok && fb != "" {
 		return fb, true
+	}
+	if _, present := m.values[key]; !present {
+		if fb, ok := config.StringMissingDefaults[key]; ok {
+			return fb, true
+		}
 	}
 	return "", false
 }

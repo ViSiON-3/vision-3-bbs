@@ -54,9 +54,11 @@ type quoteSession struct {
 	top int // first visible source index (0-based)
 
 	paras      []quotePara
-	blockStart int // buffer line holding the "Said" banner (0 = no block yet)
-	insertAt   int // buffer line the next quoted line is inserted at
-	origLine   int // cursor line CTRL-Q was pressed on
+	blockStart int  // first buffer line of the block (0 = no block yet)
+	insertAt   int  // buffer line the next quoted line is inserted at
+	hasTop     bool // the block opens with a "Said" banner at blockStart
+	hasBottom  bool // the block closes with a "Done" banner at insertAt
+	origLine   int  // cursor line CTRL-Q was pressed on
 
 	composeTop   int  // first buffer line shown in the compose pane
 	composeFocus bool // true = arrows scroll the compose pane instead of moving the bar
@@ -213,7 +215,10 @@ func (qs *quoteSession) finish() (int, int) {
 		return qs.origLine, 1
 	}
 	buf := qs.ch.buffer
-	gap := qs.insertAt + 1 // insertAt holds the "Done" banner
+	gap := qs.insertAt // the line after the last quoted line
+	if qs.hasBottom {
+		gap++ // insertAt holds the "Done" banner
+	}
 	gapReady := gap <= buf.GetLineCount() && strings.TrimSpace(buf.GetLine(gap)) == ""
 	if !gapReady {
 		gapReady = qs.insertBufferLine(gap, "")
@@ -404,7 +409,7 @@ func (qs *quoteSession) undoLast() {
 	qs.scrollToSelection()
 
 	if len(qs.paras) == 0 {
-		// Only the two banners are left — drop the block entirely.
+		// Only the banners are left — drop the block entirely.
 		qs.dropBlock()
 	}
 
@@ -412,37 +417,49 @@ func (qs *quoteSession) undoLast() {
 	qs.drawQuotePane()
 }
 
-// dropBlock removes the "Said" / "Done" banner pair of a block that holds no
+// dropBlock removes the "Said" / "Done" banners of a block that holds no
 // quoted lines.
 func (qs *quoteSession) dropBlock() {
-	qs.ch.buffer.DeleteLine(qs.blockStart) // "Said"
-	qs.ch.buffer.DeleteLine(qs.blockStart) // "Done" shifted up into its place
+	if qs.hasTop {
+		qs.ch.buffer.DeleteLine(qs.blockStart) // "Said"
+	}
+	if qs.hasBottom {
+		qs.ch.buffer.DeleteLine(qs.blockStart) // "Done" shifted up into its place
+	}
 	qs.blockStart = 0
 	qs.insertAt = 0
+	qs.hasTop, qs.hasBottom = false, false
 }
 
-// ensureBlock lazily opens the "Said" / "Done" banner pair at the cursor line so
-// an aborted quote leaves no empty block behind.
+// ensureBlock lazily opens the "Said" / "Done" banners at the cursor line so
+// an aborted quote leaves no empty block behind. Either banner may be
+// configured away in a networked area, leaving just the quoted lines.
 func (qs *quoteSession) ensureBlock() bool {
 	if qs.blockStart != 0 {
 		return true
 	}
-	top := qs.ch.processForBuffer(qs.ch.processQuoteCodes(qs.ch.quoteTopText()))
-	bottom := qs.ch.processForBuffer(qs.ch.processQuoteCodes(qs.ch.quoteBottomText()))
+	top, bottom := qs.ch.quoteBanners()
 
 	at := qs.origLine
 	if at < 1 {
 		at = 1
 	}
-	if !qs.insertBufferLine(at, top) {
-		return false
+	next := at
+	if top != "" {
+		if !qs.insertBufferLine(next, top) {
+			return false
+		}
+		next++
 	}
-	if !qs.insertBufferLine(at+1, bottom) {
-		qs.ch.buffer.DeleteLine(at)
+	if bottom != "" && !qs.insertBufferLine(next, bottom) {
+		if top != "" {
+			qs.ch.buffer.DeleteLine(at)
+		}
 		return false
 	}
 	qs.blockStart = at
-	qs.insertAt = at + 1 // the "Done" banner; quoted lines push it down
+	qs.insertAt = next // the "Done" banner if any; quoted lines push it down
+	qs.hasTop, qs.hasBottom = top != "", bottom != ""
 	return true
 }
 
@@ -642,6 +659,24 @@ func (ch *CommandHandler) quotePrefix() string {
 	}
 	tmpl = strings.ReplaceAll(tmpl, "^I", quoteInitials(ch.quoteAuthor()))
 	return ch.processQuoteCodes(tmpl)
+}
+
+// quoteBanners returns the "Said" and "Done" lines ready for the buffer. An
+// empty result means that banner is left out. Networked areas get plain text:
+// escapes and control characters are stripped so none leave the BBS, including
+// any carried in by the quoted message's author or subject.
+func (ch *CommandHandler) quoteBanners() (top, bottom string) {
+	if !ch.networked {
+		return ch.processForBuffer(ch.processQuoteCodes(ch.quoteTopText())),
+			ch.processForBuffer(ch.processQuoteCodes(ch.quoteBottomText()))
+	}
+	plain := func(tmpl string) string {
+		if strings.TrimSpace(tmpl) == "" {
+			return ""
+		}
+		return strings.TrimRight(stripControl(stripANSI(ch.processForBuffer(ch.processQuoteCodes(tmpl)))), " ")
+	}
+	return plain(ch.quoteTopNetStr), plain(ch.quoteBottomNetStr)
 }
 
 func (ch *CommandHandler) quoteTopText() string {
@@ -904,31 +939,63 @@ func isQuoteTrailerLine(line string) bool {
 	return false
 }
 
-// stripANSI removes CSI escape sequences so raw ANSI in a message body cannot
-// bleed colors into the quote pane or the composed reply.
+// stripANSI removes terminal escape sequences so raw ANSI in a message body
+// cannot bleed colors into the quote pane or the composed reply: CSI
+// sequences, the OSC/DCS/SOS/PM/APC strings (ended by BEL or ESC \), and
+// two-byte escapes such as ESC c. An unterminated string runs to the end.
 func stripANSI(s string) string {
 	if !strings.ContainsRune(s, 0x1B) {
 		return s
 	}
 	var b strings.Builder
 	for i := 0; i < len(s); {
-		if s[i] == 0x1B {
+		if s[i] != 0x1B {
+			b.WriteByte(s[i])
 			i++
-			if i < len(s) && s[i] == '[' {
-				i++
-				for i < len(s) && (s[i] < 0x40 || s[i] > 0x7E) {
-					i++
-				}
-				if i < len(s) {
-					i++ // final byte
-				}
-			}
 			continue
 		}
-		b.WriteByte(s[i])
 		i++
+		if i >= len(s) {
+			break
+		}
+		switch c := s[i]; {
+		case c == '[':
+			i++
+			for i < len(s) && (s[i] < 0x40 || s[i] > 0x7E) {
+				i++
+			}
+			if i < len(s) {
+				i++ // final byte
+			}
+		case c == ']' || c == 'P' || c == 'X' || c == '^' || c == '_':
+			i++
+			for i < len(s) {
+				if s[i] == 0x07 {
+					i++
+					break
+				}
+				if s[i] == 0x1B && i+1 < len(s) && s[i+1] == '\\' {
+					i += 2
+					break
+				}
+				i++
+			}
+		case c >= 0x20 && c <= 0x7E:
+			i++ // two-byte escape
+		}
 	}
 	return b.String()
+}
+
+// stripControl removes the C0 control characters and DEL that stripANSI
+// leaves behind, such as a stray BEL.
+func stripControl(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7F {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 func runeLen(s string) int {

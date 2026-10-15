@@ -51,6 +51,27 @@ func TestStateOf(t *testing.T) {
 	}
 }
 
+// TestStateOfMissingDefault covers a key whose default applies only while it
+// is absent: blanking it switches the string off rather than restoring it.
+func TestStateOfMissingDefault(t *testing.T) {
+	m := newTestModel(t)
+	m.values = map[string]string{}
+	if got := m.stateOf("quoteTopNet"); got != stateFallback {
+		t.Errorf("absent quoteTopNet: stateOf = %v, want stateFallback", got)
+	}
+	if got, fb := m.previewValue("quoteTopNet"); !fb || got != config.StringMissingDefaults["quoteTopNet"] {
+		t.Errorf("absent quoteTopNet: previewValue = (%q, %v), want the default", got, fb)
+	}
+
+	m.values["quoteTopNet"] = ""
+	if got := m.stateOf("quoteTopNet"); got != stateEmpty {
+		t.Errorf("blank quoteTopNet: stateOf = %v, want stateEmpty", got)
+	}
+	if got, fb := m.previewValue("quoteTopNet"); fb || got != "" {
+		t.Errorf("blank quoteTopNet: previewValue = (%q, %v), want blank", got, fb)
+	}
+}
+
 // TestPreviewValueShowsFallback checks that a row the runtime fills is not
 // drawn as blank, since blank would read as "unused".
 func TestPreviewValueShowsFallback(t *testing.T) {

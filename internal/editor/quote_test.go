@@ -159,6 +159,19 @@ func TestStripANSI(t *testing.T) {
 	if got := stripANSI("plain"); got != "plain" {
 		t.Errorf("stripANSI() = %q, want %q", got, "plain")
 	}
+	// OSC and the other string escapes go whole, whichever terminator they use.
+	for _, tc := range []struct{ in, want string }{
+		{"a\x1b]10;red\x07b", "ab"},
+		{"a\x1b]0;title\x1b\\b", "ab"},
+		{"a\x1bPq#0\x1b\\b", "ab"},
+		{"a\x1bcb", "ab"},
+		{"a\x1b]unterminated", "a"},
+		{"héllo\x1b", "héllo"},
+	} {
+		if got := stripANSI(tc.in); got != tc.want {
+			t.Errorf("stripANSI(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
 }
 
 // newQuoteHarness wires a CommandHandler to a fake terminal and a scripted
@@ -255,10 +268,10 @@ func TestQuoteModeInsertsSelectedLinesWithBannerAndPrefix(t *testing.T) {
 
 	got := stripANSI(ch.buffer.GetContent())
 	want := []string{
-		"--- Bucko Said ---",
+		"[Bucko Said]",
 		"Bu> On 28 Aug 2026, Shurato said the following...",
 		"Bu> Sh> I'd be interested in this as well", // the source line's own indent is dropped
-		"--- Bucko Done ---",
+		"[Bucko Done]",
 	}
 	gotLines := strings.Split(got, "\n")
 	if len(gotLines) < len(want) {
@@ -298,10 +311,10 @@ func TestQuoteModeLeavesOneBlankLineAfterBlock(t *testing.T) {
 
 			got := strings.Split(stripANSI(ch.buffer.GetContent()), "\n")
 			want := []string{
-				"--- Bucko Said ---",
+				"[Bucko Said]",
 				"Bu> On 28 Aug 2026, Shurato said the following...",
 				"Bu> Sh> I'd be interested in this as well",
-				"--- Bucko Done ---",
+				"[Bucko Done]",
 				"",
 				"my own words",
 			}
@@ -493,5 +506,80 @@ func TestQuoteModeParksCursorAfterScrolling(t *testing.T) {
 				t.Errorf("cursor at (%d,%d), want (%d,1) — the cursor did not follow the scrolled lightbar", row, col, tc.wantRow)
 			}
 		})
+	}
+}
+
+// Networked areas (#632): other systems read a "---" line as a tearline and
+// don't render our colors, so the net banners are plain text and a blank one
+// is left out entirely rather than falling back to the local default.
+func TestQuoteModeNetworkedBanners(t *testing.T) {
+	for _, tc := range []struct {
+		name, top, bottom string
+		want              []string
+		wantLine          int
+	}{
+		{"top only", "^N wrote:", "", []string{
+			"Bucko wrote:",
+			"Bu> On 28 Aug 2026, Shurato said the following...",
+			"Bu> Sh> I'd be interested in this as well",
+			"",
+			"draft",
+		}, 5},
+		{"no banners", "", "", []string{
+			"Bu> On 28 Aug 2026, Shurato said the following...",
+			"Bu> Sh> I'd be interested in this as well",
+			"",
+			"draft",
+		}, 4},
+		{"escapes stripped", "^N\x1b]10;red\x07 wrote:\x1b]0;x\x1b\\", "", []string{
+			"Bucko wrote:",
+			"Bu> On 28 Aug 2026, Shurato said the following...",
+			"Bu> Sh> I'd be interested in this as well",
+			"",
+			"draft",
+		}, 5},
+		{"colors stripped", "|15^N |07wrote:|07", "|08-- end --", []string{
+			"Bucko wrote:",
+			"Bu> On 28 Aug 2026, Shurato said the following...",
+			"Bu> Sh> I'd be interested in this as well",
+			"-- end --",
+			"",
+			"draft",
+		}, 6},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, ch, ih, cleanup := newQuoteHarness(t, "  \x1b", quoteBody)
+			defer cleanup()
+
+			ch.SetNetworkQuoteStrings(tc.top, tc.bottom)
+			ch.buffer.LoadContent("draft")
+			line, _ := ch.HandleQuote(ih, 1, 1)
+
+			content := ch.buffer.GetContent()
+			if strings.Contains(content, "\x1b") {
+				t.Errorf("buffer = %q, want no ANSI escapes in a networked quote", content)
+			}
+			if got := strings.Split(content, "\n"); strings.Join(got, "\n") != strings.Join(tc.want, "\n") {
+				t.Fatalf("buffer:\n got  %q\n want %q", got, tc.want)
+			}
+			if line != tc.wantLine {
+				t.Errorf("cursor line = %d, want %d", line, tc.wantLine)
+			}
+		})
+	}
+}
+
+// Undoing every quoted line in a networked area removes whichever banners the
+// block has, and leaves nothing behind when it has none.
+func TestQuoteModeNetworkedUndo(t *testing.T) {
+	for _, top := range []string{"^N wrote:", ""} {
+		_, ch, ih, cleanup := newQuoteHarness(t, "  \x08\x08\x1b", quoteBody)
+		ch.SetNetworkQuoteStrings(top, "")
+		ch.buffer.LoadContent("draft")
+		ch.HandleQuote(ih, 1, 1)
+		if got := ch.buffer.GetContent(); got != "draft" {
+			t.Errorf("top %q: buffer = %q, want %q", top, got, "draft")
+		}
+		cleanup()
 	}
 }

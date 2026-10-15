@@ -243,6 +243,8 @@ func stringCatalog() []StringEntry {
 		{Label: "No Prompt Text", Key: "noPromptText", Description: "Text for 'No' in yes/no prompts"},
 		{Label: "Abort Message Prompt", Key: "abortMessagePrompt", Description: "Confirmation prompt when aborting a message"},
 		{Label: "Quote Prefix", Key: "QuotePrefix", Description: "Prefix on quoted lines; ^I = author initials, ^N = author name"},
+		{Label: "Net Quoting Top Line", Key: "quoteTopNet", Description: "Quote top line in echomail/netmail/QWK areas; blank = none, colors stripped, avoid leading ---; ^N ^T ^D ^W"},
+		{Label: "Net Quoting Bottom Line", Key: "quoteBottomNet", Description: "Quote bottom line in echomail/netmail/QWK areas; blank = none, colors stripped, avoid leading ---; ^N ^T ^D ^W"},
 		{Label: "One-Liner Legend", Key: "One_Liner_Legend", Description: "Color code legend shown when entering one-liners"},
 		{Label: "One-Liner Anon Prompt", Key: "oneLinerAnonymousPrompt", Description: "Asks if user wants to post one-liner anonymously"},
 
