@@ -300,6 +300,14 @@ func TestMergeAreasRefusesNewDuplicateTag(t *testing.T) {
 		t.Fatalf("err = %v, want DuplicateTagError for B", err)
 	}
 
+	// A duplicate moving to a different area is new, though the count of
+	// areas with that tag is unchanged.
+	theirs = []MessageArea{{ID: 1, Tag: "X"}, {ID: 2, Tag: "X"}, {ID: 3, Tag: "A"}}
+	_, err = MergeAreas(theirs, []MessageArea{{ID: 1, Tag: "X"}, {ID: 2, Tag: "Y"}, {ID: 3, Tag: "X"}}, theirs)
+	if !errors.As(err, &dup) {
+		t.Errorf("moved duplicate not caught: %v", err)
+	}
+
 	// A duplicate already on disk does not block an unrelated save.
 	theirs = []MessageArea{{ID: 1, Tag: "A"}, {ID: 2, Tag: "X"}, {ID: 3, Tag: "X"}}
 	if _, err := MergeAreas(theirs, []MessageArea{{ID: 1, Tag: "A", Name: "n"}, {ID: 2, Tag: "X"}, {ID: 3, Tag: "X"}}, theirs); err != nil {

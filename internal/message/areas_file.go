@@ -350,22 +350,32 @@ func (e *DuplicateTagError) Error() string {
 		"elsewhere; rename one and save again", strings.Join(e.Tags, ", "))
 }
 
-// newDuplicateTags lists tags held by more than one area in merged that
-// were not already duplicated in theirs (an existing duplicate on disk is
-// warned about at load and must not block every save).
+// newDuplicateTags lists tags held by more than one area in merged where
+// some area holding it did not already hold it in theirs. A duplicate already
+// on disk, held by the same areas, is warned about at load and must not block
+// every save; one that moves to a different area is new.
 func newDuplicateTags(merged, theirs []MessageArea) []string {
-	count := func(list []MessageArea) map[string]int {
-		m := make(map[string]int, len(list))
-		for _, a := range list {
-			m[a.Tag]++
+	had := make(map[string]map[int]bool, len(theirs))
+	for _, a := range theirs {
+		if had[a.Tag] == nil {
+			had[a.Tag] = make(map[int]bool)
 		}
-		return m
+		had[a.Tag][a.ID] = true
 	}
-	before, after := count(theirs), count(merged)
+	holders := make(map[string][]int, len(merged))
+	for _, a := range merged {
+		holders[a.Tag] = append(holders[a.Tag], a.ID)
+	}
 	var dups []string
-	for tag, n := range after {
-		if n > 1 && before[tag] < n {
-			dups = append(dups, tag)
+	for tag, ids := range holders {
+		if len(ids) < 2 {
+			continue
+		}
+		for _, id := range ids {
+			if !had[tag][id] {
+				dups = append(dups, tag)
+				break
+			}
 		}
 	}
 	sort.Strings(dups)
