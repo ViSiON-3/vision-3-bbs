@@ -264,9 +264,10 @@ func (mm *MessageManager) saveAreasLocked() (map[int]int, error) {
 	disk, data, readErr := ReadAreasFile(mm.areasPath)
 	switch {
 	case readErr != nil:
-		// An unreadable file has nothing to merge; replacing it is what a
-		// save did before merging existed.
-		slog.Warn("could not read message areas before saving; overwriting", "path", mm.areasPath, "error", readErr)
+		// The file exists but cannot be read or parsed (a hand edit with a
+		// typo, say). Overwriting it with this snapshot would destroy
+		// whatever is in it; fail the save instead, which the caller reports.
+		return nil, fmt.Errorf("reading message areas before saving: %w", readErr)
 	case data == nil && mm.diskBytes != nil:
 		// The file vanished. Merging would read that as every area deleted
 		// elsewhere; write ours back instead, as a save always has.

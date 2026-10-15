@@ -264,3 +264,25 @@ func TestMergeAreasSameTagAddedTwice(t *testing.T) {
 		}
 	})
 }
+
+// A message_areas.json that exists but does not parse must not be replaced by
+// the BBS's in-memory copy: the save fails and the file is left as it is.
+func TestSaveAreasRefusesToOverwriteUnparsableFile(t *testing.T) {
+	cfgDir := t.TempDir()
+	path := filepath.Join(cfgDir, "message_areas.json")
+	writeAreasFixture(t, path, []MessageArea{{ID: 1, Position: 1, Tag: "ONE", AreaType: "local"}})
+	mm, err := NewMessageManager(t.TempDir(), cfgDir, "Test BBS", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken := []byte(`[{"id": 1, "tag": "ONE",}]`)
+	if err := os.WriteFile(path, broken, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := mm.SaveAreas(); err == nil {
+		t.Fatal("SaveAreas succeeded over an unparsable file")
+	}
+	if got, _ := os.ReadFile(path); string(got) != string(broken) {
+		t.Errorf("file changed to %q", got)
+	}
+}
