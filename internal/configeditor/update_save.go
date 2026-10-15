@@ -204,7 +204,9 @@ func (m *Model) saveAll() bool {
 	if binkdSyncErr != nil {
 		m.message = fmt.Sprintf("Saved (warning: binkd.conf sync failed: %v)", binkdSyncErr)
 	} else if len(conflicts) > 0 {
-		m.message = fmt.Sprintf("Saved; %d change(s) made elsewhere were overridden: %s",
+		// Each conflict's text says how it was resolved: some keep the
+		// editor's value, others keep the change made elsewhere.
+		m.message = fmt.Sprintf("Saved; %d conflict(s) with changes made elsewhere (see log): %s",
 			len(conflicts), conflicts[0])
 	} else {
 		m.message = "All configurations saved successfully"
