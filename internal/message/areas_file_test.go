@@ -2,6 +2,7 @@ package message
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -284,5 +285,24 @@ func TestSaveAreasRefusesToOverwriteUnparsableFile(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(path); string(got) != string(broken) {
 		t.Errorf("file changed to %q", got)
+	}
+}
+
+// An area renamed here to the tag another program just gave a new area would
+// leave two areas with one tag; the merge refuses rather than pick one.
+func TestMergeAreasRefusesNewDuplicateTag(t *testing.T) {
+	base := []MessageArea{{ID: 1, Tag: "A"}}
+	ours := []MessageArea{{ID: 1, Tag: "B"}}
+	theirs := []MessageArea{{ID: 1, Tag: "A"}, {ID: 2, Tag: "B"}}
+	_, err := MergeAreas(base, ours, theirs)
+	var dup *DuplicateTagError
+	if !errors.As(err, &dup) || len(dup.Tags) != 1 || dup.Tags[0] != "B" {
+		t.Fatalf("err = %v, want DuplicateTagError for B", err)
+	}
+
+	// A duplicate already on disk does not block an unrelated save.
+	theirs = []MessageArea{{ID: 1, Tag: "A"}, {ID: 2, Tag: "X"}, {ID: 3, Tag: "X"}}
+	if _, err := MergeAreas(theirs, []MessageArea{{ID: 1, Tag: "A", Name: "n"}, {ID: 2, Tag: "X"}, {ID: 3, Tag: "X"}}, theirs); err != nil {
+		t.Errorf("existing duplicate blocked the save: %v", err)
 	}
 }

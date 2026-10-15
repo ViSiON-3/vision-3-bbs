@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 )
@@ -328,9 +329,47 @@ func MergeAreas(base, ours, theirs []MessageArea) (AreaMergeResult, error) {
 		merged = append(merged, a)
 		byTag[a.Tag] = a.ID
 	}
+	if dups := newDuplicateTags(merged, theirs); len(dups) > 0 {
+		return res, &DuplicateTagError{Tags: dups}
+	}
 	sortAreas(merged)
 	res.Areas = merged
 	return res, nil
+}
+
+// DuplicateTagError is returned by MergeAreas when combining the two sides
+// would give two areas one tag, e.g. an area renamed here to a tag another
+// program just gave a new area. Neither side is wrong on its own, so the save
+// is refused for the sysop to resolve by renaming one.
+type DuplicateTagError struct {
+	Tags []string
+}
+
+func (e *DuplicateTagError) Error() string {
+	return fmt.Sprintf("message area tag(s) %s would be used by two areas after merging with changes made "+
+		"elsewhere; rename one and save again", strings.Join(e.Tags, ", "))
+}
+
+// newDuplicateTags lists tags held by more than one area in merged that
+// were not already duplicated in theirs (an existing duplicate on disk is
+// warned about at load and must not block every save).
+func newDuplicateTags(merged, theirs []MessageArea) []string {
+	count := func(list []MessageArea) map[string]int {
+		m := make(map[string]int, len(list))
+		for _, a := range list {
+			m[a.Tag]++
+		}
+		return m
+	}
+	before, after := count(theirs), count(merged)
+	var dups []string
+	for tag, n := range after {
+		if n > 1 && before[tag] < n {
+			dups = append(dups, tag)
+		}
+	}
+	sort.Strings(dups)
+	return dups
 }
 
 // defaultAreaBasePath is the JAM base path AddArea gives an area with no
