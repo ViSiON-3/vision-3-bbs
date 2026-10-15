@@ -21,6 +21,7 @@ func setupAreasConfig(t *testing.T) string {
 		{ID: 2, Position: 2, Tag: "FD_NET", ConferenceID: 2, AreaType: "netmail", Network: "fidonet"},
 		{ID: 3, Position: 3, Tag: "FD_LINUX", ConferenceID: 2, AreaType: "echomail", Network: "fidonet"},
 		{ID: 4, Position: 4, Tag: "FD_BBS", ConferenceID: 2, AreaType: "echomail", Network: "fidonet", RealNameOnly: true},
+		{ID: 5, Position: 5, Tag: "FD_OLD", ConferenceID: 2, AreaType: "echo", Network: "fidonet"},
 	})
 	return dir
 }
@@ -51,7 +52,7 @@ func TestAreasSetByConference(t *testing.T) {
 		t.Fatalf("rc = %d", rc)
 	}
 	got := readAreas(t, dir)
-	for tag, want := range map[string]bool{"GENERAL": false, "FD_NET": false, "FD_LINUX": true, "FD_BBS": true} {
+	for tag, want := range map[string]bool{"GENERAL": false, "FD_NET": false, "FD_LINUX": true, "FD_BBS": true, "FD_OLD": true} {
 		if got[tag].RealNameOnly != want {
 			t.Errorf("%s RealNameOnly = %v, want %v", tag, got[tag].RealNameOnly, want)
 		}
@@ -65,7 +66,7 @@ func TestAreasSetConferenceByIDAndMultipleSettings(t *testing.T) {
 		t.Fatalf("rc = %d", rc)
 	}
 	got := readAreas(t, dir)
-	for _, tag := range []string{"FD_NET", "FD_LINUX", "FD_BBS"} {
+	for _, tag := range []string{"FD_NET", "FD_LINUX", "FD_BBS", "FD_OLD"} {
 		a := got[tag]
 		if a.AllowAnon == nil || !*a.AllowAnon || a.MaxMessages != 500 || a.ACSWrite != "s20" {
 			t.Errorf("%s not updated: %+v", tag, a)
@@ -110,10 +111,27 @@ func TestAreasSetRejectsBadInput(t *testing.T) {
 		"negative number":    {"--conference", "FIDONET", "--max-age", "-1"},
 		"unknown conference": {"--conference", "NOPE", "--real-name", "on"},
 		"no matches":         {"--network", "fsxnet", "--real-name", "on"},
+		"stray argument":     {"--conference", "FIDONET", "stray", "--real-name", "on"},
 	}
 	for name, args := range cases {
 		if rc := runAreasSet(append([]string{"--config", dir}, args...)); rc == 0 {
 			t.Errorf("%s: expected failure", name)
 		}
+	}
+}
+
+func TestAreasListRejectsStrayArgument(t *testing.T) {
+	dir := setupAreasConfig(t)
+	if rc := runAreasList([]string{"--config", dir, "--conference", "FIDONET", "stray", "--type", "echomail"}); rc != 2 {
+		t.Errorf("rc = %d, want 2", rc)
+	}
+}
+
+func TestAreasHelpExitsZero(t *testing.T) {
+	if rc := runAreasList([]string{"--help"}); rc != 0 {
+		t.Errorf("list --help rc = %d, want 0", rc)
+	}
+	if rc := runAreasSet([]string{"-h"}); rc != 0 {
+		t.Errorf("set -h rc = %d, want 0", rc)
 	}
 }

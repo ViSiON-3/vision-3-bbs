@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -149,7 +150,7 @@ func matchAreas(areas []message.MessageArea, confs []conferenceConfig, f areaFil
 		if f.network != "" && !strings.EqualFold(a.Network, f.network) {
 			continue
 		}
-		if f.areaType != "" && !strings.EqualFold(a.AreaType, f.areaType) {
+		if f.areaType != "" && normalizeAreaType(a.AreaType) != normalizeAreaType(f.areaType) {
 			continue
 		}
 		if glob != "" {
@@ -160,6 +161,35 @@ func matchAreas(areas []message.MessageArea, confs []conferenceConfig, f areaFil
 		idx = append(idx, i)
 	}
 	return idx, nil
+}
+
+// normalizeAreaType folds "echo", which the tosser and areafix accept as an
+// alias, into "echomail" so --type echomail matches both.
+func normalizeAreaType(t string) string {
+	t = strings.ToLower(strings.TrimSpace(t))
+	if t == "echo" {
+		return "echomail"
+	}
+	return t
+}
+
+// parseAreasFlags parses args, returning an exit code and false when the
+// command should stop: 0 for an explicit --help, 2 for a bad flag or a stray
+// positional argument (the flag parser stops at the first one, so any filters
+// after it would be silently ignored).
+func parseAreasFlags(fs *flag.FlagSet, args []string) (int, bool) {
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0, false
+		}
+		return 2, false
+	}
+	if fs.NArg() > 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "Error: unexpected argument %q\n\n", fs.Arg(0))
+		fs.Usage()
+		return 2, false
+	}
+	return 0, true
 }
 
 func loadAreaConfigs(configDir string) (string, []message.MessageArea, []conferenceConfig, error) {
@@ -185,8 +215,8 @@ func runAreasList(args []string) int {
 		_, _ = fmt.Fprintf(os.Stderr, "Usage: helper areas list [filters]\n\n")
 		fs.PrintDefaults()
 	}
-	if err := fs.Parse(args); err != nil {
-		return 2
+	if rc, ok := parseAreasFlags(fs, args); !ok {
+		return rc
 	}
 
 	_, areas, confs, err := loadAreaConfigs(*configDir)
@@ -375,13 +405,8 @@ func runAreasSet(args []string) int {
 		_, _ = fmt.Fprintf(os.Stderr, "\nExample:\n")
 		_, _ = fmt.Fprintf(os.Stderr, "  helper areas set --conference FIDONET --type echomail --real-name on --dry-run\n")
 	}
-	if err := fs.Parse(args); err != nil {
-		return 2
-	}
-	if fs.NArg() > 0 {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: unexpected argument %q\n\n", fs.Arg(0))
-		fs.Usage()
-		return 2
+	if rc, ok := parseAreasFlags(fs, args); !ok {
+		return rc
 	}
 
 	if f.empty() && !f.all {
