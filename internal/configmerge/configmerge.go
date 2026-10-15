@@ -107,23 +107,37 @@ func Merge(base, ours, theirs any) (any, Result) {
 }
 
 // newDuplicateTags lists non-empty tags held by more than one item in merged
-// that were not already that duplicated in theirs: a duplicate already on
-// disk is someone else's to fix and must not block every save.
+// where some item holding it did not already hold it in theirs. A duplicate
+// already on disk, held by the same items, is someone else's to fix and must
+// not block every save; one that moves to a different item is new.
 func newDuplicateTags(merged, theirs []any) []string {
-	count := func(list []any) map[string]int {
-		m := make(map[string]int, len(list))
-		for _, item := range list {
-			if tag := itemTag(item); tag != "" {
-				m[tag]++
+	had := make(map[string]map[int]bool)
+	for _, item := range theirs {
+		if tag := itemTag(item); tag != "" {
+			if had[tag] == nil {
+				had[tag] = make(map[int]bool)
 			}
+			id, _ := itemID(item)
+			had[tag][id] = true
 		}
-		return m
 	}
-	before, after := count(theirs), count(merged)
+	holders := make(map[string][]int)
+	for _, item := range merged {
+		if tag := itemTag(item); tag != "" {
+			id, _ := itemID(item)
+			holders[tag] = append(holders[tag], id)
+		}
+	}
 	var dups []string
-	for tag, n := range after {
-		if n > 1 && before[tag] < n {
-			dups = append(dups, tag)
+	for tag, ids := range holders {
+		if len(ids) < 2 {
+			continue
+		}
+		for _, id := range ids {
+			if !had[tag][id] {
+				dups = append(dups, tag)
+				break
+			}
 		}
 	}
 	sort.Strings(dups)

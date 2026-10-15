@@ -238,3 +238,16 @@ func TestSaveFileFixHook(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeDuplicateTagMovedToAnotherItem(t *testing.T) {
+	theirs := []item{{ID: 1, Tag: "X"}, {ID: 2, Tag: "X"}, {ID: 3, Tag: "A"}}
+	_, res := mustMerge(t, theirs, []item{{ID: 1, Tag: "X"}, {ID: 2, Tag: "Y"}, {ID: 3, Tag: "X"}}, theirs)
+	if len(res.DuplicateTags) != 1 || res.DuplicateTags[0] != "X" {
+		t.Errorf("DuplicateTags = %v", res.DuplicateTags)
+	}
+	// Unchanged duplicate on disk: not reported.
+	_, res = mustMerge(t, theirs, theirs, theirs)
+	if len(res.DuplicateTags) != 0 {
+		t.Errorf("existing duplicate reported: %v", res.DuplicateTags)
+	}
+}
