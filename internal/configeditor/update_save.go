@@ -38,9 +38,13 @@ func (m *Model) saveAll() bool {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return false
 	}
-	if err := saveMsgAreas(m.configPath, m.configs.MsgAreas); err != nil {
+	areaConflicts, err := saveMsgAreas(m.configPath, m.configs)
+	if err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return false
+	}
+	for _, c := range areaConflicts {
+		slog.Warn("message areas merge conflict", "detail", c)
 	}
 	if err := saveFileAreas(m.configPath, m.configs.FileAreas); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
@@ -188,6 +192,9 @@ func (m *Model) saveAll() bool {
 	m.binkdSyncErr = binkdSyncErr
 	if binkdSyncErr != nil {
 		m.message = fmt.Sprintf("Saved (warning: binkd.conf sync failed: %v)", binkdSyncErr)
+	} else if len(areaConflicts) > 0 {
+		m.message = fmt.Sprintf("Saved; %d message area change(s) made elsewhere were overridden: %s",
+			len(areaConflicts), areaConflicts[0])
 	} else {
 		m.message = "All configurations saved successfully"
 	}

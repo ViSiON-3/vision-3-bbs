@@ -243,7 +243,7 @@ func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
 
 	// Default base path if empty.
 	if area.BasePath == "" {
-		area.BasePath = fmt.Sprintf("msgbases/area_%d", area.ID)
+		area.BasePath = defaultAreaBasePath(area.ID)
 	}
 
 	ptr := new(MessageArea)
@@ -257,7 +257,8 @@ func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
 
 	slog.Info("auto-created message area", "id", area.ID, "tag", area.Tag, "type", area.AreaType)
 
-	if err := mm.SaveAreas(); err != nil {
+	renumbered, err := mm.saveAreas()
+	if err != nil {
 		// Rollback in-memory state so it stays consistent with disk.
 		mm.mu.Lock()
 		delete(mm.areasByID, area.ID)
@@ -268,6 +269,11 @@ func (mm *MessageManager) AddArea(area MessageArea) (int, error) {
 		mm.mu.Unlock()
 		slog.Error("rolling back area after save failure", "tag", area.Tag, "error", err)
 		return 0, fmt.Errorf("save areas after add: %w", err)
+	}
+	// Another program added an area under the same ID before this save; the
+	// merge kept theirs and moved this one.
+	if newID, ok := renumbered[area.ID]; ok {
+		return newID, nil
 	}
 	return area.ID, nil
 }

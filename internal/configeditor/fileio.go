@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -25,15 +26,21 @@ type allConfigs struct {
 	Server      config.ServerConfig
 	Conferences []conference.Conference
 	MsgAreas    []message.MessageArea
-	FileAreas   []file.FileArea
-	Doors       map[string]config.DoorConfig
-	Events      config.EventsConfig
-	FTN         config.FTNConfig
-	V3Net       config.V3NetConfig
-	QWKNet      config.QWKNetConfig
-	Protocols   []transfer.ProtocolConfig
-	Archivers   archiver.Config
-	LoginSeq    []config.LoginItem
+	// msgAreasBase is message_areas.json as last loaded or saved, the base
+	// saveMsgAreas merges against so changes made on disk meanwhile (by the
+	// BBS or helper) are kept. msgAreasBaseKnown is false for configs not
+	// loaded from disk, which then save by plain overwrite.
+	msgAreasBase      []message.MessageArea
+	msgAreasBaseKnown bool
+	FileAreas         []file.FileArea
+	Doors             map[string]config.DoorConfig
+	Events            config.EventsConfig
+	FTN               config.FTNConfig
+	V3Net             config.V3NetConfig
+	QWKNet            config.QWKNetConfig
+	Protocols         []transfer.ProtocolConfig
+	Archivers         archiver.Config
+	LoginSeq          []config.LoginItem
 	// ZipLab is ziplab.json alone. Its ArchiveTypes is left at the default:
 	// ZipLab takes archive formats from archivers.json when the BBS loads it.
 	ZipLab ziplab.Config
@@ -64,6 +71,9 @@ func loadAllConfigs(configPath string) (allConfigs, error) {
 	if err != nil {
 		return ac, fmt.Errorf("loading message areas: %w", err)
 	}
+
+	ac.msgAreasBase = message.CloneAreas(ac.MsgAreas)
+	ac.msgAreasBaseKnown = true
 
 	// Sort message areas by conference position, then by area position within
 	// each conference so the TUI list groups areas under their conference.
@@ -259,9 +269,50 @@ func saveConferences(configPath string, confs []conference.Conference) error {
 	return saveJSONSlice(configPath, "conferences.json", confs)
 }
 
-// saveMsgAreas writes message areas back to disk.
-func saveMsgAreas(configPath string, areas []message.MessageArea) error {
-	return saveJSONSlice(configPath, "message_areas.json", areas)
+// saveMsgAreas writes message areas back to disk, returning a description of
+// each merge conflict.
+//
+// The BBS and helper write message_areas.json too, and this editor rewrites
+// it on every save, even one that changed nothing here. So the save holds the
+// shared areas lock and merges what is on disk now with the editor's areas,
+// against the list as the editor loaded it (message.MergeAreas): changes made
+// elsewhere since are kept, and only a field changed in both places takes the
+// editor's value. ac.MsgAreas and the merge base are updated to the result.
+func saveMsgAreas(configPath string, ac *allConfigs) ([]string, error) {
+	path := filepath.Join(configPath, "message_areas.json")
+	if !ac.msgAreasBaseKnown {
+		lock, err := message.LockAreasFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("locking %s: %w", path, err)
+		}
+		defer lock.Release()
+		_, err = message.WriteAreasFile(path, ac.MsgAreas)
+		return nil, err
+	}
+
+	var conflicts []string
+	err := message.UpdateAreasFile(path, func(disk []message.MessageArea) ([]message.MessageArea, bool, error) {
+		res, err := message.MergeAreas(ac.msgAreasBase, ac.MsgAreas, disk)
+		if err != nil {
+			return nil, false, err
+		}
+		for _, c := range res.Conflicts {
+			conflicts = append(conflicts, c.What)
+		}
+		merged := res.Areas
+		ac.msgAreasBase = message.CloneAreas(merged)
+		ac.MsgAreas = message.CloneAreas(merged)
+		sortMsgAreasByConference(ac.MsgAreas, ac.Conferences)
+		// Nothing to add to what is on disk: leave the file, and a running
+		// BBS, alone.
+		diskData, err1 := message.MarshalAreas(disk)
+		mergedData, err2 := message.MarshalAreas(merged)
+		if err1 == nil && err2 == nil && bytes.Equal(diskData, mergedData) {
+			return nil, false, nil
+		}
+		return merged, true, nil
+	})
+	return conflicts, err
 }
 
 // saveFileAreas writes file areas back to disk.

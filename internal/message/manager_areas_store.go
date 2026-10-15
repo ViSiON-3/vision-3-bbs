@@ -1,6 +1,7 @@
 package message
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -30,7 +31,28 @@ func (mm *MessageManager) loadMessageAreas() error {
 
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
+	mm.recordDiskState(areasList, data)
+	mm.installAreasLocked(areasList)
+	return nil
+}
 
+// recordDiskState keeps the areas as just read from or written to disk: the
+// merge base for the next save, and the bytes that tell whether anyone else
+// has written the file since. Caller holds mm.mu.
+func (mm *MessageManager) recordDiskState(areas []*MessageArea, data []byte) {
+	base := make([]MessageArea, 0, len(areas))
+	for _, a := range areas {
+		if a != nil {
+			base = append(base, *a)
+		}
+	}
+	mm.diskBase = CloneAreas(base)
+	mm.diskBytes = data
+}
+
+// installAreasLocked replaces the in-memory area definitions and rebuilds the
+// lookup indexes. Caller holds mm.mu for writing.
+func (mm *MessageManager) installAreasLocked(areasList []*MessageArea) {
 	mm.areasByID = make(map[int]*MessageArea)
 	mm.areasByTag = make(map[string]*MessageArea)
 	mm.areasByEchoTag = make(map[string]*MessageArea)
@@ -124,8 +146,6 @@ func (mm *MessageManager) loadMessageAreas() error {
 		}
 		slog.Info("auto-assigned message area positions (migration)", "count", len(sorted))
 	}
-
-	return nil
 }
 
 // Reload re-reads message_areas.json, replacing the in-memory definitions.
@@ -145,6 +165,8 @@ func (mm *MessageManager) loadMessageAreas() error {
 // v3net.json reload (or an area-browser subscription change) rebuilds them
 // against the current areas.
 func (mm *MessageManager) Reload() error {
+	mm.saveMu.Lock()
+	defer mm.saveMu.Unlock()
 	if err := mm.loadMessageAreas(); err != nil {
 		return fmt.Errorf("reloading message areas: %w", err)
 	}
@@ -191,57 +213,87 @@ func (mm *MessageManager) resolveBasePath(area *MessageArea) string {
 }
 
 // SaveAreas persists all message areas to message_areas.json atomically.
-// The file is written to a temp file alongside the target and then renamed
-// to avoid partial-write corruption.
+//
+// Other programs write the file too (the config editor, helper), so the save
+// holds the cross-process areas lock and, if the file changed since this
+// manager last read or wrote it, folds those changes in with MergeAreas rather
+// than overwriting them. The merged result then replaces the in-memory areas,
+// so the BBS sees the other writer's change without waiting for the config
+// watcher's reload.
 func (mm *MessageManager) SaveAreas() error {
-	mm.mu.RLock()
-	list := make([]MessageArea, 0, len(mm.areasByID))
+	_, err := mm.saveAreas()
+	return err
+}
+
+// saveAreas is SaveAreas, also returning any IDs the merge renumbered (see
+// AreaMergeResult.Renumbered).
+func (mm *MessageManager) saveAreas() (map[int]int, error) {
+	mm.saveMu.Lock()
+	defer mm.saveMu.Unlock()
+
+	// If the lock cannot be taken, save anyway rather than lose the change:
+	// that is the old, unlocked behaviour, and the merge below still catches
+	// any write that landed before ours.
+	lock, lockErr := LockAreasFile(mm.areasPath)
+	if lockErr != nil {
+		slog.Warn("saving message areas without the cross-process lock; a concurrent write could be lost",
+			"path", mm.areasPath, "error", lockErr)
+	}
+	defer lock.Release() // nil-safe
+
+	// Held across read, merge, write, and install so an update made between
+	// the snapshot and the install cannot be dropped from memory.
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+
+	ours := make([]MessageArea, 0, len(mm.areasByID))
 	for _, area := range mm.areasByID {
 		if area != nil {
-			list = append(list, *area)
+			ours = append(ours, *area)
 		}
 	}
-	mm.mu.RUnlock()
+	ours = CloneAreas(ours)
 
-	sort.Slice(list, func(i, j int) bool {
-		if list[i].Position != list[j].Position {
-			return list[i].Position < list[j].Position
+	out := ours
+	var renumbered map[int]int
+	external := false
+	disk, data, readErr := ReadAreasFile(mm.areasPath)
+	switch {
+	case readErr != nil:
+		// An unreadable file has nothing to merge; replacing it is what a
+		// save did before merging existed.
+		slog.Warn("could not read message areas before saving; overwriting", "path", mm.areasPath, "error", readErr)
+	case data == nil && mm.diskBytes != nil:
+		// The file vanished. Merging would read that as every area deleted
+		// elsewhere; write ours back instead, as a save always has.
+		slog.Warn("message areas file is missing; recreating it from memory", "path", mm.areasPath)
+	case !bytes.Equal(data, mm.diskBytes):
+		res, err := MergeAreas(mm.diskBase, ours, disk)
+		if err != nil {
+			return nil, fmt.Errorf("merging message areas: %w", err)
 		}
-		return list[i].ID < list[j].ID
-	})
+		for _, c := range res.Conflicts {
+			slog.Warn("message areas merge conflict", "detail", c.What)
+		}
+		slog.Info("merged message area changes made outside the BBS", "path", mm.areasPath)
+		out, renumbered, external = res.Areas, res.Renumbered, true
+	}
 
-	data, err := json.MarshalIndent(list, "", "  ")
+	written, err := WriteAreasFile(mm.areasPath, out)
 	if err != nil {
-		return fmt.Errorf("failed to marshal message areas: %w", err)
+		return nil, fmt.Errorf("failed to save message areas: %w", err)
 	}
-	data = append(data, '\n')
 
-	dir := filepath.Dir(mm.areasPath)
-	tmp, err := os.CreateTemp(dir, "message_areas_*.json.tmp")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file for areas: %w", err)
+	ptrs := make([]*MessageArea, len(out))
+	for i := range out {
+		a := out[i]
+		ptrs[i] = &a
 	}
-	tmpName := tmp.Name()
-
-	if _, err = tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("failed to write temp areas file: %w", err)
+	mm.recordDiskState(ptrs, written)
+	if external {
+		mm.installAreasLocked(ptrs)
 	}
-	if err = tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("failed to sync temp areas file: %w", err)
-	}
-	if err = tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("failed to close temp areas file: %w", err)
-	}
-	if err = os.Rename(tmpName, mm.areasPath); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("failed to rename temp areas file: %w", err)
-	}
-	return nil
+	return renumbered, nil
 }
 
 // PackAndLinkArea packs the JAM base for the given area (removing deleted
