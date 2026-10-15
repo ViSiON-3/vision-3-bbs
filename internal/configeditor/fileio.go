@@ -309,7 +309,28 @@ func fileAreasFile(configPath string) configmerge.File[[]file.FileArea] {
 			return areas, err
 		},
 		Marshal: marshalIndented[[]file.FileArea],
+		Fix:     fixRenumberedFileAreaPaths,
 	}
+}
+
+// defaultFileAreaPath is the directory the editor gives a new file area.
+func defaultFileAreaPath(id int) string {
+	return fmt.Sprintf("files/area_%d", id)
+}
+
+// fixRenumberedFileAreaPaths moves a file area the merge renumbered off the
+// generated directory named after its old ID, which the area that kept that
+// ID also uses; sharing it would mix the two areas' files and metadata. A
+// path the sysop set explicitly is left alone.
+func fixRenumberedFileAreaPaths(areas []file.FileArea, res configmerge.Result) []file.FileArea {
+	for from, to := range res.Renumbered {
+		for i := range areas {
+			if areas[i].ID == to && areas[i].Path == defaultFileAreaPath(from) {
+				areas[i].Path = defaultFileAreaPath(to)
+			}
+		}
+	}
+	return areas
 }
 
 // ftnFile describes ftn.json, read the way loadAllConfigs reads it: link

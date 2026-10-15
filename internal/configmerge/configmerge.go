@@ -17,9 +17,11 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
@@ -60,6 +62,10 @@ type Result struct {
 	// the id it was moved to, because theirs added a different item under the
 	// same id.
 	Renumbered map[int]int
+	// DuplicateTags lists tags the merged top-level list gives to more than
+	// one item where theirs did not, e.g. an item renamed here to the tag of
+	// an item added elsewhere. SaveFile refuses to write such a result.
+	DuplicateTags []string
 }
 
 // missing marks a key absent from one side of the merge.
@@ -92,7 +98,49 @@ type merger struct {
 func Merge(base, ours, theirs any) (any, Result) {
 	m := &merger{}
 	out := m.value("", 0, "", val{base, true}, val{ours, true}, val{theirs, true})
+	if merged, ok := out.v.([]any); ok {
+		if before, ok := theirs.([]any); ok {
+			m.res.DuplicateTags = newDuplicateTags(merged, before)
+		}
+	}
 	return out.v, m.res
+}
+
+// newDuplicateTags lists non-empty tags held by more than one item in merged
+// that were not already that duplicated in theirs: a duplicate already on
+// disk is someone else's to fix and must not block every save.
+func newDuplicateTags(merged, theirs []any) []string {
+	count := func(list []any) map[string]int {
+		m := make(map[string]int, len(list))
+		for _, item := range list {
+			if tag := itemTag(item); tag != "" {
+				m[tag]++
+			}
+		}
+		return m
+	}
+	before, after := count(theirs), count(merged)
+	var dups []string
+	for tag, n := range after {
+		if n > 1 && before[tag] < n {
+			dups = append(dups, tag)
+		}
+	}
+	sort.Strings(dups)
+	return dups
+}
+
+// DuplicateTagError is returned by SaveFile when the merge would give two
+// items one tag. Neither side is wrong on its own, so nothing is written and
+// the sysop resolves it by renaming one.
+type DuplicateTagError struct {
+	Path string
+	Tags []string
+}
+
+func (e *DuplicateTagError) Error() string {
+	return fmt.Sprintf("%s: tag(s) %s would be used twice after merging with changes made elsewhere; "+
+		"rename one and save again", filepath.Base(e.Path), strings.Join(e.Tags, ", "))
 }
 
 func equal(a, b val) bool {
@@ -282,7 +330,7 @@ func (m *merger) list(path string, b, o, t []any) []any {
 			case !tok:
 				added = append(added, ov)
 				continue
-			case !reflect.DeepEqual(ov, tv) && itemTag(ov) != itemTag(tv):
+			case !reflect.DeepEqual(ov, tv) && (itemTag(ov) == "" || itemTag(ov) != itemTag(tv)):
 				// Two different items added under one id.
 				out = append(out, tv)
 				added = append(added, ov)
@@ -440,6 +488,10 @@ type File[T any] struct {
 	Parse func([]byte) (T, error)
 	// Marshal renders the file's contents.
 	Marshal func(T) ([]byte, error)
+	// Fix, if set, adjusts a merged result before it is written, for
+	// fields derived from an item's id that the generic merge cannot know
+	// about (a generated directory named after the id, say).
+	Fix func(merged T, res Result) T
 	// Perm is the mode for a newly created file (0644 if zero). An existing
 	// file keeps its own mode; see FileMode.
 	Perm os.FileMode
@@ -486,6 +538,12 @@ func SaveFile[T any](f File[T], base, ours T) (T, Result, error) {
 	merged, res, err := MergeTyped(base, ours, theirs)
 	if err != nil {
 		return zero, Result{}, fmt.Errorf("merging %s: %w", f.Path, err)
+	}
+	if len(res.DuplicateTags) > 0 {
+		return zero, res, &DuplicateTagError{Path: f.Path, Tags: res.DuplicateTags}
+	}
+	if f.Fix != nil {
+		merged = f.Fix(merged, res)
 	}
 
 	mg, err1 := toGeneric(merged)

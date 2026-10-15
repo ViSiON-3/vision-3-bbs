@@ -299,7 +299,7 @@ func (m *Model) insertRecord() {
 		m.configs.FileAreas = append(m.configs.FileAreas, file.FileArea{
 			ID:   newID,
 			Name: "New File Area",
-			Path: fmt.Sprintf("files/area_%d", newID),
+			Path: defaultFileAreaPath(newID),
 		})
 	case "conference":
 		newID, newPos := nextConferenceIDAndPosition(m.configs.Conferences)

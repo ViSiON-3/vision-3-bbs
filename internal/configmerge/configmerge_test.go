@@ -2,6 +2,7 @@ package configmerge
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -177,5 +178,59 @@ func TestSaveFileKeepsFileMode(t *testing.T) {
 	}
 	if fi.Mode().Perm() != 0o600 {
 		t.Errorf("mode = %v, want 0600", fi.Mode().Perm())
+	}
+}
+
+func TestMergeUntaggedAdditionsStaySeparate(t *testing.T) {
+	type rec struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+	out, res := mustMerge(t, nil, []rec{{ID: 1, Name: "mine"}}, []rec{{ID: 1, Name: "theirs"}})
+	if len(out) != 2 || res.Renumbered[1] != 2 {
+		t.Errorf("out = %+v, renumbered = %v", out, res.Renumbered)
+	}
+}
+
+// Renaming an item here to the tag of an item added elsewhere would leave
+// two items with one tag: SaveFile refuses and writes nothing.
+func TestSaveFileRefusesNewDuplicateTag(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "items.json")
+	disk := `[{"id":1,"tag":"A"},{"id":2,"tag":"B"}]`
+	if err := os.WriteFile(path, []byte(disk), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := SaveFile(itemsFile(path), []item{{ID: 1, Tag: "A"}}, []item{{ID: 1, Tag: "B"}})
+	var dup *DuplicateTagError
+	if !errors.As(err, &dup) || len(dup.Tags) != 1 || dup.Tags[0] != "B" {
+		t.Fatalf("err = %v", err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != disk {
+		t.Errorf("file changed: %s", got)
+	}
+}
+
+func TestSaveFileFixHook(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "items.json")
+	if err := os.WriteFile(path, []byte(`[{"id":1,"tag":"THEIRS","name":"dir_1"}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := itemsFile(path)
+	f.Fix = func(v []item, res Result) []item {
+		for i := range v {
+			if res.Renumbered[1] == v[i].ID && v[i].Name == "dir_1" {
+				v[i].Name = "dir_2"
+			}
+		}
+		return v
+	}
+	saved, _, err := SaveFile(f, nil, []item{{ID: 1, Tag: "MINE", Name: "dir_1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range saved {
+		if it.Tag == "MINE" && (it.ID != 2 || it.Name != "dir_2") {
+			t.Errorf("MINE = %+v", it)
+		}
 	}
 }
