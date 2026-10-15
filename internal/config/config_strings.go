@@ -318,8 +318,6 @@ var StringFallbacks = map[string]string{
 	"konfigColumnDescription":   "Description",
 }
 
-// applyStringDefaults fills in StringFallbacks values for any string field that
-// is empty, matching each map key against the struct's json tags.
 // StringMissingDefaults maps a strings.json key to the value the runtime uses
 // when the key is absent from the file. Unlike StringFallbacks, a key that is
 // present but blank stays blank, so the sysop can switch the string off.
@@ -349,6 +347,8 @@ func applyMissingStringDefaults(c *StringsConfig, values map[string]string) {
 	}
 }
 
+// applyStringDefaults fills in StringFallbacks values for any string field that
+// is empty, matching each map key against the struct's json tags.
 func applyStringDefaults(c *StringsConfig) {
 	v := reflect.ValueOf(c).Elem()
 	t := v.Type()
