@@ -42,17 +42,22 @@ func (m *Model) saveAll() bool {
 		conflicts = append(conflicts, c...)
 		return true
 	}
-	if !merge(saveMergedFile(config.ServerConfigFile(m.configPath), b.known, &b.server, &m.configs.Server)) {
+	mergeFile := func(c []string, _ map[int]int, err error) bool { return merge(c, err) }
+	if !mergeFile(saveMergedFile(config.ServerConfigFile(m.configPath), b.known, &b.server, &m.configs.Server)) {
 		return false
 	}
-	if !merge(saveMergedFile(conferencesFile(m.configPath), b.known, &b.conferences, &m.configs.Conferences)) {
+	confConflicts, confRenumbered, err := saveMergedFile(conferencesFile(m.configPath), b.known, &b.conferences, &m.configs.Conferences)
+	if !merge(confConflicts, err) {
 		return false
 	}
 	normalizeConferenceOrder(m.configs.Conferences)
+	// Saved before the areas below, so they are written pointing at their
+	// conferences' final IDs.
+	remapConferenceIDs(m.configs, confRenumbered)
 	if !merge(saveMsgAreas(m.configPath, m.configs)) {
 		return false
 	}
-	if !merge(saveMergedFile(fileAreasFile(m.configPath), b.known, &b.fileAreas, &m.configs.FileAreas)) {
+	if !mergeFile(saveMergedFile(fileAreasFile(m.configPath), b.known, &b.fileAreas, &m.configs.FileAreas)) {
 		return false
 	}
 	if err := saveDoors(m.configPath, m.configs.Doors); err != nil {
@@ -73,7 +78,7 @@ func (m *Model) saveAll() bool {
 	// FTN before events: the FTN wizard enables a hub-poll event for the
 	// network it saves, so if the sequence fails midway the poll must not be
 	// persisted for a network that never made it to ftn.json.
-	if !merge(saveMergedFile(ftnFile(m.configPath), b.known, &b.ftn, &m.configs.FTN)) {
+	if !mergeFile(saveMergedFile(ftnFile(m.configPath), b.known, &b.ftn, &m.configs.FTN)) {
 		return false
 	}
 	// QWK networks likewise go before events, and only when a network is
@@ -157,7 +162,7 @@ func (m *Model) saveAll() bool {
 				ftn.BinkdOutboundFor(bbsRoot, m.configs.FTN))
 		}
 	}
-	if !merge(saveMergedFile(config.V3NetConfigFile(m.configPath), b.known, &b.v3net, &m.configs.V3Net)) {
+	if !mergeFile(saveMergedFile(config.V3NetConfigFile(m.configPath), b.known, &b.v3net, &m.configs.V3Net)) {
 		return false
 	}
 	if err := saveProtocols(m.configPath, m.configs.Protocols); err != nil {

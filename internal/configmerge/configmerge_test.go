@@ -159,3 +159,23 @@ func TestSaveFileMergesAndSkipsNoOps(t *testing.T) {
 		t.Error("no-op save rewrote the file")
 	}
 }
+
+// A merged save keeps the file's mode: ftn.json made 0600 to hide its
+// passwords must not come back 0644.
+func TestSaveFileKeepsFileMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "items.json")
+	if err := os.WriteFile(path, []byte(`[{"id":1,"tag":"A"}]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	base := []item{{ID: 1, Tag: "A"}}
+	if _, _, err := SaveFile(itemsFile(path), base, []item{{ID: 1, Tag: "A", Name: "edited"}}); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Errorf("mode = %v, want 0600", fi.Mode().Perm())
+	}
+}

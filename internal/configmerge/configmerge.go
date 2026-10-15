@@ -440,7 +440,20 @@ type File[T any] struct {
 	Parse func([]byte) (T, error)
 	// Marshal renders the file's contents.
 	Marshal func(T) ([]byte, error)
-	Perm    os.FileMode
+	// Perm is the mode for a newly created file (0644 if zero). An existing
+	// file keeps its own mode; see FileMode.
+	Perm os.FileMode
+}
+
+// FileMode returns the permission bits of the file at path, or def if it
+// does not exist. An atomic save replaces the file, so a writer must carry
+// the old mode over explicitly: a sysop who made ftn.json 0600 to keep its
+// passwords private must not find it 0644 after the next save.
+func FileMode(path string, def os.FileMode) os.FileMode {
+	if fi, err := os.Stat(path); err == nil {
+		return fi.Mode().Perm()
+	}
+	return def
 }
 
 // SaveFile writes ours to the file, keeping changes another program made
@@ -492,7 +505,7 @@ func write[T any](f File[T], v T) error {
 	if perm == 0 {
 		perm = 0o644
 	}
-	if err := atomicfile.WriteFile(f.Path, data, perm); err != nil {
+	if err := atomicfile.WriteFile(f.Path, data, FileMode(f.Path, perm)); err != nil {
 		return fmt.Errorf("writing %s: %w", f.Path, err)
 	}
 	return nil

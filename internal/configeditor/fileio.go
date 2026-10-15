@@ -213,33 +213,69 @@ func loadJSONSlice[T any](configPath, filename string) ([]T, error) {
 // left alone, so a retry still sees the sysop's edits as edits. It returns a
 // description of each merge conflict. Configs that were not loaded from
 // disk (known false) are written as they are.
-func saveMergedFile[T any](f configmerge.File[T], known bool, base, cur *T) ([]string, error) {
+func saveMergedFile[T any](f configmerge.File[T], known bool, base, cur *T) ([]string, map[int]int, error) {
 	if !known {
 		lock, err := configmerge.Lock(f.Path)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		defer lock.Release()
 		data, err := f.Marshal(*cur)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return nil, atomicfile.WriteFile(f.Path, data, 0o644)
+		return nil, nil, atomicfile.WriteFile(f.Path, data, configmerge.FileMode(f.Path, 0o644))
 	}
 	merged, res, err := configmerge.SaveFile(f, *base, *cur)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	newBase, err := configmerge.Clone(merged)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	*cur, *base = merged, newBase
 	var conflicts []string
 	for _, c := range res.Conflicts {
 		conflicts = append(conflicts, filepath.Base(f.Path)+": "+c.What)
 	}
-	return conflicts, nil
+	return conflicts, res.Renumbered, nil
+}
+
+// remapConferenceIDs follows a conference save that renumbered conferences
+// the editor added (another program took the ID first, or added the same
+// conference under another ID): areas the editor put in such a conference
+// move with it. An area counts as the editor's when its conference differs
+// from its base copy, or it is new; areas already in that conference on
+// disk belong to the other program's conference and stay.
+func remapConferenceIDs(ac *allConfigs, renumbered map[int]int) {
+	if len(renumbered) == 0 {
+		return
+	}
+	msgBase := make(map[int]int, len(ac.msgAreasBase))
+	for _, a := range ac.msgAreasBase {
+		msgBase[a.ID] = a.ConferenceID
+	}
+	for i := range ac.MsgAreas {
+		a := &ac.MsgAreas[i]
+		if to, ok := renumbered[a.ConferenceID]; ok {
+			if was, known := msgBase[a.ID]; !known || was != a.ConferenceID {
+				a.ConferenceID = to
+			}
+		}
+	}
+	fileBase := make(map[int]int, len(ac.bases.fileAreas))
+	for _, a := range ac.bases.fileAreas {
+		fileBase[a.ID] = a.ConferenceID
+	}
+	for i := range ac.FileAreas {
+		a := &ac.FileAreas[i]
+		if to, ok := renumbered[a.ConferenceID]; ok {
+			if was, known := fileBase[a.ID]; !known || was != a.ConferenceID {
+				a.ConferenceID = to
+			}
+		}
+	}
 }
 
 func marshalIndented[T any](v T) ([]byte, error) {

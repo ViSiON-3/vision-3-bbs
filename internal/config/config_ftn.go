@@ -612,7 +612,7 @@ func SaveOutboundSplit(configDir string) ([]OutboundAssignment, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := atomicfile.WriteFile(path, out, 0o644); err != nil {
+	if err := atomicfile.WriteFile(path, out, configmerge.FileMode(path, 0o644)); err != nil {
 		return nil, err
 	}
 	return assigned, nil

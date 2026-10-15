@@ -98,3 +98,46 @@ func hasFileArea(areas []file.FileArea, tag string) bool {
 	}
 	return false
 }
+
+// When helper ftnsetup takes the conference ID the editor gave a new
+// conference, the editor's conference is renumbered on save and the areas
+// the sysop put in it must follow, not end up in helper's conference.
+func TestSaveAllRemapsAreasOfRenumberedConference(t *testing.T) {
+	m, dir := newDiskModel(t)
+	m.dirty = true
+
+	nextID := 1
+	for _, c := range m.configs.Conferences {
+		if c.ID >= nextID {
+			nextID = c.ID + 1
+		}
+	}
+	diskConfs := append([]conference.Conference(nil), m.configs.Conferences...)
+
+	// Editor: new conference, and a new file area placed in it.
+	m.configs.Conferences = append(m.configs.Conferences,
+		conference.Conference{ID: nextID, Position: 100, Tag: "MINE", Name: "Mine"})
+	m.configs.FileAreas = append(m.configs.FileAreas,
+		file.FileArea{ID: 500, Tag: "MINE_FILES", Path: "mine_files", ConferenceID: nextID})
+
+	// Meanwhile helper ftnsetup adds its own conference under the same ID.
+	diskConfs = append(diskConfs, conference.Conference{ID: nextID, Position: 101, Tag: "FIDONET", Name: "Fidonet"})
+	writeJSONFixture(t, filepath.Join(dir, "conferences.json"), diskConfs)
+
+	if !m.saveAll() {
+		t.Fatalf("save failed: %s", m.message)
+	}
+	got := reloadConfigs(t, dir)
+	confID := map[string]int{}
+	for _, c := range got.Conferences {
+		confID[c.Tag] = c.ID
+	}
+	if confID["FIDONET"] != nextID || confID["MINE"] == nextID || confID["MINE"] == 0 {
+		t.Fatalf("conference IDs = %v", confID)
+	}
+	for _, a := range got.FileAreas {
+		if a.Tag == "MINE_FILES" && a.ConferenceID != confID["MINE"] {
+			t.Errorf("MINE_FILES in conference %d, want %d", a.ConferenceID, confID["MINE"])
+		}
+	}
+}

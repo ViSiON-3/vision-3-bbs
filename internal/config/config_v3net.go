@@ -189,7 +189,7 @@ func writeV3NetConfig(filePath string, cfg V3NetConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal V3Net config: %w", err)
 	}
-	if err := atomicfile.WriteFile(filePath, data, 0644); err != nil {
+	if err := atomicfile.WriteFile(filePath, data, configmerge.FileMode(filePath, 0644)); err != nil {
 		return fmt.Errorf("failed to write V3Net config to %s: %w", filePath, err)
 	}
 	return nil

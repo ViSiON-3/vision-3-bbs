@@ -406,7 +406,7 @@ func writeServerConfig(filePath string, cfg ServerConfig) error {
 	if err != nil {
 		return err
 	}
-	if err := atomicfile.WriteFile(filePath, data, 0644); err != nil {
+	if err := atomicfile.WriteFile(filePath, data, configmerge.FileMode(filePath, 0644)); err != nil {
 		return fmt.Errorf("failed to write config file %s: %w", filePath, err)
 	}
 	slog.Info("server configuration saved", "path", filePath)
