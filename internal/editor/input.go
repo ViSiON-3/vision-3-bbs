@@ -418,16 +418,17 @@ func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 // channel closes before a byte arrives.
 var ErrReadStopped = errors.New("input read stopped")
 
-// ReadUntil fills p with the input already queued, waiting for at least one
-// byte, or returns ErrReadStopped once stop is closed. It applies no idle
-// timeout, deadline or break-in, so code that borrows the handler (a script
-// run in place of a string) can read through it without closing it under a
-// caller that still holds it.
+// ReadUntil reads the next key into p, waiting for its first byte, or returns
+// ErrReadStopped once stop is closed. It applies no idle timeout, deadline or
+// break-in, so code that borrows the handler (a script run in place of a
+// string) can read through it without closing it under a caller that still
+// holds it.
 //
-// Taking everything queued, rather than one byte at a time, keeps a key's
-// escape sequence or a CR LF Enter in one chunk for a reader that decodes
-// keys per chunk. Stop wins over queued input, so a reader stopped with keys
-// waiting leaves them for the handler's owner.
+// A key's escape sequence, or a CR with the LF or NUL of its Enter, is taken
+// whole when already queued, for a reader that decodes keys per chunk. Other
+// queued input is left alone: a borrower that reads ahead could not give it
+// back. Stop wins over queued input, and a stop seen partway through a key
+// hands every byte taken back to the handler.
 func (ih *InputHandler) ReadUntil(p []byte, stop <-chan struct{}) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
@@ -440,36 +441,86 @@ func (ih *InputHandler) ReadUntil(p []byte, stop <-chan struct{}) (int, error) {
 	return ih.drainQueued(p, 1, stop)
 }
 
-// drainQueued adds to p, after the n bytes already in it, whatever input is
-// queued, without waiting. A stop while draining hands back everything taken
-// so far, so no key leaves the handler once the borrower is done with it.
+// drainQueued adds to p, after the n bytes already in it, the queued rest of
+// the key p starts, without waiting (see ReadUntil).
 func (ih *InputHandler) drainQueued(p []byte, n int, stop <-chan struct{}) (int, error) {
-	for n < len(p) {
+	giveBack := func() (int, error) {
+		ih.unreadBuf = append(append([]byte(nil), p[:n]...), ih.unreadBuf...)
+		return 0, ErrReadStopped
+	}
+	stopped := func() bool {
 		select {
 		case <-stop:
-			ih.unreadBuf = append(append([]byte(nil), p[:n]...), ih.unreadBuf...)
-			return 0, ErrReadStopped
+			return true
 		default:
+			return false
 		}
-		if len(ih.unreadBuf) > 0 {
-			p[n] = ih.unreadBuf[0]
-			ih.unreadBuf = ih.unreadBuf[1:]
-			n++
-			continue
+	}
+	for n < len(p) && keyContinues(p[:n]) {
+		if stopped() {
+			return giveBack()
 		}
-		select {
-		case b, ok := <-ih.incoming:
-			if !ok {
-				return n, nil
-			}
-			p[n] = b
-			n++
-			continue
-		default:
+		b, ok := ih.takeQueued()
+		if !ok {
+			break
 		}
-		break
+		if !keyAccepts(p[:n], b) {
+			ih.unreadByte(b)
+			break
+		}
+		p[n] = b
+		n++
+		// The stop can close while that byte was being taken.
+		if stopped() {
+			return giveBack()
+		}
 	}
 	return n, nil
+}
+
+// takeQueued returns the next queued byte without waiting.
+func (ih *InputHandler) takeQueued() (byte, bool) {
+	if len(ih.unreadBuf) > 0 {
+		b := ih.unreadBuf[0]
+		ih.unreadBuf = ih.unreadBuf[1:]
+		return b, true
+	}
+	select {
+	case b, ok := <-ih.incoming:
+		return b, ok
+	default:
+		return 0, false
+	}
+}
+
+// keyContinues reports whether the key begun in k may take more bytes: an
+// escape sequence before its final byte, or a lone CR.
+func keyContinues(k []byte) bool {
+	switch {
+	case len(k) == 1:
+		return k[0] == 0x1B || k[0] == '\r'
+	case k[0] != 0x1B:
+		return false
+	case len(k) == 2:
+		return k[1] == '[' || k[1] == 'O'
+	case k[1] == 'O':
+		return false // SS3: ESC O and one final byte
+	default:
+		last := k[len(k)-1]
+		return last >= 0x20 && last <= 0x3F // CSI parameter or intermediate
+	}
+}
+
+// keyAccepts reports whether b belongs to the key begun in k.
+func keyAccepts(k []byte, b byte) bool {
+	switch {
+	case k[0] == '\r':
+		return b == '\n' || b == 0x00
+	case len(k) == 1:
+		return b == '[' || b == 'O'
+	default:
+		return b >= 0x20 && b <= 0x7E
+	}
 }
 
 // ReadByteUntil is ReadUntil for a single byte.

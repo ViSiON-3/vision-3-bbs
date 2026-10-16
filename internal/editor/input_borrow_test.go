@@ -27,16 +27,41 @@ func waitQueued(t *testing.T, ih *InputHandler, n int) {
 	}
 }
 
-// An arrow key's escape sequence reaches a borrower in one chunk, so a reader
-// that decodes keys per chunk sees the key and not Escape plus letters.
-func TestReadUntilTakesEverythingQueued(t *testing.T) {
-	ih, w := pipeHandler(t)
-	go func() { _, _ = w.Write([]byte("\x1b[A")) }()
-	waitQueued(t, ih, 3)
-	buf := make([]byte, 16)
-	n, err := ih.ReadUntil(buf, nil)
-	if err != nil || string(buf[:n]) != "\x1b[A" {
-		t.Errorf("ReadUntil = %q, %v; want the whole sequence", buf[:n], err)
+// A key arrives in one chunk, so a reader that decodes keys per chunk sees an
+// arrow key and not Escape plus letters, and one Enter for CR LF; input
+// typed ahead of it stays with the handler.
+func TestReadUntilTakesOneKey(t *testing.T) {
+	for _, tc := range []struct {
+		queued, want, left string
+	}{
+		{"\x1b[Axy", "\x1b[A", "xy"},
+		{"\x1bOPx", "\x1bOP", "x"},
+		{"\x1b[15~x", "\x1b[15~", "x"},
+		{"\r\nx", "\r\n", "x"},
+		{"\r\x00x", "\r\x00", "x"},
+		{"xy", "x", "y"},
+		{"\x1bx", "\x1b", "x"},
+	} {
+		ih, w := pipeHandler(t)
+		go func() { _, _ = w.Write([]byte(tc.queued)) }()
+		waitQueued(t, ih, len(tc.queued))
+		buf := make([]byte, 16)
+		n, err := ih.ReadUntil(buf, nil)
+		if err != nil || string(buf[:n]) != tc.want {
+			t.Errorf("ReadUntil(%q) = %q, %v; want %q", tc.queued, buf[:n], err, tc.want)
+			continue
+		}
+		var left []byte
+		for len(left) < len(tc.left) {
+			b, err := ih.ReadByteUntil(nil)
+			if err != nil {
+				t.Fatalf("reading what was left: %v", err)
+			}
+			left = append(left, b)
+		}
+		if string(left) != tc.left {
+			t.Errorf("after ReadUntil(%q), left %q, want %q", tc.queued, left, tc.left)
+		}
 	}
 }
 
@@ -97,15 +122,15 @@ func TestFailWinsOverUnreadByte(t *testing.T) {
 // taken back to the handler, in order, the one already read included.
 func TestDrainQueuedStopGivesBytesBack(t *testing.T) {
 	ih, _ := pipeHandler(t)
-	ih.unreadBuf = []byte("bc")
+	ih.unreadBuf = []byte("[A")
 	stop := make(chan struct{})
 	close(stop)
 	p := make([]byte, 8)
-	p[0] = 'a' // taken by ReadUntil before the stop
+	p[0] = 0x1B // taken by ReadUntil before the stop
 	if _, err := ih.drainQueued(p, 1, stop); !errors.Is(err, ErrReadStopped) {
 		t.Fatalf("drainQueued = %v, want ErrReadStopped", err)
 	}
-	if got := string(ih.unreadBuf); got != "abc" {
-		t.Errorf("unread input = %q, want %q", got, "abc")
+	if got := string(ih.unreadBuf); got != "\x1b[A" {
+		t.Errorf("unread input = %q, want %q", got, "\x1b[A")
 	}
 }
