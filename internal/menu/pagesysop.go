@@ -102,7 +102,9 @@ func runPageSysop(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 
-	e.writeString(c.terminal, c.outputMode, e.Strings().PageSysopUnavailable)
+	// Clear the page first: the notice can be a script, and the sysop console
+	// should not show the page as active while the caller sits in it.
 	e.Pager.ClearPage(c.nodeNumber, handle, "timeout")
+	e.writeString(c.terminal, c.outputMode, e.Strings().PageSysopUnavailable)
 	return nil, "", nil
 }
