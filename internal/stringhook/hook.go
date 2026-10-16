@@ -226,3 +226,22 @@ var NoHookKeys = map[string]bool{
 func Supported(key string) bool {
 	return !NoHookKeys[key]
 }
+
+// ScriptlessKeys lists keys whose values may show a file but never run a
+// script: the menu writes them with its no-script writer, and a !door value
+// there is printed as written.
+var ScriptlessKeys = map[string]bool{
+	"idleTimeout": true, // shown just before an idle caller is disconnected
+}
+
+// SupportsKind reports whether key's value may run a hook of kind k.
+func SupportsKind(key string, k Kind) bool {
+	switch {
+	case !Supported(key):
+		return false
+	case k == Script:
+		return !ScriptlessKeys[key]
+	default:
+		return true
+	}
+}

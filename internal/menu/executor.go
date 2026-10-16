@@ -452,7 +452,8 @@ func (e *MenuExecutor) handleIdleTimeout(terminal *term.Terminal, outputMode ans
 			row = 1
 		}
 		terminalio.WriteProcessedBytes(terminal, []byte(fmt.Sprintf("\x1b[%d;1H", row)), outputMode)
-		// No script: the caller is idle and about to be disconnected.
+		// No script: the caller is idle and about to be disconnected. Keep
+		// stringhook.ScriptlessKeys in step.
 		e.writeStringNoScript(terminal, outputMode, msg)
 	}
 	slog.Info("idle timeout, disconnecting", "node", nodeNumber, "minutes", e.GetServerConfig().SessionIdleTimeoutMinutes)
