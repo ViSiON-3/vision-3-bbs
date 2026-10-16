@@ -245,7 +245,7 @@ func (e *MenuExecutor) processMatrixAction(
 		return "MATRIX", nil, nil // Return to matrix after check
 
 	case "DISCONNECT":
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MatrixDisconnecting)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().MatrixDisconnecting)
 		return "DISCONNECT", nil, nil
 
 	default:
@@ -265,7 +265,7 @@ func (e *MenuExecutor) handleCheckAccess(
 ) {
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
-	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MatrixCheckAccessPrompt)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().MatrixCheckAccessPrompt)
 
 	input, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
@@ -280,7 +280,7 @@ func (e *MenuExecutor) handleCheckAccess(
 	foundUser, exists := userManager.GetUser(handle)
 
 	if !exists {
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MatrixUserNotFound)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().MatrixUserNotFound)
 	} else if cfg := e.GetServerConfig(); canLogonAtLevel(cfg, foundUser.AccessLevel) {
 		// This option answers "check your access", so it reports whether the
 		// caller can get on. It used to branch on the validated flag, which

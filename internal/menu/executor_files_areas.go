@@ -78,11 +78,10 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 	if prompt == "" {
 		prompt = "|07File Area Tag (?=List, Q=Quit): |15"
 	}
-	renderedPrompt := ansi.ReplacePipeCodes([]byte(prompt))
 	curUpClear := "\x1b[A\r\x1b[2K"
 
 	// Show initial prompt
-	terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+	e.writeString(terminal, outputMode, prompt)
 
 	for {
 		inputTag, err := readLineFromSessionIH(s, terminal)
@@ -104,7 +103,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 			return currentUser, "", nil
 		}
 		if upperInput == "" {
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 
@@ -114,7 +113,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 				slog.Error("failed redisplaying file area list", "node", nodeNumber, "error", listErr)
 			}
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 
@@ -144,7 +143,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 
@@ -156,7 +155,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 
@@ -172,7 +171,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 			msg := "\r\n|01Error: Could not save area selection.|07\r\n"
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			uiPause(1 * time.Second)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 

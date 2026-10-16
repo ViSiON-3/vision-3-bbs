@@ -169,8 +169,8 @@ func readScanLine(ih *editor.InputHandler, terminal *term.Terminal, outputMode a
 
 // showScanNotice writes a validation notice and holds it on screen briefly
 // so it is readable before the caller redraws the menu.
-func showScanNotice(terminal *term.Terminal, outputMode ansi.OutputMode, text string) {
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(text)), outputMode)
+func (e *MenuExecutor) showScanNotice(terminal *term.Terminal, outputMode ansi.OutputMode, text string) {
+	e.writeString(terminal, outputMode, text)
 	time.Sleep(scanNoticePause)
 }
 
@@ -316,7 +316,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			default:
 				t, parsed := parseScanDate(input)
 				if !parsed {
-					showScanNotice(terminal, outputMode, e.Strings().ScanInvalidDate)
+					e.showScanNotice(terminal, outputMode, e.Strings().ScanInvalidDate)
 					continue
 				}
 				cfg.ScanDate = t.Unix()
@@ -350,7 +350,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			// menu never shows "All" while a stale bound is still in effect.
 			// The range is only ever stored as a validated pair.
 			if numMsgs <= 0 {
-				showScanNotice(terminal, outputMode, e.Strings().ScanNoMessages)
+				e.showScanNotice(terminal, outputMode, e.Strings().ScanNoMessages)
 				continue
 			}
 			e.writeStringf(terminal, outputMode, e.Strings().ScanRangeStartPrompt, numMsgs)
@@ -368,7 +368,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			startNum, convErr := strconv.Atoi(startInput)
 			if convErr != nil || startNum < 1 || startNum > numMsgs {
 				cfg.RangeStart, cfg.RangeEnd = 0, 0
-				showScanNotice(terminal, outputMode, e.Strings().ScanInvalidRange)
+				e.showScanNotice(terminal, outputMode, e.Strings().ScanInvalidRange)
 				continue
 			}
 
@@ -387,7 +387,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			endNum, convErr := strconv.Atoi(endInput)
 			if convErr != nil || endNum < startNum || endNum > numMsgs {
 				cfg.RangeStart, cfg.RangeEnd = 0, 0
-				showScanNotice(terminal, outputMode, e.Strings().ScanInvalidRange)
+				e.showScanNotice(terminal, outputMode, e.Strings().ScanInvalidRange)
 				continue
 			}
 			cfg.RangeStart, cfg.RangeEnd = startNum, endNum

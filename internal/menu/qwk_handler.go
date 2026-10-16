@@ -99,7 +99,8 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(statusMsg)), outputMode)
 
 	// Prompt user to send or quit
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+e.Strings().SendQWKPacketPrompt)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().SendQWKPacketPrompt)
 	promptInput, promptErr := readLineFromSessionIH(s, terminal)
 	if promptErr != nil {
 		if errors.Is(promptErr, io.EOF) {
@@ -261,8 +262,8 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 			return area.ACSWrite == "" || checkACS(area.ACSWrite, currentUser, s, terminal, sessionStartTime)
 		},
 		Notify: func(area *message.MessageArea) {
-			postMsg := strings.ReplaceAll(e.Strings().PostingQWKMsg, "|BN", area.Name)
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+postMsg)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+			e.writeStringSubst(terminal, outputMode, e.Strings().PostingQWKMsg, "|BN", area.Name)
 		},
 	})
 	if err != nil {
@@ -299,8 +300,9 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 
-	statusMsg := strings.ReplaceAll(e.Strings().TotalQWKAdded, "|TO", fmt.Sprintf("%d", posted))
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+statusMsg+"\r\n")), outputMode)
+	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+	e.writeStringSubst(terminal, outputMode, e.Strings().TotalQWKAdded, "|TO", fmt.Sprintf("%d", posted))
+	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 	uiPause(2 * time.Second)
 
 	return currentUser, "", nil

@@ -13,6 +13,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringhook"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -335,12 +336,38 @@ func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, men
 
 	promptString := strings.Join(promptParts, "\r\n")
 
+	leadWritten := false // the prompt's leading line break is already written
 	if promptString == "" {
 		if e.Strings().DefPrompt != "" { // Use loaded strings
 			promptString = e.Strings().DefPrompt
 		} else {
 			slog.Warn("default prompt empty and menu prompt fields empty, no prompt will be displayed", "menu", currentMenuName)
 			return nil // Explicitly return nil if no prompt string can be determined
+		}
+		// The default prompt is a strings.json value, so it can run a script
+		// or show a file (see string_hooks.go). The hook is read before any
+		// placeholder is expanded, so a substituted handle cannot start one;
+		// text after a file is expanded as usual below.
+		switch h := stringhook.Parse(promptString); h.Kind {
+		case stringhook.Script:
+			_ = terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+			return e.writeString(terminal, outputMode, promptString)
+		case stringhook.File:
+			// A missing file leaves the whole value to be printed as written.
+			width, height := stringHookTermSize(terminal)
+			_ = terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+			if err := e.displayFileIfPresent(terminal, h.Target, outputMode, width, height); err != nil {
+				warnStringHookOnce(promptString, "file not found", "file", h.Target, "error", err)
+				leadWritten = true // the line break is already written
+				break
+			}
+			if h.Rest == "" {
+				return nil
+			}
+			// The text continues where the file left the cursor.
+			promptString, leadWritten = h.Rest, true
+		case stringhook.Escaped:
+			promptString = h.Rest
 		}
 	}
 
@@ -430,7 +457,9 @@ func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, men
 
 	// 4. Process character encoding based on outputMode (Reverted to manual loop)
 	var finalBuf bytes.Buffer
-	finalBuf.Write([]byte("\r\n")) // Add newline prefix
+	if !leadWritten {
+		finalBuf.Write([]byte("\r\n")) // Add newline prefix
+	}
 
 	for i := 0; i < len(rawPromptBytes); i++ {
 		b := rawPromptBytes[i]

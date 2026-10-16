@@ -649,14 +649,14 @@ readerLoop:
 						currentMsgNum = nxt
 						break scrollLoop
 					}
-					showReaderNotice(terminal, outputMode, e.Strings().MsgEndOfMessages, termHeight)
+					e.showReaderNotice(terminal, outputMode, e.Strings().MsgEndOfMessages, termHeight)
 					break readerLoop
 				}
 				if currentMsgNum < totalMsgCount {
 					currentMsgNum++
 					break scrollLoop // Exit scroll loop to load next message
 				} else {
-					showReaderNotice(terminal, outputMode, e.Strings().MsgEndOfMessages, termHeight)
+					e.showReaderNotice(terminal, outputMode, e.Strings().MsgEndOfMessages, termHeight)
 					break readerLoop
 				}
 
@@ -691,7 +691,7 @@ readerLoop:
 						break scrollLoop
 					}
 					// Already at the first visible message: stay put.
-					showReaderNotice(terminal, outputMode, e.Strings().MsgFirstMessage, termHeight)
+					e.showReaderNotice(terminal, outputMode, e.Strings().MsgFirstMessage, termHeight)
 					needsRedraw = true
 					continue
 				}
@@ -699,7 +699,7 @@ readerLoop:
 					currentMsgNum--
 					break scrollLoop
 				} else {
-					showReaderNotice(terminal, outputMode, e.Strings().MsgFirstMessage, termHeight)
+					e.showReaderNotice(terminal, outputMode, e.Strings().MsgFirstMessage, termHeight)
 					needsRedraw = true
 					continue
 				}
@@ -713,12 +713,12 @@ readerLoop:
 
 			case 'J': // Jump to message number
 				navDir = 1
-				handleJump(reader, terminal, outputMode, &currentMsgNum, totalMsgCount, e.Strings().MsgJumpPrompt, e.Strings().MsgInvalidMsgNum)
+				e.handleJump(reader, terminal, outputMode, &currentMsgNum, totalMsgCount)
 				// Exit scroll loop to load new message
 				break scrollLoop
 
 			case 'M': // Mail reply (deferred)
-				showReaderNotice(terminal, outputMode, e.Strings().MsgMailReplyDeferred, termHeight)
+				e.showReaderNotice(terminal, outputMode, e.Strings().MsgMailReplyDeferred, termHeight)
 				needsRedraw = true
 				continue
 
@@ -779,7 +779,7 @@ readerLoop:
 				kludges, kErr := e.MessageMgr.GetMessageKludges(currentAreaID, currentMsg.MsgNum)
 				if kErr != nil {
 					slog.Error("read message kludges", "node", nodeNumber, "msg", currentMsg.MsgNum, "area", currentAreaID, "error", kErr)
-					showReaderNotice(terminal, outputMode, "|01Could not read this message's control information.|07", termHeight)
+					e.showReaderNotice(terminal, outputMode, "|01Could not read this message's control information.|07", termHeight)
 					needsRedraw = true
 					continue
 				}

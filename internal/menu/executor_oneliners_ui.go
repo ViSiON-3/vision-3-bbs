@@ -209,9 +209,7 @@ func promptAddOneliner(c *cmdCtx, currentOneLiners []onelinerRecord, onelinerPat
 		}
 	}
 
-	enterPromptBytes := ansi.ReplacePipeCodes([]byte(enterPrompt))
-	slog.Debug("writing oneliner enter prompt bytes", "node", nodeNumber, "bytes", fmt.Sprintf("%X", enterPromptBytes))
-	wErr := terminalio.WriteProcessedBytes(terminal, enterPromptBytes, outputMode)
+	wErr := e.writeString(terminal, outputMode, enterPrompt)
 	if wErr != nil {
 		slog.Error("failed writing EnterOneLiner prompt", "node", nodeNumber, "error", wErr)
 	}

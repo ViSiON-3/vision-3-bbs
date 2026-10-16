@@ -34,8 +34,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 	if currentUser != nil {
 		slog.Warn("user tried to run AUTHENTICATE while already logged in", "node", nodeNumber, "handle", currentUser.Handle)
 		msg := e.Strings().ExecAlreadyLoggedIn
-		// Use WriteProcessedBytes
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		wErr := e.writeString(terminal, outputMode, msg)
 		if wErr != nil {
 			slog.Error("failed writing already logged in message", "error", wErr)
 		}
@@ -51,8 +50,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 	// Move to Username position, display prompt, and read input
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(userRow, userCol)), outputMode)
 	usernamePrompt := e.Strings().ExecUsernamePrompt
-	// Use WriteProcessedBytes for prompt
-	wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(usernamePrompt)), outputMode)
+	wErr := e.writeString(terminal, outputMode, usernamePrompt)
 	if wErr != nil {
 		slog.Error("failed writing username prompt", "node", nodeNumber, "error", wErr)
 		// Continue anyway?
@@ -164,8 +162,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 		// Display error message to user
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode) // Move cursor for message
 		errMsg := e.Strings().ExecLoginIncorrect
-		// Use WriteProcessedBytes
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
+		wErr := e.writeString(terminal, outputMode, errMsg)
 		if wErr != nil {
 			slog.Error("failed writing login incorrect message", "error", wErr)
 		}

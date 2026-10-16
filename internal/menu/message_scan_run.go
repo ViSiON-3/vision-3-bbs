@@ -97,9 +97,9 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			// Same outcome as the multi-area scan: a search that matched
 			// nothing says so, a plain newscan with nothing new completes.
 			if msgFilter != nil {
-				showScanNotice(terminal, outputMode, e.Strings().ScanNoMatches)
+				e.showScanNotice(terminal, outputMode, e.Strings().ScanNoMatches)
 			} else {
-				showScanNotice(terminal, outputMode, e.Strings().ScanComplete)
+				e.showScanNotice(terminal, outputMode, e.Strings().ScanComplete)
 			}
 			return nil, "", nil
 		}
@@ -284,7 +284,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 				continue
 			case 'J': // Jump to message #
 				prevStart := startMsg
-				handleJump(reader, terminal, outputMode, &startMsg, totalCount, e.Strings().MsgJumpPrompt, e.Strings().MsgInvalidMsgNum)
+				e.handleJump(reader, terminal, outputMode, &startMsg, totalCount)
 				// Match Pascal: if the jump succeeded, mark everything before
 				// the new start as read (NScan.LastRead[Cb] := Valu(Inpt)-1).
 				if startMsg != prevStart && startMsg > 1 {
@@ -323,9 +323,9 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	}
 
 	if msgFilter != nil && !scannedAny {
-		showScanNotice(terminal, outputMode, e.Strings().ScanNoMatches)
+		e.showScanNotice(terminal, outputMode, e.Strings().ScanNoMatches)
 	} else {
-		showScanNotice(terminal, outputMode, e.Strings().ScanComplete)
+		e.showScanNotice(terminal, outputMode, e.Strings().ScanComplete)
 	}
 
 	return currentUser, "", nil

@@ -158,7 +158,7 @@ func showInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, outpu
 				// Each \r\n is a new line
 				lineCount++
 				if lineCount >= linesPerPage {
-					if !pauseMore(s, terminal, outputMode, morePrompt) {
+					if !e.pauseMore(s, terminal, outputMode, morePrompt) {
 						aborted = true
 						return
 					}

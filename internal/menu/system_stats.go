@@ -1,8 +1,6 @@
 package menu
 
 import (
-	"bytes"
-	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
@@ -78,40 +76,44 @@ func runSystemStats(c *cmdCtx, args string) (*user.User, string, error) {
 	topBytes = replaceTokens(topBytes)
 	botBytes = replaceTokens(botBytes)
 
-	lines := []string{
-		fmt.Sprintf(e.Strings().StatsBBSName, tokens["BBSNAME"]),
-		fmt.Sprintf(e.Strings().StatsSysOp, tokens["SYSOP"]),
-		fmt.Sprintf(e.Strings().StatsVersion, tokens["VERSION"]),
-		"",
-		fmt.Sprintf(e.Strings().StatsTotalUsers, tokens["TOTALUSERS"]),
-		fmt.Sprintf(e.Strings().StatsTotalCalls, tokens["TOTALCALLS"]),
-		fmt.Sprintf(e.Strings().StatsTotalMsgs, tokens["TOTALMSGS"]),
-		fmt.Sprintf(e.Strings().StatsTotalFiles, tokens["TOTALFILES"]),
-		fmt.Sprintf(e.Strings().StatsActiveNodes, tokens["ACTIVENODES"], tokens["MAXNODES"]),
-		"",
-		fmt.Sprintf(e.Strings().StatsDate, tokens["DATE"]),
-		fmt.Sprintf(e.Strings().StatsTime, tokens["TIME"]),
-	}
+	raw := func(b []byte) { terminalio.WriteProcessedBytes(terminal, b, outputMode) }
+	crlf := []byte("\r\n")
 
-	var buf bytes.Buffer
-	buf.Write([]byte(ansi.ClearScreen()))
-
+	raw([]byte(ansi.ClearScreen()))
 	if len(topBytes) > 0 {
-		buf.Write(ansi.ReplacePipeCodes(topBytes))
-		buf.WriteString("\r\n")
+		raw(ansi.ReplacePipeCodes(topBytes))
+		raw(crlf)
 	}
 
-	for _, line := range lines {
-		buf.Write(ansi.ReplacePipeCodes([]byte(line)))
-		buf.WriteString("\r\n")
-	}
+	// One call per line, each through writeStringf so any line can be a hook,
+	// and spelled out so the stringformat call-site check sees every key.
+	e.writeStringf(terminal, outputMode, e.Strings().StatsBBSName, tokens["BBSNAME"])
+	raw(crlf)
+	e.writeStringf(terminal, outputMode, e.Strings().StatsSysOp, tokens["SYSOP"])
+	raw(crlf)
+	e.writeStringf(terminal, outputMode, e.Strings().StatsVersion, tokens["VERSION"])
+	raw(crlf)
+	raw(crlf)
+	e.writeStringf(terminal, outputMode, e.Strings().StatsTotalUsers, tokens["TOTALUSERS"])
+	raw(crlf)
+	e.writeStringf(terminal, outputMode, e.Strings().StatsTotalCalls, tokens["TOTALCALLS"])
+	raw(crlf)
+	e.writeStringf(terminal, outputMode, e.Strings().StatsTotalMsgs, tokens["TOTALMSGS"])
+	raw(crlf)
+	e.writeStringf(terminal, outputMode, e.Strings().StatsTotalFiles, tokens["TOTALFILES"])
+	raw(crlf)
+	e.writeStringf(terminal, outputMode, e.Strings().StatsActiveNodes, tokens["ACTIVENODES"], tokens["MAXNODES"])
+	raw(crlf)
+	raw(crlf)
+	e.writeStringf(terminal, outputMode, e.Strings().StatsDate, tokens["DATE"])
+	raw(crlf)
+	e.writeStringf(terminal, outputMode, e.Strings().StatsTime, tokens["TIME"])
+	raw(crlf)
 
 	if len(botBytes) > 0 {
-		buf.Write(ansi.ReplacePipeCodes(botBytes))
-		buf.WriteString("\r\n")
+		raw(ansi.ReplacePipeCodes(botBytes))
+		raw(crlf)
 	}
-
-	terminalio.WriteProcessedBytes(terminal, buf.Bytes(), outputMode)
 
 	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {

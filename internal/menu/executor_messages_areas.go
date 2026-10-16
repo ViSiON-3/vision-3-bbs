@@ -104,12 +104,11 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 	if prompt == "" {
 		prompt = "|03Select Area |05[|13#|05/|13Tag|08, |13?|05=|13List|08, |13[|05=|13Prev |13]|05=|13Next|08, |13Q|05=|13Quit|05] : |11"
 	}
-	renderedPrompt := ansi.ReplacePipeCodes([]byte(prompt))
 	curUpClear := "\x1b[A\r\x1b[2K" // move up one line, then clear it
 
 	// Show initial prompt
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-	terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+	e.writeString(terminal, outputMode, prompt)
 
 	for {
 		inputTag, err := readLineFromSessionIH(s, terminal)
@@ -127,7 +126,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 			return currentUser, "", nil
 		}
 		if upperInput == "" {
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 
@@ -163,7 +162,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 				return currentUser, "", err
 			}
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 
@@ -174,7 +173,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 				return currentUser, "", err
 			}
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 
@@ -204,7 +203,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 
@@ -214,7 +213,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|01Access denied to '%s'.|07", area.Tag))), outputMode)
 			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 
@@ -228,7 +227,7 @@ func runSelectMessageArea(c *cmdCtx, args string) (*user.User, string, error) {
 			msg := "\r\n|01Error: Could not save area selection.|07\r\n"
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			uiPause(1 * time.Second)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 

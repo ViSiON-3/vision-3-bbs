@@ -64,11 +64,30 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 
-	// 3. Build the output string using processed templates and processed data
+	// writeRaw writes already-processed template bytes. For CP437 mode they
+	// are written raw to avoid UTF-8 false positives.
+	writeRaw := func(content []byte) error {
+		if outputMode == ansi.OutputModeCP437 {
+			_, err := terminal.Write(content)
+			return err
+		}
+		return terminalio.WriteProcessedBytes(terminal, content, outputMode)
+	}
+
+	// 3. Clear the screen and write the top template and the pending count
+	// ahead of the list, so the count is written on its own and can be a hook.
+	writeErr := terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
+	if writeErr != nil {
+		slog.Error("failed clearing screen for USERLIST", "node", nodeNumber, "error", writeErr)
+		return nil, "", writeErr
+	}
+	if wErr := writeRaw(append(append([]byte(nil), processedTopTemplate...), '\r', '\n')); wErr != nil {
+		slog.Error("failed writing USERLIST output", "node", nodeNumber, "error", wErr)
+		return nil, "", wErr
+	}
+	e.writeStringf(terminal, outputMode, e.Strings().ExecPendingValidation, pendingCount)
+
 	var outputBuffer bytes.Buffer
-	outputBuffer.Write(processedTopTemplate) // Write processed top template
-	outputBuffer.WriteString("\r\n")
-	outputBuffer.WriteString(string(ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.Strings().ExecPendingValidation, pendingCount)))))
 
 	if len(users) == 0 {
 		// Optional: Handle empty state. The template might handle this.
@@ -114,22 +133,8 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 	outputBuffer.Write(processedBotTemplate) // Write processed bottom template
 	slog.Debug("added BOT template", "bufferSize", outputBuffer.Len())
 
-	// 4. Clear screen and display the assembled content
-	writeErr := terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-	if writeErr != nil {
-		slog.Error("failed clearing screen for USERLIST", "node", nodeNumber, "error", writeErr)
-		return nil, "", writeErr
-	}
-
-	processedContent := outputBuffer.Bytes() // Contains already-processed ANSI bytes
-	// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
-	var wErr error
-	if outputMode == ansi.OutputModeCP437 {
-		_, wErr = terminal.Write(processedContent)
-	} else {
-		wErr = terminalio.WriteProcessedBytes(terminal, processedContent, outputMode)
-	}
-	if wErr != nil {
+	// 4. Display the list and the bottom template
+	if wErr := writeRaw(outputBuffer.Bytes()); wErr != nil {
 		slog.Error("failed writing USERLIST output", "node", nodeNumber, "error", wErr)
 		return nil, "", wErr
 	}

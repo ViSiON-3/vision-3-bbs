@@ -152,7 +152,7 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 		slog.Warn("failed to display NUEMAIL.ANS", "node", nodeNumber, "error", err)
 	}
 	if !displayed {
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().NewUserEmailPrompt)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().NewUserEmailPrompt)
 	}
 
 	// Auto-pause before proceeding into the editor.
@@ -207,7 +207,7 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 
 		if !saved || strings.TrimSpace(body) == "" {
 			slog.Info("new user tried to skip the sysop message", "node", nodeNumber, "handle", newUser.Handle, "saved", saved)
-			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().NewUserEmailRequired)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().NewUserEmailRequired)
 			e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 			continue
 		}
