@@ -681,6 +681,7 @@ read by `v3mail toss`, `v3mail scan`, and `v3mail ftn-pack`.
 | `origin`                  | Origin line text (empty = board name)               |
 | `binkd_outbound_path`     | Optional: this network's own BSO outbound directory (**Binkd Outbound** in the editor). Empty = the global one, but when several networks share the global one (empty, or set to the same path) all but one are given `<global>_<network>` automatically — see [Adding a Second Network](#adding-a-second-network). No dots in the name. |
 | `nodelist`                | Optional: `{ "file_echo": "FSX_NODE", "file_pattern": "FSXNET.Z*" }` (**Nodelist Echo** / **Nodelist Files** in the editor). The file echo the network's nodelist arrives in; `v3mail toss` compiles each one for lookups. See [FTN Nodelists](messages/nodelists.md). |
+| `auto_create`             | Optional: create a message area for echomail in an echo you don't carry, instead of sending it to the bad area (**Auto-Create** in the editor). See [Auto-creating echo areas](#auto-creating-echo-areas). |
 
 Hub polling is controlled by the per-network `echomail_poll_<network>` event
 under **Events**. The wizard creates it with a 15-minute cron schedule; edit
@@ -1026,6 +1027,75 @@ rather than echomail, and restrict read access to the sysop. With no bad area,
 a message for an unknown echo fails the toss and its packet is moved to
 `temp_path`; with no dupe area, dupes are logged and discarded.
 
+### Auto-creating echo areas
+
+Echo lists such as Fidonet's `backbone.na` are often out of date, so a hub can
+send echoes that aren't on the list you set up from. Instead of picking them out
+of the bad area and adding them by hand, turn on **Auto-Create** for the network
+(Echomail Networks → the network → **Auto-Create**). `v3mail toss` then creates
+an echomail area the first time a message arrives in an echo with no area, and
+tosses the message into it.
+
+```json
+"networks": {
+  "fidonet": {
+    "auto_create": {
+      "enabled": true,
+      "acs_read": "s10",
+      "acs_write": "s20",
+      "conference_id": 0,
+      "max_messages": 500,
+      "max_age": 365,
+      "auto_join": true,
+      "real_name_only": false
+    }
+  }
+}
+```
+
+| Field           | Default | Description |
+| --------------- | ------- | ----------- |
+| `enabled`       | `false` | Create areas for unknown echoes. Off: they go to the bad area, as before. |
+| `acs_read`      | `s10`   | Read access for new areas. |
+| `acs_write`     | `s20`   | Post access for new areas. |
+| `conference_id` | `0`     | Conference for new areas. `0` uses the conference of the network's other echomail areas. |
+| `max_messages`  | `500`   | Purge limit for new areas (`0` = unlimited). |
+| `max_age`       | `365`   | Purge age in days for new areas (`0` = unlimited). |
+| `auto_join`     | `true`  | Join new users to new areas automatically. |
+| `real_name_only` | `false` | Posts in new areas use real names instead of handles. |
+
+The defaults are the ones Mystic's MUTIL uses for the bases it auto-creates
+(`acs_read`, `acs_post`, `max_msgs`, `max_msgs_age`, `new_scan`,
+`use_realname`), so a board moving from Mystic gets the areas it is used to.
+Unlike Mystic, auto-create is off until you turn it on.
+
+New areas are named the way the setup wizard names its areas: the tag is
+`<network>_<echo>` in lower case (e.g. `fidonet_linux`), the name is the echo
+tag, and the message base is `msgbases/fn.<network>_<echo>`. Rename an area or
+give it a description under Message Areas afterwards. The running BBS picks the
+new area up without a restart.
+
+Creating an area changes your configuration, so the packet must prove it came
+from your hub. The address in a packet header is whatever the sender wrote, so
+it isn't enough on its own. Mail can create an area only when the packet is
+from one of the network's configured links and:
+
+- the link has a `packet_password` and the packet carries it, or
+- the link has no `packet_password` and the packet arrived in the
+  `secure_inbound_path`, which binkd only writes for password-checked sessions.
+  It must be a different directory from `inbound_path`; if the two are the
+  same, nothing counts as secure.
+
+This is the same rule `v3mail toss` applies to TIC files. The echo tag must also
+be valid: letters, digits, `_`, `-` and `.`, at most 50 characters. Mail that
+fails any of these checks goes to the bad area, and the log line `auto-create:
+not creating an area` gives the reason. Each new area is logged as
+`auto-created echomail area`.
+
+Auto-create doesn't send an AreaFix request. The hub is already sending the
+echo, so you're subscribed to it. To drop an echo you don't want, unsubscribe
+with `helper areafix --network <net> --command "-AREATAG"` and delete the area.
+
 **BAD area:** Read it via the BBS message reader. Each message will show the
 original `AREA:` tag in the header — that tells you what echo the sender thought
 they were writing to.
@@ -1035,7 +1105,7 @@ Common causes and actions:
 | What you see in BAD | Likely cause | What to do |
 |---|---|---|
 | Area tags from a network you're on | Hub is forwarding areas you haven't subscribed to | Subscribe via `helper areafix` if you want them; otherwise ignore |
-| Area tags you want to add | You forgot to subscribe after running `ftnsetup` | Run `./helper areafix --network <net> --command "+AREATAG"` |
+| Area tags you want to add | You forgot to subscribe after running `ftnsetup`, or the echo isn't on your echo list | Run `./helper areafix --network <net> --command "+AREATAG"`, or turn on [Auto-Create](#auto-creating-echo-areas) so future mail creates the area |
 | Junk/unknown area tags | Misconfigured remote, spam | Ignore; the BAD area auto-purges after 365 days |
 | Tags that look like your own areas but differ in case | `echo_tag` case mismatch in `message_areas.json` | Fix the `echo_tag` field to match exactly what the hub sends |
 

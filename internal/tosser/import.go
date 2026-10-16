@@ -38,6 +38,29 @@ func (t *Tosser) inboundDirs() []string {
 	return dirs
 }
 
+// isSecureInbound reports whether dir is the secure inbound, which only
+// binkd sessions that passed its password check write to. A secure inbound
+// that is the same directory as the unsecured one, by path or through a
+// symlink, proves nothing, since anyone can write there.
+func (t *Tosser) isSecureInbound(dir string) bool {
+	secure := t.paths.SecureInboundPath
+	if secure == "" || filepath.Clean(dir) != filepath.Clean(secure) {
+		return false
+	}
+	return t.paths.InboundPath == "" || !sameDir(secure, t.paths.InboundPath)
+}
+
+// sameDir reports whether a and b name the same directory. When either
+// can't be read, it falls back to comparing the paths.
+func sameDir(a, b string) bool {
+	if filepath.Clean(a) == filepath.Clean(b) {
+		return true
+	}
+	ai, errA := os.Stat(a)
+	bi, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(ai, bi)
+}
+
 // TossResult holds the results of a toss/scan cycle.
 type TossResult struct {
 	PacketsProcessed int
@@ -209,6 +232,9 @@ func (t *Tosser) processInboundDir(dir string, result *TossResult) {
 		return
 	}
 
+	// As for TICs: only the secure inbound is written by sessions that
+	// passed binkd's password check, which lets their mail create areas.
+	secure := t.isSecureInbound(dir)
 	ticFiles := ticReferencedFiles(dir, entries)
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -223,7 +249,7 @@ func (t *Tosser) processInboundDir(dir string, result *TossResult) {
 
 		if strings.HasSuffix(nameLower, ".pkt") {
 			// Direct .PKT file: it is its own inbound file.
-			if origin := t.tossPktFile(path, name, result); origin != "" {
+			if origin := t.tossPktFile(path, name, secure, result); origin != "" {
 				result.noteSkipped(path, origin)
 			}
 			continue
@@ -239,13 +265,14 @@ func (t *Tosser) processInboundDir(dir string, result *TossResult) {
 			if !isZIP {
 				continue // .flo or other non-ZIP file, skip
 			}
-			t.processBundle(path, name, result)
+			t.processBundle(path, name, secure, result)
 		}
 	}
 }
 
 // processBundle unpacks a ZIP bundle, tosses its .PKT contents, then removes it.
-func (t *Tosser) processBundle(path, name string, result *TossResult) {
+// secure reports whether the bundle is in the secure inbound.
+func (t *Tosser) processBundle(path, name string, secure bool, result *TossResult) {
 	tempDir := filepath.Join(t.paths.TempPath, "unpack")
 	pktPaths, err := ftn.ExtractBundle(path, tempDir)
 	if err != nil {
@@ -274,7 +301,7 @@ func (t *Tosser) processBundle(path, name string, result *TossResult) {
 	var skippedPkts []string
 	skippedOrigins := map[string]int{}
 	for _, pktPath := range pktPaths {
-		origin := t.tossPktFile(pktPath, filepath.Base(pktPath), result)
+		origin := t.tossPktFile(pktPath, filepath.Base(pktPath), secure, result)
 		if origin == "" {
 			allSkipped = false
 		} else {
@@ -304,8 +331,10 @@ func (t *Tosser) processBundle(path, name string, result *TossResult) {
 	// is removed below but skipped packets would otherwise strand in unpack/ forever
 	// since no tosser rescans that directory. Move them back to the inbound dir so
 	// the appropriate tosser picks them up on this or a future toss cycle.
+	// They go back to the directory the bundle was in, so a packet from the
+	// secure inbound stays trusted there.
 	for _, pktPath := range skippedPkts {
-		destPath := filepath.Join(t.paths.InboundPath, filepath.Base(pktPath))
+		destPath := filepath.Join(filepath.Dir(path), filepath.Base(pktPath))
 		if err := os.Rename(pktPath, destPath); err != nil {
 			// Do not delete on rename failure — a stranded packet in unpack/ is
 			// recoverable; a deleted packet is not.
@@ -325,8 +354,9 @@ func (t *Tosser) processBundle(path, name string, result *TossResult) {
 // Returns true if the packet was skipped (foreign network).
 // It returns the origin address when the packet was declined, empty otherwise;
 // the caller attributes that to whichever inbound file the packet came from,
-// which for a bundle is the bundle rather than the extracted packet.
-func (t *Tosser) tossPktFile(path, displayName string, result *TossResult) string {
+// which for a bundle is the bundle rather than the extracted packet. secure
+// reports whether the packet came from the secure inbound.
+func (t *Tosser) tossPktFile(path, displayName string, secure bool, result *TossResult) string {
 	// An empty packet carries no header and no mail. Some tossers send one
 	// when a packet ends up with nothing in it, and treating it as a parse
 	// failure moved it to temp_path, where it looked like lost mail. binkd
@@ -341,7 +371,7 @@ func (t *Tosser) tossPktFile(path, displayName string, result *TossResult) strin
 		return ""
 	}
 
-	imported, dupes, errs, skippedOrigin := t.tossPacket(path)
+	imported, dupes, errs, skippedOrigin := t.tossPacket(path, secure)
 	if skippedOrigin != "" {
 		// Not ours; leave it for the tosser whose links include that origin.
 		return skippedOrigin
@@ -370,7 +400,7 @@ func (t *Tosser) tossPktFile(path, displayName string, result *TossResult) strin
 // source address is checked against the network's known links. If the packet
 // doesn't originate from a known link, it is skipped (returned with skipped=true)
 // so the correct network's tosser can process it later.
-func (t *Tosser) tossPacket(path string) (imported, dupes int, errs []string, skippedOrigin string) {
+func (t *Tosser) tossPacket(path string, secure bool) (imported, dupes int, errs []string, skippedOrigin string) {
 	f, err := os.Open(path)
 	if err != nil {
 		return 0, 0, []string{fmt.Sprintf("open %s: %v", path, err)}, ""
@@ -399,8 +429,9 @@ func (t *Tosser) tossPacket(path string) (imported, dupes int, errs []string, sk
 		return 0, 0, nil, origin
 	}
 
+	noCreate := t.autoCreateRefusal(pktHdr, secure)
 	for i, msg := range msgs {
-		if err := t.tossMessage(msg, pktHdr, filepath.Base(path)); err != nil {
+		if err := t.tossMessage(msg, pktHdr, filepath.Base(path), noCreate); err != nil {
 			if err == errDupe {
 				dupes++
 				continue
@@ -483,8 +514,9 @@ func (t *Tosser) isPacketFromKnownLink(hdr *ftn.PacketHeader) bool {
 }
 
 // tossMessage processes a single message from a packet.
-// pktName identifies the packet in log lines.
-func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader, pktName string) (retErr error) {
+// pktName identifies the packet in log lines. noCreate is why the packet may
+// not create areas for unknown echoes, or "" if it may (see autoCreateRefusal).
+func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader, pktName, noCreate string) (retErr error) {
 	// The message is recorded as seen only once it is safely stored. Recording
 	// it up front meant a message that failed to toss (an unlinked area, a JAM
 	// write error) was already "seen" when its quarantined packet was tossed
@@ -568,6 +600,9 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader, p
 	}
 	if !found {
 		area, found = t.msgMgr.FindEchoAreaFold(parsed.Area, t.networkName)
+	}
+	if !found {
+		area, found = t.autoCreateArea(parsed.Area, noCreate)
 	}
 	if !found {
 		slog.Warn("unknown echo area", "area", parsed.Area, "from", msg.From)
