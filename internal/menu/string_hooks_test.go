@@ -18,6 +18,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -318,4 +319,36 @@ func TestPromptYesNoHooks(t *testing.T) {
 			t.Errorf("output = %q", out)
 		}
 	})
+}
+
+// tappedHookSession is a hookSession with a snoop tap.
+type tappedHookSession struct {
+	hookSession
+	tap *snoop.Tap
+}
+
+func (s tappedHookSession) Tap() *snoop.Tap { return s.tap }
+
+// A script run from a screen in another snoop mode, such as chat's pickers in
+// teleconference mode, leaves that mode in place; the door path alone would
+// put the tap back in BBS mode.
+func TestStringScriptRestoresSnoopMode(t *testing.T) {
+	f := newStringHookFixture(t, "")
+	tap := snoop.NewTap()
+	t.Cleanup(tap.Close)
+	tap.SetMode(snoop.ModeTeleconf)
+	s := tappedHookSession{hookSession: f.s, tap: tap}
+	terminal := newDoorcovTerminal(f.s.doorcovSession)
+	RegisterStringHookSession(terminal, s, nil, f.bbs)
+	defer ClearStringHookSession(terminal)
+
+	if err := f.e.writeString(terminal, ansi.OutputModeUTF8, "!say"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(f.term(), "[script") {
+		t.Fatalf("script did not run; output = %q", f.term())
+	}
+	if m := tap.Mode(); m != snoop.ModeTeleconf {
+		t.Errorf("mode after the script = %v, want teleconference", m)
+	}
 }
