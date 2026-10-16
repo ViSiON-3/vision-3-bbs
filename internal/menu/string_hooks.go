@@ -20,6 +20,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -28,6 +30,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringhook"
@@ -190,6 +193,12 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 		warnStringHookOnce(value, "door is not a v3_script door", "door", name, "type", doorConfig.Type)
 		return false, nil
 	}
+	// A missing script fails to load before running anything; print the value
+	// rather than leave the string blank.
+	if !stringScriptExists(doorConfig) {
+		warnStringHookOnce(value, "script file not found", "door", name, "script", doorConfig.Script)
+		return false, nil
+	}
 	if doorConfig.MinAccessLevel > 0 && u.AccessLevel < doorConfig.MinAccessLevel {
 		// Expected for a string shown to every caller but scripted only for
 		// some, so not a warning.
@@ -221,11 +230,28 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 	ctx.UserManager = hs.userMgr
 	ctx.CurrentUser = u
 
+	// executeDoor puts the snoop tap back in BBS mode afterwards; a string can
+	// be shown from a screen in another mode (chat's pickers set teleconference
+	// mode), so restore whatever was set before.
+	var restoreTap func()
+	if t := tapOf(hs.s); t != nil {
+		mode := t.Mode()
+		restoreTap = func() { t.SetMode(mode) }
+	}
 	runErr := executeDoor(ctx)
+	if restoreTap != nil {
+		restoreTap()
+	}
 	switch {
 	case runErr == nil:
 		return true, nil
-	case isSessionFatal(runErr):
+	case isSessionFatal(runErr) || errors.Is(runErr, editor.ErrTimeLimit):
+		// Most callers do not check this error, and their next read would
+		// start a fresh idle interval. Latch it on the session's input
+		// handler so that read ends the session instead.
+		if v, ok := sessionInputHandlers.Load(hs.s); ok {
+			v.(*editor.InputHandler).Fail(runErr)
+		}
 		return true, runErr
 	case errors.Is(runErr, ErrDoorBusy):
 		slog.Info("string script door busy, printed as text", "door", name, "node", hs.bbs.NodeID)
@@ -233,6 +259,24 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 	}
 	slog.Error("string script failed", "door", name, "node", hs.bbs.NodeID, "error", runErr)
 	return true, nil
+}
+
+// stringScriptExists reports whether a v3_script door's script file is there,
+// resolved the way executeV3ScriptDoor resolves it.
+func stringScriptExists(cfg config.DoorConfig) bool {
+	if cfg.Script == "" {
+		return false
+	}
+	dir := cfg.WorkingDirectory
+	if dir == "" {
+		dir = "."
+	}
+	path := cfg.Script
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(dir, path)
+	}
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // borrowInputSession returns s for a script run in place of a string.
@@ -259,21 +303,13 @@ type borrowedInputSession struct {
 	interrupt <-chan struct{}
 }
 
-// Read returns one byte from the handler, or an error once the read interrupt
-// fires.
+// Read returns the input queued in the handler, waiting for at least one
+// byte, or an error once the read interrupt fires.
 func (b *borrowedInputSession) Read(p []byte) (int, error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
 	b.mu.Lock()
 	stop := b.interrupt
 	b.mu.Unlock()
-	c, err := b.ih.ReadByteUntil(stop)
-	if err != nil {
-		return 0, err
-	}
-	p[0] = c
-	return 1, nil
+	return b.ih.ReadUntil(p, stop)
 }
 
 // SetReadInterrupt sets the channel that stops a blocked Read, as the script

@@ -74,7 +74,7 @@ func Validate(values, fallbacks, defaults map[string]string) []Problem {
 			}
 			continue
 		}
-		value, check := formattedPart(value)
+		value, check := formattedPart(key, value)
 		if !check {
 			continue
 		}
@@ -123,7 +123,7 @@ func ValidateValue(key, value, fallback, def string) error {
 		return fmt.Errorf("is empty, so the BBS prints %%!(EXTRA ...) instead of "+
 			"nothing: its %d argument(s) are supplied regardless", want.Arity())
 	}
-	value, check := formattedPart(value)
+	value, check := formattedPart(key, value)
 	if !check {
 		return nil
 	}
@@ -140,7 +140,13 @@ func ValidateValue(key, value, fallback, def string) error {
 // A value that runs a script (see stringhook) is never formatted: the script
 // receives the arguments instead. A value that displays a file formats only
 // the text after the file name, and with no text there is nothing to format.
-func formattedPart(value string) (string, bool) {
+//
+// A key in stringhook.NoHookKeys never runs a hook, so its value is checked as
+// written.
+func formattedPart(key, value string) (string, bool) {
+	if !stringhook.Supported(key) {
+		return value, true
+	}
 	h := stringhook.Parse(value)
 	switch h.Kind {
 	case stringhook.Script:

@@ -79,6 +79,7 @@ if (v3.args.indexOf("key") >= 0) { v3.console.print("[got " + v3.console.getkey(
 		"SAY":    {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, Args: []string{"door"}},
 		"NATIVE": {Commands: []string{"/bin/true"}},
 		"LOCKED": {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, MinAccessLevel: 200},
+		"GONE":   {Type: "v3_script", Script: "gone.js", WorkingDirectory: scripts},
 	})
 
 	ds := newDoorcovSession()
@@ -178,6 +179,7 @@ func TestWriteStringScript(t *testing.T) {
 		{"no such door", "!missing", nil},
 		{"not a script door", "!native", nil},
 		{"below the door's access level", "!locked", nil},
+		{"script file missing", "!gone", nil},
 		{"before login", "!say", func(f *stringHookFixture) { f.bbs.User = nil }},
 	} {
 		t.Run(tc.name+" prints the value as text", func(t *testing.T) {

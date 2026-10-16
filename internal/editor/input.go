@@ -97,6 +97,9 @@ type InputHandler struct {
 	// SetSessionDeadline.
 	deadlineNs atomic.Int64
 
+	// failed holds an error that ends every later key read (see Fail).
+	failed atomic.Pointer[error]
+
 	// escTimeoutNs overrides the inter-byte ESC disambiguation window
 	// (default 500 ms). 0 means use the default. Set via SetEscTimeout.
 	escTimeoutNs atomic.Int64
@@ -191,6 +194,9 @@ func (ih *InputHandler) SuspendSessionDeadline() (restore func()) {
 // timeout or the time limit, whichever runs out first. expired reports a time
 // limit that has already passed, when the read should not wait at all.
 func (ih *InputHandler) keyWait() (wait time.Duration, onTimeout error, expired bool) {
+	if err := ih.failed.Load(); err != nil {
+		return 0, *err, true
+	}
 	wait, onTimeout = ih.sessionIdleTimeout(), ErrIdleTimeout
 	if ns := ih.deadlineNs.Load(); ns != 0 {
 		left := time.Until(time.Unix(0, ns))
@@ -202,6 +208,17 @@ func (ih *InputHandler) keyWait() (wait time.Duration, onTimeout error, expired 
 		}
 	}
 	return wait, onTimeout, false
+}
+
+// Fail makes every later key read return err. Code that reads the session
+// while borrowing the handler, such as a script run in place of a string,
+// uses it when the caller's session ended under it (idle timeout, time limit,
+// hang-up): the handler's owner may not check the borrower's error, and its
+// next read must not start a fresh idle interval and let the caller carry on.
+func (ih *InputHandler) Fail(err error) {
+	if err != nil {
+		ih.failed.CompareAndSwap(nil, &err)
+	}
 }
 
 // SetEscTimeout overrides the ESC disambiguation window used in ReadKey.
@@ -393,35 +410,92 @@ func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 	}
 }
 
-// ErrReadStopped is returned by ReadByteUntil when its stop channel closes
-// before a byte arrives.
+// ErrReadStopped is returned by ReadUntil and ReadByteUntil when their stop
+// channel closes before a byte arrives.
 var ErrReadStopped = errors.New("input read stopped")
 
-// ReadByteUntil returns the next raw input byte, or ErrReadStopped once stop
-// is closed. It applies no idle timeout, deadline or break-in, so code that
-// borrows the handler (a script run in place of a string) can read through it
-// without closing it under a caller that still holds it.
-func (ih *InputHandler) ReadByteUntil(stop <-chan struct{}) (byte, error) {
-	// Stop wins over a queued byte: a reader stopped with keys waiting must
-	// leave them for the handler's owner rather than take one more.
-	select {
-	case <-stop:
-		return 0, ErrReadStopped
-	default:
+// ReadUntil fills p with the input already queued, waiting for at least one
+// byte, or returns ErrReadStopped once stop is closed. It applies no idle
+// timeout, deadline or break-in, so code that borrows the handler (a script
+// run in place of a string) can read through it without closing it under a
+// caller that still holds it.
+//
+// Taking everything queued, rather than one byte at a time, keeps a key's
+// escape sequence or a CR LF Enter in one chunk for a reader that decodes
+// keys per chunk. Stop wins over queued input, so a reader stopped with keys
+// waiting leaves them for the handler's owner.
+func (ih *InputHandler) ReadUntil(p []byte, stop <-chan struct{}) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
 	}
-	if len(ih.unreadBuf) > 0 {
-		b := ih.unreadBuf[0]
-		ih.unreadBuf = ih.unreadBuf[1:]
-		return b, nil
+	b, err := ih.readFirstUntil(stop)
+	if err != nil {
+		return 0, err
 	}
-	select {
-	case b, ok := <-ih.incoming:
-		if !ok {
-			return 0, io.EOF
+	p[0] = b
+	n := 1
+	for n < len(p) {
+		if len(ih.unreadBuf) > 0 {
+			p[n] = ih.unreadBuf[0]
+			ih.unreadBuf = ih.unreadBuf[1:]
+			n++
+			continue
 		}
-		return b, nil
-	case <-stop:
-		return 0, ErrReadStopped
+		select {
+		case b, ok := <-ih.incoming:
+			if !ok {
+				return n, nil
+			}
+			p[n] = b
+			n++
+			continue
+		default:
+		}
+		break
+	}
+	return n, nil
+}
+
+// ReadByteUntil is ReadUntil for a single byte.
+func (ih *InputHandler) ReadByteUntil(stop <-chan struct{}) (byte, error) {
+	return ih.readFirstUntil(stop)
+}
+
+// readFirstUntil waits for one byte for ReadUntil.
+func (ih *InputHandler) readFirstUntil(stop <-chan struct{}) (byte, error) {
+	for {
+		select {
+		case <-stop:
+			return 0, ErrReadStopped
+		default:
+		}
+		if len(ih.unreadBuf) > 0 {
+			b := ih.unreadBuf[0]
+			ih.unreadBuf = ih.unreadBuf[1:]
+			return b, nil
+		}
+		select {
+		case b, ok := <-ih.incoming:
+			if !ok {
+				return 0, io.EOF
+			}
+			// Both cases can be ready at once and select picks at random:
+			// if stop closed meanwhile, give the byte back to the owner.
+			select {
+			case <-stop:
+				ih.unreadByte(b)
+				return 0, ErrReadStopped
+			default:
+			}
+			// The owner's last read may have been a CR whose LF or NUL had
+			// not yet arrived; that trailer is not a key for the borrower.
+			if ih.lateEnterTrailer(b) {
+				continue
+			}
+			return b, nil
+		case <-stop:
+			return 0, ErrReadStopped
+		}
 	}
 }
 
