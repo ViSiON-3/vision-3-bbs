@@ -109,7 +109,7 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 		return terminalio.WriteProcessedBytes(c.terminal, ansi.ReplacePipeCodes([]byte(s)), c.outputMode)
 	}
 	denied := func() (*user.User, string, error) {
-		err := write(e.Strings().DoorMenuDenied)
+		err := e.writeString(c.terminal, c.outputMode, e.Strings().DoorMenuDenied)
 		next := ""
 		if rec.Fallback != "" {
 			next = "GOTO:" + rec.Fallback
@@ -531,7 +531,7 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 			return c.currentUser, next, err
 		}
 		if err != nil {
-			if werr := write(fmt.Sprintf(e.Strings().ExecRunDoorError, entry.code, err)); werr != nil {
+			if werr := e.writeStringf(c.terminal, c.outputMode, e.Strings().ExecRunDoorError, entry.code, err); werr != nil {
 				return c.currentUser, "", werr
 			}
 			uiPause(time.Second)

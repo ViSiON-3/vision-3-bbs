@@ -2,7 +2,6 @@ package menu
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -50,7 +48,9 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 			// RunnableFunc now returns user, nextActionString, error
 			authUser, nextActionStr, runErr := runnableFunc(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, runArgs)
 			if runErr != nil {
-				actionType, userResult = e.commandFailure("RUN", runTarget, fmt.Sprintf(e.Strings().ExecRunCommandError, runTarget, runErr), runErr, nextActionStr, authUser, s, terminal, outputMode, nodeNumber, termWidth, termHeight)
+				actionType, userResult = e.commandFailure("RUN", runTarget, func() error {
+					return e.writeStringf(terminal, outputMode, e.Strings().ExecRunCommandError, runTarget, runErr)
+				}, runErr, nextActionStr, authUser, s, terminal, outputMode, nodeNumber, termWidth, termHeight)
 				return actionType, "", userResult
 			}
 			slog.Debug("RUN function completed", "target", runTarget)
@@ -69,8 +69,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 			return "CONTINUE", "", authUser
 		} else {
 			slog.Warn("no internal function registered for RUN", "target", runTarget)
-			msg := fmt.Sprintf(e.Strings().ExecRunCommandNotFound, runTarget)
-			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			wErr := e.writeStringf(terminal, outputMode, e.Strings().ExecRunCommandNotFound, runTarget)
 			if wErr != nil {
 				slog.Error("failed writing missing RUN command message", "error", wErr)
 			}
@@ -84,7 +83,9 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 			// DOOR runnable returns user, "", error
 			userResultDoor, nextActionStrDoor, doorErr := doorFunc(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, doorTarget)
 			if doorErr != nil {
-				actionType, userResult = e.commandFailure("DOOR", doorTarget, fmt.Sprintf(e.Strings().ExecRunDoorError, doorTarget, doorErr), doorErr, nextActionStrDoor, userResultDoor, s, terminal, outputMode, nodeNumber, termWidth, termHeight)
+				actionType, userResult = e.commandFailure("DOOR", doorTarget, func() error {
+					return e.writeStringf(terminal, outputMode, e.Strings().ExecRunDoorError, doorTarget, doorErr)
+				}, doorErr, nextActionStrDoor, userResultDoor, s, terminal, outputMode, nodeNumber, termWidth, termHeight)
 				return actionType, "", userResult
 			}
 			// Handle potential LOGOFF request from DOOR runnable (though currently returns "")
@@ -117,8 +118,9 @@ func isSessionFatal(err error) bool {
 // commandFailure handles a non-nil error from a RUN: or DOOR: handler and
 // returns the action the menu loop should take and the user to carry on
 // with. kind ("RUN" or "DOOR") and target name the command in the log, and
-// errMsg is the message shown to the caller for it, already formatted at
-// the call site so the stringformat call-site check can see the arguments.
+// showErr writes the message shown to the caller for it. The call site
+// formats it there, so the stringformat call-site check can see the
+// arguments, and writes it through writeStringf so the string can be a hook.
 //
 // A session-fatal error (see isSessionFatal) is LOGOFF, after the idle
 // timeout or time limit notice when that was the cause. Any other error is logged and
@@ -126,7 +128,7 @@ func isSessionFatal(err error) bool {
 // for one, otherwise CONTINUE, which redisplays the menu. One broken door or
 // runnable therefore no longer drops the caller out of the menus. u is the
 // handler's user, which may be nil for "unchanged".
-func (e *MenuExecutor) commandFailure(kind, target, errMsg string, err error, next string, u *user.User, s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) (string, *user.User) {
+func (e *MenuExecutor) commandFailure(kind, target string, showErr func() error, err error, next string, u *user.User, s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) (string, *user.User) {
 	if isSessionFatal(err) {
 		if errors.Is(err, editor.ErrIdleTimeout) {
 			e.handleSessionTimeout(s, terminal, outputMode, nodeNumber, termWidth, termHeight)
@@ -137,7 +139,7 @@ func (e *MenuExecutor) commandFailure(kind, target, errMsg string, err error, ne
 	}
 
 	slog.Error("command failed", "node", nodeNumber, "kind", kind, "target", target, "error", err)
-	if wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode); wErr != nil {
+	if wErr := showErr(); wErr != nil {
 		slog.Error("failed writing command error message", "kind", kind, "error", wErr)
 	}
 	uiPause(1 * time.Second)

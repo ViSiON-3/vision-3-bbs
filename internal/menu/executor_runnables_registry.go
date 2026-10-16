@@ -37,16 +37,14 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 
 		if currentUser == nil {
 			slog.Warn("readmail called without logged in user", "node", nodeNumber)
-			msg := e.Strings().ExecReadmailLogin
-			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			wErr := e.writeString(terminal, outputMode, e.Strings().ExecReadmailLogin)
 			if wErr != nil {
 				slog.Error("failed writing readmail error message", "error", wErr)
 			}
 			uiPause(1 * time.Second)
 			return nil, "", nil // No user change, no next action, no error
 		}
-		msg := fmt.Sprintf(e.Strings().ExecReadmailPlaceholder, currentUser.Handle)
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		wErr := e.writeStringf(terminal, outputMode, e.Strings().ExecReadmailPlaceholder, currentUser.Handle)
 		if wErr != nil {
 			slog.Error("failed writing readmail placeholder message", "error", wErr)
 		}

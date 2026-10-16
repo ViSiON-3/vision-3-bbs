@@ -92,8 +92,7 @@ func promptAndResolveFile(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		return nil, "", currentUser, "", nil
 	}
 
-	prompt := fmt.Sprintf(e.Strings().FilePromptFormat, promptVerb)
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+	e.writeStringf(terminal, outputMode, e.Strings().FilePromptFormat, promptVerb)
 
 	input, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
@@ -110,8 +109,7 @@ func promptAndResolveFile(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 	record, err := findFileInArea(e.FileMgr, currentAreaID, filename)
 	if err != nil {
-		msg := fmt.Sprintf(e.Strings().FileNotFoundFormat, filename)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().FileNotFoundFormat, filename)
 		uiPause(1 * time.Second)
 		return nil, "", currentUser, "", nil
 	}

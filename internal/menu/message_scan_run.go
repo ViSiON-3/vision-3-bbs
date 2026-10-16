@@ -255,10 +255,8 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(merged), outputMode)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 		} else {
-			boardMsg := fmt.Sprintf(e.Strings().ScanAreaProgress,
+			e.writeStringf(terminal, outputMode, strings.TrimRight(e.Strings().ScanAreaProgress, "\r\n"),
 				area.Tag, startMsg, totalCount)
-			boardMsg = strings.TrimRight(boardMsg, "\r\n")
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(boardMsg)), outputMode)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 		}
 
@@ -459,8 +457,7 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 	if saveErr {
 		e.writeString(terminal, outputMode, e.Strings().UpdatePtrsError)
 	} else {
-		msg := fmt.Sprintf(e.Strings().UpdatePtrsSuccess, updatedCount)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().UpdatePtrsSuccess, updatedCount)
 	}
 	uiPause(1 * time.Second)
 

@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -47,8 +45,7 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 		if sessInvisible && !e.isCoSysOpOrAbove(currentUser) {
 			continue
 		}
-		line := fmt.Sprintf(e.Strings().PageNodeListEntry, sessNodeID, sessHandle)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().PageNodeListEntry, sessNodeID, sessHandle)
 	}
 
 	// Prompt for target node
@@ -114,8 +111,7 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 	targetSession.AddPage(pageMsg)
 
 	slog.Info("paged node", "node", nodeNumber, "handle", handle, "target", targetNodeID, "chars", len(msgInput))
-	confirm := fmt.Sprintf(e.Strings().PageSent, targetNodeID)
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(confirm)), outputMode)
+	e.writeStringf(terminal, outputMode, e.Strings().PageSent, targetNodeID)
 	uiPause(500 * time.Millisecond)
 
 	return nil, "", nil

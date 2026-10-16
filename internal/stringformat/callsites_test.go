@@ -273,10 +273,21 @@ func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys m
 			return true
 		}
 
+		// strings.TrimRight(x.Strings().Field, ...) and the like still hand
+		// the field's directives to fmt.
+		formatArg := call.Args[at]
+		if inner, ok := formatArg.(*ast.CallExpr); ok && len(inner.Args) > 0 {
+			if fn, ok := inner.Fun.(*ast.SelectorExpr); ok && strings.HasPrefix(fn.Sel.Name, "Trim") {
+				if pkg, ok := fn.X.(*ast.Ident); ok && pkg.Name == "strings" {
+					formatArg = inner.Args[0]
+				}
+			}
+		}
+
 		var fields []string
-		if field, ok := stringsField(call.Args[at]); ok {
+		if field, ok := stringsField(formatArg); ok {
 			fields = []string{field}
-		} else if id, ok := call.Args[at].(*ast.Ident); ok {
+		} else if id, ok := formatArg.(*ast.Ident); ok {
 			if field, ok := nearestField(id.Name, call.Pos()); ok {
 				fields = []string{field}
 			}

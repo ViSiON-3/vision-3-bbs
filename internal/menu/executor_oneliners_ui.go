@@ -31,8 +31,7 @@ func displayOnelinerScreen(e *MenuExecutor, terminal *term.Terminal, outputMode 
 	botTemplateBytes, errBot := readTemplateFile(botTemplatePath)
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load one or more ONELINER template files", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
-		msg := e.Strings().ExecOnelinerTemplateErr
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ExecOnelinerTemplateErr)
 		uiPause(1 * time.Second)
 		return fmt.Errorf("failed loading ONELINER templates")
 	}
@@ -228,8 +227,7 @@ func promptAddOneliner(c *cmdCtx, currentOneLiners []onelinerRecord, onelinerPat
 	}
 	newOneliner = truncateOnelinerPreservePipeCodes(newOneliner, oneLinerMaxLength)
 	if containsDisallowedOnelinerColorCode(newOneliner) {
-		msg := e.Strings().ExecOnelinerColorError
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ExecOnelinerColorError)
 		uiPause(500 * time.Millisecond)
 		return nil, "", nil
 	}
@@ -263,17 +261,14 @@ func promptAddOneliner(c *cmdCtx, currentOneLiners []onelinerRecord, onelinerPat
 
 		if saveErr != nil {
 			slog.Error("failed to write updated oneliners JSON", "node", nodeNumber, "path", onelinerPath, "error", saveErr)
-			msg := e.Strings().ExecOnelinerWriteError
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().ExecOnelinerWriteError)
 		} else {
 			slog.Info("successfully saved updated oneliners", "node", nodeNumber, "path", onelinerPath)
-			msg := e.Strings().ExecOnelinerAdded
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().ExecOnelinerAdded)
 			uiPause(500 * time.Millisecond)
 		}
 	} else {
-		msg := e.Strings().ExecOnelinerEmpty
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ExecOnelinerEmpty)
 		uiPause(500 * time.Millisecond)
 	}
 

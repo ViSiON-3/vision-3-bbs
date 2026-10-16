@@ -161,14 +161,11 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// 1. Load Menu Definition (.MNU)
 		menuRec, err := LoadMenu(st.currentMenuName, e.Menus())
 		if err != nil {
-			errMsg := fmt.Sprintf(e.Strings().ExecMenuLoadError, st.currentMenuName, err)
-			processedErrMsg := ansi.ReplacePipeCodes([]byte(errMsg))
-			// Use new helper for error message
-			wErr := terminalio.WriteProcessedBytes(terminal, processedErrMsg, outputMode)
+			wErr := e.writeStringf(terminal, outputMode, e.Strings().ExecMenuLoadError, st.currentMenuName, err)
 			if wErr != nil {
 				slog.Error("failed writing menu load error message", "error", wErr)
 			}
-			slog.Error(errMsg)
+			slog.Error("failed to load menu", "menu", st.currentMenuName, "error", err)
 			return "", st.currentUser, fmt.Errorf("failed to load menu %s: %w", st.currentMenuName, err)
 		}
 

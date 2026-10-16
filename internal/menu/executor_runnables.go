@@ -88,8 +88,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if currentUser == nil {
 		slog.Warn("showstats called without logged in user", "node", nodeNumber)
-		msg := e.Strings().ExecStatsLogin
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		wErr := e.writeString(terminal, outputMode, e.Strings().ExecStatsLogin)
 		if wErr != nil {
 			slog.Error("failed writing showstats error message", "error", wErr)
 		}
@@ -103,8 +102,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 	rawAnsiContent, readErr := ansi.GetAnsiFileContent(fullAnsPath)
 	if readErr != nil {
 		slog.Error("failed to read file for showstats", "node", nodeNumber, "path", fullAnsPath, "error", readErr)
-		msg := fmt.Sprintf(e.Strings().ExecStatsError, ansFilename)
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		wErr := e.writeStringf(terminal, outputMode, e.Strings().ExecStatsError, ansFilename)
 		if wErr != nil {
 			slog.Error("failed writing showstats file read error message", "error", wErr)
 		}

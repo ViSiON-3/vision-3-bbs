@@ -88,8 +88,7 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Display header
-	header := fmt.Sprintf(e.Strings().SearchResultsHeader, query)
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(header)), outputMode)
+	e.writeStringf(terminal, outputMode, e.Strings().SearchResultsHeader, query)
 
 	// Paginate results: leave room for header/pause prompt
 	linesPerPage := termHeight - 3
@@ -116,9 +115,7 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(
-		fmt.Sprintf(e.Strings().SearchResultsSummary, len(filtered)),
-	)), outputMode)
+	e.writeStringf(terminal, outputMode, e.Strings().SearchResultsSummary, len(filtered))
 
 	_ = writeCenteredPausePrompt(s, terminal, e.Strings().PauseString, outputMode, termWidth, termHeight) // best-effort pause prompt
 	return currentUser, "", nil
