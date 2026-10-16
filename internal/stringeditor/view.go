@@ -297,13 +297,13 @@ func (m Model) renderItem(idx, panelW int) string {
 // renderValuePreview previews a configured value. A value that runs a door or
 // shows a file in place of its text is drawn as a tag saying so, followed by
 // the door's words or the text printed after the file; an escaped "!|" value
-// shows the text it prints. A key that never runs a hook
-// (stringhook.NoHookKeys) is previewed as the text it is.
+// shows the text it prints. A value whose hook the key does not run
+// (stringhook.SupportsKind) is previewed as the text it is.
 func renderValuePreview(key, value string, width int) string {
-	if !stringhook.Supported(key) {
+	h := stringhook.Parse(value)
+	if (h.Kind == stringhook.Script || h.Kind == stringhook.File) && !stringhook.SupportsKind(key, h.Kind) {
 		return RenderColorString(value, width)
 	}
-	h := stringhook.Parse(value)
 	var tag, rest string
 	switch h.Kind {
 	case stringhook.Script:
@@ -329,10 +329,10 @@ func renderValuePreview(key, value string, width int) string {
 // for the description row, or "" for an ordinary value or a key that never
 // runs a hook.
 func hookDescription(key, value string) string {
-	if !stringhook.Supported(key) {
+	h := stringhook.Parse(value)
+	if !stringhook.SupportsKind(key, h.Kind) {
 		return ""
 	}
-	h := stringhook.Parse(value)
 	switch h.Kind {
 	case stringhook.Script:
 		return "runs door " + h.Target + " in place of the text"

@@ -409,4 +409,14 @@ func TestRenderValuePreviewHooks(t *testing.T) {
 	if got := hookDescription("anonymousName", "!say"); got != "" {
 		t.Errorf("no-hook key description = %q, want none", got)
 	}
+	// idleTimeout shows a file but never runs a script.
+	if got := plain(renderValuePreview("idleTimeout", "!say", 40)); got != "!say" {
+		t.Errorf("idleTimeout script preview = %q, want %q", got, "!say")
+	}
+	if got := plain(renderValuePreview("idleTimeout", "%BYE.ANS", 40)); got != "[file BYE.ANS]" {
+		t.Errorf("idleTimeout file preview = %q, want %q", got, "[file BYE.ANS]")
+	}
+	if got := hookDescription("idleTimeout", "!say"); got != "" {
+		t.Errorf("idleTimeout script description = %q, want none", got)
+	}
 }
