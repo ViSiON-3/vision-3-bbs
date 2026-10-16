@@ -377,3 +377,46 @@ func TestWideCharactersSurviveEditing(t *testing.T) {
 		t.Errorf("value changed by a no-op edit:\n got %q\nwant %q", got, want)
 	}
 }
+
+// A value that runs a door or shows a file previews as a tag naming it, not
+// as raw text, and an escaped "!|" value previews as the text it prints.
+func TestRenderValuePreviewHooks(t *testing.T) {
+	plain := func(s string) string { return stripANSI(s) }
+	for _, tc := range []struct {
+		value, want string
+	}{
+		{"!say hello", "[door say] hello"},
+		{"%BAR.ANS |07Pick:", "[file BAR.ANS] Pick:"},
+		{"%BAR.ANS", "[file BAR.ANS]"},
+		{"!|Warning", "!Warning"},
+		{"|09Hello", "Hello"},
+		{"%d of %d", "%d of %d"},
+	} {
+		if got := plain(renderValuePreview("execGoodbye", tc.value, 40)); got != tc.want {
+			t.Errorf("renderValuePreview(%q) = %q, want %q", tc.value, got, tc.want)
+		}
+	}
+	if got := visualLen(renderValuePreview("execGoodbye", "!averyveryverylongdoorname", 10)); got > 10 {
+		t.Errorf("preview is %d cells wide, want at most 10", got)
+	}
+	if got := hookDescription("execGoodbye", "!say"); got != "runs door say in place of the text" {
+		t.Errorf("hookDescription = %q", got)
+	}
+	// A key that never runs a hook previews its value as text.
+	if got := plain(renderValuePreview("anonymousName", "!say", 40)); got != "!say" {
+		t.Errorf("no-hook key preview = %q, want %q", got, "!say")
+	}
+	if got := hookDescription("anonymousName", "!say"); got != "" {
+		t.Errorf("no-hook key description = %q, want none", got)
+	}
+	// idleTimeout shows a file but never runs a script.
+	if got := plain(renderValuePreview("idleTimeout", "!say", 40)); got != "!say" {
+		t.Errorf("idleTimeout script preview = %q, want %q", got, "!say")
+	}
+	if got := plain(renderValuePreview("idleTimeout", "%BYE.ANS", 40)); got != "[file BYE.ANS]" {
+		t.Errorf("idleTimeout file preview = %q, want %q", got, "[file BYE.ANS]")
+	}
+	if got := hookDescription("idleTimeout", "!say"); got != "" {
+		t.Errorf("idleTimeout script description = %q, want none", got)
+	}
+}
