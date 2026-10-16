@@ -147,7 +147,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 	}
 	// |BN expands to the configured board name, so the welcome names this BBS
 	// rather than the shipped placeholder.
-	e.writeStringSubst(terminal, outputMode, welcomeStr, strings.NewReplacer("|BN", e.GetServerConfig().BoardName).Replace)
+	e.writeStringSubst(terminal, outputMode, welcomeStr, "|BN", e.GetServerConfig().BoardName)
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 
 	userNumStr := e.Strings().YourUserNum
@@ -155,7 +155,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 		userNumStr = "|15Your User # is |09|UN|CR"
 	}
 	nextID := userManager.NextUserID()
-	e.writeStringSubst(terminal, outputMode, userNumStr, strings.NewReplacer("|UN", strconv.Itoa(nextID), "|CR", "\r\n").Replace)
+	e.writeStringSubst(terminal, outputMode, userNumStr, "|UN", strconv.Itoa(nextID), "|CR", "\r\n")
 
 	// 5. Password creation with confirmation
 	password, err := e.promptForPassword(s, terminal, nodeNumber, outputMode, termWidth, termHeight)
@@ -344,8 +344,6 @@ func (e *MenuExecutor) promptForHandle(
 	if prompt == "" {
 		prompt = "|CR|08E|07n|15ter |08Y|07o|15ur |08A|07l|15ias|09.|CR|08:"
 	}
-	crlf := strings.NewReplacer("|CR", "\r\n").Replace
-
 	invalidMsg := e.Strings().InvalidUserName
 	if invalidMsg == "" {
 		invalidMsg = "|05 |10Invalid Name .. Try again!"
@@ -363,7 +361,7 @@ func (e *MenuExecutor) promptForHandle(
 
 	maxAttempts := 5
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		e.writeStringSubst(terminal, outputMode, prompt, crlf)
+		e.writeStringSubst(terminal, outputMode, prompt, "|CR", "\r\n")
 
 		input, err := styledInput(terminal, s, outputMode, newUserHandleMaxLen, "")
 		if err != nil {

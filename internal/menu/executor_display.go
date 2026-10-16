@@ -336,6 +336,7 @@ func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, men
 
 	promptString := strings.Join(promptParts, "\r\n")
 
+	leadWritten := false // the prompt's leading line break is already written
 	if promptString == "" {
 		if e.Strings().DefPrompt != "" { // Use loaded strings
 			promptString = e.Strings().DefPrompt
@@ -352,14 +353,19 @@ func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, men
 			_ = terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 			return e.writeString(terminal, outputMode, promptString)
 		case stringhook.File:
+			// A missing file leaves the whole value to be printed as written.
+			width, height := stringHookTermSize(terminal)
 			_ = terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-			if err := e.writeString(terminal, outputMode, strings.TrimSpace(h.Prefix)); err != nil {
-				return err
+			if err := e.displayFileIfPresent(terminal, h.Target, outputMode, width, height); err != nil {
+				warnStringHookOnce(promptString, "file not found", "file", h.Target, "error", err)
+				leadWritten = true // the line break is already written
+				break
 			}
 			if h.Rest == "" {
 				return nil
 			}
-			promptString = h.Rest
+			// The text continues where the file left the cursor.
+			promptString, leadWritten = h.Rest, true
 		case stringhook.Escaped:
 			promptString = h.Rest
 		}
@@ -451,7 +457,9 @@ func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, men
 
 	// 4. Process character encoding based on outputMode (Reverted to manual loop)
 	var finalBuf bytes.Buffer
-	finalBuf.Write([]byte("\r\n")) // Add newline prefix
+	if !leadWritten {
+		finalBuf.Write([]byte("\r\n")) // Add newline prefix
+	}
 
 	for i := 0; i < len(rawPromptBytes); i++ {
 		b := rawPromptBytes[i]

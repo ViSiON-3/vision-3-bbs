@@ -60,7 +60,7 @@ func runCheckNUV(c *cmdCtx, args string) (*user.User, string, error) {
 	if waitingStr == "" {
 		waitingStr = "\r\n|15New User Voting: |11|NE candidate(s)|15 awaiting your vote!"
 	}
-	e.writeStringSubst(terminal, outputMode, waitingStr, strings.NewReplacer("|NE", fmt.Sprintf("%d", unvoted)).Replace)
+	e.writeStringSubst(terminal, outputMode, waitingStr, "|NE", fmt.Sprintf("%d", unvoted))
 	wv(terminal, "\r\n", outputMode)
 
 	// The shipped string ends in " @", the Yes/No lightbar marker; the

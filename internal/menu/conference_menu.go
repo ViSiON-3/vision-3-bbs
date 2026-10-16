@@ -137,7 +137,7 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 		if joinedMsg == "" {
 			joinedMsg = "\r\n|07(|15^CN|07) |15Conference Joined!|07\r\n"
 		}
-		e.writeStringSubst(terminal, outputMode, joinedMsg, strings.NewReplacer("^CN", conf.Name, "^CT", conf.Tag).Replace)
+		e.writeStringSubst(terminal, outputMode, joinedMsg, "^CN", conf.Name, "^CT", conf.Tag)
 		uiPause(1 * time.Second)
 
 		slog.Info("user changed conference",
