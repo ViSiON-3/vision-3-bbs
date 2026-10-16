@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -38,12 +37,8 @@ func runPageSysop(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	handle := c.currentUser.Handle
 	key := strings.ToLower(handle)
-	write := func(s string) {
-		terminalio.WriteProcessedBytes(c.terminal, ansi.ReplacePipeCodes([]byte(s)), c.outputMode)
-	}
-
 	if e.Pager == nil || e.Pager.Consoles() == 0 {
-		write(e.Strings().PageSysopUnavailable)
+		e.writeString(c.terminal, c.outputMode, e.Strings().PageSysopUnavailable)
 		return nil, "", nil
 	}
 
@@ -52,12 +47,12 @@ func runPageSysop(c *cmdCtx, args string) (*user.User, string, error) {
 	if v, ok := pageCooldowns.Load(key); ok && cooldown > 0 {
 		if left := cooldown - time.Since(v.(time.Time)); left > 0 {
 			mins := int((left + time.Minute - 1) / time.Minute)
-			write(fmt.Sprintf(e.Strings().PageSysopCooldown, mins))
+			e.writeStringf(c.terminal, c.outputMode, e.Strings().PageSysopCooldown, mins)
 			return nil, "", nil
 		}
 	}
 
-	write(e.Strings().PageSysopReasonPrompt)
+	e.writeString(c.terminal, c.outputMode, e.Strings().PageSysopReasonPrompt)
 	reason, err := readLineFromSessionIH(c.s, c.terminal)
 	if err != nil {
 		if err == io.EOF {
@@ -72,7 +67,7 @@ func runPageSysop(c *cmdCtx, args string) (*user.User, string, error) {
 
 	pageCooldowns.Store(key, time.Now())
 	e.Pager.RaisePage(c.nodeNumber, handle, reason)
-	write(e.Strings().PageSysopPaging)
+	e.writeString(c.terminal, c.outputMode, e.Strings().PageSysopPaging)
 
 	ih := getSessionIH(c.s)
 	tap := tapOf(c.s)
@@ -107,7 +102,7 @@ func runPageSysop(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 
-	write(e.Strings().PageSysopUnavailable)
+	e.writeString(c.terminal, c.outputMode, e.Strings().PageSysopUnavailable)
 	e.Pager.ClearPage(c.nodeNumber, handle, "timeout")
 	return nil, "", nil
 }

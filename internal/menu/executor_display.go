@@ -192,8 +192,7 @@ func (e *MenuExecutor) displayFile(terminal *term.Terminal, filename string, out
 	data, err := ansi.GetAnsiFileContent(filePath)
 	if err != nil {
 		slog.Error("failed to read ANSI file", "path", filePath, "error", err)
-		errMsg := fmt.Sprintf(e.Strings().ExecFileLoadError, filename)
-		writeErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
+		writeErr := e.writeStringf(terminal, outputMode, e.Strings().ExecFileLoadError, filename)
 		if writeErr != nil {
 			slog.Error("failed writing displayFile error message", "error", writeErr)
 			return fmt.Errorf("read: %w; write error: %w", err, writeErr)

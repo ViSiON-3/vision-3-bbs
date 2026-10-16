@@ -285,8 +285,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 		doorConfig, exists := e.GetDoorConfig(upperInput)
 		if !exists {
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
-			msg := fmt.Sprintf(e.Strings().DoorNotFoundFormat, inputClean)
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			e.writeStringf(terminal, outputMode, e.Strings().DoorNotFoundFormat, inputClean)
 			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
@@ -297,8 +296,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
 			slog.Warn("user denied access to door",
 				"node", nodeNumber, "handle", currentUser.Handle, "level", currentUser.AccessLevel, "door", upperInput, "required", doorConfig.MinAccessLevel)
-			msg := fmt.Sprintf(e.Strings().DoorAccessDenied, upperInput)
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			e.writeStringf(terminal, outputMode, e.Strings().DoorAccessDenied, upperInput)
 			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue
@@ -405,8 +403,7 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 		doorConfig, exists := e.GetDoorConfig(upperInput)
 		if !exists {
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
-			msg := fmt.Sprintf(e.Strings().DoorNotFoundFormat, inputClean)
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			e.writeStringf(terminal, outputMode, e.Strings().DoorNotFoundFormat, inputClean)
 			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
@@ -417,8 +414,7 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
 			slog.Warn("user denied access to door info",
 				"node", nodeNumber, "handle", currentUser.Handle, "level", currentUser.AccessLevel, "door", upperInput, "required", doorConfig.MinAccessLevel)
-			msg := fmt.Sprintf(e.Strings().DoorAccessDenied, upperInput)
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			e.writeStringf(terminal, outputMode, e.Strings().DoorAccessDenied, upperInput)
 			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
 			continue

@@ -8,8 +8,6 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -31,8 +29,7 @@ func runCfgPassword(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Prompt for current password
-	msg := e.Strings().CfgCurrentPwPrompt
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().CfgCurrentPwPrompt)
 
 	oldPw, err := readPasswordSecurely(s, terminal, outputMode)
 	if err != nil {
@@ -44,8 +41,7 @@ func runCfgPassword(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Verify current password
 	if bcryptErr := bcrypt.CompareHashAndPassword([]byte(currentUser.PasswordHash), []byte(oldPw)); bcryptErr != nil {
-		msg := e.Strings().CfgIncorrectPw
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().CfgIncorrectPw)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -77,8 +73,7 @@ func runCfgPassword(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	msg = e.Strings().CfgPasswordChanged
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().CfgPasswordChanged)
 	uiPause(1 * time.Second)
 	return currentUser, "", nil
 }

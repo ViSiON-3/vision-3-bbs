@@ -87,6 +87,11 @@ func (e *MenuExecutor) writeString(terminal *term.Terminal, outputMode ansi.Outp
 	return e.renderString(terminal, outputMode, value, true, nil)
 }
 
+// WriteString is writeString for code outside the menu package.
+func (e *MenuExecutor) WriteString(terminal *term.Terminal, outputMode ansi.OutputMode, value string) error {
+	return e.writeString(terminal, outputMode, value)
+}
+
 // writeStringf is writeString for a value the call site formats with args.
 // The hook is recognised before formatting, so a script receives the
 // arguments instead of having them appended to its name.

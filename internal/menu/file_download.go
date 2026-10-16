@@ -2,7 +2,6 @@ package menu
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -48,7 +47,7 @@ func runClearBatch(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.Strings().BatchClearedFormat, count))), outputMode)
+	e.writeStringf(terminal, outputMode, e.Strings().BatchClearedFormat, count)
 	slog.Info("cleared files from batch queue", "node", nodeNumber, "handle", currentUser.Handle, "count", count)
 	uiPause(1 * time.Second)
 
@@ -103,7 +102,7 @@ func (e *MenuExecutor) downloadLoop(
 		}
 		rec, err := findFileInArea(e.FileMgr, currentUser.CurrentFileAreaID, filename)
 		if err != nil {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.Strings().FileNotFoundFormat, filename))), outputMode)
+			e.writeStringf(terminal, outputMode, e.Strings().FileNotFoundFormat, filename)
 			uiPause(1 * time.Second)
 			return false
 		}
@@ -125,7 +124,7 @@ func (e *MenuExecutor) downloadLoop(
 			currentUser.TaggedFileIDs = currentUser.TaggedFileIDs[:len(currentUser.TaggedFileIDs)-1]
 			return false
 		}
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.Strings().AddedToBatchFormat, rec.Filename))), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().AddedToBatchFormat, rec.Filename)
 		slog.Info("tagged file", "node", nodeNumber, "handle", currentUser.Handle, "id", rec.ID, "file", rec.Filename)
 		return true
 	}
@@ -159,7 +158,7 @@ func (e *MenuExecutor) downloadLoop(
 			return currentUser, nil
 		}
 
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.Strings().BatchCountFormat, len(currentUser.TaggedFileIDs)))), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().BatchCountFormat, len(currentUser.TaggedFileIDs))
 
 		e.writeString(terminal, outputMode, e.Strings().DownloadStr)
 
@@ -252,7 +251,7 @@ func (e *MenuExecutor) downloadLoop(
 			slog.Error("failed to update user after download", "node", nodeNumber, "error", err)
 		}
 
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.Strings().DownloadFinishedFormat, successCount, failCount))), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().DownloadFinishedFormat, successCount, failCount)
 		slog.Info("download complete", "node", nodeNumber, "handle", currentUser.Handle, "success", successCount, "fail", failCount)
 		uiPause(2 * time.Second)
 

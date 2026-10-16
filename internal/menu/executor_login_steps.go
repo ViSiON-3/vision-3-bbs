@@ -2,7 +2,6 @@ package menu
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -11,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -65,8 +62,7 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if totalMessages == 0 {
-		msg := e.Strings().ExecNoNewMail
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ExecNoNewMail)
 		return currentUser, "", nil
 	}
 
@@ -93,8 +89,7 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if newMailCount > 0 {
-		mailMsg := fmt.Sprintf(e.Strings().ExecNewMailCount, newMailCount)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(mailMsg)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().ExecNewMailCount, newMailCount)
 
 		// Offer to read it now rather than making the caller find the mail menu.
 		// Saying yes drops them straight into the private-mail reader, where they
@@ -111,8 +106,7 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 			return runReadPrivateMail(c, "")
 		}
 	} else {
-		msg := e.Strings().ExecNoNewMail
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ExecNoNewMail)
 	}
 
 	return currentUser, "", nil

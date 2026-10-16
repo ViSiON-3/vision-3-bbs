@@ -102,8 +102,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Move to Password position, display prompt, and read input securely
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(passRow, passCol)), outputMode)
-	passwordPrompt := e.Strings().ExecPasswordPrompt
-	wErr = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(passwordPrompt)), outputMode)
+	wErr = e.writeString(terminal, outputMode, e.Strings().ExecPasswordPrompt)
 	if wErr != nil {
 		slog.Error("failed writing password prompt", "node", nodeNumber, "error", wErr)
 	}
@@ -139,8 +138,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 				"node", nodeNumber, "ip", remoteIP, "locked_until", lockedUntil.Format("2006-01-02 15:04:05"), "attempts", attempts)
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
 			minutesLeft := int(math.Ceil(time.Until(lockedUntil).Minutes()))
-			errMsg := fmt.Sprintf(e.Strings().ExecIPLockout, minutesLeft)
-			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
+			wErr := e.writeStringf(terminal, outputMode, e.Strings().ExecIPLockout, minutesLeft)
 			if wErr != nil {
 				slog.Error("failed writing IP lockout message", "error", wErr)
 			}
@@ -197,8 +195,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 	if cfg.LogonLevel > 0 && authUser.AccessLevel < cfg.LogonLevel {
 		slog.Info("login denied - insufficient access level", "node", nodeNumber, "handle", username, "has", authUser.AccessLevel, "needs", cfg.LogonLevel)
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
-		errMsg := e.Strings().ExecAccessDenied
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
+		wErr := e.writeString(terminal, outputMode, e.Strings().ExecAccessDenied)
 		if wErr != nil {
 			slog.Error("failed writing access denied message", "error", wErr)
 		}
