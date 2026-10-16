@@ -113,7 +113,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	// Auto-generate subject with "RE: " prefix (no prompt needed)
 	newSubject := generateReplySubject(currentMsg.Subject)
 	if strings.TrimSpace(newSubject) == "" {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgReplySubjectEmpty)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().MsgReplySubjectEmpty)
 		uiPause(1 * time.Second)
 		return ""
 	}
@@ -139,7 +139,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		replyName, replyTo = handle, handle
 	}
 
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgLaunchingEditor)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().MsgLaunchingEditor)
 
 	// Start with empty editor - user will use /Q command to quote if desired
 	// Pass message metadata for quoting (from, title, date, time, isAnon, lines)
@@ -154,13 +154,13 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		currentMsg.From, currentMsg.Subject, quoteDate, quoteTime, false, quoteLines, ih, replyCtx)
 	if editErr != nil {
 		slog.Error("editor failed", "node", nodeNumber, "error", editErr)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgEditorError)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().MsgEditorError)
 		uiPause(2 * time.Second)
 		return ""
 	}
 
 	if !saved {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgReplyCancelled)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().MsgReplyCancelled)
 		uiPause(1 * time.Second)
 		return ""
 	}
@@ -183,14 +183,14 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	}
 	if err != nil {
 		slog.Error("failed to save reply", "node", nodeNumber, "error", err)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgReplyError)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().MsgReplyError)
 		uiPause(2 * time.Second)
 	} else {
 		currentUser.MessagesPosted++
 		if err := userManager.UpdateUser(currentUser); err != nil {
 			slog.Error("failed to update MessagesPosted", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 		}
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgReplySuccess)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().MsgReplySuccess)
 		uiPause(1 * time.Second)
 		*totalMsgCount++
 	}
@@ -203,7 +203,7 @@ func handleThread(reader *bufio.Reader, e *MenuExecutor, terminal *term.Terminal
 	currentMsgNum *int, totalMsgs int, subject string) {
 
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgThreadPrompt)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().MsgThreadPrompt)
 
 	key, err := readSingleKey(reader)
 	if err != nil {

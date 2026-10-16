@@ -312,7 +312,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Debug("running LISTDOORS (Windows)", "node", nodeNumber)
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorLoginRequired)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().DoorLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
@@ -328,7 +328,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load DOORLIST templates", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorTemplateError)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().DoorTemplateError)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -368,7 +368,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if displayIdx == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorNoneConfigured)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().DoorNoneConfigured)
 	}
 
 	// Display footer
@@ -398,7 +398,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Debug("running OPENDOOR (Windows)", "node", nodeNumber)
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorLoginRequired)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().DoorLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
@@ -515,7 +515,7 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 	slog.Debug("running DOORINFO (Windows)", "node", nodeNumber)
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DoorInfoLoginRequired)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().DoorInfoLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}

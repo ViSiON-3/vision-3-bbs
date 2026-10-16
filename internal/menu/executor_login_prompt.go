@@ -28,7 +28,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 
 	if !userOk || !passOk {
 		slog.Error("LOGIN.ANS is missing required coordinate codes P or O")
-		if wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecLoginCriticalError)), outputMode); wErr != nil {
+		if wErr := e.writeString(terminal, outputMode, e.Strings().ExecLoginCriticalError); wErr != nil {
 			slog.Error("failed writing critical login configuration message", "error", wErr)
 		}
 		uiPause(2 * time.Second)

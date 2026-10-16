@@ -531,7 +531,7 @@ func (e *MenuExecutor) warnTimeLeftOnRow(s ssh.Session, terminal *term.Terminal,
 // handleTimeLimit tells the caller their time limit is up and logs it. Call
 // it before returning LOGOFF for an expired time limit.
 func (e *MenuExecutor) handleTimeLimit(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int) {
-	_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().TimeLimitExpired)), outputMode) // best-effort notice
+	_ = e.writeString(terminal, outputMode, e.Strings().TimeLimitExpired) // best-effort notice
 	slog.Info("time limit reached, disconnecting", "node", nodeNumber)
 }
 

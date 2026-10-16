@@ -6,7 +6,6 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -68,7 +67,7 @@ func (e *MenuExecutor) AdmitPreAuthenticatedUser(
 
 	if cfg := e.GetServerConfig(); !canLogonAtLevel(cfg, u.AccessLevel) {
 		slog.Info("SSH pre-auth denied - insufficient access level", "node", nodeNumber, "handle", u.Handle, "has", u.AccessLevel, "needs", cfg.LogonLevel)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecAccessDenied)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ExecAccessDenied)
 		time.Sleep(accessDeniedPause)
 		return false, nil
 	}

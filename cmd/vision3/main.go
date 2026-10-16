@@ -1222,6 +1222,9 @@ func sessionHandler(s ssh.Session) {
 		Size: liveTermSize(&physicalWidth, &termHeight),
 	}
 	sessionRegistry.Register(bbsSession)
+	// Strings that run a script find the session from the terminal (#605).
+	menu.RegisterStringHookSession(terminal, s, userMgr, bbsSession)
+	defer menu.ClearStringHookSession(terminal)
 
 	currentMenuName := "LOGIN"               // Start with LOGIN
 	autoRunLog := make(types.AutoRunTracker) // Initialize tracker for this session

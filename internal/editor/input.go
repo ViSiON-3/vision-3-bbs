@@ -97,6 +97,9 @@ type InputHandler struct {
 	// SetSessionDeadline.
 	deadlineNs atomic.Int64
 
+	// failed holds an error that ends every later key read (see Fail).
+	failed atomic.Pointer[error]
+
 	// escTimeoutNs overrides the inter-byte ESC disambiguation window
 	// (default 500 ms). 0 means use the default. Set via SetEscTimeout.
 	escTimeoutNs atomic.Int64
@@ -191,6 +194,9 @@ func (ih *InputHandler) SuspendSessionDeadline() (restore func()) {
 // timeout or the time limit, whichever runs out first. expired reports a time
 // limit that has already passed, when the read should not wait at all.
 func (ih *InputHandler) keyWait() (wait time.Duration, onTimeout error, expired bool) {
+	if err := ih.failed.Load(); err != nil {
+		return 0, *err, true
+	}
 	wait, onTimeout = ih.sessionIdleTimeout(), ErrIdleTimeout
 	if ns := ih.deadlineNs.Load(); ns != 0 {
 		left := time.Until(time.Unix(0, ns))
@@ -202,6 +208,17 @@ func (ih *InputHandler) keyWait() (wait time.Duration, onTimeout error, expired 
 		}
 	}
 	return wait, onTimeout, false
+}
+
+// Fail makes every later key read return err. Code that reads the session
+// while borrowing the handler, such as a script run in place of a string,
+// uses it when the caller's session ended under it (idle timeout, time limit,
+// hang-up): the handler's owner may not check the borrower's error, and its
+// next read must not start a fresh idle interval and let the caller carry on.
+func (ih *InputHandler) Fail(err error) {
+	if err != nil {
+		ih.failed.CompareAndSwap(nil, &err)
+	}
 }
 
 // SetEscTimeout overrides the ESC disambiguation window used in ReadKey.
@@ -355,6 +372,10 @@ func (ih *InputHandler) readByte() (byte, error) {
 // break-in hook.
 func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 	for {
+		// A latched session end (see Fail) wins over pushed-back bytes.
+		if err := ih.failed.Load(); err != nil {
+			return 0, *err
+		}
 		// Checked every pass: reads inside a break-in can push bytes back.
 		if len(ih.unreadBuf) > 0 {
 			b := ih.unreadBuf[0]
@@ -389,6 +410,158 @@ func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 			}
 		case <-ih.breakInChan(breakIn):
 			ih.runBreakIn()
+		}
+	}
+}
+
+// ErrReadStopped is returned by ReadUntil and ReadByteUntil when their stop
+// channel closes before a byte arrives.
+var ErrReadStopped = errors.New("input read stopped")
+
+// ReadUntil reads the next key into p, waiting for its first byte, or returns
+// ErrReadStopped once stop is closed. It applies no idle timeout, deadline or
+// break-in, so code that borrows the handler (a script run in place of a
+// string) can read through it without closing it under a caller that still
+// holds it.
+//
+// A key's escape sequence, or a CR with the LF or NUL of its Enter, is taken
+// whole when already queued, for a reader that decodes keys per chunk. Other
+// queued input is left alone: a borrower that reads ahead could not give it
+// back. Stop wins over queued input, and a stop seen partway through a key
+// hands every byte taken back to the handler.
+func (ih *InputHandler) ReadUntil(p []byte, stop <-chan struct{}) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	b, err := ih.readFirstUntil(stop)
+	if err != nil {
+		return 0, err
+	}
+	p[0] = b
+	return ih.drainQueued(p, 1, stop)
+}
+
+// drainQueued adds to p, after the n bytes already in it, the queued rest of
+// the key p starts, without waiting (see ReadUntil).
+func (ih *InputHandler) drainQueued(p []byte, n int, stop <-chan struct{}) (int, error) {
+	giveBack := func() (int, error) {
+		ih.unreadBuf = append(append([]byte(nil), p[:n]...), ih.unreadBuf...)
+		return 0, ErrReadStopped
+	}
+	stopped := func() bool {
+		select {
+		case <-stop:
+			return true
+		default:
+			return false
+		}
+	}
+	for n < len(p) && keyContinues(p[:n]) {
+		if stopped() {
+			return giveBack()
+		}
+		b, ok := ih.takeQueued()
+		if !ok {
+			break
+		}
+		if !keyAccepts(p[:n], b) {
+			ih.unreadByte(b)
+			break
+		}
+		p[n] = b
+		n++
+		// The stop can close while that byte was being taken.
+		if stopped() {
+			return giveBack()
+		}
+	}
+	return n, nil
+}
+
+// takeQueued returns the next queued byte without waiting.
+func (ih *InputHandler) takeQueued() (byte, bool) {
+	if len(ih.unreadBuf) > 0 {
+		b := ih.unreadBuf[0]
+		ih.unreadBuf = ih.unreadBuf[1:]
+		return b, true
+	}
+	select {
+	case b, ok := <-ih.incoming:
+		return b, ok
+	default:
+		return 0, false
+	}
+}
+
+// keyContinues reports whether the key begun in k may take more bytes: an
+// escape sequence before its final byte, or a lone CR.
+func keyContinues(k []byte) bool {
+	switch {
+	case len(k) == 1:
+		return k[0] == 0x1B || k[0] == '\r'
+	case k[0] != 0x1B:
+		return false
+	case len(k) == 2:
+		return k[1] == '[' || k[1] == 'O'
+	case k[1] == 'O':
+		return false // SS3: ESC O and one final byte
+	default:
+		last := k[len(k)-1]
+		return last >= 0x20 && last <= 0x3F // CSI parameter or intermediate
+	}
+}
+
+// keyAccepts reports whether b belongs to the key begun in k.
+func keyAccepts(k []byte, b byte) bool {
+	switch {
+	case k[0] == '\r':
+		return b == '\n' || b == 0x00
+	case len(k) == 1:
+		return b == '[' || b == 'O'
+	default:
+		return b >= 0x20 && b <= 0x7E
+	}
+}
+
+// ReadByteUntil is ReadUntil for a single byte.
+func (ih *InputHandler) ReadByteUntil(stop <-chan struct{}) (byte, error) {
+	return ih.readFirstUntil(stop)
+}
+
+// readFirstUntil waits for one byte for ReadUntil.
+func (ih *InputHandler) readFirstUntil(stop <-chan struct{}) (byte, error) {
+	for {
+		select {
+		case <-stop:
+			return 0, ErrReadStopped
+		default:
+		}
+		if len(ih.unreadBuf) > 0 {
+			b := ih.unreadBuf[0]
+			ih.unreadBuf = ih.unreadBuf[1:]
+			return b, nil
+		}
+		select {
+		case b, ok := <-ih.incoming:
+			if !ok {
+				return 0, io.EOF
+			}
+			// Both cases can be ready at once and select picks at random:
+			// if stop closed meanwhile, give the byte back to the owner.
+			select {
+			case <-stop:
+				ih.unreadByte(b)
+				return 0, ErrReadStopped
+			default:
+			}
+			// The owner's last read may have been a CR whose LF or NUL had
+			// not yet arrived; that trailer is not a key for the borrower.
+			if ih.lateEnterTrailer(b) {
+				continue
+			}
+			return b, nil
+		case <-stop:
+			return 0, ErrReadStopped
 		}
 	}
 }

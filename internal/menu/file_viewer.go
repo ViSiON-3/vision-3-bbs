@@ -42,7 +42,7 @@ func (e *MenuExecutor) zipLabSender(s ssh.Session, terminal *term.Terminal, reco
 	return func(extract ziplab.ExtractFunc) {
 		area, ok := e.FileMgr.GetAreaByID(record.AreaID)
 		if !ok || u == nil || (area.ACSDownload != "" && !checkACS(area.ACSDownload, u, s, terminal, sessionStartTime)) {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().YouCantDownloadHere)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().YouCantDownloadHere)
 			return
 		}
 		proto, protoOK, protoErr := e.selectTransferProtocol(s, terminal, outputMode)
@@ -87,7 +87,7 @@ func promptAndResolveFile(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 	currentAreaID := currentUser.CurrentFileAreaID
 	if currentAreaID <= 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileNoAreaSelected)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().FileNoAreaSelected)
 		uiPause(1 * time.Second)
 		return nil, "", currentUser, "", nil
 	}
@@ -119,7 +119,7 @@ func promptAndResolveFile(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	filePath, err := e.FileMgr.GetFilePath(record.ID)
 	if err != nil {
 		slog.Error("failed to get path for file", "node", nodeNumber, "id", record.ID, "error", err)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileLocateError)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().FileLocateError)
 		uiPause(1 * time.Second)
 		return nil, "", currentUser, "", nil
 	}
@@ -195,7 +195,7 @@ func viewFileByRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, r
 	filePath, err := e.FileMgr.GetFilePath(record.ID)
 	if err != nil {
 		slog.Error("failed to get path for file", "id", record.ID, "error", err)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileLocateError)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().FileLocateError)
 		uiPause(1 * time.Second)
 		return
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/formatspec"
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringformat"
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringhook"
 )
 
 // callSite is one place the source hands a configured string to fmt.
@@ -25,6 +26,7 @@ type callSite struct {
 	Pos      string // file:line
 	Args     int    // variadic arguments passed after the format string
 	Variadic bool   // the call spreads a slice, so the count is unknown
+	Writer   bool   // a hook-aware writer method rather than fmt itself
 }
 
 // formatFuncs are the fmt entry points whose first argument is a format string.
@@ -34,6 +36,14 @@ var formatFuncs = map[string]int{
 	"Printf":  0,
 	"Errorf":  0,
 	"Fprintf": 1,
+}
+
+// formatMethods are the menu executor's string writers whose argument at the
+// given index is a format string (see internal/menu/string_hooks.go). They are
+// matched by method name on any receiver.
+var formatMethods = map[string]int{
+	"writeStringf":         2,
+	"writeStringNoScriptf": 2,
 }
 
 // fieldToKey maps a StringsConfig field name to its strings.json key.
@@ -250,11 +260,15 @@ func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys m
 		if !ok {
 			return true
 		}
-		pkg, ok := fn.X.(*ast.Ident)
-		if !ok || pkg.Name != "fmt" {
-			return true
+		at, ok := formatMethods[fn.Sel.Name]
+		writer := ok
+		if !ok {
+			pkg, isIdent := fn.X.(*ast.Ident)
+			if !isIdent || pkg.Name != "fmt" {
+				return true
+			}
+			at, ok = formatFuncs[fn.Sel.Name]
 		}
-		at, ok := formatFuncs[fn.Sel.Name]
 		if !ok || len(call.Args) <= at {
 			return true
 		}
@@ -280,6 +294,7 @@ func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys m
 				Pos:      fset.Position(call.Pos()).String(),
 				Args:     len(call.Args) - at - 1,
 				Variadic: call.Ellipsis.IsValid(),
+				Writer:   writer,
 			})
 		}
 		return true
@@ -579,5 +594,43 @@ func TestScanFindsCallSites(t *testing.T) {
 		t.Fatalf("scanCallSites found %d call sites, expected at least %d; "+
 			"stringsFieldName has probably stopped matching the source's current shape",
 			len(sites), minExpectedCallSites)
+	}
+}
+
+// TestNoHookKeysCoverRawFormatSites keeps stringhook.NoHookKeys honest: a key
+// whose value reaches fmt directly prints a !door value as text with
+// %!(EXTRA ...) appended, so it must be listed there, where validation checks
+// it as written. A listed key that no longer reaches fmt directly, but is
+// still formatted, has been converted and should come off the list.
+func TestNoHookKeysCoverRawFormatSites(t *testing.T) {
+	raw := map[string]bool{}
+	writer := map[string]bool{}
+	for _, site := range scanCallSites(t) {
+		if site.Writer {
+			writer[site.Key] = true
+		} else {
+			raw[site.Key] = true
+		}
+	}
+	var missing, stale []string
+	for key := range raw {
+		if !stringhook.NoHookKeys[key] {
+			missing = append(missing, key)
+		}
+	}
+	for key := range stringhook.NoHookKeys {
+		if writer[key] && !raw[key] {
+			stale = append(stale, key)
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(stale)
+	if len(missing) > 0 {
+		t.Errorf("these keys reach fmt directly and cannot run a hook; add them to stringhook.NoHookKeys:\n  %s",
+			strings.Join(missing, "\n  "))
+	}
+	if len(stale) > 0 {
+		t.Errorf("these keys are now written only through hook-aware writers; remove them from stringhook.NoHookKeys:\n  %s",
+			strings.Join(stale, "\n  "))
 	}
 }

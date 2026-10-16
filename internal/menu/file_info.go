@@ -34,13 +34,13 @@ func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
 
 	currentAreaID := currentUser.CurrentFileAreaID
 	if currentAreaID <= 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileNoAreaSelected)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().FileNoAreaSelected)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
 	// Prompt for filename.
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileInfoPrompt)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().FileInfoPrompt)
 
 	input, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
@@ -71,7 +71,7 @@ func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Display header and file metadata.
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileInfoHeader)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().FileInfoHeader)
 
 	sizeStr := ""
 	if rec.Size < 1024 {

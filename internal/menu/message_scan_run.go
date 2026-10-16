@@ -27,7 +27,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	currentOnly bool, termWidth int, termHeight int) (*user.User, string, error) {
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanLoginRequired)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ScanLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
@@ -72,7 +72,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	// Display "Scanning Messages..."
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanHeader)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().ScanHeader)
 
 	nonStop := false
 	quitNewScan := false
@@ -80,14 +80,14 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	// If current area only, scan just that area
 	if scanCfg.WhichAreas == 3 {
 		if currentAreaID <= 0 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoAreaSelected)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().ScanNoAreaSelected)
 			uiPause(1 * time.Second)
 			return nil, "", nil
 		}
 
 		totalCount, _ := e.MessageMgr.GetMessageCountForArea(currentAreaID)
 		if totalCount == 0 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoMessages)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().ScanNoMessages)
 			uiPause(1 * time.Second)
 			return nil, "", nil
 		}
@@ -141,7 +141,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	// If tagged areas mode, check if user has any tagged areas
 	if scanCfg.WhichAreas == 1 && len(currentUser.TaggedMessageAreaTags) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanNoTaggedAreas)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ScanNoTaggedAreas)
 		uiPause(2 * time.Second)
 		return nil, "", nil
 	}
@@ -345,7 +345,7 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 	outputMode := c.outputMode
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().UpdatePtrsLoginRequired)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().UpdatePtrsLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
@@ -353,13 +353,13 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 	scanIH := getSessionIH(s)
 
 	cancel := func() (*user.User, string, error) {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().UpdatePtrsCancelled)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().UpdatePtrsCancelled)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
 	// Prompt for target date
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().UpdatePtrsDatePrompt)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().UpdatePtrsDatePrompt)
 	dateInput, err := readScanLine(scanIH, terminal, outputMode, 10)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -386,14 +386,14 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 	default:
 		t, ok := parseScanDate(dateInput)
 		if !ok {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanInvalidDate)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().ScanInvalidDate)
 			return cancel()
 		}
 		scanDate = t.Unix()
 	}
 
 	// Prompt for scope: current conference or all
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().UpdatePtrsScopePrompt)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().UpdatePtrsScopePrompt)
 	scopeKey, keyErr := scanIH.ReadKey()
 	if keyErr != nil {
 		if errors.Is(keyErr, io.EOF) {
@@ -457,7 +457,7 @@ func runUpdateNewscanPointers(c *cmdCtx, args string) (*user.User, string, error
 	}
 
 	if saveErr {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().UpdatePtrsError)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().UpdatePtrsError)
 	} else {
 		msg := fmt.Sprintf(e.Strings().UpdatePtrsSuccess, updatedCount)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)

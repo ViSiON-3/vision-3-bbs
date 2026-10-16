@@ -73,7 +73,7 @@ func runCfgFileColumns(c *cmdCtx, args string) (*user.User, string, error) {
 				currentUser.FileListColumns = originalColumns
 				slog.Error("failed to save file column preferences", "node", nodeNumber, "error", err)
 			}
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().CfgFileColumnsSaved)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().CfgFileColumnsSaved)
 			uiPause(500 * time.Millisecond)
 			return currentUser, "", nil
 		}

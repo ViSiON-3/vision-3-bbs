@@ -38,7 +38,7 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Ask whether to scan all areas or current only.
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SysopReviewScanAll)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().SysopReviewScanAll)
 	scanInput, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
 		return currentUser, "", err
@@ -165,7 +165,7 @@ func editFileShowAndPrompt(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 	)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(info+"\r\n")), outputMode)
 
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SysopReviewPrompt)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().SysopReviewPrompt)
 
 	input, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
