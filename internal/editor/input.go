@@ -393,6 +393,38 @@ func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 	}
 }
 
+// ErrReadStopped is returned by ReadByteUntil when its stop channel closes
+// before a byte arrives.
+var ErrReadStopped = errors.New("input read stopped")
+
+// ReadByteUntil returns the next raw input byte, or ErrReadStopped once stop
+// is closed. It applies no idle timeout, deadline or break-in, so code that
+// borrows the handler (a script run in place of a string) can read through it
+// without closing it under a caller that still holds it.
+func (ih *InputHandler) ReadByteUntil(stop <-chan struct{}) (byte, error) {
+	// Stop wins over a queued byte: a reader stopped with keys waiting must
+	// leave them for the handler's owner rather than take one more.
+	select {
+	case <-stop:
+		return 0, ErrReadStopped
+	default:
+	}
+	if len(ih.unreadBuf) > 0 {
+		b := ih.unreadBuf[0]
+		ih.unreadBuf = ih.unreadBuf[1:]
+		return b, nil
+	}
+	select {
+	case b, ok := <-ih.incoming:
+		if !ok {
+			return 0, io.EOF
+		}
+		return b, nil
+	case <-stop:
+		return 0, ErrReadStopped
+	}
+}
+
 // unreadByte pushes b back so it is returned by the next readByte call.
 func (ih *InputHandler) unreadByte(b byte) {
 	ih.unreadBuf = append([]byte{b}, ih.unreadBuf...)

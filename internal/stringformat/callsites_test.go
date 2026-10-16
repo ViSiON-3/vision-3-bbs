@@ -36,6 +36,14 @@ var formatFuncs = map[string]int{
 	"Fprintf": 1,
 }
 
+// formatMethods are the menu executor's string writers whose argument at the
+// given index is a format string (see internal/menu/string_hooks.go). They are
+// matched by method name on any receiver.
+var formatMethods = map[string]int{
+	"writeStringf":         2,
+	"writeStringNoScriptf": 2,
+}
+
 // fieldToKey maps a StringsConfig field name to its strings.json key.
 func fieldToKey(t *testing.T) map[string]string {
 	t.Helper()
@@ -250,11 +258,14 @@ func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys m
 		if !ok {
 			return true
 		}
-		pkg, ok := fn.X.(*ast.Ident)
-		if !ok || pkg.Name != "fmt" {
-			return true
+		at, ok := formatMethods[fn.Sel.Name]
+		if !ok {
+			pkg, isIdent := fn.X.(*ast.Ident)
+			if !isIdent || pkg.Name != "fmt" {
+				return true
+			}
+			at, ok = formatFuncs[fn.Sel.Name]
 		}
-		at, ok := formatFuncs[fn.Sel.Name]
 		if !ok || len(call.Args) <= at {
 			return true
 		}
