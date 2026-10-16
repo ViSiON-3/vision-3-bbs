@@ -21,7 +21,7 @@ func (e *MenuExecutor) loginPausePrompt(s ssh.Session, terminal *term.Terminal, 
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
 
-	return writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
+	return e.writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 }
 
 // RunLoginSequence is the exported entry point for running the login sequence from main.go.
@@ -192,7 +192,7 @@ func (e *MenuExecutor) confirmAbortLogin(s ssh.Session, terminal *term.Terminal,
 	if prompt == "" {
 		prompt = "|07Abort Login? @"
 	}
-	abort, err := e.PromptYesNo(s, terminal, prompt, outputMode, nodeNumber, termWidth, termHeight, false)
+	abort, err := e.PromptYesNoString(s, terminal, prompt, outputMode, nodeNumber, termWidth, termHeight, false)
 	if err != nil {
 		return false, err
 	}

@@ -69,7 +69,7 @@ func runCheckNUV(c *cmdCtx, args string) (*user.User, string, error) {
 	if voteNowStr == "" {
 		voteNowStr = "|07Vote now? @"
 	}
-	voteNow, err := e.PromptYesNo(s, terminal, voteNowStr, outputMode, c.nodeNumber, termWidth, termHeight, false)
+	voteNow, err := e.PromptYesNoString(s, terminal, voteNowStr, outputMode, c.nodeNumber, termWidth, termHeight, false)
 	if err != nil {
 		// A caller who drops (or idles out) at the prompt must not be
 		// carried on through the rest of the login sequence (#488).

@@ -219,7 +219,7 @@ func runListFileAreas(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	slog.Debug("displaying LISTFILEAR pause prompt", "node", nodeNumber)
-	err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
+	err := e.writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			slog.Info("user disconnected during LISTFILEAR pause", "node", nodeNumber)

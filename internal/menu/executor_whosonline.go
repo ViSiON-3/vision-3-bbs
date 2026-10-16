@@ -245,7 +245,7 @@ func runWhoIsOnline(c *cmdCtx, args string) (*user.User, string, error) {
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
-	err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
+	err := e.writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			slog.Info("user disconnected during WHOISONLINE pause", "node", nodeNumber)

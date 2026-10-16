@@ -170,7 +170,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		if anonPrompt == "" {
 			anonPrompt = "|07Anonymous? @"
 		}
-		isAnon, err := e.PromptYesNo(s, terminal, anonPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
+		isAnon, err := e.PromptYesNoString(s, terminal, anonPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				slog.Info("user disconnected during anonymous input", "node", nodeNumber)
