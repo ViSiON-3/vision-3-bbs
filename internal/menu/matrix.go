@@ -322,7 +322,7 @@ func (e *MenuExecutor) handleCheckAccess(
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
-	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(pausePrompt)), outputMode)
+	e.writeString(terminal, outputMode, pausePrompt)
 	_, _ = readLineFromSessionIH(s, terminal)
 }
 

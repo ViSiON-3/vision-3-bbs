@@ -27,7 +27,7 @@ func TestWriteCenteredPausePromptCentersByVisibleColumns(t *testing.T) {
 	ts := newTestSession("\r")
 	terminal := newTestTerminal(ts)
 
-	if err := writeCenteredPausePrompt(ts, terminal, prompt, ansi.OutputModeUTF8, termWidth, 24); err != nil {
+	if err := (&MenuExecutor{}).writeCenteredPausePrompt(ts, terminal, prompt, ansi.OutputModeUTF8, termWidth, 24); err != nil {
 		t.Fatalf("writeCenteredPausePrompt: %v", err)
 	}
 

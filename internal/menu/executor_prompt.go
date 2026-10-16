@@ -18,18 +18,55 @@ import (
 // PromptYesNo is the canonical Yes/No prompt entrypoint for menu flows.
 // defaultYes controls which option is pre-selected (true = Yes, false = No).
 // Keep all call sites routed here so prompt behavior can be changed in one place.
+//
+// promptText is printed as text. A prompt that is a strings.json value goes
+// through PromptYesNoString or PromptYesNof instead, so the value can run a
+// script or show a file in its place (see string_hooks.go); text built from
+// anything else, such as a handle or a subject, must not be read as one.
 func (e *MenuExecutor) PromptYesNo(s ssh.Session, terminal *term.Terminal, promptText string, outputMode ansi.OutputMode, nodeNumber int, termWidth int, termHeight int, defaultYes bool) (bool, error) {
-	return e.promptYesNoLightbar(s, terminal, promptText, outputMode, nodeNumber, termWidth, termHeight, defaultYes)
+	return e.promptYesNoLightbar(s, terminal, yesNoPrompt{text: promptText}, outputMode, nodeNumber, termWidth, termHeight, defaultYes)
+}
+
+// PromptYesNoString is PromptYesNo for a prompt that is a strings.json value.
+func (e *MenuExecutor) PromptYesNoString(s ssh.Session, terminal *term.Terminal, value string, outputMode ansi.OutputMode, nodeNumber int, termWidth int, termHeight int, defaultYes bool) (bool, error) {
+	return e.promptYesNoLightbar(s, terminal, yesNoPrompt{text: value, hook: true}, outputMode, nodeNumber, termWidth, termHeight, defaultYes)
+}
+
+// PromptYesNof is PromptYesNoString for a value the call site formats with
+// args. The format comes after the fixed arguments so the stringformat
+// call-site check can count what is passed to it.
+func (e *MenuExecutor) PromptYesNof(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int, termWidth int, termHeight int, defaultYes bool, format string, args ...any) (bool, error) {
+	return e.promptYesNoLightbar(s, terminal, yesNoPrompt{text: format, args: args, hook: true}, outputMode, nodeNumber, termWidth, termHeight, defaultYes)
+}
+
+// yesNoPrompt is the text of a Yes/No prompt: plain text, or a strings.json
+// value (hook set) that may run a script or show a file in its place, formatted
+// with args when the call site supplies any.
+type yesNoPrompt struct {
+	text string
+	args []any
+	hook bool
+}
+
+// write writes the prompt followed by suffix.
+func (p yesNoPrompt) write(e *MenuExecutor, terminal *term.Terminal, outputMode ansi.OutputMode, suffix string) error {
+	if p.hook {
+		if err := e.renderString(terminal, outputMode, p.text, true, p.args); err != nil {
+			return err
+		}
+		return writeStringText(terminal, outputMode, suffix)
+	}
+	return terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(p.text+suffix)), outputMode)
 }
 
 // promptYesNoLightbar displays a Yes/No prompt with lightbar selection.
 // Returns true for Yes, false for No, and error on issues like disconnect.
 // defaultYes controls the initial selection: true = Yes highlighted, false = No highlighted.
-func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Terminal, promptText string, outputMode ansi.OutputMode, nodeNumber int, termWidth int, termHeight int, defaultYes bool) (bool, error) {
+func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Terminal, prompt yesNoPrompt, outputMode ansi.OutputMode, nodeNumber int, termWidth int, termHeight int, defaultYes bool) (bool, error) {
 	// Strip trailing ' @' — ViSiON/2 convention for Yes/No prompt terminator.
 	// The '@' signals WriteStr to render an interactive Yes/No lightbar.
-	promptText = strings.TrimSuffix(promptText, " @")
-	promptText = strings.TrimSuffix(promptText, "@")
+	prompt.text = strings.TrimSuffix(prompt.text, " @")
+	prompt.text = strings.TrimSuffix(prompt.text, "@")
 
 	// Use termHeight from user preferences instead of reading from PTY
 	if termHeight > 0 {
@@ -57,9 +94,7 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 		regularColor := e.Theme().YesNoRegularColor
 
 		// Write the prompt text inline
-		promptDisplayBytes := ansi.ReplacePipeCodes([]byte(promptText))
-		slog.Debug("writing prompt text bytes", "node", nodeNumber, "bytes", promptDisplayBytes)
-		err := terminalio.WriteStringCP437(terminal, promptDisplayBytes, outputMode)
+		err := prompt.write(e, terminal, outputMode, "")
 		if err != nil {
 			slog.Error("failed writing Yes/No prompt text (lightbar mode)", "node", nodeNumber, "error", err)
 			return false, fmt.Errorf("failed writing prompt text: %w", err)
@@ -215,7 +250,6 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 		if defaultYes {
 			yesNoHint = "[Y/n]"
 		}
-		fullPrompt := promptText + " " + yesNoHint + "? "
 
 		// Write the prompt after one blank row: newline + blank line, then prompt.
 		wErr := terminalio.WriteProcessedBytes(terminal, []byte("\r\n\r\n"), outputMode)
@@ -223,8 +257,7 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 			slog.Warn("failed writing fallback pre-prompt spacing", "error", wErr)
 		}
 
-		processedPromptBytes := ansi.ReplacePipeCodes([]byte(fullPrompt))
-		err := terminalio.WriteStringCP437(terminal, processedPromptBytes, outputMode)
+		err := prompt.write(e, terminal, outputMode, " "+yesNoHint+"? ")
 		if err != nil {
 			slog.Error("failed writing Yes/No prompt text (fallback mode)", "node", nodeNumber, "error", err) // Use nodeNumber
 			return false, fmt.Errorf("failed writing fallback prompt text: %w", err)

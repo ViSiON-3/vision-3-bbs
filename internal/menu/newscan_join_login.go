@@ -1,7 +1,6 @@
 package menu
 
 import (
-	"fmt"
 	"log/slog"
 	"sort"
 	"time"
@@ -94,8 +93,7 @@ func runNewscanAutoJoin(c *cmdCtx) (*user.User, error) {
 	}
 	sort.Strings(nets)
 	for _, net := range nets {
-		prompt := fmt.Sprintf(promptTpl, plan.NetworkNames[net])
-		yes, err := e.PromptYesNo(c.s, c.terminal, prompt, c.outputMode, c.nodeNumber, c.termWidth, c.termHeight, true)
+		yes, err := e.PromptYesNof(c.s, c.terminal, c.outputMode, c.nodeNumber, c.termWidth, c.termHeight, true, promptTpl, plan.NetworkNames[net])
 		if err != nil {
 			return nil, err // EOF/disconnect — everything decided so far is already saved
 		}

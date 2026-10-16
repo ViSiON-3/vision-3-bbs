@@ -42,7 +42,7 @@ func runListMessageAreas(c *cmdCtx, args string) (*user.User, string, error) {
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
-	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(pausePrompt)), outputMode)
+	e.writeString(terminal, outputMode, pausePrompt)
 
 	ih := getSessionIH(s)
 	for {

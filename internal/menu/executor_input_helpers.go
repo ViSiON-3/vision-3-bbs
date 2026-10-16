@@ -10,6 +10,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringhook"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -17,7 +18,19 @@ import (
 
 // writeCenteredPausePrompt writes a centered pause prompt and waits for Enter.
 // Returns error on write/read failure or io.EOF on disconnect.
-func writeCenteredPausePrompt(s ssh.Session, terminal *term.Terminal, pausePrompt string, outputMode ansi.OutputMode, termWidth int, termHeight int) error {
+func (e *MenuExecutor) writeCenteredPausePrompt(s ssh.Session, terminal *term.Terminal, pausePrompt string, outputMode ansi.OutputMode, termWidth int, termHeight int) error {
+	// A value that shows a file or runs a script draws its own prompt, so it
+	// is not centred (see string_hooks.go). The wait for Enter is the same.
+	switch h := stringhook.Parse(pausePrompt); h.Kind {
+	case stringhook.Script, stringhook.File:
+		if err := e.writeString(terminal, outputMode, pausePrompt); err != nil {
+			return err
+		}
+		return waitForEnter(s)
+	case stringhook.Escaped:
+		pausePrompt = h.Rest
+	}
+
 	// Check if we need to add newline before pause (handle it separately from centering)
 	needsNewline := !strings.HasPrefix(pausePrompt, "\r\n") && !strings.HasPrefix(pausePrompt, "\n")
 
@@ -83,16 +96,20 @@ func writeCenteredPausePrompt(s ssh.Session, terminal *term.Terminal, pausePromp
 		return wErr
 	}
 
+	return waitForEnter(s)
+}
+
+// waitForEnter reads keys until the caller presses Enter.
+func waitForEnter(s ssh.Session) error {
 	for {
 		key, err := getSessionIH(s).ReadKey()
 		if err != nil {
 			return err
 		}
 		if key == editor.KeyEnter {
-			break
+			return nil
 		}
 	}
-	return nil
 }
 
 // styledInput reads input with character-by-character display styling.

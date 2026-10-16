@@ -184,7 +184,7 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// 5. Wait for Enter using configured PauseString
 	slog.Debug("displaying LASTCALLERS pause prompt (centered)", "node", nodeNumber)
-	err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
+	err := e.writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			slog.Info("user disconnected during LASTCALLERS pause", "node", nodeNumber)

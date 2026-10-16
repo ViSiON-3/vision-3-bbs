@@ -271,7 +271,7 @@ func (e *MenuExecutor) holdScreen(s ssh.Session, terminal *term.Terminal, output
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
-	_ = writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
+	_ = e.writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 }
 
 // readLineFromSessionIH reads a simple command line from the shared session

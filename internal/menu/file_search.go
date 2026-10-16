@@ -108,7 +108,7 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 		lineCount++
 
 		if lineCount >= linesPerPage {
-			if err := writeCenteredPausePrompt(s, terminal, e.Strings().PauseString, outputMode, termWidth, termHeight); err != nil {
+			if err := e.writeCenteredPausePrompt(s, terminal, e.Strings().PauseString, outputMode, termWidth, termHeight); err != nil {
 				return currentUser, "", nil
 			}
 			lineCount = 0
@@ -117,6 +117,6 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 
 	e.writeStringf(terminal, outputMode, e.Strings().SearchResultsSummary, len(filtered))
 
-	_ = writeCenteredPausePrompt(s, terminal, e.Strings().PauseString, outputMode, termWidth, termHeight) // best-effort pause prompt
+	_ = e.writeCenteredPausePrompt(s, terminal, e.Strings().PauseString, outputMode, termWidth, termHeight) // best-effort pause prompt
 	return currentUser, "", nil
 }

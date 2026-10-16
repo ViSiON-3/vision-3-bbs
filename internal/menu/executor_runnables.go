@@ -43,7 +43,7 @@ func runMainLogoffCommand(c *cmdCtx, args string) (*user.User, string, error) {
 		prompt = "\r\n|07Log off now? @"
 	}
 
-	confirm, err := e.PromptYesNo(s, terminal, prompt, outputMode, nodeNumber, termWidth, termHeight, false)
+	confirm, err := e.PromptYesNoString(s, terminal, prompt, outputMode, nodeNumber, termWidth, termHeight, false)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, "LOGOFF", io.EOF
@@ -158,7 +158,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	slog.Debug("displaying showstats pause prompt (centered)", "node", nodeNumber)
-	err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
+	err := e.writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			slog.Info("user disconnected during showstats pause", "node", nodeNumber)
@@ -201,7 +201,7 @@ func runShowVersion(c *cmdCtx, args string) (*user.User, string, error) {
 	} else {
 		terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode) // Add newline before pause
 		slog.Debug("displaying showversion pause prompt (centered)", "node", nodeNumber)
-		err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
+		err := e.writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				slog.Info("user disconnected during showversion pause", "node", nodeNumber)

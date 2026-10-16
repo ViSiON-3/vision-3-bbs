@@ -64,7 +64,7 @@ func runOneliners(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	slog.Debug("calling promptYesNo for ONELINER add prompt", "node", nodeNumber)
-	addYes, err := e.PromptYesNo(s, terminal, askPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
+	addYes, err := e.PromptYesNoString(s, terminal, askPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			slog.Info("user disconnected during ONELINER add prompt", "node", nodeNumber)
