@@ -13,6 +13,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringhook"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -341,6 +342,26 @@ func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, men
 		} else {
 			slog.Warn("default prompt empty and menu prompt fields empty, no prompt will be displayed", "menu", currentMenuName)
 			return nil // Explicitly return nil if no prompt string can be determined
+		}
+		// The default prompt is a strings.json value, so it can run a script
+		// or show a file (see string_hooks.go). The hook is read before any
+		// placeholder is expanded, so a substituted handle cannot start one;
+		// text after a file is expanded as usual below.
+		switch h := stringhook.Parse(promptString); h.Kind {
+		case stringhook.Script:
+			_ = terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+			return e.writeString(terminal, outputMode, promptString)
+		case stringhook.File:
+			_ = terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+			if err := e.writeString(terminal, outputMode, strings.TrimSpace(h.Prefix)); err != nil {
+				return err
+			}
+			if h.Rest == "" {
+				return nil
+			}
+			promptString = h.Rest
+		case stringhook.Escaped:
+			promptString = h.Rest
 		}
 	}
 

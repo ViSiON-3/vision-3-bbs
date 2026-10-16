@@ -30,7 +30,7 @@ func runInfoFormView(c *cmdCtx, args string) (*user.User, string, error) {
 	if viewPrompt == "" {
 		viewPrompt = "|09View which |08F|07o|15rm? (|07#|15) |09:"
 	}
-	wv(terminal, viewPrompt, outputMode)
+	e.writeString(terminal, outputMode, viewPrompt)
 	input, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
 		return currentUser, "", nil

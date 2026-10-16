@@ -177,8 +177,7 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Summary
 	if totalNew == 0 {
-		terminalio.WriteProcessedBytes(terminal,
-			ansi.ReplacePipeCodes([]byte(e.Strings().FileNewscanNoNew)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().FileNewscanNoNew)
 	} else {
 		e.writeStringf(terminal, outputMode, e.Strings().FileNewscanComplete, totalNew)
 	}

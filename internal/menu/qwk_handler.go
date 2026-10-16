@@ -262,8 +262,8 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 			return area.ACSWrite == "" || checkACS(area.ACSWrite, currentUser, s, terminal, sessionStartTime)
 		},
 		Notify: func(area *message.MessageArea) {
-			postMsg := strings.ReplaceAll(e.Strings().PostingQWKMsg, "|BN", area.Name)
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+postMsg)), outputMode)
+			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+			e.writeStringSubst(terminal, outputMode, e.Strings().PostingQWKMsg, strings.NewReplacer("|BN", area.Name).Replace)
 		},
 	})
 	if err != nil {
@@ -300,8 +300,9 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 
-	statusMsg := strings.ReplaceAll(e.Strings().TotalQWKAdded, "|TO", fmt.Sprintf("%d", posted))
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+statusMsg+"\r\n")), outputMode)
+	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+	e.writeStringSubst(terminal, outputMode, e.Strings().TotalQWKAdded, strings.NewReplacer("|TO", fmt.Sprintf("%d", posted)).Replace)
+	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 	uiPause(2 * time.Second)
 
 	return currentUser, "", nil

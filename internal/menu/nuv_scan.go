@@ -60,8 +60,8 @@ func runCheckNUV(c *cmdCtx, args string) (*user.User, string, error) {
 	if waitingStr == "" {
 		waitingStr = "\r\n|15New User Voting: |11|NE candidate(s)|15 awaiting your vote!"
 	}
-	waitingStr = strings.ReplaceAll(waitingStr, "|NE", fmt.Sprintf("%d", unvoted))
-	wv(terminal, waitingStr+"\r\n", outputMode)
+	e.writeStringSubst(terminal, outputMode, waitingStr, strings.NewReplacer("|NE", fmt.Sprintf("%d", unvoted)).Replace)
+	wv(terminal, "\r\n", outputMode)
 
 	// The shipped string ends in " @", the Yes/No lightbar marker; the
 	// lightbar strips it and echoes the answer with a line break.
@@ -135,7 +135,9 @@ func runNUVScan(c *cmdCtx, args string) (*user.User, string, error) {
 		if noPendingStr == "" {
 			noPendingStr = "|07No candidates pending in NUV queue."
 		}
-		wv(terminal, "\r\n"+noPendingStr+"\r\n", outputMode)
+		wv(terminal, "\r\n", outputMode)
+		e.writeString(terminal, outputMode, noPendingStr)
+		wv(terminal, "\r\n", outputMode)
 		e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 		return currentUser, "", nil
 	}

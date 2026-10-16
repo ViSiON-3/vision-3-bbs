@@ -287,8 +287,24 @@ A file name needs an extension, so formatted strings such as `%d of %d` are neve
 file. Put a colour code before a leading `!` (`|12!Warning`) rather than after it: `!|` is the
 escape.
 
-Support is being extended to every string the BBS shows (#605). A string not yet covered prints
-its value as text.
+**Where hooks do not apply.** These strings are drawn into fixed screen layouts, or are not
+screen text at all, and are always printed or used as written:
+
+- Chat's split screen: messages, system lines, joins and leaves, and the header and status bar.
+  The network and room pickers shown before it do take hooks.
+- The Konfig (`K`) settings screen and the file-columns toggle screen.
+- Text clipped into a fixed row: the time-limit warning on lightbar menus, the one-liner legend,
+  the Yes/No lightbar labels (`yesPromptText`, `noPromptText`) and the message reader's status
+  suffixes.
+- Door messages written to the door path: connecting, connect failed, disconnected, dropfile and
+  door errors, and the `DOOR:` command's refusals (not logged in, not configured, access denied,
+  busy), which go to the session's error stream.
+- Values used as data rather than shown: `anonymousName`, `doorMenuOther`, `execVersionString`,
+  the sysop's new-user email subject, and notices delivered to the sysop or to another node
+  (`newUserSysopPage`, `newUserSysopNotice`, the V3Net new-area notices, `pageMessageFormat`).
+
+The idle-timeout notice is shown just before an idle caller is disconnected, so a `!door` value
+there prints as text.
 
 ## Value States
 

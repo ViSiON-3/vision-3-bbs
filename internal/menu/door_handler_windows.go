@@ -479,8 +479,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 				if strings.TrimSpace(busyFmt) == "" {
 					busyFmt = "\r\n|14Door is currently in use: |11%s|07\r\n"
 				}
-				busyMsg := fmt.Sprintf(busyFmt, upperInput)
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(busyMsg)), outputMode)
+				e.writeStringf(terminal, outputMode, busyFmt, upperInput)
 				uiPause(1 * time.Second)
 			} else {
 				slog.Error("door execution failed", "node", nodeNumber, "user", currentUser.Handle, "door", upperInput, "error", cmdErr)

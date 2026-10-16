@@ -147,17 +147,15 @@ func (e *MenuExecutor) handleNewUserApplication(
 	}
 	// |BN expands to the configured board name, so the welcome names this BBS
 	// rather than the shipped placeholder.
-	welcomeStr = strings.ReplaceAll(welcomeStr, "|BN", e.GetServerConfig().BoardName)
-	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(welcomeStr+"\r\n")), outputMode)
+	e.writeStringSubst(terminal, outputMode, welcomeStr, strings.NewReplacer("|BN", e.GetServerConfig().BoardName).Replace)
+	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 
 	userNumStr := e.Strings().YourUserNum
 	if userNumStr == "" {
 		userNumStr = "|15Your User # is |09|UN|CR"
 	}
 	nextID := userManager.NextUserID()
-	userNumStr = strings.ReplaceAll(userNumStr, "|UN", strconv.Itoa(nextID))
-	userNumStr = strings.ReplaceAll(userNumStr, "|CR", "\r\n")
-	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(userNumStr)), outputMode)
+	e.writeStringSubst(terminal, outputMode, userNumStr, strings.NewReplacer("|UN", strconv.Itoa(nextID), "|CR", "\r\n").Replace)
 
 	// 5. Password creation with confirmation
 	password, err := e.promptForPassword(s, terminal, nodeNumber, outputMode, termWidth, termHeight)
@@ -290,10 +288,10 @@ func (e *MenuExecutor) handleNewUserApplication(
 		// An account that is not yet reviewed still gets looked at, so say so —
 		// unless autoValidateNewUsers already marked it reviewed, in which case
 		// there is nothing pending.
+		e.writeString(terminal, outputMode, validationMsg)
 		if !newUser.Validated {
-			validationMsg += e.Strings().NewUserPendingReview
+			e.writeString(terminal, outputMode, e.Strings().NewUserPendingReview)
 		}
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(validationMsg)), outputMode)
 	}
 
 	// Pause before returning
@@ -346,7 +344,7 @@ func (e *MenuExecutor) promptForHandle(
 	if prompt == "" {
 		prompt = "|CR|08E|07n|15ter |08Y|07o|15ur |08A|07l|15ias|09.|CR|08:"
 	}
-	prompt = strings.ReplaceAll(prompt, "|CR", "\r\n")
+	crlf := strings.NewReplacer("|CR", "\r\n").Replace
 
 	invalidMsg := e.Strings().InvalidUserName
 	if invalidMsg == "" {
@@ -365,7 +363,7 @@ func (e *MenuExecutor) promptForHandle(
 
 	maxAttempts := 5
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+		e.writeStringSubst(terminal, outputMode, prompt, crlf)
 
 		input, err := styledInput(terminal, s, outputMode, newUserHandleMaxLen, "")
 		if err != nil {

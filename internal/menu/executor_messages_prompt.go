@@ -209,9 +209,12 @@ func sanitizeControlChars(s string) string {
 // no log is emitted, matching the original code's silence on that path.
 // Callers own any additional validation (e.g. required-field retry, default
 // substitution) since that differs between the title and to prompts.
+//
+// prompt is a strings.json value or fixed text, never text a caller typed: it
+// goes through writeString, so a value can run a script or show a file.
 func (e *MenuExecutor) promptComposeField(s ssh.Session, terminal *term.Terminal, prompt string, maxLen int, defaultValue string, fieldName string, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) (value string, aborted bool, err error) {
 	for {
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+		wErr := e.writeString(terminal, outputMode, prompt)
 		if wErr != nil {
 			slog.Warn("failed to write compose field prompt", "node", nodeNumber, "field", fieldName, "error", wErr)
 		}

@@ -213,6 +213,26 @@ func TestWriteStringScript(t *testing.T) {
 		}
 	})
 
+	// writeStringSubst applies a call site's own substitutions to the text
+	// only, so a substituted handle cannot start a hook either.
+	t.Run("substituted text cannot start a hook", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		terminal := newDoorcovTerminal(f.s.doorcovSession)
+		RegisterStringHookSession(terminal, f.s, nil, f.bbs)
+		defer ClearStringHookSession(terminal)
+		handle := strings.NewReplacer("|NA", "!say").Replace
+		if err := f.e.writeStringSubst(terminal, ansi.OutputModeUTF8, "|NA", handle); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.e.writeStringSubst(terminal, ansi.OutputModeUTF8, "%BAR.ANS Hi |NA", handle); err != nil {
+			t.Fatal(err)
+		}
+		out := f.term()
+		if strings.Contains(out, "[script") || !strings.Contains(out, "!say") || !strings.Contains(out, "[bar art]Hi !say") {
+			t.Errorf("output = %q", out)
+		}
+	})
+
 	t.Run("no registered session prints the value as text", func(t *testing.T) {
 		f := newStringHookFixture(t, "")
 		terminal := newDoorcovTerminal(f.s.doorcovSession)
