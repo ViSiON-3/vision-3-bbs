@@ -8,6 +8,7 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringformat"
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringhook"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
@@ -50,6 +51,10 @@ var (
 	// A fallback preview is what the BBS prints, not what the file holds, so
 	// it is drawn dimmed to read as informational rather than as a value.
 	fallbackStyle = tuiart.Color(dosBlack, dosDarkGray)
+
+	// A value that runs a door or shows a file (see internal/stringhook) is
+	// previewed as a tag naming what it does rather than as text.
+	hookStyle = tuiart.Color(dosBlack, dosYellow).Bold(true)
 
 	// State marker column, between the label and the value.
 	markerStyle = tuiart.Color(dosBlack, dosLightCyan)
@@ -278,7 +283,7 @@ func (m Model) renderItem(idx, panelW int) string {
 	} else if isFallback {
 		line += renderDimString(value, valueWidth)
 	} else {
-		line += RenderColorString(value, valueWidth)
+		line += renderValuePreview(value, valueWidth)
 	}
 
 	// Pad the value column out to the panel edge so the row is opaque against
@@ -287,6 +292,49 @@ func (m Model) renderItem(idx, panelW int) string {
 		line += panelStyle.Render(strings.Repeat(" ", pad))
 	}
 	return line
+}
+
+// renderValuePreview previews a configured value. A value that runs a door or
+// shows a file in place of its text is drawn as a tag saying so, followed by
+// the door's words or the text printed after the file; an escaped "!|" value
+// shows the text it prints.
+func renderValuePreview(value string, width int) string {
+	h := stringhook.Parse(value)
+	var tag, rest string
+	switch h.Kind {
+	case stringhook.Script:
+		tag, rest = "[door "+h.Target+"]", strings.Join(h.Args, " ")
+	case stringhook.File:
+		tag, rest = "[file "+h.Target+"]", h.Rest
+	case stringhook.Escaped:
+		return RenderColorString(h.Rest, width)
+	default:
+		return RenderColorString(value, width)
+	}
+	if cellWidth(tag) >= width {
+		return hookStyle.Render(padOrTrunc(tag, width))
+	}
+	out := hookStyle.Render(tag)
+	if rest != "" && cellWidth(tag)+1 < width {
+		out += panelStyle.Render(" ") + RenderColorString(rest, width-cellWidth(tag)-1)
+	}
+	return out
+}
+
+// hookDescription says what a value that runs a door or shows a file does,
+// for the description row, or "" for an ordinary value.
+func hookDescription(value string) string {
+	h := stringhook.Parse(value)
+	switch h.Kind {
+	case stringhook.Script:
+		return "runs door " + h.Target + " in place of the text"
+	case stringhook.File:
+		if h.Rest != "" {
+			return "shows " + h.Target + ", then the text after it"
+		}
+		return "shows " + h.Target + " in place of the text"
+	}
+	return ""
 }
 
 // renderMessageBar renders the message/mode indicator line. Every branch is
@@ -374,6 +422,9 @@ func (m Model) renderDescriptionBar(row int) string {
 		// see the contract while editing rather than after breaking it.
 		if sig := m.signatureFor(entry.Key); sig != "" {
 			desc += "  [" + sig + "]"
+		}
+		if what := hookDescription(m.getValue(entry.Key)); what != "" {
+			desc += "  - " + what
 		}
 	}
 	if desc == "" {

@@ -377,3 +377,29 @@ func TestWideCharactersSurviveEditing(t *testing.T) {
 		t.Errorf("value changed by a no-op edit:\n got %q\nwant %q", got, want)
 	}
 }
+
+// A value that runs a door or shows a file previews as a tag naming it, not
+// as raw text, and an escaped "!|" value previews as the text it prints.
+func TestRenderValuePreviewHooks(t *testing.T) {
+	plain := func(s string) string { return stripANSI(s) }
+	for _, tc := range []struct {
+		value, want string
+	}{
+		{"!say hello", "[door say] hello"},
+		{"%BAR.ANS |07Pick:", "[file BAR.ANS] Pick:"},
+		{"%BAR.ANS", "[file BAR.ANS]"},
+		{"!|Warning", "!Warning"},
+		{"|09Hello", "Hello"},
+		{"%d of %d", "%d of %d"},
+	} {
+		if got := plain(renderValuePreview(tc.value, 40)); got != tc.want {
+			t.Errorf("renderValuePreview(%q) = %q, want %q", tc.value, got, tc.want)
+		}
+	}
+	if got := visualLen(renderValuePreview("!averyveryverylongdoorname", 10)); got > 10 {
+		t.Errorf("preview is %d cells wide, want at most 10", got)
+	}
+	if got := hookDescription("!say"); got != "runs door say in place of the text" {
+		t.Errorf("hookDescription = %q", got)
+	}
+}

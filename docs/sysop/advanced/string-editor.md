@@ -268,6 +268,10 @@ text tables did. Only the start of the value matters:
 }
 ```
 
+**In the editor.** A hook value previews as a yellow tag, `[door fancyprompt]` or
+`[file NODES.ANS]`, followed by the door's words or the text printed after the file. The
+description row says what the selected value does.
+
 **Script arguments.** The script's `v3.args` holds the door's own `args` from `doors.json`, then the
 words after the door name, then the values the BBS would have formatted into the string, so a
 script can draw its own version of a message that names a door, a file or a user. The
