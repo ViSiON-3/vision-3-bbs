@@ -29,7 +29,7 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Show online nodes
 	sessions := e.activeSessions()
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageOnlineNodesHeader)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().PageOnlineNodesHeader)
 	for _, sess := range sessions {
 		sess.Mutex.RLock()
 		sessHandle := "Unknown"
@@ -52,7 +52,7 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Prompt for target node
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageWhichNodePrompt)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().PageWhichNodePrompt)
 	nodeInput, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
 		if err == io.EOF {
@@ -67,20 +67,20 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 
 	targetNodeID, err := strconv.Atoi(nodeInput)
 	if err != nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageInvalidNode)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().PageInvalidNode)
 		uiPause(500 * time.Millisecond)
 		return nil, "", nil
 	}
 
 	if targetNodeID == nodeNumber {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageSelfError)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().PageSelfError)
 		uiPause(500 * time.Millisecond)
 		return nil, "", nil
 	}
 
 	targetSession := e.nodeSession(targetNodeID)
 	if targetSession == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageNodeOffline)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().PageNodeOffline)
 		uiPause(500 * time.Millisecond)
 		return nil, "", nil
 	}
@@ -88,13 +88,13 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 	targetInvisible := targetSession.Invisible
 	targetSession.Mutex.RUnlock()
 	if targetInvisible && !e.isCoSysOpOrAbove(currentUser) {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageNodeOffline)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().PageNodeOffline)
 		uiPause(500 * time.Millisecond)
 		return nil, "", nil
 	}
 
 	// Prompt for message
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageMessagePrompt)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().PageMessagePrompt)
 	msgInput, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
 		if err == io.EOF {
@@ -104,7 +104,7 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	msgInput = strings.TrimSpace(msgInput)
 	if msgInput == "" {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().PageCancelled)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().PageCancelled)
 		uiPause(500 * time.Millisecond)
 		return nil, "", nil
 	}

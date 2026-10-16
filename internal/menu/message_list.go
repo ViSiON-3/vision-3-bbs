@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -33,7 +32,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 	// Validate user is logged in
 	if currentUser == nil {
 		slog.Warn("LISTMSGS called without logged in user", "node", nodeNumber)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgListLoginRequired)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().MsgListLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
@@ -41,7 +40,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 	// Check if user has selected a message area
 	currentAreaID := currentUser.CurrentMessageAreaID
 	if currentAreaID == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgListNoAreaSelected)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().MsgListNoAreaSelected)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -49,7 +48,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 	// Get area information
 	area, found := e.MessageMgr.GetAreaByID(currentAreaID)
 	if !found {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgListAreaNotFound)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().MsgListAreaNotFound)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -66,14 +65,14 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 	entries, lastRead, err := buildMessageList(e.MessageMgr, currentAreaID, currentUser.Handle, msgFilter)
 	if err != nil {
 		slog.Error("failed to build message list", "node", nodeNumber, "error", err)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgListLoadError)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().MsgListLoadError)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
 	// Check if area is empty
 	if len(entries) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgListNoMessages)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().MsgListNoMessages)
 		uiPause(2 * time.Second)
 		return currentUser, "", nil
 	}
@@ -204,7 +203,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 
 			// Handle empty area after deletions
 			if state.TotalMessages == 0 {
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgListNoMessages)), outputMode)
+				e.writeString(terminal, outputMode, e.Strings().MsgListNoMessages)
 				uiPause(2 * time.Second)
 				return currentUser, "", nil
 			}

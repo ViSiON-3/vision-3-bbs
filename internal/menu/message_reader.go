@@ -162,7 +162,7 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		hdrTemplatePath = e.menuFile("templates", "message_headers", "MSGHDR.2.ans")
 		hdrTemplateBytes, hdrErr = ansi.GetAnsiFileContent(hdrTemplatePath)
 		if hdrErr != nil {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().MsgHdrLoadError)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().MsgHdrLoadError)
 			uiPause(1 * time.Second)
 			return nil, "", fmt.Errorf("failed loading MSGHDR templates")
 		}

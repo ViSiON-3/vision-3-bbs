@@ -249,6 +249,47 @@ why, rather than showing a mangled banner.
 
 When saving, the editor writes keys in sorted order and omits internal `_`-prefixed keys, producing clean deterministic output.
 
+### Scripts and files in place of text
+
+A value can hand off to a VPL script or a display file instead of printing text, as PCBoard's
+text tables did. Only the start of the value matters:
+
+| Value starts with | The BBS |
+|-------------------|---------|
+| `!door [words]` | Runs the `v3_script` door `door` from `doors.json` in place of the text |
+| `%file.ext [text]` | Shows `file.ext` from the menu set's `ansi/` directory, then prints `text` |
+| `!\|` | Prints a literal `!` followed by the rest of the value |
+
+```json
+{
+    "execGoodbye": "!goodbye",
+    "scanHeader": "%SCANHDR.ANS",
+    "pageWhichNodePrompt": "%NODES.ANS |07Page which node? "
+}
+```
+
+**Script arguments.** The script's `v3.args` holds the door's own `args` from `doors.json`, then the
+words after the door name, then the values the BBS would have formatted into the string, so a
+script can draw its own version of a message that names a door, a file or a user. The
+script replaces how the string looks; the BBS still reads the caller's answer to a prompt
+afterwards.
+
+**Format verbs.** A `!door` value takes no verbs: the arguments go to the script instead. In a
+`%file.ext` value, the text after the file name carries the verbs the string normally has. The
+editor and the startup check apply these rules.
+
+**When it prints as text.** The value is printed as written, and logged once, when the door does not
+exist, is not a `v3_script` door, is busy, or the file is missing. It is also printed as text, without
+a log entry, before the caller has logged in, and when the caller's access level is below the door's
+`min_access_level`. A `!` value met while another string's script is running prints as text too.
+
+A file name needs an extension, so formatted strings such as `%d of %d` are never mistaken for a
+file. Put a colour code before a leading `!` (`|12!Warning`) rather than after it: `!|` is the
+escape.
+
+Support is being extended to every string the BBS shows (#605). A string not yet covered prints
+its value as text.
+
 ## Value States
 
 A blank value column does not mean the string is unused. The marker just right of the closing

@@ -143,6 +143,10 @@ var topic = v3.args[0];   // "topic1"
 var title = v3.args[1];   // "Best BBS Software"
 ```
 
+A script can also run in place of a string from `strings.json`, by setting the string's value to
+`!door`. Its `v3.args` then carry the string's words and values after the door's own `args`; see
+[Scripts and files in place of text](../advanced/string-editor.md#scripts-and-files-in-place-of-text).
+
 ## Example: hello.js
 
 The shipped example script demonstrates all major API areas:

@@ -398,7 +398,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			cfg.UpdatePointers = !cfg.UpdatePointers
 
 		case 'S': // Scan which areas
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ScanWhichPrompt)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().ScanWhichPrompt)
 			aKey, aErr := ih.ReadKey()
 			if aErr != nil {
 				return nil, aErr

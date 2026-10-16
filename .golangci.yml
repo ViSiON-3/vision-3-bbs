@@ -38,6 +38,9 @@ linters:
         - github.com/ViSiON-3/vision-3-bbs/internal/terminalio.WriteProcessedBytes
         - github.com/ViSiON-3/vision-3-bbs/internal/terminalio.WriteString
         - github.com/ViSiON-3/vision-3-bbs/internal/terminalio.WriteStringCP437
+        - (*github.com/ViSiON-3/vision-3-bbs/internal/menu.MenuExecutor).writeString
+        - (*github.com/ViSiON-3/vision-3-bbs/internal/menu.MenuExecutor).writeStringf
+        - (*github.com/ViSiON-3/vision-3-bbs/internal/menu.MenuExecutor).writeStringNoScript
   exclusions:
     generated: lax
     paths:

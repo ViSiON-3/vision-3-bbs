@@ -11,7 +11,7 @@ package menu
 //
 // Output that may run off the session's own goroutine (a chat line printed by
 // the receive loop, a page delivered while the caller types) or while a lock is
-// held uses writeStringNoScript / writeStringNoScriptf instead: a script there
+// held uses writeStringNoScript instead: a script there
 // would read keys out from under the code that owns the input, or hold the
 // lock for as long as the caller sat in it. Those print a !script value as
 // text, as does a script value met while another one is already running.
@@ -95,11 +95,6 @@ func (e *MenuExecutor) writeStringf(terminal *term.Terminal, outputMode ansi.Out
 // (see the file comment). A file value is still displayed.
 func (e *MenuExecutor) writeStringNoScript(terminal *term.Terminal, outputMode ansi.OutputMode, value string) error {
 	return e.renderString(terminal, outputMode, value, false, nil)
-}
-
-// writeStringNoScriptf is writeStringf for output that must not run a script.
-func (e *MenuExecutor) writeStringNoScriptf(terminal *term.Terminal, outputMode ansi.OutputMode, format string, args ...any) error {
-	return e.renderString(terminal, outputMode, format, false, args)
 }
 
 // renderString writes value, running its hook if it has one and allowScript

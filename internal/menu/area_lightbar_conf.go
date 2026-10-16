@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -34,13 +33,13 @@ func runChangeMsgConferenceLightbar(c *cmdCtx, args string) (*user.User, string,
 	termWidth, termHeight := resolveTermDims(currentUser, c.termWidth, c.termHeight)
 
 	if currentUser == nil {
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfLoginRequired)), outputMode)
+		_ = e.writeString(terminal, outputMode, e.Strings().ConfLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
 	if e.ConferenceMgr == nil {
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoConferences)), outputMode)
+		_ = e.writeString(terminal, outputMode, e.Strings().ConfNoConferences)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -69,7 +68,7 @@ func runChangeMsgConferenceLightbar(c *cmdCtx, args string) (*user.User, string,
 	}
 
 	if len(confs) == 0 {
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoConferences)), outputMode)
+		_ = e.writeString(terminal, outputMode, e.Strings().ConfNoConferences)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}

@@ -27,14 +27,14 @@ type hookCtx struct {
 	sync.Mutex
 }
 
-func (hookCtx) User() string                  { return "" }
-func (hookCtx) SessionID() string             { return "" }
-func (hookCtx) ClientVersion() string         { return "" }
-func (hookCtx) ServerVersion() string         { return "" }
-func (hookCtx) RemoteAddr() net.Addr          { return doorcovAddr }
-func (hookCtx) LocalAddr() net.Addr           { return doorcovAddr }
-func (hookCtx) Permissions() *ssh.Permissions { return &ssh.Permissions{} }
-func (hookCtx) SetValue(_, _ interface{})     {}
+func (*hookCtx) User() string                  { return "" }
+func (*hookCtx) SessionID() string             { return "" }
+func (*hookCtx) ClientVersion() string         { return "" }
+func (*hookCtx) ServerVersion() string         { return "" }
+func (*hookCtx) RemoteAddr() net.Addr          { return doorcovAddr }
+func (*hookCtx) LocalAddr() net.Addr           { return doorcovAddr }
+func (*hookCtx) Permissions() *ssh.Permissions { return &ssh.Permissions{} }
+func (*hookCtx) SetValue(_, _ interface{})     {}
 
 // hookSession is a door test session with a real context.
 type hookSession struct {
