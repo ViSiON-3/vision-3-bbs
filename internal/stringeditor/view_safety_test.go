@@ -392,14 +392,21 @@ func TestRenderValuePreviewHooks(t *testing.T) {
 		{"|09Hello", "Hello"},
 		{"%d of %d", "%d of %d"},
 	} {
-		if got := plain(renderValuePreview(tc.value, 40)); got != tc.want {
+		if got := plain(renderValuePreview("execGoodbye", tc.value, 40)); got != tc.want {
 			t.Errorf("renderValuePreview(%q) = %q, want %q", tc.value, got, tc.want)
 		}
 	}
-	if got := visualLen(renderValuePreview("!averyveryverylongdoorname", 10)); got > 10 {
+	if got := visualLen(renderValuePreview("execGoodbye", "!averyveryverylongdoorname", 10)); got > 10 {
 		t.Errorf("preview is %d cells wide, want at most 10", got)
 	}
-	if got := hookDescription("!say"); got != "runs door say in place of the text" {
+	if got := hookDescription("execGoodbye", "!say"); got != "runs door say in place of the text" {
 		t.Errorf("hookDescription = %q", got)
+	}
+	// A key that never runs a hook previews its value as text.
+	if got := plain(renderValuePreview("anonymousName", "!say", 40)); got != "!say" {
+		t.Errorf("no-hook key preview = %q, want %q", got, "!say")
+	}
+	if got := hookDescription("anonymousName", "!say"); got != "" {
+		t.Errorf("no-hook key description = %q, want none", got)
 	}
 }

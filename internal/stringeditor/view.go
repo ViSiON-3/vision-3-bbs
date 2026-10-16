@@ -283,7 +283,7 @@ func (m Model) renderItem(idx, panelW int) string {
 	} else if isFallback {
 		line += renderDimString(value, valueWidth)
 	} else {
-		line += renderValuePreview(value, valueWidth)
+		line += renderValuePreview(entry.Key, value, valueWidth)
 	}
 
 	// Pad the value column out to the panel edge so the row is opaque against
@@ -297,8 +297,12 @@ func (m Model) renderItem(idx, panelW int) string {
 // renderValuePreview previews a configured value. A value that runs a door or
 // shows a file in place of its text is drawn as a tag saying so, followed by
 // the door's words or the text printed after the file; an escaped "!|" value
-// shows the text it prints.
-func renderValuePreview(value string, width int) string {
+// shows the text it prints. A key that never runs a hook
+// (stringhook.NoHookKeys) is previewed as the text it is.
+func renderValuePreview(key, value string, width int) string {
+	if !stringhook.Supported(key) {
+		return RenderColorString(value, width)
+	}
 	h := stringhook.Parse(value)
 	var tag, rest string
 	switch h.Kind {
@@ -322,8 +326,12 @@ func renderValuePreview(value string, width int) string {
 }
 
 // hookDescription says what a value that runs a door or shows a file does,
-// for the description row, or "" for an ordinary value.
-func hookDescription(value string) string {
+// for the description row, or "" for an ordinary value or a key that never
+// runs a hook.
+func hookDescription(key, value string) string {
+	if !stringhook.Supported(key) {
+		return ""
+	}
 	h := stringhook.Parse(value)
 	switch h.Kind {
 	case stringhook.Script:
@@ -423,7 +431,7 @@ func (m Model) renderDescriptionBar(row int) string {
 		if sig := m.signatureFor(entry.Key); sig != "" {
 			desc += "  [" + sig + "]"
 		}
-		if what := hookDescription(m.getValue(entry.Key)); what != "" {
+		if what := hookDescription(entry.Key, m.getValue(entry.Key)); what != "" {
 			desc += "  - " + what
 		}
 	}
