@@ -372,6 +372,10 @@ func (ih *InputHandler) readByte() (byte, error) {
 // break-in hook.
 func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 	for {
+		// A latched session end (see Fail) wins over pushed-back bytes.
+		if err := ih.failed.Load(); err != nil {
+			return 0, *err
+		}
 		// Checked every pass: reads inside a break-in can push bytes back.
 		if len(ih.unreadBuf) > 0 {
 			b := ih.unreadBuf[0]
@@ -433,8 +437,20 @@ func (ih *InputHandler) ReadUntil(p []byte, stop <-chan struct{}) (int, error) {
 		return 0, err
 	}
 	p[0] = b
-	n := 1
+	return ih.drainQueued(p, 1, stop)
+}
+
+// drainQueued adds to p, after the n bytes already in it, whatever input is
+// queued, without waiting. A stop while draining hands back everything taken
+// so far, so no key leaves the handler once the borrower is done with it.
+func (ih *InputHandler) drainQueued(p []byte, n int, stop <-chan struct{}) (int, error) {
 	for n < len(p) {
+		select {
+		case <-stop:
+			ih.unreadBuf = append(append([]byte(nil), p[:n]...), ih.unreadBuf...)
+			return 0, ErrReadStopped
+		default:
+		}
 		if len(ih.unreadBuf) > 0 {
 			p[n] = ih.unreadBuf[0]
 			ih.unreadBuf = ih.unreadBuf[1:]

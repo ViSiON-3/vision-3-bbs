@@ -275,8 +275,8 @@ func stringScriptExists(cfg config.DoorConfig) bool {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(dir, path)
 	}
-	_, err := os.Stat(path)
-	return err == nil
+	fi, err := os.Stat(path)
+	return err == nil && fi.Mode().IsRegular()
 }
 
 // borrowInputSession returns s for a script run in place of a string.

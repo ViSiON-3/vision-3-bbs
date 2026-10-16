@@ -82,3 +82,30 @@ func TestFailLatchesKeyReads(t *testing.T) {
 		t.Errorf("Read after Fail = %v, want ErrIdleTimeout", err)
 	}
 }
+
+// A latched session end wins over a byte pushed back for re-reading.
+func TestFailWinsOverUnreadByte(t *testing.T) {
+	ih, _ := pipeHandler(t)
+	ih.unreadByte('z')
+	ih.Fail(ErrIdleTimeout)
+	if _, err := ih.Read(make([]byte, 1)); !errors.Is(err, ErrIdleTimeout) {
+		t.Errorf("Read after Fail = %v, want ErrIdleTimeout", err)
+	}
+}
+
+// A stop that arrives while queued bytes are being drained gives every byte
+// taken back to the handler, in order, the one already read included.
+func TestDrainQueuedStopGivesBytesBack(t *testing.T) {
+	ih, _ := pipeHandler(t)
+	ih.unreadBuf = []byte("bc")
+	stop := make(chan struct{})
+	close(stop)
+	p := make([]byte, 8)
+	p[0] = 'a' // taken by ReadUntil before the stop
+	if _, err := ih.drainQueued(p, 1, stop); !errors.Is(err, ErrReadStopped) {
+		t.Fatalf("drainQueued = %v, want ErrReadStopped", err)
+	}
+	if got := string(ih.unreadBuf); got != "abc" {
+		t.Errorf("unread input = %q, want %q", got, "abc")
+	}
+}
