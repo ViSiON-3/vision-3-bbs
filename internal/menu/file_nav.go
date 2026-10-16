@@ -1,7 +1,6 @@
 package menu
 
 import (
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -114,7 +113,7 @@ func navigateFileConf(c *cmdCtx, forward bool) (*user.User, string, error) {
 	if msg == "" {
 		msg = "\r\n|07(|15%s|07) [|14%s|07]\r\n"
 	}
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(msg, newConf.Name, newConf.Tag))), outputMode)
+	e.writeStringf(terminal, outputMode, msg, newConf.Name, newConf.Tag)
 	slog.Info("user navigated to file conference", "node", nodeNumber, "handle", currentUser.Handle, "id", newConf.ID, "tag", newConf.Tag)
 	return currentUser, "", nil
 }

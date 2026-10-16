@@ -60,7 +60,8 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(unreviewed) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SysopReviewNoFiles+"\r\n")), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().SysopReviewNoFiles)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -133,7 +134,8 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 				if updateErr != nil {
 					slog.Error("failed to mark file as reviewed", "node", nodeNumber, "file", rec.Filename, "error", updateErr)
 				} else {
-					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SysopReviewMarked+"\r\n")), outputMode)
+					e.writeString(terminal, outputMode, e.Strings().SysopReviewMarked)
+					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
 				}
 			}
 		}
@@ -148,7 +150,8 @@ func editFileShowAndPrompt(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
 	header := e.Strings().SysopReviewHeader
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(header+"\r\n")), outputMode)
+	e.writeString(terminal, outputMode, header)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
 
 	sizeStr := formatReviewSize(rec.Size)
 	dateStr := rec.UploadedAt.Format("01/02/2006 15:04")
@@ -251,7 +254,8 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 		return false, nil
 	}
 
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SysopReviewRenamed+"\r\n")), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().SysopReviewRenamed)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
 	return true, nil
 }
 

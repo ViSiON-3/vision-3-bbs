@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -84,7 +85,15 @@ func warnStringHookOnce(value, reason string, attrs ...any) {
 // writeString writes a strings.json value to the terminal: its text with pipe
 // codes expanded, or the script or file it names (see stringhook).
 func (e *MenuExecutor) writeString(terminal *term.Terminal, outputMode ansi.OutputMode, value string) error {
-	return e.renderString(terminal, outputMode, value, true, nil)
+	return e.renderString(terminal, outputMode, value, true, nil, nil)
+}
+
+// writeStringSubst is writeString for a value the call site fills in with
+// substitutions of its own, such as |NA for a handle or ^CN for a conference
+// name. subst is applied to the text the value prints, never to a hook's door
+// or file name, so substituted text cannot start a hook.
+func (e *MenuExecutor) writeStringSubst(terminal *term.Terminal, outputMode ansi.OutputMode, value string, subst func(string) string) error {
+	return e.renderString(terminal, outputMode, value, true, nil, subst)
 }
 
 // WriteString is writeString for code outside the menu package.
@@ -96,23 +105,31 @@ func (e *MenuExecutor) WriteString(terminal *term.Terminal, outputMode ansi.Outp
 // The hook is recognised before formatting, so a script receives the
 // arguments instead of having them appended to its name.
 func (e *MenuExecutor) writeStringf(terminal *term.Terminal, outputMode ansi.OutputMode, format string, args ...any) error {
-	return e.renderString(terminal, outputMode, format, true, args)
+	return e.renderString(terminal, outputMode, format, true, args, nil)
 }
 
 // writeStringNoScript is writeString for output that must not run a script
 // (see the file comment). A file value is still displayed.
 func (e *MenuExecutor) writeStringNoScript(terminal *term.Terminal, outputMode ansi.OutputMode, value string) error {
-	return e.renderString(terminal, outputMode, value, false, nil)
+	return e.renderString(terminal, outputMode, value, false, nil, nil)
 }
 
 // renderString writes value, running its hook if it has one and allowScript
 // permits. args is nil for a value printed verbatim, which is never passed to
-// fmt: some verbatim strings hold a literal "%".
-func (e *MenuExecutor) renderString(terminal *term.Terminal, outputMode ansi.OutputMode, value string, allowScript bool, args []any) error {
+// fmt: some verbatim strings hold a literal "%". subst, when set, is applied to
+// the text printed, after formatting.
+func (e *MenuExecutor) renderString(terminal *term.Terminal, outputMode ansi.OutputMode, value string, allowScript bool, args []any, subst func(string) string) error {
+	text := func(v string) string {
+		v = formatStringValue(v, args)
+		if subst != nil {
+			v = subst(v)
+		}
+		return v
+	}
 	h := stringhook.Parse(value)
 	switch h.Kind {
 	case stringhook.Escaped:
-		return writeStringText(terminal, outputMode, formatStringValue(h.Rest, args))
+		return writeStringText(terminal, outputMode, text(h.Rest))
 	case stringhook.File:
 		width, height := stringHookTermSize(terminal)
 		if err := e.displayFileIfPresent(terminal, h.Target, outputMode, width, height); err != nil {
@@ -124,7 +141,7 @@ func (e *MenuExecutor) renderString(terminal *term.Terminal, outputMode ansi.Out
 		if h.Rest == "" {
 			return nil
 		}
-		return writeStringText(terminal, outputMode, formatStringValue(h.Rest, args))
+		return writeStringText(terminal, outputMode, text(h.Rest))
 	case stringhook.Script:
 		ran, err := e.runStringScript(terminal, outputMode, value, h, allowScript, args)
 		if ran || err != nil {
@@ -134,7 +151,7 @@ func (e *MenuExecutor) renderString(terminal *term.Terminal, outputMode ansi.Out
 		// %!(EXTRA ...); it is printed as written.
 		return writeStringText(terminal, outputMode, value)
 	}
-	return writeStringText(terminal, outputMode, formatStringValue(value, args))
+	return writeStringText(terminal, outputMode, text(value))
 }
 
 // formatStringValue formats value with args, or returns it untouched when the
@@ -234,6 +251,11 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 		doorConfig, name)
 	ctx.UserManager = hs.userMgr
 	ctx.CurrentUser = u
+	// A door is not started once the caller's time is up, which is exactly
+	// when the time-limit notice is shown: print that value as text.
+	if deadline := doorTimeLimitDeadline(ctx); !deadline.IsZero() && !time.Now().Before(deadline) {
+		return false, nil
+	}
 
 	// executeDoor puts the snoop tap back in BBS mode afterwards; a string can
 	// be shown from a screen in another mode (chat's pickers set teleconference

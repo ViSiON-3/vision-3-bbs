@@ -50,7 +50,7 @@ func runSetFileScanDate(c *cmdCtx, args string) (*user.User, string, error) {
 	if prompt == "" {
 		prompt = "\r\n|07File newscan since |08(|15MM/DD/YY|08, |15A|08=all files, |15R|08=reset to last logon|08)|07: |15"
 	}
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+	e.writeString(terminal, outputMode, prompt)
 
 	input, err := readScanLine(getSessionIH(s), terminal, outputMode, 10)
 	if err != nil {
@@ -85,7 +85,7 @@ func runSetFileScanDate(c *cmdCtx, args string) (*user.User, string, error) {
 			if msg == "" {
 				msg = "\r\n|12Invalid date.|07\r\n"
 			}
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			e.writeString(terminal, outputMode, msg)
 			uiPause(1 * time.Second)
 			return currentUser, "", nil
 		}

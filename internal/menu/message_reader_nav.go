@@ -257,12 +257,11 @@ func forwardBackThread(e *MenuExecutor, areaID int, currentMsg int,
 }
 
 // handleJump prompts the user for a message number to jump to.
-func handleJump(reader *bufio.Reader, terminal *term.Terminal, outputMode ansi.OutputMode,
-	currentMsgNum *int, totalMsgs int, jumpPromptFmt string, invalidMsgStr string) {
+func (e *MenuExecutor) handleJump(reader *bufio.Reader, terminal *term.Terminal, outputMode ansi.OutputMode,
+	currentMsgNum *int, totalMsgs int) {
 
-	prompt := fmt.Sprintf(jumpPromptFmt, totalMsgs)
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+	e.writeStringf(terminal, outputMode, e.Strings().MsgJumpPrompt, totalMsgs)
 
 	input, err := readLineInput(reader, terminal, outputMode, 6)
 	if err != nil {
@@ -275,7 +274,7 @@ func handleJump(reader *bufio.Reader, terminal *term.Terminal, outputMode ansi.O
 
 	num, parseErr := strconv.Atoi(input)
 	if parseErr != nil || num < 1 || num > totalMsgs {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(invalidMsgStr)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().MsgInvalidMsgNum)
 		uiPause(500 * time.Millisecond)
 		return
 	}

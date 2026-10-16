@@ -452,7 +452,8 @@ func (e *MenuExecutor) handleIdleTimeout(terminal *term.Terminal, outputMode ans
 			row = 1
 		}
 		terminalio.WriteProcessedBytes(terminal, []byte(fmt.Sprintf("\x1b[%d;1H", row)), outputMode)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		// No script: the caller is idle and about to be disconnected.
+		e.writeStringNoScript(terminal, outputMode, msg)
 	}
 	slog.Info("idle timeout, disconnecting", "node", nodeNumber, "minutes", e.GetServerConfig().SessionIdleTimeoutMinutes)
 }
@@ -549,8 +550,7 @@ func remoteIPFromSession(s ssh.Session) string {
 
 func (e *MenuExecutor) showUndefinedMenuInput(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int) {
 	errMsg := e.Strings().ExecUnknownCommand
-	processedErrMsg := ansi.ReplacePipeCodes([]byte(errMsg))
-	if wErr := terminalio.WriteProcessedBytes(terminal, processedErrMsg, outputMode); wErr != nil {
+	if wErr := e.writeString(terminal, outputMode, errMsg); wErr != nil {
 		slog.Error("failed writing unknown command message", "node", nodeNumber, "error", wErr)
 	}
 	uiPause(500 * time.Millisecond)

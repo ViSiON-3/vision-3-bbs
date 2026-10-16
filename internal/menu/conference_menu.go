@@ -57,11 +57,10 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 	if prompt == "" {
 		prompt = "\r\n|03Select Conference |05[|13#|05/|13Tag|08, |13?|05=|13List|08, |13Q|05=|13Quit|05] : |11"
 	}
-	renderedPrompt := ansi.ReplacePipeCodes([]byte(prompt))
 	curUpClear := "\x1b[A\r\x1b[2K" // move up one line, then clear it
 
 	// Show initial prompt
-	terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+	e.writeString(terminal, outputMode, prompt)
 
 	for {
 		inputLine, err := readLineFromSessionIH(s, terminal)
@@ -79,7 +78,7 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 			return currentUser, "", nil
 		}
 		if upperInput == "" {
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 
@@ -89,7 +88,7 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 			if err != nil {
 				return currentUser, "", err
 			}
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 
@@ -119,7 +118,7 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 			e.writeStringf(terminal, outputMode, e.Strings().ConfNotFound, inputClean)
 			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, prompt)
 			continue
 		}
 
@@ -138,9 +137,7 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 		if joinedMsg == "" {
 			joinedMsg = "\r\n|07(|15^CN|07) |15Conference Joined!|07\r\n"
 		}
-		joinedMsg = strings.ReplaceAll(joinedMsg, "^CN", conf.Name)
-		joinedMsg = strings.ReplaceAll(joinedMsg, "^CT", conf.Tag)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(joinedMsg)), outputMode)
+		e.writeStringSubst(terminal, outputMode, joinedMsg, strings.NewReplacer("^CN", conf.Name, "^CT", conf.Tag).Replace)
 		uiPause(1 * time.Second)
 
 		slog.Info("user changed conference",
@@ -279,13 +276,15 @@ func displayConferenceList(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 		buf.WriteString(line)
 	}
 
+	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	if len(displayedConfs) == 0 {
-		buf.Write(ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoAccessibleConferences)))
+		// Written on its own, between the templates, so it can be a hook.
+		terminalio.WriteProcessedBytes(terminal, buf.Bytes(), outputMode)
+		buf.Reset()
+		e.writeString(terminal, outputMode, e.Strings().ConfNoAccessibleConferences)
 	}
 
 	buf.Write(processedBot)
-
-	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	return displayedConfs, terminalio.WriteProcessedBytes(terminal, buf.Bytes(), outputMode)
 }
 
@@ -385,13 +384,15 @@ func displayMessageAreaListFiltered(e *MenuExecutor, s ssh.Session, terminal *te
 		}
 	}
 
+	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	if len(displayedAreas) == 0 {
-		outputBuffer.Write(ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoAccessibleMsgAreas)))
+		// Written on its own, between the templates, so it can be a hook.
+		terminalio.WriteProcessedBytes(terminal, outputBuffer.Bytes(), outputMode)
+		outputBuffer.Reset()
+		e.writeString(terminal, outputMode, e.Strings().ConfNoAccessibleMsgAreas)
 	}
 
 	outputBuffer.Write(processedBotTemplate)
-
-	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	return displayedAreas, terminalio.WriteProcessedBytes(terminal, outputBuffer.Bytes(), outputMode)
 }
 
@@ -475,7 +476,7 @@ func navigateMsgConf(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 		if msg == "" {
 			msg = "\r\n|12No accessible conferences.|07\r\n"
 		}
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeString(terminal, outputMode, msg)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -511,8 +512,7 @@ func navigateMsgConf(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	if msg == "" {
 		msg = "\r\n|07(|15%s|07) [|14%s|07]\r\n"
 	}
-	formatted := fmt.Sprintf(msg, newConf.Name, newConf.Tag)
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(formatted)), outputMode)
+	e.writeStringf(terminal, outputMode, msg, newConf.Name, newConf.Tag)
 
 	slog.Info("user navigated to conference", "node", nodeNumber, "handle", currentUser.Handle, "id", newConf.ID, "tag", newConf.Tag)
 

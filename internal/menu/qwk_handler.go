@@ -99,7 +99,8 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(statusMsg)), outputMode)
 
 	// Prompt user to send or quit
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+e.Strings().SendQWKPacketPrompt)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().SendQWKPacketPrompt)
 	promptInput, promptErr := readLineFromSessionIH(s, terminal)
 	if promptErr != nil {
 		if errors.Is(promptErr, io.EOF) {
