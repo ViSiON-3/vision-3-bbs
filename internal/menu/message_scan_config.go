@@ -492,8 +492,7 @@ func runNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 				slog.Error("failed to save newscan config", "node", nodeNumber, "error", err)
 				e.writeString(terminal, outputMode, e.Strings().ScanConfigError)
 			} else {
-				msg := fmt.Sprintf(e.Strings().ScanConfigSaved, len(taggedTags))
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+				e.writeStringf(terminal, outputMode, e.Strings().ScanConfigSaved, len(taggedTags))
 			}
 			uiPause(1 * time.Second)
 			return currentUser, "", nil

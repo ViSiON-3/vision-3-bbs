@@ -6,9 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"time"
-
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 )
 
 // checkMenuPassword implements the 3-attempt menu password gate. When
@@ -35,9 +32,7 @@ func (st *runLoopState) checkMenuPassword(menuRec *MenuRecord) (ok bool, act loo
 		slog.Debug("menu requires password", "menu", st.currentMenuName)
 		passwordOk := false
 		for i := 0; i < 3; i++ { // Allow 3 attempts
-			prompt := fmt.Sprintf(e.Strings().ExecMenuPasswordPrompt, st.currentMenuName, i+1)
-			processedPrompt := ansi.ReplacePipeCodes([]byte(prompt))
-			wErr := terminalio.WriteProcessedBytes(terminal, processedPrompt, outputMode)
+			wErr := e.writeStringf(terminal, outputMode, e.Strings().ExecMenuPasswordPrompt, st.currentMenuName, i+1)
 			if wErr != nil {
 				slog.Error("failed writing menu password prompt", "node", nodeNumber, "error", wErr)
 			}

@@ -220,8 +220,7 @@ func handleThread(reader *bufio.Reader, e *MenuExecutor, terminal *term.Terminal
 		if !forward {
 			dir = "backward"
 		}
-		msg := fmt.Sprintf(e.Strings().MsgNoThreadFound, dir)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().MsgNoThreadFound, dir)
 		uiPause(1 * time.Second)
 	}
 }

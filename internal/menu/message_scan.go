@@ -210,40 +210,35 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 		} else if cfg.ScanDate > 0 {
 			dateStr = fmt.Sprintf("Since %s", cfg.since().Format("01/02/06"))
 		}
-		line := fmt.Sprintf(e.Strings().ScanDateLine, dateStr)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().ScanDateLine, dateStr)
 
 		// To
 		toStr := "N/A"
 		if cfg.SearchTo != "" {
 			toStr = fmt.Sprintf("Search For %s", cfg.SearchTo)
 		}
-		line = fmt.Sprintf(e.Strings().ScanToLine, toStr)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().ScanToLine, toStr)
 
 		// From
 		fromStr := "N/A"
 		if cfg.SearchFrom != "" {
 			fromStr = fmt.Sprintf("Search For %s", cfg.SearchFrom)
 		}
-		line = fmt.Sprintf(e.Strings().ScanFromLine, fromStr)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().ScanFromLine, fromStr)
 
 		// Range
 		rangeStr := "All"
 		if cfg.RangeStart > 0 && cfg.RangeEnd > 0 {
 			rangeStr = fmt.Sprintf("%d-%d", cfg.RangeStart, cfg.RangeEnd)
 		}
-		line = fmt.Sprintf(e.Strings().ScanRangeLine, rangeStr)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().ScanRangeLine, rangeStr)
 
 		// Update Pointers
 		upStr := "Yes"
 		if !cfg.UpdatePointers {
 			upStr = "No"
 		}
-		line = fmt.Sprintf(e.Strings().ScanUpdateLine, upStr)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().ScanUpdateLine, upStr)
 
 		// Which Areas
 		var whichStr string
@@ -255,15 +250,12 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 		case 3:
 			whichStr = "Current Area Only"
 		}
-		line = fmt.Sprintf(e.Strings().ScanWhichLine, whichStr)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().ScanWhichLine, whichStr)
 
-		line = e.Strings().ScanAbortLine
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ScanAbortLine)
 
 		// Prompt - "Selection;" Dark Cyan (|03), "(Cr" Bright Cyan (|11), "/" Bright Magenta (|13), "Scan) :" Bright Cyan (|11)
-		prompt := e.Strings().ScanSelectionPrompt
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ScanSelectionPrompt)
 	}
 
 	// promptLine shows a prompt and reads one line. A nil error with ok=false

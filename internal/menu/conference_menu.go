@@ -116,8 +116,7 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 		if !matched {
 			// Move up to overwrite prompt+input line, show error, then restore prompt
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
-			msg := fmt.Sprintf(e.Strings().ConfNotFound, inputClean)
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			e.writeStringf(terminal, outputMode, e.Strings().ConfNotFound, inputClean)
 			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
 			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
@@ -229,8 +228,7 @@ func navigateMsgArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 		slog.Error("failed to save user after area change", "node", nodeNumber, "error", err)
 	}
 
-	msg := fmt.Sprintf(e.Strings().ConfCurrentAreaFormat, newArea.Name, newArea.Tag)
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+	e.writeStringf(terminal, outputMode, e.Strings().ConfCurrentAreaFormat, newArea.Name, newArea.Tag)
 
 	slog.Info("user navigated to area", "node", nodeNumber, "handle", currentUser.Handle, "id", newArea.ID, "tag", newArea.Tag)
 

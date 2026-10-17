@@ -57,8 +57,7 @@ func navigateFileArea(c *cmdCtx, forward bool) (*user.User, string, error) {
 		slog.Error("failed to save user after file area change", "node", nodeNumber, "error", err)
 	}
 
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(
-		[]byte(fmt.Sprintf(e.Strings().ConfCurrentAreaFormat, newArea.Name, newArea.Tag))), outputMode)
+	e.writeStringf(terminal, outputMode, e.Strings().ConfCurrentAreaFormat, newArea.Name, newArea.Tag)
 	slog.Info("user navigated to file area", "node", nodeNumber, "handle", currentUser.Handle, "id", newArea.ID, "tag", newArea.Tag)
 	return currentUser, "", nil
 }

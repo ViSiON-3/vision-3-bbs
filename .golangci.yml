@@ -41,6 +41,7 @@ linters:
         - (*github.com/ViSiON-3/vision-3-bbs/internal/menu.MenuExecutor).writeString
         - (*github.com/ViSiON-3/vision-3-bbs/internal/menu.MenuExecutor).writeStringf
         - (*github.com/ViSiON-3/vision-3-bbs/internal/menu.MenuExecutor).writeStringNoScript
+        - (*github.com/ViSiON-3/vision-3-bbs/internal/menu.MenuExecutor).WriteString
   exclusions:
     generated: lax
     paths:

@@ -180,9 +180,7 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 		terminalio.WriteProcessedBytes(terminal,
 			ansi.ReplacePipeCodes([]byte(e.Strings().FileNewscanNoNew)), outputMode)
 	} else {
-		msg := fmt.Sprintf(e.Strings().FileNewscanComplete, totalNew)
-		terminalio.WriteProcessedBytes(terminal,
-			ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().FileNewscanComplete, totalNew)
 	}
 
 	_ = writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
@@ -439,8 +437,7 @@ func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 	if ansErr == nil {
 		_ = writeArt(terminal, headerContent, outputMode, termWidth) // best-effort display
 	} else {
-		header := e.Strings().FileNewscanConfigHeader
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(header)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().FileNewscanConfigHeader)
 	}
 
 	findNextSelectable := func(startIdx int, direction int) int {
@@ -558,8 +555,7 @@ func runFileNewscanConfig(c *cmdCtx, args string) (*user.User, string, error) {
 				slog.Error("failed to save file newscan config", "node", nodeNumber, "error", err)
 				e.writeString(terminal, outputMode, e.Strings().ScanConfigError)
 			} else {
-				msg := fmt.Sprintf(e.Strings().FileNewscanConfigSaved, len(taggedTags))
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+				e.writeStringf(terminal, outputMode, e.Strings().FileNewscanConfigSaved, len(taggedTags))
 			}
 			uiPause(1 * time.Second)
 			return currentUser, "", nil

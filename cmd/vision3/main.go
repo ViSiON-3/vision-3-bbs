@@ -1304,7 +1304,7 @@ func sessionHandler(s ssh.Session) {
 			if msg == "" {
 				msg = "\r\n|01Login cancelled.|07\r\n"
 			}
-			_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), effectiveMode)
+			_ = menuExecutor.WriteString(terminal, effectiveMode, msg)
 			return
 		}
 

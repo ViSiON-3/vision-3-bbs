@@ -286,13 +286,11 @@ func (e *MenuExecutor) handleCheckAccess(
 		// caller can get on. It used to branch on the validated flag, which
 		// decides nothing about login, and so told people waiting for approval
 		// they did not need.
-		msg := fmt.Sprintf(e.Strings().MatrixAccountValidated, foundUser.Handle, foundUser.AccessLevel)
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().MatrixAccountValidated, foundUser.Handle, foundUser.AccessLevel)
 	} else {
 		cfg := e.GetServerConfig()
-		msg := fmt.Sprintf(e.Strings().MatrixAccountCannotLogon,
+		e.writeStringf(terminal, outputMode, e.Strings().MatrixAccountCannotLogon,
 			foundUser.Handle, foundUser.AccessLevel, cfg.LogonLevel)
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 
 		// If NUV is enabled, show voting progress for this candidate.
 		if cfg.UseNUV {

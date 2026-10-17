@@ -58,8 +58,7 @@ func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
 	// Look up the file in the current area.
 	rec, err := findFileInArea(e.FileMgr, currentAreaID, filename)
 	if err != nil {
-		msg := fmt.Sprintf(e.Strings().FileNotFoundFormat, filename)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeStringf(terminal, outputMode, e.Strings().FileNotFoundFormat, filename)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}

@@ -196,6 +196,21 @@ func TestWriteStringScript(t *testing.T) {
 		})
 	}
 
+	// Hooks are read from the configured value before formatting, so text a
+	// caller typed and the BBS formats into a string can never start one.
+	t.Run("formatted arguments cannot start a hook", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		out := f.write(t, "%s", "!say")
+		if !strings.Contains(out, "!say") || strings.Contains(out, "[script") {
+			t.Errorf("output = %q", out)
+		}
+		f = newStringHookFixture(t, "")
+		out = f.write(t, "%s", "%BAR.ANS")
+		if !strings.Contains(out, "%BAR.ANS") || strings.Contains(out, "[bar art]") {
+			t.Errorf("output = %q", out)
+		}
+	})
+
 	t.Run("no registered session prints the value as text", func(t *testing.T) {
 		f := newStringHookFixture(t, "")
 		terminal := newDoorcovTerminal(f.s.doorcovSession)
