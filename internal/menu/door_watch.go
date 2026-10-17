@@ -332,3 +332,16 @@ func watchDoorProcess(ctx *DoorCtx, p *os.Process) (stop func()) {
 		})
 	}
 }
+
+// InputOnDemand preserves borrowed-input semantics through the activity watcher.
+func (s *watchedSession) InputOnDemand() bool {
+	source, ok := s.Session.(interface{ InputOnDemand() bool })
+	return ok && source.InputOnDemand()
+}
+
+// ReturnInput hands unconsumed script input back through the activity watcher.
+func (s *watchedSession) ReturnInput(p []byte) {
+	if owner, ok := s.Session.(interface{ ReturnInput([]byte) }); ok {
+		owner.ReturnInput(p)
+	}
+}
