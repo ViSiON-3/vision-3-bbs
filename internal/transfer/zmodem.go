@@ -655,7 +655,9 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 			_ = cmd.Process.Kill()
 		}
 		cmdErr = ctx.Err()
-		_ = <-cmdDoneCh // cancellation is the error returned to the caller
+		if err := <-cmdDoneCh; err != nil {
+			slog.Debug("transfer process exited after cancellation", "error", err)
+		}
 	case cmdErr = <-cmdDoneCh:
 	}
 	slog.Debug("command finished", "cmd", cmd.Path, "error", cmdErr)

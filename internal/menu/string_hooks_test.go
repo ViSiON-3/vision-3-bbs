@@ -253,7 +253,10 @@ func TestWriteStringScript(t *testing.T) {
 		if cur := getSessionIH(f.s); cur != ih {
 			t.Fatal("the session's input handler was replaced")
 		}
-		b, err := ih.ReadByteUntil(nil)
+		stop := make(chan struct{})
+		timer := time.AfterFunc(time.Second, func() { close(stop) })
+		defer timer.Stop()
+		b, err := ih.ReadByteUntil(stop)
 		if err != nil || b != 'y' {
 			t.Errorf("caller's next read = %q, %v; want 'y'", b, err)
 		}
