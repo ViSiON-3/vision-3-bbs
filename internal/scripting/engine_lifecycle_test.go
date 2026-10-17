@@ -138,3 +138,77 @@ func TestEngineCloseWithoutInputIsClean(t *testing.T) {
 	}
 	waitNoGoroutineLeak(t, baseline)
 }
+
+// demandSession opts a borrowed input source into reads requested by the script.
+type demandSession struct{ *interruptibleSession }
+
+// InputOnDemand leaves later keys with the owner of the borrowed input source.
+func (s demandSession) InputOnDemand() bool { return true }
+
+// TestDemandReaderLeavesNextKey verifies that no second read is made after a
+// script consumes one key, even when another key is already available.
+func TestDemandReaderLeavesNextKey(t *testing.T) {
+	sess := newInterruptibleSession("")
+	sess.chunks = [][]byte{[]byte("x"), []byte("y")}
+	eng := NewEngine(context.Background(), &SessionContext{Session: demandSession{sess}}, ScriptConfig{}, nil)
+	defer eng.Close()
+	if key, err := eng.readKey(time.Second); key != "x" || err != nil {
+		t.Fatalf("readKey = %q, %v", key, err)
+	}
+	eng.Close()
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+	if len(sess.chunks) != 1 || string(sess.chunks[0]) != "y" {
+		t.Fatalf("next key was prefetched: %q", sess.chunks)
+	}
+}
+
+// TestDemandReaderAfterTimeout verifies that a timed-out request stays pending
+// and the next getkey receives its result without starting an extra read.
+func TestDemandReaderAfterTimeout(t *testing.T) {
+	reader, writer := io.Pipe()
+	sess := &demandPipeSession{Reader: reader}
+	eng := NewEngine(context.Background(), &SessionContext{Session: sess}, ScriptConfig{}, nil)
+	defer func() { _ = reader.Close(); _ = writer.Close(); eng.Close() }()
+	if key, err := eng.readKey(time.Millisecond); key != "" || err != nil {
+		t.Fatalf("timed read = %q, %v", key, err)
+	}
+	go func() { _, _ = writer.Write([]byte("x")) }()
+	if key, err := eng.readKey(time.Second); key != "x" || err != nil {
+		t.Fatalf("next read = %q, %v", key, err)
+	}
+}
+
+// demandPipeSession models a borrowed reader with input arriving after a timeout.
+type demandPipeSession struct {
+	io.Reader
+	returned []byte
+}
+
+// Write discards output because these tests only exercise input.
+func (*demandPipeSession) Write(p []byte) (int, error) { return len(p), nil }
+
+// InputOnDemand enables borrowed-input semantics for the test pipe.
+func (*demandPipeSession) InputOnDemand() bool { return true }
+
+// ReturnInput records the bytes handed back to the owner at shutdown.
+func (s *demandPipeSession) ReturnInput(p []byte) { s.returned = append(s.returned, p...) }
+
+// TestDemandReaderReturnsTimedOutInput keeps a key that arrives after getkey
+// times out available to the caller's next prompt.
+func TestDemandReaderReturnsTimedOutInput(t *testing.T) {
+	reader, writer := io.Pipe()
+	sess := &demandPipeSession{Reader: reader}
+	eng := NewEngine(context.Background(), &SessionContext{Session: sess}, ScriptConfig{}, nil)
+	defer func() { _ = reader.Close(); _ = writer.Close(); eng.Close() }()
+	if _, err := eng.readKey(time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write([]byte("y")); err != nil {
+		t.Fatal(err)
+	}
+	eng.Close()
+	if string(sess.returned) != "y" {
+		t.Fatalf("returned %q, want y", sess.returned)
+	}
+}

@@ -655,7 +655,7 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 			_ = cmd.Process.Kill()
 		}
 		cmdErr = ctx.Err()
-		<-cmdDoneCh
+		_ = <-cmdDoneCh // cancellation is the error returned to the caller
 	case cmdErr = <-cmdDoneCh:
 	}
 	slog.Debug("command finished", "cmd", cmd.Path, "error", cmdErr)
