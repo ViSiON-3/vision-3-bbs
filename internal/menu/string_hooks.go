@@ -355,3 +355,10 @@ func (b *borrowedInputSession) SetReadInterrupt(ch <-chan struct{}) {
 
 // Unwrap returns the session underneath, for code keyed by it.
 func (b *borrowedInputSession) Unwrap() ssh.Session { return b.Session }
+
+// InputOnDemand prevents the script engine from prefetching the caller's next
+// key while borrowing this handler. Each Read returns at most one key.
+func (b *borrowedInputSession) InputOnDemand() bool { return true }
+
+// ReturnInput restores bytes a timed-out script read received before shutdown.
+func (b *borrowedInputSession) ReturnInput(p []byte) { b.ih.ReturnInput(p) }

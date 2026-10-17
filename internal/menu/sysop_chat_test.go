@@ -391,7 +391,7 @@ func TestChatDividerShowsTime(t *testing.T) {
 	r := newChatRig(t, "")
 	r.begin(t)
 	done := r.run()
-	waitFor(t, func() bool { return strings.Contains(r.term.Row(13), "chatting with") }, "chat screen not drawn")
+	waitFor(t, func() bool { return hhmm.MatchString(r.term.Row(13)) }, "chat screen not drawn")
 	// Row trims the trailing blank of the " HH:MM " field.
 	if got := r.term.Row(13); !hhmm.MatchString(got) || len([]rune(got)) != 79 {
 		t.Fatalf("divider = %q; want the fill then HH:MM in the last field", got)
