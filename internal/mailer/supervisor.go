@@ -212,10 +212,10 @@ func (s *Service) terminate(cmd *exec.Cmd, waitErr <-chan error) {
 		_ = cmd.Process.Kill() // SIGTERM unsupported (e.g. windows) or gone
 	}
 	select {
-	case <-waitErr:
+	case _ = <-waitErr: // exit status is expected after termination
 	case <-time.After(termGrace):
 		_ = cmd.Process.Kill()
-		<-waitErr
+		_ = <-waitErr // reap the killed process; its exit status is expected
 	}
 }
 
