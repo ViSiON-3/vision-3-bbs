@@ -420,3 +420,16 @@ func TestRenderValuePreviewHooks(t *testing.T) {
 		t.Errorf("idleTimeout script description = %q, want none", got)
 	}
 }
+
+// TestNoHookPreviewKeepsEscape verifies that data labels retain their literal
+// !| prefix because their runtime call sites do not parse hook escapes.
+func TestNoHookPreviewKeepsEscape(t *testing.T) {
+	for _, key := range []string{"anonymousName", "yesPromptText", "pageMessageFormat"} {
+		if got := stripANSI(renderValuePreview(key, "!|Warning", 40)); got != "!|Warning" {
+			t.Errorf("%s preview = %q, want !|Warning", key, got)
+		}
+		if got := hookDescription(key, "!|Warning"); got != "" {
+			t.Errorf("%s description = %q, want none", key, got)
+		}
+	}
+}

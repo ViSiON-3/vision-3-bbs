@@ -301,7 +301,7 @@ func (m Model) renderItem(idx, panelW int) string {
 // (stringhook.SupportsKind) is previewed as the text it is.
 func renderValuePreview(key, value string, width int) string {
 	h := stringhook.Parse(value)
-	if (h.Kind == stringhook.Script || h.Kind == stringhook.File) && !stringhook.SupportsKind(key, h.Kind) {
+	if !stringhook.SupportsKind(key, h.Kind) {
 		return RenderColorString(value, width)
 	}
 	var tag, rest string
