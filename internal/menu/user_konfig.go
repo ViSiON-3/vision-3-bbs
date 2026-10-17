@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
@@ -121,7 +123,9 @@ type konfigState struct {
 	// redraw asks for a full repaint after the current edit, for editors
 	// that take over the screen (the message editor, the header picker, the
 	// file-column box).
-	redraw bool
+	redraw        bool
+	physicalWidth int
+	resizeUpdates <-chan struct{}
 }
 
 func (st *konfigState) user() *user.User { return st.c.currentUser }
@@ -136,7 +140,12 @@ func runUserKonfig(c *cmdCtx, args string) (*user.User, string, error) {
 	// Work on a copy of the context: edits update the size it carries.
 	ctx := *c
 	st := &konfigState{c: &ctx, ih: getSessionIH(c.s)}
-	st.items, st.headings = layoutKonfig(konfigSections(c.e.Strings()))
+	st.physicalWidth = st.reportedWidth()
+	// main owns the PTY resize channel and updates the shared physical width.
+	// Poll that state while awaiting keys; never compete for its events.
+	stopWatching := st.watchWidth()
+	defer stopWatching()
+	st.relayout()
 
 	hidden := c.e.hideCursorIfNeeded(c.terminal, c.outputMode, cursorHideContextDefault)
 	defer c.e.showCursorIfHidden(c.terminal, c.outputMode, hidden)
@@ -150,7 +159,7 @@ func runUserKonfig(c *cmdCtx, args string) (*user.User, string, error) {
 		return st.user(), "", err
 	}
 	for {
-		key, err := st.ih.ReadKey()
+		key, err := st.readKey(nil)
 		if err != nil {
 			return st.user(), "", err
 		}
@@ -226,6 +235,9 @@ func (st *konfigState) moveTo(i int) {
 
 // acrossFrom returns the item in the other column nearest to item i's row.
 func (st *konfigState) acrossFrom(i int) int {
+	if st.width() < 80 {
+		return (i + 1) % len(st.items)
+	}
 	from := st.items[i]
 	best, bestDist := i, -1
 	for j, it := range st.items {
@@ -347,7 +359,9 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 
 // layoutKonfig assigns screen positions and flattens the items in hotkey
 // order: down the left column, then down the right.
-func layoutKonfig(cols [2][]konfigSection) ([]*konfigItem, []konfigHeading) {
+func layoutKonfig(cols [2][]konfigSection, widths ...int) ([]*konfigItem, []konfigHeading) {
+	compact := len(widths) > 0 && widths[0] < 80
+	compactRow := 2
 	var items []*konfigItem
 	var headings []konfigHeading
 	for c, sections := range cols {
@@ -356,6 +370,9 @@ func layoutKonfig(cols [2][]konfigSection) ([]*konfigItem, []konfigHeading) {
 			col = konfigRightCol
 		}
 		row := konfigTopRow
+		if compact {
+			col, row = konfigLeftCol, compactRow
+		}
 		for _, sec := range sections {
 			headings = append(headings, konfigHeading{row: row, col: col, title: sec.title})
 			row++
@@ -364,8 +381,11 @@ func layoutKonfig(cols [2][]konfigSection) ([]*konfigItem, []konfigHeading) {
 				items = append(items, it)
 				row++
 			}
-			row++ // gap between sections
+			if !compact {
+				row++
+			} // gap between sections
 		}
+		compactRow = row
 	}
 	return items, headings
 }
@@ -642,6 +662,8 @@ func (st *konfigState) editNumber(label string, lo, hi int, field func(u *user.U
 		return nil
 	}
 	st.applyTermSize()
+	st.relayout()
+	st.redraw = true
 	st.saved(label, strconv.Itoa(v))
 	return nil
 }
@@ -842,4 +864,131 @@ func editAutoSig(st *konfigState) error {
 		st.status = str.KonfigAutoSigUpdated
 	}
 	return nil
+}
+
+// width uses the real terminal when available, so an incorrect stored width
+// cannot hide the setting needed to recover it. Wide screens retain the art
+// and the original 80-column form.
+func (st *konfigState) width() int {
+	w := st.physicalWidth
+	if w <= 0 {
+		w = st.c.termWidth
+	}
+	if w <= 0 || w > 80 {
+		w = 80
+	}
+	return w
+}
+
+// relayout rebuilds item and heading positions for the current terminal width.
+func (st *konfigState) relayout() {
+	st.items, st.headings = layoutKonfig(konfigSections(st.c.e.Strings()), st.width())
+}
+
+// ruleRow returns the separator row for the active layout.
+func (st *konfigState) ruleRow() int {
+	if st.width() < 80 {
+		return 18
+	}
+	return konfigRuleRow
+}
+
+// helpRow returns the help row immediately below the separator.
+func (st *konfigState) helpRow() int { return st.ruleRow() + 1 }
+
+// editRow returns the input and status row below the help text.
+func (st *konfigState) editRow() int { return st.ruleRow() + 2 }
+
+// legendRow returns the exit-key legend row for the active layout.
+func (st *konfigState) legendRow() int {
+	if st.width() < 80 {
+		return 21
+	}
+	return konfigLegendRow
+}
+
+// columnWidth returns the available item width for the active layout.
+func (st *konfigState) columnWidth() int {
+	if st.width() < 80 {
+		return st.width() - 2
+	}
+	return konfigColWidth
+}
+
+// lineWidth returns the terminal width excluding the side margins.
+func (st *konfigState) lineWidth() int { return st.width() - 2 }
+
+// readKey keeps the shared session input handler and redraws the active
+// editor after a PTY resize without losing its selection or edit buffer.
+func (st *konfigState) readKey(redraw func() error) (int, error) {
+	for {
+		key, _, event, err := editor.ReadRawKeyOrEvent(st.ih, st.resizeUpdates)
+		if err != nil {
+			return 0, err
+		}
+		if !event {
+			return key, nil
+		}
+		width := st.reportedWidth()
+		if width == st.physicalWidth {
+			continue
+		}
+		st.physicalWidth = width
+		st.relayout()
+		if err := st.renderAll(); err != nil {
+			return 0, err
+		}
+		if redraw != nil {
+			if err := redraw(); err != nil {
+				return 0, err
+			}
+		}
+	}
+}
+
+// reportedWidth follows the session handler's live physical width. The PTY
+// snapshot is only a fallback for standalone callers without that registry.
+func (st *konfigState) reportedWidth() int {
+	if value, ok := terminalPhysicalWidths.Load(st.c.terminal); ok {
+		if width := int(value.(*atomic.Int32).Load()); width > 0 {
+			return width
+		}
+	}
+	if pty, _, ok := st.c.s.Pty(); ok && pty.Window.Width > 0 {
+		return pty.Window.Width
+	}
+	return 0
+}
+
+// watchWidth signals only actual width changes. Periodic events delivered to
+// the key reader would restart its idle timeout even while the caller is idle.
+func (st *konfigState) watchWidth() func() {
+	updates := make(chan struct{}, 1)
+	stop, done := make(chan struct{}), make(chan struct{})
+	previous := st.physicalWidth
+	st.resizeUpdates = updates
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				width := st.reportedWidth()
+				if width == previous {
+					continue
+				}
+				previous = width
+				// The key reader uses the latest shared width, so one pending signal
+				// also covers changes while a field hands off to another screen.
+				select {
+				case updates <- struct{}{}:
+				default:
+				}
+			}
+		}
+	}()
+	return func() { close(stop); <-done }
 }
