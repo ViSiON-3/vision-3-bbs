@@ -17,6 +17,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringhook"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -490,6 +491,13 @@ func (e *MenuExecutor) timeLeftWarning(s ssh.Session) (string, bool) {
 	minutes, ok := timeLeftWarningMinutes(s)
 	if !ok {
 		return "", false
+	}
+	// Fixed-position lightbar warnings display hook directives as literal
+	// text. Formatting their door/file prefix would produce fmt artifacts.
+	value := e.Strings().TimeLimitWarning
+	switch stringhook.Parse(value).Kind {
+	case stringhook.Script, stringhook.File:
+		return value, true
 	}
 	return fmt.Sprintf(e.Strings().TimeLimitWarning, minutes), true
 }
