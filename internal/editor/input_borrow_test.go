@@ -1,0 +1,136 @@
+package editor
+
+import (
+	"errors"
+	"io"
+	"testing"
+	"time"
+)
+
+// pipeHandler returns a handler fed by a pipe the test writes to.
+func pipeHandler(t *testing.T) (*InputHandler, *io.PipeWriter) {
+	t.Helper()
+	r, w := io.Pipe()
+	t.Cleanup(func() { _ = w.Close() })
+	return NewInputHandler(r), w
+}
+
+// waitQueued blocks until n bytes sit in the handler's channel.
+func waitQueued(t *testing.T, ih *InputHandler, n int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for len(ih.incoming) < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("only %d of %d bytes queued", len(ih.incoming), n)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// A key arrives in one chunk, so a reader that decodes keys per chunk sees an
+// arrow key and not Escape plus letters, and one Enter for CR LF; input
+// typed ahead of it stays with the handler.
+func TestReadUntilTakesOneKey(t *testing.T) {
+	for _, tc := range []struct {
+		queued, want, left string
+	}{
+		{"\x1b[Axy", "\x1b[A", "xy"},
+		{"\x1bOPx", "\x1bOP", "x"},
+		{"\x1b[15~x", "\x1b[15~", "x"},
+		{"\r\nx", "\r\n", "x"},
+		{"\r\x00x", "\r\x00", "x"},
+		{"xy", "x", "y"},
+		{"\x1bx", "\x1b", "x"},
+	} {
+		ih, w := pipeHandler(t)
+		go func() { _, _ = w.Write([]byte(tc.queued)) }()
+		waitQueued(t, ih, len(tc.queued))
+		buf := make([]byte, 16)
+		n, err := ih.ReadUntil(buf, nil)
+		if err != nil || string(buf[:n]) != tc.want {
+			t.Errorf("ReadUntil(%q) = %q, %v; want %q", tc.queued, buf[:n], err, tc.want)
+			continue
+		}
+		var left []byte
+		for len(left) < len(tc.left) {
+			b, err := ih.ReadByteUntil(nil)
+			if err != nil {
+				t.Fatalf("reading what was left: %v", err)
+			}
+			left = append(left, b)
+		}
+		if string(left) != tc.left {
+			t.Errorf("after ReadUntil(%q), left %q, want %q", tc.queued, left, tc.left)
+		}
+	}
+}
+
+// A stopped borrower leaves queued input for the handler's owner.
+func TestReadUntilStopLeavesInput(t *testing.T) {
+	ih, w := pipeHandler(t)
+	go func() { _, _ = w.Write([]byte("k")) }()
+	waitQueued(t, ih, 1)
+	stop := make(chan struct{})
+	close(stop)
+	for i := 0; i < 50; i++ {
+		if _, err := ih.ReadUntil(make([]byte, 4), stop); !errors.Is(err, ErrReadStopped) {
+			t.Fatalf("ReadUntil after stop = %v, want ErrReadStopped", err)
+		}
+	}
+	if b, err := ih.ReadByteUntil(nil); err != nil || b != 'k' {
+		t.Errorf("owner's read = %q, %v; want 'k'", b, err)
+	}
+}
+
+// The LF of a CR LF Enter the owner already read is not a key for a borrower.
+func TestReadUntilDropsLateEnterTrailer(t *testing.T) {
+	ih, w := pipeHandler(t)
+	ih.skipEnterTrailer = true
+	go func() { _, _ = w.Write([]byte("\nx")) }()
+	waitQueued(t, ih, 2)
+	if b, err := ih.ReadByteUntil(nil); err != nil || b != 'x' {
+		t.Errorf("ReadByteUntil = %q, %v; want 'x'", b, err)
+	}
+}
+
+// Fail ends every later key read with its error, with keys waiting or not.
+func TestFailLatchesKeyReads(t *testing.T) {
+	ih, w := pipeHandler(t)
+	go func() { _, _ = w.Write([]byte("a")) }()
+	waitQueued(t, ih, 1)
+	ih.Fail(ErrIdleTimeout)
+	ih.Fail(io.EOF) // the first error wins
+	if _, err := ih.ReadKey(); !errors.Is(err, ErrIdleTimeout) {
+		t.Errorf("ReadKey after Fail = %v, want ErrIdleTimeout", err)
+	}
+	if _, err := ih.Read(make([]byte, 1)); !errors.Is(err, ErrIdleTimeout) {
+		t.Errorf("Read after Fail = %v, want ErrIdleTimeout", err)
+	}
+}
+
+// A latched session end wins over a byte pushed back for re-reading.
+func TestFailWinsOverUnreadByte(t *testing.T) {
+	ih, _ := pipeHandler(t)
+	ih.unreadByte('z')
+	ih.Fail(ErrIdleTimeout)
+	if _, err := ih.Read(make([]byte, 1)); !errors.Is(err, ErrIdleTimeout) {
+		t.Errorf("Read after Fail = %v, want ErrIdleTimeout", err)
+	}
+}
+
+// A stop that arrives while queued bytes are being drained gives every byte
+// taken back to the handler, in order, the one already read included.
+func TestDrainQueuedStopGivesBytesBack(t *testing.T) {
+	ih, _ := pipeHandler(t)
+	ih.unreadBuf = []byte("[A")
+	stop := make(chan struct{})
+	close(stop)
+	p := make([]byte, 8)
+	p[0] = 0x1B // taken by ReadUntil before the stop
+	if _, err := ih.drainQueued(p, 1, stop); !errors.Is(err, ErrReadStopped) {
+		t.Fatalf("drainQueued = %v, want ErrReadStopped", err)
+	}
+	if got := string(ih.unreadBuf); got != "\x1b[A" {
+		t.Errorf("unread input = %q, want %q", got, "\x1b[A")
+	}
+}

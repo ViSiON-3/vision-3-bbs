@@ -1,0 +1,203 @@
+// Package stringhook recognises strings.json values that hand off to a script
+// or a display file instead of printing their text, after PCBoard's text-table
+// records:
+//
+//	!name [args]    run the V3 script door name in place of the text
+//	%file.ext [text] display file.ext, then print text
+//	!|text          print "!text" (an escape for text that starts with "!")
+//
+// Parsing lives here, apart from the menu package that runs the hooks, so the
+// format validator and the strings editor can recognise a hook value without
+// importing the runtime.
+package stringhook
+
+import (
+	"regexp"
+	"strings"
+)
+
+// Kind says what a value does.
+type Kind int
+
+const (
+	// Text is an ordinary value, printed as it stands.
+	Text Kind = iota
+	// Script runs the V3 script door Target, passing Args.
+	Script
+	// File displays the file Target, then prints Rest.
+	File
+	// Escaped prints Rest, which already carries the leading "!".
+	Escaped
+)
+
+// Hook is a parsed value.
+type Hook struct {
+	Kind Kind
+	// Target is the door name for Script and the file name for File.
+	Target string
+	// Args are the space-separated words after a script's door name.
+	Args []string
+	// Rest is the text a File prints after the file, or the text an Escaped
+	// value prints. It may still hold format verbs, which the caller formats
+	// with the call site's arguments.
+	Rest string
+	// Prefix is the part of the value that named the hook, kept so a hook
+	// that cannot run can print the value as written.
+	Prefix string
+}
+
+// scriptRe matches "!name" with optional arguments. The name uses the
+// characters a doors.json key may hold; anything else after the "!" is text.
+var scriptRe = regexp.MustCompile(`^!([A-Za-z0-9_\-]+)(?:[ \t]+(.*))?$`)
+
+// fileRe matches "%name.ext" with optional text after a single space. The file
+// name uses the same characters as a %%file.ext%% include and must carry an
+// extension, which keeps format strings such as "%d of %d" or "%s (default)"
+// from being read as a file.
+var fileRe = regexp.MustCompile(`(?s)^%([A-Za-z0-9_\-]+\.[A-Za-z0-9]+)(?: (.*))?$`)
+
+// Parse reports what a value does. A value that is not a hook comes back as
+// Text with Rest set to the whole value.
+func Parse(value string) Hook {
+	switch {
+	case strings.HasPrefix(value, "!|"):
+		return Hook{Kind: Escaped, Rest: "!" + value[2:], Prefix: "!|"}
+	case strings.HasPrefix(value, "!"):
+		// A script value is one line; a multi-line value starting with "!" is
+		// text that happens to begin with an exclamation.
+		if m := scriptRe.FindStringSubmatch(value); m != nil {
+			h := Hook{Kind: Script, Target: m[1], Prefix: value}
+			if args := strings.Fields(m[2]); len(args) > 0 {
+				h.Args = args
+			}
+			return h
+		}
+	case strings.HasPrefix(value, "%"):
+		if m := fileRe.FindStringSubmatch(value); m != nil {
+			prefix := "%" + m[1]
+			if len(value) > len(prefix) {
+				prefix += " "
+			}
+			return Hook{Kind: File, Target: m[1], Rest: m[2], Prefix: prefix}
+		}
+	}
+	return Hook{Kind: Text, Rest: value}
+}
+
+// IsHook reports whether a value runs a script or displays a file.
+func IsHook(value string) bool {
+	k := Parse(value).Kind
+	return k == Script || k == File
+}
+
+// NoHookKeys lists strings.json keys whose values are never run as hooks:
+// they are drawn into fixed layouts, used as data rather than shown, or
+// formatted by code that prints them as text. A !door or %file value there is
+// printed or used as written, so format validation and the strings editor
+// treat it as ordinary text.
+//
+// TestNoHookKeysCoverRawFormatSites (internal/stringformat) fails if a key
+// whose value reaches fmt directly is missing here, so a formatted string
+// cannot be advertised as a hook where it would print %!(EXTRA ...).
+var NoHookKeys = map[string]bool{
+	"addedToBatchFormat": true,
+	"batchClearedFormat": true,
+	"batchCountFormat":   true,
+	"callsites_test.go:629:thesekeysreachfmtdirectlyandcannotrunahook;addthemtostringhook.NoHookKeys:": true,
+	"cfgFileColumnsToggle":     true,
+	"chatJoinMsg":              true,
+	"chatLeaveMsg":             true,
+	"chatPrivateMsgFormat":     true,
+	"chatRoomListEntry":        true,
+	"chatSystemPrefix":         true,
+	"chatTopicMsg":             true,
+	"confCurrentAreaFormat":    true,
+	"confCurrentConfFormat":    true,
+	"confNotFound":             true,
+	"doorAccessDenied":         true,
+	"doorBusyFormat":           true,
+	"doorDropfileError":        true,
+	"doorErrorFormat":          true,
+	"doorNotFoundFormat":       true,
+	"doorRemoteConnectFailed":  true,
+	"doorRemoteConnecting":     true,
+	"doorRemoteDisconnected":   true,
+	"downloadFinishedFormat":   true,
+	"execDoorNotConfigured":    true,
+	"execFileLoadError":        true,
+	"execIPLockout":            true,
+	"execMenuLoadError":        true,
+	"execMenuPasswordPrompt":   true,
+	"execNewMailCount":         true,
+	"execPendingValidation":    true,
+	"execReadmailPlaceholder":  true,
+	"execRunCommandError":      true,
+	"execRunCommandNotFound":   true,
+	"execRunDoorError":         true,
+	"execStatsError":           true,
+	"fileNewscanComplete":      true,
+	"fileNewscanConfigSaved":   true,
+	"fileNotFoundFormat":       true,
+	"filePromptFormat":         true,
+	"konfigAutoFormat":         true,
+	"konfigAutoSigTruncated":   true,
+	"konfigClearedFormat":      true,
+	"konfigColumnSaved":        true,
+	"konfigCountFormat":        true,
+	"konfigDefaultFormat":      true,
+	"konfigEncodingMismatch":   true,
+	"konfigEncodingSaved":      true,
+	"konfigLinesFormat":        true,
+	"konfigPwTooLong":          true,
+	"konfigPwTooShort":         true,
+	"konfigRangeError":         true,
+	"konfigRangeHint":          true,
+	"konfigRealNameTooShort":   true,
+	"konfigSaveError":          true,
+	"konfigSavedFormat":        true,
+	"konfigStyleFormat":        true,
+	"konfigUpdatedFormat":      true,
+	"matrixAccountCannotLogon": true,
+	"matrixAccountValidated":   true,
+	"msgNoThreadFound":         true,
+	"newUserEmailSubject":      true,
+	"newUserSysopNotice":       true,
+	"newUserSysopPage":         true,
+	"newscanNewNetworkPrompt":  true,
+	"pageMessageFormat":        true,
+	"pageNodeListEntry":        true,
+	"pageSent":                 true,
+	"pageSysopCooldown":        true,
+	"scanAreaProgress":         true,
+	"scanConfigSaved":          true,
+	"scanDateLine":             true,
+	"scanFromLine":             true,
+	"scanRangeEndPrompt":       true,
+	"scanRangeLine":            true,
+	"scanRangeStartPrompt":     true,
+	"scanToLine":               true,
+	"scanUpdateLine":           true,
+	"scanWhichLine":            true,
+	"searchResultsHeader":      true,
+	"searchResultsSummary":     true,
+	"statsActiveNodes":         true,
+	"statsBBSName":             true,
+	"statsDate":                true,
+	"statsSysOp":               true,
+	"statsTime":                true,
+	"statsTotalCalls":          true,
+	"statsTotalFiles":          true,
+	"statsTotalMessages":       true,
+	"statsTotalUsers":          true,
+	"statsVersion":             true,
+	"sysopChatHeader":          true,
+	"timeLimitWarning":         true,
+	"updatePtrsSuccess":        true,
+	"v3netNewAreaDeclined":     true,
+	"v3netNewAreaNotice":       true,
+}
+
+// Supported reports whether key's value may run a hook.
+func Supported(key string) bool {
+	return !NoHookKeys[key]
+}

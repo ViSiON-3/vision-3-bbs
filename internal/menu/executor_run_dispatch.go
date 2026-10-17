@@ -59,14 +59,14 @@ func (st *runLoopState) checkMenuPassword(menuRec *MenuRecord) (ok bool, act loo
 			if inputPassword == menuPassword {
 				passwordOk = true
 				// Use new helper for feedback message
-				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecPasswordAccepted)), outputMode)
+				wErr := e.writeString(terminal, outputMode, e.Strings().ExecPasswordAccepted)
 				if wErr != nil {
 					slog.Error("failed writing password accepted message", "error", wErr)
 				}
 				break
 			} else {
 				// Use new helper for feedback message
-				wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecIncorrectPassword)), outputMode)
+				wErr := e.writeString(terminal, outputMode, e.Strings().ExecIncorrectPassword)
 				if wErr != nil {
 					slog.Error("failed writing incorrect password message", "error", wErr)
 				}
@@ -75,7 +75,7 @@ func (st *runLoopState) checkMenuPassword(menuRec *MenuRecord) (ok bool, act loo
 		if !passwordOk {
 			slog.Warn("user failed password entry for menu", "menu", st.currentMenuName, "user", st.userHandle())
 			// Use new helper for feedback message
-			wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ExecTooManyAttempts)), outputMode)
+			wErr := e.writeString(terminal, outputMode, e.Strings().ExecTooManyAttempts)
 			if wErr != nil {
 				slog.Error("failed writing too many attempts message", "error", wErr)
 			}

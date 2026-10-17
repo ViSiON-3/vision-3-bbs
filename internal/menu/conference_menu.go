@@ -35,13 +35,13 @@ func runChangeMsgConference(c *cmdCtx, args string) (*user.User, string, error) 
 	slog.Debug("running CHANGEMSGCONF", "node", nodeNumber)
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfLoginRequired)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
 	if e.ConferenceMgr == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoConferences)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfNoConferences)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -188,7 +188,7 @@ func navigateMsgArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	slog.Debug("running menu command", "node", nodeNumber, "command", direction)
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNavLoginRequired)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfNavLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
@@ -197,7 +197,7 @@ func navigateMsgArea(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	accessibleAreas := getAccessibleAreasInConference(e, s, terminal, currentUser, currentUser.CurrentMsgConferenceID, sessionStartTime)
 
 	if len(accessibleAreas) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoAccessibleAreas)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfNoAccessibleAreas)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -246,7 +246,7 @@ func displayConferenceList(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load MSGCONF templates", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfTemplateError)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfTemplateError)
 		return nil, fmt.Errorf("failed loading MSGCONF templates")
 	}
 
@@ -302,7 +302,7 @@ func displayMessageAreaListFiltered(e *MenuExecutor, s ssh.Session, terminal *te
 
 	if errTop != nil || errMid != nil || errBot != nil {
 		slog.Error("failed to load MSGAREA template files", "node", nodeNumber, "topError", errTop, "midError", errMid, "botError", errBot)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfAreaTemplateError)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfAreaTemplateError)
 		uiPause(1 * time.Second)
 		return nil, fmt.Errorf("failed loading MSGAREA templates")
 	}
@@ -458,13 +458,13 @@ func navigateMsgConf(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, us
 	slog.Debug("running menu command", "node", nodeNumber, "command", direction)
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNavLoginRequired)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfNavLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
 	if e.ConferenceMgr == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoConferences)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfNoConferences)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}

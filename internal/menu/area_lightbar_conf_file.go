@@ -9,7 +9,6 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -132,13 +131,13 @@ func runChangeFileConferenceLightbar(c *cmdCtx, args string) (*user.User, string
 	termWidth, termHeight := resolveTermDims(currentUser, c.termWidth, c.termHeight)
 
 	if currentUser == nil {
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfLoginRequired)), outputMode)
+		_ = e.writeString(terminal, outputMode, e.Strings().ConfLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
 	if e.ConferenceMgr == nil {
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoConferences)), outputMode)
+		_ = e.writeString(terminal, outputMode, e.Strings().ConfNoConferences)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -148,7 +147,7 @@ func runChangeFileConferenceLightbar(c *cmdCtx, args string) (*user.User, string
 		// Conferences may well exist — the templates are what's missing — so
 		// report a template error rather than "no conferences".
 		slog.Warn("FILECONF/MSGCONF templates unavailable for CHANGEFILECONF", "node", nodeNumber)
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfTemplateError)), outputMode)
+		_ = e.writeString(terminal, outputMode, e.Strings().ConfTemplateError)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -168,7 +167,7 @@ func runChangeFileConferenceLightbar(c *cmdCtx, args string) (*user.User, string
 	}
 
 	if len(confs) == 0 {
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoConferences)), outputMode)
+		_ = e.writeString(terminal, outputMode, e.Strings().ConfNoConferences)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}

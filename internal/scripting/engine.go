@@ -36,16 +36,19 @@ type Engine struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 
-	// Input: interposed pipe reader feeds rawInputCh; inputBuf holds parsed leftovers.
+	// Borrowed input is requested on demand; normal doors use a read-ahead pipe.
+	// inputBuf holds parsed leftovers.
 	inputBuf []byte
 	// utf8Pending holds the leading bytes of a UTF-8 character whose
 	// remaining bytes have not arrived yet (UTF-8 sessions only).
-	utf8Pending []byte
-	rawInputCh  chan readResult
-	pipeReader  *io.PipeReader
-	pipeWriter  *io.PipeWriter
-	readerOnce  sync.Once
-	copierDone  chan struct{} // closed when the copier goroutine exits
+	utf8Pending  []byte
+	rawInputCh   chan readResult
+	pipeReader   *io.PipeReader
+	pipeWriter   *io.PipeWriter
+	readRequests chan struct{}
+	readPending  bool
+	readerOnce   sync.Once
+	copierDone   chan struct{} // closed when the copier goroutine exits
 }
 
 // readResult carries data or an error from the reader goroutine.
@@ -149,6 +152,9 @@ func (eng *Engine) Run(scriptPath string) error {
 
 // Close cleans up the engine, stopping I/O goroutines.
 func (eng *Engine) Close() {
+	if eng.readRequests != nil {
+		eng.cancel()
+	}
 	if eng.pipeWriter != nil {
 		_ = eng.pipeWriter.Close() // best-effort shutdown of the input pipe
 	}
@@ -164,6 +170,24 @@ func (eng *Engine) Close() {
 	}
 	if eng.pipeReader != nil {
 		_ = eng.pipeReader.Close() // best-effort shutdown of the input pipe
+	}
+	// A getkey timeout can leave a requested read in flight. After it stops,
+	// return any unconsumed result to a borrowed handler before its owner resumes.
+	if eng.readRequests != nil {
+		select {
+		case <-eng.copierDone:
+			if owner, ok := eng.session.Session.(interface{ ReturnInput([]byte) }); ok {
+				pending := append(append([]byte(nil), eng.utf8Pending...), eng.inputBuf...)
+				select {
+				case result := <-eng.rawInputCh:
+					pending = append(pending, result.data...)
+				default:
+				}
+				owner.ReturnInput(pending)
+				eng.inputBuf, eng.utf8Pending = nil, nil
+			}
+		default:
+		}
 	}
 	// Drain buffered results so goroutines don't block.
 	if eng.rawInputCh != nil {
@@ -231,6 +255,11 @@ func (eng *Engine) writeBytes(b []byte) {
 
 // startReader interposes a pipe between the session and the engine's input channel.
 func (eng *Engine) startReader() {
+	if source, ok := eng.session.Session.(interface{ InputOnDemand() bool }); ok && source.InputOnDemand() {
+		eng.startDemandReader()
+		return
+	}
+
 	eng.readerOnce.Do(func() {
 		eng.rawInputCh = make(chan readResult, 4)
 		eng.pipeReader, eng.pipeWriter = io.Pipe()
@@ -272,6 +301,38 @@ func (eng *Engine) startReader() {
 	})
 }
 
+// startDemandReader starts a demand-driven reader. It never takes another key until
+// readKeyEcho asks for one, so borrowed session input stays with its owner.
+func (eng *Engine) startDemandReader() {
+	eng.readerOnce.Do(func() {
+		eng.rawInputCh = make(chan readResult, 1)
+		eng.readRequests = make(chan struct{}, 1)
+		eng.copierDone = make(chan struct{})
+		go func() {
+			defer close(eng.copierDone)
+			for {
+				select {
+				case <-eng.ctx.Done():
+					return
+				case <-eng.readRequests:
+				}
+				buf := make([]byte, 256)
+				n, err := eng.session.Session.Read(buf)
+				select {
+				case eng.rawInputCh <- readResult{data: buf[:n], err: err}:
+				case <-eng.ctx.Done():
+					// Keep the result available for Close to return to its owner.
+					eng.rawInputCh <- readResult{data: buf[:n], err: err}
+					return
+				}
+				if err != nil {
+					return
+				}
+			}
+		}()
+	})
+}
+
 // readKey reads a single key from the session with optional timeout.
 // Timeout of 0 means block indefinitely. See readKeyEcho for how keys are
 // decoded.
@@ -304,8 +365,13 @@ func (eng *Engine) readKeyEcho(timeout time.Duration) (string, []byte, error) {
 			data, eng.inputBuf = eng.inputBuf, nil
 		} else {
 			eng.startReader()
+			if eng.readRequests != nil && !eng.readPending {
+				eng.readRequests <- struct{}{}
+				eng.readPending = true
+			}
 			select {
 			case result := <-eng.rawInputCh:
+				eng.readPending = false
 				if result.err != nil {
 					eng.cancel()
 					return "", nil, ErrDisconnect

@@ -41,7 +41,7 @@ func runSetFileScanDate(c *cmdCtx, args string) (*user.User, string, error) {
 	outputMode := c.outputMode
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNavLoginRequired)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfNavLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}

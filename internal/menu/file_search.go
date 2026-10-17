@@ -32,7 +32,7 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Prompt for search text
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SearchFilesPrompt)), outputMode)
+	e.writeString(terminal, outputMode, e.Strings().SearchFilesPrompt)
 
 	input, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
@@ -48,7 +48,7 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(query) < 3 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SearchFilesMinChars)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().SearchFilesMinChars)
 		return currentUser, "", nil
 	}
 
@@ -83,7 +83,7 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(filtered) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SearchNoResults)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().SearchNoResults)
 		return currentUser, "", nil
 	}
 

@@ -31,7 +31,7 @@ func runClearBatch(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(currentUser.TaggedFileIDs) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().BatchQueueEmpty)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().BatchQueueEmpty)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -43,7 +43,7 @@ func runClearBatch(c *cmdCtx, args string) (*user.User, string, error) {
 	if err := userManager.UpdateUser(currentUser); err != nil {
 		slog.Error("failed to update user after clearing batch queue", "node", nodeNumber, "error", err)
 		currentUser.TaggedFileIDs = oldTagged
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().SaveUserError)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().SaveUserError)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -72,7 +72,7 @@ func (e *MenuExecutor) downloadLoop(
 	// promptFilename shows the add-batch prompt and reads user input.
 	// Returns the trimmed filename or "" if the user pressed Enter (cancel).
 	promptFilename := func() (string, error) {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().AddBatchPrompt)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().AddBatchPrompt)
 		input, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
 			return "", err
@@ -86,18 +86,18 @@ func (e *MenuExecutor) downloadLoop(
 	// returns false.
 	tryAddFile := func(filename string) bool {
 		if currentUser.CurrentFileAreaID <= 0 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileNoAreaSelected)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().FileNoAreaSelected)
 			uiPause(1 * time.Second)
 			return false
 		}
 		area, ok := e.FileMgr.GetAreaByID(currentUser.CurrentFileAreaID)
 		if !ok {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileAreaNotFound)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().FileAreaNotFound)
 			uiPause(1 * time.Second)
 			return false
 		}
 		if area.ACSDownload != "" && !checkACS(area.ACSDownload, currentUser, s, terminal, sessionStartTime) {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().YouCantDownloadHere)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().YouCantDownloadHere)
 			uiPause(1 * time.Second)
 			return false
 		}
@@ -109,13 +109,13 @@ func (e *MenuExecutor) downloadLoop(
 		}
 		for _, id := range currentUser.TaggedFileIDs {
 			if id == rec.ID {
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileAlreadyMarked)), outputMode)
+				e.writeString(terminal, outputMode, e.Strings().FileAlreadyMarked)
 				uiPause(1 * time.Second)
 				return false
 			}
 		}
 		if len(currentUser.TaggedFileIDs) >= 50 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FiftyFilesMaximum)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().FiftyFilesMaximum)
 			uiPause(1 * time.Second)
 			return false
 		}
@@ -154,14 +154,14 @@ func (e *MenuExecutor) downloadLoop(
 	// Main loop.
 	for {
 		if len(currentUser.TaggedFileIDs) == 0 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().NoFilesTagged)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().NoFilesTagged)
 			uiPause(1 * time.Second)
 			return currentUser, nil
 		}
 
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf(e.Strings().BatchCountFormat, len(currentUser.TaggedFileIDs)))), outputMode)
 
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().DownloadStr)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().DownloadStr)
 
 		input, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
@@ -216,7 +216,7 @@ func (e *MenuExecutor) downloadLoop(
 		}
 
 		if len(paths) == 0 {
-			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FilesResolveError)), outputMode)
+			e.writeString(terminal, outputMode, e.Strings().FilesResolveError)
 			currentUser.TaggedFileIDs = nil
 			if err := userManager.UpdateUser(currentUser); err != nil {
 				slog.Error("failed to persist cleared batch", "node", nodeNumber, "error", err)
@@ -276,20 +276,20 @@ func runDownloadFile(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if currentUser.CurrentFileAreaID <= 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileNoAreaSelected)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().FileNoAreaSelected)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
 	area, ok := e.FileMgr.GetAreaByID(currentUser.CurrentFileAreaID)
 	if !ok {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().FileAreaNotFound)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().FileAreaNotFound)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
 	if area.ACSDownload != "" && !checkACS(area.ACSDownload, currentUser, s, terminal, sessionStartTime) {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().YouCantDownloadHere)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().YouCantDownloadHere)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -326,7 +326,7 @@ func runBatchDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if len(currentUser.TaggedFileIDs) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().NoFilesTagged)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().NoFilesTagged)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}

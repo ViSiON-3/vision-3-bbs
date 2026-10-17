@@ -212,10 +212,15 @@ func (s *Service) terminate(cmd *exec.Cmd, waitErr <-chan error) {
 		_ = cmd.Process.Kill() // SIGTERM unsupported (e.g. windows) or gone
 	}
 	select {
-	case <-waitErr:
+	case err := <-waitErr:
+		if err != nil {
+			slog.Debug("binkd exited after termination", "error", err)
+		}
 	case <-time.After(termGrace):
 		_ = cmd.Process.Kill()
-		<-waitErr
+		if err := <-waitErr; err != nil {
+			slog.Debug("binkd exited after kill", "error", err)
+		}
 	}
 }
 

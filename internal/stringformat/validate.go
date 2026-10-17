@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/formatspec"
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringhook"
 )
 
 // Problem describes one string whose directives no longer match its call site.
@@ -73,6 +74,10 @@ func Validate(values, fallbacks, defaults map[string]string) []Problem {
 			}
 			continue
 		}
+		value, check := formattedPart(key, value)
+		if !check {
+			continue
+		}
 		got, err := formatspec.Parse(value)
 		if err != nil {
 			problems = append(problems, Problem{
@@ -118,11 +123,40 @@ func ValidateValue(key, value, fallback, def string) error {
 		return fmt.Errorf("is empty, so the BBS prints %%!(EXTRA ...) instead of "+
 			"nothing: its %d argument(s) are supplied regardless", want.Arity())
 	}
+	value, check := formattedPart(key, value)
+	if !check {
+		return nil
+	}
 	got, err := formatspec.Parse(value)
 	if err != nil {
 		return err
 	}
 	return formatspec.Compatible(got, want)
+}
+
+// formattedPart returns the part of a configured value that the call site's
+// arguments are formatted into, and whether it needs checking at all.
+//
+// A value that runs a script (see stringhook) is never formatted: the script
+// receives the arguments instead. A value that displays a file formats only
+// the text after the file name, and with no text there is nothing to format.
+//
+// A key in stringhook.NoHookKeys never runs a hook, so its value is checked as
+// written.
+func formattedPart(key, value string) (string, bool) {
+	if !stringhook.Supported(key) {
+		return value, true
+	}
+	h := stringhook.Parse(value)
+	switch h.Kind {
+	case stringhook.Script:
+		return "", false
+	case stringhook.File:
+		return h.Rest, h.Rest != ""
+	case stringhook.Escaped:
+		return h.Rest, true
+	}
+	return value, true
 }
 
 // effectiveValue returns what the BBS will actually print for a key: the

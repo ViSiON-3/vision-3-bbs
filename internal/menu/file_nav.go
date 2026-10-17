@@ -29,14 +29,14 @@ func navigateFileArea(c *cmdCtx, forward bool) (*user.User, string, error) {
 	sessionStartTime, outputMode := c.sessionStartTime, c.outputMode
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNavLoginRequired)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfNavLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 
 	areas := getAccessibleFileAreasInConference(e, s, terminal, currentUser, currentUser.CurrentFileConferenceID, sessionStartTime)
 	if len(areas) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoAccessibleAreas)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfNoAccessibleAreas)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
@@ -77,19 +77,19 @@ func navigateFileConf(c *cmdCtx, forward bool) (*user.User, string, error) {
 	sessionStartTime, outputMode := c.sessionStartTime, c.outputMode
 
 	if currentUser == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNavLoginRequired)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfNavLoginRequired)
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
 	if e.ConferenceMgr == nil {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoConferences)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfNoConferences)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
 
 	confs := getAccessibleConferences(e, s, terminal, currentUser, sessionStartTime)
 	if len(confs) == 0 {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().ConfNoAccessibleConfs)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().ConfNoAccessibleConfs)
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
