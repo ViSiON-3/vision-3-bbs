@@ -227,7 +227,7 @@ func TestWriteStringScript(t *testing.T) {
 		f := newStringHookFixture(t, "")
 		ih := getSessionIH(f.s)
 		defer resetSessionIH(f.s)
-		f.s.whenOutput("[script", func() { f.s.send("x") })
+		f.s.whenOutput("[script", func() { f.s.send("xy") })
 
 		out := f.write(t, "!say key")
 		if !strings.Contains(out, "[got x]") {
@@ -236,7 +236,6 @@ func TestWriteStringScript(t *testing.T) {
 		if cur := getSessionIH(f.s); cur != ih {
 			t.Fatal("the session's input handler was replaced")
 		}
-		f.s.send("y")
 		b, err := ih.ReadByteUntil(nil)
 		if err != nil || b != 'y' {
 			t.Errorf("caller's next read = %q, %v; want 'y'", b, err)
