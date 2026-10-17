@@ -147,7 +147,7 @@ func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 	if len(entries) == 0 {
 		msg := e.Strings().WantListEmpty
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+msg+"\r\n")), outputMode)
-		_ = writeCenteredPausePrompt(s, terminal, e.Strings().PauseString, outputMode, termWidth, termHeight) // best-effort pause prompt
+		_ = e.writeCenteredPausePrompt(s, terminal, e.Strings().PauseString, outputMode, termWidth, termHeight) // best-effort pause prompt
 		return currentUser, "", nil
 	}
 

@@ -141,7 +141,7 @@ func promptAddOneliner(c *cmdCtx, currentOneLiners []onelinerRecord, onelinerPat
 		if wErr != nil {
 			slog.Warn("failed to clear line before ONELINER anonymous prompt", "node", nodeNumber, "error", wErr)
 		}
-		anonYes, anonErr := e.PromptYesNo(s, terminal, anonPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
+		anonYes, anonErr := e.PromptYesNoString(s, terminal, anonPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
 		if anonErr != nil {
 			if errors.Is(anonErr, io.EOF) {
 				slog.Info("user disconnected during ONELINER anonymous prompt", "node", nodeNumber)

@@ -117,7 +117,7 @@ func runSystemStats(c *cmdCtx, args string) (*user.User, string, error) {
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
-	if err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight); err != nil {
+	if err := e.writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight); err != nil {
 		return nil, "", err
 	}
 

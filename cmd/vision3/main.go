@@ -1425,7 +1425,7 @@ func sessionHandler(s ssh.Session) {
 		if invisPrompt == "" {
 			invisPrompt = " |03Invisible Logon?|07"
 		}
-		invisChoice, invisErr := menuExecutor.PromptYesNo(s, terminal,
+		invisChoice, invisErr := menuExecutor.PromptYesNoString(s, terminal,
 			invisPrompt, effectiveMode, int(nodeID),
 			int(termWidth.Load()), int(termHeight.Load()), false)
 		if invisErr != nil {
@@ -1465,10 +1465,10 @@ func sessionHandler(s ssh.Session) {
 				"stored_h", authenticatedUser.ScreenHeight)
 			_, _ = terminal.Write([]byte("\r\n")) // best-effort display
 
-			useNew, promptErr := menuExecutor.PromptYesNo(s, terminal,
-				fmt.Sprintf(loadedStrings.TermSizeNewDetectedPrompt,
-					detectedW, detectedH, authenticatedUser.ScreenWidth, authenticatedUser.ScreenHeight),
-				effectiveMode, int(nodeID), detectedW, detectedH, false)
+			useNew, promptErr := menuExecutor.PromptYesNof(s, terminal,
+				effectiveMode, int(nodeID), detectedW, detectedH, false,
+				loadedStrings.TermSizeNewDetectedPrompt,
+				detectedW, detectedH, authenticatedUser.ScreenWidth, authenticatedUser.ScreenHeight)
 			if promptErr != nil {
 				if errors.Is(promptErr, io.EOF) {
 					slog.Info("user disconnected during terminal size prompt", "node", nodeID)
@@ -1483,7 +1483,7 @@ func sessionHandler(s ssh.Session) {
 				termWidth.Store(int32(detectedW))
 				termHeight.Store(int32(detectedH))
 
-				saveDefault, saveErr := menuExecutor.PromptYesNo(s, terminal,
+				saveDefault, saveErr := menuExecutor.PromptYesNoString(s, terminal,
 					loadedStrings.TermSizeUpdateDefaultsPrompt,
 					effectiveMode, int(nodeID), detectedW, detectedH, true)
 				if saveErr != nil && errors.Is(saveErr, io.EOF) {

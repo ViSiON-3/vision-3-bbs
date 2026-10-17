@@ -60,7 +60,7 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 		if anonPrompt == "" {
 			anonPrompt = "|09Anonymous? @"
 		}
-		anonYes, anonErr := e.PromptYesNo(s, terminal, anonPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
+		anonYes, anonErr := e.PromptYesNoString(s, terminal, anonPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
 		if anonErr != nil {
 			if errors.Is(anonErr, io.EOF) {
 				return nil, "LOGOFF", io.EOF

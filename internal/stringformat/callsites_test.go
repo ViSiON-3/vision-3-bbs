@@ -44,6 +44,7 @@ var formatFuncs = map[string]int{
 var formatMethods = map[string]int{
 	"writeStringf":         2,
 	"writeStringNoScriptf": 2,
+	"PromptYesNof":         7,
 }
 
 // fieldToKey maps a StringsConfig field name to its strings.json key.
@@ -122,12 +123,13 @@ func scanCallSites(t *testing.T) []callSite {
 		if err != nil {
 			return nil // not our concern here; the build catches syntax errors
 		}
+		globals := stringsConfigVars(file)
 		ast.Inspect(file, func(n ast.Node) bool {
 			body := funcBody(n)
 			if body == nil {
 				return true
 			}
-			sites = append(sites, scanFuncBody(t, fset, body, keys)...)
+			sites = append(sites, scanFuncBody(t, fset, body, keys, globals)...)
 			return true
 		})
 		return nil
@@ -136,6 +138,36 @@ func scanCallSites(t *testing.T) []callSite {
 		t.Fatalf("walking source: %v", err)
 	}
 	return sites
+}
+
+// stringsConfigVars returns the package-level variables a file declares as
+// config.StringsConfig, such as the session handler's loadedStrings. A field
+// read from one is as good as x.Strings().Field.
+func stringsConfigVars(file *ast.File) map[string]bool {
+	vars := map[string]bool{}
+	for _, decl := range file.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.VAR {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			sel, ok := vs.Type.(*ast.SelectorExpr)
+			if !ok || sel.Sel.Name != "StringsConfig" {
+				continue
+			}
+			if pkg, ok := sel.X.(*ast.Ident); !ok || pkg.Name != "config" {
+				continue
+			}
+			for _, name := range vs.Names {
+				vars[name.Name] = true
+			}
+		}
+	}
+	return vars
 }
 
 // funcBody returns the body of a function declaration or literal.
@@ -155,7 +187,7 @@ func funcBody(n ast.Node) *ast.BlockStmt {
 // It does not descend into nested function literals. Each closure is scanned in
 // its own right by scanCallSites, so descending would report its calls twice
 // and would let its assignments bind names in the enclosing function.
-func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys map[string]string) []callSite {
+func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys map[string]string, globals map[string]bool) []callSite {
 	t.Helper()
 
 	// Which locals hold a configured string, and where each was assigned. A
@@ -176,6 +208,9 @@ func scanFuncBody(t *testing.T, fset *token.FileSet, body *ast.BlockStmt, keys m
 	//
 	// st.Field is then as good as x.Strings().Field.
 	holders := map[string]bool{}
+	for name := range globals {
+		holders[name] = true
+	}
 	ast.Inspect(body, func(n ast.Node) bool {
 		if _, isClosure := n.(*ast.FuncLit); isClosure {
 			return false

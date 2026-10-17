@@ -161,7 +161,7 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 
 			if lineCount >= pageLines {
 				lineCount = 0
-				err := writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
+				err := e.writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 				if err != nil {
 					if err == io.EOF {
 						return currentUser, "", nil
@@ -183,7 +183,7 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 		e.writeStringf(terminal, outputMode, e.Strings().FileNewscanComplete, totalNew)
 	}
 
-	_ = writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
+	_ = e.writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
 
 	return currentUser, "", nil
 }

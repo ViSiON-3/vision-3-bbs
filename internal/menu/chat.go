@@ -67,7 +67,7 @@ func chatSelectService(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 		}
 	}
 
-	room := chatRoomPicker(e, svc, s, terminal, wt)
+	room := chatRoomPicker(e, svc, s, terminal, outputMode, wt)
 	return svc, room, netName, nil
 }
 
@@ -141,7 +141,9 @@ func probeChatNetworks(leaves []ChatLeafInfo, handle string) []chatNetInfo {
 func chatNetworkPicker(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, handle, dbPath string, leaves []ChatLeafInfo, outputMode ansi.OutputMode, wt func(string)) (chat.ChatService, string, error) {
 	nets := probeChatNetworks(leaves, handle)
 
-	wt("\r\n" + e.Strings().ChatNetworkPickerHeader + "\r\n")
+	wt("\r\n")
+	e.writeString(terminal, outputMode, e.Strings().ChatNetworkPickerHeader)
+	wt("\r\n")
 	for i, net := range nets {
 		var status string
 		switch {
@@ -152,7 +154,8 @@ func chatNetworkPicker(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 		default:
 			status = fmt.Sprintf("%d users online", net.users)
 		}
-		wt(fmt.Sprintf(e.Strings().ChatNetworkPickerEntry+"\r\n", i+1, net.name, status))
+		e.writeStringf(terminal, outputMode, e.Strings().ChatNetworkPickerEntry, i+1, net.name, status)
+		wt("\r\n")
 	}
 	wt("\r\n")
 	wt("|07Select network |08[|071|08]|07: ")
@@ -185,19 +188,22 @@ func chatNetworkPicker(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 
 // chatRoomPicker fetches the current room list and lets the user pick one.
 // Returns "lobby" if no rooms exist yet or the user presses Enter.
-func chatRoomPicker(e *MenuExecutor, svc chat.ChatService, s ssh.Session, terminal *term.Terminal, wt func(string)) string {
+func chatRoomPicker(e *MenuExecutor, svc chat.ChatService, s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, wt func(string)) string {
 	rooms, err := svc.Rooms()
 	if err != nil || len(rooms) == 0 {
 		return "lobby"
 	}
 
-	wt("\r\n" + e.Strings().ChatRoomListHeader + "\r\n")
+	wt("\r\n")
+	e.writeString(terminal, outputMode, e.Strings().ChatRoomListHeader)
+	wt("\r\n")
 	for _, r := range rooms {
 		topic := r.Topic
 		if topic == "" {
 			topic = "|08no topic|07"
 		}
-		wt(fmt.Sprintf(e.Strings().ChatRoomListEntry+"\r\n", r.Name, r.UserCount, topic))
+		e.writeStringf(terminal, outputMode, e.Strings().ChatRoomListEntry, r.Name, r.UserCount, topic)
+		wt("\r\n")
 	}
 	wt("\r\n")
 	wt("|07Select room |08[|07lobby|08]|07: ")
@@ -407,6 +413,11 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// writeChatLineLocked writes a timestamped, word-wrapped message into the
 	// chat scroll region. Caller must hold rawMu.
+	//
+	// Strings shown inside the split screen are printed as text even when they
+	// start with !door or %file (see string_hooks.go): they are wrapped into
+	// the scroll region, many arrive on the receive goroutine with rawMu held,
+	// and a script or a full-screen file would tear the layout apart.
 	writeChatLineLocked := func(text string) {
 		ts := time.Now().Format("15:04")
 		fullText := fmt.Sprintf("|08%s|07 %s", ts, text)

@@ -262,8 +262,9 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 	// means the user pressed ESC and the caller should leave the setting
 	// alone and redraw the menu. Any other read error (EOF, idle timeout) is
 	// returned so the session can disconnect as it would from any input loop.
-	promptLine := func(prompt string, maxLen int) (string, bool, error) {
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+	// promptLine reads the answer to a prompt the caller has just written
+	// with writeString or writeStringf, so the prompt can be a hook.
+	promptLine := func(maxLen int) (string, bool, error) {
 		input, err := readScanLine(ih, terminal, outputMode, maxLen)
 		if err != nil {
 			if errors.Is(err, errInputAborted) {
@@ -299,7 +300,8 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			return cfg, nil
 
 		case 'D': // Date
-			input, ok, err := promptLine(e.Strings().ScanDatePrompt, 10)
+			e.writeString(terminal, outputMode, e.Strings().ScanDatePrompt)
+			input, ok, err := promptLine(10)
 			if err != nil {
 				return nil, err
 			}
@@ -321,7 +323,8 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			}
 
 		case 'T': // To
-			input, ok, err := promptLine(e.Strings().ScanToPrompt, 30)
+			e.writeString(terminal, outputMode, e.Strings().ScanToPrompt)
+			input, ok, err := promptLine(30)
 			if err != nil {
 				return nil, err
 			}
@@ -330,7 +333,8 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 			}
 
 		case 'F': // From
-			input, ok, err := promptLine(e.Strings().ScanFromPrompt, 30)
+			e.writeString(terminal, outputMode, e.Strings().ScanFromPrompt)
+			input, ok, err := promptLine(30)
 			if err != nil {
 				return nil, err
 			}
@@ -349,7 +353,8 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 				showScanNotice(terminal, outputMode, e.Strings().ScanNoMessages)
 				continue
 			}
-			startInput, ok, err := promptLine(fmt.Sprintf(e.Strings().ScanRangeStartPrompt, numMsgs), 6)
+			e.writeStringf(terminal, outputMode, e.Strings().ScanRangeStartPrompt, numMsgs)
+			startInput, ok, err := promptLine(6)
 			if err != nil {
 				return nil, err
 			}
@@ -367,7 +372,8 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 				continue
 			}
 
-			endInput, ok, err := promptLine(fmt.Sprintf(e.Strings().ScanRangeEndPrompt, startNum, numMsgs), 6)
+			e.writeStringf(terminal, outputMode, e.Strings().ScanRangeEndPrompt, startNum, numMsgs)
+			endInput, ok, err := promptLine(6)
 			if err != nil {
 				return nil, err
 			}

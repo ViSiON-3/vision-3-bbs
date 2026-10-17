@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/gliderlabs/ssh"
+	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -259,4 +261,96 @@ func TestWriteStringScript(t *testing.T) {
 			t.Errorf("caller's next read = %q, %v; want 'y'", b, err)
 		}
 	})
+}
+
+// prompt runs fn, a Yes/No prompt on a terminal with the session registered,
+// and returns its answer and the output.
+func (f *stringHookFixture) prompt(t *testing.T, fn func(*MenuExecutor, ssh.Session, *term.Terminal) (bool, error)) (bool, string) {
+	t.Helper()
+	terminal := newDoorcovTerminal(f.s.doorcovSession)
+	RegisterStringHookSession(terminal, f.s, nil, f.bbs)
+	defer ClearStringHookSession(terminal)
+	defer resetSessionIH(f.s)
+	type result struct {
+		yes bool
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		yes, err := fn(f.e, f.s, terminal)
+		done <- result{yes, err}
+	}()
+	select {
+	case r := <-done:
+		if r.err != nil {
+			t.Fatalf("prompt: %v; output:\n%s", r.err, f.term())
+		}
+		return r.yes, f.term()
+	case <-time.After(10 * time.Second):
+		t.Fatalf("prompt still running after 10s; output:\n%s", f.term())
+		return false, ""
+	}
+}
+
+func TestPromptYesNoHooks(t *testing.T) {
+	// termHeight 0 takes the text fallback, which reads a line.
+	t.Run("string value shows its file before the question", func(t *testing.T) {
+		f := newStringHookFixture(t, "y\r")
+		yes, out := f.prompt(t, func(e *MenuExecutor, s ssh.Session, tm *term.Terminal) (bool, error) {
+			return e.PromptYesNoString(s, tm, "%BAR.ANS Really? @", ansi.OutputModeUTF8, 3, 80, 0, false)
+		})
+		if !yes || !strings.Contains(out, "[bar art]Really? [y/N]? ") {
+			t.Errorf("yes=%v output = %q", yes, out)
+		}
+	})
+	t.Run("formatted value", func(t *testing.T) {
+		f := newStringHookFixture(t, "n\r")
+		yes, out := f.prompt(t, func(e *MenuExecutor, s ssh.Session, tm *term.Terminal) (bool, error) {
+			return e.PromptYesNof(s, tm, ansi.OutputModeUTF8, 3, 80, 0, true, "%BAR.ANS Add %s?", "FidoNet")
+		})
+		if yes || !strings.Contains(out, "[bar art]Add FidoNet? [Y/n]? ") {
+			t.Errorf("yes=%v output = %q", yes, out)
+		}
+	})
+	t.Run("plain prompt text is never a hook", func(t *testing.T) {
+		f := newStringHookFixture(t, "y\r")
+		_, out := f.prompt(t, func(e *MenuExecutor, s ssh.Session, tm *term.Terminal) (bool, error) {
+			return e.PromptYesNo(s, tm, "%BAR.ANS Delete?", ansi.OutputModeUTF8, 3, 80, 0, false)
+		})
+		if !strings.Contains(out, "%BAR.ANS Delete?") || strings.Contains(out, "[bar art]") {
+			t.Errorf("output = %q", out)
+		}
+	})
+}
+
+// tappedHookSession is a hookSession with a snoop tap.
+type tappedHookSession struct {
+	hookSession
+	tap *snoop.Tap
+}
+
+func (s tappedHookSession) Tap() *snoop.Tap { return s.tap }
+
+// A script run from a screen in another snoop mode, such as chat's pickers in
+// teleconference mode, leaves that mode in place; the door path alone would
+// put the tap back in BBS mode.
+func TestStringScriptRestoresSnoopMode(t *testing.T) {
+	f := newStringHookFixture(t, "")
+	tap := snoop.NewTap()
+	t.Cleanup(tap.Close)
+	tap.SetMode(snoop.ModeTeleconf)
+	s := tappedHookSession{hookSession: f.s, tap: tap}
+	terminal := newDoorcovTerminal(f.s.doorcovSession)
+	RegisterStringHookSession(terminal, s, nil, f.bbs)
+	defer ClearStringHookSession(terminal)
+
+	if err := f.e.writeString(terminal, ansi.OutputModeUTF8, "!say"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(f.term(), "[script") {
+		t.Fatalf("script did not run; output = %q", f.term())
+	}
+	if m := tap.Mode(); m != snoop.ModeTeleconf {
+		t.Errorf("mode after the script = %v, want teleconference", m)
+	}
 }

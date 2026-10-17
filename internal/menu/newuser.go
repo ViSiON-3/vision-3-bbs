@@ -93,7 +93,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 		if pausePrompt == "" {
 			pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 		}
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(pausePrompt)), outputMode)
+		e.writeString(terminal, outputMode, pausePrompt)
 		_, _ = readLineFromSessionIH(s, terminal)
 		return nil, nil
 	}
@@ -103,7 +103,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 	if applyPrompt == "" {
 		applyPrompt = "|08A|07p|15ply |08F|07o|15r |08A|07c|15cess? @"
 	}
-	applyYes, err := e.PromptYesNo(s, terminal, applyPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
+	applyYes, err := e.PromptYesNoString(s, terminal, applyPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, io.EOF

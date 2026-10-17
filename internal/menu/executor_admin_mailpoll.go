@@ -164,7 +164,7 @@ func runMailPoll(c *cmdCtx, args string) (*user.User, string, error) {
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
-	if err := writeCenteredPausePrompt(c.s, terminal, pausePrompt, outputMode, c.termWidth, c.termHeight); err != nil {
+	if err := e.writeCenteredPausePrompt(c.s, terminal, pausePrompt, outputMode, c.termWidth, c.termHeight); err != nil {
 		return nil, "", err
 	}
 	return nil, "", nil
