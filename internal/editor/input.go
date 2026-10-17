@@ -932,3 +932,10 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 func IsPrintable(key int) bool {
 	return key >= 32 && key < 127 && key != KeyEsc
 }
+
+// ReturnInput prepends unconsumed borrowed bytes in their original order.
+// The borrower must stop all of its reads before returning input; like other
+// input reads, this method must only be called by the handler's current owner.
+func (ih *InputHandler) ReturnInput(p []byte) {
+	ih.unreadBuf = append(append([]byte(nil), p...), ih.unreadBuf...)
+}
