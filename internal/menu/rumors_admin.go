@@ -78,7 +78,7 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	minLevel := 1
 	for {
-		wv(terminal, levelPrompt, outputMode)
+		e.writeString(terminal, outputMode, levelPrompt)
 		levelInput, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -103,7 +103,7 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 	if enterPrompt == "" {
 		enterPrompt = "|09Enter Rumor |08(|15Enter|08/|15Abort|08)|07:\r\n"
 	}
-	wv(terminal, enterPrompt, outputMode)
+	e.writeString(terminal, outputMode, enterPrompt)
 	rumorText, err := readLineFromSessionIHMax(s, terminal, rumorMaxLength)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -153,7 +153,9 @@ func runRumorsAdd(c *cmdCtx, args string) (*user.User, string, error) {
 	if addedMsg == "" {
 		addedMsg = "|10Rumor has been added!"
 	}
-	wv(terminal, "\r\n"+addedMsg+"\r\n", outputMode)
+	wv(terminal, "\r\n", outputMode)
+	e.writeString(terminal, outputMode, addedMsg)
+	wv(terminal, "\r\n", outputMode)
 	uiPause(1 * time.Second)
 	slog.Info("rumor added", "node", nodeNumber, "handle", currentUser.Handle, "id", newRumor.ID)
 	return currentUser, "", nil

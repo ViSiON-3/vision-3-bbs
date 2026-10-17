@@ -213,6 +213,40 @@ func TestWriteStringScript(t *testing.T) {
 		}
 	})
 
+	// writeStringSubst applies a call site's own substitutions to the text
+	// only, so a substituted handle cannot start a hook either.
+	t.Run("substituted text cannot start a hook", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		terminal := newDoorcovTerminal(f.s.doorcovSession)
+		RegisterStringHookSession(terminal, f.s, nil, f.bbs)
+		defer ClearStringHookSession(terminal)
+		if err := f.e.writeStringSubst(terminal, ansi.OutputModeUTF8, "|NA", "|NA", "!say"); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.e.writeStringSubst(terminal, ansi.OutputModeUTF8, "%BAR.ANS Hi |NA", "|NA", "!say"); err != nil {
+			t.Fatal(err)
+		}
+		out := f.term()
+		if strings.Contains(out, "[script") || !strings.Contains(out, "!say") || !strings.Contains(out, "[bar art]Hi !say") {
+			t.Errorf("output = %q", out)
+		}
+	})
+
+	// A script in place of a substituted string gets the substituted values,
+	// so it can draw its own version of the message.
+	t.Run("script receives substituted values", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		terminal := newDoorcovTerminal(f.s.doorcovSession)
+		RegisterStringHookSession(terminal, f.s, nil, f.bbs)
+		defer ClearStringHookSession(terminal)
+		if err := f.e.writeStringSubst(terminal, ansi.OutputModeUTF8, "!say", "^CN", "Main", "^CT", "MAIN"); err != nil {
+			t.Fatal(err)
+		}
+		if out := f.term(); !strings.Contains(out, "[script door,Main,MAIN]") {
+			t.Errorf("output = %q", out)
+		}
+	})
+
 	t.Run("no registered session prints the value as text", func(t *testing.T) {
 		f := newStringHookFixture(t, "")
 		terminal := newDoorcovTerminal(f.s.doorcovSession)
@@ -352,5 +386,27 @@ func TestStringScriptRestoresSnoopMode(t *testing.T) {
 	}
 	if m := tap.Mode(); m != snoop.ModeTeleconf {
 		t.Errorf("mode after the script = %v, want teleconference", m)
+	}
+}
+
+// A default prompt that shows a file continues its text where the file left
+// the cursor, with placeholders expanded; a missing file prints the whole
+// value as written.
+func TestDefPromptFileHook(t *testing.T) {
+	for _, tc := range []struct {
+		value, want string
+	}{
+		{"%BAR.ANS Hi |MN", "[bar art]Hi MAIN"},
+		{"%NOPE.ANS Hi |MN", "%NOPE.ANS Hi MAIN"},
+	} {
+		f := newStringHookFixture(t, "")
+		f.e.SetStrings(config.StringsConfig{DefPrompt: tc.value})
+		terminal := newDoorcovTerminal(f.s.doorcovSession)
+		if err := f.e.displayPrompt(f.s, terminal, &MenuRecord{}, nil, nil, 3, "MAIN", time.Now(), ansi.OutputModeUTF8, ""); err != nil {
+			t.Fatalf("displayPrompt(%q): %v", tc.value, err)
+		}
+		if out := stripPipes(f.term()); !strings.Contains(out, tc.want) {
+			t.Errorf("displayPrompt(%q) output = %q, want it to contain %q", tc.value, out, tc.want)
+		}
 	}
 }

@@ -41,7 +41,7 @@ func (e *MenuExecutor) confirmCannotBeEmpty(s ssh.Session, terminal *term.Termin
 		if msg == "" {
 			msg = "\r\n|07Maybe another time?|07\r\n"
 		}
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeString(terminal, outputMode, msg)
 		uiPause(1 * time.Second)
 	}
 	return retry, nil
@@ -61,7 +61,7 @@ func (e *MenuExecutor) confirmExitNewUser(s ssh.Session, terminal *term.Terminal
 		if msg == "" {
 			msg = "\r\n|07Maybe another time?|07\r\n"
 		}
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		e.writeString(terminal, outputMode, msg)
 		uiPause(1 * time.Second)
 	}
 	return exit, nil
@@ -88,7 +88,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 		if closedMsg == "" {
 			closedMsg = "\r\n|12This BBS is not accepting new users at this time.|07\r\n"
 		}
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(closedMsg)), outputMode)
+		e.writeString(terminal, outputMode, closedMsg)
 		pausePrompt := e.Strings().PauseString
 		if pausePrompt == "" {
 			pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
@@ -147,17 +147,15 @@ func (e *MenuExecutor) handleNewUserApplication(
 	}
 	// |BN expands to the configured board name, so the welcome names this BBS
 	// rather than the shipped placeholder.
-	welcomeStr = strings.ReplaceAll(welcomeStr, "|BN", e.GetServerConfig().BoardName)
-	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(welcomeStr+"\r\n")), outputMode)
+	e.writeStringSubst(terminal, outputMode, welcomeStr, "|BN", e.GetServerConfig().BoardName)
+	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 
 	userNumStr := e.Strings().YourUserNum
 	if userNumStr == "" {
 		userNumStr = "|15Your User # is |09|UN|CR"
 	}
 	nextID := userManager.NextUserID()
-	userNumStr = strings.ReplaceAll(userNumStr, "|UN", strconv.Itoa(nextID))
-	userNumStr = strings.ReplaceAll(userNumStr, "|CR", "\r\n")
-	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(userNumStr)), outputMode)
+	e.writeStringSubst(terminal, outputMode, userNumStr, "|UN", strconv.Itoa(nextID), "|CR", "\r\n")
 
 	// 5. Password creation with confirmation
 	password, err := e.promptForPassword(s, terminal, nodeNumber, outputMode, termWidth, termHeight)
@@ -199,7 +197,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 	if addErr != nil {
 		slog.Error("failed to create new user", "node", nodeNumber, "handle", handle, "error", addErr)
 		errMsg := e.Strings().NewUserCreationError
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
+		e.writeString(terminal, outputMode, errMsg)
 		uiPause(2 * time.Second)
 		return nil, nil
 	}
@@ -280,7 +278,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 		// They just sent the required message and their account can get on, so
 		// they are about to be carried straight into a session — say so rather
 		// than "you can log on now", which implies a separate step.
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(e.Strings().NewUserLoggingIn)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().NewUserLoggingIn)
 	} else {
 		validationMsg := e.Strings().NewUserAccountReady
 		if !canLogonAtLevel(cfg, newUser.AccessLevel) {
@@ -290,10 +288,10 @@ func (e *MenuExecutor) handleNewUserApplication(
 		// An account that is not yet reviewed still gets looked at, so say so —
 		// unless autoValidateNewUsers already marked it reviewed, in which case
 		// there is nothing pending.
+		e.writeString(terminal, outputMode, validationMsg)
 		if !newUser.Validated {
-			validationMsg += e.Strings().NewUserPendingReview
+			e.writeString(terminal, outputMode, e.Strings().NewUserPendingReview)
 		}
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(validationMsg)), outputMode)
 	}
 
 	// Pause before returning
@@ -301,7 +299,8 @@ func (e *MenuExecutor) handleNewUserApplication(
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
-	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+pausePrompt)), outputMode)
+	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
+	e.writeString(terminal, outputMode, pausePrompt)
 	if _, pauseErr := readLineFromSessionIH(s, terminal); pauseErr != nil {
 		// The account is created and saved either way, but a caller who has
 		// dropped must not have a session opened for them: the callers' io.EOF
@@ -345,8 +344,6 @@ func (e *MenuExecutor) promptForHandle(
 	if prompt == "" {
 		prompt = "|CR|08E|07n|15ter |08Y|07o|15ur |08A|07l|15ias|09.|CR|08:"
 	}
-	prompt = strings.ReplaceAll(prompt, "|CR", "\r\n")
-
 	invalidMsg := e.Strings().InvalidUserName
 	if invalidMsg == "" {
 		invalidMsg = "|05 |10Invalid Name .. Try again!"
@@ -364,7 +361,7 @@ func (e *MenuExecutor) promptForHandle(
 
 	maxAttempts := 5
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+		e.writeStringSubst(terminal, outputMode, prompt, "|CR", "\r\n")
 
 		input, err := styledInput(terminal, s, outputMode, newUserHandleMaxLen, "")
 		if err != nil {
@@ -398,17 +395,20 @@ func (e *MenuExecutor) promptForHandle(
 
 		// Validate handle format
 		if !e.validateSignupHandle(handle) {
-			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(invalidMsg+"\r\n")), outputMode)
+			e.writeString(terminal, outputMode, invalidMsg)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
 			uiPause(500 * time.Millisecond)
 			continue
 		}
 
 		// Show "checking user base" message (matches Pascal: MultiColor(Strng^.Checking_User_Base))
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(checkingMsg+"\r\n")), outputMode)
+		e.writeString(terminal, outputMode, checkingMsg)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
 
 		// Check for duplicate handle
 		if _, exists := userManager.GetUser(handle); exists {
-			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(nameUsedMsg+"\r\n")), outputMode)
+			e.writeString(terminal, outputMode, nameUsedMsg)
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
 			uiPause(500 * time.Millisecond)
 			continue
 		}
@@ -419,7 +419,7 @@ func (e *MenuExecutor) promptForHandle(
 
 	// Max attempts reached
 	errMsg := e.Strings().NewUserTooManyAttempts
-	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
+	e.writeString(terminal, outputMode, errMsg)
 	uiPause(1 * time.Second)
 	return "", nil
 }
@@ -445,7 +445,8 @@ func (e *MenuExecutor) promptForPassword(
 	maxAttempts := 5
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		// First entry
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+createPrompt)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
+		e.writeString(terminal, outputMode, createPrompt)
 		password, err := readPasswordSecurely(s, terminal, outputMode)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -477,13 +478,13 @@ func (e *MenuExecutor) promptForPassword(
 
 		if len(password) < 3 {
 			msg := e.Strings().NewUserPasswordTooShort
-			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			e.writeString(terminal, outputMode, msg)
 			uiPause(500 * time.Millisecond)
 			continue
 		}
 
 		// Confirmation
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(confirmPrompt)), outputMode)
+		e.writeString(terminal, outputMode, confirmPrompt)
 		confirm, err := readPasswordSecurely(s, terminal, outputMode)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -504,7 +505,7 @@ func (e *MenuExecutor) promptForPassword(
 
 		if password != confirm {
 			msg := e.Strings().NewUserPasswordMismatch
-			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			e.writeString(terminal, outputMode, msg)
 			uiPause(500 * time.Millisecond)
 			continue
 		}
@@ -514,7 +515,7 @@ func (e *MenuExecutor) promptForPassword(
 	}
 
 	errMsg := e.Strings().NewUserTooManyAttempts
-	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
+	e.writeString(terminal, outputMode, errMsg)
 	uiPause(1 * time.Second)
 	return "", nil
 }
@@ -534,7 +535,8 @@ func (e *MenuExecutor) promptForRealName(
 
 	maxAttempts := 5
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+prompt)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
+		e.writeString(terminal, outputMode, prompt)
 
 		input, err := styledInput(terminal, s, outputMode, newUserRealNameMaxLen, "")
 		if err != nil {
@@ -568,7 +570,7 @@ func (e *MenuExecutor) promptForRealName(
 
 		if !validateRealName(name) {
 			msg := e.Strings().NewUserInvalidRealName
-			terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+			e.writeString(terminal, outputMode, msg)
 			uiPause(500 * time.Millisecond)
 			continue
 		}
@@ -578,7 +580,7 @@ func (e *MenuExecutor) promptForRealName(
 	}
 
 	errMsg := e.Strings().NewUserTooManyAttempts
-	terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
+	e.writeString(terminal, outputMode, errMsg)
 	uiPause(1 * time.Second)
 	return "", nil
 }
@@ -597,7 +599,8 @@ func (e *MenuExecutor) promptForLocation(
 	}
 
 	for {
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+prompt)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
+		e.writeString(terminal, outputMode, prompt)
 
 		input, err := styledInput(terminal, s, outputMode, newUserLocationMaxLen, "")
 		if err != nil {
@@ -635,7 +638,8 @@ func (e *MenuExecutor) promptForUserNote(
 	}
 
 	for {
-		terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+prompt)), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
+		e.writeString(terminal, outputMode, prompt)
 
 		input, err := styledInput(terminal, s, outputMode, newUserNoteMaxLen, "")
 		if err != nil {

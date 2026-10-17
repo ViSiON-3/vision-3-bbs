@@ -17,6 +17,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringhook"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -452,7 +453,9 @@ func (e *MenuExecutor) handleIdleTimeout(terminal *term.Terminal, outputMode ans
 			row = 1
 		}
 		terminalio.WriteProcessedBytes(terminal, []byte(fmt.Sprintf("\x1b[%d;1H", row)), outputMode)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
+		// No script: the caller is idle and about to be disconnected. Keep
+		// stringhook.ScriptlessKeys in step.
+		e.writeStringNoScript(terminal, outputMode, msg)
 	}
 	slog.Info("idle timeout, disconnecting", "node", nodeNumber, "minutes", e.GetServerConfig().SessionIdleTimeoutMinutes)
 }
@@ -485,30 +488,47 @@ const timeLimitWarnWindow = 5 * time.Minute
 // limit. Part of a minute counts as a whole one, so the last warning says 1
 // rather than 0.
 func (e *MenuExecutor) timeLeftWarning(s ssh.Session) (string, bool) {
-	d, ok := sessionDeadlines.Load(unwrapSession(s))
+	minutes, ok := timeLeftWarningMinutes(s)
 	if !ok {
 		return "", false
 	}
+	// Fixed-position lightbar warnings display hook directives as literal
+	// text. Formatting their door/file prefix would produce fmt artifacts.
+	value := e.Strings().TimeLimitWarning
+	switch stringhook.Parse(value).Kind {
+	case stringhook.Script, stringhook.File:
+		return value, true
+	}
+	return fmt.Sprintf(e.Strings().TimeLimitWarning, minutes), true
+}
+
+// timeLeftWarningMinutes returns the minutes left for the time-limit
+// warning, and false when none is due (see timeLeftWarning).
+func timeLeftWarningMinutes(s ssh.Session) (int, bool) {
+	d, ok := sessionDeadlines.Load(unwrapSession(s))
+	if !ok {
+		return 0, false
+	}
 	left := time.Until(d.(time.Time))
 	if left <= 0 || left > timeLimitWarnWindow {
-		return "", false
+		return 0, false
 	}
-	minutes := int((left + time.Minute - 1) / time.Minute)
-	return fmt.Sprintf(e.Strings().TimeLimitWarning, minutes), true
+	return int((left + time.Minute - 1) / time.Minute), true
 }
 
 // warnTimeLeft writes the time-limit warning, if one is due, at the cursor.
 // Standard menus call it before their prompt.
 func (e *MenuExecutor) warnTimeLeft(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode) {
-	if msg, ok := e.timeLeftWarning(s); ok {
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode) // best-effort notice
+	if minutes, ok := timeLeftWarningMinutes(s); ok {
+		e.writeStringf(terminal, outputMode, e.Strings().TimeLimitWarning, minutes)
 	}
 }
 
 // warnTimeLeftOnRow draws the time-limit warning, if one is due, on screen
 // row row of a width-column terminal and puts the cursor back. Lightbar menus
 // use it: their screens are drawn at fixed positions, so the warning goes on
-// the bottom row and must not scroll it. The string's line breaks are dropped
+// the bottom row and must not scroll it. For the same reason a script or file
+// value (see string_hooks.go) is printed here as text. The string's line breaks are dropped
 // and it is clipped a column short of the width, since text reaching the last
 // column of the bottom row makes some terminals scroll too.
 func (e *MenuExecutor) warnTimeLeftOnRow(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, row, width int) {
@@ -549,8 +569,7 @@ func remoteIPFromSession(s ssh.Session) string {
 
 func (e *MenuExecutor) showUndefinedMenuInput(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int) {
 	errMsg := e.Strings().ExecUnknownCommand
-	processedErrMsg := ansi.ReplacePipeCodes([]byte(errMsg))
-	if wErr := terminalio.WriteProcessedBytes(terminal, processedErrMsg, outputMode); wErr != nil {
+	if wErr := e.writeString(terminal, outputMode, errMsg); wErr != nil {
 		slog.Error("failed writing unknown command message", "node", nodeNumber, "error", wErr)
 	}
 	uiPause(500 * time.Millisecond)

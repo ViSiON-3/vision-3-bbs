@@ -55,3 +55,15 @@ func TestIsHook(t *testing.T) {
 		}
 	}
 }
+
+func TestSupportsKind(t *testing.T) {
+	if !SupportsKind("execGoodbye", Script) || !SupportsKind("execGoodbye", File) {
+		t.Error("an ordinary key should take both kinds")
+	}
+	if SupportsKind("idleTimeout", Script) || !SupportsKind("idleTimeout", File) {
+		t.Error("idleTimeout should take a file but not a script")
+	}
+	if SupportsKind("anonymousName", File) {
+		t.Error("a no-hook key should take neither kind")
+	}
+}

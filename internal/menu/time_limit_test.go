@@ -188,3 +188,22 @@ func TestTimeLimit_Effective(t *testing.T) {
 		t.Error("ACS T10 passed for a caller past their limit")
 	}
 }
+
+// TestTimeLimit_LightbarHookValuesRemainLiteral checks the fixed-row fallback
+// without running a script or interpreting a file prefix as a format directive.
+func TestTimeLimit_LightbarHookValuesRemainLiteral(t *testing.T) {
+	for _, value := range []string{"!say", "%WARN.ANS Remaining %d"} {
+		t.Run(value, func(t *testing.T) {
+			env, m := timeLimitEnv(t)
+			execcovStrings(env, func(s *config.StringsConfig) { s.TimeLimitWarning = value })
+			m.menu("BARM", MenuRecord{}, "BARM-SCREEN\r\n", CommandRecord{Keys: "A", Command: "LOGOFF"})
+			m.write("bar", "BARM.BAR", execcovBar)
+			r := execcovRun(env, execcovCall{user: env.caller, start: "BARM", input: "A", height: 25,
+				started: time.Now().Add(-57*time.Minute - 30*time.Second)})
+			want := "\x1b[s\x1b[25;1H\x1b[2K" + value + "\x1b[0m\x1b[u"
+			if !strings.Contains(r.raw, want) {
+				t.Errorf("literal warning missing: %q", r.raw)
+			}
+		})
+	}
+}

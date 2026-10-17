@@ -150,10 +150,7 @@ func runViewFile(c *cmdCtx, args string) (*user.User, string, error) {
 		if termHeight <= 0 {
 			_, termHeight = getTerminalSize(s)
 		}
-		displayTextWithPaging(s, terminal, filePath, record.Filename, outputMode, termHeight,
-			e.Strings().FileViewingHeader, e.Strings().FileEndOfFile,
-			e.Strings().FileMorePrompt, e.Strings().FilePausePrompt,
-			e.Strings().FileOpenError)
+		e.displayTextWithPaging(s, terminal, filePath, record.Filename, outputMode, termHeight)
 	}
 
 	return currentUser, "", nil
@@ -179,10 +176,7 @@ func runTypeTextFile(c *cmdCtx, args string) (*user.User, string, error) {
 	if termHeight <= 0 {
 		_, termHeight = getTerminalSize(s)
 	}
-	displayTextWithPaging(s, terminal, filePath, record.Filename, outputMode, termHeight,
-		e.Strings().FileViewingHeader, e.Strings().FileEndOfFile,
-		e.Strings().FileMorePrompt, e.Strings().FilePausePrompt,
-		e.Strings().FileOpenError)
+	e.displayTextWithPaging(s, terminal, filePath, record.Filename, outputMode, termHeight)
 
 	return currentUser, "", nil
 }
@@ -204,10 +198,7 @@ func viewFileByRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, r
 		if termHeight <= 0 {
 			_, termHeight = getTerminalSize(s)
 		}
-		displayTextWithPaging(s, terminal, filePath, record.Filename, outputMode, termHeight,
-			e.Strings().FileViewingHeader, e.Strings().FileEndOfFile,
-			e.Strings().FileMorePrompt, e.Strings().FilePausePrompt,
-			e.Strings().FileOpenError)
+		e.displayTextWithPaging(s, terminal, filePath, record.Filename, outputMode, termHeight)
 	}
 }
 
@@ -218,11 +209,11 @@ func viewFileByRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, r
 const maxTextFilePagingBytes = 4 * 1024 * 1024 // 4 MB
 
 // displayTextWithPaging shows text file contents with paging on the terminal.
-func displayTextWithPaging(s ssh.Session, terminal *term.Terminal, filePath string, filename string, outputMode ansi.OutputMode, termHeight int, viewingHeaderFmt string, endOfFile string, morePrompt string, pausePromptStr string, openError string) {
+func (e *MenuExecutor) displayTextWithPaging(s ssh.Session, terminal *term.Terminal, filePath string, filename string, outputMode ansi.OutputMode, termHeight int) {
 	fi, statErr := os.Stat(filePath)
 	if statErr == nil && fi.Size() > maxTextFilePagingBytes {
 		slog.Warn("file too large for text paging, refusing to load", "file", filePath, "bytes", fi.Size())
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(openError)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().FileOpenError)
 		uiPause(1 * time.Second)
 		return
 	}
@@ -230,7 +221,7 @@ func displayTextWithPaging(s ssh.Session, terminal *term.Terminal, filePath stri
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		slog.Error("failed to open file", "file", filePath, "error", err)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(openError)), outputMode)
+		e.writeString(terminal, outputMode, e.Strings().FileOpenError)
 		uiPause(1 * time.Second)
 		return
 	}
@@ -255,8 +246,7 @@ func displayTextWithPaging(s ssh.Session, terminal *term.Terminal, filePath stri
 	// Clear screen before showing the file.
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 
-	header := fmt.Sprintf(viewingHeaderFmt, sanitizeControlChars(filename))
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(header)), outputMode)
+	e.writeStringf(terminal, outputMode, e.Strings().FileViewingHeader, sanitizeControlChars(filename))
 
 	linesPerPage := termHeight - 4
 	if linesPerPage < 5 {
@@ -282,7 +272,7 @@ func displayTextWithPaging(s ssh.Session, terminal *term.Terminal, filePath stri
 		lineCount++
 
 		if lineCount >= linesPerPage {
-			if !pauseMore(s, terminal, outputMode, morePrompt) {
+			if !e.pauseMore(s, terminal, outputMode, e.Strings().FileMorePrompt) {
 				return
 			}
 			lineCount = 0
@@ -293,14 +283,14 @@ func displayTextWithPaging(s ssh.Session, terminal *term.Terminal, filePath stri
 		slog.Warn("error reading file", "file", filePath, "error", err)
 	}
 
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(endOfFile)), outputMode)
-	pauseEnter(s, terminal, outputMode, pausePromptStr)
+	e.writeString(terminal, outputMode, e.Strings().FileEndOfFile)
+	e.pauseEnter(s, terminal, outputMode, e.Strings().FilePausePrompt)
 }
 
 // pauseMore displays a "More" prompt and waits for user input.
 // Returns true to continue, false to abort.
-func pauseMore(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, prompt string) bool {
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+func (e *MenuExecutor) pauseMore(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, prompt string) bool {
+	e.writeString(terminal, outputMode, prompt)
 
 	ih := getSessionIH(s)
 	for {
@@ -320,8 +310,8 @@ func pauseMore(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMod
 }
 
 // pauseEnter displays a simple "press Enter" prompt.
-func pauseEnter(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, prompt string) {
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+func (e *MenuExecutor) pauseEnter(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, prompt string) {
+	e.writeString(terminal, outputMode, prompt)
 
 	ih := getSessionIH(s)
 	for {

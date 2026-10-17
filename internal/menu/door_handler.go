@@ -248,10 +248,9 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Prompt for door name
-	renderedPrompt := ansi.ReplacePipeCodes([]byte(e.Strings().DoorPrompt))
 	curUpClear := "\x1b[A\r\x1b[2K"
 
-	terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+	e.writeString(terminal, outputMode, e.Strings().DoorPrompt)
 
 	for {
 		inputName, err := readLineFromSessionIH(s, terminal)
@@ -271,13 +270,13 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 			return currentUser, "", nil
 		}
 		if upperInput == "" {
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, e.Strings().DoorPrompt)
 			continue
 		}
 
 		if upperInput == "?" {
 			_, _, _ = runListDoors(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, e.Strings().DoorPrompt)
 			continue
 		}
 
@@ -288,7 +287,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 			e.writeStringf(terminal, outputMode, e.Strings().DoorNotFoundFormat, inputClean)
 			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, e.Strings().DoorPrompt)
 			continue
 		}
 
@@ -298,7 +297,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 				"node", nodeNumber, "handle", currentUser.Handle, "level", currentUser.AccessLevel, "door", upperInput, "required", doorConfig.MinAccessLevel)
 			e.writeStringf(terminal, outputMode, e.Strings().DoorAccessDenied, upperInput)
 			uiPause(1 * time.Second)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, e.Strings().DoorPrompt)
 			continue
 		}
 
@@ -327,8 +326,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 				if strings.TrimSpace(busyFmt) == "" {
 					busyFmt = "\r\n|14Door is currently in use: |11%s|07\r\n"
 				}
-				busyMsg := fmt.Sprintf(busyFmt, upperInput)
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(busyMsg)), outputMode)
+				e.writeStringf(terminal, outputMode, busyFmt, upperInput)
 				uiPause(1 * time.Second)
 			} else {
 				slog.Error("door execution failed", "node", nodeNumber, "handle", currentUser.Handle, "door", upperInput, "error", cmdErr)
@@ -366,10 +364,9 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Prompt for door name
-	renderedPrompt := ansi.ReplacePipeCodes([]byte(e.Strings().DoorPrompt))
 	curUpClear := "\x1b[A\r\x1b[2K"
 
-	terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+	e.writeString(terminal, outputMode, e.Strings().DoorPrompt)
 
 	for {
 		inputName, err := readLineFromSessionIH(s, terminal)
@@ -389,13 +386,13 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 			return currentUser, "", nil
 		}
 		if upperInput == "" {
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, e.Strings().DoorPrompt)
 			continue
 		}
 
 		if upperInput == "?" {
 			_, _, _ = runListDoors(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, e.Strings().DoorPrompt)
 			continue
 		}
 
@@ -406,7 +403,7 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 			e.writeStringf(terminal, outputMode, e.Strings().DoorNotFoundFormat, inputClean)
 			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, e.Strings().DoorPrompt)
 			continue
 		}
 
@@ -416,7 +413,7 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 				"node", nodeNumber, "handle", currentUser.Handle, "level", currentUser.AccessLevel, "door", upperInput, "required", doorConfig.MinAccessLevel)
 			e.writeStringf(terminal, outputMode, e.Strings().DoorAccessDenied, upperInput)
 			uiPause(1 * time.Second)
-			terminalio.WriteProcessedBytes(terminal, renderedPrompt, outputMode)
+			e.writeString(terminal, outputMode, e.Strings().DoorPrompt)
 			continue
 		}
 

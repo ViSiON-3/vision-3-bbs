@@ -26,12 +26,12 @@ const readerNoticePause = 900 * time.Millisecond
 // Replacing the menu is also the right thing semantically: once the notice is
 // showing, the reader is leaving or reloading, so the options underneath it are
 // no longer selectable.
-func showReaderNotice(terminal *term.Terminal, outputMode ansi.OutputMode, text string, termHeight int) {
+func (e *MenuExecutor) showReaderNotice(terminal *term.Terminal, outputMode ansi.OutputMode, text string, termHeight int) {
 	if termHeight > 0 {
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight, 1)), outputMode)
 		terminalio.WriteProcessedBytes(terminal, []byte(eraseLine), outputMode)
 	}
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(trimNoticeLeadingBlank(text))), outputMode)
+	e.writeString(terminal, outputMode, trimNoticeLeadingBlank(text))
 	uiPause(readerNoticePause)
 }
 

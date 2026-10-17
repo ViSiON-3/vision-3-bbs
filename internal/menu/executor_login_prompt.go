@@ -156,8 +156,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode) // Move cursor for message
 		errMsg := e.Strings().ExecLoginIncorrect
-		// Use WriteProcessedBytes with the passed outputMode
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
+		wErr := e.writeString(terminal, outputMode, errMsg)
 		if wErr != nil {
 			slog.Error("failed writing login incorrect message", "error", wErr)
 		}

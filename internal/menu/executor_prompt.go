@@ -51,7 +51,7 @@ type yesNoPrompt struct {
 // write writes the prompt followed by suffix.
 func (p yesNoPrompt) write(e *MenuExecutor, terminal *term.Terminal, outputMode ansi.OutputMode, suffix string) error {
 	if p.hook {
-		if err := e.renderString(terminal, outputMode, p.text, true, p.args); err != nil {
+		if err := e.renderString(terminal, outputMode, p.text, true, p.args, nil, nil); err != nil {
 			return err
 		}
 		return writeStringText(terminal, outputMode, suffix)

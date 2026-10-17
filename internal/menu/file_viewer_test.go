@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/ViSiON-3/vision-3-bbs/internal/util"
@@ -389,7 +390,10 @@ func TestDisplayTextWithPagingRefusesHugeFile(t *testing.T) {
 	}
 	_ = f.Close()
 	r := env.run(func(c *cmdCtx, _ string) (*user.User, string, error) {
-		displayTextWithPaging(c.s, c.terminal, p, "big.txt", c.outputMode, 24, "Viewing %s", "EOF", "More", "Pause", "OPEN ERROR")
+		strs := *c.e.Strings()
+		strs.FileViewingHeader, strs.FileOpenError = "Viewing %s", "OPEN ERROR"
+		c.e.SetStrings(strs)
+		c.e.displayTextWithPaging(c.s, c.terminal, p, "big.txt", c.outputMode, 24)
 		return nil, "", nil
 	}, env.caller, "", "")
 	if !r.has("OPEN ERROR") || r.has("Viewing") {
@@ -426,8 +430,10 @@ func TestDisplayTextWithPaging_ShowsEveryLineAndPagesCorrectly(t *testing.T) {
 	t.Cleanup(func() { resetSessionIH(ts) })
 	terminal := newTestTerminal(ts)
 
-	displayTextWithPaging(ts, terminal, textPath, "readme.txt", ansi.OutputModeCP437, 9,
-		"Viewing: %s\r\n", "<EOF>", "<MORE>", "<PAUSE>", "<OPENERR>")
+	e := &MenuExecutor{}
+	e.SetStrings(config.StringsConfig{FileViewingHeader: "Viewing: %s\r\n", FileEndOfFile: "<EOF>",
+		FileMorePrompt: "<MORE>", FilePausePrompt: "<PAUSE>", FileOpenError: "<OPENERR>"})
+	e.displayTextWithPaging(ts, terminal, textPath, "readme.txt", ansi.OutputModeCP437, 9)
 
 	out := ts.output()
 	prev := -1
