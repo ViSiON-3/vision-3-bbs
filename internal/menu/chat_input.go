@@ -45,6 +45,13 @@ type chatScreen struct {
 
 	write      func([]byte) // raw write to the session
 	drawStatus func()       // redraws the status bars at statusRow; may be nil
+
+	// redrawRegion, when set, redraws the scroll region's contents from the
+	// scrollback after a resize, in place of scrolling the terminal.
+	redrawRegion func()
+	// page, when set, is called with -1 for PgUp and 1 for PgDn while a line
+	// is being typed.
+	page func(dir int)
 }
 
 // scrollBottom returns the last row of the chat scroll region.
@@ -79,7 +86,8 @@ func (c *chatScreen) restoreCursor() {
 }
 
 // resize changes the input area to n rows, keeping the most recent messages
-// in view. Growing scrolls the chat region up by the rows it gives away,
+// in view. With redrawRegion set, the region is redrawn from the scrollback.
+// Without it, growing scrolls the chat region up by the rows it gives away,
 // before the region shrinks, so the newest lines stay just above the status
 // bars; shrinking widens the region and scrolls it down by the rows it gains,
 // which pushes the old status bars and input rows out of the bottom of the
@@ -94,6 +102,9 @@ func (c *chatScreen) resize(n int) {
 	c.inputRows = n
 	newBottom := c.scrollBottom()
 	switch {
+	case c.redrawRegion != nil:
+		c.setRegion()
+		c.redrawRegion()
 	case newBottom < oldBottom:
 		c.write([]byte(ansi.MoveCursor(oldBottom, 1)))
 		c.write([]byte(strings.Repeat("\r\n", oldBottom-newBottom)))
@@ -156,6 +167,7 @@ func chatWrapInput(text []rune, width int) [][]rune {
 // chatReadLine reads one chat message using the session's InputHandler (the
 // same path as all other BBS input), echoing it in scr's input area, which
 // grows a row at a time as the text wraps and returns to one row on Enter.
+// PgUp and PgDn are passed to scr.page, under mu.
 // The message can be up to chatInputMaxLen characters; further keys are
 // ignored. It returns the text with surrounding spaces trimmed.
 //
@@ -221,6 +233,17 @@ func chatReadLine(s ssh.Session, mu *sync.Mutex, scr *chatScreen, prompt string)
 
 		case editor.KeyEsc, editor.KeyCtrlC, editor.KeyCtrlA:
 			return "", io.EOF
+
+		case editor.KeyPageUp, editor.KeyPageDown:
+			if scr.page != nil {
+				dir := 1
+				if key == editor.KeyPageUp {
+					dir = -1
+				}
+				mu.Lock()
+				scr.page(dir)
+				mu.Unlock()
+			}
 
 		default:
 			if editor.IsPrintable(key) && len(buf) < chatInputMaxLen {

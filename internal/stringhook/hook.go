@@ -115,6 +115,7 @@ var NoHookKeys = map[string]bool{
 	"chatPrivateMsgFormat":      true,
 	"chatReconnected":           true,
 	"chatRoomListEntry":         true,
+	"chatScrollbackHint":        true,
 	"chatSeparator":             true,
 	"chatSystemPrefix":          true,
 	"chatTopicMsg":              true,

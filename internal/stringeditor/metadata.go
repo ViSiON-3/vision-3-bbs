@@ -523,6 +523,7 @@ func stringCatalog() []StringEntry {
 		{Label: "Chat: /JOIN Usage", Key: "chatJoinUsage", Description: "Shown when /JOIN is typed without a room"},
 		{Label: "Chat: /TOPIC Usage", Key: "chatTopicUsage", Description: "Shown when /TOPIC is typed without a topic"},
 		{Label: "Chat: /MSG Usage", Key: "chatMsgUsage", Description: "Shown when /MSG is typed without a user and a message"},
+		{Label: "Chat: Scrollback Hint", Key: "chatScrollbackHint", Description: "Replaces the command hints while the chat is paged back with PgUp"},
 
 		// Door access control (V3)
 		{Label: "Door: Access Denied", Key: "doorAccessDenied", Description: "Shown when a user lacks access to a door (%s=door name)"},

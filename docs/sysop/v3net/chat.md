@@ -57,7 +57,9 @@ launch.
 ```
 
 - **Header** (rows 1–5): ANSI art showing network, room, and topic
-- **Scroll area**: incoming messages; scrolls automatically
+- **Scroll area**: incoming messages; scrolls automatically. The last 500
+  lines are kept, and PgUp and PgDn page through them; the hint bar says when
+  the view is paged back, and new messages wait below until you return
 - **Status bar**: current room members, hint line
 - **Input row**: typed text, sent with Enter. A word that does not fit on the
   row moves whole to a new row, and the input area grows upward one row at a
@@ -78,6 +80,7 @@ launch.
 | `/users` | Refresh the user list in the status bar |
 | `/network` | Switch to a different network mid-session |
 | `/?` or `/help` | List these commands on your own screen |
+| PgUp / PgDn | Page back through the last 500 lines of chat; Enter or PgDn at the end returns |
 | `/q` or `/quit` | Exit chat |
 
 Commands are case-insensitive. Any other line is posted to the current room.

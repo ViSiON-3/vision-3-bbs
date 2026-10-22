@@ -310,6 +310,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	currentTopic := ""
 	currentUsers := []string{}
 	mentions := 0 // room messages naming the caller since joining the room
+	scrollback := &chatScrollback{capacity: chatScrollbackLines}
 
 	var rawMu sync.Mutex
 
@@ -350,7 +351,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				"U":     func(w int) string { return chatCounter(w, len(currentUsers), "") },
 				"M":     func(w int) string { return chatCounter(w, mentions, "") },
 				"L":     text(""),
-				"B":     text(""),
+				"B":     func(w int) string { return chatBufferField(w, scrollback.len(), chatScrollbackLines) },
 			})
 			// The art is UTF-8 by now; make wraps explicit so each header
 			// row splits out on its own on terminals wider than the art.
@@ -402,13 +403,48 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		rawWriteLocked([]byte(ansi.MoveCursor(hintsRow, 1)))
 		rawWriteLocked(sep)
 		rawWriteLocked([]byte(ansi.MoveCursor(hintsRow, 2)))
-		rawWriteLocked(ansi.ReplacePipeCodes([]byte(" |08/rooms /join /msg /topic /network /q")))
+		hints := " |08/rooms /join /msg /topic /network /q"
+		if !scrollback.live() {
+			hints = e.Strings().ChatScrollbackHint
+		}
+		rawWriteLocked(ansi.ReplacePipeCodes([]byte(hints)))
 		scr.restoreCursor()
 	}
 	scr.drawStatus = drawStatusBarLocked
 
+	// drawRegionLocked redraws the chat scroll region from the scrollback:
+	// the newest lines on the live view, older ones while paged back. The
+	// lines sit at the bottom of the region, as scrolling leaves them.
+	// Caller must hold rawMu.
+	drawRegionLocked := func() {
+		bottom := scr.scrollBottom()
+		lines := scrollback.view(bottom - chatTop + 1)
+		var b strings.Builder
+		for row := chatTop; row <= bottom; row++ {
+			fmt.Fprintf(&b, "\x1B[%d;1H\x1B[2K", row)
+		}
+		for i, line := range lines {
+			b.WriteString(ansi.MoveCursor(bottom-len(lines)+1+i, 1))
+			b.Write(ansi.ReplacePipeCodes([]byte(line)))
+		}
+		rawWriteLocked([]byte(b.String()))
+		scr.restoreCursor()
+	}
+	scr.redrawRegion = drawRegionLocked
+
+	// scr.page moves the view a page up or down the scrollback, with the
+	// hint bar saying when it is off the live view. Called with rawMu held.
+	scr.page = func(dir int) {
+		if scrollback.page(dir, scr.scrollBottom()-chatTop+1) {
+			drawRegionLocked()
+			drawStatusBarLocked()
+		}
+	}
+
 	// writeChatLineLocked writes a timestamped, word-wrapped message into the
-	// chat scroll region. Caller must hold rawMu.
+	// chat scroll region and the scrollback. While the caller is paged back
+	// the line is only kept, and shows when they return. Caller must hold
+	// rawMu.
 	//
 	// Strings shown inside the split screen are printed as text even when they
 	// start with !door or %file (see string_hooks.go): they are wrapped into
@@ -420,6 +456,14 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		lines := wrapPipeText(fullText, termWidth, chatContPrefix, chatContPrefixLen)
 		n := len(lines)
 		if n == 0 {
+			return
+		}
+		held := scrollback.len()
+		scrollback.add(lines...)
+		if scrollback.len() != held {
+			drawHeaderLocked() // the Buffer counter
+		}
+		if !scrollback.live() {
 			return
 		}
 		// Scroll the chat region up by n lines.
@@ -566,6 +610,15 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			slog.Error("chat input error", "node", nodeNumber, "error", err)
 			break
 		}
+
+		// Sending a line, even a blank one, returns a paged-back view to
+		// the newest messages.
+		rawMu.Lock()
+		if scrollback.toLive() {
+			drawRegionLocked()
+			drawStatusBarLocked()
+		}
+		rawMu.Unlock()
 
 		trimmed := strings.TrimSpace(input)
 		if trimmed == "" {
@@ -767,6 +820,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			currentTopic = ""
 			mentions = 0
 			currentUsers = svc.Users()
+			scrollback.reset()
 			drawHeaderLocked()
 			for row := chatTop; row <= scr.scrollBottom(); row++ {
 				rawWriteLocked([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K", row)))
@@ -1053,4 +1107,3 @@ func wrapPipeText(text string, width int, contPrefix string, contLen int) []stri
 	}
 	return lines
 }
-

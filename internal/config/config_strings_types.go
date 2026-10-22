@@ -227,6 +227,7 @@ type StringsConfig struct {
 	ChatJoinUsage           string `json:"chatJoinUsage"`
 	ChatTopicUsage          string `json:"chatTopicUsage"`
 	ChatMsgUsage            string `json:"chatMsgUsage"`
+	ChatScrollbackHint      string `json:"chatScrollbackHint"`
 
 	// Page strings (V3-specific)
 	PageOnlineNodesHeader string `json:"pageOnlineNodesHeader"`
