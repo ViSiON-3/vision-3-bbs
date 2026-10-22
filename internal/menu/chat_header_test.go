@@ -29,9 +29,11 @@ func TestChatArtFill(t *testing.T) {
 		},
 		"U": func(w int) string { widths["U"] = w; return "·003" },
 	}
-	art := "[@ROOM###@][@U#@][@TOPIC#############@][@NOPE##@]"
+	// "sysop@Unknown.net" has no placeholder: only # may sit between a name
+	// and its closing @, so the U before "nknown" does not reach "@U#@".
+	art := "[@ROOM###@][@U#@][@TOPIC#############@][@NOPE##@] sysop@Unknown.net [@U#@]"
 	got := string(chatArtFill([]byte(art), fields))
-	want := "[lobby    ][·003][say @U@ and @ROOM#@ ][@NOPE##@]"
+	want := "[lobby    ][·003][say @U@ and @ROOM#@ ][@NOPE##@] sysop@Unknown.net [·003]"
 	if got != want {
 		t.Errorf("chatArtFill = %q, want %q", got, want)
 	}

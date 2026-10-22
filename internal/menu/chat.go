@@ -1,7 +1,6 @@
 package menu
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -1036,11 +1035,14 @@ func chatArtPlaceholder(data []byte) (string, int, bool) {
 	if j == 1 {
 		return "", 0, false
 	}
-	end := bytes.IndexByte(data[j:], '@')
-	if end < 0 {
+	k := j
+	for k < len(data) && data[k] == '#' {
+		k++
+	}
+	if k >= len(data) || data[k] != '@' {
 		return "", 0, false
 	}
-	return string(data[1:j]), j + end + 1, true
+	return string(data[1:j]), k + 1, true
 }
 
 // chatArtPad fits value to width columns, cutting whole runes or padding with
