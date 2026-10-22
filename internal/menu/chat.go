@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/gliderlabs/ssh"
@@ -308,6 +309,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	currentNetwork := selectedNetwork
 	currentTopic := ""
 	currentUsers := []string{}
+	mentions := 0 // room messages naming the caller since joining the room
 
 	var rawMu sync.Mutex
 
@@ -323,8 +325,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// drawHeaderLocked redraws the 5-row ANSI art header. Caller must hold rawMu.
-	// It loads CHATHEADER.ANS from the menu set's ansi directory, substituting
-	// @MRCROOM@ and @MRCTOPIC@ placeholders with the current room and topic.
+	// It loads CHATHEADER.ANS from the menu set's ansi directory and fills its
+	// placeholders (see chatArtFill): @NET@, @ROOM@ and @TOPIC@ with the
+	// network, room and topic, and the counters @U@ (users in the room), @M@
+	// (mentions since joining), @L@ (network lag) and @B@ (scrollback use).
 	// Falls back to a simple text header if the art file is not found.
 	drawHeaderLocked := func() {
 		artPath := e.menuFile("ansi", "CHATHEADER.ANS")
@@ -338,9 +342,16 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			// UTF-8 bytes through the CP437 converter, which reinterprets each
 			// byte separately and garbles the name rather than just cutting it.
 			// The @NAME@ placeholders are ASCII, so conversion leaves them intact.
-			artData = chatArtReplace(artData, "NET", currentNetwork)
-			artData = chatArtReplace(artData, "ROOM", currentRoom)
-			artData = chatArtReplace(artData, "TOPIC", currentTopic)
+			text := func(v string) func(int) string { return func(int) string { return v } }
+			artData = chatArtFill(artData, map[string]func(int) string{
+				"NET":   text(currentNetwork),
+				"ROOM":  text(currentRoom),
+				"TOPIC": text(currentTopic),
+				"U":     func(w int) string { return chatCounter(w, len(currentUsers), "") },
+				"M":     func(w int) string { return chatCounter(w, mentions, "") },
+				"L":     text(""),
+				"B":     text(""),
+			})
 			// The art is UTF-8 by now; make wraps explicit so each header
 			// row splits out on its own on terminals wider than the art.
 			artData = fitArt(terminal, artData, termWidth, true)
@@ -483,7 +494,13 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			switch ev.Type {
 			case chat.TypeMessage:
 				if ev.Message != nil {
-					writeChatLine(formatChatMessage(*ev.Message, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
+					rawMu.Lock()
+					writeChatLineLocked(formatChatMessage(*ev.Message, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
+					if !ev.Message.IsSystem && chatMentions(ev.Message.Text, handle) {
+						mentions++
+						drawHeaderLocked()
+					}
+					rawMu.Unlock()
 				}
 			case chat.TypePrivate:
 				if ev.Message != nil {
@@ -495,6 +512,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					rawMu.Lock()
 					currentUsers = newUsers
 					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatJoinMsg, ev.Join.Handle, ev.Join.Room))
+					drawHeaderLocked()
 					drawStatusBarLocked()
 					rawMu.Unlock()
 				}
@@ -504,6 +522,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					rawMu.Lock()
 					currentUsers = newUsers
 					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatLeaveMsg, ev.Leave.Handle, ev.Leave.Room))
+					drawHeaderLocked()
 					drawStatusBarLocked()
 					rawMu.Unlock()
 				}
@@ -614,9 +633,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					// the caller has left, until a /JOIN succeeds.
 					currentRoom = ""
 					currentTopic = ""
-					drawHeaderLocked()
 				}
+				mentions = 0
 				currentUsers = svc.Users()
+				drawHeaderLocked()
 				drawStatusBarLocked()
 				rawMu.Unlock()
 				if !rejoined {
@@ -627,6 +647,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			rawMu.Lock()
 			currentRoom = newRoom
 			currentTopic = ""
+			mentions = 0
 			currentUsers = svc.Users()
 			drawHeaderLocked()
 			drawStatusBarLocked()
@@ -744,6 +765,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			done = make(chan struct{})
 			rawMu.Lock()
 			currentTopic = ""
+			mentions = 0
 			currentUsers = svc.Users()
 			drawHeaderLocked()
 			for row := chatTop; row <= scr.scrollBottom(); row++ {
@@ -811,6 +833,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		if upper == "/USERS" {
 			rawMu.Lock()
 			currentUsers = svc.Users()
+			drawHeaderLocked()
 			drawStatusBarLocked()
 			rawMu.Unlock()
 			continue
@@ -852,37 +875,132 @@ func formatChatMessage(msg chat.ChatMessage, systemFmt, userFmt string) string {
 	return fmt.Sprintf(userFmt, msg.Handle, msg.Text)
 }
 
-// chatArtReplace finds the MCI placeholder @name####...####@ in ANSI art data
-// and replaces it with value padded (or truncated) to the same byte length,
-// preserving the visual width of the art.
+// chatArtReplace fills the @name####@ placeholder in ANSI art data with
+// value; see chatArtFill.
 func chatArtReplace(data []byte, name, value string) []byte {
-	tag := []byte("@" + name)
-	start := bytes.Index(data, tag)
-	if start < 0 {
-		return data
+	return chatArtFill(data, map[string]func(int) string{name: func(int) string { return value }})
+}
+
+// chatArtFill replaces the placeholders in the chat header art in one pass
+// over data. A placeholder is "@", an upper-case name, any fill characters
+// (the stock art uses "#") and a closing "@"; its length in columns, both
+// "@"s included, is the width of the field on screen. For each placeholder
+// whose name has an entry in fields, the function is called with that width
+// and its result is padded with spaces or cut to exactly that many columns,
+// so the art keeps its shape. Unknown placeholders are left as they are.
+// Values are never scanned for placeholders themselves, so a topic or room
+// name containing "@U@" is shown as typed.
+func chatArtFill(data []byte, fields map[string]func(int) string) []byte {
+	out := make([]byte, 0, len(data))
+	for i := 0; i < len(data); {
+		if data[i] == '@' {
+			if name, span, ok := chatArtPlaceholder(data[i:]); ok {
+				if fill, known := fields[name]; known {
+					width := utf8.RuneCount(data[i : i+span])
+					out = append(out, chatArtPad(fill(width), width)...)
+					i += span
+					continue
+				}
+			}
+		}
+		out = append(out, data[i])
+		i++
 	}
-	rest := data[start+len(tag):]
-	end := bytes.IndexByte(rest, '@')
+	return out
+}
+
+// chatArtPlaceholder reports whether data starts with a placeholder, and if
+// so returns its name and its length in bytes.
+func chatArtPlaceholder(data []byte) (string, int, bool) {
+	j := 1
+	for j < len(data) && data[j] >= 'A' && data[j] <= 'Z' {
+		j++
+	}
+	if j == 1 {
+		return "", 0, false
+	}
+	end := bytes.IndexByte(data[j:], '@')
 	if end < 0 {
-		return data
+		return "", 0, false
 	}
-	totalLen := len(tag) + end + 1 // placeholder span; ASCII, so bytes == columns
-	// Fill by columns, not bytes: the NET value is a V3Net leaf network name and
-	// is not ASCII-gated, so byte padding would leave the row short and byte
-	// truncation would cut a rune in half.
+	return string(data[1:j]), j + end + 1, true
+}
+
+// chatArtPad fits value to width columns, cutting whole runes or padding with
+// spaces. Values such as a V3Net network name are not ASCII-gated, so this
+// counts runes rather than bytes.
+func chatArtPad(value string, width int) []byte {
 	runes := []rune(value)
-	if len(runes) > totalLen {
-		runes = runes[:totalLen]
+	if len(runes) > width {
+		runes = runes[:width]
 	}
 	repl := []byte(string(runes))
-	for utf8.RuneCount(repl) < totalLen {
+	for n := len(runes); n < width; n++ {
 		repl = append(repl, ' ')
 	}
-	out := make([]byte, 0, len(data))
-	out = append(out, data[:start]...)
-	out = append(out, repl...)
-	out = append(out, data[start+totalLen:]...)
-	return out
+	return repl
+}
+
+// chatCounter formats n for a header counter field width columns wide, the
+// way the stock art draws it: a "·" separator, n zero-padded to fill the
+// field, then suffix. A value with more digits than fit shows as all nines.
+// A field too narrow for the separator gets the bare number. For example,
+// chatCounter(4, 3, "") is "·003" and chatCounter(6, 42, "ms") is "·042ms".
+func chatCounter(width, n int, suffix string) string {
+	digits := width - 1 - len(suffix)
+	if digits < 1 {
+		return strconv.Itoa(n)
+	}
+	return "\u00b7" + chatPadNumber(n, digits) + suffix
+}
+
+// chatBufferField formats the scrollback use for a header field width columns
+// wide, as "·used/capacity" with each number zero-padded to half the room
+// left; chatBufferField(8, 12, 500) is "·012/500".
+func chatBufferField(width, used, capacity int) string {
+	digits := (width - 2) / 2
+	if digits < 1 {
+		return strconv.Itoa(used)
+	}
+	return "\u00b7" + chatPadNumber(used, digits) + "/" + chatPadNumber(capacity, digits)
+}
+
+// chatPadNumber zero-pads n to digits, or shows all nines when it is longer.
+func chatPadNumber(n, digits int) string {
+	s := fmt.Sprintf("%0*d", digits, max(n, 0))
+	if len(s) > digits {
+		return strings.Repeat("9", digits)
+	}
+	return s
+}
+
+// chatMentions reports whether text mentions handle: contains it, ignoring
+// case, as a whole word, with no letter or digit directly before or after.
+// "hey caller!" and "caller's" mention Caller; "callers" does not.
+func chatMentions(text, handle string) bool {
+	if handle == "" {
+		return false
+	}
+	lower, h := strings.ToLower(text), strings.ToLower(handle)
+	for from := 0; ; {
+		i := strings.Index(lower[from:], h)
+		if i < 0 {
+			return false
+		}
+		start := from + i
+		end := start + len(h)
+		before, _ := utf8.DecodeLastRuneInString(lower[:start])
+		after, _ := utf8.DecodeRuneInString(lower[end:])
+		if !chatWordRune(before) && !chatWordRune(after) {
+			return true
+		}
+		from = start + 1
+	}
+}
+
+// chatWordRune reports whether r is part of a word for chatMentions.
+func chatWordRune(r rune) bool {
+	return r != utf8.RuneError && (unicode.IsLetter(r) || unicode.IsDigit(r))
 }
 
 // pipeDisplayLen returns the number of visible characters in a pipe-code string,
@@ -935,3 +1053,4 @@ func wrapPipeText(text string, width int, contPrefix string, contLen int) []stri
 	}
 	return lines
 }
+
