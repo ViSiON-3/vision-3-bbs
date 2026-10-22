@@ -7,6 +7,7 @@
 package chat
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -99,6 +100,14 @@ type ChatService interface {
 
 	// Close tears down the session cleanly.
 	Close() error
+}
+
+// Pinger is implemented by chat services that talk to a remote server, such
+// as the V3Net leaf. Ping measures one round trip to that server, for the
+// chat header's Lag field; ctx bounds it. A service without a server, such as
+// LocalChatService, does not implement it, and chat shows no lag.
+type Pinger interface {
+	Ping(ctx context.Context) (time.Duration, error)
 }
 
 // NormalizeRoom lowercases room names and replaces spaces with hyphens.

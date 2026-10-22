@@ -2,6 +2,8 @@ package menu
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -12,6 +14,8 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/term"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -46,6 +50,10 @@ func TestChatCounterFields(t *testing.T) {
 		{"lag with its unit", chatCounter(6, 42, "ms"), "·042ms"},
 		{"wider field, more digits", chatCounter(7, 12, ""), "·000012"},
 		{"no room for digits", chatCounter(1, 5, ""), "5"},
+		{"lag", chatLagField(6, 42*time.Millisecond, true), "·042ms"},
+		{"lag under a millisecond", chatLagField(6, 300*time.Microsecond, true), "·000ms"},
+		{"lag not measured", chatLagField(6, 0, false), "·---ms"},
+		{"lag not measured, narrow field", chatLagField(3, 0, false), "-"},
 		{"buffer", chatBufferField(8, 12, 500), "·012/500"},
 		{"buffer full", chatBufferField(8, 500, 500), "·500/500"},
 		{"buffer in a narrow field", chatBufferField(6, 12, 500), "·12/99"},
@@ -267,4 +275,74 @@ func TestChatHeaderKeepsArtWidth(t *testing.T) {
 			t.Errorf("header row %d is %d columns, row 1 is %d", i+1, w, widths[0])
 		}
 	}
+}
+
+// chatPingSvc is a chatcovSvc whose network answers pings.
+type chatPingSvc struct {
+	*chatcovSvc
+	ping func() (time.Duration, error)
+}
+
+func (s *chatPingSvc) Ping(ctx context.Context) (time.Duration, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	return s.ping()
+}
+
+// chatPingNet installs a fake network, with no queued events, whose sessions
+// answer pings with ping.
+func chatPingNet(env *menuEnv, ping func() (time.Duration, error)) *chatcovNet {
+	n := chatcovFakeNet(env)
+	n.events = nil
+	base := n.leaf()
+	env.e.ChatLeaves = chatcovLeaves{{NetworkName: n.name, NewSession: func(handle string) chat.ChatService {
+		return &chatPingSvc{chatcovSvc: base.NewSession(handle).(*chatcovSvc), ping: ping}
+	}}}
+	return n
+}
+
+// TestChatHeaderLag covers the Lag counter of #660: on network chat it shows
+// the measured round trip, refreshed on a timer, and dashes while the network
+// cannot be reached.
+func TestChatHeaderLag(t *testing.T) {
+	old := chatLagInterval
+	chatLagInterval = 10 * time.Millisecond
+	t.Cleanup(func() { chatLagInterval = old })
+
+	env := newMenuEnv(t)
+	var mu sync.Mutex
+	rtt, fail := 42*time.Millisecond, false
+	chatPingNet(env, func() (time.Duration, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if fail {
+			return 0, errors.New("hub down")
+		}
+		return rtt, nil
+	})
+
+	live := startChatLive(env, env.caller)
+	live.waitOutput("Select network [1]:")
+	live.typeKeys("\r")
+	live.waitOutput("Select room [lobby]:")
+	live.typeKeys("\r")
+	live.waitHeader("[Lag·042ms]", "[Users·002]")
+
+	mu.Lock()
+	rtt = 1500 * time.Millisecond
+	mu.Unlock()
+	live.waitHeader("[Lag·999ms]")
+
+	mu.Lock()
+	fail = true
+	mu.Unlock()
+	live.waitHeader("[Lag·---ms]")
+
+	// /network to Local stops measuring and blanks the field.
+	live.typeKeys("/network\r")
+	live.waitOutput("Select network [1]: ")
+	live.typeKeys("2\r")
+	live.waitHeader("Network: Local", "[Lag      ]")
+	live.typeKeys("/q\r")
 }

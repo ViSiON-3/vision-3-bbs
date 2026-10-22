@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"slices"
 	"sync"
 	"time"
@@ -13,7 +14,10 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
-var _ chat.ChatService = (*ChatSession)(nil)
+var (
+	_ chat.ChatService = (*ChatSession)(nil)
+	_ chat.Pinger      = (*ChatSession)(nil)
+)
 
 // chatSessionRegistry tracks active ChatSessions on this leaf.
 type chatSessionRegistry struct {
@@ -370,4 +374,30 @@ func (s *ChatSession) Close() error {
 	s.mu.Unlock()
 	s.leaf.chatSessions.deregister(s.handle)
 	return nil
+}
+
+// Ping implements chat.Pinger. It times one request to the hub, a GET of the
+// network's public room list, which needs no signature and is small, and
+// returns the round trip including reading the reply. A transport error or a
+// non-200 status is returned as an error, with no duration. ctx bounds the
+// request; the leaf's client also times it out after 10 seconds.
+func (s *ChatSession) Ping(ctx context.Context) (time.Duration, error) {
+	path := fmt.Sprintf("/v3net/v1/%s/chat/rooms", s.leaf.cfg.Network)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.leaf.cfg.HubURL+path, nil)
+	if err != nil {
+		return 0, fmt.Errorf("leaf: create ping request: %w", err)
+	}
+	start := time.Now()
+	resp, err := s.leaf.client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("leaf: ping: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }() // read side
+	if _, err := readBody(resp.Body, maxRespBytes); err != nil {
+		return 0, fmt.Errorf("leaf: ping: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("leaf: ping: status %d", resp.StatusCode)
+	}
+	return time.Since(start), nil
 }

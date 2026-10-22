@@ -1,12 +1,14 @@
 package leaf
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -652,5 +654,41 @@ func TestChatSession_OwnPostNotEchoedOverSSE(t *testing.T) {
 	// The hub sends events in order, so alice's echo would arrive first.
 	if msg := awaitChat(t, alice, chat.TypeMessage); msg.Message.Text != "from bob" {
 		t.Errorf("first message alice received = %q, want bob's", msg.Message.Text)
+	}
+}
+
+// TestChatSession_Ping covers the round-trip measurement behind the chat
+// header's Lag field (#660): one GET of the hub's public room list, timed.
+func TestChatSession_Ping(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	sess := subscribedLeaf(t, ts, "alicebbs").NewChatSession("alice")
+	defer sess.Close()
+	if d, err := sess.Ping(context.Background()); err != nil || d <= 0 {
+		t.Errorf("Ping against a working hub = (%v, %v), want a positive duration", d, err)
+	}
+
+	// The time is the whole round trip.
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(60 * time.Millisecond)
+		_, _ = w.Write([]byte("[]"))
+	}))
+	t.Cleanup(slow.Close)
+	l, _ := setupLeaf(t, slow.URL, &mockJAMWriter{})
+	if d, err := l.NewChatSession("bob").Ping(context.Background()); err != nil || d < 60*time.Millisecond {
+		t.Errorf("Ping against a 60ms hub = (%v, %v), want at least 60ms", d, err)
+	}
+
+	// A hub that answers with an error has not been measured.
+	broken := cannedHub(t, http.StatusInternalServerError, "")
+	l, _ = setupLeaf(t, broken.URL, &mockJAMWriter{})
+	if _, err := l.NewChatSession("carol").Ping(context.Background()); err == nil {
+		t.Errorf("Ping against a failing hub returned no error")
+	}
+
+	// A cancelled context stops the request.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := sess.Ping(ctx); err == nil {
+		t.Errorf("Ping with a cancelled context returned no error")
 	}
 }

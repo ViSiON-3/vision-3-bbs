@@ -2,6 +2,7 @@ package menu
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -239,6 +240,10 @@ func chatRoomChoice(input string, rooms []chat.RoomInfo) (string, error) {
 	return room, nil
 }
 
+// chatLagInterval is how often network chat measures the round trip to its
+// server for the header's Lag field.
+var chatLagInterval = 15 * time.Second
+
 // chatNoRoomMsg is shown when the caller is in no room, after a /JOIN whose
 // fallback rejoin of the previous room also failed.
 const chatNoRoomMsg = "You are not in a room. Use /JOIN <room> to join one."
@@ -311,6 +316,11 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	currentUsers := []string{}
 	mentions := 0 // room messages naming the caller since joining the room
 	scrollback := &chatScrollback{capacity: chatScrollbackLines}
+	// Network round trip for the Lag field. pinging is false on a service
+	// that cannot be measured (Local), which leaves the field blank; lagOK
+	// is false until a measurement succeeds, which shows dashes.
+	pinging, lagOK := false, false
+	var lag time.Duration
 
 	var rawMu sync.Mutex
 
@@ -350,8 +360,13 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				"TOPIC": text(currentTopic),
 				"U":     func(w int) string { return chatCounter(w, len(currentUsers), "") },
 				"M":     func(w int) string { return chatCounter(w, mentions, "") },
-				"L":     text(""),
-				"B":     func(w int) string { return chatBufferField(w, scrollback.len(), chatScrollbackLines) },
+				"L": func(w int) string {
+					if !pinging {
+						return ""
+					}
+					return chatLagField(w, lag, lagOK)
+				},
+				"B": func(w int) string { return chatBufferField(w, scrollback.len(), chatScrollbackLines) },
 			})
 			// The art is UTF-8 by now; make wraps explicit so each header
 			// row splits out on its own on terminals wider than the art.
@@ -590,7 +605,54 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	done := make(chan struct{})
 	go pumpEvents(svc, done)
 
+	// startLag measures svc's round trip now and every chatLagInterval, if
+	// it is a chat.Pinger, and redraws the header when the shown value
+	// changes. The returned function stops it and waits for it to finish;
+	// call it without rawMu held.
+	startLag := func(svc chat.ChatService) func() {
+		p, ok := svc.(chat.Pinger)
+		rawMu.Lock()
+		pinging, lagOK = ok, false
+		rawMu.Unlock()
+		if !ok {
+			return func() {}
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		stopped := make(chan struct{})
+		go func() {
+			defer close(stopped)
+			tick := time.NewTicker(chatLagInterval)
+			defer tick.Stop()
+			for {
+				d, err := p.Ping(ctx)
+				rawMu.Lock()
+				if ctx.Err() == nil {
+					wasMS, wasOK := lag/time.Millisecond, lagOK
+					lag, lagOK = d, err == nil
+					if lagOK != wasOK || (lagOK && lag/time.Millisecond != wasMS) {
+						drawHeaderLocked()
+					}
+				}
+				rawMu.Unlock()
+				select {
+				case <-ctx.Done():
+					return
+				case <-tick.C:
+				}
+			}
+		}()
+		return func() {
+			cancel()
+			<-stopped
+			rawMu.Lock()
+			pinging = false
+			rawMu.Unlock()
+		}
+	}
+	stopLag := startLag(svc)
+
 	cleanup := func() {
+		stopLag()
 		if currentRoom != "" {
 			svc.Leave(currentRoom) //nolint:errcheck
 		}
@@ -816,6 +878,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			currentRoom = newRoom
 			currentNetwork = newNetName
 			done = make(chan struct{})
+			stopLag = startLag(svc)
 			rawMu.Lock()
 			currentTopic = ""
 			mentions = 0
@@ -1006,6 +1069,20 @@ func chatCounter(width, n int, suffix string) string {
 		return strconv.Itoa(n)
 	}
 	return "\u00b7" + chatPadNumber(n, digits) + suffix
+}
+
+// chatLagField formats a round trip for the header's Lag field, width
+// columns wide: as chatCounter in milliseconds with an "ms" suffix when ok,
+// and with dashes in place of the digits when there is no measurement, as in
+// "·---ms".
+func chatLagField(width int, lag time.Duration, ok bool) string {
+	if ok {
+		return chatCounter(width, int(lag/time.Millisecond), "ms")
+	}
+	if digits := width - 3; digits >= 1 {
+		return "\u00b7" + strings.Repeat("-", digits) + "ms"
+	}
+	return "-"
 }
 
 // chatBufferField formats the scrollback use for a header field width columns
