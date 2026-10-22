@@ -283,6 +283,23 @@ func TestFormatMessage_ReplyToNumber(t *testing.T) {
 	}
 }
 
+// TestFormatMessage_NumberFieldsLeftJustified guards against the number
+// running on into the next field for readers that parse with atol(), as
+// Synchronet does for the REP conference number.
+func TestFormatMessage_NumberFieldsLeftJustified(t *testing.T) {
+	data := formatMessage(PacketMessage{
+		Conference: 2001, Number: 2001, To: "All", Subject: "Hi",
+		DateTime: time.Date(2026, 10, 21, 19, 0, 0, 0, time.UTC), Body: "x",
+		ReplyToNumber: 7,
+	})
+	if got := string(data[1:16]); got != "2001   10-21-26" {
+		t.Errorf("number+date: want %q, got %q", "2001   10-21-26", got)
+	}
+	if got := string(data[108:116]); got != "7       " {
+		t.Errorf("reference field: want %q, got %q", "7       ", got)
+	}
+}
+
 // failAfterWriter fails all writes once limit bytes have been written,
 // simulating a full disk during zip finalization.
 type failAfterWriter struct {

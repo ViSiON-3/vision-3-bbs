@@ -225,8 +225,11 @@ func formatMessage(msg PacketMessage) []byte {
 
 	header[0] = status
 
-	// Message number: positions 1-7 (7 chars, right-justified)
-	copyPadded(header[1:8], fmt.Sprintf("%7d", msg.Number), 7)
+	// Message number: positions 1-7, left-justified. The field has no
+	// terminator, and Synchronet reads it with atol(), so right-justified
+	// digits run on into the date: "   2001" + "10-21-26" reads as 200110,
+	// and a REP message then lands in the wrong conference or is rejected.
+	copyPadded(header[1:8], fmt.Sprintf("%-7d", msg.Number), 7)
 
 	// Date: positions 8-15 (MM-DD-YY, 8 chars)
 	copyPadded(header[8:16], msg.DateTime.Format("01-02-06"), 8)
@@ -246,7 +249,7 @@ func formatMessage(msg PacketMessage) []byte {
 	// Password: positions 96-107 (12 chars) — blank
 
 	// Reference number: positions 108-115 (8 bytes) — parent message number.
-	copyPadded(header[108:116], fmt.Sprintf("%8d", msg.ReplyToNumber), 8)
+	copyPadded(header[108:116], fmt.Sprintf("%-8d", msg.ReplyToNumber), 8)
 
 	// Body with QWK line ending (0xE3)
 	body := strings.ReplaceAll(msg.Body, "\r\n", "\xe3")

@@ -155,7 +155,7 @@ func TestReadPacket_SynchronetStyle(t *testing.T) {
 	body := "@VIA: HUB/FAR\xe3@MSGID: <77.gen@far>\xe3@TZ: 412c\xe3Hello from far away\xe3"
 	hdr := bytes.Repeat([]byte{' '}, BlockSize)
 	hdr[0] = ' '
-	copy(hdr[1:8], "     77")
+	copy(hdr[1:8], "77     ")
 	copy(hdr[8:21], "03-15-2609:45")
 	copy(hdr[21:46], "All")
 	copy(hdr[46:71], "Far User")
