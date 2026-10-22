@@ -27,6 +27,9 @@ func TestChatWrapInput(t *testing.T) {
 		{"a long word alone is cut at the edge only", "abcdefghij", 5, []string{"abcde", "fghij"}},
 		{"text after a long word wraps normally", "abcdefg hi", 5, []string{"abcde", "fg hi"}},
 		{"width below one still makes progress", "abc", 0, []string{"a", "b", "c"}},
+		{"wide characters take two cells", "日本 語", 5, []string{"日本 ", "語"}},
+		{"a long wide word is cut between characters", "日本語のネ", 5, []string{"日本", "語の", "ネ"}},
+		{"a wide character on a one-cell row still makes progress", "日本", 1, []string{"日", "本"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var got []string

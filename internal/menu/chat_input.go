@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gliderlabs/ssh"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -121,13 +122,13 @@ func (c *chatScreen) resize(n int) {
 }
 
 // chatWrapInput splits typed text into the rows the input area shows, each at
-// most width characters. Words are never split: a word that does not fit on
-// the current row moves whole to the next one. Only a word longer than a
-// whole row is cut, at the row's edge, and it starts on a row of its own.
-// Spaces that fall at a wrap are dropped from the display; a trailing space
-// that does not fit starts an empty last row, where the cursor goes. The
-// result always has at least one row. The text itself is not changed; this is
-// display only.
+// most width terminal cells; a wide character takes two. Words are never
+// split: a word that does not fit on the current row moves whole to the next
+// one. Only a word longer than a whole row is cut, at the row's edge, and it
+// starts on a row of its own. Spaces that fall at a wrap are dropped from the
+// display; a trailing space that does not fit starts an empty last row, where
+// the cursor goes. The result always has at least one row. The text itself is
+// not changed; this is display only.
 //
 // For example, "hello world" at width 10 is ["hello ", "world"].
 func chatWrapInput(text []rune, width int) [][]rune {
@@ -143,26 +144,48 @@ func chatWrapInput(text []rune, width int) [][]rune {
 		tok := text[i:j]
 		i = j
 		switch {
-		case len(cur)+len(tok) <= width:
+		case chatCells(cur)+chatCells(tok) <= width:
 			cur = append(cur, tok...)
 		case space:
 			rows = append(rows, cur)
 			cur = nil
-		case len(tok) <= width:
+		case chatCells(tok) <= width:
 			rows = append(rows, cur)
 			cur = append([]rune(nil), tok...)
 		default:
 			if len(cur) > 0 {
 				rows = append(rows, cur)
 			}
-			for len(tok) > width {
-				rows = append(rows, tok[:width])
-				tok = tok[width:]
+			for len(tok) > 1 && chatCells(tok) > width {
+				n := chatFitRunes(tok, width)
+				rows = append(rows, tok[:n])
+				tok = tok[n:]
 			}
 			cur = append([]rune(nil), tok...)
 		}
 	}
 	return append(rows, cur)
+}
+
+// chatCells is the number of terminal cells text takes.
+func chatCells(text []rune) int {
+	n := 0
+	for _, r := range text {
+		n += runewidth.RuneWidth(r)
+	}
+	return n
+}
+
+// chatFitRunes is how many leading runes of text fit in width cells, and at
+// least one, so a wide character on a one-cell row still makes progress.
+func chatFitRunes(text []rune, width int) int {
+	cells := 0
+	for i, r := range text {
+		if cells += runewidth.RuneWidth(r); cells > width {
+			return max(i, 1)
+		}
+	}
+	return len(text)
 }
 
 // chatReadLine reads one chat message using the session's InputHandler (the
@@ -203,7 +226,7 @@ func chatReadLine(s ssh.Session, mu *sync.Mutex, scr *chatScreen, prompt string)
 			}
 		}
 		last := rows[len(rows)-1]
-		scr.curRow, scr.curCol = scr.height, promptLen+len(last)+1
+		scr.curRow, scr.curCol = scr.height, promptLen+chatCells(last)+1
 		fmt.Fprintf(&b, "\x1B[%d;%dH", scr.curRow, scr.curCol)
 		scr.write([]byte(b.String()))
 	}
