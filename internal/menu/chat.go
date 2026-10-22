@@ -474,9 +474,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	chatPrompt := fmt.Sprintf("<%s> ", handle)
 	rawWrite([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K%s", scr.height, chatPrompt)))
 
-	// Goroutine to receive and display incoming events.
-	done := make(chan struct{})
-	go func() {
+	// pumpEvents shows the events svc delivers until its Events channel is
+	// closed, then closes done. It runs on its own goroutine, one per
+	// service: /network starts a new one after closing the old service.
+	pumpEvents := func(svc chat.ChatService, done chan struct{}) {
 		defer close(done)
 		for ev := range svc.Events() {
 			switch ev.Type {
@@ -522,7 +523,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 			}
 		}
-	}()
+	}
+	done := make(chan struct{})
+	go pumpEvents(svc, done)
 
 	cleanup := func() {
 		if currentRoom != "" {
@@ -754,53 +757,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				writeChatLine(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 			}
 
-			go func() {
-				defer close(done)
-				for ev := range svc.Events() {
-					switch ev.Type {
-					case chat.TypeMessage:
-						if ev.Message != nil {
-							writeChatLine(formatChatMessage(*ev.Message, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
-						}
-					case chat.TypePrivate:
-						if ev.Message != nil {
-							writeChatLine(fmt.Sprintf(e.Strings().ChatPrivateMsgFormat, ev.Message.Handle, ev.Message.Text))
-						}
-					case chat.TypeJoin:
-						if ev.Join != nil {
-							newUsers := svc.Users()
-							rawMu.Lock()
-							currentUsers = newUsers
-							writeChatLineLocked(fmt.Sprintf(e.Strings().ChatJoinMsg, ev.Join.Handle, ev.Join.Room))
-							drawStatusBarLocked()
-							rawMu.Unlock()
-						}
-					case chat.TypeLeave:
-						if ev.Leave != nil {
-							newUsers := svc.Users()
-							rawMu.Lock()
-							currentUsers = newUsers
-							writeChatLineLocked(fmt.Sprintf(e.Strings().ChatLeaveMsg, ev.Leave.Handle, ev.Leave.Room))
-							drawStatusBarLocked()
-							rawMu.Unlock()
-						}
-					case chat.TypeTopic:
-						if ev.Topic != nil {
-							rawMu.Lock()
-							currentTopic = ev.Topic.Topic
-							writeChatLineLocked(fmt.Sprintf(e.Strings().ChatTopicMsg, ev.Topic.Room, ev.Topic.Topic))
-							drawHeaderLocked()
-							rawMu.Unlock()
-						}
-					case chat.TypeSystem:
-						if ev.Reconnect {
-							writeChatLine(e.Strings().ChatReconnected)
-						} else if ev.Text != "" {
-							writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, ev.Text))
-						}
-					}
-				}
-			}()
+			go pumpEvents(svc, done)
 			continue
 		}
 
