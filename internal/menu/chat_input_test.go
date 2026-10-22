@@ -30,6 +30,8 @@ func TestChatWrapInput(t *testing.T) {
 		{"wide characters take two cells", "日本 語", 5, []string{"日本 ", "語"}},
 		{"a long wide word is cut between characters", "日本語のネ", 5, []string{"日本", "語の", "ネ"}},
 		{"a wide character on a one-cell row still makes progress", "日本", 1, []string{"日", "本"}},
+		// 👨‍👩‍👧 is five runes joined into one two-cell character.
+		{"a joined emoji is measured and kept whole", "ab👨\u200d👩\u200d👧cd", 3, []string{"ab", "👨\u200d👩\u200d👧c", "d"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var got []string
@@ -187,6 +189,7 @@ func TestChatReadLineNonASCII(t *testing.T) {
 		{"UTF-8", ansi.OutputModeUTF8, "caf\xc3\xa9 \xe2\x94\x80\r", "café ─"},
 		{"CP437", ansi.OutputModeCP437, "caf\x82 \xc4\r", "café ─"},
 		{"a cut-off sequence does not swallow the next key", ansi.OutputModeUTF8, "a\xc3b\r", "ab"},
+		{"backspace removes a joined emoji whole", ansi.OutputModeUTF8, "a\U0001F468\u200d\U0001F469\x08b\r", "ab"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ts := newTestSession(tc.input)

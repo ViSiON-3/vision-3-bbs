@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gliderlabs/ssh"
-	"github.com/mattn/go-runewidth"
+	"github.com/rivo/uniseg"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -167,25 +167,40 @@ func chatWrapInput(text []rune, width int) [][]rune {
 	return append(rows, cur)
 }
 
-// chatCells is the number of terminal cells text takes.
+// chatCells is the number of terminal cells text takes, measured by
+// grapheme cluster, so an emoji joined from several runes counts once.
 func chatCells(text []rune) int {
-	n := 0
-	for _, r := range text {
-		n += runewidth.RuneWidth(r)
+	return uniseg.StringWidth(string(text))
+}
+
+// chatFitRunes is how many leading runes of text fit in width cells without
+// splitting a grapheme cluster, and at least one whole cluster, so a wide
+// character on a one-cell row still makes progress.
+func chatFitRunes(text []rune, width int) int {
+	cells, n := 0, 0
+	g := uniseg.NewGraphemes(string(text))
+	for g.Next() {
+		size := len(g.Runes())
+		if cells += g.Width(); cells > width {
+			if n == 0 {
+				return size
+			}
+			return n
+		}
+		n += size
 	}
 	return n
 }
 
-// chatFitRunes is how many leading runes of text fit in width cells, and at
-// least one, so a wide character on a one-cell row still makes progress.
-func chatFitRunes(text []rune, width int) int {
-	cells := 0
-	for i, r := range text {
-		if cells += runewidth.RuneWidth(r); cells > width {
-			return max(i, 1)
-		}
+// chatLastGrapheme is how many runes the last grapheme cluster of text takes,
+// so Backspace removes a joined emoji whole.
+func chatLastGrapheme(text []rune) int {
+	last := 0
+	g := uniseg.NewGraphemes(string(text))
+	for g.Next() {
+		last = len(g.Runes())
 	}
-	return len(text)
+	return last
 }
 
 // chatReadLine reads one chat message using the session's InputHandler (the
@@ -200,7 +215,7 @@ func chatFitRunes(text []rune, width int) int {
 // connection all return io.EOF.
 func chatReadLine(s ssh.Session, mu *sync.Mutex, scr *chatScreen, prompt string) (string, error) {
 	ih := getSessionIH(s)
-	promptLen := len([]rune(prompt))
+	promptLen := uniseg.StringWidth(prompt)
 	indent := strings.Repeat(" ", promptLen)
 
 	var buf []rune
@@ -256,7 +271,7 @@ func chatReadLine(s ssh.Session, mu *sync.Mutex, scr *chatScreen, prompt string)
 
 		case editor.KeyBackspace:
 			if len(buf) > 0 {
-				buf = buf[:len(buf)-1]
+				buf = buf[:len(buf)-chatLastGrapheme(buf)]
 				redraw()
 			}
 
