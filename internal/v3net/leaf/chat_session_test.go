@@ -579,3 +579,78 @@ func TestChatSession_JoinUndoneWhenReplyUnreadable(t *testing.T) {
 		t.Errorf("current room = %q, want lobby unchanged", room)
 	}
 }
+
+// TestDispatch_DropsEchoOfOwnMessage covers #658: the hub broadcasts a post to
+// every member of the room, its author included, and the chat screen has
+// already shown the author's line when Post returned. The echo is recognised
+// by handle and node together, as the join echo is, so a user on another BBS
+// who shares the handle is still heard.
+func TestDispatch_DropsEchoOfOwnMessage(t *testing.T) {
+	const self = "<this leaf>"
+	for _, tc := range []struct {
+		name, handle, node string
+		want               bool // delivered to the sysop session
+	}{
+		{"own post echoed by the hub", "sysop", self, false},
+		{"same handle on another BBS", "sysop", "node-b", true},
+		{"another user on this BBS", "alice", self, true},
+		{"hub without the node field", "sysop", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+			sess := newRoomSession(l, "sysop", "lobby", "sysop")
+			node := tc.node
+			if node == self {
+				node = l.chatSessions.nodeID
+			}
+			l.chatSessions.dispatch(chatEvent(t, protocol.EventChatMessage, protocol.ChatMsgPayload{
+				Room: "lobby", FromHandle: tc.handle, FromNode: node, Text: "hi",
+			}))
+			if !tc.want {
+				noEvent(t, sess, "echo of own message")
+				return
+			}
+			select {
+			case ev := <-sess.events:
+				if ev.Type != chat.TypeMessage || ev.Message.Handle != tc.handle {
+					t.Errorf("event = %+v, want %s's message", ev, tc.handle)
+				}
+			default:
+				t.Errorf("message from %s@%s not delivered", tc.handle, node)
+			}
+		})
+	}
+}
+
+// TestChatSession_OwnPostNotEchoedOverSSE runs #658 end to end: with a real
+// hub and the leaf's event stream running, the poster's session receives the
+// other member's messages but not its own.
+func TestChatSession_OwnPostNotEchoedOverSSE(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	aliceLeaf := subscribedLeaf(t, ts, "alicebbs")
+	bobLeaf := subscribedLeaf(t, ts, "bobbbs")
+
+	alice := aliceLeaf.NewChatSession("alice")
+	defer alice.Close()
+	if _, _, err := alice.Join("lobby"); err != nil {
+		t.Fatalf("alice join: %v", err)
+	}
+	watchEvents(t, aliceLeaf)
+	bob := bobLeaf.NewChatSession("bob")
+	defer bob.Close()
+	if _, _, err := bob.Join("lobby"); err != nil {
+		t.Fatalf("bob join: %v", err)
+	}
+	awaitChat(t, alice, chat.TypeJoin)
+
+	if err := alice.Post("lobby", "from alice"); err != nil {
+		t.Fatalf("alice post: %v", err)
+	}
+	if err := bob.Post("lobby", "from bob"); err != nil {
+		t.Fatalf("bob post: %v", err)
+	}
+	// The hub sends events in order, so alice's echo would arrive first.
+	if msg := awaitChat(t, alice, chat.TypeMessage); msg.Message.Text != "from bob" {
+		t.Errorf("first message alice received = %q, want bob's", msg.Message.Text)
+	}
+}

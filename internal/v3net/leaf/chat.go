@@ -47,12 +47,22 @@ func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
 	case protocol.EventChatMessage, protocol.EventChatJoin,
 		protocol.EventChatLeave, protocol.EventChatTopic:
 		var msg struct {
-			Room string `json:"room"`
+			Room       string `json:"room"`
+			FromHandle string `json:"from_handle"`
+			FromNode   string `json:"from_node"`
 		}
 		if err := json.Unmarshal(ev.Data, &msg); err != nil {
 			return // drop malformed event rather than routing it to the wrong room
 		}
 		for _, s := range r.sessions {
+			// The hub sends a post back to its author too. The chat screen
+			// showed the line when Post returned, so this copy would show it
+			// twice (#658). Matched on node as well as handle, as the join
+			// echo is: users on other BBSes can share a handle.
+			if ev.Type == protocol.EventChatMessage && msg.FromNode != "" &&
+				msg.FromNode == r.nodeID && msg.FromHandle == s.handle {
+				continue
+			}
 			// room() takes and releases s.mu before deliver takes it again.
 			if s.room() == msg.Room {
 				s.deliver(ev)
@@ -270,7 +280,8 @@ func (s *ChatSession) Leave(room string) error {
 }
 
 // Post implements chat.ChatService by sending text to room through the hub.
-// The message comes back to this session as an event like any other.
+// The hub's copy sent back to this session is dropped by dispatch, so the
+// caller shows its own line once, when Post returns.
 func (s *ChatSession) Post(room, text string) error {
 	body, _ := json.Marshal(protocol.ChatPostRequest{Room: room, Text: text, Handle: s.handle})
 	return s.leaf.signedPostCtx(context.Background(),
