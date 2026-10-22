@@ -368,3 +368,23 @@ func TestChatHeaderLagDownFromStart(t *testing.T) {
 	live.waitHeader("[Lag·---ms]")
 	live.typeKeys("/q\r")
 }
+
+// TestChatArtPadCells covers values with wide characters: the field is
+// measured in terminal cells, so the art after it stays in place.
+func TestChatArtPadCells(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		width int
+		want  string
+	}{
+		{"lobby", 8, "lobby   "},
+		{"café", 6, "café  "},
+		{"日本", 6, "日本  "},
+		{"日本語", 5, "日本 "}, // a wide character that would cross the edge is cut
+		{"toolongvalue", 4, "tool"},
+	} {
+		if got := string(chatArtPad(tc.value, tc.width)); got != tc.want {
+			t.Errorf("chatArtPad(%q, %d) = %q, want %q", tc.value, tc.width, got, tc.want)
+		}
+	}
+}

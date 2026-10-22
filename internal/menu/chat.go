@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gliderlabs/ssh"
+	"github.com/mattn/go-runewidth"
 	term "golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -1051,14 +1052,11 @@ func chatArtPlaceholder(data []byte) (string, int, bool) {
 
 // chatArtPad fits value to width columns, cutting whole runes or padding with
 // spaces. Values such as a V3Net network name are not ASCII-gated, so this
-// counts runes rather than bytes.
+// counts terminal cells: a wide character takes two.
 func chatArtPad(value string, width int) []byte {
-	runes := []rune(value)
-	if len(runes) > width {
-		runes = runes[:width]
-	}
-	repl := []byte(string(runes))
-	for n := len(runes); n < width; n++ {
+	value = runewidth.Truncate(value, width, "")
+	repl := []byte(value)
+	for n := runewidth.StringWidth(value); n < width; n++ {
 		repl = append(repl, ' ')
 	}
 	return repl

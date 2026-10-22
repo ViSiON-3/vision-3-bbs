@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 func TestChatWrapInput(t *testing.T) {
@@ -166,5 +168,36 @@ func TestChatcovTextStripsWrappedInput(t *testing.T) {
 	r := runResult{raw: "\x1b[22;1H\x1b[2K> one\x1b[23;1H\x1b[2K  two\x1b[24;1H\x1b[2K  three\x1b[24;9Hshown"}
 	if got := chatcovText(r); got != "shown" {
 		t.Errorf("chatcovText = %q, want only the text outside the input area", got)
+	}
+}
+
+// TestChatReadLineNonASCII covers keys above 127: UTF-8 sequences on a UTF-8
+// terminal and single CP437 bytes on a CP437 one both reach the message as
+// characters instead of being dropped.
+func TestChatReadLineNonASCII(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		mode  ansi.OutputMode
+		input string
+		want  string
+	}{
+		{"UTF-8", ansi.OutputModeUTF8, "caf\xc3\xa9 \xe2\x94\x80\r", "café ─"},
+		{"CP437", ansi.OutputModeCP437, "caf\x82 \xc4\r", "café ─"},
+		{"a cut-off sequence does not swallow the next key", ansi.OutputModeUTF8, "a\xc3b\r", "ab"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := newTestSession(tc.input)
+			SetSessionOutputMode(ts, tc.mode)
+			t.Cleanup(func() { resetSessionIH(ts); ClearSessionOutputMode(ts) })
+			var mu sync.Mutex
+			scr := &chatScreen{height: 24, width: 80, chatTop: 6, inputRows: 1, write: func([]byte) {}}
+			line, err := chatReadLine(ts, &mu, scr, "> ")
+			if err != nil {
+				t.Fatalf("chatReadLine: %v", err)
+			}
+			if line != tc.want {
+				t.Errorf("line = %q, want %q", line, tc.want)
+			}
+		})
 	}
 }

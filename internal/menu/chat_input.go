@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/gliderlabs/ssh"
 
@@ -180,6 +181,8 @@ func chatReadLine(s ssh.Session, mu *sync.Mutex, scr *chatScreen, prompt string)
 	indent := strings.Repeat(" ", promptLen)
 
 	var buf []rune
+	mode := sessionOutputMode(s)
+	var utf8Pending []byte // bytes of a UTF-8 character still arriving
 
 	// redrawLocked lays the text out, resizes the input area to fit and draws
 	// it. When there are more rows than the area holds, the last ones show.
@@ -217,6 +220,9 @@ func chatReadLine(s ssh.Session, mu *sync.Mutex, scr *chatScreen, prompt string)
 		if err != nil {
 			return "", io.EOF
 		}
+		if key < 128 || key > 255 {
+			utf8Pending = nil // a partial sequence must not absorb the next key
+		}
 
 		switch key {
 		case editor.KeyEnter:
@@ -246,6 +252,18 @@ func chatReadLine(s ssh.Session, mu *sync.Mutex, scr *chatScreen, prompt string)
 			}
 
 		default:
+			// Bytes 128-255 are part of a UTF-8 character or a CP437
+			// character, depending on the terminal; decode them to a rune.
+			if key >= 128 && key <= 255 {
+				var decoded []byte
+				decoded, _, utf8Pending = ansi.DecodeExtendedKey(nil, mode, byte(key), utf8Pending)
+				if len(decoded) > 0 && len(buf) < chatInputMaxLen {
+					r, _ := utf8.DecodeRune(decoded)
+					buf = append(buf, r)
+					redraw()
+				}
+				continue
+			}
 			if editor.IsPrintable(key) && len(buf) < chatInputMaxLen {
 				buf = append(buf, rune(key))
 				redraw()
