@@ -156,8 +156,11 @@ func chatWrapInput(text []rune, width int) [][]rune {
 			if len(cur) > 0 {
 				rows = append(rows, cur)
 			}
-			for len(tok) > 1 && chatCells(tok) > width {
+			for chatCells(tok) > width {
 				n := chatFitRunes(tok, width)
+				if n >= len(tok) {
+					break // one cluster wider than the row: it stays on this row
+				}
 				rows = append(rows, tok[:n])
 				tok = tok[n:]
 			}

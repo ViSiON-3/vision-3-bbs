@@ -31,6 +31,7 @@ func TestChatWrapInput(t *testing.T) {
 		{"a long wide word is cut between characters", "日本語のネ", 5, []string{"日本", "語の", "ネ"}},
 		{"a wide character on a one-cell row still makes progress", "日本", 1, []string{"日", "本"}},
 		// 👨‍👩‍👧 is five runes joined into one two-cell character.
+		{"a joined emoji wider than the row takes one row", "👨\u200d👩\u200d👧", 1, []string{"👨\u200d👩\u200d👧"}},
 		{"a joined emoji is measured and kept whole", "ab👨\u200d👩\u200d👧cd", 3, []string{"ab", "👨\u200d👩\u200d👧c", "d"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
