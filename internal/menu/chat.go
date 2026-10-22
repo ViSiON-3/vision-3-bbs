@@ -16,7 +16,6 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
-	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -283,32 +282,16 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 
-	// Screen layout (Retrograde MRC-style, 5-row ANSI art header):
-	//
-	//   Rows 1-5        : ANSI art header (room / topic / decorative status)
-	//   Rows 6..sb      : chat scroll region  (sb = height-4)
-	//   Row height-3    : status bar — users
-	//   Row height-2    : status bar — hints
-	//   Row height-1    : input prompt   ← NOT the last row
-	//   Row height      : absorb buffer  (readline \r\n lands here, no screen scroll)
-	//
-	// Keeping input at height-1 rather than height prevents term.Terminal's
-	// post-Enter \r\n from triggering a full-screen scroll that would destroy
-	// the header and status bar.
-
-	// Screen layout (Retrograde MRC-style):
-	//   Rows 1-5        : ANSI art header
-	//   Rows 6..sb      : chat scroll region  (sb = height-3)
-	//   Row height-2    : status bar — users
-	//   Row height-1    : status bar — hints
-	//   Row height      : input prompt (last row; safe because chatReadLine never writes \n there)
+	// Screen layout (Retrograde MRC-style), with n input rows (1 at rest):
+	//   Rows 1-5          : ANSI art header
+	//   Rows 6..sb        : chat scroll region  (sb = height-n-2)
+	//   Row height-n-1    : status bar — users
+	//   Row height-n      : status bar — hints
+	//   Rows height-n+1.. : input area, ending on the last row (safe because
+	//                       chatReadLine never writes \n there)
+	// chatScreen owns the rows below the header; see chat_input.go.
 	const chatHeaderRows = 5
 	chatTop := chatHeaderRows + 1 // row 6
-	scrollBottom := height - 3    // last row of chat scroll region
-	if scrollBottom < chatTop {
-		scrollBottom = chatTop
-	}
-	chatInputRow := height // input at the last visible row
 
 	// Network and room selection — runs in normal terminal mode before full-screen UI.
 	svc, selectedRoom, selectedNetwork, err := chatSelectService(e, s, terminal, handle, outputMode)
@@ -331,6 +314,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	rawWriteLocked := func(data []byte) {
 		terminalio.WriteProcessedBytes(s, data, outputMode)
 	}
+	scr := &chatScreen{height: height, width: termWidth, chatTop: chatTop, inputRows: 1, write: rawWriteLocked}
 
 	rawWrite := func(data []byte) {
 		rawMu.Lock()
@@ -386,30 +370,31 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				rawWriteLocked([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K", row)))
 			}
 		}
-		// Return cursor to input row.
-		rawWriteLocked([]byte(ansi.MoveCursor(chatInputRow, 1)))
+		scr.restoreCursor()
 	}
 
-	// drawStatusBarLocked redraws the 2-row status bar. Caller must hold rawMu.
+	// drawStatusBarLocked redraws the 2-row status bar above the input area,
+	// wherever its current height puts it. Caller must hold rawMu.
 	drawStatusBarLocked := func() {
 		sep := ansi.ReplacePipeCodes([]byte(e.Strings().ChatSeparator))
+		usersRow, hintsRow := scr.statusRow(), scr.statusRow()+1
 		// Users line
-		rawWriteLocked([]byte(ansi.MoveCursor(height-2, 1)))
+		rawWriteLocked([]byte(ansi.MoveCursor(usersRow, 1)))
 		rawWriteLocked(sep)
 		userStr := strings.Join(currentUsers, ", ")
 		if userStr == "" {
 			userStr = handle
 		}
-		rawWriteLocked([]byte(ansi.MoveCursor(height-2, 2)))
+		rawWriteLocked([]byte(ansi.MoveCursor(usersRow, 2)))
 		rawWriteLocked(ansi.ReplacePipeCodes([]byte(fmt.Sprintf(" |07Users: %s", userStr))))
 		// Hints line
-		rawWriteLocked([]byte(ansi.MoveCursor(height-1, 1)))
+		rawWriteLocked([]byte(ansi.MoveCursor(hintsRow, 1)))
 		rawWriteLocked(sep)
-		rawWriteLocked([]byte(ansi.MoveCursor(height-1, 2)))
+		rawWriteLocked([]byte(ansi.MoveCursor(hintsRow, 2)))
 		rawWriteLocked(ansi.ReplacePipeCodes([]byte(" |08/rooms /join /msg /topic /network /q")))
-		// Return cursor to input row.
-		rawWriteLocked([]byte(ansi.MoveCursor(chatInputRow, 1)))
+		scr.restoreCursor()
 	}
+	scr.drawStatus = drawStatusBarLocked
 
 	// writeChatLineLocked writes a timestamped, word-wrapped message into the
 	// chat scroll region. Caller must hold rawMu.
@@ -427,6 +412,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			return
 		}
 		// Scroll the chat region up by n lines.
+		scrollBottom := scr.scrollBottom()
 		rawWriteLocked([]byte(ansi.MoveCursor(scrollBottom, 1)))
 		for i := 0; i < n; i++ {
 			rawWriteLocked([]byte("\r\n"))
@@ -436,8 +422,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			rawWriteLocked([]byte(ansi.MoveCursor(scrollBottom-n+1+i, 1)))
 			rawWriteLocked(ansi.ReplacePipeCodes([]byte(line)))
 		}
-		// Return cursor to input row (chatReadLine will reposition precisely on next key).
-		rawWriteLocked([]byte(ansi.MoveCursor(chatInputRow, 1)))
+		scr.restoreCursor()
 	}
 
 	writeChatLine := func(text string) {
@@ -450,7 +435,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	// Write directly to s (not via terminal) so term.Terminal's cursor tracking
 	// never interferes with our direct-write approach.
 	terminalio.WriteProcessedBytes(s, []byte(ansi.ClearScreen()), outputMode)
-	terminalio.WriteProcessedBytes(s, []byte(fmt.Sprintf("\x1B[%d;%dr", chatTop, scrollBottom)), outputMode)
+	terminalio.WriteProcessedBytes(s, []byte(fmt.Sprintf("\x1B[%d;%dr", chatTop, scr.scrollBottom())), outputMode)
 
 	_, history, err := svc.Join(currentRoom)
 	if err != nil {
@@ -487,7 +472,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Draw initial input prompt. chatReadLine will manage it from here on.
 	chatPrompt := fmt.Sprintf("<%s> ", handle)
-	rawWrite([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K%s", chatInputRow, chatPrompt)))
+	rawWrite([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K%s", scr.height, chatPrompt)))
 
 	// Goroutine to receive and display incoming events.
 	done := make(chan struct{})
@@ -548,7 +533,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	for {
-		input, err := chatReadLine(s, &rawMu, rawWriteLocked, chatInputRow, termWidth, chatPrompt)
+		input, err := chatReadLine(s, &rawMu, scr, chatPrompt)
 		if err != nil {
 			if err == io.EOF {
 				cleanup()
@@ -674,7 +659,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 			}
 
-			netInput, netErr := chatReadLine(s, &rawMu, rawWriteLocked, chatInputRow, termWidth, "Select network [1]: ")
+			netInput, netErr := chatReadLine(s, &rawMu, scr, "Select network [1]: ")
 			var newSvc chat.ChatService
 			var newNetName string
 			if netErr != nil {
@@ -721,7 +706,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					}
 					writeChatLine(fmt.Sprintf("|08 %d.|07 %-12s |08(%d)|07 %s", i+1, r.Name, r.UserCount, topic))
 				}
-				roomInput, roomErr2 := chatReadLine(s, &rawMu, rawWriteLocked, chatInputRow, termWidth, "Select room [lobby]: ")
+				roomInput, roomErr2 := chatReadLine(s, &rawMu, scr, "Select room [lobby]: ")
 				if roomErr2 == nil {
 					var nameErr error
 					if newRoom, nameErr = chatRoomChoice(roomInput, netRooms); nameErr != nil {
@@ -758,7 +743,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			currentTopic = ""
 			currentUsers = svc.Users()
 			drawHeaderLocked()
-			for row := chatTop; row <= scrollBottom; row++ {
+			for row := chatTop; row <= scr.scrollBottom(); row++ {
 				rawWriteLocked([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K", row)))
 			}
 			drawStatusBarLocked()
@@ -941,63 +926,6 @@ func chatArtReplace(data []byte, name, value string) []byte {
 	out = append(out, repl...)
 	out = append(out, data[start+totalLen:]...)
 	return out
-}
-
-// chatReadLine reads a line using the session's InputHandler (same path as all
-// other BBS input), echoing at the given row. All terminal writes go through
-// mu+writeFn so they are serialised with the event goroutine's writes.
-func chatReadLine(s ssh.Session, mu *sync.Mutex, writeFn func([]byte), row, termWidth int, prompt string) (string, error) {
-	ih := getSessionIH(s)
-	promptLen := len([]rune(prompt))
-	maxBuf := termWidth - promptLen - 1
-	if maxBuf < 1 {
-		maxBuf = 1
-	}
-
-	var buf []rune
-
-	redraw := func() {
-		input := string(buf)
-		curCol := promptLen + len(buf) + 1
-		seq := fmt.Sprintf("\x1B[%d;1H\x1B[2K%s%s\x1B[%d;%dH", row, prompt, input, row, curCol)
-		mu.Lock()
-		writeFn([]byte(seq))
-		mu.Unlock()
-	}
-
-	redraw()
-
-	for {
-		key, err := ih.ReadKey()
-		if err != nil {
-			return "", io.EOF
-		}
-
-		switch key {
-		case editor.KeyEnter:
-			line := strings.TrimSpace(string(buf))
-			buf = buf[:0]
-			mu.Lock()
-			writeFn([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K%s\x1B[%d;%dH", row, prompt, row, promptLen+1)))
-			mu.Unlock()
-			return line, nil
-
-		case editor.KeyBackspace:
-			if len(buf) > 0 {
-				buf = buf[:len(buf)-1]
-				redraw()
-			}
-
-		case editor.KeyEsc, editor.KeyCtrlC, editor.KeyCtrlA:
-			return "", io.EOF
-
-		default:
-			if editor.IsPrintable(key) && len(buf) < maxBuf {
-				buf = append(buf, rune(key))
-				redraw()
-			}
-		}
-	}
 }
 
 // pipeDisplayLen returns the number of visible characters in a pipe-code string,

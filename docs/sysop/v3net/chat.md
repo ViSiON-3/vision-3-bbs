@@ -59,7 +59,11 @@ launch.
 - **Header** (rows 1–5): ANSI art showing network, room, and topic
 - **Scroll area**: incoming messages; scrolls automatically
 - **Status bar**: current room members, hint line
-- **Input row**: typed text, sent with Enter
+- **Input row**: typed text, sent with Enter. A word that does not fit on the
+  row moves whole to a new row, and the input area grows upward one row at a
+  time (up to five rows), pushing the status bar and the scroll area up. It
+  returns to one row once the message is sent. A message can be up to 500
+  characters.
 
 ---
 

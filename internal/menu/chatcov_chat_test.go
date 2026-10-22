@@ -226,9 +226,10 @@ func chatcovChat(env *menuEnv, u *user.User, input string) runResult {
 	return env.run(runChat, u, "", input)
 }
 
-// chatcovInputRow matches one redraw of the chat input row: position, clear,
-// prompt and typed text, then the cursor put back after it.
-var chatcovInputRow = regexp.MustCompile(`\x1b\[\d+;1H\x1b\[2K[^\x1b]*\x1b\[\d+;\d+H`)
+// chatcovInputRow matches one redraw of the chat input area: for each of its
+// rows, position, clear and that row's prompt or indent and typed text; then
+// the cursor put back after the text.
+var chatcovInputRow = regexp.MustCompile(`(?:\x1b\[\d+;1H\x1b\[2K[^\x1b]*)+\x1b\[\d+;\d+H`)
 
 // chatcovText is r.text() without the input row. The input row echoes every
 // keystroke, so with it left in, a typed line would satisfy an assertion that
@@ -900,7 +901,8 @@ func chatcovReadLine(t *testing.T, input string, width int, prompt string) (stri
 	t.Cleanup(func() { resetSessionIH(ts) })
 	var mu sync.Mutex
 	var out strings.Builder
-	line, err := chatReadLine(ts, &mu, func(b []byte) { out.Write(b) }, 24, width, prompt)
+	scr := &chatScreen{height: 24, width: width, chatTop: 6, inputRows: 1, write: func(b []byte) { out.Write(b) }}
+	line, err := chatReadLine(ts, &mu, scr, prompt)
 	return line, out.String(), err
 }
 
@@ -915,8 +917,8 @@ func TestChatcovReadLine(t *testing.T) {
 		{"backspace and DEL erase", "abx\x08y\x7fc\r", 80, "abc"},
 		{"backspace on an empty line", "\x08\x08ok\r", 80, "ok"},
 		{"arrow keys are not text", "a\x1b[A\x1b[Db\r", 80, "ab"},
-		{"input stops one short of the width", "abcdefgh\r", 6, "abc"}, // 6 - len("> ") - 1
-		{"always room for one character", "xyz\r", 1, "x"},
+		{"text past the width wraps instead of stopping", "abcdefgh\r", 6, "abcdefgh"},
+		{"a screen too narrow for the prompt still takes text", "xyz\r", 1, "xyz"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, _, err := chatcovReadLine(t, tc.input, tc.width, "> ")
