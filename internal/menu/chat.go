@@ -626,9 +626,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				d, err := p.Ping(ctx)
 				rawMu.Lock()
 				if ctx.Err() == nil {
-					wasMS, wasOK := lag/time.Millisecond, lagOK
+					wasShown, wasOK := lag.Milliseconds(), lagOK
 					lag, lagOK = d, err == nil
-					if lagOK != wasOK || (lagOK && lag/time.Millisecond != wasMS) {
+					if lagOK != wasOK || (lagOK && lag.Milliseconds() != wasShown) {
 						drawHeaderLocked()
 					}
 				}
