@@ -73,9 +73,18 @@ launch.
 | `/msg <handle> <text>` | Send a private message to a user |
 | `/users` | Refresh the user list in the status bar |
 | `/network` | Switch to a different network mid-session |
+| `/?` or `/help` | List these commands on your own screen |
 | `/q` or `/quit` | Exit chat |
 
-Any text that does not begin with `/` is posted to the current room.
+Commands are case-insensitive. Any other line is posted to the current room.
+A line that starts with `/` but is not a command is never posted: chat shows
+"unknown command" instead, and `/join`, `/topic` and `/msg` without their
+arguments show their usage. To post a line that starts with a slash, type two:
+`//shrug` posts `/shrug`.
+
+The help list, the usage lines and the unknown-command reply are the
+`chatHelp`, `chatJoinUsage`, `chatTopicUsage`, `chatMsgUsage` and
+`chatUnknownCommand` strings, editable in the string editor.
 
 ---
 

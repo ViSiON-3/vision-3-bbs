@@ -222,6 +222,11 @@ type StringsConfig struct {
 	ChatLeaveMsg            string `json:"chatLeaveMsg"`
 	ChatTopicMsg            string `json:"chatTopicMsg"`
 	ChatReconnected         string `json:"chatReconnected"`
+	ChatHelp                string `json:"chatHelp"`
+	ChatUnknownCommand      string `json:"chatUnknownCommand"`
+	ChatJoinUsage           string `json:"chatJoinUsage"`
+	ChatTopicUsage          string `json:"chatTopicUsage"`
+	ChatMsgUsage            string `json:"chatMsgUsage"`
 
 	// Page strings (V3-specific)
 	PageOnlineNodesHeader string `json:"pageOnlineNodesHeader"`

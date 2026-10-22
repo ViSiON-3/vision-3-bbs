@@ -565,17 +565,38 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 
-		upper := strings.ToUpper(trimmed)
+		// A line starting with / is a command, and is never posted: an
+		// unknown or incomplete one is answered on this screen alone (#659).
+		// "//" escapes the slash, so a message can still start with one.
+		isCommand := strings.HasPrefix(trimmed, "/") && !strings.HasPrefix(trimmed, "//")
+		var upper, arg string
+		if isCommand {
+			var cmd string
+			cmd, arg, _ = strings.Cut(trimmed, " ")
+			upper = strings.ToUpper(cmd)
+			arg = strings.TrimSpace(arg)
+		}
 		if upper == "/Q" || upper == "/QUIT" {
 			break
 		}
 
-		if strings.HasPrefix(upper, "/JOIN ") {
+		if upper == "/?" || upper == "/HELP" {
+			for _, line := range strings.Split(e.Strings().ChatHelp, "\n") {
+				writeChatLine(strings.TrimRight(line, "\r"))
+			}
+			continue
+		}
+
+		if upper == "/JOIN" {
+			if arg == "" {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, e.Strings().ChatJoinUsage))
+				continue
+			}
 			// Normalise up front, as Join would: a name the service will
 			// refuse is rejected without leaving the current room, and
 			// currentRoom then names the room actually joined, which later
 			// posts and the final Leave are addressed to.
-			newRoom, nameErr := chat.NormalizeRoom(strings.TrimSpace(trimmed[6:]))
+			newRoom, nameErr := chat.NormalizeRoom(arg)
 			if nameErr != nil {
 				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not join room: "+nameErr.Error()))
 				continue
@@ -811,33 +832,36 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 
-		if strings.HasPrefix(upper, "/TOPIC ") {
+		if upper == "/TOPIC" {
+			if arg == "" {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, e.Strings().ChatTopicUsage))
+				continue
+			}
 			if currentRoom == "" {
 				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, chatNoRoomMsg))
 				continue
 			}
-			topicText := strings.TrimSpace(trimmed[7:])
-			if topicErr := svc.SetTopic(currentRoom, topicText); topicErr != nil {
+			if topicErr := svc.SetTopic(currentRoom, arg); topicErr != nil {
 				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not set topic: "+topicErr.Error()))
 			}
 			continue
 		}
 
-		if strings.HasPrefix(upper, "/MSG ") {
-			rest := strings.TrimSpace(trimmed[5:])
-			parts := strings.SplitN(rest, " ", 2)
-			if len(parts) == 2 {
-				target := strings.TrimSpace(parts[0])
-				message := parts[1]
-				toHandle := target
-				toNode := ""
-				if atIdx := strings.Index(target, "@"); atIdx > 0 && atIdx < len(target)-1 {
-					toHandle = target[:atIdx]
-					toNode = target[atIdx+1:]
-				}
-				if msgErr := svc.Private(toHandle, toNode, message); msgErr != nil {
-					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not send private message: "+msgErr.Error()))
-				}
+		if upper == "/MSG" {
+			target, message, ok := strings.Cut(arg, " ")
+			message = strings.TrimSpace(message)
+			if !ok || message == "" {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, e.Strings().ChatMsgUsage))
+				continue
+			}
+			toHandle := target
+			toNode := ""
+			if atIdx := strings.Index(target, "@"); atIdx > 0 && atIdx < len(target)-1 {
+				toHandle = target[:atIdx]
+				toNode = target[atIdx+1:]
+			}
+			if msgErr := svc.Private(toHandle, toNode, message); msgErr != nil {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not send private message: "+msgErr.Error()))
 			}
 			continue
 		}
@@ -848,6 +872,15 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			drawStatusBarLocked()
 			rawMu.Unlock()
 			continue
+		}
+
+		if isCommand {
+			cmd, _, _ := strings.Cut(trimmed, " ")
+			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, fmt.Sprintf(e.Strings().ChatUnknownCommand, cmd)))
+			continue
+		}
+		if strings.HasPrefix(trimmed, "//") {
+			trimmed = trimmed[1:]
 		}
 
 		if currentRoom == "" {

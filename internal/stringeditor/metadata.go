@@ -518,6 +518,11 @@ func stringCatalog() []StringEntry {
 		{Label: "Chat: User Left", Key: "chatLeaveMsg", Description: "Announced when a user leaves a room (%s=user, %s=room)"},
 		{Label: "Chat: Room Topic", Key: "chatTopicMsg", Description: "Announced when a room topic is shown (%s=room, %s=topic)"},
 		{Label: "Chat: Reconnected", Key: "chatReconnected", Description: "Shown when the chat connection is re-established"},
+		{Label: "Chat: Help", Key: "chatHelp", Description: "Command list shown by /? and /HELP, one chat line per line of text"},
+		{Label: "Chat: Unknown Command", Key: "chatUnknownCommand", Description: "Shown instead of posting a line that starts with an unknown /command (%s=command)"},
+		{Label: "Chat: /JOIN Usage", Key: "chatJoinUsage", Description: "Shown when /JOIN is typed without a room"},
+		{Label: "Chat: /TOPIC Usage", Key: "chatTopicUsage", Description: "Shown when /TOPIC is typed without a topic"},
+		{Label: "Chat: /MSG Usage", Key: "chatMsgUsage", Description: "Shown when /MSG is typed without a user and a message"},
 
 		// Door access control (V3)
 		{Label: "Door: Access Denied", Key: "doorAccessDenied", Description: "Shown when a user lacks access to a door (%s=door name)"},

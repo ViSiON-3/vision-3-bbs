@@ -227,6 +227,15 @@ var StringFallbacks = map[string]string{
 	"sysopChatHeader":       " |15%s|07 chatting with |15%s|07 ",
 	"sysopChatBack":         "\r\n|08[back from chat, press Enter]|07",
 
+	// Chat slash-command replies (#659). Before these existed an unknown or
+	// incomplete command was posted to the room, so an upgraded strings.json
+	// must still have something to show in its place.
+	"chatHelp":           "|15Chat commands|07\r\n |11/join <room>|07       join another room\r\n |11/rooms|07             list the rooms\r\n |11/topic <text>|07      set the room topic\r\n |11/msg <user> <text>|07 private message (user@node)\r\n |11/users|07             refresh the user list\r\n |11/network|07           switch chat network\r\n |11/q|07                 leave chat\r\n |11//text|07             send a line starting with /",
+	"chatJoinUsage":      "Usage: /join <room>",
+	"chatMsgUsage":       "Usage: /msg <user>[@node] <text>",
+	"chatTopicUsage":     "Usage: /topic <text>",
+	"chatUnknownCommand": "Unknown command %s - type /? for help.",
+
 	// Time limit notices. Without them an upgraded strings.json would warn
 	// nobody and disconnect callers with no word of why.
 	"timeLimitExpired": "\r\n|12Your time limit for this call is up. Call again soon!|07\r\n",
