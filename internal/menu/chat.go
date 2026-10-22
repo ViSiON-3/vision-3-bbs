@@ -405,7 +405,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		sep := ansi.ReplacePipeCodes([]byte(e.Strings().ChatSeparator))
 		usersRow, hintsRow := scr.statusRow(), scr.statusRow()+1
 		// Users line
-		rawWriteLocked([]byte(ansi.MoveCursor(usersRow, 1)))
+		rawWriteLocked([]byte(ansi.MoveCursor(usersRow, 1) + "\x1B[2K"))
 		rawWriteLocked(sep)
 		userStr := strings.Join(currentUsers, ", ")
 		if userStr == "" {
@@ -414,7 +414,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		rawWriteLocked([]byte(ansi.MoveCursor(usersRow, 2)))
 		rawWriteLocked(ansi.ReplacePipeCodes([]byte(fmt.Sprintf(" |07Users: %s", userStr))))
 		// Hints line
-		rawWriteLocked([]byte(ansi.MoveCursor(hintsRow, 1)))
+		rawWriteLocked([]byte(ansi.MoveCursor(hintsRow, 1) + "\x1B[2K"))
 		rawWriteLocked(sep)
 		rawWriteLocked([]byte(ansi.MoveCursor(hintsRow, 2)))
 		hints := " |08/rooms /join /msg /topic /network /q"
@@ -622,15 +622,19 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			defer close(stopped)
 			tick := time.NewTicker(chatLagInterval)
 			defer tick.Stop()
+			// The header may have been drawn before pinging was set, with a
+			// blank field, so the first result redraws it even as a failure.
+			first := true
 			for {
 				d, err := p.Ping(ctx)
 				rawMu.Lock()
 				if ctx.Err() == nil {
 					wasShown, wasOK := lag.Milliseconds(), lagOK
 					lag, lagOK = d, err == nil
-					if lagOK != wasOK || (lagOK && lag.Milliseconds() != wasShown) {
+					if first || lagOK != wasOK || (lagOK && lag.Milliseconds() != wasShown) {
 						drawHeaderLocked()
 					}
+					first = false
 				}
 				rawMu.Unlock()
 				select {

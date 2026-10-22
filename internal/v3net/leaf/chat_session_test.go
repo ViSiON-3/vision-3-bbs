@@ -663,8 +663,10 @@ func TestChatSession_Ping(t *testing.T) {
 	ts, _, _ := newTestHub(t, true)
 	sess := subscribedLeaf(t, ts, "alicebbs").NewChatSession("alice")
 	defer sess.Close()
-	if d, err := sess.Ping(context.Background()); err != nil || d <= 0 {
-		t.Errorf("Ping against a working hub = (%v, %v), want a positive duration", d, err)
+	// A loopback round trip can be under the clock's resolution on Windows,
+	// so zero is a valid measurement here; the slow hub below checks timing.
+	if d, err := sess.Ping(context.Background()); err != nil || d < 0 {
+		t.Errorf("Ping against a working hub = (%v, %v), want a duration and no error", d, err)
 	}
 
 	// The time is the whole round trip.

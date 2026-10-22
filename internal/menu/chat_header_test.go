@@ -348,3 +348,23 @@ func TestChatHeaderLag(t *testing.T) {
 	live.waitHeader("Network: Local", "[Lag      ]")
 	live.typeKeys("/q\r")
 }
+
+// TestChatHeaderLagDownFromStart covers a hub that never answers: the header
+// was drawn before measuring began, so the first failed ping must redraw the
+// blank Lag field as dashes.
+func TestChatHeaderLagDownFromStart(t *testing.T) {
+	old := chatLagInterval
+	chatLagInterval = time.Hour
+	t.Cleanup(func() { chatLagInterval = old })
+
+	env := newMenuEnv(t)
+	chatPingNet(env, func() (time.Duration, error) { return 0, errors.New("hub down") })
+
+	live := startChatLive(env, env.caller)
+	live.waitOutput("Select network [1]:")
+	live.typeKeys("\r")
+	live.waitOutput("Select room [lobby]:")
+	live.typeKeys("\r")
+	live.waitHeader("[Lag·---ms]")
+	live.typeKeys("/q\r")
+}
