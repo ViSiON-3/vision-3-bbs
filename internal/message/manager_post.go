@@ -26,7 +26,7 @@ func SplitNetmailTo(to string) (name, addr string) {
 // addMessage is the shared implementation behind AddMessage, AddMessageWithDate,
 // AddPrivateMessage, and AddReply.
 func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyToMsgID string,
-	replyToNum int, dateTime time.Time, private bool) (int, error) {
+	replyToNum int, dateTime time.Time, private bool, kludges []string) (int, error) {
 	b, area, err := mm.openBase(areaID)
 	if err != nil {
 		return 0, err
@@ -46,6 +46,7 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 	msg.Subject = subject
 	msg.Text = jamBody
 	msg.DateTime = dateTime
+	msg.Kludges = kludges
 
 	if private {
 		msg.Header = &jam.MessageHeader{Attribute: jam.MsgPrivate | jam.MsgLocal}
@@ -110,32 +111,58 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 // into the username and destination address.
 // Returns the 1-based message number assigned.
 func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), false)
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), false, nil)
 }
 
 // AddMessageWithDate is like AddMessage but uses the provided timestamp instead
 // of time.Now(). Used by V3Net to preserve the original authored date.
 func (mm *MessageManager) AddMessageWithDate(areaID int, from, to, subject, body, replyToMsgID string, dateTime time.Time) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, dateTime, false)
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, dateTime, false, nil)
 }
 
 // AddPrivateMessage creates and writes a new private (MSG_PRIVATE) message.
 // For netmail areas, "user@zone:net/node" in the To field is automatically split
 // into the username and destination address. Returns the 1-based message number.
 func (mm *MessageManager) AddPrivateMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), true)
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), true, nil)
 }
 
 // AddReply creates and writes a reply, recording the parent's message number
 // (replyToNum) as the JAM ReplyTo so local areas thread, and the parent's FTN
 // MSGID (replyToMsgID, may be "") as ReplyID so echomail links via jam.Link().
 func (mm *MessageManager) AddReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), false)
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), false, nil)
 }
 
 // AddPrivateReply is AddReply for private mail: it records the parent pointer
 // while preserving the MSG_PRIVATE flag, so a reply to a private message stays
 // private (and therefore visible to its recipient).
 func (mm *MessageManager) AddPrivateReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), true)
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), true, nil)
+}
+
+// PostOptions holds the optional parts of a message written with Post.
+type PostOptions struct {
+	// Private sets MSG_PRIVATE, as AddPrivateMessage does.
+	Private bool
+	// ReplyToNum is the 1-based number of the parent message in the same
+	// area, recorded as the JAM ReplyTo; 0 means the post is not a reply.
+	ReplyToNum int
+	// ReplyToMsgID is the parent's FTN MSGID, recorded as the ReplyID so
+	// echomail replies thread on other systems; empty when there is none.
+	ReplyToMsgID string
+	// Kludges are extra FTS kludge lines (without the leading ^A), such as
+	// "CHRS: CP437 2". They are stored with the message and the tosser
+	// copies them into the exported packet. AREA lines are dropped.
+	Kludges []string
+}
+
+// Post writes a message to the area like AddMessage, with the options that
+// method has no parameters for. It is what out-of-BBS tools such as
+// `helper post` use. The body is stored as given apart from line endings
+// (LF and CRLF become CR); echomail and netmail areas get the same MSGID,
+// tearline and origin as a post made from the BBS editor. Returns the
+// 1-based message number assigned.
+func (mm *MessageManager) Post(areaID int, from, to, subject, body string, opts PostOptions) (int, error) {
+	return mm.addMessage(areaID, from, to, subject, body, opts.ReplyToMsgID, opts.ReplyToNum, time.Now(), opts.Private, opts.Kludges)
 }

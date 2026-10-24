@@ -133,6 +133,49 @@ since it loaded the file, so one tool does not undo another's edits. If the
 same setting on the same area was changed in two places, the most recent save
 wins, and the BBS log or the config editor's status line says so.
 
+## Posting from the Command Line
+
+`helper post` posts a text file as a message, without logging in. Use it for
+scripted announcements, bulletins, or a network ad:
+
+```bash
+# Post an ANSI ad to an echo; the subject defaults to the file's SAUCE title
+./helper post --area FD_OTHERNETS --file micronet.ans --subj "[ANSI] Micronet Information Network"
+
+# Send netmail: post to the network's netmail area with Name@address
+./helper post --area fidonet_netmail --to "Sean Dennis@1:18/200" --subj "Your ad" --file note.txt
+
+# Read the body from stdin, check first without writing
+fortune | ./helper post --area GENERAL --subj "Today's fortune" --file - --dry-run
+```
+
+The message is written exactly as the BBS editor writes it, so echomail gets
+its MSGID, tearline and origin and goes out on the next `v3mail ftn-scan`. In
+a netmail area, the tosser routes the message to the right link, and a copy
+stays in the area. For netmail, `helper post` looks the address up in the
+compiled nodelist and shows whose system it is. `--from` defaults to
+`sysOpName` in `config.json`, and `--to` to `All`.
+
+How the file is treated depends on its extension (override with `--format`):
+
+| Format | Handling |
+|--------|----------|
+| `.ANS` | Stored byte for byte: escape codes, CP437 characters and long lines are kept, and never re-wrapped. A colour reset is added at the end so the tearline isn't drawn in the art's colours. |
+| `.ASC`, `.TXT` (and stdin) | Plain text. UTF-8 is converted to CP437 (`--charset` to force either); `--wrap N` re-wraps long lines. |
+
+For every format, CRLF, LF and a lone CR each become one line break, and the
+SAUCE record and DOS EOF marker are removed. Echomail and netmail are marked
+`CHRS: CP437 2` so other systems don't translate the art. Files with NUL
+bytes are refused, and so are non-ASCII characters in the From, To or Subject
+of echomail and netmail. Lines that other software reads as message structure
+(`---`, `* Origin:`, `SEEN-BY:`), and a clear-screen code, produce a warning.
+V3Net areas can't be posted to this way; post to them from the BBS.
+
+Posts to `PRIVMAIL`, and posts made with `--private`, are private. A private
+message in a local area must go to an existing user: put their handle in
+`--to`. `--private` is refused in echomail areas, because echomail is sent to
+every link and doesn't stay private.
+
 ---
 
 ## Creating a New Message Area
@@ -570,6 +613,7 @@ read or not, matched on the recipient CRC stored in the JAM `.jdx` index.
 - `GetAreaByTag(tag)` — Get area by tag name
 - `SaveAreas()` — Persist all areas back to `message_areas.json` (atomic write)
 - `AddMessage(areaID, from, to, subject, body, replyMsgID)` — Add new message (returns msgNum)
+- `Post(areaID, from, to, subject, body, opts)` — Like AddMessage, with `PostOptions` for private, reply and extra kludges (used by `helper post`)
 - `GetMessage(areaID, msgNum)` — Read single message by number
 - `GetMessageCountForArea(areaID)` — Total message count
 - `GetNewMessageCount(areaID, username)` — Unread count for user
