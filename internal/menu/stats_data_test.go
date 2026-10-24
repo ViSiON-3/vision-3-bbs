@@ -47,7 +47,7 @@ func TestStatsRealData(t *testing.T) {
 }
 func TestStatsSuccessfulDownloadBytes(t *testing.T) {
 	for _, batch := range []bool{false, true} {
-		for _, cmd := range []string{"/usr/bin/true", "/usr/bin/false"} {
+		for _, cmd := range []string{"success", "failure"} {
 			env := newMenuEnv(t)
 			paths := []string{filepath.Join(t.TempDir(), "a"), filepath.Join(t.TempDir(), "b")}
 			for _, p := range paths {
@@ -56,11 +56,11 @@ func TestStatsSuccessfulDownloadBytes(t *testing.T) {
 				}
 			}
 			env.run(func(c *cmdCtx, _ string) (*user.User, string, error) {
-				c.e.runTransferSend(c.s, c.terminal, transfer.ProtocolConfig{Name: "test", SendCmd: cmd, BatchSend: batch}, paths, nil, c.outputMode, c.nodeNumber, c.currentUser)
+				c.e.runTransferSend(c.s, c.terminal, statsTestProtocol(t, cmd, batch), paths, nil, c.outputMode, c.nodeNumber, c.currentUser)
 				return nil, "", c.userManager.UpdateUser(c.currentUser)
 			}, env.caller, "", "")
 			want := int64(0)
-			if cmd == "/usr/bin/true" {
+			if cmd == "success" {
 				want = 10
 			}
 			if saved := env.mustDiskUser(env.caller.ID); saved.DownloadedBytes != want {
@@ -76,10 +76,6 @@ func TestStatsSuccessfulDownloadBytes(t *testing.T) {
 func TestStatsPartialDownloadBytes(t *testing.T) {
 	env := newMenuEnv(t)
 	dir := t.TempDir()
-	script := filepath.Join(dir, "send.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\ncase \"$1\" in */b) exit 1;; esac\nexit 0\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
 	paths := []string{filepath.Join(dir, "a"), filepath.Join(dir, "b")}
 	for _, p := range paths {
 		if err := os.WriteFile(p, []byte("12345"), 0600); err != nil {
@@ -87,7 +83,7 @@ func TestStatsPartialDownloadBytes(t *testing.T) {
 		}
 	}
 	env.run(func(c *cmdCtx, _ string) (*user.User, string, error) {
-		success, failed := c.e.runTransferSend(c.s, c.terminal, transfer.ProtocolConfig{Name: "test", SendCmd: "/bin/sh", SendArgs: []string{script, "{filePath}"}}, paths, nil, c.outputMode, c.nodeNumber, c.currentUser)
+		success, failed := c.e.runTransferSend(c.s, c.terminal, statsTestProtocol(t, "partial", false), paths, nil, c.outputMode, c.nodeNumber, c.currentUser)
 		if success != 1 || failed != 1 {
 			t.Errorf("success=%d failed=%d", success, failed)
 		}
@@ -95,5 +91,28 @@ func TestStatsPartialDownloadBytes(t *testing.T) {
 	}, env.caller, "", "")
 	if got := env.caller.DownloadedBytes; got != 5 {
 		t.Errorf("bytes=%d want=5", got)
+	}
+}
+
+// statsTestProtocol runs this test executable as the transfer process on every OS.
+func statsTestProtocol(t *testing.T, mode string, batch bool) transfer.ProtocolConfig {
+	t.Helper()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return transfer.ProtocolConfig{Name: "test", SendCmd: executable, SendArgs: []string{"-test.run=^TestStatsTransferHelper$", "--", "stats-transfer", mode, "{filePath}"}, BatchSend: batch}
+}
+
+func TestStatsTransferHelper(t *testing.T) {
+	for i, arg := range os.Args {
+		if arg != "stats-transfer" || i+2 >= len(os.Args) {
+			continue
+		}
+		mode := os.Args[i+1]
+		if mode == "failure" || (mode == "partial" && filepath.Base(os.Args[i+2]) == "b") {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
 }

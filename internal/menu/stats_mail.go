@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -21,7 +22,11 @@ func (e *MenuExecutor) statsWaitingMail(u *user.User) string {
 	if err != nil {
 		return "N/A"
 	}
-	defer base.Close()
+	defer func() {
+		if err := base.Close(); err != nil {
+			slog.Warn("closing stats private-mail base", "error", err)
+		}
+	}()
 	total, err := e.MessageMgr.GetMessageCountForArea(area.ID)
 	if err != nil {
 		return "N/A"
