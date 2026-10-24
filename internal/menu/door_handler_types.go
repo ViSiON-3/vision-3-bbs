@@ -51,4 +51,14 @@ type DoorCtx struct {
 
 	// watch decides when the BBS must end the door. Set by executeDoor.
 	watch *doorWatch
+	// baseCOM1Virtual records that a DOS door's base dosemurc sets
+	// $_com1 = "virtual". Set by writeDosemurc.
+	baseCOM1Virtual bool
+}
+
+// dosSerial reports whether a DOS door talks to the caller through COM1,
+// either via the configured FOSSIL driver or because its base dosemurc maps
+// COM1 to the terminal, rather than through the DOS screen.
+func (ctx *DoorCtx) dosSerial() bool {
+	return ctx.Config.FossilDriver != "" || ctx.baseCOM1Virtual
 }

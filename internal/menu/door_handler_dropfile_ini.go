@@ -220,7 +220,7 @@ func generateDropfileIni(ctx *DoorCtx, dir, filename, tempDir string) error {
 	slog.Info("generating dropfile", "type", dropfileIniType, "filename", filename, "path", path)
 	cfg := ctx.Executor.GetServerConfig()
 	isDOS := ctx.Config.IsDOS
-	useFossil := isDOS && ctx.Config.FossilDriver != ""
+	useFossil := isDOS && ctx.dosSerial()
 
 	// The BBS relays door bytes untranslated, so the door must speak the
 	// caller's own character set. The exception is a DOS door in terminal
