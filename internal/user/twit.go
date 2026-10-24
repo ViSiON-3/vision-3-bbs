@@ -7,22 +7,30 @@ import (
 )
 
 var (
-	ErrTwitSelf      = errors.New("cannot add yourself")
-	ErrTwitExempt    = errors.New("user is exempt")
-	ErrTwitFull      = errors.New("twit list full")
+	// ErrTwitSelf rejects adding the list owner.
+	ErrTwitSelf = errors.New("cannot add yourself")
+	// ErrTwitExempt rejects adding a protected local account.
+	ErrTwitExempt = errors.New("user is exempt")
+	// ErrTwitFull reports that the configured entry limit has been reached.
+	ErrTwitFull = errors.New("twit list full")
+	// ErrTwitDuplicate reports an author already on the list.
 	ErrTwitDuplicate = errors.New("already on twit list")
-	ErrTwitInvalid   = errors.New("invalid twit name")
+	// ErrTwitInvalid rejects an empty or unsafe author name.
+	ErrTwitInvalid = errors.New("invalid twit name")
 )
 
 // TwitPolicy supplies defaults even for boards upgraded without the new settings.
 type TwitPolicy struct{ MaxEntries, ExemptLevel, SysOpLevel int }
 
+// Limit returns the configured cap or the default of 50 entries.
 func (p TwitPolicy) Limit() int {
 	if p.MaxEntries > 0 {
 		return p.MaxEntries
 	}
 	return 50
 }
+
+// Exempt reports whether local account messages must remain visible.
 func (p TwitPolicy) Exempt(u *User) bool {
 	sysop := p.SysOpLevel
 	if sysop <= 0 {
@@ -35,25 +43,20 @@ func (p TwitPolicy) Exempt(u *User) bool {
 	return u != nil && (u.AccessLevel >= sysop || u.AccessLevel >= level)
 }
 
+// TwitDirectory resolves local authors by handle and stable account ID.
 type TwitDirectory interface {
 	GetUser(string) (*User, bool)
 	GetUserByID(int) (*User, bool)
 }
 
-// NewTwitEntry resolves unqualified local handles to stable account IDs.
-// Qualified names deliberately remain network entries, even if a handle matches.
+// NewTwitEntry resolves complete local handles before interpreting network name@address syntax.
+// This preserves handles containing @ while qualified remote names remain network entries.
 func NewTwitEntry(owner *User, directory TwitDirectory, text string, policy TwitPolicy) (TwitEntry, error) {
 	entry := TwitEntry{Name: strings.TrimSpace(text)}
-	if i := strings.LastIndex(entry.Name, "@"); i >= 0 {
-		entry.Name, entry.Addr = strings.TrimSpace(entry.Name[:i]), strings.TrimSpace(entry.Name[i+1:])
-		if entry.Addr == "" {
-			return TwitEntry{}, ErrTwitInvalid
-		}
-	}
 	if owner == nil || entry.Name == "" || len(text) > 200 || strings.ContainsFunc(text, unicode.IsControl) {
 		return TwitEntry{}, ErrTwitInvalid
 	}
-	if entry.Addr == "" && directory != nil {
+	if directory != nil {
 		if target, ok := directory.GetUser(entry.Name); ok {
 			if target.ID == owner.ID {
 				return TwitEntry{}, ErrTwitSelf
@@ -63,6 +66,17 @@ func NewTwitEntry(owner *User, directory TwitDirectory, text string, policy Twit
 			}
 			entry.UserID, entry.Name = target.ID, target.Handle
 		}
+	}
+	if entry.UserID == 0 {
+		if i := strings.LastIndex(entry.Name, "@"); i >= 0 {
+			entry.Name, entry.Addr = strings.TrimSpace(entry.Name[:i]), strings.TrimSpace(entry.Name[i+1:])
+			if entry.Addr == "" {
+				return TwitEntry{}, ErrTwitInvalid
+			}
+		}
+	}
+	if entry.Name == "" {
+		return TwitEntry{}, ErrTwitInvalid
 	}
 	if entry.Addr == "" && (strings.EqualFold(entry.Name, owner.Handle) || strings.EqualFold(entry.Name, owner.RealName)) {
 		return TwitEntry{}, ErrTwitSelf
@@ -90,6 +104,7 @@ type TwitMatcher struct {
 	anonymousName string
 }
 
+// BuildTwitMatcher snapshots author names and current exemptions for a reader or export.
 func BuildTwitMatcher(entries []TwitEntry, directory TwitDirectory, policy TwitPolicy, anonymousName string) *TwitMatcher {
 	matcher := &TwitMatcher{anonymousName: strings.TrimSpace(anonymousName)}
 	for _, entry := range entries {
@@ -109,6 +124,8 @@ func BuildTwitMatcher(entries []TwitEntry, directory TwitDirectory, policy TwitP
 	}
 	return matcher
 }
+
+// Hidden matches a displayed author and origin, always preserving anonymous messages.
 func (m *TwitMatcher) Hidden(from, addr string) bool {
 	if m == nil {
 		return false

@@ -13,10 +13,13 @@ type twitPacketService struct {
 	opts qwkservice.ExportOptions
 }
 
+// BuildPacket captures API export options without building a packet.
 func (s *twitPacketService) BuildPacket(opts qwkservice.ExportOptions) (*qwkservice.ExportResult, error) {
 	s.opts = opts
 	return &qwkservice.ExportResult{}, nil
 }
+
+// TestPacketTwitMatcherResolvedOnEveryDownload checks that reused tokens receive current filter state.
 func TestPacketTwitMatcherResolvedOnEveryDownload(t *testing.T) {
 	svc := &twitPacketService{}
 	live := &user.User{ID: 2, Handle: "Reader", TwitList: []user.TwitEntry{{Name: "First"}}}

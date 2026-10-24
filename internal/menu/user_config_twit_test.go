@@ -6,10 +6,12 @@ import (
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
+// TestCfgTwitListPersistenceAndRules checks editor persistence and rejected additions.
 func TestCfgTwitListPersistenceAndRules(t *testing.T) {
 	env := newMsgEnv(t)
 	r := env.runCmd("CFG_TWITLIST", env.caller, "", "A\rCaller\rA\rSysop\rA\rRemote@21:1/100\rA\rRemote@21:1/100\rQ\r")
@@ -29,6 +31,8 @@ func TestCfgTwitListPersistenceAndRules(t *testing.T) {
 		t.Fatal("clear did not persist")
 	}
 }
+
+// TestTwitSaveFailureRestoresSessionAndDisk checks rollback after a failed save.
 func TestTwitSaveFailureRestoresSessionAndDisk(t *testing.T) {
 	dir := t.TempDir()
 	um, err := user.NewUserManager(dir)
@@ -51,6 +55,8 @@ func TestTwitSaveFailureRestoresSessionAndDisk(t *testing.T) {
 		t.Fatal("failed save changed list")
 	}
 }
+
+// TestTwitReaderQuickAddAndNavigation checks immediate filtering and subsequent navigation.
 func TestTwitReaderQuickAddAndNavigation(t *testing.T) {
 	env := newMsgEnv(t)
 	env.postMsgs(generalAreaID, testMsg{from: "Remote", to: "All", subject: "visible-first"}, testMsg{from: "Remote", to: "All", subject: "hidden-second"}, testMsg{from: "Other", to: "All", subject: "visible-third"})
@@ -66,6 +72,8 @@ func TestTwitReaderQuickAddAndNavigation(t *testing.T) {
 		t.Fatalf("jump/prev exposed twit: %s", r.text())
 	}
 }
+
+// TestTwitListsPrivateMailAndThreads checks lists, private mail and thread filtering.
 func TestTwitListsPrivateMailAndThreads(t *testing.T) {
 	env := newMsgEnv(t)
 	env.caller.TwitList = []user.TwitEntry{{Name: "Remote"}}
@@ -92,6 +100,8 @@ func TestTwitListsPrivateMailAndThreads(t *testing.T) {
 		}
 	}
 }
+
+// TestTwitCounterRespectsOtherFiltersAndDeduplicates excludes inaccessible messages and repeated visits.
 func TestTwitCounterRespectsOtherFiltersAndDeduplicates(t *testing.T) {
 	matcher := user.BuildTwitMatcher([]user.TwitEntry{{Name: "Remote"}}, nil, user.TwitPolicy{}, "")
 	count := &twitScanCounter{}
@@ -103,6 +113,8 @@ func TestTwitCounterRespectsOtherFiltersAndDeduplicates(t *testing.T) {
 		t.Fatalf("hidden=%v", count.hidden)
 	}
 }
+
+// TestTwitNewscanSummary checks one combined summary across scanned areas.
 func TestTwitNewscanSummary(t *testing.T) {
 	env := newMsgEnv(t)
 	beta := addScanArea(env, "BETA", 1, 0)
@@ -115,6 +127,8 @@ func TestTwitNewscanSummary(t *testing.T) {
 		t.Fatalf("scan: %v\n%s", r.err, r.text())
 	}
 }
+
+// TestTwitListCopiesAreIndependent checks manager read and write boundaries for slice aliases.
 func TestTwitListCopiesAreIndependent(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	u.TwitList = []user.TwitEntry{{Name: "Original"}}
@@ -133,6 +147,7 @@ func TestTwitListCopiesAreIndependent(t *testing.T) {
 	}
 }
 
+// TestTwitQuickAddSelfExemptAndAnonymous checks reader-side refusals.
 func TestTwitQuickAddSelfExemptAndAnonymous(t *testing.T) {
 	for _, tc := range []struct{ from, keys, want string }{
 		{"Caller", "IYQ", "cannot add yourself"},
@@ -149,6 +164,8 @@ func TestTwitQuickAddSelfExemptAndAnonymous(t *testing.T) {
 		})
 	}
 }
+
+// TestTwitQuickAddRealNamePreservesLocalExemption checks protected authors in real-name areas.
 func TestTwitQuickAddRealNamePreservesLocalExemption(t *testing.T) {
 	env := newMsgEnv(t)
 	env.postMsgs(generalAreaID, testMsg{from: env.sysop.RealName, to: "All", subject: "real-name-post"})
@@ -157,6 +174,8 @@ func TestTwitQuickAddRealNamePreservesLocalExemption(t *testing.T) {
 		t.Fatalf("%v\n%s", r.err, r.text())
 	}
 }
+
+// TestTwitConfiguredCap checks the configured list limit through the editor.
 func TestTwitConfiguredCap(t *testing.T) {
 	env := newMsgEnv(t)
 	cfg := env.e.GetServerConfig()
@@ -167,6 +186,8 @@ func TestTwitConfiguredCap(t *testing.T) {
 		t.Fatalf("%v\n%s", r.err, r.text())
 	}
 }
+
+// TestTwitKonfigLaunchAndReturn checks entry into the editor and form repaint.
 func TestTwitKonfigLaunchAndReturn(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	screen, _, _ := runKonfig(t, um, u, "mA\rRemote\rQ\rq", "")
@@ -178,6 +199,8 @@ func TestTwitKonfigLaunchAndReturn(t *testing.T) {
 		t.Fatalf("form did not redraw:\n%s", screen.Snapshot())
 	}
 }
+
+// TestTwitLocalEntrySurvivesRenameAndPromotion checks stable IDs and refreshed exemptions.
 func TestTwitLocalEntrySurvivesRenameAndPromotion(t *testing.T) {
 	env := newMsgEnv(t)
 	target, err := env.um.AddUser("password", "Before", "Target Real Name", "Loc")
@@ -213,6 +236,7 @@ func TestTwitLocalEntrySurvivesRenameAndPromotion(t *testing.T) {
 	}
 }
 
+// TestTwitQuickAddFromListRefreshesList checks that nested readers update their parent list.
 func TestTwitQuickAddFromListRefreshesList(t *testing.T) {
 	env := newMsgEnv(t)
 	env.postMsgs(generalAreaID, testMsg{from: "Other", to: "All", subject: "keep-first"}, testMsg{from: "Remote", to: "All", subject: "ignore-newest"})
@@ -226,6 +250,7 @@ func TestTwitQuickAddFromListRefreshesList(t *testing.T) {
 	}
 }
 
+// TestTwitListNamesRespectTerminalEncodingAndRemainLiteral checks UTF-8 and CP437 display without pipe expansion.
 func TestTwitListNamesRespectTerminalEncodingAndRemainLiteral(t *testing.T) {
 	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
 		env := newMsgEnv(t)
@@ -239,5 +264,80 @@ func TestTwitListNamesRespectTerminalEncodingAndRemainLiteral(t *testing.T) {
 		if !strings.Contains(r.raw, want) {
 			t.Fatalf("mode=%v: name was expanded or incorrectly encoded: %q", mode, r.raw)
 		}
+	}
+}
+
+// TestTwitQuickAddLocalNetworkPost applies account rules to local echomail authors.
+func TestTwitQuickAddLocalNetworkPost(t *testing.T) {
+	for _, tc := range []struct {
+		author  string
+		wantID  int
+		refusal string
+	}{{"Caller", 0, "cannot add yourself"}, {"Sysop", 0, "exempt"}, {"Th3 D@rk", 3, ""}} {
+		t.Run(tc.author, func(t *testing.T) {
+			env := newMsgEnv(t)
+			target, err := env.um.AddUser("password", "Th3 D@rk", "Dark Real Name", "Loc")
+			if err != nil {
+				t.Fatal(err)
+			}
+			area, err := env.e.MessageMgr.AddArea(message.MessageArea{Tag: "ECHO", Name: "Echo", AreaType: "echomail", EchoTag: "TEST", OriginAddr: "21:1/100", ACSRead: "*", ACSWrite: "*"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			env.caller.CurrentMessageAreaID = area
+			env.caller.CurrentMessageAreaTag = "ECHO"
+			env.postMsgs(area, testMsg{from: tc.author, to: "All", subject: "local-network"})
+			msg := env.mustMsg(area, 1)
+			if msg.OrigAddr != "21:1/100" {
+				t.Fatalf("not a local network post: %+v", msg)
+			}
+			result := env.runCmd("READMSGS", env.caller, "", "IYQ")
+			list := env.mustDiskUser(2).TwitList
+			if tc.refusal != "" {
+				if !result.has(tc.refusal) || len(list) != 0 {
+					t.Fatalf("account rule bypassed: %+v\n%s", list, result.text())
+				}
+				return
+			}
+			if len(list) != 1 || list[0].UserID != target.ID || list[0].Addr != "" {
+				t.Fatalf("not local: %+v\n%s", list, result.text())
+			}
+		})
+	}
+}
+
+// TestTwitQuickAddPromptEscapesAuthorCodes preserves the author's literal name.
+func TestTwitQuickAddPromptEscapesAuthorCodes(t *testing.T) {
+	env := newMsgEnv(t)
+	env.postMsgs(generalAreaID, testMsg{from: "Remote|CL|12", to: "All", subject: "pipe-author"})
+	result := env.runCmd("READMSGS", env.caller, "", "INQ")
+	if !result.has("Add Remote|CL|12 to your Twit List?") {
+		t.Fatalf("author interpreted as pipe codes:\n%s", result.text())
+	}
+}
+
+// TestTwitQuickAddImportedAuthorKeepsOrigin separates remote names from local accounts.
+func TestTwitQuickAddImportedAuthorKeepsOrigin(t *testing.T) {
+	env := newMsgEnv(t)
+	base, err := env.e.MessageMgr.GetBase(generalAreaID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := jam.NewMessage()
+	msg.From = "Sysop"
+	msg.To = "All"
+	msg.Subject = "imported"
+	msg.Text = "imported-body"
+	msg.OrigAddr = "21:1/200"
+	if _, err := base.WriteReceivedMessage(msg, jam.MsgTypeEchomailMsg); err != nil {
+		t.Fatal(err)
+	}
+	if err := base.Close(); err != nil {
+		t.Fatal(err)
+	}
+	result := env.runCmd("READMSGS", env.caller, "", "IYQ")
+	list := env.mustDiskUser(2).TwitList
+	if len(list) != 1 || list[0].UserID != 0 || list[0].Name != "Sysop" || list[0].Addr != "21:1/200" {
+		t.Fatalf("import resolved as local: %+v\n%s", list, result.text())
 	}
 }

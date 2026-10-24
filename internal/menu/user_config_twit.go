@@ -10,10 +10,13 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
+// twitPolicy reads list limits and exemption levels from the current board configuration.
 func twitPolicy(e *MenuExecutor) user.TwitPolicy {
 	cfg := e.GetServerConfig()
 	return user.TwitPolicy{MaxEntries: cfg.TwitListMax, ExemptLevel: cfg.TwitExemptLevel, SysOpLevel: cfg.SysOpLevel}
 }
+
+// twitMatcher resolves the session list against current local accounts.
 func twitMatcher(e *MenuExecutor, um *user.UserMgr, u *user.User) *user.TwitMatcher {
 	var entries []user.TwitEntry
 	if u != nil {
@@ -37,6 +40,8 @@ func saveTwitList(um *user.UserMgr, u *user.User, entries []user.TwitEntry) erro
 	}
 	return nil
 }
+
+// addTwit validates and saves an entry, displaying the result to the caller.
 func addTwit(c *cmdCtx, name string) bool {
 	entry, err := user.NewTwitEntry(c.currentUser, c.userManager, name, twitPolicy(c.e))
 	st := c.e.Strings()
@@ -63,6 +68,8 @@ func addTwit(c *cmdCtx, name string) bool {
 	c.e.writeString(c.terminal, c.outputMode, st.TwitAdded)
 	return true
 }
+
+// runCfgTwitList runs the add, delete and clear prompt loop for the caller.
 func runCfgTwitList(c *cmdCtx, args string) (*user.User, string, error) {
 	u := c.currentUser
 	if u == nil {
@@ -134,6 +141,7 @@ func runCfgTwitList(c *cmdCtx, args string) (*user.User, string, error) {
 // areas, even if navigation probes the same message repeatedly.
 type twitScanCounter struct{ hidden map[[2]int]bool }
 
+// record counts an otherwise-visible message once within a scan.
 func (c *twitScanCounter) record(m *message.DisplayMessage) {
 	if c == nil {
 		return
@@ -143,6 +151,8 @@ func (c *twitScanCounter) record(m *message.DisplayMessage) {
 	}
 	c.hidden[[2]int{m.AreaID, m.MsgNum}] = true
 }
+
+// withTwit narrows a visibility filter and optionally counts rejected authors.
 func withTwit(matcher func() *user.TwitMatcher, base msgOwnershipFilter, count *twitScanCounter) msgOwnershipFilter {
 	return func(m *message.DisplayMessage) bool {
 		if base != nil && !base(m) {

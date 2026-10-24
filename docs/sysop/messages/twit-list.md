@@ -12,12 +12,14 @@ In the message reader, **I** confirms adding the displayed author and immediatel
 moves forward. **T** keeps its existing Thread function. Anonymous authors cannot
 be quick-added and anonymous posts are always visible.
 
-An unqualified name matching a local handle is stored by user ID. Matching uses
+An exact local handle is stored by user ID, including handles containing `@`.
+Otherwise, `@` separates a network name from its address. Matching uses
 that user's current handle, current real name (including RealNameOnly areas), and
 the name saved at add time. This survives renames. Other names are network entries.
 Use `name@address` to match only that origin; without an address the name matches
-on every network and in local areas. Quick-add includes a message's origin address
-when present, so network authors are kept separate from similarly named accounts.
+on every network and in local areas. Quick-add includes the origin address of
+imported network messages, keeping those authors separate from similarly named accounts. Locally written echomail/netmail
+posts retain local account IDs and checks even though they also carry an origin address.
 Matching ignores case and leading/trailing whitespace. Anonymous means the
 configured `anonymousName` or the standard `Anonymous` signature; the board does
 not retain a separate anonymous author identity for filtering.

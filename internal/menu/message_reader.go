@@ -716,13 +716,18 @@ readerLoop:
 					needsRedraw = true
 					continue
 				}
-				answer, confirmErr := promptSingleChar(reader, terminal, fmt.Sprintf(e.Strings().TwitQuickConfirm, currentMsg.From), outputMode)
+				answer, confirmErr := promptSingleChar(reader, terminal, fmt.Sprintf(e.Strings().TwitQuickConfirm, strings.ReplaceAll(currentMsg.From, "|", "||")), outputMode)
 				if confirmErr != nil {
 					return currentUser, "LOGOFF", confirmErr
 				}
 				name := currentMsg.From
-				// Network origins must not resolve a coincidentally matching local handle.
-				if currentMsg.OrigAddr != "" {
+				// Imported JAM records may also carry MsgLocal, so compare the
+				// origin with this area's configured board address instead.
+				localOrigin := strings.TrimSpace(currentMsg.OrigAddr) == ""
+				if area, ok := e.MessageMgr.GetAreaByID(currentAreaID); ok && strings.TrimSpace(area.OriginAddr) != "" {
+					localOrigin = localOrigin || strings.EqualFold(strings.TrimSpace(currentMsg.OrigAddr), strings.TrimSpace(area.OriginAddr))
+				}
+				if !localOrigin {
 					name += "@" + currentMsg.OrigAddr
 				} else if target, ok := userManager.ResolveRecipient(name); ok {
 					// RealNameOnly posts still need stable IDs, self checks and exemptions.

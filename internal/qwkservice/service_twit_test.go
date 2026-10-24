@@ -10,6 +10,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
+// TestBuildPacketTwitListBeforeCapAndPrivacy checks export filtering before packet limits.
 func TestBuildPacketTwitListBeforeCapAndPrivacy(t *testing.T) {
 	store := newFakeStore()
 	store.addArea(&message.MessageArea{ID: 1, Tag: "GENERAL", Name: "General"})
@@ -49,6 +50,8 @@ func TestBuildPacketTwitListBeforeCapAndPrivacy(t *testing.T) {
 		t.Fatal("pointers committed before transfer")
 	}
 }
+
+// TestBuildPacketAllTwitsProducesNoPacket checks that empty exports do not advance last-read pointers.
 func TestBuildPacketAllTwitsProducesNoPacket(t *testing.T) {
 	store := newFakeStore()
 	store.addArea(&message.MessageArea{ID: 1, Tag: "GENERAL"})
