@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -395,8 +396,18 @@ func TestRunPost_V3NetPending(t *testing.T) {
 // An area bound to V3Net by tag in v3net.json is a V3Net area whatever its
 // type, as the BBS sees it, so a helper post there is left for the sweep.
 func TestRunPost_TagBoundV3NetPending(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		t.Run(fmt.Sprintf("enabled=%v", enabled), func(t *testing.T) {
+			testTagBoundV3NetPending(t, enabled)
+		})
+	}
+}
+
+// testTagBoundV3NetPending posts to a tag-bound local area. With V3Net
+// disabled the post still waits, to be sent once V3Net is enabled.
+func testTagBoundV3NetPending(t *testing.T, enabled bool) {
 	configDir, dataDir := postTestDirs(t)
-	v3 := `{"enabled":true,"leaves":[{"network":"felonynet","boards":["GENERAL"]}]}`
+	v3 := fmt.Sprintf(`{"enabled":%v,"leaves":[{"network":"felonynet","boards":["GENERAL"]}]}`, enabled)
 	if err := os.WriteFile(filepath.Join(configDir, "v3net.json"), []byte(v3), 0o644); err != nil {
 		t.Fatal(err)
 	}

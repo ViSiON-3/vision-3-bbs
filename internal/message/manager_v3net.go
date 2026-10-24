@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
 
@@ -95,4 +96,21 @@ func (mm *MessageManager) PendingOutbound(areaID int) ([]int, error) {
 		}
 	}
 	return pending, nil
+}
+
+// V3NetBoundAreas returns an IsV3NetArea hook that reports the areas the
+// given v3net.json leaves bind by board tag, resolved against mm now. It
+// does not look at whether V3Net is enabled: a post made while it is off
+// still waits for the outbound sweep, which sends it once V3Net is on. Tags
+// that name no area are ignored.
+func V3NetBoundAreas(mm *MessageManager, leaves []config.V3NetLeafConfig) func(areaID int) bool {
+	bound := make(map[int]bool)
+	for _, leaf := range leaves {
+		for _, tag := range leaf.Boards {
+			if area, ok := mm.GetAreaByTag(tag); ok {
+				bound[area.ID] = true
+			}
+		}
+	}
+	return func(areaID int) bool { return bound[areaID] }
 }

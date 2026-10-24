@@ -2043,6 +2043,11 @@ func main() {
 	}
 	if v3netCfgErr == nil {
 		v3netConfig.ConfigPath = rootConfigPath
+		// Areas bound by tag are V3Net areas even while V3Net is disabled,
+		// so posts there wait for the outbound sweep instead of being
+		// stored as processed. A running service replaces this below with
+		// its live bindings.
+		messageMgr.IsV3NetArea = message.V3NetBoundAreas(messageMgr, v3netConfig.Leaves)
 	}
 
 	// Start V3Net networking service if enabled

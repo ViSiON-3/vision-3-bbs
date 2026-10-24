@@ -269,24 +269,15 @@ func newHelperMessageManager(configDir, dataDir, boardName string) (*message.Mes
 	if err != nil {
 		return nil, fmt.Errorf("opening message areas: %w", err)
 	}
-	// Areas bound to V3Net by tag in v3net.json, whatever their type, as
-	// the BBS sees them: a post there must be left for its outbound sweep.
+	// Areas bound to V3Net by tag in v3net.json, whatever their type and
+	// whether V3Net is enabled, as the BBS sees them: a post there must be
+	// left for its outbound sweep.
 	v3netCfg, err := config.LoadV3NetConfig(configDir)
 	if err != nil {
 		_ = mm.Close()
 		return nil, fmt.Errorf("loading v3net.json: %w", err)
 	}
-	bound := make(map[int]bool)
-	if v3netCfg.Enabled {
-		for _, leaf := range v3netCfg.Leaves {
-			for _, tag := range leaf.Boards {
-				if area, ok := mm.GetAreaByTag(tag); ok {
-					bound[area.ID] = true
-				}
-			}
-		}
-	}
-	mm.IsV3NetArea = func(areaID int) bool { return bound[areaID] }
+	mm.IsV3NetArea = message.V3NetBoundAreas(mm, v3netCfg.Leaves)
 	return mm, nil
 }
 
