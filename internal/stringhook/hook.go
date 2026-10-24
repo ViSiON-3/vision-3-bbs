@@ -100,6 +100,9 @@ func IsHook(value string) bool {
 // whose value reaches fmt directly is missing here, so a formatted string
 // cannot be advertised as a hook where it would print %!(EXTRA ...).
 var NoHookKeys = map[string]bool{
+	"twitQuickConfirm":          true,
+	"konfigTwitListLabel":       true,
+	"konfigTwitListHelp":        true,
 	"One_Liner_Legend":          true,
 	"anonymousName":             true,
 	"cfgFileColumnsHeader":      true,

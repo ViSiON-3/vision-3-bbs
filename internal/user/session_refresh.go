@@ -81,6 +81,7 @@ func (um *UserMgr) RefreshSessionUser(current *User) (*User, bool) {
 	}
 
 	refreshed := *current
+	refreshed.TwitList = append([]TwitEntry(nil), current.TwitList...)
 	sysopOwnedFields(&refreshed, &snapshot)
 	// Follow a rename. The handle is the map key, so a sysop changing it in
 	// ./ue re-keys the record; taking the stored handle here keeps the session

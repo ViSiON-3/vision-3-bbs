@@ -81,6 +81,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	res, err := svc.BuildPacket(qwkservice.ExportOptions{
 		Handle:     currentUser.Handle,
 		TaggedTags: currentUser.TaggedMessageAreaTags,
+		TwitList:   twitMatcher(e, c.userManager, currentUser),
 	})
 	if err != nil {
 		slog.Error("failed to build QWK packet", "node", nodeNumber, "error", err)

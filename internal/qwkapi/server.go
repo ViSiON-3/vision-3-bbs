@@ -34,11 +34,13 @@ type PacketService interface {
 
 // Deps are the collaborators the API server needs.
 type Deps struct {
-	Config       config.QWKAPIConfig
-	ConfigDir    string // where auto TLS certs live
-	Users        Authenticator
-	Service      PacketService
-	AuthorizeFor func(u *user.User) func(area *message.MessageArea) bool
+	// TwitMatcherFor resolves the current list and board exemptions for each download.
+	TwitMatcherFor func(*user.User) *user.TwitMatcher
+	Config         config.QWKAPIConfig
+	ConfigDir      string // where auto TLS certs live
+	Users          Authenticator
+	Service        PacketService
+	AuthorizeFor   func(u *user.User) func(area *message.MessageArea) bool
 }
 
 // Server is the QWK packet transport API.
