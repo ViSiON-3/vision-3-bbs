@@ -22,7 +22,9 @@ const V3NetOutboundScanner = "v3net-outbound"
 // It scans from the area's V3NetOutboundScanner pointer and moves the pointer
 // up to just before the first pending message (or to the last message when
 // none is pending), so later calls skip what is already done. A pointer past
-// the end of the base is treated as 0.
+// the end of the base is treated as 0. A header that cannot be read is
+// logged and skipped, and the pointer stays before it so the next call
+// tries it again; the messages after it are still returned.
 func (mm *MessageManager) PendingOutbound(areaID int) ([]int, error) {
 	b, area, err := mm.openBase(areaID)
 	if err != nil {
@@ -50,17 +52,24 @@ func (mm *MessageManager) PendingOutbound(areaID int) ([]int, error) {
 
 	var pending []int
 	newDone := count
+	stopped := false // newDone is held before a pending or unreadable message
 	for n := done + 1; n <= count; n++ {
 		hdr, err := b.ReadMessageHeader(n)
 		if err != nil {
-			return pending, err
+			// One bad header must not hold up the posts after it: skip it,
+			// but keep the pointer before it so it is looked at again.
+			slog.Warn("v3net outbound: cannot read message header; will retry", "area", area.Tag, "msg", n, "error", err)
+			if !stopped {
+				newDone, stopped = n-1, true
+			}
+			continue
 		}
 		const skip = jam.MsgSent | jam.MsgPrivate | jam.MsgDeleted
 		if hdr.DateProcessed != 0 || hdr.Attribute&skip != 0 {
 			continue
 		}
-		if len(pending) == 0 {
-			newDone = n - 1
+		if !stopped {
+			newDone, stopped = n-1, true
 		}
 		pending = append(pending, n)
 	}

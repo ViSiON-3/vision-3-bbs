@@ -391,3 +391,28 @@ func TestRunPost_V3NetPending(t *testing.T) {
 		t.Errorf("pending = %v, %v; want one message", pending, err)
 	}
 }
+
+// An area bound to V3Net by tag in v3net.json is a V3Net area whatever its
+// type, as the BBS sees it, so a helper post there is left for the sweep.
+func TestRunPost_TagBoundV3NetPending(t *testing.T) {
+	configDir, dataDir := postTestDirs(t)
+	v3 := `{"enabled":true,"leaves":[{"network":"felonynet","boards":["GENERAL"]}]}`
+	if err := os.WriteFile(filepath.Join(configDir, "v3net.json"), []byte(v3), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"--config", configDir, "--data", dataDir, "--area", "GENERAL", "--subj", "News", "--file", "-"}
+	if code := runPost(args, bytes.NewBufferString("hello network")); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	mm, err := message.NewMessageManager(dataDir, configDir, "Test BBS", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mm.Close() }()
+	if pending, err := mm.PendingOutbound(1); err != nil || len(pending) != 1 {
+		t.Errorf("pending = %v, %v; want one message", pending, err)
+	}
+	if code := runPost(append(args, "--private", "--to", "Bob"), bytes.NewBufferString("x")); code != 1 {
+		t.Errorf("private post to a bound area: exit %d, want 1", code)
+	}
+}

@@ -153,7 +153,7 @@ func runPost(args []string, stdin io.Reader) int {
 	}
 	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
 	networked := !msgType.IsLocal()
-	isV3Net := strings.EqualFold(area.AreaType, "v3net")
+	isV3Net := strings.EqualFold(area.AreaType, "v3net") || mm.IsV3NetArea(area.ID)
 	toName, destAddr := message.SplitNetmailTo(*to)
 	switch {
 	case msgType.IsNetmail() && destAddr == "":
@@ -250,7 +250,9 @@ func printPostSummary(from, to, subject, format string, body postBody) {
 
 // newHelperMessageManager opens the message areas with the origin line text
 // of each FTN network, as v3mail does, so echomail written here carries the
-// same origin as a post made from the BBS.
+// same origin as a post made from the BBS. Its IsV3NetArea hook reports the
+// areas v3net.json binds, so posts there are written for the BBS's V3Net
+// outbound sweep, as the BBS's own hook does.
 func newHelperMessageManager(configDir, dataDir, boardName string) (*message.MessageManager, error) {
 	origins := make(map[string]string)
 	if ftnCfg, err := loadFTNConfig(filepath.Join(configDir, "ftn.json")); err == nil {
@@ -267,6 +269,24 @@ func newHelperMessageManager(configDir, dataDir, boardName string) (*message.Mes
 	if err != nil {
 		return nil, fmt.Errorf("opening message areas: %w", err)
 	}
+	// Areas bound to V3Net by tag in v3net.json, whatever their type, as
+	// the BBS sees them: a post there must be left for its outbound sweep.
+	v3netCfg, err := config.LoadV3NetConfig(configDir)
+	if err != nil {
+		_ = mm.Close()
+		return nil, fmt.Errorf("loading v3net.json: %w", err)
+	}
+	bound := make(map[int]bool)
+	if v3netCfg.Enabled {
+		for _, leaf := range v3netCfg.Leaves {
+			for _, tag := range leaf.Boards {
+				if area, ok := mm.GetAreaByTag(tag); ok {
+					bound[area.ID] = true
+				}
+			}
+		}
+	}
+	mm.IsV3NetArea = func(areaID int) bool { return bound[areaID] }
 	return mm, nil
 }
 
