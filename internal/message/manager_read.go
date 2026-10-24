@@ -214,11 +214,12 @@ func (mm *MessageManager) AdvanceLastRead(areaID int, username string, msgNum in
 	return b.AdvanceLastRead(username, msgNum)
 }
 
-// MarkMessageSent sets the MSG_SENT attribute on a message header and stamps
-// DateProcessed, so the V3Net outbound sweep does not send it again. Used by
+// MarkMessageSent sets the MSG_SENT attribute on a message header, and in a
+// local or v3net area stamps DateProcessed, so the V3Net outbound sweep does
+// not send it again. Used by
 // V3Net once a locally-posted message has been transmitted to the hub.
 func (mm *MessageManager) MarkMessageSent(areaID, msgNum int) error {
-	b, _, err := mm.openBase(areaID)
+	b, area, err := mm.openBase(areaID)
 	if err != nil {
 		return err
 	}
@@ -234,7 +235,11 @@ func (mm *MessageManager) MarkMessageSent(areaID, msgNum int) error {
 	}
 
 	hdr.Attribute |= jam.MsgSent
-	hdr.DateProcessed = uint32(time.Now().Unix())
+	// In echomail and netmail areas DateProcessed belongs to the FTN
+	// tosser's export; MSG_SENT alone keeps the sweep from resending.
+	if jam.DetermineMessageType(area.AreaType, area.EchoTag).IsLocal() {
+		hdr.DateProcessed = uint32(time.Now().Unix())
+	}
 	return b.UpdateMessageHeader(msgNum, hdr)
 }
 

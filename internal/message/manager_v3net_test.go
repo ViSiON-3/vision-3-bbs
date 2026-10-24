@@ -140,3 +140,53 @@ func TestPendingOutbound_SurvivesPack(t *testing.T) {
 		t.Errorf("after pack: pending = %v, want [2]", got)
 	}
 }
+
+// In an echomail area bound to V3Net, imports from V3Net are left
+// unprocessed for the FTN tosser; the sweep must not send them back, and a
+// sent post keeps its DateProcessed for the tosser (CodeRabbit on #685).
+func TestPendingOutbound_EchomailBoundArea(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "config")
+	if err := os.MkdirAll(cfg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	areas := `[{"id":1,"tag":"FD_GATE","name":"Gate","base_path":"gate","area_type":"echomail",
+	            "echo_tag":"GATE","origin_addr":"1:2/3","network":"fidonet"}]`
+	if err := os.WriteFile(filepath.Join(cfg, "message_areas.json"), []byte(areas), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mm, err := NewMessageManager(tmp, cfg, "TestBBS", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mm.IsV3NetArea = func(int) bool { return true }
+
+	if _, err := mm.AddMessage(1, "Remote", "All", "s", V3NetUUIDPrefix+"u-1\nfrom the hub", ""); err != nil {
+		t.Fatal(err)
+	}
+	local, err := mm.AddMessage(1, "Bob", "All", "s", "local post", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pendingIn(t, mm, 1); len(got) != 1 || got[0] != local {
+		t.Fatalf("pending = %v, want only the local post %d", got, local)
+	}
+	if err := mm.MarkMessageSent(1, local); err != nil {
+		t.Fatal(err)
+	}
+	if got := pendingIn(t, mm, 1); len(got) != 0 {
+		t.Errorf("after sent: pending = %v", got)
+	}
+	b, err := mm.GetBase(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = b.Close() }()
+	hdr, err := b.ReadMessageHeader(local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hdr.DateProcessed != 0 {
+		t.Error("MarkMessageSent stamped DateProcessed in an echomail area; the tosser would skip its export")
+	}
+}

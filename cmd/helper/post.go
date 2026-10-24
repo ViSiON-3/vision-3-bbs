@@ -228,7 +228,7 @@ func runPost(args []string, stdin io.Reader) int {
 	switch {
 	case isV3Net:
 		// Written unprocessed; the running BBS's V3Net outbound sweep sends it.
-		fmt.Println("  The running BBS sends it to the V3Net hub within a minute.")
+		fmt.Println("  The running BBS tries to send it to the V3Net hub every minute until the hub accepts it.")
 	case networked && !area.IsQWKNet():
 		fmt.Println("  It is exported on the next 'v3mail ftn-scan'.")
 	}

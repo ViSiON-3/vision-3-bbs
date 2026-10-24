@@ -3,6 +3,7 @@ package message
 import (
 	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
@@ -16,8 +17,9 @@ const V3NetOutboundScanner = "v3net-outbound"
 
 // PendingOutbound returns the numbers of the area's messages waiting for the
 // V3Net outbound sweep: not yet processed (DateProcessed 0), not sent, not
-// private and not deleted. Only local V3Net posts are written unprocessed
-// (see IsV3NetArea), so imported messages and older history never match.
+// private, not deleted, and not imported from V3Net (body starting with
+// V3NetUUIDPrefix). In local and v3net areas only local V3Net posts are
+// written unprocessed (see IsV3NetArea), so older history never matches.
 //
 // It scans from the area's V3NetOutboundScanner pointer and moves the pointer
 // up to just before the first pending message (or to the last message when
@@ -66,6 +68,20 @@ func (mm *MessageManager) PendingOutbound(areaID int) ([]int, error) {
 		}
 		const skip = jam.MsgSent | jam.MsgPrivate | jam.MsgDeleted
 		if hdr.DateProcessed != 0 || hdr.Attribute&skip != 0 {
+			continue
+		}
+		// In an echomail area bound to V3Net, imports from V3Net are also
+		// left unprocessed (for the FTN tosser); they carry the UUID kludge
+		// and must never be sent back to the hub.
+		msg, err := b.ReadMessage(n)
+		if err != nil {
+			slog.Warn("v3net outbound: cannot read message; will retry", "area", area.Tag, "msg", n, "error", err)
+			if !stopped {
+				newDone, stopped = n-1, true
+			}
+			continue
+		}
+		if strings.HasPrefix(msg.Text, V3NetUUIDPrefix) {
 			continue
 		}
 		if !stopped {
