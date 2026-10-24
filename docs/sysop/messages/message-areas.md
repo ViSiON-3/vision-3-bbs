@@ -168,7 +168,7 @@ SAUCE record and DOS EOF marker are removed. Echomail and netmail are marked
 `CHRS: CP437 2` so other systems don't translate the art. Files with NUL
 bytes are refused, and so are non-ASCII characters in the From, To or Subject
 of echomail and netmail. Lines that other software reads as message structure
-(`---`, ` * Origin:`, `SEEN-BY:`), and a clear-screen code, produce a warning.
+(`---`, `* Origin:`, `SEEN-BY:`), and a clear-screen code, produce a warning.
 V3Net areas can't be posted to this way; post to them from the BBS.
 
 ---
