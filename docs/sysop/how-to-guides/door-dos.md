@@ -10,7 +10,7 @@ Most classic door games are 16-bit DOS programs. ViSiON/3 runs them on Linux thr
 
 Install dosemu2 from your distribution or from the [dosemu2 project](https://github.com/dosemu2/dosemu2). The BBS calls the binary directly at `/usr/libexec/dosemu2/dosemu2.bin`; if your package puts it elsewhere, set the path under **System Setup → DOS Emulation** in `./config`.
 
-Then run `./setup.sh` again from the BBS root. When it finds dosemu2 it writes a `~/.dosemu/.dosemurc` with the character set and COM1 settings the BBS needs, and creates `doors/drive_c/`, which is the virtual C: drive every DOS door lives on.
+Then run `./setup.sh` again from the BBS root. When it finds dosemu2 it writes a `~/.dosemu/.dosemurc` with the character set settings the BBS needs (the BBS sets COM1 per door), and creates `doors/drive_c/`, which is the virtual C: drive every DOS door lives on.
 
 ## 2. Get the door and a FOSSIL driver
 

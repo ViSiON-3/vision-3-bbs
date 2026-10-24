@@ -128,9 +128,9 @@ func writeDosemurc(ctx *DoorCtx, rcPath, driveCPath, nodePath string) error {
 	var filtered strings.Builder
 	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "$_com1") {
+		if value, ok := com1Setting(trimmed); ok {
 			// The last assignment wins, as it does in dosemu.
-			ctx.baseCOM1Virtual = baseConfig != "" && isVirtualCOM1(trimmed)
+			ctx.baseCOM1Virtual = baseConfig != "" && strings.EqualFold(value, "virtual")
 			continue
 		}
 		if strings.HasPrefix(trimmed, "$_hdimage") ||
@@ -164,15 +164,17 @@ func writeDosemurc(ctx *DoorCtx, rcPath, driveCPath, nodePath string) error {
 	return os.WriteFile(rcPath, []byte(content), 0600)
 }
 
-// isVirtualCOM1 reports whether a trimmed dosemurc $_com1 line maps COM1 to
-// the controlling terminal, e.g. $_com1 = "virtual".
-func isVirtualCOM1(line string) bool {
-	_, value, ok := strings.Cut(line, "=")
-	if !ok {
-		return false
+// com1Setting reports whether a trimmed dosemurc line sets $_com1 (and not,
+// say, $_com10), and returns its value with any comment, trailing semicolon
+// and quotes removed, e.g. virtual for $_com1 = "virtual".
+func com1Setting(line string) (string, bool) {
+	name, value, _ := strings.Cut(line, "=")
+	if strings.TrimSpace(name) != "$_com1" {
+		return "", false
 	}
 	value, _, _ = strings.Cut(value, "#")
-	return strings.EqualFold(strings.Trim(strings.TrimSpace(value), `"`), "virtual")
+	value = strings.TrimSuffix(strings.TrimSpace(value), ";")
+	return strings.Trim(strings.TrimSpace(value), `"'`), true
 }
 
 // executeDOSDoor launches a DOS door program via dosemu2.

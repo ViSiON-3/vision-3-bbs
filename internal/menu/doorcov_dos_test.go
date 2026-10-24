@@ -231,17 +231,24 @@ func TestDoorcovWriteDosemurc(t *testing.T) {
 	})
 }
 
-func TestIsVirtualCOM1(t *testing.T) {
-	for line, want := range map[string]bool{
-		`$_com1 = "virtual"`:          true,
-		`$_com1="VIRTUAL"`:            true,
-		`$_com1 = "virtual" # FOSSIL`: true,
-		`$_com1 = "/dev/ttyS0"`:       false,
-		`$_com1 = "" # was "virtual"`: false,
-		`$_com1`:                      false,
+func TestCOM1Setting(t *testing.T) {
+	for _, tc := range []struct {
+		line, value string
+		ok          bool
+	}{
+		{`$_com1 = "virtual"`, "virtual", true},
+		{`$_com1="VIRTUAL"`, "VIRTUAL", true},
+		{`$_com1 = 'virtual'`, "virtual", true},
+		{`$_com1 = "virtual";`, "virtual", true},
+		{`$_com1 = "virtual" # FOSSIL`, "virtual", true},
+		{`$_com1 = "/dev/ttyS0"`, "/dev/ttyS0", true},
+		{`$_com1 = "" # was "virtual"`, "", true},
+		{`$_com1`, "", true},
+		{`$_com10 = "virtual"`, "", false},
+		{`$_cpu = "80486"`, "", false},
 	} {
-		if got := isVirtualCOM1(line); got != want {
-			t.Errorf("isVirtualCOM1(%q) = %v, want %v", line, got, want)
+		if value, ok := com1Setting(tc.line); value != tc.value || ok != tc.ok {
+			t.Errorf("com1Setting(%q) = %q, %v, want %q, %v", tc.line, value, ok, tc.value, tc.ok)
 		}
 	}
 }
