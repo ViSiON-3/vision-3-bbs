@@ -170,8 +170,9 @@ bytes are refused. From, To and Subject in echomail and netmail are sent as
 CP437, so a character CP437 doesn't have (an emoji, say) is refused there.
 Lines that other software reads as message structure (`---`, `* Origin:`,
 `SEEN-BY:`), and a clear-screen code, produce a warning.
-In a V3Net area, the running BBS tries to send the post to the hub every
-minute until the hub accepts it.
+In a V3Net area, the post waits until V3Net is enabled and the area's network
+is connected; then the running BBS tries to send it to the hub every minute
+until the hub accepts it.
 
 Posts to `PRIVMAIL`, and posts made with `--private`, are private. A private
 message in a local area must go to an existing user: put their handle in
