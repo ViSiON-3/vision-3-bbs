@@ -63,7 +63,7 @@ func (lb *fileLightbar) viewFile() (refresh bool) {
 	// Show cursor for the viewer.
 	_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
 	tw, th := getTerminalSize(lb.s)
-	send := lb.e.zipLabSender(lb.s, lb.terminal, sel, lb.currentUser, lb.nodeNumber, lb.sessionStartTime, lb.outputMode)
+	send := lb.e.zipLabSender(lb.s, lb.terminal, sel, lb.currentUser, lb.userManager, lb.nodeNumber, lb.sessionStartTime, lb.outputMode)
 	viewFileByRecord(lb.e, lb.s, lb.terminal, sel, lb.outputMode, tw, th, send)
 	// A ZipLab extraction replaces the session InputHandler around the
 	// transfer, so the cached one is stale.
@@ -148,7 +148,7 @@ func (lb *fileLightbar) sendTaggedFiles(filesToDownload []string, fileIDsToDownl
 	} else if !protoOK {
 		_ = lb.writePipe("\r\n|07Download cancelled.|07\r\n")
 	} else {
-		sentCount, sendFails := lb.e.runTransferSend(lb.s, lb.terminal, proto, filesToDownload, fileIDsToDownload, lb.outputMode, lb.nodeNumber)
+		sentCount, sendFails := lb.e.runTransferSend(lb.s, lb.terminal, proto, filesToDownload, fileIDsToDownload, lb.outputMode, lb.nodeNumber, lb.currentUser)
 		successCount = sentCount
 		failCount += sendFails
 		lb.ih = getSessionIH(lb.s)

@@ -123,7 +123,7 @@ func (st *fileListState) handleFileDownload() (logoff bool, err error) {
 			paths[i] = fe.path
 			fileIDs[i] = fe.id
 		}
-		transferSuccess, transferFail := st.e.runTransferSend(st.s, st.terminal, proto, paths, fileIDs, st.outputMode, st.nodeNumber)
+		transferSuccess, transferFail := st.e.runTransferSend(st.s, st.terminal, proto, paths, fileIDs, st.outputMode, st.nodeNumber, st.currentUser)
 		successCount += transferSuccess
 		failCount += transferFail
 		uiPause(1 * time.Second)
@@ -208,7 +208,7 @@ func (st *fileListState) handleFileView() (logoff bool, err error) {
 		return false, nil
 	}
 	fileToView := st.filesOnPage[viewIndex]
-	send := st.e.zipLabSender(st.s, st.terminal, &fileToView, st.currentUser, st.nodeNumber, st.sessionStartTime, st.outputMode)
+	send := st.e.zipLabSender(st.s, st.terminal, &fileToView, st.currentUser, st.userManager, st.nodeNumber, st.sessionStartTime, st.outputMode)
 	viewFileByRecord(st.e, st.s, st.terminal, &fileToView, st.outputMode, st.termWidth, st.termHeight, send)
 	return false, nil
 }

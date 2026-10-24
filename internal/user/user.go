@@ -61,8 +61,10 @@ type User struct {
 	CreatedAt        time.Time  `json:"createdAt"`
 	UpdatedAt        time.Time  `json:"updatedAt"` // For optimistic locking - tracks last modification
 	Validated        bool       `json:"validated"`
-	FilePoints       int        `json:"filePoints"`               // Added for P
-	NumUploads       int        `json:"numUploads"`               // Added for E
+	FilePoints       int        `json:"filePoints"` // Added for P
+	NumUploads       int        `json:"numUploads"` // Added for E
+	UploadedBytes    int64      `json:"uploadedBytes,omitempty"`
+	DownloadedBytes  int64      `json:"downloadedBytes,omitempty"`
 	NumDownloads     int        `json:"numDownloads,omitempty"`   // Download count for ACS 'B' ratio
 	MessagesPosted   int        `json:"messagesPosted,omitempty"` // Number of messages posted by user
 	// NumLogons is TimesCalled

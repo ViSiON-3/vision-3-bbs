@@ -115,9 +115,22 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 		"|UN": currentUser.PrivateNote,
 		"|UL": strconv.Itoa(currentUser.AccessLevel),
 		"|FL": strconv.Itoa(currentUser.AccessLevel),
-		"|UK": strconv.Itoa(currentUser.NumUploads),
+		"|UK": strconv.FormatInt(currentUser.UploadedBytes/1024, 10),
 		"|NU": strconv.Itoa(currentUser.NumUploads),
-		"|DK": "0", "|ND": "0", "|TP": "0", "|NM": "0", "|LC": "N/A",
+		"|DK": strconv.FormatInt(currentUser.DownloadedBytes/1024, 10),
+		"|ND": strconv.Itoa(currentUser.NumDownloads),
+		"|TP": strconv.Itoa(currentUser.MessagesPosted),
+		"|NM": e.statsWaitingMail(currentUser),
+		"|LC": "N/A",
+	}
+	if c.userManager != nil {
+		var latest time.Time
+		for _, call := range visibleCallRecords(c.userManager.GetLastCallers()) {
+			if !call.ConnectTime.After(sessionStartTime) && call.ConnectTime.After(latest) {
+				latest = call.ConnectTime
+				placeholders["|LC"] = call.Handle
+			}
+		}
 	}
 	placeholders["|TL"] = e.timeLeftPlaceholder(s, currentUser, sessionStartTime)
 

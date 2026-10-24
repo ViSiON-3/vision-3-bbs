@@ -38,7 +38,7 @@ func sessionReadKey(s ssh.Session) ziplab.ReadKeyFunc {
 // is extracted — then hands the session to the transfer program through
 // runTransferSend, which stops the shared InputHandler first so it cannot
 // steal the protocol's bytes.
-func (e *MenuExecutor) zipLabSender(s ssh.Session, terminal *term.Terminal, record *file.FileRecord, u *user.User, nodeNumber int, sessionStartTime time.Time, outputMode ansi.OutputMode) ziplab.SendFunc {
+func (e *MenuExecutor) zipLabSender(s ssh.Session, terminal *term.Terminal, record *file.FileRecord, u *user.User, userManager *user.UserMgr, nodeNumber int, sessionStartTime time.Time, outputMode ansi.OutputMode) ziplab.SendFunc {
 	return func(extract ziplab.ExtractFunc) {
 		area, ok := e.FileMgr.GetAreaByID(record.AreaID)
 		if !ok || u == nil || (area.ACSDownload != "" && !checkACS(area.ACSDownload, u, s, terminal, sessionStartTime)) {
@@ -61,7 +61,12 @@ func (e *MenuExecutor) zipLabSender(s ssh.Session, terminal *term.Terminal, reco
 		if err != nil {
 			return
 		}
-		e.runTransferSend(s, terminal, proto, []string{path}, nil, outputMode, nodeNumber)
+		success, _ := e.runTransferSend(s, terminal, proto, []string{path}, nil, outputMode, nodeNumber, u)
+		if success > 0 {
+			if err := userManager.UpdateUser(u); err != nil {
+				slog.Error("saving archive-member download statistics", "node", nodeNumber, "error", err)
+			}
+		}
 	}
 }
 
@@ -144,7 +149,7 @@ func runViewFile(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if e.FileMgr.IsSupportedArchive(filePath) {
-		send := e.zipLabSender(s, terminal, record, currentUser, nodeNumber, c.sessionStartTime, outputMode)
+		send := e.zipLabSender(s, terminal, record, currentUser, c.userManager, nodeNumber, c.sessionStartTime, outputMode)
 		ziplab.RunZipLabView(terminal, filePath, record.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s), send)
 	} else {
 		if termHeight <= 0 {
