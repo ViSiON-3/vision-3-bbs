@@ -340,6 +340,7 @@ func (t *Tosser) createOutboundNetmailPacket(link *linkConfig, msgs []pendingNet
 		// packet header and INTL/TOPT kludges, not the username field.
 		// Only strip when the suffix is a valid FTN address to avoid
 		// corrupting legitimate usernames containing '@'.
+		chrs := chrsKludge(pm.msg.Kludges)
 		toName := pm.msg.To
 		if idx := strings.LastIndex(toName, "@"); idx > 0 {
 			suffix := strings.TrimSpace(toName[idx+1:])
@@ -358,9 +359,9 @@ func (t *Tosser) createOutboundNetmailPacket(link *linkConfig, msgs []pendingNet
 			DestNet:  uint16(pm.destAddr.Net),
 			Attr:     linkMsgAttr(link.Flavour) | ftn.MsgAttrPrivate,
 			DateTime: ftn.FormatFTNDateTime(pm.msg.DateTime),
-			To:       toName,
-			From:     pm.msg.From,
-			Subject:  pm.msg.Subject,
+			To:       ftn.EncodeFTNString(toName, chrs),
+			From:     ftn.EncodeFTNString(pm.msg.From, chrs),
+			Subject:  ftn.EncodeFTNString(pm.msg.Subject, chrs),
 			Body:     ftn.FormatPackedMessageBody(parsed),
 		})
 	}
@@ -471,6 +472,7 @@ func (t *Tosser) createOutboundPacket(link *linkConfig, msgs []pendingMsg) (int,
 		parsed.Path = AppendPath(parsed.Path, own2D)
 
 		body := ftn.FormatPackedMessageBody(parsed)
+		chrs := chrsKludge(pm.msg.Kludges)
 
 		packed := &ftn.PackedMessage{
 			MsgType:  2,
@@ -480,9 +482,9 @@ func (t *Tosser) createOutboundPacket(link *linkConfig, msgs []pendingMsg) (int,
 			DestNet:  uint16(destAddr.Net),
 			Attr:     linkMsgAttr(link.Flavour),
 			DateTime: ftn.FormatFTNDateTime(pm.msg.DateTime),
-			To:       pm.msg.To,
-			From:     pm.msg.From,
-			Subject:  pm.msg.Subject,
+			To:       ftn.EncodeFTNString(pm.msg.To, chrs),
+			From:     ftn.EncodeFTNString(pm.msg.From, chrs),
+			Subject:  ftn.EncodeFTNString(pm.msg.Subject, chrs),
 			Body:     body,
 		}
 		packedMsgs = append(packedMsgs, packed)
@@ -523,6 +525,20 @@ func (t *Tosser) createOutboundPacket(link *linkConfig, msgs []pendingMsg) (int,
 
 	slog.Info("exported messages", "count", len(packedMsgs), "file", finalName, "link", link.Address)
 	return len(packedMsgs), nil
+}
+
+// chrsKludge returns the value of a stored CHRS kludge ("UTF-8 4"), or ""
+// when the message has none. Headers are stored as UTF-8 and are encoded for
+// the packet according to it: kept as UTF-8 when the message says so, CP437
+// otherwise.
+func chrsKludge(kludges []string) string {
+	for _, k := range kludges {
+		k = strings.TrimSpace(strings.TrimPrefix(k, "\x01"))
+		if len(k) > len("CHRS:") && strings.EqualFold(k[:len("CHRS:")], "CHRS:") {
+			return strings.TrimSpace(k[len("CHRS:"):])
+		}
+	}
+	return ""
 }
 
 // stripAreaKludges drops AREA lines from stored kludges. The exporter writes
