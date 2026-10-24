@@ -22,11 +22,21 @@ V3Net areas are message areas that are networked using the V3Net protocol. Messa
 
 ### Outbound (local user posts)
 
-1. User writes a message in a V3Net area via the message editor
-2. Message is saved to the local JAM base
-3. A tearline and origin line are appended to the local copy
-4. The `OnMessagePosted` hook sends the message to the hub via signed HTTP POST
+1. User writes a message in a V3Net area via the message editor (or a sysop
+   posts a file with `helper post`)
+2. Message is saved to the local JAM base, marked as not yet sent
+3. A tearline and origin line are appended to the local copy (by the BBS;
+   a `helper post` copy has none locally, but remote nodes add them)
+4. The BBS's outbound sweep sends the message to the hub via signed HTTP POST
+   and marks the local copy sent ("V3NET SENT" in the reader)
 5. The hub stores it and fans it out to all subscribed nodes via SSE events
+
+The sweep runs straight away after a post from the BBS and once a minute
+otherwise. If the hub can't be reached, the message stays unsent and goes out
+on a later sweep, so a post made while the hub is down is not lost. Posts
+written by `helper post` go out on the next minute's sweep, so the BBS has to
+be running. Messages that were already in an area when it was bound to a
+network are never sent.
 
 ### Inbound (remote message arrives)
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
@@ -213,8 +214,9 @@ func (mm *MessageManager) AdvanceLastRead(areaID int, username string, msgNum in
 	return b.AdvanceLastRead(username, msgNum)
 }
 
-// MarkMessageSent sets the MSG_SENT attribute on a message header.
-// Used by V3Net to indicate a locally-posted message was transmitted to the hub.
+// MarkMessageSent sets the MSG_SENT attribute on a message header and stamps
+// DateProcessed, so the V3Net outbound sweep does not send it again. Used by
+// V3Net once a locally-posted message has been transmitted to the hub.
 func (mm *MessageManager) MarkMessageSent(areaID, msgNum int) error {
 	b, _, err := mm.openBase(areaID)
 	if err != nil {
@@ -232,6 +234,7 @@ func (mm *MessageManager) MarkMessageSent(areaID, msgNum int) error {
 	}
 
 	hdr.Attribute |= jam.MsgSent
+	hdr.DateProcessed = uint32(time.Now().Unix())
 	return b.UpdateMessageHeader(msgNum, hdr)
 }
 

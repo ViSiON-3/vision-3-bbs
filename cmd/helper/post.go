@@ -151,15 +151,9 @@ func runPost(args []string, stdin io.Reader) int {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
 	}
-	if strings.EqualFold(area.AreaType, "v3net") {
-		// V3Net delivery runs from a hook inside the BBS process; a post
-		// written here would sit in the base and never reach the hub.
-		_, _ = fmt.Fprintf(os.Stderr, "Error: area %s is a V3Net area; post to it from the BBS\n", area.Tag)
-		return 1
-	}
-
 	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
 	networked := !msgType.IsLocal()
+	isV3Net := strings.EqualFold(area.AreaType, "v3net")
 	toName, destAddr := message.SplitNetmailTo(*to)
 	switch {
 	case msgType.IsNetmail() && destAddr == "":
@@ -177,10 +171,11 @@ func runPost(args []string, stdin io.Reader) int {
 	// PRIVMAIL holds only private mail, as the BBS composer treats it.
 	isPrivate := *private || strings.EqualFold(area.Tag, "PRIVMAIL")
 	if isPrivate {
-		if msgType.IsEchomail() {
-			// The exporter sends echomail to every link without the private
-			// flag, so the message would be public on the next scan.
-			_, _ = fmt.Fprintf(os.Stderr, "Error: %s is a network echo; private messages go in a local or netmail area\n", area.Tag)
+		if msgType.IsEchomail() || isV3Net {
+			// Echomail goes to every link without the private flag, so the
+			// post would be public; V3Net never sends private posts, so it
+			// would sit unsent in a shared area.
+			_, _ = fmt.Fprintf(os.Stderr, "Error: %s is a network area; private messages go in a local or netmail area\n", area.Tag)
 			return 1
 		}
 		if !msgType.IsNetmail() {
@@ -230,7 +225,11 @@ func runPost(args []string, stdin io.Reader) int {
 	}
 	fmt.Printf("Posted message #%d to %s (%s)\n", msgNum, area.Tag, area.AreaType)
 	printPostSummary(*from, *to, *subject, fmtName, body)
-	if networked && !area.IsQWKNet() {
+	switch {
+	case isV3Net:
+		// Written unprocessed; the running BBS's V3Net outbound sweep sends it.
+		fmt.Println("  The running BBS sends it to the V3Net hub within a minute.")
+	case networked && !area.IsQWKNet():
 		fmt.Println("  It is exported on the next 'v3mail ftn-scan'.")
 	}
 	return 0

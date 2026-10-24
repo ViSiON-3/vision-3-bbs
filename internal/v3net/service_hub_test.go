@@ -346,10 +346,11 @@ func TestService_UnknownNetwork(t *testing.T) {
 		}
 	}
 
-	// Sending to a network with no leaf is a silent no-op by contract.
+	// Sending to a network with no leaf sends nothing and says so, so the
+	// outbound sweep keeps the post for a later attempt.
 	msg := BuildWireMessage("nonet", "gen.general", svc.NodeID(), "General", "Alice", "All", "Hi", "Body", "")
-	if err := svc.SendMessage("nonet", msg); err != nil {
-		t.Errorf("SendMessage to unsubscribed network = %v, want nil", err)
+	if err := svc.SendMessage("nonet", msg); !errors.Is(err, ErrNoLeaf) {
+		t.Errorf("SendMessage to unsubscribed network = %v, want ErrNoLeaf", err)
 	}
 	if seen, _ := svc.dedupIdx.Seen(msg.MsgUUID); seen {
 		t.Error("a message that was never sent must not be marked seen")

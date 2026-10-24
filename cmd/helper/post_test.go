@@ -300,8 +300,8 @@ func TestRunPost_Refusals(t *testing.T) {
 		args := append([]string{"--config", configDir, "--data", dataDir, "--file", "-"}, extra...)
 		return runPost(args, bytes.NewBufferString(stdin))
 	}
-	if code := run("x", "--area", "V3_GEN", "--subj", "s"); code != 1 {
-		t.Errorf("v3net area: exit %d, want 1", code)
+	if code := run("x", "--area", "V3_GEN", "--subj", "s", "--private"); code != 1 {
+		t.Errorf("private v3net post: exit %d, want 1", code)
 	}
 	if code := run("x", "--area", "NOPE", "--subj", "s"); code != 1 {
 		t.Errorf("unknown area: exit %d, want 1", code)
@@ -372,5 +372,22 @@ func TestWrapPlainLines_CP437NotUnicodeSpace(t *testing.T) {
 	want := []string{"aaaa\xc2\xa0bb", "bb cc"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// A V3Net post is written unprocessed for the running BBS's outbound sweep.
+func TestRunPost_V3NetPending(t *testing.T) {
+	configDir, dataDir := postTestDirs(t)
+	args := []string{"--config", configDir, "--data", dataDir, "--area", "V3_GEN", "--subj", "News", "--file", "-"}
+	if code := runPost(args, bytes.NewBufferString("hello network")); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	mm, err := message.NewMessageManager(dataDir, configDir, "Test BBS", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mm.Close() }()
+	if pending, _, err := mm.PendingOutbound(4, 1); err != nil || len(pending) != 1 {
+		t.Errorf("pending = %v, %v; want one message", pending, err)
 	}
 }
