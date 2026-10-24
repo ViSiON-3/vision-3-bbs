@@ -129,9 +129,8 @@ func writeDosemurc(ctx *DoorCtx, rcPath, driveCPath, nodePath string) error {
 	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "$_com1") {
-			if baseConfig != "" && isVirtualCOM1(trimmed) {
-				ctx.baseCOM1Virtual = true
-			}
+			// The last assignment wins, as it does in dosemu.
+			ctx.baseCOM1Virtual = baseConfig != "" && isVirtualCOM1(trimmed)
 			continue
 		}
 		if strings.HasPrefix(trimmed, "$_hdimage") ||
