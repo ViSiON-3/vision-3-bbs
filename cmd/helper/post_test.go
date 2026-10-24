@@ -304,6 +304,12 @@ func TestRunPost_Refusals(t *testing.T) {
 	if code := run("x", "--area", "FD_OTHERNETS", "--subj", "s", "--to", "Sean@1:18/200"); code != 1 {
 		t.Errorf("address outside a netmail area: exit %d, want 1", code)
 	}
+	if code := run("x", "--area", "FD_OTHERNETS", "--subj", "Café news"); code != 1 {
+		t.Errorf("non-ASCII echomail subject: exit %d, want 1", code)
+	}
+	if code := run("x", "--area", "GENERAL", "--subj", "Café news", "--dry-run"); code != 0 {
+		t.Errorf("non-ASCII local subject: exit %d, want 0", code)
+	}
 	if code := run("x", "--area", "GENERAL", "--subj", "s", "--dry-run"); code != 0 {
 		t.Errorf("dry run: exit %d, want 0", code)
 	}

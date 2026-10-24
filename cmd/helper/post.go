@@ -267,7 +267,11 @@ func resolvePostArea(mm *message.MessageManager, ref string) (*message.MessageAr
 
 // checkPostHeader rejects header fields the message base or a packed FTN
 // message cannot carry: empty names, control characters, and, for networked
-// areas, values longer than the FTS-0001 header fields.
+// areas, non-ASCII text and values longer than the FTS-0001 header fields.
+// The exporter writes header strings to the packet as they are stored, and
+// they are stored as UTF-8, so a non-ASCII name or subject would reach other
+// systems as UTF-8 bytes under the post's CHRS: CP437 label. Keeping
+// networked headers ASCII also makes the length limits byte-exact.
 func checkPostHeader(from, to, subject string, networked bool) error {
 	for _, f := range []struct{ name, val string }{{"--from", from}, {"--to", to}, {"--subj", subject}} {
 		if strings.TrimSpace(f.val) == "" {
@@ -279,6 +283,11 @@ func checkPostHeader(from, to, subject string, networked bool) error {
 	}
 	if !networked {
 		return nil
+	}
+	for _, f := range []struct{ name, val string }{{"--from", from}, {"--to", to}, {"--subj", subject}} {
+		if !isASCII([]byte(f.val)) {
+			return fmt.Errorf("%s has non-ASCII characters, which FTN headers cannot carry reliably; use plain ASCII", f.name)
+		}
 	}
 	if n := utf8.RuneCountInString(from); n > ftnMaxNameLen {
 		return fmt.Errorf("--from is %d characters; FTN allows %d", n, ftnMaxNameLen)
