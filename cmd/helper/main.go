@@ -1047,9 +1047,9 @@ func writeRobotNetmail(configDir string, hub hubTarget, to, password, body, pktP
 		Attr:     ftn.MsgAttrLocal | ftn.MsgAttrCrash,
 		Cost:     0,
 		DateTime: ftn.FormatFTNDateTime(time.Now()),
-		To:       to,
-		From:     fromName,
-		Subject:  password,
+		To:       ftn.EncodeFTNString(to, ""),
+		From:     ftn.EncodeFTNString(fromName, ""),
+		Subject:  ftn.EncodeFTNString(password, ""),
 		Body:     bodyBytes,
 	}
 

@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/transform"
@@ -539,4 +540,47 @@ func DecodeFTNString(s, chrs string) string {
 		return s // Return original on decode error
 	}
 	return decoded
+}
+
+// EncodeFTNString converts a stored UTF-8 header string (From, To, Subject)
+// to the bytes written in a packed message header. It is the inverse of
+// DecodeFTNString for export.
+//
+// If chrs contains "UTF-8" (case-insensitive) the message declares UTF-8 and
+// s is returned unchanged. Otherwise s is encoded as CP437, the FTS default
+// for a message without a CHRS kludge: "Café ─ news" becomes
+// "Caf\x82 \xc4 news". A rune with no CP437 equivalent becomes '?'. A string
+// that is not valid UTF-8 is assumed to be CP437 bytes already and is
+// returned unchanged. Encoding before the packet writer cuts the fields to
+// their byte limits keeps a multibyte character from being split.
+func EncodeFTNString(s, chrs string) string {
+	if strings.Contains(strings.ToUpper(chrs), "UTF-8") || !utf8.ValidString(s) {
+		return s
+	}
+	ascii := true
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			ascii = false
+			break
+		}
+	}
+	if ascii {
+		return s
+	}
+	out := make([]byte, 0, len(s))
+	for _, r := range s {
+		if b, ok := charmap.CodePage437.EncodeRune(r); ok {
+			out = append(out, b)
+		} else {
+			out = append(out, '?')
+		}
+	}
+	return string(out)
+}
+
+// CP437Rune reports whether r can be written as a CP437 byte, so that
+// EncodeFTNString keeps it rather than replacing it with '?'.
+func CP437Rune(r rune) bool {
+	_, ok := charmap.CodePage437.EncodeRune(r)
+	return ok
 }
