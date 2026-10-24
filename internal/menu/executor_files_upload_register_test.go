@@ -64,7 +64,7 @@ func TestRegisterUploadedFiles(t *testing.T) {
 	if left, _ := os.ReadDir(incoming); len(left) != 0 {
 		t.Errorf("staging not emptied: %v", left)
 	}
-	if saved := env.mustDiskUser(env.sysop.ID); saved.NumUploads != 1 {
+	if saved := env.mustDiskUser(env.sysop.ID); saved.NumUploads != 1 || saved.UploadedBytes != 9 {
 		t.Errorf("NumUploads = %d, want 1", saved.NumUploads)
 	}
 }

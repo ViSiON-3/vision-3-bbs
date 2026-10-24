@@ -20,7 +20,7 @@ func TestRunShowStats(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "ansi"), 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	content := "Handle: |UH Level: |UL Uploads: |UK\r\n"
+	content := "Handle: |UH Level: |UL Uploads: |NU\r\n"
 	if err := os.WriteFile(filepath.Join(root, "ansi", "YOURSTAT.ANS"), []byte(content), 0644); err != nil {
 		t.Fatalf("write: %v", err)
 	}

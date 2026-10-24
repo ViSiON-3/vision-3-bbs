@@ -123,7 +123,7 @@ func (st *fileListState) handleFileDownload() (logoff bool, err error) {
 			paths[i] = fe.path
 			fileIDs[i] = fe.id
 		}
-		transferSuccess, transferFail := st.e.runTransferSend(st.s, st.terminal, proto, paths, fileIDs, st.outputMode, st.nodeNumber)
+		transferSuccess, transferFail := st.e.runTransferSend(st.s, st.terminal, proto, paths, fileIDs, st.outputMode, st.nodeNumber, st.currentUser)
 		successCount += transferSuccess
 		failCount += transferFail
 		uiPause(1 * time.Second)

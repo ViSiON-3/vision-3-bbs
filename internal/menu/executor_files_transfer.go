@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/telnetserver"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
 	"golang.org/x/term"
@@ -112,12 +114,21 @@ func (e *MenuExecutor) selectTransferProtocol(s ssh.Session, terminal *term.Term
 // resetSessionIH/getSessionIH, batch vs one-at-a-time logic, ExecuteSend, error
 // handling (including ErrBinaryNotFound), and IncrementDownloadCount.
 // fileIDs must match paths in order (paths[i] corresponds to fileIDs[i]).
+// When an account is supplied, successful file sizes are credited to its byte
+// total; the caller persists the account alongside its download count.
 // Returns successCount and failCount.
-func (e *MenuExecutor) runTransferSend(s ssh.Session, terminal *term.Terminal, proto transfer.ProtocolConfig, paths []string, fileIDs []uuid.UUID, outputMode ansi.OutputMode, nodeNumber int) (successCount, failCount int) {
+func (e *MenuExecutor) runTransferSend(s ssh.Session, terminal *term.Terminal, proto transfer.ProtocolConfig, paths []string, fileIDs []uuid.UUID, outputMode ansi.OutputMode, nodeNumber int, accounts ...*user.User) (successCount, failCount int) {
 	if len(paths) == 0 {
 		return 0, 0
 	}
 
+	creditBytes := func(path string) {
+		if len(accounts) > 0 && accounts[0] != nil {
+			if info, err := os.Stat(path); err == nil {
+				accounts[0].DownloadedBytes += info.Size()
+			}
+		}
+	}
 	names := make([]string, len(paths))
 	for i, p := range paths {
 		names[i] = filepath.Base(p)
@@ -158,6 +169,9 @@ func (e *MenuExecutor) runTransferSend(s ssh.Session, terminal *term.Terminal, p
 				}
 			}
 		}
+		for _, path := range paths {
+			creditBytes(path)
+		}
 		return len(paths), 0
 	}
 
@@ -186,6 +200,7 @@ func (e *MenuExecutor) runTransferSend(s ssh.Session, terminal *term.Terminal, p
 		slog.Info("file sent", "node", nodeNumber, "protocol", proto.Name, "name", names[i])
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|15[%d/%d]|07 |14%s|07: |02OK|07\r\n", i+1, len(paths), names[i]))), outputMode)
+		creditBytes(p)
 		successCount++
 		if i < len(fileIDs) && fileIDs[i] != uuid.Nil {
 			if err := e.FileMgr.IncrementDownloadCount(fileIDs[i]); err != nil {

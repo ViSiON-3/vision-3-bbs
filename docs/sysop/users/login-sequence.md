@@ -83,6 +83,8 @@ Displays recent oneliners and prompts the user to add a new one. Uses templates 
 
 Displays user statistics using the `YOURSTAT.ANS` file from `menus/v3/ansi/`. Supports pipe code placeholders for user data (`|UH` for handle, `|UL` for level, etc.).
 
+The screen uses account upload/download and post counts, unread private mail, and the most recent visible caller recorded before this session. Xfer Level uses the access level, matching file access checks. `|NU`/`|ND` are file counts; `|UK`/`|DK` are cumulative accepted-upload/successful-download sizes in KiB (bytes divided by 1024). Byte totals are recorded going forward; existing accounts start at zero because historical sizes were not stored. Missing call history or unavailable mail data displays `N/A`.
+
 ```json
 {"command": "USERSTATS"}
 ```

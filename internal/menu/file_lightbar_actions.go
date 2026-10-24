@@ -148,7 +148,7 @@ func (lb *fileLightbar) sendTaggedFiles(filesToDownload []string, fileIDsToDownl
 	} else if !protoOK {
 		_ = lb.writePipe("\r\n|07Download cancelled.|07\r\n")
 	} else {
-		sentCount, sendFails := lb.e.runTransferSend(lb.s, lb.terminal, proto, filesToDownload, fileIDsToDownload, lb.outputMode, lb.nodeNumber)
+		sentCount, sendFails := lb.e.runTransferSend(lb.s, lb.terminal, proto, filesToDownload, fileIDsToDownload, lb.outputMode, lb.nodeNumber, lb.currentUser)
 		successCount = sentCount
 		failCount += sendFails
 		lb.ih = getSessionIH(lb.s)

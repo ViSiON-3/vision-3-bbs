@@ -241,7 +241,7 @@ func (e *MenuExecutor) downloadLoop(
 		}
 
 		// Execute transfer.
-		successCount, failCount := e.runTransferSend(s, terminal, proto, paths, fileIDs, outputMode, nodeNumber)
+		successCount, failCount := e.runTransferSend(s, terminal, proto, paths, fileIDs, outputMode, nodeNumber, currentUser)
 
 		// Clear batch and update stats.
 		currentUser.TaggedFileIDs = nil

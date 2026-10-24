@@ -174,6 +174,7 @@ func (e *MenuExecutor) registerUploadedFiles(
 		}
 
 		slog.Info("added file record", "node", nodeNumber, "name", nf.name, "fileID", record.ID)
+		currentUser.UploadedBytes += nf.size
 		successCount++
 		existingNames[strings.ToLower(nf.name)] = true
 	}
