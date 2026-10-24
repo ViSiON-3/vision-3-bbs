@@ -66,7 +66,7 @@ func TestDoorcovWriteBatchFile(t *testing.T) {
 				Commands:         []string{"START.EXE"},
 			},
 			[]string{"@echo off", `SET PATH=%PATH%;D:\dosemu`, "c:", `C:\UTILS\X00.EXE eliminate`, "cls",
-				"D:", `cd "D:\DOORS\LORD GAME"`, "START.EXE", "exitemu"},
+				"echo \x1b[2J\x1b[H>COM1", "D:", `cd "D:\DOORS\LORD GAME"`, "START.EXE", "exitemu"},
 		},
 		{
 			"working directory without a drive",
@@ -345,13 +345,14 @@ echo "$key" > `+reply)
 }
 
 // A FOSSIL door talks over the emulated serial port: no -t, the config maps
-// COM1 to the PTY, and boot text is withheld up to the door's first escape
-// sequence rather than a screen clear.
+// COM1 to the PTY, and boot text is withheld up to the screen clear that
+// EXTERNAL.BAT echoes to COM1, so a door that starts with plain text is seen.
 func TestDoorcovDOSDoorFossilMode(t *testing.T) {
 	env := newMenuEnv(t)
 	doorcovFakeDosemu(t, env, `
 echo "BOOT-CHATTER"
-printf '\033[1;32m'
+printf '\033[2J\033[H\r\n'
+printf 'WELCOME '
 echo "ARGS:$args"
 echo "RC:$(grep -c '_com1 = "virtual"' "$node/dosemurc")"
 echo "BATCH:$(tr -d '\r' < "$node/EXTERNAL.BAT" | tr '\n' '|')"
@@ -380,13 +381,13 @@ exit 3`)
 	}
 
 	driveC := filepath.Join(env.root, "dos", "drive_c")
-	if strings.Contains(s.output(), "BOOT-CHATTER") || !strings.HasPrefix(s.output(), "\x1b[1;32m") {
-		t.Errorf("output not gated on the first escape: %q", s.output())
+	if strings.Contains(s.output(), "BOOT-CHATTER") || !strings.HasPrefix(s.output(), "\x1b[2J\x1b[HWELCOME ") {
+		t.Errorf("output not gated on the COM1 screen clear: %q", s.output())
 	}
 	doorcovHas(t, s,
 		"ARGS:-f "+filepath.Join(driveC, "nodes", "temp3", "dosemurc")+" --Fdrive_c "+driveC+" -E ",
 		"RC:1",
-		`BATCH:@echo off|SET PATH=%PATH%;D:\dosemu|c:|C:\X00.EXE|cls|CALL GAME.BAT|exitemu|`,
+		"BATCH:@echo off|SET PATH=%PATH%;D:\\dosemu|c:|C:\\X00.EXE|cls|echo \x1b[2J\x1b[H>COM1|CALL GAME.BAT|exitemu|",
 	)
 	if !doorcovExists(filepath.Join(env.root, "cleaned-3")) {
 		t.Error("cleanup command did not run after the door failed")

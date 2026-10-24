@@ -33,6 +33,11 @@ func dosDropfileName(dropfileType string) string {
 	}
 }
 
+// dosSerialStart is the screen clear EXTERNAL.BAT echoes to COM1 just before
+// a serial-mode door runs. DOS echo ends it with CRLF, which the output gate
+// drops along with the boot text before it.
+const dosSerialStart = "\x1b[2J\x1b[H"
+
 // writeBatchFile generates EXTERNAL.BAT for dosemu2 execution.
 func writeBatchFile(ctx *DoorCtx, batchPath string) error {
 	slog.Info("writing batch file", "path", batchPath)
@@ -56,8 +61,12 @@ func writeBatchFile(ctx *DoorCtx, batchPath string) error {
 	}
 
 	// Clear screen — the PTY bridge detects this ESC[2J sequence to know
-	// boot is done, discarding all prior DOS boot text.
+	// boot is done, discarding all prior DOS boot text. A serial-mode door's
+	// screen never reaches the PTY, so it gets the clear through COM1 instead.
 	b.WriteString("cls" + crlf)
+	if ctx.dosSerial() {
+		b.WriteString("echo " + dosSerialStart + ">COM1" + crlf)
+	}
 
 	// Auto-cd to the door's working directory if configured
 	if ctx.Config.WorkingDirectory != "" {
@@ -180,7 +189,8 @@ func com1Setting(line string) (string, bool) {
 // executeDOSDoor launches a DOS door program via dosemu2.
 // Uses PTY bridging: dosemu's terminal translator converts INT 10h screen
 // output to ANSI on stdout, which flows through the PTY to the SSH session.
-// Boot text is suppressed by gating PTY output until the cls ESC[2J sequence.
+// Boot text is suppressed by gating PTY output until the screen clear that
+// EXTERNAL.BAT issues just before the door runs.
 func executeDOSDoor(ctx *DoorCtx) error {
 	// Determine drive_c path (supports relative paths resolved against BBS root)
 	driveCPath := ctx.Config.DriveCPath
@@ -306,13 +316,20 @@ func executeDOSDoor(ctx *DoorCtx) error {
 	// FOSSIL mode: $_com1="virtual" maps COM1 to the PTY. The door's output
 	// flows through the FOSSIL driver → COM1 → PTY. $_video="none" suppresses
 	// DOS screen output, but dosemu still writes plain-ASCII boot text directly
-	// to the PTY. Gate on the first ESC (0x1B) byte: boot text is plain ASCII,
-	// while door output (via FOSSIL) contains ANSI escape sequences.
+	// to the PTY. The output goroutine buffers until the screen clear that
+	// EXTERNAL.BAT echoes to COM1 (dosSerialStart and its CRLF), so a door
+	// whose first output is plain text is shown at once.
 	//
 	// Terminal mode: -t translates DOS screen writes (INT 10h) to ANSI on
 	// the PTY. The output goroutine buffers until it detects ESC[2J (clear
 	// screen from `cls` in EXTERNAL.BAT), discarding DOS boot text before it.
-	useFossil := ctx.dosSerial()
+	//
+	// Either way, start is the marker that ends boot and keep is how much of
+	// it the caller gets.
+	start, keep := []byte("\x1b[2J"), len("\x1b[2J")
+	if ctx.dosSerial() {
+		start, keep = []byte(dosSerialStart+"\r\n"), len(dosSerialStart)
+	}
 
 	inputDone := make(chan struct{})
 	outputDone := make(chan struct{})
@@ -326,50 +343,6 @@ func executeDOSDoor(ctx *DoorCtx) error {
 	go func() {
 		defer close(outputDone)
 		buf := make([]byte, 4096)
-
-		if useFossil {
-			// FOSSIL mode: dosemu writes plain-ASCII boot text to the PTY before
-			// the door starts. Door output (via FOSSIL → COM1 → PTY) contains
-			// ANSI escape codes. Gate on the first ESC (0x1B) byte to suppress
-			// boot text while forwarding all door output.
-			slog.Debug("FOSSIL mode — gating boot text until first ESC byte", "node", ctx.NodeNumber)
-			var accum []byte
-			gated := true
-			for {
-				n, err := ptmx.Read(buf)
-				if n > 0 {
-					if gated {
-						accum = append(accum, buf[:n]...)
-						if idx := bytes.IndexByte(accum, 0x1b); idx >= 0 {
-							gated = false
-							_, _ = ctx.Session.Write(accum[idx:]) // best-effort door output relay
-							accum = nil
-							slog.Debug("FOSSIL boot text gate opened", "node", ctx.NodeNumber, "offset", idx)
-						}
-						if gated && len(accum) > 32768 {
-							slog.Warn("FOSSIL gate: no ESC after 32KB, flushing", "node", ctx.NodeNumber)
-							gated = false
-							_, _ = ctx.Session.Write(accum) // best-effort door output relay
-							accum = nil
-						}
-					} else {
-						_, _ = ctx.Session.Write(buf[:n]) // best-effort door output relay
-					}
-				}
-				if err != nil {
-					if gated && len(accum) > 0 {
-						slog.Warn("FOSSIL boot text gate never opened", "node", ctx.NodeNumber, "bytes", len(accum))
-					}
-					if !isDoorOutputEnd(err) {
-						slog.Warn("error copying dosemu PTY to session", "node", ctx.NodeNumber, "error", err)
-					}
-					return
-				}
-			}
-		}
-
-		// Terminal mode: gate until ESC[2J (cls) to suppress boot text
-		clearScreen := []byte("\x1b[2J")
 		var accum []byte
 		gated := true
 
@@ -378,16 +351,17 @@ func executeDOSDoor(ctx *DoorCtx) error {
 			if n > 0 {
 				if gated {
 					accum = append(accum, buf[:n]...)
-					if idx := bytes.Index(accum, clearScreen); idx >= 0 {
-						// Found clear screen — forward it and everything after
+					if idx := bytes.Index(accum, start); idx >= 0 {
+						// Found the marker — forward it and everything after
 						gated = false
-						_, _ = ctx.Session.Write(accum[idx:]) // best-effort door output relay
+						_, _ = ctx.Session.Write(accum[idx : idx+keep])  // best-effort door output relay
+						_, _ = ctx.Session.Write(accum[idx+len(start):]) // best-effort door output relay
 						accum = nil
-						slog.Debug("DOS boot text gate opened (clear screen detected)", "node", ctx.NodeNumber)
+						slog.Debug("DOS boot text gate opened", "node", ctx.NodeNumber)
 					}
-					// Safety: if we've accumulated too much without finding cls, flush it
+					// Safety: if we've accumulated too much without finding the marker, flush it
 					if gated && len(accum) > 32768 {
-						slog.Warn("clear screen not found after 32KB, flushing", "node", ctx.NodeNumber)
+						slog.Warn("DOS boot text gate: no marker after 32KB, flushing", "node", ctx.NodeNumber)
 						gated = false
 						_, _ = ctx.Session.Write(accum) // best-effort door output relay
 						accum = nil

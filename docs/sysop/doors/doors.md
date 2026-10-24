@@ -345,9 +345,9 @@ DOS doors are supported on Linux x86/x86-64 via dosemu2. ViSiON/3 uses dosemu2's
 ### How It Works
 
 1. ViSiON/3 generates a per-node `dosemurc` config that maps `drive_c_path` as the DOS C: drive
-2. An `EXTERNAL.BAT` batch file is generated containing: FOSSIL driver loading (if configured), `cls`, `cd` to working directory (if set), and the user's `commands`
+2. An `EXTERNAL.BAT` batch file is generated containing: FOSSIL driver loading (if configured), `cls` (plus a screen clear echoed to COM1 in serial mode), `cd` to working directory (if set), and the user's `commands`
 3. dosemu2 boots DOS, executes EXTERNAL.BAT, and exits via `exitemu`
-4. The PTY output bridge suppresses DOS boot text: in terminal mode it waits for the `cls` clear screen sequence (`ESC[2J`), and in serial mode for the door's first ESC byte (see [Boot Text Suppression](#boot-text-suppression))
+4. The PTY output bridge suppresses DOS boot text: in terminal mode it waits for the `cls` clear screen sequence (`ESC[2J`), and in serial mode for the same screen clear echoed to COM1 (see [Boot Text Suppression](#boot-text-suppression))
 5. After the door exits, the BBS session resumes
 
 ### FOSSIL Driver
@@ -384,7 +384,7 @@ The base config is the door's `dosemu_config` if set, otherwise `~/.dosemu/.dose
 dosemu2 outputs boot text (FreeDOS/comcom64 startup messages) before EXTERNAL.BAT starts. ViSiON/3 suppresses this by buffering PTY output until the door's output begins, then forwarding everything from that point on, so the user gets a clean screen when the door starts. How it finds that point depends on the mode:
 
 - **Terminal mode** (no COM1): output is held until the `cls` command in EXTERNAL.BAT produces an `ESC[2J` clear screen sequence.
-- **Serial mode** (**FOSSIL Driver** set, or a virtual COM1 in the door's `dosemu_config`): `$_video = "none"` keeps the DOS screen off the PTY, but dosemu2 still writes plain-ASCII boot text there. Output is held until the first ESC byte, which is normally the door's first ANSI sequence through COM1. A serial door that prints only plain text before waiting for input shows nothing until it sends an ESC byte or 32 KB of output builds up.
+- **Serial mode** (**FOSSIL Driver** set, or a virtual COM1 in the door's `dosemu_config`): `$_video = "none"` keeps the DOS screen off the PTY, but dosemu2 still writes plain-ASCII boot text there. EXTERNAL.BAT echoes a screen clear (`ESC[2J ESC[H`) to COM1 right before the door commands, and output is held until it arrives.
 
 ### Platform Support
 
