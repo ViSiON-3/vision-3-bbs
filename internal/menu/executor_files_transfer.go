@@ -117,15 +117,15 @@ func (e *MenuExecutor) selectTransferProtocol(s ssh.Session, terminal *term.Term
 // When an account is supplied, successful file sizes are credited to its byte
 // total; the caller persists the account alongside its download count.
 // Returns successCount and failCount.
-func (e *MenuExecutor) runTransferSend(s ssh.Session, terminal *term.Terminal, proto transfer.ProtocolConfig, paths []string, fileIDs []uuid.UUID, outputMode ansi.OutputMode, nodeNumber int, accounts ...*user.User) (successCount, failCount int) {
+func (e *MenuExecutor) runTransferSend(s ssh.Session, terminal *term.Terminal, proto transfer.ProtocolConfig, paths []string, fileIDs []uuid.UUID, outputMode ansi.OutputMode, nodeNumber int, account *user.User) (successCount, failCount int) {
 	if len(paths) == 0 {
 		return 0, 0
 	}
 
 	creditBytes := func(path string) {
-		if len(accounts) > 0 && accounts[0] != nil {
+		if account != nil {
 			if info, err := os.Stat(path); err == nil {
-				accounts[0].DownloadedBytes += info.Size()
+				account.DownloadedBytes += info.Size()
 			}
 		}
 	}

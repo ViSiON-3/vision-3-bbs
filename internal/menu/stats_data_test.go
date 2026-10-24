@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -114,5 +115,58 @@ func TestStatsTransferHelper(t *testing.T) {
 			os.Exit(1)
 		}
 		os.Exit(0)
+	}
+}
+
+func TestStatsMailUnusedSlot(t *testing.T) {
+	env := newMsgEnv(t)
+	seedPrivmail(env)
+	base, err := env.e.MessageMgr.GetBase(privmailAreaID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := base.BasePath + ".jdx"
+	if err := base.Close(); err != nil {
+		t.Fatal(err)
+	}
+	index, err := os.OpenFile(path, os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = index.WriteAt([]byte{255, 255, 255, 255, 255, 255, 255, 255}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := index.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := env.e.statsWaitingMail(env.caller); got != "1" {
+		t.Errorf("mail with unused slot=%s want=1", got)
+	}
+}
+
+func TestStatsArchiveMemberBytes(t *testing.T) {
+	for _, mode := range []string{"success", "failure"} {
+		env := newMenuEnv(t)
+		proto := statsTestProtocol(t, mode, false)
+		proto.Key = "T"
+		proto.Default = true
+		env.e.SetProtocols([]transfer.ProtocolConfig{proto})
+		path := filepath.Join(t.TempDir(), "member.txt")
+		if err := os.WriteFile(path, []byte("member data"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		env.run(func(c *cmdCtx, _ string) (*user.User, string, error) {
+			send := c.e.zipLabSender(c.s, c.terminal, &file.FileRecord{AreaID: 1}, c.currentUser, c.userManager, c.nodeNumber, c.sessionStartTime, c.outputMode)
+			send(func() (string, error) { return path, nil })
+			return nil, "", nil
+		}, env.sysop, "", "T\r")
+		want := int64(0)
+		if mode == "success" {
+			want = 11
+		}
+		if got := env.mustDiskUser(env.sysop.ID).DownloadedBytes; got != want {
+			t.Errorf("%s persisted member bytes=%d want=%d", mode, got, want)
+		}
 	}
 }

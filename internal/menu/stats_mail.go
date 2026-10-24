@@ -1,10 +1,12 @@
 package menu
 
 import (
+	"errors"
 	"log/slog"
 	"strconv"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -38,6 +40,9 @@ func (e *MenuExecutor) statsWaitingMail(u *user.User) string {
 	count := 0
 	for n := last + 1; n <= total; n++ {
 		msg, err := base.ReadMessage(n)
+		if errors.Is(err, jam.ErrNotFound) {
+			continue
+		}
 		if err != nil {
 			return "N/A"
 		}
