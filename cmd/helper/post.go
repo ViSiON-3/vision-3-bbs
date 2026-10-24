@@ -18,6 +18,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // --- post command ---
@@ -173,7 +174,28 @@ func runPost(args []string, stdin io.Reader) int {
 		return 1
 	}
 
-	opts := message.PostOptions{Private: *private, ReplyToNum: *replyTo}
+	// PRIVMAIL holds only private mail, as the BBS composer treats it.
+	isPrivate := *private || strings.EqualFold(area.Tag, "PRIVMAIL")
+	if isPrivate {
+		if msgType.IsEchomail() {
+			// The exporter sends echomail to every link without the private
+			// flag, so the message would be public on the next scan.
+			_, _ = fmt.Fprintf(os.Stderr, "Error: %s is a network echo; private messages go in a local or netmail area\n", area.Tag)
+			return 1
+		}
+		if !msgType.IsNetmail() {
+			// A private local message is shown only to the handle in its To
+			// field, so it has to name an existing account exactly.
+			handle, err := resolvePrivateRecipient(filepath.Join(*dataDir, "users"), toName)
+			if err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				return 1
+			}
+			*to = handle
+		}
+	}
+
+	opts := message.PostOptions{Private: isPrivate, ReplyToNum: *replyTo}
 	if networked && !area.IsQWKNet() {
 		opts.Kludges = []string{chrsCP437}
 	}
@@ -263,6 +285,22 @@ func resolvePostArea(mm *message.MessageManager, ref string) (*message.MessageAr
 		}
 	}
 	return nil, fmt.Errorf("no message area with tag %q (see 'helper areas list')", ref)
+}
+
+// resolvePrivateRecipient returns the account handle a private local message
+// to name must carry: the handle of the user with that handle
+// (case-insensitive). It fails when there is no such account or it has been
+// deleted, since the message would then be readable by no one.
+func resolvePrivateRecipient(usersDir, name string) (string, error) {
+	um, err := user.NewUserManager(usersDir)
+	if err != nil {
+		return "", fmt.Errorf("loading users from %s: %w", usersDir, err)
+	}
+	u, ok := um.GetUser(strings.TrimSpace(name))
+	if !ok || u.DeletedUser {
+		return "", fmt.Errorf("private mail needs a user handle in --to; no user %q", name)
+	}
+	return u.Handle, nil
 }
 
 // checkPostHeader rejects header fields the message base or a packed FTN
@@ -513,7 +551,9 @@ func wrapPlainLines(lines []string, width int) []string {
 			continue
 		}
 		var cur string
-		for _, word := range strings.Fields(line) {
+		// Split on ASCII blanks only: the line is CP437, and byte pairs
+		// such as C2 A0 (┬á) would otherwise be read as a UTF-8 space.
+		for _, word := range strings.FieldsFunc(line, func(r rune) bool { return r == ' ' || r == '\t' }) {
 			for len(word) > width {
 				if cur != "" {
 					out = append(out, cur)

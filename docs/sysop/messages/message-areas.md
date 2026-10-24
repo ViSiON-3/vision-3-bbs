@@ -171,6 +171,11 @@ of echomail and netmail. Lines that other software reads as message structure
 (`---`, `* Origin:`, `SEEN-BY:`), and a clear-screen code, produce a warning.
 V3Net areas can't be posted to this way; post to them from the BBS.
 
+Posts to `PRIVMAIL`, and posts made with `--private`, are private. A private
+message in a local area must go to an existing user: put their handle in
+`--to`. `--private` is refused in echomail areas, because echomail is sent to
+every link and doesn't stay private.
+
 ---
 
 ## Creating a New Message Area

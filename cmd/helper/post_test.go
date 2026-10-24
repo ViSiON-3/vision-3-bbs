@@ -162,7 +162,8 @@ func TestPostFormatFor(t *testing.T) {
 	}
 }
 
-// postTestDirs writes a config with a local, an echomail and a netmail area.
+// postTestDirs writes a config with local, echomail, netmail, V3Net and
+// PRIVMAIL areas, and a users file with Bob and the deleted user Gone.
 func postTestDirs(t *testing.T) (configDir, dataDir string) {
 	t.Helper()
 	tmp := t.TempDir()
@@ -177,7 +178,8 @@ func postTestDirs(t *testing.T) (configDir, dataDir string) {
 	  "echo_tag":"OTHERNETS","origin_addr":"1:2/3","network":"fidonet"},
 	 {"id":3,"tag":"FD_NETMAIL","name":"Netmail","base_path":"msgbases/netmail","area_type":"netmail",
 	  "origin_addr":"1:2/3","network":"fidonet"},
-	 {"id":4,"tag":"V3_GEN","name":"V3","base_path":"msgbases/v3","area_type":"v3net","network":"vnet"}]`
+	 {"id":4,"tag":"V3_GEN","name":"V3","base_path":"msgbases/v3","area_type":"v3net","network":"vnet"},
+	 {"id":5,"tag":"PRIVMAIL","name":"Private Mail","base_path":"msgbases/privmail","area_type":"local"}]`
 	write := func(name, body string) {
 		if err := os.WriteFile(filepath.Join(configDir, name), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
@@ -185,6 +187,14 @@ func postTestDirs(t *testing.T) (configDir, dataDir string) {
 	}
 	write("message_areas.json", areas)
 	write("config.json", `{"boardName":"Test BBS","sysOpName":"Test Sysop"}`)
+	usersDir := filepath.Join(dataDir, "users")
+	if err := os.MkdirAll(usersDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	users := `[{"id":1,"handle":"Bob"},{"id":2,"handle":"Gone","deletedUser":true}]`
+	if err := os.WriteFile(filepath.Join(usersDir, "users.json"), []byte(users), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	return configDir, dataDir
 }
 
@@ -200,6 +210,7 @@ func readPosted(t *testing.T, configDir, dataDir string, areaID, num int) *jam.M
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() { _ = b.Close() }()
 	msg, err := b.ReadMessage(num)
 	if err != nil {
 		t.Fatalf("ReadMessage: %v", err)
@@ -320,5 +331,43 @@ func TestRunPost_Refusals(t *testing.T) {
 	defer func() { _ = mm.Close() }()
 	if n, _ := mm.GetMessageCountForArea(1); n != 0 {
 		t.Errorf("dry run wrote %d messages", n)
+	}
+}
+
+// PRIVMAIL is private by area, as in the BBS composer, and a private local
+// message is visible only to the handle in its To field, so the recipient
+// must be an existing account and is stored with that account's handle.
+func TestRunPost_PrivateMail(t *testing.T) {
+	configDir, dataDir := postTestDirs(t)
+	run := func(extra ...string) int {
+		args := append([]string{"--config", configDir, "--data", dataDir, "--file", "-", "--subj", "s"}, extra...)
+		return runPost(args, bytes.NewBufferString("psst"))
+	}
+	if code := run("--area", "PRIVMAIL", "--to", "bob"); code != 0 {
+		t.Fatalf("PRIVMAIL to bob: exit %d", code)
+	}
+	msg := readPosted(t, configDir, dataDir, 5, 1)
+	if msg.To != "Bob" || msg.Header.Attribute&jam.MsgPrivate == 0 {
+		t.Errorf("to=%q attr=%#x, want Bob and private", msg.To, msg.Header.Attribute)
+	}
+
+	for name, args := range map[string][]string{
+		"PRIVMAIL to All":       {"--area", "PRIVMAIL"},
+		"deleted user":          {"--area", "PRIVMAIL", "--to", "Gone"},
+		"unknown user":          {"--area", "GENERAL", "--private", "--to", "Nobody"},
+		"private echomail post": {"--area", "FD_OTHERNETS", "--private"},
+	} {
+		if code := run(args...); code != 1 {
+			t.Errorf("%s: exit %d, want 1", name, code)
+		}
+	}
+}
+
+// Wrapping splits on ASCII blanks only; CP437 C2 A0 (┬á) is not a space.
+func TestWrapPlainLines_CP437NotUnicodeSpace(t *testing.T) {
+	got := wrapPlainLines([]string{"aaaa\xc2\xa0bbbb cc"}, 8)
+	want := []string{"aaaa\xc2\xa0bb", "bb cc"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
