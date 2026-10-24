@@ -2043,6 +2043,11 @@ func main() {
 	}
 	if v3netCfgErr == nil {
 		v3netConfig.ConfigPath = rootConfigPath
+		// Areas bound by tag are V3Net areas even while V3Net is disabled,
+		// so posts there wait for the outbound sweep instead of being
+		// stored as processed. A running service replaces this below with
+		// its live bindings.
+		messageMgr.IsV3NetArea = message.V3NetBoundAreas(messageMgr, v3netConfig.Leaves)
 	}
 
 	// Start V3Net networking service if enabled
@@ -2091,29 +2096,22 @@ func main() {
 				return v3net.AppendV3NetOrigin(body, v3net.DefaultTearline(), v3netOrigin(binding), nodeID)
 			}
 
-			// Hook message posts to forward to V3Net when posted to a networked area.
-			// Skip messages imported from V3Net (contain the UUID kludge) to prevent feedback loops.
+			// Local posts to V3Net areas are written unprocessed and sent by
+			// one outbound sweep, which also retries posts whose send failed
+			// and picks up posts written by other programs (helper post).
+			// The board name is read through the executor's atomic snapshot
+			// at send time, so a renamed board reaches wire messages, matching
+			// the message manager's live fallback origin.
+			messageMgr.IsV3NetArea = func(areaID int) bool {
+				_, ok := svc.AreaBindingFor(areaID)
+				return ok
+			}
+			v3netOutbound := v3net.NewOutbound(messageMgr, svc,
+				func() string { return menuExecutor.GetServerConfig().BoardName },
+				v3netOrigin, time.Minute)
 			messageMgr.OnMessagePosted = func(area *message.MessageArea, msgNum int, from, to, subject, body string) {
-				binding, ok := svc.AreaBindingFor(area.ID)
-				if !ok {
-					return
-				}
-				if strings.HasPrefix(body, "\x01V3NETUUID: ") {
-					return
-				}
-				// Read through the executor's atomic snapshot, not the shared
-				// serverConfig var: this closure runs at post time, racing the
-				// config watcher's reload writes. It also means a renamed
-				// board flows into wire messages, matching the message
-				// manager's now-live fallback origin.
-				msg := v3net.BuildWireMessage(binding.Network, area.Tag, svc.NodeID(), menuExecutor.GetServerConfig().BoardName, from, to, subject, body, v3netOrigin(binding))
-				if err := svc.SendMessage(binding.Network, msg); err != nil {
-					slog.Error("V3Net: failed to send message", "network", binding.Network, "error", err)
-					return
-				}
-				// Mark the local JAM copy as sent so the reader shows "V3NET SENT".
-				if err := messageMgr.MarkMessageSent(area.ID, msgNum); err != nil {
-					slog.Warn("V3Net: failed to mark message as sent", "msg", msgNum, "error", err)
+				if _, ok := svc.AreaBindingFor(area.ID); ok {
+					v3netOutbound.Nudge()
 				}
 			}
 
@@ -2133,6 +2131,7 @@ func main() {
 				menuExecutor.NoteV3NetNAL(userMgr, network, n, v3netNodeID)
 			})
 			go v3netService.Start(v3netCtx)
+			go v3netOutbound.Run(v3netCtx)
 			menuExecutor.V3NetStatus = v3netService
 			menuExecutor.ChatLeaves = v3netChatProvider(v3netService)
 			// Live subscription apply: re-read v3net.json and rebuild the

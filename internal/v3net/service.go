@@ -4,6 +4,7 @@ package v3net
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -398,8 +399,13 @@ func (s *Service) NodeID() string {
 	return s.ks.NodeID()
 }
 
-// SendMessage sends a message to the hub for the given network.
-// Returns nil if no leaf is configured for that network.
+// ErrNoLeaf is returned by SendMessage when no leaf client is configured for
+// the network, so nothing could be sent.
+var ErrNoLeaf = errors.New("v3net: no leaf configured for network")
+
+// SendMessage sends a message to the hub for the given network. It returns
+// ErrNoLeaf (wrapped with the network name) when no leaf is configured for
+// that network, so the caller can keep the message for a later attempt.
 // Also marks the message as seen in the dedup index so the local leaf
 // does not re-import it when polling.
 func (s *Service) SendMessage(network string, msg protocol.Message) error {
@@ -407,7 +413,7 @@ func (s *Service) SendMessage(network string, msg protocol.Message) error {
 	run, ok := s.leafByNetwork[network]
 	s.mu.RUnlock()
 	if !ok {
-		return nil
+		return fmt.Errorf("%w %q", ErrNoLeaf, network)
 	}
 	if err := run.l.SendMessage(msg); err != nil {
 		return err
@@ -498,6 +504,18 @@ func (s *Service) NetworkForArea(areaID int) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.areaBindings[areaID].Network
+}
+
+// AreaBindings returns a snapshot of every area binding, keyed by message
+// area ID. The map is the caller's to keep; a reload does not change it.
+func (s *Service) AreaBindings() map[int]AreaBinding {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[int]AreaBinding, len(s.areaBindings))
+	for id, b := range s.areaBindings {
+		out[id] = b
+	}
+	return out
 }
 
 // AreaBindingFor returns the full binding for a message area, and whether

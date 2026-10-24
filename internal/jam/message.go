@@ -94,6 +94,9 @@ func (b *Base) WriteMessage(msg *Message) (int, error) {
 		}
 		copy(hdr.Signature[:], Signature)
 		hdr.ReplyTo = msg.ReplyTo
+		if msg.Unprocessed {
+			hdr.DateProcessed = 0
+		}
 
 		hdr.Subfields = buildSubfields(msg)
 

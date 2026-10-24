@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -300,8 +301,8 @@ func TestRunPost_Refusals(t *testing.T) {
 		args := append([]string{"--config", configDir, "--data", dataDir, "--file", "-"}, extra...)
 		return runPost(args, bytes.NewBufferString(stdin))
 	}
-	if code := run("x", "--area", "V3_GEN", "--subj", "s"); code != 1 {
-		t.Errorf("v3net area: exit %d, want 1", code)
+	if code := run("x", "--area", "V3_GEN", "--subj", "s", "--private"); code != 1 {
+		t.Errorf("private v3net post: exit %d, want 1", code)
 	}
 	if code := run("x", "--area", "NOPE", "--subj", "s"); code != 1 {
 		t.Errorf("unknown area: exit %d, want 1", code)
@@ -372,5 +373,57 @@ func TestWrapPlainLines_CP437NotUnicodeSpace(t *testing.T) {
 	want := []string{"aaaa\xc2\xa0bb", "bb cc"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// A V3Net post is written unprocessed for the running BBS's outbound sweep.
+func TestRunPost_V3NetPending(t *testing.T) {
+	configDir, dataDir := postTestDirs(t)
+	args := []string{"--config", configDir, "--data", dataDir, "--area", "V3_GEN", "--subj", "News", "--file", "-"}
+	if code := runPost(args, bytes.NewBufferString("hello network")); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	mm, err := message.NewMessageManager(dataDir, configDir, "Test BBS", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mm.Close() }()
+	if pending, err := mm.PendingOutbound(4); err != nil || len(pending) != 1 {
+		t.Errorf("pending = %v, %v; want one message", pending, err)
+	}
+}
+
+// An area bound to V3Net by tag in v3net.json is a V3Net area whatever its
+// type, as the BBS sees it, so a helper post there is left for the sweep.
+func TestRunPost_TagBoundV3NetPending(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		t.Run(fmt.Sprintf("enabled=%v", enabled), func(t *testing.T) {
+			testTagBoundV3NetPending(t, enabled)
+		})
+	}
+}
+
+// testTagBoundV3NetPending posts to a tag-bound local area. With V3Net
+// disabled the post still waits, to be sent once V3Net is enabled.
+func testTagBoundV3NetPending(t *testing.T, enabled bool) {
+	configDir, dataDir := postTestDirs(t)
+	v3 := fmt.Sprintf(`{"enabled":%v,"leaves":[{"network":"felonynet","boards":["GENERAL"]}]}`, enabled)
+	if err := os.WriteFile(filepath.Join(configDir, "v3net.json"), []byte(v3), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"--config", configDir, "--data", dataDir, "--area", "GENERAL", "--subj", "News", "--file", "-"}
+	if code := runPost(args, bytes.NewBufferString("hello network")); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	mm, err := message.NewMessageManager(dataDir, configDir, "Test BBS", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mm.Close() }()
+	if pending, err := mm.PendingOutbound(1); err != nil || len(pending) != 1 {
+		t.Errorf("pending = %v, %v; want one message", pending, err)
+	}
+	if code := runPost(append(args, "--private", "--to", "Bob"), bytes.NewBufferString("x")); code != 1 {
+		t.Errorf("private post to a bound area: exit %d, want 1", code)
 	}
 }

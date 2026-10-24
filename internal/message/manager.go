@@ -88,6 +88,12 @@ type MessageManager struct {
 	// The original (untransformed) body is still passed to OnMessagePosted.
 	// May be nil.
 	BodyTransform func(areaID int, body string) string
+
+	// IsV3NetArea reports whether an area is bound to a V3Net network. A post
+	// to such an area (or to any area of type "v3net") is written unprocessed
+	// for the V3Net outbound sweep to send; see PendingOutbound. May be nil,
+	// as it is outside the BBS, where only the area type is known.
+	IsV3NetArea func(areaID int) bool
 }
 
 // NewMessageManager creates and initializes a new MessageManager.

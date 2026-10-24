@@ -2,6 +2,7 @@ package v3net_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -115,10 +116,9 @@ func TestReloadLeavesSwapsSubscriptions(t *testing.T) {
 		t.Errorf("AreaBindingFor(BETA) = %+v ok=%v, want net-b with empty origin (fallback applies at use time)", b, ok)
 	}
 
-	// SendMessage to the removed network is a silent no-op, matching the
-	// unconfigured-network contract.
-	if err := svc.SendMessage("net-a", protocol.Message{}); err != nil {
-		t.Errorf("SendMessage to removed network errored: %v", err)
+	// The removed network has no leaf any more, as for an unconfigured one.
+	if err := svc.SendMessage("net-a", protocol.Message{}); !errors.Is(err, v3net.ErrNoLeaf) {
+		t.Errorf("SendMessage to removed network = %v, want ErrNoLeaf", err)
 	}
 
 	cancel()

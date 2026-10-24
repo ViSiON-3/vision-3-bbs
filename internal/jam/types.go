@@ -81,6 +81,10 @@ type Message struct {
 	SeenBy   string
 	Path     string
 	Kludges  []string
+	// Unprocessed makes WriteMessage leave DateProcessed at 0, as
+	// WriteMessageExt does for echomail, so a later scan (the V3Net outbound
+	// sweep) knows the message still has to be sent. Not read back.
+	Unprocessed bool
 }
 
 // NewMessage creates a new Message with default values.

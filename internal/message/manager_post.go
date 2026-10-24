@@ -23,6 +23,19 @@ func SplitNetmailTo(to string) (name, addr string) {
 	return strings.TrimSpace(to[:idx]), candidate
 }
 
+// V3NetUUIDPrefix starts the body of every message imported from V3Net: a
+// kludge line carrying the message's network UUID.
+const V3NetUUIDPrefix = "\x01V3NETUUID: "
+
+// isV3NetArea reports whether posts to area go out over V3Net: its type says
+// so, or the IsV3NetArea hook does.
+func (mm *MessageManager) isV3NetArea(area *MessageArea) bool {
+	if strings.EqualFold(area.AreaType, "v3net") {
+		return true
+	}
+	return mm.IsV3NetArea != nil && mm.IsV3NetArea(area.ID)
+}
+
 // addMessage is the shared implementation behind AddMessage, AddMessageWithDate,
 // AddPrivateMessage, and AddReply.
 func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyToMsgID string,
@@ -60,6 +73,13 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 	}
 
 	msgType := jam.DetermineMessageType(area.AreaType, area.EchoTag)
+
+	// A local post to a V3Net area waits for the outbound sweep to send it.
+	// Messages imported from V3Net carry their UUID kludge and are not
+	// sent back; private mail never leaves the BBS.
+	if msgType.IsLocal() && !private && !strings.HasPrefix(body, V3NetUUIDPrefix) && mm.isV3NetArea(area) {
+		msg.Unprocessed = true
+	}
 
 	// For netmail, split "user@address" into separate To and DestAddr fields.
 	if msgType.IsNetmail() {
