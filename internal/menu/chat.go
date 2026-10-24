@@ -1,7 +1,7 @@
 package menu
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -9,14 +9,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/gliderlabs/ssh"
+	"github.com/mattn/go-runewidth"
 	term "golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
-	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -239,6 +240,10 @@ func chatRoomChoice(input string, rooms []chat.RoomInfo) (string, error) {
 	return room, nil
 }
 
+// chatLagInterval is how often network chat measures the round trip to its
+// server for the header's Lag field.
+var chatLagInterval = 15 * time.Second
+
 // chatNoRoomMsg is shown when the caller is in no room, after a /JOIN whose
 // fallback rejoin of the previous room also failed.
 const chatNoRoomMsg = "You are not in a room. Use /JOIN <room> to join one."
@@ -283,32 +288,16 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 
-	// Screen layout (Retrograde MRC-style, 5-row ANSI art header):
-	//
-	//   Rows 1-5        : ANSI art header (room / topic / decorative status)
-	//   Rows 6..sb      : chat scroll region  (sb = height-4)
-	//   Row height-3    : status bar — users
-	//   Row height-2    : status bar — hints
-	//   Row height-1    : input prompt   ← NOT the last row
-	//   Row height      : absorb buffer  (readline \r\n lands here, no screen scroll)
-	//
-	// Keeping input at height-1 rather than height prevents term.Terminal's
-	// post-Enter \r\n from triggering a full-screen scroll that would destroy
-	// the header and status bar.
-
-	// Screen layout (Retrograde MRC-style):
-	//   Rows 1-5        : ANSI art header
-	//   Rows 6..sb      : chat scroll region  (sb = height-3)
-	//   Row height-2    : status bar — users
-	//   Row height-1    : status bar — hints
-	//   Row height      : input prompt (last row; safe because chatReadLine never writes \n there)
+	// Screen layout (Retrograde MRC-style), with n input rows (1 at rest):
+	//   Rows 1-5          : ANSI art header
+	//   Rows 6..sb        : chat scroll region  (sb = height-n-2)
+	//   Row height-n-1    : status bar — users
+	//   Row height-n      : status bar — hints
+	//   Rows height-n+1.. : input area, ending on the last row (safe because
+	//                       chatReadLine never writes \n there)
+	// chatScreen owns the rows below the header; see chat_input.go.
 	const chatHeaderRows = 5
 	chatTop := chatHeaderRows + 1 // row 6
-	scrollBottom := height - 3    // last row of chat scroll region
-	if scrollBottom < chatTop {
-		scrollBottom = chatTop
-	}
-	chatInputRow := height // input at the last visible row
 
 	// Network and room selection — runs in normal terminal mode before full-screen UI.
 	svc, selectedRoom, selectedNetwork, err := chatSelectService(e, s, terminal, handle, outputMode)
@@ -325,12 +314,20 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	currentNetwork := selectedNetwork
 	currentTopic := ""
 	currentUsers := []string{}
+	mentions := 0 // room messages naming the caller since joining the room
+	scrollback := &chatScrollback{capacity: chatScrollbackLines}
+	// Network round trip for the Lag field. pinging is false on a service
+	// that cannot be measured (Local), which leaves the field blank; lagOK
+	// is false until a measurement succeeds, which shows dashes.
+	pinging, lagOK := false, false
+	var lag time.Duration
 
 	var rawMu sync.Mutex
 
 	rawWriteLocked := func(data []byte) {
 		terminalio.WriteProcessedBytes(s, data, outputMode)
 	}
+	scr := &chatScreen{height: height, width: termWidth, chatTop: chatTop, inputRows: 1, write: rawWriteLocked}
 
 	rawWrite := func(data []byte) {
 		rawMu.Lock()
@@ -339,8 +336,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// drawHeaderLocked redraws the 5-row ANSI art header. Caller must hold rawMu.
-	// It loads CHATHEADER.ANS from the menu set's ansi directory, substituting
-	// @MRCROOM@ and @MRCTOPIC@ placeholders with the current room and topic.
+	// It loads CHATHEADER.ANS from the menu set's ansi directory and fills its
+	// placeholders (see chatArtFill): @NET@, @ROOM@ and @TOPIC@ with the
+	// network, room and topic, and the counters @U@ (users in the room), @M@
+	// (mentions since joining), @L@ (network lag) and @B@ (scrollback use).
 	// Falls back to a simple text header if the art file is not found.
 	drawHeaderLocked := func() {
 		artPath := e.menuFile("ansi", "CHATHEADER.ANS")
@@ -354,9 +353,21 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			// UTF-8 bytes through the CP437 converter, which reinterprets each
 			// byte separately and garbles the name rather than just cutting it.
 			// The @NAME@ placeholders are ASCII, so conversion leaves them intact.
-			artData = chatArtReplace(artData, "NET", currentNetwork)
-			artData = chatArtReplace(artData, "ROOM", currentRoom)
-			artData = chatArtReplace(artData, "TOPIC", currentTopic)
+			text := func(v string) func(int) string { return func(int) string { return v } }
+			artData = chatArtFill(artData, map[string]func(int) string{
+				"NET":   text(currentNetwork),
+				"ROOM":  text(currentRoom),
+				"TOPIC": text(currentTopic),
+				"U":     func(w int) string { return chatCounter(w, len(currentUsers), "") },
+				"M":     func(w int) string { return chatCounter(w, mentions, "") },
+				"L": func(w int) string {
+					if !pinging {
+						return ""
+					}
+					return chatLagField(w, lag, lagOK)
+				},
+				"B": func(w int) string { return chatBufferField(w, scrollback.len(), chatScrollbackLines) },
+			})
 			// The art is UTF-8 by now; make wraps explicit so each header
 			// row splits out on its own on terminals wider than the art.
 			artData = fitArt(terminal, artData, termWidth, true)
@@ -386,33 +397,69 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				rawWriteLocked([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K", row)))
 			}
 		}
-		// Return cursor to input row.
-		rawWriteLocked([]byte(ansi.MoveCursor(chatInputRow, 1)))
+		scr.restoreCursor()
 	}
 
-	// drawStatusBarLocked redraws the 2-row status bar. Caller must hold rawMu.
+	// drawStatusBarLocked redraws the 2-row status bar above the input area,
+	// wherever its current height puts it. Caller must hold rawMu.
 	drawStatusBarLocked := func() {
 		sep := ansi.ReplacePipeCodes([]byte(e.Strings().ChatSeparator))
+		usersRow, hintsRow := scr.statusRow(), scr.statusRow()+1
 		// Users line
-		rawWriteLocked([]byte(ansi.MoveCursor(height-2, 1)))
+		rawWriteLocked([]byte(ansi.MoveCursor(usersRow, 1) + "\x1B[2K"))
 		rawWriteLocked(sep)
 		userStr := strings.Join(currentUsers, ", ")
 		if userStr == "" {
 			userStr = handle
 		}
-		rawWriteLocked([]byte(ansi.MoveCursor(height-2, 2)))
+		rawWriteLocked([]byte(ansi.MoveCursor(usersRow, 2)))
 		rawWriteLocked(ansi.ReplacePipeCodes([]byte(fmt.Sprintf(" |07Users: %s", userStr))))
 		// Hints line
-		rawWriteLocked([]byte(ansi.MoveCursor(height-1, 1)))
+		rawWriteLocked([]byte(ansi.MoveCursor(hintsRow, 1) + "\x1B[2K"))
 		rawWriteLocked(sep)
-		rawWriteLocked([]byte(ansi.MoveCursor(height-1, 2)))
-		rawWriteLocked(ansi.ReplacePipeCodes([]byte(" |08/rooms /join /msg /topic /network /q")))
-		// Return cursor to input row.
-		rawWriteLocked([]byte(ansi.MoveCursor(chatInputRow, 1)))
+		rawWriteLocked([]byte(ansi.MoveCursor(hintsRow, 2)))
+		hints := " |08/rooms /join /msg /topic /network /q"
+		if !scrollback.live() {
+			hints = e.Strings().ChatScrollbackHint
+		}
+		rawWriteLocked(ansi.ReplacePipeCodes([]byte(hints)))
+		scr.restoreCursor()
+	}
+	scr.drawStatus = drawStatusBarLocked
+
+	// drawRegionLocked redraws the chat scroll region from the scrollback:
+	// the newest lines on the live view, older ones while paged back. The
+	// lines sit at the bottom of the region, as scrolling leaves them.
+	// Caller must hold rawMu.
+	drawRegionLocked := func() {
+		bottom := scr.scrollBottom()
+		lines := scrollback.view(bottom - chatTop + 1)
+		var b strings.Builder
+		for row := chatTop; row <= bottom; row++ {
+			fmt.Fprintf(&b, "\x1B[%d;1H\x1B[2K", row)
+		}
+		for i, line := range lines {
+			b.WriteString(ansi.MoveCursor(bottom-len(lines)+1+i, 1))
+			b.Write(ansi.ReplacePipeCodes([]byte(line)))
+		}
+		rawWriteLocked([]byte(b.String()))
+		scr.restoreCursor()
+	}
+	scr.redrawRegion = drawRegionLocked
+
+	// scr.page moves the view a page up or down the scrollback, with the
+	// hint bar saying when it is off the live view. Called with rawMu held.
+	scr.page = func(dir int) {
+		if scrollback.page(dir, scr.scrollBottom()-chatTop+1) {
+			drawRegionLocked()
+			drawStatusBarLocked()
+		}
 	}
 
 	// writeChatLineLocked writes a timestamped, word-wrapped message into the
-	// chat scroll region. Caller must hold rawMu.
+	// chat scroll region and the scrollback. While the caller is paged back
+	// the line is only kept, and shows when they return. Caller must hold
+	// rawMu.
 	//
 	// Strings shown inside the split screen are printed as text even when they
 	// start with !door or %file (see string_hooks.go): they are wrapped into
@@ -426,7 +473,16 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		if n == 0 {
 			return
 		}
+		held := scrollback.len()
+		scrollback.add(lines...)
+		if scrollback.len() != held {
+			drawHeaderLocked() // the Buffer counter
+		}
+		if !scrollback.live() {
+			return
+		}
 		// Scroll the chat region up by n lines.
+		scrollBottom := scr.scrollBottom()
 		rawWriteLocked([]byte(ansi.MoveCursor(scrollBottom, 1)))
 		for i := 0; i < n; i++ {
 			rawWriteLocked([]byte("\r\n"))
@@ -436,8 +492,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			rawWriteLocked([]byte(ansi.MoveCursor(scrollBottom-n+1+i, 1)))
 			rawWriteLocked(ansi.ReplacePipeCodes([]byte(line)))
 		}
-		// Return cursor to input row (chatReadLine will reposition precisely on next key).
-		rawWriteLocked([]byte(ansi.MoveCursor(chatInputRow, 1)))
+		scr.restoreCursor()
 	}
 
 	writeChatLine := func(text string) {
@@ -450,7 +505,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	// Write directly to s (not via terminal) so term.Terminal's cursor tracking
 	// never interferes with our direct-write approach.
 	terminalio.WriteProcessedBytes(s, []byte(ansi.ClearScreen()), outputMode)
-	terminalio.WriteProcessedBytes(s, []byte(fmt.Sprintf("\x1B[%d;%dr", chatTop, scrollBottom)), outputMode)
+	terminalio.WriteProcessedBytes(s, []byte(fmt.Sprintf("\x1B[%d;%dr", chatTop, scr.scrollBottom())), outputMode)
 
 	_, history, err := svc.Join(currentRoom)
 	if err != nil {
@@ -487,17 +542,24 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Draw initial input prompt. chatReadLine will manage it from here on.
 	chatPrompt := fmt.Sprintf("<%s> ", handle)
-	rawWrite([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K%s", chatInputRow, chatPrompt)))
+	rawWrite([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K%s", scr.height, chatPrompt)))
 
-	// Goroutine to receive and display incoming events.
-	done := make(chan struct{})
-	go func() {
+	// pumpEvents shows the events svc delivers until its Events channel is
+	// closed, then closes done. It runs on its own goroutine, one per
+	// service: /network starts a new one after closing the old service.
+	pumpEvents := func(svc chat.ChatService, done chan struct{}) {
 		defer close(done)
 		for ev := range svc.Events() {
 			switch ev.Type {
 			case chat.TypeMessage:
 				if ev.Message != nil {
-					writeChatLine(formatChatMessage(*ev.Message, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
+					rawMu.Lock()
+					writeChatLineLocked(formatChatMessage(*ev.Message, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
+					if !ev.Message.IsSystem && chatMentions(ev.Message.Text, handle) {
+						mentions++
+						drawHeaderLocked()
+					}
+					rawMu.Unlock()
 				}
 			case chat.TypePrivate:
 				if ev.Message != nil {
@@ -509,6 +571,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					rawMu.Lock()
 					currentUsers = newUsers
 					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatJoinMsg, ev.Join.Handle, ev.Join.Room))
+					drawHeaderLocked()
 					drawStatusBarLocked()
 					rawMu.Unlock()
 				}
@@ -518,6 +581,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					rawMu.Lock()
 					currentUsers = newUsers
 					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatLeaveMsg, ev.Leave.Handle, ev.Leave.Room))
+					drawHeaderLocked()
 					drawStatusBarLocked()
 					rawMu.Unlock()
 				}
@@ -537,9 +601,62 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 			}
 		}
-	}()
+	}
+	done := make(chan struct{})
+	go pumpEvents(svc, done)
+
+	// startLag measures svc's round trip now and every chatLagInterval, if
+	// it is a chat.Pinger, and redraws the header when the shown value
+	// changes. The returned function stops it and waits for it to finish;
+	// call it without rawMu held.
+	startLag := func(svc chat.ChatService) func() {
+		p, ok := svc.(chat.Pinger)
+		rawMu.Lock()
+		pinging, lagOK = ok, false
+		rawMu.Unlock()
+		if !ok {
+			return func() {}
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		stopped := make(chan struct{})
+		go func() {
+			defer close(stopped)
+			tick := time.NewTicker(chatLagInterval)
+			defer tick.Stop()
+			// The header may have been drawn before pinging was set, with a
+			// blank field, so the first result redraws it even as a failure.
+			first := true
+			for {
+				d, err := p.Ping(ctx)
+				rawMu.Lock()
+				if ctx.Err() == nil {
+					wasShown, wasOK := lag.Milliseconds(), lagOK
+					lag, lagOK = d, err == nil
+					if first || lagOK != wasOK || (lagOK && lag.Milliseconds() != wasShown) {
+						drawHeaderLocked()
+					}
+					first = false
+				}
+				rawMu.Unlock()
+				select {
+				case <-ctx.Done():
+					return
+				case <-tick.C:
+				}
+			}
+		}()
+		return func() {
+			cancel()
+			<-stopped
+			rawMu.Lock()
+			pinging = false
+			rawMu.Unlock()
+		}
+	}
+	stopLag := startLag(svc)
 
 	cleanup := func() {
+		stopLag()
 		if currentRoom != "" {
 			svc.Leave(currentRoom) //nolint:errcheck
 		}
@@ -548,7 +665,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	for {
-		input, err := chatReadLine(s, &rawMu, rawWriteLocked, chatInputRow, termWidth, chatPrompt)
+		input, err := chatReadLine(s, &rawMu, scr, chatPrompt)
 		if err != nil {
 			if err == io.EOF {
 				cleanup()
@@ -560,22 +677,52 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			break
 		}
 
+		// Sending a line, even a blank one, returns a paged-back view to
+		// the newest messages.
+		rawMu.Lock()
+		if scrollback.toLive() {
+			drawRegionLocked()
+			drawStatusBarLocked()
+		}
+		rawMu.Unlock()
+
 		trimmed := strings.TrimSpace(input)
 		if trimmed == "" {
 			continue
 		}
 
-		upper := strings.ToUpper(trimmed)
+		// A line starting with / is a command, and is never posted: an
+		// unknown or incomplete one is answered on this screen alone (#659).
+		// "//" escapes the slash, so a message can still start with one.
+		isCommand := strings.HasPrefix(trimmed, "/") && !strings.HasPrefix(trimmed, "//")
+		var upper, arg string
+		if isCommand {
+			var cmd string
+			cmd, arg, _ = strings.Cut(trimmed, " ")
+			upper = strings.ToUpper(cmd)
+			arg = strings.TrimSpace(arg)
+		}
 		if upper == "/Q" || upper == "/QUIT" {
 			break
 		}
 
-		if strings.HasPrefix(upper, "/JOIN ") {
+		if upper == "/?" || upper == "/HELP" {
+			for _, line := range strings.Split(e.Strings().ChatHelp, "\n") {
+				writeChatLine(strings.TrimRight(line, "\r"))
+			}
+			continue
+		}
+
+		if upper == "/JOIN" {
+			if arg == "" {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, e.Strings().ChatJoinUsage))
+				continue
+			}
 			// Normalise up front, as Join would: a name the service will
 			// refuse is rejected without leaving the current room, and
 			// currentRoom then names the room actually joined, which later
 			// posts and the final Leave are addressed to.
-			newRoom, nameErr := chat.NormalizeRoom(strings.TrimSpace(trimmed[6:]))
+			newRoom, nameErr := chat.NormalizeRoom(arg)
 			if nameErr != nil {
 				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not join room: "+nameErr.Error()))
 				continue
@@ -605,9 +752,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					// the caller has left, until a /JOIN succeeds.
 					currentRoom = ""
 					currentTopic = ""
-					drawHeaderLocked()
 				}
+				mentions = 0
 				currentUsers = svc.Users()
+				drawHeaderLocked()
 				drawStatusBarLocked()
 				rawMu.Unlock()
 				if !rejoined {
@@ -618,6 +766,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			rawMu.Lock()
 			currentRoom = newRoom
 			currentTopic = ""
+			mentions = 0
 			currentUsers = svc.Users()
 			drawHeaderLocked()
 			drawStatusBarLocked()
@@ -653,7 +802,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 			}
 
-			netInput, netErr := chatReadLine(s, &rawMu, rawWriteLocked, chatInputRow, termWidth, "Select network [1]: ")
+			netInput, netErr := chatReadLine(s, &rawMu, scr, "Select network [1]: ")
 			var newSvc chat.ChatService
 			var newNetName string
 			if netErr != nil {
@@ -700,7 +849,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					}
 					writeChatLine(fmt.Sprintf("|08 %d.|07 %-12s |08(%d)|07 %s", i+1, r.Name, r.UserCount, topic))
 				}
-				roomInput, roomErr2 := chatReadLine(s, &rawMu, rawWriteLocked, chatInputRow, termWidth, "Select room [lobby]: ")
+				roomInput, roomErr2 := chatReadLine(s, &rawMu, scr, "Select room [lobby]: ")
 				if roomErr2 == nil {
 					var nameErr error
 					if newRoom, nameErr = chatRoomChoice(roomInput, netRooms); nameErr != nil {
@@ -733,11 +882,14 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			currentRoom = newRoom
 			currentNetwork = newNetName
 			done = make(chan struct{})
+			stopLag = startLag(svc)
 			rawMu.Lock()
 			currentTopic = ""
+			mentions = 0
 			currentUsers = svc.Users()
+			scrollback.reset()
 			drawHeaderLocked()
-			for row := chatTop; row <= scrollBottom; row++ {
+			for row := chatTop; row <= scr.scrollBottom(); row++ {
 				rawWriteLocked([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K", row)))
 			}
 			drawStatusBarLocked()
@@ -748,53 +900,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				writeChatLine(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 			}
 
-			go func() {
-				defer close(done)
-				for ev := range svc.Events() {
-					switch ev.Type {
-					case chat.TypeMessage:
-						if ev.Message != nil {
-							writeChatLine(formatChatMessage(*ev.Message, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
-						}
-					case chat.TypePrivate:
-						if ev.Message != nil {
-							writeChatLine(fmt.Sprintf(e.Strings().ChatPrivateMsgFormat, ev.Message.Handle, ev.Message.Text))
-						}
-					case chat.TypeJoin:
-						if ev.Join != nil {
-							newUsers := svc.Users()
-							rawMu.Lock()
-							currentUsers = newUsers
-							writeChatLineLocked(fmt.Sprintf(e.Strings().ChatJoinMsg, ev.Join.Handle, ev.Join.Room))
-							drawStatusBarLocked()
-							rawMu.Unlock()
-						}
-					case chat.TypeLeave:
-						if ev.Leave != nil {
-							newUsers := svc.Users()
-							rawMu.Lock()
-							currentUsers = newUsers
-							writeChatLineLocked(fmt.Sprintf(e.Strings().ChatLeaveMsg, ev.Leave.Handle, ev.Leave.Room))
-							drawStatusBarLocked()
-							rawMu.Unlock()
-						}
-					case chat.TypeTopic:
-						if ev.Topic != nil {
-							rawMu.Lock()
-							currentTopic = ev.Topic.Topic
-							writeChatLineLocked(fmt.Sprintf(e.Strings().ChatTopicMsg, ev.Topic.Room, ev.Topic.Topic))
-							drawHeaderLocked()
-							rawMu.Unlock()
-						}
-					case chat.TypeSystem:
-						if ev.Reconnect {
-							writeChatLine(e.Strings().ChatReconnected)
-						} else if ev.Text != "" {
-							writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, ev.Text))
-						}
-					}
-				}
-			}()
+			go pumpEvents(svc, done)
 			continue
 		}
 
@@ -811,33 +917,36 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 
-		if strings.HasPrefix(upper, "/TOPIC ") {
+		if upper == "/TOPIC" {
+			if arg == "" {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, e.Strings().ChatTopicUsage))
+				continue
+			}
 			if currentRoom == "" {
 				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, chatNoRoomMsg))
 				continue
 			}
-			topicText := strings.TrimSpace(trimmed[7:])
-			if topicErr := svc.SetTopic(currentRoom, topicText); topicErr != nil {
+			if topicErr := svc.SetTopic(currentRoom, arg); topicErr != nil {
 				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not set topic: "+topicErr.Error()))
 			}
 			continue
 		}
 
-		if strings.HasPrefix(upper, "/MSG ") {
-			rest := strings.TrimSpace(trimmed[5:])
-			parts := strings.SplitN(rest, " ", 2)
-			if len(parts) == 2 {
-				target := strings.TrimSpace(parts[0])
-				message := parts[1]
-				toHandle := target
-				toNode := ""
-				if atIdx := strings.Index(target, "@"); atIdx > 0 && atIdx < len(target)-1 {
-					toHandle = target[:atIdx]
-					toNode = target[atIdx+1:]
-				}
-				if msgErr := svc.Private(toHandle, toNode, message); msgErr != nil {
-					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not send private message: "+msgErr.Error()))
-				}
+		if upper == "/MSG" {
+			target, message, ok := strings.Cut(arg, " ")
+			message = strings.TrimSpace(message)
+			if !ok || message == "" {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, e.Strings().ChatMsgUsage))
+				continue
+			}
+			toHandle := target
+			toNode := ""
+			if atIdx := strings.Index(target, "@"); atIdx > 0 && atIdx < len(target)-1 {
+				toHandle = target[:atIdx]
+				toNode = target[atIdx+1:]
+			}
+			if msgErr := svc.Private(toHandle, toNode, message); msgErr != nil {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not send private message: "+msgErr.Error()))
 			}
 			continue
 		}
@@ -845,9 +954,19 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		if upper == "/USERS" {
 			rawMu.Lock()
 			currentUsers = svc.Users()
+			drawHeaderLocked()
 			drawStatusBarLocked()
 			rawMu.Unlock()
 			continue
+		}
+
+		if isCommand {
+			cmd, _, _ := strings.Cut(trimmed, " ")
+			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, fmt.Sprintf(e.Strings().ChatUnknownCommand, cmd)))
+			continue
+		}
+		if strings.HasPrefix(trimmed, "//") {
+			trimmed = trimmed[1:]
 		}
 
 		if currentRoom == "" {
@@ -877,94 +996,146 @@ func formatChatMessage(msg chat.ChatMessage, systemFmt, userFmt string) string {
 	return fmt.Sprintf(userFmt, msg.Handle, msg.Text)
 }
 
-// chatArtReplace finds the MCI placeholder @name####...####@ in ANSI art data
-// and replaces it with value padded (or truncated) to the same byte length,
-// preserving the visual width of the art.
+// chatArtReplace fills the @name####@ placeholder in ANSI art data with
+// value; see chatArtFill.
 func chatArtReplace(data []byte, name, value string) []byte {
-	tag := []byte("@" + name)
-	start := bytes.Index(data, tag)
-	if start < 0 {
-		return data
-	}
-	rest := data[start+len(tag):]
-	end := bytes.IndexByte(rest, '@')
-	if end < 0 {
-		return data
-	}
-	totalLen := len(tag) + end + 1 // placeholder span; ASCII, so bytes == columns
-	// Fill by columns, not bytes: the NET value is a V3Net leaf network name and
-	// is not ASCII-gated, so byte padding would leave the row short and byte
-	// truncation would cut a rune in half.
-	runes := []rune(value)
-	if len(runes) > totalLen {
-		runes = runes[:totalLen]
-	}
-	repl := []byte(string(runes))
-	for utf8.RuneCount(repl) < totalLen {
-		repl = append(repl, ' ')
-	}
+	return chatArtFill(data, map[string]func(int) string{name: func(int) string { return value }})
+}
+
+// chatArtFill replaces the placeholders in the chat header art in one pass
+// over data. A placeholder is "@", an upper-case name, any fill characters
+// (the stock art uses "#") and a closing "@"; its length in columns, both
+// "@"s included, is the width of the field on screen. For each placeholder
+// whose name has an entry in fields, the function is called with that width
+// and its result is padded with spaces or cut to exactly that many columns,
+// so the art keeps its shape. Unknown placeholders are left as they are.
+// Values are never scanned for placeholders themselves, so a topic or room
+// name containing "@U@" is shown as typed.
+func chatArtFill(data []byte, fields map[string]func(int) string) []byte {
 	out := make([]byte, 0, len(data))
-	out = append(out, data[:start]...)
-	out = append(out, repl...)
-	out = append(out, data[start+totalLen:]...)
+	for i := 0; i < len(data); {
+		if data[i] == '@' {
+			if name, span, ok := chatArtPlaceholder(data[i:]); ok {
+				if fill, known := fields[name]; known {
+					width := utf8.RuneCount(data[i : i+span])
+					out = append(out, chatArtPad(fill(width), width)...)
+					i += span
+					continue
+				}
+			}
+		}
+		out = append(out, data[i])
+		i++
+	}
 	return out
 }
 
-// chatReadLine reads a line using the session's InputHandler (same path as all
-// other BBS input), echoing at the given row. All terminal writes go through
-// mu+writeFn so they are serialised with the event goroutine's writes.
-func chatReadLine(s ssh.Session, mu *sync.Mutex, writeFn func([]byte), row, termWidth int, prompt string) (string, error) {
-	ih := getSessionIH(s)
-	promptLen := len([]rune(prompt))
-	maxBuf := termWidth - promptLen - 1
-	if maxBuf < 1 {
-		maxBuf = 1
+// chatArtPlaceholder reports whether data starts with a placeholder, and if
+// so returns its name and its length in bytes.
+func chatArtPlaceholder(data []byte) (string, int, bool) {
+	j := 1
+	for j < len(data) && data[j] >= 'A' && data[j] <= 'Z' {
+		j++
 	}
-
-	var buf []rune
-
-	redraw := func() {
-		input := string(buf)
-		curCol := promptLen + len(buf) + 1
-		seq := fmt.Sprintf("\x1B[%d;1H\x1B[2K%s%s\x1B[%d;%dH", row, prompt, input, row, curCol)
-		mu.Lock()
-		writeFn([]byte(seq))
-		mu.Unlock()
+	if j == 1 {
+		return "", 0, false
 	}
+	k := j
+	for k < len(data) && data[k] == '#' {
+		k++
+	}
+	if k >= len(data) || data[k] != '@' {
+		return "", 0, false
+	}
+	return string(data[1:j]), k + 1, true
+}
 
-	redraw()
+// chatArtPad fits value to width columns, cutting whole runes or padding with
+// spaces. Values such as a V3Net network name are not ASCII-gated, so this
+// counts terminal cells: a wide character takes two.
+func chatArtPad(value string, width int) []byte {
+	value = runewidth.Truncate(value, width, "")
+	repl := []byte(value)
+	for n := runewidth.StringWidth(value); n < width; n++ {
+		repl = append(repl, ' ')
+	}
+	return repl
+}
 
-	for {
-		key, err := ih.ReadKey()
-		if err != nil {
-			return "", io.EOF
+// chatCounter formats n for a header counter field width columns wide, the
+// way the stock art draws it: a "·" separator, n zero-padded to fill the
+// field, then suffix. A value with more digits than fit shows as all nines.
+// A field too narrow for the separator gets the bare number. For example,
+// chatCounter(4, 3, "") is "·003" and chatCounter(6, 42, "ms") is "·042ms".
+func chatCounter(width, n int, suffix string) string {
+	digits := width - 1 - len(suffix)
+	if digits < 1 {
+		return strconv.Itoa(n)
+	}
+	return "\u00b7" + chatPadNumber(n, digits) + suffix
+}
+
+// chatLagField formats a round trip for the header's Lag field, width
+// columns wide: as chatCounter in milliseconds with an "ms" suffix when ok,
+// and with dashes in place of the digits when there is no measurement, as in
+// "·---ms".
+func chatLagField(width int, lag time.Duration, ok bool) string {
+	if ok {
+		return chatCounter(width, int(lag/time.Millisecond), "ms")
+	}
+	if digits := width - 3; digits >= 1 {
+		return "\u00b7" + strings.Repeat("-", digits) + "ms"
+	}
+	return "-"
+}
+
+// chatBufferField formats the scrollback use for a header field width columns
+// wide, as "·used/capacity" with each number zero-padded to half the room
+// left; chatBufferField(8, 12, 500) is "·012/500".
+func chatBufferField(width, used, capacity int) string {
+	digits := (width - 2) / 2
+	if digits < 1 {
+		return strconv.Itoa(used)
+	}
+	return "\u00b7" + chatPadNumber(used, digits) + "/" + chatPadNumber(capacity, digits)
+}
+
+// chatPadNumber zero-pads n to digits, or shows all nines when it is longer.
+func chatPadNumber(n, digits int) string {
+	s := fmt.Sprintf("%0*d", digits, max(n, 0))
+	if len(s) > digits {
+		return strings.Repeat("9", digits)
+	}
+	return s
+}
+
+// chatMentions reports whether text mentions handle: contains it, ignoring
+// case, as a whole word, with no letter or digit directly before or after.
+// "hey caller!" and "caller's" mention Caller; "callers" does not.
+func chatMentions(text, handle string) bool {
+	if handle == "" {
+		return false
+	}
+	lower, h := strings.ToLower(text), strings.ToLower(handle)
+	for from := 0; ; {
+		i := strings.Index(lower[from:], h)
+		if i < 0 {
+			return false
 		}
-
-		switch key {
-		case editor.KeyEnter:
-			line := strings.TrimSpace(string(buf))
-			buf = buf[:0]
-			mu.Lock()
-			writeFn([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K%s\x1B[%d;%dH", row, prompt, row, promptLen+1)))
-			mu.Unlock()
-			return line, nil
-
-		case editor.KeyBackspace:
-			if len(buf) > 0 {
-				buf = buf[:len(buf)-1]
-				redraw()
-			}
-
-		case editor.KeyEsc, editor.KeyCtrlC, editor.KeyCtrlA:
-			return "", io.EOF
-
-		default:
-			if editor.IsPrintable(key) && len(buf) < maxBuf {
-				buf = append(buf, rune(key))
-				redraw()
-			}
+		start := from + i
+		end := start + len(h)
+		before, _ := utf8.DecodeLastRuneInString(lower[:start])
+		after, _ := utf8.DecodeRuneInString(lower[end:])
+		if !chatWordRune(before) && !chatWordRune(after) {
+			return true
 		}
+		from = start + 1
 	}
+}
+
+// chatWordRune reports whether r is part of a word for chatMentions.
+func chatWordRune(r rune) bool {
+	return r != utf8.RuneError && (unicode.IsLetter(r) || unicode.IsDigit(r))
 }
 
 // pipeDisplayLen returns the number of visible characters in a pipe-code string,

@@ -1,12 +1,14 @@
 package leaf
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -577,5 +579,118 @@ func TestChatSession_JoinUndoneWhenReplyUnreadable(t *testing.T) {
 	}
 	if room := sess.room(); room != "lobby" {
 		t.Errorf("current room = %q, want lobby unchanged", room)
+	}
+}
+
+// TestDispatch_DropsEchoOfOwnMessage covers #658: the hub broadcasts a post to
+// every member of the room, its author included, and the chat screen has
+// already shown the author's line when Post returned. The echo is recognised
+// by handle and node together, as the join echo is, so a user on another BBS
+// who shares the handle is still heard.
+func TestDispatch_DropsEchoOfOwnMessage(t *testing.T) {
+	const self = "<this leaf>"
+	for _, tc := range []struct {
+		name, handle, node string
+		want               bool // delivered to the sysop session
+	}{
+		{"own post echoed by the hub", "sysop", self, false},
+		{"same handle on another BBS", "sysop", "node-b", true},
+		{"another user on this BBS", "alice", self, true},
+		{"hub without the node field", "sysop", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+			sess := newRoomSession(l, "sysop", "lobby", "sysop")
+			node := tc.node
+			if node == self {
+				node = l.chatSessions.nodeID
+			}
+			l.chatSessions.dispatch(chatEvent(t, protocol.EventChatMessage, protocol.ChatMsgPayload{
+				Room: "lobby", FromHandle: tc.handle, FromNode: node, Text: "hi",
+			}))
+			if !tc.want {
+				noEvent(t, sess, "echo of own message")
+				return
+			}
+			select {
+			case ev := <-sess.events:
+				if ev.Type != chat.TypeMessage || ev.Message.Handle != tc.handle {
+					t.Errorf("event = %+v, want %s's message", ev, tc.handle)
+				}
+			default:
+				t.Errorf("message from %s@%s not delivered", tc.handle, node)
+			}
+		})
+	}
+}
+
+// TestChatSession_OwnPostNotEchoedOverSSE runs #658 end to end: with a real
+// hub and the leaf's event stream running, the poster's session receives the
+// other member's messages but not its own.
+func TestChatSession_OwnPostNotEchoedOverSSE(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	aliceLeaf := subscribedLeaf(t, ts, "alicebbs")
+	bobLeaf := subscribedLeaf(t, ts, "bobbbs")
+
+	alice := aliceLeaf.NewChatSession("alice")
+	defer alice.Close()
+	if _, _, err := alice.Join("lobby"); err != nil {
+		t.Fatalf("alice join: %v", err)
+	}
+	watchEvents(t, aliceLeaf)
+	bob := bobLeaf.NewChatSession("bob")
+	defer bob.Close()
+	if _, _, err := bob.Join("lobby"); err != nil {
+		t.Fatalf("bob join: %v", err)
+	}
+	awaitChat(t, alice, chat.TypeJoin)
+
+	if err := alice.Post("lobby", "from alice"); err != nil {
+		t.Fatalf("alice post: %v", err)
+	}
+	if err := bob.Post("lobby", "from bob"); err != nil {
+		t.Fatalf("bob post: %v", err)
+	}
+	// The hub sends events in order, so alice's echo would arrive first.
+	if msg := awaitChat(t, alice, chat.TypeMessage); msg.Message.Text != "from bob" {
+		t.Errorf("first message alice received = %q, want bob's", msg.Message.Text)
+	}
+}
+
+// TestChatSession_Ping covers the round-trip measurement behind the chat
+// header's Lag field (#660): one GET of the hub's public room list, timed.
+func TestChatSession_Ping(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	sess := subscribedLeaf(t, ts, "alicebbs").NewChatSession("alice")
+	defer sess.Close()
+	// A loopback round trip can be under the clock's resolution on Windows,
+	// so zero is a valid measurement here; the slow hub below checks timing.
+	if d, err := sess.Ping(context.Background()); err != nil || d < 0 {
+		t.Errorf("Ping against a working hub = (%v, %v), want a duration and no error", d, err)
+	}
+
+	// The time is the whole round trip.
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(60 * time.Millisecond)
+		_, _ = w.Write([]byte("[]"))
+	}))
+	t.Cleanup(slow.Close)
+	l, _ := setupLeaf(t, slow.URL, &mockJAMWriter{})
+	if d, err := l.NewChatSession("bob").Ping(context.Background()); err != nil || d < 60*time.Millisecond {
+		t.Errorf("Ping against a 60ms hub = (%v, %v), want at least 60ms", d, err)
+	}
+
+	// A hub that answers with an error has not been measured.
+	broken := cannedHub(t, http.StatusInternalServerError, "")
+	l, _ = setupLeaf(t, broken.URL, &mockJAMWriter{})
+	if _, err := l.NewChatSession("carol").Ping(context.Background()); err == nil {
+		t.Errorf("Ping against a failing hub returned no error")
+	}
+
+	// A cancelled context stops the request.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := sess.Ping(ctx); err == nil {
+		t.Errorf("Ping with a cancelled context returned no error")
 	}
 }

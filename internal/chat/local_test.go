@@ -139,3 +139,44 @@ func TestLocalChatJoinSurvivesHistoryError(t *testing.T) {
 		t.Errorf("users = %v, want alice in the room", users)
 	}
 }
+
+// Users follows the room as others join and leave, so the chat header's user
+// count and the status bar stay current (#660).
+func TestLocalChatUsersFollowsRoom(t *testing.T) {
+	resetSharedState()
+	dbPath := filepath.Join(t.TempDir(), "chat.db")
+	open := func(handle string) *LocalChatService {
+		t.Helper()
+		s, err := NewLocalChatService(handle, dbPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = s.Close() })
+		return s
+	}
+	alice, bob := open("alice"), open("bob")
+	if got := alice.Users(); len(got) != 0 {
+		t.Errorf("Users before joining = %v, want none", got)
+	}
+	if _, _, err := alice.Join("lobby"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := bob.Join("lobby"); err != nil {
+		t.Fatal(err)
+	}
+	if got := alice.Users(); len(got) != 2 || got[0] != "alice" || got[1] != "bob" {
+		t.Errorf("alice.Users() after bob joined = %v, want [alice bob]", got)
+	}
+	if err := bob.Leave("lobby"); err != nil {
+		t.Fatal(err)
+	}
+	if got := alice.Users(); len(got) != 1 || got[0] != "alice" {
+		t.Errorf("alice.Users() after bob left = %v, want [alice]", got)
+	}
+	if err := alice.Leave("lobby"); err != nil {
+		t.Fatal(err)
+	}
+	if got := alice.Users(); len(got) != 0 {
+		t.Errorf("Users after leaving = %v, want none", got)
+	}
+}

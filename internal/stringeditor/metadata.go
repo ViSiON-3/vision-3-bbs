@@ -645,5 +645,13 @@ func stringCatalog() []StringEntry {
 		{Label: "Konfig: Downloads Column", Key: "konfigColumnDownloads", Description: "File column name. Plain text, no colour codes"},
 		{Label: "Konfig: Uploader Column", Key: "konfigColumnUploader", Description: "File column name. Plain text, no colour codes"},
 		{Label: "Konfig: Descr. Column", Key: "konfigColumnDescription", Description: "File column name. Plain text, no colour codes"},
+
+		// Chat commands, help and scrollback (V3)
+		{Label: "Chat: Help", Key: "chatHelp", Description: "Command list shown by /? and /HELP, one chat line per line of text"},
+		{Label: "Chat: Unknown Command", Key: "chatUnknownCommand", Description: "Shown instead of posting a line that starts with an unknown /command (%s=command)"},
+		{Label: "Chat: /JOIN Usage", Key: "chatJoinUsage", Description: "Shown when /JOIN is typed without a room"},
+		{Label: "Chat: /TOPIC Usage", Key: "chatTopicUsage", Description: "Shown when /TOPIC is typed without a topic"},
+		{Label: "Chat: /MSG Usage", Key: "chatMsgUsage", Description: "Shown when /MSG is typed without a user and a message"},
+		{Label: "Chat: Scrollback Hint", Key: "chatScrollbackHint", Description: "Replaces the command hints while the chat is paged back with PgUp"},
 	}
 }

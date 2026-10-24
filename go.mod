@@ -14,6 +14,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.19
 	github.com/muesli/cancelreader v0.2.2
 	github.com/muesli/termenv v0.16.0
+	github.com/rivo/uniseg v0.4.7
 	golang.org/x/crypto v0.45.0
 	golang.org/x/term v0.37.0
 	golang.org/x/text v0.31.0
@@ -42,7 +43,6 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	modernc.org/libc v1.70.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

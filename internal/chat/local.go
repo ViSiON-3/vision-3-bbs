@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -35,10 +36,9 @@ type LocalChatService struct {
 	handle string
 	db     *sql.DB
 
-	mu           sync.RWMutex
-	currentRoom  string
-	currentUsers []string
-	events       chan ChatEvent
+	mu          sync.RWMutex
+	currentRoom string
+	events      chan ChatEvent
 }
 
 type localRoom struct {
@@ -78,10 +78,10 @@ func NewLocalChatService(handle, dbPath string) (*LocalChatService, error) {
 
 // Join implements ChatService. The room name is normalised first, so an
 // invalid name returns NormalizeRoom's error. The session is registered in
-// the process-wide room (creating it if needed), its user list is
-// snapshotted for Users, and the other members get a TypeJoin event. The
-// join has happened by the time history is loaded, so a history error is
-// logged and the join still succeeds, with no history.
+// the process-wide room (creating it if needed), which Users reads from, and
+// the other members get a TypeJoin event. The join has happened by the time
+// history is loaded, so a history error is logged and the join still
+// succeeds, with no history.
 func (s *LocalChatService) Join(room string) ([]RoomInfo, []ChatMessage, error) {
 	room, err := NormalizeRoom(room)
 	if err != nil {
@@ -98,7 +98,6 @@ func (s *LocalChatService) Join(room string) ([]RoomInfo, []ChatMessage, error) 
 
 	s.mu.Lock()
 	s.currentRoom = room
-	s.currentUsers = localUsersInRoom(room)
 	s.mu.Unlock()
 
 	broadcastLocalEvent(room, s.handle, ChatEvent{
@@ -240,15 +239,19 @@ func (s *LocalChatService) History(room string, limit int) ([]ChatMessage, error
 	return msgs, nil
 }
 
-// Users implements ChatService. It returns a copy of the member list taken
-// when this session last joined a room; later joins and leaves by others do
-// not update it.
+// Users implements ChatService. It returns the handles in this session's
+// current room as they are now, sorted, or nil when it is in no room. The
+// slice is the caller's to keep.
 func (s *LocalChatService) Users() []string {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]string, len(s.currentUsers))
-	copy(out, s.currentUsers)
-	return out
+	room := s.currentRoom
+	s.mu.RUnlock()
+	if room == "" {
+		return nil
+	}
+	users := localUsersInRoom(room)
+	slices.Sort(users)
+	return users
 }
 
 // Events implements ChatService. The buffered channel (64 events) is closed

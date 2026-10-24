@@ -25,6 +25,7 @@ var FormattedKeys = []string{
 	"chatRoomListEntry",
 	"chatSystemPrefix",
 	"chatTopicMsg",
+	"chatUnknownCommand",
 	"confCurrentAreaFormat",
 	"confCurrentConfFormat",
 	"confNotFound",
