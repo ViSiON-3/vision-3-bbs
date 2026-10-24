@@ -305,11 +305,10 @@ func resolvePrivateRecipient(usersDir, name string) (string, error) {
 
 // checkPostHeader rejects header fields the message base or a packed FTN
 // message cannot carry: empty names, control characters, and, for networked
-// areas, non-ASCII text and values longer than the FTS-0001 header fields.
-// The exporter writes header strings to the packet as they are stored, and
-// they are stored as UTF-8, so a non-ASCII name or subject would reach other
-// systems as UTF-8 bytes under the post's CHRS: CP437 label. Keeping
-// networked headers ASCII also makes the length limits byte-exact.
+// areas, characters CP437 has no byte for and values longer than the
+// FTS-0001 header fields. The exporter writes networked headers as CP437
+// (ftn.EncodeFTNString), one byte per character, so the limits count
+// characters, and a character CP437 lacks would leave as '?'.
 func checkPostHeader(from, to, subject string, networked bool) error {
 	for _, f := range []struct{ name, val string }{{"--from", from}, {"--to", to}, {"--subj", subject}} {
 		if strings.TrimSpace(f.val) == "" {
@@ -323,8 +322,9 @@ func checkPostHeader(from, to, subject string, networked bool) error {
 		return nil
 	}
 	for _, f := range []struct{ name, val string }{{"--from", from}, {"--to", to}, {"--subj", subject}} {
-		if !isASCII([]byte(f.val)) {
-			return fmt.Errorf("%s has non-ASCII characters, which FTN headers cannot carry reliably; use plain ASCII", f.name)
+		if i := strings.IndexFunc(f.val, func(r rune) bool { return !ftn.CP437Rune(r) }); i >= 0 {
+			r, _ := utf8.DecodeRuneInString(f.val[i:])
+			return fmt.Errorf("%s: %q (U+%04X) has no CP437 equivalent, so FTN headers cannot carry it", f.name, r, r)
 		}
 	}
 	if n := utf8.RuneCountInString(from); n > ftnMaxNameLen {

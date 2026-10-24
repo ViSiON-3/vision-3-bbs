@@ -577,3 +577,10 @@ func EncodeFTNString(s, chrs string) string {
 	}
 	return string(out)
 }
+
+// CP437Rune reports whether r can be written as a CP437 byte, so that
+// EncodeFTNString keeps it rather than replacing it with '?'.
+func CP437Rune(r rune) bool {
+	_, ok := charmap.CodePage437.EncodeRune(r)
+	return ok
+}
