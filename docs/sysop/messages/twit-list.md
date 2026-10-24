@@ -18,8 +18,10 @@ that user's current handle, current real name (including RealNameOnly areas), an
 the name saved at add time. This survives renames. Other names are network entries.
 Use `name@address` to match only that origin; without an address the name matches
 on every network and in local areas. Quick-add includes the origin address of
-imported network messages, keeping those authors separate from similarly named accounts. Locally written echomail/netmail
-posts retain local account IDs and checks even though they also carry an origin address.
+imported network messages, keeping those authors separate from similarly named
+accounts. Quick-adding an author from a locally written echomail/netmail post
+stores a local-user entry, so local-user matching and exemption checks still
+apply even when an origin address is present.
 Matching ignores case and leading/trailing whitespace. Anonymous means the
 configured `anonymousName` or the standard `Anonymous` signature; the board does
 not retain a separate anonymous author identity for filtering.
