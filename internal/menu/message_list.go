@@ -18,7 +18,9 @@ func runListMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 // messages it accepts are listed too. The filter is propagated to the reader
 // when a message is opened.
 func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (*user.User, string, error) {
-	msgFilter = withPrivacy(privateMailReaderFor(c.e, c.userManager, c.currentUser), msgFilter)
+	baseFilter := withPrivacy(privateMailReaderFor(c.e, c.userManager, c.currentUser), msgFilter)
+	matcher := twitMatcher(c.e, c.userManager, c.currentUser)
+	msgFilter = withTwit(func() *user.TwitMatcher { return matcher }, baseFilter, nil)
 	e := c.e
 	s := c.s
 	terminal := c.terminal
@@ -161,7 +163,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 			// Call message reader
 			_, nextAction, err := runMessageReader(e, s, terminal, userManager,
 				currentUser, nodeNumber, sessionStartTime, outputMode,
-				selectedMsg, areaMsgCount, false, tw, th, msgFilter)
+				selectedMsg, areaMsgCount, false, tw, th, baseFilter)
 
 			if err != nil {
 				slog.Error("message reader error", "node", nodeNumber, "error", err)
@@ -173,6 +175,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 				return currentUser, "LOGOFF", nil
 			}
 
+			matcher = twitMatcher(e, userManager, currentUser)
 			// Rebuild list to pick up posted/deleted messages and updated lastread markers
 			newEntries, newLastRead, rebuildErr := buildMessageList(e.MessageMgr, currentAreaID, currentUser.Handle, msgFilter)
 			if rebuildErr != nil {

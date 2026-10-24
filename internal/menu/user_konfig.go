@@ -310,6 +310,11 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					help:  str.KonfigAutoSigHelp,
 					value: autoSigValue,
 					edit:  editAutoSig},
+				{key: 'M', label: str.KonfigTwitListLabel, help: str.KonfigTwitListHelp,
+					value: func(st *konfigState) konfigValue {
+						return konfigValue{fmt.Sprintf("%d/%d", len(st.user().TwitList), twitPolicy(st.c.e).Limit()), toneValue}
+					},
+					edit: editTwitList},
 			}},
 		},
 		{

@@ -69,6 +69,13 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	// reader and its message list both apply it, so navigation never lands on
 	// a message the scan settings exclude.
 	msgFilter := scanCfg.filter()
+	counter := &twitScanCounter{}
+	defer func() {
+		if n := len(counter.hidden); n > 0 {
+			e.writeStringf(terminal, outputMode, e.Strings().TwitHiddenSummary, n)
+			uiPause(readerNoticePause)
+		}
+	}()
 
 	// Display "Scanning Messages..."
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
@@ -122,7 +129,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 		restoreLastRead := preserveLastRead(e, scanCfg, currentAreaID, currentUser.Handle, nodeNumber)
 		_, action, readErr := runMessageReader(e, s, terminal, userManager, currentUser,
-			nodeNumber, sessionStartTime, outputMode, startMsg, totalCount, true, tw, th, msgFilter)
+			nodeNumber, sessionStartTime, outputMode, startMsg, totalCount, true, tw, th, msgFilter, counter)
 		restoreLastRead()
 		if readErr != nil || action == "LOGOFF" {
 			return nil, "LOGOFF", readErr
@@ -306,7 +313,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 		// Read messages in this area
 		_, action, readErr := runMessageReader(e, s, terminal, userManager, currentUser,
-			nodeNumber, sessionStartTime, outputMode, startMsg, totalCount, true, tw, th, msgFilter)
+			nodeNumber, sessionStartTime, outputMode, startMsg, totalCount, true, tw, th, msgFilter, counter)
 		if readErr != nil || action == "LOGOFF" {
 			return nil, "LOGOFF", readErr
 		}

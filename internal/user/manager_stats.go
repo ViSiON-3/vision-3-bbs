@@ -13,6 +13,7 @@ func (um *UserMgr) GetAllUsers() []*User {
 	usersSlice := make([]*User, 0, len(um.users))
 	for _, user := range um.users {
 		userCopy := *user
+		userCopy.TwitList = append([]TwitEntry(nil), user.TwitList...)
 		usersSlice = append(usersSlice, &userCopy)
 	}
 	return usersSlice

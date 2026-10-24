@@ -15,6 +15,8 @@ import (
 
 // ServerConfig defines server-wide settings
 type ServerConfig struct {
+	TwitListMax              int    `json:"twitListMax"`     // <=0 defaults to 50
+	TwitExemptLevel          int    `json:"twitExemptLevel"` // <=0 uses SysOpLevel
 	BoardName                string `json:"boardName"`
 	SysOpName                string `json:"sysOpName"`
 	QWKID                    string `json:"qwkID,omitempty"` // Explicit QWK packet ID; blank = derive from BoardName

@@ -125,9 +125,15 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
 	sessionStartTime time.Time, outputMode ansi.OutputMode,
 	startMsg int, totalMsgCount int, isNewScan bool,
-	termWidth int, termHeight int, msgFilter msgOwnershipFilter) (*user.User, string, error) {
+	termWidth int, termHeight int, msgFilter msgOwnershipFilter, counters ...*twitScanCounter) (*user.User, string, error) {
 
-	msgFilter = withPrivacy(privateMailReaderFor(e, userManager, currentUser), msgFilter)
+	baseFilter := withPrivacy(privateMailReaderFor(e, userManager, currentUser), msgFilter)
+	matcher := twitMatcher(e, userManager, currentUser)
+	var counter *twitScanCounter
+	if len(counters) > 0 {
+		counter = counters[0]
+	}
+	msgFilter = withTwit(func() *user.TwitMatcher { return matcher }, baseFilter, counter)
 	currentAreaID := currentUser.CurrentMessageAreaID
 	currentAreaTag := currentUser.CurrentMessageAreaTag
 
@@ -565,7 +571,7 @@ readerLoop:
 					singleKey := rune(key)
 					// Check if it's a direct command key
 					switch unicode.ToUpper(singleKey) {
-					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'K', '?':
+					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'K', 'I', '?':
 						selectedKey = unicode.ToUpper(singleKey)
 					default:
 						// Not a recognized command, show lightbar
@@ -704,10 +710,41 @@ readerLoop:
 					continue
 				}
 
+			case 'I': // Ignore author (T remains Thread).
+				if strings.EqualFold(strings.TrimSpace(currentMsg.From), "Anonymous") || strings.EqualFold(strings.TrimSpace(currentMsg.From), strings.TrimSpace(e.Strings().AnonymousName)) {
+					e.showReaderNotice(terminal, outputMode, e.Strings().TwitAnonymous, termHeight)
+					needsRedraw = true
+					continue
+				}
+				answer, confirmErr := promptSingleChar(reader, terminal, fmt.Sprintf(e.Strings().TwitQuickConfirm, currentMsg.From), outputMode)
+				if confirmErr != nil {
+					return currentUser, "LOGOFF", confirmErr
+				}
+				name := currentMsg.From
+				// Network origins must not resolve a coincidentally matching local handle.
+				if currentMsg.OrigAddr != "" {
+					name += "@" + currentMsg.OrigAddr
+				} else if target, ok := userManager.ResolveRecipient(name); ok {
+					// RealNameOnly posts still need stable IDs, self checks and exemptions.
+					name = target.Handle
+				}
+				ctx := &cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, outputMode: outputMode}
+				if answer == 'Y' && addTwit(ctx, name) {
+					matcher = twitMatcher(e, userManager, currentUser)
+					navDir = 1
+					currentMsgNum++
+					break scrollLoop
+				}
+				if answer == 'Y' {
+					uiPause(readerNoticePause)
+				}
+				needsRedraw = true
+				continue
+
 			case 'T': // Thread
 				navDir = 1
 				handleThread(reader, e, terminal, outputMode, currentAreaID,
-					&currentMsgNum, totalMsgCount, currentMsg.Subject)
+					&currentMsgNum, totalMsgCount, currentMsg.Subject, msgFilter)
 				// Exit scroll loop to load new message if thread changed it
 				break scrollLoop
 
@@ -723,15 +760,16 @@ readerLoop:
 				continue
 
 			case 'L': // List messages in current area
-				updatedUser, nextAction, listErr := runListMsgsFiltered(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "", msgFilter)
+				updatedUser, nextAction, listErr := runListMsgsFiltered(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "", baseFilter)
 				if updatedUser != nil {
 					currentUser = updatedUser
 				}
 				if listErr != nil || nextAction == "LOGOFF" {
 					return currentUser, "LOGOFF", listErr
 				}
-				needsRedraw = true
-				continue
+				matcher = twitMatcher(e, userManager, currentUser)
+				// Reload through the visibility boundary after nested readers edit the list.
+				break scrollLoop
 
 			case 'D': // Delete message (sysop/co-sysop only)
 				if !isSysop {

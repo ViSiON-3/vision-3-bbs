@@ -52,6 +52,7 @@ func (um *UserMgr) UpdateUserByID(u *User) error {
 	}
 
 	userCopy := *u
+	userCopy.TwitList = append([]TwitEntry(nil), u.TwitList...)
 	// Same guard as UpdateUser: a copy taken before an external edit must not
 	// carry the pre-edit sysop fields back over what ./ue wrote.
 	if current != nil && current.gen > userCopy.gen {
@@ -85,6 +86,7 @@ func (um *UserMgr) UpdateUser(u *User) error {
 	}
 	// Create a defensive copy to prevent external mutations from bypassing locks
 	userCopy := *u
+	userCopy.TwitList = append([]TwitEntry(nil), u.TwitList...)
 	previous := um.users[lowerHandle]
 	// The caller is writing a copy it took earlier in the session. If the
 	// record has been refreshed from an external edit since then (./ue
@@ -116,6 +118,7 @@ func (um *UserMgr) GetUser(handle string) (*User, bool) {
 		return nil, false
 	}
 	userCopy := *user
+	userCopy.TwitList = append([]TwitEntry(nil), user.TwitList...)
 	return &userCopy, true
 }
 
@@ -128,6 +131,7 @@ func (um *UserMgr) GetUserByID(id int) (*User, bool) {
 		if user.ID == id {
 			// Return a copy to prevent modification of the internal user data
 			userCopy := *user
+			userCopy.TwitList = append([]TwitEntry(nil), user.TwitList...)
 			return &userCopy, true
 		}
 	}

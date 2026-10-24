@@ -20,8 +20,16 @@ type LoginEvent struct {
 	Timestamp time.Time
 }
 
+// TwitEntry identifies a local account or a network author to hide.
+type TwitEntry struct {
+	UserID int    `json:"userId,omitempty"`
+	Name   string `json:"name"`
+	Addr   string `json:"addr,omitempty"`
+}
+
 // User represents a user account.
 type User struct {
+	TwitList []TwitEntry `json:"twitList,omitempty"`
 	// gen tracks how many times this record has been refreshed from an
 	// external edit. Sessions carry a copy taken at some point in the past; if
 	// the authoritative record has since moved ahead, that copy must not be

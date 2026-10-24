@@ -94,7 +94,8 @@ type LastReadUpdate struct {
 
 // ExportOptions configure a packet build.
 type ExportOptions struct {
-	Handle string // user handle (used for PERSONAL.NDX, last-read and private-mail visibility)
+	TwitList *user.TwitMatcher // resolved once by the caller, nil means no filtering
+	Handle   string            // user handle (used for PERSONAL.NDX, last-read and private-mail visibility)
 	// TaggedTags lists the area tags to export. When empty, the service falls
 	// back to every loaded area (ListAreas); note this is not access-filtered —
 	// callers that need ACS enforcement must pre-filter the tags they pass.
@@ -190,7 +191,7 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 			}
 			// Other users' private messages never leave the board, whatever
 			// conference they sit in.
-			if !msg.VisibleTo(opts.Handle) {
+			if !msg.VisibleTo(opts.Handle) || opts.TwitList.Hidden(msg.From, msg.OrigAddr) {
 				continue
 			}
 

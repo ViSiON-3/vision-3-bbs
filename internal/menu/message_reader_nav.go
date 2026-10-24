@@ -200,7 +200,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 // handleThread prompts for forward/backward and searches for matching subject.
 func handleThread(reader *bufio.Reader, e *MenuExecutor, terminal *term.Terminal,
 	outputMode ansi.OutputMode, areaID int,
-	currentMsgNum *int, totalMsgs int, subject string) {
+	currentMsgNum *int, totalMsgs int, subject string, filter msgOwnershipFilter) {
 
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 	e.writeString(terminal, outputMode, e.Strings().MsgThreadPrompt)
@@ -212,7 +212,7 @@ func handleThread(reader *bufio.Reader, e *MenuExecutor, terminal *term.Terminal
 
 	forward := unicode.ToUpper(key) != 'B'
 
-	newMsg, found := forwardBackThread(e, areaID, *currentMsgNum, totalMsgs, subject, forward)
+	newMsg, found := forwardBackThread(e, areaID, *currentMsgNum, totalMsgs, subject, forward, filter)
 	if found {
 		*currentMsgNum = newMsg
 	} else {
@@ -227,7 +227,7 @@ func handleThread(reader *bufio.Reader, e *MenuExecutor, terminal *term.Terminal
 
 // forwardBackThread searches for messages with matching subjects, like Pascal's forwardbackthread.
 func forwardBackThread(e *MenuExecutor, areaID int, currentMsg int,
-	totalMsgs int, subject string, forward bool) (int, bool) {
+	totalMsgs int, subject string, forward bool, filter msgOwnershipFilter) (int, bool) {
 
 	// Strip " -Re: #N-" suffix and "Re: " prefix for matching
 	searchSubject := message.NormalizeThreadSubject(subject)
@@ -235,7 +235,7 @@ func forwardBackThread(e *MenuExecutor, areaID int, currentMsg int,
 	if forward {
 		for i := currentMsg + 1; i <= totalMsgs; i++ {
 			msg, err := e.MessageMgr.GetMessage(areaID, i)
-			if err != nil || msg.IsDeleted {
+			if err != nil || msg.IsDeleted || (filter != nil && !filter(msg)) {
 				continue
 			}
 			if message.SubjectsMatchThread(msg.Subject, searchSubject) {
@@ -245,7 +245,7 @@ func forwardBackThread(e *MenuExecutor, areaID int, currentMsg int,
 	} else {
 		for i := currentMsg - 1; i >= 1; i-- {
 			msg, err := e.MessageMgr.GetMessage(areaID, i)
-			if err != nil || msg.IsDeleted {
+			if err != nil || msg.IsDeleted || (filter != nil && !filter(msg)) {
 				continue
 			}
 			if message.SubjectsMatchThread(msg.Subject, searchSubject) {
@@ -291,7 +291,8 @@ func displayReaderHelp(terminal *term.Terminal, outputMode ansi.OutputMode, isSy
 		"|15R|07eply to Message       |15P|07ost a Message\r\n" +
 		"|15S|07 Prev Message        |15T|07hread Search\r\n" +
 		"|15J|07ump to Message #     |15M|07ail Reply\r\n" +
-		"|15L|07ist Titles           |15Q|07uit Reader\r\n"
+		"|15L|07ist Titles           |15Q|07uit Reader\r\n" +
+		"|15I|07gnore Author (Twit List)\r\n"
 	if isSysop {
 		help += "|01D|07elete Message        |01K|07ludges / Control Info\r\n"
 	}

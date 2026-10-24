@@ -231,6 +231,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["USERCONFIG"] = runUserKonfig                           // Full-screen user Konfig editor (K)
 	registry["CFG_PASSWORD"] = runCfgPassword
 	registry["CFG_AUTOSIG"] = runCfgAutoSig
+	registry["CFG_TWITLIST"] = runCfgTwitList
 	registry["CHAT"] = runChat
 	registry["PAGE"] = runPage
 	registry["PAGESYSOP"] = runPageSysop                     // Page the SysOp: WFC alert, countdown, split-screen chat

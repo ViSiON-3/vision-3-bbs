@@ -3,6 +3,26 @@ package config
 // StringsConfig holds all the configurable strings for the BBS.
 // This is the single source of truth.
 type StringsConfig struct {
+	KonfigTwitListLabel string `json:"konfigTwitListLabel"`
+	KonfigTwitListHelp  string `json:"konfigTwitListHelp"`
+	TwitHeader          string `json:"twitHeader"`
+	TwitChoice          string `json:"twitChoice"`
+	TwitNamePrompt      string `json:"twitNamePrompt"`
+	TwitDeletePrompt    string `json:"twitDeletePrompt"`
+	TwitClearConfirm    string `json:"twitClearConfirm"`
+	TwitQuickConfirm    string `json:"twitQuickConfirm"`
+	TwitAdded           string `json:"twitAdded"`
+	TwitRemoved         string `json:"twitRemoved"`
+	TwitCleared         string `json:"twitCleared"`
+	TwitSelf            string `json:"twitSelf"`
+	TwitExempt          string `json:"twitExempt"`
+	TwitFull            string `json:"twitFull"`
+	TwitDuplicate       string `json:"twitDuplicate"`
+	TwitInvalid         string `json:"twitInvalid"`
+	TwitSaveFailed      string `json:"twitSaveFailed"`
+	TwitAnonymous       string `json:"twitAnonymous"`
+	TwitHiddenSummary   string `json:"twitHiddenSummary"`
+
 	ConnectionStr           string `json:"connectionStr"`
 	LockedBaudStr           string `json:"lockedBaudStr"`
 	ApplyAsNewStr           string `json:"applyAsNewStr"`

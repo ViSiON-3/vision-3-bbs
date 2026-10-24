@@ -36,12 +36,14 @@ func (um *UserMgr) ResolveRecipient(name string) (*User, bool) {
 			return nil, false
 		}
 		c := *u
+		c.TwitList = append([]TwitEntry(nil), u.TwitList...)
 		return &c, true
 	}
 	if strings.EqualFold(name, "sysop") {
 		for _, u := range um.users {
 			if u.ID == 1 && !u.DeletedUser {
 				c := *u
+				c.TwitList = append([]TwitEntry(nil), u.TwitList...)
 				return &c, true
 			}
 		}
@@ -61,6 +63,7 @@ func (um *UserMgr) ResolveRecipient(name string) (*User, bool) {
 		return nil, false
 	}
 	c := *match
+	c.TwitList = append([]TwitEntry(nil), match.TwitList...)
 	return &c, true
 }
 

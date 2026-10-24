@@ -3,6 +3,7 @@
 Set up and manage message areas, echomail networking, V3Net, and the V3Mail system.
 
 - **[Message Areas](messages/message-areas.md)** — configuring JAM message bases and area settings
+- **[Twit Filter List](messages/twit-list.md)** — personal author filters, security exemptions, and reader shortcuts
 - **[Private Mail](messages/private-mail.md)** — user-to-user private messaging
 - **[FTN Echomail](messages/ftn-echomail.md)** — FTN network setup, node configuration, tossing
 - **[JAM Echomail](messages/jam-echomail.md)** — echomail in JAM message bases

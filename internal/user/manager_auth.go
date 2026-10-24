@@ -83,6 +83,7 @@ func (um *UserMgr) BeginSession(handle string) (*User, bool) {
 	// last visit" against the other session's timestamp — hiding news, rumors
 	// and files posted since this caller was actually last on.
 	userCopy := *user
+	userCopy.TwitList = append([]TwitEntry(nil), user.TwitList...)
 	um.mu.Unlock()
 
 	// Save outside the write lock to avoid blocking other user operations
@@ -118,6 +119,7 @@ func (um *UserMgr) FindByAuthorizedKey(marshaled []byte) (*User, bool) {
 				// lock is released, while Authenticate mutates LastLogin and
 				// TimesCalled on that same struct in place -- a live data race.
 				userCopy := *u
+				userCopy.TwitList = append([]TwitEntry(nil), u.TwitList...)
 				return &userCopy, true
 			}
 		}

@@ -2247,6 +2247,16 @@ func main() {
 			Users:        userMgr,
 			Service:      qwkSvc,
 			AuthorizeFor: menu.QWKWriteAuthorizer,
+			TwitMatcherFor: func(u *user.User) *user.TwitMatcher {
+				// Tokens retain a login snapshot; use the latest saved list.
+				if current, ok := userMgr.GetUserByID(u.ID); ok {
+					u = current
+				}
+				cfg := menuExecutor.GetServerConfig()
+				return user.BuildTwitMatcher(u.TwitList, userMgr, user.TwitPolicy{
+					MaxEntries: cfg.TwitListMax, ExemptLevel: cfg.TwitExemptLevel, SysOpLevel: cfg.SysOpLevel,
+				}, menuExecutor.Strings().AnonymousName)
+			},
 		})
 		if apiErr != nil {
 			logging.Fatal("failed to create QWK API server", "error", apiErr)
