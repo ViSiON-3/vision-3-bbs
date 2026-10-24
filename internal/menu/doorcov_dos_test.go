@@ -253,6 +253,22 @@ func TestCOM1Setting(t *testing.T) {
 	}
 }
 
+func TestIndexDoorStart(t *testing.T) {
+	starts := [][]byte{[]byte(dosSerialStart + "\r\n"), []byte(dosSerialStart + "\r\r\n")}
+	for _, tc := range []struct {
+		in     string
+		idx, n int
+	}{
+		{"boot" + dosSerialStart + "\r\nhi", 4, len(dosSerialStart) + 2},
+		{"boot" + dosSerialStart + "\r\r\nhi", 4, len(dosSerialStart) + 3},
+		{"boot" + dosSerialStart, -1, 0},
+	} {
+		if idx, n := indexDoorStart([]byte(tc.in), starts); idx != tc.idx || n != tc.n {
+			t.Errorf("indexDoorStart(%q) = %d, %d, want %d, %d", tc.in, idx, n, tc.idx, tc.n)
+		}
+	}
+}
+
 // doorcovFakeDosemu installs body as the BBS's dosemu binary. Before body
 // runs, $args holds the command line, $node the per-node directory (the
 // directory of the -f config) and $drive the --Fdrive_c argument, so a script

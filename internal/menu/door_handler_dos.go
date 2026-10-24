@@ -186,6 +186,18 @@ func com1Setting(line string) (string, bool) {
 	return strings.Trim(strings.TrimSpace(value), `"'`), true
 }
 
+// indexDoorStart returns the offset and length of the earliest of starts in
+// b, or -1 if none occurs.
+func indexDoorStart(b []byte, starts [][]byte) (int, int) {
+	idx, n := -1, 0
+	for _, start := range starts {
+		if i := bytes.Index(b, start); i >= 0 && (idx < 0 || i < idx) {
+			idx, n = i, len(start)
+		}
+	}
+	return idx, n
+}
+
 // executeDOSDoor launches a DOS door program via dosemu2.
 // Uses PTY bridging: dosemu's terminal translator converts INT 10h screen
 // output to ANSI on stdout, which flows through the PTY to the SSH session.
@@ -324,11 +336,13 @@ func executeDOSDoor(ctx *DoorCtx) error {
 	// the PTY. The output goroutine buffers until it detects ESC[2J (clear
 	// screen from `cls` in EXTERNAL.BAT), discarding DOS boot text before it.
 	//
-	// Either way, start is the marker that ends boot and keep is how much of
-	// it the caller gets.
-	start, keep := []byte("\x1b[2J"), len("\x1b[2J")
+	// Either way, starts are the forms of the marker that ends boot and keep
+	// is how much of it the caller gets. The serial marker's CRLF arrives as
+	// CR CR LF if dosemu writes it before the PTY is made raw below.
+	starts, keep := [][]byte{[]byte("\x1b[2J")}, len("\x1b[2J")
 	if ctx.dosSerial() {
-		start, keep = []byte(dosSerialStart+"\r\n"), len(dosSerialStart)
+		starts = [][]byte{[]byte(dosSerialStart + "\r\n"), []byte(dosSerialStart + "\r\r\n")}
+		keep = len(dosSerialStart)
 	}
 
 	inputDone := make(chan struct{})
@@ -351,11 +365,11 @@ func executeDOSDoor(ctx *DoorCtx) error {
 			if n > 0 {
 				if gated {
 					accum = append(accum, buf[:n]...)
-					if idx := bytes.Index(accum, start); idx >= 0 {
+					if idx, n := indexDoorStart(accum, starts); idx >= 0 {
 						// Found the marker — forward it and everything after
 						gated = false
-						_, _ = ctx.Session.Write(accum[idx : idx+keep])  // best-effort door output relay
-						_, _ = ctx.Session.Write(accum[idx+len(start):]) // best-effort door output relay
+						_, _ = ctx.Session.Write(accum[idx : idx+keep]) // best-effort door output relay
+						_, _ = ctx.Session.Write(accum[idx+n:])         // best-effort door output relay
 						accum = nil
 						slog.Debug("DOS boot text gate opened", "node", ctx.NodeNumber)
 					}
