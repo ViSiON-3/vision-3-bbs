@@ -387,7 +387,7 @@ func TestRunPost_V3NetPending(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = mm.Close() }()
-	if pending, _, err := mm.PendingOutbound(4, 1); err != nil || len(pending) != 1 {
+	if pending, err := mm.PendingOutbound(4); err != nil || len(pending) != 1 {
 		t.Errorf("pending = %v, %v; want one message", pending, err)
 	}
 }

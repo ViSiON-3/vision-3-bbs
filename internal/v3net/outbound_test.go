@@ -15,11 +15,15 @@ type fakeNetwork struct {
 	bindings map[int]AreaBinding
 	sent     []protocol.Message
 	fail     error
+	onSend   func(protocol.Message) // sees every attempt, failed or not
 }
 
 func (f *fakeNetwork) AreaBindings() map[int]AreaBinding { return f.bindings }
 func (f *fakeNetwork) NodeID() string                    { return "a1b2c3d4e5f6a7b8" }
 func (f *fakeNetwork) SendMessage(_ string, msg protocol.Message) error {
+	if f.onSend != nil {
+		f.onSend(msg)
+	}
 	if f.fail != nil {
 		return f.fail
 	}
@@ -34,7 +38,7 @@ func newOutboundTest(t *testing.T) (*message.MessageManager, *fakeNetwork, *Outb
 	if err := os.MkdirAll(cfg, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	areas := `[{"id":1,"tag":"FEL.GENERAL","name":"General","base_path":"fel_general","area_type":"v3net","network":"felonynet"}]`
+	areas := `[{"id":1,"tag":"fel.general","name":"General","base_path":"fel_general","area_type":"v3net","network":"felonynet"}]`
 	if err := os.WriteFile(filepath.Join(cfg, "message_areas.json"), []byte(areas), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +72,7 @@ func TestOutbound_SendsPendingOnce(t *testing.T) {
 		t.Fatalf("first sweep sent %d, want 2", n)
 	}
 	if got := net.sent[0]; got.Body != "line one\nline two" || got.Subject != "From the BBS" ||
-		got.Network != "felonynet" || got.AreaTag != "FEL.GENERAL" || got.Origin != "Test Origin" {
+		got.Network != "felonynet" || got.AreaTag != "fel.general" || got.Origin != "Test Origin" {
 		t.Errorf("first wire message = %+v", got)
 	}
 	if got := net.sent[1].Body; got != "posted by helper" {
@@ -104,6 +108,30 @@ func TestOutbound_RetriesFailedSend(t *testing.T) {
 	net.fail = nil
 	if n := out.SweepNow(); n != 1 || len(net.sent) != 1 {
 		t.Fatalf("after recovery: sent %d (%d on wire), want 1", n, len(net.sent))
+	}
+}
+
+// Every attempt at a post carries the same valid UUID, so a hub that stored
+// a post whose response was lost drops the retry as a duplicate.
+func TestOutbound_RetryKeepsUUID(t *testing.T) {
+	mm, net, out := newOutboundTest(t)
+	if _, err := mm.AddMessage(1, "Bob", "All", "s", "hi", ""); err != nil {
+		t.Fatal(err)
+	}
+	var attempts []string
+	net.fail = errors.New("response lost")
+	net.onSend = func(m protocol.Message) { attempts = append(attempts, m.MsgUUID) }
+	out.SweepNow()
+	net.fail = nil
+	out.SweepNow()
+	if len(attempts) != 2 || attempts[0] != attempts[1] {
+		t.Fatalf("attempt UUIDs = %v, want two identical", attempts)
+	}
+	if err := net.sent[0].Validate(); err != nil {
+		t.Errorf("wire message invalid: %v", err)
+	}
+	if net.sent[0].ThreadUUID != net.sent[0].MsgUUID {
+		t.Errorf("ThreadUUID %q != MsgUUID %q", net.sent[0].ThreadUUID, net.sent[0].MsgUUID)
 	}
 }
 

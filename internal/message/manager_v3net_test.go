@@ -31,7 +31,7 @@ func newV3NetTestManager(t *testing.T) *MessageManager {
 
 func pendingIn(t *testing.T, mm *MessageManager, areaID int) []int {
 	t.Helper()
-	p, _, err := mm.PendingOutbound(areaID, 1)
+	p, err := mm.PendingOutbound(areaID)
 	if err != nil {
 		t.Fatalf("PendingOutbound(%d): %v", areaID, err)
 	}
@@ -69,32 +69,74 @@ func TestPendingOutbound_WhatIsPending(t *testing.T) {
 	}
 }
 
-func TestPendingOutbound_MarkSentAndNext(t *testing.T) {
+func TestPendingOutbound_MarkSentAndPointer(t *testing.T) {
 	mm := newV3NetTestManager(t)
 	for i := 0; i < 3; i++ {
 		if _, err := mm.AddMessage(1, "Bob", "All", "s", "body", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := mm.MarkMessageSent(1, 1); err != nil {
-		t.Fatal(err)
+	for _, n := range []int{1, 3} {
+		if err := mm.MarkMessageSent(1, n); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := mm.MarkMessageSent(1, 3); err != nil {
-		t.Fatal(err)
+	if got := pendingIn(t, mm, 1); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("pending = %v, want [2]", got)
 	}
-	pending, next, err := mm.PendingOutbound(1, 1)
-	if err != nil || len(pending) != 1 || pending[0] != 2 || next != 2 {
-		t.Fatalf("pending=%v next=%d err=%v, want [2] next 2", pending, next, err)
+	if got := scanPointer(t, mm, 1); got != 1 {
+		t.Errorf("scan pointer = %d, want 1 (just before the pending post)", got)
 	}
 	if err := mm.MarkMessageSent(1, 2); err != nil {
 		t.Fatal(err)
 	}
-	pending, next, _ = mm.PendingOutbound(1, next)
-	if len(pending) != 0 || next != 4 {
-		t.Errorf("after all sent: pending=%v next=%d, want none, next 4", pending, next)
+	if got := pendingIn(t, mm, 1); len(got) != 0 {
+		t.Errorf("after all sent: pending = %v", got)
 	}
-	// A scan point past the end (as after a pack) starts over.
-	if _, next, _ = mm.PendingOutbound(1, 99); next != 4 {
-		t.Errorf("stale from: next=%d, want 4", next)
+	if got := scanPointer(t, mm, 1); got != 3 {
+		t.Errorf("scan pointer = %d, want 3", got)
+	}
+}
+
+func scanPointer(t *testing.T, mm *MessageManager, areaID int) int {
+	t.Helper()
+	b, err := mm.GetBase(areaID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = b.Close() }()
+	lr, err := b.GetLastRead(V3NetOutboundScanner)
+	if err != nil {
+		t.Fatalf("GetLastRead: %v", err)
+	}
+	return int(lr.LastReadMsg)
+}
+
+// A pack that removes messages below a pending post renumbers it; the scan
+// pointer is a lastread record, so the pack moves it too and the post is
+// still found (Codex review on #685).
+func TestPendingOutbound_SurvivesPack(t *testing.T) {
+	mm := newV3NetTestManager(t)
+	for i := 0; i < 3; i++ {
+		if _, err := mm.AddMessage(1, "Bob", "All", "s", "body", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, n := range []int{1, 2} {
+		if err := mm.MarkMessageSent(1, n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := pendingIn(t, mm, 1); len(got) != 1 || got[0] != 3 {
+		t.Fatalf("pending = %v, want [3]", got)
+	}
+	if err := mm.DeleteMessage(1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := mm.PackAndLinkArea(1); err != nil {
+		t.Fatal(err)
+	}
+	if got := pendingIn(t, mm, 1); len(got) != 1 || got[0] != 2 {
+		t.Errorf("after pack: pending = %v, want [2]", got)
 	}
 }
