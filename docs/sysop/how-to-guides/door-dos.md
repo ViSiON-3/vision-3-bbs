@@ -101,7 +101,7 @@ Connect over SSH, open the doors menu and press **L**. If you also set up the Ja
 
 **Blank screen, then back to the menu.** dosemu2 did not start. Check the path under **System Setup → DOS Emulation** and look for `dosemu_boot.log` in `doors/drive_c/nodes/temp1/`.
 
-**The game starts and immediately hangs, or ignores keys.** It is waiting on COM1 and no FOSSIL driver answered. Make sure `X00.EXE` is at the path in **FOSSIL Driver** and that `~/.dosemu/.dosemurc` contains `$_com1 = "virtual"`. Running `./setup.sh` again restores the template.
+**The game starts and immediately hangs, or ignores keys.** It is waiting on COM1 and no FOSSIL driver answered. Make sure `X00.EXE` is at the path in **FOSSIL Driver**. If the door loads its own FOSSIL driver and **FOSSIL Driver** is blank, give the door a **DOSemu Config** file that contains `$_com1 = "virtual"`.
 
 **"Bad command or file name".** A DOS path is wrong. Remember the C: drive is `doors/drive_c/` and paths inside it are DOS paths with backslashes.
 

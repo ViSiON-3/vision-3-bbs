@@ -78,7 +78,7 @@ Optional keys with nothing to report are left out: `SYS_QWKID` needs an explicit
 
 `IDLE_LIMIT` is the [idle timeout](#idle-timeout) in seconds, so a door can warn the user before it runs out; it is left out for CoSysOps and above, who are exempt. One key the draft defines is never written: `SYS_FTN_ADDR` lists the board's FTN addresses with the primary one first, and FTN networks aren't configured with a primary.
 
-- **`COMM_TYPE`** is `stdio` for a native door, `socket` with `COMM_HANDLE=3` in [SOCKET](#socket) I/O mode, and `fossil` with `COMM_PORT=1` for a DOS door with a **FOSSIL Driver**. A DOS door without one reads and writes the DOS console, which is reported as `stdio`.
+- **`COMM_TYPE`** is `stdio` for a native door, `socket` with `COMM_HANDLE=3` in [SOCKET](#socket) I/O mode, and `fossil` with `COMM_PORT=1` for a DOS door with a **FOSSIL Driver** or a `dosemu_config` that sets `$_com1 = "virtual"`. A DOS door without one reads and writes the DOS console, which is reported as `stdio`.
 - **`COMM_CHARSET`** is the caller's terminal encoding, `CP437` or `UTF-8`, because the BBS relays a door's bytes untranslated. A DOS door without a FOSSIL driver always gets `CP437`, since dosemu2 translates its screen.
 - **`USER_ROLE`** is `sysop` or `cosysop` when the user's access level reaches `sysOpLevel` or `coSysOpLevel`, otherwise `user`.
 - **`TERM_TERMINFO`** is the terminal type the caller's client sent, through Telnet TERMINAL-TYPE or the SSH pty request, such as `xterm-256color`, for doors that use curses or terminfo.
@@ -230,7 +230,7 @@ Set `is_dos: true` to run a 16-bit DOS door game via dosemu2.
 | `drive_c_path` | string | Host path mounted as DOS C: drive. Relative paths are resolved against the BBS root directory. Default: `doors/drive_c` (blank falls back to `~/.dosemu/drive_c`) |
 | `dos_emulator` | string | Emulator selection: `""` or `"auto"` (default), `"dosemu"` |
 | `fossil_driver` | string | DOS FOSSIL driver command to load before the door (e.g., `C:\UTILS\X00.EXE eliminate`). Loaded in EXTERNAL.BAT before `cls` and the door commands |
-| `dosemu_config` | string | Path to a custom `.dosemurc` config file. If blank, the user's `~/.dosemu/.dosemurc` is used as a base with per-node overrides appended |
+| `dosemu_config` | string | Path to a custom `.dosemurc` config file. If blank, the user's `~/.dosemu/.dosemurc` is used as a base with per-node overrides appended. A custom config that sets `$_com1 = "virtual"` runs the door in serial (FOSSIL) mode even with `fossil_driver` blank |
 
 ### Global DOS Settings
 
@@ -360,7 +360,9 @@ Most DOS BBS door games communicate via COM1 serial I/O using the FOSSIL (INT 14
 
 The FOSSIL driver is loaded in EXTERNAL.BAT before `cls` and the door commands. The `eliminate` parameter tells X00.EXE to remove any previous instance before installing.
 
-dosemu2's `$_com1 = "virtual"` maps COM1 to the controlling PTY, enabling FOSSIL-based door games to communicate with the SSH session.
+dosemu2's `$_com1 = "virtual"` maps COM1 to the controlling PTY, enabling FOSSIL-based door games to communicate with the SSH session. ViSiON/3 adds it to the per-node `dosemurc`, along with `$_video = "none"`, and runs dosemu2 without `-t`, so the door's output reaches the caller only through COM1.
+
+A door that loads its own FOSSIL driver from **Commands**, or drives the serial port itself, can leave **FOSSIL Driver** blank and set `$_com1 = "virtual"` in its own `dosemu_config` file instead. That puts the door in the same serial mode. Any other `$_com1` line in the base config is dropped, and the door runs in terminal mode. This includes the `$_com1 = "virtual"` in the shared `~/.dosemu/.dosemurc`, which the installed template sets for all doors.
 
 ### dosemu2 Configuration
 
@@ -375,7 +377,7 @@ ViSiON/3 generates a per-node `dosemurc` file with these settings:
 | `$_term_color` | `(on)` | Enables ANSI terminal color translation |
 | `$_term_esc_char` | `(27)` | Sets ESC as the ANSI escape character |
 
-If a base `~/.dosemu/.dosemurc` exists, it is loaded first and these settings are appended. Key settings like `$_com1 = "virtual"` and CP437 character set configuration should be in the base dosemurc.
+The base config is the door's `dosemu_config` if set, otherwise `~/.dosemu/.dosemurc` if it exists. It is loaded first, with its `$_com1`, `$_hdimage`, `$_video` and `$_vga` lines removed, and these settings are appended. Settings the BBS does not manage, such as the CP437 character set configuration, belong in the base dosemurc. `$_com1` is managed by the BBS: see [FOSSIL Driver](#fossil-driver).
 
 ### Boot Text Suppression
 
@@ -437,11 +439,10 @@ $_term_updfreq = (8)
 $_layout = "us"
 $_rawkeyboard = (auto)
 $_mouse_internal = (on)
-$_com1 = "virtual"
 $_sound = (off)
 ```
 
-The `$_external_char_set` and `$_internal_char_set` must be `"cp437"` for DOS door ANSI art to render correctly. The `$_com1 = "virtual"` setting maps COM1 to the controlling terminal for FOSSIL driver communication.
+The `$_external_char_set` and `$_internal_char_set` must be `"cp437"` for DOS door ANSI art to render correctly. A `$_com1` line here has no effect, because the BBS sets COM1 for each door: set **FOSSIL Driver** on the door, or give it a `dosemu_config` with `$_com1 = "virtual"`.
 
 ## Environment Variables
 
