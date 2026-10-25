@@ -2,11 +2,12 @@ package config
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -86,17 +87,88 @@ func LoadEventsConfig(configPath string) (EventsConfig, error) {
 // "go run .../cmd/v3mail". A --dry-run purge deletes nothing, so it does
 // not count.
 func (c EventsConfig) RunsMessagePurge() bool {
+	byID := make(map[string]EventConfig, len(c.Events))
 	for _, ev := range c.Events {
-		// The scheduler skips an event with no trigger.
-		if !ev.Enabled || (ev.Schedule == "" && ev.RunAfter == "" && !ev.RunAtStartup) {
+		byID[ev.ID] = ev
+	}
+	chaining := !c.hasChainCycle(byID)
+	for _, ev := range c.Events {
+		if !triggered(ev, byID, chaining) {
 			continue
 		}
-		if args, ok := v3mailArgs(ev.Command, ev.Args); ok && len(args) > 0 && args[0] == "purge" &&
-			boolFlag(args[1:], "all") && !boolFlag(args[1:], "dry-run") {
+		if args, ok := v3mailArgs(ev.Command, ev.Args); ok && len(args) > 0 && args[0] == "purge" && purgeEnforcesLimits(args[1:]) {
 			return true
 		}
 	}
 	return false
+}
+
+// triggered reports whether the scheduler will ever start ev: it is enabled
+// and has a schedule or runs at startup, or follows (run_after) an event
+// that is triggered itself. A missing or disabled event in the chain, or
+// chaining switched off (a cycle anywhere), means a chained event never
+// runs.
+func triggered(ev EventConfig, byID map[string]EventConfig, chaining bool) bool {
+	seen := map[string]bool{}
+	for {
+		if !ev.Enabled {
+			return false
+		}
+		if ev.Schedule != "" || ev.RunAtStartup {
+			return true
+		}
+		if !chaining || ev.RunAfter == "" || seen[ev.ID] {
+			return false
+		}
+		seen[ev.ID] = true
+		parent, ok := byID[ev.RunAfter]
+		if !ok {
+			return false
+		}
+		ev = parent
+	}
+}
+
+// hasChainCycle reports whether the enabled events' run_after links form a
+// cycle, which makes the scheduler switch chaining off for every event.
+func (c EventsConfig) hasChainCycle(byID map[string]EventConfig) bool {
+	for _, ev := range c.Events {
+		seen := map[string]bool{}
+		for cur := ev; cur.Enabled && cur.RunAfter != ""; {
+			if seen[cur.ID] {
+				return true
+			}
+			seen[cur.ID] = true
+			next, ok := byID[cur.RunAfter]
+			if !ok {
+				break
+			}
+			cur = next
+		}
+	}
+	return false
+}
+
+// purgeEnforcesLimits reports whether v3mail purge, given args (after the
+// subcommand), applies the areas' configured limits: --all is set and
+// --dry-run is not. The flags mirror cmdPurge's in cmd/v3mail, parsed the
+// way it parses them, so the scan stops where v3mail's does (the first
+// positional argument, or "--"); arguments it would reject count as no
+// purge, since v3mail exits on them.
+func purgeEnforcesLimits(args []string) bool {
+	fs := flag.NewFlagSet("purge", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	all := fs.Bool("all", false, "")
+	fs.String("config", "", "")
+	fs.String("data", "", "")
+	fs.Bool("q", false, "")
+	fs.Int("days", 0, "")
+	fs.Int("keep", 0, "")
+	dryRun := fs.Bool("dry-run", false, "")
+	if err := fs.Parse(args); err != nil {
+		return false
+	}
+	return *all && !*dryRun
 }
 
 // v3mailArgs returns v3mail's own arguments when command runs v3mail,
@@ -122,25 +194,4 @@ func isV3mailPath(path string) bool {
 func commandBase(path string) string {
 	path = strings.TrimRight(path, `/\`)
 	return strings.ToLower(path[strings.LastIndexAny(path, `/\`)+1:])
-}
-
-// boolFlag reports whether args set the boolean flag name to true, in any
-// form Go's flag package accepts (-name, --name, -name=true).
-func boolFlag(args []string, name string) bool {
-	set := false
-	for _, a := range args {
-		if !strings.HasPrefix(a, "-") {
-			continue
-		}
-		key, val, hasVal := strings.Cut(strings.TrimLeft(a, "-"), "=")
-		if key != name {
-			continue
-		}
-		set = true
-		if hasVal {
-			b, err := strconv.ParseBool(val)
-			set = err == nil && b
-		}
-	}
-	return set
 }
