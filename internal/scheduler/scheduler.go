@@ -10,6 +10,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/robfig/cron/v3"
@@ -17,14 +18,25 @@ import (
 
 // Scheduler manages scheduled event execution
 type Scheduler struct {
-	config         config.EventsConfig
-	cron           *cron.Cron
-	history        map[string]*EventHistory
-	historyPath    string
-	runningEvents  map[string]bool
+	config        config.EventsConfig
+	cron          *cron.Cron
+	history       map[string]*EventHistory
+	historyPath   string
+	runningEvents map[string]bool
+	// waitingEvents holds events that fired while every concurrency slot
+	// was taken and are waiting for one (runWithSlot). A waiting event
+	// counts as an instance for the one-run-per-event rule.
+	waitingEvents map[string]bool
+	// stopCh is closed when Stop begins, releasing events still waiting
+	// for a slot without cancelling the ones already running.
+	stopCh         chan struct{}
+	stopOnce       sync.Once
 	mu             sync.RWMutex
 	concurrencySem chan struct{}
-	startupWg      sync.WaitGroup
+	// semReplaced is closed (and remade) when Reload replaces
+	// concurrencySem, so events waiting on the old one retry on the new.
+	semReplaced chan struct{}
+	startupWg   sync.WaitGroup
 	// chainWg tracks in-flight chained events (including those still in their
 	// delay) so Stop drains them rather than leaving them to fire into a
 	// cancelled context.
@@ -71,7 +83,10 @@ func NewScheduler(cfg config.EventsConfig, historyPath string) *Scheduler {
 		history:        history,
 		historyPath:    historyPath,
 		runningEvents:  make(map[string]bool),
+		waitingEvents:  make(map[string]bool),
+		stopCh:         make(chan struct{}),
 		concurrencySem: make(chan struct{}, cfg.MaxConcurrentEvents),
+		semReplaced:    make(chan struct{}),
 		chainingOK:     validateChains(cfg.Events),
 		ctx:            ctx,
 		cancel:         cancel,
@@ -185,6 +200,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 func (s *Scheduler) Stop() {
 	s.mu.Lock()
 	s.stopping = true
+	s.stopOnce.Do(func() { close(s.stopCh) })
 	c := s.cron
 	preStartCancel := s.preStartCancel
 	s.mu.Unlock()
@@ -216,8 +232,12 @@ func (s *Scheduler) Stop() {
 	// rather than waits for work.
 	s.chainWg.Wait()
 
-	// Save history
-	if err := SaveHistory(s.historyPath, s.history); err != nil {
+	// Save history. Under the lock: a firing released from waiting for a
+	// slot records its skip on the way out, and may still be doing so.
+	s.mu.RLock()
+	err := SaveHistory(s.historyPath, s.history)
+	s.mu.RUnlock()
+	if err != nil {
 		slog.Error("failed to save event history", "error", err)
 	} else {
 		slog.Info("event history saved", "path", s.historyPath)
@@ -286,6 +306,10 @@ func (s *Scheduler) Reload(cfg config.EventsConfig) {
 		// so the old one drains harmlessly. Until they finish, total
 		// concurrency can briefly exceed the new limit.
 		s.concurrencySem = make(chan struct{}, cfg.MaxConcurrentEvents)
+		// Events waiting for a slot move to the new semaphore: a raised
+		// limit has room the old one never frees.
+		close(s.semReplaced)
+		s.semReplaced = make(chan struct{})
 	}
 	s.config = cfg
 	s.cron = newCron
@@ -350,12 +374,19 @@ func (s *Scheduler) executeChain(event config.EventConfig, depth int) {
 // event ran at all, and returns the context it ran under for anything that
 // follows it. The slot and the running mark are released by the time it
 // returns.
+//
+// An event that fires while every slot is taken waits for one, for up to its
+// timeout_seconds (with none, until shutdown). It used to be dropped, with a
+// warning and nothing in its history: a nightly purge that fired on the same
+// minute as the hub polls and the scan was lost for the night, and the
+// sysop's areas grew past their limits with no sign why (#694). An event
+// that is skipped anyway is recorded in its history.
 func (s *Scheduler) runWithSlot(event config.EventConfig) (context.Context, bool) {
-	// Atomically check if event is already running and try to acquire semaphore
 	s.mu.Lock()
-	if s.runningEvents[event.ID] {
+	if s.runningEvents[event.ID] || s.waitingEvents[event.ID] {
 		s.mu.Unlock()
 		slog.Warn("event skipped: already running", "id", event.ID, "name", event.Name)
+		s.recordSkip(event.ID, skipAlreadyRunning)
 		return nil, false
 	}
 
@@ -367,20 +398,31 @@ func (s *Scheduler) runWithSlot(event config.EventConfig) (context.Context, bool
 	maxConcurrent := s.config.MaxConcurrentEvents
 	ctx := s.ctx // never nil: NewScheduler sets a pre-start context
 
-	// Try to acquire concurrency semaphore while holding the lock
 	select {
 	case sem <- struct{}{}:
 		// Acquired slot, mark as running before releasing lock
 		s.runningEvents[event.ID] = true
 		s.mu.Unlock()
-		defer func() { <-sem }()
 	default:
+		s.waitingEvents[event.ID] = true
 		s.mu.Unlock()
-		// At concurrency limit, skip execution
-		slog.Warn("event skipped: max concurrent events reached",
+		slog.Info("event waiting for a free slot: max concurrent events reached",
 			"id", event.ID, "name", event.Name, "max_concurrent", maxConcurrent)
-		return nil, false
+		var reason string
+		sem, reason = s.waitForSlot(ctx, event)
+		s.mu.Lock()
+		delete(s.waitingEvents, event.ID)
+		if reason == "" {
+			s.runningEvents[event.ID] = true
+		}
+		s.mu.Unlock()
+		if reason != "" {
+			slog.Warn("event skipped: "+reason, "id", event.ID, "name", event.Name, "max_concurrent", maxConcurrent)
+			s.recordSkip(event.ID, reason)
+			return nil, false
+		}
 	}
+	defer func() { <-sem }()
 
 	defer func() {
 		s.mu.Lock()
@@ -394,4 +436,51 @@ func (s *Scheduler) runWithSlot(event config.EventConfig) (context.Context, bool
 	// Update history
 	s.updateHistory(result)
 	return ctx, true
+}
+
+// Reasons an event is skipped, as recorded in its history.
+const (
+	skipAlreadyRunning = "already running"
+	skipNoSlot         = "no free slot within its timeout"
+	skipStopping       = "scheduler stopping"
+)
+
+// waitForSlot waits for a concurrency slot for event, for up to its timeout
+// (with none, until shutdown). It returns the semaphore the slot was taken
+// from, which the caller releases into, or why it gave up. It follows
+// Reload's replacement of the semaphore, and gives back a slot freed as
+// shutdown begins.
+func (s *Scheduler) waitForSlot(ctx context.Context, event config.EventConfig) (chan struct{}, string) {
+	var timeout <-chan time.Time
+	if event.TimeoutSeconds > 0 {
+		t := time.NewTimer(time.Duration(event.TimeoutSeconds) * time.Second)
+		defer t.Stop()
+		timeout = t.C
+	}
+	for {
+		s.mu.RLock()
+		sem, replaced := s.concurrencySem, s.semReplaced
+		s.mu.RUnlock()
+		select {
+		case sem <- struct{}{}:
+			select {
+			case <-s.stopCh:
+				<-sem
+				return nil, skipStopping
+			case <-ctx.Done():
+				<-sem
+				return nil, skipStopping
+			default:
+				return sem, ""
+			}
+		case <-replaced:
+			continue
+		case <-s.stopCh:
+			return nil, skipStopping
+		case <-ctx.Done():
+			return nil, skipStopping
+		case <-timeout:
+			return nil, skipNoSlot
+		}
+	}
 }

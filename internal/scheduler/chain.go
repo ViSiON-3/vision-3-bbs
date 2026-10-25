@@ -92,8 +92,10 @@ func joinPath(path []string) string {
 // rather than half of it, so the scheduler's behaviour matches the warning.
 func validateChains(events []config.EventConfig) bool {
 	known := make(map[string]bool, len(events))
+	enabled := make(map[string]bool, len(events))
 	for _, e := range events {
 		known[e.ID] = true
+		enabled[e.ID] = e.Enabled
 	}
 	for _, e := range events {
 		if e.RunAfter == "" {
@@ -105,6 +107,11 @@ func validateChains(events []config.EventConfig) bool {
 				"id", e.ID, "name", e.Name)
 		case !known[e.RunAfter]:
 			slog.Warn("event run_after names an event that does not exist; it will never be chained",
+				"id", e.ID, "name", e.Name, "run_after", e.RunAfter)
+		case e.Enabled && !enabled[e.RunAfter] && e.Schedule == "" && !e.RunAtStartup:
+			// The nightly purge and pack follow the fix event: enabling
+			// them without it leaves them never running.
+			slog.Warn("event runs after a disabled event and has no schedule of its own; it will never run — enable the event it follows",
 				"id", e.ID, "name", e.Name, "run_after", e.RunAfter)
 		}
 	}

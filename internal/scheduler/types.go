@@ -25,4 +25,9 @@ type EventHistory struct {
 	RunCount     int       `json:"run_count"`
 	SuccessCount int       `json:"success_count"`
 	FailureCount int       `json:"failure_count"`
+	// SkipCount counts firings that did not run: the event was already
+	// running, or no concurrency slot came free within its timeout.
+	SkipCount      int       `json:"skip_count,omitempty"`
+	LastSkipped    time.Time `json:"last_skipped,omitzero"`
+	LastSkipReason string    `json:"last_skip_reason,omitempty"`
 }

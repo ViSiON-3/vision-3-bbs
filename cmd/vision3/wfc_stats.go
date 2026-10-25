@@ -137,12 +137,16 @@ func schedulerEvents(s *scheduler.Scheduler, now time.Time) []admin.ScheduledEve
 			Enabled:        st.Enabled,
 			RunAtStartup:   st.RunAtStartup,
 			Running:        st.Running,
+			Waiting:        st.Waiting,
 			NextRun:        st.NextRun,
 			LastRun:        st.LastRun,
 			LastStatus:     st.LastStatus,
 			LastDurationMs: st.LastDurationMs,
 			RunCount:       st.RunCount,
 			FailureCount:   st.FailureCount,
+			SkipCount:      st.SkipCount,
+			LastSkipped:    st.LastSkipped,
+			LastSkipReason: st.LastSkipReason,
 		})
 	}
 	return out

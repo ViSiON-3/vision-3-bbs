@@ -361,13 +361,15 @@ This creates a workflow:
 
 ### Nightly Message Base Maintenance
 
-ViSiON/3 uses `v3mail` for JAM message base maintenance. The recommended nightly sequence runs in three stages:
+ViSiON/3 uses `v3mail` for JAM message base maintenance. The recommended nightly sequence runs in three stages, chained with `run_after` so each starts when the one before it finishes:
 
-| Time | Stage | Purpose |
+| When | Stage | Purpose |
 |------|-------|---------|
-| 2:00 AM | `fix --repair --all` | Check integrity and repair malformed headers |
-| 2:15 AM | `purge --all` | Remove messages exceeding per-area age/count limits |
-| 2:30 AM | `pack --all` | Defragment bases and reclaim space from deleted messages |
+| 2:03 AM | `fix --repair --all` | Check integrity and repair malformed headers |
+| After fix | `purge --all` | Remove messages exceeding per-area age/count limits |
+| After purge | `pack --all` | Defragment bases and reclaim space from deleted messages |
+
+The fix runs at 2:03 because no poll, toss, scan or pack event in the template fires on that minute. Enable all three: purge and pack have no schedule of their own, so with the fix disabled they never run (the BBS logs a warning at startup when that happens).
 
 Purge limits (`max_age`, `max_messages`) are configured per area in `message_areas.json`. See [Message Purge Configuration](messages/message-areas.md#message-purge-configuration) for details.
 
@@ -377,7 +379,7 @@ Purge limits (`max_age`, `max_messages`) are configured per area in `message_are
     {
       "id": "nightly_msgbase_fix",
       "name": "Nightly Message Base Integrity Check",
-      "schedule": "0 2 * * *",
+      "schedule": "3 2 * * *",
       "command": "/usr/bin/go",
       "args": ["run", "{BBS_ROOT}/cmd/v3mail", "fix", "--repair", "--all"],
       "working_directory": "{BBS_ROOT}",
@@ -387,7 +389,7 @@ Purge limits (`max_age`, `max_messages`) are configured per area in `message_are
     {
       "id": "nightly_msgbase_purge",
       "name": "Nightly Message Base Purge",
-      "schedule": "15 2 * * *",
+      "run_after": "nightly_msgbase_fix",
       "comment": "Purge limits are read from max_age/max_messages in message_areas.json",
       "command": "/usr/bin/go",
       "args": ["run", "{BBS_ROOT}/cmd/v3mail", "purge", "--all"],
@@ -398,7 +400,7 @@ Purge limits (`max_age`, `max_messages`) are configured per area in `message_are
     {
       "id": "nightly_msgbase_pack",
       "name": "Nightly Message Base Pack",
-      "schedule": "30 2 * * *",
+      "run_after": "nightly_msgbase_purge",
       "command": "/usr/bin/go",
       "args": ["run", "{BBS_ROOT}/cmd/v3mail", "pack", "--all"],
       "working_directory": "{BBS_ROOT}",
@@ -490,8 +492,9 @@ Event execution is logged to the BBS log with the following patterns:
 - `INFO: Event 'event_id' (Event Name) completed in 1.234s (exit code: 0)`
 - `ERROR: Event 'event_id' (Event Name) failed with exit code 1`
 - `ERROR: Event 'event_id' (Event Name) timed out after 300s`
-- `WARN: Event 'event_id' (Event Name) skipped: already running`
-- `WARN: Event 'event_id' (Event Name) skipped: max concurrent events reached (3)`
+- `INFO: event waiting for a free slot: max concurrent events reached`
+- `WARN: event skipped: already running`
+- `WARN: event skipped: no free slot within its timeout`
 
 Debug output (stdout/stderr) is logged at DEBUG level when events complete.
 
@@ -504,9 +507,9 @@ The scheduler includes two levels of concurrency control:
 
 ### Behavior
 
-- If an event is scheduled to run but is already executing, it is skipped
-- If the global concurrency limit is reached, new events are skipped
-- Skipped executions are logged as warnings
+- If an event is due but is already running (or already waiting for a slot), that run is skipped
+- If the global concurrency limit is reached, the event waits for a free slot, for up to its `timeout_seconds` (with no timeout, until shutdown), and then runs. If no slot frees up in that time, the run is skipped
+- Skipped runs are logged as warnings and counted in the event's history: the WFC console's Events tab shows **Skipped** and **Last Skipped** (with the reason) in the event's details, and an event that is waiting shows as `waiting for slot`
 
 ### Example
 
@@ -517,7 +520,7 @@ Time  Event A  Event B  Event C  Result
 ----  -------  -------  -------  ------
 0:00  Start    -        -        A runs (1/2 slots)
 0:01  Running  Start    -        B runs (2/2 slots)
-0:02  Running  Running  Start    C skipped (limit reached)
+0:02  Running  Running  Due      C waits (limit reached)
 0:03  Done     Running  Start    C runs (A freed slot)
 ```
 

@@ -89,12 +89,16 @@ type ScheduledEvent struct {
 	Enabled        bool      `json:"enabled"`
 	RunAtStartup   bool      `json:"runAtStartup,omitempty"`
 	Running        bool      `json:"running"`
+	Waiting        bool      `json:"waiting,omitempty"` // fired while every slot was taken
 	NextRun        time.Time `json:"nextRun,omitzero"`
 	LastRun        time.Time `json:"lastRun,omitzero"`
 	LastStatus     string    `json:"lastStatus,omitempty"` // success | failure | timeout
 	LastDurationMs int64     `json:"lastDurationMs,omitempty"`
 	RunCount       int       `json:"runCount"`
 	FailureCount   int       `json:"failureCount"`
+	SkipCount      int       `json:"skipCount,omitempty"`
+	LastSkipped    time.Time `json:"lastSkipped,omitzero"`
+	LastSkipReason string    `json:"lastSkipReason,omitempty"`
 }
 
 // EventType enumerates diff-synthesized event kinds.
