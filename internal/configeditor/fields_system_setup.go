@@ -100,6 +100,11 @@ func sysFieldsDefaults(cfg *config.ServerConfig) []fieldDef {
 				return nil
 			},
 		},
+		{
+			Label: "Twit Lists", Help: "Let callers keep personal Twit Lists that hide authors' messages (saved lists are kept while off)", Type: ftYesNo, Col: 3, Row: 5, Width: 1,
+			Get: func() string { return uitext.BoolToYN(cfg.TwitListsOn()) },
+			Set: func(val string) error { on := uitext.YNToBool(val); cfg.TwitListEnabled = &on; return nil },
+		},
 	}
 	row := len(fields) + 1
 	fields = append(fields,

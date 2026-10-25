@@ -670,6 +670,9 @@ func stringCatalog() []StringEntry {
 		{Label: "Twit: SaveFailed", Key: "twitSaveFailed", Description: "Error when an edit could not be saved"},
 		{Label: "Twit: Anonymous", Key: "twitAnonymous", Description: "Refusal when quick-adding an anonymous author"},
 		{Label: "Twit: HiddenSummary", Key: "twitHiddenSummary", Description: "Shown after a newscan that hid messages (%d=count)"},
+		{Label: "Twit: Empty", Key: "twitEmpty", Description: "Shown in place of the list when it has no entries"},
+		{Label: "Twit: Page", Key: "twitPage", Description: "Page line when the list spans screens (%d=page, %d=pages)"},
+		{Label: "Twit: Disabled", Key: "twitDisabled", Description: "Shown when the sysop has turned Twit Lists off"},
 
 		{Label: "Twit: Label", Key: "konfigTwitListLabel", Description: "User configuration field label"},
 		{Label: "Twit: Help", Key: "konfigTwitListHelp", Description: "User configuration field help"},

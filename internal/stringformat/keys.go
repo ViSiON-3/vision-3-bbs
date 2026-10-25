@@ -112,6 +112,7 @@ var FormattedKeys = []string{
 	"timeLimitWarning",
 	"twitHeader",
 	"twitHiddenSummary",
+	"twitPage",
 	"twitQuickConfirm",
 	"updatePtrsSuccess",
 	"v3netNewAreaDeclined",

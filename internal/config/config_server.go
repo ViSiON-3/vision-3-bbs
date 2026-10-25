@@ -15,6 +15,10 @@ import (
 
 // ServerConfig defines server-wide settings
 type ServerConfig struct {
+	// TwitListEnabled turns per-user Twit Lists on board-wide; read it
+	// through TwitListsOn. nil (the key omitted) means on, so upgraded
+	// boards keep filtering. Saved lists are kept while it is off.
+	TwitListEnabled          *bool  `json:"twitListEnabled,omitempty"`
 	TwitListMax              int    `json:"twitListMax"`     // <=0 defaults to 50
 	TwitExemptLevel          int    `json:"twitExemptLevel"` // <=0 uses SysOpLevel
 	BoardName                string `json:"boardName"`
@@ -280,6 +284,12 @@ func ParseServerConfig(data []byte) (ServerConfig, error) {
 	}
 	config.SanitizeDoorMenu()
 	return config, nil
+}
+
+// TwitListsOn reports whether callers may keep Twit Lists and have them
+// applied. Omitting twitListEnabled leaves the feature on.
+func (c ServerConfig) TwitListsOn() bool {
+	return c.TwitListEnabled == nil || *c.TwitListEnabled
 }
 
 // LoadServerConfig loads the server configuration from config.json

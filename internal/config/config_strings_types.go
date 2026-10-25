@@ -22,6 +22,9 @@ type StringsConfig struct {
 	TwitSaveFailed      string `json:"twitSaveFailed"`
 	TwitAnonymous       string `json:"twitAnonymous"`
 	TwitHiddenSummary   string `json:"twitHiddenSummary"`
+	TwitEmpty           string `json:"twitEmpty"`
+	TwitPage            string `json:"twitPage"`
+	TwitDisabled        string `json:"twitDisabled"`
 
 	ConnectionStr           string `json:"connectionStr"`
 	LockedBaudStr           string `json:"lockedBaudStr"`

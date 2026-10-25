@@ -5,12 +5,27 @@ and choose **M (Twit List)**, or choose **I (Twit List)** from the stock Message
 Custom menus can call `RUN:CFG_TWITLIST`. The current full-screen `USERCONFIG`
 replaces the older `USERCFG` menu mentioned in issue #398.
 
-Use A to add a handle or network name, D to delete an entry by number, C to clear
-with confirmation, and Q to leave. Changes save immediately in the caller's
-`twitList` in `users.json`. They are session preferences, not sysop-owned fields.
-In the message reader, **I** confirms adding the displayed author and immediately
-moves forward. **T** keeps its existing Thread function. Anonymous authors cannot
-be quick-added and anonymous posts are always visible.
+The Twit List opens on its own cleared screen: a header with the entry count
+and limit, the list itself (or a note that it is empty), and a command prompt.
+Type A to add a handle or network name, D to delete an entry by number, C to
+clear with confirmation, and Q (or Enter) to go back to the menu you came from.
+Lists too long for one screen show a page line; N and P move between pages,
+and entry numbers stay the same on every page. After each command the screen
+is repainted with the result (added, removed, refused and why) above the
+prompt. Changes save immediately in the caller's `twitList` in `users.json`.
+They are session preferences, not sysop-owned fields.
+
+In the message reader, **Ignore** on the bottom command bar (hotkey **I**, or
+arrow to it) adds the author of the message on screen. It asks before adding,
+showing the author's name; answering N leaves the list and the message as they
+were. A refusal (yourself, an exempt user, a duplicate, a full list) is shown
+briefly under the prompt and the message is redrawn. After a successful add the author's messages are
+hidden at once and the reader moves to the next visible message; if there is
+none it says so and leaves the reader, as Next does at the end. **T** keeps its
+existing Thread function. Anonymous authors cannot be quick-added and anonymous
+posts are always visible. The quick-add is listed in the reader's ? help.
+On an 80-column screen a sysop's bar (which adds Delete) is too wide for the
+(Reading)/(NewScan) label, so that label is left off rather than wrapping.
 
 An exact local handle is stored by user ID, including handles containing `@`.
 Otherwise, `@` separates a network name from its address. Matching uses
@@ -30,8 +45,28 @@ In `config.json`:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
+| `twitListEnabled` | `true` | Board-wide switch, also **CONFIG → System Setup → Default Settings → Twit Lists**. See below. |
 | `twitListMax` | 50 | Maximum entries; zero or negative uses 50. |
 | `twitExemptLevel` | sysop level | Local users at or above this level cannot be added. Zero or negative uses `sysOpLevel`. Sysops are always exempt. |
+
+### Turning Twit Lists off
+
+`twitListEnabled` controls the feature for the whole board. It is a switch for
+callers' personal lists, not a list of blocked authors. When it is off:
+
+- the reader's Ignore command is removed from the bar and its help, and the I
+  key does nothing;
+- `CFG_TWITLIST` (and so M in USERCONFIG and I in the message menu) shows
+  "Twit Lists are turned off" and returns, and USERCONFIG shows the field as Off;
+- no Twit List filtering is applied anywhere: reading, newscan, message lists,
+  thread search, private mail, and QWK downloads from the terminal and the
+  HTTPS API.
+
+Saved lists are not touched. Turning the switch back on applies them again.
+A `config.json` from before this setting existed has no `twitListEnabled` key;
+that is read as on, so upgraded boards keep the behaviour they had. The menu
+art is static, so the stock MSGMENU still shows [I] Twit List while the feature
+is off; selecting it shows the notice.
 
 You cannot add yourself. Local exemptions are rechecked when the reader/list or
 QWK export builds its matcher; promoted users become visible on the next entry.
@@ -52,5 +87,6 @@ its per-area cap; last-read advances still require a successful packet transfer.
 Filtering does not delete messages, notify authors, block mail delivery, or affect
 pages, node messages, chat, one-liners, rumors, user lists, or last callers.
 
-Prompts, confirmations, errors, and the scan summary are editable through the
+Header, empty-list note, page line, prompts, confirmations, errors, the
+turned-off notice, and the scan summary are editable through the
 `twit*` entries in `strings.json` and the string editor.

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -16,8 +17,12 @@ func twitPolicy(e *MenuExecutor) user.TwitPolicy {
 	return user.TwitPolicy{MaxEntries: cfg.TwitListMax, ExemptLevel: cfg.TwitExemptLevel, SysOpLevel: cfg.SysOpLevel}
 }
 
-// twitMatcher resolves the session list against current local accounts.
+// twitMatcher resolves the session list against current local accounts. It
+// is nil, hiding nothing, while the sysop has Twit Lists turned off.
 func twitMatcher(e *MenuExecutor, um *user.UserMgr, u *user.User) *user.TwitMatcher {
+	if !twitListsOn(e) {
+		return nil
+	}
 	var entries []user.TwitEntry
 	if u != nil {
 		entries = u.TwitList
@@ -28,6 +33,12 @@ func twitMatcher(e *MenuExecutor, um *user.UserMgr, u *user.User) *user.TwitMatc
 		directory = um
 	}
 	return user.BuildTwitMatcher(entries, directory, twitPolicy(e), e.Strings().AnonymousName)
+}
+
+// TwitMatcher is twitMatcher for callers outside the menu package, such as
+// the QWK API, so every export applies the same board settings.
+func (e *MenuExecutor) TwitMatcher(um *user.UserMgr, u *user.User) *user.TwitMatcher {
+	return twitMatcher(e, um, u)
 }
 
 // saveTwitList owns its slice and restores session state when persistence fails.
@@ -41,8 +52,8 @@ func saveTwitList(um *user.UserMgr, u *user.User, entries []user.TwitEntry) erro
 	return nil
 }
 
-// addTwit validates and saves an entry, displaying the result to the caller.
-func addTwit(c *cmdCtx, name string) bool {
+// tryAddTwit validates and saves an entry, returning the message to show.
+func tryAddTwit(c *cmdCtx, name string) (string, bool) {
 	entry, err := user.NewTwitEntry(c.currentUser, c.userManager, name, twitPolicy(c.e))
 	st := c.e.Strings()
 	if err != nil {
@@ -57,82 +68,142 @@ func addTwit(c *cmdCtx, name string) bool {
 		case user.ErrTwitDuplicate:
 			text = st.TwitDuplicate
 		}
-		c.e.writeString(c.terminal, c.outputMode, text)
-		return false
+		return text, false
 	}
 	entries := append(append([]user.TwitEntry(nil), c.currentUser.TwitList...), entry)
 	if err := saveTwitList(c.userManager, c.currentUser, entries); err != nil {
-		c.e.writeString(c.terminal, c.outputMode, st.TwitSaveFailed)
-		return false
+		return st.TwitSaveFailed, false
 	}
-	c.e.writeString(c.terminal, c.outputMode, st.TwitAdded)
-	return true
+	return st.TwitAdded, true
 }
 
-// runCfgTwitList runs the add, delete and clear prompt loop for the caller.
+// addTwit validates and saves an entry, displaying the result to the caller.
+func addTwit(c *cmdCtx, name string) bool {
+	text, ok := tryAddTwit(c, name)
+	c.e.writeString(c.terminal, c.outputMode, text)
+	return ok
+}
+
+// twitListsOn reports whether the sysop has Twit Lists turned on.
+func twitListsOn(e *MenuExecutor) bool {
+	return e.GetServerConfig().TwitListsOn()
+}
+
+// twitScreenReserve is the rows below the entries: a gap, the page line, a
+// notice (blank line plus text) and the prompt.
+const twitScreenReserve = 6
+
+// twitPageSize is how many entries fit between the header and the prompt.
+func twitPageSize(termHeight int, header string) int {
+	if termHeight <= 0 {
+		termHeight = 25
+	}
+	return max(termHeight-strings.Count(header, "\n")-twitScreenReserve, 5)
+}
+
+// drawTwitScreen clears the screen and paints one page of the list with any
+// notice from the last action above the prompt.
+func drawTwitScreen(c *cmdCtx, page int, notice string) int {
+	u, st := c.currentUser, c.e.Strings()
+	perPage := twitPageSize(c.termHeight, st.TwitHeader)
+	pages := max((len(u.TwitList)+perPage-1)/perPage, 1)
+	page = min(max(page, 0), pages-1)
+	terminalio.WriteProcessedBytes(c.terminal, []byte(ansi.ClearScreen()), c.outputMode)
+	c.e.writeStringf(c.terminal, c.outputMode, st.TwitHeader, len(u.TwitList), twitPolicy(c.e).Limit())
+	if len(u.TwitList) == 0 {
+		c.e.writeString(c.terminal, c.outputMode, st.TwitEmpty)
+	}
+	for i := page * perPage; i < min((page+1)*perPage, len(u.TwitList)); i++ {
+		entry := u.TwitList[i]
+		name := entry.Name
+		if entry.Addr != "" {
+			name += "@" + entry.Addr
+		}
+		line := fmt.Sprintf("  %d. %s", i+1, name)
+		// Clip long names so every entry stays on one row of the page.
+		if r := []rune(line); c.termWidth > 1 && len(r) >= c.termWidth {
+			line = string(r[:c.termWidth-1])
+		}
+		// Names are data, not pipe codes or string scripts.
+		terminalio.WriteProcessedBytes(c.terminal, []byte(line+"\r\n"), c.outputMode)
+	}
+	if pages > 1 {
+		c.e.writeStringf(c.terminal, c.outputMode, st.TwitPage, page+1, pages)
+	}
+	c.e.writeString(c.terminal, c.outputMode, notice)
+	c.e.writeString(c.terminal, c.outputMode, st.TwitChoice)
+	return page
+}
+
+// runCfgTwitList runs the full-screen Twit List section: the list, then add,
+// delete, clear and paging commands until the caller quits.
 func runCfgTwitList(c *cmdCtx, args string) (*user.User, string, error) {
 	u := c.currentUser
 	if u == nil {
 		return nil, "", nil
 	}
 	st := c.e.Strings()
+	if !twitListsOn(c.e) {
+		c.e.writeString(c.terminal, c.outputMode, st.TwitDisabled)
+		uiPause(readerNoticePause)
+		return u, "", nil
+	}
 	read := func(prompt string) (string, error) {
 		c.e.writeString(c.terminal, c.outputMode, prompt)
 		return readLineFromSessionIH(c.s, c.terminal)
 	}
+	page, notice := 0, ""
 	for {
-		c.e.writeStringf(c.terminal, c.outputMode, st.TwitHeader, len(u.TwitList), twitPolicy(c.e).Limit())
-		for i, entry := range u.TwitList {
-			name := entry.Name
-			if entry.Addr != "" {
-				name += "@" + entry.Addr
-			}
-			// Names are data, not pipe codes or string scripts.
-			terminalio.WriteProcessedBytes(c.terminal, []byte(fmt.Sprintf("  %d. %s\r\n", i+1, name)), c.outputMode)
-		}
-		choice, err := read(st.TwitChoice)
+		page = drawTwitScreen(c, page, notice)
+		notice = ""
+		choice, err := readLineFromSessionIH(c.s, c.terminal)
 		if err != nil {
 			return u, "LOGOFF", err
 		}
 		switch strings.ToUpper(strings.TrimSpace(choice)) {
 		case "", "Q":
 			return u, "", nil
+		case "N":
+			page++
+		case "P":
+			page--
 		case "A":
 			name, err := read(st.TwitNamePrompt)
 			if err != nil {
 				return u, "LOGOFF", err
 			}
-			addTwit(c, name)
-		case "D", "C":
-			var entries []user.TwitEntry
-			if strings.EqualFold(strings.TrimSpace(choice), "D") {
-				number, err := read(st.TwitDeletePrompt)
-				if err != nil {
-					return u, "LOGOFF", err
-				}
-				n, err := strconv.Atoi(strings.TrimSpace(number))
-				if err != nil || n < 1 || n > len(u.TwitList) {
-					c.e.writeString(c.terminal, c.outputMode, st.TwitInvalid)
-					continue
-				}
-				entries = append(entries, u.TwitList[:n-1]...)
-				entries = append(entries, u.TwitList[n:]...)
-			} else {
-				answer, err := read(st.TwitClearConfirm)
-				if err != nil {
-					return u, "LOGOFF", err
-				}
-				if !strings.EqualFold(strings.TrimSpace(answer), "Y") {
-					continue
-				}
+			if strings.TrimSpace(name) != "" {
+				notice, _ = tryAddTwit(c, name)
 			}
+		case "D":
+			number, err := read(st.TwitDeletePrompt)
+			if err != nil {
+				return u, "LOGOFF", err
+			}
+			n, err := strconv.Atoi(strings.TrimSpace(number))
+			if err != nil || n < 1 || n > len(u.TwitList) {
+				notice = st.TwitInvalid
+				continue
+			}
+			entries := append(append([]user.TwitEntry(nil), u.TwitList[:n-1]...), u.TwitList[n:]...)
+			notice = st.TwitRemoved
 			if err := saveTwitList(c.userManager, u, entries); err != nil {
-				c.e.writeString(c.terminal, c.outputMode, st.TwitSaveFailed)
-			} else if strings.EqualFold(strings.TrimSpace(choice), "D") {
-				c.e.writeString(c.terminal, c.outputMode, st.TwitRemoved)
-			} else {
-				c.e.writeString(c.terminal, c.outputMode, st.TwitCleared)
+				notice = st.TwitSaveFailed
 			}
+		case "C":
+			answer, err := read(st.TwitClearConfirm)
+			if err != nil {
+				return u, "LOGOFF", err
+			}
+			if !strings.EqualFold(strings.TrimSpace(answer), "Y") {
+				continue
+			}
+			notice = st.TwitCleared
+			if err := saveTwitList(c.userManager, u, nil); err != nil {
+				notice = st.TwitSaveFailed
+			}
+		default:
+			notice = st.TwitInvalid
 		}
 	}
 }
@@ -168,6 +239,10 @@ func withTwit(matcher func() *user.TwitMatcher, base msgOwnershipFilter, count *
 
 // editTwitList returns to a freshly painted configuration form on exit.
 func editTwitList(st *konfigState) error {
+	if !twitListsOn(st.c.e) {
+		st.status = strings.TrimSpace(st.c.e.Strings().TwitDisabled)
+		return nil
+	}
 	st.redraw = true
 	_, _, err := runCfgTwitList(st.c, "")
 	return err

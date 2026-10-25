@@ -44,7 +44,7 @@ Choosing **System Setup** (key 1) opens an inner menu of six numbered items, all
 |------|------|--------|
 | 1 | BBS Registration | Board Name, SysOp Name, BBS Location, Timezone, QWK ID |
 | 2 | Server Setup | SSH enabled/host/port/legacy-algorithms, Telnet enabled/host/port, V3Net enabled + keystore/dedup/registry paths, V3Net hub settings, Binkd mailer settings |
-| 3 | Default Settings | Allow New Users (Y/N), Require Email (Y/N), File List Mode (lightbar/classic), Deleted User Retention Days |
+| 3 | Default Settings | Allow New Users (Y/N), Require Email (Y/N), File List Mode (lightbar/classic), Deleted User Retention Days, Twit Lists (Y/N) |
 | 4 | DOS Emulation | DOSemu Path |
 | 5 | Logging | Log Directory, Min Level, Rolling Type, Cache Writes, Max Files, Max Size KB |
 | 6 | QWK Mobile API | Enabled, Host, Port, Cert File, Key File, Token TTL Hours |
@@ -456,7 +456,7 @@ General BBS configuration. All settings in this file are managed through the **S
 |---------------|----------|
 | Board name, sysop name, location, timezone, QWK ID | System Setup → BBS Registration (item 1) |
 | SSH / Telnet ports and enabled flags, V3Net, Binkd | System Setup → Server Setup (item 2) |
-| New user registration, file list mode, retention | System Setup → Default Settings (item 3) |
+| New user registration, file list mode, retention, Twit Lists | System Setup → Default Settings (item 3) |
 | DOSemu binary path | System Setup → DOS Emulation (item 4) |
 | Log directory, level, rotation | System Setup → Logging (item 5) |
 | QWK mobile API listener and TLS files | System Setup → QWK Mobile API (item 6) |
@@ -545,6 +545,7 @@ under Security Levels in `./config`, to silence it.
 - `disableVgaPalette` — Stop loading the VGA color palette into UTF-8 callers' terminals. By default, UTF-8 sessions redefine the terminal's 16 ANSI colors to the exact VGA values and set its default background to black and foreground to light grey (xterm OSC 4/10/11), restoring the terminal's own palette at logoff. Bold colors (pipe codes `|08`-`|15`, `ESC[1;3x` in art) are also sent as explicit bright codes (`ESC[9xm`), since many modern terminals draw bold as a heavier font rather than the bright color. Without this, modern color themes render ANSI art with grey patches wherever explicit black (`ESC[40m`) meets reset cells. CP437 sessions are never affected; terminals without OSC support ignore it (shipped and fallback: `false`)
 - `fileListingMode` — `""` or `"lightbar"` (default) / `"classic"`
 - `deletedUserRetentionDays` — Days to keep soft-deleted user records before `helper users purge` removes them (shipped: `-1`, keep forever; fallback: `30`)
+- `twitListEnabled` — Let callers keep personal [Twit Lists](../messages/twit-list.md) and have them applied. Off hides the reader's Ignore command, refuses the list editor, and stops all Twit List filtering, including QWK downloads; saved lists are kept and apply again when it is turned back on (shipped and fallback: `true`, so a `config.json` without the key keeps Twit Lists on)
 
 **IP Blocklist/Allowlist:**
 
