@@ -17,6 +17,25 @@ import (
 	"golang.org/x/term"
 )
 
+// postingName returns the name u's post in area is signed with: the real
+// name when the area requires one, unless signByHandle (private mail outside
+// netmail, which belongs to the handles on it).
+func postingName(area *message.MessageArea, u *user.User, signByHandle bool) string {
+	if signByHandle {
+		return u.Handle
+	}
+	if area != nil && area.RealNameOnly && !u.HasRealName() {
+		// The area asks for a real name and this account has none, so the
+		// post goes out under the handle. Signup requires one and every
+		// writer now validates it, so this should be unreachable — but it
+		// is the one path that quietly defeats the flag, and a network that
+		// requires real names (FidoNet) would have no way to notice.
+		slog.Warn("area requires real names but this user has none; posting under the handle instead",
+			"area", area.Tag, "handle", u.Handle)
+	}
+	return area.PostingName(u.Handle, u.RealName)
+}
+
 // runComposeMessage handles the process of composing and saving a new message.
 // It is a RunnableFunc-compatible wrapper; use runComposeMessageWithIH when a
 // shared InputHandler is available to prevent the editor goroutine from consuming
@@ -186,20 +205,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	// 5. Determine the sender display name for the editor header (@F@ field).
 	// Priority: anonymous string > real name (if area requires it) > handle.
 	// Private mail is always signed with the handle (see signByHandle).
-	fromName := currentUser.Handle
-	if area.RealNameOnly && !signByHandle {
-		if currentUser.HasRealName() {
-			fromName = currentUser.RealName
-		} else {
-			// The area asks for a real name and this account has none, so the
-			// post goes out under the handle. Signup requires one and every
-			// writer now validates it, so this should be unreachable — but it
-			// is the one path that quietly defeats the flag, and a network that
-			// requires real names (FidoNet) would have no way to notice.
-			slog.Warn("area requires real names but this user has none; posting under the handle instead",
-				"area", area.Tag, "handle", currentUser.Handle)
-		}
-	}
+	fromName := postingName(area, currentUser, signByHandle)
 	if isAnonymous {
 		fromName = strings.TrimSpace(e.Strings().AnonymousName)
 		if fromName == "" {
@@ -262,13 +268,14 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	// 8. Save the Message via JAM backend (fromName already computed above)
 
 	// Mail in PRIVMAIL carries the private flag, or the recipient's mailbox
-	// never shows it and the area lists it to everyone.
-	var msgNum int
-	if private {
-		msgNum, err = e.MessageMgr.AddPrivateMessage(area.ID, fromName, toUser, subject, body, "")
-	} else {
-		msgNum, err = e.MessageMgr.AddMessage(area.ID, fromName, toUser, subject, body, "")
+	// never shows it and the area lists it to everyone. A post signed with
+	// the real name records the handle too, so netmail (always private)
+	// stays visible to its sender; an anonymous post records nothing.
+	opts := message.PostOptions{Private: private}
+	if !isAnonymous {
+		opts.SenderHandle = currentUser.Handle
 	}
+	msgNum, err := e.MessageMgr.Post(area.ID, fromName, toUser, subject, body, opts)
 	if err != nil {
 		slog.Error("failed to save message", "node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag, "error", err)
 		errorMsg := ansi.ReplacePipeCodes([]byte("\r\n|01Error saving message!|07\r\n"))

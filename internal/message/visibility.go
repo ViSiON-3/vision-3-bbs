@@ -4,7 +4,8 @@ import "strings"
 
 // VisibleTo reports whether the user with the given handle may read m. A
 // public message is visible to everyone. A private message is visible only to
-// its recipient and its sender: the To or From field must equal handle,
+// its recipient and its sender: To, or the sender (the SenderHandle a local
+// post signed with a real name records, else From), must equal handle,
 // ignoring case and surrounding space. A blank handle never matches, so an
 // unknown user sees no private mail.
 //
@@ -25,6 +26,13 @@ func (m *DisplayMessage) VisibleTo(handle string) bool {
 	if handle == "" {
 		return false
 	}
+	// A post signed with a real name names its sender by SenderHandle; its
+	// From is then only a display name, and must not match an account whose
+	// handle happens to equal it.
+	sender := m.From
+	if strings.TrimSpace(m.SenderHandle) != "" {
+		sender = m.SenderHandle
+	}
 	return strings.EqualFold(strings.TrimSpace(m.To), handle) ||
-		strings.EqualFold(strings.TrimSpace(m.From), handle)
+		strings.EqualFold(strings.TrimSpace(sender), handle)
 }

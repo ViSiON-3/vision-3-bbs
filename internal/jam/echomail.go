@@ -151,6 +151,12 @@ func (b *Base) writeMessageExt(msg *Message, msgType MessageType, originText str
 			hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldFTSKludge, kludge))
 		}
 
+		// Only a message written here can name a local account as its
+		// sender; anything arriving from a network must not.
+		if local && msg.SenderHandle != "" {
+			hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldV3SenderHandle, msg.SenderHandle))
+		}
+
 		// Calculate total subfield length
 		hdr.SubfieldLen = 0
 		for _, sf := range hdr.Subfields {

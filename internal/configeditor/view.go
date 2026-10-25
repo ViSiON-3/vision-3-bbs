@@ -35,6 +35,13 @@ func (m Model) View() string {
 	case modeHelp:
 		result := m.viewTopMenu()
 		return m.overlayHelpScreen(result)
+	case modeAreaSyncConfirm:
+		result := m.viewRecordEdit()
+		q := ""
+		if m.areaSync != nil {
+			q = m.areaSync.question()
+		}
+		return m.overlayConfirmDialog(result, "-- Existing Areas --", q)
 	case modeDeleteConfirm:
 		result := m.viewRecordList()
 		return m.overlayConfirmDialog(result, "-- Delete Record --",

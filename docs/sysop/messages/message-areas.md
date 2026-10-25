@@ -58,8 +58,8 @@ Message areas are defined in `configs/message_areas.json` as an array:
 - `network` — Network key this area belongs to (`ftn.json` network for echomail/netmail, `qwknet.json` key for qwknet)
 - `qwk_conference` — For `qwknet` areas, the hub's conference number. Required; it is what messages are routed on.
 - `origin_addr` — FTN origin address for echomail (e.g., `"21:3/110"`)
-- `max_msgs` — Maximum number of messages to retain (0 = no limit). Oldest messages are removed when the count is exceeded.
-- `max_msg_age` — Maximum message age in days (0 = no limit). Messages older than this are removed.
+- `max_messages` — Maximum number of messages to retain (0 = no limit). Oldest messages are removed when the count is exceeded.
+- `max_age` — Maximum message age in days (0 = no limit). Messages older than this are removed.
 - `sponsor` — Handle of the area sponsor/moderator (optional). See [Sponsor Menus](users/sponsor-menus.md).
 - `auto_join` — Flags this area as a newscan default. See [Auto Join Behavior](#auto-join-behavior) below.
 
@@ -348,23 +348,23 @@ The `v3mail` command handles all message base maintenance. See [Nightly Message 
 
 ### Message Purge Configuration
 
-Per-area purge limits are set in `message_areas.json` via `max_msgs` and `max_msg_age`. Both default to `0` (no limit). When set, limits are enforced nightly by `v3mail purge --all`:
+Per-area purge limits are set in `message_areas.json` via `max_messages` and `max_age`. Both default to `0` (no limit). Nothing enforces them until `v3mail purge --all` runs, normally from the nightly purge event in `events.json`. The template ships that event (`example_nightly_msgbase_purge`) disabled, so enable it along with the fix and pack events that go with it. While areas have limits and no enabled event runs `v3mail purge`, the BBS logs a warning at startup and the config editor says so when you set a limit.
 
 ```json
 {
   "tag": "FSX_GEN",
-  "max_msg_age": 90
+  "max_age": 90
 }
 ```
 
 ```json
 {
   "tag": "GENERAL",
-  "max_msgs": 500
+  "max_messages": 500
 }
 ```
 
-Both limits can be set simultaneously. Age is applied first; if the remaining count still exceeds `max_msgs`, the oldest messages are removed until the limit is met.
+Both limits can be set simultaneously. Age is applied first; if the remaining count still exceeds `max_messages`, the oldest messages are removed until the limit is met.
 
 ### Dupe Database
 

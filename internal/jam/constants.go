@@ -70,6 +70,12 @@ const (
 	SfldPath2D       = 2002 // PATH in 2D format
 	SfldFlags        = 2003 // Message flags
 	SfldTZUTCInfo    = 2004 // Timezone/UTC info
+
+	// SfldV3SenderHandle is ViSiON/3's own subfield, outside the IDs the
+	// JAM spec assigns ("V3"): the handle of the local account that wrote
+	// a message signed with another name (its real name). Other software
+	// skips subfields it does not know, and the tosser never exports it.
+	SfldV3SenderHandle = 0x5633
 )
 
 // Sentinel errors

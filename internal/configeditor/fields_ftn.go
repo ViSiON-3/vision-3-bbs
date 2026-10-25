@@ -8,6 +8,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
 
@@ -186,14 +187,26 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			Set: func(val string) error { netPtr.AutoCreate.Enabled = uitext.YNToBool(val); save(); return nil },
 		},
 		{
-			Label: "  ACS Read", Help: "Read access for auto-created areas (empty = " + config.DefaultAutoCreateACSRead + ")", Type: ftString, Col: 3, Row: 9, Width: 20,
+			Label: "  ACS Read", Help: "Read access for new auto-created areas (empty = " + config.DefaultAutoCreateACSRead + ")", Type: ftString, Col: 3, Row: 9, Width: 20,
 			Get: func() string { return netPtr.AutoCreate.ACSRead },
 			Set: func(val string) error { netPtr.AutoCreate.ACSRead = strings.TrimSpace(val); save(); return nil },
+			AfterSet: func(cur *Model, _ string) {
+				v := netPtr.AutoCreate.ReadACS()
+				cur.offerAreaSync(key, "ACS Read",
+					func(a *message.MessageArea) bool { return a.ACSRead != v },
+					func(a *message.MessageArea) { a.ACSRead = v }, "")
+			},
 		},
 		{
-			Label: "  ACS Write", Help: "Post access for auto-created areas (empty = " + config.DefaultAutoCreateACSWrite + ")", Type: ftString, Col: 3, Row: 10, Width: 20,
+			Label: "  ACS Write", Help: "Post access for new auto-created areas (empty = " + config.DefaultAutoCreateACSWrite + ")", Type: ftString, Col: 3, Row: 10, Width: 20,
 			Get: func() string { return netPtr.AutoCreate.ACSWrite },
 			Set: func(val string) error { netPtr.AutoCreate.ACSWrite = strings.TrimSpace(val); save(); return nil },
+			AfterSet: func(cur *Model, _ string) {
+				v := netPtr.AutoCreate.WriteACS()
+				cur.offerAreaSync(key, "ACS Write",
+					func(a *message.MessageArea) bool { return a.ACSWrite != v },
+					func(a *message.MessageArea) { a.ACSWrite = v }, "")
+			},
 		},
 		{
 			Label: "  Conference", Help: "Conference for auto-created areas", Type: ftLookup, Col: 3, Row: 11, Width: 40,
@@ -219,7 +232,7 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			},
 		},
 		{
-			Label: "  Max Messages", Help: "Maximum messages before purging in auto-created areas (0=unlimited)", Type: ftInteger, Col: 3, Row: 12, Width: 6, Min: 0, Max: 999999,
+			Label: "  Max Messages", Help: "Maximum messages before purging in new auto-created areas (0=unlimited); offers to update existing areas", Type: ftInteger, Col: 3, Row: 12, Width: 6, Min: 0, Max: 999999,
 			Get: func() string { return strconv.Itoa(netPtr.AutoCreate.MaxMessagesOrDefault()) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -230,9 +243,15 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 				save()
 				return nil
 			},
+			AfterSet: func(cur *Model, _ string) {
+				v := netPtr.AutoCreate.MaxMessagesOrDefault()
+				cur.offerAreaSync(key, "Max Messages",
+					func(a *message.MessageArea) bool { return a.MaxMessages != v },
+					func(a *message.MessageArea) { a.MaxMessages = v }, cur.purgeUnscheduledNote(v))
+			},
 		},
 		{
-			Label: "  Max Age", Help: "Maximum age in days before purging in auto-created areas (0=unlimited)", Type: ftInteger, Col: 3, Row: 13, Width: 5, Min: 0, Max: 99999,
+			Label: "  Max Age", Help: "Maximum age in days before purging in new auto-created areas (0=unlimited); offers to update existing areas", Type: ftInteger, Col: 3, Row: 13, Width: 5, Min: 0, Max: 99999,
 			Get: func() string { return strconv.Itoa(netPtr.AutoCreate.MaxAgeOrDefault()) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -243,16 +262,34 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 				save()
 				return nil
 			},
+			AfterSet: func(cur *Model, _ string) {
+				v := netPtr.AutoCreate.MaxAgeOrDefault()
+				cur.offerAreaSync(key, "Max Age",
+					func(a *message.MessageArea) bool { return a.MaxAge != v },
+					func(a *message.MessageArea) { a.MaxAge = v }, cur.purgeUnscheduledNote(v))
+			},
 		},
 		{
-			Label: "  Auto Join", Help: "Join new users to auto-created areas automatically", Type: ftYesNo, Col: 3, Row: 14, Width: 1,
+			Label: "  Auto Join", Help: "Join new users to new auto-created areas automatically; offers to update existing areas", Type: ftYesNo, Col: 3, Row: 14, Width: 1,
 			Get: func() string { return uitext.BoolToYN(netPtr.AutoCreate.AutoJoinOrDefault()) },
 			Set: func(val string) error { b := uitext.YNToBool(val); netPtr.AutoCreate.AutoJoin = &b; save(); return nil },
+			AfterSet: func(cur *Model, _ string) {
+				v := netPtr.AutoCreate.AutoJoinOrDefault()
+				cur.offerAreaSync(key, "Auto Join",
+					func(a *message.MessageArea) bool { return a.AutoJoin != v },
+					func(a *message.MessageArea) { a.AutoJoin = v }, "")
+			},
 		},
 		{
-			Label: "  Real Names", Help: "Auto-created areas post under users' real names instead of handles", Type: ftYesNo, Col: 3, Row: 15, Width: 1,
+			Label: "  Real Names", Help: "New auto-created areas post under users' real names instead of handles; offers to update existing areas", Type: ftYesNo, Col: 3, Row: 15, Width: 1,
 			Get: func() string { return uitext.BoolToYN(netPtr.AutoCreate.RealNameOnly) },
 			Set: func(val string) error { netPtr.AutoCreate.RealNameOnly = uitext.YNToBool(val); save(); return nil },
+			AfterSet: func(cur *Model, _ string) {
+				v := netPtr.AutoCreate.RealNameOnly
+				cur.offerAreaSync(key, "Real Names",
+					func(a *message.MessageArea) bool { return a.RealNameOnly != v },
+					func(a *message.MessageArea) { a.RealNameOnly = v }, "")
+			},
 		},
 	}
 }
