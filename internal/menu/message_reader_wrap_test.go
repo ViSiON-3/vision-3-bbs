@@ -26,7 +26,7 @@ const codefenixSignature = "Good to be back!\r" +
 // paints it: format, expand colour pipe codes, wrap to the terminal width and
 // cut whatever is still too wide.
 func readBodyForTest(body string, termWidth int) []string {
-	formatted := formatMessageBody(body, "", false)
+	formatted := formatMessageBody(body, "", false, nil)
 	return breakOversizedLines(wrapAnsiString(string(ansi.ReplaceColorPipeCodes([]byte(formatted))), termWidth, ansi.OutputModeUTF8), termWidth, ansi.OutputModeUTF8)
 }
 

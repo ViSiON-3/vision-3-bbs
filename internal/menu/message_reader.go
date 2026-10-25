@@ -148,6 +148,7 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	baseFilter := withPrivacy(privateMailReaderFor(e, userManager, currentUser), msgFilter)
 	matcher := twitMatcher(e, userManager, currentUser)
+	quoteBanners := newQuoteBannerMatcher(e.Strings())
 	var counter *twitScanCounter
 	if len(counters) > 0 {
 		counter = counters[0]
@@ -339,7 +340,7 @@ readerLoop:
 		area, _ := e.MessageMgr.GetAreaByID(currentAreaID)
 		includeOrigin := area != nil && (area.AreaType == "echomail" || area.AreaType == "netmail") &&
 			currentMsg.OrigAddr != "" && !hasOriginLine(currentMsg.Body)
-		formattedBody := formatMessageBody(currentMsg.Body, currentMsg.OrigAddr, includeOrigin)
+		formattedBody := formatMessageBody(currentMsg.Body, currentMsg.OrigAddr, includeOrigin, quoteBanners)
 
 		// Convert colour pipe codes to ANSI sequences. Only colour: the body
 		// was written on another system, so "||" and the screen-control codes

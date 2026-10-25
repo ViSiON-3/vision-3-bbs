@@ -87,7 +87,10 @@ func detectAnsiArtInMessage(text string) bool {
 		hasANSICursorMovement(text)
 }
 
-func formatMessageBody(body, originAddr string, includeOrigin bool) string {
+// formatMessageBody prepares a message body for the reader. Runs of quoted
+// lines get a blank line before and after them, except next to a quote banner
+// that banners matches: the editor's "Said" / "Done" lines frame the quote.
+func formatMessageBody(body, originAddr string, includeOrigin bool, banners quoteBannerMatcher) string {
 	// Check if body contains ANSI art BEFORE normalizing line endings
 	// ANSI art uses \r for cursor positioning and must NOT be modified
 	if detectAnsiArtInMessage(body) {
@@ -136,7 +139,7 @@ func formatMessageBody(body, originAddr string, includeOrigin bool) string {
 		}
 
 		if isQuote {
-			if !prevWasQuote && len(out) > 0 && out[len(out)-1] != "" {
+			if !prevWasQuote && len(out) > 0 && out[len(out)-1] != "" && !(i > 0 && banners.match(lines[i-1])) {
 				out = append(out, "")
 			}
 
@@ -148,7 +151,7 @@ func formatMessageBody(body, originAddr string, includeOrigin bool) string {
 			}
 			nextIsQuote := i+1 < len(lines) && isQuoteLine(nextLine)
 			nextIsOriginBlock := i+1 < len(lines) && (isTearLine(nextLine) || isOriginLine(nextLine))
-			if !nextIsQuote && strings.TrimSpace(nextLine) != "" && !nextIsOriginBlock {
+			if !nextIsQuote && strings.TrimSpace(nextLine) != "" && !nextIsOriginBlock && !banners.match(nextLine) {
 				out = append(out, "")
 			}
 
