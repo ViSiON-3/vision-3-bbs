@@ -58,6 +58,8 @@ func (b *Base) ReadMessage(msgNum int) (*Message, error) {
 			msg.Path = val
 		case SfldFlags:
 			msg.Flags = val
+		case SfldV3SenderHandle:
+			msg.SenderHandle = val
 		}
 	}
 

@@ -9,6 +9,7 @@ import "testing"
 func TestVisibleTo(t *testing.T) {
 	priv := &DisplayMessage{IsPrivate: true, From: "Sysop", To: "Bob"}
 	pub := &DisplayMessage{From: "Sysop", To: "Bob"}
+	signed := &DisplayMessage{IsPrivate: true, From: "Pat Example", To: "Bob", SenderHandle: "pat"}
 	cases := []struct {
 		name   string
 		m      *DisplayMessage
@@ -24,6 +25,9 @@ func TestVisibleTo(t *testing.T) {
 		{"no user", priv, "", false},
 		{"blank handle never matches blank fields", &DisplayMessage{IsPrivate: true}, "", false},
 		{"addressed by real name is not the handle's", &DisplayMessage{IsPrivate: true, From: "x", To: "Bob Builder"}, "Bob", false},
+		{"real-name post visible to its sender handle", signed, "pat", true},
+		{"real-name post still visible to its recipient", signed, "Bob", true},
+		{"real-name From does not match a handle equal to it", signed, "Pat Example", false},
 	}
 	for _, tc := range cases {
 		if got := tc.m.VisibleTo(tc.handle); got != tc.want {

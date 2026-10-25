@@ -175,16 +175,15 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	}
 
 	// Save reply, recording the parent message number for threading. A reply to
-	// a private message stays private so it remains visible to its recipient.
-	replyMsgID := currentMsg.MsgID
-	var err error
-	if currentMsg.IsPrivate {
-		_, err = e.MessageMgr.AddPrivateReply(currentAreaID, fromName, replyTo,
-			newSubject, replyBody, replyMsgID, currentMsg.MsgNum)
-	} else {
-		_, err = e.MessageMgr.AddReply(currentAreaID, fromName, replyTo,
-			newSubject, replyBody, replyMsgID, currentMsg.MsgNum)
-	}
+	// a private message stays private so it remains visible to its recipient,
+	// and records the replier's handle so a reply signed with the real name
+	// (netmail) stays visible to its sender too.
+	_, err := e.MessageMgr.Post(currentAreaID, fromName, replyTo, newSubject, replyBody, message.PostOptions{
+		Private:      currentMsg.IsPrivate,
+		ReplyToNum:   currentMsg.MsgNum,
+		ReplyToMsgID: currentMsg.MsgID,
+		SenderHandle: currentUser.Handle,
+	})
 	if err != nil {
 		slog.Error("failed to save reply", "node", nodeNumber, "error", err)
 		e.writeString(terminal, outputMode, e.Strings().MsgReplyError)

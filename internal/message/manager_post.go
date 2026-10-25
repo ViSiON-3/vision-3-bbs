@@ -39,7 +39,7 @@ func (mm *MessageManager) isV3NetArea(area *MessageArea) bool {
 // addMessage is the shared implementation behind AddMessage, AddMessageWithDate,
 // AddPrivateMessage, and AddReply.
 func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyToMsgID string,
-	replyToNum int, dateTime time.Time, private bool, kludges []string) (int, error) {
+	replyToNum int, dateTime time.Time, private bool, kludges []string, senderHandle string) (int, error) {
 	b, area, err := mm.openBase(areaID)
 	if err != nil {
 		return 0, err
@@ -60,6 +60,9 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 	msg.Text = jamBody
 	msg.DateTime = dateTime
 	msg.Kludges = kludges
+	if senderHandle = strings.TrimSpace(senderHandle); senderHandle != "" && !strings.EqualFold(senderHandle, strings.TrimSpace(from)) {
+		msg.SenderHandle = senderHandle
+	}
 
 	if private {
 		msg.Header = &jam.MessageHeader{Attribute: jam.MsgPrivate | jam.MsgLocal}
@@ -131,34 +134,34 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 // into the username and destination address.
 // Returns the 1-based message number assigned.
 func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), false, nil)
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), false, nil, "")
 }
 
 // AddMessageWithDate is like AddMessage but uses the provided timestamp instead
 // of time.Now(). Used by V3Net to preserve the original authored date.
 func (mm *MessageManager) AddMessageWithDate(areaID int, from, to, subject, body, replyToMsgID string, dateTime time.Time) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, dateTime, false, nil)
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, dateTime, false, nil, "")
 }
 
 // AddPrivateMessage creates and writes a new private (MSG_PRIVATE) message.
 // For netmail areas, "user@zone:net/node" in the To field is automatically split
 // into the username and destination address. Returns the 1-based message number.
 func (mm *MessageManager) AddPrivateMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), true, nil)
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), true, nil, "")
 }
 
 // AddReply creates and writes a reply, recording the parent's message number
 // (replyToNum) as the JAM ReplyTo so local areas thread, and the parent's FTN
 // MSGID (replyToMsgID, may be "") as ReplyID so echomail links via jam.Link().
 func (mm *MessageManager) AddReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), false, nil)
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), false, nil, "")
 }
 
 // AddPrivateReply is AddReply for private mail: it records the parent pointer
 // while preserving the MSG_PRIVATE flag, so a reply to a private message stays
 // private (and therefore visible to its recipient).
 func (mm *MessageManager) AddPrivateReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), true, nil)
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), true, nil, "")
 }
 
 // PostOptions holds the optional parts of a message written with Post.
@@ -175,6 +178,11 @@ type PostOptions struct {
 	// "CHRS: CP437 2". They are stored with the message and the tosser
 	// copies them into the exported packet. AREA lines are dropped.
 	Kludges []string
+	// SenderHandle is the handle of the local account posting, when from
+	// is another name (a real name in a real_name_only area). It is stored
+	// with the message so private mail stays visible to its sender
+	// (DisplayMessage.VisibleTo); it is dropped when it equals from.
+	SenderHandle string
 }
 
 // Post writes a message to the area like AddMessage, with the options that
@@ -184,5 +192,5 @@ type PostOptions struct {
 // tearline and origin as a post made from the BBS editor. Returns the
 // 1-based message number assigned.
 func (mm *MessageManager) Post(areaID int, from, to, subject, body string, opts PostOptions) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, opts.ReplyToMsgID, opts.ReplyToNum, time.Now(), opts.Private, opts.Kludges)
+	return mm.addMessage(areaID, from, to, subject, body, opts.ReplyToMsgID, opts.ReplyToNum, time.Now(), opts.Private, opts.Kludges, opts.SenderHandle)
 }

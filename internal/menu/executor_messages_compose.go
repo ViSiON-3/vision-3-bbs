@@ -268,13 +268,14 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	// 8. Save the Message via JAM backend (fromName already computed above)
 
 	// Mail in PRIVMAIL carries the private flag, or the recipient's mailbox
-	// never shows it and the area lists it to everyone.
-	var msgNum int
-	if private {
-		msgNum, err = e.MessageMgr.AddPrivateMessage(area.ID, fromName, toUser, subject, body, "")
-	} else {
-		msgNum, err = e.MessageMgr.AddMessage(area.ID, fromName, toUser, subject, body, "")
+	// never shows it and the area lists it to everyone. A post signed with
+	// the real name records the handle too, so netmail (always private)
+	// stays visible to its sender; an anonymous post records nothing.
+	opts := message.PostOptions{Private: private}
+	if !isAnonymous {
+		opts.SenderHandle = currentUser.Handle
 	}
+	msgNum, err := e.MessageMgr.Post(area.ID, fromName, toUser, subject, body, opts)
 	if err != nil {
 		slog.Error("failed to save message", "node", nodeNumber, "handle", currentUser.Handle, "tag", area.Tag, "error", err)
 		errorMsg := ansi.ReplacePipeCodes([]byte("\r\n|01Error saving message!|07\r\n"))

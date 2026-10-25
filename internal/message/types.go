@@ -70,6 +70,9 @@ type DisplayMessage struct {
 	IsPrivate  bool
 	IsDeleted  bool
 	AreaID     int // Area this message belongs to
+	// SenderHandle is the handle of the local account that wrote the
+	// message when From is another name (PostOptions.SenderHandle).
+	SenderHandle string
 }
 
 // Constants for standard message fields.
