@@ -1069,6 +1069,15 @@ The defaults are the ones Mystic's MUTIL uses for the bases it auto-creates
 `use_realname`), so a board moving from Mystic gets the areas it is used to.
 Unlike Mystic, auto-create is off until you turn it on.
 
+These settings are copied into an area once, when it is created. Changing one
+later does not change the areas you already have. When you change one in the
+config editor, it offers to apply the new value to the network's existing
+echomail areas; answer **Yes** to update them. From the command line,
+`./helper areas set --network <net> --type echomail --real-name on
+--max-messages 500` does the same. The purge limits are only enforced when the
+nightly `v3mail purge` event is enabled (see
+[Message Purge Configuration](messages/message-areas.md#message-purge-configuration)).
+
 New areas are named the way the setup wizard names its areas: the tag is
 `<network>_<echo>` in lower case (e.g. `fidonet_linux`), the name is the echo
 tag, and the message base is `msgbases/fn.<network>_<echo>`. Rename an area or

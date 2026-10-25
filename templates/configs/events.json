@@ -176,7 +176,7 @@
       "id": "example_nightly_msgbase_purge",
       "name": "Example: Nightly Message Base Purge",
       "schedule": "15 2 * * *",
-      "comment": "Purge messages exceeding per-area age/count limits (max_msg_age, max_msgs) configured in message_areas.json. Runs at 2:15 AM between fix and pack. No flags needed — limits are read from config.",
+      "comment": "Purge messages exceeding per-area age/count limits (max_age, max_messages) configured in message_areas.json. Runs at 2:15 AM between fix and pack. No flags needed — limits are read from config.",
       "command": "{BBS_ROOT}/v3mail",
       "args": [
         "purge",

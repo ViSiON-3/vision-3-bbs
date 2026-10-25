@@ -130,6 +130,11 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 				a.MaxMessages = n
 				return nil
 			},
+			AfterSet: func(cur *Model, _ string) {
+				if note := cur.purgeUnscheduledNote(a.MaxMessages); note != "" {
+					cur.message = note
+				}
+			},
 		},
 		{
 			Label: "Max Age", Help: "Maximum age in days before purging (0=unlimited)", Type: ftInteger, Col: 3, Row: 11, Width: 5, Min: 0, Max: 99999,
@@ -141,6 +146,11 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 				}
 				a.MaxAge = n
 				return nil
+			},
+			AfterSet: func(cur *Model, _ string) {
+				if note := cur.purgeUnscheduledNote(a.MaxAge); note != "" {
+					cur.message = note
+				}
 			},
 		},
 		{

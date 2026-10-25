@@ -388,7 +388,7 @@ Purge limits (`max_age`, `max_messages`) are configured per area in `message_are
       "id": "nightly_msgbase_purge",
       "name": "Nightly Message Base Purge",
       "schedule": "15 2 * * *",
-      "comment": "Purge limits are read from max_msg_age/max_msgs in message_areas.json",
+      "comment": "Purge limits are read from max_age/max_messages in message_areas.json",
       "command": "/usr/bin/go",
       "args": ["run", "{BBS_ROOT}/cmd/v3mail", "purge", "--all"],
       "working_directory": "{BBS_ROOT}",

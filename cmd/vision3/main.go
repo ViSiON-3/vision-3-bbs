@@ -1991,6 +1991,8 @@ func main() {
 	eventsConfig, eventsErr := config.LoadEventsConfig(rootConfigPath)
 	if eventsErr != nil {
 		slog.Warn("failed to load events config, scheduler not started", "error", eventsErr)
+	} else {
+		warnUnenforcedPurgeLimits(eventsConfig, messageMgr.ListAreas())
 	}
 
 	// The scheduler always runs; individual events are enabled/disabled per
