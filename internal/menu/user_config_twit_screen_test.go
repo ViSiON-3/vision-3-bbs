@@ -75,7 +75,7 @@ func TestTwitReaderBarShowsIgnore(t *testing.T) {
 	env := newMsgEnv(t)
 	env.postMsgs(generalAreaID, testMsg{from: "Remote", to: "All", subject: "one"})
 	r := env.runCmd("READMSGS", env.caller, "", "Q")
-	if !r.has(" Ignore ", " Thread ") {
+	if !r.has(" Twit ", " Thread ") {
 		t.Fatalf("bar:\n%s", r.text())
 	}
 }
@@ -118,7 +118,7 @@ func TestTwitDisabledGatesEverythingAndKeepsLists(t *testing.T) {
 		t.Fatalf("editor while off:\n%s", r.text())
 	}
 	r = env.runCmd("READMSGS", env.caller, "", "IYQ")
-	if !r.has("twit-post-body") || r.has(" Ignore ", "Add Remote") {
+	if !r.has("twit-post-body") || r.has(" Twit ") || r.has("Add Remote") {
 		t.Fatalf("reader while off:\n%s", r.text())
 	}
 	if env.e.TwitMatcher(env.um, env.caller) != nil {
@@ -149,15 +149,20 @@ func TestTwitKonfigShowsOffWhenDisabled(t *testing.T) {
 	}
 }
 
-// TestReaderBarSuffixFitsWidth checks the reading suffix is dropped rather than wrapped.
+// TestReaderBarSuffixFitsWidth checks both bars keep their label within 79
+// columns at 80, and that a bar too wide drops it rather than wrapping.
 func TestReaderBarSuffixFitsWidth(t *testing.T) {
-	opts := append(append([]MsgLightbarOption(nil), msgReaderOptions...), msgReaderIgnoreOption)
-	if got := readerBarSuffix(opts, " |11(NewScan)", 80); got == "" {
-		t.Fatal("caller bar should keep its suffix at 80 columns")
-	}
-	opts = append(opts, msgReaderDeleteOption)
-	if got := readerBarSuffix(opts, " |11(NewScan)", 80); got != "" {
-		t.Fatalf("sysop bar kept suffix %q past 80 columns", got)
+	caller := append(append([]MsgLightbarOption(nil), msgReaderOptions...), msgReaderIgnoreOption)
+	sysop := append(append([]MsgLightbarOption(nil), caller...), msgReaderDeleteOption)
+	for _, suffix := range []string{" |11(Reading)", " |11(NewScan)"} {
+		for name, opts := range map[string][]MsgLightbarOption{"caller": caller, "sysop": sysop} {
+			if got := readerBarSuffix(opts, suffix, 80); got != suffix {
+				t.Errorf("%s bar dropped %q at 80 columns", name, suffix)
+			}
+		}
+		if got := readerBarSuffix(sysop, suffix, 79); got != "" {
+			t.Errorf("sysop bar kept %q at 79 columns", suffix)
+		}
 	}
 }
 

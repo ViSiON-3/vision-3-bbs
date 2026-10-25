@@ -15,7 +15,7 @@ is repainted with the result (added, removed, refused and why) above the
 prompt. Changes save immediately in the caller's `twitList` in `users.json`.
 They are session preferences, not sysop-owned fields.
 
-In the message reader, **Ignore** on the bottom command bar (hotkey **I**, or
+In the message reader, **Twit** on the bottom command bar (hotkey **I**, or
 arrow to it) adds the author of the message on screen. It asks before adding,
 showing the author's name; answering N leaves the list and the message as they
 were. A refusal (yourself, an exempt user, a duplicate, a full list) is shown
@@ -24,8 +24,9 @@ hidden at once and the reader moves to the next visible message; if there is
 none it says so and leaves the reader, as Next does at the end. **T** keeps its
 existing Thread function. Anonymous authors cannot be quick-added and anonymous
 posts are always visible. The quick-add is listed in the reader's ? help.
-On an 80-column screen a sysop's bar (which adds Delete) is too wide for the
-(Reading)/(NewScan) label, so that label is left off rather than wrapping.
+The bar fits in 79 columns with its (Reading)/(NewScan) label for callers and
+sysops (whose bar adds Del). On a narrower screen the label is left off
+rather than wrapping.
 
 An exact local handle is stored by user ID, including handles containing `@`.
 Otherwise, `@` separates a network name from its address. Matching uses
@@ -54,7 +55,7 @@ In `config.json`:
 `twitListEnabled` controls the feature for the whole board. It is a switch for
 callers' personal lists, not a list of blocked authors. When it is off:
 
-- the reader's Ignore command is removed from the bar and its help, and the I
+- the reader's Twit command is removed from the bar and its help, and the I
   key does nothing;
 - `CFG_TWITLIST` (and so M in USERCONFIG and I in the message menu) shows
   "Twit Lists are turned off" and returns, and USERCONFIG shows the field as Off;

@@ -41,25 +41,28 @@ var msgReaderOptions = []MsgLightbarOption{
 
 // msgReaderIgnoreOption adds the current author to the caller's Twit List. It
 // sits before Quit and is left out while the sysop has Twit Lists turned off.
-var msgReaderIgnoreOption = MsgLightbarOption{Label: " Ignore ", HotKey: 'I'}
+var msgReaderIgnoreOption = MsgLightbarOption{Label: " Twit ", HotKey: 'I'}
 
 // readerBarSuffix returns suffix, or nothing when the bar and suffix together
-// would not fit on one termWidth-column row (the bar is bounded by a column
-// on each side), so a long bar never wraps.
+// would reach the last column of a termWidth-column row (the bar is bounded
+// by a column on each side). Like the separator line above it, the bar stays
+// off the last column, which can scroll the screen on some terminals.
 func readerBarSuffix(options []MsgLightbarOption, suffix string, termWidth int) string {
 	width := 2 + ansi.VisibleLength(string(ansi.ReplacePipeCodes([]byte(suffix))))
 	for _, opt := range options {
 		width += len(opt.Label)
 	}
-	if termWidth > 0 && width > termWidth {
+	if termWidth > 0 && width >= termWidth {
 		return ""
 	}
 	return suffix
 }
 
 // msgReaderDeleteOption is appended to the lightbar for sysop/co-sysop users only.
-// LoColor 4 (dark red) distinguishes it from regular options.
-var msgReaderDeleteOption = MsgLightbarOption{Label: " Delete ", HotKey: 'D', LoColor: 4}
+// LoColor 4 (dark red) distinguishes it from regular options. It is the last
+// item, so it has no trailing space: that keeps a sysop's bar and its
+// (Reading)/(NewScan) label within 79 columns.
+var msgReaderDeleteOption = MsgLightbarOption{Label: " Del", HotKey: 'D', LoColor: 4}
 
 // msgOwnershipFilter reports whether a message may be shown to the current user.
 // A nil filter means no extra filtering; a non-nil filter is used for areas like
