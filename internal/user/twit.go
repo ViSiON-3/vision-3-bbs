@@ -20,7 +20,7 @@ var (
 )
 
 // TwitPolicy supplies defaults even for boards upgraded without the new settings.
-type TwitPolicy struct{ MaxEntries, ExemptLevel, SysOpLevel int }
+type TwitPolicy struct{ MaxEntries, ExemptLevel, SysOpLevel, CoSysOpLevel int }
 
 // Limit returns the configured cap or the default of 50 entries.
 func (p TwitPolicy) Limit() int {
@@ -30,17 +30,21 @@ func (p TwitPolicy) Limit() int {
 	return 50
 }
 
-// Exempt reports whether local account messages must remain visible.
+// Exempt reports whether local account messages must remain visible. Sysops
+// and co-sysops always are; ExemptLevel, when set, protects lower levels too.
 func (p TwitPolicy) Exempt(u *User) bool {
-	sysop := p.SysOpLevel
-	if sysop <= 0 {
-		sysop = 255
+	staff := p.SysOpLevel
+	if staff <= 0 {
+		staff = 255
+	}
+	if p.CoSysOpLevel > 0 {
+		staff = min(staff, p.CoSysOpLevel)
 	}
 	level := p.ExemptLevel
 	if level <= 0 {
-		level = sysop
+		level = staff
 	}
-	return u != nil && (u.AccessLevel >= sysop || u.AccessLevel >= level)
+	return u != nil && (u.AccessLevel >= staff || u.AccessLevel >= level)
 }
 
 // TwitDirectory resolves local authors by handle and stable account ID.

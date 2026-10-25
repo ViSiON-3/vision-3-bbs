@@ -175,3 +175,32 @@ func TestTwitScreenClipsLongNames(t *testing.T) {
 		t.Fatalf("long name not clipped:\n%s", r.text())
 	}
 }
+
+// TestTwitReaderRefusesBeforeConfirming checks self and staff refusals come
+// without the confirmation prompt, and a co-sysop is protected.
+func TestTwitReaderRefusesBeforeConfirming(t *testing.T) {
+	for _, tc := range []struct{ from, level, want string }{
+		{"Caller", "", "can't ignore yourself"},
+		{"Sysop", "", "can't be ignored"},
+		{"Cosy", "250", "can't be ignored"},
+	} {
+		t.Run(tc.from, func(t *testing.T) {
+			env := newMsgEnv(t)
+			if tc.level != "" {
+				u, err := env.um.AddUser("password", tc.from, "Co Sysop", "Loc")
+				if err != nil {
+					t.Fatal(err)
+				}
+				u.AccessLevel = 250
+				if err := env.um.UpdateUser(u); err != nil {
+					t.Fatal(err)
+				}
+			}
+			env.postMsgs(generalAreaID, testMsg{from: tc.from, to: "All", subject: "post"})
+			r := env.runCmd("READMSGS", env.caller, "", "IQ")
+			if !r.has(tc.want) || r.has("to your Twit List? [Y/N]") || len(env.mustDiskUser(2).TwitList) != 0 {
+				t.Fatalf("%v\n%s", r.err, r.text())
+			}
+		})
+	}
+}

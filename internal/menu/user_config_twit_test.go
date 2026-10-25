@@ -15,7 +15,7 @@ import (
 func TestCfgTwitListPersistenceAndRules(t *testing.T) {
 	env := newMsgEnv(t)
 	r := env.runCmd("CFG_TWITLIST", env.caller, "", "A\rCaller\rA\rSysop\rA\rRemote@21:1/100\rA\rRemote@21:1/100\rQ\r")
-	if r.err != nil || !r.has("cannot add yourself") || !r.has("exempt") || !r.has("already on") {
+	if r.err != nil || !r.has("can't ignore yourself") || !r.has("can't be ignored") || !r.has("already on") {
 		t.Fatalf("rules: %v\n%s", r.err, r.text())
 	}
 	got := env.mustDiskUser(2)
@@ -150,8 +150,8 @@ func TestTwitListCopiesAreIndependent(t *testing.T) {
 // TestTwitQuickAddSelfExemptAndAnonymous checks reader-side refusals.
 func TestTwitQuickAddSelfExemptAndAnonymous(t *testing.T) {
 	for _, tc := range []struct{ from, keys, want string }{
-		{"Caller", "IYQ", "cannot add yourself"},
-		{"Sysop", "IYQ", "exempt"},
+		{"Caller", "IQ", "can't ignore yourself"},
+		{"Sysop", "IQ", "can't be ignored"},
 		{"Anonymous", "IQ", "Anonymous authors cannot be added"},
 	} {
 		t.Run(tc.from, func(t *testing.T) {
@@ -169,8 +169,8 @@ func TestTwitQuickAddSelfExemptAndAnonymous(t *testing.T) {
 func TestTwitQuickAddRealNamePreservesLocalExemption(t *testing.T) {
 	env := newMsgEnv(t)
 	env.postMsgs(generalAreaID, testMsg{from: env.sysop.RealName, to: "All", subject: "real-name-post"})
-	r := env.runCmd("READMSGS", env.caller, "", "IYQ")
-	if !r.has("exempt") || len(env.mustDiskUser(2).TwitList) != 0 {
+	r := env.runCmd("READMSGS", env.caller, "", "IQ")
+	if !r.has("can't be ignored") || len(env.mustDiskUser(2).TwitList) != 0 {
 		t.Fatalf("%v\n%s", r.err, r.text())
 	}
 }
@@ -273,7 +273,7 @@ func TestTwitQuickAddLocalNetworkPost(t *testing.T) {
 		author  string
 		wantID  int
 		refusal string
-	}{{"Caller", 0, "cannot add yourself"}, {"Sysop", 0, "exempt"}, {"Th3 D@rk", 3, ""}} {
+	}{{"Caller", 0, "can't ignore yourself"}, {"Sysop", 0, "can't be ignored"}, {"Th3 D@rk", 3, ""}} {
 		t.Run(tc.author, func(t *testing.T) {
 			env := newMsgEnv(t)
 			target, err := env.um.AddUser("password", "Th3 D@rk", "Dark Real Name", "Loc")

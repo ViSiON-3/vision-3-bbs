@@ -730,10 +730,6 @@ readerLoop:
 					needsRedraw = true
 					continue
 				}
-				answer, confirmErr := promptSingleChar(reader, terminal, fmt.Sprintf(e.Strings().TwitQuickConfirm, strings.ReplaceAll(currentMsg.From, "|", "||")), outputMode)
-				if confirmErr != nil {
-					return currentUser, "LOGOFF", confirmErr
-				}
 				name := currentMsg.From
 				// Imported JAM records may also carry MsgLocal, so compare the
 				// origin with this area's configured board address instead.
@@ -746,6 +742,18 @@ readerLoop:
 				} else if target, ok := userManager.ResolveRecipient(name); ok {
 					// RealNameOnly posts still need stable IDs, self checks and exemptions.
 					name = target.Handle
+				}
+				// Refuse yourself, staff, duplicates and a full list before
+				// asking, so the caller is never asked to confirm an add
+				// that cannot happen.
+				if _, err := user.NewTwitEntry(currentUser, userManager, name, twitPolicy(e)); err != nil {
+					e.showReaderNotice(terminal, outputMode, twitRefusal(e.Strings(), err), termHeight)
+					needsRedraw = true
+					continue
+				}
+				answer, confirmErr := promptSingleChar(reader, terminal, fmt.Sprintf(e.Strings().TwitQuickConfirm, strings.ReplaceAll(currentMsg.From, "|", "||")), outputMode)
+				if confirmErr != nil {
+					return currentUser, "LOGOFF", confirmErr
 				}
 				ctx := &cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, outputMode: outputMode}
 				if answer == 'Y' && addTwit(ctx, name) {

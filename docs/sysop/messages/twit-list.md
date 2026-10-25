@@ -16,11 +16,12 @@ prompt. Changes save immediately in the caller's `twitList` in `users.json`.
 They are session preferences, not sysop-owned fields.
 
 In the message reader, **Twit** on the bottom command bar (hotkey **I**, or
-arrow to it) adds the author of the message on screen. It asks before adding,
-showing the author's name; answering N leaves the list and the message as they
-were. A refusal (yourself, an exempt user, a duplicate, a full list) is shown
-briefly under the prompt and the message is redrawn. After a successful add the author's messages are
-hidden at once and the reader moves to the next visible message; if there is
+arrow to it) adds the author of the message on screen. The add is checked
+first: yourself, a sysop or co-sysop, an author already on the list, or a full
+list is refused on the reader's notice line without asking anything.
+Otherwise it asks before adding, showing the author's name; answering N leaves
+the list and the message as they were. After a successful add the author's
+messages are hidden at once and the reader moves to the next visible message; if there is
 none it says so and leaves the reader, as Next does at the end. **T** keeps its
 existing Thread function. Anonymous authors cannot be quick-added and anonymous
 posts are always visible. The quick-add is listed in the reader's ? help.
@@ -51,7 +52,7 @@ In `config.json`:
 | --- | --- | --- |
 | `twitListEnabled` | `true` | Board-wide switch, also **CONFIG → System Setup → Default Settings → Twit Lists**. See below. |
 | `twitListMax` | 50 | Maximum entries; zero or negative uses 50. |
-| `twitExemptLevel` | sysop level | Local users at or above this level cannot be added. Zero or negative uses `sysOpLevel`. Sysops are always exempt. |
+| `twitExemptLevel` | co-sysop level | Local users at or above this level cannot be added. Sysops and co-sysops (`sysOpLevel`, `coSysOpLevel`) are always exempt; zero or negative protects only them, and a value above `coSysOpLevel` cannot unprotect co-sysops. |
 
 ### Turning Twit Lists off
 
@@ -72,7 +73,7 @@ that is read as on, so upgraded boards keep the behaviour they had. The menu
 art is static, so the stock MSGMENU still shows [I] Twit List while the feature
 is off; selecting it shows the notice.
 
-You cannot add yourself. Local exemptions are rechecked when the reader/list or
+You cannot add yourself ("You can't ignore yourself!"). Local exemptions are rechecked when the reader/list or
 QWK export builds its matcher; promoted users become visible on the next entry.
 Network entries have no account security level and are not exempt, even when their
 name matches a sysop. Duplicate entries are refused.

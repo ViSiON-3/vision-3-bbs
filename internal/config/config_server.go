@@ -20,7 +20,7 @@ type ServerConfig struct {
 	// boards keep filtering. Saved lists are kept while it is off.
 	TwitListEnabled          *bool  `json:"twitListEnabled,omitempty"`
 	TwitListMax              int    `json:"twitListMax"`     // <=0 defaults to 50
-	TwitExemptLevel          int    `json:"twitExemptLevel"` // <=0 uses SysOpLevel
+	TwitExemptLevel          int    `json:"twitExemptLevel"` // <=0: only sysops and co-sysops are exempt
 	BoardName                string `json:"boardName"`
 	SysOpName                string `json:"sysOpName"`
 	QWKID                    string `json:"qwkID,omitempty"` // Explicit QWK packet ID; blank = derive from BoardName

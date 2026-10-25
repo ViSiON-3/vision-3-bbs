@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -14,7 +15,7 @@ import (
 // twitPolicy reads list limits and exemption levels from the current board configuration.
 func twitPolicy(e *MenuExecutor) user.TwitPolicy {
 	cfg := e.GetServerConfig()
-	return user.TwitPolicy{MaxEntries: cfg.TwitListMax, ExemptLevel: cfg.TwitExemptLevel, SysOpLevel: cfg.SysOpLevel}
+	return user.TwitPolicy{MaxEntries: cfg.TwitListMax, ExemptLevel: cfg.TwitExemptLevel, SysOpLevel: cfg.SysOpLevel, CoSysOpLevel: cfg.CoSysOpLevel}
 }
 
 // twitMatcher resolves the session list against current local accounts. It
@@ -52,23 +53,27 @@ func saveTwitList(um *user.UserMgr, u *user.User, entries []user.TwitEntry) erro
 	return nil
 }
 
+// twitRefusal returns the message explaining why NewTwitEntry refused an add.
+func twitRefusal(st *config.StringsConfig, err error) string {
+	switch err {
+	case user.ErrTwitSelf:
+		return st.TwitSelf
+	case user.ErrTwitExempt:
+		return st.TwitExempt
+	case user.ErrTwitFull:
+		return st.TwitFull
+	case user.ErrTwitDuplicate:
+		return st.TwitDuplicate
+	}
+	return st.TwitInvalid
+}
+
 // tryAddTwit validates and saves an entry, returning the message to show.
 func tryAddTwit(c *cmdCtx, name string) (string, bool) {
 	entry, err := user.NewTwitEntry(c.currentUser, c.userManager, name, twitPolicy(c.e))
 	st := c.e.Strings()
 	if err != nil {
-		text := st.TwitInvalid
-		switch err {
-		case user.ErrTwitSelf:
-			text = st.TwitSelf
-		case user.ErrTwitExempt:
-			text = st.TwitExempt
-		case user.ErrTwitFull:
-			text = st.TwitFull
-		case user.ErrTwitDuplicate:
-			text = st.TwitDuplicate
-		}
-		return text, false
+		return twitRefusal(st, err), false
 	}
 	entries := append(append([]user.TwitEntry(nil), c.currentUser.TwitList...), entry)
 	if err := saveTwitList(c.userManager, c.currentUser, entries); err != nil {
