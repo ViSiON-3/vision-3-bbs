@@ -97,7 +97,13 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		body := jsString(opts, "body", "")
 		replyTo := jsString(opts, "replyTo", "")
 
-		msgNum, err := mgr.AddMessage(areaID, eng.session.UserHandle, to, subject, body, replyTo)
+		// Signed as the message reader signs a post: the real name where the
+		// area requires one. A missing area is left for AddMessage to report.
+		from := eng.session.UserHandle
+		if area, ok := mgr.GetAreaByID(areaID); ok {
+			from = area.PostingName(eng.session.UserHandle, eng.session.UserRealName)
+		}
+		msgNum, err := mgr.AddMessage(areaID, from, to, subject, body, replyTo)
 		if err != nil {
 			panic(vm.NewGoError(err))
 		}

@@ -40,6 +40,17 @@ func (a *MessageArea) IsQWKNet() bool {
 	return a != nil && strings.EqualFold(a.AreaType, AreaTypeQWKNet)
 }
 
+// PostingName returns the name a post in the area is signed with: the
+// poster's real name when the area requires one and the poster has one,
+// otherwise the handle. Private mail outside netmail is signed by handle
+// whatever this says; callers posting it should not ask.
+func (a *MessageArea) PostingName(handle, realName string) string {
+	if a != nil && a.RealNameOnly && strings.TrimSpace(realName) != "" {
+		return realName
+	}
+	return handle
+}
+
 // DisplayMessage is a high-level message view for the UI layer.
 // It wraps the JAM binary data into a form suitable for display and
 // interaction in the message reader/composer.
