@@ -7,13 +7,15 @@ replaces the older `USERCFG` menu mentioned in issue #398.
 
 The Twit List is drawn like the generated door menu: a title, a short note
 that this is the caller's private ignore list (nobody is told and nothing is
-deleted) with how many of the allowed entries are used, the numbered list (or
-a note that it is empty), the commands, and the standard
+deleted) with how many of the allowed entries are used, the numbered list in
+three columns (or a note that it is empty), the commands, and the standard
 `[time] Selection:` prompt. Type A to add a handle or network name, D to
 delete an entry by number, C to clear with confirmation, and Q (or Enter) to
 go back to the menu you came from. Lists too long for one screen show a page
 line; `[` and `]` (or P and N) move between pages, and entry numbers stay the
-same on every page. After each command the screen is repainted with the
+same on every page. At 80x24 a page holds 30 entries, so a full list of 50
+takes two pages. Entries run down each column; a terminal too narrow for
+three 19-character columns gets two, or one. After each command the screen is repainted with the
 result (added, removed, refused and why) above the prompt. Changes save immediately in the caller's `twitList` in `users.json`.
 They are session preferences, not sysop-owned fields.
 
@@ -106,10 +108,13 @@ before this screen existed still works.
   the commands are built in.
 - `templates/TWITLIST.TOP`: title and description. `^TI` is the MNU title,
   `^CT` the number of entries and `^MX` the limit.
-- `templates/TWITLIST.HDR`: the column heading, left out when the list is empty.
-- `templates/TWITLIST.MID`: one row. `^ID` is the entry number, `^NA` the
-  name (with `@address` for network entries). Names are shown as written,
-  never read as pipe codes, and are cut to fit the screen width.
+- `templates/TWITLIST.HDR`: the column heading. Each text line is repeated
+  over every column the page fills; blank lines are kept as spacing. Left
+  out when the list is empty.
+- `templates/TWITLIST.MID`: one entry, drawn in a column cell. `^ID` is the
+  entry number, `^NA` the name (with `@address` for network entries). Names
+  are shown as written, never read as pipe codes, and are cut to the cell
+  width (about 25 characters at 80 columns).
 - `templates/TWITLIST.BOT`: footer and command list. Lines containing `^PG`
   (page) or `^PT` (pages) appear only when the list needs more than one page.
 

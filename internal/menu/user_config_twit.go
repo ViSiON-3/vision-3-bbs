@@ -97,6 +97,10 @@ func twitListsOn(e *MenuExecutor) bool {
 	return e.GetServerConfig().TwitListsOn()
 }
 
+// twitColumns is how many columns the list is laid out in. A terminal too
+// narrow for them gets as many as fit, as in the door menu.
+const twitColumns = 3
+
 // twitNoticeRows is the room kept above the prompt for the last action's
 // result: a blank line and the message.
 const twitNoticeRows = 2
@@ -109,8 +113,8 @@ var twitDefaultArt = map[string]string{
 	"TOP": "|15^TI |08/ |11Personal Ignore List\n" +
 		"|07Hide messages from authors you'd rather not read. Your list is private:\n" +
 		"|07nobody is told, and their messages are not deleted.  |08(|15^CT|08 of |15^MX|08 used)",
-	"HDR": "\n|08  #   Author",
-	"MID": "|07  ^ID ^NA",
+	"HDR": "\n|08 #  Author",
+	"MID": "|07^ID  ^NA",
 	"BOT": "|08Page |15^PG|08 of |15^PT|08  [ / ] Page|07\n\n" +
 		"|15A|08) |07Add an author        |15D|08) |07Delete an entry\n" +
 		"|15C|08) |07Clear the list       |15Q|08) |07Quit",
@@ -142,7 +146,9 @@ func (e *MenuExecutor) twitTemplate(part string) (string, error) {
 // drawTwitScreen paints one page of the Twit List the way the generated door
 // menu is drawn: TWITLIST.MNU supplies the title, clear and prompt, and
 // templates/TWITLIST.TOP, .HDR, .MID and .BOT the header, column heading,
-// row and footer. It returns the page shown, clamped to the pages there are.
+// entry and footer. Entries run down each of twitColumns columns, and the
+// heading's text lines repeat over each. It returns the page shown, clamped
+// to the pages there are.
 func drawTwitScreen(c *cmdCtx, page int, notice string) (int, error) {
 	e, u, st := c.e, c.currentUser, c.e.Strings()
 	rec, err := e.twitMenu()
@@ -158,6 +164,13 @@ func drawTwitScreen(c *cmdCtx, page int, notice string) (int, error) {
 	w := c.termWidth
 	if w <= 0 {
 		w = 80
+	}
+	cols := doorMenuFitColumns(twitColumns, min(w, ansi.ArtWidth))
+	cellWidth := (min(w, ansi.ArtWidth) - 1) / cols
+	// fit cuts and pads one column's text to the cell width, leaving a
+	// space before the next column.
+	fit := func(s string) string {
+		return ansi.PadVisible(ansi.TruncateVisible(s, cellWidth-1), cellWidth-1, ' ') + "\x1b[0m "
 	}
 	limit := twitPolicy(e).Limit()
 	expand := func(s string, pg, pt int) string {
@@ -178,16 +191,30 @@ func drawTwitScreen(c *cmdCtx, page int, notice string) (int, error) {
 	if len(u.TwitList) == 0 {
 		heading = ""
 	}
+	// columnHeading repeats each text line of the heading over n columns;
+	// blank lines are kept as spacing.
+	columnHeading := func(n, pg, pt int) string {
+		var out []string
+		for _, l := range strings.Split(strings.ReplaceAll(expand(heading, pg, pt), "\r", ""), "\n") {
+			cell := string(ansi.ReplacePipeCodes([]byte(l)))
+			if strings.TrimSpace(stripEscapes(cell)) == "" {
+				out = append(out, "")
+				continue
+			}
+			out = append(out, strings.TrimRight(strings.Repeat(fit(cell), n), " "))
+		}
+		return strings.Join(out, "\n")
+	}
 	// Size the page without paging lines first; only a list that overflows
 	// it needs them, and then the page is sized with them.
 	rows := func(pt int) int {
-		top := doorMenuLines(expand(art[0], pt, pt), w) + doorMenuLines(expand(heading, pt, pt), w)
+		top := doorMenuLines(expand(art[0], pt, pt), w) + doorMenuLines(columnHeading(cols, pt, pt), w)
 		bottom := doorMenuLines(expand(art[3], pt, pt), w) + twitNoticeRows
 		return doorMenuPageSize(c.termHeight, top, bottom, doorMenuLines(prompt.String()+strings.Repeat("X", 16), w), 1)
 	}
-	perPage := rows(1)
+	perPage := rows(1) * cols
 	if len(u.TwitList) > perPage {
-		perPage = rows(2)
+		perPage = rows(2) * cols
 	}
 	pages := max((len(u.TwitList)+perPage-1)/perPage, 1)
 	page = min(max(page, 0), pages-1)
@@ -201,22 +228,39 @@ func drawTwitScreen(c *cmdCtx, page int, notice string) (int, error) {
 		terminalio.WriteProcessedBytes(c.terminal, []byte(ansi.ClearScreen()), c.outputMode)
 	}
 	write(expand(art[0], page+1, pages))
-	write(expand(heading, page+1, pages))
 	if len(u.TwitList) == 0 {
 		c.e.writeString(c.terminal, c.outputMode, st.TwitEmpty)
 	}
-	// The row template is expanded and coloured first and the name put in
+	// The entry template is expanded and coloured first and the name put in
 	// after, so a name is shown as written, never read as pipe codes.
 	row := string(ansi.ReplacePipeCodes([]byte(expand(art[2], page+1, pages))))
-	for i := page * perPage; i < min((page+1)*perPage, len(u.TwitList)); i++ {
+	cell := func(i int) string {
 		entry := u.TwitList[i]
 		name := entry.Name
 		if entry.Addr != "" {
 			name += "@" + entry.Addr
 		}
-		line := strings.Replace(strings.Replace(row, "^ID", fmt.Sprintf("%-3d", i+1), 1), "^NA", name, 1)
-		// Clip long names so every entry stays on one row of the page.
-		terminalio.WriteProcessedBytes(c.terminal, []byte(ansi.TruncateVisible(line, w-1)+"\x1b[0m\r\n"), c.outputMode)
+		return strings.Replace(strings.Replace(row, "^ID", fmt.Sprintf("%2d", i+1), 1), "^NA", name, 1)
+	}
+	// Entries run down each column. A page that is not full is split evenly
+	// across the columns rather than filling the first one.
+	start := page * perPage
+	onPage := min(perPage, len(u.TwitList)-start)
+	rowsOnPage := (onPage + cols - 1) / cols
+	if heading != "" {
+		// Headed only over the columns this page fills; already coloured.
+		used := (onPage + rowsOnPage - 1) / rowsOnPage
+		terminalio.WriteProcessedBytes(c.terminal, []byte(strings.ReplaceAll(columnHeading(used, page+1, pages), "\n", "\r\n")+"\r\n"), c.outputMode)
+	}
+	for r := 0; r < rowsOnPage; r++ {
+		var line strings.Builder
+		for k := 0; k < cols; k++ {
+			if i := k*rowsOnPage + r; i < onPage {
+				// Long names are cut to the cell, so every entry stays on one row.
+				line.WriteString(fit(cell(start + i)))
+			}
+		}
+		terminalio.WriteProcessedBytes(c.terminal, []byte(strings.TrimRight(line.String(), " ")+"\r\n"), c.outputMode)
 	}
 	write(expand(art[3], page+1, pages))
 	c.e.writeString(c.terminal, c.outputMode, notice)

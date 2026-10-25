@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -53,7 +54,7 @@ func TestTwitScreenRedrawsWithNoticeAfterAction(t *testing.T) {
 	if len(parts) != 4 {
 		t.Fatalf("got %d paints, want 3\n%s", len(parts)-1, r.text())
 	}
-	if !strings.Contains(parts[2], "(1 of 50 used)") || !strings.Contains(parts[2], "1   Remote") || !strings.Contains(parts[2], "Added to your Twit List.") {
+	if !strings.Contains(parts[2], "(1 of 50 used)") || !strings.Contains(parts[2], " 1  Remote") || !strings.Contains(parts[2], "Added to your Twit List.") {
 		t.Fatalf("after add:\n%s", parts[2])
 	}
 	if !strings.Contains(parts[3], "Invalid") || strings.Contains(parts[3], "Added") {
@@ -61,29 +62,51 @@ func TestTwitScreenRedrawsWithNoticeAfterAction(t *testing.T) {
 	}
 }
 
-// TestTwitScreenPagesLongLists checks that a long list pages and numbers stay global.
+// TestTwitScreenPagesLongLists checks a full list of 50 takes two pages of
+// three columns at 80x24, and that numbers stay global across pages.
 func TestTwitScreenPagesLongLists(t *testing.T) {
 	env := newMsgEnv(t)
-	for i := 1; i <= 20; i++ {
+	for i := 1; i <= 50; i++ {
 		env.caller.TwitList = append(env.caller.TwitList, user.TwitEntry{Name: fmt.Sprintf("Author%02d", i)})
 	}
-	r := env.runCmd("CFG_TWITLIST", env.caller, "", "]\rD\r20\rQ\r")
+	r := env.runCmd("CFG_TWITLIST", env.caller, "", "]\rD\r50\rQ\r")
 	parts := twitPaints(r)
 	if len(parts) != 4 {
 		t.Fatalf("got %d paints\n%s", len(parts)-1, r.text())
 	}
 	first, second, third := parts[1], parts[2], parts[3]
-	if !strings.Contains(first, "Page 1 of 2") || !strings.Contains(first, "Author01") || strings.Contains(first, "Author20") {
+	if !strings.Contains(first, "Page 1 of 2") || !strings.Contains(first, "Author30") || strings.Contains(first, "Author31") {
 		t.Fatalf("first page:\n%s", first)
 	}
-	if !strings.Contains(second, "Page 2 of 2") || !strings.Contains(second, "20  Author20") || strings.Contains(second, "Author01") {
+	if !strings.Contains(second, "Page 2 of 2") || !strings.Contains(second, "50  Author50") || strings.Contains(second, "Author30") {
 		t.Fatalf("second page:\n%s", second)
 	}
-	if !strings.Contains(third, "removed") || strings.Contains(third, "Author20") {
+	if !strings.Contains(third, "removed") || strings.Contains(third, "Author50") {
 		t.Fatalf("after delete:\n%s", third)
 	}
-	if got := env.mustDiskUser(2).TwitList; len(got) != 19 {
-		t.Fatalf("saved %d entries, want 19", len(got))
+	if got := env.mustDiskUser(2).TwitList; len(got) != 49 {
+		t.Fatalf("saved %d entries, want 49", len(got))
+	}
+}
+
+// TestTwitScreenColumnsRunDown checks entries fill each column top to bottom,
+// three to a row, and that the heading covers only the columns in use.
+func TestTwitScreenColumnsRunDown(t *testing.T) {
+	env := newMsgEnv(t)
+	for i := 1; i <= 30; i++ {
+		env.caller.TwitList = append(env.caller.TwitList, user.TwitEntry{Name: fmt.Sprintf("Author%02d", i)})
+	}
+	paint := twitPaints(env.runCmd("CFG_TWITLIST", env.caller, "", "Q\r"))[1]
+	if !regexp.MustCompile(` 1  Author01 +11  Author11 +21  Author21 *\r*\n`).MatchString(paint) || strings.Contains(paint, "Page") {
+		t.Fatalf("not three columns down on one page:\n%s", paint)
+	}
+	if n := strings.Count(paint, "#  Author"); n != 3 {
+		t.Fatalf("heading over %d columns, want 3", n)
+	}
+	env.caller.TwitList = env.caller.TwitList[:2]
+	paint = twitPaints(env.runCmd("CFG_TWITLIST", env.caller, "", "Q\r"))[1]
+	if n := strings.Count(paint, "#  Author"); n != 2 {
+		t.Fatalf("two entries headed over %d columns, want 2:\n%s", n, paint)
 	}
 }
 
@@ -188,7 +211,7 @@ func TestTwitScreenClipsLongNames(t *testing.T) {
 	env := newMsgEnv(t)
 	env.caller.TwitList = []user.TwitEntry{{Name: strings.Repeat("x", 150)}}
 	r := env.runCmd("CFG_TWITLIST", env.caller, "", "Q\r")
-	if !r.has("  1   "+strings.Repeat("x", 73)) || r.has(strings.Repeat("x", 74)) {
+	if !r.has(" 1  "+strings.Repeat("x", 21)) || r.has(strings.Repeat("x", 22)) {
 		t.Fatalf("long name not clipped:\n%s", r.text())
 	}
 }
@@ -230,7 +253,7 @@ func TestTwitScreenFallsBackWithoutMenuFiles(t *testing.T) {
 	env.caller.TwitList = []user.TwitEntry{{Name: "Remote"}}
 	r := env.runCmd("CFG_TWITLIST", env.caller, "", "Q\r")
 	paint := strings.Join(twitPaints(r), "")
-	if r.err != nil || !strings.Contains(paint, "Personal Ignore List") || !strings.Contains(paint, "1   Remote") || !strings.Contains(paint, "Selection:") {
+	if r.err != nil || !strings.Contains(paint, "Personal Ignore List") || !strings.Contains(paint, " 1  Remote") || !strings.Contains(paint, "Selection:") {
 		t.Fatalf("fallback: %v\n%s", r.err, paint)
 	}
 }
