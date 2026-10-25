@@ -119,7 +119,8 @@ func formatMessageBody(body, originAddr string, includeOrigin bool, banners quot
 	for i, rawLine := range lines {
 		line := rawLine
 		isQuote := isQuoteLine(line)
-		isTear := isTearLine(line)
+		// A "--- Name Done ---" quote banner starts like a tearline but is not one.
+		isTear := isTearLine(line) && !banners.match(line)
 		isOrigin := isOriginLine(line)
 		isOriginBlock := isTear || isOrigin
 
@@ -139,7 +140,7 @@ func formatMessageBody(body, originAddr string, includeOrigin bool, banners quot
 		}
 
 		if isQuote {
-			if !prevWasQuote && len(out) > 0 && out[len(out)-1] != "" && !(i > 0 && banners.match(lines[i-1])) {
+			if !prevWasQuote && len(out) > 0 && out[len(out)-1] != "" && (i == 0 || !banners.match(lines[i-1])) {
 				out = append(out, "")
 			}
 

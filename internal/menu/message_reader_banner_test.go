@@ -64,3 +64,15 @@ func TestQuoteBannerMatcher(t *testing.T) {
 		t.Error("nil matcher matched")
 	}
 }
+
+// TestPlainQuoteBannersAreNotTearlines keeps an uncoloured "--- Name Done ---"
+// banner against its quote rather than spacing and dimming it as a tearline,
+// while a real tearline after it still is one.
+func TestPlainQuoteBannersAreNotTearlines(t *testing.T) {
+	body := "--- Mickey Said ---\nMi> hello\n--- Mickey Done ---\n\nreply\n--- ViSiON/3 v0.9.4/Linux"
+	got := strings.Split(formatMessageBody(body, "", false, newQuoteBannerMatcher(boardBanners)), "\n")
+	want := []string{"--- Mickey Said ---", "|14Mi> hello|07", "--- Mickey Done ---", "", "reply", "", "|08--- ViSiON/3 v0.9.4/Linux|07"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}

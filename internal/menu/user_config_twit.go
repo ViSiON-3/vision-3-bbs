@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -167,10 +168,13 @@ func drawTwitScreen(c *cmdCtx, page int, notice string) (int, error) {
 	}
 	cols := doorMenuFitColumns(twitColumns, min(w, ansi.ArtWidth))
 	cellWidth := (min(w, ansi.ArtWidth) - 1) / cols
-	// fit cuts and pads one column's text to the cell width, leaving a
-	// space before the next column.
+	// fit cuts and pads one column's text to the cell width in on-screen
+	// columns, so a double-width name cannot spill into the next column or
+	// row, leaving a space before the next column.
 	fit := func(s string) string {
-		return ansi.PadVisible(ansi.TruncateVisible(s, cellWidth-1), cellWidth-1, ' ') + "\x1b[0m "
+		s = clipColumns(s, cellWidth-1, c.outputMode)
+		used := columnWidth(stripEscapes(s), utf8.ValidString(s), c.outputMode)
+		return s + strings.Repeat(" ", max(cellWidth-1-used, 0)) + "\x1b[0m "
 	}
 	limit := twitPolicy(e).Limit()
 	expand := func(s string, pg, pt int) string {
@@ -278,11 +282,6 @@ func runCfgTwitList(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 	st := c.e.Strings()
-	if !twitListsOn(c.e) {
-		c.e.writeString(c.terminal, c.outputMode, st.TwitDisabled)
-		uiPause(readerNoticePause)
-		return u, "", nil
-	}
 	read := func(prompt string) (string, error) {
 		c.e.writeString(c.terminal, c.outputMode, prompt)
 		return readLineFromSessionIH(c.s, c.terminal)
@@ -290,6 +289,12 @@ func runCfgTwitList(c *cmdCtx, args string) (*user.User, string, error) {
 	page, notice := 0, ""
 	var err error
 	for {
+		// The sysop may turn Twit Lists off while the caller is here.
+		if !twitListsOn(c.e) {
+			c.e.writeString(c.terminal, c.outputMode, st.TwitDisabled)
+			uiPause(readerNoticePause)
+			return u, "", nil
+		}
 		if page, err = drawTwitScreen(c, page, notice); err != nil {
 			return u, "", err
 		}

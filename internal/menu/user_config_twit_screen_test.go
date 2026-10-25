@@ -10,6 +10,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/mattn/go-runewidth"
 )
 
 // setTwitLists turns the board-wide Twit List switch on or off for env.
@@ -278,4 +279,23 @@ func TestTwitDefaultsMatchShippedFiles(t *testing.T) {
 	if *rec != twitDefaultMenu {
 		t.Errorf("TWITLIST.MNU = %+v, built-in %+v", *rec, twitDefaultMenu)
 	}
+}
+
+// TestTwitScreenClipsDoubleWidthNames cuts names by screen columns, so wide
+// characters cannot push a cell past its width.
+func TestTwitScreenClipsDoubleWidthNames(t *testing.T) {
+	env := newMsgEnv(t)
+	env.outputMode = ansi.OutputModeUTF8
+	env.caller.TwitList = []user.TwitEntry{{Name: strings.Repeat("漢", 30)}, {Name: "Second"}, {Name: "Third"}}
+	paint := twitPaints(env.runCmd("CFG_TWITLIST", env.caller, "", "Q\r"))[1]
+	for _, line := range strings.Split(paint, "\n") {
+		if strings.Contains(line, "漢") {
+			cells := strings.TrimRight(line, "\r ")
+			if w := runewidth.StringWidth(cells); w > 79 || !strings.Contains(cells, "2  Second") {
+				t.Fatalf("row is %d columns or lost its neighbour: %q", w, cells)
+			}
+			return
+		}
+	}
+	t.Fatalf("no wide name shown:\n%s", paint)
 }
