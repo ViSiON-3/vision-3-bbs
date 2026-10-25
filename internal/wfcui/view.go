@@ -584,6 +584,8 @@ func eventStatusText(ev admin.ScheduledEvent) (string, uint8) {
 	switch {
 	case ev.Running:
 		return "running", cYellow
+	case ev.Waiting:
+		return "waiting for slot", cYellow
 	case !ev.Enabled:
 		return "disabled", cDarkGray
 	case ev.LastStatus == "":

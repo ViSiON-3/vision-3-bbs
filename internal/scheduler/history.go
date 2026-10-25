@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // LoadHistory loads event history from a JSON file
@@ -121,4 +122,20 @@ func (s *Scheduler) updateHistory(result EventResult) {
 
 	slog.Debug("updated event history", "id", result.EventID, "status", h.LastStatus,
 		"duration_ms", h.LastDuration, "runs", h.RunCount, "success", h.SuccessCount, "failures", h.FailureCount)
+}
+
+// recordSkip notes in the event's history that a firing did not run, and
+// why, so a skipped event shows on the WFC Events tab and not only in the
+// log.
+func (s *Scheduler) recordSkip(eventID, reason string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h, exists := s.history[eventID]
+	if !exists {
+		h = &EventHistory{EventID: eventID}
+		s.history[eventID] = h
+	}
+	h.SkipCount++
+	h.LastSkipped = time.Now()
+	h.LastSkipReason = reason
 }

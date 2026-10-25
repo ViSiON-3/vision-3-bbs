@@ -160,8 +160,8 @@
     {
       "id": "example_nightly_msgbase_fix",
       "name": "Example: Nightly Message Base Integrity Check",
-      "schedule": "0 2 * * *",
-      "comment": "Check and repair JAM message base integrity across all areas at 2 AM. Part of a 3-step nightly maintenance sequence: fix → purge → pack.",
+      "schedule": "3 2 * * *",
+      "comment": "Check and repair JAM message base integrity across all areas at 2:03 AM, a minute no poll, toss, scan or pack event fires on. First of a 3-step nightly sequence: fix → purge → pack; purge and pack are chained after it, so enable all three.",
       "command": "{BBS_ROOT}/v3mail",
       "args": [
         "fix",
@@ -175,8 +175,9 @@
     {
       "id": "example_nightly_msgbase_purge",
       "name": "Example: Nightly Message Base Purge",
-      "schedule": "15 2 * * *",
-      "comment": "Purge messages exceeding per-area age/count limits (max_msg_age, max_msgs) configured in message_areas.json. Runs at 2:15 AM between fix and pack. No flags needed — limits are read from config.",
+      "schedule": "",
+      "run_after": "example_nightly_msgbase_fix",
+      "comment": "Purge messages exceeding per-area age/count limits (max_age, max_messages) configured in message_areas.json. Runs when the fix event finishes (run_after), before pack. No flags needed — limits are read from config.",
       "command": "{BBS_ROOT}/v3mail",
       "args": [
         "purge",
@@ -189,8 +190,9 @@
     {
       "id": "example_nightly_msgbase_pack",
       "name": "Example: Nightly Message Base Pack",
-      "schedule": "30 2 * * *",
-      "comment": "Defragment and compact all JAM message bases at 2:30 AM, reclaiming space from purged/deleted messages. Runs last in the nightly sequence.",
+      "schedule": "",
+      "run_after": "example_nightly_msgbase_purge",
+      "comment": "Defragment and compact all JAM message bases, reclaiming space from purged/deleted messages. Runs when the purge event finishes (run_after), last in the nightly sequence.",
       "command": "{BBS_ROOT}/v3mail",
       "args": [
         "pack",

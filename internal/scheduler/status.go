@@ -15,12 +15,16 @@ type EventStatus struct {
 	Enabled        bool
 	RunAtStartup   bool
 	Running        bool
+	Waiting        bool      // fired while every slot was taken; waiting for one
 	NextRun        time.Time // zero when the event is disabled or has no schedule
 	LastRun        time.Time
 	LastStatus     string // "success", "failure", "timeout", or "" if never run
 	LastDurationMs int64
 	RunCount       int
 	FailureCount   int
+	SkipCount      int
+	LastSkipped    time.Time
+	LastSkipReason string
 }
 
 // Status reports every configured event with its schedule, run history, and
@@ -37,6 +41,7 @@ func (s *Scheduler) Status(now time.Time) []EventStatus {
 			Enabled:      e.Enabled,
 			RunAtStartup: e.RunAtStartup,
 			Running:      s.runningEvents[e.ID],
+			Waiting:      s.waitingEvents[e.ID],
 		}
 		if h := s.history[e.ID]; h != nil {
 			st.LastRun = h.LastRun
@@ -44,6 +49,9 @@ func (s *Scheduler) Status(now time.Time) []EventStatus {
 			st.LastDurationMs = h.LastDuration
 			st.RunCount = h.RunCount
 			st.FailureCount = h.FailureCount
+			st.SkipCount = h.SkipCount
+			st.LastSkipped = h.LastSkipped
+			st.LastSkipReason = h.LastSkipReason
 		}
 		// The cron entries do not carry the event ID, so derive the next
 		// fire time from the spec with the same parser cron.New() uses.

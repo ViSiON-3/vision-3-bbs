@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
 )
 
 type detailRow struct{ label, value string }
@@ -30,6 +32,8 @@ func (m Model) drawDetails(s *screen, g geometry) {
 			{"Duration", formatMillis(ev.LastDurationMs)},
 			{"Runs", strconv.Itoa(ev.RunCount)},
 			{"Failures", strconv.Itoa(ev.FailureCount)},
+			{"Skipped", strconv.Itoa(ev.SkipCount)},
+			{"Last Skipped", lastSkippedText(ev)},
 		}
 	} else if n, ok := m.selectedNode(); ok {
 		title = fmt.Sprintf("Node %d", n.NodeID)
@@ -116,4 +120,12 @@ func formatTimeLeft(mins int, unlimited bool) string {
 	default:
 		return fmt.Sprintf("%dm", mins)
 	}
+}
+
+// lastSkippedText is when the event last fired without running, and why.
+func lastSkippedText(ev admin.ScheduledEvent) string {
+	if ev.LastSkipped.IsZero() {
+		return "-"
+	}
+	return formatTimestamp(ev.LastSkipped) + " (" + sanitizeTerminal(ev.LastSkipReason) + ")"
 }
