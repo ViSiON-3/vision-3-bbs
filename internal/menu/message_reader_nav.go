@@ -139,6 +139,10 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		replyName, replyTo = handle, handle
 	}
 
+	// Sign the reply the way compose signs a new post: the real name where
+	// the area requires one, the handle on private mail outside netmail.
+	fromName := postingName(replyArea, currentUser, currentMsg.IsPrivate && !isNetmailArea(replyArea))
+
 	e.writeString(terminal, outputMode, e.Strings().MsgLaunchingEditor)
 
 	// Start with empty editor - user will use /Q command to quote if desired
@@ -150,7 +154,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		ConfArea:   fmt.Sprintf("%s > %s", confName, areaName),
 		Networked:  isNetworkedArea(replyArea),
 	}
-	replyBody, saved, editErr := editor.RunEditorWithMetadata("", s, sessionOutput(s), outputMode, newSubject, replyName, currentUser.Handle, false,
+	replyBody, saved, editErr := editor.RunEditorWithMetadata("", s, sessionOutput(s), outputMode, newSubject, replyName, fromName, false,
 		currentMsg.From, currentMsg.Subject, quoteDate, quoteTime, false, quoteLines, ih, replyCtx)
 	if editErr != nil {
 		slog.Error("editor failed", "node", nodeNumber, "error", editErr)
@@ -171,16 +175,15 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	}
 
 	// Save reply, recording the parent message number for threading. A reply to
-	// a private message stays private so it remains visible to its recipient.
-	replyMsgID := currentMsg.MsgID
-	var err error
-	if currentMsg.IsPrivate {
-		_, err = e.MessageMgr.AddPrivateReply(currentAreaID, currentUser.Handle, replyTo,
-			newSubject, replyBody, replyMsgID, currentMsg.MsgNum)
-	} else {
-		_, err = e.MessageMgr.AddReply(currentAreaID, currentUser.Handle, replyTo,
-			newSubject, replyBody, replyMsgID, currentMsg.MsgNum)
-	}
+	// a private message stays private so it remains visible to its recipient,
+	// and records the replier's handle so a reply signed with the real name
+	// (netmail) stays visible to its sender too.
+	_, err := e.MessageMgr.Post(currentAreaID, fromName, replyTo, newSubject, replyBody, message.PostOptions{
+		Private:      currentMsg.IsPrivate,
+		ReplyToNum:   currentMsg.MsgNum,
+		ReplyToMsgID: currentMsg.MsgID,
+		SenderHandle: currentUser.Handle,
+	})
 	if err != nil {
 		slog.Error("failed to save reply", "node", nodeNumber, "error", err)
 		e.writeString(terminal, outputMode, e.Strings().MsgReplyError)

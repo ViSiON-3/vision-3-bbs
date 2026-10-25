@@ -81,6 +81,10 @@ type Message struct {
 	SeenBy   string
 	Path     string
 	Kludges  []string
+	// SenderHandle is the handle of the local account that wrote the
+	// message, stored (SfldV3SenderHandle) only when From is another name.
+	// Only local writes record it; WriteReceivedMessage drops it.
+	SenderHandle string
 	// Unprocessed makes WriteMessage leave DateProcessed at 0, as
 	// WriteMessageExt does for echomail, so a later scan (the V3Net outbound
 	// sweep) knows the message still has to be sent. Not read back.

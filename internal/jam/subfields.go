@@ -35,6 +35,9 @@ func buildSubfields(msg *Message) []Subfield {
 	for _, kludge := range msg.Kludges {
 		sfs = append(sfs, CreateSubfield(SfldFTSKludge, kludge))
 	}
+	if msg.SenderHandle != "" {
+		sfs = append(sfs, CreateSubfield(SfldV3SenderHandle, msg.SenderHandle))
+	}
 	return sfs
 }
 
