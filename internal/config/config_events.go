@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -79,28 +80,67 @@ func LoadEventsConfig(configPath string) (EventsConfig, error) {
 	return config, nil
 }
 
-// RunsMessagePurge reports whether an enabled event runs "v3mail purge",
-// the only thing that enforces message areas' max_messages and max_age.
-// The command may be the v3mail binary or "go run .../cmd/v3mail".
+// RunsMessagePurge reports whether an event the scheduler will run invokes
+// "v3mail purge --all", the only thing that enforces message areas'
+// max_messages and max_age. The command may be the v3mail binary or
+// "go run .../cmd/v3mail". A --dry-run purge deletes nothing, so it does
+// not count.
 func (c EventsConfig) RunsMessagePurge() bool {
 	for _, ev := range c.Events {
-		if !ev.Enabled {
+		// The scheduler skips an event with no trigger.
+		if !ev.Enabled || (ev.Schedule == "" && ev.RunAfter == "" && !ev.RunAtStartup) {
 			continue
 		}
-		v3mail, purge := false, false
-		for _, word := range append([]string{ev.Command}, ev.Args...) {
-			// Split on both separators: a Windows path is read on any OS.
-			base := strings.ToLower(word[strings.LastIndexAny(word, `/\`)+1:])
-			if base == "v3mail" || base == "v3mail.exe" {
-				v3mail = true
-			}
-			if v3mail && word == "purge" {
-				purge = true
-			}
-		}
-		if purge {
+		if args, ok := v3mailArgs(ev.Command, ev.Args); ok && len(args) > 0 && args[0] == "purge" &&
+			boolFlag(args[1:], "all") && !boolFlag(args[1:], "dry-run") {
 			return true
 		}
 	}
 	return false
+}
+
+// v3mailArgs returns v3mail's own arguments when command runs v3mail,
+// either directly or as "go run <path>/v3mail".
+func v3mailArgs(command string, args []string) ([]string, bool) {
+	if isV3mailPath(command) {
+		return args, true
+	}
+	if commandBase(command) == "go" && len(args) >= 2 && args[0] == "run" && isV3mailPath(args[1]) {
+		return args[2:], true
+	}
+	return nil, false
+}
+
+// isV3mailPath reports whether path names the v3mail binary or package.
+func isV3mailPath(path string) bool {
+	base := commandBase(path)
+	return base == "v3mail" || base == "v3mail.exe"
+}
+
+// commandBase is the lower-cased last element of path. It splits on both
+// separators, so a Windows path is read on any OS.
+func commandBase(path string) string {
+	path = strings.TrimRight(path, `/\`)
+	return strings.ToLower(path[strings.LastIndexAny(path, `/\`)+1:])
+}
+
+// boolFlag reports whether args set the boolean flag name to true, in any
+// form Go's flag package accepts (-name, --name, -name=true).
+func boolFlag(args []string, name string) bool {
+	set := false
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		key, val, hasVal := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if key != name {
+			continue
+		}
+		set = true
+		if hasVal {
+			b, err := strconv.ParseBool(val)
+			set = err == nil && b
+		}
+	}
+	return set
 }

@@ -1076,7 +1076,7 @@ echomail areas; answer **Yes** to update them. From the command line,
 `./helper areas set --network <net> --type echomail --real-name on
 --max-messages 500` does the same. The purge limits are only enforced when the
 nightly `v3mail purge` event is enabled (see
-[Message Purge Configuration](message-areas.md#message-purge-configuration)).
+[Message Purge Configuration](messages/message-areas.md#message-purge-configuration)).
 
 New areas are named the way the setup wizard names its areas: the tag is
 `<network>_<echo>` in lower case (e.g. `fidonet_linux`), the name is the echo

@@ -110,7 +110,7 @@ func TestAutoCreateAreaSyncNoLeavesAreas(t *testing.T) {
 // a purge limit set while no enabled event runs v3mail purge says so.
 func TestAutoCreateMaxMessagesWarnsWithoutPurgeEvent(t *testing.T) {
 	purge := config.EventsConfig{Events: []config.EventConfig{
-		{Command: "{BBS_ROOT}/v3mail", Args: []string{"purge", "--all"}, Enabled: true},
+		{Command: "{BBS_ROOT}/v3mail", Args: []string{"purge", "--all"}, Schedule: "15 2 * * *", Enabled: true},
 	}}
 	for _, tt := range []struct {
 		desc   string
