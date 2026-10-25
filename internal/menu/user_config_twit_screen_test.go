@@ -154,14 +154,14 @@ func TestTwitKonfigShowsOffWhenDisabled(t *testing.T) {
 func TestReaderBarSuffixFitsWidth(t *testing.T) {
 	caller := append(append([]MsgLightbarOption(nil), msgReaderOptions...), msgReaderIgnoreOption)
 	sysop := append(append([]MsgLightbarOption(nil), caller...), msgReaderDeleteOption)
-	for _, suffix := range []string{" |11(Reading)", " |11(NewScan)"} {
+	for _, suffix := range []string{" |11Reading", " |11NewScan"} {
 		for name, opts := range map[string][]MsgLightbarOption{"caller": caller, "sysop": sysop} {
 			if got := readerBarSuffix(opts, suffix, 80); got != suffix {
 				t.Errorf("%s bar dropped %q at 80 columns", name, suffix)
 			}
 		}
-		if got := readerBarSuffix(sysop, suffix, 79); got != "" {
-			t.Errorf("sysop bar kept %q at 79 columns", suffix)
+		if got := readerBarSuffix(sysop, suffix, 78); got != "" {
+			t.Errorf("sysop bar kept %q at 78 columns", suffix)
 		}
 	}
 }

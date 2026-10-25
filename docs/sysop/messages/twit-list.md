@@ -24,9 +24,12 @@ hidden at once and the reader moves to the next visible message; if there is
 none it says so and leaves the reader, as Next does at the end. **T** keeps its
 existing Thread function. Anonymous authors cannot be quick-added and anonymous
 posts are always visible. The quick-add is listed in the reader's ? help.
-The bar fits in 79 columns with its (Reading)/(NewScan) label for callers and
-sysops (whose bar adds Del). On a narrower screen the label is left off
-rather than wrapping.
+The bar fits in 79 columns with its Reading/NewScan label for callers and
+sysops (whose bar adds Del). If the label would reach the last column, as on
+a narrower screen or with a longer `msgReadingSuffix`/`msgNewScanSuffix`, it
+is left off rather than wrapping. Boards upgraded from the older
+`(Reading)`/`(NewScan)` strings fit at 80 columns for callers but drop the
+label for sysops until those two strings are shortened.
 
 An exact local handle is stored by user ID, including handles containing `@`.
 Otherwise, `@` separates a network name from its address. Matching uses

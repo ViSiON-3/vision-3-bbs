@@ -59,10 +59,8 @@ func readerBarSuffix(options []MsgLightbarOption, suffix string, termWidth int) 
 }
 
 // msgReaderDeleteOption is appended to the lightbar for sysop/co-sysop users only.
-// LoColor 4 (dark red) distinguishes it from regular options. It is the last
-// item, so it has no trailing space: that keeps a sysop's bar and its
-// (Reading)/(NewScan) label within 79 columns.
-var msgReaderDeleteOption = MsgLightbarOption{Label: " Del", HotKey: 'D', LoColor: 4}
+// LoColor 4 (dark red) distinguishes it from regular options.
+var msgReaderDeleteOption = MsgLightbarOption{Label: " Del ", HotKey: 'D', LoColor: 4}
 
 // msgOwnershipFilter reports whether a message may be shown to the current user.
 // A nil filter means no extra filtering; a non-nil filter is used for areas like
