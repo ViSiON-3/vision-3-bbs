@@ -39,9 +39,28 @@ var msgReaderOptions = []MsgLightbarOption{
 	{Label: " Quit ", HotKey: 'Q'},
 }
 
+// msgReaderIgnoreOption adds the current author to the caller's Twit List. It
+// sits before Quit and is left out while the sysop has Twit Lists turned off.
+var msgReaderIgnoreOption = MsgLightbarOption{Label: " Twit ", HotKey: 'I'}
+
+// readerBarSuffix returns suffix, or nothing when the bar and suffix together
+// would reach the last column of a termWidth-column row (the bar is bounded
+// by a column on each side). Like the separator line above it, the bar stays
+// off the last column, which can scroll the screen on some terminals.
+func readerBarSuffix(options []MsgLightbarOption, suffix string, termWidth int) string {
+	width := 2 + ansi.VisibleLength(string(ansi.ReplacePipeCodes([]byte(suffix))))
+	for _, opt := range options {
+		width += len(opt.Label)
+	}
+	if termWidth > 0 && width >= termWidth {
+		return ""
+	}
+	return suffix
+}
+
 // msgReaderDeleteOption is appended to the lightbar for sysop/co-sysop users only.
 // LoColor 4 (dark red) distinguishes it from regular options.
-var msgReaderDeleteOption = MsgLightbarOption{Label: " Delete ", HotKey: 'D', LoColor: 4}
+var msgReaderDeleteOption = MsgLightbarOption{Label: " Del ", HotKey: 'D', LoColor: 4}
 
 // msgOwnershipFilter reports whether a message may be shown to the current user.
 // A nil filter means no extra filtering; a non-nil filter is used for areas like
@@ -129,6 +148,7 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	baseFilter := withPrivacy(privateMailReaderFor(e, userManager, currentUser), msgFilter)
 	matcher := twitMatcher(e, userManager, currentUser)
+	quoteBanners := newQuoteBannerMatcher(e.Strings())
 	var counter *twitScanCounter
 	if len(counters) > 0 {
 		counter = counters[0]
@@ -203,11 +223,22 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	// Build option set: append Delete option for sysop/co-sysop users
 	cfg := e.GetServerConfig()
 	isSysop := currentUser.AccessLevel >= cfg.CoSysOpLevel
-	activeOptions := make([]MsgLightbarOption, len(msgReaderOptions))
-	copy(activeOptions, msgReaderOptions)
+	twitOn := twitListsOn(e)
+	activeOptions := make([]MsgLightbarOption, 0, len(msgReaderOptions)+2)
+	for _, opt := range msgReaderOptions {
+		if opt.HotKey == 'Q' && twitOn {
+			activeOptions = append(activeOptions, msgReaderIgnoreOption)
+		}
+		activeOptions = append(activeOptions, opt)
+	}
 	if isSysop {
 		activeOptions = append(activeOptions, msgReaderDeleteOption)
 	}
+	barSuffix := e.Strings().MsgReadingSuffix
+	if isNewScan {
+		barSuffix = e.Strings().MsgNewScanSuffix
+	}
+	barSuffix = readerBarSuffix(activeOptions, barSuffix, termWidth)
 
 	currentMsgNum := startMsg
 	quitNewscan := false
@@ -309,7 +340,7 @@ readerLoop:
 		area, _ := e.MessageMgr.GetAreaByID(currentAreaID)
 		includeOrigin := area != nil && (area.AreaType == "echomail" || area.AreaType == "netmail") &&
 			currentMsg.OrigAddr != "" && !hasOriginLine(currentMsg.Body)
-		formattedBody := formatMessageBody(currentMsg.Body, currentMsg.OrigAddr, includeOrigin)
+		formattedBody := formatMessageBody(currentMsg.Body, currentMsg.OrigAddr, includeOrigin, quoteBanners)
 
 		// Convert colour pipe codes to ANSI sequences. Only colour: the body
 		// was written on another system, so "||" and the screen-control codes
@@ -434,12 +465,7 @@ readerLoop:
 				drawBody()
 
 				// Display footer: lightbar only
-				var suffixText string
-				if isNewScan {
-					suffixText = e.Strings().MsgNewScanSuffix
-				} else {
-					suffixText = e.Strings().MsgReadingSuffix
-				}
+				suffixText := barSuffix
 
 				// Draw horizontal line above footer (CP437 character 196)
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight-1, 1)), outputMode)
@@ -527,12 +553,7 @@ readerLoop:
 				continue
 
 			case editor.KeyArrowLeft, editor.KeyArrowRight, editor.KeyCtrlS, editor.KeyCtrlD: // Left/Right arrow - activate interactive lightbar
-				var suffixText string
-				if isNewScan {
-					suffixText = e.Strings().MsgNewScanSuffix
-				} else {
-					suffixText = e.Strings().MsgReadingSuffix
-				}
+				suffixText := barSuffix
 
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight, 1)), outputMode)
 
@@ -575,12 +596,7 @@ readerLoop:
 						selectedKey = unicode.ToUpper(singleKey)
 					default:
 						// Not a recognized command, show lightbar
-						var suffixText string
-						if isNewScan {
-							suffixText = e.Strings().MsgNewScanSuffix
-						} else {
-							suffixText = e.Strings().MsgReadingSuffix
-						}
+						suffixText := barSuffix
 
 						// Position cursor at last row for lightbar
 						terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight, 1)), outputMode)
@@ -612,12 +628,7 @@ readerLoop:
 					continue
 				} else {
 					// Multi-byte sequence that wasn't handled as scrolling - show lightbar
-					var suffixText string
-					if isNewScan {
-						suffixText = e.Strings().MsgNewScanSuffix
-					} else {
-						suffixText = e.Strings().MsgReadingSuffix
-					}
+					suffixText := barSuffix
 
 					terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight, 1)), outputMode)
 
@@ -711,14 +722,13 @@ readerLoop:
 				}
 
 			case 'I': // Ignore author (T remains Thread).
+				if !twitOn {
+					continue // Ignore if Twit Lists are turned off
+				}
 				if strings.EqualFold(strings.TrimSpace(currentMsg.From), "Anonymous") || strings.EqualFold(strings.TrimSpace(currentMsg.From), strings.TrimSpace(e.Strings().AnonymousName)) {
 					e.showReaderNotice(terminal, outputMode, e.Strings().TwitAnonymous, termHeight)
 					needsRedraw = true
 					continue
-				}
-				answer, confirmErr := promptSingleChar(reader, terminal, fmt.Sprintf(e.Strings().TwitQuickConfirm, strings.ReplaceAll(currentMsg.From, "|", "||")), outputMode)
-				if confirmErr != nil {
-					return currentUser, "LOGOFF", confirmErr
 				}
 				name := currentMsg.From
 				// Imported JAM records may also carry MsgLocal, so compare the
@@ -733,12 +743,29 @@ readerLoop:
 					// RealNameOnly posts still need stable IDs, self checks and exemptions.
 					name = target.Handle
 				}
+				// Refuse yourself, staff, duplicates and a full list before
+				// asking, so the caller is never asked to confirm an add
+				// that cannot happen.
+				if _, err := user.NewTwitEntry(currentUser, userManager, name, twitPolicy(e)); err != nil {
+					e.showReaderNotice(terminal, outputMode, twitRefusal(e.Strings(), err), termHeight)
+					needsRedraw = true
+					continue
+				}
+				answer, confirmErr := promptSingleChar(reader, terminal, fmt.Sprintf(e.Strings().TwitQuickConfirm, strings.ReplaceAll(currentMsg.From, "|", "||")), outputMode)
+				if confirmErr != nil {
+					return currentUser, "LOGOFF", confirmErr
+				}
 				ctx := &cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, outputMode: outputMode}
 				if answer == 'Y' && addTwit(ctx, name) {
 					matcher = twitMatcher(e, userManager, currentUser)
 					navDir = 1
-					currentMsgNum++
-					break scrollLoop
+					if nxt := nextVisible(currentMsgNum); nxt > 0 {
+						currentMsgNum = nxt
+						break scrollLoop
+					}
+					// The author was the last visible message: leave as N does.
+					e.showReaderNotice(terminal, outputMode, e.Strings().MsgEndOfMessages, termHeight)
+					break readerLoop
 				}
 				if answer == 'Y' {
 					uiPause(readerNoticePause)
@@ -842,7 +869,7 @@ readerLoop:
 				break readerLoop
 
 			case '?': // Help
-				displayReaderHelp(terminal, outputMode, isSysop)
+				displayReaderHelp(terminal, outputMode, isSysop, twitOn)
 				needsRedraw = true
 				continue
 

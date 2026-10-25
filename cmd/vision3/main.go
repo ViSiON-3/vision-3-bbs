@@ -2251,10 +2251,7 @@ func main() {
 				if current, ok := userMgr.GetUserByID(u.ID); ok {
 					u = current
 				}
-				cfg := menuExecutor.GetServerConfig()
-				return user.BuildTwitMatcher(u.TwitList, userMgr, user.TwitPolicy{
-					MaxEntries: cfg.TwitListMax, ExemptLevel: cfg.TwitExemptLevel, SysOpLevel: cfg.SysOpLevel,
-				}, menuExecutor.Strings().AnonymousName)
+				return menuExecutor.TwitMatcher(userMgr, u)
 			},
 		})
 		if apiErr != nil {

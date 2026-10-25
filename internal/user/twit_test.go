@@ -155,3 +155,23 @@ func TestTwitLocalHandleWithAt(t *testing.T) {
 		t.Fatal("rename lost local match")
 	}
 }
+
+// TestTwitPolicyExemptsStaff checks sysops and co-sysops are always exempt,
+// and that twitExemptLevel only adds protection below them.
+func TestTwitPolicyExemptsStaff(t *testing.T) {
+	board := TwitPolicy{SysOpLevel: 255, CoSysOpLevel: 250}
+	for _, tc := range []struct {
+		policy TwitPolicy
+		level  int
+		want   bool
+	}{
+		{board, 255, true}, {board, 250, true}, {board, 249, false}, {board, 10, false},
+		{TwitPolicy{SysOpLevel: 255, CoSysOpLevel: 250, ExemptLevel: 100}, 100, true},
+		{TwitPolicy{SysOpLevel: 255, CoSysOpLevel: 250, ExemptLevel: 252}, 250, true}, // can't unprotect co-sysops
+		{TwitPolicy{}, 255, true}, {TwitPolicy{}, 250, false}, // no board levels known: 255 only
+	} {
+		if got := tc.policy.Exempt(&User{AccessLevel: tc.level}); got != tc.want {
+			t.Errorf("%+v level %d: exempt=%v, want %v", tc.policy, tc.level, got, tc.want)
+		}
+	}
+}

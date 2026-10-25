@@ -110,7 +110,6 @@ var FormattedKeys = []string{
 	"sysopChatHeader",
 	"termSizeNewDetectedPrompt",
 	"timeLimitWarning",
-	"twitHeader",
 	"twitHiddenSummary",
 	"twitQuickConfirm",
 	"updatePtrsSuccess",

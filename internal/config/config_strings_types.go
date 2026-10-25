@@ -5,8 +5,6 @@ package config
 type StringsConfig struct {
 	KonfigTwitListLabel string `json:"konfigTwitListLabel"`
 	KonfigTwitListHelp  string `json:"konfigTwitListHelp"`
-	TwitHeader          string `json:"twitHeader"`
-	TwitChoice          string `json:"twitChoice"`
 	TwitNamePrompt      string `json:"twitNamePrompt"`
 	TwitDeletePrompt    string `json:"twitDeletePrompt"`
 	TwitClearConfirm    string `json:"twitClearConfirm"`
@@ -22,6 +20,8 @@ type StringsConfig struct {
 	TwitSaveFailed      string `json:"twitSaveFailed"`
 	TwitAnonymous       string `json:"twitAnonymous"`
 	TwitHiddenSummary   string `json:"twitHiddenSummary"`
+	TwitEmpty           string `json:"twitEmpty"`
+	TwitDisabled        string `json:"twitDisabled"`
 
 	ConnectionStr           string `json:"connectionStr"`
 	LockedBaudStr           string `json:"lockedBaudStr"`

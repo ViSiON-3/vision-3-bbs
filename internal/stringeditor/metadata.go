@@ -653,8 +653,6 @@ func stringCatalog() []StringEntry {
 		{Label: "Chat: /TOPIC Usage", Key: "chatTopicUsage", Description: "Shown when /TOPIC is typed without a topic"},
 		{Label: "Chat: /MSG Usage", Key: "chatMsgUsage", Description: "Shown when /MSG is typed without a user and a message"},
 		{Label: "Chat: Scrollback Hint", Key: "chatScrollbackHint", Description: "Replaces the command hints while the chat is paged back with PgUp"},
-		{Label: "Twit: Header", Key: "twitHeader", Description: "Header above the Twit List (%d=entries, %d=maximum)"},
-		{Label: "Twit: Choice", Key: "twitChoice", Description: "Editor choices for adding, deleting, clearing, or quitting"},
 		{Label: "Twit: NamePrompt", Key: "twitNamePrompt", Description: "Prompt for a local handle or network name with optional address"},
 		{Label: "Twit: DeletePrompt", Key: "twitDeletePrompt", Description: "Prompt for the entry number to remove"},
 		{Label: "Twit: ClearConfirm", Key: "twitClearConfirm", Description: "Confirmation before removing every entry"},
@@ -670,6 +668,8 @@ func stringCatalog() []StringEntry {
 		{Label: "Twit: SaveFailed", Key: "twitSaveFailed", Description: "Error when an edit could not be saved"},
 		{Label: "Twit: Anonymous", Key: "twitAnonymous", Description: "Refusal when quick-adding an anonymous author"},
 		{Label: "Twit: HiddenSummary", Key: "twitHiddenSummary", Description: "Shown after a newscan that hid messages (%d=count)"},
+		{Label: "Twit: Empty", Key: "twitEmpty", Description: "Shown in place of the list when it has no entries"},
+		{Label: "Twit: Disabled", Key: "twitDisabled", Description: "Shown when the sysop has turned Twit Lists off"},
 
 		{Label: "Twit: Label", Key: "konfigTwitListLabel", Description: "User configuration field label"},
 		{Label: "Twit: Help", Key: "konfigTwitListHelp", Description: "User configuration field help"},

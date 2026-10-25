@@ -9,7 +9,7 @@ import (
 
 func entryStatesFor(t *testing.T, body string) ([]string, []string) {
 	t.Helper()
-	formatted := formatMessageBody(body, "", false)
+	formatted := formatMessageBody(body, "", false, nil)
 	lines := wrapAnsiString(string(ansi.ReplacePipeCodes([]byte(formatted))), 79, ansi.OutputModeUTF8)
 	return lines, buildBodyEntryStates(lines)
 }
