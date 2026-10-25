@@ -2,6 +2,8 @@ package menu
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -16,12 +18,27 @@ func setTwitLists(env *menuEnv, on bool) {
 	env.e.SetServerConfig(cfg)
 }
 
+// twitPaints splits a run's output at each screen clear, with colour removed.
+func twitPaints(r runResult) []string {
+	parts := strings.Split(r.raw, ansi.ClearScreen())
+	for i := range parts {
+		parts[i] = stripEscapes(parts[i])
+	}
+	return parts
+}
+
 // TestTwitScreenClearsAndShowsEmptyState checks the dedicated screen and its empty list.
 func TestTwitScreenClearsAndShowsEmptyState(t *testing.T) {
 	env := newMsgEnv(t)
 	r := env.runCmd("CFG_TWITLIST", env.caller, "", "Q\r")
-	if r.err != nil || !strings.Contains(r.raw, ansi.ClearScreen()) || !r.has("Twit Filter List (0/50)", "empty", "[Q]") {
+	paint := strings.Join(twitPaints(r)[1:], "")
+	if r.err != nil || !strings.Contains(r.raw, ansi.ClearScreen()) || r.has("#   Author") {
 		t.Fatalf("screen: %v\n%s", r.err, r.text())
+	}
+	for _, want := range []string{"Twit List / Personal Ignore List", "(0 of 50 used)", "empty", "Q) Quit", "Selection:"} {
+		if !strings.Contains(paint, want) {
+			t.Errorf("missing %q", want)
+		}
 	}
 	if r.next != "" {
 		t.Fatalf("next=%q, want return to the calling menu", r.next)
@@ -32,11 +49,11 @@ func TestTwitScreenClearsAndShowsEmptyState(t *testing.T) {
 func TestTwitScreenRedrawsWithNoticeAfterAction(t *testing.T) {
 	env := newMsgEnv(t)
 	r := env.runCmd("CFG_TWITLIST", env.caller, "", "A\rRemote\rX\rQ\r")
-	parts := strings.Split(r.raw, ansi.ClearScreen())
+	parts := twitPaints(r)
 	if len(parts) != 4 {
 		t.Fatalf("got %d paints, want 3\n%s", len(parts)-1, r.text())
 	}
-	if !strings.Contains(parts[2], "(1/50)") || !strings.Contains(parts[2], "1. Remote") || !strings.Contains(parts[2], "Added to your Twit List.") {
+	if !strings.Contains(parts[2], "(1 of 50 used)") || !strings.Contains(parts[2], "1   Remote") || !strings.Contains(parts[2], "Added to your Twit List.") {
 		t.Fatalf("after add:\n%s", parts[2])
 	}
 	if !strings.Contains(parts[3], "Invalid") || strings.Contains(parts[3], "Added") {
@@ -50,8 +67,8 @@ func TestTwitScreenPagesLongLists(t *testing.T) {
 	for i := 1; i <= 20; i++ {
 		env.caller.TwitList = append(env.caller.TwitList, user.TwitEntry{Name: fmt.Sprintf("Author%02d", i)})
 	}
-	r := env.runCmd("CFG_TWITLIST", env.caller, "", "N\rD\r20\rQ\r")
-	parts := strings.Split(r.raw, ansi.ClearScreen())
+	r := env.runCmd("CFG_TWITLIST", env.caller, "", "]\rD\r20\rQ\r")
+	parts := twitPaints(r)
 	if len(parts) != 4 {
 		t.Fatalf("got %d paints\n%s", len(parts)-1, r.text())
 	}
@@ -59,7 +76,7 @@ func TestTwitScreenPagesLongLists(t *testing.T) {
 	if !strings.Contains(first, "Page 1 of 2") || !strings.Contains(first, "Author01") || strings.Contains(first, "Author20") {
 		t.Fatalf("first page:\n%s", first)
 	}
-	if !strings.Contains(second, "Page 2 of 2") || !strings.Contains(second, "20. Author20") || strings.Contains(second, "Author01") {
+	if !strings.Contains(second, "Page 2 of 2") || !strings.Contains(second, "20  Author20") || strings.Contains(second, "Author01") {
 		t.Fatalf("second page:\n%s", second)
 	}
 	if !strings.Contains(third, "removed") || strings.Contains(third, "Author20") {
@@ -171,7 +188,7 @@ func TestTwitScreenClipsLongNames(t *testing.T) {
 	env := newMsgEnv(t)
 	env.caller.TwitList = []user.TwitEntry{{Name: strings.Repeat("x", 150)}}
 	r := env.runCmd("CFG_TWITLIST", env.caller, "", "Q\r")
-	if !r.has("  1. "+strings.Repeat("x", 74)) || r.has(strings.Repeat("x", 75)) {
+	if !r.has("  1   "+strings.Repeat("x", 73)) || r.has(strings.Repeat("x", 74)) {
 		t.Fatalf("long name not clipped:\n%s", r.text())
 	}
 }
@@ -202,5 +219,40 @@ func TestTwitReaderRefusesBeforeConfirming(t *testing.T) {
 				t.Fatalf("%v\n%s", r.err, r.text())
 			}
 		})
+	}
+}
+
+// TestTwitScreenFallsBackWithoutMenuFiles keeps the screen working on a menu
+// set that has no TWITLIST.MNU or templates, such as an upgraded board's.
+func TestTwitScreenFallsBackWithoutMenuFiles(t *testing.T) {
+	env := newMsgEnv(t)
+	env.e.MenuSetPath = t.TempDir() // an empty menu set, never the shipped one
+	env.caller.TwitList = []user.TwitEntry{{Name: "Remote"}}
+	r := env.runCmd("CFG_TWITLIST", env.caller, "", "Q\r")
+	paint := strings.Join(twitPaints(r), "")
+	if r.err != nil || !strings.Contains(paint, "Personal Ignore List") || !strings.Contains(paint, "1   Remote") || !strings.Contains(paint, "Selection:") {
+		t.Fatalf("fallback: %v\n%s", r.err, paint)
+	}
+}
+
+// TestTwitDefaultsMatchShippedFiles keeps the built-in fallback identical to
+// the shipped TWITLIST.MNU and templates.
+func TestTwitDefaultsMatchShippedFiles(t *testing.T) {
+	e := &MenuExecutor{MenuSetPath: filepath.Join("..", "..", "menus", "v3")}
+	for part, want := range twitDefaultArt {
+		b, err := os.ReadFile(filepath.Join(e.MenuSetPath, "templates", "TWITLIST."+part))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.TrimRight(string(b), "\r\n"); got != want {
+			t.Errorf("TWITLIST.%s:\n got  %q\n want %q", part, got, want)
+		}
+	}
+	rec, err := LoadMenu("TWITLIST", e.Menus())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *rec != twitDefaultMenu {
+		t.Errorf("TWITLIST.MNU = %+v, built-in %+v", *rec, twitDefaultMenu)
 	}
 }

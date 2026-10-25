@@ -5,14 +5,16 @@ and choose **M (Twit List)**, or choose **I (Twit List)** from the stock Message
 Custom menus can call `RUN:CFG_TWITLIST`. The current full-screen `USERCONFIG`
 replaces the older `USERCFG` menu mentioned in issue #398.
 
-The Twit List opens on its own cleared screen: a header with the entry count
-and limit, the list itself (or a note that it is empty), and a command prompt.
-Type A to add a handle or network name, D to delete an entry by number, C to
-clear with confirmation, and Q (or Enter) to go back to the menu you came from.
-Lists too long for one screen show a page line; N and P move between pages,
-and entry numbers stay the same on every page. After each command the screen
-is repainted with the result (added, removed, refused and why) above the
-prompt. Changes save immediately in the caller's `twitList` in `users.json`.
+The Twit List is drawn like the generated door menu: a title, a short note
+that this is the caller's private ignore list (nobody is told and nothing is
+deleted) with how many of the allowed entries are used, the numbered list (or
+a note that it is empty), the commands, and the standard
+`[time] Selection:` prompt. Type A to add a handle or network name, D to
+delete an entry by number, C to clear with confirmation, and Q (or Enter) to
+go back to the menu you came from. Lists too long for one screen show a page
+line; `[` and `]` (or P and N) move between pages, and entry numbers stay the
+same on every page. After each command the screen is repainted with the
+result (added, removed, refused and why) above the prompt. Changes save immediately in the caller's `twitList` in `users.json`.
 They are session preferences, not sysop-owned fields.
 
 In the message reader, **Twit** on the bottom command bar (hotkey **I**, or
@@ -92,6 +94,27 @@ its per-area cap; last-read advances still require a successful packet transfer.
 Filtering does not delete messages, notify authors, block mail delivery, or affect
 pages, node messages, chat, one-liners, rumors, user lists, or last callers.
 
-Header, empty-list note, page line, prompts, confirmations, errors, the
-turned-off notice, and the scan summary are editable through the
-`twit*` entries in `strings.json` and the string editor.
+## Screen art and prompts
+
+The screen comes from the menu set, the same way as the generated door menu.
+Customize copies in `menus.d/v3/` so upgrades keep them. Any file that is
+missing falls back to a built-in copy of the shipped one, so a menu set from
+before this screen existed still works.
+
+- `mnu/TWITLIST.MNU`: `TITLE` (shown as `^TI`), `CLR`/`CLS`, `USEPROMPT`,
+  `PROMPT1` and `PROMPT2`. `menuedit` lists and edits it. It has no `.CFG`;
+  the commands are built in.
+- `templates/TWITLIST.TOP`: title and description. `^TI` is the MNU title,
+  `^CT` the number of entries and `^MX` the limit.
+- `templates/TWITLIST.HDR`: the column heading, left out when the list is empty.
+- `templates/TWITLIST.MID`: one row. `^ID` is the entry number, `^NA` the
+  name (with `@address` for network entries). Names are shown as written,
+  never read as pipe codes, and are cut to fit the screen width.
+- `templates/TWITLIST.BOT`: footer and command list. Lines containing `^PG`
+  (page) or `^PT` (pages) appear only when the list needs more than one page.
+
+All four templates also take the usual `|TIME`, `|DATE` and similar tokens.
+
+The empty-list note, prompts, confirmations, errors, the turned-off notice,
+and the scan summary are the `twit*` entries in `strings.json`, editable in
+the string editor.

@@ -1,7 +1,9 @@
 package menu
 
 import (
+	"bytes"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"golang.org/x/term"
 )
 
 // twitPolicy reads list limits and exemption levels from the current board configuration.
@@ -94,50 +97,133 @@ func twitListsOn(e *MenuExecutor) bool {
 	return e.GetServerConfig().TwitListsOn()
 }
 
-// twitScreenReserve is the rows below the entries: a gap, the page line, a
-// notice (blank line plus text) and the prompt.
-const twitScreenReserve = 6
+// twitNoticeRows is the room kept above the prompt for the last action's
+// result: a blank line and the message.
+const twitNoticeRows = 2
 
-// twitPageSize is how many entries fit between the header and the prompt.
-func twitPageSize(termHeight int, header string) int {
-	if termHeight <= 0 {
-		termHeight = 25
-	}
-	return max(termHeight-strings.Count(header, "\n")-twitScreenReserve, 5)
+// twitDefaultMenu and twitDefaultArt match the shipped TWITLIST.MNU and
+// templates/TWITLIST.*, for a menu set that predates them or leaves them out.
+var twitDefaultMenu = MenuRecord{Title: "Twit List", ClrScrBefore: true, UsePrompt: true, Prompt1: "|08[|07|TIME|08] |15Selection|08: |07"}
+
+var twitDefaultArt = map[string]string{
+	"TOP": "|15^TI |08/ |11Personal Ignore List\n" +
+		"|07Hide messages from authors you'd rather not read. Your list is private:\n" +
+		"|07nobody is told, and their messages are not deleted.  |08(|15^CT|08 of |15^MX|08 used)",
+	"HDR": "\n|08  #   Author",
+	"MID": "|07  ^ID ^NA",
+	"BOT": "|08Page |15^PG|08 of |15^PT|08  [ / ] Page|07\n\n" +
+		"|15A|08) |07Add an author        |15D|08) |07Delete an entry\n" +
+		"|15C|08) |07Clear the list       |15Q|08) |07Quit",
 }
 
-// drawTwitScreen clears the screen and paints one page of the list with any
-// notice from the last action above the prompt.
-func drawTwitScreen(c *cmdCtx, page int, notice string) int {
-	u, st := c.currentUser, c.e.Strings()
-	perPage := twitPageSize(c.termHeight, st.TwitHeader)
+// twitMenu loads TWITLIST.MNU, or the built-in default when the menu set
+// has none.
+func (e *MenuExecutor) twitMenu() (*MenuRecord, error) {
+	if ok, err := e.Menus().Exists("mnu", "TWITLIST.MNU"); err != nil || !ok {
+		rec := twitDefaultMenu
+		return &rec, err
+	}
+	return LoadMenu("TWITLIST", e.Menus())
+}
+
+// twitTemplate reads one part of the Twit List art, or the built-in default
+// when the menu set has no file for it.
+func (e *MenuExecutor) twitTemplate(part string) (string, error) {
+	b, err := readTemplateFile(e.templateFile("TWITLIST." + part))
+	if os.IsNotExist(err) {
+		return twitDefaultArt[part], nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(string(b), "\r\n"), nil
+}
+
+// drawTwitScreen paints one page of the Twit List the way the generated door
+// menu is drawn: TWITLIST.MNU supplies the title, clear and prompt, and
+// templates/TWITLIST.TOP, .HDR, .MID and .BOT the header, column heading,
+// row and footer. It returns the page shown, clamped to the pages there are.
+func drawTwitScreen(c *cmdCtx, page int, notice string) (int, error) {
+	e, u, st := c.e, c.currentUser, c.e.Strings()
+	rec, err := e.twitMenu()
+	if err != nil {
+		return page, err
+	}
+	var art [4]string
+	for i, part := range []string{"TOP", "HDR", "MID", "BOT"} {
+		if art[i], err = e.twitTemplate(part); err != nil {
+			return page, err
+		}
+	}
+	w := c.termWidth
+	if w <= 0 {
+		w = 80
+	}
+	limit := twitPolicy(e).Limit()
+	expand := func(s string, pg, pt int) string {
+		if pt <= 1 {
+			s = doorMenuDropPaging(s)
+		}
+		s = strings.NewReplacer("^TI", rec.Title, "^CT", strconv.Itoa(len(u.TwitList)), "^MX", strconv.Itoa(limit),
+			"^PG", strconv.Itoa(pg), "^PT", strconv.Itoa(pt)).Replace(s)
+		return string(e.applyCommonTemplateTokens([]byte(s), u, c.nodeNumber))
+	}
+	var prompt bytes.Buffer
+	if rec.GetUsePrompt() {
+		if err := e.displayPrompt(c.s, term.NewTerminal(&prompt, ""), rec, u, c.userManager, c.nodeNumber, "TWITLIST", c.sessionStartTime, c.outputMode, ""); err != nil {
+			return page, err
+		}
+	}
+	heading := art[1]
+	if len(u.TwitList) == 0 {
+		heading = ""
+	}
+	// Size the page without paging lines first; only a list that overflows
+	// it needs them, and then the page is sized with them.
+	rows := func(pt int) int {
+		top := doorMenuLines(expand(art[0], pt, pt), w) + doorMenuLines(expand(heading, pt, pt), w)
+		bottom := doorMenuLines(expand(art[3], pt, pt), w) + twitNoticeRows
+		return doorMenuPageSize(c.termHeight, top, bottom, doorMenuLines(prompt.String()+strings.Repeat("X", 16), w), 1)
+	}
+	perPage := rows(1)
+	if len(u.TwitList) > perPage {
+		perPage = rows(2)
+	}
 	pages := max((len(u.TwitList)+perPage-1)/perPage, 1)
 	page = min(max(page, 0), pages-1)
-	terminalio.WriteProcessedBytes(c.terminal, []byte(ansi.ClearScreen()), c.outputMode)
-	c.e.writeStringf(c.terminal, c.outputMode, st.TwitHeader, len(u.TwitList), twitPolicy(c.e).Limit())
+
+	write := func(s string) {
+		if s = strings.TrimRight(s, "\r\n"); s != "" {
+			terminalio.WriteProcessedBytes(c.terminal, ansi.ReplacePipeCodes([]byte(s+"\r\n")), c.outputMode)
+		}
+	}
+	if rec.GetClrScrBefore() {
+		terminalio.WriteProcessedBytes(c.terminal, []byte(ansi.ClearScreen()), c.outputMode)
+	}
+	write(expand(art[0], page+1, pages))
+	write(expand(heading, page+1, pages))
 	if len(u.TwitList) == 0 {
 		c.e.writeString(c.terminal, c.outputMode, st.TwitEmpty)
 	}
+	// The row template is expanded and coloured first and the name put in
+	// after, so a name is shown as written, never read as pipe codes.
+	row := string(ansi.ReplacePipeCodes([]byte(expand(art[2], page+1, pages))))
 	for i := page * perPage; i < min((page+1)*perPage, len(u.TwitList)); i++ {
 		entry := u.TwitList[i]
 		name := entry.Name
 		if entry.Addr != "" {
 			name += "@" + entry.Addr
 		}
-		line := fmt.Sprintf("  %d. %s", i+1, name)
+		line := strings.Replace(strings.Replace(row, "^ID", fmt.Sprintf("%-3d", i+1), 1), "^NA", name, 1)
 		// Clip long names so every entry stays on one row of the page.
-		if r := []rune(line); c.termWidth > 1 && len(r) >= c.termWidth {
-			line = string(r[:c.termWidth-1])
-		}
-		// Names are data, not pipe codes or string scripts.
-		terminalio.WriteProcessedBytes(c.terminal, []byte(line+"\r\n"), c.outputMode)
+		terminalio.WriteProcessedBytes(c.terminal, []byte(ansi.TruncateVisible(line, w-1)+"\x1b[0m\r\n"), c.outputMode)
 	}
-	if pages > 1 {
-		c.e.writeStringf(c.terminal, c.outputMode, st.TwitPage, page+1, pages)
-	}
+	write(expand(art[3], page+1, pages))
 	c.e.writeString(c.terminal, c.outputMode, notice)
-	c.e.writeString(c.terminal, c.outputMode, st.TwitChoice)
-	return page
+	if _, err := c.terminal.Write(prompt.Bytes()); err != nil {
+		return page, err
+	}
+	return page, nil
 }
 
 // runCfgTwitList runs the full-screen Twit List section: the list, then add,
@@ -158,8 +244,11 @@ func runCfgTwitList(c *cmdCtx, args string) (*user.User, string, error) {
 		return readLineFromSessionIH(c.s, c.terminal)
 	}
 	page, notice := 0, ""
+	var err error
 	for {
-		page = drawTwitScreen(c, page, notice)
+		if page, err = drawTwitScreen(c, page, notice); err != nil {
+			return u, "", err
+		}
 		notice = ""
 		choice, err := readLineFromSessionIH(c.s, c.terminal)
 		if err != nil {
@@ -168,9 +257,9 @@ func runCfgTwitList(c *cmdCtx, args string) (*user.User, string, error) {
 		switch strings.ToUpper(strings.TrimSpace(choice)) {
 		case "", "Q":
 			return u, "", nil
-		case "N":
+		case "]", "N":
 			page++
-		case "P":
+		case "[", "P":
 			page--
 		case "A":
 			name, err := read(st.TwitNamePrompt)
