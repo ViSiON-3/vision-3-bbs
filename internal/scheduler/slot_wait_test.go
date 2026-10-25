@@ -154,3 +154,26 @@ func TestStatusReportsWaitingAndSkips(t *testing.T) {
 		t.Errorf("status after giving up = %+v, want one %q skip", st, skipNoSlot)
 	}
 }
+
+// TestWaitingEventUsesReloadedSemaphore checks that raising the limit while
+// an event waits lets it run on the new semaphore's free capacity, while
+// the slot held on the old one still releases into it.
+func TestWaitingEventUsesReloadedSemaphore(t *testing.T) {
+	s := newTestScheduler(t, config.EventsConfig{MaxConcurrentEvents: 1})
+	defer holdSlot(t, s)() // the long-running event on the old semaphore
+
+	ev := config.EventConfig{ID: "nightly_purge", Name: "Purge", Command: lookPath(t, "echo"), TimeoutSeconds: testEventTimeout}
+	ran := make(chan bool, 1)
+	go func() { _, ok := s.runWithSlot(ev); ran <- ok }()
+	waitFor(t, "the event to wait", func() bool { return s.isWaiting(ev.ID) })
+
+	s.Reload(config.EventsConfig{MaxConcurrentEvents: 4})
+	select {
+	case ok := <-ran:
+		if !ok {
+			t.Error("event skipped after the limit was raised")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("event still waiting after Reload raised the limit")
+	}
+}
