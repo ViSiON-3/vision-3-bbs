@@ -377,7 +377,7 @@ func cmdPack(args []string) {
 }
 
 // cmdPurge deletes old messages by age or count.
-// When --all is used, per-area max_msg_age and max_msgs from message_areas.json
+// When --all is used, per-area max_age and max_messages from message_areas.json
 // take precedence; --days and --keep serve as fallback defaults for areas
 // without per-area limits configured.
 func cmdPurge(args []string) {

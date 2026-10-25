@@ -67,6 +67,7 @@ const (
 	modeQWKConfBrowser                           // Hub conference selection
 	modeQWKConfFetching                          // Progress state while the hub's conference list downloads
 	modeQWKWizardPicker                          // Add-new vs edit-existing choice on QWK wizard entry
+	modeAreaSyncConfirm                          // Apply an Auto-Create change to the network's existing areas
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -201,8 +202,9 @@ type Model struct {
 
 	// Confirm dialog
 	confirmYes        bool
-	navSaveDestMode   editorMode // where to go on Yes or No
-	navSaveSourceMode editorMode // where to return on ESC (cancel)
+	areaSync          *areaSyncPrompt // pending offer opened by modeAreaSyncConfirm
+	navSaveDestMode   editorMode      // where to go on Yes or No
+	navSaveSourceMode editorMode      // where to return on ESC (cancel)
 
 	// V3Net setup wizard state
 	wizard       *wizardState // pointer so field closures survive value-receiver copies
@@ -546,8 +548,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			result, cmd = m.updateQWKConfFetching(msg)
 		case modeQWKWizardPicker:
 			result, cmd = m.updateQWKWizardPicker(msg)
+		case modeAreaSyncConfirm:
+			result, cmd = m.updateAreaSyncConfirm(msg)
 		default:
 			return m, nil
+		}
+		// A field edit may have queued an offer to apply it to existing areas.
+		if nm, ok := result.(Model); ok {
+			result = nm.showPendingAreaSync()
 		}
 		// Clear a stale non-error flash message when navigating to a
 		// different screen. A message set by this key's own handler (a save

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // EventConfig defines a scheduled event configuration
@@ -76,4 +77,30 @@ func LoadEventsConfig(configPath string) (EventsConfig, error) {
 	slog.Info("loaded event scheduler configuration", "events", len(config.Events), "enabled", enabledCount)
 
 	return config, nil
+}
+
+// RunsMessagePurge reports whether an enabled event runs "v3mail purge",
+// the only thing that enforces message areas' max_messages and max_age.
+// The command may be the v3mail binary or "go run .../cmd/v3mail".
+func (c EventsConfig) RunsMessagePurge() bool {
+	for _, ev := range c.Events {
+		if !ev.Enabled {
+			continue
+		}
+		v3mail, purge := false, false
+		for _, word := range append([]string{ev.Command}, ev.Args...) {
+			// Split on both separators: a Windows path is read on any OS.
+			base := strings.ToLower(word[strings.LastIndexAny(word, `/\`)+1:])
+			if base == "v3mail" || base == "v3mail.exe" {
+				v3mail = true
+			}
+			if v3mail && word == "purge" {
+				purge = true
+			}
+		}
+		if purge {
+			return true
+		}
+	}
+	return false
 }
