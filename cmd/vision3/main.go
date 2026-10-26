@@ -2242,6 +2242,9 @@ func main() {
 		qwkSvc := qwkservice.New(messageMgr, menu.ResolveQWKID(serverConfig), serverConfig.BoardName, serverConfig.SysOpName, messageMgr.DataPath())
 		// Private replies uploaded through the API are addressed by handle.
 		qwkSvc.SetRecipientResolver(userMgr)
+		if confMgr != nil {
+			qwkSvc.SetConferenceLister(confMgr)
+		}
 		apiSrv, apiErr := qwkapi.NewServer(qwkapi.Deps{
 			Config:       serverConfig.QWKAPI,
 			ConfigDir:    rootConfigPath,

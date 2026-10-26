@@ -21,6 +21,7 @@ The QWK packet is a standard ZIP archive containing:
 | `HEADERS.DAT` | Extended headers (full-length To/From/Subject, Message-ID, timestamp) — see [Long headers](#long-headers-headersdat) |
 | `NNN.NDX` | Per-conference message index (one file per conference) |
 | `PERSONAL.NDX` | Index of messages addressed directly to the user |
+| `V3AREAS.JSON` | ViSiON/3 extension: maps each QWK conference number to its message area and the board conference it belongs to (see [Area index](#area-index-v3areasjson)) |
 
 REP packets follow the same block format: a ZIP containing `BBSID.MSG`.
 
@@ -196,3 +197,35 @@ All new messages in tagged areas have already been downloaded (lastread pointers
 
 **Transfer fails with "Transfer program not found"**
 The transfer protocol binary (e.g. `sz`, `rz`) is not installed or not in `PATH`. See [File Transfer](files/file-transfer.md).
+
+## Area index (`V3AREAS.JSON`)
+
+QWK's `CONTROL.DAT` carries only a flat list of conference numbers and names,
+so a reader cannot tell which areas belong to fsxNet, which to FidoNet and
+which are local. ViSiON/3 adds a small JSON sidecar to every packet that
+spells this out. Standard QWK readers ignore it; the ViSiON/3 mobile client
+uses it to group areas exactly as `configs/conferences.json` does.
+
+```json
+{
+  "version": 1,
+  "conferences": [
+    { "tag": "FSXNET", "name": "fsxNet" },
+    { "tag": "LOCAL", "name": "Local Areas" }
+  ],
+  "areas": [
+    { "qwk": 0, "tag": "PRIVMAIL", "name": "Private Mail", "conference": "LOCAL", "type": "local" },
+    { "qwk": 5, "tag": "FSX_GEN", "name": "General", "conference": "FSXNET", "type": "echomail", "network": "fsxnet" },
+    { "qwk": 12, "tag": "LORD", "name": "LORD: Legend of the Red Dragon", "type": "echomail", "network": "fidonet" }
+  ]
+}
+```
+
+- `conferences` lists only the board conferences that have at least one
+  exported area, in display order.
+- `areas` is in `CONTROL.DAT` order. `qwk` is the conference number used in
+  `CONTROL.DAT`, the `.NDX` files and message headers. `conference` is the
+  parent conference tag and is omitted for ungrouped areas. `type` is the
+  area type (`local`, `echomail`, `netmail`, `v3net`, `qwknet`) and `network`
+  the network key for networked areas.
+- Area names are passed through verbatim; clients must not parse them.

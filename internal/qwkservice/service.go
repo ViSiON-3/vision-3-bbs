@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"path/filepath"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -34,10 +35,17 @@ type MessageStore interface {
 	AddPrivateReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error)
 }
 
+// ConferenceLister is the subset of *conference.ConferenceManager the service
+// needs to describe how areas group into board conferences (V3AREAS.JSON).
+type ConferenceLister interface {
+	ListConferences() []*conference.Conference
+}
+
 // Service orchestrates QWK packet export and REP import for a single BBS
 // identity.
 type Service struct {
 	store       MessageStore
+	conferences ConferenceLister // nil: areas are exported ungrouped
 	bbsID       string
 	bbsName     string
 	sysOpName   string
@@ -69,6 +77,13 @@ func New(store MessageStore, bbsID, bbsName, sysOpName, dataPath string) *Servic
 // is stored as the reader wrote it. Public replies are never readdressed.
 func (s *Service) SetRecipientResolver(r user.RecipientResolver) {
 	s.recipients = r
+}
+
+// SetConferenceLister supplies the board's conference definitions so packets
+// can carry the area -> conference grouping in V3AREAS.JSON. Without it every
+// area is exported as ungrouped.
+func (s *Service) SetConferenceLister(cl ConferenceLister) {
+	s.conferences = cl
 }
 
 // loadConfMap loads the conference map, syncs it against the current areas, and
@@ -145,6 +160,19 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 	res := &ExportResult{BBSID: s.bbsID}
 	seen := make(map[string]struct{}, len(tags))
 
+	// V3AREAS.JSON: board conferences in display order, keyed by ID so each
+	// exported area can name its parent by tag.
+	confByID := map[int]*conference.Conference{}
+	var boardConfs []*conference.Conference
+	if s.conferences != nil {
+		boardConfs = s.conferences.ListConferences()
+		for _, c := range boardConfs {
+			confByID[c.ID] = c
+		}
+	}
+	idx := &qwk.AreaIndex{}
+	usedConfs := map[int]bool{}
+
 	for _, tag := range tags {
 		if _, dup := seen[tag]; dup {
 			continue
@@ -162,6 +190,12 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 			continue
 		}
 		pw.AddConference(entry.QWKNumber, area.Name)
+		ia := qwk.AreaIndexArea{QWK: entry.QWKNumber, Tag: area.Tag, Name: area.Name, Type: area.AreaType, Network: area.Network}
+		if c, ok := confByID[area.ConferenceID]; ok && area.ConferenceID != 0 {
+			ia.Conference = c.Tag
+			usedConfs[c.ID] = true
+		}
+		idx.Areas = append(idx.Areas, ia)
 		isPrivateConf := entry.Kind == KindPrivateMail
 
 		lastRead, err := s.store.GetLastRead(area.ID, opts.Handle)
@@ -225,6 +259,13 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 	if res.MessageCount == 0 {
 		return res, nil
 	}
+
+	for _, c := range boardConfs {
+		if usedConfs[c.ID] {
+			idx.Conferences = append(idx.Conferences, qwk.AreaIndexConference{Tag: c.Tag, Name: c.Name})
+		}
+	}
+	pw.SetAreaIndex(idx)
 
 	var buf bytes.Buffer
 	if err := pw.WritePacket(&buf); err != nil {
