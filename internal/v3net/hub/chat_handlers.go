@@ -70,11 +70,15 @@ func (h *Hub) handleChatJoin(w http.ResponseWriter, r *http.Request, network str
 		return
 	}
 
-	users := h.chatRooms.Join(network, room, nodeID, req.Handle)
+	users, added := h.chatRooms.Join(network, room, nodeID, req.Handle)
 
-	broadcastChatEvent(h.broadcaster, network, protocol.EventChatJoin, protocol.ChatJoinPayload{
-		Room: room, Handle: req.Handle, BBS: bbsName, Node: nodeID,
-	})
+	// A handle already in the room is not announced again: leaves add one
+	// user-list entry per join event, so a repeat would list it twice.
+	if added {
+		broadcastChatEvent(h.broadcaster, network, protocol.EventChatJoin, protocol.ChatJoinPayload{
+			Room: room, Handle: req.Handle, BBS: bbsName, Node: nodeID,
+		})
+	}
 
 	history, _ := h.chatStore.RoomHistory(network, room, 50)
 	resp := protocol.ChatJoinResponse{
@@ -144,7 +148,7 @@ func (h *Hub) handleChatPost(w http.ResponseWriter, r *http.Request, network str
 	}
 	broadcastChatEvent(h.broadcaster, network, protocol.EventChatMessage, protocol.ChatMsgPayload{
 		Room: room, FromHandle: handle, FromNode: nodeID, FromBBS: bbsName,
-		Text: req.Text, Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Text: req.Text, Timestamp: time.Now().UTC().Format(time.RFC3339), Origin: req.Origin,
 	})
 	w.WriteHeader(http.StatusNoContent)
 }

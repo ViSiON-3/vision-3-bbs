@@ -34,7 +34,10 @@ func (cr *chatRooms) roomsFor(network string) map[string]*roomState {
 	return rooms
 }
 
-func (cr *chatRooms) Join(network, room, nodeID, handle string) []string {
+// Join adds handle on nodeID to room and returns the room's users. added is
+// false if the handle was already a member, as it is when the same user has
+// chat open on two nodes of one BBS.
+func (cr *chatRooms) Join(network, room, nodeID, handle string) (users []string, added bool) {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 	rooms := cr.roomsFor(network)
@@ -45,11 +48,11 @@ func (cr *chatRooms) Join(network, room, nodeID, handle string) []string {
 	}
 	for _, h := range rs.members[nodeID] {
 		if h == handle {
-			return cr.usersLocked(network, room)
+			return cr.usersLocked(network, room), false
 		}
 	}
 	rs.members[nodeID] = append(rs.members[nodeID], handle)
-	return cr.usersLocked(network, room)
+	return cr.usersLocked(network, room), true
 }
 
 func (cr *chatRooms) Leave(network, room, nodeID, handle string) {

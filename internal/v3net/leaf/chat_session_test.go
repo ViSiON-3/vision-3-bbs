@@ -253,7 +253,7 @@ func TestChatSession_ReceivesHubEventsOverSSE(t *testing.T) {
 		// drain until closed
 	}
 	aliceLeaf.chatSessions.mu.RLock()
-	_, stillRegistered := aliceLeaf.chatSessions.sessions["alice"]
+	_, stillRegistered := aliceLeaf.chatSessions.sessions[alice]
 	aliceLeaf.chatSessions.mu.RUnlock()
 	if stillRegistered {
 		t.Error("closed session is still registered on the leaf")
@@ -521,7 +521,7 @@ func TestSession_FullBufferAndClosedSessionDropEvents(t *testing.T) {
 	alice.deliver(msg)
 	reg.register(alice)
 	reg.notifyReconnect()
-	reg.deregister("alice")
+	reg.deregister(alice)
 }
 
 func TestNotifyReconnect_TellsEverySession(t *testing.T) {
@@ -692,5 +692,109 @@ func TestChatSession_Ping(t *testing.T) {
 	cancel()
 	if _, err := sess.Ping(ctx); err == nil {
 		t.Errorf("Ping with a cancelled context returned no error")
+	}
+}
+
+// TestDispatch_OriginIdentifiesOwnPost covers #662: when the hub relays the
+// posting session's origin, only that session drops the echo, so another
+// session of the same user on this BBS still shows the line.
+func TestDispatch_OriginIdentifiesOwnPost(t *testing.T) {
+	l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+	one := newRoomSession(l, "sysop", "lobby", "sysop")
+	two := newRoomSession(l, "sysop", "lobby", "sysop")
+	l.chatSessions.dispatch(chatEvent(t, protocol.EventChatMessage, protocol.ChatMsgPayload{
+		Room: "lobby", FromHandle: "sysop", FromNode: l.chatSessions.nodeID, Text: "hi", Origin: one.origin,
+	}))
+	noEvent(t, one, "echo of own message")
+	select {
+	case ev := <-two.events:
+		if ev.Type != chat.TypeMessage || ev.Message.Text != "hi" {
+			t.Errorf("event = %+v, want the other session's message", ev)
+		}
+	default:
+		t.Error("post from the other session with the same handle not delivered")
+	}
+}
+
+// TestChatSession_SameHandleOnTwoNodes runs #662 end to end: a user with
+// chat open on two nodes of one BBS hears the room on both, sees each
+// session's posts on the other, and stays in the room on one node after
+// leaving it on the other.
+func TestChatSession_SameHandleOnTwoNodes(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	board := subscribedLeaf(t, ts, "boardbbs")
+	bobLeaf := subscribedLeaf(t, ts, "bobbbs")
+
+	bob := bobLeaf.NewChatSession("bob")
+	defer bob.Close()
+	if _, _, err := bob.Join("lobby"); err != nil {
+		t.Fatalf("bob join: %v", err)
+	}
+	watchEvents(t, bobLeaf)
+
+	one := board.NewChatSession("sysop")
+	defer one.Close()
+	two := board.NewChatSession("sysop")
+	defer two.Close()
+	for _, s := range []*ChatSession{one, two} {
+		if _, _, err := s.Join("lobby"); err != nil {
+			t.Fatalf("sysop join: %v", err)
+		}
+	}
+	watchEvents(t, board)
+	if join := awaitChat(t, bob, chat.TypeJoin); join.Join.Handle != "sysop" {
+		t.Errorf("bob saw join %+v, want sysop", join.Join)
+	}
+
+	if err := one.Post("lobby", "from one"); err != nil {
+		t.Fatalf("post from first session: %v", err)
+	}
+	if msg := awaitChat(t, two, chat.TypeMessage); msg.Message.Text != "from one" {
+		t.Errorf("second session got %q, want the first session's post", msg.Message.Text)
+	}
+	if msg := awaitChat(t, bob, chat.TypeMessage); msg.Message.Text != "from one" {
+		t.Errorf("bob got %q, want sysop's post", msg.Message.Text)
+	}
+	// The second join was not announced again, so bob lists sysop once.
+	if users := bob.Users(); len(users) != 2 {
+		t.Errorf("bob.Users() = %v, want [bob sysop]", users)
+	}
+	if err := bob.Post("lobby", "from bob"); err != nil {
+		t.Fatalf("bob post: %v", err)
+	}
+	// The hub sends events in order, so the first session's echo would
+	// arrive before bob's line.
+	if msg := awaitChat(t, one, chat.TypeMessage); msg.Message.Text != "from bob" {
+		t.Errorf("first session got %q first, want bob's post", msg.Message.Text)
+	}
+	if msg := awaitChat(t, two, chat.TypeMessage); msg.Message.Text != "from bob" {
+		t.Errorf("second session got %q, want bob's post", msg.Message.Text)
+	}
+
+	// Leaving on one node keeps the user in the room on the other: the hub
+	// still counts sysop as joined and the other session still hears it.
+	if err := one.Leave("lobby"); err != nil {
+		t.Fatalf("first session leave: %v", err)
+	}
+	if err := one.Close(); err != nil {
+		t.Fatalf("first session close: %v", err)
+	}
+	if err := two.SetTopic("lobby", "still here"); err != nil {
+		t.Fatalf("second session set topic after the first left: %v", err)
+	}
+	if topic := awaitChat(t, two, chat.TypeTopic); topic.Topic.Topic != "still here" {
+		t.Errorf("second session got topic %+v", topic.Topic)
+	}
+	awaitChat(t, bob, chat.TypeTopic)
+	if users := bob.Users(); len(users) != 2 {
+		t.Errorf("bob.Users() after one sysop session left = %v, want sysop still listed", users)
+	}
+
+	// The last session to leave takes the user out of the room.
+	if err := two.Leave("lobby"); err != nil {
+		t.Fatalf("second session leave: %v", err)
+	}
+	if leave := awaitChat(t, bob, chat.TypeLeave); leave.Leave.Handle != "sysop" {
+		t.Errorf("bob saw leave %+v, want sysop", leave.Leave)
 	}
 }
