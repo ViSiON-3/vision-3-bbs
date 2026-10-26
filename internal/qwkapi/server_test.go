@@ -50,6 +50,7 @@ func testServer(t *testing.T, svc PacketService, authOK bool) http.Handler {
 		AuthorizeFor: func(u *user.User) func(*message.MessageArea) bool {
 			return func(*message.MessageArea) bool { return true }
 		},
+		TwitMatcherFor: func(*user.User) *user.TwitMatcher { return nil },
 	})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
