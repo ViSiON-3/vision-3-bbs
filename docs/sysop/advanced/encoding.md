@@ -58,10 +58,15 @@ off.
 
 ## Forcing an Encoding for the Whole Board
 
-`./vision3 --output-mode=utf8` or `--output-mode=cp437` makes every session
-use that encoding, skipping detection and saved preferences. It exists for
-testing and for a board that is only ever reached from one kind of client.
-The default, `auto`, is described above.
+`./vision3 --output-mode=utf8` or `--output-mode=cp437` starts every session
+in that encoding and skips the connect-time probe. It exists for testing and
+for a board that is only ever reached from one kind of client. The default,
+`auto`, is described above.
+
+A caller's saved **Encoding** preference still wins after they log in, flag or
+no flag: a user pinned to CP437 switches to CP437 at the login screen even on
+a board started with `--output-mode=utf8`. To hold one encoding for a whole
+session, the caller's preference must be Auto.
 
 ## Troubleshooting
 
@@ -71,6 +76,7 @@ The default, `auto`, is described above.
 | Art shows `â”€â”€` or question marks in SyncTERM or NetRunner | The session is on UTF-8 | Same check; a saved `UTF-8` is the usual cause. SyncTERM should be in its CP437 mode |
 | Right on one client, wrong on another, same account | A pinned encoding | Set **Encoding** to Auto so each call is detected |
 | Everything is wrong for every caller | `--output-mode` is forced | Start the BBS without the flag |
+| Right until login, then wrong | A pinned encoding overriding `--output-mode` | Set that caller's **Encoding** to Auto |
 
 An unanswered probe is logged as `encoding probe got no answer, keeping
 terminal type guess`; a terminal that never answers keeps working on its

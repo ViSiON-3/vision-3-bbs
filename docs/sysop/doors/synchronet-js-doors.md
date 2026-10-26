@@ -147,9 +147,11 @@ A Synchronet JS door is a record in `configs/doors.json` with `"type": "synchron
 | `single_instance` | bool | `false` | Only allow one node at a time |
 | `min_access_level` | int | `0` | Minimum access level required |
 
-The bundled games:
+The bundled games, as they appear inside the top-level array of
+`configs/doors.json`:
 
 ```json
+[
 {
   "code": "LORDJS",
   "name": "Legend of the Red Dragon (JS)",
@@ -177,6 +179,7 @@ The bundled games:
   ],
   "single_instance": true
 }
+]
 ```
 
 ### Menu CFG entries

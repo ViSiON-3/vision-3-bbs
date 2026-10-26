@@ -308,7 +308,7 @@ and `menus/` relative to the working directory, which is why the unit sets
 |------|---------|
 | `doctor` (or `--doctor`) | Check the current board configuration and exit |
 | `--json` | With `doctor`: write the report as JSON |
-| `--fix` | With `doctor`: apply safe repairs (missing directories, permissions) |
+| `--fix` | With `doctor`: create the standard data directories that are missing. Nothing else is changed; a permissions warning still needs a hand fix such as `chmod 600` |
 | `--dry-run` | With `--fix`: preview the repairs without applying them |
 | `--output-mode auto\|utf8\|cp437` | Force the terminal encoding for every session instead of detecting it (default `auto`) |
 | `--help` | Print usage without starting the server |

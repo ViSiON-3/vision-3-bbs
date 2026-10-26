@@ -60,9 +60,12 @@ Per-area lastread pointers are updated after each download, so subsequent downlo
 A packet holds only what the caller could read online: private mail that is
 theirs (see [Conference numbering and private mail](#conference-numbering-and-private-mail)),
 and nothing from authors on their [Twit List](messages/twit-list.md). The Twit
-List is applied before the per-area message cap, and lastread pointers advance
-only after the packet transfer succeeds, so a skipped author's messages are
-not counted as delivered.
+List is applied before the per-area message cap, so a skipped author's
+messages never count against it. On a terminal download the lastread pointers
+advance only after the transfer succeeds; the [QWK Packet API](messages/qwk-api.md)
+advances them as soon as the packet is built, before it is sent, so a client
+that drops mid-download should fetch the areas again rather than expect a
+resend.
 
 ## Configurable Strings
 

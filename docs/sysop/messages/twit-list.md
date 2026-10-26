@@ -113,7 +113,8 @@ Repeated navigation does not inflate the total.
 
 Area Total/New/Personal counts and the newscan area's “X new” count remain raw JAM
 counts, so the reader may show fewer messages. QWK export applies the list before
-its per-area cap; last-read advances still require a successful packet transfer.
+its per-area cap. Last-read pointers advance after a successful terminal
+transfer, or as soon as the API builds a packet.
 Filtering does not delete messages, notify authors, block mail delivery, or affect
 pages, node messages, chat, one-liners, rumors, user lists, or last callers.
 
