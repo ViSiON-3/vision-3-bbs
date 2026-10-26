@@ -92,20 +92,23 @@ func TestChatIdleRoomTrafficKeepsCallerOn(t *testing.T) {
 	// Bob talks for well past both timeouts, a little more often than the
 	// chat limit, while the caller types nothing.
 	talkUntil := time.Now().Add(12 * chatIdleUnit)
+	var lastPost time.Time
 	for time.Now().Before(talkUntil) {
 		if err := bob.Post("lobby", "still here"); err != nil {
 			t.Fatalf("Bob posts: %v", err)
 		}
+		lastPost = time.Now()
 		if run.ended(2 * chatIdleUnit) {
 			t.Fatalf("chat ended with the room talking: next=%q err=%v", run.next, run.err)
 		}
 	}
 
-	quiet := time.Now()
 	if !run.ended(5 * time.Second) {
 		t.Fatal("chat still running long after the room went quiet")
 	}
-	if took := time.Since(quiet); took < 2*chatIdleUnit {
+	// Chat's limit is 4 units and the menus' 1: anything past 2 shows chat's
+	// applied, with room to spare for a slow runner.
+	if took := time.Since(lastPost); took < 2*chatIdleUnit {
 		t.Errorf("chat ended %v after the last message; its own limit is %v", took, 4*chatIdleUnit)
 	}
 	if !errors.Is(run.err, editor.ErrIdleTimeout) || run.next != "LOGOFF" {
