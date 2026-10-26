@@ -22,11 +22,15 @@ Join us on Discord to get involved, follow development and to connect with other
 
 ## STUFF WE NEED
 
-### 🎯 Contributors - Yes, You
+### 💻 Go Developers Who Give a Damn
+
+Do you write Go? Do you have fond memories of waiting 3 minutes for a single GIF to download at 14.4k? Are you looking for a project that will impress exactly nobody at your day job but might make a dozen middle-aged nerds unreasonably happy? Boy, do we have the unpaid volunteer opportunity for you!
+
+If you aren't old enough to have experienced it first-hand, have you read a weird text file or listened to some wild-eyed GenX nutjob ramble on about how much we enjoyed it and decided "I need me some of that?"
 
 **What This Is:** A moderately amusing, functional anachronism.
 
-Are you the kind of person who can wrangle a Go codebase while arguing about why HSLINK was underrated? Do you have strong opinions about ANSI art but also know when to use a mutex? We need someone to lead this glorious mess.
+Are you the kind of person who can wrangle a Go codebase while arguing about why HSLINK was underrated? Do you have strong opinions about ANSI art but also know when to use a mutex?
 
 **Technical Chops:**
 
@@ -80,12 +84,6 @@ Are you an old school ANSi artist (are you younger and infatuated for some reaso
 - Period-appropriate group shoutouts and "greetz"
 
 If you have skills, old .ANS files gathering dust, or just love the aesthetic of the golden age of BBSing, we want to hear from you! Contact us via GitHub issues or pull requests.
-
-### 💻 Go Developers Who Give a Damn
-
-Do you write Go? Do you have fond memories of waiting 3 minutes for a single GIF to download at 14.4k? Are you looking for a project that will impress exactly nobody at your day job but might make a dozen middle-aged nerds unreasonably happy? Boy, do we have the unpaid volunteer opportunity for you!
-
-If you aren't old enough to have experienced it first-hand, have you read a weird text file or listened to some wild-eyed GenX nutjob ramble on about how much we enjoyed it and decided "I need me some of that?"
 
 **Areas where we need help:**
 
