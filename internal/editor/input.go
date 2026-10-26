@@ -97,6 +97,11 @@ type InputHandler struct {
 	// of this and the wait's own start.
 	activityNs atomic.Int64
 
+	// timedOutNs is the idle timeout, in nanoseconds, that the last key read
+	// to end with ErrIdleTimeout ran out of (0 = none has). See
+	// LastIdleTimeout.
+	timedOutNs atomic.Int64
+
 	// deadlineNs is the session's time-limit deadline as Unix nanoseconds
 	// (0 = none). Once it passes, key reads return ErrTimeLimit. Set via
 	// SetSessionDeadline.
@@ -198,6 +203,14 @@ func (ih *InputHandler) idleFrom(start time.Time) time.Time {
 	return start
 }
 
+// LastIdleTimeout returns the session idle timeout that the last key read to
+// end with ErrIdleTimeout ran out of, or 0 if none has. A screen may set its
+// own timeout and put the session's back on the way out (chat does), so this
+// is what to report once the call is ending, not the timeout set now.
+func (ih *InputHandler) LastIdleTimeout() time.Duration {
+	return time.Duration(ih.timedOutNs.Load())
+}
+
 // SetSessionDeadline sets the time at which the caller's time limit runs out.
 // Key reads waiting past it, or started after it, return ErrTimeLimit. Pass
 // the zero time for no limit. Thread-safe.
@@ -227,10 +240,12 @@ func (ih *InputHandler) keyWait(start time.Time) (wait time.Duration, onTimeout 
 	if err := ih.failed.Load(); err != nil {
 		return 0, *err, true
 	}
-	wait, onTimeout = ih.sessionIdleTimeout(), ErrIdleTimeout
+	idle := ih.sessionIdleTimeout()
+	wait, onTimeout = idle, ErrIdleTimeout
 	if wait > 0 {
 		wait -= time.Since(ih.idleFrom(start))
 		if wait <= 0 {
+			ih.timedOutNs.Store(int64(idle))
 			return 0, ErrIdleTimeout, true
 		}
 	}

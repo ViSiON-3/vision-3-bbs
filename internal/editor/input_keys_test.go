@@ -155,9 +155,17 @@ func TestReadKeyWithTimeout(t *testing.T) {
 // applying when cleared.
 func TestSessionIdleTimeout(t *testing.T) {
 	quiet, hangUp := silentInput(t)
+	if d := quiet.LastIdleTimeout(); d != 0 {
+		t.Errorf("LastIdleTimeout before any timeout = %v, want 0", d)
+	}
 	quiet.SetSessionIdleTimeout(5 * time.Millisecond)
 	if k, err := quiet.ReadKey(); k != 0 || !errors.Is(err, ErrIdleTimeout) {
 		t.Errorf("idle ReadKey = %#x, %v; want 0, ErrIdleTimeout", k, err)
+	}
+	// The timeout that ran out is remembered after the session's changes.
+	quiet.SetSessionIdleTimeout(time.Minute)
+	if d := quiet.LastIdleTimeout(); d != 5*time.Millisecond {
+		t.Errorf("LastIdleTimeout = %v, want 5ms", d)
 	}
 
 	// With the timeout cleared the read waits for the connection instead, so

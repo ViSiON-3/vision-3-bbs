@@ -1,8 +1,10 @@
 package menu
 
 import (
+	"bytes"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"strings"
 	"testing"
@@ -116,6 +118,17 @@ func TestChatIdleRoomTrafficKeepsCallerOn(t *testing.T) {
 	}
 	if got, _ := sessionIdleTimeouts.Load(run.s); got != chatIdleUnit {
 		t.Errorf("idle timeout after chat = %v, want the menus' %v back", got, chatIdleUnit)
+	}
+
+	// The menu loop's notice logs chat's limit, the one that ran out, not
+	// the menus' that is back in place by then (#701).
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	env.e.handleSessionTimeout(run.s, term.NewTerminal(run.s, ""), env.outputMode, 1, 80, 24)
+	slog.SetDefault(prev)
+	if !strings.Contains(logged.String(), `msg="idle timeout, disconnecting"`) || !strings.Contains(logged.String(), "minutes=4") {
+		t.Errorf("idle log = %q, want the chat limit of 4", logged.String())
 	}
 }
 

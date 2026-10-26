@@ -53,6 +53,22 @@ func overrideSessionIdleTimeout(s ssh.Session, d time.Duration) (restore func())
 	}
 }
 
+// idleMinutesFired returns the idle timeout, in sessionIdleTimeoutMinutes
+// units, that s's input handler last timed out on. A screen with its own
+// limit (chat) has put the session's back by the time the call ends, so the
+// configured value could be the wrong one. fallback is returned when the
+// handler has not timed out, as with a door, which times out on its own.
+func idleMinutesFired(s ssh.Session, fallback int) int {
+	v, ok := sessionInputHandlers.Load(s)
+	if !ok {
+		return fallback
+	}
+	if d := v.(*editor.InputHandler).LastIdleTimeout(); d > 0 {
+		return int(d / sessionIdleUnit)
+	}
+	return fallback
+}
+
 // clearSessionIdleTimeout drops the remembered timeout when a session ends.
 func clearSessionIdleTimeout(s ssh.Session) {
 	sessionIdleTimeouts.Delete(s)
