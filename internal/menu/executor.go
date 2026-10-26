@@ -451,6 +451,12 @@ func (e *MenuExecutor) activeNodeCount() int {
 // idle timeout string, then logs the disconnection. Call this before returning
 // LOGOFF/DISCONNECT whenever ErrIdleTimeout is received from any input loop.
 func (e *MenuExecutor) handleIdleTimeout(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int, termWidth, termHeight int) {
+	e.idleTimeoutNotice(terminal, outputMode, nodeNumber, termWidth, termHeight, e.GetServerConfig().SessionIdleTimeoutMinutes)
+}
+
+// idleTimeoutNotice is handleIdleTimeout for a timeout of minutes, in
+// sessionIdleTimeoutMinutes units, which it logs.
+func (e *MenuExecutor) idleTimeoutNotice(terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int, termWidth, termHeight, minutes int) {
 	// Try to display TIMEOUT.ANS first.
 	ansPath := e.menuFile("ansi", "TIMEOUT.ANS")
 	if rawContent, err := ansi.GetAnsiFileContent(ansPath); err == nil {
@@ -471,7 +477,7 @@ func (e *MenuExecutor) handleIdleTimeout(terminal *term.Terminal, outputMode ans
 		// stringhook.ScriptlessKeys in step.
 		e.writeStringNoScript(terminal, outputMode, msg)
 	}
-	slog.Info("idle timeout, disconnecting", "node", nodeNumber, "minutes", e.GetServerConfig().SessionIdleTimeoutMinutes)
+	slog.Info("idle timeout, disconnecting", "node", nodeNumber, "minutes", minutes)
 }
 
 // timeLimitReached reports whether s has a time limit and it has run out.
@@ -490,7 +496,7 @@ func (e *MenuExecutor) handleSessionTimeout(s ssh.Session, terminal *term.Termin
 		e.handleTimeLimit(terminal, outputMode, nodeNumber)
 		return
 	}
-	e.handleIdleTimeout(terminal, outputMode, nodeNumber, termWidth, termHeight)
+	e.idleTimeoutNotice(terminal, outputMode, nodeNumber, termWidth, termHeight, idleMinutesFired(s, e.GetServerConfig().SessionIdleTimeoutMinutes))
 }
 
 // timeLimitWarnWindow is how close to the end of their time a caller starts
