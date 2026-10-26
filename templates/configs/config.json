@@ -50,6 +50,7 @@
   "connRateLimitWindowSeconds": 10,
   "connRateLimitBanMinutes": 90,
   "sessionIdleTimeoutMinutes": 5,
+  "chatIdleTimeoutMinutes": 0,
   "transferTimeoutMinutes": 30,
   "deletedUserRetentionDays": -1,
   "useNuv": false,

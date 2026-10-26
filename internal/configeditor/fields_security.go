@@ -219,7 +219,19 @@ func sysFieldsLimits(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Xfer Timeout", Help: "Max minutes for active file transfers (0=unlimited)", Type: ftInteger, Col: 3, Row: 6, Width: 5, Min: 0, Max: 999,
+			Label: "Chat Idle", Help: "Disconnect users idle in chat after N minutes; room traffic counts as activity (0=use Idle Timeout)", Type: ftInteger, Col: 3, Row: 6, Width: 5, Min: 0, Max: 999,
+			Get: func() string { return strconv.Itoa(cfg.ChatIdleTimeoutMinutes) },
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				cfg.ChatIdleTimeoutMinutes = n
+				return nil
+			},
+		},
+		{
+			Label: "Xfer Timeout", Help: "Max minutes for active file transfers (0=unlimited)", Type: ftInteger, Col: 3, Row: 7, Width: 5, Min: 0, Max: 999,
 			Get: func() string { return strconv.Itoa(cfg.TransferTimeoutMinutes) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)

@@ -2,6 +2,7 @@ package menu
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -68,7 +70,11 @@ func chatSelectService(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 		}
 	}
 
-	room := chatRoomPicker(e, svc, s, terminal, outputMode, wt)
+	room, err := chatRoomPicker(e, svc, s, terminal, outputMode, wt)
+	if err != nil {
+		svc.Close() //nolint:errcheck
+		return nil, "", "", err
+	}
 	return svc, room, netName, nil
 }
 
@@ -188,11 +194,12 @@ func chatNetworkPicker(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 }
 
 // chatRoomPicker fetches the current room list and lets the user pick one.
-// Returns "lobby" if no rooms exist yet or the user presses Enter.
-func chatRoomPicker(e *MenuExecutor, svc chat.ChatService, s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, wt func(string)) string {
+// Returns "lobby" if no rooms exist yet or the user presses Enter. The only
+// error is an idle timeout or the end of the caller's time at the prompt.
+func chatRoomPicker(e *MenuExecutor, svc chat.ChatService, s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, wt func(string)) (string, error) {
 	rooms, err := svc.Rooms()
 	if err != nil || len(rooms) == 0 {
-		return "lobby"
+		return "lobby", nil
 	}
 
 	wt("\r\n")
@@ -210,14 +217,17 @@ func chatRoomPicker(e *MenuExecutor, svc chat.ChatService, s ssh.Session, termin
 	wt("|07Select room |08[|07lobby|08]|07: ")
 
 	input, err := readLineFromSessionIH(s, terminal)
+	if errors.Is(err, editor.ErrIdleTimeout) {
+		return "", err
+	}
 	if err != nil {
-		return "lobby"
+		return "lobby", nil
 	}
 	room, nameErr := chatRoomChoice(input, rooms)
 	if nameErr != nil {
 		wt("\r\n|07" + nameErr.Error() + " - joining lobby.\r\n")
 	}
-	return room
+	return room, nil
 }
 
 // chatRoomChoice turns the answer to a room picker into the room to join: a
@@ -268,6 +278,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 	handle := currentUser.Handle
 
+	// Chat has its own idle limit, and room traffic counts as activity
+	// against it (see pumpEvents). The menus get theirs back on the way out.
+	defer overrideSessionIdleTimeout(s, e.chatIdleTimeout(currentUser))()
+
 	// The room is drawn with absolute positioning from another goroutine,
 	// so a sysop chat break-in here would garble both.
 	if t := tapOf(s); t != nil {
@@ -301,6 +315,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Network and room selection — runs in normal terminal mode before full-screen UI.
 	svc, selectedRoom, selectedNetwork, err := chatSelectService(e, s, terminal, handle, outputMode)
+	if errors.Is(err, editor.ErrIdleTimeout) {
+		return nil, "LOGOFF", err
+	}
 	if err != nil {
 		slog.Error("chat setup failed", "node", nodeNumber, "error", err)
 		return nil, "", nil
@@ -547,9 +564,15 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	// pumpEvents shows the events svc delivers until its Events channel is
 	// closed, then closes done. It runs on its own goroutine, one per
 	// service: /network starts a new one after closing the old service.
+	ih := getSessionIH(s)
 	pumpEvents := func(svc chat.ChatService, done chan struct{}) {
 		defer close(done)
 		for ev := range svc.Events() {
+			switch ev.Type {
+			case chat.TypeMessage, chat.TypePrivate, chat.TypeJoin, chat.TypeLeave, chat.TypeTopic:
+				// Someone is talking: a caller reading along isn't idle.
+				ih.NoteActivity()
+			}
 			switch ev.Type {
 			case chat.TypeMessage:
 				if ev.Message != nil {
@@ -667,11 +690,13 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	for {
 		input, err := chatReadLine(s, &rawMu, scr, chatPrompt)
 		if err != nil {
-			if err == io.EOF {
+			// An idle timeout or the time limit goes up as it is: the menu
+			// loop shows the caller why the call is ending and logs it.
+			if err == io.EOF || errors.Is(err, editor.ErrIdleTimeout) {
 				cleanup()
 				rawWrite([]byte("\x1B[r"))
 				terminal.SetPrompt("")
-				return nil, "LOGOFF", io.EOF
+				return nil, "LOGOFF", err
 			}
 			slog.Error("chat input error", "node", nodeNumber, "error", err)
 			break
@@ -803,6 +828,12 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 
 			netInput, netErr := chatReadLine(s, &rawMu, scr, "Select network [1]: ")
+			if errors.Is(netErr, editor.ErrIdleTimeout) {
+				// cleanup has already run.
+				rawWrite([]byte("\x1B[r"))
+				terminal.SetPrompt("")
+				return nil, "LOGOFF", netErr
+			}
 			var newSvc chat.ChatService
 			var newNetName string
 			if netErr != nil {
@@ -850,6 +881,12 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					writeChatLine(fmt.Sprintf("|08 %d.|07 %-12s |08(%d)|07 %s", i+1, r.Name, r.UserCount, topic))
 				}
 				roomInput, roomErr2 := chatReadLine(s, &rawMu, scr, "Select room [lobby]: ")
+				if errors.Is(roomErr2, editor.ErrIdleTimeout) {
+					newSvc.Close() //nolint:errcheck
+					rawWrite([]byte("\x1B[r"))
+					terminal.SetPrompt("")
+					return nil, "LOGOFF", roomErr2
+				}
 				if roomErr2 == nil {
 					var nameErr error
 					if newRoom, nameErr = chatRoomChoice(roomInput, netRooms); nameErr != nil {

@@ -47,6 +47,7 @@ Open the config editor and navigate to **Access & Security → Connection Limits
 | Failed Logins | 5 | Failed BBS login attempts from one IP before lockout. Set to 0 to disable. |
 | Lockout Mins | 30 | Duration of IP lockout after failed login threshold is reached. |
 | Idle Timeout | 5 | Minutes before an idle session is disconnected, in menus and in doors. CoSysOps and above are exempt. |
+| Chat Idle | 0 | Minutes before a caller idle in teleconference chat is disconnected. 0 uses Idle Timeout. In chat, messages, joins, leaves and topic changes in the caller's room count as activity, as do private messages to them. A room where something posts regularly, such as a bot, keeps an absent caller connected until their time limit ends the call. CoSysOps and above are exempt. |
 | Xfer Timeout | 10 | Minutes before a stalled file transfer is aborted. |
 
 To set IP blocklist and allowlist file paths, use **Access & Security → IP Blocklist/Allowlist** (item 4).

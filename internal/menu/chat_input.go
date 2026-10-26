@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -215,7 +216,9 @@ func chatLastGrapheme(text []rune) int {
 //
 // Every terminal write takes mu, so it is serialised with the event
 // goroutine's writes into the chat region. Ctrl-C, Ctrl-A, ESC and a closed
-// connection all return io.EOF.
+// connection all return io.EOF. An idle timeout or the end of the caller's
+// time returns that error (editor.ErrIdleTimeout, or editor.ErrTimeLimit
+// which wraps it), so the caller can be told why the call is ending.
 func chatReadLine(s ssh.Session, mu *sync.Mutex, scr *chatScreen, prompt string) (string, error) {
 	ih := getSessionIH(s)
 	promptLen := uniseg.StringWidth(prompt)
@@ -259,6 +262,9 @@ func chatReadLine(s ssh.Session, mu *sync.Mutex, scr *chatScreen, prompt string)
 	for {
 		key, err := ih.ReadKey()
 		if err != nil {
+			if errors.Is(err, editor.ErrIdleTimeout) {
+				return "", err
+			}
 			return "", io.EOF
 		}
 		if key < 128 || key > 255 {
