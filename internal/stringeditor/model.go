@@ -139,6 +139,13 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 	if err != nil {
 		return Model{}, fmt.Errorf("loading strings: %w", err)
 	}
+	// An unedited string whose shipped text has since changed is shown, and
+	// saved, as the current default: it is what the BBS prints.
+	for k, v := range values {
+		if current, ok := config.SupersededString(k, v); ok {
+			values[k] = current
+		}
+	}
 
 	ti := textinput.New()
 	// No CharLimit: a limit here silently truncates the sysop's value, and the

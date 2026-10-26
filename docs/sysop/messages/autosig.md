@@ -45,7 +45,7 @@ The prompt is the `msgAutoSigPrompt` string in `strings.json`.
 
 Callers usually manage their signature from the User Konfig editor (`K` on the main menu, `RUN:USERCONFIG`), item **F**. With no signature it opens the editor straight away; with one, it offers **Edit**, **Delete** or **Ask each post**. **A** switches asking on and off; while it's on, the field shows `, ask` after the signature's length (for example `3 lines, ask`).
 
-A `strings.json` from before this option still has the old `konfigAutoSigChoice` text, which doesn't list **A**. The key works anyway. To show it, blank the string in `./strings` to get the built-in text, or add `|08[|15A|08]|07sk each post` to your own.
+Boards upgrading from before this option get the new `konfigAutoSigChoice` text automatically, as long as they never edited it (see [Changed shipped strings](getting-started/upgrading.md#changed-shipped-strings)). If you customised it, your text is kept and doesn't list **A**, though the key works anyway. Add `|08[|15A|08]|07sk each post` to it in `./strings` to show the option.
 
 `RUN:CFG_AUTOSIG` is the standalone version for other menus:
 
