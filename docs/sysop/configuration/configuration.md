@@ -58,7 +58,7 @@ Choosing **Access & Security** (key 2) opens an inner menu of five numbered item
 | Item | Name | Fields |
 |------|------|--------|
 | 1 | Access Levels | SysOp Level, CoSysOp Level, WFC Access, Invisible Level, New User Level, Auto Validate, Notify SysOp, Regular Level, Logon Level, Anonymous Level, Page Timeout, Page Cooldown |
-| 2 | Connection Limits | Max Nodes, Max Per IP, Failed Logins (0=off), Lockout Minutes, Idle Timeout, Transfer Timeout |
+| 2 | Connection Limits | Max Nodes, Max Per IP, Failed Logins (0=off), Lockout Minutes, Idle Timeout, Chat Idle Timeout, Transfer Timeout |
 | 3 | Bot Defense | Challenge gate (enable, art file, key, timeout, required presses, stray keys, live countdown) and connection-rate limiter (enable, hits, window, ban minutes). See [Security](configuration/security.md#bot-defense) |
 | 4 | IP Blocklist/Allowlist | Blocklist Path, Allowlist Path |
 | 5 | New User Voting (NUV) | Use NUV, Auto Add NUV, NUV Use Level, Yes/No vote thresholds, Validate/Kill on threshold, NUV Level, NUV Form |
@@ -492,6 +492,7 @@ General BBS configuration. All settings in this file are managed through the **S
 - `maxFailedLogins` — Failed BBS logins from an IP before lockout (default: `5`, `0` = disabled)
 - `lockoutMinutes` — Lockout duration in minutes (default: `30`)
 - `sessionIdleTimeoutMinutes` — Idle session cutoff, in menus and in doors (default: `5`, `0` = disabled). CoSysOps and above are exempt
+- `chatIdleTimeoutMinutes` — Idle cutoff while a caller is in teleconference chat (default: `0`, meaning `sessionIdleTimeoutMinutes` applies). In chat, messages, joins, leaves and topic changes in the caller's room count as activity, as do private messages to them, so someone reading a live conversation isn't dropped. CoSysOps and above are exempt
 - `transferTimeoutMinutes` — File transfer timeout (default: `10`)
 
 <a id="access-levels"></a>

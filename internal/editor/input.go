@@ -92,6 +92,11 @@ type InputHandler struct {
 	// atomic access panics with "unaligned 64-bit atomic operation".
 	idleNs atomic.Int64
 
+	// activityNs is when NoteActivity was last called, as nanoseconds since
+	// monoEpoch (0 = never). A key-wait's idle countdown runs from the later
+	// of this and the wait's own start.
+	activityNs atomic.Int64
+
 	// deadlineNs is the session's time-limit deadline as Unix nanoseconds
 	// (0 = none). Once it passes, key reads return ErrTimeLimit. Set via
 	// SetSessionDeadline.
@@ -169,6 +174,30 @@ func (ih *InputHandler) SetSessionIdleTimeout(d time.Duration) {
 	ih.idleNs.Store(d.Nanoseconds())
 }
 
+// monoEpoch anchors activityNs to the monotonic clock, so a wall-clock step
+// can't make activity look older or newer than it was.
+var monoEpoch = time.Now()
+
+// NoteActivity restarts the idle countdown of the key read waiting now, as a
+// keystroke would, without supplying any input. Chat calls it from its event
+// goroutine when the room has traffic, so a caller reading a conversation is
+// not idle. Reads started later count from their own start as usual.
+// Thread-safe.
+func (ih *InputHandler) NoteActivity() {
+	ih.activityNs.Store(int64(time.Since(monoEpoch)))
+}
+
+// idleFrom is when the idle countdown of a key-wait that started at start
+// began: start, or the last NoteActivity if that came later.
+func (ih *InputHandler) idleFrom(start time.Time) time.Time {
+	if ns := ih.activityNs.Load(); ns != 0 {
+		if a := monoEpoch.Add(time.Duration(ns)); a.After(start) {
+			return a
+		}
+	}
+	return start
+}
+
 // SetSessionDeadline sets the time at which the caller's time limit runs out.
 // Key reads waiting past it, or started after it, return ErrTimeLimit. Pass
 // the zero time for no limit. Thread-safe.
@@ -189,15 +218,22 @@ func (ih *InputHandler) SuspendSessionDeadline() (restore func()) {
 	return func() { ih.deadlineNs.CompareAndSwap(0, ns) }
 }
 
-// keyWait returns how long a key read may wait for its first byte, 0 meaning
-// no bound, and the error to return if nothing arrives in that time: the idle
-// timeout or the time limit, whichever runs out first. expired reports a time
-// limit that has already passed, when the read should not wait at all.
-func (ih *InputHandler) keyWait() (wait time.Duration, onTimeout error, expired bool) {
+// keyWait returns how long a key read that started waiting at start may still
+// wait for its first byte, 0 meaning no bound, and the error to return if
+// nothing arrives in that time: the idle timeout or the time limit, whichever
+// runs out first. expired reports that one of them has already run out, when
+// the read should not wait at all.
+func (ih *InputHandler) keyWait(start time.Time) (wait time.Duration, onTimeout error, expired bool) {
 	if err := ih.failed.Load(); err != nil {
 		return 0, *err, true
 	}
 	wait, onTimeout = ih.sessionIdleTimeout(), ErrIdleTimeout
+	if wait > 0 {
+		wait -= time.Since(ih.idleFrom(start))
+		if wait <= 0 {
+			return 0, ErrIdleTimeout, true
+		}
+	}
 	if ns := ih.deadlineNs.Load(); ns != 0 {
 		left := time.Until(time.Unix(0, ns))
 		if left <= 0 {
@@ -371,6 +407,7 @@ func (ih *InputHandler) readByte() (byte, error) {
 // readByteOpt is readByte; breakIn says whether the wait may service the
 // break-in hook.
 func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
+	start := time.Now()
 	for {
 		// A latched session end (see Fail) wins over pushed-back bytes.
 		if err := ih.failed.Load(); err != nil {
@@ -382,7 +419,7 @@ func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 			ih.unreadBuf = ih.unreadBuf[1:]
 			return b, nil
 		}
-		wait, onTimeout, expired := ih.keyWait()
+		wait, onTimeout, expired := ih.keyWait(start)
 		if expired {
 			return 0, onTimeout
 		}
@@ -390,11 +427,14 @@ func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 			b, broke, err := ih.waitByte(wait, breakIn)
 			if broke {
 				ih.runBreakIn()
+				start = time.Now()
 				continue
 			}
 			if err != nil {
 				if isTimeoutError(err) {
-					return 0, onTimeout
+					// keyWait decides: NoteActivity may have moved the
+					// countdown on while this wait ran.
+					continue
 				}
 				return 0, err
 			}
@@ -410,6 +450,7 @@ func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 			}
 		case <-ih.breakInChan(breakIn):
 			ih.runBreakIn()
+			start = time.Now()
 		}
 	}
 }
@@ -866,7 +907,8 @@ func (ih *InputHandler) ReadKeyTranslated() (int, error) {
 func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, isEvent bool, err error) {
 	if len(ih.unreadBuf) == 0 {
 		var idle <-chan time.Time
-		wait, onTimeout, expired := ih.keyWait()
+		start := time.Now()
+		wait, onTimeout, expired := ih.keyWait(start)
 		if expired {
 			return 0, ev, false, onTimeout
 		}
@@ -895,13 +937,23 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 			case ev = <-events:
 				return 0, ev, true, nil
 			case <-idle:
-				return 0, ev, false, onTimeout
+				// NoteActivity may have moved the countdown on meanwhile.
+				wait, onTimeout, expired = ih.keyWait(start)
+				if expired {
+					return 0, ev, false, onTimeout
+				}
+				if wait <= 0 {
+					idle = nil
+				} else {
+					timer.Reset(wait)
+				}
 			case <-ih.breakInChan(true):
 				ih.runBreakIn()
 				if len(ih.unreadBuf) > 0 {
 					break wait
 				}
-				wait, onTimeout, expired = ih.keyWait()
+				start = time.Now()
+				wait, onTimeout, expired = ih.keyWait(start)
 				if expired {
 					return 0, ev, false, onTimeout
 				}

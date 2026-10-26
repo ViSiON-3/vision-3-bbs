@@ -180,6 +180,55 @@ func TestSessionIdleTimeout(t *testing.T) {
 	}
 }
 
+// NoteActivity from another goroutine keeps a waiting key read from timing
+// out; once it stops, the read times out one idle window after the last call.
+// It does not move the time limit.
+func TestNoteActivityRestartsIdleCountdown(t *testing.T) {
+	const idle = 60 * time.Millisecond
+	// busy calls NoteActivity every idle/4 for d, then stops.
+	busy := func(ih *InputHandler, d time.Duration) {
+		go func() {
+			for end := time.Now().Add(d); time.Now().Before(end); time.Sleep(idle / 4) {
+				ih.NoteActivity()
+			}
+		}()
+	}
+
+	quiet, _ := silentInput(t)
+	quiet.SetSessionIdleTimeout(idle)
+	start := time.Now()
+	busy(quiet, 5*idle)
+	if _, err := quiet.ReadKey(); !errors.Is(err, ErrIdleTimeout) {
+		t.Fatalf("ReadKey: err = %v, want ErrIdleTimeout", err)
+	}
+	if took := time.Since(start); took < 5*idle {
+		t.Errorf("ReadKey timed out after %v despite activity for %v", took, 5*idle)
+	}
+
+	start = time.Now()
+	busy(quiet, 5*idle)
+	if _, _, _, err := readKeyOrEvent[struct{}](quiet, nil); !errors.Is(err, ErrIdleTimeout) {
+		t.Fatalf("readKeyOrEvent: err = %v, want ErrIdleTimeout", err)
+	}
+	if took := time.Since(start); took < 5*idle {
+		t.Errorf("readKeyOrEvent timed out after %v despite activity for %v", took, 5*idle)
+	}
+
+	// Activity from before a read started doesn't shorten or lengthen it.
+	quiet.NoteActivity()
+	time.Sleep(idle / 2)
+	start = time.Now()
+	if _, err := quiet.ReadKey(); !errors.Is(err, ErrIdleTimeout) || time.Since(start) < idle {
+		t.Errorf("read after stale activity: err = %v after %v, want ErrIdleTimeout after %v", err, time.Since(start), idle)
+	}
+
+	quiet.SetSessionDeadline(time.Now().Add(2 * idle))
+	busy(quiet, 5*idle)
+	if _, err := quiet.ReadKey(); !errors.Is(err, ErrTimeLimit) {
+		t.Errorf("activity past the deadline: err = %v, want ErrTimeLimit", err)
+	}
+}
+
 // The session deadline ends a key wait with ErrTimeLimit, which is also an
 // ErrIdleTimeout so existing idle handling logs the caller off. Whichever of
 // the idle timeout and the deadline comes first decides the error.
