@@ -268,7 +268,9 @@ $buildFailed = $false
     @{ Name = "v3mail"; Desc = "mail processor" },
     @{ Name = "strings"; Desc = "strings editor" },
     @{ Name = "ue"; Desc = "user editor" },
-    @{ Name = "config"; Desc = "config editor" }
+    @{ Name = "config"; Desc = "config editor" },
+    @{ Name = "menuedit"; Desc = "menu editor" },
+    @{ Name = "wfc"; Desc = "sysop console" }
 ) | ForEach-Object {
     $exe = $_.Name + ".exe"
     Write-Host "Building $($_.Name)..."

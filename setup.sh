@@ -262,6 +262,11 @@ if ! go build -o config ./cmd/config; then
     echo -e "${RED}Build failed (config)!${NC}"
     exit 1
 fi
+echo "Building menuedit..."
+if ! go build -o menuedit ./cmd/menuedit; then
+    echo -e "${RED}Build failed (menuedit)!${NC}"
+    exit 1
+fi
 echo "Building wfc..."
 if ! go build -o wfc ./cmd/wfc; then
     echo -e "${RED}Build failed (wfc)!${NC}"

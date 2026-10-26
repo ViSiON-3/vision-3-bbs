@@ -6,7 +6,7 @@
 
 This project is a work-in-progress refactor and modernization of the classic ViSiON/2 BBS software. The goal is to recreate the core functionality of the classic BBS experience using modern technologies.
 
-There's detailed SysOp documentation [here](https://vision-3.github.io/vision-3-bbs/sysop).
+There's detailed SysOp documentation [here](https://vision3bbs.com/sysop/).
 
 **Note:** This is currently under active development and is not quite feature-complete.
 
@@ -85,9 +85,9 @@ Are you an old school ANSi artist (are you younger and infatuated for some reaso
 
 If you have skills, old .ANS files gathering dust, or just love the aesthetic of the golden age of BBSing, we want to hear from you! Contact us via GitHub issues or pull requests.
 
-**Areas where we need help:**
+### 🛠️ Where Developers Can Help
 
-- File transfer protocols beyond Zmodem (XMODEM, YMODEM)
+- Shipping and testing XMODEM/YMODEM by default (the protocol definitions exist; only SEXYZ Zmodem is in the template `protocols.json`)
 - Performance optimization and scalability
 - Terminal emulation improvements
 - Modern features while maintaining the classic feel
@@ -110,9 +110,9 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | NUV (New User Verification)   | ✅ Working | Voting-based approval system for new user accounts                                                                  |
 | Info Forms                    | ✅ Working | Up to 5 configurable forms; required form enforcement on login; user fill/view; SysOp browse and management         |
 | TUI User Editor (`ue`)        | ✅ Working | Full-screen terminal user management                                                                                |
-| WFC Sysop Console (`wfc`)     | ✅ Working | Remote read-only monitor of live nodes/callers + event feed over SSH, gated by a hot-reloadable WFC Access toggle in Access Levels ([guide](docs/sysop/how-to-guides/wfc-console.md)) |
+| WFC Sysop Console (`wfc`)     | ✅ Working | Remote console over SSH: live nodes/callers and event feed, kick, watch a node's screen, type for a caller, split-screen chat, answer pages; read-only accounts supported; gated by a hot-reloadable WFC Access toggle ([guide](docs/sysop/how-to-guides/wfc-console.md)) |
 | **Menus**                     |           |                                                                                                                     |
-| Menu System                   | ✅ Working | `.MNU`, `.CFG`, `.ANS` files, ACS evaluation, password protection                                                   |
+| Menu System                   | ✅ Working | `.MNU`, `.CFG`, `.ANS` files, ACS evaluation, password protection, `menus.d/` overlay for upgrade-safe customizations |
 | TUI Menu Editor (`menuedit`)  | ✅ Working | Full-screen menu configuration editor                                                                               |
 | **Messaging**                 |           |                                                                                                                     |
 | Message Areas                 | ✅ Working | JAM format, echomail/netmail, conferences, lightbar reader, threading, quoting, vi-style editor, newscan, last read |
@@ -125,11 +125,11 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | File Transfers                | ✅ Working | ZMODEM upload/download via `sexyz`, batch download with per-area ACS validation                                     |
 | File Management               | ✅ Working | SysOp file delete, move, edit descriptions, review queue for uploads, lightbar sysop bar (`*` toggle)               |
 | **Doors & Scripting**         |           |                                                                                                                     |
-| Door/External Programs        | ✅ Working | Dropfile generation, PTY passthrough                                                                                |
+| Door/External Programs        | ✅ Working | Dropfile generation, PTY passthrough, RLogin and Telnet doors                                                       |
 | SyncJS Doors                  | ✅ Working | Synchronet-compatible JavaScript door engine                                                                        |
 | V3 Scripting Engine           | ✅ Working | goja-based JavaScript runtime for native V3 script doors                                                            |
 | **Networking/FTN**            |           |                                                                                                                     |
-| FTN Echomail/Netmail          | ✅ Working | JAM-backed, tosser, import/export, dupe checking                                                                    |
+| FTN Echomail/Netmail          | ✅ Working | JAM-backed, tosser, import/export, dupe checking, nodelist fetch (ZIP/LHA)                                          |
 | Integrated Binkd Mailer       | ✅ Working | Bundled `bin/binkd` supervised as a child process (auto-restart on crash, clean shutdown); one-toggle echomail — inbound tosses automatically, outbound exports on a timer. See [FTN Echomail](docs/sysop/messages/ftn-echomail.md). |
 | FTN Setup Wizard              | ✅ Working | Guided setup in `./config`: pick network, download echo list, auto-create areas + `binkd.conf`                     |
 | QWK Networking (QWKnet)       | ✅ Working | Node on QWK-based networks such as DOVE-Net: FTP poll of the hub, REP/QWK packing and tossing with HEADERS.DAT and Synchronet kludges, dupe and loop protection, setup wizard in `./config`. See [QWK Networking](docs/sysop/messages/qwk-networking.md). |
@@ -148,14 +148,14 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | Invisible SysOp Login         | ✅ Working | SysOp/CoSysOp login without appearing in caller log                                                                 |
 | SysOp Config TUI (`config`)   | ✅ Working | Full-screen TUI configuration editor (`cmd/config`)                                                                 |
 | **Quality**                   |           |                                                                                                                     |
-| Comprehensive Testing         | 📋 Planned |                                                                                                                     |
-| Complete Documentation        | 📋 Planned |                                                                                                                     |
+| Automated Testing             | 🚧 Ongoing | Unit and integration tests across most packages; coverage still growing                                            |
+| SysOp Documentation           | 🚧 Ongoing | [SysOp guide](https://vision3bbs.com/sysop/) covers setup, configuration, messaging, files, doors, scripting, V3Net |
 
 ## Technology Stack
 
-*   **Language:** Go 1.24+
+*   **Language:** Go 1.25+
 *   **SSH Server:** `github.com/gliderlabs/ssh` — pure-Go SSH server with legacy algorithm support (SyncTerm, NetRunner compatible)
-*   **TUI Framework:** Charmbracelet BubbleTea (`github.com/charmbracelet/bubbletea`) — full-screen terminal editors and admin tools
+*   **TUI Framework:** Charmbracelet BubbleTea (`github.com/charmbracelet/bubbletea`) — full-screen terminal editors and admin tools (patched copies of `bubbletea` and `charmbracelet/x/term` live in `third_party/`)
 *   **JavaScript Engine:** `github.com/dop251/goja` — embedded JS runtime for V3 scripting and SyncJS door support
 *   **Event Scheduling:** `github.com/robfig/cron/v3` — cron-style event scheduler
 *   **Config Monitoring:** `github.com/fsnotify/fsnotify` — live configuration hot reload
@@ -164,6 +164,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 *   **Password Hashing:** `golang.org/x/crypto/bcrypt`
 *   **Message Base:** JAM binary format (echomail/netmail compatible)
 *   **Data Format:** JSON (for users and configuration)
+*   **Embedded Database:** `modernc.org/sqlite` — pure-Go SQLite for the local chat backend and QWK/V3Net dupe tracking
 
 ## Platform Support
 
@@ -214,11 +215,14 @@ vision-3-bbs/
 │   ├── login.json          # Login sequence flow definition
 │   ├── message_areas.json  # Message area definitions
 │   ├── protocols.json      # File transfer protocol configuration
+│   ├── qwknet.json         # QWK networking (QWKnet) configuration
 │   ├── strings.json        # BBS string customizations
+│   ├── v3net.json          # V3Net networking configuration
 │   └── ssh_host_rsa_key    # SSH host key
 ├── templates/              # Configuration templates (tracked in git)
-│   ├── configs/            # Template configuration files
-│   └── infoforms/          # Info form templates
+│   ├── configs/            # Template configuration files (also binkd.conf, sexyz.ini, dosemurc)
+│   ├── infoforms/          # Info form templates
+│   └── registry.json       # V3Net network registry (seed list)
 ├── data/                   # Runtime data
 │   ├── users/              # User database and call history
 │   ├── msgbases/           # JAM format message bases
@@ -231,31 +235,47 @@ vision-3-bbs/
 │   ├── admin/              # WFC admin contract (shared types for the sysop console)
 │   ├── ansi/               # ANSI/pipe code processing
 │   ├── archiver/           # Archive format handling (ZIP, etc.)
+│   ├── atomicfile/         # Atomic file replacement
 │   ├── chat/               # Inter-node chat and sysop paging
 │   ├── config/             # Configuration loading
 │   ├── configeditor/       # TUI configuration editor (BubbleTea)
+│   ├── configmerge/        # Safe saves of JSON configs shared by several programs
 │   ├── conference/         # Conference management
 │   ├── editor/             # Full-screen ANSI message editor
 │   ├── file/               # File area management
+│   ├── filelock/           # Advisory cross-process file locks
+│   ├── formatspec/         # Parses fmt directives in BBS strings
 │   ├── ftn/                # FidoNet/echomail support
 │   ├── jam/                # JAM message base format
+│   ├── jsutil/             # Helpers for goja JavaScript bindings
+│   ├── lha/                # LHA (LZH) archive reader
 │   ├── logging/            # Logging setup and helpers
+│   ├── mailer/             # Supervises the bundled binkd mailer
 │   ├── menu/               # Menu system & lightbar UI
 │   ├── menueditor/         # TUI menu editor (BubbleTea)
+│   ├── menuset/            # Menu set file resolution with menus.d overlay
 │   ├── message/            # Message base management
 │   ├── qwk/                # QWK offline mail packet format
 │   ├── qwkapi/             # QWK packet transport REST API (experimental)
+│   ├── qwknet/             # QWK networking (QWKnet node)
 │   ├── qwkservice/         # QWK packet export/import service
+│   ├── rlogin/             # RLogin client (RLogin doors)
 │   ├── scheduler/          # Cron-style event scheduler
 │   ├── scripting/          # V3 scripting engine (goja-based JavaScript runtime)
 │   ├── session/            # Session management
+│   ├── snoop/              # Session taps for WFC watch/type-in
 │   ├── sshserver/          # pure-Go SSH server (gliderlabs/ssh wrapper)
 │   ├── stringeditor/       # TUI string configuration editor
+│   ├── stringformat/       # Validates customized strings against their defaults
+│   ├── stringhook/         # strings.json values that hand off to scripts
 │   ├── syncjs/             # Synchronet-compatible JavaScript door engine
+│   ├── telnetclient/       # Telnet client (Telnet doors)
 │   ├── telnetserver/       # Telnet server
 │   ├── terminalio/         # Terminal I/O handling
+│   ├── timeleft/           # Caller time-remaining calculation
 │   ├── tosser/             # FTN echomail tosser (import/export)
 │   ├── transfer/           # File transfer protocols
+│   ├── tuiart/             # Shared look of the sysop TUI tools
 │   ├── types/              # Shared types
 │   ├── uitext/             # Shared UI text/formatting helpers
 │   ├── user/               # User management
@@ -266,12 +286,14 @@ vision-3-bbs/
 │   ├── wfcui/              # WFC (Waiting For Call) sysop console TUI (BubbleTea)
 │   └── ziplab/             # ZIP archive processing and viewer
 ├── menus/v3/               # Menu set files
+│   ├── theme.json          # Menu set theme (colors)
 │   ├── ansi/               # ANSI art files
 │   ├── bar/                # Lightbar menu definitions
 │   ├── cfg/                # Menu configuration files
 │   ├── mnu/                # Menu definition files
 │   └── templates/          # Display templates
 │       └── message_headers/ # Customizable message header styles (unlimited, 16 included)
+├── menus.d/                # Your menu overrides, read before menus/ (git-ignored)
 ├── bin/                    # External helper binaries (not tracked in git)
 ├── scripts/                # Utility scripts and example V3/SyncJS scripts
 │   └── examples/           # Example JavaScript scripts for V3 scripting and SyncJS
@@ -316,7 +338,7 @@ See [Docker Deployment Guide](docs/sysop/getting-started/docker.md) for detailed
 
 ### Option 3: Build from Source
 
-**Go 1.24+** is the only build requirement.
+**Go 1.25+** is the only build requirement.
 
 1. **Clone and set up:**
     ```bash
