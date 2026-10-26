@@ -184,9 +184,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Append auto-signature if user has one
-	if currentUser.AutoSignature != "" {
-		body = body + "\n\n" + currentUser.AutoSignature
-	}
+	body = e.appendAutoSig(s, terminal, currentUser, body, outputMode, nodeNumber, termWidth, termHeight)
 
 	// Save the private message with MSG_PRIVATE flag
 	msgNum, err := e.MessageMgr.AddPrivateMessage(privmailArea.ID, currentUser.Handle, recipientUser.Handle, subject, body, "")

@@ -258,7 +258,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	// per-area progress output as callbacks so terminal/UI concerns stay here.
 	importRes, err := svc.ImportREP(repData, qwkservice.ImportOptions{
 		Handle:    currentUser.Handle,
-		Signature: currentUser.AutoSignature,
+		Signature: currentUser.OfflineSignature(),
 		Authorize: func(area *message.MessageArea) bool {
 			return area.ACSWrite == "" || checkACS(area.ACSWrite, currentUser, s, terminal, sessionStartTime)
 		},

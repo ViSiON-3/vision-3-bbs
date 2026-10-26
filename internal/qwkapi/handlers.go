@@ -131,7 +131,7 @@ func (s *Server) handleReply(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.deps.Service.ImportREP(data, qwkservice.ImportOptions{
 		Handle:    u.Handle,
-		Signature: u.AutoSignature,
+		Signature: u.OfflineSignature(),
 		Authorize: s.deps.AuthorizeFor(u),
 	})
 	if err != nil {

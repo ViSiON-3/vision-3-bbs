@@ -628,7 +628,7 @@ func stringCatalog() []StringEntry {
 		{Label: "Konfig: Passwords Differ", Key: "konfigPwMismatch", Description: "The repeated password was different"},
 		{Label: "Konfig: Password Failed", Key: "konfigPwFailed", Description: "The new password could not be stored"},
 		{Label: "Konfig: Password Changed", Key: "konfigPwChanged", Description: "Password changed"},
-		{Label: "Konfig: Sig Choice", Key: "konfigAutoSigChoice", Description: "Asked when a signature exists. E edits, D deletes"},
+		{Label: "Konfig: Sig Choice", Key: "konfigAutoSigChoice", Description: "Asked when a signature exists. E edits, D deletes, A switches asking before each post"},
 		{Label: "Konfig: Sig Deleted", Key: "konfigAutoSigDeleted", Description: "Signature deleted"},
 		{Label: "Konfig: Editor Failed", Key: "konfigAutoSigEditorFailed", Description: "The signature editor could not start"},
 		{Label: "Konfig: Sig Unchanged", Key: "konfigAutoSigUnchanged", Description: "The editor was left without saving"},
@@ -673,5 +673,11 @@ func stringCatalog() []StringEntry {
 
 		{Label: "Twit: Label", Key: "konfigTwitListLabel", Description: "User configuration field label"},
 		{Label: "Twit: Help", Key: "konfigTwitListHelp", Description: "User configuration field help"},
+
+		// Auto-Signature: ask before each post (#697)
+		{Label: "Msg: Add Signature?", Key: "msgAutoSigPrompt", Description: "Yes/No asked after saving a message when the caller wants to be asked before their Auto-Signature is added"},
+		{Label: "Konfig: Sig Ask On", Key: "konfigAutoSigAskOn", Description: "Asking before each post was switched on"},
+		{Label: "Konfig: Sig Ask Off", Key: "konfigAutoSigAskOff", Description: "Asking before each post was switched off"},
+		{Label: "Konfig: Sig Ask Mark", Key: "konfigAutoSigAskSuffix", Description: "Added after the signature length when asking is on. Plain text, no colour codes"},
 	}
 }

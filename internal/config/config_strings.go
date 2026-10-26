@@ -30,6 +30,7 @@ func LoadStrings(configPath string) (StringsConfig, error) { // Return the loade
 		return StringsConfig{}, fmt.Errorf("failed to parse strings JSON from %s: %w", filePath, err)
 	}
 
+	applySupersededStrings(&loadedConfig)
 	applyStringDefaults(&loadedConfig)
 	if values, err := stringValues(data); err == nil {
 		applyMissingStringDefaults(&loadedConfig, values)
@@ -329,13 +330,17 @@ var StringFallbacks = map[string]string{
 	"konfigPwMismatch":          "|12The passwords didn't match.|07 Nothing was changed.",
 	"konfigPwFailed":            "|12Couldn't change your password. Please try again.|07",
 	"konfigPwChanged":           "|10Saved.|07 Your password has been changed.",
-	"konfigAutoSigChoice":       "|15Auto-Signature|08: |08[|15E|08]|07dit  |08[|15D|08]|07elete  |08[|15Esc|08]|07 Cancel",
+	"konfigAutoSigChoice":       "|15Auto-Signature|08: |08[|15E|08]|07dit  |08[|15D|08]|07elete  |08[|15A|08]|07sk each post  |08[|15Esc|08]|07 Cancel",
 	"konfigAutoSigDeleted":      "|10Saved.|07 Auto-Signature deleted.",
 	"konfigAutoSigEditorFailed": "|12The editor couldn't start.|07 Nothing was changed.",
 	"konfigAutoSigUnchanged":    "|07Auto-Signature not changed.",
 	"konfigAutoSigCleared":      "|10Saved.|07 Auto-Signature cleared.",
 	"konfigAutoSigTruncated":    "|10Saved.|07 Auto-Signature kept to its first %d lines.",
 	"konfigAutoSigUpdated":      "|10Saved.|07 Auto-Signature updated.",
+	"konfigAutoSigAskOn":        "|10Saved.|07 You'll be asked before your Auto-Signature is added.",
+	"konfigAutoSigAskOff":       "|10Saved.|07 Your Auto-Signature is added to every message.",
+	"konfigAutoSigAskSuffix":    ", ask",
+	"msgAutoSigPrompt":          "|07Add your Auto-Signature? @",
 	"konfigColumnsTitle":        "File Columns",
 	"konfigColumnsHint":         "Enter switches   Esc when done",
 	"konfigColumnsKeepOne":      "|12At least one column has to stay on.|07",
@@ -355,6 +360,52 @@ var StringMissingDefaults = map[string]string{
 	// Quote banner for echomail/netmail/QWK replies (#632). Blank means no
 	// banner, so only an installation that predates the key gets the default.
 	"quoteTopNet": "^N wrote:",
+}
+
+// StringSuperseded lists, for a key whose shipped text has changed, the text
+// it shipped with before. A strings.json still holding one of these exactly
+// was never edited by its sysop, so the runtime uses the current default
+// (the key's StringFallbacks value) instead and the change reaches existing
+// installations. Anything else, down to a single space, is the sysop's edit
+// and is left alone.
+//
+// When a shipped string changes, add its old text here (keep earlier entries)
+// and put the new text in StringFallbacks and templates/configs/strings.json.
+var StringSuperseded = map[string][]string{
+	// #697 added [A]sk each post.
+	"konfigAutoSigChoice": {
+		"|15Auto-Signature|08: |08[|15E|08]|07dit  |08[|15D|08]|07elete  |08[|15Esc|08]|07 Cancel",
+	},
+}
+
+// SupersededString returns the current default for key when value is text the
+// key used to ship with, and ok=false otherwise.
+func SupersededString(key, value string) (current string, ok bool) {
+	for _, old := range StringSuperseded[key] {
+		if value == old {
+			current, ok = StringFallbacks[key]
+			return current, ok
+		}
+	}
+	return "", false
+}
+
+// applySupersededStrings replaces any string field still holding a superseded
+// shipped value with the current default.
+func applySupersededStrings(c *StringsConfig) {
+	v := reflect.ValueOf(c).Elem()
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		field := v.Field(i)
+		if field.Kind() != reflect.String || !field.CanSet() {
+			continue
+		}
+		key, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+		if current, ok := SupersededString(key, field.String()); ok {
+			slog.Info("using updated default for unedited string", "key", key)
+			field.SetString(current)
+		}
+	}
 }
 
 // applyMissingStringDefaults fills in StringMissingDefaults values for keys

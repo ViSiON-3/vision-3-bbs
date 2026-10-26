@@ -117,6 +117,7 @@ After authentication, the system applies these preferences: if a user's stored s
 - `fileListingMode` - File listing style: `"lightbar"` or `"classic"` (empty = server default)
 - `file_list_columns` - Which columns the file lister shows. All `false` means every column is shown.
 - `autoSignature` - Auto-signature appended to messages (max 5 lines)
+- `autoSigAsk` - Ask before adding the auto-signature to each message. QWK replies get no signature while it is on. See [Auto-Signature](messages/autosig.md#asking-before-each-post).
 - `colors` - Array of 7 color values: [prompt, input, text, stat, text2, stat2, bar]. Stored but not yet applied ([#426](https://github.com/ViSiON-3/vision-3-bbs/issues/426)).
 
 #### What callers can change themselves
@@ -129,7 +130,7 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). F
 | Encoding | `preferredEncoding`: each press goes Auto → the encoding the session is using → the other one → Auto (applies from the next login) |
 | Hot Keys | `hotKeys` |
 | Header Style | `msgHdr` |
-| Auto-Signature | `autoSignature` |
+| Auto-Signature | `autoSignature`, `autoSigAsk` |
 | Real Name | `realName` (same rules as signup) |
 | Location | `group_location` |
 | User Note | `privateNote` |

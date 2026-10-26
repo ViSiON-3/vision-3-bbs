@@ -223,6 +223,18 @@ directly. There is no merge tool, and adding every new setting is not required â
 the defaults above are chosen so that skipping this step still leaves a working
 system.
 
+### Changed shipped strings
+
+Sometimes a release changes the text of a string that already shipped, for
+example to list a new key in a prompt. Your `strings.json` already has the key,
+so the fallbacks above don't apply.
+
+If your value is still exactly the old shipped text, you never edited it, and
+the BBS uses the new text instead. `./strings` shows it as the default, and
+saving from there writes it to your file. If you changed the string in any way,
+even by one space, your version is kept. The release notes say when this
+happens, so you can update your own text by hand.
+
 ## Restarting
 
 Restart the BBS. A running `vision3` keeps executing the binary it started with,

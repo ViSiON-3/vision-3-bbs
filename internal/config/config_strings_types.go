@@ -349,6 +349,7 @@ type StringsConfig struct {
 	MsgReplyError        string `json:"msgReplyError"`
 	MsgReplySuccess      string `json:"msgReplySuccess"`
 	MsgEditorError       string `json:"msgEditorError"`
+	MsgAutoSigPrompt     string `json:"msgAutoSigPrompt"`
 
 	// Message scan strings (V3-specific)
 	ScanDateLine            string `json:"scanDateLine"`
@@ -629,6 +630,9 @@ type StringsConfig struct {
 	KonfigAutoSigCleared      string `json:"konfigAutoSigCleared"`
 	KonfigAutoSigTruncated    string `json:"konfigAutoSigTruncated"`
 	KonfigAutoSigUpdated      string `json:"konfigAutoSigUpdated"`
+	KonfigAutoSigAskOn        string `json:"konfigAutoSigAskOn"`
+	KonfigAutoSigAskOff       string `json:"konfigAutoSigAskOff"`
+	KonfigAutoSigAskSuffix    string `json:"konfigAutoSigAskSuffix"`
 	KonfigColumnsTitle        string `json:"konfigColumnsTitle"`
 	KonfigColumnsHint         string `json:"konfigColumnsHint"`
 	KonfigColumnsKeepOne      string `json:"konfigColumnsKeepOne"`

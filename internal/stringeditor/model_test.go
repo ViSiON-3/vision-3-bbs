@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
 // newTestModel builds a Model over a temp strings.json.
@@ -213,5 +215,30 @@ func TestModelViewSmoke(t *testing.T) {
 	m.mode = modeAbortConfirm
 	if out := m.View(); out == "" {
 		t.Error("View() in confirm mode returned empty output")
+	}
+}
+
+// TestNewUpgradesSupersededStrings checks the editor shows an unedited old
+// shipped value as the current default, which is what the BBS prints, and
+// leaves an edited one alone.
+func TestNewUpgradesSupersededStrings(t *testing.T) {
+	old := config.StringSuperseded["konfigAutoSigChoice"][0]
+	current := config.StringFallbacks["konfigAutoSigChoice"]
+	path := filepath.Join(t.TempDir(), "strings.json")
+	if err := SaveStrings(path, map[string]string{"konfigAutoSigChoice": old, "defPrompt": old}); err != nil {
+		t.Fatal(err)
+	}
+	m, err := New(path, map[string]string{"konfigAutoSigChoice": current})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if got := m.values["konfigAutoSigChoice"]; got != current {
+		t.Errorf("konfigAutoSigChoice = %q, want the current default", got)
+	}
+	if m.stateOf("konfigAutoSigChoice") != stateDefault {
+		t.Errorf("upgraded value not shown as the default")
+	}
+	if got := m.values["defPrompt"]; got != old {
+		t.Errorf("another key with the same text was changed to %q", got)
 	}
 }

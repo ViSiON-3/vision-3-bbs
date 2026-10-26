@@ -100,7 +100,7 @@ func privateReplyHandle(um *user.UserMgr, msg *message.DisplayMessage, replier, 
 func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, terminal *term.Terminal,
 	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
 	outputMode ansi.OutputMode, currentMsg *message.DisplayMessage,
-	currentAreaID int, totalMsgCount *int, confName, areaName string) string {
+	currentAreaID int, totalMsgCount *int, confName, areaName string, termWidth, termHeight int) string {
 
 	// Prepare quote data for /Q command
 	// Split message body into lines for quoting
@@ -170,9 +170,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	}
 
 	// Append auto-signature if user has one
-	if currentUser.AutoSignature != "" {
-		replyBody = replyBody + "\n\n" + currentUser.AutoSignature
-	}
+	replyBody = e.appendAutoSig(s, terminal, currentUser, replyBody, outputMode, nodeNumber, termWidth, termHeight)
 
 	// Save reply, recording the parent message number for threading. A reply to
 	// a private message stays private so it remains visible to its recipient,
