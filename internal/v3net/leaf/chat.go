@@ -34,16 +34,23 @@ type chatSessionRegistry struct {
 	membership sync.Mutex
 }
 
+// newChatSessionRegistry returns an empty registry for the leaf whose node ID
+// is nodeID. The ID is used to match events sent from or addressed to this
+// leaf.
 func newChatSessionRegistry(nodeID string) *chatSessionRegistry {
 	return &chatSessionRegistry{sessions: make(map[*ChatSession]struct{}), nodeID: nodeID}
 }
 
+// register adds s to the sessions that dispatch delivers events to. Sessions
+// sharing a handle are each registered on their own.
 func (r *chatSessionRegistry) register(s *ChatSession) {
 	r.mu.Lock()
 	r.sessions[s] = struct{}{}
 	r.mu.Unlock()
 }
 
+// deregister removes s, leaving any other session with its handle in place.
+// Removing a session that is not registered does nothing.
 func (r *chatSessionRegistry) deregister(s *ChatSession) {
 	r.mu.Lock()
 	delete(r.sessions, s)
