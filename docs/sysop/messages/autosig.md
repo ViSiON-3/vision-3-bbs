@@ -28,10 +28,10 @@ The signature is **not** appended to anonymous messages.
 A caller who doesn't want the signature on every message can switch on **Ask each post** (stored as `autoSigAsk`). After they save a message, reply or private mail, they're asked:
 
 ```text
-Add your Auto-Signature?  Yes  No
+Add your Auto-Signature?  Yeah  Nah
 ```
 
-Yes is highlighted, so Enter signs the message as before. No posts it without the signature. This is the way to leave a signature that carries your handle off a post in a real-name-only area.
+It's the board's standard Yes/No lightbar, the same one the Anonymous question uses. Its labels are `yesPromptText` and `noPromptText` in `strings.json` (`Yeah` and `Nah` as shipped) and its colours are the theme's `yesNoHighlightColor` and `yesNoRegularColor`. Yes is highlighted, so Enter signs the message as before. No posts it without the signature. This is the way to leave a signature that carries your handle off a post in a real-name-only area.
 
 The question only comes up when a signature is set. If the prompt can't be answered (the caller drops carrier), the signature is added, so the message goes out as it always would have.
 
