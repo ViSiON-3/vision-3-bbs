@@ -34,20 +34,7 @@ Run `./config`, press **7** for Door Programs, then **I** to insert a record and
 
 **Single Instance** matters for LORD. The game keeps its player data in flat files and two nodes writing at once will corrupt them.
 
-Press **Esc**, then **Q** and **Y** to save. The same record in `configs/doors.json`:
-
-```json
-{
-  "code": "LORDJS",
-  "name": "Legend of the Red Dragon",
-  "type": "synchronet_js",
-  "script": "lord.js",
-  "working_directory": "doors/sbbs/xtrn/lord",
-  "exec_dir": "doors/sbbs/exec/",
-  "library_paths": ["doors/sbbs/exec/load", "doors/sbbs/exec/dorkit"],
-  "single_instance": true
-}
-```
+Press **Esc**, then **Q** and **Y** to save. The record the editor writes is shown under [Manual Configuration](#manual-configuration).
 
 ## 3. Add it to a menu
 
@@ -74,3 +61,23 @@ Not every Synchronet game runs. The engine implements the parts of the Synchrone
 
 - [Synchronet JS Doors](doors/synchronet-js-doors.md) for the runtime, module resolution, encoding notes and troubleshooting
 - [Door Programs](doors/doors.md) for the remaining record fields
+
+## Manual Configuration
+
+The record from step 2, as the config editor writes it to `configs/doors.json`:
+
+```json
+{
+  "code": "LORDJS",
+  "name": "Legend of the Red Dragon",
+  "type": "synchronet_js",
+  "script": "lord.js",
+  "working_directory": "doors/sbbs/xtrn/lord",
+  "exec_dir": "doors/sbbs/exec/",
+  "library_paths": ["doors/sbbs/exec/load", "doors/sbbs/exec/dorkit"],
+  "single_instance": true
+}
+```
+
+Every key is in the [Synchronet JS Doors Technical Reference](doors/synchronet-js-doors.md#doorsjson), with the LORD II record and the hand-edited menu CFG entries.
+

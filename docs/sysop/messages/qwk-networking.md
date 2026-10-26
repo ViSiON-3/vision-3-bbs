@@ -180,6 +180,69 @@ Global (**G**): Inbound Path, Outbound Path, Temp Path, Dupe DB Path, Bad Area
 Tag (a local area that catches mail for conferences you have not mirrored;
 blank drops it with a log line).
 
+## Troubleshooting
+
+**`login refused: 530`**
+The hub does not know your QWK ID or the password is wrong. On DOVE-Net the
+account name must be exactly your QWK ID and the account must have been created
+as a QWK networking account. Check System → Registration → QWK ID matches what
+you signed up with.
+
+**Poll succeeds, `hub had no packet for us` every time**
+The hub has nothing new for the conferences your account is set up for, or the
+hub has not yet linked your account to any conferences. Post something in a
+networked area and poll again; a working link shows `REP uploaded`.
+
+**Messages arrive but `unmapped` keeps counting up**
+The hub sends conferences you have not created areas for. Run
+`v3mail qwk-conferences --network <key>` and add areas for the numbers you
+want, or accept the warnings.
+
+**Your posts never appear on other systems**
+Check that the area's `area_type` is `qwknet`, its `network` matches the
+key in `qwknet.json`, and `qwk_conference` is set. `v3mail qwk-scan` reports
+`packed 0 new` when nothing qualifies. A REP sitting in `data/qwknet/out`
+means the upload is failing; the poll output says why.
+
+**A message came through twice**
+The hub sent it without a Message-ID and with different content or date each
+time. Dupe detection falls back to a digest of conference, names, subject,
+date and body when no ID is present.
+
+**The hub's log shows `!ERROR ... qwk_parse_header_list` for every message you send**
+A Synchronet hub reads the conference number from the REP header with
+`atol()`, which runs past a right-justified field into the date. ViSiON/3
+writes the message and reference numbers left-justified, as Synchronet does,
+so current releases are not affected. Messages a hub rejected before the fix
+were marked exported and are not resent unless the area's export pointer is
+wound back.
+
+**The wizard's conference list is empty**
+For a custom hub the list comes from the packet the hub sends, and a hub with
+no new mail may send none. Enter the conferences under Message Areas by hand,
+or try again after posting a test message.
+
+**`packet has no CONTROL.DAT (Include Control Files is off on the hub)`**
+The wizard's hub refresh, or `v3mail qwk-conferences`, downloaded a packet
+with no conference list in it. Mail is unaffected: the packet stays in the
+inbound directory and the next poll tosses it. For a network with a preset
+list (DOVE-Net), keep using the preset. For a custom hub, either enter the
+conference numbers under Message Areas by hand, or turn **Include Control
+Files** on at the hub (see
+[Packet settings on the hub](#packet-settings-on-the-hub)).
+
+## Limitations
+
+- **Node only.** ViSiON/3 does not host a hub: it cannot serve QWK packets to
+  other nodes or accept their REPs.
+- **Plain FTP.** No FTPS/TLS. Synchronet hubs accept plain FTP.
+- **No private mail.** Conference 0 (hub-routed private mail) is skipped and
+  logged. Public conferences only.
+- **No polls or votes.** `VOTING.DAT` is ignored; vote records (status `V`)
+  in `MESSAGES.DAT` are skipped.
+- **CP437 storage.** UTF-8 packets are converted; characters outside CP437
+  become `?`.
+
 ## Manual Configuration
 
 ### `configs/qwknet.json`
@@ -289,7 +352,7 @@ scan events are needed. Polling every 15 to 60 minutes is typical; hub
 operators generally do not want nodes calling more often than that. See
 [Event Scheduler](advanced/event-scheduler.md#qwk-network-polling-v3mail).
 
-## `v3mail` Commands
+### `v3mail` Commands
 
 | Command | What it does |
 |---------|--------------|
@@ -314,7 +377,7 @@ network; with it, the named network runs even if disabled.
 reported an error. A hub outage does not lose mail: the REP stays in the
 outbound directory and the next scan appends new posts to it.
 
-## Files and Directories
+### Files and Directories
 
 | Path | Purpose | Managed by |
 |------|---------|------------|
@@ -333,9 +396,9 @@ outbound directory and the next scan appends new posts to it.
 | `data/qwknet/dupes.json` | Imported Message-IDs, pruned after 90 days | Automatic |
 | `<area>.jlr` (user `qwknet`) | Per-area export high-water mark inside each JAM base | Automatic |
 
-## Operator Logging
+### Operator Logging
 
-`v3mail` writes to `logs/v3mail.log` through the structured logger. Lines worth
+`v3mail` writes to `data/logs/v3mail.log` through the structured logger. Lines worth
 watching, each with `network` and usually `hub`, `area` or `path` fields:
 
 | Level | Message | Meaning / action |
@@ -359,61 +422,6 @@ watching, each with `network` and usually `hub`, `area` or `path` fields:
 The poll's connection errors (`connect to hub`, `login refused`, `upload REP`,
 `download QWK`) are printed by `v3mail qwk-poll` and returned in its exit code
 rather than logged as separate lines.
-
-## Troubleshooting
-
-**`login refused: 530`**
-The hub does not know your QWK ID or the password is wrong. On DOVE-Net the
-account name must be exactly your QWK ID and the account must have been created
-as a QWK networking account. Check System → Registration → QWK ID matches what
-you signed up with.
-
-**Poll succeeds, `hub had no packet for us` every time**
-The hub has nothing new for the conferences your account is set up for, or the
-hub has not yet linked your account to any conferences. Post something in a
-networked area and poll again; a working link shows `REP uploaded`.
-
-**Messages arrive but `unmapped` keeps counting up**
-The hub sends conferences you have not created areas for. Run
-`v3mail qwk-conferences --network <key>` and add areas for the numbers you
-want, or accept the warnings.
-
-**Your posts never appear on other systems**
-Check that the area's `area_type` is `qwknet`, its `network` matches the
-key in `qwknet.json`, and `qwk_conference` is set. `v3mail qwk-scan` reports
-`packed 0 new` when nothing qualifies. A REP sitting in `data/qwknet/out`
-means the upload is failing; the poll output says why.
-
-**A message came through twice**
-The hub sent it without a Message-ID and with different content or date each
-time. Dupe detection falls back to a digest of conference, names, subject,
-date and body when no ID is present.
-
-**The wizard's conference list is empty**
-For a custom hub the list comes from the packet the hub sends, and a hub with
-no new mail may send none. Enter the conferences under Message Areas by hand,
-or try again after posting a test message.
-
-**`packet has no CONTROL.DAT (Include Control Files is off on the hub)`**
-The wizard's hub refresh, or `v3mail qwk-conferences`, downloaded a packet
-with no conference list in it. Mail is unaffected: the packet stays in the
-inbound directory and the next poll tosses it. For a network with a preset
-list (DOVE-Net), keep using the preset. For a custom hub, either enter the
-conference numbers under Message Areas by hand, or turn **Include Control
-Files** on at the hub (see
-[Packet settings on the hub](#packet-settings-on-the-hub)).
-
-## Limitations
-
-- **Node only.** ViSiON/3 does not host a hub: it cannot serve QWK packets to
-  other nodes or accept their REPs.
-- **Plain FTP.** No FTPS/TLS. Synchronet hubs accept plain FTP.
-- **No private mail.** Conference 0 (hub-routed private mail) is skipped and
-  logged. Public conferences only.
-- **No polls or votes.** `VOTING.DAT` is ignored; vote records (status `V`)
-  in `MESSAGES.DAT` are skipped.
-- **CP437 storage.** UTF-8 packets are converted; characters outside CP437
-  become `?`.
 
 ## See Also
 

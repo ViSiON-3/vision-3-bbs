@@ -3,7 +3,10 @@
 FelonyNet is a general-purpose public BBS message network running on **V3Net**,
 ViSiON/3's native REST+SSE networking protocol. It coexists alongside
 FTN-based echomail networks (FidoNet, fsxNet, etc.) — joining FelonyNet does
-not affect your existing FTN configuration.
+not affect your existing FTN configuration. Joining is the quickest way to
+get your board talking to other ViSiON/3 systems: a few screens in the config
+editor, a restart, and your callers are reading and posting across the
+network and chatting with callers on other boards.
 
 > **Experimental — Development Only.** V3Net is under active development and
 > is not yet ready for production use. APIs, configuration, and wire formats
@@ -103,7 +106,7 @@ Fill in any remaining fields:
 | Field | Value |
 |-------|-------|
 | Areas | Press **Enter** to open the area browser and subscribe |
-| Poll Interval | `5m` (minimum enforced by hub is 60s) |
+| Poll Interval | `5m` is the default; messages arrive by push in between polls |
 | Origin | Your BBS name and address, e.g. `My BBS - bbs.example.com` |
 
 > **Tip:** You can also press **I** on the Subscriptions screen to open a blank
@@ -184,7 +187,26 @@ INFO: V3Net service started (node_id=a3f9e1b2c4d5e6f7, hub=false, leaves=1)
 ```
 
 Your node automatically subscribes to the FelonyNet hub on first connection.
-FelonyNet uses auto-approve, so you start receiving messages immediately.
+If the hub auto-approves new nodes, the log shows `leaf: subscribed to hub`
+and you start receiving messages immediately. Otherwise the leaf keeps
+retrying and logs `leaf: subscribe failed, retrying` with
+`subscription status "pending"` until the hub sysop approves your node in
+their Node Management screen; nothing is needed from you but patience.
+
+---
+
+## After Joining
+
+- **New areas come to you.** When FelonyNet adds an area, you are asked
+  about it at your next login — `New Felonynet area: Music. Add?` — and
+  **Yes** subscribes and creates the local area on the spot. See
+  [New Areas on Your Networks](v3net/message-areas.md#new-areas-on-your-networks).
+- **Chat is ready.** The `CHAT` command on the main menu offers `felonynet`
+  in its network picker as soon as the subscription is saved. See
+  [V3Net Chat](v3net/chat.md).
+- **Check the setup any time** with `vision3 doctor`, which validates
+  `v3net.json`, the key file and its permissions without starting the board.
+  See [vision3 doctor](configuration/configuration.md#doctor).
 
 ---
 
@@ -206,16 +228,25 @@ for the hub procedure and compatibility setting.
 
 ## Troubleshooting
 
-**"V3Net networking disabled"** — V3Net is not enabled. Go back to Step 1 and
-set **V3Net** to `Y` in System Setup → Server Setup.
+**"V3Net is disabled in server configuration"** on the V3Net screens — V3Net
+is not enabled. Go back to Step 1 and set **V3Net** to `Y` in System Setup →
+Server Setup, then restart.
 
 **"message area not found, skipping"** — A subscribed area doesn't match any
-local message base. Open the area browser (edit the subscription → Areas) and
-verify the local board mapping.
+local message base. Open the area browser (edit the subscription → Browse
+Areas) and verify the local board mapping. `vision3 doctor` reports the same
+mismatch as a warning.
 
 **No messages arriving** — Check that `felonynet.org` is reachable. Look for
-`leaf: poll failed` warnings in the log. Verify your node is approved by
-checking the V3Net Status screen (`V3NETSTATUS`).
+`leaf: poll failed` warnings in the log. A `leaf: subscribe failed, retrying`
+line with `subscription status "pending"` means the hub has not approved your
+node yet. The V3Net Status screen (`V3NETSTATUS`) shows your node ID and the
+networks you subscribe to.
+
+**A post of yours never shows "V3NET SENT"** — The hub could not be reached
+when it was posted. The BBS retries every minute and logs the first failure
+as `v3net outbound: sending to hub; will retry`; nothing is lost. See
+[How Messages Flow](v3net/message-areas.md#how-messages-flow).
 
 **"signed subscribe required" / subscription HTTP 401** — If the hub requires
 signed subscriptions, update both the BBS and config editor and restart with
@@ -226,9 +257,9 @@ The hub operator can restore older-client compatibility by setting **Signed
 Subscribe** to **N** and restarting.
 
 **Lost keypair** — If you have your 24-word recovery seed phrase, restore it
-via `./config → 4 → Node Identity → [R] Recover`. If you have lost both the
-key file and the seed phrase, a new identity is generated on next start and
-you must re-subscribe to all hubs.
+via `./config → 6 — ViSiON/3 Networking (V3Net) → 1. Node Identity → [R] Recover`.
+If you have lost both the key file and the seed phrase, a new identity is
+generated on next start and you must re-subscribe to all hubs.
 
 ---
 
@@ -245,3 +276,40 @@ To run your own V3Net hub (not FelonyNet), see the
 - [Network Area List (NAL)](v3net/nal.md) — area subscriptions, access modes, proposals
 - [V3Net Key Recovery](v3net/recovery.md) — backing up and restoring your node identity
 - [Manual Configuration Reference](v3net/manual-config.md) — direct JSON editing
+
+---
+
+## Technical Reference
+
+What the wizard writes to `configs/v3net.json` for FelonyNet:
+
+```json
+{
+  "enabled": true,
+  "keystorePath": "data/v3net.key",
+  "dedupDbPath": "data/v3net_dedup.sqlite",
+  "registryUrl": "https://raw.githubusercontent.com/ViSiON-3/v3net-registry/main/registry.json",
+  "leaves": [
+    {
+      "hubUrl": "http://felonynet.org:8765",
+      "network": "felonynet",
+      "boards": ["fel.general", "fel.tech"],
+      "pollInterval": "5m",
+      "origin": "My BBS - bbs.example.com"
+    }
+  ]
+}
+```
+
+The shipped `templates/configs/v3net.json` already carries the FelonyNet
+subscription with an empty `boards` list and `enabled` off, so a fresh board
+only needs the switch, the areas and a restart. Every key is tabulated in the
+[Manual Configuration Reference](v3net/manual-config.md).
+
+| Log line | Meaning |
+|----------|---------|
+| `V3Net service started` | V3Net is up; shows `node_id`, `hub` and `leaves` |
+| `leaf: SSE connected` / `leaf: SSE reconnecting` | The event stream to the hub came up / dropped and is being retried with backoff |
+| `leaf: poll failed` | A periodic poll could not reach the hub |
+| `V3Net leaf: message area not found, skipping` | A board tag in the subscription matches no local area |
+| `NEW IDENTITY CREATED` | No key file was found and a new identity was generated |

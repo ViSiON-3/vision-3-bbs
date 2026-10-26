@@ -6,38 +6,62 @@ This document provides a reference for the main packages, interfaces, scripting 
 
 ```text
 internal/
+├── admin/          # WFC admin contract: data types, AdminClient interface, daemon-side server
 ├── ansi/           # ANSI and pipe code processing
 ├── archiver/       # Archive format registry (ZIP, RAR, 7Z, ARJ, LHA)
+├── atomicfile/     # Replace a file in one step (temp file + rename, Windows retry)
 ├── chat/           # Inter-node teleconference chat
 ├── conference/     # Message/file area conference grouping
 ├── config/         # Configuration loading and structures
 ├── configeditor/   # System configuration editor TUI
+├── configmerge/    # Lock, read, three-way merge and write shared JSON config files
 ├── editor/         # Text editor implementation
 ├── file/           # File area management
-├── ftn/            # FTN packet (.PKT) library
+├── filelock/       # Advisory cross-process lock (.lock sidecar) for shared data files
+├── formatspec/     # Parses fmt directives in a BBS string to check a sysop's edit
+├── ftn/            # FTN packet (.PKT) library and TIC file parser
 ├── jam/            # JAM message base implementation
+├── jsutil/         # Small helpers for building goja JavaScript objects
+├── lha/            # LHA/LZH archive reader (-lh0- and -lh4- to -lh7-)
+├── logging/        # Rolling log file writer and slog setup
+├── mailer/         # Supervised binkd child process and outbound export loop
 ├── menu/           # Menu system execution
 ├── menueditor/     # Menu and command editor TUI
+├── menuset/        # Menu set path resolution: the menus.d/ overlay over the shipped set
 ├── message/        # Message area management (JAM-backed)
 ├── qwk/            # QWK mail packet reader/writer
+├── qwkapi/         # HTTPS API for offline readers: login token, packet download, REP upload
+├── qwknet/         # QWK-based message networking (node side)
+├── qwkservice/     # QWK packet export/import orchestration over internal/qwk
+├── rlogin/         # RLogin client (RFC 1282) for door servers
 ├── scheduler/      # Cron-based event scheduler
 ├── scripting/      # Vision/3 native JavaScript runtime (V3 API)
 ├── session/        # Session state management
+├── snoop/          # Per-session tap for the WFC console: watch, type-in, chat
 ├── sshserver/      # SSH server with legacy algorithm support
 ├── stringeditor/   # String resource editor TUI
+├── stringformat/   # Checks a configured string against its call site's arguments
+├── stringhook/     # strings.json values that run a script (!CODE) or show a file (%file.ext)
 ├── syncjs/         # Synchronet-compatible JavaScript runtime
+├── telnetclient/   # Telnet client (RFC 854) for door servers
 ├── telnetserver/   # Telnet server (RFC 854)
 ├── terminalio/     # Terminal I/O with encoding support
-├── tosser/         # FTN echomail/netmail toss engine
+├── timeleft/       # Caller's remaining time, with sysop chat credit
+├── tosser/         # FTN echomail/netmail toss engine, TIC file echoes
 ├── transfer/       # File transfer protocols (ZMODEM/YMODEM/XMODEM)
+├── tuiart/         # Shared look of the sysop TUIs
 ├── types/          # Shared type definitions
+├── uitext/         # Text helpers shared by the terminal UI editors
 ├── user/           # User management
 ├── usereditor/     # User account browser/editor TUI
 ├── util/           # Utility helpers
 ├── v3net/          # V3Net inter-BBS networking
 ├── version/        # Build version constant
+├── wfcui/          # Bubble Tea TUI for the WFC console
 └── ziplab/         # Archive upload processing pipeline
 ```
+
+Board diagnostics (`vision3 doctor`) live in `cmd/vision3/doctor.go` rather than a package of their own; see [Board diagnostics](reference/technical.md#board-diagnostics-doctor).
 
 ---
 
@@ -483,30 +507,48 @@ Vision/3 native JavaScript runtime (goja) for user scripts.
 type Engine struct { /* goja runtime, session context, timeout control */ }
 
 type SessionContext struct {
-    NodeNumber  int
-    Handle      string
-    UserID      int
-    // TTY, terminal dimensions, etc.
+    Session      io.ReadWriter   // caller's terminal
+    OutputMode   ansi.OutputMode // UTF-8 or CP437; input and output are converted to match
+    UserID       int
+    UserHandle   string
+    UserRealName string
+    AccessLevel  int
+    TimeLimit    int // minutes
+    TimesCalled  int
+    Location     string
+    ScreenWidth  int
+    ScreenHeight int
+    ArtWidth     int // width art is fitted to; 0 = ScreenWidth
+    NodeNumber       int
+    SessionStartTime time.Time
+    ChatCredit       func() time.Duration // sysop chat time not charged; may be nil
+    BoardName  string
+    SysOpName  string
+    BBSVersion string
 }
 
 type ScriptConfig struct {
-    WorkingDir     string
-    MaxRunTime     time.Duration
-    SandboxedPaths []string
+    Script     string        // Main JS file to execute
+    WorkingDir string        // Working directory; scripts/data/ beside it is the sandbox and store root
+    Args       []string      // Available as v3.args
+    MaxRunTime time.Duration // 0 = 30 minutes
 }
 
 type Providers struct {
-    UserMgr    *user.UserMgr
-    MessageMgr *message.MessageManager
-    FileMgr    *file.FileManager
-    // Additional provider references
+    UserMgr         *user.UserMgr
+    CurrentUser     *user.User // live pointer behind v3.user
+    MessageMgr      *message.MessageManager
+    FileMgr         *file.FileManager
+    SessionRegistry *session.SessionRegistry // behind v3.nodes
 }
 
 func NewEngine(ctx context.Context, session *SessionContext,
     cfg ScriptConfig, providers *Providers) *Engine
-func (e *Engine) Run(scriptPath string) error
-func (e *Engine) Close()
+func (eng *Engine) Run(scriptPath string) error
+func (eng *Engine) Close()
 ```
+
+`Run` returns `nil` for a script that ran to its end or called `exit()`, `ErrDisconnect` when the caller hung up, `ErrTimeout` when `MaxRunTime` passed, and the JavaScript error otherwise. `v3.data` stores are read and written under a per-path mutex and saved through `internal/atomicfile`; see [How the store is kept on disk](scripting/vpl-scripting.md#how-the-store-is-kept-on-disk) for the checks a save makes before replacing a file. `v3.fs` runs every operation through an `os.Root` opened on `scripts/data/`.
 
 ### syncjs
 
@@ -766,13 +808,18 @@ The following packages provide BubbleTea-based TUI editors recreating the origin
 
 ```go
 type User struct {
+    TwitList                 []TwitEntry // personal ignore list (#684)
     ID                       int
     PasswordHash             string
     Handle                   string
     LegacyUsername           string
     AccessLevel              int
     Flags                    string
+    PublicKeys               []string    // OpenSSH authorized_keys lines for WFC
+    WFCReadOnly              bool        // WFC console may watch only
     LastLogin                time.Time
+    PreviousLogin            time.Time   // the visit before this one
+    FileNewscanSince         *time.Time
     TimesCalled              int
     LastBulletinRead         time.Time
     RealName                 string
@@ -781,6 +828,8 @@ type User struct {
     Validated                bool
     FilePoints               int
     NumUploads               int
+    UploadedBytes            int64
+    DownloadedBytes          int64
     NumDownloads             int
     MessagesPosted           int
     TimeLimit                int
@@ -797,7 +846,13 @@ type User struct {
     CurrentFileAreaTag       string
     TaggedFileIDs            []uuid.UUID
     TaggedMessageAreaTags    []string
+    TaggedFileAreaIDs        []int
     TaggedFileAreaTags       []string
+    SeenNewscanNetworks      []string    // newscan auto-join bookkeeping
+    SeenNewscanAreaTags      []string
+    NewscanSeenInitialized   bool
+    SeenNewsIDs              []int       // news items already shown
+    NewsSeenInitialized      bool
     ScreenWidth              int
     ScreenHeight             int
     PreferredEncoding        string
@@ -811,9 +866,20 @@ type User struct {
         Name, Size, Date, Downloads, Uploader, Description bool
     }
     AutoSignature            string
+    AutoSigAsk               bool        // ask before adding the signature
     Colors                   [7]int
     DeletedUser              bool
     DeletedAt                *time.Time
+    IntroPending             bool
+    IntroAttempts            int
+}
+
+// TwitEntry identifies a local account (UserID) or a network author
+// (Name, optional Addr) to hide.
+type TwitEntry struct {
+    UserID int    `json:"userId,omitempty"`
+    Name   string `json:"name"`
+    Addr   string `json:"addr,omitempty"`
 }
 ```
 
@@ -1089,9 +1155,9 @@ Scripts are executed via the `v3_script` door type using the goja JavaScript eng
 
 | Method                   | Parameters         | Returns   | Description                                 |
 | ------------------------ | ------------------ | --------- | ------------------------------------------- |
-| `getkey([timeout_ms])`   | integer (optional) | string    | Read single key; `""` on timeout/disconnect |
-| `getstr(maxlen[, opts])` | integer, object    | string    | Line input; opts: `{echo, upper, number}`   |
-| `getnum([max])`          | integer (optional) | integer   | Read number, clamps to max                  |
+| `getkey([timeout_ms])`   | integer (optional) | string    | Read single key as a Unicode string (CP437 bytes mapped, UTF-8 assembled); `""` on timeout, disconnect or a discarded escape sequence |
+| `getstr(maxlen[, opts])` | integer, object    | string    | Line input, default 128 characters; opts: `{echo, upper, number}`; `maxlen` counts characters |
+| `getnum([max])`          | integer (optional) | integer   | Read number, clamps to max; no max allows ten digits |
 | `yesno(prompt)`          | string             | boolean   | Y/n prompt (default Yes)                    |
 | `noyes(prompt)`          | string             | boolean   | N/y prompt (default No)                     |
 | `pause()`                | —                  | undefined | "[Press any key]" and wait                  |
@@ -1122,8 +1188,8 @@ Scripts are executed via the `v3_script` door type using the goja JavaScript eng
 
 | Method              | Parameters  | Returns   | Description                                                                   |
 | ------------------- | ----------- | --------- | ----------------------------------------------------------------------------- |
-| `set(field, value)` | string, any | undefined | Update writable field (`realName`, `location`, `screenWidth`, `screenHeight`) |
-| `save()`            | —           | undefined | Persist changes to disk                                                       |
+| `set(field, value)` | string, any | undefined | Update writable field (`realName`, `location`, `screenWidth`, `screenHeight`). A `realName` that fails `user.ValidateRealName` (blank, under 4 characters, or no space) is ignored and logged, not thrown |
+| `save()`            | —           | undefined | Persist changes to disk via `UserMgr.UpdateUserByID`; throws on error         |
 
 ### v3.users — User Database (Read-Only)
 
@@ -1141,9 +1207,9 @@ Scripts are executed via the `v3_script` door type using the goja JavaScript eng
 | `areas()`                   | —                | array          | All message areas                                   |
 | `area(tag)`                 | string           | object \| null | Get area by tag                                     |
 | `count(areaID)`             | integer          | integer        | Message count in area                               |
-| `get(areaID, msgNum)`       | integer, integer | object \| null | Get message by area and number                      |
+| `get(areaID, msgNum)`       | integer, integer | object \| null | Get message by area and number; `null` for private mail the caller neither sent nor received (`DisplayMessage.VisibleTo`) |
 | `newCount(areaID)`          | integer          | integer        | Unread message count for current user               |
-| `post(areaID, opts)`        | integer, object  | integer        | Post message; opts: `{to, subject, body, replyTo?}` |
+| `post(areaID, opts)`        | integer, object  | integer        | Post message; opts: `{to, subject, body, replyTo?}`. `from` is `area.PostingName(handle, realName)`: the real name in a real-name-only area |
 | `postPrivate(areaID, opts)` | integer, object  | integer        | Post private message; outside netmail `to` must name a user (stored as their handle), else throws |
 | `totalCount()`              | —                | integer        | Total messages across all areas                     |
 
@@ -1160,7 +1226,7 @@ Scripts are executed via the `v3_script` door type using the goja JavaScript eng
 
 ### v3.fs — Sandboxed File Operations
 
-All paths resolve relative to `scripts/data/`. Path traversal is blocked.
+All paths resolve relative to `scripts/data/`. Each call opens that directory as an `os.Root`, so traversal (`..`, absolute paths, and symbolic links that lead outside) is refused by the operating system at lookup time; `filepath.IsLocal` gives the obvious cases a clear `access denied` message first.
 
 | Method                  | Parameters        | Returns   | Description                                     |
 | ----------------------- | ----------------- | --------- | ----------------------------------------------- |
@@ -1174,7 +1240,7 @@ All paths resolve relative to `scripts/data/`. Path traversal is blocked.
 
 ### v3.data — Script-Local Persistent Storage
 
-Each script gets its own JSON file in `scripts/data/<script-name>.json`.
+Each script gets its own JSON file in `scripts/data/<script-name>.json`. Every method throws (`read script data` / `decode script data`) when the file exists but cannot be read or is not a JSON object; only a missing file reads as empty. `set` and `delete` save atomically and refuse to replace a symbolic link, a read-only file, or a file whose ownership or ACL a new copy could not keep (see [How the store is kept on disk](scripting/vpl-scripting.md#how-the-store-is-kept-on-disk)).
 
 | Method            | Parameters  | Returns          | Description                   |
 | ----------------- | ----------- | ---------------- | ----------------------------- |
@@ -1223,9 +1289,10 @@ Invisible sessions are hidden from non-sysop users (accessLevel < 200).
 
 | Name           | Type     | Description                                 |
 | -------------- | -------- | ------------------------------------------- |
-| `exit([code])` | function | Exit script with optional exit code         |
-| `sleep(ms)`    | function | Alias for `v3.util.sleep()`                 |
-| `v3.args`      | array    | Command-line arguments passed to the script |
+| `exit([code])` | function | End the script now as a clean exit. Delivered as a goja interrupt, so `try`/`catch`/`finally` cannot swallow it; a non-zero code is logged, nothing is shown to the caller |
+| `v3.args`      | array    | Arguments from the door's `args` field (plus a string's words and values when a `strings.json` value of `!CODE` runs the door) |
+
+There is no global `sleep()`; use `v3.util.sleep(ms)`.
 
 ---
 

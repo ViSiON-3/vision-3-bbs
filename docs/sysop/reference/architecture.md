@@ -30,8 +30,8 @@ The system is designed as a single Go application that listens for incoming SSH 
 
 3. **Menu System (`internal/menu/`)**
    * `MenuExecutor` handles menu loading, display, and command execution
-   * Loads menu configurations from `menus/v3/mnu/` (`.MNU` files)
-   * Loads menu display files from `menus/v3/cfg/` (`.CFG` files)
+   * Loads menu configurations from `menus/v3/mnu/` (`.MNU` files: title, prompts, fallback, ACS)
+   * Loads command definitions from `menus/v3/cfg/` (`.CFG` files: key, `GOTO:`/`RUN:`/`DOOR:` action, ACS). Every `RUN:` target is listed in the [Menu Commands Reference](reference/menu-commands.md), and a test keeps that page and the registry in step
    * Displays ANSI screens from `menus/v3/ansi/` (`.ANS` files), truncated to the user's effective terminal height to prevent scrolling
    * Handles auto-run commands and user input
    * Integrates with all managers (user, message, file)
@@ -70,9 +70,25 @@ The system is designed as a single Go application that listens for incoming SSH 
    * SEEN-BY/PATH management with net compression
    * Background polling at configurable interval
    * JSON-based dupe database with automatic purge
+   * FTN file echoes: `.TIC` files in each inbound are checked (sender is a link, `tic_password` or secure inbound, CRC, size) and the file is moved into the file area linked to that echo, with a file record; failures go to `badtic` under the network's temp path. See [FTN File Echoes (TIC)](files/file-echoes.md)
 
 9. **Binkd Mailer Supervisor (`internal/mailer/`)**
    * Supervised binkd FTN mailer daemon — launches the bundled binkd as a child process when `ftn.json` `binkd.enabled` is true, restarts on crash with backoff, and periodically exports outbound echomail/netmail via the internal tosser
+
+9a. **Shared Config Files (`internal/filelock/`, `internal/configmerge/`, `internal/atomicfile/`)**
+   * The BBS, the config editor, `helper` and `v3mail` all write the same JSON files. Each writer takes an advisory cross-process lock, a `<file>.lock` sidecar beside the file (git-ignored), across its read-modify-write
+   * `configmerge.SaveFile` locks, re-reads the file, three-way merges it against the version the writer loaded, and writes only when something changed. Objects merge key by key, lists of items with an `id` merge item by item, an edit beats a delete, and a conflict keeps the saver's value and is reported (the config editor shows it on its status line). `message_areas.json` has its own merge in `internal/message`
+   * Every write goes through `atomicfile`: temp file in the same directory, then rename, so a reader never sees a half-written file
+
+9b. **Board Diagnostics (`cmd/vision3/doctor.go`)**
+   * `vision3 doctor` (or `vision3 --doctor`) reuses the startup preflight checks and reports on configs, paths and permissions, area and echo references, FTN and binkd settings, QWKnet and V3Net, security settings, menus and doors, then exits without starting listeners. `--json` for machine output, `--fix` to create missing data directories, `--dry-run` to preview that. Exit code 0 clean, 1 warnings, 2 failures or a doctor error. See [Board diagnostics](reference/technical.md#board-diagnostics-doctor)
+
+9c. **Door Servers (`internal/rlogin/`, `internal/telnetclient/`)**
+   * Doors of `type: "rlogin"` and `type: "telnet"` connect the caller outbound to a door server or another BBS and relay the session (`internal/menu/door_handler_remote.go`). `telnetclient` answers the server's negotiation, reports the caller's screen size and the door's `terminal_type`, and supports `send_on_connect` and `raw_tcp`. See [Door Servers](doors/door-servers.md)
+
+9d. **WFC Console (`internal/admin/`, `internal/wfcui/`, `internal/snoop/`)**
+   * The `wfc` program connects over SSH as a CoSysOp-or-above account with WFC Access on. Two SSH subsystems carry it: `wfc-admin` for the console itself and `wfc-snoop` for watching a node
+   * `snoop.Tap` sits in the SSH and telnet transports: it copies everything written to the caller to an attached sysop, keeps the output since the last clear-screen so a new watcher sees the current screen, never blocks the caller's write, and merges sysop keystrokes into the caller's input while type-in or split-screen chat is on. `PAGESYSOP` pages every connected console. See [WFC Sysop Console](how-to-guides/wfc-console.md)
 
 10. **V3Net Networking (`internal/v3net/`)**
    * Native inter-BBS message networking using REST+SSE over HTTP (ed25519 signatures provide authentication)
@@ -169,27 +185,38 @@ vision3/
 │   │   └── hub.sqlite  # Hub database (subscribers, messages, NALs, proposals)
 │   └── logs/           # Application logs and event history
 │       └── event_history.json  # Event execution statistics
-├── internal/           # Internal packages
+├── internal/           # Internal packages (full list in the API Reference)
+│   ├── admin/          # WFC admin contract and daemon-side server
 │   ├── ansi/           # ANSI/CP437 handling
+│   ├── atomicfile/     # Atomic file replacement
 │   ├── conference/     # Conference grouping
 │   ├── config/         # Configuration loading
-│   ├── editor/         # Text editor (placeholder)
+│   ├── configmerge/    # Lock + three-way merge for shared config files
+│   ├── editor/         # Full-screen message editor
 │   ├── file/           # File area management
-│   ├── ftn/            # FTN packet (.PKT) library
+│   ├── filelock/       # Cross-process .lock sidecars
+│   ├── ftn/            # FTN packet (.PKT) library, TIC parser
 │   ├── jam/            # JAM message base implementation
 │   ├── mailer/         # Binkd mailer supervisor + outbound export loop
 │   ├── menu/           # Menu system
 │   ├── message/        # Message area management (JAM-backed)
+│   ├── qwknet/         # QWK-based message networking
+│   ├── rlogin/         # RLogin client for door servers
 │   ├── scheduler/      # Event scheduler (cron-style)
+│   ├── scripting/      # VPL (v3.*) JavaScript runtime
 │   ├── session/        # Session management
+│   ├── snoop/          # WFC watch / type-in tap
 │   ├── sshserver/      # SSH server (gliderlabs/ssh, pure Go)
+│   ├── syncjs/         # Synchronet-compatible JavaScript runtime
+│   ├── telnetclient/   # Telnet client for door servers
 │   ├── telnetserver/   # Telnet server (native Go)
 │   ├── terminalio/     # Terminal I/O utilities
-│   ├── tosser/         # FTN echomail tosser
+│   ├── tosser/         # FTN echomail tosser, TIC file echoes
 │   ├── transfer/       # File transfer protocols
 │   ├── types/          # Shared types
 │   ├── user/           # User management
-│   └── v3net/          # V3Net message networking
+│   ├── v3net/          # V3Net message networking
+│   └── wfcui/          # WFC console TUI
 │       ├── dedup/      # UUID-based message deduplication
 │       ├── hub/        # Hub server (REST+SSE, SQLite)
 │       ├── keystore/   # Ed25519 keypair management
@@ -225,6 +252,11 @@ vision3/
 * `internal/file`: File area management and metadata
 * `internal/v3net`: V3Net message networking (hub, leaf, protocol, keystore, dedup, NAL, registry)
 * `internal/session`: Session state tracking (currently minimal)
+* `internal/filelock`, `internal/configmerge`, `internal/atomicfile`: cross-process locking, three-way merge and atomic replacement of shared JSON files
+* `internal/rlogin`, `internal/telnetclient`: outbound door-server connections
+* `internal/admin`, `internal/wfcui`, `internal/snoop`: the WFC console contract, its TUI, and the per-session tap behind watch, type-in and chat
+* `internal/scripting`, `internal/syncjs`: the VPL (`v3.*`) and Synchronet-compatible JavaScript runtimes
+* `cmd/vision3/doctor.go`: board diagnostics (`vision3 doctor`)
 * `menus/v3`: Static menu resources (ANSI art, menu definitions); `menus.d/v3` holds per-file overrides
 * `data`: Persisted application data (users, JAM bases, FTN packets, logs)
 

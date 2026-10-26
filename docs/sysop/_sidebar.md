@@ -11,7 +11,7 @@
 * [Config Editor](configuration/configuration.md#configuration-editor-tui)
 * [General Settings](configuration/configuration.md#configjson)
 * [Strings](configuration/configuration.md#stringsjson)
-* [Doors Config](configuration/configuration.md#doorsjson)
+* [Doors Config](doors/doors.md#doorsjson)
 * [Archivers](configuration/configuration.md#archiversjson)
 * [File Areas](configuration/configuration.md#file_areasjson)
 * [Message Areas](configuration/configuration.md#message_areasjson)
@@ -26,8 +26,10 @@
 * [Oneliners](configuration/configuration.md#onelinersjson)
 * [SSH Host Keys](configuration/configuration.md#ssh-host-keys)
 * [Logging](configuration/configuration.md#logging)
+* [Doctor (Diagnostics)](configuration/configuration.md#doctor)
 * [Security](configuration/security.md)
 * [Bot Defense](configuration/security.md#bot-defense)
+* [Bad User Names](users/user-management.md#bad-user-names)
 
 * **MENU SYSTEM**
 * [Menus & ACS](menus/menu-system.md)
@@ -41,6 +43,7 @@
 * [Access Control (ACS)](menus/menu-system.md#access-control-strings-acs)
 * [Pre-Login Matrix](menus/menu-system.md#pre-login-matrix-screen)
 * [Pre-Login ANSI](menus/menu-system.md#pre-login-ansi-files-prelogon)
+* [Paging the SysOp](menus/menu-system.md#paging-the-sysop)
 * [Pipe Color Codes](menus/menu-system.md#pipe-color-codes)
 * [Placeholders](menus/menu-system.md#special-placeholder-codes)
 * [Menu Commands Reference](reference/menu-commands.md)
@@ -48,6 +51,7 @@
 
 * **USERS**
 * [User Management](users/user-management.md)
+* [Time Limits](users/user-management.md#time-limits)
 * [Admin Menu](users/admin-menu.md)
 * [User Editor](users/user-editor.md)
 * [Login Sequence](users/login-sequence.md)
@@ -57,16 +61,19 @@
 * **MESSAGES**
 * [Message Areas](messages/message-areas.md)
 * [Private Mail](messages/private-mail.md)
+* [Twit Filter List](messages/twit-list.md)
 * [QWK Offline Mail](messages/qwk.md)
 * [QWK Packet API (experimental)](messages/qwk-api.md)
 * [QWK Networking (QWKnet)](messages/qwk-networking.md)
 * [FTN Echomail](messages/ftn-echomail.md)
 * [Tosser (v3mail)](messages/ftn-echomail.md#tosser-internal--v3mail)
-* [Mailer (binkd)](messages/ftn-echomail.md#mailer-external--binkd)
+* [Mailer (binkd)](messages/ftn-echomail.md#mailer--binkd)
+* [Auto-Create Echo Areas](messages/ftn-echomail.md#auto-creating-echo-areas)
 * [FTN Nodelists](messages/nodelists.md)
 * [JAM Echomail](messages/jam-echomail.md)
 * [V3Net Networking](v3net/message-areas.md)
 * [V3Net Chat](v3net/chat.md)
+* [Chat Rate Limits](v3net/chat.md#rate-limits-on-a-hub)
 * [V3Net Hub TLS](v3net/hub-tls.md)
 * [V3Mail](messages/v3mail.md)
 * [Auto-Signature](messages/autosig.md)
@@ -74,6 +81,8 @@
 
 * **FILES**
 * [File Areas](files/file-areas.md)
+* [Viewing Files & Archives](files/file-areas.md#viewing-files-and-archives)
+* [File Newscan](files/file-areas.md#file-newscan)
 * [File Transfer](files/file-transfer.md)
 * [ZipLab Upload Processing](files/ziplab.md)
 * [Bulk Import](files/bulk-import.md)
@@ -83,6 +92,7 @@
 * **DOORS**
 * [Setting Up Doors (How-To)](how-to-guides/doors.md)
 * [Door Programs](doors/doors.md)
+* [Door Types](doors/doors.md#door-types)
 * [Generated Door Menus](doors/generated-menu.md)
 * [Synchronet JS Doors](doors/synchronet-js-doors.md)
 * [Door Servers (RLogin, Telnet)](doors/door-servers.md)
@@ -95,6 +105,7 @@
 * [SSH Server](networking/ssh.md)
 * [Telnet Server](networking/telnet.md)
 * [WFC Sysop Console](how-to-guides/wfc-console.md)
+* [WFC: Snoop & Chat](how-to-guides/wfc-console.md#watching-a-node)
 
 * **ADVANCED**
 * [Config Editor](configuration/configuration.md#configuration-editor-tui)
@@ -118,5 +129,6 @@
 * **REFERENCE**
 * [Architecture](reference/architecture.md)
 * [Technical Reference](reference/technical.md)
+* [Menu Commands Reference](reference/menu-commands.md)
 * [API Reference](reference/api-reference.md)
 * [Developer Guide](reference/developer-guide.md)

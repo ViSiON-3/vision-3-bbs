@@ -16,6 +16,7 @@ New to ViSiON/3? Start here:
 2. **[Docker Deployment](getting-started/docker.md)** — containerized setup 
 3. **[Configuration Guide](configuration/configuration.md)** — configure your BBS
 4. **[Security](configuration/security.md)** — harden your installation
+5. **[Doctor](configuration/configuration.md#doctor)** — run `vision3 doctor` to check the whole board before you open the doors
 
 ---
 
@@ -27,12 +28,12 @@ New to ViSiON/3? Start here:
 | [Configuration](configuration/configuration.md) | config.json, system settings, security |
 | [Menu System](menus/menu-system.md) | .MNU files, ACS strings, menu scripting |
 | [Users](users/user-management.md) | Accounts, access levels, login flow |
-| [Messages](messages/message-areas.md) | Message bases, FTN echomail, V3Mail |
-| [Files](files/file-areas.md) | File areas, transfers, bulk import |
+| [Messages](messages/message-areas.md) | Message bases, private mail, Twit List, QWK, FTN echomail, V3Mail |
+| [Files](files/file-areas.md) | File areas, transfers, ZipLab, bulk import, FTN file echoes (TIC) |
 | [Doors](how-to-guides/doors.md) | Setting up DOS, native, Synchronet JS and VPL doors; [reference](doors/doors.md) |
-| [Networking](networking/ssh.md) | SSH and Telnet servers |
+| [Networking](networking/ssh.md) | SSH and Telnet servers, WFC sysop console |
 | [V3Net](v3net/configuration.md) | Native inter-BBS networking, FelonyNet, key recovery |
-| [Advanced](advanced/event-scheduler.md) | Scheduler, string editor, encoding |
+| [Advanced](advanced/event-scheduler.md) | Scheduler, string editor and string hooks, encoding |
 | [Reference](reference/architecture.md) | Architecture, technical reference, API, developer guide |
 
 ---

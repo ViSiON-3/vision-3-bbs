@@ -1,6 +1,14 @@
 # ViSiON/3 Security Guide
 
-This guide covers security features and best practices for protecting your BBS.
+A BBS on the public Internet is found within hours by port scanners, password
+guessers and bots that connect and hang up a hundred times a minute. ViSiON/3
+answers with layers you turn on as you need them: connection limits, a
+pre-login Challenge Gate and connection-rate limiter aimed at bots, IP
+blocklists and allowlists that reload the moment you save them, an automatic
+lockout for failed logins, a list of handles nobody may register, and access
+levels that decide what a caller may do once inside. Everything here is set
+in `./config` under **Access & Security** (key 2), takes effect without a
+restart, and is checked by `vision3 doctor`.
 
 ## Table of Contents
 
@@ -8,7 +16,9 @@ This guide covers security features and best practices for protecting your BBS.
 - [Bot Defense](#bot-defense)
 - [IP Filtering](#ip-filtering)
 - [Access Control](#access-control)
+- [Bad User Names](#bad-user-names)
 - [Best Practices](#best-practices)
+- [Technical Reference](#technical-reference)
 
 ## Connection Security
 
@@ -234,36 +244,9 @@ Allow specific IPs to bypass all connection limits.
 
 ### File Format
 
-Both blocklist and allowlist use the same simple format:
-
-```text
-# Comments start with #, on their own line or after an entry
-# Blank lines are ignored
-
-# Individual IPv4 addresses
-192.168.1.100
-10.0.0.50
-
-# IPv4 CIDR ranges
-192.168.100.0/24    # Class C network (256 addresses)
-172.16.0.0/16       # Class B network (65,536 addresses)
-10.0.0.0/8          # Class A network (16,777,216 addresses)
-
-# Individual IPv6 addresses
-2001:db8::1
-fe80::1
-
-# IPv6 CIDR ranges
-2001:db8::/32
-fe80::/10
-```
-
-**Notes:**
-
-- One IP or CIDR range per line
-- Whitespace is trimmed
-- Invalid entries are logged and skipped
-- Files are loaded at startup and **automatically reloaded** when changed (no restart required)
+One IP or CIDR range per line, `#` for comments (on their own line or after an
+entry), blank lines ignored. The full format with examples is in the
+[Technical Reference](#ip-list-file-format) at the bottom of this page.
 
 ### Auto-Reload Feature
 
@@ -384,12 +367,12 @@ In Access & Security → IP Blocklist/Allowlist: set allowlist path, leave block
 
 **Result:**
 
-- Only allowlisted IPs can connect
-- Everyone else is rejected (empty allowlist = accept all, but add at least one entry)
-- Actually, this won't work as intended - allowlist doesn't reject others
+- The listed IPs bypass every limit and the Challenge Gate
+- Everyone else can still connect: an allowlist exempts, it does not restrict
 
-**Better approach for private BBS:**
-Use allowlist for admins only, and rely on authentication + monitoring for access control.
+The allowlist is not a members-only gate. For a private board, allowlist
+your admins, turn **Allow New Users** off (System Setup → Default Settings),
+and rely on accounts and monitoring for access control.
 
 #### Example 3: Dealing with Attack
 
@@ -482,15 +465,19 @@ CIDR mask must be 0-32 for IPv4, 0-128 for IPv6.
 
 ViSiON/3 uses numeric security levels for access control. Configure them in `./config` → **Access & Security → Access Levels** (item 1):
 
-| Field | Default | Description |
+| Field | Shipped | Description |
 |-------|---------|-------------|
 | SysOp Level | 255 | Full system access |
 | CoSysOp Level | 250 | Co-SysOp privileges |
-| Invisible Level | 0 | Level at which users are hidden from who's-online (0 = use CoSysOp level) |
-| New User Level | 1 | Level assigned when an account is first created |
-| Regular Level | 10 | Level for validated/regular users |
-| Logon Level | 10 | Level granted on successful login (0 = disabled) |
-| Anonymous Level | 5 | Level for guest/anonymous access (0 = disabled) |
+| Invisible Level | 250 | Minimum level offered the Invisible Logon prompt, which keeps the session off the Last Callers list (0 = use CoSysOp level) |
+| New User Level | 10 | Level assigned when an account is first created |
+| Regular Level | 25 | Level assigned when a user is validated |
+| Logon Level | 10 | Minimum level required to log in |
+| Anonymous Level | 50 | Minimum level to post anonymously (0 = disabled) |
+
+"Shipped" is what a new install gets from the template. A key missing from
+an older `config.json` falls back to a different built-in value; both are
+tabled under [Access Levels](users/user-management.md#access-levels).
 
 ### Authentication Lockout
 
@@ -522,11 +509,18 @@ IP-based lockout prevents **Denial of Service (DoS)** attacks where an attacker 
 
 **Persistence:**
 
-IP lockout data is held **in memory only** (not persisted to disk). This means:
-- Lockouts are cleared on BBS restart
-- No permanent lockout records
-- Fast in-memory lookups
-- Lockouts automatically expire based on timestamp, even without restart
+The lockout itself is held in memory and expires after `lockoutMinutes`. But
+when a blocklist path is configured, reaching the threshold **also appends the
+IP to the blocklist file**, with a comment saying why:
+
+```text
+198.51.100.7 # auto-blocked 2026-10-01 20:46:21: too many failed logins
+```
+
+The in-memory list is updated at once, and because the entry is in the file,
+the block survives blocklist reloads and BBS restarts. An IP already on the
+blocklist is not added twice. With no blocklist path set, only the temporary
+lockout applies and it is cleared on restart.
 
 **Logging:**
 
@@ -547,7 +541,11 @@ DEBUG: Node 3: Cleared failed login attempts for IP 203.0.113.42
 
 **Manual unlock:**
 
-To manually unlock an IP, simply restart the BBS (lockouts are in-memory only). Alternatively, wait for the lockout duration to expire — the system automatically allows logins after the configured time.
+To unblock an IP that locked itself out — your own, after a typo-filled
+evening — delete its `# auto-blocked` line from the blocklist file. The file
+is reloaded within a second and the IP can connect again; the in-memory
+lockout, if any is left, expires on its own after `lockoutMinutes`, or at the
+next restart. Restarting alone is not enough while the line is in the file.
 
 ### SSH Authentication
 
@@ -642,6 +640,25 @@ grep "locked out" data/logs/vision3.log
 # Monitor successful logins
 grep "authenticated successfully" data/logs/vision3.log
 ```
+
+## Bad User Names
+
+Signup refuses handles matching the rules in `configs/badusers.txt`: the
+shipped list blocks `root`, `admin*`, `*sysop*`, `guest` and `anonymous`,
+and you add your own — your co-sysops' handles, say, or anything a
+scammer might use to look official. One rule per line, matched
+case-insensitively against the whole handle; `*` is the only wildcard, and
+`;` or `#` start a comment. The file is re-read on every check, so an edit
+takes effect at the next signup. A missing or invalid list is logged as a
+warning and signup continues with the built-in rules, and `vision3 doctor`
+reports it.
+
+The path is **Bad Names Path** under **Access & Security → Bad User Names**
+(item 6) in `./config` (`badUsersPath` in `config.json`). Existing accounts
+are never affected, and the user editors warn but let a sysop override the
+list. Format and details:
+[Bad user names](configuration/configuration.md#bad-user-names); the signup
+side is in [User Management](users/user-management.md#bad-user-names).
 
 ## Best Practices
 
@@ -787,6 +804,8 @@ iptables -A INPUT -p tcp --dport 2222 -m state --state NEW \
 ## Security Checklist
 
 - [ ] Change default password
+- [ ] Run `./vision3 doctor` and clear its SECURITY warnings (default password, world-readable `ftn.json`, `doors.json` and `qwknet.json`)
+- [ ] Keep `configs/badusers.txt` and add your staff's handles to it
 - [ ] Configure maxNodes and maxConnectionsPerIP (Access & Security → Connection Limits)
 - [ ] Set up IP blocklist (if needed)
 - [ ] Set up IP allowlist for admins
@@ -798,6 +817,80 @@ iptables -A INPUT -p tcp --dport 2222 -m state --state NEW \
 - [ ] Review user access levels regularly
 - [ ] Test emergency access (allowlist)
 - [ ] Document your security policies
+
+## Technical Reference
+
+Everything on this page is set in `./config`; these are the keys it writes to
+`configs/config.json`, for scripting or for reading a file `vision3 doctor`
+has flagged. "Shipped" is the value a new install gets from the template;
+"fallback" is what applies when the key is absent from your file.
+
+### config.json security keys
+
+| Key | Type | Shipped | Fallback | Meaning |
+|-----|------|---------|----------|---------|
+| `maxNodes` | int | `10` | `10` | Simultaneous connections; `0` = unlimited |
+| `maxConnectionsPerIP` | int | `3` | `3` | Concurrent connections from one IP; `0` = unlimited |
+| `maxFailedLogins` | int | `5` | `5` | Failed BBS logins from one IP before lockout; `0` = off |
+| `lockoutMinutes` | int | `30` | `30` | Length of the in-memory lockout |
+| `sessionIdleTimeoutMinutes` | int | `5` | `5` | Idle cutoff in menus and doors; `0` = off. CoSysOps and above are exempt |
+| `transferTimeoutMinutes` | int | `30` | `10` | Stalled file transfer cutoff |
+| `ipBlocklistPath` | string | `configs/blocklist.txt` | blank (off) | Blocklist file; also where auto-blocked IPs are appended |
+| `ipAllowlistPath` | string | `configs/allowlist.txt` | blank (off) | Allowlist file |
+| `badUsersPath` | string | `configs/badusers.txt` | `badusers.txt` in the config directory | Handles refused at signup; see [Bad User Names](#bad-user-names) |
+| `wfcEnabled` | bool | — | `true` | Allow the remote WFC sysop console over SSH |
+| `enableChallengeGate` | bool | `false` | `false` | Challenge Gate master switch |
+| `challengeGateFile` | string | `BOTCHECK.ASC` | `BOTCHECK.ASC` | Gate art file in the menu set's `ansi/` |
+| `challengeGateKey` | string | `ESC` | `ESC` | Key the caller must press (`ESC` or one character) |
+| `challengeGateTimeoutSeconds` | int | `20` | `20` | Seconds to pass the gate |
+| `challengeGateRequiredPresses` | int | `2` | `2` | Presses required |
+| `challengeGateStrayLimit` | int | `8` | `8` | Wrong keys before hang-up |
+| `challengeGateLiveCountdown` | bool | `true` | `true` | Animate the countdown |
+| `enableConnRateLimit` | bool | `false` | `false` | Connection-rate limiter master switch |
+| `connRateLimitHits` | int | `20` | `20` | Connections from one IP within the window that trigger a ban; `0` = off |
+| `connRateLimitWindowSeconds` | int | `10` | `10` | Sliding window |
+| `connRateLimitBanMinutes` | int | `90` | `90` | Length of the in-memory ban |
+
+Access levels (`sysOpLevel`, `coSysOpLevel`, `newUserLevel` and the rest) are
+tabled under [Access Levels](users/user-management.md#access-levels) in
+the Configuration Guide.
+
+All of these are applied live when the file changes; lowering a limit below
+current usage never disconnects anyone.
+
+
+### IP list file format
+
+Both blocklist and allowlist use the same simple format:
+
+```text
+# Comments start with #, on their own line or after an entry
+# Blank lines are ignored
+
+# Individual IPv4 addresses
+192.168.1.100
+10.0.0.50
+
+# IPv4 CIDR ranges
+192.168.100.0/24    # Class C network (256 addresses)
+172.16.0.0/16       # Class B network (65,536 addresses)
+10.0.0.0/8          # Class A network (16,777,216 addresses)
+
+# Individual IPv6 addresses
+2001:db8::1
+fe80::1
+
+# IPv6 CIDR ranges
+2001:db8::/32
+fe80::/10
+```
+
+**Notes:**
+
+- One IP or CIDR range per line
+- Whitespace is trimmed
+- Invalid entries are logged and skipped
+- Files are loaded at startup and **automatically reloaded** when changed (no restart required)
 
 ## Additional Resources
 

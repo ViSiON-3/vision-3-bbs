@@ -229,6 +229,9 @@ docker exec -it -u "$(id -u):$(id -g)" vision3-bbs ./menuedit
 
 # WFC sysop console
 docker exec -u vision3 -it vision3-bbs ./wfc
+
+# Board health check (read-only; exit 0 clean, 1 warnings, 2 failures)
+docker exec -u vision3 vision3-bbs ./vision3 doctor
 ```
 
 > Omitting `-u vision3` runs the tool as root and writes root-owned files into
@@ -237,13 +240,19 @@ docker exec -u vision3 -it vision3-bbs ./wfc
 
 The container's working directory is `/vision3`, which is where `configs/`, `data/`, and `menus/` are mounted — so the TUI tools find your files automatically without extra flags.
 
-After saving changes in the TUI, restart to apply most settings:
+Saving in the TUI is normally all it takes: the running board re-reads the
+changed files within a couple of seconds, and the IP blocklist and allowlist
+are watched separately. Listening ports and hosts, enabling or disabling SSH
+or Telnet, SSH host keys and the logging directory still need a restart:
 
 ```bash
 docker compose restart
 ```
 
-Exception: IP blocklist/allowlist files are watched and reload automatically — no restart needed.
+The full list is under
+[Applying Configuration Changes](configuration/configuration.md#applying-configuration-changes).
+After hand-editing a file in the `configs/` volume, run the doctor command
+above to catch a syntax slip before the board reads it.
 
 ## Private Mail Setup
 

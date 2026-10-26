@@ -1,6 +1,6 @@
 # BBS Listings
 
-The BBS Listings feature is a user-contributed directory of other BBS systems — a modernization of ViSiON/2's `BBSLIST.PAS`. Users can add, browse, and manage entries for BBSes they know about, creating a community-curated directory.
+The BBS Listings feature is a user-contributed directory of other BBS systems — a modernization of ViSiON/2's `BBSLIST.PAS`. Users can add, browse, and manage entries for BBSes they know about, creating a community-curated directory: the modern successor to the phone-number lists every board once carried, with Telnet and SSH ports and a web address in place of a dial-up number. It needs no setup; the shipped menu set includes the BBS List submenu on the main menu's `B` key, and the data file is created the first time somebody adds an entry. CoSysOps and above can mark entries verified and edit or delete any entry.
 
 ---
 
@@ -109,9 +109,15 @@ Toggles the **Verified** flag on a listing. Requires CoSysOp access or above (`i
 
 ---
 
-## Menu Configuration
+## Technical Reference
 
-### BBSLISTM Menu
+The commands are in `menus/v3/cfg/BBSLISTM.CFG`; change the keys or the ACS
+with `menuedit`, which saves into `menus.d/`. The data lives in
+`data/bbslist.json`.
+
+### Menu Configuration
+
+#### BBSLISTM Menu
 
 The BBS List has its own submenu (`BBSLISTM`), accessed from the Main Menu via the `B` key.
 
@@ -152,13 +158,12 @@ The BBS List has its own submenu (`BBSLISTM`), accessed from the Main Menu via t
 | `V` | `RUN:BBSLISTVERIFY` | `S255` | Toggle verified flag |
 | `Q` | `GOTO:MAIN` | `*` | Return to main menu |
 
-### ANSI Screen
+#### ANSI Screen
 
 The ANSI art screen `menus/v3/ansi/BBSLISTM.ANS` is displayed when entering the BBS List Menu. It shows the available key commands (L/A/C/D/V/Q). Edit this file with any ANSI art editor to customize the appearance.
 
----
 
-## Data File
+### Data File
 
 BBS listings are stored in `data/bbslist.json`:
 
@@ -186,9 +191,8 @@ BBS listings are stored in `data/bbslist.json`:
 
 The file is created automatically when the first entry is added. The `next_id` field auto-increments to ensure unique IDs.
 
----
 
-## ViSiON/2 Compatibility
+### ViSiON/2 Compatibility
 
 | V2 Feature | V3 Equivalent |
 |-------------|---------------|

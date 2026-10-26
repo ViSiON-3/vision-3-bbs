@@ -1,8 +1,8 @@
 # Keeping Binaries Up to Date
 
-This guide is for sysops who want to track active development — running the latest unreleased code without downloading a new release archive each time.
+This guide is for sysops who want to track active development — running the latest unreleased code without downloading a new release archive each time. ViSiON/3 is pure Go, so a build is a single command and a few seconds; the trick is arranging your install so that a rebuild in the repo *is* the update, with nothing to copy and nothing of yours overwritten.
 
-> **Prerequisites:** Go 1.24+ ([install Go](https://golang.org/dl/)), Git.
+> **Prerequisites:** Go 1.25+ ([install Go](https://golang.org/dl/)), Git.
 >
 > For upgrading a BBS you already run — what a new version does and does not
 > bring with it, and which settings you have to add by hand — see
@@ -27,7 +27,7 @@ cd ~/git/vision3
 ./dev-setup.sh /opt/vision3 --symlink
 ```
 
-This builds all binaries, creates the full directory tree (configs, data, menus, etc.), generates an SSH host key, and symlinks each binary back to the repo.
+This builds all binaries (`vision3`, `helper`, `v3mail`, `strings`, `ue`, `config`, `menuedit`, `wfc`), creates the full directory tree (configs, data, menus, etc.), generates an SSH host key, creates the default sysop account, and symlinks each binary back to the repo. Existing config and data in the target are never overwritten, so it is safe to run again.
 
 ### 3. Start the BBS
 
@@ -63,7 +63,7 @@ cd ~/git/vision3
 
 # Replace binaries with symlinks
 cd /opt/vision3
-for bin in vision3 helper v3mail strings ue config menuedit; do
+for bin in vision3 helper v3mail strings ue config menuedit wfc; do
     [ -f "$bin" ] && mv "$bin" "$bin.bak"
     ln -sf ~/git/vision3/$bin ./$bin
 done
@@ -152,3 +152,34 @@ Switch back to main at any time with `git checkout main && ./build.sh`.
 - **`bin/` binaries (`sexyz`, `binkd`) are not built from Go source.** If you need these, download them from a [release archive](https://github.com/ViSiON-3/vision-3-bbs/releases) and copy them into your instance's `bin/` directory. To build binkd yourself, use `./scripts/build-binkd.sh` rather than compiling it by hand — a binkd built without its `configure` script has a broken MD5 and cannot authenticate CRAM-MD5 sessions ([details](messages/ftn-echomail.md#cram-md5-authentication-fails)).
 - **Windows users** can use `dev-setup.sh` under WSL, or copy binaries manually after each build. Symlinks on Windows require Developer Mode.
 - **After major updates**, check release notes for new config keys or migration steps.
+- **`wfc` need not match the BBS.** The console talks to the daemon over SSH, so a remote co-sysop can run an older or newer build; a feature the daemon does not know yet simply shows `-` in the console.
+
+---
+
+## Technical Reference
+
+### `dev-setup.sh`
+
+```text
+Usage: ./dev-setup.sh <target-dir> [--symlink]
+```
+
+| Option | Purpose |
+|--------|---------|
+| `--symlink` | Symlink the binaries to the git repo instead of copying them, so the instance always runs your latest `go build` output |
+| `--help`, `-h` | Print usage |
+
+The target must not be the repo root. Existing config and data in the target
+are never overwritten; `menus/` is copied only when the target has none.
+
+### `build.sh`
+
+Builds every binary in place in the repo root, in this order: `vision3`,
+`helper`, `v3mail`, `strings`, `ue`, `config`, `menuedit`, `wfc`. It stops at
+the first failure.
+
+### Cross-compiling
+
+Every binary is pure Go (no CGO), so a build for another platform is a matter
+of `GOOS`/`GOARCH`, for example `GOOS=windows GOARCH=amd64 go build -o wfc.exe ./cmd/wfc`.
+The release workflow produces the bundles the same way.

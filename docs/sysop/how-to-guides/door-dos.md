@@ -64,25 +64,11 @@ Run `./config`, press **7** for Door Programs, then **I** to insert a record and
 | FOSSIL Driver | `C:\UTILS\X00.EXE eliminate` |
 | Single Instance | `Y` |
 
-For a DOS door, **Commands** is a comma-separated list of batch lines, and **Working Dir** is a DOS path the BBS changes into before running them. `{NODE}` becomes the node number. A door that takes its dropfile directory on the command line can be given `{DOSNODEDIR}`, which becomes that node's directory such as `C:\NODES\TEMP1`; LORD reads it from its own configuration instead. The BBS writes all four dropfile formats into the node directory before every launch, so the game finds `DOOR.SYS` whichever way it looks.
+For a DOS door, **Commands** is a comma-separated list of batch lines, and **Working Dir** is a DOS path the BBS changes into before running them. `{NODE}` becomes the node number. A door that takes its dropfile directory on the command line can be given `{DOSNODEDIR}`, which becomes that node's directory such as `C:\NODES\TEMP1`; LORD reads it from its own configuration instead. The BBS writes all five dropfile formats into the node directory before every launch, so the game finds `DOOR.SYS` whichever way it looks. That is why a DOS door has no **Dropfile Location** field: the files always go in the node directory, and `DOORINFO` shows the type alone.
 
 The **FOSSIL Driver** line is run first. `eliminate` tells X00 to unload any earlier copy before loading, which keeps repeated launches clean.
 
-Press **Esc**, then **Q** and **Y** to save. The same record in `configs/doors.json`:
-
-```json
-{
-  "code": "LORD",
-  "name": "Legend of the Red Dragon",
-  "is_dos": true,
-  "working_directory": "C:\\DOORS\\LORD",
-  "commands": ["START.BAT {NODE}"],
-  "dropfile_type": "DOOR.SYS",
-  "drive_c_path": "doors/drive_c",
-  "fossil_driver": "C:\\UTILS\\X00.EXE eliminate",
-  "single_instance": true
-}
-```
+Press **Esc**, then **Q** and **Y** to save. The record the editor writes is shown under [Manual Configuration](#manual-configuration).
 
 ## 5. Add it to a menu
 
@@ -109,7 +95,30 @@ Connect over SSH, open the doors menu and press **L**. If you also set up the Ja
 
 **Box-drawing characters are wrong.** `~/.dosemu/.dosemurc` must set both character sets to `cp437`. The template does; a hand-edited file may not.
 
+**Callers are dropped mid-game, but you never are.** CoSysOps and above have no time limit and no idle timeout inside doors. Callers do: the BBS ends the door and logs them off when their time runs out or they go idle. Check the caller's time limit in the user editor; the game is told how much time is left through `DOOR.SYS`, so a well-behaved one warns them first.
+
 ## See also
 
 - [Running DOS Doors](doors/doors.md#running-dos-doors) for how the launcher works, the generated dosemu2 config, and platform support
 - [Door Programs](doors/doors.md) for every DOS field
+
+## Manual Configuration
+
+The record from step 4, as the config editor writes it to `configs/doors.json`:
+
+```json
+{
+  "code": "LORD",
+  "name": "Legend of the Red Dragon",
+  "is_dos": true,
+  "working_directory": "C:\\DOORS\\LORD",
+  "commands": ["START.BAT {NODE}"],
+  "dropfile_type": "DOOR.SYS",
+  "drive_c_path": "doors/drive_c",
+  "fossil_driver": "C:\\UTILS\\X00.EXE eliminate",
+  "single_instance": true
+}
+```
+
+A DOS door is `"is_dos": true` with no `type`. `commands` is one batch line per entry, `working_directory` is a DOS path, and `drive_c_path` is a host path relative to the BBS root. The dosemu2 binary path is `dosemuPath` in `config.json`. A door that loads its own FOSSIL driver leaves `fossil_driver` blank and sets `"dosemu_config"` to a `.dosemurc` file containing `$_com1 = "virtual"`. Every key is in the [DOS Door Fields](doors/doors.md#dos-door-fields) table, and the files the BBS generates for each launch are under [Generated dosemu2 Configuration](doors/doors.md#generated-dosemu2-configuration).
+

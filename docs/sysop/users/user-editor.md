@@ -1,6 +1,12 @@
 # User Editor (`ue`)
 
-The `ue` command is a full-screen TUI tool for managing user accounts on a running ViSiON/3 BBS. Run it directly from your server as the sysop — no web interface, no JSON editing required.
+The `ue` command is a full-screen TUI (text user interface) tool for managing
+user accounts on a running ViSiON/3 BBS, in the spirit of the `UE.EXE` every
+ViSiON/2 sysop kept next to the board. Run it directly from your server as the
+sysop — no web interface, no JSON editing required. It is the place for bulk
+work (validate or purge a batch of accounts), for fields the in-BBS
+[Admin Menu](users/admin-menu.md) does not expose (time limit, screen size,
+WFC keys), and for rescuing a sysop account that cannot reach the Admin Menu.
 
 ## Running the Editor
 
@@ -9,9 +15,10 @@ From your ViSiON/3 directory:
 ```bash
 ./ue                              # uses data/users/users.json by default
 ./ue --data /path/to/data/users/  # explicit path
+./ue --config /path/to/configs    # board config dir (default configs/)
 ```
 
-The editor reads and writes `data/users/users.json`. It uses optimistic concurrency — if the BBS modifies the user file while you have it open, you'll be warned before any save overwrites it.
+The editor reads and writes `data/users/users.json`. It uses optimistic concurrency — if the BBS modifies the user file while you have it open, you'll be warned before any save overwrites it. The config directory is read for the bad user names list and the deleted-user retention period; the two flags are independent, so an instance kept elsewhere can point `--data` and `--config` at different places.
 
 ---
 
@@ -36,15 +43,23 @@ The field editor lays its fields out in two columns. Up and Down move within the
 
 ### Field Editor
 
-Press Enter on any user to open the field editor. Displays 30 fields across two columns:
+Press Enter on any user to open the field editor. It lays the fields out in two columns, with a block of read-only statistics underneath:
 
-**Left column:** Handle, Real Name, Access Level, Total Calls, Group/Location, Access Flags, Private Note, File Points, Custom Prompt, Time Limit
+**Left column:** Handle, Real Name, Access Level, Total Calls, Group/Location, Access Flags, Private Note, File Points, Custom Prompt, Time Limit, Password, WFC Keys
 
-**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted User (read-only), Deleted At (read-only), Auto Purge (read-only), WFC Read Only, InfoForms (read-only), Created At, Updated At, Last Login, Last Bulletin
+**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted User (read-only), Deleted At (read-only), Auto Purge (read-only), WFC Read Only
 
-Custom Prompt, More Prompts and Output Mode are stored but not currently used by the board; see [User Management](users/user-management.md#user-configuration-preferences). Encoding is the field login applies.
+**Read-only block:** Num Uploads, Msgs Posted, InfoForms, Created, Updated, Last Login, Bulletin
+
+Custom Prompt, More Prompts and Output Mode are stored but not currently used by the board; see [User Management](users/user-management.md#user-configuration-preferences). Encoding is the field login applies: blank means Auto (detect on every call), `utf8` or `cp437` forces that encoding.
+
+Time Limit is minutes per call, `0` for no limit. CoSysOps and above are never limited whatever the field says; see [Time Limits](users/user-management.md#time-limits). A change made while the caller is online applies from their next menu.
+
+Changing a Handle to one that matches the board's [bad user names](users/user-management.md#bad-user-names) list shows `Warning: handle matches bad user names list; sysop override allowed` and lets you keep it; the list only blocks signups.
 
 The Password field opens a dialog — new password is bcrypt-hashed before saving.
+
+WFC Keys opens a list of the account's SSH public keys, shown by SHA256 fingerprint and comment, with `[A]dd` and `[D]elete`. Keys are validated before they are saved; see [WFC Sysop Console](how-to-guides/wfc-console.md#enabling-access-for-a-sysop).
 
 WFC Read Only (Y/N) limits the account's [WFC console](how-to-guides/wfc-console.md#read-only-accounts) to watching: the BBS refuses its kick, snoop, type-in and chat.
 
@@ -145,6 +160,45 @@ Selecting the Password field in the editor opens a secure entry dialog. The new 
 ---
 
 ## Technical Reference
+
+### CLI flags
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `--data <dir>` | `data/users/` | Directory holding `users.json` |
+| `--config <dir>` | `configs` | Board configuration directory, read for `badusers.txt` (via `badUsersPath`) and `deletedUserRetentionDays` |
+
+`ue` exits with status 1 and a message on stderr when `users.json` is not
+found or cannot be loaded.
+
+### Fields and `users.json` keys
+
+| Field | Key | Notes |
+|-------|-----|-------|
+| Handle | `handle` | Warns on a bad-user-names match |
+| Real Name | `realName` | |
+| Access Level | `accessLevel` | 0–255 |
+| Total Calls | `timesCalled` | |
+| Group/Location | `group_location` | |
+| Access Flags | `flags` | Single letters, used by ACS `F` |
+| Private Note | `privateNote` | |
+| File Points | `filePoints` | |
+| Custom Prompt | `customPrompt` | Stored, not used |
+| Time Limit | `timeLimit` | Minutes per call, 0 = unlimited, max 1440 |
+| Password | `passwordHash` | bcrypt |
+| WFC Keys | `publicKeys` | OpenSSH public-key lines |
+| Validated | `validated` | |
+| Hot Keys | `hotKeys` | |
+| More Prompts | `morePrompts` | Stored, not used |
+| Screen Width / Height | `screenWidth` / `screenHeight` | 40–200 / 24–60 |
+| Encoding | `preferredEncoding` | blank, `utf8` or `cp437` |
+| Msg Header | `msgHdr` | 0–99 |
+| Output Mode | `outputMode` | Legacy, not read |
+| Deleted User / Deleted At | `deletedUser` / `deletedAt` | Read-only; set by F2 |
+| WFC Read Only | `wfcReadOnly` | |
+
+The full record is described in
+[User Management](users/user-management.md#user-record-usersjson).
 
 ### Architecture
 

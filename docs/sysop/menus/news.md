@@ -1,6 +1,6 @@
 # System News
 
-The News system is ViSiON/3's implementation of ViSiON/2's `PrintNews` / `editnews` system. It provides a structured way for SysOps to post news items that users see at login or can browse from the main menu. News items have titles, authors, access level filters, and an **Always** flag — matching ViSiON/2's `newsrec` data structure.
+The News system is ViSiON/3's implementation of ViSiON/2's `PrintNews` / `editnews` system. It provides a structured way for SysOps to post news items that users see at login or can browse from the main menu. News items have titles, authors, access level filters, and an **Always** flag — matching ViSiON/2's `newsrec` data structure. Post from the Admin Menu (`%` → `W`), and each caller sees a new item once, the next time they log in.
 
 > This is distinct from the message board (bulletin board). News items are one-way announcements composed by the SysOp, not user-posted messages.
 
@@ -137,31 +137,6 @@ Edit `NEWSHDR.ANS` with any ANSI art editor (Moebius, PabloDraw, TheDraw) to cus
 
 ---
 
-## Data File
-
-News items are stored in `data/news.json`:
-
-```json
-{
-    "items": [
-        {
-            "id": 1,
-            "title": "Welcome to the BBS",
-            "from": "SysOp",
-            "when": "2026-01-01T00:00:00Z",
-            "level": 0,
-            "max_level": 0,
-            "always": true,
-            "body": "Welcome! Please read the rules."
-        }
-    ]
-}
-```
-
-Items are stored newest-first. The file is created automatically when the first news item is added via `EDITNEWS`.
-
----
-
 ## Login Sequence Configuration
 
 `PRINTNEWS` ships in the default `configs/login.json` and in the built-in default sequence, so news displays at login out of the box. Installs created before it was added keep their existing `login.json`; add the item by hand:
@@ -171,34 +146,6 @@ Items are stored newest-first. The file is created automatically when the first 
 ```
 
 Leave `clear_screen` and `pause_after` off. `NEWSHDR.ANS` begins with `|CL`, so each item already clears the screen, and `PRINTNEWS` pauses after every item itself. Setting `clear_screen` would blank the previous step's output even on logins where there is no news to show.
-
----
-
-## Menu Configuration
-
-### Main Menu — user news browsing
-
-```json
-{
-    "KEYS": "N",
-    "CMD": "RUN:LISTNEWS",
-    "ACS": "*",
-    "HIDDEN": false,
-    "NODE_ACTIVITY": "Reading News"
-}
-```
-
-### Admin Menu — SysOp news management
-
-```json
-{
-    "KEYS": "W",
-    "CMD": "RUN:EDITNEWS",
-    "ACS": "S255",
-    "HIDDEN": false,
-    "NODE_ACTIVITY": "Editing News"
-}
-```
 
 ---
 
@@ -239,6 +186,63 @@ Once displayed, an `always: false` item is recorded in the user's
 set `always: true`, or delete the item and add it back — a new item gets a new
 ID, which no user has seen. See [User Management](users/user-management.md) for
 the user record fields.
+
+---
+
+## Technical Reference
+
+News is managed from the Admin Menu; the data file and the shipped menu
+bindings are below for hand edits.
+
+### Data File
+
+News items are stored in `data/news.json`:
+
+```json
+{
+    "items": [
+        {
+            "id": 1,
+            "title": "Welcome to the BBS",
+            "from": "SysOp",
+            "when": "2026-01-01T00:00:00Z",
+            "level": 0,
+            "max_level": 0,
+            "always": true,
+            "body": "Welcome! Please read the rules."
+        }
+    ]
+}
+```
+
+Items are stored newest-first. The file is created automatically when the first news item is added via `EDITNEWS`.
+
+
+### Menu Configuration
+
+#### Main Menu — user news browsing
+
+```json
+{
+    "KEYS": "N",
+    "CMD": "RUN:LISTNEWS",
+    "ACS": "*",
+    "HIDDEN": false,
+    "NODE_ACTIVITY": "Reading News"
+}
+```
+
+#### Admin Menu — SysOp news management
+
+```json
+{
+    "KEYS": "W",
+    "CMD": "RUN:EDITNEWS",
+    "ACS": "S255",
+    "HIDDEN": false,
+    "NODE_ACTIVITY": "Editing News"
+}
+```
 
 ---
 

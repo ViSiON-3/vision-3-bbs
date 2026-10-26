@@ -1,6 +1,14 @@
 # ViSiON/3 Menu System Guide
 
-The ViSiON/3 menu system is the core of the BBS user interface. This guide explains how menus work and how to create or modify them.
+The ViSiON/3 menu system is the core of the BBS user interface. Every screen a
+caller moves through — the main menu, the message and file menus, the admin
+menu — is a *menu*: a piece of ANSI art, a prompt, and a list of keys bound to
+actions, each guarded by an ACS (Access Control String) that says who may use
+it. Nothing is compiled in. You can rebind a key, hide a command from new
+callers, hang a door off the main menu or draw a whole new submenu with the
+`menuedit` TUI (text user interface) and a text editor, and the board picks the
+change up the next time a caller loads that menu. This guide explains how menus
+work and how to create or modify them.
 
 ## Menu Editor (`menuedit`)
 
@@ -146,6 +154,13 @@ Resolution is per file, not per directory. Overriding `MAIN.ANS` does not mean
 copying the rest of `ansi/`; every file you have not overridden still comes from
 the shipped set, so bug fixes to those files reach you on the next pull.
 
+Where a file may be spelled more than one way — templates can be `X.TOP`,
+`X.TOP.ANS` or `X.TOP.ans` — every spelling in `menus.d/` is checked before any
+spelling in the shipped set, so your `menus.d/v3/templates/X.TOP.ans` wins over
+a shipped `X.TOP`. A copy in the overlay that exists but cannot be read (a
+broken symlink, wrong permissions) is reported as an error rather than silently
+replaced by the shipped file.
+
 `menus.d/` is git-ignored (only its README is tracked), so `git pull` never
 touches it, and there is nothing to re-copy after an upgrade.
 
@@ -253,197 +268,15 @@ the number of files you added. A `has no counterpart in the shipped set`
 warning means a subdirectory name is wrong. `git status menus/` (repo) or the
 `diff -rq` above (instance) should now report nothing.
 
-## Theme (`theme.json`)
+## Menu and command files
 
-`theme.json` in a menu set holds color settings. A copy in
-`menus.d/<set>/theme.json` overrides it. The color numbers are the same as
-for `yesNoHighlightColor`.
-
-| Field | Default | Meaning |
-|-------|---------|---------|
-| `yesNoHighlightColor` | `112` | The highlight bar in lightbars (message reader, message and file area lists, BBS list, message scan, file command bar, generated door menu) and the highlighted yes/no choice |
-| `yesNoRegularColor` | `15` | The unhighlighted yes/no choice and command bar options |
-| `chatSysopColor` | `11` | Sysop's pane in [split-screen chat](how-to-guides/wfc-console.md#chat) |
-| `chatUserColor` | `10` | Caller's pane in split-screen chat |
-
-The defaults apply to fields missing from `theme.json`. The shipped `v3`
-set's `theme.json` sets `yesNoHighlightColor` to `31` and
-`yesNoRegularColor` to `13`.
-
-A color number is the background times 16 plus the foreground, using the 16
-DOS colors: `31` is bright white (15) on blue (1).
-
-### Per-screen lightbar colors
-
-Some lists can have their own highlight instead of the theme's. The first
-record of a `bar/<NAME>.BAR` file sets it from its highlight color field; the
-coordinates are ignored. The generated door menu also uses the record's
-regular color for its rows. Like any menu file, a copy in
-`menus.d/<set>/bar/` overrides a shipped one.
-
-| File | Screen | Shipped |
-|------|--------|---------|
-| `FILELISTHI.BAR` | File listing | Yes |
-| `FILEAREAHI.BAR` | File area list | No |
-| `MSGAREAHI.BAR` | Message area list | Yes |
-| `MSGCONFHI.BAR` | Message conference list | Yes |
-| `DOORMENUHI.BAR` | [Generated door menu](doors/generated-menu.md) | No |
-
-A screen with one of these files keeps its highlight when the theme changes.
-Delete the file, or your overlay copy of it, to have that screen follow the
-theme. There is no editor for these colors yet; see issue #611.
-
-## Menu Configuration Files (.MNU)
-
-Menu configuration files are JSON files that define menu behavior and prompts.
-
-### Configuration Structure
-
-```json
-{
-  "TITLE": "Main Menu",
-  "CLR": true,
-  "USEPROMPT": true,
-  "PROMPT1": "|15Main Menu: ",
-  "PROMPT2": "",
-  "FALLBACK": "MAIN",
-  "ACS": "",
-  "PASS": "",
-  "HELPMENU": "",
-  "FORCEHELPLEVEL": 0,
-  "MES_CONF": 0,
-  "FILE_CONF": 0,
-  "FORCEHOTKEY": false
-}
-```
-
-### Configuration Fields
-
-- `TITLE` - Friendly display name shown in the menu editor
-- `CLR` - Clear screen before displaying menu
-- `USEPROMPT` - Whether to show the prompt
-- `PROMPT1` - Primary prompt text (supports pipe codes and placeholders)
-- `PROMPT2` - Secondary prompt (rarely used)
-- `FALLBACK` - Menu to go to if no command matches
-- `ACS` - Access control string for menu access
-- `PASS` - Password required to access menu
-- `HELPMENU` - Tutorial help file name *(currently unused — reserved from Pascal `MenuRec.HelpMenu`)*
-- `FORCEHELPLEVEL` - Force help display for users at or below this level *(currently unused — reserved from Pascal `MenuRec.ForceHelpLevel`)*
-- `MES_CONF` - Auto-switch user's active message conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.Mes_Conf`)*
-- `FILE_CONF` - Auto-switch user's active file conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.File_Conf`)*
-- `FORCEHOTKEY` - Force single-keypress (hotkey) input for this menu regardless of the user's Hot Keys setting. A key that could start a longer command (a multi-key command, a number on a `##` menu, or `/G`) still waits for Enter.
-
-## Command Definition Files (.CFG)
-
-Command files are JSON arrays that define what happens when users press keys.
-
-### Command Structure
-
-```json
-[
-  {
-    "KEYS": "M",
-    "CMD": "GOTO:MSGMENU",
-    "ACS": "*",
-    "HIDDEN": false
-  },
-  {
-    "KEYS": "F",
-    "CMD": "GOTO:FILEM",
-    "ACS": "s10",
-    "HIDDEN": false
-  },
-  {
-    "KEYS": "//",
-    "CMD": "RUN:SHOWSTATS",
-    "ACS": "*",
-    "HIDDEN": true
-  }
-]
-```
-
-### Command Fields
-
-- `KEYS` - Key(s) that trigger the command (space-separated for multiple)
-- `CMD` - Action to execute
-- `ACS` - Access control string
-- `HIDDEN` - Whether command is hidden from display
-- `NODE_ACTIVITY` - Optional text shown in Who's Online while the command runs; it reverts to the menu's default when the command finishes. On a `//` or `~~` entry it sets that default for the whole menu (otherwise the default is the menu name).
-
-### Example: a Main Menu entry
-
-The stock `MAIN.CFG` binds `K` to the User Konfig editor. `RUN:` commands return to the same menu when they finish, so no `GOTO:` back is needed:
-
-```json
-{
-    "KEYS": "K",
-    "CMD": "RUN:USERCONFIG",
-    "ACS": "*",
-    "HIDDEN": false,
-    "NODE_ACTIVITY": "User Settings"
-}
-```
-
-For a full worked example of a submenu (the `MAIN.CFG` entry, the submenu's `.MNU`, and its `.CFG`), see [BBS List](menus/bbs-list.md#menu-configuration).
-
-### Special Keys
-
-- `//` - Auto-run once per session
-- `~~` - Auto-run every time menu loads
-- Numbers (`1`, `2`, `10`, etc.) - Only match when listed in `KEYS` like any other key; there is no selection by position. Use `##` to accept any number
-- `^M` - Matches Enter pressed on an empty prompt (the menu's default command)
-- `##` - Matches any all-numeric input, passing the number to the command as args
-
-### Built-in Shortcuts
-
-Two keys work on every standard command menu without appearing in any `.CFG`:
-
-- `/G` - Hang up immediately, no confirmation
-- `G` - Log off with confirmation and `GOODBYE.ANS`
-
-`G` is a fallback, checked only after every command in the menu has failed to
-match, so a menu that binds `G` to something of its own keeps it.
-
-Both are matched by the standard menu input loop. The pre-login matrix
-(`PDMATRIX`) reads keys itself and recognises only its own hotkeys, so neither
-shortcut applies there; give it a `DISCONNECT` option instead, as the shipped
-`PDMATRIX.CFG` does.
-
-### Command Actions
-
-#### Goto Command
-
-Navigate to another menu:
-
-```json
-"CMD": "GOTO:MAIN"
-```
-
-#### Run Command
-
-Execute a built-in function:
-
-```json
-"CMD": "RUN:SHOWSTATS"
-```
-
-Text after the first space is passed to the command as data, for example `RUN:LASTCALLERS 20`. See the [Menu Commands Reference](reference/menu-commands.md) for every command and what it accepts.
-
-#### Door Command
-
-Launch external program:
-
-```json
-"CMD": "DOOR:TETRIS"
-```
-
-#### Logoff Command
-
-Disconnect the user:
-
-```json
-"CMD": "LOGOFF"
-```
+A menu's behaviour lives in two small JSON files: `NAME.MNU` (title, prompt,
+clear-screen, access control, password) and `NAME.CFG` (the list of keys and
+what each one does). `menuedit` edits both; the
+[Technical Reference](#technical-reference) at the bottom of this page gives
+every field of the [`.MNU`](#menu-configuration-files-mnu) and
+[`.CFG`](#command-definition-files-cfg) formats, the special keys (`//`, `~~`,
+`##`, `^M`) and the command actions (`GOTO:`, `RUN:`, `DOOR:`, `LOGOFF`).
 
 ## ANSI Art Files (.ANS)
 
@@ -898,6 +731,14 @@ Enable cursor-driven selection by creating a `.BAR` file:
 
 Format: X,Y,HighlightColor,NormalColor,Hotkey,Unused,DisplayText
 
+#### Keep the bottom row clear
+
+In the last five minutes of a caller's time limit, a lightbar menu writes the
+`timeLimitWarning` string on the bottom row of the terminal (standard menus
+show it with the prompt instead). Leave that row free of art on lightbar
+screens, or the warning will draw over it. See
+[Time Limits](users/user-management.md#time-limits).
+
 #### Keeping the BAR file and the art in step
 
 `X` and `Y` are absolute screen coordinates, 1-based, written straight out as a
@@ -937,6 +778,31 @@ something.
 
 Every command available to `RUN:` is listed, with the data it accepts and the access it checks, in the [Menu Commands Reference](reference/menu-commands.md).
 
+### Paging the SysOp
+
+`RUN:PAGESYSOP` lets a caller ask for you. They type a one-line reason, every
+connected [WFC console](how-to-guides/wfc-console.md#pages) shows a `PAGE`
+badge and rings, and the caller watches a countdown until you answer with
+split-screen chat or `pageSysopTimeout` seconds pass. With no console
+connected they are told at once that the SysOp is not available. The shipped
+`P` on the main menu is `RUN:PAGE`, which pages *another caller's node*; the
+SysOp page is not bound anywhere, so add it where you like, for example in
+`menuedit` on `MAIN`:
+
+```json
+{
+    "KEYS": "!",
+    "CMD": "RUN:PAGESYSOP",
+    "ACS": "*",
+    "HIDDEN": false,
+    "NODE_ACTIVITY": "Paging the SysOp"
+}
+```
+
+The wait and the cooldown between one caller's pages are **Page Timeout** and
+**Page Cooldown** in `./config` → **System Setup → Access & Security → Access
+Levels**; the caller's prompts are the `pageSysop*` strings in `./strings`.
+
 ## Template Files (.TOP / .MID / .BOT)
 
 Several built-in functions display content using a three-part template system:
@@ -953,7 +819,7 @@ Template files are raw CP437/ANSI binary files. The `.gitattributes` in this rep
 
 ### `.ans` Extension Support
 
-Any template file can optionally be stored with a `.ans` suffix appended to its name (e.g. `ONELINER.TOP.ans` instead of `ONELINER.TOP`). The system tries the bare name first and falls back to the `.ans` variant automatically.
+Any template file can optionally be stored with a `.ANS` or `.ans` suffix appended to its name (e.g. `ONELINER.TOP.ans` instead of `ONELINER.TOP`). The system tries the bare name, then `.ANS`, then `.ans`, and checks all three spellings in `menus.d/` before looking at the shipped set, so an overlay copy wins whatever suffix it has.
 
 This allows ANSI art editors (Moebius, PabloDraw, TheDraw, etc.) to recognise and open the file by extension without requiring a rename. The message header templates in `menus/v3/templates/message_headers/` already use `.ans` exclusively; this fallback extends that convention to all template files.
 
@@ -1057,3 +923,219 @@ Some menu names have special behavior:
 - Test with different terminal types
 - Check for unmatched pipe codes
 - Verify placeholder codes are spelled correctly
+
+## Technical Reference
+
+`menuedit` writes these files for you; this section is for reading or editing
+them by hand.
+
+### `menuedit` flags
+
+| Flag | Purpose |
+|------|---------|
+| `--menus <path>` | Menu set directory (default `menus/v3`); must contain `mnu/` and `cfg/` |
+| `--no-overlay` | Read and write the shipped set directly instead of its `menus.d` overlay |
+
+### Where the files live
+
+| Directory | Holds |
+|-----------|-------|
+| `menus/v3/mnu/` | `NAME.MNU` menu settings (JSON) |
+| `menus/v3/cfg/` | `NAME.CFG` command lists (JSON arrays) |
+| `menus/v3/ansi/` | `NAME.ANS` art, `PRELOGON.*`, and stand-alone screens such as `KONFIG.ANS` |
+| `menus/v3/bar/` | `NAME.BAR` lightbar layouts (see [Lightbar Menus](#lightbar-menus)) and `*HI.BAR` per-screen colors |
+| `menus/v3/templates/` | `NAME.TOP` / `.MID` / `.BOT` templates and `message_headers/` |
+| `menus/v3/theme.json` | Colors shared by lightbars and chat |
+| `menus.d/v3/…` | Your overrides, same layout; searched first |
+
+### Theme (`theme.json`)
+
+`theme.json` in a menu set holds color settings. A copy in
+`menus.d/<set>/theme.json` overrides it. The color numbers are the same as
+for `yesNoHighlightColor`.
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `yesNoHighlightColor` | `112` | The highlight bar in lightbars (message reader, message and file area lists, BBS list, message scan, file command bar, generated door menu) and the highlighted yes/no choice |
+| `yesNoRegularColor` | `15` | The unhighlighted yes/no choice and command bar options |
+| `chatSysopColor` | `11` | Sysop's pane in [split-screen chat](how-to-guides/wfc-console.md#chat) |
+| `chatUserColor` | `10` | Caller's pane in split-screen chat |
+
+The defaults apply to fields missing from `theme.json`. The shipped `v3`
+set's `theme.json` sets `yesNoHighlightColor` to `31` and
+`yesNoRegularColor` to `13`.
+
+A color number is the background times 16 plus the foreground, using the 16
+DOS colors: `31` is bright white (15) on blue (1).
+
+#### Per-screen lightbar colors
+
+Some lists can have their own highlight instead of the theme's. The first
+record of a `bar/<NAME>.BAR` file sets it from its highlight color field; the
+coordinates are ignored. The generated door menu also uses the record's
+regular color for its rows. Like any menu file, a copy in
+`menus.d/<set>/bar/` overrides a shipped one.
+
+| File | Screen | Shipped |
+|------|--------|---------|
+| `FILELISTHI.BAR` | File listing | Yes |
+| `FILEAREAHI.BAR` | File area list | No |
+| `MSGAREAHI.BAR` | Message area list | Yes |
+| `MSGCONFHI.BAR` | Message conference list | Yes |
+| `DOORMENUHI.BAR` | [Generated door menu](doors/generated-menu.md) | No |
+
+A screen with one of these files keeps its highlight when the theme changes.
+Delete the file, or your overlay copy of it, to have that screen follow the
+theme. There is no editor for these colors yet; see issue #611.
+
+### Menu Configuration Files (.MNU)
+
+Menu configuration files are JSON files that define menu behavior and prompts.
+
+#### Configuration Structure
+
+```json
+{
+  "TITLE": "Main Menu",
+  "CLR": true,
+  "USEPROMPT": true,
+  "PROMPT1": "|15Main Menu: ",
+  "PROMPT2": "",
+  "FALLBACK": "MAIN",
+  "ACS": "",
+  "PASS": "",
+  "HELPMENU": "",
+  "FORCEHELPLEVEL": 0,
+  "MES_CONF": 0,
+  "FILE_CONF": 0,
+  "FORCEHOTKEY": false
+}
+```
+
+#### Configuration Fields
+
+- `TITLE` - Friendly display name shown in the menu editor
+- `CLR` - Clear screen before displaying menu
+- `USEPROMPT` - Whether to show the prompt
+- `PROMPT1` - Primary prompt text (supports pipe codes and placeholders)
+- `PROMPT2` - Secondary prompt (rarely used)
+- `FALLBACK` - Menu to go to if no command matches
+- `ACS` - Access control string for menu access
+- `PASS` - Password required to access menu
+- `HELPMENU` - Tutorial help file name *(currently unused — reserved from Pascal `MenuRec.HelpMenu`)*
+- `FORCEHELPLEVEL` - Force help display for users at or below this level *(currently unused — reserved from Pascal `MenuRec.ForceHelpLevel`)*
+- `MES_CONF` - Auto-switch user's active message conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.Mes_Conf`)*
+- `FILE_CONF` - Auto-switch user's active file conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.File_Conf`)*
+- `FORCEHOTKEY` - Force single-keypress (hotkey) input for this menu regardless of the user's Hot Keys setting. A key that could start a longer command (a multi-key command, a number on a `##` menu, or `/G`) still waits for Enter.
+
+### Command Definition Files (.CFG)
+
+Command files are JSON arrays that define what happens when users press keys.
+
+#### Command Structure
+
+```json
+[
+  {
+    "KEYS": "M",
+    "CMD": "GOTO:MSGMENU",
+    "ACS": "*",
+    "HIDDEN": false
+  },
+  {
+    "KEYS": "F",
+    "CMD": "GOTO:FILEM",
+    "ACS": "s10",
+    "HIDDEN": false
+  },
+  {
+    "KEYS": "//",
+    "CMD": "RUN:SHOWSTATS",
+    "ACS": "*",
+    "HIDDEN": true
+  }
+]
+```
+
+#### Command Fields
+
+- `KEYS` - Key(s) that trigger the command (space-separated for multiple)
+- `CMD` - Action to execute
+- `ACS` - Access control string
+- `HIDDEN` - Whether command is hidden from display
+- `NODE_ACTIVITY` - Optional text shown in Who's Online while the command runs; it reverts to the menu's default when the command finishes. On a `//` or `~~` entry it sets that default for the whole menu (otherwise the default is the menu name).
+
+#### Example: a Main Menu entry
+
+The stock `MAIN.CFG` binds `K` to the User Konfig editor. `RUN:` commands return to the same menu when they finish, so no `GOTO:` back is needed:
+
+```json
+{
+    "KEYS": "K",
+    "CMD": "RUN:USERCONFIG",
+    "ACS": "*",
+    "HIDDEN": false,
+    "NODE_ACTIVITY": "User Settings"
+}
+```
+
+For a full worked example of a submenu (the `MAIN.CFG` entry, the submenu's `.MNU`, and its `.CFG`), see [BBS List](menus/bbs-list.md#menu-configuration).
+
+#### Special Keys
+
+- `//` - Auto-run once per session
+- `~~` - Auto-run every time menu loads
+- Numbers (`1`, `2`, `10`, etc.) - Only match when listed in `KEYS` like any other key; there is no selection by position. Use `##` to accept any number
+- `^M` - Matches Enter pressed on an empty prompt (the menu's default command)
+- `##` - Matches any all-numeric input, passing the number to the command as args
+
+#### Built-in Shortcuts
+
+Two keys work on every standard command menu without appearing in any `.CFG`:
+
+- `/G` - Hang up immediately, no confirmation
+- `G` - Log off with confirmation and `GOODBYE.ANS`
+
+`G` is a fallback, checked only after every command in the menu has failed to
+match, so a menu that binds `G` to something of its own keeps it.
+
+Both are matched by the standard menu input loop. The pre-login matrix
+(`PDMATRIX`) reads keys itself and recognises only its own hotkeys, so neither
+shortcut applies there; give it a `DISCONNECT` option instead, as the shipped
+`PDMATRIX.CFG` does.
+
+#### Command Actions
+
+##### Goto Command
+
+Navigate to another menu:
+
+```json
+"CMD": "GOTO:MAIN"
+```
+
+##### Run Command
+
+Execute a built-in function:
+
+```json
+"CMD": "RUN:SHOWSTATS"
+```
+
+Text after the first space is passed to the command as data, for example `RUN:LASTCALLERS 20`. See the [Menu Commands Reference](reference/menu-commands.md) for every command and what it accepts.
+
+##### Door Command
+
+Launch external program:
+
+```json
+"CMD": "DOOR:TETRIS"
+```
+
+##### Logoff Command
+
+Disconnect the user:
+
+```json
+"CMD": "LOGOFF"
+```

@@ -46,21 +46,7 @@ Run `./config`, press **7** for Door Programs, then **I** to insert a record and
 
 The placeholders from [Door Programs](doors/doors.md#placeholders) work in all three fields, so `[V3]{USERHANDLE}` sends the handle with your system tag in front.
 
-Press **Esc**, then **Q** and **Y** to save. Leaving the record with Host blank, or with the port or disconnect key out of range, warns you that the door will not run — the record is still saved, so you can come back and finish it.
-
-The same record in `configs/doors.json`:
-
-```json
-{
-  "code": "DOORSRV",
-  "name": "Door Server",
-  "type": "rlogin",
-  "host": "doors.example.com",
-  "port": 3513,
-  "client_username": "the-shared-password",
-  "server_username": "{USERHANDLE}"
-}
-```
+Press **Esc**, then **Q** and **Y** to save. Leaving the record with Host blank, or with the port or disconnect key out of range, warns you that the door will not run — the record is still saved, so you can come back and finish it. The record the editor writes is shown under [Manual Configuration](#manual-configuration).
 
 ## 4. Add it to a menu
 
@@ -93,7 +79,7 @@ If it does not work, `data/logs/vision3.log` records the address of every attemp
 
 **A door that needs Ctrl-] itself.** Change **Disconnect Key** to another control key in `^X` notation, or to `none` to pass every key through. With `none` a caller has no way out of a wedged session except dropping carrier, so only do it if the door genuinely needs the key.
 
-**Time limits.** Remote doors obey the caller's time limit like local ones: the connection is closed when it runs out, and a caller with no time left never reaches the server. CoSysOps and above are not timed out of doors.
+**Time limits.** Remote doors obey the caller's time limit like local ones: the connection is closed when it runs out, and a caller with no time left never reaches the server. The session idle timeout applies as well. CoSysOps and above are exempt from both, whatever their account says.
 
 **A server that only speaks Telnet.** Set **Type** to `Telnet` instead. The host, port, timeout and hang-up key work the same; there is no handshake, so the caller arrives at the server's own login or menu, and **Send On Connect** can type a login for them. See [Door Servers — Telnet](doors/door-servers.md#telnet).
 
@@ -101,3 +87,22 @@ If it does not work, `data/logs/vision3.log` records the address of every attemp
 
 - [Door Servers](doors/door-servers.md) for the handshake fields, security notes and full troubleshooting
 - [Door Programs](doors/doors.md) for settings shared by every door type
+
+## Manual Configuration
+
+The record from step 3, as the config editor writes it to `configs/doors.json`:
+
+```json
+{
+  "code": "DOORSRV",
+  "name": "Door Server",
+  "type": "rlogin",
+  "host": "doors.example.com",
+  "port": 3513,
+  "client_username": "the-shared-password",
+  "server_username": "{USERHANDLE}"
+}
+```
+
+A Telnet door is the same record with `"type": "telnet"`, no handshake fields, and optionally `send_on_connect` and `raw_tcp`. Every key, with its default, is in the [Door Servers Technical Reference](doors/door-servers.md#technical-reference), together with JSON for the Synchronet, DoorParty and Telnet examples.
+

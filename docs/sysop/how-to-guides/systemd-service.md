@@ -2,7 +2,9 @@
 
 On Linux, running the BBS under systemd means it starts automatically at
 boot, restarts if it ever crashes, and logs to the journal alongside the
-regular `data/logs/vision3.log` file.
+regular `data/logs/vision3.log` file. A BBS is only a BBS while it is
+answering, and a unit file is the difference between a board that survives a
+reboot while you sleep and one that does not.
 
 This guide assumes you installed a release bundle to `/opt/vision3` as
 described in the [Installation Guide](getting-started/installation.md).
@@ -280,3 +282,58 @@ sudo chown -R bbs:bbs /opt/vision3
 Another service (often the system's own sshd on port 22) is bound to the
 configured port. Pick a different port in Server Setup or stop the
 conflicting service.
+
+### Check the configuration before starting
+
+`vision3 doctor`, run from the install directory as the service user, checks
+the board's configuration and file permissions without starting the server,
+and is a quick way to find out why a unit will not stay up:
+
+```bash
+cd /opt/vision3
+sudo -u bbs ./vision3 doctor
+```
+
+---
+
+## Technical Reference
+
+### `vision3` command line
+
+`vision3` takes no arguments to run the board; it reads `configs/`, `data/`
+and `menus/` relative to the working directory, which is why the unit sets
+`WorkingDirectory=`.
+
+| Flag | Purpose |
+|------|---------|
+| `doctor` (or `--doctor`) | Check the current board configuration and exit |
+| `--json` | With `doctor`: write the report as JSON |
+| `--fix` | With `doctor`: apply safe repairs (missing directories, permissions) |
+| `--dry-run` | With `--fix`: preview the repairs without applying them |
+| `--output-mode auto\|utf8\|cp437` | Force the terminal encoding for every session instead of detecting it (default `auto`) |
+| `--help` | Print usage without starting the server |
+
+Usage errors (for example `--fix` without `doctor`) exit with status 2.
+
+### Unit directives used above
+
+| Directive | Why |
+|-----------|-----|
+| `WorkingDirectory=` | The BBS resolves its directories relative to it |
+| `Restart=on-failure`, `RestartSec=5` | Come back after a crash; a clean stop (SIGTERM) is not restarted |
+| `NoNewPrivileges=`, `ProtectSystem=full`, `ProtectHome=` | Sandboxing; see [Running from Source](#running-from-source-symlinked-binaries) for when `ProtectHome` must be relaxed |
+| `ReadWritePaths=` | The only tree the service may write |
+| `AmbientCapabilities=CAP_NET_BIND_SERVICE` | Only needed for ports below 1024 |
+
+### Signals
+
+| Signal | Effect |
+|--------|--------|
+| `SIGTERM` (`systemctl stop`) | Clean shutdown: callers are disconnected, the mailer, scheduler and node sessions close |
+| `SIGKILL` | Immediate; avoid, as in-progress writes to `data/` may be cut short |
+
+### Logs
+
+The BBS writes `data/logs/vision3.log` and echoes the same lines to stderr,
+which the journal captures (`journalctl -u vision3`). The log level and
+rotation settings are in [Logging](configuration/configuration.md#logging).

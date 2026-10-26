@@ -39,18 +39,8 @@ Once the FTN Setup Wizard has created `data/ftn/binkd.conf` (or you've created i
 
 Restart the BBS afterward. On startup, Vision/3 launches `bin/binkd` as a supervised child process: it restarts binkd automatically if it crashes (exponential backoff, 5s up to 5min), and stops it cleanly (SIGTERM, then a 5s grace period) on BBS shutdown.
 
-**`configs/ftn.json` → `binkd` settings:**
-
-| Field                     | Default        | Description                                                    |
-| ------------------------- | -------------- | ---------------------------------------------------------------|
-| `enabled`                 | `false`        | Turn the integrated mailer on/off                               |
-| `port`                    | `24554`        | BinkP listen port (synced to `binkd.conf`'s `iport`)            |
-| `binary_path`             | `bin/binkd`    | Path to the binkd binary, relative to the BBS root              |
-| `log_level`               | `4`            | binkd log verbosity (synced to `binkd.conf`'s `loglevel`)       |
-| `export_interval_seconds` | `300`          | How often Vision/3 scans+packs outbound mail into binkd's outbound queue |
-| `disable_cram_md5`        | `false`        | Launch binkd with `-m`, forcing plaintext binkp passwords in both directions |
-
-These same fields appear in the Configuration Editor under **Server Setup** as "Binkd Mailer", "Binkd Port", "Binkd Binary", "Binkd Log Lvl", "Export Secs", and "No CRAM-MD5". Saving from the config editor also re-syncs identity fields, link passwords, `iport`, and `loglevel` into `binkd.conf`.
+The `binkd` keys and their editor labels are listed in the
+[Technical Reference](#ftnjson-binkd-block-integrated-mailer).
 
 **When changes take effect:** the running mailer re-reads `ftn.json` on its own, so a config-editor save is no longer silently reverted while the BBS is up. `export_interval_seconds` is applied **live** — the export ticker retunes on its next cycle, no restart needed. Everything else (`port`, `log_level`, `disable_cram_md5`, the outbound path, and network/link changes) takes effect on the **next binkd launch** — that is, when binkd next respawns or when the BBS restarts — because binkd only reads `binkd.conf` at startup and the tosser is deliberately kept in step with the directory binkd is actually watching. So for network add/edit, still restart the BBS (below) to apply the change promptly.
 
@@ -315,23 +305,8 @@ Each line has an echo tag followed by a description.
   --acs-write s10
 ```
 
-**Options:**
-
-| Flag                   | Required | Description                                                      |
-| ---------------------- | -------- | ---------------------------------------------------------------- |
-| `--na <path>`          | Yes      | Path to the `.na` file                                           |
-| `--address <addr>`     | Yes      | Your FTN address (e.g., `21:4/158.1`)                            |
-| `--hub <addr>`         | Yes      | Your hub's FTN address (e.g., `21:4/158`)                        |
-| `--hub-password <pw>`  | No       | Packet password shared with your hub                             |
-| `--hub-name <name>`    | No       | Human-readable hub label (default: `Hub <addr>`)                 |
-| `--network <name>`     | No       | Network name (default: derived from NA filename)                 |
-| `--tag-prefix <pfx>`   | No       | Prefix for area tags and base paths (e.g. `fd_` for Fidonet)     |
-| `--conference-id <id>` | No       | Use an existing conference instead of creating one               |
-| `--acs-read <acs>`     | No       | ACS string for read access                                       |
-| `--acs-write <acs>`    | No       | ACS string for write access (e.g., `s10` for security level 10+) |
-| `--config <dir>`       | No       | Config directory (default: `configs`)                            |
-| `--dry-run`            | No       | Preview changes without writing files                            |
-| `--quiet`              | No       | Suppress detailed output                                         |
+Every flag is listed under [helper ftnsetup](#helper-ftnsetup) in the
+Technical Reference.
 
 **What `helper ftnsetup` does:**
 
@@ -349,6 +324,11 @@ Each line has an echo tag followed by a description.
 ```
 
 With `--tag-prefix fd_`, areas get prefixed tags (e.g. `FD_LINUX`) and base paths (e.g. `msgbases/fd_linux`), useful to avoid conflicts with local areas when importing Fidonet.
+
+Each imported area is created with the ACS you gave, `max_messages: 1000` and
+`max_age: 365` (enforced only while a `v3mail purge` event is enabled; see
+[Message Purge Configuration](messages/message-areas.md#message-purge-configuration)),
+and no Real Name Only or Auto Join flag.
 
 **Area settings in bulk:** imported areas get default settings. To change
 them all at once — for example, requiring real names in every echo of the
@@ -379,16 +359,8 @@ The `helper areafix` command sends an AreaFix netmail to your hub. AreaFix lets 
 ./helper areafix --network fidonet --command "%LIST"
 ```
 
-**Options:**
-
-| Flag               | Required | Description                                                                 |
-| ------------------ | -------- | --------------------------------------------------------------------------- |
-| `--network`        | Yes      | FTN network name (e.g. `fidonet`)                                           |
-| `--command`        | Yes*     | AreaFix command (e.g. `%LIST`, `+LINUX`, `-LINUX`); not required with `--seed` |
-| `--seed`           | No       | Subscribe to all echomail areas in message_areas.json for this network      |
-| `--seed-messages`  | No       | Number of old messages to request when using `--seed` (default: 25)         |
-| `--link <addr>`    | No       | Hub address (default: first link in the network)                            |
-| `--config`         | No       | Config directory (default: `configs`)                                       |
+The flags are listed under [helper areafix](#helper-areafix) in the Technical
+Reference.
 
 **AreaFix commands:**
 
@@ -650,156 +622,6 @@ scheduler (configured in `configs/events.json`) to run these automatically:
 
 See [event-scheduler.md](advanced/event-scheduler.md) for the full recommended FTN workflow configuration.
 
-## Configuration Files Reference
-
-> *The [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 4 — Echomail Networking → Echomail Networks and Echomail Links) manages FTN network and link settings interactively. Mailer-specific configuration (binkd.conf) and directory setup are still handled manually as described below.*
-
-### ftn.json
-
-`configs/ftn.json` is the central configuration for the internal FTN tosser. It is
-read by `v3mail toss`, `v3mail scan`, and `v3mail ftn-pack`.
-
-**Global fields (top-level):**
-
-| Field                 | Description                                                  |
-| --------------------- | ------------------------------------------------------------ |
-| `dupe_db_path`        | Path to the dupe detection database (relative to BBS root)   |
-| `inbound_path`        | Unsecured inbound directory (binkd deposits bundles here)    |
-| `secure_inbound_path` | Secure inbound for password-authenticated mailer sessions    |
-| `outbound_path`       | Staging dir for outbound `.pkt` files (`v3mail scan` output) |
-| `binkd_outbound_path` | Outbound bundles dir (binkd picks up ZIP archives from here); a network can override it with its own, see below |
-| `temp_path`           | Temp dir for bundle extraction during toss                   |
-| `bad_area_tag`        | Area tag for messages with unknown echo tags (e.g. `"BAD"`)  |
-| `dupe_area_tag`       | Area tag for duplicate MSGIDs (e.g. `"DUPE"`)                |
-
-**Per-network fields (`networks.<key>`):**
-
-| Field                     | Description                                         |
-| ------------------------- | --------------------------------------------------- |
-| `internal_tosser_enabled` | Set `true` to enable `v3mail` for this network      |
-| `own_address`             | Your FTN address (e.g., `21:4/158.1`)               |
-| `origin`                  | Origin line text (empty = board name)               |
-| `binkd_outbound_path`     | Optional: this network's own BSO outbound directory (**Binkd Outbound** in the editor). Empty = the global one, but when several networks share the global one (empty, or set to the same path) all but one are given `<global>_<network>` automatically — see [Adding a Second Network](#adding-a-second-network). No dots in the name. |
-| `nodelist`                | Optional: `{ "file_echo": "FSX_NODE", "file_pattern": "FSXNET.Z*" }` (**Nodelist Echo** / **Nodelist Files** in the editor). The file echo the network's nodelist arrives in; `v3mail toss` compiles each one for lookups. See [FTN Nodelists](messages/nodelists.md). |
-| `auto_create`             | Optional: create a message area for echomail in an echo you don't carry, instead of sending it to the bad area (**Auto-Create** in the editor). See [Auto-creating echo areas](#auto-creating-echo-areas). |
-
-Hub polling is controlled by the per-network `echomail_poll_<network>` event
-under **Events**. The wizard creates it with a 15-minute cron schedule; edit
-that schedule to change when the hub is contacted, or disable the event to
-stop scheduled hub polls. See
-[FTN mail polling](advanced/event-scheduler.md#ftn-mail-polling-binkd).
-
-The former **Poll Seconds** setting (`poll_interval_seconds`) was unused by the
-BBS and has been removed. Older `ftn.json` files still load; that field is ignored
-and omitted the next time the configuration is saved. Existing event schedules
-are unaffected. Inbound processing still runs through binkd's receive hook, and
-the integrated mailer's `binkd.export_interval_seconds` still controls outbound
-scan/pack frequency; neither is a hub poll schedule.
-
-**Per-link fields (`networks.<key>.links[]`):**
-
-> **Note:** Only one link (your uplink/hub) is supported per network at this time. Defining multiple links will cause all outbound echomail to be sent to each of them. Multi-link hub/downlink routing is planned for a future release.
-
-| Field              | Description                                              |
-| ------------------ | -------------------------------------------------------- |
-| `address`          | Hub FTN address                                          |
-| `packet_password`  | Packet password shared with hub                          |
-| `areafix_password` | Password for AreaFix netmail (subject line; set by hub)  |
-| `tic_password`     | Password inbound file echo TICs from this link must carry; empty = accepted from the secure inbound only ([File Echoes](files/file-echoes.md)) |
-| `filefix_password` | Password for FileFix netmail (subject line); empty = `tic_password` ([File Echoes](files/file-echoes.md)) |
-| `filefix_name`     | Name of the hub's file echo robot: `FileFix` (default), `AllFix`, `Filemgr` |
-| `name`             | Human-readable hub label                                 |
-| `flavour`          | Delivery mode: `Normal`, `Crash`, `Hold`, `Direct`       |
-| `hostname`         | Hub BinkP hostname or IP address; written to the binkd `node` line (an IPv6 address is bracketed for you) |
-| `port`             | Hub BinkP port (empty = 24554)                           |
-| `ip_family`        | Address family binkd calls the hub over: empty (auto), `ipv4` (binkd `-4`) or `ipv6` (binkd `-6`). **IP Family** under Echomail Links |
-
-**Example:**
-
-```json
-{
-    "dupe_db_path": "data/ftn/dupes.json",
-    "inbound_path": "data/ftn/in",
-    "secure_inbound_path": "data/ftn/secure_in",
-    "outbound_path": "data/ftn/temp_out",
-    "binkd_outbound_path": "data/ftn/out",
-    "temp_path": "data/ftn/temp_in",
-    "bad_area_tag": "BAD",
-    "dupe_area_tag": "DUPE",
-    "networks": {
-        "fsxnet": {
-            "internal_tosser_enabled": true,
-            "own_address": "21:4/158.1",
-            "origin": "",
-            "links": [
-                {
-                    "address": "21:4/158",
-                    "packet_password": "MYSECRET",
-                    "areafix_password": "",
-                    "name": "Hub 21:4/158",
-                    "flavour": "Crash"
-                }
-            ]
-        }
-    }
-}
-```
-
-### message_areas.json (Echomail Entries)
-
-Each echomail area has these FTN-specific fields:
-
-```json
-{
-    "id": 3,
-    "tag": "FSX_GEN",
-    "name": "General Chat + More..",
-    "description": "General Chat + More..",
-    "acs_read": "",
-    "acs_write": "s10",
-    "allow_anonymous": false,
-    "real_name_only": false,
-    "conference_id": 2,
-    "base_path": "msgbases/fsx_gen",
-    "area_type": "echomail",
-    "echo_tag": "FSX_GEN",
-    "origin_addr": "21:4/158.1",
-    "network": "fsxnet"
-}
-```
-
-| Field           | Description                                            |
-| --------------- | ------------------------------------------------------ |
-| `area_type`     | Must be `"echomail"` for FTN echo areas                |
-| `echo_tag`      | The FTN echo tag (matches the AREA: kludge in packets) |
-| `origin_addr`   | Your FTN address (appears in the Origin line)          |
-| `network`       | Network key matching a key in `ftn.json` networks      |
-| `base_path`     | Relative path (under `data/`) to the JAM base files    |
-| `conference_id` | Groups this area under a conference for menu display   |
-
-### conferences.json
-
-Groups message areas for display in the BBS menu:
-
-```json
-[
-    {
-        "id": 1,
-        "tag": "LOCAL",
-        "name": "Local Areas",
-        "description": "Local BBS discussion areas",
-        "acs": ""
-    },
-    {
-        "id": 2,
-        "tag": "FSXNET",
-        "name": "fsxNet",
-        "description": "fsxNet message areas",
-        "acs": ""
-    }
-]
-```
-
 ## Adding a Second Network
 
 To add another FTN network (e.g., AgoraNet alongside fsxNet):
@@ -974,6 +796,15 @@ that already has its MSGID, it is written to the `DUPE` message area
 different echoes is imported into both. Entries older than 30 days are
 auto-purged.
 
+Echomail that arrives with **no MSGID** (TriBBS/TriToss sends it that way) is
+recorded too, keyed by the echo tag and a hash of what its author wrote — from,
+to, subject, date written and body text. Kludges, SEEN-BY and PATH are left
+out of the hash because systems along the way add to them, so a hub forwarding
+the same message twice with different TID or DBID lines is still caught.
+Imported messages are stored exactly as received: the tosser never invents a
+MSGID for one that came without, and never stamps its own PID/TID on it, so a
+message does not acquire a different identity on every system it reaches.
+
 A message is recorded only once it has been stored. One that fails to toss
 (for example an unlinked echo with no `bad_area_tag` set) leaves its packet in
 `temp_path`, and moving that packet back to the inbound directory after fixing
@@ -995,7 +826,8 @@ uplink or a resent bundle from a real problem.
 }
 ```
 
-- Key: `<ECHO TAG> <MSGID>`, e.g. `FSX_GEN 21:4/100 deadbeef`. Entries written
+- Key: `<ECHO TAG> <MSGID>`, e.g. `FSX_GEN 21:4/100 deadbeef`, or
+  `<ECHO TAG> NOMSGID <hash>` for a message that had no MSGID. Entries written
   by older versions have no echo tag; they are no longer matched and age out
   after 30 days.
 - Value: Unix timestamp when the MSGID was first seen
@@ -1115,7 +947,7 @@ Common causes and actions:
 |---|---|---|
 | Area tags from a network you're on | Hub is forwarding areas you haven't subscribed to | Subscribe via `helper areafix` if you want them; otherwise ignore |
 | Area tags you want to add | You forgot to subscribe after running `ftnsetup`, or the echo isn't on your echo list | Run `./helper areafix --network <net> --command "+AREATAG"`, or turn on [Auto-Create](#auto-creating-echo-areas) so future mail creates the area |
-| Junk/unknown area tags | Misconfigured remote, spam | Ignore; the BAD area auto-purges after 365 days |
+| Junk/unknown area tags | Misconfigured remote, spam | Ignore. The wizard's bad area has no purge limit; give it a **Max Age** under Message Areas if you want it to clear itself |
 | Tags that look like your own areas but differ in case | `echo_tag` case mismatch in `message_areas.json` | Fix the `echo_tag` field to match exactly what the hub sends |
 
 ## Useful Commands
@@ -1160,3 +992,239 @@ bin/binkd -c data/ftn/binkd.conf
 # Subscribe to every file echo with a linked file area
 ./helper filefix --network fidonet --seed
 ```
+
+## Technical Reference
+
+> *The [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 4 — Echomail Networking → Echomail Networks and Echomail Links) manages FTN network and link settings interactively. This section is for hand-editing the files and for the command-line tools' flags and exit codes.*
+
+### ftn.json
+
+`configs/ftn.json` is the central configuration for the internal FTN tosser. It is
+read by `v3mail toss`, `v3mail scan`, and `v3mail ftn-pack`.
+
+**Global fields (top-level):**
+
+| Field                 | Description                                                  |
+| --------------------- | ------------------------------------------------------------ |
+| `dupe_db_path`        | Path to the dupe detection database (relative to BBS root)   |
+| `inbound_path`        | Unsecured inbound directory (binkd deposits bundles here)    |
+| `secure_inbound_path` | Secure inbound for password-authenticated mailer sessions    |
+| `outbound_path`       | Staging dir for outbound `.pkt` files (`v3mail scan` output) |
+| `binkd_outbound_path` | Outbound bundles dir (binkd picks up ZIP archives from here); a network can override it with its own, see below |
+| `temp_path`           | Temp dir for bundle extraction during toss                   |
+| `bad_area_tag`        | Area tag for messages with unknown echo tags (e.g. `"BAD"`)  |
+| `dupe_area_tag`       | Area tag for duplicate MSGIDs (e.g. `"DUPE"`)                |
+
+### ftn.json binkd block (integrated mailer)
+
+| Field                     | Default        | Description                                                    |
+| ------------------------- | -------------- | ---------------------------------------------------------------|
+| `enabled`                 | `false`        | Turn the integrated mailer on/off                               |
+| `port`                    | `24554`        | BinkP listen port (synced to `binkd.conf`'s `iport`)            |
+| `binary_path`             | `bin/binkd`    | Path to the binkd binary, relative to the BBS root              |
+| `log_level`               | `4`            | binkd log verbosity (synced to `binkd.conf`'s `loglevel`)       |
+| `export_interval_seconds` | `300`          | How often Vision/3 scans+packs outbound mail into binkd's outbound queue |
+| `disable_cram_md5`        | `false`        | Launch binkd with `-m`, forcing plaintext binkp passwords in both directions |
+
+These same fields appear in the Configuration Editor under **Server Setup** as "Binkd Mailer", "Binkd Port", "Binkd Binary", "Binkd Log Lvl", "Export Secs", and "No CRAM-MD5". Saving from the config editor also re-syncs identity fields, link passwords, `iport`, and `loglevel` into `binkd.conf`.
+
+**Per-network fields (`networks.<key>`):**
+
+| Field                     | Description                                         |
+| ------------------------- | --------------------------------------------------- |
+| `internal_tosser_enabled` | Set `true` to enable `v3mail` for this network      |
+| `own_address`             | Your FTN address (e.g., `21:4/158.1`)               |
+| `origin`                  | Origin line text (empty = board name)               |
+| `binkd_outbound_path`     | Optional: this network's own BSO outbound directory (**Binkd Outbound** in the editor). Empty = the global one, but when several networks share the global one (empty, or set to the same path) all but one are given `<global>_<network>` automatically — see [Adding a Second Network](#adding-a-second-network). No dots in the name. |
+| `nodelist`                | Optional: `{ "file_echo": "FSX_NODE", "file_pattern": "FSXNET.Z*" }` (**Nodelist Echo** / **Nodelist Files** in the editor). The file echo the network's nodelist arrives in; `v3mail toss` compiles each one for lookups. See [FTN Nodelists](messages/nodelists.md). |
+| `auto_create`             | Optional: create a message area for echomail in an echo you don't carry, instead of sending it to the bad area (**Auto-Create** in the editor). See [Auto-creating echo areas](#auto-creating-echo-areas). |
+
+Hub polling is controlled by the per-network `echomail_poll_<network>` event
+under **Events**. The wizard creates it with a 15-minute cron schedule; edit
+that schedule to change when the hub is contacted, or disable the event to
+stop scheduled hub polls. See
+[FTN mail polling](advanced/event-scheduler.md#ftn-mail-polling-binkd).
+
+The former **Poll Seconds** setting (`poll_interval_seconds`) was unused by the
+BBS and has been removed. Older `ftn.json` files still load; that field is ignored
+and omitted the next time the configuration is saved. Existing event schedules
+are unaffected. Inbound processing still runs through binkd's receive hook, and
+the integrated mailer's `binkd.export_interval_seconds` still controls outbound
+scan/pack frequency; neither is a hub poll schedule.
+
+**Per-link fields (`networks.<key>.links[]`):**
+
+> **Note:** Only one link (your uplink/hub) is supported per network at this time. Defining multiple links will cause all outbound echomail to be sent to each of them. Multi-link hub/downlink routing is planned for a future release.
+
+| Field              | Description                                              |
+| ------------------ | -------------------------------------------------------- |
+| `address`          | Hub FTN address                                          |
+| `packet_password`  | Packet password shared with hub                          |
+| `session_password` | Optional BinkP session password, written to the `node` line in `binkd.conf` |
+| `areafix_password` | Password for AreaFix netmail (subject line; set by hub)  |
+| `tic_password`     | Password inbound file echo TICs from this link must carry; empty = accepted from the secure inbound only ([File Echoes](files/file-echoes.md)) |
+| `filefix_password` | Password for FileFix netmail (subject line); empty = `tic_password` ([File Echoes](files/file-echoes.md)) |
+| `filefix_name`     | Name of the hub's file echo robot: `FileFix` (default), `AllFix`, `Filemgr` |
+| `name`             | Human-readable hub label                                 |
+| `flavour`          | Delivery mode: `Normal`, `Crash`, `Hold`, `Direct`       |
+| `hostname`         | Hub BinkP hostname or IP address; written to the binkd `node` line (an IPv6 address is bracketed for you) |
+| `port`             | Hub BinkP port (empty = 24554)                           |
+| `ip_family`        | Address family binkd calls the hub over: empty (auto), `ipv4` (binkd `-4`) or `ipv6` (binkd `-6`). **IP Family** under Echomail Links |
+
+**Example:**
+
+```json
+{
+    "dupe_db_path": "data/ftn/dupes.json",
+    "inbound_path": "data/ftn/in",
+    "secure_inbound_path": "data/ftn/secure_in",
+    "outbound_path": "data/ftn/temp_out",
+    "binkd_outbound_path": "data/ftn/out",
+    "temp_path": "data/ftn/temp_in",
+    "bad_area_tag": "BAD",
+    "dupe_area_tag": "DUPE",
+    "networks": {
+        "fsxnet": {
+            "internal_tosser_enabled": true,
+            "own_address": "21:4/158.1",
+            "origin": "",
+            "links": [
+                {
+                    "address": "21:4/158",
+                    "packet_password": "MYSECRET",
+                    "areafix_password": "",
+                    "name": "Hub 21:4/158",
+                    "flavour": "Crash"
+                }
+            ]
+        }
+    }
+}
+```
+
+### message_areas.json (Echomail Entries)
+
+Each echomail area has these FTN-specific fields:
+
+```json
+{
+    "id": 3,
+    "tag": "FSX_GEN",
+    "name": "General Chat + More..",
+    "description": "General Chat + More..",
+    "acs_read": "",
+    "acs_write": "s10",
+    "allow_anonymous": false,
+    "real_name_only": false,
+    "conference_id": 2,
+    "base_path": "msgbases/fsx_gen",
+    "area_type": "echomail",
+    "echo_tag": "FSX_GEN",
+    "origin_addr": "21:4/158.1",
+    "network": "fsxnet"
+}
+```
+
+| Field           | Description                                            |
+| --------------- | ------------------------------------------------------ |
+| `area_type`     | Must be `"echomail"` for FTN echo areas                |
+| `echo_tag`      | The FTN echo tag (matches the AREA: kludge in packets) |
+| `origin_addr`   | Your FTN address (appears in the Origin line)          |
+| `network`       | Network key matching a key in `ftn.json` networks      |
+| `base_path`     | Relative path (under `data/`) to the JAM base files    |
+| `conference_id` | Groups this area under a conference for menu display   |
+
+### conferences.json
+
+Groups message areas for display in the BBS menu:
+
+```json
+[
+    {
+        "id": 1,
+        "tag": "LOCAL",
+        "name": "Local Areas",
+        "description": "Local BBS discussion areas",
+        "acs": ""
+    },
+    {
+        "id": 2,
+        "tag": "FSXNET",
+        "name": "fsxNet",
+        "description": "fsxNet message areas",
+        "acs": ""
+    }
+]
+```
+
+### What goes out on the wire
+
+- **Headers are CP437.** From, To and Subject are stored as UTF-8 and
+  encoded to CP437 when a packet is written, unless the message's own `CHRS`
+  kludge declares UTF-8, in which case they stay UTF-8. A character CP437
+  cannot hold becomes `?`. Encoding happens before the packet writer cuts the
+  fields to their 36/72-byte limits, so a multibyte character is never split.
+  The same applies to the netmail `helper areafix` and `helper filefix` write.
+- **Imports are stored as received.** No MSGID is invented and no PID/TID is
+  added to mail that arrives from a network (see
+  [JAM Echomail](messages/jam-echomail.md#imported-mail-is-stored-as-received)).
+- **The tearline** is always `--- ViSiON/3 vX.Y.Z/Platform`; the origin line
+  is the network's `origin` text (or the board name) plus the area's
+  `origin_addr`.
+- **Own address changes follow into `binkd.conf`.** Saving a changed
+  **Own Address** (wizard or Echomail Networks) replaces the `address` line
+  that named the old one, and the network's `domain` line follows a zone
+  change while it still carries the old zone. Other `address` lines are
+  treated as your AKAs and left alone.
+
+### helper ftnsetup
+
+```bash
+./helper ftnsetup --na fsxnet.na --address 21:4/158.1 --hub 21:4/158 --hub-password MYSECRET --network fsxnet --acs-write s10
+```
+
+| Flag                   | Required | Description                                                      |
+| ---------------------- | -------- | ---------------------------------------------------------------- |
+| `--na <path>`          | Yes      | Path to the `.na` file                                           |
+| `--address <addr>`     | Yes      | Your FTN address (e.g., `21:4/158.1`)                            |
+| `--hub <addr>`         | Yes      | Your hub's FTN address (e.g., `21:4/158`)                        |
+| `--hub-password <pw>`  | No       | Packet password shared with your hub                             |
+| `--hub-name <name>`    | No       | Human-readable hub label (default: `Hub <addr>`)                 |
+| `--network <name>`     | No       | Network name (default: derived from NA filename)                 |
+| `--tag-prefix <pfx>`   | No       | Prefix for area tags and base paths (e.g. `fd_` for Fidonet)     |
+| `--conference-id <id>` | No       | Use an existing conference instead of creating one               |
+| `--acs-read <acs>`     | No       | ACS string for read access                                       |
+| `--acs-write <acs>`    | No       | ACS string for write access (e.g., `s10` for security level 10+) |
+| `--config <dir>`       | No       | Config directory (default: `configs`)                            |
+| `--dry-run`            | No       | Preview changes without writing files                            |
+| `--quiet`              | No       | Suppress detailed output                                         |
+
+
+Exit status: `0` on success, `1` on any error (bad flags, unreadable `.na`
+file, configuration that could not be read or written).
+
+### helper areafix
+
+```bash
+./helper areafix --network fidonet --command "%LIST"
+```
+
+| Flag               | Required | Description                                                                 |
+| ------------------ | -------- | --------------------------------------------------------------------------- |
+| `--network`        | Yes      | FTN network name (e.g. `fidonet`)                                           |
+| `--command`        | Yes*     | AreaFix command (e.g. `%LIST`, `+LINUX`, `-LINUX`); not required with `--seed` |
+| `--seed`           | No       | Subscribe to all echomail areas in message_areas.json for this network      |
+| `--seed-messages`  | No       | Number of old messages to request when using `--seed` (default: 25)         |
+| `--link <addr>`    | No       | Hub address (default: first link in the network)                            |
+| `--config`         | No       | Config directory (default: `configs`)                                       |
+
+
+`helper filefix` takes the same flags for the hub's FileFix robot
+([File Echoes](files/file-echoes.md#4-subscribe-at-your-hub)). Exit status:
+`0` on success, `1` on any error.
+
+### v3mail
+
+`v3mail toss`, `scan`, `ftn-pack` and `poll` take `--config DIR`,
+`--data DIR`, `--network NAME` and `-q`, and exit `1` on any error. See
+[V3Mail](messages/v3mail.md#technical-reference).

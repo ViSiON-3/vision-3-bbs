@@ -1,67 +1,38 @@
 # Message Areas
 
-ViSiON/3's message system lets users post and read messages across topic areas. Areas are configured in `configs/message_areas.json` and stored as JAM binary message bases.
+ViSiON/3's message system lets users post and read messages across topic
+areas, the heart of any board since the first Fido nodes traded mail at night.
+An area is a message base on disk plus a handful of settings: who may read and
+post, which conference it sits in, whether it is local or fed by a network, and
+how long its messages are kept. Areas are configured in
+`configs/message_areas.json` and stored as JAM (Joaquim-Andrew-Mats) binary
+message bases. This page covers setting areas up, what callers see in the
+reader and editor, and the file formats and command-line tools behind them.
 
 ## Configuring Message Areas
 
 Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 3 — Areas and Conferences → Message Areas) to add, edit, and remove message areas interactively. This is the recommended approach.
 
+Each area has these fields in the editor:
+
+| Field | What it sets |
+| ----- | ------------ |
+| **Position** | Display order in the area lists |
+| **Tag**, **Name**, **Description** | Short unique tag (upper case), display name, longer description |
+| **Area Type** | `local`, `echomail`, `netmail`, `v3net` or `qwknet` (see [Area Types](#area-types)) |
+| **ACS Read**, **ACS Write** | Who may read and who may post ([Access Control](#access-control)) |
+| **Base Path** | Where the JAM base lives under `data/` (blank = `msgbases/<tag>`) |
+| **Conference** | The conference the area is grouped under |
+| **Max Messages**, **Max Age** | Purge limits ([Message Purge Configuration](#message-purge-configuration)). The editor warns when no enabled event runs `v3mail purge`, because nothing else enforces them. |
+| **Auto Join** | Newscan default for new callers ([Auto Join Behavior](#auto-join-behavior)) |
+| **Real Name Only**, **Allow Anonymous** | How posts are signed ([Posting names](#posting-names-real-names-and-anonymous-posts)) |
+| **Network**, **Echo Tag**, **Origin Addr**, **QWK Conference** | Shown for networked types only; see [Networked Areas](#networked-areas) |
+| **Sponsor** | Handle of the area's moderator ([Sponsor Menus](users/sponsor-menus.md)) |
+
 SysOps and area sponsors can also edit area settings live from within the BBS via the [Sponsor Menu](users/sponsor-menus.md) (`%` in the Messages Menu) — no restart required.
 
-### JSON Reference
-
-Message areas are defined in `configs/message_areas.json` as an array:
-
-```json
-[
-  {
-    "id": 1,
-    "tag": "GENERAL",
-    "name": "General Chat",
-    "description": "General discussion area for all users.",
-    "acs_read": "",
-    "acs_write": "",
-    "conference_id": 1,
-    "base_path": "msgbases/general",
-    "area_type": "local",
-    "echo_tag": "",
-    "origin_addr": ""
-  },
-  {
-    "id": 2,
-    "tag": "FSX_GEN",
-    "name": "fsxNet General",
-    "description": "fsxNet general discussion echo.",
-    "acs_read": "",
-    "acs_write": "s10",
-    "conference_id": 2,
-    "base_path": "msgbases/fsx_gen",
-    "area_type": "echomail",
-    "echo_tag": "FSX_GEN",
-    "origin_addr": "21:3/110"
-  }
-]
-```
-
-### Area Properties
-
-- `id` — Unique numeric identifier
-- `tag` — Short tag name (uppercase)
-- `name` — Display name
-- `description` — Area description
-- `acs_read` — ACS required to read messages
-- `acs_write` — ACS required to post messages
-- `conference_id` — Conference this area belongs to (0 or omitted = ungrouped)
-- `base_path` — Relative path to JAM base files (under `data/`). If empty, defaults to `msgbases/<tag>`
-- `area_type` — Message type: `"local"`, `"echomail"`, `"netmail"`, `"v3net"`, or `"qwknet"`
-- `echo_tag` — FTN echo tag for echomail areas (e.g., `"FSX_GEN"`); for `qwknet` areas, the hub's conference name
-- `network` — Network key this area belongs to (`ftn.json` network for echomail/netmail, `qwknet.json` key for qwknet)
-- `qwk_conference` — For `qwknet` areas, the hub's conference number. Required; it is what messages are routed on.
-- `origin_addr` — FTN origin address for echomail (e.g., `"21:3/110"`)
-- `max_messages` — Maximum number of messages to retain (0 = no limit). Oldest messages are removed when the count is exceeded.
-- `max_age` — Maximum message age in days (0 = no limit). Messages older than this are removed.
-- `sponsor` — Handle of the area sponsor/moderator (optional). See [Sponsor Menus](users/sponsor-menus.md).
-- `auto_join` — Flags this area as a newscan default. See [Auto Join Behavior](#auto-join-behavior) below.
+The JSON behind the editor is described in the
+[Technical Reference](#message_areasjson).
 
 ### Area Types
 
@@ -70,6 +41,31 @@ Message areas are defined in `configs/message_areas.json` as an array:
 - **netmail** — Point-to-point private FTN mail between addresses.
 - **v3net** — Networked V3Net message area. Messages sync with a V3Net hub.
 - **qwknet** — Conference on a QWK-based network (e.g. DOVE-Net). `v3mail qwk-poll` exchanges packets with the hub; `qwk_conference` selects the hub conference. See [QWK Networking](messages/qwk-networking.md).
+
+### Posting names: real names and anonymous posts
+
+Posts are signed with the caller's handle unless the area says otherwise:
+
+- **Real Name Only** (`real_name_only`) signs new posts *and replies* with
+  the caller's real name, when they have one. Most FTN networks expect real
+  names in their echoes. A caller with no real name on file is warned and
+  posts under their handle. Private mail outside netmail areas is always
+  signed by handle, whatever the area says; netmail follows the setting, and
+  a netmail signed with a real name stays visible to its sender (see
+  [Private Mail](messages/private-mail.md#real-names-and-private-mail)).
+  Replies made from the reader and posts made by scripts (`v3.message.post`)
+  follow the same rule as new posts.
+- **Allow Anonymous** (`allow_anonymous`) lets callers at or above the
+  board's `anonymousLevel` (`./config` → **2 - Access & Security** →
+  **Anonymous Lvl**; default 5, 0 disables) choose to post
+  anonymously. It is off unless the area turns it on, and a conference can
+  forbid it for all its areas with its own `allow_anonymous: false`. An
+  anonymous post is signed with the `anonymousName` string, gets no
+  auto-signature, and records nothing about who wrote it. Callers cannot add
+  anonymous authors to a [Twit List](messages/twit-list.md).
+
+To change either setting on many areas at once, see
+[Changing Many Areas at Once](#changing-many-areas-at-once).
 
 ### Auto Join Behavior
 
@@ -89,6 +85,38 @@ Existing users are handled at login:
 The FTN wizard and V3Net subscription flows ask whether imported areas
 should be newscan defaults; the V3Net setting is per-network on the leaf
 subscription (`autoJoinAreas`, default yes).
+
+### Creating a New Message Area
+
+1. Run `./config`, open **3 - Areas and Conferences → Message Areas** and
+   choose to add an area.
+2. Give it a **Tag**, **Name** and **Description**, pick the **Area Type**
+   and **Conference**, and set **ACS Read** / **ACS Write** (blank means
+   everyone).
+3. Save. The running BBS notices the changed `message_areas.json`, checks
+   it at once, and applies it as soon as no callers are online, so there is
+   nothing to restart.
+4. JAM base files are created automatically on first access.
+
+To add an area by hand instead, append an object to the array in
+`configs/message_areas.json` (see the [Technical Reference](#message_areasjson)
+for every key):
+
+```json
+{
+  "id": 2,
+  "tag": "TECH",
+  "name": "Technical Support",
+  "description": "Technical questions and help",
+  "acs_read": "",
+  "acs_write": "s10",
+  "conference_id": 1,
+  "base_path": "msgbases/tech",
+  "area_type": "local"
+}
+```
+
+> **Tip:** Once the BBS is running, you can also edit existing area settings live via the [Sponsor Menu](users/sponsor-menus.md) (`%` in the Messages Menu).
 
 ---
 
@@ -124,7 +152,8 @@ Filters combine (an area must match all of them); `set` refuses to run
 without a filter unless `--all` is given. Settings: `--real-name`,
 `--anonymous`, `--auto-join` (`on`/`off`), `--acs-read`, `--acs-write`,
 `--max-messages`, `--max-age`, and `--sponsor`. Only the settings you pass
-are changed. A running BBS reloads `message_areas.json` on its own.
+are changed. A running BBS reloads `message_areas.json` on its own. The full
+flag list is in the [Technical Reference](#helper-areas).
 
 It is safe to run while the BBS is up or the config editor is open. Every
 program that writes `message_areas.json` takes a shared lock
@@ -132,6 +161,10 @@ program that writes `message_areas.json` takes a shared lock
 since it loaded the file, so one tool does not undo another's edits. If the
 same setting on the same area was changed in two places, the most recent save
 wins, and the BBS log or the config editor's status line says so.
+
+The config editor offers the same thing for an FTN network's echo areas when
+you change an **Auto-Create** default: see
+[Auto-creating echo areas](messages/ftn-echomail.md#auto-creating-echo-areas).
 
 ## Posting from the Command Line
 
@@ -150,7 +183,7 @@ fortune | ./helper post --area GENERAL --subj "Today's fortune" --file - --dry-r
 ```
 
 The message is written exactly as the BBS editor writes it, so echomail gets
-its MSGID, tearline and origin and goes out on the next `v3mail ftn-scan`. In
+its MSGID, tearline and origin and goes out on the next `v3mail scan`. In
 a netmail area, the tosser routes the message to the right link, and a copy
 stays in the area. For netmail, `helper post` looks the address up in the
 compiled nodelist and shows whose system it is. `--from` defaults to
@@ -179,105 +212,16 @@ message in a local area must go to an existing user: put their handle in
 `--to`. `--private` is refused in echomail areas, because echomail is sent to
 every link and doesn't stay private.
 
----
-
-## Creating a New Message Area
-
-1. Edit `configs/message_areas.json`
-2. Add a new area object to the array:
-
-```json
-{
-  "id": 2,
-  "tag": "TECH",
-  "name": "Technical Support",
-  "description": "Technical questions and help",
-  "acs_read": "",
-  "acs_write": "s10",
-  "conference_id": 1,
-  "base_path": "msgbases/tech",
-  "area_type": "local"
-}
-```
-
-3. Restart the BBS (areas are loaded at startup)
-4. JAM base files are created automatically on first access
-
-> **Tip:** Once the BBS is running, you can also edit existing area settings live via the [Sponsor Menu](users/sponsor-menus.md) (`%` in the Messages Menu).
+The flags and exit codes are in the [Technical Reference](#helper-post).
 
 ---
 
-## FTN Echomail Configuration
+## Networked Areas
 
-ViSiON/3 includes a built-in FTN tosser for echomail with support for multiple networks.
-Configure it in `configs/ftn.json` (separate from the main `config.json`):
-
-```json
-{
-  "dupe_db_path": "data/ftn/dupes.json",
-  "inbound_path": "data/ftn/in",
-  "outbound_path": "data/ftn/temp_out",
-  "binkd_outbound_path": "data/ftn/out",
-  "temp_path": "data/ftn/temp_in",
-  "networks": {
-    "fsxnet": {
-      "internal_tosser_enabled": true,
-      "own_address": "21:3/110",
-      "origin": "My BBS - bbs.example.com",
-      "links": [
-        {
-          "address": "21:1/100",
-          "packet_password": "secret",
-          "name": "FSXNet Hub",
-          "hostname": "hub.example.com",
-          "port": 24554
-        }
-      ]
-    }
-  }
-}
-```
-
-### Top-Level Settings
-
-- `dupe_db_path` — JSON file for MSGID dupe tracking (shared across all networks)
-- `networks` — Map of network name to network configuration
-
-### Per-Network Settings
-
-Each network key (e.g., `"fsxnet"`) contains:
-
-- `internal_tosser_enabled` — Set to `true` to enable `v3mail` processing for this network
-- `own_address` — Your FTN address on this network (e.g., `"21:3/110"`)
-- `origin` — Optional origin line text for new echomail posts (empty = the board name). The address is appended automatically.
-
-The inbound, outbound, binkd outbound, and temporary paths are top-level
-settings because they are shared by all configured networks.
-
-Configure hub polling under **Events**; the FTN wizard creates an
-`echomail_poll_<network>` event with a cron schedule. See
-[FTN mail polling](advanced/event-scheduler.md#ftn-mail-polling-binkd).
-
-The tearline is not configurable: FTS-0004 reserves it for the software that produced the message, so ViSiON/3 always stamps `--- ViSiON/3 vX.Y.Z/Platform`.
-
-### Link Configuration
-
-Each link defines a connected FTN node:
-
-- `address` — Node's FTN address
-- `packet_password` — Packet password (shared secret)
-- `session_password` — Optional BinkP session password
-- `areafix_password` — Optional AreaFix password
-- `tic_password` — Optional password for inbound file echo TICs ([File Echoes](files/file-echoes.md))
-- `name` — Human-readable label
-- `hostname` — Hub hostname used to generate the binkd node configuration
-- `port` — Hub BinkP port (defaults to 24554)
-
-Echo area routing is configured through `message_areas.json`: set each area's
-`network` field to the network key and use the area editor to manage the
-subscriptions. It is not stored on individual links.
-
-### Message Area Network Field
+An area of type `echomail`, `netmail`, `v3net` or `qwknet` belongs to a
+network, named in its `network` field: an `ftn.json` network key for FTN
+areas, a `qwknet.json` key for QWK network areas. The setup wizards create
+these areas for you; this is what they fill in.
 
 Echomail areas in `message_areas.json` must include a `"network"` field matching
 the network key in `ftn.json`:
@@ -292,29 +236,17 @@ the network key in `ftn.json`:
 ```
 
 This ties each area to a specific FTN network, allowing the same BBS to
-participate in multiple networks (e.g., FSXNet and FidoNet) simultaneously.
+participate in multiple networks (e.g. fsxNet and FidoNet) simultaneously.
+Echo area routing is configured here, by the area's `network` field, not on
+individual links. A `qwknet` area carries `qwk_conference` (the hub's
+conference number) instead of an origin address.
 
-### Echomail Flow
-
-**Inbound (receiving):**
-
-1. External mailer (e.g., binkd) drops .PKT files in `inbound_path`
-2. Tosser polls at configured interval
-3. Each packet is parsed, messages extracted
-4. MSGID checked against dupe database
-5. AREA tag matched to configured message areas
-6. SEEN-BY/PATH updated with own address
-7. Message written to JAM base
-
-**Outbound (sending):**
-
-1. User posts message in echomail area
-2. Message written to JAM with `DateProcessed=0`
-3. Tosser scans for unprocessed messages
-4. Creates .PKT files per destination link
-5. Adds SEEN-BY/PATH with own address
-6. Marks message as processed (`DateProcessed=now`)
-7. External mailer picks up .PKT from `outbound_path`
+Setting up the networks themselves — `ftn.json`, the tosser, binkd, hub
+polling — is covered in [FTN Echomail](messages/ftn-echomail.md),
+[QWK Networking](messages/qwk-networking.md) and
+[V3Net Networking](v3net/message-areas.md). The tearline is not configurable:
+FTS-0004 reserves it for the software that produced the message, so ViSiON/3
+always stamps `--- ViSiON/3 vX.Y.Z/Platform`.
 
 ---
 
@@ -366,6 +298,10 @@ Per-area purge limits are set in `message_areas.json` via `max_messages` and `ma
 
 Both limits can be set simultaneously. Age is applied first; if the remaining count still exceeds `max_messages`, the oldest messages are removed until the limit is met.
 
+Areas imported with `helper ftnsetup` start with `max_messages: 1000` and
+`max_age: 365`; areas the tosser auto-creates take the network's Auto-Create
+defaults ([FTN Echomail](messages/ftn-echomail.md#auto-creating-echo-areas)).
+
 ### Dupe Database
 
 The FTN dupe database (`data/ftn/dupes.json`) tracks MSGIDs to prevent duplicate imports. Some software (TriToss, for example) sends echomail with no MSGID; those messages are tracked by a hash of their sender, recipient, subject, date and text instead. Old entries are automatically purged after 30 days.
@@ -408,9 +344,46 @@ Navigation respects ACS — only areas and conferences the user has access to ar
 The `READMSGS` function provides random-access message reading:
 
 - Starts at the first unread message if any exist
-- Shows message header with sender, date, and subject
+- Shows message header with sender, date, and subject, drawn from the
+  caller's chosen `MSGHDR` template ([Header Placeholders](messages/placeholders.md))
 - Tracks lastread via the JAM `.jlr` file (per-user, per-area)
-- Commands: Enter/Space (Next), P (Previous), R (Reply), Q (Quit)
+- Hides messages from authors on the caller's [Twit List](messages/twit-list.md)
+  and private mail that is not theirs ([Private Mail](messages/private-mail.md))
+
+The command bar at the bottom is a lightbar; arrow to an item or press its
+hot key:
+
+| Key | Command | Notes |
+|-----|---------|-------|
+| `N` (Enter) | Next | Next visible message; at the end, "End of messages" and leave |
+| `S` | Prev | Previous message |
+| `R` | Reply | Reply in the same area |
+| `M` | Mail | Reply by private mail to the author |
+| `T` | Thread | Thread search |
+| `P` | Post | Post a new message |
+| `J` / `#` | Jump | Go to a message number |
+| `L` | List | List message titles |
+| `I` | Twit | Add the author to your Twit List (hidden while Twit Lists are off) |
+| `D` | Del | Delete the message (sysop and co-sysop only; shown in red) |
+| `K` | Kludges | Show the message's control information (sysop and co-sysop only; not on the bar) |
+| `?` | Help | List the commands |
+| `Q` | Quit | Leave the reader |
+
+**Kludges (K).** Sysops chasing a duplicate or misrouted message need its
+MSGID, PATH and SEEN-BY. `K` shows the current message's control information
+full screen: origin and destination addresses; written, received and processed
+dates; attributes in hex plus flag names; reply links; then the kludges in
+wire order — MSGID, REPLY and PID first, then the rest from the JAM header and
+the message text, then SEEN-BY and PATH — with the `^A` lead-ins removed. Long
+lines wrap with an indent; longer than a screen, it pages (Space, Enter or Down
+for the next page, PgUp or Up to go back). `Q` or Esc returns to the message.
+A caller's `K` does nothing.
+
+**ANSI art in messages.** Messages that use cursor positioning, or cursor
+save/restore (`ESC[s`/`ESC[u`, the way Synchronet splits an ad into message
+lines), are rendered on a virtual screen and shown as whole rows, so scrolling
+does not shear them. ANSI messages render at 80 columns at most, since that is
+what message art is drawn for; a wider terminal shows them at 80.
 
 ### Composing Messages
 
@@ -433,6 +406,42 @@ The **To:** prompt depends on the area:
 
 In `PRIVMAIL` and netmail, leaving To (or the netmail address) blank abandons
 the post.
+
+The From name follows the area's **Real Name Only** setting, and an area that
+allows anonymous posts asks whether to post anonymously
+([Posting names](#posting-names-real-names-and-anonymous-posts)). After the
+message is saved, the caller's [auto-signature](messages/autosig.md) is added,
+or offered if they have **Ask each post** on.
+
+### Quoting in the Editor
+
+When a caller replies, the editor's quote picker lets them pull lines from the
+original into their message, prefixed with the author's initials
+(`QuotePrefix` in `strings.json`; `^I` = initials, `^N` = name). Two things
+happen to the quoted text:
+
+- **Paragraphs are reflowed.** A run of source lines from one paragraph is
+  joined and rewrapped under the quote prefix, so a near-full source line does
+  not leave a one-word stub on the next line. Paragraph breaks are inferred
+  from the source: a blank line, a change of quote depth or indent, a list
+  item (`- `, `* `, `1. `), or a line that ended early when the next word
+  would have fitted. Nothing is joined when no source line is at least 40
+  columns wide (a poem, a list, one-liners), and lines over 80 columns are
+  taken as whole paragraphs. Only consecutive source lines join; skipping a
+  line starts a new paragraph, so a quote never closes up over omitted text.
+  Backspace takes the last line back out of its paragraph. A nested quote
+  prefix (`Sh> `) is carried onto every wrapped line (`Bu> Sh> …`).
+- **Banners depend on the area.** In local and V3Net areas the quoted block
+  is wrapped in the `quoteTop` and `quoteBottom` strings (shipped as
+  `[Name Said]` / `[Name Done]`, with pipe colours). In echomail, netmail and
+  QWK network areas the plain `quoteTopNet` and `quoteBottomNet` strings are
+  used instead, shipped as `^N wrote:` and no bottom line. Colours are
+  stripped from the net banners so no ANSI goes out over the network, and a
+  blank value means no line at all (there is no fallback to the default).
+  Keep them free of a leading `---`, which other software reads as a tearline.
+  All four are in the String Editor next to **Quote Prefix** (**Quoting Top
+  Line**, **Quoting Bottom Line**, **Net Quoting Top Line**, **Net Quoting
+  Bottom Line**).
 
 ### New Message Scan
 
@@ -467,7 +476,8 @@ this:
 Date, To, From and range combine: a message must satisfy all of them. The
 reader and its **L**ist show only matching messages, areas with no match are
 skipped, and a scan in which nothing matches says so. A plain newscan with
-nothing new simply reports "Newscan complete".
+nothing new simply reports "Newscan complete". Messages hidden by the
+caller's Twit List are counted once in a summary at the end of the scan.
 
 The `UPDATENEWSCAN` pointer command accepts the same date formats when moving
 pointers to a date.
@@ -490,8 +500,8 @@ Tagged areas are saved to the user's profile in `users.json`.
 
 ### Not Yet Implemented
 
-- Message deletion/moderation UI (sponsor can edit area settings; per-message delete/edit coming later)
-- Anonymous posting
+- Per-message editing (sponsors can edit area settings and sysops can delete
+  a message from the reader; editing a posted message is not available)
 - Full-text message search (newscan can filter by To, From, date and range)
 - File attachments
 
@@ -510,6 +520,8 @@ Tagged areas are saved to the user's profile in `users.json`.
 - Verify JAM base files exist in `data/msgbases/`
 - Check BBS logs for JAM open errors
 - Ensure area ID matches configuration
+- Ask whether the author is on the caller's Twit List; the reader hides those
+  messages, while the area's counts still include them
 
 ### Can't Post Messages
 
@@ -518,17 +530,123 @@ Tagged areas are saved to the user's profile in `users.json`.
 - Ensure area exists in configuration
 - Check write permissions on `data/msgbases/` directory
 
+### Posts Go Out Under the Wrong Name
+
+- Real names: set **Real Name Only** on the area (or on every area of the
+  network with `helper areas set --network <net> --real-name on`); new posts
+  and replies then use the real name. A caller with no real name on file
+  still posts under their handle.
+- Anonymous: the area must have **Allow Anonymous** on, the conference must
+  not forbid it, and the caller must reach `anonymousLevel`.
+
 ### Echomail Not Working
 
-- Verify the network's `"enabled": true` is set in `configs/ftn.json`
+- Verify the network's `"internal_tosser_enabled": true` is set in `configs/ftn.json`
 - Check `own_address` is set correctly
 - Ensure echo area tags match between config and message_areas.json
 - Verify inbound/outbound directories exist and are writable
 - Check logs for tosser errors
+- See [FTN Echomail → Troubleshooting](messages/ftn-echomail.md#troubleshooting)
+
+### A Change to message_areas.json Was Lost
+
+Every writer (the BBS, the config editor, `helper`) locks the file and merges
+its changes with what others saved, so this should not happen. If two places
+changed the same field of the same area, the later save wins and the BBS log
+or the editor's status line names the conflict. See
+[How message_areas.json is written](#how-message_areasjson-is-written).
 
 ---
 
 ## Technical Reference
+
+### message_areas.json
+
+Message areas are defined in `configs/message_areas.json` as an array:
+
+```json
+[
+  {
+    "id": 1,
+    "tag": "GENERAL",
+    "name": "General Chat",
+    "description": "General discussion area for all users.",
+    "acs_read": "",
+    "acs_write": "",
+    "conference_id": 1,
+    "base_path": "msgbases/general",
+    "area_type": "local",
+    "echo_tag": "",
+    "origin_addr": ""
+  },
+  {
+    "id": 2,
+    "tag": "FSX_GEN",
+    "name": "fsxNet General",
+    "description": "fsxNet general discussion echo.",
+    "acs_read": "",
+    "acs_write": "s10",
+    "conference_id": 2,
+    "base_path": "msgbases/fsx_gen",
+    "area_type": "echomail",
+    "echo_tag": "FSX_GEN",
+    "origin_addr": "21:3/110"
+  }
+]
+```
+
+#### Area Properties
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `id` | int | — | Unique numeric identifier |
+| `position` | int | — | Display/sort order (1-based) |
+| `tag` | string | — | Short tag name (uppercase) |
+| `name` | string | — | Display name |
+| `description` | string | — | Area description |
+| `acs_read` | string | `""` | ACS required to read messages (empty = everyone) |
+| `acs_write` | string | `""` | ACS required to post messages (empty = everyone) |
+| `allow_anonymous` | bool | absent (no) | Allow anonymous posts. The area must opt in; a conference's own `allow_anonymous: false` overrides it |
+| `real_name_only` | bool | `false` | Sign posts and replies with the caller's real name |
+| `conference_id` | int | `0` | Conference this area belongs to (0 or omitted = ungrouped) |
+| `base_path` | string | `msgbases/<tag>` | Relative path to JAM base files (under `data/`) |
+| `max_messages` | int | `0` | Maximum number of messages to retain (0 = no limit). Oldest messages are removed when the count is exceeded |
+| `max_age` | int | `0` | Maximum message age in days (0 = no limit). Messages older than this are removed |
+| `auto_join` | bool | `false` | Flags this area as a newscan default. See [Auto Join Behavior](#auto-join-behavior) |
+| `area_type` | string | — | `"local"`, `"echomail"`, `"netmail"`, `"v3net"`, or `"qwknet"` |
+| `echo_tag` | string | `""` | FTN echo tag for echomail areas (e.g., `"FSX_GEN"`); for `qwknet` areas, the hub's conference name |
+| `origin_addr` | string | `""` | FTN origin address for echomail (e.g., `"21:3/110"`) |
+| `network` | string | `""` | Network key this area belongs to (`ftn.json` network for echomail/netmail, `qwknet.json` key for qwknet) |
+| `qwk_conference` | int | `0` | For `qwknet` areas, the hub's conference number. Required; it is what messages are routed on |
+| `sponsor` | string | `""` | Handle of the area sponsor/moderator (optional). See [Sponsor Menus](users/sponsor-menus.md) |
+
+Keys marked `omitempty` in the source (`allow_anonymous`, `real_name_only`,
+`conference_id`, `max_messages`, `max_age`, `auto_join`, `echo_tag`,
+`origin_addr`, `network`, `sponsor`, `qwk_conference`) are left out of the file
+when they hold their default.
+
+### How message_areas.json Is Written
+
+The BBS (sponsor area editor, auto-created areas), the config editor, and
+`helper` (`ftnsetup`, `areas set`) all write `message_areas.json`. So that the
+last one to save does not undo the others:
+
+- Every writer holds a lock on the file (the sidecar
+  `configs/message_areas.json.lock`) across its read-modify-write. The
+  sidecar is created as needed; leave it alone.
+- Writers that keep areas in memory (the BBS and the config editor) merge
+  three ways before saving, per area ID and then per field. A change made on
+  only one side wins, so edits to different areas or fields all survive. If
+  both sides changed a field, the saver's value wins and the conflict is
+  logged (BBS) or shown on the status line (editor). An edit beats a delete.
+  Two areas added under one ID keep the one already on disk and renumber the
+  saver's, including a default `msgbases/area_<id>` base path.
+- The BBS merges only when the file's bytes differ from what it last read or
+  wrote. A file that vanished is recreated from memory rather than read as
+  "every area deleted". The config editor skips the write when nothing would
+  change.
+- The running BBS watches the file. A change is validated at once (a bad file
+  is reported in the log) and applied when no callers are online.
 
 ### Message Storage (JAM Format)
 
@@ -560,6 +678,9 @@ JAM bases are created automatically on first use if they don't exist.
 - **Per-user lastread** — Tracked in `.jlr` file using CRC32 of username
 - **Thread-safe** — All operations use `sync.RWMutex` for concurrent SSH/telnet sessions
 - **FTN-native** — Subfields store MSGID, REPLY, AREA kludges, SEEN-BY, PATH directly
+
+See [JAM Echomail](messages/jam-echomail.md) for what is written into a
+message and the one subfield of ViSiON/3's own.
 
 ### Message Templates
 
@@ -605,19 +726,71 @@ by hand.
 `^YM` counts every message ever addressed to the user's handle in that area,
 read or not, matched on the recipient CRC stored in the JAM `.jdx` index.
 
+### helper areas
+
+`helper areas list [filters]` prints the areas a filter matches;
+`helper areas set [filters] [settings]` changes them.
+
+| Flag | Applies to | Meaning |
+| ---- | ---------- | ------- |
+| `--conference <tag or id>` | both | Areas in this conference |
+| `--network <key>` | both | Areas with this network key |
+| `--type <type>` | both | `local`, `echomail`, `netmail`, `v3net` or `qwknet` |
+| `--tag <glob>` | both | Case-insensitive glob on the area tag (`FD_*`) |
+| `--all` | both | Match every area (`set` needs this or another filter) |
+| `--real-name on\|off` | `set` | `real_name_only` |
+| `--anonymous on\|off` | `set` | `allow_anonymous` |
+| `--auto-join on\|off` | `set` | `auto_join` |
+| `--acs-read <acs>`, `--acs-write <acs>` | `set` | `acs_read`, `acs_write` |
+| `--max-messages <n>`, `--max-age <days>` | `set` | Purge limits (0 = unlimited) |
+| `--sponsor <handle>` | `set` | `sponsor` |
+| `--dry-run` | `set` | Show what would change without writing |
+| `--quiet` | `set` | Only print the summary |
+| `--config <dir>` | both | Config directory (default `configs`) |
+
+Filters are ANDed. `set` reports how many areas changed and how many already
+matched. Exit status: `0` on success, `1` when the configuration could not be
+read or written or a value was invalid, `2` for a bad flag or a stray argument.
+
+### helper post
+
+`helper post --area <tag or id> --file <path|-> [options]`
+
+| Flag | Default | Meaning |
+| ---- | ------- | ------- |
+| `--area` | required | Message area tag or ID |
+| `--file` | required | Text file to post as the body, or `-` for stdin |
+| `--subj` | SAUCE title of an `.ANS` file | Subject |
+| `--to` | `All` | Recipient; in a netmail area `"Name@zone:net/node"`; in `PRIVMAIL` or with `--private`, an existing handle |
+| `--from` | `sysOpName` from `config.json` | Sender |
+| `--private` | off | Mark the message private (refused in echomail areas) |
+| `--reply-to <n>` | 0 | Thread the post under message *n* in the same area (JAM ReplyTo plus the parent's MSGID) |
+| `--format ans\|asc\|txt` | from the extension; `txt` for stdin | Body format |
+| `--charset auto\|cp437\|utf8` | `auto` | Plain-text input charset (`ans` is always stored raw) |
+| `--wrap <n>` | 0 | Re-wrap plain text to *n* columns (`asc`/`txt` only; 0 keeps lines) |
+| `--dry-run` | off | Check and describe the post without writing it |
+| `--config <dir>`, `--data <dir>` | `configs`, `data` | Directories |
+
+Exit status: `0` when the message was posted (or `--dry-run` passed), `1`
+when it was refused or could not be written (unknown area, bad address, text
+that CP437 cannot hold, a NUL byte, `--private` in echomail), `2` for a bad
+flag or a stray argument. Only warnings and errors are logged.
+
 ### API Reference
 
 #### MessageManager Methods
 
-- `NewMessageManager(dataPath, configPath, boardName)` — Initialize with JAM bases
+- `NewMessageManager(dataPath, configPath, boardName, networkOrigins)` — Initialize with JAM bases; `networkOrigins` maps each `ftn.json` network key to its origin text
 - `Close()` — Close all JAM bases (call on shutdown)
 - `ListAreas()` — Returns all message areas sorted by ID
 - `GetAreaByID(id)` — Get area by numeric ID
 - `GetAreaByTag(tag)` — Get area by tag name
-- `SaveAreas()` — Persist all areas back to `message_areas.json` (atomic write)
+- `AddArea(area)` — Add an area under the file lock, merging with concurrent writers; returns the ID actually assigned
+- `SaveAreas()` — Persist all areas back to `message_areas.json` (locked, merged, atomic write)
 - `AddMessage(areaID, from, to, subject, body, replyMsgID)` — Add new message (returns msgNum)
-- `Post(areaID, from, to, subject, body, opts)` — Like AddMessage, with `PostOptions` for private, reply and extra kludges (used by `helper post`)
+- `Post(areaID, from, to, subject, body, opts)` — Like AddMessage, with `PostOptions` for private, reply, extra kludges and the sender handle (used by the editor and `helper post`)
 - `GetMessage(areaID, msgNum)` — Read single message by number
+- `GetMessageKludges(areaID, msgNum)` — The header fields and kludge lines the reader's `K` command shows
 - `GetMessageCountForArea(areaID)` — Total message count
 - `GetNewMessageCount(areaID, username)` — Unread count for user
 - `GetAreaCounts(areaID, username)` — Total, unread and personal counts in one base open (used by the area lists)

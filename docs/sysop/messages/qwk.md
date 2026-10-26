@@ -27,7 +27,7 @@ REP packets follow the same block format: a ZIP containing `BBSID.MSG`.
 
 ## Menu Configuration
 
-The QWK menu is `QWKM.CFG`. It is reached via key `Q` on the main menu.
+The QWK menu is `QWKM.CFG`. It is reached with key `W` from the Message Menu (`MSGMENU.CFG`, `GOTO:QWKM`).
 
 Default key bindings in `QWKM.CFG`:
 
@@ -36,7 +36,7 @@ Default key bindings in `QWKM.CFG`:
 | `C` | `RUN:NEWSCANCONFIG` | Configure which areas are included in downloads |
 | `D` | `RUN:QWKDOWNLOAD` | Build and send a QWK packet |
 | `U` | `RUN:QWKUPLOAD` | Receive and process a REP reply packet |
-| `Q` | `GOTO:MAIN` | Return to main menu |
+| `Q` | `GOTO:MSGMENU` | Return to the Message Menu |
 
 The menu ANSI art is `menus/v3/ansi/QWKM.ANS`.
 
@@ -57,6 +57,13 @@ QWK download uses the same area tagging as NEWSCAN. If a user has not tagged any
 
 Per-area lastread pointers are updated after each download, so subsequent downloads only include messages the user has not yet received.
 
+A packet holds only what the caller could read online: private mail that is
+theirs (see [Conference numbering and private mail](#conference-numbering-and-private-mail)),
+and nothing from authors on their [Twit List](messages/twit-list.md). The Twit
+List is applied before the per-area message cap, and lastread pointers advance
+only after the packet transfer succeeds, so a skipped author's messages are
+not counted as delivered.
+
 ## Configurable Strings
 
 Three display strings in `configs/strings.json` control QWK messaging:
@@ -76,6 +83,10 @@ QWK download and upload use the same file transfer subsystem as file areas. Any 
 ## Per-Area Write Access
 
 When processing a REP upload, ViSiON/3 checks `acs_write` on the destination message area for each reply. Replies to areas where the user lacks write access are silently skipped and logged at `WARN` level.
+
+Each posted reply gets the caller's [auto-signature](messages/autosig.md), as
+a post from the editor would. A caller who has **Ask each post** on cannot be
+asked during an upload, so their replies are posted without a signature.
 
 ## Reply threading
 
@@ -127,7 +138,31 @@ Re-uploading the exact same `.REP` — for example after a dropped mobile
 connection — posts nothing the second time and reports the packet as already
 uploaded. Fingerprints are kept per user and pruned after 90 days.
 
-## Files and data
+## Packet API (experimental)
+
+An optional HTTPS API can expose QWK download/upload to the ViSiON/3 QWK Mobile
+companion client, without a terminal session. It is **off by default and
+experimental** — the companion app is **not yet available for download**, so
+there is nothing to connect to it yet. Leave it disabled until the app ships.
+See [QWK Packet API](messages/qwk-api.md).
+
+## Troubleshooting
+
+**User gets "No new messages to download"**
+All new messages in tagged areas have already been downloaded (lastread pointers are current). Ask the user to check their newscan config or wait for new posts.
+
+**REP upload posts 0 messages**
+- The `.REP` file name must match `BBSID.REP` (case-insensitive). Confirm the user's QWK reader is configured with the correct BBS ID.
+- The user may lack write ACS on the target areas. Check server logs for `qwk import: not authorized to post, skipping`.
+- The REP packet may not contain a `BBSID.MSG` file. Check logs for `failed to read REP` or `failed to process REP`.
+- A reply whose conference number this board does not map is skipped with `qwk import: unknown conference, skipping`; the caller's reader is using a packet from another board or an old conference list.
+
+**Transfer fails with "Transfer program not found"**
+The transfer protocol binary (e.g. `sz`, `rz`) is not installed or not in `PATH`. See [File Transfer](files/file-transfer.md).
+
+## Technical Reference
+
+### Files and data
 
 QWK reads and writes these artifacts. The `configs/` files are sysop-editable;
 the `data/` files are created and maintained automatically — **do not hand-edit
@@ -143,7 +178,7 @@ them.**
 `HEADERS.DAT` is not a stored file — it lives inside each `.QWK`/`.REP` packet
 (see [Packet Format](#packet-format) and [Long headers](#long-headers-headersdat)).
 
-## Operator logging
+### Operator logging
 
 QWK activity is logged through the server's structured logger (`slog`). The lines
 below are the ones worth watching; each carries context fields such as `node`,
@@ -177,28 +212,7 @@ addressed to another BBS is rejected (wrong BBS ID in the first block), and a
 re-uploaded identical packet is reported as already uploaded (duplicate
 detection). See [Upload safety](#upload-safety-destination-check-and-duplicate-detection).
 
-## Packet API (experimental)
-
-An optional HTTPS API can expose QWK download/upload to the ViSiON/3 QWK Mobile
-companion client, without a terminal session. It is **off by default and
-experimental** — the companion app is **not yet available for download**, so
-there is nothing to connect to it yet. Leave it disabled until the app ships.
-See [QWK Packet API](messages/qwk-api.md).
-
-## Troubleshooting
-
-**User gets "No new messages to download"**
-All new messages in tagged areas have already been downloaded (lastread pointers are current). Ask the user to check their newscan config or wait for new posts.
-
-**REP upload posts 0 messages**
-- The `.REP` file name must match `BBSID.REP` (case-insensitive). Confirm the user's QWK reader is configured with the correct BBS ID.
-- The user may lack write ACS on the target areas. Check server logs for `WARN: QWK REP: user lacks write ACS`.
-- The REP packet may not contain a `BBSID.MSG` file. Check logs for `ERROR: QWK: failed to parse REP`.
-
-**Transfer fails with "Transfer program not found"**
-The transfer protocol binary (e.g. `sz`, `rz`) is not installed or not in `PATH`. See [File Transfer](files/file-transfer.md).
-
-## Area index (`V3AREAS.JSON`)
+### Area index (`V3AREAS.JSON`)
 
 QWK's `CONTROL.DAT` carries only a flat list of conference numbers and names,
 so a reader cannot tell which areas belong to fsxNet, which to FidoNet and

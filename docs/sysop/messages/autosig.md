@@ -1,6 +1,10 @@
 # Auto-Signature
 
-The Auto-Signature feature allows users to set a personal signature that is automatically appended to every message they post. This applies to public message areas, private mail, and QWK replies.
+The Auto-Signature feature allows users to set a personal signature that is
+automatically appended to every message they post, the way a `.sig` closed
+out every post in the days of dial-up. This applies to public message areas,
+private mail, and QWK replies. Each caller sets their own; the sysop's part is
+to make sure the editor is reachable from the menus and to know the limits.
 
 ---
 
@@ -35,9 +39,7 @@ It's the board's standard Yes/No lightbar, the same one the Anonymous question u
 
 The question only comes up when a signature is set. If the prompt can't be answered (the caller drops carrier), the signature is added, so the message goes out as it always would have.
 
-QWK replies can't be asked about. With Ask each post on, replies from a REP packet get no signature; most offline readers can add their own.
-
-The prompt is the `msgAutoSigPrompt` string in `strings.json`.
+QWK replies can't be asked about. With Ask each post on, replies from a REP packet (uploaded in the terminal or through the [QWK Packet API](messages/qwk-api.md)) get no signature; most offline readers can add their own.
 
 ---
 
@@ -99,7 +101,22 @@ You can add `RUN:CFG_AUTOSIG` to any menu CFG file to make it accessible from ot
 
 ---
 
-## Limits
+## Troubleshooting
+
+- **A signature is missing from one post.** The caller has Ask each post on
+  and answered No, the post was anonymous, or the reply came in a QWK REP
+  packet with Ask each post on.
+- **A signature was cut short.** It had more than 5 lines; the editor keeps
+  the first 5 and tells the caller.
+- **The Konfig choice line doesn't show `[A]sk each post`.** The board's
+  `konfigAutoSigChoice` string was customised before the option existed; the
+  key still works. See [User Interface](#user-interface).
+
+---
+
+## Technical Reference
+
+### Limits
 
 | Setting | Value |
 |---------|-------|
@@ -114,9 +131,7 @@ Signature truncated to 5 lines.
 
 The `maxAutoSigLines` constant is defined in `internal/menu/user_config_autosig.go`.
 
----
-
-## Data Storage
+### Data Storage
 
 The auto-signature is stored as a string in the user's JSON record:
 
@@ -128,7 +143,24 @@ The auto-signature is stored as a string in the user's JSON record:
 }
 ```
 
-Lines are separated by `\n`. The field is left out when no signature is set. `autoSigAsk` is left out (false) unless the caller has switched on Ask each post.
+| Key | Type | Default | Meaning |
+|-----|------|---------|---------|
+| `autoSignature` | string | absent | The signature, lines separated by `\n`. Left out when no signature is set. |
+| `autoSigAsk` | bool | `false` (absent) | Ask before adding the signature to each post. |
+
+### Strings
+
+All in `strings.json`, editable in the [String Editor](advanced/string-editor.md);
+every one has a built-in fallback.
+
+| Key | Used for |
+|-----|----------|
+| `msgAutoSigPrompt` | The Yes/No question after a message is saved |
+| `konfigAutoSigLabel`, `konfigAutoSigHelp` | The User Konfig item |
+| `konfigAutoSigChoice` | The Edit / Delete / Ask each post choice line |
+| `konfigAutoSigAskOn`, `konfigAutoSigAskOff` | Status line after toggling Ask each post |
+| `konfigAutoSigAskSuffix` | The `, ask` suffix shown after the line count |
+| `yesPromptText`, `noPromptText` | The Yes/No labels of the prompt |
 
 ---
 

@@ -8,6 +8,11 @@ Get ViSiON/3 running on your system.
 
 - **[Installation](getting-started/installation.md)** — download a pre-built release, or build from source
 - **[Docker Deployment](getting-started/docker.md)** — recommended containerized setup via Docker Compose
+- **[Upgrading](getting-started/upgrading.md)** — moving an existing board to a new release without losing your settings or menus
+
+Once the programs are in place, `./vision3 doctor` checks the whole board and
+says what, if anything, needs attention — see
+[Doctor](configuration/configuration.md#doctor).
 
 ---
 

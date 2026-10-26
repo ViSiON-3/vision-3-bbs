@@ -30,19 +30,7 @@ Run `./config`, press **7** for Door Programs, then **I** to insert a record and
 | Working Dir | `scripts` |
 | Script | `greeting.js` |
 
-Leave **Script Args** blank unless the script reads `v3.args`. Press **Esc** to leave the record, then **Q** and answer **Y** to save.
-
-If you prefer to edit JSON, the same record in `configs/doors.json` is:
-
-```json
-{
-    "code": "GREETING",
-    "name": "Greeting",
-    "type": "v3_script",
-    "script": "greeting.js",
-    "working_directory": "scripts"
-}
-```
+Leave **Script Args** blank unless the script reads `v3.args`. Press **Esc** to leave the record, then **Q** and answer **Y** to save. If you prefer to edit JSON, the record is shown under [Manual Configuration](#manual-configuration).
 
 ## 3. Add it to a menu
 
@@ -73,3 +61,20 @@ The shipped voting booth shows how a script takes settings from its record. Its 
 
 - [VPL Scripting](scripting/vpl-scripting.md) for the API and the shipped examples
 - [Door Programs](doors/doors.md) for the remaining record fields such as **Single Instance** and **Min Access Level**
+
+## Manual Configuration
+
+The record from step 2, as the config editor writes it to `configs/doors.json`:
+
+```json
+{
+    "code": "GREETING",
+    "name": "Greeting",
+    "type": "v3_script",
+    "script": "greeting.js",
+    "working_directory": "scripts"
+}
+```
+
+`script` is relative to `working_directory`, and **Script Args** are stored as an `args` array that the script reads as `v3.args`; placeholders are not substituted in them. The seven shipped examples in `configs/doors.json` show the shape, the voting booth with arguments. The remaining keys are in the [Script Door Fields](doors/doors.md#script-door-fields) table.
+

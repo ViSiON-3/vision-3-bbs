@@ -1,6 +1,15 @@
 # Login Sequence
 
-The ViSiON/3 BBS includes a configurable login sequence that controls what happens after a user authenticates but before they reach the main menu. Sysops can customize the order, content, and visibility of each login step without modifying code.
+The ViSiON/3 BBS includes a configurable login sequence that controls what
+happens after a user authenticates but before they reach the main menu: the
+"who called last, what's new, any mail?" parade that made logging on to a BBS
+feel like arriving somewhere. Sysops can customize the order, content, and
+visibility of each login step without modifying code, by editing
+`configs/login.json` or from `./config` → **Login Sequence**.
+
+The caller's time limit is counted from the moment they connect, so the login
+sequence uses up their time; see
+[Time Limits](users/user-management.md#time-limits).
 
 ## Overview
 
@@ -47,17 +56,8 @@ only discoverable by hand, so neither gets a second chance if it is skipped.
 ]
 ```
 
-The file is a JSON array of login items. Items are executed in order from top to bottom. Fields with default values can be omitted.
+The file is a JSON array of login items. Items are executed in order from top to bottom. Fields with default values can be omitted; every field is described in the [Technical Reference](#configuration-fields).
 
-### Configuration Fields
-
-| Field            | Type    | Required | Default | Description                                                     |
-| ---------------- | ------- | -------- | ------- | --------------------------------------------------------------- |
-| **command**      | string  | Yes      | —       | The login command to execute (see Built-in Commands below)      |
-| **data**         | string  | No       | —       | Command-specific data (filename, script path, etc.)             |
-| **clear_screen** | boolean | No       | `false` | Clear the screen before executing this item                     |
-| **pause_after**  | boolean | No       | `false` | Show a "Press [ENTER] to continue" prompt after this item       |
-| **sec_level**    | integer | No       | `0`     | Minimum security level required to see this item (0 = everyone) |
 
 ## Built-in Commands
 
@@ -250,6 +250,34 @@ default sequence. Installs created before it was added still have the old
 
 See [News](menus/news.md) for details on creating and managing news items.
 
+### VOTEMANDATORY
+
+Makes the caller answer any voting-booth topics marked mandatory that they have
+not voted on yet. Silent when there are none.
+
+```json
+{"command": "VOTEMANDATORY"}
+```
+
+### RANDOMRUMOR
+
+Shows one random rumor the caller is allowed to see, centred in brackets. See
+[Rumors](menus/rumors.md#random-rumor-runrandomrumor).
+
+```json
+{"command": "RANDOMRUMOR"}
+```
+
+### INFOFORMREQUIRED
+
+Makes the caller complete any required InfoForms they have not filled in, and
+disconnects them if a required form is not completed. See
+[Required Forms at Login](menus/infoforms.md#required-forms-at-login-infoformrequired).
+
+```json
+{"command": "INFOFORMREQUIRED", "clear_screen": true}
+```
+
 ### WHOISONLINE
 
 Prompts the user with a YES/NO lightbar: "View users on other nodes?" If the user selects YES, the Who's Online display is shown using the `WHOONLN.TOP`, `WHOONLN.MID`, and `WHOONLN.BOT` templates. If the user selects NO, this item is skipped silently.
@@ -356,7 +384,25 @@ Runs a weather display script between last callers and user stats.
 
 Co-sysops (level 100+) see `COSYSOP.ANS`. Sysops (level 200+) see both `COSYSOP.ANS` and `SYSOP.ANS`.
 
-## How It Works
+## Technical Reference
+
+### Configuration Fields
+
+Each item in `configs/login.json` is an object with these fields:
+
+| Field            | Type    | Required | Default | Description                                                     |
+| ---------------- | ------- | -------- | ------- | --------------------------------------------------------------- |
+| **command**      | string  | Yes      | —       | The login command to execute (see Built-in Commands below)      |
+| **data**         | string  | No       | —       | Command-specific data (filename, script path, etc.)             |
+| **clear_screen** | boolean | No       | `false` | Clear the screen before executing this item                     |
+| **pause_after**  | boolean | No       | `false` | Show a "Press [ENTER] to continue" prompt after this item       |
+| **sec_level**    | integer | No       | `0`     | Minimum security level required to see this item (0 = everyone) |
+
+A `DOOR:CODE` command also works as a step. Any unknown `command` is logged
+as `unknown login sequence command` and skipped. The full list of step names
+is in the [Menu Commands Reference](reference/menu-commands.md#login-sequence-steps).
+
+### How It Works
 
 The login sequence is loaded at BBS startup from `configs/login.json` and stored in the menu executor. After authentication, the sequence runs directly for both SSH and telnet users — there is no intermediary menu. Each item in the array is executed in order:
 
@@ -368,7 +414,7 @@ The login sequence is loaded at BBS startup from `configs/login.json` and stored
    - If any handler returns a navigation action (GOTO or LOGOFF), the sequence ends immediately
 2. After all items complete, the user transitions to the MAIN menu
 
-### Error Handling
+#### Error Handling
 
 - **Missing files**: DISPLAYFILE and RUNDOOR log warnings but continue the sequence
 - **Missing PRIVMAIL area**: NMAILSCAN silently skips if the area is not configured
@@ -376,7 +422,7 @@ The login sequence is loaded at BBS startup from `configs/login.json` and stored
 - **Script errors**: RUNDOOR logs the error but continues with the next item
 - **Missing login.json**: The built-in default sequence (SYSOPNOTICES, NMAILSCAN, PRINTNEWS, LASTCALLS, ONELINERS, USERSTATS, NEWUSERVAL) is used
 
-## Menu System Integration
+### Menu System Integration
 
 All login sequence commands are also registered as menu runnables and can be used from any menu via `RUN:` commands:
 
@@ -391,11 +437,14 @@ All login sequence commands are also registered as menu runnables and can be use
 | FASTLOGIN      | `RUN:FASTLOGIN`              |
 | WHOISONLINE    | `RUN:WHOISONLINE` (existing) |
 | PRINTNEWS      | `RUN:PRINTNEWS`              |
+| VOTEMANDATORY  | `RUN:VOTEMANDATORY`          |
 | CHECKNUV       | `RUN:CHECKNUV`               |
 | SYSOPNOTICES   | `RUN:SYSOPNOTICES`           |
 | NEWUSERVAL     | `RUN:NEWUSERVAL`             |
+| RANDOMRUMOR    | `RUN:RANDOMRUMOR`            |
+| INFOFORMREQUIRED | `RUN:INFOFORMREQUIRED`     |
 
-## File Locations
+### File Locations
 
 | File                            | Purpose                                |
 | ------------------------------- | -------------------------------------- |
