@@ -54,3 +54,10 @@ func TestPacketTwitMatcherResolvedOnEveryDownload(t *testing.T) {
 		t.Fatalf("matcher called %d times", calls)
 	}
 }
+
+// TestNewServerRequiresTwitMatcher checks that a server can't be built without the board's Twit List rules.
+func TestNewServerRequiresTwitMatcher(t *testing.T) {
+	if _, err := NewServer(Deps{ConfigDir: t.TempDir(), Service: &twitPacketService{}}); err == nil {
+		t.Fatal("NewServer accepted a nil TwitMatcherFor")
+	}
+}

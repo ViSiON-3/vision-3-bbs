@@ -9,7 +9,6 @@ import (
 	"strconv"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwkservice"
-	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -64,15 +63,8 @@ func (s *Server) handlePacket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "slow down")
 		return
 	}
-	var matcher *user.TwitMatcher
-	if s.deps.TwitMatcherFor != nil {
-		matcher = s.deps.TwitMatcherFor(u)
-	} else {
-		directory, _ := s.deps.Users.(user.TwitDirectory)
-		matcher = user.BuildTwitMatcher(u.TwitList, directory, user.TwitPolicy{}, "")
-	}
 	res, err := s.deps.Service.BuildPacket(qwkservice.ExportOptions{
-		TwitList:   matcher,
+		TwitList:   s.deps.TwitMatcherFor(u),
 		Handle:     u.Handle,
 		TaggedTags: u.TaggedMessageAreaTags,
 	})

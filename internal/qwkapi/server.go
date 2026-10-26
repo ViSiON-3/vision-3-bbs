@@ -34,7 +34,9 @@ type PacketService interface {
 
 // Deps are the collaborators the API server needs.
 type Deps struct {
-	// TwitMatcherFor resolves the current list and board exemptions for each download.
+	// TwitMatcherFor resolves the current list and board exemptions for each
+	// download. Required: the API has no access to the board's Twit List
+	// settings, so it can't build a correct matcher on its own.
 	TwitMatcherFor func(*user.User) *user.TwitMatcher
 	Config         config.QWKAPIConfig
 	ConfigDir      string // where auto TLS certs live
@@ -61,6 +63,9 @@ const maxREPBytes = 16 << 20
 
 // NewServer builds the server and resolves its TLS certificate.
 func NewServer(deps Deps) (*Server, error) {
+	if deps.TwitMatcherFor == nil {
+		return nil, errors.New("qwk api: TwitMatcherFor is required")
+	}
 	cert, fp, err := loadOrCreateCert(deps.Config, deps.ConfigDir)
 	if err != nil {
 		return nil, err
