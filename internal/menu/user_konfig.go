@@ -496,11 +496,16 @@ func autoSigValue(st *konfigState) konfigValue {
 	if sig == "" {
 		return konfigValue{st.c.e.Strings().KonfigNone, toneDim}
 	}
+	str := st.c.e.Strings()
 	n := strings.Count(sig, "\n") + 1
-	if n == 1 {
-		return konfigValue{st.c.e.Strings().KonfigOneLine, toneValue}
+	text := str.KonfigOneLine
+	if n > 1 {
+		text = fmt.Sprintf(str.KonfigLinesFormat, n)
 	}
-	return konfigValue{fmt.Sprintf(st.c.e.Strings().KonfigLinesFormat, n), toneValue}
+	if st.user().AutoSigAsk {
+		text += str.KonfigAutoSigAskSuffix
+	}
+	return konfigValue{text, toneValue}
 }
 
 // fileColumns lists the file-listing columns in display order, with the
@@ -803,11 +808,22 @@ func editAutoSig(st *konfigState) error {
 	str := st.c.e.Strings()
 	label := str.KonfigAutoSigLabel
 	if strings.TrimSpace(st.user().AutoSignature) != "" {
-		choice, err := st.readChoice(str.KonfigAutoSigChoice, "ED")
+		choice, err := st.readChoice(str.KonfigAutoSigChoice, "EDA")
 		if err != nil {
 			return err
 		}
 		switch choice {
+		case 'A':
+			old := st.user().AutoSigAsk
+			if st.commit(label,
+				func(u *user.User) { u.AutoSigAsk = !old },
+				func(u *user.User) { u.AutoSigAsk = old }) {
+				st.status = str.KonfigAutoSigAskOff
+				if !old {
+					st.status = str.KonfigAutoSigAskOn
+				}
+			}
+			return nil
 		case 'D':
 			old := st.user().AutoSignature
 			if st.commit(label,

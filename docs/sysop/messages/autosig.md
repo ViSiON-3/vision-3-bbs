@@ -6,7 +6,7 @@ The Auto-Signature feature allows users to set a personal signature that is auto
 
 ## How It Works
 
-Each user has an `auto_signature` field stored in their user record (`data/users/users.json`). When a message is composed and saved, the signature text is appended after two blank lines:
+Each user has an `autoSignature` field stored in their user record (`data/users/users.json`). When a message is composed and saved, the signature text is appended after two blank lines:
 
 ```text
 Message body text here.
@@ -23,11 +23,29 @@ The signature is appended in all message posting contexts:
 
 The signature is **not** appended to anonymous messages.
 
+### Asking before each post
+
+A caller who doesn't want the signature on every message can switch on **Ask each post** (stored as `autoSigAsk`). After they save a message, reply or private mail, they're asked:
+
+```text
+Add your Auto-Signature?  Yes  No
+```
+
+Yes is highlighted, so Enter signs the message as before. No posts it without the signature. This is the way to leave a signature that carries your handle off a post in a real-name-only area.
+
+The question only comes up when a signature is set. If the prompt can't be answered (the caller drops carrier), the signature is added, so the message goes out as it always would have.
+
+QWK replies can't be asked about. With Ask each post on, replies from a REP packet get no signature; most offline readers can add their own.
+
+The prompt is the `msgAutoSigPrompt` string in `strings.json`.
+
 ---
 
 ## User Interface
 
-Callers usually manage their signature from the User Konfig editor (`K` on the main menu, `RUN:USERCONFIG`), item **F**. With no signature it opens the editor straight away; with one, it offers **Edit** or **Delete**.
+Callers usually manage their signature from the User Konfig editor (`K` on the main menu, `RUN:USERCONFIG`), item **F**. With no signature it opens the editor straight away; with one, it offers **Edit**, **Delete** or **Ask each post**. **A** switches asking on and off; while it's on, the field shows `, ask` after the signature's length (for example `3 lines, ask`).
+
+A `strings.json` from before this option still has the old `konfigAutoSigChoice` text, which doesn't list **A**. The key works anyway. To show it, blank the string in `./strings` to get the built-in text, or add `|08[|15A|08]|07sk each post` to your own.
 
 `RUN:CFG_AUTOSIG` is the standalone version for other menus:
 
@@ -39,13 +57,14 @@ Your current Auto-Signature is...
 
   --- my sig here ---
 
-Change/create  Delete  Quit :
+Change/create  Delete  Ask each post  Quit :
 ```
 
 | Key | Action |
 |-----|--------|
 | `C` | Open the ANSI editor to create or modify the signature |
 | `D` | Delete the current signature |
+| `A` | Switch [asking before each post](#asking-before-each-post) on or off |
 | `Q` | Return to menu |
 
 ### Editor
@@ -93,7 +112,7 @@ If a user's signature exceeds 5 lines, it is silently truncated and a notificati
 Signature truncated to 5 lines.
 ```
 
-The `maxAutoSigLines` constant is defined in `internal/menu/user_config.go`.
+The `maxAutoSigLines` constant is defined in `internal/menu/user_config_autosig.go`.
 
 ---
 
@@ -104,11 +123,12 @@ The auto-signature is stored as a string in the user's JSON record:
 ```json
 {
     "username": "example",
-    "auto_signature": "--- my sig ---\nLine 2\nLine 3"
+    "autoSignature": "--- my sig ---\nLine 2\nLine 3",
+    "autoSigAsk": true
 }
 ```
 
-Lines are separated by `\n`. The field is empty (`""`) when no signature is set.
+Lines are separated by `\n`. The field is left out when no signature is set. `autoSigAsk` is left out (false) unless the caller has switched on Ask each post.
 
 ---
 

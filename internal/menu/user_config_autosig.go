@@ -8,6 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gliderlabs/ssh"
+	"golang.org/x/term"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
@@ -46,9 +49,12 @@ func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 		}
+		if currentUser.AutoSigAsk {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|03You're asked before it is added to each message.|07\r\n\r\n")), outputMode)
+		}
 
 		// Menu prompt
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|09C|07hange/create  |09D|07elete  |09Q|07uit : ")), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|09C|07hange/create  |09D|07elete  |09A|07sk each post  |09Q|07uit : ")), outputMode)
 
 		input, err := readLineFromSessionIH(s, terminal)
 		if err != nil {
@@ -111,6 +117,20 @@ func runCfgAutoSig(c *cmdCtx, args string) (*user.User, string, error) {
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|03Auto-Signature has been deleted.|07\r\n")), outputMode)
 			}
 			uiPause(500 * time.Millisecond)
+
+		case "A":
+			currentUser.AutoSigAsk = !currentUser.AutoSigAsk
+			if err := userManager.UpdateUser(currentUser); err != nil {
+				currentUser.AutoSigAsk = !currentUser.AutoSigAsk
+				slog.Error("failed to save auto-signature ask setting", "node", nodeNumber, "error", err)
+				return currentUser, "", nil
+			}
+			if currentUser.AutoSigAsk {
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|02You'll be asked before your Auto-Signature is added.|07\r\n")), outputMode)
+			} else {
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|02Your Auto-Signature is added to every message.|07\r\n")), outputMode)
+			}
+			uiPause(500 * time.Millisecond)
 		}
 	}
 }
@@ -155,4 +175,28 @@ func runAutoSigEditor(c *cmdCtx, u *user.User) (body string, saved, truncated bo
 		body = strings.Join(lines, "\n")
 	}
 	return body, true, truncated, nil
+}
+
+// appendAutoSig adds the caller's Auto-Signature to a message body they have
+// just saved. With AutoSigAsk set the caller is asked first, Yes by default.
+// A failed or dropped prompt counts as Yes, so the message is still posted the
+// way it always was rather than lost over the question.
+func (e *MenuExecutor) appendAutoSig(s ssh.Session, terminal *term.Terminal, u *user.User, body string,
+	outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) string {
+	if u.AutoSignature == "" {
+		return body
+	}
+	if u.AutoSigAsk {
+		terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+		add, err := e.PromptYesNoString(s, terminal, e.Strings().MsgAutoSigPrompt, outputMode, nodeNumber, termWidth, termHeight, true)
+		terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
+		if err != nil {
+			slog.Warn("auto-signature prompt failed, adding signature", "node", nodeNumber, "handle", u.Handle, "error", err)
+			add = true
+		}
+		if !add {
+			return body
+		}
+	}
+	return body + "\n\n" + u.AutoSignature
 }

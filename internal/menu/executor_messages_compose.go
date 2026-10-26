@@ -261,8 +261,8 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	}
 
 	// 7. Append auto-signature if user has one and message is not anonymous
-	if !isAnonymous && currentUser.AutoSignature != "" {
-		body = body + "\n\n" + currentUser.AutoSignature
+	if !isAnonymous {
+		body = e.appendAutoSig(s, terminal, currentUser, body, outputMode, nodeNumber, termWidth, termHeight)
 	}
 
 	// 8. Save the Message via JAM backend (fromName already computed above)

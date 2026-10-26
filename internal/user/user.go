@@ -126,6 +126,7 @@ type User struct {
 		Description bool `json:"description"`
 	} `json:"file_list_columns,omitempty"`
 	AutoSignature string `json:"autoSignature,omitempty"` // Auto-signature appended to messages (max 5 lines)
+	AutoSigAsk    bool   `json:"autoSigAsk,omitempty"`    // Ask before adding AutoSignature to each message
 	Colors        [7]int `json:"colors,omitempty"`
 
 	// Soft Delete (user marked as deleted but data preserved)

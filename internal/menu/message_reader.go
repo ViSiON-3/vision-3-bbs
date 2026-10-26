@@ -679,7 +679,7 @@ readerLoop:
 
 			case 'R': // Reply
 				replyResult := handleReply(e, s, sessionIH, terminal, userManager, currentUser, nodeNumber,
-					outputMode, currentMsg, currentAreaID, &totalMsgCount, confName, areaName)
+					outputMode, currentMsg, currentAreaID, &totalMsgCount, confName, areaName, termWidth, termHeight)
 				if replyResult == "LOGOFF" {
 					return nil, "LOGOFF", io.EOF
 				}
