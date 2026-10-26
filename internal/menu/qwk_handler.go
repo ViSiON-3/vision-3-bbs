@@ -71,6 +71,9 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 
 	bbsID := resolveQWKID(e.GetServerConfig())
 	svc := qwkservice.New(e.MessageMgr, bbsID, e.GetServerConfig().BoardName, e.GetServerConfig().SysOpName, e.MessageMgr.DataPath())
+	if e.ConferenceMgr != nil {
+		svc.SetConferenceLister(e.ConferenceMgr)
+	}
 
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|15Building QWK packet...|07\r\n")), outputMode)
 

@@ -3,12 +3,14 @@ package qwkservice
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"io"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
 )
@@ -345,5 +347,102 @@ func TestBuildPacket_OmitsOthersPrivateMailInPublicAreas(t *testing.T) {
 	}
 	if want := []int{1, 4, 5}; !slices.Equal(got, want) {
 		t.Errorf("packed message numbers = %v, want %v", got, want)
+	}
+}
+
+type fakeConfs []*conference.Conference
+
+func (f fakeConfs) ListConferences() []*conference.Conference { return f }
+
+func readAreaIndex(t *testing.T, packet []byte) *qwk.AreaIndex {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(packet), int64(len(packet)))
+	if err != nil {
+		t.Fatalf("packet not a zip: %v", err)
+	}
+	for _, fl := range zr.File {
+		if fl.Name != qwk.AreaIndexFile {
+			continue
+		}
+		rc, err := fl.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rc.Close()
+		raw, _ := io.ReadAll(rc)
+		var idx qwk.AreaIndex
+		if err := json.Unmarshal(raw, &idx); err != nil {
+			t.Fatalf("%s: %v", qwk.AreaIndexFile, err)
+		}
+		return &idx
+	}
+	t.Fatalf("packet missing %s", qwk.AreaIndexFile)
+	return nil
+}
+
+func TestBuildPacket_WritesAreaIndexWithBoardConferences(t *testing.T) {
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 1, Tag: "GENERAL", Name: "General Discussion", ConferenceID: 1, AreaType: "local"})
+	store.addArea(&message.MessageArea{ID: 2, Tag: "FSX_GEN", Name: "General", ConferenceID: 2, AreaType: "echomail", Network: "fsxnet"})
+	store.addArea(&message.MessageArea{ID: 3, Tag: "LORD", Name: "LORD: Legend of the Red Dragon", AreaType: "echomail", Network: "fidonet"}) // ungrouped
+	store.seed(1, dm(1, "a", "All", "s", "b"))
+	store.seed(2, dm(1, "a", "All", "s", "b"))
+	store.seed(3, dm(1, "a", "All", "s", "b"))
+
+	svc := newTestService(t, store)
+	svc.SetConferenceLister(fakeConfs{
+		{ID: 2, Position: 1, Tag: "FSXNET", Name: "fsxNet"},
+		{ID: 1, Position: 2, Tag: "LOCAL", Name: "Local Areas"},
+		{ID: 9, Position: 3, Tag: "UNUSED", Name: "No areas exported here"},
+	})
+	res, err := svc.BuildPacket(ExportOptions{Handle: "tester"})
+	if err != nil {
+		t.Fatalf("BuildPacket: %v", err)
+	}
+	idx := readAreaIndex(t, res.Packet)
+
+	if idx.Version != qwk.AreaIndexVersion {
+		t.Errorf("version: %d", idx.Version)
+	}
+	// Only referenced conferences, in board display order.
+	gotConfs := make([]string, 0, len(idx.Conferences))
+	for _, c := range idx.Conferences {
+		gotConfs = append(gotConfs, c.Tag)
+	}
+	if !slices.Equal(gotConfs, []string{"FSXNET", "LOCAL"}) {
+		t.Errorf("conferences: %v", gotConfs)
+	}
+	byTag := map[string]qwk.AreaIndexArea{}
+	for _, a := range idx.Areas {
+		byTag[a.Tag] = a
+	}
+	if a := byTag["FSX_GEN"]; a.QWK != 2 || a.Conference != "FSXNET" || a.Type != "echomail" || a.Network != "fsxnet" {
+		t.Errorf("FSX_GEN: %+v", a)
+	}
+	if a := byTag["GENERAL"]; a.QWK != 1 || a.Conference != "LOCAL" || a.Type != "local" {
+		t.Errorf("GENERAL: %+v", a)
+	}
+	// An area with no (or unknown) conference stays ungrouped; its name is
+	// passed through untouched so no client has to parse it.
+	if a := byTag["LORD"]; a.QWK != 3 || a.Conference != "" || a.Name != "LORD: Legend of the Red Dragon" {
+		t.Errorf("LORD: %+v", a)
+	}
+}
+
+func TestBuildPacket_AreaIndexWithoutConferenceLister(t *testing.T) {
+	store := newFakeStore()
+	store.addArea(&message.MessageArea{ID: 1, Tag: "GENERAL", Name: "General", ConferenceID: 1})
+	store.seed(1, dm(1, "a", "All", "s", "b"))
+	svc := newTestService(t, store)
+	res, err := svc.BuildPacket(ExportOptions{Handle: "tester"})
+	if err != nil {
+		t.Fatalf("BuildPacket: %v", err)
+	}
+	idx := readAreaIndex(t, res.Packet)
+	if len(idx.Conferences) != 0 {
+		t.Errorf("conferences without lister: %+v", idx.Conferences)
+	}
+	if len(idx.Areas) != 1 || idx.Areas[0].Conference != "" || idx.Areas[0].QWK != 1 {
+		t.Errorf("areas: %+v", idx.Areas)
 	}
 }

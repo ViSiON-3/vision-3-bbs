@@ -20,6 +20,7 @@ type PacketWriter struct {
 	sysOpName   string
 	bbsPhone    string
 	conferences []ConferenceInfo
+	areaIndex   *AreaIndex // optional V3AREAS.JSON sidecar
 
 	messages   []PacketMessage
 	personalTo string // username to match for PERSONAL.NDX
@@ -49,6 +50,12 @@ func (pw *PacketWriter) AddConference(number int, name string) {
 	pw.conferences = append(pw.conferences, ConferenceInfo{Number: number, Name: name})
 }
 
+// SetAreaIndex attaches the V3AREAS.JSON sidecar describing how the packet's
+// conferences map onto the board's areas and conferences. nil omits the file.
+func (pw *PacketWriter) SetAreaIndex(idx *AreaIndex) {
+	pw.areaIndex = idx
+}
+
 // AddMessage adds a message to the packet.
 func (pw *PacketWriter) AddMessage(msg PacketMessage) {
 	pw.messages = append(pw.messages, msg)
@@ -71,6 +78,15 @@ func (pw *PacketWriter) WritePacket(w io.Writer) error {
 	}
 	if err := pw.writeDoorID(zw); err != nil {
 		return fmt.Errorf("DOOR.ID: %w", err)
+	}
+	if pw.areaIndex != nil {
+		data, err := encodeAreaIndex(pw.areaIndex)
+		if err != nil {
+			return fmt.Errorf("%s: %w", AreaIndexFile, err)
+		}
+		if err := writeZipEntry(zw, AreaIndexFile, data); err != nil {
+			return fmt.Errorf("%s: %w", AreaIndexFile, err)
+		}
 	}
 
 	ndxData, personalNDX, offsets, err := pw.writeMessagesDAT(zw)

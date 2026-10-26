@@ -3,7 +3,9 @@ package qwk
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -339,5 +341,72 @@ func TestPacketWriter_WritePacketReportsFinalizeError(t *testing.T) {
 	w := &failAfterWriter{limit: buf.Len() - 4}
 	if err := pw.WritePacket(w); !errors.Is(err, errDiskFull) {
 		t.Fatalf("WritePacket = %v, want errDiskFull from zip finalization", err)
+	}
+}
+
+func TestPacketWriter_AreaIndexSidecar(t *testing.T) {
+	pw := NewPacketWriter("VISION3", "ViSiON/3 BBS", "SysOp")
+	pw.AddConference(0, "Email")
+	pw.AddConference(7, "General")
+	pw.AddMessage(PacketMessage{Conference: 7, Number: 1, From: "A", To: "B", Subject: "S", DateTime: time.Now(), Body: "x"})
+	pw.SetAreaIndex(&AreaIndex{
+		Version:     99, // must be normalised to the current schema
+		Conferences: []AreaIndexConference{{Tag: "FSXNET", Name: "fsxNet"}},
+		Areas: []AreaIndexArea{
+			{QWK: 0, Tag: "PRIVMAIL", Name: "Email", Type: "local"},
+			{QWK: 7, Tag: "FSX_GEN", Name: "General", Conference: "FSXNET", Type: "echomail", Network: "fsxnet"},
+		},
+	})
+
+	var buf bytes.Buffer
+	if err := pw.WritePacket(&buf); err != nil {
+		t.Fatalf("WritePacket: %v", err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("zip: %v", err)
+	}
+	var raw []byte
+	for _, f := range zr.File {
+		if f.Name == AreaIndexFile {
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, _ = io.ReadAll(rc)
+			rc.Close()
+		}
+	}
+	if raw == nil {
+		t.Fatalf("packet missing %s", AreaIndexFile)
+	}
+	var got AreaIndex
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("sidecar not JSON: %v\n%s", err, raw)
+	}
+	if got.Version != AreaIndexVersion {
+		t.Errorf("version: want %d, got %d", AreaIndexVersion, got.Version)
+	}
+	if len(got.Conferences) != 1 || got.Conferences[0].Tag != "FSXNET" {
+		t.Errorf("conferences: %+v", got.Conferences)
+	}
+	if len(got.Areas) != 2 || got.Areas[1].Conference != "FSXNET" || got.Areas[1].Network != "fsxnet" || got.Areas[0].Conference != "" {
+		t.Errorf("areas: %+v", got.Areas)
+	}
+}
+
+func TestPacketWriter_NoAreaIndexWhenUnset(t *testing.T) {
+	pw := NewPacketWriter("VISION3", "ViSiON/3 BBS", "SysOp")
+	pw.AddConference(1, "General")
+	pw.AddMessage(PacketMessage{Conference: 1, Number: 1, From: "A", To: "B", Subject: "S", DateTime: time.Now(), Body: "x"})
+	var buf bytes.Buffer
+	if err := pw.WritePacket(&buf); err != nil {
+		t.Fatalf("WritePacket: %v", err)
+	}
+	zr, _ := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	for _, f := range zr.File {
+		if f.Name == AreaIndexFile {
+			t.Fatalf("%s written without SetAreaIndex", AreaIndexFile)
+		}
 	}
 }
