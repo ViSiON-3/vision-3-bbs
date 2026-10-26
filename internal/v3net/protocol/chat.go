@@ -16,11 +16,15 @@ type ChatLeaveRequest struct {
 
 // ChatPostRequest posts a message to a room. Handle names the sending user,
 // who must have joined the room. Older leaves omit it, and the hub then
-// credits the node's first handle in the room.
+// credits the node's first handle in the room. Origin is an opaque ID for
+// the posting session, which the hub copies into the broadcast so the leaf
+// can tell that session's own echo apart from other sessions of the same
+// handle on the node.
 type ChatPostRequest struct {
 	Room   string `json:"room"`
 	Text   string `json:"text"`
 	Handle string `json:"handle,omitempty"`
+	Origin string `json:"origin,omitempty"`
 }
 
 // ChatPrivateRequest sends a direct message to a specific user+node. Handle
@@ -60,6 +64,9 @@ type ChatMsgPayload struct {
 	ToNode     string `json:"to_node,omitempty"`   // private messages only
 	Text       string `json:"text"`
 	Timestamp  string `json:"timestamp"` // RFC3339
+	// Origin is the posting session's ChatPostRequest.Origin. Set on room
+	// message broadcasts only; empty from older leaves and hubs.
+	Origin string `json:"origin,omitempty"`
 }
 
 // ChatJoinResponse is returned by POST /chat/rooms/join.

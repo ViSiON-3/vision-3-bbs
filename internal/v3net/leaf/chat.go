@@ -19,27 +19,55 @@ var (
 	_ chat.Pinger      = (*ChatSession)(nil)
 )
 
-// chatSessionRegistry tracks active ChatSessions on this leaf.
+// chatSessionRegistry tracks active ChatSessions on this leaf. A user can
+// have chat open on more than one node, so several sessions may share a
+// handle (#662).
 type chatSessionRegistry struct {
 	mu       sync.RWMutex
-	sessions map[string]*ChatSession // handle → session
+	sessions map[*ChatSession]struct{}
 	nodeID   string
+
+	// membership serializes Join and Leave requests to the hub. The hub keeps
+	// one membership per handle on a node, so a session leaving a room must
+	// not tell the hub while another session with its handle is still there,
+	// and that check must not race a join by the other session.
+	membership sync.Mutex
 }
 
+// newChatSessionRegistry returns an empty registry for the leaf whose node ID
+// is nodeID. The ID is used to match events sent from or addressed to this
+// leaf.
 func newChatSessionRegistry(nodeID string) *chatSessionRegistry {
-	return &chatSessionRegistry{sessions: make(map[string]*ChatSession), nodeID: nodeID}
+	return &chatSessionRegistry{sessions: make(map[*ChatSession]struct{}), nodeID: nodeID}
 }
 
+// register adds s to the sessions that dispatch delivers events to. Sessions
+// sharing a handle are each registered on their own.
 func (r *chatSessionRegistry) register(s *ChatSession) {
 	r.mu.Lock()
-	r.sessions[s.handle] = s
+	r.sessions[s] = struct{}{}
 	r.mu.Unlock()
 }
 
-func (r *chatSessionRegistry) deregister(handle string) {
+// deregister removes s, leaving any other session with its handle in place.
+// Removing a session that is not registered does nothing.
+func (r *chatSessionRegistry) deregister(s *ChatSession) {
 	r.mu.Lock()
-	delete(r.sessions, handle)
+	delete(r.sessions, s)
 	r.mu.Unlock()
+}
+
+// sharesRoom reports whether a session other than s, with s's handle, is in
+// room. The caller holds r.membership.
+func (r *chatSessionRegistry) sharesRoom(s *ChatSession, room string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for o := range r.sessions {
+		if o != s && o.handle == s.handle && o.room() == room {
+			return true
+		}
+	}
+	return false
 }
 
 // dispatch applies leaf-side filtering and delivers events to matching sessions.
@@ -54,17 +82,16 @@ func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
 			Room       string `json:"room"`
 			FromHandle string `json:"from_handle"`
 			FromNode   string `json:"from_node"`
+			Origin     string `json:"origin"`
 		}
 		if err := json.Unmarshal(ev.Data, &msg); err != nil {
 			return // drop malformed event rather than routing it to the wrong room
 		}
-		for _, s := range r.sessions {
+		for s := range r.sessions {
 			// The hub sends a post back to its author too. The chat screen
 			// showed the line when Post returned, so this copy would show it
-			// twice (#658). Matched on node as well as handle, as the join
-			// echo is: users on other BBSes can share a handle.
-			if ev.Type == protocol.EventChatMessage && msg.FromNode != "" &&
-				msg.FromNode == r.nodeID && msg.FromHandle == s.handle {
+			// twice (#658).
+			if ev.Type == protocol.EventChatMessage && s.ownPost(msg.Origin, msg.FromNode, msg.FromHandle) {
 				continue
 			}
 			// room() takes and releases s.mu before deliver takes it again.
@@ -81,7 +108,7 @@ func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
 		if msg.ToNode != "" && msg.ToNode != r.nodeID {
 			return
 		}
-		for _, s := range r.sessions {
+		for s := range r.sessions {
 			if s.handle == msg.ToHandle {
 				s.deliver(ev)
 			}
@@ -94,7 +121,7 @@ func (r *chatSessionRegistry) notifyReconnect() {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	ev := chat.ChatEvent{Type: chat.TypeSystem, Reconnect: true, Text: "reconnected"}
-	for _, s := range r.sessions {
+	for s := range r.sessions {
 		s.mu.Lock()
 		if !s.closed {
 			select {
@@ -113,6 +140,7 @@ func (r *chatSessionRegistry) notifyReconnect() {
 type ChatSession struct {
 	leaf         *Leaf
 	handle       string
+	origin       string // sent with posts to recognise their echo; see ownPost
 	currentRoom  string
 	currentUsers []string
 	events       chan chat.ChatEvent
@@ -127,6 +155,18 @@ func (s *ChatSession) room() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.currentRoom
+}
+
+// ownPost reports whether a room message is this session's own post coming
+// back from the hub. A hub that relays the post's origin identifies the
+// session exactly, so another session of the same user on this BBS still
+// gets the line. Otherwise the message is matched on node and handle, as the
+// join echo is: users on other BBSes can share a handle.
+func (s *ChatSession) ownPost(origin, fromNode, fromHandle string) bool {
+	if origin != "" {
+		return origin == s.origin
+	}
+	return fromNode != "" && fromNode == s.leaf.chatSessions.nodeID && fromHandle == s.handle
 }
 
 // deliver converts a protocol.Event into a chat.ChatEvent and sends it
@@ -217,6 +257,8 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 	if err != nil {
 		return nil, nil, err
 	}
+	s.leaf.chatSessions.membership.Lock()
+	defer s.leaf.chatSessions.membership.Unlock()
 	body, _ := json.Marshal(protocol.ChatJoinRequest{Room: room, Handle: s.handle})
 	resp, err := s.leaf.signedPostWithResponse(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/join", s.leaf.cfg.Network), body)
@@ -258,10 +300,14 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 }
 
 // undoJoin asks the hub to take this handle out of room after a Join that
-// the hub accepted but whose reply could not be used. Unlike Leave it leaves
-// currentRoom alone, since the session never switched to room. Best effort:
-// a failure is only logged.
+// the hub accepted but whose reply could not be used, unless another session
+// with this handle is in the room. Unlike Leave it leaves currentRoom alone,
+// since the session never switched to room. Best effort: a failure is only
+// logged. The caller holds the registry's membership lock.
 func (s *ChatSession) undoJoin(room string) {
+	if s.leaf.chatSessions.sharesRoom(s, room) {
+		return
+	}
 	body, _ := json.Marshal(protocol.ChatLeaveRequest{Room: room, Handle: s.handle})
 	if err := s.leaf.signedPostCtx(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/leave", s.leaf.cfg.Network), body); err != nil {
@@ -271,10 +317,17 @@ func (s *ChatSession) undoJoin(room string) {
 
 // Leave implements chat.ChatService, telling the hub this handle has left
 // room. The current room is cleared only if the hub accepted the request.
+// While another session with this handle is still in room, the hub is not
+// told, since its membership is shared by both, and the room is just cleared.
 func (s *ChatSession) Leave(room string) error {
-	body, _ := json.Marshal(protocol.ChatLeaveRequest{Room: room, Handle: s.handle})
-	err := s.leaf.signedPostCtx(context.Background(),
-		fmt.Sprintf("/v3net/v1/%s/chat/rooms/leave", s.leaf.cfg.Network), body)
+	s.leaf.chatSessions.membership.Lock()
+	defer s.leaf.chatSessions.membership.Unlock()
+	var err error
+	if !s.leaf.chatSessions.sharesRoom(s, room) {
+		body, _ := json.Marshal(protocol.ChatLeaveRequest{Room: room, Handle: s.handle})
+		err = s.leaf.signedPostCtx(context.Background(),
+			fmt.Sprintf("/v3net/v1/%s/chat/rooms/leave", s.leaf.cfg.Network), body)
+	}
 	if err == nil {
 		s.mu.Lock()
 		s.currentRoom = ""
@@ -287,7 +340,7 @@ func (s *ChatSession) Leave(room string) error {
 // The hub's copy sent back to this session is dropped by dispatch, so the
 // caller shows its own line once, when Post returns.
 func (s *ChatSession) Post(room, text string) error {
-	body, _ := json.Marshal(protocol.ChatPostRequest{Room: room, Text: text, Handle: s.handle})
+	body, _ := json.Marshal(protocol.ChatPostRequest{Room: room, Text: text, Handle: s.handle, Origin: s.origin})
 	return s.leaf.signedPostCtx(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/post", s.leaf.cfg.Network), body)
 }
@@ -372,7 +425,7 @@ func (s *ChatSession) Close() error {
 	s.closed = true
 	close(s.events)
 	s.mu.Unlock()
-	s.leaf.chatSessions.deregister(s.handle)
+	s.leaf.chatSessions.deregister(s)
 	return nil
 }
 

@@ -2,6 +2,7 @@ package leaf
 
 import (
 	"context"
+	"crypto/rand"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -93,6 +94,7 @@ func (l *Leaf) NewChatSession(handle string) *ChatSession {
 	s := &ChatSession{
 		leaf:   l,
 		handle: handle,
+		origin: rand.Text(),
 		events: make(chan chat.ChatEvent, 64),
 	}
 	l.chatSessions.register(s)
