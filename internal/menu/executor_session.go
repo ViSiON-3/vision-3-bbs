@@ -37,6 +37,22 @@ func applySessionIdleTimeout(s ssh.Session, d time.Duration) {
 	getSessionIH(s).SetSessionIdleTimeout(d)
 }
 
+// overrideSessionIdleTimeout applies d to s, as applySessionIdleTimeout does,
+// for a screen with its own idle limit such as chat. The returned function
+// puts back the timeout it replaced.
+func overrideSessionIdleTimeout(s ssh.Session, d time.Duration) (restore func()) {
+	prev, had := sessionIdleTimeouts.Load(s)
+	applySessionIdleTimeout(s, d)
+	return func() {
+		if had {
+			applySessionIdleTimeout(s, prev.(time.Duration))
+			return
+		}
+		sessionIdleTimeouts.Delete(s)
+		getSessionIH(s).SetSessionIdleTimeout(0)
+	}
+}
+
 // clearSessionIdleTimeout drops the remembered timeout when a session ends.
 func clearSessionIdleTimeout(s ssh.Session) {
 	sessionIdleTimeouts.Delete(s)

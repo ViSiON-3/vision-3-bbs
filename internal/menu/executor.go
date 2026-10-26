@@ -346,6 +346,20 @@ func (e *MenuExecutor) idleTimeout(u *user.User) time.Duration {
 	return time.Duration(cfg.SessionIdleTimeoutMinutes) * sessionIdleUnit
 }
 
+// chatIdleTimeout is idleTimeout for a caller in teleconference chat:
+// chatIdleTimeoutMinutes when that is set, the session timeout otherwise.
+// Sysops and co-sysops are exempt here too.
+func (e *MenuExecutor) chatIdleTimeout(u *user.User) time.Duration {
+	cfg := e.GetServerConfig()
+	if cfg.ChatIdleTimeoutMinutes <= 0 {
+		return e.idleTimeout(u)
+	}
+	if u != nil && u.AccessLevel >= cfg.CoSysOpLevel {
+		return 0
+	}
+	return time.Duration(cfg.ChatIdleTimeoutMinutes) * sessionIdleUnit
+}
+
 // idleTimeoutForLevel is idleTimeout for an authenticated user with the
 // given access level.
 func (e *MenuExecutor) idleTimeoutForLevel(accessLevel int) time.Duration {

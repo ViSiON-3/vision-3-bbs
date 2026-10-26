@@ -102,6 +102,11 @@ type ServerConfig struct {
 	// that calls ReadKeyWithTimeout uses this value.
 	SessionIdleTimeoutMinutes int `json:"sessionIdleTimeoutMinutes"`
 
+	// Idle timeout in teleconference chat (0 = SessionIdleTimeoutMinutes
+	// applies there too). In chat, room traffic counts as activity as well as
+	// the caller's own keys.
+	ChatIdleTimeoutMinutes int `json:"chatIdleTimeoutMinutes"`
+
 	// Transfer timeout in minutes for file transfers (ZModem, etc.). 0 = no timeout.
 	// When exceeded, the transfer process is killed and the session returns to the BBS.
 	TransferTimeoutMinutes int `json:"transferTimeoutMinutes"`
