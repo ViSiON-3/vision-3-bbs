@@ -235,6 +235,23 @@ saving from there writes it to your file. If you changed the string in any way,
 even by one space, your version is kept. The release notes say when this
 happens, so you can update your own text by hand.
 
+## Check the board with doctor
+
+Before restarting, run the new binary's health check from the BBS directory:
+
+```bash
+./vision3 doctor
+```
+
+It reads every config file, the menu set and the mail setup without starting
+the board, and reports anything the new version is unhappy about: a config
+file that no longer parses, a key the new version does not know (a typo an
+older version silently ignored), a template file the upgrade expects you to
+have, a world-readable file holding passwords. Each finding comes with a
+`FIX →` line. It exits `0` when clean, `1` with warnings and `2` with
+failures, so a deploy script can stop on `2`. See
+[Doctor](configuration/configuration.md#doctor).
+
 ## Restarting
 
 Restart the BBS. A running `vision3` keeps executing the binary it started with,
@@ -247,6 +264,67 @@ callers are online. Some settings still need a restart, among them listening
 ports and hosts, SSH host keys, turning SSH or telnet on or off, and the
 logging directory and rolling settings. The full list is under
 [Applying Configuration Changes](configuration/configuration.md#applying-configuration-changes).
+
+## What changed since v0.9.4
+
+These notes cover the development build after v0.9.4, and will become the
+worked example for the next release. Deploy the new programs, run
+`./vision3 doctor`, restart, then look at the items below.
+
+- **`configs/badusers.txt` is new.** Signup now refuses the handles listed in
+  it. A new install gets the template; an upgraded board does not, and
+  `vision3 doctor` warns *bad user names ... is missing* until it does. Copy
+  `templates/configs/badusers.txt` into `configs/` (it blocks `root`,
+  `admin*`, `*sysop*`, `guest` and `anonymous`) and add your own. The path is
+  `badUsersPath` in `config.json`, a sixth item, **Bad User Names**, under
+  Access & Security in `./config`. See
+  [Bad user names](configuration/configuration.md#bad-user-names).
+- **Auto-blocked IPs now block.** An IP locked out for failed logins has
+  always been appended to your blocklist file with an `# auto-blocked`
+  comment, but the comment made the loader skip the line, so the block was
+  lost at the next reload. Those lines are now honoured. Review
+  `configs/blocklist.txt` after upgrading: every IP auto-blocked in the past
+  is blocked for real from now on. Remove the line to unblock one.
+- **Encoding is detected at connect.** A caller whose encoding is unset is
+  now on Auto and detected every call, and the first-login UTF-8/CP437
+  prompt is gone. A caller who saved `CP437` on a UTF-8 terminal before this
+  release keeps that saved value and sees garbled art; tell them to open
+  **K** and press **Encoding** until it reads `Auto (...)`. See
+  [Encoding](advanced/encoding.md).
+- **Scheduled events wait instead of being dropped.** An event that fired
+  while every slot was busy used to be skipped with a warning. It now waits
+  for a slot, for up to its timeout, so a nightly purge that shared a minute
+  with the hub polls finally runs. Skips are counted in the event history
+  and the WFC Events tab. The template's nightly sequence changed too: the
+  fix runs at `3 2 * * *` and purge and pack follow it with `run_after`. If
+  you enabled the older examples, compare yours with
+  [Nightly Message Base Maintenance](advanced/event-scheduler.md#nightly-message-base-maintenance).
+- **Purge limits that nobody enforces are reported.** With `max_messages` or
+  `max_age` set on any area and no enabled event running `v3mail purge`, the
+  BBS logs a warning at startup and `./config` notes it when you set a limit.
+  If your areas have grown past their limits, this is why.
+- **Saves no longer overwrite each other.** `./config`, `helper` and the BBS
+  lock the shared config files and merge their changes, so a conference added
+  by `helper ftnsetup` survives a save in the editor you left open. You will
+  see `<file>.lock` sidecars appear in `configs/` while something is writing;
+  they are harmless and git-ignored. The editor now logs to
+  `data/logs/config.log`.
+- **Quote banners.** A `strings.json` without `quoteTopNet` gets `^N wrote:`
+  above quoted network text; a key that is present but blank means no
+  banner. The shipped local quote banners are now `[^N Said]` and
+  `[^N Done]`; an existing board keeps its own. `konfigAutoSigChoice` is
+  upgraded automatically unless you edited it, and `twitListEnabled` absent
+  from `config.json` means Twit Lists are on.
+- **Strings can run scripts or show files.** A `strings.json` value starting
+  with `!CODE` runs a `v3_script` door in place of its text, and one starting
+  with `%file.ext` shows an ANSI file first. Nothing changes until you use
+  it. The user **K** form's text now comes from new `konfig*` strings, all
+  with fallbacks. See [String Editor](advanced/string-editor.md).
+- **IPv6 listener hosts.** `sshHost`, `telnetHost` and the V3Net hub host
+  accept `::`, `::1` or a bracketed form. Nothing to do unless you want it.
+- **FTN own address follows into `binkd.conf`.** Correcting a network's own
+  address in the wizard or under Echomail Networks now rewrites the matching
+  `address` line in `binkd.conf`, which used to need a hand edit.
 
 ## Coming from a version older than v0.9.3
 

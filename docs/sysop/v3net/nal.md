@@ -2,7 +2,7 @@
 
 ## What is the NAL?
 
-The Network Area List (NAL) is the official list of message areas that a V3Net network carries. Think of it as the master directory of all the message boards available on a network like felonynet.
+The Network Area List (NAL) is the official list of message areas that a V3Net network carries. Think of it as the master directory of all the message boards available on a network like felonynet. It is what the area browser shows you, what the login question about new areas is drawn from, and what decides who may carry each area.
 
 The NAL is **signed** by the network coordinator — the sysop who runs the hub. This signature ensures that nobody can tamper with the area list. Every node on the network can verify the signature before trusting the NAL.
 
@@ -18,7 +18,11 @@ Each message area has:
 
 ## Subscribing to Areas
 
-From the V3Net sysop menu, select **Area Subscriptions**. You'll see a list of all areas the network offers:
+Subscriptions can be managed from two places. In the config editor, open the
+subscription's **Areas** (or **Browse Areas**) field under
+**6 — ViSiON/3 Networking (V3Net) → 2. Subscriptions**. In the BBS, the V3Net
+sysop menu (`V3NETM`, **3** on the Admin menu) has **Area Subscriptions**
+(`V3NETAREAS`). You'll see a list of all areas the network offers:
 
 ```
 [ V3Net: felonynet — Area Subscriptions ]
@@ -35,6 +39,10 @@ From the V3Net sysop menu, select **Area Subscriptions**. You'll see a list of a
 - Press **Space** on an area to subscribe or unsubscribe
 - Press **E** to set which local message base this area maps to
 - Status shows `ACTIVE` (you're in), `PENDING` (waiting for approval), or blank (not subscribed)
+
+A change made here applies at once; no restart is needed. When the hub adds
+an area later, each SysOp is asked about it at login — see
+[New Areas on Your Networks](v3net/message-areas.md#new-areas-on-your-networks).
 
 ## Access Modes
 
@@ -70,7 +78,7 @@ Any sysop on the network can propose a new area. From Area Subscriptions, press 
 
 Area tags must follow the format `{prefix}.{name}` — for example, `fel.coding` or `fel.music`. The prefix is usually the network's short name.
 
-After submitting, your proposal goes to the network coordinator for review. You'll be notified via the V3Net event stream when it's approved or rejected.
+After submitting, your proposal goes to the network coordinator for review. You'll be notified via the V3Net event stream when it's approved or rejected. On a hub with **Auto Approve Areas** set to `Y`, the area is added to the NAL as soon as the proposal arrives, with no review.
 
 ## For Area Managers
 
@@ -114,6 +122,13 @@ When sysops propose new areas, you review them from the Pending Proposals screen
 - **Approve** — Asks for the access mode (`O`pen, `A`pproval or `C`losed; press Enter to keep the one proposed), then adds the area to the NAL and publishes it to all nodes. The proposing node becomes the area's manager.
 - **Reject** — Declines the proposal, optionally with a reason, and notifies the proposing node
 
+Proposals only wait here while the hub's **Auto Approve Areas** is `N`
+(`hub.autoApproveAreas: false`). With it on, every proposal is added as it
+arrives. A hub configured before the setting existed follows **Auto
+Approve** instead, so an open hub that approves subscribers on its own also
+approves areas until you set **Auto Approve Areas** to `N` explicitly. See
+[V3Net Configuration](v3net/configuration.md#system-setup--server-setup).
+
 ### Changing an Area's Manager
 
 **Manage area managers** lists every area in the NAL with its current manager. Type `C` and the row number, for example `C 3`, then enter the node ID of the new manager. The new manager must be an active subscriber of the network: the hub records the node's public key from its own registry, so you never paste a key. A sysop can find their node ID on the V3Net status screen.
@@ -132,8 +147,51 @@ The node ID stays the same, so the NAL, subscribers and area managers carry over
 
 To share the work of running a network without handing it over, reassign individual areas to other sysops with **Manage area managers**.
 
-## For Developers
+## Troubleshooting
 
-The NAL is a signed JSON document. The coordinator's ed25519 key signs a canonical representation of the NAL (all fields sorted alphabetically, signature field cleared). Any modification after signing causes verification to fail.
+| Symptom | What is happening |
+|---------|-------------------|
+| An area the hub just added is not in the browser | The leaf re-fetches the NAL when the hub announces a change (`nal_updated`) and whenever its event stream reconnects. If the BBS was down, it catches up on the next start. |
+| Subscribed, but status stays `PENDING` | The area is in approval mode and its manager has not acted yet. Approval-mode areas are the manager's call, not the coordinator's. |
+| Cannot subscribe at all | The area is closed and your node is not on its allow list, or your node is on the deny list. Ask the area manager. |
+| Coordinator Panel never appears | Your node is not the coordinator of any subscribed network. Only the hub's own node is; see Handing Over a Network. |
 
-The optional git repository at `v3net-registry` serves as an archival mirror only. All area management happens natively through the V3Net protocol and Vision/3's sysop menus.
+## Related Documentation
+
+- [V3Net Message Areas](v3net/message-areas.md) — local areas, message flow, the login question
+- [V3Net Configuration](v3net/configuration.md) — hub approval settings
+- [V3Net Key Recovery](v3net/recovery.md) — moving a hub's identity
+
+---
+
+## Technical Reference
+
+### NAL Document
+
+The NAL is a signed JSON document. The coordinator's Ed25519 key signs a canonical representation of the NAL (all fields sorted alphabetically, signature field cleared). Any modification after signing causes verification to fail.
+
+| Field | Meaning |
+|-------|---------|
+| `v3net_nal` | Format version |
+| `network` | Network name |
+| `coordinator_node_id`, `coordinator_pubkey_b64` | The hub's node ID and public key, which signed the document |
+| `updated` | Date of the last change, `YYYY-MM-DD` UTC |
+| `signature_b64` | Ed25519 signature over the canonical payload |
+| `areas[]` | The areas, each with `tag`, `name`, `description`, `language`, `moderated`, `manager_node_id`, `manager_pubkey_b64`, `access`, `policy` and `added` (the date the hub added it, used by the login question) |
+| `areas[].access` | `mode` (`open`, `approval` or `closed`), `allow_list` and `deny_list` of node IDs |
+| `areas[].policy` | `max_body_bytes`, `allow_ansi`, `require_tearline` |
+
+Area tags must match `^[a-z0-9]{1,8}\.[a-z0-9-]{1,24}$`.
+
+### Where It Lives
+
+- On the hub: in the hub data directory (`hub.dataDir`, normally
+  `data/v3net_hub/`), seeded from `hub.initialAreas` on first start.
+- On a leaf: fetched with `GET /v3net/v1/{network}/nal`, kept in memory, and
+  re-fetched after a `nal_updated` event (with a short random delay so a
+  hub's leaves do not all ask at once) and on every SSE reconnect.
+- `data/v3net_seen_areas.json` records which areas each network has offered
+  this BBS, and `data/v3net_declined_areas.json` the areas each SysOp
+  declined at login.
+
+The optional git repository at `v3net-registry` serves as an archival mirror only. All area management happens natively through the V3Net protocol and ViSiON/3's sysop menus; the `v3net-bootstrap` tool can publish a NAL by hand when needed (see [V3Net Bootstrap Tool](v3net/bootstrap.md)).

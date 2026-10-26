@@ -1,6 +1,6 @@
 # Rumors
 
-The Rumors feature is a community graffiti wall where users can post short anonymous or signed messages — a modernization of ViSiON/2's `RUMORS.PAS`. Users can browse, add, delete, and search rumors, with access-level filtering and newscan support.
+The Rumors feature is a community graffiti wall where users can post short anonymous or signed messages — a modernization of ViSiON/2's `RUMORS.PAS`. Users can browse, add, delete, and search rumors, with access-level filtering and newscan support. A random rumor can also be dropped into any menu screen with the `@RR@` code, which is how the shipped main, message and door menus keep a little life on screen between calls. It needs no setup: the Rumors submenu is on the main menu's `R` key and the data file appears with the first rumor.
 
 ---
 
@@ -101,16 +101,15 @@ Displays a single random rumor centered on screen, enclosed in brackets:
 This respects access level filtering. It can be used:
 
 - From the Rumors Menu via the `*` key
-- In the **login sequence** by adding to `configs/config.json`:
+- In the **login sequence** by adding a step to `configs/login.json` (see
+  [Login Sequence](users/login-sequence.md#randomrumor)):
 
 ```json
-{
-    "loginSequence": [
-        {"command": "LASTCALLS"},
-        {"command": "RANDOMRUMOR"},
-        {"command": "ONELINERS"}
-    ]
-}
+[
+    {"command": "LASTCALLS"},
+    {"command": "RANDOMRUMOR"},
+    {"command": "ONELINERS"}
+]
 ```
 
 ---
@@ -137,9 +136,15 @@ Place `@RR|C:70@` in any `.ANS` file to display a centered random rumor in a 70-
 
 ---
 
-## Menu Configuration
+## Technical Reference
 
-### RUMORM Menu
+The commands are in `menus/v3/cfg/RUMORM.CFG` (edit with `menuedit`), the
+prompts in `configs/strings.json` (edit with `./strings`), and the rumors in
+`data/rumors.json`.
+
+### Menu Configuration
+
+#### RUMORM Menu
 
 The Rumors feature has its own submenu (`RUMORM`), accessed from the Main Menu via the `R` key.
 
@@ -181,13 +186,12 @@ The Rumors feature has its own submenu (`RUMORM`), accessed from the Main Menu v
 | `*` | `RUN:RANDOMRUMOR` | `*` | Display a random rumor |
 | `Q` | `GOTO:MAIN` | `*` | Return to main menu |
 
-### ANSI Screen
+#### ANSI Screen
 
 The ANSI art screen `menus/v3/ansi/RUMORM.ANS` is displayed when entering the Rumors Menu. Edit this file with any ANSI art editor to customize the appearance.
 
----
 
-## Customizable Strings
+### Customizable Strings
 
 The following prompts can be customized in `configs/strings.json`:
 
@@ -199,9 +203,8 @@ The following prompts can be customized in `configs/strings.json`:
 | `rumorAdded` | `Rumor has been added!` | Confirmation message |
 | `anonymousName` | `Anonymous` | Display name for anonymous posts |
 
----
 
-## Data File
+### Data File
 
 Rumors are stored in `data/rumors.json`:
 
@@ -223,9 +226,8 @@ Rumors are stored in `data/rumors.json`:
 
 The file is created automatically when the first rumor is added. The `next_id` field auto-increments to ensure unique IDs. Concurrent access is mutex-protected.
 
----
 
-## ViSiON/2 Compatibility
+### ViSiON/2 Compatibility
 
 | V2 Feature | V3 Equivalent |
 |------------|---------------|

@@ -5,12 +5,25 @@
 > may change without notice. Use it only if you are testing or contributing
 > to V3Net development. Do not rely on it for a live BBS.
 
+V3Net is ViSiON/3's own inter-BBS network. A **leaf** node (your BBS) talks
+to a **hub** over plain HTTP: it posts local messages to the hub, and the hub
+pushes everyone else's posts back with Server-Sent Events (SSE) and a periodic
+poll. Every message and every area list is signed with your node's Ed25519
+key, so there are no packet passwords, no mailer, no nodelist and no open
+inbound ports on a leaf. You would want it to carry networked message areas
+and real-time chat between boards with a few screens in the config editor
+and a restart.
+
 V3Net settings live in two places in the TUI config editor (`./config`):
 
-- **System Setup → Server Setup** — master enable/disable, file paths, and hub server settings
-- **ViSiON/3 Networking (V3Net)** — subscriptions (leaf setup), hosted networks (hub setup), and node identity
+- **1 — System Setup → 2. Server Setup** — master enable/disable, file paths,
+  and hub server settings
+- **6 — ViSiON/3 Networking (V3Net)** — subscriptions (leaf setup), hosted
+  networks (hub setup), and node identity
 
 > For a step-by-step guide to joining FelonyNet, see [Joining FelonyNet](v3net/felonynet.md).
+> To edit `configs/v3net.json` by hand, see the
+> [Manual Configuration Reference](v3net/manual-config.md).
 
 ---
 
@@ -49,7 +62,7 @@ Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return
 | **Dedup DB Path** | Path to the SQLite message deduplication database. Recommended: `data/v3net_dedup.sqlite` |
 | **Registry URL** | Central registry URL for network discovery. Default: `https://raw.githubusercontent.com/ViSiON-3/v3net-registry/main/registry.json` |
 | **V3Net Hub** | Enable the built-in hub server (`Y`/`N`). Only needed if you are hosting your own network. |
-| **Hub Host** | Listen address for the hub. Blank means all interfaces. Set to `127.0.0.1` if behind a reverse proxy. |
+| **Hub Host** | Listen address for the hub. Blank means all interfaces. Set to `127.0.0.1` if behind a reverse proxy. IPv6 literals work with or without brackets: `::1` and `[::1]` both listen on IPv6 loopback. |
 | **Hub Port** | Listen port for the hub HTTP server. Default: `8765`. |
 | **Hub Data Dir** | Directory for hub database and NAL files. Recommended: `data/v3net_hub` |
 | **Auto Approve** | When `Y`, new leaf subscriptions are approved automatically. |
@@ -134,6 +147,17 @@ Enter - Edit  |  S - Save  |  ESC - Back
 
 Press **Enter** on **Areas** to browse and subscribe. Press **S** to save.
 
+### Editing an Existing Subscription
+
+Press **Enter** on a subscription in the list to open its edit form. It has
+the same Hub URL, Network, Poll Interval and Origin fields as the wizard, plus:
+
+| Field | Description |
+|-------|-------------|
+| **Boards** | Comma-separated local area tags this subscription feeds (e.g. `fel.general,fel.tech`). Normally filled by the area browser. |
+| **Newscan Default** | `Y` (the default) flags areas created for this network as newscan defaults for your users, so new callers see them in their newscan without opting in. |
+| **Browse Areas** | Press **Enter** to open the area browser for this hub. |
+
 ---
 
 ## Hosting a Hub
@@ -145,6 +169,10 @@ To host your own V3Net network:
 
 ```
 ./config  →  6 — ViSiON/3 Networking (V3Net)  →  3. Networks
+```
+
+```
+Enter - Edit  |  I - New (Wizard)  |  N - Nodes  |  D - Delete  |  S - Save  |  ESC - Return
 ```
 
 Press **I** to open the **Hub Setup Wizard**:
@@ -173,7 +201,7 @@ bootstrap steps needed.
 
 If you need transport encryption, place a reverse proxy (nginx, Caddy) with a
 valid CA-signed certificate in front of the hub. The hub itself always serves
-plain HTTP.
+plain HTTP. See [V3Net Hub TLS](v3net/hub-tls.md).
 
 ---
 
@@ -224,45 +252,43 @@ See [V3Net Key Recovery](v3net/recovery.md) for full details.
 
 ---
 
-## File Locations
+## Day-to-Day Operation
 
-| File | Purpose |
-|------|---------|
-| `configs/v3net.json` | Generated and managed by the config editor |
-| `data/v3net.key` | Ed25519 keypair (auto-generated on first V3Net start) |
-| `data/v3net_dedup.sqlite` | Message deduplication database |
-| `data/v3net_hub/` | Hub data directory (SQLite DB, NAL files) |
+### Which Changes Need a Restart
+
+- **Subscriptions and area bindings apply live.** Subscribing or unsubscribing
+  from the in-BBS area browser, answering the login question about a new area,
+  or saving a subscription change in the config editor is picked up by the
+  running BBS. Unchanged networks quietly re-subscribe to their hub, and a
+  caller mid-chat on that network has the chat stream reconnected.
+- **The master switch, hub settings, keystore and dedup paths need a restart.**
+  Changing **V3Net**, anything in the hub block, or either file path takes
+  effect the next time the BBS starts.
+
+### Checking Your Setup
+
+`vision3 doctor` reads `configs/v3net.json` and reports on it without
+starting the board: a file that will not parse, a hub network with a blank or
+duplicated name, a leaf whose hub URL is not `http://` or `https://`, a bad
+poll interval, a subscription with no boards, a board tag that matches no
+local message area, and a `v3net` area whose `network` is not listed. It
+also checks that the identity key file is a valid Ed25519 keypair and that
+nobody but the BBS user can read it. It never generates a replacement key.
+See [vision3 doctor](configuration/configuration.md#doctor).
+
+### Troubleshooting
+
+| Symptom | What to check |
+|---------|---------------|
+| `v3net.json not found, V3Net disabled` in the log | The BBS could not find `configs/v3net.json`. Save once from the config editor to create it. |
+| `V3Net leaf: message area not found, skipping` | A board tag in a subscription matches no local area. Open the subscription, press **Enter** on **Browse Areas**, and re-subscribe; `vision3 doctor` lists these too. |
+| `leaf: poll failed` | The hub is unreachable or rejecting you. Check the hub URL and that the hub is up. |
+| `leaf: subscribe failed, retrying` with `subscription status "pending"` | The hub has not approved your node. The leaf retries on its own; ask the hub sysop to approve you in Node Management. |
+| `V3Net is disabled in server configuration` on a V3Net screen in the BBS | The master switch is `N`. Set **V3Net** to `Y` in Server Setup and restart. |
+| `v3net hub: unsigned subscribe` on your hub | An older leaf registered without a signature. Harmless in compatibility mode; see [upgrading nodes independently](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently). |
+| `NEW IDENTITY CREATED` on startup | No key file was found, so a new identity was made. If you meant to keep the old one, stop, restore the key or recover from the seed phrase, and restart. |
 
 ---
-
-## Security Considerations
-
-**Ed25519 signatures are the security foundation.** Every message and NAL is signed with the originating node's Ed25519 private key and verified by recipients. This prevents impersonation and message forgery regardless of the transport layer. The hub serves plain HTTP — transport encryption is not required for authentication or integrity.
-
-**Transport encryption is optional.** The hub serves plain HTTP by default. If you need to encrypt traffic in transit (e.g. for private mail), place a reverse proxy with a valid CA-signed certificate in front of the hub. Note that data is still stored in plaintext at rest:
-
-- `data/v3net_dedup.sqlite` — deduplication database containing message content
-- `data/v3net_hub/` — hub database (hub nodes only), fully readable by the hub operator and anyone with server access
-- Local message base files — JAM or squish files written when messages are imported into boards
-
-Restrict file permissions appropriately and consider the security of any backup systems that touch these paths.
-
-**Protect your private key.** `data/v3net.key` and any exported seed phrase files should be readable only by the BBS process user (`chmod 600`). A compromised key allows an attacker to impersonate your node on all V3Net networks. Do not include the key file in unencrypted backups or commit it to version control.
-
-**Hub operators can read all traffic.** V3Net is a federated public message network. The hub stores and forwards messages in plaintext. The hub sysop — and anyone with access to the hub server — can read all messages routed through it. This is the same trust model as FidoNet echomail and similar networks.
-
-**Auto-approve.** Setting `Auto Approve: Y` allows any node to subscribe to your hub without review. Appropriate for open public networks; set it to `N` and manually approve nodes for curated or private networks. `Auto Approve Areas: Y` does the same for area proposals: any subscribed node can add an area to the network. Leave it `N` to review proposals in the Coordinator Panel, even on an open network.
-
-**Public areas are public.** Messages posted to networked areas are replicated to every subscribed node and stored indefinitely on each. Do not post sensitive information in public message areas.
-
----
-
-## Related Documentation
-
-- [Joining FelonyNet](v3net/felonynet.md) — step-by-step walkthrough for the FelonyNet network
-- [Network Area List (NAL)](v3net/nal.md) — area subscriptions, access modes, and proposals
-- [V3Net Key Recovery](v3net/recovery.md) — backing up and restoring your node identity
-- [Manual Configuration Reference](v3net/manual-config.md) — JSON field reference for `v3net.json`
 
 ## Upgrading hub and leaf nodes independently
 
@@ -288,6 +314,12 @@ registration, allowing manually approved legacy nodes to finish subscribing.
 Changing an existing node's requested areas requires an updated, signing client.
 Malformed or invalid signatures are rejected in both modes.
 
+A signed re-subscribe is how a node updates its own BBS name and host on the
+hub. Node keys are public, so without the signature anyone could have filed a
+subscribe request in another node's name; a signed request proves the caller
+holds the key. A node ID that is already registered under a different key is
+refused with HTTP 409.
+
 The hub logs **every unsigned subscription**, even without area tags, as
 `v3net hub: unsigned subscribe`, with `claimed_node`, `network`, `known_node`,
 and `rejected`. These logs identify claimed legacy identities, not verified
@@ -304,3 +336,68 @@ policy still determines whether the registration becomes active.
 If an older leaf is still needed, set the option back to **N** and restart.
 Its registration remains intact. Neither enabling nor disabling enforcement
 requires database cleanup, key rotation, or a binary rollback.
+
+---
+
+## Security Considerations
+
+**Ed25519 signatures are the security foundation.** Every message and NAL is signed with the originating node's Ed25519 private key and verified by recipients. This prevents impersonation and message forgery regardless of the transport layer. The hub serves plain HTTP — transport encryption is not required for authentication or integrity.
+
+**Transport encryption is optional.** The hub serves plain HTTP by default. If you need to encrypt traffic in transit (e.g. for private mail), place a reverse proxy with a valid CA-signed certificate in front of the hub. Note that data is still stored in plaintext at rest:
+
+- `data/v3net_dedup.sqlite` — deduplication database containing message content
+- `data/v3net_hub/` — hub database (hub nodes only), fully readable by the hub operator and anyone with server access
+- Local message base files — JAM or squish files written when messages are imported into boards
+
+Restrict file permissions appropriately and consider the security of any backup systems that touch these paths.
+
+**Protect your private key.** `data/v3net.key` and any exported seed phrase files should be readable only by the BBS process user (`chmod 600`). A compromised key allows an attacker to impersonate your node on all V3Net networks. Do not include the key file in unencrypted backups or commit it to version control.
+
+**Hub operators can read all traffic.** V3Net is a federated public message network. The hub stores and forwards messages in plaintext. The hub sysop — and anyone with access to the hub server — can read all messages routed through it. This is the same trust model as FidoNet echomail and similar networks.
+
+**Auto-approve.** Setting `Auto Approve: Y` allows any node to subscribe to your hub without review. Appropriate for open public networks; set it to `N` and manually approve nodes for curated or private networks. `Auto Approve Areas: Y` does the same for area proposals: any subscribed node can add an area to the network. Leave it `N` to review proposals in the Coordinator Panel, even on an open network.
+
+**Public areas are public.** Messages posted to networked areas are replicated to every subscribed node and stored indefinitely on each. Do not post sensitive information in public message areas.
+
+---
+
+## Technical Reference
+
+### File Locations
+
+| File | Purpose |
+|------|---------|
+| `configs/v3net.json` | Generated and managed by the config editor; see the [Manual Configuration Reference](v3net/manual-config.md) for every key |
+| `data/v3net.key` | Ed25519 keypair (auto-generated on first V3Net start, mode `0600`) |
+| `data/v3net_dedup.sqlite` | Message deduplication database |
+| `data/v3net_hub/` | Hub data directory (SQLite DB, NAL files) |
+| `data/v3net_seen_areas.json` | Areas each network has offered, for the login question about new areas |
+| `data/v3net_declined_areas.json` | Areas each SysOp answered **No** to at login |
+
+### Hub Listener
+
+The hub listens on `hub.host`:`hub.port`, with the port defaulting to `8765`.
+A blank host binds every interface. An IPv6 host may be written bare (`::1`)
+or bracketed (`[::1]`), and a scoped literal such as `fe80::1%eth0` is kept
+as written. On startup the hub logs `v3net hub starting addr=:8765`.
+
+### Configuration File
+
+Every key in `configs/v3net.json`, with its type, default and meaning, is
+tabulated in the [Manual Configuration Reference](v3net/manual-config.md),
+together with the network registry format and complete leaf and hub examples.
+The command-line tools that touch V3Net are documented where they are used:
+`helper post` in [V3Net Message Areas](v3net/message-areas.md#technical-reference)
+and `v3net-bootstrap` in [V3Net Bootstrap Tool](v3net/bootstrap.md).
+
+---
+
+## Related Documentation
+
+- [Joining FelonyNet](v3net/felonynet.md) — step-by-step walkthrough for the FelonyNet network
+- [V3Net Message Areas](v3net/message-areas.md) — how posts travel, `helper post`, menu commands
+- [Network Area List (NAL)](v3net/nal.md) — area subscriptions, access modes, and proposals
+- [V3Net Chat](v3net/chat.md) — real-time chat across the network
+- [V3Net Hub TLS](v3net/hub-tls.md) — HTTPS for a hub through a reverse proxy
+- [V3Net Key Recovery](v3net/recovery.md) — backing up and restoring your node identity
+- [Manual Configuration Reference](v3net/manual-config.md) — JSON field reference for `v3net.json`

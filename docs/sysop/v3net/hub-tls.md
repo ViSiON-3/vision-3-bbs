@@ -4,14 +4,21 @@
 > is not yet ready for production use. APIs, configuration, and wire formats
 > may change without notice.
 
-This guide explains how to enable TLS (HTTPS) on a V3Net hub so that
-WebSocket connections between the hub and leaf nodes are encrypted.
+This guide explains how to put a V3Net hub behind HTTPS so that traffic
+between the hub and its leaf nodes is encrypted on the wire. The hub itself
+always serves plain HTTP: Ed25519 signatures already authenticate every node
+and every message, so TLS (Transport Layer Security) is a privacy layer you
+add in front of the hub with a reverse proxy, not something the hub does
+itself. You would want it when callers' chat or messages cross the open
+internet and you would rather an eavesdropper on the path could not read them.
 
 ## Overview
 
-The V3Net hub uses a standard HTTP server for its WebSocket transport. By
-default it listens on plain HTTP. When both `tlsCert` and `tlsKey` are set
-in the hub configuration, the server switches to HTTPS automatically.
+The hub listens on `hub.host`:`hub.port` (default `8765`) and speaks HTTP
+with JSON bodies plus a long-lived Server-Sent Events (SSE) stream per leaf.
+A reverse proxy such as Caddy or nginx terminates HTTPS on port 443 and
+forwards each request to the hub on the loopback interface. Leaves then use
+an `https://` hub URL.
 
 > **TLS covers the wire only.** Enabling HTTPS prevents eavesdropping on
 > connections between leaf nodes and your hub. It does not encrypt messages
@@ -20,224 +27,147 @@ in the hub configuration, the server switches to HTTPS automatically.
 > [Security Considerations](v3net/configuration.md#security-considerations) for
 > the full picture.
 
-You have two options:
+> **Note:** Earlier V3Net builds had `tlsCert` and `tlsKey` keys in the hub
+> block and **Hub TLS Cert**/**Hub TLS Key** fields in the config editor.
+> They were removed; a hub serves plain HTTP and a reverse proxy handles
+> certificates. If your `v3net.json` still has those keys, delete them.
+
+You have two options for a certificate:
 
 | Approach | Best For |
 |----------|----------|
 | **Let's Encrypt** (free, trusted) | Public hubs with a domain name |
 | **Self-signed certificate** | Private networks, LAN-only hubs, or testing |
 
-If you run a reverse proxy (nginx, Caddy, etc.) that already terminates TLS,
-you can leave both fields blank and let the proxy handle encryption instead.
+A self-signed certificate is not trusted by leaves' HTTP clients, and the
+leaf has no option to skip certificate verification, so every subscriber
+would need to install your certificate as trusted on their server. For
+anything beyond a lab, use Let's Encrypt.
 
 ---
 
-## Option 1: Let's Encrypt
+## Step 1: Bind the Hub to Loopback
 
-Let's Encrypt issues free, publicly-trusted certificates. You need:
+```
+./config  →  1 — System Setup  →  2. Server Setup
+```
 
-- A **public domain name** pointing to the hub's IP address (e.g.
-  `hub.example.com`). Let's Encrypt cannot issue certificates for bare IP
-  addresses or `.local` hostnames.
-- Port **80** reachable from the internet (temporarily, for the ACME
-  challenge during issuance and renewal).
+Set **Hub Host** to `127.0.0.1` (or `::1` for IPv6 loopback) and leave
+**Hub Port** at `8765`, so only the proxy on the same machine can reach the
+plain-HTTP listener. Press **S** to save and restart the BBS. The hub logs:
 
-### Linux
+```
+v3net hub starting addr=127.0.0.1:8765
+```
 
-Install certbot:
+---
+
+## Step 2: Put a Reverse Proxy in Front
+
+You need a **public domain name** pointing at the server (e.g.
+`hub.example.com`); Let's Encrypt cannot issue certificates for bare IP
+addresses or `.local` hostnames. Ports **80** and **443** must be reachable
+from the internet.
+
+### Option 1: Caddy (automatic certificates)
+
+Caddy obtains and renews a Let's Encrypt certificate on its own. A complete
+`Caddyfile`:
+
+```
+hub.example.com {
+    reverse_proxy 127.0.0.1:8765 {
+        flush_interval -1
+    }
+}
+```
+
+`flush_interval -1` passes SSE events through as they arrive instead of
+buffering them. Start Caddy and you are done; there is no renewal hook to
+write.
+
+### Option 2: nginx with certbot
+
+Install certbot and request a certificate:
 
 ```bash
 # Debian / Ubuntu
-sudo apt install certbot
+sudo apt install certbot python3-certbot-nginx
 
 # Fedora / RHEL
-sudo dnf install certbot
+sudo dnf install certbot python3-certbot-nginx
+
+sudo certbot certonly --nginx -d hub.example.com
 ```
 
-Request a certificate:
+Certbot writes the files to `/etc/letsencrypt/live/hub.example.com/`. Then a
+server block that forwards to the hub:
 
-```bash
-sudo certbot certonly --standalone -d hub.example.com
+```nginx
+server {
+    listen 443 ssl;
+    server_name hub.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/hub.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/hub.example.com/privkey.pem;
+
+    location / {
+        proxy_pass         http://127.0.0.1:8765;
+        proxy_http_version 1.1;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Forwarded-For $remote_addr;
+
+        # The /events stream stays open for hours: do not buffer or time it out.
+        proxy_buffering    off;
+        proxy_cache        off;
+        proxy_read_timeout 1h;
+    }
+}
 ```
 
-Certbot writes the files to `/etc/letsencrypt/live/hub.example.com/`. Set
-the V3Net hub config fields:
-
-| Field | Value |
-|-------|-------|
-| `tlsCert` | `/etc/letsencrypt/live/hub.example.com/fullchain.pem` |
-| `tlsKey`  | `/etc/letsencrypt/live/hub.example.com/privkey.pem` |
-
-**Auto-renewal:** Certbot installs a systemd timer (or cron job) that renews
-certificates automatically. After renewal the hub must be restarted to pick
-up the new certificate:
+Certbot's systemd timer renews the certificate; nginx must reload to pick up
+the new files. The `--nginx` plugin does that for you. If you used
+`--standalone` instead, add a hook:
 
 ```bash
-# /etc/letsencrypt/renewal-hooks/post/restart-vision3.sh
+# /etc/letsencrypt/renewal-hooks/post/reload-nginx.sh
 #!/bin/sh
-systemctl restart vision3
+systemctl reload nginx
 ```
-
-Make the hook executable:
 
 ```bash
-sudo chmod +x /etc/letsencrypt/renewal-hooks/post/restart-vision3.sh
+sudo chmod +x /etc/letsencrypt/renewal-hooks/post/reload-nginx.sh
 ```
 
-### macOS
-
-Install certbot via Homebrew:
-
-```bash
-brew install certbot
-```
-
-Request a certificate:
-
-```bash
-sudo certbot certonly --standalone -d hub.example.com
-```
-
-The certificate files are written to `/etc/letsencrypt/live/hub.example.com/`.
-Set the config fields the same as the Linux example above.
-
-**Auto-renewal:** Homebrew does not install a renewal timer automatically.
-Create a launchd plist or cron entry to run `certbot renew` periodically:
-
-```bash
-# Example cron entry (runs daily at 3 AM)
-0 3 * * * /opt/homebrew/bin/certbot renew --quiet && killall -HUP vision3
-```
+The BBS never needs restarting for a certificate change; only the proxy does.
 
 ### Windows
 
-Use [win-acme](https://www.win-acme.com/), a free ACME client for Windows:
-
-1. Download the latest release from
-   [github.com/win-acme/win-acme/releases](https://github.com/win-acme/win-acme/releases).
-2. Extract and run `wacs.exe` as Administrator.
-3. Follow the interactive prompts:
-   - Choose **M** (create certificate, manual input).
-   - Enter your domain name (e.g. `hub.example.com`).
-   - Choose the **self-hosting** validation method (uses port 80).
-   - For the store step, choose **PEM files** and specify an output directory
-     (e.g. `C:\certs\`).
-4. win-acme writes `hub.example.com-chain.pem` and
-   `hub.example.com-key.pem` to the output directory.
-
-Set the V3Net hub config fields:
-
-| Field | Value |
-|-------|-------|
-| `tlsCert` | `C:\certs\hub.example.com-chain.pem` |
-| `tlsKey`  | `C:\certs\hub.example.com-key.pem` |
-
-win-acme creates a scheduled task for automatic renewal. Add a post-renewal
-script to restart the BBS after certificate updates.
+Use [win-acme](https://www.win-acme.com/), a free ACME client for Windows,
+to obtain the certificate (`wacs.exe` as Administrator, **M** for manual
+input, your domain, the self-hosting validation method, PEM files as the
+store), then point the proxy's certificate settings at the files it writes.
+Caddy runs on Windows as well and is the simpler choice there: the
+`Caddyfile` above needs no change.
 
 ---
 
-## Option 2: Self-Signed Certificate
+## Step 3: Point Leaves at HTTPS
 
-A self-signed certificate encrypts the connection but is not trusted by
-default — leaf nodes connecting via standard HTTPS clients will reject it
-unless configured to accept it. This is fine for private or testing
-networks.
+Subscribers set their hub URL to `https://hub.example.com` (no port; the
+proxy listens on 443). In the config editor that is the **Hub URL** field of
+the subscription under **6 — ViSiON/3 Networking (V3Net) → 2. Subscriptions**.
+If you list the network in the public registry, put the `https://` URL in its
+`hub_url`.
 
-### Generate with OpenSSL (Linux / macOS)
-
-```bash
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
-  -keyout hub-key.pem -out hub-cert.pem \
-  -days 3650 -nodes \
-  -subj "/CN=hub.example.com"
-```
-
-This creates a certificate valid for 10 years with no passphrase.
-
-Set the V3Net hub config fields:
-
-| Field | Value |
-|-------|-------|
-| `tlsCert` | `/path/to/hub-cert.pem` |
-| `tlsKey`  | `/path/to/hub-key.pem` |
-
-### Generate with OpenSSL (Windows)
-
-OpenSSL is bundled with [Git for Windows](https://gitforwindows.org/). Open
-Git Bash and run the same command as above, adjusting the output paths:
+Check from any machine:
 
 ```bash
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
-  -keyout C:/certs/hub-key.pem -out C:/certs/hub-cert.pem \
-  -days 3650 -nodes \
-  -subj "/CN=hub.example.com"
+curl -i https://hub.example.com/v3net/v1/networks
 ```
 
-Set the config fields to point at the generated files.
-
----
-
-## Applying the Configuration
-
-Once you have your certificate files, enter the paths in the TUI config editor:
-
-```
-./config  →  1 — System Setup  →  Server Setup
-```
-
-Scroll to the V3Net hub fields and set **Hub TLS Cert** and **Hub TLS Key**:
-
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                           Server Setup                               │
-│                                                                      │
-│  V3Net Hub       : Y                                                 │
-│  Hub Host        :                                                   │
-│  Hub Port        : 8765                                              │
-│  Hub TLS Cert    : /etc/letsencrypt/live/hub.example.com/fullcha...  │
-│  Hub TLS Key     : /etc/letsencrypt/live/hub.example.com/privkey...  │
-│  Hub Data Dir    : data/v3net_hub                                    │
-│  Auto Approve    : N                                                 │
-│  Auto Approve Areas : N                                              │
-│                                                                      │
-│                          Screen 2 of 8                               │
-└──────────────────────────────────────────────────────────────────────┘
-Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return
-```
-
-Press **S** to save, then restart the BBS to activate the change. On startup the hub logs:
-
-```
-v3net hub starting addr=:8765
-```
-
-The log line does not explicitly indicate TLS status. If the hub starts
-without errors and both `tlsCert` and `tlsKey` are set, TLS is active. A
-quick way to verify is to connect with `curl`:
-
-```bash
-curl -I https://hub.example.com:8765/
-```
-
-Leaf nodes connecting to your hub should use `https://` in their `hubUrl`.
-
----
-
-## File Permissions
-
-The BBS process must be able to read the certificate and key files. If
-using Let's Encrypt on Linux, the private key is readable only by root by
-default. Options:
-
-- Run the BBS as root (not recommended).
-- Add the BBS user to the `ssl-cert` group and adjust permissions:
-  ```bash
-  sudo chgrp -R ssl-cert /etc/letsencrypt/live /etc/letsencrypt/archive
-  sudo chmod g+rx /etc/letsencrypt/live /etc/letsencrypt/archive
-  ```
-- Copy the certificate files to a directory the BBS user owns (update paths
-  in the renewal hook).
+A JSON list of your networks over HTTPS means the proxy and the hub are
+talking.
 
 ---
 
@@ -245,8 +175,25 @@ default. Options:
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Hub fails to start with "open cert: no such file" | Certificate path is wrong | Verify the `tlsCert` path exists and is readable |
-| Hub fails to start with "open key: no such file" | Key path is wrong | Verify the `tlsKey` path exists and is readable |
-| Hub fails with "tls: private key does not match public key" | Mismatched cert/key pair | Re-generate or re-download both files together |
-| Leaf nodes get "certificate signed by unknown authority" | Self-signed cert not trusted | Use Let's Encrypt, or configure leaf to skip verification (if supported) |
-| Cert expired after 90 days | Let's Encrypt renewal not running | Check `certbot renew` timer/cron and restart hook |
+| `502 Bad Gateway` from the proxy | The hub is not running, or listens on another address | Check `v3net hub starting addr=` in the BBS log against the proxy's upstream address |
+| Leaves subscribe but never receive events | The proxy buffers the SSE stream | Turn buffering off for the hub location (`proxy_buffering off` / `flush_interval -1`) |
+| Leaves drop and reconnect every minute | The proxy's read timeout closes idle streams | Raise `proxy_read_timeout`; the leaf's `leaf: SSE reconnecting` log line shows how often it happens |
+| Leaf logs `certificate signed by unknown authority` | Self-signed certificate | Use Let's Encrypt, or install your CA certificate as trusted on each leaf |
+| Certificate expired after 90 days | Renewal not running, or the proxy did not reload | Check the certbot timer and the post-renewal hook |
+| `curl` works on `http://...:8765` but not on `https://` | Firewall blocks 443, or the DNS name points elsewhere | Open 443 and confirm the A/AAAA record |
+
+---
+
+## Technical Reference
+
+| Setting | Where | Meaning |
+|---------|-------|---------|
+| `hub.host` | `configs/v3net.json`, **Hub Host** in Server Setup | Listen address. Blank binds every interface; `127.0.0.1` or `::1` keeps the plain-HTTP listener local to the proxy. IPv6 literals may be bare or bracketed. |
+| `hub.port` | `configs/v3net.json`, **Hub Port** | Listen port, default `8765`. |
+| `leaves[].hubUrl` | `configs/v3net.json`, **Hub URL** | What leaves connect to; `https://` with the proxy's public name. |
+
+The hub has no TLS settings of its own and does not read `X-Forwarded-For`;
+its node identification comes from the signed `X-V3Net-Node-ID` header, not
+the client address, so a proxy in front of it changes nothing about
+authentication. Every key is tabulated in the
+[Manual Configuration Reference](v3net/manual-config.md).

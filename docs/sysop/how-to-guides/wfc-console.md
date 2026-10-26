@@ -1,11 +1,14 @@
 # WFC Sysop Console (`wfc`)
 
-`wfc` is a **Waiting-For-Caller** console: a live view of who's online, what
-each node is doing, the event scheduler's status, and logs of caller and bot
-activity, with a **kick** command to drop a caller. You run it on your
-own machine (laptop, desktop, another server) and it connects to a running
-ViSiON/3 daemon over the BBS's **existing SSH server** — so it works the same
-whether the BBS is on localhost or hosted in the cloud.
+`wfc` is a **Waiting-For-Caller** console: the modern stand-in for the screen a
+sysop used to leave glowing on the BBS machine overnight. It is a live view of
+who's online, what each node is doing, the event scheduler's status, and logs of
+caller and bot activity. From it you can **kick** a caller, **watch** a node's
+screen as the caller sees it, **type** for them, break in with the classic
+**split-screen chat**, and **answer pages** from callers who want the SysOp.
+You run it on your own machine (laptop, desktop, another server) and it
+connects to a running ViSiON/3 daemon over the BBS's **existing SSH server** —
+so it works the same whether the BBS is on localhost or hosted in the cloud.
 
 If the link to the BBS drops, the console **reconnects on its own** and keeps
 going; you never have to restart it.
@@ -20,10 +23,13 @@ A user account can open the WFC console only when **all** of these are true:
    numeric access level that matters.
 2. **A registered SSH public key** on the account. WFC authenticates with your
    SSH key (no password), and the key must be listed on a qualifying account.
-3. **WFC access enabled** — the `wfcEnabled` config flag (default **true**).
-   Toggle it in the config TUI under **Access & Security → Access Levels**
-   as **WFC Access**. This is hot-reloaded: the change takes effect on the
-   *next* connection attempt, no restart needed.
+   Add it from the **WFC Keys** field in `ue` or with `helper users addkey`
+   (see below).
+3. **WFC access enabled** — **WFC Access** in the config editor (`./config` →
+   **System Setup → Access & Security → Access Levels**), on by default. This is
+   hot-reloaded: the change takes effect on the *next* connection attempt, no
+   restart needed. (The key behind it is `wfcEnabled`; see the
+   [Technical Reference](#technical-reference).)
 
 A key that isn't registered, belongs to a below-CoSysOp user, or arrives while
 WFC Access is disabled simply falls through to the **normal caller login**.
@@ -96,18 +102,8 @@ can register keys with the built-in tools — no JSON editing required:
 Keys are validated with the same SSH library WFC auth uses, so an added key is
 guaranteed usable; duplicates and malformed keys are rejected.
 
-You can still edit `data/users/users.json` by hand if you prefer — add a
-`publicKeys` array of OpenSSH public-key lines:
-
-```json
-{
-  "handle": "Felonius",
-  "accessLevel": 255,
-  "publicKeys": [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... sysop@laptop"
-  ]
-}
-```
+You can still edit `data/users/users.json` by hand if you prefer; the
+`publicKeys` field is described in the [Technical Reference](#usersjson-fields).
 
 > Keep your **private** key on your own machine only. Only the **public** key
 > (`.pub`) goes into `users.json`.
@@ -129,8 +125,8 @@ flag therefore applies without a restart:
 
 ### Read-only accounts
 
-Set **WFC Read Only** to `Y` in `ue` (right column of the user's edit screen),
-or add `"wfcReadOnly": true` to the account in `users.json`. A read-only
+Set **WFC Read Only** to `Y` in `ue` (right column of the user's edit screen);
+the field is `wfcReadOnly` in `users.json`. A read-only
 console can watch the dashboard, the logs, the events and the page list.
 The daemon refuses everything that acts on a caller: kick, snoop, type-in and
 chat. The console shows `READ-ONLY` in its title bar and hides those keys.
@@ -181,20 +177,7 @@ wfc --connect ssh://Felonius@your-bbs-host:2222 --identity ~/.ssh/id_ed25519
   `ssh-keyscan`) or use `--insecure` for a one-off (skips host-key verification
   — development/first-run only).
 
-### CLI flags
-
-| Flag | Purpose |
-|------|---------|
-| `--connect ssh://user@host:port` | Admin endpoint (required) |
-| `--identity <path>` | SSH private key (default `~/.ssh/id_ed25519`) |
-| `--known-hosts <path>` | known_hosts file (default `~/.ssh/known_hosts`) |
-| `--insecure` | Skip SSH host-key verification (dev/first-run only) |
-| `--ascii` | ASCII borders instead of box-drawing characters |
-| `--no-color` | Disable color |
-| `--refresh <ms>` | Snapshot poll interval in milliseconds (default 1000) |
-| `--max-events <n>` | Events kept in the feed (default 200) |
-| `--readonly` | View-only on this console: disables kick and snoop (and so type-in and chat). It is a client setting; use a [read-only account](#read-only-accounts) to restrict another sysop |
-| `--version` / `--help` | Print version / usage |
+The full list of flags is in the [Technical Reference](#cli-flags).
 
 ## Console functions
 
@@ -295,7 +278,10 @@ Events to return it to the callers.
 `Enter` on a caller or bot shows everything the daemon knows about that
 session: node, status, handle, user ID, access level, remote address, current
 menu, activity, connect time, time online, last-activity time, and **time
-left** in the caller's session (`(unknown)` if the account has no limit).
+left** in the caller's session. It is the limit the BBS enforces: a CoSysOp or
+SysOp, or an account with `timeLimit` `0`, shows `Unlimited`, and chat time is
+credited back (see [Chat](#chat)). An older daemon that does not report the
+figure shows `(unknown)`.
 `Enter` on a scheduled event shows its ID, schedule, next and last run, last
 result and duration, and run/failure counts. `Esc` (or `Enter`) closes the
 overlay; `↑`/`↓` move to the next row without closing it.
@@ -372,7 +358,8 @@ never records the keystrokes.
 terminal: your text on top, the caller's below, and a bar between them with
 both handles and the time (`HH:MM`). Each pane word-wraps and scrolls on its
 own. Pane colors come from `chatSysopColor` and `chatUserColor` in
-[`theme.json`](menus/menu-system.md#theme-themejson).
+[`theme.json`](menus/menu-system.md#theme-themejson), so a board can match
+the chat to its menu set.
 
 Chat works only while the caller is in the BBS: menus, prompts, the message
 reader, the editor. It is refused while they are in a door, a file transfer or
@@ -417,12 +404,16 @@ out or cancelled stay in the list, marked, until the caller logs off.
 The Alt keys arrive as `ESC` followed by a letter. In macOS Terminal and iTerm,
 set the Option key to send Meta or Esc+, or press `Esc` and then the letter.
 
-`pageSysopTimeout` (default 60) and `pageSysopCooldown` (default 300) are in
-`config.json` and in the config TUI under **Access & Security → Access Levels**
-as **Page Timeout** and **Page Cooldown**; see
-[Configuration](configuration/configuration.md). Changes apply on config
-reload with no restart. The caller's prompts are in the string editor; see
+The wait and the cooldown are **Page Timeout** and **Page Cooldown** in the
+config editor (`./config` → **System Setup → Access & Security → Access
+Levels**); the keys are `pageSysopTimeout` (default 60) and `pageSysopCooldown`
+(default 300) in `config.json`. Changes apply on config reload with no restart.
+The caller's prompts are in the string editor; see
 [String Editor](advanced/string-editor.md#strings-for-sysop-chat-and-paging).
+
+`PAGESYSOP` is not bound in the shipped menu set. To offer it, add a command
+such as `RUN:PAGESYSOP` on a key of your choice in `menus.d/v3/cfg/MAIN.CFG`
+with `menuedit`; see [Menus & ACS](menus/menu-system.md#paging-the-sysop).
 
 ### Scrolling the logs
 
@@ -549,3 +540,95 @@ login because it didn't match a qualifying account.
 
 Because WFC rides the BBS's existing SSH server, you do **not** need to open any
 additional port for it.
+
+## Technical Reference
+
+Everything above can be done from `ue`, `helper` and the config editor. This
+section is for hand-editing and scripting.
+
+### CLI flags
+
+| Flag | Purpose |
+|------|---------|
+| `--connect ssh://user@host:port` | Admin endpoint (required). The user is your BBS handle, percent-encoded if it has spaces; the port is the BBS's SSH port (`sshPort`, default 2222) |
+| `--identity <path>` | SSH private key (default `~/.ssh/id_ed25519`) |
+| `--known-hosts <path>` | known_hosts file (default `~/.ssh/known_hosts`) |
+| `--insecure` | Skip SSH host-key verification (dev/first-run only) |
+| `--ascii` | ASCII borders instead of box-drawing characters |
+| `--no-color` | Disable color |
+| `--refresh <ms>` | Snapshot poll interval in milliseconds (default 1000) |
+| `--max-events <n>` | Events kept in the feed (default 200) |
+| `--readonly` | View-only on this console: disables kick and snoop (and so type-in and chat). It is a client setting; use a [read-only account](#read-only-accounts) to restrict another sysop |
+| `--version` / `--help` | Print version / usage |
+
+`wfc` exits with status 2 when `--connect` is missing or malformed, 1 when the
+key or home directory cannot be read, and prints the SSH error and exits when
+the very first connection is refused. Once connected it reconnects on its own
+(see [Reconnecting](#reconnecting)).
+
+### `config.json` keys
+
+| Key | Type | Default | Meaning |
+|-----|------|---------|---------|
+| `wfcEnabled` | bool | `true` | Allow WFC console connections. **WFC Access** in the config editor. Hot-reloaded; applies to the next connection and to the 30-second re-check of open consoles |
+| `coSysOpLevel` | int | `250` | Minimum access level for a WFC account (and for snoop, type-in and chat) |
+| `sshPort` / `sshHost` | int / string | `2222` / `0.0.0.0` | The SSH listener `wfc` connects to; see [SSH Server](networking/ssh.md) |
+| `pageSysopTimeout` | int | `60` | Seconds a `PAGESYSOP` page waits for an answer. **Page Timeout** (5–600) |
+| `pageSysopCooldown` | int | `300` | Minimum seconds between one caller's pages. **Page Cooldown** (0–86400) |
+
+### `users.json` fields
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `publicKeys` | array of strings | OpenSSH public-key lines (`authorized_keys` format) that may open the console. Omitted when empty |
+| `wfcReadOnly` | bool | The account's console may watch but not kick, snoop, type in or chat. Omitted when false |
+| `accessLevel` | int | Must be at or above `coSysOpLevel` |
+
+```json
+{
+  "handle": "Felonius",
+  "accessLevel": 255,
+  "publicKeys": [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... sysop@laptop"
+  ],
+  "wfcReadOnly": false
+}
+```
+
+The running BBS re-reads `users.json` as described in
+[When edits take effect](#when-edits-take-effect), so hand edits need no
+restart either.
+
+### `helper users` key commands
+
+| Command | Purpose |
+|---------|---------|
+| `helper users addkey <handle> <keyfile\|->` | Register a public key (`-` reads the pasted line from stdin) |
+| `helper users listkeys <handle>` | List the account's keys by SHA256 fingerprint and comment |
+| `helper users delkey <handle> <fingerprint\|index>` | Remove a key |
+
+### `theme.json` keys
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `chatSysopColor` | `11` | Sysop's pane in split-screen chat |
+| `chatUserColor` | `10` | Caller's pane in split-screen chat |
+
+See [Theme](menus/menu-system.md#theme-themejson) for the color numbering.
+
+### Strings
+
+The caller-side text for pages (`pageSysopReasonPrompt`, `pageSysopPaging`,
+`pageSysopUnavailable`, `pageSysopCooldown`) lives in `strings.json` and is
+edited with `./strings`; see
+[Strings for sysop chat and paging](advanced/string-editor.md#strings-for-sysop-chat-and-paging).
+
+### Protocol
+
+The console and the snoop are two SSH **subsystems** on the BBS's SSH server:
+`wfc-admin` carries the dashboard snapshot, event stream and commands, and
+`wfc-snoop` carries a watched node's raw output and the sysop's keystrokes.
+Both are opened on the one SSH connection `wfc` makes, so no extra port is
+involved. Access to either is decided only after the client's key **signature**
+verifies; a key offered without a signature is not an identity. The daemon
+re-checks the account every 30 seconds for as long as either channel is open.

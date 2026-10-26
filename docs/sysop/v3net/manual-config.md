@@ -7,10 +7,18 @@
 
 This page documents every field in `configs/v3net.json` for advanced users who
 need to edit the file directly — for example, when deploying via automation,
-Docker environment variables, or scripted provisioning.
+Docker environment variables, or scripted provisioning. It is the technical
+reference for the whole V3Net section; the other V3Net pages point here rather
+than repeating the key tables.
 
 > **Experimental — Development Only.** V3Net is under active development and
 > is not yet ready for production use.
+
+> **Note:** The running BBS picks up changes to `leaves` on its own; the
+> top-level switch, `hub` block and file paths take effect at the next restart.
+> Run `vision3 doctor` after a hand edit: it reports a file that will not
+> parse, unknown hub URLs, bad poll intervals and board tags that match no
+> local area. See [vision3 doctor](configuration/configuration.md#doctor).
 
 ---
 
@@ -22,6 +30,11 @@ Docker environment variables, or scripted provisioning.
 | `keystorePath` | string | `""` | Path to the Ed25519 keypair file. Auto-generated on first start if absent. Example: `"data/v3net.key"` |
 | `dedupDbPath` | string | `""` | Path to the SQLite message deduplication database. Example: `"data/v3net_dedup.sqlite"` |
 | `registryUrl` | string | `""` | URL of the V3Net network registry JSON file. Used by the BBS to list available networks. Leave blank to disable. |
+| `hub` | object | — | Hub server settings. See below. |
+| `leaves` | array | `[]` | Subscriptions to networks on remote hubs. See below. |
+
+A missing `configs/v3net.json` is the same as `"enabled": false`; the BBS logs
+`v3net.json not found, V3Net disabled` and carries on.
 
 ---
 
@@ -33,16 +46,18 @@ configuration to join an existing network.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | bool | `false` | Set to `true` to start the hub server. |
-| `host` | string | `""` | Listen address. Blank means all interfaces (`0.0.0.0`). Set to `127.0.0.1` if behind a reverse proxy. |
-| `port` | int | `8765` | TCP port for the hub HTTP(S) server. |
-| `tlsCert` | string | `""` | Path to TLS certificate file (PEM). If both `tlsCert` and `tlsKey` are set, the hub serves HTTPS. |
-| `tlsKey` | string | `""` | Path to TLS private key file (PEM). |
-| `dataDir` | string | `""` | Directory for hub data (SQLite database, NAL files). Example: `"data/v3net_hub"` |
+| `host` | string | `""` | Listen address. Blank means all interfaces. Set to `127.0.0.1` if behind a reverse proxy. IPv6 literals may be bare (`"::1"`) or bracketed (`"[::1]"`); zone identifiers such as `"fe80::1%eth0"` are accepted. |
+| `port` | int | `8765` | TCP port for the hub HTTP server. `0` means `8765`. |
+| `dataDir` | string | `""` | Directory for hub data (SQLite database, NAL files). Created on first start if missing. Example: `"data/v3net_hub"` |
 | `autoApprove` | bool | `false` | When `true`, new subscriber registrations are approved automatically. |
 | `autoApproveAreas` | bool | unset | When `true`, area proposals are added to the NAL on arrival; when `false`, they wait for the coordinator in the Coordinator Panel. Unset follows `autoApprove`, which covered proposals too before this setting existed. Recommended `false` outside testing. |
 | `requireSignedSubscribe` | bool | `false` | Require signed subscriptions. Leave false during rolling upgrades; true rejects older unsigned leaves with HTTP 401. Restart to apply; see [independent upgrades](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently). |
 | `networks` | array | `[]` | List of networks hosted by this hub. See below. |
 | `initialAreas` | array | `[]` | Area specs for the initial NAL seed. Consumed once on first hub start, then removed automatically. See below. |
+
+The hub always serves plain HTTP. There are no certificate keys in this file;
+for HTTPS put a reverse proxy in front of it, as described in
+[V3Net Hub TLS](v3net/hub-tls.md).
 
 ### Hub Network Entry (`hub.networks[]`)
 
@@ -61,6 +76,7 @@ removes `initialAreas` from the config file.
 |-------|------|-------------|
 | `tag` | string | Area tag (e.g. `"fel.general"`). Must match `^[a-z0-9]{1,8}\.[a-z0-9-]{1,24}$`. |
 | `name` | string | Human-readable area name (e.g. `"FelonyNet General"`). |
+| `description` | string | Optional one-line description of the area. |
 
 ---
 
@@ -73,9 +89,10 @@ to subscribe to multiple networks.
 |-------|------|---------|-------------|
 | `hubUrl` | string | — | Full URL of the hub (e.g. `"https://felonynet.org"`). Required. |
 | `network` | string | — | Network name to subscribe to. Must match a network hosted by the hub. Required. |
-| `boards` | array | `[]` | Local message area tags for received messages (e.g. `["fn.general", "fn.tech"]`). |
+| `boards` | array | `[]` | Local message area tags for received messages (e.g. `["fn.general", "fn.tech"]`). A local post in any of these areas is sent to the hub, whatever the area's type and even while `enabled` is `false` — it waits for V3Net to come on. |
 | `pollInterval` | string | `"5m"` | How often to poll the hub for new messages. Accepts Go duration strings: `"30s"`, `"5m"`, `"1h"`. |
 | `origin` | string | BBS name | Origin line appended to outbound messages. Falls back to the BBS name from `config.json` if blank. |
+| `autoJoinAreas` | bool | unset (`true`) | **Newscan Default** in the editor. When true or unset, message areas created for this subscription are flagged as newscan defaults for users. Set `false` to leave new areas out of newscans until users add them. |
 
 ---
 
@@ -142,12 +159,12 @@ To add your network to the public registry, submit a PR to the
   "dedupDbPath": "data/v3net_dedup.sqlite",
   "hub": {
     "enabled": true,
+    "host": "127.0.0.1",
     "port": 8765,
-    "tlsCert": "/etc/letsencrypt/live/hub.example.com/fullchain.pem",
-    "tlsKey": "/etc/letsencrypt/live/hub.example.com/privkey.pem",
     "dataDir": "data/v3net_hub",
     "autoApprove": false,
     "autoApproveAreas": false,
+    "requireSignedSubscribe": false,
     "networks": [
       {
         "name": "mynet",
@@ -158,6 +175,10 @@ To add your network to the public registry, submit a PR to the
   "leaves": []
 }
 ```
+
+`host` is `127.0.0.1` here because a reverse proxy on the same machine
+terminates HTTPS and forwards to the hub; leave it blank for a hub that
+answers directly on every interface.
 
 ## Example: Multiple Leaf Subscriptions
 
@@ -175,7 +196,8 @@ To add your network to the public registry, submit a PR to the
       "hubUrl": "https://hub.retronet.io",
       "network": "retronet",
       "boards": ["ret.general"],
-      "pollInterval": "5m"
+      "pollInterval": "5m",
+      "autoJoinAreas": false
     }
   ]
 }
@@ -187,4 +209,5 @@ To add your network to the public registry, submit a PR to the
 
 - [V3Net Configuration](v3net/configuration.md) — TUI walkthrough for all config screens
 - [Joining FelonyNet](v3net/felonynet.md) — step-by-step TUI guide
-- [V3Net Hub TLS Setup](v3net/hub-tls.md) — TLS certificate setup
+- [V3Net Message Areas](v3net/message-areas.md) — message flow, `helper post`, wire details
+- [V3Net Hub TLS Setup](v3net/hub-tls.md) — HTTPS through a reverse proxy

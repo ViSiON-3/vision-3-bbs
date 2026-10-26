@@ -55,7 +55,7 @@ scripts/                       Root for all VPL scripts
 | Path | Purpose |
 |------|---------|
 | `scripts/` | Place your `.js` script files here. Organize freely with subdirectories. |
-| `scripts/data/` | Automatic storage for `v3.data`. Each script gets a JSON file named after the script (e.g., `voting.json` for `voting.js`). Do not edit these manually while the BBS is running. |
+| `scripts/data/` | Automatic storage for `v3.data` and the sandbox for `v3.fs`. Each script gets a JSON file named after the script (e.g., `voting.json` for `voting.js`). Do not edit these manually while the BBS is running. See [How the store is kept on disk](#how-the-store-is-kept-on-disk) for what happens to a damaged or read-only store. |
 | `scripts/examples/` | Shipped example scripts for reference. |
 
 ## Adding a VPL Script
@@ -145,7 +145,7 @@ var title = v3.args[1];   // "Best BBS Software"
 
 A script can also run in place of a string from `strings.json`, by setting the string's value to
 `!door`. Its `v3.args` then carry the string's words and values after the door's own `args`; see
-[Scripts and files in place of text](../advanced/string-editor.md#scripts-and-files-in-place-of-text).
+[Scripts and files in place of text](advanced/string-editor.md#scripts-and-files-in-place-of-text).
 
 ## Example: hello.js
 
@@ -186,7 +186,7 @@ v3.console.pause();
 
 ## Programming Reference
 
-All VPL APIs are accessed through the `v3` global object. Functions that fail silently return `null`, `undefined`, `0`, or an empty string/array as noted. Functions that encounter serious errors (e.g., database write failures) throw a JavaScript error that can be caught with `try/catch`.
+All VPL APIs are accessed through the `v3` global object. Functions that fail silently return `null`, `undefined`, `0`, or an empty string/array as noted. Functions that encounter serious errors (e.g., database write failures) throw a JavaScript error that can be caught with `try/catch`. An error the script does not catch ends the script: the caller sees the door error message and the log records `V3 script error` with the reason.
 
 ### v3.args
 
@@ -197,6 +197,17 @@ v3.args[0]   // first argument
 v3.args[1]   // second argument
 v3.args.length
 ```
+
+### exit()
+
+`exit()` is the one global function outside the `v3` object. It ends the script at once and returns the caller to the menu as a normal door exit.
+
+| Function | Description |
+|----------|-------------|
+| `exit()` | Stop the script. The door returns to the menu as if the script had run to its end |
+| `exit(code)` | Same, with a numeric code. A non-zero code is written to the log as `V3 script exited with non-zero code`; the caller sees no difference |
+
+`exit()` cannot be caught: `try`/`catch`/`finally` blocks do not run, and calling it from inside a nested function still stops the whole script. Scripts also stop after 30 minutes of running, and when the caller disconnects; neither counts as an error.
 
 ---
 
@@ -248,6 +259,10 @@ v3.console.getstr(5, { number: true });    // digits only
 | `echo` | boolean | `true` | Set to `false` to hide input (password entry) |
 | `upper` | boolean | `false` | Force input to uppercase |
 | `number` | boolean | `false` | Accept digits only |
+
+`getnum()` with no `max` accepts up to ten digits. `getstr()` with no `maxlen` accepts 128 characters.
+
+**Typed characters are decoded for you.** Scripts always see Unicode strings, whatever the caller's terminal sends. On a CP437 terminal each typed byte is mapped to its Unicode character (`0xAB` becomes `½`), and on a UTF-8 terminal the bytes of one character are assembled into it even when they arrive in separate reads. The echo goes back in the caller's own encoding, `maxlen` counts characters rather than bytes, and backspace removes a whole character. A malformed UTF-8 sequence, or a CP437 byte with no Unicode equivalent, is dropped. `getkey()` returns `""` for an escape sequence it discards (arrow keys and the like) and on timeout or disconnect.
 
 #### Properties
 
@@ -337,6 +352,8 @@ v3.user.set("location", "New York, NY");
 v3.user.save();
 ```
 
+A `realName` value is checked before it is accepted, the same way the new-user application checks it: after trimming it must not be empty, must be at least 4 characters, and must contain a space. A value that fails is ignored rather than stored. Nothing is thrown, the old name stays, and the log records `script set('realName') rejected` with the reason (not the value). This stops a script from blanking a real name, which would switch off real-name-only areas for that user everywhere. An unknown field name is ignored silently.
+
 ---
 
 ### v3.users
@@ -425,6 +442,24 @@ v3.data.set("lastVisitor", {
 v3.data.delete("oldKey");
 ```
 
+#### How the store is kept on disk
+
+Every `v3.data` call reads the whole JSON file and, for `set()` and `delete()`, writes it back. Several nodes running the same script take turns, so two callers saving at once cannot lose each other's change. The rules below decide what a sysop sees when something is wrong with the file itself.
+
+| Situation | What happens |
+|-----------|--------------|
+| No store file yet | Reads return `undefined` or an empty set; the first `set()` creates `scripts/data/` and the file |
+| File is not valid JSON, or is JSON but not an object (`null`, a list, a number) | Every `v3.data` call throws `decode script data <path>`. The damaged file is left exactly as it is, so a `set()` cannot wipe what was there. Fix the JSON by hand with the BBS stopped, or move the file aside to start fresh |
+| File cannot be read (permissions, or a symbolic link that points nowhere) | Every call throws `read script data <path>`. A dangling link is reported, not treated as an empty store |
+| File is read-only for the BBS user | Reads work; `set()` and `delete()` throw `open script data for writing <path>: permission denied` |
+| File is a symbolic link | Reads follow the link; `set()` and `delete()` throw `cannot safely replace script data at a symbolic link`. Replace the link with a real file |
+| File belongs to another user or group, or carries a file-specific ACL (POSIX ACL on Linux, extended ACL on macOS, custom DACL on Windows) | Reads work; `set()` and `delete()` throw `cannot safely replace script data ...`. The BBS will not rewrite a file whose access rules it cannot carry over to the new copy |
+| Operating system other than Linux, macOS or Windows | New stores can be created, but updating an existing one throws `safe script data replacement is unsupported on this platform` |
+
+Writes are atomic: the new contents go to a temporary file in `scripts/data/` and then replace the store in one step, so a crash or power cut mid-save leaves either the old file or the new one, never a half-written one. An existing store keeps its permission bits across saves. A new store is created with mode `0644` less the process umask, so a board run under a restrictive umask gets correspondingly tighter files.
+
+> **Note:** All of these errors are ordinary JavaScript exceptions. A script that wraps its `v3.data` calls in `try/catch` can tell the caller what went wrong; one that does not simply ends with the door error message, and the reason is in the BBS log.
+
 ---
 
 ### v3.message
@@ -436,9 +471,9 @@ Message area access — read, post, and search messages.
 | `areas()` | array | List all message areas |
 | `area(tag)` | object \| `null` | Get a message area by tag |
 | `count(areaID)` | number | Message count in an area |
-| `get(areaID, msgNum)` | object \| `null` | Get a specific message |
+| `get(areaID, msgNum)` | object \| `null` | Get a specific message. Private mail the caller neither sent nor received comes back as `null`, as in the message reader |
 | `newCount(areaID)` | number | Unread message count for the current user |
-| `post(areaID, opts)` | number | Post a message, returns message number. Throws on error |
+| `post(areaID, opts)` | number | Post a message, returns message number. Throws on error. Signed with the caller's handle, or their real name in a real-name-only area, exactly as the message editor signs a post |
 | `postPrivate(areaID, opts)` | number | Post a private message, returns message number. Throws on error, including an unknown recipient (see below) |
 | `totalCount()` | number | Total messages across all areas |
 
@@ -545,7 +580,7 @@ Read-only access to file areas and file listings.
 
 ### v3.fs
 
-Sandboxed file operations. All paths are resolved relative to `scripts/data/`. Path traversal (`../`) outside the sandbox is blocked. Functions throw on error unless noted.
+Sandboxed file operations. All paths are resolved relative to `scripts/data/`, which is created on the first write if it does not exist. Path traversal (`../`) and absolute paths are refused with `access denied: path "..." is outside sandbox`. The sandbox is enforced by the operating system at lookup time, not only by inspecting the text of the path, so a symbolic link inside `scripts/data/` that points outside it is refused as well, even a dangling one. Functions throw on error unless noted; `exists()` and `delete()` return `false` instead of throwing, and `list()` with no argument lists the sandbox directory itself.
 
 | Function | Returns | Description |
 |----------|---------|-------------|
@@ -582,7 +617,7 @@ for (var i = 0; i < files.length; i++) {
 }
 ```
 
-> **Security:** Scripts cannot access files outside `scripts/data/`. Attempting to use `../` to escape the sandbox will throw an error.
+> **Security:** Scripts cannot access files outside `scripts/data/`. Attempting to use `../`, an absolute path, or a symbolic link that leads out of the directory throws an error. Files are written with mode `0644` and directories with `0755`, less the process umask.
 
 ---
 

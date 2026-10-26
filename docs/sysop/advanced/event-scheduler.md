@@ -1,155 +1,45 @@
 # Event Scheduler
 
-The ViSiON/3 BBS includes a built-in event scheduler that can automatically execute maintenance tasks, poll FTN mail, and run other scheduled operations using cron-style syntax.
+The ViSiON/3 BBS includes a built-in event scheduler that runs maintenance tasks, polls FTN and QWK mail, and launches any other command on a cron-style timetable — the job a separate cron tab or a batch file did for a DOS board, kept inside the BBS where it can see your areas, log to your log, and show its history in the WFC console. An event is a command line with a schedule; the scheduler starts it at the right minute, limits how many run at once, kills one that runs too long, and remembers how it went.
 
 ## Overview
 
 The event scheduler provides:
 
 - **Cron-style scheduling**: Standard 5-field cron syntax
-- **Concurrency control**: Limit how many events can run simultaneously
+- **Concurrency control**: Limit how many events run at once; an event that fires while every slot is busy waits for one instead of being dropped
 - **Timeout protection**: Prevent runaway processes with configurable timeouts
-- **Event history**: Track execution statistics, success/failure rates
+- **Event chaining**: Run an event when another finishes, with an optional delay
+- **Event history**: Track execution statistics, success/failure rates and skipped runs, visible in the WFC console's Events tab
 - **Placeholder substitution**: Dynamic values in commands and arguments
 - **Non-interactive execution**: All events run in batch mode (no TTY/PTY)
 
 ## Configuration
 
-Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 0 — Event Scheduler) to add, edit, and remove scheduled events interactively. This is the recommended approach.
+Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui)
+(`./config`, key **0 — Event Scheduler**) to add, edit and remove events.
+Press **I** to insert an event, fill in the fields, **Esc** to leave the
+record, then **Q** and **Y** to save. The running board reschedules within a
+couple of seconds; no restart is needed.
 
-### JSON Reference
+| Field | Meaning |
+|-------|---------|
+| Name | Shown in logs and the WFC Events tab |
+| Schedule | Cron expression such as `*/15 * * * *` or `@daily`; may be blank for an event that only follows another or runs at startup |
+| Command | Path to the program; `{BBS_ROOT}` expands to the BBS directory |
+| Args | Command-line arguments |
+| Working Dir | Directory the command runs in |
+| Timeout (sec) | Kill the command after this long; `0` = no limit. Also how long the event will wait for a free slot |
+| Enabled | Off keeps the event on file without scheduling it |
+| Run At Start | Also run once when the BBS starts |
+| Run After | ID of the event this one follows (see [Event Chaining](#event-chaining-run_after)) |
+| Delay After | Seconds to wait after the followed event finishes |
 
-Event scheduling is configured in `configs/events.json`.
-
-### Basic Structure
-
-```json
-{
-  "enabled": true,
-  "max_concurrent_events": 3,
-  "events": [
-    {
-      "id": "my_event",
-      "name": "My Scheduled Event",
-      "schedule": "*/15 * * * *",
-      "command": "/path/to/command",
-      "args": ["arg1", "arg2"],
-      "working_directory": "/path/to/workdir",
-      "timeout_seconds": 300,
-      "enabled": true,
-      "environment_vars": {
-        "VAR_NAME": "value"
-      }
-    }
-  ]
-}
-```
-
-### Configuration Fields
-
-#### Root Configuration
-
-- **enabled** (boolean): Deprecated and ignored — the scheduler always runs; enable/disable individual events instead (kept for compatibility with older versions)
-- **max_concurrent_events** (integer): Maximum number of events that can run simultaneously (default: 3)
-- **events** (array): List of event configurations
-
-#### Event Configuration
-
-- **id** (string, required): Unique identifier for the event
-- **name** (string, required): Human-readable name for logging
-- **schedule** (string): Cron schedule expression (see below). Required unless the event is `run_at_startup` or has a `run_after`
-- **command** (string, required): Path to the executable
-- **args** (array): Command-line arguments
-- **working_directory** (string): Directory to run the command in
-- **timeout_seconds** (integer): Maximum execution time (0 = no timeout)
-- **enabled** (boolean): Enable/disable this specific event
-- **environment_vars** (object): Environment variables to set
-- **run_after** (string): Event ID this event follows; it runs when that event finishes (see [Event Chaining](#event-chaining-run_after))
-- **delay_after_seconds** (integer): Seconds to wait after the `run_after` event finishes before starting
-
-## Cron Schedule Syntax
-
-The scheduler uses standard 5-field cron syntax:
-
-```text
-┌───────────── minute (0-59)
-│ ┌───────────── hour (0-23)
-│ │ ┌───────────── day of month (1-31)
-│ │ │ ┌───────────── month (1-12)
-│ │ │ │ ┌───────────── day of week (0-6, Sunday=0)
-│ │ │ │ │
-│ │ │ │ │
-* * * * *
-```
-
-### Examples
-
-- `* * * * *` - Every minute
-- `*/15 * * * *` - Every 15 minutes
-- `0 * * * *` - Every hour (at minute 0)
-- `0 3 * * *` - Daily at 3:00 AM
-- `0 0 * * 0` - Weekly on Sunday at midnight
-- `0 0 1 * *` - Monthly on the 1st at midnight
-
-### Special Schedules
-
-The scheduler also supports special keywords:
-
-- `@hourly` - Run once an hour (same as `0 * * * *`)
-- `@daily` - Run once a day at midnight (same as `0 0 * * *`)
-- `@weekly` - Run once a week on Sunday at midnight
-- `@monthly` - Run once a month on the 1st at midnight
-- `@yearly` - Run once a year on January 1st at midnight
-
-## Placeholders
-
-Event commands and arguments can include placeholders that are substituted at runtime:
-
-- `{TIMESTAMP}` - Unix timestamp (seconds since epoch)
-- `{EVENT_ID}` - Event identifier
-- `{EVENT_NAME}` - Event name
-- `{BBS_ROOT}` - BBS installation directory
-- `{DATE}` - Current date (YYYY-MM-DD)
-- `{TIME}` - Current time (HH:MM:SS)
-- `{DATETIME}` - Current date and time (YYYY-MM-DD HH:MM:SS)
-
-### Example with Placeholders
-
-```json
-{
-  "id": "backup",
-  "name": "Daily Backup",
-  "schedule": "@daily",
-  "command": "/usr/local/bin/backup.sh",
-  "args": [
-    "{BBS_ROOT}/data",
-    "/backups/bbs-{DATE}.tar.gz"
-  ],
-  "timeout_seconds": 3600,
-  "enabled": true
-}
-```
-
-## Quick Reference
-
-### Cron Schedule Patterns
-
-| Schedule | Description |
-|----------|-------------|
-| `* * * * *` | Every minute |
-| `*/5 * * * *` | Every 5 minutes |
-| `*/15 * * * *` | Every 15 minutes |
-| `*/30 * * * *` | Every 30 minutes |
-| `0 * * * *` | Every hour (at minute 0) |
-| `0 */2 * * *` | Every 2 hours |
-| `0 0 * * *` | Daily at midnight |
-| `0 3 * * *` | Daily at 3 AM |
-| `0 0 * * 0` | Weekly (Sunday midnight) |
-| `0 0 1 * *` | Monthly (1st at midnight) |
-| `@hourly` | Every hour |
-| `@daily` | Once per day at midnight |
-| `@weekly` | Weekly on Sunday |
-| `@monthly` | Monthly on the 1st |
+The FTN and QWK wizards create their own poll events (`echomail_poll_<network>`,
+`qwknet_poll_<key>`), so most boards only add the nightly message-base
+maintenance by hand. The shipped `events.json` carries every example on this
+page, disabled; enable the ones you want rather than retyping them. The file
+format is in the [Technical Reference](#technical-reference).
 
 ### Finding Command Paths
 
@@ -373,6 +263,12 @@ The fix runs at 2:03 because no poll, toss, scan or pack event in the template f
 
 Purge limits (`max_age`, `max_messages`) are configured per area in `message_areas.json`. See [Message Purge Configuration](messages/message-areas.md#message-purge-configuration) for details.
 
+> **Note:** Those limits do nothing until an enabled event runs `v3mail purge`.
+> A board with limits set and no such event logs a warning at every startup,
+> and `./config` says *No enabled event runs 'v3mail purge', so this limit is
+> not enforced* whenever you set Max Messages or Max Age on an area or under a
+> network's Auto-Create settings. Enabling the three events below is the fix.
+
 ```json
 {
   "events": [
@@ -475,12 +371,19 @@ The scheduler tracks execution history in `data/logs/event_history.json`:
     "last_duration_ms": 1234,
     "run_count": 50,
     "success_count": 48,
-    "failure_count": 2
+    "failure_count": 2,
+    "skip_count": 1,
+    "last_skipped": "2026-02-11T02:00:00Z",
+    "last_skip_reason": "no free slot within its timeout"
   }
 ]
 ```
 
-History is updated after each event execution and saved on scheduler shutdown.
+History is updated after each event execution and saved on scheduler shutdown. The
+`skip_*` fields appear once a firing has been skipped: the event was already
+running, no slot freed up within its timeout, or the scheduler was shutting
+down. The WFC console's **Events** tab shows the same history, with **Skipped**
+and **Last Skipped** in an event's details.
 
 ## Logging
 
@@ -613,10 +516,10 @@ INFO: Event 'event_id' scheduled: @hourly
 ```
 
 **If missing:**
-1. Verify `enabled: true` at root level AND event level in `configs/events.json`
+1. Verify the event has `enabled: true` in `configs/events.json` (the root-level `enabled` is ignored)
 2. Check cron schedule syntax
 3. Review BBS startup logs for configuration errors
-4. Restart BBS after config changes
+4. If the event only has `run_after`, make sure the event it follows is enabled too
 
 ### Command Not Found
 
@@ -665,16 +568,43 @@ WARN: Event 'binkd_poll' skipped: already running
 - Space out schedule (use `*/30` instead of `*/15`)
 - Check for stuck processes
 
-**Max concurrency reached:**
+**No free slot:**
 
 ```text
-WARN: Event 'backup' skipped: max concurrent events reached (3)
+INFO: event waiting for a free slot: max concurrent events reached
+WARN: event skipped: no free slot within its timeout
 ```
+
+An event that fires while every slot is busy waits for one, for up to its
+`timeout_seconds`. It is only skipped when none frees up in that time, and
+the skip is recorded in its history (`skip_count`, `last_skip_reason`) and
+shown in the WFC Events tab.
 
 **Fix:**
 - Increase `max_concurrent_events`
+- Give the event a longer `timeout_seconds` so it can wait out the busy period
 - Stagger event schedules to avoid conflicts
 - Reduce event durations
+
+### Areas Grow Past Their Limits
+
+```text
+WARN: message areas have purge limits but no enabled event runs 'v3mail purge', so the limits are not enforced; enable the nightly purge event in events.json
+```
+
+`max_messages` and `max_age` on a message area are only enforced by an event
+that runs `v3mail purge --all`. Enable the nightly sequence under
+[Nightly Message Base Maintenance](#nightly-message-base-maintenance); the
+config editor shows the same note when you set a limit without one.
+
+**Purge is enabled but never runs:**
+
+```text
+WARN: event runs after a disabled event and has no schedule of its own; it will never run — enable the event it follows
+```
+
+The shipped purge and pack events have no schedule; they follow the fix
+event. Enable all three.
 
 ### Event Always Failing
 
@@ -693,23 +623,150 @@ ERROR: Event 'event_id' stderr: [error message]
 
 ## Disabling the Scheduler
 
-To disable the scheduler entirely, set `enabled: false` in `configs/events.json`:
+The scheduler always runs; the root-level `"enabled"` key in `events.json` is
+kept for older files and ignored. To stop everything, disable each event
+(**Enabled** = No in the editor, or `"enabled": false` in the file). A board
+with no enabled events starts normally and schedules nothing.
+
+## Technical Reference
+
+Everything below is for hand-editing `configs/events.json`. The config editor
+writes the same keys; after a hand edit, the running board picks the file up
+within a couple of seconds, and `vision3 doctor` reports a file that does not parse.
+
+### File Format
+
+`configs/events.json` is a JSON object with a list of events. The shipped
+template carries every example on this page, disabled.
+
+### Basic Structure
 
 ```json
 {
-  "enabled": false,
+  "enabled": true,
   "max_concurrent_events": 3,
-  "events": []
+  "events": [
+    {
+      "id": "my_event",
+      "name": "My Scheduled Event",
+      "schedule": "*/15 * * * *",
+      "command": "/path/to/command",
+      "args": ["arg1", "arg2"],
+      "working_directory": "/path/to/workdir",
+      "timeout_seconds": 300,
+      "enabled": true,
+      "environment_vars": {
+        "VAR_NAME": "value"
+      }
+    }
+  ]
 }
 ```
 
-The BBS will start normally but the scheduler will not run.
+### Configuration Fields
 
-## Future Enhancements
+#### Root Configuration
 
-Planned features for future releases:
+- **enabled** (boolean): Deprecated and ignored — the scheduler always runs; enable/disable individual events instead (kept for compatibility with older versions)
+- **max_concurrent_events** (integer): Maximum number of events that can run simultaneously (default: 3)
+- **events** (array): List of event configurations
 
-- **Manual triggers**: API/command to trigger events on-demand
-- **Event output capture**: Store full output for review
-- **Notification hooks**: Alert on event failures
-- **Web interface**: View history and manage events via web UI
+#### Event Configuration
+
+- **id** (string, required): Unique identifier for the event
+- **name** (string, required): Human-readable name for logging
+- **schedule** (string): Cron schedule expression (see below). Required unless the event is `run_at_startup` or has a `run_after`
+- **command** (string, required): Path to the executable
+- **args** (array): Command-line arguments
+- **working_directory** (string): Directory to run the command in
+- **timeout_seconds** (integer): Maximum execution time (0 = no timeout)
+- **enabled** (boolean): Enable/disable this specific event
+- **environment_vars** (object): Environment variables to set
+- **run_at_startup** (boolean): Also run once when the BBS starts (**Run At Start** in the editor)
+- **run_after** (string): Event ID this event follows; it runs when that event finishes (see [Event Chaining](#event-chaining-run_after))
+- **delay_after_seconds** (integer): Seconds to wait after the `run_after` event finishes before starting
+- **comment** (string): Free-text note; the BBS ignores it
+
+### Cron Schedule Syntax
+
+The scheduler uses standard 5-field cron syntax:
+
+```text
+┌───────────── minute (0-59)
+│ ┌───────────── hour (0-23)
+│ │ ┌───────────── day of month (1-31)
+│ │ │ ┌───────────── month (1-12)
+│ │ │ │ ┌───────────── day of week (0-6, Sunday=0)
+│ │ │ │ │
+│ │ │ │ │
+* * * * *
+```
+
+#### Examples
+
+- `* * * * *` - Every minute
+- `*/15 * * * *` - Every 15 minutes
+- `0 * * * *` - Every hour (at minute 0)
+- `0 3 * * *` - Daily at 3:00 AM
+- `0 0 * * 0` - Weekly on Sunday at midnight
+- `0 0 1 * *` - Monthly on the 1st at midnight
+
+#### Special Schedules
+
+The scheduler also supports special keywords:
+
+- `@hourly` - Run once an hour (same as `0 * * * *`)
+- `@daily` - Run once a day at midnight (same as `0 0 * * *`)
+- `@weekly` - Run once a week on Sunday at midnight
+- `@monthly` - Run once a month on the 1st at midnight
+- `@yearly` - Run once a year on January 1st at midnight
+
+### Placeholders
+
+Event commands and arguments can include placeholders that are substituted at runtime:
+
+- `{TIMESTAMP}` - Unix timestamp (seconds since epoch)
+- `{EVENT_ID}` - Event identifier
+- `{EVENT_NAME}` - Event name
+- `{BBS_ROOT}` - BBS installation directory
+- `{DATE}` - Current date (YYYY-MM-DD)
+- `{TIME}` - Current time (HH:MM:SS)
+- `{DATETIME}` - Current date and time (YYYY-MM-DD HH:MM:SS)
+
+#### Example with Placeholders
+
+```json
+{
+  "id": "backup",
+  "name": "Daily Backup",
+  "schedule": "@daily",
+  "command": "/usr/local/bin/backup.sh",
+  "args": [
+    "{BBS_ROOT}/data",
+    "/backups/bbs-{DATE}.tar.gz"
+  ],
+  "timeout_seconds": 3600,
+  "enabled": true
+}
+```
+
+### Quick Reference
+
+#### Cron Schedule Patterns
+
+| Schedule | Description |
+|----------|-------------|
+| `* * * * *` | Every minute |
+| `*/5 * * * *` | Every 5 minutes |
+| `*/15 * * * *` | Every 15 minutes |
+| `*/30 * * * *` | Every 30 minutes |
+| `0 * * * *` | Every hour (at minute 0) |
+| `0 */2 * * *` | Every 2 hours |
+| `0 0 * * *` | Daily at midnight |
+| `0 3 * * *` | Daily at 3 AM |
+| `0 0 * * 0` | Weekly (Sunday midnight) |
+| `0 0 1 * *` | Monthly (1st at midnight) |
+| `@hourly` | Every hour |
+| `@daily` | Once per day at midnight |
+| `@weekly` | Weekly on Sunday |
+| `@monthly` | Monthly on the 1st |

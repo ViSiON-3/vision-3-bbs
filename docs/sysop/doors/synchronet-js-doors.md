@@ -1,6 +1,8 @@
 # Synchronet JavaScript Door Games
 
-ViSiON/3 includes a built-in JavaScript engine that can run Synchronet BBS door games natively. Games run inside the BBS process with no external programs and no PTY bridging. The required Synchronet JS libraries and two example doors (LORD and LORD II) are included in the release bundle under `doors/sbbs/` — no separate download or installation is needed to get started.
+ViSiON/3 includes a built-in JavaScript engine that can run Synchronet BBS door games natively. Games run inside the BBS process with no external programs and no PTY bridging, so they work on every platform the BBS does, ARM boards and macOS included. The required Synchronet JS libraries and two example doors (LORD and LORD II) are included in the release bundle under `doors/sbbs/` — no separate download or installation is needed to get started.
+
+The step-by-step setup is [Set up a Synchronet JS door](how-to-guides/door-synchronet-js.md). The `doors.json` keys, module resolution rules and the implemented API surface are in the [Technical Reference](#technical-reference) at the bottom.
 
 ## Overview
 
@@ -34,123 +36,55 @@ doors/sbbs/
     └── lord2/         Legend of the Red Dragon II
 ```
 
-To run other Synchronet JS doors, add the game's directory from the [Synchronet Git repository](https://gitlab.synchro.net/main/sbbs) (or an existing Synchronet installation) under `doors/sbbs/xtrn/` and add a configuration entry as described below.
+To run other Synchronet JS doors, add the game's directory from the [Synchronet Git repository](https://gitlab.synchro.net/main/sbbs) (or an existing Synchronet installation) under `doors/sbbs/xtrn/` and add a door record as described below.
 
 ## Configuration
 
-### doors.json
+Define the door in the [Configuration Editor](configuration/configuration.md#configuration-editor-tui): run `./config`, press **7** for Door Programs, then **I** to insert a record. Set **Type** to `Synchronet JS` and fill in:
 
-Add a door entry with `"type": "synchronet_js"`:
+| Field | Value for the bundled LORD |
+| --- | --- |
+| Code | `LORDJS` |
+| Name | `Legend of the Red Dragon (JS)` |
+| Working Dir | `doors/sbbs/xtrn/lord` — the game's data directory |
+| Script | `lord.js` — the main JS file, relative to Working Dir |
+| Exec Dir | `doors/sbbs/exec/` — Synchronet's `exec/` directory |
+| Library Paths | `doors/sbbs/exec/load, doors/sbbs/exec/dorkit` — comma-separated search paths for `load()` and `require()` |
+| Script Args | blank unless the game reads `argv` |
+| Single Instance | `Y` for games that keep flat-file save data, such as LORD |
+| Min Access Level | as you like |
 
-```json
-{
-  "code": "LORDJS",
-  "name": "Legend of the Red Dragon (JS)",
-  "type": "synchronet_js",
-  "script": "lord.js",
-  "working_directory": "doors/sbbs/xtrn/lord",
-  "exec_dir": "doors/sbbs/exec/",
-  "library_paths": [
-    "doors/sbbs/exec/load",
-    "doors/sbbs/exec/dorkit"
-  ],
-  "single_instance": true,
-  "min_access_level": 10
-}
-```
-
-### Configuration Fields
-
-| Field               | Type     | Required | Description                                                              |
-| ------------------- | -------- | -------- | ------------------------------------------------------------------------ |
-| `code`              | string   | Yes      | Unique internal code (used in `DOOR:CODE` menu commands). Uppercase; A-Z, 0-9, `_`, `-`; max 16 chars |
-| `name`              | string   | Yes      | Display name shown to users (case preserved)                             |
-| `type`              | string   | Yes      | Must be `"synchronet_js"`                                                |
-| `script`            | string   | Yes      | Main JS file to execute, relative to `working_directory`                 |
-| `working_directory` | string   | Yes      | Path to the game's data directory (relative to BBS root or absolute)     |
-| `exec_dir`          | string   | Yes      | Path to Synchronet's `exec/` directory (mapped to `system.exec_dir` in JS) |
-| `library_paths`     | []string | Yes      | Search paths for `load()` and `require()` — include both `exec/load` (JS libraries) and `exec/dorkit` (DORKit terminal framework) |
-| `single_instance`   | bool     | No       | Only allow one node at a time (default: false)                           |
-| `min_access_level`  | int      | No       | Minimum access level required (default: 0)                               |
-| `args`              | []string | No       | Arguments passed to the script as `argv`                                 |
-
-### Config Editor
-
-You can also configure Synchronet JS doors through the interactive [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section 7 — Door Programs). Set the "Type" field to `synchronet_js` and fill in the Script, Exec Dir, and Library Paths fields.
+Both library paths are needed: the games load utility libraries from `exec/load` and the terminal framework from `exec/dorkit`. Press **Esc**, then **Q** and **Y** to save. The same record as JSON is under [doors.json](#doorsjson) in the Technical Reference.
 
 ## Menu Integration
 
-Launch Synchronet JS doors the same way as any other door:
+Launch Synchronet JS doors the same way as any other door, with a `DOOR:CODE` command on a menu:
 
 ```
 DOOR:LORDJS
 ```
 
-See [Menus & ACS](menus/menu-system.md) for details on adding door entries to menus.
+Run `./menuedit`, open `DOORSM`, press **F5**, and set **Keys** to a free letter, **Command** to `DOOR:LORDJS` and **ACS** to `*`. See [Menus & ACS](menus/menu-system.md) for the menu editor and the `menus.d/v3/` overlay it saves into, and [Generated door menus](doors/generated-menu.md) for a menu that lists every door automatically.
 
-## Module Resolution
+## Example: Setting Up LORD and LORD II
 
-When a game calls `load()` or `require()`, ViSiON/3 searches for the requested file in this order:
+LORD and LORD II are included in the bundle under `doors/sbbs/xtrn/lord/` and `doors/sbbs/xtrn/lord2/`. To enable them:
 
-1. **Current script's directory** — the directory of the script that called `load()`
-2. **`js.load_path_list`** — initialized from `library_paths`, but scripts can modify it at runtime
-3. **Working directory** — the game's `working_directory`
+1. **Define the doors** in the config editor as in [Configuration](#configuration): one record with code `LORDJS`, script `lord.js` and working directory `doors/sbbs/xtrn/lord`, and one with code `LORD2JS`, script `lord2.js` and working directory `doors/sbbs/xtrn/lord2`. Both take the same **Exec Dir** and **Library Paths**, and both want **Single Instance**. The JSON for both is under [doors.json](#doorsjson).
 
-This matches Synchronet's module resolution behavior. Games that dynamically modify `js.load_path_list` (which DORKit does) work correctly.
+2. **Add menu entries** with `./menuedit`, which saves them into the `menus.d/v3/` overlay, as in [Menu Integration](#menu-integration). The equivalent hand-edited CFG entries are under [Menu CFG entries](#menu-cfg-entries).
 
-## Implemented API Surface
+3. **Connect and play** — select the door from your menu. The first run creates the game's data files inside the game's directory.
 
-The following Synchronet API objects and functions are available to JS door games:
+## Adding Other Synchronet JS Doors
 
-### Global Objects
+To add a door beyond the included examples:
 
-| Object    | Description                                                                                 |
-| --------- | ------------------------------------------------------------------------------------------- |
-| `console` | Terminal I/O: write, read, getkey, inkey, getstr, cursor movement, attributes, clear screen |
-| `bbs`     | BBS state: node_num, sys_status, online, get_time_left()                                    |
-| `user`    | Current user: alias, name, number, security.level, settings, stats                          |
-| `system`  | System info: name, operator, exec_dir, data_dir, node_dir, timer                            |
-| `server`  | Server identification (stub for DORKit mode detection)                                      |
-| `client`  | Client connection info (stub for DORKit mode detection)                                     |
-| `js`      | Runtime: exec_dir, load_path_list, terminated, on_exit()                                    |
+1. Obtain the game's `xtrn/{game}/` directory from the [Synchronet Git repository](https://gitlab.synchro.net/main/sbbs) or an existing Synchronet installation
+2. Place it under `doors/sbbs/xtrn/{game}/`
+3. Add a `Synchronet JS` door record pointing to it, with **Working Dir** set to the new directory and **Script** set to the game's main file
 
-### Classes
-
-| Class   | Description                                                                                                                                          |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `File`  | File I/O: open, close, read, write, readln, writeln, readBin, writeBin, seek (via position property), lock/unlock, flush, truncate, INI file methods |
-| `Queue` | Inter-thread message queue with session I/O fallback (used by DORKit for input buffering)                                                            |
-
-### Global Functions
-
-| Function                         | Description                              |
-| -------------------------------- | ---------------------------------------- |
-| `load(filename)`                 | Load and execute a JS module             |
-| `require(filename, symbol)`      | Load a module and verify a symbol exists |
-| `exit(code)`                     | Terminate the script                     |
-| `ascii(str)` / `ascii_str(code)` | Character code conversion                |
-| `random(max)`                    | Random integer 0 to max-1                |
-| `time()`                         | Current Unix timestamp                   |
-| `sleep(ms)`                      | Sleep for milliseconds                   |
-| `mswait(ms)`                     | Alias for sleep                          |
-| `format(fmt, ...)`               | sprintf-style formatting                 |
-| `strftime(fmt, time)`            | Date formatting                          |
-| `file_exists(path)`              | Check if a file exists                   |
-| `file_remove(path)`              | Delete a file                            |
-| `file_rename(old, new)`          | Rename a file                            |
-| `file_mutex(path)`               | Atomic lock file creation                |
-| `backslash(path)`                | Ensure path ends with `/`                |
-| `truncsp(str)`                   | Trim trailing whitespace                 |
-| `log(msg)`                       | Log a message                            |
-
-## Encoding and ANSI Art
-
-Synchronet JS games use CP437 encoding for ANSI art. ViSiON/3 preserves CP437 byte values through the JS string round-trip using Latin-1 mapping:
-
-- **File reads**: Raw bytes are mapped to Unicode codepoints with the same numeric value (byte 0xDB = rune U+00DB)
-- **Terminal output**: Runes are converted back to raw bytes and written directly to the session
-
-This means ANSI art files display correctly without any encoding configuration.
+Not every Synchronet game runs. The engine implements the parts of the Synchronet API that DORKit-based games use; see [Implemented API Surface](#implemented-api-surface) and [Limitations](#limitations).
 
 ## Multi-Node Support
 
@@ -161,6 +95,8 @@ Games that support multiple simultaneous players (like LORD) use file locking fo
 - **Automatic lock file cleanup** when the JS engine exits (prevents stale locks from crashes)
 
 Each node gets its own temporary directory (`system.node_dir`) for per-node state files.
+
+A game is ended the same way as any other door when the caller hangs up, idles past their idle timeout or runs out of time; see [Ending a Door](doors/doors.md#ending-a-door). A caller with no time limit, and CoSysOps and above, are reported to the game as having an hour left that never counts down, so no game mistakes them for being out of time.
 
 ## Limitations
 
@@ -192,52 +128,131 @@ If a game crashes or is forcefully terminated, lock files (`.lock`) may be left 
 
 Verify that your terminal supports CP437 encoding. Most modern SSH clients (SyncTERM, NetRunner, mTelnet) handle this correctly. If using a UTF-8 terminal, some block characters may not render as expected.
 
-## Example: Setting Up LORD and LORD II
+## Technical Reference
 
-LORD and LORD II are included in the bundle under `doors/sbbs/xtrn/lord/` and `doors/sbbs/xtrn/lord2/`. To enable them:
+### doors.json
 
-1. **Add to doors.json**:
-   ```json
-   {
-     "code": "LORDJS",
-     "name": "Legend of the Red Dragon (JS)",
-     "type": "synchronet_js",
-     "script": "lord.js",
-     "working_directory": "doors/sbbs/xtrn/lord",
-     "exec_dir": "doors/sbbs/exec/",
-     "library_paths": [
-       "doors/sbbs/exec/load",
-       "doors/sbbs/exec/dorkit"
-     ],
-     "single_instance": true
-   },
-   {
-     "code": "LORD2JS",
-     "name": "LORD II: New World (JS)",
-     "type": "synchronet_js",
-     "script": "lord2.js",
-     "working_directory": "doors/sbbs/xtrn/lord2",
-     "exec_dir": "doors/sbbs/exec/",
-     "library_paths": [
-       "doors/sbbs/exec/load",
-       "doors/sbbs/exec/dorkit"
-     ],
-     "single_instance": true
-   }
-   ```
+A Synchronet JS door is a record in `configs/doors.json` with `"type": "synchronet_js"`. The keys shared by every door type are in the [Door Programs reference](doors/doors.md#doorsjson); `commands`, the dropfile keys and `environment_variables` are not used.
 
-2. **Add menu entries** with `./menuedit`, which saves them into the `menus.d/v3/` overlay. To do it by hand instead, copy the shipped file into the overlay first (`mkdir -p menus.d/v3/cfg && cp menus/v3/cfg/DOORSM.CFG menus.d/v3/cfg/`), then add these objects inside its top-level array, after a trailing comma on the entry before them:
-   ```json
-   { "KEYS": "L", "CMD": "DOOR:LORDJS", "ACS": "*", "HIDDEN": false },
-   { "KEYS": "2", "CMD": "DOOR:LORD2JS", "ACS": "*", "HIDDEN": false }
-   ```
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `code` | string | required | Unique internal code (used in `DOOR:CODE` menu commands). Uppercase; A-Z, 0-9, `_`, `-`; max 16 chars |
+| `name` | string | required | Display name shown to users (case preserved) |
+| `type` | string | required | Must be `"synchronet_js"` |
+| `script` | string | required | Main JS file to execute, relative to `working_directory` |
+| `working_directory` | string | required | Path to the game's data directory (relative to BBS root or absolute) |
+| `exec_dir` | string | required | Path to Synchronet's `exec/` directory (mapped to `system.exec_dir` in JS) |
+| `library_paths` | []string | required | Search paths for `load()` and `require()` — include both `exec/load` (JS libraries) and `exec/dorkit` (DORKit terminal framework) |
+| `args` | []string | none | Arguments passed to the script as `argv`. Placeholders are not substituted |
+| `single_instance` | bool | `false` | Only allow one node at a time |
+| `min_access_level` | int | `0` | Minimum access level required |
 
-3. **Connect and play** — select the door from your menu.
+The bundled games, as they appear inside the top-level array of
+`configs/doors.json`:
 
-## Adding Other Synchronet JS Doors
+```json
+[
+{
+  "code": "LORDJS",
+  "name": "Legend of the Red Dragon (JS)",
+  "type": "synchronet_js",
+  "script": "lord.js",
+  "working_directory": "doors/sbbs/xtrn/lord",
+  "exec_dir": "doors/sbbs/exec/",
+  "library_paths": [
+    "doors/sbbs/exec/load",
+    "doors/sbbs/exec/dorkit"
+  ],
+  "single_instance": true,
+  "min_access_level": 10
+},
+{
+  "code": "LORD2JS",
+  "name": "LORD II: New World (JS)",
+  "type": "synchronet_js",
+  "script": "lord2.js",
+  "working_directory": "doors/sbbs/xtrn/lord2",
+  "exec_dir": "doors/sbbs/exec/",
+  "library_paths": [
+    "doors/sbbs/exec/load",
+    "doors/sbbs/exec/dorkit"
+  ],
+  "single_instance": true
+}
+]
+```
 
-To add a door beyond the included examples:
+### Menu CFG entries
 
-1. Obtain the game's `xtrn/{game}/` directory from the [Synchronet Git repository](https://gitlab.synchro.net/main/sbbs) or an existing Synchronet installation
-2. Place it under `doors/sbbs/xtrn/{game}/`
-3. Add a `synchronet_js` entry to `configs/doors.json` pointing to it
+To add the menu entries by hand instead of with `menuedit`, copy the shipped file into the overlay first (`mkdir -p menus.d/v3/cfg && cp menus/v3/cfg/DOORSM.CFG menus.d/v3/cfg/`), then add these objects inside its top-level array, after a trailing comma on the entry before them:
+
+```json
+{ "KEYS": "L", "CMD": "DOOR:LORDJS", "ACS": "*", "HIDDEN": false },
+{ "KEYS": "2", "CMD": "DOOR:LORD2JS", "ACS": "*", "HIDDEN": false }
+```
+
+### Module Resolution
+
+When a game calls `load()` or `require()`, ViSiON/3 searches for the requested file in this order:
+
+1. **Current script's directory** — the directory of the script that called `load()`
+2. **`js.load_path_list`** — initialized from `library_paths`, but scripts can modify it at runtime
+3. **Working directory** — the game's `working_directory`
+
+This matches Synchronet's module resolution behavior. Games that dynamically modify `js.load_path_list` (which DORKit does) work correctly.
+
+### Implemented API Surface
+
+The following Synchronet API objects and functions are available to JS door games:
+
+#### Global Objects
+
+| Object    | Description                                                                                 |
+| --------- | ------------------------------------------------------------------------------------------- |
+| `console` | Terminal I/O: write, read, getkey, inkey, getstr, cursor movement, attributes, clear screen |
+| `bbs`     | BBS state: node_num, sys_status, online, get_time_left()                                    |
+| `user`    | Current user: alias, name, number, security.level, settings, stats                          |
+| `system`  | System info: name, operator, exec_dir, data_dir, node_dir, timer                            |
+| `server`  | Server identification (stub for DORKit mode detection)                                      |
+| `client`  | Client connection info (stub for DORKit mode detection)                                     |
+| `js`      | Runtime: exec_dir, load_path_list, terminated, on_exit()                                    |
+
+#### Classes
+
+| Class   | Description                                                                                                                                          |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `File`  | File I/O: open, close, read, write, readln, writeln, readBin, writeBin, seek (via position property), lock/unlock, flush, truncate, INI file methods |
+| `Queue` | Inter-thread message queue with session I/O fallback (used by DORKit for input buffering)                                                            |
+
+#### Global Functions
+
+| Function                         | Description                              |
+| -------------------------------- | ---------------------------------------- |
+| `load(filename)`                 | Load and execute a JS module             |
+| `require(filename, symbol)`      | Load a module and verify a symbol exists |
+| `exit(code)`                     | Terminate the script                     |
+| `ascii(str)` / `ascii_str(code)` | Character code conversion                |
+| `random(max)`                    | Random integer 0 to max-1                |
+| `time()`                         | Current Unix timestamp                   |
+| `sleep(ms)`                      | Sleep for milliseconds                   |
+| `mswait(ms)`                     | Alias for sleep                          |
+| `format(fmt, ...)`               | sprintf-style formatting                 |
+| `strftime(fmt, time)`            | Date formatting                          |
+| `file_exists(path)`              | Check if a file exists                   |
+| `file_remove(path)`              | Delete a file                            |
+| `file_rename(old, new)`          | Rename a file                            |
+| `file_mutex(path)`               | Atomic lock file creation                |
+| `backslash(path)`                | Ensure path ends with `/`                |
+| `truncsp(str)`                   | Trim trailing whitespace                 |
+| `log(msg)`                       | Log a message                            |
+
+`js.on_exit()` handlers run once, before the session closes, within a five-second budget, so a game's save or cleanup on exit is not lost to a late interrupt.
+
+### Encoding and ANSI Art
+
+Synchronet JS games use CP437 encoding for ANSI art. ViSiON/3 preserves CP437 byte values through the JS string round-trip using Latin-1 mapping:
+
+- **File reads**: Raw bytes are mapped to Unicode codepoints with the same numeric value (byte 0xDB = rune U+00DB)
+- **Terminal output**: Runes are converted back to raw bytes and written directly to the session
+
+This means ANSI art files display correctly without any encoding configuration.

@@ -1,6 +1,6 @@
 # ViSiON/3 Sponsor Menus
 
-Sponsor Menus give a designated user (the **sponsor**) elevated moderation access to a specific message area. This follows the Vision/2 tradition of per-area sponsors/moderators, extended in Vision/3 with an in-BBS area editor accessible via the `%` key.
+Sponsor Menus give a designated user (the **sponsor**) elevated moderation access to a specific message area. This follows the Vision/2 tradition of per-area sponsors/moderators, extended in Vision/3 with an in-BBS area editor accessible via the `%` key. A sponsor can rename their area, tighten who may read or post, set a retention limit and keep the area list tidy, which lets a busy board share the housekeeping with the regulars who care about each subject.
 
 ## Overview
 
@@ -44,7 +44,7 @@ The handle comparison is **case-insensitive** — `"techguru"`, `"TechGuru"`, an
 
 ## Using the Sponsor Menu
 
-From the **Messages Menu**, press `%` to enter the Sponsor Menu for the currently selected message area.
+From the **Messages Menu**, press `%` to enter the Sponsor Menu for the currently selected message area. The shipped `MSGMENU.ANS` shows `[%] Sponsor Menu` on its own row, under the other options, only to callers who can use it; everyone else sees a blank row in its place, so the layout is the same for all (the row is wrapped in a `{{SPONSOR}}` [conditional region](menus/menu-system.md#keyword-conditions)).
 
 The `SPONSORM.ANS` header is displayed, followed by a prompt:
 
@@ -195,7 +195,13 @@ menus/v3/ansi/SPONSORM.ANS
 
 If the file cannot be displayed (missing or read error), the menu continues without the header — a text prompt is always shown.
 
-## Menu Configuration
+## Technical Reference
+
+The `sponsor` field and the area's other settings are in
+`configs/message_areas.json`; see [Message Areas](messages/message-areas.md)
+for the full schema.
+
+### Menu Configuration
 
 The `%` key is wired in `menus/v3/cfg/MSGMENU.CFG`:
 
@@ -209,7 +215,7 @@ The `%` key is wired in `menus/v3/cfg/MSGMENU.CFG`:
 }
 ```
 
-The entry is `"HIDDEN": true` so it does not appear in the Messages Menu listing. It is accessible only to those who know the `%` shortcut (sysops can communicate this to their sponsors).
+The entry is `"HIDDEN": true` so it does not appear in the menu's command listing; the shipped `MSGMENU.ANS` advertises it instead, inside a `{{SPONSOR}}` region that only sponsors, co-sysops and sysops see.
 
 The sponsor sub-menu is defined in `menus/v3/cfg/SPONSORM.CFG`:
 
@@ -233,17 +239,17 @@ The sponsor sub-menu is defined in `menus/v3/cfg/SPONSORM.CFG`:
 
 The `[` (previous area) and `]` (next area) navigation keys are handled internally by `runSponsorMenu` and do not need CFG entries. They are always active within the Sponsor Menu regardless of `SPONSORM.CFG`.
 
-## Implementation Notes
+### Implementation Notes
 
-### Access Check
+#### Access Check
 
 `CanAccessSponsorMenu(user, area, serverConfig)` in `internal/menu/sponsor_access.go` performs the three-way check. It is called by both `runSponsorMenu` and `runSponsorEditArea` so neither handler can be reached without passing the gate.
 
-### Persistence
+#### Persistence
 
 `MessageManager.SaveAreas()` (`internal/message/manager.go`) serialises all areas to a temp file in the same directory as `message_areas.json`, then renames it into place. This is the same atomic-write pattern used elsewhere in Vision/3 for JSON data files.
 
-### Vision/2 Lineage
+#### Vision/2 Lineage
 
 In Vision/2, the `BoardRec.Sponsor` (message areas) and `AreaRec.Sponsor` (file areas) fields stored a sponsor username. The `sponsoron()` function checked `match(curboard.sponsor, unam) OR tempsysop`. Vision/3's `CanAccessSponsorMenu` mirrors this logic, using `strings.EqualFold` for the case-insensitive handle match and `accessLevel` thresholds for sysop/co-sysop.
 

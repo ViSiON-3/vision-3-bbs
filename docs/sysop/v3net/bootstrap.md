@@ -6,9 +6,15 @@
 
 `v3net-bootstrap` is a developer utility that manually creates and publishes
 the initial Network Area List (NAL) for a V3Net hub. It is not built by
-`build.sh` — run it with `go run` when needed.
+`build.sh` — run it with `go run` when needed. A hub sysop would reach for it
+only when the normal setup path cannot be used: the hub setup wizard and the
+hub's own first start already seed the NAL for you.
 
-> **Superseded for normal use.** The `./config` setup wizard (option `E — V3Net Setup`) and hub startup auto-init handle NAL seeding automatically. Use this tool only when you need to publish a NAL outside of the normal setup flow (e.g. disaster recovery, scripted environments).
+> **Superseded for normal use.** The hub setup wizard
+> (`./config → 6 — ViSiON/3 Networking (V3Net) → 3. Networks → I`) writes the
+> initial areas to `v3net.json`, and the hub seeds and signs the NAL on its
+> first start. Use this tool only when you need to publish a NAL outside of
+> that flow (e.g. disaster recovery, scripted environments).
 
 ## When to Use
 
@@ -20,7 +26,46 @@ The `./config` wizard writes `initialAreas` to `v3net.json` and the BBS seeds th
 
 Leaf nodes do not need this tool.
 
-## Usage
+## Prerequisites
+
+1. The hub must be running and reachable at the `-hub` URL.
+2. The hub must have the network listed in its `hub.networks[]` configuration (see [Hub Network Entry](v3net/manual-config.md#hub-network-entry-hubnetworks)).
+3. The keystore file must exist. Start the BBS with `"enabled": true` and a valid `keystorePath` to auto-generate it.
+
+## Example
+
+```bash
+go run ./cmd/v3net-bootstrap \
+  -keystore data/v3net.key \
+  -hub      http://localhost:8765 \
+  -network  felonynet \
+  -areas    "fel.general:FelonyNet General,fel.art:FelonyNet Art"
+```
+
+Expected output on success:
+
+```
+Node ID: a3f9e1b2c4d5e6f7
+Signed NAL: network=felonynet, areas=2, updated=Mon, 17 Mar 2026 00:00:00 UTC
+Response: 200 {"status":"ok"}
+NAL published successfully!
+```
+
+Afterwards the areas appear in every leaf's area browser once their next NAL
+fetch runs; the hub announces the change on its event stream, so connected
+leaves pick it up straight away.
+
+## Related Documentation
+
+- [V3Net Configuration](v3net/configuration.md) — hub and leaf setup
+- [Network Area List (NAL)](v3net/nal.md) — what the NAL holds and who may change it
+- [V3Net Networking](v3net/message-areas.md) — how V3Net works from a sysop perspective
+
+---
+
+## Technical Reference
+
+### Usage
 
 ```bash
 go run ./cmd/v3net-bootstrap \
@@ -56,32 +101,7 @@ Areas are created with these defaults:
 - ANSI allowed: yes
 - Manager: the hub node (from the keystore)
 
-## Example
-
-```bash
-go run ./cmd/v3net-bootstrap \
-  -keystore data/v3net.key \
-  -hub      http://localhost:8765 \
-  -network  felonynet \
-  -areas    "fel.general:FelonyNet General,fel.art:FelonyNet Art"
-```
-
-Expected output on success:
-
-```
-Node ID: a3f9e1b2c4d5e6f7
-Signed NAL: network=felonynet, areas=2, updated=Mon, 17 Mar 2026 00:00:00 UTC
-Response: 200 {"status":"ok"}
-NAL published successfully!
-```
-
-## Prerequisites
-
-1. The hub must be running and reachable at the `-hub` URL.
-2. The hub must have the network listed in its `hub.networks[]` configuration (see [V3Net Configuration](v3net/configuration.md#hub-network-entry-hubnetworks)).
-3. The keystore file must exist. Start the BBS with `"enabled": true` and a valid `keystorePath` to auto-generate it.
-
-## How It Works
+### How It Works
 
 The tool:
 
@@ -90,7 +110,7 @@ The tool:
 3. Signs the NAL using `nal.Sign`.
 4. POSTs the signed NAL to `POST /v3net/v1/{network}/nal` on the hub, with a signed `X-V3Net-Signature` request header for authentication.
 
-## Build
+### Build
 
 This tool is intentionally excluded from `build.sh`. To build a standalone binary:
 
@@ -99,8 +119,3 @@ go build -o v3net-bootstrap ./cmd/v3net-bootstrap
 ```
 
 The compiled binary is listed in `.gitignore` and should not be committed.
-
-## Related Documentation
-
-- [V3Net Configuration](v3net/configuration.md) — hub and leaf setup
-- [V3Net Networking](v3net/message-areas.md) — how V3Net works from a sysop perspective

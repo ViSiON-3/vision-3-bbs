@@ -1,6 +1,13 @@
 # Admin Menu
 
-The Admin Menu provides in-BBS access to user management functions without leaving the BBS or editing JSON files directly. It is accessible only to SysOps — access level **255**, see [Why 255 and not `sysOpLevel`](#why-255-and-not-sysoplevel) below.
+The Admin Menu is the SysOp's desk inside the BBS: validate the callers who
+signed up overnight, fix a handle, ban a troublemaker, post news, poll the
+mail networks — all from the same terminal session you log in with, without
+leaving the BBS or editing JSON files directly. It is accessible only to
+SysOps — access level **255**, see
+[Why 255 and not `sysOpLevel`](#why-255-and-not-sysoplevel) below. For bulk
+work from the server's shell, the [User Editor](users/user-editor.md) (`ue`)
+covers the same accounts.
 
 ## Accessing the Admin Menu
 
@@ -51,7 +58,12 @@ nothing will change. To actually move the gate, edit the ACS strings themselves:
 | `T` | Voting | Manage voting topics (add, delete, edit questions and options) |
 | `U` | NUV Queue | View New User Voting candidates and vote tallies |
 | `M` | Poll Mail Networks | Send and fetch mail for every FTN and QWK network now, showing the progress (runs `v3mail poll`). **ESC** or **Q** stops it |
+| `3` | V3Net | Open the V3Net menu (`V3NETM`): networks, subscriptions and the area browser. See [V3Net](v3net/configuration.md) |
 | `Q` | Quit | Return to Main Menu |
+
+The bindings come from `menus/v3/cfg/ADMIN.CFG` (see the
+[Technical Reference](#technical-reference)); rebind or add keys with
+`menuedit` like any other menu.
 
 ---
 
@@ -86,19 +98,20 @@ Opens a lightbar browser showing only **unvalidated** user accounts. The lower h
 | `P` | Set new password (bcrypt-hashed before saving) |
 | `0` | Toggle ban status — ban sets level 0 + unvalidated; un-ban restores regular level + validated |
 | `9` | Toggle soft delete — delete sets `deletedUser=true`; un-delete restores the account |
-| `A` | Edit username |
+| `A` | Edit username. A new handle that matches your [bad user names](users/user-management.md#bad-user-names) list shows a warning but is allowed |
 | `B` | Edit real name |
 | `C` | Edit group/location |
 | `D` | Edit private note (sysop-only memo) |
 | `E` | Edit access flags |
 | `F` | Edit access level (numeric) |
+| `I` | Browse the user's [InfoForms](menus/infoforms.md#infoform-browser-user-editor--validate) |
 | `S` | **Save** all staged changes |
 | `X` | **Abort** — discard all staged changes |
 | `Q` / Esc | Quit |
 
 Changes to individual fields are **staged** (shown with a `*` prefix). Nothing is written to disk until you press `S`. Pressing `Q` with unsaved changes will warn rather than exit.
 
-> **Validation behaviour:** When `G` is used to validate a user whose access level is currently 0, the level is automatically raised to `regularUserLevel` (configured in `config.json`, default 10).
+> **Validation behaviour:** When `G` is used to validate a user whose access level is currently 0, the level is automatically raised to `regularUserLevel` (configured in `config.json`; `25` in the shipped config, `10` if the key is missing).
 >
 > **User #1 protection:** The primary SysOp account (user ID 1) cannot be unvalidated, banned, or deleted through any admin screen.
 
@@ -156,7 +169,7 @@ The screen shows a list of eligible accounts with their deletion date, then prom
 
 If `deletedUserRetentionDays` is set to `-1`, purge is disabled and `P` will report that.
 
-See [User Management — Soft Delete and Purge](users/user-management.md#soft-deleting-users) for retention period configuration.
+See [User Management — Deleting Users (Soft Delete)](users/user-management.md#deleting-users-soft-delete) for retention period configuration. The shipped config sets `deletedUserRetentionDays` to `-1`, so `P` reports that purge is disabled until you change **Del User Days** in `./config` → **System Setup → Default Settings**.
 
 ---
 
@@ -187,7 +200,7 @@ See [New User Voting](users/nuv.md) for full configuration and usage details.
 
 ## Admin Activity Logging
 
-All changes made through the admin screens (both `V` and `E`) are logged to `data/users/admin_activity.log`. Each entry records:
+All changes made through the admin screens (both `V` and `E`) are logged to `data/users/admin_activity.json`. Each entry records:
 
 - Which admin made the change
 - Which user was changed
@@ -205,3 +218,48 @@ Password changes are logged as `********` — the actual values are never writte
 - [User Editor (`ue`)](users/user-editor.md) — offline TUI for bulk operations and detailed field editing
 - [News](menus/news.md) — system news items, `NEWSHDR.ANS` template, and `EDITNEWS` reference
 - [New User Voting (NUV)](users/nuv.md) — NUV configuration, thresholds, and voting commands
+- [WFC Sysop Console](how-to-guides/wfc-console.md) — watching, chatting with and kicking callers from outside the BBS
+
+---
+
+## Technical Reference
+
+### `ADMIN.CFG` as shipped
+
+| Key | Command | ACS |
+|-----|---------|-----|
+| `V` | `RUN:VALIDATEUSER` | `S255` |
+| `E` | `RUN:ADMINLISTUSERS` | `S255` |
+| `N` | `RUN:TOGGLEALLOWNEWUSERS` | `S255` |
+| `P` | `RUN:PURGEUSERS` | `S255` |
+| `T` | `RUN:VOTE` | `S255` |
+| `W` | `RUN:EDITNEWS` | `S255` |
+| `U` | `RUN:LISTNUV` | `S255` |
+| `M` | `RUN:MAILPOLL` | `S255` |
+| `3` | `GOTO:V3NETM` | `S255` |
+| `Q` | `GOTO:MAIN` | `*` |
+
+`ADMIN.MNU` itself carries `"ACS": "S255"`, and the `%`, `X` and `/SYSOP`
+entries in `MAIN.CFG` that lead to it are `GOTO:ADMIN` with the same ACS. To
+customise any of this, copy the file into `menus.d/v3/cfg/` (or let
+`menuedit` do it) rather than editing the shipped copy; see
+[Customising menus without losing your changes](menus/menu-system.md#customising-menus-without-losing-your-changes).
+
+### Files touched
+
+| File | Written by |
+|------|-----------|
+| `data/users/users.json` | `V` and `E` on `S` |
+| `data/users/admin_activity.json` | Every staged change, validation, ban, delete and purge (passwords logged as `********`) |
+| `configs/config.json` (`allowNewUsers`) | `N` |
+| `data/news.json` | `W` |
+| `data/nuv.json` | `U` |
+
+### Related `config.json` keys
+
+| Key | Shipped | Fallback | Used by |
+|-----|---------|----------|---------|
+| `regularUserLevel` | `25` | `10` | Level given on validation (`G`) when the account is below it |
+| `allowNewUsers` | `true` | `true` | Toggled by `N` |
+| `deletedUserRetentionDays` | `-1` | `30` | Eligibility for `P` |
+| `sysOpLevel` | `255` | `255` | The pending-validation notice and other Go-side SysOp checks, **not** the menu gate (see above) |

@@ -17,31 +17,22 @@ New User Voting is ViSiON/3's implementation of ViSiON/2's NUV system. When a ne
 
 ## Configuration
 
-NUV is configured in `configs/config.json`:
+Turn NUV on and set its thresholds in the config editor: `./config` →
+**System Setup → Access & Security → New User Voting (NUV)**.
 
-```json
-{
-  "useNuv": true,
-  "autoAddNuv": true,
-  "nuvUseLevel": 25,
-  "nuvYesVotes": 5,
-  "nuvNoVotes": 5,
-  "nuvValidate": true,
-  "nuvKill": false,
-  "nuvLevel": 25
-}
-```
+| Field | Meaning |
+|-------|---------|
+| Use NUV | Enable the system. Cannot be on at the same time as **Auto Validate** on the Access Levels screen |
+| Auto Add NUV | Queue every new signup automatically |
+| NUV Use Level | Minimum access level to vote |
+| NUV Yes Votes / NUV No Votes | Votes needed to trigger each threshold |
+| NUV Validate | Validate the account automatically when the yes threshold is reached |
+| NUV Kill | Soft-delete the account automatically when the no threshold is reached |
+| NUV Level | Access level given on auto-validation |
+| NUV Form | InfoForm number (1–5) shown to voters so they can judge the candidate; 0 shows none |
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `useNuv` | `false` | Enable the NUV system. If `false`, all NUV commands are silent no-ops |
-| `autoAddNuv` | `false` | Automatically queue new users after registration |
-| `nuvUseLevel` | `25` | Minimum access level required to vote |
-| `nuvYesVotes` | `5` | Number of YES votes needed to trigger the yes threshold |
-| `nuvNoVotes` | `5` | Number of NO votes needed to trigger the no threshold |
-| `nuvValidate` | `true` | If `true` and yes threshold is reached, automatically validate the user and set their level to `nuvLevel`. If `false`, log a notice for the SysOp to act manually |
-| `nuvKill` | `false` | If `true` and no threshold is reached, automatically soft-delete the user. If `false`, log a notice for the SysOp to act manually |
-| `nuvLevel` | `25` | Access level assigned when a user is auto-validated via NUV |
+The `config.json` keys behind these fields are in the
+[Technical Reference](#configjson-keys).
 
 ---
 
@@ -174,7 +165,45 @@ To manually manage a user affected by NUV thresholds when auto-action is disable
 
 ---
 
-## Data File
+## Manually Adding a Candidate
+
+SysOps can add a user to the NUV queue directly from `LISTNUV` by pressing `A` and entering the handle.
+
+Alternatively, edit `data/nuv.json` and add an entry to the `candidates` array. The `votes` array can be empty.
+
+---
+
+## Technical Reference
+
+### `config.json` keys
+
+```json
+{
+  "useNuv": true,
+  "autoAddNuv": true,
+  "nuvUseLevel": 25,
+  "nuvYesVotes": 5,
+  "nuvNoVotes": 5,
+  "nuvValidate": true,
+  "nuvKill": false,
+  "nuvLevel": 25,
+  "nuvForm": 0
+}
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `useNuv` | bool | `false` | Enable the NUV system. If `false`, all NUV commands are silent no-ops |
+| `autoAddNuv` | bool | `false` | Automatically queue new users after registration |
+| `nuvUseLevel` | int | `25` | Minimum access level required to vote |
+| `nuvYesVotes` | int | `5` | Number of YES votes needed to trigger the yes threshold |
+| `nuvNoVotes` | int | `5` | Number of NO votes needed to trigger the no threshold |
+| `nuvValidate` | bool | `true` | If `true` and yes threshold is reached, automatically validate the user and set their level to `nuvLevel`. If `false`, log a notice for the SysOp to act manually |
+| `nuvKill` | bool | `false` | If `true` and no threshold is reached, automatically soft-delete the user. If `false`, log a notice for the SysOp to act manually |
+| `nuvLevel` | int | `25` | Access level assigned when a user is auto-validated via NUV |
+| `nuvForm` | int | `0` | InfoForm number (1–5) displayed to voters; `0` = none |
+
+### Data File (`data/nuv.json`)
 
 Candidates are stored in `data/nuv.json`:
 
@@ -204,14 +233,6 @@ Candidates are stored in `data/nuv.json`:
 ```
 
 The file is created automatically when the first candidate is added. It is safe to edit manually (e.g., to remove a stuck candidate or pre-populate votes).
-
----
-
-## Manually Adding a Candidate
-
-SysOps can add a user to the NUV queue directly from `LISTNUV` by pressing `A` and entering the handle.
-
-Alternatively, edit `data/nuv.json` and add an entry to the `candidates` array. The `votes` array can be empty.
 
 ---
 

@@ -1,6 +1,6 @@
 # v3mail — Vision3 Mail Utility
 
-`v3mail` is the built-in command-line tool for managing JAM message bases and FTN echomail on a ViSiON/3 BBS. It combines message base maintenance (stats, defragmentation, purging, integrity checks, reply-thread linking) with a complete FTN echomail tosser/scanner/packer that replaces external tools like HPT/Husky.
+`v3mail` is the built-in command-line tool for managing JAM message bases and network mail on a ViSiON/3 BBS, the descendant of ViSiON/2's `V2MAIL`. It combines message base maintenance (stats, defragmentation, purging, integrity checks, reply-thread linking) with a complete FTN echomail tosser/scanner/packer that replaces external tools like HPT/Husky.
 
 ## Commands
 
@@ -103,8 +103,8 @@ the menu entry per hub).
 
 | Command    | Description                                                                |
 | ---------- | -------------------------------------------------------------------------- |
-| `toss`     | Unpack inbound ZIP bundles and toss `.pkt` files into JAM message bases; deliver inbound file echo files (`.TIC`) into their file areas and compile nodelists among them |
-| `scan`     | Scan JAM bases for new outbound echomail and create staging `.pkt` files   |
+| `toss`     | Unpack inbound ZIP bundles and toss `.pkt` files into JAM message bases, storing each message as received; deliver inbound file echo files (`.TIC`) into their file areas and compile nodelists among them; with **Auto-Create** on, create areas for unknown echoes |
+| `scan`     | Scan JAM bases for new outbound echomail and netmail and create staging `.pkt` files; From, To and Subject go out as CP437 unless the message declares `CHRS: UTF-8` |
 | `ftn-pack` | Pack staged `.pkt` files into ZIP bundles for binkd; writes BSO flow files |
 
 ### QWK Network Commands
@@ -119,55 +119,20 @@ For boards that are nodes on a QWK-based network such as DOVE-Net. See
 | `qwk-toss`        | Import `.QWK` packets waiting in the inbound directory without connecting                    |
 | `qwk-conferences` | Print the hub's conference numbers and names (`--network` required)                          |
 
-### AreaFix Commands (via `helper`)
+### AreaFix and other `helper` commands
 
-AreaFix requests are sent as netmail to the hub's `AreaFix` robot using the `helper areafix` command (not via `v3mail` directly).
-
-| Option            | Description                                                                 |
-| ----------------- | --------------------------------------------------------------------------- |
-| `--network NAME`  | FTN network name (required)                                                 |
-| `--command CMD`   | AreaFix command to send (e.g. `%LIST`, `+LINUX`, `-LINUX`)                  |
-| `--seed`          | Subscribe to all areas in `message_areas.json` for this network             |
-| `--seed-messages` | Number of old messages to rescan when using `--seed` (default: 25)          |
-| `--link ADDR`     | Hub address to target (default: first link of the network)                  |
+Subscribing to echoes, importing echo lists, compiling nodelists and posting
+from the command line are `helper`'s job, not `v3mail`'s. `helper areafix`
+writes the AreaFix netmail into `outbound_path`, and the next `v3mail ftn-pack`
+(or the integrated mailer's export cycle) sends it:
 
 ```bash
-# List available echo areas from the hub
 ./helper areafix --network fsxnet --command "%LIST"
-
-# Subscribe to a specific area
-./helper areafix --network fsxnet --command "+LINUX"
-
-# Seed all subscribed areas with the last 50 messages
-./helper areafix --network fsxnet --seed --seed-messages 50
 ```
 
-The `areafix_password` field on the link config is used as the netmail subject (the AreaFix password). The resulting `.pkt` is written to `outbound_path` and picked up by the next `v3mail ftn-pack` + binkd run.
-
-## Global Options
-
-```text
---all           Operate on all areas defined in configs/message_areas.json
---config DIR    Path to config directory (default: configs)
---data DIR      Path to data directory (default: data)
--q              Quiet mode — suppress informational output
---dry-run       readdress only: report what would change without writing
-```
-
-## FTN-Specific Options
-
-```text
---network NAME  Restrict toss/scan/ftn-pack to a single FTN network name
-                (default: all networks with internal_tosser_enabled: true)
-```
-
-## QWK Network Options
-
-```text
---network KEY   Restrict qwk-poll/qwk-scan/qwk-toss to one network key from
-                qwknet.json (default: every network with "enabled": true).
-                The named network runs even when disabled.
-```
+See [Send AreaFix Commands](messages/ftn-echomail.md#step-3b-send-areafix-commands),
+[FTN Nodelists](messages/nodelists.md), and
+[Posting from the Command Line](messages/message-areas.md#posting-from-the-command-line).
 
 ## Usage Examples
 
@@ -197,48 +162,6 @@ The `areafix_password` field on the link config is used as the netmail subject (
 ./v3mail poll --network fsxnet
 ./v3mail poll --qwk-only
 ```
-
-## FTN Configuration
-
-FTN behaviour is controlled by `configs/ftn.json`. Global fields (top-level):
-
-| Field                 | Description                                                     |
-| --------------------- | --------------------------------------------------------------- |
-| `inbound_path`        | Directory binkd delivers inbound bundles to                     |
-| `secure_inbound_path` | Directory for password-authenticated sessions                   |
-| `outbound_path`       | Staging directory for outbound `.pkt` files (`scan` output)     |
-| `binkd_outbound_path` | binkd BSO outbound directory (`ftn-pack` output)                |
-| `temp_path`           | Temporary directory for bundle extraction                       |
-| `bad_area_tag`        | JAM area tag for messages with unknown echo tags (e.g. `"BAD"`) |
-| `dupe_area_tag`       | JAM area tag for duplicate MSGIDs (e.g. `"DUPE"`)               |
-
-Per-network fields (`networks.<key>`):
-
-| Field                       | Description                                                     |
-| --------------------------- | --------------------------------------------------------------- |
-| `own_address`               | This node's FTN address (zone:net/node.point)                   |
-| `internal_tosser_enabled`   | Set `true` to enable `v3mail` for this network                  |
-| `origin`                    | Origin line text (empty = board name)                           |
-| `binkd_outbound_path`       | Optional: this network's own BSO outbound (`ftn-pack` output); empty = the global one. Use one per network when carrying several. |
-| `nodelist`                  | Optional: `file_echo` and `file_pattern` naming the file echo and files the network's nodelist arrives as; `toss` compiles each one into `data/ftn/nodelist/<network>.json`. See [FTN Nodelists](messages/nodelists.md). |
-
-Hub polling is scheduled through **Events**, using the per-network
-`echomail_poll_<network>` event created by the FTN wizard. See
-[FTN mail polling](advanced/event-scheduler.md#ftn-mail-polling-binkd).
-The obsolete `poll_interval_seconds` field is ignored when loading older configs.
-
-Per-link fields (`networks.<key>.links[]`):
-
-| Field                  | Description                                                     |
-| ---------------------- | --------------------------------------------------------------- |
-| `address`              | Link's FTN address                                              |
-| `packet_password`      | Packet password shared with hub (empty for no auth)             |
-| `areafix_password`     | Password for AreaFix netmail (subject line; set by hub)         |
-| `tic_password`         | Password inbound file echo TICs from this link must carry       |
-| `filefix_password`     | Password for FileFix netmail (subject line); empty = `tic_password` |
-| `filefix_name`         | Hub's file echo robot name (default `FileFix`)                  |
-| `name`                 | Human-readable label for this link                              |
-| `flavour`              | Delivery mode: `Normal` (default), `Crash`, `Hold`, `Direct`    |
 
 ## How Echomail Flow Works
 
@@ -321,6 +244,105 @@ matches the pattern but cannot be compiled is a toss error saying why (not a
 nodelist, a nodediff, or another zone's list). An older list than the one
 already compiled is skipped and logged. Compile one by hand with
 `helper nodelist import`. See [FTN Nodelists](messages/nodelists.md).
+
+## Technical Reference
+
+### Global options
+
+```text
+--all           Operate on all areas defined in configs/message_areas.json
+--config DIR    Path to config directory (default: configs)
+--data DIR      Path to data directory (default: data)
+-q              Quiet mode — suppress informational output
+```
+
+A JAM base command takes either `--all` or one or more base paths
+(`data/msgbases/fsx_gen`).
+
+### Per-command options
+
+| Command | Option | Meaning |
+| ------- | ------ | ------- |
+| `pack` | `--dry-run` | Report what would be removed without modifying |
+| `purge` | `--days N` | Delete messages older than N days in areas with no `max_age` of their own (with `--all`) |
+| `purge` | `--keep N` | Keep only the newest N messages in areas with no `max_messages` of their own (with `--all`) |
+| `purge` | `--dry-run` | Report without deleting |
+| `fix` | `--repair` | Attempt to repair the problems found |
+| `lastread` | `--reset USER` | Reset the lastread pointer for this user |
+| `readdress` | `--dry-run` | Report what would change without writing |
+| `toss`, `scan`, `ftn-pack` | `--network NAME` | Restrict to a single FTN network (default: all networks with `internal_tosser_enabled: true`) |
+| `qwk-poll`, `qwk-scan`, `qwk-toss`, `qwk-conferences` | `--network KEY` | Restrict to one network key from `qwknet.json` (default: every network with `"enabled": true`). The named network runs even when disabled |
+| `poll` | `--network`, `--ftn-only`, `--qwk-only`, `--timeout DUR`, `-v` | See [Poll](#poll) |
+
+Per-area `max_messages` and `max_age` always take precedence over `--days`
+and `--keep`.
+
+### Exit status and environment
+
+`v3mail` exits `0` when the command completed and `1` when it did not: a bad
+or missing command, a base that could not be opened, a toss, scan or pack
+that reported an error, a QWK poll step that failed, or a `poll` in which any
+hub or step failed. There are no other exit codes.
+
+| Variable | Effect |
+| -------- | ------ |
+| `V3MAIL_NO_CONSOLE_LOG` | When set (to anything), log records go to `data/logs/v3mail.log` only and not to the console. The BBS sets it when it runs `v3mail` for a sysop (admin menu **M**, Poll Mail Networks) so the records do not bury the progress lines. |
+
+Logging settings come from `configs/config.json` (`logging`); the log file is
+`v3mail.log` in the configured log directory, `data/logs` by default.
+
+### FTN configuration (`ftn.json`)
+
+FTN behaviour is controlled by `configs/ftn.json`, which the Configuration Editor
+(`./config` → **4 - Echomail Networking**) maintains. The full key reference,
+including the integrated `binkd` block, is in
+[FTN Echomail](messages/ftn-echomail.md#technical-reference); the keys `v3mail`
+itself reads are:
+
+Global fields (top-level):
+
+| Field                 | Description                                                     |
+| --------------------- | --------------------------------------------------------------- |
+| `dupe_db_path`        | MSGID dupe database (`toss`); MSGID-less mail is keyed by a content hash |
+| `inbound_path`        | Directory binkd delivers inbound bundles to                     |
+| `secure_inbound_path` | Directory for password-authenticated sessions                   |
+| `outbound_path`       | Staging directory for outbound `.pkt` files (`scan` output)     |
+| `binkd_outbound_path` | binkd BSO outbound directory (`ftn-pack` output)                |
+| `temp_path`           | Temporary directory for bundle extraction                       |
+| `bad_area_tag`        | JAM area tag for messages with unknown echo tags (e.g. `"BAD"`) |
+| `dupe_area_tag`       | JAM area tag for duplicate MSGIDs (e.g. `"DUPE"`)               |
+
+Per-network fields (`networks.<key>`):
+
+| Field                       | Description                                                     |
+| --------------------------- | --------------------------------------------------------------- |
+| `own_address`               | This node's FTN address (zone:net/node.point)                   |
+| `internal_tosser_enabled`   | Set `true` to enable `v3mail` for this network                  |
+| `origin`                    | Origin line text (empty = board name)                           |
+| `binkd_outbound_path`       | Optional: this network's own BSO outbound (`ftn-pack` output); empty = the global one. Use one per network when carrying several. |
+| `nodelist`                  | Optional: `file_echo` and `file_pattern` naming the file echo and files the network's nodelist arrives as; `toss` compiles each one into `data/ftn/nodelist/<network>.json`. See [FTN Nodelists](messages/nodelists.md). |
+| `auto_create`               | Optional: `toss` creates an echomail area for an unknown echo instead of sending the mail to the bad area, with the ACS, purge limits, auto-join and real-name settings given. Only for packets from a configured link that carry its password or arrived in the secure inbound. See [Auto-creating echo areas](messages/ftn-echomail.md#auto-creating-echo-areas). |
+
+Hub polling is scheduled through **Events**, using the per-network
+`echomail_poll_<network>` event created by the FTN wizard. See
+[FTN mail polling](advanced/event-scheduler.md#ftn-mail-polling-binkd).
+The obsolete `poll_interval_seconds` field is ignored when loading older configs.
+
+Per-link fields (`networks.<key>.links[]`):
+
+| Field                  | Description                                                     |
+| ---------------------- | --------------------------------------------------------------- |
+| `address`              | Link's FTN address                                              |
+| `packet_password`      | Packet password shared with hub (empty for no auth)             |
+| `areafix_password`     | Password for AreaFix netmail (subject line; set by hub)         |
+| `tic_password`         | Password inbound file echo TICs from this link must carry       |
+| `filefix_password`     | Password for FileFix netmail (subject line); empty = `tic_password` |
+| `filefix_name`         | Hub's file echo robot name (default `FileFix`)                  |
+| `name`                 | Human-readable label for this link                              |
+| `flavour`              | Delivery mode: `Normal` (default), `Crash`, `Hold`, `Direct`    |
+| `hostname`, `port`     | Hub BinkP host and port; `poll` calls links that have a hostname |
+| `ip_family`            | `ipv4` / `ipv6` pins the family binkd calls the hub over (binkd `-4` / `-6`); empty = auto |
+| `session_password`     | BinkP session password, written to `binkd.conf`                 |
 
 ## See Also
 

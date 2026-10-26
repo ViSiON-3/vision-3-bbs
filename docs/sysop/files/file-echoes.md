@@ -1,10 +1,12 @@
 # FTN File Echoes (TIC)
 
-A **file echo** is the file-area counterpart of an echomail area: a network
-distributes files — weekly nodelists, infopacks, software — to every system
-subscribed to the echo. Each file travels with a small `.TIC` control file
-saying which echo it belongs to, its CRC, its description, and a password
-agreed with the sending link.
+A **file echo** is the file-area counterpart of an echomail area: an FTN
+(FidoNet Technology Network) distributes files — weekly nodelists, infopacks,
+software — to every system subscribed to the echo. Each file travels with a
+small `.TIC` control file saying which echo it belongs to, its CRC, its
+description, and a password agreed with the sending link. Carrying a few file
+echoes keeps your file areas stocked with the network's own releases without
+anyone uploading a thing, and it is how a network's nodelist reaches you.
 
 ViSiON/3 receives file echoes. `v3mail toss` checks every `.TIC` in the inbound
 directory and moves its file into the file area linked to that echo, with a
@@ -24,13 +26,15 @@ must be delivering into the inbound directory. See
 ### From the FTN Setup Wizard
 
 If the network's entry in the built-in registry names its file echo list —
-tqwNet's does — the FTN Setup Wizard (Configuration Editor → Echomail) has a
-**File Echoes** row. Enter downloads the list and shows the echoes; tick the
-ones to carry and save. Each gets a file area linked to its echo, exactly as
-`helper fileecho` would create it below, in the network's conference, listed
-at `s10`, downloadable at `s20`, upload `s250`. Re-entering the wizard on the
-network shows the echoes already carried ticked; unticking one leaves its file
-area in place.
+tqwNet's does — the FTN Setup Wizard (Configuration Editor → **4 — Echomail
+Networking**) has a **File Echoes** row. Enter downloads the list and shows
+the echoes; tick the ones to carry and save. Each gets a file area linked to
+its echo, exactly as `helper fileecho` would create it below, in the
+network's conference, listed at `s10`, downloadable at `s20`, upload `s250`.
+Re-entering the wizard on the network shows the echoes already carried
+ticked; unticking one leaves its file area in place. If a network has no
+list, or its list is only a filename (the hub hands it out over the
+network), the wizard says so and points to `helper fileecho`.
 
 Then continue at [step 3](#3-set-the-tic-password). For any other network,
 get the list and use `helper fileecho`, steps 1 and 2.
@@ -38,18 +42,8 @@ get the list and use `helper fileecho`, steps 1 and 2.
 ### 1. Get the network's file echo list
 
 Networks publish their file echoes as a list much like the echomail `.na`
-file — tqwNet's is `tqw_file.na`. It comes in one of two shapes, and both
-are accepted:
-
-```text
-Area TQW_NODE        0  !  Weekly Nodelists
-Area TQW_LINUXFILES  0  !  Linux files
-```
-
-```text
-TQW_NODE        Weekly Nodelists
-TQW_LINUXFILES  Linux files
-```
+file — tqwNet's is `tqw_file.na`. Both shapes are accepted; see
+[File echo list format](#file-echo-list-format).
 
 > Some networks name the file echo list `.na` too. `helper ftnsetup` refuses
 > a file echo list rather than creating echomail areas from it; use
@@ -64,25 +58,16 @@ TQW_LINUXFILES  Linux files
 This adds one file area per echo to `configs/file_areas.json`, linked to the
 echo, stored under `data/files/<network>/<echo>`. Echoes that already have a
 linked area are left alone, so it is safe to re-run with a newer list. Use
-`--dry-run` to preview.
-
-| Flag                   | Required | Description                                                         |
-| ---------------------- | -------- | ------------------------------------------------------------------- |
-| `--na <path>`          | Yes      | The network's file echo list                                        |
-| `--network <name>`     | Yes      | Network name in `ftn.json` the echoes come from                     |
-| `--tag-prefix <pfx>`   | No       | Prefix for the new areas' tags                                      |
-| `--conference-id <id>` | No       | Conference the new areas belong to (default: ungrouped)             |
-| `--acs-list <acs>`     | No       | ACS to list files                                                   |
-| `--acs-download <acs>` | No       | ACS to download files                                               |
-| `--acs-upload <acs>`   | No       | ACS to upload (default `s250`: these areas are fed by the network)  |
-| `--config <dir>`       | No       | Config directory (default: `configs`)                               |
-| `--dry-run`            | No       | Show what would be added without writing anything                   |
+`--dry-run` to preview, `--conference-id` to put the areas in a conference
+and `--tag-prefix` to prefix their tags; the flags are listed under
+[`helper fileecho`](#helper-fileecho). When it is done it prints the
+`helper filefix` command to run next.
 
 A running BBS picks up the new areas once no callers are online.
 
 To link an existing area by hand instead, set its **Network** and **File
-Echo** fields in the Configuration Editor (File Areas), or its `network` and
-`file_echo` in `file_areas.json`:
+Echo** fields in the Configuration Editor (**3 — Areas and Conferences** →
+**File Areas**), or its `network` and `file_echo` in `file_areas.json`:
 
 ```json
 {
@@ -99,7 +84,8 @@ Echo** fields in the Configuration Editor (File Areas), or its `network` and
 
 Most hubs put a password on the TICs they send (the `Pw` line). Ask your hub
 for it and set it as the link's `tic_password` — Configuration Editor,
-Echomail Links → **TIC Password**, or in `ftn.json`:
+**4 — Echomail Networking** → the network's links → **TIC Password**, or in
+`ftn.json`:
 
 ```json
 "links": [
@@ -113,12 +99,13 @@ Echomail Links → **TIC Password**, or in `ftn.json`:
 ```
 
 When `tic_password` is set, a TIC from that link without the matching
-password (compared case-insensitively) is refused. A value ends at the first NUL byte, so the padding some Mystic versions write after the password does not count. When it is empty, TICs
-from that link are accepted only from the **secure** inbound
-(`secure_inbound_path`, binkd's `inbound`), which only sessions that passed
-the link's session password can write to. A TIC's `From` line is just text,
-so without either check anyone able to drop files in the unsecured inbound
-could pose as your hub.
+password (compared case-insensitively) is refused. A value ends at the first
+NUL byte, so the padding some Mystic versions write after the password does
+not count. When it is empty, TICs from that link are accepted only from the
+**secure** inbound (`secure_inbound_path`, binkd's `inbound`), which only
+sessions that passed the link's session password can write to. A TIC's
+`From` line is just text, so without either check anyone able to drop files
+in the unsecured inbound could pose as your hub.
 
 ### 4. Subscribe at your hub
 
@@ -142,7 +129,7 @@ The netmail is addressed to the link's **FileFix Robot** (`filefix_name`,
 default `FileFix`) with its **FileFix Password** (`filefix_password`) as the
 subject. Many hubs use one password for TICs and FileFix, so with no
 `filefix_password` the link's `tic_password` is used. Set either in the
-Configuration Editor, Echomail Links, or in `ftn.json`:
+Configuration Editor's link form, or in `ftn.json`:
 
 ```json
 "links": [
@@ -155,18 +142,11 @@ Configuration Editor, Echomail Links, or in `ftn.json`:
 ]
 ```
 
-| Flag               | Required | Description                                                                 |
-| ------------------ | -------- | --------------------------------------------------------------------------- |
-| `--network <name>` | Yes      | Network name in `ftn.json`                                                  |
-| `--command <cmd>`  | Yes*     | FileFix command (`%HELP`, `%LIST`, `%QUERY`, `%UNLINKED`, `+ECHO`, `-ECHO`); not required with `--seed` |
-| `--seed`           | No       | Subscribe (`+ECHO`) to every file echo linked to a file area for this network |
-| `--link <addr>`    | No       | Hub address (default: first link in the network)                            |
-| `--config <dir>`   | No       | Config directory (default: `configs`)                                       |
-
 The packet is written to the outbound directory; `v3mail ftn-pack` and the
 next binkd poll send it, and the hub's reply arrives as netmail to the
 sysop. Files start arriving with the following polls. If your hub has no
-file echo robot, ask its sysop to link you instead.
+file echo robot, ask its sysop to link you instead. The flags are listed
+under [`helper filefix`](#helper-filefix).
 
 ### 5. Nodelists
 
@@ -246,9 +226,156 @@ Mail bundles can be named `.zip`, and so can most file echo files. A file
 named by a TIC in the same directory is never treated as a mail bundle, and
 a `.zip` with no packets inside is left in place rather than deleted.
 
-## File area records
+## Troubleshooting
 
-Files delivered by TIC carry a `crc32` field in the area's `metadata.json`.
-The BBS, `v3mail` and `helper files import` can all add to an area's file
-list while the others are running; every change is made to the list on disk
-under a lock, so none of them overwrites what another added.
+**"TIC password from ... does not match the link's tic_password"** — the
+link's **TIC Password** differs from what the hub puts on its `Pw` line. Ask
+the hub; passwords compare ignoring case. The TICs are in `temp_path/badtic`
+and can be moved back and tossed once the password is right.
+
+**"TIC claiming to be from ... arrived in the unsecured inbound"** — the
+link has no `tic_password` and binkd put the file in the plain inbound. Set
+the TIC password, or make sure the link's session is password-protected so
+binkd delivers to the secure inbound.
+
+**"no file area is linked to file echo ..."** — the hub sent an echo you
+have no area for. Run `helper fileecho` with the network's current list, or
+link an area by hand, then move the TIC and its file back and toss again.
+Unsubscribe with `helper filefix --command "-ECHO"` if you do not want it.
+
+**"file ... never arrived"** — the TIC sat for a day without its file. Hubs
+send the file in the same session; if it keeps happening, ask the hub to
+resend.
+
+**Files land but nothing changes in the nodelist lookups** — the area is not
+the network's **Nodelist Echo**, or the file does not match **Nodelist
+Files**. See [FTN Nodelists](messages/nodelists.md).
+
+## Technical Reference
+
+### File area records
+
+Files delivered by TIC carry a `crc32` field in the area's `metadata.json`,
+their `uploaded_by` is the hatching system's address, and they are recorded
+as reviewed. The BBS, `v3mail` and `helper files import` can all add to an
+area's file list while the others are running; every change is made to the
+list on disk under a lock, so none of them overwrites what another added.
+The record format is described in
+[File Areas](files/file-areas.md#file-storage-and-metadatajson).
+
+### file_areas.json keys
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `network` | string | `""` | Network name in `ftn.json` whose links may deliver to this area |
+| `file_echo` | string | `""` | File echo tag (compared ignoring case) whose TICs land here |
+
+Both set makes a file echo area; either empty makes a local area. The areas
+`helper fileecho` and the wizard create use path `<network>/<echo>` (lower
+case), the echo tag as the area tag (with any `--tag-prefix`), and the
+echo's description as the name.
+
+### ftn.json keys
+
+Per link:
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `tic_password` | string | `""` | Password TICs from this link must carry on their `Pw` line; empty = accept only from the secure inbound |
+| `filefix_password` | string | `""` | Subject of FileFix netmail; empty = `tic_password` |
+| `filefix_name` | string | `"FileFix"` | Name the hub's file echo robot answers to (`FileFix`, `AllFix`, `Filemgr`) |
+
+Per network:
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `secure_inbound_path` | string | `""` | Inbound directory only authenticated binkd sessions write to |
+| `nodelist.file_echo` | string | `""` | File echo the network's nodelist arrives in (**Nodelist Echo**) |
+| `nodelist.file_pattern` | string | `""` | Which files in that echo are the nodelist, with `*` and `?` wildcards (**Nodelist Files**); empty = any |
+
+Rejected TICs go to `temp_path/badtic` and unclaimed ones to
+`temp_path/unclaimed`, under the network's `temp_path`.
+
+### File echo list format
+
+Both of these shapes are accepted by `helper fileecho` and the wizard:
+
+```text
+Area TQW_NODE        0  !  Weekly Nodelists
+Area TQW_LINUXFILES  0  !  Linux files
+```
+
+```text
+TQW_NODE        Weekly Nodelists
+TQW_LINUXFILES  Linux files
+```
+
+### TIC file format
+
+A `.TIC` is a text file of `Keyword value` lines. Keywords are
+case-insensitive, some repeat, and each line ends at its first NUL byte (some
+Mystic versions pad the password with NULs). These are the lines ViSiON/3
+reads; others (`Magic`, `Date`, `Created`, ...) are ignored:
+
+| Keyword | Repeats | Meaning |
+| --- | --- | --- |
+| `Area` | | File echo tag; required |
+| `Areadesc` | | The echo's description |
+| `Origin` | | Address of the system that hatched the file |
+| `From` | | Address of the system that sent the TIC; must be one of the network's links |
+| `To` | | Address the TIC is for (often absent) |
+| `File` | | File name, traditionally 8.3; required |
+| `Lfile` / `Fullname` | | Long file name, when it differs; the file is found by either name |
+| `Desc` | yes | One-line description |
+| `Ldesc` | yes | Long description, one line per entry; preferred over `Desc` for the record |
+| `Path` | yes | Systems the file has passed through |
+| `Seenby` | yes | Systems that have the file |
+| `Pw` | | Password agreed with the sending link |
+| `Replaces` | yes | Files in the area this one supersedes; `*` and `?` wildcards |
+| `Size` | | File size in bytes; checked when present |
+| `Crc` | | CRC-32 of the file in hex; required and checked |
+
+A TIC with no `Area`, `File` or `Crc` line, or a `Size` or `Crc` that does
+not parse, is rejected as unusable.
+
+### `helper fileecho`
+
+```bash
+./helper fileecho --na tqw_file.na --network tqwnet --acs-list s10 --acs-download s20
+```
+
+| Flag                   | Required | Description                                                         |
+| ---------------------- | -------- | ------------------------------------------------------------------- |
+| `--na <path>`          | Yes      | The network's file echo list                                        |
+| `--network <name>`     | Yes      | Network name in `ftn.json` the echoes come from                     |
+| `--tag-prefix <pfx>`   | No       | Prefix for the new areas' tags                                      |
+| `--conference-id <id>` | No       | Conference the new areas belong to (default: ungrouped)             |
+| `--acs-list <acs>`     | No       | ACS to list files                                                   |
+| `--acs-download <acs>` | No       | ACS to download files                                               |
+| `--acs-upload <acs>`   | No       | ACS to upload (default `s250`: these areas are fed by the network)  |
+| `--config <dir>`       | No       | Config directory (default: `configs`)                               |
+| `--dry-run`            | No       | Show what would be added without writing anything                   |
+
+Exits `1` when a required flag is missing, the list does not parse, the
+network is not in `ftn.json`, or `file_areas.json` cannot be written; `0`
+otherwise.
+
+### `helper filefix`
+
+```bash
+./helper filefix --network tqwnet --seed
+./helper filefix --network tqwnet --command "%LIST"
+```
+
+| Flag               | Required | Description                                                                 |
+| ------------------ | -------- | --------------------------------------------------------------------------- |
+| `--network <name>` | Yes      | Network name in `ftn.json`                                                  |
+| `--command <cmd>`  | Yes*     | FileFix command (`%HELP`, `%LIST`, `%QUERY`, `%UNLINKED`, `+ECHO`, `-ECHO`); not required with `--seed` |
+| `--seed`           | No       | Subscribe (`+ECHO`) to every file echo linked to a file area for this network |
+| `--link <addr>`    | No       | Hub address (default: first link in the network)                            |
+| `--config <dir>`   | No       | Config directory (default: `configs`)                                       |
+
+The netmail goes to `filefix_name` with `filefix_password` (or
+`tic_password`) as its subject and the commands as its body. Exits `1` when
+`--network` is missing, neither `--command` nor `--seed` is given, the link
+has neither password, or `--seed` finds no file echo areas for the network.

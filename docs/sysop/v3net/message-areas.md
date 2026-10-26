@@ -5,7 +5,13 @@
 > may change without notice. Use it only if you are testing or contributing
 > to V3Net development. Do not rely on it for a live BBS.
 
-V3Net areas are message areas that are networked using the V3Net protocol. Messages posted locally are relayed to the hub and distributed to all subscribed nodes. Messages posted on other nodes arrive via polling and SSE (Server-Sent Events).
+V3Net areas are message areas that are networked using the V3Net protocol.
+Messages posted locally are relayed to the hub and distributed to all
+subscribed nodes. Messages posted on other nodes arrive via polling and SSE
+(Server-Sent Events). For a sysop this means echomail-style conversation
+across boards with none of the mailer, packet or nodelist upkeep: subscribe to
+an area in the config editor or from the BBS, and the local message base, the
+sending and the receiving are all handled for you.
 
 ## How V3Net Areas Differ from Other Types
 
@@ -18,33 +24,6 @@ V3Net areas are message areas that are networked using the V3Net protocol. Messa
 | Transport | N/A | .PKT files via binkd | HTTP (JSON) |
 | Real-time delivery | No | Polling only | SSE push + polling |
 
-## How Messages Flow
-
-### Outbound (local user posts)
-
-1. User writes a message in a V3Net area via the message editor (or a sysop
-   posts a file with `helper post`)
-2. Message is saved to the local JAM base, marked as not yet sent
-3. A tearline and origin line are appended to the local copy (by the BBS;
-   a `helper post` copy has none locally, but remote nodes add them)
-4. The BBS's outbound sweep sends the message to the hub via signed HTTP POST
-   and marks the local copy sent ("V3NET SENT" in the reader)
-5. The hub stores it and fans it out to all subscribed nodes via SSE events
-
-The sweep runs straight away after a post from the BBS and once a minute
-otherwise. If the hub can't be reached, the message stays unsent and goes out
-on a later sweep, so a post made while the hub is down is not lost. Posts
-written by `helper post` go out on the next minute's sweep, so the BBS has to
-be running. Messages that were already in an area when it was bound to a
-network are never sent.
-
-### Inbound (remote message arrives)
-
-1. The leaf client receives a message via polling or SSE notification
-2. The dedup index is checked — if the UUID has been seen, the message is skipped
-3. The message (with its remote tearline/origin) is written to the local JAM base
-4. The UUID is recorded in the dedup index
-
 ## Creating V3Net Areas
 
 V3Net areas are created automatically when your BBS subscribes to network areas
@@ -55,11 +34,13 @@ message base is created for you.
 You can also create areas manually through the config editor:
 
 ```
-./config  →  Message Areas  →  [I] Insert
+./config  →  3 — Areas and Conferences  →  Message Areas  →  [I] Insert
 ```
 
 Set the area's **Tag** to match the network area tag (e.g. `fn.general`), then
 add a leaf subscription via **V3Net → Subscriptions** with the same board tag.
+Choose the `v3net` area type and set **Network** to the network name; an area
+that is only bound by tag in `v3net.json` works too, whatever its type.
 
 ### New Areas on Your Networks
 
@@ -114,14 +95,65 @@ When a leaf syncs the NAL from the hub, any network areas you are subscribed to 
 - Use the network area tag as the local tag
 - Are placed in the default conference (ID 0)
 - Have their `network` field set to the V3Net network name
+- Are flagged as newscan defaults unless the subscription's **Newscan
+  Default** is `N` (`autoJoinAreas: false`)
 
-## Message Format
+## How Messages Flow
 
-V3Net messages in JAM bases look like standard echomail messages with a few additions:
+### Outbound (local user posts)
 
-- A `V3NETUUID` kludge line (hidden from users) stores the message's unique identifier for deduplication
-- A tearline (`--- ViSiON/3 vX.Y.Z/Platform`) identifies the posting software
-- An origin line (`* Origin: BBS Name (node_id)`) identifies the posting node
+1. User writes a message in a V3Net area via the message editor (or a sysop
+   posts a file with `helper post`)
+2. Message is saved to the local JAM base, marked as not yet sent
+3. A tearline and origin line are appended to the local copy (by the BBS;
+   a `helper post` copy has none locally, but remote nodes add them)
+4. The BBS's outbound sweep sends the message to the hub via signed HTTP POST
+   and marks the local copy sent ("V3NET SENT" in the reader)
+5. The hub stores it and fans it out to all subscribed nodes via SSE events
+
+The sweep runs straight away after a post from the BBS and once a minute
+otherwise. If the hub can't be reached, the message stays unsent and goes out
+on a later sweep, so a post made while the hub is down is not lost. Posts
+written by `helper post` go out on the next minute's sweep, so the BBS has to
+be running. Messages that were already in an area when it was bound to a
+network are never sent, and a message that arrived from the network is never
+sent back.
+
+An area counts as a V3Net area for sending if its type is `v3net` or if a
+subscription in `v3net.json` lists its tag under `boards`. That holds even
+while V3Net is switched off: a post made then is kept waiting and goes out
+once V3Net is enabled and the network connects, so turning V3Net off for a
+while does not lose anything.
+
+### Inbound (remote message arrives)
+
+1. The leaf client receives a message via polling or SSE notification
+2. The dedup index is checked — if the UUID has been seen, the message is skipped
+3. The message (with its remote tearline/origin) is written to the local JAM base
+4. The UUID is recorded in the dedup index
+
+## Posting from the Command Line
+
+`helper post` writes a text file, an ANSI (`.ANS`) file or standard input
+into a message area without logging in — for network ads, bulletins and
+scripted announcements. In a V3Net area it writes the post exactly as the BBS
+editor would and leaves it for the running BBS's outbound sweep:
+
+```bash
+helper post --area fel.general --file bulletin.ans --subj "[ANSI] Weekly Bulletin"
+```
+
+After posting it tells you what happens next:
+
+```
+  It waits until V3Net is enabled and this area's network is connected; then the
+  running BBS tries to send it to the hub every minute until the hub accepts it.
+```
+
+`--private` is refused in a V3Net area, since V3Net never sends private
+posts and the message would sit unsent in a shared area. The full flag list
+is in the [Technical Reference](v3net/message-areas.md#technical-reference)
+below.
 
 ## Area Proposals
 
@@ -131,7 +163,77 @@ Users and sysops can propose new areas for a network. See the [NAL documentation
 - Access modes (open, approval, closed)
 - Coordinator and area manager roles
 
-## BBS Menu Integration
+## Troubleshooting
+
+| Symptom | What is happening |
+|---------|-------------------|
+| A post shows `V3NET` but not `V3NET SENT` in the reader | It has not reached the hub yet. The sweep retries every minute; look for `v3net outbound: sending to hub; will retry` in the log. Only the first failure per message is logged at warning level, so a long outage does not flood the log. |
+| `v3net outbound: sent but could not mark as sent` | The hub accepted the post but the local flag could not be written. The next sweep sends it again under the same UUID, which the hub drops as a duplicate, and tries the mark again. Nothing is posted twice. |
+| `V3Net leaf: message area not found, skipping` | A subscription names a board tag with no local area. Re-subscribe from the area browser, or create the area with that tag. |
+| Old messages in an area never went out | Expected. Only posts made after an area was bound to a network are sent. |
+| A post from `helper post` never leaves | The BBS must be running with V3Net enabled; `helper` only writes the message. |
+
+## Related Documentation
+
+- [V3Net Configuration](v3net/configuration.md) — the config editor screens
+- [Joining FelonyNet](v3net/felonynet.md) — step-by-step guide
+- [Network Area List (NAL)](v3net/nal.md) — area management and access control
+- [Message Areas](messages/message-areas.md) — general message area configuration
+- [Header Placeholders](messages/placeholders.md) — `@I@` (network name) and `@O@` (node ID) codes
+
+---
+
+## Technical Reference
+
+### Message Format
+
+V3Net messages in JAM bases look like standard echomail messages with a few additions:
+
+- A `V3NETUUID` kludge line (hidden from users) stores the message's unique identifier for deduplication
+- A tearline (`--- ViSiON/3 vX.Y.Z/Platform`) identifies the posting software
+- An origin line (`* Origin: BBS Name (node_id)`) identifies the posting node
+
+### Pending Marker and Wire UUID
+
+A local, non-private post in a V3Net area is written with JAM
+`DateProcessed = 0`, the same "still to export" marker the FTN tosser uses.
+Imports (a body starting with the `V3NETUUID` kludge) and messages that were
+in the base before the area was bound are never marked, so they are never
+sent. The sweep stamps `DateProcessed` and the `MSG_SENT` flag once the hub
+accepts the post.
+
+Each post's wire UUID is derived from the sending node ID, the network, the
+area tag and the post's date, sender, recipient, subject and body (a SHA-256
+digest laid out as a version-4 UUID). Every attempt at the same post carries
+the same UUID, so a retry after a lost reply or a failed sent mark is dropped
+by the hub's dedup index rather than delivered twice.
+
+### `helper post`
+
+```
+helper post --area <tag|id> --file <path|-> [flags]
+```
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--area` | (required) | Message area tag or ID |
+| `--file` | (required) | Text file to post as the body, or `-` for stdin |
+| `--subj` | SAUCE title of an `.ANS` file | Subject |
+| `--from` | `sysOpName` from `config.json` | Sender |
+| `--to` | `All` | Recipient; in a netmail area `"Name@zone:net/node"` |
+| `--private` | off | Mark the message private; refused in V3Net and echomail areas |
+| `--reply-to` | `0` | Number of the message in the same area this replies to |
+| `--format` | from the extension; `txt` for stdin | Body format: `ans`, `asc` or `txt` |
+| `--charset` | `auto` | Plain-text input charset: `auto`, `cp437` or `utf8` (`ans` is always stored raw) |
+| `--wrap` | `0` | Re-wrap plain text to this many columns (`asc`/`txt` only; `0` keeps lines) |
+| `--dry-run` | off | Check and describe the post without writing it |
+| `--config` | `configs` | Config directory |
+| `--data` | `data` | Data directory |
+
+Exit status is `0` on success, `1` on an error while checking or posting, and
+`2` for a usage error.
+
+### Menu Commands
 
 V3Net provides several menu screens accessible to sysops and users:
 
@@ -144,12 +246,27 @@ V3Net provides several menu screens accessible to sysops and users:
 | `V3NETCOORDINATOR` | Coordinator panel for approving or rejecting area proposals and changing area managers (network coordinator only) |
 | `V3NETACCESSREQUESTS` | Approve or deny subscription requests for the areas this node manages (area manager only) |
 
-These commands are configured in your menu `.CFG` files. The default V3Net menu is provided in `menus/v3/cfg/V3NETM.CFG`.
+These commands are configured in your menu `.CFG` files. The default V3Net
+menu is provided in `menus/v3/cfg/V3NETM.CFG`, reached from the Admin menu
+(**3** in `ADMIN.CFG`). All of its commands are `S255` (sysop only) as shipped.
 
-## Related Documentation
+### Wire Details
 
-- [V3Net Configuration](v3net/configuration.md) — field-by-field configuration reference
-- [Joining FelonyNet](v3net/felonynet.md) — step-by-step guide
-- [Network Area List (NAL)](v3net/nal.md) — area management and access control
-- [Message Areas](messages/message-areas.md) — general message area configuration
-- [Header Placeholders](messages/placeholders.md) — `@I@` (network name) and `@O@` (node ID) codes
+- **Transport**: JSON over HTTP. A leaf makes outbound requests only; the hub
+  listens on `hub.host:hub.port` (default port `8765`).
+- **Authentication**: every leaf request other than the first subscribe is
+  signed with the node's Ed25519 key over the method, path, `Date` header and
+  body hash, sent in the `X-V3Net-Node-ID` and `X-V3Net-Signature` headers.
+- **Endpoints** (under `/v3net/v1/`): `networks`, `subscribe`,
+  `{network}/info`, `{network}/nal`, `{network}/messages` (GET to poll, POST
+  to send), `{network}/events` (the SSE stream), `{network}/presence`, the
+  `chat/rooms/...` calls, and the area, proposal, access-request, manager and
+  node-management calls used by the sysop screens.
+- **SSE events**: `ping`, `logon`, `logoff`, `new_message`, `nal_updated`,
+  `area_proposed`, `area_access_requested`, `proposal_rejected`,
+  `subscription_denied`, and the `chat_message`, `chat_private`,
+  `chat_join`, `chat_leave` and `chat_topic` chat events. The leaf reconnects
+  with backoff when the stream drops (`leaf: SSE reconnecting` in the log)
+  and re-fetches the NAL on reconnect.
+- **Dedup**: `data/v3net_dedup.sqlite` records every UUID written to a local
+  base; a message whose UUID is already there is skipped.

@@ -1,126 +1,23 @@
 # ViSiON/3 User Management Guide
 
-This guide covers user management in ViSiON/3, including user accounts, access levels, and administration.
+This guide covers user management in ViSiON/3: user accounts, access levels,
+signup, time limits, and day-to-day administration.
 
-Use the [User Editor](users/user-editor.md) (`./ue`) to manage user accounts interactively from the command line — no JSON editing required. It is a Go reimplementation of the original Vision/2 `UE.EXE` utility. SysOps can also edit users live from within the BBS via the [Admin Menu](users/admin-menu.md).
+A BBS is its callers. Every account on your board is a record in a single
+JSON (JavaScript Object Notation) file, and everything the board decides about
+a caller — what menus they can see, how long they can stay, whether they are
+still waiting for your nod — comes from a few fields on that record and a few
+levels in `config.json`. You rarely need to touch the file: the
+[User Editor](users/user-editor.md) (`./ue`) manages accounts from the command
+line, and SysOps can edit users live from within the BBS via the
+[Admin Menu](users/admin-menu.md). `ue` is a Go reimplementation of the
+original Vision/2 `UE.EXE` utility.
 
 ## User Database
 
-User data is stored in `data/users/users.json`. The system automatically creates this file with a default user on first run. See [Default User](#default-user) for its credentials and access level.
+User data is stored in `data/users/users.json`. The system automatically creates this file with a default user on first run. See [Default User](#default-user) for its credentials and access level. The record layout is in the [Technical Reference](#user-record-usersjson) at the bottom of this page.
 
-## User Structure
-
-Users are stored as a JSON array. Each user account contains:
-
-```json
-{
-  "id": 1,
-  "passwordHash": "$2a$10$...",
-  "handle": "Felonius",
-  "accessLevel": 10,
-  "flags": "",
-  "lastLogin": "2025-05-01T15:13:20Z",
-  "previousLogin": "2025-04-28T09:02:11Z",
-  "timesCalled": 220,
-  "lastBulletinRead": "0001-01-01T00:00:00Z",
-  "realName": "Felonius",
-  "createdAt": "0001-01-01T00:00:00Z",
-  "updatedAt": "2025-05-01T15:13:20Z",
-  "validated": true,
-  "filePoints": 0,
-  "numUploads": 0,
-  "numDownloads": 0,
-  "messagesPosted": 12,
-  "timeLimit": 60,
-  "privateNote": "",
-  "current_msg_conference_id": 1,
-  "current_msg_conference_tag": "LOCAL",
-  "current_file_conference_id": 1,
-  "current_file_conference_tag": "LOCAL",
-  "group_location": "FAiRLiGHT/PC",
-  "current_message_area_id": 1,
-  "current_message_area_tag": "GENERAL",
-  "last_read_message_ids": {
-    "1": "6ae43f1a-cc1c-447c-9b9c-3cdeebd3fbfb"
-  },
-  "current_file_area_id": 1,
-  "current_file_area_tag": "GENERAL",
-  "tagged_file_ids": [],
-  "tagged_message_area_tags": ["GENERAL", "BBS_TALK"],
-  "screenWidth": 80,
-  "screenHeight": 24,
-  "preferredEncoding": "cp437",
-  "msgHdr": 3,
-  "hotKeys": true,
-  "morePrompts": true,
-  "customPrompt": "",
-  "outputMode": "",
-  "fileListingMode": "lightbar",
-  "autoSignature": "",
-  "colors": [13, 9, 7, 8, 3, 11, 9]
-}
-```
-
-### User Fields
-
-#### Essential Fields
-
-- `id` - Unique numeric identifier (auto-assigned)
-- `passwordHash` - Bcrypt hashed password
-- `handle` - Display name/alias (used for login and display)
-
-#### Access
-
-- `accessLevel` - Numeric access level (0-255)
-- `flags` - String of single-character flags for ACS checks (e.g., "ABC")
-- `validated` - Whether user is validated by SysOp
-- `publicKeys` - OpenSSH public keys that may open the [WFC console](how-to-guides/wfc-console.md) (omitted when empty)
-- `wfcReadOnly` - The account's WFC console may watch but not kick, snoop, type in or chat (omitted when false)
-
-#### Statistics
-
-- `timesCalled` - Login count
-- `lastLogin` - Timestamp of the **current** session, written at authentication
-- `previousLogin` - Timestamp of the call before this one; what "new since your last visit" is measured against (see below)
-- `seen_news_ids` - System News item IDs already shown to this user
-- `news_seen_initialized` - Whether `seen_news_ids` has been back-filled yet
-- `lastBulletinRead` - Last time bulletins were read
-- `filePoints` - File area points
-- `numUploads` - Number of file uploads
-- `numDownloads` - Number of file downloads (used for ACS 'B' ratio)
-- `messagesPosted` - Number of messages posted
-- `timeLimit` - Time limit per call in minutes (0=unlimited). See [Time Limits](#time-limits)
-
-#### Personal Information
-
-- `realName` - User's real name
-- `createdAt` - Account creation timestamp
-- `updatedAt` - Last modification timestamp (used for optimistic locking)
-- `group_location` - Group/Location affiliation
-- `privateNote` - User note. Asked for at signup, editable by the caller from `K`, and shown in user lists and last callers. The `Z` ACS term matches against it.
-
-#### Terminal Preferences
-
-- `screenWidth` - Preferred terminal width (0 = use detected PTY width)
-- `screenHeight` - Preferred terminal height (0 = use detected PTY height)
-- `preferredEncoding` - `""` (Auto) detects the encoding on every call: the board draws one box-drawing character and asks the terminal where its cursor ended up, falling back to the terminal type when it gets no answer. `"utf8"` or `"cp437"` forces that encoding from the next login, on every terminal the caller uses.
-- `msgHdr` - Selected message header style; valid values are whatever `MSGHDR.<n>.ans` templates the menu set ships (0 = unset, defaults to style 1)
-
-After authentication, the system applies these preferences: if a user's stored screen dimensions are smaller than the detected PTY size (or the PTY defaults to 80x25), the stored values cap the effective terminal dimensions. ANSI art is truncated to fit the effective height to prevent scrolling.
-
-#### User Configuration Preferences
-
-- `hotKeys` - Hot keys: menu commands run on a single keypress. A key that could start a longer command (a multi-key command, a number on a `##` menu, or `/G`) still waits for Enter. A menu's `FORCEHOTKEY` turns this on for everyone on that menu.
-- `morePrompts` - Stored but not yet used; nothing pauses long output on it ([#424](https://github.com/ViSiON-3/vision-3-bbs/issues/424)).
-- `customPrompt` - Stored but not yet shown; menus always use their own prompt ([#425](https://github.com/ViSiON-3/vision-3-bbs/issues/425)).
-- `outputMode` - Legacy field, not read by the board. The encoding that login applies is `preferredEncoding`.
-- `fileListingMode` - File listing style: `"lightbar"` or `"classic"` (empty = server default)
-- `file_list_columns` - Which columns the file lister shows. All `false` means every column is shown.
-- `autoSignature` - Auto-signature appended to messages (max 5 lines)
-- `autoSigAsk` - Ask before adding the auto-signature to each message. QWK replies get no signature while it is on. See [Auto-Signature](messages/autosig.md#asking-before-each-post).
-- `colors` - Array of 7 color values: [prompt, input, text, stat, text2, stat2, bar]. Stored but not yet applied ([#426](https://github.com/ViSiON-3/vision-3-bbs/issues/426)).
-
-#### What callers can change themselves
+## What callers can change themselves
 
 The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). From it a caller can change:
 
@@ -138,27 +35,6 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). F
 | Listing Mode, File Columns | `fileListingMode`, `file_list_columns` |
 
 Each change is saved as soon as the caller confirms it. The screen's header is `KONFIG.ANS` in the menu set. Keep it to 5 rows or fewer; it can show the caller's details with tokens like `|UH` (handle) and `|LEVEL`. Its text (setting names, help lines, values and messages) is the `konfig*` strings in `strings.json`, under **Konfig:** in `./strings`. Setting names, section titles, values and prompts are plain text in fixed-width cells: longer text is cut to fit, and colour codes are not expanded there. Help lines and messages take pipe colour codes. See [User settings](reference/menu-commands.md#user-settings) for `USERCONFIG` and the `CFG_AUTOSIG`, `CFG_PASSWORD` and `CFG_FILECOLUMNS` shortcuts.
-
-#### Soft Delete
-
-- `deletedUser` - Boolean flag indicating the user is soft-deleted (default: false)
-- `deletedAt` - Timestamp when the user was deleted (only set if deletedUser is true)
-
-Soft-deleted users cannot log in and are hidden from public user listings, but all their data (messages, files, call history) is preserved and attributed to them. They remain visible in admin views.
-
-#### System State (Conference/Area Tracking)
-
-- `current_msg_conference_id` - Current message conference ID
-- `current_msg_conference_tag` - Current message conference tag
-- `current_file_conference_id` - Current file conference ID
-- `current_file_conference_tag` - Current file conference tag
-- `current_message_area_id` - Current message area ID
-- `current_message_area_tag` - Current message area tag
-- `last_read_message_ids` - Map of area ID to last read message UUID
-- `current_file_area_id` - Current file area ID
-- `current_file_area_tag` - Current file area tag
-- `tagged_file_ids` - Array of file UUIDs marked for batch download
-- `tagged_message_area_tags` - Array of message area tags tagged for newscan
 
 ## Access Levels
 
@@ -192,7 +68,7 @@ setup copies into `configs/` — so they are what a normal install runs. If a ke
 is missing from your `config.json` the loader falls back to a built-in value
 instead, and four of these differ that way (`invisibleLevel` 0, `newUserLevel` 1,
 `regularUserLevel` 10, `anonymousLevel` 5).
-[Configuration](configuration/configuration.md#access-levels) lists both sets
+[Configuration](configuration/configuration.md#access--security-sub-menu) lists both sets
 side by side.
 
 **Configuration Values:**
@@ -225,12 +101,15 @@ Every account created through the signup flow starts as:
 | Field | Value |
 | ----- | ----- |
 | `accessLevel` | `newUserLevel` — `10` in the shipped config |
-| `validated` | **`false`**, always |
+| `timeLimit` | `60` minutes per call |
+| `validated` | **`false`**, unless **Auto Validate** is on |
 
-`validated: false` is **not configurable**. It is set unconditionally when the
-account is created (`internal/user/manager_users.go`), so there is no setting
-that makes signups arrive pre-validated. Sysops looking for auto-validation
-will not find a switch for it — the options are:
+**Auto Validate** (`autoValidateNewUsers`, off by default; `./config` →
+**System Setup → Access & Security → Access Levels**) marks signups validated
+as they are created. It sets only the reviewed flag: the account is not raised
+to `regularUserLevel`, it drops off the pending list, and it skips the
+required-infoforms prompt. It cannot be combined with New User Voting. With it
+off, the options are:
 
 - **Raise `newUserLevel`** so new accounts can already do what you want without
   being validated. Access is controlled by level, not by the flag (see below),
@@ -462,26 +341,17 @@ Users are added through:
 
 When a user types "new" at the login screen username field, the new user application begins. This flow is modeled after the original ViSiON/2 Pascal `NewUser()` procedure in `GETLOGIN.PAS`.
 
-### Entry Point
-
-The application is triggered from either:
-
-- `handleLoginPrompt()` — coordinate-based LOGIN.ANS screen
-- `runAuthenticate()` — fallback text-based login
-
-Both detect "new" (case-insensitive) in the username field and call `handleNewUserApplication()`.
-
-The application can also be invoked from a menu command via `RUN:NEWUSER`.
-
 ### Application Flow
 
 1. **NEWUSER.ANS** — Displays the welcome/info screen (`menus/v3/ansi/NEWUSER.ANS`) if it exists
 2. **Apply for Access?** — Yes/No lightbar prompt using `applyAsNewStr` from `strings.json`. If the user declines, returns to login.
 3. **Handle/Alias** — Prompted with `newUserNameStr`. Validated against these rules:
    - Minimum 3 characters
-   - No special characters: `?`, `#`, `/`, `*`, `&`, `:`
+   - No special characters: `?`, `#`, `/`, `*`, `&`, `:`, and no control characters
    - Cannot be reserved words: "new", "q", "sysop"
    - Cannot be purely numeric
+   - Cannot match a rule in your **bad user names** list (see
+     [Bad user names](#bad-user-names) below)
    - Must be unique (checked against both username and handle)
    - Up to 5 attempts before rejection
 4. **Password** — Prompted with `createAPassword`. Input is masked with `*` characters.
@@ -535,6 +405,27 @@ Place a `NEWUSER.ANS` file in `menus/v3/ansi/` to display a welcome screen befor
 
 When `requireNewUserEmail` is enabled, a `NUEMAIL.ANS` in the same directory customizes the required-SysOp-message screen; without it the `newUserEmailPrompt` string is shown instead.
 
+### Bad user names
+
+Signup refuses any handle that matches a rule in `configs/badusers.txt`. The
+shipped list blocks `root`, `admin*`, `*sysop*`, `guest` and `anonymous`; edit
+it to add the names you would rather not see on your board. Matching is
+case-insensitive against the whole handle, `*` is the only wildcard, and the
+file is re-read on every check, so edits apply without a restart. The caller
+sees the ordinary `invalidUserName` message and may try again; the attempted
+handle and the rule it matched are logged at `INFO`.
+
+The list lives next to the other config files. To keep it elsewhere, set
+**Bad Names Path** in `./config` → **System Setup → Access & Security → Bad
+User Names** (`badUsersPath`). A missing or unreadable list is logged as a
+warning and signup carries on with the built-in rules only, so a typo in the
+path never locks new callers out; `vision3 doctor` reports it. The format is
+in the [Technical Reference](#baduserstxt-format).
+
+The list applies only at signup. Renaming an existing account to a listed
+handle from `ue` or the Admin Menu shows a warning and lets you go ahead; the
+BBS never renames anyone on its own.
+
 ### After Signup
 
 New accounts are created with:
@@ -547,7 +438,7 @@ The SysOp can validate users in-BBS from the Admin Menu (`%` from MAIN → `V`).
 
 SysOp accounts also receive an automatic notification on MAIN menu entry when there are pending unvalidated users.
 
-Regular-user validation level is configurable in `configs/config.json` as `regularUserLevel` (default `10`).
+Regular-user validation level is configurable in `configs/config.json` as `regularUserLevel` (`25` in the shipped config, `10` if the key is missing).
 
 ## Access Control System (ACS)
 
@@ -585,8 +476,14 @@ Operators:
 - `W<day>` - Day of week (0=Sun, 6=Sat)
 - `Y<hh:mm/hh:mm>` - Within time range
 - `Z<string>` - String exists in private note
+- `B<percent>` - Upload/download ratio (uploads ÷ downloads × 100) >= value; always passes with no downloads
+- `C<id>` - Current message conference ID equals value
+- `X<id>` - Current file conference ID equals value
+- `I` - Has flag `I` (internet access)
 - `SYSOP` - Security level >= `sysOpLevel` in `config.json` (default 255)
 - `COSYSOP` - Security level >= `coSysOpLevel` in `config.json` (default 250)
+
+`T` always passes for CoSysOps and above, who have no time limit.
 
 ### Common ACS Examples
 
@@ -604,63 +501,10 @@ Operators:
 "y09:00/17:00"  # Business hours only
 ```
 
-## Call History
-
-The system tracks user calls in `data/users/callhistory.json`:
-
-```json
-{
-  "userID": 1,
-  "handle": "Felonius",
-  "groupLocation": "FAiRLiGHT/PC",
-  "nodeID": 1,
-  "connectTime": "2025-01-01T10:00:00Z",
-  "disconnectTime": "2025-01-01T10:30:00Z",
-  "duration": 1800000000000,
-  "uploadedMB": 0,
-  "downloadedMB": 0,
-  "actions": "",
-  "baudRate": "38400",
-  "callNumber": 47
-}
-```
-
-### Call History Fields
-
-- `userID` - User's ID number
-- `handle` - User's handle at time of call
-- `groupLocation` - User's group/location
-- `nodeID` - Node number used
-- `connectTime` - Connection timestamp
-- `disconnectTime` - Disconnection timestamp
-- `duration` - Call duration in nanoseconds
-- `uploadedMB` - Data uploaded (placeholder)
-- `downloadedMB` - Data downloaded (placeholder)
-- `actions` - Actions performed (placeholder)
-- `baudRate` - Connection speed (static)
-- `callNumber` - Overall system call number
-
-The system maintains the last 20 call records.
-
-### Invisible Login
-
-Call records include an `invisible` field (boolean, omitted when false) that flags calls where the user logged in invisibly:
-
-```json
-{
-  "userID": 1,
-  "handle": "Felonius",
-  "callNumber": 48,
-  "invisible": true,
-  ...
-}
-```
-
-See [Invisible Login](#invisible-login-sysopco-sysop) below for details.
-
 ## Invisible Login (SysOp/Co-SysOp)
 
-Users at or above the configured `coSysOpLevel` (default 50) are prompted at login:
+Users at or above `invisibleLevel` (`250` in the shipped config; a missing or
+`0` value falls back to `coSysOpLevel`) are prompted at login:
 
 ```text
 Invisible Logon? Y/n
@@ -669,7 +513,7 @@ Invisible Logon? Y/n
 If they choose **Yes**, the session is flagged invisible for its duration. Invisible sessions are:
 
 - **Hidden from Last Callers** — the call does not appear in `RUN:LASTCALLERS` for *any* viewer, including the SysOp: the prompt asks whether to list the login, so declining hides it from everyone. The call is still logged to `callhistory.json` with `"invisible": true`, and the global call counter still advances.
-- **Hidden from Who's Online** — invisible sessions are excluded from `RUN:WHOONLINE` listings and the `NODECT` token count for non-CoSysOp viewers.
+- **Hidden from Who's Online** — invisible sessions are excluded from `RUN:WHOISONLINE` listings and the `NODECT` token count for non-CoSysOp viewers.
 - **Hidden from Page** — invisible nodes do not appear in the page node list and are treated as offline for non-CoSysOp users attempting to page them.
 - **Silent in Chat** — join and leave announcements are suppressed in `RUN:CHAT` for invisible users (they can still chat normally).
 
@@ -683,7 +527,10 @@ The login prompt text is configurable in `configs/strings.json`:
 "invisibleLogonPrompt": " |03Invisible Logon?|07"
 ```
 
-The access level threshold is driven by `coSysOpLevel` in `configs/config.json` (the same value that controls other CoSysOp privileges).
+The access level threshold is **Invisible Lvl** on the Access Levels screen of
+the config editor (`invisibleLevel` in `configs/config.json`). Whatever the
+threshold, CoSysOps and above always see invisible sessions, and so does the
+[WFC console](how-to-guides/wfc-console.md).
 
 ## Security Considerations
 
@@ -713,9 +560,9 @@ Since passwords are hashed, you cannot recover them. To reset: run `./ue`, selec
 
 ### Validating New Users
 
-**Recommended:** use the in-BBS Admin Menu (`%` from MAIN → `V`) to validate pending accounts. The screen shows all unvalidated users with a detail panel; press `H` to toggle validation status, then `S` to save. See [Admin Menu](users/admin-menu.md) for all key bindings.
+**Recommended:** use the in-BBS Admin Menu (`%` from MAIN → `V`) to validate pending accounts. The screen shows all unvalidated users with a detail panel; press `G` to toggle validation status, then `S` to save. See [Admin Menu](users/admin-menu.md) for all key bindings.
 
-**Alternative:** use `./ue`, select the user, and toggle the Validated field to `Y` and set Access Level to 10.
+**Alternative:** use `./ue`, highlight the user and press `F5` (auto-validate: level 10, validated, 100 file points, 60 minutes), or open the record and set the Validated field to `Y` and the Access Level yourself. `Shift-F5` validates every tagged user at once.
 
 ### Banning Users
 
@@ -788,8 +635,10 @@ Soft-deleted users are retained for a configurable number of days before they ca
 ```
 
 - **`0`** — purge immediately (on next purge run)
-- **`30`** (default) — retain for 30 days after `deletedAt`
-- **`-1`** — never purge automatically
+- **`30`** — retain for 30 days after `deletedAt` (the fallback when the key is missing)
+- **`-1`** — never purge automatically (the shipped value; purge by hand from `ue`, the Admin Menu or `helper`)
+
+It is **Del User Days** in `./config` → **System Setup → Default Settings**.
 
 Users with no `deletedAt` timestamp (not yet soft-deleted) are never eligible for purge and are always skipped.
 
@@ -847,20 +696,6 @@ Add `RUN:PURGEUSERS` to a SysOp menu definition. When triggered, it displays all
 
 Increase `accessLevel` and/or add appropriate flags.
 
-## File Management
-
-### Call Number Tracking
-
-- Next call number stored in `data/users/callnumber.json`
-- Automatically increments with each connection
-
-### File Locations
-
-- `data/users/users.json` - User database
-- `data/users/callhistory.json` - Recent calls
-- `data/users/callnumber.json` - Next call number
-- `data/users/admin_activity.json` - Admin action log (validate, ban, delete, purge)
-
 ## Best Practices
 
 1. **Regular Backups**: Backup all files in `data/users/` regularly
@@ -874,9 +709,7 @@ Increase `accessLevel` and/or add appropriate flags.
 
 The following user management features are planned:
 
-- Password change function (self-service from within BBS)
 - Import/export tools
-- User statistics and reports
 - Time bank system
 - Ratio enforcement
 
@@ -885,11 +718,25 @@ The following user management features are planned:
 ### User Can't Login
 
 - Check username (case-insensitive)
-- Verify `validated` is true
-- Check `accessLevel` > 0
+- Check `accessLevel` is at or above `logonLevel` (`validated` does not block login)
 - **Check if user is soft-deleted** (`deletedUser` should be false)
 - Ensure password is correct
 - Check for duplicate usernames
+
+### A caller cannot pick a handle
+
+- The handle matches a rule in `configs/badusers.txt`: the log shows
+  `new user handle rejected: matches badusers rule` with the rule. Edit the
+  list if the rule is too broad
+- `cannot check bad user names` in the log means the list could not be read;
+  signup still works with the built-in rules
+
+### A caller is cut off mid-session
+
+- Their `timeLimit` ran out: they saw the `timeLimitExpired` string before the
+  disconnect. Raise the limit in `ue` (it applies from their next menu) or set
+  it to `0` for no limit
+- CoSysOps and above are never cut off, whatever their record says
 
 ### Access Denied
 
@@ -904,3 +751,277 @@ The following user management features are planned:
 - Validate JSON syntax
 - Check for duplicate user IDs
 - Ensure array format (not object)
+
+## Technical Reference
+
+Everything above can be done with `ue`, the Admin Menu and the config editor.
+This section is for hand-editing `users.json` and `config.json`, and for the
+command-line tools.
+
+### Access and signup keys in `config.json`
+
+All of these are on `./config` → **System Setup → Access & Security**, on the
+**Access Levels** screen unless noted. "Shipped" is the value in
+`templates/configs/config.json`; "Fallback" is what the loader uses when the
+key is missing.
+
+| Key | Type | Shipped | Fallback | Meaning |
+|-----|------|---------|----------|---------|
+| `sysOpLevel` | int | `255` | `255` | **SysOp Level**: Go-side SysOp checks and the `SYSOP` ACS keyword |
+| `coSysOpLevel` | int | `250` | `250` | **CoSysOp Level**: CoSysOp checks, the `COSYSOP` ACS keyword, WFC access, no time limit or idle timeout |
+| `invisibleLevel` | int | `250` | `0` → uses `coSysOpLevel` | **Invisible Lvl**: minimum level for the invisible-logon prompt |
+| `newUserLevel` | int | `10` | `1` | **New User Level**: level given to new signups |
+| `autoValidateNewUsers` | bool | `false` | `false` | **Auto Validate**: mark signups validated at creation. Cannot be combined with NUV |
+| `notifySysopNewUser` | bool | `true` | `true` | **Notify SysOp**: page online co-sysops and queue a notice for the others when someone signs up |
+| `regularUserLevel` | int | `25` | `10` | **Regular Level**: level a user is raised to when validated |
+| `logonLevel` | int | `10` | `10` | **Logon Level**: minimum level to log in; `0` disables the check |
+| `anonymousLevel` | int | `50` | `5` | **Anonymous Lvl**: minimum level to post anonymously |
+| `allowNewUsers` | bool | `true` | `true` | **Allow New Users** (Default Settings screen; also toggled by Admin Menu `N`) |
+| `requireNewUserEmail` | bool | `false` | `false` | **Require Email** (Default Settings): a new caller must send the SysOp a message before using the board |
+| `badUsersPath` | string | `configs/badusers.txt` | same | **Bad Names Path** (Bad User Names screen): list of handles signup refuses. Blank means the default |
+| `deletedUserRetentionDays` | int | `-1` | `30` | **Del User Days** (Default Settings): days a soft-deleted account waits before purge; `-1` never purges automatically, `0` at once |
+| `useNuv` and the other `nuv*` keys | | | | See [New User Voting](users/nuv.md) |
+
+### `badusers.txt` format
+
+One rule per line, compared case-insensitively against the whole handle after
+outer whitespace is trimmed. `*` matches any run of characters and is the only
+wildcard; every other character is literal. Blank lines and lines starting
+with `;` or `#` are ignored. The shipped list:
+
+```text
+; badusers.txt - handles new users may not register
+; One name or wildcard pattern per line. Matching is case-insensitive.
+; * matches any run of characters. Blank lines and lines starting with ; or # are ignored.
+root
+admin*
+*sysop*
+guest
+anonymous
+```
+
+The file is re-read on every check, so edits apply at once. A list that is
+missing, unreadable, contains invalid UTF-8 or a control character is logged
+as a warning and signup goes on with the built-in rules only. `vision3 doctor`
+reports a bad list.
+
+### User record (`users.json`)
+
+Users are stored as a JSON array. Each user account contains:
+
+```json
+{
+  "id": 1,
+  "passwordHash": "$2a$10$...",
+  "handle": "Felonius",
+  "accessLevel": 10,
+  "flags": "",
+  "lastLogin": "2025-05-01T15:13:20Z",
+  "previousLogin": "2025-04-28T09:02:11Z",
+  "timesCalled": 220,
+  "lastBulletinRead": "0001-01-01T00:00:00Z",
+  "realName": "Felonius",
+  "createdAt": "0001-01-01T00:00:00Z",
+  "updatedAt": "2025-05-01T15:13:20Z",
+  "validated": true,
+  "filePoints": 0,
+  "numUploads": 0,
+  "numDownloads": 0,
+  "messagesPosted": 12,
+  "timeLimit": 60,
+  "privateNote": "",
+  "current_msg_conference_id": 1,
+  "current_msg_conference_tag": "LOCAL",
+  "current_file_conference_id": 1,
+  "current_file_conference_tag": "LOCAL",
+  "group_location": "FAiRLiGHT/PC",
+  "current_message_area_id": 1,
+  "current_message_area_tag": "GENERAL",
+  "last_read_message_ids": {
+    "1": "6ae43f1a-cc1c-447c-9b9c-3cdeebd3fbfb"
+  },
+  "current_file_area_id": 1,
+  "current_file_area_tag": "GENERAL",
+  "tagged_file_ids": [],
+  "tagged_message_area_tags": ["GENERAL", "BBS_TALK"],
+  "screenWidth": 80,
+  "screenHeight": 24,
+  "preferredEncoding": "cp437",
+  "msgHdr": 3,
+  "hotKeys": true,
+  "morePrompts": true,
+  "customPrompt": "",
+  "outputMode": "",
+  "fileListingMode": "lightbar",
+  "autoSignature": "",
+  "colors": [13, 9, 7, 8, 3, 11, 9]
+}
+```
+
+#### User Fields
+
+##### Essential Fields
+
+- `id` - Unique numeric identifier (auto-assigned)
+- `passwordHash` - Bcrypt hashed password
+- `handle` - Display name/alias (used for login and display)
+
+##### Access
+
+- `accessLevel` - Numeric access level (0-255)
+- `flags` - String of single-character flags for ACS checks (e.g., "ABC")
+- `validated` - Whether user is validated by SysOp
+- `publicKeys` - OpenSSH public keys that may open the [WFC console](how-to-guides/wfc-console.md) (omitted when empty)
+- `wfcReadOnly` - The account's WFC console may watch but not kick, snoop, type in or chat (omitted when false)
+
+##### Statistics
+
+- `timesCalled` - Login count
+- `lastLogin` - Timestamp of the **current** session, written at authentication
+- `previousLogin` - Timestamp of the call before this one; what "new since your last visit" is measured against (see below)
+- `seen_news_ids` - System News item IDs already shown to this user
+- `news_seen_initialized` - Whether `seen_news_ids` has been back-filled yet
+- `lastBulletinRead` - Last time bulletins were read
+- `filePoints` - File area points
+- `numUploads` - Number of file uploads
+- `numDownloads` - Number of file downloads (used for ACS 'B' ratio)
+- `messagesPosted` - Number of messages posted
+- `uploadedBytes` / `downloadedBytes` - Running totals of accepted uploads and successful downloads, in bytes. Shown on the login stats screen in KiB. Recorded from the release that added them; older accounts start at zero
+- `timeLimit` - Time limit per call in minutes (0=unlimited). See [Time Limits](#time-limits)
+
+##### Personal Information
+
+- `realName` - User's real name
+- `createdAt` - Account creation timestamp
+- `updatedAt` - Last modification timestamp (used for optimistic locking)
+- `group_location` - Group/Location affiliation
+- `privateNote` - User note. Asked for at signup, editable by the caller from `K`, and shown in user lists and last callers. The `Z` ACS term matches against it.
+
+##### Terminal Preferences
+
+- `screenWidth` - Preferred terminal width (0 = use detected PTY width)
+- `screenHeight` - Preferred terminal height (0 = use detected PTY height)
+- `preferredEncoding` - `""` (Auto) detects the encoding on every call: the board draws one box-drawing character and asks the terminal where its cursor ended up, falling back to the terminal type when it gets no answer. `"utf8"` or `"cp437"` forces that encoding from the next login, on every terminal the caller uses.
+- `msgHdr` - Selected message header style; valid values are whatever `MSGHDR.<n>.ans` templates the menu set ships (0 = unset, defaults to style 1)
+
+After authentication, the system applies these preferences: if a user's stored screen dimensions are smaller than the detected PTY size (or the PTY defaults to 80x25), the stored values cap the effective terminal dimensions. ANSI art is truncated to fit the effective height to prevent scrolling.
+
+##### User Configuration Preferences
+
+These are the fields behind the User Konfig (`K`) screen; see
+[What callers can change themselves](#what-callers-can-change-themselves).
+
+- `hotKeys` - Hot keys: menu commands run on a single keypress. A key that could start a longer command (a multi-key command, a number on a `##` menu, or `/G`) still waits for Enter. A menu's `FORCEHOTKEY` turns this on for everyone on that menu.
+- `morePrompts` - Stored but not yet used; nothing pauses long output on it ([#424](https://github.com/ViSiON-3/vision-3-bbs/issues/424)).
+- `customPrompt` - Stored but not yet shown; menus always use their own prompt ([#425](https://github.com/ViSiON-3/vision-3-bbs/issues/425)).
+- `outputMode` - Legacy field, not read by the board. The encoding that login applies is `preferredEncoding`.
+- `fileListingMode` - File listing style: `"lightbar"` or `"classic"` (empty = server default)
+- `file_list_columns` - Which columns the file lister shows. All `false` means every column is shown.
+- `autoSignature` - Auto-signature appended to messages (max 5 lines)
+- `autoSigAsk` - Ask before adding the auto-signature to each message. QWK replies get no signature while it is on. See [Auto-Signature](messages/autosig.md#asking-before-each-post).
+- `colors` - Array of 7 color values: [prompt, input, text, stat, text2, stat2, bar]. Stored but not yet applied ([#426](https://github.com/ViSiON-3/vision-3-bbs/issues/426)).
+
+##### Soft Delete
+
+- `deletedUser` - Boolean flag indicating the user is soft-deleted (default: false)
+- `deletedAt` - Timestamp when the user was deleted (only set if deletedUser is true)
+
+Soft-deleted users cannot log in and are hidden from public user listings, but all their data (messages, files, call history) is preserved and attributed to them. They remain visible in admin views.
+
+##### System State (Conference/Area Tracking)
+
+- `current_msg_conference_id` - Current message conference ID
+- `current_msg_conference_tag` - Current message conference tag
+- `current_file_conference_id` - Current file conference ID
+- `current_file_conference_tag` - Current file conference tag
+- `current_message_area_id` - Current message area ID
+- `current_message_area_tag` - Current message area tag
+- `last_read_message_ids` - Map of area ID to last read message UUID
+- `current_file_area_id` - Current file area ID
+- `current_file_area_tag` - Current file area tag
+- `tagged_file_ids` - Array of file UUIDs marked for batch download
+- `tagged_message_area_tags` - Array of message area tags tagged for newscan
+- `tagged_file_area_ids` / `tagged_file_area_tags` - File areas tagged for the file newscan
+- `fileNewscanSince` - Caller-set cutoff for the file newscan; absent means "since the previous call"
+- `seen_newscan_networks`, `seen_newscan_area_tags`, `newscan_seen_initialized` - Which networks and areas the caller has already been offered for newscan auto-join
+- `twitList` - The caller's private [Twit List](messages/twit-list.md) entries (omitted when empty). Not shown in `ue`; the caller manages it from `K` or the message menu
+- `introPending` / `introAttempts` - Set while a new caller still owes the SysOp the message that `requireNewUserEmail` demands, and how many sessions they have left it unsent
+
+### Signup entry points
+
+The application is triggered from either:
+
+- `handleLoginPrompt()` — coordinate-based LOGIN.ANS screen
+- `runAuthenticate()` — fallback text-based login
+
+Both detect "new" (case-insensitive) in the username field and call `handleNewUserApplication()`.
+
+The application can also be invoked from a menu command via `RUN:NEWUSER`.
+
+### Call History
+
+The system tracks user calls in `data/users/callhistory.json`:
+
+```json
+{
+  "userID": 1,
+  "handle": "Felonius",
+  "groupLocation": "FAiRLiGHT/PC",
+  "nodeID": 1,
+  "connectTime": "2025-01-01T10:00:00Z",
+  "disconnectTime": "2025-01-01T10:30:00Z",
+  "duration": 1800000000000,
+  "uploadedMB": 0,
+  "downloadedMB": 0,
+  "actions": "",
+  "baudRate": "38400",
+  "callNumber": 47
+}
+```
+
+#### Call History Fields
+
+- `userID` - User's ID number
+- `handle` - User's handle at time of call
+- `groupLocation` - User's group/location
+- `nodeID` - Node number used
+- `connectTime` - Connection timestamp
+- `disconnectTime` - Disconnection timestamp
+- `duration` - Call duration in nanoseconds
+- `uploadedMB` - Data uploaded (placeholder)
+- `downloadedMB` - Data downloaded (placeholder)
+- `actions` - Actions performed (placeholder)
+- `baudRate` - Connection speed (static)
+- `callNumber` - Overall system call number
+
+The system maintains the last 20 call records.
+
+#### Invisible Login
+
+Call records include an `invisible` field (boolean, omitted when false) that flags calls where the user logged in invisibly:
+
+```json
+{
+  "userID": 1,
+  "handle": "Felonius",
+  "callNumber": 48,
+  "invisible": true,
+  ...
+}
+```
+
+See [Invisible Login](#invisible-login-sysopco-sysop) below for details.
+
+### File locations
+
+#### Call Number Tracking
+
+- Next call number stored in `data/users/callnumber.json`
+- Automatically increments with each connection
+
+#### File Locations
+
+- `data/users/users.json` - User database
+- `data/users/callhistory.json` - Recent calls
+- `data/users/callnumber.json` - Next call number
+- `data/users/admin_activity.json` - Admin action log (validate, ban, delete, purge)

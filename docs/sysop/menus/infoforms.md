@@ -1,6 +1,6 @@
 # InfoForms
 
-InfoForms are interactive questionnaires that users fill out online — a modernization of ViSiON/2's infoform system from `RUMORS.PAS` and `OVERRET1.PAS`. SysOps create template files with questions, and users complete them by typing answers at each prompt. Completed forms can be viewed by the user, by SysOps, and during New User Voting.
+InfoForms are interactive questionnaires that users fill out online — a modernization of ViSiON/2's infoform system from `RUMORS.PAS` and `OVERRET1.PAS`. SysOps create template files with questions, and users complete them by typing answers at each prompt. Completed forms can be viewed by the user, by SysOps (from the Admin Menu's user editor or `INFOFORMHUNT`), and during New User Voting when `nuvForm` names one. A required form is the classic way to make a new caller tell you who they are before they get the run of the board.
 
 ---
 
@@ -80,36 +80,6 @@ All standard pipe codes are supported in templates (color codes, `\|CL`, `\|CR`,
 - `|B20;` before the first `*` limits the answer to 20 characters
 - `|B30;` limits the next answer to 30 characters
 - The final `*` has no `|B` code, so input length is unlimited
-
----
-
-## Configuration
-
-InfoForms configuration is stored in `data/infoforms/config.json`:
-
-```json
-{
-    "descriptions": [
-        "New User Application",
-        "",
-        "",
-        "",
-        ""
-    ],
-    "min_levels": [0, 0, 0, 0, 0],
-    "required_forms": "1"
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `descriptions` | Array of 5 strings — display name for each form (empty = no form) |
-| `min_levels` | Array of 5 integers — minimum access level to see each form (0 = everyone) |
-| `required_forms` | String of form numbers that are mandatory, e.g. `"1"` = form 1 required, `"135"` = forms 1, 3, and 5 required |
-
-A form only appears in the listing if:
-1. Its template file exists (`data/infoforms/templates/form_<n>.txt`)
-2. The user's access level meets the form's minimum level
 
 ---
 
@@ -198,9 +168,44 @@ This is typically placed near the end of the login sequence, after user validati
 
 ---
 
-## Menu Configuration
+## Technical Reference
 
-### INFORMM Menu
+Templates are plain text in `data/infoforms/templates/`, settings in
+`data/infoforms/config.json`, and answers in `data/infoforms/responses/`.
+There is no TUI for the settings file yet; edit it by hand as described below.
+
+### Configuration
+
+InfoForms configuration is stored in `data/infoforms/config.json`:
+
+```json
+{
+    "descriptions": [
+        "New User Application",
+        "",
+        "",
+        "",
+        ""
+    ],
+    "min_levels": [0, 0, 0, 0, 0],
+    "required_forms": "1"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `descriptions` | Array of 5 strings — display name for each form (empty = no form) |
+| `min_levels` | Array of 5 integers — minimum access level to see each form (0 = everyone) |
+| `required_forms` | String of form numbers that are mandatory, e.g. `"1"` = form 1 required, `"135"` = forms 1, 3, and 5 required |
+
+A form only appears in the listing if:
+1. Its template file exists (`data/infoforms/templates/form_<n>.txt`)
+2. The user's access level meets the form's minimum level
+
+
+### Menu Configuration
+
+#### INFORMM Menu
 
 The InfoForms feature has its own submenu (`INFORMM`), accessed from the Main Menu via the `I` key.
 
@@ -226,13 +231,12 @@ The InfoForms feature has its own submenu (`INFORMM`), accessed from the Main Me
 | `*` | `RUN:INFOFORMNUKE` | `S255` | SysOp: delete all forms for a user |
 | `Q` | `GOTO:MAIN` | `*` | Return to main menu |
 
-### ANSI Screen
+#### ANSI Screen
 
 The ANSI art screen `menus/v3/ansi/INFORMM.ANS` is displayed when entering the InfoForms Menu. Edit this file to customize the appearance.
 
----
 
-## Customizable Strings
+### Customizable Strings
 
 The following prompts can be customized in `configs/strings.json`:
 
@@ -242,11 +246,10 @@ The following prompts can be customized in `configs/strings.json`:
 | `newInfoFormPrompt` | `Newuser Forms (Q)uit or #:` | Prompt for new users |
 | `viewWhichForm` | `View which Form? (#) :` | Prompt when viewing a form |
 
----
 
-## Data Storage
+### Data Storage
 
-### Response Files
+#### Response Files
 
 User responses are stored as individual JSON files in `data/infoforms/responses/`:
 
@@ -275,7 +278,7 @@ Each response file:
 }
 ```
 
-### Directory Structure
+#### Directory Structure
 
 ```
 data/infoforms/
@@ -288,9 +291,8 @@ data/infoforms/
 
 The `responses/` directory is created automatically when the first form is completed (with `0700` permissions). Response files are written with `0600` permissions and use atomic writes (temp file + rename) for concurrent access safety.
 
----
 
-## ViSiON/2 Compatibility
+### ViSiON/2 Compatibility
 
 | V2 Feature | V3 Equivalent |
 |------------|---------------|

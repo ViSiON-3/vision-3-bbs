@@ -34,7 +34,8 @@ behaves identically however you connect.
 
 ## How to configure
 
-In `configs/config.json`, the server config has a `qwkAPI` block:
+There is no config editor screen for the API yet. In `configs/config.json`,
+the server config has a `qwkAPI` block:
 
 | Field | Default | Meaning |
 |-------|---------|---------|
@@ -59,12 +60,23 @@ re-authenticate on their next request). This is expected for a packet API.
   handle/password and receive a time-limited bearer token — the same "authenticate
   once, then a session carries you" model as an SSH login.
 - **Per-area write ACS still applies** on upload, exactly as in the terminal path.
+- **The caller's Twit List still applies** on download. A packet built by the
+  API leaves out the same authors the terminal would, using the list as last
+  saved (not as it was when the token was issued), and honours the board's
+  **Twit Lists** switch, the exemption levels, `twitListMax` and
+  `anonymousName`. The BBS refuses to start the API without that hook, so
+  there is no unfiltered path. See [Twit Filter List](messages/twit-list.md).
+- **Auto-signatures** are added to uploaded replies as in the terminal, except
+  for callers who have **Ask each post** on: the API cannot ask, so their
+  replies go out unsigned (see [Auto-Signature](messages/autosig.md#asking-before-each-post)).
 - **Browsers and casual clients are filtered out** (the API is not browsable and
   returns `404` to anything that looks like a web browser or omits the client
   header). That filtering is a convenience to keep stray traffic away — it is
   **not** the security boundary. TLS plus BBS credentials are.
 
-## Endpoints (for client developers)
+## Technical Reference
+
+### Endpoints (for client developers)
 
 All requests must send an `X-V3-Client` header; every request except `login` must
 also send `Authorization: Bearer <token>`.
@@ -79,7 +91,7 @@ Errors are JSON: `{"error": "<code>", "message": "<text>"}`. Rate limits apply
 (login per client IP, packet/reply per user); exceeding them returns `429` with a
 `Retry-After` header.
 
-## What gets logged
+### What gets logged
 
 Everything the API does goes to the normal BBS log (`data/logs/vision3.log` by
 default, JSON, one record per line) — there is no separate API log file. QWK API

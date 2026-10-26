@@ -189,6 +189,30 @@ With 1500 messages, message 3:
 
 The `─` fill automatically adjusts so the line always reaches the terminal width, regardless of the message number sizes.
 
+### Optional Groups (`|{ ... |}`)
+
+Wrap a label and its placeholder in `|{ ... |}` to blank the whole group when
+the placeholders inside it are empty. A header is not flowing text: it draws
+boxes, pads values to fixed columns and often positions the cursor absolutely,
+so a dropped group is replaced by spaces of the width it would have taken.
+Nothing shifts; the decoration simply goes blank.
+
+```text
+|{ Note: @U#####@|}      ->  "               "   when the author has no note
+                         ->  " Note: sysop   "   when they do
+From: @F@|{ at @Y@|}     ->  "From: Jane"        when the address is not in the nodelist
+```
+
+- A group is blanked only when it contains at least one known code and every
+  one of them is empty. A group with no placeholder is left as it is.
+- Groups do not nest. An unmatched `|{` is left as visible text.
+- Width modifiers inside a group count toward its width, so a blanked group
+  keeps the columns to its right in place.
+
+Menu prompts use the same `|{ ... |}` syntax, but there a dropped group is
+removed and the text closes up; see
+[Optional groups](menus/menu-system.md#optional-groups) in the menu system guide.
+
 ## Editing ANSI Templates
 
 ### Direct Editing (Recommended)

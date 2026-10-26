@@ -1,6 +1,6 @@
 # ViSiON/3 String Editor
 
-The string editor (`strings`) is a TUI tool for editing `configs/strings.json`, which contains all customizable text prompts and messages displayed by the BBS. It is a Go reimplementation of the original Vision/2 `STRINGS.EXE` Turbo Pascal utility.
+Every prompt, notice and error a caller sees — the pause string, the login prompt, "Press a key", the Yes/No labels — is a line of text in `configs/strings.json`, and the string editor (`./strings`) is where you reword, recolour or translate it. It is a Go reimplementation of the original ViSiON/2 `STRINGS.EXE` Turbo Pascal utility, down to the paginated three-column layout, with a few things the original did not have: search, safe editing of control characters, previews of the colour codes, and a check that a string the BBS fills in at runtime still has the right placeholders. A value can also hand off to a script or an ANSI file instead of printing text, which is how a board gets a full-screen custom prompt without touching Go.
 
 ## Running
 
@@ -132,62 +132,159 @@ In any confirmation dialog:
 - **Y** / **N** — Quick accept/reject
 - **Esc** — Cancel and return to navigation
 
-## BBS Color Codes
+## Value States
 
-String values support BBS pipe codes that are rendered with color in the editor. These same codes produce colored output when displayed to connected users at runtime.
+A blank value column does not mean the string is unused. The marker just right of the closing
+bracket says which of five states an entry is in, and the message row above the description spells it out
+for the selected entry.
 
-### Foreground Colors (`|00` – `|15`)
+| Marker | State | Meaning |
+|--------|-------|---------|
+| (none) | ViSiON/3 default | The value matches the shipped default |
+| `*` | Custom | You have changed it from the shipped default |
+| `~` | Runtime fallback | Blank in `strings.json`, but the BBS prints a built-in default. The list shows that default, dimmed |
+| `0` | Explicitly empty | Present in `strings.json` and set to nothing. The BBS prints nothing |
+| `-` | Not set | Absent from `strings.json` with no built-in default. The BBS prints nothing |
 
-| Code | Color |
-|------|-------|
-| `\|00` | Black |
-| `\|01` | Dark Blue |
-| `\|02` | Dark Green |
-| `\|03` | Dark Cyan |
-| `\|04` | Dark Red |
-| `\|05` | Dark Magenta |
-| `\|06` | Brown/Dark Yellow |
-| `\|07` | Light Gray |
-| `\|08` | Dark Gray |
-| `\|09` | Light Blue |
-| `\|10` | Light Green |
-| `\|11` | Light Cyan |
-| `\|12` | Light Red |
-| `\|13` | Light Magenta |
-| `\|14` | Yellow |
-| `\|15` | White |
+The `~` state is the common one after an upgrade: a release adds a string, your existing
+`strings.json` does not have it, and the BBS falls back to the value compiled into the binary.
+Nothing is broken — pressing `F4` writes that default into your file if you want it there
+explicitly.
 
-### Background Colors (`|B0` – `|B7`)
+Keys in `strings.json` that the editor has no entry for — a leftover from Vision/2, or something you
+added by hand — are written back unchanged when you save. Nothing is dropped.
 
-| Code | Color |
-|------|-------|
-| `\|B0` | Black background |
-| `\|B1` | Red background |
-| `\|B2` | Green background |
-| `\|B3` | Brown/Yellow background |
-| `\|B4` | Blue background |
-| `\|B5` | Magenta background |
-| `\|B6` | Cyan background |
-| `\|B7` | Light Gray background |
+## String Descriptions
 
-### Special Codes
+Each string entry has a built-in description explaining its purpose. These descriptions are compiled into the editor binary in `internal/stringeditor/metadata.go` and are displayed on row 24 as you navigate. They match the original Vision/2 `things[].descrip` help text.
 
-| Code | Meaning |
-|------|---------|
-| `\|CR` | Carriage return / newline (rendered as a space in the editor's preview) |
-| `\|CL` | Clear screen |
-| `\|DE` | Clear to end of line |
-| `@` | Yes/No selection bar |
+## String Categories
 
-### Dollar Codes (`$x`)
+The catalog holds about 550 entries, numbered in catalog order. New groups are appended, so an
+entry's number never changes between releases:
 
-Legacy Vision/2 color codes using `$` followed by a letter. These map to the same 16 DOS colors (e.g., `$a` = dark blue, `$W` = white).
+| Range | Category |
+|-------|----------|
+| 1–20 | Core prompts (login, pause, chat, quoting) |
+| 21–40 | Message base prompts (posting, boards, scanning) |
+| 41–60 | User system (registration, passwords) |
+| 61–80 | Mail and feedback prompts |
+| 81–100 | New user voting, rumors, BBS list |
+| 101–120 | File system prompts (upload, download, batch) |
+| 121–140 | File operations (ratios, listings, newscan) |
+| 141–160 | QWK mail, chat, announcements |
+| 161–178 | Advanced file/message operations |
+| 179–200 | ViSiON/3: SSH/ANSI, Door, Matrix/Login |
+| 201–220 | ViSiON/3: Conference, Executor |
+| 221–240 | ViSiON/3: Terminal/Session, File Search, File Info |
+| 241–439 | ViSiON/3: File Newscan, Sysop File Review, Column Config, Want List, and later additions |
+| 440–521 | Konfig: the user **K** settings form (see below) |
+| 522–527 | Chat: command help and usage lines |
+| 528–546 | Twit: the caller's Twit List prompts and messages |
+| 547–550 | Auto-signature prompts |
 
-### MCI Codes
+Reserved entries (keys prefixed with `_`) appear in the list as non-editable rows and are skipped when saving.
 
-Runtime placeholder codes like `|MN` (menu name), `|TL` (time left), `|CB` (current board), `|UN` (user number), etc. These are displayed as literal text in the editor but expanded by the BBS server when shown to users.
+## Strings for sysop chat and paging
 
-## File Format
+These strings are edited like any other. The `%s` and `%d` verbs follow the
+[format rules](#format-verbs) above.
+
+| Key | Editor label | Shown | Verbs |
+|-----|--------------|-------|-------|
+| `pageSysopReasonPrompt` | Page SysOp: Reason | Asks the caller for the reason for a page | |
+| `pageSysopPaging` | Page SysOp: Paging | While the page waits for an answer | |
+| `pageSysopUnavailable` | Page SysOp: Unavailable | No console connected, or the page timed out | |
+| `pageSysopCooldown` | Page SysOp: Cooldown | Caller paged again too soon | `%d` minutes |
+| `sysopChatHeader` | SysOp Chat: Header | Bar between the two chat panes | `%s` sysop handle, `%s` caller handle |
+| `sysopChatBack` | SysOp Chat: Back | Caller's screen after chat when it cannot be restored | |
+
+See [WFC Sysop Console](how-to-guides/wfc-console.md#chat).
+
+## User Konfig strings
+
+The user settings form (**K** on the main menu, `RUN:USERCONFIG`) takes all
+of its text from `strings.json`: the title drawn when the menu set has no
+`KONFIG.ANS`, the key legend, the four section titles, each setting's name and
+help line, the values (`(default)`, `(not set)`, On/Off, `Auto (…)`), the
+status and error messages, the password prompts, and the file-columns box.
+They are the `konfig*` keys, listed under **Konfig:** in the editor, so the
+form can be reworded or translated like any other prompt. Every one has a
+built-in fallback, so a `strings.json` from before the form existed still
+draws it; `F4` writes the shipped text into your file. Names, titles and
+values are written into fixed cells, so keep them short, and the entries
+marked *Plain text, no colour codes* in their description are drawn without
+pipe-code processing.
+
+## Scripts and files in place of text
+
+A value can hand off to a VPL script or a display file instead of printing text, as PCBoard's
+text tables did. Only the start of the value matters:
+
+| Value starts with | The BBS |
+|-------------------|---------|
+| `!CODE [words]` | Runs the `v3_script` door whose `code` in `doors.json` is `CODE`, in place of the text |
+| `%file.ext [text]` | Shows `file.ext` from the menu set's `ansi/` directory, then prints `text` |
+| `!\|` | Prints a literal `!` followed by the rest of the value |
+
+```json
+{
+    "execGoodbye": "!goodbye",
+    "scanHeader": "%SCANHDR.ANS",
+    "pageWhichNodePrompt": "%NODES.ANS |07Page which node? "
+}
+```
+
+**In the editor.** A hook value previews as a yellow tag, `[door FANCYPROMPT]` or
+`[file NODES.ANS]`, followed by the door's words or the text printed after the file, still in
+their colours and clipped to the column. A `!|` value previews as the text it prints. The
+description row says what the selected value does, for example *runs door SAY in place of the
+text*.
+
+**Script arguments.** The script's `v3.args` holds the door's own `args` from `doors.json`, then the
+words after the door name, then the values the BBS would have formatted into the string, so a
+script can draw its own version of a message that names a door, a file or a user. The
+script replaces how the string looks; the BBS still reads the caller's answer to a prompt
+afterwards.
+
+**Format verbs.** A `!CODE` value takes no verbs: the arguments go to the script instead. In a
+`%file.ext` value, the text after the file name carries the verbs the string normally has. The
+editor and the startup check apply these rules.
+
+**When it prints as text.** The value is printed as written, and logged once, when the door does not
+exist, is not a `v3_script` door, is busy, or the file is missing. It is also printed as text, without
+a log entry, before the caller has logged in, and when the caller's access level is below the door's
+`min_access_level`. A `!` value met while another string's script is running prints as text too.
+
+A file name needs an extension, so formatted strings such as `%d of %d` are never mistaken for a
+file. Put a colour code before a leading `!` (`|12!Warning`) rather than after it: `!|` is the
+escape.
+
+**Where hooks do not apply.** These strings are drawn into fixed screen layouts, or are not
+screen text at all, and are always printed or used as written:
+
+- Chat's split screen: messages, system lines, joins and leaves, and the header and status bar.
+  The network and room pickers shown before it do take hooks.
+- The Konfig (`K`) settings screen and the file-columns toggle screen.
+- Text clipped into a fixed row: the time-limit warning on lightbar menus, the one-liner legend,
+  the Yes/No lightbar labels (`yesPromptText`, `noPromptText`) and the message reader's status
+  suffixes.
+- Door messages written to the door path: connecting, connect failed, disconnected, dropfile and
+  door errors, and the `DOOR:` command's refusals (not logged in, not configured, access denied,
+  busy), which go to the session's error stream.
+- Values used as data rather than shown: `anonymousName`, `doorMenuOther`, `execVersionString`,
+  the sysop's new-user email subject, and notices delivered to the sysop or to another node
+  (`newUserSysopPage`, `newUserSysopNotice`, the V3Net new-area notices, `pageMessageFormat`).
+
+The idle-timeout notice is shown just before an idle caller is disconnected, so a `!CODE` value
+there prints as text.
+
+## Technical Reference
+
+The file format, the colour codes and the build notes. Day-to-day editing needs none of this;
+it is here for hand-editing `strings.json`, for scripts, and for developers adding a string.
+
+### File Format
 
 `configs/strings.json` is a flat JSON object mapping string keys to their values:
 
@@ -205,7 +302,7 @@ Keys prefixed with `_` (e.g., `_extra3`) are reserved placeholders and cannot be
 hidden from the list by default; `Ctrl-R` shows them. Entry numbers come from the full catalog, so
 they do not shift when reserved entries are hidden — "string 199" always means the same string.
 
-### Format verbs
+#### Format verbs
 
 Some strings carry `%s` / `%d` **format verbs**, which the BBS fills in at runtime. These are
 different from `|XX` placeholder codes: a placeholder can be moved or removed freely, but a format
@@ -249,132 +346,62 @@ why, rather than showing a mangled banner.
 
 When saving, the editor writes keys in sorted order and omits internal `_`-prefixed keys, producing clean deterministic output.
 
-### Scripts and files in place of text
+### BBS Color Codes
 
-A value can hand off to a VPL script or a display file instead of printing text, as PCBoard's
-text tables did. Only the start of the value matters:
+String values support BBS pipe codes that are rendered with color in the editor. These same codes produce colored output when displayed to connected users at runtime.
 
-| Value starts with | The BBS |
-|-------------------|---------|
-| `!door [words]` | Runs the `v3_script` door `door` from `doors.json` in place of the text |
-| `%file.ext [text]` | Shows `file.ext` from the menu set's `ansi/` directory, then prints `text` |
-| `!\|` | Prints a literal `!` followed by the rest of the value |
+#### Foreground Colors (`|00` – `|15`)
 
-```json
-{
-    "execGoodbye": "!goodbye",
-    "scanHeader": "%SCANHDR.ANS",
-    "pageWhichNodePrompt": "%NODES.ANS |07Page which node? "
-}
-```
+| Code | Color |
+|------|-------|
+| `\|00` | Black |
+| `\|01` | Dark Blue |
+| `\|02` | Dark Green |
+| `\|03` | Dark Cyan |
+| `\|04` | Dark Red |
+| `\|05` | Dark Magenta |
+| `\|06` | Brown/Dark Yellow |
+| `\|07` | Light Gray |
+| `\|08` | Dark Gray |
+| `\|09` | Light Blue |
+| `\|10` | Light Green |
+| `\|11` | Light Cyan |
+| `\|12` | Light Red |
+| `\|13` | Light Magenta |
+| `\|14` | Yellow |
+| `\|15` | White |
 
-**In the editor.** A hook value previews as a yellow tag, `[door fancyprompt]` or
-`[file NODES.ANS]`, followed by the door's words or the text printed after the file. The
-description row says what the selected value does.
+#### Background Colors (`|B0` – `|B7`)
 
-**Script arguments.** The script's `v3.args` holds the door's own `args` from `doors.json`, then the
-words after the door name, then the values the BBS would have formatted into the string, so a
-script can draw its own version of a message that names a door, a file or a user. The
-script replaces how the string looks; the BBS still reads the caller's answer to a prompt
-afterwards.
+| Code | Color |
+|------|-------|
+| `\|B0` | Black background |
+| `\|B1` | Red background |
+| `\|B2` | Green background |
+| `\|B3` | Brown/Yellow background |
+| `\|B4` | Blue background |
+| `\|B5` | Magenta background |
+| `\|B6` | Cyan background |
+| `\|B7` | Light Gray background |
 
-**Format verbs.** A `!door` value takes no verbs: the arguments go to the script instead. In a
-`%file.ext` value, the text after the file name carries the verbs the string normally has. The
-editor and the startup check apply these rules.
+#### Special Codes
 
-**When it prints as text.** The value is printed as written, and logged once, when the door does not
-exist, is not a `v3_script` door, is busy, or the file is missing. It is also printed as text, without
-a log entry, before the caller has logged in, and when the caller's access level is below the door's
-`min_access_level`. A `!` value met while another string's script is running prints as text too.
+| Code | Meaning |
+|------|---------|
+| `\|CR` | Carriage return / newline (rendered as a space in the editor's preview) |
+| `\|CL` | Clear screen |
+| `\|DE` | Clear to end of line |
+| `@` | Yes/No selection bar |
 
-A file name needs an extension, so formatted strings such as `%d of %d` are never mistaken for a
-file. Put a colour code before a leading `!` (`|12!Warning`) rather than after it: `!|` is the
-escape.
+#### Dollar Codes (`$x`)
 
-**Where hooks do not apply.** These strings are drawn into fixed screen layouts, or are not
-screen text at all, and are always printed or used as written:
+Legacy Vision/2 color codes using `$` followed by a letter. These map to the same 16 DOS colors (e.g., `$a` = dark blue, `$W` = white).
 
-- Chat's split screen: messages, system lines, joins and leaves, and the header and status bar.
-  The network and room pickers shown before it do take hooks.
-- The Konfig (`K`) settings screen and the file-columns toggle screen.
-- Text clipped into a fixed row: the time-limit warning on lightbar menus, the one-liner legend,
-  the Yes/No lightbar labels (`yesPromptText`, `noPromptText`) and the message reader's status
-  suffixes.
-- Door messages written to the door path: connecting, connect failed, disconnected, dropfile and
-  door errors, and the `DOOR:` command's refusals (not logged in, not configured, access denied,
-  busy), which go to the session's error stream.
-- Values used as data rather than shown: `anonymousName`, `doorMenuOther`, `execVersionString`,
-  the sysop's new-user email subject, and notices delivered to the sysop or to another node
-  (`newUserSysopPage`, `newUserSysopNotice`, the V3Net new-area notices, `pageMessageFormat`).
+#### MCI Codes
 
-The idle-timeout notice is shown just before an idle caller is disconnected, so a `!door` value
-there prints as text.
+Runtime placeholder codes like `|MN` (menu name), `|TL` (time left), `|CB` (current board), `|UN` (user number), etc. These are displayed as literal text in the editor but expanded by the BBS server when shown to users.
 
-## Value States
-
-A blank value column does not mean the string is unused. The marker just right of the closing
-bracket says which of five states an entry is in, and the message row above the description spells it out
-for the selected entry.
-
-| Marker | State | Meaning |
-|--------|-------|---------|
-| (none) | ViSiON/3 default | The value matches the shipped default |
-| `*` | Custom | You have changed it from the shipped default |
-| `~` | Runtime fallback | Blank in `strings.json`, but the BBS prints a built-in default. The list shows that default, dimmed |
-| `0` | Explicitly empty | Present in `strings.json` and set to nothing. The BBS prints nothing |
-| `-` | Not set | Absent from `strings.json` with no built-in default. The BBS prints nothing |
-
-The `~` state is the common one after an upgrade: a release adds a string, your existing
-`strings.json` does not have it, and the BBS falls back to the value compiled into the binary.
-Nothing is broken — pressing `F4` writes that default into your file if you want it there
-explicitly.
-
-Keys in `strings.json` that the editor has no entry for — a leftover from Vision/2, or something you
-added by hand — are written back unchanged when you save. Nothing is dropped.
-
-## String Descriptions
-
-Each string entry has a built-in description explaining its purpose. These descriptions are compiled into the editor binary in `internal/stringeditor/metadata.go` and are displayed on row 24 as you navigate. They match the original Vision/2 `things[].descrip` help text.
-
-## String Categories
-
-The editor contains approximately 250 string entries organized by function:
-
-| Range | Category |
-|-------|----------|
-| 1–20 | Core prompts (login, pause, chat, quoting) |
-| 21–40 | Message base prompts (posting, boards, scanning) |
-| 41–60 | User system (registration, passwords) |
-| 61–80 | Mail and feedback prompts |
-| 81–100 | New user voting, rumors, BBS list |
-| 101–120 | File system prompts (upload, download, batch) |
-| 121–140 | File operations (ratios, listings, newscan) |
-| 141–160 | QWK mail, chat, announcements |
-| 161–178 | Advanced file/message operations |
-| 179–200 | ViSiON/3: SSH/ANSI, Door, Matrix/Login |
-| 201–220 | ViSiON/3: Conference, Executor |
-| 221–240 | ViSiON/3: Terminal/Session, File Search, File Info |
-| 241–250+ | ViSiON/3: File Newscan, Sysop File Review, Column Config, Want List |
-
-Reserved entries (keys prefixed with `_`) appear in the list as non-editable rows and are skipped when saving.
-
-## Strings for sysop chat and paging
-
-These strings are edited like any other. The `%s` and `%d` verbs follow the
-[format rules](#format-verbs) above.
-
-| Key | Editor label | Shown | Verbs |
-|-----|--------------|-------|-------|
-| `pageSysopReasonPrompt` | Page SysOp: Reason | Asks the caller for the reason for a page | |
-| `pageSysopPaging` | Page SysOp: Paging | While the page waits for an answer | |
-| `pageSysopUnavailable` | Page SysOp: Unavailable | No console connected, or the page timed out | |
-| `pageSysopCooldown` | Page SysOp: Cooldown | Caller paged again too soon | `%d` minutes |
-| `sysopChatHeader` | SysOp Chat: Header | Bar between the two chat panes | `%s` sysop handle, `%s` caller handle |
-| `sysopChatBack` | SysOp Chat: Back | Caller's screen after chat when it cannot be restored | |
-
-See [WFC Sysop Console](how-to-guides/wfc-console.md#chat).
-
-## Building
+### Building
 
 The string editor is built automatically by `build.sh`:
 
@@ -388,13 +415,13 @@ Or build it standalone:
 go build -o strings ./cmd/strings
 ```
 
-## Origin
+### Origin
 
 This tool is a faithful recreation of the Vision/2 BBS `STRINGS.EXE` (Turbo Pascal, ~1400 lines in `SRC/STRINGS.PAS`). The Go version preserves the original's paginated three-column layout, DOS color scheme, and editing workflow while adding search, escape-safe editing of control characters, terminal-adaptive sizing, and chrome shared with `./config`.
 
-## Developer Reference
+### Developer Reference
 
-### How Defaults Are Loaded
+#### How Defaults Are Loaded
 
 The editor supports two layers of value restoration:
 
@@ -402,7 +429,7 @@ The editor supports two layers of value restoration:
 
 2. **ViSiON/3 Defaults (F4 "Restore")** — A separate set of shipped default values loaded from `templates/configs/strings.json`, with the copy embedded in the binary as a fallback. This represents the canonical out-of-the-box string values that ship with ViSiON/3. F4 restores the selected string to this shipped value; where the template has no entry for a key, F4 offers the runtime fallback from `config.StringFallbacks` instead.
 
-### Default Loading Flow
+#### Default Loading Flow
 
 ```text
 cmd/strings/main.go
@@ -422,7 +449,7 @@ cmd/strings/main.go
 - An on-disk template wins so a distribution can ship adjusted defaults, but the templates directory is not present in every installation, so `templates/configs/embed.go` embeds the same file into the binary as a guaranteed fallback. There is one canonical copy: the Go file sits alongside the JSON rather than the JSON being duplicated into a package.
 - The template file (`templates/configs/strings.json`) must be kept in sync with `configs/strings.json` when new string keys are added to the system.
 
-### Adding a New String
+#### Adding a New String
 
 1. Add the field to `StringsConfig` in `internal/config/config_strings_types.go`
 2. Add a `StringEntry` struct to the appropriate position in `internal/stringeditor/metadata.go` (Label, Key, Description — name the format arguments in the description)
