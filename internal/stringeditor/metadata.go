@@ -324,7 +324,6 @@ func stringCatalog() []StringEntry {
 		{Label: "Msg: Reply Error", Key: "msgReplyError", Description: "Shown on reply save error"},
 		{Label: "Msg: Reply Success", Key: "msgReplySuccess", Description: "Shown on successful reply post"},
 		{Label: "Msg: Editor Error", Key: "msgEditorError", Description: "Shown on editor error"},
-		{Label: "Msg: Add Signature?", Key: "msgAutoSigPrompt", Description: "Yes/No asked after saving a message when the caller wants to be asked before their Auto-Signature is added"},
 
 		// Message Scan (V3)
 		{Label: "Scan: Date Line", Key: "scanDateLine", Description: "Display format for scan date filter"},
@@ -636,9 +635,6 @@ func stringCatalog() []StringEntry {
 		{Label: "Konfig: Sig Cleared", Key: "konfigAutoSigCleared", Description: "The signature was saved empty"},
 		{Label: "Konfig: Sig Cut", Key: "konfigAutoSigTruncated", Description: "The signature was too long (%d=lines kept)"},
 		{Label: "Konfig: Sig Updated", Key: "konfigAutoSigUpdated", Description: "Signature changed"},
-		{Label: "Konfig: Sig Ask On", Key: "konfigAutoSigAskOn", Description: "Asking before each post was switched on"},
-		{Label: "Konfig: Sig Ask Off", Key: "konfigAutoSigAskOff", Description: "Asking before each post was switched off"},
-		{Label: "Konfig: Sig Ask Mark", Key: "konfigAutoSigAskSuffix", Description: "Added after the signature length when asking is on. Plain text, no colour codes"},
 		{Label: "Konfig: Columns Box Title", Key: "konfigColumnsTitle", Description: "Title of the file columns box. Plain text, no colour codes"},
 		{Label: "Konfig: Columns Box Hint", Key: "konfigColumnsHint", Description: "Hint at the foot of the file columns box. Plain text, no colour codes"},
 		{Label: "Konfig: Last Column", Key: "konfigColumnsKeepOne", Description: "Tried to switch off the last column"},
@@ -677,5 +673,11 @@ func stringCatalog() []StringEntry {
 
 		{Label: "Twit: Label", Key: "konfigTwitListLabel", Description: "User configuration field label"},
 		{Label: "Twit: Help", Key: "konfigTwitListHelp", Description: "User configuration field help"},
+
+		// Auto-Signature: ask before each post (#697)
+		{Label: "Msg: Add Signature?", Key: "msgAutoSigPrompt", Description: "Yes/No asked after saving a message when the caller wants to be asked before their Auto-Signature is added"},
+		{Label: "Konfig: Sig Ask On", Key: "konfigAutoSigAskOn", Description: "Asking before each post was switched on"},
+		{Label: "Konfig: Sig Ask Off", Key: "konfigAutoSigAskOff", Description: "Asking before each post was switched off"},
+		{Label: "Konfig: Sig Ask Mark", Key: "konfigAutoSigAskSuffix", Description: "Added after the signature length when asking is on. Plain text, no colour codes"},
 	}
 }
