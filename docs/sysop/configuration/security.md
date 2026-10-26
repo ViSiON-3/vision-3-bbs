@@ -518,10 +518,13 @@ IP to the blocklist file**, with a comment saying why:
 198.51.100.7 # auto-blocked 2026-10-01 20:46:21: too many failed logins
 ```
 
-The in-memory list is updated at once, and because the entry is in the file,
-the block survives blocklist reloads and BBS restarts. An IP already on the
-blocklist is not added twice. With no blocklist path set, only the temporary
-lockout applies and it is cleared on restart.
+The line is written first and the in-memory list is updated once the write
+succeeds, so a block that reached the file survives blocklist reloads and BBS
+restarts. If the file cannot be opened or written, the failure is logged and
+only the temporary lockout applies to that IP, so keep an eye on the log for
+`failed to open blocklist file` or `failed to write to blocklist file`. An IP
+already on the blocklist is not added twice. With no blocklist path set, only
+the temporary lockout applies and it is cleared on restart.
 
 **Logging:**
 

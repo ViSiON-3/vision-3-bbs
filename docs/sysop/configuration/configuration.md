@@ -893,7 +893,7 @@ To enable additional archive formats, set `"enabled": true` and ensure the corre
 
 #### FTN Bundle Note
 
-FTN echomail bundles always use ZIP format (per FidoNet standard practice) and are handled natively by Go's `archive/zip` regardless of this configuration. This config applies to user-facing archive operations: file area uploads, archive viewing, ZipLab pipeline, etc.
+ViSiON/3's tosser packs outbound echomail bundles as ZIP and unpacks only ZIP bundles from the inbound, using Go's built-in `archive/zip` and ignoring this file. That is a ViSiON/3 choice, not a FidoNet rule: the standards allow other packers, so a hub that sends ARC, ZOO or LZH bundles must be asked to send ZIP. This config applies to the user-facing archive operations: file area uploads, archive viewing and the ZipLab pipeline.
 
 ### ziplab.json
 
