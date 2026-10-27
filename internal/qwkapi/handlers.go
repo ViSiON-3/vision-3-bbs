@@ -78,14 +78,16 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.deps.Guard.ClearFailedLoginAttempts(ip)
 	}
 	s.handleLocks.clear(req.Handle)
-	tok, exp, err := s.tokens.Issue(u)
+	// A password login only ever yields a pair token: enough to register a
+	// device (or manage existing ones), never to fetch or upload packets.
+	tok, exp, err := s.tokens.Issue(u, scopePair, "")
 	if err != nil {
 		slog.Error("qwk api login: token issue failed", "handle", u.Handle, "remote", ip, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal", "could not issue token")
 		return
 	}
-	slog.Info("qwk api login", "handle", u.Handle, "remote", ip, "outcome", "success")
-	writeJSON(w, http.StatusOK, loginResponse{Token: tok, ExpiresAt: exp.UTC().Format("2006-01-02T15:04:05Z07:00")})
+	slog.Info("qwk api login", "handle", u.Handle, "remote", ip, "outcome", "success", "scope", string(scopePair))
+	writeJSON(w, http.StatusOK, loginResponse{Token: tok, ExpiresAt: exp.UTC().Format(time.RFC3339), Scope: string(scopePair)})
 }
 
 // handleLogout revokes the request's token. It needs only a live token, not an
@@ -96,12 +98,12 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method", "POST required")
 		return
 	}
-	tok, u, ok := s.tokens.bearerToken(w, r)
+	tok, e, ok := s.tokens.bearerToken(w, r)
 	if !ok {
 		return
 	}
 	s.tokens.Revoke(tok)
-	slog.Info("qwk api logout", "handle", u.Handle, "remote", clientIP(r))
+	slog.Info("qwk api logout", "handle", e.user.Handle, "remote", clientIP(r))
 	w.WriteHeader(http.StatusNoContent)
 }
 

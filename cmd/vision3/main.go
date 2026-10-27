@@ -2269,6 +2269,8 @@ func main() {
 			Service:      qwkSvc,
 			AuthorizeFor: menu.QWKWriteAuthorizer,
 			DenyLogin:    menuExecutor.QWKAPILoginDenial,
+			Devices:      userMgr,
+			BoardID:      menu.ResolveQWKID(serverConfig),
 			Guard:        connectionTracker,
 			// The API passes the account as currently saved, not the login
 			// snapshot, so the latest Twit List applies to each download.

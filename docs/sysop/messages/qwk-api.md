@@ -43,7 +43,7 @@ the server config has a `qwkAPI` block:
 | `host` | `"0.0.0.0"` | Listen interface. Use `127.0.0.1` to restrict to the local machine. |
 | `port` | `8666` | HTTPS port. |
 | `certFile` / `keyFile` | `""` | Optional real TLS cert/key paths. Blank = auto self-signed. |
-| `tokenTTLHours` | `24` | Login-token lifetime in hours. |
+| `tokenTTLHours` | `24` | Lifetime in hours of the token a paired device gets when it logs in. |
 
 When enabled with no cert configured, the BBS generates a self-signed certificate
 (`configs/qwkapi_cert.pem` / `configs/qwkapi_key.pem`) on first start and logs its
@@ -53,12 +53,42 @@ certificate (e.g. Let's Encrypt) can point `certFile`/`keyFile` at it instead.
 
 Tokens live in memory only, so restarting the BBS logs API clients out (they
 re-authenticate on their next request). This is expected for a packet API.
+Paired devices are stored with the user record and survive restarts.
+
+## Paired devices
+
+The app never keeps the user's password. Instead:
+
+1. The user enters their handle and password in the app **once**. That login
+   only yields a short-lived (10-minute) *pair* token, which can register a
+   device and manage the account's devices — it cannot fetch or upload mail.
+2. The app generates a key pair on the phone (in the Secure Enclave / Android
+   Keystore where available), sends the BBS the public half, and forgets the
+   password.
+3. From then on the app logs in by signing a one-time challenge from the BBS
+   with its private key, and gets a normal *device* token for packets.
+
+What this means for you as SysOp:
+
+- **A lost or stolen phone holds no password.** The user can unpair it from
+  the app on another device (after a password login there), and any session
+  it has ends on its next request.
+- **Changing a user's password unpairs all their devices** — by them, in the
+  user editor, or in `./ue`. Someone who learned the password could have
+  paired a phone of their own, so a password change has to cut those off. The
+  user pairs their real phone again with the new password. This is also the
+  way to remove a user's devices yourself, together with banning them; there
+  is no device list in the user editor yet.
+- **Banning, deleting or demoting a user** stops their devices logging in,
+  exactly as it stops a password login.
+- Each account can pair up to **10 devices**.
 
 ## Security model
 
-- **All traffic is HTTPS.** Users authenticate with their normal BBS
-  handle/password and receive a time-limited bearer token — the same "authenticate
-  once, then a session carries you" model as an SSH login.
+- **All traffic is HTTPS.** The password is used only to pair a device (see
+  [Paired devices](#paired-devices)); mail access needs a token from a login
+  signed by a paired device's key — the same public-key model as SSH key
+  login. Device keys must be P-256 ECDSA or Ed25519.
 - **The BBS's login protections cover the API too.** An IP on the
   `ipBlocklistPath` blocklist gets `403` on every endpoint (the allowlist still
   exempts an address, as it does for telnet/SSH). Failed API logins count toward
@@ -80,10 +110,11 @@ re-authenticate on their next request). This is expected for a packet API.
   introduction (`requireNewUserEmail`). The API has no editor to collect that
   message, so the user must log in by terminal once to send it.
 - **Account changes end API sessions straight away.** Every request re-reads
-  the account, so deleting, banning or demoting a user below `logonLevel`, or
+  the account, so deleting, banning or demoting a user below `logonLevel`,
   changing their password (by them or by you, including in the standalone
-  `./ue` editor while nobody is online), invalidates their API tokens on the
-  next request instead of when the token would have expired. That is also
+  `./ue` editor while nobody is online), or unpairing the device invalidates
+  their API tokens on the next request instead of when the token would have
+  expired. That is also
   how to kick a user off the API: change their password or ban them. Requests
   use the account as it is now, so a change to their level, tagged areas or
   signature applies to the next packet without logging in again.
@@ -97,6 +128,10 @@ re-authenticate on their next request). This is expected for a packet API.
 - **Auto-signatures** are added to uploaded replies as in the terminal, except
   for callers who have **Ask each post** on: the API cannot ask, so their
   replies go out unsigned (see [Auto-Signature](messages/autosig.md#asking-before-each-post)).
+- **Failed device logins count like failed passwords** toward the per-IP
+  lockout. A device-login challenge works once, for one device, for 60
+  seconds, and the signed message names this board, so a signature can't be
+  replayed here or against another BBS the same phone is paired with.
 - **Browsers and casual clients are filtered out** (the API is not browsable and
   returns `404` to anything that looks like a web browser or omits the client
   header). That filtering is a convenience to keep stray traffic away — it is
@@ -106,21 +141,51 @@ re-authenticate on their next request). This is expected for a packet API.
 
 ### Endpoints (for client developers)
 
-All requests must send an `X-V3-Client` header; every request except `login` must
-also send `Authorization: Bearer <token>`. A `401` on `packet` or `reply` means
-the token is gone — expired, logged out, lost in a restart, or revoked by an
-account change — and the client should log in again; a `403` with a deny code
-means logging in again will not help.
+All requests must send an `X-V3-Client` header. Every request except `login`,
+`challenge` and `login/device` must also send `Authorization: Bearer <token>`.
+
+Tokens have a scope, returned as `scope` in the login response:
+
+- `pair`, from a password login: lasts 10 minutes and can only use the
+  `devices` endpoints. Anything else answers `403 device_required`.
+- `device`, from a device login: lasts `tokenTTLHours` and can use everything
+  except registering a new device (`403 password_login_required`).
+
+A `401` on an authenticated endpoint means the token is gone — expired,
+logged out, lost in a restart, or revoked by an account change or unpairing —
+and the client should log in again (with its device key; if that fails with
+`401`, the device is no longer paired and needs a password login to pair
+again). A `403` with a deny code (`logon_level`, `intro_pending`) means logging
+in again will not help.
+
+**Device login.** `POST /api/qwk/challenge` with `{deviceId}`, then sign the
+UTF-8 bytes of
+
+```text
+ViSiON/3 QWK API device login v1\n<boardId>\n<deviceId>\n<challenge>
+```
+
+(`\n` is a newline; `boardId` is returned when pairing) and `POST
+/api/qwk/login/device` with `{deviceId, challenge, signature}`, the signature
+base64-encoded. ECDSA signatures are over SHA-256 of the message, as ASN.1 DER
+or raw 64-byte `r||s`; Ed25519 signs the message itself. Public keys are sent
+as base64 DER SubjectPublicKeyInfo.
 
 | Method | Path | Body → Response |
 |--------|------|-----------------|
-| `POST` | `/api/qwk/login` | `{handle, password}` → `{token, expiresAt}` (`401` on bad credentials, `429` with `error: "locked_out"` while the IP or handle is locked out, `403` with `error: "logon_level"` or `"intro_pending"` when the account may not log in) |
+| `POST` | `/api/qwk/login` | `{handle, password}` → `{token, expiresAt, scope: "pair"}` (`401` on bad credentials, `429` with `error: "locked_out"` while the IP or handle is locked out, `403` with `error: "logon_level"` or `"intro_pending"` when the account may not log in) |
+| `POST` | `/api/qwk/devices` | *pair token.* `{name, publicKey}` → `201 {deviceId, boardId}` (`400 bad_key`, `409 key_exists` / `too_many_devices`) |
+| `GET` | `/api/qwk/devices` | *either token.* → `[{id, name, createdAt, lastUsed, current}]`; `current` marks the device the token belongs to |
+| `DELETE` | `/api/qwk/devices/{id}` | *either token.* → `204`, or `404` if not paired. Unpairing ends that device's sessions. |
+| `POST` | `/api/qwk/challenge` | `{deviceId}` → `{challenge, expiresAt}`. Issued for any ID, paired or not. |
+| `POST` | `/api/qwk/login/device` | `{deviceId, challenge, signature}` → `{token, expiresAt, scope: "device"}` (`401 challenge_invalid` for an expired, reused or mismatched challenge — get a new one; `401 unauthorized` for a bad signature or unpaired device; lockout and deny codes as for `login`) |
 | `POST` | `/api/qwk/logout` | → `204`; the token stops working. Works even if the account may no longer log in. |
-| `GET` | `/api/qwk/packet` | → `.QWK` bytes (`application/zip`) with `X-QWK-Messages` count, or `204` when there is no new mail |
-| `POST` | `/api/qwk/reply` | `.REP` bytes (`application/zip`, max 16 MiB) → `{posted, skipped, duplicate, wrongBBS}` |
+| `GET` | `/api/qwk/packet` | *device token.* → `.QWK` bytes (`application/zip`) with `X-QWK-Messages` count, or `204` when there is no new mail |
+| `POST` | `/api/qwk/reply` | *device token.* `.REP` bytes (`application/zip`, max 16 MiB) → `{posted, skipped, duplicate, wrongBBS}` |
 
 Errors are JSON: `{"error": "<code>", "message": "<text>"}`. Rate limits apply
-(login per client IP, packet/reply per user); exceeding them returns `429` with a
+(login and device login per client IP, challenges per client IP, packet/reply
+per user); exceeding them returns `429` with a
 `Retry-After` header. A lockout also answers `429`, with `Retry-After` set to the
 seconds left on it. A request from a blocklisted IP gets `403` on any endpoint.
 
@@ -143,8 +208,14 @@ API activity.
 | WARN | `qwk api login for locked handle` | A login refused because the handle is locked, with `handle`, `remote`, and `locked_until`. |
 | WARN | `qwk api handle locked out after failed logins` | A handle just reached the failure limit, with `handle`, `remote`, and `minutes`. |
 | ERROR | `qwk api login: token issue failed` | The server could not mint a token. |
-| INFO | `qwk api auth` | `outcome=noToken` / `outcome=badToken` — a request with a missing, invalid, or expired bearer token. `outcome=revoked` with `handle` and `reason` (`accountGone`, `passwordChanged`, `logon_level`, `intro_pending`) — a token ended because the account changed. |
+| INFO | `qwk api auth` | `outcome=noToken` / `outcome=badToken` — a request with a missing, invalid, or expired bearer token. `outcome=revoked` with `handle` and `reason` (`accountGone`, `passwordChanged`, `deviceUnpaired`, `logon_level`, `intro_pending`) — a token ended because the account changed. |
 | INFO | `qwk api logout` | A client logged out, with `handle` and `remote`. |
+| INFO | `qwk api auth` | `outcome=wrongScope` — a pair token used for packets, or a device token used to pair. |
+| INFO | `qwk api device login` | `outcome=success` with `handle` and `device`; `badChallenge`, `unknownDevice`, `badSignature` (the last two count as failed logins), `denied`, or `badRequest`. |
+| WARN | `qwk api device login` | `outcome=rateLimited`. |
+| WARN | `qwk api device paired` / `qwk api device unpaired` | A device was paired or unpaired, with `handle`, `device`, `name` (paired) and `remote`. `category=security`. |
+| INFO | `qwk api pair` | A pairing refused: `outcome=badKey`, `keyExists` or `tooMany`. |
+| WARN | `qwk api challenge` | `outcome=rateLimited`, or `storeFull` (too many outstanding challenges; answered `503`). |
 | INFO | `qwk api packet` | A download, with `messages` count (including the `0`/`204` case), or `outcome=rateLimited`. |
 | INFO | `qwk api reply` | An upload, with `posted`/`skipped`/`duplicate`, or `outcome=wrongBBS`, `readError`, or `rateLimited`. |
 | WARN | `qwk api reply` | `outcome=tooLarge` — an upload over the 16 MiB cap. |

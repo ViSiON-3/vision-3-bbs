@@ -8,34 +8,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/config"
-	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwkservice"
-	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // --- fakes ---
-
-// admitAll is a DenyLogin hook that refuses no one.
-func admitAll(*user.User) string { return "" }
-
-type fakeAuth struct{ ok bool }
-
-func (f fakeAuth) Authenticate(h, p string) (*user.User, bool) {
-	if f.ok && h == "felonius" && p == "pw" {
-		return &user.User{Handle: "felonius"}, true
-	}
-	return nil, false
-}
-
-func (f fakeAuth) SyncFromDisk() {}
-
-func (f fakeAuth) GetUserByID(id int) (*user.User, bool) {
-	if f.ok && id == 0 {
-		return &user.User{Handle: "felonius"}, true
-	}
-	return nil, false
-}
 
 type fakeSvc struct {
 	packet    []byte
@@ -53,45 +29,20 @@ func (f *fakeSvc) ImportREP(d []byte, o qwkservice.ImportOptions) (*qwkservice.I
 	return f.imp, f.impErr
 }
 
+// testServer serves felonius/pw, or no accounts at all when authOK is false.
 func testServer(t *testing.T, svc PacketService, authOK bool) http.Handler {
 	t.Helper()
-	s, err := NewServer(Deps{
-		Config:    config.QWKAPIConfig{},
-		ConfigDir: t.TempDir(),
-		Users:     fakeAuth{ok: authOK},
-		Service:   svc,
-		AuthorizeFor: func(u *user.User) func(*message.MessageArea) bool {
-			return func(*message.MessageArea) bool { return true }
-		},
-		TwitMatcherFor: func(*user.User) *user.TwitMatcher { return nil },
-		DenyLogin:      admitAll,
-	})
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
+	accounts := newAccountStore()
+	if authOK {
+		accounts = newAccountStore(testAccount())
 	}
-	return s.Handler()
+	return newTestServer(t, testDeps(t, accounts, svc))
 }
 
 func clientReq(method, path string, body []byte) *http.Request {
 	r := httptest.NewRequest(method, path, bytes.NewReader(body))
 	r.Header.Set("X-V3-Client", "vision3-mobile")
 	return r
-}
-
-func login(t *testing.T, h http.Handler) string {
-	t.Helper()
-	r := clientReq("POST", "/api/qwk/login", []byte(`{"handle":"felonius","password":"pw"}`))
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, r)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("login status = %d", rr.Code)
-	}
-	var resp loginResponse
-	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
-	if resp.Token == "" {
-		t.Fatal("no token")
-	}
-	return resp.Token
 }
 
 func TestAPI_LoginBadCreds(t *testing.T) {

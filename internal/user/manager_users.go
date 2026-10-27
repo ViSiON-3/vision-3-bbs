@@ -59,6 +59,10 @@ func (um *UserMgr) UpdateUserByID(u *User) error {
 		sysopOwnedFields(&userCopy, current)
 		userCopy.gen = current.gen
 	}
+	// Devices are changed only through the device methods; see UpdateUser.
+	if current != nil {
+		userCopy.APIDevices = current.APIDevices
+	}
 	um.users[newKey] = &userCopy
 	if err := um.saveUsersLocked(); err != nil {
 		// Rollback in-memory map to match what is still on disk.
@@ -96,6 +100,13 @@ func (um *UserMgr) UpdateUser(u *User) error {
 	if previous != nil && previous.gen > userCopy.gen {
 		sysopOwnedFields(&userCopy, previous)
 		userCopy.gen = previous.gen
+	}
+	// Paired API devices are changed only through the device methods, which
+	// work on the stored record. A copy taken before a pairing (say, by a
+	// terminal session that is still on) must not drop the new device when
+	// it is saved, so the stored list always wins.
+	if previous != nil {
+		userCopy.APIDevices = previous.APIDevices
 	}
 	um.users[lowerHandle] = &userCopy
 	if err := um.saveUsersLocked(); err != nil {

@@ -8,10 +8,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/ViSiON-3/vision-3-bbs/internal/config"
-	"github.com/ViSiON-3/vision-3-bbs/internal/message"
-	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // fakeGuard records the calls the API makes into the BBS login guard.
@@ -41,22 +37,9 @@ func (g *fakeGuard) ClearFailedLoginAttempts(ip string)      { g.cleared[ip]++ }
 
 func guardedServer(t *testing.T, g LoginGuard) http.Handler {
 	t.Helper()
-	s, err := NewServer(Deps{
-		Config:    config.QWKAPIConfig{},
-		ConfigDir: t.TempDir(),
-		Users:     fakeAuth{ok: true},
-		Service:   &fakeSvc{},
-		AuthorizeFor: func(u *user.User) func(*message.MessageArea) bool {
-			return func(*message.MessageArea) bool { return true }
-		},
-		TwitMatcherFor: func(*user.User) *user.TwitMatcher { return nil },
-		DenyLogin:      admitAll,
-		Guard:          g,
-	})
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
-	return s.Handler()
+	deps := testDeps(t, newAccountStore(testAccount()), &fakeSvc{})
+	deps.Guard = g
+	return newTestServer(t, deps)
 }
 
 // loginFrom posts a login from ip and returns the recorded response.
