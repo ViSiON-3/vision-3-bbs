@@ -147,6 +147,14 @@ func TestCheckChatScreensReportsBrokenScreens(t *testing.T) {
 			t.Errorf("good screen reported: %#v", c)
 		}
 	}
+	writeDoctorFixture(t, filepath.Join(menus, "theme.json"), `{"sysopChatScreen": `)
+	checks = nil
+	checkChatScreens(menus, func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	if !hasDoctorCheck(checks, "theme.json", doctorFail, "cannot load theme.json") {
+		t.Errorf("broken theme.json not reported: %#v", checks)
+	}
 }
 
 func TestCheckMenuFilesReportsDanglingCommandReferences(t *testing.T) {

@@ -798,7 +798,8 @@ func checkChatScreens(menuRoot string, add func(string, doctorSeverity, string, 
 	}
 	theme, err := config.LoadThemeConfig(menuRoot)
 	if err != nil {
-		return // theme.json problems are reported with the other configs
+		add("theme.json", doctorFail, fmt.Sprintf("cannot load theme.json: %v", err), "Fix the JSON in theme.json; the board runs on the default theme until then.")
+		return
 	}
 	def := theme.SysopChatScreen
 	if def == "" || strings.EqualFold(def, menu.ChatScreenBuiltin) || slices.Contains(names, def) {
