@@ -14,7 +14,6 @@ import (
 	"log/slog"
 	"os" // Needed for chcp command
 	"strings"
-	"unicode/utf8"
 	// NOTE: The original code used golang.org/x/text/encoding/charmap
 	// The new code provides its own cp437ToUnicode map, so this might not be needed.
 	// If other parts of the project rely on the init() function from the old
@@ -337,7 +336,9 @@ func CP437BytesToUTF8(data []byte) []byte {
 
 // ArtForOutput returns art in the encoding the terminal expects. On a UTF-8
 // terminal, art that is not valid UTF-8 as a whole is CP437 and is converted
-// byte for byte (CP437BytesToUTF8); anything else is returned unchanged.
+// byte for byte, and in either case the control bytes CP437 draws as glyphs
+// (☺ ♥ ► ▲ ▼ …) become those glyphs, which a UTF-8 terminal would otherwise
+// draw as nothing (CP437ArtToUTF8). On a CP437 terminal art is unchanged.
 //
 // The decision has to be made for the whole file. Left to
 // terminalio.WriteProcessedBytes, it is made per span between escape
@@ -345,10 +346,10 @@ func CP437BytesToUTF8(data []byte) []byte {
 // (DB B2) decodes as U+06F2 — so they went out raw: one wrong glyph in place
 // of two cells, shifting the rest of the row and its colours.
 func ArtForOutput(data []byte, outputMode OutputMode) []byte {
-	if outputMode != OutputModeUTF8 || utf8.Valid(data) {
+	if outputMode != OutputModeUTF8 {
 		return data
 	}
-	return CP437BytesToUTF8(data)
+	return CP437ArtToUTF8(data)
 }
 
 // ReplacePipeCodes expands ViSiON/2 pipe codes into ANSI sequences: colours
