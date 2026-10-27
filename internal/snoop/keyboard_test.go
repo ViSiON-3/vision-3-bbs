@@ -629,3 +629,54 @@ func TestRequestChatRefusedWhilePending(t *testing.T) {
 		t.Fatalf("chatting=%v holder=%q; want true, a", tp.Chatting(), tp.KeyboardHolder())
 	}
 }
+
+// A screen change reaches the open chat, which answers it; only the holder
+// may ask, only while chat is open, and a chat that never takes the request
+// times it out.
+func TestSwitchChatScreen(t *testing.T) {
+	tp := newWatchedTap("a", "b")
+	if err := tp.SwitchChatScreen("a", "CHAT2", 50*time.Millisecond); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("before chat err = %v, want ErrNotHolder", err)
+	}
+	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
+	if _, err := tp.RequestChatOn("a", "CHAT1", time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := tp.SwitchChatScreen("b", "CHAT2", 50*time.Millisecond); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("other sysop err = %v, want ErrNotHolder", err)
+	}
+	if err := tp.SwitchChatScreen("a", "CHAT2", 50*time.Millisecond); !errors.Is(err, ErrSwitchTimedOut) {
+		t.Fatalf("unanswered err = %v, want ErrSwitchTimedOut", err)
+	}
+
+	refused := errors.New("does not fit")
+	go func() {
+		sw := <-tp.ScreenSwitches()
+		if sw.Screen != "WIDE" {
+			t.Errorf("screen = %q", sw.Screen)
+		}
+		sw.Done(refused)
+		(<-tp.ScreenSwitches()).Done(nil)
+	}()
+	if err := tp.SwitchChatScreen("a", "WIDE", time.Second); !errors.Is(err, refused) {
+		t.Fatalf("refused err = %v", err)
+	}
+	if got := tp.ChatScreen(); got != "CHAT1" {
+		t.Fatalf("after a refusal ChatScreen = %q, want CHAT1", got)
+	}
+	if err := tp.SwitchChatScreen("a", "CHAT2", time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if got := tp.ChatScreen(); got != "CHAT2" {
+		t.Fatalf("ChatScreen = %q, want CHAT2", got)
+	}
+
+	_ = tp.StopChat("a")
+	if err := tp.SwitchChatScreen("a", "CHAT1", time.Second); !errors.Is(err, ErrNotChatting) {
+		t.Fatalf("after StopChat err = %v, want ErrNotChatting", err)
+	}
+	tp.ChatEnded()
+	if err := tp.SwitchChatScreen("a", "CHAT1", 50*time.Millisecond); err == nil {
+		t.Fatal("switched with no chat open")
+	}
+}

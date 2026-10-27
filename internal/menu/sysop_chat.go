@@ -148,6 +148,24 @@ func (p *chatPane) newline() {
 	}
 }
 
+// refill types old's text into p, a fresh pane on another chat screen: the
+// lines old shows, oldest first, each wrapped to p's lines, then the line
+// being typed, which stays open. Lines that no longer fit scroll away.
+func (p *chatPane) refill(old *chatPane) {
+	p.moveTo()
+	for _, line := range old.shown[:old.cur] {
+		for _, r := range line {
+			p.putRune(r)
+		}
+		p.newline()
+		p.moveTo()
+	}
+	for _, r := range old.line {
+		p.putRune(r)
+	}
+	p.pending, p.esc, p.afterCR = old.pending, old.esc, old.afterCR
+}
+
 // redraw blanks segment i and writes its text back, cut to the segment so a
 // line that scrolled in from a wider segment cannot run into the art.
 func (p *chatPane) redraw(i int) {
@@ -331,11 +349,13 @@ const (
 	chatEnd
 	chatCallerGone
 	chatMinute
+	chatSwitch
 )
 
 type chatEvent struct {
 	kind chatEventKind
 	data []byte
+	sw   snoop.ScreenSwitch // for chatSwitch
 }
 
 // forwardChatEvents turns the tap's chat channels into events for
@@ -351,6 +371,8 @@ func forwardChatEvents(tap *snoop.Tap, end <-chan struct{}, events chan<- chatEv
 			ev = chatEvent{kind: chatMinute}
 		case b := <-tap.ChatInput():
 			ev = chatEvent{kind: chatSysopBytes, data: b}
+		case sw := <-tap.ScreenSwitches():
+			ev = chatEvent{kind: chatSwitch, sw: sw}
 		case <-end:
 			ev = chatEvent{kind: chatEnd}
 		case <-tap.Done():
@@ -361,6 +383,9 @@ func forwardChatEvents(tap *snoop.Tap, end <-chan struct{}, events chan<- chatEv
 		select {
 		case events <- ev:
 		case <-stop:
+			if ev.kind == chatSwitch {
+				ev.sw.Done(snoop.ErrNotChatting)
+			}
 			return
 		}
 	}
@@ -421,6 +446,56 @@ func (c *chatStatus) draw() {
 	}
 }
 
+// chatView is one chat screen drawn on the caller's terminal: its layout,
+// both panes, and what the minute timer redraws.
+type chatView struct {
+	sc            *chatLayout
+	sysop, caller *chatPane
+	refresh       func()
+}
+
+// drawChatView clears the caller's screen and draws sc on it, the built-in
+// layout when sc has no art, with empty panes.
+func drawChatView(w io.Writer, mode ansi.OutputMode, width, height int, th *config.ThemeConfig, st *config.StringsConfig, sc *chatLayout, sysopHandle, callerHandle string, began time.Time) *chatView {
+	sysopColor, callerColor := sc.Sysop.Color, sc.Caller.Color
+	if sysopColor == 0 {
+		sysopColor = th.ChatSysopColor
+	}
+	if callerColor == 0 {
+		callerColor = th.ChatUserColor
+	}
+	v := &chatView{
+		sc:     sc,
+		sysop:  newChatPane(w, mode, sc.Sysop.Lines, sysopColor),
+		caller: newChatPane(w, mode, sc.Caller.Lines, callerColor),
+	}
+	if sc.art == nil {
+		top := sc.dividerRow()
+		bar := ansi.ReplacePipeCodes([]byte(fmt.Sprintf(st.SysopChatHeader, sysopHandle, callerHandle)))
+		_, _ = fmt.Fprintf(w, "\x1b[0m\x1b[2J\x1b[%d;1H", top) // best-effort display
+		_ = terminalio.WriteProcessedBytes(w, bar, mode)
+		if fill := width - chatClockWidth - ansi.VisibleLength(string(bar)); fill > 0 {
+			_ = terminalio.WriteProcessedBytes(w, []byte("\x1b[0;37m"+strings.Repeat("\xc4", fill)), mode)
+		}
+		v.refresh = func() { drawChatClock(w, top, width) }
+	} else {
+		text := func(v string) func(int) string { return func(int) string { return v } }
+		art := chatArtFill(sc.art, map[string]func(int) string{"SYSOP": text(sysopHandle), "CALLER": text(callerHandle)})
+		// The art is drawn for the screen's width; on a wider terminal its
+		// wraps are made explicit at that width, as fitArt does for stock
+		// 80-column art, so a designed 132-column screen is not cut at 80.
+		if width > sc.Width {
+			art = ansi.HardWrap(art, sc.Width, true)
+		}
+		_, _ = fmt.Fprint(w, "\x1b[0m\x1b[2J\x1b[H") // best-effort display
+		_ = terminalio.WriteProcessedBytes(w, art, mode)
+		status := &chatStatus{w: w, mode: mode, sc: sc, sysop: sysopHandle, user: callerHandle, began: began}
+		v.refresh = status.draw
+	}
+	v.refresh()
+	return v
+}
+
 // runSysopChatOn draws chat screen sc, or the built-in split screen when sc
 // is nil, and relays both sides until the caller presses ESC twice, the sysop
 // ends chat, or the caller disconnects. The caller's keys are read on this
@@ -438,42 +513,9 @@ func runSysopChatOn(ih *editor.InputHandler, tap *snoop.Tap, w io.Writer, mode a
 	if sc == nil || sc.art == nil {
 		sc = builtinChatLayout(width, height)
 	}
-	sysopColor, callerColor := sc.Sysop.Color, sc.Caller.Color
-	if sysopColor == 0 {
-		sysopColor = th.ChatSysopColor
-	}
-	if callerColor == 0 {
-		callerColor = th.ChatUserColor
-	}
-	sysop := newChatPane(w, mode, sc.Sysop.Lines, sysopColor)
-	caller := newChatPane(w, mode, sc.Caller.Lines, callerColor)
-	status := &chatStatus{w: w, mode: mode, sc: sc, sysop: sysopHandle, user: callerHandle, began: time.Now()}
-
-	// refresh redraws what changes with the clock.
-	var refresh func()
-	if sc.art == nil {
-		top := sc.dividerRow()
-		bar := ansi.ReplacePipeCodes([]byte(fmt.Sprintf(st.SysopChatHeader, sysopHandle, callerHandle)))
-		_, _ = fmt.Fprintf(w, "\x1b[0m\x1b[2J\x1b[%d;1H", top) // best-effort display
-		_ = terminalio.WriteProcessedBytes(w, bar, mode)
-		if fill := width - chatClockWidth - ansi.VisibleLength(string(bar)); fill > 0 {
-			_ = terminalio.WriteProcessedBytes(w, []byte("\x1b[0;37m"+strings.Repeat("\xc4", fill)), mode)
-		}
-		refresh = func() { drawChatClock(w, top, width) }
-	} else {
-		text := func(v string) func(int) string { return func(int) string { return v } }
-		art := chatArtFill(sc.art, map[string]func(int) string{"SYSOP": text(sysopHandle), "CALLER": text(callerHandle)})
-		// The art is drawn for the screen's width; on a wider terminal its
-		// wraps are made explicit at that width, as fitArt does for stock
-		// 80-column art, so a designed 132-column screen is not cut at 80.
-		if width > sc.Width {
-			art = ansi.HardWrap(art, sc.Width, true)
-		}
-		_, _ = fmt.Fprint(w, "\x1b[0m\x1b[2J\x1b[H") // best-effort display
-		_ = terminalio.WriteProcessedBytes(w, art, mode)
-		refresh = status.draw
-	}
-	refresh()
+	began := time.Now()
+	view := drawChatView(w, mode, width, height, th, st, sc, sysopHandle, callerHandle, began)
+	sysop, caller := view.sysop, view.caller
 
 	events := make(chan chatEvent)
 	stop := make(chan struct{})
@@ -512,7 +554,22 @@ loop:
 			case chatCallerGone:
 				return
 			case chatMinute:
-				refresh()
+				view.refresh()
+				caller.moveTo()
+				continue
+			case chatSwitch:
+				next, err := resolveChatLayout(env, ev.sw.Screen, view.sc.name, width, height)
+				if err != nil {
+					ev.sw.Done(err)
+					continue
+				}
+				from := view.sc.name
+				view = drawChatView(w, mode, width, height, th, st, next, sysopHandle, callerHandle, began)
+				view.sysop.refill(sysop)
+				view.caller.refill(caller)
+				sysop, caller = view.sysop, view.caller
+				ev.sw.Done(nil)
+				slog.Info("sysop chat screen changed", "caller", callerHandle, "sysop", sysopHandle, "from", from, "to", next.name)
 				caller.moveTo()
 				continue
 			}

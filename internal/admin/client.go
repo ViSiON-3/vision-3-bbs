@@ -159,6 +159,9 @@ const (
 	// "screen": string}; screen names the chat screen to open, "" for the
 	// board's default and "builtin" for the fixed layout.
 	CommandChat CommandType = "node.chat"
+	// CommandChatScreen changes the screen of the open split-screen chat.
+	// Payload {"screen": string}, named as for CommandChat.
+	CommandChatScreen CommandType = "node.chat.screen"
 )
 
 // AdminCommand is a request to the server to perform an action.

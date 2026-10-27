@@ -1995,6 +1995,7 @@ func main() {
 		ChatCredit: chatCreditHook(sessionRegistry),
 		TypeIn:     typeInHook(sessionRegistry),
 		Chat:       chatHook(sessionRegistry),
+		ChatScreen: chatScreenHook(sessionRegistry),
 		Snoop:      snoopTarget(sessionRegistry, boardChatScreens),
 	})
 	menuExecutor.Pager = adminServer

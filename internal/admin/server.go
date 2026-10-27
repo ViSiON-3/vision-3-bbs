@@ -53,6 +53,8 @@ type ServerConfig struct {
 	// Chat starts or ends split-screen chat. screen names the chat screen
 	// to open, empty for the board's default. Nil means unsupported.
 	Chat func(sysop string, nodeID int, connectedAt time.Time, start bool, screen string) (started bool, err error)
+	// ChatScreen changes the open chat to screen. Nil means unsupported.
+	ChatScreen func(sysop string, nodeID int, connectedAt time.Time, screen string) error
 	// Snoop resolves wfc-snoop requests; used by the in-process client.
 	Snoop SnoopTarget
 }
@@ -323,6 +325,17 @@ func (s *Server) ExecuteAs(sysop string, cmd AdminCommand) (*Result, error) {
 		if start && started {
 			handle, _ := s.nodeIdentity(cmd.NodeID, cmd.ConnectedAt)
 			s.emit(Event{Time: timeNow(), Type: EventChatState, NodeID: cmd.NodeID, Handle: handle, Message: "on " + sysop})
+		}
+		return &Result{OK: true}, nil
+	case CommandChatScreen:
+		if s.cfg.ChatScreen == nil {
+			return nil, fmt.Errorf("admin: chat screen change not supported by this server")
+		}
+		if sysop == "" {
+			return nil, errNoSysop
+		}
+		if err := s.cfg.ChatScreen(sysop, cmd.NodeID, cmd.ConnectedAt, payloadString(cmd.Payload, "screen")); err != nil {
+			return nil, err
 		}
 		return &Result{OK: true}, nil
 	default:

@@ -32,6 +32,8 @@ type snoopControl interface {
 	// Chat starts chat on the named chat screen ("" for the board's
 	// default), or ends it.
 	Chat(start bool, screen string) error
+	// ChatScreen changes the open chat to the named chat screen.
+	ChatScreen(screen string) error
 }
 
 // rawTerm is the sysop's terminal.
@@ -448,12 +450,16 @@ func (c *snoopCmd) toggleChat() {
 
 // chatScreenChoices is what Alt-S cycles through for a board whose snoop
 // header is hdr: the board's default first (sent as ""), the built-in layout
-// when the default is a designed screen, then the other screens by name. A
-// daemon that lists no screens leaves only the default.
+// when the default is a designed screen, random when the board has two
+// screens or more and the default is not already random, then the other
+// screens by name. A daemon that lists no screens leaves only the default.
 func chatScreenChoices(hdr admin.SnoopHeader) []string {
 	choices := []string{""}
 	if hdr.ChatScreen != "" {
 		choices = append(choices, snoopBuiltinScreen)
+	}
+	if len(hdr.ChatScreens) > 1 && !strings.EqualFold(hdr.ChatScreen, snoopRandomScreen) {
+		choices = append(choices, snoopRandomScreen)
 	}
 	for _, name := range hdr.ChatScreens {
 		if name != hdr.ChatScreen {
@@ -463,11 +469,16 @@ func chatScreenChoices(hdr admin.SnoopHeader) []string {
 	return choices
 }
 
-// snoopBuiltinScreen names the fixed split-screen layout to the daemon.
-const snoopBuiltinScreen = "builtin"
+// snoopBuiltinScreen names the fixed split-screen layout to the daemon, and
+// snoopRandomScreen asks it to pick one of the board's screens.
+const (
+	snoopBuiltinScreen = "builtin"
+	snoopRandomScreen  = "random"
+)
 
-// nextScreen moves Alt-S to the next chat screen. The choice is sent with
-// the next chat start; a chat already open keeps its screen.
+// nextScreen moves Alt-S to the next chat screen. It is sent with the next
+// chat start, and switches a chat already open; a screen the open chat
+// cannot take leaves the choice where it was, with the reason on the bar.
 func (c *snoopCmd) nextScreen() {
 	c.mu.Lock()
 	if len(c.screens) < 2 {
@@ -483,13 +494,30 @@ func (c *snoopCmd) nextScreen() {
 			break
 		}
 	}
-	c.screen = c.screens[(i+1)%len(c.screens)]
+	next := c.screens[(i+1)%len(c.screens)]
+	chatting := c.mode == snoopChat
+	c.mu.Unlock()
+	var err error
+	if chatting {
+		err = c.ctl.ChatScreen(next)
+	}
+	c.mu.Lock()
 	c.lastErr = ""
-	if c.mode == snoopChat {
-		c.lastErr = "screen applies to the next chat"
+	if err != nil {
+		c.lastErr = "screen " + screenLabel(next) + ": " + err.Error()
+	} else {
+		c.screen = next
 	}
 	c.mu.Unlock()
 	c.drawStatus()
+}
+
+// screenLabel names a choice for the status bar.
+func screenLabel(screen string) string {
+	if screen == "" {
+		return "default"
+	}
+	return screen
 }
 
 // lostKeyboard reports whether err says the sysop no longer holds the
@@ -600,8 +628,11 @@ func (c *snoopCmd) drawStatus() {
 	}
 	hd := c.st.Header
 	text := fmt.Sprintf(" NODE %d · %s · %dx%d · %s", c.node, hd.Handle, hd.Width, hd.Height, strings.ToUpper(c.mode))
-	if c.screen != "" {
+	switch {
+	case c.screen != "":
 		text += " · screen " + c.screen
+	case strings.EqualFold(hd.ChatScreen, snoopRandomScreen):
+		text += " · screen random"
 	}
 	if c.lastErr != "" {
 		text += " · " + c.lastErr

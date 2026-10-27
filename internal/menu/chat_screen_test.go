@@ -154,6 +154,87 @@ func TestChatOnDesignedScreen(t *testing.T) {
 	waitDone(t, done, "chat ignored StopChat")
 }
 
+// Random picks among the screens that load and fit, other than the one to
+// avoid when there is a choice; with none that fit, chat gets the built-in
+// layout.
+func TestChooseChatLayoutRandom(t *testing.T) {
+	dir := t.TempDir()
+	writeChatScreen(t, dir, "A", testLayout, []byte(testArt))
+	writeChatScreen(t, dir, "B", testLayout, []byte(testArt))
+	writeChatScreen(t, dir, "BROKEN", "{", []byte(testArt))
+	writeChatScreen(t, dir, "WIDE", `{"width": 100, "height": 8, "sysop": {"lines": [{"row": 2, "from": 1, "to": 100}]}, "caller": {"lines": [{"row": 5, "from": 1, "to": 100}]}}`, []byte(testArt))
+	r := newChatRig(t, "")
+	env := screenEnv(t, r, menuset.Bare(dir), "random")
+	var offered int
+	pick := chatPick
+	t.Cleanup(func() { chatPick = pick })
+	chatPick = func(n int) int { offered = n; return n - 1 }
+
+	if sc := chooseChatLayout(env, "", 80, 25); sc.name != "B" || offered != 2 {
+		t.Errorf("default random chose %q of %d; want B of the 2 that fit", sc.name, offered)
+	}
+	if sc, err := resolveChatLayout(env, "RANDOM", "B", 80, 25); err != nil || sc.name != "A" || offered != 1 {
+		t.Errorf("random avoiding B chose %v of %d (%v); want A", sc, offered, err)
+	}
+	if sc := chooseChatLayout(env, "random", 120, 25); sc.name != "WIDE" || offered != 3 {
+		t.Errorf("on a wide terminal chose %q of %d; want WIDE of 3", sc.name, offered)
+	}
+	if sc := chooseChatLayout(env, "", 30, 25); sc.name != ChatScreenBuiltin {
+		t.Errorf("with nothing that fits chose %q", sc.name)
+	}
+	if _, err := resolveChatLayout(env, "random", "", 30, 25); err == nil {
+		t.Error("resolve with nothing that fits gave no error")
+	}
+}
+
+const test2Layout = `{
+  "width": 40, "height": 8,
+  "sysop": {"lines": [{"row": 6, "from": 1, "to": 10}, {"row": 7, "from": 1, "to": 10}]},
+  "caller": {"lines": [{"row": 2, "from": 1, "to": 10}, {"row": 3, "from": 1, "to": 10}]}
+}`
+
+// The sysop switches an open chat to another screen: the new art is drawn
+// and both sides' text moves onto its lines, the line being typed still
+// open. A screen that cannot be used is refused and the chat keeps its own.
+func TestChatSwitchesScreen(t *testing.T) {
+	dir := t.TempDir()
+	writeChatScreen(t, dir, "TEST", testLayout, []byte(testArt))
+	writeChatScreen(t, dir, "TEST2", test2Layout, []byte("== second =="))
+	r := newChatRig(t, "")
+	env := screenEnv(t, r, menuset.Bare(dir), "TEST")
+	sc := chooseChatLayout(env, "", 80, 25)
+	r.begin(t)
+	done := make(chan struct{})
+	go func() {
+		runSysopChatOn(r.ih, r.tap, r.term, ansi.OutputModeUTF8, 80, 25, "SysOp", "Caller", sc)
+		close(done)
+	}()
+	r.tap.Inject("SysOp", []byte("one\rtwo"))
+	r.sess.Send("hi")
+	waitFor(t, func() bool { return r.term.Row(3) == "  two" && r.term.Row(5) == "  hi" }, "chat not drawn: "+r.term.Snapshot())
+
+	if err := r.tap.SwitchChatScreen("SysOp", "NOPE", 2*time.Second); err == nil {
+		t.Fatal("switched to a screen that does not exist")
+	}
+	if got := r.term.Row(3); got != "  two" {
+		t.Fatalf("after a refused switch row 3 = %q", got)
+	}
+	if err := r.tap.SwitchChatScreen("SysOp", "TEST2", 2*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool {
+		return r.term.Row(1) == "== second ==" && r.term.Row(6) == "one" && r.term.Row(7) == "two" && r.term.Row(2) == "hi"
+	}, "TEST2 not drawn with the text moved: "+r.term.Snapshot())
+	r.tap.Inject("SysOp", []byte("!"))
+	r.sess.Send("?")
+	waitFor(t, func() bool { return r.term.Row(7) == "two!" && r.term.Row(2) == "hi?" }, "typing did not continue on the new lines: "+r.term.Snapshot())
+	if got := r.tap.ChatScreen(); got != "TEST2" {
+		t.Errorf("tap ChatScreen = %q", got)
+	}
+	_ = r.tap.StopChat("SysOp")
+	waitDone(t, done, "chat ignored StopChat")
+}
+
 // TestDesignedScreenWiderThanStockArt draws a 100-column screen on a
 // 132-column terminal: its background must wrap at 100, where the screen was
 // drawn for, not at the 80 columns stock art is fitted to.

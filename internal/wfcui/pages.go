@@ -226,6 +226,9 @@ func (c rpcControl) TypeIn(on bool) error {
 func (c rpcControl) Chat(start bool, screen string) error {
 	return c.run(admin.CommandChat, map[string]any{"start": start, "screen": screen})
 }
+func (c rpcControl) ChatScreen(screen string) error {
+	return c.run(admin.CommandChatScreen, map[string]any{"screen": screen})
+}
 
 // handleKeySnoop is S: snoop the selected caller.
 func (m Model) handleKeySnoop() (tea.Model, tea.Cmd) {

@@ -135,6 +135,21 @@ func chatHook(reg *session.SessionRegistry) func(string, int, time.Time, bool, s
 	}
 }
 
+// chatScreenHook changes the screen of the chat open on nodeID.
+func chatScreenHook(reg *session.SessionRegistry) func(string, int, time.Time, string) error {
+	return func(sysop string, nodeID int, connectedAt time.Time, screen string) error {
+		_, tap, err := nodeTap(reg, nodeID, connectedAt)
+		if err != nil {
+			return err
+		}
+		if err := tap.SwitchChatScreen(sysop, screen, chatStartWait); err != nil {
+			return err
+		}
+		slog.Info("wfc-snoop: chat screen changed", "sysop", sysop, "node", nodeID, "screen", screen)
+		return nil
+	}
+}
+
 // wfcSnoopSubsystem serves one wfc-snoop channel. Authorization matches
 // wfc-admin and is re-checked for the life of the channel. A read-only
 // account is refused, and loses an open channel at the next re-check.

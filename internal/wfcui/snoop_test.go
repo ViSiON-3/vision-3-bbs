@@ -24,9 +24,10 @@ func (f fakeRaw) MakeRaw() (func(), error) { return func() {}, nil }
 func (f fakeRaw) Size() (int, int, error)  { return f.w, f.h, nil }
 
 type fakeCtl struct {
-	mu      sync.Mutex
-	calls   []string
-	chatErr error
+	mu        sync.Mutex
+	calls     []string
+	chatErr   error
+	screenErr error
 }
 
 func (f *fakeCtl) rec(s string) {
@@ -47,6 +48,11 @@ func (f *fakeCtl) Chat(on bool, screen string) error {
 	}
 	f.rec(call)
 	return f.chatErr
+}
+
+func (f *fakeCtl) ChatScreen(screen string) error {
+	f.rec("screen:" + screen)
+	return f.screenErr
 }
 
 func (f *fakeCtl) got() string {
@@ -234,8 +240,8 @@ func TestSnoopChatToggleAndRelease(t *testing.T) {
 }
 
 // Alt-S cycles the chat screen: the board's default (CHAT1, sent as ""),
-// the built-in layout, then the other screens, and the choice goes with the
-// next chat start.
+// the built-in layout, random, then the other screens. The choice goes with
+// the next chat start, and switches a chat already open.
 func TestSnoopScreenCyclesAndGoesWithChat(t *testing.T) {
 	hdr := utf8Hdr
 	hdr.ChatScreen = "CHAT1"
@@ -246,18 +252,55 @@ func TestSnoopScreenCyclesAndGoesWithChat(t *testing.T) {
 	r.send(t, "\x1bc")
 	r.send(t, "\x1bc")
 	r.send(t, "\x1bs")
+	r.out.waitFor(t, "screen random")
+	r.send(t, "\x1bs")
 	r.out.waitFor(t, "screen CHAT2")
 	r.send(t, "\x1bc")
-	r.send(t, "\x1bs")
-	r.out.waitFor(t, "applies to the next chat")
+	r.send(t, "\x1bs") // the open chat goes back to the default
+	r.send(t, "\x1bs") // and on to the built-in layout
 	r.send(t, "\x1bx")
 	r.wait(t)
-	if c := r.ctl.got(); c != "chat+:builtin,chat-,chat+:CHAT2,chat-" {
+	if c := r.ctl.got(); c != "chat+:builtin,chat-,chat+:CHAT2,screen:,screen:builtin,chat-" {
 		t.Fatalf("calls %s", c)
 	}
 	if !strings.Contains(r.out.String(), "Alt-S screen") {
 		t.Fatal("status bar does not mention Alt-S")
 	}
+}
+
+// A screen the open chat refuses is not taken: the bar says why and the
+// next chat still opens on the choice before it.
+func TestSnoopScreenRefusedByOpenChat(t *testing.T) {
+	hdr := utf8Hdr
+	hdr.ChatScreen = "CHAT1"
+	hdr.ChatScreens = []string{"CHAT1", "CHAT2"}
+	r := newRig(t, hdr, 100, 30)
+	r.ctl.screenErr = errors.New("does not fit the caller")
+	r.send(t, "\x1bc")
+	r.send(t, "\x1bs")
+	r.out.waitFor(t, "does not fit the caller")
+	r.send(t, "\x1bc")
+	r.send(t, "\x1bc")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	if c := r.ctl.got(); c != "chat+,screen:builtin,chat-,chat+,chat-" {
+		t.Fatalf("calls %s", c)
+	}
+}
+
+// A board whose default is random says so, and Alt-S does not offer random
+// a second time.
+func TestSnoopScreenRandomDefault(t *testing.T) {
+	hdr := utf8Hdr
+	hdr.ChatScreen = "random"
+	hdr.ChatScreens = []string{"CHAT1", "CHAT2"}
+	if got := strings.Join(chatScreenChoices(hdr), ","); got != ",builtin,CHAT1,CHAT2" {
+		t.Fatalf("choices = %q", got)
+	}
+	r := newRig(t, hdr, 100, 30)
+	r.out.waitFor(t, "screen random")
+	r.send(t, "\x1bx")
+	r.wait(t)
 }
 
 func TestSnoopScreenWithoutScreensIsRefused(t *testing.T) {

@@ -15,6 +15,8 @@ var (
 	ErrTapClosed      = errors.New("caller disconnected")
 	ErrNotWatching    = errors.New("attach a watch before taking the keyboard")
 	ErrChatPending    = errors.New("a chat request is already waiting for the caller")
+	ErrNotChatting    = errors.New("no chat is open")
+	ErrSwitchTimedOut = errors.New("chat did not answer the screen change")
 )
 
 const inputQueue = 64
@@ -22,14 +24,15 @@ const inputQueue = 64
 // keyboard is the sysop-input half of a Tap. Its fields are guarded by Tap.mu.
 type keyboard struct {
 	holder   string
-	since    time.Time     // when holder took the keyboard
-	injected int           // bytes holder has injected
-	input    chan []byte   // type-in bytes for the transport's Read
-	ready    chan struct{} // buffered 1: signals queued type-in without consuming it
-	chatIn   chan []byte   // sysop bytes while chat is active
-	breakIn  chan struct{} // buffered 1: a pending chat request
-	req      *chatRequest  // the pending chat request, nil if none
-	endChat  chan struct{} // closed by StopChat/ReleaseKeyboard
+	since    time.Time         // when holder took the keyboard
+	injected int               // bytes holder has injected
+	input    chan []byte       // type-in bytes for the transport's Read
+	ready    chan struct{}     // buffered 1: signals queued type-in without consuming it
+	chatIn   chan []byte       // sysop bytes while chat is active
+	switches chan ScreenSwitch // screen changes for the open chat; unbuffered
+	breakIn  chan struct{}     // buffered 1: a pending chat request
+	req      *chatRequest      // the pending chat request, nil if none
+	endChat  chan struct{}     // closed by StopChat/ReleaseKeyboard
 	chatting bool
 	chats    uint64 // chats started over the tap's life
 	// chatTook is the handle whose RequestChat took a free keyboard for the
@@ -59,6 +62,7 @@ func (k *keyboard) init() {
 	k.input = make(chan []byte, inputQueue)
 	k.ready = make(chan struct{}, 1)
 	k.chatIn = make(chan []byte, inputQueue)
+	k.switches = make(chan ScreenSwitch)
 	k.breakIn = make(chan struct{}, 1)
 	k.now = time.Now
 }
@@ -345,6 +349,73 @@ func (t *Tap) ChatScreen() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.kb.chatScreen
+}
+
+// ScreenSwitch asks the open chat to change to another chat screen, named as
+// for RequestChatOn. The chat answers with Done.
+type ScreenSwitch struct {
+	Screen string
+	reply  chan error // buffered 1
+}
+
+// Done answers the request: nil when the chat switched, or why it did not.
+func (s ScreenSwitch) Done(err error) {
+	select {
+	case s.reply <- err:
+	default:
+	}
+}
+
+// ScreenSwitches carries the sysop's screen changes to the open chat.
+func (t *Tap) ScreenSwitches() <-chan ScreenSwitch { return t.kb.switches }
+
+// SwitchChatScreen asks the open chat to change to screen. Only the keyboard
+// holder may switch it. It waits up to wait for the chat to take the request
+// and answer, and returns the chat's answer.
+func (t *Tap) SwitchChatScreen(handle, screen string, wait time.Duration) error {
+	t.mu.Lock()
+	switch {
+	case t.closed:
+		t.mu.Unlock()
+		return ErrTapClosed
+	case t.kb.holder != handle:
+		t.mu.Unlock()
+		return ErrNotHolder
+	case !t.kb.chatting:
+		t.mu.Unlock()
+		return ErrNotChatting
+	}
+	end := t.kb.endChat
+	t.mu.Unlock()
+
+	req := ScreenSwitch{Screen: screen, reply: make(chan error, 1)}
+	timeout := time.NewTimer(wait)
+	defer timeout.Stop()
+	select {
+	case t.kb.switches <- req:
+	case <-end:
+		return ErrNotChatting
+	case <-t.done:
+		return ErrTapClosed
+	case <-timeout.C:
+		return ErrSwitchTimedOut
+	}
+	select {
+	case err := <-req.reply:
+		if err != nil {
+			return err
+		}
+		t.mu.Lock()
+		if t.kb.chatting {
+			t.kb.chatScreen = screen
+		}
+		t.mu.Unlock()
+		return nil
+	case <-t.done:
+		return ErrTapClosed
+	case <-timeout.C:
+		return ErrSwitchTimedOut
+	}
 }
 
 // EndChat is closed when the sysop ends chat or drops the keyboard.

@@ -157,6 +157,35 @@ func TestCheckChatScreensReportsBrokenScreens(t *testing.T) {
 	}
 }
 
+// random is a valid default, warned about only when no screen loads.
+func TestCheckChatScreensAcceptsRandom(t *testing.T) {
+	menus := filepath.Join(t.TempDir(), "menus", "v3")
+	for _, sub := range []string{"cfg", "ansi"} {
+		if err := os.MkdirAll(filepath.Join(menus, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeDoctorFixture(t, filepath.Join(menus, "theme.json"), `{"sysopChatScreen":"random"}`)
+	run := func() []doctorCheck {
+		var checks []doctorCheck
+		checkChatScreens(menus, func(name string, status doctorSeverity, message, fix string) {
+			checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+		})
+		return checks
+	}
+	if checks := run(); !hasDoctorCheck(checks, "theme.json", doctorWarn, "no chat screen loads") {
+		t.Errorf("random with no screens not reported: %#v", checks)
+	}
+	good := `{"sysop":{"lines":[{"row":2,"from":1,"to":80}]},"caller":{"lines":[{"row":4,"from":1,"to":80}]}}`
+	writeDoctorFixture(t, filepath.Join(menus, "cfg", "GOOD.json"), good)
+	writeDoctorFixture(t, filepath.Join(menus, "ansi", "GOOD.ANS"), "art")
+	for _, c := range run() {
+		if c.Name == "theme.json" {
+			t.Errorf("random with a screen reported: %#v", c)
+		}
+	}
+}
+
 func TestCheckMenuFilesReportsDanglingCommandReferences(t *testing.T) {
 	root := t.TempDir()
 	menus := filepath.Join(root, "menus", "v3")
