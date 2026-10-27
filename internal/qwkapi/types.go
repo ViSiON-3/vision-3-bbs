@@ -15,6 +15,22 @@ type Authenticator interface {
 	Authenticate(handle, password string) (*user.User, bool)
 }
 
+// Reasons a DenyLogin hook gives for refusing an account whose password is
+// correct. Each is also the error code the client receives.
+const (
+	// DenyIntroPending: the account still owes the sysop its new-user
+	// introduction, which only the terminal can collect.
+	DenyIntroPending = "intro_pending"
+	// DenyLogonLevel: the account's access level is below logonLevel (this is
+	// also what a banned account, at level 0, hits).
+	DenyLogonLevel = "logon_level"
+)
+
+var denyMessages = map[string]string{
+	DenyIntroPending: "finish new-user signup on the BBS first",
+	DenyLogonLevel:   "account not permitted to log in",
+}
+
 type loginRequest struct {
 	Handle   string `json:"handle"`
 	Password string `json:"password"`

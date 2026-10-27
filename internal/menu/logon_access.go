@@ -6,6 +6,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/qwkapi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -72,4 +73,19 @@ func (e *MenuExecutor) AdmitPreAuthenticatedUser(
 		return false, nil
 	}
 	return true, nil
+}
+
+// QWKAPILoginDenial is the QWK API's counterpart to AdmitPreAuthenticatedUser:
+// it applies the same post-password checks to an API login, returning why the
+// account is refused or "" to admit it. The API has no terminal to run the
+// intro gate in, so an account that still owes its introduction is refused
+// rather than sent through it.
+func (e *MenuExecutor) QWKAPILoginDenial(u *user.User) string {
+	if u.IntroPending {
+		return qwkapi.DenyIntroPending
+	}
+	if !canLogonAtLevel(e.GetServerConfig(), u.AccessLevel) {
+		return qwkapi.DenyLogonLevel
+	}
+	return ""
 }

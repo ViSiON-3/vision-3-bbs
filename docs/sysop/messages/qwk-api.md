@@ -73,6 +73,12 @@ re-authenticate on their next request). This is expected for a packet API.
   deliberately locks another user's handle pauses that user's mobile sync but
   does not keep them off the BBS. Handles are counted whether or not the
   account exists, so a lockout doesn't reveal which handles are real.
+- **Accounts the terminal would turn away are turned away here too.** A
+  correct password still gets `403` and no token if the account is below
+  `logonLevel` — which includes a banned account (level 0) and a new user
+  waiting for validation — or if it still owes the SysOp its new-user
+  introduction (`requireNewUserEmail`). The API has no editor to collect that
+  message, so the user must log in by terminal once to send it.
 - **Per-area write ACS still applies** on upload, exactly as in the terminal path.
 - **The caller's Twit List still applies** on download. A packet built by the
   API leaves out the same authors the terminal would, using the list as last
@@ -97,7 +103,7 @@ also send `Authorization: Bearer <token>`.
 
 | Method | Path | Body → Response |
 |--------|------|-----------------|
-| `POST` | `/api/qwk/login` | `{handle, password}` → `{token, expiresAt}` (`401` on bad credentials, `429` with `error: "locked_out"` while the IP or handle is locked out) |
+| `POST` | `/api/qwk/login` | `{handle, password}` → `{token, expiresAt}` (`401` on bad credentials, `429` with `error: "locked_out"` while the IP or handle is locked out, `403` with `error: "logon_level"` or `"intro_pending"` when the account may not log in) |
 | `GET` | `/api/qwk/packet` | → `.QWK` bytes (`application/zip`) with `X-QWK-Messages` count, or `204` when there is no new mail |
 | `POST` | `/api/qwk/reply` | `.REP` bytes (`application/zip`, max 16 MiB) → `{posted, skipped, duplicate, wrongBBS}` |
 
@@ -119,7 +125,7 @@ API activity.
 | Level | `msg` | When |
 |-------|-------|------|
 | INFO | `QWK API listening` | Startup: listen address and TLS cert fingerprint. |
-| INFO | `qwk api login` | `outcome=success` / `outcome=fail`, with `handle` and `remote`. A malformed body logs `outcome=badRequest` with `remote` and `error` but **no** `handle` — on a decode failure that field may be partial or hold the password. |
+| INFO | `qwk api login` | `outcome=success` / `outcome=fail`, with `handle` and `remote`; `outcome=denied` with `reason=logon_level` or `intro_pending` for a correct password on an account that may not log in. A malformed body logs `outcome=badRequest` with `remote` and `error` but **no** `handle` — on a decode failure that field may be partial or hold the password. |
 | WARN | `qwk api login` | `outcome=rateLimited` — too many login attempts from one IP. |
 | WARN | `qwk api login from locked IP` | A login refused because its IP is in the per-IP lockout, with `remote` and `locked_until`. |
 | WARN | `qwk api login for locked handle` | A login refused because the handle is locked, with `handle`, `remote`, and `locked_until`. |

@@ -65,6 +65,18 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "invalid credentials")
 		return
 	}
+	// The password was right, so this is not a failed attempt — but, as at the
+	// terminal login prompt, the counters are only cleared for a login that
+	// goes on to start a session.
+	if reason := s.deps.DenyLogin(u); reason != "" {
+		slog.Info("qwk api login", "handle", u.Handle, "remote", ip, "outcome", "denied", "reason", reason)
+		msg, known := denyMessages[reason]
+		if !known {
+			msg = denyMessages[DenyLogonLevel]
+		}
+		writeError(w, http.StatusForbidden, reason, msg)
+		return
+	}
 	if s.deps.Guard != nil {
 		s.deps.Guard.ClearFailedLoginAttempts(ip)
 	}
