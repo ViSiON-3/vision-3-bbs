@@ -481,12 +481,12 @@ func drawChatView(w io.Writer, mode ansi.OutputMode, width, height int, th *conf
 	} else {
 		text := func(v string) func(int) string { return func(int) string { return v } }
 		art := chatArtFill(sc.art, map[string]func(int) string{"SYSOP": text(sysopHandle), "CALLER": text(callerHandle)})
-		// The art is drawn for the screen's width; on a wider terminal its
-		// wraps are made explicit at that width, as fitArt does for stock
-		// 80-column art, so a designed 132-column screen is not cut at 80.
-		if width > sc.Width {
-			art = ansi.HardWrap(art, sc.Width, true)
-		}
+		// The art is drawn for the screen's width, and art often relies on
+		// the terminal wrapping at that width. Its wraps are made explicit,
+		// as fitArt does for stock art on a wider terminal, so the screen
+		// draws the same on a wider caller and on the WFC mirroring this
+		// output to a sysop terminal wider than the caller's.
+		art = ansi.HardWrap(art, sc.Width, true)
 		_, _ = fmt.Fprint(w, "\x1b[0m\x1b[2J\x1b[H") // best-effort display
 		_ = terminalio.WriteProcessedBytes(w, art, mode)
 		status := &chatStatus{w: w, mode: mode, sc: sc, sysop: sysopHandle, user: callerHandle, began: began}

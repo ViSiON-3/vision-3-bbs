@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -233,6 +234,24 @@ func TestChatSwitchesScreen(t *testing.T) {
 	}
 	_ = r.tap.StopChat("SysOp")
 	waitDone(t, done, "chat ignored StopChat")
+}
+
+// Art that relies on the caller's terminal wrapping at its width gets
+// explicit line breaks even when the caller is exactly that wide, so the WFC
+// mirroring chat on a wider sysop terminal draws it the same.
+func TestChatArtWrapsAreExplicit(t *testing.T) {
+	sc := &chatLayout{
+		Width: 80, Height: 6,
+		Sysop:  chatSide{Lines: []chatSegment{{Row: 3, From: 1, To: 80}}},
+		Caller: chatSide{Lines: []chatSegment{{Row: 5, From: 1, To: 80}}},
+		art:    []byte(strings.Repeat("A", 80) + strings.Repeat("B", 80)),
+		name:   "WRAP",
+	}
+	var out bytes.Buffer
+	drawChatView(&out, ansi.OutputModeUTF8, 80, 25, &config.ThemeConfig{}, &config.StringsConfig{}, sc, "SysOp", "Caller", time.Now())
+	if want := strings.Repeat("A", 80) + "\r\n" + strings.Repeat("B", 80); !strings.Contains(out.String(), want) {
+		t.Fatalf("art drawn without the break at column 80: %q", out.String())
+	}
 }
 
 // TestDesignedScreenWiderThanStockArt draws a 100-column screen on a
