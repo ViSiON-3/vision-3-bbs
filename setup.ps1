@@ -44,7 +44,7 @@ if (-not $goExe) {
         if ($LASTEXITCODE -ne 0) { throw "go version failed" }
         if ($goVersionOutput -match "go(\d+\.\d+\.\d+)") {
             $GO_VERSION = $Matches[1]
-            $REQUIRED_VERSION = [version]"1.24.2"
+            $REQUIRED_VERSION = [version]"1.25.0"
             $parsedGo = [version]$GO_VERSION
             if ($parsedGo -ge $REQUIRED_VERSION) {
                 Write-Host "[OK] Go $GO_VERSION (required: $REQUIRED_VERSION or higher)" -ForegroundColor Green
@@ -268,7 +268,9 @@ $buildFailed = $false
     @{ Name = "v3mail"; Desc = "mail processor" },
     @{ Name = "strings"; Desc = "strings editor" },
     @{ Name = "ue"; Desc = "user editor" },
-    @{ Name = "config"; Desc = "config editor" }
+    @{ Name = "config"; Desc = "config editor" },
+    @{ Name = "menuedit"; Desc = "menu editor" },
+    @{ Name = "wfc"; Desc = "sysop console" }
 ) | ForEach-Object {
     $exe = $_.Name + ".exe"
     Write-Host "Building $($_.Name)..."

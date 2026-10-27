@@ -20,7 +20,7 @@ echo
 # Check for Go
 if command -v go &> /dev/null; then
     GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
-    REQUIRED_VERSION="1.24.2"
+    REQUIRED_VERSION="1.25.0"
     
     # Simple version comparison (works for most cases)
     if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$GO_VERSION" | sort -V | head -n1)" = "$REQUIRED_VERSION" ]; then
@@ -260,6 +260,11 @@ go build -o ue ./cmd/ue
 echo "Building config..."
 if ! go build -o config ./cmd/config; then
     echo -e "${RED}Build failed (config)!${NC}"
+    exit 1
+fi
+echo "Building menuedit..."
+if ! go build -o menuedit ./cmd/menuedit; then
+    echo -e "${RED}Build failed (menuedit)!${NC}"
     exit 1
 fi
 echo "Building wfc..."

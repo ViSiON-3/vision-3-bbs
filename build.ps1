@@ -33,7 +33,8 @@ $targets = @(
     @{ Cmd = "strings"; Desc = "strings editor" },
     @{ Cmd = "ue"; Desc = "user editor" },
     @{ Cmd = "config"; Desc = "config editor" },
-    @{ Cmd = "menuedit"; Desc = "menu editor" }
+    @{ Cmd = "menuedit"; Desc = "menu editor" },
+    @{ Cmd = "wfc"; Desc = "sysop console" }
 )
 foreach ($t in $targets) {
     $exe = $t.Cmd + ".exe"
