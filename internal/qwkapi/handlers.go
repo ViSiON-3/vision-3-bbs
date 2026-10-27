@@ -20,6 +20,15 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := clientIP(r)
+	// The lockout is checked ahead of the rate limit so a locked client is
+	// told how long the lockout really lasts, not the limiter's one minute.
+	if s.deps.Guard != nil {
+		if locked, until, _ := s.deps.Guard.IsIPLockedOut(ip); locked {
+			logging.Security("qwk api login from locked IP", "remote", ip, "locked_until", until.Format(time.RFC3339))
+			writeLockedOut(w, until, "too many failed logins from this address")
+			return
+		}
+	}
 	if !s.loginLimit.allow(ip) {
 		// Repeated login attempts from one address are the brute-force signal a
 		// sysop most wants to see, so this is the one throttle logged at WARN.
@@ -27,13 +36,6 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "60")
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many login attempts")
 		return
-	}
-	if s.deps.Guard != nil {
-		if locked, until, _ := s.deps.Guard.IsIPLockedOut(ip); locked {
-			logging.Security("qwk api login from locked IP", "remote", ip, "locked_until", until.Format(time.RFC3339))
-			writeLockedOut(w, until, "too many failed logins from this address")
-			return
-		}
 	}
 	var req loginRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
