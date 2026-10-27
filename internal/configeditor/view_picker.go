@@ -3,6 +3,7 @@ package configeditor
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // viewLookupPicker renders the lookup picker popup over the current edit screen.
@@ -35,7 +36,14 @@ func (m Model) viewLookupPicker() string {
 		visible = total
 	}
 
+	// The box is 50 columns, wider when an entry needs it (the ► prefix and
+	// a trailing space included), up to what the terminal leaves beside the
+	// border; padRight cuts anything longer.
 	boxW := 50
+	for _, item := range m.pickerItems {
+		boxW = max(boxW, utf8.RuneCountInString(item.Display)+4)
+	}
+	boxW = min(boxW, max(50, m.width-4))
 	// box: top border + title + separator + items + empty + bottom border
 	boxH := visible + 5
 

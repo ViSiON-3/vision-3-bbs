@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
@@ -151,4 +153,21 @@ func TestBadThemeStopsLoad(t *testing.T) {
 	if _, err := loadAllConfigs(filepath.Join(root, "configs")); err == nil || !strings.Contains(err.Error(), "theme") {
 		t.Fatalf("err = %v, want a theme load error", err)
 	}
+}
+
+// The picker widens for an entry longer than its usual 50 columns, so a
+// screen's full title and author show on an 80-column terminal.
+func TestThemeChatScreenPickerShowsLongEntries(t *testing.T) {
+	m, root := newThemeModel(t)
+	for rel, body := range map[string]string{
+		"menus/v3/cfg/V3CHAT1.json": "{}",
+		"menus/v3/ansi/V3CHAT1.ANS": "\x1b[0mart\x1a" + sauceRecord("ViSiON/3 Framed Chat", "ViSiON/3 Dev Team", "ViSiON/3"),
+	} {
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(rel)), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	nm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 25})
+	m = press(t, nm.(Model), "D", "2", "enter")
+	wantScreen(t, m, "V3CHAT1 - ViSiON/3 Framed Chat by ViSiON/3 Dev Team")
 }
