@@ -4,93 +4,25 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
-	"sync"
 	"testing"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/config"
-	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// accountStore is an Authenticator over live accounts the test can change
-// between requests, as a sysop or the terminal would. Every account's password
-// is "pw".
-type accountStore struct {
-	mu    sync.Mutex
-	users []*user.User
-	syncs int
-}
-
-func newAccountStore(users ...*user.User) *accountStore { return &accountStore{users: users} }
-
-func (a *accountStore) Authenticate(handle, password string) (*user.User, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	for _, u := range a.users {
-		if strings.EqualFold(u.Handle, handle) && !u.DeletedUser && password == "pw" {
-			c := *u
-			return &c, true
-		}
-	}
-	return nil, false
-}
-
-func (a *accountStore) SyncFromDisk() {
-	a.mu.Lock()
-	a.syncs++
-	a.mu.Unlock()
-}
-
-func (a *accountStore) GetUserByID(id int) (*user.User, bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	for _, u := range a.users {
-		if u.ID == id {
-			c := *u
-			return &c, true
-		}
-	}
-	return nil, false
-}
-
-// change applies fn to the stored account under the store's lock.
-func (a *accountStore) change(id int, fn func(*user.User)) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	for _, u := range a.users {
-		if u.ID == id {
-			fn(u)
-		}
-	}
-}
-
-// sessionServer serves one account, ID 7 "felonius" at level 20, under a
+// sessionServer serves testAccount (ID 7 "felonius" at level 20) under a
 // DenyLogin that refuses anything below level 10.
 func sessionServer(t *testing.T) (http.Handler, *accountStore, *twitPacketService) {
 	t.Helper()
-	accounts := newAccountStore(&user.User{ID: 7, Handle: "felonius", AccessLevel: 20, PasswordHash: "hash-1"})
+	accounts := newAccountStore(testAccount())
 	svc := &twitPacketService{}
-	s, err := NewServer(Deps{
-		Config:    config.QWKAPIConfig{},
-		ConfigDir: t.TempDir(),
-		Users:     accounts,
-		Service:   svc,
-		AuthorizeFor: func(u *user.User) func(*message.MessageArea) bool {
-			return func(*message.MessageArea) bool { return true }
-		},
-		TwitMatcherFor: func(*user.User) *user.TwitMatcher { return nil },
-		DenyLogin: func(u *user.User) string {
-			if u.AccessLevel < 10 {
-				return DenyLogonLevel
-			}
-			return ""
-		},
-	})
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
+	deps := testDeps(t, accounts, svc)
+	deps.DenyLogin = func(u *user.User) string {
+		if u.AccessLevel < 10 {
+			return DenyLogonLevel
+		}
+		return ""
 	}
-	return s.Handler(), accounts, svc
+	return newTestServer(t, deps), accounts, svc
 }
 
 func withToken(method, path, tok string) *http.Request {
@@ -199,13 +131,16 @@ func TestLogout_WorksForDeniedAccount(t *testing.T) {
 // so login and every session check must call it before reading the account.
 func TestSession_SyncsExternalEditsBeforeEachRead(t *testing.T) {
 	h, accounts, _ := sessionServer(t)
-	tok := login(t, h)
-	if accounts.syncs != 1 {
-		t.Fatalf("syncs after login = %d, want 1", accounts.syncs)
+	before := accounts.syncCount()
+	passwordLogin(t, h)
+	if got := accounts.syncCount() - before; got != 1 {
+		t.Fatalf("syncs for a password login = %d, want 1", got)
 	}
+	tok := login(t, h)
+	before = accounts.syncCount()
 	serve(h, withToken("GET", "/api/qwk/packet", tok))
 	serve(h, withToken("POST", "/api/qwk/reply", tok))
-	if accounts.syncs != 3 {
-		t.Errorf("syncs after two requests = %d, want 3", accounts.syncs)
+	if got := accounts.syncCount() - before; got != 2 {
+		t.Errorf("syncs for two requests = %d, want 2", got)
 	}
 }

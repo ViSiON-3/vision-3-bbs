@@ -49,6 +49,11 @@ type Deps struct {
 	// admit. It runs at login and again on every authenticated request.
 	// Required, so no API login skips them.
 	DenyLogin func(u *user.User) string
+	// Devices stores paired devices. Required.
+	Devices DeviceStore
+	// BoardID names this board in the message a device signs, so a signature
+	// is valid only here. Required; main passes the QWK packet ID.
+	BoardID string
 	// Guard, when non-nil, applies the BBS's IP blocklist to every request and
 	// its per-IP failed-login lockout to logins.
 	Guard LoginGuard
@@ -60,6 +65,8 @@ type Server struct {
 	tokens      *tokenStore
 	loginLimit  *limiter
 	packetLimit *limiter
+	challLimit  *limiter
+	challenges  *challengeStore
 	handleLocks *handleLockouts
 	cert        tls.Certificate
 	fingerprint string
@@ -79,6 +86,9 @@ func NewServer(deps Deps) (*Server, error) {
 	if deps.DenyLogin == nil {
 		return nil, errors.New("qwk api: DenyLogin is required")
 	}
+	if deps.Devices == nil || deps.BoardID == "" {
+		return nil, errors.New("qwk api: Devices and BoardID are required")
+	}
 	cert, fp, err := loadOrCreateCert(deps.Config, deps.ConfigDir)
 	if err != nil {
 		return nil, err
@@ -88,6 +98,8 @@ func NewServer(deps Deps) (*Server, error) {
 		tokens:      newTokenStore(deps.Config.TokenTTL()),
 		loginLimit:  newLimiter(5, time.Minute),
 		packetLimit: newLimiter(30, time.Minute),
+		challLimit:  newLimiter(10, time.Minute),
+		challenges:  newChallengeStore(),
 		handleLocks: newHandleLockouts(handleMaxFailures, handleLockout),
 		cert:        cert,
 		fingerprint: fp,
@@ -100,8 +112,12 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/qwk/login", s.rejectBlocked(requireClient(s.handleLogin)))
 	mux.HandleFunc("/api/qwk/logout", s.rejectBlocked(requireClient(s.handleLogout)))
-	mux.HandleFunc("/api/qwk/packet", s.rejectBlocked(requireClient(s.requireSession(s.handlePacket))))
-	mux.HandleFunc("/api/qwk/reply", s.rejectBlocked(requireClient(s.requireSession(s.handleReply))))
+	mux.HandleFunc("/api/qwk/challenge", s.rejectBlocked(requireClient(s.handleChallenge)))
+	mux.HandleFunc("/api/qwk/login/device", s.rejectBlocked(requireClient(s.handleDeviceLogin)))
+	mux.HandleFunc("/api/qwk/devices", s.rejectBlocked(requireClient(s.handleDevices)))
+	mux.HandleFunc("/api/qwk/devices/", s.rejectBlocked(requireClient(s.requireAnySession(s.handleDeviceDelete))))
+	mux.HandleFunc("/api/qwk/packet", s.rejectBlocked(requireClient(s.requireSession(scopeDevice, s.handlePacket))))
+	mux.HandleFunc("/api/qwk/reply", s.rejectBlocked(requireClient(s.requireSession(scopeDevice, s.handleReply))))
 	// Catch-all so requests to unknown paths are visible too; without it the
 	// mux's own 404 would leave scanner traffic entirely unrecorded.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -176,6 +192,8 @@ func (s *Server) sweepLoop() {
 			s.loginLimit.sweep()
 			s.packetLimit.sweep()
 			s.handleLocks.sweep()
+			s.challLimit.sweep()
+			s.challenges.sweep()
 		}
 	}
 }

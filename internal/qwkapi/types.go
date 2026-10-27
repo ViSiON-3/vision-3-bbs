@@ -38,6 +38,18 @@ var denyMessages = map[string]string{
 	DenyLogonLevel:   "account not permitted to log in",
 }
 
+// DeviceStore keeps the devices paired with each account (satisfied by
+// *user.UserMgr).
+type DeviceStore interface {
+	AddAPIDevice(userID int, d user.APIDevice, max int) error
+	RemoveAPIDevice(userID int, deviceID string) (bool, error)
+	TouchAPIDevice(userID int, deviceID string, at time.Time) error
+	FindAPIDevice(deviceID string) (*user.User, user.APIDevice, bool)
+	// BeginSession records a device login as a call, as Authenticate does
+	// for a password login.
+	BeginSession(handle string) (*user.User, bool)
+}
+
 type loginRequest struct {
 	Handle   string `json:"handle"`
 	Password string `json:"password"`
@@ -46,6 +58,40 @@ type loginRequest struct {
 type loginResponse struct {
 	Token     string `json:"token"`
 	ExpiresAt string `json:"expiresAt"`
+	Scope     string `json:"scope"`
+}
+
+type pairRequest struct {
+	Name      string `json:"name"`
+	PublicKey string `json:"publicKey"`
+}
+
+type pairResponse struct {
+	DeviceID string `json:"deviceId"`
+	BoardID  string `json:"boardId"`
+}
+
+type challengeRequest struct {
+	DeviceID string `json:"deviceId"`
+}
+
+type challengeResponse struct {
+	Challenge string `json:"challenge"`
+	ExpiresAt string `json:"expiresAt"`
+}
+
+type deviceLoginRequest struct {
+	DeviceID  string `json:"deviceId"`
+	Challenge string `json:"challenge"`
+	Signature string `json:"signature"` // base64
+}
+
+type deviceInfo struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"createdAt"`
+	LastUsed  string `json:"lastUsed,omitempty"`
+	Current   bool   `json:"current"`
 }
 
 type replyResponse struct {

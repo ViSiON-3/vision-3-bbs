@@ -5,29 +5,15 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/config"
-	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 func denyingServer(t *testing.T, reason string, g LoginGuard) http.Handler {
 	t.Helper()
-	s, err := NewServer(Deps{
-		Config:    config.QWKAPIConfig{},
-		ConfigDir: t.TempDir(),
-		Users:     fakeAuth{ok: true},
-		Service:   &fakeSvc{},
-		AuthorizeFor: func(u *user.User) func(*message.MessageArea) bool {
-			return func(*message.MessageArea) bool { return true }
-		},
-		TwitMatcherFor: func(*user.User) *user.TwitMatcher { return nil },
-		DenyLogin:      func(*user.User) string { return reason },
-		Guard:          g,
-	})
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
-	return s.Handler()
+	deps := testDeps(t, newAccountStore(testAccount()), &fakeSvc{})
+	deps.DenyLogin = func(*user.User) string { return reason }
+	deps.Guard = g
+	return newTestServer(t, deps)
 }
 
 // A correct password for an account the terminal would refuse gets no token.

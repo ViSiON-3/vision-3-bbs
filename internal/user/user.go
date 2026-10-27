@@ -141,6 +141,12 @@ type User struct {
 	// Session-owned state (not carried in the sysop external-edit merge).
 	IntroPending  bool `json:"introPending,omitempty"`
 	IntroAttempts int  `json:"introAttempts,omitempty"`
+
+	// APIDevices are the phones paired with the QWK API (see api_devices.go).
+	// Owned by the BBS: ./ue does not edit them, so they are not part of the
+	// external-edit merge. Only the UserMgr device methods change them, and
+	// they always build a new slice, so copies of a User can share it safely.
+	APIDevices []APIDevice `json:"apiDevices,omitempty"`
 }
 
 // CallRecord stores information about a single call session.
