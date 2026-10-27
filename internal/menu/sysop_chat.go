@@ -223,14 +223,25 @@ func (p *chatPane) wrap() {
 	p.moveTo()
 	for _, r := range word {
 		w, _ := p.cellWidth(r)
-		if p.cells+w > p.width() {
+		if p.cells+w > p.width() && w <= p.width() {
 			p.newline()
 			p.moveTo()
 		}
-		p.emit(r)
-		p.line = append(p.line, r)
-		p.cells += w
+		p.place(r, w)
 	}
+}
+
+// place writes r, w cells wide, at the cursor, which the caller has moved to
+// a line with room for it or the start of a new one. A rune wider than the
+// whole line can never be shown there and is dropped, without taking a new
+// line, rather than drawn over the art past the line's end.
+func (p *chatPane) place(r rune, w int) {
+	if w > p.width() {
+		return
+	}
+	p.emit(r)
+	p.line = append(p.line, r)
+	p.cells += w
 }
 
 // put writes text at the pane's cursor, word-wrapping at the pane width. b is
@@ -305,14 +316,12 @@ func (p *chatPane) putRune(r rune) {
 			return
 		}
 		p.wrap()
-		if p.cells+w > p.width() {
+		if p.cells+w > p.width() && w <= p.width() {
 			p.newline()
 			p.moveTo()
 		}
 	}
-	p.emit(r)
-	p.line = append(p.line, r)
-	p.cells += w
+	p.place(r, w)
 }
 
 type chatEventKind int

@@ -259,6 +259,27 @@ func TestChatPaneWrapsWordIntoNarrowerLine(t *testing.T) {
 	}
 }
 
+// TestChatPaneDropsRuneWiderThanLine puts a two-cell rune where the next
+// lines are one cell wide: it cannot be shown and must not overwrite the
+// art beside the line, whether typed directly or carried by a wrap.
+func TestChatPaneDropsRuneWiderThanLine(t *testing.T) {
+	term := testterm.New(20, 6)
+	term.Write([]byte("\x1b[2;1H####\x1b[3;1H####\x1b[4;1H####"))
+	segs := []chatSegment{{Row: 2, From: 1, To: 3}, {Row: 3, From: 1, To: 1}, {Row: 4, From: 1, To: 1}}
+	p := newChatPane(term, ansi.OutputModeUTF8, segs, 10)
+	p.put([]byte("ab \u4e16x"))
+	if r2, r3, r4 := term.Row(2), term.Row(3), term.Row(4); r2 != "ab #" || r3 != "x###" || r4 != "####" {
+		t.Fatalf("rows = %q, %q, %q; want the wide rune dropped and x on the first one-cell line", r2, r3, r4)
+	}
+	p.put([]byte("\u4e16"))
+	if r3, r4 := term.Row(3), term.Row(4); r3 != "x###" || r4 != "####" {
+		t.Fatalf("rows = %q, %q; want a wide rune typed on a one-cell line dropped", r3, r4)
+	}
+	if string(p.line) != "x" || p.cur != 1 {
+		t.Fatalf("line %q on segment %d", string(p.line), p.cur)
+	}
+}
+
 // TestChatPaneScrollsThroughSegments types past the end of a pane whose
 // lines are different widths at different places, as a designed screen's
 // can be, and checks the text moves up through them.
