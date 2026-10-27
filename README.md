@@ -87,7 +87,6 @@ If you have skills, old .ANS files gathering dust, or just love the aesthetic of
 
 ### 🛠️ Where Developers Can Help
 
-- Shipping and testing XMODEM/YMODEM by default (the protocol definitions exist; only SEXYZ Zmodem is in the template `protocols.json`)
 - Performance optimization and scalability
 - Terminal emulation improvements
 - Modern features while maintaining the classic feel
