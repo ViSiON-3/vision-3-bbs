@@ -447,6 +447,15 @@ func TestShippedV2ChatScreensRender(t *testing.T) {
 			if got := r.term.Cell(1, 74).Rune; got != '·' {
 				t.Errorf("column 74 = %q; the caller handle ran over the decoration", got)
 			}
+			// The divider's ▲ ▼ arrows are CP437 control bytes; a UTF-8
+			// caller must get them as glyphs, or the row comes up short and
+			// the art after it shifts.
+			if row := r.term.Row(12); !strings.Contains(row, "▲") || !strings.Contains(row, "▼") {
+				t.Errorf("divider row = %q; want its ▲ and ▼ arrows", row)
+			}
+			if got := r.term.Cell(13, 34).Rune; got != '│' {
+				t.Errorf("row 13 column 34 = %q, want the frame's │: the art shifted (row 13 = %q)", got, r.term.Row(13))
+			}
 			if got := r.term.Cell(3, 35).Fg; got != fg[0] {
 				t.Errorf("sysop text fg = %d; want %d", got, fg[0])
 			}

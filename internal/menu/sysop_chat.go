@@ -480,7 +480,15 @@ func drawChatView(w io.Writer, mode ansi.OutputMode, width, height int, th *conf
 		v.refresh = func() { drawChatClock(w, top, width) }
 	} else {
 		text := func(v string) func(int) string { return func(int) string { return v } }
-		art := chatArtFill(sc.art, map[string]func(int) string{"SYSOP": text(sysopHandle), "CALLER": text(callerHandle)})
+		// A UTF-8 terminal gets the art converted up front, with the glyphs
+		// CP437 draws for control bytes (the ▲ ▼ arrows art often uses),
+		// which the output writer would leave as invisible control bytes and
+		// so shorten the row they are on.
+		src := sc.art
+		if mode == ansi.OutputModeUTF8 {
+			src = ansi.CP437ArtToUTF8(src)
+		}
+		art := chatArtFill(src, map[string]func(int) string{"SYSOP": text(sysopHandle), "CALLER": text(callerHandle)})
 		// The art is drawn for the screen's width; on a wider terminal its
 		// wraps are made explicit at that width, as fitArt does for stock
 		// 80-column art, so a designed 132-column screen is not cut at 80.
