@@ -29,7 +29,7 @@
     ]
   },
   "fields": {
-    "sysopName": {"row": 1, "col": 18},
-    "callerName": {"row": 1, "col": 50}
+    "sysopName": {"row": 1, "col": 18, "width": 24},
+    "callerName": {"row": 1, "col": 50, "width": 23}
   }
 }
