@@ -270,6 +270,50 @@ USERLINES
 	}
 }
 
+// The CHATNFO.n files ViSiON/2 shipped write a typing line as "1: 35,3 80,3"
+// with CRLF endings, and a line may reach the last column.
+func TestConvertChatNfoShippedForm(t *testing.T) {
+	nfo := "SYSOPNAME=18,1\r\nUSERNAME=50,1\r\nSYSOPCOLOR=9\r\nUSERCOLOR=13\r\nSTATCOLOR=31\r\n" +
+		"SYSOPLINES\r\n1: 35,3 80,3\r\n2: 35,4 80,4\r\nUSERLINES\r\n1: 35,13 80,13\r\n"
+	out, err := ConvertChatNfo(strings.NewReader(nfo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, err := parseChatLayout(out)
+	if err != nil {
+		t.Fatalf("converted layout does not parse: %v\n%s", err, out)
+	}
+	want, _ := json.Marshal([]chatSegment{{Row: 3, From: 35, To: 80}, {Row: 4, From: 35, To: 80}})
+	if got, _ := json.Marshal(sc.Sysop.Lines); string(got) != string(want) {
+		t.Errorf("sysop lines = %s; want %s", got, want)
+	}
+	if len(sc.Caller.Lines) != 1 || sc.Caller.Lines[0].Row != 13 {
+		t.Errorf("caller lines = %+v", sc.Caller.Lines)
+	}
+	if f := sc.Fields.CallerName; f == nil || f.Row != 1 || f.Col != 50 {
+		t.Errorf("caller name field = %+v", f)
+	}
+}
+
+// Every chat screen in the shipped menu set loads and fits an 80x25 caller.
+func TestShippedChatScreensLoad(t *testing.T) {
+	set := menuset.Bare(filepath.Join("..", "..", "menus", "v3"))
+	names := ChatScreens(set)
+	if len(names) == 0 {
+		t.Fatal("no chat screens in the shipped menu set")
+	}
+	for _, name := range names {
+		sc, err := loadChatLayout(set, name)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if !sc.fits(80, 25) {
+			t.Errorf("%s: %dx%d does not fit 80x25", name, sc.Width, sc.Height)
+		}
+	}
+}
+
 func TestConvertChatArt(t *testing.T) {
 	got := ConvertChatArt([]byte("SysOp: |S  User: |u |07"))
 	if string(got) != "SysOp: @SYSOP@  User: @CALLER@ |07" {

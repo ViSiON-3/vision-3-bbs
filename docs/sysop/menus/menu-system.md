@@ -1006,7 +1006,10 @@ other:
 `Alt-S` on the WFC snoop screen picks another for the next chat. The shipped
 set has `CHAT1`: a framed box for each side, the time and date on the title
 row and the minutes in chat at the bottom. Copy its two files under new names
-to start your own.
+to start your own. It also has the two screens ViSiON/2 shipped, converted
+from its `CHAT.1` and `CHAT.2`: `V2CHAT1`, art by Posyden of GRiM Productions,
+and `V2CHAT2`, art by JED of ACiD Productions. Each has the art on the left
+and the sysop and caller typing on the right, with the handles on the top row.
 
 The art can carry the names: `@SYSOP@` and `@CALLER@` in it are replaced
 with the handles when chat opens, padded or cut to the width of the
