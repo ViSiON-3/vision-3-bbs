@@ -84,16 +84,17 @@ func (r *chatIdleRun) ended(d time.Duration) bool {
 // the menu loop turns into the idle notice and log line.
 func TestChatIdleRoomTrafficKeepsCallerOn(t *testing.T) {
 	env := newMenuEnv(t)
-	run := startChatIdle(env, env.caller, 1, 4)
+	run := startChatIdle(env, env.caller, 1, 10)
 	waitChatOutput(t, run.s, "Joined #lobby")
 
 	bob := chatcovLocal(env, "Bob")
 	if _, _, err := bob.Join("lobby"); err != nil {
 		t.Fatalf("Bob joins: %v", err)
 	}
-	// Bob talks for well past both timeouts, a little more often than the
-	// chat limit, while the caller types nothing.
-	talkUntil := time.Now().Add(12 * chatIdleUnit)
+	// Bob talks for well past both timeouts, much more often than the chat
+	// limit, while the caller types nothing. The chat limit leaves room for a
+	// slow Post: a SQLite write on a Windows runner can take over 100ms.
+	talkUntil := time.Now().Add(24 * chatIdleUnit)
 	var lastPost time.Time
 	for time.Now().Before(talkUntil) {
 		if err := bob.Post("lobby", "still here"); err != nil {
@@ -108,10 +109,10 @@ func TestChatIdleRoomTrafficKeepsCallerOn(t *testing.T) {
 	if !run.ended(5 * time.Second) {
 		t.Fatal("chat still running long after the room went quiet")
 	}
-	// Chat's limit is 4 units and the menus' 1: anything past 2 shows chat's
+	// Chat's limit is 10 units and the menus' 1: anything past 2 shows chat's
 	// applied, with room to spare for a slow runner.
 	if took := time.Since(lastPost); took < 2*chatIdleUnit {
-		t.Errorf("chat ended %v after the last message; its own limit is %v", took, 4*chatIdleUnit)
+		t.Errorf("chat ended %v after the last message; its own limit is %v", took, 10*chatIdleUnit)
 	}
 	if !errors.Is(run.err, editor.ErrIdleTimeout) || run.next != "LOGOFF" {
 		t.Errorf("runChat = (%q, %v), want LOGOFF with editor.ErrIdleTimeout", run.next, run.err)
@@ -127,8 +128,8 @@ func TestChatIdleRoomTrafficKeepsCallerOn(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
 	env.e.handleSessionTimeout(run.s, term.NewTerminal(run.s, ""), env.outputMode, 1, 80, 24)
 	slog.SetDefault(prev)
-	if !strings.Contains(logged.String(), `msg="idle timeout, disconnecting"`) || !strings.Contains(logged.String(), "minutes=4") {
-		t.Errorf("idle log = %q, want the chat limit of 4", logged.String())
+	if !strings.Contains(logged.String(), `msg="idle timeout, disconnecting"`) || !strings.Contains(logged.String(), "minutes=10") {
+		t.Errorf("idle log = %q, want the chat limit of 10", logged.String())
 	}
 }
 
