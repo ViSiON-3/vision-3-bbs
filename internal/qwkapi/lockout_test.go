@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -183,5 +184,44 @@ func TestHandleLockouts_ExpiryAndSweep(t *testing.T) {
 	hl.sweep()
 	if hl.size() != 0 {
 		t.Errorf("size after sweep = %d, want 0", hl.size())
+	}
+}
+
+// The limit is failures within one lockout period. Spaced-out failures that
+// never fit max into one period must not lock, however many accumulate.
+func TestHandleLockouts_CountsWithinOneWindow(t *testing.T) {
+	hl := newHandleLockouts(3, 100*time.Millisecond)
+	hl.fail("felonius")
+	time.Sleep(60 * time.Millisecond)
+	hl.fail("felonius")
+	time.Sleep(60 * time.Millisecond)
+	// 120ms after the first failure: a new window, so this is failure 1 of 3.
+	if hl.fail("felonius") {
+		t.Fatal("locked by failures spread over more than one window")
+	}
+}
+
+// A success that races failures must not wipe the lock they installed.
+func TestHandleLockouts_ClearKeepsActiveLock(t *testing.T) {
+	hl := newHandleLockouts(2, time.Minute)
+	hl.fail("felonius")
+	hl.fail("felonius")
+	hl.clear("felonius")
+	if _, locked := hl.lockedUntil("felonius"); !locked {
+		t.Fatal("clear removed an active lock")
+	}
+}
+
+// A locked IP is told about the lockout even once it is also over the login
+// rate limit.
+func TestAPI_LockoutReportedAheadOfRateLimit(t *testing.T) {
+	g := newFakeGuard()
+	g.lockedUntil["203.0.113.9"] = time.Now().Add(10 * time.Minute)
+	h := guardedServer(t, g)
+	for i := 0; i < 8; i++ {
+		rr := loginFrom(h, "203.0.113.9", "felonius", "pw")
+		if !strings.Contains(rr.Body.String(), `"locked_out"`) {
+			t.Fatalf("attempt %d: body = %s, want locked_out", i+1, rr.Body.String())
+		}
 	}
 }
