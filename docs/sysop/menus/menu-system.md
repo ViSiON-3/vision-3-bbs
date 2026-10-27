@@ -1051,6 +1051,7 @@ The layout:
 
 | Key | Meaning |
 |-----|---------|
+| `title` | What the screen looks like, shown beside its name where the sysop picks a screen (the config editor's Theme page). Not drawn |
 | `width`, `height` | The terminal size the screen is drawn for; `80` by `25` if left out. A caller with a smaller terminal gets the built-in layout instead |
 | `art` | The background's file name in `ansi/`, if it is not `NAME.ANS` |
 | `statusColor` | Colour of the fields; grey (`7`) if left out |

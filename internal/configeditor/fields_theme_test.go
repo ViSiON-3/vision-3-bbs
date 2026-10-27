@@ -21,7 +21,7 @@ func newThemeModel(t *testing.T) (Model, string) {
 		"menus/v3/theme.json":         themeShipped,
 		"menus/v3/cfg/CHAT1.json":     "{}",
 		"menus/v3/cfg/MAIN.CFG":       "[]",
-		"menus.d/v3/cfg/V2CHAT1.json": "{}",
+		"menus.d/v3/cfg/V2CHAT1.json": `{"title": "ViSiON/2: skull art"}`,
 	}
 	for rel, body := range files {
 		path := filepath.Join(root, filepath.FromSlash(rel))
@@ -65,6 +65,12 @@ func TestThemeChatScreenPickedAndSavedToOverlay(t *testing.T) {
 	if got := strings.Join(values, ","); got != "(built-in),random,CHAT1,V2CHAT1" {
 		t.Fatalf("picker = %s", got)
 	}
+	if got := m.pickerItems[3].Display; got != "V2CHAT1 - ViSiON/2: skull art" {
+		t.Errorf("titled screen shown as %q", got)
+	}
+	if got := m.pickerItems[2].Display; got != "CHAT1" {
+		t.Errorf("untitled screen shown as %q", got)
+	}
 	if m.pickerItems[m.pickerCursor].Value != "CHAT1" {
 		t.Fatalf("picker opened on %q, want the current CHAT1", m.pickerItems[m.pickerCursor].Value)
 	}
@@ -97,7 +103,7 @@ func TestThemeChatScreenPickedAndSavedToOverlay(t *testing.T) {
 // Colours are DOS codes 0-255.
 func TestThemeColorFieldRange(t *testing.T) {
 	th := config.ThemeConfig{}
-	f := themeFieldsChat(&th, func() []string { return nil })[1]
+	f := themeFieldsChat(&th, func() []themeChatScreen { return nil })[1]
 	if f.Type != ftInteger || f.Min != 0 || f.Max != 255 {
 		t.Fatalf("sysop colour field = %+v", f)
 	}

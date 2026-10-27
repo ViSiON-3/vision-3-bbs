@@ -71,6 +71,9 @@ type chatFields struct {
 
 // chatLayout is a chat screen's layout, as read from cfg/NAME.json.
 type chatLayout struct {
+	// Title says what the screen looks like, for the sysop picking one; it
+	// is not drawn.
+	Title string `json:"title,omitempty"`
 	// Art is the background's file name in ansi/; empty means NAME.ANS.
 	Art string `json:"art,omitempty"`
 	// Width and Height are the terminal size the screen is drawn for,
