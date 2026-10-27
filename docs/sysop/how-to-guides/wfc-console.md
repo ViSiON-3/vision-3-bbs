@@ -400,7 +400,8 @@ can have several; the format is in
 `sysopChatScreen` in `theme.json` names the screen `Alt-C` opens; the shipped
 set's is `CHAT1`. `Alt-S` on the snoop screen cycles through the others for
 the next chat: the board's default, then the built-in layout, then every other
-screen in the set by name. The status bar shows `screen NAME` while a choice
+screen in the set by name, such as `V2CHAT1` and `V2CHAT2`, the two screens
+ViSiON/2 shipped. The status bar shows `screen NAME` while a choice
 other than the default is selected, and the choice goes with the next `Alt-C`
 or answered page. Pressing `Alt-S` during a chat changes only the next one. A
 daemon older than the console reports no screens, and `Alt-S` says so.

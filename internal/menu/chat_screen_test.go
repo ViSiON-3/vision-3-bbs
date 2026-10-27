@@ -270,6 +270,106 @@ USERLINES
 	}
 }
 
+// The CHATNFO.n files ViSiON/2 shipped write a typing line as "1: 35,3 80,3"
+// with CRLF endings, and a line may reach the last column.
+func TestConvertChatNfoShippedForm(t *testing.T) {
+	nfo := "SYSOPNAME=18,1\r\nUSERNAME=50,1\r\nSYSOPCOLOR=9\r\nUSERCOLOR=13\r\nSTATCOLOR=31\r\n" +
+		"SYSOPLINES\r\n1: 35,3 80,3\r\n2: 35,4 80,4\r\nUSERLINES\r\n1: 35,13 80,13\r\n"
+	out, err := ConvertChatNfo(strings.NewReader(nfo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, err := parseChatLayout(out)
+	if err != nil {
+		t.Fatalf("converted layout does not parse: %v\n%s", err, out)
+	}
+	want, _ := json.Marshal([]chatSegment{{Row: 3, From: 35, To: 80}, {Row: 4, From: 35, To: 80}})
+	if got, _ := json.Marshal(sc.Sysop.Lines); string(got) != string(want) {
+		t.Errorf("sysop lines = %s; want %s", got, want)
+	}
+	if len(sc.Caller.Lines) != 1 || sc.Caller.Lines[0].Row != 13 {
+		t.Errorf("caller lines = %+v", sc.Caller.Lines)
+	}
+	if f := sc.Fields.CallerName; f == nil || f.Row != 1 || f.Col != 50 {
+		t.Errorf("caller name field = %+v", f)
+	}
+}
+
+// Every chat screen in the shipped menu set loads and fits an 80x25 caller.
+func TestShippedChatScreensFit(t *testing.T) {
+	set := menuset.Bare(filepath.Join("..", "..", "menus", "v3"))
+	names := ChatScreens(set)
+	if len(names) == 0 {
+		t.Fatal("no chat screens in the shipped menu set")
+	}
+	for _, name := range names {
+		sc, err := loadChatLayout(set, name)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if !sc.fits(80, 25) {
+			t.Errorf("%s: %dx%d does not fit 80x25", name, sc.Width, sc.Height)
+		}
+	}
+}
+
+// The ViSiON/2 screens type on the right of the art, in their own colours,
+// and cut handles too long for the header so its labels survive.
+func TestShippedV2ChatScreensRender(t *testing.T) {
+	m := menuset.Bare(filepath.Join("..", "..", "menus", "v3"))
+	longSysop := "TheSysopWithAVeryLongHandle"  // 27, header room is 24
+	longCaller := "ACallerWithAVeryLongHandle!" // 27, header room is 23
+	for name, fg := range map[string][2]int{"V2CHAT1": {94, 95}, "V2CHAT2": {95, 35}} {
+		t.Run(name, func(t *testing.T) {
+			r := newChatRig(t, "")
+			env := screenEnv(t, r, m, "CHAT1")
+			sc := chooseChatLayout(env, name, 80, 25)
+			if sc.name != name {
+				t.Fatalf("chose %q", sc.name)
+			}
+			r.begin(t)
+			done := make(chan struct{})
+			go func() {
+				runSysopChatOn(r.ih, r.tap, r.term, ansi.OutputModeUTF8, 80, 25, longSysop, longCaller, sc)
+				close(done)
+			}()
+			r.tap.Inject("SysOp", []byte("hello"))
+			r.sess.Send("hi")
+			cells := func(row, from, to int) string {
+				var sb strings.Builder
+				for col := from; col <= to; col++ {
+					sb.WriteRune(r.term.Cell(row, col).Rune)
+				}
+				return sb.String()
+			}
+			waitFor(t, func() bool {
+				return cells(3, 35, 39) == "hello" && cells(13, 35, 36) == "hi"
+			}, name+" not rendered: "+r.term.Snapshot())
+			if got := cells(1, 18, 42); got != longSysop[:24]+" " {
+				t.Errorf("sysop handle = %q; want it cut to 24 columns", got)
+			}
+			if got := cells(1, 43, 48); got != "User :" {
+				t.Errorf("User : label = %q; the sysop handle ran over it", got)
+			}
+			if got := cells(1, 50, 73); got != longCaller[:23]+" " {
+				t.Errorf("caller handle = %q; want it cut to 23 columns", got)
+			}
+			if got := r.term.Cell(1, 74).Rune; got != '·' {
+				t.Errorf("column 74 = %q; the caller handle ran over the decoration", got)
+			}
+			if got := r.term.Cell(3, 35).Fg; got != fg[0] {
+				t.Errorf("sysop text fg = %d; want %d", got, fg[0])
+			}
+			if got := r.term.Cell(13, 35).Fg; got != fg[1] {
+				t.Errorf("caller text fg = %d; want %d", got, fg[1])
+			}
+			_ = r.tap.StopChat("SysOp")
+			waitDone(t, done, "chat ignored StopChat")
+		})
+	}
+}
+
 func TestConvertChatArt(t *testing.T) {
 	got := ConvertChatArt([]byte("SysOp: |S  User: |u |07"))
 	if string(got) != "SysOp: @SYSOP@  User: @CALLER@ |07" {
