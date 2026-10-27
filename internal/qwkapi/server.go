@@ -43,6 +43,9 @@ type Deps struct {
 	Users          Authenticator
 	Service        PacketService
 	AuthorizeFor   func(u *user.User) func(area *message.MessageArea) bool
+	// Guard, when non-nil, applies the BBS's IP blocklist to every request and
+	// its per-IP failed-login lockout to logins.
+	Guard LoginGuard
 }
 
 // Server is the QWK packet transport API.
@@ -51,6 +54,7 @@ type Server struct {
 	tokens      *tokenStore
 	loginLimit  *limiter
 	packetLimit *limiter
+	handleLocks *handleLockouts
 	cert        tls.Certificate
 	fingerprint string
 	httpSrv     *http.Server
@@ -75,6 +79,7 @@ func NewServer(deps Deps) (*Server, error) {
 		tokens:      newTokenStore(deps.Config.TokenTTL()),
 		loginLimit:  newLimiter(5, time.Minute),
 		packetLimit: newLimiter(30, time.Minute),
+		handleLocks: newHandleLockouts(handleMaxFailures, handleLockout),
 		cert:        cert,
 		fingerprint: fp,
 		done:        make(chan struct{}),
@@ -84,9 +89,9 @@ func NewServer(deps Deps) (*Server, error) {
 // Handler builds the routed, middleware-wrapped handler.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/qwk/login", requireClient(s.handleLogin))
-	mux.HandleFunc("/api/qwk/packet", requireClient(s.tokens.requireBearer(s.handlePacket)))
-	mux.HandleFunc("/api/qwk/reply", requireClient(s.tokens.requireBearer(s.handleReply)))
+	mux.HandleFunc("/api/qwk/login", s.rejectBlocked(requireClient(s.handleLogin)))
+	mux.HandleFunc("/api/qwk/packet", s.rejectBlocked(requireClient(s.tokens.requireBearer(s.handlePacket))))
+	mux.HandleFunc("/api/qwk/reply", s.rejectBlocked(requireClient(s.tokens.requireBearer(s.handleReply))))
 	// Catch-all so requests to unknown paths are visible too; without it the
 	// mux's own 404 would leave scanner traffic entirely unrecorded.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -146,8 +151,9 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// sweepLoop periodically prunes expired tokens and elapsed rate-limit windows
-// until the server is shut down, bounding the in-memory maps.
+// sweepLoop periodically prunes expired tokens, elapsed rate-limit windows and
+// stale handle lockouts until the server is shut down, bounding the in-memory
+// maps.
 func (s *Server) sweepLoop() {
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
@@ -159,6 +165,7 @@ func (s *Server) sweepLoop() {
 			s.tokens.sweep()
 			s.loginLimit.sweep()
 			s.packetLimit.sweep()
+			s.handleLocks.sweep()
 		}
 	}
 }

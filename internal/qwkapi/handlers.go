@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwkservice"
 )
 
@@ -26,6 +28,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "too many login attempts")
 		return
 	}
+	if s.deps.Guard != nil {
+		if locked, until, _ := s.deps.Guard.IsIPLockedOut(ip); locked {
+			logging.Security("qwk api login from locked IP", "remote", ip, "locked_until", until.Format(time.RFC3339))
+			writeLockedOut(w, until, "too many failed logins from this address")
+			return
+		}
+	}
 	var req loginRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
 		// The handle is not logged here: on a decode failure it may be absent,
@@ -34,12 +43,30 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
 		return
 	}
+	// A locked handle is refused before the password is checked, so a correct
+	// guess during the lockout does not get through.
+	if until, locked := s.handleLocks.lockedUntil(req.Handle); locked {
+		logging.Security("qwk api login for locked handle", "handle", req.Handle, "remote", ip, "locked_until", until.Format(time.RFC3339))
+		writeLockedOut(w, until, "too many failed logins for this account")
+		return
+	}
 	u, ok := s.deps.Users.Authenticate(req.Handle, req.Password)
 	if !ok {
 		slog.Info("qwk api login", "handle", req.Handle, "remote", ip, "outcome", "fail")
+		if s.deps.Guard != nil {
+			// The guard logs the lockout itself when this trips it.
+			s.deps.Guard.RecordFailedLoginAttempt(ip)
+		}
+		if s.handleLocks.fail(req.Handle) {
+			logging.Security("qwk api handle locked out after failed logins", "handle", req.Handle, "remote", ip, "minutes", int(handleLockout/time.Minute))
+		}
 		writeError(w, http.StatusUnauthorized, "unauthorized", "invalid credentials")
 		return
 	}
+	if s.deps.Guard != nil {
+		s.deps.Guard.ClearFailedLoginAttempts(ip)
+	}
+	s.handleLocks.clear(req.Handle)
 	tok, exp, err := s.tokens.Issue(u)
 	if err != nil {
 		slog.Error("qwk api login: token issue failed", "handle", u.Handle, "remote", ip, "error", err)

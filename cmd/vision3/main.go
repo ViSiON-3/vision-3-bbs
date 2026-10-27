@@ -577,6 +577,18 @@ func (ct *ConnectionTracker) IsAllowlisted(ip string) bool {
 	return ct.allowlist != nil && ct.allowlist.Contains(ip)
 }
 
+// IsBlocked reports whether ip is on the blocklist and not allowlisted — the
+// same verdict the accept-time check gives, for listeners (the QWK API) that
+// don't go through TryAccept.
+func (ct *ConnectionTracker) IsBlocked(ip string) bool {
+	ct.mu.Lock()
+	defer ct.mu.Unlock()
+	if ct.isAllowlistedLocked(ip) {
+		return false
+	}
+	return ct.blocklist != nil && ct.blocklist.Contains(ip)
+}
+
 // RecordFailedLoginAttempt records a failed login attempt from an IP address.
 // Returns true if the IP was just locked out.
 func (ct *ConnectionTracker) RecordFailedLoginAttempt(ip string) bool {
@@ -2251,6 +2263,7 @@ func main() {
 			Users:        userMgr,
 			Service:      qwkSvc,
 			AuthorizeFor: menu.QWKWriteAuthorizer,
+			Guard:        connectionTracker,
 			TwitMatcherFor: func(u *user.User) *user.TwitMatcher {
 				// Tokens retain a login snapshot; use the latest saved list.
 				if current, ok := userMgr.GetUserByID(u.ID); ok {

@@ -59,6 +59,20 @@ re-authenticate on their next request). This is expected for a packet API.
 - **All traffic is HTTPS.** Users authenticate with their normal BBS
   handle/password and receive a time-limited bearer token — the same "authenticate
   once, then a session carries you" model as an SSH login.
+- **The BBS's login protections cover the API too.** An IP on the
+  `ipBlocklistPath` blocklist gets `403` on every endpoint (the allowlist still
+  exempts an address, as it does for telnet/SSH). Failed API logins count toward
+  the same per-IP `maxFailedLogins` / `lockoutMinutes` lockout as the terminal
+  login prompt, so guesses can't be split between the two to dodge it — and an
+  IP that trips it is added to the blocklist just as it would be from telnet.
+  See [IP Blocklist/Allowlist Files](configuration/configuration.md#ip-blocklistallowlist-files).
+- **Each handle also locks after 10 failed API logins** within 15 minutes, for
+  15 minutes, whichever IPs the attempts came from — this is what stops
+  guessing spread across many addresses. While locked, even the correct
+  password is refused. The lock only applies to the API, so someone who
+  deliberately locks another user's handle pauses that user's mobile sync but
+  does not keep them off the BBS. Handles are counted whether or not the
+  account exists, so a lockout doesn't reveal which handles are real.
 - **Per-area write ACS still applies** on upload, exactly as in the terminal path.
 - **The caller's Twit List still applies** on download. A packet built by the
   API leaves out the same authors the terminal would, using the list as last
@@ -83,13 +97,14 @@ also send `Authorization: Bearer <token>`.
 
 | Method | Path | Body → Response |
 |--------|------|-----------------|
-| `POST` | `/api/qwk/login` | `{handle, password}` → `{token, expiresAt}` (`401` on bad credentials) |
+| `POST` | `/api/qwk/login` | `{handle, password}` → `{token, expiresAt}` (`401` on bad credentials, `429` with `error: "locked_out"` while the IP or handle is locked out) |
 | `GET` | `/api/qwk/packet` | → `.QWK` bytes (`application/zip`) with `X-QWK-Messages` count, or `204` when there is no new mail |
 | `POST` | `/api/qwk/reply` | `.REP` bytes (`application/zip`, max 16 MiB) → `{posted, skipped, duplicate, wrongBBS}` |
 
 Errors are JSON: `{"error": "<code>", "message": "<text>"}`. Rate limits apply
 (login per client IP, packet/reply per user); exceeding them returns `429` with a
-`Retry-After` header.
+`Retry-After` header. A lockout also answers `429`, with `Retry-After` set to the
+seconds left on it. A request from a blocklisted IP gets `403` on any endpoint.
 
 ### What gets logged
 
@@ -106,6 +121,9 @@ API activity.
 | INFO | `QWK API listening` | Startup: listen address and TLS cert fingerprint. |
 | INFO | `qwk api login` | `outcome=success` / `outcome=fail`, with `handle` and `remote`. A malformed body logs `outcome=badRequest` with `remote` and `error` but **no** `handle` — on a decode failure that field may be partial or hold the password. |
 | WARN | `qwk api login` | `outcome=rateLimited` — too many login attempts from one IP. |
+| WARN | `qwk api login from locked IP` | A login refused because its IP is in the per-IP lockout, with `remote` and `locked_until`. |
+| WARN | `qwk api login for locked handle` | A login refused because the handle is locked, with `handle`, `remote`, and `locked_until`. |
+| WARN | `qwk api handle locked out after failed logins` | A handle just reached the failure limit, with `handle`, `remote`, and `minutes`. |
 | ERROR | `qwk api login: token issue failed` | The server could not mint a token. |
 | INFO | `qwk api auth` | `outcome=noToken` / `outcome=badToken` — a request with a missing, invalid, or expired bearer token. |
 | INFO | `qwk api packet` | A download, with `messages` count (including the `0`/`204` case), or `outcome=rateLimited`. |
@@ -113,10 +131,14 @@ API activity.
 | WARN | `qwk api reply` | `outcome=tooLarge` — an upload over the 16 MiB cap. |
 | ERROR | `qwk api build packet` / `qwk api import rep` | A packet failed to build or import. |
 | WARN | `qwk api server` | Connection-level trouble from Go's HTTP server, e.g. `http: TLS handshake error from ...`. |
-| DEBUG | `qwk api rejected` | A request turned away without doing any work: `reason=noClientHeader`, `browser`, `htmlAccept`, `unknownPath`, `badMethod`, or `pathRedirect`. Each carries `remote`, `method`, `path`, and `agent`. |
+| DEBUG | `qwk api rejected` | A request turned away without doing any work: `reason=noClientHeader`, `browser`, `htmlAccept`, `unknownPath`, `badMethod`, `pathRedirect`, or `blocked` (a blocklisted IP). Each carries `remote`, `method`, `path`, and `agent`. |
 
-Failed logins, bad tokens, oversized uploads, and rate-limit trips are all
-recorded at INFO or WARN, so they are visible with the default log level.
+Failed logins, bad tokens, oversized uploads, lockouts, and rate-limit trips are
+all recorded at INFO or WARN, so they are visible with the default log level.
+The lockout records carry `category=security`. A failed API login also produces
+the BBS's usual `failed login attempt` / `IP locked out after failed login
+attempts` records from the shared per-IP lockout; those don't start with
+`qwk api`.
 
 Rejected probes are the exception: an open port on the public internet collects
 constant scanner traffic (`/wp-login.php` and friends), and logging every one of
