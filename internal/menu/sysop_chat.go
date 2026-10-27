@@ -306,7 +306,7 @@ func (p *chatPane) backspace() {
 
 func (p *chatPane) putRune(r rune) {
 	w, ok := p.cellWidth(r)
-	if !ok {
+	if !ok || w > p.width() {
 		return
 	}
 	if p.cells+w > p.width() {
