@@ -2,5 +2,6 @@
     "yesNoHighlightColor": 31,
     "yesNoRegularColor": 13,
     "chatSysopColor": 11,
-    "chatUserColor": 10
+    "chatUserColor": 10,
+    "sysopChatScreen": "CHAT1"
 }

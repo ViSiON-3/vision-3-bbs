@@ -114,6 +114,41 @@ func TestCheckV3NetReportsInvalidLeafSettings(t *testing.T) {
 	}
 }
 
+func TestCheckChatScreensReportsBrokenScreens(t *testing.T) {
+	root := t.TempDir()
+	menus := filepath.Join(root, "menus", "v3")
+	for _, sub := range []string{"cfg", "ansi"} {
+		if err := os.MkdirAll(filepath.Join(menus, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	good := `{"sysop":{"lines":[{"row":2,"from":1,"to":80}]},"caller":{"lines":[{"row":4,"from":1,"to":80}]}}`
+	writeDoctorFixture(t, filepath.Join(menus, "cfg", "GOOD.json"), good)
+	writeDoctorFixture(t, filepath.Join(menus, "ansi", "GOOD.ANS"), "art")
+	writeDoctorFixture(t, filepath.Join(menus, "cfg", "NOART.json"), good)
+	writeDoctorFixture(t, filepath.Join(menus, "cfg", "BAD.json"), `{"sysop":{"lines":[]}}`)
+	writeDoctorFixture(t, filepath.Join(menus, "ansi", "BAD.ANS"), "art")
+	writeDoctorFixture(t, filepath.Join(menus, "theme.json"), `{"sysopChatScreen":"GONE"}`)
+	var checks []doctorCheck
+	checkChatScreens(menus, func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	if !hasDoctorCheck(checks, "menus/v3/cfg/BAD.json", doctorFail, "sysop has no typing lines") {
+		t.Errorf("bad layout not reported: %#v", checks)
+	}
+	if !hasDoctorCheck(checks, "menus/v3/cfg/NOART.json", doctorFail, "NOART.ANS") {
+		t.Errorf("missing art not reported: %#v", checks)
+	}
+	if !hasDoctorCheck(checks, "theme.json", doctorWarn, `sysopChatScreen "GONE"`) {
+		t.Errorf("missing default screen not reported: %#v", checks)
+	}
+	for _, c := range checks {
+		if c.Name == "menus/v3/cfg/GOOD.json" {
+			t.Errorf("good screen reported: %#v", c)
+		}
+	}
+}
+
 func TestCheckMenuFilesReportsDanglingCommandReferences(t *testing.T) {
 	root := t.TempDir()
 	menus := filepath.Join(root, "menus", "v3")

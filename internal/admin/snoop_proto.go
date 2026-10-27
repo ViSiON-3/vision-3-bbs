@@ -25,6 +25,11 @@ type SnoopHeader struct {
 	Width      int    `json:"width"`
 	Height     int    `json:"height"`
 	Handle     string `json:"handle"`
+	// ChatScreen is the chat screen the board opens by default, empty for
+	// the built-in layout; ChatScreens lists the screens the menu set
+	// defines, so the console can offer them. Missing from an older daemon.
+	ChatScreen  string   `json:"chatScreen,omitempty"`
+	ChatScreens []string `json:"chatScreens,omitempty"`
 }
 
 // SnoopTarget resolves a request to the node's tap and header fields.

@@ -155,7 +155,9 @@ const (
 	CommandKick CommandType = "node.kick"
 	// CommandTypeIn turns sysop type-in on or off. Payload {"on": bool}.
 	CommandTypeIn CommandType = "node.typein"
-	// CommandChat starts or ends split-screen chat. Payload {"start": bool}.
+	// CommandChat starts or ends split-screen chat. Payload {"start": bool,
+	// "screen": string}; screen names the chat screen to open, "" for the
+	// board's default and "builtin" for the fixed layout.
 	CommandChat CommandType = "node.chat"
 )
 

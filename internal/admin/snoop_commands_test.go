@@ -49,7 +49,7 @@ func TestChatCommandWithoutHookIsUnsupported(t *testing.T) {
 }
 
 func TestChatCommandEmitsState(t *testing.T) {
-	srv := newTestServer(ServerConfig{Chat: func(string, int, time.Time, bool) (bool, error) { return true, nil }})
+	srv := newTestServer(ServerConfig{Chat: func(string, int, time.Time, bool, string) (bool, error) { return true, nil }})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ch := srv.Subscribe(ctx)
@@ -159,7 +159,7 @@ func TestClearPageClearsOutstandingPageOnce(t *testing.T) {
 }
 
 func TestChatStopEmitsNoState(t *testing.T) {
-	srv := newTestServer(ServerConfig{Chat: func(string, int, time.Time, bool) (bool, error) { return true, nil }})
+	srv := newTestServer(ServerConfig{Chat: func(string, int, time.Time, bool, string) (bool, error) { return true, nil }})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ch := srv.Subscribe(ctx)
@@ -174,7 +174,7 @@ func TestChatStopEmitsNoState(t *testing.T) {
 }
 
 func TestChatCommandOnRunningChatEmitsNothing(t *testing.T) {
-	srv := newTestServer(ServerConfig{Chat: func(string, int, time.Time, bool) (bool, error) { return false, nil }})
+	srv := newTestServer(ServerConfig{Chat: func(string, int, time.Time, bool, string) (bool, error) { return false, nil }})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ch := srv.Subscribe(ctx)

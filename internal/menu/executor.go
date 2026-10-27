@@ -135,7 +135,7 @@ func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners [
 	e.SetServerConfig(serverCfg)
 	e.SetLoginSequence(loginSequence)
 	e.SetProtocols(protocols)
-	SetSysopChatEnv(chatEnv{theme: e.Theme, strings: e.Strings, caller: e.chatCaller, ended: e.chatEnded, holdDropped: e.chatHoldDropped})
+	SetSysopChatEnv(chatEnv{theme: e.Theme, strings: e.Strings, menus: e.Menus, caller: e.chatCaller, ended: e.chatEnded, holdDropped: e.chatHoldDropped})
 	return e
 }
 

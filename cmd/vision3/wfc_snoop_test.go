@@ -24,7 +24,7 @@ func regWithNode(start time.Time) (*session.SessionRegistry, *session.BbsSession
 func TestSnoopTargetRefusesReusedNode(t *testing.T) {
 	start := time.Unix(100, 0)
 	reg, _ := regWithNode(start)
-	_, _, err := snoopTarget(reg)(admin.SnoopRequest{NodeID: 4, ConnectedAt: start.Add(time.Second)})
+	_, _, err := snoopTarget(reg, nil)(admin.SnoopRequest{NodeID: 4, ConnectedAt: start.Add(time.Second)})
 	if err == nil || !strings.Contains(err.Error(), "different caller") {
 		t.Fatalf("err = %v", err)
 	}
@@ -34,7 +34,7 @@ func TestSnoopTargetHeader(t *testing.T) {
 	start := time.Unix(100, 0)
 	reg, bs := regWithNode(start)
 	bs.Tap.SetCP437(true)
-	tap, hdr, err := snoopTarget(reg)(admin.SnoopRequest{NodeID: 4, ConnectedAt: start})
+	tap, hdr, err := snoopTarget(reg, nil)(admin.SnoopRequest{NodeID: 4, ConnectedAt: start})
 	if err != nil || tap != bs.Tap {
 		t.Fatalf("tap %p err %v", tap, err)
 	}
@@ -49,7 +49,7 @@ func TestSnoopTargetHeaderUsesLiveSize(t *testing.T) {
 	w, h := 80, 25
 	bs.Size = func() (int, int) { return w, h }
 	w, h = 132, 50 // the caller resized after login
-	_, hdr, err := snoopTarget(reg)(admin.SnoopRequest{NodeID: 4, ConnectedAt: start})
+	_, hdr, err := snoopTarget(reg, nil)(admin.SnoopRequest{NodeID: 4, ConnectedAt: start})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestChatHookRefusedInDoor(t *testing.T) {
 	reg, bs := regWithNode(start)
 	bs.Tap.AttachAs("jim")
 	bs.Tap.SetMode(snoop.ModeDoor)
-	_, err := chatHook(reg)("jim", 4, start, true)
+	_, err := chatHook(reg)("jim", 4, start, true, "")
 	if err == nil || !strings.Contains(err.Error(), "door") {
 		t.Fatalf("err = %v", err)
 	}

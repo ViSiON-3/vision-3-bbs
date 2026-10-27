@@ -40,8 +40,12 @@ func (f *fakeCtl) TypeIn(on bool) error {
 	return nil
 }
 
-func (f *fakeCtl) Chat(on bool) error {
-	f.rec(map[bool]string{true: "chat+", false: "chat-"}[on])
+func (f *fakeCtl) Chat(on bool, screen string) error {
+	call := map[bool]string{true: "chat+", false: "chat-"}[on]
+	if screen != "" {
+		call += ":" + screen
+	}
+	f.rec(call)
 	return f.chatErr
 }
 
@@ -226,6 +230,48 @@ func TestSnoopChatToggleAndRelease(t *testing.T) {
 	r.wait(t)
 	if c := r.ctl.got(); c != "chat+,chat-,chat+,chat-" {
 		t.Fatalf("calls %s", c)
+	}
+}
+
+// Alt-S cycles the chat screen: the board's default (CHAT1, sent as ""),
+// the built-in layout, then the other screens, and the choice goes with the
+// next chat start.
+func TestSnoopScreenCyclesAndGoesWithChat(t *testing.T) {
+	hdr := utf8Hdr
+	hdr.ChatScreen = "CHAT1"
+	hdr.ChatScreens = []string{"CHAT1", "CHAT2"}
+	r := newRig(t, hdr, 100, 30)
+	r.send(t, "\x1bs")
+	r.out.waitFor(t, "screen builtin")
+	r.send(t, "\x1bc")
+	r.send(t, "\x1bc")
+	r.send(t, "\x1bs")
+	r.out.waitFor(t, "screen CHAT2")
+	r.send(t, "\x1bc")
+	r.send(t, "\x1bs")
+	r.out.waitFor(t, "applies to the next chat")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	if c := r.ctl.got(); c != "chat+:builtin,chat-,chat+:CHAT2,chat-" {
+		t.Fatalf("calls %s", c)
+	}
+	if !strings.Contains(r.out.String(), "Alt-S screen") {
+		t.Fatal("status bar does not mention Alt-S")
+	}
+}
+
+func TestSnoopScreenWithoutScreensIsRefused(t *testing.T) {
+	r := newRig(t, utf8Hdr, 100, 30)
+	r.send(t, "\x1bs")
+	r.out.waitFor(t, "no chat screens")
+	r.send(t, "\x1bc")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	if c := r.ctl.got(); c != "chat+,chat-" {
+		t.Fatalf("calls %s", c)
+	}
+	if strings.Contains(r.out.String(), "Alt-S screen") {
+		t.Fatal("status bar offers Alt-S with nothing to choose")
 	}
 }
 

@@ -296,15 +296,21 @@ func TestRPCControlSendsCommands(t *testing.T) {
 	if err := ctl.TypeIn(true); err != nil {
 		t.Fatal(err)
 	}
-	if err := ctl.Chat(false); err != nil {
+	if err := ctl.Chat(false, ""); err != nil {
 		t.Fatal(err)
 	}
-	if len(fc.execs) != 2 {
+	if err := ctl.Chat(true, "CHAT2"); err != nil {
+		t.Fatal(err)
+	}
+	if len(fc.execs) != 3 {
 		t.Fatalf("execs %+v", fc.execs)
 	}
 	e := fc.execs[0]
 	if e.Command != admin.CommandTypeIn || e.NodeID != 3 || !e.ConnectedAt.Equal(at) || e.Payload["on"] != true {
 		t.Fatalf("typein %+v", e)
+	}
+	if e := fc.execs[2]; e.Command != admin.CommandChat || e.Payload["start"] != true || e.Payload["screen"] != "CHAT2" {
+		t.Fatalf("chat start %+v", e)
 	}
 	e = fc.execs[1]
 	if e.Command != admin.CommandChat || e.Payload["start"] != false {

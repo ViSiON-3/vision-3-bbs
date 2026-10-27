@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 )
@@ -26,6 +28,9 @@ import (
 type chatEnv struct {
 	theme   func() *config.ThemeConfig
 	strings func() *config.StringsConfig
+	// menus is the menu set the chat screens are read from. Nil means only
+	// the built-in layout is available.
+	menus func() menuset.Set
 	// caller returns the logged-in handle and saved screen size of the
 	// session carrying tap; zero values when unknown.
 	caller func(*snoop.Tap) (handle string, width, height int)
@@ -42,19 +47,28 @@ var sysopChat atomic.Pointer[chatEnv]
 // SetSysopChatEnv installs the chat environment.
 func SetSysopChatEnv(env chatEnv) { sysopChat.Store(&env) }
 
-// chatPane is one half of the split screen: rows first..last (1-based).
+// chatPane is one party's typing area: the segments of the screen they type
+// on, in order. The text scrolls up through the segments when the last one
+// is full. They need not line up or be the same width, so scrolling is done
+// here, segment by segment, rather than by a terminal scroll region.
 type chatPane struct {
-	w           io.Writer
-	mode        ansi.OutputMode // the caller's terminal encoding
-	first, last int
-	width       int
-	row, col    int
-	color       int
-	line        []rune // text on the cursor row
-	cells       int    // display cells taken by line; col is cells+1
-	pending     []byte // start of a UTF-8 sequence split across writes
-	esc         int    // escape sequence being skipped, see the esc* constants
-	afterCR     bool   // an LF or NUL straight after CR is part of the same newline
+	w     io.Writer
+	mode  ansi.OutputMode // the caller's terminal encoding
+	segs  []chatSegment
+	color int
+	cur   int      // the segment holding the cursor
+	line  []rune   // text on the cursor segment
+	cells int      // display cells taken by line; the cursor is cells past the segment start
+	shown [][]rune // text on every segment, kept for scrolling
+	// pending is the start of a UTF-8 sequence split across writes; esc the
+	// escape sequence being skipped, see the esc* constants.
+	pending []byte
+	esc     int
+	afterCR bool // an LF or NUL straight after CR is part of the same newline
+}
+
+func newChatPane(w io.Writer, mode ansi.OutputMode, segs []chatSegment, color int) *chatPane {
+	return &chatPane{w: w, mode: mode, segs: segs, color: color, shown: make([][]rune, len(segs))}
 }
 
 // Escape states: after ESC, inside a CSI sequence, and after ESC O.
@@ -107,19 +121,48 @@ func (p *chatPane) skipEscape(c byte) bool {
 	}
 }
 
+func (p *chatPane) seg() chatSegment { return p.segs[p.cur] }
+
+// width is the cursor segment's width in cells.
+func (p *chatPane) width() int { return p.seg().width() }
+
 func (p *chatPane) moveTo() {
-	_, _ = fmt.Fprintf(p.w, "\x1b[%d;%dH%s", p.row, p.col, colorCodeToAnsi(p.color)) // best-effort display
+	s := p.seg()
+	_, _ = fmt.Fprintf(p.w, "\x1b[%d;%dH%s", s.Row, s.From+p.cells, colorCodeToAnsi(p.color)) // best-effort display
 }
 
+// newline moves to the next segment. On the last one the text scrolls up a
+// segment instead, and every segment is redrawn.
 func (p *chatPane) newline() {
-	p.col = 1
+	p.shown[p.cur] = append(p.shown[p.cur][:0], p.line...)
 	p.line = p.line[:0]
 	p.cells = 0
-	if p.row < p.last {
-		p.row++
+	if p.cur < len(p.segs)-1 {
+		p.cur++
 		return
 	}
-	_, _ = fmt.Fprintf(p.w, "\x1b[%d;%dr\x1b[%d;1H\n\x1b[r", p.first, p.last, p.last) // best-effort display
+	copy(p.shown, p.shown[1:])
+	p.shown[len(p.shown)-1] = nil
+	for i := range p.segs {
+		p.redraw(i)
+	}
+}
+
+// redraw blanks segment i and writes its text back, cut to the segment so a
+// line that scrolled in from a wider segment cannot run into the art.
+func (p *chatPane) redraw(i int) {
+	s := p.segs[i]
+	_, _ = fmt.Fprintf(p.w, "\x1b[%d;%dH%s%s\x1b[%d;%dH", s.Row, s.From, colorCodeToAnsi(p.color), strings.Repeat(" ", s.width()), s.Row, s.From) // best-effort display
+	text, cells := p.shown[i], 0
+	for n, r := range text {
+		w, _ := p.cellWidth(r)
+		if cells+w > s.width() {
+			text = text[:n]
+			break
+		}
+		cells += w
+	}
+	p.emit(text...)
 }
 
 // cellWidth is the number of terminal columns r takes in the pane and
@@ -147,24 +190,30 @@ func (p *chatPane) emit(r ...rune) {
 	_ = terminalio.WriteProcessedBytes(p.w, []byte(string(r)), p.mode)
 }
 
+// cellsOf is the display width of text.
+func (p *chatPane) cellsOf(text []rune) int {
+	n := 0
+	for _, r := range text {
+		w, _ := p.cellWidth(r)
+		n += w
+	}
+	return n
+}
+
 // wrap starts a new line for a character that does not fit. The word being
 // typed moves down with it unless it fills the whole line.
 func (p *chatPane) wrap() {
 	var word []rune
-	wordCells := 0
 	for i := len(p.line) - 1; i >= 0; i-- {
 		if p.line[i] != ' ' {
 			continue
 		}
 		word = append(word, p.line[i+1:]...)
-		for _, r := range word {
-			w, _ := p.cellWidth(r)
-			wordCells += w
-		}
 		if len(word) > 0 {
-			p.col = 1 + p.cells - wordCells
+			p.line = p.line[:i+1]
+			p.cells -= p.cellsOf(word)
 			p.moveTo()
-			_, _ = io.WriteString(p.w, strings.Repeat(" ", wordCells))
+			_, _ = io.WriteString(p.w, strings.Repeat(" ", p.cellsOf(word)))
 		}
 		break
 	}
@@ -172,8 +221,7 @@ func (p *chatPane) wrap() {
 	p.moveTo()
 	p.emit(word...)
 	p.line = append(p.line, word...)
-	p.cells = wordCells
-	p.col = p.cells + 1
+	p.cells = p.cellsOf(word)
 }
 
 // put writes text at the pane's cursor, word-wrapping at the pane width. b is
@@ -228,9 +276,9 @@ func (p *chatPane) backspace() {
 	w, _ := p.cellWidth(p.line[len(p.line)-1])
 	p.line = p.line[:len(p.line)-1]
 	p.cells -= w
-	p.col -= w
 	// Position absolutely: after a full-width line the terminal cursor sits
-	// on the last column, not at col, so a relative BS lands one cell short.
+	// on the last column, one short of where cells says, so a relative BS
+	// lands one cell short.
 	p.moveTo()
 	_, _ = io.WriteString(p.w, strings.Repeat(" ", w))
 	p.moveTo()
@@ -241,14 +289,14 @@ func (p *chatPane) putRune(r rune) {
 	if !ok {
 		return
 	}
-	if p.cells+w > p.width {
+	if p.cells+w > p.width() {
 		if r == ' ' {
 			p.newline()
 			p.moveTo()
 			return
 		}
 		p.wrap()
-		if p.cells+w > p.width {
+		if p.cells+w > p.width() {
 			p.newline()
 			p.moveTo()
 		}
@@ -256,7 +304,6 @@ func (p *chatPane) putRune(r rune) {
 	p.emit(r)
 	p.line = append(p.line, r)
 	p.cells += w
-	p.col += w
 }
 
 type chatEventKind int
@@ -312,12 +359,56 @@ func drawChatClock(w io.Writer, row, width int) {
 	_, _ = fmt.Fprintf(w, "\x1b[%d;%dH\x1b[0;37m %s \x1b[0m", row, width-chatClockWidth+1, time.Now().Format("15:04")) // best-effort display
 }
 
-// runSysopChat draws the split screen and relays both sides until the caller
-// presses ESC twice, the sysop ends chat, or the caller disconnects. The
-// caller's keys are read on this goroutine. When chat ends normally the
-// caller's screen is redrawn from the tap's catch-up buffer; when the caller
-// has gone nothing more is written.
+// runSysopChat draws the built-in split screen and relays both sides; see
+// runSysopChatOn.
 func runSysopChat(ih *editor.InputHandler, tap *snoop.Tap, w io.Writer, mode ansi.OutputMode, width, height int, sysopHandle, callerHandle string) {
+	runSysopChatOn(ih, tap, w, mode, width, height, sysopHandle, callerHandle, nil)
+}
+
+// chatStatus draws a chat screen's fields: the names, time, date and the
+// minutes since chat began. It is redrawn every minute.
+type chatStatus struct {
+	w           io.Writer
+	mode        ansi.OutputMode
+	sc          *chatLayout
+	sysop, user string
+	began       time.Time
+}
+
+func (c *chatStatus) draw() {
+	color := c.sc.StatusColor
+	if color == 0 {
+		color = 7
+	}
+	now := time.Now()
+	for _, f := range []struct {
+		field *chatField
+		value string
+	}{
+		{c.sc.Fields.SysopName, c.sysop},
+		{c.sc.Fields.CallerName, c.user},
+		{c.sc.Fields.Time, now.Format("15:04")},
+		{c.sc.Fields.Date, now.Format("01/02/06")},
+		{c.sc.Fields.Elapsed, strconv.Itoa(int(now.Sub(c.began).Minutes()))},
+	} {
+		if f.field == nil {
+			continue
+		}
+		value := []byte(f.value)
+		if f.field.Width > 0 {
+			value = chatArtPad(f.value, f.field.Width)
+		}
+		_, _ = fmt.Fprintf(c.w, "\x1b[%d;%dH%s", f.field.Row, f.field.Col, colorCodeToAnsi(color)) // best-effort display
+		_ = terminalio.WriteProcessedBytes(c.w, value, c.mode)
+	}
+}
+
+// runSysopChatOn draws chat screen sc, or the built-in split screen when sc
+// is nil, and relays both sides until the caller presses ESC twice, the sysop
+// ends chat, or the caller disconnects. The caller's keys are read on this
+// goroutine. When chat ends normally the caller's screen is redrawn from the
+// tap's catch-up buffer; when the caller has gone nothing more is written.
+func runSysopChatOn(ih *editor.InputHandler, tap *snoop.Tap, w io.Writer, mode ansi.OutputMode, width, height int, sysopHandle, callerHandle string, sc *chatLayout) {
 	env := sysopChat.Load()
 	if env == nil {
 		return
@@ -326,17 +417,39 @@ func runSysopChat(ih *editor.InputHandler, tap *snoop.Tap, w io.Writer, mode ans
 	height = max(height, 5)
 	width = max(width, 20)
 	th, st := env.theme(), env.strings()
-	top := (height - 1) / 2
-	sysop := &chatPane{w: w, mode: mode, first: 1, last: top, width: width, row: 1, col: 1, color: th.ChatSysopColor}
-	caller := &chatPane{w: w, mode: mode, first: top + 2, last: height, width: width, row: top + 2, col: 1, color: th.ChatUserColor}
-
-	bar := ansi.ReplacePipeCodes([]byte(fmt.Sprintf(st.SysopChatHeader, sysopHandle, callerHandle)))
-	_, _ = fmt.Fprintf(w, "\x1b[0m\x1b[2J\x1b[%d;1H", top+1) // best-effort display
-	_ = terminalio.WriteProcessedBytes(w, bar, mode)
-	if fill := width - chatClockWidth - ansi.VisibleLength(string(bar)); fill > 0 {
-		_ = terminalio.WriteProcessedBytes(w, []byte("\x1b[0;37m"+strings.Repeat("\xc4", fill)), mode)
+	if sc == nil || sc.art == nil {
+		sc = builtinChatLayout(width, height)
 	}
-	drawChatClock(w, top+1, width)
+	sysopColor, callerColor := sc.Sysop.Color, sc.Caller.Color
+	if sysopColor == 0 {
+		sysopColor = th.ChatSysopColor
+	}
+	if callerColor == 0 {
+		callerColor = th.ChatUserColor
+	}
+	sysop := newChatPane(w, mode, sc.Sysop.Lines, sysopColor)
+	caller := newChatPane(w, mode, sc.Caller.Lines, callerColor)
+	status := &chatStatus{w: w, mode: mode, sc: sc, sysop: sysopHandle, user: callerHandle, began: time.Now()}
+
+	// refresh redraws what changes with the clock.
+	var refresh func()
+	if sc.art == nil {
+		top := sc.dividerRow()
+		bar := ansi.ReplacePipeCodes([]byte(fmt.Sprintf(st.SysopChatHeader, sysopHandle, callerHandle)))
+		_, _ = fmt.Fprintf(w, "\x1b[0m\x1b[2J\x1b[%d;1H", top) // best-effort display
+		_ = terminalio.WriteProcessedBytes(w, bar, mode)
+		if fill := width - chatClockWidth - ansi.VisibleLength(string(bar)); fill > 0 {
+			_ = terminalio.WriteProcessedBytes(w, []byte("\x1b[0;37m"+strings.Repeat("\xc4", fill)), mode)
+		}
+		refresh = func() { drawChatClock(w, top, width) }
+	} else {
+		text := func(v string) func(int) string { return func(int) string { return v } }
+		art := chatArtFill(sc.art, map[string]func(int) string{"SYSOP": text(sysopHandle), "CALLER": text(callerHandle)})
+		_, _ = fmt.Fprint(w, "\x1b[0m\x1b[2J\x1b[H") // best-effort display
+		_ = terminalio.WriteProcessedBytes(w, ansi.FitArtToWidth(art, width, true), mode)
+		refresh = status.draw
+	}
+	refresh()
 
 	events := make(chan chatEvent)
 	stop := make(chan struct{})
@@ -375,7 +488,7 @@ loop:
 			case chatCallerGone:
 				return
 			case chatMinute:
-				drawChatClock(w, top+1, width)
+				refresh()
 				caller.moveTo()
 				continue
 			}
@@ -452,9 +565,10 @@ func serviceSysopChat(s ssh.Session, ih *editor.InputHandler, tap *snoop.Tap) {
 		height = 25
 	}
 	sysop := tap.KeyboardHolder()
+	sc := chooseChatLayout(env, tap.ChatScreen(), width, height)
 	start := time.Now()
-	slog.Info("sysop chat started", "caller", handle, "sysop", sysop)
-	runSysopChat(ih, tap, v.(io.Writer), sessionOutputMode(s), width, height, sysop, handle)
+	slog.Info("sysop chat started", "caller", handle, "sysop", sysop, "screen", sc.name)
+	runSysopChatOn(ih, tap, v.(io.Writer), sessionOutputMode(s), width, height, sysop, handle, sc)
 	took := time.Since(start)
 	addChatCredit(s, took)
 	slog.Info("sysop chat ended", "caller", handle, "sysop", sysop, "duration", took.Round(time.Second))

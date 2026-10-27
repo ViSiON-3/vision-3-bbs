@@ -42,13 +42,20 @@ func nodeTap(reg *session.SessionRegistry, nodeID int, connectedAt time.Time) (*
 	return s, tap, nil
 }
 
-func snoopTarget(reg *session.SessionRegistry) admin.SnoopTarget {
+// chatScreens reports the board's default chat screen and the screens its
+// menu set defines, for the snoop header. Nil means none are reported.
+type chatScreens func() (defaultScreen string, names []string)
+
+func snoopTarget(reg *session.SessionRegistry, screens chatScreens) admin.SnoopTarget {
 	return func(req admin.SnoopRequest) (*snoop.Tap, admin.SnoopHeader, error) {
 		s, tap, err := nodeTap(reg, req.NodeID, req.ConnectedAt)
 		if err != nil {
 			return nil, admin.SnoopHeader{}, err
 		}
 		hdr := admin.SnoopHeader{OutputMode: "utf8"}
+		if screens != nil {
+			hdr.ChatScreen, hdr.ChatScreens = screens()
+		}
 		hdr.Width, hdr.Height = s.TermSize()
 		s.Mutex.RLock()
 		if s.User != nil {
@@ -94,8 +101,8 @@ func typeInHook(reg *session.SessionRegistry) func(string, int, time.Time, bool)
 	}
 }
 
-func chatHook(reg *session.SessionRegistry) func(string, int, time.Time, bool) (bool, error) {
-	return func(sysop string, nodeID int, connectedAt time.Time, start bool) (bool, error) {
+func chatHook(reg *session.SessionRegistry) func(string, int, time.Time, bool, string) (bool, error) {
+	return func(sysop string, nodeID int, connectedAt time.Time, start bool, screen string) (bool, error) {
 		s, tap, err := nodeTap(reg, nodeID, connectedAt)
 		if err != nil {
 			return false, err
@@ -107,14 +114,14 @@ func chatHook(reg *session.SessionRegistry) func(string, int, time.Time, bool) (
 			slog.Info("wfc-snoop: chat end requested", "sysop", sysop, "node", nodeID)
 			return false, nil
 		}
-		started, err := tap.RequestChat(sysop, chatStartWait)
+		started, err := tap.RequestChatOn(sysop, screen, chatStartWait)
 		if err != nil {
 			return false, err
 		}
 		if !started {
 			return false, nil
 		}
-		slog.Info("wfc-snoop: chat requested", "sysop", sysop, "node", nodeID)
+		slog.Info("wfc-snoop: chat requested", "sysop", sysop, "node", nodeID, "screen", screen)
 		if adminServer != nil {
 			var handle string
 			s.Mutex.RLock()
@@ -180,7 +187,7 @@ func wfcSnoopSubsystem(sess ssh.Session) {
 		<-watchDone
 	}()
 	audit := func(msg string, args ...any) { slog.Info("wfc-snoop: "+msg, args...) }
-	if err := admin.ServeSnoop(sess, handle, snoopTarget(sessionRegistry), audit); err != nil {
+	if err := admin.ServeSnoop(sess, handle, snoopTarget(sessionRegistry, boardChatScreens), audit); err != nil {
 		slog.Info("wfc-snoop: channel closed", "user", handle, "reason", err)
 	}
 }

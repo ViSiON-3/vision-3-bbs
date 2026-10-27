@@ -1711,7 +1711,12 @@ func main() {
 	flag.BoolVar(&doctorJSON, "json", false, "Write doctor output as JSON")
 	flag.BoolVar(&doctorFix, "fix", false, "Apply safe doctor repairs (requires --doctor)")
 	flag.BoolVar(&doctorDryRun, "dry-run", false, "Preview safe doctor repairs without applying them (requires --fix)")
+	var convertChatNfo string
+	flag.StringVar(&convertChatNfo, "convert-chatnfo", "", "Convert a Vision/2 CHATNFO.n chat layout to chat screen JSON on stdout and exit")
 	flag.Parse()
+	if convertChatNfo != "" {
+		os.Exit(runConvertChatNfo(convertChatNfo, os.Stdout, os.Stderr))
+	}
 	if (doctorFix || doctorDryRun) && !doctorMode {
 		fmt.Fprintln(os.Stderr, "vision3: --fix and --dry-run require --doctor")
 		os.Exit(2)
@@ -1978,7 +1983,7 @@ func main() {
 		ChatCredit: chatCreditHook(sessionRegistry),
 		TypeIn:     typeInHook(sessionRegistry),
 		Chat:       chatHook(sessionRegistry),
-		Snoop:      snoopTarget(sessionRegistry),
+		Snoop:      snoopTarget(sessionRegistry, boardChatScreens),
 	})
 	menuExecutor.Pager = adminServer
 	go adminServer.Run(context.Background())

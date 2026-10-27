@@ -324,6 +324,7 @@ toggles it.
 | `Alt-H` | Show or hide the status bar |
 | `Alt-T` | Type for the caller (see below) |
 | `Alt-C` | Start or end chat (see below) |
+| `Alt-S` | Choose the chat screen for the next chat (see [Chat screens](#chat-screens)) |
 
 If the caller disconnects, `wfc` returns to the dashboard with
 `node N disconnected`. The status bar follows your terminal size: it shows when
@@ -354,12 +355,16 @@ never records the keystrokes.
 
 ### Chat
 
-`Alt-C` toggles chat. It opens the classic split screen on the caller's
-terminal: your text on top, the caller's below, and a bar between them with
-both handles and the time (`HH:MM`). Each pane word-wraps and scrolls on its
-own. Pane colors come from `chatSysopColor` and `chatUserColor` in
-[`theme.json`](menus/menu-system.md#theme-themejson), so a board can match
-the chat to its menu set.
+`Alt-C` toggles chat. It opens a split screen on the caller's terminal with
+your text in one area and the caller's in another. Each area word-wraps and
+scrolls on its own. The shipped menu set opens the `CHAT1` screen: a framed
+box for each side under a title row with the time and date, and the minutes
+in chat at the bottom. With no screen configured the built-in layout is used:
+your text on top, the caller's below, and a bar between them with both
+handles and the time (`HH:MM`). Text colors come from the screen, or from
+`chatSysopColor` and `chatUserColor` in
+[`theme.json`](menus/menu-system.md#theme-themejson) where the screen leaves
+them out. See [Chat screens](#chat-screens) for designing your own.
 
 Chat works only while the caller is in the BBS: menus, prompts, the message
 reader, the editor. It is refused while they are in a door, a file transfer or
@@ -383,6 +388,27 @@ rather than landing on the caller's prompt. The snoop screen still shows
 `CHAT` until you press `Alt-C`, which returns you to watching with "chat ended
 by caller" in the status bar. The event log shows "Chat with <sysop> started"
 and "Chat ended" for each chat.
+
+### Chat screens
+
+A chat screen is ANSI art for the background plus a layout saying where each
+side types and where the names, time, date and elapsed minutes go, as
+ViSiON/2's `CHAT.n` and `CHATNFO.n` did. They live in the menu set, so a board
+can have several; the format is in
+[Chat screens](menus/menu-system.md#chat-screens).
+
+`sysopChatScreen` in `theme.json` names the screen `Alt-C` opens; the shipped
+set's is `CHAT1`. `Alt-S` on the snoop screen cycles through the others for
+the next chat: the board's default, then the built-in layout, then every other
+screen in the set by name. The status bar shows `screen NAME` while a choice
+other than the default is selected, and the choice goes with the next `Alt-C`
+or answered page. Pressing `Alt-S` during a chat changes only the next one. A
+daemon older than the console reports no screens, and `Alt-S` says so.
+
+A screen is drawn for a terminal size (80x25 unless its layout says
+otherwise). A caller whose terminal is smaller gets the built-in layout
+instead, as does one whose screen fails to load; the daemon log says why,
+and `vision3 doctor` reports a screen that cannot load.
 
 ### Pages
 
@@ -468,7 +494,7 @@ reported plainly instead of turning into a retry loop.
 | `R` | Refresh now (not shown on the bar); retry the connection now when offline |
 | `Q` / `Ctrl+C` | Quit |
 
-On the snoop screen: `Alt-X` dashboard, `Alt-T` type-in, `Alt-C` chat, `Alt-H` status bar.
+On the snoop screen: `Alt-X` dashboard, `Alt-T` type-in, `Alt-C` chat, `Alt-S` chat screen, `Alt-H` status bar.
 
 ## Troubleshooting
 

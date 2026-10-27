@@ -50,8 +50,9 @@ type ServerConfig struct {
 	// TypeIn turns sysop type-in on or off for the caller on nodeID whose
 	// session started at connectedAt. Nil means unsupported.
 	TypeIn func(sysop string, nodeID int, connectedAt time.Time, on bool) error
-	// Chat starts or ends split-screen chat. Nil means unsupported.
-	Chat func(sysop string, nodeID int, connectedAt time.Time, start bool) (started bool, err error)
+	// Chat starts or ends split-screen chat. screen names the chat screen
+	// to open, empty for the board's default. Nil means unsupported.
+	Chat func(sysop string, nodeID int, connectedAt time.Time, start bool, screen string) (started bool, err error)
 	// Snoop resolves wfc-snoop requests; used by the in-process client.
 	Snoop SnoopTarget
 }
@@ -261,6 +262,14 @@ func payloadBool(p map[string]any, key string) bool {
 	return v
 }
 
+func payloadString(p map[string]any, key string) string {
+	if p == nil {
+		return ""
+	}
+	v, _ := p[key].(string)
+	return v
+}
+
 // ExecuteAs runs an admin command on behalf of sysop.
 func (s *Server) ExecuteAs(sysop string, cmd AdminCommand) (*Result, error) {
 	switch cmd.Command {
@@ -305,7 +314,7 @@ func (s *Server) ExecuteAs(sysop string, cmd AdminCommand) (*Result, error) {
 			return nil, errNoSysop
 		}
 		start := payloadBool(cmd.Payload, "start")
-		started, err := s.cfg.Chat(sysop, cmd.NodeID, cmd.ConnectedAt, start)
+		started, err := s.cfg.Chat(sysop, cmd.NodeID, cmd.ConnectedAt, start, payloadString(cmd.Payload, "screen"))
 		if err != nil {
 			return nil, err
 		}

@@ -18,7 +18,7 @@ func readOnlyRPC(t *testing.T, ro *atomic.Bool) (*StreamClient, *atomic.Int32) {
 		Reg: &fakeRegistry{}, Refresh: 20 * time.Millisecond, MaxEvents: 8,
 		Kick:   func(int, time.Time) error { calls.Add(1); return nil },
 		TypeIn: func(string, int, time.Time, bool) error { calls.Add(1); return nil },
-		Chat:   func(string, int, time.Time, bool) (bool, error) { calls.Add(1); return false, nil },
+		Chat:   func(string, int, time.Time, bool, string) (bool, error) { calls.Add(1); return false, nil },
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
