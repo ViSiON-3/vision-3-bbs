@@ -40,7 +40,7 @@ type handleLockouts struct {
 
 type handleFailures struct {
 	count       int
-	last        time.Time
+	start       time.Time // first failure in the current counting window
 	lockedUntil time.Time
 }
 
@@ -61,42 +61,56 @@ func (hl *handleLockouts) lockedUntil(handle string) (until time.Time, ok bool) 
 }
 
 // fail records a failed login for handle and reports whether it just became
-// locked. Failures older than the lockout period are forgotten, so the count
-// is of recent failures rather than all-time ones.
+// locked. Failures are counted in fixed windows of the lockout period starting
+// at the first failure, so the limit means that many failures within one
+// period; a slow trickle of failures never adds up to a lock.
 func (hl *handleLockouts) fail(handle string) bool {
 	now := time.Now()
 	key := strings.ToLower(handle)
 	hl.mu.Lock()
 	defer hl.mu.Unlock()
 	f, exists := hl.m[key]
-	if !exists || now.Sub(f.last) >= hl.lockout {
-		f = &handleFailures{}
+	if !exists {
+		f = &handleFailures{start: now}
 		hl.m[key] = f
 	}
+	// Reset the count in place: replacing the entry would drop a lock that a
+	// concurrent request installed.
+	if now.Sub(f.start) >= hl.lockout {
+		f.count = 0
+		f.start = now
+	}
 	f.count++
-	f.last = now
 	if f.count >= hl.max {
 		f.lockedUntil = now.Add(hl.lockout)
 		f.count = 0
+		f.start = now
 		return true
 	}
 	return false
 }
 
-// clear forgets the failures for handle after a successful login.
+// clear forgets the failures for handle after a successful login. An active
+// lock is kept: one can only exist here if failures racing this login
+// installed it after the login passed its lock check, and wiping it would
+// reset the guess limit for whoever made them.
 func (hl *handleLockouts) clear(handle string) {
+	key := strings.ToLower(handle)
 	hl.mu.Lock()
-	delete(hl.m, strings.ToLower(handle))
-	hl.mu.Unlock()
+	defer hl.mu.Unlock()
+	if f, exists := hl.m[key]; exists && time.Now().Before(f.lockedUntil) {
+		return
+	}
+	delete(hl.m, key)
 }
 
-// sweep removes entries that are neither locked nor holding recent failures,
+// sweep removes entries that are neither locked nor in a counting window,
 // bounding map growth.
 func (hl *handleLockouts) sweep() {
 	now := time.Now()
 	hl.mu.Lock()
 	for k, f := range hl.m {
-		if !now.Before(f.lockedUntil) && now.Sub(f.last) >= hl.lockout {
+		if !now.Before(f.lockedUntil) && now.Sub(f.start) >= hl.lockout {
 			delete(hl.m, k)
 		}
 	}
