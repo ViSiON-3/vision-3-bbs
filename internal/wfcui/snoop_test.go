@@ -740,14 +740,17 @@ func TestSnoopNoWriteAfterRunReturns(t *testing.T) {
 // palette back.
 var snoopExit = "\x1b[r\x1b[0m\x1b[2J" + ansi.ResetPalette()
 
-// vtScreen is a minimal terminal: text, CR, LF, CUP, DECSTBM, ED and EL. OSC
-// sequences (the palette) are skipped, as a terminal draws nothing for them.
+// vtScreen is a minimal terminal: text, CR, LF, CUP, CUF, CUB, SCOSC/SCORC,
+// DECSTBM, ED and EL. OSC sequences (the palette) are skipped, as a terminal
+// draws nothing for them. It never wraps: text past the last column lands on
+// it, so a line the mirror fails to break shows up as overwritten.
 type vtScreen struct {
-	w, h     int
-	cells    [][]rune
-	row, col int // 0-based
-	top, bot int
-	scrolls  int
+	w, h               int
+	cells              [][]rune
+	row, col           int // 0-based
+	savedRow, savedCol int
+	top, bot           int
+	scrolls            int
 }
 
 func newVTScreen(w, h int) *vtScreen {
@@ -826,6 +829,14 @@ func (s *vtScreen) csi(final rune, params string) {
 	switch final {
 	case 'H':
 		s.row, s.col = arg(0, 1)-1, arg(1, 1)-1
+	case 'C':
+		s.col = min(s.col+arg(0, 1), s.w-1)
+	case 'D':
+		s.col = max(s.col-arg(0, 1), 0)
+	case 's':
+		s.savedRow, s.savedCol = s.row, s.col
+	case 'u':
+		s.row, s.col = s.savedRow, s.savedCol
 	case 'r':
 		s.top, s.bot = arg(0, 1)-1, arg(1, s.h)-1
 		s.row, s.col = 0, 0
@@ -843,6 +854,72 @@ func (s *vtScreen) csi(final rune, params string) {
 }
 
 func (s *vtScreen) line(i int) string { return strings.TrimRight(string(s.cells[i]), " ") }
+
+// mirrorOf runs out through a 100-column sysop terminal mirroring an
+// 80-column caller and returns the screen the sysop sees.
+func mirrorOf(t *testing.T, out string) *vtScreen {
+	t.Helper()
+	r := newRig(t, utf8Hdr, 100, 40)
+	r.out.waitFor(t, "NODE 3")
+	_, _ = r.server.Write([]byte(out + "END"))
+	r.out.waitFor(t, "END")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	sc := newVTScreen(100, 40)
+	sc.feed(strings.TrimSuffix(r.out.String(), snoopExit))
+	return sc
+}
+
+// On a sysop terminal wider than the caller's, the mirror wraps where the
+// caller's terminal does: a row that fills all 80 columns does not run into
+// the next on the sysop's 100.
+func TestSnoopWrapsAtTheCallersWidth(t *testing.T) {
+	a, b := strings.Repeat("A", 80), strings.Repeat("B", 80)
+	sc := mirrorOf(t, "\x1b[2J\x1b[H"+a+b+"\r\n")
+	if got := sc.line(0); got != a {
+		t.Errorf("row 1 = %q, want 80 As", got)
+	}
+	if got := sc.line(1); got != b {
+		t.Errorf("row 2 = %q, want 80 Bs", got)
+	}
+}
+
+// Art often ends a full row by saving the cursor, sending CR LF and
+// restoring it, then carries on writing to wrap onto the next row, as the
+// ViSiON/2 chat screens do.
+func TestSnoopWrapsAfterSaveCRLFRestore(t *testing.T) {
+	a := strings.Repeat("A", 80)
+	sc := mirrorOf(t, "\x1b[2J\x1b[H"+a+"\x1b[s\r\n\x1b[u"+"BBB")
+	if got := sc.line(0); got != a {
+		t.Errorf("row 1 = %q, want 80 As", got)
+	}
+	if got := sc.line(1); !strings.HasPrefix(got, "BBB") {
+		t.Errorf("row 2 = %q, want it to start BBB", got)
+	}
+}
+
+// A cursor-forward the caller's terminal stops at its last column stops
+// there on the mirror too.
+func TestSnoopCursorForwardStopsAtTheCallersEdge(t *testing.T) {
+	sc := mirrorOf(t, "\x1b[2J\x1b[H\x1b[200CX")
+	if got := sc.line(0); got != strings.Repeat(" ", 79)+"X" {
+		t.Errorf("row 1 = %q, want X in column 80", got)
+	}
+}
+
+// With the sysop's terminal no wider than the caller's, the output is
+// mirrored byte for byte.
+func TestSnoopMirrorUnchangedAtTheSameWidth(t *testing.T) {
+	r := newRig(t, utf8Hdr, 80, 25)
+	in := strings.Repeat("A", 80) + strings.Repeat("B", 80) + "\x1b[200CEND"
+	_, _ = r.server.Write([]byte(in))
+	r.out.waitFor(t, "END")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	if !strings.Contains(r.out.String(), in) {
+		t.Fatal("output changed on a sysop terminal as wide as the caller's")
+	}
+}
 
 func TestSnoopMirroredScreenScrollsUnderBar(t *testing.T) {
 	r := newRig(t, utf8Hdr, 100, 40)
@@ -994,5 +1071,19 @@ func TestSnoopLoadsAndResetsVGAPalette(t *testing.T) {
 	set, reset := strings.Index(out, ansi.SetVGAPalette()), strings.LastIndex(out, ansi.ResetPalette())
 	if set < 0 || reset < 0 || reset < set {
 		t.Fatalf("palette set at %d, reset at %d in %q", set, reset, out)
+	}
+}
+
+// A CP437 caller's terminal draws the control bytes art uses as glyphs, such
+// as the ▲ ▼ arrows on the ViSiON/2 chat screens, so the mirror draws them
+// too.
+func TestSnoopDrawsCP437ControlGlyphs(t *testing.T) {
+	r := newRig(t, admin.SnoopHeader{OutputMode: "cp437", Width: 80, Height: 25}, 80, 25)
+	_, _ = r.server.Write([]byte("\xc4\x1eSysop\x1e\xc4\r\nEND"))
+	r.out.waitFor(t, "END")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	if !strings.Contains(r.out.String(), "─▲Sysop▲─\r\n") {
+		t.Fatalf("arrows not drawn: %q", r.out.String())
 	}
 }

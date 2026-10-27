@@ -165,6 +165,7 @@ func (c *snoopCmd) Run() error {
 	c.write(ansi.SetVGAPalette() + "\x1b[0m\x1b[2J\x1b[H")
 	c.mu.Lock()
 	c.track.reset(c.st.Header.Width, c.st.Header.Height)
+	c.track.fit = c.w > c.st.Header.Width
 	c.mu.Unlock()
 	c.drawStatus()
 
@@ -258,6 +259,7 @@ func (c *snoopCmd) onResize() {
 		return
 	}
 	c.w, c.h = w, h
+	c.track.fit = w > c.st.Header.Width
 	c.regionStale = true
 	if !c.statusManual {
 		c.statusOn = h > c.st.Header.Height
@@ -312,15 +314,16 @@ func (c *snoopCmd) pump(done chan<- struct{}) {
 			if cp437 {
 				// ESC sequences pass through byte for byte and the rest of
 				// a sequence split across reads is ASCII, so each chunk
-				// converts on its own.
-				chunk = ansi.CP437BytesToUTF8(chunk)
+				// converts on its own. The control bytes a CP437 terminal
+				// draws as glyphs (the ▲ ▼ arrows art uses) are drawn too.
+				chunk = ansi.DrawCP437ControlGlyphs(ansi.CP437BytesToUTF8(chunk))
 			}
 			c.mu.Lock()
 			// Split the chunk after each region change so the mirrored
 			// region is back in force before any output that could scroll.
 			for len(chunk) > 0 {
-				k, region := c.track.feedToRegion(chunk)
-				_, _ = c.stdout.Write(chunk[:k])
+				k, out, region := c.track.feedToRegion(chunk)
+				_, _ = c.stdout.Write(out)
 				chunk = chunk[k:]
 				if region {
 					c.mirrorRegionLocked()
@@ -665,6 +668,13 @@ type seqTracker struct {
 	params []byte // parameter bytes of the CSI being read
 	interm bool   // the CSI has an intermediate byte
 	cur    cursor
+
+	// fit is set while the sysop's terminal is wider than the caller's. The
+	// mirror then wraps where the caller's terminal does rather than where
+	// the sysop's would: see fitBefore and fitAfter.
+	fit   bool
+	final byte   // final byte of the CSI the last step completed, else 0
+	out   []byte // output for the bytes fed, reused between calls
 }
 
 const (
@@ -678,19 +688,32 @@ const (
 
 func (t *seqTracker) feed(p []byte) {
 	for len(p) > 0 {
-		n, _ := t.feedToRegion(p)
+		n, _, _ := t.feedToRegion(p)
 		p = p[n:]
 	}
 }
 
 // feedToRegion tracks p up to and including the first sequence that changes
-// the scroll region (DECSTBM or RIS). It returns the bytes consumed and
-// whether it stopped on such a sequence.
-func (t *seqTracker) feedToRegion(p []byte) (int, bool) {
+// the scroll region (DECSTBM or RIS). It returns the bytes consumed, what to
+// write to the sysop's terminal for them (p itself, unless fit adds to it),
+// and whether it stopped on such a sequence. The output is valid until the
+// next call.
+func (t *seqTracker) feedToRegion(p []byte) (int, []byte, bool) {
 	n, region := len(p), false
+	t.out = t.out[:0]
 	for i, b := range p {
 		sets := t.cur.regionSets
+		if t.fit && t.fitBefore(b) {
+			t.out = append(t.out, '\r', '\n')
+		}
+		text := t.state == stGround && b >= 0x20 && b != 0x7f
+		wasPending := t.cur.pendingWrap
+		t.final = 0
 		t.step(b)
+		if t.fit {
+			t.out = append(t.out, b)
+			t.fitAfter(b, text, wasPending)
+		}
 		if t.cur.regionSets != sets {
 			n, region = i+1, true
 			break
@@ -700,7 +723,42 @@ func (t *seqTracker) feedToRegion(p []byte) (int, bool) {
 	if len(t.tail) > utf8.UTFMax {
 		t.tail = append(t.tail[:0], t.tail[len(t.tail)-utf8.UTFMax:]...)
 	}
-	return n, region
+	out := t.out
+	if !t.fit {
+		out = p[:n]
+	}
+	return n, out, region
+}
+
+// fitBefore reports whether b starts a character that the caller's
+// terminal wraps to the next line before drawing: the last character filled
+// its final column. The sysop's wider terminal would draw it on the same
+// line, so the mirror breaks the line first.
+func (t *seqTracker) fitBefore(b byte) bool {
+	c := &t.cur
+	if t.state != stGround || c.rneed > 0 || !c.known || c.origin || !c.pendingWrap {
+		return false
+	}
+	return b >= 0x20 && b != 0x7f && (b < 0x80 || b >= 0xc0)
+}
+
+// fitAfter keeps the sysop's cursor where the caller's is after b. A
+// character that fills the caller's last column leaves the caller's cursor
+// there, waiting to wrap, but moves the sysop's one column on, so it is
+// stepped back. Moves the caller's terminal stops at its right edge
+// (cursor forward, column, tab, position) go further on the sysop's, so
+// the cursor is put back where the caller's stopped.
+func (t *seqTracker) fitAfter(b byte, text, wasPending bool) {
+	c := &t.cur
+	if !c.known || c.origin {
+		return
+	}
+	switch {
+	case text && c.rneed == 0 && c.pendingWrap && !wasPending:
+		t.out = append(t.out, "\x1b[D"...)
+	case t.final != 0 && strings.IndexByte("CGaHf`", t.final) >= 0, t.state == stGround && b == '\t':
+		t.out = fmt.Appendf(t.out, "\x1b[%d;%dH", c.row, c.col)
+	}
 }
 
 // maxOSC bounds an operating system command; past it the tracker gives up
@@ -747,6 +805,7 @@ func (t *seqTracker) step(b byte) {
 		switch {
 		case b >= 0x40 && b <= 0x7e:
 			t.state = stGround
+			t.final = b
 			t.cur.csi(b, string(t.params), t.interm)
 		case b >= 0x30 && b <= 0x3f:
 			if len(t.params) < maxParams {

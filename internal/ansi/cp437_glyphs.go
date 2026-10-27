@@ -29,6 +29,18 @@ func CP437ArtToUTF8(data []byte) []byte {
 	return mapControlGlyphs(data, true)
 }
 
+// DrawCP437ControlGlyphs returns UTF-8 text with the control bytes a CP437
+// terminal draws as glyphs replaced by those glyphs, as for CP437ArtToUTF8;
+// everything else, escape sequences included, is unchanged. It suits output
+// already converted from CP437 a chunk at a time, as the WFC mirrors a CP437
+// caller.
+func DrawCP437ControlGlyphs(data []byte) []byte {
+	if !hasControlGlyph(data) {
+		return data
+	}
+	return mapControlGlyphs(data, false)
+}
+
 func hasControlGlyph(data []byte) bool {
 	for i := 0; i < len(data); i++ {
 		if data[i] == 0x1B {

@@ -16,3 +16,13 @@ func TestCP437ArtToUTF8(t *testing.T) {
 		}
 	}
 }
+
+func TestDrawCP437ControlGlyphs(t *testing.T) {
+	if got := string(DrawCP437ControlGlyphs([]byte("─\x1eA\x1b[1;31m\r\n\x07"))); got != "─▲A\x1b[1;31m\r\n\x07" {
+		t.Errorf("got %q", got)
+	}
+	in := []byte("plain text\r\n")
+	if got := DrawCP437ControlGlyphs(in); &got[0] != &in[0] {
+		t.Error("text with no control glyphs was copied")
+	}
+}
