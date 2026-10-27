@@ -296,7 +296,7 @@ func TestConvertChatNfoShippedForm(t *testing.T) {
 }
 
 // Every chat screen in the shipped menu set loads and fits an 80x25 caller.
-func TestShippedChatScreensLoad(t *testing.T) {
+func TestShippedChatScreensFit(t *testing.T) {
 	set := menuset.Bare(filepath.Join("..", "..", "menus", "v3"))
 	names := ChatScreens(set)
 	if len(names) == 0 {
@@ -311,6 +311,62 @@ func TestShippedChatScreensLoad(t *testing.T) {
 		if !sc.fits(80, 25) {
 			t.Errorf("%s: %dx%d does not fit 80x25", name, sc.Width, sc.Height)
 		}
+	}
+}
+
+// The ViSiON/2 screens type on the right of the art, in their own colours,
+// and cut handles too long for the header so its labels survive.
+func TestShippedV2ChatScreensRender(t *testing.T) {
+	m := menuset.Bare(filepath.Join("..", "..", "menus", "v3"))
+	longSysop := "TheSysopWithAVeryLongHandle"  // 27, header room is 24
+	longCaller := "ACallerWithAVeryLongHandle!" // 27, header room is 23
+	for name, fg := range map[string][2]int{"V2CHAT1": {94, 95}, "V2CHAT2": {95, 35}} {
+		t.Run(name, func(t *testing.T) {
+			r := newChatRig(t, "")
+			env := screenEnv(t, r, m, "CHAT1")
+			sc := chooseChatLayout(env, name, 80, 25)
+			if sc.name != name {
+				t.Fatalf("chose %q", sc.name)
+			}
+			r.begin(t)
+			done := make(chan struct{})
+			go func() {
+				runSysopChatOn(r.ih, r.tap, r.term, ansi.OutputModeUTF8, 80, 25, longSysop, longCaller, sc)
+				close(done)
+			}()
+			r.tap.Inject("SysOp", []byte("hello"))
+			r.sess.Send("hi")
+			cells := func(row, from, to int) string {
+				var sb strings.Builder
+				for col := from; col <= to; col++ {
+					sb.WriteRune(r.term.Cell(row, col).Rune)
+				}
+				return sb.String()
+			}
+			waitFor(t, func() bool {
+				return cells(3, 35, 39) == "hello" && cells(13, 35, 36) == "hi"
+			}, name+" not rendered: "+r.term.Snapshot())
+			if got := cells(1, 18, 42); got != longSysop[:24]+" " {
+				t.Errorf("sysop handle = %q; want it cut to 24 columns", got)
+			}
+			if got := cells(1, 43, 48); got != "User :" {
+				t.Errorf("User : label = %q; the sysop handle ran over it", got)
+			}
+			if got := cells(1, 50, 73); got != longCaller[:23]+" " {
+				t.Errorf("caller handle = %q; want it cut to 23 columns", got)
+			}
+			if got := r.term.Cell(1, 74).Rune; got != '·' {
+				t.Errorf("column 74 = %q; the caller handle ran over the decoration", got)
+			}
+			if got := r.term.Cell(3, 35).Fg; got != fg[0] {
+				t.Errorf("sysop text fg = %d; want %d", got, fg[0])
+			}
+			if got := r.term.Cell(13, 35).Fg; got != fg[1] {
+				t.Errorf("caller text fg = %d; want %d", got, fg[1])
+			}
+			_ = r.tap.StopChat("SysOp")
+			waitDone(t, done, "chat ignored StopChat")
+		})
 	}
 }
 
