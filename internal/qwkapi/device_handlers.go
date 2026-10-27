@@ -52,8 +52,22 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal", "could not pair device")
 		return
 	}
-	dev := user.APIDevice{ID: id, Name: cleanDeviceName(req.Name), PublicKey: canonical, CreatedAt: time.Now().UTC()}
+	// u is the account as read when this request was authenticated, and its
+	// password matched the token's then. Stamping with that password, and not
+	// whatever the account has by the time the save happens, is what lets a
+	// reset during a slow request void the pairing.
+	dev := user.APIDevice{
+		ID:            id,
+		Name:          cleanDeviceName(req.Name),
+		PublicKey:     canonical,
+		PasswordStamp: user.PasswordStamp(u.PasswordHash),
+		CreatedAt:     time.Now().UTC(),
+	}
 	switch err := s.deps.Devices.AddAPIDevice(u.ID, dev, maxDevicesPerUser); {
+	case errors.Is(err, user.ErrPasswordChanged):
+		slog.Info("qwk api pair", "handle", u.Handle, "remote", clientIP(r), "outcome", "passwordChanged")
+		writeError(w, http.StatusUnauthorized, "unauthorized", "session no longer valid; log in again")
+		return
 	case errors.Is(err, user.ErrTooManyDevices):
 		slog.Info("qwk api pair", "handle", u.Handle, "remote", clientIP(r), "outcome", "tooMany")
 		writeError(w, http.StatusConflict, "too_many_devices", "unpair a device first")

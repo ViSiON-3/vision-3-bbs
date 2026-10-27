@@ -299,3 +299,26 @@ func TestCleanDeviceName(t *testing.T) {
 		}
 	}
 }
+
+// resetDuringPair is a DeviceStore whose owner resets the password just as a
+// pairing reaches the save: the window a slow-walked request would exploit.
+type resetDuringPair struct{ *accountStore }
+
+func (r resetDuringPair) AddAPIDevice(userID int, d user.APIDevice, max int) error {
+	r.change(userID, func(u *user.User) { u.PasswordHash = "reset-by-owner" })
+	return r.accountStore.AddAPIDevice(userID, d, max)
+}
+
+func TestDevice_PasswordResetDuringPairingRefusesDevice(t *testing.T) {
+	accounts := newAccountStore(testAccount())
+	deps := testDeps(t, accounts, &fakeSvc{})
+	deps.Devices = resetDuringPair{accounts}
+	h := newTestServer(t, deps)
+	rr := postJSON(h, "/api/qwk/devices", passwordLogin(t, h), pairRequest{Name: "Attacker", PublicKey: newTestDevice(t).pub})
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("pair across a password reset: %d %s, want 401", rr.Code, rr.Body.String())
+	}
+	if u, _ := accounts.GetUserByID(7); len(u.APIDevices) != 0 {
+		t.Errorf("devices = %+v, want none", u.APIDevices)
+	}
+}

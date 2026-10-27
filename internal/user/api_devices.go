@@ -28,6 +28,9 @@ var (
 	ErrTooManyDevices = errors.New("too many paired devices")
 	// ErrDeviceKeyExists is returned when the key is already paired to the user.
 	ErrDeviceKeyExists = errors.New("device key already paired")
+	// ErrPasswordChanged is returned when the password the pairing was
+	// authenticated under is no longer the account's password.
+	ErrPasswordChanged = errors.New("password changed since the pairing was authenticated")
 )
 
 // PasswordStamp derives the stamp recorded on a device from a password hash.
@@ -60,12 +63,22 @@ func (u *User) APIDevice(id string) (APIDevice, bool) {
 	return APIDevice{}, false
 }
 
-// AddAPIDevice pairs d with the user, stamping it with the current password.
+// AddAPIDevice pairs d with the user. The caller sets d.PasswordStamp to the
+// stamp of the password the pairing was authenticated with; if that is no
+// longer the account's password the pairing fails with ErrPasswordChanged.
+// Checking here, under the manager lock, matters: stamping with whatever the
+// password is at save time would let someone holding a stolen password start
+// a pairing, wait out the owner's password reset, and finish with a device
+// stamped by the new password, which the reset would then not void.
+//
 // Devices left over from an earlier password are dropped as it is saved. It
 // fails with ErrTooManyDevices once the user has max valid devices, and with
 // ErrDeviceKeyExists if the same key is already paired.
 func (um *UserMgr) AddAPIDevice(userID int, d APIDevice, max int) error {
 	return um.mutateAPIDevices(userID, func(u *User, valid []APIDevice) ([]APIDevice, error) {
+		if d.PasswordStamp != PasswordStamp(u.PasswordHash) {
+			return nil, ErrPasswordChanged
+		}
 		for _, existing := range valid {
 			if existing.PublicKey == d.PublicKey {
 				return nil, ErrDeviceKeyExists
@@ -74,7 +87,6 @@ func (um *UserMgr) AddAPIDevice(userID int, d APIDevice, max int) error {
 		if len(valid) >= max {
 			return nil, ErrTooManyDevices
 		}
-		d.PasswordStamp = PasswordStamp(u.PasswordHash)
 		return append(valid, d), nil
 	})
 }

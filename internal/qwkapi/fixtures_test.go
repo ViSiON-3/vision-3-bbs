@@ -79,6 +79,9 @@ func (a *accountStore) AddAPIDevice(userID int, d user.APIDevice, max int) error
 	if u == nil {
 		return user.ErrUserNotFound
 	}
+	if d.PasswordStamp != user.PasswordStamp(u.PasswordHash) {
+		return user.ErrPasswordChanged
+	}
 	valid := u.ValidAPIDevices()
 	for _, e := range valid {
 		if e.PublicKey == d.PublicKey {
@@ -88,7 +91,6 @@ func (a *accountStore) AddAPIDevice(userID int, d user.APIDevice, max int) error
 	if len(valid) >= max {
 		return user.ErrTooManyDevices
 	}
-	d.PasswordStamp = user.PasswordStamp(u.PasswordHash)
 	u.APIDevices = append(valid, d)
 	return nil
 }

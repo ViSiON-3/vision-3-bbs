@@ -22,7 +22,7 @@ func newDeviceTestMgr(t *testing.T) (*UserMgr, string, *User) {
 
 func TestAPIDevices_PairPersistsAndIsFound(t *testing.T) {
 	um, dir, u := newDeviceTestMgr(t)
-	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev1", Name: "Phone", PublicKey: "key1", CreatedAt: time.Now()}, 10); err != nil {
+	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev1", Name: "Phone", PublicKey: "key1", CreatedAt: time.Now(), PasswordStamp: PasswordStamp(u.PasswordHash)}, 10); err != nil {
 		t.Fatalf("AddAPIDevice: %v", err)
 	}
 	reloaded, err := NewUserManager(dir)
@@ -43,7 +43,7 @@ func TestAPIDevices_PairPersistsAndIsFound(t *testing.T) {
 func TestAPIDevices_StaleCopyDoesNotDropDevice(t *testing.T) {
 	um, _, _ := newDeviceTestMgr(t)
 	stale, _ := um.GetUser("pocket")
-	if err := um.AddAPIDevice(stale.ID, APIDevice{ID: "dev1", PublicKey: "key1"}, 10); err != nil {
+	if err := um.AddAPIDevice(stale.ID, APIDevice{ID: "dev1", PublicKey: "key1", PasswordStamp: stampOf(t, um)}, 10); err != nil {
 		t.Fatal(err)
 	}
 	stale.RealName = "Changed In Session"
@@ -63,7 +63,7 @@ func TestAPIDevices_StaleCopyDoesNotDropDevice(t *testing.T) {
 
 func TestAPIDevices_PasswordChangeVoidsDevices(t *testing.T) {
 	um, _, u := newDeviceTestMgr(t)
-	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev1", PublicKey: "key1"}, 10); err != nil {
+	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev1", PublicKey: "key1", PasswordStamp: stampOf(t, um)}, 10); err != nil {
 		t.Fatal(err)
 	}
 	cur, _ := um.GetUser("pocket")
@@ -76,7 +76,7 @@ func TestAPIDevices_PasswordChangeVoidsDevices(t *testing.T) {
 	}
 	// The voided device is dropped at the next change, not just hidden, so
 	// pairing the same key again works.
-	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev2", PublicKey: "key1"}, 1); err != nil {
+	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev2", PublicKey: "key1", PasswordStamp: stampOf(t, um)}, 1); err != nil {
 		t.Fatalf("re-pair after password change: %v", err)
 	}
 	after, _ := um.GetUser("pocket")
@@ -87,16 +87,16 @@ func TestAPIDevices_PasswordChangeVoidsDevices(t *testing.T) {
 
 func TestAPIDevices_LimitsRemoveAndTouch(t *testing.T) {
 	um, _, u := newDeviceTestMgr(t)
-	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev1", PublicKey: "key1"}, 2); err != nil {
+	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev1", PublicKey: "key1", PasswordStamp: stampOf(t, um)}, 2); err != nil {
 		t.Fatal(err)
 	}
-	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dup", PublicKey: "key1"}, 2); !errors.Is(err, ErrDeviceKeyExists) {
+	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dup", PublicKey: "key1", PasswordStamp: stampOf(t, um)}, 2); !errors.Is(err, ErrDeviceKeyExists) {
 		t.Errorf("duplicate key: err = %v", err)
 	}
-	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev2", PublicKey: "key2"}, 2); err != nil {
+	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev2", PublicKey: "key2", PasswordStamp: stampOf(t, um)}, 2); err != nil {
 		t.Fatal(err)
 	}
-	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev3", PublicKey: "key3"}, 2); !errors.Is(err, ErrTooManyDevices) {
+	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev3", PublicKey: "key3", PasswordStamp: stampOf(t, um)}, 2); !errors.Is(err, ErrTooManyDevices) {
 		t.Errorf("over cap: err = %v", err)
 	}
 	at := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
@@ -124,7 +124,36 @@ func TestAPIDevices_DeletedUserCannotPair(t *testing.T) {
 	if err := um.UpdateUser(cur); err != nil {
 		t.Fatal(err)
 	}
-	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev1", PublicKey: "key1"}, 10); !errors.Is(err, ErrUserNotFound) {
+	if err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev1", PublicKey: "key1", PasswordStamp: stampOf(t, um)}, 10); !errors.Is(err, ErrUserNotFound) {
 		t.Errorf("err = %v, want ErrUserNotFound", err)
+	}
+}
+
+// stampOf is the current password stamp of the test account.
+func stampOf(t *testing.T, um *UserMgr) string {
+	t.Helper()
+	u, ok := um.GetUser("pocket")
+	if !ok {
+		t.Fatal("test account missing")
+	}
+	return PasswordStamp(u.PasswordHash)
+}
+
+// A pairing authenticated under one password must not be saved once the
+// password has changed, even though the device would otherwise be valid.
+func TestAPIDevices_PairingUnderOldPasswordRefused(t *testing.T) {
+	um, _, u := newDeviceTestMgr(t)
+	oldStamp := stampOf(t, um)
+	cur, _ := um.GetUser("pocket")
+	cur.PasswordHash = "reset-by-owner"
+	if err := um.UpdateUser(cur); err != nil {
+		t.Fatal(err)
+	}
+	err := um.AddAPIDevice(u.ID, APIDevice{ID: "dev1", PublicKey: "key1", PasswordStamp: oldStamp}, 10)
+	if !errors.Is(err, ErrPasswordChanged) {
+		t.Fatalf("err = %v, want ErrPasswordChanged", err)
+	}
+	if after, _ := um.GetUser("pocket"); len(after.APIDevices) != 0 {
+		t.Errorf("devices = %+v, want none", after.APIDevices)
 	}
 }
