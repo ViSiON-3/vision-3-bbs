@@ -52,6 +52,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeLockedOut(w, until, "too many failed logins for this account")
 		return
 	}
+	s.deps.Users.SyncFromDisk()
 	u, ok := s.deps.Users.Authenticate(req.Handle, req.Password)
 	if !ok {
 		slog.Info("qwk api login", "handle", req.Handle, "remote", ip, "outcome", "fail")

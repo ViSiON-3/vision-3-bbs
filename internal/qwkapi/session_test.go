@@ -19,6 +19,7 @@ import (
 type accountStore struct {
 	mu    sync.Mutex
 	users []*user.User
+	syncs int
 }
 
 func newAccountStore(users ...*user.User) *accountStore { return &accountStore{users: users} }
@@ -33,6 +34,12 @@ func (a *accountStore) Authenticate(handle, password string) (*user.User, bool) 
 		}
 	}
 	return nil, false
+}
+
+func (a *accountStore) SyncFromDisk() {
+	a.mu.Lock()
+	a.syncs++
+	a.mu.Unlock()
 }
 
 func (a *accountStore) GetUserByID(id int) (*user.User, bool) {
@@ -185,5 +192,20 @@ func TestLogout_WorksForDeniedAccount(t *testing.T) {
 	accounts.change(7, func(u *user.User) { u.AccessLevel = 0 })
 	if rr := serve(h, withToken("POST", "/api/qwk/logout", tok)); rr.Code != http.StatusNoContent {
 		t.Errorf("logout: status = %d, want 204", rr.Code)
+	}
+}
+
+// External ./ue edits only reach the in-memory accounts through SyncFromDisk,
+// so login and every session check must call it before reading the account.
+func TestSession_SyncsExternalEditsBeforeEachRead(t *testing.T) {
+	h, accounts, _ := sessionServer(t)
+	tok := login(t, h)
+	if accounts.syncs != 1 {
+		t.Fatalf("syncs after login = %d, want 1", accounts.syncs)
+	}
+	serve(h, withToken("GET", "/api/qwk/packet", tok))
+	serve(h, withToken("POST", "/api/qwk/reply", tok))
+	if accounts.syncs != 3 {
+		t.Errorf("syncs after two requests = %d, want 3", accounts.syncs)
 	}
 }

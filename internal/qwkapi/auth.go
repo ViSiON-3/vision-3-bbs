@@ -136,6 +136,7 @@ func (s *Server) requireSession(next http.HandlerFunc) http.HandlerFunc {
 		if !ok {
 			return
 		}
+		s.deps.Users.SyncFromDisk()
 		cur, found := s.deps.Users.GetUserByID(snap.ID)
 		var reason string
 		switch {

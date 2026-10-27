@@ -81,8 +81,9 @@ re-authenticate on their next request). This is expected for a packet API.
   message, so the user must log in by terminal once to send it.
 - **Account changes end API sessions straight away.** Every request re-reads
   the account, so deleting, banning or demoting a user below `logonLevel`, or
-  changing their password (by them or by you), invalidates their API tokens on
-  the next request instead of when the token would have expired. That is also
+  changing their password (by them or by you, including in the standalone
+  `./ue` editor while nobody is online), invalidates their API tokens on the
+  next request instead of when the token would have expired. That is also
   how to kick a user off the API: change their password or ban them. Requests
   use the account as it is now, so a change to their level, tagged areas or
   signature applies to the next packet without logging in again.

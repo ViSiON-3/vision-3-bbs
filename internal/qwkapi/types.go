@@ -15,6 +15,11 @@ import (
 type Authenticator interface {
 	Authenticate(handle, password string) (*user.User, bool)
 	GetUserByID(id int) (*user.User, bool)
+	// SyncFromDisk folds in edits made to users.json outside the BBS (the
+	// standalone ./ue editor), at most once a second. The API calls it before
+	// every account read, since with no terminal caller online nothing else
+	// would, and a ban or password change made in ./ue would go unseen.
+	SyncFromDisk()
 }
 
 // Reasons a DenyLogin hook gives for refusing an account whose password is
