@@ -40,7 +40,12 @@ func newChatRig(t *testing.T, keys string) *chatRig {
 
 func newChatRigOpts(t *testing.T, keys string, opts ...testterm.Option) *chatRig {
 	t.Helper()
-	term := testterm.New(80, 25, opts...)
+	return newChatRigSized(t, keys, 80, 25, opts...)
+}
+
+func newChatRigSized(t *testing.T, keys string, width, height int, opts ...testterm.Option) *chatRig {
+	t.Helper()
+	term := testterm.New(width, height, opts...)
 	sess := testterm.NewSession(term, keys)
 	ih := editor.NewInputHandler(sess)
 	t.Cleanup(ih.Close)
@@ -224,6 +229,33 @@ func TestChatPaneWrapsAndScrolls(t *testing.T) {
 	}
 	if r1, r2 := term.Row(1), term.Row(2); r1 != "def" || r2 != "g" {
 		t.Fatalf("rows = %q, %q; want def, g", r1, r2)
+	}
+}
+
+// TestChatPaneWrapsWordIntoNarrowerLine carries a word from a wide line to
+// one too narrow for it; it must break there rather than run into the art
+// past the line's end.
+func TestChatPaneWrapsWordIntoNarrowerLine(t *testing.T) {
+	term := testterm.New(40, 6)
+	term.Write([]byte("\x1b[2;1H############\x1b[3;1H############\x1b[4;1H############\x1b[5;1H############"))
+	segs := []chatSegment{{Row: 2, From: 1, To: 12}, {Row: 3, From: 1, To: 4}, {Row: 4, From: 1, To: 4}, {Row: 5, From: 1, To: 4}}
+	p := newChatPane(term, ansi.OutputModeUTF8, segs, 10)
+	p.put([]byte("a bcdefghijXY"))
+	if got := strings.TrimRight(term.Row(2), " "); got != "a" {
+		t.Errorf("row 2 = %q; want only the a left behind", got)
+	}
+	for row, text := range map[int]string{3: "bcde", 4: "fghi", 5: "jXY"} {
+		if got := term.Row(row); !strings.HasPrefix(got, text) {
+			t.Errorf("row %d = %q; want it to start %q", row, got, text)
+		}
+	}
+	for _, row := range []int{3, 4, 5} {
+		if got := term.Row(row); got[4:] != "########" {
+			t.Errorf("row %d = %q; art past the line was overwritten", row, got)
+		}
+	}
+	if string(p.line) != "jXY" || p.cur != 3 || p.cells != 3 {
+		t.Errorf("line %q on segment %d at cell %d after the carried word broke twice", string(p.line), p.cur, p.cells)
 	}
 }
 

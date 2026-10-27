@@ -154,6 +154,35 @@ func TestChatOnDesignedScreen(t *testing.T) {
 	waitDone(t, done, "chat ignored StopChat")
 }
 
+// TestDesignedScreenWiderThanStockArt draws a 100-column screen on a
+// 132-column terminal: its background must wrap at 100, where the screen was
+// drawn for, not at the 80 columns stock art is fitted to.
+func TestDesignedScreenWiderThanStockArt(t *testing.T) {
+	dir := t.TempDir()
+	layout := `{"width": 100, "height": 6, "sysop": {"lines": [{"row": 3, "from": 1, "to": 100}]}, "caller": {"lines": [{"row": 5, "from": 1, "to": 100}]}}`
+	art := strings.Repeat("A", 100) + strings.Repeat("B", 100)
+	writeChatScreen(t, dir, "WIDE", layout, []byte(art))
+	r := newChatRigSized(t, "", 132, 10)
+	env := screenEnv(t, r, menuset.Bare(dir), "WIDE")
+	sc := chooseChatLayout(env, "", 132, 10)
+	if sc.name != "WIDE" {
+		t.Fatalf("chose %q", sc.name)
+	}
+	r.begin(t)
+	done := make(chan struct{})
+	go func() {
+		runSysopChatOn(r.ih, r.tap, r.term, ansi.OutputModeUTF8, 132, 10, "SysOp", "Caller", sc)
+		close(done)
+	}()
+	r.sess.Send("x")
+	waitFor(t, func() bool { return r.term.Row(5) == "x" }, "chat not drawn")
+	if r1, r2 := r.term.Row(1), r.term.Row(2); r1 != strings.Repeat("A", 100) || r2 != strings.Repeat("B", 100) {
+		t.Fatalf("art rows = %q, %q; want 100 As then 100 Bs", r1, r2)
+	}
+	_ = r.tap.StopChat("SysOp")
+	waitDone(t, done, "chat ignored StopChat")
+}
+
 func TestShippedChatScreenLoads(t *testing.T) {
 	m := menuset.Bare(filepath.Join("..", "..", "menus", "v3"))
 	sc, err := loadChatLayout(m, "CHAT1")

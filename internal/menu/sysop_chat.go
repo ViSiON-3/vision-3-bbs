@@ -201,7 +201,9 @@ func (p *chatPane) cellsOf(text []rune) int {
 }
 
 // wrap starts a new line for a character that does not fit. The word being
-// typed moves down with it unless it fills the whole line.
+// typed moves down with it unless it fills the whole line. The next line
+// may be narrower than the one the word came from, so the word is put back
+// rune by rune and breaks wherever it runs out of room.
 func (p *chatPane) wrap() {
 	var word []rune
 	for i := len(p.line) - 1; i >= 0; i-- {
@@ -219,9 +221,16 @@ func (p *chatPane) wrap() {
 	}
 	p.newline()
 	p.moveTo()
-	p.emit(word...)
-	p.line = append(p.line, word...)
-	p.cells = p.cellsOf(word)
+	for _, r := range word {
+		w, _ := p.cellWidth(r)
+		if p.cells+w > p.width() {
+			p.newline()
+			p.moveTo()
+		}
+		p.emit(r)
+		p.line = append(p.line, r)
+		p.cells += w
+	}
 }
 
 // put writes text at the pane's cursor, word-wrapping at the pane width. b is
@@ -445,8 +454,14 @@ func runSysopChatOn(ih *editor.InputHandler, tap *snoop.Tap, w io.Writer, mode a
 	} else {
 		text := func(v string) func(int) string { return func(int) string { return v } }
 		art := chatArtFill(sc.art, map[string]func(int) string{"SYSOP": text(sysopHandle), "CALLER": text(callerHandle)})
+		// The art is drawn for the screen's width; on a wider terminal its
+		// wraps are made explicit at that width, as fitArt does for stock
+		// 80-column art, so a designed 132-column screen is not cut at 80.
+		if width > sc.Width {
+			art = ansi.HardWrap(art, sc.Width, true)
+		}
 		_, _ = fmt.Fprint(w, "\x1b[0m\x1b[2J\x1b[H") // best-effort display
-		_ = terminalio.WriteProcessedBytes(w, ansi.FitArtToWidth(art, width, true), mode)
+		_ = terminalio.WriteProcessedBytes(w, art, mode)
 		refresh = status.draw
 	}
 	refresh()
