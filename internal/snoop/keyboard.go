@@ -36,6 +36,9 @@ type keyboard struct {
 	// current chat; ChatEnded gives it back. Empty when the sysop already
 	// held it for type-in.
 	chatTook string
+	// chatScreen is the chat screen the sysop asked for with the current
+	// request, empty for the board's default.
+	chatScreen string
 	// holderEnded is set when the holder ended the current chat with
 	// StopChat or ReleaseKeyboard. A chat that ended any other way (the
 	// caller left it) drops the keyboard, so the sysop's next keys are
@@ -161,9 +164,17 @@ func (t *Tap) ChatInput() <-chan []byte { return t.kb.chatIn }
 func (t *Tap) BreakIn() <-chan struct{} { return t.kb.breakIn }
 
 // RequestChat takes the keyboard for handle and asks the caller's session to
-// open chat. It waits up to wait for ChatBegan; on failure nothing is left
-// pending and the keyboard is released if this call took it.
+// open chat on the board's default chat screen. It waits up to wait for
+// ChatBegan; on failure nothing is left pending and the keyboard is released
+// if this call took it.
 func (t *Tap) RequestChat(handle string, wait time.Duration) (started bool, err error) {
+	return t.RequestChatOn(handle, "", wait)
+}
+
+// RequestChatOn is RequestChat with a chat screen of the sysop's choosing;
+// empty means the board's default. The session reads it with ChatScreen when
+// it opens the chat.
+func (t *Tap) RequestChatOn(handle, screen string, wait time.Duration) (started bool, err error) {
 	t.mu.Lock()
 	if t.closed {
 		t.mu.Unlock()
@@ -202,6 +213,7 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) (started bool, err 
 	}
 	req := &chatRequest{began: make(chan struct{})}
 	t.kb.req = req
+	t.kb.chatScreen = screen
 	t.kb.endChat = make(chan struct{})
 	select {
 	case t.kb.breakIn <- struct{}{}:
@@ -237,6 +249,7 @@ func (t *Tap) RequestChat(handle string, wait time.Duration) (started bool, err 
 		t.kb.req = nil
 	}
 	t.kb.chatTook = ""
+	t.kb.chatScreen = ""
 	if tookIt && t.kb.holder == handle {
 		t.kb.drop()
 	}
@@ -321,8 +334,17 @@ func (t *Tap) ChatEnded() (dropped string, held time.Duration, injected int) {
 		t.kb.drop()
 	}
 	t.kb.chatTook = ""
+	t.kb.chatScreen = ""
 	t.kb.holderEnded = false
 	return dropped, held, injected
+}
+
+// ChatScreen is the chat screen the sysop asked for with the current chat
+// request, empty for the board's default.
+func (t *Tap) ChatScreen() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.kb.chatScreen
 }
 
 // EndChat is closed when the sysop ends chat or drops the keyboard.

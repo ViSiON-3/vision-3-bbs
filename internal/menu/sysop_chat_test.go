@@ -40,7 +40,12 @@ func newChatRig(t *testing.T, keys string) *chatRig {
 
 func newChatRigOpts(t *testing.T, keys string, opts ...testterm.Option) *chatRig {
 	t.Helper()
-	term := testterm.New(80, 25, opts...)
+	return newChatRigSized(t, keys, 80, 25, opts...)
+}
+
+func newChatRigSized(t *testing.T, keys string, width, height int, opts ...testterm.Option) *chatRig {
+	t.Helper()
+	term := testterm.New(width, height, opts...)
 	sess := testterm.NewSession(term, keys)
 	ih := editor.NewInputHandler(sess)
 	t.Cleanup(ih.Close)
@@ -217,14 +222,80 @@ func TestChatPaneEditing(t *testing.T) {
 }
 
 func TestChatPaneWrapsAndScrolls(t *testing.T) {
-	var out strings.Builder
-	p := &chatPane{w: &out, first: 1, last: 2, width: 3, row: 1, col: 1}
+	term, p := paneOn(3, 2)
 	p.put([]byte("abcdefg"))
-	if p.row != 2 || p.col != 2 {
-		t.Fatalf("cursor = %d,%d; want 2,2", p.row, p.col)
+	if p.cur != 1 || p.cells != 1 {
+		t.Fatalf("cursor = segment %d, cell %d; want segment 1, cell 1", p.cur, p.cells)
 	}
-	if !strings.Contains(out.String(), "\x1b[1;2r\x1b[2;1H\n\x1b[r") {
-		t.Fatalf("no region scroll in %q", out.String())
+	if r1, r2 := term.Row(1), term.Row(2); r1 != "def" || r2 != "g" {
+		t.Fatalf("rows = %q, %q; want def, g", r1, r2)
+	}
+}
+
+// TestChatPaneWrapsWordIntoNarrowerLine carries a word from a wide line to
+// one too narrow for it; it must break there rather than run into the art
+// past the line's end.
+func TestChatPaneWrapsWordIntoNarrowerLine(t *testing.T) {
+	term := testterm.New(40, 6)
+	term.Write([]byte("\x1b[2;1H############\x1b[3;1H############\x1b[4;1H############\x1b[5;1H############"))
+	segs := []chatSegment{{Row: 2, From: 1, To: 12}, {Row: 3, From: 1, To: 4}, {Row: 4, From: 1, To: 4}, {Row: 5, From: 1, To: 4}}
+	p := newChatPane(term, ansi.OutputModeUTF8, segs, 10)
+	p.put([]byte("a bcdefghijXY"))
+	if got := strings.TrimRight(term.Row(2), " "); got != "a" {
+		t.Errorf("row 2 = %q; want only the a left behind", got)
+	}
+	for row, text := range map[int]string{3: "bcde", 4: "fghi", 5: "jXY"} {
+		if got := term.Row(row); !strings.HasPrefix(got, text) {
+			t.Errorf("row %d = %q; want it to start %q", row, got, text)
+		}
+	}
+	for _, row := range []int{3, 4, 5} {
+		if got := term.Row(row); got[4:] != "########" {
+			t.Errorf("row %d = %q; art past the line was overwritten", row, got)
+		}
+	}
+	if string(p.line) != "jXY" || p.cur != 3 || p.cells != 3 {
+		t.Errorf("line %q on segment %d at cell %d after the carried word broke twice", string(p.line), p.cur, p.cells)
+	}
+}
+
+// TestChatPaneDropsRuneWiderThanLine puts a two-cell rune where the next
+// lines are one cell wide: it cannot be shown and must not overwrite the
+// art beside the line, whether typed directly or carried by a wrap.
+func TestChatPaneDropsRuneWiderThanLine(t *testing.T) {
+	term := testterm.New(20, 6)
+	term.Write([]byte("\x1b[2;1H####\x1b[3;1H####\x1b[4;1H####"))
+	segs := []chatSegment{{Row: 2, From: 1, To: 3}, {Row: 3, From: 1, To: 1}, {Row: 4, From: 1, To: 1}}
+	p := newChatPane(term, ansi.OutputModeUTF8, segs, 10)
+	p.put([]byte("ab \u4e16x"))
+	if r2, r3, r4 := term.Row(2), term.Row(3), term.Row(4); r2 != "ab #" || r3 != "x###" || r4 != "####" {
+		t.Fatalf("rows = %q, %q, %q; want the wide rune dropped and x on the first one-cell line", r2, r3, r4)
+	}
+	p.put([]byte("\u4e16"))
+	if r3, r4 := term.Row(3), term.Row(4); r3 != "x###" || r4 != "####" {
+		t.Fatalf("rows = %q, %q; want a wide rune typed on a one-cell line dropped", r3, r4)
+	}
+	if string(p.line) != "x" || p.cur != 1 {
+		t.Fatalf("line %q on segment %d", string(p.line), p.cur)
+	}
+}
+
+// TestChatPaneScrollsThroughSegments types past the end of a pane whose
+// lines are different widths at different places, as a designed screen's
+// can be, and checks the text moves up through them.
+func TestChatPaneScrollsThroughSegments(t *testing.T) {
+	term := testterm.New(40, 6)
+	segs := []chatSegment{{Row: 2, From: 5, To: 14}, {Row: 4, From: 2, To: 7}, {Row: 5, From: 10, To: 19}}
+	p := newChatPane(term, ansi.OutputModeUTF8, segs, 10)
+	p.put([]byte("first line\rtwo\rthird\rfour"))
+	want := map[int]string{2: "    two", 4: " third", 5: "         four"}
+	for row, text := range want {
+		if got := term.Row(row); got != text {
+			t.Fatalf("row %d = %q; want %q", row, got, text)
+		}
+	}
+	if got := term.Row(1); got != "" {
+		t.Fatalf("row 1 = %q; want the art row left alone", got)
 	}
 }
 
@@ -348,7 +419,7 @@ func TestChatEscEscKeyGoesToPromptFirst(t *testing.T) {
 // paneOn is a pane drawn on its own terminal, for layout tests.
 func paneOn(width, rows int) (*testterm.Term, *chatPane) {
 	term := testterm.New(40, rows)
-	return term, &chatPane{w: term, first: 1, last: rows, width: width, row: 1, col: 1}
+	return term, newChatPane(term, ansi.OutputModeUTF8, fullWidthSegments(1, rows, width), 7)
 }
 
 func TestChatPaneWordWrap(t *testing.T) {
@@ -588,7 +659,7 @@ func TestChatShowsNonASCIIInCP437Session(t *testing.T) {
 func TestChatPaneNeverEchoesEscape(t *testing.T) {
 	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
 		var out strings.Builder
-		p := &chatPane{w: &out, mode: mode, first: 1, last: 5, width: 40, row: 1, col: 1}
+		p := newChatPane(&out, mode, fullWidthSegments(1, 5, 40), 7)
 		p.put([]byte("a\x1b[2Jb\x9bc\x07d"))
 		// U+2190 is the CP437 glyph for byte 0x1B.
 		p.put([]byte("\u2190\u263a"))
@@ -618,8 +689,8 @@ func TestChatPaneBackspaceRemovesWholeRune(t *testing.T) {
 	if got := term.Row(1); got != "a" {
 		t.Fatalf("after rune backspace row = %q", got)
 	}
-	if p.col != 2 || p.cells != 1 {
-		t.Fatalf("col, cells = %d, %d; want 2, 1", p.col, p.cells)
+	if p.cells != 1 {
+		t.Fatalf("cells = %d; want 1", p.cells)
 	}
 }
 
@@ -693,7 +764,7 @@ func TestChatPaneBackspaceAtFullWidth(t *testing.T) {
 		"next write": {"abcdefghij", "\b"},
 	} {
 		term := testterm.New(10, 5)
-		p := &chatPane{w: term, first: 1, last: 5, width: 10, row: 1, col: 1}
+		p := newChatPane(term, ansi.OutputModeUTF8, fullWidthSegments(1, 5, 10), 7)
 		for _, s := range parts {
 			p.put([]byte(s))
 		}

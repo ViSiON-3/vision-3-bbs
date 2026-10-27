@@ -131,7 +131,7 @@ Each menu consists of three files:
 All menu files are located in `menus/v3/`:
 
 - `menus/v3/mnu/` - Menu configuration files
-- `menus/v3/cfg/` - Command definition files
+- `menus/v3/cfg/` - Command definition files, and `NAME.json` [chat screen](#chat-screens) layouts
 - `menus/v3/ansi/` - ANSI art files
 - `menus/v3/bar/` - Lightbar menu files (optional)
 
@@ -941,8 +941,8 @@ them by hand.
 | Directory | Holds |
 |-----------|-------|
 | `menus/v3/mnu/` | `NAME.MNU` menu settings (JSON) |
-| `menus/v3/cfg/` | `NAME.CFG` command lists (JSON arrays) |
-| `menus/v3/ansi/` | `NAME.ANS` art, `PRELOGON.*`, and stand-alone screens such as `KONFIG.ANS` |
+| `menus/v3/cfg/` | `NAME.CFG` command lists (JSON arrays) and `NAME.json` [chat screen](#chat-screens) layouts |
+| `menus/v3/ansi/` | `NAME.ANS` art, `PRELOGON.*`, stand-alone screens such as `KONFIG.ANS`, and chat screen backgrounds |
 | `menus/v3/bar/` | `NAME.BAR` lightbar layouts (see [Lightbar Menus](#lightbar-menus)) and `*HI.BAR` per-screen colors |
 | `menus/v3/templates/` | `NAME.TOP` / `.MID` / `.BOT` templates and `message_headers/` |
 | `menus/v3/theme.json` | Colors shared by lightbars and chat |
@@ -958,12 +958,13 @@ for `yesNoHighlightColor`.
 |-------|---------|---------|
 | `yesNoHighlightColor` | `112` | The highlight bar in lightbars (message reader, message and file area lists, BBS list, message scan, file command bar, generated door menu) and the highlighted yes/no choice |
 | `yesNoRegularColor` | `15` | The unhighlighted yes/no choice and command bar options |
-| `chatSysopColor` | `11` | Sysop's pane in [split-screen chat](how-to-guides/wfc-console.md#chat) |
-| `chatUserColor` | `10` | Caller's pane in split-screen chat |
+| `chatSysopColor` | `11` | Sysop's text in [split-screen chat](how-to-guides/wfc-console.md#chat), where the chat screen sets no colour of its own |
+| `chatUserColor` | `10` | Caller's text in split-screen chat, likewise |
+| `sysopChatScreen` | (none) | The [chat screen](#chat-screens) split-screen chat opens with; empty means the built-in layout |
 
 The defaults apply to fields missing from `theme.json`. The shipped `v3`
-set's `theme.json` sets `yesNoHighlightColor` to `31` and
-`yesNoRegularColor` to `13`.
+set's `theme.json` sets `yesNoHighlightColor` to `31`, `yesNoRegularColor`
+to `13` and `sysopChatScreen` to `CHAT1`.
 
 A color number is the background times 16 plus the foreground, using the 16
 DOS colors: `31` is bright white (15) on blue (1).
@@ -987,6 +988,81 @@ regular color for its rows. Like any menu file, a copy in
 A screen with one of these files keeps its highlight when the theme changes.
 Delete the file, or your overlay copy of it, to have that screen follow the
 theme. There is no editor for these colors yet; see issue #611.
+
+### Chat screens
+
+A chat screen is what [split-screen chat](how-to-guides/wfc-console.md#chat)
+draws on the caller's terminal: ANSI art for the background, and a layout
+saying where each side types and where the status values go. A screen called
+`NAME` is two files in the menu set, overridable from `menus.d/` like any
+other:
+
+| File | Holds |
+|------|-------|
+| `cfg/NAME.json` | The layout |
+| `ansi/NAME.ANS` | The background, drawn once when chat opens |
+
+`theme.json`'s `sysopChatScreen` names the screen chat opens with, and
+`Alt-S` on the WFC snoop screen picks another for the next chat. The shipped
+set has `CHAT1`: a framed box for each side, the time and date on the title
+row and the minutes in chat at the bottom. Copy its two files under new names
+to start your own.
+
+The art can carry the names: `@SYSOP@` and `@CALLER@` in it are replaced
+with the handles when chat opens, padded or cut to the width of the
+placeholder, so `@SYSOP###########@` reserves 18 columns. Anything else in the
+art is left as it is.
+
+The layout:
+
+```json
+{
+  "width": 80,
+  "height": 25,
+  "statusColor": 15,
+  "sysop": {
+    "color": 11,
+    "lines": [
+      {"row": 3, "from": 3, "to": 77},
+      {"row": 4, "from": 3, "to": 77}
+    ]
+  },
+  "caller": {
+    "lines": [
+      {"row": 14, "from": 3, "to": 77},
+      {"row": 15, "from": 3, "to": 77}
+    ]
+  },
+  "fields": {
+    "sysopName": {"row": 2, "col": 5, "width": 20},
+    "callerName": {"row": 13, "col": 5, "width": 20},
+    "time": {"row": 1, "col": 55, "width": 5},
+    "date": {"row": 1, "col": 67, "width": 8},
+    "elapsed": {"row": 24, "col": 74, "width": 3}
+  }
+}
+```
+
+| Key | Meaning |
+|-----|---------|
+| `width`, `height` | The terminal size the screen is drawn for; `80` by `25` if left out. A caller with a smaller terminal gets the built-in layout instead |
+| `art` | The background's file name in `ansi/`, if it is not `NAME.ANS` |
+| `statusColor` | Colour of the fields; grey (`7`) if left out |
+| `sysop`, `caller` | Each side's `color` (the theme's chat colour for that side if left out or `0`) and `lines` |
+| `lines` | The typing lines in order, each the cells from column `from` to column `to` on row `row`, 1-based and both included. They can be anywhere on the screen and need not be the same width. Text moves up through them when the last one is full |
+| `fields` | Where to show the sysop's handle, the caller's handle, the time (`HH:MM`), the date (`MM/DD/YY`) and the minutes since chat began. Leave out any you do not want. `width` pads or cuts the value to that many columns so it never runs into the art |
+
+Rows and columns are 1-based and must lie on the screen; a layout that does
+not is refused whole, as is one with an unknown key, and chat uses the
+built-in layout. `vision3 doctor` reports such screens, and the daemon log
+says why a screen was not used.
+
+Converting a ViSiON/2 chat screen: its `CHAT.n` art and `CHATNFO.n` layout
+become `ansi/NAME.ANS` and `cfg/NAME.json`. `vision3 -convert-chatnfo
+CHATNFO.1 > menus.d/v3/cfg/CHAT1.json` writes the layout; copy the art and
+change its `|U` and `|S` name codes to `@CALLER@` and `@SYSOP@`. The
+`USER_CLEAR_LINE` and `SYSOP_CLEAR_LINE` settings have no counterpart, and a
+colour left out of `CHATNFO.n` takes the theme's rather than ViSiON/2's blue.
 
 ### Menu Configuration Files (.MNU)
 

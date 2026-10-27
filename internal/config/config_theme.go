@@ -16,6 +16,10 @@ type ThemeConfig struct {
 	YesNoRegularColor   int `json:"yesNoRegularColor"`
 	ChatSysopColor      int `json:"chatSysopColor"` // sysop pane in split-screen chat
 	ChatUserColor       int `json:"chatUserColor"`  // caller pane in split-screen chat
+	// SysopChatScreen names the chat screen split-screen chat opens with:
+	// cfg/NAME.json and ansi/NAME.ANS in the menu set. Empty means the
+	// built-in layout. The sysop can pick another from the WFC.
+	SysopChatScreen string `json:"sysopChatScreen"`
 	// Add other theme elements here as needed (e.g., default menu colors)
 }
 

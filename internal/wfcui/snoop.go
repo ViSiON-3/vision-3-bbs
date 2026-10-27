@@ -29,7 +29,9 @@ const (
 // snoopControl drives the server-side state behind the snoop screen.
 type snoopControl interface {
 	TypeIn(on bool) error
-	Chat(start bool) error
+	// Chat starts chat on the named chat screen ("" for the board's
+	// default), or ends it.
+	Chat(start bool, screen string) error
 }
 
 // rawTerm is the sysop's terminal.
@@ -83,6 +85,13 @@ type snoopCmd struct {
 
 	startChat bool // begin in chat, as when answering a page
 
+	// screens are the chat screens Alt-S cycles through: "" for the board's
+	// default, then the built-in layout when the default is a designed
+	// screen, then the menu set's other screens. screen is the current
+	// choice, sent with the next chat start.
+	screens []string
+	screen  string
+
 	typeBeforeChat bool // type-in was on when chat started
 	barRow         int  // row the bar was last drawn on, 0 if none
 	regionOn       bool // a scroll region was set on the sysop terminal
@@ -135,8 +144,9 @@ func (c *snoopCmd) Run() error {
 	} else {
 		c.statusOn = c.h > c.st.Header.Height
 	}
+	c.screens = chatScreenChoices(c.st.Header)
 	if c.startChat {
-		if err := c.ctl.Chat(true); err != nil {
+		if err := c.ctl.Chat(true, c.screen); err != nil {
 			c.lastErr = err.Error()
 		} else {
 			c.mode = snoopChat
@@ -196,7 +206,7 @@ func (c *snoopCmd) Run() error {
 	typeHeld := mode == snoopType || (mode == snoopChat && c.typeBeforeChat)
 	c.mu.Unlock()
 	if mode == snoopChat {
-		_ = c.ctl.Chat(false)
+		_ = c.ctl.Chat(false, "")
 	}
 	if typeHeld {
 		_ = c.ctl.TypeIn(false)
@@ -350,6 +360,8 @@ func (c *snoopCmd) loop(in <-chan byte, inEnd, outDone <-chan struct{}) string {
 			c.toggleType()
 		case 'c', 'C':
 			c.toggleChat()
+		case 's', 'S':
+			c.nextScreen()
 		case 'h', 'H':
 			c.toggleStatus()
 		case 'x', 'X':
@@ -399,7 +411,7 @@ func (c *snoopCmd) toggleChat() {
 	m := c.mode
 	c.mu.Unlock()
 	if m == snoopChat {
-		if err := c.ctl.Chat(false); err != nil {
+		if err := c.ctl.Chat(false, ""); err != nil {
 			if lostKeyboard(err) {
 				// The caller ended chat, which released the keyboard.
 				c.mu.Lock()
@@ -421,7 +433,10 @@ func (c *snoopCmd) toggleChat() {
 		c.setMode(back)
 		return
 	}
-	if err := c.ctl.Chat(true); err != nil {
+	c.mu.Lock()
+	screen := c.screen
+	c.mu.Unlock()
+	if err := c.ctl.Chat(true, screen); err != nil {
 		c.setErr(err)
 		return
 	}
@@ -429,6 +444,52 @@ func (c *snoopCmd) toggleChat() {
 	c.typeBeforeChat = m == snoopType
 	c.mu.Unlock()
 	c.setMode(snoopChat)
+}
+
+// chatScreenChoices is what Alt-S cycles through for a board whose snoop
+// header is hdr: the board's default first (sent as ""), the built-in layout
+// when the default is a designed screen, then the other screens by name. A
+// daemon that lists no screens leaves only the default.
+func chatScreenChoices(hdr admin.SnoopHeader) []string {
+	choices := []string{""}
+	if hdr.ChatScreen != "" {
+		choices = append(choices, snoopBuiltinScreen)
+	}
+	for _, name := range hdr.ChatScreens {
+		if name != hdr.ChatScreen {
+			choices = append(choices, name)
+		}
+	}
+	return choices
+}
+
+// snoopBuiltinScreen names the fixed split-screen layout to the daemon.
+const snoopBuiltinScreen = "builtin"
+
+// nextScreen moves Alt-S to the next chat screen. The choice is sent with
+// the next chat start; a chat already open keeps its screen.
+func (c *snoopCmd) nextScreen() {
+	c.mu.Lock()
+	if len(c.screens) < 2 {
+		c.lastErr = "this board has no chat screens"
+		c.mu.Unlock()
+		c.drawStatus()
+		return
+	}
+	i := 0
+	for j, name := range c.screens {
+		if name == c.screen {
+			i = j
+			break
+		}
+	}
+	c.screen = c.screens[(i+1)%len(c.screens)]
+	c.lastErr = ""
+	if c.mode == snoopChat {
+		c.lastErr = "screen applies to the next chat"
+	}
+	c.mu.Unlock()
+	c.drawStatus()
 }
 
 // lostKeyboard reports whether err says the sysop no longer holds the
@@ -539,10 +600,19 @@ func (c *snoopCmd) drawStatus() {
 	}
 	hd := c.st.Header
 	text := fmt.Sprintf(" NODE %d · %s · %dx%d · %s", c.node, hd.Handle, hd.Width, hd.Height, strings.ToUpper(c.mode))
+	if c.screen != "" {
+		text += " · screen " + c.screen
+	}
 	if c.lastErr != "" {
 		text += " · " + c.lastErr
 	}
-	text += " · Alt-T type · Alt-C chat · Alt-X exit "
+	// The Alt-S hint goes first when there is room for it, as the other
+	// hotkeys matter more on a narrow terminal.
+	hints := " · Alt-T type · Alt-C chat · Alt-X exit "
+	if withScreens := " · Alt-T type · Alt-C chat · Alt-S screen · Alt-X exit "; len(c.screens) > 1 && utf8.RuneCountInString(text+withScreens) <= c.w {
+		hints = withScreens
+	}
+	text += hints
 	r := []rune(text)
 	if len(r) > c.w {
 		r = r[:c.w]

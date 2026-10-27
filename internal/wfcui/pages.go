@@ -204,12 +204,12 @@ type rpcControl struct {
 	node   admin.NodeState
 }
 
-func (c rpcControl) run(cmd admin.CommandType, key string, v bool) error {
+func (c rpcControl) run(cmd admin.CommandType, payload map[string]any) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 	defer cancel()
 	res, err := c.client.Execute(ctx, admin.AdminCommand{
 		Command: cmd, NodeID: c.node.NodeID, ConnectedAt: c.node.ConnectedAt,
-		Payload: map[string]any{key: v},
+		Payload: payload,
 	})
 	if err != nil {
 		return err
@@ -220,8 +220,12 @@ func (c rpcControl) run(cmd admin.CommandType, key string, v bool) error {
 	return nil
 }
 
-func (c rpcControl) TypeIn(on bool) error  { return c.run(admin.CommandTypeIn, "on", on) }
-func (c rpcControl) Chat(start bool) error { return c.run(admin.CommandChat, "start", start) }
+func (c rpcControl) TypeIn(on bool) error {
+	return c.run(admin.CommandTypeIn, map[string]any{"on": on})
+}
+func (c rpcControl) Chat(start bool, screen string) error {
+	return c.run(admin.CommandChat, map[string]any{"start": start, "screen": screen})
+}
 
 // handleKeySnoop is S: snoop the selected caller.
 func (m Model) handleKeySnoop() (tea.Model, tea.Cmd) {

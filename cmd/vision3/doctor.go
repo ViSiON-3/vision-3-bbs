@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -381,6 +382,7 @@ func inspectBoard(root string) doctorReport {
 		checkBadUserNames(configDir, add, serverCfg)
 	}
 	checkMenuFiles(filepath.Join(root, "menus", "v3"), configDir, add)
+	checkChatScreens(filepath.Join(root, "menus", "v3"), add)
 	checkDoors(configDir, root, add)
 	checkWritablePaths(root, add)
 	return report
@@ -772,6 +774,39 @@ func checkDefaultSysopPassword(root string, cfg config.ServerConfig, add func(st
 		}
 	}
 	add("default sysop credentials", doctorOK, "no published default sysop password detected", "")
+}
+
+// checkChatScreens loads every chat screen in the menu set (cfg/NAME.json
+// with ansi/NAME.ANS) the way split-screen chat would, so a layout that
+// would make chat fall back to the built-in screen is reported here instead
+// of in the log during a chat. It also checks the default screen theme.json
+// names exists.
+func checkChatScreens(menuRoot string, add func(string, doctorSeverity, string, string)) {
+	menuSet := menuset.FromPath(menuRoot)
+	names := menu.ChatScreens(menuSet)
+	setName := filepath.Base(menuRoot)
+	bad := 0
+	for _, name := range names {
+		rel := filepath.ToSlash(filepath.Join("menus", setName, "cfg", name+".json"))
+		if err := menu.CheckChatScreen(menuSet, name); err != nil {
+			bad++
+			add(rel, doctorFail, err.Error(), fmt.Sprintf("Fix the layout or add the ansi/%s.ANS art it needs; chat uses the built-in layout until then.", name))
+		}
+	}
+	if len(names) > 0 && bad == 0 {
+		add("chat screens", doctorOK, fmt.Sprintf("%d chat screen(s) load", len(names)), "")
+	}
+	theme, err := config.LoadThemeConfig(menuRoot)
+	if err != nil {
+		add("theme.json", doctorFail, fmt.Sprintf("cannot load theme.json: %v", err), "Fix the JSON in theme.json; the board runs on the default theme until then.")
+		return
+	}
+	def := theme.SysopChatScreen
+	if def == "" || strings.EqualFold(def, menu.ChatScreenBuiltin) || slices.Contains(names, def) {
+		return
+	}
+	add("theme.json", doctorWarn, fmt.Sprintf("sysopChatScreen %q has no cfg/%s.json; chat uses the built-in layout", def, def),
+		"Create the screen, or set sysopChatScreen to one that exists or to \"\" for the built-in layout.")
 }
 
 func checkWritablePaths(root string, add func(string, doctorSeverity, string, string)) {
