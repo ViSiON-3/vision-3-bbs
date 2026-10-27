@@ -437,14 +437,8 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 				slog.Warn("invalid time format in ACS time range", "value", value, "startError", errStart, "endError", errEnd)
 				result = false
 			} else {
-				startDateTime := time.Date(now.Year(), now.Month(), now.Day(), startTime.Hour(), startTime.Minute(), 0, 0, now.Location())
-				endDateTime := time.Date(now.Year(), now.Month(), now.Day(), endTime.Hour(), endTime.Minute(), 0, 0, now.Location())
-				if endDateTime.Before(startDateTime) {
-					result = now.After(startDateTime) || now.Before(endDateTime)
-				} else {
-					result = (now.After(startDateTime) || now.Equal(startDateTime)) && (now.Before(endDateTime) || now.Equal(endDateTime))
-				}
-				slog.Debug("ACS 'Y' check", "range", value, "start", startDateTime, "end", endDateTime, "now", now, "result", result)
+				result = inTimeRange(now, startTime, endTime)
+				slog.Debug("ACS 'Y' check", "range", value, "now", now, "result", result)
 			}
 		}
 	case "B": // Upload/Download ratio >= value (as percentage)
@@ -488,4 +482,17 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 
 	// Negation is handled by the RPN evaluator using the '!' operator
 	return result
+}
+
+// inTimeRange reports whether now's clock time falls within start-end, both
+// minutes included: 00:00/23:59 is the whole day, through 23:59:59. A range
+// whose end is before its start runs past midnight.
+func inTimeRange(now, start, end time.Time) bool {
+	m := now.Hour()*60 + now.Minute()
+	from := start.Hour()*60 + start.Minute()
+	to := end.Hour()*60 + end.Minute()
+	if to < from {
+		return m >= from || m <= to
+	}
+	return m >= from && m <= to
 }
