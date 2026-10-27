@@ -60,6 +60,10 @@ type ServerConfig struct {
 	BadUsersPath        string `json:"badUsersPath"` // Blank uses badusers.txt in the selected config directory
 	MaxFailedLogins     int    `json:"maxFailedLogins"`
 	LockoutMinutes      int    `json:"lockoutMinutes"`
+	// MaxLoginTries is how many wrong passwords a call gets at the login
+	// prompt before NICETRY.ANS is shown and it is disconnected. 0 means 3,
+	// the BBS standard; see LoginTries.
+	MaxLoginTries       int    `json:"maxLoginTries,omitempty"`
 	FileListingMode     string `json:"fileListingMode"`
 	DoorMenuMode        string `json:"doorMenuMode,omitempty"`
 	DoorMenuSort        string `json:"doorMenuSort,omitempty"`
@@ -223,6 +227,7 @@ func defaultServerConfig() ServerConfig {
 		BadUsersPath:                 "configs/badusers.txt",
 		MaxFailedLogins:              5,
 		LockoutMinutes:               30,
+		MaxLoginTries:                DefaultLoginTries,
 		AllowNewUsers:                true,
 		RequireNewUserEmail:          false,
 		EnableChallengeGate:          false,
@@ -457,4 +462,16 @@ func UpdateServerConfig(configPath string, fn func(*ServerConfig) error) (Server
 		return cfg, err // ErrNoChange included: nothing is written
 	}
 	return cfg, writeServerConfig(f.Path, cfg)
+}
+
+// DefaultLoginTries is the BBS standard: three wrong passwords, then the
+// call is dropped.
+const DefaultLoginTries = 3
+
+// LoginTries is MaxLoginTries, or DefaultLoginTries when it is not set.
+func (c ServerConfig) LoginTries() int {
+	if c.MaxLoginTries > 0 {
+		return c.MaxLoginTries
+	}
+	return DefaultLoginTries
 }

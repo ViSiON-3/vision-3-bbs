@@ -370,7 +370,7 @@ the TUI signals the BBS once every file in the save has been written.
 | `configs/ftn.json` | Origin lines apply on save; the mailer's runtime settings (port, log level, links) apply on its next cycle. Enabling or disabling the binkd mailer itself still requires a restart |
 
 Connection-security settings in `config.json` — `maxNodes`, `maxConnectionsPerIP`,
-`maxFailedLogins`, `lockoutMinutes`, the connection rate limiter, and the
+`maxFailedLogins`, `lockoutMinutes`, `maxLoginTries`, the connection rate limiter, and the
 `ipBlocklistPath` / `ipAllowlistPath` settings — are applied live. Lowering a
 limit below current usage never disconnects anyone: new connections are refused
 until callers log off and usage falls back under the limit.
@@ -594,6 +594,7 @@ API's `qwkAPI.host` takes an IPv6 address without brackets.
 - `maxConnectionsPerIP` — Max concurrent connections from one IP (default: `3`)
 - `maxFailedLogins` — Failed BBS logins from an IP before lockout (default: `5`, `0` = disabled)
 - `lockoutMinutes` — Lockout duration in minutes (default: `30`)
+- `maxLoginTries` — Wrong passwords a call gets at the login prompt before `NICETRY.ANS` is shown and the call is dropped (default: `3`, the BBS standard; `0` also means `3`). Counted per call, separately from `maxFailedLogins`; the attempt that locks an IP out also shows `NICETRY.ANS` and drops the call. Without the art, the `execLoginTooManyTries` string is shown instead. Config editor: Access & Security → Connection Limits → Login Tries
 - `sessionIdleTimeoutMinutes` — Idle session cutoff, in menus and in doors (default: `5`, `0` = disabled). CoSysOps and above are exempt
 - `chatIdleTimeoutMinutes` — Idle cutoff while a caller is in teleconference chat (default: `0`, meaning `sessionIdleTimeoutMinutes` applies). In chat, messages, joins, leaves and topic changes in the caller's room count as activity, as do private messages to them, so someone reading a live conversation isn't dropped. CoSysOps and above are exempt
 - `transferTimeoutMinutes` — File transfer timeout (default: `10`)

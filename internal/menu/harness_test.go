@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -23,6 +24,8 @@ type testSession struct {
 	// hooks run once each, from Write, as soon as the output first contains
 	// their marker. See whenOutput.
 	hooks []outputHook
+
+	closed atomic.Bool // Close was called: the BBS hung up
 }
 
 type outputHook struct {
@@ -36,6 +39,12 @@ func newTestSession(input string) *testSession {
 }
 
 func (ts *testSession) Read(p []byte) (int, error) { return ts.in.Read(p) }
+
+// Close records that the BBS hung up on the caller.
+func (ts *testSession) Close() error {
+	ts.closed.Store(true)
+	return nil
+}
 
 func (ts *testSession) Write(p []byte) (int, error) {
 	n, err := ts.out.Write(p)

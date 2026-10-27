@@ -125,6 +125,21 @@ func TestExeccovLogin_Refused(t *testing.T) {
 			t.Errorf("lockout failed=%v cleared=%v", lock.failed, lock.cleared)
 		}
 	})
+	t.Run("third wrong password", func(t *testing.T) {
+		env, _, lock := execcovLoginEnv(t)
+		r := execcovRun(env, execcovCall{start: "LOGIN", input: strings.Repeat("alice\rguess\r", 4)})
+		if r.next != "LOGOFF" || r.user != nil {
+			t.Errorf("next=%q user=%s err=%v", r.next, execcovHandle(r.user), r.err)
+		}
+		// Three tries, then NICETRY.ANS instead of a fourth LOGIN screen;
+		// this menu set has no NICETRY.ANS, so its fallback string.
+		if n := execcovCount(r, "LOGIN-SCREEN"); n != 3 || !r.has("Nice try!") {
+			t.Errorf("LOGIN screens %d, output:\n%s", n, r.text())
+		}
+		if lock.failed["203.0.113.5"] != 3 {
+			t.Errorf("lockout failed=%v", lock.failed)
+		}
+	})
 	t.Run("locked IP", func(t *testing.T) {
 		env, _, lock := execcovLoginEnv(t)
 		lock.lockedIP, lock.until = "203.0.113.5", time.Now().Add(5*time.Minute)
