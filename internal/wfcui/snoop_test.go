@@ -15,6 +15,7 @@ import (
 	"github.com/muesli/cancelreader"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 )
 
@@ -728,13 +729,19 @@ func TestSnoopNoWriteAfterRunReturns(t *testing.T) {
 		r.cmd.resize <- struct{}{}
 		r.send(t, "\x1bx")
 		r.wait(t)
-		if got := r.out.String(); !strings.HasSuffix(got, "\x1b[r\x1b[0m\x1b[2J") {
+		if got := r.out.String(); !strings.HasSuffix(got, snoopExit) {
 			t.Fatalf("wrote after Run returned: %q", got[max(0, len(got)-60):])
 		}
 	}
 }
 
-// vtScreen is a minimal terminal: text, CR, LF, CUP, DECSTBM, ED and EL.
+// snoopExit is what the snoop screen writes as Run returns: the scroll
+// region and colours reset, the screen cleared, and the terminal's own
+// palette back.
+var snoopExit = "\x1b[r\x1b[0m\x1b[2J" + ansi.ResetPalette()
+
+// vtScreen is a minimal terminal: text, CR, LF, CUP, DECSTBM, ED and EL. OSC
+// sequences (the palette) are skipped, as a terminal draws nothing for them.
 type vtScreen struct {
 	w, h     int
 	cells    [][]rune
@@ -776,6 +783,16 @@ func (s *vtScreen) feed(in string) {
 				return
 			}
 			s.csi(b[j], string(b[i+2:j]))
+			i = j
+		case r == 0x1b && i+1 < len(b) && b[i+1] == ']':
+			// OSC, ended by BEL or ST (ESC \).
+			j := i + 2
+			for j < len(b) && b[j] != 0x07 && (b[j] != 0x1b || j+1 >= len(b) || b[j+1] != '\\') {
+				j++
+			}
+			if b[min(j, len(b)-1)] == 0x1b {
+				j++
+			}
 			i = j
 		case r == 0x1b:
 			i++
@@ -838,7 +855,7 @@ func TestSnoopMirroredScreenScrollsUnderBar(t *testing.T) {
 	r.out.waitFor(t, "line40")
 	r.send(t, "\x1bx")
 	r.wait(t)
-	out := strings.TrimSuffix(r.out.String(), "\x1b[r\x1b[0m\x1b[2J")
+	out := strings.TrimSuffix(r.out.String(), snoopExit)
 	sc := newVTScreen(100, 40)
 	sc.feed(out)
 	if sc.scrolls == 0 {
@@ -856,7 +873,7 @@ func TestSnoopMirroredScreenScrollsUnderBar(t *testing.T) {
 	if !strings.Contains(sc.line(39), "NODE 3") {
 		t.Fatalf("bar missing from the last row: %q", sc.line(39))
 	}
-	if !strings.HasSuffix(r.out.String(), "\x1b[r\x1b[0m\x1b[2J") {
+	if !strings.HasSuffix(r.out.String(), snoopExit) {
 		t.Fatal("scroll region not reset at exit")
 	}
 }
@@ -896,7 +913,7 @@ func TestSnoopCallerRegionScrollsOnlyItsRows(t *testing.T) {
 	r.send(t, "\x1bx")
 	r.wait(t)
 	sc := newVTScreen(100, 40)
-	sc.feed(strings.TrimSuffix(r.out.String(), "\x1b[r\x1b[0m\x1b[2J"))
+	sc.feed(strings.TrimSuffix(r.out.String(), snoopExit))
 	want := map[int]string{0: "top1", 1: "top2", 2: "m06", 8: "m12", 9: "", 10: ""}
 	for row, w := range want {
 		if got := sc.line(row); got != w {
@@ -951,7 +968,7 @@ func TestSnoopRegionResetMidChunkKeepsMirror(t *testing.T) {
 	r.send(t, "\x1bx")
 	r.wait(t)
 	sc := newVTScreen(100, 40)
-	sc.feed(strings.TrimSuffix(r.out.String(), "\x1b[r\x1b[0m\x1b[2J"))
+	sc.feed(strings.TrimSuffix(r.out.String(), snoopExit))
 	if got := sc.line(0); got != "line17" {
 		t.Errorf("row 1 = %q, want line17", got)
 	}
@@ -963,5 +980,19 @@ func TestSnoopRegionResetMidChunkKeepsMirror(t *testing.T) {
 	}
 	if !strings.Contains(sc.line(39), "NODE 3") {
 		t.Errorf("bar missing from the last row: %q", sc.line(39))
+	}
+}
+
+// The snoop screen loads the VGA palette the caller's session loaded at
+// login, so the art's resets draw on black rather than the sysop terminal's
+// own background, and gives the terminal its colours back when it leaves.
+func TestSnoopLoadsAndResetsVGAPalette(t *testing.T) {
+	r := newRig(t, utf8Hdr, 80, 25)
+	r.send(t, "\x1bx")
+	r.wait(t)
+	out := r.out.String()
+	set, reset := strings.Index(out, ansi.SetVGAPalette()), strings.LastIndex(out, ansi.ResetPalette())
+	if set < 0 || reset < 0 || reset < set {
+		t.Fatalf("palette set at %d, reset at %d in %q", set, reset, out)
 	}
 }

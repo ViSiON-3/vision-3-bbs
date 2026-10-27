@@ -157,7 +157,12 @@ func (c *snoopCmd) Run() error {
 			c.mode = snoopChat
 		}
 	}
-	c.write("\x1b[0m\x1b[2J\x1b[H")
+	// The caller's session loaded the VGA palette at login, long before this
+	// snoop began, so the sysop's terminal would draw the art in its own
+	// theme: a grey default background shows wherever the art resets its
+	// colours. Load the palette here too, and give the terminal its own
+	// colours back on the way out.
+	c.write(ansi.SetVGAPalette() + "\x1b[0m\x1b[2J\x1b[H")
 	c.mu.Lock()
 	c.track.reset(c.st.Header.Width, c.st.Header.Height)
 	c.mu.Unlock()
@@ -221,7 +226,7 @@ func (c *snoopCmd) Run() error {
 
 	c.result.reason = reason
 	c.mu.Lock()
-	_, _ = io.WriteString(c.stdout, "\x1b[r\x1b[0m\x1b[2J")
+	_, _ = io.WriteString(c.stdout, "\x1b[r\x1b[0m\x1b[2J"+ansi.ResetPalette())
 	c.mu.Unlock()
 	return nil
 }
