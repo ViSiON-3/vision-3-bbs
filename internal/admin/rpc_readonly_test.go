@@ -16,9 +16,10 @@ func readOnlyRPC(t *testing.T, ro *atomic.Bool) (*StreamClient, *atomic.Int32) {
 	var calls atomic.Int32
 	srv := NewServer(ServerConfig{
 		Reg: &fakeRegistry{}, Refresh: 20 * time.Millisecond, MaxEvents: 8,
-		Kick:   func(int, time.Time) error { calls.Add(1); return nil },
-		TypeIn: func(string, int, time.Time, bool) error { calls.Add(1); return nil },
-		Chat:   func(string, int, time.Time, bool, string) (bool, error) { calls.Add(1); return false, nil },
+		Kick:       func(int, time.Time) error { calls.Add(1); return nil },
+		TypeIn:     func(string, int, time.Time, bool) error { calls.Add(1); return nil },
+		Chat:       func(string, int, time.Time, bool, string) (bool, error) { calls.Add(1); return false, nil },
+		ChatScreen: func(string, int, time.Time, string) error { calls.Add(1); return nil },
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -35,6 +36,7 @@ var grabCommands = []AdminCommand{
 	{Command: CommandKick, NodeID: 1},
 	{Command: CommandTypeIn, NodeID: 1, Payload: map[string]any{"on": true}},
 	{Command: CommandChat, NodeID: 1, Payload: map[string]any{"start": true}},
+	{Command: CommandChatScreen, NodeID: 1, Payload: map[string]any{"screen": "CHAT2"}},
 }
 
 // releaseCommands only give the keyboard back, so a read-only console may.

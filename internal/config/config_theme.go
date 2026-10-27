@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 )
 
@@ -18,7 +20,8 @@ type ThemeConfig struct {
 	ChatUserColor       int `json:"chatUserColor"`  // caller pane in split-screen chat
 	// SysopChatScreen names the chat screen split-screen chat opens with:
 	// cfg/NAME.json and ansi/NAME.ANS in the menu set. Empty means the
-	// built-in layout. The sysop can pick another from the WFC.
+	// built-in layout, and "random" one of the set's screens each chat. The
+	// sysop can pick another from the WFC.
 	SysopChatScreen string `json:"sysopChatScreen"`
 	// Add other theme elements here as needed (e.g., default menu colors)
 }
@@ -61,4 +64,42 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 
 	slog.Info("loaded theme configuration", "path", filePath)
 	return theme, nil
+}
+
+// SaveThemeConfig writes theme to the menu set's theme.json in its overlay
+// (menus.d/<set>/theme.json), so an upgrade of the shipped set leaves it
+// alone. It starts from the theme.json in use, so keys ThemeConfig does not
+// know are kept.
+func SaveThemeConfig(menuSetPath string, theme ThemeConfig) error {
+	set := menuset.FromPath(menuSetPath)
+	current, err := set.Resolve("theme.json")
+	if err != nil {
+		return err
+	}
+	doc := map[string]json.RawMessage{}
+	data, err := os.ReadFile(current)
+	switch {
+	case err == nil:
+		if err := json.Unmarshal(data, &doc); err != nil {
+			return fmt.Errorf("parse %s: %w", current, err)
+		}
+	case !os.IsNotExist(err):
+		return err
+	}
+	known, err := json.Marshal(theme)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(known, &doc); err != nil {
+		return err
+	}
+	out, err := json.MarshalIndent(doc, "", "    ")
+	if err != nil {
+		return err
+	}
+	path := set.WritePath("theme.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return atomicfile.WriteFile(path, append(out, '\n'), 0o644)
 }

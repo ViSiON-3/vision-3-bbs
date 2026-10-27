@@ -780,7 +780,7 @@ func checkDefaultSysopPassword(root string, cfg config.ServerConfig, add func(st
 // with ansi/NAME.ANS) the way split-screen chat would, so a layout that
 // would make chat fall back to the built-in screen is reported here instead
 // of in the log during a chat. It also checks the default screen theme.json
-// names exists.
+// names exists, or that random has a screen to pick.
 func checkChatScreens(menuRoot string, add func(string, doctorSeverity, string, string)) {
 	menuSet := menuset.FromPath(menuRoot)
 	names := menu.ChatScreens(menuSet)
@@ -802,6 +802,13 @@ func checkChatScreens(menuRoot string, add func(string, doctorSeverity, string, 
 		return
 	}
 	def := theme.SysopChatScreen
+	if strings.EqualFold(def, menu.ChatScreenRandom) {
+		if len(names)-bad == 0 {
+			add("theme.json", doctorWarn, "sysopChatScreen is random but no chat screen loads; chat uses the built-in layout",
+				"Add a chat screen to the menu set, or set sysopChatScreen to \"\" for the built-in layout.")
+		}
+		return
+	}
 	if def == "" || strings.EqualFold(def, menu.ChatScreenBuiltin) || slices.Contains(names, def) {
 		return
 	}

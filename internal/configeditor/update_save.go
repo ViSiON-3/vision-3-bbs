@@ -185,6 +185,14 @@ func (m *Model) saveAll() bool {
 			return false
 		}
 	}
+	if m.configs.Theme != m.configs.themeSaved {
+		c, err := saveTheme(m.configPath, &m.configs.themeSaved, &m.configs.Theme)
+		if err != nil {
+			m.message = fmt.Sprintf("SAVE ERROR: %v", err)
+			return false
+		}
+		conflicts = append(conflicts, c...)
+	}
 
 	m.dirty = false
 

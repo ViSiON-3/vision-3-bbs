@@ -129,7 +129,11 @@ func scanCallSites(t *testing.T) []callSite {
 			if body == nil {
 				return true
 			}
-			sites = append(sites, scanFuncBody(t, fset, body, keys, globals)...)
+			holders := stringsConfigParams(n)
+			for name := range globals {
+				holders[name] = true
+			}
+			sites = append(sites, scanFuncBody(t, fset, body, keys, holders)...)
 			return true
 		})
 		return nil
@@ -168,6 +172,41 @@ func stringsConfigVars(file *ast.File) map[string]bool {
 		}
 	}
 	return vars
+}
+
+// stringsConfigParams returns the parameters of a function declaration or
+// literal typed config.StringsConfig or *config.StringsConfig, as in
+// drawChatView(..., st *config.StringsConfig, ...). A field read from one is
+// as good as x.Strings().Field.
+func stringsConfigParams(n ast.Node) map[string]bool {
+	params := map[string]bool{}
+	var ft *ast.FuncType
+	switch fn := n.(type) {
+	case *ast.FuncDecl:
+		ft = fn.Type
+	case *ast.FuncLit:
+		ft = fn.Type
+	}
+	if ft == nil || ft.Params == nil {
+		return params
+	}
+	for _, field := range ft.Params.List {
+		typ := field.Type
+		if star, ok := typ.(*ast.StarExpr); ok {
+			typ = star.X
+		}
+		sel, ok := typ.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "StringsConfig" {
+			continue
+		}
+		if pkg, ok := sel.X.(*ast.Ident); !ok || pkg.Name != "config" {
+			continue
+		}
+		for _, name := range field.Names {
+			params[name.Name] = true
+		}
+	}
+	return params
 }
 
 // funcBody returns the body of a function declaration or literal.
@@ -584,6 +623,7 @@ func TestAliasedFormatSitesAreFound(t *testing.T) {
 		"confCurrentConfFormat",   // msg := ...; fmt.Sprintf(msg, name, tag)
 		"doorBusyFormat",          // busyFmt := ...; fmt.Sprintf(busyFmt, ...)
 		"newscanNewNetworkPrompt", // promptTpl := ...; fmt.Sprintf(promptTpl, ...)
+		"sysopChatHeader",         // st *config.StringsConfig parameter; fmt.Sprintf(st.SysopChatHeader, ...)
 	} {
 		if !found[key] {
 			t.Errorf("%q is formatted through a local alias but the scanner did not find it", key)

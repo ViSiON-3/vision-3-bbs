@@ -82,3 +82,21 @@ func TestGetAnsiFileContentStripsSAUCE(t *testing.T) {
 		t.Error("Expected error for nonexistent file, got nil")
 	}
 }
+
+func TestReadSAUCE(t *testing.T) {
+	rec := make([]byte, 128)
+	copy(rec, "SAUCE00")
+	copy(rec[7:], "Skull \x82 Chat")     // CP437 0x82 is é
+	copy(rec[42:], "Posyden\x00\x00")    // NUL padding
+	copy(rec[62:], "GRiM Productions  ") // space padding
+	art := append([]byte("\x1b[0mart\x1a"), rec...)
+	s, ok := ReadSAUCE(art)
+	if !ok || s != (Sauce{Title: "Skull é Chat", Author: "Posyden", Group: "GRiM Productions"}) {
+		t.Fatalf("ReadSAUCE = %+v, %v", s, ok)
+	}
+	for _, data := range [][]byte{nil, []byte("short"), bytes.Repeat([]byte("x"), 200)} {
+		if s, ok := ReadSAUCE(data); ok || s != (Sauce{}) {
+			t.Errorf("ReadSAUCE(%d bytes without a record) = %+v, %v", len(data), s, ok)
+		}
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"sort"
@@ -242,25 +243,78 @@ func (sc *chatLayout) dividerRow() int { return sc.Sysop.Lines[len(sc.Sysop.Line
 // caller's terminal has, gives way to the built-in layout so chat still
 // opens; the reason is logged for the sysop.
 func chooseChatLayout(env *chatEnv, want string, width, height int) *chatLayout {
+	sc, err := resolveChatLayout(env, want, "", width, height)
+	if err != nil {
+		slog.Warn("chat screen unavailable, using the built-in layout", "error", err)
+		return builtinChatLayout(width, height)
+	}
+	return sc
+}
+
+// resolveChatLayout is chooseChatLayout without the fallback: it returns why
+// the screen cannot be used, as a chat already open must keep its screen
+// rather than drop to the built-in one. ChatScreenRandom picks among the
+// menu set's screens that load and fit, other than avoid when there is a
+// choice, so a switch to random changes the screen.
+func resolveChatLayout(env *chatEnv, want, avoid string, width, height int) (*chatLayout, error) {
 	name := want
 	if name == "" {
 		name = env.theme().SysopChatScreen
 	}
 	if name == "" || strings.EqualFold(name, ChatScreenBuiltin) || env.menus == nil {
-		return builtinChatLayout(width, height)
+		if strings.EqualFold(name, ChatScreenRandom) {
+			return nil, errors.New("no menu set to pick a random chat screen from")
+		}
+		return builtinChatLayout(width, height), nil
 	}
-	sc, err := loadChatLayout(env.menus(), name)
+	m := env.menus()
+	if strings.EqualFold(name, ChatScreenRandom) {
+		return randomChatLayout(m, avoid, width, height)
+	}
+	sc, err := loadChatLayout(m, name)
 	if err != nil {
-		slog.Warn("chat screen unavailable, using the built-in layout", "screen", name, "error", err)
-		return builtinChatLayout(width, height)
+		return nil, fmt.Errorf("chat screen %s: %w", name, err)
 	}
 	if !sc.fits(width, height) {
-		slog.Warn("chat screen does not fit the caller's terminal, using the built-in layout",
-			"screen", name, "screen_size", fmt.Sprintf("%dx%d", sc.Width, sc.Height),
-			"terminal", fmt.Sprintf("%dx%d", width, height))
-		return builtinChatLayout(width, height)
+		return nil, fmt.Errorf("chat screen %s is %dx%d, the caller's terminal %dx%d", name, sc.Width, sc.Height, width, height)
 	}
-	return sc
+	return sc, nil
+}
+
+// ChatScreenRandom picks one of the menu set's chat screens each time, as
+// the default or the sysop's choice.
+const ChatScreenRandom = "random"
+
+// chatPick chooses one of n; tests replace it.
+var chatPick = rand.IntN
+
+func randomChatLayout(m menuset.Set, avoid string, width, height int) (*chatLayout, error) {
+	var fit []*chatLayout
+	for _, name := range ChatScreens(m) {
+		sc, err := loadChatLayout(m, name)
+		if err != nil {
+			slog.Warn("chat screen unavailable for random choice", "screen", name, "error", err)
+			continue
+		}
+		if sc.fits(width, height) {
+			fit = append(fit, sc)
+		}
+	}
+	if len(fit) > 1 {
+		others := fit[:0:0]
+		for _, sc := range fit {
+			if !strings.EqualFold(sc.name, avoid) {
+				others = append(others, sc)
+			}
+		}
+		if len(others) > 0 {
+			fit = others
+		}
+	}
+	if len(fit) == 0 {
+		return nil, fmt.Errorf("no chat screen fits the caller's %dx%d terminal", width, height)
+	}
+	return fit[chatPick(len(fit))], nil
 }
 
 // ConvertChatNfo reads a Vision/2 CHATNFO.n layout and returns the equivalent

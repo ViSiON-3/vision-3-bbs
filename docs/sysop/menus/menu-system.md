@@ -960,11 +960,11 @@ for `yesNoHighlightColor`.
 | `yesNoRegularColor` | `15` | The unhighlighted yes/no choice and command bar options |
 | `chatSysopColor` | `11` | Sysop's text in [split-screen chat](how-to-guides/wfc-console.md#chat), where the chat screen sets no colour of its own |
 | `chatUserColor` | `10` | Caller's text in split-screen chat, likewise |
-| `sysopChatScreen` | (none) | The [chat screen](#chat-screens) split-screen chat opens with; empty means the built-in layout |
+| `sysopChatScreen` | (none) | The [chat screen](#chat-screens) split-screen chat opens with; empty means the built-in layout, `random` one of the set's screens each chat |
 
 The defaults apply to fields missing from `theme.json`. The shipped `v3`
 set's `theme.json` sets `yesNoHighlightColor` to `31`, `yesNoRegularColor`
-to `13` and `sysopChatScreen` to `CHAT1`.
+to `13` and `sysopChatScreen` to `V3CHAT1`.
 
 A color number is the background times 16 plus the foreground, using the 16
 DOS colors: `31` is bright white (15) on blue (1).
@@ -1002,14 +1002,22 @@ other:
 | `cfg/NAME.json` | The layout |
 | `ansi/NAME.ANS` | The background, drawn once when chat opens |
 
-`theme.json`'s `sysopChatScreen` names the screen chat opens with, and
-`Alt-S` on the WFC snoop screen picks another for the next chat. The shipped
-set has `CHAT1`: a framed box for each side, the time and date on the title
+`theme.json`'s `sysopChatScreen` names the screen chat opens with; the
+config editor's Theme page sets it from a list of the set's screens. `random`
+picks one of the set's screens that fits the caller's terminal each chat.
+`Alt-S` on the WFC snoop screen picks another, for the next chat or the one
+already open. The shipped
+set has `V3CHAT1`: a framed box for each side, the time and date on the title
 row and the minutes in chat at the bottom. Copy its two files under new names
 to start your own. It also has the two screens ViSiON/2 shipped, converted
 from its `CHAT.1` and `CHAT.2`: `V2CHAT1`, art by Posyden of GRiM Productions,
 and `V2CHAT2`, art by JED of ACiD Productions. Each has the art on the left
 and the sysop and caller typing on the right, with the handles on the top row.
+
+The art's SAUCE record names the screen where the sysop picks one: the
+config editor's Theme page lists each screen with its SAUCE title and author,
+e.g. `V2CHAT1 - ViSiON/2 Chat #1 by Posyden`. Set them in your art editor
+when you save the screen; a screen whose art has no SAUCE is listed by name.
 
 The art can carry the names: `@SYSOP@` and `@CALLER@` in it are replaced
 with the handles when chat opens, padded or cut to the width of the
@@ -1062,7 +1070,7 @@ says why a screen was not used.
 
 Converting a ViSiON/2 chat screen: its `CHAT.n` art and `CHATNFO.n` layout
 become `ansi/NAME.ANS` and `cfg/NAME.json`. `vision3 -convert-chatnfo
-CHATNFO.1 > menus.d/v3/cfg/CHAT1.json` writes the layout; copy the art and
+CHATNFO.1 > menus.d/v3/cfg/MYCHAT.json` writes the layout; copy the art and
 change its `|U` and `|S` name codes to `@CALLER@` and `@SYSOP@`. The
 `USER_CLEAR_LINE` and `SYSOP_CLEAR_LINE` settings have no counterpart, and a
 colour left out of `CHATNFO.n` takes the theme's rather than ViSiON/2's blue.

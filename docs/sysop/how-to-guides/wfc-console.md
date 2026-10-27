@@ -324,7 +324,7 @@ toggles it.
 | `Alt-H` | Show or hide the status bar |
 | `Alt-T` | Type for the caller (see below) |
 | `Alt-C` | Start or end chat (see below) |
-| `Alt-S` | Choose the chat screen for the next chat (see [Chat screens](#chat-screens)) |
+| `Alt-S` | Change the chat screen, for the open chat or the next one (see [Chat screens](#chat-screens)) |
 
 If the caller disconnects, `wfc` returns to the dashboard with
 `node N disconnected`. The status bar follows your terminal size: it shows when
@@ -357,7 +357,7 @@ never records the keystrokes.
 
 `Alt-C` toggles chat. It opens a split screen on the caller's terminal with
 your text in one area and the caller's in another. Each area word-wraps and
-scrolls on its own. The shipped menu set opens the `CHAT1` screen: a framed
+scrolls on its own. The shipped menu set opens the `V3CHAT1` screen: a framed
 box for each side under a title row with the time and date, and the minutes
 in chat at the bottom. With no screen configured the built-in layout is used:
 your text on top, the caller's below, and a bar between them with both
@@ -398,13 +398,21 @@ can have several; the format is in
 [Chat screens](menus/menu-system.md#chat-screens).
 
 `sysopChatScreen` in `theme.json` names the screen `Alt-C` opens; the shipped
-set's is `CHAT1`. `Alt-S` on the snoop screen cycles through the others for
-the next chat: the board's default, then the built-in layout, then every other
-screen in the set by name, such as `V2CHAT1` and `V2CHAT2`, the two screens
-ViSiON/2 shipped. The status bar shows `screen NAME` while a choice
-other than the default is selected, and the choice goes with the next `Alt-C`
-or answered page. Pressing `Alt-S` during a chat changes only the next one. A
-daemon older than the console reports no screens, and `Alt-S` says so.
+set's is `V3CHAT1`, and the config editor's Theme page changes it. It can be
+`random`, a different screen each chat. `Alt-S` on the snoop screen cycles
+through the others: the board's default, then the built-in layout, then
+`random` when the board has two screens or more, then every other screen in
+the set by name, such as `V2CHAT1` and `V2CHAT2`, the two screens ViSiON/2
+shipped. The status bar shows `screen NAME` while a choice other than
+the default is selected (and `screen random` when that is the default), and
+the choice goes with the next `Alt-C` or answered page.
+
+Pressing `Alt-S` during a chat switches that chat: the caller's screen is
+redrawn on the new one and both sides' text moves onto its typing lines, the
+line being typed still open. A screen the chat cannot use (missing, broken, or
+bigger than the caller's terminal) is refused with the reason on the status
+bar, and the chat keeps its screen. A daemon older than the console reports
+no screens, and `Alt-S` says so; one that predates switching refuses it.
 
 A screen is drawn for a terminal size (80x25 unless its layout says
 otherwise). A caller whose terminal is smaller gets the built-in layout

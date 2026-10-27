@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +46,26 @@ func TestChatCommandWithoutHookIsUnsupported(t *testing.T) {
 	_, err := srv.ExecuteAs("jim", AdminCommand{Command: CommandChat, NodeID: 2, Payload: map[string]any{"start": true}})
 	if err == nil {
 		t.Fatal("want unsupported error")
+	}
+}
+
+func TestChatScreenCommandCallsHook(t *testing.T) {
+	var got string
+	srv := newTestServer(ServerConfig{ChatScreen: func(sysop string, node int, _ time.Time, screen string) error {
+		got = fmt.Sprintf("%s %d %s", sysop, node, screen)
+		return nil
+	}})
+	if _, err := srv.ExecuteAs("jim", AdminCommand{Command: CommandChatScreen, NodeID: 2, Payload: map[string]any{"screen": "CHAT2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got != "jim 2 CHAT2" {
+		t.Fatalf("hook got %q", got)
+	}
+	if _, err := srv.ExecuteAs("", AdminCommand{Command: CommandChatScreen, NodeID: 2}); err == nil {
+		t.Fatal("want an error without a sysop")
+	}
+	if _, err := newTestServer(ServerConfig{}).ExecuteAs("jim", AdminCommand{Command: CommandChatScreen, NodeID: 2}); err == nil {
+		t.Fatal("want unsupported error without a hook")
 	}
 }
 

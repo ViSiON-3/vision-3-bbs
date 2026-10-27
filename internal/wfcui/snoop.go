@@ -32,6 +32,8 @@ type snoopControl interface {
 	// Chat starts chat on the named chat screen ("" for the board's
 	// default), or ends it.
 	Chat(start bool, screen string) error
+	// ChatScreen changes the open chat to the named chat screen.
+	ChatScreen(screen string) error
 }
 
 // rawTerm is the sysop's terminal.
@@ -88,9 +90,12 @@ type snoopCmd struct {
 	// screens are the chat screens Alt-S cycles through: "" for the board's
 	// default, then the built-in layout when the default is a designed
 	// screen, then the menu set's other screens. screen is the current
-	// choice, sent with the next chat start.
+	// choice, sent with the next chat start. cycle is Alt-S's place in
+	// screens; it moves on even when an open chat refuses a screen, so one
+	// unusable screen cannot stop the cycle.
 	screens []string
 	screen  string
+	cycle   int
 
 	typeBeforeChat bool // type-in was on when chat started
 	barRow         int  // row the bar was last drawn on, 0 if none
@@ -152,9 +157,15 @@ func (c *snoopCmd) Run() error {
 			c.mode = snoopChat
 		}
 	}
-	c.write("\x1b[0m\x1b[2J\x1b[H")
+	// The caller's session loaded the VGA palette at login, long before this
+	// snoop began, so the sysop's terminal would draw the art in its own
+	// theme: a grey default background shows wherever the art resets its
+	// colours. Load the palette here too, and give the terminal its own
+	// colours back on the way out.
+	c.write(ansi.SetVGAPalette() + "\x1b[0m\x1b[2J\x1b[H")
 	c.mu.Lock()
 	c.track.reset(c.st.Header.Width, c.st.Header.Height)
+	c.track.fit = c.w > c.st.Header.Width
 	c.mu.Unlock()
 	c.drawStatus()
 
@@ -216,7 +227,7 @@ func (c *snoopCmd) Run() error {
 
 	c.result.reason = reason
 	c.mu.Lock()
-	_, _ = io.WriteString(c.stdout, "\x1b[r\x1b[0m\x1b[2J")
+	_, _ = io.WriteString(c.stdout, "\x1b[r\x1b[0m\x1b[2J"+ansi.ResetPalette())
 	c.mu.Unlock()
 	return nil
 }
@@ -248,6 +259,7 @@ func (c *snoopCmd) onResize() {
 		return
 	}
 	c.w, c.h = w, h
+	c.track.fit = w > c.st.Header.Width
 	c.regionStale = true
 	if !c.statusManual {
 		c.statusOn = h > c.st.Header.Height
@@ -302,15 +314,16 @@ func (c *snoopCmd) pump(done chan<- struct{}) {
 			if cp437 {
 				// ESC sequences pass through byte for byte and the rest of
 				// a sequence split across reads is ASCII, so each chunk
-				// converts on its own.
-				chunk = ansi.CP437BytesToUTF8(chunk)
+				// converts on its own. The control bytes a CP437 terminal
+				// draws as glyphs (the ▲ ▼ arrows art uses) are drawn too.
+				chunk = ansi.DrawCP437ControlGlyphs(ansi.CP437BytesToUTF8(chunk))
 			}
 			c.mu.Lock()
 			// Split the chunk after each region change so the mirrored
 			// region is back in force before any output that could scroll.
 			for len(chunk) > 0 {
-				k, region := c.track.feedToRegion(chunk)
-				_, _ = c.stdout.Write(chunk[:k])
+				k, out, region := c.track.feedToRegion(chunk)
+				_, _ = c.stdout.Write(out)
 				chunk = chunk[k:]
 				if region {
 					c.mirrorRegionLocked()
@@ -448,12 +461,16 @@ func (c *snoopCmd) toggleChat() {
 
 // chatScreenChoices is what Alt-S cycles through for a board whose snoop
 // header is hdr: the board's default first (sent as ""), the built-in layout
-// when the default is a designed screen, then the other screens by name. A
-// daemon that lists no screens leaves only the default.
+// when the default is a designed screen, random when the board has two
+// screens or more and the default is not already random, then the other
+// screens by name. A daemon that lists no screens leaves only the default.
 func chatScreenChoices(hdr admin.SnoopHeader) []string {
 	choices := []string{""}
 	if hdr.ChatScreen != "" {
 		choices = append(choices, snoopBuiltinScreen)
+	}
+	if len(hdr.ChatScreens) > 1 && !strings.EqualFold(hdr.ChatScreen, snoopRandomScreen) {
+		choices = append(choices, snoopRandomScreen)
 	}
 	for _, name := range hdr.ChatScreens {
 		if name != hdr.ChatScreen {
@@ -463,11 +480,17 @@ func chatScreenChoices(hdr admin.SnoopHeader) []string {
 	return choices
 }
 
-// snoopBuiltinScreen names the fixed split-screen layout to the daemon.
-const snoopBuiltinScreen = "builtin"
+// snoopBuiltinScreen names the fixed split-screen layout to the daemon, and
+// snoopRandomScreen asks it to pick one of the board's screens.
+const (
+	snoopBuiltinScreen = "builtin"
+	snoopRandomScreen  = "random"
+)
 
-// nextScreen moves Alt-S to the next chat screen. The choice is sent with
-// the next chat start; a chat already open keeps its screen.
+// nextScreen moves Alt-S to the next chat screen. It is sent with the next
+// chat start, and switches a chat already open; a screen the open chat
+// cannot take leaves the choice where it was, with the reason on the bar,
+// and the next Alt-S moves on past it.
 func (c *snoopCmd) nextScreen() {
 	c.mu.Lock()
 	if len(c.screens) < 2 {
@@ -476,20 +499,31 @@ func (c *snoopCmd) nextScreen() {
 		c.drawStatus()
 		return
 	}
-	i := 0
-	for j, name := range c.screens {
-		if name == c.screen {
-			i = j
-			break
-		}
+	c.cycle = (c.cycle + 1) % len(c.screens)
+	next := c.screens[c.cycle]
+	chatting := c.mode == snoopChat
+	c.mu.Unlock()
+	var err error
+	if chatting {
+		err = c.ctl.ChatScreen(next)
 	}
-	c.screen = c.screens[(i+1)%len(c.screens)]
+	c.mu.Lock()
 	c.lastErr = ""
-	if c.mode == snoopChat {
-		c.lastErr = "screen applies to the next chat"
+	if err != nil {
+		c.lastErr = "screen " + screenLabel(next) + ": " + err.Error()
+	} else {
+		c.screen = next
 	}
 	c.mu.Unlock()
 	c.drawStatus()
+}
+
+// screenLabel names a choice for the status bar.
+func screenLabel(screen string) string {
+	if screen == "" {
+		return "default"
+	}
+	return screen
 }
 
 // lostKeyboard reports whether err says the sysop no longer holds the
@@ -600,8 +634,11 @@ func (c *snoopCmd) drawStatus() {
 	}
 	hd := c.st.Header
 	text := fmt.Sprintf(" NODE %d · %s · %dx%d · %s", c.node, hd.Handle, hd.Width, hd.Height, strings.ToUpper(c.mode))
-	if c.screen != "" {
+	switch {
+	case c.screen != "":
 		text += " · screen " + c.screen
+	case strings.EqualFold(hd.ChatScreen, snoopRandomScreen):
+		text += " · screen random"
 	}
 	if c.lastErr != "" {
 		text += " · " + c.lastErr
@@ -631,6 +668,13 @@ type seqTracker struct {
 	params []byte // parameter bytes of the CSI being read
 	interm bool   // the CSI has an intermediate byte
 	cur    cursor
+
+	// fit is set while the sysop's terminal is wider than the caller's. The
+	// mirror then wraps where the caller's terminal does rather than where
+	// the sysop's would: see fitBefore and fitAfter.
+	fit   bool
+	final byte   // final byte of the CSI the last step completed, else 0
+	out   []byte // output for the bytes fed, reused between calls
 }
 
 const (
@@ -644,19 +688,32 @@ const (
 
 func (t *seqTracker) feed(p []byte) {
 	for len(p) > 0 {
-		n, _ := t.feedToRegion(p)
+		n, _, _ := t.feedToRegion(p)
 		p = p[n:]
 	}
 }
 
 // feedToRegion tracks p up to and including the first sequence that changes
-// the scroll region (DECSTBM or RIS). It returns the bytes consumed and
-// whether it stopped on such a sequence.
-func (t *seqTracker) feedToRegion(p []byte) (int, bool) {
+// the scroll region (DECSTBM or RIS). It returns the bytes consumed, what to
+// write to the sysop's terminal for them (p itself, unless fit adds to it),
+// and whether it stopped on such a sequence. The output is valid until the
+// next call.
+func (t *seqTracker) feedToRegion(p []byte) (int, []byte, bool) {
 	n, region := len(p), false
+	t.out = t.out[:0]
 	for i, b := range p {
 		sets := t.cur.regionSets
+		if t.fit && t.fitBefore(b) {
+			t.out = append(t.out, '\r', '\n')
+		}
+		text := t.state == stGround && b >= 0x20 && b != 0x7f
+		wasPending := t.cur.pendingWrap
+		t.final = 0
 		t.step(b)
+		if t.fit {
+			t.out = append(t.out, b)
+			t.fitAfter(b, text, wasPending)
+		}
 		if t.cur.regionSets != sets {
 			n, region = i+1, true
 			break
@@ -666,7 +723,42 @@ func (t *seqTracker) feedToRegion(p []byte) (int, bool) {
 	if len(t.tail) > utf8.UTFMax {
 		t.tail = append(t.tail[:0], t.tail[len(t.tail)-utf8.UTFMax:]...)
 	}
-	return n, region
+	out := t.out
+	if !t.fit {
+		out = p[:n]
+	}
+	return n, out, region
+}
+
+// fitBefore reports whether b starts a character that the caller's
+// terminal wraps to the next line before drawing: the last character filled
+// its final column. The sysop's wider terminal would draw it on the same
+// line, so the mirror breaks the line first.
+func (t *seqTracker) fitBefore(b byte) bool {
+	c := &t.cur
+	if t.state != stGround || c.rneed > 0 || !c.known || c.origin || !c.pendingWrap {
+		return false
+	}
+	return b >= 0x20 && b != 0x7f && (b < 0x80 || b >= 0xc0)
+}
+
+// fitAfter keeps the sysop's cursor where the caller's is after b. A
+// character that fills the caller's last column leaves the caller's cursor
+// there, waiting to wrap, but moves the sysop's one column on, so it is
+// stepped back. Moves the caller's terminal stops at its right edge
+// (cursor forward, column, tab, position) go further on the sysop's, so
+// the cursor is put back where the caller's stopped.
+func (t *seqTracker) fitAfter(b byte, text, wasPending bool) {
+	c := &t.cur
+	if !c.known || c.origin {
+		return
+	}
+	switch {
+	case text && c.rneed == 0 && c.pendingWrap && !wasPending:
+		t.out = append(t.out, "\x1b[D"...)
+	case t.final != 0 && strings.IndexByte("CGaHf`", t.final) >= 0, t.state == stGround && b == '\t':
+		t.out = fmt.Appendf(t.out, "\x1b[%d;%dH", c.row, c.col)
+	}
 }
 
 // maxOSC bounds an operating system command; past it the tracker gives up
@@ -713,6 +805,7 @@ func (t *seqTracker) step(b byte) {
 		switch {
 		case b >= 0x40 && b <= 0x7e:
 			t.state = stGround
+			t.final = b
 			t.cur.csi(b, string(t.params), t.interm)
 		case b >= 0x30 && b <= 0x3f:
 			if len(t.params) < maxParams {

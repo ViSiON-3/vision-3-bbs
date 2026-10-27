@@ -15,6 +15,7 @@ import (
 	"github.com/muesli/cancelreader"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 )
 
@@ -24,9 +25,10 @@ func (f fakeRaw) MakeRaw() (func(), error) { return func() {}, nil }
 func (f fakeRaw) Size() (int, int, error)  { return f.w, f.h, nil }
 
 type fakeCtl struct {
-	mu      sync.Mutex
-	calls   []string
-	chatErr error
+	mu        sync.Mutex
+	calls     []string
+	chatErr   error
+	screenErr error
 }
 
 func (f *fakeCtl) rec(s string) {
@@ -47,6 +49,11 @@ func (f *fakeCtl) Chat(on bool, screen string) error {
 	}
 	f.rec(call)
 	return f.chatErr
+}
+
+func (f *fakeCtl) ChatScreen(screen string) error {
+	f.rec("screen:" + screen)
+	return f.screenErr
 }
 
 func (f *fakeCtl) got() string {
@@ -234,8 +241,8 @@ func TestSnoopChatToggleAndRelease(t *testing.T) {
 }
 
 // Alt-S cycles the chat screen: the board's default (CHAT1, sent as ""),
-// the built-in layout, then the other screens, and the choice goes with the
-// next chat start.
+// the built-in layout, random, then the other screens. The choice goes with
+// the next chat start, and switches a chat already open.
 func TestSnoopScreenCyclesAndGoesWithChat(t *testing.T) {
 	hdr := utf8Hdr
 	hdr.ChatScreen = "CHAT1"
@@ -246,18 +253,57 @@ func TestSnoopScreenCyclesAndGoesWithChat(t *testing.T) {
 	r.send(t, "\x1bc")
 	r.send(t, "\x1bc")
 	r.send(t, "\x1bs")
+	r.out.waitFor(t, "screen random")
+	r.send(t, "\x1bs")
 	r.out.waitFor(t, "screen CHAT2")
 	r.send(t, "\x1bc")
-	r.send(t, "\x1bs")
-	r.out.waitFor(t, "applies to the next chat")
+	r.send(t, "\x1bs") // the open chat goes back to the default
+	r.send(t, "\x1bs") // and on to the built-in layout
 	r.send(t, "\x1bx")
 	r.wait(t)
-	if c := r.ctl.got(); c != "chat+:builtin,chat-,chat+:CHAT2,chat-" {
+	if c := r.ctl.got(); c != "chat+:builtin,chat-,chat+:CHAT2,screen:,screen:builtin,chat-" {
 		t.Fatalf("calls %s", c)
 	}
 	if !strings.Contains(r.out.String(), "Alt-S screen") {
 		t.Fatal("status bar does not mention Alt-S")
 	}
+}
+
+// A screen the open chat refuses is not taken: the bar says why, the next
+// Alt-S moves on to the screen after it rather than retrying it, and the
+// next chat still opens on the choice before them.
+func TestSnoopScreenRefusedByOpenChat(t *testing.T) {
+	hdr := utf8Hdr
+	hdr.ChatScreen = "CHAT1"
+	hdr.ChatScreens = []string{"CHAT1", "CHAT2"}
+	r := newRig(t, hdr, 100, 30)
+	r.ctl.screenErr = errors.New("does not fit the caller")
+	r.send(t, "\x1bc")
+	r.send(t, "\x1bs")
+	r.out.waitFor(t, "does not fit the caller")
+	r.send(t, "\x1bs")
+	r.send(t, "\x1bc")
+	r.send(t, "\x1bc")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	if c := r.ctl.got(); c != "chat+,screen:builtin,screen:random,chat-,chat+,chat-" {
+		t.Fatalf("calls %s", c)
+	}
+}
+
+// A board whose default is random says so, and Alt-S does not offer random
+// a second time.
+func TestSnoopScreenRandomDefault(t *testing.T) {
+	hdr := utf8Hdr
+	hdr.ChatScreen = "random"
+	hdr.ChatScreens = []string{"CHAT1", "CHAT2"}
+	if got := strings.Join(chatScreenChoices(hdr), ","); got != ",builtin,CHAT1,CHAT2" {
+		t.Fatalf("choices = %q", got)
+	}
+	r := newRig(t, hdr, 100, 30)
+	r.out.waitFor(t, "screen random")
+	r.send(t, "\x1bx")
+	r.wait(t)
 }
 
 func TestSnoopScreenWithoutScreensIsRefused(t *testing.T) {
@@ -683,19 +729,28 @@ func TestSnoopNoWriteAfterRunReturns(t *testing.T) {
 		r.cmd.resize <- struct{}{}
 		r.send(t, "\x1bx")
 		r.wait(t)
-		if got := r.out.String(); !strings.HasSuffix(got, "\x1b[r\x1b[0m\x1b[2J") {
+		if got := r.out.String(); !strings.HasSuffix(got, snoopExit) {
 			t.Fatalf("wrote after Run returned: %q", got[max(0, len(got)-60):])
 		}
 	}
 }
 
-// vtScreen is a minimal terminal: text, CR, LF, CUP, DECSTBM, ED and EL.
+// snoopExit is what the snoop screen writes as Run returns: the scroll
+// region and colours reset, the screen cleared, and the terminal's own
+// palette back.
+var snoopExit = "\x1b[r\x1b[0m\x1b[2J" + ansi.ResetPalette()
+
+// vtScreen is a minimal terminal: text, CR, LF, CUP, CUF, CUB, SCOSC/SCORC,
+// DECSTBM, ED and EL. OSC sequences (the palette) are skipped, as a terminal
+// draws nothing for them. It never wraps: text past the last column lands on
+// it, so a line the mirror fails to break shows up as overwritten.
 type vtScreen struct {
-	w, h     int
-	cells    [][]rune
-	row, col int // 0-based
-	top, bot int
-	scrolls  int
+	w, h               int
+	cells              [][]rune
+	row, col           int // 0-based
+	savedRow, savedCol int
+	top, bot           int
+	scrolls            int
 }
 
 func newVTScreen(w, h int) *vtScreen {
@@ -732,6 +787,16 @@ func (s *vtScreen) feed(in string) {
 			}
 			s.csi(b[j], string(b[i+2:j]))
 			i = j
+		case r == 0x1b && i+1 < len(b) && b[i+1] == ']':
+			// OSC, ended by BEL or ST (ESC \).
+			j := i + 2
+			for j < len(b) && b[j] != 0x07 && (b[j] != 0x1b || j+1 >= len(b) || b[j+1] != '\\') {
+				j++
+			}
+			if b[min(j, len(b)-1)] == 0x1b {
+				j++
+			}
+			i = j
 		case r == 0x1b:
 			i++
 		case r == '\r':
@@ -764,6 +829,14 @@ func (s *vtScreen) csi(final rune, params string) {
 	switch final {
 	case 'H':
 		s.row, s.col = arg(0, 1)-1, arg(1, 1)-1
+	case 'C':
+		s.col = min(s.col+arg(0, 1), s.w-1)
+	case 'D':
+		s.col = max(s.col-arg(0, 1), 0)
+	case 's':
+		s.savedRow, s.savedCol = s.row, s.col
+	case 'u':
+		s.row, s.col = s.savedRow, s.savedCol
 	case 'r':
 		s.top, s.bot = arg(0, 1)-1, arg(1, s.h)-1
 		s.row, s.col = 0, 0
@@ -782,6 +855,72 @@ func (s *vtScreen) csi(final rune, params string) {
 
 func (s *vtScreen) line(i int) string { return strings.TrimRight(string(s.cells[i]), " ") }
 
+// mirrorOf runs out through a 100-column sysop terminal mirroring an
+// 80-column caller and returns the screen the sysop sees.
+func mirrorOf(t *testing.T, out string) *vtScreen {
+	t.Helper()
+	r := newRig(t, utf8Hdr, 100, 40)
+	r.out.waitFor(t, "NODE 3")
+	_, _ = r.server.Write([]byte(out + "END"))
+	r.out.waitFor(t, "END")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	sc := newVTScreen(100, 40)
+	sc.feed(strings.TrimSuffix(r.out.String(), snoopExit))
+	return sc
+}
+
+// On a sysop terminal wider than the caller's, the mirror wraps where the
+// caller's terminal does: a row that fills all 80 columns does not run into
+// the next on the sysop's 100.
+func TestSnoopWrapsAtTheCallersWidth(t *testing.T) {
+	a, b := strings.Repeat("A", 80), strings.Repeat("B", 80)
+	sc := mirrorOf(t, "\x1b[2J\x1b[H"+a+b+"\r\n")
+	if got := sc.line(0); got != a {
+		t.Errorf("row 1 = %q, want 80 As", got)
+	}
+	if got := sc.line(1); got != b {
+		t.Errorf("row 2 = %q, want 80 Bs", got)
+	}
+}
+
+// Art often ends a full row by saving the cursor, sending CR LF and
+// restoring it, then carries on writing to wrap onto the next row, as the
+// ViSiON/2 chat screens do.
+func TestSnoopWrapsAfterSaveCRLFRestore(t *testing.T) {
+	a := strings.Repeat("A", 80)
+	sc := mirrorOf(t, "\x1b[2J\x1b[H"+a+"\x1b[s\r\n\x1b[u"+"BBB")
+	if got := sc.line(0); got != a {
+		t.Errorf("row 1 = %q, want 80 As", got)
+	}
+	if got := sc.line(1); !strings.HasPrefix(got, "BBB") {
+		t.Errorf("row 2 = %q, want it to start BBB", got)
+	}
+}
+
+// A cursor-forward the caller's terminal stops at its last column stops
+// there on the mirror too.
+func TestSnoopCursorForwardStopsAtTheCallersEdge(t *testing.T) {
+	sc := mirrorOf(t, "\x1b[2J\x1b[H\x1b[200CX")
+	if got := sc.line(0); got != strings.Repeat(" ", 79)+"X" {
+		t.Errorf("row 1 = %q, want X in column 80", got)
+	}
+}
+
+// With the sysop's terminal no wider than the caller's, the output is
+// mirrored byte for byte.
+func TestSnoopMirrorUnchangedAtTheSameWidth(t *testing.T) {
+	r := newRig(t, utf8Hdr, 80, 25)
+	in := strings.Repeat("A", 80) + strings.Repeat("B", 80) + "\x1b[200CEND"
+	_, _ = r.server.Write([]byte(in))
+	r.out.waitFor(t, "END")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	if !strings.Contains(r.out.String(), in) {
+		t.Fatal("output changed on a sysop terminal as wide as the caller's")
+	}
+}
+
 func TestSnoopMirroredScreenScrollsUnderBar(t *testing.T) {
 	r := newRig(t, utf8Hdr, 100, 40)
 	r.out.waitFor(t, "NODE 3")
@@ -793,7 +932,7 @@ func TestSnoopMirroredScreenScrollsUnderBar(t *testing.T) {
 	r.out.waitFor(t, "line40")
 	r.send(t, "\x1bx")
 	r.wait(t)
-	out := strings.TrimSuffix(r.out.String(), "\x1b[r\x1b[0m\x1b[2J")
+	out := strings.TrimSuffix(r.out.String(), snoopExit)
 	sc := newVTScreen(100, 40)
 	sc.feed(out)
 	if sc.scrolls == 0 {
@@ -811,7 +950,7 @@ func TestSnoopMirroredScreenScrollsUnderBar(t *testing.T) {
 	if !strings.Contains(sc.line(39), "NODE 3") {
 		t.Fatalf("bar missing from the last row: %q", sc.line(39))
 	}
-	if !strings.HasSuffix(r.out.String(), "\x1b[r\x1b[0m\x1b[2J") {
+	if !strings.HasSuffix(r.out.String(), snoopExit) {
 		t.Fatal("scroll region not reset at exit")
 	}
 }
@@ -851,7 +990,7 @@ func TestSnoopCallerRegionScrollsOnlyItsRows(t *testing.T) {
 	r.send(t, "\x1bx")
 	r.wait(t)
 	sc := newVTScreen(100, 40)
-	sc.feed(strings.TrimSuffix(r.out.String(), "\x1b[r\x1b[0m\x1b[2J"))
+	sc.feed(strings.TrimSuffix(r.out.String(), snoopExit))
 	want := map[int]string{0: "top1", 1: "top2", 2: "m06", 8: "m12", 9: "", 10: ""}
 	for row, w := range want {
 		if got := sc.line(row); got != w {
@@ -906,7 +1045,7 @@ func TestSnoopRegionResetMidChunkKeepsMirror(t *testing.T) {
 	r.send(t, "\x1bx")
 	r.wait(t)
 	sc := newVTScreen(100, 40)
-	sc.feed(strings.TrimSuffix(r.out.String(), "\x1b[r\x1b[0m\x1b[2J"))
+	sc.feed(strings.TrimSuffix(r.out.String(), snoopExit))
 	if got := sc.line(0); got != "line17" {
 		t.Errorf("row 1 = %q, want line17", got)
 	}
@@ -918,5 +1057,33 @@ func TestSnoopRegionResetMidChunkKeepsMirror(t *testing.T) {
 	}
 	if !strings.Contains(sc.line(39), "NODE 3") {
 		t.Errorf("bar missing from the last row: %q", sc.line(39))
+	}
+}
+
+// The snoop screen loads the VGA palette the caller's session loaded at
+// login, so the art's resets draw on black rather than the sysop terminal's
+// own background, and gives the terminal its colours back when it leaves.
+func TestSnoopLoadsAndResetsVGAPalette(t *testing.T) {
+	r := newRig(t, utf8Hdr, 80, 25)
+	r.send(t, "\x1bx")
+	r.wait(t)
+	out := r.out.String()
+	set, reset := strings.Index(out, ansi.SetVGAPalette()), strings.LastIndex(out, ansi.ResetPalette())
+	if set < 0 || reset < 0 || reset < set {
+		t.Fatalf("palette set at %d, reset at %d in %q", set, reset, out)
+	}
+}
+
+// A CP437 caller's terminal draws the control bytes art uses as glyphs, such
+// as the ▲ ▼ arrows on the ViSiON/2 chat screens, so the mirror draws them
+// too.
+func TestSnoopDrawsCP437ControlGlyphs(t *testing.T) {
+	r := newRig(t, admin.SnoopHeader{OutputMode: "cp437", Width: 80, Height: 25}, 80, 25)
+	_, _ = r.server.Write([]byte("\xc4\x1eSysop\x1e\xc4\r\nEND"))
+	r.out.waitFor(t, "END")
+	r.send(t, "\x1bx")
+	r.wait(t)
+	if !strings.Contains(r.out.String(), "─▲Sysop▲─\r\n") {
+		t.Fatalf("arrows not drawn: %q", r.out.String())
 	}
 }
