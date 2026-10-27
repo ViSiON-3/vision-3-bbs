@@ -355,8 +355,13 @@ never records the keystrokes.
 
 ### Chat
 
-`Alt-C` toggles chat. It opens a split screen on the caller's terminal with
-your text in one area and the caller's in another. Each area word-wraps and
+`Alt-C` toggles chat. The caller's screen first clears and shows
+`sysopChatSummon` from `strings.json` ("You have been summoned by the
+SysOp!") centred for a moment, then a split screen opens with your text in
+one area and the caller's in another. When you end chat the caller sees
+`sysopChatReturn` ("Returning you to reality - as you were!"), or
+`sysopChatCallerLeft` when they end it with `Esc Esc`, and is then put back
+on the screen they were on. An empty string skips its message. Each area word-wraps and
 scrolls on its own. The shipped menu set opens the `V3CHAT1` screen: a framed
 box for each side under a title row with the time and date, and the minutes
 in chat at the bottom. With no screen configured the built-in layout is used:
