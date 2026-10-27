@@ -474,7 +474,7 @@ Operators:
 - `P<points>` - File points >= value
 - `T<minutes>` - Time left >= value
 - `W<day>` - Day of week (0=Sun, 6=Sat)
-- `Y<hh:mm/hh:mm>` - Within time range
+- `Y<hh:mm/hh:mm>` - Within time range (both minutes included, so `Y00:00/23:59` is all day; a range like `Y22:00/06:00` runs past midnight)
 - `Z<string>` - String exists in private note
 - `B<percent>` - Upload/download ratio (uploads ÷ downloads × 100) >= value; always passes with no downloads
 - `C<id>` - Current message conference ID equals value
