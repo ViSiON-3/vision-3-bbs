@@ -2,7 +2,10 @@ package qwkapi
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -37,4 +40,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]string{"error": code, "message": message})
+}
+
+// writeLockedOut answers a login refused by a lockout with 429, telling the
+// client when to try again.
+func writeLockedOut(w http.ResponseWriter, until time.Time, message string) {
+	secs := int(math.Ceil(time.Until(until).Seconds()))
+	if secs < 1 {
+		secs = 1
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(secs))
+	writeError(w, http.StatusTooManyRequests, "locked_out", message)
 }

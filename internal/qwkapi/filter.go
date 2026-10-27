@@ -22,6 +22,21 @@ func requireClient(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// rejectBlocked turns away requests from an IP on the BBS blocklist, the API's
+// counterpart to the connection-accept check the telnet and SSH listeners make.
+// It runs ahead of everything else, so a blocked address gets no further — not
+// even a login attempt.
+func (s *Server) rejectBlocked(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.deps.Guard != nil && s.deps.Guard.IsBlocked(clientIP(r)) {
+			logProbe(r, "blocked")
+			writeError(w, http.StatusForbidden, "forbidden", "address blocked")
+			return
+		}
+		next(w, r)
+	}
+}
+
 // clientRejectReason names why the client filter turned a request away, or ""
 // when the request passes.
 func clientRejectReason(r *http.Request) string {
