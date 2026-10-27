@@ -478,3 +478,46 @@ func TestSyncDoesNotHoldFileLockWhileWaitingForManager(t *testing.T) {
 		t.Errorf("save waited %s for the file lock held by a blocked sync", took)
 	}
 }
+
+// A save that lands while a sync is reading users.json must not be undone by
+// the sync: the bytes it read predate the save, and merging them took this
+// process's own change for an outside edit (#729: a WFC account cleared of
+// read-only came back read-only).
+func TestSyncDoesNotUndoASaveThatOvertookIt(t *testing.T) {
+	um := refreshMgr(t, &User{ID: 1, Handle: "Boss", AccessLevel: 255, WFCReadOnly: true})
+
+	um.mu.Lock()
+	done := make(chan struct{})
+	go func() {
+		um.syncFromDisk()
+		close(done)
+	}()
+	// Let the sync start; it then waits on um.mu, after reading the file with
+	// the old code and before reading it with the fix.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		sessionRefresh.mu.Lock()
+		started := !sessionRefresh.lastSync.IsZero()
+		sessionRefresh.mu.Unlock()
+		if started {
+			break
+		}
+		if time.Now().After(deadline) {
+			um.mu.Unlock()
+			t.Fatal("sync never started")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	um.users["boss"].WFCReadOnly = false
+	err := um.saveUsersLocked()
+	um.mu.Unlock()
+	<-done
+	if err != nil {
+		t.Fatalf("saveUsersLocked: %v", err)
+	}
+	if u, _ := um.GetUser("boss"); u.WFCReadOnly {
+		t.Fatal("the sync put back the read-only flag the save had just cleared")
+	}
+}

@@ -148,6 +148,13 @@ func (um *UserMgr) syncFromDisk() {
 	sessionRefresh.lastSync = time.Now()
 	sessionRefresh.mu.Unlock()
 
+	// Note the file as last read or written. A save that lands while the file
+	// is read below changes it, and then what was read may be older than
+	// that save.
+	um.mu.RLock()
+	before := um.fileState
+	um.mu.RUnlock()
+
 	// Take the cross-process lock so the merge cannot read a file that ./ue is
 	// midway through replacing. On failure, read anyway: writes land by rename,
 	// so the worst case is merging a version that is one save old, and the next
@@ -176,10 +183,7 @@ func (um *UserMgr) syncFromDisk() {
 	}
 	current := fileFingerprint{size: int64(len(data)), sum: sha256.Sum256(data)}
 
-	um.mu.RLock()
-	unchanged := current == um.fileState
-	um.mu.RUnlock()
-	if unchanged {
+	if current == before {
 		return
 	}
 
@@ -191,6 +195,13 @@ func (um *UserMgr) syncFromDisk() {
 
 	um.mu.Lock()
 	defer um.mu.Unlock()
+	if um.fileState != before {
+		// A save (or another sync) landed while the file was read, so the
+		// bytes may predate it, and merging them would take this process's
+		// own change for an outside edit and undo it. Skip; the next poll
+		// reads the file as it now is, so a real outside edit still arrives.
+		return
+	}
 	um.mergeExternalEditsFrom(onDisk)
 	// Record the fingerprint of the bytes actually merged, not a fresh read of
 	// the file, which could have moved on in between and would leave the map
