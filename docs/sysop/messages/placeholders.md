@@ -64,8 +64,8 @@ The visual placeholder format is particularly useful for ANSI art templates wher
 | `@Y@` | Origin system name from the network's [nodelist](messages/nodelists.md) (a point gets its node's name). Blank if the address is not listed, the area is not an FTN area, or there is no compiled nodelist                               |
 | `@R@` | Destination system name from the network's [nodelist](messages/nodelists.md) (a point gets its node's name). Blank if the address is not listed, the area is not an FTN area, or there is no compiled nodelist                          |
 | `@I@` | V3Net network name (e.g., `felonynet`). Empty if the area is not V3Net-networked. **Note:** This code is also used in `FSEDITOR.ANS` as the Insert/Overwrite indicator — the meaning is context-dependent |
-| `@Z@` | Combined conference and area name (format: `CONF NAME > AREA NAME`)                                                                                                                                       |
-| `@X@` | Combined conference/area and message count (format: `CONF NAME > AREA NAME [current/total]`)                                                                                                              |
+| `@Z@` | Combined conference and area name (format: `CONF NAME > AREA NAME`). Cut to a width with `...` at the end |
+| `@X@` | Combined conference/area and message count (format: `CONF NAME > AREA NAME [current/total]`). Cut to a width, the name is shortened with `...` and the count always shown whole |
 | `@K@` | Current node number                                                                                                                                                                                       |
 | `@G@` | Gap fill: fills remaining line width with `─` (CP437 0xC4). See Gap Fill section below                                                                                                                    |
 
@@ -106,6 +106,10 @@ Use `<NUMBER` after the code to cap a field's length without padding it:
 @T<72@     - Subject cut at 72 characters; a short subject stays short
 @Z<60@     - Conference > Area cut at 60 characters
 ```
+
+`@Z@` and `@X@` are cut with `...` at the end, so the cut shows, and `@X@`
+shortens only the area name: `GENERAL > Gene... [1/42]`. The message count
+is never cut, whatever the field's width.
 
 **How it works:**
 - Values longer than the limit are truncated; shorter values are inserted as-is, with no padding

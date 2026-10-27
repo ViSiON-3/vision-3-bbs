@@ -348,8 +348,8 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 				'E': "0",
 				'O': "",
 				'A': "",
-				'Z': "GENERAL > General Discussion",
-				'X': "GENERAL > General Discussion [1/42]",
+				'Z': "FIDONET INTERNATIONAL > Linux and Open Source Discussion",
+				'X': "FIDONET INTERNATIONAL > Linux and Open Source Discussion [1/42]",
 				'K': strconv.Itoa(nodeNumber),
 			}
 			// Mirror the real reader path: in CP437 mode the substitutions are

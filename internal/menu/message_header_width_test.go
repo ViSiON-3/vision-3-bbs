@@ -93,3 +93,52 @@ func TestShippedHeadersStayWithin79Columns(t *testing.T) {
 		}
 	}
 }
+
+// Every shipped header style shows which message the reader is on and how
+// many the area has, however long the area's name (#727): where the name
+// and counter share a field (X), the name is shortened, not the counter.
+func TestShippedHeadersKeepTheCounter(t *testing.T) {
+	z := "A Very Long Conference Name > " + strings.Repeat("y", 70)
+	subs := map[byte]string{
+		'B': "TAG", 'T': "Subject", 'F': "From", 'S': "To", 'U': "", 'M': "LOCAL",
+		'L': "10", '#': "1234", 'N': "56789", 'C': "[1234/56789]", 'V': "1234 of 56789",
+		'D': "12/31/26", 'W': "12:59 pm", 'P': "None", 'E': "0", 'K': "1",
+		'Z': z, 'X': z + " [1234/56789]",
+	}
+	dir := filepath.Join("..", "..", "menus", "v3", "templates", "message_headers")
+	for n := 1; n <= 15; n++ {
+		name := "MSGHDR." + strconv.Itoa(n) + ".ans"
+		tpl, err := ansi.GetAnsiFileContent(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, cp437 := range []bool{false, true} {
+			out := string(processTemplate(tpl, subs, buildAutoWidths(subs, 56789, 80, cp437), cp437))
+			if !strings.Contains(out, "1234") || !strings.Contains(out, "56789") {
+				t.Errorf("%s (cp437=%v): message 1234 of 56789 not shown in full", name, cp437)
+			}
+		}
+	}
+}
+
+func TestFitAreaAndCounter(t *testing.T) {
+	z := "GENERAL > General Discussion"
+	x := z + " [1/42]"
+	for _, tc := range []struct {
+		limit int
+		cp437 bool
+		want  string
+	}{
+		{40, false, x},                          // fits
+		{24, false, "GENERAL > Gene... [1/42]"}, // name shortened, counter whole
+		{24, true, "GENERAL > Gene... [1/42]"},
+		{6, false, "[1/42]"}, // narrower than the counter: the counter alone
+	} {
+		if got := fitAreaAndCounter(x, z, "[1/42]", tc.limit, tc.cp437); got != tc.want {
+			t.Errorf("limit %d cp437 %v: %q, want %q", tc.limit, tc.cp437, got, tc.want)
+		}
+	}
+	if got := ellipsize(z, 12, false); got != "GENERAL >..." {
+		t.Errorf("ellipsize: %q", got)
+	}
+}
