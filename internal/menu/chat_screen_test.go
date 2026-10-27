@@ -270,13 +270,6 @@ func TestShippedChatScreenLoads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join("..", "..", "menus", "v3", "ansi", "V3CHAT1.ANS"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if s, ok := ansi.ReadSAUCE(raw); !ok || s.Title == "" {
-		t.Errorf("V3CHAT1.ANS SAUCE = %+v, %v; the config editor lists the screen by its title", s, ok)
-	}
 	if !sc.fits(80, 25) || sc.fits(80, 24) {
 		t.Fatalf("V3CHAT1 is %dx%d; want a screen for 80x25", sc.Width, sc.Height)
 	}
@@ -383,7 +376,8 @@ func TestConvertChatNfoShippedForm(t *testing.T) {
 	}
 }
 
-// Every chat screen in the shipped menu set loads and fits an 80x25 caller.
+// Every chat screen in the shipped menu set loads, fits an 80x25 caller, and
+// has a SAUCE title for the config editor to list it by.
 func TestShippedChatScreensFit(t *testing.T) {
 	set := menuset.Bare(filepath.Join("..", "..", "menus", "v3"))
 	names := ChatScreens(set)
@@ -399,6 +393,13 @@ func TestShippedChatScreensFit(t *testing.T) {
 		if !sc.fits(80, 25) {
 			t.Errorf("%s: %dx%d does not fit 80x25", name, sc.Width, sc.Height)
 		}
+		raw, err := os.ReadFile(filepath.Join("..", "..", "menus", "v3", "ansi", name+".ANS"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s, ok := ansi.ReadSAUCE(raw); !ok || s.Title == "" {
+			t.Errorf("%s.ANS SAUCE = %+v, %v; want a title", name, s, ok)
+		}
 	}
 }
 
@@ -411,7 +412,7 @@ func TestShippedV2ChatScreensRender(t *testing.T) {
 	for name, fg := range map[string][2]int{"V2CHAT1": {94, 95}, "V2CHAT2": {95, 35}} {
 		t.Run(name, func(t *testing.T) {
 			r := newChatRig(t, "")
-			env := screenEnv(t, r, m, "CHAT1")
+			env := screenEnv(t, r, m, "V3CHAT1")
 			sc := chooseChatLayout(env, name, 80, 25)
 			if sc.name != name {
 				t.Fatalf("chose %q", sc.name)
