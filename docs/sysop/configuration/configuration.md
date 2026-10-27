@@ -40,7 +40,7 @@ ViSiON/3 includes an interactive TUI configuration editor modeled after ViSiON/2
 
 ### Main Menu
 
-The editor opens to a main menu. Keys **1** through **6** and **B** open sub-menus, keys **7** through **9**, **0** and **A** open record lists, and **Q** quits.
+The editor opens to a main menu. Keys **1** through **6**, **B** and **D** open sub-menus, keys **7** through **9**, **0**, **A** and **C** open record lists, and **Q** quits.
 
 | Key | Section | What it covers |
 |-----|---------|----------------|
@@ -56,6 +56,8 @@ The editor opens to a main menu. Keys **1** through **6** and **B** open sub-men
 | 0 | Event Scheduler | Automated event record list |
 | A | Login Sequence | Login step record list |
 | B | ZipLab Upload Processing | Sub-menu: General, Pipeline Steps, Virus Scan (see [ZipLab](files/ziplab.md)) |
+| C | Door Categories | Door category record list |
+| D | Theme | Sub-menu: Prompt Colors, Split-Screen Chat (see [Theme Sub-menu](#theme-sub-menu)) |
 | Q | Quit | Exit (prompts to save if there are unsaved changes) |
 
 ### System Setup Sub-menu
@@ -153,6 +155,20 @@ Two things the editor does for you here:
 | Node Identity | View public key / mnemonic phrase, generate a new keypair, or recover from a seed phrase |
 | Subscriptions | Add/edit hub subscriptions (hub URL, network name, poll interval, origin); includes a V3Net Area Browser and a Registry Browser for discovering networks |
 | Hosted Networks | Manage networks your hub hosts, including their areas (add/edit/delete/rename with optional JAM base operations) |
+
+### Theme Sub-menu
+
+Edits the menu set's `theme.json` (see [Theme Configuration](#theme-configuration)).
+
+| Item | What it edits |
+|------|---------------|
+| Prompt Colors | Yes/No highlight and regular colours (DOS colour codes) |
+| Split-Screen Chat | The chat screen chat opens with, picked from the menu set's screens, the built-in layout or **random**; and the sysop's and caller's text colours where a screen sets none |
+
+The theme is saved to the overlay, `menus.d/v3/theme.json`, so upgrading the
+shipped menus keeps it; the first save copies the shipped settings there. A
+theme you have not changed is not written. A running BBS picks the change up
+without a restart.
 
 ### Navigation
 
@@ -1211,7 +1227,9 @@ The `menus/v3/theme.json` file controls color schemes:
 - `yesNoRegularColor` - DOS color code for regular yes/no prompts
 - `chatSysopColor` - color of the sysop's text in split-screen chat where the chat screen sets none (default `11`)
 - `chatUserColor` - color of the caller's text in split-screen chat, likewise (default `10`)
-- `sysopChatScreen` - the [chat screen](menus/menu-system.md#chat-screens) split-screen chat opens with: `cfg/NAME.json` and `ansi/NAME.ANS` in the menu set. Empty for the built-in layout; the shipped set uses `CHAT1`
+- `sysopChatScreen` - the [chat screen](menus/menu-system.md#chat-screens) split-screen chat opens with: `cfg/NAME.json` and `ansi/NAME.ANS` in the menu set. Empty for the built-in layout, `random` for one of the set's screens each chat; the shipped set uses `CHAT1`
+
+The config editor's [Theme](#theme-sub-menu) page edits these fields.
 
 A copy at `menus.d/<set>/theme.json` overrides the one in `menus/<set>/`.
 

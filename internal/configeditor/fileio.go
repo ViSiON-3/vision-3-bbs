@@ -49,6 +49,10 @@ type allConfigs struct {
 	// ZipLab is ziplab.json alone. Its ArchiveTypes is left at the default:
 	// ZipLab takes archive formats from archivers.json when the BBS loads it.
 	ZipLab ziplab.Config
+	// Theme is the menu set's theme.json, overlay first; themeSaved is it as
+	// last loaded or saved, so an unedited theme is never written.
+	Theme      config.ThemeConfig
+	themeSaved config.ThemeConfig
 }
 
 // configBases are the snapshots saveMergedFile merges against: each shared
@@ -86,6 +90,11 @@ func (ac *allConfigs) snapshotBases() error {
 }
 
 // loadAllConfigs loads all configuration files from the given directory.
+// menuSetPath is the menu set the BBS runs, beside the configs directory.
+func menuSetPath(configPath string) string {
+	return filepath.Join(configPath, "..", "menus", "v3")
+}
+
 func loadAllConfigs(configPath string) (allConfigs, error) {
 	var ac allConfigs
 	var err error
@@ -177,6 +186,14 @@ func loadAllConfigs(configPath string) (allConfigs, error) {
 	if err != nil {
 		return ac, fmt.Errorf("loading ziplab: %w", err)
 	}
+
+	// theme.json lives in the menu set, not in configs. A file that does not
+	// parse stops the load for the same reason as doors.
+	ac.Theme, err = config.LoadThemeConfig(menuSetPath(configPath))
+	if err != nil {
+		return ac, fmt.Errorf("loading theme: %w", err)
+	}
+	ac.themeSaved = ac.Theme
 
 	// Login sequence
 	ac.LoginSeq, err = loadJSONSlice[config.LoginItem](configPath, "login.json")

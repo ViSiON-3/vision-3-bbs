@@ -960,7 +960,7 @@ for `yesNoHighlightColor`.
 | `yesNoRegularColor` | `15` | The unhighlighted yes/no choice and command bar options |
 | `chatSysopColor` | `11` | Sysop's text in [split-screen chat](how-to-guides/wfc-console.md#chat), where the chat screen sets no colour of its own |
 | `chatUserColor` | `10` | Caller's text in split-screen chat, likewise |
-| `sysopChatScreen` | (none) | The [chat screen](#chat-screens) split-screen chat opens with; empty means the built-in layout |
+| `sysopChatScreen` | (none) | The [chat screen](#chat-screens) split-screen chat opens with; empty means the built-in layout, `random` one of the set's screens each chat |
 
 The defaults apply to fields missing from `theme.json`. The shipped `v3`
 set's `theme.json` sets `yesNoHighlightColor` to `31`, `yesNoRegularColor`
@@ -1002,8 +1002,11 @@ other:
 | `cfg/NAME.json` | The layout |
 | `ansi/NAME.ANS` | The background, drawn once when chat opens |
 
-`theme.json`'s `sysopChatScreen` names the screen chat opens with, and
-`Alt-S` on the WFC snoop screen picks another for the next chat. The shipped
+`theme.json`'s `sysopChatScreen` names the screen chat opens with; the
+config editor's Theme page sets it from a list of the set's screens. `random`
+picks one of the set's screens that fits the caller's terminal each chat.
+`Alt-S` on the WFC snoop screen picks another, for the next chat or the one
+already open. The shipped
 set has `CHAT1`: a framed box for each side, the time and date on the title
 row and the minutes in chat at the bottom. Copy its two files under new names
 to start your own. It also has the two screens ViSiON/2 shipped, converted

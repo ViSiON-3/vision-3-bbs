@@ -281,8 +281,8 @@ func resolveChatLayout(env *chatEnv, want, avoid string, width, height int) (*ch
 	return sc, nil
 }
 
-// ChatScreenRandom, as the default or the sysop's choice, picks one of the
-// menu set's chat screens each time.
+// ChatScreenRandom picks one of the menu set's chat screens each time, as
+// the default or the sysop's choice.
 const ChatScreenRandom = "random"
 
 // chatPick chooses one of n; tests replace it.

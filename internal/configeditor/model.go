@@ -364,6 +364,7 @@ func New(configPath string) (Model, error) {
 		{"A", "Login Sequence"},
 		{"B", "ZipLab Upload Processing"},
 		{"C", "Door Categories"},
+		{"D", "Theme"},
 		{"Q", "Quit Program"},
 	}
 
@@ -716,7 +717,13 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.returnMode = modeTopMenu
 		m.mode = modeRecordList
 		return m, nil
-	case 13: // Quit
+	case 13: // Theme
+		m.sysMenuItems = themeMenuItems()
+		m.sysMenuTitle = "Theme"
+		m.mode = modeSysConfigMenu
+		m.sysMenuCursor = 0
+		return m, nil
+	case 14: // Quit
 		return m.tryExit()
 	}
 	return m, nil
