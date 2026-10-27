@@ -680,7 +680,6 @@ func TestCheckACS_InternetAndConference(t *testing.T) {
 
 func TestEvaluateCondition_TimeRange(t *testing.T) {
 	u := &user.User{}
-	// Use a range that covers the current time (00:00 to 23:59)
 	if !evaluateCondition("Y00:00/23:59", u, nil, nil, time.Now()) {
 		t.Error("expected true for Y00:00/23:59 (all day range)")
 	}
@@ -691,6 +690,34 @@ func TestEvaluateCondition_TimeRange(t *testing.T) {
 	// Invalid time values
 	if evaluateCondition("Y25:00/26:00", u, nil, nil, time.Now()) {
 		t.Error("expected false for invalid time values")
+	}
+}
+
+// Both ends of a Y range are whole minutes, so the last second of the end
+// minute is still in range; a range ending before it starts runs past midnight.
+func TestInTimeRange(t *testing.T) {
+	at := func(h, m, s int) time.Time { return time.Date(2026, 10, 26, h, m, s, 0, time.UTC) }
+	hm := func(h, m int) time.Time { return time.Date(0, 1, 1, h, m, 0, 0, time.UTC) }
+	for _, tc := range []struct {
+		now        time.Time
+		start, end time.Time
+		want       bool
+	}{
+		{at(0, 0, 0), hm(0, 0), hm(23, 59), true},
+		{at(23, 59, 40), hm(0, 0), hm(23, 59), true},
+		{at(12, 0, 0), hm(9, 0), hm(17, 0), true},
+		{at(17, 0, 59), hm(9, 0), hm(17, 0), true},
+		{at(17, 1, 0), hm(9, 0), hm(17, 0), false},
+		{at(8, 59, 59), hm(9, 0), hm(17, 0), false},
+		{at(22, 0, 0), hm(22, 0), hm(6, 0), true},
+		{at(3, 0, 0), hm(22, 0), hm(6, 0), true},
+		{at(6, 0, 30), hm(22, 0), hm(6, 0), true},
+		{at(12, 0, 0), hm(22, 0), hm(6, 0), false},
+	} {
+		if got := inTimeRange(tc.now, tc.start, tc.end); got != tc.want {
+			t.Errorf("inTimeRange(%s, %s-%s) = %v, want %v", tc.now.Format("15:04:05"),
+				tc.start.Format("15:04"), tc.end.Format("15:04"), got, tc.want)
+		}
 	}
 }
 
