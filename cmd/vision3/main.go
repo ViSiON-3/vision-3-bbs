@@ -2270,11 +2270,9 @@ func main() {
 			AuthorizeFor: menu.QWKWriteAuthorizer,
 			DenyLogin:    menuExecutor.QWKAPILoginDenial,
 			Guard:        connectionTracker,
+			// The API passes the account as currently saved, not the login
+			// snapshot, so the latest Twit List applies to each download.
 			TwitMatcherFor: func(u *user.User) *user.TwitMatcher {
-				// Tokens retain a login snapshot; use the latest saved list.
-				if current, ok := userMgr.GetUserByID(u.ID); ok {
-					u = current
-				}
 				return menuExecutor.TwitMatcher(userMgr, u)
 			},
 		})

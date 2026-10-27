@@ -52,6 +52,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeLockedOut(w, until, "too many failed logins for this account")
 		return
 	}
+	s.deps.Users.SyncFromDisk()
 	u, ok := s.deps.Users.Authenticate(req.Handle, req.Password)
 	if !ok {
 		slog.Info("qwk api login", "handle", req.Handle, "remote", ip, "outcome", "fail")
@@ -70,11 +71,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// goes on to start a session.
 	if reason := s.deps.DenyLogin(u); reason != "" {
 		slog.Info("qwk api login", "handle", u.Handle, "remote", ip, "outcome", "denied", "reason", reason)
-		msg, known := denyMessages[reason]
-		if !known {
-			msg = denyMessages[DenyLogonLevel]
-		}
-		writeError(w, http.StatusForbidden, reason, msg)
+		writeDenied(w, reason)
 		return
 	}
 	if s.deps.Guard != nil {
@@ -89,6 +86,23 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("qwk api login", "handle", u.Handle, "remote", ip, "outcome", "success")
 	writeJSON(w, http.StatusOK, loginResponse{Token: tok, ExpiresAt: exp.UTC().Format("2006-01-02T15:04:05Z07:00")})
+}
+
+// handleLogout revokes the request's token. It needs only a live token, not an
+// account that may still log in, so a client can always discard its session.
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		logProbe(r, "badMethod")
+		writeError(w, http.StatusMethodNotAllowed, "method", "POST required")
+		return
+	}
+	tok, u, ok := s.tokens.bearerToken(w, r)
+	if !ok {
+		return
+	}
+	s.tokens.Revoke(tok)
+	slog.Info("qwk api logout", "handle", u.Handle, "remote", clientIP(r))
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handlePacket(w http.ResponseWriter, r *http.Request) {

@@ -10,9 +10,16 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// Authenticator verifies BBS credentials (satisfied by *user.UserMgr).
+// Authenticator verifies BBS credentials and re-reads accounts for live
+// sessions (satisfied by *user.UserMgr).
 type Authenticator interface {
 	Authenticate(handle, password string) (*user.User, bool)
+	GetUserByID(id int) (*user.User, bool)
+	// SyncFromDisk folds in edits made to users.json outside the BBS (the
+	// standalone ./ue editor), at most once a second. The API calls it before
+	// every account read, since with no terminal caller online nothing else
+	// would, and a ban or password change made in ./ue would go unseen.
+	SyncFromDisk()
 }
 
 // Reasons a DenyLogin hook gives for refusing an account whose password is
@@ -67,4 +74,14 @@ func writeLockedOut(w http.ResponseWriter, until time.Time, message string) {
 	}
 	w.Header().Set("Retry-After", strconv.Itoa(secs))
 	writeError(w, http.StatusTooManyRequests, "locked_out", message)
+}
+
+// writeDenied answers for an account a DenyLogin hook refused, with the reason
+// as the error code.
+func writeDenied(w http.ResponseWriter, reason string) {
+	msg, known := denyMessages[reason]
+	if !known {
+		msg = denyMessages[DenyLogonLevel]
+	}
+	writeError(w, http.StatusForbidden, reason, msg)
 }

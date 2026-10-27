@@ -28,6 +28,15 @@ func (f fakeAuth) Authenticate(h, p string) (*user.User, bool) {
 	return nil, false
 }
 
+func (f fakeAuth) SyncFromDisk() {}
+
+func (f fakeAuth) GetUserByID(id int) (*user.User, bool) {
+	if f.ok && id == 0 {
+		return &user.User{Handle: "felonius"}, true
+	}
+	return nil, false
+}
+
 type fakeSvc struct {
 	packet    []byte
 	msgCount  int

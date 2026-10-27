@@ -1,8 +1,9 @@
 // Package qwkapi is the HTTPS API that lets an offline mail reader fetch QWK
 // packets and upload REP replies without a terminal session. A client POSTs
 // BBS credentials to /api/qwk/login for a short-lived bearer token, then GETs
-// /api/qwk/packet and POSTs to /api/qwk/reply; packet building and reply
-// import are delegated to qwkservice. Server, built by NewServer, adds rate
+// /api/qwk/packet and POSTs to /api/qwk/reply, ending with an optional POST to
+// /api/qwk/logout; packet building and reply import are delegated to
+// qwkservice. Server, built by NewServer, adds rate
 // limiting, a client-header filter and a sysop-supplied or self-signed TLS
 // certificate.
 package qwkapi
@@ -45,7 +46,8 @@ type Deps struct {
 	AuthorizeFor   func(u *user.User) func(area *message.MessageArea) bool
 	// DenyLogin applies the checks the terminal login makes once a password
 	// verifies, returning a DenyIntroPending/DenyLogonLevel reason or "" to
-	// admit. Required, so no API login skips them.
+	// admit. It runs at login and again on every authenticated request.
+	// Required, so no API login skips them.
 	DenyLogin func(u *user.User) string
 	// Guard, when non-nil, applies the BBS's IP blocklist to every request and
 	// its per-IP failed-login lockout to logins.
@@ -97,8 +99,9 @@ func NewServer(deps Deps) (*Server, error) {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/qwk/login", s.rejectBlocked(requireClient(s.handleLogin)))
-	mux.HandleFunc("/api/qwk/packet", s.rejectBlocked(requireClient(s.tokens.requireBearer(s.handlePacket))))
-	mux.HandleFunc("/api/qwk/reply", s.rejectBlocked(requireClient(s.tokens.requireBearer(s.handleReply))))
+	mux.HandleFunc("/api/qwk/logout", s.rejectBlocked(requireClient(s.handleLogout)))
+	mux.HandleFunc("/api/qwk/packet", s.rejectBlocked(requireClient(s.requireSession(s.handlePacket))))
+	mux.HandleFunc("/api/qwk/reply", s.rejectBlocked(requireClient(s.requireSession(s.handleReply))))
 	// Catch-all so requests to unknown paths are visible too; without it the
 	// mux's own 404 would leave scanner traffic entirely unrecorded.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

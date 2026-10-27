@@ -79,6 +79,14 @@ re-authenticate on their next request). This is expected for a packet API.
   waiting for validation — or if it still owes the SysOp its new-user
   introduction (`requireNewUserEmail`). The API has no editor to collect that
   message, so the user must log in by terminal once to send it.
+- **Account changes end API sessions straight away.** Every request re-reads
+  the account, so deleting, banning or demoting a user below `logonLevel`, or
+  changing their password (by them or by you, including in the standalone
+  `./ue` editor while nobody is online), invalidates their API tokens on the
+  next request instead of when the token would have expired. That is also
+  how to kick a user off the API: change their password or ban them. Requests
+  use the account as it is now, so a change to their level, tagged areas or
+  signature applies to the next packet without logging in again.
 - **Per-area write ACS still applies** on upload, exactly as in the terminal path.
 - **The caller's Twit List still applies** on download. A packet built by the
   API leaves out the same authors the terminal would, using the list as last
@@ -99,11 +107,15 @@ re-authenticate on their next request). This is expected for a packet API.
 ### Endpoints (for client developers)
 
 All requests must send an `X-V3-Client` header; every request except `login` must
-also send `Authorization: Bearer <token>`.
+also send `Authorization: Bearer <token>`. A `401` on `packet` or `reply` means
+the token is gone — expired, logged out, lost in a restart, or revoked by an
+account change — and the client should log in again; a `403` with a deny code
+means logging in again will not help.
 
 | Method | Path | Body → Response |
 |--------|------|-----------------|
 | `POST` | `/api/qwk/login` | `{handle, password}` → `{token, expiresAt}` (`401` on bad credentials, `429` with `error: "locked_out"` while the IP or handle is locked out, `403` with `error: "logon_level"` or `"intro_pending"` when the account may not log in) |
+| `POST` | `/api/qwk/logout` | → `204`; the token stops working. Works even if the account may no longer log in. |
 | `GET` | `/api/qwk/packet` | → `.QWK` bytes (`application/zip`) with `X-QWK-Messages` count, or `204` when there is no new mail |
 | `POST` | `/api/qwk/reply` | `.REP` bytes (`application/zip`, max 16 MiB) → `{posted, skipped, duplicate, wrongBBS}` |
 
@@ -131,7 +143,8 @@ API activity.
 | WARN | `qwk api login for locked handle` | A login refused because the handle is locked, with `handle`, `remote`, and `locked_until`. |
 | WARN | `qwk api handle locked out after failed logins` | A handle just reached the failure limit, with `handle`, `remote`, and `minutes`. |
 | ERROR | `qwk api login: token issue failed` | The server could not mint a token. |
-| INFO | `qwk api auth` | `outcome=noToken` / `outcome=badToken` — a request with a missing, invalid, or expired bearer token. |
+| INFO | `qwk api auth` | `outcome=noToken` / `outcome=badToken` — a request with a missing, invalid, or expired bearer token. `outcome=revoked` with `handle` and `reason` (`accountGone`, `passwordChanged`, `logon_level`, `intro_pending`) — a token ended because the account changed. |
+| INFO | `qwk api logout` | A client logged out, with `handle` and `remote`. |
 | INFO | `qwk api packet` | A download, with `messages` count (including the `0`/`204` case), or `outcome=rateLimited`. |
 | INFO | `qwk api reply` | An upload, with `posted`/`skipped`/`duplicate`, or `outcome=wrongBBS`, `readError`, or `rateLimited`. |
 | WARN | `qwk api reply` | `outcome=tooLarge` — an upload over the 16 MiB cap. |
