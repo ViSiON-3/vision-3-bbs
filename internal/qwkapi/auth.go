@@ -59,6 +59,13 @@ func (ts *tokenStore) Resolve(tok string) (*user.User, bool) {
 	return e.user, true
 }
 
+// Revoke deletes tok, ending that session; unknown tokens are ignored.
+func (ts *tokenStore) Revoke(tok string) {
+	ts.mu.Lock()
+	delete(ts.m, tok)
+	ts.mu.Unlock()
+}
+
 func (ts *tokenStore) sweep() {
 	now := time.Now()
 	ts.mu.Lock()
@@ -96,24 +103,59 @@ func userFromContext(ctx context.Context) *user.User {
 	return u
 }
 
-// requireBearer wraps next, admitting only requests with a live token.
-func (ts *tokenStore) requireBearer(next http.HandlerFunc) http.HandlerFunc {
+// bearerToken resolves the request's bearer token, writing the 401 itself and
+// returning ok=false when it is missing, unknown or expired.
+func (ts *tokenStore) bearerToken(w http.ResponseWriter, r *http.Request) (tok string, u *user.User, ok bool) {
+	auth := r.Header.Get("Authorization")
+	tok = strings.TrimPrefix(auth, "Bearer ")
+	if tok == auth || tok == "" {
+		slog.Info("qwk api auth", "remote", clientIP(r), "path", r.URL.Path, "outcome", "noToken")
+		writeError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
+		return "", nil, false
+	}
+	u, ok = ts.Resolve(tok)
+	if !ok {
+		// Routine after a restart (tokens are in-memory), but also what a
+		// forged or replayed token looks like, so it is always recorded.
+		slog.Info("qwk api auth", "remote", clientIP(r), "path", r.URL.Path, "outcome", "badToken")
+		writeError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired token")
+		return "", nil, false
+	}
+	return tok, u, true
+}
+
+// requireSession wraps next, admitting only requests with a live token whose
+// account may still log in. The account is re-read on every request, so a
+// ban, demotion, deletion or password change takes effect on the client's
+// next request rather than when its token expires, and the token is revoked
+// then. next receives the account as it is now, not as it was at login, so
+// write ACS, tagged areas and the signature follow current settings too.
+func (s *Server) requireSession(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		tok := strings.TrimPrefix(auth, "Bearer ")
-		if tok == auth || tok == "" {
-			slog.Info("qwk api auth", "remote", clientIP(r), "path", r.URL.Path, "outcome", "noToken")
-			writeError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
-			return
-		}
-		u, ok := ts.Resolve(tok)
+		tok, snap, ok := s.tokens.bearerToken(w, r)
 		if !ok {
-			// Routine after a restart (tokens are in-memory), but also what a
-			// forged or replayed token looks like, so it is always recorded.
-			slog.Info("qwk api auth", "remote", clientIP(r), "path", r.URL.Path, "outcome", "badToken")
-			writeError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired token")
 			return
 		}
-		next(w, r.WithContext(context.WithValue(r.Context(), userCtxKey, u)))
+		cur, found := s.deps.Users.GetUserByID(snap.ID)
+		var reason string
+		switch {
+		case !found || cur.DeletedUser:
+			reason = "accountGone"
+		case cur.PasswordHash != snap.PasswordHash:
+			reason = "passwordChanged"
+		}
+		if reason != "" {
+			s.tokens.Revoke(tok)
+			slog.Info("qwk api auth", "handle", snap.Handle, "remote", clientIP(r), "path", r.URL.Path, "outcome", "revoked", "reason", reason)
+			writeError(w, http.StatusUnauthorized, "unauthorized", "session no longer valid; log in again")
+			return
+		}
+		if deny := s.deps.DenyLogin(cur); deny != "" {
+			s.tokens.Revoke(tok)
+			slog.Info("qwk api auth", "handle", cur.Handle, "remote", clientIP(r), "path", r.URL.Path, "outcome", "revoked", "reason", deny)
+			writeDenied(w, deny)
+			return
+		}
+		next(w, r.WithContext(context.WithValue(r.Context(), userCtxKey, cur)))
 	}
 }

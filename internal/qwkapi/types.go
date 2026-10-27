@@ -10,9 +10,11 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// Authenticator verifies BBS credentials (satisfied by *user.UserMgr).
+// Authenticator verifies BBS credentials and re-reads accounts for live
+// sessions (satisfied by *user.UserMgr).
 type Authenticator interface {
 	Authenticate(handle, password string) (*user.User, bool)
+	GetUserByID(id int) (*user.User, bool)
 }
 
 // Reasons a DenyLogin hook gives for refusing an account whose password is
@@ -67,4 +69,14 @@ func writeLockedOut(w http.ResponseWriter, until time.Time, message string) {
 	}
 	w.Header().Set("Retry-After", strconv.Itoa(secs))
 	writeError(w, http.StatusTooManyRequests, "locked_out", message)
+}
+
+// writeDenied answers for an account a DenyLogin hook refused, with the reason
+// as the error code.
+func writeDenied(w http.ResponseWriter, reason string) {
+	msg, known := denyMessages[reason]
+	if !known {
+		msg = denyMessages[DenyLogonLevel]
+	}
+	writeError(w, http.StatusForbidden, reason, msg)
 }
