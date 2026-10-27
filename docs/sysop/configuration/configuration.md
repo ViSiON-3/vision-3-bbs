@@ -1217,7 +1217,7 @@ The `menus/v3/theme.json` file controls color schemes:
   "yesNoRegularColor": 15,
   "chatSysopColor": 11,
   "chatUserColor": 10,
-  "sysopChatScreen": "CHAT1"
+  "sysopChatScreen": "V3CHAT1"
 }
 ```
 
@@ -1227,7 +1227,7 @@ The `menus/v3/theme.json` file controls color schemes:
 - `yesNoRegularColor` - DOS color code for regular yes/no prompts
 - `chatSysopColor` - color of the sysop's text in split-screen chat where the chat screen sets none (default `11`)
 - `chatUserColor` - color of the caller's text in split-screen chat, likewise (default `10`)
-- `sysopChatScreen` - the [chat screen](menus/menu-system.md#chat-screens) split-screen chat opens with: `cfg/NAME.json` and `ansi/NAME.ANS` in the menu set. Empty for the built-in layout, `random` for one of the set's screens each chat; the shipped set uses `CHAT1`
+- `sysopChatScreen` - the [chat screen](menus/menu-system.md#chat-screens) split-screen chat opens with: `cfg/NAME.json` and `ansi/NAME.ANS` in the menu set. Empty for the built-in layout, `random` for one of the set's screens each chat; the shipped set uses `V3CHAT1`
 
 The config editor's [Theme](#theme-sub-menu) page edits these fields.
 

@@ -357,7 +357,7 @@ never records the keystrokes.
 
 `Alt-C` toggles chat. It opens a split screen on the caller's terminal with
 your text in one area and the caller's in another. Each area word-wraps and
-scrolls on its own. The shipped menu set opens the `CHAT1` screen: a framed
+scrolls on its own. The shipped menu set opens the `V3CHAT1` screen: a framed
 box for each side under a title row with the time and date, and the minutes
 in chat at the bottom. With no screen configured the built-in layout is used:
 your text on top, the caller's below, and a bar between them with both
@@ -398,7 +398,7 @@ can have several; the format is in
 [Chat screens](menus/menu-system.md#chat-screens).
 
 `sysopChatScreen` in `theme.json` names the screen `Alt-C` opens; the shipped
-set's is `CHAT1`, and the config editor's Theme page changes it. It can be
+set's is `V3CHAT1`, and the config editor's Theme page changes it. It can be
 `random`, a different screen each chat. `Alt-S` on the snoop screen cycles
 through the others: the board's default, then the built-in layout, then
 `random` when the board has two screens or more, then every other screen in

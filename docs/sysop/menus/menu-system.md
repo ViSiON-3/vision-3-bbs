@@ -964,7 +964,7 @@ for `yesNoHighlightColor`.
 
 The defaults apply to fields missing from `theme.json`. The shipped `v3`
 set's `theme.json` sets `yesNoHighlightColor` to `31`, `yesNoRegularColor`
-to `13` and `sysopChatScreen` to `CHAT1`.
+to `13` and `sysopChatScreen` to `V3CHAT1`.
 
 A color number is the background times 16 plus the foreground, using the 16
 DOS colors: `31` is bright white (15) on blue (1).
@@ -1007,12 +1007,17 @@ config editor's Theme page sets it from a list of the set's screens. `random`
 picks one of the set's screens that fits the caller's terminal each chat.
 `Alt-S` on the WFC snoop screen picks another, for the next chat or the one
 already open. The shipped
-set has `CHAT1`: a framed box for each side, the time and date on the title
+set has `V3CHAT1`: a framed box for each side, the time and date on the title
 row and the minutes in chat at the bottom. Copy its two files under new names
 to start your own. It also has the two screens ViSiON/2 shipped, converted
 from its `CHAT.1` and `CHAT.2`: `V2CHAT1`, art by Posyden of GRiM Productions,
 and `V2CHAT2`, art by JED of ACiD Productions. Each has the art on the left
 and the sysop and caller typing on the right, with the handles on the top row.
+
+The art's SAUCE record names the screen where the sysop picks one: the
+config editor's Theme page lists each screen with its SAUCE title and author,
+e.g. `V2CHAT1 - ViSiON/2 Chat #1 by Posyden`. Set them in your art editor
+when you save the screen; a screen whose art has no SAUCE is listed by name.
 
 The art can carry the names: `@SYSOP@` and `@CALLER@` in it are replaced
 with the handles when chat opens, padded or cut to the width of the
@@ -1051,7 +1056,6 @@ The layout:
 
 | Key | Meaning |
 |-----|---------|
-| `title` | What the screen looks like, shown beside its name where the sysop picks a screen (the config editor's Theme page). Not drawn |
 | `width`, `height` | The terminal size the screen is drawn for; `80` by `25` if left out. A caller with a smaller terminal gets the built-in layout instead |
 | `art` | The background's file name in `ansi/`, if it is not `NAME.ANS` |
 | `statusColor` | Colour of the fields; grey (`7`) if left out |
@@ -1066,7 +1070,7 @@ says why a screen was not used.
 
 Converting a ViSiON/2 chat screen: its `CHAT.n` art and `CHATNFO.n` layout
 become `ansi/NAME.ANS` and `cfg/NAME.json`. `vision3 -convert-chatnfo
-CHATNFO.1 > menus.d/v3/cfg/CHAT1.json` writes the layout; copy the art and
+CHATNFO.1 > menus.d/v3/cfg/MYCHAT.json` writes the layout; copy the art and
 change its `|U` and `|S` name codes to `@CALLER@` and `@SYSOP@`. The
 `USER_CLEAR_LINE` and `SYSOP_CLEAR_LINE` settings have no counterpart, and a
 colour left out of `CHATNFO.n` takes the theme's rather than ViSiON/2's blue.

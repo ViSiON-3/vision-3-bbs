@@ -477,29 +477,8 @@ func preparePostBody(raw []byte, opts postBodyOptions) (postBody, error) {
 // sauceTitle returns the trimmed Title field of a file's SAUCE record, or ""
 // when the file has none.
 func sauceTitle(data []byte) string {
-	const sauceSize = 128
-	if len(data) < sauceSize {
-		return ""
-	}
-	rec := data[len(data)-sauceSize:]
-	if !bytes.HasPrefix(rec, []byte("SAUCE")) {
-		return ""
-	}
-	// SAUCE: ID(5) Version(2) Title(35), space or NUL padded, CP437.
-	title := strings.TrimRight(string(rec[7:42]), " \x00")
-	var b strings.Builder
-	for i := 0; i < len(title); i++ {
-		c := title[i]
-		switch {
-		case c < 0x20:
-			continue
-		case c < 0x80:
-			b.WriteByte(c)
-		default:
-			b.WriteRune(ansi.Cp437ToUnicode[c])
-		}
-	}
-	return strings.TrimSpace(b.String())
+	s, _ := ansi.ReadSAUCE(data)
+	return s.Title
 }
 
 // toCP437 returns plain text as CP437 bytes. charset "cp437" keeps the bytes

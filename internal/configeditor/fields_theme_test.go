@@ -11,6 +11,17 @@ import (
 
 const themeShipped = `{"yesNoHighlightColor": 31, "yesNoRegularColor": 13, "chatSysopColor": 11, "chatUserColor": 10, "sysopChatScreen": "CHAT1"}`
 
+// sauceRecord is a 128-byte SAUCE record with the given title, author and
+// group.
+func sauceRecord(title, author, group string) string {
+	rec := make([]byte, 128)
+	copy(rec, "SAUCE00")
+	copy(rec[7:42], title)
+	copy(rec[42:62], author)
+	copy(rec[62:82], group)
+	return string(rec)
+}
+
 // newThemeModel builds an editor over <tmp>/configs beside a shipped menu
 // set <tmp>/menus/v3 with theme.json and two chat screens, one of them only
 // in the overlay. It returns the model and the BBS root.
@@ -21,7 +32,9 @@ func newThemeModel(t *testing.T) (Model, string) {
 		"menus/v3/theme.json":         themeShipped,
 		"menus/v3/cfg/CHAT1.json":     "{}",
 		"menus/v3/cfg/MAIN.CFG":       "[]",
-		"menus.d/v3/cfg/V2CHAT1.json": `{"title": "ViSiON/2: skull art"}`,
+		"menus.d/v3/cfg/V2CHAT1.json": `{"art": "SKULL.ANS"}`,
+		"menus.d/v3/ansi/SKULL.ANS":   "\x1b[0mart\x1a" + sauceRecord("ViSiON/2 Chat #1", "Posyden", "GRiM"),
+		"menus/v3/ansi/CHAT1.ANS":     "\x1b[0mart, no SAUCE",
 	}
 	for rel, body := range files {
 		path := filepath.Join(root, filepath.FromSlash(rel))
@@ -65,7 +78,7 @@ func TestThemeChatScreenPickedAndSavedToOverlay(t *testing.T) {
 	if got := strings.Join(values, ","); got != "(built-in),random,CHAT1,V2CHAT1" {
 		t.Fatalf("picker = %s", got)
 	}
-	if got := m.pickerItems[3].Display; got != "V2CHAT1 - ViSiON/2: skull art" {
+	if got := m.pickerItems[3].Display; got != "V2CHAT1 - ViSiON/2 Chat #1 by Posyden" {
 		t.Errorf("titled screen shown as %q", got)
 	}
 	if got := m.pickerItems[2].Display; got != "CHAT1" {

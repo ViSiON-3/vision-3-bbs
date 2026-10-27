@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 )
@@ -78,11 +79,7 @@ func themeFieldsChat(th *config.ThemeConfig, screens func() []themeChatScreen) [
 					{Value: themeChatRandom, Display: themeChatRandom + " - a different screen each chat"},
 				}
 				for _, sc := range screens() {
-					display := sc.Name
-					if sc.Title != "" {
-						display += " - " + sc.Title
-					}
-					items = append(items, LookupItem{Value: sc.Name, Display: display})
+					items = append(items, LookupItem{Value: sc.Name, Display: sc.label()})
 				}
 				return items
 			},
@@ -92,18 +89,33 @@ func themeFieldsChat(th *config.ThemeConfig, screens func() []themeChatScreen) [
 	}
 }
 
-// themeChatScreen is one of the menu set's chat screens: its name and the
-// title its layout gives it, if any.
+// themeChatScreen is one of the menu set's chat screens: its name, and the
+// SAUCE title and author of its art, if any.
 type themeChatScreen struct {
-	Name, Title string
+	Name, Title, Author string
+}
+
+// label is how the picker lists the screen: "NAME - Title by Author", as
+// much of it as the screen's art says.
+func (sc themeChatScreen) label() string {
+	s := sc.Name
+	if sc.Title != "" {
+		s += " - " + sc.Title
+	}
+	if sc.Author != "" {
+		s += " by " + sc.Author
+	}
+	return s
 }
 
 // themeChatScreens lists the menu set's chat screens: the stems of the .json
 // files in its cfg directory, overlay included, as menu.ChatScreens does for
-// the BBS, each with the title from its layout. A layout that cannot be read
-// is still listed, by name; the doctor reports it.
+// the BBS. Each carries the SAUCE of its art, ansi/NAME.ANS or the file the
+// layout's "art" names. A screen whose files cannot be read is still listed,
+// by name; the doctor reports it.
 func themeChatScreens(configPath string) []themeChatScreen {
-	entries, err := menuset.FromPath(menuSetPath(configPath)).ReadDir("cfg")
+	set := menuset.FromPath(menuSetPath(configPath))
+	entries, err := set.ReadDir("cfg")
 	if err != nil {
 		return nil
 	}
@@ -114,10 +126,23 @@ func themeChatScreens(configPath string) []themeChatScreen {
 		}
 		sc := themeChatScreen{Name: strings.TrimSuffix(e.Name, filepath.Ext(e.Name))}
 		var layout struct {
-			Title string `json:"title"`
+			Art string `json:"art"`
 		}
-		if data, err := os.ReadFile(e.Path); err == nil && json.Unmarshal(data, &layout) == nil {
-			sc.Title = layout.Title
+		if data, err := os.ReadFile(e.Path); err == nil {
+			_ = json.Unmarshal(data, &layout) // a broken layout keeps the default art name
+		}
+		var artPath string
+		if layout.Art != "" {
+			artPath, err = set.Resolve("ansi", layout.Art)
+		} else {
+			artPath, err = set.ResolveFirst("ansi", sc.Name+".ANS", sc.Name+".ans")
+		}
+		if err == nil {
+			if art, err := os.ReadFile(artPath); err == nil {
+				if sauce, ok := ansi.ReadSAUCE(art); ok {
+					sc.Title, sc.Author = sauce.Title, sauce.Author
+				}
+			}
 		}
 		screens = append(screens, sc)
 	}

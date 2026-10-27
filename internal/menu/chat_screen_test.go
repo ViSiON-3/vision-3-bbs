@@ -266,15 +266,22 @@ func TestDesignedScreenWiderThanStockArt(t *testing.T) {
 
 func TestShippedChatScreenLoads(t *testing.T) {
 	m := menuset.Bare(filepath.Join("..", "..", "menus", "v3"))
-	sc, err := loadChatLayout(m, "CHAT1")
+	sc, err := loadChatLayout(m, "V3CHAT1")
 	if err != nil {
 		t.Fatal(err)
 	}
+	raw, err := os.ReadFile(filepath.Join("..", "..", "menus", "v3", "ansi", "V3CHAT1.ANS"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s, ok := ansi.ReadSAUCE(raw); !ok || s.Title == "" {
+		t.Errorf("V3CHAT1.ANS SAUCE = %+v, %v; the config editor lists the screen by its title", s, ok)
+	}
 	if !sc.fits(80, 25) || sc.fits(80, 24) {
-		t.Fatalf("CHAT1 is %dx%d; want a screen for 80x25", sc.Width, sc.Height)
+		t.Fatalf("V3CHAT1 is %dx%d; want a screen for 80x25", sc.Width, sc.Height)
 	}
 	r := newChatRig(t, "")
-	screenEnv(t, r, m, "CHAT1")
+	screenEnv(t, r, m, "V3CHAT1")
 	r.begin(t)
 	done := make(chan struct{})
 	go func() {
@@ -285,7 +292,7 @@ func TestShippedChatScreenLoads(t *testing.T) {
 	r.sess.Send("hi")
 	waitFor(t, func() bool {
 		return strings.HasPrefix(r.term.Row(3), "│ hello") && strings.HasPrefix(r.term.Row(14), "│ hi")
-	}, "CHAT1 not rendered: "+r.term.Snapshot())
+	}, "V3CHAT1 not rendered: "+r.term.Snapshot())
 	for row, want := range map[int]string{2: "SysOp", 13: "Caller", 1: "Time " + time.Now().Format("15:04"), 24: "Minutes in chat: 0"} {
 		if got := r.term.Row(row); !strings.Contains(got, want) {
 			t.Errorf("row %d = %q; want it to contain %q", row, got, want)
