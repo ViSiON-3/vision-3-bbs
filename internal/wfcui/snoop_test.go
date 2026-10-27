@@ -268,8 +268,9 @@ func TestSnoopScreenCyclesAndGoesWithChat(t *testing.T) {
 	}
 }
 
-// A screen the open chat refuses is not taken: the bar says why and the
-// next chat still opens on the choice before it.
+// A screen the open chat refuses is not taken: the bar says why, the next
+// Alt-S moves on to the screen after it rather than retrying it, and the
+// next chat still opens on the choice before them.
 func TestSnoopScreenRefusedByOpenChat(t *testing.T) {
 	hdr := utf8Hdr
 	hdr.ChatScreen = "CHAT1"
@@ -279,11 +280,12 @@ func TestSnoopScreenRefusedByOpenChat(t *testing.T) {
 	r.send(t, "\x1bc")
 	r.send(t, "\x1bs")
 	r.out.waitFor(t, "does not fit the caller")
+	r.send(t, "\x1bs")
 	r.send(t, "\x1bc")
 	r.send(t, "\x1bc")
 	r.send(t, "\x1bx")
 	r.wait(t)
-	if c := r.ctl.got(); c != "chat+,screen:builtin,chat-,chat+,chat-" {
+	if c := r.ctl.got(); c != "chat+,screen:builtin,screen:random,chat-,chat+,chat-" {
 		t.Fatalf("calls %s", c)
 	}
 }

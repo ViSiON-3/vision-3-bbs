@@ -680,3 +680,46 @@ func TestSwitchChatScreen(t *testing.T) {
 		t.Fatal("switched with no chat open")
 	}
 }
+
+// A switch the chat reaches only after the sysop's wait ran out cannot be
+// taken, so the chat leaves its screen as the sysop was told; one the chat
+// took in time is waited for, however long it takes to answer.
+func TestSwitchChatScreenTimeoutAndTakeAgree(t *testing.T) {
+	tp := newWatchedTap("a")
+	go func() { <-tp.BreakIn(); tp.ChatBegan() }()
+	if _, err := tp.RequestChatOn("a", "CHAT1", time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	late := make(chan bool)
+	go func() {
+		sw := <-tp.ScreenSwitches()
+		time.Sleep(100 * time.Millisecond) // past the requester's wait
+		late <- sw.Take()
+		sw.Done(nil)
+	}()
+	if err := tp.SwitchChatScreen("a", "CHAT2", 30*time.Millisecond); !errors.Is(err, ErrSwitchTimedOut) {
+		t.Fatalf("late switch err = %v, want ErrSwitchTimedOut", err)
+	}
+	if <-late {
+		t.Fatal("the chat took a switch whose requester had timed out")
+	}
+	if got := tp.ChatScreen(); got != "CHAT1" {
+		t.Fatalf("ChatScreen = %q after a timed-out switch", got)
+	}
+
+	go func() {
+		sw := <-tp.ScreenSwitches()
+		if !sw.Take() {
+			t.Error("could not take a fresh switch")
+		}
+		time.Sleep(100 * time.Millisecond) // answering past the wait
+		sw.Done(nil)
+	}()
+	if err := tp.SwitchChatScreen("a", "CHAT2", 30*time.Millisecond); err != nil {
+		t.Fatalf("switch taken in time err = %v, want nil", err)
+	}
+	if got := tp.ChatScreen(); got != "CHAT2" {
+		t.Fatalf("ChatScreen = %q, want CHAT2", got)
+	}
+}

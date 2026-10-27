@@ -558,6 +558,9 @@ loop:
 				caller.moveTo()
 				continue
 			case chatSwitch:
+				if !ev.sw.Take() {
+					continue // the sysop's request timed out; it was told nothing changed
+				}
 				next, err := resolveChatLayout(env, ev.sw.Screen, view.sc.name, width, height)
 				if err != nil {
 					ev.sw.Done(err)

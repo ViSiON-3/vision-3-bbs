@@ -259,6 +259,31 @@ func saveMergedFile[T any](f configmerge.File[T], known bool, base, cur *T) ([]s
 	return conflicts, res.Renumbered, nil
 }
 
+// saveTheme writes the theme the way saveMergedFile writes the shared files:
+// it re-reads theme.json and merges three ways against base, so a field
+// changed on disk since loading (by another editor, or by hand) is kept
+// unless the editor changed it too. cur and base become the merged theme.
+func saveTheme(configPath string, base, cur *config.ThemeConfig) ([]string, error) {
+	path := menuSetPath(configPath)
+	disk, err := config.LoadThemeConfig(path)
+	if err != nil {
+		return nil, err
+	}
+	merged, res, err := configmerge.MergeTyped(*base, *cur, disk)
+	if err != nil {
+		return nil, err
+	}
+	if err := config.SaveThemeConfig(path, merged); err != nil {
+		return nil, err
+	}
+	*cur, *base = merged, merged
+	var conflicts []string
+	for _, c := range res.Conflicts {
+		conflicts = append(conflicts, "theme.json: "+c.What)
+	}
+	return conflicts, nil
+}
+
 // remapConferenceIDs follows a conference save that renumbered conferences
 // the editor added (another program took the ID first, or added the same
 // conference under another ID): areas the editor put in such a conference

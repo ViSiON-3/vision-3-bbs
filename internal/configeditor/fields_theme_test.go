@@ -171,3 +171,37 @@ func TestThemeChatScreenPickerShowsLongEntries(t *testing.T) {
 	m = press(t, nm.(Model), "D", "2", "enter")
 	wantScreen(t, m, "V3CHAT1 - ViSiON/3 Framed Chat by ViSiON/3 Dev Team")
 }
+
+// A theme field changed on disk after the editor loaded survives the
+// editor's save of another field; a field both changed takes the editor's
+// value and is reported.
+func TestSaveThemeMergesChangesMadeElsewhere(t *testing.T) {
+	m, root := newThemeModel(t)
+	menus := filepath.Join(root, "menus", "v3")
+	elsewhere := m.configs.Theme
+	elsewhere.SysopChatScreen = "V2CHAT1"
+	elsewhere.ChatUserColor = 14
+	if err := config.SaveThemeConfig(menus, elsewhere); err != nil {
+		t.Fatal(err)
+	}
+
+	m.configs.Theme.YesNoHighlightColor = 47
+	m.configs.Theme.ChatUserColor = 12
+	m.dirty = true
+	if !m.saveAll() {
+		t.Fatalf("saveAll: %s", m.message)
+	}
+	got, err := config.LoadThemeConfig(menus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SysopChatScreen != "V2CHAT1" || got.YesNoHighlightColor != 47 || got.ChatUserColor != 12 {
+		t.Errorf("saved theme = %+v; want V2CHAT1 kept, 47 and 12 from the editor", got)
+	}
+	if m.configs.Theme != got {
+		t.Errorf("editor shows %+v after the save, disk has %+v", m.configs.Theme, got)
+	}
+	if !strings.Contains(m.message, "theme.json") {
+		t.Errorf("status = %q; want the chatUserColor conflict reported", m.message)
+	}
+}

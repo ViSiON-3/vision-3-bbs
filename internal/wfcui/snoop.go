@@ -90,9 +90,12 @@ type snoopCmd struct {
 	// screens are the chat screens Alt-S cycles through: "" for the board's
 	// default, then the built-in layout when the default is a designed
 	// screen, then the menu set's other screens. screen is the current
-	// choice, sent with the next chat start.
+	// choice, sent with the next chat start. cycle is Alt-S's place in
+	// screens; it moves on even when an open chat refuses a screen, so one
+	// unusable screen cannot stop the cycle.
 	screens []string
 	screen  string
+	cycle   int
 
 	typeBeforeChat bool // type-in was on when chat started
 	barRow         int  // row the bar was last drawn on, 0 if none
@@ -478,7 +481,8 @@ const (
 
 // nextScreen moves Alt-S to the next chat screen. It is sent with the next
 // chat start, and switches a chat already open; a screen the open chat
-// cannot take leaves the choice where it was, with the reason on the bar.
+// cannot take leaves the choice where it was, with the reason on the bar,
+// and the next Alt-S moves on past it.
 func (c *snoopCmd) nextScreen() {
 	c.mu.Lock()
 	if len(c.screens) < 2 {
@@ -487,14 +491,8 @@ func (c *snoopCmd) nextScreen() {
 		c.drawStatus()
 		return
 	}
-	i := 0
-	for j, name := range c.screens {
-		if name == c.screen {
-			i = j
-			break
-		}
-	}
-	next := c.screens[(i+1)%len(c.screens)]
+	c.cycle = (c.cycle + 1) % len(c.screens)
+	next := c.screens[c.cycle]
 	chatting := c.mode == snoopChat
 	c.mu.Unlock()
 	var err error

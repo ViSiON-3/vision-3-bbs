@@ -3,6 +3,7 @@ package snoop
 import (
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 )
 
@@ -352,11 +353,26 @@ func (t *Tap) ChatScreen() string {
 }
 
 // ScreenSwitch asks the open chat to change to another chat screen, named as
-// for RequestChatOn. The chat answers with Done.
+// for RequestChatOn. The chat claims it with Take before changing anything,
+// and answers with Done.
 type ScreenSwitch struct {
 	Screen string
 	reply  chan error // buffered 1
+	// state is switchPending until the chat takes the request or the sysop's
+	// wait for it runs out, whichever comes first.
+	state *atomic.Int32
 }
+
+const (
+	switchPending int32 = iota
+	switchTaken
+	switchCanceled
+)
+
+// Take claims the request for the chat to apply. It is false when the
+// sysop's request has already timed out; the chat must then leave its
+// screen as it is, as the sysop was told it did not change.
+func (s ScreenSwitch) Take() bool { return s.state.CompareAndSwap(switchPending, switchTaken) }
 
 // Done answers the request: nil when the chat switched, or why it did not.
 func (s ScreenSwitch) Done(err error) {
@@ -388,7 +404,7 @@ func (t *Tap) SwitchChatScreen(handle, screen string, wait time.Duration) error 
 	end := t.kb.endChat
 	t.mu.Unlock()
 
-	req := ScreenSwitch{Screen: screen, reply: make(chan error, 1)}
+	req := ScreenSwitch{Screen: screen, reply: make(chan error, 1), state: new(atomic.Int32)}
 	timeout := time.NewTimer(wait)
 	defer timeout.Stop()
 	select {
@@ -400,8 +416,7 @@ func (t *Tap) SwitchChatScreen(handle, screen string, wait time.Duration) error 
 	case <-timeout.C:
 		return ErrSwitchTimedOut
 	}
-	select {
-	case err := <-req.reply:
+	answered := func(err error) error {
 		if err != nil {
 			return err
 		}
@@ -411,10 +426,24 @@ func (t *Tap) SwitchChatScreen(handle, screen string, wait time.Duration) error 
 		}
 		t.mu.Unlock()
 		return nil
+	}
+	select {
+	case err := <-req.reply:
+		return answered(err)
 	case <-t.done:
 		return ErrTapClosed
 	case <-timeout.C:
+	}
+	if req.state.CompareAndSwap(switchPending, switchCanceled) {
 		return ErrSwitchTimedOut
+	}
+	// The chat took the request before the wait ran out and is applying
+	// it, so its answer is what happened.
+	select {
+	case err := <-req.reply:
+		return answered(err)
+	case <-t.done:
+		return ErrTapClosed
 	}
 }
 

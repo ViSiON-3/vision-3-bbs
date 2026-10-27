@@ -186,11 +186,12 @@ func (m *Model) saveAll() bool {
 		}
 	}
 	if m.configs.Theme != m.configs.themeSaved {
-		if err := config.SaveThemeConfig(menuSetPath(m.configPath), m.configs.Theme); err != nil {
+		c, err := saveTheme(m.configPath, &m.configs.themeSaved, &m.configs.Theme)
+		if err != nil {
 			m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 			return false
 		}
-		m.configs.themeSaved = m.configs.Theme
+		conflicts = append(conflicts, c...)
 	}
 
 	m.dirty = false
