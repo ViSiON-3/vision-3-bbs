@@ -15,6 +15,10 @@ import (
 )
 
 // --- fakes ---
+
+// admitAll is a DenyLogin hook that refuses no one.
+func admitAll(*user.User) string { return "" }
+
 type fakeAuth struct{ ok bool }
 
 func (f fakeAuth) Authenticate(h, p string) (*user.User, bool) {
@@ -51,6 +55,7 @@ func testServer(t *testing.T, svc PacketService, authOK bool) http.Handler {
 			return func(*message.MessageArea) bool { return true }
 		},
 		TwitMatcherFor: func(*user.User) *user.TwitMatcher { return nil },
+		DenyLogin:      admitAll,
 	})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)

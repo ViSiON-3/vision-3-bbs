@@ -43,6 +43,10 @@ type Deps struct {
 	Users          Authenticator
 	Service        PacketService
 	AuthorizeFor   func(u *user.User) func(area *message.MessageArea) bool
+	// DenyLogin applies the checks the terminal login makes once a password
+	// verifies, returning a DenyIntroPending/DenyLogonLevel reason or "" to
+	// admit. Required, so no API login skips them.
+	DenyLogin func(u *user.User) string
 	// Guard, when non-nil, applies the BBS's IP blocklist to every request and
 	// its per-IP failed-login lockout to logins.
 	Guard LoginGuard
@@ -69,6 +73,9 @@ const maxREPBytes = 16 << 20
 func NewServer(deps Deps) (*Server, error) {
 	if deps.TwitMatcherFor == nil {
 		return nil, errors.New("qwk api: TwitMatcherFor is required")
+	}
+	if deps.DenyLogin == nil {
+		return nil, errors.New("qwk api: DenyLogin is required")
 	}
 	cert, fp, err := loadOrCreateCert(deps.Config, deps.ConfigDir)
 	if err != nil {

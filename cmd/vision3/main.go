@@ -2263,6 +2263,7 @@ func main() {
 			Users:        userMgr,
 			Service:      qwkSvc,
 			AuthorizeFor: menu.QWKWriteAuthorizer,
+			DenyLogin:    menuExecutor.QWKAPILoginDenial,
 			Guard:        connectionTracker,
 			TwitMatcherFor: func(u *user.User) *user.TwitMatcher {
 				// Tokens retain a login snapshot; use the latest saved list.

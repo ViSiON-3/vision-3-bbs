@@ -49,6 +49,7 @@ func guardedServer(t *testing.T, g LoginGuard) http.Handler {
 			return func(*message.MessageArea) bool { return true }
 		},
 		TwitMatcherFor: func(*user.User) *user.TwitMatcher { return nil },
+		DenyLogin:      admitAll,
 		Guard:          g,
 	})
 	if err != nil {

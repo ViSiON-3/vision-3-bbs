@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/qwkapi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // Login is decided by level alone. Anything telling a user whether they can
@@ -47,5 +49,34 @@ func TestCanLogonIsIndependentOfValidation(t *testing.T) {
 	// A validated account below the threshold still cannot.
 	if canLogonAtLevel(cfg, 5) {
 		t.Error("an account below logonLevel cannot log on, validated or not")
+	}
+}
+
+// The API login must refuse what the terminal login refuses once the password
+// verifies: an owed intro, then a level below logonLevel (which is also where a
+// banned account, at level 0, ends up).
+func TestQWKAPILoginDenial(t *testing.T) {
+	cases := []struct {
+		name         string
+		logonLevel   int
+		access       int
+		introPending bool
+		want         string
+	}{
+		{"ordinary user", 10, 25, false, ""},
+		{"below logon level", 10, 5, false, qwkapi.DenyLogonLevel},
+		{"banned (level 0)", 10, 0, false, qwkapi.DenyLogonLevel},
+		{"intro owed, even above logon level", 10, 25, true, qwkapi.DenyIntroPending},
+		{"logon level disabled", 0, 0, false, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := &MenuExecutor{}
+			e.SetServerConfig(config.ServerConfig{LogonLevel: c.logonLevel})
+			u := &user.User{Handle: "caller", AccessLevel: c.access, IntroPending: c.introPending}
+			if got := e.QWKAPILoginDenial(u); got != c.want {
+				t.Errorf("QWKAPILoginDenial = %q, want %q", got, c.want)
+			}
+		})
 	}
 }

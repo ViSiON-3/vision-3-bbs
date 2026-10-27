@@ -24,7 +24,7 @@ func TestPacketTwitMatcherResolvedOnEveryDownload(t *testing.T) {
 	svc := &twitPacketService{}
 	live := &user.User{ID: 2, Handle: "Reader", TwitList: []user.TwitEntry{{Name: "First"}}}
 	calls := 0
-	server, err := NewServer(Deps{ConfigDir: t.TempDir(), Service: svc, TwitMatcherFor: func(snapshot *user.User) *user.TwitMatcher {
+	server, err := NewServer(Deps{ConfigDir: t.TempDir(), Service: svc, DenyLogin: admitAll, TwitMatcherFor: func(snapshot *user.User) *user.TwitMatcher {
 		calls++
 		if snapshot.Handle != "Reader" {
 			t.Fatalf("wrong account: %+v", snapshot)
