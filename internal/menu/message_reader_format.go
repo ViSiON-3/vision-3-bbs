@@ -5,11 +5,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"golang.org/x/text/encoding/charmap"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
-// bodyAsUTF8 settles a message body's encoding once, for the whole body: a
-// body that is not valid UTF-8 is CP437 throughout and is converted to UTF-8.
+// bodyAsUTF8 settles a message body's encoding once, for the whole body, and
+// returns it as UTF-8. charset is the message's CHRS kludge
+// (DisplayMessage.Charset).
 //
 // Left to the writer, the decision is made per span between escape sequences
 // and per wrapped line, and a CP437 run cut short by a colour change is often
@@ -17,19 +20,87 @@ import (
 // went out as one unrelated character, or as '?' on a CP437 terminal. Once the
 // body is UTF-8 every span agrees, and a CP437 terminal gets the original
 // bytes back from the writer.
-func bodyAsUTF8(body string) string {
+//
+// A body that is valid UTF-8 is taken as UTF-8 whatever CHRS says: labels
+// naming a single-byte set on what is really UTF-8 are common (CP850 and
+// LATIN-1 on Russian and English text), while a single-byte body that is
+// valid UTF-8 throughout is not seen in practice. Otherwise CHRS picks the
+// decoding. A UTF-8 label means the body is UTF-8 with stray bytes in it,
+// usually a quote of a CP437 message, so only those bytes are read as CP437.
+// The Cyrillic sets are decoded by name; their box drawing sits where CP437's
+// does, so art drawn in them survives. Every other label is read as CP437:
+// art is often labelled with whatever its editor defaulted to, and the other
+// sets put letters where CP437 draws blocks and lines.
+func bodyAsUTF8(body, charset string) string {
 	if utf8.ValidString(body) {
 		return body
+	}
+	switch charset {
+	case "UTF-8", "UTF8":
+		return mixedUTF8(body)
+	case "CP866", "+7_FIDO", "+7":
+		return decodeCharmap(body, charmap.CodePage866)
+	case "CP1251":
+		return decodeCharmap(body, charmap.Windows1251)
+	case "KOI8-R":
+		return decodeCharmap(body, charmap.KOI8R)
+	case "KOI8-U":
+		return decodeCharmap(body, charmap.KOI8U)
 	}
 	return string(ansi.CP437BytesToUTF8([]byte(body)))
 }
 
-// wrapTextBody cuts a message body that is not ANSI art into the lines the
-// reader paints. Word wrap cannot break a run with no spaces (an ASCII rule, a
-// row of blocks) or a quote line, which it leaves alone; whatever is still
-// too wide is cut, or it spills onto the row below when drawn.
-func wrapTextBody(body string, width int, mode ansi.OutputMode) []string {
-	return breakOversizedLines(wrapAnsiString(bodyAsUTF8(body), width, mode), width, mode)
+// mixedUTF8 keeps every valid UTF-8 sequence in s and reads each byte that
+// is not part of one as CP437.
+func mixedUTF8(s string) string {
+	var b strings.Builder
+	b.Grow(len(s) + len(s)/4)
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			r = ansi.Cp437ToUnicode[s[i]]
+		}
+		b.WriteRune(r)
+		i += size
+	}
+	return b.String()
+}
+
+// decodeCharmap decodes s from a single-byte character set. Every byte has a
+// character in the sets bodyAsUTF8 passes, and ASCII, escape sequences
+// included, decodes as itself.
+func decodeCharmap(s string, cm *charmap.Charmap) string {
+	out, err := cm.NewDecoder().String(s)
+	if err != nil {
+		return string(ansi.CP437BytesToUTF8([]byte(s)))
+	}
+	return out
+}
+
+// messageBodyLines turns a message body, colour pipe codes already expanded,
+// into the lines the reader paints, as UTF-8.
+func messageBodyLines(body, charset string, termWidth int, mode ansi.OutputMode) []string {
+	body = bodyAsUTF8(body, charset)
+
+	if detectAnsiArtInMessage(body) {
+		// Render ANSI art into a virtual buffer, cursor positioning
+		// relative to the buffer (0,0) rather than the terminal screen.
+		// Text reaching the right margin wraps onto the next row the way a
+		// terminal does, deferred so that a row filled exactly to the
+		// margin does not gain a blank row after it. Art can turn wrapping
+		// off with ESC[?7l, and much of this echo's art turns it on with
+		// ESC[?7h.
+		//
+		// Message art is drawn for 80 columns and much of it relies on
+		// wrapping there, so a wider terminal still renders it at 80;
+		// wrapping at the terminal's width would shear it.
+		return RenderANSIArtToLines(body, min(termWidth, ansi.ArtWidth), 500)
+	}
+
+	// Word wrap cannot break a run with no spaces (an ASCII rule, a row of
+	// blocks) or a quote line, which it leaves alone; whatever is still too
+	// wide is cut, or it spills onto the row below when drawn.
+	return breakOversizedLines(wrapAnsiString(body, termWidth, mode), termWidth, mode)
 }
 
 func hasOriginLine(text string) bool {

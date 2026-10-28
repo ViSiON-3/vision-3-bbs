@@ -47,6 +47,7 @@ func (mm *MessageManager) GetMessage(areaID, msgNum int) (*DisplayMessage, error
 		IsPrivate:  msg.IsPrivate(),
 		IsDeleted:  msg.IsDeleted(),
 		AreaID:     areaID,
+		Charset:    messageCharset(msg),
 
 		SenderHandle: msg.SenderHandle,
 	}, nil

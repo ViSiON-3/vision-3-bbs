@@ -70,6 +70,9 @@ type DisplayMessage struct {
 	IsPrivate  bool
 	IsDeleted  bool
 	AreaID     int // Area this message belongs to
+	// Charset is the character set the message's CHRS kludge names, upper
+	// case and without its level ("CP437", "UTF-8"), or "" if it has none.
+	Charset string
 	// SenderHandle is the handle of the local account that wrote the
 	// message when From is another name (PostOptions.SenderHandle).
 	SenderHandle string
