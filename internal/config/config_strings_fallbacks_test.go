@@ -58,6 +58,31 @@ func TestLoadStringsMissingDefaults(t *testing.T) {
 	}
 }
 
+// TestLoadStringsKeepsBlankChatNotices checks that a sysop who blanks a chat
+// notice has switched it off, while a board without the key gets the notice.
+func TestLoadStringsKeepsBlankChatNotices(t *testing.T) {
+	for _, tc := range []struct {
+		name, json, want string
+	}{
+		{"absent", `{}`, StringMissingDefaults["sysopChatSummon"]},
+		{"blank", `{"sysopChatSummon": ""}`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "strings.json"), []byte(tc.json), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			c, err := LoadStrings(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.SysopChatSummon != tc.want {
+				t.Errorf("SysopChatSummon = %q, want %q", c.SysopChatSummon, tc.want)
+			}
+		})
+	}
+}
+
 // TestApplyStringDefaultsFillsOnlyEmpty checks that a configured value is never
 // overwritten by its fallback.
 func TestApplyStringDefaultsFillsOnlyEmpty(t *testing.T) {

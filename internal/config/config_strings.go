@@ -227,9 +227,6 @@ var StringFallbacks = map[string]string{
 	"pageSysopCooldown":     "\r\n|07You paged the SysOp recently. Try again in |15%d|07 minutes.\r\n",
 	"sysopChatHeader":       " |15%s|07 chatting with |15%s|07 ",
 	"sysopChatBack":         "\r\n|08[back from chat, press Enter]|07",
-	"sysopChatSummon":       "|11You have been summoned by the SysOp!|07",
-	"sysopChatReturn":       "|11Returning you to reality - as you were!|07",
-	"sysopChatCallerLeft":   "|11OK, I guess you don't want to chat! Returning...|07",
 
 	// Chat slash-command replies (#659). Before these existed an unknown or
 	// incomplete command was posted to the room, so an upgraded strings.json
@@ -360,6 +357,10 @@ var StringFallbacks = map[string]string{
 // when the key is absent from the file. Unlike StringFallbacks, a key that is
 // present but blank stays blank, so the sysop can switch the string off.
 var StringMissingDefaults = map[string]string{
+	// Notices around sysop chat (#725). Blank skips the notice and its pause.
+	"sysopChatSummon":     "|11You have been summoned by the SysOp!|07",
+	"sysopChatReturn":     "|11Returning you to reality - as you were!|07",
+	"sysopChatCallerLeft": "|11OK, I guess you don't want to chat! Returning...|07",
 	// Quote banner for echomail/netmail/QWK replies (#632). Blank means no
 	// banner, so only an installation that predates the key gets the default.
 	"quoteTopNet": "^N wrote:",
