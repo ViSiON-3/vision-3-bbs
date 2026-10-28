@@ -9,19 +9,20 @@ import (
 
 // recordListKeys are the top-menu keystrokes that open each record list.
 var recordListKeys = map[string][]string{
-	"msgarea":    {"3", "1"},
-	"filearea":   {"3", "2"},
-	"conference": {"3", "3"},
-	"ftn":        {"4", "1"},
-	"ftnlink":    {"4", "2"},
-	"qwknet":     {"5", "1"},
-	"v3netleaf":  {"6", "2"},
-	"v3nethub":   {"6", "3"},
-	"door":       {"7"},
-	"protocol":   {"8"},
-	"archiver":   {"9"},
-	"event":      {"0"},
-	"login":      {"A"},
+	"msgarea":      {"3", "1"},
+	"filearea":     {"3", "2"},
+	"conference":   {"3", "3"},
+	"ftn":          {"4", "1"},
+	"ftnlink":      {"4", "2"},
+	"qwknet":       {"5", "1"},
+	"v3netleaf":    {"6", "2"},
+	"v3nethub":     {"6", "3"},
+	"door":         {"7", "1"},
+	"doorcategory": {"7", "2"},
+	"protocol":     {"8"},
+	"archiver":     {"9"},
+	"event":        {"0"},
+	"login":        {"A"},
 }
 
 // openRecordList navigates from the top menu to recordType's list.

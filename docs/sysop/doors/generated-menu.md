@@ -30,13 +30,13 @@ Run `./config`. Three places matter:
 - **System Setup → Default Settings** has **Door Menu Mode** (`lightbar` or
   `list`), **Door Menu Sort** (the default ordering) and **Door Menu Cols**
   (1 to 4 columns).
-- **C — Door Categories** adds, edits and deletes categories. Each has a
+- **Door Programs → Door Categories** adds, edits and deletes categories. Each has a
   **Code**, **Name**, **Description**, **Min Access Level**, **ACS**, **Sort
   Order**, a **Door Sort** that overrides the default inside that category,
   and a **Columns** count that overrides the global one for its door list.
   Renaming a category updates the doors that reference it; deleting one moves
   those doors to Other.
-- **7 — Door Programs** has, on every door, a **Category** picker, a
+- **Door Programs → Doors** has, on every door, a **Category** picker, a
   **Description** (shown by the `^DS` row placeholder), a **Hidden** flag and a
   manual **Sort Order**. Saving preserves the original order of `doors.json`.
 

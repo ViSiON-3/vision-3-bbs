@@ -21,9 +21,9 @@ ViSiON/3 runs six kinds of door. The **Type** field in the config editor picks o
 
 ## Configuration
 
-Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section **7 — Door Programs**) to add, edit, and remove door definitions interactively. Press **I** to insert a record, fill in the fields, press **Esc** to leave the record, then **Q** and **Y** to save. The editor writes `configs/doors.json`; the running board notices the change within a couple of seconds, so no restart is needed.
+Use the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section **7 — Door Programs → 1 — Doors**) to add, edit, and remove door definitions interactively. Press **I** to insert a record, fill in the fields, press **Esc** to leave the record, then **Q** and **Y** to save. The editor writes `configs/doors.json`; the running board notices the change within a couple of seconds, so no restart is needed.
 
-Section **C — Door Categories** groups doors for the [generated door menu](doors/generated-menu.md). Doors without a category still work; they are listed under **Other**.
+**Door Programs → 2 — Door Categories** groups doors for the [generated door menu](doors/generated-menu.md). Doors without a category still work; they are listed under **Other**.
 
 ### Required Fields by Door Type
 

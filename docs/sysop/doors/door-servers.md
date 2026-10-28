@@ -23,7 +23,7 @@ The settings shared by both — host, port, timeout and the hang-up key — are 
 
 ## Quick start
 
-In the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section **7 — Door Programs**), press **I** to add a door and set **Type** to `RLogin`. Fill in **Host**, and usually **Terminal Type**:
+In the [Configuration Editor](configuration/configuration.md#configuration-editor-tui) (`./config`, section **7 — Door Programs → 1 — Doors**), press **I** to add a door and set **Type** to `RLogin`. Fill in **Host**, and usually **Terminal Type**:
 
 | Field | JSON key | Meaning |
 | --- | --- | --- |

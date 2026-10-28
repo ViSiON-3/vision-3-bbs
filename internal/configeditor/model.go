@@ -363,8 +363,7 @@ func New(configPath string) (Model, error) {
 		{"0", "Event Scheduler"},
 		{"A", "Login Sequence"},
 		{"B", "ZipLab Upload Processing"},
-		{"C", "Door Categories"},
-		{"D", "Theme"},
+		{"C", "Theme"},
 		{"Q", "Quit Program"},
 	}
 
@@ -664,12 +663,14 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.mode = modeCategoryMenu
 		return m, nil
 
-	case 6: // Door Programs (direct)
-		m.recordType = "door"
-		m.recordCursor = 0
-		m.recordScroll = 0
-		m.returnMode = modeTopMenu
-		m.mode = modeRecordList
+	case 6: // Door Programs: the doors and the categories that group them
+		m.catMenuTitle = "Door Programs"
+		m.catMenuItems = []categoryMenuItem{
+			{Label: "Doors", RecordType: "door"},
+			{Label: "Door Categories", RecordType: "doorcategory"},
+		}
+		m.catMenuCursor = 0
+		m.mode = modeCategoryMenu
 		return m, nil
 
 	case 7: // Transfer Protocols (direct)
@@ -711,19 +712,13 @@ func (m Model) selectTopMenuItem() (Model, tea.Cmd) {
 		m.sysMenuCursor = 0
 		return m, nil
 
-	case 12: // Door Categories
-		m.recordType = "doorcategory"
-		m.recordCursor, m.recordScroll = 0, 0
-		m.returnMode = modeTopMenu
-		m.mode = modeRecordList
-		return m, nil
-	case 13: // Theme
+	case 12: // Theme
 		m.sysMenuItems = themeMenuItems()
 		m.sysMenuTitle = "Theme"
 		m.mode = modeSysConfigMenu
 		m.sysMenuCursor = 0
 		return m, nil
-	case 14: // Quit
+	case 13: // Quit
 		return m.tryExit()
 	}
 	return m, nil

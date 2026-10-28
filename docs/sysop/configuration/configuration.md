@@ -40,7 +40,7 @@ ViSiON/3 includes an interactive TUI configuration editor modeled after ViSiON/2
 
 ### Main Menu
 
-The editor opens to a main menu. Keys **1** through **6**, **B** and **D** open sub-menus, keys **7** through **9**, **0**, **A** and **C** open record lists, and **Q** quits.
+The editor opens to a main menu. Keys **1** through **7**, **B** and **C** open sub-menus, keys **8**, **9**, **0** and **A** open record lists, and **Q** quits.
 
 | Key | Section | What it covers |
 |-----|---------|----------------|
@@ -50,14 +50,13 @@ The editor opens to a main menu. Keys **1** through **6**, **B** and **D** open 
 | 4 | Echomail Networking | Sub-menu: Echomail Networks, Echomail Links, FTN Setup Wizard |
 | 5 | QWK Networking | Sub-menu: QWK Networks, QWK Network Wizard |
 | 6 | ViSiON/3 Networking (V3Net) | Sub-menu: Node Identity, Subscriptions, Hosted Networks |
-| 7 | Door Programs | External door program record list |
+| 7 | Door Programs | Sub-menu: Doors, Door Categories |
 | 8 | Transfer Protocols | File transfer protocol record list |
 | 9 | Archivers | Archive format record list |
 | 0 | Event Scheduler | Automated event record list |
 | A | Login Sequence | Login step record list |
 | B | ZipLab Upload Processing | Sub-menu: General, Pipeline Steps, Virus Scan (see [ZipLab](files/ziplab.md)) |
-| C | Door Categories | Door category record list |
-| D | Theme | Sub-menu: Prompt Colors, Split-Screen Chat (see [Theme Sub-menu](#theme-sub-menu)) |
+| C | Theme | Sub-menu: Prompt Colors, Split-Screen Chat (see [Theme Sub-menu](#theme-sub-menu)) |
 | Q | Quit | Exit (prompts to save if there are unsaved changes) |
 
 ### System Setup Sub-menu
@@ -832,7 +831,7 @@ The strings support pipe color codes:
 
 ### doors.json
 
-> *Use the [Configuration Editor](#configuration-editor-tui) (section 7 — Door Programs) to manage door settings interactively.*
+> *Use the [Configuration Editor](#configuration-editor-tui) (section 7 — Door Programs → Doors) to manage door settings interactively.*
 
 Configures external door programs launched from the BBS: a JSON array of door
 records, written by the Configuration Editor. Every key, its type and default

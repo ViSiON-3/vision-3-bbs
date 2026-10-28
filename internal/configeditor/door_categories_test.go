@@ -10,7 +10,7 @@ import (
 
 func TestDoorCategoriesEditorRoundTrip(t *testing.T) {
 	m, dir := newDiskModel(t)
-	m = press(t, m, "c", "i", "enter")
+	m = press(t, openRecordList(t, m, "doorcategory"), "i", "enter")
 	if m.mode != modeRecordEdit || m.recordType != "doorcategory" {
 		t.Fatalf("%v %q", m.mode, m.recordType)
 	}
