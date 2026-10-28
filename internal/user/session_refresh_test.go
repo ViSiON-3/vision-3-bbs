@@ -478,3 +478,35 @@ func TestSyncDoesNotHoldFileLockWhileWaitingForManager(t *testing.T) {
 		t.Errorf("save waited %s for the file lock held by a blocked sync", took)
 	}
 }
+
+// A save that lands while a sync is reading users.json must not be undone by
+// the sync: the bytes it read predate the save, and merging them took this
+// process's own change for an outside edit (#729: a WFC account cleared of
+// read-only came back read-only).
+func TestSyncDoesNotUndoASaveThatOvertookIt(t *testing.T) {
+	um := refreshMgr(t, &User{ID: 1, Handle: "Boss", AccessLevel: 255, WFCReadOnly: true})
+	// An outside edit, so the sync has something to merge: the bytes it
+	// reads still carry the read-only flag.
+	editOnDisk(t, um.path, func(u *User) { u.RealName = "Edited" })
+
+	// Once the sync has read those bytes, and before it merges them, this
+	// process saves twice: the first save folds the outside edit in, the
+	// second clears the flag.
+	beforeSyncMerge = func() {
+		um.mu.Lock()
+		defer um.mu.Unlock()
+		if err := um.saveUsersLocked(); err != nil {
+			t.Errorf("saveUsersLocked: %v", err)
+		}
+		um.users["boss"].WFCReadOnly = false
+		if err := um.saveUsersLocked(); err != nil {
+			t.Errorf("saveUsersLocked: %v", err)
+		}
+	}
+	t.Cleanup(func() { beforeSyncMerge = func() {} })
+
+	um.syncFromDisk()
+	if u, _ := um.GetUser("boss"); u.WFCReadOnly {
+		t.Fatal("the sync put back the read-only flag the save had just cleared")
+	}
+}
