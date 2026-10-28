@@ -128,6 +128,10 @@ func (um *UserMgr) lookupForRefresh(current *User) (User, bool) {
 // online, like the WFC access checks, call it first.
 func (um *UserMgr) SyncFromDisk() { um.syncFromDisk() }
 
+// beforeSyncMerge runs between syncFromDisk's read of the file and its merge,
+// so a test can land a save in that gap.
+var beforeSyncMerge = func() {}
+
 // syncFromDisk folds in any external edit to users.json, at most once per
 // diskSyncInterval across the whole process.
 //
@@ -193,6 +197,7 @@ func (um *UserMgr) syncFromDisk() {
 		return // malformed: keep what we have rather than lose session state
 	}
 
+	beforeSyncMerge()
 	um.mu.Lock()
 	defer um.mu.Unlock()
 	if um.fileState != before {

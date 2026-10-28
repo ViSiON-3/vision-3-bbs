@@ -485,38 +485,27 @@ func TestSyncDoesNotHoldFileLockWhileWaitingForManager(t *testing.T) {
 // read-only came back read-only).
 func TestSyncDoesNotUndoASaveThatOvertookIt(t *testing.T) {
 	um := refreshMgr(t, &User{ID: 1, Handle: "Boss", AccessLevel: 255, WFCReadOnly: true})
+	// An outside edit, so the sync has something to merge: the bytes it
+	// reads still carry the read-only flag.
+	editOnDisk(t, um.path, func(u *User) { u.RealName = "Edited" })
 
-	um.mu.Lock()
-	done := make(chan struct{})
-	go func() {
-		um.syncFromDisk()
-		close(done)
-	}()
-	// Let the sync start; it then waits on um.mu, after reading the file with
-	// the old code and before reading it with the fix.
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		sessionRefresh.mu.Lock()
-		started := !sessionRefresh.lastSync.IsZero()
-		sessionRefresh.mu.Unlock()
-		if started {
-			break
+	// Once the sync has read those bytes, and before it merges them, this
+	// process saves twice: the first save folds the outside edit in, the
+	// second clears the flag.
+	beforeSyncMerge = func() {
+		um.mu.Lock()
+		defer um.mu.Unlock()
+		if err := um.saveUsersLocked(); err != nil {
+			t.Errorf("saveUsersLocked: %v", err)
 		}
-		if time.Now().After(deadline) {
-			um.mu.Unlock()
-			t.Fatal("sync never started")
+		um.users["boss"].WFCReadOnly = false
+		if err := um.saveUsersLocked(); err != nil {
+			t.Errorf("saveUsersLocked: %v", err)
 		}
-		time.Sleep(time.Millisecond)
 	}
-	time.Sleep(200 * time.Millisecond)
+	t.Cleanup(func() { beforeSyncMerge = func() {} })
 
-	um.users["boss"].WFCReadOnly = false
-	err := um.saveUsersLocked()
-	um.mu.Unlock()
-	<-done
-	if err != nil {
-		t.Fatalf("saveUsersLocked: %v", err)
-	}
+	um.syncFromDisk()
 	if u, _ := um.GetUser("boss"); u.WFCReadOnly {
 		t.Fatal("the sync put back the read-only flag the save had just cleared")
 	}
