@@ -266,9 +266,6 @@ func stringCatalog() []StringEntry {
 		{Label: "Page SysOp: Cooldown", Key: "pageSysopCooldown", Description: "Shown when the caller pages too soon (%d=minutes)"},
 		{Label: "SysOp Chat: Header", Key: "sysopChatHeader", Description: "Split-screen chat title bar (%s=sysop, %s=caller)"},
 		{Label: "SysOp Chat: Back", Key: "sysopChatBack", Description: "Shown when the caller returns from chat"},
-		{Label: "SysOp Chat: Summon", Key: "sysopChatSummon", Description: "Centered on a cleared screen before chat opens (empty to skip)"},
-		{Label: "SysOp Chat: Return", Key: "sysopChatReturn", Description: "Centered when the SysOp ends chat (empty to skip)"},
-		{Label: "SysOp Chat: Caller Left", Key: "sysopChatCallerLeft", Description: "Centered when the caller ends chat with Esc Esc (empty to skip)"},
 		{Label: "Page: Message Prompt", Key: "pageMessagePrompt", Description: "Prompt for page message text"},
 		{Label: "Page: Message Format", Key: "pageMessageFormat", Description: "Format of received page (%s=from, %s=msg)"},
 		{Label: "Page: Sent", Key: "pageSent", Description: "Confirmation that page was sent (%d=node)"},
@@ -682,5 +679,10 @@ func stringCatalog() []StringEntry {
 		{Label: "Konfig: Sig Ask On", Key: "konfigAutoSigAskOn", Description: "Asking before each post was switched on"},
 		{Label: "Konfig: Sig Ask Off", Key: "konfigAutoSigAskOff", Description: "Asking before each post was switched off"},
 		{Label: "Konfig: Sig Ask Mark", Key: "konfigAutoSigAskSuffix", Description: "Added after the signature length when asking is on. Plain text, no colour codes"},
+
+		// SysOp chat: summon and return notices (#725)
+		{Label: "SysOp Chat: Summon", Key: "sysopChatSummon", Description: "Centered on a cleared screen before chat opens (empty to skip)"},
+		{Label: "SysOp Chat: Return", Key: "sysopChatReturn", Description: "Centered when the SysOp ends chat (empty to skip)"},
+		{Label: "SysOp Chat: Caller Left", Key: "sysopChatCallerLeft", Description: "Centered when the caller ends chat with Esc Esc (empty to skip)"},
 	}
 }
