@@ -280,11 +280,12 @@ func TestKonfigLineEditorKeys(t *testing.T) {
 
 func TestKonfigScreenWidthRangeAndLiveApply(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
-	screen, got, _ := runKonfig(t, um, u, "a"+keyClear+"20\rq", "")
-	if got.ScreenWidth == 20 {
+	// 60 was allowed before screens were fixed at 80 columns.
+	screen, got, _ := runKonfig(t, um, u, "a"+keyClear+"60\rq", "")
+	if got.ScreenWidth == 60 {
 		t.Fatal("out-of-range width was accepted")
 	}
-	if !strings.Contains(screen.Row(konfigEditRow), "40 to 255") {
+	if !strings.Contains(screen.Row(konfigEditRow), "80 to 255") {
 		t.Errorf("status row = %q", screen.Row(konfigEditRow))
 	}
 

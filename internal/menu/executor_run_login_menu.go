@@ -9,6 +9,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // handleLoginMenu implements the LOGIN menu's special interactive handling:
@@ -97,9 +98,9 @@ func (st *runLoopState) handleLoginMenu(res ansi.ProcessAnsiResult) (act loopAct
 
 		// --- Update user's terminal dimensions from detected size ---
 		if termWidth > 0 && termHeight > 0 {
-			st.currentUser.ScreenWidth = termWidth
+			st.currentUser.ScreenWidth = user.ClampScreenWidth(termWidth)
 			st.currentUser.ScreenHeight = termHeight
-			slog.Info("updated user screen preferences", "handle", st.currentUser.Handle, "width", termWidth, "height", termHeight)
+			slog.Info("updated user screen preferences", "handle", st.currentUser.Handle, "width", st.currentUser.ScreenWidth, "height", termHeight)
 			if userManager != nil {
 				if saveErr := userManager.UpdateUser(st.currentUser); saveErr != nil {
 					slog.Error("failed to save user screen preferences", "error", saveErr)

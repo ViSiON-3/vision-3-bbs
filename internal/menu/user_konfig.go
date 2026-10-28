@@ -98,8 +98,8 @@ const (
 
 // Limits shared with new-user signup and the old CFG_* commands.
 const (
-	konfigMinWidth    = 40
-	konfigMaxWidth    = 255
+	konfigMinWidth    = user.MinScreenWidth
+	konfigMaxWidth    = user.MaxScreenWidth
 	konfigMinHeight   = 21
 	konfigMaxHeight   = 60
 	konfigMinPassword = 3

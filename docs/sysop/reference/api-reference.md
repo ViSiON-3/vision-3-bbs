@@ -1188,7 +1188,7 @@ Scripts are executed via the `v3_script` door type using the goja JavaScript eng
 
 | Method              | Parameters  | Returns   | Description                                                                   |
 | ------------------- | ----------- | --------- | ----------------------------------------------------------------------------- |
-| `set(field, value)` | string, any | undefined | Update writable field (`realName`, `location`, `screenWidth`, `screenHeight`). A `realName` that fails `user.ValidateRealName` (blank, under 4 characters, or no space) is ignored and logged, not thrown |
+| `set(field, value)` | string, any | undefined | Update writable field (`realName`, `location`, `screenWidth`, `screenHeight`). `screenWidth` is held to 80–255. A `realName` that fails `user.ValidateRealName` (blank, under 4 characters, or no space) is ignored and logged, not thrown |
 | `save()`            | —           | undefined | Persist changes to disk via `UserMgr.UpdateUserByID`; throws on error         |
 
 ### v3.users — User Database (Read-Only)

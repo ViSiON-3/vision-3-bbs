@@ -84,7 +84,7 @@ func registerUser(v3 *goja.Object, eng *Engine) {
 		case "location":
 			u.GroupLocation = call.Arguments[1].String()
 		case "screenWidth":
-			u.ScreenWidth = int(call.Arguments[1].ToInteger())
+			u.ScreenWidth = user.ClampScreenWidth(int(call.Arguments[1].ToInteger()))
 		case "screenHeight":
 			u.ScreenHeight = int(call.Arguments[1].ToInteger())
 		}

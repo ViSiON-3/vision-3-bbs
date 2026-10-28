@@ -163,7 +163,7 @@ func editFields() []fieldDef {
 			Set: func(u *user.User, val string) error { u.MorePrompts = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Screen Width", Type: ftInteger, Col: 50, Row: 7, Width: 3, Min: 40, Max: 200,
+			Label: "Screen Width", Type: ftInteger, Col: 50, Row: 7, Width: 3, Min: user.MinScreenWidth, Max: user.MaxScreenWidth,
 			Get: func(u *user.User) string {
 				if u.ScreenWidth == 0 {
 					return "80"

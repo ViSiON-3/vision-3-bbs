@@ -193,6 +193,8 @@ func (um *UserMgr) loadUsers() error { // Receiver uses renamed type
 			slog.Warn("duplicate handle; skipping subsequent entry", "handle", user.Handle)
 			continue
 		}
+		// Widths under 80 were allowed before screens were fixed at 80×25.
+		user.ScreenWidth = ClampScreenWidth(user.ScreenWidth)
 		user.persisted = true // came from the file, so an absence later is a delete
 		um.users[lowerHandle] = user
 		slog.Debug("loaded user", "handle", user.Handle, "group", user.GroupLocation)

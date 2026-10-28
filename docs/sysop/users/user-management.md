@@ -899,7 +899,7 @@ Users are stored as a JSON array. Each user account contains:
 
 ##### Terminal Preferences
 
-- `screenWidth` - Preferred terminal width (0 = use detected PTY width)
+- `screenWidth` - Preferred terminal width, 80–255 (0 = use detected PTY width). Screens are laid out for 80×25, so narrower widths are raised to 80
 - `screenHeight` - Preferred terminal height (0 = use detected PTY height)
 - `preferredEncoding` - `""` (Auto) detects the encoding on every call: the board draws one box-drawing character and asks the terminal where its cursor ended up, falling back to the terminal type when it gets no answer. `"utf8"` or `"cp437"` forces that encoding from the next login, on every terminal the caller uses.
 - `msgHdr` - Selected message header style; valid values are whatever `MSGHDR.<n>.ans` templates the menu set ships (0 = unset, defaults to style 1)
