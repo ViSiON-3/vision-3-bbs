@@ -1,7 +1,9 @@
 package menu
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"sync"
@@ -778,5 +780,85 @@ func TestChatPaneBackspaceAtFullWidth(t *testing.T) {
 		if got := term.Row(1); got != "abcdefghiZ" {
 			t.Errorf("%s: after retyping row = %q; want abcdefghiZ", name, got)
 		}
+	}
+}
+
+// noticeRig is a chat rig whose strings carry the summon and return
+// notices, and whose output is also recorded raw, since the chat screen and
+// the restored screen draw over the notices.
+func noticeRig(t *testing.T, keys string) (*chatRig, *bytes.Buffer) {
+	t.Helper()
+	r := newChatRig(t, keys)
+	env := *sysopChat.Load()
+	env.strings = func() *config.StringsConfig {
+		return &config.StringsConfig{
+			SysopChatHeader:     " %s chatting with %s ",
+			SysopChatBack:       "[back]",
+			SysopChatSummon:     "|11SUMMONED",
+			SysopChatReturn:     "RETURNING",
+			SysopChatCallerLeft: "CALLER-LEFT",
+		}
+	}
+	SetSysopChatEnv(env)
+	return r, &bytes.Buffer{}
+}
+
+func (r *chatRig) runRecorded(raw *bytes.Buffer) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		runSysopChat(r.ih, r.tap, io.MultiWriter(r.term, raw), ansi.OutputModeUTF8, 80, 25, "SysOp", "Caller")
+		close(done)
+	}()
+	return done
+}
+
+// The summons is centred on a cleared screen before the chat screen, and
+// the sysop ending chat brings the return notice before the caller's screen
+// comes back.
+func TestChatSummonAndReturnNotices(t *testing.T) {
+	r, raw := noticeRig(t, "")
+	r.tap.Output([]byte("\x1b[2JMAIN MENU"))
+	r.begin(t)
+	done := r.runRecorded(raw)
+	waitFor(t, func() bool { return strings.Contains(r.term.Row(13), "chatting with") }, "chat screen not drawn")
+	_ = r.tap.StopChat("SysOp")
+	waitDone(t, done, "chat ignored StopChat")
+
+	out := raw.String()
+	// "SUMMONED" is 8 cells: centred on 80 columns it starts at column 37 of
+	// row 13, after the pipe code's colour.
+	summon := strings.Index(out, "\x1b[2J\x1b[13;37H")
+	header := strings.Index(out, "chatting with")
+	if summon < 0 || !strings.Contains(out[summon:], "SUMMONED") || header < summon {
+		t.Errorf("summons not centred before the chat screen: %q", out[:min(len(out), 200)])
+	}
+	ret := strings.Index(out, "\x1b[13;36HRETURNING") // 9 cells: column 36
+	if ret < header || strings.Contains(out, "CALLER-LEFT") {
+		t.Errorf("sysop ending chat: return notice at %d (header %d): %q", ret, header, out[max(0, len(out)-200):])
+	}
+	if got := r.term.Row(1); !strings.Contains(got, "MAIN MENU") {
+		t.Errorf("screen not restored after the notice: %q", got)
+	}
+}
+
+// The caller ending chat with Esc Esc gets its own notice.
+func TestChatCallerLeftNotice(t *testing.T) {
+	r, raw := noticeRig(t, "")
+	r.begin(t)
+	done := r.runRecorded(raw)
+	r.sess.Send("\x1b\x1b")
+	waitDone(t, done, "chat did not end on caller ESC ESC")
+	out := raw.String()
+	if !strings.Contains(out, "CALLER-LEFT") || strings.Contains(out, "RETURNING") {
+		t.Errorf("caller ending chat: %q", out[max(0, len(out)-200):])
+	}
+}
+
+// An empty notice writes nothing.
+func TestChatNoticeEmptyShowsNothing(t *testing.T) {
+	var b bytes.Buffer
+	showChatNotice(&b, ansi.OutputModeUTF8, 80, 25, "")
+	if b.Len() != 0 {
+		t.Fatalf("wrote %q", b.String())
 	}
 }

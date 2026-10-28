@@ -504,6 +504,24 @@ func drawChatView(w io.Writer, mode ansi.OutputMode, width, height int, th *conf
 	return v
 }
 
+// chatNoticePause is how long a chat notice stays on the caller's screen.
+const chatNoticePause = 1500 * time.Millisecond
+
+// showChatNotice clears the caller's screen and shows text, a strings.json
+// line with pipe codes, centred on it for chatNoticePause: the summons before
+// chat opens and the word on the way back out. Empty text shows nothing and
+// does not pause.
+func showChatNotice(w io.Writer, mode ansi.OutputMode, width, height int, text string) {
+	if text == "" {
+		return
+	}
+	b := ansi.ReplacePipeCodes([]byte(text))
+	col := max((width-ansi.VisibleLength(string(b)))/2+1, 1)
+	_, _ = fmt.Fprintf(w, "\x1b[0m\x1b[2J\x1b[%d;%dH", (height+1)/2, col) // best-effort display
+	_ = terminalio.WriteProcessedBytes(w, b, mode)
+	uiPause(chatNoticePause)
+}
+
 // runSysopChatOn draws chat screen sc, or the built-in split screen when sc
 // is nil, and relays both sides until the caller presses ESC twice, the sysop
 // ends chat, or the caller disconnects. The caller's keys are read on this
@@ -521,6 +539,7 @@ func runSysopChatOn(ih *editor.InputHandler, tap *snoop.Tap, w io.Writer, mode a
 	if sc == nil || sc.art == nil {
 		sc = builtinChatLayout(width, height)
 	}
+	showChatNotice(w, mode, width, height, st.SysopChatSummon)
 	began := time.Now()
 	view := drawChatView(w, mode, width, height, th, st, sc, sysopHandle, callerHandle, began)
 	sysop, caller := view.sysop, view.caller
@@ -538,6 +557,7 @@ func runSysopChatOn(ih *editor.InputHandler, tap *snoop.Tap, w io.Writer, mode a
 	}()
 
 	lastEsc := false
+	callerLeft := false // the caller ended chat with Esc Esc
 	var keyPending []byte
 loop:
 	for {
@@ -587,6 +607,7 @@ loop:
 		}
 		if k == editor.KeyEsc {
 			if lastEsc {
+				callerLeft = true
 				break loop
 			}
 			lastEsc = true
@@ -608,6 +629,11 @@ loop:
 		}
 	}
 
+	notice := st.SysopChatReturn
+	if callerLeft {
+		notice = st.SysopChatCallerLeft
+	}
+	showChatNotice(w, mode, width, height, notice)
 	_, _ = fmt.Fprint(w, "\x1b[r\x1b[0m\x1b[2J\x1b[H") // best-effort display
 	if !overflowed {
 		_, _ = w.Write(snap)
