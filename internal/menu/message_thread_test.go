@@ -714,3 +714,65 @@ func TestMessageReaderThreadPaneCP437(t *testing.T) {
 		}
 	}
 }
+
+// Text from a message cannot act on the terminal from inside the pane or
+// the signposts: escape sequences and control characters are dropped, a
+// pipe code is printed rather than expanded, and a body stored as raw
+// CP437 (0x82 is é) is decoded rather than mangled. Cells keep their width.
+func TestThreadCellsAreInert(t *testing.T) {
+	if got := excerpt("Caf\x82 au lait\nmore"); got != "Café au lait" {
+		t.Errorf("excerpt of a raw CP437 body = %q", got)
+	}
+	g := threadGlyphsFor(ansi.OutputModeUTF8)
+	for _, tc := range []struct{ in, want string }{
+		{"|CLgone", "||CLgone"},
+		{"a|15b", "a||15b"},
+		{"x\x1b[2Jy\x1b[1;1Hz", "xyz"},
+		{"tab\there\x7f", "tabhere"},
+		{"Caf\x82", "Café"},
+	} {
+		got := threadCell(tc.in, 12, g, ansi.OutputModeUTF8)
+		if !strings.HasPrefix(got, tc.want) {
+			t.Errorf("threadCell(%q) = %q, want prefix %q", tc.in, got, tc.want)
+		}
+		expanded := string(ansi.ReplacePipeCodes([]byte(got)))
+		if strings.Contains(expanded, "\x1b") {
+			t.Errorf("threadCell(%q) expands to an escape: %q", tc.in, expanded)
+		}
+		if w := utf8.RuneCountInString(expanded); w != 12 {
+			t.Errorf("threadCell(%q) is %d columns after expansion, want 12: %q", tc.in, w, expanded)
+		}
+		if t2 := threadText(tc.in, ansi.OutputModeUTF8); !strings.HasPrefix(t2, tc.want) {
+			t.Errorf("threadText(%q) = %q", tc.in, t2)
+		}
+	}
+	// A row and a signpost built from such a message stay 79 columns and
+	// carry no clear-screen.
+	msg := &message.DisplayMessage{MsgNum: 7, From: "Evil|CL", Subject: "|CLsubject", Body: "\x1b[2J|16pwned\nbody", DateTime: time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC)}
+	row := renderTreeRow(threadRow{Num: 7, Depth: 1, Prefix: "└─", Msg: msg}, true, 79, g, ansi.OutputModeUTF8)
+	if w := visibleWidth(row, ansi.OutputModeUTF8); w != 79 {
+		t.Errorf("row width = %d: %q", w, row)
+	}
+	if expanded := string(ansi.ReplacePipeCodes([]byte(row))); strings.Contains(expanded, "\x1b[2J") || !strings.Contains(expanded, "|16pwned") || !strings.Contains(expanded, "Evil|CL") {
+		t.Errorf("row expands to %q", expanded)
+	}
+	signs := renderSignposts([]signpost{{key: 'U', arrow: g.up, target: 7, handle: "Evil|CL\x1b[2J"}, {key: 'F', arrow: g.down}, {key: 'X', arrow: g.right}}, 79, g, ansi.OutputModeUTF8)
+	if w := visibleWidth(signs, ansi.OutputModeUTF8); w != 79 {
+		t.Errorf("signposts width = %d: %q", w, signs)
+	}
+	if expanded := string(ansi.ReplacePipeCodes([]byte(signs))); strings.Contains(expanded, "\x1b[2J") || !strings.Contains(expanded, "Evil|CL ") {
+		t.Errorf("signposts expand to %q", expanded)
+	}
+	// The pane title carries the root subject through the same cleaning.
+	tv := newThreadView(map[int]*message.ReplyNode{7: {Num: 7, Children: []int{8}}, 8: {Num: 8, Parent: 7}}, 8,
+		func(n int) *message.DisplayMessage {
+			if n == 7 {
+				return msg
+			}
+			return &message.DisplayMessage{MsgNum: 8, From: "x", Subject: "Re: s", Body: "b"}
+		})
+	title := string(ansi.ReplacePipeCodes([]byte(renderThreadPane(tv, 3, 79, " Thread ", g, ansi.OutputModeUTF8)[0])))
+	if !strings.Contains(title, "|CLsubject") {
+		t.Errorf("pane title expands to %q", title)
+	}
+}
