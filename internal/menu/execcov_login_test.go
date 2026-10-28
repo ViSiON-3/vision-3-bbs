@@ -109,8 +109,8 @@ func TestExeccovLogin_ScreenFitAndEncoding(t *testing.T) {
 }
 
 // A refused login redraws the LOGIN screen for another go. The refusals: a
-// wrong password (counted against the IP), a locked-out IP (even with the
-// right password), and an account below the logon level.
+// wrong password (counted against the IP), and an account below the logon
+// level. A locked-out IP (even with the right password) ends the call.
 func TestExeccovLogin_Refused(t *testing.T) {
 	t.Run("wrong password", func(t *testing.T) {
 		env, _, lock := execcovLoginEnv(t)
@@ -144,7 +144,9 @@ func TestExeccovLogin_Refused(t *testing.T) {
 		env, _, lock := execcovLoginEnv(t)
 		lock.lockedIP, lock.until = "203.0.113.5", time.Now().Add(5*time.Minute)
 		r := execcovRun(env, execcovCall{start: "LOGIN", input: "alice\rsecret\r"})
-		if r.next != "LOGOFF" || r.user != nil || !r.has("LOCKED 5 MIN") || execcovCount(r, "LOGIN-SCREEN") != 2 {
+		// A caller from a locked-out IP gets NICETRY at once rather than
+		// another LOGIN screen to try again on.
+		if r.next != "LOGOFF" || r.user != nil || !r.has("LOCKED 5 MIN") || !r.has("Nice try!") || execcovCount(r, "LOGIN-SCREEN") != 1 {
 			t.Errorf("next=%q user=%s output:\n%s", r.next, execcovHandle(r.user), r.text())
 		}
 		if len(lock.failed) != 0 {

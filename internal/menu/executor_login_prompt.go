@@ -136,7 +136,7 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 				slog.Error("failed writing IP lockout message", "error", wErr)
 			}
 			uiPause(2 * time.Second)
-			if e.loginFailed(s, terminal, outputMode, nodeNumber, false, termWidth, termHeight) {
+			if e.loginFailed(s, terminal, outputMode, nodeNumber, true, termWidth, termHeight) {
 				return nil, io.EOF
 			}
 			return nil, nil

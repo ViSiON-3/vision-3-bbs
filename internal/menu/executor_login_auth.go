@@ -141,7 +141,7 @@ func runAuthenticate(c *cmdCtx, args string) (*user.User, string, error) {
 				slog.Error("failed writing IP lockout message", "error", wErr)
 			}
 			uiPause(2 * time.Second)
-			if e.loginFailed(s, terminal, outputMode, nodeNumber, false, termWidth, termHeight) {
+			if e.loginFailed(s, terminal, outputMode, nodeNumber, true, termWidth, termHeight) {
 				return nil, "LOGOFF", io.EOF
 			}
 			return nil, "", nil

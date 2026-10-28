@@ -357,6 +357,9 @@ var StringFallbacks = map[string]string{
 // when the key is absent from the file. Unlike StringFallbacks, a key that is
 // present but blank stays blank, so the sysop can switch the string off.
 var StringMissingDefaults = map[string]string{
+	// Shown when NICETRY.ANS is missing and a caller has used up their
+	// password tries (#726). Blank means no notice before the disconnect.
+	"execLoginTooManyTries": "\r\n|12Too many failed login attempts. Nice try!|07\r\n",
 	// Quote banner for echomail/netmail/QWK replies (#632). Blank means no
 	// banner, so only an installation that predates the key gets the default.
 	"quoteTopNet": "^N wrote:",
