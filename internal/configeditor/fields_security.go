@@ -242,6 +242,18 @@ func sysFieldsLimits(cfg *config.ServerConfig) []fieldDef {
 				return nil
 			},
 		},
+		{
+			Label: "Login Tries", Help: "Wrong passwords per call before NICETRY.ANS and disconnect (0=3)", Type: ftInteger, Col: 3, Row: 8, Width: 5, Min: 0, Max: 99,
+			Get: func() string { return strconv.Itoa(cfg.LoginTries()) },
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				cfg.MaxLoginTries = n
+				return nil
+			},
+		},
 	}
 }
 

@@ -524,6 +524,7 @@ type StringsConfig struct {
 	ExecLoginCancelled      string `json:"execLoginCancelled"`
 	ExecIPLockout           string `json:"execIPLockout"`
 	ExecLoginIncorrect      string `json:"execLoginIncorrect"`
+	ExecLoginTooManyTries   string `json:"execLoginTooManyTries"`
 	ExecNotValidated        string `json:"execNotValidated"`
 	ExecMenuLoadError       string `json:"execMenuLoadError"`
 	ExecMenuPasswordPrompt  string `json:"execMenuPasswordPrompt"`

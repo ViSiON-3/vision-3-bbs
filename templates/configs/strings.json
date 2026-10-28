@@ -151,6 +151,7 @@
   "execLoginCancelled": "\r\n|01Login cancelled. Come back later!|07\r\n",
   "execLoginCriticalError": "\r\n|01CRITICAL ERROR: Login screen configuration invalid (Missing P/O).|07\r\n",
   "execLoginIncorrect": "\r\n|01Login incorrect.|07\r\n",
+  "execLoginTooManyTries": "\r\n|12Too many failed login attempts. Nice try!|07\r\n",
   "execMenuLoadError": "|01Error loading menu %s: %v|07",
   "execMenuPasswordPrompt": "\r\n|07Password for %s (|15Attempt %d/3|07): ",
   "execNewMailCount": "\r\n|14You have |15%d|14 new private mail message(s).|07\r\n",

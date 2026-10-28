@@ -684,5 +684,8 @@ func stringCatalog() []StringEntry {
 		{Label: "SysOp Chat: Summon", Key: "sysopChatSummon", Description: "Centered on a cleared screen before chat opens (empty to skip)"},
 		{Label: "SysOp Chat: Return", Key: "sysopChatReturn", Description: "Centered when the SysOp ends chat (empty to skip)"},
 		{Label: "SysOp Chat: Caller Left", Key: "sysopChatCallerLeft", Description: "Centered when the caller ends chat with Esc Esc (empty to skip)"},
+
+		// Login: password tries used up (#726)
+		{Label: "Exec: Login Tries Used", Key: "execLoginTooManyTries", Description: "Shown before disconnecting after too many wrong passwords, when NICETRY.ANS is missing"},
 	}
 }

@@ -136,6 +136,9 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 				slog.Error("failed writing IP lockout message", "error", wErr)
 			}
 			uiPause(2 * time.Second)
+			if e.loginFailed(s, terminal, outputMode, nodeNumber, true, termWidth, termHeight) {
+				return nil, io.EOF
+			}
 			return nil, nil
 		}
 	}
@@ -147,8 +150,9 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 		slog.Warn("failed authentication attempt", "node", nodeNumber, "handle", username, "ip", remoteIP)
 
 		// Record failed login attempt for this IP
+		wasLocked := false
 		if e.IPLockoutCheck != nil {
-			wasLocked := e.IPLockoutCheck.RecordFailedLoginAttempt(remoteIP)
+			wasLocked = e.IPLockoutCheck.RecordFailedLoginAttempt(remoteIP)
 			if wasLocked {
 				logging.Security("IP locked out after too many failed attempts", "node", nodeNumber, "ip", remoteIP)
 			}
@@ -161,7 +165,10 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 			slog.Error("failed writing login incorrect message", "error", wErr)
 		}
 		uiPause(1 * time.Second) // Pause after failed attempt
-		return nil, nil          // Failed auth, but not a critical error. Let LOGIN menu handle retries.
+		if e.loginFailed(s, terminal, outputMode, nodeNumber, wasLocked, termWidth, termHeight) {
+			return nil, io.EOF
+		}
+		return nil, nil // Failed auth, but not a critical error. Let LOGIN menu handle retries.
 	}
 
 	// A new user who owes the SysOp the required introduction message is sent
@@ -196,7 +203,8 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 
 	slog.Info("user authenticated successfully via LOGIN prompt", "node", nodeNumber, "handle", authUser.Handle)
 
-	// Clear failed login attempts for this IP
+	// Clear failed login attempts for this IP and this call
+	clearLoginFailures(s)
 	if e.IPLockoutCheck != nil {
 		e.IPLockoutCheck.ClearFailedLoginAttempts(remoteIP)
 		slog.Debug("cleared failed login attempts", "node", nodeNumber, "ip", remoteIP)

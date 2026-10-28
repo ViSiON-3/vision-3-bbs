@@ -29,6 +29,7 @@
   "ipAllowlistPath": "configs/allowlist.txt",
   "maxFailedLogins": 5,
   "lockoutMinutes": 30,
+  "maxLoginTries": 3,
   "fileListingMode": "lightbar",
   "doorMenuMode": "lightbar",
   "doorMenuSort": "name",
