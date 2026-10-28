@@ -1,6 +1,7 @@
 package stringeditor
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -240,5 +241,44 @@ func TestNewUpgradesSupersededStrings(t *testing.T) {
 	}
 	if got := m.values["defPrompt"]; got != old {
 		t.Errorf("another key with the same text was changed to %q", got)
+	}
+}
+
+// TestModelEditSavesBlankForAbsentMissingDefault checks that a key absent
+// from the file, which the BBS fills with its missing-key default, can be
+// saved blank to switch it off, while F1 then Enter leaves it absent.
+func TestModelEditSavesBlankForAbsentMissingDefault(t *testing.T) {
+	const keyName = "quoteTopNet"
+	// An upgraded board's file, which predates the key.
+	path := filepath.Join(t.TempDir(), "strings.json")
+	if err := os.WriteFile(path, []byte(`{"defPrompt": "mine"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := New(path, map[string]string{"defPrompt": "factory"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	for i, e := range m.entries {
+		if e.Key == keyName {
+			m.cursor = i
+		}
+	}
+	if m.entries[m.cursor].Key != keyName {
+		t.Fatalf("%s not in the catalog", keyName)
+	}
+
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyF1})
+	if got := m.textInput.Value(); got != EscapeForEdit(config.StringMissingDefaults[keyName]) {
+		t.Errorf("F1 prefill = %q, want the missing-key default", got)
+	}
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if _, present := m.values[keyName]; present || m.dirty {
+		t.Errorf("an unchanged edit wrote %q, dirty=%v", m.values[keyName], m.dirty)
+	}
+
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if v, present := m.values[keyName]; !present || v != "" || !m.dirty {
+		t.Errorf("blank edit: value=%q present=%v dirty=%v, want a saved blank", v, present, m.dirty)
 	}
 }

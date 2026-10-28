@@ -434,7 +434,6 @@ func stringCatalog() []StringEntry {
 		{Label: "Exec: Abort Login", Key: "execAbortLoginPrompt", Description: "Prompt to abort login"},
 		{Label: "Exec: Login Cancelled", Key: "execLoginCancelled", Description: "Shown when login is cancelled"},
 		{Label: "Exec: IP Lockout", Key: "execIPLockout", Description: "Shown when IP is locked out (%d=minutes)"},
-		{Label: "Exec: Login Tries Used", Key: "execLoginTooManyTries", Description: "Shown before disconnecting after too many wrong passwords, when NICETRY.ANS is missing"},
 		{Label: "Exec: Login Incorrect", Key: "execLoginIncorrect", Description: "Shown for incorrect login"},
 		{Label: "Exec: Not Validated", Key: "execNotValidated", Description: "Shown for unvalidated accounts"},
 		{Label: "Exec: Menu Load Err", Key: "execMenuLoadError", Description: "Shown on menu load error (%s=menu, %v=err)"},
@@ -680,5 +679,8 @@ func stringCatalog() []StringEntry {
 		{Label: "Konfig: Sig Ask On", Key: "konfigAutoSigAskOn", Description: "Asking before each post was switched on"},
 		{Label: "Konfig: Sig Ask Off", Key: "konfigAutoSigAskOff", Description: "Asking before each post was switched off"},
 		{Label: "Konfig: Sig Ask Mark", Key: "konfigAutoSigAskSuffix", Description: "Added after the signature length when asking is on. Plain text, no colour codes"},
+
+		// Login: password tries used up (#726)
+		{Label: "Exec: Login Tries Used", Key: "execLoginTooManyTries", Description: "Shown before disconnecting after too many wrong passwords, when NICETRY.ANS is missing"},
 	}
 }

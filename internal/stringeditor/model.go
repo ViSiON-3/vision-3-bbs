@@ -321,7 +321,7 @@ func (m Model) updateNavigate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyF1:
 		// Edit with pre-filled value
 		entry := m.entries[m.cursor]
-		return m.startEdit(m.getValue(entry.Key))
+		return m.startEdit(m.editBase(entry.Key))
 	case tea.KeyF3:
 		// Revert current item to original (on-disk) value
 		entry := m.entries[m.cursor]
@@ -425,7 +425,7 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.editErr = err.Error()
 			return m, nil
 		}
-		if newVal != m.getValue(m.editKey) {
+		if newVal != m.editBase(m.editKey) {
 			m.values[m.editKey] = newVal
 			m.recomputeDirty()
 		}
@@ -605,6 +605,17 @@ func (m *Model) recomputeDirty() {
 }
 
 // getValue returns the current value for a key, or empty string.
+// editBase returns the value an edit of key starts from and is compared with:
+// the file's value, or for an absent key the default the BBS uses for it. An
+// absent key with a missing-key default can then be saved blank, which
+// switches that string off.
+func (m Model) editBase(key string) string {
+	if v, ok := m.values[key]; ok {
+		return v
+	}
+	return config.StringMissingDefaults[key]
+}
+
 func (m Model) getValue(key string) string {
 	if v, ok := m.values[key]; ok {
 		return v
