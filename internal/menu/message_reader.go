@@ -489,7 +489,7 @@ readerLoop:
 			editor.KeyCtrlE, editor.KeyCtrlX, editor.KeyCtrlR, editor.KeyCtrlC,
 			// The thread keys are not on the bar, so the bar hands them
 			// back too rather than swallowing them.
-			'U', 'u', 'F', 'f', 'X', 'x', '[', ']',
+			'U', 'u', 'F', 'f', 'X', 'x', '[', ']', 'V', 'v',
 		}
 		pendingKey := 0
 

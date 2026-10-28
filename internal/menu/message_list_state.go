@@ -293,7 +293,9 @@ func buildThreadedMessageList(msgMgr *message.MessageManager, areaID int, userna
 	}
 
 	// Every message is read once, as the flat list reads them, and kept only
-	// if the user may see it.
+	// if the user may see it. A deleted one they may see is kept, flagged,
+	// so its placeholder is drawn; a deleted one they may not is hidden
+	// like any other, and its replies hang from the nearest listed message.
 	msgs := make(map[int]*message.DisplayMessage, totalCount)
 	for n := 1; n <= totalCount; n++ {
 		m, err := msgMgr.GetMessage(areaID, n)
@@ -301,7 +303,7 @@ func buildThreadedMessageList(msgMgr *message.MessageManager, areaID int, userna
 			slog.Warn("failed to read message", "msg", n, "area", areaID, "error", err)
 			continue
 		}
-		if m.IsDeleted || (msgFilter != nil && !msgFilter(m)) {
+		if msgFilter != nil && !msgFilter(m) {
 			continue
 		}
 		msgs[n] = m
@@ -317,7 +319,7 @@ func buildThreadedMessageList(msgMgr *message.MessageManager, areaID int, userna
 	// message rather than a placeholder; ok is false at the top.
 	nearestSubject := func(n int) (string, bool) {
 		for p := parentOf[n]; p != 0; p = parentOf[p] {
-			if m := msgs[p]; m != nil {
+			if m := msgs[p]; m != nil && !m.IsDeleted {
 				return m.Subject, true
 			}
 		}

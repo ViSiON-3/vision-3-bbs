@@ -520,3 +520,71 @@ func TestListMsgsReaderReturnsToList(t *testing.T) {
 		})
 	}
 }
+
+// Message text cannot act on the terminal from a list row: a reply whose
+// first line is a clear-screen code or an escape is printed inert, and the
+// row keeps its width.
+func TestThreadedListRowIsInert(t *testing.T) {
+	entry := MessageListEntry{MsgNum: 7, Threaded: true, Depth: 1, Prefix: "└─", Excerpt: "|CLpwned \x1b[2Jtext", From: "Evil|16", Date: time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC)}
+	for _, hl := range []bool{false, true} {
+		ts := newTestSession("")
+		if err := drawMessageListLine(newTestTerminal(ts), entry, hl, ansi.OutputModeUTF8, nil); err != nil {
+			t.Fatal(err)
+		}
+		out := ts.output()
+		if strings.Contains(out, "\x1b[2J") || !strings.Contains(out, "|CLpwned text") || !strings.Contains(out, "Evil|16") {
+			t.Errorf("hl=%v: row expands to %q", hl, out)
+		}
+		stripped := testAnsiEscape.ReplaceAllString(strings.TrimRight(strings.Split(out, "\n")[0], "\r"), "")
+		if w := utf8.RuneCountInString(stripped); w != 79 {
+			t.Errorf("hl=%v: width %d: %q", hl, w, stripped)
+		}
+	}
+}
+
+// A deleted message is a placeholder in the list only for a caller who
+// could have read it: with the private #9 deleted, the caller's list hangs
+// #15 from #5 with no "#9 deleted" row.
+func TestThreadedListDeletedPrivateStaysHidden(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	if err := env.e.MessageMgr.DeleteMessage(generalAreaID, 9); err != nil {
+		t.Fatalf("DeleteMessage: %v", err)
+	}
+	filter := withPrivacy(privateMailReaderFor(env.e, env.um, env.caller), nil)
+	entries, _, err := buildThreadedMessageList(env.e.MessageMgr, generalAreaID, "Caller", filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range entries {
+		if e.MsgNum == 9 {
+			t.Errorf("the deleted private #9 is listed (placeholder=%v)", e.Placeholder)
+		}
+		if e.MsgNum == 15 && (e.Depth != 3 || e.Prefix != "│ │ └─") {
+			t.Errorf("#15 = %+v, want it hanging from #5", e)
+		}
+		found = found || (e.MsgNum == 4 && e.Placeholder)
+	}
+	if !found {
+		t.Error("the deleted public #4 should still be a placeholder")
+	}
+}
+
+// V reaches the list from inside the lightbar too.
+func TestReaderVPassesThroughLightbar(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	env.markRead(generalAreaID, "Caller", len(sampleThread))
+	r := env.runCmd("READMSGS", env.caller, "", "5\r\x1b[CV\x1b[B\rQ")
+	if r.err != nil || r.next != "QUIT_NEWSCAN" {
+		t.Fatalf("next = %q err = %v; output:\n%s", r.next, r.err, r.text())
+	}
+	txt := r.text()
+	if !strings.Contains(txt, "Threaded List") {
+		t.Errorf("Right then V should open the threaded list; output:\n%s", txt)
+	}
+	if last := strings.LastIndex(txt, "Reading message #"); last < 0 || !strings.HasPrefix(txt[last:], "Reading message #7 ") {
+		t.Errorf("Enter on the next row should read #7; output:\n%s", txt)
+	}
+}

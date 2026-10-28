@@ -193,6 +193,12 @@ const (
 // listCell renders s as exactly width columns, truncating with an ellipsis and
 // padding with spaces.
 //
+// The text comes from a message, so first it is made inert (threadPlainText):
+// escape sequences and control characters out, a raw CP437 body line
+// decoded. Pipes are doubled last, after fitting, so the row's pipe-code
+// expansion prints them rather than reading a colour code out of a subject,
+// at no cost in columns.
+//
 // Order matters. toCP437Safe emits one byte per rune, and CP437's high bytes
 // are not valid UTF-8, so anything that decodes runes must run before the
 // conversion: truncating afterwards turns every accented character into U+FFFD
@@ -200,7 +206,7 @@ const (
 // cannot see. Truncate and measure in Unicode, convert, then pad with ASCII
 // spaces that are the same byte either way.
 func listCell(s string, width int, outputMode ansi.OutputMode) string {
-	s = ansi.TruncateRunes(s, width, "...")
+	s = ansi.TruncateRunes(threadPlainText(s), width, "...")
 	n := utf8.RuneCountInString(s)
 	if outputMode == ansi.OutputModeCP437 {
 		s = toCP437Safe(s)
@@ -208,7 +214,7 @@ func listCell(s string, width int, outputMode ansi.OutputMode) string {
 	if n < width {
 		s += strings.Repeat(" ", width-n)
 	}
-	return s
+	return threadEscapePipes(s)
 }
 
 // listNumCell right-aligns a message number in listNumWidth columns.
