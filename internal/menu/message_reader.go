@@ -346,34 +346,7 @@ readerLoop:
 		// was written on another system, so "||" and the screen-control codes
 		// are text, not ViSiON/3 escapes.
 		processedBodyBytes := ansi.ReplaceColorPipeCodes([]byte(formattedBody))
-		processedBodyStr := string(processedBodyBytes)
-
-		var wrappedBodyLines []string
-
-		// Check if message contains ANSI art using improved detection
-		hasAnsiArt := detectAnsiArtInMessage(processedBodyStr)
-
-		if hasAnsiArt {
-			// Render ANSI art into a virtual buffer, cursor positioning
-			// relative to the buffer (0,0) rather than the terminal screen.
-			// Text reaching the right margin wraps onto the next row the way a
-			// terminal does, deferred so that a row filled exactly to the
-			// margin does not gain a blank row after it. Art can turn wrapping
-			// off with ESC[?7l, and much of this echo's art turns it on with
-			// ESC[?7h.
-			//
-			// Message art is drawn for 80 columns and much of it relies on
-			// wrapping there, so a wider terminal still renders it at 80;
-			// wrapping at the terminal's width would shear it.
-			wrappedBodyLines = RenderANSIArtToLines(processedBodyStr, min(termWidth, ansi.ArtWidth), 500)
-
-			// Convert CP437 bytes to UTF-8 for modern terminals
-			for i, line := range wrappedBodyLines {
-				wrappedBodyLines[i] = string(ansi.CP437BytesToUTF8([]byte(line)))
-			}
-		} else {
-			wrappedBodyLines = wrapTextBody(processedBodyStr, termWidth, outputMode)
-		}
+		wrappedBodyLines := messageBodyLines(string(processedBodyBytes), currentMsg.Charset, termWidth, outputMode)
 
 		// Calculate available body height
 		// Find the actual bottom row of the header using ANSI cursor tracking

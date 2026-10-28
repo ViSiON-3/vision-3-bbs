@@ -1177,6 +1177,26 @@ Groups message areas for display in the BBS menu:
   change while it still carries the old zone. Other `address` lines are
   treated as your AKAs and left alone.
 
+### How message bodies are displayed
+
+Bodies are stored as received, so the reader works out each body's character
+set when it shows it:
+
+- **A body that is valid UTF-8 is shown as UTF-8**, whatever its `CHRS`
+  kludge says. Labels naming CP850 or LATIN-1 on text that is really UTF-8
+  are common.
+- **Otherwise the `CHRS` kludge decides.** `UTF-8` keeps the UTF-8 and reads
+  any stray bytes (usually a quoted CP437 message) as CP437. `CP866`
+  (`+7_FIDO`), `CP1251`, `KOI8-R` and `KOI8-U` are decoded as Cyrillic.
+- **Everything else is CP437**, including messages with no `CHRS` and those
+  labelled CP850, LATIN-1 and the like: ANSI art often carries whatever label
+  its editor defaulted to, and those sets put letters where CP437 draws
+  blocks and lines.
+
+The whole body is decoded at once, so colour changes and line breaks can't
+split a character. Callers on a CP437 terminal see `?` for anything CP437
+can't draw, Cyrillic included.
+
 ### helper ftnsetup
 
 ```bash

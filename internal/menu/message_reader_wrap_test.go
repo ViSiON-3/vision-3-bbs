@@ -30,7 +30,7 @@ const codefenixSignature = "Good to be back!\r" +
 // is sent it, so a CP437 fixture comes back in its own bytes, one per column.
 func readBodyForTest(body string, termWidth int) []string {
 	formatted := formatMessageBody(body, "", false, nil)
-	lines := wrapTextBody(string(ansi.ReplaceColorPipeCodes([]byte(formatted))), termWidth, ansi.OutputModeCP437)
+	lines := messageBodyLines(string(ansi.ReplaceColorPipeCodes([]byte(formatted))), "", termWidth, ansi.OutputModeCP437)
 	for i, ln := range lines {
 		var out bytes.Buffer
 		if err := terminalio.WriteStringCP437(&out, []byte(ln), ansi.OutputModeCP437); err != nil {
@@ -381,7 +381,7 @@ func TestMessageBodyCP437PairBetweenEscapes(t *testing.T) {
 		{ansi.OutputModeCP437, "\xdc\xb1\xdb\xdb\xdb  ANetBBS   \xdb\xdb\xdb"},
 	} {
 		var out bytes.Buffer
-		for _, ln := range wrapTextBody(stingRayRow, 80, tc.mode) {
+		for _, ln := range messageBodyLines(stingRayRow, "", 80, tc.mode) {
 			if err := terminalio.WriteProcessedBytes(&out, []byte(ln), tc.mode); err != nil {
 				t.Fatal(err)
 			}
@@ -406,5 +406,50 @@ func TestMessageBodyKeepsCP437BlankCells(t *testing.T) {
 	}
 	if lines[1] != "A\xffB" {
 		t.Errorf("blank cell inside text = %q, want %q", lines[1], "A\xffB")
+	}
+}
+
+// A body that is not valid UTF-8 is decoded by its CHRS kludge (#739). A
+// UTF-8 label keeps the UTF-8 and reads only the stray bytes as CP437; the
+// Cyrillic sets are decoded by name; any other label, or none, is CP437. A
+// body that is valid UTF-8 is left alone whatever the label says.
+func TestBodyAsUTF8HonoursCHRS(t *testing.T) {
+	for _, tc := range []struct {
+		name, charset, body, want string
+	}{
+		{"utf-8 with a CP437 quote", "UTF-8", "Bj\xc3\xb6rn > \xb2\xb0\xb1", "Björn > ▓░▒"},
+		{"no label reads it all as CP437", "", "Bj\xc3\xb6rn > \xb2\xb0\xb1", "Bj├╢rn > ▓░▒"},
+		{"cp866", "CP866", "\x8f\xe0\xa8\xa2\xa5\xe2, Ward! \xc4\xb3\xdb", "Привет, Ward! ─│█"},
+		{"+7_fido is cp866", "+7_FIDO", "\x8f\xe0\xa8\xa2\xa5\xe2\xff", "Привет "},
+		{"koi8-r", "KOI8-R", "\xf0\xd2\xc9\xd7\xc5\xd4", "Привет"},
+		{"cp1251", "CP1251", "\xcf\xf0\xe8\xe2\xe5\xf2", "Привет"},
+		{"cp850 is read as cp437", "CP850", "\x1b[34m\xdd\xde\xb5", "\x1b[34m▌▐╡"},
+		{"valid utf-8 beats the label", "CP850", "Привет ─", "Привет ─"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := bodyAsUTF8(tc.body, tc.charset); got != tc.want {
+				t.Errorf("bodyAsUTF8(%q, %q) = %q, want %q", tc.body, tc.charset, got, tc.want)
+			}
+		})
+	}
+}
+
+// Positioned art in UTF-8 is one cell per character. The renderer stored a
+// byte per cell, so ▄▀█ took nine columns and pushed everything after it
+// along, and the reader then read each byte as CP437 on top of that.
+func TestMessageBodyRendersUTF8Art(t *testing.T) {
+	art := func(body string) string {
+		lines := messageBodyLines(body, "", 80, ansi.OutputModeUTF8)
+		if len(lines) == 0 {
+			t.Fatalf("no rows rendered for %q", body)
+		}
+		return reWrapEsc.ReplaceAllString(lines[0], "")
+	}
+	if got := art("\x1b[1;1H▄▀█\x1b[1;5HX"); got != "▄▀█ X" {
+		t.Errorf("UTF-8 art row = %q, want %q", got, "▄▀█ X")
+	}
+	// A body that is not UTF-8 is CP437 art, as before.
+	if got := art("\x1b[1;1H\xdc\xdf\xdb\x1b[1;5HX"); got != "▄▀█ X" {
+		t.Errorf("CP437 art row = %q, want %q", got, "▄▀█ X")
 	}
 }

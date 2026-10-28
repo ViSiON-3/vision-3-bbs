@@ -1,16 +1,16 @@
 package menu
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // ANSICell represents a single character cell with its attributes
 type ANSICell struct {
-	Char  byte   // Keep as byte to preserve CP437 encoding
+	Char  rune   // Message bodies reach the renderer as UTF-8 (bodyAsUTF8)
 	Style string // ANSI escape sequence for this cell's style
 }
 
@@ -91,7 +91,7 @@ func NewANSIRenderer(width, height int) *ANSIRenderer {
 // Render processes ANSI text and renders it into the buffer
 func (r *ANSIRenderer) Render(text string) {
 	i := 0
-	lastChar := byte(0)
+	lastChar := rune(0)
 	for i < len(text) {
 		// Check for ANSI escape sequence
 		if i < len(text) && text[i] == '\x1b' {
@@ -110,9 +110,16 @@ func (r *ANSIRenderer) Render(text string) {
 			}
 		}
 
-		// Handle regular characters
-		// CRITICAL: Keep as byte, not rune, to preserve CP437 encoding
-		ch := text[i]
+		// One character per cell. The reader converts the body to UTF-8
+		// first, so a multibyte character is one cell, not one per byte; a
+		// stray byte that is not UTF-8 is read as CP437.
+		ch, size := rune(text[i]), 1
+		if ch >= utf8.RuneSelf {
+			ch, size = utf8.DecodeRuneInString(text[i:])
+			if ch == utf8.RuneError && size == 1 {
+				ch = ansi.Cp437ToUnicode[text[i]]
+			}
+		}
 		switch ch {
 		case '\r':
 			r.CursorX = 0
@@ -162,7 +169,7 @@ func (r *ANSIRenderer) Render(text string) {
 			}
 		}
 		lastChar = ch // Track last character for \n handling
-		i++
+		i += size
 	}
 }
 
@@ -487,8 +494,7 @@ func (r *ANSIRenderer) ExtractLines() []string {
 	var lines []string
 
 	for y := 0; y < r.Height; y++ {
-		// Use bytes.Buffer instead of strings.Builder to preserve CP437 bytes
-		var line bytes.Buffer
+		var line strings.Builder
 		lastStyle := ""
 
 		// Find the rightmost non-space character OR styled space (preserve background colors)
@@ -518,8 +524,7 @@ func (r *ANSIRenderer) ExtractLines() []string {
 				lastStyle = cell.Style
 			}
 
-			// Add character (write raw byte to preserve CP437)
-			line.WriteByte(cell.Char)
+			line.WriteRune(cell.Char)
 		}
 
 		// Reset at end of line
@@ -527,7 +532,6 @@ func (r *ANSIRenderer) ExtractLines() []string {
 			line.WriteString("\x1b[0m")
 		}
 
-		// Convert buffer to string (preserves raw bytes)
 		lines = append(lines, line.String())
 	}
 
@@ -547,7 +551,6 @@ func RenderANSIArtToLines(text string, width, height int) []string {
 	// Create renderer with generous height to capture all content
 	renderer := NewANSIRenderer(width, height)
 
-	// Render the ANSI art (keeping CP437 bytes as-is)
 	renderer.Render(text)
 
 	// Extract lines

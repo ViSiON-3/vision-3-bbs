@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -237,6 +238,28 @@ func normalizeLineEndings(text string) string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
 	return text
+}
+
+// messageCharset returns the character set a message's CHRS kludge names
+// ("CHRS: CP866 2" gives "CP866"), looking in the header subfields and then
+// in any kludge lines left in the body text, or "" if there is none.
+func messageCharset(msg *jam.Message) string {
+	lines := slices.Clone(msg.Kludges)
+	isEOL := func(r rune) bool { return r == '\r' || r == '\n' }
+	for _, line := range strings.FieldsFunc(msg.Text, isEOL) {
+		if strings.HasPrefix(line, "\x01") {
+			lines = append(lines, strings.TrimSpace(line[1:]))
+		}
+	}
+	for _, k := range lines {
+		if len(k) < len("CHRS:") || !strings.EqualFold(k[:len("CHRS:")], "CHRS:") {
+			continue
+		}
+		if f := strings.Fields(k[len("CHRS:"):]); len(f) > 0 {
+			return strings.ToUpper(f[0])
+		}
+	}
+	return ""
 }
 
 // stripKludgeLines removes FTN kludge lines (lines starting with \x01) from

@@ -315,3 +315,34 @@ func TestGetMessageStripsKludgesAndNormalizesLineEndings(t *testing.T) {
 		t.Error("GetMessage past the end of the base returned nil error")
 	}
 }
+
+// The reader decodes a body by its CHRS kludge, so GetMessage reports the
+// set it names, whether the kludge is a header subfield or a line left in
+// the body text.
+func TestGetMessageReportsCharset(t *testing.T) {
+	mm := newReplyTestManager(t)
+	for _, tc := range []struct {
+		name    string
+		body    string
+		kludges []string
+		want    string
+	}{
+		{"subfield", "body", []string{"CHRS: cp866 2"}, "CP866"},
+		{"body kludge", "first\r\x01CHRS: UTF-8 4\rsecond", nil, "UTF-8"},
+		{"none", "body", []string{"TZUTC: 0000"}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			n, err := mm.Post(1, "alice", "All", "s", tc.body, PostOptions{Kludges: tc.kludges})
+			if err != nil {
+				t.Fatal(err)
+			}
+			msg, err := mm.GetMessage(1, n)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if msg.Charset != tc.want {
+				t.Errorf("Charset = %q, want %q", msg.Charset, tc.want)
+			}
+		})
+	}
+}
