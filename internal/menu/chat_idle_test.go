@@ -84,23 +84,27 @@ func (r *chatIdleRun) ended(d time.Duration) bool {
 // the menu loop turns into the idle notice and log line.
 func TestChatIdleRoomTrafficKeepsCallerOn(t *testing.T) {
 	env := newMenuEnv(t)
+	// Bob's database is opened before the caller's idle countdown starts:
+	// under -race on a Windows runner, opening it can outlast the chat limit.
+	bob := chatcovLocal(env, "Bob")
 	run := startChatIdle(env, env.caller, 1, 10)
 	waitChatOutput(t, run.s, "Joined #lobby")
 
-	bob := chatcovLocal(env, "Bob")
 	if _, _, err := bob.Join("lobby"); err != nil {
 		t.Fatalf("Bob joins: %v", err)
 	}
-	// Bob talks for well past both timeouts, much more often than the chat
-	// limit, while the caller types nothing. The chat limit leaves room for a
-	// slow Post: a SQLite write on a Windows runner can take over 100ms.
+	// Bob keeps the room busy for well past both timeouts, much more often
+	// than the chat limit, while the caller types nothing. He changes the
+	// topic rather than posting: a topic is room traffic like a message, but
+	// stays in memory, where a Post is a SQLite write that under -race on a
+	// Windows runner can itself outlast the limit (#706).
 	talkUntil := time.Now().Add(24 * chatIdleUnit)
-	var lastPost time.Time
+	var lastTraffic time.Time
 	for time.Now().Before(talkUntil) {
-		if err := bob.Post("lobby", "still here"); err != nil {
-			t.Fatalf("Bob posts: %v", err)
+		if err := bob.SetTopic("lobby", "still here"); err != nil {
+			t.Fatalf("Bob sets the topic: %v", err)
 		}
-		lastPost = time.Now()
+		lastTraffic = time.Now()
 		if run.ended(2 * chatIdleUnit) {
 			t.Fatalf("chat ended with the room talking: next=%q err=%v", run.next, run.err)
 		}
@@ -111,8 +115,8 @@ func TestChatIdleRoomTrafficKeepsCallerOn(t *testing.T) {
 	}
 	// Chat's limit is 10 units and the menus' 1: anything past 2 shows chat's
 	// applied, with room to spare for a slow runner.
-	if took := time.Since(lastPost); took < 2*chatIdleUnit {
-		t.Errorf("chat ended %v after the last message; its own limit is %v", took, 10*chatIdleUnit)
+	if took := time.Since(lastTraffic); took < 2*chatIdleUnit {
+		t.Errorf("chat ended %v after the room went quiet; its own limit is %v", took, 10*chatIdleUnit)
 	}
 	if !errors.Is(run.err, editor.ErrIdleTimeout) || run.next != "LOGOFF" {
 		t.Errorf("runChat = (%q, %v), want LOGOFF with editor.ErrIdleTimeout", run.next, run.err)
