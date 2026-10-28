@@ -112,6 +112,12 @@ var StringFallbacks = map[string]string{
 	"msgThreadStart":          "\r\n|09Start of thread.",
 	"msgThreadEnd":            "\r\n|09End of thread.",
 	"msgThreadPaneTitle":      " Thread ",
+	// The message list's threaded mode (T in the list, V from the reader).
+	"msgListThreadedTitle":      "%s - Threaded List",
+	"msgListThreadColumn":       "Thread",
+	"msgListHelpThreaded":       "%s/%s: Navigate  Enter: Read  T: Flat  Q: Quit",
+	"msgListHelpFlat":           "%s/%s: Navigate  Enter: Read  T: Threaded  Q: Quit",
+	"msgListDeletedPlaceholder": "#%d deleted",
 
 	// Conference and new-user notices whose defaults lived as literals at the
 	// call site. Lifting them here changes nothing at runtime and makes them

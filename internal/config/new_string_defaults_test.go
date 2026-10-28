@@ -28,18 +28,23 @@ func TestNewStringKeysHaveDefaults(t *testing.T) {
 	}
 
 	for name, got := range map[string]string{
-		"NewUserAccountReady":      cfg.NewUserAccountReady,
-		"NewUserPendingReview":     cfg.NewUserPendingReview,
-		"MatrixAccountCannotLogon": cfg.MatrixAccountCannotLogon,
-		"MsgThreadNoParent":        cfg.MsgThreadNoParent,
-		"MsgThreadParentDeleted":   cfg.MsgThreadParentDeleted,
-		"MsgThreadParentHidden":    cfg.MsgThreadParentHidden,
-		"MsgThreadNoReplies":       cfg.MsgThreadNoReplies,
-		"MsgThreadNoSiblingRoot":   cfg.MsgThreadNoSiblingRoot,
-		"MsgThreadNoMoreSiblings":  cfg.MsgThreadNoMoreSiblings,
-		"MsgThreadStart":           cfg.MsgThreadStart,
-		"MsgThreadEnd":             cfg.MsgThreadEnd,
-		"MsgThreadPaneTitle":       cfg.MsgThreadPaneTitle,
+		"NewUserAccountReady":       cfg.NewUserAccountReady,
+		"NewUserPendingReview":      cfg.NewUserPendingReview,
+		"MatrixAccountCannotLogon":  cfg.MatrixAccountCannotLogon,
+		"MsgThreadNoParent":         cfg.MsgThreadNoParent,
+		"MsgThreadParentDeleted":    cfg.MsgThreadParentDeleted,
+		"MsgThreadParentHidden":     cfg.MsgThreadParentHidden,
+		"MsgThreadNoReplies":        cfg.MsgThreadNoReplies,
+		"MsgThreadNoSiblingRoot":    cfg.MsgThreadNoSiblingRoot,
+		"MsgThreadNoMoreSiblings":   cfg.MsgThreadNoMoreSiblings,
+		"MsgThreadStart":            cfg.MsgThreadStart,
+		"MsgThreadEnd":              cfg.MsgThreadEnd,
+		"MsgThreadPaneTitle":        cfg.MsgThreadPaneTitle,
+		"MsgListThreadedTitle":      cfg.MsgListThreadedTitle,
+		"MsgListThreadColumn":       cfg.MsgListThreadColumn,
+		"MsgListHelpThreaded":       cfg.MsgListHelpThreaded,
+		"MsgListHelpFlat":           cfg.MsgListHelpFlat,
+		"MsgListDeletedPlaceholder": cfg.MsgListDeletedPlaceholder,
 	} {
 		if strings.TrimSpace(got) == "" {
 			t.Errorf("%s is empty on an upgraded strings.json; it would print nothing", name)

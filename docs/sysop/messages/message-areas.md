@@ -366,7 +366,8 @@ hot key:
 | `F` | First reply | The first reply to this message (not on the bar) |
 | `X` | Next sibling | The next reply to the same message (not on the bar) |
 | `]` / `[` | Thread next / previous | Walk the thread in display order (not on the bar) |
-| `L` | List | List message titles |
+| `L` | List | List message titles (flat), cursor on this message |
+| `V` | Threaded list | List the area as reply threads, cursor on this message (not on the bar; the `[V]list` signpost names it) |
 | `I` | Twit | Add the author to your Twit List (hidden while Twit Lists are off) |
 | `D` | Del | Delete the message (sysop and co-sysop only; shown in red) |
 | `K` | Kludges | Show the message's control information (sysop and co-sysop only; not on the bar) |
@@ -390,6 +391,34 @@ caller can see, and `U` on it says only that the message it answers is not
 available. Each key shows a short notice on the bar row when there is
 nowhere to go; the notices are the `msgThread*` strings. The direct-reply
 count is available to header templates as `@H@`.
+
+**Lists from the reader (L, V).** `L` opens the flat message list and `V`
+the threaded one, each with the cursor on the message being read. Enter
+there returns to the same reader on the highlighted message; `V`, `Q` or
+Esc return to the message the list was opened from. No second reader is
+opened underneath, however many times the caller goes back and forth. A
+reader opened from the menu's list (`LISTMSGS`) returns to that list on
+`V`, `L` or `Q`, in the mode asked for, with the cursor on the message that
+was being read.
+
+### Listing Messages
+
+The `LISTMSGS` function lists the current area, newest first, in a framed
+lightbar list: arrows, PgUp/PgDn, Home and End move the cursor, Enter reads
+the message and `Q` or Esc leaves. `T` switches between the flat list and
+the **threaded list**, keeping the cursor on the same message; the choice
+holds for the rest of the call, and the reader's `L` and `V` set it too.
+
+The threaded list shows each thread as a tree, newest root first, replies
+in the order the reader's `]` walks them. The `Thread` column holds the
+tree glyphs and then the root's subject, or a reply's own first line of
+text, so `Re:` is not repeated down the column; a reply that changed the
+subject shows the new subject instead. A deleted message that a listed
+reply answers (one not yet packed away) appears as a `#n deleted` row that
+the cursor steps over and the page counter leaves out. Private mail that is
+not the caller's, and posts from authors on their Twit List, are left out,
+and their replies hang from the nearest listed message. The titles, column
+heading, help lines and placeholder text are the `msgList*` strings.
 
 **Kludges (K).** Sysops chasing a duplicate or misrouted message need its
 MSGID, PATH and SEEN-BY. `K` shows the current message's control information

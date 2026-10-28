@@ -4,83 +4,95 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 )
 
-// runMessageListNavigation handles keyboard input for list navigation
+// runMessageListNavigation handles keyboard input for list navigation.
+//
+// The cursor only ever rests on a message: in threaded mode a deleted
+// placeholder row is stepped over, whichever key is moving and whether or
+// not that crosses a page. Actions: REFRESH_LINE (cursor moved within the
+// page), REFRESH_FULL (page changed), READ with the message number, TOGGLE
+// (T: switch flat/threaded), QUIT (Q, Esc or V) and ERROR.
 func runMessageListNavigation(ih *editor.InputHandler, state *MessageListState) (action string, selectedMsg int, err error) {
+	// moveTo puts the cursor on absolute index i, or leaves it when i is
+	// out of range, and names the redraw that needs.
+	moveTo := func(i int) (string, bool) {
+		if i < 0 || i >= len(state.Entries) {
+			return "", false
+		}
+		if state.setSelected(i) {
+			return "REFRESH_FULL", true
+		}
+		return "REFRESH_LINE", true
+	}
 	for {
 		key, err := ih.ReadKey()
 		if err != nil {
 			return "ERROR", 0, err
 		}
 
-		// Calculate total pages
-		totalPages := (state.TotalMessages + state.ItemsPerPage - 1) / state.ItemsPerPage
-		if totalPages < 1 {
-			totalPages = 1
-		}
-
-		// Calculate current page boundaries
-		start, end := calculatePagination(len(state.Entries), state.ItemsPerPage, state.CurrentPage)
-		itemsOnPage := end - start
+		totalPages := state.totalPages()
+		cur := state.selectedAbsolute()
 
 		switch key {
 		case editor.KeyArrowUp, editor.KeyCtrlE: // Up arrow
-			if state.SelectedIndex > 0 {
-				state.SelectedIndex--
-				return "REFRESH_LINE", 0, nil
-			} else if state.CurrentPage > 1 {
-				// Move to previous page, select last item
-				state.CurrentPage--
-				start, end := calculatePagination(len(state.Entries), state.ItemsPerPage, state.CurrentPage)
-				state.SelectedIndex = (end - start) - 1
-				return "REFRESH_FULL", 0, nil
+			if a, ok := moveTo(state.nextSelectable(cur-1, -1)); ok {
+				return a, 0, nil
 			}
 
 		case editor.KeyArrowDown, editor.KeyCtrlX: // Down arrow
-			if state.SelectedIndex < itemsOnPage-1 {
-				state.SelectedIndex++
-				return "REFRESH_LINE", 0, nil
-			} else if state.CurrentPage < totalPages {
-				// Move to next page, select first item
-				state.CurrentPage++
-				state.SelectedIndex = 0
-				return "REFRESH_FULL", 0, nil
+			if a, ok := moveTo(state.nextSelectable(cur+1, 1)); ok {
+				return a, 0, nil
 			}
 
-		case editor.KeyPageUp, editor.KeyCtrlR: // Page Up
+		case editor.KeyPageUp, editor.KeyCtrlR: // Page Up: first message of the previous page
 			if state.CurrentPage > 1 {
-				state.CurrentPage--
-				state.SelectedIndex = 0
-				return "REFRESH_FULL", 0, nil
+				start := (state.CurrentPage - 2) * state.ItemsPerPage
+				i := state.nextSelectable(start, 1)
+				if i >= start+state.ItemsPerPage {
+					// That page holds only placeholders: go to the first
+					// message of the nearest page above with one, rather
+					// than to a message on the page being left.
+					if above := state.nextSelectable(start-1, -1); above >= 0 {
+						i = state.nextSelectable(above/state.ItemsPerPage*state.ItemsPerPage, 1)
+					} else {
+						i = -1
+					}
+				}
+				if i >= 0 {
+					state.setSelected(i)
+					return "REFRESH_FULL", 0, nil
+				}
 			}
 
-		case editor.KeyPageDown, editor.KeyCtrlC: // Page Down
+		case editor.KeyPageDown, editor.KeyCtrlC: // Page Down: first message of the next page
 			if state.CurrentPage < totalPages {
-				state.CurrentPage++
-				state.SelectedIndex = 0
-				return "REFRESH_FULL", 0, nil
+				start := state.CurrentPage * state.ItemsPerPage
+				if i := state.nextSelectable(start, 1); i >= 0 {
+					state.setSelected(i)
+					return "REFRESH_FULL", 0, nil
+				}
 			}
 
 		case editor.KeyHome, editor.KeyCtrlW: // Home
-			if state.CurrentPage != 1 || state.SelectedIndex != 0 {
-				state.CurrentPage = 1
-				state.SelectedIndex = 0
+			if i := state.nextSelectable(0, 1); i >= 0 && i != cur {
+				state.setSelected(i)
 				return "REFRESH_FULL", 0, nil
 			}
 
 		case editor.KeyEnd, editor.KeyCtrlP: // End
-			lastPage := totalPages
-			state.CurrentPage = lastPage
-			start, end := calculatePagination(len(state.Entries), state.ItemsPerPage, state.CurrentPage)
-			state.SelectedIndex = (end - start) - 1
-			return "REFRESH_FULL", 0, nil
-
-		case editor.KeyEnter: // Enter - read selected message
-			actualIndex := start + state.SelectedIndex
-			if actualIndex < len(state.Entries) {
-				return "READ", state.Entries[actualIndex].MsgNum, nil
+			if i := state.nextSelectable(len(state.Entries)-1, -1); i >= 0 {
+				state.setSelected(i)
+				return "REFRESH_FULL", 0, nil
 			}
 
-		case 'Q', 'q': // Quit
+		case editor.KeyEnter: // Enter - read selected message
+			if state.selectable(cur) {
+				return "READ", state.Entries[cur].MsgNum, nil
+			}
+
+		case 'T', 't': // Switch between flat and threaded
+			return "TOGGLE", 0, nil
+
+		case 'Q', 'q', 'V', 'v', editor.KeyEsc: // Quit (back to the reader, when it opened the list)
 			return "QUIT", 0, nil
 
 		case '?': // Help (future enhancement)

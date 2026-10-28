@@ -410,6 +410,12 @@ type StringsConfig struct {
 	MsgListAreaNotFound   string `json:"msgListAreaNotFound"`
 	MsgListLoadError      string `json:"msgListLoadError"`
 	MsgListNoMessages     string `json:"msgListNoMessages"`
+	// Threaded list mode (T in the list, V from the reader).
+	MsgListThreadedTitle      string `json:"msgListThreadedTitle"`
+	MsgListThreadColumn       string `json:"msgListThreadColumn"`
+	MsgListHelpThreaded       string `json:"msgListHelpThreaded"`
+	MsgListHelpFlat           string `json:"msgListHelpFlat"`
+	MsgListDeletedPlaceholder string `json:"msgListDeletedPlaceholder"`
 
 	// File viewer strings (V3-specific)
 	FileNoAreaSelected string `json:"fileNoAreaSelected"`

@@ -325,7 +325,7 @@ func TestRenderSignpostsFitsWidth(t *testing.T) {
 			{key: 'U', arrow: "↑", target: 1, handle: "Lux"},
 			{key: 'F', arrow: "↓"},
 			{key: 'X', arrow: "→"},
-		}, []string{"─[U]↑ #1 Lux ─[F]↓ none ─[X]→ none ────"}},
+		}, []string{"─[U]↑ #1 Lux ─[F]↓ none ─[X]→ none ─[V]list ────"}},
 	}
 	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
 		g := threadGlyphsFor(mode)
@@ -363,16 +363,17 @@ func TestRenderSignpostsDropsTinyHandles(t *testing.T) {
 		{key: 'F', arrow: g.down, target: 100001, handle: "Another_Long_Handle"},
 		{key: 'X', arrow: g.right, target: 100002, handle: "A_Third_Long_Handle"},
 	}
-	// The fixed parts take 42 columns; the 44-column row leaves two.
-	row := renderSignposts(segs, 44, g, ansi.OutputModeUTF8)
+	// The fixed parts take 51 columns with the list tail; a 53-column row
+	// leaves two.
+	row := renderSignposts(segs, 53, g, ansi.OutputModeUTF8)
 	stripped := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(row))), "")
-	if utf8.RuneCountInString(stripped) != 44 {
-		t.Errorf("width = %d, want 44: %q", utf8.RuneCountInString(stripped), stripped)
+	if utf8.RuneCountInString(stripped) != 53 {
+		t.Errorf("width = %d, want 53: %q", utf8.RuneCountInString(stripped), stripped)
 	}
 	if strings.Contains(stripped, "Som") || strings.Contains(stripped, "Ano") || strings.Contains(stripped, "A_T") {
-		t.Errorf("no handle fits a 44-column row with three six-digit targets: %q", stripped)
+		t.Errorf("no handle fits a 53-column row with three six-digit targets: %q", stripped)
 	}
-	if !strings.Contains(stripped, "#100000 ─[F]↓ #100001 ─[X]→ #100002") {
+	if !strings.Contains(stripped, "#100000 ─[F]↓ #100001 ─[X]→ #100002 ─[V]list") {
 		t.Errorf("the fixed parts must still render whole: %q", stripped)
 	}
 }
@@ -530,7 +531,7 @@ func TestMessageReaderThreadPaneLayout(t *testing.T) {
 		t.Error("a row that is not current should not be blue")
 	}
 	signs := screen.Row(23)
-	for _, want := range []string{"─[U]↑ #3 Kestrel_of_the_W", "─[F]↓ #7 Mercury Retrogr", "─[X]→ #11 GrimmTheTosser"} {
+	for _, want := range []string{"─[U]↑ #3 Kestrel_of_t…", "─[F]↓ #7 Mercury Retr…", "─[X]→ #11 GrimmTheToss…", "─[V]list"} {
 		if !strings.Contains(signs, want) {
 			t.Errorf("signposts = %q, want %q", signs, want)
 		}
@@ -697,7 +698,7 @@ func TestMessageReaderThreadPaneCP437(t *testing.T) {
 	if row := screen.Row(9); !strings.HasPrefix(row, "  ├─#3 Kestrel_~ ") {
 		t.Errorf("pane row above = %q", row)
 	}
-	if signs := screen.Row(23); !strings.Contains(signs, "─[U] #3 Kestrel_of_the_W~ ─[F] #7 Mercury Retrogra~ ─[X] #11 GrimmTheTosser") {
+	if signs := screen.Row(23); !strings.Contains(signs, "─[U] #3 Kestrel_of_t~ ─[F] #7 Mercury Retr~ ─[X] #11 GrimmTheToss~ ─[V]list") {
 		t.Errorf("signposts = %q", signs)
 	}
 	if c := screen.Cell(23, 80).Rune; c != ' ' {

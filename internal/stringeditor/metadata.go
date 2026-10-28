@@ -698,5 +698,12 @@ func stringCatalog() []StringEntry {
 		{Label: "Msg: Thread Start", Key: "msgThreadStart", Description: "[ on the first message of a thread"},
 		{Label: "Msg: Thread End", Key: "msgThreadEnd", Description: "] on the last message of a thread"},
 		{Label: "Msg: Thread Pane Title", Key: "msgThreadPaneTitle", Description: "Label on the reader's docked thread pane"},
+
+		// Message list: threaded mode
+		{Label: "MsgList: Threaded Title", Key: "msgListThreadedTitle", Description: "Title of the list in threaded mode (%s=area, or conference > area)"},
+		{Label: "MsgList: Thread Column", Key: "msgListThreadColumn", Description: "Heading of the tree column in threaded mode"},
+		{Label: "MsgList: Help Threaded", Key: "msgListHelpThreaded", Description: "Help line in threaded mode (%s/%s=up/down arrows)"},
+		{Label: "MsgList: Help Flat", Key: "msgListHelpFlat", Description: "Help line in flat mode (%s/%s=up/down arrows)"},
+		{Label: "MsgList: Deleted Row", Key: "msgListDeletedPlaceholder", Description: "Row for a deleted message a reply hangs from (%d=message number)"},
 	}
 }
