@@ -392,3 +392,19 @@ func TestMessageBodyCP437PairBetweenEscapes(t *testing.T) {
 		}
 	}
 }
+
+// CP437 0xFF is a blank cell that art paints with a background colour. Once
+// the body is converted it is NBSP, which must neither come back as '?' nor
+// count as an empty row and lose the cell and its colour.
+func TestMessageBodyKeepsCP437BlankCells(t *testing.T) {
+	lines := readBodyForTest("\x1b[41m\xff\xff\rA\xffB\r", 80)
+	if len(lines) < 2 {
+		t.Fatalf("expected 2 lines, got %d: %q", len(lines), lines)
+	}
+	if lines[0] != "\x1b[41m\xff\xff" {
+		t.Errorf("row of blank cells = %q, want %q", lines[0], "\x1b[41m\xff\xff")
+	}
+	if lines[1] != "A\xffB" {
+		t.Errorf("blank cell inside text = %q, want %q", lines[1], "A\xffB")
+	}
+}

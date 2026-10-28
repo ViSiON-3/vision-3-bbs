@@ -156,7 +156,10 @@ func wrapAnsiString(text string, width int, mode ansi.OutputMode) []string {
 
 	for _, line := range inputLines {
 		plainLine := stripEscapes(line)
-		if strings.TrimSpace(plainLine) == "" {
+		// Blank means ASCII whitespace, as the word splitter below counts it.
+		// strings.TrimSpace also trims NBSP, the UTF-8 form of a CP437 0xFF
+		// cell, and would drop a row of them along with its colour.
+		if strings.Trim(plainLine, " \t\r\n\v\f") == "" {
 			wrappedLines = append(wrappedLines, "")
 			continue
 		}

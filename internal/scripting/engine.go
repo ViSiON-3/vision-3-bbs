@@ -444,9 +444,8 @@ func (eng *Engine) readLine(maxLen int, opts lineOpts) (string, error) {
 			if ch >= 0x80 {
 				// A decoded non-ASCII character: store it as UTF-8 and
 				// echo the bytes the caller typed. They are already in the
-				// session's encoding, and re-encoding key through writeRaw
-				// would not always give them back (CP437 0xFF, NBSP, has
-				// no reverse mapping and would echo as '?').
+				// session's encoding, so there is nothing to gain from
+				// re-encoding key through writeRaw.
 				buf = append(buf, key...)
 				if !opts.noEcho {
 					eng.writeBytes(echo)

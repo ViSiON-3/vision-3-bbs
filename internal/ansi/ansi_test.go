@@ -766,10 +766,10 @@ func TestUnicodeToCP437RoundTrip(t *testing.T) {
 	}
 }
 
-// TestUnicodeToCP437CoversHighBytes: every CP437 glyph 0x80-0xFE can be
-// written back to a CP437 terminal. Only 0xFF (NBSP) is left out on purpose.
+// TestUnicodeToCP437CoversHighBytes: every CP437 glyph 0x80-0xFF can be
+// written back to a CP437 terminal.
 func TestUnicodeToCP437CoversHighBytes(t *testing.T) {
-	for b := 0x80; b < 0xFF; b++ {
+	for b := 0x80; b <= 0xFF; b++ {
 		r := Cp437ToUnicode[b]
 		if got, ok := UnicodeToCP437[r]; !ok || got != byte(b) {
 			t.Errorf("UnicodeToCP437[U+%04X] = 0x%02X, %v; want 0x%02X", r, got, ok, b)
