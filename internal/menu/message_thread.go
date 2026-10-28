@@ -35,10 +35,17 @@ func threadRows(nodes map[int]*message.ReplyNode, roots []int, load func(int) *m
 // deleted message is a root only while something readable descends from it.
 func threadForest(nodes map[int]*message.ReplyNode, load func(int) *message.DisplayMessage) []threadRow {
 	f := newThreadFlattener(nodes, load)
+	// The tree can have gaps (an unreadable header is left out), so the
+	// keys are walked, not the numbers up to the count.
+	nums := make([]int, 0, len(nodes))
+	for n := range nodes {
+		nums = append(nums, n)
+	}
+	sort.Sort(sort.Reverse(sort.IntSlice(nums)))
 	var roots []int
-	for n := len(nodes); n >= 1; n-- {
+	for _, n := range nums {
 		node := nodes[n]
-		if node == nil || f.shownParent(n) != 0 {
+		if f.shownParent(n) != 0 {
 			continue
 		}
 		if node.Deleted || f.msg(n) != nil {

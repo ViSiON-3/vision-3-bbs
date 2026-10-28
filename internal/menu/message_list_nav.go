@@ -46,7 +46,18 @@ func runMessageListNavigation(ih *editor.InputHandler, state *MessageListState) 
 		case editor.KeyPageUp, editor.KeyCtrlR: // Page Up: first message of the previous page
 			if state.CurrentPage > 1 {
 				start := (state.CurrentPage - 2) * state.ItemsPerPage
-				if i := state.nextSelectable(start, 1); i >= 0 {
+				i := state.nextSelectable(start, 1)
+				if i >= start+state.ItemsPerPage {
+					// That page holds only placeholders: go to the first
+					// message of the nearest page above with one, rather
+					// than to a message on the page being left.
+					if above := state.nextSelectable(start-1, -1); above >= 0 {
+						i = state.nextSelectable(above/state.ItemsPerPage*state.ItemsPerPage, 1)
+					} else {
+						i = -1
+					}
+				}
+				if i >= 0 {
 					state.setSelected(i)
 					return "REFRESH_FULL", 0, nil
 				}

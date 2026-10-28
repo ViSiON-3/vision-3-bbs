@@ -87,6 +87,30 @@ func TestThreadedListNavigationSkipsPlaceholders(t *testing.T) {
 	}
 }
 
+// A page made only of placeholders (a long chain of deleted ancestors
+// above a readable reply) is passed over by Page Up as well as Page Down:
+// Page Up from the page after it lands on the nearest message above it,
+// not back on the page being left.
+func TestThreadedListPageUpOverPlaceholderPage(t *testing.T) {
+	nums := []int{10, 9, 8, 7, 6, 5, 4, 3, 2}
+	entries := make([]MessageListEntry, len(nums))
+	for i, n := range nums {
+		// Page 2 (indexes 3-5) is all placeholders.
+		entries[i] = MessageListEntry{MsgNum: n, Threaded: true, Placeholder: i >= 3 && i <= 5}
+	}
+	state := &MessageListState{TotalMessages: len(entries), Entries: entries, CurrentPage: 1, ItemsPerPage: 3, Threaded: true}
+	ih := editor.NewInputHandler(strings.NewReader("\x1b[6~\x1b[5~\r"))
+	if a, _, _ := runMessageListNavigation(ih, state); a != "REFRESH_FULL" || state.CurrentPage != 3 {
+		t.Fatalf("page down: %s page %d, want page 3 (page 2 has no message)", a, state.CurrentPage)
+	}
+	if a, _, _ := runMessageListNavigation(ih, state); a != "REFRESH_FULL" || state.CurrentPage != 1 || state.SelectedIndex != 0 {
+		t.Fatalf("page up from page 3: %s page %d index %d, want page 1 index 0", a, state.CurrentPage, state.SelectedIndex)
+	}
+	if a, msg, _ := runMessageListNavigation(ih, state); a != "READ" || msg != 10 {
+		t.Errorf("enter: %s #%d, want READ #10", a, msg)
+	}
+}
+
 // T and V come back as actions for the list runner; Esc quits like Q.
 func TestThreadedListNavigationToggleAndQuitKeys(t *testing.T) {
 	for key, want := range map[string]string{"T": "TOGGLE", "t": "TOGGLE", "V": "QUIT", "\x1b": "QUIT", "Q": "QUIT"} {
@@ -212,6 +236,16 @@ func TestThreadedListHeaderMatchesRowWidth(t *testing.T) {
 	_ = drawMessageListScreen(newTestTerminal(ts), &MessageListState{Entries: []MessageListEntry{}, CurrentPage: 1, ItemsPerPage: 5}, "General", "Main", ansi.OutputModeUTF8, nil)
 	if flat := testAnsiEscape.ReplaceAllString(ts.output(), ""); !strings.Contains(flat, "T: Threaded  Q: Quit") || !strings.Contains(flat, "Main > General - Message List") {
 		t.Errorf("flat screen help/title changed:\n%s", flat)
+	}
+}
+
+// A tree with a gap (a header that could not be read leaves no node) still
+// lists every thread: the roots come from the keys, not the count.
+func TestThreadForestWalksKeysNotCount(t *testing.T) {
+	nodes := map[int]*message.ReplyNode{1: {Num: 1}, 3: {Num: 3}}
+	rows := threadForest(nodes, sampleLoad("Caller"))
+	if got := rowNums(rows); !reflect.DeepEqual(got, []int{3, 1}) {
+		t.Errorf("rows = %v, want [3 1]", got)
 	}
 }
 
