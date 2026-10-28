@@ -188,7 +188,7 @@ func (m Model) startSysFieldEdit() (Model, tea.Cmd) {
 	val := f.Get()
 	m.mode = modeSysConfigField
 	m.textInput.SetValue(val)
-	m.textInput.CharLimit = f.Width
+	m.textInput.CharLimit = f.charLimit()
 	m.textInput.Width = f.Width
 	m.textInput.EchoMode = textinput.EchoNormal
 	m.textInput.Placeholder = ""

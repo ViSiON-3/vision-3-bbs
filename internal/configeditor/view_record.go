@@ -335,6 +335,11 @@ func (m Model) renderRecordField(fieldIdx int, f fieldDef) (string, int) {
 	if f.Masked {
 		displayVal = maskValue(value)
 	}
+	// Mark values that run past the field so it is clear there is more to
+	// scroll to once editing.
+	if f.Type == ftString {
+		displayVal = truncateWithEllipsis(displayVal, f.Width)
+	}
 	displayValue := padRight(displayVal, f.Width)
 
 	if isActive && m.mode == modeRecordEdit {
