@@ -93,6 +93,7 @@ func TestReloadDropsCachedIndexes(t *testing.T) {
 	mm.mu.Lock()
 	mm.threadIndex[1] = &threadIndex{}
 	mm.msgidIndex[1] = &msgidIndex{}
+	mm.replyTrees[1] = &replyTree{}
 	mm.mu.Unlock()
 
 	if err := mm.Reload(); err != nil {
@@ -100,10 +101,10 @@ func TestReloadDropsCachedIndexes(t *testing.T) {
 	}
 
 	mm.mu.RLock()
-	ti, mi := len(mm.threadIndex), len(mm.msgidIndex)
+	ti, mi, rt := len(mm.threadIndex), len(mm.msgidIndex), len(mm.replyTrees)
 	mm.mu.RUnlock()
-	if ti != 0 || mi != 0 {
-		t.Errorf("cached indexes survived reload: thread=%d msgid=%d, want 0/0", ti, mi)
+	if ti != 0 || mi != 0 || rt != 0 {
+		t.Errorf("cached indexes survived reload: thread=%d msgid=%d replytree=%d, want 0/0/0", ti, mi, rt)
 	}
 }
 

@@ -62,35 +62,30 @@ func threadEscapePipes(s string) string {
 
 // threadCell clips s to width columns with g's ellipsis and pads it, in the
 // terminal's encoding, as listCell does for the message list.
-func threadCell(s string, width int, g threadGlyphs, mode ansi.OutputMode) string {
+//
+// The cell stays UTF-8 whatever the terminal: the output writer converts it
+// for CP437, one byte per rune ("?" where CP437 has no character), so the
+// width holds. Converting here would put CP437 bytes next to the UTF-8
+// glyphs around them, and a pair that happened to form a valid UTF-8
+// sequence would be folded into one byte.
+func threadCell(s string, width int, g threadGlyphs, _ ansi.OutputMode) string {
 	s = ansi.TruncateRunes(threadPlainText(s), width, g.ellipsis)
-	n := utf8.RuneCountInString(s)
-	if mode == ansi.OutputModeCP437 {
-		s = toCP437Safe(s)
-	}
-	if n < width {
+	if n := utf8.RuneCountInString(s); n < width {
 		s += strings.Repeat(" ", width-n)
 	}
 	return threadEscapePipes(s)
 }
 
-// threadText converts s for the terminal without padding it.
-func threadText(s string, mode ansi.OutputMode) string {
-	s = threadPlainText(s)
-	if mode == ansi.OutputModeCP437 {
-		s = toCP437Safe(s)
-	}
-	return threadEscapePipes(s)
+// threadText prepares s for the terminal without padding it; UTF-8, as for
+// threadCell.
+func threadText(s string, _ ansi.OutputMode) string {
+	return threadEscapePipes(threadPlainText(s))
 }
 
 // threadCols is the column count of text threadText produced: one per
-// byte in CP437, one per rune in UTF-8, with a doubled pipe as one.
-func threadCols(s string, mode ansi.OutputMode) int {
-	s = strings.ReplaceAll(s, "||", "|")
-	if mode == ansi.OutputModeCP437 {
-		return len(s)
-	}
-	return utf8.RuneCountInString(s)
+// rune, with a doubled pipe as one.
+func threadCols(s string, _ ansi.OutputMode) int {
+	return utf8.RuneCountInString(strings.ReplaceAll(s, "||", "|"))
 }
 
 // excerpt is the line of body that stands for the message in a thread

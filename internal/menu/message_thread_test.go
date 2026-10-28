@@ -95,11 +95,8 @@ func sampleLoad(viewer string) func(int) *message.DisplayMessage {
 			return nil
 		}
 		m := sampleThread[n-1]
-		if m.deleted {
-			return nil
-		}
 		dm := &message.DisplayMessage{MsgNum: n, From: m.from, To: m.to, Subject: m.subject, Body: m.body,
-			IsPrivate: m.private, ReplyToNum: m.parent, DateTime: time.Date(2026, 10, 19+n/4, 8, 0, 0, 0, time.UTC)}
+			IsPrivate: m.private, IsDeleted: m.deleted, ReplyToNum: m.parent, DateTime: time.Date(2026, 10, 19+n/4, 8, 0, 0, 0, time.UTC)}
 		if !dm.VisibleTo(viewer) {
 			return nil
 		}
@@ -773,5 +770,114 @@ func TestThreadCellsAreInert(t *testing.T) {
 	title := string(ansi.ReplacePipeCodes([]byte(renderThreadPane(tv, 3, 79, " Thread ", g, ansi.OutputModeUTF8)[0])))
 	if !strings.Contains(title, "|CLsubject") {
 		t.Errorf("pane title expands to %q", title)
+	}
+}
+
+// A deleted message is a placeholder only for a caller who could have read
+// it. With the private #9 deleted, its public reply #15 still hangs from #5
+// for everyone else, with no "#9 deleted" row and U saying only that the
+// parent is unavailable; its recipient sees the placeholder.
+func TestDeletedPrivateMessageStaysHidden(t *testing.T) {
+	nodes := sampleNodes()
+	nodes[9].Deleted = true
+	deleted9 := func(viewer string) func(int) *message.DisplayMessage {
+		base := sampleLoad(viewer)
+		return func(n int) *message.DisplayMessage {
+			m := base(n)
+			if m != nil && n == 9 {
+				m.IsDeleted = true
+			}
+			return m
+		}
+	}
+	tv := newThreadView(nodes, 15, deleted9("Caller"))
+	for _, r := range tv.rows {
+		if r.Num == 9 {
+			t.Errorf("caller's rows include the deleted private #9: %v", rowNums(tv.rows))
+		}
+	}
+	if r := tv.row(15); r == nil || r.Parent != 5 {
+		t.Errorf("#15 should hang from #5 for the caller: %+v", r)
+	}
+	if p, state := tv.parentOf(15); state != parentHidden || p != 0 {
+		t.Errorf("parentOf(15) = %d, %v; want hidden and unnamed", p, state)
+	}
+	if _, notice := threadNavTarget(tv, 'U', env0Strings(t)); strings.Contains(notice, "#9") {
+		t.Errorf("U notice names the hidden message: %q", notice)
+	}
+	segs := readerSignposts(tv, threadGlyphsFor(ansi.OutputModeUTF8))
+	if segs[0].target != 0 {
+		t.Errorf("U signpost names the hidden parent: %+v", segs[0])
+	}
+
+	kestrel := newThreadView(nodes, 15, deleted9("Kestrel_of_the_Wastes"))
+	if r := kestrel.row(9); r == nil || !r.Deleted {
+		t.Errorf("the recipient should see #9 as a placeholder: %v", rowNums(kestrel.rows))
+	}
+	if p, state := kestrel.parentOf(15); state != parentDeleted || p != 9 {
+		t.Errorf("recipient's parentOf(15) = %d, %v; want deleted #9", p, state)
+	}
+}
+
+// The same through the reader and base: with #9 deleted, the caller reading
+// #15 sees neither its number nor a placeholder for it.
+func TestMessageReaderDeletedPrivateParentStaysHidden(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	if err := env.e.MessageMgr.DeleteMessage(generalAreaID, 9); err != nil {
+		t.Fatalf("DeleteMessage: %v", err)
+	}
+	screen := env.readerAt(15, "")
+	snap := screen.Snapshot()
+	if strings.Contains(snap, "#9") {
+		t.Errorf("the deleted private #9 is named:\n%s", snap)
+	}
+	if !strings.Contains(screen.Row(23), "─[U]↑ none ") {
+		t.Errorf("signposts = %q, want U leading nowhere", screen.Row(23))
+	}
+	r := env.sub(t).runCmd("READMSGS", env.caller, "", "15\rUQ")
+	if !r.has("The message this answers isn't available to you.") || strings.Contains(r.text(), "#9") {
+		t.Errorf("U should give the hidden-parent notice without naming #9; output:\n%s", r.text())
+	}
+}
+
+// After R posts a reply, the reader reloads the message, so the thread
+// view includes the reply: F on a leaf that was just answered goes to it.
+func TestMessageReaderReplyRefreshesThread(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	env.markRead(generalAreaID, "Caller", len(sampleThread))
+	r := env.runCmd("READMSGS", env.caller, "", "10\rRbody-16 fresh reply\x1aFQ")
+	txt := r.text()
+	if !r.has("Reply posted successfully") {
+		t.Fatalf("reply not posted; output:\n%s", txt)
+	}
+	if last := strings.LastIndex(txt, "Reading message #"); last < 0 || !strings.HasPrefix(txt[last:], "Reading message #16 ") {
+		t.Errorf("F after the reply should open the new reply #16; output:\n%s", txt)
+	}
+	if r.has("No replies to #10 yet.") {
+		t.Errorf("the thread view was not rebuilt after the reply; output:\n%s", txt)
+	}
+}
+
+// The thread keys work from inside the lightbar too: Right or Left enters
+// the bar, and the key is handed back rather than swallowed.
+func TestMessageReaderThreadKeysPassThroughLightbar(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	env.markRead(generalAreaID, "Caller", len(sampleThread))
+	for _, tc := range []struct {
+		keys string
+		at   int
+	}{
+		{"\x1b[CU", 3},
+		{"\x1b[Cf", 7},
+		{"\x1b[D]", 7},
+	} {
+		r := env.sub(t).runCmd("READMSGS", env.caller, "", "5\r"+tc.keys+"Q")
+		txt := r.text()
+		if last := strings.LastIndex(txt, "Reading message #"); last < 0 || !strings.HasPrefix(txt[last:], fmt.Sprintf("Reading message #%d ", tc.at)) {
+			t.Errorf("%q should end on #%d; output:\n%s", tc.keys, tc.at, txt)
+		}
 	}
 }

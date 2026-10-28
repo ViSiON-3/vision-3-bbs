@@ -31,6 +31,15 @@ func TestNewStringKeysHaveDefaults(t *testing.T) {
 		"NewUserAccountReady":      cfg.NewUserAccountReady,
 		"NewUserPendingReview":     cfg.NewUserPendingReview,
 		"MatrixAccountCannotLogon": cfg.MatrixAccountCannotLogon,
+		"MsgThreadNoParent":        cfg.MsgThreadNoParent,
+		"MsgThreadParentDeleted":   cfg.MsgThreadParentDeleted,
+		"MsgThreadParentHidden":    cfg.MsgThreadParentHidden,
+		"MsgThreadNoReplies":       cfg.MsgThreadNoReplies,
+		"MsgThreadNoSiblingRoot":   cfg.MsgThreadNoSiblingRoot,
+		"MsgThreadNoMoreSiblings":  cfg.MsgThreadNoMoreSiblings,
+		"MsgThreadStart":           cfg.MsgThreadStart,
+		"MsgThreadEnd":             cfg.MsgThreadEnd,
+		"MsgThreadPaneTitle":       cfg.MsgThreadPaneTitle,
 	} {
 		if strings.TrimSpace(got) == "" {
 			t.Errorf("%s is empty on an upgraded strings.json; it would print nothing", name)

@@ -99,6 +99,20 @@ func stringValues(data []byte) (map[string]string, error) {
 // upgraded installation will not have it and the feature would otherwise print
 // nothing at all.
 var StringFallbacks = map[string]string{
+	// Reply-thread navigation in the message reader (U/F/X/[/]) and the
+	// docked pane's label. An install that predates them would otherwise
+	// print "%!(EXTRA int=...)" for the numbered notices and nothing for
+	// the rest.
+	"msgThreadNoParent":       "\r\n|09Message |15#%d|09 starts its thread; it isn't a reply.",
+	"msgThreadParentDeleted":  "\r\n|09Message |15#%d|09, the one this answers, has been deleted.",
+	"msgThreadParentHidden":   "\r\n|09The message this answers isn't available to you.",
+	"msgThreadNoReplies":      "\r\n|09No replies to |15#%d|09 yet.",
+	"msgThreadNoSiblingRoot":  "\r\n|09Message |15#%d|09 starts its thread; it has no sibling replies.",
+	"msgThreadNoMoreSiblings": "\r\n|09No more replies to |15#%d|09 after this one.",
+	"msgThreadStart":          "\r\n|09Start of thread.",
+	"msgThreadEnd":            "\r\n|09End of thread.",
+	"msgThreadPaneTitle":      " Thread ",
+
 	// Conference and new-user notices whose defaults lived as literals at the
 	// call site. Lifting them here changes nothing at runtime and makes them
 	// editable rather than invisible.

@@ -21,11 +21,12 @@ type threadRow struct {
 
 // threadRows flattens the trees rooted at roots, in that order, depth-first
 // with children in ascending message order. load returns a message the
-// caller may read, or nil for one that is hidden from them (another user's
-// private mail, a twit's post): a hidden message is never a row, and its
-// replies attach to its nearest shown ancestor, or become roots. Deleted
-// messages are rows, as placeholders, only while a shown message descends
-// from them, so that reply keeps its place.
+// caller may read, deleted or not, or nil for one that is hidden from them
+// (another user's private mail, a twit's post): a hidden message is never
+// a row, deleted or not, and its replies attach to its nearest shown
+// ancestor, or become roots. A deleted message the caller may read is a
+// row, as a placeholder, only while a shown message descends from it, so
+// that reply keeps its place.
 func threadRows(nodes map[int]*message.ReplyNode, roots []int, load func(int) *message.DisplayMessage) []threadRow {
 	f := &threadFlattener{nodes: nodes, load: load, msgs: map[int]*message.DisplayMessage{}, live: map[int]bool{}}
 	var rows []threadRow
@@ -42,25 +43,28 @@ type threadFlattener struct {
 	live  map[int]bool                    // hasLive results
 }
 
-// msg returns n's message, loading it once; nil when n is hidden or deleted.
+// msg returns n's message, loading it once; nil when n is hidden. A
+// deleted message the caller may read is returned too, flagged, so a
+// placeholder is drawn only for a deletion the caller could have seen.
 func (f *threadFlattener) msg(n int) *message.DisplayMessage {
 	if m, ok := f.msgs[n]; ok {
 		return m
 	}
 	var m *message.DisplayMessage
-	if node := f.nodes[n]; node != nil && !node.Deleted {
+	if f.nodes[n] != nil {
 		m = f.load(n)
 	}
 	f.msgs[n] = m
 	return m
 }
 
-// hasLive reports whether a shown message is n or descends from it.
+// hasLive reports whether a readable, undeleted message is n or descends
+// from it.
 func (f *threadFlattener) hasLive(n int) bool {
 	if v, ok := f.live[n]; ok {
 		return v
 	}
-	v := f.msg(n) != nil
+	v := !f.nodes[n].Deleted && f.msg(n) != nil
 	for _, c := range f.nodes[n].Children {
 		if v {
 			break
@@ -80,14 +84,14 @@ func (f *threadFlattener) shownChildren(n int) []int {
 	gather = func(p int) {
 		for _, c := range f.nodes[p].Children {
 			switch {
+			case f.msg(c) == nil: // hidden, deleted or not: its replies take its place
+				gather(c)
 			case f.nodes[c].Deleted:
 				if f.hasLive(c) {
 					out = append(out, c)
 				}
-			case f.msg(c) != nil:
+			default:
 				out = append(out, c)
-			default: // hidden: its replies take its place
-				gather(c)
 			}
 		}
 	}
@@ -120,7 +124,11 @@ func (f *threadFlattener) walk(rows []threadRow, n, depth, parent int, ancestors
 		}
 	}
 	node := f.nodes[n]
-	rows = append(rows, threadRow{Num: n, Depth: depth, Prefix: prefix, Deleted: node.Deleted, Parent: parent, Msg: f.msg(n)})
+	var m *message.DisplayMessage
+	if !node.Deleted {
+		m = f.msg(n)
+	}
+	rows = append(rows, threadRow{Num: n, Depth: depth, Prefix: prefix, Deleted: node.Deleted, Parent: parent, Msg: m})
 	children := f.shownChildren(n)
 	for i, c := range children {
 		rows = f.walk(rows, c, depth+1, n, append(ancestorsLast[:len(ancestorsLast):len(ancestorsLast)], i == len(children)-1))
@@ -177,11 +185,11 @@ func newThreadView(nodes map[int]*message.ReplyNode, cur int, load func(int) *me
 	return tv
 }
 
-// shownParent is n's nearest ancestor that is shown (readable or a deleted
-// placeholder), or 0.
+// shownParent is n's nearest ancestor that is shown (readable, or a
+// deleted placeholder the caller could have read), or 0.
 func (tv *threadView) shownParent(n int) int {
 	p := tv.nodes[n].Parent
-	for p != 0 && !tv.nodes[p].Deleted && tv.load(p) == nil {
+	for p != 0 && tv.load(p) == nil {
 		p = tv.nodes[p].Parent
 	}
 	return p
@@ -273,10 +281,10 @@ func (tv *threadView) parentOf(n int) (parent int, state parentState) {
 	}
 	p := node.Parent
 	switch {
+	case tv.load(p) == nil: // hidden, deleted or not: never named
+		return 0, parentHidden
 	case tv.nodes[p].Deleted:
 		return p, parentDeleted
-	case tv.load(p) == nil:
-		return 0, parentHidden
 	}
 	return p, parentShown
 }
@@ -329,7 +337,7 @@ func (tv *threadView) rootSubject() string {
 
 // handle is the author of n, for a signpost; "" when n is not readable.
 func (tv *threadView) handle(n int) string {
-	if m := tv.load(n); m != nil {
+	if m := tv.load(n); m != nil && !m.IsDeleted {
 		return m.From
 	}
 	return ""
