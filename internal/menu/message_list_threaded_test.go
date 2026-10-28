@@ -1,7 +1,6 @@
 package menu
 
 import (
-	"bytes"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -427,7 +426,9 @@ func TestListMsgsToggleKeepsSelection(t *testing.T) {
 func TestListMsgsModePersistsForSession(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
-	ts := newTestSession("TQ")
+	// One session, two lists: the first run's T and Q, then the second
+	// run's Q, all read through the session's one input handler.
+	ts := newTestSession("TQQ")
 	c := &cmdCtx{e: env.e, s: ts, terminal: newTestTerminal(ts), userManager: env.um, currentUser: env.caller, nodeNumber: 1, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
 	t.Cleanup(func() { resetSessionIH(ts); sessionListModes.Delete(ts) })
 	if _, _, err := runListMsgs(c, ""); err != nil {
@@ -436,9 +437,7 @@ func TestListMsgsModePersistsForSession(t *testing.T) {
 	if !sessionListThreaded(ts) {
 		t.Fatal("T should record threaded mode for the session")
 	}
-	// The same session again, with fresh input: it opens threaded.
-	ts.in = bytes.NewReader([]byte("Q"))
-	resetSessionIH(ts)
+	// The same session again: it opens threaded.
 	if _, _, err := runListMsgs(c, ""); err != nil {
 		t.Fatalf("second list: %v", err)
 	}
