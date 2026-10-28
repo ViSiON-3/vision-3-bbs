@@ -16,7 +16,10 @@ func TestDoorTextFieldsScrollPastWidth(t *testing.T) {
 	m := newDoorModel(map[string]config.DoorConfig{
 		"LORD": {Code: "LORD", Name: longName, Commands: []string{longCmd}},
 	})
+	// Start from a short limit, as after editing a short field, so a limit
+	// applied after SetValue would truncate.
 	m.textInput = textinput.New()
+	m.textInput.CharLimit = 16
 	m.mode = modeRecordEdit
 	m.recordEditIdx = 0
 	m.recordFields = m.buildRecordFields()
