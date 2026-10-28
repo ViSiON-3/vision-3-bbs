@@ -259,6 +259,9 @@ type StringsConfig struct {
 	PageSysopCooldown     string `json:"pageSysopCooldown"`
 	SysopChatHeader       string `json:"sysopChatHeader"`
 	SysopChatBack         string `json:"sysopChatBack"`
+	SysopChatSummon       string `json:"sysopChatSummon"`
+	SysopChatReturn       string `json:"sysopChatReturn"`
+	SysopChatCallerLeft   string `json:"sysopChatCallerLeft"`
 	PageMessagePrompt     string `json:"pageMessagePrompt"`
 	PageMessageFormat     string `json:"pageMessageFormat"`
 	PageSent              string `json:"pageSent"`

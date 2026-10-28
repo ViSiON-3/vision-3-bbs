@@ -104,8 +104,9 @@ func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 
 	// Convert encoding based on output mode (similar to SHOWSTATS fix)
 	if outputMode == ansi.OutputModeUTF8 {
-		// UTF-8 mode: Convert CP437 bytes to UTF-8 for proper display
-		ansiProcessResult.DisplayBytes = ansi.CP437BytesToUTF8(ansiProcessResult.DisplayBytes)
+		// UTF-8 mode: Convert CP437 bytes to UTF-8 for proper display, glyph
+		// control bytes (▲ ▼ …) included
+		ansiProcessResult.DisplayBytes = ansi.DrawCP437ControlGlyphs(ansi.CP437BytesToUTF8(ansiProcessResult.DisplayBytes))
 	}
 	// CP437 mode: DisplayBytes already contain raw CP437, pass through as-is
 

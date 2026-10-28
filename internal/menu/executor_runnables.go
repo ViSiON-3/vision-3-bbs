@@ -139,7 +139,7 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 	var statsDisplayBytes []byte
 	if outputMode == ansi.OutputModeUTF8 {
 		// UTF-8 mode: Convert CP437→UTF-8 first, then substitute placeholders
-		utf8Content := string(ansi.CP437BytesToUTF8(rawAnsiContent))
+		utf8Content := string(ansi.DrawCP437ControlGlyphs(ansi.CP437BytesToUTF8(rawAnsiContent)))
 		for key, val := range placeholders {
 			utf8Content = strings.ReplaceAll(utf8Content, key, val)
 		}

@@ -423,6 +423,13 @@ func HardWrap(data []byte, width int, utf8Spans bool) []byte {
 			}
 			i++
 
+		case b < 0x20 && cp437ControlGlyphs[b] != 0:
+			// Art draws these as glyphs (▲ ▼ ☺ …): a CP437 terminal shows
+			// them, and ArtForOutput turns them into the glyphs for a UTF-8
+			// one, so each takes a cell.
+			printCell(data[i : i+1])
+			i++
+
 		case b < 0x20 || b == 0x7f: // other control characters do not move the cursor
 			out = append(out, b)
 			i++

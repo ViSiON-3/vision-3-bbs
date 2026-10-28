@@ -360,6 +360,10 @@ var StringMissingDefaults = map[string]string{
 	// Shown when NICETRY.ANS is missing and a caller has used up their
 	// password tries (#726). Blank means no notice before the disconnect.
 	"execLoginTooManyTries": "\r\n|12Too many failed login attempts. Nice try!|07\r\n",
+	// Notices around sysop chat (#725). Blank skips the notice and its pause.
+	"sysopChatSummon":     "|11You have been summoned by the SysOp!|07",
+	"sysopChatReturn":     "|11Returning you to reality - as you were!|07",
+	"sysopChatCallerLeft": "|11OK, I guess you don't want to chat! Returning...|07",
 	// Quote banner for echomail/netmail/QWK replies (#632). Blank means no
 	// banner, so only an installation that predates the key gets the default.
 	"quoteTopNet": "^N wrote:",

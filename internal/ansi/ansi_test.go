@@ -1326,8 +1326,10 @@ func TestProcessAnsiAndExtractCoords_PipeCLResetsCoords(t *testing.T) {
 }
 
 func TestProcessAnsiAndExtractCoords_ControlCharsNoAdvance(t *testing.T) {
-	// Control characters below 0x20 (except \r, \n) should not advance cursor
-	input := []byte{0x01, 0x02, 'A', '|', 'X', 'Y'}
+	// Control characters that are acted on rather than drawn (NUL, BEL) should
+	// not advance the cursor; those drawn as glyphs (☺ ▲ …) do, see
+	// TestFieldCoordsCountControlGlyphs
+	input := []byte{0x00, 0x07, 'A', '|', 'X', 'Y'}
 	result, err := ProcessAnsiAndExtractCoords(input, OutputModeCP437)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1336,7 +1338,7 @@ func TestProcessAnsiAndExtractCoords_ControlCharsNoAdvance(t *testing.T) {
 	if !ok {
 		t.Fatal("expected field coord 'XY'")
 	}
-	// Control chars 0x01, 0x02 don't advance cursor, 'A' advances to X=2
+	// NUL and BEL don't advance the cursor, 'A' advances to X=2
 	if coord.X != 2 || coord.Y != 1 {
 		t.Errorf("field coord XY = (%d, %d), want (2, 1)", coord.X, coord.Y)
 	}
