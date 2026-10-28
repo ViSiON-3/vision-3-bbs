@@ -188,6 +188,8 @@ func (m Model) emptyRecordListHint() string {
 		return "No QWK networks yet — press I to join one (QWK network wizard)."
 	case "v3netleaf":
 		return "No subscriptions yet — press I for the wizard, or B to browse the registry."
+	case "doorcategory":
+		return "No categories yet — press I to add one. Uncategorized doors list under Other."
 	case "msgarea", "filearea", "conference", "door", "event", "protocol", "archiver", "login":
 		return "Nothing configured yet — press I to insert the first entry."
 	}
@@ -206,7 +208,7 @@ func (m Model) recordTypeTitle() string {
 	case "doorcategory":
 		return "Door Categories"
 	case "door":
-		return "Door Programs"
+		return "Doors"
 	case "event":
 		return "Event Scheduler"
 	case "ftn":

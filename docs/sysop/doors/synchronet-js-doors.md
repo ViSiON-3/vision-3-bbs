@@ -40,7 +40,7 @@ To run other Synchronet JS doors, add the game's directory from the [Synchronet 
 
 ## Configuration
 
-Define the door in the [Configuration Editor](configuration/configuration.md#configuration-editor-tui): run `./config`, press **7** for Door Programs, then **I** to insert a record. Set **Type** to `Synchronet JS` and fill in:
+Define the door in the [Configuration Editor](configuration/configuration.md#configuration-editor-tui): run `./config`, press **7** for Door Programs and **1** for Doors, then **I** to insert a record. Set **Type** to `Synchronet JS` and fill in:
 
 | Field | Value for the bundled LORD |
 | --- | --- |
