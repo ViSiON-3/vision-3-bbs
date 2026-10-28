@@ -28,7 +28,8 @@ type PlaceholderMatch struct {
 //	4=:WIDTH (optional), 5=### (optional), 6=* (optional), 7=<MAXWIDTH (optional)
 //
 // G = gap fill: fills remaining line width with ─ (CP437 0xC4) characters.
-var placeholderRegex = regexp.MustCompile(`@([BTFSUL#NDWPEOMAZCXGVKIYR])(?:\|([LRC])(\d+)?)?(?::(\d+)|([#]+)|(\*)|<(\d+))?@`)
+// H = direct replies to the message in the reply tree (the reader fills it).
+var placeholderRegex = regexp.MustCompile(`@([BTFSUL#NDWPEOMAZCXGVKIYRH])(?:\|([LRC])(\d+)?)?(?::(\d+)|([#]+)|(\*)|<(\d+))?@`)
 
 // parsePlaceholders extracts all @CODE@ patterns from template bytes.
 func parsePlaceholders(template []byte) []PlaceholderMatch {

@@ -43,6 +43,7 @@ func (mm *MessageManager) invalidateThreadIndex(areaID int) {
 	defer mm.mu.Unlock()
 	delete(mm.threadIndex, areaID)
 	delete(mm.msgidIndex, areaID)
+	delete(mm.replyTrees, areaID)
 }
 
 // FindMessageByMSGID searches for a message in the given area whose MSGID

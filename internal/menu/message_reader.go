@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -154,6 +155,11 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		counter = counters[0]
 	}
 	msgFilter = withTwit(func() *user.TwitMatcher { return matcher }, baseFilter, counter)
+	// The thread keys, signposts and pane see the thread through the same
+	// rules as navigation, but a hidden post they pass over is not one the
+	// scan skipped, so it does not count toward a newscan's twit tally.
+	threadFilter := withTwit(func() *user.TwitMatcher { return matcher }, baseFilter, nil)
+	glyphs := threadGlyphsFor(outputMode)
 	currentAreaID := currentUser.CurrentMessageAreaID
 	currentAreaTag := currentUser.CurrentMessageAreaTag
 
@@ -307,6 +313,9 @@ readerLoop:
 			continue
 		}
 
+		// The reply thread this message sits in, as this caller may see it.
+		tv := readerThreadView(e, currentAreaID, currentMsgNum, currentMsg, threadFilter)
+
 		// Build Pascal-style substitution map
 		templateUsesUserNote := headerTemplateUsesUserNote(hdrTemplateBytes)
 		replyCount := 0
@@ -322,6 +331,9 @@ readerLoop:
 			nodelists = nil // no @Y@ or @R@ to fill
 		}
 		substitutions := buildMsgSubstitutions(currentMsg, currentAreaTag, currentMsgNum, totalMsgCount, !templateUsesUserNote, replyCount, confName, areaName, e.MessageMgr, currentAreaID, userManager, nodeNumber, e.V3NetStatus, nodelists)
+		// @H@: direct replies to this message in the reply tree, as the
+		// pane counts them. @E@ keeps its subject-based count.
+		substitutions['H'] = strconv.Itoa(tv.directReplies(currentMsgNum))
 		// For CP437 terminals, convert UTF-8 substitution values to CP437 bytes so that
 		// multi-byte runes (e.g. Cyrillic from FTN UTF-8 messages) render as '?' instead
 		// of raw UTF-8 bytes that display as CP437 box-drawing characters.
@@ -391,6 +403,20 @@ readerLoop:
 		if bodyAvailHeight < 1 {
 			bodyAvailHeight = 5
 		}
+
+		// The docked thread pane sits under the header and moves the body
+		// down. A message that starts a thread nobody has answered has no
+		// thread to show, so the body keeps the rows.
+		paneTop := bodyStartRow
+		var paneLines []string
+		if tv.hasThread() {
+			if rows := paneRowsFor(bodyAvailHeight); rows > 0 {
+				paneLines = renderThreadPane(tv, rows, termWidth-1, e.Strings().MsgThreadPaneTitle, glyphs, outputMode)
+				bodyStartRow += rows + 2
+				bodyAvailHeight -= rows + 2
+			}
+		}
+		signposts := renderSignposts(readerSignposts(tv, glyphs), termWidth-1, glyphs, outputMode)
 
 		// Initialize scroll state for this message
 		scrollOffset := 0
@@ -462,15 +488,20 @@ readerLoop:
 					terminalio.WriteProcessedBytes(terminal, processedHeader, outputMode)
 				}
 
+				for i, line := range paneLines {
+					terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(paneTop+i, 1)), outputMode)
+					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
+				}
+
 				drawBody()
 
 				// Display footer: lightbar only
 				suffixText := barSuffix
 
-				// Draw horizontal line above footer (CP437 character 196)
+				// The separator row above the bar carries the thread
+				// signposts: where U, F and X lead from this message.
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight-1, 1)), outputMode)
-				horizontalLine := "|08" + strings.Repeat("\xC4", termWidth-1) + "|07" // CP437 horizontal line character
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(horizontalLine)), outputMode)
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(signposts)), outputMode)
 
 				// Position cursor at last row for lightbar
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight, 1)), outputMode)
@@ -592,7 +623,8 @@ readerLoop:
 					singleKey := rune(key)
 					// Check if it's a direct command key
 					switch unicode.ToUpper(singleKey) {
-					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'K', 'I', '?':
+					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'K', 'I', '?',
+						'U', 'F', 'X', '[', ']':
 						selectedKey = unicode.ToUpper(singleKey)
 					default:
 						// Not a recognized command, show lightbar
@@ -786,6 +818,24 @@ readerLoop:
 				// Exit scroll loop to load new message
 				break scrollLoop
 
+			case 'U', 'F', 'X', '[', ']': // Reply-tree navigation
+				target, notice := threadNavTarget(tv, selectedKey, e.Strings())
+				if target == 0 {
+					e.showReaderNotice(terminal, outputMode, notice, termHeight)
+					needsRedraw = true
+					continue
+				}
+				if target > totalMsgCount {
+					// A reply posted since the reader started is in the
+					// tree but past the bound the reader was given.
+					if n, err := e.MessageMgr.GetMessageCountForArea(currentAreaID); err == nil && n > totalMsgCount {
+						totalMsgCount = n
+					}
+				}
+				navDir = 1
+				currentMsgNum = target
+				break scrollLoop
+
 			case 'M': // Mail reply (deferred)
 				e.showReaderNotice(terminal, outputMode, e.Strings().MsgMailReplyDeferred, termHeight)
 				needsRedraw = true
@@ -890,6 +940,28 @@ readerLoop:
 		return nil, "QUIT_NEWSCAN", nil
 	}
 	return nil, "", nil
+}
+
+// readerThreadView builds the thread view for the message the reader is on.
+// Only the messages of that thread are loaded, each once, and only those
+// filter accepts are shown; cur is reused rather than read again.
+func readerThreadView(e *MenuExecutor, areaID, msgNum int, cur *message.DisplayMessage, filter msgOwnershipFilter) *threadView {
+	nodes, err := e.MessageMgr.ReplyTree(areaID)
+	if err != nil {
+		slog.Warn("failed to build reply tree", "area", areaID, "error", err)
+		nodes = nil
+	}
+	load := func(n int) *message.DisplayMessage {
+		if n == msgNum {
+			return cur
+		}
+		m, err := e.MessageMgr.GetMessage(areaID, n)
+		if err != nil || m.IsDeleted || (filter != nil && !filter(m)) {
+			return nil
+		}
+		return m
+	}
+	return newThreadView(nodes, msgNum, load)
 }
 
 var quotePrefixRe = regexp.MustCompile(`^[A-Za-z0-9]{1,3}>`)

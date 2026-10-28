@@ -62,7 +62,7 @@ func TestShippedHeadersStayWithin79Columns(t *testing.T) {
 		'B': long, 'T': long, 'F': long, 'S': long, 'U': long, 'M': long,
 		'L': "255", '#': "9999999", 'N': "9999999", 'C': "[9999999/9999999]",
 		'V': "9999999 of 9999999", 'D': "12/31/26", 'W': "12:59 pm", 'P': "9999999",
-		'E': "9999", 'O': long, 'A': long, 'Z': long, 'X': long, 'K': "999",
+		'E': "9999", 'H': "9999", 'O': long, 'A': long, 'Z': long, 'X': long, 'K': "999",
 	}
 	// CP437 sessions get CP437 bytes; build their long values from pairs that
 	// also happen to be valid UTF-8, so a rune-counting width check would
@@ -102,7 +102,7 @@ func TestShippedHeadersKeepTheCounter(t *testing.T) {
 	subs := map[byte]string{
 		'B': "TAG", 'T': "Subject", 'F': "From", 'S': "To", 'U': "", 'M': "LOCAL",
 		'L': "10", '#': "1234", 'N': "56789", 'C': "[1234/56789]", 'V': "1234 of 56789",
-		'D': "12/31/26", 'W': "12:59 pm", 'P': "None", 'E': "0", 'K': "1",
+		'D': "12/31/26", 'W': "12:59 pm", 'P': "None", 'E': "0", 'H': "0", 'K': "1",
 		'Z': z, 'X': z + " [1234/56789]",
 	}
 	dir := filepath.Join("..", "..", "menus", "v3", "templates", "message_headers")

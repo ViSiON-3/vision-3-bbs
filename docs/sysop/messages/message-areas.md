@@ -362,12 +362,34 @@ hot key:
 | `T` | Thread | Thread search |
 | `P` | Post | Post a new message |
 | `J` / `#` | Jump | Go to a message number |
+| `U` | Up | The message this one answers (not on the bar) |
+| `F` | First reply | The first reply to this message (not on the bar) |
+| `X` | Next sibling | The next reply to the same message (not on the bar) |
+| `]` / `[` | Thread next / previous | Walk the thread in display order (not on the bar) |
 | `L` | List | List message titles |
 | `I` | Twit | Add the author to your Twit List (hidden while Twit Lists are off) |
 | `D` | Del | Delete the message (sysop and co-sysop only; shown in red) |
 | `K` | Kludges | Show the message's control information (sysop and co-sysop only; not on the bar) |
 | `?` | Help | List the commands |
 | `Q` | Quit | Leave the reader |
+
+**Reply threads (U, F, X, `]`, `[`).** These follow the reply links a
+message carries (the JAM `ReplyTo`, or the `REPLY` kludge of echomail), not
+its subject, so they walk the actual conversation. `T` is still the
+subject search. The separator row above the bar is a set of signposts that
+say where `U`, `F` and `X` lead from the current message, with the author's
+handle (`none` when there is nowhere to go, `#n deleted` when the parent has
+been deleted). When the message is part of a thread, a pane under the header
+draws the thread as a tree, five rows (three on a short screen) windowed
+around the current message, with the root's subject in its title and the
+message's place in the thread; a message that starts a thread nobody has
+answered shows no pane. Mail the caller may not read (another user's private
+message, a post from an author on their Twit List) is never shown or counted
+in any of this; a reply to such a message hangs from the nearest message the
+caller can see, and `U` on it says only that the message it answers is not
+available. Each key shows a short notice on the bar row when there is
+nowhere to go; the notices are the `msgThread*` strings. The direct-reply
+count is available to header templates as `@H@`.
 
 **Kludges (K).** Sysops chasing a duplicate or misrouted message need its
 MSGID, PATH and SEEN-BY. `K` shows the current message's control information
