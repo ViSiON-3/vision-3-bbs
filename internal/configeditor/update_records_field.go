@@ -48,8 +48,9 @@ func (m Model) startRecordFieldEdit() (Model, tea.Cmd) {
 
 	val := f.Get()
 	m.mode = modeRecordField
+	// CharLimit first: SetValue truncates to whatever limit is already set.
+	m.textInput.CharLimit = f.charLimit()
 	m.textInput.SetValue(val)
-	m.textInput.CharLimit = f.Width
 	m.textInput.Width = f.Width
 	m.textInput.EchoMode = textinput.EchoNormal
 	m.textInput.Placeholder = ""

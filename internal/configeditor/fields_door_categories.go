@@ -75,8 +75,8 @@ func (m *Model) fieldsDoorCategory() []fieldDef {
 			c.Code = code
 			return nil
 		}},
-		{Label: "Name", Help: "Category display name", Type: ftString, Col: 3, Row: 2, Width: 40, Get: func() string { return c.Name }, Set: func(v string) error { c.Name = v; return nil }},
-		{Label: "Description", Help: "Category description (^DS)", Type: ftString, Col: 3, Row: 3, Width: 45, Get: func() string { return c.Description }, Set: func(v string) error { c.Description = v; return nil }},
+		{Label: "Name", Help: "Category display name", Type: ftString, Col: 3, Row: 2, Width: doorTextWidth, MaxLen: doorTextMaxLen, Get: func() string { return c.Name }, Set: func(v string) error { c.Name = v; return nil }},
+		{Label: "Description", Help: "Category description (^DS)", Type: ftString, Col: 3, Row: 3, Width: doorTextWidth, MaxLen: doorTextMaxLen, Get: func() string { return c.Description }, Set: func(v string) error { c.Description = v; return nil }},
 		{Label: "Min Access Level", Help: "Minimum access to see the category", Type: ftInteger, Col: 3, Row: 4, Width: 3, Min: 0, Max: 255, Get: func() string { return strconv.Itoa(c.MinAccessLevel) }, Set: func(v string) error {
 			n, err := strconv.Atoi(v)
 			if err != nil {
@@ -85,7 +85,7 @@ func (m *Model) fieldsDoorCategory() []fieldDef {
 			c.MinAccessLevel = n
 			return nil
 		}},
-		{Label: "ACS", Help: "Category access requirement", Type: ftString, Col: 3, Row: 5, Width: 40, Get: func() string { return c.ACS }, Set: func(v string) error { c.ACS = v; return nil }},
+		{Label: "ACS", Help: "Category access requirement", Type: ftString, Col: 3, Row: 5, Width: doorTextWidth, MaxLen: doorTextMaxLen, Get: func() string { return c.ACS }, Set: func(v string) error { c.ACS = v; return nil }},
 		{Label: "Sort Order", Help: "Category position (lower comes first)", Type: ftInteger, Col: 3, Row: 6, Width: 6, Min: 0, Max: 999999, Get: func() string { return strconv.Itoa(c.SortOrder) }, Set: func(v string) error {
 			n, err := strconv.Atoi(v)
 			if err != nil {

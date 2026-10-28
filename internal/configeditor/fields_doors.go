@@ -10,6 +10,14 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
 
+// Door text fields fill the 70-column record box (2 pad + 19 label + the
+// cursor cell) and scroll horizontally past it, since paths and command
+// lines often run longer than any box.
+const (
+	doorTextWidth  = 48
+	doorTextMaxLen = 1024
+)
+
 // sliceToCSV joins a string slice with ", " for display.
 func sliceToCSV(s []string) string {
 	return strings.Join(s, ", ")
@@ -248,7 +256,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 
 	row++
 	fields = append(fields, fieldDef{
-		Label: "Name", Help: "Display name shown to users (case preserved)", Type: ftString, Col: 3, Row: row, Width: 30,
+		Label: "Name", Help: "Display name shown to users (case preserved)", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 		Get: func() string { return dPtr.Name },
 		Set: func(val string) error { dPtr.Name = val; save(); return nil },
 	})
@@ -311,7 +319,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 
 	row++
 	fields = append(fields, fieldDef{
-		Label: "Working Dir", Help: "Directory to run the door in", Type: ftString, Col: 3, Row: row, Width: 45,
+		Label: "Working Dir", Help: "Directory to run the door in", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 		Get: func() string { return dPtr.WorkingDirectory },
 		Set: func(val string) error { dPtr.WorkingDirectory = val; save(); return nil },
 	})
@@ -320,25 +328,25 @@ func (m *Model) fieldsDoor() []fieldDef {
 		// Synchronet JS-specific fields
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Script", Help: "Main JS file to execute (relative to working dir)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Script", Help: "Main JS file to execute (relative to working dir)", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 			Get: func() string { return dPtr.Script },
 			Set: func(val string) error { dPtr.Script = val; save(); return nil },
 		})
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Exec Dir", Help: "Synchronet exec directory (system.exec_dir)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Exec Dir", Help: "Synchronet exec directory (system.exec_dir)", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 			Get: func() string { return dPtr.ExecDir },
 			Set: func(val string) error { dPtr.ExecDir = val; save(); return nil },
 		})
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Library Paths", Help: "Search paths for load()/require(), comma-separated", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Library Paths", Help: "Search paths for load()/require(), comma-separated", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 			Get: func() string { return sliceToCSV(dPtr.LibraryPaths) },
 			Set: func(val string) error { dPtr.LibraryPaths = csvToSlice(val); save(); return nil },
 		})
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Script Args", Help: "Arguments passed to script (available as argv), comma-separated", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Script Args", Help: "Arguments passed to script (available as argv), comma-separated", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 			Get: func() string { return sliceToCSV(dPtr.Args) },
 			Set: func(val string) error { dPtr.Args = csvToSlice(val); save(); return nil },
 		})
@@ -346,13 +354,13 @@ func (m *Model) fieldsDoor() []fieldDef {
 		// VPL script fields — Script and Args only (no Exec Dir or Library Paths)
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Script", Help: "Main JS file to execute (relative to working dir)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Script", Help: "Main JS file to execute (relative to working dir)", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 			Get: func() string { return dPtr.Script },
 			Set: func(val string) error { dPtr.Script = val; save(); return nil },
 		})
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Script Args", Help: "Arguments passed to script (available as v3.args), comma-separated", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Script Args", Help: "Arguments passed to script (available as v3.args), comma-separated", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 			Get: func() string { return sliceToCSV(dPtr.Args) },
 			Set: func(val string) error { dPtr.Args = csvToSlice(val); save(); return nil },
 		})
@@ -367,7 +375,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 		}
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Host", Help: "Door server hostname or IP address", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Host", Help: "Door server hostname or IP address", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 			Get: func() string { return dPtr.Host },
 			Set: func(val string) error { dPtr.Host = strings.TrimSpace(val); save(); return nil },
 		})
@@ -388,32 +396,32 @@ func (m *Model) fieldsDoor() []fieldDef {
 		if isRLogin(dPtr) {
 			row++
 			fields = append(fields, fieldDef{
-				Label: "Client User", Help: "RLogin client-user-name; some servers expect a password here (blank = {USERHANDLE})", Type: ftString, Col: 3, Row: row, Width: 45,
+				Label: "Client User", Help: "RLogin client-user-name; some servers expect a password here (blank = {USERHANDLE})", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 				Get: func() string { return dPtr.ClientUsername },
 				Set: func(val string) error { dPtr.ClientUsername = val; save(); return nil },
 			})
 			row++
 			fields = append(fields, fieldDef{
-				Label: "Server User", Help: "RLogin server-user-name, e.g. [TAG]{USERHANDLE} (blank = {USERHANDLE})", Type: ftString, Col: 3, Row: row, Width: 45,
+				Label: "Server User", Help: "RLogin server-user-name, e.g. [TAG]{USERHANDLE} (blank = {USERHANDLE})", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 				Get: func() string { return dPtr.ServerUsername },
 				Set: func(val string) error { dPtr.ServerUsername = val; save(); return nil },
 			})
 			row++
 			fields = append(fields, fieldDef{
-				Label: "Terminal Type", Help: "RLogin terminal-type; door servers read the door code here, e.g. xtrn=LORD (blank = ANSI/38400)", Type: ftString, Col: 3, Row: row, Width: 45,
+				Label: "Terminal Type", Help: "RLogin terminal-type; door servers read the door code here, e.g. xtrn=LORD (blank = ANSI/38400)", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 				Get: func() string { return dPtr.TerminalType },
 				Set: func(val string) error { dPtr.TerminalType = val; save(); return nil },
 			})
 		} else {
 			row++
 			fields = append(fields, fieldDef{
-				Label: "Terminal Type", Help: "Terminal type reported to the server when it asks (blank = ANSI)", Type: ftString, Col: 3, Row: row, Width: 45,
+				Label: "Terminal Type", Help: "Terminal type reported to the server when it asks (blank = ANSI)", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 				Get: func() string { return dPtr.TerminalType },
 				Set: func(val string) error { dPtr.TerminalType = val; save(); return nil },
 			})
 			row++
 			fields = append(fields, fieldDef{
-				Label: "Send On Connect", Help: "Sent once connected, e.g. a login: {USERHANDLE}\\rsecret\\r (\\r = Enter, \\n = LF, \\\\ = backslash)", Type: ftString, Col: 3, Row: row, Width: 45,
+				Label: "Send On Connect", Help: "Sent once connected, e.g. a login: {USERHANDLE}\\rsecret\\r (\\r = Enter, \\n = LF, \\\\ = backslash)", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 				Get: func() string { return showControlEscapes(dPtr.SendOnConnect) },
 				Set: func(val string) error {
 					parsed, err := parseControlEscapes(val)
@@ -464,7 +472,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 		// Native and DOS doors have commands and dropfiles
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Commands", Help: "Native: cmd + args (space- or comma-sep). Placeholders: {NODEDIR} {DROPFILE} {NODE} {PORT} — add trailing / if the door needs it, e.g. {NODEDIR}/", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Commands", Help: "Native: cmd + args (space- or comma-sep). Placeholders: {NODEDIR} {DROPFILE} {NODE} {PORT} — add trailing / if the door needs it, e.g. {NODEDIR}/", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 			Get: func() string { return doorCommandsGet(dPtr) },
 			Set: func(val string) error { doorCommandsSet(dPtr, val); save(); return nil },
 		})
@@ -571,7 +579,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 		// Cleanup and env vars for native/DOS doors only
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Cleanup Command", Help: "Command to run after door exits (blank=none); args space- or comma-sep", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Cleanup Command", Help: "Command to run after door exits (blank=none); args space- or comma-sep", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 			Get: func() string {
 				if dPtr.CleanupCommand == "" {
 					return ""
@@ -590,7 +598,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 		if !dPtr.IsRemote() {
 			row++
 			fields = append(fields, fieldDef{
-				Label: "Env Vars", Help: "Environment variables: KEY=VALUE, KEY2=VALUE2", Type: ftString, Col: 3, Row: row, Width: 45,
+				Label: "Env Vars", Help: "Environment variables: KEY=VALUE, KEY2=VALUE2", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 				Get: func() string { return envMapToCSV(dPtr.EnvironmentVars) },
 				Set: func(val string) error {
 					m, err := csvToEnvMap(val)
@@ -609,7 +617,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 		// DOS-specific fields
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Drive C Path", Help: "Drive C directory path (blank=~/.dosemu/drive_c)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "Drive C Path", Help: "Drive C directory path (blank=~/.dosemu/drive_c)", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 			Get: func() string { return dPtr.DriveCPath },
 			Set: func(val string) error { dPtr.DriveCPath = val; save(); return nil },
 		})
@@ -627,13 +635,13 @@ func (m *Model) fieldsDoor() []fieldDef {
 		})
 		row++
 		fields = append(fields, fieldDef{
-			Label: "FOSSIL Driver", Help: "DOS FOSSIL driver command (e.g. C:\\UTILS\\X00.EXE eliminate)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "FOSSIL Driver", Help: "DOS FOSSIL driver command (e.g. C:\\UTILS\\X00.EXE eliminate)", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 			Get: func() string { return dPtr.FossilDriver },
 			Set: func(val string) error { dPtr.FossilDriver = val; save(); return nil },
 		})
 		row++
 		fields = append(fields, fieldDef{
-			Label: "DOSemu Config", Help: "Custom .dosemurc config file (optional)", Type: ftString, Col: 3, Row: row, Width: 45,
+			Label: "DOSemu Config", Help: "Custom .dosemurc config file (optional)", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 			Get: func() string { return dPtr.DosemuConfig },
 			Set: func(val string) error { dPtr.DosemuConfig = val; save(); return nil },
 		})
@@ -675,7 +683,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 				}
 				return items
 			}},
-		fieldDef{Label: "Description", Help: "Generated menu description (^DS)", Type: ftString, Col: 3, Row: row + 2, Width: 45, Get: func() string { return dPtr.Description }, Set: func(v string) error { dPtr.Description = v; save(); return nil }},
+		fieldDef{Label: "Description", Help: "Generated menu description (^DS)", Type: ftString, Col: 3, Row: row + 2, Width: doorTextWidth, MaxLen: doorTextMaxLen, Get: func() string { return dPtr.Description }, Set: func(v string) error { dPtr.Description = v; save(); return nil }},
 		fieldDef{Label: "Hidden", Help: "Hide from the generated menu; DOOR:CODE still works", Type: ftYesNo, Col: 3, Row: row + 3, Width: 1, Get: func() string { return uitext.BoolToYN(dPtr.Hidden) }, Set: func(v string) error { dPtr.Hidden = uitext.YNToBool(v); save(); return nil }},
 		fieldDef{Label: "Sort Order", Help: "Position when generated menu sort is manual", Type: ftInteger, Col: 3, Row: row + 4, Width: 6, Min: 0, Max: 999999, Get: func() string { return strconv.Itoa(dPtr.SortOrder) }, Set: func(v string) error {
 			n, err := strconv.Atoi(v)

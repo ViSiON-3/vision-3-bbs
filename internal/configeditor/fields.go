@@ -32,6 +32,7 @@ type fieldDef struct {
 	Col         int       // Column position (x) inside box
 	Row         int       // Row position (y) inside box
 	Width       int       // Input field width
+	MaxLen      int       // Max input length; 0 = Width. Longer values scroll while editing
 	Min         int       // Minimum value (for ftInteger)
 	Max         int       // Maximum value (for ftInteger)
 	Masked      bool      // Show '*' characters when not actively editing
@@ -39,6 +40,14 @@ type fieldDef struct {
 	Set         func(val string) error
 	AfterSet    func(m *Model, val string) // called after Set succeeds, on the current model
 	LookupItems func() []LookupItem        // provider for ftLookup
+}
+
+// charLimit returns the textinput character limit for f.
+func (f fieldDef) charLimit() int {
+	if f.MaxLen > 0 {
+		return f.MaxLen
+	}
+	return f.Width
 }
 
 // maskValue replaces each rune in s with '*'.
