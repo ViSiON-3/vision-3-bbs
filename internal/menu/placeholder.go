@@ -155,6 +155,17 @@ func processPlaceholderTemplate(template []byte, substitutions map[byte]string, 
 				}
 			}
 
+			// The area fields shorten the area name to fit, never the
+			// counter X carries after it.
+			if limit := placeholderLimit(match, autoWidths); limit > 0 {
+				switch match.Code {
+				case "X":
+					value = fitAreaAndCounter(value, substitutions['Z'], substitutions['C'], limit, cp437Values)
+				case "Z":
+					value = ellipsize(value, limit, cp437Values)
+				}
+			}
+
 			// Apply width constraint if specified (with alignment)
 			if match.AutoWidth && autoWidths != nil {
 				if w, ok := autoWidths[match.Code[0]]; ok && w > 0 {
@@ -182,6 +193,49 @@ func processPlaceholderTemplate(template []byte, substitutions map[byte]string, 
 	}
 
 	return result
+}
+
+// placeholderLimit is the most cells match's value may take: its fixed,
+// auto or maximum width, or 0 for none.
+func placeholderLimit(match PlaceholderMatch, autoWidths map[byte]int) int {
+	switch {
+	case match.AutoWidth:
+		return autoWidths[match.Code[0]] // a missing entry means no limit
+	case match.Width > 0:
+		return match.Width
+	default:
+		return match.MaxWidth
+	}
+}
+
+// fitAreaAndCounter fits X, the area name and the "[current/total]" counter
+// after it, into limit cells. When it does not fit, the area name (z) is
+// shortened and the counter (c) kept whole: a reader cannot see which message
+// they are on otherwise (#727).
+func fitAreaAndCounter(x, z, c string, limit int, cp437Values bool) string {
+	if placeholderCells(x, cp437Values) <= limit || c == "" {
+		return ellipsize(x, limit, cp437Values)
+	}
+	room := limit - placeholderCells(c, cp437Values) - 1
+	if room < 1 {
+		return c // the field is narrower than the counter; fitting cuts it
+	}
+	return ellipsize(z, room, cp437Values) + " " + c
+}
+
+// ellipsize shortens s to limit cells, ending it with "..." so the cut
+// shows. Three dots rather than "…": CP437 has no such character, and it is
+// of ambiguous width, two cells on some UTF-8 terminals.
+func ellipsize(s string, limit int, cp437Values bool) string {
+	if placeholderCells(s, cp437Values) <= limit {
+		return s
+	}
+	const ell = "..."
+	room := limit - len(ell)
+	if room < 1 {
+		return truncatePlaceholderValue(s, limit, cp437Values)
+	}
+	return strings.TrimRight(truncatePlaceholderValue(s, room, cp437Values), " ") + ell
 }
 
 // resolveGapFills replaces gap fill markers with ─ characters to fill lines to target width.
