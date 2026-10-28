@@ -50,3 +50,24 @@ func TestArtForOutputDrawsControlGlyphs(t *testing.T) {
 		t.Errorf("CP437: %q", got)
 	}
 }
+
+// A field after a drawn control glyph sits one column further on, as the
+// glyph takes a cell on screen; a byte that is acted on (BEL) takes none.
+func TestFieldCoordsCountControlGlyphs(t *testing.T) {
+	for _, tc := range []struct {
+		art  string
+		want int
+	}{
+		{"\x1eA|P", 3},
+		{"\x07A|P", 2},
+		{"A\x7f|P", 2},
+	} {
+		res, err := ProcessAnsiAndExtractCoords([]byte(tc.art), OutputModeCP437)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := res.FieldCoords["P"].X; got != tc.want {
+			t.Errorf("%q: field P at column %d, want %d", tc.art, got, tc.want)
+		}
+	}
+}

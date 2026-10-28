@@ -994,8 +994,11 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 				currentX++
 			} else if b >= 0x80 { // Assume CP437 chars > 127 are printable and advance cursor
 				currentX++
+			} else if b < 0x20 && cp437ControlGlyphs[b] != 0 {
+				// Drawn as a glyph (▲ ▼ ☺ …), as HardWrap counts it
+				currentX++
 			}
-			// We don't increment X for other control chars (0x00-0x1f except \n, \r)
+			// We don't increment X for the control chars that are acted on (BEL, BS, …)
 		}
 
 		i += consumed
