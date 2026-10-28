@@ -64,11 +64,16 @@ func (mm *MessageManager) ReplyTree(areaID int) (map[int]*ReplyNode, error) {
 		return t == nil || t.total != total || (modCounter != 0 && t.modCounter != modCounter)
 	}
 	if stale(tree) {
+		// Built without the lock: it reads every header in the area, and
+		// nothing else should wait on that. Two readers arriving together
+		// may both build; the second keeps whichever fresh tree is stored.
+		built := buildReplyTree(b, total, modCounter)
 		mm.mu.Lock()
-		tree = mm.replyTrees[areaID]
-		if stale(tree) {
-			tree = buildReplyTree(b, total, modCounter)
-			mm.replyTrees[areaID] = tree
+		if cur := mm.replyTrees[areaID]; stale(cur) {
+			mm.replyTrees[areaID] = built
+			tree = built
+		} else {
+			tree = cur
 		}
 		mm.mu.Unlock()
 	}

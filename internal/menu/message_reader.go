@@ -487,6 +487,9 @@ readerLoop:
 		readerScrollKeys := []int{
 			editor.KeyArrowUp, editor.KeyArrowDown, editor.KeyPageUp, editor.KeyPageDown,
 			editor.KeyCtrlE, editor.KeyCtrlX, editor.KeyCtrlR, editor.KeyCtrlC,
+			// The thread keys are not on the bar, so the bar hands them
+			// back too rather than swallowing them.
+			'U', 'u', 'F', 'f', 'X', 'x', '[', ']',
 		}
 		pendingKey := 0
 
@@ -736,9 +739,9 @@ readerLoop:
 				if replyResult == "LOGOFF" {
 					return nil, "LOGOFF", currentMsgNum, io.EOF
 				}
-				// Redraw message after reply
-				needsRedraw = true
-				continue
+				// Reload the message: the reply is now in its thread, so the
+				// pane, signposts and reply count have to be rebuilt.
+				continue readerLoop
 
 			case 'P': // Post new message
 				terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
@@ -996,10 +999,10 @@ func readerThreadView(e *MenuExecutor, areaID, msgNum int, cur *message.DisplayM
 			return cur
 		}
 		m, err := e.MessageMgr.GetMessage(areaID, n)
-		if err != nil || m.IsDeleted || (filter != nil && !filter(m)) {
+		if err != nil || (filter != nil && !filter(m)) {
 			return nil
 		}
-		return m
+		return m // deleted ones too, flagged, for the view to draw as placeholders
 	}
 	return newThreadView(nodes, msgNum, load)
 }
