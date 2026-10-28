@@ -118,9 +118,9 @@ type signpost struct {
 	handle  string // the target's author, when readable
 }
 
-// signpostListKey adds the "[V]list" tail to the signposts. It belongs to
-// the threaded message list, which lands in the next change.
-const signpostListKey = false
+// signpostListKey adds the "[V]list" tail to the signposts: V opens the
+// threaded message list on the current message.
+const signpostListKey = true
 
 // renderSignposts builds the separator row: each key with its arrow and
 // target, the handles sharing whatever width the fixed parts leave, and a

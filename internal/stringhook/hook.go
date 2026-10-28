@@ -223,6 +223,10 @@ var NoHookKeys = map[string]bool{
 	"newUserSysopNotice":        true,
 	"newUserSysopPage":          true,
 	"noPromptText":              true,
+	"msgListDeletedPlaceholder": true, // drawn into the message list frame
+	"msgListHelpFlat":           true,
+	"msgListHelpThreaded":       true,
+	"msgListThreadedTitle":      true,
 	"msgThreadNoMoreSiblings":   true, // formatted before showReaderNotice prints it
 	"msgThreadNoParent":         true,
 	"msgThreadNoReplies":        true,

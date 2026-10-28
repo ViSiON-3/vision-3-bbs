@@ -27,12 +27,27 @@ type threadRow struct {
 // messages are rows, as placeholders, only while a shown message descends
 // from them, so that reply keeps its place.
 func threadRows(nodes map[int]*message.ReplyNode, roots []int, load func(int) *message.DisplayMessage) []threadRow {
-	f := &threadFlattener{nodes: nodes, load: load, msgs: map[int]*message.DisplayMessage{}, live: map[int]bool{}}
-	var rows []threadRow
-	for _, r := range roots {
-		rows = f.walk(rows, r, 0, 0, nil)
+	return newThreadFlattener(nodes, load).rows(roots)
+}
+
+// threadForest flattens every thread of the area, newest root first (the
+// order the flat list shows messages in), with the rules of threadRows. A
+// deleted message is a root only while something readable descends from it.
+func threadForest(nodes map[int]*message.ReplyNode, load func(int) *message.DisplayMessage) []threadRow {
+	f := newThreadFlattener(nodes, load)
+	var roots []int
+	for n := len(nodes); n >= 1; n-- {
+		node := nodes[n]
+		if node == nil || f.shownParent(n) != 0 {
+			continue
+		}
+		if node.Deleted || f.msg(n) != nil {
+			if f.hasLive(n) {
+				roots = append(roots, n)
+			}
+		}
 	}
-	return rows
+	return f.rows(roots)
 }
 
 type threadFlattener struct {
@@ -40,6 +55,29 @@ type threadFlattener struct {
 	load  func(int) *message.DisplayMessage
 	msgs  map[int]*message.DisplayMessage // loaded messages; a nil entry is hidden
 	live  map[int]bool                    // hasLive results
+}
+
+func newThreadFlattener(nodes map[int]*message.ReplyNode, load func(int) *message.DisplayMessage) *threadFlattener {
+	return &threadFlattener{nodes: nodes, load: load, msgs: map[int]*message.DisplayMessage{}, live: map[int]bool{}}
+}
+
+// rows flattens the trees under roots, in that order.
+func (f *threadFlattener) rows(roots []int) []threadRow {
+	var rows []threadRow
+	for _, r := range roots {
+		rows = f.walk(rows, r, 0, 0, nil)
+	}
+	return rows
+}
+
+// shownParent is n's nearest ancestor that is shown (readable or a deleted
+// placeholder), or 0.
+func (f *threadFlattener) shownParent(n int) int {
+	p := f.nodes[n].Parent
+	for p != 0 && !f.nodes[p].Deleted && f.msg(p) == nil {
+		p = f.nodes[p].Parent
+	}
+	return p
 }
 
 // msg returns n's message, loading it once; nil when n is hidden or deleted.

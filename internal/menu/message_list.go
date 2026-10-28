@@ -18,6 +18,24 @@ func runListMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 // messages it accepts are listed too. The filter is propagated to the reader
 // when a message is opened.
 func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (*user.User, string, error) {
+	u, action, _, err := runListMsgsWith(c, args, msgFilter, listOpts{})
+	return u, action, err
+}
+
+// listOpts is how the list was opened.
+type listOpts struct {
+	// fromReader is set when the reader's V or L opened the list. The list
+	// then never nests a reader: Enter returns "READ" with the highlighted
+	// message, and V, Q and Esc return "READ" with startMsg, for the reader
+	// to show.
+	fromReader bool
+	startMsg   int  // the message to put the cursor on; 0 = the first
+	threaded   bool // open threaded (fromReader); otherwise the session's last mode
+}
+
+// runListMsgsWith is runListMsgsFiltered with listOpts. The message number
+// is meaningful with the "READ" action (fromReader only).
+func runListMsgsWith(c *cmdCtx, args string, msgFilter msgOwnershipFilter, opts listOpts) (*user.User, string, int, error) {
 	baseFilter := withPrivacy(privateMailReaderFor(c.e, c.userManager, c.currentUser), msgFilter)
 	matcher := twitMatcher(c.e, c.userManager, c.currentUser)
 	msgFilter = withTwit(func() *user.TwitMatcher { return matcher }, baseFilter, nil)
@@ -36,7 +54,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 		slog.Warn("LISTMSGS called without logged in user", "node", nodeNumber)
 		e.writeString(terminal, outputMode, e.Strings().MsgListLoginRequired)
 		uiPause(1 * time.Second)
-		return nil, "", nil
+		return nil, "", 0, nil
 	}
 
 	// Check if user has selected a message area
@@ -44,7 +62,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 	if currentAreaID == 0 {
 		e.writeString(terminal, outputMode, e.Strings().MsgListNoAreaSelected)
 		uiPause(1 * time.Second)
-		return currentUser, "", nil
+		return currentUser, "", 0, nil
 	}
 
 	// Get area information
@@ -52,7 +70,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 	if !found {
 		e.writeString(terminal, outputMode, e.Strings().MsgListAreaNotFound)
 		uiPause(1 * time.Second)
-		return currentUser, "", nil
+		return currentUser, "", 0, nil
 	}
 
 	// Get conference name
@@ -63,20 +81,33 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 		}
 	}
 
+	// Flat or threaded: as the reader asked, else as the caller last had it.
+	threaded := sessionListThreaded(s)
+	if opts.fromReader {
+		threaded = opts.threaded
+		setSessionListThreaded(s, threaded)
+	}
+	build := func(threaded bool) ([]MessageListEntry, int, error) {
+		if threaded {
+			return buildThreadedMessageList(e.MessageMgr, currentAreaID, currentUser.Handle, msgFilter)
+		}
+		return buildMessageList(e.MessageMgr, currentAreaID, currentUser.Handle, msgFilter)
+	}
+
 	// Build message list
-	entries, lastRead, err := buildMessageList(e.MessageMgr, currentAreaID, currentUser.Handle, msgFilter)
+	entries, lastRead, err := build(threaded)
 	if err != nil {
 		slog.Error("failed to build message list", "node", nodeNumber, "error", err)
 		e.writeString(terminal, outputMode, e.Strings().MsgListLoadError)
 		uiPause(1 * time.Second)
-		return currentUser, "", nil
+		return currentUser, "", 0, nil
 	}
 
 	// Check if area is empty
 	if len(entries) == 0 {
 		e.writeString(terminal, outputMode, e.Strings().MsgListNoMessages)
 		uiPause(2 * time.Second)
-		return currentUser, "", nil
+		return currentUser, "", 0, nil
 	}
 
 	// Derive an effective terminal height.
@@ -110,6 +141,26 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 		ItemsPerPage:  itemsPerPage,
 		SelectedIndex: 0,
 		LastRead:      lastRead,
+		Threaded:      threaded,
+	}
+	state.selectMessage(opts.startMsg)
+
+	// rebuild reloads the list in mode threaded (new posts, deletions, read
+	// markers) and puts the cursor back on message n, or near where it was.
+	rebuild := func(threaded bool, n int) {
+		newEntries, newLastRead, rebuildErr := build(threaded)
+		if rebuildErr != nil {
+			slog.Error("failed to rebuild message list", "node", nodeNumber, "error", rebuildErr)
+			return
+		}
+		state.Threaded = threaded
+		state.Entries = newEntries
+		state.TotalMessages = len(newEntries)
+		state.LastRead = newLastRead
+		if state.CurrentPage > state.totalPages() {
+			state.CurrentPage = state.totalPages()
+		}
+		state.selectMessage(n)
 	}
 
 	// Main navigation loop
@@ -121,9 +172,9 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 	}()
 
 	// Draw initial screen
-	if err := drawMessageListScreen(terminal, state, area.Name, confName, outputMode); err != nil {
+	if err := drawMessageListScreen(terminal, state, area.Name, confName, outputMode, e.Strings()); err != nil {
 		slog.Error("failed to draw message list", "node", nodeNumber, "error", err)
-		return currentUser, "", err
+		return currentUser, "", 0, err
 	}
 
 	previousIndex := state.SelectedIndex // Track previous selection for optimized refresh
@@ -133,14 +184,34 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 		action, selectedMsg, err := runMessageListNavigation(sessionIH, state)
 		if err != nil {
 			slog.Error("navigation error", "node", nodeNumber, "error", err)
-			return currentUser, "LOGOFF", err
+			return currentUser, "LOGOFF", 0, err
 		}
 
 		switch action {
 		case "QUIT":
-			return currentUser, "", nil
+			if opts.fromReader {
+				return currentUser, "READ", opts.startMsg, nil
+			}
+			return currentUser, "", 0, nil
+
+		case "TOGGLE":
+			cur := 0
+			if i := state.selectedAbsolute(); state.selectable(i) {
+				cur = state.Entries[i].MsgNum
+			}
+			setSessionListThreaded(s, !state.Threaded)
+			rebuild(!state.Threaded, cur)
+			if err := drawMessageListScreen(terminal, state, area.Name, confName, outputMode, e.Strings()); err != nil {
+				slog.Error("failed to redraw message list", "node", nodeNumber, "error", err)
+				return currentUser, "", 0, err
+			}
+			previousIndex = state.SelectedIndex
 
 		case "READ":
+			if opts.fromReader {
+				// The reader that opened the list shows the message itself.
+				return currentUser, "READ", selectedMsg, nil
+			}
 			// Get terminal dimensions from user preferences
 			tw := currentUser.ScreenWidth
 			if tw == 0 {
@@ -160,69 +231,47 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 				areaMsgCount = selectedMsg
 			}
 
-			// Call message reader
-			_, nextAction, err := runMessageReader(e, s, terminal, userManager,
+			// Call message reader. It knows it was opened from here, so its
+			// V and L come back rather than opening a second list.
+			_, nextAction, lastMsg, err := runMessageReaderOpts(e, s, terminal, userManager,
 				currentUser, nodeNumber, sessionStartTime, outputMode,
-				selectedMsg, areaMsgCount, false, tw, th, baseFilter)
+				selectedMsg, areaMsgCount, false, tw, th, baseFilter, readerOpts{fromList: true})
 
 			if err != nil {
 				slog.Error("message reader error", "node", nodeNumber, "error", err)
-				return currentUser, "", err
+				return currentUser, "", 0, err
 			}
 
 			// Handle return action
 			if nextAction == "LOGOFF" {
-				return currentUser, "LOGOFF", nil
+				return currentUser, "LOGOFF", 0, nil
 			}
 
 			matcher = twitMatcher(e, userManager, currentUser)
-			// Rebuild list to pick up posted/deleted messages and updated lastread markers
-			newEntries, newLastRead, rebuildErr := buildMessageList(e.MessageMgr, currentAreaID, currentUser.Handle, msgFilter)
-			if rebuildErr != nil {
-				slog.Error("failed to rebuild message list", "node", nodeNumber, "error", rebuildErr)
-			} else {
-				state.Entries = newEntries
-				state.TotalMessages = len(newEntries)
-				state.LastRead = newLastRead
-
-				// Clamp page/selection if messages were deleted
-				totalPages := (state.TotalMessages + state.ItemsPerPage - 1) / state.ItemsPerPage
-				if totalPages < 1 {
-					totalPages = 1
-				}
-				if state.CurrentPage > totalPages {
-					state.CurrentPage = totalPages
-				}
-				_, end := calculatePagination(len(state.Entries), state.ItemsPerPage, state.CurrentPage)
-				start, _ := calculatePagination(len(state.Entries), state.ItemsPerPage, state.CurrentPage)
-				itemsOnPage := end - start
-				if state.SelectedIndex >= itemsOnPage {
-					state.SelectedIndex = itemsOnPage - 1
-				}
-				if state.SelectedIndex < 0 {
-					state.SelectedIndex = 0
-				}
-			}
+			// Rebuild list to pick up posted/deleted messages and updated
+			// lastread markers, in the mode the reader's V or L asked for,
+			// with the cursor on the message that was being read.
+			rebuild(sessionListThreaded(s), lastMsg)
 
 			// Handle empty area after deletions
 			if state.TotalMessages == 0 {
 				e.writeString(terminal, outputMode, e.Strings().MsgListNoMessages)
 				uiPause(2 * time.Second)
-				return currentUser, "", nil
+				return currentUser, "", 0, nil
 			}
 
 			// Redraw full screen after returning from reader
-			if err := drawMessageListScreen(terminal, state, area.Name, confName, outputMode); err != nil {
+			if err := drawMessageListScreen(terminal, state, area.Name, confName, outputMode, e.Strings()); err != nil {
 				slog.Error("failed to redraw message list", "node", nodeNumber, "error", err)
-				return currentUser, "", err
+				return currentUser, "", 0, err
 			}
 			previousIndex = state.SelectedIndex // Track highlighted line after redraw
 
 		case "REFRESH_FULL":
 			// Optimized page refresh (only redraw message lines and page info, no screen clear)
-			if err := refreshPageContent(terminal, state, outputMode); err != nil {
+			if err := refreshPageContent(terminal, state, outputMode, e.Strings()); err != nil {
 				slog.Error("failed to refresh page content", "node", nodeNumber, "error", err)
-				return currentUser, "", err
+				return currentUser, "", 0, err
 			}
 			previousIndex = state.SelectedIndex // Track highlighted line after redraw
 
@@ -236,7 +285,7 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 				actualIndex := start + previousIndex
 				if actualIndex < len(state.Entries) {
 					row := 6 + previousIndex
-					_ = drawMessageLineAtRow(terminal, state.Entries[actualIndex], row, false, outputMode) // best-effort redraw
+					_ = drawMessageLineAtRow(terminal, state.Entries[actualIndex], row, false, outputMode, e.Strings()) // best-effort redraw
 				}
 			}
 
@@ -245,14 +294,14 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 				actualIndex := start + state.SelectedIndex
 				if actualIndex < len(state.Entries) {
 					row := 6 + state.SelectedIndex
-					_ = drawMessageLineAtRow(terminal, state.Entries[actualIndex], row, true, outputMode) // best-effort redraw
+					_ = drawMessageLineAtRow(terminal, state.Entries[actualIndex], row, true, outputMode, e.Strings()) // best-effort redraw
 				}
 			}
 
 			previousIndex = state.SelectedIndex
 
 		case "ERROR":
-			return currentUser, "LOGOFF", err
+			return currentUser, "LOGOFF", 0, err
 		}
 	}
 }

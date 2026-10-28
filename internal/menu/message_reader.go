@@ -146,6 +146,27 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	sessionStartTime time.Time, outputMode ansi.OutputMode,
 	startMsg int, totalMsgCount int, isNewScan bool,
 	termWidth int, termHeight int, msgFilter msgOwnershipFilter, counters ...*twitScanCounter) (*user.User, string, error) {
+	u, action, _, err := runMessageReaderOpts(e, s, terminal, userManager, currentUser, nodeNumber,
+		sessionStartTime, outputMode, startMsg, totalMsgCount, isNewScan, termWidth, termHeight, msgFilter, readerOpts{}, counters...)
+	return u, action, err
+}
+
+// readerOpts is how the reader was opened.
+type readerOpts struct {
+	// fromList is set when the message list opened the reader. V and L then
+	// return "LIST" (after recording the mode asked for) instead of opening
+	// a second list over the first, and the list re-selects the message.
+	fromList bool
+}
+
+// runMessageReaderOpts is runMessageReader with readerOpts. The extra result
+// is the message the reader was on when it returned, for a list to put its
+// cursor back on.
+func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
+	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
+	sessionStartTime time.Time, outputMode ansi.OutputMode,
+	startMsg int, totalMsgCount int, isNewScan bool,
+	termWidth int, termHeight int, msgFilter msgOwnershipFilter, opts readerOpts, counters ...*twitScanCounter) (*user.User, string, int, error) {
 
 	baseFilter := withPrivacy(privateMailReaderFor(e, userManager, currentUser), msgFilter)
 	matcher := twitMatcher(e, userManager, currentUser)
@@ -196,7 +217,7 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		if hdrErr != nil {
 			e.writeString(terminal, outputMode, e.Strings().MsgHdrLoadError)
 			uiPause(1 * time.Second)
-			return nil, "", fmt.Errorf("failed loading MSGHDR templates")
+			return nil, "", startMsg, fmt.Errorf("failed loading MSGHDR templates")
 		}
 	}
 
@@ -526,10 +547,10 @@ readerLoop:
 				key, keyErr = sessionIH.ReadKey()
 				if keyErr != nil {
 					if errors.Is(keyErr, editor.ErrIdleTimeout) {
-						return nil, "LOGOFF", editor.ErrIdleTimeout
+						return nil, "LOGOFF", currentMsgNum, editor.ErrIdleTimeout
 					}
 					if errors.Is(keyErr, io.EOF) {
-						return nil, "LOGOFF", io.EOF
+						return nil, "LOGOFF", currentMsgNum, io.EOF
 					}
 					continue
 				}
@@ -600,10 +621,10 @@ readerLoop:
 				selKey, passKey, lbErr := runMsgLightbar(sessionIH, terminal, activeOptions, outputMode, hiColor, loColor, suffixText, initialDir, true, boundsColor, readerScrollKeys)
 				if lbErr != nil {
 					if errors.Is(lbErr, editor.ErrIdleTimeout) {
-						return nil, "LOGOFF", editor.ErrIdleTimeout
+						return nil, "LOGOFF", currentMsgNum, editor.ErrIdleTimeout
 					}
 					if errors.Is(lbErr, io.EOF) {
-						return nil, "LOGOFF", io.EOF
+						return nil, "LOGOFF", currentMsgNum, io.EOF
 					}
 					slog.Error("lightbar error", "node", nodeNumber, "error", lbErr)
 					break readerLoop
@@ -624,7 +645,7 @@ readerLoop:
 					// Check if it's a direct command key
 					switch unicode.ToUpper(singleKey) {
 					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'K', 'I', '?',
-						'U', 'F', 'X', '[', ']':
+						'U', 'F', 'X', '[', ']', 'V':
 						selectedKey = unicode.ToUpper(singleKey)
 					default:
 						// Not a recognized command, show lightbar
@@ -636,10 +657,10 @@ readerLoop:
 						selKey, passKey, lbErr := runMsgLightbar(sessionIH, terminal, activeOptions, outputMode, hiColor, loColor, suffixText, 0, true, boundsColor, readerScrollKeys)
 						if lbErr != nil {
 							if errors.Is(lbErr, editor.ErrIdleTimeout) {
-								return nil, "LOGOFF", editor.ErrIdleTimeout
+								return nil, "LOGOFF", currentMsgNum, editor.ErrIdleTimeout
 							}
 							if errors.Is(lbErr, io.EOF) {
-								return nil, "LOGOFF", io.EOF
+								return nil, "LOGOFF", currentMsgNum, io.EOF
 							}
 							slog.Error("lightbar error", "node", nodeNumber, "error", lbErr)
 							break readerLoop
@@ -667,10 +688,10 @@ readerLoop:
 					selKey, passKey, lbErr := runMsgLightbar(sessionIH, terminal, activeOptions, outputMode, hiColor, loColor, suffixText, 0, true, boundsColor, readerScrollKeys)
 					if lbErr != nil {
 						if errors.Is(lbErr, editor.ErrIdleTimeout) {
-							return nil, "LOGOFF", editor.ErrIdleTimeout
+							return nil, "LOGOFF", currentMsgNum, editor.ErrIdleTimeout
 						}
 						if errors.Is(lbErr, io.EOF) {
-							return nil, "LOGOFF", io.EOF
+							return nil, "LOGOFF", currentMsgNum, io.EOF
 						}
 						slog.Error("lightbar error", "node", nodeNumber, "error", lbErr)
 						break readerLoop
@@ -713,7 +734,7 @@ readerLoop:
 				replyResult := handleReply(e, s, sessionIH, terminal, userManager, currentUser, nodeNumber,
 					outputMode, currentMsg, currentAreaID, &totalMsgCount, confName, areaName, termWidth, termHeight)
 				if replyResult == "LOGOFF" {
-					return nil, "LOGOFF", io.EOF
+					return nil, "LOGOFF", currentMsgNum, io.EOF
 				}
 				// Redraw message after reply
 				needsRedraw = true
@@ -785,7 +806,7 @@ readerLoop:
 				}
 				answer, confirmErr := promptSingleChar(reader, terminal, fmt.Sprintf(e.Strings().TwitQuickConfirm, strings.ReplaceAll(currentMsg.From, "|", "||")), outputMode)
 				if confirmErr != nil {
-					return currentUser, "LOGOFF", confirmErr
+					return currentUser, "LOGOFF", currentMsgNum, confirmErr
 				}
 				ctx := &cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, outputMode: outputMode}
 				if answer == 'Y' && addTwit(ctx, name) {
@@ -841,16 +862,35 @@ readerLoop:
 				needsRedraw = true
 				continue
 
-			case 'L': // List messages in current area
-				updatedUser, nextAction, listErr := runListMsgsFiltered(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "", baseFilter)
+			case 'L', 'V': // List messages in current area: L flat, V threaded
+				threaded := selectedKey == 'V'
+				if opts.fromList {
+					// The list under this reader shows itself again, in the
+					// mode asked for, with the cursor on this message.
+					setSessionListThreaded(s, threaded)
+					return currentUser, "LIST", currentMsgNum, nil
+				}
+				updatedUser, nextAction, listMsg, listErr := runListMsgsWith(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "", baseFilter,
+					listOpts{fromReader: true, startMsg: currentMsgNum, threaded: threaded})
 				if updatedUser != nil {
 					currentUser = updatedUser
 				}
 				if listErr != nil || nextAction == "LOGOFF" {
-					return currentUser, "LOGOFF", listErr
+					return currentUser, "LOGOFF", currentMsgNum, listErr
 				}
 				matcher = twitMatcher(e, userManager, currentUser)
-				// Reload through the visibility boundary after nested readers edit the list.
+				// The list picked a message (Enter) or came back (V, Q, Esc)
+				// to the one it was opened from; show it here, with the area's
+				// count refreshed in case the list showed newer posts.
+				if nextAction == "READ" && listMsg > 0 {
+					if listMsg > totalMsgCount {
+						if n, err := e.MessageMgr.GetMessageCountForArea(currentAreaID); err == nil && n > totalMsgCount {
+							totalMsgCount = n
+						}
+					}
+					navDir = 1
+					currentMsgNum = listMsg
+				}
 				break scrollLoop
 
 			case 'D': // Delete message (sysop/co-sysop only)
@@ -905,10 +945,10 @@ readerLoop:
 				}
 				if vErr := showKludgeView(sessionIH, terminal, outputMode, currentMsg.MsgNum, kludges, termWidth, termHeight); vErr != nil {
 					if errors.Is(vErr, editor.ErrIdleTimeout) {
-						return nil, "LOGOFF", editor.ErrIdleTimeout
+						return nil, "LOGOFF", currentMsgNum, editor.ErrIdleTimeout
 					}
 					if errors.Is(vErr, io.EOF) {
-						return nil, "LOGOFF", io.EOF
+						return nil, "LOGOFF", currentMsgNum, io.EOF
 					}
 				}
 				needsRedraw = true
@@ -937,9 +977,9 @@ readerLoop:
 	}
 
 	if quitNewscan {
-		return nil, "QUIT_NEWSCAN", nil
+		return nil, "QUIT_NEWSCAN", currentMsgNum, nil
 	}
-	return nil, "", nil
+	return nil, "", currentMsgNum, nil
 }
 
 // readerThreadView builds the thread view for the message the reader is on.

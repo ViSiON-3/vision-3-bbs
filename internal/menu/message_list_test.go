@@ -325,7 +325,7 @@ func TestDrawMessageListScreenHelpLineCenteringIsRuneBased(t *testing.T) {
 				TotalMessages: 0,
 			}
 
-			if err := drawMessageListScreen(terminal, state, "General", "Main", tc.mode); err != nil {
+			if err := drawMessageListScreen(terminal, state, "General", "Main", tc.mode, nil); err != nil {
 				t.Fatalf("drawMessageListScreen: %v", err)
 			}
 
@@ -365,7 +365,7 @@ func TestDrawMessageListScreenNonASCIITitleDoesNotPanic(t *testing.T) {
 	// 40 CJK runes: well under the 75-rune clamp, but 120 bytes.
 	areaName := strings.Repeat("日", 40)
 
-	if err := drawMessageListScreen(terminal, state, areaName, "Main", ansi.OutputModeUTF8); err != nil {
+	if err := drawMessageListScreen(terminal, state, areaName, "Main", ansi.OutputModeUTF8, nil); err != nil {
 		t.Fatalf("drawMessageListScreen: %v", err)
 	}
 
@@ -438,7 +438,7 @@ func TestMessageListRowWidthIsExact(t *testing.T) {
 				t.Run(fmt.Sprintf("%s/%v/hl=%v", tc.name, mode, hl), func(t *testing.T) {
 					ts := newTestSession("")
 					terminal := newTestTerminal(ts)
-					if err := drawMessageListLine(terminal, tc.entry, hl, mode); err != nil {
+					if err := drawMessageListLine(terminal, tc.entry, hl, mode, nil); err != nil {
 						t.Fatalf("drawMessageListLine: %v", err)
 					}
 					line := strings.TrimRight(strings.Split(ts.output(), "\n")[0], "\r")
@@ -458,7 +458,7 @@ func TestMessageListHeaderMatchesRowWidth(t *testing.T) {
 	ts := newTestSession("")
 	terminal := newTestTerminal(ts)
 	state := &MessageListState{Entries: []MessageListEntry{}, CurrentPage: 1, ItemsPerPage: 5}
-	if err := drawMessageListScreen(terminal, state, "General", "Main", ansi.OutputModeUTF8); err != nil {
+	if err := drawMessageListScreen(terminal, state, "General", "Main", ansi.OutputModeUTF8, nil); err != nil {
 		t.Fatalf("drawMessageListScreen: %v", err)
 	}
 	for _, line := range strings.Split(ts.output(), "\n") {
@@ -480,7 +480,7 @@ func TestMessageListShowsTheMessageDate(t *testing.T) {
 		MsgNum: 42, Subject: "Hi", From: "a", To: "All",
 		Date: time.Date(2019, 3, 7, 12, 0, 0, 0, time.UTC),
 	}
-	if err := drawMessageListLine(terminal, entry, false, ansi.OutputModeUTF8); err != nil {
+	if err := drawMessageListLine(terminal, entry, false, ansi.OutputModeUTF8, nil); err != nil {
 		t.Fatalf("drawMessageListLine: %v", err)
 	}
 	stripped := testAnsiEscape.ReplaceAllString(ts.output(), "")
@@ -508,7 +508,7 @@ func TestMessageListCP437FieldsSurviveTruncation(t *testing.T) {
 
 	ts := newTestSession("")
 	terminal := newTestTerminal(ts)
-	if err := drawMessageListLine(terminal, entry, false, ansi.OutputModeCP437); err != nil {
+	if err := drawMessageListLine(terminal, entry, false, ansi.OutputModeCP437, nil); err != nil {
 		t.Fatalf("drawMessageListLine: %v", err)
 	}
 	out := []byte(ts.output())
@@ -535,7 +535,7 @@ func TestMessageListUTF8FieldsKeepAccents(t *testing.T) {
 	}
 	ts := newTestSession("")
 	terminal := newTestTerminal(ts)
-	if err := drawMessageListLine(terminal, entry, false, ansi.OutputModeUTF8); err != nil {
+	if err := drawMessageListLine(terminal, entry, false, ansi.OutputModeUTF8, nil); err != nil {
 		t.Fatalf("drawMessageListLine: %v", err)
 	}
 	out := ts.output()
