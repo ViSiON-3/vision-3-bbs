@@ -344,7 +344,7 @@ Current user with live accessor properties and write support. All properties ref
 |-------|------|-------------|
 | `"realName"` | string | User's real name |
 | `"location"` | string | User's location |
-| `"screenWidth"` | number | Terminal width preference |
+| `"screenWidth"` | number | Terminal width preference, held to 80–255 |
 | `"screenHeight"` | number | Terminal height preference |
 
 ```javascript

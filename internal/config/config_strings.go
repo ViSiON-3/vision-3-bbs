@@ -253,7 +253,7 @@ var StringFallbacks = map[string]string{
 	"konfigSectionPersonal":     "Personal",
 	"konfigSectionFiles":        "Files",
 	"konfigScreenWidthLabel":    "Screen Width",
-	"konfigScreenWidthHelp":     "Columns your terminal shows (40-255). Used for layout and word wrap.",
+	"konfigScreenWidthHelp":     "Columns your terminal shows (80-255). Used for layout and word wrap.",
 	"konfigScreenHeightLabel":   "Screen Height",
 	"konfigScreenHeightHelp":    "Rows your terminal shows (21-60). Used for paging and full-screen views.",
 	"konfigEncodingLabel":       "Encoding",
@@ -382,6 +382,10 @@ var StringSuperseded = map[string][]string{
 	// #697 added [A]sk each post.
 	"konfigAutoSigChoice": {
 		"|15Auto-Signature|08: |08[|15E|08]|07dit  |08[|15D|08]|07elete  |08[|15Esc|08]|07 Cancel",
+	},
+	// The minimum screen width went from 40 to 80.
+	"konfigScreenWidthHelp": {
+		"Columns your terminal shows (40-255). Used for layout and word wrap.",
 	},
 }
 

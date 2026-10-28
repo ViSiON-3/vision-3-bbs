@@ -293,7 +293,7 @@
   "konfigSavedFormat": "|10Saved.|07 %s is now |15%s|07.",
   "konfigScreenHeightHelp": "Rows your terminal shows (21-60). Used for paging and full-screen views.",
   "konfigScreenHeightLabel": "Screen Height",
-  "konfigScreenWidthHelp": "Columns your terminal shows (40-255). Used for layout and word wrap.",
+  "konfigScreenWidthHelp": "Columns your terminal shows (80-255). Used for layout and word wrap.",
   "konfigScreenWidthLabel": "Screen Width",
   "konfigSectionFiles": "Files",
   "konfigSectionMessages": "Messages",

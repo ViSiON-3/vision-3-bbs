@@ -190,7 +190,7 @@ found or cannot be loaded.
 | Validated | `validated` | |
 | Hot Keys | `hotKeys` | |
 | More Prompts | `morePrompts` | Stored, not used |
-| Screen Width / Height | `screenWidth` / `screenHeight` | 40–200 / 24–60 |
+| Screen Width / Height | `screenWidth` / `screenHeight` | 80–255 / 24–60 |
 | Encoding | `preferredEncoding` | blank, `utf8` or `cp437` |
 | Msg Header | `msgHdr` | 0–99 |
 | Output Mode | `outputMode` | Legacy, not read |

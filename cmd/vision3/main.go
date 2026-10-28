@@ -1456,8 +1456,15 @@ func sessionHandler(s ssh.Session) {
 		}
 	}
 
-	// Determine effective terminal size based on user preferences and manual adjustments
+	// Determine effective terminal size based on user preferences and manual
+	// adjustments. Screens are laid out for 80 columns, so a narrower terminal
+	// still gets 80: comparing or saving its real width would only offer a
+	// width the board does not lay out for.
 	effectiveWidth := int(termWidth.Load())
+	if w := user.ClampScreenWidth(effectiveWidth); w != effectiveWidth {
+		effectiveWidth = w
+		termWidth.Store(int32(w))
+	}
 	effectiveHeight := int(termHeight.Load())
 
 	// Capture whether user needs first-time setup BEFORE auto-saving dimensions
