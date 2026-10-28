@@ -31,10 +31,39 @@ func threadGlyphsFor(mode ansi.OutputMode) threadGlyphs {
 	return threadGlyphs{marker: "►", up: "↑", down: "↓", right: "→", ellipsis: "…"}
 }
 
+// threadPlainText prepares text taken from a message (a subject, a handle,
+// a body line) for a pane or signpost cell. A body stored as raw CP437, as
+// imported echomail can be, is decoded so it is clipped by character; then
+// escape sequences and control characters are dropped, so a message cannot
+// clear the screen or move the cursor from inside the pane.
+//
+// Pipes are left in. The finished cell is passed through the pipe-code
+// expander with the colours around it, so threadEscapePipes doubles them
+// after the cell has been fitted, where the extra byte costs no column.
+func threadPlainText(s string) string {
+	if !utf8.ValidString(s) {
+		s = string(ansi.CP437BytesToUTF8([]byte(s)))
+	}
+	s = ansi.StripAnsi(s)
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// threadEscapePipes doubles each pipe so the expander prints it rather than
+// reading a colour code out of the message. Applied after fitting: "||"
+// still draws as one column.
+func threadEscapePipes(s string) string {
+	return strings.ReplaceAll(s, "|", "||")
+}
+
 // threadCell clips s to width columns with g's ellipsis and pads it, in the
 // terminal's encoding, as listCell does for the message list.
 func threadCell(s string, width int, g threadGlyphs, mode ansi.OutputMode) string {
-	s = ansi.TruncateRunes(s, width, g.ellipsis)
+	s = ansi.TruncateRunes(threadPlainText(s), width, g.ellipsis)
 	n := utf8.RuneCountInString(s)
 	if mode == ansi.OutputModeCP437 {
 		s = toCP437Safe(s)
@@ -42,20 +71,22 @@ func threadCell(s string, width int, g threadGlyphs, mode ansi.OutputMode) strin
 	if n < width {
 		s += strings.Repeat(" ", width-n)
 	}
-	return s
+	return threadEscapePipes(s)
 }
 
 // threadText converts s for the terminal without padding it.
 func threadText(s string, mode ansi.OutputMode) string {
+	s = threadPlainText(s)
 	if mode == ansi.OutputModeCP437 {
-		return toCP437Safe(s)
+		s = toCP437Safe(s)
 	}
-	return s
+	return threadEscapePipes(s)
 }
 
 // threadCols is the column count of text threadText produced: one per
-// byte in CP437, one per rune in UTF-8.
+// byte in CP437, one per rune in UTF-8, with a doubled pipe as one.
 func threadCols(s string, mode ansi.OutputMode) int {
+	s = strings.ReplaceAll(s, "||", "|")
 	if mode == ansi.OutputModeCP437 {
 		return len(s)
 	}
@@ -64,7 +95,11 @@ func threadCols(s string, mode ansi.OutputMode) int {
 
 // excerpt is the line of body that stands for the message in a thread
 // view: the first that is not blank, quoted, a tear line or an origin line.
+// A body stored as raw CP437 is decoded first, so the line is text.
 func excerpt(body string) string {
+	if !utf8.ValidString(body) {
+		body = string(ansi.CP437BytesToUTF8([]byte(body)))
+	}
 	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimRight(line, "\r")
 		if strings.TrimSpace(line) == "" || isQuoteLine(line) || isTearLine(line) || isOriginLine(line) {
@@ -162,6 +197,7 @@ func renderSignposts(segs []signpost, width int, g threadGlyphs, mode ansi.Outpu
 
 	var named []*seg
 	for _, p := range parts {
+		p.handle = threadPlainText(p.handle)
 		if p.target != 0 && !p.deleted && p.handle != "" {
 			named = append(named, p)
 		}
@@ -236,7 +272,7 @@ func renderThreadPane(tv *threadView, rows, width int, title string, g threadGly
 	subjectRoom := width - utf8.RuneCountInString(left) - 1 - utf8.RuneCountInString(right) - 2 - 3
 	subject := ""
 	if subjectRoom >= minSubjectRoom {
-		subject = ansi.TruncateRunes(tv.rootSubject(), subjectRoom, g.ellipsis) + " "
+		subject = ansi.TruncateRunes(threadPlainText(tv.rootSubject()), subjectRoom, g.ellipsis) + " "
 	}
 	fill := width - utf8.RuneCountInString(left) - utf8.RuneCountInString(subject) - utf8.RuneCountInString(right) - 2
 	lines = append(lines, "|08──|03"+title+"|08─ |11"+threadText(subject, mode)+
