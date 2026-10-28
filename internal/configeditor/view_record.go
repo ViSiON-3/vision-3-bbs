@@ -60,7 +60,9 @@ func (m Model) viewRecordEdit() string {
 	// unless the active field's help wraps to a second line.
 	helpRegionRows := m.fieldHelpRegionRows(m.recordFields, boxW)
 	extraV := maxInt(0, m.height-visibleRows-9-helpRegionRows)
-	topPad := extraV / 2
+	// An odd spare row goes above the box: the help region already ends in a
+	// blank separator, so rounding down would leave the box sitting low.
+	topPad := (extraV + 1) / 2
 	bottomPad := extraV - topPad
 
 	for i := 0; i < topPad; i++ {

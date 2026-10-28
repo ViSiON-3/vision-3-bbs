@@ -65,3 +65,29 @@ func TestDoorTextFieldsScrollPastWidth(t *testing.T) {
 		})
 	}
 }
+
+// At the minimum 80x25 the door editor has one spare row; it belongs above
+// the box, since the help region below already ends in a blank separator.
+func TestDoorEditCenteredAtMinHeight(t *testing.T) {
+	m := newDoorModel(map[string]config.DoorConfig{
+		"LORD": {Code: "LORD", Name: "LORD", Commands: []string{"/opt/lord/start.sh"}},
+	})
+	m.width, m.height = 80, 25
+	m.mode = modeRecordEdit
+	m.recordFields = m.buildRecordFields()
+
+	lines := strings.Split(m.viewRecordEdit(), "\n")
+	top, bottom := -1, -1
+	for i, l := range lines {
+		if strings.Contains(l, "┌") {
+			top = i
+		}
+		if strings.Contains(l, "└") {
+			bottom = i
+		}
+	}
+	// header(0), blank(1), box(2..20), help region(21..23), footer(24)
+	if top != 2 || bottom != 20 {
+		t.Errorf("box spans rows %d..%d, want 2..20", top, bottom)
+	}
+}
