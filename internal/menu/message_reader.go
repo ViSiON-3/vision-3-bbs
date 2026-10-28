@@ -372,11 +372,7 @@ readerLoop:
 				wrappedBodyLines[i] = string(ansi.CP437BytesToUTF8([]byte(line)))
 			}
 		} else {
-			// Regular text message - use normal wrapping. Word wrap cannot
-			// break a run with no spaces (an ASCII rule, a row of blocks) or a
-			// quote line, which it leaves alone; cut whatever is still too
-			// wide, or it spills onto the row below when drawn.
-			wrappedBodyLines = breakOversizedLines(wrapAnsiString(processedBodyStr, termWidth, outputMode), termWidth, outputMode)
+			wrappedBodyLines = wrapTextBody(processedBodyStr, termWidth, outputMode)
 		}
 
 		// Calculate available body height

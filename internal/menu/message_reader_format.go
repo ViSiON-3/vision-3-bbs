@@ -3,7 +3,34 @@ package menu
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
+
+// bodyAsUTF8 settles a message body's encoding once, for the whole body: a
+// body that is not valid UTF-8 is CP437 throughout and is converted to UTF-8.
+//
+// Left to the writer, the decision is made per span between escape sequences
+// and per wrapped line, and a CP437 run cut short by a colour change is often
+// valid UTF-8 on its own — ▄▒ (DC B1) decodes as U+0731 — so two cells of art
+// went out as one unrelated character, or as '?' on a CP437 terminal. Once the
+// body is UTF-8 every span agrees, and a CP437 terminal gets the original
+// bytes back from the writer.
+func bodyAsUTF8(body string) string {
+	if utf8.ValidString(body) {
+		return body
+	}
+	return string(ansi.CP437BytesToUTF8([]byte(body)))
+}
+
+// wrapTextBody cuts a message body that is not ANSI art into the lines the
+// reader paints. Word wrap cannot break a run with no spaces (an ASCII rule, a
+// row of blocks) or a quote line, which it leaves alone; whatever is still
+// too wide is cut, or it spills onto the row below when drawn.
+func wrapTextBody(body string, width int, mode ansi.OutputMode) []string {
+	return breakOversizedLines(wrapAnsiString(bodyAsUTF8(body), width, mode), width, mode)
+}
 
 func hasOriginLine(text string) bool {
 	if text == "" {

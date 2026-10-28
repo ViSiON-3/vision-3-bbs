@@ -152,7 +152,9 @@ var UnicodeToCP437 = map[rune]byte{
 	'≡': 0xF0, '±': 0xF1, '≥': 0xF2, '≤': 0xF3, '⌠': 0xF4, '⌡': 0xF5, '÷': 0xF6, '≈': 0xF7,
 	'°': 0xF8, '∙': 0xF9, '·': 0xFA, '√': 0xFB, 'ⁿ': 0xFC, '²': 0xFD,
 	// 0xFE is ■ above
-	// ' ': 0xFF, // Avoid mapping NBSP rune to 0xFF
+	// 0xFF is a blank cell. It decodes to NBSP, so NBSP has to encode back
+	// to it, or CP437 text converted to UTF-8 loses its blanks to '?'.
+	'\u00a0': 0xFF,
 }
 
 // Common pipe code replacements map - Based on ViSiON/2 GenTypes.pas VColor array

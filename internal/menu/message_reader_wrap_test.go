@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -8,6 +9,7 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 )
 
 // codefenixSignature is the tail of a real fsxNet message (21:4/141) as it is
@@ -24,10 +26,19 @@ const codefenixSignature = "Good to be back!\r" +
 
 // readBodyForTest mirrors what the message reader does to a body before it
 // paints it: format, expand colour pipe codes, wrap to the terminal width and
-// cut whatever is still too wide.
+// cut whatever is still too wide. Each line is returned as a CP437 terminal
+// is sent it, so a CP437 fixture comes back in its own bytes, one per column.
 func readBodyForTest(body string, termWidth int) []string {
 	formatted := formatMessageBody(body, "", false, nil)
-	return breakOversizedLines(wrapAnsiString(string(ansi.ReplaceColorPipeCodes([]byte(formatted))), termWidth, ansi.OutputModeUTF8), termWidth, ansi.OutputModeUTF8)
+	lines := wrapTextBody(string(ansi.ReplaceColorPipeCodes([]byte(formatted))), termWidth, ansi.OutputModeCP437)
+	for i, ln := range lines {
+		var out bytes.Buffer
+		if err := terminalio.WriteStringCP437(&out, []byte(ln), ansi.OutputModeCP437); err != nil {
+			panic(err)
+		}
+		lines[i] = out.String()
+	}
+	return lines
 }
 
 // A signature block that already fits the terminal must reach the screen
@@ -348,5 +359,52 @@ func TestMessageBodyMeasuresCP437SplitByEscapes(t *testing.T) {
 	}
 	if got := visibleCols(strings.Join(lines, "")); got != 16 {
 		t.Errorf("wrapped body has %d columns, want all 16 kept", got)
+	}
+}
+
+// stingRayRow is a row of a real DOVE-Net ANSI ad as stored in the JAM base:
+// CP437, coloured but not positioned, so it is read as text. ▄▒ (DC B1) sits
+// alone between two colour changes, and on its own that pair is valid UTF-8.
+const stingRayRow = "             \x1b[34m\xdc\xdf\xb1\xb0\xdb\xb0\xb2\x1b[0;34m\xb0\xb1\xb0\xb2" +
+	"\x1b[1m\xdc\xb1\x1b[0m\xdb\xdb\x1b[1;30m\xdb\x1b[0m  \x1b[1mANetBBS\x1b[0m   \x1b[1;30m\xdb\x1b[0m\xdb\xdb\r"
+
+// A CP437 body draws the same on either terminal however its colour changes
+// cut it up. Judged span by span, the lone ▄▒ was taken for U+0731: a UTF-8
+// terminal got a Syriac combining mark and a CP437 terminal got '?', one cell
+// where the art has two.
+func TestMessageBodyCP437PairBetweenEscapes(t *testing.T) {
+	for _, tc := range []struct {
+		mode ansi.OutputMode
+		want string
+	}{
+		{ansi.OutputModeUTF8, "▄▒███  ANetBBS   ███"},
+		{ansi.OutputModeCP437, "\xdc\xb1\xdb\xdb\xdb  ANetBBS   \xdb\xdb\xdb"},
+	} {
+		var out bytes.Buffer
+		for _, ln := range wrapTextBody(stingRayRow, 80, tc.mode) {
+			if err := terminalio.WriteProcessedBytes(&out, []byte(ln), tc.mode); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got := reWrapEsc.ReplaceAllString(out.String(), "")
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("mode %v: drawn row %q does not contain %q", tc.mode, got, tc.want)
+		}
+	}
+}
+
+// CP437 0xFF is a blank cell that art paints with a background colour. Once
+// the body is converted it is NBSP, which must neither come back as '?' nor
+// count as an empty row and lose the cell and its colour.
+func TestMessageBodyKeepsCP437BlankCells(t *testing.T) {
+	lines := readBodyForTest("\x1b[41m\xff\xff\rA\xffB\r", 80)
+	if len(lines) < 2 {
+		t.Fatalf("expected 2 lines, got %d: %q", len(lines), lines)
+	}
+	if lines[0] != "\x1b[41m\xff\xff" {
+		t.Errorf("row of blank cells = %q, want %q", lines[0], "\x1b[41m\xff\xff")
+	}
+	if lines[1] != "A\xffB" {
+		t.Errorf("blank cell inside text = %q, want %q", lines[1], "A\xffB")
 	}
 }
