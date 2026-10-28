@@ -62,6 +62,8 @@ func (mm *MessageManager) installAreasLocked(areasList []*MessageArea) {
 	// built for a previous BasePath. At construction this is a no-op.
 	mm.threadIndex = make(map[int]*threadIndex)
 	mm.msgidIndex = make(map[int]*msgidIndex)
+	mm.replyTrees = make(map[int]*replyTree)
+	mm.areaGen++
 
 	for _, area := range areasList {
 		if area == nil {

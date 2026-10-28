@@ -1,0 +1,364 @@
+package menu
+
+import (
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+)
+
+// threadGlyphs are the characters the thread pane and signposts draw that
+// differ between a UTF-8 and a CP437 terminal. The box-drawing characters
+// are written as UTF-8 either way; the output writer converts them.
+type threadGlyphs struct {
+	marker   string // the current row's pointer
+	up       string // U's arrow
+	down     string // F's arrow
+	right    string // X's arrow
+	ellipsis string // marks a clipped handle or excerpt
+}
+
+// threadGlyphsFor picks the glyphs for mode. CP437 draws glyphs for the
+// control bytes 0x10 and 0x18-0x1A, and has no ellipsis, so a clipped name
+// ends in "~" there.
+func threadGlyphsFor(mode ansi.OutputMode) threadGlyphs {
+	if mode == ansi.OutputModeCP437 {
+		return threadGlyphs{marker: "\x10", up: "\x18", down: "\x19", right: "\x1a", ellipsis: "~"}
+	}
+	return threadGlyphs{marker: "►", up: "↑", down: "↓", right: "→", ellipsis: "…"}
+}
+
+// threadPlainText prepares text taken from a message (a subject, a handle,
+// a body line) for a pane or signpost cell. A body stored as raw CP437, as
+// imported echomail can be, is decoded so it is clipped by character; then
+// escape sequences and control characters are dropped, so a message cannot
+// clear the screen or move the cursor from inside the pane.
+//
+// Pipes are left in. The finished cell is passed through the pipe-code
+// expander with the colours around it, so threadEscapePipes doubles them
+// after the cell has been fitted, where the extra byte costs no column.
+func threadPlainText(s string) string {
+	if !utf8.ValidString(s) {
+		s = string(ansi.CP437BytesToUTF8([]byte(s)))
+	}
+	s = ansi.StripAnsi(s)
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// threadEscapePipes doubles each pipe so the expander prints it rather than
+// reading a colour code out of the message. Applied after fitting: "||"
+// still draws as one column.
+func threadEscapePipes(s string) string {
+	return strings.ReplaceAll(s, "|", "||")
+}
+
+// threadCell clips s to width columns with g's ellipsis and pads it, in the
+// terminal's encoding, as listCell does for the message list.
+//
+// The cell stays UTF-8 whatever the terminal: the output writer converts it
+// for CP437, one byte per rune ("?" where CP437 has no character), so the
+// width holds. Converting here would put CP437 bytes next to the UTF-8
+// glyphs around them, and a pair that happened to form a valid UTF-8
+// sequence would be folded into one byte.
+func threadCell(s string, width int, g threadGlyphs, _ ansi.OutputMode) string {
+	s = ansi.TruncateRunes(threadPlainText(s), width, g.ellipsis)
+	if n := utf8.RuneCountInString(s); n < width {
+		s += strings.Repeat(" ", width-n)
+	}
+	return threadEscapePipes(s)
+}
+
+// threadText prepares s for the terminal without padding it; UTF-8, as for
+// threadCell.
+func threadText(s string, _ ansi.OutputMode) string {
+	return threadEscapePipes(threadPlainText(s))
+}
+
+// threadCols is the column count of text threadText produced: one per
+// rune, with a doubled pipe as one.
+func threadCols(s string, _ ansi.OutputMode) int {
+	return utf8.RuneCountInString(strings.ReplaceAll(s, "||", "|"))
+}
+
+// excerpt is the line of body that stands for the message in a thread
+// view: the first that is not blank, quoted, a tear line or an origin line.
+// A body stored as raw CP437 is decoded first, so the line is text.
+func excerpt(body string) string {
+	if !utf8.ValidString(body) {
+		body = string(ansi.CP437BytesToUTF8([]byte(body)))
+	}
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" || isQuoteLine(line) || isTearLine(line) || isOriginLine(line) {
+			continue
+		}
+		return strings.TrimSpace(line)
+	}
+	return ""
+}
+
+// Thread pane geometry. The pane takes paneRows tree rows plus a title row
+// and a closing rule, and shrinks or goes away rather than leave the body
+// fewer than paneMinBodyLines.
+const (
+	paneRows         = 5
+	paneRowsReduced  = 3
+	paneMinBodyLines = 6
+	paneAuthorWidth  = 9
+	paneDateWidth    = 8
+	// maxTreeDepth is the deepest level drawn with glyphs; deeper rows
+	// collapse their prefix to "+N".
+	maxTreeDepth = 8
+)
+
+// paneRowsFor returns how many tree rows the pane may take out of
+// bodyAvail body lines: 5, else 3, else none.
+func paneRowsFor(bodyAvail int) int {
+	for _, rows := range []int{paneRows, paneRowsReduced} {
+		if bodyAvail-(rows+2) >= paneMinBodyLines {
+			return rows
+		}
+	}
+	return 0
+}
+
+// treePrefix is a row's tree glyphs, collapsed past maxTreeDepth.
+func treePrefix(r threadRow) string {
+	if r.Depth > maxTreeDepth {
+		return strings.Repeat("  ", maxTreeDepth-1) + "+" + strconv.Itoa(r.Depth-(maxTreeDepth-1))
+	}
+	return r.Prefix
+}
+
+// signpost is one segment of the reader's separator row: the key, where it
+// leads and who wrote that message.
+type signpost struct {
+	key     rune
+	arrow   string
+	target  int    // 0 = none
+	deleted bool   // the target is a deleted message
+	handle  string // the target's author, when readable
+}
+
+// signpostListKey adds the "[V]list" tail to the signposts. It belongs to
+// the threaded message list, which lands in the next change.
+const signpostListKey = false
+
+// renderSignposts builds the separator row: each key with its arrow and
+// target, the handles sharing whatever width the fixed parts leave, and a
+// rule filling the rest. The result is pipe-coded and exactly width columns.
+//
+// The fixed parts (keys, arrows, "#n", "deleted", "none", the list tail)
+// always render. The handles are then fitted shortest first, each given
+// min(its length + 1, an equal share of what is left); one that would be
+// clipped under 4 characters is dropped, and the others are clipped with
+// the ellipsis.
+func renderSignposts(segs []signpost, width int, g threadGlyphs, mode ansi.OutputMode) string {
+	const minHandle = 4
+	type seg struct {
+		signpost
+		fixed string // "#n ", "#n deleted " or "none "
+		show  string // the fitted handle plus a space, or ""
+	}
+	parts := make([]*seg, len(segs))
+	fixedWidth := 0
+	for i, s := range segs {
+		p := &seg{signpost: s}
+		switch {
+		case s.target == 0:
+			p.fixed = "none "
+		case s.deleted:
+			p.fixed = fmt.Sprintf("#%d deleted ", s.target)
+		default:
+			p.fixed = fmt.Sprintf("#%d ", s.target)
+		}
+		fixedWidth += 6 + len(p.fixed) // "─[U]↑ " is 6 columns
+		parts[i] = p
+	}
+	listTail := ""
+	if signpostListKey {
+		listTail = "|08─|03[|11V|03]|07list "
+		fixedWidth += 9
+	}
+	avail := width - fixedWidth
+
+	var named []*seg
+	for _, p := range parts {
+		p.handle = threadPlainText(p.handle)
+		if p.target != 0 && !p.deleted && p.handle != "" {
+			named = append(named, p)
+		}
+	}
+	sort.SliceStable(named, func(i, j int) bool {
+		return utf8.RuneCountInString(named[i].handle) < utf8.RuneCountInString(named[j].handle)
+	})
+	for i, p := range named {
+		share := avail / (len(named) - i)
+		n := utf8.RuneCountInString(p.handle)
+		w := min(n+1, share)
+		// A handle shown whole, or with at least minHandle characters.
+		if w-1 >= min(minHandle, n) {
+			p.show = threadText(ansi.TruncateRunes(p.handle, w-1, g.ellipsis), mode) + " "
+			avail -= w
+		}
+	}
+
+	var b strings.Builder
+	used := 0
+	for _, p := range parts {
+		colour := "|08"
+		if p.target != 0 && !p.deleted {
+			colour = "|15"
+		}
+		fmt.Fprintf(&b, "|08─|03[|11%c|03]|07%s %s%s|07%s", p.key, p.arrow, colour, p.fixed, p.show)
+		used += 6 + len(p.fixed) + threadCols(p.show, mode)
+	}
+	if listTail != "" {
+		b.WriteString(listTail)
+		used += 9
+	}
+	if used < width {
+		b.WriteString("|08" + strings.Repeat("─", width-used))
+	}
+	b.WriteString("|07")
+	return b.String()
+}
+
+// readerSignposts builds the signposts for the message tv is on.
+func readerSignposts(tv *threadView, g threadGlyphs) []signpost {
+	cur := tv.cur
+	up := signpost{key: 'U', arrow: g.up}
+	switch p, state := tv.parentOf(cur); state {
+	case parentShown:
+		up.target, up.handle = p, tv.handle(p)
+	case parentDeleted:
+		up.target, up.deleted = p, true
+	}
+	down := signpost{key: 'F', arrow: g.down}
+	if f := tv.firstReply(cur); f != 0 {
+		down.target, down.handle = f, tv.handle(f)
+	}
+	right := signpost{key: 'X', arrow: g.right}
+	if x, _ := tv.nextSibling(cur); x != 0 {
+		right.target, right.handle = x, tv.handle(x)
+	}
+	return []signpost{up, down, right}
+}
+
+// renderThreadPane draws the docked thread pane for tv: a title row, rows
+// tree rows windowed around the current message, and a closing rule. Each
+// line is pipe-coded (with raw escapes for the current row's background)
+// and exactly width columns. title is the pane's label, " Thread ".
+func renderThreadPane(tv *threadView, rows, width int, title string, g threadGlyphs, mode ansi.OutputMode) []string {
+	lines := make([]string, 0, rows+2)
+
+	// Title: ──[ Thread ]─ subject ──────── pos of count · depth d ──
+	pos, count := tv.position(tv.cur)
+	right := fmt.Sprintf(" %d of %d · depth %d ", pos, count, tv.depth(tv.cur))
+	left := "──" + title + "─ "
+	subjectRoom := width - utf8.RuneCountInString(left) - 1 - utf8.RuneCountInString(right) - 2 - 3
+	subject := ""
+	if subjectRoom >= minSubjectRoom {
+		subject = ansi.TruncateRunes(threadPlainText(tv.rootSubject()), subjectRoom, g.ellipsis) + " "
+	}
+	fill := width - utf8.RuneCountInString(left) - utf8.RuneCountInString(subject) - utf8.RuneCountInString(right) - 2
+	lines = append(lines, "|08──|03"+title+"|08─ |11"+threadText(subject, mode)+
+		"|08"+strings.Repeat("─", max(fill, 0))+"|03"+right+"|08──|07")
+
+	// Tree rows: a window of rows lines that keeps the current row two from
+	// the top where the thread allows.
+	ci := tv.pos[tv.cur]
+	start := max(0, min(ci-2, len(tv.rows)-rows))
+	for i := 0; i < rows; i++ {
+		if start+i >= len(tv.rows) {
+			lines = append(lines, strings.Repeat(" ", width))
+			continue
+		}
+		lines = append(lines, renderTreeRow(tv.rows[start+i], start+i == ci, width, g, mode))
+	}
+
+	lines = append(lines, "|08"+strings.Repeat("─", width)+"|07")
+	return lines
+}
+
+// minSubjectRoom is the narrowest the pane title shows a subject in.
+const minSubjectRoom = 4
+
+// renderTreeRow draws one pane row, width columns wide:
+//
+//	► ├─#5 Phosphor… That was it. Font sticks now, but the menus…  10/20/26
+//
+// The current row is drawn on a blue background, in white, with the marker
+// in yellow; the rest use cyan glyphs and number, grey author and date and
+// a dark excerpt. A deleted placeholder shows only "#n deleted".
+func renderTreeRow(r threadRow, current bool, width int, g threadGlyphs, mode ansi.OutputMode) string {
+	prefix := treePrefix(r)
+	var b strings.Builder
+	used := 0
+	if current {
+		b.WriteString("\x1b[44m|14" + g.marker + " |11")
+	} else {
+		b.WriteString("|07  |03")
+	}
+	used += 2
+	b.WriteString(prefix)
+	used += utf8.RuneCountInString(prefix)
+
+	if r.Deleted {
+		text := fmt.Sprintf("#%d deleted", r.Num)
+		b.WriteString("|08" + text)
+		used += len(text)
+		b.WriteString(strings.Repeat(" ", max(width-used, 0)))
+		b.WriteString("\x1b[0m|07")
+		return b.String()
+	}
+
+	num := fmt.Sprintf("#%d ", r.Num)
+	numColour, authorColour, textColour, dateColour := "|11", "|07", "|08", "|07"
+	if current {
+		numColour, authorColour, textColour, dateColour = "|15", "|15", "|15", "|15"
+	}
+	b.WriteString(numColour + num)
+	used += len(num)
+
+	author := ""
+	if r.Msg != nil {
+		author = r.Msg.From
+	}
+	b.WriteString(authorColour + threadCell(author, paneAuthorWidth, g, mode) + " ")
+	used += paneAuthorWidth + 1
+
+	// The text, then a two-column gap, then the date in the last columns.
+	room := width - used - 2 - paneDateWidth
+	text := ""
+	if room > minSubjectRoom && r.Msg != nil {
+		if r.Depth == 0 {
+			text = r.Msg.Subject
+		} else {
+			text = excerpt(r.Msg.Body)
+		}
+	}
+	if room > 0 {
+		b.WriteString(textColour + threadCell(text, room, g, mode))
+		used += room
+	}
+	date := strings.Repeat(" ", paneDateWidth)
+	if r.Msg != nil && !r.Msg.DateTime.IsZero() {
+		date = r.Msg.DateTime.Format("01/02/06")
+	}
+	if used+2+paneDateWidth <= width {
+		b.WriteString("  " + dateColour + date)
+		used += 2 + paneDateWidth
+	}
+	b.WriteString(strings.Repeat(" ", max(width-used, 0)))
+	b.WriteString("\x1b[0m|07")
+	return b.String()
+}

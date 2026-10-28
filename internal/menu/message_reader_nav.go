@@ -292,7 +292,9 @@ func displayReaderHelp(terminal *term.Terminal, outputMode ansi.OutputMode, isSy
 		"|15R|07eply to Message       |15P|07ost a Message\r\n" +
 		"|15S|07 Prev Message        |15T|07hread Search\r\n" +
 		"|15J|07ump to Message #     |15M|07ail Reply\r\n" +
-		"|15L|07ist Titles           |15Q|07uit Reader\r\n"
+		"|15L|07ist Titles           |15Q|07uit Reader\r\n" +
+		"|15U|07p to Parent          |15F|07irst Reply\r\n" +
+		"|15X|07 Next Sibling        |15]|07 / |15[|07 Next / Prev in Thread\r\n"
 	if twitOn {
 		help += "|15I|07gnore Author (Twit List)\r\n"
 	}

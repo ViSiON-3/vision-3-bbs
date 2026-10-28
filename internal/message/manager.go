@@ -75,6 +75,12 @@ type MessageManager struct {
 	networkOrigins map[string]string
 	threadIndex    map[int]*threadIndex
 	msgidIndex     map[int]*msgidIndex
+	replyTrees     map[int]*replyTree
+	// areaGen counts area installations (construction and every Reload).
+	// A cache built without the lock is published only if it is unchanged,
+	// so a tree read from a base that a reload has since replaced never
+	// enters the cache that reload emptied.
+	areaGen uint64
 	// qwkID is the system's QWK ID, the "@host" part of Message-IDs given to
 	// posts in QWK network areas. Blank leaves those posts without one; the
 	// network scanner then synthesizes an ID at export time.
@@ -115,6 +121,7 @@ func NewMessageManager(dataPath, configPath, boardName string, networkOrigins ma
 		networkOrigins: normalizeNetworkOrigins(networkOrigins),
 		threadIndex:    make(map[int]*threadIndex),
 		msgidIndex:     make(map[int]*msgidIndex),
+		replyTrees:     make(map[int]*replyTree),
 	}
 
 	if err := mm.loadMessageAreas(); err != nil {
