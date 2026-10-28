@@ -408,7 +408,9 @@ func renderCells(data []byte, width int) map[[2]int]byte {
 		case b == '\t':
 			x, pending = ((x-1)/8+1)*8+1, false
 			clamp()
-		case b < 0x20:
+		case b < 0x20 && cp437ControlGlyphs[b] == 0:
+			// Acted on, not drawn; the glyph control bytes (▲ ▼ …) are
+			// drawn like any character, as a CP437 terminal does.
 		default:
 			if pending {
 				x, y, pending = 1, y+1, false
