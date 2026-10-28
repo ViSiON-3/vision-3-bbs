@@ -63,6 +63,7 @@ func (mm *MessageManager) installAreasLocked(areasList []*MessageArea) {
 	mm.threadIndex = make(map[int]*threadIndex)
 	mm.msgidIndex = make(map[int]*msgidIndex)
 	mm.replyTrees = make(map[int]*replyTree)
+	mm.areaGen++
 
 	for _, area := range areasList {
 		if area == nil {

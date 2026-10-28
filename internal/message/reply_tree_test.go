@@ -212,3 +212,48 @@ func TestReplyTreeRefreshesAfterPost(t *testing.T) {
 		t.Errorf("empty area: %v, %v; want an empty tree", empty, err)
 	}
 }
+
+// A tree built while the areas were reloaded is handed back but not cached:
+// it may describe a base the reload replaced, which is why the reload
+// emptied the cache. The reload runs inside the build-to-publish window
+// through the test hook.
+func TestReplyTreeBuiltAcrossReloadIsNotCached(t *testing.T) {
+	mm := newIndexTestManager(t)
+	root := post(t, mm, 1, "All", "one")
+	replyTo(t, mm, 1, root, "Re: one")
+
+	reloads := 0
+	afterReplyTreeBuild = func() {
+		reloads++
+		if err := mm.Reload(); err != nil {
+			t.Errorf("Reload: %v", err)
+		}
+	}
+	t.Cleanup(func() { afterReplyTreeBuild = nil })
+
+	nodes, err := mm.ReplyTree(1)
+	if err != nil {
+		t.Fatalf("ReplyTree: %v", err)
+	}
+	if len(nodes) != 2 || reloads != 1 {
+		t.Fatalf("got %d nodes after %d reloads; want the built tree of 2 back", len(nodes), reloads)
+	}
+	mm.mu.RLock()
+	cached := len(mm.replyTrees)
+	mm.mu.RUnlock()
+	if cached != 0 {
+		t.Errorf("a tree built across a reload was cached (%d entries)", cached)
+	}
+
+	// With no reload in the window, the next build is cached as usual.
+	afterReplyTreeBuild = nil
+	if _, err := mm.ReplyTree(1); err != nil {
+		t.Fatalf("ReplyTree: %v", err)
+	}
+	mm.mu.RLock()
+	cached = len(mm.replyTrees)
+	mm.mu.RUnlock()
+	if cached != 1 {
+		t.Errorf("an ordinary build should be cached: %d entries", cached)
+	}
+}
