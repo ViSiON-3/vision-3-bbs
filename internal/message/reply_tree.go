@@ -15,6 +15,10 @@ type ReplyNode struct {
 	Deleted  bool
 }
 
+// afterReplyTreeBuild, when set, runs between building a tree and
+// publishing it. Tests use it to reload the areas inside that window.
+var afterReplyTreeBuild func()
+
 // replyTree caches an area's reply tree, invalidated like threadIndex.
 type replyTree struct {
 	total      int
@@ -33,6 +37,13 @@ type replyTree struct {
 // The tree is built from headers alone and cached until the base changes.
 // The returned map is shared with the cache and must not be modified.
 func (mm *MessageManager) ReplyTree(areaID int) (map[int]*ReplyNode, error) {
+	// Taken before the base is chosen: a reload at any point after this
+	// changes it, and a tree built from the base chosen here is then not
+	// cached (it is still returned, being what that base holds).
+	mm.mu.RLock()
+	gen := mm.areaGen
+	mm.mu.RUnlock()
+
 	b, _, err := mm.openBase(areaID)
 	if err != nil {
 		return nil, err
@@ -68,11 +79,17 @@ func (mm *MessageManager) ReplyTree(areaID int) (map[int]*ReplyNode, error) {
 		// nothing else should wait on that. Two readers arriving together
 		// may both build; the second keeps whichever fresh tree is stored.
 		built := buildReplyTree(b, total, modCounter)
+		if afterReplyTreeBuild != nil {
+			afterReplyTreeBuild()
+		}
 		mm.mu.Lock()
-		if cur := mm.replyTrees[areaID]; stale(cur) {
+		switch cur := mm.replyTrees[areaID]; {
+		case mm.areaGen != gen:
+			tree = built // the areas changed under us: use it, cache nothing
+		case stale(cur):
 			mm.replyTrees[areaID] = built
 			tree = built
-		} else {
+		default:
 			tree = cur
 		}
 		mm.mu.Unlock()
