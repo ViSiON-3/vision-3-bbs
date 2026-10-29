@@ -9,9 +9,7 @@ import (
 // A message's identity is (network, origin_node, msg_uuid): the UUID is
 // chosen by the sender, so two nodes can use the same one, and both posts are
 // kept. checkMessageAuthor makes origin_node the authenticated poster, so a
-// node cannot claim another node's UUID. The UNIQUE columns are listed with
-// msg_uuid before origin_node so its index also serves the cursor lookup by
-// (network, msg_uuid) in Fetch.
+// node cannot claim another node's UUID.
 const messagesSchema = `
 CREATE TABLE IF NOT EXISTS messages (
 	id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,6 +72,14 @@ func NewMessageStore(db *sql.DB) (*MessageStore, error) {
 	}
 	if err := migrateMessageIdentity(db); err != nil {
 		return nil, err
+	}
+	// Fetch finds a UUID's copies in id order: for the cursor's earliest copy
+	// and, for older leaves, to serve only the earliest. The unique index
+	// cannot serve that (its id comes after origin_node), and without it
+	// SQLite walks the whole network by id. Created after the rebuild, which
+	// would drop it.
+	if _, err := db.Exec("CREATE INDEX IF NOT EXISTS idx_messages_uuid ON messages(network, msg_uuid, id)"); err != nil {
+		return nil, fmt.Errorf("hub: create uuid index: %w", err)
 	}
 	return &MessageStore{db: db}, nil
 }
@@ -142,13 +148,21 @@ func (ms *MessageStore) Store(msgUUID, originNode, network, areaTag, data string
 // If sinceUUID is empty or "0", returns from the beginning.
 // Returns the raw JSON data strings ordered oldest first.
 //
+// perOrigin is set by leaves that identify a message by origin node and
+// UUID; they get every message. Older leaves identify a message by UUID
+// alone, so they get only the earliest message in the network with each
+// UUID. A leaf that dedups on UUID would drop the later copies anyway, and
+// serving them could stall it: once another node re-posts UUIDs the leaf
+// has, a page of nothing but those copies never moves its cursor, which
+// stays on the earliest copy.
+//
 // The cursor is the message (sinceOrigin, sinceUUID) in this network. Without
-// sinceOrigin, sent by leaves older than per-origin identity, or when the
-// network has no message with that origin and UUID, it is the earliest
-// message in the network with that UUID: that may send again a few messages
-// the leaf already has, which it drops as duplicates, but never skips one.
-// Only a UUID the network does not hold at all starts from the beginning.
-func (ms *MessageStore) Fetch(network, sinceUUID, sinceOrigin string, limit int, areaTags []string) ([]string, bool, error) {
+// sinceOrigin, or when the network has no message with that origin and UUID,
+// it is the earliest message in the network with that UUID: that may send
+// again a few messages the leaf already has, which it drops as duplicates,
+// but never skips one. Only a UUID the network does not hold at all starts
+// from the beginning.
+func (ms *MessageStore) Fetch(network, sinceUUID, sinceOrigin string, perOrigin bool, limit int, areaTags []string) ([]string, bool, error) {
 	if len(areaTags) == 0 {
 		return nil, false, nil
 	}
@@ -157,54 +171,9 @@ func (ms *MessageStore) Fetch(network, sinceUUID, sinceOrigin string, limit int,
 		limit = 100
 	}
 
-	// Build IN (?,?,...) placeholder list.
-	placeholders := make([]string, len(areaTags))
-	for i := range areaTags {
-		placeholders[i] = "?"
-	}
-	inClause := strings.Join(placeholders, ",")
-
 	// Fetch limit+1 to detect if there are more pages.
-	fetchLimit := limit + 1
-
-	var rows *sql.Rows
-	var err error
-
-	if sinceUUID == "" || sinceUUID == "0" {
-		// Args: network, each areaTag, fetchLimit.
-		args := make([]any, 0, 1+len(areaTags)+1)
-		args = append(args, network)
-		for _, tag := range areaTags {
-			args = append(args, tag)
-		}
-		args = append(args, fetchLimit)
-		rows, err = ms.db.Query(
-			"SELECT data FROM messages WHERE network = ? AND area_tag IN ("+inClause+") ORDER BY id ASC LIMIT ?",
-			args...,
-		)
-	} else {
-		// Args: network, each areaTag, [network, sinceUUID, sinceOrigin],
-		// network, sinceUUID, fetchLimit.
-		const exact = "(SELECT id FROM messages WHERE network = ? AND msg_uuid = ? AND origin_node = ?), "
-		const earliest = "(SELECT MIN(id) FROM messages WHERE network = ? AND msg_uuid = ?)"
-		cursor := earliest
-		args := make([]any, 0, 1+len(areaTags)+6)
-		args = append(args, network)
-		for _, tag := range areaTags {
-			args = append(args, tag)
-		}
-		if sinceOrigin != "" {
-			cursor = exact + earliest
-			args = append(args, network, sinceUUID, sinceOrigin)
-		}
-		args = append(args, network, sinceUUID, fetchLimit)
-		rows, err = ms.db.Query(
-			`SELECT data FROM messages
-			 WHERE network = ? AND area_tag IN (`+inClause+`) AND id > COALESCE(`+cursor+`, 0)
-			 ORDER BY id ASC LIMIT ?`,
-			args...,
-		)
-	}
+	query, args := fetchQuery(network, sinceUUID, sinceOrigin, perOrigin, limit+1, areaTags)
+	rows, err := ms.db.Query(query, args...)
 	if err != nil {
 		return nil, false, fmt.Errorf("hub: fetch messages: %w", err)
 	}
@@ -227,6 +196,42 @@ func (ms *MessageStore) Fetch(network, sinceUUID, sinceOrigin string, limit int,
 		results = results[:limit]
 	}
 	return results, hasMore, nil
+}
+
+// fetchQuery builds Fetch's query and its arguments; see Fetch.
+func fetchQuery(network, sinceUUID, sinceOrigin string, perOrigin bool, fetchLimit int, areaTags []string) (string, []any) {
+	// Build IN (?,?,...) placeholder list.
+	placeholders := make([]string, len(areaTags))
+	for i := range areaTags {
+		placeholders[i] = "?"
+	}
+	inClause := strings.Join(placeholders, ",")
+
+	query := "SELECT data FROM messages m WHERE m.network = ? AND m.area_tag IN (" + inClause + ")"
+	args := make([]any, 0, 1+len(areaTags)+6)
+	args = append(args, network)
+	for _, tag := range areaTags {
+		args = append(args, tag)
+	}
+	if !perOrigin {
+		// Only the earliest copy of each UUID: a search of idx_messages_uuid.
+		query += ` AND NOT EXISTS (SELECT 1 FROM messages e
+			WHERE e.network = m.network AND e.msg_uuid = m.msg_uuid AND e.id < m.id)`
+	}
+	if sinceUUID != "" && sinceUUID != "0" {
+		const exact = "(SELECT id FROM messages WHERE network = ? AND msg_uuid = ? AND origin_node = ?), "
+		const earliest = "(SELECT MIN(id) FROM messages WHERE network = ? AND msg_uuid = ?)"
+		cursor := earliest
+		if sinceOrigin != "" {
+			cursor = exact + earliest
+			args = append(args, network, sinceUUID, sinceOrigin)
+		}
+		args = append(args, network, sinceUUID)
+		query += " AND m.id > COALESCE(" + cursor + ", 0)"
+	}
+	query += " ORDER BY m.id ASC LIMIT ?"
+	args = append(args, fetchLimit)
+	return query, args
 }
 
 // Count returns the total message count for a network.

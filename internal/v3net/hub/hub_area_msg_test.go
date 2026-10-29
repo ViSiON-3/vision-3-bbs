@@ -295,7 +295,7 @@ func TestMessageStore_FetchFiltersByAreaTags(t *testing.T) {
 	h.messages.Store("b00e8400-0003", "", "testnet", "gen.restricted", `{"msg_uuid":"b00e8400-0003","area_tag":"gen.restricted"}`)
 
 	// Fetch only gen.general.
-	results, hasMore, err := h.messages.Fetch("testnet", "", "", 100, []string{"gen.general"})
+	results, hasMore, err := h.messages.Fetch("testnet", "", "", true, 100, []string{"gen.general"})
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestMessageStore_FetchFiltersByAreaTags(t *testing.T) {
 	}
 
 	// Fetch both areas.
-	all, _, err := h.messages.Fetch("testnet", "", "", 100, []string{"gen.general", "gen.restricted"})
+	all, _, err := h.messages.Fetch("testnet", "", "", true, 100, []string{"gen.general", "gen.restricted"})
 	if err != nil {
 		t.Fatalf("Fetch all: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestMessageStore_FetchEmptyAreaTagsReturnsNil(t *testing.T) {
 
 	h.messages.Store("b10e8400-0001", "", "testnet", "gen.general", `{"msg_uuid":"b10e8400-0001"}`)
 
-	results, hasMore, err := h.messages.Fetch("testnet", "", "", 100, []string{})
+	results, hasMore, err := h.messages.Fetch("testnet", "", "", true, 100, []string{})
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}

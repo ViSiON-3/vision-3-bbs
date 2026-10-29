@@ -484,12 +484,13 @@ func TestDispatchNALEvent_OnlyNALUpdatedSchedulesRefetch(t *testing.T) {
 }
 
 // pagedHub serves one page of messages per request, in order, and records the
-// cursor (since and since_origin) each request carried.
+// cursor (since and since_origin) and identity each request carried.
 type pagedHub struct {
-	mu      sync.Mutex
-	pages   [][]protocol.Message
-	cursor  []string
-	origins []string
+	mu         sync.Mutex
+	pages      [][]protocol.Message
+	cursor     []string
+	origins    []string
+	identities []string
 }
 
 func (p *pagedHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -498,6 +499,7 @@ func (p *pagedHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	n := len(p.cursor)
 	p.cursor = append(p.cursor, r.URL.Query().Get("since"))
 	p.origins = append(p.origins, r.URL.Query().Get("since_origin"))
+	p.identities = append(p.identities, r.URL.Query().Get("identity"))
 	var page []protocol.Message
 	if n < len(p.pages) {
 		page = p.pages[n]
@@ -533,6 +535,11 @@ func TestPoll_FollowsHasMoreWithCursor(t *testing.T) {
 	// The cursor names the message's origin node too.
 	if len(ph.origins) != 2 || ph.origins[0] != "" || ph.origins[1] != "test.example.net" {
 		t.Errorf("request since_origin = %q, want [\"\" test.example.net]", ph.origins)
+	}
+	// Every request, the first with no cursor included, asks for per-origin
+	// identity, so the hub serves every copy of a UUID.
+	if len(ph.identities) != 2 || ph.identities[0] != protocol.IdentityOrigin || ph.identities[1] != protocol.IdentityOrigin {
+		t.Errorf("request identity = %q, want origin on both", ph.identities)
 	}
 	if last, origin, err := ix.LastSeen("testnet"); err != nil || last != testUUID3 || origin != "test.example.net" {
 		t.Errorf("LastSeen = %q, %q, %v; want %s, test.example.net", last, origin, err, testUUID3)
@@ -699,5 +706,11 @@ func TestPoll_SameUUIDFromTwoNodesImportsBoth(t *testing.T) {
 		if seen, err := ix.Seen("testnet", w.origin, w.uuid); err != nil || !seen {
 			t.Errorf("Seen(%s/%s) = %v, %v; want true", w.origin, w.uuid, seen, err)
 		}
+	}
+
+	// A new leaf's first poll has no cursor, yet still gets both copies.
+	fresh := subscribedLeaf(t, ts, "fresh", "gen.general")
+	if count, err := fresh.Poll(ctx); err != nil || count != len(want) {
+		t.Errorf("fresh leaf's first Poll = %d, %v; want %d", count, err, len(want))
 	}
 }

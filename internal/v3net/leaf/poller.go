@@ -20,7 +20,9 @@ import (
 // order, whether or not that message was imported, so a page of skipped
 // messages still moves the poll forward. A message is identified by its
 // origin node and UUID, so the cursor is sent as since=<uuid> and
-// since_origin=<node>; a hub that predates since_origin ignores it. A hub can
+// since_origin=<node>, and every request carries identity=origin so the hub
+// serves every copy of a UUID, one per origin node, even on the first poll
+// with no cursor. A hub that predates these parameters ignores them. A hub can
 // still hand back a cursor it does not recognise (it then starts again from
 // the beginning), so a cursor already requested in this cycle ends the cycle
 // instead of looping.
@@ -51,7 +53,8 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 		}
 		requested[cur] = true
 
-		path := fmt.Sprintf("/v3net/v1/%s/messages?since=%s&limit=100", l.cfg.Network, url.QueryEscape(cur.uuid))
+		path := fmt.Sprintf("/v3net/v1/%s/messages?since=%s&limit=100&identity=%s",
+			l.cfg.Network, url.QueryEscape(cur.uuid), protocol.IdentityOrigin)
 		if cur.origin != "" {
 			path += "&since_origin=" + url.QueryEscape(cur.origin)
 		}
