@@ -270,3 +270,118 @@ menu is provided in `menus/v3/cfg/V3NETM.CFG`, reached from the Admin menu
   and re-fetches the NAL on reconnect.
 - **Dedup**: `data/v3net_dedup.sqlite` records every UUID written to a local
   base; a message whose UUID is already there is skipped.
+
+### Message Signatures
+
+This section is for anyone writing another V3Net implementation. A message
+is signed by the node that wrote it, with the same Ed25519 key it subscribes
+with, so any reader can check the author without trusting the hub. Two wire
+fields carry the signature:
+
+| Field | Meaning |
+|-------|---------|
+| `origin_pubkey_b64` | The author node's Ed25519 public key, 32 bytes in standard base64 |
+| `signature_b64` | The Ed25519 signature over the signed payload below, 64 bytes in standard base64 |
+
+A legacy unsigned message has neither field. A message with either one claims
+a signature and must verify; it is never treated as unsigned.
+
+**Signed payload.** The signature covers these bytes, with no trailing
+newline:
+
+1. The ASCII prefix `V3NET-MSG-SIG-v1` followed by one line feed (`0x0A`).
+   The prefix keeps a message signature from being replayed as a NAL or
+   request signature; the version changes if the covered fields ever do.
+2. A JSON object with exactly these 17 keys, in this (sorted) order:
+   `area_tag`, `attributes`, `body`, `date_utc`, `from`, `msg_uuid`,
+   `network`, `origin`, `origin_board`, `origin_node`, `origin_pubkey_b64`,
+   `parent_uuid`, `subject`, `tearline`, `thread_uuid`, `to`, `v3net`.
+
+The JSON is compact: no spaces or newlines between tokens. Every key is
+always present. `attributes` is a plain integer. `parent_uuid` is `null` when
+the message has no parent, never left out or `""`. `tearline` and `origin`
+are `""` when empty, even though the wire message leaves them out then.
+`origin_pubkey_b64` is included; `signature_b64` is not. `kludges` are not
+signed: they are free-form metadata a relay may add to (the
+`v3net_truncated` marker, for one).
+
+Strings are escaped with HTML escaping off, as Go's `encoding/json` does
+with `SetEscapeHTML(false)`:
+
+- `"` and `\` become `\"` and `\\`.
+- Backspace, form feed, line feed, carriage return and tab become `\b`,
+  `\f`, `\n`, `\r` and `\t`; any other byte below `0x20` becomes `\u00XX`
+  with lowercase hex.
+- U+2028 and U+2029 become ` ` and ` `.
+- Everything else, including `<`, `>`, `&`, `/` and all other non-ASCII
+  text, is written as raw UTF-8.
+
+**Before signing**, the author replaces each byte of invalid UTF-8 in the
+signed text fields with U+FFFD (one per byte, as Go's JSON encoder does when
+the message is sent), so the signature covers the text readers decode. It
+also cuts a body over 32,768 bytes down before signing, since any later change
+breaks the signature. `origin_node` must be the signing key's node ID.
+
+**Verifying.** A reader checks that `origin_pubkey_b64` decodes to 32 bytes,
+that `origin_node` is that key's node ID (the first 8 bytes of SHA-256 of the
+raw key, as lowercase hex), and that `signature_b64` decodes to 64 bytes and
+verifies over the payload rebuilt from the message as received. The hub also
+checks that the key is the one the posting node subscribed with.
+
+#### Worked example
+
+The key is the secret key from RFC 8032 section 7.1, test 1. Ed25519
+signatures are deterministic, so this key and message always give the same
+signature.
+
+| | |
+|---|---|
+| Seed (hex) | `9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60` |
+| Public key (`origin_pubkey_b64`) | `11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=` |
+| Node ID (`origin_node`) | `21fe31dfa154a261` |
+
+The message, as the author has it before signing. It has no parent, and its
+kludge is not signed:
+
+```json
+{
+  "v3net": "1.0",
+  "network": "felonynet",
+  "area_tag": "fel.general",
+  "msg_uuid": "6f9619ff-8b86-4d01-b42d-00cf4fc964ff",
+  "thread_uuid": "6f9619ff-8b86-4d01-b42d-00cf4fc964ff",
+  "parent_uuid": null,
+  "origin_node": "21fe31dfa154a261",
+  "origin_board": "General",
+  "from": "Sysop",
+  "to": "All",
+  "subject": "Q&A <tonight>",
+  "date_utc": "2026-10-29T12:00:00Z",
+  "body": "Café opens at 8.\r\nSee you there!",
+  "tearline": "--- ViSiON/3",
+  "origin": "Example BBS",
+  "attributes": 0,
+  "kludges": {"chrs": "UTF-8"}
+}
+```
+
+The signed payload is these 521 bytes (UTF-8), two lines with no newline at
+the end. SHA-256 of the payload is
+`3d4746d10764ef86e059b25669c591e01e62a7b4911f17dccfdbf5acfcba5c60`.
+
+```
+V3NET-MSG-SIG-v1
+{"area_tag":"fel.general","attributes":0,"body":"Café opens at 8.\r\nSee you there!","date_utc":"2026-10-29T12:00:00Z","from":"Sysop","msg_uuid":"6f9619ff-8b86-4d01-b42d-00cf4fc964ff","network":"felonynet","origin":"Example BBS","origin_board":"General","origin_node":"21fe31dfa154a261","origin_pubkey_b64":"11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=","parent_uuid":null,"subject":"Q&A <tonight>","tearline":"--- ViSiON/3","thread_uuid":"6f9619ff-8b86-4d01-b42d-00cf4fc964ff","to":"All","v3net":"1.0"}
+```
+
+The `<`, `>` and `&` in the subject and the `é` in the body are written as
+they are, and the body's carriage return and line feed as `\r\n`. The
+signature (`signature_b64`) is:
+
+```
+buk/YQJzkqsR2N2RMdVMjKBgpXP6MYvDIFEXjQQ+NnlXYPS7+J5BrJF3YBWGmu/CG4DtSinfXoic8U1oZz6MCA==
+```
+
+The test `TestMessageSignatureDocExample` in
+`internal/v3net/protocol/signature_example_test.go` checks these values
+against the code.

@@ -353,7 +353,8 @@ do not have to take the hub's word for who wrote it. The message carries the
 author's public key (`origin_pubkey_b64`) and an ed25519 signature
 (`signature_b64`) over its author-set fields: network, area, the message,
 thread and parent UUIDs, origin node and board, from, to, subject, date,
-body, tearline, origin line and attributes. Kludges are not signed.
+body, tearline, origin line and attributes. Kludges are not signed. The
+exact bytes signed are in [Message Signatures](v3net/message-areas.md#message-signatures).
 
 - **The hub** rejects a signed post (HTTP 403) unless the signature verifies,
   the key is the one the posting node subscribed with, and `origin_node` is
