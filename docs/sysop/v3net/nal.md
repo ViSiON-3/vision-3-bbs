@@ -187,6 +187,9 @@ the browser shows the error instead.
 
 The hub's own key, served by the network's `/info` page, is pinned the same
 way into `hubPubKey` (**Hub Key**) and checked each time the leaf starts.
+An updated hub also signs its replies and events with that key; a changed
+hub key pauses syncing with the hub until you accept it (see
+[Hub signatures](v3net/configuration.md#hub-signatures)).
 
 ### When the Key Changes
 

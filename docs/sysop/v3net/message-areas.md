@@ -250,6 +250,71 @@ These commands are configured in your menu `.CFG` files. The default V3Net
 menu is provided in `menus/v3/cfg/V3NETM.CFG`, reached from the Admin menu
 (**3** in `ADMIN.CFG`). All of its commands are `S255` (sysop only) as shipped.
 
+### Hub Signatures
+
+This section is for anyone writing another V3Net implementation. A hub
+signs what it sends a leaf with its own Ed25519 node key, the key its
+`/info` page serves as `hub_pubkey_b64` and leaves pin. Signatures are
+unpadded base64url (RFC 4648 section 5, no `=`), like the request's
+`X-V3Net-Signature`. How a leaf acts on them is in
+[Hub signatures](v3net/configuration.md#hub-signatures).
+
+**Responses.** Every response to a request that carries
+`X-V3Net-Signature`, refusals included, carries `X-V3Net-Hub-Signature`, the
+signature over these bytes:
+
+```
+V3NET-RESP-SIG-v1\n{request signature}\n{status}\n{body hash}
+```
+
+- `V3NET-RESP-SIG-v1` is literal ASCII and each `\n` is a line feed
+  (`0x0A`); there is no newline at the end. The prefix keeps a response
+  signature from being taken for any other kind.
+- `{request signature}` is the request's `X-V3Net-Signature` header exactly
+  as sent. It already covers the request's method, path, `Date` and body,
+  so the response cannot be replayed for any other request, and no nonce is
+  needed.
+- `{status}` is the HTTP status code in decimal, such as `200` or `401`.
+- `{body hash}` is the SHA-256 of the response body as sent, in lowercase
+  hex. Other headers, such as `X-V3Net-Has-More`, are not covered.
+
+**Event stream.** The `{network}/events` response is signed as above with
+an empty body (its body hash is
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`). Each
+event then carries two extra SSE fields, before `data` so that leaves from
+before hub signatures, which act on the `data` line and skip lines they do
+not know, still read every event:
+
+```
+event: logon
+id: 1
+sig: {signature}
+data: {"handle":"Sysop","node":"21fe31dfa154a261","timestamp":"2026-10-29T12:00:00Z"}
+
+```
+
+`id` is the event's sequence number in this stream, starting at 1 and
+rising by one with every event, pings included. `sig` is the signature over:
+
+```
+V3NET-EVENT-SIG-v1\n{network}\n{request signature}\n{id}\n{event}\n{data}
+```
+
+where `{request signature}` is the `X-V3Net-Signature` of the request that
+opened the stream, `{id}` the decimal sequence number, `{event}` the event
+type and `{data}` the `data` line's JSON exactly as sent. A leaf accepts an
+event only if its `id` is one more than the last and its `sig` verifies, so
+an event cannot be repeated, reordered, removed from between others, or
+moved into another stream or network. A hub that cannot sign an event ends the stream rather
+than skip a number.
+
+A hub that predates hub signatures sends neither the header nor the extra
+fields, and a leaf with no hub key pinned cannot check either.
+
+The tests `TestResponseSignedPayloadFormat` and `TestEventSignature` in
+`internal/v3net/protocol/hubsig_test.go` check these payloads against the
+code.
+
 ### Wire Details
 
 - **Transport**: JSON over HTTP. A leaf makes outbound requests only; the hub
