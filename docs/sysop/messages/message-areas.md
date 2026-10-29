@@ -359,7 +359,7 @@ hot key:
 | `S` | Prev | Previous message |
 | `R` | Reply | Reply in the same area |
 | `M` | Mail | Reply by private mail to the author |
-| `T` / Tab | Thread | Move focus to the thread menu, or back to the message (see below). Greyed out on the bar when the message has no thread to show |
+| `T` / Tab | Thread | Move focus to the thread menu, or back to the message (see below). Greyed out on the bar, and does nothing, when the message has no thread to show or the screen has no room for the pane |
 | `P` | Post | Post a new message |
 | `J` / `#` | Jump | Go to a message number |
 | `L` | List | List message titles, cursor on this message (flat or threaded, as the caller last had it) |
