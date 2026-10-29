@@ -233,6 +233,7 @@ parameters:
 |-----------|---------|
 | `since` | `msg_uuid` of the last message the leaf has. Empty or `0` starts from the beginning. |
 | `since_origin` | `origin_node` of that message. Optional. |
+| `identity` | `origin` to identify messages by origin node and UUID. A current leaf sends it on every poll, the first one with no cursor included. |
 | `limit` | Page size, 1 to 500 (default 100). |
 
 The hub returns the messages in its own order that come after the cursor, in
@@ -247,7 +248,15 @@ as the cursor, skipped messages included.
   the leaf drops as duplicates, but never skips one.
 - Only a UUID the network does not hold at all starts from the beginning.
 
-A hub from before the identity rule ignores `since_origin`.
+Without `identity=origin` the hub treats the leaf as one from before the
+identity rule, which dedups on the UUID alone: it serves only the earliest
+message in the network with each UUID and leaves out later copies, which
+such a leaf would drop anyway. Serving them could stall it for good. Once
+another node posted copies of a page's worth of UUIDs the leaf already has,
+every page would hold only copies, and its cursor, still on the earliest
+copy, would never move past them.
+
+A hub from before the identity rule ignores `since_origin` and `identity`.
 
 When a post is stored, the hub sends a `new_message` event on the network's
 SSE stream with `network`, `msg_uuid`, `origin_node`, `from` and `subject`.
