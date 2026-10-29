@@ -586,6 +586,27 @@ func TestMessageReaderLoneReplyToDeletedRoot(t *testing.T) {
 	}
 }
 
+// A thread shorter than the pane takes only the rows it fills: #12 and its
+// one reply draw a title, two rows and the closing rule, and the body
+// starts right under them, with no blank pane rows.
+func TestMessageReaderPaneShrinksToThread(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	screen := env.readerAt(13, "")
+	if !strings.Contains(screen.Row(7), "── Thread ─") {
+		t.Fatalf("pane title not under the header:\n%s", screen.Snapshot())
+	}
+	if !strings.Contains(screen.Row(8), "#12 ") || !strings.Contains(screen.Row(9), "#13 ") {
+		t.Errorf("tree rows = %q, %q", screen.Row(8), screen.Row(9))
+	}
+	if rule := strings.TrimRight(screen.Row(10), " "); rule != strings.Repeat("─", 79) {
+		t.Errorf("row 10 should close the pane: %q", rule)
+	}
+	if !strings.Contains(screen.Row(11), "six hours late") {
+		t.Errorf("body should start right under the pane:\n%s", screen.Snapshot())
+	}
+}
+
 // The pane rows follow the current message: on #14 (last in the thread)
 // the window ends with it; on #8 the deleted #4 shows as a placeholder.
 func TestMessageReaderPaneWindowAndPlaceholder(t *testing.T) {

@@ -412,7 +412,8 @@ readerLoop:
 			if !tv.hasThread() || !sessionThreadPaneOpen(s, currentUser) {
 				return
 			}
-			if rows := paneRowsFor(bodyAvailHeight); rows > 0 {
+			// A short thread takes only the rows it fills.
+			if rows := min(paneRowsFor(bodyAvailHeight), len(tv.rows)); rows > 0 {
 				paneLines = renderThreadPane(tv, rows, termWidth-1, e.Strings().MsgThreadPaneTitle, glyphs, outputMode)
 				bodyStartRow += rows + 2
 				bodyAvailHeight -= rows + 2

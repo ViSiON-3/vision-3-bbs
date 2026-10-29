@@ -379,8 +379,9 @@ its subject, so they walk the actual conversation. When the message is part of a
 above the bar is a set of signposts that say where `B`, `F` and `A` lead
 from the current message, with the author's handle (`none` when there is
 nowhere to go, `#n deleted` when the parent has been deleted), and a pane
-under the header draws the thread as a tree, five rows (three on a short
-screen) windowed around the current message, with the root's subject in its
+under the header draws the thread as a tree, up to five rows (three on a
+short screen; a shorter thread takes only the rows it fills) windowed around
+the current message, with the root's subject in its
 title and the message's place in the thread (no pane when every other
 message in it is deleted or hidden from the caller). `T` (Thread on the
 bar) closes and reopens the pane, and is greyed out when there is no pane
