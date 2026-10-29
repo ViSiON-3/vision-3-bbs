@@ -66,3 +66,39 @@ func TestV3NetLeafSignedMessagesField(t *testing.T) {
 		t.Error("Set(N) did not disable requireSignedMessages")
 	}
 }
+
+func TestV3NetLeafSignedHubFields(t *testing.T) {
+	m := Model{configs: &allConfigs{}}
+	m.configs.V3Net.Leaves = []config.V3NetLeafConfig{{HubURL: "http://hub.example", Network: "testnet", HubSigned: true}}
+	l := &m.configs.V3Net.Leaves[0]
+	require := findField(t, m.fieldsV3NetLeaf(), "Signed Hub")
+	signs := findField(t, m.fieldsV3NetLeaf(), "Hub Signs")
+
+	if got := require.Get(); got != "N" {
+		t.Fatalf("Signed Hub default = %q, want N", got)
+	}
+	if err := require.Set("Y"); err != nil {
+		t.Fatal(err)
+	}
+	if !l.RequireSignedHub {
+		t.Error("Set(Y) did not enable requireSignedHub")
+	}
+	if err := require.Set("N"); err != nil {
+		t.Fatal(err)
+	}
+	if l.RequireSignedHub {
+		t.Error("Set(N) did not disable requireSignedHub")
+	}
+
+	// Clearing the leaf's record is the recovery from a hub that stopped
+	// signing.
+	if got := signs.Get(); got != "Y" {
+		t.Fatalf("Hub Signs = %q, want Y", got)
+	}
+	if err := signs.Set("N"); err != nil {
+		t.Fatal(err)
+	}
+	if l.HubSigned {
+		t.Error("Set(N) did not clear hubSigned")
+	}
+}

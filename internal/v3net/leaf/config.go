@@ -29,6 +29,20 @@ type Config struct {
 	// RequireSignedMessages drops polled messages without an author
 	// signature instead of importing them as legacy messages.
 	RequireSignedMessages bool
+	// RequireSignedHub refuses unsigned replies to signed requests and
+	// unsigned SSE streams, pausing syncing as a bad signature does,
+	// instead of taking them as from a hub that predates hub signing.
+	RequireSignedHub bool
+	// HubSigned is whether this leaf has seen the hub sign before, as the
+	// caller stored it through OnHubSigned. Once set, unsigned replies are
+	// refused as with RequireSignedHub.
+	HubSigned bool
+	// OnHubSigned is called when a hub signature first verifies while
+	// HubSigned is unset, so the caller can store HubSigned and a restart
+	// cannot be used to accept unsigned replies again. It runs on the
+	// leaf's goroutine. An error means it was not stored; the leaf keeps
+	// enforcing it and calls OnHubSigned again at the next verified reply.
+	OnHubSigned func() error
 
 	// CoordPubKeyB64 is the pinned coordinator key (standard base64). Every
 	// NAL must be signed by it. Blank means not pinned yet: the first NAL

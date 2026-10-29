@@ -97,6 +97,8 @@ to subscribe to multiple networks.
 | `requireSignedMessages` | bool | `false` | **Signed Messages** in the editor. When true, the leaf drops polled messages that carry no author signature. Leave it false until every node on the network signs its messages. See [Requiring signed messages](v3net/configuration.md#on-a-leaf). |
 | `coordinatorPubKey` | string | blank | **Coord Key** in the editor. The network coordinator's Ed25519 public key (base64). NALs signed by any other key are rejected. Blank pins the key of the next NAL the leaf verifies and writes it here. See [Coordinator Key Pinning](v3net/nal.md#coordinator-key-pinning). |
 | `hubPubKey` | string | blank | **Hub Key** in the editor. The hub's Ed25519 public key (base64) from the network's `/info`. Pinned and checked the same way. |
+| `requireSignedHub` | bool | `false` | **Signed Hub** in the editor. When true, the leaf refuses replies from the hub that carry no hub signature, and pauses as for a bad one. See [Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies). |
+| `hubSigned` | bool | `false` | Written by the BBS, shown as **Hub Signs**. Set once the hub's signatures have checked out; from then on unsigned replies from it are refused, as with `requireSignedHub`. Remove it (or set it `false`) only if the hub really stopped signing. |
 | `pendingCoordinatorPubKey`, `pendingHubPubKey` | string | blank | Written by the BBS, shown as **Offered Coord** / **Offered Hub**. A key the hub offered that differs from the pin. It is rejected; copy it into the pin to accept it. |
 
 ---

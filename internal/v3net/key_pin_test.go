@@ -79,6 +79,36 @@ func TestPersistKeyEvent(t *testing.T) {
 	(&Service{}).persistKeyEvent(ev(leaf.KeyCoordinator, "Z", "Z"))
 }
 
+// persistHubSigned sets hubSigned in the matching leaf entry of v3net.json
+// only, and leaves it alone once set.
+func TestPersistHubSigned(t *testing.T) {
+	dir := t.TempDir()
+	if err := config.SaveV3NetConfig(dir, config.V3NetConfig{Leaves: []config.V3NetLeafConfig{
+		{HubURL: "https://other.example", Network: "testnet"},
+		{HubURL: "https://hub.example", Network: "testnet"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	s := &Service{cfg: config.V3NetConfig{ConfigPath: dir}}
+	for range 2 {
+		if err := s.persistHubSigned("testnet", "https://hub.example"); err != nil {
+			t.Fatalf("persistHubSigned: %v", err)
+		}
+	}
+	cfg, err := config.LoadV3NetConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Leaves[0].HubSigned || !cfg.Leaves[1].HubSigned {
+		t.Errorf("hubSigned = %v, %v; want only the matching leaf set", cfg.Leaves[0].HubSigned, cfg.Leaves[1].HubSigned)
+	}
+
+	// No config path: nothing to write, nothing to fail.
+	if err := (&Service{}).persistHubSigned("testnet", "https://hub.example"); err != nil {
+		t.Errorf("persistHubSigned without a config path: %v", err)
+	}
+}
+
 // keyPinned tells the key observer about a pin a handover moved, once it is
 // stored, and stays quiet for a first-use pin.
 func TestKeyPinnedNotifiesHandover(t *testing.T) {

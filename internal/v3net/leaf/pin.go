@@ -77,6 +77,9 @@ type KeyEvent struct {
 type Pins struct {
 	Coord, Hub               string
 	PendingCoord, PendingHub string
+	// HubSigned is the entry's record that the hub signs (see
+	// Config.HubSigned).
+	HubSigned bool
 }
 
 // keyPins is the leaf's pinned and pending keys, guarded by Leaf.pinMu.
@@ -91,6 +94,13 @@ type keyPins struct {
 	// until OnKeyPinned stores the move. Several moves before a store keep
 	// the first pin, the one the caller still holds.
 	coordMovedFrom, hubMovedFrom string
+
+	// hubSigned is whether the hub has been seen signing, so unsigned
+	// replies are refused (see hubsig.go). hubSignedUnsaved marks it set
+	// but not yet stored by OnHubSigned. hubSignedCfg is the value the
+	// caller's config holds, as far as the leaf knows: UpdatePins acts on
+	// a change from it, which is the sysop clearing or setting it.
+	hubSigned, hubSignedUnsaved, hubSignedCfg bool
 }
 
 // slots returns pointers to the pin, the pending key and the unsaved flag
@@ -118,8 +128,19 @@ func (p *keyPins) movedFrom(kind KeyKind) *string {
 // NAL is re-fetched in the background so an accepted key takes effect at
 // once; likewise /info is re-checked when the hub pin changed. Pass a nil
 // ctx for a leaf that is not running. Safe for concurrent use.
+//
+// HubSigned is applied when it differs from the value the leaf last knew
+// the config to hold, so a stale copy of the file does not undo a record
+// the leaf has not stored yet, while the sysop clearing it (after a hub
+// went back to a version that does not sign) takes effect at once.
 func (l *Leaf) UpdatePins(ctx context.Context, p Pins) {
 	l.pinMu.Lock()
+	signedChanged := p.HubSigned != l.pins.hubSignedCfg
+	if signedChanged {
+		l.pins.hubSignedCfg = p.HubSigned
+		l.pins.hubSigned = p.HubSigned
+		l.pins.hubSignedUnsaved = false
+	}
 	coordChanged := normalizeKey(p.Coord) != l.pins.coord
 	hubChanged := normalizeKey(p.Hub) != l.pins.hub
 	if coordChanged {
@@ -136,6 +157,13 @@ func (l *Leaf) UpdatePins(ctx context.Context, p Pins) {
 	}
 	l.pinMu.Unlock()
 
+	if signedChanged {
+		slog.Info("leaf: hub signing record changed in config",
+			"network", l.cfg.Network, "hub", l.cfg.HubURL, "hub_signed", p.HubSigned)
+		// A pause over unsigned replies that /info could not lift then
+		// lifts now, rather than at the next periodic re-check.
+		hubChanged = hubChanged || (!p.HubSigned && l.HubPaused())
+	}
 	if ctx == nil || (!coordChanged && !hubChanged) {
 		return
 	}

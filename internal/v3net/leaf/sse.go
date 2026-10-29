@@ -145,7 +145,7 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 			if eventType != "" && data != nil {
 				ev := protocol.Event{Type: eventType, Data: json.RawMessage(strings.Join(data, "\n"))}
 				if err := verifier.check(id, sig, ev.Type, ev.Data); err != nil {
-					l.hubSignatureFailed(ctx, path)
+					l.hubSignatureFailed(ctx, "bad hub signature on "+path)
 					return fmt.Errorf("SSE event: %w", err)
 				}
 				l.onEvent(ev)

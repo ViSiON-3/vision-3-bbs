@@ -128,6 +128,18 @@ type V3NetLeafConfig struct {
 	// network's nodes upgrade; a signature that does not verify is refused
 	// either way.
 	RequireSignedMessages bool `json:"requireSignedMessages,omitempty"`
+	// RequireSignedHub refuses any reply to a signed request, or SSE stream,
+	// that the hub has not signed, and pauses syncing as a bad signature
+	// does. Default false accepts unsigned replies from hubs that predate
+	// hub signing, until HubSigned is set.
+	RequireSignedHub bool `json:"requireSignedHub,omitempty"`
+	// HubSigned records that the hub has signed a reply that verified
+	// against HubPubKey. The leaf sets it, and from then on refuses
+	// unsigned replies as if RequireSignedHub were on, so stripping the
+	// signature header cannot switch the check off, across restarts
+	// included. The sysop clears it only if the hub really stopped signing
+	// (a rollback to an older version, for one).
+	HubSigned bool `json:"hubSigned,omitempty"`
 
 	// CoordinatorPubKey pins the network coordinator's ed25519 public key
 	// (standard base64). The leaf rejects any NAL signed by a different key.
