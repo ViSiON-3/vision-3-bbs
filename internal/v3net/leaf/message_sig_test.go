@@ -1,11 +1,13 @@
 package leaf
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -238,12 +240,11 @@ func TestPoll_StopsWhenHubDoesNotAdvance(t *testing.T) {
 }
 
 // sinceHub serves the messages after the one named by the since cursor, as
-// the hub does, and records each request's cursor and how many it served.
+// the hub does, and records each request's cursor.
 type sinceHub struct {
 	mu       sync.Mutex
 	messages []protocol.Message
 	cursors  []string
-	served   []int
 }
 
 func (h *sinceHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -258,23 +259,50 @@ func (h *sinceHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.cursors = append(h.cursors, since)
-	h.served = append(h.served, len(page))
 	_ = json.NewEncoder(w).Encode(page)
 }
 
-func (h *sinceHub) add(m protocol.Message) {
+// replace swaps in m for the stored message with the same UUID, as a hub
+// holds one row per UUID.
+func (h *sinceHub) replace(m protocol.Message) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.messages = append(h.messages, m)
+	for i := range h.messages {
+		if h.messages[i].MsgUUID == m.MsgUUID {
+			h.messages[i] = m
+		}
+	}
 }
 
-func (h *sinceHub) lastRequest() (cursor string, served int) {
+func (h *sinceHub) lastCursor() string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.cursors[len(h.cursors)-1], h.served[len(h.served)-1]
+	return h.cursors[len(h.cursors)-1]
 }
 
-func TestPoll_DoesNotRefetchRefusedNewestMessage(t *testing.T) {
+// captureLogs sends the default logger to a buffer, at debug level, for the
+// rest of the test.
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+// countLogLines counts the lines of logs at level that contain text.
+func countLogLines(logs, level, text string) int {
+	n := 0
+	for _, line := range strings.Split(logs, "\n") {
+		if strings.Contains(line, "level="+level) && strings.Contains(line, text) {
+			n++
+		}
+	}
+	return n
+}
+
+func TestPoll_RefusedNewestMessageWarnsOnceAndGenuineImports(t *testing.T) {
 	author, _, err := keystore.Load(filepath.Join(t.TempDir(), "author.key"))
 	if err != nil {
 		t.Fatal(err)
@@ -284,37 +312,69 @@ func TestPoll_DoesNotRefetchRefusedNewestMessage(t *testing.T) {
 	if err := genuine.Sign(author); err != nil {
 		t.Fatal(err)
 	}
-	forged := genuine
-	forged.Body = "the hub rewrote this"
+	tampered := genuine
+	tampered.Body = "a proxy rewrote this"
 
-	h := &sinceHub{messages: []protocol.Message{testMessage(sigUUID(1)), forged}}
+	h := &sinceHub{messages: []protocol.Message{testMessage(sigUUID(1)), tampered}}
 	ts := httptest.NewServer(h)
 	defer ts.Close()
 	writer := &mockJAMWriter{}
 	l, ix := setupLeaf(t, ts.URL, writer)
+	logs := captureLogs(t)
 
 	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
 		t.Fatalf("first Poll = %d, %v; want 1", count, err)
 	}
-	// The refused message is the newest on the hub. The next poll starts
-	// after it, so it is neither fetched nor logged again.
-	if count, err := l.Poll(context.Background()); err != nil || count != 0 {
-		t.Fatalf("second Poll = %d, %v; want 0", count, err)
+	// The tampered message is the newest on the hub. Each poll starts at the
+	// last seen message and fetches it again, but warns only the first time.
+	for i := 0; i < 3; i++ {
+		if count, err := l.Poll(context.Background()); err != nil || count != 0 {
+			t.Fatalf("repeat Poll = %d, %v; want 0", count, err)
+		}
+		if cursor := h.lastCursor(); cursor != sigUUID(1) {
+			t.Fatalf("poll asked since %q, want the last seen message %s", cursor, sigUUID(1))
+		}
 	}
-	if cursor, served := h.lastRequest(); cursor != forged.MsgUUID || served != 0 {
-		t.Errorf("second poll asked since %q and got %d messages; want since %s and none", cursor, served, forged.MsgUUID)
+	const text = "failed author signature check"
+	if n := countLogLines(logs.String(), "WARN", text); n != 1 {
+		t.Errorf("signature warning logged %d times over 4 polls, want 1", n)
 	}
-	if seen, _ := ix.Seen(forged.MsgUUID); seen {
+	if n := countLogLines(logs.String(), "DEBUG", text); n != 3 {
+		t.Errorf("signature debug line logged %d times, want 3", n)
+	}
+	if seen, _ := ix.Seen(tampered.MsgUUID); seen {
 		t.Fatal("refused message was marked seen")
 	}
 
-	// The genuine message under the same UUID still imports.
-	h.add(genuine)
+	// The hub now serves the genuine message under the same UUID.
+	h.replace(genuine)
 	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
-		t.Fatalf("third Poll = %d, %v; want 1", count, err)
+		t.Fatalf("Poll after correction = %d, %v; want 1", count, err)
 	}
 	if got := writer.messages[len(writer.messages)-1]; got.MsgUUID != genuine.MsgUUID || got.Body != genuine.Body {
 		t.Errorf("imported %s %q, want the genuine message", got.MsgUUID, got.Body)
+	}
+}
+
+func TestRefusedLog_ForgetsOldestWhenFull(t *testing.T) {
+	var r refusedLog
+	for i := 0; i < refusedCap; i++ {
+		if !r.add(sigUUID(i)) {
+			t.Fatalf("add(%d) reported a repeat", i)
+		}
+	}
+	if r.add(sigUUID(0)) {
+		t.Fatal("a remembered UUID was reported new")
+	}
+	if !r.add(sigUUID(refusedCap)) {
+		t.Fatal("a new UUID was reported as a repeat")
+	}
+	if len(r.uuids) != refusedCap || len(r.order) != refusedCap {
+		t.Errorf("log holds %d/%d entries, want %d", len(r.uuids), len(r.order), refusedCap)
+	}
+	// The oldest entry was dropped to make room.
+	if !r.add(sigUUID(0)) {
+		t.Error("the oldest UUID was not forgotten")
 	}
 }
 
@@ -333,7 +393,7 @@ func TestPoll_RetriesUnwritableMessage(t *testing.T) {
 	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
 		t.Fatalf("second Poll = %d, %v; want 1", count, err)
 	}
-	if cursor, _ := h.lastRequest(); cursor != sigUUID(1) {
+	if cursor := h.lastCursor(); cursor != sigUUID(1) {
 		t.Errorf("second poll asked since %q, want the last seen message %s", cursor, sigUUID(1))
 	}
 }

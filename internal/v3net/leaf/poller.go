@@ -3,9 +3,11 @@ package leaf
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -20,23 +22,16 @@ import (
 // it does not recognise (it then starts again from the beginning), so a
 // cursor already requested in this cycle ends the cycle instead of looping.
 //
-// The next cycle starts where this one ended (see pollCursor), not at the
-// last message marked seen, so a refused message at the end of the hub's
-// list is not fetched and logged again on every poll.
+// Each cycle starts at the last message marked seen, so a refused message
+// after it is fetched again, and a genuine copy the hub serves in its place
+// is imported. Once a newer message is imported the cursor moves past it.
 func (l *Leaf) poll(ctx context.Context) (int, error) {
-	l.pollMu.Lock()
-	defer l.pollMu.Unlock()
-
-	cursor := l.pollCursor
-	if cursor == "" {
-		var err error
-		if cursor, err = l.cfg.DedupIndex.LastSeen(l.cfg.Network); err != nil {
-			return 0, fmt.Errorf("leaf: get cursor: %w", err)
-		}
+	cursor, err := l.cfg.DedupIndex.LastSeen(l.cfg.Network)
+	if err != nil {
+		return 0, fmt.Errorf("leaf: get cursor: %w", err)
 	}
 
 	total := 0
-	writeFailed := false
 	requested := make(map[string]bool)
 	for {
 		if ctx.Err() != nil {
@@ -71,15 +66,12 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 		}
 
 		for _, msg := range messages {
-			outcome, err := l.importMessage(msg)
+			imported, err := l.importMessage(msg)
 			if err != nil {
 				return total, err
 			}
-			switch outcome {
-			case importWritten:
+			if imported {
 				total++
-			case importFailed:
-				writeFailed = true
 			}
 		}
 		if len(messages) > 0 {
@@ -91,96 +83,123 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 			break
 		}
 	}
-	// A message JAM could not take is retried from the last seen message,
-	// as before; otherwise the next cycle skips what this one refused.
-	if writeFailed {
-		l.pollCursor = ""
-	} else {
-		l.pollCursor = cursor
-	}
 	return total, nil
 }
-
-// importOutcome is what importMessage did with one polled message.
-type importOutcome int
-
-const (
-	importSkipped importOutcome = iota // refused, for another network, or already seen
-	importWritten                      // written to JAM and marked seen
-	importFailed                       // JAM refused it; not marked seen
-)
 
 // importMessage checks one polled message and writes it to JAM unless it is
 // invalid, fails its author check, belongs to another network, or has been
 // seen. A rejected or unwritable message is logged and skipped, not marked
 // seen, so a genuine copy under the same UUID can still be imported later.
 // It returns an error only for a dedup index failure, which ends the poll.
-func (l *Leaf) importMessage(msg protocol.Message) (importOutcome, error) {
+func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
 	if err := msg.Validate(); err != nil {
-		slog.Warn("leaf: invalid message from hub, skipping", "uuid", msg.MsgUUID, "error", err)
-		return importSkipped, nil
+		l.refuse(&msg, "leaf: invalid message from hub, skipping", "error", err)
+		return false, nil
 	}
 	if msg.Network != l.cfg.Network {
 		// A signature binds the network, but a hub could still relay a
 		// message signed for another network into this one's poll.
-		slog.Warn("leaf: message for another network, skipping", "uuid", msg.MsgUUID,
+		l.refuse(&msg, "leaf: message for another network, skipping",
 			"network", l.cfg.Network, "message_network", msg.Network)
-		return importSkipped, nil
+		return false, nil
 	}
-	if !verifyAuthor(&msg, l.cfg.RequireSignedMessages) {
-		return importSkipped, nil
+	if err := verifyAuthor(&msg, l.cfg.RequireSignedMessages); errors.Is(err, protocol.ErrMessageUnsigned) {
+		l.refuse(&msg, "leaf: unsigned message from hub, dropping", "origin_node", msg.OriginNode)
+		return false, nil
+	} else if err != nil {
+		l.refuse(&msg, "leaf: message failed author signature check, dropping",
+			"origin_node", msg.OriginNode, "error", err)
+		return false, nil
 	}
 	if msg.NeedsTruncation() {
 		if msg.IsSigned() {
 			// The author truncates before signing and the hub refuses
 			// oversize signed posts, so this was not sent as signed; cutting
 			// it would import text the signature does not cover.
-			slog.Warn("leaf: signed message over the body limit, dropping", "uuid", msg.MsgUUID,
+			l.refuse(&msg, "leaf: signed message over the body limit, dropping",
 				"origin_node", msg.OriginNode, "bytes", len(msg.Body))
-			return importSkipped, nil
+			return false, nil
 		}
 		msg.Truncate()
 	}
 
 	seen, err := l.cfg.DedupIndex.Seen(msg.MsgUUID)
 	if err != nil {
-		return importSkipped, fmt.Errorf("leaf: dedup check: %w", err)
+		return false, fmt.Errorf("leaf: dedup check: %w", err)
 	}
 	if seen {
-		return importSkipped, nil
+		return false, nil
 	}
 
 	localNum, err := l.cfg.JAMWriter.WriteMessage(msg)
 	if err != nil {
 		slog.Error("leaf: write message to JAM", "uuid", msg.MsgUUID, "error", err)
-		return importFailed, nil
+		return false, nil
 	}
 	if err := l.cfg.DedupIndex.MarkSeen(msg.MsgUUID, l.cfg.Network, &localNum); err != nil {
 		slog.Error("leaf: mark seen", "uuid", msg.MsgUUID, "error", err)
 	}
-	return importWritten, nil
+	return true, nil
 }
 
 // verifyAuthor checks a polled message's author signature independently of
 // the hub: the signature must verify and origin_node must be derived from
-// origin_pubkey_b64. It logs and returns false for a message that claims a
-// signature which does not check out, so it is never imported. Legacy
+// origin_pubkey_b64. A message that claims a signature which does not check
+// out gets its VerifySignature error, so it is never imported. Legacy
 // unsigned messages are accepted while networks migrate to signing, unless
-// requireSigned is set.
-func verifyAuthor(msg *protocol.Message, requireSigned bool) bool {
+// requireSigned is set; then they get protocol.ErrMessageUnsigned.
+func verifyAuthor(msg *protocol.Message, requireSigned bool) error {
 	if !msg.IsSigned() {
 		if requireSigned {
-			slog.Warn("leaf: unsigned message from hub, dropping", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode)
-			return false
+			return protocol.ErrMessageUnsigned
 		}
 		slog.Debug("leaf: accepting unsigned message from hub", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode)
-		return true
+		return nil
 	}
-	if err := msg.VerifySignature(); err != nil {
-		slog.Warn("leaf: message failed author signature check, dropping",
-			"uuid", msg.MsgUUID, "origin_node", msg.OriginNode, "error", err)
+	return msg.VerifySignature()
+}
+
+// refuse logs a message the leaf will not import: at warn the first time its
+// UUID is refused, and at debug when the same UUID is refused again.
+func (l *Leaf) refuse(msg *protocol.Message, text string, args ...any) {
+	args = append([]any{"uuid", msg.MsgUUID}, args...)
+	if l.refused.add(msg.MsgUUID) {
+		slog.Warn(text, args...)
+	} else {
+		slog.Debug(text, args...)
+	}
+}
+
+// refusedCap bounds how many refused UUIDs refusedLog remembers.
+const refusedCap = 1024
+
+// refusedLog remembers the UUIDs of messages the leaf refused. A refused
+// message is not marked seen, so one at the end of the hub's list is fetched
+// on every poll until a newer message is imported; the log keeps that from
+// repeating the warning each time. Once full it forgets its oldest entry.
+// The zero value is ready to use.
+type refusedLog struct {
+	mu    sync.Mutex
+	uuids map[string]struct{}
+	order []string // oldest first
+}
+
+// add records uuid and reports whether it was new.
+func (r *refusedLog) add(uuid string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.uuids[uuid]; ok {
 		return false
 	}
+	if r.uuids == nil {
+		r.uuids = make(map[string]struct{})
+	}
+	if len(r.order) >= refusedCap {
+		delete(r.uuids, r.order[0])
+		r.order = r.order[1:]
+	}
+	r.uuids[uuid] = struct{}{}
+	r.order = append(r.order, uuid)
 	return true
 }
 
