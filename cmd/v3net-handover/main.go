@@ -3,9 +3,10 @@
 // signs a coordinator handover naming the new key, and POSTs it to the hub,
 // which serves it with the NAL so subscribers move their pinned keys
 // themselves. Run it before the hub switches to the new key if you can; a
-// hub already running the new key also takes it, and re-signs the NAL with
-// that key as it does. Before posting, it checks which key the hub runs and
-// refuses a hub running neither key.
+// hub already running the new key also takes it, and signs the NAL with
+// that key if it has not already. Before posting, it checks which key the
+// hub runs and refuses a hub running neither key. The request is sent as
+// the outgoing key's node, or as the node of -auth-keystore.
 //
 // Usage:
 //
@@ -36,6 +37,7 @@ func main() {
 	network := flag.String("network", "", "network name (e.g. felonynet)")
 	newKey := flag.String("new-key", "", "the new coordinator's public key (standard base64)")
 	newKeystore := flag.String("new-keystore", "", "or: path to the new coordinator's v3net.key, to read its public key from")
+	authKeystore := flag.String("auth-keystore", "", "path to the v3net.key of the subscribed node to send the request as (default: -keystore)")
 	dryRun := flag.Bool("dry-run", false, "print the signed handover instead of sending it")
 	flag.Parse()
 
@@ -73,13 +75,21 @@ func main() {
 	}
 	if late {
 		fmt.Println("The hub already runs the new key. Posting the handover anyway: the hub accepts it")
-		fmt.Println("and re-signs the NAL with the new key, so subscribers follow without re-pinning.")
+		fmt.Println("and signs the NAL with the new key, so subscribers follow without re-pinning.")
 	}
 
+	// The handover's own signature is what the hub checks; the request only
+	// has to come from a node subscribed to the network. That is the old
+	// key's node unless its registration was deleted, when the hub's current
+	// key, which the hub registers itself, serves instead.
+	sender := ks
+	if *authKeystore != "" {
+		sender = loadKeystore(*authKeystore)
+	}
 	path := fmt.Sprintf("/v3net/v1/%s/nal/handover", *network)
 	bodyHash := sha256.Sum256(body)
 	dateUTC := time.Now().UTC().Format(http.TimeFormat)
-	sig, err := ks.Sign(http.MethodPost, path, dateUTC, hex.EncodeToString(bodyHash[:]))
+	sig, err := sender.Sign(http.MethodPost, path, dateUTC, hex.EncodeToString(bodyHash[:]))
 	if err != nil {
 		logging.Fatal("sign request", "error", err)
 	}
@@ -89,7 +99,7 @@ func main() {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Date", dateUTC)
-	req.Header.Set("X-V3Net-Node-ID", ks.NodeID())
+	req.Header.Set("X-V3Net-Node-ID", sender.NodeID())
 	req.Header.Set("X-V3Net-Signature", sig)
 
 	resp, err := client.Do(req)
@@ -102,10 +112,14 @@ func main() {
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	fmt.Printf("Response: %d %s\n", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnauthorized && *authKeystore == "" {
+			fmt.Fprintln(os.Stderr, "The hub did not accept the request from the outgoing key's node; if its registration")
+			fmt.Fprintln(os.Stderr, "was deleted, send it as another subscribed node with -auth-keystore (the hub's current key will do).")
+		}
 		os.Exit(1)
 	}
 	if late {
-		fmt.Println("Handover published. The hub has re-signed the NAL with the new key.")
+		fmt.Println("Handover published. The hub now serves the NAL signed by the new key.")
 		return
 	}
 	fmt.Println("Handover published. Restart the hub with the new key to sign the NAL with it.")
