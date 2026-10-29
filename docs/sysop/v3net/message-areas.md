@@ -241,12 +241,18 @@ another page follows; the leaf asks again with the last message of the page
 as the cursor, skipped messages included.
 
 - With `since_origin`, the cursor is exactly that message in the network.
-- Without it (a leaf from before the identity rule), the cursor is the
-  earliest message in the network with that UUID. That may send a few
-  messages again, which the leaf drops as duplicates, but never skips one.
-- A cursor the hub does not have in that network starts from the beginning.
+- Without it (a leaf from before the identity rule), or when the network has
+  no message with that origin and UUID, the cursor is the earliest message
+  in the network with that UUID. That may send a few messages again, which
+  the leaf drops as duplicates, but never skips one.
+- Only a UUID the network does not hold at all starts from the beginning.
 
 A hub from before the identity rule ignores `since_origin`.
+
+When a post is stored, the hub sends a `new_message` event on the network's
+SSE stream with `network`, `msg_uuid`, `origin_node`, `from` and `subject`.
+`origin_node` was added with the identity rule; a leaf that predates it
+ignores the field, and a leaf should not rely on it from an older hub.
 
 ### `helper post`
 
