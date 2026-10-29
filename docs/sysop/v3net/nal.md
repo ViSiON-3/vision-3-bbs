@@ -213,25 +213,39 @@ holds a handover.
 
 If the hub was restarted with the new key before the handover was
 published, subscribers see a hub key they have not pinned and pause syncing
-with the hub, and the hub keeps serving the NAL the old key signed. To
-recover, publish the handover now, exactly as in step 2: sign it with the
-**old** `v3net.key` (keep a copy of it), and point `-hub` at the running
-hub. The tool notes that the hub already runs the new key and posts anyway.
-The hub accepts the handover, re-signs the NAL with the new key straight
-away and announces the change. Subscribers move both pins and resume
-without re-pinning by hand; a paused leaf re-checks the hub every five
-minutes, so allow that long. No second restart is needed.
+with the hub. To recover, publish the handover now, exactly as in step 2:
+sign it with the **old** `v3net.key` (keep a copy of it), and point `-hub`
+at the running hub. The tool notes that the hub already runs the new key
+and posts anyway. The hub accepts the handover and announces the change.
+Subscribers move both pins and resume without re-pinning by hand; a paused
+leaf re-checks the hub every five minutes, so allow that long. No second
+restart is needed.
 
-This is as safe as the usual order: the hub still only accepts a handover
-signed by the key of the NAL it holds, and while it runs a key no handover
-names, it accepts only a handover to that key.
+Until the handover arrives, the hub may serve either NAL:
 
-Publish it before anything changes the NAL. Until the handover arrives the
-hub signs its own NAL changes (approving a proposal, changing an area's
-access or manager, merging `initialAreas`) with the new key, and once it
-has, the old key no longer signs the stored NAL: the handover is refused,
-and every subscriber has to [accept the new key by
+- **The old key's.** Nothing has changed the NAL since the restart. The
+  hub re-signs it with the new key as soon as it accepts the handover.
+- **The new key's.** Something changed the NAL first (merging
+  `initialAreas` at startup, approving a proposal, changing an area's
+  access or manager), and the hub signed it with the key it runs, as it
+  always has when a key changes without a handover. Subscribers reject that
+  NAL until the handover arrives. The hub remembers the key that signed the
+  NAL before, and takes that key's handover to the new key all the same.
+
+This is as safe as the usual order: the hub only takes a handover signed by
+the key that signed its NAL before the switch, and while it runs a key no
+handover names, only a handover to that key. It remembers one key back, so
+if the hub's key changed twice without a handover, only the latest change
+can be bridged; subscribers still on the first key [accept the new key by
 hand](#accepting-a-new-key-by-hand).
+
+The tool sends the request as the old key's node, which the hub registered
+as a subscriber while it ran with that key. Do not delete that node in
+**Node Management** before the handover is published. If you already have,
+the hub answers `401 unknown or inactive node`; send the request as the
+hub's current node instead, which the hub always registers, by adding
+`-auth-keystore data/v3net.key` (the new key). The handover itself is
+still signed by the old key, which is what the hub checks.
 
 ## Coordinator Key Pinning
 
@@ -346,6 +360,7 @@ connected to.
 | Cannot subscribe at all | The area is closed and your node is not on its allow list, or your node is on the deny list. Ask the area manager. |
 | New areas stopped arriving; the log says `key changed; rejected until the sysop accepts it` | The hub is serving a NAL signed by a key other than the one pinned, with no handover leading to it from your pin. See [When the Key Changes](#when-the-key-changes). |
 | Every subscriber paused on a changed hub key right after you moved the hub to a new key | The hub was switched before the handover was published. Publish it now with the old key; see [If the Hub Already Runs the New Key](#if-the-hub-already-runs-the-new-key). |
+| `v3net-handover` fails with `401 unknown or inactive node` | The old key's node is no longer registered with the hub (deleted in Node Management). Add `-auth-keystore` with the hub's current `v3net.key`; see [If the Hub Already Runs the New Key](#if-the-hub-already-runs-the-new-key). |
 | The log says `key moved by a signed coordinator handover` | The coordinator moved the network to a new key, and your leaf followed. Nothing to do; see [Signed Handovers](#signed-handovers). |
 | Coordinator Panel never appears | Your node is not the coordinator of any subscribed network. Only the hub's own node is; see Handing Over a Network. |
 

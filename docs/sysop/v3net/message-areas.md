@@ -442,6 +442,17 @@ runs a key that neither signed the stored NAL nor appears on its
 handovers, the only handover it accepts is one to its own key (`409`
 otherwise), since it could never sign for any other.
 
+Such a hub may also have re-signed the NAL with its own key before the
+handover arrived: a hub-side change to a NAL never handed over is signed
+with the hub's key, whatever key signed it before. When that happens with
+no handover held, the hub records the key that signed the NAL before as
+the network's previous signer (one per network, kept across restarts). With
+no handover held, it then also accepts a handover whose `old_key` is that
+previous signer and whose `new_key` is its own key, which already signs the
+NAL; the NAL is served as it is, with the handover, and the hub sends
+`nal_updated`. Once any handover is held, the previous signer no longer
+counts.
+
 A posted NAL (`POST /v3net/v1/{network}/nal`) must always come from the
 node of the coordinator key in force and be signed by that key, so once
 the hub holds a handover only the new key may post. The hub's own NAL
