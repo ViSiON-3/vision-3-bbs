@@ -170,10 +170,20 @@ Where the pin comes from, in order of preference:
    operator over a channel you trust.
 2. **The registry.** When you join from the registry browser and the
    registry entry publishes `coordinator_pubkey_b64` / `hub_pubkey_b64`,
-   those keys are pinned when the subscription is saved.
-3. **First use.** With no key set (including every subscription made before
-   pinning existed), the leaf pins the key of the first NAL it verifies,
-   writes it to `coordinatorPubKey`, and logs `pinned key on first use`.
+   those keys are pinned when the subscription is saved. The join wizard's
+   area list only shows a NAL signed by that coordinator key; if the hub
+   serves one signed by another key, the wizard refuses to save.
+3. **First use.** Joining without a registry key pins the key that signed
+   the NAL you picked areas from. With no key set at all (including every
+   subscription made before pinning existed), the leaf pins the key of the
+   first NAL it verifies, writes it to `coordinatorPubKey`, and logs
+   `pinned key on first use`. If that write fails, the leaf keeps enforcing
+   the key and retries the write at each fetch.
+
+The editor's area browser checks every NAL it lists the same way: a valid
+signature, a coordinator node ID that belongs to the key, and the
+subscription's pinned key when one is set. A NAL that fails is not listed;
+the browser shows the error instead.
 
 The hub's own key, served by the network's `/info` page, is pinned the same
 way into `hubPubKey` (**Hub Key**) and checked each time the leaf starts.
@@ -207,7 +217,9 @@ no signed hand-over from the old coordinator yet.
    key the operator gave you if they differ. Saving clears the offered key.
    Do the same for **Hub Key** if the hub key changed too.
 3. The running BBS picks up the edit to `v3net.json` by itself; no restart is
-   needed. The next NAL signed by the new key is accepted.
+   needed. An edit that only changes keys is applied to the running
+   subscription without restarting it, and the leaf re-fetches the NAL at
+   once, so the new coordinator's area list takes effect straight away.
 
 Blanking **Coord Key** also accepts the change, by pinning whatever the hub
 serves next on first use. Only do that when you trust the hub you are
