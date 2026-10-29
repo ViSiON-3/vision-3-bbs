@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/configmerge"
@@ -57,5 +58,57 @@ func TestV3NetSaveKeepsKeysPinnedMeanwhile(t *testing.T) {
 		// The editor left pending as it was in base (""), so the disk value
 		// is kept; the leaf clears it once the accepted key verifies.
 		t.Errorf("netb pending = %q, want offered-b", b.PendingCoordinatorPubKey)
+	}
+}
+
+// Leaves added or removed on disk while the editor holds an old copy are
+// kept that way when it saves, and its own leaf edits still win (#763).
+func TestV3NetSaveKeepsLeavesChangedMeanwhile(t *testing.T) {
+	dir := t.TempDir()
+	base := V3NetConfig{Leaves: []V3NetLeafConfig{
+		{HubURL: "https://a.example", Network: "neta", Boards: []string{"A"}},
+		{HubURL: "https://b.example", Network: "netb", Boards: []string{"B"}},
+	}}
+	if err := SaveV3NetConfig(dir, base); err != nil {
+		t.Fatal(err)
+	}
+
+	// Another editor session drops netb and subscribes to netc.
+	if err := UpdateV3NetConfig(dir, func(c *V3NetConfig) error {
+		c.Leaves = []V3NetLeafConfig{
+			c.Leaves[0],
+			{HubURL: "https://c.example", Network: "netc", Boards: []string{"C"}},
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// This editor, still holding base, changes neta's boards and adds netd.
+	ours, err := configmerge.Clone(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ours.Leaves[0].Boards = []string{"A", "A2"}
+	ours.Leaves = append(ours.Leaves, V3NetLeafConfig{HubURL: "https://d.example", Network: "netd"})
+
+	if _, res, err := configmerge.SaveFile(V3NetConfigFile(dir), base, ours); err != nil {
+		t.Fatal(err)
+	} else if len(res.Conflicts) != 0 {
+		t.Errorf("conflicts = %+v", res.Conflicts)
+	}
+	got, err := LoadV3NetConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var nets []string
+	for _, l := range got.Leaves {
+		nets = append(nets, l.Network)
+	}
+	if strings.Join(nets, ",") != "neta,netd,netc" {
+		t.Errorf("leaves = %v, want neta, netd, netc", nets)
+	}
+	if b := got.Leaves[0].Boards; len(b) != 2 || b[1] != "A2" {
+		t.Errorf("neta boards = %v, want the editor's", b)
 	}
 }
