@@ -321,9 +321,8 @@ func TestBuildThreadedMessageList(t *testing.T) {
 func TestListMsgsThreadedScreen(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
-	// From the menu the list opens flat, cursor on the newest (#15); T
-	// switches it, keeping the cursor on #15. Q leaves the screen as drawn.
-	screen := env.screenRun("LISTMSGS", env.caller, "TQ")
+	// From the menu the list opens threaded. Q leaves the screen as drawn.
+	screen := env.screenRun("LISTMSGS", env.caller, "Q")
 	snap := screen.Snapshot()
 	if !strings.Contains(screen.Row(2), "General Discussion - Threaded List") {
 		t.Errorf("title = %q", screen.Row(2))
@@ -387,8 +386,8 @@ func listOpenedBody(t *testing.T, r runResult) int {
 
 // T keeps the cursor on the same message when switching either way, even
 // when it lands on another page: flat lists #1 last (page 2 of 2); the
-// threaded list has it fifth (page 1). The flat list opens on the newest,
-// #15, which the threaded list has tenth.
+// threaded list has it fifth (page 1). The list opens threaded, on the
+// newest root, #12.
 func TestListMsgsToggleKeepsSelection(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
@@ -397,15 +396,14 @@ func TestListMsgsToggleKeepsSelection(t *testing.T) {
 		keys string
 		want int
 	}{
-		{"flat opens on the newest", "", 15},
-		{"flat end then T opens #1", "\x1b[FT", 1},
-		{"flat end, T, T is still #1", "\x1b[FTT", 1},
-		{"T keeps #15", "T", 15},
-		{"T then down lands on #11", "T\x1b[B", 11},
-		{"T then down twice skips the placeholder to #8", "T\x1b[B\x1b[B", 8},
-		{"T, end (#14), T back to flat keeps #14", "T\x1b[FT", 14},
-		{"T, down (#11), T, T keeps #11", "T\x1b[BTT", 11},
-		{"T, home (#12), T to flat keeps #12", "T\x1b[HT", 12},
+		{"threaded opens on the newest root", "", 12},
+		{"T keeps #12", "T", 12},
+		{"down lands on #13", "\x1b[B", 13},
+		{"down past #11 skips the placeholder to #8", strings.Repeat("\x1b[B", 11), 8},
+		{"end (#14), T to flat keeps #14", "\x1b[FT", 14},
+		{"end, T, T is still #14", "\x1b[FTT", 14},
+		{"T, end (#1, page 2), T back to threaded keeps #1", "T\x1b[FT", 1},
+		{"T, home (#15), T back to threaded keeps #15", "T\x1b[HT", 15},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -422,7 +420,7 @@ func TestListMsgsToggleKeepsSelection(t *testing.T) {
 }
 
 // The mode a caller picks holds for the session: after T in one list, the
-// next list from the menu opens threaded.
+// next list from the menu opens flat.
 func TestListMsgsModePersistsForSession(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
@@ -434,15 +432,15 @@ func TestListMsgsModePersistsForSession(t *testing.T) {
 	if _, _, err := runListMsgs(c, ""); err != nil {
 		t.Fatalf("first list: %v", err)
 	}
-	if !sessionListThreaded(ts) {
-		t.Fatal("T should record threaded mode for the session")
+	if sessionListThreaded(ts) {
+		t.Fatal("T should record flat mode for the session")
 	}
-	// The same session again: it opens threaded.
+	// The same session again: it opens flat.
 	if _, _, err := runListMsgs(c, ""); err != nil {
 		t.Fatalf("second list: %v", err)
 	}
-	if out := testAnsiEscape.ReplaceAllString(ts.output(), ""); strings.Count(out, "Threaded List") < 2 {
-		t.Errorf("second list should open threaded; output:\n%s", out)
+	if out := testAnsiEscape.ReplaceAllString(ts.output(), ""); strings.Count(out, "- Message List") < 2 {
+		t.Errorf("second list should open flat; output:\n%s", out)
 	}
 }
 
@@ -462,11 +460,11 @@ func TestReaderListRoundTrip(t *testing.T) {
 		at   int
 	}{
 		{"L, Enter reads the highlighted (same) message", "5\rL\rQ", 5},
-		{"L opens the flat list; down is #3 there", "5\rL\x1b[B\rQ", 3},
+		{"L opens the threaded list; down is #7 there", "5\rL\x1b[B\rQ", 7},
 		{"L, Q comes back to the message it left", "5\rL\x1b[B\x1b[BQQ", 5},
 		{"L, Esc comes back too", "5\rL\x1b[B\x1bQ", 5},
-		{"L, T, down, Enter reads the next in thread order", "5\rLT\x1b[B\rQ", 7},
-		{"L, T, Enter, L, Enter, Q: two round trips, one reader, still threaded", "5\rLT\x1b[B\rL\x1b[B\rQ", 10},
+		{"L, T, down, Enter reads the next in flat order", "5\rLT\x1b[B\rQ", 3},
+		{"L, T, Enter, L, Enter, Q: two round trips, one reader, still flat", "5\rLT\x1b[B\rL\x1b[B\rQ", 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -489,18 +487,18 @@ func TestReaderListRoundTrip(t *testing.T) {
 func TestListMsgsReaderReturnsToList(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
-	// The flat list opens on #15, then #14, #13...; T keeps #15, which the
-	// threaded list has tenth, followed by #11, the #4 placeholder, #8, #14.
+	// The threaded list opens on #12, then #13, #6, #2, #1, #3...; T keeps
+	// #12, which the flat list has fourth, followed by #11, #10, #8.
 	cases := []struct {
 		name string
 		keys string
 		want int    // message the second Enter opens
 		mode string // title text expected after the return
 	}{
-		{"Enter, L, Enter reopens the same message in flat mode", "\x1b[B\rL\r", 14, "Message List"},
-		{"T, Enter, L, Enter reopens the same message in threaded mode", "T\x1b[B\rL\r", 11, "Threaded List"},
-		{"Enter, Q keeps the cursor on the message read", "\x1b[B\x1b[B\rQ\r", 13, "Message List"},
-		{"Enter, ], L follows the thread then lists on the new message", "T\x1b[B\x1b[B\r]L\r", 14, "Threaded List"},
+		{"Enter, L, Enter reopens the same message in threaded mode", "\x1b[B\rL\r", 13, "Threaded List"},
+		{"T, Enter, L, Enter reopens the same message in flat mode", "T\x1b[B\rL\r", 11, "Message List"},
+		{"Enter, Q keeps the cursor on the message read", "\x1b[B\x1b[B\rQ\r", 6, "Threaded List"},
+		{"Enter, ], L follows the thread then lists on the new message", strings.Repeat("\x1b[B", 4) + "\r]L\r", 3, "Threaded List"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

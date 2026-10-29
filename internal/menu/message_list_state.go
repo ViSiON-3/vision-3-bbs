@@ -151,7 +151,7 @@ func (s *MessageListState) selectMessage(n int) {
 
 // sessionListModes remembers, per session, whether the message list was
 // last in threaded mode, so the mode a caller picked with T holds for the
-// rest of the call.
+// rest of the call. Until they press T the list is threaded.
 var sessionListModes sync.Map
 
 func setSessionListThreaded(s ssh.Session, threaded bool) {
@@ -160,7 +160,7 @@ func setSessionListThreaded(s ssh.Session, threaded bool) {
 
 func sessionListThreaded(s ssh.Session) bool {
 	v, ok := sessionListModes.Load(s)
-	return ok && v.(bool)
+	return !ok || v.(bool)
 }
 
 // sessionThreadPanes remembers, per session, whether the caller opened or

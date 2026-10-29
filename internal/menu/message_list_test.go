@@ -609,10 +609,10 @@ func TestListMsgsReadMarksAndRedraws(t *testing.T) {
 	env.generalMsgs(3)
 
 	r := env.runCmd("LISTMSGS", env.caller, "", "\rQQ")
-	if !r.has("General Discussion - Message List", "subj-1", "subj-2", "subj-3") {
+	if !r.has("General Discussion - Threaded List", "subj-1", "subj-2", "subj-3") {
 		t.Errorf("list incomplete; output:\n%s", r.text())
 	}
-	if n := strings.Count(r.text(), "Message List"); n != 2 {
+	if n := strings.Count(r.text(), "Threaded List"); n != 2 {
 		t.Errorf("list drawn %d times, want 2 (before and after reading)", n)
 	}
 	if lr := env.diskLastRead(generalAreaID, "Caller"); lr != 3 {

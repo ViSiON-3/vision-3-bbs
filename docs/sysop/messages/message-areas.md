@@ -410,9 +410,10 @@ with the cursor on the message that was being read.
 
 The `LISTMSGS` function lists the current area, newest first, in a framed
 lightbar list: arrows, PgUp/PgDn, Home and End move the cursor, Enter reads
-the message and `Q` or Esc leaves. `T` switches between the flat list and
-the **threaded list**, keeping the cursor on the same message; the choice
-holds for the rest of the call, and the reader's `L` opens in it.
+the message and `Q` or Esc leaves. The list opens as the **threaded
+list**; `T` switches between it and the flat list, keeping the cursor on
+the same message. The choice holds for the rest of the call, and the
+reader's `L` opens in it.
 
 The threaded list shows each thread as a tree, newest root first, replies
 in the order the reader's `]` walks them. The `Thread` column holds the
