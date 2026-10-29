@@ -67,6 +67,10 @@ type V3NetHubConfig struct {
 	// RequireSignedSubscribe rejects legacy unsigned registrations when enabled.
 	// Default false keeps existing networks working during rolling upgrades.
 	RequireSignedSubscribe bool `json:"requireSignedSubscribe"`
+	// RequireSignedMessages rejects posted messages without an author
+	// signature when enabled. Default false accepts legacy unsigned posts
+	// during rolling upgrades.
+	RequireSignedMessages bool `json:"requireSignedMessages"`
 	// AutoApproveAreas adds proposed areas to the NAL without the coordinator
 	// reviewing them. Unset follows AutoApprove, which used to cover both;
 	// see AreaProposalsAutoApproved.

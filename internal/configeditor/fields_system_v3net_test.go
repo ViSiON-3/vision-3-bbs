@@ -59,9 +59,20 @@ func TestAutoApproveEditKeepsExplicitAreaSetting(t *testing.T) {
 }
 
 func TestSignedSubscribeSetting(t *testing.T) {
+	testHubYesNoSetting(t, "Signed Subscribe", func(m *Model) bool { return m.configs.V3Net.Hub.RequireSignedSubscribe })
+}
+
+func TestSignedMessagesSetting(t *testing.T) {
+	testHubYesNoSetting(t, "Signed Messages", func(m *Model) bool { return m.configs.V3Net.Hub.RequireSignedMessages })
+}
+
+// testHubYesNoSetting checks that the hub Y/N field label defaults to N and
+// that Y and N round-trip into the config value stored reads.
+func testHubYesNoSetting(t *testing.T, label string, stored func(*Model) bool) {
+	t.Helper()
 	m := Model{configs: &allConfigs{}}
 	for _, f := range m.sysFieldsNetwork(&config.ServerConfig{}) {
-		if f.Label != "Signed Subscribe" {
+		if f.Label != label {
 			continue
 		}
 		if got := f.Get(); got != "N" {
@@ -74,8 +85,11 @@ func TestSignedSubscribeSetting(t *testing.T) {
 			if got := f.Get(); got != value {
 				t.Fatalf("got %q, want %q", got, value)
 			}
+			if got := stored(&m); got != (value == "Y") {
+				t.Fatalf("after Set(%q) config value = %v", value, got)
+			}
 		}
 		return
 	}
-	t.Fatal("missing Signed Subscribe field")
+	t.Fatalf("missing %s field", label)
 }

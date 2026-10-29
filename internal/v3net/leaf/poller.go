@@ -51,6 +51,13 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 				cursor = msg.MsgUUID
 				continue
 			}
+			if !verifyAuthor(&msg) {
+				// Not marked seen, so a genuine copy under the same UUID
+				// can still be imported; the cursor moves past it so the
+				// rest of the page is not held up.
+				cursor = msg.MsgUUID
+				continue
+			}
 			if msg.NeedsTruncation() {
 				msg.Truncate()
 			}
@@ -85,6 +92,24 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 		}
 	}
 	return total, nil
+}
+
+// verifyAuthor checks a polled message's author signature independently of
+// the hub: the signature must verify and origin_node must be derived from
+// origin_pubkey_b64. It logs and returns false for a message that claims a
+// signature which does not check out, so it is never imported. Legacy
+// unsigned messages are accepted while networks migrate to signing.
+func verifyAuthor(msg *protocol.Message) bool {
+	if !msg.IsSigned() {
+		slog.Debug("leaf: accepting unsigned message from hub", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode)
+		return true
+	}
+	if err := msg.VerifySignature(); err != nil {
+		slog.Warn("leaf: message failed author signature check, dropping",
+			"uuid", msg.MsgUUID, "origin_node", msg.OriginNode, "error", err)
+		return false
+	}
+	return true
 }
 
 // runPoller starts the polling loop. It runs until ctx is cancelled.

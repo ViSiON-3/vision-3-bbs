@@ -170,7 +170,7 @@ func TestPostAndGetMessage(t *testing.T) {
 		AreaTag:     "gen.general",
 		MsgUUID:     "550e8400-e29b-41d4-a716-446655440000",
 		ThreadUUID:  "550e8400-e29b-41d4-a716-446655440000",
-		OriginNode:  "test.example.net",
+		OriginNode:  leafKS.NodeID(),
 		OriginBoard: "General",
 		From:        "Tester",
 		To:          "All",
@@ -237,7 +237,7 @@ func TestDuplicatePostReturns200(t *testing.T) {
 		"area_tag": "gen.general",
 		"msg_uuid": "550e8400-e29b-41d4-a716-446655440000",
 		"thread_uuid": "550e8400-e29b-41d4-a716-446655440000",
-		"origin_node": "test.example.net",
+		"origin_node": "ORIGIN_NODE",
 		"origin_board": "General",
 		"from": "Tester",
 		"to": "All",
@@ -246,6 +246,7 @@ func TestDuplicatePostReturns200(t *testing.T) {
 		"body": "Hello!",
 		"kludges": {}
 	}`
+	msgJSON = strings.Replace(msgJSON, "ORIGIN_NODE", leafKS.NodeID(), 1)
 
 	// Post twice.
 	for i := 0; i < 2; i++ {
@@ -299,7 +300,7 @@ func TestSSEReceivesNewMessageEvent(t *testing.T) {
 		"area_tag": "gen.general",
 		"msg_uuid": "660e8400-e29b-41d4-a716-446655440001",
 		"thread_uuid": "660e8400-e29b-41d4-a716-446655440001",
-		"origin_node": "test.example.net",
+		"origin_node": "ORIGIN_NODE",
 		"origin_board": "General",
 		"from": "Tester",
 		"to": "All",
@@ -308,6 +309,7 @@ func TestSSEReceivesNewMessageEvent(t *testing.T) {
 		"body": "Testing SSE",
 		"kludges": {}
 	}`
+	msgJSON = strings.Replace(msgJSON, "ORIGIN_NODE", leafKS.NodeID(), 1)
 	postReq := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/messages", msgJSON)
 	postResp, err := http.DefaultClient.Do(postReq)
 	if err != nil {

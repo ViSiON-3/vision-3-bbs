@@ -72,15 +72,15 @@ func registerLeafWithAreas(t *testing.T, ts *httptest.Server, leafKS *keystore.K
 	}
 }
 
-// testMsgJSON returns a valid message JSON for the given area tag and UUID.
-func testMsgJSON(areaTag, uuid string) string {
+// testMsgJSON returns a valid unsigned message JSON from originNode for the given area tag and UUID.
+func testMsgJSON(originNode, areaTag, uuid string) string {
 	return fmt.Sprintf(`{
 		"v3net": "1.0",
 		"network": "testnet",
 		"area_tag": %q,
 		"msg_uuid": %q,
 		"thread_uuid": %q,
-		"origin_node": "test.example.net",
+		"origin_node": %q,
 		"origin_board": "General",
 		"from": "Tester",
 		"to": "All",
@@ -88,7 +88,7 @@ func testMsgJSON(areaTag, uuid string) string {
 		"date_utc": "2026-03-16T04:20:00Z",
 		"body": "Hello V3Net!",
 		"kludges": {}
-	}`, areaTag, uuid, uuid)
+	}`, areaTag, uuid, uuid, originNode)
 }
 
 func TestMessageStore_StoreWithAreaTag(t *testing.T) {
@@ -115,7 +115,7 @@ func TestPostMessage_NoNAL_Returns422(t *testing.T) {
 	// Register leaf without area subscriptions (no NAL seeded).
 	registerLeaf(t, ts, leafKS)
 
-	msgJSON := testMsgJSON("gen.general", "aa0e8400-e29b-41d4-a716-446655440001")
+	msgJSON := testMsgJSON(leafKS.NodeID(), "gen.general", "aa0e8400-e29b-41d4-a716-446655440001")
 	req := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/messages", msgJSON)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -141,7 +141,7 @@ func TestPostMessage_UnknownArea_Returns422(t *testing.T) {
 	registerLeafWithAreas(t, ts, leafKS, []string{"gen.general"})
 
 	// Post to an area that doesn't exist in the NAL.
-	msgJSON := testMsgJSON("gen.nonexistent", "ab0e8400-e29b-41d4-a716-446655440002")
+	msgJSON := testMsgJSON(leafKS.NodeID(), "gen.nonexistent", "ab0e8400-e29b-41d4-a716-446655440002")
 	req := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/messages", msgJSON)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -167,7 +167,7 @@ func TestPostMessage_NotSubscribed_Returns403(t *testing.T) {
 	// Register without subscribing to gen.general.
 	registerLeaf(t, ts, leafKS)
 
-	msgJSON := testMsgJSON("gen.general", "ac0e8400-e29b-41d4-a716-446655440003")
+	msgJSON := testMsgJSON(leafKS.NodeID(), "gen.general", "ac0e8400-e29b-41d4-a716-446655440003")
 	req := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/messages", msgJSON)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -192,7 +192,7 @@ func TestPostMessage_ActiveSubscription_Returns200(t *testing.T) {
 	seedAreaMsgNAL(t, h, hubKS)
 	registerLeafWithAreas(t, ts, leafKS, []string{"gen.general"})
 
-	msgJSON := testMsgJSON("gen.general", "ad0e8400-e29b-41d4-a716-446655440004")
+	msgJSON := testMsgJSON(leafKS.NodeID(), "gen.general", "ad0e8400-e29b-41d4-a716-446655440004")
 	req := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/messages", msgJSON)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -217,9 +217,9 @@ func TestGetMessages_FiltersToSubscribedAreas(t *testing.T) {
 	seedAreaMsgNAL(t, h, hubKS)
 
 	// Directly store messages bypassing POST enforcement.
-	h.messages.Store("ae0e8400-e29b-41d4-a716-000000000001", "testnet", "gen.general", testMsgJSON("gen.general", "ae0e8400-e29b-41d4-a716-000000000001"))
-	h.messages.Store("ae0e8400-e29b-41d4-a716-000000000002", "testnet", "gen.general", testMsgJSON("gen.general", "ae0e8400-e29b-41d4-a716-000000000002"))
-	h.messages.Store("ae0e8400-e29b-41d4-a716-000000000003", "testnet", "gen.restricted", testMsgJSON("gen.restricted", "ae0e8400-e29b-41d4-a716-000000000003"))
+	h.messages.Store("ae0e8400-e29b-41d4-a716-000000000001", "testnet", "gen.general", testMsgJSON("test.example.net", "gen.general", "ae0e8400-e29b-41d4-a716-000000000001"))
+	h.messages.Store("ae0e8400-e29b-41d4-a716-000000000002", "testnet", "gen.general", testMsgJSON("test.example.net", "gen.general", "ae0e8400-e29b-41d4-a716-000000000002"))
+	h.messages.Store("ae0e8400-e29b-41d4-a716-000000000003", "testnet", "gen.restricted", testMsgJSON("test.example.net", "gen.restricted", "ae0e8400-e29b-41d4-a716-000000000003"))
 
 	// Register leaf only with gen.general subscription.
 	registerLeafWithAreas(t, ts, leafKS, []string{"gen.general"})
@@ -261,7 +261,7 @@ func TestGetMessages_NoSubscriptions_ReturnsEmpty(t *testing.T) {
 	seedAreaMsgNAL(t, h, hubKS)
 
 	// Store a message directly.
-	h.messages.Store("af0e8400-e29b-41d4-a716-000000000001", "testnet", "gen.general", testMsgJSON("gen.general", "af0e8400-e29b-41d4-a716-000000000001"))
+	h.messages.Store("af0e8400-e29b-41d4-a716-000000000001", "testnet", "gen.general", testMsgJSON("test.example.net", "gen.general", "af0e8400-e29b-41d4-a716-000000000001"))
 
 	// Register leaf without any area subscriptions.
 	registerLeaf(t, ts, leafKS)

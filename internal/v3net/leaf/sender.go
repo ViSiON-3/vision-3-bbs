@@ -64,8 +64,17 @@ func (l *Leaf) SendMessage(msg protocol.Message) error {
 	return l.SendMessageCtx(context.Background(), msg)
 }
 
-// SendMessageCtx signs and POSTs a message to the hub with context.
+// SendMessageCtx signs and POSTs a message to the hub with context. An
+// oversize body is truncated first, then the message is signed with the
+// node key (protocol.Message.Sign), so the signature covers exactly what the
+// hub stores and relays. The message's OriginNode must be this node's ID.
 func (l *Leaf) SendMessageCtx(ctx context.Context, msg protocol.Message) error {
+	if msg.NeedsTruncation() {
+		msg.Truncate()
+	}
+	if err := msg.Sign(l.cfg.Keystore); err != nil {
+		return fmt.Errorf("leaf: sign message: %w", err)
+	}
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("leaf: marshal message: %w", err)

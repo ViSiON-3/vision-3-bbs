@@ -15,6 +15,10 @@ type Config struct {
 	// RequireSignedSubscribe opts into rejecting legacy unsigned subscriptions.
 	// False preserves compatibility while leaves upgrade independently.
 	RequireSignedSubscribe bool
+	// RequireSignedMessages opts into rejecting posted messages that carry
+	// no author signature. False accepts legacy unsigned posts while leaves
+	// upgrade; a message that carries a bad signature is always rejected.
+	RequireSignedMessages bool
 	// AutoApproveAreas adds area proposals to the NAL on arrival instead of
 	// queueing them for the coordinator.
 	AutoApproveAreas bool

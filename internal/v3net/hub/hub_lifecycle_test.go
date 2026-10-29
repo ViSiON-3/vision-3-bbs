@@ -419,7 +419,7 @@ func TestPostMessage_Validation(t *testing.T) {
 	url := ts.URL + "/v3net/v1/testnet/messages"
 	const uuid = "770e8400-e29b-41d4-a716-446655440000"
 
-	wrongNet := strings.Replace(testMsgJSON("gen.general", uuid), `"network": "testnet"`, `"network": "othernet"`, 1)
+	wrongNet := strings.Replace(testMsgJSON(leafKS.NodeID(), "gen.general", uuid), `"network": "testnet"`, `"network": "othernet"`, 1)
 	cases := []struct {
 		name, body string
 		want       int

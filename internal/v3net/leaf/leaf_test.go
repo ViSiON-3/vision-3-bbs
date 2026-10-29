@@ -143,6 +143,14 @@ func testMessage(uuid string) protocol.Message {
 	}
 }
 
+// ownMessage returns testMessage(uuid) authored by l's node, which is what
+// SendMessage requires before it signs.
+func ownMessage(l *Leaf, uuid string) protocol.Message {
+	msg := testMessage(uuid)
+	msg.OriginNode = l.cfg.Keystore.NodeID()
+	return msg
+}
+
 func TestPoll_ReceivesMessages(t *testing.T) {
 	msgs := []protocol.Message{
 		testMessage("550e8400-e29b-41d4-a716-446655440000"),
@@ -205,7 +213,7 @@ func TestSendMessage_Signs(t *testing.T) {
 	writer := &mockJAMWriter{}
 	l, _ := setupLeaf(t, ts.URL, writer)
 
-	msg := testMessage("550e8400-e29b-41d4-a716-446655440000")
+	msg := ownMessage(l, "550e8400-e29b-41d4-a716-446655440000")
 	if err := l.SendMessage(msg); err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}
