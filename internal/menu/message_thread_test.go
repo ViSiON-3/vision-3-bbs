@@ -604,6 +604,8 @@ func TestMessageReaderThreadMenuWithViewClosed(t *testing.T) {
 		{"", 0},
 		{"T", 1},
 		{"TT", 1},
+		{"\t", 1},
+		{"\t\t", 1},
 		// Opened, redrawn as the cursor moves, then drawn on #7.
 		{"T\x1b[B\r", 3},
 	} {
@@ -615,6 +617,10 @@ func TestMessageReaderThreadMenuWithViewClosed(t *testing.T) {
 	screen := env.screenRun("READMSGS", &caller, "5\rTTQ")
 	if strings.Contains(screen.Row(7), "── Thread ") {
 		t.Errorf("the pane should be gone after T closes the menu:\n%s", screen.Snapshot())
+	}
+	screen = env.screenRun("READMSGS", &caller, "5\r\tQ")
+	if !strings.HasPrefix(screen.Row(7), "── Thread Menu ─") {
+		t.Errorf("Tab should open the pane as the thread menu:\n%s", screen.Snapshot())
 	}
 }
 
