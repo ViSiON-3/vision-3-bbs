@@ -271,6 +271,30 @@ func TestWriteStringScript(t *testing.T) {
 		}
 	})
 
+	// With no InputHandler running, the script reads ahead from the session
+	// itself. Keys the caller typed for the next prompt that the script did
+	// not read must reach that prompt (#653).
+	t.Run("hands keys typed ahead to the next prompt", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		f.s.whenOutput("[script", func() { f.s.send("xyz") })
+
+		out := f.write(t, "!say key")
+		if !strings.Contains(out, "[got x]") {
+			t.Fatalf("script did not read its key; output = %q", out)
+		}
+		ih := getSessionIH(f.s)
+		defer resetSessionIH(f.s)
+		stop := make(chan struct{})
+		timer := time.AfterFunc(time.Second, func() { close(stop) })
+		defer timer.Stop()
+		for _, want := range []byte("yz") {
+			b, err := ih.ReadByteUntil(stop)
+			if err != nil || b != want {
+				t.Fatalf("next prompt read %q, %v; want %q", b, err, want)
+			}
+		}
+	})
+
 	// The caller of a prompt often holds the session's InputHandler across
 	// the prompt. A script run in its place must read through that handler
 	// and leave it open; closing it would hand the caller end-of-file.

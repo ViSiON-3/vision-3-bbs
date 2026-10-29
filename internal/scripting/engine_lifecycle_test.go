@@ -73,8 +73,8 @@ func waitNoGoroutineLeak(t *testing.T, baseline int) {
 }
 
 // TestEngineCloseStopsIOGoroutines demonstrates that when a V3 script ends
-// normally while the user stays connected, the copier (session->pipe), reader
-// (pipe->channel) and context-watcher goroutines all exit once the door
+// normally while the user stays connected, the copier (session->channel) and
+// context-watcher goroutines all exit once the door
 // handler closes the read interrupt and calls Close. A regression here would
 // leave the copier blocked in session.Read, stealing the next menu keypress
 // and leaking one goroutine per script run.
@@ -137,6 +137,66 @@ func TestEngineCloseWithoutInputIsClean(t *testing.T) {
 		t.Fatal("copier goroutine started for a script that never read input")
 	}
 	waitNoGoroutineLeak(t, baseline)
+}
+
+// TestEngineCloseReturnsUnreadInput verifies that keys arriving in the same
+// read as the one a script consumed are returned by Close, not dropped.
+func TestEngineCloseReturnsUnreadInput(t *testing.T) {
+	sess := newInterruptibleSession("abc")
+	eng := NewEngine(context.Background(), &SessionContext{Session: sess}, ScriptConfig{}, nil)
+	t.Cleanup(func() { eng.Close() })
+
+	if key, err := eng.readKey(2 * time.Second); key != "a" || err != nil {
+		t.Fatalf("readKey = %q, %v; want \"a\", nil", key, err)
+	}
+	sess.closeInterrupt()
+	if got := string(eng.Close()); got != "bc" {
+		t.Fatalf("Close returned %q, want \"bc\"", got)
+	}
+	if got := eng.Close(); got != nil {
+		t.Fatalf("second Close returned %q, want nil", got)
+	}
+}
+
+// TestEngineCloseReturnsQueuedAndHeldInput fills the copier's channel so the
+// copier is left holding a chunk it cannot deliver when the script ends.
+// Close must return the queued chunks and the held one, in order, and the
+// copier must not read past them.
+func TestEngineCloseReturnsQueuedAndHeldInput(t *testing.T) {
+	sess := newInterruptibleSession("a")
+	for _, c := range []string{"b", "c", "d", "e", "f", "g"} {
+		sess.chunks = append(sess.chunks, []byte(c))
+	}
+	eng := NewEngine(context.Background(), &SessionContext{Session: sess}, ScriptConfig{}, nil)
+	t.Cleanup(func() { eng.Close() })
+
+	if key, err := eng.readKey(2 * time.Second); key != "a" || err != nil {
+		t.Fatalf("readKey = %q, %v; want \"a\", nil", key, err)
+	}
+	// b..e fill the channel; the copier then reads f and blocks sending it.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		sess.mu.Lock()
+		left := len(sess.chunks)
+		sess.mu.Unlock()
+		if left == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("copier did not read ahead: %d chunks left", left)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	sess.closeInterrupt()
+	if got := string(eng.Close()); got != "bcdef" {
+		t.Fatalf("Close returned %q, want \"bcdef\"", got)
+	}
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+	if len(sess.chunks) != 1 || string(sess.chunks[0]) != "g" {
+		t.Fatalf("copier read past the held chunk: %q left", sess.chunks)
+	}
 }
 
 // demandSession opts a borrowed input source into reads requested by the script.

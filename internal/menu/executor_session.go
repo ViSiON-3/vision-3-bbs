@@ -77,11 +77,12 @@ func clearSessionIdleTimeout(s ssh.Session) {
 // ClearSessionIdleTimeout is clearSessionIdleTimeout for the session handler,
 // which can set a timeout (SSH pre-auth, login sequence) before any menu runs
 // and so before MenuExecutor.Run's own deferred cleanup is in place. It drops
-// the session's time-limit deadline too.
+// the session's time-limit deadline and any type-ahead kept for it too.
 func ClearSessionIdleTimeout(s ssh.Session) {
 	clearSessionIdleTimeout(s)
 	sessionDeadlines.Delete(s)
 	sessionChatCredits.Delete(s)
+	sessionTypeAhead.Delete(s)
 	clearLoginFailures(s)
 }
 
@@ -244,8 +245,33 @@ func getSessionIH(s ssh.Session) *editor.InputHandler {
 	if tap := tapOf(s); tap != nil {
 		ih.SetBreakIn(tap.BreakIn(), func() { serviceSysopChat(s, ih, tap) })
 	}
+	// No one has read from the new handler yet, so this is its owner.
+	if v, ok := sessionTypeAhead.LoadAndDelete(s); ok {
+		ih.ReturnInput(v.([]byte))
+	}
 	sessionInputHandlers.Store(s, ih)
 	return ih
+}
+
+// sessionTypeAhead holds, per session, keys a V3 script read ahead from the
+// session but never consumed, until getSessionIH creates the next
+// InputHandler and queues them in it ahead of anything new. A door runs with
+// the handler stopped (resetSessionIH), so there is no handler to give them
+// to when the script ends.
+var sessionTypeAhead sync.Map
+
+// stashTypeAhead keeps p, keys the caller typed while a script ran with the
+// session's InputHandler stopped, for the next handler getSessionIH creates.
+// It appends to any keys already kept.
+func stashTypeAhead(s ssh.Session, p []byte) {
+	if len(p) == 0 {
+		return
+	}
+	s = unwrapSession(s)
+	if v, ok := sessionTypeAhead.Load(s); ok {
+		p = append(append([]byte(nil), v.([]byte)...), p...)
+	}
+	sessionTypeAhead.Store(s, append([]byte(nil), p...))
 }
 
 // resetSessionIH stops and removes any session-scoped InputHandler for s.
