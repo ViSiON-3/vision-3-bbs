@@ -207,7 +207,7 @@ func TestThreadViewNavigation(t *testing.T) {
 		t.Errorf("firstReply(5) = %d, want 7", f)
 	}
 	if x, _ := tv.nextSibling(7); x != 15 {
-		t.Errorf("nextSibling(7) = %d, want 15: X skips the private #9", x)
+		t.Errorf("nextSibling(7) = %d, want 15: A skips the private #9", x)
 	}
 	if x, isRoot := tv.nextSibling(15); x != 0 || isRoot {
 		t.Errorf("nextSibling(15) = %d, root %v; want none, not a root", x, isRoot)
@@ -254,15 +254,15 @@ func TestThreadViewNavigation(t *testing.T) {
 		target int
 		notice string
 	}{
-		{5, 'U', 3, ""},
-		{1, 'U', 0, "Message |15#1|09 starts its thread; it isn't a reply."},
-		{8, 'U', 0, "Message |15#4|09, the one this answers, has been deleted."},
-		{15, 'U', 0, "The message this answers isn't available to you."},
+		{5, 'B', 3, ""},
+		{1, 'B', 0, "Message |15#1|09 starts its thread; it isn't a reply."},
+		{8, 'B', 0, "Message |15#4|09, the one this answers, has been deleted."},
+		{15, 'B', 0, "The message this answers isn't available to you."},
 		{1, 'F', 3, ""},
 		{10, 'F', 0, "No replies to |15#10|09 yet."},
-		{7, 'X', 15, ""},
-		{1, 'X', 0, "Message |15#1|09 starts its thread; it has no sibling replies."},
-		{11, 'X', 0, "No more replies to |15#3|09 after this one."},
+		{7, 'A', 15, ""},
+		{1, 'A', 0, "Message |15#1|09 starts its thread; it has no sibling replies."},
+		{11, 'A', 0, "No more replies to |15#3|09 after this one."},
 		{10, ']', 15, ""},
 		{14, ']', 0, "End of thread."},
 		{3, '[', 1, ""},
@@ -307,25 +307,25 @@ func TestRenderSignpostsFitsWidth(t *testing.T) {
 		want []string // substrings of the stripped row
 	}{
 		{"three long handles", []signpost{
-			{key: 'U', arrow: "↑", target: 3, handle: long},
+			{key: 'B', arrow: "↑", target: 3, handle: long},
 			{key: 'F', arrow: "↓", target: 7, handle: long + "_Two"},
-			{key: 'X', arrow: "→", target: 11, handle: long + "_Three"},
-		}, []string{"─[U]↑ #3 ", "─[F]↓ #7 ", "─[X]→ #11 ", "…"}},
+			{key: 'A', arrow: "→", target: 11, handle: long + "_Three"},
+		}, []string{"─[B]↑ #3 ", "─[F]↓ #7 ", "─[A]→ #11 ", "…"}},
 		{"two long handles", []signpost{
-			{key: 'U', arrow: "↑", target: 3, handle: long},
+			{key: 'B', arrow: "↑", target: 3, handle: long},
 			{key: 'F', arrow: "↓", target: 7, handle: long},
-			{key: 'X', arrow: "→"},
+			{key: 'A', arrow: "→"},
 		}, []string{"none", "…"}},
 		{"deleted target", []signpost{
-			{key: 'U', arrow: "↑", target: 4, deleted: true},
+			{key: 'B', arrow: "↑", target: 4, deleted: true},
 			{key: 'F', arrow: "↓", target: 14, handle: "PhosphorDotMatrix"},
-			{key: 'X', arrow: "→"},
-		}, []string{"─[U]↑ #4 deleted ", "─[F]↓ #14 PhosphorDotMatrix ", "─[X]→ none ─"}},
+			{key: 'A', arrow: "→"},
+		}, []string{"─[B]↑ #4 deleted ", "─[F]↓ #14 PhosphorDotMatrix ", "─[A]→ none ─"}},
 		{"short handles leave a rule", []signpost{
-			{key: 'U', arrow: "↑", target: 1, handle: "Lux"},
+			{key: 'B', arrow: "↑", target: 1, handle: "Lux"},
 			{key: 'F', arrow: "↓"},
-			{key: 'X', arrow: "→"},
-		}, []string{"─[U]↑ #1 Lux ─[F]↓ none ─[X]→ none ─[V]list ────"}},
+			{key: 'A', arrow: "→"},
+		}, []string{"─[B]↑ #1 Lux ─[F]↓ none ─[A]→ none ─[V]tree ────"}},
 	}
 	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
 		g := threadGlyphsFor(mode)
@@ -334,7 +334,7 @@ func TestRenderSignpostsFitsWidth(t *testing.T) {
 				segs := make([]signpost, len(tc.segs))
 				for i, s := range tc.segs {
 					segs[i] = s
-					segs[i].arrow = map[rune]string{'U': g.up, 'F': g.down, 'X': g.right}[s.key]
+					segs[i].arrow = map[rune]string{'B': g.up, 'F': g.down, 'A': g.right}[s.key]
 				}
 				row := renderSignposts(segs, 79, g, mode)
 				if w := visibleWidth(row, mode); w != 79 {
@@ -359,9 +359,9 @@ func TestRenderSignpostsFitsWidth(t *testing.T) {
 func TestRenderSignpostsDropsTinyHandles(t *testing.T) {
 	g := threadGlyphsFor(ansi.OutputModeUTF8)
 	segs := []signpost{
-		{key: 'U', arrow: g.up, target: 100000, handle: "Someone_Rather_Long"},
+		{key: 'B', arrow: g.up, target: 100000, handle: "Someone_Rather_Long"},
 		{key: 'F', arrow: g.down, target: 100001, handle: "Another_Long_Handle"},
-		{key: 'X', arrow: g.right, target: 100002, handle: "A_Third_Long_Handle"},
+		{key: 'A', arrow: g.right, target: 100002, handle: "A_Third_Long_Handle"},
 	}
 	// The fixed parts take 51 columns with the list tail; a 53-column row
 	// leaves two.
@@ -373,7 +373,7 @@ func TestRenderSignpostsDropsTinyHandles(t *testing.T) {
 	if strings.Contains(stripped, "Som") || strings.Contains(stripped, "Ano") || strings.Contains(stripped, "A_T") {
 		t.Errorf("no handle fits a 53-column row with three six-digit targets: %q", stripped)
 	}
-	if !strings.Contains(stripped, "#100000 ─[F]↓ #100001 ─[X]→ #100002 ─[V]list") {
+	if !strings.Contains(stripped, "#100000 ─[F]↓ #100001 ─[A]→ #100002 ─[V]tree") {
 		t.Errorf("the fixed parts must still render whole: %q", stripped)
 	}
 }
@@ -531,7 +531,7 @@ func TestMessageReaderThreadPaneLayout(t *testing.T) {
 		t.Error("a row that is not current should not be blue")
 	}
 	signs := screen.Row(23)
-	for _, want := range []string{"─[U]↑ #3 Kestrel_of_t…", "─[F]↓ #7 Mercury Retr…", "─[X]→ #11 GrimmTheToss…", "─[V]list"} {
+	for _, want := range []string{"─[B]↑ #3 Kestrel_of_t…", "─[F]↓ #7 Mercury Retr…", "─[A]→ #11 GrimmTheToss…", "─[V]tree"} {
 		if !strings.Contains(signs, want) {
 			t.Errorf("signposts = %q, want %q", signs, want)
 		}
@@ -550,7 +550,7 @@ func TestMessageReaderThreadPaneLayout(t *testing.T) {
 }
 
 // A message that starts a thread nobody answered shows no pane, and the
-// body keeps the rows; its signposts all read none.
+// body keeps the rows; the separator row is a plain rule, no signposts.
 func TestMessageReaderNoPaneWithoutThread(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
@@ -561,8 +561,29 @@ func TestMessageReaderNoPaneWithoutThread(t *testing.T) {
 	if !strings.Contains(screen.Row(7), "Moving my hub poll") {
 		t.Errorf("body should start right under the header:\n%s", screen.Snapshot())
 	}
-	if signs := screen.Row(23); !strings.Contains(signs, "─[U]↑ none ─[F]↓ none ─[X]→ none ─") {
-		t.Errorf("signposts = %q", signs)
+	if signs := strings.TrimRight(screen.Row(23), " "); signs != strings.Repeat("─", 79) {
+		t.Errorf("separator = %q, want a plain rule", signs)
+	}
+}
+
+// The only reply to a deleted root has no pane, having nothing else to
+// show, but it is still a reply: its signposts and B say the parent is gone.
+func TestMessageReaderLoneReplyToDeletedRoot(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	if err := env.e.MessageMgr.DeleteMessage(generalAreaID, 12); err != nil {
+		t.Fatalf("DeleteMessage: %v", err)
+	}
+	screen := env.readerAt(13, "")
+	if strings.Contains(screen.Snapshot(), "── Thread ─") {
+		t.Errorf("pane shown with nothing else to show:\n%s", screen.Snapshot())
+	}
+	if !strings.Contains(screen.Row(23), "─[B]↑ #12 deleted ") {
+		t.Errorf("signposts = %q, want B leading to the deleted #12", screen.Row(23))
+	}
+	r := env.sub(t).runCmd("READMSGS", env.caller, "", "13\rBQ")
+	if !r.has("Message #12, the one this answers, has been deleted.") {
+		t.Errorf("B should give the deleted-parent notice; output:\n%s", r.text())
 	}
 }
 
@@ -576,7 +597,7 @@ func TestMessageReaderPaneWindowAndPlaceholder(t *testing.T) {
 	if !strings.Contains(snap, "└─#4 deleted") {
 		t.Errorf("deleted #4 should be a placeholder row:\n%s", snap)
 	}
-	if !strings.Contains(screen.Row(23), "─[U]↑ #4 deleted ─[F]↓ #14 PhosphorDotMatrix ─[X]→ none") {
+	if !strings.Contains(screen.Row(23), "─[B]↑ #4 deleted ─[F]↓ #14 PhosphorDotMatrix ─[A]→ none") {
 		t.Errorf("signposts on #8 = %q", screen.Row(23))
 	}
 	screen = env.readerAt(14, "")
@@ -600,17 +621,17 @@ func TestMessageReaderThreadKeys(t *testing.T) {
 		at    int    // message shown at the end
 		seen  string // body marker or notice seen along the way
 	}{
-		{"U goes to the parent", 5, "U", 3, "body-3"},
+		{"B goes to the parent", 5, "B", 3, "body-3"},
 		{"F goes to the first reply", 1, "F", 3, "body-3"},
-		{"X goes to the next sibling, skipping private mail", 7, "X", 15, "body-15"},
+		{"A goes to the next sibling, skipping private mail", 7, "A", 15, "body-15"},
 		{"] walks the thread", 10, "]", 15, "body-15"},
 		{"[ walks back", 3, "[", 1, "body-1"},
-		{"U on a root", 1, "U", 1, "Message #1 starts its thread; it isn't a reply."},
-		{"U under a deleted parent", 8, "U", 8, "Message #4, the one this answers, has been deleted."},
-		{"U under a hidden parent", 15, "U", 15, "The message this answers isn't available to you."},
+		{"B on a root", 1, "B", 1, "Message #1 starts its thread; it isn't a reply."},
+		{"B under a deleted parent", 8, "B", 8, "Message #4, the one this answers, has been deleted."},
+		{"B under a hidden parent", 15, "B", 15, "The message this answers isn't available to you."},
 		{"F on a leaf", 10, "F", 10, "No replies to #10 yet."},
-		{"X on a root", 1, "X", 1, "Message #1 starts its thread; it has no sibling replies."},
-		{"X on the last sibling", 11, "X", 11, "No more replies to #3 after this one."},
+		{"A on a root", 1, "A", 1, "Message #1 starts its thread; it has no sibling replies."},
+		{"A on the last sibling", 11, "A", 11, "No more replies to #3 after this one."},
 		{"] at the end", 14, "]", 14, "End of thread."},
 		{"[ at the start", 1, "[", 1, "Start of thread."},
 		{"keys chain", 1, "FFF]", 10, "body-10"},
@@ -676,8 +697,8 @@ func TestMessageReaderDirectReplyCountRespectsVisibility(t *testing.T) {
 	if snap := kestrelScreen.Snapshot(); !strings.Contains(snap, "│ │ └─#9 n0name") {
 		t.Errorf("the recipient's pane should show #9:\n%s", snap)
 	}
-	if !strings.Contains(kestrelScreen.Row(23), "─[X]→ #9 n0name") {
-		t.Errorf("recipient's signposts = %q, want X leading to #9", kestrelScreen.Row(23))
+	if !strings.Contains(kestrelScreen.Row(23), "─[A]→ #9 n0name") {
+		t.Errorf("recipient's signposts = %q, want A leading to #9", kestrelScreen.Row(23))
 	}
 }
 
@@ -698,7 +719,7 @@ func TestMessageReaderThreadPaneCP437(t *testing.T) {
 	if row := screen.Row(9); !strings.HasPrefix(row, "  ├─#3 Kestrel_~ ") {
 		t.Errorf("pane row above = %q", row)
 	}
-	if signs := screen.Row(23); !strings.Contains(signs, "─[U] #3 Kestrel_of_t~ ─[F] #7 Mercury Retr~ ─[X] #11 GrimmTheToss~ ─[V]list") {
+	if signs := screen.Row(23); !strings.Contains(signs, "─[B] #3 Kestrel_of_t~ ─[F] #7 Mercury Retr~ ─[A] #11 GrimmTheToss~ ─[V]tree") {
 		t.Errorf("signposts = %q", signs)
 	}
 	if c := screen.Cell(23, 80).Rune; c != ' ' {
@@ -753,7 +774,7 @@ func TestThreadCellsAreInert(t *testing.T) {
 	if expanded := string(ansi.ReplacePipeCodes([]byte(row))); strings.Contains(expanded, "\x1b[2J") || !strings.Contains(expanded, "|16pwned") || !strings.Contains(expanded, "Evil|CL") {
 		t.Errorf("row expands to %q", expanded)
 	}
-	signs := renderSignposts([]signpost{{key: 'U', arrow: g.up, target: 7, handle: "Evil|CL\x1b[2J"}, {key: 'F', arrow: g.down}, {key: 'X', arrow: g.right}}, 79, g, ansi.OutputModeUTF8)
+	signs := renderSignposts([]signpost{{key: 'B', arrow: g.up, target: 7, handle: "Evil|CL\x1b[2J"}, {key: 'F', arrow: g.down}, {key: 'A', arrow: g.right}}, 79, g, ansi.OutputModeUTF8)
 	if w := visibleWidth(signs, ansi.OutputModeUTF8); w != 79 {
 		t.Errorf("signposts width = %d: %q", w, signs)
 	}
@@ -776,7 +797,7 @@ func TestThreadCellsAreInert(t *testing.T) {
 
 // A deleted message is a placeholder only for a caller who could have read
 // it. With the private #9 deleted, its public reply #15 still hangs from #5
-// for everyone else, with no "#9 deleted" row and U saying only that the
+// for everyone else, with no "#9 deleted" row and B saying only that the
 // parent is unavailable; its recipient sees the placeholder.
 func TestDeletedPrivateMessageStaysHidden(t *testing.T) {
 	nodes := sampleNodes()
@@ -803,12 +824,12 @@ func TestDeletedPrivateMessageStaysHidden(t *testing.T) {
 	if p, state := tv.parentOf(15); state != parentHidden || p != 0 {
 		t.Errorf("parentOf(15) = %d, %v; want hidden and unnamed", p, state)
 	}
-	if _, notice := threadNavTarget(tv, 'U', env0Strings(t)); strings.Contains(notice, "#9") {
-		t.Errorf("U notice names the hidden message: %q", notice)
+	if _, notice := threadNavTarget(tv, 'B', env0Strings(t)); strings.Contains(notice, "#9") {
+		t.Errorf("B notice names the hidden message: %q", notice)
 	}
 	segs := readerSignposts(tv, threadGlyphsFor(ansi.OutputModeUTF8))
 	if segs[0].target != 0 {
-		t.Errorf("U signpost names the hidden parent: %+v", segs[0])
+		t.Errorf("B signpost names the hidden parent: %+v", segs[0])
 	}
 
 	kestrel := newThreadView(nodes, 15, deleted9("Kestrel_of_the_Wastes"))
@@ -833,12 +854,12 @@ func TestMessageReaderDeletedPrivateParentStaysHidden(t *testing.T) {
 	if strings.Contains(snap, "#9") {
 		t.Errorf("the deleted private #9 is named:\n%s", snap)
 	}
-	if !strings.Contains(screen.Row(23), "─[U]↑ none ") {
-		t.Errorf("signposts = %q, want U leading nowhere", screen.Row(23))
+	if !strings.Contains(screen.Row(23), "─[B]↑ none ") {
+		t.Errorf("signposts = %q, want B leading nowhere", screen.Row(23))
 	}
-	r := env.sub(t).runCmd("READMSGS", env.caller, "", "15\rUQ")
+	r := env.sub(t).runCmd("READMSGS", env.caller, "", "15\rBQ")
 	if !r.has("The message this answers isn't available to you.") || strings.Contains(r.text(), "#9") {
-		t.Errorf("U should give the hidden-parent notice without naming #9; output:\n%s", r.text())
+		t.Errorf("B should give the hidden-parent notice without naming #9; output:\n%s", r.text())
 	}
 }
 
@@ -871,7 +892,7 @@ func TestMessageReaderThreadKeysPassThroughLightbar(t *testing.T) {
 		keys string
 		at   int
 	}{
-		{"\x1b[CU", 3},
+		{"\x1b[CB", 3},
 		{"\x1b[Cf", 7},
 		{"\x1b[D]", 7},
 	} {

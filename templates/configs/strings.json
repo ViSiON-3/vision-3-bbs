@@ -1,6 +1,8 @@
 {
  "konfigTwitListLabel": "Twit List",
  "konfigTwitListHelp": "Hide messages from selected authors.",
+ "konfigThreadViewLabel": "Thread View",
+ "konfigThreadViewHelp": "On: the reader opens with the reply tree shown under the header. V toggles it.",
   "twitNamePrompt": "Name (optionally name@address): ",
   "twitDeletePrompt": "Entry number to delete: ",
   "twitClearConfirm": "Clear your Twit List? [Y/N]: ",
@@ -291,7 +293,7 @@
   "konfigRealNameTooShort": "|12Real name must be at least %d characters.|07",
   "konfigSaveError": "|12Couldn't save %s. Please try again.|07",
   "konfigSavedFormat": "|10Saved.|07 %s is now |15%s|07.",
-  "konfigScreenHeightHelp": "Rows your terminal shows (21-60). Used for paging and full-screen views.",
+  "konfigScreenHeightHelp": "Rows your terminal shows (24-60). Used for paging and full-screen views.",
   "konfigScreenHeightLabel": "Screen Height",
   "konfigScreenWidthHelp": "Columns your terminal shows (80-255). Used for layout and word wrap.",
   "konfigScreenWidthLabel": "Screen Width",

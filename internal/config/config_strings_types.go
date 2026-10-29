@@ -3,6 +3,9 @@ package config
 // StringsConfig holds all the configurable strings for the BBS.
 // This is the single source of truth.
 type StringsConfig struct {
+	KonfigThreadViewLabel string `json:"konfigThreadViewLabel"`
+	KonfigThreadViewHelp  string `json:"konfigThreadViewHelp"`
+
 	KonfigTwitListLabel string `json:"konfigTwitListLabel"`
 	KonfigTwitListHelp  string `json:"konfigTwitListHelp"`
 	TwitNamePrompt      string `json:"twitNamePrompt"`
@@ -344,7 +347,7 @@ type StringsConfig struct {
 	MsgReadingSuffix     string `json:"msgReadingSuffix"`
 	MsgThreadPrompt      string `json:"msgThreadPrompt"`
 	MsgNoThreadFound     string `json:"msgNoThreadFound"`
-	// Reply-tree navigation (U/F/X/[/]) notices and the docked pane's label.
+	// Reply-tree navigation (B/F/A/[/]) notices and the docked pane's label.
 	MsgThreadNoParent       string `json:"msgThreadNoParent"`
 	MsgThreadParentDeleted  string `json:"msgThreadParentDeleted"`
 	MsgThreadParentHidden   string `json:"msgThreadParentHidden"`

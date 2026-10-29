@@ -153,9 +153,9 @@ func runMessageReader(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 // readerOpts is how the reader was opened.
 type readerOpts struct {
-	// fromList is set when the message list opened the reader. V and L then
-	// return "LIST" (after recording the mode asked for) instead of opening
-	// a second list over the first, and the list re-selects the message.
+	// fromList is set when the message list opened the reader. L then
+	// returns "LIST" instead of opening a second list over the first, and
+	// the list re-selects the message.
 	fromList bool
 }
 
@@ -395,18 +395,31 @@ readerLoop:
 		}
 
 		// The docked thread pane sits under the header and moves the body
-		// down. A message that starts a thread nobody has answered has no
-		// thread to show, so the body keeps the rows.
-		paneTop := bodyStartRow
+		// down while it is open (V opens and closes it). A message that is
+		// not in a thread has no pane and no signposts: the separator row
+		// is a plain rule and the body keeps the rows. A reply whose parent
+		// is deleted or hidden is still in one, even with nothing else to
+		// show: it keeps its signposts and keys, though there is no pane.
+		paneTop, fullBodyStart, fullBodyAvail := bodyStartRow, bodyStartRow, bodyAvailHeight
 		var paneLines []string
-		if tv.hasThread() {
+		layoutPane := func() {
+			paneLines = nil
+			bodyStartRow, bodyAvailHeight = fullBodyStart, fullBodyAvail
+			if !tv.hasThread() || !sessionThreadPaneOpen(s, currentUser) {
+				return
+			}
 			if rows := paneRowsFor(bodyAvailHeight); rows > 0 {
 				paneLines = renderThreadPane(tv, rows, termWidth-1, e.Strings().MsgThreadPaneTitle, glyphs, outputMode)
 				bodyStartRow += rows + 2
 				bodyAvailHeight -= rows + 2
 			}
 		}
-		signposts := renderSignposts(readerSignposts(tv, glyphs), termWidth-1, glyphs, outputMode)
+		layoutPane()
+		signposts := "|08" + strings.Repeat("─", termWidth-1) + "|07"
+		inThread := tv.hasThread() || tv.isReply()
+		if inThread {
+			signposts = renderSignposts(readerSignposts(tv, glyphs), termWidth-1, glyphs, outputMode)
+		}
 
 		// Initialize scroll state for this message
 		scrollOffset := 0
@@ -458,7 +471,7 @@ readerLoop:
 			editor.KeyCtrlE, editor.KeyCtrlX, editor.KeyCtrlR, editor.KeyCtrlC,
 			// The thread keys are not on the bar, so the bar hands them
 			// back too rather than swallowing them.
-			'U', 'u', 'F', 'f', 'X', 'x', '[', ']', 'V', 'v',
+			'B', 'b', 'F', 'f', 'A', 'a', '[', ']', 'V', 'v',
 		}
 		pendingKey := 0
 
@@ -492,7 +505,7 @@ readerLoop:
 				suffixText := barSuffix
 
 				// The separator row above the bar carries the thread
-				// signposts: where U, F and X lead from this message.
+				// signposts: where B, F and A lead from this message.
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight-1, 1)), outputMode)
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(signposts)), outputMode)
 
@@ -617,7 +630,7 @@ readerLoop:
 					// Check if it's a direct command key
 					switch unicode.ToUpper(singleKey) {
 					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'K', 'I', '?',
-						'U', 'F', 'X', '[', ']', 'V':
+						'B', 'F', 'A', '[', ']', 'V':
 						selectedKey = unicode.ToUpper(singleKey)
 					default:
 						// Not a recognized command, show lightbar
@@ -811,7 +824,10 @@ readerLoop:
 				// Exit scroll loop to load new message
 				break scrollLoop
 
-			case 'U', 'F', 'X', '[', ']': // Reply-tree navigation
+			case 'B', 'F', 'A', '[', ']': // Reply-tree navigation
+				if !inThread {
+					continue
+				}
 				target, notice := threadNavTarget(tv, selectedKey, e.Strings())
 				if target == 0 {
 					e.showReaderNotice(terminal, outputMode, notice, termHeight)
@@ -834,16 +850,26 @@ readerLoop:
 				needsRedraw = true
 				continue
 
-			case 'L', 'V': // List messages in current area: L flat, V threaded
-				threaded := selectedKey == 'V'
+			case 'V': // Open or close the thread pane
+				if !tv.hasThread() {
+					continue
+				}
+				setSessionThreadPaneOpen(s, !sessionThreadPaneOpen(s, currentUser))
+				layoutPane()
+				// Keep the top line where it was, as far as the new height
+				// allows.
+				scrollOffset = max(0, min(scrollOffset, totalBodyLines-bodyAvailHeight))
+				needsRedraw = true
+				continue
+
+			case 'L': // List messages in current area, in the caller's last list mode
 				if opts.fromList {
-					// The list under this reader shows itself again, in the
-					// mode asked for, with the cursor on this message.
-					setSessionListThreaded(s, threaded)
+					// The list under this reader shows itself again, with
+					// the cursor on this message.
 					return currentUser, "LIST", currentMsgNum, nil
 				}
 				updatedUser, nextAction, listMsg, listErr := runListMsgsWith(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "", baseFilter,
-					listOpts{fromReader: true, startMsg: currentMsgNum, threaded: threaded})
+					listOpts{fromReader: true, startMsg: currentMsgNum})
 				if updatedUser != nil {
 					currentUser = updatedUser
 				}

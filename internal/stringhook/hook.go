@@ -103,6 +103,8 @@ var NoHookKeys = map[string]bool{
 	"twitQuickConfirm":          true,
 	"konfigTwitListLabel":       true,
 	"konfigTwitListHelp":        true,
+	"konfigThreadViewLabel":     true,
+	"konfigThreadViewHelp":      true,
 	"One_Liner_Legend":          true,
 	"anonymousName":             true,
 	"cfgFileColumnsHeader":      true,

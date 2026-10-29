@@ -99,7 +99,7 @@ func stringValues(data []byte) (map[string]string, error) {
 // upgraded installation will not have it and the feature would otherwise print
 // nothing at all.
 var StringFallbacks = map[string]string{
-	// Reply-thread navigation in the message reader (U/F/X/[/]) and the
+	// Reply-thread navigation in the message reader (B/F/A/[/]) and the
 	// docked pane's label. An install that predates them would otherwise
 	// print "%!(EXTRA int=...)" for the numbered notices and nothing for
 	// the rest.
@@ -112,7 +112,7 @@ var StringFallbacks = map[string]string{
 	"msgThreadStart":          "\r\n|09Start of thread.",
 	"msgThreadEnd":            "\r\n|09End of thread.",
 	"msgThreadPaneTitle":      " Thread ",
-	// The message list's threaded mode (T in the list, V from the reader).
+	// The message list's threaded mode (T in the list).
 	"msgListThreadedTitle":      "%s - Threaded List",
 	"msgListThreadColumn":       "Thread",
 	"msgListHelpThreaded":       "%s/%s: Navigate  Enter: Read  T: Flat  Q: Quit",
@@ -275,7 +275,7 @@ var StringFallbacks = map[string]string{
 	"konfigScreenWidthLabel":    "Screen Width",
 	"konfigScreenWidthHelp":     "Columns your terminal shows (80-255). Used for layout and word wrap.",
 	"konfigScreenHeightLabel":   "Screen Height",
-	"konfigScreenHeightHelp":    "Rows your terminal shows (21-60). Used for paging and full-screen views.",
+	"konfigScreenHeightHelp":    "Rows your terminal shows (24-60). Used for paging and full-screen views.",
 	"konfigEncodingLabel":       "Encoding",
 	"konfigEncodingHelp":        "Auto detects it on every call. Force UTF-8 or CP437 only if Auto is wrong.",
 	"konfigHotKeysLabel":        "Hot Keys",
@@ -284,6 +284,8 @@ var StringFallbacks = map[string]string{
 	"konfigHeaderStyleHelp":     "How message headers look in the reader. Opens the style picker.",
 	"konfigTwitListLabel":       "Twit List",
 	"konfigTwitListHelp":        "Hide messages from selected authors.",
+	"konfigThreadViewLabel":     "Thread View",
+	"konfigThreadViewHelp":      "On: the reader opens with the reply tree shown under the header. V toggles it.",
 	"twitNamePrompt":            "Name (optionally name@address): ",
 	"twitDeletePrompt":          "Entry number to delete: ",
 	"twitClearConfirm":          "Clear your Twit List? [Y/N]: ",

@@ -362,44 +362,49 @@ hot key:
 | `T` | Thread | Thread search |
 | `P` | Post | Post a new message |
 | `J` / `#` | Jump | Go to a message number |
-| `U` | Up | The message this one answers (not on the bar) |
+| `B` | Back | The message this one answers (not on the bar) |
 | `F` | First reply | The first reply to this message (not on the bar) |
-| `X` | Next sibling | The next reply to the same message (not on the bar) |
+| `A` | Across | The next reply to the same message (not on the bar) |
 | `]` / `[` | Thread next / previous | Walk the thread in display order (not on the bar) |
-| `L` | List | List message titles (flat), cursor on this message |
-| `V` | Threaded list | List the area as reply threads, cursor on this message (not on the bar; the `[V]list` signpost names it) |
+| `L` | List | List message titles, cursor on this message (flat or threaded, as the caller last had it) |
+| `V` | Thread tree | Open or close the thread pane under the header (not on the bar; the `[V]tree` signpost names it) |
 | `I` | Twit | Add the author to your Twit List (hidden while Twit Lists are off) |
 | `D` | Del | Delete the message (sysop and co-sysop only; shown in red) |
 | `K` | Kludges | Show the message's control information (sysop and co-sysop only; not on the bar) |
 | `?` | Help | List the commands |
 | `Q` | Quit | Leave the reader |
 
-**Reply threads (U, F, X, `]`, `[`).** These follow the reply links a
+**Reply threads (B, F, A, `]`, `[`).** These follow the reply links a
 message carries (the JAM `ReplyTo`, or the `REPLY` kludge of echomail), not
 its subject, so they walk the actual conversation. `T` is still the
-subject search. The separator row above the bar is a set of signposts that
-say where `U`, `F` and `X` lead from the current message, with the author's
-handle (`none` when there is nowhere to go, `#n deleted` when the parent has
-been deleted). When the message is part of a thread, a pane under the header
-draws the thread as a tree, five rows (three on a short screen) windowed
-around the current message, with the root's subject in its title and the
-message's place in the thread; a message that starts a thread nobody has
-answered shows no pane. Mail the caller may not read (another user's private
+subject search. When the message is part of a thread, the separator row
+above the bar is a set of signposts that say where `B`, `F` and `A` lead
+from the current message, with the author's handle (`none` when there is
+nowhere to go, `#n deleted` when the parent has been deleted), and a pane
+under the header draws the thread as a tree, five rows (three on a short
+screen) windowed around the current message, with the root's subject in its
+title and the message's place in the thread (no pane when every other
+message in it is deleted or hidden from the caller). `V` closes and reopens the
+pane; the choice holds for the rest of the call, and the caller's **Thread
+View** setting in User Konfig decides whether it starts open. A message
+that is not in a thread (one nobody has answered and that answers nothing)
+shows no pane and no signposts, just the plain rule, and the thread keys
+do nothing there. Mail the caller may not read (another user's private
 message, a post from an author on their Twit List) is never shown or counted
 in any of this; a reply to such a message hangs from the nearest message the
-caller can see, and `U` on it says only that the message it answers is not
+caller can see, and `B` on it says only that the message it answers is not
 available. Each key shows a short notice on the bar row when there is
 nowhere to go; the notices are the `msgThread*` strings. The direct-reply
 count is available to header templates as `@H@`.
 
-**Lists from the reader (L, V).** `L` opens the flat message list and `V`
-the threaded one, each with the cursor on the message being read. Enter
-there returns to the same reader on the highlighted message; `V`, `Q` or
-Esc return to the message the list was opened from. No second reader is
-opened underneath, however many times the caller goes back and forth. A
-reader opened from the menu's list (`LISTMSGS`) returns to that list on
-`V`, `L` or `Q`, in the mode asked for, with the cursor on the message that
-was being read.
+**Listing from the reader (L).** `L` opens the message list, flat or
+threaded as the caller last had it (`T` in the list switches), with the
+cursor on the message being read. Enter there returns to the same reader
+on the highlighted message; `Q` or Esc return to the message the list was
+opened from. No second reader is opened underneath, however many times the
+caller goes back and forth. A reader opened from the menu's list
+(`LISTMSGS`) returns to that list on `L` or `Q`, in the mode it was in,
+with the cursor on the message that was being read.
 
 ### Listing Messages
 
@@ -407,7 +412,7 @@ The `LISTMSGS` function lists the current area, newest first, in a framed
 lightbar list: arrows, PgUp/PgDn, Home and End move the cursor, Enter reads
 the message and `Q` or Esc leaves. `T` switches between the flat list and
 the **threaded list**, keeping the cursor on the same message; the choice
-holds for the rest of the call, and the reader's `L` and `V` set it too.
+holds for the rest of the call, and the reader's `L` opens in it.
 
 The threaded list shows each thread as a tree, newest root first, replies
 in the order the reader's `]` walks them. The `Thread` column holds the

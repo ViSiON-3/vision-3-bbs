@@ -23,11 +23,12 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). F
 
 | Setting | Field |
 | --- | --- |
-| Screen Width, Screen Height | `screenWidth`, `screenHeight` (applies straight away) |
+| Screen Width, Screen Height | `screenWidth`, `screenHeight` (applies straight away; height 24-60) |
 | Encoding | `preferredEncoding`: each press goes Auto → the encoding the session is using → the other one → Auto (applies from the next login) |
 | Hot Keys | `hotKeys` |
 | Header Style | `msgHdr` |
 | Auto-Signature | `autoSignature`, `autoSigAsk` |
+| Thread View | `threadViewClosed`: whether the message reader opens with its thread pane shown (the default) or closed; `V` in the reader overrides it for the rest of the call |
 | Real Name | `realName` (same rules as signup) |
 | Location | `group_location` |
 | User Note | `privateNote` |

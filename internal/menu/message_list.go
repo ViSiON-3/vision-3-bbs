@@ -24,13 +24,12 @@ func runListMsgsFiltered(c *cmdCtx, args string, msgFilter msgOwnershipFilter) (
 
 // listOpts is how the list was opened.
 type listOpts struct {
-	// fromReader is set when the reader's V or L opened the list. The list
-	// then never nests a reader: Enter returns "READ" with the highlighted
-	// message, and V, Q and Esc return "READ" with startMsg, for the reader
-	// to show.
+	// fromReader is set when the reader's L opened the list. The list then
+	// never nests a reader: Enter returns "READ" with the highlighted
+	// message, and Q and Esc return "READ" with startMsg, for the reader to
+	// show.
 	fromReader bool
-	startMsg   int  // the message to put the cursor on; 0 = the first
-	threaded   bool // open threaded (fromReader); otherwise the session's last mode
+	startMsg   int // the message to put the cursor on; 0 = the first
 }
 
 // runListMsgsWith is runListMsgsFiltered with listOpts. The message number
@@ -81,12 +80,8 @@ func runListMsgsWith(c *cmdCtx, args string, msgFilter msgOwnershipFilter, opts 
 		}
 	}
 
-	// Flat or threaded: as the reader asked, else as the caller last had it.
+	// Flat or threaded: as the caller last had it.
 	threaded := sessionListThreaded(s)
-	if opts.fromReader {
-		threaded = opts.threaded
-		setSessionListThreaded(s, threaded)
-	}
 	build := func(threaded bool) ([]MessageListEntry, int, error) {
 		if threaded {
 			return buildThreadedMessageList(e.MessageMgr, currentAreaID, currentUser.Handle, msgFilter)
@@ -232,7 +227,7 @@ func runListMsgsWith(c *cmdCtx, args string, msgFilter msgOwnershipFilter, opts 
 			}
 
 			// Call message reader. It knows it was opened from here, so its
-			// V and L come back rather than opening a second list.
+			// L comes back rather than opening a second list.
 			_, nextAction, lastMsg, err := runMessageReaderOpts(e, s, terminal, userManager,
 				currentUser, nodeNumber, sessionStartTime, outputMode,
 				selectedMsg, areaMsgCount, false, tw, th, baseFilter, readerOpts{fromList: true})

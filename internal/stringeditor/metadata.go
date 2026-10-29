@@ -689,12 +689,12 @@ func stringCatalog() []StringEntry {
 		{Label: "Exec: Login Tries Used", Key: "execLoginTooManyTries", Description: "Shown before disconnecting after too many wrong passwords, when NICETRY.ANS is missing"},
 
 		// Message reader: reply-tree navigation and the thread pane
-		{Label: "Msg: Thread No Parent", Key: "msgThreadNoParent", Description: "U on a message that starts its thread (%d=message number)"},
-		{Label: "Msg: Thread Parent Del", Key: "msgThreadParentDeleted", Description: "U when the message answered is deleted (%d=its number)"},
-		{Label: "Msg: Thread Parent Hid", Key: "msgThreadParentHidden", Description: "U when the message answered is not available to the caller"},
+		{Label: "Msg: Thread No Parent", Key: "msgThreadNoParent", Description: "B on a message that starts its thread (%d=message number)"},
+		{Label: "Msg: Thread Parent Del", Key: "msgThreadParentDeleted", Description: "B when the message answered is deleted (%d=its number)"},
+		{Label: "Msg: Thread Parent Hid", Key: "msgThreadParentHidden", Description: "B when the message answered is not available to the caller"},
 		{Label: "Msg: Thread No Replies", Key: "msgThreadNoReplies", Description: "F on a message with no replies (%d=message number)"},
-		{Label: "Msg: Thread No Sibling", Key: "msgThreadNoSiblingRoot", Description: "X on a message that starts its thread (%d=message number)"},
-		{Label: "Msg: Thread Last Sibling", Key: "msgThreadNoMoreSiblings", Description: "X on the last reply to a message (%d=that message's number)"},
+		{Label: "Msg: Thread No Sibling", Key: "msgThreadNoSiblingRoot", Description: "A on a message that starts its thread (%d=message number)"},
+		{Label: "Msg: Thread Last Sibling", Key: "msgThreadNoMoreSiblings", Description: "A on the last reply to a message (%d=that message's number)"},
 		{Label: "Msg: Thread Start", Key: "msgThreadStart", Description: "[ on the first message of a thread"},
 		{Label: "Msg: Thread End", Key: "msgThreadEnd", Description: "] on the last message of a thread"},
 		{Label: "Msg: Thread Pane Title", Key: "msgThreadPaneTitle", Description: "Label on the reader's docked thread pane"},
@@ -705,5 +705,9 @@ func stringCatalog() []StringEntry {
 		{Label: "MsgList: Help Threaded", Key: "msgListHelpThreaded", Description: "Help line in threaded mode (%s/%s=up/down arrows)"},
 		{Label: "MsgList: Help Flat", Key: "msgListHelpFlat", Description: "Help line in flat mode (%s/%s=up/down arrows)"},
 		{Label: "MsgList: Deleted Row", Key: "msgListDeletedPlaceholder", Description: "Row for a deleted message a reply hangs from (%d=message number)"},
+
+		// User Konfig: the reader's thread pane
+		{Label: "Konfig: Thread View Label", Key: "konfigThreadViewLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},
+		{Label: "Konfig: Thread View Help", Key: "konfigThreadViewHelp", Description: "Help line shown while Thread View is highlighted"},
 	}
 }
