@@ -1,13 +1,17 @@
 package config
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
@@ -116,6 +120,24 @@ type V3NetLeafConfig struct {
 	PollInterval  string   `json:"pollInterval"`            // Duration string (e.g., "5m")
 	Origin        string   `json:"origin,omitempty"`        // Origin line text (e.g. "My Cool BBS - bbs.example.com")
 	AutoJoinAreas *bool    `json:"autoJoinAreas,omitempty"` // Flag created areas as newscan defaults (nil = true)
+
+	// CoordinatorPubKey pins the network coordinator's ed25519 public key
+	// (standard base64). The leaf rejects any NAL signed by a different key.
+	// Blank means not pinned yet: the leaf pins the key of the next NAL it
+	// verifies and writes it here (trust on first use). The sysop accepts a
+	// coordinator key change by pasting the new key here or blanking it.
+	CoordinatorPubKey string `json:"coordinatorPubKey,omitempty"`
+	// HubPubKey pins the hub's ed25519 public key (standard base64), as
+	// served by the network's /info endpoint. Pinned and accepted the same
+	// way as CoordinatorPubKey.
+	HubPubKey string `json:"hubPubKey,omitempty"`
+	// PendingCoordinatorPubKey is a coordinator key the hub offered that
+	// differs from CoordinatorPubKey. The leaf records it here for the sysop
+	// to inspect; it is never trusted until the sysop accepts it.
+	PendingCoordinatorPubKey string `json:"pendingCoordinatorPubKey,omitempty"`
+	// PendingHubPubKey is a hub key /info served that differs from
+	// HubPubKey, recorded for the sysop like PendingCoordinatorPubKey.
+	PendingHubPubKey string `json:"pendingHubPubKey,omitempty"`
 }
 
 // AutoJoinEnabled reports whether message areas created for this leaf
@@ -123,6 +145,14 @@ type V3NetLeafConfig struct {
 // existing configs keep today's behavior.
 func (l V3NetLeafConfig) AutoJoinEnabled() bool {
 	return l.AutoJoinAreas == nil || *l.AutoJoinAreas
+}
+
+// ValidV3NetPubKey reports whether s, ignoring surrounding whitespace, is an
+// ed25519 public key in standard base64: the form V3NetLeafConfig pins keys
+// in, and the form hubs and the registry publish them in.
+func ValidV3NetPubKey(s string) bool {
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(s))
+	return err == nil && len(raw) == ed25519.PublicKeySize
 }
 
 // LoadV3NetConfig loads V3Net networking configuration from v3net.json.
@@ -168,7 +198,47 @@ func V3NetConfigFile(configPath string) configmerge.File[V3NetConfig] {
 		Marshal: func(cfg V3NetConfig) ([]byte, error) {
 			return json.MarshalIndent(cfg, "", "  ")
 		},
+		Reconcile: reconcileV3NetLeafKeys,
 	}
+}
+
+// reconcileV3NetLeafKeys three-way merges the pinned and pending key fields
+// of each leaf, matched by network and hub URL. The leaves array has no ids,
+// so the generic merge keeps one side's array whole; without this, a config
+// editor that loaded v3net.json before the BBS pinned a key would erase the
+// pin when it saved an unrelated edit. A key field the saving side left as
+// it was in base takes the value on disk; one it changed keeps its value.
+func reconcileV3NetLeafKeys(base, theirs, merged V3NetConfig) V3NetConfig {
+	type leafKey struct{ network, hubURL string }
+	index := func(leaves []V3NetLeafConfig) map[leafKey]V3NetLeafConfig {
+		m := make(map[leafKey]V3NetLeafConfig, len(leaves))
+		for _, l := range leaves {
+			m[leafKey{l.Network, l.HubURL}] = l
+		}
+		return m
+	}
+	baseLeaves, diskLeaves := index(base.Leaves), index(theirs.Leaves)
+	field := func(merged, base, disk *string) {
+		if *merged == *base {
+			*merged = *disk
+		}
+	}
+	out := merged
+	out.Leaves = slices.Clone(merged.Leaves)
+	for i := range out.Leaves {
+		l := &out.Leaves[i]
+		k := leafKey{l.Network, l.HubURL}
+		b, inBase := baseLeaves[k]
+		d, onDisk := diskLeaves[k]
+		if !inBase || !onDisk {
+			continue // added on one side or removed on disk: nothing to merge
+		}
+		field(&l.CoordinatorPubKey, &b.CoordinatorPubKey, &d.CoordinatorPubKey)
+		field(&l.HubPubKey, &b.HubPubKey, &d.HubPubKey)
+		field(&l.PendingCoordinatorPubKey, &b.PendingCoordinatorPubKey, &d.PendingCoordinatorPubKey)
+		field(&l.PendingHubPubKey, &b.PendingHubPubKey, &d.PendingHubPubKey)
+	}
+	return out
 }
 
 // SaveV3NetConfig writes cfg to v3net.json under the file's cross-process

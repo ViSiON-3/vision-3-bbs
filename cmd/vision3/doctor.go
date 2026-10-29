@@ -1436,6 +1436,24 @@ func checkV3Net(configDir, root string, add func(string, doctorSeverity, string,
 			add("V3Net configuration", doctorWarn, label+" has no boards", "Select at least one local board to receive this network's messages.")
 			issues++
 		}
+		for _, pin := range []struct{ field, value string }{
+			{"coordinatorPubKey", leaf.CoordinatorPubKey},
+			{"hubPubKey", leaf.HubPubKey},
+		} {
+			if strings.TrimSpace(pin.value) != "" && !config.ValidV3NetPubKey(pin.value) {
+				add("V3Net configuration", doctorWarn, fmt.Sprintf("%s has an invalid %s", label, pin.field), "Paste the network's base64 ed25519 key, or blank it to pin the key on first use.")
+				issues++
+			}
+		}
+		for _, pending := range []struct{ field, pin, value string }{
+			{"pendingCoordinatorPubKey", "coordinatorPubKey", leaf.PendingCoordinatorPubKey},
+			{"pendingHubPubKey", "hubPubKey", leaf.PendingHubPubKey},
+		} {
+			if pending.value != "" {
+				add("V3Net configuration", doctorWarn, fmt.Sprintf("%s: the hub offered a changed key (%s), which is being rejected", label, pending.field), "Confirm the new key with the network operator, then copy it into "+pending.pin+" (see Coordinator Key Pinning in docs/sysop/v3net/nal.md).")
+				issues++
+			}
+		}
 	}
 	if cfg.Hub.Enabled && len(cfg.Hub.Networks) == 0 {
 		add("V3Net configuration", doctorWarn, "hub is enabled but publishes no networks", "Add at least one named network under hub.networks.")

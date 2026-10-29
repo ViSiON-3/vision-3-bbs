@@ -73,6 +73,10 @@ func (m Model) handleFetchNALMsg(msg fetchNALMsg) (tea.Model, tea.Cmd) {
 	subscribed := make(map[string]bool)
 	localNames := make(map[string]string)
 
+	if m.wizard != nil && m.wizard.flow == "leaf" && msg.coordKey != "" {
+		m.wizard.browsedCoordKey = msg.coordKey
+		m.wizard.browsedHub, m.wizard.browsedNetwork = msg.hubURL, msg.network
+	}
 	if m.wizard != nil && m.wizard.flow == "leaf" {
 		for _, sa := range m.wizard.selectedAreas {
 			if sa.Subscribed {
@@ -280,5 +284,5 @@ func (m Model) enterAreaBrowser(hubURL, network string, returnMode editorMode) (
 	m.areaBrowserReturn = returnMode
 	m.message = ""
 	m.mode = modeV3NetAreaBrowser
-	return m, fetchHubNAL(hubURL, network)
+	return m, fetchHubNAL(hubURL, network, m.areaBrowserPin())
 }

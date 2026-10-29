@@ -116,6 +116,7 @@ var FormattedKeys = []string{
 	"twitHiddenSummary",
 	"twitQuickConfirm",
 	"updatePtrsSuccess",
+	"v3netKeyChangedNotice",
 	"v3netNewAreaDeclined",
 	"v3netNewAreaNotice",
 }

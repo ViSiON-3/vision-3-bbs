@@ -25,6 +25,13 @@ var (
 	ErrAreaNotFound     = errors.New("nal: area not found")
 	ErrInvalidSignature = errors.New("nal: signature verification failed")
 	ErrInvalidPubKey    = errors.New("nal: invalid coordinator public key")
+	// ErrCoordNodeIDMismatch means the NAL's coordinator_node_id is not the
+	// node ID derived from its coordinator_pubkey_b64.
+	ErrCoordNodeIDMismatch = errors.New("nal: coordinator node ID does not match the coordinator public key")
+	// ErrCoordKeyMismatch means the NAL is signed by a coordinator key other
+	// than the one the reader pinned for the network. The signature may be
+	// valid; the signer is not the coordinator the reader trusts.
+	ErrCoordKeyMismatch = errors.New("nal: coordinator key does not match the pinned key")
 )
 
 // Canonical field order for NAL signing. The NAL JSON is marshalled with
@@ -179,6 +186,22 @@ func Verify(n *protocol.NAL) error {
 	return nil
 }
 
+// VerifyCoordNodeID checks that the NAL's CoordNodeID is the node ID derived
+// from CoordPubKeyB64 (see keystore.NodeIDFromPubKey). It returns
+// ErrInvalidPubKey when the key does not decode to an ed25519 public key and
+// an error wrapping ErrCoordNodeIDMismatch when the IDs differ. It does not
+// check the signature; call Verify for that.
+func VerifyCoordNodeID(n *protocol.NAL) error {
+	pubKeyBytes, err := base64.StdEncoding.DecodeString(n.CoordPubKeyB64)
+	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
+		return ErrInvalidPubKey
+	}
+	if want := keystore.NodeIDFromPubKey(pubKeyBytes); n.CoordNodeID != want {
+		return fmt.Errorf("%w: NAL names %q, key derives %q", ErrCoordNodeIDMismatch, n.CoordNodeID, want)
+	}
+	return nil
+}
+
 // Fetch retrieves a NAL from a hub's /nal endpoint. Does not verify.
 func Fetch(ctx context.Context, url string, client *http.Client) (*protocol.NAL, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -221,6 +244,9 @@ type Cache struct {
 	entries map[string]*cacheEntry // network → entry
 	ttl     time.Duration
 	client  *http.Client
+	// check, if set, runs on each fetched NAL after its signature and
+	// network have been verified and before it is cached. See SetCheck.
+	check func(*protocol.NAL) error
 }
 
 type cacheEntry struct {
@@ -235,6 +261,16 @@ func NewCache(ttl time.Duration, client *http.Client) *Cache {
 		ttl:     ttl,
 		client:  client,
 	}
+}
+
+// SetCheck installs fn as an extra acceptance test for every NAL the cache
+// fetches. fn runs after the signature and network name have been verified;
+// an error from it rejects the NAL, so the cache keeps the copy it already
+// had, and the error is returned to the caller wrapped. The leaf uses this to
+// enforce its pinned coordinator key. Call it before the cache is shared
+// between goroutines; it is not synchronized.
+func (c *Cache) SetCheck(fn func(*protocol.NAL) error) {
+	c.check = fn
 }
 
 // Put stores a verified NAL in the cache.
@@ -254,6 +290,19 @@ func (c *Cache) Get(network string) *protocol.NAL {
 		return nil
 	}
 	return e.nal
+}
+
+// Last returns the cached NAL for network however old it is, or nil if none
+// was ever cached. Unlike Get it ignores the TTL: it is the last NAL that
+// passed verification, which is what a caller carrying trust across a
+// restart of the cache's owner wants.
+func (c *Cache) Last(network string) *protocol.NAL {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if e := c.entries[network]; e != nil {
+		return e.nal
+	}
+	return nil
 }
 
 // FetchAndVerify fetches a NAL from the given URL, verifies it, and caches it.
@@ -289,6 +338,11 @@ func (c *Cache) Refresh(ctx context.Context, url, network string) (*protocol.NAL
 	}
 	if n.Network != network {
 		return nil, fmt.Errorf("nal: network mismatch: got %q want %q", n.Network, network)
+	}
+	if c.check != nil {
+		if err := c.check(n); err != nil {
+			return nil, fmt.Errorf("nal: check %s: %w", network, err)
+		}
 	}
 	c.Put(network, n)
 	return n, nil

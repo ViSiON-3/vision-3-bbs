@@ -93,6 +93,9 @@ to subscribe to multiple networks.
 | `pollInterval` | string | `"5m"` | How often to poll the hub for new messages. Accepts Go duration strings: `"30s"`, `"5m"`, `"1h"`. |
 | `origin` | string | BBS name | Origin line appended to outbound messages. Falls back to the BBS name from `config.json` if blank. |
 | `autoJoinAreas` | bool | unset (`true`) | **Newscan Default** in the editor. When true or unset, message areas created for this subscription are flagged as newscan defaults for users. Set `false` to leave new areas out of newscans until users add them. |
+| `coordinatorPubKey` | string | blank | **Coord Key** in the editor. The network coordinator's Ed25519 public key (base64). NALs signed by any other key are rejected. Blank pins the key of the next NAL the leaf verifies and writes it here. See [Coordinator Key Pinning](v3net/nal.md#coordinator-key-pinning). |
+| `hubPubKey` | string | blank | **Hub Key** in the editor. The hub's Ed25519 public key (base64) from the network's `/info`. Pinned and checked the same way. |
+| `pendingCoordinatorPubKey`, `pendingHubPubKey` | string | blank | Written by the BBS, shown as **Offered Coord** / **Offered Hub**. A key the hub offered that differs from the pin. It is rejected; copy it into the pin to accept it. |
 
 ---
 
@@ -109,7 +112,9 @@ The `registryUrl` field points to a public JSON file listing known V3Net network
       "name": "felonynet",
       "description": "Official ViSiON/3 BBS message network",
       "hub_url": "https://felonynet.org",
-      "hub_node_id": "22819c83e045cd1e"
+      "hub_node_id": "22819c83e045cd1e",
+      "hub_pubkey_b64": "<hub's base64 Ed25519 public key>",
+      "coordinator_pubkey_b64": "<coordinator's base64 Ed25519 public key>"
     }
   ]
 }
@@ -121,6 +126,8 @@ The `registryUrl` field points to a public JSON file listing known V3Net network
 | `description` | Human-readable summary shown in the registry browser |
 | `hub_url` | Base URL of the hub's V3Net endpoint |
 | `hub_node_id` | 16-character hex node ID of the hub |
+| `hub_pubkey_b64` | Optional. The hub's public key. A leaf joined from the registry browser pins it as `hubPubKey`. |
+| `coordinator_pubkey_b64` | Optional. The coordinator's public key, which signs the NAL (on a V3Net hub, the same as the hub key). A leaf joined from the registry browser pins it as `coordinatorPubKey` instead of trusting the first NAL it sees. |
 
 To add your network to the public registry, submit a PR to the
 [v3net-registry](https://github.com/ViSiON-3/v3net-registry) repository.

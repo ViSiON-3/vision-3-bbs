@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"reflect"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,6 +56,15 @@ type Service struct {
 	// reloadMu serializes ReloadLeaves calls; it is never held together with mu.
 	reloadMu sync.Mutex
 
+	// leafCfgs is the subscription list ConfigureLeaves last built the
+	// leaves from, so ReloadLeaves can tell a pin-only edit from one that
+	// needs a rebuild. Guarded by mu.
+	leafCfgs []config.V3NetLeafConfig
+	// carriedNALs holds, during a ReloadLeaves rebuild, the last NAL each
+	// old leaf accepted, for AddLeaf to seed into its replacement. Guarded
+	// by mu.
+	carriedNALs map[leafKey]*protocol.NAL
+
 	// BBSName and BBSHost are sent in subscribe requests and, when the hub
 	// is enabled, written to the hub's own subscriber row by Start.
 	BBSName string
@@ -61,6 +73,69 @@ type Service struct {
 	// nalObserver holds the func(network string, n *protocol.NAL) set by
 	// SetNALObserver, called with each NAL a leaf fetches.
 	nalObserver atomic.Value
+
+	// keyObserver holds the func(leaf.KeyEvent) set by SetKeyChangeObserver.
+	keyObserver atomic.Value
+}
+
+// SetKeyChangeObserver registers fn to hear when a leaf's hub offers a
+// coordinator or hub key that differs from the pinned one. The leaf has
+// already rejected the key and logged it; fn is for alerting the sysop. It
+// is called once per distinct offered key, from leaf goroutines, so it must
+// be safe for concurrent use. Set it before Start.
+func (s *Service) SetKeyChangeObserver(fn func(ev leaf.KeyEvent)) {
+	s.keyObserver.Store(fn)
+}
+
+// persistKeyEvent writes a leaf's first-use pin, or a changed key it was
+// offered, into that leaf's entry in v3net.json, so a restart keeps the pin
+// and the sysop can see the pending key. A pin is written only where the
+// entry has none, so a key the sysop set meanwhile wins. Without a config
+// path (tests, tools) nothing is written. It returns an error only when the
+// file could not be read or written, so the leaf can retry a pin later.
+func (s *Service) persistKeyEvent(ev leaf.KeyEvent) error {
+	if s.cfg.ConfigPath == "" {
+		return nil
+	}
+	pinning := ev.Pinned == ev.Offered
+	err := config.UpdateV3NetConfig(s.cfg.ConfigPath, func(cfg *config.V3NetConfig) error {
+		for i := range cfg.Leaves {
+			lc := &cfg.Leaves[i]
+			if lc.Network != ev.Network || lc.HubURL != ev.HubURL {
+				continue
+			}
+			pin, pending := &lc.CoordinatorPubKey, &lc.PendingCoordinatorPubKey
+			if ev.Kind == leaf.KeyHub {
+				pin, pending = &lc.HubPubKey, &lc.PendingHubPubKey
+			}
+			changed := false
+			if pinning {
+				if strings.TrimSpace(*pin) == "" {
+					*pin = ev.Offered
+					changed = true
+				}
+				// The pending key is now the pin: the sysop accepted it.
+				if *pending != "" && *pending == *pin {
+					*pending = ""
+					changed = true
+				}
+			} else if *pending != ev.Offered {
+				*pending = ev.Offered
+				changed = true
+			}
+			if !changed {
+				return config.ErrNoChange
+			}
+			return nil
+		}
+		return config.ErrNoChange
+	})
+	if err != nil && !errors.Is(err, config.ErrNoChange) {
+		slog.Warn("v3net: could not record key in v3net.json",
+			"network", ev.Network, "key", string(ev.Kind), "error", err)
+		return err
+	}
+	return nil
 }
 
 // SetNALObserver registers fn to receive every NAL a leaf fetches and
@@ -87,7 +162,10 @@ type AreaBinding struct {
 // its goroutine, so a stop never strands a mid-backoff subscribe or an open
 // SSE stream.
 type leafRun struct {
-	l      *leaf.Leaf
+	l *leaf.Leaf
+	// ctx is the leaf's own context while it runs (nil before), for work
+	// the service starts on the leaf's behalf, such as a pin change.
+	ctx    context.Context
 	cancel context.CancelFunc
 	done   chan struct{}
 	// stop makes stopping idempotent and concurrency-safe: shutdown, Close,
@@ -278,12 +356,29 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 				fn(lcfg.Network, n)
 			}
 		},
-		BBSName: s.BBSName,
-		BBSHost: s.BBSHost,
+		BBSName:               s.BBSName,
+		BBSHost:               s.BBSHost,
+		CoordPubKeyB64:        lcfg.CoordinatorPubKey,
+		HubPubKeyB64:          lcfg.HubPubKey,
+		PendingCoordPubKeyB64: lcfg.PendingCoordinatorPubKey,
+		PendingHubPubKeyB64:   lcfg.PendingHubPubKey,
+		OnKeyPinned:           s.persistKeyEvent,
+		OnKeyChanged: func(ev leaf.KeyEvent) {
+			_ = s.persistKeyEvent(ev) // logged; the pending key is only a record
+			if fn, ok := s.keyObserver.Load().(func(leaf.KeyEvent)); ok && fn != nil {
+				fn(ev)
+			}
+		},
 	})
 
 	run := &leafRun{l: l}
 	s.mu.Lock()
+	// A NAL the previous leaf for this subscription accepted (see
+	// ReloadLeaves) is installed before the leaf starts, so a rebuild keeps
+	// the trusted area list even while the hub serves an unaccepted key.
+	if n := s.carriedNALs[leafKey{lcfg.Network, lcfg.HubURL}]; n != nil && l.SeedNAL(n) {
+		slog.Debug("v3net: carried the last accepted NAL into the rebuilt leaf", "network", lcfg.Network)
+	}
 	s.leaves = append(s.leaves, run)
 	s.leafByNetwork[lcfg.Network] = run
 	if s.runCtx != nil {
@@ -299,6 +394,7 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 // Caller must hold s.mu, and s.runCtx must be set.
 func (s *Service) startLeafLocked(run *leafRun) {
 	lctx, cancel := context.WithCancel(s.runCtx)
+	run.ctx = lctx
 	run.cancel = cancel
 	run.done = make(chan struct{})
 	go func() {
@@ -681,6 +777,62 @@ func (s *Service) ConfigureLeaves(leafCfgs []config.V3NetLeafConfig, mgr *messag
 			slog.Error("V3Net leaf error", "network", lcfg.Network, "error", err)
 		}
 	}
+	s.mu.Lock()
+	s.leafCfgs = slices.Clone(leafCfgs)
+	s.mu.Unlock()
+}
+
+// leafKey identifies a subscription: one network on one hub.
+type leafKey struct{ network, hubURL string }
+
+// withoutKeys returns c with its pinned and pending key fields cleared, for
+// comparing subscriptions while ignoring the keys.
+func withoutKeys(c config.V3NetLeafConfig) config.V3NetLeafConfig {
+	c.CoordinatorPubKey, c.HubPubKey = "", ""
+	c.PendingCoordinatorPubKey, c.PendingHubPubKey = "", ""
+	return c
+}
+
+// keysOnlyChange reports whether next differs from prev, if at all, only in
+// the leaves' pinned and pending key fields.
+func keysOnlyChange(prev, next []config.V3NetLeafConfig) bool {
+	if len(prev) != len(next) {
+		return false
+	}
+	for i := range prev {
+		if !reflect.DeepEqual(withoutKeys(prev[i]), withoutKeys(next[i])) {
+			return false
+		}
+	}
+	return true
+}
+
+// applyPins installs the keys from leafCfgs on the running leaves without
+// rebuilding them. The caller holds reloadMu.
+func (s *Service) applyPins(leafCfgs []config.V3NetLeafConfig) {
+	// run.ctx is written under s.mu when a leaf starts, so it is read here.
+	type target struct {
+		l   *leaf.Leaf
+		ctx context.Context
+	}
+	s.mu.Lock()
+	runs := make(map[leafKey]target, len(s.leaves))
+	for _, run := range s.leaves {
+		runs[leafKey{run.l.Network(), run.l.HubURL()}] = target{run.l, run.ctx}
+	}
+	s.leafCfgs = slices.Clone(leafCfgs)
+	s.mu.Unlock()
+
+	for _, c := range leafCfgs {
+		run, ok := runs[leafKey{c.Network, c.HubURL}]
+		if !ok {
+			continue // skipped at configure time (no resolvable boards)
+		}
+		run.l.UpdatePins(run.ctx, leaf.Pins{
+			Coord: c.CoordinatorPubKey, Hub: c.HubPubKey,
+			PendingCoord: c.PendingCoordinatorPubKey, PendingHub: c.PendingHubPubKey,
+		})
+	}
 }
 
 // ReloadLeaves replaces the running leaf subscriptions with those in
@@ -694,11 +846,26 @@ func (s *Service) ConfigureLeaves(leafCfgs []config.V3NetLeafConfig, mgr *messag
 // visible costs: unchanged networks re-subscribe to their hub (idempotent),
 // and a caller mid-chat on a V3Net leaf has that chat's stream cancelled.
 //
+// Two things soften that. An edit that only changes pinned or pending keys
+// (the leaf recording a key, or the sysop accepting one) is applied to the
+// running leaves in place, with no rebuild. And a rebuilt leaf starts with
+// the last NAL its predecessor accepted, when the coordinator pin is the
+// same, so it never runs without a trusted area list.
+//
 // Hub settings, the enabled flag, and keystore/dedup paths are NOT touched;
 // those still require a restart.
 func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.MessageManager, confMgr *conference.ConferenceManager) error {
 	s.reloadMu.Lock()
 	defer s.reloadMu.Unlock()
+
+	s.mu.RLock()
+	prev := s.leafCfgs
+	s.mu.RUnlock()
+	if prev != nil && keysOnlyChange(prev, leafCfgs) {
+		s.applyPins(leafCfgs)
+		slog.Info("v3net: leaf keys updated in place", "count", len(leafCfgs))
+		return nil
+	}
 
 	if created := SyncAreas(leafCfgs, mgr, confMgr); created > 0 {
 		slog.Info("v3net: created message areas for new subscriptions", "count", created)
@@ -714,16 +881,24 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 	s.areaBindings = make(map[int]AreaBinding)
 	s.mu.Unlock()
 
+	carried := make(map[leafKey]*protocol.NAL)
 	for _, run := range old {
 		s.stopLeaf(run)
+		if n := run.l.LastNAL(); n != nil {
+			carried[leafKey{run.l.Network(), run.l.HubURL()}] = n
+		}
 	}
 	slog.Info("v3net: leaf subscriptions stopped for reload", "count", len(old))
 
+	s.mu.Lock()
+	s.carriedNALs = carried
+	s.mu.Unlock()
 	s.ConfigureLeaves(leafCfgs, mgr)
 
-	s.mu.RLock()
+	s.mu.Lock()
+	s.carriedNALs = nil
 	count := len(s.leaves)
-	s.mu.RUnlock()
+	s.mu.Unlock()
 	slog.Info("v3net: leaf subscriptions reloaded", "count", count)
 	return nil
 }

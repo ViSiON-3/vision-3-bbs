@@ -120,6 +120,15 @@ type wizardState struct {
 	origin       string
 	fetchError   string // set if auto-fetch failed
 
+	// regEntry is the registry entry the hub URL and network were filled
+	// from, if any. Its published keys become the new leaf's pins, provided
+	// the sysop has not since changed the hub URL or network.
+	regEntry *protocol.RegistryEntry
+	// browsedCoordKey is the coordinator key that signed the last NAL the
+	// area browser verified for browsedHub/browsedNetwork. With no registry
+	// key it becomes the new leaf's pin; with one, the two must agree.
+	browsedCoordKey, browsedHub, browsedNetwork string
+
 	selectedAreas []areaBrowserItem // areas selected during wizard flow
 
 	// Hub wizard fields (steps 0–3)

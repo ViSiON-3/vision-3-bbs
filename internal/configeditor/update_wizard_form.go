@@ -287,6 +287,25 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 		PollInterval: m.wizard.pollInterval,
 		Origin:       m.wizard.origin,
 	}
+	// Pin the keys the registry publishes, so the leaf does not have to
+	// trust whatever the hub serves on first contact. The areas were chosen
+	// from a NAL the browser verified; if the registry names a different
+	// coordinator, that NAL came from someone else, so refuse to save.
+	// Without a registry key, pin the key that signed the browsed NAL.
+	regCoord, regHub := m.wizard.registryKeys(leaf.HubURL, leaf.Network)
+	browsed := m.wizard.browsedKey(leaf.HubURL, leaf.Network)
+	if regCoord != "" && browsed != "" && browsed != regCoord {
+		m.message = "NOT SAVED: the hub's NAL is signed by " + browsed +
+			", not the registry's coordinator key " + regCoord + ". The hub may be impersonated."
+		return m, nil
+	}
+	switch {
+	case regCoord != "":
+		leaf.CoordinatorPubKey = regCoord
+	case browsed != "":
+		leaf.CoordinatorPubKey = browsed
+	}
+	leaf.HubPubKey = regHub
 	m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves, leaf)
 	m.configs.V3Net.Enabled = true
 	// Create MsgAreas for selected areas, then save everything in one pass.

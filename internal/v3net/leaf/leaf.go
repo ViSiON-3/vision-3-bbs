@@ -32,6 +32,10 @@ type Leaf struct {
 	refetchPending atomic.Bool
 	// reconnectFetching is set while the post-reconnect fetch is retrying.
 	reconnectFetching atomic.Bool
+
+	// pinMu guards pins, the pinned and pending coordinator and hub keys.
+	pinMu sync.Mutex
+	pins  keyPins
 }
 
 // New creates a new Leaf with the given configuration.
@@ -45,7 +49,14 @@ func New(cfg Config) *Leaf {
 		client:    &http.Client{Timeout: 10 * time.Second},
 		sseClient: &http.Client{},
 		nalCache:  nal.NewCache(1*time.Hour, &http.Client{Timeout: 30 * time.Second}),
+		pins: keyPins{
+			coord:        normalizeKey(cfg.CoordPubKeyB64),
+			hub:          normalizeKey(cfg.HubPubKeyB64),
+			pendingCoord: normalizeKey(cfg.PendingCoordPubKeyB64),
+			pendingHub:   normalizeKey(cfg.PendingHubPubKeyB64),
+		},
 	}
+	l.nalCache.SetCheck(l.checkNAL)
 	if cfg.OnEvent != nil {
 		l.eventCb.Store(cfg.OnEvent)
 	}
@@ -125,6 +136,12 @@ func (l *Leaf) Start(ctx context.Context) {
 		break
 	}
 	slog.Info("leaf: subscribed to hub", "network", l.cfg.Network, "hub", l.cfg.HubURL)
+
+	// Check the hub's key against the pin (or pin it). Nothing yet depends
+	// on the hub key, so a failure is reported and the leaf carries on.
+	if err := l.checkHubKey(ctx); err != nil {
+		slog.Warn("leaf: hub key check failed", "network", l.cfg.Network, "hub", l.cfg.HubURL, "error", err)
+	}
 
 	// Fetch the NAL once up front, so areas the hub added while this node
 	// was offline reach OnNAL without waiting for the next change event.

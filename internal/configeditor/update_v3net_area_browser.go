@@ -79,7 +79,7 @@ func (m Model) updateV3NetAreaBrowser(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.areaBrowserError != "" {
 				m.areaBrowserLoading = true
 				m.areaBrowserError = ""
-				return m, fetchHubNAL(m.areaBrowserHub, m.areaBrowserNetwork)
+				return m, fetchHubNAL(m.areaBrowserHub, m.areaBrowserNetwork, m.areaBrowserPin())
 			}
 		}
 	}

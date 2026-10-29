@@ -14,6 +14,11 @@ import (
 )
 
 // FetchNAL fetches and verifies the NAL for this leaf's network from the hub.
+// Besides the signature, the NAL must name this leaf's network, its
+// coordinator key must be the pinned one (pinned now if none was), and its
+// coordinator node ID must derive from that key; otherwise the error wraps
+// nal.ErrCoordKeyMismatch or nal.ErrCoordNodeIDMismatch. The result is not
+// cached.
 func (l *Leaf) FetchNAL(ctx context.Context) (*protocol.NAL, error) {
 	url := l.cfg.HubURL + fmt.Sprintf("/v3net/v1/%s/nal", l.cfg.Network)
 	n, err := nal.Fetch(ctx, url, l.client)
@@ -22,6 +27,12 @@ func (l *Leaf) FetchNAL(ctx context.Context) (*protocol.NAL, error) {
 	}
 	if err := nal.Verify(n); err != nil {
 		return nil, fmt.Errorf("leaf: verify NAL: %w", err)
+	}
+	if n.Network != l.cfg.Network {
+		return nil, fmt.Errorf("leaf: NAL network mismatch: got %q want %q", n.Network, l.cfg.Network)
+	}
+	if err := l.checkNAL(n); err != nil {
+		return nil, fmt.Errorf("leaf: check NAL: %w", err)
 	}
 	return n, nil
 }

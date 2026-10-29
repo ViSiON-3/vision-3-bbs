@@ -33,6 +33,14 @@ type RegistryEntry struct {
 	Description string `json:"description"`
 	HubURL      string `json:"hub_url"`
 	HubNodeID   string `json:"hub_node_id"`
+	// HubPubKeyB64 is the hub's ed25519 public key (standard base64), when
+	// the registry publishes it. A leaf joining from the registry pins it
+	// instead of trusting the key the hub serves on first contact.
+	HubPubKeyB64 string `json:"hub_pubkey_b64,omitempty"`
+	// CoordPubKeyB64 is the network coordinator's ed25519 public key
+	// (standard base64), when the registry publishes it. A leaf joining from
+	// the registry pins it and rejects NALs signed by any other key.
+	CoordPubKeyB64 string `json:"coordinator_pubkey_b64,omitempty"`
 }
 
 // Registry is the top-level structure of the V3Net registry JSON.
