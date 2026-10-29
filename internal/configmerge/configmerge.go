@@ -506,6 +506,11 @@ type File[T any] struct {
 	// fields derived from an item's id that the generic merge cannot know
 	// about (a generated directory named after the id, say).
 	Fix func(merged T, res Result) T
+	// Reconcile, if set, runs after Fix with all three versions, for parts
+	// of the file the generic merge can only treat as one value: a list
+	// whose items have no id is kept whole from one side, and Reconcile can
+	// merge selected fields of its items by a key of its own.
+	Reconcile func(base, theirs, merged T) T
 	// Perm is the mode for a newly created file (0644 if zero). An existing
 	// file keeps its own mode; see FileMode.
 	Perm os.FileMode
@@ -558,6 +563,9 @@ func SaveFile[T any](f File[T], base, ours T) (T, Result, error) {
 	}
 	if f.Fix != nil {
 		merged = f.Fix(merged, res)
+	}
+	if f.Reconcile != nil {
+		merged = f.Reconcile(base, theirs, merged)
 	}
 
 	mg, err1 := toGeneric(merged)
