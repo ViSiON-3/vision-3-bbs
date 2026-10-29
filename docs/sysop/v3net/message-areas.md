@@ -452,9 +452,17 @@ no handover held, the hub records the key that signed the NAL before as
 the network's previous signer (one per network, kept across restarts). With
 no handover held, it then also accepts a handover whose `old_key` is that
 previous signer and whose `new_key` is its own key, which already signs the
-NAL; the NAL is served as it is, with the handover, and the hub sends
-`nal_updated`. Once any handover is held, the previous signer no longer
-counts.
+NAL; the NAL is served with the handover, changed only as below, and the
+hub sends `nal_updated`. Once any handover is held, the previous signer no
+longer counts.
+
+When the hub signs the NAL for a key the network was handed over to (at
+startup, on a late handover, or on a handover from the previous signer),
+each area whose `manager_node_id` or `manager_pubkey_b64` names the node
+of a key it was handed over from gets the hub's node ID and key as its
+manager, in the same signed NAL update; the hub logs each move. Areas
+other nodes manage keep their managers. A re-sign without a handover moves
+nothing.
 
 A posted NAL (`POST /v3net/v1/{network}/nal`) must always come from the
 node of the coordinator key in force and be signed by that key, so once

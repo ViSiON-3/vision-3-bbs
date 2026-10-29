@@ -469,9 +469,9 @@ func TestLateHandoverAdopted(t *testing.T) {
 // A hub restarted with the new key that re-signs the NAL with it before the
 // handover arrives (the lost-key path, unchanged) records the old key as
 // the previous signer, and still accepts that key's handover to its own:
-// the NAL is already the new key's, so it is served as is with the
-// handover. A handover to any other key, or from a key that never signed
-// the NAL, is refused.
+// the NAL is already the new key's, so it is served with the handover,
+// changed only to move the old node's area to the hub. A handover to any
+// other key, or from a key that never signed the NAL, is refused.
 func TestLateHandoverAfterResign(t *testing.T) {
 	dir := t.TempDir()
 	oldKS, newKS := newKey(t, "old.key"), newKey(t, "new.key")
@@ -537,8 +537,13 @@ func TestLateHandoverAfterResign(t *testing.T) {
 	if err := json.Unmarshal(getNALBody(t, ts), &served); err != nil {
 		t.Fatal(err)
 	}
-	if served.SignatureB64 != stored.SignatureB64 {
-		t.Error("the NAL was re-signed again; want it served as stored")
+	// Re-signed by the same key, only to move the old node's area to the
+	// hub (see TestHandoverMovesCoordinatorAreas).
+	if served.CoordPubKeyB64 != stored.CoordPubKeyB64 || nal.Verify(&served) != nil {
+		t.Errorf("served NAL signed by %s; want the hub key's, verified", served.CoordPubKeyB64)
+	}
+	if a := served.FindArea("gen.general"); a == nil || a.ManagerNodeID != newKS.NodeID() {
+		t.Errorf("gen.general managed by %+v, want the hub's node", a)
 	}
 	if len(served.Handovers) != 1 || served.Handovers[0] != *ho {
 		t.Errorf("served handovers = %+v, want the one posted", served.Handovers)

@@ -115,7 +115,15 @@ func (ns *NALStore) AddHandover(network string, h *protocol.CoordHandover) error
 // n's own key when no handover starts there, so a NAL re-signed by a key off
 // the chain is not overruled by older handovers.
 func coordKeyInForce(n *protocol.NAL, hs []protocol.CoordHandover) string {
+	path := coordKeyPath(n, hs)
+	return path[len(path)-1]
+}
+
+// coordKeyPath returns the keys coordKeyInForce passes through: n's key
+// first, then each key hs hands it on to, ending with the key in force.
+func coordKeyPath(n *protocol.NAL, hs []protocol.CoordHandover) []string {
 	key := n.CoordPubKeyB64
+	path := []string{key}
 	seen := map[string]bool{key: true}
 	for moved := true; moved; {
 		moved = false
@@ -123,12 +131,13 @@ func coordKeyInForce(n *protocol.NAL, hs []protocol.CoordHandover) string {
 			if h.OldKeyB64 == key && !seen[h.NewKeyB64] {
 				key = h.NewKeyB64
 				seen[key] = true
+				path = append(path, key)
 				moved = true
 				break
 			}
 		}
 	}
-	return key
+	return path
 }
 
 // servedHandovers trims hs to the most recent nal.MaxHandovers, the most a
@@ -246,6 +255,13 @@ func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if fromPrev {
+		if err := h.moveAreasToHub(network, n, ho.OldKeyB64); err != nil {
+			slog.Error("hub: could not move the previous signer's areas to the hub", "network", network, "error", err)
+			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+			return
+		}
+	}
 	if err := h.nalStore.AddHandover(network, &ho); err != nil {
 		slog.Error("add handover", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
@@ -253,12 +269,62 @@ func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("hub: coordinator handover accepted", "network", network, "from", ho.OldKeyB64, "to", ho.NewKeyB64)
 	if fromPrev {
-		// The NAL is already the hub key's; leaves only need the handover.
+		// The NAL is already the hub key's, and its areas were moved to the
+		// hub's node above; leaves only need the handover.
 		h.publishNALUpdated(network, n)
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 		return
 	}
 	h.answerAdopted(w, network)
+}
+
+// moveAreasToHub makes the hub's node the manager of each area of NAL n
+// that the previous signer's node still manages, then signs and stores n.
+// It runs before a late handover from that key is stored (see
+// fromPrevSigner), so a failure leaves nothing held and posting the
+// handover again retries all of it. When no area moves, n is left as it
+// is.
+func (h *Hub) moveAreasToHub(network string, n *protocol.NAL, from string) error {
+	if !h.moveManagedAreas(n, []string{from}) {
+		return nil
+	}
+	if err := nal.Sign(n, h.cfg.Keystore); err != nil {
+		return err
+	}
+	return h.nalStore.Put(network, n)
+}
+
+// moveManagedAreas makes the hub's node the manager of each area of n
+// managed by the node of a key in from, the coordinator keys the network
+// was handed over from, and logs each move. Areas other nodes manage are
+// left alone. It changes n in place and reports whether any area moved;
+// the caller signs and stores n, so the moves and the re-sign are one NAL
+// update. Without it the old coordinator's areas would keep a manager
+// nobody runs any more until the operator reassigned each one.
+func (h *Hub) moveManagedAreas(n *protocol.NAL, from []string) bool {
+	hubKey, hubNode := h.hubKey(), h.cfg.Keystore.NodeID()
+	old := make(map[string]bool, 2*len(from))
+	for _, key := range from {
+		if key == "" || key == hubKey {
+			continue
+		}
+		old[key] = true
+		if id := nodeIDOf(key); id != "" {
+			old[id] = true
+		}
+	}
+	moved := false
+	for i := range n.Areas {
+		a := &n.Areas[i]
+		if !old[a.ManagerPubKeyB64] && !old[a.ManagerNodeID] {
+			continue
+		}
+		slog.Info("hub: area manager moved to the hub after a coordinator handover",
+			"network", n.Network, "tag", a.Tag, "from", a.ManagerNodeID, "to", hubNode)
+		a.ManagerNodeID, a.ManagerPubKeyB64 = hubNode, hubKey
+		moved = true
+	}
+	return moved
 }
 
 // errAdoptFailed is the reply to a handover the hub holds but could not
@@ -282,7 +348,8 @@ func (h *Hub) answerAdopted(w http.ResponseWriter, network string) {
 // and ho's new key are both the hub's key, and ho's old key is the
 // network's recorded previous signer (see SignNAL). ho has been verified,
 // so the previous signer signed it. The chain is then just ho, from the key
-// leaves still pin to the key that signs the NAL, and nothing is re-signed.
+// leaves still pin to the key that signs the NAL, and the NAL is re-signed
+// only to move the previous signer's areas to the hub (see moveAreasToHub).
 //
 // This is as strong as the key-in-force rule: the previous signer was the
 // key in force until the hub re-signed without a handover, and only its
@@ -431,8 +498,10 @@ func (h *Hub) adoptHandovers() {
 
 // adoptHandover re-signs network's stored NAL with the hub's key when a
 // handover chain from the NAL's key ends at it, and returns the re-signed
-// NAL, or nil when there was nothing to do. Call it with nalMu held, or
-// before the hub serves requests.
+// NAL, or nil when there was nothing to do. Areas managed by the nodes of
+// the keys on that chain move to the hub's node in the same update (see
+// moveManagedAreas). Call it with nalMu held, or before the hub serves
+// requests.
 func (h *Hub) adoptHandover(network string) (*protocol.NAL, error) {
 	hubKey := h.hubKey()
 	if hubKey == "" {
@@ -446,10 +515,12 @@ func (h *Hub) adoptHandover(network string) (*protocol.NAL, error) {
 	if err != nil {
 		return nil, err
 	}
-	if coordKeyInForce(n, hs) != hubKey {
+	path := coordKeyPath(n, hs)
+	if path[len(path)-1] != hubKey {
 		return nil, nil
 	}
 	from := n.CoordPubKeyB64
+	h.moveManagedAreas(n, path[:len(path)-1])
 	if err := nal.Sign(n, h.cfg.Keystore); err != nil {
 		return nil, err
 	}

@@ -200,8 +200,11 @@ fail with `the network was handed over to another coordinator key` until
 the hub runs with the new key; a proposal sent meanwhile waits in
 **Pending area proposals** instead of being approved automatically.
 
-The new key's node becomes the coordinator. Areas the old hub node managed
-keep it as their manager until you reassign them with **Manage area
+The new key's node becomes the coordinator. When the hub signs the NAL
+with the new key, the areas the old hub node managed move to the new node
+in the same NAL update, and the hub logs `area manager moved to the hub
+after a coordinator handover` for each one. Areas other sysops manage stay
+theirs. To hand some of the moved areas back out, use **Manage area
 managers**.
 
 The hub only takes a handover signed by the key in force, and never one
