@@ -180,8 +180,8 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		counter = counters[0]
 	}
 	msgFilter = withTwit(func() *user.TwitMatcher { return matcher }, baseFilter, counter)
-	// The thread keys, signposts and pane see the thread through the same
-	// rules as navigation, but a hidden post they pass over is not one the
+	// The thread pane and menu see the thread through the same
+	// rules as navigation, but a hidden post they leave out is not one the
 	// scan skipped, so it does not count toward a newscan's twit tally.
 	threadFilter := withTwit(func() *user.TwitMatcher { return matcher }, baseFilter, nil)
 	glyphs := threadGlyphsFor(outputMode)
@@ -273,6 +273,10 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 	currentMsgNum := startMsg
 	quitNewscan := false
+	// threadMenu is whether the thread menu is open: T opens it on a message
+	// with a thread to show, and it stays open while the caller reads
+	// messages from it with Enter. Any other way to another message closes it.
+	threadMenu := false
 	// navDir is the direction (+1/-1) of the last navigation command; it steers
 	// the msgFilter skip so "previous" keeps moving backward past hidden messages.
 	navDir := 1
@@ -340,6 +344,10 @@ readerLoop:
 
 		// The reply thread this message sits in, as this caller may see it.
 		tv := readerThreadView(e, currentAreaID, currentMsgNum, currentMsg, threadFilter)
+		keepThreadMenu := threadMenu && tv.hasThread()
+		threadMenu = false
+		// The thread menu's cursor starts on the message being read.
+		threadCursor := currentMsgNum
 
 		// Build Pascal-style substitution map
 		templateUsesUserNote := headerTemplateUsesUserNote(hdrTemplateBytes)
@@ -399,32 +407,42 @@ readerLoop:
 		}
 
 		// The docked thread pane sits under the header and moves the body
-		// down while it is open (T opens and closes it). A message that is
-		// not in a thread has no pane and no signposts: the separator row
-		// is a plain rule and the body keeps the rows. A reply whose parent
-		// is deleted or hidden is still in one, even with nothing else to
-		// show: it keeps its signposts and keys, though there is no pane.
+		// down. It shows while the thread menu is open, and otherwise when
+		// the caller's Thread View setting is on. A message with no thread
+		// to show has no pane, and the body keeps the rows. While the menu
+		// is open, the separator row above the bar lists its keys; otherwise
+		// it is a plain rule.
 		paneTop, fullBodyStart, fullBodyAvail := bodyStartRow, bodyStartRow, bodyAvailHeight
 		var paneLines []string
+		paneRows := 0
+		renderPane := func() {
+			hl := currentMsgNum
+			if threadMenu {
+				hl = threadCursor
+			}
+			paneLines = renderThreadPane(tv, hl, paneRows, termWidth-1, e.Strings().MsgThreadPaneTitle, glyphs, outputMode)
+		}
 		layoutPane := func() {
-			paneLines = nil
+			paneLines, paneRows = nil, 0
 			bodyStartRow, bodyAvailHeight = fullBodyStart, fullBodyAvail
-			if !tv.hasThread() || !sessionThreadPaneOpen(s, currentUser) {
+			if !tv.hasThread() || (!threadMenu && currentUser.ThreadViewClosed) {
 				return
 			}
 			// A short thread takes only the rows it fills.
-			if rows := min(paneRowsFor(bodyAvailHeight), len(tv.rows)); rows > 0 {
-				paneLines = renderThreadPane(tv, rows, termWidth-1, e.Strings().MsgThreadPaneTitle, glyphs, outputMode)
-				bodyStartRow += rows + 2
-				bodyAvailHeight -= rows + 2
+			if paneRows = min(paneRowsFor(bodyAvailHeight), len(tv.rows)); paneRows > 0 {
+				renderPane()
+				bodyStartRow += paneRows + 2
+				bodyAvailHeight -= paneRows + 2
 			}
 		}
-		layoutPane()
-		signposts := "|08" + strings.Repeat("─", termWidth-1) + "|07"
-		inThread := tv.hasThread() || tv.isReply()
-		if inThread {
-			signposts = renderSignposts(readerSignposts(tv, glyphs), termWidth-1, glyphs, outputMode)
+		separator := func() string {
+			if threadMenu {
+				return renderThreadMenuKeys(termWidth-1, glyphs)
+			}
+			return "|08" + strings.Repeat("─", termWidth-1) + "|07"
 		}
+		threadMenu = keepThreadMenu
+		layoutPane()
 		// The bar's Thread item is lit only when there is a pane to open.
 		for i := range activeOptions {
 			if activeOptions[i].HotKey == 'T' {
@@ -470,6 +488,13 @@ readerLoop:
 			}
 		}
 
+		drawPane := func() {
+			for i, line := range paneLines {
+				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(paneTop+i, 1)), outputMode)
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
+			}
+		}
+
 		// Update lastread when first displaying message. Advance only:
 		// paging back to an older message must not mark newer ones unread
 		// again, or the new-mail and newscan counts report them twice.
@@ -483,9 +508,6 @@ readerLoop:
 		readerScrollKeys := []int{
 			editor.KeyArrowUp, editor.KeyArrowDown, editor.KeyPageUp, editor.KeyPageDown,
 			editor.KeyCtrlE, editor.KeyCtrlX, editor.KeyCtrlR, editor.KeyCtrlC,
-			// The thread keys are not on the bar, so the bar hands them
-			// back too rather than swallowing them.
-			'B', 'b', 'F', 'f', 'A', 'a', '[', ']',
 		}
 		pendingKey := 0
 
@@ -508,20 +530,17 @@ readerLoop:
 					terminalio.WriteProcessedBytes(terminal, processedHeader, outputMode)
 				}
 
-				for i, line := range paneLines {
-					terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(paneTop+i, 1)), outputMode)
-					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
-				}
+				drawPane()
 
 				drawBody()
 
 				// Display footer: lightbar only
 				suffixText := barSuffix
 
-				// The separator row above the bar carries the thread
-				// signposts: where B, F and A lead from this message.
+				// The separator row above the bar: the thread menu's keys
+				// while it is open, else a plain rule.
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight-1, 1)), outputMode)
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(signposts)), outputMode)
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(separator())), outputMode)
 
 				// Position cursor at last row for lightbar
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight, 1)), outputMode)
@@ -550,6 +569,30 @@ readerLoop:
 					}
 					if errors.Is(keyErr, io.EOF) {
 						return nil, "LOGOFF", currentMsgNum, io.EOF
+					}
+					continue
+				}
+			}
+
+			// While the thread menu is open, the arrows move its cursor,
+			// Enter reads the message under it, and T or Esc close it.
+			if threadMenu {
+				if handled, read := threadMenuKey(tv, key, &threadCursor); handled {
+					switch {
+					case read && threadCursor != currentMsgNum:
+						navDir = 1
+						currentMsgNum = threadCursor
+						threadMenu = true // stays open on the message read
+						break scrollLoop
+					case read:
+					case key == editor.KeyEsc || unicode.ToUpper(rune(key)) == 'T':
+						threadMenu = false
+						layoutPane()
+						scrollOffset = max(0, min(scrollOffset, totalBodyLines-bodyAvailHeight))
+						needsRedraw = true
+					default:
+						renderPane()
+						drawPane()
 					}
 					continue
 				}
@@ -643,8 +686,7 @@ readerLoop:
 					singleKey := rune(key)
 					// Check if it's a direct command key
 					switch unicode.ToUpper(singleKey) {
-					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'K', 'I', '?',
-						'B', 'F', 'A', '[', ']':
+					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'K', 'I', '?':
 						selectedKey = unicode.ToUpper(singleKey)
 					default:
 						// Not a recognized command, show lightbar
@@ -736,7 +778,7 @@ readerLoop:
 					return nil, "LOGOFF", currentMsgNum, io.EOF
 				}
 				// Reload the message: the reply is now in its thread, so the
-				// pane, signposts and reply count have to be rebuilt.
+				// pane and reply count have to be rebuilt.
 				continue readerLoop
 
 			case 'P': // Post new message
@@ -825,11 +867,12 @@ readerLoop:
 				needsRedraw = true
 				continue
 
-			case 'T': // Open or close the thread pane
+			case 'T': // Open or close the thread menu
 				if !tv.hasThread() {
 					continue
 				}
-				setSessionThreadPaneOpen(s, !sessionThreadPaneOpen(s, currentUser))
+				threadMenu = !threadMenu
+				threadCursor = currentMsgNum
 				layoutPane()
 				// Keep the top line where it was, as far as the new height
 				// allows.
@@ -841,27 +884,6 @@ readerLoop:
 				navDir = 1
 				e.handleJump(reader, terminal, outputMode, &currentMsgNum, totalMsgCount)
 				// Exit scroll loop to load new message
-				break scrollLoop
-
-			case 'B', 'F', 'A', '[', ']': // Reply-tree navigation
-				if !inThread {
-					continue
-				}
-				target, notice := threadNavTarget(tv, selectedKey, e.Strings())
-				if target == 0 {
-					e.showReaderNotice(terminal, outputMode, notice, termHeight)
-					needsRedraw = true
-					continue
-				}
-				if target > totalMsgCount {
-					// A reply posted since the reader started is in the
-					// tree but past the bound the reader was given.
-					if n, err := e.MessageMgr.GetMessageCountForArea(currentAreaID); err == nil && n > totalMsgCount {
-						totalMsgCount = n
-					}
-				}
-				navDir = 1
-				currentMsgNum = target
 				break scrollLoop
 
 			case 'M': // Mail reply (deferred)

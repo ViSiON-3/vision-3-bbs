@@ -359,13 +359,9 @@ hot key:
 | `S` | Prev | Previous message |
 | `R` | Reply | Reply in the same area |
 | `M` | Mail | Reply by private mail to the author |
-| `T` | Thread | Open or close the thread pane under the header. Greyed out on the bar when the message has no thread to show |
+| `T` | Thread | Open or close the thread menu (see below). Greyed out on the bar when the message has no thread to show |
 | `P` | Post | Post a new message |
 | `J` / `#` | Jump | Go to a message number |
-| `B` | Back | The message this one answers (not on the bar) |
-| `F` | First reply | The first reply to this message (not on the bar) |
-| `A` | Across | The next reply to the same message (not on the bar) |
-| `]` / `[` | Thread next / previous | Walk the thread in display order (not on the bar) |
 | `L` | List | List message titles, cursor on this message (flat or threaded, as the caller last had it) |
 | `I` | Twit | Add the author to your Twit List (hidden while Twit Lists are off) |
 | `D` | Del | Delete the message (sysop and co-sysop only; shown in red) |
@@ -373,29 +369,31 @@ hot key:
 | `?` | Help | List the commands |
 | `Q` | Quit | Leave the reader |
 
-**Reply threads (B, F, A, `]`, `[`).** These follow the reply links a
-message carries (the JAM `ReplyTo`, or the `REPLY` kludge of echomail), not
-its subject, so they walk the actual conversation. When the message is part of a thread, the separator row
-above the bar is a set of signposts that say where `B`, `F` and `A` lead
-from the current message, with the author's handle (`none` when there is
-nowhere to go, `#n deleted` when the parent has been deleted), and a pane
-under the header draws the thread as a tree, up to five rows (three on a
-short screen; a shorter thread takes only the rows it fills) windowed around
-the current message, with the root's subject in its
-title and the message's place in the thread (no pane when every other
-message in it is deleted or hidden from the caller). `T` (Thread on the
-bar) closes and reopens the pane, and is greyed out when there is no pane
-to show; the choice holds for the rest of the call, and the caller's **Thread
-View** setting in User Konfig decides whether it starts open. A message
-that is not in a thread (one nobody has answered and that answers nothing)
-shows no pane and no signposts, just the plain rule, and the thread keys
-do nothing there. Mail the caller may not read (another user's private
-message, a post from an author on their Twit List) is never shown or counted
-in any of this; a reply to such a message hangs from the nearest message the
-caller can see, and `B` on it says only that the message it answers is not
-available. Each key shows a short notice on the bar row when there is
-nowhere to go; the notices are the `msgThread*` strings. The direct-reply
-count is available to header templates as `@H@`.
+**Reply threads (T).** The thread follows the reply links a message
+carries (the JAM `ReplyTo`, or the `REPLY` kludge of echomail), not its
+subject, so it shows the actual conversation. When the message is part of
+a thread, a pane under the header draws it as a tree, up to five rows
+(three on a short screen; a shorter thread takes only the rows it fills)
+windowed around the current message, which carries the `►` marker, with
+the root's subject in its title and the message's place in the thread.
+
+`T` (Thread on the bar) opens the **thread menu**: the pane becomes a
+lightbar, and the row above the bar lists its keys. ↑/↓, Home and End move
+the highlight through the thread, stepping over `#n deleted` placeholders;
+Enter reads the highlighted message and leaves the menu open, so the
+caller can keep browsing; `T` or Esc close it. Any other reader command
+works as usual and closes the menu. While the menu is closed, the arrows
+scroll the body and the row above the bar is a plain rule.
+
+The caller's **Thread View** setting in User Konfig decides whether the
+pane shows (not as a menu) while the menu is closed; with it off, the pane
+appears only while the menu is open. A message with no thread to show (one
+nobody has answered and that answers nothing, or whose every other message
+is deleted or hidden from the caller) has no pane, and Thread is greyed out
+on the bar. Mail the caller may not read (another user's private message, a
+post from an author on their Twit List) is never shown or counted in any of
+this; a reply to such a message hangs from the nearest message the caller
+can see. The direct-reply count is available to header templates as `@H@`.
 
 **Listing from the reader (L).** `L` opens the message list, flat or
 threaded as the caller last had it (`T` in the list switches), with the

@@ -1,10 +1,9 @@
 package menu
 
 import (
-	"fmt"
 	"sort"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
 
@@ -183,7 +182,7 @@ func (f *threadFlattener) walk(rows []threadRow, n, depth, parent int, ancestors
 
 // threadView is the reply thread around the message the reader is on, as
 // the reader may show it: hidden messages removed, deleted ones kept as
-// placeholders. The reader's thread keys, signposts and pane all read it.
+// placeholders. The reader's thread pane and menu read it.
 type threadView struct {
 	cur   int
 	rows  []threadRow
@@ -265,15 +264,6 @@ func (tv *threadView) hasThread() bool {
 	return len(tv.order()) > 1
 }
 
-// isReply reports whether the current message answers another, even one
-// that is deleted or hidden from the caller. Such a message keeps its
-// signposts and thread keys when it is the only one left to show, so B can
-// still say why there is nowhere to go.
-func (tv *threadView) isReply() bool {
-	_, state := tv.parentOf(tv.cur)
-	return state != parentNone
-}
-
 // directReplies counts the readable replies shown under n.
 func (tv *threadView) directReplies(n int) int {
 	return len(tv.replies(n))
@@ -288,74 +278,6 @@ func (tv *threadView) replies(n int) []int {
 		}
 	}
 	return out
-}
-
-// firstReply is the first readable reply shown under n, or 0.
-func (tv *threadView) firstReply(n int) int {
-	if rs := tv.replies(n); len(rs) > 0 {
-		return rs[0]
-	}
-	return 0
-}
-
-// nextSibling is the readable reply after n under the same shown parent, or
-// 0. isRoot is set when n is a root of the shown tree.
-func (tv *threadView) nextSibling(n int) (next int, isRoot bool) {
-	r := tv.row(n)
-	if r == nil || r.Parent == 0 {
-		return 0, true
-	}
-	sibs := tv.replies(r.Parent)
-	for i, s := range sibs {
-		if s == n && i+1 < len(sibs) {
-			return sibs[i+1], false
-		}
-	}
-	return 0, false
-}
-
-// parentState says what pressing B on n would reach.
-type parentState int
-
-const (
-	parentNone    parentState = iota // n starts its thread
-	parentShown                      // the parent can be read
-	parentDeleted                    // the parent is deleted
-	parentHidden                     // the parent is not available to this user
-)
-
-// parentOf returns n's actual parent and whether the reader may go there.
-// Unlike the shown tree, this does not step over hidden messages: a hidden
-// parent is reported as such, not replaced by the next ancestor, though it
-// is never named.
-func (tv *threadView) parentOf(n int) (parent int, state parentState) {
-	node := tv.nodes[n]
-	if node == nil || node.Parent == 0 {
-		return 0, parentNone
-	}
-	p := node.Parent
-	switch {
-	case tv.load(p) == nil: // hidden, deleted or not: never named
-		return 0, parentHidden
-	case tv.nodes[p].Deleted:
-		return p, parentDeleted
-	}
-	return p, parentShown
-}
-
-// neighbour returns the message before (dir -1) or after (dir +1) n in the
-// thread's display order, or 0 at the ends.
-func (tv *threadView) neighbour(n, dir int) int {
-	ord := tv.order()
-	for i, m := range ord {
-		if m == n {
-			if j := i + dir; j >= 0 && j < len(ord) {
-				return ord[j]
-			}
-			return 0
-		}
-	}
-	return 0
 }
 
 // position returns n's 1-based place among the thread's readable messages
@@ -389,57 +311,38 @@ func (tv *threadView) rootSubject() string {
 	return ""
 }
 
-// handle is the author of n, for a signpost; "" when n is not readable.
-func (tv *threadView) handle(n int) string {
-	if m := tv.load(n); m != nil && !m.IsDeleted {
-		return m.From
+// threadMenuKey applies key to the thread menu, whose cursor is a message
+// number in tv. It reports whether the menu takes the key, and whether the
+// key asks to read the message under the cursor (Enter). The arrows, Home
+// and End move the cursor over the readable messages, stepping over deleted
+// placeholders; T and Esc are taken for the caller to close the menu.
+func threadMenuKey(tv *threadView, key int, cursor *int) (handled, read bool) {
+	ord := tv.order()
+	if len(ord) == 0 {
+		return false, false
 	}
-	return ""
-}
-
-// threadNavTarget resolves one of the reader's thread keys for the message
-// tv is on: B (back to the parent), F (first reply), A (across to the next
-// sibling), ] and [ (next and
-// previous in thread order). It returns the message to show, or 0 and the
-// notice that says why there is none.
-func threadNavTarget(tv *threadView, key rune, str *config.StringsConfig) (target int, notice string) {
-	cur := tv.cur
+	i := 0
+	for j, n := range ord {
+		if n == *cursor {
+			i = j
+		}
+	}
 	switch key {
-	case 'B':
-		p, state := tv.parentOf(cur)
-		switch state {
-		case parentShown:
-			return p, ""
-		case parentDeleted:
-			return 0, fmt.Sprintf(str.MsgThreadParentDeleted, p)
-		case parentHidden:
-			return 0, str.MsgThreadParentHidden
-		}
-		return 0, fmt.Sprintf(str.MsgThreadNoParent, cur)
-	case 'F':
-		if f := tv.firstReply(cur); f != 0 {
-			return f, ""
-		}
-		return 0, fmt.Sprintf(str.MsgThreadNoReplies, cur)
-	case 'A':
-		next, isRoot := tv.nextSibling(cur)
-		switch {
-		case next != 0:
-			return next, ""
-		case isRoot:
-			return 0, fmt.Sprintf(str.MsgThreadNoSiblingRoot, cur)
-		}
-		return 0, fmt.Sprintf(str.MsgThreadNoMoreSiblings, tv.row(cur).Parent)
-	case ']':
-		if n := tv.neighbour(cur, 1); n != 0 {
-			return n, ""
-		}
-		return 0, str.MsgThreadEnd
-	case '[':
-		if n := tv.neighbour(cur, -1); n != 0 {
-			return n, ""
-		}
-		return 0, str.MsgThreadStart
+	case editor.KeyArrowUp, editor.KeyCtrlE:
+		i = max(i-1, 0)
+	case editor.KeyArrowDown, editor.KeyCtrlX:
+		i = min(i+1, len(ord)-1)
+	case editor.KeyHome:
+		i = 0
+	case editor.KeyEnd:
+		i = len(ord) - 1
+	case editor.KeyEnter:
+		return true, true
+	case editor.KeyEsc, 'T', 't':
+		return true, false
+	default:
+		return false, false
 	}
-	return 0, ""
+	*cursor = ord[i]
+	return true, false
 }

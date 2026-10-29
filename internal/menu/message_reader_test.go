@@ -400,7 +400,7 @@ func TestMessageReaderHelpMailAndEsc(t *testing.T) {
 	env.generalMsgs(1)
 
 	r := env.runCmd("READMSGS", env.caller, "", "?M\x1b")
-	if !r.has("Message Reader Help", "Thread Tree On/Off") {
+	if !r.has("Message Reader Help", "Thread Menu") {
 		t.Errorf("? did not show help; output:\n%s", r.text())
 	}
 	if r.has("elete Message") {

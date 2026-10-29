@@ -498,7 +498,7 @@ func TestListMsgsReaderReturnsToList(t *testing.T) {
 		{"Enter, L, Enter reopens the same message in threaded mode", "\x1b[B\rL\r", 13, "Threaded List"},
 		{"T, Enter, L, Enter reopens the same message in flat mode", "T\x1b[B\rL\r", 11, "Message List"},
 		{"Enter, Q keeps the cursor on the message read", "\x1b[B\x1b[B\rQ\r", 6, "Threaded List"},
-		{"Enter, ], L follows the thread then lists on the new message", strings.Repeat("\x1b[B", 4) + "\r]L\r", 3, "Threaded List"},
+		{"Enter, thread menu, L lists on the message reached", strings.Repeat("\x1b[B", 4) + "\rT\x1b[B\rL\r", 3, "Threaded List"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -565,45 +565,6 @@ func TestThreadedListDeletedPrivateStaysHidden(t *testing.T) {
 	}
 	if !found {
 		t.Error("the deleted public #4 should still be a placeholder")
-	}
-}
-
-// T opens and closes the thread pane, from inside the lightbar too, and the
-// choice holds for the next message of the session.
-func TestReaderTTogglesThreadPane(t *testing.T) {
-	env := newMsgEnv(t)
-	env.seedSampleThread()
-	env.markRead(generalAreaID, "Caller", len(sampleThread))
-	for _, tc := range []struct {
-		name   string
-		closed bool // the caller's Konfig default
-		keys   string
-		panes  int // pane draws in the output
-	}{
-		{"open by default", false, "5\rQ", 1},
-		{"T closes it", false, "5\rTQ", 1},
-		{"T twice reopens it", false, "5\rTTQ", 2},
-		{"Right then T closes it from the bar", false, "5\r\x1b[CTQ", 1},
-		{"closed stays closed on the next message", false, "5\rT]Q", 1},
-		{"Konfig closed", true, "5\r]Q", 0},
-		{"Konfig closed, T opens it for the session", true, "5\rT]Q", 2},
-		{"T does nothing without a thread", false, "2\rTTQ", 0},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			sub := env.sub(t)
-			caller := *sub.caller
-			caller.ThreadViewClosed = tc.closed
-			r := sub.runCmd("READMSGS", &caller, "", tc.keys)
-			if r.err != nil || r.next != "QUIT_NEWSCAN" {
-				t.Fatalf("next = %q err = %v; output:\n%s", r.next, r.err, r.text())
-			}
-			if n := strings.Count(r.text(), "── Thread ─"); n != tc.panes {
-				t.Errorf("pane drawn %d times, want %d; output:\n%s", n, tc.panes, r.text())
-			}
-			if r.has("Message Threading") {
-				t.Errorf("T asked for a subject search; output:\n%s", r.text())
-			}
-		})
 	}
 }
 

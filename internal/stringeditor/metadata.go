@@ -686,15 +686,7 @@ func stringCatalog() []StringEntry {
 		// Login: password tries used up (#726)
 		{Label: "Exec: Login Tries Used", Key: "execLoginTooManyTries", Description: "Shown before disconnecting after too many wrong passwords, when NICETRY.ANS is missing"},
 
-		// Message reader: reply-tree navigation and the thread pane
-		{Label: "Msg: Thread No Parent", Key: "msgThreadNoParent", Description: "B on a message that starts its thread (%d=message number)"},
-		{Label: "Msg: Thread Parent Del", Key: "msgThreadParentDeleted", Description: "B when the message answered is deleted (%d=its number)"},
-		{Label: "Msg: Thread Parent Hid", Key: "msgThreadParentHidden", Description: "B when the message answered is not available to the caller"},
-		{Label: "Msg: Thread No Replies", Key: "msgThreadNoReplies", Description: "F on a message with no replies (%d=message number)"},
-		{Label: "Msg: Thread No Sibling", Key: "msgThreadNoSiblingRoot", Description: "A on a message that starts its thread (%d=message number)"},
-		{Label: "Msg: Thread Last Sibling", Key: "msgThreadNoMoreSiblings", Description: "A on the last reply to a message (%d=that message's number)"},
-		{Label: "Msg: Thread Start", Key: "msgThreadStart", Description: "[ on the first message of a thread"},
-		{Label: "Msg: Thread End", Key: "msgThreadEnd", Description: "] on the last message of a thread"},
+		// Message reader: the thread pane
 		{Label: "Msg: Thread Pane Title", Key: "msgThreadPaneTitle", Description: "Label on the reader's docked thread pane"},
 
 		// Message list: threaded mode

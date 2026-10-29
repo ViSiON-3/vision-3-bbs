@@ -345,25 +345,17 @@ type StringsConfig struct {
 	MsgScrollPercent     string `json:"msgScrollPercent"`
 	MsgNewScanSuffix     string `json:"msgNewScanSuffix"`
 	MsgReadingSuffix     string `json:"msgReadingSuffix"`
-	// Reply-tree navigation (B/F/A/[/]) notices and the docked pane's label.
-	MsgThreadNoParent       string `json:"msgThreadNoParent"`
-	MsgThreadParentDeleted  string `json:"msgThreadParentDeleted"`
-	MsgThreadParentHidden   string `json:"msgThreadParentHidden"`
-	MsgThreadNoReplies      string `json:"msgThreadNoReplies"`
-	MsgThreadNoSiblingRoot  string `json:"msgThreadNoSiblingRoot"`
-	MsgThreadNoMoreSiblings string `json:"msgThreadNoMoreSiblings"`
-	MsgThreadStart          string `json:"msgThreadStart"`
-	MsgThreadEnd            string `json:"msgThreadEnd"`
-	MsgThreadPaneTitle      string `json:"msgThreadPaneTitle"`
-	MsgJumpPrompt           string `json:"msgJumpPrompt"`
-	MsgInvalidMsgNum        string `json:"msgInvalidMsgNum"`
-	MsgReplySubjectEmpty    string `json:"msgReplySubjectEmpty"`
-	MsgLaunchingEditor      string `json:"msgLaunchingEditor"`
-	MsgReplyCancelled       string `json:"msgReplyCancelled"`
-	MsgReplyError           string `json:"msgReplyError"`
-	MsgReplySuccess         string `json:"msgReplySuccess"`
-	MsgEditorError          string `json:"msgEditorError"`
-	MsgAutoSigPrompt        string `json:"msgAutoSigPrompt"`
+	// The docked thread pane's label.
+	MsgThreadPaneTitle   string `json:"msgThreadPaneTitle"`
+	MsgJumpPrompt        string `json:"msgJumpPrompt"`
+	MsgInvalidMsgNum     string `json:"msgInvalidMsgNum"`
+	MsgReplySubjectEmpty string `json:"msgReplySubjectEmpty"`
+	MsgLaunchingEditor   string `json:"msgLaunchingEditor"`
+	MsgReplyCancelled    string `json:"msgReplyCancelled"`
+	MsgReplyError        string `json:"msgReplyError"`
+	MsgReplySuccess      string `json:"msgReplySuccess"`
+	MsgEditorError       string `json:"msgEditorError"`
+	MsgAutoSigPrompt     string `json:"msgAutoSigPrompt"`
 
 	// Message scan strings (V3-specific)
 	ScanDateLine            string `json:"scanDateLine"`

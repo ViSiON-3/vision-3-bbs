@@ -9,7 +9,6 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
-	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
 )
 
@@ -161,22 +160,6 @@ func setSessionListThreaded(s ssh.Session, threaded bool) {
 func sessionListThreaded(s ssh.Session) bool {
 	v, ok := sessionListModes.Load(s)
 	return !ok || v.(bool)
-}
-
-// sessionThreadPanes remembers, per session, whether the caller opened or
-// closed the reader's thread pane with T. Until they do, the pane follows
-// their Konfig setting.
-var sessionThreadPanes sync.Map
-
-func setSessionThreadPaneOpen(s ssh.Session, open bool) {
-	sessionThreadPanes.Store(s, open)
-}
-
-func sessionThreadPaneOpen(s ssh.Session, u *user.User) bool {
-	if v, ok := sessionThreadPanes.Load(s); ok {
-		return v.(bool)
-	}
-	return u == nil || !u.ThreadViewClosed
 }
 
 // truncateString truncates a string to maxLen, adding "..." if truncated.
