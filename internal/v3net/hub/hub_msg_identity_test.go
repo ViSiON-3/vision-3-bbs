@@ -139,7 +139,12 @@ func TestMessageStore_FetchCursor(t *testing.T) {
 		// A UUID only another network holds is not a cursor here.
 		{"cursor from another network", u9, "nodea", []string{"nodea/" + u1, "nodeb/" + u2, "nodeb/" + u1, "nodea/" + u3}},
 		{"cursor from another network without origin", u9, "", []string{"nodea/" + u1, "nodeb/" + u2, "nodeb/" + u1, "nodea/" + u3}},
-		{"unknown origin", u1, "nodec", []string{"nodea/" + u1, "nodeb/" + u2, "nodeb/" + u1, "nodea/" + u3}},
+		// An origin the network has no copy from falls back to the earliest
+		// copy of the UUID rather than the whole history.
+		{"unknown origin falls back to the earliest copy", u1, "nodec", []string{"nodeb/" + u2, "nodeb/" + u1, "nodea/" + u3}},
+		{"unknown origin on a later UUID", u2, "nodec", []string{"nodeb/" + u1, "nodea/" + u3}},
+		// Only a UUID the network does not hold starts from the beginning.
+		{"unknown UUID", "c10e8400-e29b-41d4-a716-44665544000f", "nodea", []string{"nodea/" + u1, "nodeb/" + u2, "nodeb/" + u1, "nodea/" + u3}},
 	}
 	for _, c := range cases {
 		if got := fetchUUIDs(t, ms, "testnet", c.since, c.origin); !equalStrings(got, c.want) {

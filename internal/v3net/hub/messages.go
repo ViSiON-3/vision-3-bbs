@@ -143,10 +143,11 @@ func (ms *MessageStore) Store(msgUUID, originNode, network, areaTag, data string
 // Returns the raw JSON data strings ordered oldest first.
 //
 // The cursor is the message (sinceOrigin, sinceUUID) in this network. Without
-// sinceOrigin, sent by leaves older than per-origin identity, it is the
-// earliest message in the network with that UUID: that may send again a few
-// messages the leaf already has, which it drops as duplicates, but never
-// skips one. An unknown cursor starts from the beginning.
+// sinceOrigin, sent by leaves older than per-origin identity, or when the
+// network has no message with that origin and UUID, it is the earliest
+// message in the network with that UUID: that may send again a few messages
+// the leaf already has, which it drops as duplicates, but never skips one.
+// Only a UUID the network does not hold at all starts from the beginning.
 func (ms *MessageStore) Fetch(network, sinceUUID, sinceOrigin string, limit int, areaTags []string) ([]string, bool, error) {
 	if len(areaTags) == 0 {
 		return nil, false, nil
@@ -182,22 +183,24 @@ func (ms *MessageStore) Fetch(network, sinceUUID, sinceOrigin string, limit int,
 			args...,
 		)
 	} else {
-		// Args: network, each areaTag, network, sinceUUID, [sinceOrigin], fetchLimit.
-		cursor := "SELECT MIN(id) FROM messages WHERE network = ? AND msg_uuid = ?"
-		args := make([]any, 0, 1+len(areaTags)+4)
+		// Args: network, each areaTag, [network, sinceUUID, sinceOrigin],
+		// network, sinceUUID, fetchLimit.
+		const exact = "(SELECT id FROM messages WHERE network = ? AND msg_uuid = ? AND origin_node = ?), "
+		const earliest = "(SELECT MIN(id) FROM messages WHERE network = ? AND msg_uuid = ?)"
+		cursor := earliest
+		args := make([]any, 0, 1+len(areaTags)+6)
 		args = append(args, network)
 		for _, tag := range areaTags {
 			args = append(args, tag)
 		}
-		args = append(args, network, sinceUUID)
 		if sinceOrigin != "" {
-			cursor += " AND origin_node = ?"
-			args = append(args, sinceOrigin)
+			cursor = exact + earliest
+			args = append(args, network, sinceUUID, sinceOrigin)
 		}
-		args = append(args, fetchLimit)
+		args = append(args, network, sinceUUID, fetchLimit)
 		rows, err = ms.db.Query(
 			`SELECT data FROM messages
-			 WHERE network = ? AND area_tag IN (`+inClause+`) AND id > COALESCE((`+cursor+`), 0)
+			 WHERE network = ? AND area_tag IN (`+inClause+`) AND id > COALESCE(`+cursor+`, 0)
 			 ORDER BY id ASC LIMIT ?`,
 			args...,
 		)
