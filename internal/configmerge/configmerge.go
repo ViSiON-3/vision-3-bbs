@@ -435,34 +435,85 @@ func (m *merger) list(path string, b, o, t []any) []any {
 	return out
 }
 
-// fieldKey returns the key a list item is matched on: the values of fields,
-// which must all be strings.
-func fieldKey(item any, fields []string) (string, bool) {
+// fieldKey returns the key a list item is matched on, the values of fields
+// (which must all be strings) encoded as a JSON array so that no two
+// different sets of values share a key, and a label naming the item in
+// messages.
+func fieldKey(item any, fields []string) (key, label string, ok bool) {
 	obj, ok := item.(map[string]any)
 	if !ok {
-		return "", false
+		return "", "", false
 	}
 	parts := make([]string, len(fields))
 	for i, f := range fields {
 		if parts[i], ok = obj[f].(string); !ok {
-			return "", false
+			return "", "", false
 		}
 	}
-	return strings.Join(parts, " "), true
+	data, err := json.Marshal(parts)
+	if err != nil {
+		return "", "", false
+	}
+	return string(data), strings.Join(parts, " "), true
+}
+
+// blankStrings returns the versions of one list item with every string
+// field that some version has, and another lacks, set to "" in the one that
+// lacks it. An omitempty string field cleared on one side is then an edit
+// to "" rather than a deletion, which an edit elsewhere would beat. Absent
+// versions (the item deleted on that side) are left alone.
+func blankStrings(vs ...val) []val {
+	strs := make(map[string]bool)
+	for _, v := range vs {
+		if obj, ok := v.v.(map[string]any); ok && v.ok {
+			for k, x := range obj {
+				if _, isStr := x.(string); isStr {
+					strs[k] = true
+				}
+			}
+		}
+	}
+	out := make([]val, len(vs))
+	for i, v := range vs {
+		out[i] = v
+		obj, ok := v.v.(map[string]any)
+		if !ok || !v.ok {
+			continue
+		}
+		var filled map[string]any
+		for k := range strs {
+			if _, has := obj[k]; has {
+				continue
+			}
+			if filled == nil {
+				filled = make(map[string]any, len(obj)+len(strs))
+				for kk, x := range obj {
+					filled[kk] = x
+				}
+			}
+			filled[k] = ""
+		}
+		if filled != nil {
+			out[i] = val{filled, true}
+		}
+	}
+	return out
 }
 
 // fieldList merges a list whose items are matched on the values of fields
 // rather than an id. Items merge like the keys of an object: one added on
 // one side is kept, one deleted on one side and untouched on the other is
-// gone, and one both sides added merges field by field. It reports false,
-// and the list is merged as a single value, when an item lacks a key or two
-// items on one side share one.
+// gone, and one both sides added merges field by field. Within an item a
+// string field one side cleared counts as set to "" (blankStrings). It
+// reports false, and the list is merged as a single value, when an item
+// lacks a key or two items on one side share one.
 func (m *merger) fieldList(path string, fields []string, b, o, t []any) ([]any, bool) {
+	labels := make(map[string]string)
 	index := func(list []any) (map[string]any, []string, bool) {
 		mp := make(map[string]any, len(list))
 		order := make([]string, 0, len(list))
 		for _, item := range list {
-			k, ok := fieldKey(item, fields)
+			k, label, ok := fieldKey(item, fields)
 			if !ok {
 				return nil, nil, false
 			}
@@ -470,6 +521,7 @@ func (m *merger) fieldList(path string, fields []string, b, o, t []any) ([]any, 
 				return nil, nil, false
 			}
 			mp[k] = item
+			labels[k] = label
 			order = append(order, k)
 		}
 		return mp, order, true
@@ -492,7 +544,13 @@ func (m *merger) fieldList(path string, fields []string, b, o, t []any) ([]any, 
 		bv, bok := bm[k]
 		ov, ook := om[k]
 		tv, tok := tm[k]
-		r := m.value(joinPath(path, k), 0, "", val{bv, bok}, val{ov, ook}, val{tv, tok})
+		vs := []val{{bv, bok}, {ov, ook}, {tv, tok}}
+		if bok {
+			// An item both sides added has nothing to clear: each side's
+			// fields are additions.
+			vs = blankStrings(vs...)
+		}
+		r := m.value(joinPath(path, labels[k]), 0, "", vs[0], vs[1], vs[2])
 		if r.ok {
 			out = append(out, r.v)
 		}
@@ -555,7 +613,8 @@ func MergeTyped[T any](base, ours, theirs T) (T, Result, error) {
 // id. keys maps the path of each such list, as Conflict.Path names it (e.g.
 // "leaves"), to the item fields that together identify an item; those fields
 // must hold strings. Such a list merges item by item instead of as a single
-// value.
+// value, and a string field cleared in an item reads as set to "", so
+// blanking an omitempty field is an edit, not a deletion.
 func MergeTypedKeys[T any](keys map[string][]string, base, ours, theirs T) (T, Result, error) {
 	var zero T
 	g := make([]any, 3)

@@ -334,6 +334,38 @@ func TestMergeFieldKeyedListDeletions(t *testing.T) {
 	}
 }
 
+// Clearing an omitempty string field drops it from the JSON; that is an edit
+// to "", which wins over a different edit elsewhere like any other value.
+func TestMergeFieldKeyedListBlankedFieldIsAnEdit(t *testing.T) {
+	base := subsDoc{Subs: []sub{{Net: "a", Hub: "h", Key: "A"}}}
+	ours := subsDoc{Subs: []sub{{Net: "a", Hub: "h"}}}
+	theirs := subsDoc{Subs: []sub{{Net: "a", Hub: "h", Key: "B"}}}
+	out, res := mustMergeKeys(t, base, ours, theirs)
+	if len(out.Subs) != 1 || out.Subs[0].Key != "" || len(res.Conflicts) != 1 {
+		t.Errorf("out = %+v, conflicts = %+v; want this save's blank key, reported", out, res.Conflicts)
+	}
+
+	// Blanked elsewhere and untouched here: blank too.
+	out, _ = mustMergeKeys(t, base, base, ours)
+	if len(out.Subs) != 1 || out.Subs[0].Key != "" {
+		t.Errorf("out = %+v, want the blank from elsewhere", out)
+	}
+}
+
+// Keys whose values differ only in where a space falls are different items.
+func TestMergeFieldKeyedListKeysDoNotCollide(t *testing.T) {
+	theirs := subsDoc{Subs: []sub{{Net: "a b", Hub: "c"}, {Net: "a", Hub: "b c"}}}
+	out, _ := mustMergeKeys(t, subsDoc{}, subsDoc{}, theirs)
+	if len(out.Subs) != 2 {
+		t.Errorf("out = %+v, want both items", out)
+	}
+	ours := subsDoc{Subs: []sub{{Net: "a b", Hub: "c", Poll: "5m"}, {Net: "a", Hub: "b c"}}}
+	out, res := mustMergeKeys(t, theirs, ours, theirs)
+	if len(out.Subs) != 2 || out.Subs[0].Poll != "5m" || out.Subs[1].Poll != "" || len(res.Conflicts) != 0 {
+		t.Errorf("out = %+v, conflicts = %+v", out, res.Conflicts)
+	}
+}
+
 func TestMergeFieldKeyedListSameItemAddedTwice(t *testing.T) {
 	out, _ := mustMergeKeys(t, subsDoc{},
 		subsDoc{Subs: []sub{{Net: "a", Hub: "h", Poll: "5m"}}},

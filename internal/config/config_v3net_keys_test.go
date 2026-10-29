@@ -61,6 +61,46 @@ func TestV3NetSaveKeepsKeysPinnedMeanwhile(t *testing.T) {
 	}
 }
 
+// Blanking a pinned key in the editor is how the sysop asks for a re-pin.
+// The blank must win over a key the BBS pinned meanwhile, even though the
+// omitempty field vanishes from the editor's JSON.
+func TestV3NetSaveKeepsBlankedPin(t *testing.T) {
+	dir := t.TempDir()
+	base := V3NetConfig{Leaves: []V3NetLeafConfig{
+		{HubURL: "https://a.example", Network: "neta", CoordinatorPubKey: "A", PendingHubPubKey: "P"},
+	}}
+	if err := SaveV3NetConfig(dir, base); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpdateV3NetConfig(dir, func(c *V3NetConfig) error {
+		c.Leaves[0].CoordinatorPubKey = "B"
+		c.Leaves[0].PendingHubPubKey = "Q"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ours, err := configmerge.Clone(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ours.Leaves[0].CoordinatorPubKey = ""
+	ours.Leaves[0].PendingHubPubKey = ""
+	if _, _, err := configmerge.SaveFile(V3NetConfigFile(dir), base, ours); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadV3NetConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Leaves) != 1 {
+		t.Fatalf("leaves = %+v", got.Leaves)
+	}
+	if l := got.Leaves[0]; l.CoordinatorPubKey != "" || l.PendingHubPubKey != "" {
+		t.Errorf("leaf = %+v; the editor's blanked keys must win", l)
+	}
+}
+
 // Leaves added or removed on disk while the editor holds an old copy are
 // kept that way when it saves, and its own leaf edits still win (#763).
 func TestV3NetSaveKeepsLeavesChangedMeanwhile(t *testing.T) {
