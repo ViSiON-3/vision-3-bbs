@@ -63,6 +63,9 @@ func (h *Hub) handleSetAreaManager(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"area not found"}`, http.StatusNotFound)
 			return
 		}
+		if refuseHandedOver(w, err) {
+			return
+		}
 		slog.Error("set area manager", "network", network, "tag", tag, "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return

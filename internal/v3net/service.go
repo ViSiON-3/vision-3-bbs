@@ -22,7 +22,6 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/hub"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/leaf"
-	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/registry"
 )
@@ -79,18 +78,43 @@ type Service struct {
 }
 
 // SetKeyChangeObserver registers fn to hear when a leaf's hub offers a
-// coordinator or hub key that differs from the pinned one. The leaf has
-// already rejected the key and logged it; fn is for alerting the sysop. It
-// is called once per distinct offered key, from leaf goroutines, so it must
-// be safe for concurrent use. Set it before Start.
+// coordinator or hub key that differs from the pinned one, and when a leaf
+// moved a pin along a signed coordinator handover. For an offered key the
+// leaf has already rejected and logged it, and fn is called once per
+// distinct offered key. For a handover, ev.Previous is set (the key the pin
+// moved from) and fn is called once the new pin is stored in v3net.json.
+// Either way fn is for alerting the sysop. Calls come from leaf goroutines,
+// so fn must be safe for concurrent use. Set it before Start.
 func (s *Service) SetKeyChangeObserver(fn func(ev leaf.KeyEvent)) {
 	s.keyObserver.Store(fn)
+}
+
+// keyPinned is each leaf's OnKeyPinned: it stores the pin, and tells the
+// observer about a pin a signed handover moved (ev.Previous set). That is
+// done only once the store succeeded, since a failed store is retried and
+// would otherwise be reported again.
+func (s *Service) keyPinned(ev leaf.KeyEvent) error {
+	if err := s.persistKeyEvent(ev); err != nil {
+		return err
+	}
+	if ev.Previous != "" {
+		s.notifyKeyObserver(ev)
+	}
+	return nil
+}
+
+// notifyKeyObserver hands ev to the observer SetKeyChangeObserver set, if any.
+func (s *Service) notifyKeyObserver(ev leaf.KeyEvent) {
+	if fn, ok := s.keyObserver.Load().(func(leaf.KeyEvent)); ok && fn != nil {
+		fn(ev)
+	}
 }
 
 // persistKeyEvent writes a leaf's first-use pin, or a changed key it was
 // offered, into that leaf's entry in v3net.json, so a restart keeps the pin
 // and the sysop can see the pending key. A pin is written only where the
-// entry has none, so a key the sysop set meanwhile wins. Without a config
+// entry has none, or, for a pin a signed handover moved, where the entry
+// still holds the key it moved from, so a key the sysop set meanwhile wins. Without a config
 // path (tests, tools) nothing is written. It returns an error only when the
 // file could not be read or written, so the leaf can retry a pin later.
 func (s *Service) persistKeyEvent(ev leaf.KeyEvent) error {
@@ -110,7 +134,9 @@ func (s *Service) persistKeyEvent(ev leaf.KeyEvent) error {
 			}
 			changed := false
 			if pinning {
-				if strings.TrimSpace(*pin) == "" {
+				// A handover replaces the pin it moved from, and only that
+				// one: a key the sysop set meanwhile wins.
+				if cur := strings.TrimSpace(*pin); cur == "" || (ev.Previous != "" && cur == ev.Previous) {
 					*pin = ev.Offered
 					changed = true
 				}
@@ -245,7 +271,9 @@ func hubAutoInit(cfg config.V3NetConfig, h *hub.Hub, ks *keystore.Keystore) {
 			continue // nothing new to add
 		}
 
-		if err := nal.Sign(nalDoc, ks); err != nil {
+		// SignNAL refuses a network handed over to another key, so seeding
+		// cannot undo the handover.
+		if err := h.SignNAL(nalDoc); err != nil {
 			slog.Error("v3net: could not sign initial NAL", "network", n.Name, "error", err)
 			continue
 		}
@@ -364,12 +392,10 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		HubPubKeyB64:          lcfg.HubPubKey,
 		PendingCoordPubKeyB64: lcfg.PendingCoordinatorPubKey,
 		PendingHubPubKeyB64:   lcfg.PendingHubPubKey,
-		OnKeyPinned:           s.persistKeyEvent,
+		OnKeyPinned:           s.keyPinned,
 		OnKeyChanged: func(ev leaf.KeyEvent) {
 			_ = s.persistKeyEvent(ev) // logged; the pending key is only a record
-			if fn, ok := s.keyObserver.Load().(func(leaf.KeyEvent)); ok && fn != nil {
-				fn(ev)
-			}
+			s.notifyKeyObserver(ev)
 		},
 	})
 

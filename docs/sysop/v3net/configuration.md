@@ -372,9 +372,14 @@ messages, chat or logon notices (these fail with
 as a changed coordinator key: it is recorded as **Offered Hub**
 (`pendingHubPubKey`) and every SysOp is warned at login.
 
+A hub whose operator moved the network to its new key with a signed
+handover is the exception: the leaf checks the handover, moves **Hub Key**
+itself and carries on (see
+[Signed Handovers](v3net/nal.md#signed-handovers)).
+
 To resume, confirm the new key with the network's operator through a channel
 you already trust, then copy it into **Hub Key**, as in
-[Accepting a New Key](v3net/nal.md#accepting-a-new-key-coordinator-transfer).
+[Accepting a New Key by Hand](v3net/nal.md#accepting-a-new-key-by-hand).
 The running BBS picks the edit up without a restart, checks `/info` against
 the new pin and resumes at once (`leaf: hub key matches the pin; resuming
 sync`). Messages posted locally meanwhile wait in the message base and are
@@ -516,8 +521,10 @@ Every key in `configs/v3net.json`, with its type, default and meaning, is
 tabulated in the [Manual Configuration Reference](v3net/manual-config.md),
 together with the network registry format and complete leaf and hub examples.
 The command-line tools that touch V3Net are documented where they are used:
-`helper post` in [V3Net Message Areas](v3net/message-areas.md#technical-reference)
-and `v3net-bootstrap` in [V3Net Bootstrap Tool](v3net/bootstrap.md).
+`helper post` in [V3Net Message Areas](v3net/message-areas.md#technical-reference),
+`v3net-bootstrap` in [V3Net Bootstrap Tool](v3net/bootstrap.md), and
+`v3net-handover` in
+[Moving the Network to a New Key](v3net/nal.md#moving-the-network-to-a-new-key).
 
 ---
 

@@ -58,6 +58,52 @@ func TestPersistKeyEvent(t *testing.T) {
 		t.Errorf("after acceptance: coord %q, pending %q; want C and none", got.CoordinatorPubKey, got.PendingCoordinatorPubKey)
 	}
 
+	// A handover moves the pin it started from, and clears a pending key
+	// it made the pin.
+	s.persistKeyEvent(ev(leaf.KeyCoordinator, "C", "D"))
+	moved := ev(leaf.KeyCoordinator, "D", "D")
+	moved.Previous = "C"
+	s.persistKeyEvent(moved)
+	if got = load(); got.CoordinatorPubKey != "D" || got.PendingCoordinatorPubKey != "" {
+		t.Errorf("after handover: coord %q, pending %q; want D and none", got.CoordinatorPubKey, got.PendingCoordinatorPubKey)
+	}
+	// One that started from a pin the sysop has since replaced does not.
+	moved = ev(leaf.KeyHub, "E", "E")
+	moved.Previous = "not-the-pin"
+	s.persistKeyEvent(moved)
+	if got = load(); got.HubPubKey != "sysop-set" {
+		t.Errorf("stale handover overwrote the hub pin: %q", got.HubPubKey)
+	}
+
 	// No config path: nothing to write, nothing to fail.
 	(&Service{}).persistKeyEvent(ev(leaf.KeyCoordinator, "Z", "Z"))
+}
+
+// keyPinned tells the key observer about a pin a handover moved, once it is
+// stored, and stays quiet for a first-use pin.
+func TestKeyPinnedNotifiesHandover(t *testing.T) {
+	dir := t.TempDir()
+	if err := config.SaveV3NetConfig(dir, config.V3NetConfig{Leaves: []config.V3NetLeafConfig{
+		{HubURL: "https://hub.example", Network: "testnet"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	s := &Service{cfg: config.V3NetConfig{ConfigPath: dir}}
+	var seen []leaf.KeyEvent
+	s.SetKeyChangeObserver(func(ev leaf.KeyEvent) { seen = append(seen, ev) })
+	ev := leaf.KeyEvent{Network: "testnet", HubURL: "https://hub.example", Kind: leaf.KeyCoordinator, Pinned: "A", Offered: "A"}
+
+	if err := s.keyPinned(ev); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 0 {
+		t.Fatalf("first-use pin notified the observer: %+v", seen)
+	}
+	ev.Pinned, ev.Offered, ev.Previous = "B", "B", "A"
+	if err := s.keyPinned(ev); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 1 || seen[0].Previous != "A" || seen[0].Pinned != "B" {
+		t.Errorf("observer saw %+v, want the move from A to B", seen)
+	}
 }

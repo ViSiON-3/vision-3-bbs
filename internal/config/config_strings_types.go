@@ -294,6 +294,11 @@ type StringsConfig struct {
 	// leaf rejects until the sysop accepts it (%s=network, %s=key kind,
 	// "coordinator" or "hub").
 	V3NetKeyChangedNotice string `json:"v3netKeyChangedNotice"`
+	// V3NetKeyHandoverNotice tells a sysop at login that a V3Net leaf moved
+	// a pinned coordinator or hub key to a new one along a signed
+	// coordinator handover, and saved it in v3net.json (%s=network, %s=key
+	// kind, "coordinator" or "hub").
+	V3NetKeyHandoverNotice string `json:"v3netKeyHandoverNotice"`
 
 	// Newuser strings (V3-specific)
 	NewUsersClosedStr       string `json:"newUsersClosedStr"`

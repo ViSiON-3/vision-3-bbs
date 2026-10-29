@@ -148,11 +148,59 @@ The node ID stays the same, so the NAL, subscribers and area managers carry over
 To share the work of running a network without handing it over, reassign individual areas to other sysops with **Manage area managers**.
 
 Because the recovered hub has the same key, subscribers' pinned coordinator
-key stays valid and nobody has to re-pin. If a network does move to a new
-key (a hub that could not recover its phrase, or a new operator starting a
-fresh hub under the old name), every subscriber's leaf rejects the new NAL
-until its sysop re-pins, as described next. Announce the new key through a
-channel the subscribers already trust before you switch.
+key stays valid and nobody has to re-pin. If a network moves to a new key
+(a new operator who wants their own identity, or retiring a key you no
+longer trust), sign a handover with the old key first, as described next;
+subscribers then move their pins by themselves. Without the old key (a hub
+that could not recover its phrase) there is no handover, and every
+subscriber's leaf rejects the new NAL until its sysop re-pins, as described
+under [Accepting a New Key](#accepting-a-new-key-by-hand). Announce the new
+key through a channel the subscribers already trust before you switch.
+
+### Moving the Network to a New Key
+
+A coordinator handover is a short statement, signed with the network's
+current key, that names the new key. The hub keeps it and serves it with
+the NAL, and each subscriber's leaf that checks it against its pinned key
+moves the pin to the new key itself (see
+[Signed Handovers](#signed-handovers)).
+
+1. Get the new key's public key: from the new hub's Node Identity screen
+   (`./config` → V3Net → Node Identity), or its `v3net.key` file.
+2. While the hub still runs with the old key, sign and publish the handover
+   from the hub's machine:
+
+   ```bash
+   go run ./cmd/v3net-handover \
+     -keystore data/v3net.key \
+     -hub      http://localhost:8765 \
+     -network  felonynet \
+     -new-key  <new public key>
+   ```
+
+   Use `-new-keystore <path>` instead of `-new-key` to read the key from
+   the new `v3net.key`, and `-dry-run` to print the signed handover without
+   sending it. Run it once per network the hub carries.
+3. Start the hub with the new key (swap in the new `v3net.key`, or recover
+   the new identity's phrase). On start it re-signs each handed-over
+   network's NAL with the new key, so subscribers move at their next fetch.
+
+Do steps 2 and 3 close together. Between them the hub refuses every NAL
+change it would sign with the old key (approving a proposal, changing an
+area's access or manager), because signing with the old key would undo the
+handover for subscribers that already follow the new key. Those changes
+fail with `the network was handed over to another coordinator key` until
+the hub runs with the new key; a proposal sent meanwhile waits in
+**Pending area proposals** instead of being approved automatically.
+
+The new key's node becomes the coordinator. Areas the old hub node managed
+keep it as their manager until you reassign them with **Manage area
+managers**.
+
+The hub only takes a handover signed by the key in force, and never one
+back to a key the network already used. A NAL published to the hub must
+always be signed by the key in force, which is the new key once the hub
+holds a handover.
 
 ## Coordinator Key Pinning
 
@@ -205,14 +253,44 @@ If the hub serves a NAL signed by a different key, the leaf:
 - queues a warning for every SysOp at their next login, and `./vision3
   doctor` reports it until it is dealt with.
 
-The pin is never updated on its own. A changed key is either a planned
-change of coordinator or someone impersonating the hub, and only you can
-tell which.
+Apart from a signed handover, described next, the pin is never updated on
+its own. A changed key is either a planned change of coordinator or someone
+impersonating the hub, and only you can tell which.
 
-### Accepting a New Key (Coordinator Transfer)
+### Signed Handovers
 
-Changing coordinator is done by each subscriber re-pinning by hand. There is
-no signed hand-over from the old coordinator yet.
+When the coordinator moves the network to a new key with a signed handover
+(see [Moving the Network to a New Key](#moving-the-network-to-a-new-key)),
+the hub serves the handover with the NAL. A leaf offered a NAL signed by a
+key other than its pin follows the handovers from the pinned key: each must
+be for this network and signed by the key before it. If they lead to the
+key that signed the NAL, the leaf:
+
+- moves the pin to the new key and accepts the NAL;
+- logs a warning, `key moved by a signed coordinator handover`, with the
+  old and new key and the number of steps;
+- writes the new key to `coordinatorPubKey` in `v3net.json`, but only if the
+  entry still holds the old key, so a key you set yourself wins, and clears
+  `pendingCoordinatorPubKey` if it held the new key;
+- once the new key is saved, queues a notice for every SysOp at their next
+  login saying the network moved its key by a signed handover (the
+  `v3netKeyHandoverNotice` string). Several moves in a row give one notice.
+
+A leaf that was offline through several handovers follows them all, up to
+eight in a row. The hub key is checked the same way: when `/info` serves
+the key that signs the NAL and the handovers lead to it from the pinned hub
+key, `hubPubKey` moves too and syncing carries on without a pause.
+
+Handovers that do not start at your pin, or that fail to verify, change
+nothing: the NAL is rejected as above. A stolen old key could hand the
+network to someone else this way, but a stolen key can already sign NALs,
+so the handover adds no new risk.
+
+### Accepting a New Key by Hand
+
+Without a signed handover, changing coordinator is done by each subscriber
+re-pinning by hand. This also works when a handover exists, and when a leaf
+was offline through more handovers than it follows.
 
 1. Confirm the new key with the network's operator through a channel you
    already trust (not the hub that is serving it).
@@ -235,7 +313,8 @@ connected to.
 | An area the hub just added is not in the browser | The leaf re-fetches the NAL when the hub announces a change (`nal_updated`) and whenever its event stream reconnects. If the BBS was down, it catches up on the next start. |
 | Subscribed, but status stays `PENDING` | The area is in approval mode and its manager has not acted yet. Approval-mode areas are the manager's call, not the coordinator's. |
 | Cannot subscribe at all | The area is closed and your node is not on its allow list, or your node is on the deny list. Ask the area manager. |
-| New areas stopped arriving; the log says `key changed; rejected until the sysop accepts it` | The hub is serving a NAL signed by a key other than the one pinned. See [When the Key Changes](#when-the-key-changes). |
+| New areas stopped arriving; the log says `key changed; rejected until the sysop accepts it` | The hub is serving a NAL signed by a key other than the one pinned, with no handover leading to it from your pin. See [When the Key Changes](#when-the-key-changes). |
+| The log says `key moved by a signed coordinator handover` | The coordinator moved the network to a new key, and your leaf followed. Nothing to do; see [Signed Handovers](#signed-handovers). |
 | Coordinator Panel never appears | Your node is not the coordinator of any subscribed network. Only the hub's own node is; see Handing Over a Network. |
 
 ## Related Documentation
@@ -262,6 +341,7 @@ The NAL is a signed JSON document. The coordinator's Ed25519 key signs a canonic
 | `areas[]` | The areas, each with `tag`, `name`, `description`, `language`, `moderated`, `manager_node_id`, `manager_pubkey_b64`, `access`, `policy` and `added` (the date the hub added it, used by the login question) |
 | `areas[].access` | `mode` (`open`, `approval` or `closed`), `allow_list` and `deny_list` of node IDs |
 | `areas[].policy` | `max_body_bytes`, `allow_ansi`, `require_tearline` |
+| `coordinator_handovers[]` | The coordinator handovers the hub holds for the network, oldest first, at most 32; left out when there are none. Added by the hub when it serves the NAL and not covered by the NAL's signature, since each carries its own. See [Coordinator Handovers](v3net/message-areas.md#coordinator-handovers) |
 
 Area tags must match `^[a-z0-9]{1,8}\.[a-z0-9-]{1,24}$`.
 

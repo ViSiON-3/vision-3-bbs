@@ -233,6 +233,7 @@ var NoHookKeys = map[string]bool{
 	"sysopChatHeader":           true,
 	"timeLimitWarning":          true,
 	"v3netKeyChangedNotice":     true,
+	"v3netKeyHandoverNotice":    true,
 	"v3netNewAreaDeclined":      true,
 	"v3netNewAreaNotice":        true,
 	"yesPromptText":             true,
