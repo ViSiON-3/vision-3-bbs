@@ -810,17 +810,22 @@ func keysOnlyChange(prev, next []config.V3NetLeafConfig) bool {
 // applyPins installs the keys from leafCfgs on the running leaves without
 // rebuilding them. The caller holds reloadMu.
 func (s *Service) applyPins(leafCfgs []config.V3NetLeafConfig) {
+	// run.ctx is written under s.mu when a leaf starts, so it is read here.
+	type target struct {
+		l   *leaf.Leaf
+		ctx context.Context
+	}
 	s.mu.Lock()
-	runs := make(map[leafKey]*leafRun, len(s.leaves))
+	runs := make(map[leafKey]target, len(s.leaves))
 	for _, run := range s.leaves {
-		runs[leafKey{run.l.Network(), run.l.HubURL()}] = run
+		runs[leafKey{run.l.Network(), run.l.HubURL()}] = target{run.l, run.ctx}
 	}
 	s.leafCfgs = slices.Clone(leafCfgs)
 	s.mu.Unlock()
 
 	for _, c := range leafCfgs {
-		run := runs[leafKey{c.Network, c.HubURL}]
-		if run == nil {
+		run, ok := runs[leafKey{c.Network, c.HubURL}]
+		if !ok {
 			continue // skipped at configure time (no resolvable boards)
 		}
 		run.l.UpdatePins(run.ctx, leaf.Pins{
