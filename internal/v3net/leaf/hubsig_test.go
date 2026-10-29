@@ -260,8 +260,8 @@ func TestUnsignedHubTolerated(t *testing.T) {
 }
 
 // fakeSSEHub serves /info with its key and an SSE stream whose events are
-// written by write, given the opening request's signature.
-func fakeSSEHub(t *testing.T, hubKS *keystore.Keystore, write func(w io.Writer, reqSig string)) *httptest.Server {
+// written by write, given the opening request's signature and nonce.
+func fakeSSEHub(t *testing.T, hubKS *keystore.Keystore, write func(w io.Writer, req reqBinding)) *httptest.Server {
 	t.Helper()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/info") {
@@ -270,12 +270,12 @@ func fakeSSEHub(t *testing.T, hubKS *keystore.Keystore, write func(w io.Writer, 
 			})
 			return
 		}
-		reqSig := r.Header.Get("X-V3Net-Signature")
-		sig, _ := protocol.SignResponse(hubKS, reqSig, http.StatusOK, nil)
+		req := reqBinding{sig: r.Header.Get("X-V3Net-Signature"), nonce: r.Header.Get(protocol.HeaderNonce)}
+		sig, _ := protocol.SignResponse(hubKS, req.sig, req.nonce, http.StatusOK, nil)
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set(protocol.HeaderHubSignature, sig)
 		w.WriteHeader(http.StatusOK)
-		write(w, reqSig)
+		write(w, req)
 		w.(http.Flusher).Flush()
 	}))
 	t.Cleanup(ts.Close)
@@ -283,9 +283,9 @@ func fakeSSEHub(t *testing.T, hubKS *keystore.Keystore, write func(w io.Writer, 
 }
 
 // signedEvent formats one event as the hub sends it.
-func signedEvent(t *testing.T, hubKS *keystore.Keystore, reqSig string, seq uint64, typ, data string) string {
+func signedEvent(t *testing.T, hubKS *keystore.Keystore, req reqBinding, seq uint64, typ, data string) string {
 	t.Helper()
-	sig, err := protocol.SignEvent(hubKS, "testnet", reqSig, seq, typ, []byte(data))
+	sig, err := protocol.SignEvent(hubKS, "testnet", req.sig, req.nonce, seq, typ, []byte(data))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,22 +293,28 @@ func signedEvent(t *testing.T, hubKS *keystore.Keystore, reqSig string, seq uint
 }
 
 // Within a signed stream an event replayed, skipped ahead, or lifted from
-// another stream drops the stream before it is dispatched.
+// another stream (including an identical connect in the same second, which
+// differs only by its nonce) drops the stream before it is dispatched.
 func TestSSERejectsReplayedEvents(t *testing.T) {
 	hubKS := newCoordKey(t)
-	cases := map[string]func(w io.Writer, reqSig string){
-		"replayed": func(w io.Writer, reqSig string) {
-			ev := signedEvent(t, hubKS, reqSig, 1, "ping", "{}")
+	cases := map[string]func(w io.Writer, req reqBinding){
+		"replayed": func(w io.Writer, req reqBinding) {
+			ev := signedEvent(t, hubKS, req, 1, "ping", "{}")
 			_, _ = io.WriteString(w, ev+ev)
 		},
-		"skipped": func(w io.Writer, reqSig string) {
-			_, _ = io.WriteString(w, signedEvent(t, hubKS, reqSig, 1, "ping", "{}")+signedEvent(t, hubKS, reqSig, 3, "ping", "{}"))
+		"skipped": func(w io.Writer, req reqBinding) {
+			_, _ = io.WriteString(w, signedEvent(t, hubKS, req, 1, "ping", "{}")+signedEvent(t, hubKS, req, 3, "ping", "{}"))
 		},
-		"other stream": func(w io.Writer, reqSig string) {
-			_, _ = io.WriteString(w, signedEvent(t, hubKS, reqSig, 1, "ping", "{}")+signedEvent(t, hubKS, "another-request", 2, "ping", "{}"))
+		"other stream": func(w io.Writer, req reqBinding) {
+			other := reqBinding{sig: "another-request", nonce: req.nonce}
+			_, _ = io.WriteString(w, signedEvent(t, hubKS, req, 1, "ping", "{}")+signedEvent(t, hubKS, other, 2, "ping", "{}"))
 		},
-		"unsigned event": func(w io.Writer, reqSig string) {
-			_, _ = io.WriteString(w, signedEvent(t, hubKS, reqSig, 1, "ping", "{}")+"event: ping\ndata: {}\n\n")
+		"same-second stream": func(w io.Writer, req reqBinding) {
+			other := reqBinding{sig: req.sig, nonce: "another-nonce"}
+			_, _ = io.WriteString(w, signedEvent(t, hubKS, req, 1, "ping", "{}")+signedEvent(t, hubKS, other, 2, "ping", "{}"))
+		},
+		"unsigned event": func(w io.Writer, req reqBinding) {
+			_, _ = io.WriteString(w, signedEvent(t, hubKS, req, 1, "ping", "{}")+"event: ping\ndata: {}\n\n")
 		},
 	}
 	for name, write := range cases {
@@ -385,5 +391,214 @@ func TestLegacyLeafReadsSignedStream(t *testing.T) {
 	payload := awaitEvent(t, events, protocol.EventLogon, func(p protocol.LogonPayload) bool { return p.Handle == "old-timer" })
 	if payload.Handle != "old-timer" {
 		t.Errorf("logon payload = %+v", payload)
+	}
+}
+
+// rawSSEHub serves an unsigned SSE stream with the given body.
+func rawSSEHub(t *testing.T, body string) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+// An event is buffered until its blank line, so its field count and size
+// are capped; a stream over either cap is dropped, signed or not. The caps
+// apply per event: many normal events in a row are fine.
+func TestSSEEventLimits(t *testing.T) {
+	line := "data: " + strings.Repeat("x", 128<<10) + "\n" // 128KB, well under the line cap
+	hubKS := newCoordKey(t)
+	cases := map[string]struct {
+		hub     func(t *testing.T) *httptest.Server
+		wantErr error
+		events  int64
+	}{
+		"too many fields": {
+			hub: func(t *testing.T) *httptest.Server {
+				return rawSSEHub(t, "event: ping\n"+strings.Repeat("data: {}\n", maxSSEEventFields)+"\n")
+			},
+			wantErr: errSSEEventTooLarge,
+		},
+		"too many bytes": {
+			hub:     func(t *testing.T) *httptest.Server { return rawSSEHub(t, "event: ping\n"+strings.Repeat(line, 9)+"\n") },
+			wantErr: errSSEEventTooLarge,
+		},
+		"too many bytes, signed": {
+			hub: func(t *testing.T) *httptest.Server {
+				return fakeSSEHub(t, hubKS, func(w io.Writer, req reqBinding) {
+					_, _ = io.WriteString(w, signedEvent(t, hubKS, req, 1, "ping", "{}")+"event: ping\nid: 2\n"+strings.Repeat(line, 9)+"\n")
+				})
+			},
+			wantErr: errSSEEventTooLarge,
+			events:  1,
+		},
+		"limits reset per event": {
+			hub: func(t *testing.T) *httptest.Server {
+				ev := "event: ping\n" + strings.Repeat(line, 7) + "\n" // 896KB, 8 fields
+				return rawSSEHub(t, strings.Repeat(ev, 4))
+			},
+			events: 4,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			ts := tc.hub(t)
+			l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
+			l.pins.hub = hubKS.PubKeyBase64()
+			var got atomic.Int64
+			l.SetOnEvent(func(protocol.Event) { got.Add(1) })
+
+			err := l.connectSSE(context.Background(), false)
+			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+				t.Fatalf("connectSSE = %v, want %v", err, tc.wantErr)
+			}
+			if tc.wantErr == nil && (err == nil || !strings.Contains(err.Error(), "stream ended")) {
+				t.Fatalf("connectSSE = %v, want the stream to end normally", err)
+			}
+			if n := got.Load(); n != tc.events {
+				t.Errorf("%d events dispatched, want %d", n, tc.events)
+			}
+			if l.HubPaused() {
+				t.Error("an oversized event paused syncing")
+			}
+		})
+	}
+}
+
+// A hub that has changed its key refuses the stream with a reply signed by
+// the new key. The leaf checks that refusal like any other reply, so it
+// pauses and reports the offered key rather than reconnecting for ever.
+func TestSSESignedRefusalChecked(t *testing.T) {
+	newKey := newCoordKey(t)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/info") {
+			_ = json.NewEncoder(w).Encode(protocol.NetworkInfo{
+				Name: "testnet", HubNodeID: newKey.NodeID(), HubPubKeyB64: newKey.PubKeyBase64(),
+			})
+			return
+		}
+		body := []byte(`{"error":"unknown or inactive node"}`)
+		sig, _ := protocol.SignResponse(newKey, r.Header.Get("X-V3Net-Signature"), r.Header.Get(protocol.HeaderNonce), http.StatusUnauthorized, body)
+		w.Header().Set(protocol.HeaderHubSignature, sig)
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(ts.Close)
+	l, rec := pinnedLeaf(t, ts, "")
+	l.pins.hub = newCoordKey(t).PubKeyBase64()
+
+	err := l.connectSSE(context.Background(), false)
+	if !errors.Is(err, ErrHubSignature) || !strings.Contains(err.Error(), "401") {
+		t.Fatalf("connectSSE = %v, want a 401 wrapping ErrHubSignature", err)
+	}
+	if !l.HubPaused() {
+		t.Error("not paused after a refusal signed by another key")
+	}
+	if _, changed := rec.counts(); changed != 1 || rec.changed[0].Offered != newKey.PubKeyBase64() {
+		t.Errorf("key changes = %+v, want the new key offered once", rec.changed)
+	}
+}
+
+// replayProxy forwards to a hub, but answers a message poll whose request
+// signature it has seen before with the reply it recorded for it.
+type replayProxy struct {
+	mu       sync.Mutex
+	recorded map[string]recordedReply
+	replays  int
+}
+
+type recordedReply struct {
+	header http.Header
+	status int
+	body   []byte
+}
+
+func (p *replayProxy) handler(t *testing.T, hubURL string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqSig := r.Header.Get("X-V3Net-Signature")
+		isPoll := strings.HasSuffix(r.URL.Path, "/messages") && r.Method == http.MethodGet
+		p.mu.Lock()
+		rec, seen := p.recorded[reqSig]
+		if isPoll && seen {
+			p.replays++
+		}
+		p.mu.Unlock()
+		if isPoll && seen {
+			for k, v := range rec.header {
+				w.Header()[k] = v
+			}
+			w.WriteHeader(rec.status)
+			_, _ = w.Write(rec.body)
+			return
+		}
+
+		out, err := http.NewRequestWithContext(r.Context(), r.Method, hubURL+r.URL.RequestURI(), r.Body)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		out.Header = r.Header.Clone()
+		resp, err := http.DefaultClient.Do(out)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if isPoll {
+			p.mu.Lock()
+			p.recorded[reqSig] = recordedReply{header: resp.Header.Clone(), status: resp.StatusCode, body: body}
+			p.mu.Unlock()
+		}
+		for k, v := range resp.Header {
+			w.Header()[k] = v
+		}
+		w.WriteHeader(resp.StatusCode)
+		_, _ = w.Write(body)
+	})
+}
+
+// Two identical polls in the same second carry the same request signature.
+// A reply captured for the first and replayed for the second is refused,
+// because the second request carried a fresh nonce.
+func TestSameSecondReplayRejected(t *testing.T) {
+	ts, _, hubKS := newTestHub(t, true)
+	p := &replayProxy{recorded: map[string]recordedReply{}}
+	front := httptest.NewServer(p.handler(t, ts.URL))
+	t.Cleanup(front.Close)
+	l := subscribedLeaf(t, front, "Leaf BBS")
+	l.pins.hub = hubKS.PubKeyBase64()
+	ctx := context.Background()
+
+	// Poll back to back until two polls land in the same second.
+	var replayErr error
+	for i := 0; i < 50; i++ {
+		_, err := l.Poll(ctx)
+		p.mu.Lock()
+		replayed := p.replays > 0
+		p.mu.Unlock()
+		if replayed {
+			replayErr = err
+			break
+		}
+		if err != nil {
+			t.Fatalf("Poll %d (forwarded): %v", i, err)
+		}
+	}
+	p.mu.Lock()
+	replays := p.replays
+	p.mu.Unlock()
+	if replays == 0 {
+		t.Fatal("no two polls shared a request signature; the replay was never attempted")
+	}
+	if !errors.Is(replayErr, ErrHubSignature) {
+		t.Fatalf("Poll with a replayed reply = %v, want ErrHubSignature", replayErr)
+	}
+	if l.HubPaused() {
+		t.Error("still paused although /info serves the pinned key")
 	}
 }

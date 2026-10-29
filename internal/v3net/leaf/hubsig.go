@@ -157,12 +157,18 @@ func (l *Leaf) noteUnsignedHub() {
 	}
 }
 
+// reqBinding is what a hub's signatures on a reply are bound to: the
+// request's X-V3Net-Signature and the nonce sent with it.
+type reqBinding struct {
+	sig, nonce string
+}
+
 // verifyHubResponse checks a response's X-V3Net-Hub-Signature against the
-// pinned hub key, for the signed request reqSig and the body as read. An
+// pinned hub key, for the signed request req and the body as read. An
 // unsigned response, or one from a hub whose key is not pinned, is accepted.
 // A bad signature pauses syncing and returns an error wrapping
 // ErrHubSignature.
-func (l *Leaf) verifyHubResponse(ctx context.Context, resp *http.Response, path, reqSig string, body []byte) error {
+func (l *Leaf) verifyHubResponse(ctx context.Context, resp *http.Response, path string, req reqBinding, body []byte) error {
 	sig := resp.Header.Get(protocol.HeaderHubSignature)
 	if sig == "" {
 		l.noteUnsignedHub()
@@ -172,7 +178,7 @@ func (l *Leaf) verifyHubResponse(ctx context.Context, resp *http.Response, path,
 	if !ok {
 		return nil
 	}
-	if protocol.VerifyResponse(pub, reqSig, resp.StatusCode, body, sig) != nil {
+	if protocol.VerifyResponse(pub, req.sig, req.nonce, resp.StatusCode, body, sig) != nil {
 		l.hubSignatureFailed(ctx, path)
 		return fmt.Errorf("%w: response to %s", ErrHubSignature, path)
 	}
@@ -183,7 +189,7 @@ func (l *Leaf) verifyHubResponse(ctx context.Context, resp *http.Response, path,
 type eventVerifier struct {
 	pub     ed25519.PublicKey
 	network string
-	reqSig  string
+	req     reqBinding
 	last    uint64 // sequence number of the last event accepted
 }
 
@@ -191,15 +197,15 @@ type eventVerifier struct {
 // returns a verifier for its events, or nil for a stream from a hub that
 // does not sign or whose key is not pinned. A bad signature pauses syncing
 // and returns an error wrapping ErrHubSignature.
-func (l *Leaf) newEventVerifier(ctx context.Context, resp *http.Response, path, reqSig string) (*eventVerifier, error) {
-	if err := l.verifyHubResponse(ctx, resp, path, reqSig, nil); err != nil {
+func (l *Leaf) newEventVerifier(ctx context.Context, resp *http.Response, path string, req reqBinding) (*eventVerifier, error) {
+	if err := l.verifyHubResponse(ctx, resp, path, req, nil); err != nil {
 		return nil, err
 	}
 	pub, ok := l.pinnedHubPubKey()
 	if !ok || resp.Header.Get(protocol.HeaderHubSignature) == "" {
 		return nil, nil
 	}
-	return &eventVerifier{pub: pub, network: l.cfg.Network, reqSig: reqSig}, nil
+	return &eventVerifier{pub: pub, network: l.cfg.Network, req: req}, nil
 }
 
 // check accepts an event whose id is the next sequence number and whose sig
@@ -212,7 +218,7 @@ func (v *eventVerifier) check(id, sig, eventType string, data []byte) error {
 	if err != nil || seq != v.last+1 {
 		return fmt.Errorf("%w: %s event id %q out of sequence, want %d", ErrHubSignature, eventType, id, v.last+1)
 	}
-	if protocol.VerifyEvent(v.pub, v.network, v.reqSig, seq, eventType, data, sig) != nil {
+	if protocol.VerifyEvent(v.pub, v.network, v.req.sig, v.req.nonce, seq, eventType, data, sig) != nil {
 		return fmt.Errorf("%w: %s event %d", ErrHubSignature, eventType, seq)
 	}
 	v.last = seq

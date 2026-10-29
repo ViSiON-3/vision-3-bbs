@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -13,6 +14,19 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
+
+// Limits on one SSE event, as read before the blank line that ends it. The
+// scanner caps each line, but an event can be any number of lines and
+// nothing is verified until it ends, so these cap what is buffered for it.
+// A stream over either limit is dropped, signed or not. The hub sends four
+// fields per event and its largest event is far below the byte limit.
+const (
+	maxSSEEventFields = 16
+	maxSSEEventBytes  = 1 << 20 // 1MB of field values
+)
+
+// errSSEEventTooLarge is returned when an event goes over the limits above.
+var errSSEEventTooLarge = errors.New("SSE event too large")
 
 var (
 	sseBackoffBase = 5 * time.Second
@@ -63,7 +77,9 @@ func (l *Leaf) runSSE(ctx context.Context) {
 // blank line after each event; fields other than event, id, sig and data are
 // skipped. When the hub signs the stream, every event must carry the next
 // id in sequence and a sig that verifies (see eventVerifier), or the stream
-// is dropped and syncing paused. A pause from elsewhere also drops it.
+// is dropped and syncing paused. A pause from elsewhere also drops it, as
+// does an event over maxSSEEventFields or maxSSEEventBytes. A refusal is
+// checked like any signed reply before its status is returned.
 func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 	// Taken before connecting, so a pause that starts at any point after
 	// this drops the stream.
@@ -79,16 +95,26 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 	}()
 
 	path := fmt.Sprintf("/v3net/v1/%s/events", l.cfg.Network)
-	resp, reqSig, err := l.signedGetSSE(streamCtx, path)
+	resp, req, err := l.signedGetSSE(streamCtx, path)
 	if err != nil {
 		return fmt.Errorf("SSE connect: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }() // read side
 
 	if resp.StatusCode != 200 {
+		// A refusal is signed like any other reply. Checking it lets a hub
+		// that now signs with another key (and so refuses or is refused)
+		// pause syncing and report the key, instead of reconnecting forever.
+		body, err := readBody(resp.Body, maxRespBytes)
+		if err != nil {
+			return fmt.Errorf("SSE status: %d: read body: %w", resp.StatusCode, err)
+		}
+		if err := l.verifyHubResponse(ctx, resp, path, req, body); err != nil {
+			return fmt.Errorf("SSE status: %d: %w", resp.StatusCode, err)
+		}
 		return fmt.Errorf("SSE status: %d", resp.StatusCode)
 	}
-	verifier, err := l.newEventVerifier(ctx, resp, path, reqSig)
+	verifier, err := l.newEventVerifier(ctx, resp, path, req)
 	if err != nil {
 		return fmt.Errorf("SSE connect: %w", err)
 	}
@@ -107,6 +133,7 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 	scanner.Buffer(make([]byte, 0, 4096), 1<<20) // 1MB max token size
 	var eventType, id, sig string
 	var data []string
+	fields, size := 0, 0
 
 	for scanner.Scan() {
 		if streamCtx.Err() != nil {
@@ -114,8 +141,7 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 		}
 
 		line := scanner.Text()
-		switch {
-		case line == "":
+		if line == "" {
 			if eventType != "" && data != nil {
 				ev := protocol.Event{Type: eventType, Data: json.RawMessage(strings.Join(data, "\n"))}
 				if err := verifier.check(id, sig, ev.Type, ev.Data); err != nil {
@@ -127,6 +153,15 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 				l.dispatchNALEvent(ctx, ev)
 			}
 			eventType, id, sig, data = "", "", "", nil
+			fields, size = 0, 0
+			continue
+		}
+
+		fields++
+		if fields > maxSSEEventFields {
+			return fmt.Errorf("%w: over %d fields", errSSEEventTooLarge, maxSSEEventFields)
+		}
+		switch {
 		case strings.HasPrefix(line, "event: "):
 			eventType = strings.TrimPrefix(line, "event: ")
 		case strings.HasPrefix(line, "id: "):
@@ -135,6 +170,11 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 			sig = strings.TrimPrefix(line, "sig: ")
 		case strings.HasPrefix(line, "data: "):
 			data = append(data, strings.TrimPrefix(line, "data: "))
+		default:
+			continue
+		}
+		if size += len(line); size > maxSSEEventBytes {
+			return fmt.Errorf("%w: over %d bytes", errSSEEventTooLarge, maxSSEEventBytes)
 		}
 	}
 

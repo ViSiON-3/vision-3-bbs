@@ -101,7 +101,8 @@ func (b *Broadcaster) StartPing(ctx context.Context) {
 //
 // With a signer, each event also carries an id field, its sequence number in
 // this stream starting at 1, and a sig field, the signer's signature over
-// protocol.EventSignedPayload, bound to the request that opened the stream:
+// protocol.EventSignedPayload, bound to the request that opened the stream
+// (its signature and nonce):
 //
 //	event: {type}
 //	id: {seq}
@@ -135,6 +136,7 @@ func (b *Broadcaster) ServeSSE(w http.ResponseWriter, r *http.Request, network s
 	flusher.Flush()
 
 	reqSig := r.Header.Get(headerSignature)
+	nonce := protocol.RequestNonce(r.Header.Get(protocol.HeaderNonce))
 	if reqSig == "" {
 		signer = nil
 	}
@@ -156,7 +158,7 @@ func (b *Broadcaster) ServeSSE(w http.ResponseWriter, r *http.Request, network s
 				continue
 			}
 			seq++
-			sig, err := protocol.SignEvent(signer, network, reqSig, seq, ev.Type, ev.Data)
+			sig, err := protocol.SignEvent(signer, network, reqSig, nonce, seq, ev.Type, ev.Data)
 			if err != nil {
 				// A gap in the sequence would only make the leaf drop the
 				// stream, so end it here; the leaf reconnects.

@@ -235,9 +235,9 @@ func (l *Leaf) signedGetCtx(ctx context.Context, path string) (*http.Response, e
 }
 
 // signedGetSSE opens the SSE stream at path. It returns the request's
-// signature, which the stream's signatures are bound to; the caller checks
-// them (newEventVerifier).
-func (l *Leaf) signedGetSSE(ctx context.Context, path string) (*http.Response, string, error) {
+// signature and nonce, which the stream's signatures are bound to; the
+// caller checks them (newEventVerifier).
+func (l *Leaf) signedGetSSE(ctx context.Context, path string) (*http.Response, reqBinding, error) {
 	return l.signedRequest(ctx, l.sseClient, http.MethodGet, path, nil)
 }
 
@@ -246,7 +246,7 @@ func (l *Leaf) signedGetSSE(ctx context.Context, path string) (*http.Response, s
 // with the body replaced by what was read. A bad signature returns an error
 // wrapping ErrHubSignature and pauses syncing.
 func (l *Leaf) signedDo(ctx context.Context, method, path string, body []byte) (*http.Response, error) {
-	resp, reqSig, err := l.signedRequest(ctx, l.client, method, path, body)
+	resp, req, err := l.signedRequest(ctx, l.client, method, path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func (l *Leaf) signedDo(ctx context.Context, method, path string, body []byte) (
 	if err != nil {
 		return nil, fmt.Errorf("leaf: read %s response: %w", path, err)
 	}
-	if err := l.verifyHubResponse(ctx, resp, path, reqSig, data); err != nil {
+	if err := l.verifyHubResponse(ctx, resp, path, req, data); err != nil {
 		return nil, err
 	}
 	resp.Body = io.NopCloser(bytes.NewReader(data))
@@ -263,12 +263,18 @@ func (l *Leaf) signedDo(ctx context.Context, method, path string, body []byte) (
 }
 
 // signedRequest signs a request with the node key over its method, path,
-// Date and body hash, and sends it with c. It returns the response unread
-// and the request's signature, or ErrHubPaused without sending anything
+// Date and body hash, and sends it with c, with a fresh nonce for the hub
+// to bind its reply to. The nonce is not part of the request signature,
+// whose form older hubs check. It returns the response unread and what the
+// reply's signatures are bound to, or ErrHubPaused without sending anything
 // while syncing with the hub is paused.
-func (l *Leaf) signedRequest(ctx context.Context, c *http.Client, method, path string, body []byte) (*http.Response, string, error) {
+func (l *Leaf) signedRequest(ctx context.Context, c *http.Client, method, path string, body []byte) (*http.Response, reqBinding, error) {
 	if l.HubPaused() {
-		return nil, "", ErrHubPaused
+		return nil, reqBinding{}, ErrHubPaused
+	}
+	nonce, err := protocol.NewNonce()
+	if err != nil {
+		return nil, reqBinding{}, fmt.Errorf("leaf: request nonce: %w", err)
 	}
 	bodyHash := sha256.Sum256(body)
 	bodySHA := hex.EncodeToString(bodyHash[:])
@@ -276,7 +282,7 @@ func (l *Leaf) signedRequest(ctx context.Context, c *http.Client, method, path s
 
 	sig, err := l.cfg.Keystore.Sign(method, path, dateStr, bodySHA)
 	if err != nil {
-		return nil, "", fmt.Errorf("leaf: sign request: %w", err)
+		return nil, reqBinding{}, fmt.Errorf("leaf: sign request: %w", err)
 	}
 
 	var rdr io.Reader
@@ -285,7 +291,7 @@ func (l *Leaf) signedRequest(ctx context.Context, c *http.Client, method, path s
 	}
 	req, err := http.NewRequestWithContext(ctx, method, l.cfg.HubURL+path, rdr)
 	if err != nil {
-		return nil, "", fmt.Errorf("leaf: create request: %w", err)
+		return nil, reqBinding{}, fmt.Errorf("leaf: create request: %w", err)
 	}
 	if method != http.MethodGet {
 		req.Header.Set("Content-Type", "application/json")
@@ -293,10 +299,11 @@ func (l *Leaf) signedRequest(ctx context.Context, c *http.Client, method, path s
 	req.Header.Set("Date", dateStr)
 	req.Header.Set("X-V3Net-Node-ID", l.cfg.Keystore.NodeID())
 	req.Header.Set("X-V3Net-Signature", sig)
+	req.Header.Set(protocol.HeaderNonce, nonce)
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, "", err
+		return nil, reqBinding{}, err
 	}
-	return resp, sig, nil
+	return resp, reqBinding{sig: sig, nonce: nonce}, nil
 }

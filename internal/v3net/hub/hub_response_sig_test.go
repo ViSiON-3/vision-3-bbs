@@ -31,9 +31,10 @@ func doRequest(t *testing.T, req *http.Request) (*http.Response, []byte) {
 }
 
 // Every response to a signed request carries the hub's signature over that
-// request's signature, the status and the body: successes, refusals and the
-// subscribe bootstrap alike. Public endpoints answering unsigned requests
-// are left alone.
+// request's signature and nonce, the status and the body: successes,
+// refusals and the subscribe bootstrap alike. A request without a nonce (an
+// older leaf) is signed with an empty one. Public endpoints answering
+// unsigned requests are left alone.
 func TestHubSignsResponses(t *testing.T) {
 	h, hubKS := setupTestHub(t)
 	ts := httptest.NewServer(h.newMux())
@@ -55,15 +56,18 @@ func TestHubSignsResponses(t *testing.T) {
 		"subscribe": signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/subscribe",
 			`{"network":"testnet","node_id":"`+leafKS.NodeID()+`","pubkey_b64":"`+leafKS.PubKeyBase64()+`","bbs_name":"Test BBS"}`),
 	}
+	reqs["messages"].Header.Set(protocol.HeaderNonce, "nonce-messages")
+	reqs["refused"].Header.Set(protocol.HeaderNonce, "nonce-refused")
 	for name, req := range reqs {
 		reqSig := req.Header.Get(headerSignature)
+		nonce := req.Header.Get(protocol.HeaderNonce)
 		resp, body := doRequest(t, req)
 		sig := resp.Header.Get(protocol.HeaderHubSignature)
 		if sig == "" {
 			t.Errorf("%s: response (%d) is unsigned", name, resp.StatusCode)
 			continue
 		}
-		if err := protocol.VerifyResponse(hubKS.PubKey(), reqSig, resp.StatusCode, body, sig); err != nil {
+		if err := protocol.VerifyResponse(hubKS.PubKey(), reqSig, nonce, resp.StatusCode, body, sig); err != nil {
 			t.Errorf("%s: hub signature does not verify: %v", name, err)
 		}
 		if name == "refused" && resp.StatusCode != http.StatusUnauthorized {
@@ -74,6 +78,46 @@ func TestHubSignsResponses(t *testing.T) {
 	resp, _ := doRequest(t, httptestGet(t, ts.URL+"/v3net/v1/testnet/info"))
 	if sig := resp.Header.Get(protocol.HeaderHubSignature); sig != "" {
 		t.Errorf("unsigned /info request got a hub signature %q", sig)
+	}
+}
+
+// Two identical requests in the same second carry the same signature (Date
+// has one-second resolution and Ed25519 is deterministic). Their nonces
+// still tell the replies apart: the reply to one does not verify for the
+// other.
+func TestHubResponseBoundToNonce(t *testing.T) {
+	h, hubKS := setupTestHub(t)
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	if err != nil {
+		t.Fatalf("load leaf keystore: %v", err)
+	}
+	registerLeaf(t, ts, leafKS)
+
+	first := signedRequest(t, leafKS, "GET", ts.URL+"/v3net/v1/testnet/messages?since=&limit=10", "")
+	second := first.Clone(first.Context())
+	first.Header.Set(protocol.HeaderNonce, "nonce-one")
+	second.Header.Set(protocol.HeaderNonce, "nonce-two")
+	reqSig := first.Header.Get(headerSignature)
+	if second.Header.Get(headerSignature) != reqSig || second.Header.Get("Date") != first.Header.Get("Date") {
+		t.Fatal("the two requests are not identical")
+	}
+
+	resp1, body1 := doRequest(t, first)
+	resp2, body2 := doRequest(t, second)
+	if resp1.StatusCode != http.StatusOK || resp2.StatusCode != http.StatusOK {
+		t.Fatalf("statuses %d, %d; want both 200", resp1.StatusCode, resp2.StatusCode)
+	}
+	sig1 := resp1.Header.Get(protocol.HeaderHubSignature)
+	if err := protocol.VerifyResponse(hubKS.PubKey(), reqSig, "nonce-one", resp1.StatusCode, body1, sig1); err != nil {
+		t.Fatalf("first reply: %v", err)
+	}
+	if err := protocol.VerifyResponse(hubKS.PubKey(), reqSig, "nonce-two", resp2.StatusCode, body2, resp2.Header.Get(protocol.HeaderHubSignature)); err != nil {
+		t.Fatalf("second reply: %v", err)
+	}
+	if err := protocol.VerifyResponse(hubKS.PubKey(), reqSig, "nonce-two", resp1.StatusCode, body1, sig1); err == nil {
+		t.Error("the first reply verifies for the second, identical request")
 	}
 }
 
@@ -149,6 +193,7 @@ func TestHubSignsSSEEvents(t *testing.T) {
 	registerLeaf(t, ts, leafKS)
 
 	req := signedRequest(t, leafKS, "GET", ts.URL+"/v3net/v1/testnet/events", "")
+	req.Header.Set(protocol.HeaderNonce, "stream-nonce")
 	reqSig := req.Header.Get(headerSignature)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -158,7 +203,7 @@ func TestHubSignsSSEEvents(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("SSE status %d", resp.StatusCode)
 	}
-	if err := protocol.VerifyResponse(hubKS.PubKey(), reqSig, http.StatusOK, nil, resp.Header.Get(protocol.HeaderHubSignature)); err != nil {
+	if err := protocol.VerifyResponse(hubKS.PubKey(), reqSig, "stream-nonce", http.StatusOK, nil, resp.Header.Get(protocol.HeaderHubSignature)); err != nil {
 		t.Fatalf("SSE response signature: %v", err)
 	}
 
@@ -173,12 +218,12 @@ func TestHubSignsSSEEvents(t *testing.T) {
 			t.Errorf("event %d: id %q, want %d", i, ev.id, i+1)
 			continue
 		}
-		if err := protocol.VerifyEvent(hubKS.PubKey(), "testnet", reqSig, seq, ev.typ, []byte(ev.data), ev.sig); err != nil {
+		if err := protocol.VerifyEvent(hubKS.PubKey(), "testnet", reqSig, "stream-nonce", seq, ev.typ, []byte(ev.data), ev.sig); err != nil {
 			t.Errorf("event %d: signature: %v", i, err)
 		}
 	}
 	// The first event replayed in the second's place does not verify.
-	if err := protocol.VerifyEvent(hubKS.PubKey(), "testnet", reqSig, 2, evs[0].typ, []byte(evs[0].data), evs[0].sig); err == nil {
+	if err := protocol.VerifyEvent(hubKS.PubKey(), "testnet", reqSig, "stream-nonce", 2, evs[0].typ, []byte(evs[0].data), evs[0].sig); err == nil {
 		t.Error("event 1 verified as event 2")
 	}
 }

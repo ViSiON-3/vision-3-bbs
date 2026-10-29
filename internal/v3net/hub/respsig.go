@@ -10,8 +10,8 @@ import (
 )
 
 // signResponses signs every response to a signed request with the hub key,
-// in X-V3Net-Hub-Signature over the request's signature, the status and the
-// body (protocol.ResponseSignedPayload), so a leaf can check it against the
+// in X-V3Net-Hub-Signature over the request's signature and nonce, the
+// status and the body (protocol.ResponseSignedPayload), so a leaf can check it against the
 // hub key it pinned. The body is buffered to hash it before anything is
 // sent. An event stream is the exception: it is signed as it starts, with an
 // empty body, and ServeSSE signs each event on its own.
@@ -25,7 +25,8 @@ func (h *Hub) signResponses(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		sw := &signingWriter{w: w, signer: h.cfg.Keystore, reqSig: reqSig}
+		nonce := protocol.RequestNonce(r.Header.Get(protocol.HeaderNonce))
+		sw := &signingWriter{w: w, signer: h.cfg.Keystore, reqSig: reqSig, nonce: nonce}
 		next.ServeHTTP(sw, r)
 		sw.finish()
 	})
@@ -38,6 +39,7 @@ type signingWriter struct {
 	w      http.ResponseWriter
 	signer protocol.HubSigner
 	reqSig string
+	nonce  string
 
 	status      int
 	wroteHeader bool
@@ -101,7 +103,7 @@ func (sw *signingWriter) finish() {
 // keystore cannot sign, the response goes out unsigned and the leaf treats
 // it as from an older hub.
 func (sw *signingWriter) sign(body []byte) {
-	sig, err := protocol.SignResponse(sw.signer, sw.reqSig, sw.status, body)
+	sig, err := protocol.SignResponse(sw.signer, sw.reqSig, sw.nonce, sw.status, body)
 	if err != nil {
 		slog.Error("hub: sign response", "error", err)
 		return

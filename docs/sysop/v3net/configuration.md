@@ -355,8 +355,10 @@ event on the live event stream) with its node key. That is the key its
 [Coordinator Key Pinning](v3net/nal.md#coordinator-key-pinning). The leaf
 checks every signature against the pinned key, so a reply altered on the way,
 or one from a server that is not your hub, is refused. Each signature is tied
-to the request it answers and each event to its place in the stream, so an
-old reply or event cannot be passed off as a new one. This matters most for
+to the request it answers (through a random nonce the leaf sends with each
+request) and each event to its place in the stream, so an old reply or event
+cannot be passed off as a new one. A refusal of the event stream is checked
+too, so a hub that changed its key is caught there as well. This matters most for
 hubs on plain HTTP or behind a proxy that terminates TLS, and the key stays
 the same when the hub's certificate changes.
 
