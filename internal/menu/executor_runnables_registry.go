@@ -118,7 +118,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 
 		// Doors read directly from ssh.Session; reset shared InputHandler first
 		// so it does not race and steal door/menu keystrokes.
-		resetSessionIH(s)
+		handOffSessionIH(s)
 		cmdErr := executeDoor(ctx)
 		_ = getSessionIH(s)
 

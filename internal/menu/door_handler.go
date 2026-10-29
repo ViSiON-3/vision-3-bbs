@@ -310,7 +310,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 			nodeNumber, sessionStartTime, outputMode,
 			doorConfig, upperInput)
 
-		resetSessionIH(s)
+		handOffSessionIH(s)
 		cmdErr := executeDoor(ctx)
 		_ = getSessionIH(s)
 

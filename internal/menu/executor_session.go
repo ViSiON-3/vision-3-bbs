@@ -253,11 +253,12 @@ func getSessionIH(s ssh.Session) *editor.InputHandler {
 	return ih
 }
 
-// sessionTypeAhead holds, per session, keys a V3 script read ahead from the
-// session but never consumed, until getSessionIH creates the next
+// sessionTypeAhead holds, per session, keys read from the session but never
+// consumed (left in the InputHandler stopped for a door, or read ahead by a
+// door or script that ended), until getSessionIH creates the next
 // InputHandler and queues them in it ahead of anything new. A door runs with
-// the handler stopped (resetSessionIH), so there is no handler to give them
-// to when the script ends.
+// the handler stopped (handOffSessionIH), so there is no handler to give them
+// to when it ends.
 var sessionTypeAhead sync.Map
 
 // stashTypeAhead keeps p, keys the caller typed while a script ran with the
@@ -296,6 +297,19 @@ func resetSessionIH(s ssh.Session) {
 	if v, ok := sessionInputHandlers.Load(s); ok {
 		if ih, ok := v.(*editor.InputHandler); ok {
 			ih.CloseAndWait()
+		}
+		sessionInputHandlers.Delete(s)
+	}
+}
+
+// handOffSessionIH is resetSessionIH before a door. Keys the handler read
+// that no prompt consumed are kept (stashTypeAhead) rather than dropped, so
+// getSessionIH gives them to the handler it creates after the door, ahead of
+// any the door itself leaves unread.
+func handOffSessionIH(s ssh.Session) {
+	if v, ok := sessionInputHandlers.Load(s); ok {
+		if ih, ok := v.(*editor.InputHandler); ok {
+			stashTypeAhead(s, ih.CloseAndTakeUnread())
 		}
 		sessionInputHandlers.Delete(s)
 	}

@@ -3,6 +3,8 @@ package editor
 import (
 	"errors"
 	"io"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -132,5 +134,77 @@ func TestDrainQueuedStopGivesBytesBack(t *testing.T) {
 	}
 	if got := string(ih.unreadBuf); got != "\x1b[A" {
 		t.Errorf("unread input = %q, want %q", got, "\x1b[A")
+	}
+}
+
+// interruptReader is a session whose reads return its data, one byte at a
+// time, and then block until the read interrupt is closed, as the SSH and
+// telnet adapters' do.
+type interruptReader struct {
+	data []byte
+	mu   sync.Mutex
+	intr <-chan struct{}
+}
+
+func (r *interruptReader) SetReadInterrupt(ch <-chan struct{}) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if ch != nil {
+		r.intr = ch
+	}
+}
+
+func (r *interruptReader) Read(p []byte) (int, error) {
+	r.mu.Lock()
+	if len(r.data) > 0 {
+		p[0], r.data = r.data[0], r.data[1:]
+		r.mu.Unlock()
+		return 1, nil
+	}
+	intr := r.intr
+	r.mu.Unlock()
+	<-intr
+	return 0, errors.New("read interrupted")
+}
+
+// A handler stopped for a door hands back the bytes no one read, oldest
+// first, without the LF of an Enter already read, and stops reading the
+// session (#750).
+func TestCloseAndTakeUnread(t *testing.T) {
+	ih := NewInputHandler(&interruptReader{data: []byte("\nbcd")})
+	waitQueued(t, ih, 4)
+	ih.skipEnterTrailer = true
+	ih.ReturnInput([]byte("a"))
+
+	if got := string(ih.CloseAndTakeUnread()); got != "abcd" {
+		t.Fatalf("CloseAndTakeUnread = %q, want %q", got, "abcd")
+	}
+	select {
+	case <-ih.done:
+	default:
+		t.Fatal("reader goroutine still running")
+	}
+	if got := ih.CloseAndTakeUnread(); got != nil {
+		t.Errorf("second CloseAndTakeUnread = %q, want nil", got)
+	}
+}
+
+// With a full queue the reader goroutine is blocked queueing a byte, not in
+// a session read the interrupt can stop. CloseAndTakeUnread must still return,
+// with that byte too.
+func TestCloseAndTakeUnreadFullQueue(t *testing.T) {
+	want := strings.Repeat("x", 300)
+	ih := NewInputHandler(&interruptReader{data: []byte(want)})
+	waitQueued(t, ih, cap(ih.incoming))
+
+	done := make(chan []byte, 1)
+	go func() { done <- ih.CloseAndTakeUnread() }()
+	select {
+	case got := <-done:
+		if string(got) != want {
+			t.Errorf("CloseAndTakeUnread returned %d bytes, want %d", len(got), len(want))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("CloseAndTakeUnread did not return")
 	}
 }

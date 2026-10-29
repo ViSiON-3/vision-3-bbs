@@ -347,9 +347,11 @@ func executeDOSDoor(ctx *DoorCtx) error {
 
 	inputDone := make(chan struct{})
 	outputDone := make(chan struct{})
+	var unread []byte // read by the input goroutine, for after inputDone
 	go func() {
 		defer close(inputDone)
-		_, err := io.Copy(ptmx, ctx.Session)
+		var err error
+		unread, err = copyDoorInput(ptmx, ctx.Session, readInterrupt)
 		if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
 			slog.Warn("error copying session stdin to dosemu PTY", "node", ctx.NodeNumber, "error", err)
 		}
@@ -402,10 +404,12 @@ func executeDOSDoor(ctx *DoorCtx) error {
 	slog.Debug("dosemu2 process exited", "node", ctx.NodeNumber, "door", ctx.DoorName)
 
 	// Interrupt the input goroutine's blocked Read() so it exits without
-	// consuming the user's next keypress, then close the PTY.
+	// consuming the user's next keypress, then close the PTY. Keys it read
+	// that the door never got go to the next prompt.
 	close(readInterrupt)
 	if hasInterrupt {
 		<-inputDone
+		stashTypeAhead(ctx.Session, unread)
 	}
 	// Relay what the door wrote on its way out before closing the PTY.
 	drainDoorOutput(ptmx, outputDone, ctx.NodeNumber, ctx.DoorName)

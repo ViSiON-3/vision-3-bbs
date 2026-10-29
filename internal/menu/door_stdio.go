@@ -62,11 +62,13 @@ func runStdioDoor(ctx *DoorCtx, cmd *exec.Cmd) error {
 	}
 
 	inputDone := make(chan struct{})
+	var unread []byte // read by the input goroutine, for after inputDone
 	go func() {
 		defer close(inputDone)
 		// Closing the pipe when the session ends gives the door end-of-file.
 		defer func() { _ = stdinW.Close() }() // best-effort pipe teardown
-		_, err := io.Copy(stdinW, ctx.Session)
+		var err error
+		unread, err = copyDoorInput(stdinW, ctx.Session, readInterrupt)
 		if err != nil && !errors.Is(err, os.ErrClosed) && !errors.Is(err, syscall.EPIPE) {
 			if strings.Contains(err.Error(), "read interrupted") {
 				slog.Debug("input goroutine interrupted for door (expected during shutdown)", "node", ctx.NodeNumber, "door", ctx.DoorName)
@@ -88,6 +90,52 @@ func runStdioDoor(ctx *DoorCtx, cmd *exec.Cmd) error {
 	close(readInterrupt)
 	if hasInterrupt {
 		<-inputDone
+		stashTypeAhead(ctx.Session, unread)
 	}
 	return cmdErr
+}
+
+// copyDoorInput copies the caller's keys from the session to w, a door's
+// input, until a read or a write fails. A chunk read after exited is closed
+// (the door has gone, so nothing would read it) is not written, and a write
+// that fails leaves the rest of its chunk unwritten. copyDoorInput returns
+// those keys, for the caller to keep for the next prompt (stashTypeAhead)
+// once the copy has ended, and the error that ended it; end of input is not
+// an error.
+//
+// Keys already written but not yet read by the door when it exits are in the
+// PTY or pipe, out of reach, and are lost.
+func copyDoorInput(w io.Writer, r io.Reader, exited <-chan struct{}) ([]byte, error) {
+	buf := make([]byte, 32*1024)
+	for {
+		n, rerr := r.Read(buf)
+		if n > 0 {
+			select {
+			case <-exited:
+				return append([]byte(nil), buf[:n]...), ignoreEOF(rerr)
+			default:
+			}
+			nw, werr := w.Write(buf[:n])
+			if nw < 0 || nw > n {
+				nw = 0
+			}
+			if werr == nil && nw < n {
+				werr = io.ErrShortWrite
+			}
+			if werr != nil {
+				return append([]byte(nil), buf[nw:n]...), werr
+			}
+		}
+		if rerr != nil {
+			return nil, ignoreEOF(rerr)
+		}
+	}
+}
+
+// ignoreEOF returns err, or nil if it is io.EOF.
+func ignoreEOF(err error) error {
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	return err
 }

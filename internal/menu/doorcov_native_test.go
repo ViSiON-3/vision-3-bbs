@@ -9,8 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/gliderlabs/ssh"
 )
 
@@ -369,4 +371,61 @@ func TestDoorcovNativeDoorSocketStartFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "failed to start door 'TESTDOOR' with socket I/O") || !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("err = %v, want a socket start failure wrapping not-exist", err)
 	}
+}
+
+// Keys typed ahead around a door reach the prompt after it, oldest first:
+// those the session's InputHandler had read when it was stopped for the
+// door, then those the door's input copier read but could not hand to the
+// door because it had stopped reading (#750).
+func TestDoorcovNativeDoorKeepsTypeAhead(t *testing.T) {
+	env := newMenuEnv(t)
+	s := newDoorcovSession()
+	t.Cleanup(func() {
+		resetSessionIH(s)
+		sessionTypeAhead.Delete(s)
+	})
+	readKeys := func(ih *editor.InputHandler, want string) {
+		t.Helper()
+		stop := make(chan struct{})
+		timer := time.AfterFunc(2*time.Second, func() { close(stop) })
+		defer timer.Stop()
+		for _, w := range []byte(want) {
+			if b, err := ih.ReadByteUntil(stop); err != nil || b != w {
+				t.Fatalf("prompt read %q, %v; want %q", b, err, w)
+			}
+		}
+	}
+
+	s.send("abc")
+	readKeys(getSessionIH(s), "a")
+	// Wait until the handler has taken b and c from the session.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		s.mu.Lock()
+		left := len(s.pending) + len(s.keys)
+		s.mu.Unlock()
+		if left == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("input handler did not read ahead")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// The door closes its input, so keys typed once it says BYE cannot be
+	// written to it. It stays a moment so they reach its input copier, not
+	// the next prompt's handler, which would also pass.
+	s.whenOutput("BYE", func() { s.send("xyz") })
+	ctx := doorcovCtx(env, s, config.DoorConfig{
+		Commands: []string{"/bin/sh", "-c", "exec 0<&-; echo BYE; sleep 0.2"},
+	})
+	handOffSessionIH(s)
+	if err := doorcovExec(t, s, executeNativeDoor, ctx); err != nil {
+		t.Fatalf("executeNativeDoor: %v", err)
+	}
+	if v, ok := sessionTypeAhead.Load(s); !ok || string(v.([]byte)) != "bcxyz" {
+		t.Errorf("kept type-ahead = %q, want %q", v, "bcxyz")
+	}
+	readKeys(getSessionIH(s), "bcxyz")
 }
