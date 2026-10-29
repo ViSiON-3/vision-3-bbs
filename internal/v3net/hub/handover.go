@@ -154,7 +154,9 @@ func nodeIDOf(keyB64 string) string {
 // required, from any subscriber). It must verify, name the network, be
 // signed by the coordinator key in force and hand over to a key the
 // network's chain has not used, so the stored handovers never loop. Posting
-// one the hub already holds succeeds without storing it twice.
+// one the hub already holds (the same old and new key) succeeds without
+// storing it twice. When the handover hands the network to the hub's own
+// key, the reply is 200 only once the NAL is signed by that key.
 //
 // The handover may also come late: the hub was restarted with the new key
 // before it was posted. The stored NAL is then still the old key's, and with
@@ -213,10 +215,12 @@ func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, old := range hs {
-		if old == ho {
-			// Re-signing may have failed when it was first posted.
-			h.adoptPostedHandover(network)
-			writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		// The same handover, or the same old key's statement re-signed at
+		// another time (as v3net-handover does when run again), is a
+		// repeat: it is not stored again, but re-signing is retried, since
+		// it may have failed when the handover was first posted.
+		if old.OldKeyB64 == ho.OldKeyB64 && old.NewKeyB64 == ho.NewKeyB64 {
+			h.answerAdopted(w, network)
 			return
 		}
 	}
@@ -251,8 +255,24 @@ func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
 	if fromPrev {
 		// The NAL is already the hub key's; leaves only need the handover.
 		h.publishNALUpdated(network, n)
-	} else {
-		h.adoptPostedHandover(network)
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		return
+	}
+	h.answerAdopted(w, network)
+}
+
+// errAdoptFailed is the reply to a handover the hub holds but could not
+// re-sign the NAL for.
+const errAdoptFailed = `{"error":"handover held, but re-signing the NAL with the hub key failed (see the hub log); post the handover again to retry"}`
+
+// answerAdopted re-signs network's NAL if a held handover hands it to the
+// hub's key (adoptPostedHandover) and answers the post: 200 when that
+// worked or was not needed, 500 with errAdoptFailed when it failed, so the
+// poster does not report a recovery that has not happened.
+func (h *Hub) answerAdopted(w http.ResponseWriter, network string) {
+	if err := h.adoptPostedHandover(network); err != nil {
+		http.Error(w, errAdoptFailed, http.StatusInternalServerError)
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
@@ -302,17 +322,18 @@ func hubSwitched(n *protocol.NAL, hs []protocol.CoordHandover, hubKey string) bo
 // adoptPostedHandover re-signs network's NAL with the hub's key when a
 // handover just posted hands the network to it (see adoptHandover), and
 // tells subscribers the NAL changed so they fetch it, and move their pins,
-// now. A failure is logged and the handover stays: the next restart re-signs
-// the NAL. Call it with nalMu held.
-func (h *Hub) adoptPostedHandover(network string) {
+// now. A failure is logged and returned; the handover stays, and posting it
+// again or the next restart retries. Call it with nalMu held.
+func (h *Hub) adoptPostedHandover(network string) error {
 	n, err := h.adoptHandover(network)
 	if err != nil {
 		slog.Error("hub: could not re-sign the NAL after a handover", "network", network, "error", err)
-		return
+		return err
 	}
 	if n != nil {
 		h.publishNALUpdated(network, n)
 	}
+	return nil
 }
 
 // publishNALUpdated tells network's subscribers that its NAL, now n,

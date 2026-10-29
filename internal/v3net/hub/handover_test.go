@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -546,16 +547,100 @@ func TestLateHandoverAfterResign(t *testing.T) {
 		t.Errorf("no chain from the old key to the served NAL: %v", err)
 	}
 
-	// With a handover held the previous signer no longer counts: the old
-	// key cannot hand over again, and the hub signs its changes as usual.
+	// The same handover signed again at another time is a repeat: answered,
+	// not stored. A handover from the old key to anything else is refused,
+	// and the hub signs its changes as usual.
 	again, err := protocol.NewCoordHandover(oldKS, "testnet", newKS.PubKeyBase64(), time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := postJSON(t, poster, url, again); got != http.StatusConflict {
-		t.Errorf("second handover from the previous signer: status %d, want 409", got)
+	if got := postJSON(t, poster, url, again); got != http.StatusOK {
+		t.Errorf("A to B signed again: status %d, want 200", got)
+	}
+	if got := postJSON(t, poster, url, signHandover(t, "testnet", oldKS, third)); got != http.StatusConflict {
+		t.Errorf("handover from the previous signer to a third key: status %d, want 409", got)
+	}
+	if hs, err := h.nalStore.Handovers("testnet"); err != nil || len(hs) != 1 {
+		t.Errorf("stored handovers = %d, %v; want 1", len(hs), err)
 	}
 	if err := h.updateNALArea("testnet", "gen.general", func(a *protocol.Area) { a.Description = "after" }); err != nil {
 		t.Errorf("updateNALArea after the late handover: %v", err)
+	}
+}
+
+// postJSONBody is postJSON returning the reply body too.
+func postJSONBody(t *testing.T, ks *keystore.Keystore, url string, v any) (int, string) {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(signedRequest(t, ks, "POST", url, string(data)))
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body)
+}
+
+// When the hub accepts a late handover but cannot store the re-signed NAL,
+// it says so with 500 rather than 200, keeping the handover; posting it
+// again once the fault is gone, even re-signed at another time as the tool
+// does, re-signs the NAL and succeeds.
+func TestLateHandoverAdoptFailureReported(t *testing.T) {
+	dir := t.TempDir()
+	oldKS, newKS, poster := newKey(t, "old.key"), newKey(t, "new.key"), newKey(t, "poster.key")
+	open := func(ks *keystore.Keystore) (*Hub, *httptest.Server) {
+		t.Helper()
+		h, err := New(Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
+			RequireSignedSubscribe: true, Networks: []NetworkConfig{{Name: "testnet"}}})
+		if err != nil {
+			t.Fatalf("create hub: %v", err)
+		}
+		return h, httptest.NewServer(h.newMux())
+	}
+	h, ts := open(oldKS)
+	seedTestNAL(t, h, oldKS)
+	registerLeaf(t, ts, poster)
+	ts.Close()
+	_ = h.Close()
+	h, ts = open(newKS)
+	defer h.Close()
+	defer ts.Close()
+
+	// Storing the re-signed NAL fails.
+	if _, err := h.db.Exec(`CREATE TRIGGER fail_nal_update BEFORE UPDATE ON network_nal
+		BEGIN SELECT RAISE(ABORT, 'injected'); END`); err != nil {
+		t.Fatal(err)
+	}
+	url := ts.URL + "/v3net/v1/testnet/nal/handover"
+	status, body := postJSONBody(t, poster, url, signHandover(t, "testnet", oldKS, newKS))
+	if status != http.StatusInternalServerError || !strings.Contains(body, "post the handover again") {
+		t.Fatalf("POST with the store failing: %d %s; want 500 asking to post again", status, body)
+	}
+	if hs, err := h.nalStore.Handovers("testnet"); err != nil || len(hs) != 1 {
+		t.Fatalf("stored handovers = %d, %v; want the handover held", len(hs), err)
+	}
+	if n, err := h.nalStore.Get("testnet"); err != nil || n.CoordPubKeyB64 != oldKS.PubKeyBase64() {
+		t.Fatalf("stored NAL changed although storing failed: %v", err)
+	}
+
+	if _, err := h.db.Exec(`DROP TRIGGER fail_nal_update`); err != nil {
+		t.Fatal(err)
+	}
+	again, err := protocol.NewCoordHandover(oldKS, "testnet", newKS.PubKeyBase64(), time.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status, body := postJSONBody(t, poster, url, again); status != http.StatusOK {
+		t.Fatalf("repost once fixed: %d %s; want 200", status, body)
+	}
+	var served protocol.NAL
+	if err := json.Unmarshal(getNALBody(t, ts), &served); err != nil {
+		t.Fatal(err)
+	}
+	if served.CoordPubKeyB64 != newKS.PubKeyBase64() || len(served.Handovers) != 1 {
+		t.Errorf("served NAL signed by %s with %d handovers; want the new key's with 1", served.CoordPubKeyB64, len(served.Handovers))
 	}
 }
