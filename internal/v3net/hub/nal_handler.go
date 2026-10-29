@@ -25,10 +25,13 @@ type NALStore struct {
 	db *sql.DB
 }
 
-// NewNALStore initializes the NAL table.
+// NewNALStore initializes the NAL and coordinator handover tables.
 func NewNALStore(db *sql.DB) (*NALStore, error) {
 	if _, err := db.Exec(nalSchema); err != nil {
 		return nil, fmt.Errorf("hub: create nal table: %w", err)
+	}
+	if _, err := db.Exec(handoverSchema); err != nil {
+		return nil, fmt.Errorf("hub: create handover table: %w", err)
 	}
 	return &NALStore{db: db}, nil
 }
@@ -131,11 +134,20 @@ func (h *Hub) handleGetNAL(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"no NAL available"}`, http.StatusNotFound)
 		return
 	}
+	hs, err := h.nalStore.Handovers(network)
+	if err != nil {
+		slog.Error("list handovers", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	n.Handovers = servedHandovers(hs)
 
 	writeJSON(w, http.StatusOK, n)
 }
 
 // handlePostNAL accepts a new signed NAL from the coordinator (auth required).
+// Once the network has been handed over, the coordinator is the holder of
+// the key in force (see coordKeyInForce), and the NAL must be signed by it.
 func (h *Hub) handlePostNAL(w http.ResponseWriter, r *http.Request) {
 	network := extractNetwork(r.URL.Path)
 	nodeID := r.Header.Get(headerNodeID)
@@ -170,9 +182,26 @@ func (h *Hub) handlePostNAL(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
-	if existing != nil && existing.CoordNodeID != nodeID {
-		http.Error(w, `{"error":"only the coordinator may update the NAL"}`, http.StatusForbidden)
-		return
+	if existing != nil {
+		hs, err := h.nalStore.Handovers(network)
+		if err != nil {
+			slog.Error("list handovers for coord check", "error", err)
+			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+			return
+		}
+		// Without handovers this is the stored NAL's coordinator, as before.
+		coordNodeID := existing.CoordNodeID
+		if key := coordKeyInForce(existing, hs); key != existing.CoordPubKeyB64 {
+			coordNodeID = nodeIDOf(key)
+			if n.CoordPubKeyB64 != key {
+				http.Error(w, `{"error":"NAL is not signed by the coordinator key in force"}`, http.StatusForbidden)
+				return
+			}
+		}
+		if coordNodeID != nodeID {
+			http.Error(w, `{"error":"only the coordinator may update the NAL"}`, http.StatusForbidden)
+			return
+		}
 	}
 	// For initial NAL creation, only the hub itself may bootstrap the coordinator role.
 	// This prevents any subscriber from claiming coordinator authority.
@@ -193,6 +222,8 @@ func (h *Hub) handlePostNAL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handovers are served from their own table, never from a posted NAL.
+	n.Handovers = nil
 	if err := h.nalStore.Put(network, &n); err != nil {
 		slog.Error("put nal", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)

@@ -1,0 +1,228 @@
+package hub
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
+)
+
+// The hub keeps the coordinator handovers it accepted for each network
+// (see protocol.CoordHandover) and serves the most recent ones with the NAL.
+// A handover is accepted from any subscriber, since its signature is the
+// authority: it must be signed by the coordinator key in force, which is the
+// stored NAL's key followed along the handovers already held. From then on
+// the hub takes NALs signed by the new key, and a hub restarted with the new
+// key re-signs the stored NAL with it (adoptHandovers), so leaves move their
+// pins at their next fetch.
+
+const handoverSchema = `
+CREATE TABLE IF NOT EXISTS coord_handovers (
+	id            INTEGER PRIMARY KEY AUTOINCREMENT,
+	network       TEXT NOT NULL,
+	handover_json TEXT NOT NULL,
+	received_at   DATETIME DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_coord_handovers_network ON coord_handovers(network, id);
+`
+
+// Handovers returns the handovers stored for network, oldest first.
+func (ns *NALStore) Handovers(network string) ([]protocol.CoordHandover, error) {
+	rows, err := ns.db.Query("SELECT handover_json FROM coord_handovers WHERE network = ? ORDER BY id", network)
+	if err != nil {
+		return nil, fmt.Errorf("hub: list handovers: %w", err)
+	}
+	defer func() { _ = rows.Close() }() // read side
+	var hs []protocol.CoordHandover
+	for rows.Next() {
+		var data string
+		if err := rows.Scan(&data); err != nil {
+			return nil, fmt.Errorf("hub: scan handover: %w", err)
+		}
+		var h protocol.CoordHandover
+		if err := json.Unmarshal([]byte(data), &h); err != nil {
+			return nil, fmt.Errorf("hub: unmarshal handover: %w", err)
+		}
+		hs = append(hs, h)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("hub: list handovers: %w", err)
+	}
+	return hs, nil
+}
+
+// AddHandover stores a handover for network after the others. It does not
+// check it; the caller has.
+func (ns *NALStore) AddHandover(network string, h *protocol.CoordHandover) error {
+	data, err := json.Marshal(h)
+	if err != nil {
+		return fmt.Errorf("hub: marshal handover: %w", err)
+	}
+	if _, err := ns.db.Exec("INSERT INTO coord_handovers (network, handover_json) VALUES (?, ?)", network, string(data)); err != nil {
+		return fmt.Errorf("hub: add handover: %w", err)
+	}
+	return nil
+}
+
+// coordKeyInForce returns the coordinator key in force for network: the key
+// of NAL n, followed along hs for as long as one of them hands it on. It is
+// n's own key when no handover starts there, so a NAL re-signed by a key off
+// the chain is not overruled by older handovers.
+func coordKeyInForce(n *protocol.NAL, hs []protocol.CoordHandover) string {
+	key := n.CoordPubKeyB64
+	seen := map[string]bool{key: true}
+	for moved := true; moved; {
+		moved = false
+		for _, h := range hs {
+			if h.OldKeyB64 == key && !seen[h.NewKeyB64] {
+				key = h.NewKeyB64
+				seen[key] = true
+				moved = true
+				break
+			}
+		}
+	}
+	return key
+}
+
+// servedHandovers trims hs to the most recent nal.MaxHandovers, the most a
+// leaf looks at.
+func servedHandovers(hs []protocol.CoordHandover) []protocol.CoordHandover {
+	if len(hs) > nal.MaxHandovers {
+		return hs[len(hs)-nal.MaxHandovers:]
+	}
+	return hs
+}
+
+// nodeIDOf returns the node ID of a base64 public key, or "" if it is not
+// one.
+func nodeIDOf(keyB64 string) string {
+	raw, err := base64.StdEncoding.DecodeString(keyB64)
+	if err != nil {
+		return ""
+	}
+	return keystore.NodeIDFromPubKey(raw)
+}
+
+// handlePostHandover accepts a coordinator handover for a network (auth
+// required, from any subscriber). It must verify, name the network, be
+// signed by the coordinator key in force and hand over to a key the
+// network's chain has not used, so the stored handovers never loop. Posting
+// one the hub already holds succeeds without storing it twice.
+func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
+	network := extractNetwork(r.URL.Path)
+	if h.findNetwork(network) == nil {
+		http.Error(w, `{"error":"network not found"}`, http.StatusNotFound)
+		return
+	}
+
+	var ho protocol.CoordHandover
+	if err := json.NewDecoder(r.Body).Decode(&ho); err != nil {
+		http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+		return
+	}
+	if ho.Network != network {
+		http.Error(w, `{"error":"network mismatch"}`, http.StatusBadRequest)
+		return
+	}
+	if err := ho.Verify(); err != nil {
+		http.Error(w, `{"error":"handover verification failed"}`, http.StatusUnprocessableEntity)
+		return
+	}
+
+	h.nalMu.Lock()
+	defer h.nalMu.Unlock()
+
+	n, err := h.nalStore.Get(network)
+	if err != nil {
+		slog.Error("get nal for handover", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	if n == nil {
+		http.Error(w, `{"error":"no NAL available"}`, http.StatusNotFound)
+		return
+	}
+	hs, err := h.nalStore.Handovers(network)
+	if err != nil {
+		slog.Error("list handovers", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	for _, old := range hs {
+		if old == ho {
+			writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+			return
+		}
+	}
+	if ho.OldKeyB64 != coordKeyInForce(n, hs) {
+		http.Error(w, `{"error":"handover is not signed by the coordinator key in force"}`, http.StatusConflict)
+		return
+	}
+	if ho.NewKeyB64 == n.CoordPubKeyB64 || handoverUsesKey(hs, ho.NewKeyB64) {
+		http.Error(w, `{"error":"handover returns to a key the network already used"}`, http.StatusConflict)
+		return
+	}
+
+	if err := h.nalStore.AddHandover(network, &ho); err != nil {
+		slog.Error("add handover", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	slog.Info("hub: coordinator handover accepted", "network", network, "from", ho.OldKeyB64, "to", ho.NewKeyB64)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handoverUsesKey reports whether key is either end of any of hs.
+func handoverUsesKey(hs []protocol.CoordHandover, key string) bool {
+	for _, h := range hs {
+		if h.OldKeyB64 == key || h.NewKeyB64 == key {
+			return true
+		}
+	}
+	return false
+}
+
+// adoptHandovers re-signs each network's stored NAL with the hub's key when
+// a handover chain from the NAL's key ends at it: the hub has been
+// restarted with the key the network was handed to. Leaves then find the
+// new key at their next fetch, without waiting for an area change. Failures
+// are logged; the old NAL stays until the next change re-signs it.
+func (h *Hub) adoptHandovers() {
+	if h.cfg.Keystore == nil {
+		return
+	}
+	hubKey := h.cfg.Keystore.PubKeyBase64()
+	h.nalMu.Lock()
+	defer h.nalMu.Unlock()
+	for _, nc := range h.cfg.Networks {
+		n, err := h.nalStore.Get(nc.Name)
+		if err != nil || n == nil || n.CoordPubKeyB64 == hubKey {
+			continue
+		}
+		hs, err := h.nalStore.Handovers(nc.Name)
+		if err != nil {
+			slog.Warn("hub: could not read coordinator handovers", "network", nc.Name, "error", err)
+			continue
+		}
+		if coordKeyInForce(n, hs) != hubKey {
+			continue
+		}
+		from := n.CoordPubKeyB64
+		if err := nal.Sign(n, h.cfg.Keystore); err != nil {
+			slog.Error("hub: could not re-sign the NAL after a handover", "network", nc.Name, "error", err)
+			continue
+		}
+		if err := h.nalStore.Put(nc.Name, n); err != nil {
+			slog.Error("hub: could not store the re-signed NAL", "network", nc.Name, "error", err)
+			continue
+		}
+		slog.Info("hub: NAL re-signed with the key the network was handed over to",
+			"network", nc.Name, "from", from, "to", hubKey)
+	}
+}

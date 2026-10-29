@@ -118,6 +118,7 @@ func New(cfg Config) (*Hub, error) {
 		Addr:    cfg.ListenAddr,
 		Handler: h.newMux(),
 	}
+	h.adoptHandovers()
 
 	return h, nil
 }

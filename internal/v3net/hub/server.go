@@ -71,6 +71,9 @@ func (h *Hub) newMux() http.Handler {
 			// NAL endpoint (POST requires coordinator auth).
 			case strings.HasSuffix(path, "/nal") && r.Method == http.MethodPost:
 				h.handlePostNAL(w, r)
+			// Coordinator handover (any subscriber; the statement is signed).
+			case strings.HasSuffix(path, "/nal/handover") && r.Method == http.MethodPost:
+				h.handlePostHandover(w, r)
 
 			// Area proposals.
 			case strings.HasSuffix(path, "/areas/propose") && r.Method == http.MethodPost:
