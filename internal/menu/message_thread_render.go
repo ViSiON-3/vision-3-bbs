@@ -98,15 +98,17 @@ func excerpt(body string) string {
 	return ""
 }
 
-// Thread pane geometry. The pane takes paneRows tree rows plus a title row
-// and a closing rule, and shrinks or goes away rather than leave the body
-// fewer than paneMinBodyLines.
+// Thread pane geometry. The pane takes paneRows tree rows plus a title row,
+// a closing rule and a blank row, and shrinks or goes away rather than leave
+// the body fewer than paneMinBodyLines.
 const (
 	paneRows         = 5
 	paneRowsReduced  = 3
 	paneMinBodyLines = 6
-	paneAuthorWidth  = 9
-	paneDateWidth    = 8
+	// paneGap is the blank row between the pane and the message body.
+	paneGap         = 1
+	paneAuthorWidth = 9
+	paneDateWidth   = 8
 	// maxTreeDepth is the deepest level drawn with glyphs; deeper rows
 	// collapse their prefix to "+N".
 	maxTreeDepth = 8
@@ -116,7 +118,7 @@ const (
 // bodyAvail body lines: 5, else 3, else none.
 func paneRowsFor(bodyAvail int) int {
 	for _, rows := range []int{paneRows, paneRowsReduced} {
-		if bodyAvail-(rows+2) >= paneMinBodyLines {
+		if bodyAvail-(rows+2+paneGap) >= paneMinBodyLines {
 			return rows
 		}
 	}
@@ -137,8 +139,7 @@ func treePrefix(r threadRow) string {
 func renderThreadMenuKeys(width int, frame string, g threadGlyphs) string {
 	keys := []struct{ key, label string }{
 		{g.up + g.down, "Move"},
-		{"Enter", "Read"},
-		{"Tab/Esc", "Close"},
+		{"Tab", "Back"},
 	}
 	var b strings.Builder
 	used := 0
@@ -155,13 +156,13 @@ func renderThreadMenuKeys(width int, frame string, g threadGlyphs) string {
 
 // renderThreadPane draws the docked thread pane for tv: a title row, rows
 // tree rows windowed around the current message, and a closing rule, which
-// lists the menu's keys while the thread menu is open. hl is the menu's
-// cursor while it is open, drawn as a blue bar with the window kept around
-// it, and the frame is then bright and the text in colour; hl is 0 while
-// the menu is closed, and the whole pane is dark grey with no bar. The
-// message being read always carries the marker. Each line is pipe-coded
-// (with raw escapes for the bar's background) and exactly width columns.
-// title is the pane's label, " Thread ".
+// lists the menu's keys while the thread menu is open. hl is the current
+// message while the menu is open, drawn as a blue bar, with the frame bright
+// and the text in colour; hl is 0 while the menu is closed, and the whole
+// pane is dark grey with no bar. The current message always carries the
+// marker. Each line is pipe-coded (with raw escapes for the bar's
+// background) and exactly width columns. title is the pane's label,
+// " Thread ".
 func renderThreadPane(tv *threadView, hl, rows, width int, title string, g threadGlyphs, mode ansi.OutputMode) []string {
 	lines := make([]string, 0, rows+2)
 

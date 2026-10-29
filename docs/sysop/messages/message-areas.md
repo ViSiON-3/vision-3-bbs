@@ -377,16 +377,16 @@ a thread, a pane under the header draws it as a tree, up to five rows
 windowed around the current message, which carries the `►` marker, with
 the root's subject in its title and the message's place in the thread.
 
-Tab or `T` (Thread on the bar) moves focus to the **thread menu**. Its frame turns bright
-cyan, its closing row lists its keys, a blue
-bar marks the cursor, and the reader's bar below is greyed out while the
-menu has the arrows and Enter. ↑/↓, Home and End move the cursor through the
-thread, stepping over `#n deleted` placeholders; Enter reads the message
-under it and leaves the menu open, so the caller can keep browsing; Tab,
-`T` or Esc return focus to the message. Any other reader command works as usual and closes the menu.
-While the menu is closed, the whole pane is drawn in dark grey with no bar
-(the message being read keeps its `►` marker), and the arrows scroll the
-body.
+Tab or `T` (Thread on the bar) moves focus to the **thread menu**. Its frame
+turns bright cyan, its closing row lists its keys, a blue bar marks the
+message being read, and the reader's bar below is greyed out while the menu
+has the arrows. ↑/↓, Home and End move through the thread, stepping over
+`#n deleted` placeholders, and each move shows that message straight away,
+with focus left on the menu. Tab (or Enter, `T` or Esc) gives focus back to
+the message, where the arrows scroll the body again. Any other reader
+command works as usual and closes the menu. While the menu is closed, the
+whole pane is drawn in dark grey with no bar (the message being read keeps
+its `►` marker). A blank row separates the pane from the message.
 
 The caller's **Thread View** setting in User Konfig decides whether the
 pane shows (not as a menu) while the menu is closed; with it off, the pane

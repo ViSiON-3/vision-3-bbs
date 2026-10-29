@@ -311,38 +311,41 @@ func (tv *threadView) rootSubject() string {
 	return ""
 }
 
-// threadMenuKey applies key to the thread menu, whose cursor is a message
-// number in tv. It reports whether the menu takes the key, and whether the
-// key asks to read the message under the cursor (Enter). The arrows, Home
-// and End move the cursor over the readable messages, stepping over deleted
-// placeholders; Tab, T and Esc are taken for the caller to close the menu.
-func threadMenuKey(tv *threadView, key int, cursor *int) (handled, read bool) {
-	ord := tv.order()
-	if len(ord) == 0 {
-		return false, false
+// threadMenuKey applies key to the thread menu on tv's current message. The
+// arrows, Home and End name the readable message to move to (target),
+// stepping over deleted placeholders; target is 0 when the key goes nowhere.
+// Tab, Enter, T and Esc ask to give focus back to the message (back). handled
+// is false for a key the menu leaves to the reader.
+func threadMenuKey(tv *threadView, key int) (handled bool, target int, back bool) {
+	switch key {
+	case editor.KeyTab, editor.KeyEnter, editor.KeyEsc, 'T', 't':
+		return true, 0, true
 	}
-	i := 0
+	ord := tv.order()
+	i := -1
 	for j, n := range ord {
-		if n == *cursor {
+		if n == tv.cur {
 			i = j
 		}
 	}
+	if i < 0 {
+		return false, 0, false
+	}
+	j := i
 	switch key {
 	case editor.KeyArrowUp, editor.KeyCtrlE:
-		i = max(i-1, 0)
+		j = max(i-1, 0)
 	case editor.KeyArrowDown, editor.KeyCtrlX:
-		i = min(i+1, len(ord)-1)
+		j = min(i+1, len(ord)-1)
 	case editor.KeyHome:
-		i = 0
+		j = 0
 	case editor.KeyEnd:
-		i = len(ord) - 1
-	case editor.KeyEnter:
-		return true, true
-	case editor.KeyEsc, editor.KeyTab, 'T', 't':
-		return true, false
+		j = len(ord) - 1
 	default:
-		return false, false
+		return false, 0, false
 	}
-	*cursor = ord[i]
-	return true, false
+	if j == i {
+		return true, 0, false
+	}
+	return true, ord[j], false
 }

@@ -356,8 +356,6 @@ readerLoop:
 		tv := readerThreadView(e, currentAreaID, currentMsgNum, currentMsg, threadFilter)
 		keepThreadMenu := threadMenu && tv.hasThread()
 		threadMenu = false
-		// The thread menu's cursor starts on the message being read.
-		threadCursor := currentMsgNum
 
 		// Build Pascal-style substitution map
 		templateUsesUserNote := headerTemplateUsesUserNote(hdrTemplateBytes)
@@ -427,7 +425,7 @@ readerLoop:
 		renderPane := func() {
 			hl := 0
 			if threadMenu {
-				hl = threadCursor
+				hl = currentMsgNum
 			}
 			paneLines = renderThreadPane(tv, hl, paneRows, termWidth-1, e.Strings().MsgThreadPaneTitle, glyphs, outputMode)
 		}
@@ -440,8 +438,8 @@ readerLoop:
 			// A short thread takes only the rows it fills.
 			if paneRows = min(paneRowsFor(bodyAvailHeight), len(tv.rows)); paneRows > 0 {
 				renderPane()
-				bodyStartRow += paneRows + 2
-				bodyAvailHeight -= paneRows + 2
+				bodyStartRow += paneRows + 2 + paneGap
+				bodyAvailHeight -= paneRows + 2 + paneGap
 			}
 		}
 		separator := func() string {
@@ -589,25 +587,22 @@ readerLoop:
 				}
 			}
 
-			// While the thread menu is open, the arrows move its cursor,
-			// Enter reads the message under it, and Tab, T or Esc close it.
+			// While the thread menu is open, the arrows read the message
+			// they move to, keeping the menu open, and Tab, Enter, T or Esc
+			// give focus back to the message.
 			if threadMenu {
-				if handled, read := threadMenuKey(tv, key, &threadCursor); handled {
+				if handled, target, back := threadMenuKey(tv, key); handled {
 					switch {
-					case read && threadCursor != currentMsgNum:
-						navDir = 1
-						currentMsgNum = threadCursor
-						threadMenu = true // stays open on the message read
-						break scrollLoop
-					case read:
-					case key == editor.KeyEsc || key == editor.KeyTab || unicode.ToUpper(rune(key)) == 'T':
+					case back:
 						threadMenu = false
 						layoutPane()
 						scrollOffset = max(0, min(scrollOffset, totalBodyLines-bodyAvailHeight))
 						needsRedraw = true
-					default:
-						renderPane()
-						drawPane()
+					case target != 0:
+						navDir = 1
+						currentMsgNum = target
+						threadMenu = true // stays open on the message read
+						break scrollLoop
 					}
 					continue
 				}
@@ -889,7 +884,6 @@ readerLoop:
 					continue
 				}
 				threadMenu = !threadMenu
-				threadCursor = currentMsgNum
 				layoutPane()
 				// Keep the top line where it was, as far as the new height
 				// allows.

@@ -215,33 +215,34 @@ func TestThreadViewNavigation(t *testing.T) {
 	}
 }
 
-// The thread menu's cursor moves over the readable messages in display
-// order, stepping over the #4 placeholder; Enter asks to read, T and Esc
-// are taken to close, and other keys are left to the reader.
+// In the thread menu the arrows, Home and End name the readable message to
+// read next, in display order, stepping over the #4 placeholder; at an end
+// they go nowhere. Tab, Enter, T and Esc give focus back; other keys are
+// left to the reader.
 func TestThreadMenuKey(t *testing.T) {
-	tv := newThreadView(sampleNodes(), 11, sampleLoad("Caller"))
 	for _, tc := range []struct {
-		name          string
-		from, key     int
-		want          int
-		handled, read bool
+		name     string
+		cur, key int
+		handled  bool
+		target   int
+		back     bool
 	}{
-		{"down", 11, editor.KeyArrowDown, 8, true, false},
-		{"up", 11, editor.KeyArrowUp, 15, true, false},
-		{"up at the top stays", 1, editor.KeyArrowUp, 1, true, false},
-		{"down at the bottom stays", 14, editor.KeyArrowDown, 14, true, false},
-		{"home", 10, editor.KeyHome, 1, true, false},
-		{"end", 3, editor.KeyEnd, 14, true, false},
-		{"enter reads", 7, editor.KeyEnter, 7, true, true},
-		{"T closes", 7, 'T', 7, true, false},
-		{"Tab closes", 7, editor.KeyTab, 7, true, false},
-		{"Esc closes", 7, editor.KeyEsc, 7, true, false},
-		{"N is the reader's", 7, 'N', 7, false, false},
+		{"down", 11, editor.KeyArrowDown, true, 8, false},
+		{"up", 11, editor.KeyArrowUp, true, 15, false},
+		{"up at the top goes nowhere", 1, editor.KeyArrowUp, true, 0, false},
+		{"down at the bottom goes nowhere", 14, editor.KeyArrowDown, true, 0, false},
+		{"home", 10, editor.KeyHome, true, 1, false},
+		{"end", 3, editor.KeyEnd, true, 14, false},
+		{"Tab", 7, editor.KeyTab, true, 0, true},
+		{"Enter", 7, editor.KeyEnter, true, 0, true},
+		{"T", 7, 'T', true, 0, true},
+		{"Esc", 7, editor.KeyEsc, true, 0, true},
+		{"N is the reader's", 7, 'N', false, 0, false},
 	} {
-		cursor := tc.from
-		handled, read := threadMenuKey(tv, tc.key, &cursor)
-		if cursor != tc.want || handled != tc.handled || read != tc.read {
-			t.Errorf("%s: cursor %d handled %v read %v; want %d %v %v", tc.name, cursor, handled, read, tc.want, tc.handled, tc.read)
+		tv := newThreadView(sampleNodes(), tc.cur, sampleLoad("Caller"))
+		handled, target, back := threadMenuKey(tv, tc.key)
+		if handled != tc.handled || target != tc.target || back != tc.back {
+			t.Errorf("%s: handled %v target %d back %v; want %v %d %v", tc.name, handled, target, back, tc.handled, tc.target, tc.back)
 		}
 	}
 }
@@ -276,16 +277,17 @@ func TestRenderThreadMenuKeys(t *testing.T) {
 		}
 	}
 	stripped := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderThreadMenuKeys(79, "|08", threadGlyphsFor(ansi.OutputModeUTF8))))), "")
-	if !strings.HasPrefix(stripped, "─[↑↓]Move ─[Enter]Read ─[Tab/Esc]Close ──") {
+	if !strings.HasPrefix(stripped, "─[↑↓]Move ─[Tab]Back ──") {
 		t.Errorf("keys = %q", stripped)
 	}
 }
 
 // The pane takes five rows, then three, then none, as the body shrinks:
-// with a six-row header, a 24-row terminal has 15 body lines, a 20-row one
-// 11 and a 16-row one 7, and the body keeps at least six.
+// with its title, closing rule and blank row it needs eight rows for five,
+// six for three, and the body keeps at least six. With a six-row header, a
+// 24-row terminal has 15 body lines, a 21-row one 12 and a 20-row one 11.
 func TestPaneRowsFor(t *testing.T) {
-	for _, tc := range []struct{ termHeight, want int }{{25, 5}, {24, 5}, {22, 5}, {21, 3}, {20, 3}, {19, 0}, {16, 0}} {
+	for _, tc := range []struct{ termHeight, want int }{{25, 5}, {24, 5}, {23, 5}, {22, 3}, {21, 3}, {20, 0}, {16, 0}} {
 		bodyAvail := tc.termHeight - 7 - 2
 		if got := paneRowsFor(bodyAvail); got != tc.want {
 			t.Errorf("termHeight %d (body %d): pane rows = %d, want %d", tc.termHeight, bodyAvail, got, tc.want)
@@ -421,8 +423,11 @@ func TestMessageReaderThreadPaneLayout(t *testing.T) {
 	if rule := strings.TrimRight(screen.Row(13), " "); rule != strings.Repeat("─", 79) {
 		t.Errorf("closing rule = %q", rule)
 	}
-	if !strings.Contains(screen.Row(14), "Ke> Check that the entry") {
-		t.Errorf("body should start on row 14:\n%s", snap)
+	if blank := strings.TrimSpace(screen.Row(14)); blank != "" {
+		t.Errorf("row 14 should be blank between the pane and the body: %q", blank)
+	}
+	if !strings.Contains(screen.Row(15), "Ke> Check that the entry") {
+		t.Errorf("body should start on row 15:\n%s", snap)
 	}
 	if marker := screen.Cell(10, 1); marker.Rune != '►' {
 		t.Errorf("row 10 col 1 = %q, want the marker", marker.Rune)
@@ -483,8 +488,8 @@ func TestMessageReaderLoneReplyToDeletedRoot(t *testing.T) {
 }
 
 // A thread shorter than the pane takes only the rows it fills: #12 and its
-// one reply draw a title, two rows and the closing rule, and the body
-// starts right under them, with no blank pane rows.
+// one reply draw a title, two rows and the closing rule, then the blank
+// row, and the body starts right under it, with no blank pane rows.
 func TestMessageReaderPaneShrinksToThread(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
@@ -498,7 +503,7 @@ func TestMessageReaderPaneShrinksToThread(t *testing.T) {
 	if rule := strings.TrimRight(screen.Row(10), " "); rule != strings.Repeat("─", 79) {
 		t.Errorf("row 10 should close the pane: %q", rule)
 	}
-	if !strings.Contains(screen.Row(11), "six hours late") {
+	if strings.TrimSpace(screen.Row(11)) != "" || !strings.Contains(screen.Row(12), "six hours late") {
 		t.Errorf("body should start right under the pane:\n%s", screen.Snapshot())
 	}
 }
@@ -522,9 +527,10 @@ func TestMessageReaderPaneWindowAndPlaceholder(t *testing.T) {
 	}
 }
 
-// The thread menu through the real reader and message base: T opens it,
-// the arrows move its cursor, Enter reads the message under the cursor and
-// leaves the menu open, and T or Esc close it without leaving the reader.
+// The thread menu through the real reader and message base: T or Tab
+// gives it focus, each arrow reads the message it moves to with the menu
+// left open, and Tab, Enter, T or Esc give focus back to the message
+// without leaving the reader.
 func TestMessageReaderThreadMenu(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
@@ -534,14 +540,15 @@ func TestMessageReaderThreadMenu(t *testing.T) {
 		keys  string
 		at    int // message shown at the end
 	}{
-		{"down, Enter reads the next in the thread", 5, "T\x1b[B\r", 7},
-		{"the menu stays open after Enter", 5, "T\x1b[B\r\x1b[B\r", 10},
-		{"up steps over the #4 placeholder", 8, "T\x1b[A\r", 11},
-		{"Home and End", 5, "T\x1b[F\r\x1b[H\r", 1},
-		{"Enter on the message being read stays there", 5, "T\r", 5},
-		{"T closes it; Enter is Next again", 5, "TT\r", 6},
-		{"Esc closes it without leaving the reader", 5, "T\x1bN", 6},
-		{"Tab opens it and Tab closes it", 5, "\t\x1b[B\r\t\r", 8},
+		{"down reads the next in the thread", 5, "T\x1b[B", 7},
+		{"the menu stays open: down twice", 5, "T\x1b[B\x1b[B", 10},
+		{"up steps over the #4 placeholder", 8, "T\x1b[A", 11},
+		{"End then Home", 5, "T\x1b[F\x1b[H", 1},
+		{"up at the top stays", 1, "T\x1b[A", 1},
+		{"Enter gives focus back; Enter is Next again", 5, "T\r\r", 6},
+		{"T gives focus back", 5, "TT\r", 6},
+		{"Esc gives focus back without leaving the reader", 5, "T\x1bN", 6},
+		{"Tab there and back", 5, "\t\x1b[B\t\r", 8},
 		{"T on a message with no thread does nothing", 2, "T\r", 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -556,11 +563,10 @@ func TestMessageReaderThreadMenu(t *testing.T) {
 	}
 }
 
-// With the menu open the cursor row is barred blue, the message being read
-// keeps the marker, the window follows the cursor, the frame is bright cyan
-// with the same title, the pane's closing row lists the menu's keys, and
-// the bar below is greyed out. Down from #5 puts the cursor on #7, two from
-// the top of a window that now starts at #3.
+// With the menu open the message being read is barred blue and marked,
+// the frame is bright cyan with the same title, the pane's closing row
+// lists the menu's keys, and the bar below is greyed out. Down from #5
+// reads #7, two from the top of a window that now starts at #3.
 func TestMessageReaderThreadMenuScreen(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
@@ -571,7 +577,7 @@ func TestMessageReaderThreadMenuScreen(t *testing.T) {
 	if c := screen.Cell(7, 1); !isBrightCyan(c) {
 		t.Errorf("open pane frame fg %d bold %v, want bright cyan", c.Fg, c.Bold)
 	}
-	if keys := screen.Row(13); !strings.HasPrefix(keys, "─[↑↓]Move ─[Enter]Read ─[Tab/Esc]Close ──") {
+	if keys := screen.Row(13); !strings.HasPrefix(keys, "─[↑↓]Move ─[Tab]Back ──") {
 		t.Errorf("pane's closing row = %q, want the menu's keys", keys)
 	}
 	if sep := strings.TrimRight(screen.Row(23), " "); sep != strings.Repeat("─", 79) {
@@ -584,14 +590,14 @@ func TestMessageReaderThreadMenuScreen(t *testing.T) {
 	if c := screen.Cell(24, utf8.RuneCountInString(screen.Row(24)[:col])+1); !isDarkGrey(c) || c.Bg == 44 {
 		t.Errorf("Next drawn fg %d bold %v bg %d, want greyed and unselected", c.Fg, c.Bold, c.Bg)
 	}
-	if marker := screen.Cell(9, 1); marker.Rune != '►' || !strings.Contains(screen.Row(9), "#5 ") {
-		t.Errorf("row 9 = %q, want the marker on #5", screen.Row(9))
+	if !strings.Contains(screen.Row(2), "Reading message #7 ") {
+		t.Errorf("down should read #7 straight away:\n%s", screen.Snapshot())
+	}
+	if marker := screen.Cell(10, 1); marker.Rune != '►' || !strings.Contains(screen.Row(10), "#7 ") || screen.Cell(10, 40).Bg != 44 {
+		t.Errorf("row 10 = %q, want #7 marked and barred", screen.Row(10))
 	}
 	if bg := screen.Cell(9, 40).Bg; bg == 44 {
-		t.Error("#5 should not be highlighted once the cursor moves")
-	}
-	if !strings.Contains(screen.Row(10), "#7 ") || screen.Cell(10, 40).Bg != 44 {
-		t.Errorf("the cursor should highlight #7 on row 10: %q", screen.Row(10))
+		t.Error("#5 should no longer be barred")
 	}
 }
 
@@ -612,8 +618,8 @@ func TestMessageReaderThreadMenuWithViewClosed(t *testing.T) {
 		{"TT", 1},
 		{"\t", 1},
 		{"\t\t", 1},
-		// Opened, redrawn as the cursor moves, then drawn on #7.
-		{"T\x1b[B\r", 3},
+		// Opened on #5, drawn again on #7, then closed by Enter.
+		{"T\x1b[B\r", 2},
 	} {
 		r := env.sub(t).runCmd("READMSGS", &caller, "", "5\r"+tc.keys+"Q")
 		if n := strings.Count(r.text(), "── Thread "); n != tc.panes {
@@ -695,7 +701,7 @@ func TestMessageReaderThreadPaneCP437(t *testing.T) {
 	if row := screen.Row(9); !strings.HasPrefix(row, "  ├─#3 Kestrel_~ ") {
 		t.Errorf("pane row above = %q", row)
 	}
-	if keys := screen.Row(13); !strings.Contains(keys, "]Move ─[Enter]Read ─[Tab/Esc]Close ─") {
+	if keys := screen.Row(13); !strings.Contains(keys, "]Move ─[Tab]Back ─") {
 		t.Errorf("pane's closing row = %q", keys)
 	}
 	if c := screen.Cell(13, 80).Rune; c != ' ' {
