@@ -699,8 +699,5 @@ func stringCatalog() []StringEntry {
 		// User Konfig: the reader's thread pane
 		{Label: "Konfig: Thread View Label", Key: "konfigThreadViewLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},
 		{Label: "Konfig: Thread View Help", Key: "konfigThreadViewHelp", Description: "Help line shown while Thread View is highlighted"},
-
-		// Message reader: the thread pane while it is the thread menu
-		{Label: "Msg: Thread Menu Title", Key: "msgThreadMenuTitle", Description: "Label on the reader's thread pane while T has the thread menu open"},
 	}
 }

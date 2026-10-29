@@ -161,7 +161,7 @@ func renderThreadMenuKeys(width int, frame string, g threadGlyphs) string {
 // when the menu is closed, so no row is barred and the frame is dark. The
 // message being read always carries the marker. Each line is pipe-coded
 // (with raw escapes for the bar's background) and exactly width columns.
-// title is the pane's label, " Thread " or " Thread Menu ".
+// title is the pane's label, " Thread ".
 func renderThreadPane(tv *threadView, hl, rows, width int, title string, g threadGlyphs, mode ansi.OutputMode) []string {
 	lines := make([]string, 0, rows+2)
 

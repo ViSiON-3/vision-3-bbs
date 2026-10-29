@@ -552,14 +552,14 @@ func TestMessageReaderThreadMenu(t *testing.T) {
 
 // With the menu open the cursor row is barred blue, the message being read
 // keeps the marker, the window follows the cursor, the frame is bright cyan
-// and titled Thread Menu, the pane's closing row lists the menu's keys, and
+// with the same title, the pane's closing row lists the menu's keys, and
 // the bar below is greyed out. Down from #5 puts the cursor on #7, two from
 // the top of a window that now starts at #3.
 func TestMessageReaderThreadMenuScreen(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
 	screen := env.readerAt(5, "T\x1b[B")
-	if title := screen.Row(7); !strings.HasPrefix(title, "── Thread Menu ─ ") {
+	if title := screen.Row(7); !strings.HasPrefix(title, "── Thread ─ ") {
 		t.Errorf("title = %q", title)
 	}
 	if c := screen.Cell(7, 1); !isBrightCyan(c) {
@@ -619,7 +619,7 @@ func TestMessageReaderThreadMenuWithViewClosed(t *testing.T) {
 		t.Errorf("the pane should be gone after T closes the menu:\n%s", screen.Snapshot())
 	}
 	screen = env.screenRun("READMSGS", &caller, "5\r\tQ")
-	if !strings.HasPrefix(screen.Row(7), "── Thread Menu ─") {
+	if !strings.HasPrefix(screen.Row(7), "── Thread ─") || screen.Cell(10, 40).Bg != 44 {
 		t.Errorf("Tab should open the pane as the thread menu:\n%s", screen.Snapshot())
 	}
 }

@@ -347,7 +347,6 @@ type StringsConfig struct {
 	MsgReadingSuffix     string `json:"msgReadingSuffix"`
 	// The docked thread pane's label.
 	MsgThreadPaneTitle   string `json:"msgThreadPaneTitle"`
-	MsgThreadMenuTitle   string `json:"msgThreadMenuTitle"`
 	MsgJumpPrompt        string `json:"msgJumpPrompt"`
 	MsgInvalidMsgNum     string `json:"msgInvalidMsgNum"`
 	MsgReplySubjectEmpty string `json:"msgReplySubjectEmpty"`

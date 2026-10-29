@@ -378,7 +378,7 @@ windowed around the current message, which carries the `►` marker, with
 the root's subject in its title and the message's place in the thread.
 
 Tab or `T` (Thread on the bar) moves focus to the **thread menu**. Its frame turns bright
-cyan, its title reads `Thread Menu`, its closing row lists its keys, a blue
+cyan, its closing row lists its keys, a blue
 bar marks the cursor, and the reader's bar below is greyed out while the
 menu has the arrows and Enter. ↑/↓, Home and End move the cursor through the
 thread, stepping over `#n deleted` placeholders; Enter reads the message

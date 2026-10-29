@@ -99,11 +99,9 @@ func stringValues(data []byte) (map[string]string, error) {
 // upgraded installation will not have it and the feature would otherwise print
 // nothing at all.
 var StringFallbacks = map[string]string{
-	// The message reader's docked thread pane labels, closed and as the
-	// thread menu. An install that predates them would otherwise print
-	// nothing.
+	// The message reader's docked thread pane label. An install that
+	// predates it would otherwise print nothing.
 	"msgThreadPaneTitle": " Thread ",
-	"msgThreadMenuTitle": " Thread Menu ",
 	// The message list's threaded mode (T in the list).
 	"msgListThreadedTitle":      "%s - Threaded List",
 	"msgListThreadColumn":       "Thread",

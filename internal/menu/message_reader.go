@@ -425,11 +425,11 @@ readerLoop:
 		var paneLines []string
 		paneRows := 0
 		renderPane := func() {
-			hl, title := 0, e.Strings().MsgThreadPaneTitle
+			hl := 0
 			if threadMenu {
-				hl, title = threadCursor, e.Strings().MsgThreadMenuTitle
+				hl = threadCursor
 			}
-			paneLines = renderThreadPane(tv, hl, paneRows, termWidth-1, title, glyphs, outputMode)
+			paneLines = renderThreadPane(tv, hl, paneRows, termWidth-1, e.Strings().MsgThreadPaneTitle, glyphs, outputMode)
 		}
 		layoutPane := func() {
 			paneLines, paneRows = nil, 0

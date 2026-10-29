@@ -32,7 +32,6 @@ func TestNewStringKeysHaveDefaults(t *testing.T) {
 		"NewUserPendingReview":      cfg.NewUserPendingReview,
 		"MatrixAccountCannotLogon":  cfg.MatrixAccountCannotLogon,
 		"MsgThreadPaneTitle":        cfg.MsgThreadPaneTitle,
-		"MsgThreadMenuTitle":        cfg.MsgThreadMenuTitle,
 		"MsgListThreadedTitle":      cfg.MsgListThreadedTitle,
 		"MsgListThreadColumn":       cfg.MsgListThreadColumn,
 		"MsgListHelpThreaded":       cfg.MsgListHelpThreaded,

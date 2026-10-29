@@ -353,7 +353,6 @@
   "msgReplySubjectEmpty": "\r\nSubject cannot be empty. Reply cancelled.\r\n",
   "msgReplySuccess": "\r\nReply posted successfully!\r\n",
   "msgScrollPercent": " |05[|13%d%%|05]",
-  "msgThreadMenuTitle": " Thread Menu ",
   "msgThreadPaneTitle": " Thread ",
   "msgTitleStr": "|08[|15Title|08] : ",
   "msgToStr": "|08[|15To|08   ] : ",
