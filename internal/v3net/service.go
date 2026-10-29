@@ -317,6 +317,7 @@ func New(cfg config.V3NetConfig) (*Service, error) {
 			Keystore:               ks,
 			AutoApprove:            cfg.Hub.AutoApprove,
 			RequireSignedSubscribe: cfg.Hub.RequireSignedSubscribe,
+			RequireSignedMessages:  cfg.Hub.RequireSignedMessages,
 			AutoApproveAreas:       cfg.Hub.AreaProposalsAutoApproved(),
 			Networks:               networks,
 		})

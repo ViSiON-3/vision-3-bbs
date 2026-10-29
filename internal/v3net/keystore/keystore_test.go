@@ -83,6 +83,9 @@ func TestNodeID_DerivedFromPubKey(t *testing.T) {
 	if ks.NodeID() != expected {
 		t.Errorf("node ID mismatch: got %q, expected %q", ks.NodeID(), expected)
 	}
+	if got := NodeIDFromPubKey(ks.PubKey()); got != expected {
+		t.Errorf("NodeIDFromPubKey = %q, expected %q", got, expected)
+	}
 }
 
 func TestSign_VerifiesCorrectly(t *testing.T) {

@@ -3,10 +3,9 @@ package hub
 import (
 	"bytes"
 	"crypto/ed25519"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -159,7 +159,15 @@ func (h *Hub) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if status, errMsg := h.checkMessageAuthor(&msg, nodeID, network); status != 0 {
+		writeJSON(w, status, map[string]string{"error": errMsg})
+		return
+	}
+
 	if msg.NeedsTruncation() {
+		// Only legacy unsigned posts reach here oversize: a signed post's
+		// body is covered by its signature, so checkMessageAuthor rejects
+		// it rather than let the hub alter it.
 		msg.Truncate()
 	}
 
@@ -187,6 +195,47 @@ func (h *Hub) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, protocol.MessageResponse{OK: true, MsgUUID: msg.MsgUUID})
+}
+
+// checkMessageAuthor checks that a posted message comes from the node that
+// posted it. A signed message must verify (protocol.Message.VerifySignature,
+// which also binds origin_node to origin_pubkey_b64), its origin_pubkey_b64
+// must be the key the node subscribed with, and its body must already be
+// within protocol.MaxBodyBytes, since the hub may not alter it. An unsigned
+// message is rejected only when RequireSignedMessages is set. Either way
+// origin_node must be the authenticated node ID. It returns 0 if the message
+// is acceptable, otherwise the HTTP status and error text to reply with.
+func (h *Hub) checkMessageAuthor(msg *protocol.Message, nodeID, network string) (int, string) {
+	if msg.IsSigned() {
+		if err := msg.VerifySignature(); err != nil {
+			slog.Warn("v3net hub: rejected message with bad signature", "node", nodeID, "network", network,
+				"uuid", msg.MsgUUID, "error", err)
+			return http.StatusForbidden, "message signature invalid: " + err.Error()
+		}
+		pub, _ := msg.OriginPubKey() // VerifySignature has decoded it already
+		if registered := h.subscribers.GetPubKey(nodeID, network); registered == nil || !registered.Equal(pub) {
+			slog.Warn("v3net hub: rejected message signed by a key other than the subscriber's", "node", nodeID,
+				"network", network, "uuid", msg.MsgUUID, "origin_node", msg.OriginNode)
+			return http.StatusForbidden, "origin_pubkey_b64 is not the posting node's registered key"
+		}
+		if msg.NeedsTruncation() {
+			return http.StatusRequestEntityTooLarge,
+				fmt.Sprintf("signed message body exceeds %d bytes; truncate before signing", protocol.MaxBodyBytes)
+		}
+	}
+
+	if msg.OriginNode != nodeID {
+		return http.StatusForbidden, "origin_node does not match authenticated node"
+	}
+
+	if !msg.IsSigned() {
+		if h.cfg.RequireSignedMessages {
+			slog.Warn("v3net hub: rejected unsigned message", "node", nodeID, "network", network, "uuid", msg.MsgUUID)
+			return http.StatusUnauthorized, "signed messages required: upgrade the leaf"
+		}
+		slog.Debug("v3net hub: accepting unsigned message", "node", nodeID, "network", network, "uuid", msg.MsgUUID)
+	}
+	return 0, ""
 }
 
 // handleEvents serves the SSE event stream (auth required).
@@ -289,8 +338,7 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid pubkey_b64"}`, http.StatusUnprocessableEntity)
 		return
 	}
-	h256 := sha256.Sum256(pubKeyBytes)
-	expectedNodeID := hex.EncodeToString(h256[:8])
+	expectedNodeID := keystore.NodeIDFromPubKey(pubKeyBytes)
 	if req.NodeID != expectedNodeID {
 		http.Error(w, `{"error":"node_id does not match pubkey_b64"}`, http.StatusUnprocessableEntity)
 		return

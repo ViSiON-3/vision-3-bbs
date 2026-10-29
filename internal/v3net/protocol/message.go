@@ -34,6 +34,13 @@ type Message struct {
 	Origin      string         `json:"origin,omitempty"`   // User-defined origin line (e.g. "My Cool BBS - bbs.example.com")
 	Attributes  uint32         `json:"attributes"`
 	Kludges     map[string]any `json:"kludges"`
+	// OriginPubKeyB64 is the author node's ed25519 public key (base64). Its
+	// derived node ID must equal OriginNode. Empty on legacy unsigned messages.
+	OriginPubKeyB64 string `json:"origin_pubkey_b64,omitempty"`
+	// SignatureB64 is the author node's ed25519 signature (base64) over
+	// SignedPayload. Empty on legacy unsigned messages. See Sign and
+	// VerifySignature.
+	SignatureB64 string `json:"signature_b64,omitempty"`
 }
 
 var (

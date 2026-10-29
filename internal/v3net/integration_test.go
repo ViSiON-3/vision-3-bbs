@@ -160,7 +160,7 @@ func setupIntegration(t *testing.T) (
 }
 
 func TestIntegration_PostAndPoll(t *testing.T) {
-	_, _, l, _, _, _, writer := setupIntegration(t)
+	_, _, l, leafKS, _, _, writer := setupIntegration(t)
 
 	// Leaf sends a message to the hub.
 	msg := protocol.Message{
@@ -169,7 +169,7 @@ func TestIntegration_PostAndPoll(t *testing.T) {
 		AreaTag:     "gen.general",
 		MsgUUID:     "550e8400-e29b-41d4-a716-446655440000",
 		ThreadUUID:  "550e8400-e29b-41d4-a716-446655440000",
-		OriginNode:  "test.example.net",
+		OriginNode:  leafKS.NodeID(),
 		OriginBoard: "General",
 		From:        "Tester",
 		To:          "All",
@@ -203,10 +203,17 @@ func TestIntegration_PostAndPoll(t *testing.T) {
 	if got.Subject != msg.Subject {
 		t.Errorf("wrong subject: got %q, want %q", got.Subject, msg.Subject)
 	}
+	// The author's signature survives the hub and verifies on the leaf.
+	if got.OriginPubKeyB64 != leafKS.PubKeyBase64() {
+		t.Errorf("origin_pubkey_b64 = %q, want the author's key", got.OriginPubKeyB64)
+	}
+	if err := got.VerifySignature(); err != nil {
+		t.Errorf("polled message does not verify: %v", err)
+	}
 }
 
 func TestIntegration_DedupPreventsDoubleWrite(t *testing.T) {
-	_, _, l, _, _, _, writer := setupIntegration(t)
+	_, _, l, leafKS, _, _, writer := setupIntegration(t)
 
 	msg := protocol.Message{
 		V3Net:       "1.0",
@@ -214,7 +221,7 @@ func TestIntegration_DedupPreventsDoubleWrite(t *testing.T) {
 		AreaTag:     "gen.general",
 		MsgUUID:     "660e8400-e29b-41d4-a716-446655440001",
 		ThreadUUID:  "660e8400-e29b-41d4-a716-446655440001",
-		OriginNode:  "test.example.net",
+		OriginNode:  leafKS.NodeID(),
 		OriginBoard: "General",
 		From:        "Tester",
 		To:          "All",
@@ -255,7 +262,7 @@ func TestIntegration_DedupPreventsDoubleWrite(t *testing.T) {
 }
 
 func TestIntegration_SSEReceivesEvents(t *testing.T) {
-	_, _, l, _, _, _, _ := setupIntegration(t)
+	_, _, l, leafKS, _, _, _ := setupIntegration(t)
 
 	events := make(chan protocol.Event, 10)
 	l.SetOnEvent(func(ev protocol.Event) {
@@ -278,7 +285,7 @@ func TestIntegration_SSEReceivesEvents(t *testing.T) {
 		AreaTag:     "gen.general",
 		MsgUUID:     "770e8400-e29b-41d4-a716-446655440002",
 		ThreadUUID:  "770e8400-e29b-41d4-a716-446655440002",
-		OriginNode:  "test.example.net",
+		OriginNode:  leafKS.NodeID(),
 		OriginBoard: "General",
 		From:        "Tester",
 		To:          "All",
@@ -336,14 +343,14 @@ func TestIntegration_ChatEvent(t *testing.T) {
 }
 
 func TestIntegration_AreaFilteredPolling(t *testing.T) {
-	h, ts, l, _, hubKS, _, writer := setupIntegration(t)
+	h, ts, l, leafKS, hubKS, _, writer := setupIntegration(t)
 
 	// Post a message to gen.general via leaf 1.
 	msg := protocol.Message{
 		V3Net: "1.0", Network: "testnet", AreaTag: "gen.general",
 		MsgUUID:    "880e8400-e29b-41d4-a716-446655440010",
 		ThreadUUID: "880e8400-e29b-41d4-a716-446655440010",
-		OriginNode: "test.example.net", OriginBoard: "General",
+		OriginNode: leafKS.NodeID(), OriginBoard: "General",
 		From: "Tester", To: "All", Subject: "Area filtered test",
 		DateUTC: "2026-03-16T04:20:00Z", Body: "Should be received.",
 		Kludges: map[string]any{},
@@ -422,7 +429,7 @@ func TestIntegration_AreaFilteredPolling(t *testing.T) {
 		V3Net: "1.0", Network: "testnet", AreaTag: "gen.coding",
 		MsgUUID:    "990e8400-e29b-41d4-a716-446655440011",
 		ThreadUUID: "990e8400-e29b-41d4-a716-446655440011",
-		OriginNode: "leaf2.example.net", OriginBoard: "Coding",
+		OriginNode: leaf2KS.NodeID(), OriginBoard: "Coding",
 		From: "Leaf2 User", To: "All", Subject: "Coding msg",
 		DateUTC: "2026-03-16T04:20:00Z", Body: "Should NOT be received by leaf 1.",
 		Kludges: map[string]any{},

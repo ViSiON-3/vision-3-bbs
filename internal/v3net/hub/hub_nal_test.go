@@ -291,7 +291,7 @@ func TestGetMessages_Pagination(t *testing.T) {
 			"area_tag":"gen.general",
 			"msg_uuid":%q,
 			"thread_uuid":%q,
-			"origin_node":"test.example.net",
+			"origin_node":%q,
 			"origin_board":"General",
 			"from":"Tester",
 			"to":"All",
@@ -299,7 +299,7 @@ func TestGetMessages_Pagination(t *testing.T) {
 			"date_utc":"2026-03-16T04:20:00Z",
 			"body":"Body %d",
 			"kludges":{}
-		}`, uuid, uuid, i+1, i+1)
+		}`, uuid, uuid, leafKS.NodeID(), i+1, i+1)
 
 		req := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/messages", msgJSON)
 		resp, postErr := http.DefaultClient.Do(req)

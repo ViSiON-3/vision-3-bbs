@@ -63,7 +63,7 @@ func TestSubscribe_RegistersWithHub(t *testing.T) {
 	}
 
 	// The requested area is live: the leaf can post to it straight away.
-	if err := l.SendMessage(testMessage(testUUID1)); err != nil {
+	if err := l.SendMessage(ownMessage(l, testUUID1)); err != nil {
 		t.Errorf("post to subscribed area: %v", err)
 	}
 	// Subscribing again is harmless.
@@ -243,7 +243,7 @@ func TestStart_SubscribesFetchesNALAndPolls(t *testing.T) {
 	seedHubNAL(t, h, hubKS, "gen.general")
 
 	poster := subscribedLeaf(t, ts, "poster", "gen.general")
-	if err := poster.SendMessage(testMessage(testUUID1)); err != nil {
+	if err := poster.SendMessage(ownMessage(poster, testUUID1)); err != nil {
 		t.Fatalf("post first message: %v", err)
 	}
 
@@ -300,7 +300,7 @@ func TestStart_SubscribesFetchesNALAndPolls(t *testing.T) {
 		t.Errorf("first message = %s, want %s", m.MsgUUID, testUUID1)
 	}
 	// One posted afterwards arrives on a later poll tick.
-	if err := poster.SendMessage(testMessage(testUUID2)); err != nil {
+	if err := poster.SendMessage(ownMessage(poster, testUUID2)); err != nil {
 		t.Fatalf("post second message: %v", err)
 	}
 	if m := recv("second message"); m.MsgUUID != testUUID2 {
@@ -624,11 +624,11 @@ func TestSendMessage_HubRejectionIsAnError(t *testing.T) {
 	seedHubNAL(t, h, hubKS, "gen.general")
 	l := subscribedLeaf(t, ts, "leafbbs") // no area subscriptions
 
-	err := l.SendMessage(testMessage(testUUID1))
+	err := l.SendMessage(ownMessage(l, testUUID1))
 	if err == nil || !strings.Contains(err.Error(), "403") {
 		t.Errorf("SendMessage to unsubscribed area = %v, want a 403 error", err)
 	}
-	msg := testMessage(testUUID1)
+	msg := ownMessage(l, testUUID1)
 	msg.AreaTag = "gen.missing"
 	err = l.SendMessageCtx(context.Background(), msg)
 	if err == nil || !strings.Contains(err.Error(), fmt.Sprint(http.StatusUnprocessableEntity)) {

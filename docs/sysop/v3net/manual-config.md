@@ -52,6 +52,7 @@ configuration to join an existing network.
 | `autoApprove` | bool | `false` | When `true`, new subscriber registrations are approved automatically. |
 | `autoApproveAreas` | bool | unset | When `true`, area proposals are added to the NAL on arrival; when `false`, they wait for the coordinator in the Coordinator Panel. Unset follows `autoApprove`, which covered proposals too before this setting existed. Recommended `false` outside testing. |
 | `requireSignedSubscribe` | bool | `false` | Require signed subscriptions. Leave false during rolling upgrades; true rejects older unsigned leaves with HTTP 401. Restart to apply; see [independent upgrades](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently). |
+| `requireSignedMessages` | bool | `false` | Reject message posts without an author signature (HTTP 401). Leave false until every leaf signs its messages; posts with a bad signature are rejected either way. Restart to apply; see [requiring signed messages](v3net/configuration.md#requiring-signed-messages). |
 | `networks` | array | `[]` | List of networks hosted by this hub. See below. |
 | `initialAreas` | array | `[]` | Area specs for the initial NAL seed. Consumed once on first hub start, then removed automatically. See below. |
 
@@ -172,6 +173,7 @@ To add your network to the public registry, submit a PR to the
     "autoApprove": false,
     "autoApproveAreas": false,
     "requireSignedSubscribe": false,
+    "requireSignedMessages": false,
     "networks": [
       {
         "name": "mynet",
