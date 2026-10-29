@@ -309,7 +309,7 @@ func TestStart_SubscribesFetchesNALAndPolls(t *testing.T) {
 
 	stop()
 	for _, uuid := range []string{testUUID1, testUUID2} {
-		if seen, err := ix.Seen(uuid); err != nil || !seen {
+		if seen, err := ix.Seen("testnet", poster.cfg.Keystore.NodeID(), uuid); err != nil || !seen {
 			t.Errorf("dedup Seen(%s) = %v, %v; want true", uuid, seen, err)
 		}
 	}
@@ -484,11 +484,13 @@ func TestDispatchNALEvent_OnlyNALUpdatedSchedulesRefetch(t *testing.T) {
 }
 
 // pagedHub serves one page of messages per request, in order, and records the
-// cursor each request carried.
+// cursor (since and since_origin) and identity each request carried.
 type pagedHub struct {
-	mu     sync.Mutex
-	pages  [][]protocol.Message
-	cursor []string
+	mu         sync.Mutex
+	pages      [][]protocol.Message
+	cursor     []string
+	origins    []string
+	identities []string
 }
 
 func (p *pagedHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -496,6 +498,8 @@ func (p *pagedHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer p.mu.Unlock()
 	n := len(p.cursor)
 	p.cursor = append(p.cursor, r.URL.Query().Get("since"))
+	p.origins = append(p.origins, r.URL.Query().Get("since_origin"))
+	p.identities = append(p.identities, r.URL.Query().Get("identity"))
 	var page []protocol.Message
 	if n < len(p.pages) {
 		page = p.pages[n]
@@ -528,8 +532,17 @@ func TestPoll_FollowsHasMoreWithCursor(t *testing.T) {
 	if len(ph.cursor) != 2 || ph.cursor[0] != "" || ph.cursor[1] != testUUID1 {
 		t.Errorf("request cursors = %q, want [\"\" %s]", ph.cursor, testUUID1)
 	}
-	if last, err := ix.LastSeen("testnet"); err != nil || last != testUUID3 {
-		t.Errorf("LastSeen = %q, %v; want %s", last, err, testUUID3)
+	// The cursor names the message's origin node too.
+	if len(ph.origins) != 2 || ph.origins[0] != "" || ph.origins[1] != "test.example.net" {
+		t.Errorf("request since_origin = %q, want [\"\" test.example.net]", ph.origins)
+	}
+	// Every request, the first with no cursor included, asks for per-origin
+	// identity, so the hub serves every copy of a UUID.
+	if len(ph.identities) != 2 || ph.identities[0] != protocol.IdentityOrigin || ph.identities[1] != protocol.IdentityOrigin {
+		t.Errorf("request identity = %q, want origin on both", ph.identities)
+	}
+	if last, origin, err := ix.LastSeen("testnet"); err != nil || last != testUUID3 || origin != "test.example.net" {
+		t.Errorf("LastSeen = %q, %q, %v; want %s, test.example.net", last, origin, err, testUUID3)
 	}
 }
 
@@ -556,10 +569,10 @@ func TestPoll_SkipsInvalidAndUnwritableMessages(t *testing.T) {
 		t.Errorf("oversized message: body %d bytes, truncated flag %v", len(got.Body), got.IsTruncated())
 	}
 	// A message the JAM base refused is not marked seen.
-	if seen, _ := ix.Seen(testUUID1); seen {
+	if seen, _ := ix.Seen("testnet", "test.example.net", testUUID1); seen {
 		t.Error("unwritable message was marked seen")
 	}
-	if seen, _ := ix.Seen(testUUID2); !seen {
+	if seen, _ := ix.Seen("testnet", "test.example.net", testUUID2); !seen {
 		t.Error("written message was not marked seen")
 	}
 }
@@ -633,5 +646,71 @@ func TestSendMessage_HubRejectionIsAnError(t *testing.T) {
 	err = l.SendMessageCtx(context.Background(), msg)
 	if err == nil || !strings.Contains(err.Error(), fmt.Sprint(http.StatusUnprocessableEntity)) {
 		t.Errorf("SendMessage to unknown area = %v, want a 422 error", err)
+	}
+}
+
+// A message is its origin node and UUID: a second node's message under a UUID
+// the reader has already imported from another node is imported too, and
+// the poll cursor names the origin so the hub resumes after the right copy.
+func TestPoll_SameUUIDFromTwoNodesImportsBoth(t *testing.T) {
+	ts, h, hubKS := newTestHub(t, true)
+	seedHubNAL(t, h, hubKS, "gen.general")
+	posterA := subscribedLeaf(t, ts, "postera", "gen.general")
+	posterB := subscribedLeaf(t, ts, "posterb", "gen.general")
+	reader := subscribedLeaf(t, ts, "reader", "gen.general")
+	writer := reader.cfg.JAMWriter.(*mockJAMWriter)
+	ix := reader.cfg.DedupIndex
+	ctx := context.Background()
+
+	if err := posterA.SendMessage(ownMessage(posterA, testUUID1)); err != nil {
+		t.Fatalf("post from A: %v", err)
+	}
+	if count, err := reader.Poll(ctx); err != nil || count != 1 {
+		t.Fatalf("first Poll = %d, %v; want 1", count, err)
+	}
+
+	if err := posterB.SendMessage(ownMessage(posterB, testUUID1)); err != nil {
+		t.Fatalf("post from B: %v", err)
+	}
+	if count, err := reader.Poll(ctx); err != nil || count != 1 {
+		t.Fatalf("Poll after B's post = %d, %v; want 1", count, err)
+	}
+
+	// A's next post follows B's copy; the cursor must not resolve to A's.
+	if err := posterA.SendMessage(ownMessage(posterA, testUUID2)); err != nil {
+		t.Fatalf("second post from A: %v", err)
+	}
+	// A posting its own UUID again is still a duplicate.
+	if err := posterA.SendMessage(ownMessage(posterA, testUUID1)); err != nil {
+		t.Fatalf("repost from A: %v", err)
+	}
+	if count, err := reader.Poll(ctx); err != nil || count != 1 {
+		t.Fatalf("Poll after A's second post = %d, %v; want 1", count, err)
+	}
+	if count, err := reader.Poll(ctx); err != nil || count != 0 {
+		t.Fatalf("idle Poll = %d, %v; want 0", count, err)
+	}
+
+	want := []struct{ origin, uuid string }{
+		{posterA.cfg.Keystore.NodeID(), testUUID1},
+		{posterB.cfg.Keystore.NodeID(), testUUID1},
+		{posterA.cfg.Keystore.NodeID(), testUUID2},
+	}
+	if writer.count() != len(want) {
+		t.Fatalf("reader wrote %d messages, want %d", writer.count(), len(want))
+	}
+	for i, w := range want {
+		if got := writer.messages[i]; got.OriginNode != w.origin || got.MsgUUID != w.uuid {
+			t.Errorf("message %d = %s/%s, want %s/%s", i, got.OriginNode, got.MsgUUID, w.origin, w.uuid)
+		}
+		if seen, err := ix.Seen("testnet", w.origin, w.uuid); err != nil || !seen {
+			t.Errorf("Seen(%s/%s) = %v, %v; want true", w.origin, w.uuid, seen, err)
+		}
+	}
+
+	// A new leaf's first poll has no cursor, yet still gets both copies.
+	fresh := subscribedLeaf(t, ts, "fresh", "gen.general")
+	if count, err := fresh.Poll(ctx); err != nil || count != len(want) {
+		t.Errorf("fresh leaf's first Poll = %d, %v; want %d", count, err, len(want))
 	}
 }

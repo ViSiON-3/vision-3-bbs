@@ -352,7 +352,7 @@ func TestService_UnknownNetwork(t *testing.T) {
 	if err := svc.SendMessage("nonet", msg); !errors.Is(err, ErrNoLeaf) {
 		t.Errorf("SendMessage to unsubscribed network = %v, want ErrNoLeaf", err)
 	}
-	if seen, _ := svc.dedupIdx.Seen(msg.MsgUUID); seen {
+	if seen, _ := svc.dedupIdx.Seen(msg.Network, msg.OriginNode, msg.MsgUUID); seen {
 		t.Error("a message that was never sent must not be marked seen")
 	}
 }
@@ -463,7 +463,7 @@ func TestService_StartRunsHubAndLeaf(t *testing.T) {
 	if err := svc.SendMessage("testnet", msg); err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}
-	if seen, err := svc.dedupIdx.Seen(msg.MsgUUID); err != nil || !seen {
+	if seen, err := svc.dedupIdx.Seen(msg.Network, msg.OriginNode, msg.MsgUUID); err != nil || !seen {
 		t.Errorf("outbound message Seen = %v, %v; want true", seen, err)
 	}
 	resp, err := http.Get(ts.URL + "/v3net/v1/testnet/info")
@@ -484,7 +484,7 @@ func TestService_StartRunsHubAndLeaf(t *testing.T) {
 	if err := svc.SendMessage("testnet", bad); err == nil {
 		t.Error("SendMessage to an area not in the NAL should fail")
 	}
-	if seen, _ := svc.dedupIdx.Seen(bad.MsgUUID); seen {
+	if seen, _ := svc.dedupIdx.Seen(bad.Network, bad.OriginNode, bad.MsgUUID); seen {
 		t.Error("a refused message must not be marked seen")
 	}
 

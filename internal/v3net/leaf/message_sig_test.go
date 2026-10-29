@@ -74,9 +74,9 @@ func TestPoll_VerifiesAuthorSignatures(t *testing.T) {
 		t.Errorf("imported %s and %s, want the signed and the unsigned message",
 			writer.messages[0].MsgUUID, writer.messages[1].MsgUUID)
 	}
-	for n := 1; n <= 5; n++ {
-		if seen, _ := ix.Seen(sigUUID(n)); seen {
-			t.Errorf("dropped message %s was marked seen", sigUUID(n))
+	for _, m := range []protocol.Message{bodyEdited, subjectEdited, wrongOrigin, impersonated, keyStripped} {
+		if seen, _ := ix.Seen(m.Network, m.OriginNode, m.MsgUUID); seen {
+			t.Errorf("dropped message %s was marked seen", m.MsgUUID)
 		}
 	}
 }
@@ -342,7 +342,7 @@ func TestPoll_RefusedNewestMessageWarnsOnceAndGenuineImports(t *testing.T) {
 	if n := countLogLines(logs.String(), "DEBUG", text); n != 3 {
 		t.Errorf("signature debug line logged %d times, want 3", n)
 	}
-	if seen, _ := ix.Seen(tampered.MsgUUID); seen {
+	if seen, _ := ix.Seen(tampered.Network, tampered.OriginNode, tampered.MsgUUID); seen {
 		t.Fatal("refused message was marked seen")
 	}
 
@@ -369,8 +369,8 @@ func TestRefusedLog_ForgetsOldestWhenFull(t *testing.T) {
 	if !r.add(sigUUID(refusedCap)) {
 		t.Fatal("a new UUID was reported as a repeat")
 	}
-	if len(r.uuids) != refusedCap || len(r.order) != refusedCap {
-		t.Errorf("log holds %d/%d entries, want %d", len(r.uuids), len(r.order), refusedCap)
+	if len(r.keys) != refusedCap || len(r.order) != refusedCap {
+		t.Errorf("log holds %d/%d entries, want %d", len(r.keys), len(r.order), refusedCap)
 	}
 	// The oldest entry was dropped to make room.
 	if !r.add(sigUUID(0)) {
@@ -421,7 +421,7 @@ func TestPoll_RequireSignedMessagesDropsUnsigned(t *testing.T) {
 	if writer.messages[0].MsgUUID != signed.MsgUUID {
 		t.Errorf("imported %s, want only the signed message", writer.messages[0].MsgUUID)
 	}
-	if seen, _ := ix.Seen(unsigned.MsgUUID); seen {
+	if seen, _ := ix.Seen(unsigned.Network, unsigned.OriginNode, unsigned.MsgUUID); seen {
 		t.Error("dropped unsigned message was marked seen")
 	}
 }

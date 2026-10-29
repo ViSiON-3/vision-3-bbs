@@ -16,35 +16,48 @@ import (
 // poll runs a single poll cycle: fetches new messages from the hub, deduplicates,
 // and writes to JAM. Returns the number of new messages processed.
 //
-// Each page's cursor is the UUID of the last message the hub returned, in the
-// hub's order, whether or not that message was imported, so a page of skipped
-// messages still moves the poll forward. A hub can still hand back a cursor
-// it does not recognise (it then starts again from the beginning), so a
-// cursor already requested in this cycle ends the cycle instead of looping.
+// Each page's cursor is the last message the hub returned, in the hub's
+// order, whether or not that message was imported, so a page of skipped
+// messages still moves the poll forward. A message is identified by its
+// origin node and UUID, so the cursor is sent as since=<uuid> and
+// since_origin=<node>, and every request carries identity=origin so the hub
+// serves every copy of a UUID, one per origin node, even on the first poll
+// with no cursor. A hub that predates these parameters ignores them. A hub can
+// still hand back a cursor it does not recognise (it then starts again from
+// the beginning), so a cursor already requested in this cycle ends the cycle
+// instead of looping.
 //
 // Each cycle starts at the last message marked seen, so a refused message
 // after it is fetched again, and a genuine copy the hub serves in its place
-// is imported. Once a newer message is imported the cursor moves past it.
+// is imported. Once a newer message is imported the cursor moves past it. A
+// dedup row recorded before origin nodes were kept has no origin, so the
+// first cycle after an upgrade sends since alone.
 func (l *Leaf) poll(ctx context.Context) (int, error) {
-	cursor, err := l.cfg.DedupIndex.LastSeen(l.cfg.Network)
+	var cur pollCursor
+	var err error
+	cur.uuid, cur.origin, err = l.cfg.DedupIndex.LastSeen(l.cfg.Network)
 	if err != nil {
 		return 0, fmt.Errorf("leaf: get cursor: %w", err)
 	}
 
 	total := 0
-	requested := make(map[string]bool)
+	requested := make(map[pollCursor]bool)
 	for {
 		if ctx.Err() != nil {
 			return total, ctx.Err()
 		}
-		if requested[cursor] {
+		if requested[cur] {
 			slog.Warn("leaf: hub returned a page that does not advance the cursor; ending poll",
-				"network", l.cfg.Network, "cursor", cursor)
+				"network", l.cfg.Network, "cursor", cur.uuid, "cursor_origin", cur.origin)
 			break
 		}
-		requested[cursor] = true
+		requested[cur] = true
 
-		path := fmt.Sprintf("/v3net/v1/%s/messages?since=%s&limit=100", l.cfg.Network, url.QueryEscape(cursor))
+		path := fmt.Sprintf("/v3net/v1/%s/messages?since=%s&limit=100&identity=%s",
+			l.cfg.Network, url.QueryEscape(cur.uuid), protocol.IdentityOrigin)
+		if cur.origin != "" {
+			path += "&since_origin=" + url.QueryEscape(cur.origin)
+		}
 		resp, err := l.signedGetCtx(ctx, path)
 		if err != nil {
 			return total, fmt.Errorf("leaf: fetch messages: %w", err)
@@ -75,7 +88,8 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 			}
 		}
 		if len(messages) > 0 {
-			cursor = messages[len(messages)-1].MsgUUID
+			last := messages[len(messages)-1]
+			cur = pollCursor{uuid: last.MsgUUID, origin: last.OriginNode}
 		}
 
 		hasMore := resp.Header.Get("X-V3Net-Has-More") == "true"
@@ -84,6 +98,12 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 		}
 	}
 	return total, nil
+}
+
+// pollCursor names the message a poll page starts after.
+type pollCursor struct {
+	uuid   string
+	origin string // "" when unknown, for a legacy dedup row
 }
 
 // importMessage checks one polled message and writes it to JAM unless it is
@@ -123,7 +143,7 @@ func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
 		msg.Truncate()
 	}
 
-	seen, err := l.cfg.DedupIndex.Seen(msg.MsgUUID)
+	seen, err := l.cfg.DedupIndex.Seen(l.cfg.Network, msg.OriginNode, msg.MsgUUID)
 	if err != nil {
 		return false, fmt.Errorf("leaf: dedup check: %w", err)
 	}
@@ -133,11 +153,11 @@ func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
 
 	localNum, err := l.cfg.JAMWriter.WriteMessage(msg)
 	if err != nil {
-		slog.Error("leaf: write message to JAM", "uuid", msg.MsgUUID, "error", err)
+		slog.Error("leaf: write message to JAM", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode, "error", err)
 		return false, nil
 	}
-	if err := l.cfg.DedupIndex.MarkSeen(msg.MsgUUID, l.cfg.Network, &localNum); err != nil {
-		slog.Error("leaf: mark seen", "uuid", msg.MsgUUID, "error", err)
+	if err := l.cfg.DedupIndex.MarkSeen(l.cfg.Network, msg.OriginNode, msg.MsgUUID, &localNum); err != nil {
+		slog.Error("leaf: mark seen", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode, "error", err)
 	}
 	return true, nil
 }
@@ -160,46 +180,48 @@ func verifyAuthor(msg *protocol.Message, requireSigned bool) error {
 }
 
 // refuse logs a message the leaf will not import: at warn the first time its
-// UUID is refused, and at debug when the same UUID is refused again.
+// message is refused, and at debug when the same message is refused again.
+// A message is its origin node and UUID, so another node's message under the
+// same UUID still gets its own warning.
 func (l *Leaf) refuse(msg *protocol.Message, text string, args ...any) {
 	args = append([]any{"uuid", msg.MsgUUID}, args...)
-	if l.refused.add(msg.MsgUUID) {
+	if l.refused.add(msg.OriginNode + "/" + msg.MsgUUID) {
 		slog.Warn(text, args...)
 	} else {
 		slog.Debug(text, args...)
 	}
 }
 
-// refusedCap bounds how many refused UUIDs refusedLog remembers.
+// refusedCap bounds how many refused messages refusedLog remembers.
 const refusedCap = 1024
 
-// refusedLog remembers the UUIDs of messages the leaf refused. A refused
-// message is not marked seen, so one at the end of the hub's list is fetched
-// on every poll until a newer message is imported; the log keeps that from
-// repeating the warning each time. Once full it forgets its oldest entry.
-// The zero value is ready to use.
+// refusedLog remembers the messages the leaf refused, keyed on origin node
+// and UUID. A refused message is not marked seen, so one at the end of the
+// hub's list is fetched on every poll until a newer message is imported; the
+// log keeps that from repeating the warning each time. Once full it forgets
+// its oldest entry. The zero value is ready to use.
 type refusedLog struct {
 	mu    sync.Mutex
-	uuids map[string]struct{}
+	keys  map[string]struct{}
 	order []string // oldest first
 }
 
-// add records uuid and reports whether it was new.
-func (r *refusedLog) add(uuid string) bool {
+// add records key and reports whether it was new.
+func (r *refusedLog) add(key string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.uuids[uuid]; ok {
+	if _, ok := r.keys[key]; ok {
 		return false
 	}
-	if r.uuids == nil {
-		r.uuids = make(map[string]struct{})
+	if r.keys == nil {
+		r.keys = make(map[string]struct{})
 	}
 	if len(r.order) >= refusedCap {
-		delete(r.uuids, r.order[0])
+		delete(r.keys, r.order[0])
 		r.order = r.order[1:]
 	}
-	r.uuids[uuid] = struct{}{}
-	r.order = append(r.order, uuid)
+	r.keys[key] = struct{}{}
+	r.order = append(r.order, key)
 	return true
 }
 

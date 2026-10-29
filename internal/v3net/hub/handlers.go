@@ -59,11 +59,18 @@ func (h *Hub) handleNetworkInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetMessages returns messages newer than a cursor (auth required).
-// Results are filtered to the node's actively subscribed areas.
+// The cursor is since=<msg_uuid>, plus since_origin=<origin_node> from leaves
+// that know message identity is per origin node. Those leaves also send
+// identity=origin on every poll, even the first with no cursor, and get every
+// message; older leaves get only the earliest copy of each UUID (see
+// MessageStore.Fetch). Results are filtered to the node's actively
+// subscribed areas.
 func (h *Hub) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 	network := extractNetwork(r.URL.Path)
 	nodeID := r.Header.Get(headerNodeID)
 	since := r.URL.Query().Get("since")
+	sinceOrigin := r.URL.Query().Get("since_origin")
+	perOrigin := r.URL.Query().Get("identity") == protocol.IdentityOrigin
 	limit := 100
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n >= 1 && n <= 500 {
@@ -85,7 +92,7 @@ func (h *Hub) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	results, hasMore, err := h.messages.Fetch(network, since, limit, areaTags)
+	results, hasMore, err := h.messages.Fetch(network, since, sinceOrigin, perOrigin, limit, areaTags)
 	if err != nil {
 		slog.Error("fetch messages", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
@@ -177,7 +184,7 @@ func (h *Hub) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isNew, err := h.messages.Store(msg.MsgUUID, network, msg.AreaTag, string(data))
+	isNew, err := h.messages.Store(msg.MsgUUID, msg.OriginNode, network, msg.AreaTag, string(data))
 	if err != nil {
 		slog.Error("store message", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
@@ -186,10 +193,11 @@ func (h *Hub) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 
 	if isNew {
 		ev, _ := protocol.NewEvent(protocol.EventNewMessage, protocol.NewMessagePayload{
-			Network: network,
-			MsgUUID: msg.MsgUUID,
-			From:    msg.From,
-			Subject: msg.Subject,
+			Network:    network,
+			MsgUUID:    msg.MsgUUID,
+			OriginNode: msg.OriginNode,
+			From:       msg.From,
+			Subject:    msg.Subject,
 		})
 		h.broadcaster.Publish(network, ev)
 	}

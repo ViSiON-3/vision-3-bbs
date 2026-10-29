@@ -15,6 +15,12 @@ const ProtocolVersion = "1.0"
 // MaxBodyBytes is the maximum allowed message body size.
 const MaxBodyBytes = 32768
 
+// IdentityOrigin is the value of the identity query parameter a leaf sends
+// on every message poll to say it identifies a message by network, origin
+// node and UUID. Without it the hub serves only the earliest message with
+// each UUID, for leaves that identify a message by UUID alone.
+const IdentityOrigin = "origin"
+
 // Message represents a V3Net networked message in wire format.
 type Message struct {
 	V3Net       string         `json:"v3net"`

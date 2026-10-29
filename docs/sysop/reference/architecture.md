@@ -97,7 +97,7 @@ The system is designed as a single Go application that listens for incoming SSH 
    * **Leaf** (`leaf/`) — client that subscribes to a hub, polls for messages, maintains an SSE connection for real-time events, and sends locally-posted messages
    * **Protocol** (`protocol/`) — wire format types, message signing/verification, event definitions, NAL data structures, area tag validation
    * **Keystore** (`keystore/`) — Ed25519 keypair generation, persistence, signing, and verification
-   * **Dedup** (`dedup/`) — UUID-based SQLite deduplication index to prevent re-importing messages
+   * **Dedup** (`dedup/`) — SQLite deduplication index, keyed on network, origin node and message UUID, to prevent re-importing messages
    * **NAL** (`nal/`) — Network Area List signing, verification, caching, and access control evaluation
    * **Registry** (`registry/`) — fetches and caches network registry listings from a remote JSON endpoint
    * **JAM Adapter** (`jam_adapter.go`) — writes V3Net protocol messages to local JAM bases via MessageManager
@@ -217,7 +217,7 @@ vision3/
 │   ├── user/           # User management
 │   ├── v3net/          # V3Net message networking
 │   └── wfcui/          # WFC console TUI
-│       ├── dedup/      # UUID-based message deduplication
+│       ├── dedup/      # message deduplication (network, origin node, UUID)
 │       ├── hub/        # Hub server (REST+SSE, SQLite)
 │       ├── keystore/   # Ed25519 keypair management
 │       ├── leaf/       # Leaf client (poller, SSE, sender)
