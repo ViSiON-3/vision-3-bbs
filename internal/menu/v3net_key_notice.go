@@ -26,8 +26,31 @@ func (e *MenuExecutor) NoteV3NetKeyChange(userManager *user.UserMgr, network, ki
 		slog.Warn("v3net: key change not queued for sysops: v3netKeyChangedNotice has no text", "network", network)
 		return 0
 	}
-	text := fmt.Sprintf(format, v3netNetworkLabel(network), kind)
+	return e.queueSysopKeyNotice(userManager, network, fmt.Sprintf(format, v3netNetworkLabel(network), kind))
+}
 
+// NoteV3NetKeyHandover tells every sysop at login that a leaf moved the
+// pinned coordinator or hub key (kind) for network along a signed
+// coordinator handover and saved the new key in v3net.json. The service
+// calls it once per stored move; as with NoteV3NetKeyChange, a sysop who
+// already has the same notice queued (after two moves in a row, say) is not
+// given a second one. It returns the number of notices queued.
+func (e *MenuExecutor) NoteV3NetKeyHandover(userManager *user.UserMgr, network, kind string) int {
+	if userManager == nil {
+		return 0
+	}
+	// Filled from StringFallbacks like v3netKeyChangedNotice.
+	format := e.Strings().V3NetKeyHandoverNotice
+	if format == "" {
+		slog.Warn("v3net: key handover not queued for sysops: v3netKeyHandoverNotice has no text", "network", network)
+		return 0
+	}
+	return e.queueSysopKeyNotice(userManager, network, fmt.Sprintf(format, v3netNetworkLabel(network), kind))
+}
+
+// queueSysopKeyNotice queues text for every sysop who does not already have
+// it queued, and returns how many it queued.
+func (e *MenuExecutor) queueSysopKeyNotice(userManager *user.UserMgr, network, text string) int {
 	path := sysopNoticesPath(e.GetServerConfig().DataDir)
 	queued := 0
 	for _, u := range userManager.GetAllUsers() {
@@ -43,7 +66,7 @@ func (e *MenuExecutor) NoteV3NetKeyChange(userManager *user.UserMgr, network, ki
 			continue
 		}
 		if err := enqueueSysopNotice(path, u.ID, sysopNotice{Text: text, CreatedAt: time.Now()}); err != nil {
-			slog.Warn("v3net: could not queue a key-change notice", "network", network, "recipient", u.Handle, "error", err)
+			slog.Warn("v3net: could not queue a key notice", "network", network, "recipient", u.Handle, "error", err)
 			continue
 		}
 		queued++

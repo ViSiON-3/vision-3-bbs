@@ -78,3 +78,32 @@ func TestPersistKeyEvent(t *testing.T) {
 	// No config path: nothing to write, nothing to fail.
 	(&Service{}).persistKeyEvent(ev(leaf.KeyCoordinator, "Z", "Z"))
 }
+
+// keyPinned tells the key observer about a pin a handover moved, once it is
+// stored, and stays quiet for a first-use pin.
+func TestKeyPinnedNotifiesHandover(t *testing.T) {
+	dir := t.TempDir()
+	if err := config.SaveV3NetConfig(dir, config.V3NetConfig{Leaves: []config.V3NetLeafConfig{
+		{HubURL: "https://hub.example", Network: "testnet"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	s := &Service{cfg: config.V3NetConfig{ConfigPath: dir}}
+	var seen []leaf.KeyEvent
+	s.SetKeyChangeObserver(func(ev leaf.KeyEvent) { seen = append(seen, ev) })
+	ev := leaf.KeyEvent{Network: "testnet", HubURL: "https://hub.example", Kind: leaf.KeyCoordinator, Pinned: "A", Offered: "A"}
+
+	if err := s.keyPinned(ev); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 0 {
+		t.Fatalf("first-use pin notified the observer: %+v", seen)
+	}
+	ev.Pinned, ev.Offered, ev.Previous = "B", "B", "A"
+	if err := s.keyPinned(ev); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 1 || seen[0].Previous != "A" || seen[0].Pinned != "B" {
+		t.Errorf("observer saw %+v, want the move from A to B", seen)
+	}
+}

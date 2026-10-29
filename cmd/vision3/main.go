@@ -2159,8 +2159,13 @@ func main() {
 				menuExecutor.NoteV3NetNAL(userMgr, network, n, v3netNodeID)
 			})
 			// Warn sysops at login when a hub offers a key that differs
-			// from the one pinned for the network.
+			// from the one pinned for the network, and tell them when a
+			// signed handover moved a pin (ev.Previous is then set).
 			v3netService.SetKeyChangeObserver(func(ev leaf.KeyEvent) {
+				if ev.Previous != "" {
+					menuExecutor.NoteV3NetKeyHandover(userMgr, ev.Network, string(ev.Kind))
+					return
+				}
 				menuExecutor.NoteV3NetKeyChange(userMgr, ev.Network, string(ev.Kind))
 			})
 			go v3netService.Start(v3netCtx)

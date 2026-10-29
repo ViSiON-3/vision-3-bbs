@@ -117,6 +117,7 @@ var FormattedKeys = []string{
 	"twitQuickConfirm",
 	"updatePtrsSuccess",
 	"v3netKeyChangedNotice",
+	"v3netKeyHandoverNotice",
 	"v3netNewAreaDeclined",
 	"v3netNewAreaNotice",
 }
