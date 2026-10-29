@@ -58,6 +58,23 @@ func TestPersistKeyEvent(t *testing.T) {
 		t.Errorf("after acceptance: coord %q, pending %q; want C and none", got.CoordinatorPubKey, got.PendingCoordinatorPubKey)
 	}
 
+	// A handover moves the pin it started from, and clears a pending key
+	// it made the pin.
+	s.persistKeyEvent(ev(leaf.KeyCoordinator, "C", "D"))
+	moved := ev(leaf.KeyCoordinator, "D", "D")
+	moved.Previous = "C"
+	s.persistKeyEvent(moved)
+	if got = load(); got.CoordinatorPubKey != "D" || got.PendingCoordinatorPubKey != "" {
+		t.Errorf("after handover: coord %q, pending %q; want D and none", got.CoordinatorPubKey, got.PendingCoordinatorPubKey)
+	}
+	// One that started from a pin the sysop has since replaced does not.
+	moved = ev(leaf.KeyHub, "E", "E")
+	moved.Previous = "not-the-pin"
+	s.persistKeyEvent(moved)
+	if got = load(); got.HubPubKey != "sysop-set" {
+		t.Errorf("stale handover overwrote the hub pin: %q", got.HubPubKey)
+	}
+
 	// No config path: nothing to write, nothing to fail.
 	(&Service{}).persistKeyEvent(ev(leaf.KeyCoordinator, "Z", "Z"))
 }

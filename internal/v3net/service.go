@@ -90,7 +90,8 @@ func (s *Service) SetKeyChangeObserver(fn func(ev leaf.KeyEvent)) {
 // persistKeyEvent writes a leaf's first-use pin, or a changed key it was
 // offered, into that leaf's entry in v3net.json, so a restart keeps the pin
 // and the sysop can see the pending key. A pin is written only where the
-// entry has none, so a key the sysop set meanwhile wins. Without a config
+// entry has none, or, for a pin a signed handover moved, where the entry
+// still holds the key it moved from, so a key the sysop set meanwhile wins. Without a config
 // path (tests, tools) nothing is written. It returns an error only when the
 // file could not be read or written, so the leaf can retry a pin later.
 func (s *Service) persistKeyEvent(ev leaf.KeyEvent) error {
@@ -110,7 +111,9 @@ func (s *Service) persistKeyEvent(ev leaf.KeyEvent) error {
 			}
 			changed := false
 			if pinning {
-				if strings.TrimSpace(*pin) == "" {
+				// A handover replaces the pin it moved from, and only that
+				// one: a key the sysop set meanwhile wins.
+				if cur := strings.TrimSpace(*pin); cur == "" || (ev.Previous != "" && cur == ev.Previous) {
 					*pin = ev.Offered
 					changed = true
 				}
