@@ -249,7 +249,7 @@ func (l *Leaf) checkPin(kind KeyKind, offered string) (pinned string, ok bool) {
 				"network", l.cfg.Network, "hub", l.cfg.HubURL, "key", string(kind), "pubkey", offered)
 		}
 		if retry {
-			l.savePin(kind, offered)
+			l.savePin(kind)
 		}
 		return offered, true
 	}
@@ -274,14 +274,33 @@ func (l *Leaf) checkPin(kind KeyKind, offered string) (pinned string, ok bool) {
 	return pinned, false
 }
 
-// savePin hands an unsaved pin to OnKeyPinned and, if it was stored (or
-// there is nowhere to store it), clears the unsaved flag, provided the pin
-// is still the same key. A failure leaves the flag set for the next fetch.
-func (l *Leaf) savePin(kind KeyKind, key string) {
+// savePin hands the unsaved pin for kind to OnKeyPinned and, if it was
+// stored (or there is nowhere to store it), clears the unsaved flag,
+// provided the pin is still the same key. A failure leaves the flag set for
+// the next fetch.
+//
+// Saves of one kind run one at a time, each reading the pin and the key a
+// handover moved it from when its turn comes. Two handovers in quick
+// succession (A to B, then B to C) therefore store B, then C in place of B;
+// were they to overlap, C's save would name A as the key it replaces, find B
+// in the file and store nothing, while still clearing the unsaved flag.
+func (l *Leaf) savePin(kind KeyKind) {
+	mu := &l.coordSaveMu
+	if kind == KeyHub {
+		mu = &l.hubSaveMu
+	}
+	mu.Lock()
+	defer mu.Unlock()
+
+	l.pinMu.Lock()
+	pin, _, unsaved := l.pins.slots(kind)
+	key, previous, need := *pin, *l.pins.movedFrom(kind), *unsaved
+	l.pinMu.Unlock()
+	if !need || key == "" {
+		// A save that ran ahead of this one stored it already.
+		return
+	}
 	if l.cfg.OnKeyPinned != nil {
-		l.pinMu.Lock()
-		previous := *l.pins.movedFrom(kind)
-		l.pinMu.Unlock()
 		ev := KeyEvent{Network: l.cfg.Network, HubURL: l.cfg.HubURL, Kind: kind, Pinned: key, Offered: key, Previous: previous}
 		if err := l.cfg.OnKeyPinned(ev); err != nil {
 			slog.Warn("leaf: could not store pinned key; will retry at the next fetch",
@@ -291,7 +310,6 @@ func (l *Leaf) savePin(kind KeyKind, key string) {
 	}
 	l.pinMu.Lock()
 	defer l.pinMu.Unlock()
-	pin, _, unsaved := l.pins.slots(kind)
 	switch moved := l.pins.movedFrom(kind); {
 	case *pin == key:
 		*unsaved = false

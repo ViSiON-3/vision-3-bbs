@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -212,6 +213,62 @@ func TestHandoverThroughHubMovesBothPins(t *testing.T) {
 	}
 	if moved != 2 || len(rec.changed) != 0 {
 		t.Errorf("events: pinned %+v, changed %+v; want both keys moved and nothing rejected", rec.pinned, rec.changed)
+	}
+}
+
+// Two handovers in quick succession, A to B and B to C, saved by
+// overlapping calls: C's save waits for B's and then replaces B, so the
+// stored pin ends at C. The store mimics persistKeyEvent, which writes a
+// moved pin only over the key it moved from.
+func TestSuccessiveHandoverSavesAreSerialized(t *testing.T) {
+	a, b, c := newCoordKey(t), newCoordKey(t), newCoordKey(t)
+	l, _ := setupLeaf(t, "http://unused.invalid", &mockJAMWriter{})
+	l.pins.coord = a.PubKeyBase64()
+
+	var mu sync.Mutex
+	stored := a.PubKeyBase64()
+	entered, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	l.cfg.OnKeyPinned = func(ev KeyEvent) error {
+		mu.Lock()
+		if stored == "" || stored == ev.Previous {
+			stored = ev.Pinned
+		}
+		mu.Unlock()
+		if calls.Add(1) == 1 {
+			// B is stored; hold its save open while C's arrives. An
+			// overlapping C save would name A as the key it replaces.
+			close(entered)
+			<-release
+		}
+		return nil
+	}
+
+	hs := handoverChain(t, a, b, c)
+	if !l.followHandovers(KeyCoordinator, b.PubKeyBase64(), hs[:1]) {
+		t.Fatal("A to B not followed")
+	}
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); l.savePin(KeyCoordinator) }()
+	<-entered
+	if !l.followHandovers(KeyCoordinator, c.PubKeyBase64(), hs) {
+		t.Fatal("B to C not followed")
+	}
+	go func() { defer wg.Done(); l.savePin(KeyCoordinator) }()
+	time.Sleep(20 * time.Millisecond) // let C's save reach the lock
+	close(release)
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if stored != c.PubKeyBase64() {
+		t.Errorf("stored pin = %s, want C (B is %s)", stored, b.PubKeyBase64())
+	}
+	l.pinMu.Lock()
+	defer l.pinMu.Unlock()
+	if l.pins.coordUnsaved || l.pins.coordMovedFrom != "" {
+		t.Errorf("save state left: unsaved %v, moved from %q", l.pins.coordUnsaved, l.pins.coordMovedFrom)
 	}
 }
 

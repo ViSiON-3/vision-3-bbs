@@ -43,6 +43,8 @@ type Leaf struct {
 	// pinMu guards pins, the pinned and pending coordinator and hub keys.
 	pinMu sync.Mutex
 	pins  keyPins
+	// coordSaveMu and hubSaveMu serialize savePin for each key kind.
+	coordSaveMu, hubSaveMu sync.Mutex
 
 	// refused remembers which refused messages were already logged at warn.
 	refused refusedLog
