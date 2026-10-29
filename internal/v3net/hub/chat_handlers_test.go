@@ -61,6 +61,7 @@ func resetChatLimits(h *Hub) {
 func setupChatTest(t *testing.T) (*Hub, *httptest.Server, *keystore.Keystore) {
 	t.Helper()
 	h, _ := setupTestHub(t)
+	freezeUserLimit(t, h)
 	ts := httptest.NewServer(h.newMux())
 	t.Cleanup(ts.Close)
 	leafKS := loadTestKeystore(t, "leaf.key")
