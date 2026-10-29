@@ -20,6 +20,14 @@ type NAL struct {
 	Updated        string `json:"updated"`       // YYYY-MM-DD UTC
 	SignatureB64   string `json:"signature_b64"` // ed25519 over canonical payload
 	Areas          []Area `json:"areas"`
+
+	// Handovers are the coordinator handovers the hub holds for the
+	// network, oldest first, so a leaf pinned to an earlier coordinator key
+	// can follow them to the key that signed this NAL. The hub attaches
+	// them when it serves the NAL; each carries its own signature, so they
+	// are left out of the NAL's canonical form, and older leaves ignore the
+	// field. Empty when the network never changed coordinator key.
+	Handovers []CoordHandover `json:"coordinator_handovers,omitempty"`
 }
 
 // Area defines a single message area within a network.
