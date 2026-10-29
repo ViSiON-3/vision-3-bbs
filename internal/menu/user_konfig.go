@@ -569,7 +569,7 @@ func toggleHotKeys(st *konfigState) error {
 }
 
 // toggleThreadView sets whether the reader opens with its thread pane shown.
-// The reader's V overrides it for the rest of the call, so the new default
+// The reader's T overrides it for the rest of the call, so the new default
 // is applied to this session too.
 func toggleThreadView(st *konfigState) error {
 	old := st.user().ThreadViewClosed

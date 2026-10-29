@@ -568,9 +568,9 @@ func TestThreadedListDeletedPrivateStaysHidden(t *testing.T) {
 	}
 }
 
-// V opens and closes the thread pane, from inside the lightbar too, and the
+// T opens and closes the thread pane, from inside the lightbar too, and the
 // choice holds for the next message of the session.
-func TestReaderVTogglesThreadPane(t *testing.T) {
+func TestReaderTTogglesThreadPane(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
 	env.markRead(generalAreaID, "Caller", len(sampleThread))
@@ -581,12 +581,13 @@ func TestReaderVTogglesThreadPane(t *testing.T) {
 		panes  int // pane draws in the output
 	}{
 		{"open by default", false, "5\rQ", 1},
-		{"V closes it", false, "5\rVQ", 1},
-		{"V twice reopens it", false, "5\rVVQ", 2},
-		{"Right then V closes it from the bar", false, "5\r\x1b[CVQ", 1},
-		{"closed stays closed on the next message", false, "5\rV]Q", 1},
+		{"T closes it", false, "5\rTQ", 1},
+		{"T twice reopens it", false, "5\rTTQ", 2},
+		{"Right then T closes it from the bar", false, "5\r\x1b[CTQ", 1},
+		{"closed stays closed on the next message", false, "5\rT]Q", 1},
 		{"Konfig closed", true, "5\r]Q", 0},
-		{"Konfig closed, V opens it for the session", true, "5\rV]Q", 2},
+		{"Konfig closed, T opens it for the session", true, "5\rT]Q", 2},
+		{"T does nothing without a thread", false, "2\rTTQ", 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sub := env.sub(t)
@@ -599,9 +600,34 @@ func TestReaderVTogglesThreadPane(t *testing.T) {
 			if n := strings.Count(r.text(), "── Thread ─"); n != tc.panes {
 				t.Errorf("pane drawn %d times, want %d; output:\n%s", n, tc.panes, r.text())
 			}
-			if r.has("Threaded List") {
-				t.Errorf("V opened the list; output:\n%s", r.text())
+			if r.has("Message Threading") {
+				t.Errorf("T asked for a subject search; output:\n%s", r.text())
 			}
 		})
+	}
+}
+
+// The bar's Thread item is in the bar's usual blue on a message with a
+// thread, and greyed out on one without.
+func TestReaderThreadItemGreyedWithoutThread(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	for _, tc := range []struct {
+		msg  int
+		grey bool
+	}{{5, false}, {2, true}} {
+		screen := env.readerAt(tc.msg, "")
+		row := 24
+		col := strings.Index(screen.Row(row), "Thread")
+		if col < 0 {
+			t.Fatalf("#%d: no Thread item on the bar: %q", tc.msg, screen.Row(row))
+		}
+		col = utf8.RuneCountInString(screen.Row(row)[:col]) + 1
+		c := screen.Cell(row, col)
+		grey := c.Fg == 90 || (c.Fg == 30 && c.Bold)
+		blue := c.Fg == 94 || (c.Fg == 34 && c.Bold)
+		if grey != tc.grey || blue == tc.grey {
+			t.Errorf("#%d: Thread drawn with fg %d bold %v, want grey=%v", tc.msg, c.Fg, c.Bold, tc.grey)
+		}
 	}
 }

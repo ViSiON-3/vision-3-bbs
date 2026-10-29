@@ -164,7 +164,7 @@ func sessionListThreaded(s ssh.Session) bool {
 }
 
 // sessionThreadPanes remembers, per session, whether the caller opened or
-// closed the reader's thread pane with V. Until they do, the pane follows
+// closed the reader's thread pane with T. Until they do, the pane follows
 // their Konfig setting.
 var sessionThreadPanes sync.Map
 

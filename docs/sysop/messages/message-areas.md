@@ -359,7 +359,7 @@ hot key:
 | `S` | Prev | Previous message |
 | `R` | Reply | Reply in the same area |
 | `M` | Mail | Reply by private mail to the author |
-| `T` | Thread | Thread search |
+| `T` | Thread | Open or close the thread pane under the header. Greyed out on the bar when the message has no thread to show |
 | `P` | Post | Post a new message |
 | `J` / `#` | Jump | Go to a message number |
 | `B` | Back | The message this one answers (not on the bar) |
@@ -367,7 +367,6 @@ hot key:
 | `A` | Across | The next reply to the same message (not on the bar) |
 | `]` / `[` | Thread next / previous | Walk the thread in display order (not on the bar) |
 | `L` | List | List message titles, cursor on this message (flat or threaded, as the caller last had it) |
-| `V` | Thread tree | Open or close the thread pane under the header (not on the bar; the `[V]tree` signpost names it) |
 | `I` | Twit | Add the author to your Twit List (hidden while Twit Lists are off) |
 | `D` | Del | Delete the message (sysop and co-sysop only; shown in red) |
 | `K` | Kludges | Show the message's control information (sysop and co-sysop only; not on the bar) |
@@ -376,16 +375,16 @@ hot key:
 
 **Reply threads (B, F, A, `]`, `[`).** These follow the reply links a
 message carries (the JAM `ReplyTo`, or the `REPLY` kludge of echomail), not
-its subject, so they walk the actual conversation. `T` is still the
-subject search. When the message is part of a thread, the separator row
+its subject, so they walk the actual conversation. When the message is part of a thread, the separator row
 above the bar is a set of signposts that say where `B`, `F` and `A` lead
 from the current message, with the author's handle (`none` when there is
 nowhere to go, `#n deleted` when the parent has been deleted), and a pane
 under the header draws the thread as a tree, five rows (three on a short
 screen) windowed around the current message, with the root's subject in its
 title and the message's place in the thread (no pane when every other
-message in it is deleted or hidden from the caller). `V` closes and reopens the
-pane; the choice holds for the rest of the call, and the caller's **Thread
+message in it is deleted or hidden from the caller). `T` (Thread on the
+bar) closes and reopens the pane, and is greyed out when there is no pane
+to show; the choice holds for the rest of the call, and the caller's **Thread
 View** setting in User Konfig decides whether it starts open. A message
 that is not in a thread (one nobody has answered and that answers nothing)
 shows no pane and no signposts, just the plain rule, and the thread keys

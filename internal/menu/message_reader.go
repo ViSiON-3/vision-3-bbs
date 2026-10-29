@@ -59,6 +59,10 @@ func readerBarSuffix(options []MsgLightbarOption, suffix string, termWidth int) 
 	return suffix
 }
 
+// msgReaderInactiveColor greys out a bar item that does nothing on the
+// current message (Thread, on a message with no thread to show).
+const msgReaderInactiveColor = 8
+
 // msgReaderDeleteOption is appended to the lightbar for sysop/co-sysop users only.
 // LoColor 4 (dark red) distinguishes it from regular options.
 var msgReaderDeleteOption = MsgLightbarOption{Label: " Del ", HotKey: 'D', LoColor: 4}
@@ -395,7 +399,7 @@ readerLoop:
 		}
 
 		// The docked thread pane sits under the header and moves the body
-		// down while it is open (V opens and closes it). A message that is
+		// down while it is open (T opens and closes it). A message that is
 		// not in a thread has no pane and no signposts: the separator row
 		// is a plain rule and the body keeps the rows. A reply whose parent
 		// is deleted or hidden is still in one, even with nothing else to
@@ -419,6 +423,15 @@ readerLoop:
 		inThread := tv.hasThread() || tv.isReply()
 		if inThread {
 			signposts = renderSignposts(readerSignposts(tv, glyphs), termWidth-1, glyphs, outputMode)
+		}
+		// The bar's Thread item is lit only when there is a pane to open.
+		for i := range activeOptions {
+			if activeOptions[i].HotKey == 'T' {
+				activeOptions[i].LoColor = 0
+				if !tv.hasThread() {
+					activeOptions[i].LoColor = msgReaderInactiveColor
+				}
+			}
 		}
 
 		// Initialize scroll state for this message
@@ -471,7 +484,7 @@ readerLoop:
 			editor.KeyCtrlE, editor.KeyCtrlX, editor.KeyCtrlR, editor.KeyCtrlC,
 			// The thread keys are not on the bar, so the bar hands them
 			// back too rather than swallowing them.
-			'B', 'b', 'F', 'f', 'A', 'a', '[', ']', 'V', 'v',
+			'B', 'b', 'F', 'f', 'A', 'a', '[', ']',
 		}
 		pendingKey := 0
 
@@ -630,7 +643,7 @@ readerLoop:
 					// Check if it's a direct command key
 					switch unicode.ToUpper(singleKey) {
 					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'K', 'I', '?',
-						'B', 'F', 'A', '[', ']', 'V':
+						'B', 'F', 'A', '[', ']':
 						selectedKey = unicode.ToUpper(singleKey)
 					default:
 						// Not a recognized command, show lightbar
@@ -811,12 +824,17 @@ readerLoop:
 				needsRedraw = true
 				continue
 
-			case 'T': // Thread
-				navDir = 1
-				handleThread(reader, e, terminal, outputMode, currentAreaID,
-					&currentMsgNum, totalMsgCount, currentMsg.Subject, msgFilter)
-				// Exit scroll loop to load new message if thread changed it
-				break scrollLoop
+			case 'T': // Open or close the thread pane
+				if !tv.hasThread() {
+					continue
+				}
+				setSessionThreadPaneOpen(s, !sessionThreadPaneOpen(s, currentUser))
+				layoutPane()
+				// Keep the top line where it was, as far as the new height
+				// allows.
+				scrollOffset = max(0, min(scrollOffset, totalBodyLines-bodyAvailHeight))
+				needsRedraw = true
+				continue
 
 			case 'J': // Jump to message number
 				navDir = 1
@@ -847,18 +865,6 @@ readerLoop:
 
 			case 'M': // Mail reply (deferred)
 				e.showReaderNotice(terminal, outputMode, e.Strings().MsgMailReplyDeferred, termHeight)
-				needsRedraw = true
-				continue
-
-			case 'V': // Open or close the thread pane
-				if !tv.hasThread() {
-					continue
-				}
-				setSessionThreadPaneOpen(s, !sessionThreadPaneOpen(s, currentUser))
-				layoutPane()
-				// Keep the top line where it was, as far as the new height
-				// allows.
-				scrollOffset = max(0, min(scrollOffset, totalBodyLines-bodyAvailHeight))
 				needsRedraw = true
 				continue
 

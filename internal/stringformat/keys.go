@@ -80,7 +80,6 @@ var FormattedKeys = []string{
 	"msgListHelpFlat",
 	"msgListHelpThreaded",
 	"msgListThreadedTitle",
-	"msgNoThreadFound",
 	"msgThreadNoMoreSiblings",
 	"msgThreadNoParent",
 	"msgThreadNoReplies",

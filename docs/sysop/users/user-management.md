@@ -28,7 +28,7 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). F
 | Hot Keys | `hotKeys` |
 | Header Style | `msgHdr` |
 | Auto-Signature | `autoSignature`, `autoSigAsk` |
-| Thread View | `threadViewClosed`: whether the message reader opens with its thread pane shown (the default) or closed; `V` in the reader overrides it for the rest of the call |
+| Thread View | `threadViewClosed`: whether the message reader opens with its thread pane shown (the default) or closed; `T` (Thread) in the reader overrides it for the rest of the call |
 | Real Name | `realName` (same rules as signup) |
 | Location | `group_location` |
 | User Note | `privateNote` |

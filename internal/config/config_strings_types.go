@@ -345,8 +345,6 @@ type StringsConfig struct {
 	MsgScrollPercent     string `json:"msgScrollPercent"`
 	MsgNewScanSuffix     string `json:"msgNewScanSuffix"`
 	MsgReadingSuffix     string `json:"msgReadingSuffix"`
-	MsgThreadPrompt      string `json:"msgThreadPrompt"`
-	MsgNoThreadFound     string `json:"msgNoThreadFound"`
 	// Reply-tree navigation (B/F/A/[/]) notices and the docked pane's label.
 	MsgThreadNoParent       string `json:"msgThreadNoParent"`
 	MsgThreadParentDeleted  string `json:"msgThreadParentDeleted"`

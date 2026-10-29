@@ -314,8 +314,6 @@ func stringCatalog() []StringEntry {
 		{Label: "Msg: Scroll Percent", Key: "msgScrollPercent", Description: "Format for scroll percentage indicator"},
 		{Label: "Msg: NewScan Suffix", Key: "msgNewScanSuffix", Description: "Suffix added during newscan mode"},
 		{Label: "Msg: Reading Suffix", Key: "msgReadingSuffix", Description: "Suffix added during reading mode"},
-		{Label: "Msg: Thread Prompt", Key: "msgThreadPrompt", Description: "Prompt for thread navigation direction"},
-		{Label: "Msg: No Thread Found", Key: "msgNoThreadFound", Description: "Shown when no thread is found (%s=direction)"},
 		{Label: "Msg: Jump Prompt", Key: "msgJumpPrompt", Description: "Prompt for jumping to a message number"},
 		{Label: "Msg: Invalid Num", Key: "msgInvalidMsgNum", Description: "Shown for invalid message number"},
 		{Label: "Msg: Reply Empty Subj", Key: "msgReplySubjectEmpty", Description: "Shown when reply subject is empty"},

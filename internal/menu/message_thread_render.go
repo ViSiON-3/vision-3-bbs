@@ -148,16 +148,11 @@ type signpost struct {
 	handle  string // the target's author, when readable
 }
 
-// signpostTreeKey adds the "[V]tree" tail to the signposts: V opens or
-// closes the thread pane.
-const signpostTreeKey = true
-
 // renderSignposts builds the separator row: each key with its arrow and
 // target, the handles sharing whatever width the fixed parts leave, and a
 // rule filling the rest. The result is pipe-coded and exactly width columns.
 //
-// The fixed parts (keys, arrows, "#n", "deleted", "none", the V tail)
-// always render. The handles are then fitted shortest first, each given
+// The fixed parts (keys, arrows, "#n", "deleted", "none") always render. The handles are then fitted shortest first, each given
 // min(its length + 1, an equal share of what is left); one that would be
 // clipped under 4 characters is dropped, and the others are clipped with
 // the ellipsis.
@@ -182,11 +177,6 @@ func renderSignposts(segs []signpost, width int, g threadGlyphs, mode ansi.Outpu
 		}
 		fixedWidth += 6 + len(p.fixed) // "─[B]↑ " is 6 columns
 		parts[i] = p
-	}
-	listTail := ""
-	if signpostTreeKey {
-		listTail = "|08─|03[|11V|03]|07tree "
-		fixedWidth += 9
 	}
 	avail := width - fixedWidth
 
@@ -220,10 +210,6 @@ func renderSignposts(segs []signpost, width int, g threadGlyphs, mode ansi.Outpu
 		}
 		fmt.Fprintf(&b, "|08─|03[|11%c|03]|07%s %s%s|07%s", p.key, p.arrow, colour, p.fixed, p.show)
 		used += 6 + len(p.fixed) + threadCols(p.show, mode)
-	}
-	if listTail != "" {
-		b.WriteString(listTail)
-		used += 9
 	}
 	if used < width {
 		b.WriteString("|08" + strings.Repeat("─", width-used))

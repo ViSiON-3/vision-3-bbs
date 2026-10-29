@@ -285,7 +285,7 @@ var StringFallbacks = map[string]string{
 	"konfigTwitListLabel":       "Twit List",
 	"konfigTwitListHelp":        "Hide messages from selected authors.",
 	"konfigThreadViewLabel":     "Thread View",
-	"konfigThreadViewHelp":      "On: the reader opens with the reply tree shown under the header. V toggles it.",
+	"konfigThreadViewHelp":      "On: the reader opens with the reply tree shown under the header. T toggles it.",
 	"twitNamePrompt":            "Name (optionally name@address): ",
 	"twitDeletePrompt":          "Entry number to delete: ",
 	"twitClearConfirm":          "Clear your Twit List? [Y/N]: ",
