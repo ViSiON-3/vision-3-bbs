@@ -305,7 +305,7 @@ func (tv *threadView) nextSibling(n int) (next int, isRoot bool) {
 	return 0, false
 }
 
-// parentState says what pressing U on n would reach.
+// parentState says what pressing B on n would reach.
 type parentState int
 
 const (
@@ -389,13 +389,14 @@ func (tv *threadView) handle(n int) string {
 }
 
 // threadNavTarget resolves one of the reader's thread keys for the message
-// tv is on: U (parent), F (first reply), X (next sibling), ] and [ (next and
+// tv is on: B (back to the parent), F (first reply), A (across to the next
+// sibling), ] and [ (next and
 // previous in thread order). It returns the message to show, or 0 and the
 // notice that says why there is none.
 func threadNavTarget(tv *threadView, key rune, str *config.StringsConfig) (target int, notice string) {
 	cur := tv.cur
 	switch key {
-	case 'U':
+	case 'B':
 		p, state := tv.parentOf(cur)
 		switch state {
 		case parentShown:
@@ -411,7 +412,7 @@ func threadNavTarget(tv *threadView, key rune, str *config.StringsConfig) (targe
 			return f, ""
 		}
 		return 0, fmt.Sprintf(str.MsgThreadNoReplies, cur)
-	case 'X':
+	case 'A':
 		next, isRoot := tv.nextSibling(cur)
 		switch {
 		case next != 0:

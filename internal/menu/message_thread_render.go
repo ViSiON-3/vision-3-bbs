@@ -15,9 +15,9 @@ import (
 // are written as UTF-8 either way; the output writer converts them.
 type threadGlyphs struct {
 	marker   string // the current row's pointer
-	up       string // U's arrow
+	up       string // B's arrow
 	down     string // F's arrow
-	right    string // X's arrow
+	right    string // A's arrow
 	ellipsis string // marks a clipped handle or excerpt
 }
 
@@ -148,15 +148,15 @@ type signpost struct {
 	handle  string // the target's author, when readable
 }
 
-// signpostListKey adds the "[V]list" tail to the signposts: V opens the
-// threaded message list on the current message.
-const signpostListKey = true
+// signpostTreeKey adds the "[V]tree" tail to the signposts: V opens or
+// closes the thread pane.
+const signpostTreeKey = true
 
 // renderSignposts builds the separator row: each key with its arrow and
 // target, the handles sharing whatever width the fixed parts leave, and a
 // rule filling the rest. The result is pipe-coded and exactly width columns.
 //
-// The fixed parts (keys, arrows, "#n", "deleted", "none", the list tail)
+// The fixed parts (keys, arrows, "#n", "deleted", "none", the V tail)
 // always render. The handles are then fitted shortest first, each given
 // min(its length + 1, an equal share of what is left); one that would be
 // clipped under 4 characters is dropped, and the others are clipped with
@@ -180,12 +180,12 @@ func renderSignposts(segs []signpost, width int, g threadGlyphs, mode ansi.Outpu
 		default:
 			p.fixed = fmt.Sprintf("#%d ", s.target)
 		}
-		fixedWidth += 6 + len(p.fixed) // "─[U]↑ " is 6 columns
+		fixedWidth += 6 + len(p.fixed) // "─[B]↑ " is 6 columns
 		parts[i] = p
 	}
 	listTail := ""
-	if signpostListKey {
-		listTail = "|08─|03[|11V|03]|07list "
+	if signpostTreeKey {
+		listTail = "|08─|03[|11V|03]|07tree "
 		fixedWidth += 9
 	}
 	avail := width - fixedWidth
@@ -235,7 +235,7 @@ func renderSignposts(segs []signpost, width int, g threadGlyphs, mode ansi.Outpu
 // readerSignposts builds the signposts for the message tv is on.
 func readerSignposts(tv *threadView, g threadGlyphs) []signpost {
 	cur := tv.cur
-	up := signpost{key: 'U', arrow: g.up}
+	up := signpost{key: 'B', arrow: g.up}
 	switch p, state := tv.parentOf(cur); state {
 	case parentShown:
 		up.target, up.handle = p, tv.handle(p)
@@ -246,7 +246,7 @@ func readerSignposts(tv *threadView, g threadGlyphs) []signpost {
 	if f := tv.firstReply(cur); f != 0 {
 		down.target, down.handle = f, tv.handle(f)
 	}
-	right := signpost{key: 'X', arrow: g.right}
+	right := signpost{key: 'A', arrow: g.right}
 	if x, _ := tv.nextSibling(cur); x != 0 {
 		right.target, right.handle = x, tv.handle(x)
 	}

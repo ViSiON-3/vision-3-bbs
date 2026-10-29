@@ -76,6 +76,7 @@ func sysopOwnedFields(dst, src *User) {
 	dst.OutputMode = src.OutputMode
 	dst.MsgHdr = src.MsgHdr
 	dst.HotKeys = src.HotKeys
+	dst.ThreadViewClosed = src.ThreadViewClosed
 	dst.MorePrompts = src.MorePrompts
 	dst.CustomPrompt = src.CustomPrompt
 }

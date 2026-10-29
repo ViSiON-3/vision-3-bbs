@@ -128,6 +128,9 @@ type User struct {
 	AutoSignature string `json:"autoSignature,omitempty"` // Auto-signature appended to messages (max 5 lines)
 	AutoSigAsk    bool   `json:"autoSigAsk,omitempty"`    // Ask before adding AutoSignature to each message
 	Colors        [7]int `json:"colors,omitempty"`
+	// ThreadViewClosed starts the message reader with its thread pane
+	// closed; V in the reader still opens it for the rest of the call.
+	ThreadViewClosed bool `json:"threadViewClosed,omitempty"`
 
 	// Soft Delete (user marked as deleted but data preserved)
 	DeletedUser bool       `json:"deletedUser,omitempty"` // True if user is soft-deleted

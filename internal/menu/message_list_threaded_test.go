@@ -112,7 +112,7 @@ func TestThreadedListPageUpOverPlaceholderPage(t *testing.T) {
 
 // T and V come back as actions for the list runner; Esc quits like Q.
 func TestThreadedListNavigationToggleAndQuitKeys(t *testing.T) {
-	for key, want := range map[string]string{"T": "TOGGLE", "t": "TOGGLE", "V": "QUIT", "\x1b": "QUIT", "Q": "QUIT"} {
+	for key, want := range map[string]string{"T": "TOGGLE", "t": "TOGGLE", "\x1b": "QUIT", "Q": "QUIT"} {
 		state := placeholderState()
 		ih := editor.NewInputHandler(strings.NewReader(key))
 		if a, _, err := runMessageListNavigation(ih, state); err != nil || a != want {
@@ -447,9 +447,9 @@ func TestListMsgsModePersistsForSession(t *testing.T) {
 }
 
 // Round trips between the reader and the list never nest a second reader:
-// V from the reader opens the threaded list on the current message, Enter
-// there returns to the same reader on the chosen message, and V/Q/Esc in
-// the list return to the message it was opened from. With a nested reader
+// L from the reader opens the list on the current message, Enter there
+// returns to the same reader on the chosen message, and Q/Esc in the list
+// return to the message it was opened from. With a nested reader
 // the trailing Q would leave the caller in the list, and the exhausted
 // input would log the session off instead of ending with the reader's Q.
 func TestReaderListRoundTrip(t *testing.T) {
@@ -461,13 +461,12 @@ func TestReaderListRoundTrip(t *testing.T) {
 		keys string
 		at   int
 	}{
-		{"V, Enter reads the highlighted (same) message", "5\rV\rQ", 5},
-		{"V, down, Enter reads the next in thread order", "5\rV\x1b[B\rQ", 7},
-		{"V, Q comes back to the message it left", "5\rV\x1b[B\x1b[BQQ", 5},
-		{"V, V comes back too", "5\rV\x1b[BVQ", 5},
-		{"V, Esc comes back too", "5\rV\x1b[B\x1bQ", 5},
+		{"L, Enter reads the highlighted (same) message", "5\rL\rQ", 5},
 		{"L opens the flat list; down is #3 there", "5\rL\x1b[B\rQ", 3},
-		{"V, Enter, V, Enter, Q: two round trips, one reader", "5\rV\x1b[B\rV\x1b[B\rQ", 10},
+		{"L, Q comes back to the message it left", "5\rL\x1b[B\x1b[BQQ", 5},
+		{"L, Esc comes back too", "5\rL\x1b[B\x1bQ", 5},
+		{"L, T, down, Enter reads the next in thread order", "5\rLT\x1b[B\rQ", 7},
+		{"L, T, Enter, L, Enter, Q: two round trips, one reader, still threaded", "5\rLT\x1b[B\rL\x1b[B\rQ", 10},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -484,8 +483,8 @@ func TestReaderListRoundTrip(t *testing.T) {
 	}
 }
 
-// From a list opened on the menu, the nested reader's V and L return to
-// that list, in the mode asked for, with the cursor on the message that was
+// From a list opened on the menu, the nested reader's L returns to that
+// list, in the mode it was in, with the cursor on the message that was
 // being read; Q returns to it too.
 func TestListMsgsReaderReturnsToList(t *testing.T) {
 	env := newMsgEnv(t)
@@ -498,10 +497,10 @@ func TestListMsgsReaderReturnsToList(t *testing.T) {
 		want int    // message the second Enter opens
 		mode string // title text expected after the return
 	}{
-		{"Enter, V, Enter reopens the same message in threaded mode", "\x1b[B\rV\r", 14, "Threaded List"},
-		{"Enter, L, Enter reopens the same message in flat mode", "T\x1b[B\rL\r", 11, "Message List"},
+		{"Enter, L, Enter reopens the same message in flat mode", "\x1b[B\rL\r", 14, "Message List"},
+		{"T, Enter, L, Enter reopens the same message in threaded mode", "T\x1b[B\rL\r", 11, "Threaded List"},
 		{"Enter, Q keeps the cursor on the message read", "\x1b[B\x1b[B\rQ\r", 13, "Message List"},
-		{"Enter, ], V follows the thread then lists on the new message", "T\x1b[B\x1b[B\r]V\r", 14, "Threaded List"},
+		{"Enter, ], L follows the thread then lists on the new message", "T\x1b[B\x1b[B\r]L\r", 14, "Threaded List"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -571,20 +570,40 @@ func TestThreadedListDeletedPrivateStaysHidden(t *testing.T) {
 	}
 }
 
-// V reaches the list from inside the lightbar too.
-func TestReaderVPassesThroughLightbar(t *testing.T) {
+// V opens and closes the thread pane, from inside the lightbar too, and the
+// choice holds for the next message of the session.
+func TestReaderVTogglesThreadPane(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
 	env.markRead(generalAreaID, "Caller", len(sampleThread))
-	r := env.runCmd("READMSGS", env.caller, "", "5\r\x1b[CV\x1b[B\rQ")
-	if r.err != nil || r.next != "QUIT_NEWSCAN" {
-		t.Fatalf("next = %q err = %v; output:\n%s", r.next, r.err, r.text())
-	}
-	txt := r.text()
-	if !strings.Contains(txt, "Threaded List") {
-		t.Errorf("Right then V should open the threaded list; output:\n%s", txt)
-	}
-	if last := strings.LastIndex(txt, "Reading message #"); last < 0 || !strings.HasPrefix(txt[last:], "Reading message #7 ") {
-		t.Errorf("Enter on the next row should read #7; output:\n%s", txt)
+	for _, tc := range []struct {
+		name   string
+		closed bool // the caller's Konfig default
+		keys   string
+		panes  int // pane draws in the output
+	}{
+		{"open by default", false, "5\rQ", 1},
+		{"V closes it", false, "5\rVQ", 1},
+		{"V twice reopens it", false, "5\rVVQ", 2},
+		{"Right then V closes it from the bar", false, "5\r\x1b[CVQ", 1},
+		{"closed stays closed on the next message", false, "5\rV]Q", 1},
+		{"Konfig closed", true, "5\r]Q", 0},
+		{"Konfig closed, V opens it for the session", true, "5\rV]Q", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sub := env.sub(t)
+			caller := *sub.caller
+			caller.ThreadViewClosed = tc.closed
+			r := sub.runCmd("READMSGS", &caller, "", tc.keys)
+			if r.err != nil || r.next != "QUIT_NEWSCAN" {
+				t.Fatalf("next = %q err = %v; output:\n%s", r.next, r.err, r.text())
+			}
+			if n := strings.Count(r.text(), "── Thread ─"); n != tc.panes {
+				t.Errorf("pane drawn %d times, want %d; output:\n%s", n, tc.panes, r.text())
+			}
+			if r.has("Threaded List") {
+				t.Errorf("V opened the list; output:\n%s", r.text())
+			}
+		})
 	}
 }

@@ -92,7 +92,7 @@ func runMessageListNavigation(ih *editor.InputHandler, state *MessageListState) 
 		case 'T', 't': // Switch between flat and threaded
 			return "TOGGLE", 0, nil
 
-		case 'Q', 'q', 'V', 'v', editor.KeyEsc: // Quit (back to the reader, when it opened the list)
+		case 'Q', 'q', editor.KeyEsc: // Quit (back to the reader, when it opened the list)
 			return "QUIT", 0, nil
 
 		case '?': // Help (future enhancement)

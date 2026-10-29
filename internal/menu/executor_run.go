@@ -89,6 +89,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 	defer sessionDeadlines.Delete(s)
 	defer sessionTermSizes.Delete(s)
 	defer sessionListModes.Delete(s)
+	defer sessionThreadPanes.Delete(s)
 
 	if st.currentUser != nil {
 		slog.Debug("running menu for user", "handle", st.currentUser.Handle, "level", st.currentUser.AccessLevel)

@@ -77,12 +77,12 @@ type konfigHeading struct {
 	title    string
 }
 
-// Screen geometry. Everything fits in 21 rows, the smallest height the
+// Screen geometry. Everything fits in 24 rows, the smallest height the
 // board allows, so the form draws whatever size the caller has set.
 const (
 	konfigHeaderRows = 5                    // rows reserved for KONFIG.ANS
 	konfigTopRow     = konfigHeaderRows + 2 // one blank row under the art
-	konfigFormRows   = 10                   // two sections a column, with their gaps
+	konfigFormRows   = 11                   // two sections a column, with their gaps
 	konfigColWidth   = 38
 	konfigLeftCol    = 2
 	konfigRightCol   = 42
@@ -100,7 +100,7 @@ const (
 const (
 	konfigMinWidth    = user.MinScreenWidth
 	konfigMaxWidth    = user.MaxScreenWidth
-	konfigMinHeight   = 21
+	konfigMinHeight   = 24
 	konfigMaxHeight   = 60
 	konfigMinPassword = 3
 	// konfigMaxPassword is bcrypt's limit in bytes. Login takes passwords of
@@ -318,6 +318,10 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 						return konfigValue{fmt.Sprintf("%d/%d", len(st.user().TwitList), twitPolicy(st.c.e).Limit()), toneValue}
 					},
 					edit: editTwitList},
+				{key: 'N', label: str.KonfigThreadViewLabel, flips: true,
+					help:  str.KonfigThreadViewHelp,
+					value: func(st *konfigState) konfigValue { return st.onOffValue(!st.user().ThreadViewClosed) },
+					edit:  toggleThreadView},
 			}},
 		},
 		{
@@ -560,6 +564,21 @@ func toggleHotKeys(st *konfigState) error {
 		func(u *user.User) { u.HotKeys = !old },
 		func(u *user.User) { u.HotKeys = old }) {
 		st.saved(label, st.onOffValue(!old).text)
+	}
+	return nil
+}
+
+// toggleThreadView sets whether the reader opens with its thread pane shown.
+// The reader's V overrides it for the rest of the call, so the new default
+// is applied to this session too.
+func toggleThreadView(st *konfigState) error {
+	old := st.user().ThreadViewClosed
+	label := st.c.e.Strings().KonfigThreadViewLabel
+	if st.commit(label,
+		func(u *user.User) { u.ThreadViewClosed = !old },
+		func(u *user.User) { u.ThreadViewClosed = old }) {
+		sessionThreadPanes.Delete(st.c.s)
+		st.saved(label, st.onOffValue(old).text)
 	}
 	return nil
 }
