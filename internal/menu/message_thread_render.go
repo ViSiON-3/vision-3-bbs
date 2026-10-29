@@ -155,10 +155,10 @@ func renderThreadMenuKeys(width int, frame string, g threadGlyphs) string {
 
 // renderThreadPane draws the docked thread pane for tv: a title row, rows
 // tree rows windowed around the current message, and a closing rule, which
-// lists the menu's keys while the thread menu is open. hl is
-// the thread menu's cursor while the menu is open, drawn as a blue bar
-// with the window kept around it, and the frame is then drawn bright; 0
-// when the menu is closed, so no row is barred and the frame is dark. The
+// lists the menu's keys while the thread menu is open. hl is the menu's
+// cursor while it is open, drawn as a blue bar with the window kept around
+// it, and the frame is then bright and the text in colour; hl is 0 while
+// the menu is closed, and the whole pane is dark grey with no bar. The
 // message being read always carries the marker. Each line is pipe-coded
 // (with raw escapes for the bar's background) and exactly width columns.
 // title is the pane's label, " Thread ".
@@ -175,11 +175,14 @@ func renderThreadPane(tv *threadView, hl, rows, width int, title string, g threa
 		subject = ansi.TruncateRunes(threadPlainText(tv.rootSubject()), subjectRoom, g.ellipsis) + " "
 	}
 	fill := width - utf8.RuneCountInString(left) - utf8.RuneCountInString(subject) - utf8.RuneCountInString(right) - 2
-	frame, label := "|08", "|03"
-	if hl != 0 {
-		frame, label = "|11", "|15"
+	// Closed, the whole pane is dark grey, so the message body reads as
+	// the panel with focus; open, the frame is bright and the text in colour.
+	dim := hl == 0
+	frame, label, subjectColour := "|08", "|08", "|08"
+	if !dim {
+		frame, label, subjectColour = "|11", "|15", "|11"
 	}
-	lines = append(lines, frame+"──"+label+title+frame+"─ |11"+threadText(subject, mode)+
+	lines = append(lines, frame+"──"+label+title+frame+"─ "+subjectColour+threadText(subject, mode)+
 		frame+strings.Repeat("─", max(fill, 0))+label+right+frame+"──|07")
 
 	// Tree rows: a window of rows lines that keeps the cursor, or else the
@@ -199,7 +202,7 @@ func renderThreadPane(tv *threadView, hl, rows, width int, title string, g threa
 			continue
 		}
 		r := tv.rows[start+i]
-		lines = append(lines, renderTreeRow(r, r.Num == tv.cur, start+i == hi, width, g, mode))
+		lines = append(lines, renderTreeRow(r, r.Num == tv.cur, start+i == hi, dim, width, g, mode))
 	}
 
 	if hl != 0 {
@@ -220,8 +223,9 @@ const minSubjectRoom = 4
 // The highlighted row is drawn on a blue background, in white; the rest use
 // cyan glyphs and number, grey author and date and a dark excerpt. The
 // message being read (current) carries the marker, in yellow. A deleted
-// placeholder shows only "#n deleted".
-func renderTreeRow(r threadRow, current, highlight bool, width int, g threadGlyphs, mode ansi.OutputMode) string {
+// placeholder shows only "#n deleted". A dim row (the thread menu is
+// closed) is all dark grey, marker included.
+func renderTreeRow(r threadRow, current, highlight, dim bool, width int, g threadGlyphs, mode ansi.OutputMode) string {
 	prefix := treePrefix(r)
 	var b strings.Builder
 	used := 0
@@ -229,9 +233,12 @@ func renderTreeRow(r threadRow, current, highlight bool, width int, g threadGlyp
 	if current {
 		marker = g.marker
 	}
-	if highlight {
+	switch {
+	case highlight:
 		b.WriteString("\x1b[44m|14" + marker + " |11")
-	} else {
+	case dim:
+		b.WriteString("|08" + marker + " ")
+	default:
 		b.WriteString("|14" + marker + " |03")
 	}
 	used += 2
@@ -249,8 +256,11 @@ func renderTreeRow(r threadRow, current, highlight bool, width int, g threadGlyp
 
 	num := fmt.Sprintf("#%d ", r.Num)
 	numColour, authorColour, textColour, dateColour := "|11", "|07", "|08", "|07"
-	if highlight {
+	switch {
+	case highlight:
 		numColour, authorColour, textColour, dateColour = "|15", "|15", "|15", "|15"
+	case dim:
+		numColour, authorColour, textColour, dateColour = "|08", "|08", "|08", "|08"
 	}
 	b.WriteString(numColour + num)
 	used += len(num)

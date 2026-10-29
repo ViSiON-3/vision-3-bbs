@@ -384,8 +384,9 @@ menu has the arrows and Enter. ↑/↓, Home and End move the cursor through the
 thread, stepping over `#n deleted` placeholders; Enter reads the message
 under it and leaves the menu open, so the caller can keep browsing; Tab,
 `T` or Esc return focus to the message. Any other reader command works as usual and closes the menu.
-While the menu is closed, the pane's frame is dark, no row is barred (the
-message being read keeps its `►` marker), and the arrows scroll the body.
+While the menu is closed, the whole pane is drawn in dark grey with no bar
+(the message being read keeps its `►` marker), and the arrows scroll the
+body.
 
 The caller's **Thread View** setting in User Konfig decides whether the
 pane shows (not as a menu) while the menu is closed; with it off, the pane

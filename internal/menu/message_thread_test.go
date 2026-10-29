@@ -315,7 +315,7 @@ func TestRenderThreadPaneWidth(t *testing.T) {
 	}
 	// Depth past eight collapses to a count.
 	deep := threadRow{Num: 99, Depth: 11, Prefix: strings.Repeat("│ ", 10) + "└─", Msg: sampleLoad("Caller")(10)}
-	line := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderTreeRow(deep, false, false, 79, threadGlyphsFor(ansi.OutputModeUTF8), ansi.OutputModeUTF8)))), "")
+	line := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderTreeRow(deep, false, false, false, 79, threadGlyphsFor(ansi.OutputModeUTF8), ansi.OutputModeUTF8)))), "")
 	if !strings.Contains(line, "              +4#99 ") {
 		t.Errorf("deep row = %q, want the prefix collapsed to +4", line)
 	}
@@ -434,8 +434,14 @@ func TestMessageReaderThreadPaneLayout(t *testing.T) {
 			t.Errorf("row %d is barred blue with the menu closed", row)
 		}
 	}
-	if c := screen.Cell(7, 1); !isDarkGrey(c) {
-		t.Errorf("closed pane frame fg %d bold %v, want dark grey", c.Fg, c.Bold)
+	// Every drawn character of the closed pane, frame, text and marker,
+	// is dark grey.
+	for row := 7; row <= 13; row++ {
+		for col := 1; col <= 79; col++ {
+			if c := screen.Cell(row, col); c.Rune != ' ' && !isDarkGrey(c) {
+				t.Fatalf("row %d col %d %q drawn fg %d bold %v, want dark grey", row, col, c.Rune, c.Fg, c.Bold)
+			}
+		}
 	}
 	if sep := strings.TrimRight(screen.Row(23), " "); sep != strings.Repeat("─", 79) {
 		t.Errorf("separator = %q, want a plain rule", sep)
@@ -736,7 +742,7 @@ func TestThreadCellsAreInert(t *testing.T) {
 	// A row built from such a message stays 79 columns and carries no
 	// clear-screen.
 	msg := &message.DisplayMessage{MsgNum: 7, From: "Evil|CL", Subject: "|CLsubject", Body: "\x1b[2J|16pwned\nbody", DateTime: time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC)}
-	row := renderTreeRow(threadRow{Num: 7, Depth: 1, Prefix: "└─", Msg: msg}, true, true, 79, g, ansi.OutputModeUTF8)
+	row := renderTreeRow(threadRow{Num: 7, Depth: 1, Prefix: "└─", Msg: msg}, true, true, false, 79, g, ansi.OutputModeUTF8)
 	if w := visibleWidth(row, ansi.OutputModeUTF8); w != 79 {
 		t.Errorf("row width = %d: %q", w, row)
 	}
