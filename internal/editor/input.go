@@ -355,6 +355,60 @@ func (ih *InputHandler) CloseAndWait() {
 	}
 }
 
+// CloseAndTakeUnread is CloseAndWait for an owner handing the session to
+// another reader, such as a door: it also returns the bytes the handler read
+// from the session that no one consumed, oldest first (pushed-back bytes,
+// then queued ones), so they can go to whatever reads next. The LF or NUL of
+// an Enter already read is not among them; trailer reports that such an
+// Enter's LF or NUL has not arrived yet, so the session's next reader should
+// drop a leading one (see ExpectEnterTrailer). Like other reads, it must only
+// be called by the handler's owner.
+//
+// For a session without SetReadInterrupt the background goroutine cannot be
+// stopped and keeps reading; only the bytes already queued are returned.
+func (ih *InputHandler) CloseAndTakeUnread() (unread []byte, trailer bool) {
+	ih.Close()
+	unread = append([]byte(nil), ih.unreadBuf...)
+	ih.unreadBuf = nil
+	take := func(b byte) {
+		if !ih.lateEnterTrailer(b) {
+			unread = append(unread, b)
+		}
+	}
+	if ih.readInterrupt != nil {
+		// The goroutine may be blocked queueing a byte it read just before
+		// Close; it closes incoming once it has stopped.
+		for b := range ih.incoming {
+			take(b)
+		}
+		<-ih.done
+	} else {
+	drain:
+		for {
+			select {
+			case b, ok := <-ih.incoming:
+				if !ok {
+					break drain
+				}
+				take(b)
+			default:
+				break drain
+			}
+		}
+	}
+	trailer, ih.skipEnterTrailer = ih.skipEnterTrailer, false
+	if len(unread) == 0 {
+		unread = nil
+	}
+	return unread, trailer
+}
+
+// ExpectEnterTrailer tells the handler that the session's previous reader
+// took the CR of an Enter whose LF or NUL had not arrived, so the next byte
+// read from the session is dropped if it is that LF or NUL. Like other
+// reads, it must only be called by the handler's owner.
+func (ih *InputHandler) ExpectEnterTrailer() { ih.skipEnterTrailer = true }
+
 // Read implements io.Reader. It reads exactly one byte from the incoming channel,
 // blocking until a byte is available or the channel is closed (EOF). This allows
 // InputHandler to be wrapped by bufio.NewReader and shared between callers (e.g.

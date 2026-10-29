@@ -322,9 +322,11 @@ func stringScriptExists(cfg config.DoorConfig) bool {
 func borrowInputSession(s ssh.Session) ssh.Session {
 	v, ok := sessionInputHandlers.Load(s)
 	if !ok {
-		// Keys an earlier script left for the next handler come first.
-		if _, kept := sessionTypeAhead.Load(unwrapSession(s)); kept {
-			return &typeAheadSession{Session: s}
+		// Keys an earlier script left for the next handler come first, and
+		// the trailer of an Enter it read is dropped.
+		trailer := takeEnterTrailer(s)
+		if _, kept := sessionTypeAhead.Load(unwrapSession(s)); kept || trailer {
+			return &typeAheadSession{Session: s, skipTrailer: trailer}
 		}
 		return s
 	}
@@ -367,17 +369,25 @@ func (b *borrowedInputSession) InputOnDemand() bool { return true }
 // ReturnInput restores bytes a timed-out script read received before shutdown.
 func (b *borrowedInputSession) ReturnInput(p []byte) { b.ih.ReturnInput(p) }
 
+// ExpectEnterTrailer has the handler drop the LF or NUL of an Enter the
+// script read, which had not arrived when the script ended.
+func (b *borrowedInputSession) ExpectEnterTrailer() { b.ih.ExpectEnterTrailer() }
+
 // typeAheadSession is an ssh.Session for a script run in place of a string
 // with no InputHandler running, when an earlier script left keys it did not
 // read (stashTypeAhead). Its reads return those keys before reading the
 // session, so the script sees them in the order they were typed; starting a
 // handler here instead would leave one reading the session under code that
-// reads it directly.
+// reads it directly. It is also used when an earlier script left only the
+// mark of an Enter whose LF or NUL had not arrived (keepEnterTrailer).
 type typeAheadSession struct {
 	ssh.Session
 	mu      sync.Mutex
 	taken   bool
 	pending []byte // kept keys taken from the stash but not yet read
+	// skipTrailer says the first byte read from the session is dropped if
+	// it is the LF or NUL of an Enter an earlier reader took.
+	skipTrailer bool
 }
 
 // Read returns the kept keys first, then reads the session.
@@ -396,7 +406,25 @@ func (t *typeAheadSession) Read(p []byte) (int, error) {
 		return n, nil
 	}
 	t.mu.Unlock()
-	return t.Session.Read(p)
+	for {
+		n, err := t.Session.Read(p)
+		if n > 0 && t.takeTrailer() && (p[0] == '\n' || p[0] == 0x00) {
+			if n = copy(p, p[1:n]); n == 0 && err == nil {
+				continue
+			}
+		}
+		return n, err
+	}
+}
+
+// takeTrailer reports whether the next byte read from the session is to be
+// dropped if it is an Enter's LF or NUL, and clears that.
+func (t *typeAheadSession) takeTrailer() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	skip := t.skipTrailer
+	t.skipTrailer = false
+	return skip
 }
 
 // SetReadInterrupt passes ch on to the session, which the script engine's

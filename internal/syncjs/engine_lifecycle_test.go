@@ -79,8 +79,8 @@ func newLifecycleEngine(sess io.ReadWriter) *Engine {
 }
 
 // TestEngineCloseStopsIOGoroutines demonstrates that when a SyncJS door ends
-// normally while the user stays connected, the copier (session->pipe), reader
-// (pipe->channel) and context-watcher goroutines all exit once the door
+// normally while the user stays connected, the copier (session->channel) and
+// context-watcher goroutines exit once the door
 // handler closes the read interrupt and calls Close. A regression here would
 // leave the copier blocked in session.Read, stealing the next menu keypress
 // and leaking one goroutine per door run.
@@ -133,4 +133,155 @@ func TestEngineCloseWithoutInputIsClean(t *testing.T) {
 		t.Fatal("copier goroutine started for a door that never read input")
 	}
 	waitNoGoroutineLeak(t, baseline)
+}
+
+// TestEngineCloseReturnsUnreadInput verifies that keys arriving in the same
+// read as the one a door consumed are returned by Close, not dropped (#751).
+func TestEngineCloseReturnsUnreadInput(t *testing.T) {
+	sess := newInterruptibleSession("abc")
+	eng := newLifecycleEngine(sess)
+	t.Cleanup(func() { eng.Close() })
+
+	if key, err := eng.readKey(2 * time.Second); key != "a" || err != nil {
+		t.Fatalf("readKey = %q, %v; want \"a\", nil", key, err)
+	}
+	sess.closeInterrupt()
+	if got := string(eng.Close()); got != "bc" {
+		t.Fatalf("Close returned %q, want \"bc\"", got)
+	}
+	if got := eng.Close(); got != nil {
+		t.Fatalf("second Close returned %q, want nil", got)
+	}
+}
+
+// TestEngineCloseReturnsQueuedAndHeldInput fills the copier's channel so the
+// copier is left holding a chunk it cannot deliver when the door ends.
+// Close must return the queued chunks and the held one, in order, and the
+// copier must not read past them.
+func TestEngineCloseReturnsQueuedAndHeldInput(t *testing.T) {
+	sess := newInterruptibleSession("a")
+	for _, c := range []string{"b", "c", "d", "e", "f", "g"} {
+		sess.chunks = append(sess.chunks, []byte(c))
+	}
+	eng := newLifecycleEngine(sess)
+	t.Cleanup(func() { eng.Close() })
+
+	if key, err := eng.readKey(2 * time.Second); key != "a" || err != nil {
+		t.Fatalf("readKey = %q, %v; want \"a\", nil", key, err)
+	}
+	// b..e fill the channel; the copier then reads f and blocks sending it.
+	waitChunksLeft(t, sess, 1)
+
+	sess.closeInterrupt()
+	if got := string(eng.Close()); got != "bcdef" {
+		t.Fatalf("Close returned %q, want \"bcdef\"", got)
+	}
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+	if len(sess.chunks) != 1 || string(sess.chunks[0]) != "g" {
+		t.Fatalf("copier read past the held chunk: %q left", sess.chunks)
+	}
+}
+
+// waitChunksLeft waits until the copier has taken all but n of sess's chunks.
+func waitChunksLeft(t *testing.T, sess *interruptibleSession, n int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		sess.mu.Lock()
+		left := len(sess.chunks)
+		sess.mu.Unlock()
+		if left == n {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("copier did not read ahead: %d chunks left, want %d", left, n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// TestEngineSplitEnter verifies that the LF of an Enter sent as CR LF but
+// split across two reads is neither a second Enter for the door nor a key
+// Close hands to the next prompt.
+func TestEngineSplitEnter(t *testing.T) {
+	t.Run("door reads on", func(t *testing.T) {
+		sess := newInterruptibleSession("\r")
+		sess.chunks = [][]byte{[]byte("\nx")}
+		eng := newLifecycleEngine(sess)
+		t.Cleanup(func() { sess.closeInterrupt(); eng.Close() })
+
+		if key, err := eng.readKey(2 * time.Second); key != "\r" || err != nil {
+			t.Fatalf("readKey = %q, %v; want CR, nil", key, err)
+		}
+		key := ""
+		for key == "" {
+			var err error
+			if key, err = eng.readKey(2 * time.Second); err != nil {
+				t.Fatalf("readKey: %v", err)
+			}
+		}
+		if key != "x" {
+			t.Fatalf("key after the split Enter = %q, want \"x\"", key)
+		}
+	})
+
+	// A read that brings only the LF is no key: a blocking read goes on
+	// waiting for one rather than returning nothing.
+	t.Run("trailer arrives alone", func(t *testing.T) {
+		sess := newInterruptibleSession("\r")
+		sess.chunks = [][]byte{[]byte("\n"), []byte("x")}
+		eng := newLifecycleEngine(sess)
+		t.Cleanup(func() { sess.closeInterrupt(); eng.Close() })
+
+		if key, err := eng.readKey(2 * time.Second); key != "\r" || err != nil {
+			t.Fatalf("readKey = %q, %v; want CR, nil", key, err)
+		}
+		if key, err := eng.readKey(0); key != "x" || err != nil {
+			t.Fatalf("blocking readKey after the lone LF = %q, %v; want \"x\", nil", key, err)
+		}
+	})
+
+	// The door ends after the CR, with the LF still in the session: the
+	// next reader is told to drop it, and an engine told so drops it.
+	t.Run("door ends before the trailer", func(t *testing.T) {
+		sess := newInterruptibleSession("\r")
+		eng := newLifecycleEngine(sess)
+		t.Cleanup(func() { eng.Close() })
+
+		if key, err := eng.readKey(2 * time.Second); key != "\r" || err != nil {
+			t.Fatalf("readKey = %q, %v; want CR, nil", key, err)
+		}
+		sess.closeInterrupt()
+		if got := eng.Close(); got != nil || !eng.EnterTrailerPending() {
+			t.Fatalf("Close = %q, trailer pending %v; want nil, true", got, eng.EnterTrailerPending())
+		}
+
+		nextSess := newInterruptibleSession("\nx")
+		next := newLifecycleEngine(nextSess)
+		next.ExpectEnterTrailer()
+		t.Cleanup(func() { nextSess.closeInterrupt(); next.Close() })
+		if key, err := next.readKey(2 * time.Second); key != "x" || err != nil {
+			t.Fatalf("next engine readKey = %q, %v; want \"x\", nil", key, err)
+		}
+	})
+
+	t.Run("door ends", func(t *testing.T) {
+		sess := newInterruptibleSession("\r")
+		sess.chunks = [][]byte{[]byte("\nx")}
+		eng := newLifecycleEngine(sess)
+		t.Cleanup(func() { eng.Close() })
+
+		if key, err := eng.readKey(2 * time.Second); key != "\r" || err != nil {
+			t.Fatalf("readKey = %q, %v; want CR, nil", key, err)
+		}
+		waitChunksLeft(t, sess, 0)
+		sess.closeInterrupt()
+		if got := string(eng.Close()); got != "x" {
+			t.Fatalf("Close returned %q, want \"x\"", got)
+		}
+		if eng.EnterTrailerPending() {
+			t.Error("trailer still pending after Close dropped it")
+		}
+	})
 }

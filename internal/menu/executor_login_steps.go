@@ -171,7 +171,7 @@ func runLoginDoor(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// The door reads the session directly, so the session's input handler
 	// must let go of it first, as the menu door handler does.
-	resetSessionIH(s)
+	handOffSessionIH(s)
 
 	// Set up a read interrupt so the stdin copier can be stopped once the
 	// script exits, as the native door handler does. With cmd.Stdin = s,
@@ -191,11 +191,12 @@ func runLoginDoor(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 	inputDone := make(chan struct{})
+	var left doorInputCopy // set by the input goroutine, for after inputDone
 	go func() {
 		defer close(inputDone)
 		// Ends on interrupt, disconnect or a closed pipe; closing stdin then
 		// hands a disconnect on to the script as end of input.
-		_, _ = io.Copy(stdin, s)
+		left, _ = copyDoorInput(stdin, s, readInterrupt, takeEnterTrailer(s))
 		_ = stdin.Close()
 	}()
 
@@ -206,6 +207,8 @@ func runLoginDoor(c *cmdCtx, args string) (*user.User, string, error) {
 	close(readInterrupt)
 	if hasInterrupt {
 		<-inputDone
+		// Keys the script never got go to the next prompt.
+		left.keep(s)
 	}
 
 	return currentUser, "", nil

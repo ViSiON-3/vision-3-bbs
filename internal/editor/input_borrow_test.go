@@ -3,6 +3,8 @@ package editor
 import (
 	"errors"
 	"io"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -132,5 +134,99 @@ func TestDrainQueuedStopGivesBytesBack(t *testing.T) {
 	}
 	if got := string(ih.unreadBuf); got != "\x1b[A" {
 		t.Errorf("unread input = %q, want %q", got, "\x1b[A")
+	}
+}
+
+// interruptReader is a session whose reads return its data, one byte at a
+// time, and then block until the read interrupt is closed, as the SSH and
+// telnet adapters' do.
+type interruptReader struct {
+	data []byte
+	mu   sync.Mutex
+	intr <-chan struct{}
+}
+
+func (r *interruptReader) SetReadInterrupt(ch <-chan struct{}) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if ch != nil {
+		r.intr = ch
+	}
+}
+
+func (r *interruptReader) Read(p []byte) (int, error) {
+	r.mu.Lock()
+	if len(r.data) > 0 {
+		p[0], r.data = r.data[0], r.data[1:]
+		r.mu.Unlock()
+		return 1, nil
+	}
+	intr := r.intr
+	r.mu.Unlock()
+	<-intr
+	return 0, errors.New("read interrupted")
+}
+
+// A handler stopped for a door hands back the bytes no one read, oldest
+// first, without the LF of an Enter already read, and stops reading the
+// session (#750).
+func TestCloseAndTakeUnread(t *testing.T) {
+	ih := NewInputHandler(&interruptReader{data: []byte("\nbcd")})
+	waitQueued(t, ih, 4)
+	ih.skipEnterTrailer = true
+	ih.ReturnInput([]byte("a"))
+
+	if got, trailer := ih.CloseAndTakeUnread(); string(got) != "abcd" || trailer {
+		t.Fatalf("CloseAndTakeUnread = %q, %v; want %q, false", got, trailer, "abcd")
+	}
+	select {
+	case <-ih.done:
+	default:
+		t.Fatal("reader goroutine still running")
+	}
+	if got, trailer := ih.CloseAndTakeUnread(); got != nil || trailer {
+		t.Errorf("second CloseAndTakeUnread = %q, %v; want nil, false", got, trailer)
+	}
+}
+
+// A handler stopped while the LF of an Enter it read is still to come says
+// so, and a handler told to expect it drops it (#750).
+func TestCloseAndTakeUnreadPendingTrailer(t *testing.T) {
+	r := &interruptReader{}
+	ih := NewInputHandler(r)
+	ih.skipEnterTrailer = true
+	if got, trailer := ih.CloseAndTakeUnread(); got != nil || !trailer {
+		t.Fatalf("CloseAndTakeUnread = %q, %v; want nil, true", got, trailer)
+	}
+
+	r.data = []byte("\nx")
+	next := NewInputHandler(r)
+	defer next.CloseAndWait()
+	next.ExpectEnterTrailer()
+	if b, err := next.ReadByteUntil(nil); err != nil || b != 'x' {
+		t.Errorf("next handler read %q, %v; want 'x'", b, err)
+	}
+}
+
+// With a full queue the reader goroutine is blocked queueing a byte, not in
+// a session read the interrupt can stop. CloseAndTakeUnread must still return,
+// with that byte too.
+func TestCloseAndTakeUnreadFullQueue(t *testing.T) {
+	want := strings.Repeat("x", 300)
+	ih := NewInputHandler(&interruptReader{data: []byte(want)})
+	waitQueued(t, ih, cap(ih.incoming))
+
+	done := make(chan []byte, 1)
+	go func() {
+		got, _ := ih.CloseAndTakeUnread()
+		done <- got
+	}()
+	select {
+	case got := <-done:
+		if string(got) != want {
+			t.Errorf("CloseAndTakeUnread returned %d bytes, want %d", len(got), len(want))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("CloseAndTakeUnread did not return")
 	}
 }

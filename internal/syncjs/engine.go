@@ -12,7 +12,6 @@ package syncjs
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -53,13 +52,22 @@ type Engine struct {
 	exitCodes    []string // JS code strings to eval on exit
 	exitOnce     sync.Once
 
-	// Input: interposed pipe reader feeds rawInputCh; inputBuf holds parsed leftovers
+	// Input: the copier goroutine feeds rawInputCh; inputBuf holds parsed leftovers
 	inputBuf   []byte
-	rawInputCh chan readResult // fed by reader goroutine on the pipe
-	pipeReader *io.PipeReader  // engine reads from this end
-	pipeWriter *io.PipeWriter  // copier writes session data to this end
+	rawInputCh chan readResult // fed by the copier goroutine
 	readerOnce sync.Once
 	copierDone chan struct{} // closed when the copier goroutine exits
+	// stopCopier, closed by Close, tells the copier to stop offering input.
+	// A chunk it has read but can no longer deliver is left in heldInput,
+	// which only Close reads, after copierDone.
+	stopCopier chan struct{}
+	heldInput  []byte
+	closeOnce  sync.Once
+	// crTrailer is set when the last key read was a CR that ended its
+	// chunk: Enter sent as CR LF or CR NUL can be split across reads, and
+	// the LF or NUL at the start of the next chunk is part of that Enter,
+	// not a key of its own.
+	crTrailer bool
 
 	// Lock files created by file_mutex() — cleaned up on Close()
 	lockFiles []string
@@ -215,45 +223,80 @@ func (eng *Engine) runExitHandlers() {
 	}
 }
 
-// Close runs exit handlers (if RunExitHandlers has not already) and cleans up
-// the engine.
-func (eng *Engine) Close() {
+// Close runs exit handlers (if RunExitHandlers has not already), cleans up
+// the engine, and returns the input the script read from the session but
+// never consumed, oldest first: keys the caller typed ahead for whatever
+// follows the door. The caller should hand them to the session's next reader
+// so they are not lost.
+//
+// The copier goroutine stops only once its blocked session Read returns, so
+// the caller must close the session's read interrupt (SetReadInterrupt)
+// before calling Close. A session without one cannot be stopped: Close gives
+// up waiting after two seconds, and a key the copier reads after that is
+// lost. Close may be called more than once; later calls return nil.
+func (eng *Engine) Close() []byte {
+	var unread []byte
+	eng.closeOnce.Do(func() { unread = eng.close() })
+	return unread
+}
+
+// close does the work of Close, once.
+func (eng *Engine) close() []byte {
 	eng.RunExitHandlers()
-	// Stop the reader goroutines by closing the pipe. The caller should
-	// close a SetReadInterrupt channel before calling Close() so the
-	// copier goroutine's blocked session.Read() returns immediately.
-	if eng.pipeWriter != nil {
-		_ = eng.pipeWriter.Close() // best-effort shutdown of the input pipe
+	if eng.stopCopier != nil {
+		close(eng.stopCopier)
 	}
-	// Wait for the copier goroutine to exit so it stops reading from
-	// the session. This relies on the caller closing the read interrupt
-	// (via SetReadInterrupt) to unblock the copier's session.Read().
+	// Wait for the copier goroutine to exit so it stops reading from the
+	// session, and so everything it read is in rawInputCh or heldInput.
+	stopped := false
 	if eng.copierDone != nil {
 		select {
 		case <-eng.copierDone:
+			stopped = true
 		case <-time.After(2 * time.Second):
 			slog.Warn("copier goroutine did not exit within 2s; proceeding with cleanup")
 		}
 	}
-	if eng.pipeReader != nil {
-		_ = eng.pipeReader.Close() // best-effort shutdown of the input pipe
-	}
-	// Drain any buffered results so goroutines don't block on channel send
+
+	// Everything the script did not consume, oldest first: the rest of the
+	// last chunk it parsed, the chunks still queued, then the one the
+	// copier held when it stopped.
+	unread := append([]byte(nil), eng.inputBuf...)
+	eng.inputBuf = nil
 	if eng.rawInputCh != nil {
+	drain:
 		for {
 			select {
-			case <-eng.rawInputCh:
+			case result := <-eng.rawInputCh:
+				unread = append(unread, result.data...)
 			default:
-				goto drained
+				break drain
 			}
 		}
-	drained:
 	}
+	if stopped {
+		unread = append(unread, eng.heldInput...)
+		eng.heldInput = nil
+	}
+	// The rest of an Enter the script has already read is not the next
+	// prompt's key. An Enter whose LF or NUL has not arrived yet is the next
+	// reader's to finish; EnterTrailerPending reports it.
+	if eng.crTrailer && len(unread) > 0 {
+		if unread[0] == '\n' || unread[0] == 0x00 {
+			unread = unread[1:]
+		}
+		eng.crTrailer = false
+	}
+
 	// Clean up lock files created by file_mutex()
 	for _, lf := range eng.lockFiles {
 		_ = os.Remove(lf) // best-effort lock-file cleanup
 	}
 	eng.cancel()
+	if len(unread) == 0 {
+		return nil
+	}
+	return unread
 }
 
 // watchContext monitors the context and interrupts the JS runtime on
@@ -398,45 +441,43 @@ func encodeRune(buf []byte, r rune) int {
 	return 4
 }
 
-// startReader interposes a pipe between the session and the engine's input
-// channel. A copier goroutine moves bytes from the session into the pipe,
-// and a reader goroutine reads from the pipe into rawInputCh. Closing the
-// pipe in Close() cleanly stops both goroutines without affecting the session.
+// startReader starts the goroutine that feeds the engine's input channel from
+// the session. It reads ahead of the script, up to the channel's capacity;
+// Close returns whatever the script has not consumed by then.
 func (eng *Engine) startReader() {
 	eng.readerOnce.Do(func() {
 		eng.rawInputCh = make(chan readResult, 4)
-		eng.pipeReader, eng.pipeWriter = io.Pipe()
 		eng.copierDone = make(chan struct{})
+		eng.stopCopier = make(chan struct{})
 
-		// Copier: session -> pipe (blocks on session.Read, killed by read interrupt)
+		// Copier: session -> channel (blocks on session.Read, stopped by the
+		// read interrupt). Each chunk it reads is either delivered to
+		// rawInputCh or, once Close has asked it to stop, left in heldInput,
+		// so no key it took from the session is dropped.
+		// offer reports whether the copier may go on.
+		offer := func(r readResult) bool {
+			select {
+			case eng.rawInputCh <- r:
+				return true
+			case <-eng.stopCopier:
+				eng.heldInput = r.data
+				return false
+			}
+		}
 		go func() {
 			defer close(eng.copierDone)
-			buf := make([]byte, 256)
 			for {
+				buf := make([]byte, 256)
 				n, err := eng.session.Session.Read(buf)
-				if n > 0 {
-					if _, werr := eng.pipeWriter.Write(buf[:n]); werr != nil {
-						return // pipe closed
-					}
+				// A Read can return bytes with its error. The bytes go first,
+				// on their own, so the script still sees them, and Close can
+				// return them if it does not.
+				if n > 0 && !offer(readResult{data: buf[:n]}) {
+					return
 				}
 				if err != nil {
 					eng.cancel() // signal context so CPU-bound scripts stop on disconnect
-					eng.pipeWriter.CloseWithError(err)
-					return
-				}
-			}
-		}()
-
-		// Reader: pipe -> channel (killed by pipe close returning error)
-		go func() {
-			for {
-				buf := make([]byte, 64)
-				n, err := eng.pipeReader.Read(buf)
-				if n > 0 {
-					eng.rawInputCh <- readResult{data: buf[:n]}
-				}
-				if err != nil {
-					eng.rawInputCh <- readResult{err: err}
+					offer(readResult{err: err})
 					return
 				}
 			}
@@ -463,22 +504,47 @@ func (eng *Engine) readKey(timeout time.Duration) (string, error) {
 		timer = time.After(timeout)
 	}
 
-	select {
-	case result := <-eng.rawInputCh:
-		if result.err != nil {
-			eng.cancel()
-			return "", ErrDisconnect
-		}
-		if len(result.data) == 0 {
+	for {
+		select {
+		case result := <-eng.rawInputCh:
+			if result.err != nil {
+				eng.cancel()
+				return "", ErrDisconnect
+			}
+			data := result.data
+			// The LF or NUL of an Enter split across two reads. A chunk
+			// that held only that is no key: keep waiting, on the same
+			// timer.
+			if eng.crTrailer {
+				eng.crTrailer = false
+				if len(data) > 0 && (data[0] == '\n' || data[0] == 0x00) {
+					if data = data[1:]; len(data) == 0 {
+						continue
+					}
+				}
+			}
+			if len(data) == 0 {
+				return "", nil
+			}
+			return eng.parseInput(data), nil
+		case <-timer:
 			return "", nil
+		case <-eng.ctx.Done():
+			return "", ErrTerminated
 		}
-		return eng.parseInput(result.data), nil
-	case <-timer:
-		return "", nil
-	case <-eng.ctx.Done():
-		return "", ErrTerminated
 	}
 }
+
+// ExpectEnterTrailer tells the engine that the session's previous reader
+// took the CR of an Enter whose LF or NUL had not arrived, so a leading LF
+// or NUL in the first input the engine reads belongs to that Enter and is
+// dropped. Call it before Run.
+func (eng *Engine) ExpectEnterTrailer() { eng.crTrailer = true }
+
+// EnterTrailerPending reports, after Close, whether the script took the CR
+// of an Enter whose LF or NUL had not arrived when it ended. The session's
+// next reader should then drop a leading LF or NUL.
+func (eng *Engine) EnterTrailerPending() bool { return eng.crTrailer }
 
 type readResult struct {
 	data []byte
@@ -563,6 +629,8 @@ func (eng *Engine) parseInput(data []byte) string {
 		if len(data) > 1 && data[1] == '\n' {
 			consumed = 2
 		}
+		// A CR that ends the chunk may have its LF or NUL in the next one.
+		eng.crTrailer = len(data) == 1
 		result = "\r"
 	} else if data[0] == '\n' {
 		// Treat bare \n as Enter too
@@ -600,6 +668,9 @@ func (eng *Engine) readRawByte(timeout time.Duration) (byte, bool) {
 		if len(result.data) == 0 {
 			return 0, false
 		}
+		// A raw read takes the next byte as it is, so no CR is left waiting
+		// for its LF.
+		eng.crTrailer = false
 		ch := result.data[0]
 		if len(result.data) > 1 {
 			eng.inputBuf = append(eng.inputBuf, result.data[1:]...)
