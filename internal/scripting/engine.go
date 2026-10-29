@@ -52,6 +52,11 @@ type Engine struct {
 	stopCopier chan struct{}
 	heldInput  []byte
 	closeOnce  sync.Once
+	// crTrailer is set when the last key read was a CR that ended its
+	// chunk: Enter sent as CR LF or CR NUL can be split across reads, and
+	// the LF or NUL at the start of the next chunk is part of that Enter,
+	// not a key of its own.
+	crTrailer bool
 }
 
 // readResult carries data or an error from the reader goroutine.
@@ -214,6 +219,12 @@ func (eng *Engine) close() []byte {
 		unread = append(unread, eng.heldInput...)
 		eng.heldInput = nil
 	}
+	// The rest of an Enter the script has already read is not the next
+	// prompt's key.
+	if eng.crTrailer && len(unread) > 0 && (unread[0] == '\n' || unread[0] == 0x00) {
+		unread = unread[1:]
+	}
+	eng.crTrailer = false
 	if len(unread) == 0 {
 		return nil
 	}
@@ -299,20 +310,31 @@ func (eng *Engine) startReader() {
 		// Copier: session -> channel. Each chunk it reads is either
 		// delivered to rawInputCh or, once Close has asked it to stop, left
 		// in heldInput, so no key it took from the session is dropped.
+		// offer reports whether the copier may go on.
+		offer := func(r readResult) bool {
+			select {
+			case eng.rawInputCh <- r:
+				return true
+			case <-eng.stopCopier:
+				eng.heldInput = r.data
+				return false
+			}
+		}
 		go func() {
 			defer close(eng.copierDone)
 			for {
 				buf := make([]byte, 256)
 				n, err := eng.session.Session.Read(buf)
-				if n > 0 || err != nil {
-					select {
-					case eng.rawInputCh <- readResult{data: buf[:n], err: err}:
-					case <-eng.stopCopier:
-						eng.heldInput = buf[:n]
-						return
-					}
+				// A Read can return bytes with its error. The bytes go first,
+				// on their own, so readKeyEcho, which stops at an error,
+				// still sees them, and Close can return them if it does not.
+				if n > 0 && !offer(readResult{data: buf[:n]}) {
+					return
 				}
 				if err != nil {
+					if !offer(readResult{err: err}) {
+						return
+					}
 					eng.cancel() // signal context so CPU-bound scripts stop on disconnect
 					return
 				}
@@ -400,6 +422,15 @@ func (eng *Engine) readKeyEcho(timeout time.Duration) (string, []byte, error) {
 					return "", nil, nil
 				}
 				data = result.data
+				// The LF or NUL of an Enter split across two reads.
+				if eng.crTrailer {
+					eng.crTrailer = false
+					if data[0] == '\n' || data[0] == 0x00 {
+						if data = data[1:]; len(data) == 0 {
+							continue
+						}
+					}
+				}
 			case <-timer:
 				return "", nil, nil
 			case <-eng.ctx.Done():
@@ -514,6 +545,8 @@ func (eng *Engine) parseInput(data []byte) string {
 		if len(data) > 1 && data[1] == '\n' {
 			consumed = 2
 		}
+		// A CR that ends the chunk may have its LF or NUL in the next one.
+		eng.crTrailer = len(data) == 1
 		result = "\r"
 	} else if data[0] == '\n' {
 		result = "\r"

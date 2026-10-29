@@ -199,6 +199,116 @@ func TestEngineCloseReturnsQueuedAndHeldInput(t *testing.T) {
 	}
 }
 
+// lastWordsSession returns its data and io.EOF from the same Read, as a
+// session read can when the caller hangs up.
+type lastWordsSession struct {
+	mu   sync.Mutex
+	data []byte
+}
+
+func (s *lastWordsSession) Read(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := copy(p, s.data)
+	s.data = s.data[n:]
+	return n, io.EOF
+}
+
+func (*lastWordsSession) Write(p []byte) (int, error) { return len(p), nil }
+
+// TestEngineKeepsBytesReadWithError verifies that bytes a session Read
+// returns together with an error reach the script or Close, not neither.
+func TestEngineKeepsBytesReadWithError(t *testing.T) {
+	eng := NewEngine(context.Background(), &SessionContext{Session: &lastWordsSession{data: []byte("ab")}}, ScriptConfig{}, nil)
+	t.Cleanup(func() { eng.Close() })
+
+	var got []byte
+	for {
+		key, err := eng.readKey(2 * time.Second)
+		if err != nil {
+			break
+		}
+		if key == "" {
+			t.Fatal("readKey timed out")
+		}
+		got = append(got, key...)
+	}
+	got = append(got, eng.Close()...)
+	if string(got) != "ab" {
+		t.Fatalf("script read and Close returned %q together, want \"ab\"", got)
+	}
+}
+
+// waitChunksRead waits until the copier has read all but left of sess's
+// chunks.
+func waitChunksRead(t *testing.T, sess *interruptibleSession, left int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		sess.mu.Lock()
+		n := len(sess.chunks) + len(sess.data)
+		sess.mu.Unlock()
+		if n == left {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("copier did not read ahead: %d chunks left", n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// TestEngineSplitEnter verifies that the LF of an Enter split from its CR
+// across two reads is not taken for a second key, by the script or by the
+// prompt Close hands the rest to.
+func TestEngineSplitEnter(t *testing.T) {
+	readAEnter := func(t *testing.T, eng *Engine) {
+		t.Helper()
+		for _, w := range []string{"a", "\r"} {
+			if key, err := eng.readKey(2 * time.Second); key != w || err != nil {
+				t.Fatalf("readKey = %q, %v; want %q", key, err, w)
+			}
+		}
+	}
+
+	t.Run("script", func(t *testing.T) {
+		sess := newInterruptibleSession("a\r")
+		sess.chunks = [][]byte{[]byte("\ny")}
+		eng := NewEngine(context.Background(), &SessionContext{Session: sess}, ScriptConfig{}, nil)
+		t.Cleanup(func() { sess.closeInterrupt(); eng.Close() })
+		readAEnter(t, eng)
+		if key, err := eng.readKey(2 * time.Second); key != "y" || err != nil {
+			t.Fatalf("key after Enter = %q, %v; want \"y\"", key, err)
+		}
+	})
+
+	t.Run("next prompt", func(t *testing.T) {
+		sess := newInterruptibleSession("a\r")
+		sess.chunks = [][]byte{[]byte("\ny")}
+		eng := NewEngine(context.Background(), &SessionContext{Session: sess}, ScriptConfig{}, nil)
+		t.Cleanup(func() { eng.Close() })
+		readAEnter(t, eng)
+		waitChunksRead(t, sess, 0)
+		sess.closeInterrupt()
+		if got := string(eng.Close()); got != "y" {
+			t.Fatalf("Close returned %q, want \"y\"", got)
+		}
+	})
+
+	t.Run("lone LF later is a key", func(t *testing.T) {
+		sess := newInterruptibleSession("a\rb")
+		sess.chunks = [][]byte{[]byte("\n")}
+		eng := NewEngine(context.Background(), &SessionContext{Session: sess}, ScriptConfig{}, nil)
+		t.Cleanup(func() { sess.closeInterrupt(); eng.Close() })
+		readAEnter(t, eng)
+		for _, w := range []string{"b", "\r"} {
+			if key, err := eng.readKey(2 * time.Second); key != w || err != nil {
+				t.Fatalf("readKey = %q, %v; want %q", key, err, w)
+			}
+		}
+	})
+}
+
 // demandSession opts a borrowed input source into reads requested by the script.
 type demandSession struct{ *interruptibleSession }
 
