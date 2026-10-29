@@ -181,7 +181,7 @@ func TestPoll_SkipsDuplicates(t *testing.T) {
 	l, ix := setupLeaf(t, ts.URL, writer)
 
 	// Pre-mark as seen.
-	if err := ix.MarkSeen(uuid, "testnet", nil); err != nil {
+	if err := ix.MarkSeen("testnet", msgs[0].OriginNode, uuid, nil); err != nil {
 		t.Fatalf("mark seen: %v", err)
 	}
 

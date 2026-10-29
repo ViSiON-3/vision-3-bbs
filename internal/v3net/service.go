@@ -517,7 +517,7 @@ func (s *Service) SendMessage(network string, msg protocol.Message) error {
 		return err
 	}
 	// Mark as seen so our own leaf won't write it back to JAM.
-	if err := s.dedupIdx.MarkSeen(msg.MsgUUID, network, nil); err != nil {
+	if err := s.dedupIdx.MarkSeen(network, msg.OriginNode, msg.MsgUUID, nil); err != nil {
 		slog.Warn("v3net: failed to mark outbound message as seen", "uuid", msg.MsgUUID, "error", err)
 	}
 	return nil

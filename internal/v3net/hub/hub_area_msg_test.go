@@ -94,7 +94,7 @@ func testMsgJSON(originNode, areaTag, uuid string) string {
 func TestMessageStore_StoreWithAreaTag(t *testing.T) {
 	h, _ := setupTestHub(t)
 
-	ok, err := h.messages.Store("uuid-001", "testnet", "gen.general", `{"test":"data"}`)
+	ok, err := h.messages.Store("uuid-001", "", "testnet", "gen.general", `{"test":"data"}`)
 	if err != nil {
 		t.Fatalf("Store: %v", err)
 	}
@@ -217,9 +217,9 @@ func TestGetMessages_FiltersToSubscribedAreas(t *testing.T) {
 	seedAreaMsgNAL(t, h, hubKS)
 
 	// Directly store messages bypassing POST enforcement.
-	h.messages.Store("ae0e8400-e29b-41d4-a716-000000000001", "testnet", "gen.general", testMsgJSON("test.example.net", "gen.general", "ae0e8400-e29b-41d4-a716-000000000001"))
-	h.messages.Store("ae0e8400-e29b-41d4-a716-000000000002", "testnet", "gen.general", testMsgJSON("test.example.net", "gen.general", "ae0e8400-e29b-41d4-a716-000000000002"))
-	h.messages.Store("ae0e8400-e29b-41d4-a716-000000000003", "testnet", "gen.restricted", testMsgJSON("test.example.net", "gen.restricted", "ae0e8400-e29b-41d4-a716-000000000003"))
+	h.messages.Store("ae0e8400-e29b-41d4-a716-000000000001", "test.example.net", "testnet", "gen.general", testMsgJSON("test.example.net", "gen.general", "ae0e8400-e29b-41d4-a716-000000000001"))
+	h.messages.Store("ae0e8400-e29b-41d4-a716-000000000002", "test.example.net", "testnet", "gen.general", testMsgJSON("test.example.net", "gen.general", "ae0e8400-e29b-41d4-a716-000000000002"))
+	h.messages.Store("ae0e8400-e29b-41d4-a716-000000000003", "test.example.net", "testnet", "gen.restricted", testMsgJSON("test.example.net", "gen.restricted", "ae0e8400-e29b-41d4-a716-000000000003"))
 
 	// Register leaf only with gen.general subscription.
 	registerLeafWithAreas(t, ts, leafKS, []string{"gen.general"})
@@ -261,7 +261,7 @@ func TestGetMessages_NoSubscriptions_ReturnsEmpty(t *testing.T) {
 	seedAreaMsgNAL(t, h, hubKS)
 
 	// Store a message directly.
-	h.messages.Store("af0e8400-e29b-41d4-a716-000000000001", "testnet", "gen.general", testMsgJSON("test.example.net", "gen.general", "af0e8400-e29b-41d4-a716-000000000001"))
+	h.messages.Store("af0e8400-e29b-41d4-a716-000000000001", "test.example.net", "testnet", "gen.general", testMsgJSON("test.example.net", "gen.general", "af0e8400-e29b-41d4-a716-000000000001"))
 
 	// Register leaf without any area subscriptions.
 	registerLeaf(t, ts, leafKS)
@@ -290,12 +290,12 @@ func TestMessageStore_FetchFiltersByAreaTags(t *testing.T) {
 	h, _ := setupTestHub(t)
 
 	// Store messages in two areas.
-	h.messages.Store("b00e8400-0001", "testnet", "gen.general", `{"msg_uuid":"b00e8400-0001","area_tag":"gen.general"}`)
-	h.messages.Store("b00e8400-0002", "testnet", "gen.general", `{"msg_uuid":"b00e8400-0002","area_tag":"gen.general"}`)
-	h.messages.Store("b00e8400-0003", "testnet", "gen.restricted", `{"msg_uuid":"b00e8400-0003","area_tag":"gen.restricted"}`)
+	h.messages.Store("b00e8400-0001", "", "testnet", "gen.general", `{"msg_uuid":"b00e8400-0001","area_tag":"gen.general"}`)
+	h.messages.Store("b00e8400-0002", "", "testnet", "gen.general", `{"msg_uuid":"b00e8400-0002","area_tag":"gen.general"}`)
+	h.messages.Store("b00e8400-0003", "", "testnet", "gen.restricted", `{"msg_uuid":"b00e8400-0003","area_tag":"gen.restricted"}`)
 
 	// Fetch only gen.general.
-	results, hasMore, err := h.messages.Fetch("testnet", "", 100, []string{"gen.general"})
+	results, hasMore, err := h.messages.Fetch("testnet", "", "", 100, []string{"gen.general"})
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestMessageStore_FetchFiltersByAreaTags(t *testing.T) {
 	}
 
 	// Fetch both areas.
-	all, _, err := h.messages.Fetch("testnet", "", 100, []string{"gen.general", "gen.restricted"})
+	all, _, err := h.messages.Fetch("testnet", "", "", 100, []string{"gen.general", "gen.restricted"})
 	if err != nil {
 		t.Fatalf("Fetch all: %v", err)
 	}
@@ -319,9 +319,9 @@ func TestMessageStore_FetchFiltersByAreaTags(t *testing.T) {
 func TestMessageStore_FetchEmptyAreaTagsReturnsNil(t *testing.T) {
 	h, _ := setupTestHub(t)
 
-	h.messages.Store("b10e8400-0001", "testnet", "gen.general", `{"msg_uuid":"b10e8400-0001"}`)
+	h.messages.Store("b10e8400-0001", "", "testnet", "gen.general", `{"msg_uuid":"b10e8400-0001"}`)
 
-	results, hasMore, err := h.messages.Fetch("testnet", "", 100, []string{})
+	results, hasMore, err := h.messages.Fetch("testnet", "", "", 100, []string{})
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}

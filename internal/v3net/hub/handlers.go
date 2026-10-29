@@ -59,11 +59,14 @@ func (h *Hub) handleNetworkInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetMessages returns messages newer than a cursor (auth required).
+// The cursor is since=<msg_uuid>, plus since_origin=<origin_node> from leaves
+// that know message identity is per origin node (see MessageStore.Fetch).
 // Results are filtered to the node's actively subscribed areas.
 func (h *Hub) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 	network := extractNetwork(r.URL.Path)
 	nodeID := r.Header.Get(headerNodeID)
 	since := r.URL.Query().Get("since")
+	sinceOrigin := r.URL.Query().Get("since_origin")
 	limit := 100
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n >= 1 && n <= 500 {
@@ -85,7 +88,7 @@ func (h *Hub) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	results, hasMore, err := h.messages.Fetch(network, since, limit, areaTags)
+	results, hasMore, err := h.messages.Fetch(network, since, sinceOrigin, limit, areaTags)
 	if err != nil {
 		slog.Error("fetch messages", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
@@ -177,7 +180,7 @@ func (h *Hub) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isNew, err := h.messages.Store(msg.MsgUUID, network, msg.AreaTag, string(data))
+	isNew, err := h.messages.Store(msg.MsgUUID, msg.OriginNode, network, msg.AreaTag, string(data))
 	if err != nil {
 		slog.Error("store message", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
