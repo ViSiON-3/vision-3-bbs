@@ -271,8 +271,11 @@ Where the pin comes from, in order of preference:
 2. **The registry.** When you join from the registry browser and the
    registry entry publishes `coordinator_pubkey_b64` / `hub_pubkey_b64`,
    those keys are pinned when the subscription is saved. The join wizard's
-   area list only shows a NAL signed by that coordinator key; if the hub
-   serves one signed by another key, the wizard refuses to save.
+   area list only shows a NAL signed by that coordinator key, or by a key
+   the network moved to from it with [signed handovers](#signed-handovers);
+   if the hub serves one signed by any other key, the wizard refuses to
+   save. After a handover the registry key is still pinned, and the leaf
+   moves the pin at its first fetch.
 3. **First use.** Joining without a registry key pins the key that signed
    the NAL you picked areas from. With no key set at all (including every
    subscription made before pinning existed), the leaf pins the key of the
@@ -282,8 +285,11 @@ Where the pin comes from, in order of preference:
 
 The editor's area browser checks every NAL it lists the same way: a valid
 signature, a coordinator node ID that belongs to the key, and the
-subscription's pinned key when one is set. A NAL that fails is not listed;
-the browser shows the error instead.
+subscription's pinned key when one is set. Like the leaf, it also takes a
+NAL signed by a key the pinned key's [signed handovers](#signed-handovers)
+lead to, and then says `Network moved keys by signed handover`. It does
+not change the pin itself; the running leaf moves it at its next fetch. A
+NAL that fails is not listed; the browser shows the error instead.
 
 The hub's own key, served by the network's `/info` page, is pinned the same
 way into `hubPubKey` (**Hub Key**) and checked each time the leaf starts.

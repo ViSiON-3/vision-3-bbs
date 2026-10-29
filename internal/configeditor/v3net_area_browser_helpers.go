@@ -62,6 +62,11 @@ func hubErrorText(prefix string, err error) string {
 	return fmt.Sprintf("%s: %v", prefix, cause)
 }
 
+// handoverNotice tells the sysop that the browsed NAL is signed by a key the
+// pin reaches only along signed coordinator handovers. It fits the browser's
+// message row.
+const handoverNotice = "Network moved keys by signed handover; the leaf will update its pin"
+
 // handleFetchNALMsg processes the NAL fetch result.
 func (m Model) handleFetchNALMsg(msg fetchNALMsg) (tea.Model, tea.Cmd) {
 	m.areaBrowserLoading = false
@@ -74,8 +79,17 @@ func (m Model) handleFetchNALMsg(msg fetchNALMsg) (tea.Model, tea.Cmd) {
 	localNames := make(map[string]string)
 
 	if m.wizard != nil && m.wizard.flow == "leaf" && msg.coordKey != "" {
+		// A NAL reached along handovers was verified against the registry
+		// key, so that key is the one it vouches for; the new leaf pins it
+		// and moves the pin itself at its first fetch.
 		m.wizard.browsedCoordKey = msg.coordKey
+		if msg.handedOverFrom != "" {
+			m.wizard.browsedCoordKey = msg.handedOverFrom
+		}
 		m.wizard.browsedHub, m.wizard.browsedNetwork = msg.hubURL, msg.network
+	}
+	if msg.handedOverFrom != "" {
+		m.message = handoverNotice
 	}
 	if m.wizard != nil && m.wizard.flow == "leaf" {
 		for _, sa := range m.wizard.selectedAreas {
