@@ -23,7 +23,8 @@ import (
 // in, or copied from the registry when the network was joined) or, failing
 // that, are pinned on first use. A key that later differs from the pin is
 // rejected and reported, never adopted: the sysop accepts it by replacing or
-// blanking the pin in v3net.json.
+// blanking the pin in v3net.json. A changed hub key also pauses syncing with
+// the hub until then (see hubsig.go).
 
 // KeyKind names which of a network's keys a KeyEvent is about.
 type KeyKind string
@@ -265,9 +266,8 @@ func (l *Leaf) savePin(kind KeyKind, key string) {
 
 // checkHubKey fetches the network's /info and checks its hub key against the
 // pin, pinning it on first use. A hub that does not publish its key (older
-// hubs) is skipped. A mismatch returns an error wrapping ErrHubKeyMismatch;
-// nothing else in the leaf depends on the hub key yet, so callers log it and
-// carry on.
+// hubs) is skipped. A mismatch pauses syncing with the hub and returns an
+// error wrapping ErrHubKeyMismatch; a key that matches lifts any pause.
 func (l *Leaf) checkHubKey(ctx context.Context) error {
 	path := fmt.Sprintf("/v3net/v1/%s/info", l.cfg.Network)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, l.cfg.HubURL+path, nil)
@@ -302,8 +302,10 @@ func (l *Leaf) checkHubKey(ctx context.Context) error {
 		return fmt.Errorf("%w: info names %q, key derives %q", ErrHubNodeIDMismatch, info.HubNodeID, want)
 	}
 	if pinned, ok := l.checkPin(KeyHub, info.HubPubKeyB64); !ok {
+		l.pauseHub("hub key does not match the pinned key")
 		return fmt.Errorf("%w: pinned %s, hub offered %s", ErrHubKeyMismatch, pinned, info.HubPubKeyB64)
 	}
+	l.resumeHub()
 	return nil
 }
 

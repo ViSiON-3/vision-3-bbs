@@ -33,6 +33,13 @@ type Leaf struct {
 	// reconnectFetching is set while the post-reconnect fetch is retrying.
 	reconnectFetching atomic.Bool
 
+	// hubMu guards hub, which pauses syncing while the hub's key or
+	// signatures do not match the pinned hub key (see hubsig.go).
+	hubMu sync.Mutex
+	hub   hubGate
+	// unsignedHubLogged is set once an unsigned hub response is logged.
+	unsignedHubLogged atomic.Bool
+
 	// pinMu guards pins, the pinned and pending coordinator and hub keys.
 	pinMu sync.Mutex
 	pins  keyPins
@@ -55,6 +62,7 @@ func New(cfg Config) *Leaf {
 			pendingCoord: normalizeKey(cfg.PendingCoordPubKeyB64),
 			pendingHub:   normalizeKey(cfg.PendingHubPubKeyB64),
 		},
+		hub: newHubGate(),
 	}
 	l.nalCache.SetCheck(l.checkNAL)
 	if cfg.OnEvent != nil {
@@ -121,6 +129,14 @@ func (l *Leaf) Start(ctx context.Context) {
 	subscribeBackoff := 5 * time.Second
 	for {
 		if err := l.subscribe(ctx); err != nil {
+			// A bad signature on the reply pauses syncing; wait for the
+			// sysop rather than backing off.
+			if l.HubPaused() {
+				if l.waitHubTrusted(ctx) != nil {
+					return
+				}
+				continue
+			}
 			slog.Warn("leaf: subscribe failed, retrying", "network", l.cfg.Network, "error", err, "retry_in", subscribeBackoff)
 			select {
 			case <-ctx.Done():
@@ -137,8 +153,9 @@ func (l *Leaf) Start(ctx context.Context) {
 	}
 	slog.Info("leaf: subscribed to hub", "network", l.cfg.Network, "hub", l.cfg.HubURL)
 
-	// Check the hub's key against the pin (or pin it). Nothing yet depends
-	// on the hub key, so a failure is reported and the leaf carries on.
+	// Check the hub's key against the pin (or pin it). A changed key pauses
+	// polling, SSE and sending until the sysop accepts it; other failures
+	// are logged and the leaf carries on.
 	if err := l.checkHubKey(ctx); err != nil {
 		slog.Warn("leaf: hub key check failed", "network", l.cfg.Network, "hub", l.cfg.HubURL, "error", err)
 	}

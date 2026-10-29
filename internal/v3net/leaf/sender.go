@@ -157,31 +157,11 @@ func (l *Leaf) sendPresenceCtx(ctx context.Context, eventType, handle string) er
 }
 
 func (l *Leaf) signedPostCtx(ctx context.Context, path string, body []byte) error {
-	url := l.cfg.HubURL + path
-	bodyHash := sha256.Sum256(body)
-	bodySHA := hex.EncodeToString(bodyHash[:])
-	dateStr := time.Now().UTC().Format(http.TimeFormat)
-
-	sig, err := l.cfg.Keystore.Sign("POST", path, dateStr, bodySHA)
-	if err != nil {
-		return fmt.Errorf("leaf: sign request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("leaf: create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Date", dateStr)
-	req.Header.Set("X-V3Net-Node-ID", l.cfg.Keystore.NodeID())
-	req.Header.Set("X-V3Net-Signature", sig)
-
-	resp, err := l.client.Do(req)
+	resp, err := l.signedDo(ctx, http.MethodPost, path, body)
 	if err != nil {
 		return fmt.Errorf("leaf: POST %s: %w", path, err)
 	}
-	defer func() { _ = resp.Body.Close() }() // read side
-	drainBody(resp.Body)                     // drain for connection reuse
+	_ = resp.Body.Close() // read side; already read in full
 
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("leaf: POST %s returned %d", path, resp.StatusCode)
@@ -189,29 +169,11 @@ func (l *Leaf) signedPostCtx(ctx context.Context, path string, body []byte) erro
 	return nil
 }
 
-// signedPostWithResponse is like signedPost but returns the raw response
-// so the caller can parse the body. The caller must close resp.Body.
+// signedPostWithResponse is like signedPostCtx but returns the response, its
+// hub signature checked, so the caller can parse the body. The caller must
+// close resp.Body.
 func (l *Leaf) signedPostWithResponse(ctx context.Context, path string, body []byte) (*http.Response, error) {
-	url := l.cfg.HubURL + path
-	bodyHash := sha256.Sum256(body)
-	bodySHA := hex.EncodeToString(bodyHash[:])
-	dateStr := time.Now().UTC().Format(http.TimeFormat)
-
-	sig, err := l.cfg.Keystore.Sign("POST", path, dateStr, bodySHA)
-	if err != nil {
-		return nil, fmt.Errorf("leaf: sign request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("leaf: create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Date", dateStr)
-	req.Header.Set("X-V3Net-Node-ID", l.cfg.Keystore.NodeID())
-	req.Header.Set("X-V3Net-Signature", sig)
-
-	return l.client.Do(req)
+	return l.signedDo(ctx, http.MethodPost, path, body)
 }
 
 // Response-body size caps. Hub responses are JSON: subscribe/join/info
@@ -269,31 +231,72 @@ func (l *Leaf) get(path string) ([]byte, error) {
 }
 
 func (l *Leaf) signedGetCtx(ctx context.Context, path string) (*http.Response, error) {
-	return l.signedGetWith(ctx, path, l.client)
+	return l.signedDo(ctx, http.MethodGet, path, nil)
 }
 
-func (l *Leaf) signedGetSSE(ctx context.Context, path string) (*http.Response, error) {
-	return l.signedGetWith(ctx, path, l.sseClient)
+// signedGetSSE opens the SSE stream at path. It returns the request's
+// signature, which the stream's signatures are bound to; the caller checks
+// them (newEventVerifier).
+func (l *Leaf) signedGetSSE(ctx context.Context, path string) (*http.Response, string, error) {
+	return l.signedRequest(ctx, l.sseClient, http.MethodGet, path, nil)
 }
 
-func (l *Leaf) signedGetWith(ctx context.Context, path string, c *http.Client) (*http.Response, error) {
-	url := l.cfg.HubURL + path
-	emptyHash := sha256.Sum256(nil)
-	bodySHA := hex.EncodeToString(emptyHash[:])
+// signedDo sends a signed request and reads the response in full (up to
+// maxPollRespBytes), checking the hub's signature on it before returning it
+// with the body replaced by what was read. A bad signature returns an error
+// wrapping ErrHubSignature and pauses syncing.
+func (l *Leaf) signedDo(ctx context.Context, method, path string, body []byte) (*http.Response, error) {
+	resp, reqSig, err := l.signedRequest(ctx, l.client, method, path, body)
+	if err != nil {
+		return nil, err
+	}
+	data, err := readBody(resp.Body, maxPollRespBytes)
+	_ = resp.Body.Close() // read side
+	if err != nil {
+		return nil, fmt.Errorf("leaf: read %s response: %w", path, err)
+	}
+	if err := l.verifyHubResponse(ctx, resp, path, reqSig, data); err != nil {
+		return nil, err
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(data))
+	return resp, nil
+}
+
+// signedRequest signs a request with the node key over its method, path,
+// Date and body hash, and sends it with c. It returns the response unread
+// and the request's signature, or ErrHubPaused without sending anything
+// while syncing with the hub is paused.
+func (l *Leaf) signedRequest(ctx context.Context, c *http.Client, method, path string, body []byte) (*http.Response, string, error) {
+	if l.HubPaused() {
+		return nil, "", ErrHubPaused
+	}
+	bodyHash := sha256.Sum256(body)
+	bodySHA := hex.EncodeToString(bodyHash[:])
 	dateStr := time.Now().UTC().Format(http.TimeFormat)
 
-	sig, err := l.cfg.Keystore.Sign("GET", path, dateStr, bodySHA)
+	sig, err := l.cfg.Keystore.Sign(method, path, dateStr, bodySHA)
 	if err != nil {
-		return nil, fmt.Errorf("leaf: sign request: %w", err)
+		return nil, "", fmt.Errorf("leaf: sign request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	var rdr io.Reader
+	if method != http.MethodGet {
+		rdr = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, l.cfg.HubURL+path, rdr)
 	if err != nil {
-		return nil, fmt.Errorf("leaf: create request: %w", err)
+		return nil, "", fmt.Errorf("leaf: create request: %w", err)
+	}
+	if method != http.MethodGet {
+		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Date", dateStr)
 	req.Header.Set("X-V3Net-Node-ID", l.cfg.Keystore.NodeID())
 	req.Header.Set("X-V3Net-Signature", sig)
 
-	return c.Do(req)
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	return resp, sig, nil
 }
