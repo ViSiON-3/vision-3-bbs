@@ -332,6 +332,67 @@ The tests `TestResponseSignedPayloadFormat`, `TestNonce` and `TestEventSignature
 `internal/v3net/protocol/hubsig_test.go` check these payloads against the
 code.
 
+### Coordinator Handovers
+
+This section is for anyone writing another V3Net implementation. A
+coordinator handover moves a network from one coordinator key to another;
+how leaves act on it is in
+[Signed Handovers](v3net/nal.md#signed-handovers). It is a JSON object:
+
+| Field | Meaning |
+|-------|---------|
+| `network` | The network handed over |
+| `old_key` | The outgoing coordinator's Ed25519 public key, 32 bytes in standard base64 |
+| `new_key` | The incoming coordinator's key, in the same form; never the same as `old_key` |
+| `issued` | When it was signed, RFC 3339 in UTC, such as `2026-10-29T12:00:00Z` |
+| `signature_b64` | The Ed25519 signature by `old_key` over the signed payload below, 64 bytes in standard base64 |
+
+**Signed payload.** The signature covers these bytes, with no trailing
+newline:
+
+1. The ASCII prefix `V3NET-COORD-HANDOVER-v1` followed by one line feed
+   (`0x0A`), which keeps a handover signature from being taken for any other
+   kind.
+2. A compact JSON object with exactly the keys `issued`, `network`,
+   `new_key` and `old_key`, in that (sorted) order, strings escaped as for
+   [message signatures](#message-signatures) (HTML escaping off).
+
+For example:
+
+```
+V3NET-COORD-HANDOVER-v1
+{"issued":"2026-10-29T12:00:00Z","network":"felonynet","new_key":"bmV3","old_key":"b2xk"}
+```
+
+(The keys are shortened here; real ones are 44 characters.)
+
+**Publishing.** A subscriber sends the handover as the body of a signed
+`POST /v3net/v1/{network}/nal/handover`. The hub accepts it only if it
+verifies, names the network in the path, and `old_key` is the coordinator
+key in force: the key of the stored NAL, followed along any handovers the
+hub already holds. It refuses a `new_key` the network has already used, so
+the stored handovers never loop (`409`). Sending one it already holds
+succeeds without storing it twice. From then on the hub takes a posted NAL
+only from the new key's node, signed by the new key, and a hub started
+with the new key re-signs the stored NAL with it.
+
+**Serving.** `GET /v3net/v1/{network}/nal` carries the handovers in the
+NAL's `coordinator_handovers` array, oldest first, at most 32 (the most
+recent). The array is left out of the NAL's canonical form, so leaves that
+predate handovers verify the NAL as before and ignore the field.
+
+**Following.** A leaf pinned to key P that is offered a NAL signed by key N
+looks for a chain of handovers from P to N, each one for this network,
+verifying under its own `old_key`, and starting where the one before ended.
+It follows at most 8 steps, never visits a key twice, and ignores a list of
+more than 32. With such a chain it moves its pin to N; without one it
+rejects the NAL. A leaf moves its pinned hub key the same way when `/info`
+serves the key that signs the NAL.
+
+The tests `TestCoordHandoverSignedPayloadFormat` in
+`internal/v3net/protocol/handover_test.go` and `TestFollowHandoversLimits`
+in `internal/v3net/nal/handover_test.go` check this against the code.
+
 ### Wire Details
 
 - **Transport**: JSON over HTTP. A leaf makes outbound requests only; the hub
@@ -340,7 +401,8 @@ code.
   signed with the node's Ed25519 key over the method, path, `Date` header and
   body hash, sent in the `X-V3Net-Node-ID` and `X-V3Net-Signature` headers.
 - **Endpoints** (under `/v3net/v1/`): `networks`, `subscribe`,
-  `{network}/info`, `{network}/nal`, `{network}/messages` (GET to poll, POST
+  `{network}/info`, `{network}/nal` (and `{network}/nal/handover`),
+  `{network}/messages` (GET to poll, POST
   to send), `{network}/events` (the SSE stream), `{network}/presence`, the
   `chat/rooms/...` calls, and the area, proposal, access-request, manager and
   node-management calls used by the sysop screens.

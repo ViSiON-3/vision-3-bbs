@@ -199,6 +199,7 @@ vision-3-bbs/
 │   ├── ue/                 # TUI user editor
 │   ├── v3mail/             # JAM message base and FTN mail processor
 │   ├── v3net-bootstrap/    # Create and publish an initial NAL for a V3Net network
+│   ├── v3net-handover/     # Sign and publish a V3Net coordinator key handover
 │   ├── vision3/            # Main BBS server application
 │   └── wfc/                # Remote sysop console (SSH client for the WFC TUI)
 ├── configs/                # Active configuration files (not tracked in git)
