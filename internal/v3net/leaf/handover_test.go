@@ -216,6 +216,140 @@ func TestHandoverThroughHubMovesBothPins(t *testing.T) {
 	}
 }
 
+// End to end, in the other order: the hub restarts with the new key first,
+// so a leaf pinned to the old key pauses on the changed hub key. Once the
+// old key's handover is posted, the hub re-signs the NAL with the new key,
+// and the leaf moves both pins and resumes. The same holds when the hub
+// already re-signed the NAL with the new key before the handover came, as
+// merging initialAreas at startup does: the leaf rejects that NAL until the
+// handover bridges its pin to the new key.
+func TestLateHandoverThroughHubMovesBothPins(t *testing.T) {
+	t.Run("NAL still the old key's", func(t *testing.T) { testLateHandoverThroughHub(t, false) })
+	t.Run("NAL re-signed before the handover", func(t *testing.T) { testLateHandoverThroughHub(t, true) })
+}
+
+// testLateHandoverThroughHub runs TestLateHandoverThroughHubMovesBothPins,
+// re-signing the NAL with the new key before the handover when resign is
+// set.
+func testLateHandoverThroughHub(t *testing.T, resign bool) {
+	dir := t.TempDir()
+	oldKS, err := loadKeystoreAt(filepath.Join(dir, "old.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	newKS, err := loadKeystoreAt(filepath.Join(dir, "new.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var current atomic.Pointer[hub.Hub]
+	open := func(ks *keystore.Keystore) *hub.Hub {
+		t.Helper()
+		h, err := hub.New(hub.Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
+			RequireSignedSubscribe: true, Networks: []hub.NetworkConfig{{Name: "testnet"}}})
+		if err != nil {
+			t.Fatalf("create hub: %v", err)
+		}
+		current.Store(h)
+		return h
+	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		current.Load().Mux().ServeHTTP(w, r)
+	}))
+	t.Cleanup(ts.Close)
+
+	h := open(oldKS)
+	seedHubNAL(t, h, oldKS, "gen.general")
+	l := subscribedLeaf(t, ts, "Leaf BBS")
+	poster := subscribedLeaf(t, ts, "Poster BBS")
+	rec := &keyRecorder{}
+	rec.attach(l)
+	ctx := context.Background()
+	if err := l.checkHubKey(ctx); err != nil {
+		t.Fatalf("pin hub key: %v", err)
+	}
+	if err := l.refreshNAL(ctx); err != nil {
+		t.Fatalf("pin coordinator key: %v", err)
+	}
+
+	_ = h.Close()
+	h = open(newKS)
+	t.Cleanup(func() { _ = h.Close() })
+	if err := l.checkHubKey(ctx); !errors.Is(err, ErrHubKeyMismatch) {
+		t.Fatalf("checkHubKey before the handover = %v, want ErrHubKeyMismatch", err)
+	}
+	if !l.HubPaused() {
+		t.Fatal("sync with the hub is not paused on the changed hub key")
+	}
+	if resign {
+		// What the initialAreas merge does at startup: add an area, sign
+		// through SignNAL, store.
+		n, err := h.NALStore().Get("testnet")
+		if err != nil || n == nil {
+			t.Fatalf("get NAL: %v", err)
+		}
+		n.Areas = append(n.Areas, protocol.Area{Tag: "gen.new", Name: "New", Language: "en",
+			ManagerNodeID: newKS.NodeID(), ManagerPubKeyB64: newKS.PubKeyBase64(),
+			Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen},
+			Policy: protocol.AreaPolicy{MaxBodyBytes: protocol.MaxBodyBytes}})
+		if err := h.SignNAL(n); err != nil {
+			t.Fatalf("SignNAL after the switch: %v", err)
+		}
+		if err := h.NALStore().Put("testnet", n); err != nil {
+			t.Fatal(err)
+		}
+		if err := l.refreshNAL(ctx); !errors.Is(err, nal.ErrCoordKeyMismatch) {
+			t.Fatalf("refreshNAL of the re-signed NAL = %v, want ErrCoordKeyMismatch", err)
+		}
+	}
+
+	ho, err := protocol.NewCoordHandover(oldKS, "testnet", newKS.PubKeyBase64(), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(ho)
+	resp, err := poster.signedPostWithResponse(ctx, "/v3net/v1/testnet/nal/handover", body)
+	if err != nil {
+		t.Fatalf("post handover: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("post handover: status %d", resp.StatusCode)
+	}
+
+	if err := l.checkHubKey(ctx); err != nil {
+		t.Fatalf("checkHubKey after the handover: %v", err)
+	}
+	if err := l.refreshNAL(ctx); err != nil {
+		t.Fatalf("refreshNAL after the handover: %v", err)
+	}
+	want := newKS.PubKeyBase64()
+	if got := l.PinnedKey(KeyHub); got != want {
+		t.Errorf("hub pin = %s, want the new key", got)
+	}
+	if got := l.PinnedKey(KeyCoordinator); got != want {
+		t.Errorf("coordinator pin = %s, want the new key", got)
+	}
+	for _, kind := range []KeyKind{KeyHub, KeyCoordinator} {
+		if got := l.PendingKey(kind); got != "" {
+			t.Errorf("pending %s key = %s, want none", kind, got)
+		}
+	}
+	if l.HubPaused() {
+		t.Error("sync with the hub is still paused")
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	moved := 0
+	for _, ev := range rec.pinned {
+		if ev.Previous == oldKS.PubKeyBase64() && ev.Pinned == want {
+			moved++
+		}
+	}
+	if moved != 2 {
+		t.Errorf("events: pinned %+v; want both keys moved", rec.pinned)
+	}
+}
+
 // Two handovers in quick succession, A to B and B to C, saved by
 // overlapping calls: C's save waits for B's and then replaces B, so the
 // stored pin ends at C. The store mimics persistKeyEvent, which writes a

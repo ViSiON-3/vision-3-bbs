@@ -431,8 +431,30 @@ to the same bytes, does not verify.
 verifies, names the network in the path, and `old_key` is the coordinator
 key in force: the key of the stored NAL, followed along any handovers the
 hub already holds. It refuses a `new_key` the network has already used, so
-the stored handovers never loop (`409`). Sending one it already holds
-succeeds without storing it twice.
+the stored handovers never loop (`409`). Sending one it already holds, or
+one with the same `old_key` and `new_key` signed at another time, succeeds
+without storing it twice.
+
+A hub may already run `new_key` when the handover arrives, if it was
+restarted with the new key first. The rules above are unchanged, so the
+handover must still be signed by the key of the stored NAL; the hub then
+re-signs the NAL with its key at once and sends `nal_updated`. If it holds
+the handover but cannot store the re-signed NAL, it answers `500` saying
+so; sending the handover again retries the re-sign. While a hub
+runs a key that neither signed the stored NAL nor appears on its
+handovers, the only handover it accepts is one to its own key (`409`
+otherwise), since it could never sign for any other.
+
+Such a hub may also have re-signed the NAL with its own key before the
+handover arrived: a hub-side change to a NAL never handed over is signed
+with the hub's key, whatever key signed it before. When that happens with
+no handover held, the hub records the key that signed the NAL before as
+the network's previous signer (one per network, kept across restarts). With
+no handover held, it then also accepts a handover whose `old_key` is that
+previous signer and whose `new_key` is its own key, which already signs the
+NAL; the NAL is served as it is, with the handover, and the hub sends
+`nal_updated`. Once any handover is held, the previous signer no longer
+counts.
 
 A posted NAL (`POST /v3net/v1/{network}/nal`) must always come from the
 node of the coordinator key in force and be signed by that key, so once
