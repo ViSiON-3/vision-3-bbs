@@ -38,12 +38,15 @@ type LogoffPayload struct {
 	Timestamp string `json:"timestamp"`
 }
 
-// NewMessagePayload is the data for a new_message event.
+// NewMessagePayload is the data for a new_message event. A message is
+// identified by its origin node and UUID, so both are sent; origin_node was
+// added later, and leaves that predate it ignore it.
 type NewMessagePayload struct {
-	Network string `json:"network"`
-	MsgUUID string `json:"msg_uuid"`
-	From    string `json:"from"`
-	Subject string `json:"subject"`
+	Network    string `json:"network"`
+	MsgUUID    string `json:"msg_uuid"`
+	OriginNode string `json:"origin_node"`
+	From       string `json:"from"`
+	Subject    string `json:"subject"`
 }
 
 // ChatPayload is the data for a chat event.

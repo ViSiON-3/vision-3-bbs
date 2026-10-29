@@ -322,6 +322,15 @@ func TestSSEReceivesNewMessageEvent(t *testing.T) {
 		if ev.Type != "new_message" {
 			t.Errorf("expected new_message event, got %q", ev.Type)
 		}
+		// The event names the message by origin node as well as UUID.
+		var p protocol.NewMessagePayload
+		if err := json.Unmarshal(ev.Data, &p); err != nil {
+			t.Fatalf("decode new_message payload: %v", err)
+		}
+		if p.Network != "testnet" || p.MsgUUID != "660e8400-e29b-41d4-a716-446655440001" ||
+			p.OriginNode != leafKS.NodeID() || p.From != "Tester" || p.Subject != "SSE Test" {
+			t.Errorf("new_message payload = %+v", p)
+		}
 	case <-time.After(2 * time.Second):
 		t.Error("timed out waiting for SSE event")
 	}

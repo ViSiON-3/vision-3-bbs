@@ -189,10 +189,11 @@ func (h *Hub) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 
 	if isNew {
 		ev, _ := protocol.NewEvent(protocol.EventNewMessage, protocol.NewMessagePayload{
-			Network: network,
-			MsgUUID: msg.MsgUUID,
-			From:    msg.From,
-			Subject: msg.Subject,
+			Network:    network,
+			MsgUUID:    msg.MsgUUID,
+			OriginNode: msg.OriginNode,
+			From:       msg.From,
+			Subject:    msg.Subject,
 		})
 		h.broadcaster.Publish(network, ev)
 	}
