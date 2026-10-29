@@ -283,10 +283,11 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 	currentMsgNum := startMsg
 	quitNewscan := false
-	// threadMenu is whether the thread menu is open: T opens it on a message
-	// with a thread to show, and it stays open while the caller reads
-	// messages from it with Enter. Any other way to another message closes it.
-	threadMenu := false
+	// threadMenu is whether the thread menu is open: T or Tab opens it on a
+	// message with a thread to show, and it stays open while the caller
+	// moves through the thread with it. menuMove marks a message reached
+	// that way, so the menu opens again on it; any other command closes it.
+	threadMenu, menuMove := false, false
 	// navDir is the direction (+1/-1) of the last navigation command; it steers
 	// the msgFilter skip so "previous" keeps moving backward past hidden messages.
 	navDir := 1
@@ -354,8 +355,8 @@ readerLoop:
 
 		// The reply thread this message sits in, as this caller may see it.
 		tv := readerThreadView(e, currentAreaID, currentMsgNum, currentMsg, threadFilter)
-		keepThreadMenu := threadMenu && tv.hasThread()
-		threadMenu = false
+		keepThreadMenu := menuMove && tv.hasThread()
+		threadMenu, menuMove = false, false
 
 		// Build Pascal-style substitution map
 		templateUsesUserNote := headerTemplateUsesUserNote(hdrTemplateBytes)
@@ -442,20 +443,16 @@ readerLoop:
 				bodyAvailHeight -= paneRows + 2 + paneGap
 			}
 		}
-		separator := func() string {
-			if threadMenu && paneLines == nil {
-				// No room for the pane: the keys go above the bar instead.
-				return renderThreadMenuKeys(termWidth-1, "|08", glyphs)
-			}
-			return "|08" + strings.Repeat("─", termWidth-1) + "|07"
-		}
-		threadMenu = keepThreadMenu
+		separator := "|08" + strings.Repeat("─", termWidth-1) + "|07"
+		// The menu needs a thread to show and room for the pane to show it in.
+		canMenu := tv.hasThread() && paneRowsFor(fullBodyAvail) > 0
+		threadMenu = keepThreadMenu && canMenu
 		layoutPane()
-		// The bar's Thread item is lit only when there is a pane to open.
+		// The bar's Thread item is lit only when there is a menu to open.
 		for i := range activeOptions {
 			if activeOptions[i].HotKey == 'T' {
 				activeOptions[i].LoColor = 0
-				if !tv.hasThread() {
+				if !canMenu {
 					activeOptions[i].LoColor = msgReaderInactiveColor
 				}
 			}
@@ -547,7 +544,7 @@ readerLoop:
 
 				// The separator row above the bar: a plain rule.
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight-1, 1)), outputMode)
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(separator())), outputMode)
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(separator)), outputMode)
 
 				// Position cursor at last row for lightbar
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight, 1)), outputMode)
@@ -599,9 +596,16 @@ readerLoop:
 						scrollOffset = max(0, min(scrollOffset, totalBodyLines-bodyAvailHeight))
 						needsRedraw = true
 					case target != 0:
+						if target > totalMsgCount {
+							// A reply posted since the reader started is in
+							// the tree but past the bound it was given.
+							if n, err := e.MessageMgr.GetMessageCountForArea(currentAreaID); err == nil && n > totalMsgCount {
+								totalMsgCount = n
+							}
+						}
 						navDir = 1
 						currentMsgNum = target
-						threadMenu = true // stays open on the message read
+						menuMove = true // the menu opens again on it
 						break scrollLoop
 					}
 					continue
@@ -762,6 +766,14 @@ readerLoop:
 				continue
 			}
 
+			// Any command but Thread closes the thread menu first.
+			if threadMenu && selectedKey != 'T' {
+				threadMenu = false
+				layoutPane()
+				scrollOffset = max(0, min(scrollOffset, totalBodyLines-bodyAvailHeight))
+				needsRedraw = true
+			}
+
 			// Now handle message navigation commands
 			// Handle the selected command
 			switch selectedKey {
@@ -880,7 +892,7 @@ readerLoop:
 				continue
 
 			case 'T': // Open or close the thread menu
-				if !tv.hasThread() {
+				if !canMenu {
 					continue
 				}
 				threadMenu = !threadMenu

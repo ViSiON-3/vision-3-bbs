@@ -344,6 +344,12 @@ func TestExcerpt(t *testing.T) {
 // feeding keys, and returns the screen as it was left.
 func (env *menuEnv) screenRun(cmd string, u *user.User, keys string) *testterm.Term {
 	env.t.Helper()
+	return env.screenRunHeight(cmd, u, keys, 24)
+}
+
+// screenRunHeight is screenRun on an 80-column terminal of height rows.
+func (env *menuEnv) screenRunHeight(cmd string, u *user.User, keys string, height int) *testterm.Term {
+	env.t.Helper()
 	fn, ok := env.e.RunRegistry[cmd]
 	if !ok {
 		env.t.Fatalf("no runnable registered as %q", cmd)
@@ -352,7 +358,7 @@ func (env *menuEnv) screenRun(cmd string, u *user.User, keys string) *testterm.T
 	if env.outputMode == ansi.OutputModeCP437 {
 		opts = append(opts, testterm.CP437())
 	}
-	screen := testterm.New(80, 24, opts...)
+	screen := testterm.New(80, height, opts...)
 	sess := testterm.NewSession(screen, keys)
 	SetSessionOutputMode(sess, env.outputMode)
 	env.t.Cleanup(func() {
@@ -361,7 +367,7 @@ func (env *menuEnv) screenRun(cmd string, u *user.User, keys string) *testterm.T
 	})
 	c := &cmdCtx{
 		e: env.e, s: sess, terminal: term.NewTerminal(sess, ""), userManager: env.um, currentUser: u,
-		nodeNumber: 1, sessionStartTime: time.Now(), outputMode: env.outputMode, termWidth: 80, termHeight: 24,
+		nodeNumber: 1, sessionStartTime: time.Now(), outputMode: env.outputMode, termWidth: 80, termHeight: height,
 	}
 	done := make(chan struct{})
 	go func() {
@@ -560,6 +566,49 @@ func TestMessageReaderThreadMenu(t *testing.T) {
 				t.Errorf("reader should end on #%d; output:\n%s", tc.at, txt)
 			}
 		})
+	}
+}
+
+// Any reader command but Thread closes the menu: after N from #7 the
+// threaded #8 opens with the menu closed, so Enter is Next again (to #10,
+// past the private #9); after ? the help returns to a closed menu.
+func TestMessageReaderOtherCommandsCloseThreadMenu(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	for _, tc := range []struct {
+		name  string
+		start int
+		keys  string
+		at    int
+	}{
+		{"N", 7, "TN\r", 10},
+		{"?", 5, "T?\r", 6},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sub := env.sub(t)
+			sub.markRead(generalAreaID, "Caller", len(sampleThread))
+			r := sub.runCmd("READMSGS", sub.caller, "", fmt.Sprintf("%d\r%sQ", tc.start, tc.keys))
+			txt := r.text()
+			if last := strings.LastIndex(txt, "Reading message #"); last < 0 || !strings.HasPrefix(txt[last:], fmt.Sprintf("Reading message #%d ", tc.at)) {
+				t.Errorf("reader should end on #%d; output:\n%s", tc.at, txt)
+			}
+		})
+	}
+}
+
+// With no room for the pane (a 20-row screen under a six-row header), Thread
+// is greyed out and T does not open an invisible menu: Enter stays Next.
+func TestMessageReaderNoThreadMenuWithoutRoom(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	env.markRead(generalAreaID, "Caller", len(sampleThread))
+	screen := env.screenRunHeight("READMSGS", env.caller, "5\rT\rQ", 20)
+	snap := screen.Snapshot()
+	if strings.Contains(snap, "── Thread ") || strings.Contains(snap, "[Tab]Back") {
+		t.Errorf("the pane or menu was drawn without room for it:\n%s", snap)
+	}
+	if !strings.Contains(screen.Row(2), "Reading message #6 ") {
+		t.Errorf("T should do nothing, leaving Enter as Next to #6:\n%s", snap)
 	}
 }
 
