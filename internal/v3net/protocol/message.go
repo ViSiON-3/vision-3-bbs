@@ -21,6 +21,20 @@ const MaxBodyBytes = 32768
 // each UUID, for leaves that identify a message by UUID alone.
 const IdentityOrigin = "origin"
 
+// PollFormatPage is the value of the format query parameter a leaf sends on
+// a message poll to have the page returned as a MessagePage, with has_more
+// in the body, which the hub's response signature covers. Without it the
+// hub returns a bare JSON array and the X-V3Net-Has-More header, which no
+// signature covers; a hub that predates the parameter does that too.
+const PollFormatPage = "page"
+
+// MessagePage is a page of polled messages in the PollFormatPage form.
+type MessagePage struct {
+	Messages []Message `json:"messages"`
+	// HasMore means another page follows the last message in Messages.
+	HasMore bool `json:"has_more"`
+}
+
 // Message represents a V3Net networked message in wire format.
 type Message struct {
 	V3Net       string         `json:"v3net"`

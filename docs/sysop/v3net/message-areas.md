@@ -235,11 +235,25 @@ parameters:
 | `since_origin` | `origin_node` of that message. Optional. |
 | `identity` | `origin` to identify messages by origin node and UUID. A current leaf sends it on every poll, the first one with no cursor included. |
 | `limit` | Page size, 1 to 500 (default 100). |
+| `format` | `page` to get the page as an object with `has_more` in it (below). A current leaf sends it on every poll. |
 
 The hub returns the messages in its own order that come after the cursor, in
-the leaf's subscribed areas, oldest first. `X-V3Net-Has-More: true` means
-another page follows; the leaf asks again with the last message of the page
-as the cursor, skipped messages included.
+the leaf's subscribed areas, oldest first. With `format=page` the body is
+
+```json
+{"messages":[...],"has_more":true}
+```
+
+and `has_more: true` means another page follows. The hub's response
+signature covers the body, so `has_more` cannot be changed on the way. Without
+`format=page` the body is the bare array of messages and another page is
+announced by the header `X-V3Net-Has-More: true`, which no signature covers. A
+hub from before `format=page` ignores the parameter and answers that way, so
+a leaf reads either form. `format=page` is part of the signed request and the
+signature covers the body, so nothing on the way can turn a current hub's
+object into an array to fall back on the header. Either way the leaf asks
+again with the last message of the page as the cursor, skipped messages
+included.
 
 - With `since_origin`, the cursor is exactly that message in the network.
 - Without it (a leaf from before the identity rule), or when the network has
@@ -343,7 +357,10 @@ V3NET-RESP-SIG-v1\n{request signature}\n{nonce}\n{status}\n{body hash}
   empty (the line is then blank) for a request without one.
 - `{status}` is the HTTP status code in decimal, such as `200` or `401`.
 - `{body hash}` is the SHA-256 of the response body as sent, in lowercase
-  hex. Other headers, such as `X-V3Net-Has-More`, are not covered.
+  hex. Headers are not covered. The one header a leaf acts on,
+  `X-V3Net-Has-More` on a message page, is replaced by `has_more` in the
+  body when the leaf polls with `format=page`
+  (see [Polling Messages](#polling-messages)).
 
 **Event stream.** The `{network}/events` response is signed as above with
 an empty body (its body hash is

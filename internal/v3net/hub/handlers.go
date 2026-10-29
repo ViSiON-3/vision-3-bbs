@@ -99,13 +99,20 @@ func (h *Hub) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if hasMore {
+	// A leaf that asks for format=page gets has_more in the body, where the
+	// response signature covers it (protocol.MessagePage); others get a bare
+	// array and the header, as before.
+	page := r.URL.Query().Get("format") == protocol.PollFormatPage
+	if hasMore && !page {
 		w.Header().Set("X-V3Net-Has-More", "true")
 	}
 
-	// Write raw JSON array of message objects.
+	// Write raw JSON message objects, as stored.
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	if page {
+		_, _ = w.Write([]byte(`{"messages":`)) // best-effort response write
+	}
 	_, _ = w.Write([]byte("[")) // best-effort response write
 	for i, data := range results {
 		if i > 0 {
@@ -114,6 +121,9 @@ func (h *Hub) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(data)) // best-effort response write
 	}
 	_, _ = w.Write([]byte("]")) // best-effort response write
+	if page {
+		_, _ = fmt.Fprintf(w, `,"has_more":%t}`, hasMore) // best-effort response write
+	}
 }
 
 // handlePostMessage accepts a new message from a leaf node (auth required).

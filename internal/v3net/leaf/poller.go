@@ -1,11 +1,13 @@
 package leaf
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -22,7 +24,9 @@ import (
 // origin node and UUID, so the cursor is sent as since=<uuid> and
 // since_origin=<node>, and every request carries identity=origin so the hub
 // serves every copy of a UUID, one per origin node, even on the first poll
-// with no cursor. A hub that predates these parameters ignores them. A hub can
+// with no cursor. It also sends format=page, so a hub that knows it says
+// whether another page follows inside the signed body (see decodePage).
+// A hub that predates these parameters ignores them. A hub can
 // still hand back a cursor it does not recognise (it then starts again from
 // the beginning), so a cursor already requested in this cycle ends the cycle
 // instead of looping.
@@ -53,8 +57,8 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 		}
 		requested[cur] = true
 
-		path := fmt.Sprintf("/v3net/v1/%s/messages?since=%s&limit=100&identity=%s",
-			l.cfg.Network, url.QueryEscape(cur.uuid), protocol.IdentityOrigin)
+		path := fmt.Sprintf("/v3net/v1/%s/messages?since=%s&limit=100&identity=%s&format=%s",
+			l.cfg.Network, url.QueryEscape(cur.uuid), protocol.IdentityOrigin, protocol.PollFormatPage)
 		if cur.origin != "" {
 			path += "&since_origin=" + url.QueryEscape(cur.origin)
 		}
@@ -73,8 +77,8 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 			return total, fmt.Errorf("leaf: fetch messages returned %d", resp.StatusCode)
 		}
 
-		var messages []protocol.Message
-		if err := json.Unmarshal(body, &messages); err != nil {
+		messages, hasMore, err := decodePage(body, resp.Header)
+		if err != nil {
 			return total, fmt.Errorf("leaf: decode messages: %w", err)
 		}
 
@@ -92,12 +96,33 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 			cur = pollCursor{uuid: last.MsgUUID, origin: last.OriginNode}
 		}
 
-		hasMore := resp.Header.Get("X-V3Net-Has-More") == "true"
 		if !hasMore || len(messages) == 0 {
 			break
 		}
 	}
 	return total, nil
+}
+
+// decodePage reads a page of polled messages and whether another follows.
+// A hub that knows format=page returns a protocol.MessagePage, whose
+// has_more its response signature covers. One that predates it returns a
+// bare array, and then the unsigned X-V3Net-Has-More header is all there
+// is. A signing hub's body cannot be swapped for the other form without
+// failing its signature, and the format parameter is part of the signed
+// request path, so it cannot be dropped on the way either.
+func decodePage(body []byte, h http.Header) ([]protocol.Message, bool, error) {
+	if trimmed := bytes.TrimLeft(body, " \t\r\n"); len(trimmed) > 0 && trimmed[0] == '{' {
+		var page protocol.MessagePage
+		if err := json.Unmarshal(body, &page); err != nil {
+			return nil, false, err
+		}
+		return page.Messages, page.HasMore, nil
+	}
+	var messages []protocol.Message
+	if err := json.Unmarshal(body, &messages); err != nil {
+		return nil, false, err
+	}
+	return messages, h.Get("X-V3Net-Has-More") == "true", nil
 }
 
 // pollCursor names the message a poll page starts after.

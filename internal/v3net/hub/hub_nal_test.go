@@ -363,6 +363,44 @@ func TestGetMessages_Pagination(t *testing.T) {
 	if hasMore2 == "true" {
 		t.Errorf("expected no X-V3Net-Has-More on final batch, got %q", hasMore2)
 	}
+
+	// With format=page the same pages carry has_more in the body, where the
+	// response signature covers it, and no header.
+	for _, tc := range []struct {
+		query   string
+		want    int
+		hasMore bool
+	}{
+		{query: "?limit=2&format=page", want: 2, hasMore: true},
+		{query: "?since=" + sinceUUID + "&limit=10&format=page", want: 1, hasMore: false},
+	} {
+		resp := signedGet(t, ts, leafKS, "/v3net/v1/testnet/messages"+tc.query)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s status: %d", tc.query, resp.StatusCode)
+		}
+		if h := resp.Header.Get("X-V3Net-Has-More"); h != "" {
+			t.Errorf("GET %s: X-V3Net-Has-More %q sent with format=page", tc.query, h)
+		}
+		var page protocol.MessagePage
+		if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
+			t.Fatalf("GET %s: decode page: %v", tc.query, err)
+		}
+		resp.Body.Close()
+		if len(page.Messages) != tc.want || page.HasMore != tc.hasMore {
+			t.Errorf("GET %s: %d messages, has_more %v; want %d, %v",
+				tc.query, len(page.Messages), page.HasMore, tc.want, tc.hasMore)
+		}
+	}
+}
+
+// signedGet sends a signed GET for path to ts as ks.
+func signedGet(t *testing.T, ts *httptest.Server, ks *keystore.Keystore, path string) *http.Response {
+	t.Helper()
+	resp, err := http.DefaultClient.Do(signedRequest(t, ks, "GET", ts.URL+path, ""))
+	if err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+	return resp
 }
 
 func TestNALStorePut_StampsAreasAdded(t *testing.T) {
