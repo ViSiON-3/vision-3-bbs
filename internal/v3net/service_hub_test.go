@@ -695,6 +695,80 @@ func TestHubAutoInit_MergesNewInitialAreas(t *testing.T) {
 	}
 }
 
+// A hub restarted with a new key, whose initialAreas merge re-signs the NAL
+// with that key at startup, before any handover, still accepts the old
+// key's handover to the new key afterwards (#780). The old key's node
+// posts it, as v3net-handover does.
+func TestHubAutoInit_MergeAfterKeySwitchKeepsLateHandover(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.V3NetConfig{
+		KeystorePath: filepath.Join(dir, "old.key"),
+		DedupDBPath:  filepath.Join(dir, "dedup.sqlite"),
+		Hub: config.V3NetHubConfig{
+			Enabled:      true,
+			DataDir:      filepath.Join(dir, "hub"),
+			Networks:     []config.V3NetHubNetwork{{Name: "testnet"}},
+			InitialAreas: []config.V3NetHubArea{{Tag: "gen.general", Name: "General"}},
+		},
+	}
+	first, err := New(cfg)
+	if err != nil {
+		t.Fatalf("first New: %v", err)
+	}
+	first.Close()
+
+	cfg.KeystorePath = filepath.Join(dir, "new.key")
+	cfg.Hub.InitialAreas = append(cfg.Hub.InitialAreas, config.V3NetHubArea{Tag: "gen.retro", Name: "Retro"})
+	second, err := New(cfg)
+	if err != nil {
+		t.Fatalf("second New: %v", err)
+	}
+	defer second.Close()
+	oldKS, _, err := keystore.Load(filepath.Join(dir, "old.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := second.Hub().NALStore()
+	n, err := store.Get("testnet")
+	if err != nil || n == nil || n.CoordNodeID != second.NodeID() || n.FindArea("gen.retro") == nil {
+		t.Fatalf("NAL after the merge = %+v, %v; want it re-signed by the new key", n, err)
+	}
+
+	ts := httptest.NewServer(second.Hub().Mux())
+	defer ts.Close()
+	ho, err := protocol.NewCoordHandover(oldKS, "testnet", n.CoordPubKeyB64, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(ho)
+	path := "/v3net/v1/testnet/nal/handover"
+	req, err := http.NewRequest("POST", ts.URL+path, bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	date := time.Now().UTC().Format(http.TimeFormat)
+	hash := sha256.Sum256(body)
+	sig, err := oldKS.Sign("POST", path, date, hex.EncodeToString(hash[:]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Date", date)
+	req.Header.Set("X-V3Net-Node-ID", oldKS.NodeID())
+	req.Header.Set("X-V3Net-Signature", sig)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post handover: %v", err)
+	}
+	msg, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("post handover: %d %s", resp.StatusCode, msg)
+	}
+	if hs, err := store.Handovers("testnet"); err != nil || len(hs) != 1 || hs[0] != *ho {
+		t.Errorf("stored handovers = %+v, %v; want the one posted", hs, err)
+	}
+}
+
 // newAreaFixture returns a message manager holding the given areas.
 func newAreaFixture(t *testing.T, areas ...*message.MessageArea) (*message.MessageManager, string) {
 	t.Helper()

@@ -219,8 +219,19 @@ func TestHandoverThroughHubMovesBothPins(t *testing.T) {
 // End to end, in the other order: the hub restarts with the new key first,
 // so a leaf pinned to the old key pauses on the changed hub key. Once the
 // old key's handover is posted, the hub re-signs the NAL with the new key,
-// and the leaf moves both pins and resumes.
+// and the leaf moves both pins and resumes. The same holds when the hub
+// already re-signed the NAL with the new key before the handover came, as
+// merging initialAreas at startup does: the leaf rejects that NAL until the
+// handover bridges its pin to the new key.
 func TestLateHandoverThroughHubMovesBothPins(t *testing.T) {
+	t.Run("NAL still the old key's", func(t *testing.T) { testLateHandoverThroughHub(t, false) })
+	t.Run("NAL re-signed before the handover", func(t *testing.T) { testLateHandoverThroughHub(t, true) })
+}
+
+// testLateHandoverThroughHub runs TestLateHandoverThroughHubMovesBothPins,
+// re-signing the NAL with the new key before the handover when resign is
+// set.
+func testLateHandoverThroughHub(t *testing.T, resign bool) {
 	dir := t.TempDir()
 	oldKS, err := loadKeystoreAt(filepath.Join(dir, "old.key"))
 	if err != nil {
@@ -269,6 +280,27 @@ func TestLateHandoverThroughHubMovesBothPins(t *testing.T) {
 	if !l.HubPaused() {
 		t.Fatal("sync with the hub is not paused on the changed hub key")
 	}
+	if resign {
+		// What the initialAreas merge does at startup: add an area, sign
+		// through SignNAL, store.
+		n, err := h.NALStore().Get("testnet")
+		if err != nil || n == nil {
+			t.Fatalf("get NAL: %v", err)
+		}
+		n.Areas = append(n.Areas, protocol.Area{Tag: "gen.new", Name: "New", Language: "en",
+			ManagerNodeID: newKS.NodeID(), ManagerPubKeyB64: newKS.PubKeyBase64(),
+			Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen},
+			Policy: protocol.AreaPolicy{MaxBodyBytes: protocol.MaxBodyBytes}})
+		if err := h.SignNAL(n); err != nil {
+			t.Fatalf("SignNAL after the switch: %v", err)
+		}
+		if err := h.NALStore().Put("testnet", n); err != nil {
+			t.Fatal(err)
+		}
+		if err := l.refreshNAL(ctx); !errors.Is(err, nal.ErrCoordKeyMismatch) {
+			t.Fatalf("refreshNAL of the re-signed NAL = %v, want ErrCoordKeyMismatch", err)
+		}
+	}
 
 	ho, err := protocol.NewCoordHandover(oldKS, "testnet", newKS.PubKeyBase64(), time.Now())
 	if err != nil {
@@ -297,8 +329,10 @@ func TestLateHandoverThroughHubMovesBothPins(t *testing.T) {
 	if got := l.PinnedKey(KeyCoordinator); got != want {
 		t.Errorf("coordinator pin = %s, want the new key", got)
 	}
-	if got := l.PendingKey(KeyHub); got != "" {
-		t.Errorf("pending hub key = %s, want none", got)
+	for _, kind := range []KeyKind{KeyHub, KeyCoordinator} {
+		if got := l.PendingKey(kind); got != "" {
+			t.Errorf("pending %s key = %s, want none", kind, got)
+		}
 	}
 	if l.HubPaused() {
 		t.Error("sync with the hub is still paused")

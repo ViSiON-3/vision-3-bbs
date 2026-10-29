@@ -464,3 +464,98 @@ func TestLateHandoverAdopted(t *testing.T) {
 		t.Errorf("updateNALArea after the late handover: %v", err)
 	}
 }
+
+// A hub restarted with the new key that re-signs the NAL with it before the
+// handover arrives (the lost-key path, unchanged) records the old key as
+// the previous signer, and still accepts that key's handover to its own:
+// the NAL is already the new key's, so it is served as is with the
+// handover. A handover to any other key, or from a key that never signed
+// the NAL, is refused.
+func TestLateHandoverAfterResign(t *testing.T) {
+	dir := t.TempDir()
+	oldKS, newKS := newKey(t, "old.key"), newKey(t, "new.key")
+	third, stranger, poster := newKey(t, "third.key"), newKey(t, "stranger.key"), newKey(t, "poster.key")
+	open := func(ks *keystore.Keystore) (*Hub, *httptest.Server) {
+		t.Helper()
+		h, err := New(Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
+			RequireSignedSubscribe: true, Networks: []NetworkConfig{{Name: "testnet"}}})
+		if err != nil {
+			t.Fatalf("create hub: %v", err)
+		}
+		return h, httptest.NewServer(h.newMux())
+	}
+
+	h, ts := open(oldKS)
+	seedTestNAL(t, h, oldKS)
+	registerLeaf(t, ts, poster)
+	ts.Close()
+	_ = h.Close()
+
+	h, ts = open(newKS)
+	defer ts.Close()
+	// With no handover held, a hub-side change signs with the new key as
+	// before, and the old key is kept as the previous signer.
+	if err := h.updateNALArea("testnet", "gen.general", func(a *protocol.Area) { a.Description = "switched" }); err != nil {
+		t.Fatalf("updateNALArea after the switch: %v", err)
+	}
+	stored, err := h.nalStore.Get("testnet")
+	if err != nil || stored.CoordPubKeyB64 != newKS.PubKeyBase64() {
+		t.Fatalf("stored NAL after the edit: %v; want it re-signed by the new key", err)
+	}
+	if err := nal.Verify(stored); err != nil {
+		t.Errorf("re-signed NAL does not verify: %v", err)
+	}
+	// The record survives a restart.
+	ts.Close()
+	_ = h.Close()
+	h, ts = open(newKS)
+	defer h.Close()
+	defer ts.Close()
+	if prev, err := h.nalStore.PrevSigner("testnet"); err != nil || prev != oldKS.PubKeyBase64() {
+		t.Fatalf("previous signer = %q, %v; want the old key", prev, err)
+	}
+
+	url := ts.URL + "/v3net/v1/testnet/nal/handover"
+	if got := postJSON(t, poster, url, signHandover(t, "testnet", oldKS, third)); got != http.StatusConflict {
+		t.Errorf("handover to a third key: status %d, want 409", got)
+	}
+	if got := postJSON(t, poster, url, signHandover(t, "testnet", stranger, newKS)); got != http.StatusConflict {
+		t.Errorf("handover from a key that never signed the NAL: status %d, want 409", got)
+	}
+	if hs, err := h.nalStore.Handovers("testnet"); err != nil || len(hs) != 0 {
+		t.Fatalf("stored handovers = %d, %v; want none", len(hs), err)
+	}
+
+	ho := signHandover(t, "testnet", oldKS, newKS)
+	for i := 0; i < 2; i++ {
+		if got := postJSON(t, poster, url, ho); got != http.StatusOK {
+			t.Fatalf("POST late handover #%d: status %d", i+1, got)
+		}
+	}
+	var served protocol.NAL
+	if err := json.Unmarshal(getNALBody(t, ts), &served); err != nil {
+		t.Fatal(err)
+	}
+	if served.SignatureB64 != stored.SignatureB64 {
+		t.Error("the NAL was re-signed again; want it served as stored")
+	}
+	if len(served.Handovers) != 1 || served.Handovers[0] != *ho {
+		t.Errorf("served handovers = %+v, want the one posted", served.Handovers)
+	}
+	if _, err := nal.FollowHandovers("testnet", oldKS.PubKeyBase64(), served.CoordPubKeyB64, served.Handovers); err != nil {
+		t.Errorf("no chain from the old key to the served NAL: %v", err)
+	}
+
+	// With a handover held the previous signer no longer counts: the old
+	// key cannot hand over again, and the hub signs its changes as usual.
+	again, err := protocol.NewCoordHandover(oldKS, "testnet", newKS.PubKeyBase64(), time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := postJSON(t, poster, url, again); got != http.StatusConflict {
+		t.Errorf("second handover from the previous signer: status %d, want 409", got)
+	}
+	if err := h.updateNALArea("testnet", "gen.general", func(a *protocol.Area) { a.Description = "after" }); err != nil {
+		t.Errorf("updateNALArea after the late handover: %v", err)
+	}
+}
