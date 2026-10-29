@@ -24,8 +24,8 @@ const CoordHandoverDomain = "V3NET-COORD-HANDOVER-v1\n"
 
 // Coordinator handover errors.
 var (
-	// ErrHandoverKey is returned when old_key or new_key is not a valid
-	// base64 ed25519 public key, or the two are the same key.
+	// ErrHandoverKey is returned when old_key or new_key is not an ed25519
+	// public key in canonical standard base64, or the two are the same key.
 	ErrHandoverKey = errors.New("protocol: invalid handover key")
 	// ErrHandoverIssued is returned when issued is not an RFC 3339 time.
 	ErrHandoverIssued = errors.New("protocol: invalid handover issued time")
@@ -145,10 +145,20 @@ func (h *CoordHandover) checkFields() error {
 	return nil
 }
 
-// decodePubKey decodes a standard base64 ed25519 public key.
+// CanonicalPubKey reports whether b64 is an ed25519 public key in canonical
+// standard base64: exactly what encoding the decoded key gives back. The
+// decoder also takes embedded line breaks and stray padding bits, so one
+// key has many spellings; handover keys are compared as strings, so only
+// the canonical one is accepted.
+func CanonicalPubKey(b64 string) bool {
+	_, err := decodePubKey(b64)
+	return err == nil
+}
+
+// decodePubKey decodes an ed25519 public key in canonical standard base64.
 func decodePubKey(b64 string) (ed25519.PublicKey, error) {
 	b, err := base64.StdEncoding.DecodeString(b64)
-	if err != nil || len(b) != ed25519.PublicKeySize {
+	if err != nil || len(b) != ed25519.PublicKeySize || base64.StdEncoding.EncodeToString(b) != b64 {
 		return nil, errors.New("invalid ed25519 public key")
 	}
 	return ed25519.PublicKey(b), nil

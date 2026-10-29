@@ -61,10 +61,11 @@ func TestFollowHandovers(t *testing.T) {
 	// Nothing leads backwards, or from a key not on the chain.
 	stranger := testKeystore(t).PubKeyBase64()
 	for name, c := range map[string][2]string{
-		"backwards":         {pub(3), pub(0)},
-		"not from the pin":  {stranger, pub(3)},
-		"to an unknown key": {pub(0), stranger},
-		"same key":          {pub(0), pub(0)},
+		"backwards":                     {pub(3), pub(0)},
+		"not from the pin":              {stranger, pub(3)},
+		"to an unknown key":             {pub(0), stranger},
+		"same key":                      {pub(0), pub(0)},
+		"pin spelled with a line break": {pub(0)[:20] + "\n" + pub(0)[20:], pub(1)},
 	} {
 		if _, err := FollowHandovers("testnet", c[0], c[1], hs); !errors.Is(err, ErrNoHandoverChain) {
 			t.Errorf("%s: err = %v, want ErrNoHandoverChain", name, err)

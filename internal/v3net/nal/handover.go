@@ -32,10 +32,17 @@ var ErrNoHandoverChain = errors.New("nal: no coordinator handover chain from the
 // No key is visited twice, so loops end, and a chain longer than
 // MaxHandoverSteps is not followed. It returns an error wrapping
 // ErrNoHandoverChain when there is no such chain or hs is longer than
-// MaxHandovers. from and to must differ.
+// MaxHandovers. from and to must differ and be in canonical base64 (see
+// protocol.CanonicalPubKey).
 func FollowHandovers(network, from, to string, hs []protocol.CoordHandover) ([]protocol.CoordHandover, error) {
 	if from == "" || to == "" || from == to {
 		return nil, fmt.Errorf("%w: nothing to follow", ErrNoHandoverChain)
+	}
+	// Keys are matched as strings, and a handover only verifies with
+	// canonical ones, so a pin or NAL key spelled any other way never
+	// matches; say so rather than search.
+	if !protocol.CanonicalPubKey(from) || !protocol.CanonicalPubKey(to) {
+		return nil, fmt.Errorf("%w: keys must be canonical base64", ErrNoHandoverChain)
 	}
 	if len(hs) > MaxHandovers {
 		return nil, fmt.Errorf("%w: %d handovers, more than the %d allowed", ErrNoHandoverChain, len(hs), MaxHandovers)

@@ -1,8 +1,10 @@
 package protocol_test
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,5 +95,54 @@ func TestCoordHandoverTampered(t *testing.T) {
 
 	if _, err := protocol.NewCoordHandover(oldKey, "felonynet", oldKey.PubKeyBase64(), handoverIssued); !errors.Is(err, protocol.ErrHandoverKey) {
 		t.Errorf("NewCoordHandover to its own key = %v, want ErrHandoverKey", err)
+	}
+}
+
+// nonCanonical respells key k, 32 bytes in standard base64, with one of the
+// two unused low bits of its last character set. The decoder still returns
+// the same key for it.
+func nonCanonical(k string) string {
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+	i := strings.IndexByte(alphabet, k[42])
+	return k[:42] + string(alphabet[i^1]) + k[43:]
+}
+
+// A key has one accepted spelling: line breaks or stray padding bits, which
+// the base64 decoder ignores, make a handover invalid, since keys are
+// compared as strings.
+func TestCoordHandoverNonCanonicalKeys(t *testing.T) {
+	oldKey, newKey := loadKey(t, "old.key"), loadKey(t, "new.key")
+	odd := nonCanonical(newKey.PubKeyBase64())
+	raw, err := base64.StdEncoding.DecodeString(odd)
+	if err != nil || base64.StdEncoding.EncodeToString(raw) != newKey.PubKeyBase64() {
+		t.Fatalf("test setup: %q should decode to the new key (%v)", odd, err)
+	}
+	wrapped := newKey.PubKeyBase64()[:20] + "\n" + newKey.PubKeyBase64()[20:]
+
+	for name, k := range map[string]string{"padding bits": odd, "line break": wrapped} {
+		if protocol.CanonicalPubKey(k) {
+			t.Errorf("%s: CanonicalPubKey = true", name)
+		}
+		if _, err := protocol.NewCoordHandover(oldKey, "felonynet", k, handoverIssued); !errors.Is(err, protocol.ErrHandoverKey) {
+			t.Errorf("%s: NewCoordHandover = %v, want ErrHandoverKey", name, err)
+		}
+	}
+	if !protocol.CanonicalPubKey(newKey.PubKeyBase64()) {
+		t.Error("CanonicalPubKey rejects a canonical key")
+	}
+
+	good, err := protocol.NewCoordHandover(oldKey, "felonynet", newKey.PubKeyBase64(), handoverIssued)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := *good
+	h.OldKeyB64 = nonCanonical(h.OldKeyB64)
+	if err := h.Verify(); !errors.Is(err, protocol.ErrHandoverKey) {
+		t.Errorf("respelled old_key: Verify = %v, want ErrHandoverKey", err)
+	}
+	h = *good
+	h.NewKeyB64 = odd
+	if err := h.Verify(); !errors.Is(err, protocol.ErrHandoverKey) {
+		t.Errorf("respelled new_key: Verify = %v, want ErrHandoverKey", err)
 	}
 }
