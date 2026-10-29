@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 )
@@ -112,12 +114,53 @@ func (m *Message) IsSigned() bool {
 	return m.OriginPubKeyB64 != "" || m.SignatureB64 != ""
 }
 
+// NormalizeUTF8 replaces each byte of invalid UTF-8 in the message's signed
+// text fields with U+FFFD. encoding/json makes the same replacement when the
+// message is sent, so the hub and every leaf decode exactly these strings;
+// signing the raw bytes instead (raw CP437 text, say) would sign something
+// no reader ever sees. Valid text is left as it is.
+func (m *Message) NormalizeUTF8() {
+	for _, f := range []*string{
+		&m.V3Net, &m.Network, &m.AreaTag, &m.MsgUUID, &m.ThreadUUID, &m.OriginNode,
+		&m.OriginBoard, &m.From, &m.To, &m.Subject, &m.DateUTC, &m.Body, &m.Tearline, &m.Origin,
+	} {
+		*f = wireUTF8(*f)
+	}
+	if m.ParentUUID != nil {
+		p := wireUTF8(*m.ParentUUID)
+		m.ParentUUID = &p
+	}
+}
+
+// wireUTF8 returns s with every byte that is not part of valid UTF-8
+// replaced by U+FFFD, one per byte, matching encoding/json's encoder (unlike
+// strings.ToValidUTF8, which collapses a run of bad bytes into one).
+func wireUTF8(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 8)
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			b.WriteRune(utf8.RuneError)
+		} else {
+			b.WriteString(s[i : i+size])
+		}
+		i += size
+	}
+	return b.String()
+}
+
 // Sign sets OriginPubKeyB64 to the signer's key and SignatureB64 to its
-// signature over SignedPayload. The message must already be final: its
-// origin_node must be the signer's node ID and its body must be within
-// MaxBodyBytes (call Truncate first), since any later change breaks the
-// signature.
+// signature over SignedPayload. It first applies NormalizeUTF8, so the
+// signature covers the text as it travels. The message must otherwise be
+// final: its origin_node must be the signer's node ID and its body must be
+// within MaxBodyBytes after normalising (call NormalizeUTF8, then Truncate,
+// first), since any later change breaks the signature.
 func (m *Message) Sign(s MessageSigner) error {
+	m.NormalizeUTF8()
 	if m.OriginNode != s.NodeID() {
 		return fmt.Errorf("protocol: sign: origin_node %q is not the signing node %q", m.OriginNode, s.NodeID())
 	}

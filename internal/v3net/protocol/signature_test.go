@@ -104,6 +104,45 @@ func TestMessageVerify_DetectsChangesAfterSigning(t *testing.T) {
 	}
 }
 
+func TestMessageSign_InvalidUTF8MatchesWire(t *testing.T) {
+	ks := loadKey(t, "a.key")
+	m := protocol.Message{
+		V3Net: protocol.ProtocolVersion, Network: "testnet", AreaTag: "gen.general",
+		MsgUUID:    "550e8400-e29b-41d4-a716-446655440000",
+		ThreadUUID: "550e8400-e29b-41d4-a716-446655440000",
+		OriginNode: ks.NodeID(), OriginBoard: "General",
+		From: "Ren\x82e", To: "All", Subject: "\xc9\xcd\xbb box",
+		DateUTC: "2026-03-16T04:20:00Z", Body: "raw \x80\x81\xfe\xff bytes \xe2\x82",
+	}
+	raw := m // what encoding/json sent before messages were signed
+	if err := m.Sign(ks); err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got protocol.Message
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if err := got.VerifySignature(); err != nil {
+		t.Fatalf("VerifySignature after JSON round trip: %v", err)
+	}
+
+	// Readers see the same text as when the raw bytes went out unsigned.
+	rawData, _ := json.Marshal(raw)
+	var legacy protocol.Message
+	if err := json.Unmarshal(rawData, &legacy); err != nil {
+		t.Fatal(err)
+	}
+	if got.Body != legacy.Body || got.Subject != legacy.Subject || got.From != legacy.From {
+		t.Errorf("signed text %q/%q/%q differs from unsigned wire text %q/%q/%q",
+			got.From, got.Subject, got.Body, legacy.From, legacy.Subject, legacy.Body)
+	}
+}
+
 func TestMessageVerify_KludgesAreNotSigned(t *testing.T) {
 	m := signedMessage(t, loadKey(t, "a.key"))
 	m.Kludges = map[string]any{"relayed_by": "hub"}

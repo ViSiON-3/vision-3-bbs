@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"time"
 
@@ -64,12 +65,15 @@ func (l *Leaf) SendMessage(msg protocol.Message) error {
 	return l.SendMessageCtx(context.Background(), msg)
 }
 
-// SendMessageCtx signs and POSTs a message to the hub with context. An
-// oversize body is truncated first, then the message is signed with the
-// node key (protocol.Message.Sign), so the signature covers exactly what the
-// hub stores and relays. The message's OriginNode must be this node's ID.
+// SendMessageCtx signs and POSTs a message to the hub with context. Invalid
+// UTF-8 is replaced as it would be on the wire and an oversize body is
+// truncated, then the message is signed with the node key
+// (protocol.Message.Sign), so the signature covers exactly what the hub
+// stores and relays. The message's OriginNode must be this node's ID.
 func (l *Leaf) SendMessageCtx(ctx context.Context, msg protocol.Message) error {
+	msg.NormalizeUTF8()
 	if msg.NeedsTruncation() {
+		msg.Kludges = maps.Clone(msg.Kludges) // Truncate writes to it; leave the caller's alone
 		msg.Truncate()
 	}
 	if err := msg.Sign(l.cfg.Keystore); err != nil {
