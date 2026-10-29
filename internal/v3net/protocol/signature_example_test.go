@@ -102,16 +102,18 @@ func TestMessageSignatureDocExample(t *testing.T) {
 		t.Errorf("example does not verify: %v", err)
 	}
 
-	doc, err := os.ReadFile("../../../docs/sysop/v3net/message-areas.md")
+	raw, err := os.ReadFile("../../../docs/sysop/v3net/message-areas.md")
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A Windows checkout may turn the doc's line endings into CRLF.
+	doc := strings.ReplaceAll(string(raw), "\r\n", "\n")
 	for k, v := range want {
-		if !strings.Contains(string(doc), v) {
+		if !strings.Contains(doc, v) {
 			t.Errorf("message-areas.md does not show the example %s %q", k, v)
 		}
 	}
-	if !strings.Contains(string(doc), exampleSeedHex) {
+	if !strings.Contains(doc, exampleSeedHex) {
 		t.Error("message-areas.md does not show the example seed")
 	}
 }
