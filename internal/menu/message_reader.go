@@ -397,7 +397,9 @@ readerLoop:
 		// The docked thread pane sits under the header and moves the body
 		// down while it is open (V opens and closes it). A message that is
 		// not in a thread has no pane and no signposts: the separator row
-		// is a plain rule and the body keeps the rows.
+		// is a plain rule and the body keeps the rows. A reply whose parent
+		// is deleted or hidden is still in one, even with nothing else to
+		// show: it keeps its signposts and keys, though there is no pane.
 		paneTop, fullBodyStart, fullBodyAvail := bodyStartRow, bodyStartRow, bodyAvailHeight
 		var paneLines []string
 		layoutPane := func() {
@@ -414,7 +416,8 @@ readerLoop:
 		}
 		layoutPane()
 		signposts := "|08" + strings.Repeat("─", termWidth-1) + "|07"
-		if tv.hasThread() {
+		inThread := tv.hasThread() || tv.isReply()
+		if inThread {
 			signposts = renderSignposts(readerSignposts(tv, glyphs), termWidth-1, glyphs, outputMode)
 		}
 
@@ -822,7 +825,7 @@ readerLoop:
 				break scrollLoop
 
 			case 'B', 'F', 'A', '[', ']': // Reply-tree navigation
-				if !tv.hasThread() {
+				if !inThread {
 					continue
 				}
 				target, notice := threadNavTarget(tv, selectedKey, e.Strings())

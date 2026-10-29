@@ -265,6 +265,15 @@ func (tv *threadView) hasThread() bool {
 	return len(tv.order()) > 1
 }
 
+// isReply reports whether the current message answers another, even one
+// that is deleted or hidden from the caller. Such a message keeps its
+// signposts and thread keys when it is the only one left to show, so B can
+// still say why there is nowhere to go.
+func (tv *threadView) isReply() bool {
+	_, state := tv.parentOf(tv.cur)
+	return state != parentNone
+}
+
 // directReplies counts the readable replies shown under n.
 func (tv *threadView) directReplies(n int) int {
 	return len(tv.replies(n))

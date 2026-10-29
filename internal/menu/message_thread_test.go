@@ -566,6 +566,27 @@ func TestMessageReaderNoPaneWithoutThread(t *testing.T) {
 	}
 }
 
+// The only reply to a deleted root has no pane, having nothing else to
+// show, but it is still a reply: its signposts and B say the parent is gone.
+func TestMessageReaderLoneReplyToDeletedRoot(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	if err := env.e.MessageMgr.DeleteMessage(generalAreaID, 12); err != nil {
+		t.Fatalf("DeleteMessage: %v", err)
+	}
+	screen := env.readerAt(13, "")
+	if strings.Contains(screen.Snapshot(), "── Thread ─") {
+		t.Errorf("pane shown with nothing else to show:\n%s", screen.Snapshot())
+	}
+	if !strings.Contains(screen.Row(23), "─[B]↑ #12 deleted ") {
+		t.Errorf("signposts = %q, want B leading to the deleted #12", screen.Row(23))
+	}
+	r := env.sub(t).runCmd("READMSGS", env.caller, "", "13\rBQ")
+	if !r.has("Message #12, the one this answers, has been deleted.") {
+		t.Errorf("B should give the deleted-parent notice; output:\n%s", r.text())
+	}
+}
+
 // The pane rows follow the current message: on #14 (last in the thread)
 // the window ends with it; on #8 the deleted #4 shows as a placeholder.
 func TestMessageReaderPaneWindowAndPlaceholder(t *testing.T) {

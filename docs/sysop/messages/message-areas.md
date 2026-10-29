@@ -383,7 +383,8 @@ from the current message, with the author's handle (`none` when there is
 nowhere to go, `#n deleted` when the parent has been deleted), and a pane
 under the header draws the thread as a tree, five rows (three on a short
 screen) windowed around the current message, with the root's subject in its
-title and the message's place in the thread. `V` closes and reopens the
+title and the message's place in the thread (no pane when every other
+message in it is deleted or hidden from the caller). `V` closes and reopens the
 pane; the choice holds for the rest of the call, and the caller's **Thread
 View** setting in User Konfig decides whether it starts open. A message
 that is not in a thread (one nobody has answered and that answers nothing)
