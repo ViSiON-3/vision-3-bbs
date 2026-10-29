@@ -26,6 +26,10 @@ type Config struct {
 	BBSName string // Local BBS name for subscribe request
 	BBSHost string // Local BBS hostname for subscribe request
 
+	// RequireSignedMessages drops polled messages without an author
+	// signature instead of importing them as legacy messages.
+	RequireSignedMessages bool
+
 	// CoordPubKeyB64 is the pinned coordinator key (standard base64). Every
 	// NAL must be signed by it. Blank means not pinned yet: the first NAL
 	// that verifies pins its key and OnKeyPinned is told.

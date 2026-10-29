@@ -1,15 +1,18 @@
 package leaf
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
@@ -233,5 +236,192 @@ func TestPoll_StopsWhenHubDoesNotAdvance(t *testing.T) {
 	}
 	if count != 2 || requests > 3 {
 		t.Errorf("Poll imported %d over %d requests; want 2 and a bounded number of requests", count, requests)
+	}
+}
+
+// sinceHub serves the messages after the one named by the since cursor, as
+// the hub does, and records each request's cursor.
+type sinceHub struct {
+	mu       sync.Mutex
+	messages []protocol.Message
+	cursors  []string
+}
+
+func (h *sinceHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	since := r.URL.Query().Get("since")
+	page := h.messages
+	for i, m := range h.messages {
+		if m.MsgUUID == since {
+			page = h.messages[i+1:]
+			break
+		}
+	}
+	h.cursors = append(h.cursors, since)
+	_ = json.NewEncoder(w).Encode(page)
+}
+
+// replace swaps in m for the stored message with the same UUID, as a hub
+// holds one row per UUID.
+func (h *sinceHub) replace(m protocol.Message) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for i := range h.messages {
+		if h.messages[i].MsgUUID == m.MsgUUID {
+			h.messages[i] = m
+		}
+	}
+}
+
+func (h *sinceHub) lastCursor() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.cursors[len(h.cursors)-1]
+}
+
+// captureLogs sends the default logger to a buffer, at debug level, for the
+// rest of the test.
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+// countLogLines counts the lines of logs at level that contain text.
+func countLogLines(logs, level, text string) int {
+	n := 0
+	for _, line := range strings.Split(logs, "\n") {
+		if strings.Contains(line, "level="+level) && strings.Contains(line, text) {
+			n++
+		}
+	}
+	return n
+}
+
+func TestPoll_RefusedNewestMessageWarnsOnceAndGenuineImports(t *testing.T) {
+	author, _, err := keystore.Load(filepath.Join(t.TempDir(), "author.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	genuine := testMessage(sigUUID(2))
+	genuine.OriginNode = author.NodeID()
+	if err := genuine.Sign(author); err != nil {
+		t.Fatal(err)
+	}
+	tampered := genuine
+	tampered.Body = "a proxy rewrote this"
+
+	h := &sinceHub{messages: []protocol.Message{testMessage(sigUUID(1)), tampered}}
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+	writer := &mockJAMWriter{}
+	l, ix := setupLeaf(t, ts.URL, writer)
+	logs := captureLogs(t)
+
+	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
+		t.Fatalf("first Poll = %d, %v; want 1", count, err)
+	}
+	// The tampered message is the newest on the hub. Each poll starts at the
+	// last seen message and fetches it again, but warns only the first time.
+	for i := 0; i < 3; i++ {
+		if count, err := l.Poll(context.Background()); err != nil || count != 0 {
+			t.Fatalf("repeat Poll = %d, %v; want 0", count, err)
+		}
+		if cursor := h.lastCursor(); cursor != sigUUID(1) {
+			t.Fatalf("poll asked since %q, want the last seen message %s", cursor, sigUUID(1))
+		}
+	}
+	const text = "failed author signature check"
+	if n := countLogLines(logs.String(), "WARN", text); n != 1 {
+		t.Errorf("signature warning logged %d times over 4 polls, want 1", n)
+	}
+	if n := countLogLines(logs.String(), "DEBUG", text); n != 3 {
+		t.Errorf("signature debug line logged %d times, want 3", n)
+	}
+	if seen, _ := ix.Seen(tampered.MsgUUID); seen {
+		t.Fatal("refused message was marked seen")
+	}
+
+	// The hub now serves the genuine message under the same UUID.
+	h.replace(genuine)
+	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
+		t.Fatalf("Poll after correction = %d, %v; want 1", count, err)
+	}
+	if got := writer.messages[len(writer.messages)-1]; got.MsgUUID != genuine.MsgUUID || got.Body != genuine.Body {
+		t.Errorf("imported %s %q, want the genuine message", got.MsgUUID, got.Body)
+	}
+}
+
+func TestRefusedLog_ForgetsOldestWhenFull(t *testing.T) {
+	var r refusedLog
+	for i := 0; i < refusedCap; i++ {
+		if !r.add(sigUUID(i)) {
+			t.Fatalf("add(%d) reported a repeat", i)
+		}
+	}
+	if r.add(sigUUID(0)) {
+		t.Fatal("a remembered UUID was reported new")
+	}
+	if !r.add(sigUUID(refusedCap)) {
+		t.Fatal("a new UUID was reported as a repeat")
+	}
+	if len(r.uuids) != refusedCap || len(r.order) != refusedCap {
+		t.Errorf("log holds %d/%d entries, want %d", len(r.uuids), len(r.order), refusedCap)
+	}
+	// The oldest entry was dropped to make room.
+	if !r.add(sigUUID(0)) {
+		t.Error("the oldest UUID was not forgotten")
+	}
+}
+
+func TestPoll_RetriesUnwritableMessage(t *testing.T) {
+	h := &sinceHub{messages: []protocol.Message{testMessage(sigUUID(1)), testMessage(sigUUID(2))}}
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+	writer := &failingJAMWriter{failUUID: sigUUID(2)}
+	l, _ := setupLeaf(t, ts.URL, writer)
+
+	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
+		t.Fatalf("first Poll = %d, %v; want 1", count, err)
+	}
+	// Once JAM takes it, the next poll goes back for the message it refused.
+	writer.failUUID = ""
+	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
+		t.Fatalf("second Poll = %d, %v; want 1", count, err)
+	}
+	if cursor := h.lastCursor(); cursor != sigUUID(1) {
+		t.Errorf("second poll asked since %q, want the last seen message %s", cursor, sigUUID(1))
+	}
+}
+
+func TestPoll_RequireSignedMessagesDropsUnsigned(t *testing.T) {
+	author, _, err := keystore.Load(filepath.Join(t.TempDir(), "author.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed := testMessage(sigUUID(1))
+	signed.OriginNode = author.NodeID()
+	if err := signed.Sign(author); err != nil {
+		t.Fatal(err)
+	}
+	unsigned := testMessage(sigUUID(2))
+
+	ts, _ := newMockHub(t, []protocol.Message{signed, unsigned})
+	writer := &mockJAMWriter{}
+	l, ix := setupLeaf(t, ts.URL, writer)
+	l.cfg.RequireSignedMessages = true
+
+	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
+		t.Fatalf("Poll = %d, %v; want 1", count, err)
+	}
+	if writer.messages[0].MsgUUID != signed.MsgUUID {
+		t.Errorf("imported %s, want only the signed message", writer.messages[0].MsgUUID)
+	}
+	if seen, _ := ix.Seen(unsigned.MsgUUID); seen {
+		t.Error("dropped unsigned message was marked seen")
 	}
 }

@@ -94,6 +94,7 @@ to subscribe to multiple networks.
 | `pollInterval` | string | `"5m"` | How often to poll the hub for new messages. Accepts Go duration strings: `"30s"`, `"5m"`, `"1h"`. |
 | `origin` | string | BBS name | Origin line appended to outbound messages. Falls back to the BBS name from `config.json` if blank. |
 | `autoJoinAreas` | bool | unset (`true`) | **Newscan Default** in the editor. When true or unset, message areas created for this subscription are flagged as newscan defaults for users. Set `false` to leave new areas out of newscans until users add them. |
+| `requireSignedMessages` | bool | `false` | **Signed Messages** in the editor. When true, the leaf drops polled messages that carry no author signature. Leave it false until every node on the network signs its messages. See [Requiring signed messages](v3net/configuration.md#on-a-leaf). |
 | `coordinatorPubKey` | string | blank | **Coord Key** in the editor. The network coordinator's Ed25519 public key (base64). NALs signed by any other key are rejected. Blank pins the key of the next NAL the leaf verifies and writes it here. See [Coordinator Key Pinning](v3net/nal.md#coordinator-key-pinning). |
 | `hubPubKey` | string | blank | **Hub Key** in the editor. The hub's Ed25519 public key (base64) from the network's `/info`. Pinned and checked the same way. |
 | `pendingCoordinatorPubKey`, `pendingHubPubKey` | string | blank | Written by the BBS, shown as **Offered Coord** / **Offered Hub**. A key the hub offered that differs from the pin. It is rejected; copy it into the pin to accept it. |

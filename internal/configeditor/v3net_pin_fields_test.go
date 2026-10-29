@@ -4,6 +4,8 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
 func TestV3NetPinFieldValidatesAndClearsPending(t *testing.T) {
@@ -40,5 +42,27 @@ func TestV3NetPinFieldValidatesAndClearsPending(t *testing.T) {
 	g := v3netPendingField("Offered Coord", 11, &pending)
 	if got := g.Get(); got != "(none)" {
 		t.Errorf("empty pending shows %q", got)
+	}
+}
+
+func TestV3NetLeafSignedMessagesField(t *testing.T) {
+	m := Model{configs: &allConfigs{}}
+	m.configs.V3Net.Leaves = []config.V3NetLeafConfig{{HubURL: "http://hub.example", Network: "testnet"}}
+	f := findField(t, m.fieldsV3NetLeaf(), "Signed Messages")
+
+	if got := f.Get(); got != "N" {
+		t.Fatalf("default = %q, want N", got)
+	}
+	if err := f.Set("Y"); err != nil {
+		t.Fatal(err)
+	}
+	if !m.configs.V3Net.Leaves[0].RequireSignedMessages {
+		t.Error("Set(Y) did not enable requireSignedMessages")
+	}
+	if err := f.Set("N"); err != nil {
+		t.Fatal(err)
+	}
+	if m.configs.V3Net.Leaves[0].RequireSignedMessages {
+		t.Error("Set(N) did not disable requireSignedMessages")
 	}
 }
