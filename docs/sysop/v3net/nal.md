@@ -185,13 +185,22 @@ moves the pin to the new key itself (see
    the new identity's phrase). On start it re-signs each handed-over
    network's NAL with the new key, so subscribers move at their next fetch.
 
+Do steps 2 and 3 close together. Between them the hub refuses every NAL
+change it would sign with the old key (approving a proposal, changing an
+area's access or manager), because signing with the old key would undo the
+handover for subscribers that already follow the new key. Those changes
+fail with `the network was handed over to another coordinator key` until
+the hub runs with the new key; a proposal sent meanwhile waits in
+**Pending area proposals** instead of being approved automatically.
+
 The new key's node becomes the coordinator. Areas the old hub node managed
 keep it as their manager until you reassign them with **Manage area
 managers**.
 
 The hub only takes a handover signed by the key in force, and never one
-back to a key the network already used. Once it holds one, only the new key
-may publish the NAL.
+back to a key the network already used. A NAL published to the hub must
+always be signed by the key in force, which is the new key once the hub
+holds a handover.
 
 ## Coordinator Key Pinning
 
@@ -262,7 +271,10 @@ key that signed the NAL, the leaf:
   old and new key and the number of steps;
 - writes the new key to `coordinatorPubKey` in `v3net.json`, but only if the
   entry still holds the old key, so a key you set yourself wins, and clears
-  `pendingCoordinatorPubKey` if it held the new key.
+  `pendingCoordinatorPubKey` if it held the new key;
+- once the new key is saved, queues a notice for every SysOp at their next
+  login saying the network moved its key by a signed handover (the
+  `v3netKeyHandoverNotice` string). Several moves in a row give one notice.
 
 A leaf that was offline through several handovers follows them all, up to
 eight in a row. The hub key is checked the same way: when `/info` serves

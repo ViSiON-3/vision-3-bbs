@@ -342,7 +342,7 @@ how leaves act on it is in
 | Field | Meaning |
 |-------|---------|
 | `network` | The network handed over |
-| `old_key` | The outgoing coordinator's Ed25519 public key, 32 bytes in standard base64 |
+| `old_key` | The outgoing coordinator's Ed25519 public key, 32 bytes in canonical standard base64 (44 characters with one `=`, no line breaks, unused low bits zero) |
 | `new_key` | The incoming coordinator's key, in the same form; never the same as `old_key` |
 | `issued` | When it was signed, RFC 3339 in UTC, such as `2026-10-29T12:00:00Z` |
 | `signature_b64` | The Ed25519 signature by `old_key` over the signed payload below, 64 bytes in standard base64 |
@@ -366,15 +366,26 @@ V3NET-COORD-HANDOVER-v1
 
 (The keys are shortened here; real ones are 44 characters.)
 
+Keys are compared as strings, along the chain and on the hub, so each has
+exactly one accepted spelling: the one encoding the decoded 32 bytes gives
+back. A handover with a key spelled any other way, even one that decodes
+to the same bytes, does not verify.
+
 **Publishing.** A subscriber sends the handover as the body of a signed
 `POST /v3net/v1/{network}/nal/handover`. The hub accepts it only if it
 verifies, names the network in the path, and `old_key` is the coordinator
 key in force: the key of the stored NAL, followed along any handovers the
 hub already holds. It refuses a `new_key` the network has already used, so
 the stored handovers never loop (`409`). Sending one it already holds
-succeeds without storing it twice. From then on the hub takes a posted NAL
-only from the new key's node, signed by the new key, and a hub started
-with the new key re-signs the stored NAL with it.
+succeeds without storing it twice.
+
+A posted NAL (`POST /v3net/v1/{network}/nal`) must always come from the
+node of the coordinator key in force and be signed by that key, so once
+the hub holds a handover only the new key may post. The hub's own NAL
+changes (proposal approvals, access and manager edits) are refused with
+`409` while it runs with a key other than the one in force, since signing
+with the old key would undo the handover. A hub started with the new key
+re-signs the stored NAL with it, and its changes are signed as before.
 
 **Serving.** `GET /v3net/v1/{network}/nal` carries the handovers in the
 NAL's `coordinator_handovers` array, oldest first, at most 32 (the most
