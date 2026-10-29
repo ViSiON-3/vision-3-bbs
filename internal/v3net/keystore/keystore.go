@@ -126,12 +126,11 @@ func (ks *Keystore) NodeID() string {
 	return NodeIDFromPubKey(ks.pubKey)
 }
 
-// NodeIDFromPubKey returns the node identifier that belongs to a raw ed25519
-// public key: the lowercase hex of the first 8 bytes of SHA-256(pubKey), 16
-// characters long. Use it to check that a node ID someone presents matches
-// the key they sign with.
-func NodeIDFromPubKey(pubKey ed25519.PublicKey) string {
-	h := sha256.Sum256(pubKey)
+// NodeIDFromPubKey derives the 16-char hex node identifier for a raw ed25519
+// public key: the first 8 bytes of its SHA-256, hex encoded. It is the same
+// derivation NodeID uses, for checking a node ID another node claims.
+func NodeIDFromPubKey(pub ed25519.PublicKey) string {
+	h := sha256.Sum256(pub)
 	return fmt.Sprintf("%x", h[:8])
 }
 
