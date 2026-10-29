@@ -569,7 +569,6 @@ Tagged areas are saved to the user's profile in `users.json`.
 ### In Development
 
 - Network message support is functional (echomail tosser built in)
-- Message threading view
 
 ---
 
