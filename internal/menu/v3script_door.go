@@ -93,9 +93,10 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 	runErr := eng.Run(cfg.Script)
 
 	// Interrupt the copier goroutine's blocked Read() so it exits without
-	// consuming the user's next keypress, then close the engine.
+	// consuming the user's next keypress, then close the engine. Keys the
+	// script read ahead but never used go to the next prompt.
 	close(readInterrupt)
-	eng.Close()
+	stashTypeAhead(ctx.Session, eng.Close())
 
 	if runErr != nil {
 		if errors.Is(runErr, scripting.ErrDisconnect) {

@@ -322,6 +322,10 @@ func stringScriptExists(cfg config.DoorConfig) bool {
 func borrowInputSession(s ssh.Session) ssh.Session {
 	v, ok := sessionInputHandlers.Load(s)
 	if !ok {
+		// Keys an earlier script left for the next handler come first.
+		if _, kept := sessionTypeAhead.Load(unwrapSession(s)); kept {
+			return &typeAheadSession{Session: s}
+		}
 		return s
 	}
 	return &borrowedInputSession{Session: s, ih: v.(*editor.InputHandler)}
@@ -362,3 +366,56 @@ func (b *borrowedInputSession) InputOnDemand() bool { return true }
 
 // ReturnInput restores bytes a timed-out script read received before shutdown.
 func (b *borrowedInputSession) ReturnInput(p []byte) { b.ih.ReturnInput(p) }
+
+// typeAheadSession is an ssh.Session for a script run in place of a string
+// with no InputHandler running, when an earlier script left keys it did not
+// read (stashTypeAhead). Its reads return those keys before reading the
+// session, so the script sees them in the order they were typed; starting a
+// handler here instead would leave one reading the session under code that
+// reads it directly.
+type typeAheadSession struct {
+	ssh.Session
+	mu      sync.Mutex
+	taken   bool
+	pending []byte // kept keys taken from the stash but not yet read
+}
+
+// Read returns the kept keys first, then reads the session.
+func (t *typeAheadSession) Read(p []byte) (int, error) {
+	t.mu.Lock()
+	if !t.taken {
+		t.taken = true
+		if v, ok := sessionTypeAhead.LoadAndDelete(unwrapSession(t.Session)); ok {
+			t.pending = v.([]byte)
+		}
+	}
+	if len(t.pending) > 0 {
+		n := copy(p, t.pending)
+		t.pending = t.pending[n:]
+		t.mu.Unlock()
+		return n, nil
+	}
+	t.mu.Unlock()
+	return t.Session.Read(p)
+}
+
+// SetReadInterrupt passes ch on to the session, which the script engine's
+// door executor relies on to stop its reads.
+func (t *typeAheadSession) SetReadInterrupt(ch <-chan struct{}) {
+	if ri, ok := t.Session.(readInterrupter); ok {
+		ri.SetReadInterrupt(ch)
+	}
+}
+
+// Unwrap returns the session underneath, for code keyed by it.
+func (t *typeAheadSession) Unwrap() ssh.Session { return t.Session }
+
+// takeUnread returns the kept keys the script never read and forgets them.
+// Call it only once the script's reads have stopped.
+func (t *typeAheadSession) takeUnread() []byte {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	p := t.pending
+	t.pending = nil
+	return p
+}
