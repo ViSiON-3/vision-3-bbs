@@ -98,7 +98,21 @@ func (b *Broadcaster) StartPing(ctx context.Context) {
 }
 
 // ServeSSE writes SSE events to the HTTP response for the given network.
-func (b *Broadcaster) ServeSSE(w http.ResponseWriter, r *http.Request, network string) {
+//
+// With a signer, each event also carries an id field, its sequence number in
+// this stream starting at 1, and a sig field, the signer's signature over
+// protocol.EventSignedPayload, bound to the request that opened the stream:
+//
+//	event: {type}
+//	id: {seq}
+//	sig: {base64url signature}
+//	data: {json}
+//
+// The extra fields come before data, so a leaf that predates them, which
+// dispatches an event at its data line and skips lines it does not know,
+// still reads every event. A nil signer or a request without a signature
+// header sends events unsigned, as before.
+func (b *Broadcaster) ServeSSE(w http.ResponseWriter, r *http.Request, network string, signer protocol.HubSigner) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
@@ -120,6 +134,12 @@ func (b *Broadcaster) ServeSSE(w http.ResponseWriter, r *http.Request, network s
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
+	reqSig := r.Header.Get(headerSignature)
+	if reqSig == "" {
+		signer = nil
+	}
+	var seq uint64
+
 	ctx := r.Context()
 	for {
 		select {
@@ -130,7 +150,20 @@ func (b *Broadcaster) ServeSSE(w http.ResponseWriter, r *http.Request, network s
 				return
 			}
 			// Best-effort: a dead connection is detected by the request context.
-			_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, ev.Data)
+			if signer == nil {
+				_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, ev.Data)
+				flusher.Flush()
+				continue
+			}
+			seq++
+			sig, err := protocol.SignEvent(signer, network, reqSig, seq, ev.Type, ev.Data)
+			if err != nil {
+				// A gap in the sequence would only make the leaf drop the
+				// stream, so end it here; the leaf reconnects.
+				slog.Error("hub: sign SSE event", "network", network, "error", err)
+				return
+			}
+			_, _ = fmt.Fprintf(w, "event: %s\nid: %d\nsig: %s\ndata: %s\n\n", ev.Type, seq, sig, ev.Data)
 			flusher.Flush()
 		}
 	}

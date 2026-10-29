@@ -242,7 +242,11 @@ func (h *Hub) checkMessageAuthor(msg *protocol.Message, nodeID, network string) 
 func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	network := extractNetwork(r.URL.Path)
 	nodeID := r.Header.Get(headerNodeID)
-	h.broadcaster.ServeSSE(w, r, network)
+	var signer protocol.HubSigner
+	if h.cfg.Keystore != nil {
+		signer = h.cfg.Keystore
+	}
+	h.broadcaster.ServeSSE(w, r, network, signer)
 	// ServeSSE blocks until the client disconnects.
 	// Clean up chat room presence for the disconnected node.
 	removed := h.chatRooms.HandleDisconnect(network, nodeID)
