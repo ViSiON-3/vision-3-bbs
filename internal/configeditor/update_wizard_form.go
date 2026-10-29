@@ -287,6 +287,16 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 		PollInterval: m.wizard.pollInterval,
 		Origin:       m.wizard.origin,
 	}
+	// Pin the keys the registry publishes, so the leaf does not have to
+	// trust whatever the hub serves on first contact.
+	if e := m.wizard.regEntry; e != nil && e.HubURL == leaf.HubURL && e.Name == leaf.Network {
+		if config.ValidV3NetPubKey(e.CoordPubKeyB64) {
+			leaf.CoordinatorPubKey = strings.TrimSpace(e.CoordPubKeyB64)
+		}
+		if config.ValidV3NetPubKey(e.HubPubKeyB64) {
+			leaf.HubPubKey = strings.TrimSpace(e.HubPubKeyB64)
+		}
+	}
 	m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves, leaf)
 	m.configs.V3Net.Enabled = true
 	// Create MsgAreas for selected areas, then save everything in one pass.

@@ -147,6 +147,72 @@ The node ID stays the same, so the NAL, subscribers and area managers carry over
 
 To share the work of running a network without handing it over, reassign individual areas to other sysops with **Manage area managers**.
 
+Because the recovered hub has the same key, subscribers' pinned coordinator
+key stays valid and nobody has to re-pin. If a network does move to a new
+key (a hub that could not recover its phrase, or a new operator starting a
+fresh hub under the old name), every subscriber's leaf rejects the new NAL
+until its sysop re-pins, as described next. Announce the new key through a
+channel the subscribers already trust before you switch.
+
+## Coordinator Key Pinning
+
+A NAL carries the key that signed it, so checking the signature alone only
+proves that *someone* signed it. To know it was the coordinator, each leaf
+pins the coordinator's public key for the network and rejects any NAL
+signed by a different key, even one with a valid signature. It also checks
+that the NAL's `coordinator_node_id` belongs to that key.
+
+Where the pin comes from, in order of preference:
+
+1. **You set it.** Paste the coordinator's key into **Coord Key** on the
+   subscription (`./config` → V3Net → **2. Subscriptions**), or into
+   `coordinatorPubKey` in `v3net.json`. Get the key from the network's
+   operator over a channel you trust.
+2. **The registry.** When you join from the registry browser and the
+   registry entry publishes `coordinator_pubkey_b64` / `hub_pubkey_b64`,
+   those keys are pinned when the subscription is saved.
+3. **First use.** With no key set (including every subscription made before
+   pinning existed), the leaf pins the key of the first NAL it verifies,
+   writes it to `coordinatorPubKey`, and logs `pinned key on first use`.
+
+The hub's own key, served by the network's `/info` page, is pinned the same
+way into `hubPubKey` (**Hub Key**) and checked each time the leaf starts.
+
+### When the Key Changes
+
+If the hub serves a NAL signed by a different key, the leaf:
+
+- rejects it and keeps using the last NAL it accepted, so areas and
+  subscriptions carry on as they were;
+- logs an error, `key changed; rejected until the sysop accepts it`, with
+  both the pinned and the offered key;
+- records the offered key in `pendingCoordinatorPubKey` (shown as **Offered
+  Coord** in the editor; `pendingHubPubKey` / **Offered Hub** for the hub
+  key);
+- queues a warning for every SysOp at their next login, and `./vision3
+  doctor` reports it until it is dealt with.
+
+The pin is never updated on its own. A changed key is either a planned
+change of coordinator or someone impersonating the hub, and only you can
+tell which.
+
+### Accepting a New Key (Coordinator Transfer)
+
+Changing coordinator is done by each subscriber re-pinning by hand. There is
+no signed hand-over from the old coordinator yet.
+
+1. Confirm the new key with the network's operator through a channel you
+   already trust (not the hub that is serving it).
+2. Copy the offered key into **Coord Key** (or `coordinatorPubKey`), or the
+   key the operator gave you if they differ. Saving clears the offered key.
+   Do the same for **Hub Key** if the hub key changed too.
+3. The running BBS picks up the edit to `v3net.json` by itself; no restart is
+   needed. The next NAL signed by the new key is accepted.
+
+Blanking **Coord Key** also accepts the change, by pinning whatever the hub
+serves next on first use. Only do that when you trust the hub you are
+connected to.
+
 ## Troubleshooting
 
 | Symptom | What is happening |
@@ -154,6 +220,7 @@ To share the work of running a network without handing it over, reassign individ
 | An area the hub just added is not in the browser | The leaf re-fetches the NAL when the hub announces a change (`nal_updated`) and whenever its event stream reconnects. If the BBS was down, it catches up on the next start. |
 | Subscribed, but status stays `PENDING` | The area is in approval mode and its manager has not acted yet. Approval-mode areas are the manager's call, not the coordinator's. |
 | Cannot subscribe at all | The area is closed and your node is not on its allow list, or your node is on the deny list. Ask the area manager. |
+| New areas stopped arriving; the log says `key changed; rejected until the sysop accepts it` | The hub is serving a NAL signed by a key other than the one pinned. See [When the Key Changes](#when-the-key-changes). |
 | Coordinator Panel never appears | Your node is not the coordinator of any subscribed network. Only the hub's own node is; see Handing Over a Network. |
 
 ## Related Documentation
@@ -189,7 +256,10 @@ Area tags must match `^[a-z0-9]{1,8}\.[a-z0-9-]{1,24}$`.
   `data/v3net_hub/`), seeded from `hub.initialAreas` on first start.
 - On a leaf: fetched with `GET /v3net/v1/{network}/nal`, kept in memory, and
   re-fetched after a `nal_updated` event (with a short random delay so a
-  hub's leaves do not all ask at once) and on every SSE reconnect.
+  hub's leaves do not all ask at once) and on every SSE reconnect. Each
+  fetch must be signed by the pinned `coordinatorPubKey`, and its
+  `coordinator_node_id` must be the first 8 bytes of SHA-256 of that key, in
+  hex; otherwise it is rejected and the previous NAL stays in effect.
 - `data/v3net_seen_areas.json` records which areas each network has offered
   this BBS, and `data/v3net_declined_areas.json` the areas each SysOp
   declined at login.

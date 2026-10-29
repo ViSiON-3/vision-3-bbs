@@ -46,6 +46,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/types"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	v3net "github.com/ViSiON-3/vision-3-bbs/internal/v3net"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/leaf"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -2156,6 +2157,11 @@ func main() {
 			v3netNodeID := v3netService.NodeID()
 			v3netService.SetNALObserver(func(network string, n *protocol.NAL) {
 				menuExecutor.NoteV3NetNAL(userMgr, network, n, v3netNodeID)
+			})
+			// Warn sysops at login when a hub offers a key that differs
+			// from the one pinned for the network.
+			v3netService.SetKeyChangeObserver(func(ev leaf.KeyEvent) {
+				menuExecutor.NoteV3NetKeyChange(userMgr, ev.Network, string(ev.Kind))
 			})
 			go v3netService.Start(v3netCtx)
 			go v3netOutbound.Run(v3netCtx)

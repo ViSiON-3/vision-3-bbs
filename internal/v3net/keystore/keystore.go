@@ -123,7 +123,15 @@ func (ks *Keystore) save(path string) error {
 // NodeID returns the 16-char hex node identifier derived from the public key.
 // It is the first 8 bytes (16 hex chars) of SHA-256(raw public key).
 func (ks *Keystore) NodeID() string {
-	h := sha256.Sum256(ks.pubKey)
+	return NodeIDFromPubKey(ks.pubKey)
+}
+
+// NodeIDFromPubKey returns the node identifier that belongs to a raw ed25519
+// public key: the lowercase hex of the first 8 bytes of SHA-256(pubKey), 16
+// characters long. Use it to check that a node ID someone presents matches
+// the key they sign with.
+func NodeIDFromPubKey(pubKey ed25519.PublicKey) string {
+	h := sha256.Sum256(pubKey)
 	return fmt.Sprintf("%x", h[:8])
 }
 

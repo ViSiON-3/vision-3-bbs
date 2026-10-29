@@ -289,6 +289,11 @@ type StringsConfig struct {
 	// will not be asked about the area again, so it says how to add it by
 	// hand later (%s=area tag).
 	V3NetNewAreaDeclined string `json:"v3netNewAreaDeclined"`
+	// V3NetKeyChangedNotice warns a sysop at login that a V3Net hub offered
+	// a coordinator or hub key that differs from the pinned one, which the
+	// leaf rejects until the sysop accepts it (%s=network, %s=key kind,
+	// "coordinator" or "hub").
+	V3NetKeyChangedNotice string `json:"v3netKeyChangedNotice"`
 
 	// Newuser strings (V3-specific)
 	NewUsersClosedStr       string `json:"newUsersClosedStr"`

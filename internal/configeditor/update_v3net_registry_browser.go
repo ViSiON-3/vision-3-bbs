@@ -129,6 +129,7 @@ func (m Model) selectRegistryEntry(entry protocol.RegistryEntry) (tea.Model, tea
 			networkName:  entry.Name,
 			pollInterval: "5m",
 			origin:       boardName,
+			regEntry:     &entry,
 		}
 		m.wizardTitle = "Leaf Setup — Join a Network"
 		m.wizardFields = m.fieldsLeafWizard()
@@ -142,6 +143,7 @@ func (m Model) selectRegistryEntry(entry protocol.RegistryEntry) (tea.Model, tea
 	// Already in wizard — update its fields and return.
 	m.wizard.hubURL = entry.HubURL
 	m.wizard.networkName = entry.Name
+	m.wizard.regEntry = &entry
 	m.wizardFields = m.fieldsLeafWizard()
 	m.message = "Selected " + entry.Name
 	m.mode = m.regBrowserReturn

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
 
@@ -131,6 +132,48 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 				}
 				return fmt.Sprintf("%d area(s) subscribed — Enter to manage", n)
 			},
+		},
+		v3netPinField("Coord Key", "Pinned coordinator key; NALs signed by any other key are rejected. Blank = pin on first use",
+			9, &l.CoordinatorPubKey, &l.PendingCoordinatorPubKey),
+		v3netPinField("Hub Key", "Pinned hub key from the network's /info. Blank = pin on first use",
+			10, &l.HubPubKey, &l.PendingHubPubKey),
+		v3netPendingField("Offered Coord", 11, &l.PendingCoordinatorPubKey),
+		v3netPendingField("Offered Hub", 12, &l.PendingHubPubKey),
+	}
+}
+
+// v3netPinField edits one of a leaf's pinned keys. A value must be a base64
+// ed25519 key or blank (pin on first use). Changing the pin is how the sysop
+// accepts a key change, so it also clears the matching pending key.
+func v3netPinField(label, help string, row int, pin, pending *string) fieldDef {
+	return fieldDef{
+		Label: label, Help: help, Type: ftString, Col: 3, Row: row, Width: 49, MaxLen: 64,
+		Get: func() string { return *pin },
+		Set: func(val string) error {
+			val = strings.TrimSpace(val)
+			if val != "" && !config.ValidV3NetPubKey(val) {
+				return fmt.Errorf("not a base64 ed25519 public key")
+			}
+			if val != *pin {
+				*pin = val
+				*pending = ""
+			}
+			return nil
+		},
+	}
+}
+
+// v3netPendingField shows a key the hub offered that differs from the pin.
+// The leaf records it and keeps rejecting it; copying it into the pin field
+// above (after checking it with the network operator) accepts it.
+func v3netPendingField(label string, row int, pending *string) fieldDef {
+	return fieldDef{
+		Label: label, Help: "Changed key the hub offered, rejected until you paste it into the pinned key above", Type: ftDisplay, Col: 3, Row: row, Width: 49,
+		Get: func() string {
+			if *pending == "" {
+				return "(none)"
+			}
+			return *pending
 		},
 	}
 }

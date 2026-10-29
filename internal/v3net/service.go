@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -61,6 +62,66 @@ type Service struct {
 	// nalObserver holds the func(network string, n *protocol.NAL) set by
 	// SetNALObserver, called with each NAL a leaf fetches.
 	nalObserver atomic.Value
+
+	// keyObserver holds the func(leaf.KeyEvent) set by SetKeyChangeObserver.
+	keyObserver atomic.Value
+}
+
+// SetKeyChangeObserver registers fn to hear when a leaf's hub offers a
+// coordinator or hub key that differs from the pinned one. The leaf has
+// already rejected the key and logged it; fn is for alerting the sysop. It
+// is called once per distinct offered key, from leaf goroutines, so it must
+// be safe for concurrent use. Set it before Start.
+func (s *Service) SetKeyChangeObserver(fn func(ev leaf.KeyEvent)) {
+	s.keyObserver.Store(fn)
+}
+
+// persistKeyEvent writes a leaf's first-use pin, or a changed key it was
+// offered, into that leaf's entry in v3net.json, so a restart keeps the pin
+// and the sysop can see the pending key. A pin is written only where the
+// entry has none, so a key the sysop set meanwhile wins. Without a config
+// path (tests, tools) nothing is written. Failures are logged.
+func (s *Service) persistKeyEvent(ev leaf.KeyEvent) {
+	if s.cfg.ConfigPath == "" {
+		return
+	}
+	pinning := ev.Pinned == ev.Offered
+	err := config.UpdateV3NetConfig(s.cfg.ConfigPath, func(cfg *config.V3NetConfig) error {
+		for i := range cfg.Leaves {
+			lc := &cfg.Leaves[i]
+			if lc.Network != ev.Network || lc.HubURL != ev.HubURL {
+				continue
+			}
+			pin, pending := &lc.CoordinatorPubKey, &lc.PendingCoordinatorPubKey
+			if ev.Kind == leaf.KeyHub {
+				pin, pending = &lc.HubPubKey, &lc.PendingHubPubKey
+			}
+			changed := false
+			if pinning {
+				if strings.TrimSpace(*pin) == "" {
+					*pin = ev.Offered
+					changed = true
+				}
+				// The pending key is now the pin: the sysop accepted it.
+				if *pending != "" && *pending == *pin {
+					*pending = ""
+					changed = true
+				}
+			} else if *pending != ev.Offered {
+				*pending = ev.Offered
+				changed = true
+			}
+			if !changed {
+				return config.ErrNoChange
+			}
+			return nil
+		}
+		return config.ErrNoChange
+	})
+	if err != nil && !errors.Is(err, config.ErrNoChange) {
+		slog.Warn("v3net: could not record key in v3net.json",
+			"network", ev.Network, "key", string(ev.Kind), "error", err)
+	}
 }
 
 // SetNALObserver registers fn to receive every NAL a leaf fetches and
@@ -278,8 +339,19 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 				fn(lcfg.Network, n)
 			}
 		},
-		BBSName: s.BBSName,
-		BBSHost: s.BBSHost,
+		BBSName:               s.BBSName,
+		BBSHost:               s.BBSHost,
+		CoordPubKeyB64:        lcfg.CoordinatorPubKey,
+		HubPubKeyB64:          lcfg.HubPubKey,
+		PendingCoordPubKeyB64: lcfg.PendingCoordinatorPubKey,
+		PendingHubPubKeyB64:   lcfg.PendingHubPubKey,
+		OnKeyPinned:           s.persistKeyEvent,
+		OnKeyChanged: func(ev leaf.KeyEvent) {
+			s.persistKeyEvent(ev)
+			if fn, ok := s.keyObserver.Load().(func(leaf.KeyEvent)); ok && fn != nil {
+				fn(ev)
+			}
+		},
 	})
 
 	run := &leafRun{l: l}
