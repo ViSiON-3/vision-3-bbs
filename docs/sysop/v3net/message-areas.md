@@ -312,7 +312,7 @@ with `SetEscapeHTML(false)`:
 - Backspace, form feed, line feed, carriage return and tab become `\b`,
   `\f`, `\n`, `\r` and `\t`; any other byte below `0x20` becomes `\u00XX`
   with lowercase hex.
-- U+2028 and U+2029 become ` ` and ` `.
+- U+2028 and U+2029 become `\u2028` and `\u2029`.
 - Everything else, including `<`, `>`, `&`, `/` and all other non-ASCII
   text, is written as raw UTF-8.
 

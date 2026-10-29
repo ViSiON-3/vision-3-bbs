@@ -117,3 +117,17 @@ func TestMessageSignatureDocExample(t *testing.T) {
 		t.Error("message-areas.md does not show the example seed")
 	}
 }
+
+// The string escaping rules listed in message-areas.md.
+func TestSignedPayloadStringEscaping(t *testing.T) {
+	m := exampleMessage(exampleNodeID)
+	m.Body = "a<b>&c/\"\\\b\f\n\r\t\x01\x1f\u2028\u2029é"
+	payload, err := m.SignedPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `"body":"a<b>&c/\"\\\b\f\n\r\t\u0001\u001f` + `\u2028\u2029é"`
+	if !strings.Contains(string(payload), want) {
+		t.Errorf("payload = %s\nwant it to contain %s", payload, want)
+	}
+}
