@@ -124,7 +124,12 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			},
 		},
 		{
-			Label: "Browse Areas", Help: "Press Enter to browse and subscribe to hub areas", Type: ftDisplay, Col: 3, Row: 7, Width: 49,
+			Label: "Signed Messages", Help: "Drop unsigned messages from the hub; leave N until the network's nodes sign theirs", Type: ftYesNo, Col: 3, Row: 7, Width: 1,
+			Get: func() string { return uitext.BoolToYN(l.RequireSignedMessages) },
+			Set: func(val string) error { l.RequireSignedMessages = uitext.YNToBool(val); return nil },
+		},
+		{
+			Label: "Browse Areas", Help: "Press Enter to browse and subscribe to hub areas", Type: ftDisplay, Col: 3, Row: 8, Width: 49,
 			Get: func() string {
 				n := len(l.Boards)
 				if n == 0 {

@@ -124,6 +124,11 @@ type V3NetLeafConfig struct {
 	PollInterval  string   `json:"pollInterval"`            // Duration string (e.g., "5m")
 	Origin        string   `json:"origin,omitempty"`        // Origin line text (e.g. "My Cool BBS - bbs.example.com")
 	AutoJoinAreas *bool    `json:"autoJoinAreas,omitempty"` // Flag created areas as newscan defaults (nil = true)
+	// RequireSignedMessages drops polled messages that carry no author
+	// signature. Default false imports legacy unsigned messages while the
+	// network's nodes upgrade; a signature that does not verify is refused
+	// either way.
+	RequireSignedMessages bool `json:"requireSignedMessages,omitempty"`
 
 	// CoordinatorPubKey pins the network coordinator's ed25519 public key
 	// (standard base64). The leaf rejects any NAL signed by a different key.

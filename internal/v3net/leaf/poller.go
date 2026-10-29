@@ -127,7 +127,7 @@ func (l *Leaf) importMessage(msg protocol.Message) (importOutcome, error) {
 			"network", l.cfg.Network, "message_network", msg.Network)
 		return importSkipped, nil
 	}
-	if !verifyAuthor(&msg) {
+	if !verifyAuthor(&msg, l.cfg.RequireSignedMessages) {
 		return importSkipped, nil
 	}
 	if msg.NeedsTruncation() {
@@ -165,9 +165,14 @@ func (l *Leaf) importMessage(msg protocol.Message) (importOutcome, error) {
 // the hub: the signature must verify and origin_node must be derived from
 // origin_pubkey_b64. It logs and returns false for a message that claims a
 // signature which does not check out, so it is never imported. Legacy
-// unsigned messages are accepted while networks migrate to signing.
-func verifyAuthor(msg *protocol.Message) bool {
+// unsigned messages are accepted while networks migrate to signing, unless
+// requireSigned is set.
+func verifyAuthor(msg *protocol.Message, requireSigned bool) bool {
 	if !msg.IsSigned() {
+		if requireSigned {
+			slog.Warn("leaf: unsigned message from hub, dropping", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode)
+			return false
+		}
 		slog.Debug("leaf: accepting unsigned message from hub", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode)
 		return true
 	}

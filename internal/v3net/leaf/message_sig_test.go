@@ -337,3 +337,31 @@ func TestPoll_RetriesUnwritableMessage(t *testing.T) {
 		t.Errorf("second poll asked since %q, want the last seen message %s", cursor, sigUUID(1))
 	}
 }
+
+func TestPoll_RequireSignedMessagesDropsUnsigned(t *testing.T) {
+	author, _, err := keystore.Load(filepath.Join(t.TempDir(), "author.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed := testMessage(sigUUID(1))
+	signed.OriginNode = author.NodeID()
+	if err := signed.Sign(author); err != nil {
+		t.Fatal(err)
+	}
+	unsigned := testMessage(sigUUID(2))
+
+	ts, _ := newMockHub(t, []protocol.Message{signed, unsigned})
+	writer := &mockJAMWriter{}
+	l, ix := setupLeaf(t, ts.URL, writer)
+	l.cfg.RequireSignedMessages = true
+
+	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
+		t.Fatalf("Poll = %d, %v; want 1", count, err)
+	}
+	if writer.messages[0].MsgUUID != signed.MsgUUID {
+		t.Errorf("imported %s, want only the signed message", writer.messages[0].MsgUUID)
+	}
+	if seen, _ := ix.Seen(unsigned.MsgUUID); seen {
+		t.Error("dropped unsigned message was marked seen")
+	}
+}

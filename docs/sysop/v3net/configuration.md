@@ -158,6 +158,7 @@ the same Hub URL, Network, Poll Interval and Origin fields as the wizard, plus:
 |-------|-------------|
 | **Boards** | Comma-separated local area tags this subscription feeds (e.g. `fel.general,fel.tech`). Normally filled by the area browser. |
 | **Newscan Default** | `Y` (the default) flags areas created for this network as newscan defaults for your users, so new callers see them in their newscan without opting in. |
+| **Signed Messages** | Default `N` imports unsigned messages from older nodes. Set `Y` to drop them once every node on the network signs its messages. See [Requiring signed messages](v3net/configuration.md#requiring-signed-messages). |
 | **Browse Areas** | Press **Enter** to open the area browser for this hub. |
 
 ---
@@ -289,6 +290,7 @@ See [vision3 doctor](configuration/configuration.md#doctor).
 | `V3Net is disabled in server configuration` on a V3Net screen in the BBS | The master switch is `N`. Set **V3Net** to `Y` in Server Setup and restart. |
 | `v3net hub: rejected unsigned message` on your hub | **Signed Messages** is `Y` and an older leaf posted without a signature. The leaf gets HTTP 401 and must upgrade; see [requiring signed messages](v3net/configuration.md#requiring-signed-messages). |
 | `v3net hub: rejected message with bad signature` on your hub | A post's author signature did not verify, or its `origin_node` is not derived from its key. Always rejected (HTTP 403). |
+| `leaf: unsigned message from hub, dropping` | **Signed Messages** is `Y` on this subscription and the hub relayed a message without a signature, from a node that has not upgraded. Set it back to `N` if that node's messages should still arrive; see [requiring signed messages](v3net/configuration.md#on-a-leaf). |
 | `leaf: message failed author signature check, dropping` | The hub relayed a message whose author signature does not verify: it was changed after the author signed it, or claims another node's identity. The leaf skips it and carries on, and does not fetch it again until the BBS restarts. It is not marked as seen, so a genuine copy of the message can still arrive. If it keeps happening, raise it with the hub sysop. |
 | `v3net hub: unsigned subscribe` on your hub | An older leaf registered without a signature. Harmless in compatibility mode; see [upgrading nodes independently](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently). |
 | `NEW IDENTITY CREATED` on startup | No key file was found, so a new identity was made. If you meant to keep the old one, stop, restore the key or recover from the seed phrase, and restart. |
@@ -374,7 +376,7 @@ body, tearline, origin line and attributes. Kludges are not signed.
 including when the setting is absent from an older configuration. In that
 mode the hub accepts unsigned posts from older leaves, logging each at debug
 level as `v3net hub: accepting unsigned message`, and leaves import unsigned
-messages as before. A message that carries a signature which does not verify
+messages as before unless they are set to refuse them ([on a leaf](v3net/configuration.md#on-a-leaf)). A message that carries a signature which does not verify
 is rejected in both modes.
 
 To move a network to signed messages:
@@ -391,8 +393,27 @@ To move a network to signed messages:
 
 Setting it back to **N** and restarting undoes this; no data changes either
 way. Messages stored before the switch stay as they are, and leaves keep
-importing those that are unsigned. Leaves have no setting of their own to
-refuse unsigned messages yet.
+importing those that are unsigned.
+
+### On a leaf
+
+A leaf can refuse unsigned messages too, whatever the hub does. Set
+**Signed Messages** to **Y** in the subscription's edit form (or
+`requireSignedMessages` to `true` on the entry in `leaves`). The running BBS
+applies it without a restart. From then on the leaf drops every unsigned
+message it polls from that network, logging each as
+`leaf: unsigned message from hub, dropping`, and imports only messages whose
+signature verifies. Messages already in your message bases are not touched.
+
+It defaults to **N**, including when the setting is absent, because an
+unsigned message is still normal while nodes upgrade. Leave it at **N** until
+every node on the network signs its posts, or the leaf drops their messages.
+Setting it back to **N** applies to messages polled from then on. Unsigned
+messages dropped while it was on are not fetched again, apart from any newer
+than the last message the leaf imported.
+
+Signed messages are not yet required by default on either side. That will
+come in a later release, once nodes have upgraded.
 
 ---
 

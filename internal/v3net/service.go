@@ -359,6 +359,7 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		},
 		BBSName:               s.BBSName,
 		BBSHost:               s.BBSHost,
+		RequireSignedMessages: lcfg.RequireSignedMessages,
 		CoordPubKeyB64:        lcfg.CoordinatorPubKey,
 		HubPubKeyB64:          lcfg.HubPubKey,
 		PendingCoordPubKeyB64: lcfg.PendingCoordinatorPubKey,
