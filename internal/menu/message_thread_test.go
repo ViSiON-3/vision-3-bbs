@@ -234,6 +234,7 @@ func TestThreadMenuKey(t *testing.T) {
 		{"end", 3, editor.KeyEnd, 14, true, false},
 		{"enter reads", 7, editor.KeyEnter, 7, true, true},
 		{"T closes", 7, 'T', 7, true, false},
+		{"Tab closes", 7, editor.KeyTab, 7, true, false},
 		{"Esc closes", 7, editor.KeyEsc, 7, true, false},
 		{"N is the reader's", 7, 'N', 7, false, false},
 	} {
@@ -244,6 +245,12 @@ func TestThreadMenuKey(t *testing.T) {
 		}
 	}
 }
+
+// isDarkGrey reports whether c is drawn in dark grey (pipe colour 8).
+func isDarkGrey(c testterm.Cell) bool { return c.Fg == 90 || (c.Fg == 30 && c.Bold) }
+
+// isBrightCyan reports whether c is drawn in bright cyan (pipe colour 11).
+func isBrightCyan(c testterm.Cell) bool { return c.Fg == 96 || (c.Fg == 36 && c.Bold) }
 
 // visibleWidth is the column count of a pipe-coded line as the terminal
 // receives it: expanded, then put through the output writer for mode, which
@@ -263,13 +270,13 @@ func visibleWidth(line string, mode ansi.OutputMode) int {
 // The thread menu's key row fills exactly the row in both encodings.
 func TestRenderThreadMenuKeys(t *testing.T) {
 	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
-		row := renderThreadMenuKeys(79, threadGlyphsFor(mode))
+		row := renderThreadMenuKeys(79, "|08", threadGlyphsFor(mode))
 		if w := visibleWidth(row, mode); w != 79 {
 			t.Errorf("%v: width = %d, want 79: %q", mode, w, row)
 		}
 	}
-	stripped := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderThreadMenuKeys(79, threadGlyphsFor(ansi.OutputModeUTF8))))), "")
-	if !strings.HasPrefix(stripped, "─[↑↓]Move ─[Enter]Read ─[T/Esc]Close ──") {
+	stripped := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderThreadMenuKeys(79, "|08", threadGlyphsFor(ansi.OutputModeUTF8))))), "")
+	if !strings.HasPrefix(stripped, "─[↑↓]Move ─[Enter]Read ─[Tab/Esc]Close ──") {
 		t.Errorf("keys = %q", stripped)
 	}
 }
@@ -420,11 +427,15 @@ func TestMessageReaderThreadPaneLayout(t *testing.T) {
 	if marker := screen.Cell(10, 1); marker.Rune != '►' {
 		t.Errorf("row 10 col 1 = %q, want the marker", marker.Rune)
 	}
-	if bg := screen.Cell(10, 40).Bg; bg != 44 {
-		t.Errorf("current pane row background = %d, want blue (SGR 44)", bg)
+	// With the menu closed no row is barred: the blue bar is the menu's
+	// cursor, and the frame is dark grey.
+	for row := 8; row <= 12; row++ {
+		if bg := screen.Cell(row, 40).Bg; bg == 44 {
+			t.Errorf("row %d is barred blue with the menu closed", row)
+		}
 	}
-	if bg := screen.Cell(9, 40).Bg; bg == 44 {
-		t.Error("a row that is not current should not be blue")
+	if c := screen.Cell(7, 1); !isDarkGrey(c) {
+		t.Errorf("closed pane frame fg %d bold %v, want dark grey", c.Fg, c.Bold)
 	}
 	if sep := strings.TrimRight(screen.Row(23), " "); sep != strings.Repeat("─", 79) {
 		t.Errorf("separator = %q, want a plain rule", sep)
@@ -524,6 +535,7 @@ func TestMessageReaderThreadMenu(t *testing.T) {
 		{"Enter on the message being read stays there", 5, "T\r", 5},
 		{"T closes it; Enter is Next again", 5, "TT\r", 6},
 		{"Esc closes it without leaving the reader", 5, "T\x1bN", 6},
+		{"Tab opens it and Tab closes it", 5, "\t\x1b[B\r\t\r", 8},
 		{"T on a message with no thread does nothing", 2, "T\r", 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -538,16 +550,33 @@ func TestMessageReaderThreadMenu(t *testing.T) {
 	}
 }
 
-// With the menu open the cursor row is highlighted, the message being read
-// keeps the marker, the window follows the cursor, and the separator lists
-// the menu's keys. Down from #5 puts the cursor on #7, two from the top of
-// a window that now starts at #3.
+// With the menu open the cursor row is barred blue, the message being read
+// keeps the marker, the window follows the cursor, the frame is bright cyan
+// and titled Thread Menu, the pane's closing row lists the menu's keys, and
+// the bar below is greyed out. Down from #5 puts the cursor on #7, two from
+// the top of a window that now starts at #3.
 func TestMessageReaderThreadMenuScreen(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
 	screen := env.readerAt(5, "T\x1b[B")
-	if sep := screen.Row(23); !strings.HasPrefix(sep, "─[↑↓]Move ─[Enter]Read ─[T/Esc]Close ──") {
-		t.Errorf("separator = %q", sep)
+	if title := screen.Row(7); !strings.HasPrefix(title, "── Thread Menu ─ ") {
+		t.Errorf("title = %q", title)
+	}
+	if c := screen.Cell(7, 1); !isBrightCyan(c) {
+		t.Errorf("open pane frame fg %d bold %v, want bright cyan", c.Fg, c.Bold)
+	}
+	if keys := screen.Row(13); !strings.HasPrefix(keys, "─[↑↓]Move ─[Enter]Read ─[Tab/Esc]Close ──") {
+		t.Errorf("pane's closing row = %q, want the menu's keys", keys)
+	}
+	if sep := strings.TrimRight(screen.Row(23), " "); sep != strings.Repeat("─", 79) {
+		t.Errorf("separator = %q, want a plain rule", sep)
+	}
+	col := strings.Index(screen.Row(24), "Next")
+	if col < 0 {
+		t.Fatalf("no Next on the bar: %q", screen.Row(24))
+	}
+	if c := screen.Cell(24, utf8.RuneCountInString(screen.Row(24)[:col])+1); !isDarkGrey(c) || c.Bg == 44 {
+		t.Errorf("Next drawn fg %d bold %v bg %d, want greyed and unselected", c.Fg, c.Bold, c.Bg)
 	}
 	if marker := screen.Cell(9, 1); marker.Rune != '►' || !strings.Contains(screen.Row(9), "#5 ") {
 		t.Errorf("row 9 = %q, want the marker on #5", screen.Row(9))
@@ -579,12 +608,12 @@ func TestMessageReaderThreadMenuWithViewClosed(t *testing.T) {
 		{"T\x1b[B\r", 3},
 	} {
 		r := env.sub(t).runCmd("READMSGS", &caller, "", "5\r"+tc.keys+"Q")
-		if n := strings.Count(r.text(), "── Thread ─"); n != tc.panes {
+		if n := strings.Count(r.text(), "── Thread "); n != tc.panes {
 			t.Errorf("%q: pane drawn %d times, want %d", tc.keys, n, tc.panes)
 		}
 	}
 	screen := env.screenRun("READMSGS", &caller, "5\rTTQ")
-	if strings.Contains(screen.Row(7), "── Thread ─") {
+	if strings.Contains(screen.Row(7), "── Thread ") {
 		t.Errorf("the pane should be gone after T closes the menu:\n%s", screen.Snapshot())
 	}
 }
@@ -654,11 +683,11 @@ func TestMessageReaderThreadPaneCP437(t *testing.T) {
 	if row := screen.Row(9); !strings.HasPrefix(row, "  ├─#3 Kestrel_~ ") {
 		t.Errorf("pane row above = %q", row)
 	}
-	if sep := screen.Row(23); !strings.Contains(sep, "]Move ─[Enter]Read ─[T/Esc]Close ─") {
-		t.Errorf("separator = %q", sep)
+	if keys := screen.Row(13); !strings.Contains(keys, "]Move ─[Enter]Read ─[Tab/Esc]Close ─") {
+		t.Errorf("pane's closing row = %q", keys)
 	}
-	if c := screen.Cell(23, 80).Rune; c != ' ' {
-		t.Errorf("separator reached column 80: %q", c)
+	if c := screen.Cell(13, 80).Rune; c != ' ' {
+		t.Errorf("key row reached column 80: %q", c)
 	}
 	sent := strings.Join(screen.Unhandled(), "")
 	for _, b := range []string{"\x10", "\x18", "\x19"} {

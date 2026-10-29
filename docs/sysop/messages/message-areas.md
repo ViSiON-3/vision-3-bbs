@@ -359,7 +359,7 @@ hot key:
 | `S` | Prev | Previous message |
 | `R` | Reply | Reply in the same area |
 | `M` | Mail | Reply by private mail to the author |
-| `T` | Thread | Open or close the thread menu (see below). Greyed out on the bar when the message has no thread to show |
+| `T` / Tab | Thread | Move focus to the thread menu, or back to the message (see below). Greyed out on the bar when the message has no thread to show |
 | `P` | Post | Post a new message |
 | `J` / `#` | Jump | Go to a message number |
 | `L` | List | List message titles, cursor on this message (flat or threaded, as the caller last had it) |
@@ -377,13 +377,15 @@ a thread, a pane under the header draws it as a tree, up to five rows
 windowed around the current message, which carries the `►` marker, with
 the root's subject in its title and the message's place in the thread.
 
-`T` (Thread on the bar) opens the **thread menu**: the pane becomes a
-lightbar, and the row above the bar lists its keys. ↑/↓, Home and End move
-the highlight through the thread, stepping over `#n deleted` placeholders;
-Enter reads the highlighted message and leaves the menu open, so the
-caller can keep browsing; `T` or Esc close it. Any other reader command
-works as usual and closes the menu. While the menu is closed, the arrows
-scroll the body and the row above the bar is a plain rule.
+Tab or `T` (Thread on the bar) moves focus to the **thread menu**. Its frame turns bright
+cyan, its title reads `Thread Menu`, its closing row lists its keys, a blue
+bar marks the cursor, and the reader's bar below is greyed out while the
+menu has the arrows and Enter. ↑/↓, Home and End move the cursor through the
+thread, stepping over `#n deleted` placeholders; Enter reads the message
+under it and leaves the menu open, so the caller can keep browsing; Tab,
+`T` or Esc return focus to the message. Any other reader command works as usual and closes the menu.
+While the menu is closed, the pane's frame is dark, no row is barred (the
+message being read keeps its `►` marker), and the arrows scroll the body.
 
 The caller's **Thread View** setting in User Konfig decides whether the
 pane shows (not as a menu) while the menu is closed; with it off, the pane

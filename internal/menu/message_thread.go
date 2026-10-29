@@ -315,7 +315,7 @@ func (tv *threadView) rootSubject() string {
 // number in tv. It reports whether the menu takes the key, and whether the
 // key asks to read the message under the cursor (Enter). The arrows, Home
 // and End move the cursor over the readable messages, stepping over deleted
-// placeholders; T and Esc are taken for the caller to close the menu.
+// placeholders; Tab, T and Esc are taken for the caller to close the menu.
 func threadMenuKey(tv *threadView, key int, cursor *int) (handled, read bool) {
 	ord := tv.order()
 	if len(ord) == 0 {
@@ -338,7 +338,7 @@ func threadMenuKey(tv *threadView, key int, cursor *int) (handled, read bool) {
 		i = len(ord) - 1
 	case editor.KeyEnter:
 		return true, true
-	case editor.KeyEsc, 'T', 't':
+	case editor.KeyEsc, editor.KeyTab, 'T', 't':
 		return true, false
 	default:
 		return false, false

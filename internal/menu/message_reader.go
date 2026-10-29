@@ -63,6 +63,16 @@ func readerBarSuffix(options []MsgLightbarOption, suffix string, termWidth int) 
 // current message (Thread, on a message with no thread to show).
 const msgReaderInactiveColor = 8
 
+// dimmedOptions is opts with every item greyed out.
+func dimmedOptions(opts []MsgLightbarOption) []MsgLightbarOption {
+	out := make([]MsgLightbarOption, len(opts))
+	for i, o := range opts {
+		o.LoColor = msgReaderInactiveColor
+		out[i] = o
+	}
+	return out
+}
+
 // msgReaderDeleteOption is appended to the lightbar for sysop/co-sysop users only.
 // LoColor 4 (dark red) distinguishes it from regular options.
 var msgReaderDeleteOption = MsgLightbarOption{Label: " Del ", HotKey: 'D', LoColor: 4}
@@ -410,17 +420,16 @@ readerLoop:
 		// down. It shows while the thread menu is open, and otherwise when
 		// the caller's Thread View setting is on. A message with no thread
 		// to show has no pane, and the body keeps the rows. While the menu
-		// is open, the separator row above the bar lists its keys; otherwise
-		// it is a plain rule.
+		// is open, the pane's closing row lists its keys.
 		paneTop, fullBodyStart, fullBodyAvail := bodyStartRow, bodyStartRow, bodyAvailHeight
 		var paneLines []string
 		paneRows := 0
 		renderPane := func() {
-			hl := currentMsgNum
+			hl, title := 0, e.Strings().MsgThreadPaneTitle
 			if threadMenu {
-				hl = threadCursor
+				hl, title = threadCursor, e.Strings().MsgThreadMenuTitle
 			}
-			paneLines = renderThreadPane(tv, hl, paneRows, termWidth-1, e.Strings().MsgThreadPaneTitle, glyphs, outputMode)
+			paneLines = renderThreadPane(tv, hl, paneRows, termWidth-1, title, glyphs, outputMode)
 		}
 		layoutPane := func() {
 			paneLines, paneRows = nil, 0
@@ -436,8 +445,9 @@ readerLoop:
 			}
 		}
 		separator := func() string {
-			if threadMenu {
-				return renderThreadMenuKeys(termWidth-1, glyphs)
+			if threadMenu && paneLines == nil {
+				// No room for the pane: the keys go above the bar instead.
+				return renderThreadMenuKeys(termWidth-1, "|08", glyphs)
 			}
 			return "|08" + strings.Repeat("─", termWidth-1) + "|07"
 		}
@@ -537,8 +547,7 @@ readerLoop:
 				// Display footer: lightbar only
 				suffixText := barSuffix
 
-				// The separator row above the bar: the thread menu's keys
-				// while it is open, else a plain rule.
+				// The separator row above the bar: a plain rule.
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight-1, 1)), outputMode)
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(separator())), outputMode)
 
@@ -546,7 +555,13 @@ readerLoop:
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight, 1)), outputMode)
 
 				// Draw the lightbar menu
-				drawMsgLightbarStatic(terminal, activeOptions, outputMode, hiColor, loColor, suffixText, 0, true, boundsColor)
+				// While the thread menu has the arrows and Enter, the bar is
+				// drawn greyed out with nothing selected.
+				if threadMenu {
+					drawMsgLightbarStatic(terminal, dimmedOptions(activeOptions), outputMode, hiColor, loColor, suffixText, -1, true, boundsColor)
+				} else {
+					drawMsgLightbarStatic(terminal, activeOptions, outputMode, hiColor, loColor, suffixText, 0, true, boundsColor)
+				}
 
 				needsRedraw = false
 				needsBodyRedraw = false
@@ -575,7 +590,7 @@ readerLoop:
 			}
 
 			// While the thread menu is open, the arrows move its cursor,
-			// Enter reads the message under it, and T or Esc close it.
+			// Enter reads the message under it, and Tab, T or Esc close it.
 			if threadMenu {
 				if handled, read := threadMenuKey(tv, key, &threadCursor); handled {
 					switch {
@@ -585,7 +600,7 @@ readerLoop:
 						threadMenu = true // stays open on the message read
 						break scrollLoop
 					case read:
-					case key == editor.KeyEsc || unicode.ToUpper(rune(key)) == 'T':
+					case key == editor.KeyEsc || key == editor.KeyTab || unicode.ToUpper(rune(key)) == 'T':
 						threadMenu = false
 						layoutPane()
 						scrollOffset = max(0, min(scrollOffset, totalBodyLines-bodyAvailHeight))
@@ -712,6 +727,8 @@ readerLoop:
 						}
 						selectedKey = rune(selKey)
 					}
+				} else if key == editor.KeyTab {
+					selectedKey = 'T' // Tab moves focus to the thread menu, as on most BBS panels
 				} else if key == editor.KeyEnter {
 					selectedKey = 'N' // Enter = Next
 				} else if key == editor.KeyEsc {

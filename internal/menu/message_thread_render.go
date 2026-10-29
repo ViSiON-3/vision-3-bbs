@@ -131,34 +131,37 @@ func treePrefix(r threadRow) string {
 	return r.Prefix
 }
 
-// renderThreadMenuKeys builds the separator row while the thread menu is
-// open: its keys, then a rule to fill width columns. The result is
-// pipe-coded.
-func renderThreadMenuKeys(width int, g threadGlyphs) string {
+// renderThreadMenuKeys builds the row that lists the thread menu's keys,
+// then a rule to fill width columns, the rules in frame's colour. It closes
+// the pane while the menu is open. The result is pipe-coded.
+func renderThreadMenuKeys(width int, frame string, g threadGlyphs) string {
 	keys := []struct{ key, label string }{
 		{g.up + g.down, "Move"},
 		{"Enter", "Read"},
-		{"T/Esc", "Close"},
+		{"Tab/Esc", "Close"},
 	}
 	var b strings.Builder
 	used := 0
 	for _, k := range keys {
-		b.WriteString("|08─|03[|11" + k.key + "|03]|07" + k.label + " ")
+		b.WriteString(frame + "─|03[|11" + k.key + "|03]|07" + k.label + " ")
 		used += 4 + utf8.RuneCountInString(k.key) + len(k.label)
 	}
 	if used < width {
-		b.WriteString("|08" + strings.Repeat("─", width-used))
+		b.WriteString(frame + strings.Repeat("─", width-used))
 	}
 	b.WriteString("|07")
 	return b.String()
 }
 
 // renderThreadPane draws the docked thread pane for tv: a title row, rows
-// tree rows windowed around message hl, and a closing rule. hl is the row
-// drawn highlighted: the thread menu's cursor while the menu is open, else
-// the message being read, which always carries the marker. Each line is
-// pipe-coded (with raw escapes for the highlight's background) and exactly
-// width columns. title is the pane's label, " Thread ".
+// tree rows windowed around the current message, and a closing rule, which
+// lists the menu's keys while the thread menu is open. hl is
+// the thread menu's cursor while the menu is open, drawn as a blue bar
+// with the window kept around it, and the frame is then drawn bright; 0
+// when the menu is closed, so no row is barred and the frame is dark. The
+// message being read always carries the marker. Each line is pipe-coded
+// (with raw escapes for the bar's background) and exactly width columns.
+// title is the pane's label, " Thread " or " Thread Menu ".
 func renderThreadPane(tv *threadView, hl, rows, width int, title string, g threadGlyphs, mode ansi.OutputMode) []string {
 	lines := make([]string, 0, rows+2)
 
@@ -172,13 +175,24 @@ func renderThreadPane(tv *threadView, hl, rows, width int, title string, g threa
 		subject = ansi.TruncateRunes(threadPlainText(tv.rootSubject()), subjectRoom, g.ellipsis) + " "
 	}
 	fill := width - utf8.RuneCountInString(left) - utf8.RuneCountInString(subject) - utf8.RuneCountInString(right) - 2
-	lines = append(lines, "|08──|03"+title+"|08─ |11"+threadText(subject, mode)+
-		"|08"+strings.Repeat("─", max(fill, 0))+"|03"+right+"|08──|07")
+	frame, label := "|08", "|03"
+	if hl != 0 {
+		frame, label = "|11", "|15"
+	}
+	lines = append(lines, frame+"──"+label+title+frame+"─ |11"+threadText(subject, mode)+
+		frame+strings.Repeat("─", max(fill, 0))+label+right+frame+"──|07")
 
-	// Tree rows: a window of rows lines that keeps the highlighted row two
-	// from the top where the thread allows.
-	hi := tv.pos[hl]
-	start := max(0, min(hi-2, len(tv.rows)-rows))
+	// Tree rows: a window of rows lines that keeps the cursor, or else the
+	// current message, two from the top where the thread allows.
+	anchor := hl
+	if anchor == 0 {
+		anchor = tv.cur
+	}
+	hi := -1
+	if hl != 0 {
+		hi = tv.pos[hl]
+	}
+	start := max(0, min(tv.pos[anchor]-2, len(tv.rows)-rows))
 	for i := 0; i < rows; i++ {
 		if start+i >= len(tv.rows) {
 			lines = append(lines, strings.Repeat(" ", width))
@@ -188,7 +202,11 @@ func renderThreadPane(tv *threadView, hl, rows, width int, title string, g threa
 		lines = append(lines, renderTreeRow(r, r.Num == tv.cur, start+i == hi, width, g, mode))
 	}
 
-	lines = append(lines, "|08"+strings.Repeat("─", width)+"|07")
+	if hl != 0 {
+		lines = append(lines, renderThreadMenuKeys(width, frame, g))
+	} else {
+		lines = append(lines, frame+strings.Repeat("─", width)+"|07")
+	}
 	return lines
 }
 
