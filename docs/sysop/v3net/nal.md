@@ -216,10 +216,17 @@ published, subscribers see a hub key they have not pinned and pause syncing
 with the hub. To recover, publish the handover now, exactly as in step 2:
 sign it with the **old** `v3net.key` (keep a copy of it), and point `-hub`
 at the running hub. The tool notes that the hub already runs the new key
-and posts anyway. The hub accepts the handover and announces the change.
-Subscribers move both pins and resume without re-pinning by hand; a paused
-leaf re-checks the hub every five minutes, so allow that long. No second
-restart is needed.
+and posts anyway. The hub accepts the handover and announces the change,
+and the tool then fetches the NAL to confirm the hub serves it signed by
+the new key. Subscribers move both pins and resume without re-pinning by
+hand; a paused leaf re-checks the hub every five minutes, so allow that
+long. No second restart is needed.
+
+If the tool reports that the hub holds the handover but could not sign the
+NAL with the new key, subscribers are still paused. Check the hub's log for
+the cause (`could not re-sign the NAL after a handover`), fix it, and run
+the same command again: the hub treats it as the same handover and retries
+the signing.
 
 Until the handover arrives, the hub may serve either NAL:
 

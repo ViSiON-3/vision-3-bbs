@@ -431,13 +431,16 @@ to the same bytes, does not verify.
 verifies, names the network in the path, and `old_key` is the coordinator
 key in force: the key of the stored NAL, followed along any handovers the
 hub already holds. It refuses a `new_key` the network has already used, so
-the stored handovers never loop (`409`). Sending one it already holds
-succeeds without storing it twice.
+the stored handovers never loop (`409`). Sending one it already holds, or
+one with the same `old_key` and `new_key` signed at another time, succeeds
+without storing it twice.
 
 A hub may already run `new_key` when the handover arrives, if it was
 restarted with the new key first. The rules above are unchanged, so the
 handover must still be signed by the key of the stored NAL; the hub then
-re-signs the NAL with its key at once and sends `nal_updated`. While a hub
+re-signs the NAL with its key at once and sends `nal_updated`. If it holds
+the handover but cannot store the re-signed NAL, it answers `500` saying
+so; sending the handover again retries the re-sign. While a hub
 runs a key that neither signed the stored NAL nor appears on its
 handovers, the only handover it accepts is one to its own key (`409`
 otherwise), since it could never sign for any other.
