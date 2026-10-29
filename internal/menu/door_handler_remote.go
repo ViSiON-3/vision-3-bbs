@@ -135,10 +135,12 @@ func relayRemoteSession(ctx *DoorCtx, conn net.Conn, remoteOut io.Reader, discon
 
 	inputDone := make(chan struct{})
 	outputDone := make(chan struct{})
+	var left doorInputCopy // set by the input goroutine, for after inputDone
 
 	go func() {
 		defer close(inputDone)
-		err := copyToRemote(conn, ctx.Session, disconnectKey, disconnectEnabled)
+		var err error
+		left, err = copyToRemote(conn, ctx.Session, readInterrupt, disconnectKey, disconnectEnabled, ctx.enterTrailer)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrClosed) && !errors.Is(err, net.ErrClosed) {
 			if strings.Contains(err.Error(), "read interrupted") {
 				slog.Debug("remote door input interrupted (expected during shutdown)",
@@ -174,43 +176,61 @@ func relayRemoteSession(ctx *DoorCtx, conn net.Conn, remoteOut io.Reader, discon
 	close(readInterrupt)
 	if hasInterrupt {
 		<-inputDone
+		left.keep(ctx.Session)
 	}
 
 	slog.Info("remote door session ended",
 		"node", ctx.NodeNumber, "door", ctx.DoorName, "protocol", proto)
 }
 
-// copyToRemote forwards caller keystrokes to the door server, watching for the
-// local disconnect key. It returns nil when that key is pressed, since a user
-// hanging up deliberately is not an error.
-func copyToRemote(dst io.Writer, src io.Reader, disconnectKey byte, disconnectEnabled bool) error {
-	buf := make([]byte, 4096)
-	for {
-		n, readErr := src.Read(buf)
-		if n > 0 {
-			chunk := buf[:n]
-			if disconnectEnabled {
-				if i := bytes.IndexByte(chunk, disconnectKey); i >= 0 {
-					// Send anything typed ahead of the hang-up key, then stop.
-					if i > 0 {
-						if _, err := dst.Write(chunk[:i]); err != nil {
-							return err
-						}
-					}
-					return nil
-				}
-			}
-			if _, err := dst.Write(chunk); err != nil {
-				return err
-			}
+// copyToRemote forwards caller keystrokes to the door server until a read or
+// a write fails, or the caller presses the local disconnect key; a user
+// hanging up deliberately is not an error. It is copyDoorInput with closed,
+// the relay closing the connection, as exited: it returns the keys it read
+// but did not send (a chunk read once closed is closed, the unsent rest of a
+// failed write, and the keys typed after the disconnect key) for the caller
+// to keep for the next prompt once the copy has ended. With enterTrailer
+// set, the LF or NUL of an earlier Enter is not sent.
+func copyToRemote(dst io.Writer, src io.Reader, closed <-chan struct{}, disconnectKey byte, disconnectEnabled bool, enterTrailer bool) (doorInputCopy, error) {
+	w := dst
+	if disconnectEnabled {
+		w = disconnectWriter{w: dst, key: disconnectKey}
+	}
+	left, err := copyDoorInput(w, src, closed, enterTrailer)
+	if errors.Is(err, errDisconnectKey) {
+		err = nil
+	}
+	return left, err
+}
+
+// errDisconnectKey is how disconnectWriter tells copyToRemote the caller
+// pressed the disconnect key.
+var errDisconnectKey = errors.New("disconnect key pressed")
+
+// disconnectWriter writes to w what comes before key, then fails with
+// errDisconnectKey. It counts key as written, so the keys after it are what
+// copyDoorInput hands back unsent.
+type disconnectWriter struct {
+	w   io.Writer
+	key byte
+}
+
+func (d disconnectWriter) Write(p []byte) (int, error) {
+	i := bytes.IndexByte(p, d.key)
+	if i < 0 {
+		return d.w.Write(p)
+	}
+	// Send anything typed ahead of the hang-up key, then stop.
+	if i > 0 {
+		n, err := d.w.Write(p[:i])
+		if err == nil && n < i {
+			err = io.ErrShortWrite
 		}
-		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				return nil
-			}
-			return readErr
+		if err != nil {
+			return n, err
 		}
 	}
+	return i + 1, errDisconnectKey
 }
 
 // substituteDoorPlaceholders expands the {NODE}, {USERHANDLE} and friends that

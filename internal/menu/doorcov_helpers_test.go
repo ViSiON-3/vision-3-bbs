@@ -70,19 +70,32 @@ func (s *doorcovSession) Read(p []byte) (int, error) {
 	intr := s.intr
 	s.mu.Unlock()
 
+	// Keys already sent are read before an interrupt is seen, as a
+	// connection's buffered input would be, so a test knows which reader
+	// gets them.
 	select {
 	case b, ok := <-s.keys:
-		if !ok {
-			return 0, io.EOF
-		}
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		n := copy(p, b)
-		s.pending = append(s.pending, b[n:]...)
-		return n, nil
+		return s.take(p, b, ok)
+	default:
+	}
+	select {
+	case b, ok := <-s.keys:
+		return s.take(p, b, ok)
 	case <-intr:
 		return 0, errors.New("read interrupted")
 	}
+}
+
+// take returns what Read got from keys, keeping what p has no room for.
+func (s *doorcovSession) take(p, b []byte, ok bool) (int, error) {
+	if !ok {
+		return 0, io.EOF
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := copy(p, b)
+	s.pending = append(s.pending, b[n:]...)
+	return n, nil
 }
 
 func (s *doorcovSession) Write(p []byte) (int, error) {

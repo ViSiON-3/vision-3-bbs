@@ -2,6 +2,7 @@ package menu
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -51,8 +52,9 @@ func TestParseDisconnectKeyViaDoorConfig(t *testing.T) {
 
 func TestCopyToRemoteForwardsInput(t *testing.T) {
 	var dst bytes.Buffer
-	if err := copyToRemote(&dst, strings.NewReader("hello door"), 0x1D, true); err != nil {
-		t.Fatalf("copyToRemote: %v", err)
+	left, err := copyToRemote(&dst, strings.NewReader("hello door"), nil, 0x1D, true, false)
+	if err != nil || left.unread != nil {
+		t.Fatalf("copyToRemote = %q, %v; want nil, nil", left.unread, err)
 	}
 	if dst.String() != "hello door" {
 		t.Errorf("forwarded %q, want %q", dst.String(), "hello door")
@@ -60,15 +62,18 @@ func TestCopyToRemoteForwardsInput(t *testing.T) {
 }
 
 // Anything typed before the hang-up key was meant for the door and must still
-// reach it; anything after it must not.
+// reach it; anything after it must not, and is kept for the next prompt.
 func TestCopyToRemoteStopsAtDisconnectKey(t *testing.T) {
 	var dst bytes.Buffer
-	err := copyToRemote(&dst, strings.NewReader("ab\x1dcd"), 0x1D, true)
+	left, err := copyToRemote(&dst, strings.NewReader("ab\x1dcd"), nil, 0x1D, true, false)
 	if err != nil {
 		t.Fatalf("copyToRemote: %v", err)
 	}
 	if dst.String() != "ab" {
 		t.Errorf("forwarded %q, want %q", dst.String(), "ab")
+	}
+	if string(left.unread) != "cd" {
+		t.Errorf("kept %q, want %q", left.unread, "cd")
 	}
 }
 
@@ -76,12 +81,70 @@ func TestCopyToRemoteStopsAtDisconnectKey(t *testing.T) {
 // uses Ctrl-] itself keeps working.
 func TestCopyToRemotePassesDisconnectKeyWhenDisabled(t *testing.T) {
 	var dst bytes.Buffer
-	if err := copyToRemote(&dst, strings.NewReader("ab\x1dcd"), 0x1D, false); err != nil {
+	if _, err := copyToRemote(&dst, strings.NewReader("ab\x1dcd"), nil, 0x1D, false, false); err != nil {
 		t.Fatalf("copyToRemote: %v", err)
 	}
 	if dst.String() != "ab\x1dcd" {
 		t.Errorf("forwarded %q, want the disconnect key passed through", dst.String())
 	}
+}
+
+// copyToRemote hands back the keys the door server never got, in order, and
+// does not send the trailer of an Enter read before the door (#769).
+func TestCopyToRemoteKeepsUnsentKeys(t *testing.T) {
+	t.Run("keeps a chunk read after the connection closed", func(t *testing.T) {
+		closed := make(chan struct{})
+		close(closed)
+		var dst bytes.Buffer
+		left, err := copyToRemote(&dst, strings.NewReader("abc"), closed, 0x1D, true, false)
+		if string(left.unread) != "abc" || err != nil || dst.Len() != 0 {
+			t.Errorf("copyToRemote = %q, %v, sent %q; want \"abc\", nil, nothing", left.unread, err, dst.String())
+		}
+	})
+
+	t.Run("keeps what a failed write left", func(t *testing.T) {
+		for _, enabled := range []bool{true, false} {
+			w := &failingWriter{n: 1}
+			left, err := copyToRemote(w, strings.NewReader("abc"), nil, 0x1D, enabled, false)
+			if string(left.unread) != "bc" || !errors.Is(err, errDoorGone) || w.got.String() != "a" {
+				t.Errorf("disconnect key %v: copyToRemote = %q, %v, sent %q; want \"bc\", %v, \"a\"",
+					enabled, left.unread, err, w.got.String(), errDoorGone)
+			}
+		}
+	})
+
+	t.Run("keeps what a failed write before the disconnect key left", func(t *testing.T) {
+		w := &failingWriter{n: 1}
+		left, err := copyToRemote(w, strings.NewReader("abc\x1dd"), nil, 0x1D, true, false)
+		if string(left.unread) != "bc\x1dd" || !errors.Is(err, errDoorGone) || w.got.String() != "a" {
+			t.Errorf("copyToRemote = %q, %v, sent %q; want %q, %v, \"a\"",
+				left.unread, err, w.got.String(), "bc\x1dd", errDoorGone)
+		}
+	})
+
+	t.Run("drops an earlier Enter's trailer", func(t *testing.T) {
+		for _, tc := range []struct {
+			chunks  []string
+			want    string
+			trailer bool
+		}{
+			{[]string{"\nab"}, "ab", false},
+			{[]string{"\x00", "ab"}, "ab", false},
+			{[]string{"a\n"}, "a\n", false},
+			{nil, "", true},
+		} {
+			var dst bytes.Buffer
+			var rs []io.Reader
+			for _, c := range tc.chunks {
+				rs = append(rs, strings.NewReader(c))
+			}
+			left, err := copyToRemote(&dst, io.MultiReader(rs...), nil, 0x1D, true, true)
+			if err != nil || dst.String() != tc.want || left.unread != nil || left.enterTrailer != tc.trailer {
+				t.Errorf("chunks %q: copyToRemote = %+v, %v, sent %q; want trailer %v, sent %q",
+					tc.chunks, left, err, dst.String(), tc.trailer, tc.want)
+			}
+		}
+	})
 }
 
 func TestSubstituteDoorPlaceholders(t *testing.T) {
