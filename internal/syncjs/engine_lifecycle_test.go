@@ -226,6 +226,46 @@ func TestEngineSplitEnter(t *testing.T) {
 		}
 	})
 
+	// A read that brings only the LF is no key: a blocking read goes on
+	// waiting for one rather than returning nothing.
+	t.Run("trailer arrives alone", func(t *testing.T) {
+		sess := newInterruptibleSession("\r")
+		sess.chunks = [][]byte{[]byte("\n"), []byte("x")}
+		eng := newLifecycleEngine(sess)
+		t.Cleanup(func() { sess.closeInterrupt(); eng.Close() })
+
+		if key, err := eng.readKey(2 * time.Second); key != "\r" || err != nil {
+			t.Fatalf("readKey = %q, %v; want CR, nil", key, err)
+		}
+		if key, err := eng.readKey(0); key != "x" || err != nil {
+			t.Fatalf("blocking readKey after the lone LF = %q, %v; want \"x\", nil", key, err)
+		}
+	})
+
+	// The door ends after the CR, with the LF still in the session: the
+	// next reader is told to drop it, and an engine told so drops it.
+	t.Run("door ends before the trailer", func(t *testing.T) {
+		sess := newInterruptibleSession("\r")
+		eng := newLifecycleEngine(sess)
+		t.Cleanup(func() { eng.Close() })
+
+		if key, err := eng.readKey(2 * time.Second); key != "\r" || err != nil {
+			t.Fatalf("readKey = %q, %v; want CR, nil", key, err)
+		}
+		sess.closeInterrupt()
+		if got := eng.Close(); got != nil || !eng.EnterTrailerPending() {
+			t.Fatalf("Close = %q, trailer pending %v; want nil, true", got, eng.EnterTrailerPending())
+		}
+
+		nextSess := newInterruptibleSession("\nx")
+		next := newLifecycleEngine(nextSess)
+		next.ExpectEnterTrailer()
+		t.Cleanup(func() { nextSess.closeInterrupt(); next.Close() })
+		if key, err := next.readKey(2 * time.Second); key != "x" || err != nil {
+			t.Fatalf("next engine readKey = %q, %v; want \"x\", nil", key, err)
+		}
+	})
+
 	t.Run("door ends", func(t *testing.T) {
 		sess := newInterruptibleSession("\r")
 		sess.chunks = [][]byte{[]byte("\nx")}
@@ -239,6 +279,9 @@ func TestEngineSplitEnter(t *testing.T) {
 		sess.closeInterrupt()
 		if got := string(eng.Close()); got != "x" {
 			t.Fatalf("Close returned %q, want \"x\"", got)
+		}
+		if eng.EnterTrailerPending() {
+			t.Error("trailer still pending after Close dropped it")
 		}
 	})
 }

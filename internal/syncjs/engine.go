@@ -279,11 +279,14 @@ func (eng *Engine) close() []byte {
 		eng.heldInput = nil
 	}
 	// The rest of an Enter the script has already read is not the next
-	// prompt's key.
-	if eng.crTrailer && len(unread) > 0 && (unread[0] == '\n' || unread[0] == 0x00) {
-		unread = unread[1:]
+	// prompt's key. An Enter whose LF or NUL has not arrived yet is the next
+	// reader's to finish; EnterTrailerPending reports it.
+	if eng.crTrailer && len(unread) > 0 {
+		if unread[0] == '\n' || unread[0] == 0x00 {
+			unread = unread[1:]
+		}
+		eng.crTrailer = false
 	}
-	eng.crTrailer = false
 
 	// Clean up lock files created by file_mutex()
 	for _, lf := range eng.lockFiles {
@@ -501,30 +504,47 @@ func (eng *Engine) readKey(timeout time.Duration) (string, error) {
 		timer = time.After(timeout)
 	}
 
-	select {
-	case result := <-eng.rawInputCh:
-		if result.err != nil {
-			eng.cancel()
-			return "", ErrDisconnect
-		}
-		data := result.data
-		// The LF or NUL of an Enter split across two reads.
-		if eng.crTrailer {
-			eng.crTrailer = false
-			if len(data) > 0 && (data[0] == '\n' || data[0] == 0x00) {
-				data = data[1:]
+	for {
+		select {
+		case result := <-eng.rawInputCh:
+			if result.err != nil {
+				eng.cancel()
+				return "", ErrDisconnect
 			}
-		}
-		if len(data) == 0 {
+			data := result.data
+			// The LF or NUL of an Enter split across two reads. A chunk
+			// that held only that is no key: keep waiting, on the same
+			// timer.
+			if eng.crTrailer {
+				eng.crTrailer = false
+				if len(data) > 0 && (data[0] == '\n' || data[0] == 0x00) {
+					if data = data[1:]; len(data) == 0 {
+						continue
+					}
+				}
+			}
+			if len(data) == 0 {
+				return "", nil
+			}
+			return eng.parseInput(data), nil
+		case <-timer:
 			return "", nil
+		case <-eng.ctx.Done():
+			return "", ErrTerminated
 		}
-		return eng.parseInput(data), nil
-	case <-timer:
-		return "", nil
-	case <-eng.ctx.Done():
-		return "", ErrTerminated
 	}
 }
+
+// ExpectEnterTrailer tells the engine that the session's previous reader
+// took the CR of an Enter whose LF or NUL had not arrived, so a leading LF
+// or NUL in the first input the engine reads belongs to that Enter and is
+// dropped. Call it before Run.
+func (eng *Engine) ExpectEnterTrailer() { eng.crTrailer = true }
+
+// EnterTrailerPending reports, after Close, whether the script took the CR
+// of an Enter whose LF or NUL had not arrived when it ended. The session's
+// next reader should then drop a leading LF or NUL.
+func (eng *Engine) EnterTrailerPending() bool { return eng.crTrailer }
 
 type readResult struct {
 	data []byte
