@@ -2,7 +2,10 @@
 // key. It loads the outgoing coordinator's keystore (the hub's current key),
 // signs a coordinator handover naming the new key, and POSTs it to the hub,
 // which serves it with the NAL so subscribers move their pinned keys
-// themselves. Run it before the hub switches to the new key.
+// themselves. Run it before the hub switches to the new key if you can; a
+// hub already running the new key also takes it, and re-signs the NAL with
+// that key as it does. Before posting, it checks which key the hub runs and
+// refuses a hub running neither key.
 //
 // Usage:
 //
@@ -62,6 +65,17 @@ func main() {
 		return
 	}
 
+	client := &http.Client{Timeout: 30 * time.Second}
+	late, err := checkHubKey(client, *hubURL, *network, h)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if late {
+		fmt.Println("The hub already runs the new key. Posting the handover anyway: the hub accepts it")
+		fmt.Println("and re-signs the NAL with the new key, so subscribers follow without re-pinning.")
+	}
+
 	path := fmt.Sprintf("/v3net/v1/%s/nal/handover", *network)
 	bodyHash := sha256.Sum256(body)
 	dateUTC := time.Now().UTC().Format(http.TimeFormat)
@@ -78,7 +92,6 @@ func main() {
 	req.Header.Set("X-V3Net-Node-ID", ks.NodeID())
 	req.Header.Set("X-V3Net-Signature", sig)
 
-	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		logging.Fatal("POST handover", "error", err)
@@ -91,7 +104,45 @@ func main() {
 	if resp.StatusCode != http.StatusOK {
 		os.Exit(1)
 	}
+	if late {
+		fmt.Println("Handover published. The hub has re-signed the NAL with the new key.")
+		return
+	}
 	fmt.Println("Handover published. Restart the hub with the new key to sign the NAL with it.")
+}
+
+// checkHubKey fetches the network's /info and compares the hub's key with
+// the handover's keys. It reports late when the hub already runs the new
+// key, and returns an error when the hub runs neither key or does not say
+// which it runs: the hub would refuse the handover, or take one it can
+// never act on, or -hub names the wrong hub.
+func checkHubKey(client *http.Client, hubURL, network string, h *protocol.CoordHandover) (late bool, err error) {
+	url := fmt.Sprintf("%s/v3net/v1/%s/info", hubURL, network)
+	resp, err := client.Get(url)
+	if err != nil {
+		return false, fmt.Errorf("could not check the hub's key: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }() // read side
+	// Small JSON; cap the read.
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("could not check the hub's key: GET %s: %d %s", url, resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var info protocol.NetworkInfo
+	if err := json.Unmarshal(body, &info); err != nil {
+		return false, fmt.Errorf("could not check the hub's key: decode %s: %w", url, err)
+	}
+	switch info.HubPubKeyB64 {
+	case h.OldKeyB64:
+		return false, nil
+	case h.NewKeyB64:
+		return true, nil
+	case "":
+		return false, fmt.Errorf("the hub does not publish its key at %s; refusing to post the handover", url)
+	default:
+		return false, fmt.Errorf("the hub runs key %s, which is neither the outgoing key %s nor the new key %s; refusing to post the handover (check -hub, -network and the keystores)",
+			info.HubPubKeyB64, h.OldKeyB64, h.NewKeyB64)
+	}
 }
 
 // loadKeystore loads an existing keystore. keystore.Load would generate a
