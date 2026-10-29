@@ -36,6 +36,18 @@ type Leaf struct {
 	// pinMu guards pins, the pinned and pending coordinator and hub keys.
 	pinMu sync.Mutex
 	pins  keyPins
+
+	// pollMu runs poll cycles one at a time and guards pollCursor.
+	pollMu sync.Mutex
+	// pollCursor is where the next poll starts: the last message the hub
+	// returned in the previous cycle. Messages up to it were imported,
+	// already seen, or refused; a refused one is not marked seen, so a
+	// genuine message with its UUID that the hub serves later still comes
+	// after the cursor and is imported. Blank means start from the dedup
+	// index's last seen message. It is kept in memory only: after a restart
+	// the leaf starts from the last seen message and logs a refused message
+	// once more.
+	pollCursor string
 }
 
 // New creates a new Leaf with the given configuration.

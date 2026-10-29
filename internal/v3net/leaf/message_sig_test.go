@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
@@ -233,5 +234,106 @@ func TestPoll_StopsWhenHubDoesNotAdvance(t *testing.T) {
 	}
 	if count != 2 || requests > 3 {
 		t.Errorf("Poll imported %d over %d requests; want 2 and a bounded number of requests", count, requests)
+	}
+}
+
+// sinceHub serves the messages after the one named by the since cursor, as
+// the hub does, and records each request's cursor and how many it served.
+type sinceHub struct {
+	mu       sync.Mutex
+	messages []protocol.Message
+	cursors  []string
+	served   []int
+}
+
+func (h *sinceHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	since := r.URL.Query().Get("since")
+	page := h.messages
+	for i, m := range h.messages {
+		if m.MsgUUID == since {
+			page = h.messages[i+1:]
+			break
+		}
+	}
+	h.cursors = append(h.cursors, since)
+	h.served = append(h.served, len(page))
+	_ = json.NewEncoder(w).Encode(page)
+}
+
+func (h *sinceHub) add(m protocol.Message) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.messages = append(h.messages, m)
+}
+
+func (h *sinceHub) lastRequest() (cursor string, served int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.cursors[len(h.cursors)-1], h.served[len(h.served)-1]
+}
+
+func TestPoll_DoesNotRefetchRefusedNewestMessage(t *testing.T) {
+	author, _, err := keystore.Load(filepath.Join(t.TempDir(), "author.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	genuine := testMessage(sigUUID(2))
+	genuine.OriginNode = author.NodeID()
+	if err := genuine.Sign(author); err != nil {
+		t.Fatal(err)
+	}
+	forged := genuine
+	forged.Body = "the hub rewrote this"
+
+	h := &sinceHub{messages: []protocol.Message{testMessage(sigUUID(1)), forged}}
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+	writer := &mockJAMWriter{}
+	l, ix := setupLeaf(t, ts.URL, writer)
+
+	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
+		t.Fatalf("first Poll = %d, %v; want 1", count, err)
+	}
+	// The refused message is the newest on the hub. The next poll starts
+	// after it, so it is neither fetched nor logged again.
+	if count, err := l.Poll(context.Background()); err != nil || count != 0 {
+		t.Fatalf("second Poll = %d, %v; want 0", count, err)
+	}
+	if cursor, served := h.lastRequest(); cursor != forged.MsgUUID || served != 0 {
+		t.Errorf("second poll asked since %q and got %d messages; want since %s and none", cursor, served, forged.MsgUUID)
+	}
+	if seen, _ := ix.Seen(forged.MsgUUID); seen {
+		t.Fatal("refused message was marked seen")
+	}
+
+	// The genuine message under the same UUID still imports.
+	h.add(genuine)
+	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
+		t.Fatalf("third Poll = %d, %v; want 1", count, err)
+	}
+	if got := writer.messages[len(writer.messages)-1]; got.MsgUUID != genuine.MsgUUID || got.Body != genuine.Body {
+		t.Errorf("imported %s %q, want the genuine message", got.MsgUUID, got.Body)
+	}
+}
+
+func TestPoll_RetriesUnwritableMessage(t *testing.T) {
+	h := &sinceHub{messages: []protocol.Message{testMessage(sigUUID(1)), testMessage(sigUUID(2))}}
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+	writer := &failingJAMWriter{failUUID: sigUUID(2)}
+	l, _ := setupLeaf(t, ts.URL, writer)
+
+	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
+		t.Fatalf("first Poll = %d, %v; want 1", count, err)
+	}
+	// Once JAM takes it, the next poll goes back for the message it refused.
+	writer.failUUID = ""
+	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
+		t.Fatalf("second Poll = %d, %v; want 1", count, err)
+	}
+	if cursor, _ := h.lastRequest(); cursor != sigUUID(1) {
+		t.Errorf("second poll asked since %q, want the last seen message %s", cursor, sigUUID(1))
 	}
 }

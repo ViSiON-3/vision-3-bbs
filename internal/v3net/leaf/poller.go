@@ -19,13 +19,24 @@ import (
 // messages still moves the poll forward. A hub can still hand back a cursor
 // it does not recognise (it then starts again from the beginning), so a
 // cursor already requested in this cycle ends the cycle instead of looping.
+//
+// The next cycle starts where this one ended (see pollCursor), not at the
+// last message marked seen, so a refused message at the end of the hub's
+// list is not fetched and logged again on every poll.
 func (l *Leaf) poll(ctx context.Context) (int, error) {
-	cursor, err := l.cfg.DedupIndex.LastSeen(l.cfg.Network)
-	if err != nil {
-		return 0, fmt.Errorf("leaf: get cursor: %w", err)
+	l.pollMu.Lock()
+	defer l.pollMu.Unlock()
+
+	cursor := l.pollCursor
+	if cursor == "" {
+		var err error
+		if cursor, err = l.cfg.DedupIndex.LastSeen(l.cfg.Network); err != nil {
+			return 0, fmt.Errorf("leaf: get cursor: %w", err)
+		}
 	}
 
 	total := 0
+	writeFailed := false
 	requested := make(map[string]bool)
 	for {
 		if ctx.Err() != nil {
@@ -60,12 +71,15 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 		}
 
 		for _, msg := range messages {
-			imported, err := l.importMessage(msg)
+			outcome, err := l.importMessage(msg)
 			if err != nil {
 				return total, err
 			}
-			if imported {
+			switch outcome {
+			case importWritten:
 				total++
+			case importFailed:
+				writeFailed = true
 			}
 		}
 		if len(messages) > 0 {
@@ -77,28 +91,44 @@ func (l *Leaf) poll(ctx context.Context) (int, error) {
 			break
 		}
 	}
+	// A message JAM could not take is retried from the last seen message,
+	// as before; otherwise the next cycle skips what this one refused.
+	if writeFailed {
+		l.pollCursor = ""
+	} else {
+		l.pollCursor = cursor
+	}
 	return total, nil
 }
+
+// importOutcome is what importMessage did with one polled message.
+type importOutcome int
+
+const (
+	importSkipped importOutcome = iota // refused, for another network, or already seen
+	importWritten                      // written to JAM and marked seen
+	importFailed                       // JAM refused it; not marked seen
+)
 
 // importMessage checks one polled message and writes it to JAM unless it is
 // invalid, fails its author check, belongs to another network, or has been
 // seen. A rejected or unwritable message is logged and skipped, not marked
 // seen, so a genuine copy under the same UUID can still be imported later.
 // It returns an error only for a dedup index failure, which ends the poll.
-func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
+func (l *Leaf) importMessage(msg protocol.Message) (importOutcome, error) {
 	if err := msg.Validate(); err != nil {
 		slog.Warn("leaf: invalid message from hub, skipping", "uuid", msg.MsgUUID, "error", err)
-		return false, nil
+		return importSkipped, nil
 	}
 	if msg.Network != l.cfg.Network {
 		// A signature binds the network, but a hub could still relay a
 		// message signed for another network into this one's poll.
 		slog.Warn("leaf: message for another network, skipping", "uuid", msg.MsgUUID,
 			"network", l.cfg.Network, "message_network", msg.Network)
-		return false, nil
+		return importSkipped, nil
 	}
 	if !verifyAuthor(&msg) {
-		return false, nil
+		return importSkipped, nil
 	}
 	if msg.NeedsTruncation() {
 		if msg.IsSigned() {
@@ -107,28 +137,28 @@ func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
 			// it would import text the signature does not cover.
 			slog.Warn("leaf: signed message over the body limit, dropping", "uuid", msg.MsgUUID,
 				"origin_node", msg.OriginNode, "bytes", len(msg.Body))
-			return false, nil
+			return importSkipped, nil
 		}
 		msg.Truncate()
 	}
 
 	seen, err := l.cfg.DedupIndex.Seen(msg.MsgUUID)
 	if err != nil {
-		return false, fmt.Errorf("leaf: dedup check: %w", err)
+		return importSkipped, fmt.Errorf("leaf: dedup check: %w", err)
 	}
 	if seen {
-		return false, nil
+		return importSkipped, nil
 	}
 
 	localNum, err := l.cfg.JAMWriter.WriteMessage(msg)
 	if err != nil {
 		slog.Error("leaf: write message to JAM", "uuid", msg.MsgUUID, "error", err)
-		return false, nil
+		return importFailed, nil
 	}
 	if err := l.cfg.DedupIndex.MarkSeen(msg.MsgUUID, l.cfg.Network, &localNum); err != nil {
 		slog.Error("leaf: mark seen", "uuid", msg.MsgUUID, "error", err)
 	}
-	return true, nil
+	return importWritten, nil
 }
 
 // verifyAuthor checks a polled message's author signature independently of
