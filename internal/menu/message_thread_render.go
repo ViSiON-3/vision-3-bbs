@@ -133,25 +133,39 @@ func treePrefix(r threadRow) string {
 	return r.Prefix
 }
 
-// renderThreadMenuKeys builds the row that lists the thread menu's keys,
-// then a rule to fill width columns, the rules in frame's colour. It closes
-// the pane while the menu is open. The result is pipe-coded.
-func renderThreadMenuKeys(width int, frame string, g threadGlyphs) string {
-	keys := []struct{ key, label string }{
-		{g.up + g.down, "Move"},
-		{"Tab", "Back"},
-	}
+// threadKey is one key and what it does, on a thread key row.
+type threadKey struct{ key, label string }
+
+// renderKeyRow builds a rule of width columns carrying keys, each drawn as
+// "─[key] label ", after lead columns of rule, in frame's colour. The
+// result is pipe-coded.
+func renderKeyRow(width, lead int, frame string, keys []threadKey) string {
 	var b strings.Builder
-	used := 0
+	b.WriteString(frame + strings.Repeat("─", lead))
+	used := lead
 	for _, k := range keys {
-		b.WriteString(frame + "─|03[|11" + k.key + "|03]|07" + k.label + " ")
-		used += 4 + utf8.RuneCountInString(k.key) + len(k.label)
+		b.WriteString(frame + "─|03[|11" + k.key + "|03] |07" + k.label + " ")
+		used += 5 + utf8.RuneCountInString(k.key) + utf8.RuneCountInString(k.label)
 	}
 	if used < width {
 		b.WriteString(frame + strings.Repeat("─", width-used))
 	}
 	b.WriteString("|07")
 	return b.String()
+}
+
+// renderThreadMenuKeys builds the row that closes the pane while the thread
+// menu is open: its keys, in frame's colour. tabLabel says what Tab does
+// from there: "Close" when the pane goes away with the menu, "Message View"
+// when it stays.
+func renderThreadMenuKeys(width int, frame, tabLabel string, g threadGlyphs) string {
+	return renderKeyRow(width, 0, frame, []threadKey{{g.up + g.down, "Move"}, {"Tab", tabLabel}})
+}
+
+// renderThreadViewHint builds the separator row above the reader's bar
+// while Tab can open the thread menu.
+func renderThreadViewHint(width int) string {
+	return renderKeyRow(width, 3, "|08", []threadKey{{"Tab", "Thread View"}})
 }
 
 // renderThreadPane draws the docked thread pane for tv: a title row, rows
@@ -162,8 +176,8 @@ func renderThreadMenuKeys(width int, frame string, g threadGlyphs) string {
 // pane is dark grey with no bar. The current message always carries the
 // marker. Each line is pipe-coded (with raw escapes for the bar's
 // background) and exactly width columns. title is the pane's label,
-// " Thread ".
-func renderThreadPane(tv *threadView, hl, rows, width int, title string, g threadGlyphs, mode ansi.OutputMode) []string {
+// " Thread "; tabLabel is what the key row says Tab does.
+func renderThreadPane(tv *threadView, hl, rows, width int, title, tabLabel string, g threadGlyphs, mode ansi.OutputMode) []string {
 	lines := make([]string, 0, rows+2)
 
 	// Title: ──[ Thread ]─ subject ──────── pos of count · depth d ──
@@ -207,7 +221,7 @@ func renderThreadPane(tv *threadView, hl, rows, width int, title string, g threa
 	}
 
 	if hl != 0 {
-		lines = append(lines, renderThreadMenuKeys(width, frame, g))
+		lines = append(lines, renderThreadMenuKeys(width, frame, tabLabel, g))
 	} else {
 		lines = append(lines, frame+strings.Repeat("─", width)+"|07")
 	}

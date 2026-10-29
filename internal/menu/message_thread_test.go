@@ -271,14 +271,23 @@ func visibleWidth(line string, mode ansi.OutputMode) int {
 // The thread menu's key row fills exactly the row in both encodings.
 func TestRenderThreadMenuKeys(t *testing.T) {
 	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
-		row := renderThreadMenuKeys(79, "|08", threadGlyphsFor(mode))
+		row := renderThreadMenuKeys(79, "|08", "Message View", threadGlyphsFor(mode))
 		if w := visibleWidth(row, mode); w != 79 {
 			t.Errorf("%v: width = %d, want 79: %q", mode, w, row)
 		}
 	}
-	stripped := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderThreadMenuKeys(79, "|08", threadGlyphsFor(ansi.OutputModeUTF8))))), "")
-	if !strings.HasPrefix(stripped, "─[↑↓]Move ─[Tab]Back ──") {
-		t.Errorf("keys = %q", stripped)
+	for label, want := range map[string]string{
+		"Close":        "─[↑↓] Move ─[Tab] Close ──",
+		"Message View": "─[↑↓] Move ─[Tab] Message View ──",
+	} {
+		stripped := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderThreadMenuKeys(79, "|08", label, threadGlyphsFor(ansi.OutputModeUTF8))))), "")
+		if !strings.HasPrefix(stripped, want) {
+			t.Errorf("keys = %q, want prefix %q", stripped, want)
+		}
+	}
+	hint := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderThreadViewHint(79)))), "")
+	if !strings.HasPrefix(hint, "────[Tab] Thread View ──") || utf8.RuneCountInString(hint) != 79 {
+		t.Errorf("hint = %q", hint)
 	}
 }
 
@@ -303,7 +312,7 @@ func TestRenderThreadPaneWidth(t *testing.T) {
 		for _, cur := range []int{1, 5, 8, 14} {
 			tv := newThreadView(sampleNodes(), cur, sampleLoad("Caller"))
 			for _, rows := range []int{5, 3} {
-				lines := renderThreadPane(tv, tv.cur, rows, 79, " Thread ", g, mode)
+				lines := renderThreadPane(tv, tv.cur, rows, 79, " Thread ", "Close", g, mode)
 				if len(lines) != rows+2 {
 					t.Fatalf("%v #%d rows %d: %d lines", mode, cur, rows, len(lines))
 				}
@@ -394,7 +403,7 @@ func (env *menuEnv) readerAt(n int, keys string) *testterm.Term {
 // The reader on #5 of the sample thread: the header counts two direct
 // replies (#7 and the hoisted #15), the pane sits under the header with
 // the current row marked and windowed two from the top, the body follows,
-// and the separator is a plain rule while the thread menu is closed.
+// and the separator names Tab while the thread menu is closed.
 func TestMessageReaderThreadPaneLayout(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
@@ -454,8 +463,8 @@ func TestMessageReaderThreadPaneLayout(t *testing.T) {
 			}
 		}
 	}
-	if sep := strings.TrimRight(screen.Row(23), " "); sep != strings.Repeat("─", 79) {
-		t.Errorf("separator = %q, want a plain rule", sep)
+	if sep := screen.Row(23); !strings.HasPrefix(sep, "────[Tab] Thread View ──") {
+		t.Errorf("separator = %q, want the Tab hint", sep)
 	}
 	if !strings.Contains(screen.Row(24), "Next") {
 		t.Errorf("lightbar missing:\n%s", snap)
@@ -604,7 +613,7 @@ func TestMessageReaderNoThreadMenuWithoutRoom(t *testing.T) {
 	env.markRead(generalAreaID, "Caller", len(sampleThread))
 	screen := env.screenRunHeight("READMSGS", env.caller, "5\rT\rQ", 20)
 	snap := screen.Snapshot()
-	if strings.Contains(snap, "── Thread ") || strings.Contains(snap, "[Tab]Back") {
+	if strings.Contains(snap, "── Thread ") || strings.Contains(snap, "[Tab]") {
 		t.Errorf("the pane or menu was drawn without room for it:\n%s", snap)
 	}
 	if !strings.Contains(screen.Row(2), "Reading message #6 ") {
@@ -626,7 +635,7 @@ func TestMessageReaderThreadMenuScreen(t *testing.T) {
 	if c := screen.Cell(7, 1); !isBrightCyan(c) {
 		t.Errorf("open pane frame fg %d bold %v, want bright cyan", c.Fg, c.Bold)
 	}
-	if keys := screen.Row(13); !strings.HasPrefix(keys, "─[↑↓]Move ─[Tab]Back ──") {
+	if keys := screen.Row(13); !strings.HasPrefix(keys, "─[↑↓] Move ─[Tab] Message View ──") {
 		t.Errorf("pane's closing row = %q, want the menu's keys", keys)
 	}
 	if sep := strings.TrimRight(screen.Row(23), " "); sep != strings.Repeat("─", 79) {
@@ -682,6 +691,15 @@ func TestMessageReaderThreadMenuWithViewClosed(t *testing.T) {
 	screen = env.screenRun("READMSGS", &caller, "5\r\tQ")
 	if !strings.HasPrefix(screen.Row(7), "── Thread ─") || screen.Cell(10, 40).Bg != 44 {
 		t.Errorf("Tab should open the pane as the thread menu:\n%s", screen.Snapshot())
+	}
+	// Tab would close the pane here, and says so.
+	if keys := screen.Row(13); !strings.HasPrefix(keys, "─[↑↓] Move ─[Tab] Close ──") {
+		t.Errorf("key row = %q, want Tab to say Close", keys)
+	}
+	// With the pane hidden, the separator still names Tab.
+	screen = env.screenRun("READMSGS", &caller, "5\rQ")
+	if sep := screen.Row(23); !strings.HasPrefix(sep, "────[Tab] Thread View ──") {
+		t.Errorf("separator = %q, want the Tab hint", sep)
 	}
 }
 
@@ -750,7 +768,7 @@ func TestMessageReaderThreadPaneCP437(t *testing.T) {
 	if row := screen.Row(9); !strings.HasPrefix(row, "  ├─#3 Kestrel_~ ") {
 		t.Errorf("pane row above = %q", row)
 	}
-	if keys := screen.Row(13); !strings.Contains(keys, "]Move ─[Tab]Back ─") {
+	if keys := screen.Row(13); !strings.Contains(keys, "] Move ─[Tab] Message View ─") {
 		t.Errorf("pane's closing row = %q", keys)
 	}
 	if c := screen.Cell(13, 80).Rune; c != ' ' {
@@ -812,7 +830,7 @@ func TestThreadCellsAreInert(t *testing.T) {
 			}
 			return &message.DisplayMessage{MsgNum: 8, From: "x", Subject: "Re: s", Body: "b"}
 		})
-	title := string(ansi.ReplacePipeCodes([]byte(renderThreadPane(tv, tv.cur, 3, 79, " Thread ", g, ansi.OutputModeUTF8)[0])))
+	title := string(ansi.ReplacePipeCodes([]byte(renderThreadPane(tv, tv.cur, 3, 79, " Thread ", "Close", g, ansi.OutputModeUTF8)[0])))
 	if !strings.Contains(title, "|CLsubject") {
 		t.Errorf("pane title expands to %q", title)
 	}

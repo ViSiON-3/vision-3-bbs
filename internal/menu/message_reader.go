@@ -428,7 +428,13 @@ readerLoop:
 			if threadMenu {
 				hl = currentMsgNum
 			}
-			paneLines = renderThreadPane(tv, hl, paneRows, termWidth-1, e.Strings().MsgThreadPaneTitle, glyphs, outputMode)
+			// Tab closes the pane with the menu when Thread View is off, and
+			// otherwise only hands focus back to the message.
+			tabLabel := "Message View"
+			if currentUser.ThreadViewClosed {
+				tabLabel = "Close"
+			}
+			paneLines = renderThreadPane(tv, hl, paneRows, termWidth-1, e.Strings().MsgThreadPaneTitle, tabLabel, glyphs, outputMode)
 		}
 		layoutPane := func() {
 			paneLines, paneRows = nil, 0
@@ -443,9 +449,16 @@ readerLoop:
 				bodyAvailHeight -= paneRows + 2 + paneGap
 			}
 		}
-		separator := "|08" + strings.Repeat("─", termWidth-1) + "|07"
 		// The menu needs a thread to show and room for the pane to show it in.
 		canMenu := tv.hasThread() && paneRowsFor(fullBodyAvail) > 0
+		// The separator row above the bar names Tab while it would open the
+		// thread menu; otherwise it is a plain rule.
+		separator := func() string {
+			if canMenu && !threadMenu {
+				return renderThreadViewHint(termWidth - 1)
+			}
+			return "|08" + strings.Repeat("─", termWidth-1) + "|07"
+		}
 		threadMenu = keepThreadMenu && canMenu
 		layoutPane()
 		// The bar's Thread item is lit only when there is a menu to open.
@@ -542,9 +555,9 @@ readerLoop:
 				// Display footer: lightbar only
 				suffixText := barSuffix
 
-				// The separator row above the bar: a plain rule.
+				// The separator row above the bar.
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight-1, 1)), outputMode)
-				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(separator)), outputMode)
+				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(separator())), outputMode)
 
 				// Position cursor at last row for lightbar
 				terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(termHeight, 1)), outputMode)

@@ -383,7 +383,10 @@ message being read, and the reader's bar below is greyed out while the menu
 has the arrows. ↑/↓, Home and End move through the thread, stepping over
 `#n deleted` placeholders, and each move shows that message straight away,
 with focus left on the menu. Tab (or Enter, `T` or Esc) gives focus back to
-the message, where the arrows scroll the body again. Any other reader
+the message, where the arrows scroll the body again. The key row names what
+Tab does from there: `[Tab] Close` when the pane goes away with the menu
+(Thread View off), `[Tab] Message View` when it stays. While Tab would open
+the menu, the row above the reader's bar reads `[Tab] Thread View`. Any other reader
 command works as usual and closes the menu. While the menu is closed, the
 whole pane is drawn in dark grey with no bar (the message being read keeps
 its `►` marker). A blank row separates the pane from the message.
