@@ -20,7 +20,7 @@ sending and the receiving are all handled for you.
 | Networking | None | FTN mailer + tosser | Built-in (REST+SSE) |
 | Authentication | N/A | Packet passwords | Ed25519 signatures |
 | Area discovery | Manual | AREAS.BBS | NAL (Network Area List) |
-| Message dedup | N/A | MSGID CRC | UUID-based SQLite index |
+| Message dedup | N/A | MSGID CRC | SQLite index of origin node + UUID |
 | Transport | N/A | .PKT files via binkd | HTTP (JSON) |
 | Real-time delivery | No | Polling only | SSE push + polling |
 
@@ -128,9 +128,10 @@ while does not lose anything.
 ### Inbound (remote message arrives)
 
 1. The leaf client receives a message via polling or SSE notification
-2. The dedup index is checked — if the UUID has been seen, the message is skipped
+2. The dedup index is checked — if this message (its origin node and UUID)
+   has been seen, it is skipped
 3. The message (with its remote tearline/origin) is written to the local JAM base
-4. The UUID is recorded in the dedup index
+4. The message is recorded in the dedup index
 
 ## Posting from the Command Line
 
@@ -189,7 +190,7 @@ Users and sysops can propose new areas for a network. See the [NAL documentation
 
 V3Net messages in JAM bases look like standard echomail messages with a few additions:
 
-- A `V3NETUUID` kludge line (hidden from users) stores the message's unique identifier for deduplication
+- A `V3NETUUID` kludge line (hidden from users) stores the message's UUID
 - A tearline (`--- ViSiON/3 vX.Y.Z/Platform`) identifies the posting software
 - An origin line (`* Origin: BBS Name (node_id)`) identifies the posting node
 
@@ -207,6 +208,45 @@ area tag and the post's date, sender, recipient, subject and body (a SHA-256
 digest laid out as a version-4 UUID). Every attempt at the same post carries
 the same UUID, so a retry after a lost reply or a failed sent mark is dropped
 by the hub's dedup index rather than delivered twice.
+
+### Message Identity
+
+The sending node picks a message's `msg_uuid`, so the UUID alone does not
+identify a message: another node can post under the same one, by accident
+or on purpose. A message is identified by **(network, `origin_node`,
+`msg_uuid`)**. The hub only accepts a post whose `origin_node` is the node
+that sent it, so no node can take over another node's UUIDs.
+
+- **Hub**: two posts with the same UUID from different nodes are both stored
+  and both delivered. A node posting its own UUID again is a duplicate: the
+  hub answers 200 and keeps the first copy.
+- **Leaf**: the dedup index records each imported message by network, origin
+  node and UUID. Entries made before this rule have no origin node and match
+  that UUID from any node, so nothing already imported comes in again.
+
+### Polling Messages
+
+A leaf polls `GET /v3net/v1/{network}/messages` with these query
+parameters:
+
+| Parameter | Meaning |
+|-----------|---------|
+| `since` | `msg_uuid` of the last message the leaf has. Empty or `0` starts from the beginning. |
+| `since_origin` | `origin_node` of that message. Optional. |
+| `limit` | Page size, 1 to 500 (default 100). |
+
+The hub returns the messages in its own order that come after the cursor, in
+the leaf's subscribed areas, oldest first. `X-V3Net-Has-More: true` means
+another page follows; the leaf asks again with the last message of the page
+as the cursor, skipped messages included.
+
+- With `since_origin`, the cursor is exactly that message in the network.
+- Without it (a leaf from before the identity rule), the cursor is the
+  earliest message in the network with that UUID. That may send a few
+  messages again, which the leaf drops as duplicates, but never skips one.
+- A cursor the hub does not have in that network starts from the beginning.
+
+A hub from before the identity rule ignores `since_origin`.
 
 ### `helper post`
 
@@ -350,8 +390,9 @@ code.
   `chat_join`, `chat_leave` and `chat_topic` chat events. The leaf reconnects
   with backoff when the stream drops (`leaf: SSE reconnecting` in the log)
   and re-fetches the NAL on reconnect.
-- **Dedup**: `data/v3net_dedup.sqlite` records every UUID written to a local
-  base; a message whose UUID is already there is skipped.
+- **Dedup**: `data/v3net_dedup.sqlite` records every message written to a
+  local base by network, origin node and UUID; a message already there is
+  skipped (see [Message Identity](#message-identity)).
 
 ### Message Signatures
 
