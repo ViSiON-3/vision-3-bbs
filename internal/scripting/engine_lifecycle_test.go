@@ -295,6 +295,54 @@ func TestEngineSplitEnter(t *testing.T) {
 		}
 	})
 
+	// A read that brings only the LF is no key: a blocking read goes on
+	// waiting for one rather than returning nothing.
+	t.Run("trailer arrives alone", func(t *testing.T) {
+		sess := newInterruptibleSession("a\r")
+		sess.chunks = [][]byte{[]byte("\n"), []byte("y")}
+		eng := NewEngine(context.Background(), &SessionContext{Session: sess}, ScriptConfig{}, nil)
+		t.Cleanup(func() { sess.closeInterrupt(); eng.Close() })
+		readAEnter(t, eng)
+		if key, err := eng.readKey(0); key != "y" || err != nil {
+			t.Fatalf("blocking readKey after the lone LF = %q, %v; want \"y\"", key, err)
+		}
+	})
+
+	// The script ends after the CR, with the LF still in the session: the
+	// next reader is told to drop it, and an engine told so drops it.
+	t.Run("script ends before the trailer", func(t *testing.T) {
+		sess := newInterruptibleSession("a\r")
+		eng := NewEngine(context.Background(), &SessionContext{Session: sess}, ScriptConfig{}, nil)
+		t.Cleanup(func() { eng.Close() })
+		readAEnter(t, eng)
+		sess.closeInterrupt()
+		if got := eng.Close(); got != nil || !eng.EnterTrailerPending() {
+			t.Fatalf("Close = %q, trailer pending %v; want nil, true", got, eng.EnterTrailerPending())
+		}
+
+		nextSess := newInterruptibleSession("\ny")
+		next := NewEngine(context.Background(), &SessionContext{Session: nextSess}, ScriptConfig{}, nil)
+		next.ExpectEnterTrailer()
+		t.Cleanup(func() { nextSess.closeInterrupt(); next.Close() })
+		if key, err := next.readKey(2 * time.Second); key != "y" || err != nil {
+			t.Fatalf("next engine readKey = %q, %v; want \"y\"", key, err)
+		}
+	})
+
+	// A borrowed handler is told itself.
+	t.Run("borrowed handler told of the trailer", func(t *testing.T) {
+		sess := &trailerSession{demandSession{newInterruptibleSession("\r")}, false}
+		eng := NewEngine(context.Background(), &SessionContext{Session: sess}, ScriptConfig{}, nil)
+		t.Cleanup(func() { eng.Close() })
+		if key, err := eng.readKey(2 * time.Second); key != "\r" || err != nil {
+			t.Fatalf("readKey = %q, %v; want CR", key, err)
+		}
+		sess.closeInterrupt()
+		if got := eng.Close(); got != nil || eng.EnterTrailerPending() || !sess.told {
+			t.Fatalf("Close = %q, pending %v, handler told %v; want nil, false, true", got, eng.EnterTrailerPending(), sess.told)
+		}
+	})
+
 	t.Run("lone LF later is a key", func(t *testing.T) {
 		sess := newInterruptibleSession("a\rb")
 		sess.chunks = [][]byte{[]byte("\n")}
@@ -314,6 +362,16 @@ type demandSession struct{ *interruptibleSession }
 
 // InputOnDemand leaves later keys with the owner of the borrowed input source.
 func (s demandSession) InputOnDemand() bool { return true }
+
+// trailerSession is a demandSession whose owner records being told to drop
+// an Enter's trailer.
+type trailerSession struct {
+	demandSession
+	told bool
+}
+
+func (s *trailerSession) ReturnInput([]byte)  {}
+func (s *trailerSession) ExpectEnterTrailer() { s.told = true }
 
 // TestDemandReaderLeavesNextKey verifies that no second read is made after a
 // script consumes one key, even when another key is already available.

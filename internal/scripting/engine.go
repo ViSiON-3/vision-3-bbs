@@ -223,9 +223,21 @@ func (eng *Engine) close() []byte {
 	// prompt's key.
 	if eng.crTrailer && len(unread) > 0 && (unread[0] == '\n' || unread[0] == 0x00) {
 		unread = unread[1:]
+		eng.crTrailer = false
 	}
-	eng.crTrailer = false
+	if len(unread) > 0 {
+		eng.crTrailer = false
+	}
 	if len(unread) == 0 {
+		// An Enter whose LF or NUL has not arrived yet is the next
+		// reader's to finish. A borrowed handler is told here; otherwise
+		// the caller asks EnterTrailerPending.
+		if eng.crTrailer && eng.readRequests != nil && stopped {
+			if owner, ok := eng.session.Session.(interface{ ExpectEnterTrailer() }); ok {
+				owner.ExpectEnterTrailer()
+				eng.crTrailer = false
+			}
+		}
 		return nil
 	}
 
@@ -242,6 +254,18 @@ func (eng *Engine) close() []byte {
 	}
 	return unread
 }
+
+// ExpectEnterTrailer tells the engine that the session's previous reader
+// took the CR of an Enter whose LF or NUL had not arrived, so a leading LF
+// or NUL in the first input the engine reads belongs to that Enter and is
+// dropped. Call it before Run.
+func (eng *Engine) ExpectEnterTrailer() { eng.crTrailer = true }
+
+// EnterTrailerPending reports, after Close, whether the script took the CR
+// of an Enter whose LF or NUL had not arrived when it ended, and no borrowed
+// handler was told. The session's next reader should then drop a leading LF
+// or NUL.
+func (eng *Engine) EnterTrailerPending() bool { return eng.crTrailer }
 
 // watchContext monitors the context and interrupts the JS runtime on cancellation.
 func (eng *Engine) watchContext() {
