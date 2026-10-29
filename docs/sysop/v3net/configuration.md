@@ -360,7 +360,9 @@ body, tearline, origin line and attributes. Kludges are not signed.
   the hub. A message that was altered after signing, or whose `origin_node`
   does not match its key, is logged as
   `leaf: message failed author signature check, dropping` and not imported.
-  The rest of the poll continues.
+  The leaf also drops a message labelled with a different network than the
+  one it is polling, and a signed message over 32 KB, rather than cutting
+  text the signature covers. The rest of the poll continues.
 - **Long messages**: the leaf cuts a body over 32 KB down before signing, so
   the signature covers the body readers get. The hub never shortens a signed
   message; a signed post over the limit is refused with HTTP 413. Unsigned
