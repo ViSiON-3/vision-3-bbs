@@ -285,7 +285,9 @@ See [vision3 doctor](configuration/configuration.md#doctor).
 |---------|---------------|
 | `v3net.json not found, V3Net disabled` in the log | The BBS could not find `configs/v3net.json`. Save once from the config editor to create it. |
 | `V3Net leaf: message area not found, skipping` | A board tag in a subscription matches no local area. Open the subscription, press **Enter** on **Browse Areas**, and re-subscribe; `vision3 doctor` lists these too. |
-| `leaf: poll failed` | The hub is unreachable or rejecting you. Check the hub URL and that the hub is up. |
+| `leaf: poll failed` | The hub is unreachable or rejecting you. Check the hub URL and that the hub is up. If the error says the sync is paused, see the next row. |
+| `leaf: pausing sync with the hub` | The hub's key, or the key it signs with, is not the pinned **Hub Key**. Polling, the event stream and sending stop for that network until you accept the key; see [hub signatures](v3net/configuration.md#hub-signatures). |
+| `leaf: hub does not sign its responses (older hub)` | Logged once. The hub predates hub signatures; the leaf works with it as before, unverified. |
 | `leaf: subscribe failed, retrying` with `subscription status "pending"` | The hub has not approved your node. The leaf retries on its own; ask the hub sysop to approve you in Node Management. |
 | `V3Net is disabled in server configuration` on a V3Net screen in the BBS | The master switch is `N`. Set **V3Net** to `Y` in Server Setup and restart. |
 | `v3net hub: rejected unsigned message` on your hub | **Signed Messages** is `Y` and an older leaf posted without a signature. The leaf gets HTTP 401 and must upgrade; see [requiring signed messages](v3net/configuration.md#requiring-signed-messages). |
@@ -343,6 +345,54 @@ policy still determines whether the registration becomes active.
 If an older leaf is still needed, set the option back to **N** and restart.
 Its registration remains intact. Neither enabling nor disabling enforcement
 requires database cleanup, key rotation, or a binary rollback.
+
+---
+
+## Hub signatures
+
+An updated hub signs everything it sends a leaf in answer to a signed
+request (message pages, replies to posts, chat and sysop calls, and each
+event on the live event stream) with its node key. That is the key its
+`/info` page serves and the leaf pins as **Hub Key** (`hubPubKey`); see
+[Coordinator Key Pinning](v3net/nal.md#coordinator-key-pinning). The leaf
+checks every signature against the pinned key, so a reply altered on the way,
+or one from a server that is not your hub, is refused. Each signature is tied
+to the request it answers (through a random nonce the leaf sends with each
+request) and each event to its place in the stream, so an old reply or event
+cannot be passed off as a new one. A refusal of the event stream is checked
+too, so a hub that changed its key is caught there as well. This matters most for
+hubs on plain HTTP or behind a proxy that terminates TLS, and the key stays
+the same when the hub's certificate changes.
+
+**When the hub's key changes**, the leaf stops talking to the hub for that
+network: it no longer polls, drops the event stream, and refuses to send
+messages, chat or logon notices (these fail with
+`sync with the hub is paused until its key matches the pin`). It logs
+`leaf: pausing sync with the hub` and reports the hub's new key the same way
+as a changed coordinator key: it is recorded as **Offered Hub**
+(`pendingHubPubKey`) and every SysOp is warned at login.
+
+To resume, confirm the new key with the network's operator through a channel
+you already trust, then copy it into **Hub Key**, as in
+[Accepting a New Key](v3net/nal.md#accepting-a-new-key-coordinator-transfer).
+The running BBS picks the edit up without a restart, checks `/info` against
+the new pin and resumes at once (`leaf: hub key matches the pin; resuming
+sync`). Messages posted locally meanwhile wait in the message base and are
+sent then. While paused, the leaf also re-checks `/info` every five minutes,
+so a hub that goes back to the pinned key resumes on its own.
+
+A single reply whose signature fails while `/info` still serves the pinned
+key is refused on its own (the poll or send fails and is retried as usual);
+the leaf does not stay paused.
+
+**Older hubs** do not sign. The leaf logs
+`leaf: hub does not sign its responses (older hub)` once and carries on
+unverified, as before, so leaves and hubs can be upgraded in any order. A
+leaf with no **Hub Key** pinned (a hub that does not publish one) cannot
+check signatures either. There is no leaf setting yet to refuse an unsigned
+hub; that will come in a later release, once hubs have upgraded. The
+signature format is in
+[Hub Signatures](v3net/message-areas.md#hub-signatures).
 
 ---
 

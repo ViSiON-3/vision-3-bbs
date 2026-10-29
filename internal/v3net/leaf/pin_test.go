@@ -279,6 +279,9 @@ func TestHubKeyPinnedFromInfo(t *testing.T) {
 	if err := l2.checkHubKey(ctx); !errors.Is(err, ErrHubKeyMismatch) {
 		t.Errorf("checkHubKey = %v, want ErrHubKeyMismatch", err)
 	}
+	if !l2.HubPaused() {
+		t.Error("a mismatched hub key did not pause syncing")
+	}
 	if _, changed := rec2.counts(); changed != 1 || rec2.changed[0].Offered != hubKS.PubKeyBase64() {
 		t.Errorf("change events = %+v", rec2.changed)
 	}

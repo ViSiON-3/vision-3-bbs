@@ -22,7 +22,7 @@ func (h *Hub) newMux() http.Handler {
 			h.handleNetworks(w, r)
 			return
 		case path == "/v3net/v1/subscribe" && r.Method == http.MethodPost:
-			h.handleSubscribe(w, r)
+			h.signResponses(http.HandlerFunc(h.handleSubscribe)).ServeHTTP(w, r)
 			return
 		case strings.HasPrefix(path, "/v3net/") && strings.HasSuffix(path, "/info") && r.Method == http.MethodGet:
 			h.handleNetworkInfo(w, r)
@@ -38,14 +38,15 @@ func (h *Hub) newMux() http.Handler {
 			return
 		}
 
-		// All other /v3net/v1/{network}/* routes require auth.
+		// All other /v3net/v1/{network}/* routes require auth, and their
+		// responses, refusals included, are signed with the hub key.
 		network := extractNetwork(r.URL.Path)
 		if network == "" {
 			http.NotFound(w, r)
 			return
 		}
 
-		h.authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.signResponses(h.authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			// Core endpoints.
 			case strings.HasSuffix(path, "/messages") && r.Method == http.MethodGet:
@@ -109,7 +110,7 @@ func (h *Hub) newMux() http.Handler {
 			default:
 				http.NotFound(w, r)
 			}
-		})).ServeHTTP(w, r)
+		}))).ServeHTTP(w, r)
 	})
 }
 

@@ -35,7 +35,8 @@ type Config struct {
 	// that verifies pins its key and OnKeyPinned is told.
 	CoordPubKeyB64 string
 	// HubPubKeyB64 is the pinned hub key (standard base64), checked against
-	// /info when the leaf starts. Blank pins on first use like
+	// /info when the leaf starts and used to verify the hub's signed
+	// responses and SSE events. Blank pins on first use like
 	// CoordPubKeyB64.
 	HubPubKeyB64 string
 	// PendingCoordPubKeyB64 and PendingHubPubKeyB64 are mismatched keys
@@ -52,8 +53,9 @@ type Config struct {
 	OnKeyPinned func(KeyEvent) error
 	// OnKeyChanged is called when the hub offers a key that differs from the
 	// pinned one, once per distinct offered key. The leaf keeps the pin and
-	// rejects the new key; the caller should alert the sysop and record the
-	// offered key. It runs on the leaf's goroutine.
+	// rejects the new key; for the hub key it also pauses syncing with the
+	// hub until the key matches the pin again. The caller should alert the
+	// sysop and record the offered key. It runs on the leaf's goroutine.
 	OnKeyChanged func(KeyEvent)
 }
 
