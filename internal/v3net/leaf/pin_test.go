@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
@@ -62,14 +63,24 @@ func (s *nalServer) start(t *testing.T) *httptest.Server {
 	return ts
 }
 
-// keyRecorder collects the key events a leaf reports.
+// keyRecorder collects the key events a leaf reports. While failPins is
+// set, OnKeyPinned reports a storage failure.
 type keyRecorder struct {
 	mu              sync.Mutex
 	pinned, changed []KeyEvent
+	failPins        bool
 }
 
 func (r *keyRecorder) attach(l *Leaf) {
-	l.cfg.OnKeyPinned = func(ev KeyEvent) { r.mu.Lock(); r.pinned = append(r.pinned, ev); r.mu.Unlock() }
+	l.cfg.OnKeyPinned = func(ev KeyEvent) error {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.pinned = append(r.pinned, ev)
+		if r.failPins {
+			return errors.New("disk full")
+		}
+		return nil
+	}
 	l.cfg.OnKeyChanged = func(ev KeyEvent) { r.mu.Lock(); r.changed = append(r.changed, ev); r.mu.Unlock() }
 }
 
@@ -289,5 +300,109 @@ func TestNewSeedsPinsFromConfig(t *testing.T) {
 	}
 	if err := l.checkNAL(signedNAL(t, newCoordKey(t))); !errors.Is(err, nal.ErrCoordKeyMismatch) {
 		t.Errorf("checkNAL = %v, want ErrCoordKeyMismatch", err)
+	}
+}
+
+// A first-use pin that could not be stored is still enforced, and is offered
+// for storage again at each matching fetch until it is stored.
+func TestUnsavedPinIsRetried(t *testing.T) {
+	ks := newCoordKey(t)
+	srv := &nalServer{}
+	srv.set(signedNAL(t, ks, "gen.general"))
+	ts := srv.start(t)
+	l, rec := pinnedLeaf(t, ts, "")
+	rec.failPins = true
+	ctx := context.Background()
+
+	if err := l.refreshNAL(ctx); err != nil {
+		t.Fatalf("first refresh: %v", err)
+	}
+	if got := l.PinnedKey(KeyCoordinator); got != ks.PubKeyBase64() {
+		t.Fatalf("pin = %q; an unsaved pin must still be enforced", got)
+	}
+	if err := l.refreshNAL(ctx); err != nil {
+		t.Fatalf("second refresh: %v", err)
+	}
+	if pinned, _ := rec.counts(); pinned != 2 {
+		t.Fatalf("store attempted %d times, want 2 (first use, then a retry)", pinned)
+	}
+
+	rec.mu.Lock()
+	rec.failPins = false
+	rec.mu.Unlock()
+	for range 2 {
+		if err := l.refreshNAL(ctx); err != nil {
+			t.Fatalf("refresh: %v", err)
+		}
+	}
+	if pinned, _ := rec.counts(); pinned != 3 {
+		t.Errorf("store attempted %d times, want 3 (no more retries once stored)", pinned)
+	}
+}
+
+// UpdatePins installs a pin the sysop accepted on the running leaf and
+// re-fetches, so the new coordinator's NAL replaces the old one in place.
+func TestUpdatePinsAcceptsNewKeyInPlace(t *testing.T) {
+	oldKey, newKey := newCoordKey(t), newCoordKey(t)
+	srv := &nalServer{}
+	srv.set(signedNAL(t, oldKey, "gen.old"))
+	ts := srv.start(t)
+	l, _ := pinnedLeaf(t, ts, oldKey.PubKeyBase64())
+	got := make(chan *protocol.NAL, 4)
+	l.cfg.OnNAL = func(n *protocol.NAL) { got <- n }
+	ctx := context.Background()
+
+	if err := l.refreshNAL(ctx); err != nil {
+		t.Fatal(err)
+	}
+	<-got
+	srv.set(signedNAL(t, newKey, "gen.new"))
+	if err := l.refreshNAL(ctx); !errors.Is(err, nal.ErrCoordKeyMismatch) {
+		t.Fatalf("refresh = %v, want ErrCoordKeyMismatch", err)
+	}
+
+	// Unchanged pins: nothing happens, the pending key stays.
+	l.UpdatePins(ctx, Pins{Coord: oldKey.PubKeyBase64()})
+	if l.PendingKey(KeyCoordinator) != newKey.PubKeyBase64() {
+		t.Error("an unchanged pin dropped the leaf's pending key")
+	}
+
+	l.UpdatePins(ctx, Pins{Coord: newKey.PubKeyBase64(), PendingCoord: newKey.PubKeyBase64()})
+	select {
+	case n := <-got:
+		if n.CoordPubKeyB64 != newKey.PubKeyBase64() {
+			t.Errorf("OnNAL got a NAL from %s", n.CoordPubKeyB64)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no NAL re-fetch after the pin changed")
+	}
+	if areas, err := l.Areas(ctx); err != nil || len(areas) != 1 || areas[0].Tag != "gen.new" {
+		t.Errorf("Areas = %+v, %v; want gen.new", areas, err)
+	}
+	if p := l.PendingKey(KeyCoordinator); p != "" {
+		t.Errorf("pending key %q left after acceptance", p)
+	}
+}
+
+// SeedNAL installs only a NAL signed by the pinned key, and the seeded NAL
+// survives a refresh that the pin rejects.
+func TestSeedNALKeepsTrustedListAcrossRebuild(t *testing.T) {
+	trusted, other := newCoordKey(t), newCoordKey(t)
+	srv := &nalServer{}
+	srv.set(signedNAL(t, other, "gen.evil"))
+	ts := srv.start(t)
+	l, _ := pinnedLeaf(t, ts, trusted.PubKeyBase64())
+
+	if l.SeedNAL(signedNAL(t, other, "gen.evil")) {
+		t.Error("seeded a NAL signed by an unpinned key")
+	}
+	if !l.SeedNAL(signedNAL(t, trusted, "gen.good")) {
+		t.Fatal("did not seed a NAL signed by the pinned key")
+	}
+	if err := l.refreshNAL(context.Background()); !errors.Is(err, nal.ErrCoordKeyMismatch) {
+		t.Fatalf("refresh = %v, want ErrCoordKeyMismatch", err)
+	}
+	if n := l.LastNAL(); n == nil || n.Areas[0].Tag != "gen.good" {
+		t.Errorf("LastNAL = %+v, want the seeded gen.good", n)
 	}
 }

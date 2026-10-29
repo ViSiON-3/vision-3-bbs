@@ -42,8 +42,10 @@ type Config struct {
 	// OnKeyPinned is called when the leaf pins a key on first use, so the
 	// caller can persist it, and when a key the sysop accepted (the pending
 	// key, now pinned) first verifies, so the caller can drop the pending
-	// record. It runs on the leaf's goroutine.
-	OnKeyPinned func(KeyEvent)
+	// record. It runs on the leaf's goroutine. An error means the key was not
+	// stored; the leaf keeps enforcing it and calls OnKeyPinned again at the
+	// next matching fetch.
+	OnKeyPinned func(KeyEvent) error
 	// OnKeyChanged is called when the hub offers a key that differs from the
 	// pinned one, once per distinct offered key. The leaf keeps the pin and
 	// rejects the new key; the caller should alert the sysop and record the

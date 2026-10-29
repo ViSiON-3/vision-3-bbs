@@ -292,6 +292,19 @@ func (c *Cache) Get(network string) *protocol.NAL {
 	return e.nal
 }
 
+// Last returns the cached NAL for network however old it is, or nil if none
+// was ever cached. Unlike Get it ignores the TTL: it is the last NAL that
+// passed verification, which is what a caller carrying trust across a
+// restart of the cache's owner wants.
+func (c *Cache) Last(network string) *protocol.NAL {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if e := c.entries[network]; e != nil {
+		return e.nal
+	}
+	return nil
+}
+
 // FetchAndVerify fetches a NAL from the given URL, verifies it, and caches it.
 // On fetch failure with a warm cache, returns the stale entry with a logged warning.
 func (c *Cache) FetchAndVerify(ctx context.Context, url, network string) (*protocol.NAL, error) {
