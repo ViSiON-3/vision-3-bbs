@@ -20,7 +20,8 @@ import (
 // stored NAL's key followed along the handovers already held. From then on
 // the hub takes NALs signed by the new key, and a hub restarted with the new
 // key re-signs the stored NAL with it (adoptHandovers), so leaves move their
-// pins at their next fetch.
+// pins at their next fetch. A hub already running the new key when the
+// handover is posted re-signs the NAL as soon as it accepts it.
 
 const handoverSchema = `
 CREATE TABLE IF NOT EXISTS coord_handovers (
@@ -115,6 +116,19 @@ func nodeIDOf(keyB64 string) string {
 // signed by the coordinator key in force and hand over to a key the
 // network's chain has not used, so the stored handovers never loop. Posting
 // one the hub already holds succeeds without storing it twice.
+//
+// The handover may also come late: the hub was restarted with the new key
+// before it was posted. The stored NAL is then still the old key's, and with
+// no handover leading on from it that key is the one in force, so the usual
+// rules accept the handover; the hub then re-signs the NAL with its key
+// straight away, as adoptHandovers would at the next restart. This is no
+// weaker than the usual order: the handover is still checked against the key
+// in force, which only that key's holder can sign for. The hub's own key
+// only ever narrows what is accepted, never widens it, so running a key
+// does not let a hub take the network for that key or any other. To keep
+// a switched hub from taking a handover it can never act on, while the hub
+// runs a key that neither signs the stored NAL nor appears on the chain,
+// the only handover it accepts is one to its own key.
 func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
 	network := extractNetwork(r.URL.Path)
 	if h.findNetwork(network) == nil {
@@ -157,6 +171,8 @@ func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, old := range hs {
 		if old == ho {
+			// Re-signing may have failed when it was first posted.
+			h.adoptPostedHandover(network)
 			writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 			return
 		}
@@ -169,6 +185,10 @@ func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"handover returns to a key the network already used"}`, http.StatusConflict)
 		return
 	}
+	if hubKey := h.hubKey(); hubSwitched(n, hs, hubKey) && ho.NewKeyB64 != hubKey {
+		http.Error(w, `{"error":"the hub already runs a new key; only a handover to the hub's key is accepted"}`, http.StatusConflict)
+		return
+	}
 
 	if err := h.nalStore.AddHandover(network, &ho); err != nil {
 		slog.Error("add handover", "error", err)
@@ -176,7 +196,49 @@ func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("hub: coordinator handover accepted", "network", network, "from", ho.OldKeyB64, "to", ho.NewKeyB64)
+	h.adoptPostedHandover(network)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// hubKey returns the hub's public key, or "" when it runs without one.
+func (h *Hub) hubKey() string {
+	if h.cfg.Keystore == nil {
+		return ""
+	}
+	return h.cfg.Keystore.PubKeyBase64()
+}
+
+// hubSwitched reports whether the hub runs a key that neither signs the
+// stored NAL n nor appears on its handovers hs: it was restarted with a new
+// key before the network was handed to it.
+func hubSwitched(n *protocol.NAL, hs []protocol.CoordHandover, hubKey string) bool {
+	return hubKey != "" && hubKey != n.CoordPubKeyB64 && !handoverUsesKey(hs, hubKey)
+}
+
+// adoptPostedHandover re-signs network's NAL with the hub's key when a
+// handover just posted hands the network to it (see adoptHandover), and
+// tells subscribers the NAL changed so they fetch it, and move their pins,
+// now. A failure is logged and the handover stays: the next restart re-signs
+// the NAL. Call it with nalMu held.
+func (h *Hub) adoptPostedHandover(network string) {
+	n, err := h.adoptHandover(network)
+	if err != nil {
+		slog.Error("hub: could not re-sign the NAL after a handover", "network", network, "error", err)
+		return
+	}
+	if n == nil {
+		return
+	}
+	ev, err := protocol.NewEvent(protocol.EventNALUpdated, protocol.NALUpdatedPayload{
+		Network:   network,
+		Updated:   n.Updated,
+		AreaCount: len(n.Areas),
+	})
+	if err != nil {
+		slog.Error("build nal_updated event", "network", network, "error", err)
+		return
+	}
+	h.broadcaster.Publish(network, ev)
 }
 
 // ErrHandedOver is returned by SignNAL, and so by every hub-side NAL change,
@@ -237,32 +299,43 @@ func (h *Hub) adoptHandovers() {
 	if h.cfg.Keystore == nil {
 		return
 	}
-	hubKey := h.cfg.Keystore.PubKeyBase64()
 	h.nalMu.Lock()
 	defer h.nalMu.Unlock()
 	for _, nc := range h.cfg.Networks {
-		n, err := h.nalStore.Get(nc.Name)
-		if err != nil || n == nil || n.CoordPubKeyB64 == hubKey {
-			continue
-		}
-		hs, err := h.nalStore.Handovers(nc.Name)
-		if err != nil {
-			slog.Warn("hub: could not read coordinator handovers", "network", nc.Name, "error", err)
-			continue
-		}
-		if coordKeyInForce(n, hs) != hubKey {
-			continue
-		}
-		from := n.CoordPubKeyB64
-		if err := nal.Sign(n, h.cfg.Keystore); err != nil {
+		if _, err := h.adoptHandover(nc.Name); err != nil {
 			slog.Error("hub: could not re-sign the NAL after a handover", "network", nc.Name, "error", err)
-			continue
 		}
-		if err := h.nalStore.Put(nc.Name, n); err != nil {
-			slog.Error("hub: could not store the re-signed NAL", "network", nc.Name, "error", err)
-			continue
-		}
-		slog.Info("hub: NAL re-signed with the key the network was handed over to",
-			"network", nc.Name, "from", from, "to", hubKey)
 	}
+}
+
+// adoptHandover re-signs network's stored NAL with the hub's key when a
+// handover chain from the NAL's key ends at it, and returns the re-signed
+// NAL, or nil when there was nothing to do. Call it with nalMu held, or
+// before the hub serves requests.
+func (h *Hub) adoptHandover(network string) (*protocol.NAL, error) {
+	hubKey := h.hubKey()
+	if hubKey == "" {
+		return nil, nil
+	}
+	n, err := h.nalStore.Get(network)
+	if err != nil || n == nil || n.CoordPubKeyB64 == hubKey {
+		return nil, err
+	}
+	hs, err := h.nalStore.Handovers(network)
+	if err != nil {
+		return nil, err
+	}
+	if coordKeyInForce(n, hs) != hubKey {
+		return nil, nil
+	}
+	from := n.CoordPubKeyB64
+	if err := nal.Sign(n, h.cfg.Keystore); err != nil {
+		return nil, err
+	}
+	if err := h.nalStore.Put(network, n); err != nil {
+		return nil, err
+	}
+	slog.Info("hub: NAL re-signed with the key the network was handed over to",
+		"network", network, "from", from, "to", hubKey)
+	return n, nil
 }

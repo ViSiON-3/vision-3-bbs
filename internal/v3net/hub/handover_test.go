@@ -100,6 +100,11 @@ func TestHandoverStoredAndServed(t *testing.T) {
 	if err := nal.Verify(&served); err != nil {
 		t.Errorf("served NAL does not verify: %v", err)
 	}
+	// The hub still runs the old key, so the NAL stays the old key's until
+	// it restarts with the new one.
+	if served.CoordPubKeyB64 != hubKS.PubKeyBase64() {
+		t.Errorf("served NAL signed by %s, want the hub key until a restart", served.CoordPubKeyB64)
+	}
 
 	// The old key may no longer post the NAL; the new key may.
 	oldNAL := &protocol.NAL{V3NetNAL: "1.0", Network: "testnet", Areas: served.Areas}
@@ -384,5 +389,78 @@ func TestPostNALRequiresKeyInForce(t *testing.T) {
 	}
 	if got := post(ts, newKS, newKS); got != http.StatusOK {
 		t.Errorf("new key: status %d, want 200", got)
+	}
+}
+
+// A hub restarted with the new key before the handover was posted accepts
+// the old key's handover to it, re-signs the NAL with the new key at once
+// and serves it with the handover. In that state it refuses a handover to
+// any other key, and one not signed by the old key.
+func TestLateHandoverAdopted(t *testing.T) {
+	dir := t.TempDir()
+	oldKS, newKS := newKey(t, "old.key"), newKey(t, "new.key")
+	third, stranger, poster := newKey(t, "third.key"), newKey(t, "stranger.key"), newKey(t, "poster.key")
+	open := func(ks *keystore.Keystore) (*Hub, *httptest.Server) {
+		t.Helper()
+		h, err := New(Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
+			RequireSignedSubscribe: true, Networks: []NetworkConfig{{Name: "testnet"}}})
+		if err != nil {
+			t.Fatalf("create hub: %v", err)
+		}
+		return h, httptest.NewServer(h.newMux())
+	}
+
+	h, ts := open(oldKS)
+	seedTestNAL(t, h, oldKS)
+	registerLeaf(t, ts, poster)
+	ts.Close()
+	_ = h.Close()
+
+	// Restarted with the new key and no handover held, the hub keeps the
+	// old key's NAL.
+	h, ts = open(newKS)
+	defer h.Close()
+	defer ts.Close()
+	if n, err := h.nalStore.Get("testnet"); err != nil || n.CoordPubKeyB64 != oldKS.PubKeyBase64() {
+		t.Fatalf("stored NAL after the switch: %v; want the old key's", err)
+	}
+
+	url := ts.URL + "/v3net/v1/testnet/nal/handover"
+	if got := postJSON(t, poster, url, signHandover(t, "testnet", oldKS, third)); got != http.StatusConflict {
+		t.Errorf("handover to a third key: status %d, want 409", got)
+	}
+	if got := postJSON(t, poster, url, signHandover(t, "testnet", stranger, newKS)); got != http.StatusConflict {
+		t.Errorf("handover to the hub key signed by another key: status %d, want 409", got)
+	}
+	if hs, err := h.nalStore.Handovers("testnet"); err != nil || len(hs) != 0 {
+		t.Fatalf("stored handovers = %d, %v; want none", len(hs), err)
+	}
+
+	ho := signHandover(t, "testnet", oldKS, newKS)
+	for i := 0; i < 2; i++ {
+		if got := postJSON(t, poster, url, ho); got != http.StatusOK {
+			t.Fatalf("POST late handover #%d: status %d", i+1, got)
+		}
+	}
+	var served protocol.NAL
+	if err := json.Unmarshal(getNALBody(t, ts), &served); err != nil {
+		t.Fatal(err)
+	}
+	if served.CoordPubKeyB64 != newKS.PubKeyBase64() || served.CoordNodeID != newKS.NodeID() {
+		t.Errorf("served NAL signed by %s, want the new key", served.CoordPubKeyB64)
+	}
+	if err := nal.Verify(&served); err != nil {
+		t.Errorf("served NAL does not verify: %v", err)
+	}
+	if len(served.Handovers) != 1 || served.Handovers[0] != *ho {
+		t.Errorf("served handovers = %+v, want the one posted", served.Handovers)
+	}
+	if served.FindArea("gen.general") == nil {
+		t.Error("re-signed NAL lost its areas")
+	}
+
+	// The hub now runs the key in force and changes the NAL as usual.
+	if err := h.updateNALArea("testnet", "gen.general", func(a *protocol.Area) { a.Description = "after" }); err != nil {
+		t.Errorf("updateNALArea after the late handover: %v", err)
 	}
 }
