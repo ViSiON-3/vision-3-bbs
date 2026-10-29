@@ -271,16 +271,16 @@ func visibleWidth(line string, mode ansi.OutputMode) int {
 // The thread menu's key row fills exactly the row in both encodings.
 func TestRenderThreadMenuKeys(t *testing.T) {
 	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
-		row := renderThreadMenuKeys(79, "|08", "Message View", threadGlyphsFor(mode))
+		row := renderThreadMenuKeys(79, "|08", "Message View")
 		if w := visibleWidth(row, mode); w != 79 {
 			t.Errorf("%v: width = %d, want 79: %q", mode, w, row)
 		}
 	}
 	for label, want := range map[string]string{
-		"Close":        "─[↑↓] Move ─[Tab] Close ──",
-		"Message View": "─[↑↓] Move ─[Tab] Message View ──",
+		"Close":        "─[Tab] Close ──",
+		"Message View": "─[Tab] Message View ──",
 	} {
-		stripped := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderThreadMenuKeys(79, "|08", label, threadGlyphsFor(ansi.OutputModeUTF8))))), "")
+		stripped := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderThreadMenuKeys(79, "|08", label)))), "")
 		if !strings.HasPrefix(stripped, want) {
 			t.Errorf("keys = %q, want prefix %q", stripped, want)
 		}
@@ -635,7 +635,7 @@ func TestMessageReaderThreadMenuScreen(t *testing.T) {
 	if c := screen.Cell(7, 1); !isBrightCyan(c) {
 		t.Errorf("open pane frame fg %d bold %v, want bright cyan", c.Fg, c.Bold)
 	}
-	if keys := screen.Row(13); !strings.HasPrefix(keys, "─[↑↓] Move ─[Tab] Message View ──") {
+	if keys := screen.Row(13); !strings.HasPrefix(keys, "─[Tab] Message View ──") {
 		t.Errorf("pane's closing row = %q, want the menu's keys", keys)
 	}
 	if sep := strings.TrimRight(screen.Row(23), " "); sep != strings.Repeat("─", 79) {
@@ -693,7 +693,7 @@ func TestMessageReaderThreadMenuWithViewClosed(t *testing.T) {
 		t.Errorf("Tab should open the pane as the thread menu:\n%s", screen.Snapshot())
 	}
 	// Tab would close the pane here, and says so.
-	if keys := screen.Row(13); !strings.HasPrefix(keys, "─[↑↓] Move ─[Tab] Close ──") {
+	if keys := screen.Row(13); !strings.HasPrefix(keys, "─[Tab] Close ──") {
 		t.Errorf("key row = %q, want Tab to say Close", keys)
 	}
 	// With the pane hidden, the separator still names Tab.
@@ -751,11 +751,11 @@ func TestMessageReaderDirectReplyCountRespectsVisibility(t *testing.T) {
 	}
 }
 
-// On a CP437 session the pane and the menu's keys arrive as single bytes:
-// the box characters, "~" for a clipped name, and the 0x10 marker and the
-// 0x18 and 0x19 arrows. The emulator draws nothing for those control bytes (a CP437
-// terminal draws glyphs), so they show up in its unhandled list and the
-// text after each sits one column left of where a real terminal puts it.
+// On a CP437 session the pane arrives as single bytes: the box characters,
+// "~" for a clipped name, and the 0x10 marker. The emulator draws nothing
+// for that control byte (a CP437 terminal draws a glyph), so it shows up in
+// its unhandled list and the text after it sits one column left of where a
+// real terminal puts it.
 func TestMessageReaderThreadPaneCP437(t *testing.T) {
 	env := newMsgEnv(t)
 	env.outputMode = ansi.OutputModeCP437
@@ -768,14 +768,14 @@ func TestMessageReaderThreadPaneCP437(t *testing.T) {
 	if row := screen.Row(9); !strings.HasPrefix(row, "  ├─#3 Kestrel_~ ") {
 		t.Errorf("pane row above = %q", row)
 	}
-	if keys := screen.Row(13); !strings.Contains(keys, "] Move ─[Tab] Message View ─") {
+	if keys := screen.Row(13); !strings.Contains(keys, "─[Tab] Message View ─") {
 		t.Errorf("pane's closing row = %q", keys)
 	}
 	if c := screen.Cell(13, 80).Rune; c != ' ' {
 		t.Errorf("key row reached column 80: %q", c)
 	}
 	sent := strings.Join(screen.Unhandled(), "")
-	for _, b := range []string{"\x10", "\x18", "\x19"} {
+	for _, b := range []string{"\x10"} {
 		if !strings.Contains(sent, b) {
 			t.Errorf("control glyph %q was not sent; unhandled = %q", b, screen.Unhandled())
 		}

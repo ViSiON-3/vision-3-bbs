@@ -10,24 +10,22 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
-// threadGlyphs are the characters the thread pane and menu keys draw that
-// differ between a UTF-8 and a CP437 terminal. The box-drawing characters
-// are written as UTF-8 either way; the output writer converts them.
+// threadGlyphs are the characters the thread pane draws that differ
+// between a UTF-8 and a CP437 terminal. The box-drawing characters are
+// written as UTF-8 either way; the output writer converts them.
 type threadGlyphs struct {
 	marker   string // the current row's pointer
-	up       string // the thread menu's Move key
-	down     string
 	ellipsis string // marks a clipped handle or excerpt
 }
 
-// threadGlyphsFor picks the glyphs for mode. CP437 draws glyphs for the
-// control bytes 0x10, 0x18 and 0x19, and has no ellipsis, so a clipped name
-// ends in "~" there.
+// threadGlyphsFor picks the glyphs for mode. CP437 draws a glyph for the
+// control byte 0x10, and has no ellipsis, so a clipped name ends in "~"
+// there.
 func threadGlyphsFor(mode ansi.OutputMode) threadGlyphs {
 	if mode == ansi.OutputModeCP437 {
-		return threadGlyphs{marker: "\x10", up: "\x18", down: "\x19", ellipsis: "~"}
+		return threadGlyphs{marker: "\x10", ellipsis: "~"}
 	}
-	return threadGlyphs{marker: "►", up: "↑", down: "↓", ellipsis: "…"}
+	return threadGlyphs{marker: "►", ellipsis: "…"}
 }
 
 // threadPlainText prepares text taken from a message (a subject, a handle,
@@ -155,11 +153,12 @@ func renderKeyRow(width, lead int, frame string, keys []threadKey) string {
 }
 
 // renderThreadMenuKeys builds the row that closes the pane while the thread
-// menu is open: its keys, in frame's colour. tabLabel says what Tab does
+// menu is open: its Tab key, in frame's colour. The arrows need no label on
+// a lightbar. tabLabel says what Tab does
 // from there: "Close" when the pane goes away with the menu, "Message View"
 // when it stays.
-func renderThreadMenuKeys(width int, frame, tabLabel string, g threadGlyphs) string {
-	return renderKeyRow(width, 0, frame, []threadKey{{g.up + g.down, "Move"}, {"Tab", tabLabel}})
+func renderThreadMenuKeys(width int, frame, tabLabel string) string {
+	return renderKeyRow(width, 0, frame, []threadKey{{"Tab", tabLabel}})
 }
 
 // renderThreadViewHint builds the separator row above the reader's bar
@@ -221,7 +220,7 @@ func renderThreadPane(tv *threadView, hl, rows, width int, title, tabLabel strin
 	}
 
 	if hl != 0 {
-		lines = append(lines, renderThreadMenuKeys(width, frame, tabLabel, g))
+		lines = append(lines, renderThreadMenuKeys(width, frame, tabLabel))
 	} else {
 		lines = append(lines, frame+strings.Repeat("─", width)+"|07")
 	}
