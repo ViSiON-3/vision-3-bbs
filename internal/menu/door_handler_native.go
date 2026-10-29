@@ -253,11 +253,11 @@ func executeNativeDoor(ctx *DoorCtx) error {
 
 			inputDone := make(chan struct{})
 			outputDone := make(chan struct{})
-			var unread []byte // read by the input goroutine, for after inputDone
+			var left doorInputCopy // set by the input goroutine, for after inputDone
 			go func() {
 				defer close(inputDone)
 				var err error
-				unread, err = copyDoorInput(ptmx, ctx.Session, readInterrupt)
+				left, err = copyDoorInput(ptmx, ctx.Session, readInterrupt, ctx.enterTrailer)
 				if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
 					// "read interrupted" is expected when we close readInterrupt during shutdown
 					if strings.Contains(err.Error(), "read interrupted") {
@@ -292,7 +292,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			close(readInterrupt)
 			if hasInterrupt {
 				<-inputDone
-				stashTypeAhead(ctx.Session, unread)
+				left.keep(ctx.Session)
 			}
 
 			// Relay what the door wrote on its way out before closing the PTY.
@@ -356,11 +356,11 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				// Bidirectional bridge: session <-> socketpair
 				inputDone := make(chan struct{})
 				outputDone := make(chan struct{})
-				var unread []byte // read by the input goroutine, for after inputDone
+				var left doorInputCopy // set by the input goroutine, for after inputDone
 				go func() {
 					defer close(inputDone)
 					var err error
-					unread, err = copyDoorInput(bbsSock, ctx.Session, readInterrupt)
+					left, err = copyDoorInput(bbsSock, ctx.Session, readInterrupt, ctx.enterTrailer)
 					if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
 						if !strings.Contains(err.Error(), "read interrupted") {
 							slog.Warn("socket I/O input error for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
@@ -382,7 +382,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				close(readInterrupt)
 				if hasInterrupt {
 					<-inputDone
-					stashTypeAhead(ctx.Session, unread)
+					left.keep(ctx.Session)
 				}
 				// Relay what the door wrote on its way out before closing the socket.
 				drainDoorOutput(bbsSock, outputDone, ctx.NodeNumber, ctx.DoorName)

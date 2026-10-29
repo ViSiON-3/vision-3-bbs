@@ -51,6 +51,10 @@ type DoorCtx struct {
 
 	// watch decides when the BBS must end the door. Set by executeDoor.
 	watch *doorWatch
+	// enterTrailer says the session's last reader took the CR of an Enter
+	// whose LF or NUL had not arrived, so the door's input drops a leading
+	// one (takeEnterTrailer). Set by executeDoor.
+	enterTrailer bool
 	// baseCOM1Virtual records that a DOS door's base dosemurc sets
 	// $_com1 = "virtual". Set by writeDosemurc.
 	baseCOM1Virtual bool

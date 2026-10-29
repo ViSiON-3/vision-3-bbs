@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/gliderlabs/ssh"
 )
 
 // doorOutputDrainTimeout bounds how long a door's remaining output is relayed
@@ -62,13 +64,13 @@ func runStdioDoor(ctx *DoorCtx, cmd *exec.Cmd) error {
 	}
 
 	inputDone := make(chan struct{})
-	var unread []byte // read by the input goroutine, for after inputDone
+	var left doorInputCopy // set by the input goroutine, for after inputDone
 	go func() {
 		defer close(inputDone)
 		// Closing the pipe when the session ends gives the door end-of-file.
 		defer func() { _ = stdinW.Close() }() // best-effort pipe teardown
 		var err error
-		unread, err = copyDoorInput(stdinW, ctx.Session, readInterrupt)
+		left, err = copyDoorInput(stdinW, ctx.Session, readInterrupt, ctx.enterTrailer)
 		if err != nil && !errors.Is(err, os.ErrClosed) && !errors.Is(err, syscall.EPIPE) {
 			if strings.Contains(err.Error(), "read interrupted") {
 				slog.Debug("input goroutine interrupted for door (expected during shutdown)", "node", ctx.NodeNumber, "door", ctx.DoorName)
@@ -90,44 +92,68 @@ func runStdioDoor(ctx *DoorCtx, cmd *exec.Cmd) error {
 	close(readInterrupt)
 	if hasInterrupt {
 		<-inputDone
-		stashTypeAhead(ctx.Session, unread)
+		left.keep(ctx.Session)
 	}
 	return cmdErr
+}
+
+// doorInputCopy is what copyDoorInput leaves for the prompt after the door.
+type doorInputCopy struct {
+	unread       []byte // keys read from the session but not given to the door
+	enterTrailer bool   // the LF or NUL of an earlier Enter has not come yet
+}
+
+// keep hands c to the session's next reader: the keys through
+// stashTypeAhead, the pending Enter trailer through keepEnterTrailer. Call it
+// only once the copy has ended.
+func (c doorInputCopy) keep(s ssh.Session) {
+	stashTypeAhead(s, c.unread)
+	keepEnterTrailer(s, c.enterTrailer)
 }
 
 // copyDoorInput copies the caller's keys from the session to w, a door's
 // input, until a read or a write fails. A chunk read after exited is closed
 // (the door has gone, so nothing would read it) is not written, and a write
 // that fails leaves the rest of its chunk unwritten. copyDoorInput returns
-// those keys, for the caller to keep for the next prompt (stashTypeAhead)
-// once the copy has ended, and the error that ended it; end of input is not
-// an error.
+// those keys, for the caller to keep for the next prompt once the copy has
+// ended, and the error that ended it; end of input is not an error.
+//
+// With enterTrailer set, the session's last reader took the CR of an Enter
+// whose LF or NUL had not arrived: a leading LF or NUL in the first input
+// read is dropped, and if nothing was read the result still says so.
 //
 // Keys already written but not yet read by the door when it exits are in the
 // PTY or pipe, out of reach, and are lost.
-func copyDoorInput(w io.Writer, r io.Reader, exited <-chan struct{}) ([]byte, error) {
+func copyDoorInput(w io.Writer, r io.Reader, exited <-chan struct{}, enterTrailer bool) (doorInputCopy, error) {
 	buf := make([]byte, 32*1024)
 	for {
 		n, rerr := r.Read(buf)
-		if n > 0 {
+		data := buf[:n]
+		if enterTrailer && n > 0 {
+			enterTrailer = false
+			if data[0] == '\n' || data[0] == 0x00 {
+				data = data[1:]
+			}
+		}
+		if len(data) > 0 {
 			select {
 			case <-exited:
-				return append([]byte(nil), buf[:n]...), ignoreEOF(rerr)
+				return doorInputCopy{unread: append([]byte(nil), data...)}, ignoreEOF(rerr)
 			default:
 			}
-			nw, werr := w.Write(buf[:n])
-			if nw < 0 || nw > n {
+			nw, werr := w.Write(data)
+			if nw < 0 || nw > len(data) {
 				nw = 0
 			}
-			if werr == nil && nw < n {
+			if werr == nil && nw < len(data) {
 				werr = io.ErrShortWrite
 			}
 			if werr != nil {
-				return append([]byte(nil), buf[nw:n]...), werr
+				return doorInputCopy{unread: append([]byte(nil), data[nw:]...)}, werr
 			}
 		}
 		if rerr != nil {
-			return nil, ignoreEOF(rerr)
+			return doorInputCopy{enterTrailer: enterTrailer}, ignoreEOF(rerr)
 		}
 	}
 }

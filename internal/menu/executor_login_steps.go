@@ -191,12 +191,12 @@ func runLoginDoor(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 	inputDone := make(chan struct{})
-	var unread []byte // read by the input goroutine, for after inputDone
+	var left doorInputCopy // set by the input goroutine, for after inputDone
 	go func() {
 		defer close(inputDone)
 		// Ends on interrupt, disconnect or a closed pipe; closing stdin then
 		// hands a disconnect on to the script as end of input.
-		unread, _ = copyDoorInput(stdin, s, readInterrupt)
+		left, _ = copyDoorInput(stdin, s, readInterrupt, takeEnterTrailer(s))
 		_ = stdin.Close()
 	}()
 
@@ -208,7 +208,7 @@ func runLoginDoor(c *cmdCtx, args string) (*user.User, string, error) {
 	if hasInterrupt {
 		<-inputDone
 		// Keys the script never got go to the next prompt.
-		stashTypeAhead(s, unread)
+		left.keep(s)
 	}
 
 	return currentUser, "", nil

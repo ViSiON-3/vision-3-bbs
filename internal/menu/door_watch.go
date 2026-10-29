@@ -278,6 +278,9 @@ func runDoorWatched(ctx *DoorCtx, run func(*DoorCtx) error) error {
 	}
 	ctx.watch = newDoorWatch(ctx.IdleTimeout, deadline)
 	defer ctx.watch.freeze()
+	// The door reads the session next, so the trailer of an Enter read before
+	// it is the door's to drop.
+	ctx.enterTrailer = takeEnterTrailer(ctx.Session)
 	ctx.Session = wrapDoorSession(ctx.Session, ctx.watch)
 
 	err := run(ctx)

@@ -429,3 +429,39 @@ func TestDoorcovNativeDoorKeepsTypeAhead(t *testing.T) {
 	}
 	readKeys(getSessionIH(s), "bcxyz")
 }
+
+// The prompt that launched a door read the CR of an Enter whose LF had not
+// arrived. The LF reaches the door after the hand-off, and is dropped there
+// rather than read by the door as an empty line.
+func TestDoorcovNativeDoorDropsEnterTrailer(t *testing.T) {
+	env := newMenuEnv(t)
+	s := newDoorcovSession()
+	t.Cleanup(func() {
+		resetSessionIH(s)
+		sessionTypeAhead.Delete(s)
+	})
+
+	s.send("\r")
+	ih := getSessionIH(s)
+	stop := make(chan struct{})
+	timer := time.AfterFunc(2*time.Second, func() { close(stop) })
+	defer timer.Stop()
+	if b, err := ih.ReadByteUntil(stop); err != nil || b != '\r' {
+		t.Fatalf("prompt read %q, %v; want CR", b, err)
+	}
+	ih.SkipEnterTrailer() // as a line prompt does; the LF is not there yet
+
+	s.whenOutput("NAME?", func() { s.send("\nneo\n") })
+	ctx := doorcovCtx(env, s, config.DoorConfig{
+		Commands: []string{"/bin/sh", "-c", `printf 'NAME?'; read name; echo "NAME:$name."`},
+	})
+	handOffSessionIH(s)
+	watched := func(c *DoorCtx) error { return runDoorWatched(c, executeNativeDoor) }
+	if err := doorcovExec(t, s, watched, ctx); err != nil {
+		t.Fatalf("executeNativeDoor: %v", err)
+	}
+	doorcovHas(t, s, "NAME:neo.")
+	if takeEnterTrailer(s) {
+		t.Error("trailer still marked after the door dropped it")
+	}
+}

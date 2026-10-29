@@ -31,7 +31,8 @@ func (w *failingWriter) Write(p []byte) (int, error) {
 func TestCopyDoorInput(t *testing.T) {
 	t.Run("copies until end of input", func(t *testing.T) {
 		var w bytes.Buffer
-		unread, err := copyDoorInput(&w, strings.NewReader("abc"), nil)
+		left, err := copyDoorInput(&w, strings.NewReader("abc"), nil, false)
+		unread := left.unread
 		if unread != nil || err != nil || w.String() != "abc" {
 			t.Errorf("copyDoorInput = %q, %v, wrote %q; want nil, nil, \"abc\"", unread, err, w.String())
 		}
@@ -41,7 +42,8 @@ func TestCopyDoorInput(t *testing.T) {
 		exited := make(chan struct{})
 		close(exited)
 		var w bytes.Buffer
-		unread, err := copyDoorInput(&w, strings.NewReader("abc"), exited)
+		left, err := copyDoorInput(&w, strings.NewReader("abc"), exited, false)
+		unread := left.unread
 		if string(unread) != "abc" || err != nil || w.Len() != 0 {
 			t.Errorf("copyDoorInput = %q, %v, wrote %q; want \"abc\", nil, nothing", unread, err, w.String())
 		}
@@ -49,7 +51,8 @@ func TestCopyDoorInput(t *testing.T) {
 
 	t.Run("keeps what a failed write left", func(t *testing.T) {
 		w := &failingWriter{n: 1}
-		unread, err := copyDoorInput(w, strings.NewReader("abc"), nil)
+		left, err := copyDoorInput(w, strings.NewReader("abc"), nil, false)
+		unread := left.unread
 		if string(unread) != "bc" || !errors.Is(err, errDoorGone) || w.got.String() != "a" {
 			t.Errorf("copyDoorInput = %q, %v, wrote %q; want \"bc\", %v, \"a\"", unread, err, w.got.String(), errDoorGone)
 		}
@@ -58,9 +61,37 @@ func TestCopyDoorInput(t *testing.T) {
 	t.Run("passes on a read error", func(t *testing.T) {
 		var w bytes.Buffer
 		r := io.MultiReader(strings.NewReader("ab"), &errReader{errDoorGone})
-		unread, err := copyDoorInput(&w, r, nil)
+		left, err := copyDoorInput(&w, r, nil, false)
+		unread := left.unread
 		if unread != nil || !errors.Is(err, errDoorGone) || w.String() != "ab" {
 			t.Errorf("copyDoorInput = %q, %v, wrote %q; want nil, %v, \"ab\"", unread, err, w.String(), errDoorGone)
+		}
+	})
+
+	// The LF of an Enter the session's last reader took is not the door's
+	// key, whether it comes alone or with others; if it never comes, the
+	// next reader is told to drop it.
+	t.Run("drops an earlier Enter's trailer", func(t *testing.T) {
+		for _, tc := range []struct {
+			chunks  []string
+			want    string
+			trailer bool
+		}{
+			{[]string{"\nab"}, "ab", false},
+			{[]string{"\x00", "ab"}, "ab", false},
+			{[]string{"a\n"}, "a\n", false},
+			{nil, "", true},
+		} {
+			var w bytes.Buffer
+			var rs []io.Reader
+			for _, c := range tc.chunks {
+				rs = append(rs, strings.NewReader(c))
+			}
+			left, err := copyDoorInput(&w, io.MultiReader(rs...), nil, true)
+			if err != nil || w.String() != tc.want || left.unread != nil || left.enterTrailer != tc.trailer {
+				t.Errorf("chunks %q: copyDoorInput = %+v, %v, wrote %q; want trailer %v, wrote %q",
+					tc.chunks, left, err, w.String(), tc.trailer, tc.want)
+			}
 		}
 	})
 }

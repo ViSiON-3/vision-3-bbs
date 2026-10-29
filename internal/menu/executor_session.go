@@ -83,6 +83,7 @@ func ClearSessionIdleTimeout(s ssh.Session) {
 	sessionDeadlines.Delete(s)
 	sessionChatCredits.Delete(s)
 	sessionTypeAhead.Delete(s)
+	sessionEnterTrailers.Delete(s)
 	clearLoginFailures(s)
 }
 
@@ -249,8 +250,33 @@ func getSessionIH(s ssh.Session) *editor.InputHandler {
 	if v, ok := sessionTypeAhead.LoadAndDelete(s); ok {
 		ih.ReturnInput(v.([]byte))
 	}
+	if takeEnterTrailer(s) {
+		ih.ExpectEnterTrailer()
+	}
 	sessionInputHandlers.Store(s, ih)
 	return ih
+}
+
+// sessionEnterTrailers marks sessions whose last reader took the CR of an
+// Enter whose LF or NUL had not arrived when it stopped (a handler stopped
+// for a door, or a door or script that ended). The session's next reader
+// takes the mark (takeEnterTrailer) and drops that LF or NUL if it comes
+// next, so it is not read as a second Enter.
+var sessionEnterTrailers sync.Map
+
+// keepEnterTrailer marks s as described at sessionEnterTrailers when pending
+// is true.
+func keepEnterTrailer(s ssh.Session, pending bool) {
+	if pending {
+		sessionEnterTrailers.Store(unwrapSession(s), true)
+	}
+}
+
+// takeEnterTrailer reports whether s was marked by keepEnterTrailer, and
+// clears the mark.
+func takeEnterTrailer(s ssh.Session) bool {
+	_, ok := sessionEnterTrailers.LoadAndDelete(unwrapSession(s))
+	return ok
 }
 
 // sessionTypeAhead holds, per session, keys read from the session but never
@@ -264,11 +290,13 @@ var sessionTypeAhead sync.Map
 // stashTypeAhead keeps p, keys the caller typed while a script ran with the
 // session's InputHandler stopped, for the next handler getSessionIH creates.
 // It appends to any keys already kept. When the script ran on a
-// typeAheadSession, the kept keys it never got to read follow p.
+// typeAheadSession, the kept keys it never got to read follow p, and an
+// Enter's trailer it never got to drop stays marked.
 func stashTypeAhead(s ssh.Session, p []byte) {
 	for cur := s; ; {
 		if t, ok := cur.(*typeAheadSession); ok {
 			p = append(append([]byte(nil), p...), t.takeUnread()...)
+			keepEnterTrailer(s, t.takeTrailer())
 			break
 		}
 		u, ok := cur.(interface{ Unwrap() ssh.Session })
@@ -300,16 +328,21 @@ func resetSessionIH(s ssh.Session) {
 		}
 		sessionInputHandlers.Delete(s)
 	}
+	// What reads the session next does not look for an Enter's trailer.
+	takeEnterTrailer(s)
 }
 
 // handOffSessionIH is resetSessionIH before a door. Keys the handler read
 // that no prompt consumed are kept (stashTypeAhead) rather than dropped, so
 // getSessionIH gives them to the handler it creates after the door, ahead of
-// any the door itself leaves unread.
+// any the door itself leaves unread. An Enter's LF or NUL still to come is
+// marked (keepEnterTrailer) for the door to drop.
 func handOffSessionIH(s ssh.Session) {
 	if v, ok := sessionInputHandlers.Load(s); ok {
 		if ih, ok := v.(*editor.InputHandler); ok {
-			stashTypeAhead(s, ih.CloseAndTakeUnread())
+			unread, trailer := ih.CloseAndTakeUnread()
+			stashTypeAhead(s, unread)
+			keepEnterTrailer(s, trailer)
 		}
 		sessionInputHandlers.Delete(s)
 	}

@@ -295,6 +295,35 @@ func TestWriteStringScript(t *testing.T) {
 		}
 	})
 
+	// The script reads the CR of an Enter whose LF has not arrived when it
+	// ends. The LF is the rest of that Enter, not a key for the next prompt
+	// or the next script.
+	t.Run("drops the trailer of an Enter the script read", func(t *testing.T) {
+		for _, next := range []string{"prompt", "script"} {
+			f := newStringHookFixture(t, "")
+			f.s.whenOutput("[script", func() { f.s.send("\r") })
+			if out := f.write(t, "!say key"); !strings.Contains(out, "[got \r]") {
+				t.Fatalf("script did not read the Enter; output = %q", out)
+			}
+			f.s.send("\nz")
+			if next == "script" {
+				if out := f.write(t, "!say key"); !strings.Contains(out, "[got z]") {
+					t.Fatalf("next script did not skip the LF; output = %q", out)
+				}
+				continue
+			}
+			ih := getSessionIH(f.s)
+			stop := make(chan struct{})
+			timer := time.AfterFunc(time.Second, func() { close(stop) })
+			b, err := ih.ReadByteUntil(stop)
+			timer.Stop()
+			resetSessionIH(f.s)
+			if err != nil || b != 'z' {
+				t.Fatalf("next prompt read %q, %v; want 'z'", b, err)
+			}
+		}
+	})
+
 	// A second script run before any handler is started gets the keys the
 	// first left, ahead of the session's newer input.
 	t.Run("hands keys typed ahead to the next script", func(t *testing.T) {

@@ -176,16 +176,35 @@ func TestCloseAndTakeUnread(t *testing.T) {
 	ih.skipEnterTrailer = true
 	ih.ReturnInput([]byte("a"))
 
-	if got := string(ih.CloseAndTakeUnread()); got != "abcd" {
-		t.Fatalf("CloseAndTakeUnread = %q, want %q", got, "abcd")
+	if got, trailer := ih.CloseAndTakeUnread(); string(got) != "abcd" || trailer {
+		t.Fatalf("CloseAndTakeUnread = %q, %v; want %q, false", got, trailer, "abcd")
 	}
 	select {
 	case <-ih.done:
 	default:
 		t.Fatal("reader goroutine still running")
 	}
-	if got := ih.CloseAndTakeUnread(); got != nil {
-		t.Errorf("second CloseAndTakeUnread = %q, want nil", got)
+	if got, trailer := ih.CloseAndTakeUnread(); got != nil || trailer {
+		t.Errorf("second CloseAndTakeUnread = %q, %v; want nil, false", got, trailer)
+	}
+}
+
+// A handler stopped while the LF of an Enter it read is still to come says
+// so, and a handler told to expect it drops it (#750).
+func TestCloseAndTakeUnreadPendingTrailer(t *testing.T) {
+	r := &interruptReader{}
+	ih := NewInputHandler(r)
+	ih.skipEnterTrailer = true
+	if got, trailer := ih.CloseAndTakeUnread(); got != nil || !trailer {
+		t.Fatalf("CloseAndTakeUnread = %q, %v; want nil, true", got, trailer)
+	}
+
+	r.data = []byte("\nx")
+	next := NewInputHandler(r)
+	defer next.CloseAndWait()
+	next.ExpectEnterTrailer()
+	if b, err := next.ReadByteUntil(nil); err != nil || b != 'x' {
+		t.Errorf("next handler read %q, %v; want 'x'", b, err)
 	}
 }
 
@@ -198,7 +217,10 @@ func TestCloseAndTakeUnreadFullQueue(t *testing.T) {
 	waitQueued(t, ih, cap(ih.incoming))
 
 	done := make(chan []byte, 1)
-	go func() { done <- ih.CloseAndTakeUnread() }()
+	go func() {
+		got, _ := ih.CloseAndTakeUnread()
+		done <- got
+	}()
 	select {
 	case got := <-done:
 		if string(got) != want {

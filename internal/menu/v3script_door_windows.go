@@ -86,6 +86,9 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 	}
 
 	eng := scripting.NewEngine(engineCtx, session, cfg, providers)
+	if ctx.enterTrailer {
+		eng.ExpectEnterTrailer()
+	}
 
 	slog.Info("starting V3 script",
 		"node", ctx.NodeNumber, "door", ctx.DoorName, "script", ctx.Config.Script)
@@ -97,6 +100,7 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 	// script read ahead but never used go to the next prompt.
 	close(readInterrupt)
 	stashTypeAhead(ctx.Session, eng.Close())
+	keepEnterTrailer(ctx.Session, eng.EnterTrailerPending())
 
 	if runErr != nil {
 		if errors.Is(runErr, scripting.ErrDisconnect) {
