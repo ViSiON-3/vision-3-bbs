@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -168,6 +167,9 @@ func (h *Hub) handleSetAccessMode(w http.ResponseWriter, r *http.Request) {
 	if err := h.updateNALArea(network, tag, func(area *protocol.Area) {
 		area.Access.Mode = req.Mode
 	}); err != nil {
+		if refuseHandedOver(w, err) {
+			return
+		}
 		slog.Error("set access mode", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
@@ -229,6 +231,9 @@ func (h *Hub) handleApproveAccess(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}); err != nil {
+		if refuseHandedOver(w, err) {
+			return
+		}
 		slog.Error("approve access", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
@@ -278,6 +283,9 @@ func (h *Hub) handleDenyAccess(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}); err != nil {
+		if refuseHandedOver(w, err) {
+			return
+		}
 		slog.Error("deny access", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
@@ -334,6 +342,9 @@ func (h *Hub) handleRemoveFromDenyList(w http.ResponseWriter, r *http.Request) {
 			area.Access.DenyList = removeStr(area.Access.DenyList, nid)
 		}
 	}); err != nil {
+		if refuseHandedOver(w, err) {
+			return
+		}
 		slog.Error("remove from deny list", "error", err)
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
@@ -363,7 +374,7 @@ func (h *Hub) updateNALArea(network, tag string, mutate func(area *protocol.Area
 
 	mutate(area)
 
-	if err := nal.Sign(currentNAL, h.cfg.Keystore); err != nil {
+	if err := h.SignNAL(currentNAL); err != nil {
 		return fmt.Errorf("sign nal: %w", err)
 	}
 	if err := h.nalStore.Put(network, currentNAL); err != nil {

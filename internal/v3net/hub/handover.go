@@ -3,6 +3,7 @@ package hub
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -176,6 +177,45 @@ func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("hub: coordinator handover accepted", "network", network, "from", ho.OldKeyB64, "to", ho.NewKeyB64)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// ErrHandedOver is returned by SignNAL, and so by every hub-side NAL change,
+// when the network was handed over to a key other than the one the hub
+// runs with. Signing with the hub key would undo the handover for leaves
+// that already follow the new key, so the change is refused until the hub
+// runs with the key in force.
+var ErrHandedOver = errors.New("hub: the network was handed over to another coordinator key; restart the hub with that key to change the NAL")
+
+// SignNAL signs n with the hub's key, unless n's network has handovers and
+// the coordinator key in force is not the hub's, when it returns
+// ErrHandedOver. A network never handed over is signed as before, whatever
+// key signed its stored NAL. Every hub-side NAL change signs through it;
+// call it with nalMu held, or before the hub serves requests.
+func (h *Hub) SignNAL(n *protocol.NAL) error {
+	stored, err := h.nalStore.Get(n.Network)
+	if err != nil {
+		return err
+	}
+	if stored != nil {
+		hs, err := h.nalStore.Handovers(n.Network)
+		if err != nil {
+			return err
+		}
+		if len(hs) > 0 && coordKeyInForce(stored, hs) != h.cfg.Keystore.PubKeyBase64() {
+			return ErrHandedOver
+		}
+	}
+	return nal.Sign(n, h.cfg.Keystore)
+}
+
+// refuseHandedOver answers a NAL change that SignNAL refused with 409 and
+// reports whether it did.
+func refuseHandedOver(w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, ErrHandedOver) {
+		return false
+	}
+	writeJSON(w, http.StatusConflict, map[string]string{"error": ErrHandedOver.Error()})
+	return true
 }
 
 // handoverUsesKey reports whether key is either end of any of hs.

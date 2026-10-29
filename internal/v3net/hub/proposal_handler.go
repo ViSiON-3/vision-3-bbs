@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -315,7 +314,7 @@ func (h *Hub) approveProposal(network, proposalID string, overrides protocol.Pro
 	currentNAL.Areas = append(currentNAL.Areas, newArea)
 
 	// Re-sign the NAL.
-	if err := nal.Sign(currentNAL, h.cfg.Keystore); err != nil {
+	if err := h.SignNAL(currentNAL); err != nil {
 		return fmt.Errorf("sign nal: %w", err)
 	}
 
@@ -375,6 +374,9 @@ func (h *Hub) handleApproveProposal(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, errInvalidManager) {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+		if refuseHandedOver(w, err) {
 			return
 		}
 		slog.Error("approve proposal", "error", err)

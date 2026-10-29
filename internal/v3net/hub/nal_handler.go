@@ -189,17 +189,17 @@ func (h *Hub) handlePostNAL(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 			return
 		}
-		// Without handovers this is the stored NAL's coordinator, as before.
-		coordNodeID := existing.CoordNodeID
-		if key := coordKeyInForce(existing, hs); key != existing.CoordPubKeyB64 {
-			coordNodeID = nodeIDOf(key)
-			if n.CoordPubKeyB64 != key {
-				http.Error(w, `{"error":"NAL is not signed by the coordinator key in force"}`, http.StatusForbidden)
-				return
-			}
-		}
-		if coordNodeID != nodeID {
+		// The coordinator is the holder of the key in force, which is the
+		// stored NAL's own key when the network was never handed over. Its
+		// node must send the NAL and its key must sign it, so no NAL from
+		// another key replaces the stored one without a handover.
+		key := coordKeyInForce(existing, hs)
+		if nodeIDOf(key) != nodeID {
 			http.Error(w, `{"error":"only the coordinator may update the NAL"}`, http.StatusForbidden)
+			return
+		}
+		if n.CoordPubKeyB64 != key {
+			http.Error(w, `{"error":"NAL is not signed by the coordinator key in force"}`, http.StatusForbidden)
 			return
 		}
 	}
@@ -215,10 +215,18 @@ func (h *Hub) handlePostNAL(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"coordinator node ID must match sender for initial NAL"}`, http.StatusBadRequest)
 			return
 		}
+		if n.CoordPubKeyB64 != h.cfg.Keystore.PubKeyBase64() {
+			http.Error(w, `{"error":"the initial NAL must be signed by the hub key"}`, http.StatusForbidden)
+			return
+		}
 	}
 
 	if err := nal.Verify(&n); err != nil {
 		http.Error(w, `{"error":"NAL signature verification failed"}`, http.StatusUnprocessableEntity)
+		return
+	}
+	if err := nal.VerifyCoordNodeID(&n); err != nil {
+		http.Error(w, `{"error":"coordinator node ID does not match the coordinator key"}`, http.StatusUnprocessableEntity)
 		return
 	}
 

@@ -2,6 +2,7 @@ package hub
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -247,5 +248,141 @@ func TestHubAdoptsHandoverOnRestart(t *testing.T) {
 	defer h.Close()
 	if got := coordKey(h); got != newKS.PubKeyBase64() {
 		t.Errorf("NAL key after restart with the new key = %s, want %s", got, newKS.PubKeyBase64())
+	}
+	// Running with the key in force, the hub changes the NAL as usual.
+	if err := h.updateNALArea("testnet", "gen.general", func(a *protocol.Area) { a.Description = "after" }); err != nil {
+		t.Errorf("updateNALArea with the key in force: %v", err)
+	}
+	if got := coordKey(h); got != newKS.PubKeyBase64() {
+		t.Errorf("NAL key after an edit = %s, want the new key", got)
+	}
+}
+
+// Between accepting a handover and restarting with the new key, the hub
+// refuses every change it would sign with the old key: re-signing would
+// undo the handover for leaves that already follow the new key.
+func TestHandoverWindowRefusesHubSigning(t *testing.T) {
+	h, hubKS := setupTestHub(t)
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+	seedTestNAL(t, h, hubKS)
+	registerHubAsLeaf(t, ts, hubKS)
+	proposer := newKey(t, "proposer.key")
+	registerLeaf(t, ts, proposer)
+	before, err := h.nalStore.Get("testnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Without a handover the hub signs its changes as before.
+	if err := h.SignNAL(before); err != nil {
+		t.Fatalf("SignNAL before the handover: %v", err)
+	}
+	if err := h.nalStore.AddHandover("testnet", signHandover(t, "testnet", hubKS, newKey(t, "new.key"))); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.SignNAL(before); !errors.Is(err, ErrHandedOver) {
+		t.Errorf("SignNAL = %v, want ErrHandedOver", err)
+	}
+	if err := h.updateNALArea("testnet", "gen.general", func(*protocol.Area) {}); !errors.Is(err, ErrHandedOver) {
+		t.Errorf("updateNALArea = %v, want ErrHandedOver", err)
+	}
+	if got := postJSON(t, hubKS, ts.URL+"/v3net/v1/testnet/areas/gen.general/access/mode",
+		protocol.AccessModeRequest{Mode: protocol.AccessModeClosed}); got != http.StatusConflict {
+		t.Errorf("set access mode: status %d, want 409", got)
+	}
+
+	// A proposal is not auto-approved; approving it by hand is refused.
+	data, _ := json.Marshal(protocol.AreaProposalRequest{Tag: "gen.new", Name: "New", Language: "en", AccessMode: protocol.AccessModeOpen})
+	resp, err := http.DefaultClient.Do(signedRequest(t, proposer, "POST", ts.URL+"/v3net/v1/testnet/areas/propose", string(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pr protocol.ProposalResponse
+	_ = json.NewDecoder(resp.Body).Decode(&pr)
+	resp.Body.Close()
+	if pr.Status != "pending" || pr.ProposalID == "" {
+		t.Fatalf("proposal response = %+v, want pending", pr)
+	}
+	if got := postJSON(t, hubKS, ts.URL+"/v3net/v1/testnet/areas/proposals/"+pr.ProposalID+"/approve", struct{}{}); got != http.StatusConflict {
+		t.Errorf("approve proposal: status %d, want 409", got)
+	}
+
+	after, err := h.nalStore.Get("testnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.SignatureB64 != before.SignatureB64 || after.FindArea("gen.new") != nil || after.FindArea("gen.general").Access.Mode != protocol.AccessModeOpen {
+		t.Error("the stored NAL changed during the handover window")
+	}
+}
+
+// Every posted NAL must be signed by the coordinator key in force, with or
+// without handovers, so no other key's NAL replaces the stored one.
+func TestPostNALRequiresKeyInForce(t *testing.T) {
+	dir := t.TempDir()
+	oldKS, newKS, other := newKey(t, "old.key"), newKey(t, "new.key"), newKey(t, "other.key")
+	open := func(ks *keystore.Keystore) (*Hub, *httptest.Server) {
+		t.Helper()
+		h, err := New(Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
+			RequireSignedSubscribe: true, Networks: []NetworkConfig{{Name: "testnet"}}})
+		if err != nil {
+			t.Fatalf("create hub: %v", err)
+		}
+		return h, httptest.NewServer(h.newMux())
+	}
+	post := func(ts *httptest.Server, sender, signer *keystore.Keystore) int {
+		t.Helper()
+		n := &protocol.NAL{V3NetNAL: "1.0", Network: "testnet", Areas: []protocol.Area{}}
+		if err := nal.Sign(n, signer); err != nil {
+			t.Fatal(err)
+		}
+		return postJSON(t, sender, ts.URL+"/v3net/v1/testnet/nal", n)
+	}
+
+	h, ts := open(oldKS)
+	registerLeaf(t, ts, oldKS)
+	registerLeaf(t, ts, newKS)
+	if got := post(ts, oldKS, other); got != http.StatusBadRequest {
+		t.Errorf("initial NAL signed by another key: status %d, want 400", got)
+	}
+	// Naming the hub's node does not make another key's NAL the hub's.
+	forged := &protocol.NAL{V3NetNAL: "1.0", Network: "testnet", Areas: []protocol.Area{}}
+	if err := nal.Sign(forged, other); err != nil {
+		t.Fatal(err)
+	}
+	forged.CoordNodeID = oldKS.NodeID()
+	if got := postJSON(t, oldKS, ts.URL+"/v3net/v1/testnet/nal", forged); got != http.StatusForbidden {
+		t.Errorf("initial NAL naming the hub but signed by another key: status %d, want 403", got)
+	}
+	if got := post(ts, oldKS, oldKS); got != http.StatusOK {
+		t.Fatalf("initial NAL: status %d", got)
+	}
+	// No handovers: the stored key in force, not just its node, must sign.
+	if got := post(ts, oldKS, other); got != http.StatusForbidden {
+		t.Errorf("coordinator node posting another key's NAL: status %d, want 403", got)
+	}
+	if got := post(ts, oldKS, oldKS); got != http.StatusOK {
+		t.Errorf("same key again: status %d, want 200", got)
+	}
+	if err := h.nalStore.AddHandover("testnet", signHandover(t, "testnet", oldKS, newKS)); err != nil {
+		t.Fatal(err)
+	}
+	ts.Close()
+	_ = h.Close()
+
+	// Restarted with the new key, the stored NAL is the new key's, and
+	// neither the old key nor any other may replace it.
+	h, ts = open(newKS)
+	defer h.Close()
+	defer ts.Close()
+	for name, signer := range map[string]*keystore.Keystore{"old key": oldKS, "other key": other} {
+		if got := post(ts, newKS, signer); got != http.StatusForbidden {
+			t.Errorf("new node posting a NAL signed by the %s: status %d, want 403", name, got)
+		}
+	}
+	if got := post(ts, newKS, newKS); got != http.StatusOK {
+		t.Errorf("new key: status %d, want 200", got)
 	}
 }
