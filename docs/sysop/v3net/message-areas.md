@@ -434,6 +434,14 @@ hub already holds. It refuses a `new_key` the network has already used, so
 the stored handovers never loop (`409`). Sending one it already holds
 succeeds without storing it twice.
 
+A hub may already run `new_key` when the handover arrives, if it was
+restarted with the new key first. The rules above are unchanged, so the
+handover must still be signed by the key of the stored NAL; the hub then
+re-signs the NAL with its key at once and sends `nal_updated`. While a hub
+runs a key that neither signed the stored NAL nor appears on its
+handovers, the only handover it accepts is one to its own key (`409`
+otherwise), since it could never sign for any other.
+
 A posted NAL (`POST /v3net/v1/{network}/nal`) must always come from the
 node of the coordinator key in force and be signed by that key, so once
 the hub holds a handover only the new key may post. The hub's own NAL

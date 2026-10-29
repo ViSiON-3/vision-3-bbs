@@ -165,10 +165,14 @@ the NAL, and each subscriber's leaf that checks it against its pinned key
 moves the pin to the new key itself (see
 [Signed Handovers](#signed-handovers)).
 
+The recommended order is below: publish the handover, then switch the hub
+to the new key. If the hub was switched first, the handover still works;
+see [If the Hub Already Runs the New Key](#if-the-hub-already-runs-the-new-key).
+
 1. Get the new key's public key: from the new hub's Node Identity screen
    (`./config` → V3Net → Node Identity), or its `v3net.key` file.
 2. While the hub still runs with the old key, sign and publish the handover
-   from the hub's machine:
+   from the hub's machine, with the old `v3net.key`:
 
    ```bash
    go run ./cmd/v3net-handover \
@@ -180,7 +184,10 @@ moves the pin to the new key itself (see
 
    Use `-new-keystore <path>` instead of `-new-key` to read the key from
    the new `v3net.key`, and `-dry-run` to print the signed handover without
-   sending it. Run it once per network the hub carries.
+   sending it. Run it once per network the hub carries. Before posting,
+   the tool checks the key the hub's `/info` page serves, and refuses if it
+   is neither the old key nor the new one (usually a wrong `-hub`,
+   `-network` or keystore).
 3. Start the hub with the new key (swap in the new `v3net.key`, or recover
    the new identity's phrase). On start it re-signs each handed-over
    network's NAL with the new key, so subscribers move at their next fetch.
@@ -201,6 +208,30 @@ The hub only takes a handover signed by the key in force, and never one
 back to a key the network already used. A NAL published to the hub must
 always be signed by the key in force, which is the new key once the hub
 holds a handover.
+
+#### If the Hub Already Runs the New Key
+
+If the hub was restarted with the new key before the handover was
+published, subscribers see a hub key they have not pinned and pause syncing
+with the hub, and the hub keeps serving the NAL the old key signed. To
+recover, publish the handover now, exactly as in step 2: sign it with the
+**old** `v3net.key` (keep a copy of it), and point `-hub` at the running
+hub. The tool notes that the hub already runs the new key and posts anyway.
+The hub accepts the handover, re-signs the NAL with the new key straight
+away and announces the change. Subscribers move both pins and resume
+without re-pinning by hand; a paused leaf re-checks the hub every five
+minutes, so allow that long. No second restart is needed.
+
+This is as safe as the usual order: the hub still only accepts a handover
+signed by the key of the NAL it holds, and while it runs a key no handover
+names, it accepts only a handover to that key.
+
+Publish it before anything changes the NAL. Until the handover arrives the
+hub signs its own NAL changes (approving a proposal, changing an area's
+access or manager, merging `initialAreas`) with the new key, and once it
+has, the old key no longer signs the stored NAL: the handover is refused,
+and every subscriber has to [accept the new key by
+hand](#accepting-a-new-key-by-hand).
 
 ## Coordinator Key Pinning
 
@@ -314,6 +345,7 @@ connected to.
 | Subscribed, but status stays `PENDING` | The area is in approval mode and its manager has not acted yet. Approval-mode areas are the manager's call, not the coordinator's. |
 | Cannot subscribe at all | The area is closed and your node is not on its allow list, or your node is on the deny list. Ask the area manager. |
 | New areas stopped arriving; the log says `key changed; rejected until the sysop accepts it` | The hub is serving a NAL signed by a key other than the one pinned, with no handover leading to it from your pin. See [When the Key Changes](#when-the-key-changes). |
+| Every subscriber paused on a changed hub key right after you moved the hub to a new key | The hub was switched before the handover was published. Publish it now with the old key; see [If the Hub Already Runs the New Key](#if-the-hub-already-runs-the-new-key). |
 | The log says `key moved by a signed coordinator handover` | The coordinator moved the network to a new key, and your leaf followed. Nothing to do; see [Signed Handovers](#signed-handovers). |
 | Coordinator Panel never appears | Your node is not the coordinator of any subscribed network. Only the hub's own node is; see Handing Over a Network. |
 
