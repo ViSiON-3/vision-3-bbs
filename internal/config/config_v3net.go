@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -207,47 +206,11 @@ func V3NetConfigFile(configPath string) configmerge.File[V3NetConfig] {
 		Marshal: func(cfg V3NetConfig) ([]byte, error) {
 			return json.MarshalIndent(cfg, "", "  ")
 		},
-		Reconcile: reconcileV3NetLeafKeys,
+		// A leaf is a subscription to one network through one hub, so
+		// leaves added or removed elsewhere, and keys the BBS pins, merge
+		// leaf by leaf with the saving side's edits.
+		ListKeys: map[string][]string{"leaves": {"network", "hubUrl"}},
 	}
-}
-
-// reconcileV3NetLeafKeys three-way merges the pinned and pending key fields
-// of each leaf, matched by network and hub URL. The leaves array has no ids,
-// so the generic merge keeps one side's array whole; without this, a config
-// editor that loaded v3net.json before the BBS pinned a key would erase the
-// pin when it saved an unrelated edit. A key field the saving side left as
-// it was in base takes the value on disk; one it changed keeps its value.
-func reconcileV3NetLeafKeys(base, theirs, merged V3NetConfig) V3NetConfig {
-	type leafKey struct{ network, hubURL string }
-	index := func(leaves []V3NetLeafConfig) map[leafKey]V3NetLeafConfig {
-		m := make(map[leafKey]V3NetLeafConfig, len(leaves))
-		for _, l := range leaves {
-			m[leafKey{l.Network, l.HubURL}] = l
-		}
-		return m
-	}
-	baseLeaves, diskLeaves := index(base.Leaves), index(theirs.Leaves)
-	field := func(merged, base, disk *string) {
-		if *merged == *base {
-			*merged = *disk
-		}
-	}
-	out := merged
-	out.Leaves = slices.Clone(merged.Leaves)
-	for i := range out.Leaves {
-		l := &out.Leaves[i]
-		k := leafKey{l.Network, l.HubURL}
-		b, inBase := baseLeaves[k]
-		d, onDisk := diskLeaves[k]
-		if !inBase || !onDisk {
-			continue // added on one side or removed on disk: nothing to merge
-		}
-		field(&l.CoordinatorPubKey, &b.CoordinatorPubKey, &d.CoordinatorPubKey)
-		field(&l.HubPubKey, &b.HubPubKey, &d.HubPubKey)
-		field(&l.PendingCoordinatorPubKey, &b.PendingCoordinatorPubKey, &d.PendingCoordinatorPubKey)
-		field(&l.PendingHubPubKey, &b.PendingHubPubKey, &d.PendingHubPubKey)
-	}
-	return out
 }
 
 // SaveV3NetConfig writes cfg to v3net.json under the file's cross-process

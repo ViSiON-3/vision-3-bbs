@@ -251,3 +251,161 @@ func TestMergeDuplicateTagMovedToAnotherItem(t *testing.T) {
 		t.Errorf("existing duplicate reported: %v", res.DuplicateTags)
 	}
 }
+
+type sub struct {
+	Net  string `json:"net"`
+	Hub  string `json:"hub"`
+	Poll string `json:"poll,omitempty"`
+	Key  string `json:"key,omitempty"`
+}
+
+type subsDoc struct {
+	Subs []sub `json:"subs,omitempty"`
+}
+
+var subKeys = map[string][]string{"subs": {"net", "hub"}}
+
+func mustMergeKeys(t *testing.T, base, ours, theirs subsDoc) (subsDoc, Result) {
+	t.Helper()
+	out, res, err := MergeTypedKeys(subKeys, base, ours, theirs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out, res
+}
+
+func subsByNet(subs []sub) map[string]sub {
+	m := make(map[string]sub, len(subs))
+	for _, s := range subs {
+		m[s.Net] = s
+	}
+	return m
+}
+
+func TestMergeFieldKeyedList(t *testing.T) {
+	base := subsDoc{Subs: []sub{{Net: "a", Hub: "h"}, {Net: "b", Hub: "h"}, {Net: "c", Hub: "h"}}}
+	// Here: edit a's poll interval and b's key.
+	ours := subsDoc{Subs: []sub{{Net: "a", Hub: "h", Poll: "10m"}, {Net: "b", Hub: "h", Key: "mine"}, {Net: "c", Hub: "h"}}}
+	// Elsewhere: pin a's key, change b's key, remove c, add d.
+	theirs := subsDoc{Subs: []sub{{Net: "a", Hub: "h", Key: "pinned"}, {Net: "b", Hub: "h", Key: "theirs"}, {Net: "d", Hub: "h"}}}
+	out, res := mustMergeKeys(t, base, ours, theirs)
+
+	got := subsByNet(out.Subs)
+	if len(out.Subs) != 3 {
+		t.Errorf("subs = %+v, want a, b and d", out.Subs)
+	}
+	if a := got["a"]; a.Poll != "10m" || a.Key != "pinned" {
+		t.Errorf("a = %+v, want both edits", a)
+	}
+	if b := got["b"]; b.Key != "mine" {
+		t.Errorf("b = %+v, want this save's key", b)
+	}
+	if _, ok := got["c"]; ok {
+		t.Error("c was removed elsewhere and untouched here; should be gone")
+	}
+	if _, ok := got["d"]; !ok {
+		t.Error("d added elsewhere was lost")
+	}
+	if len(res.Conflicts) != 1 || res.Conflicts[0].Path != "subs.b h.key" {
+		t.Errorf("conflicts = %+v, want one on b's key", res.Conflicts)
+	}
+}
+
+func TestMergeFieldKeyedListDeletions(t *testing.T) {
+	base := subsDoc{Subs: []sub{{Net: "a", Hub: "h"}}}
+
+	// Removed here, edited elsewhere: kept, edited, and reported.
+	out, res := mustMergeKeys(t, base, subsDoc{}, subsDoc{Subs: []sub{{Net: "a", Hub: "h", Key: "pinned"}}})
+	if len(out.Subs) != 1 || out.Subs[0].Key != "pinned" || len(res.Conflicts) != 1 {
+		t.Errorf("out = %+v, conflicts = %+v", out, res.Conflicts)
+	}
+
+	// The last item removed here (the omitempty key goes with it) while
+	// another is added elsewhere: only the addition remains.
+	out, res = mustMergeKeys(t, base, subsDoc{}, subsDoc{Subs: []sub{{Net: "a", Hub: "h"}, {Net: "b", Hub: "h"}}})
+	if len(out.Subs) != 1 || out.Subs[0].Net != "b" || len(res.Conflicts) != 0 {
+		t.Errorf("out = %+v, conflicts = %+v", out, res.Conflicts)
+	}
+
+	// Moving a subscription to another hub is a removal and an addition.
+	out, _ = mustMergeKeys(t, base, subsDoc{Subs: []sub{{Net: "a", Hub: "h2"}}}, base)
+	if len(out.Subs) != 1 || out.Subs[0].Hub != "h2" {
+		t.Errorf("out = %+v", out)
+	}
+}
+
+// Clearing an omitempty string field drops it from the JSON; that is an edit
+// to "", which wins over a different edit elsewhere like any other value.
+func TestMergeFieldKeyedListBlankedFieldIsAnEdit(t *testing.T) {
+	base := subsDoc{Subs: []sub{{Net: "a", Hub: "h", Key: "A"}}}
+	ours := subsDoc{Subs: []sub{{Net: "a", Hub: "h"}}}
+	theirs := subsDoc{Subs: []sub{{Net: "a", Hub: "h", Key: "B"}}}
+	out, res := mustMergeKeys(t, base, ours, theirs)
+	if len(out.Subs) != 1 || out.Subs[0].Key != "" || len(res.Conflicts) != 1 {
+		t.Errorf("out = %+v, conflicts = %+v; want this save's blank key, reported", out, res.Conflicts)
+	}
+
+	// Blanked elsewhere and untouched here: blank too.
+	out, _ = mustMergeKeys(t, base, base, ours)
+	if len(out.Subs) != 1 || out.Subs[0].Key != "" {
+		t.Errorf("out = %+v, want the blank from elsewhere", out)
+	}
+}
+
+// Keys whose values differ only in where a space falls are different items.
+func TestMergeFieldKeyedListKeysDoNotCollide(t *testing.T) {
+	theirs := subsDoc{Subs: []sub{{Net: "a b", Hub: "c"}, {Net: "a", Hub: "b c"}}}
+	out, _ := mustMergeKeys(t, subsDoc{}, subsDoc{}, theirs)
+	if len(out.Subs) != 2 {
+		t.Errorf("out = %+v, want both items", out)
+	}
+	ours := subsDoc{Subs: []sub{{Net: "a b", Hub: "c", Poll: "5m"}, {Net: "a", Hub: "b c"}}}
+	out, res := mustMergeKeys(t, theirs, ours, theirs)
+	if len(out.Subs) != 2 || out.Subs[0].Poll != "5m" || out.Subs[1].Poll != "" || len(res.Conflicts) != 0 {
+		t.Errorf("out = %+v, conflicts = %+v", out, res.Conflicts)
+	}
+}
+
+func TestMergeFieldKeyedListSameItemAddedTwice(t *testing.T) {
+	out, _ := mustMergeKeys(t, subsDoc{},
+		subsDoc{Subs: []sub{{Net: "a", Hub: "h", Poll: "5m"}}},
+		subsDoc{Subs: []sub{{Net: "a", Hub: "h", Key: "pinned"}}})
+	if len(out.Subs) != 1 || out.Subs[0].Poll != "5m" || out.Subs[0].Key != "pinned" {
+		t.Errorf("out = %+v, want one item with both fields", out)
+	}
+}
+
+// A list with two items under one key cannot be matched item by item, so it
+// merges as a single value, as it did before it had keys.
+func TestMergeFieldKeyedListDuplicateKeyIsOneValue(t *testing.T) {
+	base := subsDoc{Subs: []sub{{Net: "a", Hub: "h"}}}
+	theirs := subsDoc{Subs: []sub{{Net: "a", Hub: "h"}, {Net: "a", Hub: "h", Poll: "1m"}}}
+	out, _ := mustMergeKeys(t, base, base, theirs)
+	if len(out.Subs) != 2 {
+		t.Errorf("out = %+v, want theirs whole", out)
+	}
+}
+
+func TestSaveFileListKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "subs.json")
+	f := File[subsDoc]{
+		Path: path,
+		Parse: func(b []byte) (subsDoc, error) {
+			var v subsDoc
+			return v, json.Unmarshal(b, &v)
+		},
+		Marshal:  func(v subsDoc) ([]byte, error) { return json.MarshalIndent(v, "", "  ") },
+		ListKeys: subKeys,
+	}
+	base := subsDoc{Subs: []sub{{Net: "a", Hub: "h"}}}
+	if err := os.WriteFile(path, []byte(`{"subs":[{"net":"a","hub":"h"},{"net":"b","hub":"h"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	saved, _, err := SaveFile(f, base, subsDoc{Subs: []sub{{Net: "a", Hub: "h", Poll: "5m"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.Subs) != 2 || saved.Subs[0].Poll != "5m" || saved.Subs[1].Net != "b" {
+		t.Errorf("saved = %+v", saved)
+	}
+}

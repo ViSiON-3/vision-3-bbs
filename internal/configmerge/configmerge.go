@@ -76,6 +76,9 @@ type val struct {
 
 type merger struct {
 	res Result
+	// keys maps the path of a list whose items have no id to the fields
+	// that together identify an item (MergeTypedKeys).
+	keys map[string][]string
 }
 
 // Merge does a three-way merge of decoded JSON values (as produced by
@@ -85,7 +88,8 @@ type merger struct {
 //   - A value changed on only one side takes that side's value.
 //   - Objects merge key by key, so edits to different keys all survive.
 //   - Lists whose items are all objects with an integer "id" merge item by
-//     item, matched on id. Other lists are merged as a single value.
+//     item, matched on id. Other lists are merged as a single value, unless
+//     the caller names fields that identify their items (MergeTypedKeys).
 //   - A value both sides changed differently keeps ours and is reported.
 //   - A key or item deleted on one side and edited on the other is kept,
 //     edited (a deletion is easy to redo; a lost edit is not), and reported.
@@ -96,7 +100,11 @@ type merger struct {
 //     the id and ours is given the next free one (Result.Renumbered, for a
 //     top-level list).
 func Merge(base, ours, theirs any) (any, Result) {
-	m := &merger{}
+	return mergeKeys(nil, base, ours, theirs)
+}
+
+func mergeKeys(keys map[string][]string, base, ours, theirs any) (any, Result) {
+	m := &merger{keys: keys}
 	out := m.value("", 0, "", val{base, true}, val{ours, true}, val{theirs, true})
 	if merged, ok := out.v.([]any); ok {
 		if before, ok := theirs.([]any); ok {
@@ -190,6 +198,21 @@ func (m *merger) value(path string, itemID int, field string, b, o, t val) val {
 	tl, tIsList := t.v.([]any)
 	if baseEmpty {
 		bl, bIsList = nil, true
+	}
+	if fields, ok := m.keys[path]; ok {
+		// An absent or null list here is an empty one: the field is
+		// usually omitempty, so deleting the last item removes the key.
+		if !o.ok || o.v == nil {
+			ol, oIsList = nil, true
+		}
+		if !t.ok || t.v == nil {
+			tl, tIsList = nil, true
+		}
+		if bIsList && oIsList && tIsList {
+			if out, ok := m.fieldList(path, fields, bl, ol, tl); ok {
+				return val{out, true}
+			}
+		}
 	}
 	if o.ok && t.ok && bIsList && oIsList && tIsList && keyedList(bl) && keyedList(ol) && keyedList(tl) {
 		return val{m.list(path, bl, ol, tl), true}
@@ -412,6 +435,129 @@ func (m *merger) list(path string, b, o, t []any) []any {
 	return out
 }
 
+// fieldKey returns the key a list item is matched on, the values of fields
+// (which must all be strings) encoded as a JSON array so that no two
+// different sets of values share a key, and a label naming the item in
+// messages.
+func fieldKey(item any, fields []string) (key, label string, ok bool) {
+	obj, ok := item.(map[string]any)
+	if !ok {
+		return "", "", false
+	}
+	parts := make([]string, len(fields))
+	for i, f := range fields {
+		if parts[i], ok = obj[f].(string); !ok {
+			return "", "", false
+		}
+	}
+	data, err := json.Marshal(parts)
+	if err != nil {
+		return "", "", false
+	}
+	return string(data), strings.Join(parts, " "), true
+}
+
+// blankStrings returns the versions of one list item with every string
+// field that some version has, and another lacks, set to "" in the one that
+// lacks it. An omitempty string field cleared on one side is then an edit
+// to "" rather than a deletion, which an edit elsewhere would beat. Absent
+// versions (the item deleted on that side) are left alone.
+func blankStrings(vs ...val) []val {
+	strs := make(map[string]bool)
+	for _, v := range vs {
+		if obj, ok := v.v.(map[string]any); ok && v.ok {
+			for k, x := range obj {
+				if _, isStr := x.(string); isStr {
+					strs[k] = true
+				}
+			}
+		}
+	}
+	out := make([]val, len(vs))
+	for i, v := range vs {
+		out[i] = v
+		obj, ok := v.v.(map[string]any)
+		if !ok || !v.ok {
+			continue
+		}
+		var filled map[string]any
+		for k := range strs {
+			if _, has := obj[k]; has {
+				continue
+			}
+			if filled == nil {
+				filled = make(map[string]any, len(obj)+len(strs))
+				for kk, x := range obj {
+					filled[kk] = x
+				}
+			}
+			filled[k] = ""
+		}
+		if filled != nil {
+			out[i] = val{filled, true}
+		}
+	}
+	return out
+}
+
+// fieldList merges a list whose items are matched on the values of fields
+// rather than an id. Items merge like the keys of an object: one added on
+// one side is kept, one deleted on one side and untouched on the other is
+// gone, and one both sides added merges field by field. Within an item a
+// string field one side cleared counts as set to "" (blankStrings). It
+// reports false, and the list is merged as a single value, when an item
+// lacks a key or two items on one side share one.
+func (m *merger) fieldList(path string, fields []string, b, o, t []any) ([]any, bool) {
+	labels := make(map[string]string)
+	index := func(list []any) (map[string]any, []string, bool) {
+		mp := make(map[string]any, len(list))
+		order := make([]string, 0, len(list))
+		for _, item := range list {
+			k, label, ok := fieldKey(item, fields)
+			if !ok {
+				return nil, nil, false
+			}
+			if _, dup := mp[k]; dup {
+				return nil, nil, false
+			}
+			mp[k] = item
+			labels[k] = label
+			order = append(order, k)
+		}
+		return mp, order, true
+	}
+	bm, _, ok1 := index(b)
+	om, oOrder, ok2 := index(o)
+	tm, tOrder, ok3 := index(t)
+	if !ok1 || !ok2 || !ok3 {
+		return nil, false
+	}
+
+	// Ours' order, then items only theirs has, in theirs' order.
+	out := []any{}
+	placed := make(map[string]bool)
+	for _, k := range append(oOrder, tOrder...) {
+		if placed[k] {
+			continue
+		}
+		placed[k] = true
+		bv, bok := bm[k]
+		ov, ook := om[k]
+		tv, tok := tm[k]
+		vs := []val{{bv, bok}, {ov, ook}, {tv, tok}}
+		if bok {
+			// An item both sides added has nothing to clear: each side's
+			// fields are additions.
+			vs = blankStrings(vs...)
+		}
+		r := m.value(joinPath(path, labels[k]), 0, "", vs[0], vs[1], vs[2])
+		if r.ok {
+			out = append(out, r.v)
+		}
+	}
+	return out, true
+}
+
 func (m *merger) renumbered(from, to int) {
 	if m.res.Renumbered == nil {
 		m.res.Renumbered = make(map[int]int)
@@ -460,6 +606,16 @@ func toGeneric(v any) (any, error) {
 // form (see Merge), so every field is covered, including ones added to the
 // type later, and an omitted field reads the same as its zero value.
 func MergeTyped[T any](base, ours, theirs T) (T, Result, error) {
+	return MergeTypedKeys(nil, base, ours, theirs)
+}
+
+// MergeTypedKeys is MergeTyped for a value holding lists whose items have no
+// id. keys maps the path of each such list, as Conflict.Path names it (e.g.
+// "leaves"), to the item fields that together identify an item; those fields
+// must hold strings. Such a list merges item by item instead of as a single
+// value, and a string field cleared in an item reads as set to "", so
+// blanking an omitempty field is an edit, not a deletion.
+func MergeTypedKeys[T any](keys map[string][]string, base, ours, theirs T) (T, Result, error) {
 	var zero T
 	g := make([]any, 3)
 	for i, v := range []T{base, ours, theirs} {
@@ -468,7 +624,7 @@ func MergeTyped[T any](base, ours, theirs T) (T, Result, error) {
 			return zero, Result{}, err
 		}
 	}
-	merged, res := Merge(g[0], g[1], g[2])
+	merged, res := mergeKeys(keys, g[0], g[1], g[2])
 	data, err := json.Marshal(merged)
 	if err != nil {
 		return zero, Result{}, err
@@ -506,11 +662,10 @@ type File[T any] struct {
 	// fields derived from an item's id that the generic merge cannot know
 	// about (a generated directory named after the id, say).
 	Fix func(merged T, res Result) T
-	// Reconcile, if set, runs after Fix with all three versions, for parts
-	// of the file the generic merge can only treat as one value: a list
-	// whose items have no id is kept whole from one side, and Reconcile can
-	// merge selected fields of its items by a key of its own.
-	Reconcile func(base, theirs, merged T) T
+	// ListKeys names the fields that identify the items of lists that have
+	// no id, so they merge item by item (MergeTypedKeys). A list without an
+	// entry here is kept whole from one side.
+	ListKeys map[string][]string
 	// Perm is the mode for a newly created file (0644 if zero). An existing
 	// file keeps its own mode; see FileMode.
 	Perm os.FileMode
@@ -554,7 +709,7 @@ func SaveFile[T any](f File[T], base, ours T) (T, Result, error) {
 	if err != nil {
 		return zero, Result{}, fmt.Errorf("parsing %s: %w", f.Path, err)
 	}
-	merged, res, err := MergeTyped(base, ours, theirs)
+	merged, res, err := MergeTypedKeys(f.ListKeys, base, ours, theirs)
 	if err != nil {
 		return zero, Result{}, fmt.Errorf("merging %s: %w", f.Path, err)
 	}
@@ -563,9 +718,6 @@ func SaveFile[T any](f File[T], base, ours T) (T, Result, error) {
 	}
 	if f.Fix != nil {
 		merged = f.Fix(merged, res)
-	}
-	if f.Reconcile != nil {
-		merged = f.Reconcile(base, theirs, merged)
 	}
 
 	mg, err1 := toGeneric(merged)
