@@ -11,7 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor/testterm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
@@ -182,11 +182,8 @@ func TestThreadRowsPrunesAndReparents(t *testing.T) {
 	if got := rowNums(tv.rows); !reflect.DeepEqual(got, []int{15}) {
 		t.Errorf("rows around #15 under a hidden root = %v, want [15]", got)
 	}
-	if p, state := tv.parentOf(15); state != parentHidden || p != 0 {
-		t.Errorf("parentOf(15) = %d, %v; want hidden and unnamed", p, state)
-	}
-	if _, isRoot := tv.nextSibling(15); !isRoot {
-		t.Error("#15 should be a root of its shown tree")
+	if r := tv.row(15); r == nil || r.Parent != 0 {
+		t.Errorf("#15 should be a root of its shown tree: %+v", r)
 	}
 }
 
@@ -203,36 +200,6 @@ func TestThreadViewNavigation(t *testing.T) {
 	if n := tv.directReplies(1); n != 1 {
 		t.Errorf("directReplies(1) = %d, want 1 (#3; the deleted #4 is not a reply)", n)
 	}
-	if f := tv.firstReply(5); f != 7 {
-		t.Errorf("firstReply(5) = %d, want 7", f)
-	}
-	if x, _ := tv.nextSibling(7); x != 15 {
-		t.Errorf("nextSibling(7) = %d, want 15: A skips the private #9", x)
-	}
-	if x, isRoot := tv.nextSibling(15); x != 0 || isRoot {
-		t.Errorf("nextSibling(15) = %d, root %v; want none, not a root", x, isRoot)
-	}
-	if x, isRoot := tv.nextSibling(1); x != 0 || !isRoot {
-		t.Errorf("nextSibling(1) = %d, root %v; want none on the root", x, isRoot)
-	}
-	if p, state := tv.parentOf(8); state != parentDeleted || p != 4 {
-		t.Errorf("parentOf(8) = %d, %v; want the deleted #4", p, state)
-	}
-	if p, state := tv.parentOf(15); state != parentHidden || p != 0 {
-		t.Errorf("parentOf(15) = %d, %v; want hidden", p, state)
-	}
-	if p, state := tv.parentOf(1); state != parentNone || p != 0 {
-		t.Errorf("parentOf(1) = %d, %v; want none", p, state)
-	}
-	if p, state := tv.parentOf(5); state != parentShown || p != 3 {
-		t.Errorf("parentOf(5) = %d, %v; want #3", p, state)
-	}
-	if n := tv.neighbour(10, 1); n != 15 {
-		t.Errorf("after #10 in thread order = %d, want 15", n)
-	}
-	if n := tv.neighbour(1, -1); n != 0 {
-		t.Errorf("before the root = %d, want 0", n)
-	}
 	if pos, count := tv.position(5); pos != 3 || count != 9 {
 		t.Errorf("position(5) = %d of %d, want 3 of 9", pos, count)
 	}
@@ -246,41 +213,45 @@ func TestThreadViewNavigation(t *testing.T) {
 	if alone.hasThread() {
 		t.Error("an unanswered root has no thread to show")
 	}
-	// Each key's target and notice.
-	strs := env0Strings(t)
+}
+
+// In the thread menu the arrows, Home and End name the readable message to
+// read next, in display order, stepping over the #4 placeholder; at an end
+// they go nowhere. Tab, Enter, T and Esc give focus back; other keys are
+// left to the reader.
+func TestThreadMenuKey(t *testing.T) {
 	for _, tc := range []struct {
-		cur    int
-		key    rune
-		target int
-		notice string
+		name     string
+		cur, key int
+		handled  bool
+		target   int
+		back     bool
 	}{
-		{5, 'B', 3, ""},
-		{1, 'B', 0, "Message |15#1|09 starts its thread; it isn't a reply."},
-		{8, 'B', 0, "Message |15#4|09, the one this answers, has been deleted."},
-		{15, 'B', 0, "The message this answers isn't available to you."},
-		{1, 'F', 3, ""},
-		{10, 'F', 0, "No replies to |15#10|09 yet."},
-		{7, 'A', 15, ""},
-		{1, 'A', 0, "Message |15#1|09 starts its thread; it has no sibling replies."},
-		{11, 'A', 0, "No more replies to |15#3|09 after this one."},
-		{10, ']', 15, ""},
-		{14, ']', 0, "End of thread."},
-		{3, '[', 1, ""},
-		{1, '[', 0, "Start of thread."},
+		{"down", 11, editor.KeyArrowDown, true, 8, false},
+		{"up", 11, editor.KeyArrowUp, true, 15, false},
+		{"up at the top goes nowhere", 1, editor.KeyArrowUp, true, 0, false},
+		{"down at the bottom goes nowhere", 14, editor.KeyArrowDown, true, 0, false},
+		{"home", 10, editor.KeyHome, true, 1, false},
+		{"end", 3, editor.KeyEnd, true, 14, false},
+		{"Tab", 7, editor.KeyTab, true, 0, true},
+		{"Enter", 7, editor.KeyEnter, true, 0, true},
+		{"T", 7, 'T', true, 0, true},
+		{"Esc", 7, editor.KeyEsc, true, 0, true},
+		{"N is the reader's", 7, 'N', false, 0, false},
 	} {
 		tv := newThreadView(sampleNodes(), tc.cur, sampleLoad("Caller"))
-		target, notice := threadNavTarget(tv, tc.key, strs)
-		if target != tc.target || !strings.Contains(notice, tc.notice) || (tc.notice == "" && notice != "") {
-			t.Errorf("#%d %c: target %d notice %q; want %d %q", tc.cur, tc.key, target, notice, tc.target, tc.notice)
+		handled, target, back := threadMenuKey(tv, tc.key)
+		if handled != tc.handled || target != tc.target || back != tc.back {
+			t.Errorf("%s: handled %v target %d back %v; want %v %d %v", tc.name, handled, target, back, tc.handled, tc.target, tc.back)
 		}
 	}
 }
 
-// env0Strings loads the shipped strings, for notice text.
-func env0Strings(t *testing.T) *config.StringsConfig {
-	t.Helper()
-	return newMenuEnv(t).e.Strings()
-}
+// isDarkGrey reports whether c is drawn in dark grey (pipe colour 8).
+func isDarkGrey(c testterm.Cell) bool { return c.Fg == 90 || (c.Fg == 30 && c.Bold) }
+
+// isBrightCyan reports whether c is drawn in bright cyan (pipe colour 11).
+func isBrightCyan(c testterm.Cell) bool { return c.Fg == 96 || (c.Fg == 36 && c.Bold) }
 
 // visibleWidth is the column count of a pipe-coded line as the terminal
 // receives it: expanded, then put through the output writer for mode, which
@@ -297,92 +268,35 @@ func visibleWidth(line string, mode ansi.OutputMode) int {
 	return utf8.RuneCountInString(stripped)
 }
 
-// The signposts always fill exactly the row, however long the handles: the
-// fixed parts render whole and the handles share what is left.
-func TestRenderSignpostsFitsWidth(t *testing.T) {
-	long := "Kestrel_of_the_Wastes_and_Beyond"
-	cases := []struct {
-		name string
-		segs []signpost
-		want []string // substrings of the stripped row
-	}{
-		{"three long handles", []signpost{
-			{key: 'B', arrow: "↑", target: 3, handle: long},
-			{key: 'F', arrow: "↓", target: 7, handle: long + "_Two"},
-			{key: 'A', arrow: "→", target: 11, handle: long + "_Three"},
-		}, []string{"─[B]↑ #3 ", "─[F]↓ #7 ", "─[A]→ #11 ", "…"}},
-		{"two long handles", []signpost{
-			{key: 'B', arrow: "↑", target: 3, handle: long},
-			{key: 'F', arrow: "↓", target: 7, handle: long},
-			{key: 'A', arrow: "→"},
-		}, []string{"none", "…"}},
-		{"deleted target", []signpost{
-			{key: 'B', arrow: "↑", target: 4, deleted: true},
-			{key: 'F', arrow: "↓", target: 14, handle: "PhosphorDotMatrix"},
-			{key: 'A', arrow: "→"},
-		}, []string{"─[B]↑ #4 deleted ", "─[F]↓ #14 PhosphorDotMatrix ", "─[A]→ none ─"}},
-		{"short handles leave a rule", []signpost{
-			{key: 'B', arrow: "↑", target: 1, handle: "Lux"},
-			{key: 'F', arrow: "↓"},
-			{key: 'A', arrow: "→"},
-		}, []string{"─[B]↑ #1 Lux ─[F]↓ none ─[A]→ none ─[V]tree ────"}},
-	}
+// The thread menu's key row fills exactly the row in both encodings.
+func TestRenderThreadMenuKeys(t *testing.T) {
 	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
-		g := threadGlyphsFor(mode)
-		for _, tc := range cases {
-			t.Run(fmt.Sprintf("%s/%v", tc.name, mode), func(t *testing.T) {
-				segs := make([]signpost, len(tc.segs))
-				for i, s := range tc.segs {
-					segs[i] = s
-					segs[i].arrow = map[rune]string{'B': g.up, 'F': g.down, 'A': g.right}[s.key]
-				}
-				row := renderSignposts(segs, 79, g, mode)
-				if w := visibleWidth(row, mode); w != 79 {
-					t.Errorf("width = %d, want 79: %q", w, row)
-				}
-				if mode != ansi.OutputModeUTF8 {
-					return
-				}
-				stripped := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(row))), "")
-				for _, want := range tc.want {
-					if !strings.Contains(stripped, want) {
-						t.Errorf("row %q lacks %q", stripped, want)
-					}
-				}
-			})
+		row := renderThreadMenuKeys(79, "|08", "Message View")
+		if w := visibleWidth(row, mode); w != 79 {
+			t.Errorf("%v: width = %d, want 79: %q", mode, w, row)
 		}
 	}
-}
-
-// A handle that would get fewer than four characters is dropped rather
-// than clipped to nothing.
-func TestRenderSignpostsDropsTinyHandles(t *testing.T) {
-	g := threadGlyphsFor(ansi.OutputModeUTF8)
-	segs := []signpost{
-		{key: 'B', arrow: g.up, target: 100000, handle: "Someone_Rather_Long"},
-		{key: 'F', arrow: g.down, target: 100001, handle: "Another_Long_Handle"},
-		{key: 'A', arrow: g.right, target: 100002, handle: "A_Third_Long_Handle"},
+	for label, want := range map[string]string{
+		"Close":        "─[Tab] Close ──",
+		"Message View": "─[Tab] Message View ──",
+	} {
+		stripped := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderThreadMenuKeys(79, "|08", label)))), "")
+		if !strings.HasPrefix(stripped, want) {
+			t.Errorf("keys = %q, want prefix %q", stripped, want)
+		}
 	}
-	// The fixed parts take 51 columns with the list tail; a 53-column row
-	// leaves two.
-	row := renderSignposts(segs, 53, g, ansi.OutputModeUTF8)
-	stripped := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(row))), "")
-	if utf8.RuneCountInString(stripped) != 53 {
-		t.Errorf("width = %d, want 53: %q", utf8.RuneCountInString(stripped), stripped)
-	}
-	if strings.Contains(stripped, "Som") || strings.Contains(stripped, "Ano") || strings.Contains(stripped, "A_T") {
-		t.Errorf("no handle fits a 53-column row with three six-digit targets: %q", stripped)
-	}
-	if !strings.Contains(stripped, "#100000 ─[F]↓ #100001 ─[A]→ #100002 ─[V]tree") {
-		t.Errorf("the fixed parts must still render whole: %q", stripped)
+	hint := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderThreadViewHint(79)))), "")
+	if !strings.HasPrefix(hint, "─[Tab] Thread View ──") || utf8.RuneCountInString(hint) != 79 {
+		t.Errorf("hint = %q", hint)
 	}
 }
 
 // The pane takes five rows, then three, then none, as the body shrinks:
-// with a six-row header, a 24-row terminal has 15 body lines, a 20-row one
-// 11 and a 16-row one 7, and the body keeps at least six.
+// with its title, closing rule and blank row it needs eight rows for five,
+// six for three, and the body keeps at least six. With a six-row header, a
+// 24-row terminal has 15 body lines, a 21-row one 12 and a 20-row one 11.
 func TestPaneRowsFor(t *testing.T) {
-	for _, tc := range []struct{ termHeight, want int }{{25, 5}, {24, 5}, {22, 5}, {21, 3}, {20, 3}, {19, 0}, {16, 0}} {
+	for _, tc := range []struct{ termHeight, want int }{{25, 5}, {24, 5}, {23, 5}, {22, 3}, {21, 3}, {20, 0}, {16, 0}} {
 		bodyAvail := tc.termHeight - 7 - 2
 		if got := paneRowsFor(bodyAvail); got != tc.want {
 			t.Errorf("termHeight %d (body %d): pane rows = %d, want %d", tc.termHeight, bodyAvail, got, tc.want)
@@ -398,7 +312,7 @@ func TestRenderThreadPaneWidth(t *testing.T) {
 		for _, cur := range []int{1, 5, 8, 14} {
 			tv := newThreadView(sampleNodes(), cur, sampleLoad("Caller"))
 			for _, rows := range []int{5, 3} {
-				lines := renderThreadPane(tv, rows, 79, " Thread ", g, mode)
+				lines := renderThreadPane(tv, tv.cur, rows, 79, " Thread ", "Close", g, mode)
 				if len(lines) != rows+2 {
 					t.Fatalf("%v #%d rows %d: %d lines", mode, cur, rows, len(lines))
 				}
@@ -412,7 +326,7 @@ func TestRenderThreadPaneWidth(t *testing.T) {
 	}
 	// Depth past eight collapses to a count.
 	deep := threadRow{Num: 99, Depth: 11, Prefix: strings.Repeat("│ ", 10) + "└─", Msg: sampleLoad("Caller")(10)}
-	line := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderTreeRow(deep, false, 79, threadGlyphsFor(ansi.OutputModeUTF8), ansi.OutputModeUTF8)))), "")
+	line := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderTreeRow(deep, false, false, false, 79, threadGlyphsFor(ansi.OutputModeUTF8), ansi.OutputModeUTF8)))), "")
 	if !strings.Contains(line, "              +4#99 ") {
 		t.Errorf("deep row = %q, want the prefix collapsed to +4", line)
 	}
@@ -439,6 +353,12 @@ func TestExcerpt(t *testing.T) {
 // feeding keys, and returns the screen as it was left.
 func (env *menuEnv) screenRun(cmd string, u *user.User, keys string) *testterm.Term {
 	env.t.Helper()
+	return env.screenRunHeight(cmd, u, keys, 24)
+}
+
+// screenRunHeight is screenRun on an 80-column terminal of height rows.
+func (env *menuEnv) screenRunHeight(cmd string, u *user.User, keys string, height int) *testterm.Term {
+	env.t.Helper()
 	fn, ok := env.e.RunRegistry[cmd]
 	if !ok {
 		env.t.Fatalf("no runnable registered as %q", cmd)
@@ -447,7 +367,7 @@ func (env *menuEnv) screenRun(cmd string, u *user.User, keys string) *testterm.T
 	if env.outputMode == ansi.OutputModeCP437 {
 		opts = append(opts, testterm.CP437())
 	}
-	screen := testterm.New(80, 24, opts...)
+	screen := testterm.New(80, height, opts...)
 	sess := testterm.NewSession(screen, keys)
 	SetSessionOutputMode(sess, env.outputMode)
 	env.t.Cleanup(func() {
@@ -456,7 +376,7 @@ func (env *menuEnv) screenRun(cmd string, u *user.User, keys string) *testterm.T
 	})
 	c := &cmdCtx{
 		e: env.e, s: sess, terminal: term.NewTerminal(sess, ""), userManager: env.um, currentUser: u,
-		nodeNumber: 1, sessionStartTime: time.Now(), outputMode: env.outputMode, termWidth: 80, termHeight: 24,
+		nodeNumber: 1, sessionStartTime: time.Now(), outputMode: env.outputMode, termWidth: 80, termHeight: height,
 	}
 	done := make(chan struct{})
 	go func() {
@@ -483,7 +403,7 @@ func (env *menuEnv) readerAt(n int, keys string) *testterm.Term {
 // The reader on #5 of the sample thread: the header counts two direct
 // replies (#7 and the hoisted #15), the pane sits under the header with
 // the current row marked and windowed two from the top, the body follows,
-// and the separator carries the signposts.
+// and the separator names Tab while the thread menu is closed.
 func TestMessageReaderThreadPaneLayout(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
@@ -518,31 +438,33 @@ func TestMessageReaderThreadPaneLayout(t *testing.T) {
 	if rule := strings.TrimRight(screen.Row(13), " "); rule != strings.Repeat("─", 79) {
 		t.Errorf("closing rule = %q", rule)
 	}
-	if !strings.Contains(screen.Row(14), "Ke> Check that the entry") {
-		t.Errorf("body should start on row 14:\n%s", snap)
+	if blank := strings.TrimSpace(screen.Row(14)); blank != "" {
+		t.Errorf("row 14 should be blank between the pane and the body: %q", blank)
+	}
+	if !strings.Contains(screen.Row(15), "Ke> Check that the entry") {
+		t.Errorf("body should start on row 15:\n%s", snap)
 	}
 	if marker := screen.Cell(10, 1); marker.Rune != '►' {
 		t.Errorf("row 10 col 1 = %q, want the marker", marker.Rune)
 	}
-	if bg := screen.Cell(10, 40).Bg; bg != 44 {
-		t.Errorf("current pane row background = %d, want blue (SGR 44)", bg)
-	}
-	if bg := screen.Cell(9, 40).Bg; bg == 44 {
-		t.Error("a row that is not current should not be blue")
-	}
-	signs := screen.Row(23)
-	for _, want := range []string{"─[B]↑ #3 Kestrel_of_t…", "─[F]↓ #7 Mercury Retr…", "─[A]→ #11 GrimmTheToss…", "─[V]tree"} {
-		if !strings.Contains(signs, want) {
-			t.Errorf("signposts = %q, want %q", signs, want)
+	// With the menu closed no row is barred: the blue bar is the menu's
+	// cursor, and the frame is dark grey.
+	for row := 8; row <= 12; row++ {
+		if bg := screen.Cell(row, 40).Bg; bg == 44 {
+			t.Errorf("row %d is barred blue with the menu closed", row)
 		}
 	}
-	// The row fills 79 columns (the last may be the final segment's
-	// space) and never reaches the 80th, which can scroll some terminals.
-	if n := utf8.RuneCountInString(strings.TrimRight(signs, " ")); n < 78 || n > 79 {
-		t.Errorf("signposts width = %d: %q", n, signs)
+	// Every drawn character of the closed pane, frame, text and marker,
+	// is dark grey.
+	for row := 7; row <= 13; row++ {
+		for col := 1; col <= 79; col++ {
+			if c := screen.Cell(row, col); c.Rune != ' ' && !isDarkGrey(c) {
+				t.Fatalf("row %d col %d %q drawn fg %d bold %v, want dark grey", row, col, c.Rune, c.Fg, c.Bold)
+			}
+		}
 	}
-	if c := screen.Cell(23, 80).Rune; c != ' ' {
-		t.Errorf("signposts reached column 80: %q", c)
+	if sep := screen.Row(23); !strings.HasPrefix(sep, "─[Tab] Thread View ──") {
+		t.Errorf("separator = %q, want the Tab hint", sep)
 	}
 	if !strings.Contains(screen.Row(24), "Next") {
 		t.Errorf("lightbar missing:\n%s", snap)
@@ -550,7 +472,7 @@ func TestMessageReaderThreadPaneLayout(t *testing.T) {
 }
 
 // A message that starts a thread nobody answered shows no pane, and the
-// body keeps the rows; the separator row is a plain rule, no signposts.
+// body keeps the rows; the separator row is a plain rule.
 func TestMessageReaderNoPaneWithoutThread(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
@@ -566,24 +488,38 @@ func TestMessageReaderNoPaneWithoutThread(t *testing.T) {
 	}
 }
 
-// The only reply to a deleted root has no pane, having nothing else to
-// show, but it is still a reply: its signposts and B say the parent is gone.
+// The only reply to a deleted root has nothing else to show: no pane, and
+// T does not open the thread menu.
 func TestMessageReaderLoneReplyToDeletedRoot(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
 	if err := env.e.MessageMgr.DeleteMessage(generalAreaID, 12); err != nil {
 		t.Fatalf("DeleteMessage: %v", err)
 	}
+	screen := env.readerAt(13, "T")
+	if strings.Contains(screen.Snapshot(), "── Thread ─") || strings.Contains(screen.Snapshot(), "Close") {
+		t.Errorf("pane or menu shown with nothing else to show:\n%s", screen.Snapshot())
+	}
+}
+
+// A thread shorter than the pane takes only the rows it fills: #12 and its
+// one reply draw a title, two rows and the closing rule, then the blank
+// row, and the body starts right under it, with no blank pane rows.
+func TestMessageReaderPaneShrinksToThread(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
 	screen := env.readerAt(13, "")
-	if strings.Contains(screen.Snapshot(), "── Thread ─") {
-		t.Errorf("pane shown with nothing else to show:\n%s", screen.Snapshot())
+	if !strings.Contains(screen.Row(7), "── Thread ─") {
+		t.Fatalf("pane title not under the header:\n%s", screen.Snapshot())
 	}
-	if !strings.Contains(screen.Row(23), "─[B]↑ #12 deleted ") {
-		t.Errorf("signposts = %q, want B leading to the deleted #12", screen.Row(23))
+	if !strings.Contains(screen.Row(8), "#12 ") || !strings.Contains(screen.Row(9), "#13 ") {
+		t.Errorf("tree rows = %q, %q", screen.Row(8), screen.Row(9))
 	}
-	r := env.sub(t).runCmd("READMSGS", env.caller, "", "13\rBQ")
-	if !r.has("Message #12, the one this answers, has been deleted.") {
-		t.Errorf("B should give the deleted-parent notice; output:\n%s", r.text())
+	if rule := strings.TrimRight(screen.Row(10), " "); rule != strings.Repeat("─", 79) {
+		t.Errorf("row 10 should close the pane: %q", rule)
+	}
+	if strings.TrimSpace(screen.Row(11)) != "" || !strings.Contains(screen.Row(12), "six hours late") {
+		t.Errorf("body should start right under the pane:\n%s", screen.Snapshot())
 	}
 }
 
@@ -597,9 +533,6 @@ func TestMessageReaderPaneWindowAndPlaceholder(t *testing.T) {
 	if !strings.Contains(snap, "└─#4 deleted") {
 		t.Errorf("deleted #4 should be a placeholder row:\n%s", snap)
 	}
-	if !strings.Contains(screen.Row(23), "─[B]↑ #4 deleted ─[F]↓ #14 PhosphorDotMatrix ─[A]→ none") {
-		t.Errorf("signposts on #8 = %q", screen.Row(23))
-	}
 	screen = env.readerAt(14, "")
 	if row := screen.Row(12); !strings.HasPrefix(row, "►     └─#14 Phosphor…") {
 		t.Errorf("last row should be #14 marked: %q\n%s", row, screen.Snapshot())
@@ -609,45 +542,164 @@ func TestMessageReaderPaneWindowAndPlaceholder(t *testing.T) {
 	}
 }
 
-// Each thread key moves the reader, or shows its notice on the bar row and
-// stays, through the real reader and message base.
-func TestMessageReaderThreadKeys(t *testing.T) {
+// The thread menu through the real reader and message base: T or Tab
+// gives it focus, each arrow reads the message it moves to with the menu
+// left open, and Tab, Enter, T or Esc give focus back to the message
+// without leaving the reader.
+func TestMessageReaderThreadMenu(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
 	for _, tc := range []struct {
 		name  string
 		start int
 		keys  string
-		at    int    // message shown at the end
-		seen  string // body marker or notice seen along the way
+		at    int // message shown at the end
 	}{
-		{"B goes to the parent", 5, "B", 3, "body-3"},
-		{"F goes to the first reply", 1, "F", 3, "body-3"},
-		{"A goes to the next sibling, skipping private mail", 7, "A", 15, "body-15"},
-		{"] walks the thread", 10, "]", 15, "body-15"},
-		{"[ walks back", 3, "[", 1, "body-1"},
-		{"B on a root", 1, "B", 1, "Message #1 starts its thread; it isn't a reply."},
-		{"B under a deleted parent", 8, "B", 8, "Message #4, the one this answers, has been deleted."},
-		{"B under a hidden parent", 15, "B", 15, "The message this answers isn't available to you."},
-		{"F on a leaf", 10, "F", 10, "No replies to #10 yet."},
-		{"A on a root", 1, "A", 1, "Message #1 starts its thread; it has no sibling replies."},
-		{"A on the last sibling", 11, "A", 11, "No more replies to #3 after this one."},
-		{"] at the end", 14, "]", 14, "End of thread."},
-		{"[ at the start", 1, "[", 1, "Start of thread."},
-		{"keys chain", 1, "FFF]", 10, "body-10"},
+		{"down reads the next in the thread", 5, "T\x1b[B", 7},
+		{"the menu stays open: down twice", 5, "T\x1b[B\x1b[B", 10},
+		{"up steps over the #4 placeholder", 8, "T\x1b[A", 11},
+		{"End then Home", 5, "T\x1b[F\x1b[H", 1},
+		{"up at the top stays", 1, "T\x1b[A", 1},
+		{"Enter gives focus back; Enter is Next again", 5, "T\r\r", 6},
+		{"T gives focus back", 5, "TT\r", 6},
+		{"Esc gives focus back without leaving the reader", 5, "T\x1bN", 6},
+		{"Tab there and back", 5, "\t\x1b[B\t\r", 8},
+		{"T on a message with no thread does nothing", 2, "T\r", 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sub := env.sub(t)
 			sub.markRead(generalAreaID, "Caller", len(sampleThread))
 			r := sub.runCmd("READMSGS", sub.caller, "", fmt.Sprintf("%d\r%sQ", tc.start, tc.keys))
 			txt := r.text()
-			if !strings.Contains(txt, tc.seen) {
-				t.Errorf("output lacks %q:\n%s", tc.seen, txt)
-			}
 			if last := strings.LastIndex(txt, "Reading message #"); last < 0 || !strings.HasPrefix(txt[last:], fmt.Sprintf("Reading message #%d ", tc.at)) {
 				t.Errorf("reader should end on #%d; output:\n%s", tc.at, txt)
 			}
 		})
+	}
+}
+
+// Any reader command but Thread closes the menu: after N from #7 the
+// threaded #8 opens with the menu closed, so Enter is Next again (to #10,
+// past the private #9); after ? the help returns to a closed menu.
+func TestMessageReaderOtherCommandsCloseThreadMenu(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	for _, tc := range []struct {
+		name  string
+		start int
+		keys  string
+		at    int
+	}{
+		{"N", 7, "TN\r", 10},
+		{"?", 5, "T?\r", 6},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sub := env.sub(t)
+			sub.markRead(generalAreaID, "Caller", len(sampleThread))
+			r := sub.runCmd("READMSGS", sub.caller, "", fmt.Sprintf("%d\r%sQ", tc.start, tc.keys))
+			txt := r.text()
+			if last := strings.LastIndex(txt, "Reading message #"); last < 0 || !strings.HasPrefix(txt[last:], fmt.Sprintf("Reading message #%d ", tc.at)) {
+				t.Errorf("reader should end on #%d; output:\n%s", tc.at, txt)
+			}
+		})
+	}
+}
+
+// With no room for the pane (a 20-row screen under a six-row header), Thread
+// is greyed out and T does not open an invisible menu: Enter stays Next.
+func TestMessageReaderNoThreadMenuWithoutRoom(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	env.markRead(generalAreaID, "Caller", len(sampleThread))
+	screen := env.screenRunHeight("READMSGS", env.caller, "5\rT\rQ", 20)
+	snap := screen.Snapshot()
+	if strings.Contains(snap, "── Thread ") || strings.Contains(snap, "[Tab]") {
+		t.Errorf("the pane or menu was drawn without room for it:\n%s", snap)
+	}
+	if !strings.Contains(screen.Row(2), "Reading message #6 ") {
+		t.Errorf("T should do nothing, leaving Enter as Next to #6:\n%s", snap)
+	}
+}
+
+// With the menu open the message being read is barred blue and marked,
+// the frame is bright cyan with the same title, the pane's closing row
+// lists the menu's keys, and the bar below is greyed out. Down from #5
+// reads #7, two from the top of a window that now starts at #3.
+func TestMessageReaderThreadMenuScreen(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	screen := env.readerAt(5, "T\x1b[B")
+	if title := screen.Row(7); !strings.HasPrefix(title, "── Thread ─ ") {
+		t.Errorf("title = %q", title)
+	}
+	if c := screen.Cell(7, 1); !isBrightCyan(c) {
+		t.Errorf("open pane frame fg %d bold %v, want bright cyan", c.Fg, c.Bold)
+	}
+	if keys := screen.Row(13); !strings.HasPrefix(keys, "─[Tab] Message View ──") {
+		t.Errorf("pane's closing row = %q, want the menu's keys", keys)
+	}
+	if sep := strings.TrimRight(screen.Row(23), " "); sep != strings.Repeat("─", 79) {
+		t.Errorf("separator = %q, want a plain rule", sep)
+	}
+	col := strings.Index(screen.Row(24), "Next")
+	if col < 0 {
+		t.Fatalf("no Next on the bar: %q", screen.Row(24))
+	}
+	if c := screen.Cell(24, utf8.RuneCountInString(screen.Row(24)[:col])+1); !isDarkGrey(c) || c.Bg == 44 {
+		t.Errorf("Next drawn fg %d bold %v bg %d, want greyed and unselected", c.Fg, c.Bold, c.Bg)
+	}
+	if !strings.Contains(screen.Row(2), "Reading message #7 ") {
+		t.Errorf("down should read #7 straight away:\n%s", screen.Snapshot())
+	}
+	if marker := screen.Cell(10, 1); marker.Rune != '►' || !strings.Contains(screen.Row(10), "#7 ") || screen.Cell(10, 40).Bg != 44 {
+		t.Errorf("row 10 = %q, want #7 marked and barred", screen.Row(10))
+	}
+	if bg := screen.Cell(9, 40).Bg; bg == 44 {
+		t.Error("#5 should no longer be barred")
+	}
+}
+
+// With Thread View off in Konfig there is no pane until T opens the menu,
+// and closing the menu hides it again.
+func TestMessageReaderThreadMenuWithViewClosed(t *testing.T) {
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	env.markRead(generalAreaID, "Caller", len(sampleThread))
+	caller := *env.caller
+	caller.ThreadViewClosed = true
+	for _, tc := range []struct {
+		keys  string
+		panes int
+	}{
+		{"", 0},
+		{"T", 1},
+		{"TT", 1},
+		{"\t", 1},
+		{"\t\t", 1},
+		// Opened on #5, drawn again on #7, then closed by Enter.
+		{"T\x1b[B\r", 2},
+	} {
+		r := env.sub(t).runCmd("READMSGS", &caller, "", "5\r"+tc.keys+"Q")
+		if n := strings.Count(r.text(), "── Thread "); n != tc.panes {
+			t.Errorf("%q: pane drawn %d times, want %d", tc.keys, n, tc.panes)
+		}
+	}
+	screen := env.screenRun("READMSGS", &caller, "5\rTTQ")
+	if strings.Contains(screen.Row(7), "── Thread ") {
+		t.Errorf("the pane should be gone after T closes the menu:\n%s", screen.Snapshot())
+	}
+	screen = env.screenRun("READMSGS", &caller, "5\r\tQ")
+	if !strings.HasPrefix(screen.Row(7), "── Thread ─") || screen.Cell(10, 40).Bg != 44 {
+		t.Errorf("Tab should open the pane as the thread menu:\n%s", screen.Snapshot())
+	}
+	// Tab would close the pane here, and says so.
+	if keys := screen.Row(13); !strings.HasPrefix(keys, "─[Tab] Close ──") {
+		t.Errorf("key row = %q, want Tab to say Close", keys)
+	}
+	// With the pane hidden, the separator still names Tab.
+	screen = env.screenRun("READMSGS", &caller, "5\rQ")
+	if sep := screen.Row(23); !strings.HasPrefix(sep, "─[Tab] Thread View ──") {
+		t.Errorf("separator = %q, want the Tab hint", sep)
 	}
 }
 
@@ -697,21 +749,18 @@ func TestMessageReaderDirectReplyCountRespectsVisibility(t *testing.T) {
 	if snap := kestrelScreen.Snapshot(); !strings.Contains(snap, "│ │ └─#9 n0name") {
 		t.Errorf("the recipient's pane should show #9:\n%s", snap)
 	}
-	if !strings.Contains(kestrelScreen.Row(23), "─[A]→ #9 n0name") {
-		t.Errorf("recipient's signposts = %q, want A leading to #9", kestrelScreen.Row(23))
-	}
 }
 
-// On a CP437 session the pane and signposts arrive as single bytes: the
-// box characters, "~" for a clipped name, and the 0x10 marker and 0x18-0x1A
-// arrows. The emulator draws nothing for those four control bytes (a CP437
-// terminal draws glyphs), so they show up in its unhandled list and the
-// text after each sits one column left of where a real terminal puts it.
+// On a CP437 session the pane arrives as single bytes: the box characters,
+// "~" for a clipped name, and the 0x10 marker. The emulator draws nothing
+// for that control byte (a CP437 terminal draws a glyph), so it shows up in
+// its unhandled list and the text after it sits one column left of where a
+// real terminal puts it.
 func TestMessageReaderThreadPaneCP437(t *testing.T) {
 	env := newMsgEnv(t)
 	env.outputMode = ansi.OutputModeCP437
 	env.seedSampleThread()
-	screen := env.readerAt(5, "")
+	screen := env.readerAt(5, "T")
 	snap := screen.Snapshot()
 	if row := screen.Row(10); !strings.Contains(row, "│ ├─#5 Phosphor~ That was it. Font sticks now, but the menus are s~  ") {
 		t.Errorf("current pane row = %q\n%s", row, snap)
@@ -719,22 +768,21 @@ func TestMessageReaderThreadPaneCP437(t *testing.T) {
 	if row := screen.Row(9); !strings.HasPrefix(row, "  ├─#3 Kestrel_~ ") {
 		t.Errorf("pane row above = %q", row)
 	}
-	if signs := screen.Row(23); !strings.Contains(signs, "─[B] #3 Kestrel_of_t~ ─[F] #7 Mercury Retr~ ─[A] #11 GrimmTheToss~ ─[V]tree") {
-		t.Errorf("signposts = %q", signs)
+	if keys := screen.Row(13); !strings.Contains(keys, "─[Tab] Message View ─") {
+		t.Errorf("pane's closing row = %q", keys)
 	}
-	if c := screen.Cell(23, 80).Rune; c != ' ' {
-		t.Errorf("signposts reached column 80: %q", c)
+	if c := screen.Cell(13, 80).Rune; c != ' ' {
+		t.Errorf("key row reached column 80: %q", c)
 	}
 	sent := strings.Join(screen.Unhandled(), "")
-	for _, b := range []string{"\x10", "\x18", "\x19", "\x1a"} {
+	for _, b := range []string{"\x10"} {
 		if !strings.Contains(sent, b) {
 			t.Errorf("control glyph %q was not sent; unhandled = %q", b, screen.Unhandled())
 		}
 	}
 }
 
-// Text from a message cannot act on the terminal from inside the pane or
-// the signposts: escape sequences and control characters are dropped, a
+// Text from a message cannot act on the terminal from inside the pane: escape sequences and control characters are dropped, a
 // pipe code is printed rather than expanded, and a body stored as raw
 // CP437 (0x82 is é) is decoded rather than mangled. Cells keep their width.
 func TestThreadCellsAreInert(t *testing.T) {
@@ -764,22 +812,15 @@ func TestThreadCellsAreInert(t *testing.T) {
 			t.Errorf("threadText(%q) = %q", tc.in, t2)
 		}
 	}
-	// A row and a signpost built from such a message stay 79 columns and
-	// carry no clear-screen.
+	// A row built from such a message stays 79 columns and carries no
+	// clear-screen.
 	msg := &message.DisplayMessage{MsgNum: 7, From: "Evil|CL", Subject: "|CLsubject", Body: "\x1b[2J|16pwned\nbody", DateTime: time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC)}
-	row := renderTreeRow(threadRow{Num: 7, Depth: 1, Prefix: "└─", Msg: msg}, true, 79, g, ansi.OutputModeUTF8)
+	row := renderTreeRow(threadRow{Num: 7, Depth: 1, Prefix: "└─", Msg: msg}, true, true, false, 79, g, ansi.OutputModeUTF8)
 	if w := visibleWidth(row, ansi.OutputModeUTF8); w != 79 {
 		t.Errorf("row width = %d: %q", w, row)
 	}
 	if expanded := string(ansi.ReplacePipeCodes([]byte(row))); strings.Contains(expanded, "\x1b[2J") || !strings.Contains(expanded, "|16pwned") || !strings.Contains(expanded, "Evil|CL") {
 		t.Errorf("row expands to %q", expanded)
-	}
-	signs := renderSignposts([]signpost{{key: 'B', arrow: g.up, target: 7, handle: "Evil|CL\x1b[2J"}, {key: 'F', arrow: g.down}, {key: 'A', arrow: g.right}}, 79, g, ansi.OutputModeUTF8)
-	if w := visibleWidth(signs, ansi.OutputModeUTF8); w != 79 {
-		t.Errorf("signposts width = %d: %q", w, signs)
-	}
-	if expanded := string(ansi.ReplacePipeCodes([]byte(signs))); strings.Contains(expanded, "\x1b[2J") || !strings.Contains(expanded, "Evil|CL ") {
-		t.Errorf("signposts expand to %q", expanded)
 	}
 	// The pane title carries the root subject through the same cleaning.
 	tv := newThreadView(map[int]*message.ReplyNode{7: {Num: 7, Children: []int{8}}, 8: {Num: 8, Parent: 7}}, 8,
@@ -789,7 +830,7 @@ func TestThreadCellsAreInert(t *testing.T) {
 			}
 			return &message.DisplayMessage{MsgNum: 8, From: "x", Subject: "Re: s", Body: "b"}
 		})
-	title := string(ansi.ReplacePipeCodes([]byte(renderThreadPane(tv, 3, 79, " Thread ", g, ansi.OutputModeUTF8)[0])))
+	title := string(ansi.ReplacePipeCodes([]byte(renderThreadPane(tv, tv.cur, 3, 79, " Thread ", "Close", g, ansi.OutputModeUTF8)[0])))
 	if !strings.Contains(title, "|CLsubject") {
 		t.Errorf("pane title expands to %q", title)
 	}
@@ -797,8 +838,8 @@ func TestThreadCellsAreInert(t *testing.T) {
 
 // A deleted message is a placeholder only for a caller who could have read
 // it. With the private #9 deleted, its public reply #15 still hangs from #5
-// for everyone else, with no "#9 deleted" row and B saying only that the
-// parent is unavailable; its recipient sees the placeholder.
+// for everyone else, with no "#9 deleted" row; its recipient sees the
+// placeholder.
 func TestDeletedPrivateMessageStaysHidden(t *testing.T) {
 	nodes := sampleNodes()
 	nodes[9].Deleted = true
@@ -821,28 +862,14 @@ func TestDeletedPrivateMessageStaysHidden(t *testing.T) {
 	if r := tv.row(15); r == nil || r.Parent != 5 {
 		t.Errorf("#15 should hang from #5 for the caller: %+v", r)
 	}
-	if p, state := tv.parentOf(15); state != parentHidden || p != 0 {
-		t.Errorf("parentOf(15) = %d, %v; want hidden and unnamed", p, state)
-	}
-	if _, notice := threadNavTarget(tv, 'B', env0Strings(t)); strings.Contains(notice, "#9") {
-		t.Errorf("B notice names the hidden message: %q", notice)
-	}
-	segs := readerSignposts(tv, threadGlyphsFor(ansi.OutputModeUTF8))
-	if segs[0].target != 0 {
-		t.Errorf("B signpost names the hidden parent: %+v", segs[0])
-	}
-
 	kestrel := newThreadView(nodes, 15, deleted9("Kestrel_of_the_Wastes"))
 	if r := kestrel.row(9); r == nil || !r.Deleted {
 		t.Errorf("the recipient should see #9 as a placeholder: %v", rowNums(kestrel.rows))
 	}
-	if p, state := kestrel.parentOf(15); state != parentDeleted || p != 9 {
-		t.Errorf("recipient's parentOf(15) = %d, %v; want deleted #9", p, state)
-	}
 }
 
 // The same through the reader and base: with #9 deleted, the caller reading
-// #15 sees neither its number nor a placeholder for it.
+// #15 sees neither its number nor a placeholder for it, menu open or not.
 func TestMessageReaderDeletedPrivateParentStaysHidden(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
@@ -854,37 +881,31 @@ func TestMessageReaderDeletedPrivateParentStaysHidden(t *testing.T) {
 	if strings.Contains(snap, "#9") {
 		t.Errorf("the deleted private #9 is named:\n%s", snap)
 	}
-	if !strings.Contains(screen.Row(23), "─[B]↑ none ") {
-		t.Errorf("signposts = %q, want B leading nowhere", screen.Row(23))
-	}
-	r := env.sub(t).runCmd("READMSGS", env.caller, "", "15\rBQ")
-	if !r.has("The message this answers isn't available to you.") || strings.Contains(r.text(), "#9") {
-		t.Errorf("B should give the hidden-parent notice without naming #9; output:\n%s", r.text())
+	if snap := env.readerAt(15, "T").Snapshot(); strings.Contains(snap, "#9") {
+		t.Errorf("the thread menu names the deleted private #9:\n%s", snap)
 	}
 }
 
 // After R posts a reply, the reader reloads the message, so the thread
-// view includes the reply: F on a leaf that was just answered goes to it.
+// view includes the reply: the thread menu reaches it from the leaf that
+// was just answered.
 func TestMessageReaderReplyRefreshesThread(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
 	env.markRead(generalAreaID, "Caller", len(sampleThread))
-	r := env.runCmd("READMSGS", env.caller, "", "10\rRbody-16 fresh reply\x1aFQ")
+	r := env.runCmd("READMSGS", env.caller, "", "10\rRbody-16 fresh reply\x1aT\x1b[B\rQ")
 	txt := r.text()
 	if !r.has("Reply posted successfully") {
 		t.Fatalf("reply not posted; output:\n%s", txt)
 	}
 	if last := strings.LastIndex(txt, "Reading message #"); last < 0 || !strings.HasPrefix(txt[last:], "Reading message #16 ") {
-		t.Errorf("F after the reply should open the new reply #16; output:\n%s", txt)
-	}
-	if r.has("No replies to #10 yet.") {
-		t.Errorf("the thread view was not rebuilt after the reply; output:\n%s", txt)
+		t.Errorf("down from #10 in the menu should open the new reply #16; output:\n%s", txt)
 	}
 }
 
-// The thread keys work from inside the lightbar too: Right or Left enters
-// the bar, and the key is handed back rather than swallowed.
-func TestMessageReaderThreadKeysPassThroughLightbar(t *testing.T) {
+// Thread on the bar opens the menu like the T key: Right enters the bar, T
+// picks Thread, and the arrows then move the menu's cursor.
+func TestMessageReaderThreadMenuFromLightbar(t *testing.T) {
 	env := newMsgEnv(t)
 	env.seedSampleThread()
 	env.markRead(generalAreaID, "Caller", len(sampleThread))
@@ -892,9 +913,8 @@ func TestMessageReaderThreadKeysPassThroughLightbar(t *testing.T) {
 		keys string
 		at   int
 	}{
-		{"\x1b[CB", 3},
-		{"\x1b[Cf", 7},
-		{"\x1b[D]", 7},
+		{"\x1b[CT\x1b[B\r", 7},
+		{"\x1b[Dt\x1b[A\r", 3},
 	} {
 		r := env.sub(t).runCmd("READMSGS", env.caller, "", "5\r"+tc.keys+"Q")
 		txt := r.text()

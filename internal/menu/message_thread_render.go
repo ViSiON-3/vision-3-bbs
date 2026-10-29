@@ -2,7 +2,7 @@ package menu
 
 import (
 	"fmt"
-	"sort"
+
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -10,29 +10,26 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
-// threadGlyphs are the characters the thread pane and signposts draw that
-// differ between a UTF-8 and a CP437 terminal. The box-drawing characters
-// are written as UTF-8 either way; the output writer converts them.
+// threadGlyphs are the characters the thread pane draws that differ
+// between a UTF-8 and a CP437 terminal. The box-drawing characters are
+// written as UTF-8 either way; the output writer converts them.
 type threadGlyphs struct {
 	marker   string // the current row's pointer
-	up       string // B's arrow
-	down     string // F's arrow
-	right    string // A's arrow
 	ellipsis string // marks a clipped handle or excerpt
 }
 
-// threadGlyphsFor picks the glyphs for mode. CP437 draws glyphs for the
-// control bytes 0x10 and 0x18-0x1A, and has no ellipsis, so a clipped name
-// ends in "~" there.
+// threadGlyphsFor picks the glyphs for mode. CP437 draws a glyph for the
+// control byte 0x10, and has no ellipsis, so a clipped name ends in "~"
+// there.
 func threadGlyphsFor(mode ansi.OutputMode) threadGlyphs {
 	if mode == ansi.OutputModeCP437 {
-		return threadGlyphs{marker: "\x10", up: "\x18", down: "\x19", right: "\x1a", ellipsis: "~"}
+		return threadGlyphs{marker: "\x10", ellipsis: "~"}
 	}
-	return threadGlyphs{marker: "►", up: "↑", down: "↓", right: "→", ellipsis: "…"}
+	return threadGlyphs{marker: "►", ellipsis: "…"}
 }
 
 // threadPlainText prepares text taken from a message (a subject, a handle,
-// a body line) for a pane or signpost cell. A body stored as raw CP437, as
+// a body line) for a pane cell. A body stored as raw CP437, as
 // imported echomail can be, is decoded so it is clipped by character; then
 // escape sequences and control characters are dropped, so a message cannot
 // clear the screen or move the cursor from inside the pane.
@@ -82,12 +79,6 @@ func threadText(s string, _ ansi.OutputMode) string {
 	return threadEscapePipes(threadPlainText(s))
 }
 
-// threadCols is the column count of text threadText produced: one per
-// rune, with a doubled pipe as one.
-func threadCols(s string, _ ansi.OutputMode) int {
-	return utf8.RuneCountInString(strings.ReplaceAll(s, "||", "|"))
-}
-
 // excerpt is the line of body that stands for the message in a thread
 // view: the first that is not blank, quoted, a tear line or an origin line.
 // A body stored as raw CP437 is decoded first, so the line is text.
@@ -105,15 +96,17 @@ func excerpt(body string) string {
 	return ""
 }
 
-// Thread pane geometry. The pane takes paneRows tree rows plus a title row
-// and a closing rule, and shrinks or goes away rather than leave the body
-// fewer than paneMinBodyLines.
+// Thread pane geometry. The pane takes paneRows tree rows plus a title row,
+// a closing rule and a blank row, and shrinks or goes away rather than leave
+// the body fewer than paneMinBodyLines.
 const (
 	paneRows         = 5
 	paneRowsReduced  = 3
 	paneMinBodyLines = 6
-	paneAuthorWidth  = 9
-	paneDateWidth    = 8
+	// paneGap is the blank row between the pane and the message body.
+	paneGap         = 1
+	paneAuthorWidth = 9
+	paneDateWidth   = 8
 	// maxTreeDepth is the deepest level drawn with glyphs; deeper rows
 	// collapse their prefix to "+N".
 	maxTreeDepth = 8
@@ -123,7 +116,7 @@ const (
 // bodyAvail body lines: 5, else 3, else none.
 func paneRowsFor(bodyAvail int) int {
 	for _, rows := range []int{paneRows, paneRowsReduced} {
-		if bodyAvail-(rows+2) >= paneMinBodyLines {
+		if bodyAvail-(rows+2+paneGap) >= paneMinBodyLines {
 			return rows
 		}
 	}
@@ -138,126 +131,52 @@ func treePrefix(r threadRow) string {
 	return r.Prefix
 }
 
-// signpost is one segment of the reader's separator row: the key, where it
-// leads and who wrote that message.
-type signpost struct {
-	key     rune
-	arrow   string
-	target  int    // 0 = none
-	deleted bool   // the target is a deleted message
-	handle  string // the target's author, when readable
-}
+// threadKey is one key and what it does, on a thread key row.
+type threadKey struct{ key, label string }
 
-// signpostTreeKey adds the "[V]tree" tail to the signposts: V opens or
-// closes the thread pane.
-const signpostTreeKey = true
-
-// renderSignposts builds the separator row: each key with its arrow and
-// target, the handles sharing whatever width the fixed parts leave, and a
-// rule filling the rest. The result is pipe-coded and exactly width columns.
-//
-// The fixed parts (keys, arrows, "#n", "deleted", "none", the V tail)
-// always render. The handles are then fitted shortest first, each given
-// min(its length + 1, an equal share of what is left); one that would be
-// clipped under 4 characters is dropped, and the others are clipped with
-// the ellipsis.
-func renderSignposts(segs []signpost, width int, g threadGlyphs, mode ansi.OutputMode) string {
-	const minHandle = 4
-	type seg struct {
-		signpost
-		fixed string // "#n ", "#n deleted " or "none "
-		show  string // the fitted handle plus a space, or ""
-	}
-	parts := make([]*seg, len(segs))
-	fixedWidth := 0
-	for i, s := range segs {
-		p := &seg{signpost: s}
-		switch {
-		case s.target == 0:
-			p.fixed = "none "
-		case s.deleted:
-			p.fixed = fmt.Sprintf("#%d deleted ", s.target)
-		default:
-			p.fixed = fmt.Sprintf("#%d ", s.target)
-		}
-		fixedWidth += 6 + len(p.fixed) // "─[B]↑ " is 6 columns
-		parts[i] = p
-	}
-	listTail := ""
-	if signpostTreeKey {
-		listTail = "|08─|03[|11V|03]|07tree "
-		fixedWidth += 9
-	}
-	avail := width - fixedWidth
-
-	var named []*seg
-	for _, p := range parts {
-		p.handle = threadPlainText(p.handle)
-		if p.target != 0 && !p.deleted && p.handle != "" {
-			named = append(named, p)
-		}
-	}
-	sort.SliceStable(named, func(i, j int) bool {
-		return utf8.RuneCountInString(named[i].handle) < utf8.RuneCountInString(named[j].handle)
-	})
-	for i, p := range named {
-		share := avail / (len(named) - i)
-		n := utf8.RuneCountInString(p.handle)
-		w := min(n+1, share)
-		// A handle shown whole, or with at least minHandle characters.
-		if w-1 >= min(minHandle, n) {
-			p.show = threadText(ansi.TruncateRunes(p.handle, w-1, g.ellipsis), mode) + " "
-			avail -= w
-		}
-	}
-
+// renderKeyRow builds a rule of width columns carrying keys, each drawn as
+// "─[key] label ", after lead columns of rule, in frame's colour. The
+// result is pipe-coded.
+func renderKeyRow(width, lead int, frame string, keys []threadKey) string {
 	var b strings.Builder
-	used := 0
-	for _, p := range parts {
-		colour := "|08"
-		if p.target != 0 && !p.deleted {
-			colour = "|15"
-		}
-		fmt.Fprintf(&b, "|08─|03[|11%c|03]|07%s %s%s|07%s", p.key, p.arrow, colour, p.fixed, p.show)
-		used += 6 + len(p.fixed) + threadCols(p.show, mode)
-	}
-	if listTail != "" {
-		b.WriteString(listTail)
-		used += 9
+	b.WriteString(frame + strings.Repeat("─", lead))
+	used := lead
+	for _, k := range keys {
+		b.WriteString(frame + "─|03[|11" + k.key + "|03] |07" + k.label + " ")
+		used += 5 + utf8.RuneCountInString(k.key) + utf8.RuneCountInString(k.label)
 	}
 	if used < width {
-		b.WriteString("|08" + strings.Repeat("─", width-used))
+		b.WriteString(frame + strings.Repeat("─", width-used))
 	}
 	b.WriteString("|07")
 	return b.String()
 }
 
-// readerSignposts builds the signposts for the message tv is on.
-func readerSignposts(tv *threadView, g threadGlyphs) []signpost {
-	cur := tv.cur
-	up := signpost{key: 'B', arrow: g.up}
-	switch p, state := tv.parentOf(cur); state {
-	case parentShown:
-		up.target, up.handle = p, tv.handle(p)
-	case parentDeleted:
-		up.target, up.deleted = p, true
-	}
-	down := signpost{key: 'F', arrow: g.down}
-	if f := tv.firstReply(cur); f != 0 {
-		down.target, down.handle = f, tv.handle(f)
-	}
-	right := signpost{key: 'A', arrow: g.right}
-	if x, _ := tv.nextSibling(cur); x != 0 {
-		right.target, right.handle = x, tv.handle(x)
-	}
-	return []signpost{up, down, right}
+// renderThreadMenuKeys builds the row that closes the pane while the thread
+// menu is open: its Tab key, in frame's colour. The arrows need no label on
+// a lightbar. tabLabel says what Tab does
+// from there: "Close" when the pane goes away with the menu, "Message View"
+// when it stays.
+func renderThreadMenuKeys(width int, frame, tabLabel string) string {
+	return renderKeyRow(width, 0, frame, []threadKey{{"Tab", tabLabel}})
+}
+
+// renderThreadViewHint builds the separator row above the reader's bar
+// while Tab can open the thread menu.
+func renderThreadViewHint(width int) string {
+	return renderKeyRow(width, 0, "|08", []threadKey{{"Tab", "Thread View"}})
 }
 
 // renderThreadPane draws the docked thread pane for tv: a title row, rows
-// tree rows windowed around the current message, and a closing rule. Each
-// line is pipe-coded (with raw escapes for the current row's background)
-// and exactly width columns. title is the pane's label, " Thread ".
-func renderThreadPane(tv *threadView, rows, width int, title string, g threadGlyphs, mode ansi.OutputMode) []string {
+// tree rows windowed around the current message, and a closing rule, which
+// lists the menu's keys while the thread menu is open. hl is the current
+// message while the menu is open, drawn as a blue bar, with the frame bright
+// and the text in colour; hl is 0 while the menu is closed, and the whole
+// pane is dark grey with no bar. The current message always carries the
+// marker. Each line is pipe-coded (with raw escapes for the bar's
+// background) and exactly width columns. title is the pane's label,
+// " Thread "; tabLabel is what the key row says Tab does.
+func renderThreadPane(tv *threadView, hl, rows, width int, title, tabLabel string, g threadGlyphs, mode ansi.OutputMode) []string {
 	lines := make([]string, 0, rows+2)
 
 	// Title: ──[ Thread ]─ subject ──────── pos of count · depth d ──
@@ -270,22 +189,41 @@ func renderThreadPane(tv *threadView, rows, width int, title string, g threadGly
 		subject = ansi.TruncateRunes(threadPlainText(tv.rootSubject()), subjectRoom, g.ellipsis) + " "
 	}
 	fill := width - utf8.RuneCountInString(left) - utf8.RuneCountInString(subject) - utf8.RuneCountInString(right) - 2
-	lines = append(lines, "|08──|03"+title+"|08─ |11"+threadText(subject, mode)+
-		"|08"+strings.Repeat("─", max(fill, 0))+"|03"+right+"|08──|07")
+	// Closed, the whole pane is dark grey, so the message body reads as
+	// the panel with focus; open, the frame is bright and the text in colour.
+	dim := hl == 0
+	frame, label, subjectColour := "|08", "|08", "|08"
+	if !dim {
+		frame, label, subjectColour = "|11", "|15", "|11"
+	}
+	lines = append(lines, frame+"──"+label+title+frame+"─ "+subjectColour+threadText(subject, mode)+
+		frame+strings.Repeat("─", max(fill, 0))+label+right+frame+"──|07")
 
-	// Tree rows: a window of rows lines that keeps the current row two from
-	// the top where the thread allows.
-	ci := tv.pos[tv.cur]
-	start := max(0, min(ci-2, len(tv.rows)-rows))
+	// Tree rows: a window of rows lines that keeps the cursor, or else the
+	// current message, two from the top where the thread allows.
+	anchor := hl
+	if anchor == 0 {
+		anchor = tv.cur
+	}
+	hi := -1
+	if hl != 0 {
+		hi = tv.pos[hl]
+	}
+	start := max(0, min(tv.pos[anchor]-2, len(tv.rows)-rows))
 	for i := 0; i < rows; i++ {
 		if start+i >= len(tv.rows) {
 			lines = append(lines, strings.Repeat(" ", width))
 			continue
 		}
-		lines = append(lines, renderTreeRow(tv.rows[start+i], start+i == ci, width, g, mode))
+		r := tv.rows[start+i]
+		lines = append(lines, renderTreeRow(r, r.Num == tv.cur, start+i == hi, dim, width, g, mode))
 	}
 
-	lines = append(lines, "|08"+strings.Repeat("─", width)+"|07")
+	if hl != 0 {
+		lines = append(lines, renderThreadMenuKeys(width, frame, tabLabel))
+	} else {
+		lines = append(lines, frame+strings.Repeat("─", width)+"|07")
+	}
 	return lines
 }
 
@@ -296,17 +234,26 @@ const minSubjectRoom = 4
 //
 //	► ├─#5 Phosphor… That was it. Font sticks now, but the menus…  10/20/26
 //
-// The current row is drawn on a blue background, in white, with the marker
-// in yellow; the rest use cyan glyphs and number, grey author and date and
-// a dark excerpt. A deleted placeholder shows only "#n deleted".
-func renderTreeRow(r threadRow, current bool, width int, g threadGlyphs, mode ansi.OutputMode) string {
+// The highlighted row is drawn on a blue background, in white; the rest use
+// cyan glyphs and number, grey author and date and a dark excerpt. The
+// message being read (current) carries the marker, in yellow. A deleted
+// placeholder shows only "#n deleted". A dim row (the thread menu is
+// closed) is all dark grey, marker included.
+func renderTreeRow(r threadRow, current, highlight, dim bool, width int, g threadGlyphs, mode ansi.OutputMode) string {
 	prefix := treePrefix(r)
 	var b strings.Builder
 	used := 0
+	marker := " "
 	if current {
-		b.WriteString("\x1b[44m|14" + g.marker + " |11")
-	} else {
-		b.WriteString("|07  |03")
+		marker = g.marker
+	}
+	switch {
+	case highlight:
+		b.WriteString("\x1b[44m|14" + marker + " |11")
+	case dim:
+		b.WriteString("|08" + marker + " ")
+	default:
+		b.WriteString("|14" + marker + " |03")
 	}
 	used += 2
 	b.WriteString(prefix)
@@ -323,8 +270,11 @@ func renderTreeRow(r threadRow, current bool, width int, g threadGlyphs, mode an
 
 	num := fmt.Sprintf("#%d ", r.Num)
 	numColour, authorColour, textColour, dateColour := "|11", "|07", "|08", "|07"
-	if current {
+	switch {
+	case highlight:
 		numColour, authorColour, textColour, dateColour = "|15", "|15", "|15", "|15"
+	case dim:
+		numColour, authorColour, textColour, dateColour = "|08", "|08", "|08", "|08"
 	}
 	b.WriteString(numColour + num)
 	used += len(num)

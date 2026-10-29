@@ -73,7 +73,7 @@ func TestTwitReaderQuickAddAndNavigation(t *testing.T) {
 	}
 }
 
-// TestTwitListsPrivateMailAndThreads checks lists, private mail and thread filtering.
+// TestTwitListsPrivateMailAndThreads checks lists and private mail filtering.
 func TestTwitListsPrivateMailAndThreads(t *testing.T) {
 	env := newMsgEnv(t)
 	env.caller.TwitList = []user.TwitEntry{{Name: "Remote"}}
@@ -83,14 +83,6 @@ func TestTwitListsPrivateMailAndThreads(t *testing.T) {
 	entries, _, err := buildMessageList(env.e.MessageMgr, generalAreaID, "Caller", filter)
 	if err != nil || len(entries) != 2 {
 		t.Fatalf("list=%+v err=%v", entries, err)
-	}
-	n, found := forwardBackThread(env.e, generalAreaID, 1, 3, "Thread", true, filter)
-	if !found || n != 3 {
-		t.Fatalf("forward thread=%d,%v", n, found)
-	}
-	n, found = forwardBackThread(env.e, generalAreaID, 3, 3, "Thread", false, filter)
-	if !found || n != 1 {
-		t.Fatalf("back thread=%d,%v", n, found)
 	}
 	env.postMsgs(privmailAreaID, testMsg{from: "Remote", to: "Caller", subject: "hidden-mail", private: true}, testMsg{from: "Other", to: "Caller", subject: "visible-mail", private: true})
 	for _, cmd := range []string{"READPRIVMAIL", "LISTPRIVMAIL"} {

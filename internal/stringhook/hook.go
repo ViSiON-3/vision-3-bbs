@@ -229,11 +229,6 @@ var NoHookKeys = map[string]bool{
 	"msgListHelpFlat":           true,
 	"msgListHelpThreaded":       true,
 	"msgListThreadedTitle":      true,
-	"msgThreadNoMoreSiblings":   true, // formatted before showReaderNotice prints it
-	"msgThreadNoParent":         true,
-	"msgThreadNoReplies":        true,
-	"msgThreadNoSiblingRoot":    true,
-	"msgThreadParentDeleted":    true,
 	"pageMessageFormat":         true,
 	"sysopChatHeader":           true,
 	"timeLimitWarning":          true,

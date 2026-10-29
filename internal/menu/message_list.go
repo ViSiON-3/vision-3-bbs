@@ -244,7 +244,7 @@ func runListMsgsWith(c *cmdCtx, args string, msgFilter msgOwnershipFilter, opts 
 
 			matcher = twitMatcher(e, userManager, currentUser)
 			// Rebuild list to pick up posted/deleted messages and updated
-			// lastread markers, in the mode the reader's V or L asked for,
+			// lastread markers, in the mode the list was in,
 			// with the cursor on the message that was being read.
 			rebuild(sessionListThreaded(s), lastMsg)
 

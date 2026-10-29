@@ -266,35 +266,6 @@ func TestMessageReaderJump(t *testing.T) {
 	}
 }
 
-// TestMessageReaderThread checks T forward finds the next message in the
-// thread (skipping unrelated subjects), T backward finds the earlier one,
-// and a direction with no match says so.
-func TestMessageReaderThread(t *testing.T) {
-	env := newMsgEnv(t)
-	env.postMsgs(generalAreaID,
-		testMsg{from: "Sysop", to: "All", subject: "cats"},
-		testMsg{from: "Sysop", to: "All", subject: "dogs"},
-		testMsg{from: "Caller", to: "Sysop", subject: "Re: cats"},
-	)
-
-	// Read from 1: thread forward lands on 3 ("Re: cats"), thread forward
-	// again finds nothing, thread back returns to 1.
-	r := env.runCmd("READMSGS", env.caller, "", "TFTFTBQ")
-	txt := r.text()
-	if strings.Contains(txt, "\"dogs\"") {
-		t.Errorf("thread search stopped on an unrelated subject; output:\n%s", txt)
-	}
-	if !r.has("\"Re: cats\"") {
-		t.Errorf("thread forward did not reach the reply; output:\n%s", txt)
-	}
-	if !r.has("No forward thread found!") {
-		t.Errorf("thread forward past the last reply should say so; output:\n%s", txt)
-	}
-	if n := strings.Count(txt, "\"cats\""); n < 2 {
-		t.Errorf("thread back should redisplay the original (shown %d times)", n)
-	}
-}
-
 // TestMessageReaderReplyPostsThreadedReply replies to a message through the
 // editor: the reply lands in the same base addressed to the author, with a
 // "Re:" subject, the typed body, a link to its parent, and the caller's post
@@ -429,7 +400,7 @@ func TestMessageReaderHelpMailAndEsc(t *testing.T) {
 	env.generalMsgs(1)
 
 	r := env.runCmd("READMSGS", env.caller, "", "?M\x1b")
-	if !r.has("Message Reader Help", "Thread Search") {
+	if !r.has("Message Reader Help", "Thread Menu") {
 		t.Errorf("? did not show help; output:\n%s", r.text())
 	}
 	if r.has("elete Message") {

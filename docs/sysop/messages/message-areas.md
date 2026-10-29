@@ -359,43 +359,47 @@ hot key:
 | `S` | Prev | Previous message |
 | `R` | Reply | Reply in the same area |
 | `M` | Mail | Reply by private mail to the author |
-| `T` | Thread | Thread search |
+| `T` / Tab | Thread | Move focus to the thread menu, or back to the message (see below). Greyed out on the bar, and does nothing, when the message has no thread to show or the screen has no room for the pane |
 | `P` | Post | Post a new message |
 | `J` / `#` | Jump | Go to a message number |
-| `B` | Back | The message this one answers (not on the bar) |
-| `F` | First reply | The first reply to this message (not on the bar) |
-| `A` | Across | The next reply to the same message (not on the bar) |
-| `]` / `[` | Thread next / previous | Walk the thread in display order (not on the bar) |
 | `L` | List | List message titles, cursor on this message (flat or threaded, as the caller last had it) |
-| `V` | Thread tree | Open or close the thread pane under the header (not on the bar; the `[V]tree` signpost names it) |
 | `I` | Twit | Add the author to your Twit List (hidden while Twit Lists are off) |
 | `D` | Del | Delete the message (sysop and co-sysop only; shown in red) |
 | `K` | Kludges | Show the message's control information (sysop and co-sysop only; not on the bar) |
 | `?` | Help | List the commands |
 | `Q` | Quit | Leave the reader |
 
-**Reply threads (B, F, A, `]`, `[`).** These follow the reply links a
-message carries (the JAM `ReplyTo`, or the `REPLY` kludge of echomail), not
-its subject, so they walk the actual conversation. `T` is still the
-subject search. When the message is part of a thread, the separator row
-above the bar is a set of signposts that say where `B`, `F` and `A` lead
-from the current message, with the author's handle (`none` when there is
-nowhere to go, `#n deleted` when the parent has been deleted), and a pane
-under the header draws the thread as a tree, five rows (three on a short
-screen) windowed around the current message, with the root's subject in its
-title and the message's place in the thread (no pane when every other
-message in it is deleted or hidden from the caller). `V` closes and reopens the
-pane; the choice holds for the rest of the call, and the caller's **Thread
-View** setting in User Konfig decides whether it starts open. A message
-that is not in a thread (one nobody has answered and that answers nothing)
-shows no pane and no signposts, just the plain rule, and the thread keys
-do nothing there. Mail the caller may not read (another user's private
-message, a post from an author on their Twit List) is never shown or counted
-in any of this; a reply to such a message hangs from the nearest message the
-caller can see, and `B` on it says only that the message it answers is not
-available. Each key shows a short notice on the bar row when there is
-nowhere to go; the notices are the `msgThread*` strings. The direct-reply
-count is available to header templates as `@H@`.
+**Reply threads (T).** The thread follows the reply links a message
+carries (the JAM `ReplyTo`, or the `REPLY` kludge of echomail), not its
+subject, so it shows the actual conversation. When the message is part of
+a thread, a pane under the header draws it as a tree, up to five rows
+(three on a short screen; a shorter thread takes only the rows it fills)
+windowed around the current message, which carries the `►` marker, with
+the root's subject in its title and the message's place in the thread.
+
+Tab or `T` (Thread on the bar) moves focus to the **thread menu**. Its frame
+turns bright cyan, its closing row lists its keys, a blue bar marks the
+message being read, and the reader's bar below is greyed out while the menu
+has the arrows. ↑/↓, Home and End move through the thread, stepping over
+`#n deleted` placeholders, and each move shows that message straight away,
+with focus left on the menu. Tab (or Enter, `T` or Esc) gives focus back to
+the message, where the arrows scroll the body again. The key row names what
+Tab does from there: `[Tab] Close` when the pane goes away with the menu
+(Thread View off), `[Tab] Message View` when it stays. While Tab would open
+the menu, the row above the reader's bar reads `[Tab] Thread View`. Any other reader
+command works as usual and closes the menu. While the menu is closed, the
+whole pane is drawn in dark grey with no bar (the message being read keeps
+its `►` marker). A blank row separates the pane from the message.
+
+The caller's **Thread View** setting in User Konfig decides whether the
+pane shows (not as a menu) while the menu is closed; with it off, the pane
+appears only while the menu is open. A message with no thread to show (one
+nobody has answered and that answers nothing, or whose every other message
+is deleted or hidden from the caller) has no pane, and Thread is greyed out
+on the bar. Mail the caller may not read (another user's private message, a
+post from an author on their Twit List) is never shown or counted in any of
+this; a reply to such a message hangs from the nearest message the caller
+can see. The direct-reply count is available to header templates as `@H@`.
 
 **Listing from the reader (L).** `L` opens the message list, flat or
 threaded as the caller last had it (`T` in the list switches), with the
@@ -410,9 +414,10 @@ with the cursor on the message that was being read.
 
 The `LISTMSGS` function lists the current area, newest first, in a framed
 lightbar list: arrows, PgUp/PgDn, Home and End move the cursor, Enter reads
-the message and `Q` or Esc leaves. `T` switches between the flat list and
-the **threaded list**, keeping the cursor on the same message; the choice
-holds for the rest of the call, and the reader's `L` opens in it.
+the message and `Q` or Esc leaves. The list opens as the **threaded
+list**; `T` switches between it and the flat list, keeping the cursor on
+the same message. The choice holds for the rest of the call, and the
+reader's `L` opens in it.
 
 The threaded list shows each thread as a tree, newest root first, replies
 in the order the reader's `]` walks them. The `Thread` column holds the
