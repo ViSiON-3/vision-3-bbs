@@ -295,6 +295,32 @@ func TestWriteStringScript(t *testing.T) {
 		}
 	})
 
+	// A second script run before any handler is started gets the keys the
+	// first left, ahead of the session's newer input.
+	t.Run("hands keys typed ahead to the next script", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		f.s.whenOutput("[script", func() { f.s.send("xyz") })
+
+		if out := f.write(t, "!say key"); !strings.Contains(out, "[got x]") {
+			t.Fatalf("first script did not read its key; output = %q", out)
+		}
+		if out := f.write(t, "!say key"); !strings.Contains(out, "[got y]") {
+			t.Fatalf("second script did not read the kept key; output = %q", out)
+		}
+		f.s.send("w")
+		ih := getSessionIH(f.s)
+		defer resetSessionIH(f.s)
+		stop := make(chan struct{})
+		timer := time.AfterFunc(time.Second, func() { close(stop) })
+		defer timer.Stop()
+		for _, want := range []byte("zw") {
+			b, err := ih.ReadByteUntil(stop)
+			if err != nil || b != want {
+				t.Fatalf("next prompt read %q, %v; want %q", b, err, want)
+			}
+		}
+	})
+
 	// The caller of a prompt often holds the session's InputHandler across
 	// the prompt. A script run in its place must read through that handler
 	// and leave it open; closing it would hand the caller end-of-file.

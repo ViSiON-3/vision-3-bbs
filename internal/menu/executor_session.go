@@ -262,8 +262,20 @@ var sessionTypeAhead sync.Map
 
 // stashTypeAhead keeps p, keys the caller typed while a script ran with the
 // session's InputHandler stopped, for the next handler getSessionIH creates.
-// It appends to any keys already kept.
+// It appends to any keys already kept. When the script ran on a
+// typeAheadSession, the kept keys it never got to read follow p.
 func stashTypeAhead(s ssh.Session, p []byte) {
+	for cur := s; ; {
+		if t, ok := cur.(*typeAheadSession); ok {
+			p = append(append([]byte(nil), p...), t.takeUnread()...)
+			break
+		}
+		u, ok := cur.(interface{ Unwrap() ssh.Session })
+		if !ok {
+			break
+		}
+		cur = u.Unwrap()
+	}
 	if len(p) == 0 {
 		return
 	}
