@@ -132,6 +132,14 @@ func TestChatPrivate_UsesSenderHandle(t *testing.T) {
 	}
 }
 
+// freezeUserLimit swaps in a per-user chat limiter that never refills during
+// a test, so a back-to-back request is refused however slow the runner is.
+func freezeUserLimit(t *testing.T, h *Hub) {
+	t.Helper()
+	h.chatLimiter.Stop()
+	h.chatLimiter = newRateLimiter(time.Hour)
+}
+
 // freezeNodeLimit swaps in a node-wide chat limiter with the usual burst but
 // an hour-long refill, so a test sees the burst run out however slowly the
 // machine sends its requests.

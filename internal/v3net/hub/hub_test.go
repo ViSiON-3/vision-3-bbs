@@ -520,6 +520,7 @@ func TestPresence_InvalidType(t *testing.T) {
 
 func TestChat_RateLimited(t *testing.T) {
 	h, _ := setupTestHub(t)
+	freezeUserLimit(t, h)
 	ts := httptest.NewServer(h.newMux())
 	defer ts.Close()
 
