@@ -286,7 +286,7 @@ func TestRenderThreadMenuKeys(t *testing.T) {
 		}
 	}
 	hint := testAnsiEscape.ReplaceAllString(string(ansi.ReplacePipeCodes([]byte(renderThreadViewHint(79)))), "")
-	if !strings.HasPrefix(hint, "────[Tab] Thread View ──") || utf8.RuneCountInString(hint) != 79 {
+	if !strings.HasPrefix(hint, "─[Tab] Thread View ──") || utf8.RuneCountInString(hint) != 79 {
 		t.Errorf("hint = %q", hint)
 	}
 }
@@ -463,7 +463,7 @@ func TestMessageReaderThreadPaneLayout(t *testing.T) {
 			}
 		}
 	}
-	if sep := screen.Row(23); !strings.HasPrefix(sep, "────[Tab] Thread View ──") {
+	if sep := screen.Row(23); !strings.HasPrefix(sep, "─[Tab] Thread View ──") {
 		t.Errorf("separator = %q, want the Tab hint", sep)
 	}
 	if !strings.Contains(screen.Row(24), "Next") {
@@ -698,7 +698,7 @@ func TestMessageReaderThreadMenuWithViewClosed(t *testing.T) {
 	}
 	// With the pane hidden, the separator still names Tab.
 	screen = env.screenRun("READMSGS", &caller, "5\rQ")
-	if sep := screen.Row(23); !strings.HasPrefix(sep, "────[Tab] Thread View ──") {
+	if sep := screen.Row(23); !strings.HasPrefix(sep, "─[Tab] Thread View ──") {
 		t.Errorf("separator = %q, want the Tab hint", sep)
 	}
 }

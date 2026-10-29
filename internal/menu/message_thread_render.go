@@ -165,7 +165,7 @@ func renderThreadMenuKeys(width int, frame, tabLabel string, g threadGlyphs) str
 // renderThreadViewHint builds the separator row above the reader's bar
 // while Tab can open the thread menu.
 func renderThreadViewHint(width int) string {
-	return renderKeyRow(width, 3, "|08", []threadKey{{"Tab", "Thread View"}})
+	return renderKeyRow(width, 0, "|08", []threadKey{{"Tab", "Thread View"}})
 }
 
 // renderThreadPane draws the docked thread pane for tv: a title row, rows
