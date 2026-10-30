@@ -316,6 +316,10 @@ func (c *Conn) flushReplies() error {
 // within one write: a terminal that sends CR and LF separately has the CR
 // padded before the LF arrives, which a server reads as the line end it is
 // followed by a stray LF.
+//
+// The count returned is of p's bytes. When the socket write fails part way,
+// it is the bytes of p whose whole escaped form went out, so a caller can
+// keep the rest: the BBS gives the keys a door never got to the next prompt.
 func (c *Conn) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
@@ -325,23 +329,48 @@ func (c *Conn) Write(p []byte) (int, error) {
 	out := make([]byte, 0, len(p)+8)
 	for i, b := range p {
 		out = append(out, b)
-		switch {
-		case b == iac:
-			out = append(out, iac)
-		case b == '\r' && !binary:
-			if i+1 < len(p) && (p[i+1] == '\n' || p[i+1] == 0) {
-				continue
-			}
-			out = append(out, 0)
+		if e, ok := escapeAfter(p, i, binary); ok {
+			out = append(out, e)
 		}
 	}
 
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
-	if _, err := c.Conn.Write(out); err != nil {
-		// How much of p the bytes that did go out amount to is not worth
-		// working back from the escaped form; the connection is finished.
-		return 0, err
+	if n, err := c.Conn.Write(out); err != nil {
+		return inputSent(p, binary, n), err
 	}
 	return len(p), nil
+}
+
+// escapeAfter returns the byte Write sends after p[i], if any: a second IAC
+// after an IAC, and outside binary mode a NUL after a CR not already
+// followed by LF or NUL.
+func escapeAfter(p []byte, i int, binary bool) (byte, bool) {
+	switch {
+	case p[i] == iac:
+		return iac, true
+	case p[i] == '\r' && !binary:
+		if i+1 < len(p) && (p[i+1] == '\n' || p[i+1] == 0) {
+			return 0, false
+		}
+		return 0, true
+	}
+	return 0, false
+}
+
+// inputSent returns how many bytes of p went out whole when Write sent
+// wrote bytes of its escaped form. A byte whose escape did not go out
+// counts as not sent.
+func inputSent(p []byte, binary bool, wrote int) int {
+	end := 0
+	for i := range p {
+		end++
+		if _, ok := escapeAfter(p, i, binary); ok {
+			end++
+		}
+		if end > wrote {
+			return i
+		}
+	}
+	return len(p)
 }

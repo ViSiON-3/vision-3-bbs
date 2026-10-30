@@ -3,6 +3,7 @@ package telnetclient
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"testing"
@@ -303,6 +304,57 @@ func TestWriteEscapesCallerInput(t *testing.T) {
 				t.Errorf("server received %q, want %q", got, tc.want)
 			}
 			expectQuiet(t, server)
+		})
+	}
+}
+
+// shortConn is a socket that takes n bytes and then fails.
+type shortConn struct {
+	net.Conn
+	n   int
+	got bytes.Buffer
+}
+
+var errSocketGone = errors.New("socket gone")
+
+func (c *shortConn) Write(p []byte) (int, error) {
+	n := min(c.n, len(p))
+	c.got.Write(p[:n])
+	c.n -= n
+	if n < len(p) {
+		return n, errSocketGone
+	}
+	return n, nil
+}
+
+// A socket write that fails part way reports the caller's bytes that went
+// out whole, so the BBS can keep the rest for its next prompt.
+func TestWriteReportsInputSentBeforeAFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		input  string
+		wire   int // bytes the socket takes
+		binary bool
+		want   int
+	}{
+		{"nothing sent", "abc", 0, false, 0},
+		{"plain", "abc", 2, false, 2},
+		{"IAC sent whole", "a\xffb", 3, false, 2},
+		{"IAC without its escape", "a\xffb", 2, false, 1},
+		{"CR sent with its pad", "a\rb", 3, false, 2},
+		{"CR without its pad", "a\rb", 2, false, 1},
+		{"CR LF is not padded", "a\r\nb", 3, false, 3},
+		{"binary CR is not padded", "a\rb", 2, true, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sock := &shortConn{n: tc.wire}
+			c := &Conn{Conn: sock}
+			c.binaryTX.Store(tc.binary)
+			n, err := c.Write([]byte(tc.input))
+			if !errors.Is(err, errSocketGone) || n != tc.want {
+				t.Errorf("Write(%q) with %d bytes taken = %d, %v; want %d, %v",
+					tc.input, tc.wire, n, err, tc.want, errSocketGone)
+			}
 		})
 	}
 }

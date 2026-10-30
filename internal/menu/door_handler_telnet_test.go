@@ -2,6 +2,7 @@ package menu
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net"
 	"strings"
@@ -103,7 +104,7 @@ func awaitDone(t *testing.T, done <-chan error, what string) {
 func TestExecuteTelnetDoorNegotiatesAndRelays(t *testing.T) {
 	ds := newTelnetDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{
 		Type: "telnet", Host: host, Port: port, TerminalType: "ANSI-BBS",
@@ -159,7 +160,7 @@ func TestExecuteTelnetDoorNegotiatesAndRelays(t *testing.T) {
 func TestExecuteTelnetDoorSendsOnConnect(t *testing.T) {
 	ds := newTelnetDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{
 		Type: "telnet", Host: host, Port: port,
@@ -181,7 +182,7 @@ func TestExecuteTelnetDoorSendsOnConnect(t *testing.T) {
 func TestExecuteTelnetDoorRawTCP(t *testing.T) {
 	ds := newTelnetDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{
 		Type: "telnet", Host: host, Port: port, RawTCP: true,
@@ -208,7 +209,7 @@ func TestExecuteTelnetDoorRawTCP(t *testing.T) {
 func TestExecuteTelnetDoorDisconnectKeyEndsSession(t *testing.T) {
 	ds := newTelnetDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "telnet", Host: host, Port: port})
 
@@ -223,7 +224,7 @@ func TestExecuteTelnetDoorDisconnectKeyEndsSession(t *testing.T) {
 func TestTelnetDoorDispatches(t *testing.T) {
 	ds := newTelnetDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "telnet", Host: host, Port: port})
 
@@ -236,7 +237,7 @@ func TestTelnetDoorDispatches(t *testing.T) {
 }
 
 func TestExecuteTelnetDoorRequiresHost(t *testing.T) {
-	ctx := newRLoginDoorCtx(t, newRelaySession(), config.DoorConfig{Type: "telnet", Host: "  "})
+	ctx := newRLoginDoorCtx(t, newRelaySession(t), config.DoorConfig{Type: "telnet", Host: "  "})
 	err := executeTelnetDoor(ctx)
 	if err == nil || !strings.Contains(err.Error(), "no host") {
 		t.Errorf("executeTelnetDoor = %v, want a missing-host error", err)
@@ -244,7 +245,7 @@ func TestExecuteTelnetDoorRequiresHost(t *testing.T) {
 }
 
 func TestExecuteTelnetDoorRejectsBadDisconnectKey(t *testing.T) {
-	ctx := newRLoginDoorCtx(t, newRelaySession(), config.DoorConfig{
+	ctx := newRLoginDoorCtx(t, newRelaySession(t), config.DoorConfig{
 		Type: "telnet", Host: "127.0.0.1", DisconnectKey: "ctrl-]",
 	})
 	if err := executeTelnetDoor(ctx); err == nil {
@@ -260,7 +261,7 @@ func TestExecuteTelnetDoorReportsConnectFailure(t *testing.T) {
 	host, port := (&doorServer{ln: ln}).hostPort(t)
 	_ = ln.Close() // nothing is listening there now
 
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{
 		Type: "telnet", Host: host, Port: port, ConnectTimeout: 2,
 	})
@@ -276,7 +277,7 @@ func TestExecuteTelnetDoorReportsConnectFailure(t *testing.T) {
 func TestExecuteTelnetDoorRefusesWhenTimeExhausted(t *testing.T) {
 	ds := newTelnetDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "telnet", Host: host, Port: port})
 	ctx.User.TimeLimit = 30
@@ -335,5 +336,31 @@ func TestRemoteDoorDefaultTimeoutMatchesTheDialers(t *testing.T) {
 	}
 	if telnetclient.DefaultTimeout != remoteDoorDefaultTimeout {
 		t.Errorf("telnet default %v, remote door default %v", telnetclient.DefaultTimeout, remoteDoorDefaultTimeout)
+	}
+}
+
+// shortSocket is a door server connection that takes n bytes and then fails.
+type shortSocket struct {
+	net.Conn
+	n int
+}
+
+func (c *shortSocket) Write(p []byte) (int, error) {
+	n := min(c.n, len(p))
+	c.n -= n
+	if n < len(p) {
+		return n, errDoorGone
+	}
+	return n, nil
+}
+
+// A telnet write that fails part way keeps only the keys whose escaped form
+// did not go out, so the next prompt does not get keys the door already had.
+func TestCopyToRemoteKeepsWhatTelnetDidNotSend(t *testing.T) {
+	// "ab\r" goes out as a, b, CR, NUL; the socket takes those four.
+	conn := telnetclient.NewConn(&shortSocket{n: 4}, telnetclient.Options{})
+	left, err := copyToRemote(conn, strings.NewReader("ab\rcd"), nil, 0x1D, true, false)
+	if !errors.Is(err, errDoorGone) || string(left.unread) != "cd" {
+		t.Errorf("copyToRemote = %q, %v; want %q, %v", left.unread, err, "cd", errDoorGone)
 	}
 }
