@@ -9,6 +9,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -210,7 +212,106 @@ func V3NetConfigFile(configPath string) configmerge.File[V3NetConfig] {
 		// leaves added or removed elsewhere, and keys the BBS pins, merge
 		// leaf by leaf with the saving side's edits.
 		ListKeys: map[string][]string{"leaves": {"network", "hubUrl"}},
+		Prepare:  settleV3NetHubMoves,
 	}
+}
+
+// v3netLeafKey identifies a leaf the way the merge does.
+type v3netLeafKey struct{ network, hubURL string }
+
+// settleV3NetHubMoves lets a leaf moved to a new hub on one side replace the
+// old leaf even if the other side meanwhile touched only the old leaf's key
+// state. Matched on network and hub URL, changing a hub URL reads as removing
+// one leaf and adding another, so a key the BBS pinned on the old leaf
+// meanwhile would read as "removed here, edited elsewhere": the old leaf
+// would be kept and the network listed twice. Pins for the old hub do not
+// apply to the new one, so for a network where one side removed a leaf and
+// added another, the other side's version of the removed leaf is taken back
+// to base when only its key state differs, and the leaf goes. An edit to any
+// other field of it is still kept and reported, as is a plain removal.
+func settleV3NetHubMoves(base, ours, theirs V3NetConfig) (V3NetConfig, V3NetConfig) {
+	theirs.Leaves = settleV3NetLeaves(base.Leaves, ours.Leaves, theirs.Leaves)
+	ours.Leaves = settleV3NetLeaves(base.Leaves, theirs.Leaves, ours.Leaves)
+	return ours, theirs
+}
+
+// settleV3NetLeaves returns other with each leaf that mover moved to a new
+// hub, and that other changed only in its key state, put back as it was in
+// base. other itself is not modified.
+func settleV3NetLeaves(base, mover, other []V3NetLeafConfig) []V3NetLeafConfig {
+	index := func(leaves []V3NetLeafConfig) map[v3netLeafKey]V3NetLeafConfig {
+		m := make(map[v3netLeafKey]V3NetLeafConfig, len(leaves))
+		for _, l := range leaves {
+			m[v3netLeafKey{l.Network, l.HubURL}] = l
+		}
+		return m
+	}
+	baseLeaves, moverLeaves := index(base), index(mover)
+	removed, added := make(map[string]bool), make(map[string]bool)
+	for k := range baseLeaves {
+		if _, ok := moverLeaves[k]; !ok {
+			removed[k.network] = true
+		}
+	}
+	for k := range moverLeaves {
+		if _, ok := baseLeaves[k]; !ok {
+			added[k.network] = true
+		}
+	}
+
+	var out []V3NetLeafConfig
+	for i, l := range other {
+		k := v3netLeafKey{l.Network, l.HubURL}
+		b, inBase := baseLeaves[k]
+		_, kept := moverLeaves[k]
+		if !inBase || kept || !removed[l.Network] || !added[l.Network] ||
+			!sameV3NetLeafApartFromKeys(l, b) {
+			continue
+		}
+		if out == nil {
+			out = slices.Clone(other)
+		}
+		out[i] = b
+	}
+	if out == nil {
+		return other
+	}
+	return out
+}
+
+// v3netLeafHubState lists, by JSON name, the leaf fields that record what
+// the leaf learned from or about its hub: pinned and pending keys, and any
+// flag of that kind added later. None of it applies to another hub, so an
+// edit elsewhere to these fields alone does not keep a leaf whose hub URL
+// was changed (settleV3NetHubMoves). Per-hub trust state the BBS writes
+// into a leaf belongs here.
+var v3netLeafHubState = []string{
+	"coordinatorPubKey",
+	"hubPubKey",
+	"pendingCoordinatorPubKey",
+	"pendingHubPubKey",
+}
+
+// sameV3NetLeafApartFromKeys reports whether a and b differ at most in
+// v3netLeafHubState.
+func sameV3NetLeafApartFromKeys(a, b V3NetLeafConfig) bool {
+	strip := func(l V3NetLeafConfig) (map[string]any, error) {
+		data, err := json.Marshal(l)
+		if err != nil {
+			return nil, err
+		}
+		var m map[string]any
+		if err := json.Unmarshal(data, &m); err != nil {
+			return nil, err
+		}
+		for _, k := range v3netLeafHubState {
+			delete(m, k)
+		}
+		return m, nil
+	}
+	ma, err1 := strip(a)
+	mb, err2 := strip(b)
+	return err1 == nil && err2 == nil && reflect.DeepEqual(ma, mb)
 }
 
 // SaveV3NetConfig writes cfg to v3net.json under the file's cross-process

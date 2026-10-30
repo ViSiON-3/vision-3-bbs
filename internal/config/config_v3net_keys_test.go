@@ -1,6 +1,7 @@
 package config
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -150,5 +151,132 @@ func TestV3NetSaveKeepsLeavesChangedMeanwhile(t *testing.T) {
 	}
 	if b := got.Leaves[0].Boards; len(b) != 2 || b[1] != "A2" {
 		t.Errorf("neta boards = %v, want the editor's", b)
+	}
+}
+
+// saveV3NetHubRace writes base, applies disk as a change made elsewhere,
+// then saves ours against base as the config editor does, and returns the
+// leaves on disk and the conflicts reported.
+func saveV3NetHubRace(t *testing.T, base V3NetConfig, disk func(*V3NetConfig), edit func(*V3NetConfig)) ([]V3NetLeafConfig, []configmerge.Conflict) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := SaveV3NetConfig(dir, base); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpdateV3NetConfig(dir, func(c *V3NetConfig) error { disk(c); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	ours, err := configmerge.Clone(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit(&ours)
+	_, res, err := configmerge.SaveFile(V3NetConfigFile(dir), base, ours)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadV3NetConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got.Leaves, res.Conflicts
+}
+
+func hubMoveBase() V3NetConfig {
+	return V3NetConfig{Leaves: []V3NetLeafConfig{
+		{HubURL: "https://old.example", Network: "neta", Boards: []string{"A"}, CoordinatorPubKey: "C"},
+		{HubURL: "https://b.example", Network: "netb", Boards: []string{"B"}},
+	}}
+}
+
+// moveHub changes neta's hub URL as the leaf edit form does, clearing the
+// hub key pinned for the old hub.
+func moveHub(c *V3NetConfig) {
+	c.Leaves[0].HubURL = "https://new.example"
+	c.Leaves[0].HubPubKey = ""
+}
+
+// The editor changes a leaf's hub URL while the BBS pins a key on the old
+// leaf: the old leaf goes, without a conflict, rather than listing the
+// network twice (#765).
+func TestV3NetSaveHubURLChangeBeatsKeyPin(t *testing.T) {
+	leaves, conflicts := saveV3NetHubRace(t, hubMoveBase(), func(c *V3NetConfig) {
+		c.Leaves[0].HubPubKey = "pinned-old"
+		c.Leaves[0].PendingCoordinatorPubKey = "offered-old"
+	}, moveHub)
+	if len(conflicts) != 0 {
+		t.Errorf("conflicts = %+v", conflicts)
+	}
+	if len(leaves) != 2 || leaves[0].HubURL != "https://new.example" || leaves[1].Network != "netb" {
+		t.Fatalf("leaves = %+v, want neta at the new hub and netb", leaves)
+	}
+	if l := leaves[0]; l.HubPubKey != "" || l.PendingCoordinatorPubKey != "" || l.CoordinatorPubKey != "C" {
+		t.Errorf("neta = %+v; the old hub's pins must not carry over", l)
+	}
+}
+
+// An edit elsewhere to anything but the old leaf's keys is not the BBS
+// pinning a key, so it is kept and reported as before.
+func TestV3NetSaveHubURLChangeKeepsOtherEdits(t *testing.T) {
+	leaves, conflicts := saveV3NetHubRace(t, hubMoveBase(), func(c *V3NetConfig) {
+		c.Leaves[0].HubPubKey = "pinned-old"
+		c.Leaves[0].Boards = []string{"A", "A2"}
+	}, moveHub)
+	if len(conflicts) != 1 {
+		t.Errorf("conflicts = %+v, want one for the old leaf", conflicts)
+	}
+	if len(leaves) != 3 {
+		t.Errorf("leaves = %+v, want the edited old leaf kept beside the new one", leaves)
+	}
+}
+
+// Removing a leaf without adding another for its network is not a hub
+// change: a key pinned on it meanwhile keeps it, reported, as before.
+func TestV3NetSaveRemovedLeafKeepsKeyPin(t *testing.T) {
+	leaves, conflicts := saveV3NetHubRace(t, hubMoveBase(), func(c *V3NetConfig) {
+		c.Leaves[0].HubPubKey = "pinned-old"
+	}, func(c *V3NetConfig) {
+		c.Leaves = c.Leaves[1:]
+	})
+	if len(conflicts) != 1 {
+		t.Errorf("conflicts = %+v, want one for the removed leaf", conflicts)
+	}
+	if len(leaves) != 2 || leaves[1].HubPubKey != "pinned-old" {
+		t.Errorf("leaves = %+v, want the pinned leaf kept", leaves)
+	}
+}
+
+// A misspelt name in v3netLeafHubState would silently stop that field
+// counting as hub state.
+func TestV3NetLeafHubStateNamesFields(t *testing.T) {
+	tags := make(map[string]bool)
+	rt := reflect.TypeOf(V3NetLeafConfig{})
+	for i := 0; i < rt.NumField(); i++ {
+		name, _, _ := strings.Cut(rt.Field(i).Tag.Get("json"), ",")
+		tags[name] = true
+	}
+	for _, k := range v3netLeafHubState {
+		if !tags[k] {
+			t.Errorf("v3netLeafHubState names %q, which is not a V3NetLeafConfig field", k)
+		}
+	}
+}
+
+// The reverse: another editor session moved the leaf to a new hub while
+// this one changed only the old leaf's keys. The move wins the same way;
+// an edit to another field of the old leaf is kept and reported.
+func TestV3NetSaveHubURLChangedElsewhere(t *testing.T) {
+	leaves, conflicts := saveV3NetHubRace(t, hubMoveBase(), moveHub, func(c *V3NetConfig) {
+		c.Leaves[0].CoordinatorPubKey = "accepted"
+	})
+	if len(conflicts) != 0 || len(leaves) != 2 || leaves[0].HubURL != "https://new.example" {
+		t.Errorf("leaves = %+v, conflicts = %+v; want only the moved leaf", leaves, conflicts)
+	}
+
+	leaves, conflicts = saveV3NetHubRace(t, hubMoveBase(), moveHub, func(c *V3NetConfig) {
+		c.Leaves[0].PollInterval = "10m"
+	})
+	if len(conflicts) != 1 || len(leaves) != 3 {
+		t.Errorf("leaves = %+v, conflicts = %+v; want the edited old leaf kept and reported", leaves, conflicts)
 	}
 }
