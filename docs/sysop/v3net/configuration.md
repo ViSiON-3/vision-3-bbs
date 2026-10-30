@@ -462,11 +462,20 @@ could not record that the hub signs; will retry at the next reply`), it
 still refuses unsigned replies while it runs, and the field shows **N**.
 Set **Hub Signs** to **N** anyway and save: the file is unchanged, but the
 save still makes the running BBS re-read `v3net.json` ([once callers log off](v3net/configuration.md#when-changes-to-v3netjson-apply)). If you edit the file
-by hand, saving it (or `touch configs/v3net.json`) does the same. The leaf
-then drops the record and does not write it later unless the hub signs
-again (it logs `leaf: config does not record that the hub signs; dropping
-the record not yet stored`). Any other change saved to `v3net.json` while
-the write is failing drops it too, as a restart would.
+by hand, saving it unchanged (or `touch configs/v3net.json`) does the same.
+The leaf then drops the record and does not write it later unless the hub
+signs again (it logs `leaf: config does not record that the hub signs;
+dropping the record not yet stored`). The BBS knows this was you because the
+file's timestamp moved and its contents did not. It cannot tell which
+subscription you meant, so every subscription holding such a record drops it.
+
+Any other change saved to `v3net.json` while the write is failing leaves the
+record and the retry alone, and the same goes for a key the leaf has pinned
+but could not write yet. So if the save that set **Hub Signs** to **N** also
+changed something else in the file, or another change to it was still waiting
+to be applied, the leaf keeps the record and does not log that line: save
+**Hub Signs** again once the change has been applied, or restart the BBS,
+which starts from what the file holds.
 
 ---
 

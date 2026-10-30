@@ -483,7 +483,7 @@ func TestHubSignedClearCancelsRetry(t *testing.T) {
 
 	rec.fail.Store(false) // a retry now would store it
 	logs := captureLogs(t)
-	l.UpdatePins(ctx, Pins{Hub: hubKS.PubKeyBase64(), HubSigned: false})
+	l.UpdatePins(ctx, Pins{Hub: hubKS.PubKeyBase64(), HubSigned: false, HubSignedEdited: true})
 	if l.HubSigned() {
 		t.Fatal("the sysop's clear did not drop the record not yet stored")
 	}
@@ -556,7 +556,7 @@ func TestReloadKeepsHubSignedSetDuringIt(t *testing.T) {
 		waitFor(t, "the record to be set", l.HubSigned)
 	}
 
-	l.UpdatePins(context.Background(), Pins{Hub: hubKS.PubKeyBase64(), HubSigned: false})
+	l.UpdatePins(context.Background(), Pins{Hub: hubKS.PubKeyBase64(), HubSigned: false, HubSignedEdited: true})
 	<-noted
 	if !l.HubSigned() || !rec.file.Load() || rec.calls.Load() != 1 {
 		t.Errorf("hubSigned=%v file=%v stores=%d; want the record set during the reload kept and stored",
@@ -607,5 +607,37 @@ func TestHubSignedOnlyChangeLog(t *testing.T) {
 		if strings.Contains(out, "pinned keys changed") {
 			t.Errorf("hubSigned=%v: logged as a change of the pinned keys:\n%s", signed, out)
 		}
+	}
+}
+
+// A reload that says nothing about hubSigned, such as a save of something
+// else in the file, leaves a record not yet stored in force and its store
+// retried (#798).
+func TestUnrelatedReloadKeepsUnsavedHubSigned(t *testing.T) {
+	l, _, p, hubKS := proxiedLeaf(t, (*keystore.Keystore).PubKeyBase64)
+	rec := &fileRecorder{}
+	rec.attach(l)
+	rec.fail.Store(true)
+	ctx := context.Background()
+
+	if _, err := l.Poll(ctx); err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+	l.UpdatePins(ctx, Pins{Hub: hubKS.PubKeyBase64(), HubSigned: false})
+	if !l.HubSigned() {
+		t.Fatal("an unrelated reload dropped the record not yet stored")
+	}
+	p.stripSig.Store(true)
+	if _, err := l.Poll(ctx); !errors.Is(err, ErrHubUnsigned) {
+		t.Errorf("Poll with the signature stripped = %v, want ErrHubUnsigned", err)
+	}
+
+	p.stripSig.Store(false)
+	rec.fail.Store(false)
+	if _, err := l.Poll(ctx); err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+	if !rec.file.Load() {
+		t.Error("the store was not retried after the unrelated reload")
 	}
 }

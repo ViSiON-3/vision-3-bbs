@@ -409,3 +409,35 @@ func TestSeedNALKeepsTrustedListAcrossRebuild(t *testing.T) {
 		t.Errorf("LastNAL = %+v, want the seeded gen.good", n)
 	}
 }
+
+// A pin not yet stored survives a reload of a file that does not hold it,
+// and is retried; the sysop editing the file's pin replaces it (#798).
+func TestUnsavedPinOnlyReplacedWhenEdited(t *testing.T) {
+	ks := newCoordKey(t)
+	srv := &nalServer{}
+	srv.set(signedNAL(t, ks, "gen.general"))
+	ts := srv.start(t)
+	l, rec := pinnedLeaf(t, ts, "")
+	rec.failPins = true
+	ctx := context.Background()
+
+	if err := l.refreshNAL(ctx); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	l.UpdatePins(ctx, Pins{})
+	if got := l.PinnedKey(KeyCoordinator); got != ks.PubKeyBase64() {
+		t.Fatalf("pin = %q after an unrelated reload, want the unsaved pin kept", got)
+	}
+	if u := l.UnsavedState(); u.Coord != ks.PubKeyBase64() {
+		t.Fatalf("unsaved %+v, want the pin still waiting to be stored", u)
+	}
+
+	other := newCoordKey(t).PubKeyBase64()
+	l.UpdatePins(ctx, Pins{Coord: other, CoordEdited: true})
+	if got := l.PinnedKey(KeyCoordinator); got != other {
+		t.Errorf("pin = %q after the sysop's edit, want %q", got, other)
+	}
+	if u := l.UnsavedState(); u.Coord != "" {
+		t.Errorf("unsaved %+v, want the old pin gone", u)
+	}
+}
