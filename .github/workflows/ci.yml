@@ -108,13 +108,13 @@ jobs:
               ForEach-Object { '{0}={1}MB' -f $_.ProcessName, [int]($_.WorkingSet64 / 1MB) }
             $cpu = $procs | Sort-Object CPU -Descending | Select-Object -First 5 |
               ForEach-Object { '{0}={1}s' -f $_.ProcessName, [int]$_.CPU }
-            '{0:u} free={1}MB commit_free={2}MB mem: {3} cpu_total: {4}' -f (Get-Date).ToUniversalTime(),
-              [int]($os.FreePhysicalMemory / 1KB), [int]($os.FreeVirtualMemory / 1KB), ($mem -join ' '), ($cpu -join ' ')
+            Add-Content "$env:RUNNER_TEMP/resources.log" ('{0:u} free={1}MB commit_free={2}MB mem: {3} cpu_total: {4}' -f (Get-Date).ToUniversalTime(),
+              [int]($os.FreePhysicalMemory / 1KB), [int]($os.FreeVirtualMemory / 1KB), ($mem -join ' '), ($cpu -join ' '))
             Start-Sleep 30
           }
           '@
           $logger = Start-Process pwsh -PassThru -WindowStyle Hidden `
-            -RedirectStandardOutput "$env:RUNNER_TEMP/resources.log" `
+            -RedirectStandardOutput "$env:RUNNER_TEMP/resources.out" `
             -RedirectStandardError "$env:RUNNER_TEMP/resources.err" `
             -ArgumentList '-NoProfile', '-File', "$env:RUNNER_TEMP/resource-logger.ps1"
           Set-Content "$env:RUNNER_TEMP/resource-logger.pid" $logger.Id
@@ -161,8 +161,10 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
-          Stop-Process -Id (Get-Content "$env:RUNNER_TEMP/resource-logger.pid") -Force -ErrorAction SilentlyContinue
-          Get-Content "$env:RUNNER_TEMP/resources.log", "$env:RUNNER_TEMP/resources.err" -ErrorAction SilentlyContinue
+          $id = Get-Content "$env:RUNNER_TEMP/resource-logger.pid"
+          "logger still running: $([bool](Get-Process -Id $id -ErrorAction SilentlyContinue))"
+          Stop-Process -Id $id -Force -ErrorAction SilentlyContinue
+          Get-Content "$env:RUNNER_TEMP/resources.log", "$env:RUNNER_TEMP/resources.out", "$env:RUNNER_TEMP/resources.err" -ErrorAction SilentlyContinue
 
   # Script-store replacement inspects native ACLs on every released OS.
   # Linux and Windows are covered above; macOS needs its own native run.
