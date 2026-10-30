@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -142,12 +143,17 @@ func TestPrevSignerMigrated(t *testing.T) {
 	if got := postJSON(t, poster, ts.URL+"/v3net/v1/testnet/nal/handover", signHandover(t, "testnet", oldKS, newKS)); got != http.StatusOK {
 		t.Errorf("late handover from the migrated key: status %d, want 200", got)
 	}
-	// Opening a migrated database again changes nothing.
+	// The handover took the record's place: the bridged key's areas moved,
+	// so the record is cleared with them. Opening the migrated database
+	// again changes nothing.
 	_ = h.Close()
 	h = openTestHubAt(t, dir, newKS)
 	defer h.Close()
-	if prev, err := h.nalStore.PrevSigners("testnet"); err != nil || len(prev) != 1 {
-		t.Errorf("previous signers after reopening = %q, %v", prev, err)
+	if prev, err := h.nalStore.PrevSigners("testnet"); err != nil || len(prev) != 0 {
+		t.Errorf("previous signers after the handover = %q, %v; want none", prev, err)
+	}
+	if hs, err := h.nalStore.Handovers("testnet"); err != nil || len(hs) != 1 {
+		t.Errorf("stored handovers after reopening = %d, %v; want 1", len(hs), err)
 	}
 }
 
@@ -294,6 +300,158 @@ func TestLateHandoverChainToUnsignedSwitch(t *testing.T) {
 		if area := served.FindArea(tag); area == nil || area.ManagerNodeID != c.NodeID() {
 			t.Errorf("%s managed by %+v, want C's node", tag, area)
 		}
+	}
+}
+
+// unsignedSwitchHub runs a hub on dir with A, then B (re-signing the NAL,
+// with an area of B's node added), then C without re-signing, so the NAL
+// is still B's and A is a previous signer. It returns the hub running C,
+// closed at cleanup.
+func unsignedSwitchHub(t *testing.T, dir string, a, b, c, poster *keystore.Keystore) *Hub {
+	t.Helper()
+	h, ts := switchedHub(t, dir, poster, a, b)
+	n, err := h.nalStore.Get("testnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n.Areas = append(n.Areas, protocol.Area{Tag: "gen.b", Name: "B", Language: "en",
+		ManagerNodeID: b.NodeID(), ManagerPubKeyB64: b.PubKeyBase64(),
+		Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen}, Policy: protocol.AreaPolicy{MaxBodyBytes: 65536}})
+	if err := h.SignNAL(n); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.nalStore.Put("testnet", n); err != nil {
+		t.Fatal(err)
+	}
+	ts.Close()
+	_ = h.Close()
+	h = openTestHubAt(t, dir, c)
+	t.Cleanup(func() { _ = h.Close() })
+	return h
+}
+
+// checkMovedTo fails unless the stored NAL is signed by ks and the areas
+// of A's node (gen.general) and B's node (gen.b) are managed by ks's node.
+func checkMovedTo(t *testing.T, h *Hub, ks *keystore.Keystore) {
+	t.Helper()
+	n, err := h.nalStore.Get("testnet")
+	if err != nil || n == nil {
+		t.Fatalf("get NAL: %v", err)
+	}
+	if n.CoordPubKeyB64 != ks.PubKeyBase64() || nal.Verify(n) != nil {
+		t.Errorf("NAL signed by %s; want %s, verified", n.CoordPubKeyB64, ks.PubKeyBase64())
+	}
+	for _, tag := range []string{"gen.general", "gen.b"} {
+		if area := n.FindArea(tag); area == nil || area.ManagerNodeID != ks.NodeID() {
+			t.Errorf("%s managed by %+v, want the node of %s", tag, area, ks.PubKeyBase64())
+		}
+	}
+}
+
+// A chain A to B to C stored while the NAL is still B's, whose re-sign
+// then fails, moves A's areas when the re-sign is retried, by a restart or
+// by posting B to C again: which areas move comes from the stored
+// handovers and previous signers, not from the request that brought them.
+// Once moved, the record is cleared, so a later re-sign for another key
+// leaves an area the operator has since given back to A's node alone.
+func TestLateHandoverChainAdoptRetried(t *testing.T) {
+	for _, retry := range []string{"restart", "repost B to C"} {
+		t.Run(retry, func(t *testing.T) {
+			dir := t.TempDir()
+			a, b, c, d, poster := newKey(t, "a.key"), newKey(t, "b.key"), newKey(t, "c.key"), newKey(t, "d.key"), newKey(t, "poster.key")
+			h := unsignedSwitchHub(t, dir, a, b, c, poster)
+			ts := httptest.NewServer(h.newMux())
+			defer ts.Close()
+			url := ts.URL + "/v3net/v1/testnet/nal/handover"
+
+			if _, err := h.db.Exec(`CREATE TRIGGER fail_nal_update BEFORE UPDATE ON network_nal
+				BEGIN SELECT RAISE(ABORT, 'injected'); END`); err != nil {
+				t.Fatal(err)
+			}
+			if status, body := postJSONBody(t, poster, url, chainOf(t, a, b, c)); status != http.StatusInternalServerError {
+				t.Fatalf("A to B to C with the store failing: %d %s; want 500", status, body)
+			}
+			if hs, err := h.nalStore.Handovers("testnet"); err != nil || len(hs) != 2 {
+				t.Fatalf("stored handovers = %d, %v; want the chain held", len(hs), err)
+			}
+			if _, err := h.db.Exec(`DROP TRIGGER fail_nal_update`); err != nil {
+				t.Fatal(err)
+			}
+
+			if retry == "restart" {
+				ts.Close()
+				_ = h.Close()
+				h = openTestHubAt(t, dir, c)
+				defer h.Close()
+				ts = httptest.NewServer(h.newMux())
+				defer ts.Close()
+				url = ts.URL + "/v3net/v1/testnet/nal/handover"
+			} else if got := postJSON(t, poster, url, chainOf(t, b, c)[0]); got != http.StatusOK {
+				t.Fatalf("B to C again: status %d, want 200", got)
+			}
+			checkMovedTo(t, h, c)
+			if prev, err := h.nalStore.PrevSigners("testnet"); err != nil || len(prev) != 0 {
+				t.Errorf("previous signers after the re-sign = %q, %v; want none", prev, err)
+			}
+
+			// The operator gives gen.general back to A's node; handing
+			// the network on to D does not take it away again.
+			if err := h.updateNALArea("testnet", "gen.general", func(area *protocol.Area) {
+				area.ManagerNodeID, area.ManagerPubKeyB64 = a.NodeID(), a.PubKeyBase64()
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if got := postJSON(t, poster, url, chainOf(t, c, d)[0]); got != http.StatusOK {
+				t.Fatalf("C to D: status %d, want 200", got)
+			}
+			ts.Close()
+			_ = h.Close()
+			h = openTestHubAt(t, dir, d)
+			defer h.Close()
+			n, err := h.nalStore.Get("testnet")
+			if err != nil || n.CoordPubKeyB64 != d.PubKeyBase64() {
+				t.Fatalf("NAL after restarting with D: %v", err)
+			}
+			if area := n.FindArea("gen.general"); area == nil || area.ManagerNodeID != a.NodeID() {
+				t.Errorf("gen.general managed by %+v; the operator's choice of A's node must stay", area)
+			}
+			if area := n.FindArea("gen.b"); area == nil || area.ManagerNodeID != d.NodeID() {
+				t.Errorf("gen.b managed by %+v, want D's node", area)
+			}
+		})
+	}
+}
+
+// A hub that went back to a key the network used before (A signed, B
+// re-signed with no handover, the hub restarted with A while the NAL is
+// still B's) refuses B's handover back to A, though the key-in-force
+// rules alone would take it: A is a previous signer, so a used key. The
+// same holds for a chain that passes through a previous signer outside
+// the bridge.
+func TestHandoverBackToPrevSignerRefused(t *testing.T) {
+	dir := t.TempDir()
+	a, b, x, poster := newKey(t, "a.key"), newKey(t, "b.key"), newKey(t, "x.key"), newKey(t, "poster.key")
+	h, ts := switchedHub(t, dir, poster, a, b)
+	ts.Close()
+	_ = h.Close()
+	h = openTestHubAt(t, dir, a)
+	defer h.Close()
+	ts = httptest.NewServer(h.newMux())
+	defer ts.Close()
+	url := ts.URL + "/v3net/v1/testnet/nal/handover"
+
+	status, body := postJSONBody(t, poster, url, chainOf(t, b, a)[0])
+	if status != http.StatusConflict || !strings.Contains(body, "already used") {
+		t.Errorf("B back to A: %d %s; want 409, key already used", status, body)
+	}
+	if got := postJSON(t, poster, url, chainOf(t, b, x, a)); got != http.StatusConflict {
+		t.Errorf("B to X to A: status %d, want 409", got)
+	}
+	if hs, err := h.nalStore.Handovers("testnet"); err != nil || len(hs) != 0 {
+		t.Errorf("stored handovers = %d, %v; want none", len(hs), err)
+	}
+	if n, err := h.nalStore.Get("testnet"); err != nil || n.CoordPubKeyB64 != b.PubKeyBase64() {
+		t.Errorf("stored NAL changed: %v", err)
 	}
 }
 
