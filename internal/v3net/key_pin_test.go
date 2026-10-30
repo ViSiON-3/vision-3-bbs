@@ -110,29 +110,33 @@ func TestPersistHubSigned(t *testing.T) {
 	}
 }
 
-// hubSignedStored reads the matching entry's hubSigned from v3net.json as it
-// is when called.
+// hubSignedStored reads the matching entry's hubSigned and count of clears from
+// v3net.json as it is when called.
 func TestHubSignedStored(t *testing.T) {
 	dir := t.TempDir()
 	s := &Service{cfg: config.V3NetConfig{ConfigPath: dir}}
 	stored := s.hubSignedStored("testnet", "https://hub.example")
-	if got, err := stored(); err != nil || got {
-		t.Fatalf("with no v3net.json: %v, %v; want false", got, err)
+	if got, err := stored(); !errors.Is(err, leaf.ErrNoStoredEntry) {
+		t.Fatalf("with no v3net.json: %+v, %v; want no entry", got, err)
 	}
 	if err := config.SaveV3NetConfig(dir, config.V3NetConfig{Leaves: []config.V3NetLeafConfig{
 		{HubURL: "https://other.example", Network: "testnet", HubSigned: true},
-		{HubURL: "https://hub.example", Network: "testnet"},
+		{HubURL: "https://hub.example", Network: "testnet", HubSignedClears: 2},
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := stored(); err != nil || got {
-		t.Fatalf("before the store: %v, %v; want false", got, err)
+	if got, err := stored(); err != nil || got != (leaf.StoredHubSigned{Clears: 2}) {
+		t.Fatalf("before the store: %+v, %v; want unset with 2 clears", got, err)
 	}
 	if err := s.persistHubSigned("testnet", "https://hub.example"); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := stored(); err != nil || !got {
-		t.Errorf("after the store: %v, %v; want true", got, err)
+	if got, err := stored(); err != nil || got != (leaf.StoredHubSigned{Signed: true, Clears: 2}) {
+		t.Errorf("after the store: %+v, %v; want set with 2 clears", got, err)
+	}
+	other := s.hubSignedStored("othernet", "https://hub.example")
+	if got, err := other(); !errors.Is(err, leaf.ErrNoStoredEntry) {
+		t.Errorf("with no entry: %+v, %v; want no entry", got, err)
 	}
 	if (&Service{}).hubSignedStored("testnet", "https://hub.example") != nil {
 		t.Error("a service without a config path has a store to read")
@@ -145,7 +149,7 @@ func TestPinStored(t *testing.T) {
 	dir := t.TempDir()
 	s := &Service{cfg: config.V3NetConfig{ConfigPath: dir}}
 	stored := s.pinStored("testnet", "https://hub.example")
-	if got, err := stored(leaf.KeyCoordinator); !errors.Is(err, leaf.ErrNoStoredPin) {
+	if got, err := stored(leaf.KeyCoordinator); !errors.Is(err, leaf.ErrNoStoredEntry) {
 		t.Fatalf("with no v3net.json: %+v, %v; want no entry", got, err)
 	}
 	if err := config.SaveV3NetConfig(dir, config.V3NetConfig{Leaves: []config.V3NetLeafConfig{
@@ -165,7 +169,7 @@ func TestPinStored(t *testing.T) {
 		t.Errorf("hub pin = %+v, %v", got, err)
 	}
 	other := s.pinStored("othernet", "https://hub.example")
-	if got, err := other(leaf.KeyCoordinator); !errors.Is(err, leaf.ErrNoStoredPin) {
+	if got, err := other(leaf.KeyCoordinator); !errors.Is(err, leaf.ErrNoStoredEntry) {
 		t.Errorf("with no entry: %+v, %v; want no entry", got, err)
 	}
 	if (&Service{}).pinStored("testnet", "https://hub.example") != nil {

@@ -547,7 +547,7 @@ func handoverLeaf(t *testing.T, kind KeyKind, keys ...*keystore.Keystore) (*Leaf
 	}
 	l.cfg.PinStored = func(k KeyKind) (StoredPin, error) {
 		if k != kind {
-			return StoredPin{}, ErrNoStoredPin
+			return StoredPin{}, ErrNoStoredEntry
 		}
 		return StoredPin{Pin: stored}, nil
 	}
@@ -621,29 +621,20 @@ func TestUpdatePinsSysopEditBeatsHandoverPin(t *testing.T) {
 	}
 }
 
-// With a store that cannot be read, or no store, the reloaded copy stands in
-// for it: the pin the unsaved one moved from keeps it, anything else replaces
-// it (#805).
-func TestUpdatePinsStoreUnreadable(t *testing.T) {
+// With no store at all, the reloaded copy stands in for it: the pin the unsaved
+// one moved from keeps it, anything else replaces it (#805).
+func TestUpdatePinsNoStore(t *testing.T) {
 	a, b, c := newCoordKey(t), newCoordKey(t), newCoordKey(t)
-	for name, pinStored := range map[string]func(KeyKind) (StoredPin, error){
-		"unreadable": func(KeyKind) (StoredPin, error) { return StoredPin{}, errors.New("gone") },
-		"no entry":   func(KeyKind) (StoredPin, error) { return StoredPin{}, ErrNoStoredPin },
-		"none":       nil,
-	} {
-		t.Run(name, func(t *testing.T) {
-			l, _ := handoverLeaf(t, KeyCoordinator, a, b, c)
-			l.cfg.PinStored = pinStored
-			l.UpdatePins(nil, Pins{Coord: b.PubKeyBase64(), CoordEdited: true}) //nolint:staticcheck // nil ctx: the leaf is not running
-			if got := l.PinnedKey(KeyCoordinator); got != c.PubKeyBase64() {
-				t.Errorf("own stored pin: pin = %s, want the unsaved one kept", got)
-			}
-			other := newCoordKey(t).PubKeyBase64()
-			l.UpdatePins(nil, Pins{Coord: other, CoordEdited: true}) //nolint:staticcheck // nil ctx: the leaf is not running
-			if got := l.PinnedKey(KeyCoordinator); got != other {
-				t.Errorf("edit: pin = %s, want %s", got, other)
-			}
-		})
+	l, _ := handoverLeaf(t, KeyCoordinator, a, b, c)
+	l.cfg.PinStored = nil
+	l.UpdatePins(nil, Pins{Coord: b.PubKeyBase64(), CoordEdited: true}) //nolint:staticcheck // nil ctx: the leaf is not running
+	if got := l.PinnedKey(KeyCoordinator); got != c.PubKeyBase64() {
+		t.Errorf("own stored pin: pin = %s, want the unsaved one kept", got)
+	}
+	other := newCoordKey(t).PubKeyBase64()
+	l.UpdatePins(nil, Pins{Coord: other, CoordEdited: true}) //nolint:staticcheck // nil ctx: the leaf is not running
+	if got := l.PinnedKey(KeyCoordinator); got != other {
+		t.Errorf("edit: pin = %s, want %s", got, other)
 	}
 }
 

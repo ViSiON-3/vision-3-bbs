@@ -49,13 +49,15 @@ type Config struct {
 	// now. When UpdatePins is handed HubSigned false while the leaf
 	// enforces it, the leaf asks this before taking it as the sysop's
 	// clear, since a copy of the config read before OnHubSigned stored the
-	// record looks the same. Nil takes UpdatePins' value as it is.
-	HubSignedStored func() (bool, error)
+	// record looks the same; Retire asks it too. It returns ErrNoStoredEntry
+	// when the store has no entry for this subscription. An error keeps the
+	// record in force. Nil takes the copy's value as it is.
+	HubSignedStored func() (StoredHubSigned, error)
 	// PinStored returns what the caller's store holds for kind now, or
-	// ErrNoStoredPin when it has no entry for this subscription. A reload is
-	// a copy of the store read earlier, and the leaf may have stored a pin
-	// since, so UpdatePins and Retire ask this before acting on it. Nil, or
-	// a store that cannot be read, takes the copy as the store's.
+	// ErrNoStoredEntry when it has no entry for this subscription. A reload
+	// is a copy of the store read earlier, and the leaf may have stored a pin
+	// since, so UpdatePins and Retire ask this before acting on it. An error
+	// keeps the leaf's pin and pending key. Nil takes the copy as the store's.
 	PinStored func(KeyKind) (StoredPin, error)
 
 	// CoordPubKeyB64 is the pinned coordinator key (standard base64). Every

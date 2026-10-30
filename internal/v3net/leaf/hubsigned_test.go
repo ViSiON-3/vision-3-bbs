@@ -416,7 +416,7 @@ func TestStaleReloadDoesNotClearHubSigned(t *testing.T) {
 	l, _, _, hubKS := proxiedLeaf(t, (*keystore.Keystore).PubKeyBase64)
 	var file atomic.Bool // what v3net.json holds
 	l.cfg.OnHubSigned = func() error { file.Store(true); return nil }
-	l.cfg.HubSignedStored = func() (bool, error) { return file.Load(), nil }
+	l.cfg.HubSignedStored = func() (StoredHubSigned, error) { return StoredHubSigned{Signed: file.Load()}, nil }
 	ctx := context.Background()
 
 	stale := Pins{Hub: hubKS.PubKeyBase64(), HubSigned: file.Load()} // read before the store
@@ -456,7 +456,7 @@ func (r *fileRecorder) attach(l *Leaf) {
 		r.file.Store(true)
 		return nil
 	}
-	l.cfg.HubSignedStored = func() (bool, error) { return r.file.Load(), nil }
+	l.cfg.HubSignedStored = func() (StoredHubSigned, error) { return StoredHubSigned{Signed: r.file.Load()}, nil }
 }
 
 // The sysop clearing hubSigned while the leaf's store of it is waiting to be

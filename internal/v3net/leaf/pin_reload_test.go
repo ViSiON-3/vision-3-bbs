@@ -1,8 +1,10 @@
 package leaf
 
 import (
+	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 )
@@ -48,7 +50,7 @@ func TestUpdatePinsCopyReadBeforeFirstUseStore(t *testing.T) {
 	l.cfg.OnKeyPinned = func(ev KeyEvent) error { stored = ev.Pinned; return nil }
 	l.cfg.PinStored = func(k KeyKind) (StoredPin, error) {
 		if k != KeyCoordinator {
-			return StoredPin{}, ErrNoStoredPin
+			return StoredPin{}, ErrNoStoredEntry
 		}
 		return StoredPin{Pin: stored}, nil
 	}
@@ -86,7 +88,7 @@ func TestUpdatePinsEditInStoreWins(t *testing.T) {
 				pending := "pending-" + edit.name
 				l.cfg.PinStored = func(k KeyKind) (StoredPin, error) {
 					if k != KeyCoordinator {
-						return StoredPin{}, ErrNoStoredPin
+						return StoredPin{}, ErrNoStoredEntry
 					}
 					return StoredPin{Pin: *stored, Pending: pending}, nil
 				}
@@ -171,7 +173,7 @@ func TestUpdatePinsConcurrentWithStores(t *testing.T) {
 	}
 	l.cfg.PinStored = func(k KeyKind) (StoredPin, error) {
 		if k != KeyCoordinator {
-			return StoredPin{}, ErrNoStoredPin
+			return StoredPin{}, ErrNoStoredEntry
 		}
 		return StoredPin{Pin: read()}, nil
 	}
@@ -273,4 +275,234 @@ func TestRetire(t *testing.T) {
 			t.Errorf("a retired leaf stored %s", *stored)
 		}
 	})
+}
+
+// With a store that cannot be read or holds no entry, the copy may be the stale
+// one, edit or not, so the leaf's pin, pending key and hubSigned record stand,
+// and the caller is told (#821).
+func TestUpdatePinsKeepsLeafWhenStoreUnread(t *testing.T) {
+	for name, err := range map[string]error{"unreadable": errors.New("gone"), "no entry": ErrNoStoredEntry} {
+		t.Run(name, func(t *testing.T) {
+			a, b := newCoordKey(t), newCoordKey(t)
+			l, _ := handoverLeaf(t, KeyCoordinator, a, b)
+			l.pins.pendingCoord = "pending-of-the-leaf"
+			l.pins.hubSigned, l.pins.hubSignedCfg = true, true
+			l.cfg.PinStored = func(KeyKind) (StoredPin, error) { return StoredPin{}, err }
+			l.cfg.HubSignedStored = func() (StoredHubSigned, error) { return StoredHubSigned{}, err }
+
+			p := l.UpdatePins(nil, Pins{Coord: newCoordKey(t).PubKeyBase64(), PendingCoord: "copy", CoordEdited: true, HubSignedEdited: true}) //nolint:staticcheck // nil ctx: the leaf is not running
+			if !p.StoreUnread {
+				t.Error("StoreUnread not set")
+			}
+			if got := l.PinnedKey(KeyCoordinator); got != b.PubKeyBase64() {
+				t.Errorf("pin = %s, want the leaf's B", got)
+			}
+			if got := l.PendingKey(KeyCoordinator); got != "pending-of-the-leaf" {
+				t.Errorf("pending = %q, want the leaf's", got)
+			}
+			if u := l.UnsavedState(); u.Coord != b.PubKeyBase64() || u.CoordMovedFrom != a.PubKeyBase64() {
+				t.Errorf("unsaved %+v, want B still moving from A", u)
+			}
+			if !l.HubSigned() {
+				t.Error("the record was dropped, relaxing what the leaf enforces")
+			}
+		})
+	}
+}
+
+// Retire treats a store it cannot read the same way (#821).
+func TestRetireKeepsLeafWhenStoreUnread(t *testing.T) {
+	for name, err := range map[string]error{"unreadable": errors.New("gone"), "no entry": ErrNoStoredEntry} {
+		t.Run(name, func(t *testing.T) {
+			a, b := newCoordKey(t), newCoordKey(t)
+			l, _ := handoverLeaf(t, KeyCoordinator, a, b)
+			l.pins.pendingCoord = "pending-of-the-leaf"
+			l.cfg.PinStored = func(KeyKind) (StoredPin, error) { return StoredPin{}, err }
+
+			p, u := l.Retire(Pins{Coord: newCoordKey(t).PubKeyBase64(), PendingCoord: "copy", CoordEdited: true})
+			if !p.StoreUnread {
+				t.Error("StoreUnread not set")
+			}
+			if p.Coord != b.PubKeyBase64() || p.PendingCoord != "pending-of-the-leaf" {
+				t.Errorf("pins %+v, want the leaf's", p)
+			}
+			if u.Coord != b.PubKeyBase64() || u.CoordMovedFrom != a.PubKeyBase64() {
+				t.Errorf("unsaved %+v, want B still moving from A", u)
+			}
+		})
+	}
+}
+
+// Retire brings the hubSigned record up to date with the store, so a replacement
+// never starts without a record in force, unless the sysop cleared it (#821).
+func TestRetireHubSigned(t *testing.T) {
+	type leafState struct{ signed, unsaved, cfg bool }
+	var (
+		noRecord = leafState{}
+		unsaved  = leafState{signed: true, unsaved: true}
+		saved    = leafState{signed: true, cfg: true}
+	)
+	gone := errors.New("gone")
+	cases := []struct {
+		name   string
+		leaf   leafState
+		copyOf Pins
+		noRead bool // no store to read
+		stored StoredHubSigned
+		err    error
+
+		wantSigned, wantCarried, wantUnread bool
+		wantClears                          int
+	}{
+		{name: "stored after the copy was read", leaf: saved, stored: StoredHubSigned{Signed: true}, wantSigned: true},
+		{name: "stored by another writer", leaf: noRecord, stored: StoredHubSigned{Signed: true}, wantSigned: true},
+		{name: "not yet stored", leaf: unsaved, wantCarried: true},
+		{name: "not yet stored, copy holds it", leaf: unsaved, copyOf: Pins{HubSigned: true}, stored: StoredHubSigned{Signed: true}, wantSigned: true},
+		{
+			name: "unsaved, cleared in the copy", leaf: unsaved,
+			copyOf: Pins{HubSignedClears: 1, HubSignedEdited: true}, stored: StoredHubSigned{Clears: 1},
+			wantClears: 1,
+		},
+		{name: "unsaved, cleared since the copy", leaf: unsaved, stored: StoredHubSigned{Clears: 1}, wantClears: 1},
+		{
+			name: "stored, cleared in the copy", leaf: saved,
+			copyOf: Pins{HubSignedClears: 1, HubSignedEdited: true}, stored: StoredHubSigned{Clears: 1},
+			wantClears: 1,
+		},
+		{name: "stored, cleared since the copy", leaf: saved, copyOf: Pins{HubSigned: true}, stored: StoredHubSigned{Clears: 1}, wantClears: 1},
+		{
+			name: "recorded again since the clear in the copy", leaf: saved,
+			copyOf: Pins{HubSignedClears: 1, HubSignedEdited: true}, stored: StoredHubSigned{Signed: true, Clears: 1},
+			wantSigned: true, wantClears: 1,
+		},
+		{
+			name: "unreadable, stored, clear in the copy", leaf: saved,
+			copyOf: Pins{HubSignedClears: 1, HubSignedEdited: true}, err: gone,
+			wantSigned: true, wantUnread: true, wantClears: 1,
+		},
+		{
+			name: "unreadable, unsaved, clear in the copy", leaf: unsaved,
+			copyOf: Pins{HubSignedClears: 1, HubSignedEdited: true}, err: gone,
+			wantCarried: true, wantUnread: true, wantClears: 1,
+		},
+		{name: "no entry, stored", leaf: saved, err: ErrNoStoredEntry, wantSigned: true, wantUnread: true},
+		{name: "no entry, unsaved", leaf: unsaved, err: ErrNoStoredEntry, wantCarried: true, wantUnread: true},
+		{name: "no store, unsaved", leaf: unsaved, noRead: true, wantCarried: true},
+		{name: "no store, unsaved, edited", leaf: unsaved, noRead: true, copyOf: Pins{HubSignedEdited: true}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			l, _ := setupLeaf(t, "http://unused.invalid", &mockJAMWriter{})
+			l.pins.hubSigned, l.pins.hubSignedUnsaved, l.pins.hubSignedCfg = c.leaf.signed, c.leaf.unsaved, c.leaf.cfg
+			if !c.noRead {
+				l.cfg.HubSignedStored = func() (StoredHubSigned, error) { return c.stored, c.err }
+			}
+
+			p, u := l.Retire(c.copyOf)
+			if p.HubSigned != c.wantSigned || p.HubSignedClears != c.wantClears {
+				t.Errorf("record %v with %d clears, want %v with %d", p.HubSigned, p.HubSignedClears, c.wantSigned, c.wantClears)
+			}
+			if u.HubSigned != c.wantCarried {
+				t.Errorf("carried unsaved = %v, want %v", u.HubSigned, c.wantCarried)
+			}
+			if p.StoreUnread != c.wantUnread {
+				t.Errorf("StoreUnread = %v, want %v", p.StoreUnread, c.wantUnread)
+			}
+		})
+	}
+}
+
+// Retire waits for a store of the record that is under way, and sees it (#821).
+func TestRetireWaitsForHubSignedStore(t *testing.T) {
+	l, _ := setupLeaf(t, "http://unused.invalid", &mockJAMWriter{})
+	var mu sync.Mutex
+	file := false
+	entered, release := make(chan struct{}), make(chan struct{})
+	l.cfg.OnHubSigned = func() error {
+		close(entered)
+		<-release
+		mu.Lock()
+		defer mu.Unlock()
+		file = true
+		return nil
+	}
+	l.cfg.HubSignedStored = func() (StoredHubSigned, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return StoredHubSigned{Signed: file}, nil
+	}
+	go l.noteHubSigned()
+	<-entered
+
+	retired := make(chan Pins)
+	go func() {
+		p, _ := l.Retire(Pins{})
+		retired <- p
+	}()
+	select {
+	case <-retired:
+		t.Fatal("Retire did not wait for the store under way")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if p := <-retired; !p.HubSigned {
+		t.Error("the replacement would start without the record just stored")
+	}
+}
+
+// A retired leaf, replaced or with its subscription removed, stores nothing
+// more: not a pin, not a pending key, not hubSigned (#817, #821).
+func TestRetiredLeafStoresNothing(t *testing.T) {
+	for name, retire := range map[string]func(*Leaf){
+		"Retire":    func(l *Leaf) { l.Retire(Pins{}) },
+		"EndStores": (*Leaf).EndStores,
+	} {
+		t.Run(name, func(t *testing.T) {
+			l, _ := setupLeaf(t, "http://unused.invalid", &mockJAMWriter{})
+			var stores []string
+			l.cfg.OnKeyPinned = func(KeyEvent) error { stores = append(stores, "pin"); return nil }
+			l.cfg.OnKeyChanged = func(KeyEvent) { stores = append(stores, "pending") }
+			l.cfg.OnHubSigned = func() error { stores = append(stores, "hubSigned"); return nil }
+			retire(l)
+
+			first, other := newCoordKey(t).PubKeyBase64(), newCoordKey(t).PubKeyBase64()
+			if _, ok := l.checkPin(KeyCoordinator, first); !ok {
+				t.Fatal("first use refused")
+			}
+			if _, ok := l.checkPin(KeyCoordinator, other); ok {
+				t.Fatal("a changed key was accepted")
+			}
+			l.noteHubSigned()
+			if len(stores) != 0 {
+				t.Errorf("a retired leaf attempted stores: %v", stores)
+			}
+		})
+	}
+}
+
+// EndStores waits for a record of a changed key that is under way, so none lands
+// after it (#821).
+func TestEndStoresWaitsForKeyChanged(t *testing.T) {
+	l, _ := setupLeaf(t, "http://unused.invalid", &mockJAMWriter{})
+	l.pins.coord = newCoordKey(t).PubKeyBase64()
+	entered, release := make(chan struct{}), make(chan struct{})
+	l.cfg.OnKeyChanged = func(KeyEvent) {
+		close(entered)
+		<-release
+	}
+	go l.checkPin(KeyCoordinator, newCoordKey(t).PubKeyBase64())
+	<-entered
+
+	ended := make(chan struct{})
+	go func() {
+		l.EndStores()
+		close(ended)
+	}()
+	select {
+	case <-ended:
+		t.Fatal("EndStores did not wait for the record under way")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	<-ended
 }

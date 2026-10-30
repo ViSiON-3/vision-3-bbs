@@ -5,11 +5,26 @@ import (
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/leaf"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
+
+// saveAndReload writes cfg to the fixture's v3net.json and reloads from it: a
+// reload checks what it was handed against the file.
+func saveAndReload(t *testing.T, svc *v3net.Service, mm *message.MessageManager, cfg config.V3NetLeafConfig) {
+	t.Helper()
+	leaves := []config.V3NetLeafConfig{cfg}
+	if err := config.SaveV3NetConfig(filepath.Dir(svc.ConfigPath()), config.V3NetConfig{Leaves: leaves}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ReloadLeaves(leaves, mm, nil); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func reloadTestKey(t *testing.T) *keystore.Keystore {
 	t.Helper()
@@ -48,9 +63,7 @@ func TestReloadLeavesKeyOnlyChangeKeepsLeafAndNAL(t *testing.T) {
 
 	// The leaf records the key the hub offered: pending only.
 	cfg.PendingCoordinatorPubKey = newKey.PubKeyBase64()
-	if err := svc.ReloadLeaves([]config.V3NetLeafConfig{cfg}, mm, nil); err != nil {
-		t.Fatal(err)
-	}
+	saveAndReload(t, svc, mm, cfg)
 	if got := svc.Leaves()[0]; got != first {
 		t.Fatal("a pending-key-only edit rebuilt the leaf")
 	}
@@ -63,9 +76,7 @@ func TestReloadLeavesKeyOnlyChangeKeepsLeafAndNAL(t *testing.T) {
 
 	// The sysop accepts the new key: applied to the same leaf.
 	cfg.CoordinatorPubKey = newKey.PubKeyBase64()
-	if err := svc.ReloadLeaves([]config.V3NetLeafConfig{cfg}, mm, nil); err != nil {
-		t.Fatal(err)
-	}
+	saveAndReload(t, svc, mm, cfg)
 	if got := svc.Leaves()[0]; got != first {
 		t.Fatal("accepting a key rebuilt the leaf")
 	}
@@ -77,9 +88,7 @@ func TestReloadLeavesKeyOnlyChangeKeepsLeafAndNAL(t *testing.T) {
 	// it is signed by the (unchanged) pin.
 	first.SeedNAL(reloadTestNAL(t, newKey, "net-a", "gen.accepted"))
 	cfg.Origin = "Changed origin"
-	if err := svc.ReloadLeaves([]config.V3NetLeafConfig{cfg}, mm, nil); err != nil {
-		t.Fatal(err)
-	}
+	saveAndReload(t, svc, mm, cfg)
 	second := svc.Leaves()[0]
 	if second == first {
 		t.Fatal("an origin edit did not rebuild the leaf")
@@ -92,9 +101,7 @@ func TestReloadLeavesKeyOnlyChangeKeepsLeafAndNAL(t *testing.T) {
 	// old key.
 	cfg.CoordinatorPubKey = oldKey.PubKeyBase64()
 	cfg.Origin = "Again"
-	if err := svc.ReloadLeaves([]config.V3NetLeafConfig{cfg}, mm, nil); err != nil {
-		t.Fatal(err)
-	}
+	saveAndReload(t, svc, mm, cfg)
 	if n := svc.Leaves()[0].LastNAL(); n != nil {
 		t.Errorf("carried a NAL signed by a key that is no longer pinned: %+v", n)
 	}
@@ -115,9 +122,7 @@ func TestReloadLeavesHubSignedInPlace(t *testing.T) {
 	}
 
 	cfg.HubSigned = false
-	if err := svc.ReloadLeaves([]config.V3NetLeafConfig{cfg}, mm, nil); err != nil {
-		t.Fatal(err)
-	}
+	saveAndReload(t, svc, mm, cfg)
 	if got := svc.Leaves()[0]; got != first {
 		t.Fatal("clearing hubSigned rebuilt the leaf")
 	}
@@ -126,9 +131,7 @@ func TestReloadLeavesHubSignedInPlace(t *testing.T) {
 	}
 
 	cfg.RequireSignedHub = true
-	if err := svc.ReloadLeaves([]config.V3NetLeafConfig{cfg}, mm, nil); err != nil {
-		t.Fatal(err)
-	}
+	saveAndReload(t, svc, mm, cfg)
 	if got := svc.Leaves()[0]; got == first {
 		t.Error("turning on requireSignedHub did not rebuild the leaf")
 	}

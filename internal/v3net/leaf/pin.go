@@ -55,9 +55,11 @@ var ErrHubKeyMismatch = errors.New("leaf: hub key does not match the pinned key"
 // from its hub_pubkey_b64.
 var ErrHubNodeIDMismatch = errors.New("leaf: hub node ID does not match the hub public key")
 
-// ErrNoStoredPin is what Config.PinStored returns when the store has no entry
-// for the subscription, which says nothing about the entry's pins.
-var ErrNoStoredPin = errors.New("leaf: store has no entry for this subscription")
+// ErrNoStoredEntry is what Config.PinStored and Config.HubSignedStored return
+// when the store has no entry for the subscription. A reload's copy held one, so
+// the entry was removed since the copy was read, and the reload that follows
+// from that removal retires the leaf; until then the leaf stays as it is.
+var ErrNoStoredEntry = errors.New("leaf: store has no entry for this subscription")
 
 // KeyEvent describes a key the leaf pinned on first use, or a key the hub
 // offered that differs from the pin. It is passed to Config.OnKeyPinned and
@@ -83,14 +85,24 @@ type StoredPin struct {
 	Pin, Pending string
 }
 
+// StoredHubSigned is what the caller's store holds about whether the hub signs.
+type StoredHubSigned struct {
+	// Signed is the record itself (see Config.HubSigned).
+	Signed bool
+	// Clears is the entry's count of the sysop's clears of it
+	// (config.V3NetLeafConfig.HubSignedClears).
+	Clears int
+}
+
 // Pins is the set of keys a leaf holds for its network, as kept in its
 // v3net.json entry. Empty strings mean "none".
 type Pins struct {
 	Coord, Hub               string
 	PendingCoord, PendingHub string
 	// HubSigned is the entry's record that the hub signs (see
-	// Config.HubSigned).
-	HubSigned bool
+	// Config.HubSigned), and HubSignedClears its count of clears.
+	HubSigned       bool
+	HubSignedClears int
 	// CoordEdited and HubEdited say the file's pin changed since the copy
 	// the caller last handed over. A pin not yet stored is replaced only
 	// then, and not when the change is the leaf's own earlier store (see
@@ -101,6 +113,12 @@ type Pins struct {
 	// which is how a sysop clears a record the file never got. A record not
 	// yet stored is dropped only then.
 	HubSignedEdited bool
+	// StoreUnread is set on what UpdatePins and Retire return when the store
+	// could not be read, or held no entry, for a check they needed. What
+	// could not be checked stays as the leaf has it, so this copy was not
+	// acted on, and the next reload's edits are told against whatever the
+	// caller told this one's against.
+	StoreUnread bool
 }
 
 // UnsavedState is what a leaf holds that its caller's store does not yet:
@@ -133,8 +151,9 @@ type keyPins struct {
 	// a change from it, which is the sysop clearing or setting it.
 	hubSigned, hubSignedUnsaved, hubSignedCfg bool
 
-	// retired is set by Retire: a replacement leaf has taken over this
-	// subscription's stores, so savePin stores nothing more.
+	// retired is set by Retire and EndStores: a replacement leaf has taken
+	// over this subscription's stores, or the subscription is gone, so the
+	// leaf stores nothing more.
 	retired bool
 }
 
@@ -182,6 +201,8 @@ func (p *keyPins) state(kind KeyKind) pinState {
 // the store as it is now, and the store wins (see currentFilePin). A sysop's
 // edit is in the store too, even one back to an earlier key. The pins returned
 // are the ones checked, which is what the next reload's edits are told against.
+// A store that cannot be read, or holds no entry, shows the copy may be stale
+// and has nothing better, so the leaf stays as it is (see Pins.StoreUnread).
 //
 // When the coordinator pin changed and ctx is non-nil, the NAL is re-fetched in the background so an accepted key takes effect at
 // once; likewise /info is re-checked when the hub pin changed. Pass a nil
@@ -189,11 +210,12 @@ func (p *keyPins) state(kind KeyKind) pinState {
 //
 // HubSigned is applied by applyHubSigned.
 func (l *Leaf) UpdatePins(ctx context.Context, p Pins) Pins {
-	l.applyHubSigned(p.HubSigned, p.HubSignedEdited)
+	signedRead := l.applyHubSigned(p.HubSigned, p.HubSignedEdited)
 
-	var coordChanged, hubChanged bool
-	p.Coord, p.PendingCoord, coordChanged = l.applyFilePin(KeyCoordinator, p.Coord, p.PendingCoord, p.CoordEdited)
-	p.Hub, p.PendingHub, hubChanged = l.applyFilePin(KeyHub, p.Hub, p.PendingHub, p.HubEdited)
+	var coordChanged, hubChanged, coordRead, hubRead bool
+	p.Coord, p.PendingCoord, coordChanged, coordRead = l.applyFilePin(KeyCoordinator, p.Coord, p.PendingCoord, p.CoordEdited)
+	p.Hub, p.PendingHub, hubChanged, hubRead = l.applyFilePin(KeyHub, p.Hub, p.PendingHub, p.HubEdited)
+	p.StoreUnread = !signedRead || !coordRead || !hubRead
 
 	if ctx == nil || (!coordChanged && !hubChanged) {
 		return p
@@ -216,12 +238,13 @@ func (l *Leaf) UpdatePins(ctx context.Context, p Pins) Pins {
 }
 
 // applyFilePin installs the file's pin for kind and its pending key, as
-// UpdatePins describes, and returns the file's pin and pending key as checked
-// and whether the leaf's pin changed. It holds the save
+// UpdatePins describes, and returns the file's pin and pending key as checked,
+// whether the leaf's pin changed, and whether the store could be read; if it
+// could not, the pin and pending key returned are the leaf's. It holds the save
 // lock for kind, so no store lands between the read of the store and acting on
 // it. A handover or first-use pin takes no save lock until it is stored, so if
 // the leaf's pin moved meanwhile the verdict is reached again.
-func (l *Leaf) applyFilePin(kind KeyKind, filePin, filePending string, edited bool) (string, string, bool) {
+func (l *Leaf) applyFilePin(kind KeyKind, filePin, filePending string, edited bool) (pinOut, pendingOut string, changed, read bool) {
 	mu := l.saveMu(kind)
 	mu.Lock()
 	defer mu.Unlock()
@@ -230,12 +253,15 @@ func (l *Leaf) applyFilePin(kind KeyKind, filePin, filePending string, edited bo
 		l.pinMu.Lock()
 		before := l.pins.state(kind)
 		l.pinMu.Unlock()
-		pinNow, pendingNow, editedNow := l.currentFilePin(kind, before, filePin, filePending, edited)
+		pinNow, pendingNow, editedNow, read := l.currentFilePin(kind, before, filePin, filePending, edited)
 		if l.pinReadHook != nil {
 			l.pinReadHook(kind)
 		}
+		if !read {
+			return l.PinnedKey(kind), l.PendingKey(kind), false, false
+		}
 		if changed, settled := l.installFilePin(kind, before, pinNow, pendingNow, editedNow); settled {
-			return pinNow, pendingNow, changed
+			return pinNow, pendingNow, changed, true
 		}
 	}
 }
@@ -275,21 +301,34 @@ func (l *Leaf) installFilePin(kind KeyKind, before pinState, filePin, filePendin
 //
 // A store that differs from the copy was written after the copy was read. If
 // the leaf wrote it the pin already matches, or waits to be stored over it; if
-// anyone else did it is an edit. A store that cannot be read, or holds no entry
-// for this subscription, is taken to hold the copy.
-func (l *Leaf) currentFilePin(kind KeyKind, st pinState, filePin, filePending string, edited bool) (string, string, bool) {
+// anyone else did it is an edit. read is false if the store cannot be read or
+// holds no entry for this subscription, and the caller keeps what the leaf has:
+// the copy may be the stale one, and the file will reload once it is fixed. With
+// no store at all (Config.PinStored nil) the copy is all there is, and stands.
+func (l *Leaf) currentFilePin(kind KeyKind, st pinState, filePin, filePending string, edited bool) (pin, pending string, editedOut, read bool) {
 	if l.cfg.PinStored != nil {
 		stored, err := l.cfg.PinStored(kind)
-		switch {
-		case err == nil:
-			edited = edited || normalizeKey(stored.Pin) != normalizeKey(filePin)
-			filePin, filePending = stored.Pin, stored.Pending
-		case !errors.Is(err, ErrNoStoredPin):
-			slog.Warn("leaf: could not check the pinned key in the config; using the reloaded copy",
-				"network", l.cfg.Network, "hub", l.cfg.HubURL, "key", string(kind), "error", err)
+		if err != nil {
+			l.noteStoreUnread(string(kind)+" key", err)
+			return "", "", false, false
 		}
+		edited = edited || normalizeKey(stored.Pin) != normalizeKey(filePin)
+		filePin, filePending = stored.Pin, stored.Pending
 	}
-	return filePin, filePending, edited && !unsavedFollowsStore(st, filePin)
+	return filePin, filePending, edited && !unsavedFollowsStore(st, filePin), true
+}
+
+// noteStoreUnread logs that a reload could not check what, so the leaf keeps
+// what it has. An entry removed since the reload's read is no fault: the reload
+// that follows retires the leaf.
+func (l *Leaf) noteStoreUnread(what string, err error) {
+	if errors.Is(err, ErrNoStoredEntry) {
+		slog.Info("leaf: subscription no longer in the config; keeping what the leaf holds",
+			"network", l.cfg.Network, "hub", l.cfg.HubURL, "checking", what)
+		return
+	}
+	slog.Warn("leaf: could not read the config; keeping what the leaf holds",
+		"network", l.cfg.Network, "hub", l.cfg.HubURL, "checking", what, "error", err)
 }
 
 // unsavedFollowsStore reports whether a reload whose store holds storedPin
@@ -306,30 +345,75 @@ func unsavedFollowsStore(st pinState, storedPin string) bool {
 	return st.unsaved && st.movedFrom != "" && normalizeKey(storedPin) == st.movedFrom
 }
 
+// lockStores takes every save lock, so it returns once work the leaf started
+// has finished storing, and no store starts until the returned func is called.
+func (l *Leaf) lockStores() (unlock func()) {
+	l.coordSaveMu.Lock()
+	l.hubSaveMu.Lock()
+	l.hubSignedSaveMu.Lock()
+	return func() {
+		l.hubSignedSaveMu.Unlock()
+		l.hubSaveMu.Unlock()
+		l.coordSaveMu.Unlock()
+	}
+}
+
+// EndStores ends this leaf's stores, for a leaf whose subscription was removed.
+// Work it started can still be finishing, and were the subscription re-added
+// that work would store into the new entry, so it takes the save locks and no
+// callback that writes to the store runs after it returns. What the leaf held
+// goes with it: a re-added subscription starts from its entry. Call it once the
+// leaf has stopped.
+func (l *Leaf) EndStores() {
+	defer l.lockStores()()
+	l.pinMu.Lock()
+	defer l.pinMu.Unlock()
+	l.pins.retired = true
+}
+
 // Retire ends this leaf's stores and returns what a replacement for the same
 // subscription should start from: p, a reload's copy of the file, brought up to
-// date as UpdatePins does, and what this leaf holds that the store does not,
-// less any pin the reload replaces. p's HubSigned is not looked at, and the
-// state's HubSigned is the leaf's as it is.
+// date with the store, and what this leaf holds that the store does not, less
+// anything the reload replaces. The pins are checked as UpdatePins checks them.
+//
+// So is the hubSigned record, except that here the store's true needs no clear
+// to be checked against: a record stored after the copy was read reaches the
+// replacement, which would otherwise take unsigned replies until the next
+// reload. A record not yet stored goes with it unless the sysop wrote the field,
+// in the copy or in the store since (see Pins.HubSignedEdited), so a raised count
+// of clears wins whichever of the two holds it. The store is what a clear is
+// checked against, so a store holding the record beats a copy's clear: a verified
+// reply came after that clear, or the sysop has set it again.
+//
+// A store that cannot be read, or holds no entry, leaves each of these as the
+// leaf has it, and the record in force (see Pins.StoreUnread).
 //
 // Call it once the leaf has stopped. Work it started can still be finishing, so
 // it takes the save locks; a store after that would land unseen by the
-// replacement, so savePin stores nothing more.
+// replacement, so the leaf stores nothing more. A reply verified after this is
+// not carried: it is news to the replacement as a reply it had yet to get.
 func (l *Leaf) Retire(p Pins) (Pins, UnsavedState) {
-	l.coordSaveMu.Lock()
-	defer l.coordSaveMu.Unlock()
-	l.hubSaveMu.Lock()
-	defer l.hubSaveMu.Unlock()
+	defer l.lockStores()()
 
 	l.pinMu.Lock()
 	l.pins.retired = true
 	coord, hub := l.pins.state(KeyCoordinator), l.pins.state(KeyHub)
-	u := UnsavedState{HubSigned: l.pins.hubSigned && l.pins.hubSignedUnsaved}
+	signedUnsaved := l.pins.hubSigned && l.pins.hubSignedUnsaved
+	signedCfg := l.pins.hubSignedCfg
 	l.pinMu.Unlock()
 
+	var u UnsavedState
 	settle := func(kind KeyKind, st pinState, pin, pending *string, edited bool, unsaved, movedFrom *string) {
-		var replaced bool
-		*pin, *pending, replaced = l.currentFilePin(kind, st, *pin, *pending, edited)
+		var replaced, read bool
+		*pin, *pending, replaced, read = l.currentFilePin(kind, st, *pin, *pending, edited)
+		if !read {
+			p.StoreUnread = true
+			*pin, *pending = st.pin, l.PendingKey(kind)
+			if st.unsaved {
+				*unsaved, *movedFrom = st.pin, st.movedFrom
+			}
+			return
+		}
 		if !st.unsaved || replaced {
 			return
 		}
@@ -341,7 +425,27 @@ func (l *Leaf) Retire(p Pins) (Pins, UnsavedState) {
 	}
 	settle(KeyCoordinator, coord, &p.Coord, &p.PendingCoord, p.CoordEdited, &u.Coord, &u.CoordMovedFrom)
 	settle(KeyHub, hub, &p.Hub, &p.PendingHub, p.HubEdited, &u.Hub, &u.HubMovedFrom)
+	u.HubSigned = l.settleHubSigned(&p, signedUnsaved, signedCfg)
 	return p, u
+}
+
+// settleHubSigned brings p's hubSigned record up to date for Retire, for a leaf
+// with signedUnsaved a record not yet stored and signedCfg the value it knows
+// the config to hold, and reports whether the record not yet stored is carried.
+func (l *Leaf) settleHubSigned(p *Pins, signedUnsaved, signedCfg bool) bool {
+	edited := p.HubSignedEdited
+	if l.cfg.HubSignedStored != nil {
+		stored, err := l.cfg.HubSignedStored()
+		if err != nil {
+			l.noteStoreUnread("hubSigned", err)
+			p.StoreUnread = true
+			p.HubSigned = p.HubSigned || signedCfg
+			return signedUnsaved
+		}
+		edited = edited || stored.Signed != p.HubSigned || stored.Clears != p.HubSignedClears
+		p.HubSigned, p.HubSignedClears = stored.Signed, stored.Clears
+	}
+	return signedUnsaved && !p.HubSigned && !edited
 }
 
 // applyHubSigned installs the config's hubSigned, v, when it differs from
@@ -355,7 +459,8 @@ func (l *Leaf) Retire(p Pins) (Pins, UnsavedState) {
 // clearing it. So a clear is checked against the store as it is now
 // (Config.HubSignedStored), read under the same lock noteHubSigned holds
 // while it stores, so the read sees every store that has finished. A
-// store that cannot be read leaves the record in force.
+// store that cannot be read, or holds no entry, leaves the record in force,
+// and applyHubSigned returns false.
 //
 // A record OnHubSigned failed to store is in force although the config
 // lacks it. A reload that says nothing about it (edited false) keeps it and
@@ -372,7 +477,7 @@ func (l *Leaf) Retire(p Pins) (Pins, UnsavedState) {
 // Once the record is cleared, with requireSignedHub off, a pause caused
 // only by unsigned replies lifts at once, even for a hub whose /info
 // serves no key to resume on.
-func (l *Leaf) applyHubSigned(v, edited bool) {
+func (l *Leaf) applyHubSigned(v, edited bool) (read bool) {
 	l.hubSignedSaveMu.Lock()
 	defer l.hubSignedSaveMu.Unlock()
 
@@ -385,11 +490,10 @@ func (l *Leaf) applyHubSigned(v, edited bool) {
 	if clearing && l.cfg.HubSignedStored != nil {
 		stored, err := l.cfg.HubSignedStored()
 		if err != nil {
-			slog.Warn("leaf: could not check hubSigned in the config; keeping it",
-				"network", l.cfg.Network, "hub", l.cfg.HubURL, "error", err)
-			return
+			l.noteStoreUnread("hubSigned", err)
+			return false
 		}
-		v = stored
+		v = stored.Signed
 	}
 
 	l.pinMu.Lock()
@@ -409,11 +513,12 @@ func (l *Leaf) applyHubSigned(v, edited bool) {
 		slog.Info("leaf: hub signing record changed in config",
 			"network", l.cfg.Network, "hub", l.cfg.HubURL, "hub_signed", v)
 	default:
-		return
+		return true
 	}
 	if !v {
 		l.liftUnsignedPause()
 	}
+	return true
 }
 
 // UnsavedState returns what the leaf holds that its caller's store does not
@@ -570,10 +675,27 @@ func (l *Leaf) checkPin(kind KeyKind, offered string) (pinned string, ok bool) {
 		"network", l.cfg.Network, "hub", l.cfg.HubURL, "key", string(kind),
 		"pinned", pinned, "offered", offered,
 		"accept", "verify the new key with the network operator, then replace or blank the pin in v3net.json")
-	if l.cfg.OnKeyChanged != nil {
-		l.cfg.OnKeyChanged(KeyEvent{Network: l.cfg.Network, HubURL: l.cfg.HubURL, Kind: kind, Pinned: pinned, Offered: offered})
-	}
+	l.reportKeyChanged(kind, pinned, offered)
 	return pinned, false
+}
+
+// reportKeyChanged hands a changed key to OnKeyChanged, which records it in the
+// caller's store, unless the leaf was retired. It holds the save lock for kind,
+// so Retire and EndStores wait for it, and a reload's read of the store sees it.
+func (l *Leaf) reportKeyChanged(kind KeyKind, pinned, offered string) {
+	if l.cfg.OnKeyChanged == nil {
+		return
+	}
+	mu := l.saveMu(kind)
+	mu.Lock()
+	defer mu.Unlock()
+	l.pinMu.Lock()
+	retired := l.pins.retired
+	l.pinMu.Unlock()
+	if retired {
+		return
+	}
+	l.cfg.OnKeyChanged(KeyEvent{Network: l.cfg.Network, HubURL: l.cfg.HubURL, Kind: kind, Pinned: pinned, Offered: offered})
 }
 
 // savePin hands the unsaved pin for kind to OnKeyPinned and, if it was
@@ -598,7 +720,8 @@ func (l *Leaf) savePin(kind KeyKind) {
 	l.pinMu.Unlock()
 	if !need || key == "" || retired {
 		// A save that ran ahead of this one stored it already, or the leaf
-		// that replaced this one now owns the store (see Retire).
+		// that replaced this one now owns the store, or the subscription is
+		// gone (see Retire, EndStores).
 		return
 	}
 	if l.cfg.OnKeyPinned != nil {
