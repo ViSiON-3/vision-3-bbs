@@ -54,6 +54,9 @@ type Leaf struct {
 	// hubSignedReadHook, if set (tests only), runs between applyHubSigned's
 	// first read of the record and its update.
 	hubSignedReadHook func()
+	// pinReadHook, if set (tests only), runs between applyFilePin's read of
+	// the store and its update of the pin.
+	pinReadHook func(KeyKind)
 
 	// refused remembers which refused messages were already logged at warn.
 	refused refusedLog

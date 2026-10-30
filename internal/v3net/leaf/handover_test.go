@@ -545,7 +545,12 @@ func handoverLeaf(t *testing.T, kind KeyKind, keys ...*keystore.Keystore) (*Leaf
 		stored = ev.Pinned
 		return nil
 	}
-	l.cfg.PinStored = func(KeyKind) (string, error) { return stored, nil }
+	l.cfg.PinStored = func(k KeyKind) (StoredPin, error) {
+		if k != kind {
+			return StoredPin{}, ErrNoStoredPin
+		}
+		return StoredPin{Pin: stored}, nil
+	}
 	hs := handoverChain(t, keys...)
 	for i, k := range keys[1:] {
 		fail = i == len(keys)-2
@@ -621,8 +626,9 @@ func TestUpdatePinsSysopEditBeatsHandoverPin(t *testing.T) {
 // it (#805).
 func TestUpdatePinsStoreUnreadable(t *testing.T) {
 	a, b, c := newCoordKey(t), newCoordKey(t), newCoordKey(t)
-	for name, pinStored := range map[string]func(KeyKind) (string, error){
-		"unreadable": func(KeyKind) (string, error) { return "", errors.New("gone") },
+	for name, pinStored := range map[string]func(KeyKind) (StoredPin, error){
+		"unreadable": func(KeyKind) (StoredPin, error) { return StoredPin{}, errors.New("gone") },
+		"no entry":   func(KeyKind) (StoredPin, error) { return StoredPin{}, ErrNoStoredPin },
 		"none":       nil,
 	} {
 		t.Run(name, func(t *testing.T) {
