@@ -158,6 +158,20 @@ func TestDryRunCouldNotCheck(t *testing.T) {
 			t.Errorf("dryRunCheck = true, output %q", out.String()+errOut.String())
 		}
 	})
+
+	t.Run("a redirect loop at the hub's key check", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, r.URL.Path, http.StatusFound)
+		}))
+		defer ts.Close()
+		var out, errOut bytes.Buffer
+		if dryRunCheck(&out, &errOut, ts.Client(), ts.URL, chain, a, false) {
+			t.Errorf("dryRunCheck = true, output %q", out.String()+errOut.String())
+		}
+		if !strings.Contains(errOut.String(), "would stop here") || strings.Contains(out.String(), "Could not check") {
+			t.Errorf("output %q %q, want a real run's stop, not offline use", out.String(), errOut.String())
+		}
+	})
 }
 
 // A dry run believes the signer history only as a real run does: a reply that

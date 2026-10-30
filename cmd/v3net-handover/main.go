@@ -360,6 +360,11 @@ func checkHubKey(client *http.Client, hubURL, network, from, to string) (late bo
 	url := fmt.Sprintf("%s/v3net/v1/%s/info", hubURL, network)
 	resp, err := client.Get(url)
 	if err != nil {
+		// A response with the error is a redirect that was refused, such as a
+		// loop: something answered, so this is not a hub out of reach.
+		if resp != nil {
+			return false, fmt.Errorf("could not check the hub's key: %w", err)
+		}
 		return false, fmt.Errorf("%w: %w", errHubUnreachable, err)
 	}
 	defer func() { _ = resp.Body.Close() }() // read side
