@@ -266,7 +266,7 @@ func TestLateHandoverChainToUnsignedSwitch(t *testing.T) {
 	n.Areas = append(n.Areas, protocol.Area{Tag: "gen.b", Name: "B", Language: "en",
 		ManagerNodeID: b.NodeID(), ManagerPubKeyB64: b.PubKeyBase64(),
 		Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen}, Policy: protocol.AreaPolicy{MaxBodyBytes: 65536}})
-	if err := h.SignNAL(n); err != nil {
+	if err := h.SignNAL(n, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.nalStore.Put("testnet", n); err != nil {
@@ -317,7 +317,7 @@ func unsignedSwitchHub(t *testing.T, dir string, a, b, c, poster *keystore.Keyst
 	n.Areas = append(n.Areas, protocol.Area{Tag: "gen.b", Name: "B", Language: "en",
 		ManagerNodeID: b.NodeID(), ManagerPubKeyB64: b.PubKeyBase64(),
 		Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen}, Policy: protocol.AreaPolicy{MaxBodyBytes: 65536}})
-	if err := h.SignNAL(n); err != nil {
+	if err := h.SignNAL(n, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.nalStore.Put("testnet", n); err != nil {

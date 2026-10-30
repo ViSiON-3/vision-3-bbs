@@ -240,6 +240,10 @@ func (h *Hub) handleListProposals(w http.ResponseWriter, r *http.Request) {
 // broadcasts the nal_updated event. Empty override fields keep the
 // proposal's access mode and make the proposing node the manager. A manager
 // override must name an active subscriber, or errInvalidManager is returned.
+// Only an override counts as choosing the manager (see SignNAL): an approval
+// without one, which is every auto-approval and every approval from the
+// Pending Proposals screen, says nothing about who should manage the area, so
+// the proposing node manages it by default and not by anyone's choice.
 func (h *Hub) approveProposal(network, proposalID string, overrides protocol.ProposalApproveRequest) error {
 	// Serialize the entire approve operation to prevent concurrent approvals
 	// from overwriting each other or appending duplicate areas.
@@ -314,7 +318,11 @@ func (h *Hub) approveProposal(network, proposalID string, overrides protocol.Pro
 	currentNAL.Areas = append(currentNAL.Areas, newArea)
 
 	// Re-sign the NAL.
-	if err := h.SignNAL(currentNAL); err != nil {
+	var managersSet map[string]bool
+	if overrides.ManagerNodeID != "" {
+		managersSet = map[string]bool{tag: true}
+	}
+	if err := h.SignNAL(currentNAL, managersSet); err != nil {
 		return fmt.Errorf("sign nal: %w", err)
 	}
 

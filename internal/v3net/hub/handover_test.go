@@ -281,14 +281,14 @@ func TestHandoverWindowRefusesHubSigning(t *testing.T) {
 	}
 
 	// Without a handover the hub signs its changes as before.
-	if err := h.SignNAL(before); err != nil {
+	if err := h.SignNAL(before, nil); err != nil {
 		t.Fatalf("SignNAL before the handover: %v", err)
 	}
 	if err := h.nalStore.AddHandover("testnet", signHandover(t, "testnet", hubKS, newKey(t, "new.key"))); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := h.SignNAL(before); !errors.Is(err, ErrHandedOver) {
+	if err := h.SignNAL(before, nil); !errors.Is(err, ErrHandedOver) {
 		t.Errorf("SignNAL = %v, want ErrHandedOver", err)
 	}
 	if err := h.updateNALArea("testnet", "gen.general", func(*protocol.Area) {}); !errors.Is(err, ErrHandedOver) {

@@ -354,8 +354,22 @@ func (h *Hub) handleRemoveFromDenyList(w http.ResponseWriter, r *http.Request) {
 }
 
 // updateNALArea loads the NAL, applies a mutation to the named area, re-signs,
-// persists, and fans out an nal_updated event.
+// persists, and fans out an nal_updated event. A mutation that sets the area's
+// manager goes through setNALAreaManager instead.
 func (h *Hub) updateNALArea(network, tag string, mutate func(area *protocol.Area)) error {
+	return h.changeNALArea(network, tag, false, mutate)
+}
+
+// setNALAreaManager is updateNALArea for a mutation that sets the area's
+// manager because someone chose that manager, so SignNAL leaves the area as
+// the mutation has it, even when the manager it names is the one already there.
+func (h *Hub) setNALAreaManager(network, tag string, mutate func(area *protocol.Area)) error {
+	return h.changeNALArea(network, tag, true, mutate)
+}
+
+// changeNALArea does the work of updateNALArea and setNALAreaManager;
+// managerSet says which it is doing.
+func (h *Hub) changeNALArea(network, tag string, managerSet bool, mutate func(area *protocol.Area)) error {
 	h.nalMu.Lock()
 	defer h.nalMu.Unlock()
 
@@ -374,7 +388,11 @@ func (h *Hub) updateNALArea(network, tag string, mutate func(area *protocol.Area
 
 	mutate(area)
 
-	if err := h.SignNAL(currentNAL); err != nil {
+	var managersSet map[string]bool
+	if managerSet {
+		managersSet = map[string]bool{tag: true}
+	}
+	if err := h.SignNAL(currentNAL, managersSet); err != nil {
 		return fmt.Errorf("sign nal: %w", err)
 	}
 	if err := h.nalStore.Put(network, currentNAL); err != nil {

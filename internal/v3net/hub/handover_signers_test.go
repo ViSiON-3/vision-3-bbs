@@ -98,7 +98,7 @@ func TestRepeatedLinkMovesNoAreas(t *testing.T) {
 
 	h = openTestHubAt(t, dir, b)
 	ts = httptest.NewServer(h.newMux())
-	if err := h.updateNALArea("testnet", "gen.general", func(area *protocol.Area) {
+	if err := h.setNALAreaManager("testnet", "gen.general", func(area *protocol.Area) {
 		area.ManagerNodeID, area.ManagerPubKeyB64 = a.NodeID(), a.PubKeyBase64()
 	}); err != nil {
 		t.Fatal(err)
@@ -158,7 +158,7 @@ func TestHubChangeAfterFailedAdoptMovesAreasOnce(t *testing.T) {
 		t.Errorf("previous signers after the change = %q, %v; want none", prev, err)
 	}
 
-	if err := h.updateNALArea("testnet", "gen.general", func(area *protocol.Area) {
+	if err := h.setNALAreaManager("testnet", "gen.general", func(area *protocol.Area) {
 		area.ManagerNodeID, area.ManagerPubKeyB64 = a.NodeID(), a.PubKeyBase64()
 	}); err != nil {
 		t.Fatal(err)

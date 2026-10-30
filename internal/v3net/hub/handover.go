@@ -522,10 +522,11 @@ func oldKeys(chain []protocol.CoordHandover) []string {
 // moveManagedAreas makes the hub's node the manager of each area of n
 // managed by the node of a key in from, the coordinator keys the network
 // was handed over from, and logs each move. Areas other nodes manage are
-// left alone, as are those whose tags are in keep. It changes n in place and reports whether any area moved;
-// the caller signs and stores n, so the moves and the re-sign are one NAL
-// update. Without it the old coordinator's areas would keep a manager
-// nobody runs any more until the operator reassigned each one.
+// left alone, as are those whose tags are in keep. It changes n in place and
+// reports whether any area moved; the caller signs and stores n, so the moves
+// and the re-sign are one NAL update. Without it the old coordinator's areas
+// would keep a manager nobody runs any more until the operator reassigned each
+// one.
 func (h *Hub) moveManagedAreas(n *protocol.NAL, from []string, keep map[string]bool) bool {
 	hubKey, hubNode := h.hubKey(), h.cfg.Keystore.NodeID()
 	old := make(map[string]bool, 2*len(from))
@@ -624,11 +625,13 @@ var ErrHandedOver = errors.New("hub: the network was handed over to another coor
 // stored NAL is still another key's, because the re-sign failed, this change
 // is that re-sign: the areas it would have moved move in n (see
 // adoptHandover), and storing n drops the previous signers (see putTx), so no
-// later re-sign moves them again. An area whose manager n sets, compared with
-// the stored NAL, stays as n has it: that is the change's own choice. Every
-// hub-side NAL change signs through it;
-// call it with nalMu held, or before the hub serves requests.
-func (h *Hub) SignNAL(n *protocol.NAL) error {
+// later re-sign moves them again. An area whose tag is in managersSet stays as
+// n has it: the caller names the areas whose manager someone chose in this
+// change, since the NAL cannot show a choice that changes nothing, nor tell
+// one from a manager that only followed from the change. Every hub-side NAL
+// change signs through it; call it with nalMu held, or before the hub serves
+// requests.
+func (h *Hub) SignNAL(n *protocol.NAL, managersSet map[string]bool) error {
 	stored, err := h.nalStore.Get(n.Network)
 	if err != nil {
 		return err
@@ -656,24 +659,10 @@ func (h *Hub) SignNAL(n *protocol.NAL) error {
 			if err != nil {
 				return err
 			}
-			h.moveManagedAreas(n, keysHandedOverFrom(stored, hs, prev), managersSet(stored, n))
+			h.moveManagedAreas(n, keysHandedOverFrom(stored, hs, prev), managersSet)
 		}
 	}
 	return nal.Sign(n, h.cfg.Keystore)
-}
-
-// managersSet returns the tags of the areas of after whose manager is not what
-// before has: a new manager, or a new area.
-func managersSet(before, after *protocol.NAL) map[string]bool {
-	tags := make(map[string]bool)
-	for i := range after.Areas {
-		a := &after.Areas[i]
-		was := before.FindArea(a.Tag)
-		if was == nil || was.ManagerNodeID != a.ManagerNodeID || was.ManagerPubKeyB64 != a.ManagerPubKeyB64 {
-			tags[a.Tag] = true
-		}
-	}
-	return tags
 }
 
 // refuseHandedOver answers a NAL change that SignNAL refused with 409 and

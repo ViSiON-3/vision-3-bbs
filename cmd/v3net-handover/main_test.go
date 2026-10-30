@@ -78,7 +78,7 @@ func TestPublishReportsOutcome(t *testing.T) {
 			}))
 			defer ts.Close()
 			var out, errOut bytes.Buffer
-			ok := publish(&out, &errOut, ts.Client(), ts.URL, []protocol.CoordHandover{*h}, body, oldKS, tc.authSet, tc.late, oldKS.PubKeyBase64(), false)
+			ok := publish(&out, &errOut, ts.Client(), ts.URL, []protocol.CoordHandover{*h}, body, oldKS, tc.authSet, tc.late, oldKS.PubKeyBase64(), false) == postSucceeded
 			all := out.String() + errOut.String()
 			if ok != tc.ok || !strings.Contains(all, tc.want) {
 				t.Errorf("publish = %v, output %q; want %v and %q", ok, all, tc.ok, tc.want)
@@ -176,7 +176,7 @@ func TestPublishChainToHub(t *testing.T) {
 		if err != nil || n == nil {
 			t.Fatalf("get NAL: %v", err)
 		}
-		if err := h.SignNAL(n); err != nil {
+		if err := h.SignNAL(n, nil); err != nil {
 			t.Fatal(err)
 		}
 		if err := h.NALStore().Put("testnet", n); err != nil {
@@ -199,7 +199,7 @@ func TestPublishChainToHub(t *testing.T) {
 		t.Fatalf("checkHubKey = %v, %v; want late", late, err)
 	}
 	var out, errOut bytes.Buffer
-	if !publish(&out, &errOut, ts.Client(), ts.URL, chain, body, keys[0], false, true, to, true) {
+	if publish(&out, &errOut, ts.Client(), ts.URL, chain, body, keys[0], false, true, to, true) != postSucceeded {
 		t.Fatalf("publish failed: %s%s", out.String(), errOut.String())
 	}
 	if !strings.Contains(out.String(), "now serves the NAL signed by the new key") {

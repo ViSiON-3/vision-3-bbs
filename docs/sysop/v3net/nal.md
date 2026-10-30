@@ -337,7 +337,7 @@ verify, or an unsigned one from a hub that signed its reply about the signers,
 proves nothing about what happened, because the post had already gone out. The
 same goes for no reply at all (a timeout or a dropped connection). In each case
 the tool does not report success or a refusal: it says the post may or may not
-have taken effect, and exits with status 1. To find out, run the same command
+have taken effect, and exits with status 3. To find out, run the same command
 with `-dry-run`. `the hub already holds this chain` means the post arrived; a
 pass as a new chain means it did not. Posting again is also safe, since the hub
 does not store a handover twice.
@@ -345,6 +345,27 @@ does not store a handover twice.
 An older hub signs nothing. The tool says so and takes the status as sent, as
 it always did. For a hub too old to report its signers, look for the handover
 in `coordinator_handovers` in the network's NAL, or in the hub's log.
+
+**Exit status.** A script can tell these outcomes apart by the tool's exit
+status:
+
+| Status | Meaning |
+|--------|---------|
+| 0 | The post worked, or a dry run found nothing that would stop a real run (see the table above) |
+| 1 | The post failed or the hub refused it, a check stopped the tool before posting, or the options were missing or wrong |
+| 2 | A flag the tool does not know; nothing was signed or posted |
+| 3 | The outcome is unknown, as described above: the post may or may not have taken effect |
+
+Treat 3 as neither success nor failure: run the command with `-dry-run` to find
+out, or post again.
+
+`go run` exits with status 1 whatever status the tool exits with, so a script
+that needs these must build the tool and run the result:
+
+```bash
+go build -o v3net-handover ./cmd/v3net-handover
+./v3net-handover -keystore data/v3net.key -hub http://localhost:8765 -network felonynet -new-key <new public key>
+```
 
 The tool sends the request as the old key's node, which the hub registered
 as a subscriber while it ran with that key. Do not delete that node in

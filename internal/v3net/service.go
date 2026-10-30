@@ -363,8 +363,9 @@ func hubAutoInit(cfg config.V3NetConfig, h *hub.Hub, ks *keystore.Keystore) {
 		}
 
 		// SignNAL refuses a network handed over to another key, so seeding
-		// cannot undo the handover.
-		if err := h.SignNAL(nalDoc); err != nil {
+		// cannot undo the handover. No manager here is anyone's choice: the
+		// seeded areas are the hub's own, which never move.
+		if err := h.SignNAL(nalDoc, nil); err != nil {
 			slog.Error("v3net: could not sign initial NAL", "network", n.Name, "error", err)
 			continue
 		}

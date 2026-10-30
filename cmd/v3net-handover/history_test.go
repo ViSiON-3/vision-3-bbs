@@ -171,7 +171,7 @@ func switchedHubServer(t *testing.T, sender *keystore.Keystore, keys ...*keystor
 		if err != nil || n == nil {
 			t.Fatalf("get NAL: %v", err)
 		}
-		if err := h.SignNAL(n); err != nil {
+		if err := h.SignNAL(n, nil); err != nil {
 			t.Fatal(err)
 		}
 		if err := h.NALStore().Put("testnet", n); err != nil {
@@ -514,7 +514,7 @@ func TestMatchChainAgreesWithHub(t *testing.T) {
 					if i == 0 {
 						n = &protocol.NAL{V3NetNAL: "1.0", Network: "testnet", Areas: []protocol.Area{}}
 					}
-					if err := h.SignNAL(n); err != nil {
+					if err := h.SignNAL(n, nil); err != nil {
 						t.Fatalf("step %s: %v", step, err)
 					}
 					if err := h.NALStore().Put("testnet", n); err != nil {
