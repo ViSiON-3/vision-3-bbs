@@ -2,6 +2,7 @@ package config
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -315,5 +316,73 @@ func TestV3NetSaveHubURLChangedElsewhere(t *testing.T) {
 	})
 	if len(conflicts) != 1 || len(leaves) != 3 {
 		t.Errorf("leaves = %+v, conflicts = %+v; want the edited old leaf kept and reported", leaves, conflicts)
+	}
+}
+
+// Two editor sessions move one network to different hubs: a hub URL
+// changed on both sides, so this save's leaf is kept, the other move is
+// reported, and the network is listed once (#791).
+func TestV3NetSaveHubMovedBothSides(t *testing.T) {
+	leaves, conflicts := saveV3NetHubRace(t, hubMoveBase(), func(c *V3NetConfig) {
+		c.Leaves[0].HubURL = "https://other.example"
+		c.Leaves[0].Boards = []string{"A", "A2"}
+	}, moveHub)
+	if len(leaves) != 2 || leaves[0].HubURL != "https://new.example" || leaves[1].Network != "netb" {
+		t.Fatalf("leaves = %+v, want neta at this save's hub and netb", leaves)
+	}
+	if len(leaves[0].Boards) != 1 {
+		t.Errorf("neta = %+v; the other session's leaf is replaced whole", leaves[0])
+	}
+	if len(conflicts) != 1 || conflicts[0].Field != "hubUrl" ||
+		!strings.Contains(conflicts[0].What, "https://other.example") {
+		t.Errorf("conflicts = %+v, want one naming the other session's hub", conflicts)
+	}
+}
+
+// Both sessions moving the network to the same hub agree, so there is one
+// leaf and nothing to report.
+func TestV3NetSaveHubMovedBothSidesSameHub(t *testing.T) {
+	leaves, conflicts := saveV3NetHubRace(t, hubMoveBase(), moveHub, moveHub)
+	if len(conflicts) != 0 {
+		t.Errorf("conflicts = %+v", conflicts)
+	}
+	if len(leaves) != 2 || leaves[0].HubURL != "https://new.example" || leaves[1].Network != "netb" {
+		t.Errorf("leaves = %+v, want neta at the new hub and netb", leaves)
+	}
+}
+
+// A second leaf for a network is a subscription through a second hub. When
+// one side moves the network and the other adds such a leaf, the sides did
+// not change the same thing: the move and the new subscription are both
+// kept, unreported, whichever side made which.
+func TestV3NetSaveHubMoveBesideSecondHub(t *testing.T) {
+	addSecond := func(c *V3NetConfig) {
+		c.Leaves = append(c.Leaves, V3NetLeafConfig{HubURL: "https://second.example", Network: "neta"})
+	}
+	hubs := func(leaves []V3NetLeafConfig) []string {
+		var out []string
+		for _, l := range leaves {
+			if l.Network == "neta" {
+				out = append(out, l.HubURL)
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	want := []string{"https://new.example", "https://second.example"}
+	for _, tc := range []struct {
+		name       string
+		disk, edit func(*V3NetConfig)
+	}{
+		{"moved here", addSecond, moveHub},
+		{"moved elsewhere", moveHub, addSecond},
+	} {
+		leaves, conflicts := saveV3NetHubRace(t, hubMoveBase(), tc.disk, tc.edit)
+		if len(conflicts) != 0 {
+			t.Errorf("%s: conflicts = %+v", tc.name, conflicts)
+		}
+		if got := hubs(leaves); !slices.Equal(got, want) {
+			t.Errorf("%s: neta hubs = %v, want %v", tc.name, got, want)
+		}
 	}
 }

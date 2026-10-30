@@ -447,8 +447,8 @@ func TestSaveFilePrepareHook(t *testing.T) {
 		ListKeys: subKeys,
 		// Ours moved the sub to another hub, so theirs' key for the old
 		// one no longer matters.
-		Prepare: func(base, ours, theirs subsDoc) (subsDoc, subsDoc) {
-			return ours, base
+		Prepare: func(base, ours, theirs subsDoc) (subsDoc, subsDoc, []Conflict) {
+			return ours, base, nil
 		},
 	}
 	base := subsDoc{Subs: []sub{{Net: "a", Hub: "h"}}}
@@ -465,5 +465,40 @@ func TestSaveFilePrepareHook(t *testing.T) {
 	}
 	if disk, err := parse(data); err != nil || len(disk.Subs) != 1 || disk.Subs[0].Hub != "h2" {
 		t.Errorf("file = %s, want the merged result written", data)
+	}
+}
+
+// Conflicts Prepare returns for changes of theirs it discarded come first in
+// the result, ahead of the merge's own.
+func TestSaveFilePrepareConflicts(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "subs.json")
+	if err := os.WriteFile(path, []byte(`{"subs":[{"net":"a","hub":"h3"},{"net":"b","hub":"h","key":"T"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := File[subsDoc]{
+		Path: path,
+		Parse: func(b []byte) (subsDoc, error) {
+			var v subsDoc
+			return v, json.Unmarshal(b, &v)
+		},
+		Marshal:  func(v subsDoc) ([]byte, error) { return json.MarshalIndent(v, "", "  ") },
+		ListKeys: subKeys,
+		// Both sides moved sub a to another hub; theirs' move is dropped.
+		Prepare: func(base, ours, theirs subsDoc) (subsDoc, subsDoc, []Conflict) {
+			theirs.Subs = theirs.Subs[1:]
+			return ours, theirs, []Conflict{{Path: "subs.a", What: "subs.a: moved here and elsewhere"}}
+		},
+	}
+	base := subsDoc{Subs: []sub{{Net: "a", Hub: "h"}, {Net: "b", Hub: "h"}}}
+	ours := subsDoc{Subs: []sub{{Net: "a", Hub: "h2"}, {Net: "b", Hub: "h", Key: "O"}}}
+	saved, res, err := SaveFile(f, base, ours)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Conflicts) != 2 || res.Conflicts[0].Path != "subs.a" {
+		t.Errorf("conflicts = %+v, want Prepare's, then the merge's for sub b's key", res.Conflicts)
+	}
+	if len(saved.Subs) != 2 || saved.Subs[0].Hub != "h2" || saved.Subs[1].Key != "O" {
+		t.Errorf("saved = %+v", saved)
 	}
 }

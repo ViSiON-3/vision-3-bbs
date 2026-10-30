@@ -686,8 +686,9 @@ type File[T any] struct {
 	// item removed and another added, and an edit elsewhere to the removed
 	// one would keep it beside the new one. It must not modify the values
 	// it is passed in place; theirs as read is still what SaveFile compares
-	// the result with.
-	Prepare func(base, ours, theirs T) (T, T)
+	// the result with. It returns a conflict for each change of theirs it
+	// discarded, so the result reports it like one the merge settled.
+	Prepare func(base, ours, theirs T) (T, T, []Conflict)
 	// Fix, if set, adjusts a merged result before it is written, for
 	// fields derived from an item's id that the generic merge cannot know
 	// about (a generated directory named after the id, say).
@@ -740,12 +741,16 @@ func SaveFile[T any](f File[T], base, ours T) (T, Result, error) {
 		return zero, Result{}, fmt.Errorf("parsing %s: %w", f.Path, err)
 	}
 	mergeOurs, mergeTheirs := ours, theirs
+	var prepared []Conflict
 	if f.Prepare != nil {
-		mergeOurs, mergeTheirs = f.Prepare(base, ours, theirs)
+		mergeOurs, mergeTheirs, prepared = f.Prepare(base, ours, theirs)
 	}
 	merged, res, err := MergeTypedKeys(f.ListKeys, base, mergeOurs, mergeTheirs)
 	if err != nil {
 		return zero, Result{}, fmt.Errorf("merging %s: %w", f.Path, err)
+	}
+	if len(prepared) > 0 {
+		res.Conflicts = append(prepared, res.Conflicts...)
 	}
 	if len(res.DuplicateTags) > 0 {
 		return zero, res, &DuplicateTagError{Path: f.Path, Tags: res.DuplicateTags}
