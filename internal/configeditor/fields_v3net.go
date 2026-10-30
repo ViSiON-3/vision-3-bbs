@@ -68,12 +68,31 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 		return nil
 	}
 	l := &m.configs.V3Net.Leaves[idx]
+	// Set by the Hub URL field when it dropped the old hub's key, for its
+	// AfterSet to tell the sysop.
+	hubKeyCleared := false
 
 	return []fieldDef{
 		{
-			Label: "Hub URL", Help: "URL of the V3Net hub (e.g. https://felonynet.org)", Type: ftString, Col: 3, Row: 1, Width: 49,
+			Label: "Hub URL", Help: "URL of the V3Net hub (e.g. https://felonynet.org); changing it re-pins the hub key on first contact", Type: ftString, Col: 3, Row: 1, Width: 49,
 			Get: func() string { return l.HubURL },
-			Set: func(val string) error { l.HubURL = val; return nil },
+			Set: func(val string) error {
+				hubKeyCleared = false
+				if val != l.HubURL && l.HubURL != "" {
+					// The old hub's key does not apply to the new one; the
+					// coordinator key belongs to the network and stays.
+					// Per-hub state the leaf records is cleared here too.
+					hubKeyCleared = l.HubPubKey != "" || l.PendingHubPubKey != ""
+					l.HubPubKey, l.PendingHubPubKey = "", ""
+				}
+				l.HubURL = val
+				return nil
+			},
+			AfterSet: func(cur *Model, _ string) {
+				if hubKeyCleared {
+					cur.message = "Hub key cleared; it is pinned again on first contact with the new hub"
+				}
+			},
 		},
 		{
 			Label: "Network", Help: "Network name to subscribe to (e.g. felonynet)", Type: ftString, Col: 3, Row: 2, Width: 32,

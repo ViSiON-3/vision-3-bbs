@@ -457,6 +457,28 @@ func fieldKey(item any, fields []string) (key, label string, ok bool) {
 	return string(data), strings.Join(parts, " "), true
 }
 
+// ItemsKeyed reports whether list merges item by item when keyed on fields
+// (MergeTypedKeys): every item has the fields, as strings, and no two items
+// share their values. Otherwise the list merges as a single value. A hook
+// that matches items itself (File.Prepare) uses it to match only where the
+// merge will.
+func ItemsKeyed[E any](list []E, fields []string) bool {
+	g, err := toGeneric(list)
+	if err != nil {
+		return false
+	}
+	items, _ := g.([]any)
+	seen := make(map[string]bool, len(items))
+	for _, item := range items {
+		k, _, ok := fieldKey(item, fields)
+		if !ok || seen[k] {
+			return false
+		}
+		seen[k] = true
+	}
+	return true
+}
+
 // blankStrings returns the versions of one list item with every string
 // field that some version has, and another lacks, set to "" in the one that
 // lacks it. An omitempty string field cleared on one side is then an edit
@@ -658,6 +680,14 @@ type File[T any] struct {
 	Parse func([]byte) (T, error)
 	// Marshal renders the file's contents.
 	Marshal func(T) ([]byte, error)
+	// Prepare, if set, adjusts ours and theirs before they are merged
+	// against base and returns them, for an edit the generic merge would
+	// misread: a list item whose identifying field changed reads as one
+	// item removed and another added, and an edit elsewhere to the removed
+	// one would keep it beside the new one. It must not modify the values
+	// it is passed in place; theirs as read is still what SaveFile compares
+	// the result with.
+	Prepare func(base, ours, theirs T) (T, T)
 	// Fix, if set, adjusts a merged result before it is written, for
 	// fields derived from an item's id that the generic merge cannot know
 	// about (a generated directory named after the id, say).
@@ -709,7 +739,11 @@ func SaveFile[T any](f File[T], base, ours T) (T, Result, error) {
 	if err != nil {
 		return zero, Result{}, fmt.Errorf("parsing %s: %w", f.Path, err)
 	}
-	merged, res, err := MergeTypedKeys(f.ListKeys, base, ours, theirs)
+	mergeOurs, mergeTheirs := ours, theirs
+	if f.Prepare != nil {
+		mergeOurs, mergeTheirs = f.Prepare(base, ours, theirs)
+	}
+	merged, res, err := MergeTypedKeys(f.ListKeys, base, mergeOurs, mergeTheirs)
 	if err != nil {
 		return zero, Result{}, fmt.Errorf("merging %s: %w", f.Path, err)
 	}
