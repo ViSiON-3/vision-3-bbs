@@ -14,7 +14,7 @@ func TestV3NetLeafHubURLChangeClearsHubKey(t *testing.T) {
 	m.configs.V3Net.Leaves = []config.V3NetLeafConfig{{
 		HubURL: "https://old.example", Network: "testnet",
 		CoordinatorPubKey: "coord", PendingCoordinatorPubKey: "coord-offered",
-		HubPubKey: "hub", PendingHubPubKey: "hub-offered",
+		HubPubKey: "hub", PendingHubPubKey: "hub-offered", HubSigned: true,
 	}}
 	f := findField(t, m.fieldsV3NetLeaf(), "Hub URL")
 
@@ -23,7 +23,7 @@ func TestV3NetLeafHubURLChangeClearsHubKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.AfterSet(&m, "https://old.example")
-	if l := m.configs.V3Net.Leaves[0]; l.HubPubKey != "hub" || l.PendingHubPubKey != "hub-offered" || m.message != "" {
+	if l := m.configs.V3Net.Leaves[0]; l.HubPubKey != "hub" || l.PendingHubPubKey != "hub-offered" || !l.HubSigned || m.message != "" {
 		t.Errorf("same URL: leaf = %+v, message %q; want nothing changed", l, m.message)
 	}
 
@@ -32,8 +32,8 @@ func TestV3NetLeafHubURLChangeClearsHubKey(t *testing.T) {
 	}
 	f.AfterSet(&m, "https://new.example")
 	l := m.configs.V3Net.Leaves[0]
-	if l.HubURL != "https://new.example" || l.HubPubKey != "" || l.PendingHubPubKey != "" {
-		t.Errorf("new URL: leaf = %+v; want the hub key and pending hub key cleared", l)
+	if l.HubURL != "https://new.example" || l.HubPubKey != "" || l.PendingHubPubKey != "" || l.HubSigned {
+		t.Errorf("new URL: leaf = %+v; want the hub key, pending hub key and hubSigned cleared", l)
 	}
 	if l.CoordinatorPubKey != "coord" || l.PendingCoordinatorPubKey != "coord-offered" {
 		t.Errorf("new URL: leaf = %+v; the coordinator keys must stay", l)

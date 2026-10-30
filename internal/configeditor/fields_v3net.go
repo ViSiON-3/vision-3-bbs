@@ -82,8 +82,9 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 					// The old hub's key does not apply to the new one; the
 					// coordinator key belongs to the network and stays.
 					// Per-hub state the leaf records is cleared here too.
-					hubKeyCleared = l.HubPubKey != "" || l.PendingHubPubKey != ""
+					hubKeyCleared = l.HubPubKey != "" || l.PendingHubPubKey != "" || l.HubSigned
 					l.HubPubKey, l.PendingHubPubKey = "", ""
+					l.HubSigned = false
 				}
 				l.HubURL = val
 				return nil
