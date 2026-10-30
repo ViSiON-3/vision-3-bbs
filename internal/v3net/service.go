@@ -72,6 +72,9 @@ type Service struct {
 	// configFile is v3net.json as the last reload, or startup, found it (see
 	// noteConfigFile). Guarded by mu.
 	configFile configFileState
+	// configFileReadHook, if set (tests only), runs in readConfigFile between
+	// its first stat of v3net.json and reading it.
+	configFileReadHook func()
 
 	// BBSName and BBSHost are sent in subscribe requests and, when the hub
 	// is enabled, written to the hub's own subscriber row by Start.
@@ -936,24 +939,44 @@ type configFileState struct {
 // contents did not. Only a sysop does that: the config editor, for Hub
 // Signs, or a hand save or touch. The BBS's own writes change the contents,
 // and a reload the file did not cause (reload.force, the area browser)
-// leaves the timestamp alone. Without a config path, or a file, it reports
-// false.
+// leaves the timestamp alone. Without a config path, or a usable copy of the
+// file (see readConfigFile), it reports false, and so does the next call.
 func (s *Service) noteConfigFile() bool {
-	var cur configFileState
-	if s.cfg.ConfigPath != "" {
-		path := filepath.Join(s.cfg.ConfigPath, "v3net.json")
-		// Stat first: a write between the two looks changed, not touched.
-		if info, err := os.Stat(path); err == nil {
-			if data, err := os.ReadFile(path); err == nil {
-				cur = configFileState{seen: true, modTime: info.ModTime(), data: data}
-			}
-		}
-	}
+	cur := s.readConfigFile()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	prev := s.configFile
 	s.configFile = cur
 	return prev.seen && cur.seen && !cur.modTime.Equal(prev.modTime) && bytes.Equal(cur.data, prev.data)
+}
+
+// readConfigFile returns a copy of v3net.json, or the zero state if it could
+// not be read or was written during the read. A write replaces the file, so
+// a timestamp from before it and contents from after would make the next
+// call take that write for a touch: the file must be the same one, with the
+// same timestamp and size, either side of the read.
+func (s *Service) readConfigFile() configFileState {
+	if s.cfg.ConfigPath == "" {
+		return configFileState{}
+	}
+	path := filepath.Join(s.cfg.ConfigPath, "v3net.json")
+	before, err := os.Stat(path)
+	if err != nil {
+		return configFileState{}
+	}
+	if s.configFileReadHook != nil {
+		s.configFileReadHook()
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return configFileState{}
+	}
+	after, err := os.Stat(path)
+	if err != nil || !os.SameFile(before, after) ||
+		!after.ModTime().Equal(before.ModTime()) || after.Size() != before.Size() {
+		return configFileState{}
+	}
+	return configFileState{seen: true, modTime: before.ModTime(), data: data}
 }
 
 // leafEdits says which of a leaf's recorded fields the sysop wrote between
