@@ -183,8 +183,8 @@ see [If the Hub Already Runs the New Key](#if-the-hub-already-runs-the-new-key).
    ```
 
    Use `-new-keystore <path>` instead of `-new-key` to read the key from
-   the new `v3net.key`, and `-dry-run` to print the signed handover without
-   sending it. Run it once per network the hub carries. Before posting,
+   the new `v3net.key`, and `-dry-run` to print the signed handover and
+   check it without sending it. Run it once per network the hub carries. Before posting,
    the tool checks the key the hub's `/info` page serves, and refuses if it
    is neither the old key nor the new one (usually a wrong `-hub`,
    `-network` or keystore). It then checks the chain against the hub's
@@ -315,7 +315,36 @@ An older hub has no such record to give. The tool then prints `Could not
 check the chain against the hub's signer history` and posts as before, and
 the hub still checks the chain itself. It prints the same if the hub does
 not know the sending node, and the post then fails with the `401` described
-below. `-dry-run` does not contact the hub, so it makes no check.
+below.
+
+`-dry-run` makes all of these checks and posts nothing, so you can ask the hub
+which chain it needs before committing to one. It prints the signed handover,
+then what a real run would do:
+
+| Output | Meaning | Exit status |
+|--------|---------|-------------|
+| `Dry run: the checks pass and a real run would post this chain.` | The chain matches the hub's record | 0 |
+| `Dry run: a real run would stop here:` and the reason | The hub runs neither key, its answer failed its signature, or the chain does not match; the reason names the chain to use where it can | 1 |
+| `Could not check the chain:` | The hub could not be reached, so nothing was checked. You still get the signed handover, so this works offline | 0 |
+| `Could not check the chain against the hub's signer history:` | The hub answered but has no record to give, as above. A real run would post | 0 |
+
+Exit status 0 therefore does not by itself mean the chain was checked; read
+the output.
+
+**Checking the result.** The tool also checks the signature on the hub's reply
+to the post, with a fresh nonce, against the same key. A reply that does not
+verify, or an unsigned one from a hub that signed its reply about the signers,
+proves nothing about what happened, because the post had already gone out. The
+same goes for no reply at all (a timeout or a dropped connection). In each case
+the tool does not report success or a refusal: it says the post may or may not
+have taken effect, and exits with status 1. To find out, run the same command
+with `-dry-run`. `the hub already holds this chain` means the post arrived; a
+pass as a new chain means it did not. Posting again is also safe, since the hub
+does not store a handover twice.
+
+An older hub signs nothing. The tool says so and takes the status as sent, as
+it always did. For a hub too old to report its signers, look for the handover
+in `coordinator_handovers` in the network's NAL, or in the hub's log.
 
 The tool sends the request as the old key's node, which the hub registered
 as a subscriber while it ran with that key. Do not delete that node in
