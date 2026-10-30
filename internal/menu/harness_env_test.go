@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"log"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -25,6 +27,37 @@ import (
 // Tests never wait out on-screen message pauses: they read the output
 // instead of watching it, and the pauses would add minutes to the run.
 func init() { uiPause = func(time.Duration) {} }
+
+// captureSlog sends slog's default logger to w until the returned function is
+// called. Restoring the logger alone is not enough: slog.SetDefault also points
+// the log package at the new handler, and the original default logger writes
+// through the log package, so every later line in the test binary would go on
+// to w instead of the test output (#814).
+func captureSlog(w io.Writer, opts *slog.HandlerOptions) (restore func()) {
+	prev, out, flags := slog.Default(), log.Writer(), log.Flags()
+	slog.SetDefault(slog.New(slog.NewTextHandler(w, opts)))
+	return func() {
+		slog.SetDefault(prev)
+		log.SetOutput(out)
+		log.SetFlags(flags)
+	}
+}
+
+// After a capture, lines logged through slog no longer reach the capture.
+func TestCaptureSlogRestoresLogOutput(t *testing.T) {
+	var captured strings.Builder
+	restore := captureSlog(&captured, nil)
+	slog.Info("during")
+	restore()
+	if !strings.Contains(captured.String(), "during") {
+		t.Fatalf("capture = %q, want the line logged during it", captured.String())
+	}
+	captured.Reset()
+	slog.Info("after")
+	if captured.Len() != 0 {
+		t.Errorf("capture still receiving after restore: %q", captured.String())
+	}
+}
 
 // menuEnv is a complete, isolated BBS for handler tests: an executor wired
 // the way NewExecutor wires it, running on the shipped defaults.

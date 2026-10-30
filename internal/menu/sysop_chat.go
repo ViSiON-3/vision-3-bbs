@@ -650,6 +650,9 @@ func serviceSysopChat(s ssh.Session, ih *editor.InputHandler, tap *snoop.Tap) {
 	if env == nil || !ok {
 		return
 	}
+	// Chat time is credited from before the sysop's request is answered, so
+	// none of a chat the sysop has been told began goes uncredited.
+	start := time.Now()
 	if !tap.ChatBegan() {
 		return
 	}
@@ -684,7 +687,6 @@ func serviceSysopChat(s ssh.Session, ih *editor.InputHandler, tap *snoop.Tap) {
 	}
 	sysop := tap.KeyboardHolder()
 	sc := chooseChatLayout(env, tap.ChatScreen(), width, height)
-	start := time.Now()
 	slog.Info("sysop chat started", "caller", handle, "sysop", sysop, "screen", sc.name)
 	runSysopChatOn(ih, tap, v.(io.Writer), sessionOutputMode(s), width, height, sysop, handle, sc)
 	took := time.Since(start)

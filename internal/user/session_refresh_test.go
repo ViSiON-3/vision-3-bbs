@@ -474,7 +474,9 @@ func TestSyncDoesNotHoldFileLockWhileWaitingForManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("saveUsersLocked: %v", err)
 	}
-	if took > time.Second {
+	// A lock held by the sync stalls the save for all of DefaultTimeout. The
+	// save's own write and sync have passed a second on a slow Windows runner.
+	if took > filelock.DefaultTimeout/2 {
 		t.Errorf("save waited %s for the file lock held by a blocked sync", took)
 	}
 }
