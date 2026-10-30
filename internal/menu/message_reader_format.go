@@ -100,7 +100,50 @@ func messageBodyLines(body, charset string, termWidth int, mode ansi.OutputMode)
 	// Word wrap cannot break a run with no spaces (an ASCII rule, a row of
 	// blocks) or a quote line, which it leaves alone; whatever is still too
 	// wide is cut, or it spills onto the row below when drawn.
+	body = dropTruncatedEscapes(body)
 	return breakOversizedLines(wrapAnsiString(body, termWidth, mode), termWidth, mode)
+}
+
+// dropTruncatedEscapes removes escape sequences that were cut off before their
+// final byte, keeping everything else exactly as it arrived. Art can reach us
+// cut at 79 bytes mid-sequence, and a body using only colour never goes through
+// the ANSI renderer, which discards these itself. Sent to the terminal, the
+// fragment is drawn as text or eats whatever follows, depending on the client.
+// The lost bytes cannot be recovered; this only stops the damage showing.
+func dropTruncatedEscapes(s string) string {
+	if !strings.Contains(s, "\x1b") {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if s[i] != 0x1b {
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		j := i + 1
+		if j < len(s) && s[j] == '[' {
+			j++
+			for j < len(s) && s[j] >= 0x20 && s[j] <= 0x3f { // parameters, intermediates
+				j++
+			}
+			if j < len(s) && s[j] >= 0x40 && s[j] <= 0x7e { // final byte: complete
+				b.WriteString(s[i : j+1])
+				i = j + 1
+				continue
+			}
+			i = j // stop before the byte that ended it, so it is still processed
+			continue
+		}
+		if j >= len(s) || s[j] == '\r' || s[j] == '\n' || s[j] == 0x1b {
+			i = j // a bare ESC
+			continue
+		}
+		b.WriteString(s[i : j+1])
+		i = j + 1
+	}
+	return b.String()
 }
 
 func hasOriginLine(text string) bool {
