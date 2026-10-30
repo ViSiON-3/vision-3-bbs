@@ -2,6 +2,7 @@ package v3net
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -204,4 +205,32 @@ func TestKeyPinnedNotifiesHandover(t *testing.T) {
 	if len(seen) != 1 || seen[0].Previous != "A" || seen[0].Pinned != "B" {
 		t.Errorf("observer saw %+v, want the move from A to B", seen)
 	}
+}
+
+// A reload's baseline goes back only for the fields it could not check, so a clear
+// it applied is not seen as a clear again after a pin's read failed (#821).
+func TestWithUncheckedFrom(t *testing.T) {
+	before := config.V3NetLeafConfig{
+		CoordinatorPubKey: "old-coord", PendingCoordinatorPubKey: "old-coord-pending",
+		HubPubKey: "old-hub", PendingHubPubKey: "old-hub-pending",
+		HubSigned: true, HubSignedClears: 1,
+	}
+	checked := config.V3NetLeafConfig{
+		CoordinatorPubKey: "new-coord", PendingCoordinatorPubKey: "new-coord-pending",
+		HubPubKey: "new-hub", PendingHubPubKey: "new-hub-pending",
+		HubSignedClears: 2,
+	}
+	check := func(name string, p leaf.Pins, want config.V3NetLeafConfig) {
+		t.Helper()
+		if got := withUncheckedFrom(checked, before, p); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %+v, want %+v", name, got, want)
+		}
+	}
+	want := before
+	want.HubSigned, want.HubSignedClears = false, 2
+	check("pins unread", leaf.Pins{CoordUnread: true, HubUnread: true}, want)
+	want = checked
+	want.HubSigned, want.HubSignedClears = true, 1
+	check("hubSigned unread", leaf.Pins{HubSignedUnread: true}, want)
+	check("all read", leaf.Pins{}, checked)
 }

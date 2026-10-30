@@ -113,12 +113,13 @@ type Pins struct {
 	// which is how a sysop clears a record the file never got. A record not
 	// yet stored is dropped only then.
 	HubSignedEdited bool
-	// StoreUnread is set on what UpdatePins and Retire return when the store
-	// could not be read, or held no entry, for a check they needed. What
-	// could not be checked stays as the leaf has it, so this copy was not
-	// acted on, and the next reload's edits are told against whatever the
-	// caller told this one's against.
-	StoreUnread bool
+	// CoordUnread, HubUnread and HubSignedUnread are set on what UpdatePins and
+	// Retire return when the store could not be read, or held no entry, for
+	// the check that field needed. Such a field stays as the leaf has it, so
+	// the copy's was not acted on, and the next reload's edits to it are told
+	// against whatever the caller told this one's against. A field that was
+	// checked has been acted on, and is told against what is returned.
+	CoordUnread, HubUnread, HubSignedUnread bool
 }
 
 // UnsavedState is what a leaf holds that its caller's store does not yet:
@@ -202,7 +203,7 @@ func (p *keyPins) state(kind KeyKind) pinState {
 // edit is in the store too, even one back to an earlier key. The pins returned
 // are the ones checked, which is what the next reload's edits are told against.
 // A store that cannot be read, or holds no entry, shows the copy may be stale
-// and has nothing better, so the leaf stays as it is (see Pins.StoreUnread).
+// and has nothing better, so the leaf stays as it is (see Pins.CoordUnread).
 //
 // When the coordinator pin changed and ctx is non-nil, the NAL is re-fetched in the background so an accepted key takes effect at
 // once; likewise /info is re-checked when the hub pin changed. Pass a nil
@@ -210,12 +211,12 @@ func (p *keyPins) state(kind KeyKind) pinState {
 //
 // HubSigned is applied by applyHubSigned.
 func (l *Leaf) UpdatePins(ctx context.Context, p Pins) Pins {
-	signedRead := l.applyHubSigned(p.HubSigned, p.HubSignedEdited)
+	p.HubSignedUnread = !l.applyHubSigned(p.HubSigned, p.HubSignedEdited)
 
 	var coordChanged, hubChanged, coordRead, hubRead bool
 	p.Coord, p.PendingCoord, coordChanged, coordRead = l.applyFilePin(KeyCoordinator, p.Coord, p.PendingCoord, p.CoordEdited)
 	p.Hub, p.PendingHub, hubChanged, hubRead = l.applyFilePin(KeyHub, p.Hub, p.PendingHub, p.HubEdited)
-	p.StoreUnread = !signedRead || !coordRead || !hubRead
+	p.CoordUnread, p.HubUnread = !coordRead, !hubRead
 
 	if ctx == nil || (!coordChanged && !hubChanged) {
 		return p
@@ -386,7 +387,7 @@ func (l *Leaf) EndStores() {
 // reply came after that clear, or the sysop has set it again.
 //
 // A store that cannot be read, or holds no entry, leaves each of these as the
-// leaf has it, and the record in force (see Pins.StoreUnread).
+// leaf has it, and the record in force (see Pins.CoordUnread).
 //
 // Call it once the leaf has stopped. Work it started can still be finishing, so
 // it takes the save locks; a store after that would land unseen by the
@@ -403,28 +404,28 @@ func (l *Leaf) Retire(p Pins) (Pins, UnsavedState) {
 	l.pinMu.Unlock()
 
 	var u UnsavedState
-	settle := func(kind KeyKind, st pinState, pin, pending *string, edited bool, unsaved, movedFrom *string) {
-		var replaced, read bool
+	settle := func(kind KeyKind, st pinState, pin, pending *string, edited bool, unsaved, movedFrom *string) (read bool) {
+		var replaced bool
 		*pin, *pending, replaced, read = l.currentFilePin(kind, st, *pin, *pending, edited)
 		if !read {
-			p.StoreUnread = true
 			*pin, *pending = st.pin, l.PendingKey(kind)
 			if st.unsaved {
 				*unsaved, *movedFrom = st.pin, st.movedFrom
 			}
-			return
+			return false
 		}
 		if !st.unsaved || replaced {
-			return
+			return true
 		}
 		*unsaved, *movedFrom = st.pin, st.movedFrom
 		if normalizeKey(*pin) == st.pin {
 			// The file holds it, as in installFilePin.
 			*movedFrom = ""
 		}
+		return true
 	}
-	settle(KeyCoordinator, coord, &p.Coord, &p.PendingCoord, p.CoordEdited, &u.Coord, &u.CoordMovedFrom)
-	settle(KeyHub, hub, &p.Hub, &p.PendingHub, p.HubEdited, &u.Hub, &u.HubMovedFrom)
+	p.CoordUnread = !settle(KeyCoordinator, coord, &p.Coord, &p.PendingCoord, p.CoordEdited, &u.Coord, &u.CoordMovedFrom)
+	p.HubUnread = !settle(KeyHub, hub, &p.Hub, &p.PendingHub, p.HubEdited, &u.Hub, &u.HubMovedFrom)
 	u.HubSigned = l.settleHubSigned(&p, signedUnsaved, signedCfg)
 	return p, u
 }
@@ -438,7 +439,7 @@ func (l *Leaf) settleHubSigned(p *Pins, signedUnsaved, signedCfg bool) bool {
 		stored, err := l.cfg.HubSignedStored()
 		if err != nil {
 			l.noteStoreUnread("hubSigned", err)
-			p.StoreUnread = true
+			p.HubSignedUnread = true
 			p.HubSigned = p.HubSigned || signedCfg
 			return signedUnsaved
 		}

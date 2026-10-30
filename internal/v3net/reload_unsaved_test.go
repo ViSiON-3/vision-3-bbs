@@ -447,10 +447,9 @@ func TestReloadKeepsLeafWhenFileUnusable(t *testing.T) {
 			}
 		},
 		"no entry": func(f *unsavedFixture) {
-			keep := f.cfgs
-			f.cfgs = f.cfgs[1:]
-			f.write()
-			f.cfgs = keep
+			if err := config.SaveV3NetConfig(f.dir, config.V3NetConfig{}); err != nil {
+				f.t.Fatal(err)
+			}
 		},
 		"no file": func(f *unsavedFixture) {
 			if err := os.Remove(filepath.Join(f.dir, "v3net.json")); err != nil {

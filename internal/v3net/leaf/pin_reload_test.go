@@ -291,8 +291,8 @@ func TestUpdatePinsKeepsLeafWhenStoreUnread(t *testing.T) {
 			l.cfg.HubSignedStored = func() (StoredHubSigned, error) { return StoredHubSigned{}, err }
 
 			p := l.UpdatePins(nil, Pins{Coord: newCoordKey(t).PubKeyBase64(), PendingCoord: "copy", CoordEdited: true, HubSignedEdited: true}) //nolint:staticcheck // nil ctx: the leaf is not running
-			if !p.StoreUnread {
-				t.Error("StoreUnread not set")
+			if !p.CoordUnread || !p.HubUnread || !p.HubSignedUnread {
+				t.Errorf("unread flags %+v, want all set", p)
 			}
 			if got := l.PinnedKey(KeyCoordinator); got != b.PubKeyBase64() {
 				t.Errorf("pin = %s, want the leaf's B", got)
@@ -310,6 +310,40 @@ func TestUpdatePinsKeepsLeafWhenStoreUnread(t *testing.T) {
 	}
 }
 
+// Each field reports its own read, so a clear that was checked and applied is not
+// reported as unread because a pin's read failed after it (#821).
+func TestUnreadFlagsPerField(t *testing.T) {
+	newLeaf := func(pinErr, signedErr error) *Leaf {
+		l, _ := setupLeaf(t, "http://unused.invalid", &mockJAMWriter{})
+		l.pins.hubSigned, l.pins.hubSignedCfg = true, true
+		l.cfg.PinStored = func(KeyKind) (StoredPin, error) { return StoredPin{}, pinErr }
+		l.cfg.HubSignedStored = func() (StoredHubSigned, error) { return StoredHubSigned{}, signedErr }
+		return l
+	}
+	gone := errors.New("gone")
+	copyOf := Pins{HubSignedClears: 1, HubSignedEdited: true}
+
+	l := newLeaf(gone, nil)
+	p := l.UpdatePins(nil, copyOf) //nolint:staticcheck // nil ctx: the leaf is not running
+	if !p.CoordUnread || !p.HubUnread || p.HubSignedUnread || l.HubSigned() {
+		t.Errorf("pins unread: %+v, hubSigned=%v; want the clear applied and only the pins unread", p, l.HubSigned())
+	}
+	p, _ = newLeaf(gone, nil).Retire(copyOf)
+	if !p.CoordUnread || !p.HubUnread || p.HubSignedUnread || p.HubSigned {
+		t.Errorf("Retire, pins unread: %+v; want the clear applied and only the pins unread", p)
+	}
+
+	l = newLeaf(nil, gone)
+	p = l.UpdatePins(nil, copyOf) //nolint:staticcheck // nil ctx: the leaf is not running
+	if p.CoordUnread || p.HubUnread || !p.HubSignedUnread || !l.HubSigned() {
+		t.Errorf("hubSigned unread: %+v, hubSigned=%v; want the record kept and only it unread", p, l.HubSigned())
+	}
+	p, _ = newLeaf(nil, gone).Retire(copyOf)
+	if p.CoordUnread || p.HubUnread || !p.HubSignedUnread || !p.HubSigned {
+		t.Errorf("Retire, hubSigned unread: %+v; want the record kept and only it unread", p)
+	}
+}
+
 // Retire treats a store it cannot read the same way (#821).
 func TestRetireKeepsLeafWhenStoreUnread(t *testing.T) {
 	for name, err := range map[string]error{"unreadable": errors.New("gone"), "no entry": ErrNoStoredEntry} {
@@ -320,8 +354,8 @@ func TestRetireKeepsLeafWhenStoreUnread(t *testing.T) {
 			l.cfg.PinStored = func(KeyKind) (StoredPin, error) { return StoredPin{}, err }
 
 			p, u := l.Retire(Pins{Coord: newCoordKey(t).PubKeyBase64(), PendingCoord: "copy", CoordEdited: true})
-			if !p.StoreUnread {
-				t.Error("StoreUnread not set")
+			if !p.CoordUnread || !p.HubUnread {
+				t.Errorf("unread flags %+v, want the pins' set", p)
 			}
 			if p.Coord != b.PubKeyBase64() || p.PendingCoord != "pending-of-the-leaf" {
 				t.Errorf("pins %+v, want the leaf's", p)
@@ -405,8 +439,8 @@ func TestRetireHubSigned(t *testing.T) {
 			if u.HubSigned != c.wantCarried {
 				t.Errorf("carried unsaved = %v, want %v", u.HubSigned, c.wantCarried)
 			}
-			if p.StoreUnread != c.wantUnread {
-				t.Errorf("StoreUnread = %v, want %v", p.StoreUnread, c.wantUnread)
+			if p.HubSignedUnread != c.wantUnread {
+				t.Errorf("HubSignedUnread = %v, want %v", p.HubSignedUnread, c.wantUnread)
 			}
 		})
 	}

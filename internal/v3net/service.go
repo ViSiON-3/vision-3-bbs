@@ -959,15 +959,21 @@ func leafEdits(prev, next config.V3NetLeafConfig) (coord, hub, hubSigned bool) {
 	return coord, hub, prev.HubSigned != next.HubSigned || prev.HubSignedClears != next.HubSignedClears
 }
 
-// withRecordedFrom returns c with its pinned and pending key fields, and the
-// record that the hub signs and the count of its clears, taken from from: the
-// fields withoutKeys clears. A reload that could not check them against the file
-// keeps the baseline from before it, so the next reload still sees any edit in
-// them as one.
-func withRecordedFrom(c, from config.V3NetLeafConfig) config.V3NetLeafConfig {
-	c.CoordinatorPubKey, c.HubPubKey = from.CoordinatorPubKey, from.HubPubKey
-	c.PendingCoordinatorPubKey, c.PendingHubPubKey = from.PendingCoordinatorPubKey, from.PendingHubPubKey
-	c.HubSigned, c.HubSignedClears = from.HubSigned, from.HubSignedClears
+// withUncheckedFrom returns c, a reload's baseline, with the recorded fields p
+// says could not be checked against the file taken from before, the baseline
+// that reload was told against, so the next reload still sees any edit in them as
+// one. A field that was checked has been acted on, so it keeps its new baseline:
+// a clear already applied is not a clear again.
+func withUncheckedFrom(c, before config.V3NetLeafConfig, p leaf.Pins) config.V3NetLeafConfig {
+	if p.CoordUnread {
+		c.CoordinatorPubKey, c.PendingCoordinatorPubKey = before.CoordinatorPubKey, before.PendingCoordinatorPubKey
+	}
+	if p.HubUnread {
+		c.HubPubKey, c.PendingHubPubKey = before.HubPubKey, before.PendingHubPubKey
+	}
+	if p.HubSignedUnread {
+		c.HubSigned, c.HubSignedClears = before.HubSigned, before.HubSignedClears
+	}
 	return c
 }
 
@@ -1015,12 +1021,9 @@ func (s *Service) applyPins(prev, leafCfgs []config.V3NetLeafConfig) {
 			HubSigned:   c.HubSigned,
 			CoordEdited: coordEdited, HubEdited: hubEdited, HubSignedEdited: hubSignedEdited,
 		})
-		if p.StoreUnread {
-			*c = withRecordedFrom(*c, before)
-			continue
-		}
 		c.CoordinatorPubKey, c.HubPubKey = p.Coord, p.Hub
 		c.PendingCoordinatorPubKey, c.PendingHubPubKey = p.PendingCoord, p.PendingHub
+		*c = withUncheckedFrom(*c, before, p)
 	}
 	s.mu.Lock()
 	s.leafCfgs = leafCfgs
@@ -1135,8 +1138,8 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 	s.mu.Lock()
 	for i, c := range s.leafCfgs {
 		key := leafKey{c.Network, c.HubURL}
-		if settled[key].StoreUnread {
-			s.leafCfgs[i] = withRecordedFrom(c, prevByKey[key])
+		if p, ok := settled[key]; ok {
+			s.leafCfgs[i] = withUncheckedFrom(c, prevByKey[key], p)
 		}
 	}
 	s.carriedNALs = nil
