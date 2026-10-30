@@ -417,7 +417,12 @@ stores (the handovers from the NAL's key to the hub's, and the previous
 signers a late chain bridged to the NAL's key), so a re-sign that failed
 or was cut short by a restart moves the same areas when it is retried.
 The same update clears the previous signers, so their areas are never
-moved twice, over a manager chosen since.
+moved twice, over a manager chosen since. A hub-side NAL change made while
+the NAL is still another key's and the handovers lead to the hub's (the
+re-sign failed) counts as that update and moves the same areas. Any NAL
+stored under a new key while handovers are held also clears the previous
+signers, a NAL posted by the coordinator included; a posted NAL is signed
+as it came, so nothing moves.
 
 A posted NAL (`POST /v3net/v1/{network}/nal`) must always come from the
 node of the coordinator key in force and be signed by that key, so once
@@ -431,6 +436,23 @@ re-signs the stored NAL with it, and its changes are signed as before.
 NAL's `coordinator_handovers` array, oldest first, at most 32 (the most
 recent). The array is left out of the NAL's canonical form, so leaves that
 predate handovers verify the NAL as before and ignore the field.
+
+**Signer history.** `GET /v3net/v1/{network}/nal/signers` tells a tool
+what chain the hub needs. It is a signed request from any subscribed node,
+and the reply is a [hub-signed response](#hub-signatures); act on it only
+once that signature verifies. It holds public keys only:
+
+| Field | Meaning |
+|-------|---------|
+| `network` | The network |
+| `nal_key` | The key that signs the stored NAL |
+| `key_in_force` | `nal_key` followed along `handovers` |
+| `previous_signers` | The previous signers described above, oldest first; may be empty, and may include `nal_key` |
+| `handovers` | Every handover held, oldest first, as `old_key` and `new_key`; may be empty |
+
+A hub that predates this endpoint answers a subscribed node `404`. Verify
+the reply against a key you already trust for the hub, not one read from
+the unsigned `/info`.
 
 **Following.** A leaf pinned to key P that is offered a NAL signed by key N
 looks for a chain of handovers from P to N, each one for this network,
@@ -452,7 +474,8 @@ in `internal/v3net/nal/handover_test.go` check this against the code.
   signed with the node's Ed25519 key over the method, path, `Date` header and
   body hash, sent in the `X-V3Net-Node-ID` and `X-V3Net-Signature` headers.
 - **Endpoints** (under `/v3net/v1/`): `networks`, `subscribe`,
-  `{network}/info`, `{network}/nal` (and `{network}/nal/handover`),
+  `{network}/info`, `{network}/nal` (and `{network}/nal/handover` and
+  `{network}/nal/signers`),
   `{network}/messages` (GET to poll, POST
   to send), `{network}/events` (the SSE stream), `{network}/presence`, the
   `chat/rooms/...` calls, and the area, proposal, access-request, manager and

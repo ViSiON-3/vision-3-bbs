@@ -187,7 +187,9 @@ see [If the Hub Already Runs the New Key](#if-the-hub-already-runs-the-new-key).
    sending it. Run it once per network the hub carries. Before posting,
    the tool checks the key the hub's `/info` page serves, and refuses if it
    is neither the old key nor the new one (usually a wrong `-hub`,
-   `-network` or keystore).
+   `-network` or keystore). It then checks the chain against the hub's
+   record of who signed the NAL; see
+   [Checking the Chain](#checking-the-chain).
 3. Start the hub with the new key (swap in the new `v3net.key`, or recover
    the new identity's phrase). On start it re-signs each handed-over
    network's NAL with the new key, so subscribers move at their next fetch.
@@ -277,8 +279,43 @@ Post the whole chain at once. Once the hub holds any handover it no longer
 takes one from a remembered key, so posting B to C on its own would leave
 subscribers still on A to [accept the new key by
 hand](#accepting-a-new-key-by-hand). The same goes for a key you no longer
-have: start the chain at the oldest key you still hold, and subscribers on
-older ones re-pin by hand.
+have: start the chain at the oldest key you still hold, add
+`-omit-lost-keys`, and subscribers on older ones re-pin by hand.
+
+##### Checking the Chain
+
+You do not have to work out the chain yourself. Before posting, the tool
+asks the hub which keys signed the NAL and prints the chain it needs: which
+keystore to pass as `-keystore`, which to pass to `-via` and in what order,
+and the `-new-key`. If yours does not match, the tool refuses and posts
+nothing, so a wrong first try costs nothing. Run it with the keystore you
+have, then again with the flags it prints.
+
+Sometimes a key is really gone. A chain that leaves out a recorded key is
+refused too, because it cannot be repaired afterwards: once the hub holds a
+handover it takes none from remembered keys. If you no longer have that
+key's keystore, add `-omit-lost-keys` to post the chain without it.
+Subscribers still on that key [accept the new key by
+hand](#accepting-a-new-key-by-hand). The flag does not let through a chain
+the hub would refuse.
+
+If the hub went back to a key it already ran (A, then B, then A), it cannot
+bridge B itself, since it takes no handover back to a key the network used.
+To keep subscribers on B, restart the hub with the new key first and post
+the whole chain, B then A then the new key; the tool prints it. Otherwise
+add `-omit-lost-keys`.
+
+The tool believes the hub's answer only if it is signed by the hub key you
+named, which is `-keystore`'s key or the new key, whichever `/info` says the
+hub runs. An answer with a bad signature, or a successful one with none,
+stops the tool: something other than that hub answered. Check `-hub` and any
+proxy in front of the hub.
+
+An older hub has no such record to give. The tool then prints `Could not
+check the chain against the hub's signer history` and posts as before, and
+the hub still checks the chain itself. It prints the same if the hub does
+not know the sending node, and the post then fails with the `401` described
+below. `-dry-run` does not contact the hub, so it makes no check.
 
 The tool sends the request as the old key's node, which the hub registered
 as a subscriber while it ran with that key. Do not delete that node in
