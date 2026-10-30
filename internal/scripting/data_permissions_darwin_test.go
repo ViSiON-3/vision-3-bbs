@@ -37,7 +37,7 @@ func TestDataStoreMacACLRejectsUpdates(t *testing.T) {
 //
 // The entry names everyone because the kernel decides that without an identity
 // lookup. A deny entry for a named principal such as nobody counts as applying
-// to the caller when the lookup fails, which denied this test's own read (#807).
+// to the caller when the lookup fails, which can deny this test's own read (#807).
 func TestDataStoreMacSymlinkDoesNotBypassACL(t *testing.T) {
 	h := newHarness(t, harnessOpts{})
 	h.mustRun(`v3.data.set("kept", 1)`)
