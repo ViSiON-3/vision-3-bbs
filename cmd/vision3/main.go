@@ -1235,6 +1235,8 @@ func sessionHandler(s ssh.Session) {
 		Size: liveTermSize(&physicalWidth, &termHeight),
 	}
 	sessionRegistry.Register(bbsSession)
+	menuExecutor.AttachToasts(s, bbsSession)
+	defer menu.DetachToasts(s)
 	// Strings that run a script find the session from the terminal (#605).
 	menu.RegisterStringHookSession(terminal, s, userMgr, bbsSession)
 	defer menu.ClearStringHookSession(terminal)
@@ -1649,6 +1651,13 @@ func sessionHandler(s ssh.Session) {
 	} else {
 		currentMenuName = loginNextMenu
 	}
+
+	// Queued toasts wait for the end of the login sequence, so none lands on
+	// login art. It is not a login.json step, so no install can miss it.
+	if currentMenuName != "LOGOFF" {
+		menuExecutor.DeliverLoginToasts(s, terminal, authenticatedUser, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
+	}
+	bbsSession.SetToastsReady(true)
 
 	// V3Net logon notification
 	if v3netService != nil && authenticatedUser != nil {

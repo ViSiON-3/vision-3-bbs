@@ -20,7 +20,7 @@ func chatcovNode(env *menuEnv, node int, u *user.User) *session.BbsSession {
 func TestChatcovPageDeliversToTargetNode(t *testing.T) {
 	env := newMenuEnv(t)
 	chatcovNode(env, 1, env.caller)
-	target := chatcovNode(env, 2, env.sysop)
+	chatcovNode(env, 2, env.sysop)
 	chatcovNode(env, 3, nil) // connected but not logged in yet
 
 	r := env.run(runPage, env.caller, "", "2\r  lunch?  \r")
@@ -36,9 +36,13 @@ func TestChatcovPageDeliversToTargetNode(t *testing.T) {
 	}
 
 	// The page is queued on the target with the message trimmed, and nowhere else.
-	pages := target.DrainPages()
-	if len(pages) != 1 || !strings.Contains(pages[0], "Page from |15Caller|09: lunch?|07") {
-		t.Errorf("target pages = %q, want one page from Caller reading \"lunch?\"", pages)
+	// It is kept for the target's account, with the message trimmed.
+	queued, err := env.e.toastStore().Peek(env.sysop.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queued) != 1 || !strings.Contains(queued[0].Text, "Page from |15Caller|09: lunch?|07") {
+		t.Errorf("target toasts = %+v, want one page from Caller reading \"lunch?\"", queued)
 	}
 	if got := env.e.SessionRegistry.Get(3).DrainPages(); len(got) != 0 {
 		t.Errorf("node 3 received pages it was not sent: %q", got)
@@ -122,7 +126,7 @@ func TestChatcovPageInvisibleNode(t *testing.T) {
 	if !r.has("Node 2: Ghost", "Page sent to Node 2.") {
 		t.Errorf("sysop should see and reach the invisible node:\n%s", r.text())
 	}
-	if pages := ghost.DrainPages(); len(pages) != 1 || !strings.Contains(pages[0], "Sysop") {
+	if pages, _ := env.e.toastStore().Peek(ghostUser.ID); len(pages) != 1 || !strings.Contains(pages[0].Text, "Sysop") {
 		t.Errorf("ghost pages = %q, want one page from Sysop", pages)
 	}
 }

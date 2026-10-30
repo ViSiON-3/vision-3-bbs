@@ -132,6 +132,12 @@ type InputHandler struct {
 	breakIn   <-chan struct{}
 	breakInFn func()
 	inBreakIn bool
+
+	// toastWake, when it fires during a key wait, runs toastFn on the waiting
+	// goroutine. Unlike a break-in it does not restart the idle countdown or
+	// move the deadline, so a stream of toasts cannot keep an idle caller on.
+	toastWake <-chan struct{}
+	toastFn   func()
 }
 
 // SetBreakIn registers fn to run whenever ch fires while a read is waiting
@@ -166,6 +172,48 @@ func (ih *InputHandler) runBreakIn() {
 		ih.inBreakIn = false
 	}()
 	ih.breakInFn()
+}
+
+// SetToastHook registers fn to run whenever ch fires while a read is waiting
+// for the first byte of a key, outside a break-in. Waits inside an escape
+// sequence do not service it. Call from the reading goroutine.
+func (ih *InputHandler) SetToastHook(ch <-chan struct{}, fn func()) {
+	ih.toastWake = ch
+	ih.toastFn = fn
+}
+
+// toastChan is the channel to select on, or nil when the wait must not service
+// the toast hook.
+func (ih *InputHandler) toastChan(allow bool) <-chan struct{} {
+	if !allow || ih.inBreakIn {
+		return nil
+	}
+	return ih.toastWake
+}
+
+// WaitForInput waits up to d for input, leaving it to be read, and reports
+// whether any came. A closed connection counts: the next read reports it.
+func (ih *InputHandler) WaitForInput(d time.Duration) bool {
+	if len(ih.unreadBuf) > 0 {
+		return true
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	for {
+		select {
+		case b, ok := <-ih.incoming:
+			if !ok {
+				return true
+			}
+			if ih.lateEnterTrailer(b) {
+				continue
+			}
+			ih.unreadByte(b)
+			return true
+		case <-timer.C:
+			return false
+		}
+	}
 }
 
 // ReadKeyOrEvent is the exported form of readKeyOrEvent.
@@ -520,6 +568,8 @@ func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 		case <-ih.breakInChan(breakIn):
 			ih.runBreakIn()
 			start = time.Now()
+		case <-ih.toastChan(breakIn):
+			ih.toastFn()
 		}
 	}
 }
@@ -728,6 +778,13 @@ func (ih *InputHandler) waitByte(timeout time.Duration, breakIn bool) (b byte, b
 			return 0, false, errTimeout
 		case <-ih.breakInChan(breakIn):
 			return 0, true, nil
+		case <-ih.toastChan(breakIn):
+			ih.toastFn()
+			if len(ih.unreadBuf) > 0 {
+				b := ih.unreadBuf[0]
+				ih.unreadBuf = ih.unreadBuf[1:]
+				return b, false, nil
+			}
 		}
 	}
 }
@@ -1041,6 +1098,11 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 				default:
 					timer.Reset(wait)
 					idle = timer.C
+				}
+			case <-ih.toastChan(true):
+				ih.toastFn()
+				if len(ih.unreadBuf) > 0 {
+					break wait
 				}
 			}
 		}

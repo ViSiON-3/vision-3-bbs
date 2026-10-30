@@ -420,6 +420,8 @@
   "sysopChatSummon": "|11You have been summoned by the SysOp!|07",
   "sysopChatReturn": "|11Returning you to reality - as you were!|07",
   "sysopChatCallerLeft": "|11OK, I guess you don't want to chat! Returning...|07",
+  "toastOverlayFormat": "|09>> |07%s|07",
+  "toastBodyHint": " |08(details at your next menu)|07",
   "pauseString": "|15\u25a0|07\u25a0|08\u25a0 |B4|15SlAm eNtEr!|B0 |08\u25a0|07\u25a0|15\u25a0",
   "pickMailHeader": "|08P|07i|15ck |08t|07h|15is |08h|07e|15ader? @",
   "postOnBoardStr": "|09Post on |08[|15|CB|08]? @",

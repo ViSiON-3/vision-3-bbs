@@ -272,6 +272,10 @@ type StringsConfig struct {
 	PageInvalidNode       string `json:"pageInvalidNode"`
 	PageSelfError         string `json:"pageSelfError"`
 	PageNodeOffline       string `json:"pageNodeOffline"`
+	// ToastOverlayFormat frames a toast drawn over a screen (%s=the toast).
+	ToastOverlayFormat string `json:"toastOverlayFormat"`
+	// ToastBodyHint follows a toast with a body, which waits for the next menu.
+	ToastBodyHint string `json:"toastBodyHint"`
 	// NewUserSysopPage is queued to every online co-sysop when a signup
 	// completes, and delivered through the same page queue as PageMessageFormat.
 	NewUserSysopPage string `json:"newUserSysopPage"`

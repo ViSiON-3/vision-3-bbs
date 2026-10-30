@@ -230,6 +230,8 @@ var NoHookKeys = map[string]bool{
 	"msgListHelpThreaded":       true,
 	"msgListThreadedTitle":      true,
 	"pageMessageFormat":         true,
+	"toastBodyHint":             true,
+	"toastOverlayFormat":        true,
 	"sysopChatHeader":           true,
 	"timeLimitWarning":          true,
 	"v3netKeyChangedNotice":     true,

@@ -246,6 +246,7 @@ func getSessionIH(s ssh.Session) *editor.InputHandler {
 	if tap := tapOf(s); tap != nil {
 		ih.SetBreakIn(tap.BreakIn(), func() { serviceSysopChat(s, ih, tap) })
 	}
+	applyToastHook(s, ih)
 	// No one has read from the new handler yet, so this is its owner.
 	if v, ok := sessionTypeAhead.LoadAndDelete(s); ok {
 		ih.ReturnInput(v.([]byte))

@@ -161,7 +161,7 @@ func (st *runLoopState) readStandardInput(menuRec *MenuRecord) (input string, ac
 	sessionStartTime := st.sessionStartTime
 
 	// --- Standard Menu Input Handling ---
-	e.deliverPendingPages(terminal, nodeNumber, outputMode)
+	e.deliverToastsInline(s, terminal, nodeNumber, outputMode)
 	e.warnTimeLeft(s, terminal, outputMode)
 	// Display Prompt (Skip if USEPROMPT is false)
 	slog.Debug("checking prompt display for menu", "menu", st.currentMenuName, "usePrompt", menuRec.GetUsePrompt())
