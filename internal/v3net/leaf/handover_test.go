@@ -640,3 +640,19 @@ func TestUpdatePinsStoreUnreadable(t *testing.T) {
 		})
 	}
 }
+
+// Once the file holds the unsaved pin, a sysop's edit back to the pin it moved
+// from is an edit, not the leaf's own store, even if the unsaved flag is still
+// set (#805).
+func TestUpdatePinsEditBackAfterFileHoldsUnsavedPin(t *testing.T) {
+	a, b, c := newCoordKey(t), newCoordKey(t), newCoordKey(t)
+	l, stored := handoverLeaf(t, KeyCoordinator, a, b, c)
+	*stored = c.PubKeyBase64()
+	l.UpdatePins(nil, Pins{Coord: c.PubKeyBase64(), CoordEdited: true}) //nolint:staticcheck // nil ctx: the leaf is not running
+
+	*stored = b.PubKeyBase64()
+	l.UpdatePins(nil, Pins{Coord: b.PubKeyBase64(), CoordEdited: true}) //nolint:staticcheck // nil ctx: the leaf is not running
+	if got := l.PinnedKey(KeyCoordinator); got != b.PubKeyBase64() {
+		t.Errorf("pin = %s, want the sysop's %s", got, b.PubKeyBase64())
+	}
+}
