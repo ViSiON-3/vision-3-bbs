@@ -1,6 +1,11 @@
 package v3net_test
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -366,5 +371,195 @@ func TestReloadEditBackToLateCopysPin(t *testing.T) {
 		if got := f.leaf().UnsavedState().Coord; got != "" {
 			t.Errorf("rebuild=%v: unsaved pin %q, want it replaced", rebuild, got)
 		}
+	}
+}
+
+// leafFor returns the current leaf for network.
+func (f *unsavedFixture) leafFor(network string) *leaf.Leaf {
+	f.t.Helper()
+	for _, l := range f.svc.Leaves() {
+		if l.Network() == network {
+			return l
+		}
+	}
+	f.t.Fatalf("no leaf for %s", network)
+	return nil
+}
+
+// A rebuild whose copy of the file predates a hubSigned record in the file starts
+// the new leaf with the record in force, and the sysop can still clear it (#821).
+func TestRebuildKeepsHubSignedStoredSinceRead(t *testing.T) {
+	f := newUnsavedFixture(t)
+	copyOfFile := slices.Clone(f.cfgs)
+	copyOfFile[1].Boards = []string{"GAMMA"}
+
+	f.cfgs[1].Boards = []string{"GAMMA"}
+	f.cfgs[1].HubSigned = true
+	f.write()
+	if err := f.svc.ReloadLeaves(copyOfFile, f.mm, nil); err != nil {
+		t.Fatal(err)
+	}
+	if l := f.leafFor("net-b"); !l.HubSigned() || l.UnsavedState().HubSigned {
+		t.Fatalf("hubSigned=%v, unsaved %+v; want the stored record in force", l.HubSigned(), l.UnsavedState())
+	}
+
+	f.cfgs[1].HubSigned = false
+	f.cfgs[1].HubSignedClears++
+	f.write()
+	f.reload()
+	if f.leafFor("net-b").HubSigned() {
+		t.Error("the sysop's clear after the rebuild did not apply")
+	}
+}
+
+// A clear written after the rebuild's copy was read drops a record not yet
+// stored, and the reload the clear's own save triggers is not a second one (#821).
+func TestRebuildHonoursClearSinceRead(t *testing.T) {
+	f := newUnsavedFixture(t)
+	copyOfFile := slices.Clone(f.cfgs)
+	copyOfFile[1].Boards = []string{"GAMMA"}
+
+	f.cfgs[1].Boards = []string{"GAMMA"}
+	f.cfgs[0].HubSignedClears = 1
+	f.write()
+	if err := f.svc.ReloadLeaves(copyOfFile, f.mm, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.leaf().UnsavedState(); got.HubSigned || f.leaf().HubSigned() {
+		t.Fatalf("unsaved %+v, hubSigned=%v; want the record dropped", got, f.leaf().HubSigned())
+	}
+
+	f.leaf().RestoreUnsaved(leaf.UnsavedState{HubSigned: true})
+	f.reload()
+	if !f.leaf().HubSigned() {
+		t.Error("the reload of the same count dropped a new record")
+	}
+}
+
+// With v3net.json broken, or without the entry, a reload's copy is not acted on,
+// even when it holds an edit: the leaf's state stands, rebuilt or not. Once the
+// file is right again the edit counts as one (#821).
+func TestReloadKeepsLeafWhenFileUnusable(t *testing.T) {
+	breakers := map[string]func(f *unsavedFixture){
+		"unreadable": func(f *unsavedFixture) {
+			if err := os.WriteFile(filepath.Join(f.dir, "v3net.json"), []byte("{not json"), 0644); err != nil {
+				f.t.Fatal(err)
+			}
+		},
+		"no entry": func(f *unsavedFixture) {
+			if err := config.SaveV3NetConfig(f.dir, config.V3NetConfig{}); err != nil {
+				f.t.Fatal(err)
+			}
+		},
+		"no file": func(f *unsavedFixture) {
+			if err := os.Remove(filepath.Join(f.dir, "v3net.json")); err != nil {
+				f.t.Fatal(err)
+			}
+		},
+	}
+	for name, breakFile := range breakers {
+		for _, rebuild := range []bool{false, true} {
+			t.Run(name, func(t *testing.T) {
+				f := newUnsavedFixture(t)
+				// A second record, one the file holds.
+				f.cfgs[1].HubSigned = true
+				f.write()
+				f.reload()
+
+				f.cfgs[0].CoordinatorPubKey = "sysop-key"
+				f.cfgs[0].HubSignedClears = 1
+				f.cfgs[1].HubSigned = false
+				f.cfgs[1].HubSignedClears = 1
+				if rebuild {
+					f.cfgs[1].Boards = []string{"GAMMA"}
+				}
+				copyOfFile := slices.Clone(f.cfgs)
+				breakFile(f)
+				if err := f.svc.ReloadLeaves(copyOfFile, f.mm, nil); err != nil {
+					t.Fatal(err)
+				}
+				f.wantKept("the file could not be checked")
+				if !f.leafFor("net-b").HubSigned() {
+					t.Error("net-b's stored record was dropped on a clear the file could not confirm")
+				}
+
+				if err := os.Remove(filepath.Join(f.dir, "v3net.json")); err != nil && !os.IsNotExist(err) {
+					t.Fatal(err)
+				}
+				f.write()
+				f.reload()
+				if got := f.leaf().PinnedKey(leaf.KeyCoordinator); got != "sysop-key" {
+					t.Errorf("pin %q after the file was fixed, want the sysop's", got)
+				}
+				if got := f.leaf().UnsavedState(); got.Coord != "" || got.HubSigned || f.leaf().HubSigned() {
+					t.Errorf("unsaved %+v, hubSigned=%v after the file was fixed; want the edits in force", got, f.leaf().HubSigned())
+				}
+				if f.leafFor("net-b").HubSigned() {
+					t.Error("net-b's clear did not apply once the file was fixed")
+				}
+			})
+		}
+	}
+}
+
+// The reload that shows an entry really gone removes the leaf, whatever it held.
+func TestReloadOfRemovedEntryRemovesLeaf(t *testing.T) {
+	f := newUnsavedFixture(t)
+	f.cfgs = f.cfgs[1:]
+	f.write()
+	f.reload()
+	if got := f.svc.LeafCount(); got != 1 {
+		t.Errorf("%d leaves, want net-a gone", got)
+	}
+}
+
+// Late work on a leaf whose subscription was removed stores nothing, even in the
+// entry once it is added back, and what it held does not come back with the
+// entry (#821).
+func TestRemovedLeafStoresNothingAfterReAdd(t *testing.T) {
+	coord := reloadTestKey(t)
+	served := reloadTestNAL(t, coord, "net-a", "gen.test")
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(served)
+	}))
+	t.Cleanup(hub.Close)
+
+	for name, pinned := range map[string]string{
+		"first-use pin": "",
+		"changed key":   reloadTestKey(t).PubKeyBase64(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newUnsavedFixture(t)
+			f.cfgs[0].HubURL = hub.URL
+			f.cfgs[0].CoordinatorPubKey = pinned
+			f.write()
+			f.reload()
+			removed := f.leaf()
+
+			entry := f.cfgs[0]
+			f.cfgs = f.cfgs[1:]
+			f.write()
+			f.reload()
+
+			entry.CoordinatorPubKey = ""
+			f.cfgs = append(f.cfgs, entry)
+			f.write()
+			f.reload()
+
+			_, _ = removed.FetchNAL(context.Background()) // refused for a changed key
+			fresh, err := config.LoadV3NetConfig(f.dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, lc := range fresh.Leaves {
+				if lc.Network == "net-a" && (lc.CoordinatorPubKey != "" || lc.PendingCoordinatorPubKey != "") {
+					t.Errorf("the removed leaf stored into the re-added entry: pin %q, pending %q",
+						lc.CoordinatorPubKey, lc.PendingCoordinatorPubKey)
+				}
+			}
+			if got := f.leaf().UnsavedState(); got != (leaf.UnsavedState{}) {
+				t.Errorf("re-added leaf unsaved %+v, want it to start from its entry", got)
+			}
+		})
 	}
 }

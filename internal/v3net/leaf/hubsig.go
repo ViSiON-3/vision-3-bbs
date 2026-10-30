@@ -30,11 +30,6 @@ import (
 // Config.RequireSignedHub is set or once the hub has been seen signing
 // (Config.HubSigned). The leaf hands the latter to OnHubSigned the first
 // time a hub signature verifies, so a restart does not forget it.
-// That is also all a proxy that strips the signature header needs, so an
-// unsigned reply is refused, and pauses syncing as a bad signature does,
-// when Config.RequireSignedHub is set or once the hub has been seen signing
-// (Config.HubSigned). The leaf records the latter through OnHubSigned the
-// first time a hub signature verifies, so a restart does not forget it.
 
 // ErrHubPaused is returned by signed requests while syncing with the hub is
 // paused over its key. Check for it with errors.Is.
@@ -277,10 +272,13 @@ func (l *Leaf) noteHubSigned() {
 	l.hubSignedSaveMu.Lock()
 	defer l.hubSignedSaveMu.Unlock()
 	l.pinMu.Lock()
-	save = l.pins.hubSigned && l.pins.hubSignedUnsaved
+	save = l.pins.hubSigned && l.pins.hubSignedUnsaved && !l.pins.retired
 	l.pinMu.Unlock()
 	if !save {
-		return // a save that ran ahead of this one stored it
+		// A save that ran ahead of this one stored it, or the leaf that
+		// replaced this one now owns the store, or the subscription is gone
+		// (see Retire, EndStores).
+		return
 	}
 	if l.cfg.OnHubSigned != nil {
 		if err := l.cfg.OnHubSigned(); err != nil {
