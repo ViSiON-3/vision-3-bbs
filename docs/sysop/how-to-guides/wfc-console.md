@@ -26,7 +26,7 @@ A user account can open the WFC console only when **all** of these are true:
    Add it from the **WFC Keys** field in `ue` or with `helper users addkey`
    (see below).
 3. **WFC access enabled** — **WFC Access** in the config editor (`./config` →
-   **System Setup → Access & Security → Access Levels**), on by default. This is
+   **Access & Security → WFC & Paging**), on by default. This is
    hot-reloaded: the change takes effect on the *next* connection attempt, no
    restart needed. (The key behind it is `wfcEnabled`; see the
    [Technical Reference](#technical-reference).)
@@ -445,8 +445,7 @@ The Alt keys arrive as `ESC` followed by a letter. In macOS Terminal and iTerm,
 set the Option key to send Meta or Esc+, or press `Esc` and then the letter.
 
 The wait and the cooldown are **Page Timeout** and **Page Cooldown** in the
-config editor (`./config` → **System Setup → Access & Security → Access
-Levels**); the keys are `pageSysopTimeout` (default 60) and `pageSysopCooldown`
+config editor (`./config` → **Access & Security → WFC & Paging**); the keys are `pageSysopTimeout` (default 60) and `pageSysopCooldown`
 (default 300) in `config.json`. Changes apply on config reload with no restart.
 The caller's prompts are in the string editor; see
 [String Editor](advanced/string-editor.md#strings-for-sysop-chat-and-paging).

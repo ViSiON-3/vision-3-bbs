@@ -889,6 +889,7 @@ func sessionHandler(s ssh.Session) {
 	capturedStartTime := time.Now()          // Capture start time close to session start
 	var authenticatedUser *user.User = nil   // Declare here so the closure can capture it
 	var bbsSession *session.BbsSession = nil // Declare here so the deferred disconnect can read Invisible flag
+	logonAnnounced := false                  // A logoff is only announced after its logon
 
 	// Defer removal from active sessions map and logging disconnection
 	// The deferred function now uses a closure to access authenticatedUser
@@ -904,6 +905,10 @@ func sessionHandler(s ssh.Session) {
 		}
 		if adminServer != nil && authenticatedUser != nil {
 			adminServer.ClearPage(int(nodeID), authenticatedUser.Handle, "logoff")
+		}
+
+		if logonAnnounced {
+			menuExecutor.AnnounceLogoff(bbsSession, authenticatedUser)
 		}
 
 		// V3Net logoff notification
@@ -1658,6 +1663,10 @@ func sessionHandler(s ssh.Session) {
 		menuExecutor.DeliverLoginToasts(s, terminal, authenticatedUser, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
 	}
 	bbsSession.SetToastsReady(true)
+	if currentMenuName != "LOGOFF" {
+		menuExecutor.AnnounceLogon(bbsSession, authenticatedUser)
+		logonAnnounced = true
+	}
 
 	// V3Net logon notification
 	if v3netService != nil && authenticatedUser != nil {

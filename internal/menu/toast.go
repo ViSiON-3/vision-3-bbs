@@ -12,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
@@ -22,7 +23,7 @@ import (
 
 // Toasts reach a caller in one of two ways. While a read waits for a key, the
 // screen's owner is idle, so the input handler's toast hook draws the toast on
-// the bottom row and replays the tap's catch-up buffer to restore the screen.
+// the configured position and replays the tap's catch-up buffer to restore the screen.
 // At a menu prompt, or at login, toasts are written inline and bodies are
 // shown. Whatever cannot be drawn yet stays queued for the next of those.
 
@@ -173,7 +174,66 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	}
 }
 
-// drawToastOverlay writes t on the bottom row, leaving the cursor and colours
+// toastAnchorCode is the coordinate code that places toasts from menu art:
+// ~TO or |TO.
+const toastAnchorCode = "TO"
+
+// setToastAnchor places toasts where this menu's art has the anchor code. Art
+// coordinates count from the top of the art, so they only match the screen when
+// the menu clears it first; otherwise the configured position stands.
+func (e *MenuExecutor) setToastAnchor(nodeNumber int, res ansi.ProcessAnsiResult, clearsScreen bool) {
+	sess := e.nodeSession(nodeNumber)
+	if sess == nil {
+		return
+	}
+	if pos, ok := res.FieldCoords[toastAnchorCode]; ok && clearsScreen {
+		sess.SetToastAnchor(pos.Y, pos.X)
+		return
+	}
+	sess.ClearToastAnchor()
+}
+
+// clearToastAnchor ends setToastAnchor when the menu stops waiting for input.
+func (e *MenuExecutor) clearToastAnchor(nodeNumber int) {
+	if sess := e.nodeSession(nodeNumber); sess != nil {
+		sess.ClearToastAnchor()
+	}
+}
+
+// toastMinCols is how many columns a toast keeps when its configured column
+// would otherwise leave it too little room.
+const toastMinCols = 20
+
+// toastEdgeRow is the row offset rows in from the configured edge. An offset
+// too big for this terminal stops at the opposite edge.
+func toastEdgeRow(edge string, offset, height int) int {
+	offset = max(0, offset)
+	if edge == config.ToastEdgeTop {
+		return min(1+offset, height)
+	}
+	return max(height-offset, 1)
+}
+
+// toastCenterCol is the column that centers textLen cells on the caller's Konfig
+// screen width. It uses the terminal's width when Konfig has none, or when Konfig
+// claims more than the terminal has, so the text is never cut short by centering.
+func toastCenterCol(textLen, konfigWidth, termWidth int) int {
+	width := termWidth
+	if konfigWidth > 0 && konfigWidth < termWidth {
+		width = konfigWidth
+	}
+	return max(1, (width-textLen)/2+1)
+}
+
+// toastPlacement fits a position to this terminal. A row past the bottom is
+// drawn there, and a column too far right moves left so toastMinCols still fit.
+func toastPlacement(cfgRow, cfgCol, width, height int) (row, col int) {
+	row = max(1, min(cfgRow, height))
+	col = max(1, min(cfgCol, width-toastMinCols))
+	return row, col
+}
+
+// drawToastOverlay writes t at the configured position, leaving the cursor and colours
 // where they were.
 func (e *MenuExecutor) drawToastOverlay(s ssh.Session, w io.Writer, sess *session.BbsSession, t toast.Toast) error {
 	width, height := sess.TermSize()
@@ -191,10 +251,26 @@ func (e *MenuExecutor) drawToastOverlay(s ssh.Session, w io.Writer, sess *sessio
 	if st.ToastOverlayFormat != "" {
 		text = fmt.Sprintf(st.ToastOverlayFormat, text)
 	}
+	cfg := e.GetServerConfig()
+	line := string(ansi.ReplacePipeCodes([]byte(text)))
+	cfgRow, cfgCol := toastEdgeRow(cfg.ToastEdge, cfg.ToastOffset, height), cfg.ToastCol
+	if cfg.ToastCenter {
+		konfigWidth := 0
+		sess.Mutex.RLock()
+		if sess.User != nil {
+			konfigWidth = sess.User.ScreenWidth
+		}
+		sess.Mutex.RUnlock()
+		cfgCol = toastCenterCol(ansi.VisibleLength(line), konfigWidth, width)
+	}
+	if r, c, ok := sess.ToastAnchor(); ok {
+		cfgRow, cfgCol = r, c
+	}
+	row, col := toastPlacement(cfgRow, cfgCol, width, height)
 	// One column short: a character in the last cell of the last row can scroll
 	// the screen on some terminals.
-	line := ansi.TruncateVisible(string(ansi.ReplacePipeCodes([]byte(text))), width-1)
-	out := "\x1b7" + ansi.MoveCursor(height, 1) + "\x1b[0m\x1b[2K" + line + "\x1b[0m\x1b8"
+	line = ansi.TruncateVisible(line, width-col)
+	out := "\x1b7" + ansi.MoveCursor(row, col) + "\x1b[0m\x1b[K" + line + "\x1b[0m\x1b8"
 	return terminalio.WriteProcessedBytes(w, []byte(out), sessionOutputMode(s))
 }
 

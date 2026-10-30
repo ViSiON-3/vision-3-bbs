@@ -115,11 +115,36 @@ func sysFieldsBotDefense(cfg *config.ServerConfig) []fieldDef {
 	}
 }
 
-// sysFieldsNUV returns fields for the New User Voting sub-screen.
+// sysFieldsNUV returns fields for the New Users & Voting sub-screen.
 func sysFieldsNUV(cfg *config.ServerConfig) []fieldDef {
 	return []fieldDef{
 		{
-			Label: "Use NUV", Help: "Enable New User Voting (cannot be used with Auto Validate)", Type: ftYesNo, Col: 3, Row: 1, Width: 1,
+			Label: "Auto Validate", Help: "Mark new signups validated (cannot be used with New User Voting)", Type: ftYesNo, Col: 3, Row: 1, Width: 1,
+			Get: func() string { return uitext.BoolToYN(cfg.AutoValidateNewUsers) },
+			Set: func(val string) error {
+				on := uitext.YNToBool(val)
+				// Mutually exclusive with NUV: a candidate that arrives already
+				// validated leaves the vote nothing to decide.
+				if on && cfg.UseNUV {
+					return fmt.Errorf("cannot auto-validate while New User Voting is enabled; turn Use NUV off first")
+				}
+				cfg.AutoValidateNewUsers = on
+				return nil
+			},
+		},
+		{
+			Label: "Notify SysOp", Help: "Page online CoSysOps+ when a new user signs up", Type: ftYesNo, Col: 3, Row: 2, Width: 1,
+			Get: func() string { return uitext.BoolToYN(cfg.NotifySysopNewUser) },
+			Set: func(val string) error {
+				// Deliberately independent of Auto Validate. An auto-validated
+				// signup leaves nothing to review, but a sysop still wants to
+				// know somebody joined.
+				cfg.NotifySysopNewUser = uitext.YNToBool(val)
+				return nil
+			},
+		},
+		{
+			Label: "Use NUV", Help: "Enable New User Voting (cannot be used with Auto Validate)", Type: ftYesNo, Col: 3, Row: 3, Width: 1,
 			Get: func() string { return uitext.BoolToYN(cfg.UseNUV) },
 			Set: func(val string) error {
 				on := uitext.YNToBool(val)
@@ -133,12 +158,12 @@ func sysFieldsNUV(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Auto Add NUV", Help: "Automatically queue new registrations for voting", Type: ftYesNo, Col: 3, Row: 2, Width: 1,
+			Label: "Auto Add NUV", Help: "Automatically queue new registrations for voting", Type: ftYesNo, Col: 3, Row: 4, Width: 1,
 			Get: func() string { return uitext.BoolToYN(cfg.AutoAddNUV) },
 			Set: func(val string) error { cfg.AutoAddNUV = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "NUV Use Level", Help: "Minimum access level required to vote", Type: ftInteger, Col: 3, Row: 3, Width: 3, Min: 0, Max: 255,
+			Label: "NUV Use Level", Help: "Minimum access level required to vote", Type: ftInteger, Col: 3, Row: 5, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.NUVUseLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -150,7 +175,7 @@ func sysFieldsNUV(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "NUV Yes Votes", Help: "YES votes required to trigger yes threshold", Type: ftInteger, Col: 3, Row: 4, Width: 3, Min: 1, Max: 999,
+			Label: "NUV Yes Votes", Help: "YES votes required to trigger yes threshold", Type: ftInteger, Col: 3, Row: 6, Width: 3, Min: 1, Max: 999,
 			Get: func() string { return strconv.Itoa(cfg.NUVYesVotes) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -162,7 +187,7 @@ func sysFieldsNUV(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "NUV No Votes", Help: "NO votes required to trigger no threshold", Type: ftInteger, Col: 3, Row: 5, Width: 3, Min: 1, Max: 999,
+			Label: "NUV No Votes", Help: "NO votes required to trigger no threshold", Type: ftInteger, Col: 3, Row: 7, Width: 3, Min: 1, Max: 999,
 			Get: func() string { return strconv.Itoa(cfg.NUVNoVotes) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -174,17 +199,17 @@ func sysFieldsNUV(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "NUV Validate", Help: "Auto-validate user when yes threshold reached", Type: ftYesNo, Col: 3, Row: 6, Width: 1,
+			Label: "NUV Validate", Help: "Auto-validate user when yes threshold reached", Type: ftYesNo, Col: 3, Row: 8, Width: 1,
 			Get: func() string { return uitext.BoolToYN(cfg.NUVValidate) },
 			Set: func(val string) error { cfg.NUVValidate = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "NUV Kill", Help: "Auto-delete user when no threshold reached", Type: ftYesNo, Col: 3, Row: 7, Width: 1,
+			Label: "NUV Kill", Help: "Auto-delete user when no threshold reached", Type: ftYesNo, Col: 3, Row: 9, Width: 1,
 			Get: func() string { return uitext.BoolToYN(cfg.NUVKill) },
 			Set: func(val string) error { cfg.NUVKill = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "NUV Level", Help: "Access level assigned to auto-validated NUV users", Type: ftInteger, Col: 3, Row: 8, Width: 3, Min: 0, Max: 255,
+			Label: "NUV Level", Help: "Access level assigned to auto-validated NUV users", Type: ftInteger, Col: 3, Row: 10, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.NUVLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -196,7 +221,7 @@ func sysFieldsNUV(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "NUV Form", Help: "Infoform number (1-5) shown to voters; 0 = disabled", Type: ftInteger, Col: 3, Row: 9, Width: 1, Min: 0, Max: 5,
+			Label: "NUV Form", Help: "Infoform number (1-5) shown to voters; 0 = disabled", Type: ftInteger, Col: 3, Row: 11, Width: 1, Min: 0, Max: 5,
 			Get: func() string { return strconv.Itoa(cfg.NUVForm) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)

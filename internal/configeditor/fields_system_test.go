@@ -72,9 +72,9 @@ func TestSysFieldsQWKAPI(t *testing.T) {
 	}
 }
 
-func TestSysFieldsLevels_WFCAccess(t *testing.T) {
+func TestSysFieldsWFCPaging_WFCAccess(t *testing.T) {
 	cfg := &config.ServerConfig{WFCEnabled: true}
-	fields := sysFieldsLevels(cfg)
+	fields := sysFieldsWFCPaging(cfg)
 
 	var f *fieldDef
 	for i := range fields {
@@ -84,7 +84,7 @@ func TestSysFieldsLevels_WFCAccess(t *testing.T) {
 		}
 	}
 	if f == nil {
-		t.Fatal("WFC Access field not found in Access Levels screen")
+		t.Fatal("WFC Access field not found in WFC & Paging screen")
 	}
 	if f.Type != ftYesNo {
 		t.Errorf("WFC Access type: want ftYesNo, got %v", f.Type)
@@ -111,11 +111,12 @@ func TestMenuListsPartitionAllScreens(t *testing.T) {
 
 	wantSys := []string{
 		"BBS Registration", "Server Setup", "Default Settings",
-		"DOS Emulation", "Logging", "QWK Mobile API",
+		"DOS Emulation", "Logging", "QWK Mobile API", "Toasts",
 	}
 	wantSec := []string{
 		"Access Levels", "Connection Limits", "Bot Defense",
-		"IP Blocklist/Allowlist", "New User Voting (NUV)", "Bad User Names",
+		"IP Blocklist/Allowlist", "New Users & Voting", "Bad User Names",
+		"WFC & Paging",
 	}
 
 	gotSys := make([]string, len(sys))

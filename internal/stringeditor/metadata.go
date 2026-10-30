@@ -705,5 +705,7 @@ func stringCatalog() []StringEntry {
 		// Toasts
 		{Label: "Toast: Overlay Format", Key: "toastOverlayFormat", Description: "Frames a toast drawn over a screen, kept to one row (%s=the toast)"},
 		{Label: "Toast: Body Hint", Key: "toastBodyHint", Description: "Follows a toast whose details wait for the next menu"},
+		{Label: "Toast: Logon", Key: "toastLogon", Description: "Shown to other callers when someone logs on (%s=handle, %d=node)"},
+		{Label: "Toast: Logoff", Key: "toastLogoff", Description: "Shown to other callers when someone logs off (%s=handle, %d=node)"},
 	}
 }

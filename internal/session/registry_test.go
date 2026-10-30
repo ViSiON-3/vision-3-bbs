@@ -80,3 +80,16 @@ func TestSessionPendingPages(t *testing.T) {
 		t.Errorf("expected 0 after drain, got %d", len(pages))
 	}
 }
+
+func TestExpiringPagesGoStale(t *testing.T) {
+	s := &BbsSession{}
+	s.AddExpiringPage("old", -time.Second)
+	s.AddPage("keeps")
+	s.AddExpiringPage("fresh", time.Minute)
+	if got, ok := s.PeekPage(); !ok || got != "keeps" {
+		t.Fatalf("PeekPage = %q, %v, want keeps", got, ok)
+	}
+	if got := s.DrainPages(); len(got) != 2 || got[0] != "keeps" || got[1] != "fresh" {
+		t.Fatalf("DrainPages = %q", got)
+	}
+}

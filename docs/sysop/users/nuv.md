@@ -18,11 +18,11 @@ New User Voting is ViSiON/3's implementation of ViSiON/2's NUV system. When a ne
 ## Configuration
 
 Turn NUV on and set its thresholds in the config editor: `./config` →
-**System Setup → Access & Security → New User Voting (NUV)**.
+**Access & Security → New Users & Voting**.
 
 | Field | Meaning |
 |-------|---------|
-| Use NUV | Enable the system. Cannot be on at the same time as **Auto Validate** on the Access Levels screen |
+| Use NUV | Enable the system. Cannot be on at the same time as **Auto Validate** on the same screen |
 | Auto Add NUV | Queue every new signup automatically |
 | NUV Use Level | Minimum access level to vote |
 | NUV Yes Votes / NUV No Votes | Votes needed to trigger each threshold |

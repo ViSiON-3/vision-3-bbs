@@ -459,11 +459,31 @@ All login sequence commands are also registered as menu runnables and can be use
 
 ## Toasts
 
-Node pages reach a caller as toasts: a line drawn on the bottom row while a
-screen waits for a key, which clears on the next key or after 5 seconds. A page
+Node pages reach a caller as toasts: a line drawn over the screen while it waits for a key, which clears on the next key or after 5 seconds. A page
 for a caller who has left is kept in `data/toasts.json` and shown once, at the
 end of their next login. This happens on every install and is not a
 `login.json` step. Toasts wait while a caller is in a door, a file transfer,
 sysop chat or teleconference, then show at their next menu prompt.
 
 The strings `toastOverlayFormat` and `toastBodyHint` set how a toast looks.
+
+Logon and logoff announcements are also toasts. They are off by default: turn
+them on with `toastLogons`, `toastLogoffs` and `toastAnnounceLevel`, and word
+them with `toastLogon` and `toastLogoff`. They go only to callers online at the
+time, and are dropped if they cannot be shown within a minute. Invisible callers
+are never announced.
+
+`toastEdge`, `toastOffset`, `toastCenter` and `toastCol` set where a toast is drawn, for the
+whole board; in `./config` they are on **System Setup → Toasts**. The offset
+counts rows in from the top or bottom edge, so the default of `bottom` and `0` is
+the bottom row on any terminal height. An offset too big for the terminal stops
+at the opposite edge, and a column too far right moves left so at least 20
+characters fit. With `toastCenter` on, a toast is centered on the caller's Screen
+Width from Konfig, or on the terminal's width if that is unset or wider than the
+terminal, and `toastCol` is ignored. Toasts written at a menu prompt or at login appear at the cursor.
+
+A menu can place toasts itself: put the coordinate code `~TO` (or `|TO`) in its
+art, and toasts go there while that menu waits for input. It overrides those
+settings, which still apply to every other screen and to menus without the
+code. The menu must have Clear Screen on, because art coordinates count from the
+top of the art.

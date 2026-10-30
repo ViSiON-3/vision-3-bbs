@@ -91,6 +91,7 @@ func systemConfigMenuItems() []sysConfigMenuItem {
 		{Label: "DOS Emulation", Build: func(m *Model) []fieldDef { return sysFieldsDOS(&m.configs.Server) }},
 		{Label: "Logging", Build: func(m *Model) []fieldDef { return sysFieldsLogging(&m.configs.Server) }},
 		{Label: "QWK Mobile API", Build: func(m *Model) []fieldDef { return sysFieldsQWKAPI(&m.configs.Server) }},
+		{Label: "Toasts", Build: func(m *Model) []fieldDef { return sysFieldsToasts(&m.configs.Server) }},
 	}
 }
 
@@ -102,7 +103,8 @@ func securityMenuItems() []sysConfigMenuItem {
 		{Label: "Connection Limits", Build: func(m *Model) []fieldDef { return sysFieldsLimits(&m.configs.Server) }},
 		{Label: "Bot Defense", Build: func(m *Model) []fieldDef { return sysFieldsBotDefense(&m.configs.Server) }},
 		{Label: "IP Blocklist/Allowlist", Build: func(m *Model) []fieldDef { return sysFieldsIPLists(&m.configs.Server) }},
-		{Label: "New User Voting (NUV)", Build: func(m *Model) []fieldDef { return sysFieldsNUV(&m.configs.Server) }},
+		{Label: "New Users & Voting", Build: func(m *Model) []fieldDef { return sysFieldsNUV(&m.configs.Server) }},
 		{Label: "Bad User Names", Build: func(m *Model) []fieldDef { return sysFieldsBadUserNames(&m.configs.Server) }},
+		{Label: "WFC & Paging", Build: func(m *Model) []fieldDef { return sysFieldsWFCPaging(&m.configs.Server) }},
 	}
 }

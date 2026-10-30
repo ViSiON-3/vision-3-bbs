@@ -58,6 +58,23 @@ func (s *BbsSession) ToastAnnounced(id string) bool {
 	return s.toastsAnnounced[id]
 }
 
+// SetToastAnchor sets where toasts go while the current menu screen is up.
+func (s *BbsSession) SetToastAnchor(row, col int) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	s.toastAnchorRow, s.toastAnchorCol = row, col
+}
+
+// ClearToastAnchor returns toasts to the configured position.
+func (s *BbsSession) ClearToastAnchor() { s.SetToastAnchor(0, 0) }
+
+// ToastAnchor returns what SetToastAnchor set, and whether anything is set.
+func (s *BbsSession) ToastAnchor() (row, col int, ok bool) {
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
+	return s.toastAnchorRow, s.toastAnchorCol, s.toastAnchorRow > 0
+}
+
 // SendToast queues a toast for a user account and wakes any session they have.
 // The disk comes first, so a toast cannot be lost with a session that ends
 // before showing it. If the write fails, online sessions still get its line.
