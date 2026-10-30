@@ -1,6 +1,7 @@
 package v3net
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -144,20 +145,28 @@ func TestPinStored(t *testing.T) {
 	dir := t.TempDir()
 	s := &Service{cfg: config.V3NetConfig{ConfigPath: dir}}
 	stored := s.pinStored("testnet", "https://hub.example")
-	if got, err := stored(leaf.KeyCoordinator); err != nil || got != "" {
-		t.Fatalf("with no v3net.json: %q, %v; want none", got, err)
+	if got, err := stored(leaf.KeyCoordinator); !errors.Is(err, leaf.ErrNoStoredPin) {
+		t.Fatalf("with no v3net.json: %+v, %v; want no entry", got, err)
 	}
 	if err := config.SaveV3NetConfig(dir, config.V3NetConfig{Leaves: []config.V3NetLeafConfig{
 		{HubURL: "https://other.example", Network: "testnet", CoordinatorPubKey: "other"},
-		{HubURL: "https://hub.example", Network: "testnet", CoordinatorPubKey: "coord", HubPubKey: "hub"},
+		{
+			HubURL: "https://hub.example", Network: "testnet",
+			CoordinatorPubKey: "coord", PendingCoordinatorPubKey: "coord-pending",
+			HubPubKey: "hub", PendingHubPubKey: "hub-pending",
+		},
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := stored(leaf.KeyCoordinator); err != nil || got != "coord" {
-		t.Errorf("coordinator pin = %q, %v", got, err)
+	if got, err := stored(leaf.KeyCoordinator); err != nil || got != (leaf.StoredPin{Pin: "coord", Pending: "coord-pending"}) {
+		t.Errorf("coordinator pin = %+v, %v", got, err)
 	}
-	if got, err := stored(leaf.KeyHub); err != nil || got != "hub" {
-		t.Errorf("hub pin = %q, %v", got, err)
+	if got, err := stored(leaf.KeyHub); err != nil || got != (leaf.StoredPin{Pin: "hub", Pending: "hub-pending"}) {
+		t.Errorf("hub pin = %+v, %v", got, err)
+	}
+	other := s.pinStored("othernet", "https://hub.example")
+	if got, err := other(leaf.KeyCoordinator); !errors.Is(err, leaf.ErrNoStoredPin) {
+		t.Errorf("with no entry: %+v, %v; want no entry", got, err)
 	}
 	if (&Service{}).pinStored("testnet", "https://hub.example") != nil {
 		t.Error("a service without a config path has a store to read")

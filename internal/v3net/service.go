@@ -203,25 +203,25 @@ func (s *Service) persistHubSigned(network, hubURL string) error {
 }
 
 // storedLeaf reads the v3net.json entry for network and hubURL as it is when
-// called. A missing file or entry reads as an empty entry.
-func (s *Service) storedLeaf(network, hubURL string) (config.V3NetLeafConfig, error) {
+// called, and reports whether there is one. A missing file holds no entry.
+func (s *Service) storedLeaf(network, hubURL string) (config.V3NetLeafConfig, bool, error) {
 	data, err := os.ReadFile(filepath.Join(s.cfg.ConfigPath, "v3net.json"))
 	if os.IsNotExist(err) {
-		return config.V3NetLeafConfig{}, nil
+		return config.V3NetLeafConfig{}, false, nil
 	}
 	if err != nil {
-		return config.V3NetLeafConfig{}, err
+		return config.V3NetLeafConfig{}, false, err
 	}
 	cfg, err := config.ParseV3NetConfig(data)
 	if err != nil {
-		return config.V3NetLeafConfig{}, err
+		return config.V3NetLeafConfig{}, false, err
 	}
 	for _, lc := range cfg.Leaves {
 		if lc.Network == network && lc.HubURL == hubURL {
-			return lc, nil
+			return lc, true, nil
 		}
 	}
-	return config.V3NetLeafConfig{}, nil
+	return config.V3NetLeafConfig{}, false, nil
 }
 
 // hubSignedStored returns a leaf's Config.HubSignedStored: whether the
@@ -233,25 +233,30 @@ func (s *Service) hubSignedStored(network, hubURL string) func() (bool, error) {
 		return nil
 	}
 	return func() (bool, error) {
-		lc, err := s.storedLeaf(network, hubURL)
+		lc, _, err := s.storedLeaf(network, hubURL)
 		return lc.HubSigned, err
 	}
 }
 
-// pinStored returns a leaf's Config.PinStored: the pin the v3net.json entry
-// for network and hubURL holds now, read from the file. A missing file or
-// entry holds none. Without a config path there is no store to read, and it
-// returns nil.
-func (s *Service) pinStored(network, hubURL string) func(leaf.KeyKind) (string, error) {
+// pinStored returns a leaf's Config.PinStored: the pin and pending key the
+// v3net.json entry for network and hubURL holds now, read from the file. A
+// missing file or entry is leaf.ErrNoStoredPin. Without a config path there is
+// no store to read, and it returns nil.
+func (s *Service) pinStored(network, hubURL string) func(leaf.KeyKind) (leaf.StoredPin, error) {
 	if s.cfg.ConfigPath == "" {
 		return nil
 	}
-	return func(kind leaf.KeyKind) (string, error) {
-		lc, err := s.storedLeaf(network, hubURL)
-		if kind == leaf.KeyHub {
-			return lc.HubPubKey, err
+	return func(kind leaf.KeyKind) (leaf.StoredPin, error) {
+		lc, found, err := s.storedLeaf(network, hubURL)
+		switch {
+		case err != nil:
+			return leaf.StoredPin{}, err
+		case !found:
+			return leaf.StoredPin{}, leaf.ErrNoStoredPin
+		case kind == leaf.KeyHub:
+			return leaf.StoredPin{Pin: lc.HubPubKey, Pending: lc.PendingHubPubKey}, nil
 		}
-		return lc.CoordinatorPubKey, err
+		return leaf.StoredPin{Pin: lc.CoordinatorPubKey, Pending: lc.PendingCoordinatorPubKey}, nil
 	}
 }
 
@@ -945,7 +950,7 @@ func keysOnlyChange(prev, next []config.V3NetLeafConfig) bool {
 // shows in hubSignedClears even when the value of hubSigned cannot show it,
 // because the file never got the record. A changed pin may be the leaf's own
 // store reaching the reload; the leaf tells that from an edit (see
-// leaf.Leaf.UnsavedFollowsStore).
+// leaf.Leaf.UpdatePins).
 func leafEdits(prev, next config.V3NetLeafConfig) (coord, hub, hubSigned bool) {
 	coord = strings.TrimSpace(prev.CoordinatorPubKey) != strings.TrimSpace(next.CoordinatorPubKey)
 	hub = strings.TrimSpace(prev.HubPubKey) != strings.TrimSpace(next.HubPubKey)
@@ -1016,6 +1021,11 @@ func (s *Service) applyPins(prev, leafCfgs []config.V3NetLeafConfig) {
 // leaf.UnsavedState), unless the reload shows the sysop wrote that field: a
 // file that merely lacks it says nothing about it, whatever else changed.
 //
+// leafCfgs was read from the file before this call, so a leaf may have stored
+// a pin since. Each leaf therefore checks its pins against the file as it is
+// now: in place under its save lock, or when rebuilt once it has stopped and
+// can store no more (see leaf.Leaf.Retire). The file wins over the copy.
+//
 // Hub settings, the enabled flag, and keystore/dedup paths are NOT touched;
 // those still require a restart.
 func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.MessageManager, confMgr *conference.ConferenceManager) error {
@@ -1047,6 +1057,7 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 
 	carried := make(map[leafKey]*protocol.NAL)
 	unsaved := make(map[leafKey]leaf.UnsavedState)
+	settled := make(map[leafKey]leaf.Pins)
 	prevByKey, nextByKey := cfgsByKey(prev), cfgsByKey(leafCfgs)
 	for _, run := range old {
 		s.stopLeaf(run)
@@ -1058,14 +1069,13 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 		if !ok {
 			continue
 		}
-		u := run.l.UnsavedState()
 		coordEdited, hubEdited, hubSignedEdited := leafEdits(prevByKey[key], next)
-		if coordEdited && !run.l.UnsavedFollowsStore(leaf.KeyCoordinator, next.CoordinatorPubKey) {
-			u.Coord, u.CoordMovedFrom = "", ""
-		}
-		if hubEdited && !run.l.UnsavedFollowsStore(leaf.KeyHub, next.HubPubKey) {
-			u.Hub, u.HubMovedFrom = "", ""
-		}
+		pins, u := run.l.Retire(leaf.Pins{
+			Coord: next.CoordinatorPubKey, Hub: next.HubPubKey,
+			PendingCoord: next.PendingCoordinatorPubKey, PendingHub: next.PendingHubPubKey,
+			CoordEdited: coordEdited, HubEdited: hubEdited,
+		})
+		settled[key] = pins
 		if hubSignedEdited {
 			u.HubSigned = false
 		}
@@ -1077,6 +1087,14 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 	s.carriedNALs = carried
 	s.carriedUnsaved = unsaved
 	s.mu.Unlock()
+	leafCfgs = slices.Clone(leafCfgs)
+	for i := range leafCfgs {
+		c := &leafCfgs[i]
+		if p, ok := settled[leafKey{c.Network, c.HubURL}]; ok {
+			c.CoordinatorPubKey, c.HubPubKey = p.Coord, p.Hub
+			c.PendingCoordinatorPubKey, c.PendingHubPubKey = p.PendingCoord, p.PendingHub
+		}
+	}
 	s.ConfigureLeaves(leafCfgs, mgr)
 
 	s.mu.Lock()

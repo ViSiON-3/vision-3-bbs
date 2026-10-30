@@ -2,6 +2,7 @@ package v3net_test
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -267,6 +268,67 @@ func TestReloadOfOwnStoredPin(t *testing.T) {
 				}
 				if pin := f.leaf().PinnedKey(leaf.KeyCoordinator); pin == unsavedPin || got.Coord != "" {
 					t.Errorf("rebuild=%v: pin %q, unsaved %+v; want the sysop's edit in force", rebuild, pin, got)
+				}
+			})
+		}
+	}
+}
+
+// A reload that read the file before the leaf's store, and applies after, does
+// not install the older pin, rebuilt or not; an edit written after that read
+// wins, even one back to an earlier key (#817).
+func TestReloadOfCopyReadBeforeStore(t *testing.T) {
+	const older, stored, sysop = "key-older", "key-stored", "key-sysop"
+	for _, rebuild := range []bool{false, true} {
+		cases := []struct {
+			name      string
+			file      string // what the file holds when the reload applies
+			pin       string // the pin the leaf then has
+			pending   string
+			copyHolds string // the pin in the copy the reload read
+		}{
+			{name: "the leaf's store", file: stored, pin: stored, copyHolds: older},
+			{name: "the first-use store", file: stored, pin: stored, copyHolds: ""},
+			{name: "an edit since the read", file: sysop, pin: sysop, pending: "pending-sysop", copyHolds: older},
+			{name: "an edit back since the read", file: older, pin: older, copyHolds: stored},
+		}
+		for _, c := range cases {
+			t.Run(c.name, func(t *testing.T) {
+				f := newUnsavedFixture(t)
+				f.cfgs[0].CoordinatorPubKey = c.copyHolds
+				f.cfgs[0].PendingCoordinatorPubKey = "pending-in-the-copy"
+				copyOfFile := slices.Clone(f.cfgs)
+
+				// The leaf has stored its pin and applied that reload.
+				f.cfgs[0].CoordinatorPubKey = stored
+				f.cfgs[0].PendingCoordinatorPubKey = ""
+				f.write()
+				f.reload()
+				if got := f.leaf().PinnedKey(leaf.KeyCoordinator); got != stored {
+					t.Fatalf("pin %q before the late reload, want %q", got, stored)
+				}
+
+				f.cfgs[0].CoordinatorPubKey = c.file
+				f.cfgs[0].PendingCoordinatorPubKey = c.pending
+				f.write()
+				if rebuild {
+					copyOfFile[1].Boards = []string{"GAMMA"}
+				}
+				first := f.leaf()
+				if err := f.svc.ReloadLeaves(copyOfFile, f.mm, nil); err != nil {
+					t.Fatal(err)
+				}
+				if rebuilt := f.leaf() != first; rebuilt != rebuild {
+					t.Fatalf("rebuilt = %v, want %v", rebuilt, rebuild)
+				}
+				if got := f.leaf().PinnedKey(leaf.KeyCoordinator); got != c.pin {
+					t.Errorf("rebuild=%v: pin %q, want %q", rebuild, got, c.pin)
+				}
+				if got := f.leaf().PendingKey(leaf.KeyCoordinator); got != c.pending {
+					t.Errorf("rebuild=%v: pending %q, want %q", rebuild, got, c.pending)
+				}
+				if got := f.leaf().UnsavedState().Coord; got != "" {
+					t.Errorf("rebuild=%v: unsaved pin %q, want none", rebuild, got)
 				}
 			})
 		}
