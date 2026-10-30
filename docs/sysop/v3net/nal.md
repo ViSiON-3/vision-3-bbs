@@ -353,14 +353,19 @@ status:
 |--------|---------|
 | 0 | The post worked, or a dry run found nothing that would stop a real run (see the table above) |
 | 1 | The post failed or the hub refused it, a check stopped the tool before posting, or the options were missing or wrong |
-| 2 | A flag the tool does not know; nothing was signed or posted |
+| 2 | The flags could not be parsed: one the tool does not know, one with its value missing, or a bad value for `-dry-run` or `-omit-lost-keys`. Nothing was signed or posted |
 | 3 | The outcome is unknown, as described above: the post may or may not have taken effect |
 
 Treat 3 as neither success nor failure: run the command with `-dry-run` to find
 out, or post again.
 
-`go run` exits with status 1 whatever status the tool exits with, so a script
-that needs these must build the tool and run the result:
+Status 1 does not always mean the handover had no effect. When the hub already
+runs the new key, it may have stored the handover and then failed to sign the
+NAL, or the tool may have been unable to confirm the NAL it then serves. The
+tool says so; fix the cause and run the command again.
+
+`go run` exits with status 1 for any non-zero status from the tool, so a script
+that needs to tell these apart must build the tool and run the result:
 
 ```bash
 go build -o v3net-handover ./cmd/v3net-handover

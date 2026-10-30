@@ -44,7 +44,7 @@ func runTool(t *testing.T, args ...string) (int, string) {
 // A script reads the outcome from main's exit status: against a real hub, 0
 // for a post that worked and 1 for one refused, or stopped before posting, and
 // 3 when the reply to the post proves nothing or never comes, even if the hub
-// took the post. A flag the tool does not know is 2, from the flag package.
+// took the post. Flags it cannot parse are 2, from the flag package.
 func TestMainExitStatus(t *testing.T) {
 	dir := t.TempDir()
 	load := func(name string) (*keystore.Keystore, string) {
@@ -105,6 +105,7 @@ func TestMainExitStatus(t *testing.T) {
 		{"a hub on neither key", post(hubOnOtherKey.URL), 1, "refusing to post"},
 		{"options missing", []string{"-network", "testnet"}, 1, "need -keystore"},
 		{"a flag it does not know", []string{"-no-such-flag"}, 2, "no-such-flag"},
+		{"a flag with its value missing", []string{"-keystore"}, 2, "keystore"},
 		{"a reply that does not verify", post(forged.URL), 3, "may or may not"},
 		{"no reply at all", post(dropped.URL), 3, "may or may not"},
 	}

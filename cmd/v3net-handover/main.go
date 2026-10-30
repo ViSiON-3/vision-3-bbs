@@ -29,8 +29,8 @@
 // it says it could not check, so the handover can still be signed offline. A
 // check that would stop a real run exits non-zero.
 //
-// It exits 0 on success, 1 on a failure or refusal, 2 for a flag it does not
-// know, and 3 for the unknown outcome above.
+// It exits 0 on success, 1 on a failure or refusal, 2 for flags it cannot parse,
+// and 3 for the unknown outcome above.
 //
 // Usage:
 //
