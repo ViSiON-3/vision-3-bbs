@@ -284,6 +284,9 @@ func runDoorWatched(ctx *DoorCtx, run func(*DoorCtx) error) error {
 	ctx.Session = wrapDoorSession(ctx.Session, ctx.watch)
 
 	err := run(ctx)
+	// A door that failed before reading the session, such as one whose
+	// process would not start, never took the mark.
+	keepEnterTrailer(ctx.Session, ctx.takeDoorEnterTrailer())
 	if reason := ctx.watch.endReason(); reason != 0 {
 		slog.Info("door ended by the BBS", "node", ctx.NodeNumber, "door", ctx.DoorName,
 			"reason", reason.String(), "doorError", err)

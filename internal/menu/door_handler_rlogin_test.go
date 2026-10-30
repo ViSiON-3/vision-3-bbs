@@ -113,12 +113,53 @@ func TestCopyToRemoteKeepsUnsentKeys(t *testing.T) {
 		}
 	})
 
-	t.Run("keeps what a failed write before the disconnect key left", func(t *testing.T) {
-		w := &failingWriter{n: 1}
-		left, err := copyToRemote(w, strings.NewReader("abc\x1dd"), nil, 0x1D, true, false)
-		if string(left.unread) != "bc\x1dd" || !errors.Is(err, errDoorGone) || w.got.String() != "a" {
-			t.Errorf("copyToRemote = %q, %v, sent %q; want %q, %v, \"a\"",
-				left.unread, err, w.got.String(), "bc\x1dd", errDoorGone)
+	// The caller pressed the disconnect key to leave the door, so it is not
+	// kept as a keypress for the next prompt, nor are the keys before it
+	// that were meant for the door (#785).
+	t.Run("keeps only what followed the disconnect key after a failed write", func(t *testing.T) {
+		for _, tc := range []struct {
+			key     byte
+			input   string
+			kept    string
+			trailer bool
+		}{
+			{0x1D, "abc\x1dd", "d", false},
+			{0x1D, "abc\x1d", "", false},
+			{'\r', "abc\r\nY", "Y", false},
+			{'\r', "abc\r\x00Y", "Y", false},
+			{'\r', "abc\r", "", true},
+		} {
+			w := &failingWriter{n: 1}
+			left, err := copyToRemote(w, strings.NewReader(tc.input), nil, tc.key, true, false)
+			if string(left.unread) != tc.kept || left.enterTrailer != tc.trailer || !errors.Is(err, errDoorGone) || w.got.String() != "a" {
+				t.Errorf("%q: copyToRemote = %+v, %v, sent %q; want kept %q, trailer %v, %v, sent \"a\"",
+					tc.input, left, err, w.got.String(), tc.kept, tc.trailer, errDoorGone)
+			}
+		}
+	})
+
+	// A chunk read once the connection closed is not sent, but the
+	// disconnect key in it was still pressed to leave the door (#785).
+	t.Run("keeps only what followed the disconnect key in a chunk read after the connection closed", func(t *testing.T) {
+		closed := make(chan struct{})
+		close(closed)
+		for _, tc := range []struct {
+			key     byte
+			input   string
+			kept    string
+			trailer bool
+		}{
+			{0x1D, "ab\x1dcd", "cd", false},
+			{'\r', "ab\r\n", "", false},
+			{'\r', "ab\r\nY", "Y", false},
+			{'\r', "ab\r", "", true},
+		} {
+			var dst bytes.Buffer
+			left, err := copyToRemote(&dst, strings.NewReader(tc.input), closed, tc.key, true, false)
+			if string(left.unread) != tc.kept || left.enterTrailer != tc.trailer || err != nil || dst.Len() != 0 {
+				t.Errorf("%q: copyToRemote = %+v, %v, sent %q; want kept %q, trailer %v, nil, nothing",
+					tc.input, left, err, dst.String(), tc.kept, tc.trailer)
+			}
 		}
 	})
 

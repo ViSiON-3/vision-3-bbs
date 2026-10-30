@@ -465,3 +465,46 @@ func TestDoorcovNativeDoorDropsEnterTrailer(t *testing.T) {
 		t.Error("trailer still marked after the door dropped it")
 	}
 }
+
+// A door that fails before reading the session, such as one whose process
+// will not start, leaves the trailer of the Enter that launched it to the
+// next reader, as an unreachable remote door does (#785).
+func TestDoorcovFailedDoorKeepsEnterTrailer(t *testing.T) {
+	env := newMenuEnv(t)
+	t.Setenv("HOME", t.TempDir())
+	setServerField(env.e, func(c *config.ServerConfig) { c.DosemuPath = "/nonexistent/dosemu2.bin" })
+
+	for _, tc := range []struct {
+		name string
+		cfg  config.DoorConfig
+		pty  bool
+	}{
+		{"no command", config.DoorConfig{}, false},
+		{"node directory", config.DoorConfig{Commands: []string{"true"}, DropfileLocation: "node"}, false},
+		{"dropfile", config.DoorConfig{Commands: []string{"true"}, DropfileType: "CHAIN.TXT",
+			WorkingDirectory: filepath.Join(t.TempDir(), "missing")}, false},
+		{"standard I/O start", config.DoorConfig{Commands: []string{"/nonexistent/door"}}, false},
+		{"PTY start", config.DoorConfig{Commands: []string{"/nonexistent/door"}, RequiresRawTerminal: true}, true},
+		{"socket start", config.DoorConfig{Commands: []string{"/nonexistent/door"}, IOMode: "SOCKET"}, false},
+		{"DOS emulator start", config.DoorConfig{IsDOS: true, DriveCPath: t.TempDir()}, false},
+		{"V3 script", config.DoorConfig{Type: "v3_script"}, false},
+		{"Synchronet JS", config.DoorConfig{Type: "synchronet_js"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.cfg.DropfileLocation == "node" {
+				t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing"))
+			}
+			s := newDoorcovSession()
+			s.isPty = tc.pty
+			t.Cleanup(func() { takeEnterTrailer(s) })
+			keepEnterTrailer(s, true)
+			ctx := doorcovCtx(env, s, tc.cfg)
+			if err := doorcovExec(t, s, func(c *DoorCtx) error { return runDoorWatched(c, runDoorByType) }, ctx); err == nil {
+				t.Fatal("door did not fail")
+			}
+			if !takeEnterTrailer(s) {
+				t.Error("trailer mark lost though the door read nothing")
+			}
+		})
+	}
+}

@@ -95,6 +95,59 @@ func TestDoorcovRemoteDoorKeepsTypeAhead(t *testing.T) {
 	doorcovReadKeys(t, getSessionIH(s), "bcxyz")
 }
 
+// With CR as the disconnect key, an Enter typed once the door server has
+// hung up was still pressed to leave the door: it does not reach the next
+// prompt, nor does the key before it that was meant for the door, only what
+// was typed after it (#785). The copier reads the keys either just before it
+// is stopped, when they fail to send, or just after; both keep only the Y.
+func TestDoorcovRemoteDoorCRDisconnectKeyAfterHangup(t *testing.T) {
+	env := newMenuEnv(t)
+	s := newDoorcovSession()
+	t.Cleanup(func() {
+		resetSessionIH(s)
+		sessionTypeAhead.Delete(s)
+		takeEnterTrailer(s)
+	})
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		_, _ = c.Write([]byte("BYE"))
+		_ = c.Close()
+	}()
+	raw, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	conn := &closeHookConn{Conn: raw, onClose: func() { s.send("a\r\nY") }}
+
+	ctx := doorcovCtx(env, s, config.DoorConfig{Type: "rlogin"})
+	relay := func(c *DoorCtx) error {
+		relayRemoteSession(c, conn, conn, '\r', true, time.Time{})
+		return nil
+	}
+	handOffSessionIH(s)
+	watched := func(c *DoorCtx) error { return runDoorWatched(c, relay) }
+	if err := doorcovExec(t, s, watched, ctx); err != nil {
+		t.Fatalf("relayRemoteSession: %v", err)
+	}
+	doorcovHas(t, s, "BYE")
+	if v, ok := sessionTypeAhead.Load(s); !ok || string(v.([]byte)) != "Y" {
+		t.Errorf("kept type-ahead = %q, want %q", v, "Y")
+	}
+	if takeEnterTrailer(s) {
+		t.Error("trailer marked though the LF came with the CR")
+	}
+	doorcovReadKeys(t, getSessionIH(s), "Y")
+}
+
 // The prompt that launched a remote door read the CR of an Enter whose LF
 // had not arrived. The LF reaches the door after the hand-off, and is not
 // sent to the door server.

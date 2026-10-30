@@ -55,8 +55,6 @@ func executeRLoginDoor(ctx *DoorCtx) error {
 		// litters the door server's log.
 		slog.Info("not entering rlogin door, no time left",
 			"node", ctx.NodeNumber, "door", ctx.DoorName)
-		// The door read nothing, so an Enter's trailer is the next reader's.
-		keepEnterTrailer(ctx.Session, ctx.enterTrailer)
 		return nil
 	}
 
@@ -86,7 +84,6 @@ func executeRLoginDoor(ctx *DoorCtx) error {
 		slog.Warn("rlogin door connection failed",
 			"node", ctx.NodeNumber, "door", ctx.DoorName, "addr", addr, "error", err)
 		writeDoorMessage(ctx, fmt.Sprintf(ctx.Executor.Strings().DoorRemoteConnectFailed, ctx.DoorName))
-		keepEnterTrailer(ctx.Session, ctx.enterTrailer)
 		return nil
 	}
 

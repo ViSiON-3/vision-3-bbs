@@ -86,7 +86,7 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 	}
 
 	eng := scripting.NewEngine(engineCtx, session, cfg, providers)
-	if ctx.enterTrailer {
+	if ctx.takeDoorEnterTrailer() {
 		eng.ExpectEnterTrailer()
 	}
 
