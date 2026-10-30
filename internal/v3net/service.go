@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -195,6 +196,36 @@ func (s *Service) persistHubSigned(network, hubURL string) error {
 		return err
 	}
 	return nil
+}
+
+// hubSignedStored returns a leaf's Config.HubSignedStored: whether the
+// v3net.json entry for network and hubURL holds hubSigned now, read from
+// the file. A missing file or entry holds nothing. Without a config path
+// there is no store to read, and it returns nil.
+func (s *Service) hubSignedStored(network, hubURL string) func() (bool, error) {
+	if s.cfg.ConfigPath == "" {
+		return nil
+	}
+	path := filepath.Join(s.cfg.ConfigPath, "v3net.json")
+	return func() (bool, error) {
+		data, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		cfg, err := config.ParseV3NetConfig(data)
+		if err != nil {
+			return false, err
+		}
+		for _, lc := range cfg.Leaves {
+			if lc.Network == network && lc.HubURL == hubURL {
+				return lc.HubSigned, nil
+			}
+		}
+		return false, nil
+	}
 }
 
 // SetNALObserver registers fn to receive every NAL a leaf fetches and
@@ -424,6 +455,7 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		RequireSignedHub:      lcfg.RequireSignedHub,
 		HubSigned:             lcfg.HubSigned,
 		OnHubSigned:           func() error { return s.persistHubSigned(lcfg.Network, lcfg.HubURL) },
+		HubSignedStored:       s.hubSignedStored(lcfg.Network, lcfg.HubURL),
 		CoordPubKeyB64:        lcfg.CoordinatorPubKey,
 		HubPubKeyB64:          lcfg.HubPubKey,
 		PendingCoordPubKeyB64: lcfg.PendingCoordinatorPubKey,

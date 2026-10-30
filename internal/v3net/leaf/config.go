@@ -43,6 +43,12 @@ type Config struct {
 	// leaf's goroutine. An error means it was not stored; the leaf keeps
 	// enforcing it and calls OnHubSigned again at the next verified reply.
 	OnHubSigned func() error
+	// HubSignedStored reports whether the caller's store holds HubSigned
+	// now. When UpdatePins is handed HubSigned false while the leaf
+	// enforces it, the leaf asks this before taking it as the sysop's
+	// clear, since a copy of the config read before OnHubSigned stored the
+	// record looks the same. Nil takes UpdatePins' value as it is.
+	HubSignedStored func() (bool, error)
 
 	// CoordPubKeyB64 is the pinned coordinator key (standard base64). Every
 	// NAL must be signed by it. Blank means not pinned yet: the first NAL

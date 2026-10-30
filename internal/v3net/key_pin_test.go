@@ -109,6 +109,35 @@ func TestPersistHubSigned(t *testing.T) {
 	}
 }
 
+// hubSignedStored reads the matching entry's hubSigned from v3net.json as it
+// is when called.
+func TestHubSignedStored(t *testing.T) {
+	dir := t.TempDir()
+	s := &Service{cfg: config.V3NetConfig{ConfigPath: dir}}
+	stored := s.hubSignedStored("testnet", "https://hub.example")
+	if got, err := stored(); err != nil || got {
+		t.Fatalf("with no v3net.json: %v, %v; want false", got, err)
+	}
+	if err := config.SaveV3NetConfig(dir, config.V3NetConfig{Leaves: []config.V3NetLeafConfig{
+		{HubURL: "https://other.example", Network: "testnet", HubSigned: true},
+		{HubURL: "https://hub.example", Network: "testnet"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := stored(); err != nil || got {
+		t.Fatalf("before the store: %v, %v; want false", got, err)
+	}
+	if err := s.persistHubSigned("testnet", "https://hub.example"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := stored(); err != nil || !got {
+		t.Errorf("after the store: %v, %v; want true", got, err)
+	}
+	if (&Service{}).hubSignedStored("testnet", "https://hub.example") != nil {
+		t.Error("a service without a config path has a store to read")
+	}
+}
+
 // keyPinned tells the key observer about a pin a handover moved, once it is
 // stored, and stays quiet for a first-use pin.
 func TestKeyPinnedNotifiesHandover(t *testing.T) {

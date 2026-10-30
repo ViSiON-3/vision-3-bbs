@@ -59,6 +59,11 @@ var hubRecheckInterval = 5 * time.Minute
 // hubGate is whether syncing with the hub is paused, guarded by Leaf.hubMu.
 type hubGate struct {
 	paused bool
+	// unsignedOnly is set while every cause of the current pause was an
+	// unsigned reply refused under hubMustSign, so the pause can lift once
+	// signatures are no longer required, even for a hub whose /info serves
+	// no key to resume on. A key mismatch or bad signature clears it.
+	unsignedOnly bool
 	// pausedCh is closed when a pause begins, so an open SSE stream drops;
 	// resumedCh is closed when it ends. Each is replaced once closed.
 	pausedCh, resumedCh chan struct{}
@@ -86,14 +91,25 @@ func (l *Leaf) hubChans() (paused, resumed <-chan struct{}) {
 	return l.hub.pausedCh, l.hub.resumedCh
 }
 
-// pauseHub stops syncing with the hub, logging reason the first time.
+// pauseHub stops syncing with the hub over its key or a bad signature,
+// logging reason the first time.
 func (l *Leaf) pauseHub(reason string) {
+	l.pause(reason, false)
+}
+
+// pause stops syncing with the hub, logging reason the first time. unsigned
+// says the cause is an unsigned reply refused under hubMustSign; any other
+// cause, now or added to a pause already in force, keeps the pause until the
+// hub's key matches the pin.
+func (l *Leaf) pause(reason string, unsigned bool) {
 	l.hubMu.Lock()
 	if l.hub.paused {
+		l.hub.unsignedOnly = l.hub.unsignedOnly && unsigned
 		l.hubMu.Unlock()
 		return
 	}
 	l.hub.paused = true
+	l.hub.unsignedOnly = unsigned
 	close(l.hub.pausedCh)
 	l.hub.resumedCh = make(chan struct{})
 	l.hubMu.Unlock()
@@ -103,16 +119,36 @@ func (l *Leaf) pauseHub(reason string) {
 
 // resumeHub lifts a pause, once the hub's key matches the pin again.
 func (l *Leaf) resumeHub() {
-	l.hubMu.Lock()
-	if !l.hub.paused {
-		l.hubMu.Unlock()
+	if l.resume(false) {
+		slog.Info("leaf: hub key matches the pin; resuming sync", "network", l.cfg.Network, "hub", l.cfg.HubURL)
+	}
+}
+
+// liftUnsignedPause lifts a pause caused only by unsigned replies, once
+// hubMustSign no longer holds: the sysop cleared hubSigned with
+// requireSignedHub off, after the hub really stopped signing.
+func (l *Leaf) liftUnsignedPause() {
+	if must, _ := l.hubMustSign(); must {
 		return
 	}
+	if l.resume(true) {
+		slog.Info("leaf: hub signatures no longer required; resuming sync", "network", l.cfg.Network, "hub", l.cfg.HubURL)
+	}
+}
+
+// resume lifts the pause, or with unsignedOnly only a pause whose every
+// cause was an unsigned reply. It reports whether it lifted one.
+func (l *Leaf) resume(unsignedOnly bool) bool {
+	l.hubMu.Lock()
+	defer l.hubMu.Unlock()
+	if !l.hub.paused || (unsignedOnly && !l.hub.unsignedOnly) {
+		return false
+	}
 	l.hub.paused = false
+	l.hub.unsignedOnly = false
 	close(l.hub.resumedCh)
 	l.hub.pausedCh = make(chan struct{})
-	l.hubMu.Unlock()
-	slog.Info("leaf: hub key matches the pin; resuming sync", "network", l.cfg.Network, "hub", l.cfg.HubURL)
+	return true
 }
 
 // waitHubTrusted returns at once unless syncing is paused; then it waits for
@@ -144,9 +180,10 @@ func (l *Leaf) waitHubTrusted(ctx context.Context) error {
 // is reported to the sysop as pending and keeps the pause. If /info still
 // serves the pinned key, only the bad response is refused and the pause
 // lifts; if /info cannot be fetched, or serves no key, the pause holds until
-// a later check succeeds.
-func (l *Leaf) hubSignatureFailed(ctx context.Context, reason string) {
-	l.pauseHub(reason)
+// a later check succeeds, or, with unsigned (the signature was missing),
+// until signatures are no longer required (liftUnsignedPause).
+func (l *Leaf) hubSignatureFailed(ctx context.Context, reason string, unsigned bool) {
+	l.pause(reason, unsigned)
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
 	if err := l.checkHubKey(ctx); err != nil && !errors.Is(err, ErrHubKeyMismatch) {
@@ -209,7 +246,7 @@ func (l *Leaf) hubUnsigned(ctx context.Context, path, why string) error {
 	} else {
 		slog.Debug("leaf: refusing an unsigned reply from the hub", "network", l.cfg.Network, "path", path)
 	}
-	l.hubSignatureFailed(ctx, "missing hub signature on "+path)
+	l.hubSignatureFailed(ctx, "missing hub signature on "+path, true)
 	return fmt.Errorf("%w: response to %s (%s)", ErrHubUnsigned, path, why)
 }
 
@@ -232,6 +269,16 @@ func (l *Leaf) noteHubSigned() {
 	}
 	if !save {
 		return
+	}
+	// Held across the store and the record of it, so applyHubSigned never
+	// reads the store between the two (see there).
+	l.hubSignedSaveMu.Lock()
+	defer l.hubSignedSaveMu.Unlock()
+	l.pinMu.Lock()
+	save = l.pins.hubSigned && l.pins.hubSignedUnsaved
+	l.pinMu.Unlock()
+	if !save {
+		return // a save that ran ahead of this one stored it
 	}
 	if l.cfg.OnHubSigned != nil {
 		if err := l.cfg.OnHubSigned(); err != nil {
@@ -276,7 +323,7 @@ func (l *Leaf) verifyHubResponse(ctx context.Context, resp *http.Response, path 
 		return nil
 	}
 	if protocol.VerifyResponse(pub, req.sig, req.nonce, resp.StatusCode, body, sig) != nil {
-		l.hubSignatureFailed(ctx, "bad hub signature on "+path)
+		l.hubSignatureFailed(ctx, "bad hub signature on "+path, false)
 		return fmt.Errorf("%w: response to %s", ErrHubSignature, path)
 	}
 	l.noteHubSigned()

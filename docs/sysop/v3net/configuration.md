@@ -421,7 +421,12 @@ remove it. So the leaf refuses unsigned replies from a hub in two cases:
 An unsigned reply is handled like one whose signature fails: the leaf logs
 `leaf: refusing an unsigned reply from the hub`, pauses, checks the hub's
 `/info`, and, if it still serves the pinned key, resumes, having dropped
-only that reply. If replies keep arriving unsigned, nothing gets through.
+only that reply. If replies keep arriving unsigned, nothing gets through. An
+event stream that was opened unsigned before the leaf required signatures is
+dropped the same way before its next event is used. If the hub's `/info`
+serves no key at all, the pause holds until you clear **Hub Signs** as below;
+a pause because the hub's key changed holds until you accept the key, as
+above, whatever you do with **Hub Signs**.
 
 **If your hub really stopped signing**, for example because its operator
 went back to an older version, every reply is refused until you clear the

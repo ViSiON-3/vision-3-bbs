@@ -79,7 +79,9 @@ func (l *Leaf) runSSE(ctx context.Context) {
 // id in sequence and a sig that verifies (see eventVerifier), or the stream
 // is dropped and syncing paused. A pause from elsewhere also drops it, as
 // does an event over maxSSEEventFields or maxSSEEventBytes. A refusal is
-// checked like any signed reply before its status is returned.
+// checked like any signed reply before its status is returned. An unsigned
+// stream, accepted while hub signatures were not required, is refused like
+// an unsigned reply before its next event is dispatched once they are.
 func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 	// Taken before connecting, so a pause that starts at any point after
 	// this drops the stream.
@@ -144,8 +146,16 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 		if line == "" {
 			if eventType != "" && data != nil {
 				ev := protocol.Event{Type: eventType, Data: json.RawMessage(strings.Join(data, "\n"))}
+				if verifier == nil {
+					// An unsigned stream opened while signatures were not
+					// required ends once they are: the leaf has since seen
+					// the hub sign, or the sysop turned on Hub Signs.
+					if must, why := l.hubMustSign(); must {
+						return fmt.Errorf("SSE event: %w", l.hubUnsigned(ctx, path, why))
+					}
+				}
 				if err := verifier.check(id, sig, ev.Type, ev.Data); err != nil {
-					l.hubSignatureFailed(ctx, "bad hub signature on "+path)
+					l.hubSignatureFailed(ctx, "bad hub signature on "+path, false)
 					return fmt.Errorf("SSE event: %w", err)
 				}
 				l.onEvent(ev)

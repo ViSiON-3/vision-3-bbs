@@ -31,6 +31,8 @@ type hubProxy struct {
 	events atomic.Int64
 	// stripSig removes X-V3Net-Hub-Signature from every response.
 	stripSig atomic.Bool
+	// stripEvents removes it from event stream responses only.
+	stripEvents atomic.Bool
 
 	mu      sync.Mutex
 	rewrite func(path string, body []byte) []byte
@@ -45,7 +47,7 @@ func newHubProxy(t *testing.T, hubURL string) *hubProxy {
 	p := &hubProxy{}
 	rp := httputil.NewSingleHostReverseProxy(target)
 	rp.ModifyResponse = func(resp *http.Response) error {
-		if p.stripSig.Load() {
+		if p.stripSig.Load() || (p.stripEvents.Load() && strings.HasSuffix(resp.Request.URL.Path, "/events")) {
 			resp.Header.Del(protocol.HeaderHubSignature)
 		}
 		p.mu.Lock()

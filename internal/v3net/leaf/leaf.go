@@ -48,6 +48,9 @@ type Leaf struct {
 	pins  keyPins
 	// coordSaveMu and hubSaveMu serialize savePin for each key kind.
 	coordSaveMu, hubSaveMu sync.Mutex
+	// hubSignedSaveMu orders storing hubSigned against confirming a clear
+	// of it (noteHubSigned, applyHubSigned).
+	hubSignedSaveMu sync.Mutex
 
 	// refused remembers which refused messages were already logged at warn.
 	refused refusedLog

@@ -2,9 +2,15 @@ package leaf
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -256,5 +262,183 @@ func TestHubSignedClearedBySysop(t *testing.T) {
 	}
 	if !l.HubSigned() || rec.calls.Load() != 1 {
 		t.Errorf("hubSigned=%v stores=%d; want the hub recorded as signing again", l.HubSigned(), rec.calls.Load())
+	}
+}
+
+// logonRecorder collects the handles of the logon events a leaf dispatches.
+type logonRecorder struct {
+	mu      sync.Mutex
+	handles []string
+}
+
+func (r *logonRecorder) attach(l *Leaf) {
+	l.SetOnEvent(func(ev protocol.Event) {
+		var p protocol.LogonPayload
+		if ev.Type != protocol.EventLogon || json.Unmarshal(ev.Data, &p) != nil {
+			return
+		}
+		r.mu.Lock()
+		r.handles = append(r.handles, p.Handle)
+		r.mu.Unlock()
+	})
+}
+
+func (r *logonRecorder) has(handle string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, h := range r.handles {
+		if h == handle {
+			return true
+		}
+	}
+	return false
+}
+
+// An event stream whose signature was stripped, opened while hub
+// signatures were not required, is dropped before its next event is
+// dispatched once they are: because a verified reply showed the hub signs,
+// or because the sysop turned on Hub Signs in place.
+func TestUnsignedStreamDroppedOnceSignaturesRequired(t *testing.T) {
+	for name, require := range map[string]func(t *testing.T, l *Leaf, hubKS *keystore.Keystore){
+		"hub seen signing": func(t *testing.T, l *Leaf, _ *keystore.Keystore) {
+			if _, err := l.Poll(context.Background()); err != nil {
+				t.Fatalf("Poll: %v", err)
+			}
+			if !l.HubSigned() {
+				t.Fatal("a verified poll did not record that the hub signs")
+			}
+		},
+		"Hub Signs turned on": func(t *testing.T, l *Leaf, hubKS *keystore.Keystore) {
+			l.UpdatePins(context.Background(), Pins{Hub: hubKS.PubKeyBase64(), HubSigned: true})
+			if !l.HubSigned() {
+				t.Fatal("Hub Signs set in the config did not reach the leaf")
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			l, _, p, hubKS := proxiedLeaf(t, (*keystore.Keystore).PubKeyBase64)
+			p.stripEvents.Store(true)
+			rec := &logonRecorder{}
+			rec.attach(l)
+			other := subscribedLeaf(t, p.ts, "Other BBS")
+
+			done := make(chan error, 1)
+			go func() { done <- l.connectSSE(context.Background(), false) }()
+			// The unsigned stream is live, and accepted while nothing requires
+			// signatures.
+			waitFor(t, "the unsigned stream to deliver", func() bool {
+				_ = other.SendLogon("probe")
+				return rec.has("probe")
+			})
+
+			require(t, l, hubKS)
+			if err := other.SendLogon("forged"); err != nil {
+				t.Fatalf("SendLogon: %v", err)
+			}
+			select {
+			case err := <-done:
+				if !errors.Is(err, ErrHubUnsigned) {
+					t.Errorf("connectSSE = %v, want ErrHubUnsigned", err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("unsigned stream still open once signatures were required")
+			}
+			if rec.has("forged") {
+				t.Error("an event from the unsigned stream was dispatched once signatures were required")
+			}
+		})
+	}
+}
+
+// A hub rolled back to a version that neither signs nor publishes a key
+// leaves the leaf paused, as nothing on /info can resume it. Clearing
+// hubSigned (with requireSignedHub off) lifts that pause.
+func TestRollbackRecoveryResumesWithoutHubKey(t *testing.T) {
+	mh := &mockHub{ks: newCoordKey(t), messages: []protocol.Message{testMessage(testUUID1)}}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/info") {
+			_ = json.NewEncoder(w).Encode(protocol.NetworkInfo{Name: "testnet"})
+			return
+		}
+		mh.handler(w, r)
+	}))
+	t.Cleanup(ts.Close)
+	l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
+	pin := newCoordKey(t).PubKeyBase64()
+	l.pins.hub = pin
+	l.pins.hubSigned, l.pins.hubSignedCfg = true, true
+	ctx := context.Background()
+
+	if _, err := l.Poll(ctx); !errors.Is(err, ErrHubUnsigned) {
+		t.Fatalf("Poll of the rolled-back hub = %v, want ErrHubUnsigned", err)
+	}
+	if err := l.checkHubKey(ctx); err != nil || !l.HubPaused() {
+		t.Fatalf("re-check of /info = %v, paused=%v; want it to find nothing to resume on", err, l.HubPaused())
+	}
+
+	l.UpdatePins(ctx, Pins{Hub: pin, HubSigned: false})
+	if l.HubPaused() {
+		t.Fatal("still paused after the sysop cleared hubSigned")
+	}
+	if n, err := l.Poll(ctx); err != nil || n != 1 {
+		t.Errorf("Poll after recovery = %d, %v; want the hub's message", n, err)
+	}
+}
+
+// Clearing hubSigned does not lift a pause over the hub's key: one from a
+// bad signature, or one where the check after an unsigned reply found a
+// changed key.
+func TestClearingHubSignedKeepsKeyPause(t *testing.T) {
+	for name, strip := range map[string]bool{"bad signature": false, "unsigned reply, changed key": true} {
+		t.Run(name, func(t *testing.T) {
+			oldKey := newCoordKey(t).PubKeyBase64()
+			l, _, p, hubKS := proxiedLeaf(t, func(*keystore.Keystore) string { return oldKey })
+			l.pins.hubSigned, l.pins.hubSignedCfg = true, true
+			p.stripSig.Store(strip)
+			ctx := context.Background()
+
+			if _, err := l.Poll(ctx); err == nil {
+				t.Fatal("Poll succeeded against a hub signing with another key")
+			}
+			if !l.HubPaused() {
+				t.Fatal("not paused")
+			}
+			l.UpdatePins(ctx, Pins{Hub: oldKey, PendingHub: hubKS.PubKeyBase64(), HubSigned: false})
+			if l.HubSigned() {
+				t.Error("hubSigned not cleared")
+			}
+			if !l.HubPaused() {
+				t.Error("clearing hubSigned lifted a pause over the hub's key")
+			}
+		})
+	}
+}
+
+// A reload that read the config before the leaf stored hubSigned, and is
+// applied after, is not taken for the sysop clearing it: the leaf checks the
+// store, which holds the record. A real clear still applies.
+func TestStaleReloadDoesNotClearHubSigned(t *testing.T) {
+	l, _, _, hubKS := proxiedLeaf(t, (*keystore.Keystore).PubKeyBase64)
+	var file atomic.Bool // what v3net.json holds
+	l.cfg.OnHubSigned = func() error { file.Store(true); return nil }
+	l.cfg.HubSignedStored = func() (bool, error) { return file.Load(), nil }
+	ctx := context.Background()
+
+	stale := Pins{Hub: hubKS.PubKeyBase64(), HubSigned: file.Load()} // read before the store
+	if _, err := l.Poll(ctx); err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+	if !file.Load() {
+		t.Fatal("hubSigned not stored")
+	}
+	l.UpdatePins(ctx, stale)
+	if !l.HubSigned() {
+		t.Fatal("a reload read before the store cleared hubSigned")
+	}
+
+	file.Store(false) // the sysop clears it
+	l.UpdatePins(ctx, Pins{Hub: hubKS.PubKeyBase64(), HubSigned: false})
+	if l.HubSigned() {
+		t.Error("the sysop's clear did not apply")
 	}
 }
