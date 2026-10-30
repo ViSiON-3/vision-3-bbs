@@ -10,11 +10,11 @@ import (
 )
 
 // Saving Hub Signs at N when v3net.json already holds N (the leaf's write
-// of it failed) leaves the file's contents alone but still moves its
-// timestamp, which is what makes a running BBS reload it and the leaf drop
-// the record it could not write. A save that does not set Hub Signs leaves
-// an unchanged v3net.json untouched.
-func TestSaveHubSignsBumpsUnchangedV3NetConfig(t *testing.T) {
+// of it failed) raises that leaf's hubSignedClears and no other's, even with
+// another change in the same save, which is what tells a running BBS the leaf
+// should drop the record it could not write. A save that does not set Hub
+// Signs leaves an unchanged v3net.json untouched.
+func TestSaveHubSignsRaisesClears(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "configs")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
@@ -27,7 +27,10 @@ func TestSaveHubSignsBumpsUnchangedV3NetConfig(t *testing.T) {
 	cfg := config.V3NetConfig{
 		Enabled:      true,
 		KeystorePath: filepath.Join(root, "data", "v3net.key"),
-		Leaves:       []config.V3NetLeafConfig{{HubURL: "http://hub.example", Network: "testnet", Boards: []string{"test.general"}}},
+		Leaves: []config.V3NetLeafConfig{
+			{HubURL: "http://hub.example", Network: "testnet", Boards: []string{"test.general"}},
+			{HubURL: "http://hub.example", Network: "othernet", Boards: []string{"other.general"}},
+		},
 	}
 	if err := config.SaveV3NetConfig(configDir, cfg); err != nil {
 		t.Fatal(err)
@@ -36,34 +39,22 @@ func TestSaveHubSignsBumpsUnchangedV3NetConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	before, err := os.ReadFile(path)
-	if err != nil {
+
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
 		t.Fatal(err)
 	}
 
-	old := time.Now().Add(-time.Hour)
-	setOld := func() {
-		t.Helper()
-		if err := os.Chtimes(path, old, old); err != nil {
-			t.Fatal(err)
-		}
-	}
-	modTime := func() time.Time {
-		t.Helper()
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return info.ModTime()
-	}
-
 	// A save of something else leaves the unchanged file alone.
-	setOld()
 	m.dirty = true
 	if !m.saveAll() {
 		t.Fatalf("saveAll: %s", m.message)
 	}
-	if !modTime().Equal(old) {
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(old) {
 		t.Fatal("a save that did not set Hub Signs moved v3net.json's timestamp")
 	}
 
@@ -76,23 +67,18 @@ func TestSaveHubSignsBumpsUnchangedV3NetConfig(t *testing.T) {
 	if !m.dirty {
 		t.Fatal("setting Hub Signs did not mark the session dirty")
 	}
+	m.configs.V3Net.Leaves[1].Origin = "another change"
 	if !m.saveAll() {
 		t.Fatalf("saveAll: %s", m.message)
 	}
-	if !modTime().After(old) {
-		t.Error("saving Hub Signs at N did not move v3net.json's timestamp")
+	got, err := config.LoadV3NetConfig(configDir)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if after, err := os.ReadFile(path); err != nil || string(after) != string(before) {
-		t.Errorf("v3net.json rewritten (err %v):\n%s\nwant\n%s", err, after, before)
+	if got.Leaves[0].HubSignedClears != 1 || got.Leaves[1].HubSignedClears != 0 {
+		t.Errorf("clears = %d and %d, want 1 and 0", got.Leaves[0].HubSignedClears, got.Leaves[1].HubSignedClears)
 	}
-
-	// The next save, with Hub Signs not set again, leaves it alone.
-	setOld()
-	m.dirty = true
-	if !m.saveAll() {
-		t.Fatalf("saveAll: %s", m.message)
-	}
-	if !modTime().Equal(old) {
-		t.Error("a later save moved v3net.json's timestamp again")
+	if got.Leaves[1].Origin != "another change" {
+		t.Errorf("origin = %q; the other change was not saved", got.Leaves[1].Origin)
 	}
 }

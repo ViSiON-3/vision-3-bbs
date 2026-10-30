@@ -495,13 +495,12 @@ func TestServerConfigReloadUpdatesBoardNameFallback(t *testing.T) {
 	}
 }
 
-// TestV3NetReloadOnUnchangedHubSignsSave drives the real v3net.json target
-// through what a v3config save does when the sysop sets Hub Signs to the N
-// the file already holds: the file is not rewritten, its timestamp is moved
-// (config.TouchConfigFile) and the save sentinel is touched. That reloads
-// the leaves, so a leaf enforcing a record it could not write drops it. A
-// save that does not move v3net.json's timestamp does not reload them.
-func TestV3NetReloadOnUnchangedHubSignsSave(t *testing.T) {
+// TestV3NetReloadOnHubSignsSave drives the real v3net.json target through what
+// a v3config save does when the sysop sets Hub Signs to the N the file already
+// holds: hubSignedClears is raised, so the file changes, and the save sentinel
+// is touched. That reloads the leaves, so a leaf enforcing a record it could
+// not write drops it. A save that leaves v3net.json alone does not reload them.
+func TestV3NetReloadOnHubSignsSave(t *testing.T) {
 	configDir := t.TempDir()
 	path := filepath.Join(configDir, "v3net.json")
 	if err := config.SaveV3NetConfig(configDir, config.V3NetConfig{
@@ -545,7 +544,10 @@ func TestV3NetReloadOnUnchangedHubSignsSave(t *testing.T) {
 		t.Fatalf("a save that left v3net.json alone reloaded the leaves %d times", reloads)
 	}
 
-	if err := config.TouchConfigFile(path); err != nil {
+	if err := config.UpdateV3NetConfig(configDir, func(c *config.V3NetConfig) error {
+		c.Leaves[0].HubSignedClears++
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	ts := time.Now().Add(time.Second)

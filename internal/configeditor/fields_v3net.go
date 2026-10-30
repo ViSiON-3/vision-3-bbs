@@ -172,11 +172,16 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 		{
 			Label: "Hub Signs", Help: "Set by the leaf once the hub signs; its unsigned replies are then refused. N only if it stopped signing", Type: ftYesNo, Col: 3, Row: 14, Width: 1,
 			Get: func() string { return uitext.BoolToYN(l.HubSigned) },
-			Set: func(val string) error { l.HubSigned = uitext.YNToBool(val); return nil },
-			// Hub Signs at N may be what the file already holds while the
-			// running leaf enforces a record it could not write; the save
-			// must still reach the leaf for it to drop that record.
-			AfterSet: func(cur *Model, _ string) { cur.v3netHubSignsSet = true },
+			Set: func(val string) error {
+				l.HubSigned = uitext.YNToBool(val)
+				// N may be what the file already holds while the running leaf
+				// enforces a record it could not write. Raising the count
+				// tells that leaf, and only that leaf, to drop the record.
+				if !l.HubSigned {
+					l.HubSignedClears++
+				}
+				return nil
+			},
 		},
 	}
 }

@@ -1,10 +1,8 @@
 package v3net_test
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -14,7 +12,7 @@ import (
 
 // unsavedFixture is a service with two leaves, built from a real v3net.json,
 // whose first leaf holds a hubSigned record and a coordinator pin it has not
-// stored. The file gets an old timestamp, so a touch visibly moves it.
+// stored.
 type unsavedFixture struct {
 	t    *testing.T
 	svc  *v3net.Service
@@ -33,7 +31,7 @@ func newUnsavedFixture(t *testing.T) *unsavedFixture {
 		dir:  filepath.Dir(svc.ConfigPath()),
 		cfgs: []config.V3NetLeafConfig{leafCfg("net-a", "ALPHA"), leafCfg("net-b", "BETA")},
 	}
-	f.write(time.Now().Add(-time.Hour))
+	f.write()
 	svc.ConfigureLeaves(f.cfgs, mm)
 	f.leaf().RestoreUnsaved(leaf.UnsavedState{Coord: unsavedPin, HubSigned: true})
 	return f
@@ -51,18 +49,10 @@ func (f *unsavedFixture) leaf() *leaf.Leaf {
 	return nil
 }
 
-// write saves f.cfgs to v3net.json with the timestamp at.
-func (f *unsavedFixture) write(at time.Time) {
+// write saves f.cfgs to v3net.json.
+func (f *unsavedFixture) write() {
 	f.t.Helper()
 	if err := config.SaveV3NetConfig(f.dir, config.V3NetConfig{Leaves: f.cfgs}); err != nil {
-		f.t.Fatal(err)
-	}
-	f.touch(at)
-}
-
-func (f *unsavedFixture) touch(at time.Time) {
-	f.t.Helper()
-	if err := os.Chtimes(filepath.Join(f.dir, "v3net.json"), at, at); err != nil {
 		f.t.Fatal(err)
 	}
 }
@@ -95,7 +85,7 @@ func TestReloadKeepsUnsavedOnInPlaceChange(t *testing.T) {
 	first := f.leaf()
 
 	f.cfgs[1].HubPubKey = "other-leaf-key"
-	f.write(time.Now())
+	f.write()
 	f.reload()
 	if f.leaf() != first {
 		t.Fatal("a keys-only change rebuilt the leaf")
@@ -121,7 +111,7 @@ func TestReloadKeepsUnsavedAcrossRebuild(t *testing.T) {
 	first := f.leaf()
 
 	f.cfgs[1].Boards = []string{"GAMMA"}
-	f.write(time.Now())
+	f.write()
 	f.reload()
 	if f.leaf() == first {
 		t.Fatal("a boards change did not rebuild the leaf")
@@ -145,7 +135,7 @@ func TestReloadReplacesEditedUnsavedPin(t *testing.T) {
 		if rebuild {
 			f.cfgs[1].Boards = []string{"GAMMA"}
 		}
-		f.write(time.Now())
+		f.write()
 		f.reload()
 		l := f.leaf()
 		if got := l.PinnedKey(leaf.KeyCoordinator); got != "sysop-key" {
@@ -157,53 +147,128 @@ func TestReloadReplacesEditedUnsavedPin(t *testing.T) {
 	}
 }
 
-// The sysop saving Hub Signs at the N the file holds moves only the file's
-// timestamp (config.TouchConfigFile). That still drops the record, not the
-// pin (#787).
-func TestReloadOfTouchedFileDropsUnsavedHubSigned(t *testing.T) {
-	f := newUnsavedFixture(t)
-	f.touch(time.Now())
-	f.reload()
-	got := f.leaf().UnsavedState()
-	if got.HubSigned || f.leaf().HubSigned() {
-		t.Errorf("unsaved %+v, hubSigned=%v; want the record dropped", got, f.leaf().HubSigned())
+// The sysop setting Hub Signs to the N the file holds raises hubSignedClears.
+// That drops the record, not the pin, whether the leaf is rebuilt or not, and
+// whatever else the same save changed (#804).
+func TestReloadOfRaisedClearsDropsUnsavedHubSigned(t *testing.T) {
+	cases := []struct {
+		name    string
+		rebuild bool
+		other   func(f *unsavedFixture)
+	}{
+		{name: "alone"},
+		{name: "with another leaf's key", other: func(f *unsavedFixture) { f.cfgs[1].HubPubKey = "other-leaf-key" }},
+		{name: "with another leaf's boards", rebuild: true, other: func(f *unsavedFixture) { f.cfgs[1].Boards = []string{"GAMMA"} }},
 	}
-	if got.Coord != unsavedPin {
-		t.Errorf("unsaved %+v; want the pin kept", got)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := newUnsavedFixture(t)
+			first := f.leaf()
+			f.cfgs[0].HubSignedClears++
+			if c.other != nil {
+				c.other(f)
+			}
+			f.write()
+			f.reload()
+			if rebuilt := f.leaf() != first; rebuilt != c.rebuild {
+				t.Fatalf("rebuilt = %v, want %v", rebuilt, c.rebuild)
+			}
+			got := f.leaf().UnsavedState()
+			if got.HubSigned || f.leaf().HubSigned() {
+				t.Errorf("unsaved %+v, hubSigned=%v; want the record dropped", got, f.leaf().HubSigned())
+			}
+			if got.Coord != unsavedPin {
+				t.Errorf("unsaved %+v; want the pin kept", got)
+			}
+		})
 	}
 }
 
-// A touch that comes with a rebuild drops the record there too.
-func TestRebuildOfTouchedFileDropsUnsavedHubSigned(t *testing.T) {
+// A clear still reaches the leaf when it was saved while another change was
+// queued, so the leaf first sees both in one reload, and later reloads of the
+// same count are not clears again (#804).
+func TestReloadOfQueuedClearsDropsOnce(t *testing.T) {
 	f := newUnsavedFixture(t)
-	first := f.leaf()
-	fresh := append([]config.V3NetLeafConfig(nil), f.cfgs...)
-	fresh[1].Boards = []string{"GAMMA"}
-	f.touch(time.Now())
-	if err := f.svc.ReloadLeaves(fresh, f.mm, nil); err != nil {
-		t.Fatal(err)
-	}
-	if f.leaf() == first {
-		t.Fatal("a boards change did not rebuild the leaf")
-	}
+	f.cfgs[0].HubSignedClears = 1
+	f.write()
+	f.cfgs[1].HubPubKey = "queued-key"
+	f.write()
+	f.reload()
 	if f.leaf().HubSigned() {
-		t.Error("the rebuilt leaf kept the record after a touched file")
+		t.Fatal("the clear saved before a queued change did not drop the record")
 	}
-}
 
-// A reload the file did not cause (reload.force, the area browser) leaves
-// the timestamp alone, so it is not a sysop's save of Hub Signs.
-func TestReloadOfUntouchedFileKeepsUnsaved(t *testing.T) {
-	f := newUnsavedFixture(t)
-	f.reload()
-	f.wantKept("the file was not touched")
-
-	// Having been touched once does not make later reloads count again.
-	f.touch(time.Now())
-	f.reload()
 	f.leaf().RestoreUnsaved(leaf.UnsavedState{HubSigned: true})
 	f.reload()
 	if !f.leaf().HubSigned() {
-		t.Error("a second reload of the same touch dropped the record")
+		t.Error("a second reload of the same count dropped a new record")
+	}
+}
+
+// A clear belongs to one leaf: another leaf holding a record keeps it (#804).
+func TestRaisedClearsDropsOnlyThatLeaf(t *testing.T) {
+	f := newUnsavedFixture(t)
+	f.cfgs[1].HubSignedClears = 1
+	f.write()
+	f.reload()
+	f.wantKept("another leaf's Hub Signs was cleared")
+}
+
+// A reload without a raised count says nothing about the record, however the
+// file's timestamp moved (#804).
+func TestReloadWithoutRaisedClearsKeepsUnsaved(t *testing.T) {
+	f := newUnsavedFixture(t)
+	f.reload()
+	f.wantKept("nothing changed")
+	f.write() // the same contents, with a new timestamp
+	f.reload()
+	f.wantKept("the file was saved as it was")
+}
+
+// A reload carrying the pin the leaf itself stored, while a later handover
+// pin waits to be stored, keeps that pin, rebuilt or not; a sysop's edit, even
+// to a key the leaf passed through earlier, replaces it (#805).
+func TestReloadOfOwnStoredPin(t *testing.T) {
+	const earlier, stored, sysop = "key-earlier", "key-stored", "key-sysop"
+	cases := []struct {
+		name string
+		file string
+		kept bool
+	}{
+		{"the leaf's own store", stored, true},
+		{"an edit to another key", sysop, false},
+		{"an edit to a key the leaf passed through", earlier, false},
+		{"a blanked pin", "", false},
+	}
+	for _, rebuild := range []bool{false, true} {
+		for _, c := range cases {
+			t.Run(c.name, func(t *testing.T) {
+				f := newUnsavedFixture(t)
+				// The leaf has applied a copy older than its own store.
+				f.cfgs[0].CoordinatorPubKey = "key-applied"
+				f.write()
+				f.reload()
+				f.leaf().RestoreUnsaved(leaf.UnsavedState{Coord: unsavedPin, CoordMovedFrom: stored, HubSigned: true})
+
+				f.cfgs[0].CoordinatorPubKey = c.file
+				if rebuild {
+					f.cfgs[1].Boards = []string{"GAMMA"}
+				}
+				f.write()
+				f.reload()
+
+				got := f.leaf().UnsavedState()
+				if c.kept {
+					f.wantKept("the leaf's own store reached the reload")
+					if got.CoordMovedFrom != stored {
+						t.Errorf("rebuild=%v: unsaved %+v, want it still moving from the stored pin", rebuild, got)
+					}
+					return
+				}
+				if pin := f.leaf().PinnedKey(leaf.KeyCoordinator); pin == unsavedPin || got.Coord != "" {
+					t.Errorf("rebuild=%v: pin %q, unsaved %+v; want the sysop's edit in force", rebuild, pin, got)
+				}
+			})
+		}
 	}
 }

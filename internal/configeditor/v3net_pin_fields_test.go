@@ -101,4 +101,18 @@ func TestV3NetLeafSignedHubFields(t *testing.T) {
 	if l.HubSigned {
 		t.Error("Set(N) did not clear hubSigned")
 	}
+	if l.HubSignedClears != 1 {
+		t.Errorf("hubSignedClears = %d after Set(N), want 1", l.HubSignedClears)
+	}
+
+	// Setting it to N again is a clear again; setting it to Y is not one.
+	if err := signs.Set("N"); err != nil {
+		t.Fatal(err)
+	}
+	if err := signs.Set("Y"); err != nil {
+		t.Fatal(err)
+	}
+	if !l.HubSigned || l.HubSignedClears != 2 {
+		t.Errorf("hubSigned = %v, hubSignedClears = %d; want true and 2", l.HubSigned, l.HubSignedClears)
+	}
 }
