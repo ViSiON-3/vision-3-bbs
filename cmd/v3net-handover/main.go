@@ -13,6 +13,12 @@
 // tool then signs a chain, A to B with A's key and B to C with B's, and
 // posts it as one request, which a hub running C takes whole or not at all.
 //
+// Before posting, the tool asks the hub which keys it recorded signing the NAL
+// (GET {network}/nal/signers), prints the chain the hub needs, and refuses a
+// chain that does not match. It trusts that reply only if it verifies under
+// the key the operator named for the hub. A hub without the endpoint is not
+// checked: the tool says so and posts, and the hub's own checks still apply.
+//
 // Usage:
 //
 //	go run ./cmd/v3net-handover -keystore data/v3net.key -hub http://localhost:8765 -network felonynet -new-key <base64 public key>
@@ -21,14 +27,18 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -46,6 +56,7 @@ func main() {
 	newKeystore := flag.String("new-keystore", "", "or: path to the new coordinator's v3net.key, to read its public key from")
 	authKeystore := flag.String("auth-keystore", "", "path to the v3net.key of the subscribed node to send the request as (default: -keystore)")
 	via := flag.String("via", "", "comma-separated paths to the v3net.key of each key the hub ran between -keystore's and the new key, oldest first")
+	omitLost := flag.Bool("omit-lost-keys", false, "post a chain that leaves out keys the hub recorded, because their keystores are lost; subscribers still on those keys re-pin by hand")
 	dryRun := flag.Bool("dry-run", false, "print the signed handover instead of sending it")
 	flag.Parse()
 
@@ -102,6 +113,16 @@ func main() {
 	sender := signers[0]
 	if *authKeystore != "" {
 		sender = loadKeystore(*authKeystore)
+	}
+	// checkHubKey left the hub on one of the two keys the operator named, so
+	// /info, which is unsigned, only chooses between those.
+	hubKey := from
+	if late {
+		hubKey = final
+	}
+	if err := checkHistory(os.Stdout, client, *hubURL, chain, hubKey, sender, *omitLost); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 	if !publish(os.Stdout, os.Stderr, client, *hubURL, chain, body, sender, *authKeystore != "", late) {
 		os.Exit(1)
@@ -250,6 +271,182 @@ func checkHubKey(client *http.Client, hubURL, network, from, to string) (late bo
 		return false, fmt.Errorf("the hub runs key %s, which is neither the outgoing key %s nor the new key %s; refusing to post the handover (check -hub, -network and the keystores)",
 			info.HubPubKeyB64, from, to)
 	}
+}
+
+// fetchHistory asks the hub for network's signer history as sender. It returns
+// the history once its reply verifies under hubKey, one of the keys the
+// operator named, with a nonce fresh for this request so an old reply cannot
+// be replayed. With no history to go on it returns nil and why not: a hub
+// without the endpoint answers 404, one that predates hub signatures sends no
+// signature, and a sender it does not know gets 401. A signature that fails,
+// or a 200 with none, which no hub with the endpoint sends, is an error: that
+// reply is not from the hub the operator named.
+func fetchHistory(client *http.Client, hubURL, network, hubKey string, sender *keystore.Keystore) (*protocol.SignerHistory, string, error) {
+	rawKey, err := base64.StdEncoding.DecodeString(hubKey)
+	if err != nil || len(rawKey) != ed25519.PublicKeySize {
+		return nil, "", fmt.Errorf("the hub key %s is not a public key", hubKey)
+	}
+	path := fmt.Sprintf("/v3net/v1/%s/nal/signers", network)
+	bodyHash := sha256.Sum256(nil)
+	dateUTC := time.Now().UTC().Format(http.TimeFormat)
+	sig, err := sender.Sign(http.MethodGet, path, dateUTC, hex.EncodeToString(bodyHash[:]))
+	if err != nil {
+		return nil, "", fmt.Errorf("sign request: %w", err)
+	}
+	nonce, err := protocol.NewNonce()
+	if err != nil {
+		return nil, "", fmt.Errorf("make request nonce: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodGet, hubURL+path, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Date", dateUTC)
+	req.Header.Set("X-V3Net-Node-ID", sender.NodeID())
+	req.Header.Set("X-V3Net-Signature", sig)
+	req.Header.Set(protocol.HeaderNonce, nonce)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err.Error(), nil
+	}
+	defer func() { _ = resp.Body.Close() }() // read side
+	// Small JSON; a reply cut short fails its signature.
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+
+	respSig := resp.Header.Get(protocol.HeaderHubSignature)
+	switch {
+	case respSig != "":
+		if err := protocol.VerifyResponse(ed25519.PublicKey(rawKey), sig, nonce, resp.StatusCode, body, respSig); err != nil {
+			return nil, "", fmt.Errorf("the hub's reply about its signers does not verify under the hub key %s; refusing to post the handover (check -hub and the keystores)", hubKey)
+		}
+	case resp.StatusCode == http.StatusOK:
+		return nil, "", fmt.Errorf("the hub's reply about its signers is unsigned; refusing to post the handover (check -hub, and any proxy in front of the hub)")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Sprintf("the hub answered %d (a hub that predates the check, or one that does not know the sending node)", resp.StatusCode), nil
+	}
+	var history protocol.SignerHistory
+	if err := json.Unmarshal(body, &history); err != nil {
+		return nil, fmt.Sprintf("its reply could not be read: %v", err), nil
+	}
+	return &history, "", nil
+}
+
+// checkHistory checks chain against the signer history of the hub running
+// hubKey and reports to out. It returns an error if the chain does not match.
+// It says so and returns nil when the hub has no history to give: the post
+// goes ahead as it always has, and the hub still checks the chain itself.
+func checkHistory(out io.Writer, client *http.Client, hubURL string, chain []protocol.CoordHandover, hubKey string, sender *keystore.Keystore, omitLost bool) error {
+	history, why, err := fetchHistory(client, hubURL, chain[0].Network, hubKey, sender)
+	if err != nil {
+		return err
+	}
+	if history == nil {
+		_, _ = fmt.Fprintf(out, "Could not check the chain against the hub's signer history: %s.\nPosting anyway; the hub still checks the chain.\n", why)
+		return nil
+	}
+	note, err := matchChain(history, hubKey, chain, omitLost)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(out, note)
+	return nil
+}
+
+// matchChain compares chain with what the hub running hubKey needs, using the
+// hub's own rules (nal.CheckChainShape, nal.CheckPostedChain), and returns a
+// line for the operator, or an error naming the chain to post. Beyond those
+// rules it refuses a chain the hub would take but that leaves out a recorded
+// key, since subscribers still on that key would be stranded and, once a
+// handover is held, the hub takes no more from recorded keys. omitLost allows
+// that when the key's keystore is gone; it never lets through a chain the hub
+// would refuse.
+func matchChain(history *protocol.SignerHistory, hubKey string, chain []protocol.CoordHandover, omitLost bool) (string, error) {
+	held := make([]protocol.CoordHandover, 0, len(history.Handovers))
+	for _, link := range history.Handovers {
+		held = append(held, protocol.CoordHandover{OldKeyB64: link.OldKeyB64, NewKeyB64: link.NewKeyB64})
+	}
+	olds := make([]string, 0, len(chain))
+	for _, ho := range chain {
+		olds = append(olds, ho.OldKeyB64)
+	}
+	to := chain[len(chain)-1].NewKeyB64
+
+	// earlier are the recorded keys other than the NAL's own, oldest first;
+	// signers adds the NAL's key when the hub has not re-signed it yet.
+	earlier := make([]string, 0, len(history.PrevSigners))
+	for _, key := range history.PrevSigners {
+		if key != history.NALKeyB64 {
+			earlier = append(earlier, key)
+		}
+	}
+	signers := earlier
+	if history.NALKeyB64 != hubKey {
+		signers = append(earlier[:len(earlier):len(earlier)], history.NALKeyB64)
+	}
+	wentBack := slices.Contains(history.PrevSigners, hubKey)
+
+	err := nal.CheckChainShape(chain)
+	var check nal.ChainCheck
+	if err == nil {
+		check, err = nal.CheckPostedChain(history.NALKeyB64, held, chain, history.PrevSigners, hubKey)
+	}
+	if err != nil {
+		msg := fmt.Sprintf("the hub would refuse this chain: %v. Refusing to post it", err)
+		switch {
+		case len(held) > 0:
+			msg += fmt.Sprintf(".\nThe key in force is %s", history.KeyInForceB64)
+		case wentBack:
+			msg += fmt.Sprintf(".\nThe hub runs %s, which already signed this network's NAL, so it takes no handover back to that key. Run the hub with a new key, or re-pin subscribers by hand", hubKey)
+		case len(signers) > 0 && (to == hubKey || history.NALKeyB64 != hubKey):
+			msg += ".\n" + describeChain(signers, hubKey)
+		}
+		return "", errors.New(msg)
+	}
+
+	switch {
+	case len(check.Fresh) == 0:
+		return "Signer history: the hub already holds this chain; posting it again retries the re-sign.", nil
+	case len(held) > 0:
+		return "Signer history: the chain continues from the key in force.", nil
+	case check.FromPrevSigners:
+		needed := describeChain(signers, hubKey)
+		if slices.Equal(olds, signers) {
+			return "Signer history: the chain matches the keys the hub recorded.\n" + needed, nil
+		}
+		if !omitLost {
+			return "", fmt.Errorf("this chain leaves out keys the hub recorded, and subscribers still on them could then only re-pin by hand. Pass all of them, or -omit-lost-keys if their keystores are lost.\n%s", needed)
+		}
+		return fmt.Sprintf("Signer history: leaving out %d recorded key(s); subscribers on them re-pin by hand.\n%s", len(signers)-len(olds), needed), nil
+	case len(earlier) == 0:
+		return "Signer history: the chain starts at the key in force.", nil
+	case omitLost:
+		return fmt.Sprintf("Signer history: leaving out %d recorded key(s); subscribers on them re-pin by hand.", len(earlier)), nil
+	case wentBack:
+		// The hub cannot bridge to a key it already used, but a hub on the
+		// new key can take the whole chain through the NAL's key.
+		bridge := append(earlier[:len(earlier):len(earlier)], history.NALKeyB64)
+		return "", fmt.Errorf("the hub recorded earlier signers no handover covers, and it stops taking handovers from them once it holds this one. It already signed the NAL with the key it runs, so it cannot bridge them itself: restart the hub with the new key, then post the whole chain, or pass -omit-lost-keys if their keystores are lost.\n%s", describeChain(bridge, to))
+	default:
+		return "", fmt.Errorf("the hub recorded earlier signers no handover covers, and it stops taking handovers from them once it holds this one. First bridge them, or pass -omit-lost-keys if their keystores are lost.\n%s", describeChain(earlier, hubKey))
+	}
+}
+
+// describeChain returns the flags that post the chain from signers, oldest
+// first, to to, as the operator would pass them.
+func describeChain(signers []string, to string) string {
+	var b strings.Builder
+	b.WriteString("The chain the hub needs:\n")
+	fmt.Fprintf(&b, "  -keystore  the keystore of %s\n", signers[0])
+	if len(signers) > 1 {
+		b.WriteString("  -via       the keystores of, in this order:\n")
+		for _, key := range signers[1:] {
+			fmt.Fprintf(&b, "              %s\n", key)
+		}
+	}
+	fmt.Fprintf(&b, "  -new-key   %s", to)
+	return b.String()
 }
 
 // loadKeystore loads an existing keystore. keystore.Load would generate a

@@ -46,6 +46,29 @@ type CoordHandover struct {
 	SignatureB64 string `json:"signature_b64"`
 }
 
+// HandoverLink names one handover the hub holds by its two keys.
+type HandoverLink struct {
+	OldKeyB64 string `json:"old_key"`
+	NewKeyB64 string `json:"new_key"`
+}
+
+// SignerHistory is the reply to GET /v3net/v1/{network}/nal/signers: what the
+// hub records about the keys that signed the network's NAL. It is covered only
+// by the hub's response signature, so check that before acting on it.
+type SignerHistory struct {
+	Network string `json:"network"`
+	// NALKeyB64 is the key that signs the stored NAL.
+	NALKeyB64 string `json:"nal_key"`
+	// KeyInForceB64 is NALKeyB64 followed along Handovers.
+	KeyInForceB64 string `json:"key_in_force"`
+	// PrevSigners are the keys that signed the NAL before the hub re-signed
+	// it with no handover, oldest first. May include NALKeyB64.
+	PrevSigners []string `json:"previous_signers"`
+	// Handovers are every handover the hub holds, oldest first. Once there
+	// are any, PrevSigners no longer count.
+	Handovers []HandoverLink `json:"handovers"`
+}
+
 // HandoverSigner is the outgoing coordinator's key. *keystore.Keystore
 // satisfies it.
 type HandoverSigner interface {

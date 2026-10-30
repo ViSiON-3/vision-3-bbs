@@ -225,10 +225,8 @@ func addHandoversTx(tx *sql.Tx, network string, hs []protocol.CoordHandover) err
 	return nil
 }
 
-// coordKeyInForce returns the coordinator key in force for network: the key
-// of NAL n, followed along hs for as long as one of them hands it on. It is
-// n's own key when no handover starts there, so a NAL re-signed by a key off
-// the chain is not overruled by older handovers.
+// coordKeyInForce returns the coordinator key in force for network, from NAL
+// n's key along hs (see nal.CoordKeyPath).
 func coordKeyInForce(n *protocol.NAL, hs []protocol.CoordHandover) string {
 	path := coordKeyPath(n, hs)
 	return path[len(path)-1]
@@ -237,22 +235,7 @@ func coordKeyInForce(n *protocol.NAL, hs []protocol.CoordHandover) string {
 // coordKeyPath returns the keys coordKeyInForce passes through: n's key
 // first, then each key hs hands it on to, ending with the key in force.
 func coordKeyPath(n *protocol.NAL, hs []protocol.CoordHandover) []string {
-	key := n.CoordPubKeyB64
-	path := []string{key}
-	seen := map[string]bool{key: true}
-	for moved := true; moved; {
-		moved = false
-		for _, h := range hs {
-			if h.OldKeyB64 == key && !seen[h.NewKeyB64] {
-				key = h.NewKeyB64
-				seen[key] = true
-				path = append(path, key)
-				moved = true
-				break
-			}
-		}
-	}
-	return path
+	return nal.CoordKeyPath(n.CoordPubKeyB64, hs)
 }
 
 // servedHandovers trims hs to the most recent nal.MaxHandovers, the most a
@@ -297,7 +280,7 @@ func nodeIDOf(keyB64 string) string {
 //
 // If the switched hub has already re-signed the NAL with its key, the old
 // key is no longer in force; the handover is then accepted from one of the
-// network's previous signers instead (see fromPrevSigners).
+// network's previous signers instead (see nal.CheckPostedChain).
 //
 // The body is one handover, or an array of them that forms a chain, each
 // starting at the key the one before handed over to. A chain is checked
@@ -340,20 +323,6 @@ func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
-	// The same handover, or the same old key's statement re-signed at
-	// another time (as v3net-handover does when run again), is a repeat:
-	// it is not stored again, but re-signing is retried, since it may have
-	// failed when the handover was first posted.
-	var fresh []protocol.CoordHandover
-	for _, ho := range chain {
-		if !holdsHandover(hs, &ho) {
-			fresh = append(fresh, ho)
-		}
-	}
-	if len(fresh) == 0 {
-		h.answerAdopted(w, network)
-		return
-	}
 	hubKey := h.hubKey()
 	prev, err := h.nalStore.PrevSigners(network)
 	if err != nil {
@@ -361,19 +330,19 @@ func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
-	fromPrev := fromPrevSigners(n, hs, fresh, prev, hubKey)
-	if !fromPrev {
-		// A previous signer is a key the network used, though no handover
-		// names it, so the key-in-force rules below would not see it.
-		// Only a chain from the previous signers passes through them.
-		if returnsToSigner(fresh, prev) {
-			http.Error(w, errReturnsToUsedKey, http.StatusConflict)
-			return
-		}
-		if msg := checkChainInForce(n, hs, fresh, hubKey); msg != "" {
-			http.Error(w, msg, http.StatusConflict)
-			return
-		}
+	check, err := nal.CheckPostedChain(n.CoordPubKeyB64, hs, chain, prev, hubKey)
+	if err != nil {
+		http.Error(w, refusalBody(err), http.StatusConflict)
+		return
+	}
+	// The same handover, or the same old key's statement re-signed at
+	// another time (as v3net-handover does when run again), is a repeat:
+	// it is not stored again, but re-signing is retried, since it may have
+	// failed when the handover was first posted.
+	fresh, fromPrev := check.Fresh, check.FromPrevSigners
+	if len(fresh) == 0 {
+		h.answerAdopted(w, network)
+		return
 	}
 
 	// A chain to a NAL already the hub key's is stored with the NAL, its
@@ -409,14 +378,74 @@ func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
 	h.answerAdopted(w, network)
 }
 
-// errReturnsToUsedKey refuses a handover to a key the network already used.
-const errReturnsToUsedKey = `{"error":"handover returns to a key the network already used"}`
+// handleGetSigners serves what the hub records about the keys that signed
+// network's NAL (auth required, from any subscriber), so v3net-handover can
+// tell the operator which chain the hub needs. It holds public keys only. It
+// sits behind authMiddleware so signResponses binds the reply to the request:
+// the tool acts on it only once that signature verifies.
+func (h *Hub) handleGetSigners(w http.ResponseWriter, r *http.Request) {
+	network := extractNetwork(r.URL.Path)
+	if h.findNetwork(network) == nil {
+		http.Error(w, `{"error":"network not found"}`, http.StatusNotFound)
+		return
+	}
+
+	h.nalMu.Lock()
+	defer h.nalMu.Unlock()
+
+	n, err := h.nalStore.Get(network)
+	if err != nil {
+		slog.Error("get nal for signer history", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	if n == nil {
+		http.Error(w, `{"error":"no NAL available"}`, http.StatusNotFound)
+		return
+	}
+	hs, err := h.nalStore.Handovers(network)
+	if err != nil {
+		slog.Error("list handovers", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	prev, err := h.nalStore.PrevSigners(network)
+	if err != nil {
+		slog.Error("list previous signers", "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	history := protocol.SignerHistory{
+		Network:       network,
+		NALKeyB64:     n.CoordPubKeyB64,
+		KeyInForceB64: coordKeyInForce(n, hs),
+		PrevSigners:   append([]string{}, prev...),
+		Handovers:     make([]protocol.HandoverLink, 0, len(hs)),
+	}
+	for _, ho := range hs {
+		history.Handovers = append(history.Handovers, protocol.HandoverLink{OldKeyB64: ho.OldKeyB64, NewKeyB64: ho.NewKeyB64})
+	}
+	writeJSON(w, http.StatusOK, history)
+}
+
+// refusalBody returns the JSON body for a refused handover post.
+func refusalBody(err error) string {
+	return fmt.Sprintf(`{"error":%q}`, err.Error())
+}
 
 // logAccepted logs each handover of network the hub just stored.
 func logAccepted(network string, hs []protocol.CoordHandover) {
 	for _, ho := range hs {
 		slog.Info("hub: coordinator handover accepted", "network", network, "from", ho.OldKeyB64, "to", ho.NewKeyB64)
 	}
+}
+
+// keysHandedOverFrom returns the keys whose areas move when the stored NAL n
+// is re-signed for the key its handovers hs lead to: the keys on that chain,
+// and the previous signers prev it bridged to n's key.
+func keysHandedOverFrom(n *protocol.NAL, hs []protocol.CoordHandover, prev []string) []string {
+	path := coordKeyPath(n, hs)
+	return append(path[:len(path)-1:len(path)-1], retiredSigners(n, hs, prev)...)
 }
 
 // retiredSigners returns the previous signers prev that the handovers hs
@@ -446,22 +475,8 @@ func retiredSigners(n *protocol.NAL, hs []protocol.CoordHandover, prev []string)
 	return keys
 }
 
-// returnsToSigner reports whether chain hands over to one of the previous
-// signers prev.
-func returnsToSigner(chain []protocol.CoordHandover, prev []string) bool {
-	for _, ho := range chain {
-		for _, key := range prev {
-			if ho.NewKeyB64 == key {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // decodeHandovers reads a handover post for network: one handover, or an
-// array of at most nal.MaxHandoverSteps that forms a chain, no key twice.
-// Each must name network and verify. It returns the handovers, or the
+// array that nal.CheckChainShape accepts. Each must name network and verify. It returns the handovers, or the
 // status and body to refuse the post with.
 func decodeHandovers(body io.Reader, network string) ([]protocol.CoordHandover, int, string) {
 	var raw json.RawMessage
@@ -480,61 +495,19 @@ func decodeHandovers(body io.Reader, network string) ([]protocol.CoordHandover, 
 		}
 		chain = []protocol.CoordHandover{ho}
 	}
-	if len(chain) == 0 || len(chain) > nal.MaxHandoverSteps {
-		return nil, http.StatusBadRequest, fmt.Sprintf(`{"error":"a handover chain has 1 to %d handovers"}`, nal.MaxHandoverSteps)
+	if err := nal.CheckChainShape(chain); err != nil {
+		return nil, http.StatusBadRequest, refusalBody(err)
 	}
-	seen := map[string]bool{chain[0].OldKeyB64: true}
 	for i := range chain {
 		ho := &chain[i]
 		if ho.Network != network {
 			return nil, http.StatusBadRequest, `{"error":"network mismatch"}`
 		}
-		if i > 0 && ho.OldKeyB64 != chain[i-1].NewKeyB64 {
-			return nil, http.StatusBadRequest, `{"error":"each handover must start at the key the one before hands over to"}`
-		}
-		if seen[ho.NewKeyB64] {
-			return nil, http.StatusBadRequest, `{"error":"a handover chain may not visit a key twice"}`
-		}
-		seen[ho.NewKeyB64] = true
 		if err := ho.Verify(); err != nil {
 			return nil, http.StatusUnprocessableEntity, `{"error":"handover verification failed"}`
 		}
 	}
 	return chain, 0, ""
-}
-
-// holdsHandover reports whether hs has a handover from ho's old key to its
-// new key, signed at any time.
-func holdsHandover(hs []protocol.CoordHandover, ho *protocol.CoordHandover) bool {
-	for _, old := range hs {
-		if old.OldKeyB64 == ho.OldKeyB64 && old.NewKeyB64 == ho.NewKeyB64 {
-			return true
-		}
-	}
-	return false
-}
-
-// checkChainInForce checks chain link by link against the stored NAL n and
-// the handovers hs, as if each link were posted once the ones before it
-// were held: each must be signed by the coordinator key in force, hand
-// over to a key the network has not used, and, while the hub runs a key
-// that neither signs n nor appears on the handovers, hand over to the
-// hub's key. It returns the body to refuse the post with, or "".
-func checkChainInForce(n *protocol.NAL, hs, chain []protocol.CoordHandover, hubKey string) string {
-	staged := append(hs[:len(hs):len(hs)], chain...)
-	for i := range chain {
-		ho, held := &chain[i], staged[:len(hs)+i]
-		if ho.OldKeyB64 != coordKeyInForce(n, held) {
-			return `{"error":"handover is not signed by the coordinator key in force"}`
-		}
-		if ho.NewKeyB64 == n.CoordPubKeyB64 || handoverUsesKey(held, ho.NewKeyB64) {
-			return errReturnsToUsedKey
-		}
-		if hubSwitched(n, held, hubKey) && ho.NewKeyB64 != hubKey {
-			return `{"error":"the hub already runs a new key; only a handover to the hub's key is accepted"}`
-		}
-	}
-	return ""
 }
 
 // oldKeys returns the key each of chain hands over from.
@@ -595,84 +568,12 @@ func (h *Hub) answerAdopted(w http.ResponseWriter, network string) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// fromPrevSigners reports whether chain is a late chain of handovers from
-// the network's previous signers prev (see SignNAL) to the hub's key. The keys
-// that signed the NAL, in order, are the recorded previous signers and
-// then the stored NAL n's own key, when that is not yet the hub's. The
-// chain qualifies when no handover is held, it ends at the hub's key,
-// which is none of those, and every old key on
-// it is one of them, in that order. When n is not yet the hub's, the last
-// link must start at n's key, so that adopting the chain re-signs n. The
-// chain has been verified, so each link was signed by the key before it.
-//
-// When n is already the hub's, the NAL is re-signed only to move the old
-// keys' areas to the hub, in the update that stores the chain (see
-// handlePostHandover). When it is not (the hub ran
-// A, was switched to B and re-signed, then to C without re-signing), the
-// chain is stored and adopted as any handover to the hub's key is.
-//
-// This is as strong as the key-in-force rule: each previous signer was the
-// key in force until the hub re-signed without a handover, and only its
-// holder can sign its link. Taking the keys in the order they signed keeps
-// the chain to the switches the hub made, never through a third key, and a
-// chain can only end at the hub's own key. Once any handover is held the
-// record no longer applies, so a chain must be posted whole (see
-// handlePostHandover). If a previous signer was a lost key, nobody can sign
-// a link from it and the chain starts after it; its leaves re-pin by hand,
-// as before. A stolen one gains its thief nothing: it can only point
-// leaves at the key the hub already runs. Only maxPrevSigners keys are
-// recorded; leaves on an older one re-pin by hand.
-//
-// A hub whose own key is a previous signer went back to a key the network
-// used; no chain qualifies then, and the caller refuses any chain to a
-// previous signer (see returnsToSigner).
-func fromPrevSigners(n *protocol.NAL, hs, chain []protocol.CoordHandover, prev []string, hubKey string) bool {
-	if len(hs) > 0 || hubKey == "" || chain[len(chain)-1].NewKeyB64 != hubKey {
-		return false
-	}
-	if n.CoordPubKeyB64 != hubKey && chain[len(chain)-1].OldKeyB64 != n.CoordPubKeyB64 {
-		return false
-	}
-	signers := make([]string, 0, len(prev)+1)
-	for _, key := range prev {
-		if key == hubKey {
-			return false
-		}
-		if key != n.CoordPubKeyB64 {
-			signers = append(signers, key)
-		}
-	}
-	if n.CoordPubKeyB64 != hubKey {
-		signers = append(signers, n.CoordPubKeyB64)
-	}
-	pos := make(map[string]int, len(signers))
-	for i, key := range signers {
-		pos[key] = i
-	}
-	last := -1
-	for _, ho := range chain {
-		i, ok := pos[ho.OldKeyB64]
-		if !ok || i <= last {
-			return false
-		}
-		last = i
-	}
-	return true
-}
-
 // hubKey returns the hub's public key, or "" when it runs without one.
 func (h *Hub) hubKey() string {
 	if h.cfg.Keystore == nil {
 		return ""
 	}
 	return h.cfg.Keystore.PubKeyBase64()
-}
-
-// hubSwitched reports whether the hub runs a key that neither signs the
-// stored NAL n nor appears on its handovers hs: it was restarted with a new
-// key before the network was handed to it.
-func hubSwitched(n *protocol.NAL, hs []protocol.CoordHandover, hubKey string) bool {
-	return hubKey != "" && hubKey != n.CoordPubKeyB64 && !handoverUsesKey(hs, hubKey)
 }
 
 // adoptPostedHandover re-signs network's NAL with the hub's key when a
@@ -719,8 +620,12 @@ var ErrHandedOver = errors.New("hub: the network was handed over to another coor
 // ErrHandedOver. A network never handed over is signed as before, whatever
 // key signed its stored NAL; when that was another key, it is first added
 // to the network's previous signers, so a late chain of handovers from it
-// is still accepted. Every hub-side NAL change signs through it; call it
-// with nalMu held, or before the hub serves requests.
+// is still accepted. When n's network was handed to the hub's key but the
+// stored NAL is still another key's, because the re-sign failed, this change
+// is that re-sign: the areas it would have moved move in n (see
+// adoptHandover), and storing n drops the previous signers (see putTx), so no
+// later re-sign moves them again. Every hub-side NAL change signs through it;
+// call it with nalMu held, or before the hub serves requests.
 func (h *Hub) SignNAL(n *protocol.NAL) error {
 	stored, err := h.nalStore.Get(n.Network)
 	if err != nil {
@@ -744,6 +649,13 @@ func (h *Hub) SignNAL(n *protocol.NAL) error {
 				return err
 			}
 		}
+		if len(hs) > 0 && stored.CoordPubKeyB64 != hubKey {
+			prev, err := h.nalStore.PrevSigners(n.Network)
+			if err != nil {
+				return err
+			}
+			h.moveManagedAreas(n, keysHandedOverFrom(stored, hs, prev))
+		}
 	}
 	return nal.Sign(n, h.cfg.Keystore)
 }
@@ -756,16 +668,6 @@ func refuseHandedOver(w http.ResponseWriter, err error) bool {
 	}
 	writeJSON(w, http.StatusConflict, map[string]string{"error": ErrHandedOver.Error()})
 	return true
-}
-
-// handoverUsesKey reports whether key is either end of any of hs.
-func handoverUsesKey(hs []protocol.CoordHandover, key string) bool {
-	for _, h := range hs {
-		if h.OldKeyB64 == key || h.NewKeyB64 == key {
-			return true
-		}
-	}
-	return false
 }
 
 // adoptHandovers re-signs each network's stored NAL with the hub's key when
@@ -820,7 +722,7 @@ func (h *Hub) adoptHandover(network string) (*protocol.NAL, error) {
 		return nil, err
 	}
 	from := n.CoordPubKeyB64
-	h.moveManagedAreas(n, append(path[:len(path)-1:len(path)-1], retiredSigners(n, hs, prev)...))
+	h.moveManagedAreas(n, keysHandedOverFrom(n, hs, prev))
 	if err := nal.Sign(n, h.cfg.Keystore); err != nil {
 		return nil, err
 	}

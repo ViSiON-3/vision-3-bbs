@@ -320,22 +320,106 @@ func TestV3NetSaveHubURLChangedElsewhere(t *testing.T) {
 }
 
 // Two editor sessions move one network to different hubs: a hub URL
-// changed on both sides, so this save's leaf is kept, the other move is
-// reported, and the network is listed once (#791).
+// changed on both sides, so this save's hub is kept, the other move is
+// reported, the network is listed once, and the other session's other edits
+// survive. Its hub state does not, being about a hub this leaf does not use
+// (#791, #796).
 func TestV3NetSaveHubMovedBothSides(t *testing.T) {
 	leaves, conflicts := saveV3NetHubRace(t, hubMoveBase(), func(c *V3NetConfig) {
 		c.Leaves[0].HubURL = "https://other.example"
 		c.Leaves[0].Boards = []string{"A", "A2"}
-	}, moveHub)
+		c.Leaves[0].PollInterval = "9m"
+		c.Leaves[0].RequireSignedHub = true
+		c.Leaves[0].CoordinatorPubKey = "other-c"
+		c.Leaves[0].HubPubKey = "other-h"
+		c.Leaves[0].PendingHubPubKey = "other-p"
+		c.Leaves[0].HubSigned = true
+	}, func(c *V3NetConfig) {
+		moveHub(c)
+		c.Leaves[0].Origin = "ours"
+	})
 	if len(leaves) != 2 || leaves[0].HubURL != "https://new.example" || leaves[1].Network != "netb" {
 		t.Fatalf("leaves = %+v, want neta at this save's hub and netb", leaves)
 	}
-	if len(leaves[0].Boards) != 1 {
-		t.Errorf("neta = %+v; the other session's leaf is replaced whole", leaves[0])
+	l := leaves[0]
+	if !slices.Equal(l.Boards, []string{"A", "A2"}) || l.PollInterval != "9m" || !l.RequireSignedHub || l.Origin != "ours" {
+		t.Errorf("neta = %+v; want both sessions' edits", l)
+	}
+	if l.CoordinatorPubKey != "C" || l.HubPubKey != "" || l.PendingHubPubKey != "" || l.HubSigned {
+		t.Errorf("neta = %+v; want the other hub's state left out", l)
 	}
 	if len(conflicts) != 1 || conflicts[0].Field != "hubUrl" ||
 		!strings.Contains(conflicts[0].What, "https://other.example") {
 		t.Errorf("conflicts = %+v, want one naming the other session's hub", conflicts)
+	}
+}
+
+// Beside the hub URL, a field the two sessions changed differently keeps
+// this save's value and is reported, as in a leaf that did not move. A blank
+// here is a change like any other, and the same change on both sides is no
+// conflict (#796).
+func TestV3NetSaveHubMovedBothSidesFieldConflicts(t *testing.T) {
+	base := hubMoveBase()
+	base.Leaves[0].Origin = "base"
+	base.Leaves[0].PollInterval = "5m"
+	leaves, conflicts := saveV3NetHubRace(t, base, func(c *V3NetConfig) {
+		c.Leaves[0].HubURL = "https://other.example"
+		c.Leaves[0].Boards = []string{"THEIRS"}
+		c.Leaves[0].Origin = "theirs"
+		c.Leaves[0].PollInterval = "9m"
+	}, func(c *V3NetConfig) {
+		moveHub(c)
+		c.Leaves[0].Boards = []string{"OURS"}
+		c.Leaves[0].Origin = ""
+		c.Leaves[0].PollInterval = "9m"
+	})
+	if len(leaves) != 2 {
+		t.Fatalf("leaves = %+v", leaves)
+	}
+	l := leaves[0]
+	if l.HubURL != "https://new.example" || !slices.Equal(l.Boards, []string{"OURS"}) || l.Origin != "" || l.PollInterval != "9m" {
+		t.Errorf("neta = %+v; want this save's values", l)
+	}
+	var fields []string
+	for _, c := range conflicts {
+		fields = append(fields, c.Field)
+	}
+	if want := []string{"hubUrl", "boards", "origin"}; !slices.Equal(fields, want) {
+		t.Errorf("conflict fields = %v, want %v (%+v)", fields, want, conflicts)
+	}
+}
+
+// SaveFile still compares the result with theirs as read, so settling must
+// leave the versions it is passed as they were.
+func TestV3NetHubMovedBothSidesKeepsInputs(t *testing.T) {
+	base := hubMoveBase()
+	mk := func(hub, poll string) V3NetConfig {
+		c, err := configmerge.Clone(base)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.Leaves[0].HubURL = hub
+		c.Leaves[0].PollInterval = poll
+		return c
+	}
+	ours, theirs := mk("https://new.example", ""), mk("https://other.example", "9m")
+	wantOurs, wantTheirs := mk("https://new.example", ""), mk("https://other.example", "9m")
+	gotOurs, gotTheirs, _ := settleV3NetHubMoves(base, ours, theirs)
+	if !reflect.DeepEqual(ours, wantOurs) || !reflect.DeepEqual(theirs, wantTheirs) {
+		t.Errorf("inputs modified: ours = %+v, theirs = %+v", ours, theirs)
+	}
+	if gotOurs.Leaves[0].PollInterval != "9m" || len(gotTheirs.Leaves) != 1 {
+		t.Errorf("ours = %+v, theirs = %+v; want the edit moved into ours and the leaf out of theirs", gotOurs, gotTheirs)
+	}
+}
+
+// v3netLeafOnHubOf copies exactly the hub URL and the hub state.
+func TestV3NetLeafOnHubOf(t *testing.T) {
+	l := V3NetLeafConfig{HubURL: "l", Network: "n", Origin: "o", CoordinatorPubKey: "l", HubSigned: true}
+	got := v3netLeafOnHubOf(l, V3NetLeafConfig{HubURL: "h", Network: "x", Origin: "x", HubPubKey: "h"})
+	want := V3NetLeafConfig{HubURL: "h", Network: "n", Origin: "o", HubPubKey: "h"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %+v, want %+v", got, want)
 	}
 }
 

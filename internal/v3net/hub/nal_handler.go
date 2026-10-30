@@ -93,6 +93,16 @@ func putTx(tx *sql.Tx, network string, n *protocol.NAL) error {
 	}
 	stampAreasAdded(prev, n, time.Now())
 
+	// A NAL that leaves its key once handovers are held has left the
+	// previous signers behind. Keeping them would let a later re-sign move
+	// their areas, over a manager chosen since (see retiredSigners).
+	if prev != nil && prev.CoordPubKeyB64 != n.CoordPubKeyB64 {
+		if _, err := tx.Exec(`DELETE FROM coord_signer_history WHERE network = ?
+			AND EXISTS (SELECT 1 FROM coord_handovers WHERE network = ?)`, network, network); err != nil {
+			return fmt.Errorf("hub: clear previous signers: %w", err)
+		}
+	}
+
 	data, err := json.Marshal(n)
 	if err != nil {
 		return fmt.Errorf("hub: marshal nal: %w", err)
