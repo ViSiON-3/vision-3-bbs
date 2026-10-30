@@ -350,6 +350,122 @@ func testLateHandoverThroughHub(t *testing.T, resign bool) {
 	}
 }
 
+// End to end, with the hub switched twice before any handover: it runs A,
+// is restarted with B and re-signs the NAL with it (merging initialAreas),
+// then with C, re-signing again. A leaf pinned to A for both keys pauses on
+// C's hub key and rejects C's NAL. Once the chain A to B to C is posted in
+// one request, the hub serves the NAL with it, and the leaf moves both pins
+// from A to C and resumes, without a manual re-pin.
+func TestLateHandoverChainThroughHubMovesBothPins(t *testing.T) {
+	dir := t.TempDir()
+	keys := make([]*keystore.Keystore, 3)
+	for i, name := range []string{"a.key", "b.key", "c.key"} {
+		ks, err := loadKeystoreAt(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		keys[i] = ks
+	}
+	a, c := keys[0], keys[2]
+	var current atomic.Pointer[hub.Hub]
+	open := func(ks *keystore.Keystore) *hub.Hub {
+		t.Helper()
+		h, err := hub.New(hub.Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
+			RequireSignedSubscribe: true, Networks: []hub.NetworkConfig{{Name: "testnet"}}})
+		if err != nil {
+			t.Fatalf("create hub: %v", err)
+		}
+		current.Store(h)
+		return h
+	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		current.Load().Mux().ServeHTTP(w, r)
+	}))
+	t.Cleanup(ts.Close)
+
+	h := open(a)
+	seedHubNAL(t, h, a, "gen.general")
+	l := subscribedLeaf(t, ts, "Leaf BBS")
+	poster := subscribedLeaf(t, ts, "Poster BBS")
+	rec := &keyRecorder{}
+	rec.attach(l)
+	ctx := context.Background()
+	if err := l.checkHubKey(ctx); err != nil {
+		t.Fatalf("pin hub key: %v", err)
+	}
+	if err := l.refreshNAL(ctx); err != nil {
+		t.Fatalf("pin coordinator key: %v", err)
+	}
+
+	for _, ks := range keys[1:] {
+		_ = h.Close()
+		h = open(ks)
+		// What the initialAreas merge does at startup: add an area, sign
+		// through SignNAL, store.
+		n, err := h.NALStore().Get("testnet")
+		if err != nil || n == nil {
+			t.Fatalf("get NAL: %v", err)
+		}
+		n.Areas = append(n.Areas, protocol.Area{Tag: "gen.n" + ks.NodeID()[:6], Name: "New", Language: "en",
+			ManagerNodeID: ks.NodeID(), ManagerPubKeyB64: ks.PubKeyBase64(),
+			Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen},
+			Policy: protocol.AreaPolicy{MaxBodyBytes: protocol.MaxBodyBytes}})
+		if err := h.SignNAL(n); err != nil {
+			t.Fatalf("SignNAL after the switch: %v", err)
+		}
+		if err := h.NALStore().Put("testnet", n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() { _ = h.Close() })
+	if err := l.checkHubKey(ctx); !errors.Is(err, ErrHubKeyMismatch) {
+		t.Fatalf("checkHubKey before the handovers = %v, want ErrHubKeyMismatch", err)
+	}
+	if err := l.refreshNAL(ctx); !errors.Is(err, nal.ErrCoordKeyMismatch) {
+		t.Fatalf("refreshNAL before the handovers = %v, want ErrCoordKeyMismatch", err)
+	}
+
+	body, _ := json.Marshal(handoverChain(t, keys...))
+	resp, err := poster.signedPostWithResponse(ctx, "/v3net/v1/testnet/nal/handover", body)
+	if err != nil {
+		t.Fatalf("post chain: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("post chain: status %d", resp.StatusCode)
+	}
+
+	if err := l.checkHubKey(ctx); err != nil {
+		t.Fatalf("checkHubKey after the chain: %v", err)
+	}
+	if err := l.refreshNAL(ctx); err != nil {
+		t.Fatalf("refreshNAL after the chain: %v", err)
+	}
+	want := c.PubKeyBase64()
+	for _, kind := range []KeyKind{KeyHub, KeyCoordinator} {
+		if got := l.PinnedKey(kind); got != want {
+			t.Errorf("%s pin = %s, want C", kind, got)
+		}
+		if got := l.PendingKey(kind); got != "" {
+			t.Errorf("pending %s key = %s, want none", kind, got)
+		}
+	}
+	if l.HubPaused() {
+		t.Error("sync with the hub is still paused")
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	moved := 0
+	for _, ev := range rec.pinned {
+		if ev.Previous == a.PubKeyBase64() && ev.Pinned == want {
+			moved++
+		}
+	}
+	if moved != 2 {
+		t.Errorf("events: pinned %+v; want both keys moved from A to C", rec.pinned)
+	}
+}
+
 // Two handovers in quick succession, A to B and B to C, saved by
 // overlapping calls: C's save waits for B's and then replaces B, so the
 // stored pin ends at C. The store mimics persistKeyEvent, which writes a

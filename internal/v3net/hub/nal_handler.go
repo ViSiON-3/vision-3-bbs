@@ -33,6 +33,9 @@ func NewNALStore(db *sql.DB) (*NALStore, error) {
 	if _, err := db.Exec(handoverSchema); err != nil {
 		return nil, fmt.Errorf("hub: create handover table: %w", err)
 	}
+	if err := migratePrevSigners(db); err != nil {
+		return nil, err
+	}
 	return &NALStore{db: db}, nil
 }
 
@@ -65,7 +68,17 @@ func (ns *NALStore) Put(network string, n *protocol.NAL) error {
 		return fmt.Errorf("hub: put nal: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := putTx(tx, network, n); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("hub: put nal: %w", err)
+	}
+	return nil
+}
 
+// putTx is Put within tx.
+func putTx(tx *sql.Tx, network string, n *protocol.NAL) error {
 	var prev *protocol.NAL
 	var prevData string
 	switch err := tx.QueryRow("SELECT nal_json FROM network_nal WHERE network = ?", network).Scan(&prevData); err {
@@ -90,9 +103,6 @@ func (ns *NALStore) Put(network string, n *protocol.NAL) error {
 		network, string(data),
 	)
 	if err != nil {
-		return fmt.Errorf("hub: put nal: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("hub: put nal: %w", err)
 	}
 	return nil

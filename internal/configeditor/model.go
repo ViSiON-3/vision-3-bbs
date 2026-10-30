@@ -124,9 +124,11 @@ type wizardState struct {
 	// from, if any. Its published keys become the new leaf's pins, provided
 	// the sysop has not since changed the hub URL or network.
 	regEntry *protocol.RegistryEntry
-	// browsedCoordKey is the coordinator key that signed the last NAL the
-	// area browser verified for browsedHub/browsedNetwork. With no registry
-	// key it becomes the new leaf's pin; with one, the two must agree.
+	// browsedCoordKey is the coordinator key the last NAL the area browser
+	// verified for browsedHub/browsedNetwork was accepted under: the key
+	// that signed it, or the registry key its handovers led from. With no
+	// registry key it becomes the new leaf's pin; with one, the two must
+	// agree.
 	browsedCoordKey, browsedHub, browsedNetwork string
 
 	selectedAreas []areaBrowserItem // areas selected during wizard flow

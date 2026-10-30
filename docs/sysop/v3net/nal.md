@@ -200,8 +200,11 @@ fail with `the network was handed over to another coordinator key` until
 the hub runs with the new key; a proposal sent meanwhile waits in
 **Pending area proposals** instead of being approved automatically.
 
-The new key's node becomes the coordinator. Areas the old hub node managed
-keep it as their manager until you reassign them with **Manage area
+The new key's node becomes the coordinator. When the hub signs the NAL
+with the new key, the areas the old hub node managed move to the new node
+in the same NAL update, and the hub logs `area manager moved to the hub
+after a coordinator handover` for each one. Areas other sysops manage stay
+theirs. To hand some of the moved areas back out, use **Manage area
 managers**.
 
 The hub only takes a handover signed by the key in force, and never one
@@ -241,10 +244,41 @@ Until the handover arrives, the hub may serve either NAL:
 
 This is as safe as the usual order: the hub only takes a handover signed by
 the key that signed its NAL before the switch, and while it runs a key no
-handover names, only a handover to that key. It remembers one key back, so
-if the hub's key changed twice without a handover, only the latest change
-can be bridged; subscribers still on the first key [accept the new key by
-hand](#accepting-a-new-key-by-hand).
+handover names, only a handover to that key.
+
+##### If the Key Changed More Than Once
+
+If the hub's key changed more than once before any handover was published
+(A, then B, then C, each restart re-signing the NAL), the hub remembers each
+key that signed the NAL, up to the last eight. Bridge them all in one go:
+pass the first key's keystore as `-keystore`, the keystores in between to
+`-via` in the order the hub ran them (comma-separated), and the key the hub
+runs now as `-new-key`:
+
+```bash
+go run ./cmd/v3net-handover \
+  -keystore a.key \
+  -via      b.key \
+  -hub      http://localhost:8765 \
+  -network  felonynet \
+  -new-key  <C's public key>
+```
+
+The tool signs A to B with A's key and B to C with B's, and posts both as
+one request. The hub takes the chain whole or not at all: every link must
+be signed by the key before it, start at a key that signed the NAL, follow
+the order those keys signed it, and end at the key the hub runs. Subscribers
+on A or on B then follow it to C. Include every key that signed the NAL,
+up to the one the hub serves it signed by now if that is not yet C. Only
+keys that signed the NAL count: if the NAL is still signed by A (nothing
+changed it while the hub ran B), post A to C directly, without `-via`.
+
+Post the whole chain at once. Once the hub holds any handover it no longer
+takes one from a remembered key, so posting B to C on its own would leave
+subscribers still on A to [accept the new key by
+hand](#accepting-a-new-key-by-hand). The same goes for a key you no longer
+have: start the chain at the oldest key you still hold, and subscribers on
+older ones re-pin by hand.
 
 The tool sends the request as the old key's node, which the hub registered
 as a subscriber while it ran with that key. Do not delete that node in
@@ -271,8 +305,11 @@ Where the pin comes from, in order of preference:
 2. **The registry.** When you join from the registry browser and the
    registry entry publishes `coordinator_pubkey_b64` / `hub_pubkey_b64`,
    those keys are pinned when the subscription is saved. The join wizard's
-   area list only shows a NAL signed by that coordinator key; if the hub
-   serves one signed by another key, the wizard refuses to save.
+   area list only shows a NAL signed by that coordinator key, or by a key
+   the network moved to from it with [signed handovers](#signed-handovers);
+   if the hub serves one signed by any other key, the wizard refuses to
+   save. After a handover the registry key is still pinned, and the leaf
+   moves the pin at its first fetch.
 3. **First use.** Joining without a registry key pins the key that signed
    the NAL you picked areas from. With no key set at all (including every
    subscription made before pinning existed), the leaf pins the key of the
@@ -282,8 +319,11 @@ Where the pin comes from, in order of preference:
 
 The editor's area browser checks every NAL it lists the same way: a valid
 signature, a coordinator node ID that belongs to the key, and the
-subscription's pinned key when one is set. A NAL that fails is not listed;
-the browser shows the error instead.
+subscription's pinned key when one is set. Like the leaf, it also takes a
+NAL signed by a key the pinned key's [signed handovers](#signed-handovers)
+lead to, and then says `Network moved keys by signed handover`. It does
+not change the pin itself; the running leaf moves it at its next fetch. A
+NAL that fails is not listed; the browser shows the error instead.
 
 The hub's own key, served by the network's `/info` page, is pinned the same
 way into `hubPubKey` (**Hub Key**) and checked each time the leaf starts.
@@ -367,6 +407,7 @@ connected to.
 | Cannot subscribe at all | The area is closed and your node is not on its allow list, or your node is on the deny list. Ask the area manager. |
 | New areas stopped arriving; the log says `key changed; rejected until the sysop accepts it` | The hub is serving a NAL signed by a key other than the one pinned, with no handover leading to it from your pin. See [When the Key Changes](#when-the-key-changes). |
 | Every subscriber paused on a changed hub key right after you moved the hub to a new key | The hub was switched before the handover was published. Publish it now with the old key; see [If the Hub Already Runs the New Key](#if-the-hub-already-runs-the-new-key). |
+| `v3net-handover` fails with `409 handover is not signed by the coordinator key in force`, and the hub's key changed more than once without a handover | Post the whole chain from the first key in one request with `-via`; see [If the Key Changed More Than Once](#if-the-key-changed-more-than-once). |
 | `v3net-handover` fails with `401 unknown or inactive node` | The old key's node is no longer registered with the hub (deleted in Node Management). Add `-auth-keystore` with the hub's current `v3net.key`; see [If the Hub Already Runs the New Key](#if-the-hub-already-runs-the-new-key). |
 | The log says `key moved by a signed coordinator handover` | The coordinator moved the network to a new key, and your leaf followed. Nothing to do; see [Signed Handovers](#signed-handovers). |
 | Coordinator Panel never appears | Your node is not the coordinator of any subscribed network. Only the hub's own node is; see Handing Over a Network. |

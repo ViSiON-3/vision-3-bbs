@@ -22,6 +22,11 @@ type fetchNALMsg struct {
 	areas []protocol.Area
 	// coordKey is the coordinator key that signed the NAL, once verified.
 	coordKey string
+	// handedOverFrom is the pinned key the NAL's coordinator handovers led
+	// from to coordKey, when the network moved keys since it was pinned;
+	// handoverSteps is how many handovers that took. "" and 0 otherwise.
+	handedOverFrom string
+	handoverSteps  int
 	// hubURL and network say which subscription the NAL was fetched for.
 	hubURL, network string
 	err             error
@@ -77,22 +82,33 @@ func (m Model) areaBrowserPin() string {
 // verifyBrowsedNAL checks a NAL fetched for the area browser the way a leaf
 // would: a valid signature, the expected network, a coordinator node ID that
 // belongs to the signing key, and, when pin is set, that key being the
-// pinned one. A NAL that fails is not shown, so a hub that is impersonated
-// cannot offer areas the sysop then subscribes to.
-func verifyBrowsedNAL(n *protocol.NAL, network, pin string) error {
+// pinned one or one the NAL's coordinator handovers lead to from the pin
+// (see nal.FollowHandovers). A NAL that fails is not shown, so a hub that is
+// impersonated cannot offer areas the sysop then subscribes to.
+//
+// When a handover chain was followed, it returns the chain; the pin itself
+// is left as it is. The running leaf follows the same chain at its next
+// fetch and stores the moved pin, so the browser only says the network
+// moved keys.
+func verifyBrowsedNAL(n *protocol.NAL, network, pin string) ([]protocol.CoordHandover, error) {
 	if err := nal.Verify(n); err != nil {
-		return fmt.Errorf("NAL signature check failed: %w", err)
+		return nil, fmt.Errorf("NAL signature check failed: %w", err)
 	}
 	if n.Network != network {
-		return fmt.Errorf("hub served the NAL for %q, not %q", n.Network, network)
+		return nil, fmt.Errorf("hub served the NAL for %q, not %q", n.Network, network)
 	}
 	if err := nal.VerifyCoordNodeID(n); err != nil {
-		return fmt.Errorf("NAL coordinator check failed: %w", err)
+		return nil, fmt.Errorf("NAL coordinator check failed: %w", err)
 	}
-	if pin = strings.TrimSpace(pin); pin != "" && n.CoordPubKeyB64 != pin {
-		return fmt.Errorf("%w: expected %s, NAL signed by %s", nal.ErrCoordKeyMismatch, pin, n.CoordPubKeyB64)
+	if pin = strings.TrimSpace(pin); pin == "" || n.CoordPubKeyB64 == pin {
+		return nil, nil
 	}
-	return nil
+	if len(n.Handovers) > 0 {
+		if chain, err := nal.FollowHandovers(network, pin, n.CoordPubKeyB64, n.Handovers); err == nil {
+			return chain, nil
+		}
+	}
+	return nil, fmt.Errorf("%w: expected %s, NAL signed by %s", nal.ErrCoordKeyMismatch, pin, n.CoordPubKeyB64)
 }
 
 // subscribeAreasMsg is the result of a subscribe call.
@@ -104,7 +120,8 @@ type subscribeAreasMsg struct {
 // fetchHubNAL returns a tea.Cmd that GETs /v3net/v1/{network}/nal from the hub
 // and verifies it with verifyBrowsedNAL against pin (the coordinator key the
 // subscription pins or the registry publishes; "" checks the signature and
-// node ID only). This endpoint is public (no auth required).
+// node ID only), following the coordinator handovers served with it from the
+// pin. This endpoint is public (no auth required).
 func fetchHubNAL(hubURL, network, pin string) tea.Cmd {
 	return func() tea.Msg {
 		client := &http.Client{Timeout: 10 * time.Second}
@@ -129,10 +146,15 @@ func fetchHubNAL(hubURL, network, pin string) tea.Cmd {
 		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&n); err != nil {
 			return fetchNALMsg{err: fmt.Errorf("decode NAL: %w", err)}
 		}
-		if err := verifyBrowsedNAL(&n, network, pin); err != nil {
+		chain, err := verifyBrowsedNAL(&n, network, pin)
+		if err != nil {
 			return fetchNALMsg{err: err}
 		}
-		return fetchNALMsg{areas: n.Areas, coordKey: n.CoordPubKeyB64, hubURL: hubURL, network: network}
+		msg := fetchNALMsg{areas: n.Areas, coordKey: n.CoordPubKeyB64, hubURL: hubURL, network: network}
+		if len(chain) > 0 {
+			msg.handedOverFrom, msg.handoverSteps = strings.TrimSpace(pin), len(chain)
+		}
+		return msg
 	}
 }
 

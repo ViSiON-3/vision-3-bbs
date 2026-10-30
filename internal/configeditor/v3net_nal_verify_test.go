@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -133,6 +135,117 @@ func TestLeafWizardPinsVerifiedKeys(t *testing.T) {
 		ac := reloadConfigs(t, dir)
 		if len(ac.V3Net.Leaves) != 1 || ac.V3Net.Leaves[0].CoordinatorPubKey != otherKey.PubKeyBase64() {
 			t.Errorf("leaves = %+v, msg %q", ac.V3Net.Leaves, m.message)
+		}
+	})
+}
+
+// handOver returns the signed handovers keys[0]->keys[1]->... for felnet.
+func handOver(t *testing.T, keys ...*keystore.Keystore) []protocol.CoordHandover {
+	t.Helper()
+	var hs []protocol.CoordHandover
+	for i := 0; i+1 < len(keys); i++ {
+		h, err := protocol.NewCoordHandover(keys[i], "felnet", keys[i+1].PubKeyBase64(), time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		hs = append(hs, *h)
+	}
+	return hs
+}
+
+// After the network moved keys, the area browser accepts a NAL signed by
+// the new key when its handovers lead there from the pin, over one step or
+// several, and says how it got there. With no chain from the pin it is
+// refused as before.
+func TestFetchHubNALFollowsHandovers(t *testing.T) {
+	a, b, c, other := browseKey(t), browseKey(t), browseKey(t), browseKey(t)
+	pin := a.PubKeyBase64()
+
+	moved := browseNAL(t, c)
+	moved.Handovers = handOver(t, a, b, c)
+	msg := fetchHubNAL(serveNAL(t, moved), "felnet", pin)().(fetchNALMsg)
+	if msg.err != nil || len(msg.areas) != 1 {
+		t.Fatalf("fetch along A->B->C = %+v", msg)
+	}
+	if msg.coordKey != c.PubKeyBase64() || msg.handedOverFrom != pin || msg.handoverSteps != 2 {
+		t.Errorf("fetch along A->B->C: coordKey %s, from %s, steps %d", msg.coordKey, msg.handedOverFrom, msg.handoverSteps)
+	}
+	// Signed by the pinned key itself, nothing is followed.
+	if msg := fetchHubNAL(serveNAL(t, browseNAL(t, a)), "felnet", pin)().(fetchNALMsg); msg.err != nil || msg.handedOverFrom != "" {
+		t.Errorf("fetch of the pinned key's NAL = %+v", msg)
+	}
+
+	gap := browseNAL(t, c)
+	gap.Handovers = handOver(t, b, c) // nothing from the pin
+	foreign := browseNAL(t, c)
+	foreign.Handovers = handOver(t, a, c)
+	foreign.Handovers[0].Network = "othernet" // breaks its signature too
+	stray := browseNAL(t, c)
+	stray.Handovers = handOver(t, a, other)
+	refused := map[string]*protocol.NAL{
+		"no handovers":                 browseNAL(t, c),
+		"chain not from the pin":       gap,
+		"handover for another network": foreign,
+		"chain to another key":         stray,
+	}
+	for name, n := range refused {
+		msg := fetchHubNAL(serveNAL(t, n), "felnet", pin)().(fetchNALMsg)
+		if !errors.Is(msg.err, nal.ErrCoordKeyMismatch) || len(msg.areas) != 0 {
+			t.Errorf("%s: fetch = %+v, want ErrCoordKeyMismatch and no areas", name, msg)
+		}
+	}
+}
+
+// The browser shows a handed-over NAL's areas and says the network moved
+// keys, without touching the pin. In the join wizard the registry key the
+// chain started at is what the new leaf pins, so saving is not refused; the
+// leaf moves the pin itself at its first fetch.
+func TestAreaBrowserHandedOverNAL(t *testing.T) {
+	regKey, newCoord := browseKey(t), browseKey(t)
+	moved := fetchNALMsg{
+		areas:    []protocol.Area{{Tag: "fel.general", Name: "General"}},
+		coordKey: newCoord.PubKeyBase64(), hubURL: "https://hub.example", network: "felnet",
+		handedOverFrom: regKey.PubKeyBase64(), handoverSteps: 1,
+	}
+
+	t.Run("record edit", func(t *testing.T) {
+		m, _ := newDiskModel(t)
+		m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves, config.V3NetLeafConfig{
+			HubURL: "https://hub.example", Network: "felnet", CoordinatorPubKey: regKey.PubKeyBase64(),
+		})
+		m.recordEditIdx = len(m.configs.V3Net.Leaves) - 1
+		m.areaBrowserReturn, m.areaBrowserHub, m.areaBrowserNetwork = modeRecordEdit, "https://hub.example", "felnet"
+		m = asModel(t, first(m.handleFetchNALMsg(moved)))
+		if len(m.areaBrowserAreas) != 1 || m.areaBrowserError != "" {
+			t.Fatalf("areas %+v, error %q", m.areaBrowserAreas, m.areaBrowserError)
+		}
+		if m.message != handoverNotice {
+			t.Errorf("message = %q, want the handover notice", m.message)
+		}
+		if !strings.Contains(m.viewV3NetAreaBrowser(), handoverNotice) {
+			t.Error("the browser does not show the handover notice")
+		}
+		if got := m.configs.V3Net.Leaves[m.recordEditIdx].CoordinatorPubKey; got != regKey.PubKeyBase64() {
+			t.Errorf("pin changed to %s; the running leaf moves it", got)
+		}
+	})
+
+	t.Run("join wizard", func(t *testing.T) {
+		m, dir := newDiskModel(t)
+		makeKey(t, m.configs.V3Net.KeystorePath)
+		m = press(t, m, "6", "2", "i")
+		m.wizard.hubURL, m.wizard.networkName = "https://hub.example", "felnet"
+		m.wizard.regEntry = &protocol.RegistryEntry{Name: "felnet", HubURL: "https://hub.example", CoordPubKeyB64: regKey.PubKeyBase64()}
+		m.areaBrowserHub, m.areaBrowserNetwork = "https://hub.example", "felnet"
+		m = asModel(t, first(m.handleFetchNALMsg(moved)))
+		if m.wizard.browsedCoordKey != regKey.PubKeyBase64() {
+			t.Fatalf("browsed key = %s, want the registry key the chain started at", m.wizard.browsedCoordKey)
+		}
+		m.wizard.selectedAreas = []areaBrowserItem{{Tag: "fel.general", Name: "General", Subscribed: true}}
+		m = press(t, m, "S")
+		ac := reloadConfigs(t, dir)
+		if len(ac.V3Net.Leaves) != 1 || ac.V3Net.Leaves[0].CoordinatorPubKey != regKey.PubKeyBase64() {
+			t.Errorf("leaves = %+v, msg %q; want the registry key pinned", ac.V3Net.Leaves, m.message)
 		}
 	})
 }
