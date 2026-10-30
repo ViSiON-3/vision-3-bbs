@@ -32,6 +32,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -353,89 +354,83 @@ func checkHistory(out io.Writer, client *http.Client, hubURL string, chain []pro
 	return nil
 }
 
-// matchChain compares chain with what the hub running hubKey needs, going by
-// the same rules the hub applies (see handlePostHandover), and returns a line
-// for the operator, or an error naming the chain to post. Beyond those rules
-// it refuses a chain the hub would take but that leaves out a recorded key,
-// since subscribers still on that key would be stranded and, once a handover
-// is held, the hub takes no more from recorded keys. omitLost allows that when
-// the key's keystore is gone.
+// matchChain compares chain with what the hub running hubKey needs, using the
+// hub's own rules (nal.CheckChainShape, nal.CheckPostedChain), and returns a
+// line for the operator, or an error naming the chain to post. Beyond those
+// rules it refuses a chain the hub would take but that leaves out a recorded
+// key, since subscribers still on that key would be stranded and, once a
+// handover is held, the hub takes no more from recorded keys. omitLost allows
+// that when the key's keystore is gone; it never lets through a chain the hub
+// would refuse.
 func matchChain(history *protocol.SignerHistory, hubKey string, chain []protocol.CoordHandover, omitLost bool) (string, error) {
+	held := make([]protocol.CoordHandover, 0, len(history.Handovers))
+	for _, link := range history.Handovers {
+		held = append(held, protocol.CoordHandover{OldKeyB64: link.OldKeyB64, NewKeyB64: link.NewKeyB64})
+	}
 	olds := make([]string, 0, len(chain))
 	for _, ho := range chain {
 		olds = append(olds, ho.OldKeyB64)
 	}
 	to := chain[len(chain)-1].NewKeyB64
 
-	if len(history.Handovers) > 0 {
-		for _, ho := range chain {
-			if !slices.Contains(history.Handovers, protocol.HandoverLink{OldKeyB64: ho.OldKeyB64, NewKeyB64: ho.NewKeyB64}) {
-				if ho.OldKeyB64 != history.KeyInForceB64 {
-					return "", fmt.Errorf("the hub holds handovers, so the next must start at the key in force, %s; this one starts at %s. Refusing to post it", history.KeyInForceB64, ho.OldKeyB64)
-				}
-				return "Signer history: the chain continues from the key in force.", nil
-			}
-		}
-		return "Signer history: the hub already holds this chain; posting it again retries the re-sign.", nil
-	}
-
-	wentBack := slices.Contains(history.PrevSigners, hubKey)
-	signers := make([]string, 0, len(history.PrevSigners)+1)
+	// earlier are the recorded keys other than the NAL's own, oldest first;
+	// signers adds the NAL's key when the hub has not re-signed it yet.
+	earlier := make([]string, 0, len(history.PrevSigners))
 	for _, key := range history.PrevSigners {
 		if key != history.NALKeyB64 {
-			signers = append(signers, key)
+			earlier = append(earlier, key)
 		}
 	}
+	signers := earlier
 	if history.NALKeyB64 != hubKey {
-		signers = append(signers, history.NALKeyB64)
+		signers = append(earlier[:len(earlier):len(earlier)], history.NALKeyB64)
+	}
+	wentBack := slices.Contains(history.PrevSigners, hubKey)
+
+	err := nal.CheckChainShape(chain)
+	var check nal.ChainCheck
+	if err == nil {
+		check, err = nal.CheckPostedChain(history.NALKeyB64, held, chain, history.PrevSigners, hubKey)
+	}
+	if err != nil {
+		msg := fmt.Sprintf("the hub would refuse this chain: %v. Refusing to post it", err)
+		switch {
+		case len(held) > 0:
+			msg += fmt.Sprintf(".\nThe key in force is %s", history.KeyInForceB64)
+		case wentBack:
+			msg += fmt.Sprintf(".\nThe hub runs %s, which already signed this network's NAL, so it takes no handover back to that key. Run the hub with a new key, or re-pin subscribers by hand", hubKey)
+		case len(signers) > 0 && (to == hubKey || history.NALKeyB64 != hubKey):
+			msg += ".\n" + describeChain(signers, hubKey)
+		}
+		return "", errors.New(msg)
 	}
 
-	// A hub not yet on the new key takes a chain from the key in force to
-	// anywhere, so only that key and any unbridged signers can be wrong. The
-	// chain starts at the hub's key, as checkHubKey saw to.
-	if to != hubKey {
-		if history.NALKeyB64 != hubKey {
-			return "", fmt.Errorf("the hub runs a key other than the one that signs its NAL, so first bridge them.\n%s", describeChain(signers, hubKey))
+	switch {
+	case len(check.Fresh) == 0:
+		return "Signer history: the hub already holds this chain; posting it again retries the re-sign.", nil
+	case len(held) > 0:
+		return "Signer history: the chain continues from the key in force.", nil
+	case check.FromPrevSigners:
+		needed := describeChain(signers, hubKey)
+		if slices.Equal(olds, signers) {
+			return "Signer history: the chain matches the keys the hub recorded.\n" + needed, nil
 		}
-		if len(signers) > 0 && !wentBack {
-			if !omitLost {
-				return "", fmt.Errorf("the hub recorded earlier signers no handover covers, and it stops taking handovers from them once it holds this one. First bridge them, or pass -omit-lost-keys if their keystores are lost.\n%s", describeChain(signers, hubKey))
-			}
-			return fmt.Sprintf("Signer history: leaving out %d recorded key(s); subscribers on them re-pin by hand.", len(signers)), nil
+		if !omitLost {
+			return "", fmt.Errorf("this chain leaves out keys the hub recorded, and subscribers still on them could then only re-pin by hand. Pass all of them, or -omit-lost-keys if their keystores are lost.\n%s", needed)
 		}
+		return fmt.Sprintf("Signer history: leaving out %d recorded key(s); subscribers on them re-pin by hand.\n%s", len(signers)-len(olds), needed), nil
+	case len(earlier) == 0:
 		return "Signer history: the chain starts at the key in force.", nil
+	case omitLost:
+		return fmt.Sprintf("Signer history: leaving out %d recorded key(s); subscribers on them re-pin by hand.", len(earlier)), nil
+	case wentBack:
+		// The hub cannot bridge to a key it already used, but a hub on the
+		// new key can take the whole chain through the NAL's key.
+		bridge := append(earlier[:len(earlier):len(earlier)], history.NALKeyB64)
+		return "", fmt.Errorf("the hub recorded earlier signers no handover covers, and it stops taking handovers from them once it holds this one. It already signed the NAL with the key it runs, so it cannot bridge them itself: restart the hub with the new key, then post the whole chain, or pass -omit-lost-keys if their keystores are lost.\n%s", describeChain(bridge, to))
+	default:
+		return "", fmt.Errorf("the hub recorded earlier signers no handover covers, and it stops taking handovers from them once it holds this one. First bridge them, or pass -omit-lost-keys if their keystores are lost.\n%s", describeChain(earlier, hubKey))
 	}
-
-	if wentBack {
-		return "", fmt.Errorf("the hub runs %s, which already signed this network's NAL, and refuses any handover back to a used key. Run the hub with a new key, or re-pin subscribers by hand", hubKey)
-	}
-	if len(signers) == 0 {
-		return "", fmt.Errorf("the hub's NAL is already signed by the new key, and the hub recorded no earlier signer, so it has no handover to take. Refusing to post")
-	}
-	needed := describeChain(signers, hubKey)
-	if slices.Equal(olds, signers) {
-		return "Signer history: the chain matches the keys the hub recorded.\n" + needed, nil
-	}
-	// The hub also takes any of the signers, in order, ending at the NAL's key.
-	inOrder := isSubsequence(olds, signers) && (history.NALKeyB64 == hubKey || olds[len(olds)-1] == history.NALKeyB64)
-	if !inOrder {
-		return "", fmt.Errorf("this chain does not match the keys the hub recorded, so the hub would refuse it. Refusing to post it.\n%s", needed)
-	}
-	if !omitLost {
-		return "", fmt.Errorf("this chain leaves out keys the hub recorded, and subscribers still on them could then only re-pin by hand. Pass all of them, or -omit-lost-keys if their keystores are lost.\n%s", needed)
-	}
-	return fmt.Sprintf("Signer history: leaving out %d recorded key(s); subscribers on them re-pin by hand.\n%s", len(signers)-len(olds), needed), nil
-}
-
-// isSubsequence reports whether every key of keys appears in all, in order.
-func isSubsequence(keys, all []string) bool {
-	i := 0
-	for _, key := range all {
-		if i < len(keys) && keys[i] == key {
-			i++
-		}
-	}
-	return i == len(keys)
 }
 
 // describeChain returns the flags that post the chain from signers, oldest

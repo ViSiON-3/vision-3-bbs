@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -65,6 +68,12 @@ func TestMatchChain(t *testing.T) {
 	held := &protocol.SignerHistory{NALKeyB64: key(c), KeyInForceB64: key(c), PrevSigners: []string{},
 		Handovers: []protocol.HandoverLink{link(a, b), link(b, c)}}
 
+	// Hub on D, its NAL still A's, the handover A to B held.
+	heldSwitched := &protocol.SignerHistory{NALKeyB64: key(a), KeyInForceB64: key(b), PrevSigners: []string{},
+		Handovers: []protocol.HandoverLink{link(a, b)}}
+	// Hub ran A, B, then A again, re-signing each time.
+	returned := &protocol.SignerHistory{NALKeyB64: key(a), KeyInForceB64: key(a), PrevSigners: []string{key(a), key(b)}}
+
 	cases := []struct {
 		name     string
 		history  *protocol.SignerHistory
@@ -78,22 +87,28 @@ func TestMatchChain(t *testing.T) {
 		{"no -via, key lost", resigned, c, chainFrom(t, key(c), a), true, ""},
 		{"starts late", resigned, c, chainFrom(t, key(c), b), false, key(a)},
 		{"starts late, key lost", resigned, c, chainFrom(t, key(c), b), true, ""},
-		{"-via out of order", resigned, c, chainFrom(t, key(c), b, a), false, "does not match"},
-		{"-via out of order, omit is no help", resigned, c, chainFrom(t, key(c), b, a), true, "does not match"},
-		{"-via through a third key", resigned, c, chainFrom(t, key(c), a, x), true, "does not match"},
+		{"-via out of order", resigned, c, chainFrom(t, key(c), b, a), false, "would refuse"},
+		{"-via out of order, omit is no help", resigned, c, chainFrom(t, key(c), b, a), true, "would refuse"},
+		{"-via through a third key", resigned, c, chainFrom(t, key(c), a, x), true, "would refuse"},
 		{"NAL's key, the chain needed", unsigned, c, chainFrom(t, key(c), a, b), false, ""},
-		{"past the NAL's key", unsigned, c, chainFrom(t, key(c), a), true, "does not match"},
+		{"past the NAL's key", unsigned, c, chainFrom(t, key(c), a), true, "would refuse"},
 		{"plain handover", plain, a, chainFrom(t, key(b), a), false, ""},
 		{"planned chain to come", plain, a, chainFrom(t, key(c), a, b), false, ""},
 		{"onward, earlier signers unbridged", earlier, c, chainFrom(t, key(d), c), false, key(b)},
 		{"onward, earlier signers lost", earlier, c, chainFrom(t, key(d), c), true, ""},
 		{"hub went back to a used key", wentBack, a, chainFrom(t, key(a), b), false, "already signed"},
-		{"nothing to hand over", &protocol.SignerHistory{NALKeyB64: key(c), KeyInForceB64: key(c)}, c, chainFrom(t, key(c), a), false, "no handover to take"},
+		{"nothing to hand over", &protocol.SignerHistory{NALKeyB64: key(c), KeyInForceB64: key(c)}, c, chainFrom(t, key(c), a), false, "key in force"},
 		{"held, reposted", held, c, chainFrom(t, key(c), a, b), false, ""},
 		{"held, one link reposted", held, c, chainFrom(t, key(c), b), false, ""},
 		{"held, on from the key in force", held, c, chainFrom(t, key(d), c), false, ""},
 		{"held, repeat then on", held, c, chainFrom(t, key(d), b, c), false, ""},
 		{"held, not from the key in force", held, c, chainFrom(t, key(d), a), false, "key in force"},
+		{"held, on then back to a used key", held, c, chainFrom(t, key(a), c, d), false, "already used"},
+		{"held, hub switched, through a third key", heldSwitched, d, chainFrom(t, key(d), b, c), false, "hub's key"},
+		{"held, hub switched, straight to it", heldSwitched, d, chainFrom(t, key(d), b), false, ""},
+		{"onward through a recorded key, omit is no help", resigned, c, chainFrom(t, key(d), c, a), true, "already used"},
+		{"went back, onward leaves a key unbridged", returned, a, chainFrom(t, key(c), a), false, "restart the hub"},
+		{"went back, onward, key lost", returned, a, chainFrom(t, key(c), a), true, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -367,4 +382,190 @@ func TestCheckHistoryCarriesOnWithoutHistory(t *testing.T) {
 			t.Errorf("err = %v, want it to say the reply does not verify", err)
 		}
 	})
+}
+
+// matchChain and a real hub agree on every chain. Each case drives a hub
+// through its steps: "a" runs it on key a and re-signs the NAL, "=a" runs it
+// on key a without re-signing, and "a>b>c" posts that chain. The last chain
+// is then checked by the tool, with -omit-lost-keys so only the hub's own rules
+// are in play, and posted to the hub. needsOmit says the tool also asks for
+// the flag without it.
+func TestMatchChainAgreesWithHub(t *testing.T) {
+	cases := []struct {
+		name      string
+		steps     []string
+		chain     string
+		accepted  bool
+		needsOmit bool
+	}{
+		{"plain handover", []string{"a"}, "a>b", true, false},
+		{"planned chain", []string{"a"}, "a>b>c", true, false},
+		{"not from the key in force", []string{"a"}, "x>b", false, false},
+		{"late, NAL still the old key's", []string{"a", "=c"}, "a>c", true, false},
+		{"late, re-signed", []string{"a", "c"}, "a>c", true, false},
+		{"re-signed twice, the chain needed", []string{"a", "b", "c"}, "a>b>c", true, false},
+		{"re-signed twice, skipping B", []string{"a", "b", "c"}, "a>c", true, true},
+		{"re-signed twice, starting at B", []string{"a", "b", "c"}, "b>c", true, true},
+		{"re-signed twice, out of order", []string{"a", "b", "c"}, "b>a>c", false, false},
+		{"re-signed twice, through a third key", []string{"a", "b", "c"}, "a>x>c", false, false},
+		{"re-signed twice, ending elsewhere", []string{"a", "b", "c"}, "a>b>x", false, false},
+		{"NAL B's, the chain needed", []string{"a", "b", "=c"}, "a>b>c", true, false},
+		{"NAL B's, past its key", []string{"a", "b", "=c"}, "a>c", false, false},
+		{"NAL B's, starting at it", []string{"a", "b", "=c"}, "b>c", true, true},
+		{"onward, earlier signers unbridged", []string{"a", "b", "c"}, "c>d", true, true},
+		{"onward through a recorded key", []string{"a", "b", "c"}, "c>a>d", false, false},
+		{"held, onward", []string{"a", "b", "c", "a>b>c"}, "c>d", true, false},
+		{"held, repeated", []string{"a", "b", "c", "a>b>c"}, "a>b>c", true, false},
+		{"held, one link repeated", []string{"a", "b", "c", "a>b>c"}, "b>c", true, false},
+		{"held, repeat then onward", []string{"a", "b", "c", "a>b>c"}, "b>c>d", true, false},
+		{"held, on then back to a used key", []string{"a", "b", "c", "a>b>c"}, "c>d>a", false, false},
+		{"held, not from the key in force", []string{"a", "b", "c", "a>b>c"}, "a>d", false, false},
+		{"held, hub switched, through a third key", []string{"a", "a>b", "=d"}, "b>c>d", false, false},
+		{"held, hub switched, straight to it", []string{"a", "a>b", "=d"}, "b>d", true, false},
+		{"went back, NAL B's, back to the hub", []string{"a", "b", "=a"}, "b>a", false, false},
+		{"went back, re-signed, onward", []string{"a", "b", "a"}, "a>c", true, true},
+		{"went back, the chain from a new key", []string{"a", "b", "a", "=c"}, "b>a>c", true, false},
+		{"went back, new key, skipping B", []string{"a", "b", "a", "=c"}, "a>c", true, true},
+		{"a key twice", []string{"a"}, "a>b>a", false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			names := []string{"a", "b", "c", "d", "x", "sender"}
+			loaded := loadKeys(t, names...)
+			keys := make(map[string]*keystore.Keystore, len(names))
+			for i, name := range names {
+				keys[name] = loaded[i]
+			}
+			sender := keys["sender"]
+			dir := t.TempDir()
+
+			var current atomic.Pointer[hub.Hub]
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				current.Load().Mux().ServeHTTP(w, r)
+			}))
+			defer ts.Close()
+			var hubKey string
+			open := func(name string) {
+				t.Helper()
+				if old := current.Load(); old != nil {
+					_ = old.Close()
+				}
+				h, err := hub.New(hub.Config{ListenAddr: ":0", DataDir: dir, Keystore: keys[name], AutoApprove: true,
+					Networks: []hub.NetworkConfig{{Name: "testnet"}}})
+				if err != nil {
+					t.Fatalf("create hub: %v", err)
+				}
+				current.Store(h)
+				hubKey = keys[name].PubKeyBase64()
+			}
+			defer func() { _ = current.Load().Close() }()
+			signed := func(chain string) []protocol.CoordHandover {
+				t.Helper()
+				parts := strings.Split(chain, ">")
+				signers := make([]*keystore.Keystore, 0, len(parts)-1)
+				for _, name := range parts[:len(parts)-1] {
+					signers = append(signers, keys[name])
+				}
+				return chainFrom(t, keys[parts[len(parts)-1]].PubKeyBase64(), signers...)
+			}
+			post := func(chain []protocol.CoordHandover) int {
+				t.Helper()
+				body, err := chainBody(chain)
+				if err != nil {
+					t.Fatal(err)
+				}
+				path := "/v3net/v1/testnet/nal/handover"
+				sum := sha256.Sum256(body)
+				date := time.Now().UTC().Format(http.TimeFormat)
+				sig, err := sender.Sign(http.MethodPost, path, date, hex.EncodeToString(sum[:]))
+				if err != nil {
+					t.Fatal(err)
+				}
+				req, err := http.NewRequest(http.MethodPost, ts.URL+path, bytes.NewReader(body))
+				if err != nil {
+					t.Fatal(err)
+				}
+				req.Header.Set("Date", date)
+				req.Header.Set("X-V3Net-Node-ID", sender.NodeID())
+				req.Header.Set("X-V3Net-Signature", sig)
+				resp, err := ts.Client().Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_ = resp.Body.Close()
+				return resp.StatusCode
+			}
+
+			for i, step := range tc.steps {
+				switch {
+				case strings.Contains(step, ">"):
+					if got := post(signed(step)); got != http.StatusOK {
+						t.Fatalf("step %s: status %d", step, got)
+					}
+				case strings.HasPrefix(step, "="):
+					open(strings.TrimPrefix(step, "="))
+				default:
+					open(step)
+					h := current.Load()
+					n, err := h.NALStore().Get("testnet")
+					if err != nil {
+						t.Fatal(err)
+					}
+					if i == 0 {
+						n = &protocol.NAL{V3NetNAL: "1.0", Network: "testnet", Areas: []protocol.Area{}}
+					}
+					if err := h.SignNAL(n); err != nil {
+						t.Fatalf("step %s: %v", step, err)
+					}
+					if err := h.NALStore().Put("testnet", n); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if i == 0 {
+					sub, _ := json.Marshal(protocol.SubscribeRequest{Network: "testnet", NodeID: sender.NodeID(),
+						PubKeyB64: sender.PubKeyBase64(), BBSName: "Sender", BBSHost: "sender.example.net"})
+					resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", bytes.NewReader(sub))
+					if err != nil {
+						t.Fatal(err)
+					}
+					_ = resp.Body.Close()
+				}
+			}
+
+			history, why, err := fetchHistory(ts.Client(), ts.URL, "testnet", hubKey, sender)
+			if err != nil || history == nil {
+				t.Fatalf("fetch history: %v %s", err, why)
+			}
+			chain := signed(tc.chain)
+			_, withOmit := matchChain(history, hubKey, chain, true)
+			_, strict := matchChain(history, hubKey, chain, false)
+
+			status := post(chain)
+			if (status == http.StatusOK) != tc.accepted {
+				t.Errorf("hub answered %d, want accepted = %v", status, tc.accepted)
+			}
+			if (withOmit == nil) != (status == http.StatusOK) {
+				t.Errorf("tool with -omit-lost-keys says %v, hub answered %d", withOmit, status)
+			}
+			if wantStrict := tc.accepted && !tc.needsOmit; (strict == nil) != wantStrict {
+				t.Errorf("tool without -omit-lost-keys says %v, want accepted = %v", strict, wantStrict)
+			}
+		})
+	}
+}
+
+// With the hub back on a key it already ran, the chain the tool points to
+// works: restarted on the new key, the hub takes it whole.
+func TestWentBackAdviceNamesTheChain(t *testing.T) {
+	keys := loadKeys(t, "a", "b", "c")
+	a, b, c := keys[0].PubKeyBase64(), keys[1].PubKeyBase64(), keys[2].PubKeyBase64()
+	history := &protocol.SignerHistory{NALKeyB64: a, KeyInForceB64: a, PrevSigners: []string{a, b}}
+	_, err := matchChain(history, a, chainFrom(t, c, keys[0]), false)
+	if err == nil {
+		t.Fatal("A to C with B unbridged passed without -omit-lost-keys")
+	}
+	want := describeChain([]string{b, a}, c)
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q does not contain the chain %q", err, want)
+	}
 }

@@ -299,6 +299,12 @@ Subscribers still on that key [accept the new key by
 hand](#accepting-a-new-key-by-hand). The flag does not let through a chain
 the hub would refuse.
 
+If the hub went back to a key it already ran (A, then B, then A), it cannot
+bridge B itself, since it takes no handover back to a key the network used.
+To keep subscribers on B, restart the hub with the new key first and post
+the whole chain, B then A then the new key; the tool prints it. Otherwise
+add `-omit-lost-keys`.
+
 The tool believes the hub's answer only if it is signed by the hub key you
 named, which is `-keystore`'s key or the new key, whichever `/info` says the
 hub runs. An answer with a bad signature, or a successful one with none,
