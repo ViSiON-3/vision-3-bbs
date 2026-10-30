@@ -94,9 +94,11 @@ jobs:
       - name: go vet
         if: matrix.os == 'windows-latest'
         run: go vet ./...
+      # internal/menu alone takes 3-6 minutes on a Windows runner, so a slow
+      # runner can pass go test's default 10-minute timeout (#792).
       - name: go test
         if: matrix.os != 'ubuntu-latest'
-        run: go test ./...
+        run: go test -timeout 20m ./...
       - name: Native script-store ACL regression
         run: go test -v ./internal/scripting -run '^TestDataStoreCustomized(D)?ACLRejectsUpdates$' -count=1
         env:
@@ -110,7 +112,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: scripts/coverage-check.sh coverage.out
       - name: go test -race
-        run: go test -race ./...
+        run: go test -race -timeout 20m ./...
       # The vendored forks under third_party/ are separate modules (wired in
       # with replace directives), so ./... above never reaches them. The
       # bubbletea fork carries local changes with their own tests (shifted

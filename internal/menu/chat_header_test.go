@@ -175,7 +175,7 @@ func (c *chatLive) header() string {
 // waitHeader waits until the last header drawn contains every one of want.
 func (c *chatLive) waitHeader(want ...string) {
 	c.t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for {
 		h := c.header()
 		ok := true
