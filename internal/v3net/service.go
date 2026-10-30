@@ -3,6 +3,7 @@
 package v3net
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -64,6 +65,13 @@ type Service struct {
 	// old leaf accepted, for AddLeaf to seed into its replacement. Guarded
 	// by mu.
 	carriedNALs map[leafKey]*protocol.NAL
+	// carriedUnsaved holds, during a ReloadLeaves rebuild, what each old leaf
+	// had not stored and the reload did not replace, for AddLeaf to install
+	// in its replacement. Guarded by mu.
+	carriedUnsaved map[leafKey]leaf.UnsavedState
+	// configFile is v3net.json as the last reload, or startup, found it (see
+	// noteConfigFile). Guarded by mu.
+	configFile configFileState
 
 	// BBSName and BBSHost are sent in subscribe requests and, when the hub
 	// is enabled, written to the hub's own subscriber row by Start.
@@ -469,6 +477,11 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 
 	run := &leafRun{l: l}
 	s.mu.Lock()
+	// What the previous leaf had not stored (see ReloadLeaves) goes first: a
+	// handover pin among it is what a carried NAL is checked against.
+	if u, ok := s.carriedUnsaved[leafKey{lcfg.Network, lcfg.HubURL}]; ok {
+		l.RestoreUnsaved(u)
+	}
 	// A NAL the previous leaf for this subscription accepted (see
 	// ReloadLeaves) is installed before the leaf starts, so a rebuild keeps
 	// the trusted area list even while the hub serves an unaccepted key.
@@ -850,6 +863,12 @@ func (s *Service) ConfigPath() string {
 // with a warning, matching historical startup behavior. If the service is
 // already running, new leaves start immediately.
 func (s *Service) ConfigureLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.MessageManager) {
+	s.mu.RLock()
+	first := s.leafCfgs == nil
+	s.mu.RUnlock()
+	if first {
+		s.noteConfigFile()
+	}
 	for _, lcfg := range leafCfgs {
 		router := NewJAMRouter()
 		var resolvedBoards []string
@@ -905,9 +924,63 @@ func keysOnlyChange(prev, next []config.V3NetLeafConfig) bool {
 	return true
 }
 
+// configFileState identifies a copy of v3net.json.
+type configFileState struct {
+	seen    bool
+	modTime time.Time
+	data    []byte
+}
+
+// noteConfigFile records v3net.json as it is now and reports whether it was
+// saved again as it was since the last record: its timestamp moved and its
+// contents did not. Only a sysop does that: the config editor, for Hub
+// Signs, or a hand save or touch. The BBS's own writes change the contents,
+// and a reload the file did not cause (reload.force, the area browser)
+// leaves the timestamp alone. Without a config path, or a file, it reports
+// false.
+func (s *Service) noteConfigFile() bool {
+	var cur configFileState
+	if s.cfg.ConfigPath != "" {
+		path := filepath.Join(s.cfg.ConfigPath, "v3net.json")
+		// Stat first: a write between the two looks changed, not touched.
+		if info, err := os.Stat(path); err == nil {
+			if data, err := os.ReadFile(path); err == nil {
+				cur = configFileState{seen: true, modTime: info.ModTime(), data: data}
+			}
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev := s.configFile
+	s.configFile = cur
+	return prev.seen && cur.seen && !cur.modTime.Equal(prev.modTime) && bytes.Equal(cur.data, prev.data)
+}
+
+// leafEdits says which of a leaf's recorded fields the sysop wrote between
+// prev and next, two copies of its v3net.json entry. touched is
+// noteConfigFile's result for next: a field's value cannot show the sysop
+// saving hubSigned at what the file already holds, so a touched file counts
+// as that for every leaf. It says nothing about the pins, which that save
+// has no reason to replace.
+func leafEdits(prev, next config.V3NetLeafConfig, touched bool) (coord, hub, hubSigned bool) {
+	coord = strings.TrimSpace(prev.CoordinatorPubKey) != strings.TrimSpace(next.CoordinatorPubKey)
+	hub = strings.TrimSpace(prev.HubPubKey) != strings.TrimSpace(next.HubPubKey)
+	return coord, hub, touched || prev.HubSigned != next.HubSigned
+}
+
+// cfgsByKey indexes leaf configs by subscription.
+func cfgsByKey(cfgs []config.V3NetLeafConfig) map[leafKey]config.V3NetLeafConfig {
+	m := make(map[leafKey]config.V3NetLeafConfig, len(cfgs))
+	for _, c := range cfgs {
+		m[leafKey{c.Network, c.HubURL}] = c
+	}
+	return m
+}
+
 // applyPins installs the keys from leafCfgs on the running leaves without
-// rebuilding them. The caller holds reloadMu.
-func (s *Service) applyPins(leafCfgs []config.V3NetLeafConfig) {
+// rebuilding them, telling each which of them were edited since prev. The
+// caller holds reloadMu.
+func (s *Service) applyPins(prev, leafCfgs []config.V3NetLeafConfig, touched bool) {
 	// run.ctx is written under s.mu when a leaf starts, so it is read here.
 	type target struct {
 		l   *leaf.Leaf
@@ -921,15 +994,18 @@ func (s *Service) applyPins(leafCfgs []config.V3NetLeafConfig) {
 	s.leafCfgs = slices.Clone(leafCfgs)
 	s.mu.Unlock()
 
+	prevByKey := cfgsByKey(prev)
 	for _, c := range leafCfgs {
 		run, ok := runs[leafKey{c.Network, c.HubURL}]
 		if !ok {
 			continue // skipped at configure time (no resolvable boards)
 		}
+		coordEdited, hubEdited, hubSignedEdited := leafEdits(prevByKey[leafKey{c.Network, c.HubURL}], c, touched)
 		run.l.UpdatePins(run.ctx, leaf.Pins{
 			Coord: c.CoordinatorPubKey, Hub: c.HubPubKey,
 			PendingCoord: c.PendingCoordinatorPubKey, PendingHub: c.PendingHubPubKey,
-			HubSigned: c.HubSigned,
+			HubSigned:   c.HubSigned,
+			CoordEdited: coordEdited, HubEdited: hubEdited, HubSignedEdited: hubSignedEdited,
 		})
 	}
 }
@@ -952,17 +1028,22 @@ func (s *Service) applyPins(leafCfgs []config.V3NetLeafConfig) {
 // the last NAL its predecessor accepted, when the coordinator pin is the
 // same, so it never runs without a trusted area list.
 //
+// Either way a leaf keeps what it has not managed to store yet (see
+// leaf.UnsavedState), unless the reload shows the sysop wrote that field: a
+// file that merely lacks it says nothing about it, whatever else changed.
+//
 // Hub settings, the enabled flag, and keystore/dedup paths are NOT touched;
 // those still require a restart.
 func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.MessageManager, confMgr *conference.ConferenceManager) error {
 	s.reloadMu.Lock()
 	defer s.reloadMu.Unlock()
 
+	touched := s.noteConfigFile()
 	s.mu.RLock()
 	prev := s.leafCfgs
 	s.mu.RUnlock()
 	if prev != nil && keysOnlyChange(prev, leafCfgs) {
-		s.applyPins(leafCfgs)
+		s.applyPins(prev, leafCfgs, touched)
 		slog.Info("v3net: leaf keys updated in place", "count", len(leafCfgs))
 		return nil
 	}
@@ -982,21 +1063,42 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 	s.mu.Unlock()
 
 	carried := make(map[leafKey]*protocol.NAL)
+	unsaved := make(map[leafKey]leaf.UnsavedState)
+	prevByKey, nextByKey := cfgsByKey(prev), cfgsByKey(leafCfgs)
 	for _, run := range old {
 		s.stopLeaf(run)
+		key := leafKey{run.l.Network(), run.l.HubURL()}
 		if n := run.l.LastNAL(); n != nil {
-			carried[leafKey{run.l.Network(), run.l.HubURL()}] = n
+			carried[key] = n
 		}
+		next, ok := nextByKey[key]
+		if !ok {
+			continue
+		}
+		u := run.l.UnsavedState()
+		coordEdited, hubEdited, hubSignedEdited := leafEdits(prevByKey[key], next, touched)
+		if coordEdited {
+			u.Coord, u.CoordMovedFrom = "", ""
+		}
+		if hubEdited {
+			u.Hub, u.HubMovedFrom = "", ""
+		}
+		if hubSignedEdited {
+			u.HubSigned = false
+		}
+		unsaved[key] = u
 	}
 	slog.Info("v3net: leaf subscriptions stopped for reload", "count", len(old))
 
 	s.mu.Lock()
 	s.carriedNALs = carried
+	s.carriedUnsaved = unsaved
 	s.mu.Unlock()
 	s.ConfigureLeaves(leafCfgs, mgr)
 
 	s.mu.Lock()
 	s.carriedNALs = nil
+	s.carriedUnsaved = nil
 	count := len(s.leaves)
 	s.mu.Unlock()
 	slog.Info("v3net: leaf subscriptions reloaded", "count", count)
