@@ -153,7 +153,7 @@ func TestBuildDoorCtxIdleTimeout(t *testing.T) {
 func TestDoorIdleEndsRemoteDoor(t *testing.T) {
 	ds := newTelnetDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "telnet", Host: host, Port: port, RawTCP: true})
 	ctx.IdleTimeout = 300 * time.Millisecond
 
@@ -292,7 +292,7 @@ func TestDoorWatchEndsRLoginDoor(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ds := newDoorServer(t)
 			host, port := ds.hostPort(t)
-			sess := newRelaySession()
+			sess := newRelaySession(t)
 			ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "rlogin", Host: host, Port: port})
 
 			if !tt.afterConnect {
@@ -337,7 +337,7 @@ func TestDoorWatchEndsRLoginDoor(t *testing.T) {
 func TestRemoteDoorTimeLimitWinsRace(t *testing.T) {
 	ds := newDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "rlogin", Host: host, Port: port})
 	ctx.User.TimeLimit = 1
 	ctx.SessionStartTime = time.Now().Add(-time.Minute + 300*time.Millisecond)

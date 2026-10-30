@@ -191,13 +191,18 @@ func relayRemoteSession(ctx *DoorCtx, conn net.Conn, remoteOut io.Reader, discon
 // failed write, and the keys typed after the disconnect key) for the caller
 // to keep for the next prompt once the copy has ended. With enterTrailer
 // set, the LF or NUL of an earlier Enter is not sent.
+//
+// A disconnect key of CR is the CR of an Enter, so the LF or NUL that
+// follows it is not kept, or is marked for the next reader to drop if it has
+// not arrived.
 func copyToRemote(dst io.Writer, src io.Reader, closed <-chan struct{}, disconnectKey byte, disconnectEnabled bool, enterTrailer bool) (doorInputCopy, error) {
-	w := dst
-	if disconnectEnabled {
-		w = disconnectWriter{w: dst, key: disconnectKey}
+	if !disconnectEnabled {
+		return copyDoorInput(dst, src, closed, enterTrailer)
 	}
-	left, err := copyDoorInput(w, src, closed, enterTrailer)
+	d := &disconnectWriter{w: dst, key: disconnectKey}
+	left, err := copyDoorInput(d, src, closed, enterTrailer)
 	if errors.Is(err, errDisconnectKey) {
+		left.enterTrailer = d.enterTrailer
 		err = nil
 	}
 	return left, err
@@ -209,13 +214,15 @@ var errDisconnectKey = errors.New("disconnect key pressed")
 
 // disconnectWriter writes to w what comes before key, then fails with
 // errDisconnectKey. It counts key as written, so the keys after it are what
-// copyDoorInput hands back unsent.
+// copyDoorInput hands back unsent. A key of CR takes the LF or NUL after it
+// too, or sets enterTrailer if the write ends with it.
 type disconnectWriter struct {
-	w   io.Writer
-	key byte
+	w            io.Writer
+	key          byte
+	enterTrailer bool
 }
 
-func (d disconnectWriter) Write(p []byte) (int, error) {
+func (d *disconnectWriter) Write(p []byte) (int, error) {
 	i := bytes.IndexByte(p, d.key)
 	if i < 0 {
 		return d.w.Write(p)
@@ -230,7 +237,16 @@ func (d disconnectWriter) Write(p []byte) (int, error) {
 			return n, err
 		}
 	}
-	return i + 1, errDisconnectKey
+	n := i + 1
+	if d.key == '\r' {
+		switch {
+		case n == len(p):
+			d.enterTrailer = true
+		case p[n] == '\n' || p[n] == 0x00:
+			n++
+		}
+	}
+	return n, errDisconnectKey
 }
 
 // substituteDoorPlaceholders expands the {NODE}, {USERHANDLE} and friends that

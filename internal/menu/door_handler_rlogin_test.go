@@ -147,6 +147,30 @@ func TestCopyToRemoteKeepsUnsentKeys(t *testing.T) {
 	})
 }
 
+// A disconnect key of CR is the CR of an Enter: the LF or NUL of that Enter
+// is not kept for the next prompt, where it would be an empty answer, and
+// if it has not arrived the next reader is told to drop it.
+func TestCopyToRemoteCRDisconnectKey(t *testing.T) {
+	for _, tc := range []struct {
+		input   string
+		sent    string
+		kept    string
+		trailer bool
+	}{
+		{"ab\r\nY", "ab", "Y", false},
+		{"ab\r\x00Y", "ab", "Y", false},
+		{"ab\rY", "ab", "Y", false},
+		{"ab\r", "ab", "", true},
+	} {
+		var dst bytes.Buffer
+		left, err := copyToRemote(&dst, strings.NewReader(tc.input), nil, '\r', true, false)
+		if err != nil || dst.String() != tc.sent || string(left.unread) != tc.kept || left.enterTrailer != tc.trailer {
+			t.Errorf("%q: copyToRemote = %+v, %v, sent %q; want kept %q, trailer %v, sent %q",
+				tc.input, left, err, dst.String(), tc.kept, tc.trailer, tc.sent)
+		}
+	}
+}
+
 func TestSubstituteDoorPlaceholders(t *testing.T) {
 	subs := map[string]string{"{USERHANDLE}": "Neo", "{NODE}": "3"}
 	for _, tc := range []struct{ in, want string }{
@@ -177,8 +201,13 @@ type relaySession struct {
 	out bytes.Buffer
 }
 
-func newRelaySession() *relaySession {
+// The session ends with the test: a relay input copier still parked in Read
+// (relaySession has no read interrupt, so the relay does not wait for it)
+// gets end of input and exits rather than outliving the test.
+func newRelaySession(t *testing.T) *relaySession {
+	t.Helper()
 	pr, pw := io.Pipe()
+	t.Cleanup(func() { _ = pw.Close() })
 	return &relaySession{pr: pr, pw: pw}
 }
 
@@ -271,7 +300,7 @@ func newRLoginDoorCtx(t *testing.T, s *relaySession, doorCfg config.DoorConfig) 
 func TestExecuteRLoginDoorRelaysBothDirections(t *testing.T) {
 	ds := newDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{
 		Type: "rlogin", Host: host, Port: port,
@@ -337,7 +366,7 @@ func TestExecuteRLoginDoorRelaysBothDirections(t *testing.T) {
 func TestExecuteRLoginDoorDisconnectKeyEndsSession(t *testing.T) {
 	ds := newDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "rlogin", Host: host, Port: port})
 
@@ -365,7 +394,7 @@ func TestExecuteRLoginDoorDisconnectKeyEndsSession(t *testing.T) {
 func TestExecuteRLoginDoorRefusesWhenTimeExhausted(t *testing.T) {
 	ds := newDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "rlogin", Host: host, Port: port})
 	ctx.User.TimeLimit = 30
@@ -476,7 +505,7 @@ func TestDoorDeadline(t *testing.T) {
 func TestRelayRemoteSessionStopsAtDeadline(t *testing.T) {
 	ds := newDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "rlogin", Host: host, Port: port})
 
 	conn, err := net.Dial("tcp", net.JoinHostPort(host, fmt.Sprint(port)))
@@ -503,7 +532,7 @@ func TestRelayRemoteSessionStopsAtDeadline(t *testing.T) {
 }
 
 func TestExecuteRLoginDoorRequiresHost(t *testing.T) {
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "rlogin"})
 
 	err := executeRLoginDoor(ctx)
@@ -516,7 +545,7 @@ func TestExecuteRLoginDoorRequiresHost(t *testing.T) {
 }
 
 func TestExecuteRLoginDoorRejectsBadDisconnectKey(t *testing.T) {
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{
 		Type: "rlogin", Host: "127.0.0.1", Port: 1, DisconnectKey: "banana",
 	})
@@ -543,7 +572,7 @@ func TestExecuteRLoginDoorReportsConnectFailure(t *testing.T) {
 		t.Fatalf("parse port: %v", err)
 	}
 
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{
 		Type: "rlogin", Host: host, Port: port, ConnectTimeout: 1,
 	})
@@ -564,7 +593,7 @@ func TestExecuteRLoginDoorReportsConnectFailure(t *testing.T) {
 func TestExecuteRLoginDoorDefaultsHandshakeToHandle(t *testing.T) {
 	ds := newDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "rlogin", Host: host, Port: port})
 
@@ -587,7 +616,7 @@ func TestExecuteRLoginDoorDefaultsHandshakeToHandle(t *testing.T) {
 func TestRLoginDoorDispatches(t *testing.T) {
 	ds := newDoorServer(t)
 	host, port := ds.hostPort(t)
-	sess := newRelaySession()
+	sess := newRelaySession(t)
 
 	ctx := newRLoginDoorCtx(t, sess, config.DoorConfig{Type: "rlogin", Host: host, Port: port})
 
