@@ -88,12 +88,17 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      # Temporary, Windows only. Four Windows jobs lost the runner about 50
-      # minutes in, with no logs and only GitHub's guess that CPU or memory
-      # starvation is one possible cause (#814). This samples free memory and
-      # the top processes every 30s so the next one can be read. The stop step
-      # at the end of this job prints the samples. Remove both once a runner
-      # loss has been explained, or when #814's cause is no longer in question.
+      # Temporary, Windows only. Four Windows jobs lost the runner with no logs,
+      # and GitHub's message lists CPU or memory starvation as one possible cause
+      # (#814). This samples free memory and the top processes every 30s, and the
+      # stop step at the end of this job prints the samples.
+      #
+      # It shows what a healthy job uses, not what killed a lost one. A lost job
+      # never reaches the stop step and its VM is gone. A deliberately killed
+      # runner kept no logs, not even from finished steps, and no annotations;
+      # only an artifact uploaded by an earlier step survived. Samples from the
+      # step that dies can't reach an artifact with these limits, since a run
+      # step has no artifact token. Remove both steps once #814 is settled.
       - name: Start resource logger
         if: matrix.os == 'windows-latest'
         continue-on-error: true
