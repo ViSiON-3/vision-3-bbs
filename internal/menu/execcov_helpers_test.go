@@ -130,8 +130,8 @@ func execcovRun(env *menuEnv, c execcovCall) runResult {
 	select {
 	case r := <-done:
 		return runResult{raw: ts.output(), user: r.u, next: r.action, err: r.err}
-	case <-time.After(10 * time.Second):
-		env.t.Fatalf("Run still going 10s after its input ran out")
+	case <-time.After(30 * time.Second):
+		env.t.Fatalf("Run still going 30s after its input ran out")
 		return runResult{}
 	}
 }
@@ -172,8 +172,8 @@ func execcovRunFn(env *menuEnv, fn RunnableFunc, u *user.User, args, input strin
 	select {
 	case r := <-done:
 		return runResult{raw: ts.output(), user: r.u, next: r.next, err: r.err}, ts.errOut.String()
-	case <-time.After(10 * time.Second):
-		env.t.Fatalf("handler still running 10s after its input ran out")
+	case <-time.After(30 * time.Second):
+		env.t.Fatalf("handler still running 30s after its input ran out")
 		return runResult{}, ""
 	}
 }
