@@ -264,11 +264,30 @@ See [V3Net Key Recovery](v3net/recovery.md) for full details.
 - **Subscriptions and area bindings apply live.** Subscribing or unsubscribing
   from the in-BBS area browser, answering the login question about a new area,
   or saving a subscription change in the config editor is picked up by the
-  running BBS. Unchanged networks quietly re-subscribe to their hub, and a
+  running BBS, though a config editor save can wait for callers to log off
+  (see below). Unchanged networks quietly re-subscribe to their hub, and a
   caller mid-chat on that network has the chat stream reconnected.
 - **The master switch, hub settings, keystore and dedup paths need a restart.**
   Changing **V3Net**, anything in the hub block, or either file path takes
   effect the next time the BBS starts.
+
+### When Changes to v3net.json Apply
+
+A change that needs no restart still does not always apply the moment you save
+it. A saved `v3net.json`, from the config editor or a text editor, waits until
+no callers are online, then applies within a couple of seconds of the last one
+logging off. On a busy board a save can look like it did nothing, including an
+edit to a key pin, **Hub Signs**, **Signed Hub**, a subscription's **Signed
+Messages** or a subscription's boards. To apply it right away, with callers online:
+
+```bash
+touch configs/reload.force
+```
+
+A caller mid-chat on a V3Net network may have the chat stream reconnected. The
+area browser and the login question about a new area do not wait; they apply at
+once. See
+[Applying Configuration Changes](configuration/configuration.md#applying-configuration-changes).
 
 ### Checking Your Setup
 
@@ -382,7 +401,7 @@ itself and carries on (see
 To resume, confirm the new key with the network's operator through a channel
 you already trust, then copy it into **Hub Key**, as in
 [Accepting a New Key by Hand](v3net/nal.md#accepting-a-new-key-by-hand).
-The running BBS picks the edit up without a restart, checks `/info` against
+The running BBS picks the edit up without a restart ([it waits for callers to log off](v3net/configuration.md#when-changes-to-v3netjson-apply)), checks `/info` against
 the new pin and resumes at once (`leaf: hub key matches the pin; resuming
 sync`). Messages posted locally meanwhile wait in the message base and are
 sent then. While paused, the leaf also re-checks `/info` every five minutes,
@@ -434,7 +453,7 @@ record. Check with the hub's operator first: if the hub still signs,
 something on the way is removing its signatures. Then, in the subscription's
 edit form, set **Hub Signs** to **N** (or remove `"hubSigned": true` from the
 entry in `v3net.json`) and make sure **Signed Hub** is **N**. The running BBS
-picks the change up without a restart and accepts the hub's unsigned
+picks the change up without a restart ([it waits for callers to log off](v3net/configuration.md#when-changes-to-v3netjson-apply)) and accepts the hub's unsigned
 replies again. When the hub signs again, the leaf notices and sets **Hub
 Signs** back on its own.
 
@@ -442,7 +461,7 @@ If the leaf could not write **Hub Signs** to `v3net.json` (it logs `leaf:
 could not record that the hub signs; will retry at the next reply`), it
 still refuses unsigned replies while it runs, and the field shows **N**.
 Set **Hub Signs** to **N** anyway and save: the file is unchanged, but the
-save still makes the running BBS re-read `v3net.json`. If you edit the file
+save still makes the running BBS re-read `v3net.json` ([once callers log off](v3net/configuration.md#when-changes-to-v3netjson-apply)). If you edit the file
 by hand, saving it (or `touch configs/v3net.json`) does the same. The leaf
 then drops the record and does not write it later unless the hub signs
 again (it logs `leaf: config does not record that the hub signs; dropping
@@ -506,7 +525,7 @@ importing those that are unsigned.
 A leaf can refuse unsigned messages too, whatever the hub does. Set
 **Signed Messages** to **Y** in the subscription's edit form (or
 `requireSignedMessages` to `true` on the entry in `leaves`). The running BBS
-applies it without a restart. From then on the leaf drops every unsigned
+applies it without a restart ([it waits for callers to log off](v3net/configuration.md#when-changes-to-v3netjson-apply)). From then on the leaf drops every unsigned
 message it polls from that network, logging each as
 `leaf: unsigned message from hub, dropping`, and imports only messages whose
 signature verifies. Messages already in your message bases are not touched.
