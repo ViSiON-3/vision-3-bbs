@@ -88,6 +88,36 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # Temporary, Windows only. Four Windows jobs lost the runner about 50
+      # minutes in, with no logs and only GitHub's guess that CPU or memory
+      # starvation is one possible cause (#814). This samples free memory and
+      # the top processes every 30s so the next one can be read. The stop step
+      # at the end of this job prints the samples. Remove both once a runner
+      # loss has been explained, or when #814's cause is no longer in question.
+      - name: Start resource logger
+        if: matrix.os == 'windows-latest'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Set-Content "$env:RUNNER_TEMP/resource-logger.ps1" @'
+          # 4 hours at most, in case the stop step never runs.
+          foreach ($i in 1..480) {
+            $os = Get-CimInstance Win32_OperatingSystem
+            $procs = Get-Process
+            $mem = $procs | Sort-Object WorkingSet64 -Descending | Select-Object -First 5 |
+              ForEach-Object { '{0}={1}MB' -f $_.ProcessName, [int]($_.WorkingSet64 / 1MB) }
+            $cpu = $procs | Sort-Object CPU -Descending | Select-Object -First 5 |
+              ForEach-Object { '{0}={1}s' -f $_.ProcessName, [int]$_.CPU }
+            '{0:u} free={1}MB commit_free={2}MB mem: {3} cpu_total: {4}' -f (Get-Date).ToUniversalTime(),
+              [int]($os.FreePhysicalMemory / 1KB), [int]($os.FreeVirtualMemory / 1KB), ($mem -join ' '), ($cpu -join ' ')
+            Start-Sleep 30
+          }
+          '@
+          $logger = Start-Process pwsh -PassThru -WindowStyle Hidden `
+            -RedirectStandardOutput "$env:RUNNER_TEMP/resources.log" `
+            -RedirectStandardError "$env:RUNNER_TEMP/resources.err" `
+            -ArgumentList '-NoProfile', '-File', "$env:RUNNER_TEMP/resource-logger.ps1"
+          Set-Content "$env:RUNNER_TEMP/resource-logger.pid" $logger.Id
       # Windows only: the lint job already vets on Linux, and a Linux vet never
       # analyses the windows-tagged files anyway, since the build constraints
       # exclude them. This is their first vet coverage.
@@ -126,6 +156,13 @@ jobs:
             (cd "$m" && go vet ./... && go test ./...) || exit 1
             echo "::endgroup::"
           done
+      - name: Stop resource logger
+        if: always() && matrix.os == 'windows-latest'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Stop-Process -Id (Get-Content "$env:RUNNER_TEMP/resource-logger.pid") -Force -ErrorAction SilentlyContinue
+          Get-Content "$env:RUNNER_TEMP/resources.log", "$env:RUNNER_TEMP/resources.err" -ErrorAction SilentlyContinue
 
   # Script-store replacement inspects native ACLs on every released OS.
   # Linux and Windows are covered above; macOS needs its own native run.
