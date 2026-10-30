@@ -254,10 +254,11 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			inputDone := make(chan struct{})
 			outputDone := make(chan struct{})
 			var left doorInputCopy // set by the input goroutine, for after inputDone
+			trailer := ctx.takeDoorEnterTrailer()
 			go func() {
 				defer close(inputDone)
 				var err error
-				left, err = copyDoorInput(ptmx, ctx.Session, readInterrupt, ctx.enterTrailer)
+				left, err = copyDoorInput(ptmx, ctx.Session, readInterrupt, trailer)
 				if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
 					// "read interrupted" is expected when we close readInterrupt during shutdown
 					if strings.Contains(err.Error(), "read interrupted") {
@@ -357,10 +358,11 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				inputDone := make(chan struct{})
 				outputDone := make(chan struct{})
 				var left doorInputCopy // set by the input goroutine, for after inputDone
+				trailer := ctx.takeDoorEnterTrailer()
 				go func() {
 					defer close(inputDone)
 					var err error
-					left, err = copyDoorInput(bbsSock, ctx.Session, readInterrupt, ctx.enterTrailer)
+					left, err = copyDoorInput(bbsSock, ctx.Session, readInterrupt, trailer)
 					if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
 						if !strings.Contains(err.Error(), "read interrupted") {
 							slog.Warn("socket I/O input error for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)

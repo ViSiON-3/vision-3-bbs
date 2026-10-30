@@ -65,12 +65,13 @@ func runStdioDoor(ctx *DoorCtx, cmd *exec.Cmd) error {
 
 	inputDone := make(chan struct{})
 	var left doorInputCopy // set by the input goroutine, for after inputDone
+	trailer := ctx.takeDoorEnterTrailer()
 	go func() {
 		defer close(inputDone)
 		// Closing the pipe when the session ends gives the door end-of-file.
 		defer func() { _ = stdinW.Close() }() // best-effort pipe teardown
 		var err error
-		left, err = copyDoorInput(stdinW, ctx.Session, readInterrupt, ctx.enterTrailer)
+		left, err = copyDoorInput(stdinW, ctx.Session, readInterrupt, trailer)
 		if err != nil && !errors.Is(err, os.ErrClosed) && !errors.Is(err, syscall.EPIPE) {
 			if strings.Contains(err.Error(), "read interrupted") {
 				slog.Debug("input goroutine interrupted for door (expected during shutdown)", "node", ctx.NodeNumber, "door", ctx.DoorName)

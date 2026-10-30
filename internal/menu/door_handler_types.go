@@ -53,11 +53,23 @@ type DoorCtx struct {
 	watch *doorWatch
 	// enterTrailer says the session's last reader took the CR of an Enter
 	// whose LF or NUL had not arrived, so the door's input drops a leading
-	// one (takeEnterTrailer). Set by executeDoor.
+	// one (takeEnterTrailer). Set by runDoorWatched; whatever reads the
+	// session for the door takes it with takeDoorEnterTrailer.
 	enterTrailer bool
 	// baseCOM1Virtual records that a DOS door's base dosemurc sets
 	// $_com1 = "virtual". Set by writeDosemurc.
 	baseCOM1Virtual bool
+}
+
+// takeDoorEnterTrailer returns enterTrailer for the reader the door starts
+// on the session, which then owns the mark, and clears it. Call it before
+// starting that reader, on the goroutine that runs the door: a mark nothing
+// took is passed on to the next reader when the door ends (runDoorWatched),
+// as it is when the door fails before reading anything.
+func (ctx *DoorCtx) takeDoorEnterTrailer() bool {
+	t := ctx.enterTrailer
+	ctx.enterTrailer = false
+	return t
 }
 
 // dosSerial reports whether a DOS door talks to the caller through COM1,

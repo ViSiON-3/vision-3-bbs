@@ -136,11 +136,12 @@ func relayRemoteSession(ctx *DoorCtx, conn net.Conn, remoteOut io.Reader, discon
 	inputDone := make(chan struct{})
 	outputDone := make(chan struct{})
 	var left doorInputCopy // set by the input goroutine, for after inputDone
+	trailer := ctx.takeDoorEnterTrailer()
 
 	go func() {
 		defer close(inputDone)
 		var err error
-		left, err = copyToRemote(conn, ctx.Session, readInterrupt, disconnectKey, disconnectEnabled, ctx.enterTrailer)
+		left, err = copyToRemote(conn, ctx.Session, readInterrupt, disconnectKey, disconnectEnabled, trailer)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrClosed) && !errors.Is(err, net.ErrClosed) {
 			if strings.Contains(err.Error(), "read interrupted") {
 				slog.Debug("remote door input interrupted (expected during shutdown)",
@@ -192,9 +193,11 @@ func relayRemoteSession(ctx *DoorCtx, conn net.Conn, remoteOut io.Reader, discon
 // to keep for the next prompt once the copy has ended. With enterTrailer
 // set, the LF or NUL of an earlier Enter is not sent.
 //
-// A disconnect key of CR is the CR of an Enter, so the LF or NUL that
-// follows it is not kept, or is marked for the next reader to drop if it has
-// not arrived.
+// The disconnect key is never kept, nor what was typed before it in the
+// same chunk: the caller pressed it to leave the door, even when the copy
+// stopped before it was reached. A disconnect key of CR is the CR of an
+// Enter, so the LF or NUL that follows it is not kept either, or is marked
+// for the next reader to drop if it has not arrived.
 func copyToRemote(dst io.Writer, src io.Reader, closed <-chan struct{}, disconnectKey byte, disconnectEnabled bool, enterTrailer bool) (doorInputCopy, error) {
 	if !disconnectEnabled {
 		return copyDoorInput(dst, src, closed, enterTrailer)
@@ -203,7 +206,13 @@ func copyToRemote(dst io.Writer, src io.Reader, closed <-chan struct{}, disconne
 	left, err := copyDoorInput(d, src, closed, enterTrailer)
 	if errors.Is(err, errDisconnectKey) {
 		left.enterTrailer = d.enterTrailer
-		err = nil
+		return left, nil
+	}
+	// The key was read but not reached: a write ahead of it in its chunk
+	// failed, or the chunk was read once closed and not written at all.
+	if i := bytes.IndexByte(left.unread, disconnectKey); i >= 0 {
+		end, trailer := d.keyEnd(left.unread, i)
+		left = doorInputCopy{unread: left.unread[end:], enterTrailer: trailer}
 	}
 	return left, err
 }
@@ -237,16 +246,25 @@ func (d *disconnectWriter) Write(p []byte) (int, error) {
 			return n, err
 		}
 	}
-	n := i + 1
+	n, trailer := d.keyEnd(p, i)
+	d.enterTrailer = trailer
+	return n, errDisconnectKey
+}
+
+// keyEnd returns where the disconnect key at p[i] ends: after it, or for a
+// key of CR after the LF or NUL that follows it. trailer reports a CR that
+// ends p, whose LF or NUL has not arrived.
+func (d *disconnectWriter) keyEnd(p []byte, i int) (end int, trailer bool) {
+	end = i + 1
 	if d.key == '\r' {
 		switch {
-		case n == len(p):
-			d.enterTrailer = true
-		case p[n] == '\n' || p[n] == 0x00:
-			n++
+		case end == len(p):
+			trailer = true
+		case p[end] == '\n' || p[end] == 0x00:
+			end++
 		}
 	}
-	return n, errDisconnectKey
+	return end, trailer
 }
 
 // substituteDoorPlaceholders expands the {NODE}, {USERHANDLE} and friends that

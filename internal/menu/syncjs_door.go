@@ -93,7 +93,7 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 	}()
 
 	eng := syncjs.NewEngine(engineCtx, session, cfg)
-	if ctx.enterTrailer {
+	if ctx.takeDoorEnterTrailer() {
 		eng.ExpectEnterTrailer()
 	}
 

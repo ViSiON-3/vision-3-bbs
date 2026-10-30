@@ -348,10 +348,11 @@ func executeDOSDoor(ctx *DoorCtx) error {
 	inputDone := make(chan struct{})
 	outputDone := make(chan struct{})
 	var left doorInputCopy // set by the input goroutine, for after inputDone
+	trailer := ctx.takeDoorEnterTrailer()
 	go func() {
 		defer close(inputDone)
 		var err error
-		left, err = copyDoorInput(ptmx, ctx.Session, readInterrupt, ctx.enterTrailer)
+		left, err = copyDoorInput(ptmx, ctx.Session, readInterrupt, trailer)
 		if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
 			slog.Warn("error copying session stdin to dosemu PTY", "node", ctx.NodeNumber, "error", err)
 		}
