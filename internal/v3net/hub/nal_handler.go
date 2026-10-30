@@ -33,6 +33,9 @@ func NewNALStore(db *sql.DB) (*NALStore, error) {
 	if _, err := db.Exec(handoverSchema); err != nil {
 		return nil, fmt.Errorf("hub: create handover table: %w", err)
 	}
+	if err := migratePrevSigners(db); err != nil {
+		return nil, err
+	}
 	return &NALStore{db: db}, nil
 }
 

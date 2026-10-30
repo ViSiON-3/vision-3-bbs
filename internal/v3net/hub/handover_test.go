@@ -512,8 +512,8 @@ func TestLateHandoverAfterResign(t *testing.T) {
 	h, ts = open(newKS)
 	defer h.Close()
 	defer ts.Close()
-	if prev, err := h.nalStore.PrevSigner("testnet"); err != nil || prev != oldKS.PubKeyBase64() {
-		t.Fatalf("previous signer = %q, %v; want the old key", prev, err)
+	if prev, err := h.nalStore.PrevSigners("testnet"); err != nil || len(prev) != 1 || prev[0] != oldKS.PubKeyBase64() {
+		t.Fatalf("previous signers = %q, %v; want the old key", prev, err)
 	}
 
 	url := ts.URL + "/v3net/v1/testnet/nal/handover"

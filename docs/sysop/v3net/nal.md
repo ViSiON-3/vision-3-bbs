@@ -244,10 +244,41 @@ Until the handover arrives, the hub may serve either NAL:
 
 This is as safe as the usual order: the hub only takes a handover signed by
 the key that signed its NAL before the switch, and while it runs a key no
-handover names, only a handover to that key. It remembers one key back, so
-if the hub's key changed twice without a handover, only the latest change
-can be bridged; subscribers still on the first key [accept the new key by
-hand](#accepting-a-new-key-by-hand).
+handover names, only a handover to that key.
+
+##### If the Key Changed More Than Once
+
+If the hub's key changed more than once before any handover was published
+(A, then B, then C, each restart re-signing the NAL), the hub remembers each
+key that signed the NAL, up to the last eight. Bridge them all in one go:
+pass the first key's keystore as `-keystore`, the keystores in between to
+`-via` in the order the hub ran them (comma-separated), and the key the hub
+runs now as `-new-key`:
+
+```bash
+go run ./cmd/v3net-handover \
+  -keystore a.key \
+  -via      b.key \
+  -hub      http://localhost:8765 \
+  -network  felonynet \
+  -new-key  <C's public key>
+```
+
+The tool signs A to B with A's key and B to C with B's, and posts both as
+one request. The hub takes the chain whole or not at all: every link must
+be signed by the key before it, start at a key that signed the NAL, follow
+the order those keys signed it, and end at the key the hub runs. Subscribers
+on A or on B then follow it to C. Include every key that signed the NAL,
+up to the one the hub serves it signed by now if that is not yet C. Only
+keys that signed the NAL count: if the NAL is still signed by A (nothing
+changed it while the hub ran B), post A to C directly, without `-via`.
+
+Post the whole chain at once. Once the hub holds any handover it no longer
+takes one from a remembered key, so posting B to C on its own would leave
+subscribers still on A to [accept the new key by
+hand](#accepting-a-new-key-by-hand). The same goes for a key you no longer
+have: start the chain at the oldest key you still hold, and subscribers on
+older ones re-pin by hand.
 
 The tool sends the request as the old key's node, which the hub registered
 as a subscriber while it ran with that key. Do not delete that node in
@@ -376,6 +407,7 @@ connected to.
 | Cannot subscribe at all | The area is closed and your node is not on its allow list, or your node is on the deny list. Ask the area manager. |
 | New areas stopped arriving; the log says `key changed; rejected until the sysop accepts it` | The hub is serving a NAL signed by a key other than the one pinned, with no handover leading to it from your pin. See [When the Key Changes](#when-the-key-changes). |
 | Every subscriber paused on a changed hub key right after you moved the hub to a new key | The hub was switched before the handover was published. Publish it now with the old key; see [If the Hub Already Runs the New Key](#if-the-hub-already-runs-the-new-key). |
+| `v3net-handover` fails with `409 handover is not signed by the coordinator key in force`, and the hub's key changed more than once without a handover | Post the whole chain from the first key in one request with `-via`; see [If the Key Changed More Than Once](#if-the-key-changed-more-than-once). |
 | `v3net-handover` fails with `401 unknown or inactive node` | The old key's node is no longer registered with the hub (deleted in Node Management). Add `-auth-keystore` with the hub's current `v3net.key`; see [If the Hub Already Runs the New Key](#if-the-hub-already-runs-the-new-key). |
 | The log says `key moved by a signed coordinator handover` | The coordinator moved the network to a new key, and your leaf followed. Nothing to do; see [Signed Handovers](#signed-handovers). |
 | Coordinator Panel never appears | Your node is not the coordinator of any subscribed network. Only the hub's own node is; see Handing Over a Network. |

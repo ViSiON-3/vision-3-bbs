@@ -448,13 +448,29 @@ otherwise), since it could never sign for any other.
 Such a hub may also have re-signed the NAL with its own key before the
 handover arrived: a hub-side change to a NAL never handed over is signed
 with the hub's key, whatever key signed it before. When that happens with
-no handover held, the hub records the key that signed the NAL before as
-the network's previous signer (one per network, kept across restarts). With
-no handover held, it then also accepts a handover whose `old_key` is that
-previous signer and whose `new_key` is its own key, which already signs the
-NAL; the NAL is served with the handover, changed only as below, and the
-hub sends `nal_updated`. Once any handover is held, the previous signer no
-longer counts.
+no handover held, the hub adds the key that signed the NAL before to the
+network's previous signers: an ordered list, oldest first, of at most 8
+keys, kept across restarts (a key recorded again moves to the end). With no
+handover held, it then also accepts a chain of handovers that ends at its
+own key and whose every `old_key` is a previous signer or, when the NAL is
+not yet signed by the hub's key, the NAL's own key, in the order they
+signed the NAL (so the last link then starts at the NAL's key). A hub whose
+own key is on the list (it went back to a key it ran before) accepts no
+such chain. A NAL already signed by the hub's key is served with the
+chain, changed only as below; any other is re-signed at once, as for a
+late handover. Either way the hub sends `nal_updated`. Once any handover
+is held, the previous signers no longer count.
+
+The body of the post is one handover, or a JSON array of at most 8 that
+forms a chain: each starts at the `new_key` of the one before, and no key
+appears twice (`400` otherwise). Every link must verify (`422`). The hub
+checks the chain as a whole against the previous signers, or else link by
+link under the rules above, as if each were posted once the ones before it
+were held, and stores all of it or none (`409`). Links it already holds
+are skipped; a chain of nothing else is a repeat. A late chain must be
+posted in one request: posted link by link, the last link would be held
+first, after which the previous signers no longer count and the earlier
+links are refused. Hubs that predate chains answer `400` to an array.
 
 When the hub signs the NAL for a key the network was handed over to (at
 startup, on a late handover, or on a handover from the previous signer),

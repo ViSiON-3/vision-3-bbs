@@ -8,6 +8,11 @@
 // hub runs and refuses a hub running neither key. The request is sent as
 // the outgoing key's node, or as the node of -auth-keystore.
 //
+// When the hub's key changed more than once without a handover (A to B to
+// C), -via names the keystores of the keys in between, oldest first: the
+// tool then signs a chain, A to B with A's key and B to C with B's, and
+// posts it as one request, which a hub running C takes whole or not at all.
+//
 // Usage:
 //
 //	go run ./cmd/v3net-handover -keystore data/v3net.key -hub http://localhost:8765 -network felonynet -new-key <base64 public key>
@@ -40,6 +45,7 @@ func main() {
 	newKey := flag.String("new-key", "", "the new coordinator's public key (standard base64)")
 	newKeystore := flag.String("new-keystore", "", "or: path to the new coordinator's v3net.key, to read its public key from")
 	authKeystore := flag.String("auth-keystore", "", "path to the v3net.key of the subscribed node to send the request as (default: -keystore)")
+	via := flag.String("via", "", "comma-separated paths to the v3net.key of each key the hub ran between -keystore's and the new key, oldest first")
 	dryRun := flag.Bool("dry-run", false, "print the signed handover instead of sending it")
 	flag.Parse()
 
@@ -49,28 +55,37 @@ func main() {
 		os.Exit(1)
 	}
 
-	ks := loadKeystore(*keystorePath)
+	signers := []*keystore.Keystore{loadKeystore(*keystorePath)}
+	for _, path := range strings.Split(*via, ",") {
+		if path = strings.TrimSpace(path); path != "" {
+			signers = append(signers, loadKeystore(path))
+		}
+	}
 	to := strings.TrimSpace(*newKey)
 	if *newKeystore != "" {
 		to = loadKeystore(*newKeystore).PubKeyBase64()
 	}
 
-	h, err := protocol.NewCoordHandover(ks, *network, to, time.Now())
+	chain, err := signChain(signers, *network, to, time.Now())
 	if err != nil {
 		logging.Fatal("sign handover", "error", err)
 	}
-	body, err := json.Marshal(h)
+	body, err := chainBody(chain)
 	if err != nil {
 		logging.Fatal("marshal handover", "error", err)
 	}
-	fmt.Printf("Handover: network=%s\n  from %s\n  to   %s\n", h.Network, h.OldKeyB64, h.NewKeyB64)
+	fmt.Printf("Handover: network=%s\n", *network)
+	for _, h := range chain {
+		fmt.Printf("  from %s\n  to   %s\n", h.OldKeyB64, h.NewKeyB64)
+	}
 	if *dryRun {
 		fmt.Println(string(body))
 		return
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	late, err := checkHubKey(client, *hubURL, *network, h)
+	from, final := chain[0].OldKeyB64, chain[len(chain)-1].NewKeyB64
+	late, err := checkHubKey(client, *hubURL, *network, from, final)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -84,21 +99,52 @@ func main() {
 	// has to come from a node subscribed to the network. That is the old
 	// key's node unless its registration was deleted, when the hub's current
 	// key, which the hub registers itself, serves instead.
-	sender := ks
+	sender := signers[0]
 	if *authKeystore != "" {
 		sender = loadKeystore(*authKeystore)
 	}
-	if !publish(os.Stdout, os.Stderr, client, *hubURL, h, body, sender, *authKeystore != "", late) {
+	if !publish(os.Stdout, os.Stderr, client, *hubURL, chain, body, sender, *authKeystore != "", late) {
 		os.Exit(1)
 	}
 }
 
-// publish POSTs the handover h (body is its JSON) to the hub as sender and
-// reports the outcome to out and errOut, returning whether it succeeded.
-// For a late handover, success means the hub serves the NAL signed by the
-// new key with the handover, checked by fetching it, not just a 200.
-func publish(out, errOut io.Writer, client *http.Client, hubURL string, h *protocol.CoordHandover, body []byte, sender *keystore.Keystore, authSet, late bool) bool {
-	path := fmt.Sprintf("/v3net/v1/%s/nal/handover", h.Network)
+// signChain signs the handovers of network from each signer's key to the
+// next signer's, and from the last signer's to to, each with the key it
+// hands over from.
+func signChain(signers []*keystore.Keystore, network, to string, issued time.Time) ([]protocol.CoordHandover, error) {
+	chain := make([]protocol.CoordHandover, 0, len(signers))
+	for i, s := range signers {
+		next := to
+		if i+1 < len(signers) {
+			next = signers[i+1].PubKeyBase64()
+		}
+		h, err := protocol.NewCoordHandover(s, network, next, issued)
+		if err != nil {
+			return nil, err
+		}
+		chain = append(chain, *h)
+	}
+	return chain, nil
+}
+
+// chainBody returns the request body for chain: the handover itself when
+// there is one, which every hub takes, or the array of them, which only a
+// hub that takes chains does (an older one answers 400).
+func chainBody(chain []protocol.CoordHandover) ([]byte, error) {
+	if len(chain) == 1 {
+		return json.Marshal(chain[0])
+	}
+	return json.Marshal(chain)
+}
+
+// publish POSTs the handover chain (body is its JSON) to the hub as sender
+// and reports the outcome to out and errOut, returning whether it
+// succeeded. For a late handover, success means the hub serves the NAL
+// signed by the new key with a chain from the outgoing key, checked by
+// fetching it, not just a 200.
+func publish(out, errOut io.Writer, client *http.Client, hubURL string, chain []protocol.CoordHandover, body []byte, sender *keystore.Keystore, authSet, late bool) bool {
+	network := chain[0].Network
+	path := fmt.Sprintf("/v3net/v1/%s/nal/handover", network)
 	bodyHash := sha256.Sum256(body)
 	dateUTC := time.Now().UTC().Format(http.TimeFormat)
 	sig, err := sender.Sign(http.MethodPost, path, dateUTC, hex.EncodeToString(bodyHash[:]))
@@ -142,7 +188,7 @@ func publish(out, errOut io.Writer, client *http.Client, hubURL string, h *proto
 		_, _ = fmt.Fprintln(out, "Handover published. Restart the hub with the new key to sign the NAL with it.")
 		return true
 	}
-	if err := checkServedNAL(client, hubURL, h); err != nil {
+	if err := checkServedNAL(client, hubURL, network, chain[0].OldKeyB64, chain[len(chain)-1].NewKeyB64); err != nil {
 		_, _ = fmt.Fprintf(errOut, "The hub accepted the handover, but %v.\n", err)
 		_, _ = fmt.Fprintln(errOut, "Subscribers may still be paused. Check the hub log, then run this command again to retry.")
 		return false
@@ -152,31 +198,32 @@ func publish(out, errOut io.Writer, client *http.Client, hubURL string, h *proto
 	return true
 }
 
-// checkServedNAL fetches the network's NAL and returns an error unless it
-// verifies, is signed by h's new key and carries h's old-to-new step.
-func checkServedNAL(client *http.Client, hubURL string, h *protocol.CoordHandover) error {
-	n, err := nal.Fetch(context.Background(), fmt.Sprintf("%s/v3net/v1/%s/nal", hubURL, h.Network), client)
+// checkServedNAL fetches network's NAL and returns an error unless it
+// verifies, is signed by the new key to and carries a chain of handovers to
+// it from the outgoing key from.
+func checkServedNAL(client *http.Client, hubURL, network, from, to string) error {
+	n, err := nal.Fetch(context.Background(), fmt.Sprintf("%s/v3net/v1/%s/nal", hubURL, network), client)
 	if err != nil {
 		return fmt.Errorf("the NAL could not be fetched to confirm it: %w", err)
 	}
 	if err := nal.Verify(n); err != nil {
 		return fmt.Errorf("the NAL it serves does not verify: %w", err)
 	}
-	if n.CoordPubKeyB64 != h.NewKeyB64 {
+	if n.CoordPubKeyB64 != to {
 		return fmt.Errorf("it still serves a NAL signed by %s", n.CoordPubKeyB64)
 	}
-	if _, err := nal.FollowHandovers(h.Network, h.OldKeyB64, h.NewKeyB64, n.Handovers); err != nil {
+	if _, err := nal.FollowHandovers(network, from, to, n.Handovers); err != nil {
 		return fmt.Errorf("the NAL it serves carries no handover from the outgoing key")
 	}
 	return nil
 }
 
 // checkHubKey fetches the network's /info and compares the hub's key with
-// the handover's keys. It reports late when the hub already runs the new
-// key, and returns an error when the hub runs neither key or does not say
-// which it runs: the hub would refuse the handover, or take one it can
-// never act on, or -hub names the wrong hub.
-func checkHubKey(client *http.Client, hubURL, network string, h *protocol.CoordHandover) (late bool, err error) {
+// the outgoing key from and the new key to. It reports late when the hub
+// already runs the new key, and returns an error when the hub runs neither
+// key or does not say which it runs: the hub would refuse the handover, or
+// take one it can never act on, or -hub names the wrong hub.
+func checkHubKey(client *http.Client, hubURL, network, from, to string) (late bool, err error) {
 	url := fmt.Sprintf("%s/v3net/v1/%s/info", hubURL, network)
 	resp, err := client.Get(url)
 	if err != nil {
@@ -193,15 +240,15 @@ func checkHubKey(client *http.Client, hubURL, network string, h *protocol.CoordH
 		return false, fmt.Errorf("could not check the hub's key: decode %s: %w", url, err)
 	}
 	switch info.HubPubKeyB64 {
-	case h.OldKeyB64:
+	case from:
 		return false, nil
-	case h.NewKeyB64:
+	case to:
 		return true, nil
 	case "":
 		return false, fmt.Errorf("the hub does not publish its key at %s; refusing to post the handover", url)
 	default:
 		return false, fmt.Errorf("the hub runs key %s, which is neither the outgoing key %s nor the new key %s; refusing to post the handover (check -hub, -network and the keystores)",
-			info.HubPubKeyB64, h.OldKeyB64, h.NewKeyB64)
+			info.HubPubKeyB64, from, to)
 	}
 }
 
