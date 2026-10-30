@@ -33,7 +33,11 @@ func TestDataStoreMacACLRejectsUpdates(t *testing.T) {
 }
 
 // TestDataStoreMacSymlinkDoesNotBypassACL checks a writable link to a readable
-// target that restricts another local user. Neither may change on mutation.
+// target with an explicit ACL. Neither may change on mutation.
+//
+// The entry names everyone because the kernel decides that without an identity
+// lookup. A deny entry for a named principal such as nobody counts as applying
+// to the caller when the lookup fails, which denied this test's own read (#807).
 func TestDataStoreMacSymlinkDoesNotBypassACL(t *testing.T) {
 	h := newHarness(t, harnessOpts{})
 	h.mustRun(`v3.data.set("kept", 1)`)
@@ -45,7 +49,7 @@ func TestDataStoreMacSymlinkDoesNotBypassACL(t *testing.T) {
 	if err := os.Chmod(target, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if output, err := exec.Command("/bin/chmod", "+a", "nobody deny read", target).CombinedOutput(); err != nil {
+	if output, err := exec.Command("/bin/chmod", "+a", "everyone deny delete", target).CombinedOutput(); err != nil {
 		t.Fatalf("set target ACL: %v: %s", err, output)
 	}
 	t.Cleanup(func() { _ = exec.Command("/bin/chmod", "-N", target).Run() })
