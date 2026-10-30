@@ -182,6 +182,14 @@ func (l *Leaf) UpdatePins(ctx context.Context, p Pins) {
 // while it stores, so the read sees every store that has finished. A
 // store that cannot be read leaves the record in force.
 //
+// A record OnHubSigned failed to store is in force although the config
+// lacks it, and a reload whose store confirms that still clears it, as a
+// changed pin replaces an unsaved one: otherwise the sysop clearing
+// hubSigned after a hub rollback would be undone by the retried store. The
+// leaf cannot tell that from an edit elsewhere in the file, but either way
+// the store holds what a restart would use. A later verified reply records
+// it again, since the hub then signs.
+//
 // Once the record is cleared, with requireSignedHub off, a pause caused
 // only by unsigned replies lifts at once, even for a hub whose /info
 // serves no key to resume on.
@@ -190,7 +198,7 @@ func (l *Leaf) applyHubSigned(v bool) {
 	defer l.hubSignedSaveMu.Unlock()
 
 	l.pinMu.Lock()
-	clearing := !v && l.pins.hubSignedCfg
+	clearing := !v && (l.pins.hubSignedCfg || l.pins.hubSignedUnsaved)
 	l.pinMu.Unlock()
 	if clearing && l.cfg.HubSignedStored != nil {
 		stored, err := l.cfg.HubSignedStored()
@@ -203,18 +211,24 @@ func (l *Leaf) applyHubSigned(v bool) {
 	}
 
 	l.pinMu.Lock()
-	changed := v != l.pins.hubSignedCfg
+	dropped := !v && l.pins.hubSignedUnsaved
+	changed := v != l.pins.hubSignedCfg || dropped
 	if changed {
 		l.pins.hubSignedCfg = v
 		l.pins.hubSigned = v
 		l.pins.hubSignedUnsaved = false
 	}
 	l.pinMu.Unlock()
-	if !changed {
+	switch {
+	case dropped:
+		slog.Info("leaf: config does not record that the hub signs; dropping the record not yet stored",
+			"network", l.cfg.Network, "hub", l.cfg.HubURL)
+	case changed:
+		slog.Info("leaf: hub signing record changed in config",
+			"network", l.cfg.Network, "hub", l.cfg.HubURL, "hub_signed", v)
+	default:
 		return
 	}
-	slog.Info("leaf: hub signing record changed in config",
-		"network", l.cfg.Network, "hub", l.cfg.HubURL, "hub_signed", v)
 	if !v {
 		l.liftUnsignedPause()
 	}

@@ -41,7 +41,9 @@ type Config struct {
 	// HubSigned is unset, so the caller can store HubSigned and a restart
 	// cannot be used to accept unsigned replies again. It runs on the
 	// leaf's goroutine. An error means it was not stored; the leaf keeps
-	// enforcing it and calls OnHubSigned again at the next verified reply.
+	// enforcing it and calls OnHubSigned again at the next verified reply,
+	// unless UpdatePins meanwhile finds HubSigned still unset in the store,
+	// which drops the record.
 	OnHubSigned func() error
 	// HubSignedStored reports whether the caller's store holds HubSigned
 	// now. When UpdatePins is handed HubSigned false while the leaf
