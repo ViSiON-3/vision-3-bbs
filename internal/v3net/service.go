@@ -980,23 +980,32 @@ func (s *Service) applyPins(prev, leafCfgs []config.V3NetLeafConfig) {
 	for _, run := range s.leaves {
 		runs[leafKey{run.l.Network(), run.l.HubURL()}] = target{run.l, run.ctx}
 	}
-	s.leafCfgs = slices.Clone(leafCfgs)
 	s.mu.Unlock()
 
+	// The next reload's edits are told against the pins as checked, not this
+	// copy, which may be older than the file: otherwise an edit back to the
+	// copy's pin would look like no change.
+	leafCfgs = slices.Clone(leafCfgs)
 	prevByKey := cfgsByKey(prev)
-	for _, c := range leafCfgs {
+	for i := range leafCfgs {
+		c := &leafCfgs[i]
 		run, ok := runs[leafKey{c.Network, c.HubURL}]
 		if !ok {
 			continue // skipped at configure time (no resolvable boards)
 		}
-		coordEdited, hubEdited, hubSignedEdited := leafEdits(prevByKey[leafKey{c.Network, c.HubURL}], c)
-		run.l.UpdatePins(run.ctx, leaf.Pins{
+		coordEdited, hubEdited, hubSignedEdited := leafEdits(prevByKey[leafKey{c.Network, c.HubURL}], *c)
+		p := run.l.UpdatePins(run.ctx, leaf.Pins{
 			Coord: c.CoordinatorPubKey, Hub: c.HubPubKey,
 			PendingCoord: c.PendingCoordinatorPubKey, PendingHub: c.PendingHubPubKey,
 			HubSigned:   c.HubSigned,
 			CoordEdited: coordEdited, HubEdited: hubEdited, HubSignedEdited: hubSignedEdited,
 		})
+		c.CoordinatorPubKey, c.HubPubKey = p.Coord, p.Hub
+		c.PendingCoordinatorPubKey, c.PendingHubPubKey = p.PendingCoord, p.PendingHub
 	}
+	s.mu.Lock()
+	s.leafCfgs = leafCfgs
+	s.mu.Unlock()
 }
 
 // ReloadLeaves replaces the running leaf subscriptions with those in

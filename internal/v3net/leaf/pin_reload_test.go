@@ -180,7 +180,7 @@ func TestUpdatePinsConcurrentWithStores(t *testing.T) {
 	go func() {
 		defer close(done)
 		for i, k := range keys[1:] {
-			if !l.followHandovers(KeyCoordinator, k.PubKeyBase64(), hs[:i+1]) {
+			if !l.followHandovers(KeyCoordinator, k.PubKeyBase64(), hs[i:i+1]) {
 				t.Errorf("handover to key %d not followed: the pin moved back", i+1)
 				return
 			}

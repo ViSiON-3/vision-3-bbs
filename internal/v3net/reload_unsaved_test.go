@@ -334,3 +334,37 @@ func TestReloadOfCopyReadBeforeStore(t *testing.T) {
 		}
 	}
 }
+
+// After a late reload kept the pin the file held, a sysop's edit back to the
+// late copy's pin is still an edit, rebuilt or not (#817).
+func TestReloadEditBackToLateCopysPin(t *testing.T) {
+	const older, stored = "key-older", "key-stored"
+	for _, rebuild := range []bool{false, true} {
+		f := newUnsavedFixture(t)
+		f.cfgs[0].CoordinatorPubKey = older
+		copyOfFile := slices.Clone(f.cfgs)
+		f.cfgs[0].CoordinatorPubKey = stored
+		f.write()
+		f.reload()
+
+		if rebuild {
+			copyOfFile[1].Boards = []string{"GAMMA"}
+			f.cfgs[1].Boards = []string{"GAMMA"}
+			f.write()
+		}
+		if err := f.svc.ReloadLeaves(copyOfFile, f.mm, nil); err != nil {
+			t.Fatal(err)
+		}
+		f.leaf().RestoreUnsaved(leaf.UnsavedState{Coord: unsavedPin, CoordMovedFrom: stored})
+
+		f.cfgs[0].CoordinatorPubKey = older
+		f.write()
+		f.reload()
+		if got := f.leaf().PinnedKey(leaf.KeyCoordinator); got != older {
+			t.Errorf("rebuild=%v: pin %q, want the sysop's %q", rebuild, got, older)
+		}
+		if got := f.leaf().UnsavedState().Coord; got != "" {
+			t.Errorf("rebuild=%v: unsaved pin %q, want it replaced", rebuild, got)
+		}
+	}
+}

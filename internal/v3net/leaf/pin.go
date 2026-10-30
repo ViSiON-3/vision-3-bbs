@@ -180,21 +180,23 @@ func (p *keyPins) state(kind KeyKind) pinState {
 // p is a copy of the file read earlier, so a pin the leaf has stored since
 // would move back if it were believed. Each pin is therefore checked against
 // the store as it is now, and the store wins (see currentFilePin). A sysop's
-// edit is in the store too, even one back to an earlier key.
+// edit is in the store too, even one back to an earlier key. The pins returned
+// are the ones checked, which is what the next reload's edits are told against.
 //
 // When the coordinator pin changed and ctx is non-nil, the NAL is re-fetched in the background so an accepted key takes effect at
 // once; likewise /info is re-checked when the hub pin changed. Pass a nil
 // ctx for a leaf that is not running. Safe for concurrent use.
 //
 // HubSigned is applied by applyHubSigned.
-func (l *Leaf) UpdatePins(ctx context.Context, p Pins) {
+func (l *Leaf) UpdatePins(ctx context.Context, p Pins) Pins {
 	l.applyHubSigned(p.HubSigned, p.HubSignedEdited)
 
-	coordChanged := l.applyFilePin(KeyCoordinator, p.Coord, p.PendingCoord, p.CoordEdited)
-	hubChanged := l.applyFilePin(KeyHub, p.Hub, p.PendingHub, p.HubEdited)
+	var coordChanged, hubChanged bool
+	p.Coord, p.PendingCoord, coordChanged = l.applyFilePin(KeyCoordinator, p.Coord, p.PendingCoord, p.CoordEdited)
+	p.Hub, p.PendingHub, hubChanged = l.applyFilePin(KeyHub, p.Hub, p.PendingHub, p.HubEdited)
 
 	if ctx == nil || (!coordChanged && !hubChanged) {
-		return
+		return p
 	}
 	slog.Info("leaf: pinned keys changed in config",
 		"network", l.cfg.Network, "hub", l.cfg.HubURL, "coordinator", coordChanged, "hub_key", hubChanged)
@@ -210,14 +212,16 @@ func (l *Leaf) UpdatePins(ctx context.Context, p Pins) {
 			}
 		}
 	}()
+	return p
 }
 
 // applyFilePin installs the file's pin for kind and its pending key, as
-// UpdatePins describes, and reports whether the pin changed. It holds the save
+// UpdatePins describes, and returns the file's pin and pending key as checked
+// and whether the leaf's pin changed. It holds the save
 // lock for kind, so no store lands between the read of the store and acting on
 // it. A handover or first-use pin takes no save lock until it is stored, so if
 // the leaf's pin moved meanwhile the verdict is reached again.
-func (l *Leaf) applyFilePin(kind KeyKind, filePin, filePending string, edited bool) bool {
+func (l *Leaf) applyFilePin(kind KeyKind, filePin, filePending string, edited bool) (string, string, bool) {
 	mu := l.saveMu(kind)
 	mu.Lock()
 	defer mu.Unlock()
@@ -231,7 +235,7 @@ func (l *Leaf) applyFilePin(kind KeyKind, filePin, filePending string, edited bo
 			l.pinReadHook(kind)
 		}
 		if changed, settled := l.installFilePin(kind, before, pinNow, pendingNow, editedNow); settled {
-			return changed
+			return pinNow, pendingNow, changed
 		}
 	}
 }
