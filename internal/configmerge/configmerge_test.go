@@ -409,3 +409,42 @@ func TestSaveFileListKeys(t *testing.T) {
 		t.Errorf("saved = %+v", saved)
 	}
 }
+
+// Prepare adjusts the versions merged; the file as read is still what the
+// result is compared with before writing.
+func TestSaveFilePrepareHook(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "subs.json")
+	if err := os.WriteFile(path, []byte(`{"subs":[{"net":"a","hub":"h","key":"K"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	parse := func(b []byte) (subsDoc, error) {
+		var v subsDoc
+		return v, json.Unmarshal(b, &v)
+	}
+	f := File[subsDoc]{
+		Path:     path,
+		Parse:    parse,
+		Marshal:  func(v subsDoc) ([]byte, error) { return json.MarshalIndent(v, "", "  ") },
+		ListKeys: subKeys,
+		// Ours moved the sub to another hub, so theirs' key for the old
+		// one no longer matters.
+		Prepare: func(base, ours, theirs subsDoc) (subsDoc, subsDoc) {
+			return ours, base
+		},
+	}
+	base := subsDoc{Subs: []sub{{Net: "a", Hub: "h"}}}
+	saved, res, err := SaveFile(f, base, subsDoc{Subs: []sub{{Net: "a", Hub: "h2"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Conflicts) != 0 || len(saved.Subs) != 1 || saved.Subs[0].Hub != "h2" {
+		t.Errorf("saved = %+v, conflicts = %+v", saved, res.Conflicts)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disk, err := parse(data); err != nil || len(disk.Subs) != 1 || disk.Subs[0].Hub != "h2" {
+		t.Errorf("file = %s, want the merged result written", data)
+	}
+}

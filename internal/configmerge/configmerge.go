@@ -658,6 +658,14 @@ type File[T any] struct {
 	Parse func([]byte) (T, error)
 	// Marshal renders the file's contents.
 	Marshal func(T) ([]byte, error)
+	// Prepare, if set, adjusts ours and theirs before they are merged
+	// against base and returns them, for an edit the generic merge would
+	// misread: a list item whose identifying field changed reads as one
+	// item removed and another added, and an edit elsewhere to the removed
+	// one would keep it beside the new one. It must not modify the values
+	// it is passed in place; theirs as read is still what SaveFile compares
+	// the result with.
+	Prepare func(base, ours, theirs T) (T, T)
 	// Fix, if set, adjusts a merged result before it is written, for
 	// fields derived from an item's id that the generic merge cannot know
 	// about (a generated directory named after the id, say).
@@ -709,7 +717,11 @@ func SaveFile[T any](f File[T], base, ours T) (T, Result, error) {
 	if err != nil {
 		return zero, Result{}, fmt.Errorf("parsing %s: %w", f.Path, err)
 	}
-	merged, res, err := MergeTypedKeys(f.ListKeys, base, ours, theirs)
+	mergeOurs, mergeTheirs := ours, theirs
+	if f.Prepare != nil {
+		mergeOurs, mergeTheirs = f.Prepare(base, ours, theirs)
+	}
+	merged, res, err := MergeTypedKeys(f.ListKeys, base, mergeOurs, mergeTheirs)
 	if err != nil {
 		return zero, Result{}, fmt.Errorf("merging %s: %w", f.Path, err)
 	}
