@@ -193,7 +193,14 @@ func (l *Leaf) applyFilePin(kind KeyKind, filePin, filePending string, edited bo
 	l.pinMu.Lock()
 	defer l.pinMu.Unlock()
 	pin, pending, unsaved := l.pins.slots(kind)
-	if normalizeKey(filePin) == *pin || (!edited && *unsaved) {
+	if normalizeKey(filePin) == *pin {
+		// The file holds this pin, so it no longer moves from the one before,
+		// and a sysop's edit back to that one is an edit. The pin stays
+		// unsaved if it was: a pending key may still need clearing.
+		*l.pins.movedFrom(kind) = ""
+		return false
+	}
+	if !edited && *unsaved {
 		return false
 	}
 	*pin = normalizeKey(filePin)
