@@ -390,7 +390,7 @@ was offline through more handovers than it follows.
    key the operator gave you if they differ. Saving clears the offered key.
    Do the same for **Hub Key** if the hub key changed too.
 3. The running BBS picks up the edit to `v3net.json` by itself; no restart is
-   needed. An edit that only changes keys is applied to the running
+   needed, though it [waits for callers to log off](v3net/configuration.md#when-changes-to-v3netjson-apply). An edit that only changes keys is applied to the running
    subscription without restarting it, and the leaf re-fetches the NAL at
    once, so the new coordinator's area list takes effect straight away.
 
