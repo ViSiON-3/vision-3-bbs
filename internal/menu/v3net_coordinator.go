@@ -336,10 +336,6 @@ func runV3NetAreaManagers(c *cmdCtx, networks []string) (string, string, error) 
 		if nodeID == "" {
 			continue
 		}
-		if nodeID == row.area.ManagerNodeID {
-			status = fmt.Sprintf("|14%s is already the manager of %s.|07", nodeID, row.area.Tag)
-			continue
-		}
 		ctx, cancel = context.WithTimeout(context.Background(), v3netManageTimeout)
 		err = svc.SetAreaManager(ctx, row.network, row.area.Tag, nodeID)
 		cancel()

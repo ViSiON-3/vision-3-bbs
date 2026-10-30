@@ -54,7 +54,7 @@ func (h *Hub) handleSetAreaManager(w http.ResponseWriter, r *http.Request) {
 	}
 
 	found := false
-	if err := h.updateNALArea(network, tag, func(area *protocol.Area) {
+	if err := h.setNALAreaManager(network, tag, func(area *protocol.Area) {
 		found = true
 		area.ManagerNodeID = req.ManagerNodeID
 		area.ManagerPubKeyB64 = pubKey

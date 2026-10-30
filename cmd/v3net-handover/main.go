@@ -21,13 +21,16 @@
 //
 // It checks the signature on the reply to the post the same way. A reply that
 // does not verify proves nothing either way, so the tool reports the outcome
-// as unknown and says how to find out, and exits non-zero. An older hub does
-// not sign at all, and its status is taken as sent.
+// as unknown and says how to find out, and exits with status 3. An older hub
+// does not sign at all, and its status is taken as sent.
 //
 // -dry-run prints the signed handover, makes the same checks and reports what
 // a real run would do, without posting. A hub it cannot reach is not an error:
 // it says it could not check, so the handover can still be signed offline. A
 // check that would stop a real run exits non-zero.
+//
+// It exits 0 on success, 1 on a failure or refusal, 2 for flags it cannot parse,
+// and 3 for the unknown outcome above.
 //
 // Usage:
 //
@@ -142,10 +145,28 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if !publish(os.Stdout, os.Stderr, client, *hubURL, chain, body, sender, *authKeystore != "", late, hubKey, hubSigns) {
+	switch publish(os.Stdout, os.Stderr, client, *hubURL, chain, body, sender, *authKeystore != "", late, hubKey, hubSigns) {
+	case postSucceeded:
+	case postUnknown:
+		os.Exit(exitUnknownOutcome)
+	default:
 		os.Exit(1)
 	}
 }
+
+// exitUnknownOutcome is the exit status when the post may or may not have
+// taken effect, so a script does not take a post that worked for one that
+// failed. It is not 2, which the flag package exits with for a bad flag.
+const exitUnknownOutcome = 3
+
+// postOutcome is what publish found out about a post.
+type postOutcome int
+
+const (
+	postFailed    postOutcome = iota // it failed, or the hub refused it
+	postSucceeded                    // the hub took it, and did what was asked
+	postUnknown                      // nothing shows whether it took effect
+)
 
 // dryRunTimeout bounds each request of a dry run, which an operator may run
 // with no hub in reach.
@@ -230,23 +251,23 @@ func reportUnknownOutcome(errOut io.Writer, network string) {
 }
 
 // publish POSTs the handover chain (body is its JSON) to the hub as sender
-// and reports the outcome to out and errOut, returning whether it
-// succeeded. For a late handover, success means the hub serves the NAL
+// and reports the outcome to out and errOut, also returning it. For a late
+// handover, success means the hub serves the NAL
 // signed by the new key with a chain from the outgoing key, checked by
 // fetching it, not just a 200.
 //
 // The reply is checked as fetchHistory checks its own: under hubKey, with a
 // nonce fresh for this request. One that fails, or one with no signature from
 // a hub known to sign (hubSigns), says nothing about the outcome, since the
-// post went out before it came back, so publish returns false without calling
-// it a success or a refusal. So does no reply at all. An unsigned reply from a
+// post went out before it came back, so publish returns postUnknown without
+// calling it a success or a refusal. So does no reply at all. An unsigned reply from a
 // hub not known to sign is an older hub's, and its status is taken as sent.
-func publish(out, errOut io.Writer, client *http.Client, hubURL string, chain []protocol.CoordHandover, body []byte, sender *keystore.Keystore, authSet, late bool, hubKey string, hubSigns bool) bool {
+func publish(out, errOut io.Writer, client *http.Client, hubURL string, chain []protocol.CoordHandover, body []byte, sender *keystore.Keystore, authSet, late bool, hubKey string, hubSigns bool) postOutcome {
 	network := chain[0].Network
 	pub, err := decodeHubKey(hubKey)
 	if err != nil {
 		_, _ = fmt.Fprintln(errOut, err)
-		return false
+		return postFailed
 	}
 	path := fmt.Sprintf("/v3net/v1/%s/nal/handover", network)
 	bodyHash := sha256.Sum256(body)
@@ -254,17 +275,17 @@ func publish(out, errOut io.Writer, client *http.Client, hubURL string, chain []
 	sig, err := sender.Sign(http.MethodPost, path, dateUTC, hex.EncodeToString(bodyHash[:]))
 	if err != nil {
 		_, _ = fmt.Fprintf(errOut, "sign request: %v\n", err)
-		return false
+		return postFailed
 	}
 	nonce, err := protocol.NewNonce()
 	if err != nil {
 		_, _ = fmt.Fprintf(errOut, "make request nonce: %v\n", err)
-		return false
+		return postFailed
 	}
 	req, err := http.NewRequest(http.MethodPost, hubURL+path, bytes.NewReader(body))
 	if err != nil {
 		_, _ = fmt.Fprintf(errOut, "create request: %v\n", err)
-		return false
+		return postFailed
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Date", dateUTC)
@@ -276,7 +297,7 @@ func publish(out, errOut io.Writer, client *http.Client, hubURL string, chain []
 	if err != nil {
 		_, _ = fmt.Fprintf(errOut, "POST handover: %v\n", err)
 		reportUnknownOutcome(errOut, network)
-		return false
+		return postUnknown
 	}
 	defer func() { _ = resp.Body.Close() }() // response fully consumed below
 
@@ -299,7 +320,7 @@ func publish(out, errOut io.Writer, client *http.Client, hubURL string, chain []
 		_, _ = fmt.Fprintf(errOut, "Response (not verified): %d %q\n", resp.StatusCode, strings.TrimSpace(string(respBody)))
 		_, _ = fmt.Fprintf(errOut, "The hub's reply to the post cannot be trusted: %s (check -hub, and any proxy in front of the hub).\n", unverified)
 		reportUnknownOutcome(errOut, network)
-		return false
+		return postUnknown
 	}
 	_, _ = fmt.Fprintf(out, "Response: %d %s\n", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	if respSig == "" {
@@ -309,26 +330,26 @@ func publish(out, errOut io.Writer, client *http.Client, hubURL string, chain []
 	case resp.StatusCode == http.StatusUnauthorized && !authSet:
 		_, _ = fmt.Fprintln(errOut, "The hub did not accept the request from the outgoing key's node; if its registration")
 		_, _ = fmt.Fprintln(errOut, "was deleted, send it as another subscribed node with -auth-keystore (the hub's current key will do).")
-		return false
+		return postFailed
 	case resp.StatusCode == http.StatusInternalServerError && late:
 		_, _ = fmt.Fprintln(errOut, "The hub holds the handover but could not sign the NAL with the new key, so subscribers")
 		_, _ = fmt.Fprintln(errOut, "are still paused. Check the hub log, fix the cause, then run this command again to retry.")
-		return false
+		return postFailed
 	case resp.StatusCode != http.StatusOK:
-		return false
+		return postFailed
 	}
 	if !late {
 		_, _ = fmt.Fprintln(out, "Handover published. Restart the hub with the new key to sign the NAL with it.")
-		return true
+		return postSucceeded
 	}
 	if err := checkServedNAL(client, hubURL, network, chain[0].OldKeyB64, chain[len(chain)-1].NewKeyB64); err != nil {
 		_, _ = fmt.Fprintf(errOut, "The hub accepted the handover, but %v.\n", err)
 		_, _ = fmt.Fprintln(errOut, "Subscribers may still be paused. Check the hub log, then run this command again to retry.")
-		return false
+		return postFailed
 	}
 	_, _ = fmt.Fprintln(out, "Handover published. The hub now serves the NAL signed by the new key with the handover;")
 	_, _ = fmt.Fprintln(out, "subscribers move their pins at their next check (paused ones within five minutes).")
-	return true
+	return postSucceeded
 }
 
 // checkServedNAL fetches network's NAL and returns an error unless it

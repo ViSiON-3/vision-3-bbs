@@ -291,7 +291,7 @@ func testLateHandoverThroughHub(t *testing.T, resign bool) {
 			ManagerNodeID: newKS.NodeID(), ManagerPubKeyB64: newKS.PubKeyBase64(),
 			Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen},
 			Policy: protocol.AreaPolicy{MaxBodyBytes: protocol.MaxBodyBytes}})
-		if err := h.SignNAL(n); err != nil {
+		if err := h.SignNAL(n, nil); err != nil {
 			t.Fatalf("SignNAL after the switch: %v", err)
 		}
 		if err := h.NALStore().Put("testnet", n); err != nil {
@@ -410,7 +410,7 @@ func TestLateHandoverChainThroughHubMovesBothPins(t *testing.T) {
 			ManagerNodeID: ks.NodeID(), ManagerPubKeyB64: ks.PubKeyBase64(),
 			Access: protocol.AreaAccess{Mode: protocol.AccessModeOpen},
 			Policy: protocol.AreaPolicy{MaxBodyBytes: protocol.MaxBodyBytes}})
-		if err := h.SignNAL(n); err != nil {
+		if err := h.SignNAL(n, nil); err != nil {
 			t.Fatalf("SignNAL after the switch: %v", err)
 		}
 		if err := h.NALStore().Put("testnet", n); err != nil {

@@ -227,6 +227,14 @@ func TestCoordinatorPanelReassignsAreaManager(t *testing.T) {
 		t.Errorf("expected the confirmation, got %q", out)
 	}
 
+	// Naming the current manager still reaches the hub: during a failed adopt
+	// that choice is what keeps the area from moving to the hub (see SignNAL).
+	fake = newManageFake(true)
+	runManageScreen(t, fake, "M\rC 2\rSOMEONE\rq\rq\r", runV3NetCoordinator)
+	if len(fake.calls) != 1 || fake.calls[0] != "set-manager testnet test.theirs SOMEONE" {
+		t.Errorf("hub calls %v, want the current manager sent to the hub", fake.calls)
+	}
+
 	fake = newManageFake(true)
 	fake.managerErr = errors.New("manager must be an active subscriber of this network: NOPE")
 	out = runManageScreen(t, fake, "M\rC 1\rNOPE\rq\rq\r", runV3NetCoordinator)

@@ -296,10 +296,17 @@ func TestPublishVerifiesResponse(t *testing.T) {
 			}))
 			defer ts.Close()
 			var out, errOut bytes.Buffer
-			ok := publish(&out, &errOut, ts.Client(), ts.URL, chain, body, oldKS, false, false, oldKS.PubKeyBase64(), tc.hubSigns)
+			got := publish(&out, &errOut, ts.Client(), ts.URL, chain, body, oldKS, false, false, oldKS.PubKeyBase64(), tc.hubSigns)
 			all := out.String() + errOut.String()
-			if ok != tc.ok {
-				t.Errorf("publish = %v, want %v; output %q", ok, tc.ok, all)
+			want := postFailed
+			switch {
+			case tc.ok:
+				want = postSucceeded
+			case tc.unknown:
+				want = postUnknown
+			}
+			if got != want {
+				t.Errorf("publish = %v, want %v; output %q", got, want, all)
 			}
 			if !strings.Contains(all, tc.want) {
 				t.Errorf("output %q does not contain %q", all, tc.want)
@@ -335,7 +342,7 @@ func TestPublishVerifiesRealHub(t *testing.T) {
 		chain := chainFrom(t, b.PubKeyBase64(), a)
 		body, _ := chainBody(chain)
 		var out, errOut bytes.Buffer
-		if !publish(&out, &errOut, ts.Client(), ts.URL, chain, body, a, false, false, a.PubKeyBase64(), true) {
+		if publish(&out, &errOut, ts.Client(), ts.URL, chain, body, a, false, false, a.PubKeyBase64(), true) != postSucceeded {
 			t.Fatalf("publish failed: %s%s", out.String(), errOut.String())
 		}
 		if strings.Contains(out.String(), "did not sign") {
@@ -366,7 +373,7 @@ func TestPublishVerifiesRealHub(t *testing.T) {
 
 		strip.Store(true)
 		var out, errOut bytes.Buffer
-		if publish(&out, &errOut, ts.Client(), ts.URL, chain, body, a, false, true, to, true) {
+		if publish(&out, &errOut, ts.Client(), ts.URL, chain, body, a, false, true, to, true) != postUnknown {
 			t.Fatalf("publish believed a forged status: %s%s", out.String(), errOut.String())
 		}
 		if !strings.Contains(errOut.String(), "may or may not") {
