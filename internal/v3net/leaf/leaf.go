@@ -51,6 +51,9 @@ type Leaf struct {
 	// hubSignedSaveMu orders storing hubSigned against confirming a clear
 	// of it (noteHubSigned, applyHubSigned).
 	hubSignedSaveMu sync.Mutex
+	// hubSignedReadHook, if set (tests only), runs between applyHubSigned's
+	// first read of the record and its update.
+	hubSignedReadHook func()
 
 	// refused remembers which refused messages were already logged at warn.
 	refused refusedLog

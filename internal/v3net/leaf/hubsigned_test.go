@@ -193,11 +193,10 @@ func TestHubSignedSurvivesRestart(t *testing.T) {
 	}
 }
 
-// A record that could not be stored is still enforced, offered to
-// OnHubSigned again at the next verified reply, and not undone by a config
-// reload that predates it.
+// A record that could not be stored is still enforced, and offered to
+// OnHubSigned again at the next verified reply.
 func TestHubSignedStoreRetried(t *testing.T) {
-	l, _, p, hubKS := proxiedLeaf(t, (*keystore.Keystore).PubKeyBase64)
+	l, _, p, _ := proxiedLeaf(t, (*keystore.Keystore).PubKeyBase64)
 	rec := &signedRecorder{}
 	rec.attach(l)
 	rec.fail.Store(true)
@@ -208,10 +207,6 @@ func TestHubSignedStoreRetried(t *testing.T) {
 	}
 	if !l.HubSigned() || rec.stored.Load() {
 		t.Fatalf("hubSigned=%v stored=%v; want enforced but not stored", l.HubSigned(), rec.stored.Load())
-	}
-	l.UpdatePins(ctx, Pins{Hub: hubKS.PubKeyBase64()})
-	if !l.HubSigned() {
-		t.Fatal("a reload of the config as it was cleared a record not yet stored")
 	}
 	p.stripSig.Store(true)
 	if _, err := l.Poll(ctx); !errors.Is(err, ErrHubUnsigned) {
@@ -440,5 +435,177 @@ func TestStaleReloadDoesNotClearHubSigned(t *testing.T) {
 	l.UpdatePins(ctx, Pins{Hub: hubKS.PubKeyBase64(), HubSigned: false})
 	if l.HubSigned() {
 		t.Error("the sysop's clear did not apply")
+	}
+}
+
+// fileRecorder stands in for v3net.json behind OnHubSigned and
+// HubSignedStored. While fail is set a store reports a failure and leaves
+// the file as it is.
+type fileRecorder struct {
+	calls atomic.Int32
+	fail  atomic.Bool
+	file  atomic.Bool // hubSigned as the file holds it
+}
+
+func (r *fileRecorder) attach(l *Leaf) {
+	l.cfg.OnHubSigned = func() error {
+		r.calls.Add(1)
+		if r.fail.Load() {
+			return errors.New("disk full")
+		}
+		r.file.Store(true)
+		return nil
+	}
+	l.cfg.HubSignedStored = func() (bool, error) { return r.file.Load(), nil }
+}
+
+// The sysop clearing hubSigned while the leaf's store of it is waiting to be
+// retried drops the record: the retry is not made, so the clear is not
+// undone, and unsigned replies are accepted again. Once the hub signs again
+// the leaf records it again and stores it.
+func TestHubSignedClearCancelsRetry(t *testing.T) {
+	l, _, p, hubKS := proxiedLeaf(t, (*keystore.Keystore).PubKeyBase64)
+	rec := &fileRecorder{}
+	rec.attach(l)
+	rec.fail.Store(true)
+	ctx := context.Background()
+
+	if _, err := l.Poll(ctx); err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+	if !l.HubSigned() || rec.file.Load() {
+		t.Fatalf("hubSigned=%v file=%v; want enforced but not stored", l.HubSigned(), rec.file.Load())
+	}
+	p.stripSig.Store(true) // the hub went back to a version that does not sign
+	if _, err := l.Poll(ctx); !errors.Is(err, ErrHubUnsigned) {
+		t.Fatalf("Poll of the rolled-back hub = %v, want ErrHubUnsigned", err)
+	}
+
+	rec.fail.Store(false) // a retry now would store it
+	logs := captureLogs(t)
+	l.UpdatePins(ctx, Pins{Hub: hubKS.PubKeyBase64(), HubSigned: false})
+	if l.HubSigned() {
+		t.Fatal("the sysop's clear did not drop the record not yet stored")
+	}
+	if !strings.Contains(logs.String(), "dropping the record not yet stored") {
+		t.Errorf("no log of the dropped record:\n%s", logs)
+	}
+	for range 2 {
+		if _, err := l.Poll(ctx); err != nil {
+			t.Fatalf("Poll after the sysop cleared hubSigned: %v", err)
+		}
+	}
+	if l.HubPaused() || l.HubSigned() || rec.file.Load() || rec.calls.Load() != 1 {
+		t.Fatalf("paused=%v hubSigned=%v file=%v stores=%d; want unsigned replies accepted and no retried store",
+			l.HubPaused(), l.HubSigned(), rec.file.Load(), rec.calls.Load())
+	}
+
+	p.stripSig.Store(false) // the hub is upgraded again
+	if _, err := l.Poll(ctx); err != nil {
+		t.Fatalf("Poll after the hub signs again: %v", err)
+	}
+	if !l.HubSigned() || !rec.file.Load() || rec.calls.Load() != 2 {
+		t.Errorf("hubSigned=%v file=%v stores=%d; want the hub recorded and stored again",
+			l.HubSigned(), rec.file.Load(), rec.calls.Load())
+	}
+}
+
+// A reload that read the config while a store of hubSigned was waiting to
+// be retried, and is applied after the retry succeeded, does not drop the
+// record: the file then holds it.
+func TestStaleReloadKeepsRetriedHubSigned(t *testing.T) {
+	l, _, p, hubKS := proxiedLeaf(t, (*keystore.Keystore).PubKeyBase64)
+	rec := &fileRecorder{}
+	rec.attach(l)
+	rec.fail.Store(true)
+	ctx := context.Background()
+
+	if _, err := l.Poll(ctx); err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+	stale := Pins{Hub: hubKS.PubKeyBase64(), HubSigned: rec.file.Load()} // read while the store is pending
+	rec.fail.Store(false)
+	if _, err := l.Poll(ctx); err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+	if !rec.file.Load() {
+		t.Fatal("retried store of hubSigned did not succeed")
+	}
+	l.UpdatePins(ctx, stale)
+	if !l.HubSigned() {
+		t.Fatal("a reload read before the retried store dropped hubSigned")
+	}
+	p.stripSig.Store(true)
+	if _, err := l.Poll(ctx); !errors.Is(err, ErrHubUnsigned) {
+		t.Errorf("Poll with the signature stripped = %v, want ErrHubUnsigned", err)
+	}
+}
+
+// A record the leaf sets while a reload without it is being applied, after
+// the reload's first read, was not checked against the store, so the reload
+// leaves it for noteHubSigned to store rather than dropping it.
+func TestReloadKeepsHubSignedSetDuringIt(t *testing.T) {
+	l, _, _, hubKS := proxiedLeaf(t, (*keystore.Keystore).PubKeyBase64)
+	rec := &fileRecorder{}
+	rec.attach(l)
+	noted := make(chan struct{})
+	l.hubSignedReadHook = func() {
+		go func() { l.noteHubSigned(); close(noted) }()
+		// noteHubSigned sets the record, then waits for the lock this
+		// reload holds before storing it.
+		waitFor(t, "the record to be set", l.HubSigned)
+	}
+
+	l.UpdatePins(context.Background(), Pins{Hub: hubKS.PubKeyBase64(), HubSigned: false})
+	<-noted
+	if !l.HubSigned() || !rec.file.Load() || rec.calls.Load() != 1 {
+		t.Errorf("hubSigned=%v file=%v stores=%d; want the record set during the reload kept and stored",
+			l.HubSigned(), rec.file.Load(), rec.calls.Load())
+	}
+}
+
+// The sysop setting hubSigned by hand while the leaf's store of it is
+// waiting to be retried leaves it set, and the retry is no longer needed.
+func TestSysopSetsHubSignedWhileStorePending(t *testing.T) {
+	l, _, _, hubKS := proxiedLeaf(t, (*keystore.Keystore).PubKeyBase64)
+	rec := &fileRecorder{}
+	rec.attach(l)
+	rec.fail.Store(true)
+	ctx := context.Background()
+
+	if _, err := l.Poll(ctx); err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+	rec.file.Store(true) // the sysop sets Hub Signs
+	l.UpdatePins(ctx, Pins{Hub: hubKS.PubKeyBase64(), HubSigned: true})
+	if _, err := l.Poll(ctx); err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+	if !l.HubSigned() || rec.calls.Load() != 1 {
+		t.Errorf("hubSigned=%v stores=%d; want it kept and not stored again", l.HubSigned(), rec.calls.Load())
+	}
+}
+
+// A change to hubSigned alone, while syncing is paused over the hub's key,
+// is logged as that, not as a change of the pinned keys.
+func TestHubSignedOnlyChangeLog(t *testing.T) {
+	oldKey := newCoordKey(t).PubKeyBase64()
+	l, _, _, _ := proxiedLeaf(t, func(*keystore.Keystore) string { return oldKey })
+	l.pins.hubSigned, l.pins.hubSignedCfg = true, true
+	ctx := context.Background()
+	if _, err := l.Poll(ctx); err == nil || !l.HubPaused() {
+		t.Fatalf("Poll = %v, paused=%v; want a pause over the hub's key", err, l.HubPaused())
+	}
+
+	for _, signed := range []bool{false, true} {
+		logs := captureLogs(t)
+		l.UpdatePins(ctx, Pins{Hub: oldKey, PendingHub: l.PendingKey(KeyHub), HubSigned: signed})
+		out := logs.String()
+		if !strings.Contains(out, "hub signing record changed in config") {
+			t.Errorf("hubSigned=%v: no log of the change:\n%s", signed, out)
+		}
+		if strings.Contains(out, "pinned keys changed") {
+			t.Errorf("hubSigned=%v: logged as a change of the pinned keys:\n%s", signed, out)
+		}
 	}
 }

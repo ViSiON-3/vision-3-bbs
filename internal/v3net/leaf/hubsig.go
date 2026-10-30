@@ -252,7 +252,8 @@ func (l *Leaf) hubUnsigned(ctx context.Context, path, why string) error {
 
 // noteHubSigned records that a hub signature verified. The first time, it
 // sets hubSigned and hands it to OnHubSigned to store; a store that failed
-// is retried at each later verified reply until it succeeds.
+// is retried at each later verified reply until it succeeds, or until a
+// reload drops the record (see applyHubSigned).
 func (l *Leaf) noteHubSigned() {
 	l.unsignedRefusedLogged.Store(false)
 	l.pinMu.Lock()

@@ -494,3 +494,66 @@ func TestServerConfigReloadUpdatesBoardNameFallback(t *testing.T) {
 		t.Errorf("fallback origin = %q after malformed reload, want New Board (unchanged)", got)
 	}
 }
+
+// TestV3NetReloadOnUnchangedHubSignsSave drives the real v3net.json target
+// through what a v3config save does when the sysop sets Hub Signs to the N
+// the file already holds: the file is not rewritten, its timestamp is moved
+// (config.TouchConfigFile) and the save sentinel is touched. That reloads
+// the leaves, so a leaf enforcing a record it could not write drops it. A
+// save that does not move v3net.json's timestamp does not reload them.
+func TestV3NetReloadOnUnchangedHubSignsSave(t *testing.T) {
+	configDir := t.TempDir()
+	path := filepath.Join(configDir, "v3net.json")
+	if err := config.SaveV3NetConfig(configDir, config.V3NetConfig{
+		Leaves: []config.V3NetLeafConfig{{HubURL: "http://hub.example", Network: "testnet"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+	reloads := 0
+	e := &menu.MenuExecutor{
+		SessionRegistry: session.NewSessionRegistry(),
+		V3NetReload:     func() error { reloads++; return nil },
+	}
+	cw := &ConfigWatcher{
+		rootConfigPath:    configDir,
+		menuExecutor:      e,
+		interval:          defaultPollInterval,
+		sentinelPath:      config.ReloadSentinelPath(configDir),
+		forceSentinelPath: config.ReloadForceSentinelPath(configDir),
+		mtimes:            make(map[string]time.Time),
+		pending:           make(map[string]bool),
+		stop:              make(chan struct{}),
+		done:              make(chan struct{}),
+	}
+	cw.deferredTargets = []deferredTarget{{
+		name:     "v3net.json",
+		path:     path,
+		validate: cw.validateV3Net,
+		apply:    cw.applyV3Net,
+	}}
+	cw.seed()
+
+	if err := config.TouchReloadSentinel(configDir); err != nil {
+		t.Fatal(err)
+	}
+	cw.poll()
+	if reloads != 0 {
+		t.Fatalf("a save that left v3net.json alone reloaded the leaves %d times", reloads)
+	}
+
+	if err := config.TouchConfigFile(path); err != nil {
+		t.Fatal(err)
+	}
+	ts := time.Now().Add(time.Second)
+	if err := os.Chtimes(config.ReloadSentinelPath(configDir), ts, ts); err != nil {
+		t.Fatal(err)
+	}
+	cw.poll()
+	if reloads != 1 {
+		t.Errorf("leaves reloaded %d times after a Hub Signs save, want 1", reloads)
+	}
+}

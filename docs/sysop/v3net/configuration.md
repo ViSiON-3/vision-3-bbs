@@ -438,6 +438,17 @@ picks the change up without a restart and accepts the hub's unsigned
 replies again. When the hub signs again, the leaf notices and sets **Hub
 Signs** back on its own.
 
+If the leaf could not write **Hub Signs** to `v3net.json` (it logs `leaf:
+could not record that the hub signs; will retry at the next reply`), it
+still refuses unsigned replies while it runs, and the field shows **N**.
+Set **Hub Signs** to **N** anyway and save: the file is unchanged, but the
+save still makes the running BBS re-read `v3net.json`. If you edit the file
+by hand, saving it (or `touch configs/v3net.json`) does the same. The leaf
+then drops the record and does not write it later unless the hub signs
+again (it logs `leaf: config does not record that the hub signs; dropping
+the record not yet stored`). Any other change saved to `v3net.json` while
+the write is failing drops it too, as a restart would.
+
 ---
 
 ## Requiring signed messages
