@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"log/slog"
 	"net"
 	"strings"
 	"testing"
@@ -17,6 +16,12 @@ import (
 
 // chatIdleUnit stands in for a minute of idle timeout in these tests.
 const chatIdleUnit = 50 * time.Millisecond
+
+// chatStartWait bounds waits that span chat starting up, which opens its
+// SQLite database. A slow Windows runner has taken longer than 5s to get
+// through that (#792, #814). The waits poll, so this only matters on such a
+// runner; a chat that never ends still fails, showing its screen.
+const chatStartWait = 30 * time.Second
 
 // chatIdleRun is a chat session started under the menus' idle timeout, as a
 // caller reaches it from a menu.
@@ -128,10 +133,9 @@ func TestChatIdleRoomTrafficKeepsCallerOn(t *testing.T) {
 	// The menu loop's notice logs chat's limit, the one that ran out, not
 	// the menus' that is back in place by then (#701).
 	var logged bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	restore := captureSlog(&logged, nil)
 	env.e.handleSessionTimeout(run.s, term.NewTerminal(run.s, ""), env.outputMode, 1, 80, 24)
-	slog.SetDefault(prev)
+	restore()
 	if !strings.Contains(logged.String(), `msg="idle timeout, disconnecting"`) || !strings.Contains(logged.String(), "minutes=10") {
 		t.Errorf("idle log = %q, want the chat limit of 10", logged.String())
 	}
@@ -142,8 +146,8 @@ func TestChatIdleRoomTrafficKeepsCallerOn(t *testing.T) {
 func TestChatIdleTimeoutSetting(t *testing.T) {
 	env := newMenuEnv(t)
 	run := startChatIdle(env, env.caller, 2, 0)
-	if !run.ended(5 * time.Second) {
-		t.Fatal("silent caller not timed out under the session limit")
+	if !run.ended(chatStartWait) {
+		t.Fatalf("silent caller not timed out under the session limit; screen: %q", run.s.output())
 	}
 	if !errors.Is(run.err, editor.ErrIdleTimeout) {
 		t.Errorf("runChat err = %v, want editor.ErrIdleTimeout", run.err)
@@ -175,7 +179,7 @@ func TestChatIdleTimeoutSetting(t *testing.T) {
 // waitChatOutput waits until s's screen text contains marker.
 func waitChatOutput(t *testing.T, s *chatLiveSession, marker string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(chatStartWait)
 	for !strings.Contains(testAnsiEscape.ReplaceAllString(s.output(), ""), marker) {
 		if time.Now().After(deadline) {
 			t.Fatalf("screen never showed %q: %q", marker, s.output())
@@ -191,8 +195,8 @@ func TestChatIdleAtPicker(t *testing.T) {
 		env := newMenuEnv(t)
 		n := chatcovFakeNet(env)
 		run := startChatIdle(env, env.caller, 1, 0)
-		if !run.ended(5 * time.Second) {
-			t.Fatal("caller idle at the network picker not timed out")
+		if !run.ended(chatStartWait) {
+			t.Fatalf("caller idle at the network picker not timed out; screen: %q", run.s.output())
 		}
 		if !errors.Is(run.err, editor.ErrIdleTimeout) || run.next != "LOGOFF" {
 			t.Errorf("runChat = (%q, %v), want LOGOFF with editor.ErrIdleTimeout", run.next, run.err)
@@ -209,8 +213,8 @@ func TestChatIdleAtPicker(t *testing.T) {
 		}
 		run := startChatIdle(env, env.caller, 1, 0)
 		waitChatOutput(t, run.s, "Select room")
-		if !run.ended(5 * time.Second) {
-			t.Fatal("caller idle at the room picker not timed out")
+		if !run.ended(chatStartWait) {
+			t.Fatalf("caller idle at the room picker not timed out; screen: %q", run.s.output())
 		}
 		if !errors.Is(run.err, editor.ErrIdleTimeout) || run.next != "LOGOFF" {
 			t.Errorf("runChat = (%q, %v), want LOGOFF with editor.ErrIdleTimeout", run.next, run.err)

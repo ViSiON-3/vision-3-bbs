@@ -157,9 +157,7 @@ func TestNestingExactlyAtTheCapExpandsWithoutWarning(t *testing.T) {
 	e := promptExecutor(t, files)
 
 	var logged bytes.Buffer
-	restore := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	defer slog.SetDefault(restore)
+	defer captureSlog(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})()
 
 	got := visibleText(e.renderPromptText("%%n1.ans%%", nil, 0, 0, 1))
 

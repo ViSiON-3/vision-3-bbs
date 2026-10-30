@@ -166,9 +166,7 @@ func newsWarningFor(t *testing.T, newsItems []NewsItem, seq []config.LoginItem) 
 	}
 
 	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	defer slog.SetDefault(prev)
+	defer captureSlog(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})()
 
 	WarnIfNewsUnwired(dataPath, seq)
 	return buf.String()
