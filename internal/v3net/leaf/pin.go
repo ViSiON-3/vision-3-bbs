@@ -188,7 +188,10 @@ func (l *Leaf) UpdatePins(ctx context.Context, p Pins) {
 // hubSigned after a hub rollback would be undone by the retried store. The
 // leaf cannot tell that from an edit elsewhere in the file, but either way
 // the store holds what a restart would use. A later verified reply records
-// it again, since the hub then signs.
+// it again, since the hub then signs. Only a record the first read saw is
+// dropped: noteHubSigned can set one between the two reads, before it
+// waits for the lock to store it, and that one was not checked against the
+// store, so it is left for noteHubSigned.
 //
 // Once the record is cleared, with requireSignedHub off, a pause caused
 // only by unsigned replies lifts at once, even for a hub whose /info
@@ -200,6 +203,9 @@ func (l *Leaf) applyHubSigned(v bool) {
 	l.pinMu.Lock()
 	clearing := !v && (l.pins.hubSignedCfg || l.pins.hubSignedUnsaved)
 	l.pinMu.Unlock()
+	if l.hubSignedReadHook != nil {
+		l.hubSignedReadHook()
+	}
 	if clearing && l.cfg.HubSignedStored != nil {
 		stored, err := l.cfg.HubSignedStored()
 		if err != nil {
@@ -211,7 +217,7 @@ func (l *Leaf) applyHubSigned(v bool) {
 	}
 
 	l.pinMu.Lock()
-	dropped := !v && l.pins.hubSignedUnsaved
+	dropped := clearing && !v && l.pins.hubSignedUnsaved
 	changed := v != l.pins.hubSignedCfg || dropped
 	if changed {
 		l.pins.hubSignedCfg = v

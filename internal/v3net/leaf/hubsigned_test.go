@@ -541,6 +541,29 @@ func TestStaleReloadKeepsRetriedHubSigned(t *testing.T) {
 	}
 }
 
+// A record the leaf sets while a reload without it is being applied, after
+// the reload's first read, was not checked against the store, so the reload
+// leaves it for noteHubSigned to store rather than dropping it.
+func TestReloadKeepsHubSignedSetDuringIt(t *testing.T) {
+	l, _, _, hubKS := proxiedLeaf(t, (*keystore.Keystore).PubKeyBase64)
+	rec := &fileRecorder{}
+	rec.attach(l)
+	noted := make(chan struct{})
+	l.hubSignedReadHook = func() {
+		go func() { l.noteHubSigned(); close(noted) }()
+		// noteHubSigned sets the record, then waits for the lock this
+		// reload holds before storing it.
+		waitFor(t, "the record to be set", l.HubSigned)
+	}
+
+	l.UpdatePins(context.Background(), Pins{Hub: hubKS.PubKeyBase64(), HubSigned: false})
+	<-noted
+	if !l.HubSigned() || !rec.file.Load() || rec.calls.Load() != 1 {
+		t.Errorf("hubSigned=%v file=%v stores=%d; want the record set during the reload kept and stored",
+			l.HubSigned(), rec.file.Load(), rec.calls.Load())
+	}
+}
+
 // The sysop setting hubSigned by hand while the leaf's store of it is
 // waiting to be retried leaves it set, and the retry is no longer needed.
 func TestSysopSetsHubSignedWhileStorePending(t *testing.T) {
