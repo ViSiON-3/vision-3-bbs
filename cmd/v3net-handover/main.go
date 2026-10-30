@@ -19,6 +19,16 @@
 // the key the operator named for the hub. A hub without the endpoint is not
 // checked: the tool says so and posts, and the hub's own checks still apply.
 //
+// It checks the signature on the reply to the post the same way. A reply that
+// does not verify proves nothing either way, so the tool reports the outcome
+// as unknown and says how to find out, and exits non-zero. An older hub does
+// not sign at all, and its status is taken as sent.
+//
+// -dry-run prints the signed handover, makes the same checks and reports what
+// a real run would do, without posting. A hub it cannot reach is not an error:
+// it says it could not check, so the handover can still be signed offline. A
+// check that would stop a real run exits non-zero.
+//
 // Usage:
 //
 //	go run ./cmd/v3net-handover -keystore data/v3net.key -hub http://localhost:8765 -network felonynet -new-key <base64 public key>
@@ -57,7 +67,7 @@ func main() {
 	authKeystore := flag.String("auth-keystore", "", "path to the v3net.key of the subscribed node to send the request as (default: -keystore)")
 	via := flag.String("via", "", "comma-separated paths to the v3net.key of each key the hub ran between -keystore's and the new key, oldest first")
 	omitLost := flag.Bool("omit-lost-keys", false, "post a chain that leaves out keys the hub recorded, because their keystores are lost; subscribers still on those keys re-pin by hand")
-	dryRun := flag.Bool("dry-run", false, "print the signed handover instead of sending it")
+	dryRun := flag.Bool("dry-run", false, "print the signed handover and check it against the hub, if it can be reached, instead of sending it")
 	flag.Parse()
 
 	if *keystorePath == "" || *network == "" || (*newKey == "") == (*newKeystore == "") {
@@ -91,6 +101,21 @@ func main() {
 	}
 	if *dryRun {
 		fmt.Println(string(body))
+	}
+
+	// The handover's own signature is what the hub checks; the request only
+	// has to come from a node subscribed to the network. That is the old
+	// key's node unless its registration was deleted, when the hub's current
+	// key, which the hub registers itself, serves instead.
+	sender := signers[0]
+	if *authKeystore != "" {
+		sender = loadKeystore(*authKeystore)
+	}
+	if *dryRun {
+		client := &http.Client{Timeout: dryRunTimeout}
+		if !dryRunCheck(os.Stdout, os.Stderr, client, *hubURL, chain, sender, *omitLost) {
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -106,28 +131,29 @@ func main() {
 		fmt.Println("and signs the NAL with the new key, so subscribers follow without re-pinning.")
 	}
 
-	// The handover's own signature is what the hub checks; the request only
-	// has to come from a node subscribed to the network. That is the old
-	// key's node unless its registration was deleted, when the hub's current
-	// key, which the hub registers itself, serves instead.
-	sender := signers[0]
-	if *authKeystore != "" {
-		sender = loadKeystore(*authKeystore)
-	}
 	// checkHubKey left the hub on one of the two keys the operator named, so
 	// /info, which is unsigned, only chooses between those.
 	hubKey := from
 	if late {
 		hubKey = final
 	}
-	if err := checkHistory(os.Stdout, client, *hubURL, chain, hubKey, sender, *omitLost); err != nil {
+	hubSigns, err := checkHistory(os.Stdout, client, *hubURL, chain, hubKey, sender, *omitLost)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if !publish(os.Stdout, os.Stderr, client, *hubURL, chain, body, sender, *authKeystore != "", late) {
+	if !publish(os.Stdout, os.Stderr, client, *hubURL, chain, body, sender, *authKeystore != "", late, hubKey, hubSigns) {
 		os.Exit(1)
 	}
 }
+
+// dryRunTimeout bounds each request of a dry run, which an operator may run
+// with no hub in reach.
+const dryRunTimeout = 10 * time.Second
+
+// errHubUnreachable means no answer came from the hub at all, as opposed to
+// an answer the tool would act on.
+var errHubUnreachable = errors.New("the hub could not be reached")
 
 // signChain signs the handovers of network from each signer's key to the
 // next signer's, and from the last signer's to to, each with the key it
@@ -158,19 +184,81 @@ func chainBody(chain []protocol.CoordHandover) ([]byte, error) {
 	return json.Marshal(chain)
 }
 
+// dryRunCheck makes the checks a real run makes before posting and reports to
+// out and errOut what that run would do. It posts nothing. It returns false
+// when a real run would stop, and true otherwise, including when the hub
+// cannot be reached, or has no history to give: the output then says the chain
+// was not checked.
+func dryRunCheck(out, errOut io.Writer, client *http.Client, hubURL string, chain []protocol.CoordHandover, sender *keystore.Keystore, omitLost bool) bool {
+	from, final := chain[0].OldKeyB64, chain[len(chain)-1].NewKeyB64
+	late, err := checkHubKey(client, hubURL, chain[0].Network, from, final)
+	if errors.Is(err, errHubUnreachable) {
+		_, _ = fmt.Fprintf(out, "Could not check the chain: %v.\nDry run: nothing was posted, and the chain has not been checked.\n", err)
+		return true
+	}
+	if err != nil {
+		_, _ = fmt.Fprintf(errOut, "Dry run: a real run would stop here: %v\nNothing was posted.\n", err)
+		return false
+	}
+	hubKey := from
+	if late {
+		hubKey = final
+		_, _ = fmt.Fprintln(out, "The hub already runs the new key. A real run posts the handover anyway: the hub accepts it")
+		_, _ = fmt.Fprintln(out, "and signs the NAL with the new key, so subscribers follow without re-pinning.")
+	}
+	result, err := historyVerdict(client, hubURL, chain, hubKey, sender, omitLost)
+	if err != nil {
+		_, _ = fmt.Fprintf(errOut, "Dry run: a real run would stop here: %v\nNothing was posted.\n", err)
+		return false
+	}
+	if result.why != "" {
+		_, _ = fmt.Fprintf(out, "Could not check the chain against the hub's signer history: %s.\nDry run: nothing was posted. A real run would post it, and the hub would still check the chain.\n", result.why)
+		return true
+	}
+	_, _ = fmt.Fprintln(out, result.note)
+	_, _ = fmt.Fprintln(out, "Dry run: the checks pass and a real run would post this chain. Nothing was posted.")
+	return true
+}
+
+// reportUnknownOutcome tells the operator that nothing shows whether the post
+// took effect, and how to find out.
+func reportUnknownOutcome(errOut io.Writer, network string) {
+	_, _ = fmt.Fprintln(errOut, "The post may or may not have taken effect. To find out, run this command again with -dry-run:")
+	_, _ = fmt.Fprintln(errOut, "\"the hub already holds this chain\" means it did. A hub too old to say can be checked by looking")
+	_, _ = fmt.Fprintf(errOut, "for the handover in coordinator_handovers at /v3net/v1/%s/nal, or in the hub's log.\n", network)
+	_, _ = fmt.Fprintln(errOut, "Posting again is safe: the hub does not store a handover twice.")
+}
+
 // publish POSTs the handover chain (body is its JSON) to the hub as sender
 // and reports the outcome to out and errOut, returning whether it
 // succeeded. For a late handover, success means the hub serves the NAL
 // signed by the new key with a chain from the outgoing key, checked by
 // fetching it, not just a 200.
-func publish(out, errOut io.Writer, client *http.Client, hubURL string, chain []protocol.CoordHandover, body []byte, sender *keystore.Keystore, authSet, late bool) bool {
+//
+// The reply is checked as fetchHistory checks its own: under hubKey, with a
+// nonce fresh for this request. One that fails, or one with no signature from
+// a hub known to sign (hubSigns), says nothing about the outcome, since the
+// post went out before it came back, so publish returns false without calling
+// it a success or a refusal. So does no reply at all. An unsigned reply from a
+// hub not known to sign is an older hub's, and its status is taken as sent.
+func publish(out, errOut io.Writer, client *http.Client, hubURL string, chain []protocol.CoordHandover, body []byte, sender *keystore.Keystore, authSet, late bool, hubKey string, hubSigns bool) bool {
 	network := chain[0].Network
+	pub, err := decodeHubKey(hubKey)
+	if err != nil {
+		_, _ = fmt.Fprintln(errOut, err)
+		return false
+	}
 	path := fmt.Sprintf("/v3net/v1/%s/nal/handover", network)
 	bodyHash := sha256.Sum256(body)
 	dateUTC := time.Now().UTC().Format(http.TimeFormat)
 	sig, err := sender.Sign(http.MethodPost, path, dateUTC, hex.EncodeToString(bodyHash[:]))
 	if err != nil {
 		_, _ = fmt.Fprintf(errOut, "sign request: %v\n", err)
+		return false
+	}
+	nonce, err := protocol.NewNonce()
+	if err != nil {
+		_, _ = fmt.Fprintf(errOut, "make request nonce: %v\n", err)
 		return false
 	}
 	req, err := http.NewRequest(http.MethodPost, hubURL+path, bytes.NewReader(body))
@@ -182,17 +270,41 @@ func publish(out, errOut io.Writer, client *http.Client, hubURL string, chain []
 	req.Header.Set("Date", dateUTC)
 	req.Header.Set("X-V3Net-Node-ID", sender.NodeID())
 	req.Header.Set("X-V3Net-Signature", sig)
+	req.Header.Set(protocol.HeaderNonce, nonce)
 
 	resp, err := client.Do(req)
 	if err != nil {
 		_, _ = fmt.Fprintf(errOut, "POST handover: %v\n", err)
+		reportUnknownOutcome(errOut, network)
 		return false
 	}
 	defer func() { _ = resp.Body.Close() }() // response fully consumed below
 
 	// Diagnostic output only: cap the read; truncation is acceptable.
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+
+	// Quoted when unverified: it can say anything, including what a success
+	// looks like.
+	respSig := resp.Header.Get(protocol.HeaderHubSignature)
+	unverified := ""
+	switch {
+	case respSig != "":
+		if protocol.VerifyResponse(pub, sig, nonce, resp.StatusCode, respBody, respSig) != nil {
+			unverified = fmt.Sprintf("its signature does not verify under the hub key %s", hubKey)
+		}
+	case hubSigns:
+		unverified = "it is unsigned, though this hub signed its reply about its signers"
+	}
+	if unverified != "" {
+		_, _ = fmt.Fprintf(errOut, "Response (not verified): %d %q\n", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		_, _ = fmt.Fprintf(errOut, "The hub's reply to the post cannot be trusted: %s (check -hub, and any proxy in front of the hub).\n", unverified)
+		reportUnknownOutcome(errOut, network)
+		return false
+	}
 	_, _ = fmt.Fprintf(out, "Response: %d %s\n", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	if respSig == "" {
+		_, _ = fmt.Fprintln(out, "The hub did not sign this response, as a hub that predates signed responses does not; its status is taken as sent.")
+	}
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized && !authSet:
 		_, _ = fmt.Fprintln(errOut, "The hub did not accept the request from the outgoing key's node; if its registration")
@@ -248,7 +360,7 @@ func checkHubKey(client *http.Client, hubURL, network, from, to string) (late bo
 	url := fmt.Sprintf("%s/v3net/v1/%s/info", hubURL, network)
 	resp, err := client.Get(url)
 	if err != nil {
-		return false, fmt.Errorf("could not check the hub's key: %w", err)
+		return false, fmt.Errorf("%w: %w", errHubUnreachable, err)
 	}
 	defer func() { _ = resp.Body.Close() }() // read side
 	// Small JSON; cap the read.
@@ -273,6 +385,15 @@ func checkHubKey(client *http.Client, hubURL, network, from, to string) (late bo
 	}
 }
 
+// decodeHubKey returns the public key whose base64 form is hubKey.
+func decodeHubKey(hubKey string) (ed25519.PublicKey, error) {
+	rawKey, err := base64.StdEncoding.DecodeString(hubKey)
+	if err != nil || len(rawKey) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("the hub key %s is not a public key", hubKey)
+	}
+	return ed25519.PublicKey(rawKey), nil
+}
+
 // fetchHistory asks the hub for network's signer history as sender. It returns
 // the history once its reply verifies under hubKey, one of the keys the
 // operator named, with a nonce fresh for this request so an old reply cannot
@@ -280,26 +401,27 @@ func checkHubKey(client *http.Client, hubURL, network, from, to string) (late bo
 // without the endpoint answers 404, one that predates hub signatures sends no
 // signature, and a sender it does not know gets 401. A signature that fails,
 // or a 200 with none, which no hub with the endpoint sends, is an error: that
-// reply is not from the hub the operator named.
-func fetchHistory(client *http.Client, hubURL, network, hubKey string, sender *keystore.Keystore) (*protocol.SignerHistory, string, error) {
-	rawKey, err := base64.StdEncoding.DecodeString(hubKey)
-	if err != nil || len(rawKey) != ed25519.PublicKeySize {
-		return nil, "", fmt.Errorf("the hub key %s is not a public key", hubKey)
+// reply is not from the hub the operator named. signed says the reply carried
+// a signature that verified, so the hub signs its responses.
+func fetchHistory(client *http.Client, hubURL, network, hubKey string, sender *keystore.Keystore) (history *protocol.SignerHistory, why string, signed bool, err error) {
+	pub, err := decodeHubKey(hubKey)
+	if err != nil {
+		return nil, "", false, err
 	}
 	path := fmt.Sprintf("/v3net/v1/%s/nal/signers", network)
 	bodyHash := sha256.Sum256(nil)
 	dateUTC := time.Now().UTC().Format(http.TimeFormat)
 	sig, err := sender.Sign(http.MethodGet, path, dateUTC, hex.EncodeToString(bodyHash[:]))
 	if err != nil {
-		return nil, "", fmt.Errorf("sign request: %w", err)
+		return nil, "", false, fmt.Errorf("sign request: %w", err)
 	}
 	nonce, err := protocol.NewNonce()
 	if err != nil {
-		return nil, "", fmt.Errorf("make request nonce: %w", err)
+		return nil, "", false, fmt.Errorf("make request nonce: %w", err)
 	}
 	req, err := http.NewRequest(http.MethodGet, hubURL+path, nil)
 	if err != nil {
-		return nil, "", fmt.Errorf("create request: %w", err)
+		return nil, "", false, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Date", dateUTC)
 	req.Header.Set("X-V3Net-Node-ID", sender.NodeID())
@@ -308,7 +430,7 @@ func fetchHistory(client *http.Client, hubURL, network, hubKey string, sender *k
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err.Error(), nil
+		return nil, err.Error(), false, nil
 	}
 	defer func() { _ = resp.Body.Close() }() // read side
 	// Small JSON; a reply cut short fails its signature.
@@ -317,41 +439,65 @@ func fetchHistory(client *http.Client, hubURL, network, hubKey string, sender *k
 	respSig := resp.Header.Get(protocol.HeaderHubSignature)
 	switch {
 	case respSig != "":
-		if err := protocol.VerifyResponse(ed25519.PublicKey(rawKey), sig, nonce, resp.StatusCode, body, respSig); err != nil {
-			return nil, "", fmt.Errorf("the hub's reply about its signers does not verify under the hub key %s; refusing to post the handover (check -hub and the keystores)", hubKey)
+		if err := protocol.VerifyResponse(pub, sig, nonce, resp.StatusCode, body, respSig); err != nil {
+			return nil, "", false, fmt.Errorf("the hub's reply about its signers does not verify under the hub key %s; refusing to post the handover (check -hub and the keystores)", hubKey)
 		}
 	case resp.StatusCode == http.StatusOK:
-		return nil, "", fmt.Errorf("the hub's reply about its signers is unsigned; refusing to post the handover (check -hub, and any proxy in front of the hub)")
+		return nil, "", false, fmt.Errorf("the hub's reply about its signers is unsigned; refusing to post the handover (check -hub, and any proxy in front of the hub)")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Sprintf("the hub answered %d (a hub that predates the check, or one that does not know the sending node)", resp.StatusCode), nil
+		return nil, fmt.Sprintf("the hub answered %d (a hub that predates the check, or one that does not know the sending node)", resp.StatusCode), respSig != "", nil
 	}
-	var history protocol.SignerHistory
-	if err := json.Unmarshal(body, &history); err != nil {
-		return nil, fmt.Sprintf("its reply could not be read: %v", err), nil
+	history = &protocol.SignerHistory{}
+	if err := json.Unmarshal(body, history); err != nil {
+		return nil, fmt.Sprintf("its reply could not be read: %v", err), true, nil
 	}
-	return &history, "", nil
+	return history, "", true, nil
 }
 
-// checkHistory checks chain against the signer history of the hub running
-// hubKey and reports to out. It returns an error if the chain does not match.
-// It says so and returns nil when the hub has no history to give: the post
-// goes ahead as it always has, and the hub still checks the chain itself.
-func checkHistory(out io.Writer, client *http.Client, hubURL string, chain []protocol.CoordHandover, hubKey string, sender *keystore.Keystore, omitLost bool) error {
-	history, why, err := fetchHistory(client, hubURL, chain[0].Network, hubKey, sender)
+// historyResult is what historyVerdict found: a note for the operator on a
+// chain that matches, or why the hub's history could not be had. hubSigns
+// says the hub signed its reply.
+type historyResult struct {
+	note     string
+	why      string
+	hubSigns bool
+}
+
+// historyVerdict checks chain against the signer history of the hub running
+// hubKey. It returns an error if the chain does not match or the reply does
+// not verify.
+func historyVerdict(client *http.Client, hubURL string, chain []protocol.CoordHandover, hubKey string, sender *keystore.Keystore, omitLost bool) (historyResult, error) {
+	history, why, signed, err := fetchHistory(client, hubURL, chain[0].Network, hubKey, sender)
 	if err != nil {
-		return err
+		return historyResult{}, err
 	}
 	if history == nil {
-		_, _ = fmt.Fprintf(out, "Could not check the chain against the hub's signer history: %s.\nPosting anyway; the hub still checks the chain.\n", why)
-		return nil
+		return historyResult{why: why, hubSigns: signed}, nil
 	}
 	note, err := matchChain(history, hubKey, chain, omitLost)
 	if err != nil {
-		return err
+		return historyResult{}, err
 	}
-	_, _ = fmt.Fprintln(out, note)
-	return nil
+	return historyResult{note: note, hubSigns: signed}, nil
+}
+
+// checkHistory checks chain against the signer history of the hub running
+// hubKey and reports to out, returning whether the hub signed its reply. It
+// returns an error if the chain does not match. It says so and returns nil
+// when the hub has no history to give: the post goes ahead as it always has,
+// and the hub still checks the chain itself.
+func checkHistory(out io.Writer, client *http.Client, hubURL string, chain []protocol.CoordHandover, hubKey string, sender *keystore.Keystore, omitLost bool) (hubSigns bool, err error) {
+	result, err := historyVerdict(client, hubURL, chain, hubKey, sender, omitLost)
+	if err != nil {
+		return false, err
+	}
+	if result.why != "" {
+		_, _ = fmt.Fprintf(out, "Could not check the chain against the hub's signer history: %s.\nPosting anyway; the hub still checks the chain.\n", result.why)
+		return result.hubSigns, nil
+	}
+	_, _ = fmt.Fprintln(out, result.note)
+	return result.hubSigns, nil
 }
 
 // matchChain compares chain with what the hub running hubKey needs, using the

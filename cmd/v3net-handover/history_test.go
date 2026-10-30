@@ -203,13 +203,13 @@ func TestCheckHistoryAgainstHub(t *testing.T) {
 	to := c.PubKeyBase64()
 
 	var out bytes.Buffer
-	if err := checkHistory(&out, ts.Client(), ts.URL, chainFrom(t, to, a, b), to, a, false); err != nil {
+	if _, err := checkHistory(&out, ts.Client(), ts.URL, chainFrom(t, to, a, b), to, a, false); err != nil {
 		t.Fatalf("the chain needed: %v", err)
 	}
 	if !strings.Contains(out.String(), "matches") || !strings.Contains(out.String(), b.PubKeyBase64()) {
 		t.Errorf("output %q, want the match and the chain", out.String())
 	}
-	err := checkHistory(&out, ts.Client(), ts.URL, chainFrom(t, to, a), to, a, false)
+	_, err := checkHistory(&out, ts.Client(), ts.URL, chainFrom(t, to, a), to, a, false)
 	if err == nil || !strings.Contains(err.Error(), b.PubKeyBase64()) {
 		t.Errorf("A to C with B recorded: %v, want a refusal naming B", err)
 	}
@@ -287,7 +287,7 @@ func TestCheckHistoryRefusesUnverifiedReply(t *testing.T) {
 			if tc.name == "an earlier reply replayed" {
 				// The same request in the same second has the same signature,
 				// so only the nonce can tell this reply from the last.
-				if err := checkHistory(io.Discard, ts.Client(), ts.URL, chainFrom(t, to, a, b), to, a, false); err != nil {
+				if _, err := checkHistory(io.Discard, ts.Client(), ts.URL, chainFrom(t, to, a, b), to, a, false); err != nil {
 					t.Fatalf("the first, genuine reply: %v", err)
 				}
 			}
@@ -296,7 +296,7 @@ func TestCheckHistoryRefusesUnverifiedReply(t *testing.T) {
 			if tc.name == "an earlier reply replayed" {
 				chain = chainFrom(t, to, a, b)
 			}
-			err := checkHistory(&out, ts.Client(), ts.URL, chain, to, a, false)
+			_, err := checkHistory(&out, ts.Client(), ts.URL, chain, to, a, false)
 			if err == nil || !strings.Contains(err.Error(), "refusing to post") {
 				t.Errorf("err = %v, want a refusal to post; output %q", err, out.String())
 			}
@@ -338,7 +338,7 @@ func TestCheckHistoryCarriesOnWithoutHistory(t *testing.T) {
 			ts := httptest.NewServer(tc.handler)
 			defer ts.Close()
 			var out bytes.Buffer
-			if err := checkHistory(&out, ts.Client(), ts.URL, chainFrom(t, to, a), to, a, false); err != nil {
+			if _, err := checkHistory(&out, ts.Client(), ts.URL, chainFrom(t, to, a), to, a, false); err != nil {
 				t.Fatalf("checkHistory: %v", err)
 			}
 			if !strings.Contains(out.String(), "Could not check") || !strings.Contains(out.String(), tc.want) {
@@ -352,7 +352,7 @@ func TestCheckHistoryCarriesOnWithoutHistory(t *testing.T) {
 		url, client := ts.URL, ts.Client()
 		ts.Close()
 		var out bytes.Buffer
-		if err := checkHistory(&out, client, url, chainFrom(t, to, a), to, a, false); err != nil {
+		if _, err := checkHistory(&out, client, url, chainFrom(t, to, a), to, a, false); err != nil {
 			t.Fatalf("checkHistory: %v", err)
 		}
 		if !strings.Contains(out.String(), "Could not check") {
@@ -363,7 +363,7 @@ func TestCheckHistoryCarriesOnWithoutHistory(t *testing.T) {
 	t.Run("real hub, sender unknown", func(t *testing.T) {
 		hubTS := switchedHubServer(t, a, a, c)
 		var out bytes.Buffer
-		if err := checkHistory(&out, hubTS.Client(), hubTS.URL, chainFrom(t, to, a), to, stranger, false); err != nil {
+		if _, err := checkHistory(&out, hubTS.Client(), hubTS.URL, chainFrom(t, to, a), to, stranger, false); err != nil {
 			t.Fatalf("checkHistory: %v", err)
 		}
 		if !strings.Contains(out.String(), "answered 401") {
@@ -377,7 +377,7 @@ func TestCheckHistoryCarriesOnWithoutHistory(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}))
 		defer ts.Close()
-		err := checkHistory(io.Discard, ts.Client(), ts.URL, chainFrom(t, to, a), to, a, false)
+		_, err := checkHistory(io.Discard, ts.Client(), ts.URL, chainFrom(t, to, a), to, a, false)
 		if err == nil || !strings.Contains(err.Error(), "does not verify") {
 			t.Errorf("err = %v, want it to say the reply does not verify", err)
 		}
@@ -532,7 +532,7 @@ func TestMatchChainAgreesWithHub(t *testing.T) {
 				}
 			}
 
-			history, why, err := fetchHistory(ts.Client(), ts.URL, "testnet", hubKey, sender)
+			history, why, _, err := fetchHistory(ts.Client(), ts.URL, "testnet", hubKey, sender)
 			if err != nil || history == nil {
 				t.Fatalf("fetch history: %v %s", err, why)
 			}
