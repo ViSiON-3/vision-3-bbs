@@ -56,18 +56,6 @@ func TouchReloadSentinel(configPath string) error {
 	return nil
 }
 
-// TouchConfigFile moves the modification time of the config file at path to
-// now without rewriting it, so a running BBS treats the file as changed and
-// reloads it. A tool calls it when a save leaves a file's contents as they
-// were but the BBS must still act on it. A missing file is left missing.
-func TouchConfigFile(path string) error {
-	now := time.Now()
-	if err := os.Chtimes(path, now, now); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("updating timestamp of %s: %w", path, err)
-	}
-	return nil
-}
-
 // ReloadForceSentinelName is the semaphore a sysop touches to apply DEFERRED
 // configuration changes immediately, without waiting for the board to go
 // idle, and to re-read everything else at the same time:

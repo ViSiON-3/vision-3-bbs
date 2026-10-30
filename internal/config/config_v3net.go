@@ -143,6 +143,12 @@ type V3NetLeafConfig struct {
 	// included. The sysop clears it only if the hub really stopped signing
 	// (a rollback to an older version, for one).
 	HubSigned bool `json:"hubSigned,omitempty"`
+	// HubSignedClears counts the times the sysop set HubSigned to N for this
+	// leaf. Only its changing means anything: it tells a running leaf the
+	// sysop cleared the record, even when HubSigned already reads false
+	// because the leaf could not store it. The config editor raises it; a
+	// sysop editing the file by hand raises it too.
+	HubSignedClears int `json:"hubSignedClears,omitempty"`
 
 	// CoordinatorPubKey pins the network coordinator's ed25519 public key
 	// (standard base64). The leaf rejects any NAL signed by a different key.
@@ -266,7 +272,37 @@ func settleV3NetHubMoves(base, ours, theirs V3NetConfig) (V3NetConfig, V3NetConf
 	ours.Leaves = settleV3NetLeaves(base.Leaves, theirs.Leaves, ours.Leaves)
 	var conflicts []configmerge.Conflict
 	ours.Leaves, theirs.Leaves, conflicts = mergeV3NetHubMovedElsewhere(base.Leaves, ours.Leaves, theirs.Leaves)
+	ours.Leaves, theirs.Leaves = settleV3NetHubSignedClears(base.Leaves, ours.Leaves, theirs.Leaves)
 	return ours, theirs, conflicts
+}
+
+// settleV3NetHubSignedClears returns ours and theirs, without modifying
+// either, with hubSignedClears on a leaf both sides raised set to one above
+// both. Each side raising it is a clear of its own, so neither may read as a
+// conflict, and neither may be lost: taken as they are, two sessions that
+// each raise 3 to 4 would agree on 4, which a leaf that has applied the first
+// save takes as no change.
+func settleV3NetHubSignedClears(base, ours, theirs []V3NetLeafConfig) ([]V3NetLeafConfig, []V3NetLeafConfig) {
+	baseClears := make(map[v3netLeafKey]int, len(base))
+	for _, l := range base {
+		baseClears[v3netLeafKey{l.Network, l.HubURL}] = l.HubSignedClears
+	}
+	cloned := false
+	for i, o := range ours {
+		k := v3netLeafKey{o.Network, o.HubURL}
+		b, inBase := baseClears[k]
+		j := slices.IndexFunc(theirs, func(l V3NetLeafConfig) bool { return (v3netLeafKey{l.Network, l.HubURL}) == k })
+		if !inBase || j < 0 || o.HubSignedClears == b || theirs[j].HubSignedClears == b {
+			continue
+		}
+		if !cloned {
+			cloned = true
+			ours, theirs = slices.Clone(ours), slices.Clone(theirs)
+		}
+		n := max(o.HubSignedClears, theirs[j].HubSignedClears) + 1
+		ours[i].HubSignedClears, theirs[j].HubSignedClears = n, n
+	}
+	return ours, theirs
 }
 
 // mergeV3NetHubMovedElsewhere settles each network that both sides moved to
@@ -406,6 +442,7 @@ var v3netLeafHubState = []string{
 	"pendingCoordinatorPubKey",
 	"pendingHubPubKey",
 	"hubSigned",
+	"hubSignedClears",
 }
 
 // sameV3NetLeafApartFromKeys reports whether a and b differ at most in

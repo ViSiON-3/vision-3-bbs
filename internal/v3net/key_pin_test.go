@@ -138,6 +138,32 @@ func TestHubSignedStored(t *testing.T) {
 	}
 }
 
+// pinStored reads the matching entry's pins from v3net.json as it is when
+// called.
+func TestPinStored(t *testing.T) {
+	dir := t.TempDir()
+	s := &Service{cfg: config.V3NetConfig{ConfigPath: dir}}
+	stored := s.pinStored("testnet", "https://hub.example")
+	if got, err := stored(leaf.KeyCoordinator); err != nil || got != "" {
+		t.Fatalf("with no v3net.json: %q, %v; want none", got, err)
+	}
+	if err := config.SaveV3NetConfig(dir, config.V3NetConfig{Leaves: []config.V3NetLeafConfig{
+		{HubURL: "https://other.example", Network: "testnet", CoordinatorPubKey: "other"},
+		{HubURL: "https://hub.example", Network: "testnet", CoordinatorPubKey: "coord", HubPubKey: "hub"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := stored(leaf.KeyCoordinator); err != nil || got != "coord" {
+		t.Errorf("coordinator pin = %q, %v", got, err)
+	}
+	if got, err := stored(leaf.KeyHub); err != nil || got != "hub" {
+		t.Errorf("hub pin = %q, %v", got, err)
+	}
+	if (&Service{}).pinStored("testnet", "https://hub.example") != nil {
+		t.Error("a service without a config path has a store to read")
+	}
+}
+
 // keyPinned tells the key observer about a pin a handover moved, once it is
 // stored, and stays quiet for a first-use pin.
 func TestKeyPinnedNotifiesHandover(t *testing.T) {

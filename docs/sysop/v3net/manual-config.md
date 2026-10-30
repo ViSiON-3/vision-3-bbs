@@ -99,6 +99,7 @@ to subscribe to multiple networks.
 | `hubPubKey` | string | blank | **Hub Key** in the editor. The hub's Ed25519 public key (base64) from the network's `/info`. Pinned and checked the same way. |
 | `requireSignedHub` | bool | `false` | **Signed Hub** in the editor. When true, the leaf refuses replies from the hub that carry no hub signature, and pauses as for a bad one. See [Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies). |
 | `hubSigned` | bool | `false` | Written by the BBS, shown as **Hub Signs**. Set once the hub's signatures have checked out; from then on unsigned replies from it are refused, as with `requireSignedHub`. Remove it (or set it `false`) only if the hub really stopped signing. |
+| `hubSignedClears` | number | `0` | Raised by the editor each time **Hub Signs** is set to **N**. It tells a running leaf you cleared the record, for when the leaf could not write `hubSigned` and the file already reads `false`: raise it by one by hand to do the same. See [Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies). |
 | `pendingCoordinatorPubKey`, `pendingHubPubKey` | string | blank | Written by the BBS, shown as **Offered Coord** / **Offered Hub**. A key the hub offered that differs from the pin. It is rejected; copy it into the pin to accept it. |
 
 ---

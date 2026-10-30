@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
@@ -82,12 +83,13 @@ type Pins struct {
 	HubSigned bool
 	// CoordEdited and HubEdited say the file's pin changed since the copy
 	// the caller last handed over. A pin not yet stored is replaced only
-	// then: otherwise the file simply does not hold it yet.
+	// then, and not when the change is the leaf's own earlier store (see
+	// UnsavedFollowsStore): otherwise the file simply does not hold it yet.
 	CoordEdited, HubEdited bool
 	// HubSignedEdited says the sysop wrote hubSigned: its value changed, or
-	// the file was saved again as it was, which is how a sysop clears a
-	// record the file never got. A record not yet stored is dropped only
-	// then.
+	// the entry's count of clears did (config.V3NetLeafConfig.HubSignedClears),
+	// which is how a sysop clears a record the file never got. A record not
+	// yet stored is dropped only then.
 	HubSignedEdited bool
 }
 
@@ -146,7 +148,8 @@ func (p *keyPins) movedFrom(kind KeyKind) *string {
 // than the file. A pin not yet stored is kept unless the file's pin was
 // edited (Pins.CoordEdited, Pins.HubEdited), since a file that lacks it says
 // nothing about it, so a reload of an unrelated change leaves what the leaf
-// trusts alone. When the coordinator pin changed and ctx is non-nil, the
+// trusts alone; so is one that follows, by a handover, from the pin the
+// leaf's own store left in the file (see UnsavedFollowsStore). When the coordinator pin changed and ctx is non-nil, the
 // NAL is re-fetched in the background so an accepted key takes effect at
 // once; likewise /info is re-checked when the hub pin changed. Pass a nil
 // ctx for a leaf that is not running. Safe for concurrent use.
@@ -155,22 +158,8 @@ func (p *keyPins) movedFrom(kind KeyKind) *string {
 func (l *Leaf) UpdatePins(ctx context.Context, p Pins) {
 	l.applyHubSigned(p.HubSigned, p.HubSignedEdited)
 
-	l.pinMu.Lock()
-	coordChanged := normalizeKey(p.Coord) != l.pins.coord && (p.CoordEdited || !l.pins.coordUnsaved)
-	hubChanged := normalizeKey(p.Hub) != l.pins.hub && (p.HubEdited || !l.pins.hubUnsaved)
-	if coordChanged {
-		l.pins.coord = normalizeKey(p.Coord)
-		l.pins.pendingCoord = normalizeKey(p.PendingCoord)
-		l.pins.coordUnsaved = false
-		l.pins.coordMovedFrom = ""
-	}
-	if hubChanged {
-		l.pins.hub = normalizeKey(p.Hub)
-		l.pins.pendingHub = normalizeKey(p.PendingHub)
-		l.pins.hubUnsaved = false
-		l.pins.hubMovedFrom = ""
-	}
-	l.pinMu.Unlock()
+	coordChanged := l.applyFilePin(KeyCoordinator, p.Coord, p.PendingCoord, p.CoordEdited)
+	hubChanged := l.applyFilePin(KeyHub, p.Hub, p.PendingHub, p.HubEdited)
 
 	if ctx == nil || (!coordChanged && !hubChanged) {
 		return
@@ -189,6 +178,66 @@ func (l *Leaf) UpdatePins(ctx context.Context, p Pins) {
 			}
 		}
 	}()
+}
+
+// applyFilePin installs the file's pin for kind and its pending key, as
+// UpdatePins describes, and reports whether the pin changed. It holds the save
+// lock for kind, so no store lands between the check of the store and acting
+// on it.
+func (l *Leaf) applyFilePin(kind KeyKind, filePin, filePending string, edited bool) bool {
+	mu := l.saveMu(kind)
+	mu.Lock()
+	defer mu.Unlock()
+
+	edited = edited && !l.UnsavedFollowsStore(kind, filePin)
+	l.pinMu.Lock()
+	defer l.pinMu.Unlock()
+	pin, pending, unsaved := l.pins.slots(kind)
+	if normalizeKey(filePin) == *pin || (!edited && *unsaved) {
+		return false
+	}
+	*pin = normalizeKey(filePin)
+	*pending = normalizeKey(filePending)
+	*unsaved = false
+	*l.pins.movedFrom(kind) = ""
+	return true
+}
+
+// UnsavedFollowsStore reports whether a reload whose file holds filePin for
+// kind, changed since the last reload, leaves the leaf's unsaved pin standing:
+// the pin is waiting to be stored over the pin a handover moved it from, and
+// the store holds that pin now.
+//
+// The leaf stores each pin over the one before, so while no one else writes
+// the entry, the store holds exactly the pin the unsaved one moved from. Then
+// filePin is that pin, or an older copy of the file from before the leaf's
+// later stores, and applying it would move the pin back along the chain. A
+// sysop's edit leaves something else in the store, including a key the leaf
+// passed through earlier, so it still wins. Retyping the pin the store already
+// holds changes nothing in the file and is no edit.
+//
+// A store that cannot be read is taken to hold filePin. A caller that acts on
+// the answer while the leaf runs must hold the save lock for kind across both,
+// as applyFilePin does.
+func (l *Leaf) UnsavedFollowsStore(kind KeyKind, filePin string) bool {
+	l.pinMu.Lock()
+	_, _, unsaved := l.pins.slots(kind)
+	movedFrom, waiting := *l.pins.movedFrom(kind), *unsaved
+	l.pinMu.Unlock()
+	if !waiting || movedFrom == "" {
+		return false
+	}
+	stored := filePin
+	if l.cfg.PinStored != nil {
+		s, err := l.cfg.PinStored(kind)
+		if err != nil {
+			slog.Warn("leaf: could not check the pinned key in the config; using the reloaded copy",
+				"network", l.cfg.Network, "hub", l.cfg.HubURL, "key", string(kind), "error", err)
+		} else {
+			stored = s
+		}
+	}
+	return normalizeKey(stored) == movedFrom
 }
 
 // applyHubSigned installs the config's hubSigned, v, when it differs from
@@ -434,10 +483,7 @@ func (l *Leaf) checkPin(kind KeyKind, offered string) (pinned string, ok bool) {
 // were they to overlap, C's save would name A as the key it replaces, find B
 // in the file and store nothing, while still clearing the unsaved flag.
 func (l *Leaf) savePin(kind KeyKind) {
-	mu := &l.coordSaveMu
-	if kind == KeyHub {
-		mu = &l.hubSaveMu
-	}
+	mu := l.saveMu(kind)
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -468,6 +514,14 @@ func (l *Leaf) savePin(kind KeyKind) {
 		// holds key, so that is what the next store replaces.
 		*moved = key
 	}
+}
+
+// saveMu returns the lock that orders stores of the pin for kind.
+func (l *Leaf) saveMu(kind KeyKind) *sync.Mutex {
+	if kind == KeyHub {
+		return &l.hubSaveMu
+	}
+	return &l.coordSaveMu
 }
 
 // followHandovers moves the pin for kind to offered when the handovers lead

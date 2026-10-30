@@ -167,11 +167,6 @@ type Model struct {
 	// with its own result has to carry the warning across.
 	binkdSyncErr error
 
-	// Set when the sysop sets a leaf's Hub Signs, so the next save makes a
-	// running BBS reload v3net.json even if its contents did not change.
-	// See saveAll.
-	v3netHubSignsSet bool
-
 	// Top menu state
 	topCursor int
 	topItems  []topMenuItem
