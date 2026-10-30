@@ -165,6 +165,16 @@ func (m *Model) saveAll() bool {
 	if !mergeFile(saveMergedFile(config.V3NetConfigFile(m.configPath), b.known, &b.v3net, &m.configs.V3Net)) {
 		return false
 	}
+	// An unchanged v3net.json is not rewritten, and a running BBS reloads
+	// it only when its timestamp moves. A leaf whose write of Hub Signs
+	// failed still enforces it while the file holds N, so the sysop saving
+	// N must reach it anyway: bump the timestamp.
+	if m.v3netHubSignsSet {
+		if err := config.TouchConfigFile(config.V3NetConfigFile(m.configPath).Path); err != nil {
+			m.message = fmt.Sprintf("SAVE ERROR: %v", err)
+			return false
+		}
+	}
 	if err := saveProtocols(m.configPath, m.configs.Protocols); err != nil {
 		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
 		return false
@@ -195,6 +205,7 @@ func (m *Model) saveAll() bool {
 	}
 
 	m.dirty = false
+	m.v3netHubSignsSet = false
 
 	// Every file is written, so signal a running BBS to re-read its
 	// configuration. This is deliberately last: the early returns above mean a
