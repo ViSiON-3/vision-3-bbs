@@ -314,6 +314,7 @@ var v3netLeafHubState = []string{
 	"hubPubKey",
 	"pendingCoordinatorPubKey",
 	"pendingHubPubKey",
+	"hubSigned",
 }
 
 // sameV3NetLeafApartFromKeys reports whether a and b differ at most in

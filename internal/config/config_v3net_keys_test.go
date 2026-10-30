@@ -215,6 +215,23 @@ func TestV3NetSaveHubURLChangeBeatsKeyPin(t *testing.T) {
 	}
 }
 
+// The BBS recording that the old hub signs is per-hub state too, so it
+// does not keep the old leaf and does not carry over to the new hub.
+func TestV3NetSaveHubURLChangeBeatsHubSigned(t *testing.T) {
+	leaves, conflicts := saveV3NetHubRace(t, hubMoveBase(), func(c *V3NetConfig) {
+		c.Leaves[0].HubSigned = true
+	}, moveHub)
+	if len(conflicts) != 0 {
+		t.Errorf("conflicts = %+v", conflicts)
+	}
+	if len(leaves) != 2 || leaves[0].HubURL != "https://new.example" || leaves[1].Network != "netb" {
+		t.Fatalf("leaves = %+v, want neta at the new hub and netb", leaves)
+	}
+	if leaves[0].HubSigned {
+		t.Errorf("neta = %+v; hubSigned for the old hub must not carry over", leaves[0])
+	}
+}
+
 // An edit elsewhere to anything but the old leaf's keys is not the BBS
 // pinning a key, so it is kept and reported as before.
 func TestV3NetSaveHubURLChangeKeepsOtherEdits(t *testing.T) {
