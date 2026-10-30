@@ -277,11 +277,18 @@ func settleV3NetHubMoves(base, ours, theirs V3NetConfig) (V3NetConfig, V3NetConf
 }
 
 // settleV3NetHubSignedClears returns ours and theirs, without modifying
-// either, with hubSignedClears on a leaf both sides raised set to one above
-// both. Each side raising it is a clear of its own, so neither may read as a
-// conflict, and neither may be lost: taken as they are, two sessions that
-// each raise 3 to 4 would agree on 4, which a leaf that has applied the first
-// save takes as no change.
+// either, with this save's clears of hubSigned kept.
+//
+// A leaf whose count this save raised and whose hubSigned this save leaves
+// false has hubSigned false on both sides, so the clear beats a record the leaf
+// stored since this session loaded the file: the generic merge sees no edit
+// here to a value that already read false, and would keep the record.
+//
+// A leaf whose count both sides raised has it set to one above both. Each side
+// raising it is a clear of its own, so neither may read as a conflict, and
+// neither may be lost: taken as they are, two sessions that each raise 3 to 4
+// would agree on 4, which a leaf that has applied the first save takes as no
+// change.
 func settleV3NetHubSignedClears(base, ours, theirs []V3NetLeafConfig) ([]V3NetLeafConfig, []V3NetLeafConfig) {
 	baseClears := make(map[v3netLeafKey]int, len(base))
 	for _, l := range base {
@@ -292,15 +299,20 @@ func settleV3NetHubSignedClears(base, ours, theirs []V3NetLeafConfig) ([]V3NetLe
 		k := v3netLeafKey{o.Network, o.HubURL}
 		b, inBase := baseClears[k]
 		j := slices.IndexFunc(theirs, func(l V3NetLeafConfig) bool { return (v3netLeafKey{l.Network, l.HubURL}) == k })
-		if !inBase || j < 0 || o.HubSignedClears == b || theirs[j].HubSignedClears == b {
+		if !inBase || j < 0 || o.HubSignedClears == b {
 			continue
 		}
 		if !cloned {
 			cloned = true
 			ours, theirs = slices.Clone(ours), slices.Clone(theirs)
 		}
-		n := max(o.HubSignedClears, theirs[j].HubSignedClears) + 1
-		ours[i].HubSignedClears, theirs[j].HubSignedClears = n, n
+		if !o.HubSigned {
+			theirs[j].HubSigned = false
+		}
+		if theirs[j].HubSignedClears != b {
+			n := max(o.HubSignedClears, theirs[j].HubSignedClears) + 1
+			ours[i].HubSignedClears, theirs[j].HubSignedClears = n, n
+		}
 	}
 	return ours, theirs
 }

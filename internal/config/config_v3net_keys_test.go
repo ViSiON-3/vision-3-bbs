@@ -522,3 +522,27 @@ func TestV3NetSaveHubURLChangeBeatsHubSignedClears(t *testing.T) {
 		t.Fatalf("leaves = %+v, want neta at the new hub and netb", leaves)
 	}
 }
+
+// Setting Hub Signs to N beats a record the leaf stored after this session
+// loaded the file, though N is also what the session loaded. A save that does
+// not raise the count leaves the record alone.
+func TestV3NetSaveHubSignedClearBeatsLeafRecord(t *testing.T) {
+	record := func(c *V3NetConfig) { c.Leaves[0].HubSigned = true }
+
+	leaves, conflicts := saveV3NetHubRace(t, hubMoveBase(), record, func(c *V3NetConfig) {
+		c.Leaves[0].HubSignedClears = 1
+	})
+	if len(conflicts) != 0 {
+		t.Errorf("conflicts = %+v", conflicts)
+	}
+	if leaves[0].HubSigned || leaves[0].HubSignedClears != 1 {
+		t.Errorf("after a clear: %+v; want hubSigned off and the count raised", leaves[0])
+	}
+
+	leaves, _ = saveV3NetHubRace(t, hubMoveBase(), record, func(c *V3NetConfig) {
+		c.Leaves[0].PollInterval = "9m"
+	})
+	if !leaves[0].HubSigned {
+		t.Errorf("after another edit: %+v; want the record kept", leaves[0])
+	}
+}

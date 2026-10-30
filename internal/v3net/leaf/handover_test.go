@@ -554,6 +554,7 @@ func handoverLeaf(t *testing.T, kind KeyKind, keys ...*keystore.Keystore) (*Leaf
 		}
 		l.savePin(kind)
 	}
+	fail = false // a retry now would store it
 	return l, &stored
 }
 
