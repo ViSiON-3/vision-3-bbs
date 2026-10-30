@@ -23,11 +23,16 @@ import (
 )
 
 // hubProxy sits between a leaf and a real hub, counting the signed requests
-// that reach the hub and optionally rewriting response bodies.
+// that reach the hub and optionally rewriting response bodies or stripping
+// the hub's signature header.
 type hubProxy struct {
 	ts     *httptest.Server
 	signed atomic.Int64
 	events atomic.Int64
+	// stripSig removes X-V3Net-Hub-Signature from every response.
+	stripSig atomic.Bool
+	// stripEvents removes it from event stream responses only.
+	stripEvents atomic.Bool
 
 	mu      sync.Mutex
 	rewrite func(path string, body []byte) []byte
@@ -42,6 +47,9 @@ func newHubProxy(t *testing.T, hubURL string) *hubProxy {
 	p := &hubProxy{}
 	rp := httputil.NewSingleHostReverseProxy(target)
 	rp.ModifyResponse = func(resp *http.Response) error {
+		if p.stripSig.Load() || (p.stripEvents.Load() && strings.HasSuffix(resp.Request.URL.Path, "/events")) {
+			resp.Header.Del(protocol.HeaderHubSignature)
+		}
 		p.mu.Lock()
 		rw := p.rewrite
 		p.mu.Unlock()

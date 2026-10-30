@@ -160,6 +160,8 @@ the same Hub URL, Network, Poll Interval and Origin fields as the wizard, plus:
 | **Newscan Default** | `Y` (the default) flags areas created for this network as newscan defaults for your users, so new callers see them in their newscan without opting in. |
 | **Signed Messages** | Default `N` imports unsigned messages from older nodes. Set `Y` to drop them once every node on the network signs its messages. See [Requiring signed messages](v3net/configuration.md#requiring-signed-messages). |
 | **Browse Areas** | Press **Enter** to open the area browser for this hub. |
+| **Signed Hub** | Default `N` accepts unsigned replies from a hub that predates hub signing, until the leaf has seen it sign. Set `Y` to refuse them from the start. See [Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies). |
+| **Hub Signs** | Set to `Y` by the leaf once the hub's signatures check out; unsigned replies from it are refused from then on. Set it to `N` only if the hub really stopped signing. |
 
 ---
 
@@ -394,10 +396,47 @@ the leaf does not stay paused.
 `leaf: hub does not sign its responses (older hub)` once and carries on
 unverified, as before, so leaves and hubs can be upgraded in any order. A
 leaf with no **Hub Key** pinned (a hub that does not publish one) cannot
-check signatures either. There is no leaf setting yet to refuse an unsigned
-hub; that will come in a later release, once hubs have upgraded. The
-signature format is in
+check signatures either. The signature format is in
 [Hub Signatures](v3net/message-areas.md#hub-signatures).
+
+### Refusing unsigned replies
+
+A reply with its signature removed looks just like one from an older hub,
+and anything between your BBS and the hub (a plain-HTTP hop, a proxy) can
+remove it. So the leaf refuses unsigned replies from a hub in two cases:
+
+- **Once it has seen the hub sign.** The first time a hub signature checks
+  out against **Hub Key**, the leaf logs `leaf: hub signs its responses;
+  unsigned replies from it are refused from now on` and sets **Hub Signs**
+  (`hubSigned`) on the subscription in `v3net.json`. From then on it refuses
+  that hub's unsigned replies, after a restart too. You do not need to do
+  anything for this.
+- **When you turn on Signed Hub** (`requireSignedHub`) on the subscription.
+  The leaf then refuses unsigned replies from the start, before it has seen
+  the hub sign, and a hub that does not sign at all keeps the network paused.
+  It defaults to **N** while hubs upgrade; turn it on once you know your hub
+  signs (**Hub Signs** shows **Y**). A later release will turn it on by
+  default.
+
+An unsigned reply is handled like one whose signature fails: the leaf logs
+`leaf: refusing an unsigned reply from the hub`, pauses, checks the hub's
+`/info`, and, if it still serves the pinned key, resumes, having dropped
+only that reply. If replies keep arriving unsigned, nothing gets through. An
+event stream that was opened unsigned before the leaf required signatures is
+dropped the same way before its next event is used. If the hub's `/info`
+serves no key at all, the pause holds until you clear **Hub Signs** as below;
+a pause because the hub's key changed holds until you accept the key, as
+above, whatever you do with **Hub Signs**.
+
+**If your hub really stopped signing**, for example because its operator
+went back to an older version, every reply is refused until you clear the
+record. Check with the hub's operator first: if the hub still signs,
+something on the way is removing its signatures. Then, in the subscription's
+edit form, set **Hub Signs** to **N** (or remove `"hubSigned": true` from the
+entry in `v3net.json`) and make sure **Signed Hub** is **N**. The running BBS
+picks the change up without a restart and accepts the hub's unsigned
+replies again. When the hub signs again, the leaf notices and sets **Hub
+Signs** back on its own.
 
 ---
 

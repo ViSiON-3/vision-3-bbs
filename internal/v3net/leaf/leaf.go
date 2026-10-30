@@ -39,12 +39,18 @@ type Leaf struct {
 	hub   hubGate
 	// unsignedHubLogged is set once an unsigned hub response is logged.
 	unsignedHubLogged atomic.Bool
+	// unsignedRefusedLogged is set once a refused unsigned reply is logged,
+	// and cleared when a hub signature next verifies.
+	unsignedRefusedLogged atomic.Bool
 
 	// pinMu guards pins, the pinned and pending coordinator and hub keys.
 	pinMu sync.Mutex
 	pins  keyPins
 	// coordSaveMu and hubSaveMu serialize savePin for each key kind.
 	coordSaveMu, hubSaveMu sync.Mutex
+	// hubSignedSaveMu orders storing hubSigned against confirming a clear
+	// of it (noteHubSigned, applyHubSigned).
+	hubSignedSaveMu sync.Mutex
 
 	// refused remembers which refused messages were already logged at warn.
 	refused refusedLog
@@ -66,6 +72,8 @@ func New(cfg Config) *Leaf {
 			hub:          normalizeKey(cfg.HubPubKeyB64),
 			pendingCoord: normalizeKey(cfg.PendingCoordPubKeyB64),
 			pendingHub:   normalizeKey(cfg.PendingHubPubKeyB64),
+			hubSigned:    cfg.HubSigned,
+			hubSignedCfg: cfg.HubSigned,
 		},
 		hub: newHubGate(),
 	}

@@ -77,6 +77,9 @@ type KeyEvent struct {
 type Pins struct {
 	Coord, Hub               string
 	PendingCoord, PendingHub string
+	// HubSigned is the entry's record that the hub signs (see
+	// Config.HubSigned).
+	HubSigned bool
 }
 
 // keyPins is the leaf's pinned and pending keys, guarded by Leaf.pinMu.
@@ -91,6 +94,13 @@ type keyPins struct {
 	// until OnKeyPinned stores the move. Several moves before a store keep
 	// the first pin, the one the caller still holds.
 	coordMovedFrom, hubMovedFrom string
+
+	// hubSigned is whether the hub has been seen signing, so unsigned
+	// replies are refused (see hubsig.go). hubSignedUnsaved marks it set
+	// but not yet stored by OnHubSigned. hubSignedCfg is the value the
+	// caller's config holds, as far as the leaf knows: UpdatePins acts on
+	// a change from it, which is the sysop clearing or setting it.
+	hubSigned, hubSignedUnsaved, hubSignedCfg bool
 }
 
 // slots returns pointers to the pin, the pending key and the unsaved flag
@@ -118,7 +128,11 @@ func (p *keyPins) movedFrom(kind KeyKind) *string {
 // NAL is re-fetched in the background so an accepted key takes effect at
 // once; likewise /info is re-checked when the hub pin changed. Pass a nil
 // ctx for a leaf that is not running. Safe for concurrent use.
+//
+// HubSigned is applied by applyHubSigned.
 func (l *Leaf) UpdatePins(ctx context.Context, p Pins) {
+	l.applyHubSigned(p.HubSigned)
+
 	l.pinMu.Lock()
 	coordChanged := normalizeKey(p.Coord) != l.pins.coord
 	hubChanged := normalizeKey(p.Hub) != l.pins.hub
@@ -153,6 +167,57 @@ func (l *Leaf) UpdatePins(ctx context.Context, p Pins) {
 			}
 		}
 	}()
+}
+
+// applyHubSigned installs the config's hubSigned, v, when it differs from
+// the value the leaf last knew the config to hold, so a copy of the file
+// that predates a record the leaf has not stored yet does not undo it,
+// while the sysop setting or clearing it takes effect at once.
+//
+// A clear needs more care. A reload can read the file before
+// OnHubSigned stores the record and be applied after, by when the leaf
+// takes the file to hold it; that stale copy looks just like the sysop
+// clearing it. So a clear is checked against the store as it is now
+// (Config.HubSignedStored), read under the same lock noteHubSigned holds
+// while it stores, so the read sees every store that has finished. A
+// store that cannot be read leaves the record in force.
+//
+// Once the record is cleared, with requireSignedHub off, a pause caused
+// only by unsigned replies lifts at once, even for a hub whose /info
+// serves no key to resume on.
+func (l *Leaf) applyHubSigned(v bool) {
+	l.hubSignedSaveMu.Lock()
+	defer l.hubSignedSaveMu.Unlock()
+
+	l.pinMu.Lock()
+	clearing := !v && l.pins.hubSignedCfg
+	l.pinMu.Unlock()
+	if clearing && l.cfg.HubSignedStored != nil {
+		stored, err := l.cfg.HubSignedStored()
+		if err != nil {
+			slog.Warn("leaf: could not check hubSigned in the config; keeping it",
+				"network", l.cfg.Network, "hub", l.cfg.HubURL, "error", err)
+			return
+		}
+		v = stored
+	}
+
+	l.pinMu.Lock()
+	changed := v != l.pins.hubSignedCfg
+	if changed {
+		l.pins.hubSignedCfg = v
+		l.pins.hubSigned = v
+		l.pins.hubSignedUnsaved = false
+	}
+	l.pinMu.Unlock()
+	if !changed {
+		return
+	}
+	slog.Info("leaf: hub signing record changed in config",
+		"network", l.cfg.Network, "hub", l.cfg.HubURL, "hub_signed", v)
+	if !v {
+		l.liftUnsignedPause()
+	}
 }
 
 // LastNAL returns the last NAL this leaf accepted, however old, or nil.

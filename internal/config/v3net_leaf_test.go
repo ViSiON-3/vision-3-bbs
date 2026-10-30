@@ -37,3 +37,20 @@ func TestV3NetLeafRequireSignedMessagesDefaultsOff(t *testing.T) {
 		t.Error("requireSignedMessages true was not read")
 	}
 }
+
+func TestV3NetLeafSignedHubFieldsDefaultOff(t *testing.T) {
+	var l V3NetLeafConfig
+	if err := json.Unmarshal([]byte(`{"hubUrl":"http://x","network":"felonynet"}`), &l); err != nil {
+		t.Fatal(err)
+	}
+	if l.RequireSignedHub || l.HubSigned {
+		t.Errorf("requireSignedHub=%v hubSigned=%v by default, want both off", l.RequireSignedHub, l.HubSigned)
+	}
+
+	if err := json.Unmarshal([]byte(`{"hubUrl":"http://x","network":"felonynet","requireSignedHub":true,"hubSigned":true}`), &l); err != nil {
+		t.Fatal(err)
+	}
+	if !l.RequireSignedHub || !l.HubSigned {
+		t.Errorf("requireSignedHub=%v hubSigned=%v, want both read as true", l.RequireSignedHub, l.HubSigned)
+	}
+}

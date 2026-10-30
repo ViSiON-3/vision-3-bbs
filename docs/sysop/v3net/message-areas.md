@@ -235,11 +235,25 @@ parameters:
 | `since_origin` | `origin_node` of that message. Optional. |
 | `identity` | `origin` to identify messages by origin node and UUID. A current leaf sends it on every poll, the first one with no cursor included. |
 | `limit` | Page size, 1 to 500 (default 100). |
+| `format` | `page` to get the page as an object with `has_more` in it (below). A current leaf sends it on every poll. |
 
 The hub returns the messages in its own order that come after the cursor, in
-the leaf's subscribed areas, oldest first. `X-V3Net-Has-More: true` means
-another page follows; the leaf asks again with the last message of the page
-as the cursor, skipped messages included.
+the leaf's subscribed areas, oldest first. With `format=page` the body is
+
+```json
+{"messages":[...],"has_more":true}
+```
+
+and `has_more: true` means another page follows. The hub's response
+signature covers the body, so `has_more` cannot be changed on the way. Without
+`format=page` the body is the bare array of messages and another page is
+announced by the header `X-V3Net-Has-More: true`, which no signature covers. A
+hub from before `format=page` ignores the parameter and answers that way, so
+a leaf reads either form. `format=page` is part of the signed request and the
+signature covers the body, so nothing on the way can turn a current hub's
+object into an array to fall back on the header. Either way the leaf asks
+again with the last message of the page as the cursor, skipped messages
+included.
 
 - With `since_origin`, the cursor is exactly that message in the network.
 - Without it (a leaf from before the identity rule), or when the network has
@@ -304,88 +318,6 @@ V3Net provides several menu screens accessible to sysops and users:
 These commands are configured in your menu `.CFG` files. The default V3Net
 menu is provided in `menus/v3/cfg/V3NETM.CFG`, reached from the Admin menu
 (**3** in `ADMIN.CFG`). All of its commands are `S255` (sysop only) as shipped.
-
-### Hub Signatures
-
-This section is for anyone writing another V3Net implementation. A hub
-signs what it sends a leaf with its own Ed25519 node key, the key its
-`/info` page serves as `hub_pubkey_b64` and leaves pin. Signatures are
-unpadded base64url (RFC 4648 section 5, no `=`), like the request's
-`X-V3Net-Signature`. How a leaf acts on them is in
-[Hub signatures](v3net/configuration.md#hub-signatures).
-
-**Request nonce.** With every signed request an updated leaf also sends
-`X-V3Net-Nonce`, a fresh random value (16 random bytes as unpadded
-base64url). The request signature alone does not tell two requests apart:
-`Date` has one-second resolution and Ed25519 signatures are deterministic, so
-two identical requests in the same second carry the same signature. The
-nonce does, so a reply captured for one cannot be passed off as the reply to
-the other. The nonce is not part of the request signature, whose form older
-hubs check, and older hubs ignore the header. A hub treats a request with no
-`X-V3Net-Nonce`, or one longer than 128 bytes, as having an empty nonce; a
-leaf that sent a nonce then fails to verify the reply, which is the safe way
-round.
-
-**Responses.** Every response to a request that carries
-`X-V3Net-Signature`, refusals included, carries `X-V3Net-Hub-Signature`, the
-signature over these bytes:
-
-```
-V3NET-RESP-SIG-v1\n{request signature}\n{nonce}\n{status}\n{body hash}
-```
-
-- `V3NET-RESP-SIG-v1` is literal ASCII and each `\n` is a line feed
-  (`0x0A`); there is no newline at the end. The prefix keeps a response
-  signature from being taken for any other kind.
-- `{request signature}` is the request's `X-V3Net-Signature` header exactly
-  as sent, which covers the request's method, path, `Date` and body.
-- `{nonce}` is the request's `X-V3Net-Nonce` header exactly as sent, or
-  empty (the line is then blank) for a request without one.
-- `{status}` is the HTTP status code in decimal, such as `200` or `401`.
-- `{body hash}` is the SHA-256 of the response body as sent, in lowercase
-  hex. Other headers, such as `X-V3Net-Has-More`, are not covered.
-
-**Event stream.** The `{network}/events` response is signed as above with
-an empty body (its body hash is
-`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`). Each
-event then carries two extra SSE fields, before `data` so that leaves from
-before hub signatures, which act on the `data` line and skip lines they do
-not know, still read every event:
-
-```
-event: logon
-id: 1
-sig: {signature}
-data: {"handle":"Sysop","node":"21fe31dfa154a261","timestamp":"2026-10-29T12:00:00Z"}
-
-```
-
-`id` is the event's sequence number in this stream, starting at 1 and
-rising by one with every event, pings included. `sig` is the signature over:
-
-```
-V3NET-EVENT-SIG-v1\n{network}\n{request signature}\n{nonce}\n{id}\n{event}\n{data}
-```
-
-where `{request signature}` and `{nonce}` are the `X-V3Net-Signature` and
-`X-V3Net-Nonce` of the request that opened the stream (the nonce empty if it
-had none), `{id}` the decimal sequence number, `{event}` the event
-type and `{data}` the `data` line's JSON exactly as sent. A leaf accepts an
-event only if its `id` is one more than the last and its `sig` verifies, so
-an event cannot be repeated, reordered, removed from between others, or
-moved into another stream or network. A hub that cannot sign an event ends
-the stream rather than skip a number.
-
-A leaf buffers an event until the blank line that ends it, so it caps each
-event at 16 lines and 1 MB of field text and drops a stream that sends more,
-signed or not. The hub's events are four lines each.
-
-A hub that predates hub signatures sends neither the header nor the extra
-fields, and a leaf with no hub key pinned cannot check either.
-
-The tests `TestResponseSignedPayloadFormat`, `TestNonce` and `TestEventSignature` in
-`internal/v3net/protocol/hubsig_test.go` check these payloads against the
-code.
 
 ### Coordinator Handovers
 
@@ -649,3 +581,173 @@ buk/YQJzkqsR2N2RMdVMjKBgpXP6MYvDIFEXjQQ+NnlXYPS7+J5BrJF3YBWGmu/CG4DtSinfXoic8U1o
 The test `TestMessageSignatureDocExample` in
 `internal/v3net/protocol/signature_example_test.go` checks these values
 against the code.
+
+### Hub Signatures
+
+This section is for anyone writing another V3Net implementation. A hub
+signs what it sends a leaf with its own Ed25519 node key, the key its
+`/info` page serves as `hub_pubkey_b64` and leaves pin. Signatures are
+unpadded base64url (RFC 4648 section 5, no `=`), like the request's
+`X-V3Net-Signature`. How a leaf acts on them is in
+[Hub signatures](v3net/configuration.md#hub-signatures).
+
+**Request nonce.** With every signed request an updated leaf also sends
+`X-V3Net-Nonce`, a fresh random value (16 random bytes as unpadded
+base64url). The request signature alone does not tell two requests apart:
+`Date` has one-second resolution and Ed25519 signatures are deterministic, so
+two identical requests in the same second carry the same signature. The
+nonce does, so a reply captured for one cannot be passed off as the reply to
+the other. The nonce is not part of the request signature, whose form older
+hubs check, and older hubs ignore the header. A hub treats a request with no
+`X-V3Net-Nonce`, or one longer than 128 bytes, as having an empty nonce; a
+leaf that sent a nonce then fails to verify the reply, which is the safe way
+round.
+
+**Responses.** Every response to a request that carries
+`X-V3Net-Signature`, refusals included, carries `X-V3Net-Hub-Signature`, the
+signature over these bytes:
+
+```
+V3NET-RESP-SIG-v1\n{request signature}\n{nonce}\n{status}\n{body hash}
+```
+
+- `V3NET-RESP-SIG-v1` is literal ASCII and each `\n` is a line feed
+  (`0x0A`); there is no newline at the end. The prefix keeps a response
+  signature from being taken for any other kind.
+- `{request signature}` is the request's `X-V3Net-Signature` header exactly
+  as sent, which covers the request's method, path, `Date` and body.
+- `{nonce}` is the request's `X-V3Net-Nonce` header exactly as sent, or
+  empty (the line is then blank) for a request without one.
+- `{status}` is the HTTP status code in decimal, such as `200` or `401`.
+- `{body hash}` is the SHA-256 of the response body as sent, in lowercase
+  hex. Headers are not covered. The one header a leaf acts on,
+  `X-V3Net-Has-More` on a message page, is replaced by `has_more` in the
+  body when the leaf polls with `format=page`
+  (see [Polling Messages](#polling-messages)).
+
+**Event stream.** The `{network}/events` response is signed as above with
+an empty body (its body hash is
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`). Each
+event then carries two extra SSE fields, before `data` so that leaves from
+before hub signatures, which act on the `data` line and skip lines they do
+not know, still read every event:
+
+```
+event: logon
+id: 1
+sig: {signature}
+data: {"handle":"Sysop","node":"21fe31dfa154a261","timestamp":"2026-10-29T12:00:00Z"}
+
+```
+
+`id` is the event's sequence number in this stream, starting at 1 and
+rising by one with every event, pings included. `sig` is the signature over:
+
+```
+V3NET-EVENT-SIG-v1\n{network}\n{request signature}\n{nonce}\n{id}\n{event}\n{data}
+```
+
+where `{request signature}` and `{nonce}` are the `X-V3Net-Signature` and
+`X-V3Net-Nonce` of the request that opened the stream (the nonce empty if it
+had none), `{id}` the decimal sequence number, `{event}` the event
+type and `{data}` the `data` line's JSON exactly as sent. A leaf accepts an
+event only if its `id` is one more than the last and its `sig` verifies, so
+an event cannot be repeated, reordered, removed from between others, or
+moved into another stream or network. A hub that cannot sign an event ends
+the stream rather than skip a number.
+
+A leaf buffers an event until the blank line that ends it, so it caps each
+event at 16 lines and 1 MB of field text and drops a stream that sends more,
+signed or not. The hub's events are four lines each.
+
+A hub that predates hub signatures sends neither the header nor the extra
+fields, and a leaf with no hub key pinned cannot check either. Since
+removing the header makes a reply look like one from such a hub, a leaf
+refuses unsigned replies and streams from a hub it has seen sign before, or
+whose sysop requires hub signatures
+([Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies)).
+
+#### Hub signature example
+
+The hub's key is the one from the
+[message signature example](#worked-example) (RFC 8032 section 7.1,
+test 1), and the leaf's is the secret key from test 2 of the same section.
+Ed25519 signatures are deterministic, so these values never change.
+
+| | Hub | Leaf |
+|---|---|---|
+| Seed (hex) | `9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60` | `4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb` |
+| Public key | `11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=` | `PUAXw+hDiVqStwqnTRt+vJyYLM8uxJaMwM1V8Sr0Zgw=` |
+| Node ID | `21fe31dfa154a261` | `39f713d0a644253f` |
+
+**A reply to a poll.** The leaf polls `felonynet` from the start:
+
+| | |
+|---|---|
+| Request | `GET /v3net/v1/felonynet/messages?since=&limit=100&identity=origin&format=page` |
+| `Date` | `Thu, 29 Oct 2026 12:00:00 GMT` |
+| `X-V3Net-Signature` | `ZGIM6oH1yXiQb76W2fM1Oskcq9quIqOfcEz87Ts45d3D1_y-PA9kTApaeS-dfN2d4FMMbVlL8Itr9YWJ5RbLAw` |
+| `X-V3Net-Nonce` | `AAECAwQFBgcICQoLDA0ODw` |
+
+The request has no body, so the request signature covers the SHA-256 of
+nothing, `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+The hub has no messages for it and answers `200` with this body:
+
+```
+{"messages":[],"has_more":false}
+```
+
+Its SHA-256 is
+`f4528e8588f80a1c2a47d6468ec1ce76305c0780fccee566e4d2e13012026a65`, so the
+signed payload is these five lines, with no newline at the end:
+
+```
+V3NET-RESP-SIG-v1
+ZGIM6oH1yXiQb76W2fM1Oskcq9quIqOfcEz87Ts45d3D1_y-PA9kTApaeS-dfN2d4FMMbVlL8Itr9YWJ5RbLAw
+AAECAwQFBgcICQoLDA0ODw
+200
+f4528e8588f80a1c2a47d6468ec1ce76305c0780fccee566e4d2e13012026a65
+```
+
+and the hub sends it with:
+
+```
+X-V3Net-Hub-Signature: Q3GGVka76e7yLCKTmyvRnwLePhlmTNoyusbsiV1UKLd8wnf8HA5CYCe6h2xE1ZN5cjoQ2L9iWGuII-bQUvklAA
+```
+
+**An event.** The leaf opens the event stream:
+
+| | |
+|---|---|
+| Request | `GET /v3net/v1/felonynet/events` |
+| `Date` | `Thu, 29 Oct 2026 12:00:05 GMT` |
+| `X-V3Net-Signature` | `5CtxwqDTTWItRJcSnHzbftIFXtSKt0NGKhaOqmbqn2R0OuYfSM91EwZiBZaAjXoU7VM6piLzZulxtkXQvFHEDg` |
+| `X-V3Net-Nonce` | `EBESExQVFhcYGRobHB0eHw` |
+
+The first event on it is a logon on the leaf's board. Its signed payload is
+these seven lines, with no newline at the end:
+
+```
+V3NET-EVENT-SIG-v1
+felonynet
+5CtxwqDTTWItRJcSnHzbftIFXtSKt0NGKhaOqmbqn2R0OuYfSM91EwZiBZaAjXoU7VM6piLzZulxtkXQvFHEDg
+EBESExQVFhcYGRobHB0eHw
+1
+logon
+{"handle":"Sysop","node":"39f713d0a644253f","timestamp":"2026-10-29T12:00:07Z"}
+```
+
+and the hub sends it as:
+
+```
+event: logon
+id: 1
+sig: 6KGM84CZziZt-xRrnWzvbgMaxJdJOFCMNLEHUJ4qnPRiY1uJDDJPzOH9SXrhP9UFO5svy6I0AFVktMkVxp9vAg
+data: {"handle":"Sysop","node":"39f713d0a644253f","timestamp":"2026-10-29T12:00:07Z"}
+
+```
+
+The tests `TestResponseSignedPayloadFormat`, `TestNonce` and
+`TestEventSignature` in `internal/v3net/protocol/hubsig_test.go` check these
+payloads against the code, and `TestHubSignatureDocExample` in
+`internal/v3net/protocol/hubsig_example_test.go` checks the example.

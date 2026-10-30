@@ -144,6 +144,16 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			10, &l.HubPubKey, &l.PendingHubPubKey),
 		v3netPendingField("Offered Coord", 11, &l.PendingCoordinatorPubKey),
 		v3netPendingField("Offered Hub", 12, &l.PendingHubPubKey),
+		{
+			Label: "Signed Hub", Help: "Refuse unsigned replies from the hub; leave N until the hub signs", Type: ftYesNo, Col: 3, Row: 13, Width: 1,
+			Get: func() string { return uitext.BoolToYN(l.RequireSignedHub) },
+			Set: func(val string) error { l.RequireSignedHub = uitext.YNToBool(val); return nil },
+		},
+		{
+			Label: "Hub Signs", Help: "Set by the leaf once the hub signs; its unsigned replies are then refused. N only if it stopped signing", Type: ftYesNo, Col: 3, Row: 14, Width: 1,
+			Get: func() string { return uitext.BoolToYN(l.HubSigned) },
+			Set: func(val string) error { l.HubSigned = uitext.YNToBool(val); return nil },
+		},
 	}
 }
 
