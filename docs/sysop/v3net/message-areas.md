@@ -419,7 +419,10 @@ or was cut short by a restart moves the same areas when it is retried.
 The same update clears the previous signers, so their areas are never
 moved twice, over a manager chosen since. A hub-side NAL change made while
 the NAL is still another key's and the handovers lead to the hub's (the
-re-sign failed) counts as that update and moves the same areas. Any NAL
+re-sign failed) counts as that update and moves the same areas, except an
+area whose manager the change itself sets, compared with the stored NAL (a
+new manager, or a new area): that area keeps the manager the change gave it,
+even the node of a key handed over from. Any NAL
 stored under a new key while handovers are held also clears the previous
 signers, a NAL posted by the coordinator included; a posted NAL is signed
 as it came, so nothing moves.

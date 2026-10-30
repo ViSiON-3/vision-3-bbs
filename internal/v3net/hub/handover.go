@@ -350,7 +350,7 @@ func (h *Hub) handlePostHandover(w http.ResponseWriter, r *http.Request) {
 	// is not is adopted below like any handover to the hub's key.
 	if fromPrev && n.CoordPubKeyB64 == hubKey {
 		changed := n
-		if h.moveManagedAreas(n, oldKeys(fresh)) {
+		if h.moveManagedAreas(n, oldKeys(fresh), nil) {
 			if err := nal.Sign(n, h.cfg.Keystore); err != nil {
 				slog.Error("hub: could not re-sign the NAL for the previous signers' areas", "network", network, "error", err)
 				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
@@ -522,11 +522,11 @@ func oldKeys(chain []protocol.CoordHandover) []string {
 // moveManagedAreas makes the hub's node the manager of each area of n
 // managed by the node of a key in from, the coordinator keys the network
 // was handed over from, and logs each move. Areas other nodes manage are
-// left alone. It changes n in place and reports whether any area moved;
+// left alone, as are those whose tags are in keep. It changes n in place and reports whether any area moved;
 // the caller signs and stores n, so the moves and the re-sign are one NAL
 // update. Without it the old coordinator's areas would keep a manager
 // nobody runs any more until the operator reassigned each one.
-func (h *Hub) moveManagedAreas(n *protocol.NAL, from []string) bool {
+func (h *Hub) moveManagedAreas(n *protocol.NAL, from []string, keep map[string]bool) bool {
 	hubKey, hubNode := h.hubKey(), h.cfg.Keystore.NodeID()
 	old := make(map[string]bool, 2*len(from))
 	for _, key := range from {
@@ -541,7 +541,7 @@ func (h *Hub) moveManagedAreas(n *protocol.NAL, from []string) bool {
 	moved := false
 	for i := range n.Areas {
 		a := &n.Areas[i]
-		if !old[a.ManagerPubKeyB64] && !old[a.ManagerNodeID] {
+		if keep[a.Tag] || (!old[a.ManagerPubKeyB64] && !old[a.ManagerNodeID]) {
 			continue
 		}
 		slog.Info("hub: area manager moved to the hub after a coordinator handover",
@@ -624,7 +624,9 @@ var ErrHandedOver = errors.New("hub: the network was handed over to another coor
 // stored NAL is still another key's, because the re-sign failed, this change
 // is that re-sign: the areas it would have moved move in n (see
 // adoptHandover), and storing n drops the previous signers (see putTx), so no
-// later re-sign moves them again. Every hub-side NAL change signs through it;
+// later re-sign moves them again. An area whose manager n sets, compared with
+// the stored NAL, stays as n has it: that is the change's own choice. Every
+// hub-side NAL change signs through it;
 // call it with nalMu held, or before the hub serves requests.
 func (h *Hub) SignNAL(n *protocol.NAL) error {
 	stored, err := h.nalStore.Get(n.Network)
@@ -654,10 +656,24 @@ func (h *Hub) SignNAL(n *protocol.NAL) error {
 			if err != nil {
 				return err
 			}
-			h.moveManagedAreas(n, keysHandedOverFrom(stored, hs, prev))
+			h.moveManagedAreas(n, keysHandedOverFrom(stored, hs, prev), managersSet(stored, n))
 		}
 	}
 	return nal.Sign(n, h.cfg.Keystore)
+}
+
+// managersSet returns the tags of the areas of after whose manager is not what
+// before has: a new manager, or a new area.
+func managersSet(before, after *protocol.NAL) map[string]bool {
+	tags := make(map[string]bool)
+	for i := range after.Areas {
+		a := &after.Areas[i]
+		was := before.FindArea(a.Tag)
+		if was == nil || was.ManagerNodeID != a.ManagerNodeID || was.ManagerPubKeyB64 != a.ManagerPubKeyB64 {
+			tags[a.Tag] = true
+		}
+	}
+	return tags
 }
 
 // refuseHandedOver answers a NAL change that SignNAL refused with 409 and
@@ -722,7 +738,7 @@ func (h *Hub) adoptHandover(network string) (*protocol.NAL, error) {
 		return nil, err
 	}
 	from := n.CoordPubKeyB64
-	h.moveManagedAreas(n, keysHandedOverFrom(n, hs, prev))
+	h.moveManagedAreas(n, keysHandedOverFrom(n, hs, prev), nil)
 	if err := nal.Sign(n, h.cfg.Keystore); err != nil {
 		return nil, err
 	}
