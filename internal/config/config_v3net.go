@@ -211,10 +211,13 @@ func V3NetConfigFile(configPath string) configmerge.File[V3NetConfig] {
 		// A leaf is a subscription to one network through one hub, so
 		// leaves added or removed elsewhere, and keys the BBS pins, merge
 		// leaf by leaf with the saving side's edits.
-		ListKeys: map[string][]string{"leaves": {"network", "hubUrl"}},
+		ListKeys: map[string][]string{"leaves": v3netLeafKeyFields},
 		Prepare:  settleV3NetHubMoves,
 	}
 }
+
+// v3netLeafKeyFields are the JSON fields that identify a leaf in the merge.
+var v3netLeafKeyFields = []string{"network", "hubUrl"}
 
 // v3netLeafKey identifies a leaf the way the merge does.
 type v3netLeafKey struct{ network, hubURL string }
@@ -229,7 +232,16 @@ type v3netLeafKey struct{ network, hubURL string }
 // added another, the other side's version of the removed leaf is taken back
 // to base when only its key state differs, and the leaf goes. An edit to any
 // other field of it is still kept and reported, as is a plain removal.
+//
+// When a version has two leaves with one network and hub URL, the merge
+// takes the leaves as a single value and there are no single leaves to
+// settle, so all three are left alone.
 func settleV3NetHubMoves(base, ours, theirs V3NetConfig) (V3NetConfig, V3NetConfig) {
+	for _, leaves := range [][]V3NetLeafConfig{base.Leaves, ours.Leaves, theirs.Leaves} {
+		if !configmerge.ItemsKeyed(leaves, v3netLeafKeyFields) {
+			return ours, theirs
+		}
+	}
 	theirs.Leaves = settleV3NetLeaves(base.Leaves, ours.Leaves, theirs.Leaves)
 	ours.Leaves = settleV3NetLeaves(base.Leaves, theirs.Leaves, ours.Leaves)
 	return ours, theirs

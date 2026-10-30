@@ -246,6 +246,26 @@ func TestV3NetSaveRemovedLeafKeepsKeyPin(t *testing.T) {
 	}
 }
 
+// Leaves sharing a network and hub URL merge as a single list, so a hub
+// move must not touch them first: here it would set both of this side's
+// unchanged duplicates to one of them, which reads as an edit and brings
+// the old leaves back over the move made on disk.
+func TestV3NetSaveHubMoveLeavesDuplicateLeavesAlone(t *testing.T) {
+	base := V3NetConfig{Leaves: []V3NetLeafConfig{
+		{HubURL: "https://old.example", Network: "neta", CoordinatorPubKey: "A"},
+		{HubURL: "https://old.example", Network: "neta", CoordinatorPubKey: "B"},
+	}}
+	leaves, conflicts := saveV3NetHubRace(t, base, func(c *V3NetConfig) {
+		c.Leaves = []V3NetLeafConfig{{HubURL: "https://new.example", Network: "neta", CoordinatorPubKey: "A"}}
+	}, func(*V3NetConfig) {})
+	if len(conflicts) != 0 {
+		t.Errorf("conflicts = %+v", conflicts)
+	}
+	if len(leaves) != 1 || leaves[0].HubURL != "https://new.example" {
+		t.Errorf("leaves = %+v, want the move made on disk", leaves)
+	}
+}
+
 // A misspelt name in v3netLeafHubState would silently stop that field
 // counting as hub state.
 func TestV3NetLeafHubStateNamesFields(t *testing.T) {

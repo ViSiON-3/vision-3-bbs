@@ -410,6 +410,25 @@ func TestSaveFileListKeys(t *testing.T) {
 	}
 }
 
+func TestItemsKeyed(t *testing.T) {
+	fields := subKeys["subs"]
+	for _, c := range []struct {
+		list []sub
+		want bool
+	}{
+		{nil, true},
+		{[]sub{{Net: "a", Hub: "h"}, {Net: "a", Hub: "h2"}}, true},
+		{[]sub{{Net: "a", Hub: "h"}, {Net: "a", Hub: "h", Key: "K"}}, false},
+	} {
+		if got := ItemsKeyed(c.list, fields); got != c.want {
+			t.Errorf("ItemsKeyed(%+v) = %v, want %v", c.list, got, c.want)
+		}
+	}
+	if ItemsKeyed([]map[string]any{{"net": "a"}}, fields) {
+		t.Error("an item lacking a key field counted as keyed")
+	}
+}
+
 // Prepare adjusts the versions merged; the file as read is still what the
 // result is compared with before writing.
 func TestSaveFilePrepareHook(t *testing.T) {

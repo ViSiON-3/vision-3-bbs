@@ -457,6 +457,28 @@ func fieldKey(item any, fields []string) (key, label string, ok bool) {
 	return string(data), strings.Join(parts, " "), true
 }
 
+// ItemsKeyed reports whether list merges item by item when keyed on fields
+// (MergeTypedKeys): every item has the fields, as strings, and no two items
+// share their values. Otherwise the list merges as a single value. A hook
+// that matches items itself (File.Prepare) uses it to match only where the
+// merge will.
+func ItemsKeyed[E any](list []E, fields []string) bool {
+	g, err := toGeneric(list)
+	if err != nil {
+		return false
+	}
+	items, _ := g.([]any)
+	seen := make(map[string]bool, len(items))
+	for _, item := range items {
+		k, _, ok := fieldKey(item, fields)
+		if !ok || seen[k] {
+			return false
+		}
+		seen[k] = true
+	}
+	return true
+}
+
 // blankStrings returns the versions of one list item with every string
 // field that some version has, and another lacks, set to "" in the one that
 // lacks it. An omitempty string field cleared on one side is then an edit
