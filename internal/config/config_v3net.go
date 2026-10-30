@@ -245,18 +245,74 @@ type v3netLeafKey struct{ network, hubURL string }
 // to base when only its key state differs, and the leaf goes. An edit to any
 // other field of it is still kept and reported, as is a plain removal.
 //
+// A network both sides moved to different hubs is a hub URL changed on both
+// sides: ours is kept and theirs' move reported (dropV3NetHubMovedElsewhere).
+//
 // When a version has two leaves with one network and hub URL, the merge
 // takes the leaves as a single value and there are no single leaves to
 // settle, so all three are left alone.
-func settleV3NetHubMoves(base, ours, theirs V3NetConfig) (V3NetConfig, V3NetConfig) {
+func settleV3NetHubMoves(base, ours, theirs V3NetConfig) (V3NetConfig, V3NetConfig, []configmerge.Conflict) {
 	for _, leaves := range [][]V3NetLeafConfig{base.Leaves, ours.Leaves, theirs.Leaves} {
 		if !configmerge.ItemsKeyed(leaves, v3netLeafKeyFields) {
-			return ours, theirs
+			return ours, theirs, nil
 		}
 	}
 	theirs.Leaves = settleV3NetLeaves(base.Leaves, ours.Leaves, theirs.Leaves)
 	ours.Leaves = settleV3NetLeaves(base.Leaves, theirs.Leaves, ours.Leaves)
-	return ours, theirs
+	var conflicts []configmerge.Conflict
+	theirs.Leaves, conflicts = dropV3NetHubMovedElsewhere(base.Leaves, ours.Leaves, theirs.Leaves)
+	return ours, theirs, conflicts
+}
+
+// dropV3NetHubMovedElsewhere returns theirs without the leaf of each network
+// that both sides moved to a different new hub, with a conflict for each.
+// The two new leaves have different keys, so the merge would keep both and
+// list the network twice; like a field changed on both sides, this save's
+// hub wins instead. Only a network with one leaf in each version counts:
+// a second leaf added for a network on either side is a subscription
+// through another hub, kept as such. theirs itself is not modified.
+func dropV3NetHubMovedElsewhere(base, ours, theirs []V3NetLeafConfig) ([]V3NetLeafConfig, []configmerge.Conflict) {
+	// only maps each network with exactly one leaf to that leaf.
+	only := func(leaves []V3NetLeafConfig) map[string]V3NetLeafConfig {
+		m := make(map[string]V3NetLeafConfig, len(leaves))
+		n := make(map[string]int, len(leaves))
+		for _, l := range leaves {
+			m[l.Network] = l
+			n[l.Network]++
+		}
+		for network, count := range n {
+			if count > 1 {
+				delete(m, network)
+			}
+		}
+		return m
+	}
+	baseOnly, oursOnly := only(base), only(ours)
+
+	var out []V3NetLeafConfig
+	var conflicts []configmerge.Conflict
+	for network, t := range only(theirs) {
+		b, inBase := baseOnly[network]
+		o, inOurs := oursOnly[network]
+		if !inBase || !inOurs || t.HubURL == b.HubURL || o.HubURL == b.HubURL || o.HubURL == t.HubURL {
+			continue
+		}
+		if out == nil {
+			out = slices.Clone(theirs)
+		}
+		out = slices.DeleteFunc(out, func(l V3NetLeafConfig) bool { return l.Network == network })
+		path := "leaves." + network + " " + b.HubURL + ".hubUrl"
+		conflicts = append(conflicts, configmerge.Conflict{
+			Path: path, Field: "hubUrl",
+			What: fmt.Sprintf("%s: changed to %s here and to %s elsewhere; kept this save's leaf",
+				path, o.HubURL, t.HubURL),
+		})
+	}
+	if out == nil {
+		return theirs, nil
+	}
+	slices.SortFunc(conflicts, func(a, b configmerge.Conflict) int { return strings.Compare(a.Path, b.Path) })
+	return out, conflicts
 }
 
 // settleV3NetLeaves returns other with each leaf that mover moved to a new
