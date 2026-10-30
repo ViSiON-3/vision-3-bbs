@@ -277,8 +277,8 @@ A change that needs no restart still does not always apply the moment you save
 it. A saved `v3net.json`, from the config editor or a text editor, waits until
 no callers are online, then applies within a couple of seconds of the last one
 logging off. On a busy board a save can look like it did nothing, including an
-edit to a key pin, **Hub Signs**, **Signed Hub**, **Signed Messages** or a
-subscription. To apply it right away, with callers online:
+edit to a key pin, **Hub Signs**, **Signed Hub**, a subscription's **Signed
+Messages** or a subscription's boards. To apply it right away, with callers online:
 
 ```bash
 touch configs/reload.force
