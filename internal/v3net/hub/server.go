@@ -74,6 +74,9 @@ func (h *Hub) newMux() http.Handler {
 			// Coordinator handover (any subscriber; the statement is signed).
 			case strings.HasSuffix(path, "/nal/handover") && r.Method == http.MethodPost:
 				h.handlePostHandover(w, r)
+			// Recorded signers, for v3net-handover (any subscriber).
+			case strings.HasSuffix(path, "/nal/signers") && r.Method == http.MethodGet:
+				h.handleGetSigners(w, r)
 
 			// Area proposals.
 			case strings.HasSuffix(path, "/areas/propose") && r.Method == http.MethodPost:
