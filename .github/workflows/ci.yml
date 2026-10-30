@@ -100,24 +100,27 @@ jobs:
         shell: pwsh
         run: |
           Set-Content "$env:RUNNER_TEMP/resource-logger.ps1" @'
+          param($log)
           # 4 hours at most, in case the stop step never runs.
           foreach ($i in 1..480) {
-            $os = Get-CimInstance Win32_OperatingSystem
-            $procs = Get-Process
-            $mem = $procs | Sort-Object WorkingSet64 -Descending | Select-Object -First 5 |
-              ForEach-Object { '{0}={1}MB' -f $_.ProcessName, [int]($_.WorkingSet64 / 1MB) }
-            $cpu = $procs | Sort-Object CPU -Descending | Select-Object -First 5 |
-              ForEach-Object { '{0}={1}s' -f $_.ProcessName, [int]$_.CPU }
-            Add-Content "$env:RUNNER_TEMP/resources.log" ('{0:u} free={1}MB commit_free={2}MB mem: {3} cpu_total: {4}' -f (Get-Date).ToUniversalTime(),
-              [int]($os.FreePhysicalMemory / 1KB), [int]($os.FreeVirtualMemory / 1KB), ($mem -join ' '), ($cpu -join ' '))
+            try {
+              $os = Get-CimInstance Win32_OperatingSystem
+              $procs = Get-Process
+              $mem = $procs | Sort-Object WorkingSet64 -Descending | Select-Object -First 5 |
+                ForEach-Object { '{0}={1}MB' -f $_.ProcessName, [int]($_.WorkingSet64 / 1MB) }
+              $cpu = $procs | Sort-Object CPU -Descending | Select-Object -First 5 |
+                ForEach-Object { '{0}={1}s' -f $_.ProcessName, [int]$_.CPU }
+              Add-Content $log ('{0:u} free={1}MB commit_free={2}MB mem: {3} cpu_total: {4}' -f (Get-Date).ToUniversalTime(),
+                [int]($os.FreePhysicalMemory / 1KB), [int]($os.FreeVirtualMemory / 1KB), ($mem -join ' '), ($cpu -join ' '))
+            } catch { Add-Content $log "sample failed: $_" }
             Start-Sleep 30
           }
           '@
-          $logger = Start-Process pwsh -PassThru -WindowStyle Hidden `
-            -RedirectStandardOutput "$env:RUNNER_TEMP/resources.out" `
-            -RedirectStandardError "$env:RUNNER_TEMP/resources.err" `
-            -ArgumentList '-NoProfile', '-File', "$env:RUNNER_TEMP/resource-logger.ps1"
-          Set-Content "$env:RUNNER_TEMP/resource-logger.pid" $logger.Id
+          # Not Start-Process: its child was gone by the next step on the runner.
+          $cmd = '"{0}" -NoProfile -WindowStyle Hidden -File "{1}\resource-logger.ps1" "{1}\resources.log"' -f (Get-Command pwsh).Source, $env:RUNNER_TEMP
+          $logger = Invoke-CimMethod Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd }
+          "logger pid $($logger.ProcessId), return value $($logger.ReturnValue)"
+          Set-Content "$env:RUNNER_TEMP/resource-logger.pid" $logger.ProcessId
       # Windows only: the lint job already vets on Linux, and a Linux vet never
       # analyses the windows-tagged files anyway, since the build constraints
       # exclude them. This is their first vet coverage.
@@ -164,7 +167,7 @@ jobs:
           $id = Get-Content "$env:RUNNER_TEMP/resource-logger.pid"
           "logger still running: $([bool](Get-Process -Id $id -ErrorAction SilentlyContinue))"
           Stop-Process -Id $id -Force -ErrorAction SilentlyContinue
-          Get-Content "$env:RUNNER_TEMP/resources.log", "$env:RUNNER_TEMP/resources.out", "$env:RUNNER_TEMP/resources.err" -ErrorAction SilentlyContinue
+          Get-Content "$env:RUNNER_TEMP/resources.log" -ErrorAction SilentlyContinue
 
   # Script-store replacement inspects native ACLs on every released OS.
   # Linux and Windows are covered above; macOS needs its own native run.
