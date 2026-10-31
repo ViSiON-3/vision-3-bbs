@@ -113,10 +113,15 @@ const (
 const ProdCodeUnassigned = 0xFE
 
 // productRevision splits a version string such as "0.9.5" or "v0.9.5" into
-// the major and minor revision bytes a Type-2+ header carries. A part that
-// is missing or not a number is 0, as is one that does not fit a byte.
+// the major and minor revision bytes a Type-2+ header carries. The prefix
+// and surrounding space are accepted as version.Display accepts them. A part
+// that is missing or not a number is 0, as is one that does not fit a byte.
 func productRevision(v string) (major, minor uint8) {
-	parts := strings.SplitN(strings.TrimPrefix(v, "v"), ".", 3)
+	v = strings.TrimSpace(v)
+	if v != "" && (v[0] == 'v' || v[0] == 'V') {
+		v = v[1:]
+	}
+	parts := strings.SplitN(v, ".", 3)
 	byteAt := func(i int) uint8 {
 		if i >= len(parts) {
 			return 0
