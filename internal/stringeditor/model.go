@@ -574,6 +574,9 @@ func (m Model) formatProblem(key, value string) error {
 	if !ok {
 		return nil
 	}
+	if _, canSwitchOff := config.StringMissingDefaults[key]; canSwitchOff && value == "" {
+		return nil // saved blank, this string is off; its call sites check for it
+	}
 	return stringformat.ValidateValue(key, value, config.StringFallbacks[key], def)
 }
 
@@ -581,7 +584,7 @@ func (m Model) formatProblem(key, value string) error {
 // match the arguments its call site passes.
 func (m Model) formatProblems() []stringformat.Problem {
 	defaults := stringformat.MergeDefaults(config.StringFallbacks, m.shippedDefaults)
-	return stringformat.Validate(m.values, config.StringFallbacks, defaults)
+	return stringformat.Validate(m.values, config.StringFallbacks, config.StringMissingDefaults, defaults)
 }
 
 // plural renders a "and N more" suffix for a warning naming one example.
