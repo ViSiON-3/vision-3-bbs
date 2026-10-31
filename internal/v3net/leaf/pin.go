@@ -100,7 +100,10 @@ type Pins struct {
 	Coord, Hub               string
 	PendingCoord, PendingHub string
 	// HubSigned is the entry's record that the hub signs (see
-	// Config.HubSigned), and HubSignedClears its count of clears.
+	// Config.HubSigned). HubSignedClears is the highest count of clears the
+	// caller has seen, in this copy or an earlier one; a store holding more
+	// holds a clear the caller has yet to see. UpdatePins and Retire return the
+	// store's count, once read, which is what the next reload is told against.
 	HubSigned       bool
 	HubSignedClears int
 	// CoordEdited and HubEdited say the file's pin changed since the copy
@@ -109,9 +112,10 @@ type Pins struct {
 	// unsavedFollowsStore): otherwise the file simply does not hold it yet.
 	CoordEdited, HubEdited bool
 	// HubSignedEdited says the sysop wrote hubSigned: its value changed, or
-	// the entry's count of clears did (config.V3NetLeafConfig.HubSignedClears),
+	// the entry's count of clears rose (config.V3NetLeafConfig.HubSignedClears),
 	// which is how a sysop clears a record the file never got. A record not
-	// yet stored is dropped only then.
+	// yet stored is dropped only then. A lower count is an older copy of the
+	// file, or the sysop lowering it by hand, and neither is a clear.
 	HubSignedEdited bool
 	// CoordUnread, HubUnread and HubSignedUnread are set on what UpdatePins and
 	// Retire return when the store could not be read, or held no entry, for
@@ -151,6 +155,14 @@ type keyPins struct {
 	// caller's config holds, as far as the leaf knows: UpdatePins acts on
 	// a change from it, which is the sysop clearing or setting it.
 	hubSigned, hubSignedUnsaved, hubSignedCfg bool
+	// hubSignedCleared is set when the sysop's clear reached this leaf. A
+	// reply a predecessor verified is older than that, so it is not recorded
+	// here or handed on (see HandLateRepliesTo).
+	hubSignedCleared bool
+	// hubSignedLate marks a record first set after the leaf retired, and
+	// hubSignedNext is the replacement to hand one to.
+	hubSignedLate bool
+	hubSignedNext *Leaf
 
 	// retired is set by Retire and EndStores: a replacement leaf has taken
 	// over this subscription's stores, or the subscription is gone, so the
@@ -211,7 +223,7 @@ func (p *keyPins) state(kind KeyKind) pinState {
 //
 // HubSigned is applied by applyHubSigned.
 func (l *Leaf) UpdatePins(ctx context.Context, p Pins) Pins {
-	p.HubSignedUnread = !l.applyHubSigned(p.HubSigned, p.HubSignedEdited)
+	l.applyHubSigned(&p)
 
 	var coordChanged, hubChanged, coordRead, hubRead bool
 	p.Coord, p.PendingCoord, coordChanged, coordRead = l.applyFilePin(KeyCoordinator, p.Coord, p.PendingCoord, p.CoordEdited)
@@ -391,8 +403,8 @@ func (l *Leaf) EndStores() {
 //
 // Call it once the leaf has stopped. Work it started can still be finishing, so
 // it takes the save locks; a store after that would land unseen by the
-// replacement, so the leaf stores nothing more. A reply verified after this is
-// not carried: it is news to the replacement as a reply it had yet to get.
+// replacement, so the leaf stores nothing more. A reply verified after this
+// reaches the replacement through HandLateRepliesTo.
 func (l *Leaf) Retire(p Pins) (Pins, UnsavedState) {
 	defer l.lockStores()()
 
@@ -443,10 +455,37 @@ func (l *Leaf) settleHubSigned(p *Pins, signedUnsaved, signedCfg bool) bool {
 			p.HubSigned = p.HubSigned || signedCfg
 			return signedUnsaved
 		}
-		edited = edited || stored.Signed != p.HubSigned || stored.Clears != p.HubSignedClears
+		edited = edited || stored.Signed != p.HubSigned || stored.Clears > p.HubSignedClears
 		p.HubSigned, p.HubSignedClears = stored.Signed, stored.Clears
 	}
+	if !p.HubSigned && (edited || signedCfg) {
+		l.pinMu.Lock()
+		l.pins.hubSignedCleared = true
+		l.pinMu.Unlock()
+	}
 	return signedUnsaved && !p.HubSigned && !edited
+}
+
+// HandLateRepliesTo makes next, this retired leaf's replacement for the same
+// network and hub, the one told if a hub signature first verifies here from now
+// on, or did since Retire. A reply under way when the leaf stopped would
+// otherwise be forgotten, and next would take unsigned replies until its own
+// first verified reply. It only ever sets the record, and not if the sysop's
+// clear reached this leaf or next (see keyPins.hubSignedCleared). Next stores
+// what it is told. A leaf with no replacement on the same hub, EndStores' case,
+// is never given one: what it learned says nothing about another hub.
+func (l *Leaf) HandLateRepliesTo(next *Leaf) {
+	l.pinMu.Lock()
+	if l.pins.hubSignedCleared {
+		l.pinMu.Unlock()
+		return
+	}
+	l.pins.hubSignedNext = next
+	late := l.pins.hubSignedLate
+	l.pinMu.Unlock()
+	if late {
+		next.lateHubSigned()
+	}
 }
 
 // applyHubSigned installs the config's hubSigned, v, when it differs from
@@ -461,7 +500,7 @@ func (l *Leaf) settleHubSigned(p *Pins, signedUnsaved, signedCfg bool) bool {
 // (Config.HubSignedStored), read under the same lock noteHubSigned holds
 // while it stores, so the read sees every store that has finished. A
 // store that cannot be read, or holds no entry, leaves the record in force,
-// and applyHubSigned returns false.
+// and sets p.HubSignedUnread.
 //
 // A record OnHubSigned failed to store is in force although the config
 // lacks it. A reload that says nothing about it (edited false) keeps it and
@@ -475,29 +514,48 @@ func (l *Leaf) settleHubSigned(p *Pins, signedUnsaved, signedCfg bool) bool {
 // reads, before it waits for the lock to store it, and that one was not
 // checked against the store, so it is left for noteHubSigned.
 //
+// A store's count of clears above p.HubSignedClears is an edit too: the copy
+// predates that clear, and p returns the store's count for the next reload to
+// be told against, so that reload would not see it. So a stale copy's lower
+// count leaves the next reload's baseline alone, while a count really lowered
+// in the file lowers it, and the next rise counts.
+//
 // Once the record is cleared, with requireSignedHub off, a pause caused
 // only by unsigned replies lifts at once, even for a hub whose /info
 // serves no key to resume on.
-func (l *Leaf) applyHubSigned(v, edited bool) (read bool) {
+func (l *Leaf) applyHubSigned(p *Pins) {
 	l.hubSignedSaveMu.Lock()
 	defer l.hubSignedSaveMu.Unlock()
 
+	v, edited := p.HubSigned, p.HubSignedEdited
 	l.pinMu.Lock()
-	clearing := !v && (l.pins.hubSignedCfg || (edited && l.pins.hubSignedUnsaved))
+	cfg, unsaved := l.pins.hubSignedCfg, l.pins.hubSignedUnsaved
 	l.pinMu.Unlock()
 	if l.hubSignedReadHook != nil {
 		l.hubSignedReadHook()
 	}
-	if clearing && l.cfg.HubSignedStored != nil {
-		stored, err := l.cfg.HubSignedStored()
-		if err != nil {
-			l.noteStoreUnread("hubSigned", err)
-			return false
+	var stored StoredHubSigned
+	var storeErr error
+	if l.cfg.HubSignedStored != nil {
+		if stored, storeErr = l.cfg.HubSignedStored(); storeErr == nil {
+			edited = edited || stored.Clears > p.HubSignedClears
+			p.HubSignedClears = stored.Clears
 		}
+	}
+	clearing := !v && (cfg || (edited && unsaved))
+	if clearing && storeErr != nil {
+		l.noteStoreUnread("hubSigned", storeErr)
+		p.HubSignedUnread = true
+		return
+	}
+	if clearing && l.cfg.HubSignedStored != nil {
 		v = stored.Signed
 	}
 
 	l.pinMu.Lock()
+	if !v && (clearing || edited) {
+		l.pins.hubSignedCleared = true
+	}
 	dropped := clearing && !v && l.pins.hubSignedUnsaved
 	changed := v != l.pins.hubSignedCfg || dropped
 	if changed {
@@ -514,12 +572,11 @@ func (l *Leaf) applyHubSigned(v, edited bool) (read bool) {
 		slog.Info("leaf: hub signing record changed in config",
 			"network", l.cfg.Network, "hub", l.cfg.HubURL, "hub_signed", v)
 	default:
-		return true
+		return
 	}
 	if !v {
 		l.liftUnsignedPause()
 	}
-	return true
 }
 
 // UnsavedState returns what the leaf holds that its caller's store does not

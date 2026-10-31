@@ -1,0 +1,89 @@
+package leaf
+
+import (
+	"testing"
+	"time"
+)
+
+// A late record arriving while a clear is being applied on the replacement, past
+// the point the clear looked for a record to drop, waits for it and then sees it,
+// so it cannot undo the clear (#824).
+func TestLateHubSignedDuringClear(t *testing.T) {
+	old, _ := setupLeaf(t, "http://unused.invalid", &mockJAMWriter{})
+	next, _ := setupLeaf(t, "http://unused.invalid", &mockJAMWriter{})
+	rec := &fileRecorder{}
+	rec.attach(next)
+	old.Retire(Pins{})
+	old.HandLateRepliesTo(next)
+
+	done := make(chan struct{})
+	next.hubSignedReadHook = func() {
+		go func() { old.noteHubSigned(); close(done) }()
+		waitFor(t, "the late reply to verify", old.HubSigned)
+		time.Sleep(50 * time.Millisecond) // for it to reach the replacement
+	}
+	next.UpdatePins(nil, Pins{HubSignedClears: 1, HubSignedEdited: true}) //nolint:staticcheck // nil ctx: the leaf is not running
+	<-done
+	if next.HubSigned() || rec.file.Load() {
+		t.Errorf("hubSigned=%v stored=%v; want the clear to stand", next.HubSigned(), rec.file.Load())
+	}
+}
+
+// A record first set on a retired leaf reaches its replacement, whichever comes
+// first, along a chain of them, and is stored there. The sysop's clear, on the
+// leaf or anywhere along the chain, stops it (#824).
+func TestLateHubSignedHandOff(t *testing.T) {
+	cleared := Pins{HubSignedClears: 1, HubSignedEdited: true}
+	retireAndHand := func(from, to *Leaf, p Pins) {
+		from.Retire(p)
+		from.HandLateRepliesTo(to)
+	}
+	cases := []struct {
+		name string
+		run  func(old, mid, last *Leaf)
+		want bool
+	}{
+		{name: "handed on before the reply", want: true, run: func(old, _, last *Leaf) {
+			retireAndHand(old, last, Pins{})
+			old.noteHubSigned()
+		}},
+		{name: "reply before it is handed on", want: true, run: func(old, _, last *Leaf) {
+			old.Retire(Pins{})
+			old.noteHubSigned()
+			old.HandLateRepliesTo(last)
+		}},
+		{name: "along a chain", want: true, run: func(old, mid, last *Leaf) {
+			retireAndHand(old, mid, Pins{})
+			retireAndHand(mid, last, Pins{})
+			old.noteHubSigned()
+		}},
+		{name: "cleared when retired", run: func(old, _, last *Leaf) {
+			retireAndHand(old, last, cleared)
+			old.noteHubSigned()
+		}},
+		{name: "cleared when the next one retired", run: func(old, mid, last *Leaf) {
+			retireAndHand(old, mid, Pins{})
+			retireAndHand(mid, last, cleared)
+			old.noteHubSigned()
+		}},
+		{name: "cleared in place on the replacement", run: func(old, _, last *Leaf) {
+			retireAndHand(old, last, Pins{})
+			last.UpdatePins(nil, cleared) //nolint:staticcheck // nil ctx: the leaf is not running
+			old.noteHubSigned()
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			old, _ := setupLeaf(t, "http://unused.invalid", &mockJAMWriter{})
+			mid, _ := setupLeaf(t, "http://unused.invalid", &mockJAMWriter{})
+			last, _ := setupLeaf(t, "http://unused.invalid", &mockJAMWriter{})
+			rec := &fileRecorder{}
+			rec.attach(last)
+
+			c.run(old, mid, last)
+			if last.HubSigned() != c.want || rec.file.Load() != c.want {
+				t.Errorf("hubSigned=%v stored=%v, want %v", last.HubSigned(), rec.file.Load(), c.want)
+			}
+		})
+	}
+}

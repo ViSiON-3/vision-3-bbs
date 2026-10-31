@@ -470,10 +470,12 @@ theirs. It makes no difference whether the same save changes something else, or
 another change is still waiting to be applied.
 
 If you edit the file by hand, raise `hubSignedClears` in that subscription's
-entry by one, adding `"hubSignedClears": 1` if it isn't there. Only a change in
+entry by one, adding `"hubSignedClears": 1` if it isn't there. Only a rise in
 the number counts: saving the file as it was, or `touch configs/v3net.json`,
-drops nothing. Restarting the BBS also works, since it starts from what the
-file holds.
+drops nothing, and neither does lowering the number or removing the field. The
+leaf keeps its record, and once the BBS has re-read the file the next rise
+counts from the lower number. Restarting the BBS also works, since it starts
+from what the file holds.
 
 Any other change saved to `v3net.json` while the write is failing leaves the
 record and the retry alone, and the same goes for a key the leaf has pinned

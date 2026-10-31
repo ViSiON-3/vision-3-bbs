@@ -249,30 +249,67 @@ func (l *Leaf) hubUnsigned(ctx context.Context, path, why string) error {
 // sets hubSigned and hands it to OnHubSigned to store; a store that failed
 // is retried at each later verified reply until it succeeds, or until a
 // reload in which the sysop wrote hubSigned drops the record (see
-// applyHubSigned).
+// applyHubSigned). On a retired leaf the first time goes to its replacement
+// instead (see HandLateRepliesTo).
 func (l *Leaf) noteHubSigned() {
 	l.unsignedRefusedLogged.Store(false)
-	l.pinMu.Lock()
-	first := !l.pins.hubSigned
-	if first {
-		l.pins.hubSigned = true
-		l.pins.hubSignedUnsaved = true
-	}
-	save := l.pins.hubSignedUnsaved
-	l.pinMu.Unlock()
-	if first {
-		slog.Info("leaf: hub signs its responses; unsigned replies from it are refused from now on",
-			"network", l.cfg.Network, "hub", l.cfg.HubURL)
-	}
-	if !save {
+	if !l.markHubSigned() {
 		return
 	}
 	// Held across the store and the record of it, so applyHubSigned never
 	// reads the store between the two (see there).
 	l.hubSignedSaveMu.Lock()
 	defer l.hubSignedSaveMu.Unlock()
+	l.storeHubSigned()
+}
+
+// lateHubSigned records a reply a predecessor verified, as noteHubSigned does a
+// reply of this leaf's own, unless the sysop's clear has reached this leaf. It
+// holds the save lock throughout, which applyHubSigned and Retire hold while
+// they act on a clear, so a clear is either seen here or finds the record to
+// clear.
+func (l *Leaf) lateHubSigned() {
+	l.hubSignedSaveMu.Lock()
+	defer l.hubSignedSaveMu.Unlock()
 	l.pinMu.Lock()
-	save = l.pins.hubSigned && l.pins.hubSignedUnsaved && !l.pins.retired
+	cleared := l.pins.hubSignedCleared
+	l.pinMu.Unlock()
+	if !cleared && l.markHubSigned() {
+		l.storeHubSigned()
+	}
+}
+
+// markHubSigned sets the record, the first time handing it on from a retired
+// leaf, and reports whether it waits to be stored.
+func (l *Leaf) markHubSigned() (save bool) {
+	l.pinMu.Lock()
+	first := !l.pins.hubSigned
+	if first {
+		l.pins.hubSigned = true
+		l.pins.hubSignedUnsaved = true
+	}
+	save = l.pins.hubSignedUnsaved
+	late := first && l.pins.retired
+	if late {
+		l.pins.hubSignedLate = true
+	}
+	next := l.pins.hubSignedNext
+	l.pinMu.Unlock()
+	if first {
+		slog.Info("leaf: hub signs its responses; unsigned replies from it are refused from now on",
+			"network", l.cfg.Network, "hub", l.cfg.HubURL)
+	}
+	if late && next != nil {
+		next.lateHubSigned()
+	}
+	return save
+}
+
+// storeHubSigned hands a record waiting to be stored to OnHubSigned. The caller
+// holds the save lock.
+func (l *Leaf) storeHubSigned() {
+	l.pinMu.Lock()
+	save := l.pins.hubSigned && l.pins.hubSignedUnsaved && !l.pins.retired
 	l.pinMu.Unlock()
 	if !save {
 		// A save that ran ahead of this one stored it, or the leaf that
