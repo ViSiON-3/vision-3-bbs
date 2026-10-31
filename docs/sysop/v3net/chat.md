@@ -114,6 +114,9 @@ This covers message text, handles, topics, room and network names, and what
 arrives from other boards, which also has any control characters blanked. The
 chat strings in `strings.json` are the sysop's and keep every pipe code.
 
+The fields of a `CHATHEADER.ANS` header are the exception: they are not expanded
+at all, so a topic holding `|04` or `||` shows exactly that there.
+
 ---
 
 ## Local Chat
