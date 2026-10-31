@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -15,6 +16,7 @@ import (
 	"golang.org/x/text/transform"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/util"
+	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
 
 // PacketType2Plus is the packet version identifier for Type-2+ packets.
@@ -105,12 +107,41 @@ const (
 	MsgAttrFRQ      = 0x0800
 )
 
+// ProdCodeUnassigned is the FTSC product code for a product that has no
+// code of its own in the FTSC product list (FTSCPROD). ViSiON/3 has none,
+// so its packets carry this instead of 0, which the list gives to Fido.
+const ProdCodeUnassigned = 0xFE
+
+// productRevision splits a version string such as "0.9.5" or "v0.9.5" into
+// the major and minor revision bytes a Type-2+ header carries. The prefix
+// and surrounding space are accepted as version.Display accepts them. A part
+// that is missing or not a number is 0, as is one that does not fit a byte.
+func productRevision(v string) (major, minor uint8) {
+	v = strings.TrimSpace(v)
+	if v != "" && (v[0] == 'v' || v[0] == 'V') {
+		v = v[1:]
+	}
+	parts := strings.SplitN(v, ".", 3)
+	byteAt := func(i int) uint8 {
+		if i >= len(parts) {
+			return 0
+		}
+		n, err := strconv.Atoi(parts[i])
+		if err != nil || n < 0 || n > 255 {
+			return 0
+		}
+		return uint8(n)
+	}
+	return byteAt(0), byteAt(1)
+}
+
 // NewPacketHeader creates a header with sensible defaults for the given addresses.
 func NewPacketHeader(origZone, origNet, origNode, origPoint uint16,
 	destZone, destNet, destNode, destPoint uint16,
 	password string) *PacketHeader {
 
 	now := time.Now()
+	major, minor := productRevision(version.Number)
 	h := &PacketHeader{
 		OrigNode:  origNode,
 		DestNode:  destNode,
@@ -121,6 +152,9 @@ func NewPacketHeader(origZone, origNet, origNode, origPoint uint16,
 		Minute:    uint16(now.Minute()),
 		Second:    uint16(now.Second()),
 		PktType:   PacketType2Plus,
+		ProdCode:  ProdCodeUnassigned,
+		ProdRev:   major,
+		ProdRev2:  minor,
 		OrigNet:   origNet,
 		DestNet:   destNet,
 		QOrigZone: origZone,
