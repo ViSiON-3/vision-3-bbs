@@ -47,7 +47,13 @@ func TestScan_CleansHeaderControls(t *testing.T) {
 	msg := jam.NewMessage()
 	msg.From, msg.To, msg.Subject = "Fr\x1bcom", "T\x07o", "Sub\x1b[2Jject\r\nTo: x"
 	msg.Text = "body"
-	if _, err := base.WriteMessage(msg); err != nil {
+	area, ok := e.msgMgr.GetAreaByID(1)
+	if !ok {
+		t.Fatal("no area 1")
+	}
+	// WriteMessageExt, as a local post is written: WriteMessage marks a message
+	// processed, and the scan would pass over it.
+	if _, err := base.WriteMessageExt(msg, jam.DetermineMessageType(area.AreaType, area.EchoTag), area.EchoTag, "TestBBS"); err != nil {
 		t.Fatal(err)
 	}
 	_ = base.Close()
