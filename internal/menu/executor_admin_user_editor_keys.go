@@ -232,6 +232,21 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 			}
 			refresh = true
 		}
+	case 'v', 'V':
+		// Paired QWK API devices. Saved at once, like the infoform viewer it
+		// waits for staged edits to be dealt with first.
+		if len(st.pendingChanges) == 0 && st.deviceScreenAvailable() {
+			sel := st.users[st.selectedIndex]
+			screen := deviceScreen{e: st.e, s: st.s, terminal: st.terminal, mode: st.outputMode, um: st.userManager,
+				width: termWidth, height: termHeight, userID: sel.ID, owner: sel.Handle, by: st.currentUser.Handle}
+			if err := screen.run(); err != nil {
+				return false, true, nil, "LOGOFF", err
+			}
+			if err := st.renderHeader(); err != nil {
+				return false, true, nil, "", err
+			}
+			refresh = true
+		}
 	case '\r', '\n':
 		// Enter/Return pressed - do nothing (removed help text display)
 	case editor.KeyArrowUp:

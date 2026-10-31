@@ -12,7 +12,7 @@ import (
 func (m Model) View() string {
 	switch {
 	case m.mode == modeEdit || m.mode == modeEditField || m.mode == modePasswordEntry || m.mode == modeSaveOnLeave ||
-		m.mode == modeKeyList || m.mode == modeKeyAdd:
+		m.mode == modeKeyList || m.mode == modeKeyAdd || m.mode == modeDeviceList:
 		return m.viewEditScreen()
 	case m.confirmFromEdit && (m.mode == modeDeleteConfirm || m.mode == modeUndeleteConfirm || m.mode == modePurgeConfirm || m.mode == modeValidate):
 		return m.viewEditScreen()

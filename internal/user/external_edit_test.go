@@ -437,3 +437,106 @@ func TestAdoptedLegacyRecordKeepsItsHandle(t *testing.T) {
 		t.Errorf("Handle = %q, want OldTimer — the record would be skipped on the next load", got.Handle)
 	}
 }
+
+// paired returns a user with the named devices, all valid for its password.
+func paired(ids ...string) *User {
+	u := &User{ID: 7, Handle: "Pat", PasswordHash: "hash"}
+	for _, id := range ids {
+		u.APIDevices = append(u.APIDevices, APIDevice{ID: id, Name: id, PasswordStamp: PasswordStamp(u.PasswordHash)})
+	}
+	return u
+}
+
+func deviceIDs(devices []APIDevice) []string {
+	ids := []string{}
+	for _, d := range devices {
+		ids = append(ids, d.ID)
+	}
+	return ids
+}
+
+// An unpairing made in ./ue must survive the BBS's next save, and must not
+// disturb the last-use time the BBS holds for the devices that remain.
+func TestExternalUnpairSurvivesSave(t *testing.T) {
+	um, path := mgrWithUser(t, paired("a", "b"))
+	used := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	if err := um.TouchAPIDevice(7, "b", used); err != nil {
+		t.Fatal(err)
+	}
+	writeUsersFile(t, path, paired("b"))
+
+	if err := um.UpdateUser(paired()); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := um.GetUserByID(7)
+	if ids := deviceIDs(got.APIDevices); len(ids) != 1 || ids[0] != "b" {
+		t.Fatalf("devices in memory = %v, want [b]", ids)
+	}
+	if !got.APIDevices[0].LastUsed.Equal(used) {
+		t.Errorf("LastUsed = %v, want the BBS's %v", got.APIDevices[0].LastUsed, used)
+	}
+	if ids := deviceIDs(readUsersFile(t, path)["pat"].APIDevices); len(ids) != 1 || ids[0] != "b" {
+		t.Errorf("devices on disk = %v, want [b]", ids)
+	}
+}
+
+// A phone paired as the first save after a ./ue edit is missing from the file
+// that edit wrote. It must not be taken for an unpairing.
+func TestPairingSurvivesPendingExternalEdit(t *testing.T) {
+	um, path := mgrWithUser(t, paired("a"))
+	edited := paired("a")
+	edited.AccessLevel = 50
+	writeUsersFile(t, path, edited)
+
+	d := APIDevice{ID: "new", PublicKey: "k", PasswordStamp: PasswordStamp("hash")}
+	if err := um.AddAPIDevice(7, d, 10); err != nil {
+		t.Fatal(err)
+	}
+	onDisk := readUsersFile(t, path)["pat"]
+	if ids := deviceIDs(onDisk.APIDevices); len(ids) != 2 {
+		t.Errorf("devices on disk = %v, want [a new]", ids)
+	}
+	if onDisk.AccessLevel != 50 {
+		t.Errorf("AccessLevel = %d, the ./ue edit was lost", onDisk.AccessLevel)
+	}
+	if um.unsavedDevices != nil {
+		t.Errorf("unsavedDevices = %v after the save", um.unsavedDevices)
+	}
+}
+
+// A stale copy in ./ue cannot bring back a device the BBS has since unpaired.
+func TestExternalEditCannotRestoreUnpairedDevice(t *testing.T) {
+	um, path := mgrWithUser(t, paired("a", "b"))
+	if _, err := um.RemoveAPIDevice(7, "a"); err != nil {
+		t.Fatal(err)
+	}
+	writeUsersFile(t, path, paired("a", "b"))
+
+	if err := um.UpdateUser(paired()); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := um.GetUserByID(7); len(got.APIDevices) != 1 || got.APIDevices[0].ID != "b" {
+		t.Errorf("devices = %v, want [b]", deviceIDs(got.APIDevices))
+	}
+}
+
+func TestShowsAPIDevices(t *testing.T) {
+	stale := paired("a")
+	stale.PasswordHash = "changed"
+	tests := []struct {
+		name    string
+		u       *User
+		enabled bool
+		want    bool
+	}{
+		{"API on, no devices", paired(), true, true},
+		{"API off, no devices", paired(), false, false},
+		{"API off, devices left over", paired("a"), false, true},
+		{"API off, only voided devices", stale, false, false},
+	}
+	for _, tt := range tests {
+		if got := tt.u.ShowsAPIDevices(tt.enabled); got != tt.want {
+			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}

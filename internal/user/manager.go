@@ -60,6 +60,10 @@ type UserMgr struct {
 	// and the save path merges those edits back in rather than overwriting
 	// them. Guarded by mu, like every other field here.
 	fileState fileFingerprint
+	// unsavedDevices holds the IDs of devices being paired whose save has not
+	// finished. The merge keeps these though they are not on disk yet; any
+	// other device missing from disk was unpaired in ./ue. Guarded by mu.
+	unsavedDevices map[string]bool
 }
 
 // NewUserManager creates and initializes a new user manager

@@ -674,6 +674,18 @@ func stringCatalog() []StringEntry {
 		{Label: "Twit: Label", Key: "konfigTwitListLabel", Description: "User configuration field label"},
 		{Label: "Twit: Help", Key: "konfigTwitListHelp", Description: "User configuration field help"},
 
+		{Label: "Konfig: QWK Devices", Key: "konfigQwkDevicesLabel", Description: "User configuration field label"},
+		{Label: "Konfig: QWK Devices Help", Key: "konfigQwkDevicesHelp", Description: "User configuration field help"},
+		{Label: "QWK Devices: Title", Key: "qwkDevicesTitle", Description: "Heading of the paired device screen"},
+		{Label: "QWK Devices: Header", Key: "qwkDevicesHeader", Description: "Column heading above the device list"},
+		{Label: "QWK Devices: Empty", Key: "qwkDevicesEmpty", Description: "Shown in place of the list when nothing is paired"},
+		{Label: "QWK Devices: Never", Key: "qwkDevicesNever", Description: "Last Used value for a device that has never logged in"},
+		{Label: "QWK Devices: Prompt", Key: "qwkDevicesPrompt", Description: "Prompt under the device list"},
+		{Label: "QWK Devices: Removed", Key: "qwkDevicesRemoved", Description: "Confirmation after unpairing a device"},
+		{Label: "QWK Devices: Invalid", Key: "qwkDevicesInvalid", Description: "Shown when the number entered matches no device"},
+		{Label: "QWK Devices: Save Failed", Key: "qwkDevicesSaveFailed", Description: "Error when the unpairing could not be saved"},
+		{Label: "QWK Devices: Disabled", Key: "qwkDevicesDisabled", Description: "Shown when the screen is opened on a board without the QWK API"},
+
 		// Auto-Signature: ask before each post (#697)
 		{Label: "Msg: Add Signature?", Key: "msgAutoSigPrompt", Description: "Yes/No asked after saving a message when the caller wants to be asked before their Auto-Signature is added"},
 		{Label: "Konfig: Sig Ask On", Key: "konfigAutoSigAskOn", Description: "Asking before each post was switched on"},

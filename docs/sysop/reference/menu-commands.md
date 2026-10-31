@@ -147,6 +147,7 @@ All of these apply to the logged-in user. The stock main menu binds `K` to `USER
 | `CFG_FILECOLUMNS` | none | Toggle screen for the columns shown in file listings. | |
 | `CFG_PASSWORD` | none | Asks for the current password, then a new one. | |
 | `CFG_TWITLIST` | none | Full-screen editor for the caller's personal ignore list (Twit List): add, delete, clear, page, or quit. Drawn like the generated door menu from `TWITLIST.MNU` and `templates/TWITLIST.*`. Also available as M in USERCONFIG and I in the stock message menu. Shows a notice and returns when the sysop has turned Twit Lists off. | |
+| `CFG_QWKDEVICES` | none | Lists the caller's devices paired with the [QWK API](../messages/qwk-api.md) and unpairs one by number. Also item **O** of the **K** user configuration, which hides it on a board without the API. |
 | `CFG_AUTOSIG` | none | Auto-signature editor. Change, delete, switch asking before each post, or quit. Up to five lines. | |
 
 ## Doors

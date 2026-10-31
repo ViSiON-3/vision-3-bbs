@@ -71,14 +71,23 @@ The app never keeps the user's password. Instead:
 What this means for you as SysOp:
 
 - **A lost or stolen phone holds no password.** The user can unpair it from
-  the app on another device (after a password login there), and any session
-  it has ends on its next request.
+  the terminal (**QWK Devices** in the **K** user configuration, or
+  `RUN:CFG_QWKDEVICES` on a menu of yours), or from the app on another device
+  after a password login there. Any session it has ends on its next request.
+- **You can unpair a device for them.** Press **V** in the in-BBS user editor, or
+  choose **QWK Devices** in `./ue`, to see a user's devices (name, when paired,
+  last used) and unpair one. Changes in `./ue` take effect when you save, and it
+  can only remove devices. If you overwrite a newer `users.json` when `./ue`
+  warns about it, a device paired since `./ue` loaded is lost too and has to
+  pair again.
+- **On a board without the API, none of this appears.** These screens show only
+  when `qwkAPI.enabled` is on, or for a user who still has devices from when it
+  was on, so they can remove them.
 - **Changing a user's password unpairs all their devices** — by them, in the
   user editor, or in `./ue`. Someone who learned the password could have
   paired a phone of their own, so a password change has to cut those off. The
-  user pairs their real phone again with the new password. This is also the
-  way to remove a user's devices yourself, together with banning them; there
-  is no device list in the user editor yet.
+  user pairs their real phone again with the new password. It is also the way
+  to remove all of a user's devices at once.
 - **Banning, deleting or demoting a user** stops their devices logging in,
   exactly as it stops a password login.
 - Each account can pair up to **10 devices**.

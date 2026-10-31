@@ -54,6 +54,7 @@ const (
 	modeMassPurge                         // Confirm purge all deleted users
 	modeKeyList                           // WFC key-manager: list/delete keys
 	modeKeyAdd                            // WFC key-manager: add a new key
+	modeDeviceList                        // Paired QWK API devices: list/unpair
 )
 
 // Model is the BubbleTea model for the user editor TUI.
@@ -175,14 +176,19 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 
 	// Load retention days from config (best effort)
 	retDays := -1
+	qwkAPIEnabled := false
 	if cfg, err := config.LoadServerConfig(configDir); err == nil {
 		retDays = cfg.DeletedUserRetentionDays
+		qwkAPIEnabled = cfg.QWKAPI.Enabled
 	}
 
 	// Sort users by ID with deleted users at the bottom
 	sortUsers(users, false)
 
 	fields := editFields()
+	if qwkAPIEnabled || anyAPIDevices(users) {
+		fields = append(fields, qwkDevicesFieldDef())
+	}
 
 	// Wire up dynamic display fields that need runtime context.
 	for i := range fields {
@@ -282,6 +288,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateKeyList(msg)
 		case modeKeyAdd:
 			return m.updateKeyAdd(msg)
+		case modeDeviceList:
+			return m.updateDeviceList(msg)
 		}
 	}
 	return m, nil
@@ -486,6 +494,10 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if f.Label == "WFC Keys" {
 				// WFC key-manager dialog
 				m.openKeyDialog()
+				return m, nil
+			}
+			if f.Label == qwkDevicesField {
+				m.openDeviceDialog()
 				return m, nil
 			}
 			// Password field - enter password entry mode

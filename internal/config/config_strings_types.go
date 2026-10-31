@@ -6,6 +6,18 @@ type StringsConfig struct {
 	KonfigThreadViewLabel string `json:"konfigThreadViewLabel"`
 	KonfigThreadViewHelp  string `json:"konfigThreadViewHelp"`
 
+	KonfigQwkDevicesLabel string `json:"konfigQwkDevicesLabel"`
+	KonfigQwkDevicesHelp  string `json:"konfigQwkDevicesHelp"`
+	QwkDevicesTitle       string `json:"qwkDevicesTitle"`
+	QwkDevicesHeader      string `json:"qwkDevicesHeader"`
+	QwkDevicesEmpty       string `json:"qwkDevicesEmpty"`
+	QwkDevicesNever       string `json:"qwkDevicesNever"`
+	QwkDevicesPrompt      string `json:"qwkDevicesPrompt"`
+	QwkDevicesRemoved     string `json:"qwkDevicesRemoved"`
+	QwkDevicesInvalid     string `json:"qwkDevicesInvalid"`
+	QwkDevicesSaveFailed  string `json:"qwkDevicesSaveFailed"`
+	QwkDevicesDisabled    string `json:"qwkDevicesDisabled"`
+
 	KonfigTwitListLabel string `json:"konfigTwitListLabel"`
 	KonfigTwitListHelp  string `json:"konfigTwitListHelp"`
 	TwitNamePrompt      string `json:"twitNamePrompt"`
