@@ -18,7 +18,7 @@ func TestHeaderFieldsCannotRunScreenCodes(t *testing.T) {
 		{"new format, marker in the subject", "@E:30@", "|#1|CL", "x"},
 		{"new format, cut by the field width", "@E:3@|CL", "ab|CLxx", "x"},
 		{"legacy", "|E |S", "a|CLb", "c|PPd"},
-		{"legacy, marker in the subject", "|E", "|#1|CL", "x"},
+		{"legacy, marker in the subject", "|E", "|#1|CLx", "x"},
 		// Run often: map order used to decide whether this one fired.
 		{"legacy, code in the subject", "|E |S", "|S", "CL"},
 		{"legacy, code in the recipient", "|S |E", "CL", "|E"},
