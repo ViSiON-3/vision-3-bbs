@@ -432,7 +432,6 @@ func (t *Tosser) createOutboundPacket(link *linkConfig, msgs []pendingMsg) (int,
 	)
 
 	var packedMsgs []*ftn.PackedMessage
-	own2D := t.ownAddr.String2D()
 
 	for _, pm := range msgs {
 		// Build body with AREA, kludges, text, SEEN-BY, PATH
@@ -464,12 +463,10 @@ func (t *Tosser) createOutboundPacket(link *linkConfig, msgs []pendingMsg) (int,
 		if pm.msg.SeenBy != "" {
 			parsed.SeenBy = []string{pm.msg.SeenBy}
 		}
-		parsed.SeenBy = MergeSeenBy(parsed.SeenBy, own2D)
-
 		if pm.msg.Path != "" {
 			parsed.Path = []string{pm.msg.Path}
 		}
-		parsed.Path = AppendPath(parsed.Path, own2D)
+		stampSeenByPath(parsed, t.ownAddr)
 
 		body := ftn.FormatPackedMessageBody(parsed)
 		chrs := chrsKludge(pm.msg.Kludges)

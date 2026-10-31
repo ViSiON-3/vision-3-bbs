@@ -178,7 +178,7 @@ Outbound:
 ```
 
 1. binkd receives a bundle from your hub and places it in `inbound_path`
-2. `v3mail toss` extracts the bundle, parses each `.pkt`, and writes messages into the correct JAM bases; updates SEEN-BY and PATH; detects duplicates via `data/ftn/dupes.json`
+2. `v3mail toss` extracts the bundle, parses each `.pkt`, and writes messages into the correct JAM bases; adds your node address to SEEN-BY and PATH (a point system leaves both lines alone, in both directions, since its net/node is the boss's address and the boss would reject the mail as a loop); detects duplicates via `data/ftn/dupes.json`
 3. Users read and reply to messages in Vision/3
 4. `v3mail scan` reads new messages from JAM bases (using a per-base high-water mark stored in each area's `.jlr` file under the `v3mail` scanner user) and creates outbound `.pkt` files in `outbound_path`
 5. `v3mail ftn-pack` bundles the `.pkt` files into BSO ZIP archives in `binkd_outbound_path`; if link `flavour` is `Crash`, a `.clo` flow file is written to trigger an immediate binkd call

@@ -634,10 +634,8 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader, p
 		}
 	}()
 
-	// Update SEEN-BY and PATH with our address
-	own2D := t.ownAddr.String2D()
-	parsed.SeenBy = MergeSeenBy(parsed.SeenBy, own2D)
-	parsed.Path = AppendPath(parsed.Path, own2D)
+	// Update SEEN-BY and PATH with our address (a point leaves them alone)
+	stampSeenByPath(parsed, t.ownAddr)
 
 	// Build JAM message
 	jamMsg := jam.NewMessage()

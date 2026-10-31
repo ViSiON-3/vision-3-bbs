@@ -5,7 +5,24 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
+	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
+
+// stampSeenByPath adds own to a message's SEEN-BY and PATH lines, as a node
+// does when it tosses echomail in either direction. A point leaves both
+// lines alone: they hold 2D net/node addresses, a point's 2D form is its
+// boss's address, and a boss that finds itself in PATH drops the message as
+// a loop. The boss stamps the lines when it tosses the message onward.
+func stampSeenByPath(parsed *ftn.ParsedBody, own *jam.FidoAddress) {
+	if own.Point != 0 {
+		return
+	}
+	own2D := own.String2D()
+	parsed.SeenBy = MergeSeenBy(parsed.SeenBy, own2D)
+	parsed.Path = AppendPath(parsed.Path, own2D)
+}
 
 // netNode is a net/node pair for SEEN-BY/PATH processing.
 type netNode struct {
