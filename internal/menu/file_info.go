@@ -86,13 +86,13 @@ func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
 			"|15Downloads   : |07%d\r\n"+
 			"|15Area        : |07%s\r\n"+
 			"|15Description : |07%s\r\n",
-		rec.Filename,
+		callerText(rec.Filename),
 		sizeStr,
 		rec.UploadedAt.Format("01/02/2006"),
-		rec.UploadedBy,
+		callerText(rec.UploadedBy),
 		rec.DownloadCount,
 		areaName,
-		rec.Description,
+		callerText(rec.Description),
 	)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(info)), outputMode)
 

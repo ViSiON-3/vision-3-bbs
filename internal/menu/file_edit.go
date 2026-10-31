@@ -164,7 +164,7 @@ func editFileShowAndPrompt(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 			"|15Downloads : |07%d\r\n"+
 			"|15Area      : |07%s\r\n"+
 			"|15Desc      : |07%s\r\n",
-		rec.Filename, sizeStr, rec.UploadedBy, dateStr, rec.DownloadCount, areaName, rec.Description,
+		callerText(rec.Filename), sizeStr, callerText(rec.UploadedBy), dateStr, rec.DownloadCount, areaName, callerText(rec.Description),
 	)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(info+"\r\n")), outputMode)
 

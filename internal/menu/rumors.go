@@ -67,7 +67,7 @@ func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
 		r := &rd.Rumors[idx]
 		author := rumorShownAuthor(r, anonName)
 		wv(terminal, fmt.Sprintf("|03%-4d|07%-42s|11%-16s|07%s\r\n",
-			r.ID, truncateRunes(r.Text, 41), truncateRunes(author, 15), r.PostedAt.Format("01/02/06")), outputMode)
+			r.ID, callerText(truncateRunes(r.Text, 41)), callerText(truncateRunes(author, 15)), r.PostedAt.Format("01/02/06")), outputMode)
 		// The author column is too narrow for "Author (RealUser)", so a sysop
 		// gets the real poster of a masked rumor on a line of its own,
 		// under the author column.
@@ -79,7 +79,7 @@ func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
 					poster = parts[0]
 				}
 				wv(terminal, fmt.Sprintf("%s|08(|11%s|08)|07\r\n",
-					strings.Repeat(" ", rumorListAuthorCol), poster), outputMode)
+					strings.Repeat(" ", rumorListAuthorCol), callerText(poster)), outputMode)
 			}
 		}
 	}
@@ -147,7 +147,7 @@ func runRumorsSearch(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		found++
 		author := rumorDisplayAuthor(&r, isSysop, anonName)
-		wv(terminal, fmt.Sprintf("|03%-4d|07%s |08by |11%s\r\n", r.ID, r.Text, author), outputMode)
+		wv(terminal, fmt.Sprintf("|03%-4d|07%s |08by |11%s\r\n", r.ID, callerText(r.Text), callerText(author)), outputMode)
 	}
 
 	if found == 0 {
@@ -203,7 +203,7 @@ func runRumorsNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		found++
 		author := rumorDisplayAuthor(&r, isSysop, anonName)
-		wv(terminal, fmt.Sprintf("|03%-4d|07%s |08by |11%s\r\n", r.ID, r.Text, author), outputMode)
+		wv(terminal, fmt.Sprintf("|03%-4d|07%s |08by |11%s\r\n", r.ID, callerText(r.Text), callerText(author)), outputMode)
 	}
 
 	if found == 0 {

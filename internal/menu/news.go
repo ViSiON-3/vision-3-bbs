@@ -245,7 +245,7 @@ func renderNewsHeader(e *MenuExecutor, item *NewsItem, idx int, outputMode ansi.
 	if err != nil {
 		// Fallback plain header if NEWSHDR.ANS is missing.
 		fallback := fmt.Sprintf("\r\n|15News #%d: |11%s\r\n|07From: |11%s |07  Date: |11%s\r\n|08%s\r\n",
-			idx, item.Title, item.From, item.When.Format("01/02/2006"),
+			idx, callerText(item.Title), callerText(item.From), item.When.Format("01/02/2006"),
 			strings.Repeat("\xc4", newsFallbackHeaderWidth))
 		return trimTrailingBlankRows(ansi.ReplacePipeCodes([]byte(fallback))), newsFallbackHeaderWidth
 	}
@@ -256,8 +256,8 @@ func renderNewsHeader(e *MenuExecutor, item *NewsItem, idx int, outputMode ansi.
 	}
 	hdr := string(raw)
 	hdr = strings.ReplaceAll(hdr, "^NM", strconv.Itoa(idx))
-	hdr = strings.ReplaceAll(hdr, "^TI", item.Title)
-	hdr = strings.ReplaceAll(hdr, "^FR", item.From)
+	hdr = strings.ReplaceAll(hdr, "^TI", callerText(item.Title))
+	hdr = strings.ReplaceAll(hdr, "^FR", callerText(item.From))
 	hdr = strings.ReplaceAll(hdr, "^DT", item.When.Format("01/02/2006"))
 	hdr = strings.ReplaceAll(hdr, "^TM", item.When.Format("3:04 pm"))
 	hdr = strings.ReplaceAll(hdr, "^LV", strconv.Itoa(item.Level))

@@ -86,7 +86,7 @@ func runBanUser(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	confirmPrompt := fmt.Sprintf("\r\n\r\n|07Ban |15%s|07 (set level 0 + unvalidated)? @", targetUser.Handle)
+	confirmPrompt := fmt.Sprintf("\r\n\r\n|07Ban |15%s|07 (set level 0 + unvalidated)? @", callerText(targetUser.Handle))
 	confirm, confirmErr := e.PromptYesNo(s, terminal, confirmPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
 	if confirmErr != nil {
 		if errors.Is(confirmErr, io.EOF) {
@@ -121,7 +121,7 @@ func runBanUser(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	success := fmt.Sprintf("\r\n\r\n|10User banned: |15%s|10 (level 0, unvalidated).|07", targetUser.Handle)
+	success := fmt.Sprintf("\r\n\r\n|10User banned: |15%s|10 (level 0, unvalidated).|07", callerText(targetUser.Handle))
 	_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(success)), outputMode)
 	if pauseErr := e.loginPausePrompt(s, terminal, nodeNumber, outputMode, termWidth, termHeight); pauseErr != nil {
 		if errors.Is(pauseErr, io.EOF) {
@@ -207,7 +207,7 @@ func runDeleteUser(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	confirmPrompt := fmt.Sprintf("\r\n\r\n|07Delete |15%s|07 (soft delete - data preserved)? @", targetUser.Handle)
+	confirmPrompt := fmt.Sprintf("\r\n\r\n|07Delete |15%s|07 (soft delete - data preserved)? @", callerText(targetUser.Handle))
 	confirm, confirmErr := e.PromptYesNo(s, terminal, confirmPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
 	if confirmErr != nil {
 		if errors.Is(confirmErr, io.EOF) {
@@ -243,7 +243,7 @@ func runDeleteUser(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	success := fmt.Sprintf("\r\n\r\n|10User deleted: |15%s|10 (soft delete - data preserved).|07", targetUser.Handle)
+	success := fmt.Sprintf("\r\n\r\n|10User deleted: |15%s|10 (soft delete - data preserved).|07", callerText(targetUser.Handle))
 	_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(success)), outputMode)
 	if pauseErr := e.loginPausePrompt(s, terminal, nodeNumber, outputMode, termWidth, termHeight); pauseErr != nil {
 		if errors.Is(pauseErr, io.EOF) {

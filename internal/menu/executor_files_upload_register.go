@@ -88,7 +88,7 @@ func (e *MenuExecutor) registerUploadedFiles(
 
 			if !result.Success {
 				slog.Error("ziplab pipeline failed", "node", nodeNumber, "name", nf.name, "error", result.Error)
-				errMsg := fmt.Sprintf("\r\n|01ZipLab processing failed for '%s'.|07\r\n", nf.name)
+				errMsg := fmt.Sprintf("\r\n|01ZipLab processing failed for '%s'.|07\r\n", callerText(nf.name))
 				terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 				uiPause(2 * time.Second)
 				continue
@@ -104,7 +104,7 @@ func (e *MenuExecutor) registerUploadedFiles(
 		if description == "" {
 			e.pauseEnter(s, terminal, outputMode, e.Strings().FilePausePrompt)
 			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-			descPrompt := fmt.Sprintf("\r\n|15%s|07 (%d bytes)\r\n|11Desc:|07 ", nf.name, nf.size)
+			descPrompt := fmt.Sprintf("\r\n|15%s|07 (%d bytes)\r\n|11Desc:|07 ", callerText(nf.name), nf.size)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(descPrompt)), outputMode)
 
 			descInput, err := readLineFromSessionIH(s, terminal)
@@ -152,20 +152,20 @@ func (e *MenuExecutor) registerUploadedFiles(
 			slog.Warn("upload rejected, file already exists on disk", "node", nodeNumber, "name", nf.name)
 			duplicateCount++
 			_ = os.Remove(incomingPath) // best-effort cleanup of rejected upload
-			dupMsg := fmt.Sprintf("\r\n|09'%s' already exists in this area. Rejected.|07\r\n", nf.name)
+			dupMsg := fmt.Sprintf("\r\n|09'%s' already exists in this area. Rejected.|07\r\n", callerText(nf.name))
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(dupMsg)), outputMode)
 			continue
 		}
 		if moveErr := os.Rename(incomingPath, finalPath); moveErr != nil {
 			slog.Error("failed to move file to area", "node", nodeNumber, "name", nf.name, "error", moveErr)
-			errMsg := fmt.Sprintf("\r\n|01Failed to accept '%s'.|07\r\n", nf.name)
+			errMsg := fmt.Sprintf("\r\n|01Failed to accept '%s'.|07\r\n", callerText(nf.name))
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			continue
 		}
 
 		if addErr := e.FileMgr.AddFileRecord(record); addErr != nil {
 			slog.Error("failed to add file record", "node", nodeNumber, "name", nf.name, "error", addErr)
-			errMsg := fmt.Sprintf("\r\n|01Failed to register '%s'.|07\r\n", nf.name)
+			errMsg := fmt.Sprintf("\r\n|01Failed to register '%s'.|07\r\n", callerText(nf.name))
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 			if removeErr := os.Remove(finalPath); removeErr != nil {
 				slog.Error("failed to clean up orphaned file", "node", nodeNumber, "name", nf.name, "error", removeErr)

@@ -180,7 +180,7 @@ func nuvDisplayStats(e *MenuExecutor, terminal *term.Terminal, c *NUVCandidate, 
 					dateSuffix = fmt.Sprintf(" |08%s", v.VotedAt.Format("01/02/06"))
 				}
 				// V2 style: Tab(Voter,27) then ': "comment"'
-				wv(terminal, fmt.Sprintf("|07%-27s|09: |07\"%s\"%s\r\n", v.Voter, v.Comment, dateSuffix), outputMode)
+				wv(terminal, fmt.Sprintf("|07%-27s|09: |07\"%s\"%s\r\n", callerText(v.Voter), callerText(v.Comment), dateSuffix), outputMode)
 			}
 		}
 		if !hasComments {

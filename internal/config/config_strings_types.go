@@ -326,6 +326,8 @@ type StringsConfig struct {
 	NewUserPasswordTooShort string `json:"newUserPasswordTooShort"`
 	NewUserPasswordMismatch string `json:"newUserPasswordMismatch"`
 	NewUserInvalidRealName  string `json:"newUserInvalidRealName"`
+	NewUserRealNamePipe     string `json:"newUserRealNamePipe"`
+	NewUserHandlePipe       string `json:"newUserHandlePipe"`
 	NewUserTooManyAttempts  string `json:"newUserTooManyAttempts"`
 	NewUserAccountCreated   string `json:"newUserAccountCreated"`
 	NewUserAccountReady     string `json:"newUserAccountReady"`
@@ -656,6 +658,7 @@ type StringsConfig struct {
 	KonfigEncodingMismatch    string `json:"konfigEncodingMismatch"`
 	KonfigRealNameRequired    string `json:"konfigRealNameRequired"`
 	KonfigRealNameTooShort    string `json:"konfigRealNameTooShort"`
+	KonfigRealNamePipe        string `json:"konfigRealNamePipe"`
 	KonfigRealNameNeedsSpace  string `json:"konfigRealNameNeedsSpace"`
 	KonfigPwCurrent           string `json:"konfigPwCurrent"`
 	KonfigPwNew               string `json:"konfigPwNew"`

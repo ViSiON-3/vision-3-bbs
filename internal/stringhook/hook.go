@@ -203,6 +203,7 @@ var NoHookKeys = map[string]bool{
 	"konfigRealNameLabel":       true,
 	"konfigRealNameNeedsSpace":  true,
 	"konfigRealNameRequired":    true,
+	"konfigRealNamePipe":        true,
 	"konfigRealNameTooShort":    true,
 	"konfigSaveError":           true,
 	"konfigSavedFormat":         true,

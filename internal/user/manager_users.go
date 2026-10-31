@@ -37,6 +37,10 @@ func (um *UserMgr) UpdateUserByID(u *User) error {
 	if oldKey == "" {
 		return ErrUserNotFound
 	}
+	// Other settings on an old account save as usual; only a rename is checked.
+	if err := ValidateHandleEdit(current.Handle, u.Handle); err != nil {
+		return err
+	}
 
 	newKey := strings.ToLower(u.Handle)
 	var originalEntry *User
@@ -161,6 +165,9 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 	handle = strings.TrimSpace(handle)
 	if handle == "" {
 		return nil, fmt.Errorf("handle cannot be blank")
+	}
+	if strings.Contains(handle, "|") || strings.Contains(realName, "|") {
+		return nil, ErrNamePipe
 	}
 	lowerHandle := strings.ToLower(handle)
 

@@ -760,6 +760,8 @@ func (st *konfigState) validationMessage(err error) string {
 		return str.KonfigRealNameRequired
 	case errors.Is(err, user.ErrRealNameTooShort):
 		return fmt.Sprintf(str.KonfigRealNameTooShort, user.RealNameMinLen)
+	case errors.Is(err, user.ErrNamePipe):
+		return str.KonfigRealNamePipe
 	default:
 		return str.KonfigRealNameNeedsSpace
 	}

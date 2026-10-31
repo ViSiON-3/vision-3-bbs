@@ -220,7 +220,7 @@ func formatFileListLine(rec file.FileRecord, currentUser *user.User, extendedMod
 	prefixLen := ansi.VisibleLength(processedPrefix)
 	descIndent := strings.Repeat(" ", prefixLen)
 	for j := 1; j < len(dizLines); j++ {
-		dizContinuations = append(dizContinuations, "|07"+descIndent+dizLines[j])
+		dizContinuations = append(dizContinuations, "|07"+descIndent+callerText(dizLines[j]))
 	}
 
 	return line, dizContinuations

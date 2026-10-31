@@ -189,7 +189,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 				voted = "|10Yes"
 			}
 			wv(terminal, fmt.Sprintf("|07%-4d |11%-20s |07%-10s |10%4d |12%4d |07%s\r\n",
-				i+1, c.Handle, c.When.Format("01/02/06"), yes, no, voted), outputMode)
+				i+1, callerText(c.Handle), c.When.Format("01/02/06"), yes, no, voted), outputMode)
 		}
 	}
 	wv(terminal, "\r\n", outputMode)
@@ -223,14 +223,14 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			handle = strings.TrimSpace(handle)
 			if _, ok := userManager.GetUser(handle); !ok {
-				wv(terminal, fmt.Sprintf("|12User '%s' not found.\r\n", handle), outputMode)
+				wv(terminal, fmt.Sprintf("|12User '%s' not found.\r\n", callerText(handle)), outputMode)
 				continue
 			}
 			if err := nuvAddCandidate(e.dataDir(), handle); err != nil {
-				wv(terminal, fmt.Sprintf("|12Failed to add '%s': %v\r\n", handle, err), outputMode)
+				wv(terminal, fmt.Sprintf("|12Failed to add '%s': %v\r\n", callerText(handle), err), outputMode)
 				continue
 			}
-			wv(terminal, fmt.Sprintf("|10Added '%s' to NUV queue.\r\n", handle), outputMode)
+			wv(terminal, fmt.Sprintf("|10Added '%s' to NUV queue.\r\n", callerText(handle)), outputMode)
 
 		case 'R', 'r':
 			wv(terminal, "\r\n|07Remove candidate #: ", outputMode)
@@ -262,7 +262,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 			fi := nuvFindCandidate(fresh, handle)
 			if fi < 0 {
 				nuvMu.Unlock()
-				wv(terminal, fmt.Sprintf("|07'%s' is no longer in the queue.\r\n", handle), outputMode)
+				wv(terminal, fmt.Sprintf("|07'%s' is no longer in the queue.\r\n", callerText(handle)), outputMode)
 				continue
 			}
 			removed := fresh.Candidates[fi]
@@ -275,7 +275,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			nuvMu.Unlock()
 			slog.Info("sysop removed candidate from queue", "handle", currentUser.Handle, "candidate", removed.Handle)
-			wv(terminal, fmt.Sprintf("|10Removed '%s' from queue.\r\n", removed.Handle), outputMode)
+			wv(terminal, fmt.Sprintf("|10Removed '%s' from queue.\r\n", callerText(removed.Handle)), outputMode)
 
 		case 'V', 'v':
 			wv(terminal, "\r\n|07Vote on candidate #: ", outputMode)
@@ -305,7 +305,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			fi := nuvFindCandidate(fresh, handle)
 			if fi < 0 {
-				wv(terminal, fmt.Sprintf("|07'%s' is no longer in the queue.\r\n", handle), outputMode)
+				wv(terminal, fmt.Sprintf("|07'%s' is no longer in the queue.\r\n", callerText(handle)), outputMode)
 				continue
 			}
 			nuvVoteOn(e, s, terminal, userManager, currentUser, fresh, fi, outputMode, termWidth, termHeight)
@@ -337,7 +337,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 					voted = "|10Yes"
 				}
 				wv(terminal, fmt.Sprintf("|07%-4d |11%-20s |07%-10s |10%4d |12%4d |07%s\r\n",
-					i+1, c.Handle, c.When.Format("01/02/06"), yes, no, voted), outputMode)
+					i+1, callerText(c.Handle), c.When.Format("01/02/06"), yes, no, voted), outputMode)
 			}
 		}
 		wv(terminal, "\r\n", outputMode)

@@ -24,7 +24,7 @@ func (lb *fileLightbar) showFileInfo() (refresh bool, exit bool, result *user.Us
 
 	_ = terminalio.WriteProcessedBytes(lb.terminal, []byte(ansi.ClearScreen()), lb.outputMode)
 
-	d1 := fmt.Sprintf("|15Filename  : |07%s\r\n", sel.Filename)
+	d1 := fmt.Sprintf("|15Filename  : |07%s\r\n", callerText(sel.Filename))
 	d2 := fmt.Sprintf("|15Size      : |07%s\r\n", compactFileSize(sel.Size))
 	_ = lb.writePipe(d1)
 	_ = lb.writePipe(d2)
@@ -32,9 +32,9 @@ func (lb *fileLightbar) showFileInfo() (refresh bool, exit bool, result *user.Us
 	for i, dl := range descLines {
 		var dLine string
 		if i == 0 {
-			dLine = fmt.Sprintf("|15Desc      : |07%s\r\n", dl)
+			dLine = fmt.Sprintf("|15Desc      : |07%s\r\n", callerText(dl))
 		} else {
-			dLine = fmt.Sprintf("|07            %s\r\n", dl)
+			dLine = fmt.Sprintf("|07            %s\r\n", callerText(dl))
 		}
 		_ = lb.writePipe(dLine)
 	}
@@ -43,7 +43,7 @@ func (lb *fileLightbar) showFileInfo() (refresh bool, exit bool, result *user.Us
 	}
 
 	d3 := fmt.Sprintf("|15Uploaded  : |07%s\r\n", sel.UploadedAt.Format("01/02/2006 15:04"))
-	d4 := fmt.Sprintf("|15Uploader  : |07%s\r\n", sel.UploadedBy)
+	d4 := fmt.Sprintf("|15Uploader  : |07%s\r\n", callerText(sel.UploadedBy))
 	d5 := fmt.Sprintf("|15Downloads : |07%d\r\n", sel.DownloadCount)
 	_ = lb.writePipe(d3)
 	_ = lb.writePipe(d4)

@@ -147,7 +147,7 @@ func runPromptAndComposeMessage(c *cmdCtx, args string) (*user.User, string, err
 	if !foundArea {
 		slog.Warn("invalid area selection", "node", nodeNumber, "selection", selectedAreaStr, "handle", currentUser.Handle)
 		// TODO: Use configurable string
-		msg := fmt.Sprintf("\r\n|01Invalid area: %s|07\r\n", selectedAreaStr)
+		msg := fmt.Sprintf("\r\n|01Invalid area: %s|07\r\n", callerText(selectedAreaStr))
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		uiPause(1 * time.Second)
 		// TODO: Need to redraw menu

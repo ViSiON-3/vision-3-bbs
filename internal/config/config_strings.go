@@ -115,6 +115,8 @@ var StringFallbacks = map[string]string{
 	"confCurrentConfFormat": "\r\n|07(|15%s|07) [|14%s|07]\r\n",
 	"confNoAccessibleConfs": "\r\n|12No accessible conferences.|07\r\n",
 	"newUsersClosedStr":     "\r\n|12This BBS is not accepting new users at this time.|07\r\n",
+	"newUserHandlePipe":     "\r\n|12Handles cannot contain the || character. Please pick another.|07\r\n",
+	"newUserRealNamePipe":   "\r\n|12Real names cannot contain the || character.|07\r\n",
 
 	// Without a fallback, an existing strings.json that predates this key
 	// yields an empty value, and the notice is skipped silently: the sysop sees
@@ -347,6 +349,7 @@ var StringFallbacks = map[string]string{
 	"konfigEncodingMismatch":    "|12Saved, but this terminal is using %s.|07 |15%s|07 starts next login.",
 	"konfigRealNameRequired":    "|12Real name cannot be blank: areas flagged real-name-only fall back to the handle without it.|07",
 	"konfigRealNameTooShort":    "|12Real name must be at least %d characters.|07",
+	"konfigRealNamePipe":        "|12Real name cannot contain the || character.|07",
 	"konfigRealNameNeedsSpace":  "|12Real name must contain a space (first and last name).|07",
 	"konfigPwCurrent":           "Current password",
 	"konfigPwNew":               "New password",

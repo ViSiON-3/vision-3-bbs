@@ -217,7 +217,7 @@ func runRumorsDelete(c *cmdCtx, args string) (*user.User, string, error) {
 		for _, idx := range visible {
 			r := &rd.Rumors[idx]
 			author := rumorDisplayAuthor(r, isSysop, anonName)
-			wv(terminal, fmt.Sprintf("|03%-4d|07%-50s |11%s\r\n", r.ID, truncateRunes(r.Text, 48), author), outputMode)
+			wv(terminal, fmt.Sprintf("|03%-4d|07%-50s |11%s\r\n", r.ID, callerText(truncateRunes(r.Text, 48)), callerText(author)), outputMode)
 		}
 		wv(terminal, "\r\n|07Rumor number to delete: ", outputMode)
 		input, err = readLineFromSessionIH(s, terminal)
@@ -273,7 +273,7 @@ func runRumorsDelete(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Confirm
-	wv(terminal, fmt.Sprintf("\r\n|07%s\r\n", r.Text), outputMode)
+	wv(terminal, fmt.Sprintf("\r\n|07%s\r\n", callerText(r.Text)), outputMode)
 	delYes, delErr := e.PromptYesNo(s, terminal, "|09Delete this rumor? @", outputMode, nodeNumber, termWidth, termHeight, false)
 	if delErr != nil {
 		// A disconnect must end the session rather than read as "no", matching

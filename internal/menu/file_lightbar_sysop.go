@@ -115,7 +115,7 @@ func (lb *fileLightbar) editDescription(frame *lbFrame) {
 // from disk, dropping any stale tag reference to it.
 func (lb *fileLightbar) killFile(frame *lbFrame) (exit bool, result *user.User, action string, err error) {
 	rec := lb.allFiles[lb.selectedIndex]
-	confirmPrompt := fmt.Sprintf("Delete %s from disk?", rec.Filename)
+	confirmPrompt := fmt.Sprintf("Delete %s from disk?", callerText(rec.Filename))
 	lb.beginFooterPrompt()
 	tw, th := getTerminalSize(lb.s)
 	proceed, promptErr := lb.e.PromptYesNo(lb.s, lb.terminal, confirmPrompt, lb.outputMode, lb.nodeNumber, tw, th, false)
@@ -166,7 +166,7 @@ func (lb *fileLightbar) moveFile(frame *lbFrame) (exit bool, result *user.User, 
 		frame.needFullRedraw = true
 		return false, nil, "", nil
 	}
-	confirmPrompt := fmt.Sprintf("Move %s to %s?", rec.Filename, targetArea.Name)
+	confirmPrompt := fmt.Sprintf("Move %s to %s?", callerText(rec.Filename), targetArea.Name)
 	_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
 	tw, th := getTerminalSize(lb.s)
 	proceed, promptErr := lb.e.PromptYesNo(lb.s, lb.terminal, confirmPrompt, lb.outputMode, lb.nodeNumber, tw, th, false)
