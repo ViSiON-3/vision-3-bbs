@@ -1,10 +1,14 @@
 package menu
 
 import (
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
+	"github.com/ViSiON-3/vision-3-bbs/internal/toast"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -82,5 +86,103 @@ func TestAnnounceSkipsInvisibleCaller(t *testing.T) {
 	e.AnnounceLogoff(from, u)
 	if got := viewer.DrainPages(); len(got) != 0 {
 		t.Errorf("invisible caller announced: %q", got)
+	}
+}
+
+// A handle is a caller's own text: it cannot act on the screens of those told
+// about it, while the configured wording keeps its colours.
+func TestAnnounceEscapesTheHandle(t *testing.T) {
+	for _, handle := range []string{"Comer|CL", "Comer|04"} {
+		e, from, u := announceFixture(t, true, true, 0)
+		e.SetStrings(config.StringsConfig{ToastLogon: "|12on %s %d", ToastLogoff: "|12off %s %d"})
+		u.Handle = handle
+		viewer := announceViewer(e, 2, 2, 10, true)
+		e.AnnounceLogon(from, u)
+		e.AnnounceLogoff(from, u)
+		pages := viewer.DrainPages()
+		if len(pages) != 2 {
+			t.Fatalf("pages = %q", pages)
+		}
+		colour := string(ansi.ReplacePipeCodes([]byte("|12")))
+		for _, page := range pages {
+			got := string(toastPipes(page))
+			if !strings.HasPrefix(got, colour) || !strings.Contains(got, " "+handle+" ") {
+				t.Errorf("%q rendered as %q, want the format's colour and the handle as typed", page, got)
+			}
+		}
+	}
+}
+
+// A sysop's promotion or demotion reaches announcements from the refreshed
+// record, not the one taken at login.
+func TestAnnounceChecksTheViewersPublishedLevel(t *testing.T) {
+	e, from, u := announceFixture(t, true, true, 20)
+	demoted := announceViewer(e, 2, 2, 255, true)
+	promoted := announceViewer(e, 3, 3, 10, true)
+	demoted.SetToastViewer(10, 0)
+	promoted.SetToastViewer(30, 0)
+
+	e.AnnounceLogon(from, u)
+	if got := demoted.DrainPages(); len(got) != 0 {
+		t.Errorf("demoted caller told: %q", got)
+	}
+	if got := promoted.DrainPages(); len(got) != 1 {
+		t.Errorf("promoted caller told: %q", got)
+	}
+}
+
+// refreshCurrentUser is where the session learns its new level and width.
+func TestRefreshPublishesTheCallersRecord(t *testing.T) {
+	env := newMenuEnv(t)
+	sess := chatcovNode(env, 1, env.caller)
+	stored := *env.caller
+	stored.AccessLevel = env.caller.AccessLevel + 7
+	if err := env.um.UpdateUser(&stored); err != nil {
+		t.Fatal(err)
+	}
+	mine := *env.caller
+	mine.ScreenWidth = 132
+	st := &runLoopState{e: env.e, s: newTestSession(""), userManager: env.um, currentUser: &mine, nodeNumber: 1}
+	if !st.refreshCurrentUser() {
+		t.Fatal("refresh ended the call")
+	}
+	level, width, ok := sess.ToastViewer()
+	if !ok || level != stored.AccessLevel || width != 132 {
+		t.Errorf("ToastViewer = %d, %d, %v, want %d, 132", level, width, ok, stored.AccessLevel)
+	}
+	if env.caller.AccessLevel == level {
+		t.Error("login record changed")
+	}
+}
+
+// Width changed in Konfig centres the toast on the new width.
+func TestToastCenterUsesThePublishedWidth(t *testing.T) {
+	env := newToastEnv(t)
+	toastDwell = 10 * time.Second
+	cfg := env.e.GetServerConfig()
+	cfg.ToastCenter = true
+	env.e.SetServerConfig(cfg)
+	env.u.ScreenWidth = 80
+	env.sess.Width = 120
+	env.sess.SetToastViewer(0, 40)
+	var out strings.Builder
+	if _, err := env.e.drawToastOverlay(env.s, &out, env.sess, toast.Toast{Text: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	// ">> x" is four cells, centered on 40 columns.
+	if want := ansi.MoveCursor(24, 19); !strings.Contains(out.String(), want) {
+		t.Errorf("overlay = %q, want it at %q", out.String(), want)
+	}
+}
+
+func TestWrapToastAnchorFollowsAutowrap(t *testing.T) {
+	raw := []byte(strings.Repeat("x", 81) + "~TO")
+	res, err := ansi.ProcessAnsiAndExtractCoords(raw, ansi.OutputModeCP437)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapToastAnchor(&res, raw, 80)
+	if got := res.FieldCoords[toastAnchorCode]; got.Y != 2 || got.X != 2 {
+		t.Errorf("anchor at %+v, want row 2, column 2", got)
 	}
 }

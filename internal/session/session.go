@@ -56,8 +56,11 @@ type BbsSession struct {
 	toastWake       chan struct{}   // see ToastWake; guarded by Mutex
 	toastsReady     atomic.Bool     // see SetToastsReady
 	toastsAnnounced map[string]bool // see NoteToastAnnounced; guarded by Mutex
+	toastViewer     *toastViewer    // see SetToastViewer; guarded by Mutex
 	toastAnchorRow  int             // see SetToastAnchor; guarded by Mutex
 	toastAnchorCol  int             // see SetToastAnchor; guarded by Mutex
+	toastsShown     map[string]bool // see NoteToastShown; guarded by Mutex
+	heldPages       []string        // see HoldPage; guarded by Mutex
 }
 
 // TermSize returns the caller's current terminal size.
@@ -122,6 +125,39 @@ func (s *BbsSession) PopPage() {
 	defer s.Mutex.Unlock()
 	if len(s.PendingPages) > 0 {
 		s.PendingPages = s.PendingPages[1:]
+	}
+}
+
+// HoldPage takes the oldest pending page out of the overlay's way: it has been
+// drawn cut short, so the whole of it waits for the next inline delivery.
+func (s *BbsSession) HoldPage() {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	if len(s.PendingPages) > 0 {
+		// An announcement is old news by the next menu; what was drawn will do.
+		if p := s.PendingPages[0]; p.expires.IsZero() {
+			s.heldPages = append(s.heldPages, p.text)
+		}
+		s.PendingPages = s.PendingPages[1:]
+	}
+}
+
+// PeekHeldPage returns the oldest page HoldPage kept, without removing it.
+func (s *BbsSession) PeekHeldPage() (string, bool) {
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
+	if len(s.heldPages) == 0 {
+		return "", false
+	}
+	return s.heldPages[0], true
+}
+
+// PopHeldPage removes the oldest page HoldPage kept.
+func (s *BbsSession) PopHeldPage() {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	if len(s.heldPages) > 0 {
+		s.heldPages = s.heldPages[1:]
 	}
 }
 

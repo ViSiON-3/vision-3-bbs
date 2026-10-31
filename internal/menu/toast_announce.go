@@ -18,7 +18,7 @@ func (e *MenuExecutor) AnnounceLogon(sess *session.BbsSession, u *user.User) {
 	if sess == nil || u == nil || format == "" || !e.GetServerConfig().ToastLogons {
 		return
 	}
-	e.announce(sess, u, fmt.Sprintf(e.Strings().ToastLogon, u.Handle, sess.NodeID))
+	e.announce(sess, u, fmt.Sprintf(e.Strings().ToastLogon, threadEscapePipes(u.Handle), sess.NodeID))
 }
 
 // AnnounceLogoff tells other online callers that u has logged off (#206).
@@ -27,7 +27,7 @@ func (e *MenuExecutor) AnnounceLogoff(sess *session.BbsSession, u *user.User) {
 	if sess == nil || u == nil || format == "" || !e.GetServerConfig().ToastLogoffs {
 		return
 	}
-	e.announce(sess, u, fmt.Sprintf(e.Strings().ToastLogoff, u.Handle, sess.NodeID))
+	e.announce(sess, u, fmt.Sprintf(e.Strings().ToastLogoff, threadEscapePipes(u.Handle), sess.NodeID))
 }
 
 // announce sends msg to every other caller allowed to see it. An invisible
@@ -48,8 +48,10 @@ func (e *MenuExecutor) announce(from *session.BbsSession, u *user.User, msg stri
 		sess.Mutex.RLock()
 		viewer, viewerNode := sess.User, sess.NodeID
 		sess.Mutex.RUnlock()
-		if viewerNode == node || viewer == nil || viewer.ID == u.ID ||
-			viewer.AccessLevel < level || !sess.ToastsReady() {
+		if viewerNode == node || viewer == nil || viewer.ID == u.ID || !sess.ToastsReady() {
+			continue
+		}
+		if viewerLevel, _, ok := sess.ToastViewer(); !ok || viewerLevel < level {
 			continue
 		}
 		sess.AddExpiringPage(msg, announceTTL)

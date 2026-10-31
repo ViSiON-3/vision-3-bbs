@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -1476,5 +1477,53 @@ func TestArtForOutput_DecidesEncodingForWholeFile(t *testing.T) {
 	// CP437 terminals get the file bytes untouched.
 	if got := ArtForOutput(art, OutputModeCP437); !bytes.Equal(got, art) {
 		t.Errorf("ArtForOutput(CP437 mode) = %q, want unchanged", got)
+	}
+}
+
+func TestEscapeScreenPipeCodes(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"plain", "plain"},
+		{"|CL", "|CL"},
+		{"|CR|DE|PP|P", "|CR|DE|PP|P"},
+		{"||CL", "|CL"},
+		{"|||CL", "||CL"},
+		{"|04red|B1x", pipeCodeReplacements["|04"] + "red" + pipeCodeReplacements["|B1"] + "x"},
+		{"|B10x", pipeCodeReplacements["|B10"] + "x"},
+		{"end|", "end|"},
+	}
+	for _, tt := range tests {
+		got := string(ReplacePipeCodes([]byte(EscapeScreenPipeCodes(tt.in))))
+		if got != tt.want {
+			t.Errorf("expanded EscapeScreenPipeCodes(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestFieldCoordsAtWidthFollowsAutowrap(t *testing.T) {
+	x := func(n int) string { return strings.Repeat("x", n) }
+	tests := []struct {
+		name string
+		art  string
+		want struct{ X, Y int }
+	}{
+		{"inside the row", x(5) + "~TO", struct{ X, Y int }{6, 1}},
+		{"just filled the row", x(80) + "~TO", struct{ X, Y int }{1, 2}},
+		{"past the row", x(81) + "~TO", struct{ X, Y int }{2, 2}},
+		{"two rows on", x(165) + "~TO", struct{ X, Y int }{6, 3}},
+		{"line feed then wrap", "a\n" + x(81) + "~TO", struct{ X, Y int }{2, 3}},
+		{"positioned first", "\x1b[5;79H" + x(3) + "~TO", struct{ X, Y int }{2, 6}},
+		{"cursor forward stops at the margin", "\x1b[200C~TO", struct{ X, Y int }{80, 1}},
+		{"colour codes take no room", "|04" + x(80) + "|07~TO", struct{ X, Y int }{1, 2}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			coords, err := FieldCoordsAtWidth([]byte(tt.art), 80)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := coords["TO"]; got != tt.want {
+				t.Errorf("TO at %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 }
