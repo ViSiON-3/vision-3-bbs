@@ -1478,3 +1478,22 @@ func TestArtForOutput_DecidesEncodingForWholeFile(t *testing.T) {
 		t.Errorf("ArtForOutput(CP437 mode) = %q, want unchanged", got)
 	}
 }
+
+func TestEscapeScreenPipeCodes(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"plain", "plain"},
+		{"|CL", "|CL"},
+		{"|CR|DE|PP|P", "|CR|DE|PP|P"},
+		{"||CL", "|CL"},
+		{"|||CL", "||CL"},
+		{"|04red|B1x", pipeCodeReplacements["|04"] + "red" + pipeCodeReplacements["|B1"] + "x"},
+		{"|B10x", pipeCodeReplacements["|B10"] + "x"},
+		{"end|", "end|"},
+	}
+	for _, tt := range tests {
+		got := string(ReplacePipeCodes([]byte(EscapeScreenPipeCodes(tt.in))))
+		if got != tt.want {
+			t.Errorf("expanded EscapeScreenPipeCodes(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}

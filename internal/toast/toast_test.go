@@ -52,14 +52,36 @@ func TestRemoveTakesOnlyTheNamedToast(t *testing.T) {
 
 func TestClaimIsExclusiveUntilReleased(t *testing.T) {
 	st := Open(t.TempDir())
-	if !st.Claim("a") {
+	if err := st.Enqueue(1, Toast{ID: "a", Text: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if !st.Claim(1, "a") {
 		t.Fatal("first claim refused")
 	}
-	if st.Claim("a") {
+	if st.Claim(1, "a") {
 		t.Fatal("second claim allowed")
 	}
 	st.Release("a")
-	if !st.Claim("a") {
+	if !st.Claim(1, "a") {
 		t.Fatal("claim refused after release")
+	}
+}
+
+// Two sessions can Peek the same toast. Once one has shown and removed it, the
+// other's copy is stale and must not be claimed.
+func TestClaimRefusesARemovedToast(t *testing.T) {
+	st := Open(t.TempDir())
+	if err := st.Enqueue(1, Toast{ID: "a", Text: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if !st.Claim(1, "a") {
+		t.Fatal("first claim refused")
+	}
+	if err := st.Remove(1, "a"); err != nil {
+		t.Fatal(err)
+	}
+	st.Release("a")
+	if st.Claim(1, "a") {
+		t.Fatal("claimed a toast already removed")
 	}
 }

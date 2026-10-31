@@ -142,16 +142,27 @@ func (st *Store) Remove(userID int, id string) error {
 	return st.save(m)
 }
 
-// Claim reports whether the caller may show the toast with this ID, so two
-// sessions on one account do not both show it. Pair it with Release.
-func (st *Store) Claim(id string) bool {
+// Claim reports whether the caller may show this toast of userID's, so two
+// sessions on one account do not both show it. A toast already removed cannot be
+// claimed: the other session has shown it, and the caller's Peek was stale. Pair
+// it with Release.
+func (st *Store) Claim(userID int, id string) bool {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if st.claimed[id] {
 		return false
 	}
-	st.claimed[id] = true
-	return true
+	m, err := st.load()
+	if err != nil {
+		return false
+	}
+	for _, t := range m[userID] {
+		if t.ID == id {
+			st.claimed[id] = true
+			return true
+		}
+	}
+	return false
 }
 
 // Release ends a Claim.

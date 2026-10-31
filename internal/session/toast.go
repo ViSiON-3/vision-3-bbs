@@ -36,8 +36,9 @@ func (s *BbsSession) SetToastsReady(ready bool) { s.toastsReady.Store(ready) }
 // ToastsReady reports what SetToastsReady last set.
 func (s *BbsSession) ToastsReady() bool { return s.toastsReady.Load() }
 
-// NoteToastAnnounced records that this session has shown a toast's line but
-// not yet its body, and reports whether it is the first time.
+// NoteToastAnnounced records that this session has drawn a toast's line but not
+// yet all of it, its body or a line too long for the row, and reports whether it
+// is the first time.
 func (s *BbsSession) NoteToastAnnounced(id string) bool {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
@@ -73,6 +74,25 @@ func (s *BbsSession) ToastAnchor() (row, col int, ok bool) {
 	s.Mutex.RLock()
 	defer s.Mutex.RUnlock()
 	return s.toastAnchorRow, s.toastAnchorCol, s.toastAnchorRow > 0
+}
+
+// NoteToastShown records that this session has shown all of a toast but could
+// not remove it from the queue, so it is not shown again while the removal is
+// retried.
+func (s *BbsSession) NoteToastShown(id string) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	if s.toastsShown == nil {
+		s.toastsShown = map[string]bool{}
+	}
+	s.toastsShown[id] = true
+}
+
+// ToastShown reports whether NoteToastShown has seen id.
+func (s *BbsSession) ToastShown(id string) bool {
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
+	return s.toastsShown[id]
 }
 
 // SendToast queues a toast for a user account and wakes any session they have.

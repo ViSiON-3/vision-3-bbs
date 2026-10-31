@@ -429,6 +429,36 @@ func ReplaceColorPipeCodes(data []byte) []byte {
 	return buf.Bytes()
 }
 
+// EscapeScreenPipeCodes returns s made safe for ReplacePipeCodes when part of it
+// came from someone else: colour codes and "||" stay as they are and every other
+// pipe is doubled, so |CL, |CR, |DE, |P and |PP print as text instead of acting
+// on the screen.
+func EscapeScreenPipeCodes(s string) string {
+	data := []byte(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(data); {
+		if data[i] != '|' {
+			b.WriteByte(data[i])
+			i++
+			continue
+		}
+		if i+1 < len(data) && data[i+1] == '|' {
+			b.WriteString("||")
+			i += 2
+			continue
+		}
+		if _, n := colorPipeCodeAt(data, i); n > 0 {
+			b.Write(data[i : i+n])
+			i += n
+			continue
+		}
+		b.WriteString("||")
+		i++
+	}
+	return b.String()
+}
+
 // colorPipeCodeAt returns the expansion of the colour pipe code starting at
 // data[i] and its length, or a zero length if there is none. The longest code
 // wins, so |B10 is not read as |B1 followed by a "0".

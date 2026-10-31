@@ -1,11 +1,15 @@
 package menu
 
 import (
+	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -443,6 +447,255 @@ func TestToastAnchorFromMenuArtOverridesConfiguredPosition(t *testing.T) {
 	keys = env.readKey()
 	env.sess.AddPage("Back")
 	toastWaitFor(t, "the overlay", func() bool { return strings.Contains(env.term.Row(20), ">> Back") })
+	env.s.Send("x")
+	<-keys
+}
+
+// A toast's text comes from another caller, so screen codes in it print as text.
+func TestToastTextCannotRunScreenCodes(t *testing.T) {
+	env := newToastEnv(t)
+	var out bytes.Buffer
+	if _, err := env.e.drawToastOverlay(env.s, &out, env.sess, toast.Toast{Text: "a|CLb|CRc|Pd|04e"}); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if strings.Contains(got, "\x1b[2J") || !strings.Contains(got, "a|CLb|CRc|Pd") {
+		t.Errorf("overlay = %q, want the screen codes as text", got)
+	}
+	if !strings.Contains(got, string(ansi.ReplacePipeCodes([]byte("|04")))+"e") {
+		t.Errorf("overlay = %q, want the colour code expanded", got)
+	}
+
+	store := env.e.toastStore()
+	if err := store.Enqueue(env.u.ID, toast.Toast{Text: "stored|CLtoast"}); err != nil {
+		t.Fatal(err)
+	}
+	env.sess.AddPage("live|CLpage")
+	terminal := term.NewTerminal(env.s, "")
+	if !env.e.deliverToastsInline(env.s, terminal, 1, 0) {
+		t.Fatal("nothing written")
+	}
+	shot := env.term.Snapshot()
+	if !strings.Contains(shot, "FULL SCREEN") {
+		t.Errorf("inline delivery cleared the screen:\n%s", shot)
+	}
+	if !strings.Contains(shot, "stored|CLtoast") || !strings.Contains(shot, "live|CLpage") {
+		t.Errorf("screen codes not shown as text:\n%s", shot)
+	}
+}
+
+// Page senders' handles can hold pipes, and their own text must not be taken for
+// colour or screen codes.
+func TestPageEscapesTheSendersHandle(t *testing.T) {
+	env := newMenuEnv(t)
+	chatcovNode(env, 1, env.caller)
+	chatcovNode(env, 2, env.sysop)
+	env.caller.Handle = "Caller|04"
+
+	if r := env.run(runPage, env.caller, "", "2\rhi\r"); r.err != nil {
+		t.Fatal(r.err)
+	}
+	queued, err := env.e.toastStore().Peek(env.sysop.ID)
+	if err != nil || len(queued) != 1 {
+		t.Fatalf("queue = %+v, %v", queued, err)
+	}
+	if got := string(toastPipes(queued[0].Text)); !strings.Contains(got, "Caller|04") {
+		t.Errorf("rendered page = %q, want the handle as typed", got)
+	}
+}
+
+// The overlay measures terminal cells: a wide character takes two.
+func TestToastOverlayClipsByColumns(t *testing.T) {
+	env := newToastEnv(t)
+	SetSessionOutputMode(env.s, ansi.OutputModeUTF8)
+	var out bytes.Buffer
+	clipped, err := env.e.drawToastOverlay(env.s, &out, env.sess, toast.Toast{Text: strings.Repeat("漢", 60)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !clipped {
+		t.Error("clipped = false for text wider than the row")
+	}
+	_, line, _ := strings.Cut(out.String(), ">> ")
+	line, _, _ = strings.Cut(line, "\x1b[0m\x1b8")
+	if w := runewidth.StringWidth(ansi.StripAnsi(line)); w > 79 {
+		t.Errorf("overlay is %d columns wide, want at most 79: %q", w, line)
+	}
+}
+
+// A toast too long for the row stays queued, once drawn, for all of it to show
+// inline.
+func TestLongToastDrawnOnceThenShownWholeInline(t *testing.T) {
+	env := newToastEnv(t)
+	toastDwell = time.Millisecond
+	store := env.e.toastStore()
+	long := "HEAD " + strings.Repeat("x ", 80) + "TAIL"
+	keys := env.readKey()
+	if err := env.e.SessionRegistry.SendToast(store, env.u.ID, toast.Toast{Text: long}); err != nil {
+		t.Fatal(err)
+	}
+	toastWaitFor(t, "the first drawing", func() bool {
+		q := mustPeek(t, store, env.u.ID)
+		return len(q) == 1 && env.sess.ToastAnnounced(q[0].ID)
+	})
+	time.Sleep(20 * time.Millisecond)
+	if q := mustPeek(t, store, env.u.ID); len(q) != 1 {
+		t.Fatalf("queue = %+v, want the long toast kept", q)
+	}
+	if _, _, ok := env.e.nextOverlayToast(env.sess); ok {
+		t.Error("long toast offered to the overlay a second time")
+	}
+	env.s.Send("x")
+	<-keys
+
+	// A board with only lightbar menus has no prompt, so it goes between menus.
+	env.s.Send("\r")
+	terminal := term.NewTerminal(env.s, "")
+	env.e.deliverToastBodies(env.s, terminal, 1, 0, 80, 24)
+	if !strings.Contains(env.term.Snapshot(), "TAIL") {
+		t.Errorf("the end of the toast never shown:\n%s", env.term.Snapshot())
+	}
+	if q := mustPeek(t, store, env.u.ID); len(q) != 0 {
+		t.Errorf("queue = %+v, want empty", q)
+	}
+}
+
+func TestLongLivePageHeldForInline(t *testing.T) {
+	env := newToastEnv(t)
+	toastDwell = time.Millisecond
+	long := "HEAD " + strings.Repeat("x ", 80) + "TAIL"
+	keys := env.readKey()
+	env.sess.AddPage(long)
+	toastWaitFor(t, "the page held", func() bool {
+		_, held := env.sess.PeekHeldPage()
+		return held
+	})
+	if _, pending := env.sess.PeekPage(); pending {
+		t.Error("held page still offered to the overlay")
+	}
+	env.s.Send("x")
+	<-keys
+	if !env.e.deliverToastsInline(env.s, term.NewTerminal(env.s, ""), 1, 0) {
+		t.Fatal("nothing written")
+	}
+	if !strings.Contains(env.term.Snapshot(), "TAIL") {
+		t.Errorf("the end of the page never shown:\n%s", env.term.Snapshot())
+	}
+	if _, held := env.sess.PeekHeldPage(); held {
+		t.Error("page still held after delivery")
+	}
+}
+
+// With the store refusing writes, a shown toast cannot leave the queue. It must
+// not be drawn again; the next prompt retries the removal without showing it.
+func TestFailedRemoveDoesNotShowTheToastAgain(t *testing.T) {
+	env := newToastEnv(t)
+	store := env.e.toastStore()
+	if err := store.Enqueue(env.u.ID, toast.Toast{ID: "a", Text: "only once"}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(env.e.GetServerConfig().DataDir, "toasts.json")
+	good, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{broken"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env.e.settleOverlayToast(env.sess, toast.Toast{ID: "a", Text: "only once"}, true, false)
+	if err := os.WriteFile(path, good, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if q, _, ok := env.e.nextOverlayToast(env.sess); ok {
+		t.Errorf("overlay offered %+v again after a failed remove", q)
+		store.Release(q.ID)
+	}
+	before := env.term.Snapshot()
+	env.e.deliverToastsInline(env.s, term.NewTerminal(env.s, ""), 1, 0)
+	if env.term.Snapshot() != before {
+		t.Errorf("toast written again:\n%s", env.term.Snapshot())
+	}
+	if q := mustPeek(t, store, env.u.ID); len(q) != 0 {
+		t.Errorf("queue = %+v, want the removal retried", q)
+	}
+}
+
+// A dwell ends with the read's wait, however long toastDwell is.
+func TestToastDwellStopsAtTheIdleTimeout(t *testing.T) {
+	env := newToastEnv(t)
+	toastDwell = time.Hour
+	ih := getSessionIH(env.s)
+	ih.SetSessionIdleTimeout(100 * time.Millisecond)
+	env.sess.AddPage("long dwell")
+	done := make(chan error, 1)
+	go func() {
+		_, err := ih.ReadKey()
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, editor.ErrIdleTimeout) {
+			t.Fatalf("read ended with %v, want idle timeout", err)
+		}
+	case <-time.After(3 * time.Second):
+		env.s.Send("x")
+		t.Fatal("the overlay's dwell outlasted the idle timeout")
+	}
+}
+
+// Toasts arriving faster than they dwell must not hold the read in the hook.
+func TestSteadyToastsYieldToTheIdleTimeout(t *testing.T) {
+	env := newToastEnv(t)
+	toastDwell = 20 * time.Millisecond
+	ih := getSessionIH(env.s)
+	ih.SetSessionIdleTimeout(150 * time.Millisecond)
+	env.sess.AddPage("first")
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			case <-time.After(5 * time.Millisecond):
+				env.sess.AddPage("noise")
+			}
+		}
+	}()
+	done := make(chan error, 1)
+	go func() {
+		_, err := ih.ReadKey()
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, editor.ErrIdleTimeout) {
+			t.Fatalf("read ended with %v, want idle timeout", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("a steady stream of toasts starved the idle timeout")
+	}
+}
+
+// A toast an overflowing screen held has no other wake coming, so a later screen
+// must call for it.
+func TestHeldToastRearmedForTheNextScreen(t *testing.T) {
+	env := newToastEnv(t)
+	toastDwell = 10 * time.Second
+	env.s.tap.Output([]byte(strings.Repeat("x", 2*snoop.CatchupLimit+1)))
+	keys := env.readKey()
+	if err := env.e.SessionRegistry.SendToast(env.e.toastStore(), env.u.ID, toast.Toast{Text: "held"}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(30 * time.Millisecond)
+	if strings.Contains(env.term.Row(24), "held") {
+		t.Fatalf("toast drawn over an overflowed screen: %q", env.term.Row(24))
+	}
+
+	_, _ = env.s.Write([]byte("\x1b[2J\x1b[HNEW SCREEN"))
+	env.e.rearmToasts(1)
+	toastWaitFor(t, "the held toast", func() bool { return strings.Contains(env.term.Row(24), ">> held") })
 	env.s.Send("x")
 	<-keys
 }

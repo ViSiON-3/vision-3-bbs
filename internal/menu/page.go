@@ -109,7 +109,7 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// A logged-in target's page is kept for their account, so it survives them
 	// leaving before they see it; one still at login only has this session.
-	pageMsg := fmt.Sprintf(e.Strings().PageMessageFormat, handle, msgInput)
+	pageMsg := fmt.Sprintf(e.Strings().PageMessageFormat, threadEscapePipes(handle), msgInput)
 	targetSession.Mutex.RLock()
 	targetUser := targetSession.User
 	targetSession.Mutex.RUnlock()

@@ -462,7 +462,8 @@ All login sequence commands are also registered as menu runnables and can be use
 Node pages reach a caller as toasts: a line drawn over the screen while it waits for a key, which clears on the next key or after 5 seconds. A page
 for a caller who has left is kept in `data/toasts.json` and shown once, at the
 end of their next login. This happens on every install and is not a
-`login.json` step. Toasts wait while a caller is in a door, a file transfer,
+`login.json` step. A page too long for the row shows as much as fits, and all of
+it appears at the caller's next menu. Toasts wait while a caller is in a door, a file transfer,
 sysop chat or teleconference, then show at their next menu prompt.
 
 The strings `toastOverlayFormat` and `toastBodyHint` set how a toast looks.
