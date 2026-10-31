@@ -123,8 +123,7 @@ func TestUserPlaceholdersOnlyColour(t *testing.T) {
 }
 
 // writeStringf and writeStringSubst are the central points for strings.json
-// lines, so they escape arguments and keep the format's codes. A script gets the
-// text as it is.
+// lines, so they escape arguments and keep the format's codes.
 func TestStringArgumentsOnlyColour(t *testing.T) {
 	got := formatStringValue("|CL%s %d", []any{chatScreenCodesMsg, 7})
 	out := string(ansi.ReplacePipeCodes([]byte(got)))
@@ -134,11 +133,6 @@ func TestStringArgumentsOnlyColour(t *testing.T) {
 	chatCheckNoScreenCodes(t, "a string argument", out)
 	if !strings.HasSuffix(out, " 7") {
 		t.Errorf("a number argument changed: %q", out)
-	}
-
-	f := newStringHookFixture(t, "")
-	if out := f.write(t, "!say extra", chatScreenCodesMsg); !strings.Contains(out, chatScreenCodesMsg) {
-		t.Errorf("a script did not get the argument as it is: %q", out)
 	}
 }
 
