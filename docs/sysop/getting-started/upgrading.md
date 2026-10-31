@@ -316,7 +316,7 @@ A **repo-in-place** install gets these from `git pull`. An **instance** or
 
 | Files | Why |
 | ----- | --- |
-| `cfg/MSGMENU.CFG`, `ansi/MSGMENU.ANS` | New **I** key, Twit List (`RUN:CFG_TWITLIST`) |
+| `cfg/MSGMENU.CFG`, `ansi/MSGMENU.ANS` | New **T** key, Twit List (`RUN:CFG_TWITLIST`); **I** is kept as an alias |
 | `ansi/SPONSORM.ANS`, `ansi/CHATHEADER.ANS`, `ansi/YOURSTAT.ANS` | Redrawn or corrected; the chat header gains the Users and Mentions counters |
 | `theme.json` | New `chatSysopColor` and `chatUserColor` for split-screen chat |
 | `mnu/DOORMENU.MNU`, `templates/DOORMENU*`, `templates/DOORCAT.*` | New: the [generated door menu](doors/generated-menu.md), needed only if you bind `RUN:DOORMENU` |
