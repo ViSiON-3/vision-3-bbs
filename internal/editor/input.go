@@ -139,6 +139,13 @@ type InputHandler struct {
 	// of toasts cannot keep an idle caller on.
 	toastWake <-chan struct{}
 	toastFn   func(limit time.Duration)
+	// toastsHeld notes that toastFn left work for a screen that can show it;
+	// toastRetry makes the next key wait run toastFn without a wake.
+	toastsHeld bool
+	toastRetry bool
+	// screenRedraw, when set, redraws the screen waiting on this read without
+	// relying on the session's catch-up buffer.
+	screenRedraw func()
 }
 
 // SetBreakIn registers fn to run whenever ch fires while a read is waiting
@@ -186,13 +193,49 @@ func (ih *InputHandler) SetToastHook(ch <-chan struct{}, fn func(limit time.Dura
 	ih.toastFn = fn
 }
 
+// SetScreenRedraw names how the screen waiting on the next read redraws itself,
+// or clears it with nil. Only the screen's own goroutine may call it.
+func (ih *InputHandler) SetScreenRedraw(fn func()) { ih.screenRedraw = fn }
+
+// ScreenRedraw returns what SetScreenRedraw set.
+func (ih *InputHandler) ScreenRedraw() func() { return ih.screenRedraw }
+
+// HoldToasts records that the toast hook used up its wake without being able to
+// show what is waiting. Call it from the hook.
+func (ih *InputHandler) HoldToasts() { ih.toastsHeld = true }
+
+// RetryHeldToasts makes the next key wait run the toast hook if HoldToasts was
+// called since the last retry, for a screen that can show more than the one that
+// held them. Call from the reading goroutine.
+func (ih *InputHandler) RetryHeldToasts() {
+	if ih.toastsHeld {
+		ih.toastsHeld, ih.toastRetry = false, true
+	}
+}
+
+// toastRetryNow is the channel a wait selects on to retry held toasts at once.
+var toastRetryNow = func() <-chan struct{} {
+	ch := make(chan struct{})
+	close(ch)
+	return ch
+}()
+
 // toastChan is the channel to select on, or nil when the wait must not service
 // the toast hook.
 func (ih *InputHandler) toastChan(allow bool) <-chan struct{} {
 	if !allow || ih.inBreakIn {
 		return nil
 	}
+	if ih.toastRetry {
+		return toastRetryNow
+	}
 	return ih.toastWake
+}
+
+// runToastHook runs the toast hook for a wait with limit left.
+func (ih *InputHandler) runToastHook(limit time.Duration) {
+	ih.toastRetry = false
+	ih.toastFn(limit)
 }
 
 // WaitForInput waits up to d for input, leaving it to be read, and reports
@@ -573,7 +616,7 @@ func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 			ih.runBreakIn()
 			start = time.Now()
 		case <-ih.toastChan(breakIn):
-			ih.toastFn(0) // this wait has no timeout to run out
+			ih.runToastHook(0) // this wait has no timeout to run out
 		}
 	}
 }
@@ -788,7 +831,7 @@ func (ih *InputHandler) waitByte(timeout time.Duration, breakIn bool) (b byte, b
 			if left <= 0 {
 				return 0, false, errTimeout
 			}
-			ih.toastFn(left)
+			ih.runToastHook(left)
 			if len(ih.unreadBuf) > 0 {
 				b := ih.unreadBuf[0]
 				ih.unreadBuf = ih.unreadBuf[1:]
@@ -1113,7 +1156,7 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 				if toastExpired {
 					return 0, ev, false, toastTimeout
 				}
-				ih.toastFn(left)
+				ih.runToastHook(left)
 				if len(ih.unreadBuf) > 0 {
 					break wait
 				}

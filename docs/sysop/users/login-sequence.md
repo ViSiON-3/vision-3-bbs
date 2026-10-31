@@ -463,8 +463,10 @@ Node pages reach a caller as toasts: a line drawn over the screen while it waits
 for a caller who has left is kept in `data/toasts.json` and shown once, at the
 end of their next login. This happens on every install and is not a
 `login.json` step. A page too long for the row shows as much as fits, and all of
-it appears at the caller's next menu. Toasts wait while a caller is in a door, a file transfer,
-sysop chat or teleconference, then show at their next menu prompt.
+it appears at the caller's next menu. In teleconference a toast appears as a line
+in the room, held while the caller has paged back through the scrollback. Toasts
+wait while a caller is in a door, a file transfer or sysop chat, then show at
+their next menu prompt.
 
 The strings `toastOverlayFormat` and `toastBodyHint` set how a toast looks.
 

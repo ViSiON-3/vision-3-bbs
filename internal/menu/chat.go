@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -262,6 +263,9 @@ const chatNoRoomMsg = "You are not in a room. Use /JOIN <room> to join one."
 const chatContPrefix = "|08      \xC0|07 "
 const chatContPrefixLen = 8
 
+// errToastLineNotWritten says a toast's room line did not reach the caller.
+var errToastLineNotWritten = errors.New("toast line not written")
+
 func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
 	s := c.s
@@ -341,8 +345,13 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 	var rawMu sync.Mutex
 
+	// writeFailed notes a failed write for those that need to know, as a toast
+	// that must stay queued if it did not reach the caller.
+	var writeFailed atomic.Bool
 	rawWriteLocked := func(data []byte) {
-		terminalio.WriteProcessedBytes(s, data, outputMode)
+		if err := terminalio.WriteProcessedBytes(s, data, outputMode); err != nil {
+			writeFailed.Store(true)
+		}
 	}
 	scr := &chatScreen{height: height, width: termWidth, chatTop: chatTop, inputRows: 1, write: rawWriteLocked}
 
@@ -464,12 +473,22 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	scr.redrawRegion = drawRegionLocked
 
+	// wakeToastsLocked calls for toasts held while the view was paged back.
+	wakeToastsLocked := func() {
+		if sess := e.nodeSession(nodeNumber); sess != nil {
+			sess.WakeToasts()
+		}
+	}
+
 	// scr.page moves the view a page up or down the scrollback, with the
 	// hint bar saying when it is off the live view. Called with rawMu held.
 	scr.page = func(dir int) {
 		if scrollback.page(dir, scr.scrollBottom()-chatTop+1) {
 			drawRegionLocked()
 			drawStatusBarLocked()
+			if scrollback.live() {
+				wakeToastsLocked()
+			}
 		}
 	}
 
@@ -498,8 +517,13 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		if !scrollback.live() {
 			return
 		}
-		// Scroll the chat region up by n lines.
+		// A message taller than the chat region shows its newest lines; the
+		// rest are in the scrollback. Any more would write over the header.
 		scrollBottom := scr.scrollBottom()
+		if room := max(scrollBottom-chatTop+1, 1); n > room {
+			lines, n = lines[n-room:], room
+		}
+		// Scroll the chat region up by n lines.
 		rawWriteLocked([]byte(ansi.MoveCursor(scrollBottom, 1)))
 		for i := 0; i < n; i++ {
 			rawWriteLocked([]byte("\r\n"))
@@ -560,6 +584,26 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	// Draw initial input prompt. chatReadLine will manage it from here on.
 	chatPrompt := fmt.Sprintf("<%s> ", handle)
 	rawWrite([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K%s", scr.height, chatPrompt)))
+
+	// Toasts become lines in the room. A line written while paged back would
+	// only be kept, unseen, so they hold until the view is live again.
+	defer setToastLineScreen(s, e.nodeSession(nodeNumber), toastLineScreen{
+		ready: func() bool {
+			rawMu.Lock()
+			defer rawMu.Unlock()
+			return scrollback.live()
+		},
+		write: func(text string) error {
+			rawMu.Lock()
+			defer rawMu.Unlock()
+			writeFailed.Store(false)
+			writeChatLineLocked(text)
+			if writeFailed.Load() {
+				return errToastLineNotWritten
+			}
+			return nil
+		},
+	})()
 
 	// pumpEvents shows the events svc delivers until its Events channel is
 	// closed, then closes done. It runs on its own goroutine, one per
@@ -708,6 +752,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		if scrollback.toLive() {
 			drawRegionLocked()
 			drawStatusBarLocked()
+			wakeToastsLocked()
 		}
 		rawMu.Unlock()
 
