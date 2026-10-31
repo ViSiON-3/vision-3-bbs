@@ -1,6 +1,33 @@
 package leaf
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+// A late record arriving while a clear is being applied on the replacement, past
+// the point the clear looked for a record to drop, waits for it and then sees it,
+// so it cannot undo the clear (#824).
+func TestLateHubSignedDuringClear(t *testing.T) {
+	old, _ := setupLeaf(t, "http://unused.invalid", &mockJAMWriter{})
+	next, _ := setupLeaf(t, "http://unused.invalid", &mockJAMWriter{})
+	rec := &fileRecorder{}
+	rec.attach(next)
+	old.Retire(Pins{})
+	old.HandLateRepliesTo(next)
+
+	done := make(chan struct{})
+	next.hubSignedReadHook = func() {
+		go func() { old.noteHubSigned(); close(done) }()
+		waitFor(t, "the late reply to verify", old.HubSigned)
+		time.Sleep(50 * time.Millisecond) // for it to reach the replacement
+	}
+	next.UpdatePins(nil, Pins{HubSignedClears: 1, HubSignedEdited: true}) //nolint:staticcheck // nil ctx: the leaf is not running
+	<-done
+	if next.HubSigned() || rec.file.Load() {
+		t.Errorf("hubSigned=%v stored=%v; want the clear to stand", next.HubSigned(), rec.file.Load())
+	}
+}
 
 // A record first set on a retired leaf reaches its replacement, whichever comes
 // first, along a chain of them, and is stored there. The sysop's clear, on the

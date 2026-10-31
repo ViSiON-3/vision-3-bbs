@@ -488,17 +488,6 @@ func (l *Leaf) HandLateRepliesTo(next *Leaf) {
 	}
 }
 
-// lateHubSigned records a reply a predecessor verified, as noteHubSigned does a
-// reply of this leaf's own, unless the sysop's clear has reached this leaf.
-func (l *Leaf) lateHubSigned() {
-	l.pinMu.Lock()
-	cleared := l.pins.hubSignedCleared
-	l.pinMu.Unlock()
-	if !cleared {
-		l.noteHubSigned()
-	}
-}
-
 // applyHubSigned installs the config's hubSigned, v, when it differs from
 // the value the leaf last knew the config to hold, so a copy of the file
 // that predates a record the leaf has not stored yet does not undo it,
