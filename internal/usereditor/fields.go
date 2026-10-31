@@ -9,9 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/mattn/go-runewidth"
 )
 
 // fieldType defines the edit behavior for a field.
@@ -327,9 +326,13 @@ func infoformStatus(dataDir string, userID int) string {
 }
 
 // padRight pads a string to width with spaces, truncating if longer.
-func padRight(s string, width int) string { return tuiart.PadRight(s, width) }
+func padRight(s string, width int) string {
+	// In terminal cells, not runes: handles and locations may use double-width
+	// characters, which would otherwise push the rest of the row out of place.
+	return runewidth.FillRight(runewidth.Truncate(s, width, ""), width)
+}
 
 // padLeft pads a string on the left to width.
 func padLeft(s string, width int) string {
-	return ansi.PadLeft(ansi.TruncateRunes(s, width, ""), width)
+	return runewidth.FillLeft(runewidth.Truncate(s, width, ""), width)
 }
