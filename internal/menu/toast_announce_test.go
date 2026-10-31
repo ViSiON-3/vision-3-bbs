@@ -137,11 +137,11 @@ func TestRefreshPublishesTheCallersRecord(t *testing.T) {
 	sess := chatcovNode(env, 1, env.caller)
 	stored := *env.caller
 	stored.AccessLevel = env.caller.AccessLevel + 7
+	stored.ScreenWidth = 132 // Konfig saves here, and a refresh reads it back
 	if err := env.um.UpdateUser(&stored); err != nil {
 		t.Fatal(err)
 	}
 	mine := *env.caller
-	mine.ScreenWidth = 132
 	st := &runLoopState{e: env.e, s: newTestSession(""), userManager: env.um, currentUser: &mine, nodeNumber: 1}
 	if !st.refreshCurrentUser() {
 		t.Fatal("refresh ended the call")
