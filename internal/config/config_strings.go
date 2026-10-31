@@ -381,6 +381,8 @@ var StringMissingDefaults = map[string]string{
 	"sysopChatReturn":     "|11Returning you to reality - as you were!|07",
 	"sysopChatCallerLeft": "|11OK, I guess you don't want to chat! Returning...|07",
 
+	"toastLogon":         "|15%s|07 logged on to node |15%d|07",
+	"toastLogoff":        "|15%s|07 logged off node |15%d|07",
 	"toastOverlayFormat": "|09>> |07%s|07",
 	"toastBodyHint":      " |08(details at your next menu)|07",
 	// Quote banner for echomail/netmail/QWK replies (#632). Blank means no

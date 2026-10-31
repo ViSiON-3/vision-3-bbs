@@ -11,7 +11,7 @@ import (
 // editor at all, in either direction.
 func TestEditorRefusesAutoValidateWhileNUVOn(t *testing.T) {
 	cfg := &config.ServerConfig{UseNUV: true}
-	f := fieldByLabel(t, sysFieldsLevels(cfg), "Auto Validate")
+	f := fieldByLabel(t, sysFieldsNUV(cfg), "Auto Validate")
 
 	err := f.Set("Y")
 	if err == nil {
@@ -48,7 +48,7 @@ func TestEditorAllowsTurningEitherOff(t *testing.T) {
 	if err := fieldByLabel(t, sysFieldsNUV(cfg), "Use NUV").Set("N"); err != nil {
 		t.Fatalf("turning NUV off should be allowed: %v", err)
 	}
-	if err := fieldByLabel(t, sysFieldsLevels(cfg), "Auto Validate").Set("Y"); err != nil {
+	if err := fieldByLabel(t, sysFieldsNUV(cfg), "Auto Validate").Set("Y"); err != nil {
 		t.Fatalf("enabling Auto Validate after NUV is off should be allowed: %v", err)
 	}
 	if !cfg.AutoValidateNewUsers || cfg.UseNUV {
@@ -63,7 +63,7 @@ func TestEditorAllowsTurningEitherOff(t *testing.T) {
 func TestBothSwitchesWarnAboutEachOther(t *testing.T) {
 	cfg := &config.ServerConfig{}
 
-	autoValidate := fieldByLabel(t, sysFieldsLevels(cfg), "Auto Validate")
+	autoValidate := fieldByLabel(t, sysFieldsNUV(cfg), "Auto Validate")
 	if !strings.Contains(autoValidate.Help, "New User Voting") {
 		t.Errorf("Auto Validate help does not mention New User Voting: %q", autoValidate.Help)
 	}

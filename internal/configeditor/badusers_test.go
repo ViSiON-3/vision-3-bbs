@@ -18,8 +18,11 @@ func TestBadUserNamesPathField(t *testing.T) {
 	if cfg.BadUsersPath != "custom/names.txt" {
 		t.Fatal("path edit not applied")
 	}
-	items := securityMenuItems()
-	if items[len(items)-1].Label != "Bad User Names" {
+	found := false
+	for _, it := range securityMenuItems() {
+		found = found || it.Label == "Bad User Names"
+	}
+	if !found {
 		t.Fatal("missing security menu entry")
 	}
 }

@@ -45,7 +45,7 @@ type BbsSession struct {
 	LastMenu     string               // Tracks the previously visited menu
 	StartTime    time.Time            // Tracks the session start time
 	LastActivity time.Time            // Tracks last user input for idle calculation
-	PendingPages []string             // Live-only toasts waiting to be shown; not kept across a restart
+	PendingPages []pendingPage        // Live-only toasts waiting to be shown; not kept across a restart
 	Invisible    bool                 // True if user logged in invisibly (SysOp/CoSysOp only)
 	Tap          *snoop.Tap           // WFC snoop point for this node; nil in tests
 	ChatCredit   func() time.Duration // Sysop chat time credited to the caller; nil means none
@@ -56,6 +56,9 @@ type BbsSession struct {
 	toastWake       chan struct{}   // see ToastWake; guarded by Mutex
 	toastsReady     atomic.Bool     // see SetToastsReady
 	toastsAnnounced map[string]bool // see NoteToastAnnounced; guarded by Mutex
+	toastViewer     *toastViewer    // see SetToastViewer; guarded by Mutex
+	toastAnchorRow  int             // see SetToastAnchor; guarded by Mutex
+	toastAnchorCol  int             // see SetToastAnchor; guarded by Mutex
 	toastsShown     map[string]bool // see NoteToastShown; guarded by Mutex
 	heldPages       []string        // see HoldPage; guarded by Mutex
 }
@@ -71,22 +74,49 @@ func (s *BbsSession) TermSize() (width, height int) {
 	return width, height
 }
 
+// pendingPage is one live-only toast. A zero expires never goes stale.
+type pendingPage struct {
+	text    string
+	expires time.Time
+}
+
 // AddPage queues a live-only toast for this session and wakes its key wait.
-func (s *BbsSession) AddPage(msg string) {
+func (s *BbsSession) AddPage(msg string) { s.addPage(pendingPage{text: msg}) }
+
+// AddExpiringPage is AddPage for news that is worthless after ttl, such as a
+// logon announcement to a caller who is in a door.
+func (s *BbsSession) AddExpiringPage(msg string, ttl time.Duration) {
+	s.addPage(pendingPage{text: msg, expires: time.Now().Add(ttl)})
+}
+
+func (s *BbsSession) addPage(p pendingPage) {
 	s.Mutex.Lock()
-	s.PendingPages = append(s.PendingPages, msg)
+	s.PendingPages = append(s.PendingPages, p)
 	s.Mutex.Unlock()
 	s.WakeToasts()
 }
 
+// dropStalePagesLocked removes expired pages. Caller holds Mutex for writing.
+func (s *BbsSession) dropStalePagesLocked() {
+	now := time.Now()
+	kept := s.PendingPages[:0]
+	for _, p := range s.PendingPages {
+		if p.expires.IsZero() || now.Before(p.expires) {
+			kept = append(kept, p)
+		}
+	}
+	s.PendingPages = kept
+}
+
 // PeekPage returns the oldest pending page without removing it.
 func (s *BbsSession) PeekPage() (string, bool) {
-	s.Mutex.RLock()
-	defer s.Mutex.RUnlock()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	s.dropStalePagesLocked()
 	if len(s.PendingPages) == 0 {
 		return "", false
 	}
-	return s.PendingPages[0], true
+	return s.PendingPages[0].text, true
 }
 
 // PopPage removes the oldest pending page.
@@ -104,7 +134,10 @@ func (s *BbsSession) HoldPage() {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	if len(s.PendingPages) > 0 {
-		s.heldPages = append(s.heldPages, s.PendingPages[0])
+		// An announcement is old news by the next menu; what was drawn will do.
+		if p := s.PendingPages[0]; p.expires.IsZero() {
+			s.heldPages = append(s.heldPages, p.text)
+		}
 		s.PendingPages = s.PendingPages[1:]
 	}
 }
@@ -132,10 +165,14 @@ func (s *BbsSession) PopHeldPage() {
 func (s *BbsSession) DrainPages() []string {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
+	s.dropStalePagesLocked()
 	if len(s.PendingPages) == 0 {
 		return nil
 	}
-	pages := s.PendingPages
+	pages := make([]string, len(s.PendingPages))
+	for i, p := range s.PendingPages {
+		pages[i] = p.text
+	}
 	s.PendingPages = nil
 	return pages
 }

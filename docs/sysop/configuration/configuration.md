@@ -44,8 +44,8 @@ The editor opens to a main menu. Keys **1** through **7**, **B** and **C** open 
 
 | Key | Section | What it covers |
 |-----|---------|----------------|
-| 1 | System Setup | Sub-menu: BBS Registration, Server Setup, Default Settings, DOS Emulation, Logging, QWK Mobile API |
-| 2 | Access & Security | Sub-menu: Access Levels, Connection Limits, Bot Defense, IP Blocklist/Allowlist, New User Voting (NUV), Bad User Names |
+| 1 | System Setup | Sub-menu: BBS Registration, Server Setup, Default Settings, DOS Emulation, Logging, QWK Mobile API, Toasts |
+| 2 | Access & Security | Sub-menu: Access Levels, Connection Limits, Bot Defense, IP Blocklist/Allowlist, New Users & Voting, Bad User Names, WFC & Paging |
 | 3 | Areas and Conferences | Sub-menu: Message Areas, File Areas, Conferences |
 | 4 | Echomail Networking | Sub-menu: Echomail Networks, Echomail Links, FTN Setup Wizard |
 | 5 | QWK Networking | Sub-menu: QWK Networks, QWK Network Wizard |
@@ -61,7 +61,7 @@ The editor opens to a main menu. Keys **1** through **7**, **B** and **C** open 
 
 ### System Setup Sub-menu
 
-Choosing **System Setup** (key 1) opens an inner menu of six numbered items, all writing to `configs/config.json`. Use Up/Down and Enter to open an item; Esc returns to the main menu.
+Choosing **System Setup** (key 1) opens an inner menu of seven numbered items, all writing to `configs/config.json`. Use Up/Down and Enter to open an item; Esc returns to the main menu.
 
 | Item | Name | Fields |
 |------|------|--------|
@@ -71,6 +71,7 @@ Choosing **System Setup** (key 1) opens an inner menu of six numbered items, all
 | 4 | DOS Emulation | DOSemu Path |
 | 5 | Logging | Log Directory, Min Level, Rolling Type, Cache Writes, Max Files, Max Size KB |
 | 6 | QWK Mobile API | Enabled, Host, Port, Cert File, Key File, Token TTL Hours |
+| 7 | Toasts | Toast Logons, Toast Logoffs, Toast Level, Toast Edge, Toast Offset, Toast Center, Toast Col |
 
 **Server Setup (item 2)** also writes to `configs/v3net.json` for the V3Net fields (keystore path, dedup DB path, registry URL, hub enabled/host/port/data dir/auto-approve/auto-approve areas).
 
@@ -82,16 +83,17 @@ or port takes effect at the next restart.
 
 ### Access & Security Sub-menu
 
-Choosing **Access & Security** (key 2) opens an inner menu of six numbered items, also writing to `configs/config.json`.
+Choosing **Access & Security** (key 2) opens an inner menu of seven numbered items, also writing to `configs/config.json`.
 
 | Item | Name | Fields |
 |------|------|--------|
-| 1 | Access Levels | SysOp Level, CoSysOp Level, WFC Access, Invisible Level, New User Level, Auto Validate, Notify SysOp, Regular Level, Logon Level, Anonymous Level, Page Timeout, Page Cooldown |
+| 1 | Access Levels | SysOp Level, CoSysOp Level, Invisible Level, New User Level, Regular Level, Logon Level, Anonymous Level |
 | 2 | Connection Limits | Max Nodes, Max Per IP, Failed Logins (0=off), Lockout Minutes, Idle Timeout, Chat Idle Timeout, Transfer Timeout |
 | 3 | Bot Defense | Challenge gate (enable, art file, key, timeout, required presses, stray keys, live countdown) and connection-rate limiter (enable, hits, window, ban minutes). See [Security](configuration/security.md#bot-defense) |
 | 4 | IP Blocklist/Allowlist | Blocklist Path, Allowlist Path |
-| 5 | New User Voting (NUV) | Use NUV, Auto Add NUV, NUV Use Level, Yes/No vote thresholds, Validate/Kill on threshold, NUV Level, NUV Form |
+| 5 | New Users & Voting | Auto Validate, Notify SysOp, Use NUV, Auto Add NUV, NUV Use Level, Yes/No vote thresholds, Validate/Kill on threshold, NUV Level, NUV Form |
 | 6 | Bad User Names | Bad Names Path — the list of handles refused at signup; the rules themselves are edited in that file. See [Bad user names](#bad-user-names) |
+| 7 | WFC & Paging | WFC Access, Page Timeout, Page Cooldown |
 
 ### Areas and Conferences Sub-menu
 
@@ -559,11 +561,13 @@ General BBS configuration. All settings in this file are managed through the **S
 | DOSemu binary path | System Setup → DOS Emulation (item 4) |
 | Log directory, level, rotation | System Setup → Logging (item 5) |
 | QWK mobile API listener and TLS files | System Setup → QWK Mobile API (item 6) |
+| Logon and logoff announcements, toast position | System Setup → Toasts (item 7) |
 | Access levels (sysop, new user, logon, etc.) | Access & Security → Access Levels (item 1) |
 | Max nodes, per-IP limits, timeouts | Access & Security → Connection Limits (item 2) |
 | Bot challenge gate and connection-rate limiter | Access & Security → Bot Defense (item 3) |
 | Blocklist / allowlist file paths | Access & Security → IP Blocklist/Allowlist (item 4) |
-| NUV voting thresholds and behavior | Access & Security → New User Voting (NUV) (item 5) |
+| Auto Validate, Notify SysOp, NUV voting thresholds and behavior | Access & Security → New Users & Voting (item 5) |
+| WFC console access, sysop page wait and cooldown | Access & Security → WFC & Paging (item 7) |
 
 #### Field Reference
 
@@ -621,6 +625,9 @@ built-in defaults and overlays whatever the file provides.
 | `pageSysopTimeout` | `60` | `60` | Seconds a caller waits for a sysop to answer a `PAGESYSOP` page before being told the SysOp is not available. Shown as **Page Timeout** in the config TUI, which accepts 5–600 |
 | `pageSysopCooldown` | `300` | `300` | Seconds a caller must wait between pages; `0` disables the cooldown. Shown as **Page Cooldown** in the config TUI, which accepts 0–86400 |
 
+In `./config`, `notifySysopNewUser` is on **New Users & Voting**, and the two
+page settings are on **WFC & Paging**.
+
 See [User Management](users/user-management.md#system-access-levels) for how
 these interact, and what happens at signup.
 
@@ -659,6 +666,18 @@ under Security Levels in `./config`, to silence it.
 - `ipAllowlistPath` — Path to allowlist file (empty = disabled)
 
 Both files are plain text: one IP or CIDR range per line, `#` for comments. They are watched for changes and reloaded automatically — no restart required. See [Security Guide](configuration/security.md) for format details.
+
+**Toasts:**
+
+| Setting | Shipped | Fallback | Meaning |
+| ------- | ------- | -------- | ------- |
+| `toastLogons` | `false` | `false` | Announce logons to other online callers |
+| `toastLogoffs` | `false` | `false` | Announce logoffs to other online callers |
+| `toastAnnounceLevel` | `0` | `0` | Minimum access level to see those announcements |
+| `toastEdge` | `bottom` | empty, read as `bottom` | Screen edge a toast is placed from: `top` or `bottom` |
+| `toastOffset` | `0` | `0` | Rows in from that edge, towards the middle of the screen. The config TUI accepts 0–50 |
+| `toastCenter` | `false` | `false` | Center a toast on the caller's Konfig screen width, in place of `toastCol` |
+| `toastCol` | `1` | `0` | Column a toast starts at; `0` reads as `1` |
 
 **New User Voting (NUV):**
 

@@ -46,5 +46,8 @@ func (st *runLoopState) refreshCurrentUser() bool {
 	}
 
 	st.currentUser = refreshed
+	if sess := st.e.nodeSession(st.nodeNumber); sess != nil {
+		sess.SetToastViewer(refreshed.AccessLevel, refreshed.ScreenWidth)
+	}
 	return true
 }

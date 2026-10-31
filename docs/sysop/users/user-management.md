@@ -106,7 +106,7 @@ Every account created through the signup flow starts as:
 | `validated` | **`false`**, unless **Auto Validate** is on |
 
 **Auto Validate** (`autoValidateNewUsers`, off by default; `./config` →
-**System Setup → Access & Security → Access Levels**) marks signups validated
+**Access & Security → New Users & Voting**) marks signups validated
 as they are created. It sets only the reviewed flag: the account is not raised
 to `regularUserLevel`, it drops off the pending list, and it skips the
 required-infoforms prompt. It cannot be combined with New User Voting. With it
@@ -772,8 +772,8 @@ key is missing.
 | `coSysOpLevel` | int | `250` | `250` | **CoSysOp Level**: CoSysOp checks, the `COSYSOP` ACS keyword, WFC access, no time limit or idle timeout |
 | `invisibleLevel` | int | `250` | `0` → uses `coSysOpLevel` | **Invisible Lvl**: minimum level for the invisible-logon prompt |
 | `newUserLevel` | int | `10` | `1` | **New User Level**: level given to new signups |
-| `autoValidateNewUsers` | bool | `false` | `false` | **Auto Validate**: mark signups validated at creation. Cannot be combined with NUV |
-| `notifySysopNewUser` | bool | `true` | `true` | **Notify SysOp**: page online co-sysops and queue a notice for the others when someone signs up |
+| `autoValidateNewUsers` | bool | `false` | `false` | **Auto Validate** (New Users & Voting screen): mark signups validated at creation. Cannot be combined with NUV |
+| `notifySysopNewUser` | bool | `true` | `true` | **Notify SysOp** (New Users & Voting screen): page online co-sysops and queue a notice for the others when someone signs up |
 | `regularUserLevel` | int | `25` | `10` | **Regular Level**: level a user is raised to when validated |
 | `logonLevel` | int | `10` | `10` | **Logon Level**: minimum level to log in; `0` disables the check |
 | `anonymousLevel` | int | `50` | `5` | **Anonymous Lvl**: minimum level to post anonymously |

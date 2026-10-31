@@ -249,7 +249,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// var numericMatchAction string // Moved declaration up
 
 		// 4. Determine Input Mode / Method
+		e.setToastAnchor(nodeNumber, ansiProcessResult, menuRec.GetClrScrBefore())
 		input, act, retErr := st.readMenuInput(ansiProcessResult, menuRec)
+		e.clearToastAnchor(nodeNumber)
 		switch act {
 		case loopReturn:
 			// Every exit but the removed-account one hands back st.currentUser,

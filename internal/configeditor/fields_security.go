@@ -1,7 +1,6 @@
 package configeditor
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -39,36 +38,7 @@ func sysFieldsLevels(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "WFC Access", Help: "Allow remote WFC sysop console connections", Type: ftYesNo, Col: 3, Row: 3, Width: 1,
-			Get: func() string { return uitext.BoolToYN(cfg.WFCEnabled) },
-			Set: func(val string) error { cfg.WFCEnabled = uitext.YNToBool(val); return nil },
-		},
-		{
-			Label: "Page Timeout", Help: "Seconds PAGESYSOP waits for the SysOp to answer", Type: ftInteger, Col: 3, Row: 4, Width: 4, Min: 5, Max: 600,
-			Get: func() string { return strconv.Itoa(cfg.PageSysopTimeoutSeconds) },
-			Set: func(val string) error {
-				n, err := strconv.Atoi(val)
-				if err != nil {
-					return err
-				}
-				cfg.PageSysopTimeoutSeconds = n
-				return nil
-			},
-		},
-		{
-			Label: "Page Cooldown", Help: "Seconds before the same caller may page again", Type: ftInteger, Col: 3, Row: 5, Width: 5, Min: 0, Max: 86400,
-			Get: func() string { return strconv.Itoa(cfg.PageSysopCooldownSeconds) },
-			Set: func(val string) error {
-				n, err := strconv.Atoi(val)
-				if err != nil {
-					return err
-				}
-				cfg.PageSysopCooldownSeconds = n
-				return nil
-			},
-		},
-		{
-			Label: "Invisible Lvl", Help: "Level at which user is hidden from who's online", Type: ftInteger, Col: 3, Row: 6, Width: 3, Min: 0, Max: 255,
+			Label: "Invisible Lvl", Help: "Level at which user is hidden from who's online", Type: ftInteger, Col: 3, Row: 3, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.InvisibleLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -80,7 +50,7 @@ func sysFieldsLevels(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "New User Level", Help: "Level assigned to new signups", Type: ftInteger, Col: 3, Row: 7, Width: 3, Min: 0, Max: 255,
+			Label: "New User Level", Help: "Level assigned to new signups", Type: ftInteger, Col: 3, Row: 4, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.NewUserLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -92,32 +62,7 @@ func sysFieldsLevels(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Auto Validate", Help: "Mark new signups validated (cannot be used with New User Voting)", Type: ftYesNo, Col: 50, Row: 5, Width: 1,
-			Get: func() string { return uitext.BoolToYN(cfg.AutoValidateNewUsers) },
-			Set: func(val string) error {
-				on := uitext.YNToBool(val)
-				// Mutually exclusive with NUV: a candidate that arrives already
-				// validated leaves the vote nothing to decide.
-				if on && cfg.UseNUV {
-					return fmt.Errorf("cannot auto-validate while New User Voting is enabled; turn Use NUV off first")
-				}
-				cfg.AutoValidateNewUsers = on
-				return nil
-			},
-		},
-		{
-			Label: "Notify SysOp", Help: "Page online CoSysOps+ when a new user signs up", Type: ftYesNo, Col: 50, Row: 6, Width: 1,
-			Get: func() string { return uitext.BoolToYN(cfg.NotifySysopNewUser) },
-			Set: func(val string) error {
-				// Deliberately independent of Auto Validate. An auto-validated
-				// signup leaves nothing to review, but a sysop still wants to
-				// know somebody joined.
-				cfg.NotifySysopNewUser = uitext.YNToBool(val)
-				return nil
-			},
-		},
-		{
-			Label: "Regular Level", Help: "Level assigned when user is validated", Type: ftInteger, Col: 3, Row: 8, Width: 3, Min: 0, Max: 255,
+			Label: "Regular Level", Help: "Level assigned when user is validated", Type: ftInteger, Col: 3, Row: 5, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.RegularUserLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -129,7 +74,7 @@ func sysFieldsLevels(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Logon Level", Help: "Minimum access level required to log in (0=disabled)", Type: ftInteger, Col: 3, Row: 9, Width: 3, Min: 0, Max: 255,
+			Label: "Logon Level", Help: "Minimum access level required to log in (0=disabled)", Type: ftInteger, Col: 3, Row: 6, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.LogonLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -141,7 +86,7 @@ func sysFieldsLevels(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Anonymous Lvl", Help: "Minimum level required to post anonymously (0=disabled)", Type: ftInteger, Col: 3, Row: 10, Width: 3, Min: 0, Max: 255,
+			Label: "Anonymous Lvl", Help: "Minimum level required to post anonymously (0=disabled)", Type: ftInteger, Col: 3, Row: 7, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.AnonymousLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -277,4 +222,39 @@ func sysFieldsIPLists(cfg *config.ServerConfig) []fieldDef {
 func sysFieldsBadUserNames(cfg *config.ServerConfig) []fieldDef {
 	return []fieldDef{{Label: "Bad Names Path", Help: "Edit this file: one name per line; * wildcard; ;/# comments; live reload", Type: ftString, Col: 3, Row: 1, Width: 45,
 		Get: func() string { return cfg.BadUsersPath }, Set: func(val string) error { cfg.BadUsersPath = val; return nil }}}
+}
+
+// sysFieldsWFCPaging returns fields for the WFC & Paging sub-screen.
+func sysFieldsWFCPaging(cfg *config.ServerConfig) []fieldDef {
+	return []fieldDef{
+		{
+			Label: "WFC Access", Help: "Allow remote WFC sysop console connections", Type: ftYesNo, Col: 3, Row: 1, Width: 1,
+			Get: func() string { return uitext.BoolToYN(cfg.WFCEnabled) },
+			Set: func(val string) error { cfg.WFCEnabled = uitext.YNToBool(val); return nil },
+		},
+		{
+			Label: "Page Timeout", Help: "Seconds PAGESYSOP waits for the SysOp to answer", Type: ftInteger, Col: 3, Row: 2, Width: 4, Min: 5, Max: 600,
+			Get: func() string { return strconv.Itoa(cfg.PageSysopTimeoutSeconds) },
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				cfg.PageSysopTimeoutSeconds = n
+				return nil
+			},
+		},
+		{
+			Label: "Page Cooldown", Help: "Seconds before the same caller may page again", Type: ftInteger, Col: 3, Row: 3, Width: 5, Min: 0, Max: 86400,
+			Get: func() string { return strconv.Itoa(cfg.PageSysopCooldownSeconds) },
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				cfg.PageSysopCooldownSeconds = n
+				return nil
+			},
+		},
+	}
 }

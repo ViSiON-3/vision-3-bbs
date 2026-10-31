@@ -13,6 +13,12 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/configmerge"
 )
 
+// Values of ServerConfig.ToastEdge.
+const (
+	ToastEdgeTop    = "top"
+	ToastEdgeBottom = "bottom"
+)
+
 // ServerConfig defines server-wide settings
 type ServerConfig struct {
 	// TwitListEnabled turns per-user Twit Lists on board-wide; read it
@@ -43,7 +49,21 @@ type ServerConfig struct {
 	// signup completes, delivered at their next menu prompt. Independent of
 	// AutoValidateNewUsers: an auto-validated signup raises nothing to review,
 	// but a sysop still wants to know somebody joined.
-	NotifySysopNewUser  bool   `json:"notifySysopNewUser"`
+	NotifySysopNewUser bool `json:"notifySysopNewUser"`
+	// ToastLogons and ToastLogoffs announce callers coming and going to other
+	// online callers at or above ToastAnnounceLevel (#206). Off by default, so
+	// an upgrade does not start showing them unasked.
+	ToastLogons        bool `json:"toastLogons"`
+	ToastLogoffs       bool `json:"toastLogoffs"`
+	ToastAnnounceLevel int  `json:"toastAnnounceLevel"`
+	// ToastEdge and ToastOffset place a toast drawn over a screen: the rows in
+	// from the top or bottom edge, so a position holds on any terminal height.
+	// An empty edge reads as the bottom. ToastCenter centers on the caller's
+	// Konfig screen width in place of ToastCol, where column 0 reads as 1.
+	ToastEdge           string `json:"toastEdge"`
+	ToastOffset         int    `json:"toastOffset"`
+	ToastCenter         bool   `json:"toastCenter"`
+	ToastCol            int    `json:"toastCol"`
 	RegularUserLevel    int    `json:"regularUserLevel"`
 	LogonLevel          int    `json:"logonLevel"`
 	AnonymousLevel      int    `json:"anonymousLevel"`

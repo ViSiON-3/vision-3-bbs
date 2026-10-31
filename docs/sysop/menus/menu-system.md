@@ -477,6 +477,7 @@ For interactive positioning (like login screens):
 
 - `|{P}` - Mark username input position
 - `|{O}` - Mark password input position
+- `~TO` or `|TO` - Where toasts appear while this menu waits for input (the menu must have Clear Screen on)
 
 ## Conditional Regions ({{acs}}...{{/}})
 
@@ -800,8 +801,7 @@ SysOp page is not bound anywhere, so add it where you like, for example in
 ```
 
 The wait and the cooldown between one caller's pages are **Page Timeout** and
-**Page Cooldown** in `./config` → **System Setup → Access & Security → Access
-Levels**; the caller's prompts are the `pageSysop*` strings in `./strings`.
+**Page Cooldown** in `./config` → **Access & Security → WFC & Paging**; the caller's prompts are the `pageSysop*` strings in `./strings`.
 
 ## Template Files (.TOP / .MID / .BOT)
 

@@ -205,7 +205,7 @@ func TestToastsHeldWhenTheyCannotBeDrawn(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			env := newToastEnv(t)
 			setup(env)
-			env.readKey()
+			keys := env.readKey()
 			_ = env.e.SessionRegistry.SendToast(env.e.toastStore(), env.u.ID, toast.Toast{Text: "held"})
 			time.Sleep(30 * time.Millisecond)
 			if strings.Contains(env.term.Row(24), "held") {
@@ -215,6 +215,7 @@ func TestToastsHeldWhenTheyCannotBeDrawn(t *testing.T) {
 				t.Errorf("queue = %+v, want the toast still there", q)
 			}
 			env.s.Send("x")
+			<-keys
 		})
 	}
 }
@@ -223,7 +224,7 @@ func TestToastBodyAnnouncedOnceThenShownInlineLiterally(t *testing.T) {
 	env := newToastEnv(t)
 	toastDwell = time.Millisecond
 	store := env.e.toastStore()
-	env.readKey()
+	keys := env.readKey()
 	_ = env.e.SessionRegistry.SendToast(store, env.u.ID, toast.Toast{Text: "Post refused", Body: "my |15text\nline two\x1b[2J"})
 
 	toastWaitFor(t, "the announcement", func() bool {
@@ -234,6 +235,7 @@ func TestToastBodyAnnouncedOnceThenShownInlineLiterally(t *testing.T) {
 		t.Fatalf("queue = %+v, want the body still kept", q)
 	}
 	env.s.Send("x")
+	<-keys
 	toastWaitFor(t, "the read to end", func() bool { return strings.Contains(env.term.Row(24), "BOTTOM") })
 
 	body := string(toastBody("my |15text\nline two\x1b[2J"))
@@ -274,6 +276,179 @@ func mustPeek(t *testing.T, store *toast.Store, id int) []toast.Toast {
 		t.Fatal(err)
 	}
 	return q
+}
+
+func TestToastEdgeRow(t *testing.T) {
+	cases := []struct {
+		name                 string
+		edge                 string
+		offset, height, want int
+	}{
+		{"unset edge is the bottom", "", 0, 24, 24},
+		{"bottom follows the terminal", config.ToastEdgeBottom, 0, 50, 50},
+		{"bottom offset moves up", config.ToastEdgeBottom, 2, 24, 22},
+		{"top", config.ToastEdgeTop, 0, 24, 1},
+		{"top offset moves down", config.ToastEdgeTop, 2, 24, 3},
+		{"bottom offset stops at the top", config.ToastEdgeBottom, 50, 24, 1},
+		{"top offset stops at the bottom", config.ToastEdgeTop, 50, 24, 24},
+		{"negative offset from a hand edit", config.ToastEdgeBottom, -3, 24, 24},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := toastEdgeRow(c.edge, c.offset, c.height); got != c.want {
+				t.Errorf("got %d, want %d", got, c.want)
+			}
+		})
+	}
+}
+
+func TestToastCenterCol(t *testing.T) {
+	cases := []struct {
+		name                           string
+		textLen, konfig, term, wantCol int
+	}{
+		{"on the terminal when Konfig is unset", 10, 0, 80, 36},
+		{"on the Konfig width", 10, 40, 80, 16},
+		{"Konfig wider than the terminal", 10, 132, 80, 36},
+		{"text wider than the screen", 100, 0, 80, 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := toastCenterCol(c.textLen, c.konfig, c.term); got != c.wantCol {
+				t.Errorf("got %d, want %d", got, c.wantCol)
+			}
+		})
+	}
+}
+
+func TestToastOverlayCentersOnKonfigWidth(t *testing.T) {
+	env := newToastEnv(t)
+	toastDwell = 10 * time.Second
+	cfg := env.e.GetServerConfig()
+	cfg.ToastCenter = true
+	cfg.ToastCol = 70 // ignored while centering
+	env.e.SetServerConfig(cfg)
+	env.sess.User.ScreenWidth = 40
+	keys := env.readKey()
+
+	env.sess.AddPage("Mid")
+	toastWaitFor(t, "the overlay", func() bool { return strings.Contains(env.term.Row(24), ">> Mid") })
+	// ">> Mid" is 6 wide: (40-6)/2+1.
+	if got := env.term.Cell(24, 18).Rune; got != '>' {
+		t.Errorf("column 18 = %q, want the toast's start; row = %q", got, env.term.Row(24))
+	}
+	env.s.Send("x")
+	<-keys
+}
+
+func TestToastAnchorOverridesCenter(t *testing.T) {
+	env := newToastEnv(t)
+	toastDwell = 10 * time.Second
+	cfg := env.e.GetServerConfig()
+	cfg.ToastCenter = true
+	env.e.SetServerConfig(cfg)
+	env.sess.SetToastAnchor(3, 9)
+	keys := env.readKey()
+
+	env.sess.AddPage("Art")
+	toastWaitFor(t, "the overlay", func() bool { return strings.Contains(env.term.Row(3), ">> Art") })
+	if got := env.term.Cell(3, 9).Rune; got != '>' {
+		t.Errorf("column 9 = %q, want the toast's start", got)
+	}
+	env.s.Send("x")
+	<-keys
+}
+
+func TestToastPlacement(t *testing.T) {
+	cases := []struct {
+		name                 string
+		cfgRow, cfgCol, w, h int
+		wantRow, wantCol     int
+	}{
+		{"column 0 reads as 1", 24, 0, 80, 24, 24, 1},
+		{"position used as set", 3, 10, 80, 24, 3, 10},
+		{"row past the bottom", 40, 1, 80, 24, 24, 1},
+		{"column too far right", 1, 75, 80, 24, 1, 60},
+		{"narrow terminal", 1, 30, 15, 24, 1, 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			row, col := toastPlacement(c.cfgRow, c.cfgCol, c.w, c.h)
+			if row != c.wantRow || col != c.wantCol {
+				t.Errorf("got %d,%d, want %d,%d", row, col, c.wantRow, c.wantCol)
+			}
+		})
+	}
+}
+
+func TestToastOverlayDrawsAtConfiguredPosition(t *testing.T) {
+	env := newToastEnv(t)
+	toastDwell = 10 * time.Second
+	cfg := env.e.GetServerConfig()
+	cfg.ToastEdge, cfg.ToastOffset, cfg.ToastCol = config.ToastEdgeTop, 0, 6
+	env.e.SetServerConfig(cfg)
+	keys := env.readKey()
+
+	env.sess.AddPage("Placed")
+	toastWaitFor(t, "the overlay", func() bool { return strings.Contains(env.term.Row(1), ">> Placed") })
+	// Text left of the column stays; the row's old text from there on goes.
+	if got := env.term.Row(1); !strings.HasPrefix(got, "FULL >> Placed") || strings.Contains(got, "SCREEN") {
+		t.Errorf("row 1 = %q", got)
+	}
+	if !strings.Contains(env.term.Row(24), "BOTTOM TEXT") {
+		t.Errorf("bottom row touched: %q", env.term.Row(24))
+	}
+	if row, col := env.term.Cursor(); row != 5 || col != 7 {
+		t.Errorf("cursor at %d,%d, want 5,7", row, col)
+	}
+	env.s.Send("x")
+	<-keys
+	if !strings.Contains(env.term.Row(1), "FULL SCREEN") {
+		t.Errorf("row 1 not restored: %q", env.term.Row(1))
+	}
+}
+
+func TestToastAnchorFromMenuArtOverridesConfiguredPosition(t *testing.T) {
+	env := newToastEnv(t)
+	toastDwell = 10 * time.Second
+	cfg := env.e.GetServerConfig()
+	cfg.ToastEdge, cfg.ToastOffset, cfg.ToastCol = config.ToastEdgeBottom, 4, 1
+	env.e.SetServerConfig(cfg)
+
+	res, err := ansi.ProcessAnsiAndExtractCoords([]byte("\x1b[3;9H~TO"), ansi.OutputModeCP437)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(res.DisplayBytes), "TO") {
+		t.Errorf("code left in the art: %q", res.DisplayBytes)
+	}
+
+	// Without a cleared screen the art's coordinates mean nothing.
+	env.e.setToastAnchor(1, res, false)
+	if _, _, ok := env.sess.ToastAnchor(); ok {
+		t.Error("anchor set on a menu that does not clear the screen")
+	}
+
+	env.e.setToastAnchor(1, res, true)
+	keys := env.readKey()
+	env.sess.AddPage("Anchored")
+	toastWaitFor(t, "the overlay", func() bool { return strings.Contains(env.term.Row(3), ">> Anchored") })
+	if strings.Contains(env.term.Row(20), "Anchored") {
+		t.Errorf("drawn at the configured row too: %q", env.term.Row(20))
+	}
+	if got := env.term.Cell(3, 9).Rune; got != '>' {
+		t.Errorf("column 9 of row 3 = %q, want the toast's start", got)
+	}
+	env.s.Send("x")
+	<-keys
+
+	// Leaving the menu hands toasts back to the configured position.
+	env.e.clearToastAnchor(1)
+	keys = env.readKey()
+	env.sess.AddPage("Back")
+	toastWaitFor(t, "the overlay", func() bool { return strings.Contains(env.term.Row(20), ">> Back") })
+	env.s.Send("x")
+	<-keys
 }
 
 // A toast's text comes from another caller, so screen codes in it print as text.
