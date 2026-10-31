@@ -249,7 +249,8 @@ func (l *Leaf) hubUnsigned(ctx context.Context, path, why string) error {
 // sets hubSigned and hands it to OnHubSigned to store; a store that failed
 // is retried at each later verified reply until it succeeds, or until a
 // reload in which the sysop wrote hubSigned drops the record (see
-// applyHubSigned).
+// applyHubSigned). On a retired leaf the first time goes to its replacement
+// instead (see HandLateRepliesTo).
 func (l *Leaf) noteHubSigned() {
 	l.unsignedRefusedLogged.Store(false)
 	l.pinMu.Lock()
@@ -259,10 +260,18 @@ func (l *Leaf) noteHubSigned() {
 		l.pins.hubSignedUnsaved = true
 	}
 	save := l.pins.hubSignedUnsaved
+	late := first && l.pins.retired
+	if late {
+		l.pins.hubSignedLate = true
+	}
+	next := l.pins.hubSignedNext
 	l.pinMu.Unlock()
 	if first {
 		slog.Info("leaf: hub signs its responses; unsigned replies from it are refused from now on",
 			"network", l.cfg.Network, "hub", l.cfg.HubURL)
+	}
+	if late && next != nil {
+		next.lateHubSigned()
 	}
 	if !save {
 		return

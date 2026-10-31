@@ -949,14 +949,15 @@ func keysOnlyChange(prev, next []config.V3NetLeafConfig) bool {
 
 // leafEdits says which of a leaf's recorded fields were written between prev
 // and next, two copies of its v3net.json entry. A sysop's clear of hubSigned
-// shows in hubSignedClears even when the value of hubSigned cannot show it,
-// because the file never got the record. A changed pin may be the leaf's own
+// shows in hubSignedClears rising even when the value of hubSigned cannot show
+// it, because the file never got the record; next may be the older copy, so a
+// lower count is no clear. A changed pin may be the leaf's own
 // store reaching the reload; the leaf tells that from an edit (see
 // leaf.Leaf.UpdatePins).
 func leafEdits(prev, next config.V3NetLeafConfig) (coord, hub, hubSigned bool) {
 	coord = strings.TrimSpace(prev.CoordinatorPubKey) != strings.TrimSpace(next.CoordinatorPubKey)
 	hub = strings.TrimSpace(prev.HubPubKey) != strings.TrimSpace(next.HubPubKey)
-	return coord, hub, prev.HubSigned != next.HubSigned || prev.HubSignedClears != next.HubSignedClears
+	return coord, hub, prev.HubSigned != next.HubSigned || next.HubSignedClears > prev.HubSignedClears
 }
 
 // withUncheckedFrom returns c, a reload's baseline, with the recorded fields p
@@ -1018,11 +1019,12 @@ func (s *Service) applyPins(prev, leafCfgs []config.V3NetLeafConfig) {
 		p := run.l.UpdatePins(run.ctx, leaf.Pins{
 			Coord: c.CoordinatorPubKey, Hub: c.HubPubKey,
 			PendingCoord: c.PendingCoordinatorPubKey, PendingHub: c.PendingHubPubKey,
-			HubSigned:   c.HubSigned,
+			HubSigned: c.HubSigned, HubSignedClears: max(before.HubSignedClears, c.HubSignedClears),
 			CoordEdited: coordEdited, HubEdited: hubEdited, HubSignedEdited: hubSignedEdited,
 		})
 		c.CoordinatorPubKey, c.HubPubKey = p.Coord, p.Hub
 		c.PendingCoordinatorPubKey, c.PendingHubPubKey = p.PendingCoord, p.PendingHub
+		c.HubSignedClears = p.HubSignedClears
 		*c = withUncheckedFrom(*c, before, p)
 	}
 	s.mu.Lock()
@@ -1050,7 +1052,9 @@ func (s *Service) applyPins(prev, leafCfgs []config.V3NetLeafConfig) {
 //
 // Either way a leaf keeps what it has not managed to store yet (see
 // leaf.UnsavedState), unless the reload shows the sysop wrote that field: a
-// file that merely lacks it says nothing about it, whatever else changed.
+// file that merely lacks it says nothing about it, whatever else changed. A
+// reply a replaced leaf verifies late reaches its replacement (see
+// leaf.Leaf.HandLateRepliesTo).
 //
 // leafCfgs was read from the file before this call, so a leaf may have stored
 // a pin since. Each leaf therefore checks its pins against the file as it is
@@ -1112,7 +1116,7 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 		pins, u := run.l.Retire(leaf.Pins{
 			Coord: next.CoordinatorPubKey, Hub: next.HubPubKey,
 			PendingCoord: next.PendingCoordinatorPubKey, PendingHub: next.PendingHubPubKey,
-			HubSigned: next.HubSigned, HubSignedClears: next.HubSignedClears,
+			HubSigned: next.HubSigned, HubSignedClears: max(prevByKey[key].HubSignedClears, next.HubSignedClears),
 			CoordEdited: coordEdited, HubEdited: hubEdited, HubSignedEdited: hubSignedEdited,
 		})
 		settled[key] = pins
@@ -1145,7 +1149,18 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 	s.carriedNALs = nil
 	s.carriedUnsaved = nil
 	count := len(s.leaves)
+	replacements := make(map[leafKey]*leaf.Leaf, count)
+	for _, run := range s.leaves {
+		replacements[leafKey{run.l.Network(), run.l.HubURL()}] = run.l
+	}
 	s.mu.Unlock()
+	// Keyed by network and hub, so what a leaf learned never reaches a leaf on
+	// another hub. Outside s.mu: this can store a record.
+	for _, run := range old {
+		if next, ok := replacements[leafKey{run.l.Network(), run.l.HubURL()}]; ok {
+			run.l.HandLateRepliesTo(next)
+		}
+	}
 	slog.Info("v3net: leaf subscriptions reloaded", "count", count)
 	return nil
 }

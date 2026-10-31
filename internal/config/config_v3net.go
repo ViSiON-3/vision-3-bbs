@@ -144,7 +144,7 @@ type V3NetLeafConfig struct {
 	// (a rollback to an older version, for one).
 	HubSigned bool `json:"hubSigned,omitempty"`
 	// HubSignedClears counts the times the sysop set HubSigned to N for this
-	// leaf. Only its changing means anything: it tells a running leaf the
+	// leaf. Only its rising means anything: it tells a running leaf the
 	// sysop cleared the record, even when HubSigned already reads false
 	// because the leaf could not store it. The config editor raises it; a
 	// sysop editing the file by hand raises it too.
