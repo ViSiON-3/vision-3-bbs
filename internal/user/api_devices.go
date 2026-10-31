@@ -186,7 +186,15 @@ func (um *UserMgr) mutateAPIDevices(userID int, fn func(u *User, valid []APIDevi
 	um.unsavedDevices = newDeviceIDs(next, previous)
 	defer func() { um.unsavedDevices = nil }()
 	if err := um.saveUsersLocked(); err != nil {
-		target.APIDevices = previous
+		// The save may have merged an external edit first, which replaces the
+		// stored records, so target can be stale by now. Look the record up
+		// again, or a failed pairing would stay live in memory.
+		for _, u := range um.users {
+			if u.ID == userID {
+				u.APIDevices = previous
+				break
+			}
+		}
 		return err
 	}
 	return nil

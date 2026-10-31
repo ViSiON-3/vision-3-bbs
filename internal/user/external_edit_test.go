@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -538,5 +539,30 @@ func TestShowsAPIDevices(t *testing.T) {
 		if got := tt.u.ShowsAPIDevices(tt.enabled); got != tt.want {
 			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
 		}
+	}
+}
+
+// A pairing whose save fails must not stay live, even when the save merged an
+// external edit first and so replaced the stored record.
+func TestFailedPairingRollsBackAfterMerge(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a directory the test cannot write to")
+	}
+	um, path := mgrWithUser(t, paired("a"))
+	edited := paired("a")
+	edited.AccessLevel = 50
+	writeUsersFile(t, path, edited)
+	dir := filepath.Dir(path)
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	d := APIDevice{ID: "new", PublicKey: "k", PasswordStamp: PasswordStamp("hash")}
+	if err := um.AddAPIDevice(7, d, 10); err == nil {
+		t.Fatal("AddAPIDevice succeeded on a read-only directory")
+	}
+	if got, _ := um.GetUserByID(7); len(got.APIDevices) != 1 {
+		t.Errorf("devices = %v, want the failed pairing rolled back", deviceIDs(got.APIDevices))
 	}
 }
