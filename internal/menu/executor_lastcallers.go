@@ -121,12 +121,12 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 		// Iterate through call records and format using processed LASTCALL.MID
 		for _, record := range lastCallers {
 			line := processedMidTemplate // Start with the pipe-code-processed mid template
-			userNote := string(ansi.ReplacePipeCodes([]byte(userNotesByID[record.UserID])))
+			userNote := string(ansi.ReplacePipeCodes([]byte(callerText(userNotesByID[record.UserID]))))
 
 			// Format data for substitution with fixed-width padding for column alignment
 			baud := record.BaudRate
-			name := string(ansi.ReplacePipeCodes([]byte(record.Handle)))
-			groupLoc := string(ansi.ReplacePipeCodes([]byte(record.GroupLocation)))
+			name := string(ansi.ReplacePipeCodes([]byte(callerText(record.Handle))))
+			groupLoc := string(ansi.ReplacePipeCodes([]byte(callerText(record.GroupLocation))))
 			onTime := formatLastCallerShortLocalTime(record.ConnectTime, timeLoc)
 			actions := record.Actions
 			hours := int(record.Duration.Hours())

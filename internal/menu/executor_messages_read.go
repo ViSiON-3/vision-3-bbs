@@ -107,7 +107,7 @@ func runReadMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		selectedNum, parseErr := strconv.Atoi(selectedNumStr)
 		if parseErr != nil || selectedNum < 1 || selectedNum > totalMessageCount {
-			msg := fmt.Sprintf("\r\n|01Invalid message number: %s|07\r\n", selectedNumStr)
+			msg := fmt.Sprintf("\r\n|01Invalid message number: %s|07\r\n", callerText(selectedNumStr))
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			uiPause(1 * time.Second)
 			return nil, "", nil

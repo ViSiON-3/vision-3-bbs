@@ -175,8 +175,8 @@ found or cannot be loaded.
 
 | Field | Key | Notes |
 |-------|-----|-------|
-| Handle | `handle` | Warns on a bad-user-names match |
-| Real Name | `realName` | |
+| Handle | `handle` | Warns on a bad-user-names match. A new handle cannot contain `\|` |
+| Real Name | `realName` | A new real name cannot contain `\|` |
 | Access Level | `accessLevel` | 0–255 |
 | Total Calls | `timesCalled` | |
 | Group/Location | `group_location` | |

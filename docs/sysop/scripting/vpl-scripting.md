@@ -342,7 +342,7 @@ Current user with live accessor properties and write support. All properties ref
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `"realName"` | string | User's real name |
+| `"realName"` | string | User's real name. A new name with a `\|` in it is refused, as at signup |
 | `"location"` | string | User's location |
 | `"screenWidth"` | number | Terminal width preference, held to 80–255 |
 | `"screenHeight"` | number | Terminal height preference |

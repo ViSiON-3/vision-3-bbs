@@ -251,10 +251,10 @@ func (s *Screen) createMinimalHeader(subject, recipient string) string {
 	header.WriteString(ansi.ClearScreen())
 	header.WriteString("|15Full Screen Message Editor\r\n")
 	header.WriteString("|07To: |11")
-	header.WriteString(recipient)
+	header.WriteString(ansi.EscapeScreenPipeCodes(recipient))
 	header.WriteString("\r\n")
 	header.WriteString("|07Subject: |11")
-	header.WriteString(subject)
+	header.WriteString(ansi.EscapeScreenPipeCodes(subject))
 	header.WriteString("\r\n")
 	// One column short of the 80-column art width (WriteArt wraps there on
 	// any terminal), so the rule never wraps.
@@ -315,9 +315,9 @@ func (s *Screen) processPipeCodes(content []byte, subject, recipient, fromName s
 
 		// All substitutions in a single pass (including @I@ initial placeholder).
 		subs := map[byte]string{
-			'S': recipient,
-			'F': fromName,
-			'E': subject,
+			'S': ansi.EscapeScreenPipeCodes(recipient),
+			'F': ansi.EscapeScreenPipeCodes(fromName),
+			'E': ansi.EscapeScreenPipeCodes(subject),
 			'T': timeStr,
 			'D': dateStr,
 			'I': "   ", // initial value; updated dynamically by updateDynamicHeaderFields
@@ -344,8 +344,8 @@ func (s *Screen) processPipeCodes(content []byte, subject, recipient, fromName s
 			anonStr = "Yes"
 		}
 		replacements := map[string]string{
-			"|S": recipient,
-			"|E": subject,
+			"|S": ansi.EscapeScreenPipeCodes(recipient),
+			"|E": ansi.EscapeScreenPipeCodes(subject),
 			"|D": dateStr,
 			"|T": timeStr,
 			"|A": anonStr,

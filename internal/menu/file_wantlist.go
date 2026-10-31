@@ -162,7 +162,7 @@ func runWantListSysop(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u
 	// Display each entry
 	for i, entry := range entries {
 		line := fmt.Sprintf("|15%3d. |07%-14s |11%-20s |03%-20s |08%s\r\n",
-			i+1, entry.Handle, entry.Filename, entry.Reason, entry.Date)
+			i+1, callerText(entry.Handle), callerText(entry.Filename), callerText(entry.Reason), entry.Date)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 	}
 

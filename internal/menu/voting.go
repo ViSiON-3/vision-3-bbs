@@ -196,21 +196,21 @@ func voteListTopics(terminal *term.Terminal, vd *VotingData, currentUser *user.U
 		if currentUser != nil && hasVoted(&t, currentUser.Handle) {
 			tags += " |10[Voted]|07"
 		}
-		wv(terminal, fmt.Sprintf("  |11%2d|07. |15%s|07%s\r\n", i+1, t.Question, tags), outputMode)
+		wv(terminal, fmt.Sprintf("  |11%2d|07. |15%s|07%s\r\n", i+1, callerText(t.Question), tags), outputMode)
 	}
 	wv(terminal, "|08"+strings.Repeat("\xc4", 50)+"\r\n", outputMode)
 }
 
 func voteListChoices(terminal *term.Terminal, topic *VoteTopic, outputMode ansi.OutputMode) {
-	wv(terminal, fmt.Sprintf("\r\n|15%s\r\n|08%s\r\n", topic.Question, strings.Repeat("\xc4", 40)), outputMode)
+	wv(terminal, fmt.Sprintf("\r\n|15%s\r\n|08%s\r\n", callerText(topic.Question), strings.Repeat("\xc4", 40)), outputMode)
 	for i, opt := range topic.Options {
-		wv(terminal, fmt.Sprintf("  |11%2d|07. |15%s|07\r\n", i+1, opt), outputMode)
+		wv(terminal, fmt.Sprintf("  |11%2d|07. |15%s|07\r\n", i+1, callerText(opt)), outputMode)
 	}
 }
 
 func voteShowResults(terminal *term.Terminal, topic *VoteTopic, outputMode ansi.OutputMode) {
 	total := totalVotes(topic)
-	wv(terminal, fmt.Sprintf("\r\n|15%s |08(%d vote%s)\r\n", topic.Question, total, pluralS(total)), outputMode)
+	wv(terminal, fmt.Sprintf("\r\n|15%s |08(%d vote%s)\r\n", callerText(topic.Question), total, pluralS(total)), outputMode)
 	for i, opt := range topic.Options {
 		count := len(topic.Votes[strconv.Itoa(i)])
 		pct := 0.0
@@ -219,7 +219,7 @@ func voteShowResults(terminal *term.Terminal, topic *VoteTopic, outputMode ansi.
 		}
 		barLen := int(pct / 5)
 		bar := strings.Repeat("\xdb", barLen) + strings.Repeat("\xb0", 20-barLen)
-		wv(terminal, fmt.Sprintf("  |11%-20s |09%s |15%5.1f%% |08(%d)\r\n", opt, bar, pct, count), outputMode)
+		wv(terminal, fmt.Sprintf("  |11%-20s |09%s |15%5.1f%% |08(%d)\r\n", callerText(opt), bar, pct, count), outputMode)
 	}
 }
 
@@ -432,7 +432,7 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 		topic := &vd.Topics[curIdx]
 		voted := hasVoted(topic, currentUser.Handle)
 
-		wv(terminal, fmt.Sprintf("\r\n|07Current topic |15[|11%d|15]|07: |15%s|07\r\n", curIdx+1, topic.Question), outputMode)
+		wv(terminal, fmt.Sprintf("\r\n|07Current topic |15[|11%d|15]|07: |15%s|07\r\n", curIdx+1, callerText(topic.Question)), outputMode)
 		if notice != "" {
 			wv(terminal, notice+"|07\r\n", outputMode)
 			notice = ""
@@ -470,7 +470,7 @@ func runVote(c *cmdCtx, args string) (*user.User, string, error) {
 		case cmd == "A" && isSysOp:
 			vd, notice = voteAddTopic(e, s, terminal, vd, outputMode)
 		case cmd == "D" && isSysOp:
-			wv(terminal, fmt.Sprintf("\r\n|07Delete topic %d (%s)? [Y/N]: ", curIdx+1, topic.Question), outputMode)
+			wv(terminal, fmt.Sprintf("\r\n|07Delete topic %d (%s)? [Y/N]: ", curIdx+1, callerText(topic.Question)), outputMode)
 			confirm, _ := readLineFromSessionIH(s, terminal)
 			if strings.ToUpper(strings.TrimSpace(confirm)) == "Y" {
 				votingMu.Lock()

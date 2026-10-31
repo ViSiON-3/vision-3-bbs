@@ -103,6 +103,17 @@ func (e *MenuExecutor) resolveCurrentFileAreaTokens(currentUser *user.User) (str
 	return areaTag, areaName
 }
 
+// callerText prepares text a caller set (a handle, a real name, a location, a
+// note, a one-liner, a filename) to go into a pipe-coded line: its colour codes
+// still colour and its screen codes print as typed, so it cannot clear or scroll
+// someone else's screen. Formats and templates are the sysop's and keep every
+// code, so escape the value, not the line, and only where the line is expanded
+// afterwards. Cut the value to length first: a code cut in half is harmless once
+// escaped, but escaping first could leave half of a doubled pipe.
+func callerText(s string) string {
+	return ansi.EscapeScreenPipeCodes(s)
+}
+
 // applyCommonTemplateTokens replaces pipe-style tokens (|CFAN, |CFA, |CAN, |CA,
 // |UH, |NODE, |DATE, |TIME, etc.) in template bytes before ANSI pipe-code
 // processing.  This mirrors the substitution that displayMenuPrompt performs so
@@ -132,9 +143,10 @@ func (e *MenuExecutor) applyCommonTemplateTokens(data []byte, currentUser *user.
 		"|FCN":       "None",
 	}
 	if currentUser != nil {
-		tokens["|UH"] = currentUser.Handle
-		tokens["|ALIAS"] = currentUser.Handle
-		tokens["|HANDLE"] = currentUser.Handle
+		handle := callerText(currentUser.Handle)
+		tokens["|UH"] = handle
+		tokens["|ALIAS"] = handle
+		tokens["|HANDLE"] = handle
 		tokens["|LEVEL"] = strconv.Itoa(currentUser.AccessLevel)
 		if currentUser.CurrentMsgConferenceTag != "" {
 			tokens["|CC"] = currentUser.CurrentMsgConferenceTag
@@ -275,13 +287,14 @@ func applyUserPlaceholders(placeholders map[string]string, u *user.User) {
 	if u == nil {
 		return
 	}
-	placeholders["|UH"] = u.Handle
-	placeholders["|ALIAS"] = u.Handle
-	placeholders["|HANDLE"] = u.Handle
+	handle := callerText(u.Handle)
+	placeholders["|UH"] = handle
+	placeholders["|ALIAS"] = handle
+	placeholders["|HANDLE"] = handle
 	placeholders["|LEVEL"] = strconv.Itoa(u.AccessLevel)
-	placeholders["|NAME"] = u.RealName
-	placeholders["|GL"] = u.GroupLocation
-	placeholders["|UN"] = u.PrivateNote
+	placeholders["|NAME"] = callerText(u.RealName)
+	placeholders["|GL"] = callerText(u.GroupLocation)
+	placeholders["|UN"] = callerText(u.PrivateNote)
 	placeholders["|UPLDS"] = strconv.Itoa(u.NumUploads)
 	placeholders["|DNLDS"] = strconv.Itoa(u.NumDownloads)
 	placeholders["|POSTS"] = strconv.Itoa(u.MessagesPosted)

@@ -123,7 +123,7 @@ func (st *userEditorState) renderList() error {
 			lineStart = "\x1b[46;30m" // Dark cyan background, black foreground
 			lineEnd = "\x1b[0m"       // Reset colors
 		}
-		line := fmt.Sprintf("%s%s%-22s   %-10s   ID:%-4d   L:%-3d  %-2s%s%s", lineStart, prefix, adminTruncate(u.Handle, 22), adminDate(u.CreatedAt), u.ID, u.AccessLevel, status, onlineIndicator, lineEnd)
+		line := fmt.Sprintf("%s%s%-22s   %-10s   ID:%-4d   L:%-3d  %-2s%s%s", lineStart, prefix, callerText(adminTruncate(u.Handle, 22)), adminDate(u.CreatedAt), u.ID, u.AccessLevel, status, onlineIndicator, lineEnd)
 		if err := st.writeAt(row, 1, line); err != nil {
 			return err
 		}
@@ -144,9 +144,9 @@ func (st *userEditorState) renderDetails(message string) error {
 
 	getFieldValue := func(fieldName string, originalValue string) string {
 		if val, ok := st.pendingChanges[fieldName]; ok {
-			return fmt.Sprintf("|14*|03%s|07", adminTruncate(val.(string), 23))
+			return fmt.Sprintf("|14*|03%s|07", callerText(adminTruncate(val.(string), 23)))
 		}
-		return adminTruncate(originalValue, 24)
+		return callerText(adminTruncate(originalValue, 24))
 	}
 
 	getIntFieldValue := func(fieldName string, originalValue int) string {

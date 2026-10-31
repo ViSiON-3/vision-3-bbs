@@ -239,6 +239,12 @@ func (ch *CommandHandler) quoteNotice(inputHandler *InputHandler, text string) {
 
 // processQuoteCodes processes ^N, ^T, ^D, ^W and ^I codes in quote strings
 func (ch *CommandHandler) processQuoteCodes(text string) string {
+	return ch.expandQuoteCodes(text, func(s string) string { return s })
+}
+
+// expandQuoteCodes is processQuoteCodes with field applied to the author and
+// subject, which come from whoever wrote the message being quoted.
+func (ch *CommandHandler) expandQuoteCodes(text string, field func(string) string) string {
 	result := ""
 	i := 0
 	for i < len(text) {
@@ -249,14 +255,14 @@ func (ch *CommandHandler) processQuoteCodes(text string) string {
 				if ch.quoteData.IsAnon {
 					result += "Anonymous"
 				} else {
-					result += ch.quoteData.From
+					result += field(ch.quoteData.From)
 				}
 				i += 2
 			case 'I', 'i':
 				result += quoteInitials(ch.quoteAuthor())
 				i += 2
 			case 'T', 't':
-				result += ch.quoteData.Title
+				result += field(ch.quoteData.Title)
 				i += 2
 			case 'D', 'd':
 				result += ch.quoteData.Date

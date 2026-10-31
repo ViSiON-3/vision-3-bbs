@@ -94,7 +94,7 @@ func runPurgeUsers(c *cmdCtx, args string) (*user.User, string, error) {
 			deletedOn = u.DeletedAt.Format("2006-01-02")
 		}
 		line := fmt.Sprintf("  |15#%-4d|07  %-20s  deleted |14%s|07\r\n",
-			u.ID, u.Handle, deletedOn)
+			u.ID, callerText(u.Handle), deletedOn)
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 	}
 

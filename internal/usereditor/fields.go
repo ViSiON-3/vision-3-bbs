@@ -45,7 +45,13 @@ func editFields() []fieldDef {
 		{
 			Label: "Handle", Type: ftString, Col: 3, Row: 4, Width: 22,
 			Get: func(u *user.User) string { return u.Handle },
-			Set: func(u *user.User, val string) error { u.Handle = val; return nil },
+			Set: func(u *user.User, val string) error {
+				if err := user.ValidateHandleEdit(u.Handle, val); err != nil {
+					return err
+				}
+				u.Handle = val
+				return nil
+			},
 		},
 		{
 			Label: "Real Name", Type: ftString, Col: 3, Row: 5, Width: 22,
@@ -53,7 +59,7 @@ func editFields() []fieldDef {
 			Set: func(u *user.User, val string) error {
 				// Same rule signup applies: a blanked real name silently turns
 				// off real_name_only for that user in every area.
-				if err := user.ValidateRealName(val); err != nil {
+				if err := user.ValidateRealNameEdit(u.RealName, val); err != nil {
 					return err
 				}
 				u.RealName = strings.TrimSpace(val)

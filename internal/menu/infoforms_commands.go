@@ -125,7 +125,7 @@ func runInfoFormHunt(c *cmdCtx, args string) (*user.User, string, error) {
 		if u, ok := userManager.GetUserByID(uid); ok && u.Handle != "" {
 			displayHandle = u.Handle
 		}
-		wv(terminal, fmt.Sprintf("\r\n|11%s\r\n", displayHandle), outputMode)
+		wv(terminal, fmt.Sprintf("\r\n|11%s\r\n", callerText(displayHandle)), outputMode)
 		showInfoForm(e, s, terminal, outputMode, uid, formNum, termHeight)
 	}
 
@@ -233,7 +233,7 @@ func runInfoFormNuke(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	nukeYes, err := e.PromptYesNo(s, terminal,
-		fmt.Sprintf("|07Erase ALL info-forms for %s.. Are you sure? @", targetUser.Handle),
+		fmt.Sprintf("|07Erase ALL info-forms for %s.. Are you sure? @", callerText(targetUser.Handle)),
 		outputMode, nodeNumber, termWidth, termHeight, false)
 	if err != nil || !nukeYes {
 		return currentUser, "", nil

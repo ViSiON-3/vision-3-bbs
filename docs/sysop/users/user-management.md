@@ -37,6 +37,16 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). F
 
 Each change is saved as soon as the caller confirms it. The screen's header is `KONFIG.ANS` in the menu set. Keep it to 5 rows or fewer; it can show the caller's details with tokens like `|UH` (handle) and `|LEVEL`. Its text (setting names, help lines, values and messages) is the `konfig*` strings in `strings.json`, under **Konfig:** in `./strings`. Setting names, section titles, values and prompts are plain text in fixed-width cells: longer text is cut to fit, and colour codes are not expanded there. Help lines and messages take pipe colour codes. See [User settings](reference/menu-commands.md#user-settings) for `USERCONFIG` and the `CFG_AUTOSIG`, `CFG_PASSWORD` and `CFG_FILECOLUMNS` shortcuts.
 
+## Pipes in Names
+
+A new handle or real name cannot contain `|`, because screens print names through the pipe-code expander. Signup, `USERCONFIG`, the admin user editor, `./ue` and the scripting API all refuse one.
+
+Accounts that already have a `|` in their handle or real name keep it. They can log in and save other settings, and retyping the same name is not refused. Only a change to a new name with a `|` in it is. To clean up an old account, set its name in `./ue` or the admin user editor.
+
+Colour codes in an old handle, and in a location, note or one-liner, still colour it on the screens where they did before. The screen codes `|CL`, `|CR`, `|DE`, `|P` and `|PP` print as typed there, so a caller's text cannot clear or scroll someone else's screen. Formats in `strings.json`, menus and templates are the sysop's and keep every code. That also goes for anything passed into a `strings.json` format, such as a conference name: only its colour codes act.
+
+Scripts print what they are given, so a VPL script that puts `v3.user.handle` into `v3.console.println` still expands any codes in an old handle.
+
 ## Access Levels
 
 Access levels range from 0-255, with common levels being:
@@ -348,7 +358,7 @@ When a user types "new" at the login screen username field, the new user applica
 2. **Apply for Access?** — Yes/No lightbar prompt using `applyAsNewStr` from `strings.json`. If the user declines, returns to login.
 3. **Handle/Alias** — Prompted with `newUserNameStr`. Validated against these rules:
    - Minimum 3 characters
-   - No special characters: `?`, `#`, `/`, `*`, `&`, `:`, and no control characters
+   - No special characters: `?`, `#`, `/`, `*`, `&`, `:`, `|`, and no control characters
    - Cannot be reserved words: "new", "q", "sysop"
    - Cannot be purely numeric
    - Cannot match a rule in your **bad user names** list (see

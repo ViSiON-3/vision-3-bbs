@@ -393,6 +393,14 @@ func (e *MenuExecutor) promptForHandle(
 			continue
 		}
 
+		// Say why a pipe is refused: unlike the other banned characters, it is
+		// one a caller may well try on purpose, to colour their handle.
+		if strings.Contains(handle, "|") {
+			e.writeString(terminal, outputMode, e.Strings().NewUserHandlePipe)
+			uiPause(500 * time.Millisecond)
+			continue
+		}
+
 		// Validate handle format
 		if !e.validateSignupHandle(handle) {
 			e.writeString(terminal, outputMode, invalidMsg)
@@ -570,6 +578,9 @@ func (e *MenuExecutor) promptForRealName(
 
 		if !validateRealName(name) {
 			msg := e.Strings().NewUserInvalidRealName
+			if strings.Contains(name, "|") {
+				msg = e.Strings().NewUserRealNamePipe
+			}
 			e.writeString(terminal, outputMode, msg)
 			uiPause(500 * time.Millisecond)
 			continue
@@ -664,7 +675,7 @@ func (e *MenuExecutor) promptForUserNote(
 }
 
 // validateHandle checks a handle against rules from Pascal ValidUserName().
-// Rules: not empty, min 3 chars, no special chars (?#/*&:),
+// Rules: not empty, min 3 chars, no special chars (?#/*&:|),
 // cannot be "new" or "q", cannot be purely numeric.
 func validateHandle(handle string) bool {
 	if len(handle) < 3 {
@@ -688,7 +699,9 @@ func validateHandle(handle string) bool {
 	// (node lists, WFC console, logs). The C1 range U+0080–U+009F is included
 	// because U+009B is the 8-bit form of CSI; CP437 input decodes its high
 	// bytes to printable codepoints, so legitimate handles are unaffected.
-	invalidChars := "?#/*&:"
+	// A pipe would start a pipe code wherever the handle is shown. Accounts made
+	// before this rule keep theirs, and the screens escape it (see callerText).
+	invalidChars := "?#/*&:|"
 	for _, c := range handle {
 		if strings.ContainsRune(invalidChars, c) || c < 0x20 || c == 0x7f || (c >= 0x80 && c <= 0x9f) {
 			return false

@@ -396,7 +396,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 		fmt.Fprintf(&b, "|11D|07) Description   : |15%s\r\n", edited.Description)
 		fmt.Fprintf(&b, "|11R|07) ACS Read      : |15%s\r\n", edited.ACSRead)
 		fmt.Fprintf(&b, "|11W|07) ACS Write     : |15%s\r\n", edited.ACSWrite)
-		fmt.Fprintf(&b, "|11S|07) Sponsor       : |15%s\r\n", edited.Sponsor)
+		fmt.Fprintf(&b, "|11S|07) Sponsor       : |15%s\r\n", callerText(edited.Sponsor))
 		fmt.Fprintf(&b, "|11M|07) Max Messages  : |15%d\r\n", edited.MaxMessages)
 		fmt.Fprintf(&b, "|11G|07) Max Age (days): |15%d\r\n", edited.MaxAge)
 		fmt.Fprintf(&b, "|11A|07) Allow Anon    : |15%s\r\n", showAllowAnon())
@@ -523,7 +523,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			case newHandle != "":
 				if userManager != nil {
 					if _, exists := userManager.GetUser(newHandle); !exists {
-						msg := fmt.Sprintf("|01User '%s' not found - sponsor unchanged.|07", newHandle)
+						msg := fmt.Sprintf("|01User '%s' not found - sponsor unchanged.|07", callerText(newHandle))
 						_ = terminalio.WriteProcessedBytes(terminal,
 							ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 						uiPause(1 * time.Second)
@@ -1000,7 +1000,7 @@ func getAllAreasInConference(e *MenuExecutor, conferenceID int) []*message.Messa
 func promptAreaField(s ssh.Session, terminal *term.Terminal,
 	outputMode ansi.OutputMode, label, current string, maxLen int) string {
 
-	prompt := fmt.Sprintf("|15%s|07 [|11%s|07]: ", label, current)
+	prompt := fmt.Sprintf("|15%s|07 [|11%s|07]: ", label, callerText(current))
 	_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
 
 	input, err := readLineFromSessionIH(s, terminal)

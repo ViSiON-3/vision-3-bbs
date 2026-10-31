@@ -106,7 +106,7 @@ func (e *MenuExecutor) promptComposeRecipient(s ssh.Session, terminal *term.Term
 					return u.Handle, u.Handle, false, nil
 				}
 			}
-			say(fmt.Sprintf("|01User '%s' not found.|07\r\n", val))
+			say(fmt.Sprintf("|01User '%s' not found.|07\r\n", callerText(val)))
 		}
 
 	case recipientNetmail:
@@ -130,7 +130,7 @@ func (e *MenuExecutor) promptComposeRecipient(s ssh.Session, terminal *term.Term
 					if strings.TrimSpace(val[:at]) == "" {
 						say("|01Enter a name before the address.|07\r\n")
 					} else {
-						say(fmt.Sprintf("|01'%s' is not an FTN address, e.g. 1:234/567.|07\r\n", strings.TrimSpace(val[at+1:])))
+						say(fmt.Sprintf("|01'%s' is not an FTN address, e.g. 1:234/567.|07\r\n", callerText(strings.TrimSpace(val[at+1:]))))
 					}
 					continue
 				}
@@ -151,7 +151,7 @@ func (e *MenuExecutor) promptComposeRecipient(s ssh.Session, terminal *term.Term
 					return "", "", true, nil
 				}
 				if _, perr := jam.ParseAddress(a); perr != nil {
-					say(fmt.Sprintf("|01'%s' is not an FTN address, e.g. 1:234/567.|07\r\n", a))
+					say(fmt.Sprintf("|01'%s' is not an FTN address, e.g. 1:234/567.|07\r\n", callerText(a)))
 					continue
 				}
 				addr = a

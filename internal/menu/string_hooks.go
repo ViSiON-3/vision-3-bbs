@@ -92,13 +92,16 @@ func (e *MenuExecutor) writeString(terminal *term.Terminal, outputMode ansi.Outp
 // placeholders of its own, given as old, new pairs: |NA for a handle, ^CN for
 // a conference name. They are replaced in the text the value prints, never in
 // a hook's door or file name, so substituted text cannot start a hook. A
-// script value receives the new values as arguments instead, in order.
+// script value receives the new values as arguments instead, in order. The new
+// values can name a caller, so only their colour codes act (see callerText).
 func (e *MenuExecutor) writeStringSubst(terminal *term.Terminal, outputMode ansi.OutputMode, value string, pairs ...string) error {
 	var values []any
+	escaped := append([]string(nil), pairs...)
 	for i := 1; i < len(pairs); i += 2 {
 		values = append(values, pairs[i])
+		escaped[i] = callerText(pairs[i])
 	}
-	return e.renderString(terminal, outputMode, value, true, nil, strings.NewReplacer(pairs...).Replace, values)
+	return e.renderString(terminal, outputMode, value, true, nil, strings.NewReplacer(escaped...).Replace, values)
 }
 
 // WriteString is writeString for code outside the menu package.
@@ -108,7 +111,8 @@ func (e *MenuExecutor) WriteString(terminal *term.Terminal, outputMode ansi.Outp
 
 // writeStringf is writeString for a value the call site formats with args.
 // The hook is recognised before formatting, so a script receives the
-// arguments instead of having them appended to its name.
+// arguments instead of having them appended to its name. String arguments can
+// name a caller, so only their colour codes act (see formatStringValue).
 func (e *MenuExecutor) writeStringf(terminal *term.Terminal, outputMode ansi.OutputMode, format string, args ...any) error {
 	return e.renderString(terminal, outputMode, format, true, args, nil, nil)
 }
@@ -161,12 +165,22 @@ func (e *MenuExecutor) renderString(terminal *term.Terminal, outputMode ansi.Out
 }
 
 // formatStringValue formats value with args, or returns it untouched when the
-// call site passes none.
+// call site passes none. The value is the sysop's and keeps every pipe code; a
+// string argument can be a handle or something a caller typed, so it is escaped
+// here, which covers every writeStringf call at once. Escaping twice changes
+// nothing, so an argument a call site has already escaped is safe.
 func formatStringValue(value string, args []any) string {
 	if args == nil {
 		return value
 	}
-	return fmt.Sprintf(value, args...)
+	escaped := make([]any, len(args))
+	for i, arg := range args {
+		if s, ok := arg.(string); ok {
+			arg = callerText(s)
+		}
+		escaped[i] = arg
+	}
+	return fmt.Sprintf(value, escaped...)
 }
 
 func writeStringText(terminal *term.Terminal, outputMode ansi.OutputMode, text string) error {

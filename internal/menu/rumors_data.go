@@ -200,5 +200,6 @@ func getRandomRumorText(dataDir string, userLevel int) string {
 	}
 
 	idx := visible[rand.Intn(len(visible))]
-	return rd.Rumors[idx].Text
+	// New rumors have their pipes replaced when posted; older ones may not.
+	return callerText(rd.Rumors[idx].Text)
 }
