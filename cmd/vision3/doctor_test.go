@@ -244,6 +244,59 @@ func TestCheckBinkdAgreementReportsMismatchedHubAndNodeSettings(t *testing.T) {
 	}
 }
 
+func TestCheckBinkdAgreementFollowsSymlinks(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"secure", "in", "out"} {
+		if err := os.Mkdir(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link := filepath.Join(t.TempDir(), "bbs")
+	if err := os.Symlink(root, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	cfg := config.FTNConfig{
+		SecureInboundPath: filepath.Join(link, "secure"),
+		InboundPath:       filepath.Join(link, "in"),
+		BinkdOutboundPath: filepath.Join(link, "out"),
+		Networks: map[string]config.FTNNetworkConfig{"fsxnet": {
+			OwnAddress: "21:1/100",
+		}},
+	}
+	data := "domain fsxnet " + filepath.Join(root, "out") + " 21\n" +
+		"address 21:1/100@fsxnet\n" +
+		"inbound " + filepath.Join(root, "secure") + "\ninbound-nonsecure " + filepath.Join(root, "in") + "\n"
+	var checks []doctorCheck
+	checkBinkdAgreement(data, cfg, root, func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	if hasDoctorCheck(checks, "binkd.conf agreement", doctorWarn, "does not match") {
+		t.Fatalf("a symlinked path was reported as a mismatch: %#v", checks)
+	}
+}
+
+func TestCheckIPListsAcceptsInlineComments(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "blocklist.txt")
+	data := "# header\n192.0.2.1 # auto-blocked 2026-10-01: too many failed logins\n198.51.100.0/24 # range\nnot-an-ip # bad\n"
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var checks []doctorCheck
+	checkIPLists(config.ServerConfig{IPBlocklistPath: path}, root, func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	var warnings int
+	for _, c := range checks {
+		if c.Status == doctorWarn {
+			warnings++
+		}
+	}
+	if warnings != 1 || !hasDoctorCheck(checks, "IP blocklist", doctorWarn, `invalid IP address "not-an-ip"`) {
+		t.Fatalf("want one warning, for not-an-ip: %#v", checks)
+	}
+}
+
 func TestCheckInfoFormsChecksRequiredLoginHookAndTemplates(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "configs")

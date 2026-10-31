@@ -501,7 +501,7 @@ func checkBinkdAgreement(contents string, cfg config.FTNConfig, root string, add
 			}
 		}
 		if expected := cfg.BinkdOutboundFor(network); expected != "" {
-			if got, ok := domains[strings.ToLower(network)]; !ok || filepath.Clean(resolveFromRoot(root, got)) != filepath.Clean(expected) {
+			if got, ok := domains[strings.ToLower(network)]; !ok || !samePath(resolveFromRoot(root, got), expected) {
 				add("binkd.conf agreement", doctorWarn, fmt.Sprintf("network %q domain outbound path does not match configs/ftn.json (binkd.conf: %q, config: %q)", network, got, expected), "Run the FTN setup wizard to synchronize domain outbound paths.")
 				issues++
 			}
@@ -569,14 +569,14 @@ func checkBinkdAgreement(contents string, cfg config.FTNConfig, root string, add
 	if got := strings.TrimSpace(inbound); got == "" {
 		add("binkd.conf agreement", doctorWarn, "binkd.conf is missing the inbound directive", "Run the FTN setup wizard to restore inbound paths.")
 		issues++
-	} else if filepath.Clean(resolveFromRoot(root, got)) != filepath.Clean(wantSecure) {
+	} else if !samePath(resolveFromRoot(root, got), wantSecure) {
 		add("binkd.conf agreement", doctorWarn, fmt.Sprintf("inbound path %q does not match configured secure inbound path %q", got, wantSecure), "Run the FTN setup wizard to synchronize inbound paths.")
 		issues++
 	}
 	if wantInbound != "" && strings.TrimSpace(insecureInbound) == "" {
 		add("binkd.conf agreement", doctorWarn, "binkd.conf is missing the inbound-nonsecure directive", "Run the FTN setup wizard to restore inbound paths.")
 		issues++
-	} else if got := strings.TrimSpace(insecureInbound); got != "" && wantInbound != "" && filepath.Clean(resolveFromRoot(root, got)) != filepath.Clean(wantInbound) {
+	} else if got := strings.TrimSpace(insecureInbound); got != "" && wantInbound != "" && !samePath(resolveFromRoot(root, got), wantInbound) {
 		add("binkd.conf agreement", doctorWarn, fmt.Sprintf("inbound-nonsecure path %q does not match configured inbound path %q", got, wantInbound), "Run the FTN setup wizard to synchronize inbound paths.")
 		issues++
 	}
@@ -601,8 +601,11 @@ func checkIPLists(cfg config.ServerConfig, root string, add func(string, doctorS
 		}
 		invalid := 0
 		for i, line := range strings.Split(string(data), "\n") {
+			// Same rule as LoadIPList: # starts a comment, even after an entry,
+			// which is how AppendToBlocklist writes an auto-block.
+			line, _, _ = strings.Cut(line, "#")
 			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
+			if line == "" {
 				continue
 			}
 			if strings.Contains(line, "/") {
@@ -1010,6 +1013,20 @@ func resolveFromRoot(root, path string) string {
 		return filepath.Clean(path)
 	}
 	return filepath.Join(root, path)
+}
+
+// samePath reports whether two paths name the same location, so an install
+// reached through a symlink (/v3 -> /opt/v3) is not reported as a mismatch. A path
+// that cannot be resolved, such as one not created yet, is compared as written.
+func samePath(a, b string) bool {
+	return realPath(a) == realPath(b)
+}
+
+func realPath(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return filepath.Clean(path)
 }
 
 func fileExists(path string) bool {
