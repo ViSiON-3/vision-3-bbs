@@ -103,6 +103,17 @@ A line that starts with `/` but is not a command is never posted: chat shows
 arguments show their usage. To post a line that starts with a slash, type two:
 `//shrug` posts `/shrug`.
 
+### Pipe Codes in Chat
+
+Callers can colour what they type with the colour pipe codes (`|00`-`|15`,
+`|23` and `|B0`-`|B15`). The screen codes `|CL`, `|CR`, `|DE`, `|P` and `|PP` do
+not act: they show as typed, so nobody can clear or scroll another caller's
+screen. `||` still shows as one `|`.
+
+This covers message text, handles, topics, room and network names, and what
+arrives from other boards, which also has any control characters blanked. The
+chat strings in `strings.json` are the sysop's and keep every pipe code.
+
 ---
 
 ## Local Chat

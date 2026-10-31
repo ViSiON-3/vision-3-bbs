@@ -1499,6 +1499,27 @@ func TestEscapeScreenPipeCodes(t *testing.T) {
 	}
 }
 
+func TestColorPipeCodeLen(t *testing.T) {
+	for in, want := range map[string]int{
+		"":      0,
+		"|":     0,
+		"x|04":  0,
+		"|04x":  3,
+		"|23":   3,
+		"|16":   0,
+		"|B1x":  3,
+		"|B10x": 4,
+		"|B16":  3, // |B1 then a "6", as ReplacePipeCodes reads it
+		"|CL":   0,
+		"|P":    0,
+		"||":    0,
+	} {
+		if got := ColorPipeCodeLen(in); got != want {
+			t.Errorf("ColorPipeCodeLen(%q) = %d, want %d", in, got, want)
+		}
+	}
+}
+
 func TestFieldCoordsAtWidthFollowsAutowrap(t *testing.T) {
 	x := func(n int) string { return strings.Repeat("x", n) }
 	tests := []struct {

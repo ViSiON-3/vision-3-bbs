@@ -77,10 +77,11 @@ func (e *MenuExecutor) toastStore() *toast.Store {
 }
 
 // toastLine is a toast's text flattened to one line: its own control
-// characters could otherwise move the cursor or scroll the screen.
+// characters could otherwise move the cursor or scroll the screen. The C1 range
+// is included because U+009B is the 8-bit form of CSI.
 func toastLine(text string) string {
 	return strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7F {
+		if r < 0x20 || (r >= 0x7F && r <= 0x9F) {
 			return ' '
 		}
 		return r

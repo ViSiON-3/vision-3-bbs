@@ -471,7 +471,7 @@ func drawChatView(w io.Writer, mode ansi.OutputMode, width, height int, th *conf
 	}
 	if sc.art == nil {
 		top := sc.dividerRow()
-		bar := ansi.ReplacePipeCodes([]byte(fmt.Sprintf(st.SysopChatHeader, sysopHandle, callerHandle)))
+		bar := ansi.ReplacePipeCodes([]byte(fmt.Sprintf(st.SysopChatHeader, ansi.EscapeScreenPipeCodes(sysopHandle), ansi.EscapeScreenPipeCodes(callerHandle))))
 		_, _ = fmt.Fprintf(w, "\x1b[0m\x1b[2J\x1b[%d;1H", top) // best-effort display
 		_ = terminalio.WriteProcessedBytes(w, bar, mode)
 		if fill := width - chatClockWidth - ansi.VisibleLength(string(bar)); fill > 0 {
