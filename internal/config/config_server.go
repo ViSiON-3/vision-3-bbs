@@ -13,13 +13,13 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/configmerge"
 )
 
-// ServerConfig defines server-wide settings
 // Values of ServerConfig.ToastEdge.
 const (
 	ToastEdgeTop    = "top"
 	ToastEdgeBottom = "bottom"
 )
 
+// ServerConfig defines server-wide settings
 type ServerConfig struct {
 	// TwitListEnabled turns per-user Twit Lists on board-wide; read it
 	// through TwitListsOn. nil (the key omitted) means on, so upgraded
