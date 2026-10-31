@@ -153,6 +153,16 @@ func TestValidate_InvalidFields(t *testing.T) {
 			wantErr: "subject must be 1",
 		},
 		{
+			name:    "subject with escape",
+			modify:  func(m *Message) { m.Subject = "a\x1b[2Jb" },
+			wantErr: "subject contains control character",
+		},
+		{
+			name:    "subject with 8-bit CSI",
+			modify:  func(m *Message) { m.Subject = "a\u009b2Jb" },
+			wantErr: "subject contains control character",
+		},
+		{
 			name:    "empty body",
 			modify:  func(m *Message) { m.Body = "" },
 			wantErr: "body must not be empty",

@@ -3,13 +3,17 @@ package message
 import (
 	"regexp"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 var reReplySuffix = regexp.MustCompile(` -Re: #\d+-$`)
 
 // NormalizeThreadSubject strips Pascal-style reply markers for thread matching.
 func NormalizeThreadSubject(subject string) string {
-	s := strings.TrimSpace(subject)
+	// A subject read straight from a header may still hold what GetMessage
+	// cleans, and must still match its cleaned self.
+	s := strings.TrimSpace(ansi.HeaderText(subject))
 	s = reReplySuffix.ReplaceAllString(s, "")
 	s = strings.TrimSpace(s)
 	for strings.HasPrefix(strings.ToUpper(s), "RE: ") {

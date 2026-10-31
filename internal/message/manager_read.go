@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
 
@@ -32,17 +33,20 @@ func (mm *MessageManager) GetMessage(areaID, msgNum int) (*DisplayMessage, error
 	}
 
 	return &DisplayMessage{
-		MsgNum:     msgNum,
-		From:       msg.From,
-		To:         msg.To,
-		Subject:    msg.Subject,
+		MsgNum: msgNum,
+		// The base may hold a control character in any of these from before
+		// they were cleaned on the way in, or from another tool. Everything
+		// that shows a message or passes it on reads it here.
+		From:       ansi.HeaderText(msg.From),
+		To:         ansi.HeaderText(msg.To),
+		Subject:    ansi.HeaderText(msg.Subject),
 		DateTime:   msg.DateTime,
 		Body:       stripKludgeLines(normalizeLineEndings(msg.Text)),
 		MsgID:      msg.MsgID,
 		ReplyID:    msg.ReplyID,
 		ReplyToNum: replyToNum,
-		OrigAddr:   msg.OrigAddr,
-		DestAddr:   msg.DestAddr,
+		OrigAddr:   ansi.HeaderText(msg.OrigAddr),
+		DestAddr:   ansi.HeaderText(msg.DestAddr),
 		Attributes: msg.GetAttribute(),
 		IsPrivate:  msg.IsPrivate(),
 		IsDeleted:  msg.IsDeleted(),

@@ -43,7 +43,7 @@ func threadPlainText(s string) string {
 	}
 	s = ansi.StripAnsi(s)
 	return strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
+		if r < 0x20 || (r >= 0x7f && r <= 0x9f) {
 			return -1
 		}
 		return r

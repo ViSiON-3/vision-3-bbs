@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -192,9 +193,9 @@ func (n *Node) netMessageFor(base *jam.Base, area *message.MessageArea, conf, nu
 	m := qwk.NetMessage{
 		Conference:    conf,
 		Number:        num,
-		From:          msg.From,
-		To:            msg.To,
-		Subject:       msg.Subject,
+		From:          ansi.HeaderText(msg.From),
+		To:            ansi.HeaderText(msg.To),
+		Subject:       ansi.HeaderText(msg.Subject),
 		DateTime:      msg.DateTime,
 		Body:          body,
 		Private:       msg.IsPrivate(),

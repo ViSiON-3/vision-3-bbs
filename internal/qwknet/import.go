@@ -295,9 +295,9 @@ func dupeKey(m qwk.NetMessage) string {
 // message's number.
 func (n *Node) importMessage(base *jam.Base, area *message.MessageArea, m qwk.NetMessage, replyTo int) (int, error) {
 	jm := jam.NewMessage()
-	jm.From = toCP437(m.From, m.UTF8)
-	jm.To = toCP437(m.To, m.UTF8)
-	jm.Subject = toCP437(m.Subject, m.UTF8)
+	jm.From = ansi.HeaderText(toCP437(m.From, m.UTF8))
+	jm.To = ansi.HeaderText(toCP437(m.To, m.UTF8))
+	jm.Subject = ansi.HeaderText(toCP437(m.Subject, m.UTF8))
 	jm.Text = toCP437(m.Body, m.UTF8)
 	if jm.To == "" {
 		jm.To = message.MsgToUserAll

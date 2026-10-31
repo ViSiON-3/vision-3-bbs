@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
@@ -639,9 +640,9 @@ func (t *Tosser) tossMessage(msg *ftn.PackedMessage, pktHdr *ftn.PacketHeader, p
 
 	// Build JAM message
 	jamMsg := jam.NewMessage()
-	jamMsg.From = msg.From
-	jamMsg.To = msg.To
-	jamMsg.Subject = msg.Subject
+	jamMsg.From = ansi.HeaderText(msg.From)
+	jamMsg.To = ansi.HeaderText(msg.To)
+	jamMsg.Subject = ansi.HeaderText(msg.Subject)
 	jamMsg.Text = parsed.Text // Store only the message text, not kludges/SEEN-BY/PATH
 
 	// Store SEEN-BY and PATH as JAM subfields for proper roundtrip with export
@@ -740,9 +741,9 @@ func (t *Tosser) writeMsgToArea(areaTag string, msg *ftn.PackedMessage, pktHdr *
 	}()
 
 	jamMsg := jam.NewMessage()
-	jamMsg.From = msg.From
-	jamMsg.To = msg.To
-	jamMsg.Subject = msg.Subject
+	jamMsg.From = ansi.HeaderText(msg.From)
+	jamMsg.To = ansi.HeaderText(msg.To)
+	jamMsg.Subject = ansi.HeaderText(msg.Subject)
 	jamMsg.Text = parsed.Text
 	if msgID != "" {
 		jamMsg.MsgID = msgID

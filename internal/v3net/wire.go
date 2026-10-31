@@ -26,7 +26,7 @@ func BuildWireMessage(network, areaTag, originNode, originBoard, from, to, subje
 		OriginBoard: originBoard,
 		From:        from,
 		To:          to,
-		Subject:     subject,
+		Subject:     protocol.CleanSubject(subject),
 		DateUTC:     time.Now().UTC().Format(time.RFC3339),
 		Body:        body,
 		Tearline:    DefaultTearline(),

@@ -4,6 +4,7 @@ package protocol
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -106,10 +107,26 @@ func (m *Message) Validate() error {
 	if err := validateStringLength("subject", m.Subject, 1, 128); err != nil {
 		return err
 	}
+	for _, r := range m.Subject {
+		if unicode.IsControl(r) {
+			return fmt.Errorf("subject contains control character: %U", r)
+		}
+	}
 	if len(m.Body) == 0 {
 		return fmt.Errorf("body must not be empty")
 	}
 	return nil
+}
+
+// CleanSubject returns subject with each control character turned into a space,
+// which is what Validate requires of it.
+func CleanSubject(subject string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, subject)
 }
 
 // IsTruncated returns true if the message was truncated by Truncate().

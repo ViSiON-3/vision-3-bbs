@@ -160,11 +160,62 @@ func TestStoredHeaderControlsDoNotReachCaller(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sub := env.sub(t)
+			sub.markRead(generalAreaID, "Caller", 0)
 			r := sub.runCmd(tc.cmd, sub.caller, tc.args, tc.keys)
 			if r.err != nil {
 				t.Fatalf("%s: %v", tc.cmd, r.err)
 			}
+			if !r.has("MARKESC") {
+				t.Fatalf("the first message was not drawn; output:\n%s", r.text())
+			}
 			assertNoHeaderControls(t, tc.name, r.raw)
 		})
+	}
+}
+
+// A reply to a stored message takes its subject and recipient from the message,
+// and neither carries the control characters into the new one.
+func TestReplyDoesNotCopyHeaderControls(t *testing.T) {
+	env := newMsgEnv(t)
+	storeRawHeaders(t, env)
+
+	r := env.runCmd("READMSGS", env.caller, "", "RThanks\x1aQ")
+	if !r.has("Reply posted successfully!") {
+		t.Fatalf("reply not confirmed; output:\n%s", r.text())
+	}
+	assertNoHeaderControls(t, "reply", r.raw)
+	reply := env.mustMsg(generalAreaID, len(hostileHeaders)+1)
+	if reply.Subject != "Re:  cMARKESC" || reply.To != " cMARKESC" {
+		t.Errorf("reply subject/to = %q/%q", reply.Subject, reply.To)
+	}
+}
+
+// A caller on a UTF-8 terminal can type U+009B at the subject prompt: ESC ends
+// the prompt and it drops other C0 bytes, but it takes any complete character.
+func TestTypedSubjectDropsControlCharacter(t *testing.T) {
+	env := newMsgEnv(t)
+
+	r := env.runCmd("COMPOSEMSG", env.caller, "GENERAL", "\u009b2JFirst post\r\rHello, board.\x1a")
+	if !r.has("Message Posted!") {
+		t.Fatalf("post not confirmed; output:\n%s", r.text())
+	}
+	base, err := env.e.MessageMgr.GetBase(generalAreaID)
+	if err != nil {
+		t.Fatalf("GetBase: %v", err)
+	}
+	defer func() { _ = base.Close() }()
+	stored, err := base.ReadMessage(1)
+	if err != nil {
+		t.Fatalf("ReadMessage: %v", err)
+	}
+	if stored.Subject != " 2JFirst post" {
+		t.Errorf("stored subject = %q", stored.Subject)
+	}
+}
+
+// The list's plain-text cells also show body excerpts, which nothing else cleans.
+func TestListCellDropsC1(t *testing.T) {
+	if got := listCell("a\u009b2Jb", 6, ansi.OutputModeUTF8); got != "a2Jb  " {
+		t.Errorf("listCell = %q", got)
 	}
 }

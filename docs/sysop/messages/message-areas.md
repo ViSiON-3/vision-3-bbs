@@ -430,6 +430,11 @@ not the caller's, and posts from authors on their Twit List, are left out,
 and their replies hang from the nearest listed message. The titles, column
 heading, help lines and placeholder text are the `msgList*` strings.
 
+**Header fields.** A message's From, To and Subject never reach a caller with
+control characters in them, wherever the message came from: each one becomes a
+space when the message is stored, read or exported. The message body can still
+carry ANSI.
+
 **Kludges (K).** Sysops chasing a duplicate or misrouted message need its
 MSGID, PATH and SEEN-BY. `K` shows the current message's control information
 full screen: origin and destination addresses; written, received and processed

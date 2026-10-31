@@ -5,6 +5,18 @@ import (
 	"testing"
 )
 
+// A subject stored before control characters were cleaned on the way in can
+// still be sent: the hub would refuse it as written on every sweep.
+func TestBuildWireMessageCleansSubject(t *testing.T) {
+	msg := BuildWireMessage("net", "gen.general", "node", "Board", "From", "To", "a\x1b[2Jb", "Body", "")
+	if msg.Subject != "a [2Jb" {
+		t.Errorf("Subject = %q", msg.Subject)
+	}
+	if err := msg.Validate(); err != nil {
+		t.Errorf("Validate: %v", err)
+	}
+}
+
 func TestBuildWireMessageTearlineIsAlwaysDefault(t *testing.T) {
 	msg := BuildWireMessage("testnet", "gen.general", "abc123", "General", "Sysop", "All", "Hello", "body text", "My Cool BBS")
 	if !strings.HasPrefix(msg.Tearline, "--- ViSiON/3 ") {
