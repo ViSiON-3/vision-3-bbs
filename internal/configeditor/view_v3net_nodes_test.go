@@ -8,6 +8,24 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
+func TestViewV3NetNodes_SanitizesEveryNodeField(t *testing.T) {
+	m := Model{
+		width: 80, height: 25,
+		mode:         modeV3NetNodes,
+		nodesNetwork: "testnet",
+		nodesList: []protocol.NodeInfo{
+			{NodeID: "\x1b[2Jn", BBSName: "\x1b[2Jb", Status: "\x1b[2Js", CreatedAt: "\x1b[2Jc"},
+		},
+		configs: &allConfigs{V3Net: config.V3NetConfig{
+			KeystorePath: "data/v3net.key",
+			Hub:          config.V3NetHubConfig{Port: 8765},
+		}},
+	}
+	if out := m.viewV3NetNodes(); strings.ContainsRune(out, 0x1b) {
+		t.Errorf("rendered view contains a raw ESC byte: %q", out)
+	}
+}
+
 // TestViewV3NetNodes_SanitizesBBSNameControlChars ensures a BBSName from a
 // remote subscribe request (attacker-controlled) cannot inject ANSI/OSC
 // escape sequences into the sysop's terminal.

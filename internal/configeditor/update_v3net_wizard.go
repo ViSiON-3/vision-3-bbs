@@ -8,6 +8,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // fetchNetworksMsg is the result of an auto-fetch of hub networks.
@@ -36,7 +38,7 @@ func fetchHubNetworks(hubURL string) tea.Cmd {
 		}
 		var names []string
 		for _, s := range summaries {
-			names = append(names, s.Name)
+			names = append(names, ansi.OneLine(s.Name))
 		}
 		return fetchNetworksMsg{names: names}
 	}

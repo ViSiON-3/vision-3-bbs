@@ -33,9 +33,11 @@ func (m Model) viewV3NetNodes() string {
 	lb.list(listVisible, m.nodesScroll, m.nodesCursor, total,
 		func(i int) string {
 			n := m.nodesList[i]
-			joined := ansi.TruncateRunes(n.CreatedAt, 10, "") // date only
+			// Nodes choose what they send, and the terminal gets it as written.
+			// The list keeps it exact because actions send the node ID back.
+			joined := ansi.TruncateRunes(ansi.OneLine(n.CreatedAt), 10, "") // date only
 			return fmt.Sprintf("   %-16s %-20s %-8s %s",
-				n.NodeID, padRight(sanitizeRegistryField(n.BBSName), 20), padRight(n.Status, 8), joined)
+				ansi.OneLine(n.NodeID), padRight(ansi.OneLine(n.BBSName), 20), padRight(ansi.OneLine(n.Status), 8), joined)
 		})
 	lb.bottomBorder()
 	lb.bgRows(lb.bottomPad)

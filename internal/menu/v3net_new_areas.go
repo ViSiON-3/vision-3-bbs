@@ -175,6 +175,10 @@ func (e *MenuExecutor) NoteV3NetNAL(userManager *user.UserMgr, network string, n
 			if subscribed[a.Tag] {
 				continue
 			}
+			if protocol.ValidateAreaTag(a.Tag) != nil {
+				slog.Warn("v3net: hub lists an area with an invalid tag; not offering it", "network", network, "tag", a.Tag)
+				continue
+			}
 			if a.Access.Mode == protocol.AccessModeClosed && !nal.NodeAllowed(&a, nodeID) {
 				continue // this node could not join it anyway
 			}
@@ -195,7 +199,7 @@ func (e *MenuExecutor) NoteV3NetNAL(userManager *user.UserMgr, network string, n
 		}
 
 		path := sysopNoticesPath(dataDir)
-		label := v3netNetworkLabel(network)
+		label := v3netText(v3netNetworkLabel(network))
 		v3netDeclinedMu.Lock()
 		declined, err := loadV3NetDeclined(v3netDeclinedAreasPath(dataDir))
 		v3netDeclinedMu.Unlock()
@@ -220,7 +224,7 @@ func (e *MenuExecutor) NoteV3NetNAL(userManager *user.UserMgr, network string, n
 					continue // answered No to an earlier attempt
 				}
 				notice := sysopNotice{
-					Text:         fmt.Sprintf(format, label, a.Name),
+					Text:         fmt.Sprintf(format, label, v3netText(a.Name)),
 					V3NetNetwork: network,
 					V3NetTag:     a.Tag,
 					V3NetName:    a.Name,

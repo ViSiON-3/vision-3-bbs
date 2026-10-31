@@ -11,8 +11,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
 // areaBrowserListVisible is the number of rows shown in the area browser list.
@@ -21,8 +23,10 @@ const areaBrowserListVisible = 10
 // defaultLocalBoardName generates a default local board name from the network
 // and area display name. e.g. "felonynet" + "General" → "FelonyNet General".
 // Network names are validated as lowercase ASCII alphanumeric, so single-byte
-// indexing is safe here.
+// indexing is safe here. The area name is the hub's, and the result is kept as a
+// local area name that callers' screens expand, so it is stored as plain text.
 func defaultLocalBoardName(network, areaName string) string {
+	areaName = ansi.PlainName(areaName)
 	if network == "" || areaName == "" {
 		return areaName
 	}
@@ -59,7 +63,7 @@ func hubErrorText(prefix string, err error) string {
 	if errors.As(err, &urlErr) {
 		cause = urlErr.Err
 	}
-	return fmt.Sprintf("%s: %v", prefix, cause)
+	return fmt.Sprintf("%s: %s", prefix, ansi.OneLine(cause.Error()))
 }
 
 // handoverNotice tells the sysop that the browsed NAL is signed by a key the
@@ -114,10 +118,15 @@ func (m Model) handleFetchNALMsg(msg fetchNALMsg) (tea.Model, tea.Cmd) {
 
 	items := make([]areaBrowserItem, 0, len(msg.areas))
 	for _, a := range msg.areas {
+		// The tag names files and config entries, so an area without a valid
+		// one cannot be carried and is not offered.
+		if protocol.ValidateAreaTag(a.Tag) != nil {
+			continue
+		}
 		item := areaBrowserItem{
 			Tag:         a.Tag,
-			Name:        a.Name,
-			Description: a.Description,
+			Name:        ansi.OneLine(a.Name),
+			Description: ansi.OneLine(a.Description),
 			Subscribed:  subscribed[a.Tag],
 		}
 		if subscribed[a.Tag] {
@@ -145,7 +154,7 @@ func (m Model) handleSubscribeAreasMsg(msg subscribeAreasMsg) (tea.Model, tea.Cm
 	}
 	statusMap := make(map[string]string)
 	for _, s := range msg.statuses {
-		statusMap[s.Tag] = strings.ToUpper(s.Status)
+		statusMap[s.Tag] = strings.ToUpper(ansi.OneLine(s.Status))
 	}
 	for i := range m.areaBrowserAreas {
 		if st, ok := statusMap[m.areaBrowserAreas[i].Tag]; ok {

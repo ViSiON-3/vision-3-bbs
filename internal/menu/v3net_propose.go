@@ -58,7 +58,7 @@ func runV3NetPropose(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Form fields.
 	fields := []proposeField{
-		{label: "Network", value: network, editable: false},
+		{label: "Network", value: v3netText(network), editable: false},
 		{label: "Area Tag", help: "prefix.name (e.g. fel.general)", maxLen: 34, editable: true},
 		{label: "Name", help: "Display name for the area", maxLen: 40, editable: true},
 		{label: "Description", help: "Short description", maxLen: 60, editable: true},
@@ -91,7 +91,7 @@ func runV3NetPropose(c *cmdCtx, args string) (*user.User, string, error) {
 
 		// Row 1: Header.
 		buf.WriteString(ansi.MoveCursor(1, 1))
-		header := fmt.Sprintf("|12V3Net: Propose New Area|07  |08(%s)|07", network)
+		header := fmt.Sprintf("|12V3Net: Propose New Area|07  |08(%s)|07", v3netText(network))
 		buf.Write(ansi.ReplacePipeCodes([]byte(header)))
 
 		// Row 2: Separator.
@@ -342,12 +342,12 @@ func runV3NetPropose(c *cmdCtx, args string) (*user.User, string, error) {
 
 			resp, submitErr := svc.ProposeArea(network, req)
 			if submitErr != nil {
-				statusMsg = fmt.Sprintf("|04Error: %s|07", submitErr)
+				statusMsg = fmt.Sprintf("|04Error: %s|07", v3netClip(submitErr.Error(), termWidth-10))
 				renderForm()
 				continue
 			}
 
-			statusMsg = fmt.Sprintf("|10Proposal submitted! ID: %s  Status: %s|07", resp.ProposalID, resp.Status)
+			statusMsg = fmt.Sprintf("|10Proposal submitted! ID: %s  Status: %s|07", v3netText(resp.ProposalID), v3netText(resp.Status))
 			renderForm()
 
 			// Wait for a keypress, then return.
