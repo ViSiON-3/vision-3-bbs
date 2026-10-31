@@ -94,7 +94,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	// COMPOSEMSG refuses it: nobody will read the mail.
 	recipientUser, found := userManager.GetUser(recipient)
 	if !found || recipientUser == nil || recipientUser.DeletedUser {
-		msg := fmt.Sprintf("\r\n|01Error: User '%s' not found.|07\r\n", recipient)
+		msg := fmt.Sprintf("\r\n|01Error: User '%s' not found.|07\r\n", callerText(recipient))
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		uiPause(1 * time.Second)
 		return nil, "", nil
@@ -204,7 +204,7 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Confirmation
 	slog.Info("user sent private message", "node", nodeNumber, "handle", currentUser.Handle, "num", msgNum, "recipient", recipientUser.Handle)
-	confirmMsg := ansi.ReplacePipeCodes([]byte(fmt.Sprintf("\r\n|02Private message sent to %s!|07\r\n", recipientUser.Handle)))
+	confirmMsg := ansi.ReplacePipeCodes([]byte(fmt.Sprintf("\r\n|02Private message sent to %s!|07\r\n", callerText(recipientUser.Handle))))
 	terminalio.WriteProcessedBytes(terminal, confirmMsg, outputMode)
 	uiPause(1 * time.Second)
 

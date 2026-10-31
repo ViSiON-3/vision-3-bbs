@@ -719,5 +719,10 @@ func stringCatalog() []StringEntry {
 		{Label: "Toast: Body Hint", Key: "toastBodyHint", Description: "Follows a toast whose details wait for the next menu"},
 		{Label: "Toast: Logon", Key: "toastLogon", Description: "Shown to other callers when someone logs on (%s=handle, %d=node)"},
 		{Label: "Toast: Logoff", Key: "toastLogoff", Description: "Shown to other callers when someone logs off (%s=handle, %d=node)"},
+
+		// Pipes in names. New entries go last: an entry's number is its position.
+		{Label: "New User: Name Has Pipe", Key: "newUserRealNamePipe", Description: "Shown when a real name contains a | character"},
+		{Label: "New User: Handle Has Pipe", Key: "newUserHandlePipe", Description: "Shown when a handle contains a | character"},
+		{Label: "Konfig: Name Has Pipe", Key: "konfigRealNamePipe", Description: "Real name containing a | character"},
 	}
 }

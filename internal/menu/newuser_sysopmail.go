@@ -227,7 +227,7 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 
 		slog.Info("new user left a message for the sysop", "node", nodeNumber, "handle", newUser.Handle, "sysop", sysop.Handle)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(
-			[]byte(fmt.Sprintf("\r\n|02Your message has been sent to %s.|07\r\n", sysop.Handle))), outputMode)
+			[]byte(fmt.Sprintf("\r\n|02Your message has been sent to %s.|07\r\n", callerText(sysop.Handle)))), outputMode)
 		uiPause(1 * time.Second)
 		return true, nil
 	}

@@ -221,7 +221,7 @@ func browseInfoForms(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 
 	for {
 		_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-		wv(terminal, fmt.Sprintf("\r\n|15InfoForms for |11%s|07\r\n", sel.Handle), outputMode)
+		wv(terminal, fmt.Sprintf("\r\n|15InfoForms for |11%s|07\r\n", callerText(sel.Handle)), outputMode)
 		wv(terminal, "|08"+strings.Repeat("-", 50)+"\r\n\r\n", outputMode)
 
 		hasAnyForm := false

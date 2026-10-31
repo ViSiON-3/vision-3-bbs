@@ -139,7 +139,7 @@ func runSelectFileArea(c *cmdCtx, args string) (*user.User, string, error) {
 
 		if !matched {
 			terminalio.WriteProcessedBytes(terminal, []byte(curUpClear), outputMode)
-			msg := fmt.Sprintf("|01Invalid file area '%s'!|07", inputClean)
+			msg := fmt.Sprintf("|01Invalid file area '%s'!|07", callerText(inputClean))
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 			uiPause(1 * time.Second)
 			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[2K"), outputMode)

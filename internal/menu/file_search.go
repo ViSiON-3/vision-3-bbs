@@ -103,7 +103,7 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 			fname = string(runes[:12])
 		}
 
-		line := fmt.Sprintf("\r\n|09%-8s |15%-12s |07%5dk |14%s", r.areaTag, fname, (r.size+1023)/1024, r.description)
+		line := fmt.Sprintf("\r\n|09%-8s |15%-12s |07%5dk |14%s", r.areaTag, callerText(fname), (r.size+1023)/1024, callerText(r.description))
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 		lineCount++
 

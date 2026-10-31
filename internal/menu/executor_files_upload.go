@@ -282,7 +282,7 @@ func checkUploadDuplicates(
 	if safeName != nf.name || safeName == "." || safeName == ".." || strings.Contains(nf.name, "..") || filepath.IsAbs(nf.name) {
 		slog.Error("rejected unsafe filename", "node", nodeNumber, "name", nf.name)
 		_ = os.Remove(incomingPath) // best-effort cleanup of rejected upload
-		errMsg := fmt.Sprintf("\r\n|01'%s' rejected: invalid filename.|07\r\n", nf.name)
+		errMsg := fmt.Sprintf("\r\n|01'%s' rejected: invalid filename.|07\r\n", callerText(nf.name))
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
 		return true, false
 	}
@@ -292,7 +292,7 @@ func checkUploadDuplicates(
 		slog.Warn("duplicate file rejected", "node", nodeNumber, "name", nf.name)
 		_ = os.Remove(incomingPath) // best-effort cleanup of rejected upload
 
-		dupMsg := fmt.Sprintf("\r\n|09'%s' already exists in this area. Rejected.|07\r\n", nf.name)
+		dupMsg := fmt.Sprintf("\r\n|09'%s' already exists in this area. Rejected.|07\r\n", callerText(nf.name))
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(dupMsg)), outputMode)
 		return true, true
 	}

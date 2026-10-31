@@ -91,8 +91,8 @@ func displayOnelinerScreen(e *MenuExecutor, terminal *term.Terminal, outputMode 
 		for i := startIdx; i < numLiners; i++ {
 			record := records[i]
 			displayName := onelinerVisibleName(record, anonymousName)
-			displayName = formatOnelinerDisplayName(displayName)
-			messageText := truncateOnelinerPreservePipeCodes(record.Text, oneLinerMaxLength)
+			displayName = callerText(formatOnelinerDisplayName(displayName))
+			messageText := callerText(truncateOnelinerPreservePipeCodes(record.Text, oneLinerMaxLength))
 
 			line := strings.ReplaceAll(midTemplateRaw, "^NU", displayName)
 			line = strings.ReplaceAll(line, "^OL", messageText)

@@ -74,7 +74,7 @@ func registerUser(v3 *goja.Object, eng *Engine) {
 			// Rejected rather than silently stored: a script blanking a real
 			// name would turn off real_name_only for that user everywhere.
 			v := call.Arguments[1].String()
-			if err := user.ValidateRealName(v); err != nil {
+			if err := user.ValidateRealNameEdit(u.RealName, v); err != nil {
 				// The value itself is not logged: a script can pass anything here,
 				// and a rejected name is still someone's personal data.
 				slog.Warn("script set('realName') rejected", "error", err)

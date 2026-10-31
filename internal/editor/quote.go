@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // The split-pane quote picker used by CTRL-Q.
@@ -666,15 +668,19 @@ func (ch *CommandHandler) quotePrefix() string {
 // escapes and control characters are stripped so none leave the BBS, including
 // any carried in by the quoted message's author or subject.
 func (ch *CommandHandler) quoteBanners() (top, bottom string) {
+	// The sysop's banner keeps every pipe code; the author and subject in it only
+	// get to colour, or a name like "|CL" would clear the screen when quoted.
+	banner := func(tmpl string) string {
+		return ch.processForBuffer(ch.expandQuoteCodes(tmpl, ansi.EscapeScreenPipeCodes))
+	}
 	if !ch.networked {
-		return ch.processForBuffer(ch.processQuoteCodes(ch.quoteTopText())),
-			ch.processForBuffer(ch.processQuoteCodes(ch.quoteBottomText()))
+		return banner(ch.quoteTopText()), banner(ch.quoteBottomText())
 	}
 	plain := func(tmpl string) string {
 		if strings.TrimSpace(tmpl) == "" {
 			return ""
 		}
-		return strings.TrimRight(stripControl(stripANSI(ch.processForBuffer(ch.processQuoteCodes(tmpl)))), " ")
+		return strings.TrimRight(stripControl(stripANSI(banner(tmpl))), " ")
 	}
 	return plain(ch.quoteTopNetStr), plain(ch.quoteBottomNetStr)
 }

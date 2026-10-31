@@ -170,7 +170,7 @@ func runUnvalidateUser(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	confirmPrompt := fmt.Sprintf("\r\n\r\n|07Set |15%s|07 to unvalidated? @", targetUser.Handle)
+	confirmPrompt := fmt.Sprintf("\r\n\r\n|07Set |15%s|07 to unvalidated? @", callerText(targetUser.Handle))
 	confirm, confirmErr := e.PromptYesNo(s, terminal, confirmPrompt, outputMode, nodeNumber, termWidth, termHeight, false)
 	if confirmErr != nil {
 		if errors.Is(confirmErr, io.EOF) {
@@ -206,7 +206,7 @@ func runUnvalidateUser(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	success := fmt.Sprintf("\r\n\r\n|10User set to unvalidated: |15%s|10.|07", targetUser.Handle)
+	success := fmt.Sprintf("\r\n\r\n|10User set to unvalidated: |15%s|10.|07", callerText(targetUser.Handle))
 	_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(success)), outputMode)
 	if pauseErr := e.loginPausePrompt(s, terminal, nodeNumber, outputMode, termWidth, termHeight); pauseErr != nil {
 		if errors.Is(pauseErr, io.EOF) {

@@ -29,6 +29,14 @@ func (lb *fileLightbar) errMsgPause(msg string) {
 	uiPause(1 * time.Second)
 }
 
+// lightbarMidTemplate readies the expanded FILELIST.MID for buildFileEntry, which
+// expands each row again once the file's fields are in. The tokens in the template
+// (|UH) are expanded by then, so a handle's escaped "|CL" reads as a code unless
+// the pipes left in the template are escaped for that second pass.
+func lightbarMidTemplate(processed string) string {
+	return ansi.EscapePipes(processed)
+}
+
 func (lb *fileLightbar) buildFileEntry(idx int, highlighted bool, maxLines int) []string {
 	if idx < 0 || idx >= len(lb.allFiles) {
 		return nil
@@ -52,7 +60,7 @@ func (lb *fileLightbar) buildFileEntry(idx int, highlighted bool, maxLines int) 
 	line := lb.processedMidTemplate
 	line = strings.ReplaceAll(line, "^MARK", markStr)
 	line = strings.ReplaceAll(line, "^NUM", fileNumStr)
-	line = strings.ReplaceAll(line, "^NAME", fileNameStr)
+	line = strings.ReplaceAll(line, "^NAME", callerText(fileNameStr))
 	line = strings.ReplaceAll(line, "^DATE", dateStr)
 	line = strings.ReplaceAll(line, "^SIZE", sizeStr)
 
@@ -88,13 +96,13 @@ func (lb *fileLightbar) buildFileEntry(idx int, highlighted bool, maxLines int) 
 		}
 		result = append(result, lb.hiColorSeq+rowText+"\x1b[0m")
 	} else {
-		fullLine := strings.ReplaceAll(line, "^DESC", firstDesc)
+		fullLine := strings.ReplaceAll(line, "^DESC", callerText(firstDesc))
 		processed := string(ansi.ReplacePipeCodes([]byte(fullLine)))
 		result = append(result, processed)
 	}
 
 	for _, cl := range contLines {
-		result = append(result, string(ansi.ReplacePipeCodes([]byte("|07"+lb.descIndentStr+cl))))
+		result = append(result, string(ansi.ReplacePipeCodes([]byte("|07"+lb.descIndentStr+callerText(cl)))))
 	}
 
 	return result

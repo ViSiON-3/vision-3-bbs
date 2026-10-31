@@ -29,6 +29,13 @@ var ErrRealNameTooShort = errors.New("real name must be at least 4 characters")
 // is how signup distinguishes a name from a handle.
 var ErrRealNameNeedsSpace = errors.New("real name must contain a space (first and last name)")
 
+// ErrNamePipe is returned for a new handle or real name holding a pipe. Screens
+// print names through the pipe-code expander, so a name like "|CL" could act on
+// someone else's screen. Accounts that already have one keep it; the screens
+// escape it instead. Shown in strings that expand pipe codes, where "|)" is not a
+// code and prints as written.
+var ErrNamePipe = errors.New("names cannot contain the pipe (|) character")
+
 // RealNameMinLen is the shortest accepted real name, in runes.
 const RealNameMinLen = 4
 
@@ -40,6 +47,35 @@ const RealNameMinLen = 4
 // The length is counted in runes, not bytes: a four-character name in a
 // non-ASCII script is a real name, and byte-counting would reject it.
 func ValidateRealName(name string) error {
+	if err := validateRealNameForm(name); err != nil {
+		return err
+	}
+	if strings.Contains(name, "|") {
+		return ErrNamePipe
+	}
+	return nil
+}
+
+// ValidateRealNameEdit is ValidateRealName for changing a stored real name. An
+// account made before pipes were refused keeps its name, so an edit that leaves
+// the name as it was is not refused for the pipe.
+func ValidateRealNameEdit(old, name string) error {
+	if strings.TrimSpace(name) == strings.TrimSpace(old) {
+		return validateRealNameForm(name)
+	}
+	return ValidateRealName(name)
+}
+
+// ValidateHandleEdit applies the pipe rule to a handle change. Existing accounts
+// keep their handles, so leaving one as it was is never refused.
+func ValidateHandleEdit(old, handle string) error {
+	if strings.TrimSpace(handle) != strings.TrimSpace(old) && strings.Contains(handle, "|") {
+		return ErrNamePipe
+	}
+	return nil
+}
+
+func validateRealNameForm(name string) error {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
 		return ErrRealNameRequired

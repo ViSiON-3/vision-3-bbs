@@ -98,8 +98,8 @@ Opens a lightbar browser showing only **unvalidated** user accounts. The lower h
 | `P` | Set new password (bcrypt-hashed before saving) |
 | `0` | Toggle ban status — ban sets level 0 + unvalidated; un-ban restores regular level + validated |
 | `9` | Toggle soft delete — delete sets `deletedUser=true`; un-delete restores the account |
-| `A` | Edit username. A new handle that matches your [bad user names](users/user-management.md#bad-user-names) list shows a warning but is allowed |
-| `B` | Edit real name |
+| `A` | Edit username. A new handle that matches your [bad user names](users/user-management.md#bad-user-names) list shows a warning but is allowed. A new handle cannot contain `\|` |
+| `B` | Edit real name. A new real name cannot contain `\|` |
 | `C` | Edit group/location |
 | `D` | Edit private note (sysop-only memo) |
 | `E` | Edit access flags |

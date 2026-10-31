@@ -152,7 +152,7 @@ func newsAddItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	alwaysIn, _ := readLineFromSessionIH(s, terminal)
 	always := strings.ToUpper(strings.TrimSpace(alwaysIn)) == "Y"
 
-	wv(terminal, fmt.Sprintf("|07Author |15[|11%s|15]|07: ", currentUser.Handle), outputMode)
+	wv(terminal, fmt.Sprintf("|07Author |15[|11%s|15]|07: ", callerText(currentUser.Handle)), outputMode)
 	fromIn, _ := readLineFromSessionIH(s, terminal)
 	from := strings.TrimSpace(fromIn)
 	if from == "" {
@@ -282,8 +282,8 @@ func newsEditItem(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 			maxStr = "All"
 		}
 		wv(terminal, fmt.Sprintf("\r\n|15News #%d\r\n", n), outputMode)
-		wv(terminal, fmt.Sprintf("|15[T]|07itle......: |11%s\r\n", item.Title), outputMode)
-		wv(terminal, fmt.Sprintf("|15[F]|07rom.......: |11%s\r\n", item.From), outputMode)
+		wv(terminal, fmt.Sprintf("|15[T]|07itle......: |11%s\r\n", callerText(item.Title)), outputMode)
+		wv(terminal, fmt.Sprintf("|15[F]|07rom.......: |11%s\r\n", callerText(item.From)), outputMode)
 		wv(terminal, fmt.Sprintf("|15[L]|07evel (min): |11%d\r\n", item.Level), outputMode)
 		wv(terminal, fmt.Sprintf("|15[X]|07 Max level: |11%s\r\n", maxStr), outputMode)
 		wv(terminal, fmt.Sprintf("|15[A]|07lways.....: |11%v\r\n", item.Always), outputMode)
