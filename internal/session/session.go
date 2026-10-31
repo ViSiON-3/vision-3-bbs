@@ -8,6 +8,7 @@ package session
 import (
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -44,13 +45,19 @@ type BbsSession struct {
 	LastMenu     string               // Tracks the previously visited menu
 	StartTime    time.Time            // Tracks the session start time
 	LastActivity time.Time            // Tracks last user input for idle calculation
-	PendingPages []string             // Queued page messages for delivery at next prompt
+	PendingPages []string             // Live-only toasts waiting to be shown; not kept across a restart
 	Invisible    bool                 // True if user logged in invisibly (SysOp/CoSysOp only)
 	Tap          *snoop.Tap           // WFC snoop point for this node; nil in tests
 	ChatCredit   func() time.Duration // Sysop chat time credited to the caller; nil means none
 	// Size returns the caller's live terminal size. The SSH session handler
 	// sets it; sessions built without it (tests) report Width and Height.
 	Size func() (width, height int)
+
+	toastWake       chan struct{}   // see ToastWake; guarded by Mutex
+	toastsReady     atomic.Bool     // see SetToastsReady
+	toastsAnnounced map[string]bool // see NoteToastAnnounced; guarded by Mutex
+	toastsShown     map[string]bool // see NoteToastShown; guarded by Mutex
+	heldPages       []string        // see HoldPage; guarded by Mutex
 }
 
 // TermSize returns the caller's current terminal size.
@@ -64,11 +71,61 @@ func (s *BbsSession) TermSize() (width, height int) {
 	return width, height
 }
 
-// AddPage queues a page message for delivery at the user's next menu prompt.
+// AddPage queues a live-only toast for this session and wakes its key wait.
 func (s *BbsSession) AddPage(msg string) {
 	s.Mutex.Lock()
-	defer s.Mutex.Unlock()
 	s.PendingPages = append(s.PendingPages, msg)
+	s.Mutex.Unlock()
+	s.WakeToasts()
+}
+
+// PeekPage returns the oldest pending page without removing it.
+func (s *BbsSession) PeekPage() (string, bool) {
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
+	if len(s.PendingPages) == 0 {
+		return "", false
+	}
+	return s.PendingPages[0], true
+}
+
+// PopPage removes the oldest pending page.
+func (s *BbsSession) PopPage() {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	if len(s.PendingPages) > 0 {
+		s.PendingPages = s.PendingPages[1:]
+	}
+}
+
+// HoldPage takes the oldest pending page out of the overlay's way: it has been
+// drawn cut short, so the whole of it waits for the next inline delivery.
+func (s *BbsSession) HoldPage() {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	if len(s.PendingPages) > 0 {
+		s.heldPages = append(s.heldPages, s.PendingPages[0])
+		s.PendingPages = s.PendingPages[1:]
+	}
+}
+
+// PeekHeldPage returns the oldest page HoldPage kept, without removing it.
+func (s *BbsSession) PeekHeldPage() (string, bool) {
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
+	if len(s.heldPages) == 0 {
+		return "", false
+	}
+	return s.heldPages[0], true
+}
+
+// PopHeldPage removes the oldest page HoldPage kept.
+func (s *BbsSession) PopHeldPage() {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	if len(s.heldPages) > 0 {
+		s.heldPages = s.heldPages[1:]
+	}
 }
 
 // DrainPages returns all pending pages and clears the queue.

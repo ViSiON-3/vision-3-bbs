@@ -265,21 +265,6 @@ func writeArt(terminal *term.Terminal, data []byte, outputMode ansi.OutputMode, 
 	return terminalio.WriteProcessedBytes(terminal, data, outputMode)
 }
 
-// deliverPendingPages checks for and displays any queued page messages.
-func (e *MenuExecutor) deliverPendingPages(terminal *term.Terminal, nodeNumber int, outputMode ansi.OutputMode) {
-	sess := e.nodeSession(nodeNumber)
-	if sess == nil {
-		return
-	}
-	pages := sess.DrainPages()
-	for _, page := range pages {
-		if err := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+page+"\r\n")), outputMode); err != nil {
-			slog.Error("failed to deliver page", "node", nodeNumber, "error", err)
-			return
-		}
-	}
-}
-
 // displayPrompt handles rendering the menu prompt, including file includes and placeholder substitution.
 // Added currentAreaName parameter
 // applyUserPlaceholders fills in the placeholders taken straight off the user

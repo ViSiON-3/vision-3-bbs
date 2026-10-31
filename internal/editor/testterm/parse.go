@@ -171,6 +171,15 @@ func moveCount(params []int) int {
 }
 
 func (t *Term) applyEscape(seq []byte) {
+	// DECSC and DECRC, the two-byte forms of ESC[s and ESC[u.
+	if len(seq) == 2 && seq[1] == '7' {
+		t.savedRow, t.savedCol = t.row, t.col
+		return
+	}
+	if len(seq) == 2 && seq[1] == '8' {
+		t.row, t.col = t.savedRow, t.savedCol
+		return
+	}
 	params, final, private := csiParams(seq)
 	if final == 0 {
 		t.unhandled = append(t.unhandled, string(seq))

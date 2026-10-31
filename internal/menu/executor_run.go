@@ -105,6 +105,10 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 	applySessionIdleTimeout(s, e.idleTimeout(st.currentUser))
 
 	for {
+		// A screen is about to replace this one, so a toast's body can have it.
+		e.deliverToastBodies(s, terminal, nodeNumber, outputMode, termWidth, termHeight)
+		e.rearmToasts(nodeNumber)
+
 		slog.Info("running menu", "menu", st.currentMenuName, "previous", st.previousMenuName, "node", nodeNumber)
 
 		// Pick up anything a sysop changed on disk since the last screen. The

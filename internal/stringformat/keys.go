@@ -85,6 +85,7 @@ var FormattedKeys = []string{
 	"newUserSysopPage",
 	"newscanNewNetworkPrompt",
 	"pageMessageFormat",
+	"toastOverlayFormat",
 	"pageNodeListEntry",
 	"pageSent",
 	"pageSysopCooldown",

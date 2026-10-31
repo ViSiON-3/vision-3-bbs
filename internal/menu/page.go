@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/toast"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -106,9 +107,17 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	// Queue the page on target session
-	pageMsg := fmt.Sprintf(e.Strings().PageMessageFormat, handle, msgInput)
-	targetSession.AddPage(pageMsg)
+	// A logged-in target's page is kept for their account, so it survives them
+	// leaving before they see it; one still at login only has this session.
+	pageMsg := fmt.Sprintf(e.Strings().PageMessageFormat, threadEscapePipes(handle), msgInput)
+	targetSession.Mutex.RLock()
+	targetUser := targetSession.User
+	targetSession.Mutex.RUnlock()
+	if targetUser != nil {
+		_ = e.SessionRegistry.SendToast(e.toastStore(), targetUser.ID, toast.Toast{Text: pageMsg})
+	} else {
+		targetSession.AddPage(pageMsg)
+	}
 
 	slog.Info("paged node", "node", nodeNumber, "handle", handle, "target", targetNodeID, "chars", len(msgInput))
 	e.writeStringf(terminal, outputMode, e.Strings().PageSent, targetNodeID)

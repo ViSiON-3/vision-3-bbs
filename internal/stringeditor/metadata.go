@@ -701,5 +701,9 @@ func stringCatalog() []StringEntry {
 		// User Konfig: the reader's thread pane
 		{Label: "Konfig: Thread View Label", Key: "konfigThreadViewLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},
 		{Label: "Konfig: Thread View Help", Key: "konfigThreadViewHelp", Description: "Help line shown while Thread View is highlighted"},
+
+		// Toasts
+		{Label: "Toast: Overlay Format", Key: "toastOverlayFormat", Description: "Frames a toast drawn over a screen, kept to one row (%s=the toast)"},
+		{Label: "Toast: Body Hint", Key: "toastBodyHint", Description: "Follows a toast whose details wait for the next menu"},
 	}
 }
