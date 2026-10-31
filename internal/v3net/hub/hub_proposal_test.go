@@ -483,3 +483,33 @@ func TestPropose_SubscribersAutoApprovedAreasReviewed(t *testing.T) {
 		t.Error("proposed area reached the NAL without review")
 	}
 }
+
+func TestPropose_RefusesScreenCodesAndControls(t *testing.T) {
+	h, hubKS := setupTestHub(t)
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+
+	leafKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
+	if err != nil {
+		t.Fatalf("load leaf keystore: %v", err)
+	}
+	registerLeaf(t, ts, leafKS)
+	seedTestNALForProposals(t, h, hubKS)
+
+	for _, body := range []string{
+		`{"tag":"gen.test","name":"Evil|CL","language":"en","access_mode":"open"}`,
+		`{"tag":"gen.test","name":"Evil\u001b[2J","language":"en","access_mode":"open"}`,
+		`{"tag":"gen.test","name":"Fine","description":"|PP","language":"en","access_mode":"open"}`,
+		`{"tag":"gen.test","name":"Fine","language":"\u009b2J","access_mode":"open"}`,
+	} {
+		req := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/areas/propose", body)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST propose: %v", err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusUnprocessableEntity {
+			t.Errorf("%s: got %d, want 422", body, resp.StatusCode)
+		}
+	}
+}

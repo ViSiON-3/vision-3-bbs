@@ -26,7 +26,7 @@ func (e *MenuExecutor) NoteV3NetKeyChange(userManager *user.UserMgr, network, ki
 		slog.Warn("v3net: key change not queued for sysops: v3netKeyChangedNotice has no text", "network", network)
 		return 0
 	}
-	return e.queueSysopKeyNotice(userManager, network, fmt.Sprintf(format, v3netNetworkLabel(network), kind))
+	return e.queueSysopKeyNotice(userManager, network, fmt.Sprintf(format, v3netText(v3netNetworkLabel(network)), kind))
 }
 
 // NoteV3NetKeyHandover tells every sysop at login that a leaf moved the
@@ -45,7 +45,7 @@ func (e *MenuExecutor) NoteV3NetKeyHandover(userManager *user.UserMgr, network, 
 		slog.Warn("v3net: key handover not queued for sysops: v3netKeyHandoverNotice has no text", "network", network)
 		return 0
 	}
-	return e.queueSysopKeyNotice(userManager, network, fmt.Sprintf(format, v3netNetworkLabel(network), kind))
+	return e.queueSysopKeyNotice(userManager, network, fmt.Sprintf(format, v3netText(v3netNetworkLabel(network)), kind))
 }
 
 // queueSysopKeyNotice queues text for every sysop who does not already have

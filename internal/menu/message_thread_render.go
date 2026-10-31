@@ -54,7 +54,7 @@ func threadPlainText(s string) string {
 // reading a colour code out of the message. Applied after fitting: "||"
 // still draws as one column.
 func threadEscapePipes(s string) string {
-	return strings.ReplaceAll(s, "|", "||")
+	return ansi.EscapePipes(s)
 }
 
 // threadCell clips s to width columns with g's ellipsis and pads it, in the

@@ -391,11 +391,11 @@ func (e *MenuExecutor) offerV3NetAreas(c *cmdCtx, offers []sysopNotice, leadIn b
 	}
 
 	if len(added) > 0 {
-		list := strings.Join(added, ", ")
+		list := v3netText(strings.Join(added, ", "))
 		if e.V3NetReload == nil {
 			write(fmt.Sprintf("\r\n|10Added %s. Restart to activate.|07\r\n", list))
 		} else if rerr := e.V3NetReload(); rerr != nil {
-			write(fmt.Sprintf("\r\n|10Added %s.|07 |04Live apply failed (%s); restart to activate.|07\r\n", list, rerr))
+			write(fmt.Sprintf("\r\n|10Added %s.|07 |04Live apply failed (%s); restart to activate.|07\r\n", list, v3netText(rerr.Error())))
 		} else {
 			write(fmt.Sprintf("\r\n|10Added %s. Now active.|07\r\n", list))
 		}
@@ -451,9 +451,11 @@ func (e *MenuExecutor) offerV3NetArea(c *cmdCtx, n sysopNotice, svc V3NetStatusP
 		return true, false, false // closed to this node since it was offered
 	}
 
-	prompt := n.Text
+	// The stored text may have been queued by a build that left the hub's text
+	// in it. It holds the string's colours too, so those are kept.
+	prompt := chatText(n.Text)
 	if format != "" {
-		prompt = fmt.Sprintf(format, v3netNetworkLabel(n.V3NetNetwork), area.Name)
+		prompt = fmt.Sprintf(format, v3netText(v3netNetworkLabel(n.V3NetNetwork)), v3netText(area.Name))
 	}
 	// The lightbar ends its own line once answered, so only the first
 	// question may need a line break in front of it.
@@ -472,13 +474,13 @@ func (e *MenuExecutor) offerV3NetArea(c *cmdCtx, n sysopNotice, svc V3NetStatusP
 			slog.Warn("v3net: could not record a declined area", "network", n.V3NetNetwork, "tag", area.Tag, "error", derr)
 		}
 		if declined := e.Strings().V3NetNewAreaDeclined; declined != "" {
-			write(fmt.Sprintf(declined, area.Tag) + "\r\n")
+			write(fmt.Sprintf(declined, v3netText(area.Tag)) + "\r\n")
 		}
 		return true, false, false
 	}
 	if err := v3netSubscribe(e.RootConfigPath, e.MessageMgr, n.V3NetNetwork, hubURL, area, true); err != nil {
 		slog.Warn("v3net: could not add offered area", "network", n.V3NetNetwork, "tag", area.Tag, "error", err)
-		write(fmt.Sprintf("\r\n|04Could not add %s: %s. You will be asked again next time.|07\r\n", area.Tag, err))
+		write(fmt.Sprintf("\r\n|04Could not add %s: %s. You will be asked again next time.|07\r\n", v3netText(area.Tag), v3netText(err.Error())))
 		return false, false, false
 	}
 	slog.Info("v3net: sysop added offered area", "network", n.V3NetNetwork, "tag", area.Tag, "handle", c.currentUser.Handle)
