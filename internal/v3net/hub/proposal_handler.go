@@ -161,6 +161,14 @@ func (h *Hub) handlePropose(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"name is required"}`, http.StatusBadRequest)
 		return
 	}
+	for _, f := range []struct{ field, value string }{
+		{"name", req.Name}, {"description", req.Description}, {"language", req.Language},
+	} {
+		if err := protocol.ValidateAreaText(f.field, f.value); err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+	}
 
 	lang := req.Language
 	if lang == "" {

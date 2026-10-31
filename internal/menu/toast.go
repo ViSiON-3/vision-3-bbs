@@ -80,12 +80,7 @@ func (e *MenuExecutor) toastStore() *toast.Store {
 // characters could otherwise move the cursor or scroll the screen. The C1 range
 // is included because U+009B is the 8-bit form of CSI.
 func toastLine(text string) string {
-	return strings.Map(func(r rune) rune {
-		if r < 0x20 || (r >= 0x7F && r <= 0x9F) {
-			return ' '
-		}
-		return r
-	}, text)
+	return ansi.OneLine(text)
 }
 
 // toastPipes expands a toast's pipe codes. Its text comes from another caller,

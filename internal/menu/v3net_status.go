@@ -80,7 +80,7 @@ func runV3NetStatus(c *cmdCtx, args string) (*user.User, string, error) {
 			lines = append(lines, "")
 			lines = append(lines, "|03  Networks:|07")
 			for _, net := range networks {
-				lines = append(lines, fmt.Sprintf("|08    · |11%s|07", net))
+				lines = append(lines, fmt.Sprintf("|08    · |11%s|07", v3netText(net)))
 			}
 		}
 

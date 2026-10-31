@@ -55,6 +55,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
@@ -322,7 +323,7 @@ func publish(out, errOut io.Writer, client *http.Client, hubURL string, chain []
 		reportUnknownOutcome(errOut, network)
 		return postUnknown
 	}
-	_, _ = fmt.Fprintf(out, "Response: %d %s\n", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	_, _ = fmt.Fprintf(out, "Response: %d %s\n", resp.StatusCode, ansi.OneLine(strings.TrimSpace(string(respBody))))
 	if respSig == "" {
 		_, _ = fmt.Fprintln(out, "The hub did not sign this response, as a hub that predates signed responses does not; its status is taken as sent.")
 	}
@@ -364,7 +365,7 @@ func checkServedNAL(client *http.Client, hubURL, network, from, to string) error
 		return fmt.Errorf("the NAL it serves does not verify: %w", err)
 	}
 	if n.CoordPubKeyB64 != to {
-		return fmt.Errorf("it still serves a NAL signed by %s", n.CoordPubKeyB64)
+		return fmt.Errorf("it still serves a NAL signed by %s", ansi.OneLine(n.CoordPubKeyB64))
 	}
 	if _, err := nal.FollowHandovers(network, from, to, n.Handovers); err != nil {
 		return fmt.Errorf("the NAL it serves carries no handover from the outgoing key")
@@ -392,7 +393,7 @@ func checkHubKey(client *http.Client, hubURL, network, from, to string) (late bo
 	// Small JSON; cap the read.
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("could not check the hub's key: GET %s: %d %s", url, resp.StatusCode, strings.TrimSpace(string(body)))
+		return false, fmt.Errorf("could not check the hub's key: GET %s: %d %s", url, resp.StatusCode, ansi.OneLine(strings.TrimSpace(string(body))))
 	}
 	var info protocol.NetworkInfo
 	if err := json.Unmarshal(body, &info); err != nil {
@@ -407,7 +408,7 @@ func checkHubKey(client *http.Client, hubURL, network, from, to string) (late bo
 		return false, fmt.Errorf("the hub does not publish its key at %s; refusing to post the handover", url)
 	default:
 		return false, fmt.Errorf("the hub runs key %s, which is neither the outgoing key %s nor the new key %s; refusing to post the handover (check -hub, -network and the keystores)",
-			info.HubPubKeyB64, from, to)
+			ansi.OneLine(info.HubPubKeyB64), from, to)
 	}
 }
 
@@ -476,9 +477,25 @@ func fetchHistory(client *http.Client, hubURL, network, hubKey string, sender *k
 	}
 	history = &protocol.SignerHistory{}
 	if err := json.Unmarshal(body, history); err != nil {
-		return nil, fmt.Sprintf("its reply could not be read: %v", err), true, nil
+		return nil, fmt.Sprintf("its reply could not be read: %v", ansi.OneLine(err.Error())), true, nil
 	}
+	cleanHistory(history)
 	return history, "", true, nil
+}
+
+// cleanHistory removes control characters from the keys in a signer history:
+// this tool prints them, and the hub's signature says who sent them, not what
+// they hold. Real keys are base64, so it leaves those as they are.
+func cleanHistory(h *protocol.SignerHistory) {
+	h.NALKeyB64 = ansi.OneLine(h.NALKeyB64)
+	h.KeyInForceB64 = ansi.OneLine(h.KeyInForceB64)
+	for i := range h.PrevSigners {
+		h.PrevSigners[i] = ansi.OneLine(h.PrevSigners[i])
+	}
+	for i := range h.Handovers {
+		h.Handovers[i].OldKeyB64 = ansi.OneLine(h.Handovers[i].OldKeyB64)
+		h.Handovers[i].NewKeyB64 = ansi.OneLine(h.Handovers[i].NewKeyB64)
+	}
 }
 
 // historyResult is what historyVerdict found: a note for the operator on a

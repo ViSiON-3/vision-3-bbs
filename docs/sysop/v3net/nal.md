@@ -80,6 +80,31 @@ Area tags must follow the format `{prefix}.{name}` — for example, `fel.coding`
 
 After submitting, your proposal goes to the network coordinator for review. You'll be notified via the V3Net event stream when it's approved or rejected. On a hub with **Auto Approve Areas** set to `Y`, the area is added to the NAL as soon as the proposal arrives, with no review.
 
+An area's name, description and language can't hold pipes or control characters.
+The hub refuses a proposal that has them, and the screen shows its error.
+
+## Text From Other Boards
+
+Area names, descriptions, BBS names, proposal fields and error messages from a
+hub come from other people's systems, so V3Net screens treat them as plain text.
+This covers the login notices, the area browser, the registry and coordinator
+screens, the config editor and the `v3net-handover` tool:
+
+- A pipe shows as a pipe. `|CL` does not clear the screen, and `|12` does not
+  change the colour.
+- Control characters, including raw escape sequences, show as spaces.
+- An area whose tag isn't a valid `prefix.name` is not offered, and it can't be
+  added to your BBS. The config editor leaves it out of its area browser.
+
+When you add an area, its local name is the hub's name with any pipes changed to
+`/`. You can rename it and colour it yourself afterwards.
+
+A V3Net area added before this check may hold a hub's text. When the BBS or the
+config editor loads such a name, control characters become spaces and the pipes of
+the screen codes (`|CL`, `|CR`, `|DE`, `|P`, `|PP`) become `/`. Colour codes stay,
+so a name you coloured is unaffected, but a V3Net area's local name can't use
+screen codes.
+
 ## For Area Managers
 
 If you manage an area (the coordinator assigned you as manager), you'll see the **Area Access Requests** screen in the V3Net menu:
