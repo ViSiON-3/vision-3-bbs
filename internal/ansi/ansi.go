@@ -459,6 +459,16 @@ func EscapeScreenPipeCodes(s string) string {
 	return b.String()
 }
 
+// ColorPipeCodeLen returns the length of the colour pipe code at the start of s,
+// or 0 if s does not start with one.
+func ColorPipeCodeLen(s string) int {
+	if s == "" {
+		return 0
+	}
+	_, n := colorPipeCodeAt([]byte(s[:min(len(s), 4)]), 0)
+	return n
+}
+
 // colorPipeCodeAt returns the expansion of the colour pipe code starting at
 // data[i] and its length, or a zero length if there is none. The longest code
 // wins, so |B10 is not read as |B1 followed by a "0".

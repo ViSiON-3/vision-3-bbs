@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -37,7 +38,8 @@ func (e *MenuExecutor) notifySysopsOfNewUser(userManager *user.UserMgr, newUser 
 		slog.Debug("new-user sysop notice skipped: newUserSysopPage is empty", "node", nodeNumber)
 		return 0, 0
 	}
-	msg := fmt.Sprintf(format, newUser.Handle, nodeNumber)
+	// A handle may hold a pipe, and msg is expanded when it is shown.
+	msg := fmt.Sprintf(format, ansi.EscapeScreenPipeCodes(newUser.Handle), nodeNumber)
 
 	// Page online co-sysop+ sessions, and remember which accounts we reached so
 	// they are not also queued a login notice for the same event.

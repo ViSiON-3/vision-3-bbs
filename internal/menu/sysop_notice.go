@@ -245,7 +245,7 @@ func (e *MenuExecutor) renderSysopNotice(n sysopNotice, now time.Time) string {
 		return n.Text
 	}
 	age := humanizeAge(now.Sub(n.CreatedAt))
-	return fmt.Sprintf(format, n.Handle, age, n.Node)
+	return fmt.Sprintf(format, ansi.EscapeScreenPipeCodes(n.Handle), age, n.Node)
 }
 
 // runSysopNotices is the SYSOPNOTICES login-sequence handler: it shows any

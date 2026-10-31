@@ -162,7 +162,7 @@ func chatNetworkPicker(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 		default:
 			status = fmt.Sprintf("%d users online", net.users)
 		}
-		e.writeStringf(terminal, outputMode, e.Strings().ChatNetworkPickerEntry, i+1, net.name, status)
+		e.writeStringf(terminal, outputMode, e.Strings().ChatNetworkPickerEntry, i+1, chatText(net.name), status)
 		wt("\r\n")
 	}
 	wt("\r\n")
@@ -207,11 +207,11 @@ func chatRoomPicker(e *MenuExecutor, svc chat.ChatService, s ssh.Session, termin
 	e.writeString(terminal, outputMode, e.Strings().ChatRoomListHeader)
 	wt("\r\n")
 	for _, r := range rooms {
-		topic := r.Topic
+		topic := chatText(r.Topic)
 		if topic == "" {
 			topic = "|08no topic|07"
 		}
-		e.writeStringf(terminal, outputMode, e.Strings().ChatRoomListEntry, r.Name, r.UserCount, topic)
+		e.writeStringf(terminal, outputMode, e.Strings().ChatRoomListEntry, chatText(r.Name), r.UserCount, topic)
 		wt("\r\n")
 	}
 	wt("\r\n")
@@ -381,9 +381,11 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			// The @NAME@ placeholders are ASCII, so conversion leaves them intact.
 			text := func(v string) func(int) string { return func(int) string { return v } }
 			artData = chatArtFill(artData, map[string]func(int) string{
-				"NET":   text(currentNetwork),
-				"ROOM":  text(currentRoom),
-				"TOPIC": text(currentTopic),
+				// The art is not expanded, so a pipe in these shows as it is
+				// without escaping; only control characters need to go.
+				"NET":   text(toastLine(currentNetwork)),
+				"ROOM":  text(toastLine(currentRoom)),
+				"TOPIC": text(toastLine(currentTopic)),
 				"U":     func(w int) string { return chatCounter(w, len(currentUsers), "") },
 				"M":     func(w int) string { return chatCounter(w, mentions, "") },
 				"L": func(w int) string {
@@ -411,9 +413,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			rawWriteLocked(sep)
 			rawWriteLocked([]byte(ansi.MoveCursor(2, 1)))
 			rawWriteLocked(sep)
-			roomLine := " |15#" + currentRoom
+			roomLine := " |15#" + chatText(currentRoom)
 			if currentTopic != "" {
-				roomLine += " |08/ |07" + currentTopic
+				roomLine += " |08/ |07" + chatText(currentTopic)
 			}
 			rawWriteLocked([]byte(ansi.MoveCursor(2, 1)))
 			rawWriteLocked(ansi.ReplacePipeCodes([]byte(roomLine)))
@@ -439,7 +441,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			userStr = handle
 		}
 		rawWriteLocked([]byte(ansi.MoveCursor(usersRow, 2)))
-		rawWriteLocked(ansi.ReplacePipeCodes([]byte(fmt.Sprintf(" |07Users: %s", userStr))))
+		rawWriteLocked(ansi.ReplacePipeCodes([]byte(fmt.Sprintf(" |07Users: %s", chatText(userStr)))))
 		// Hints line
 		rawWriteLocked([]byte(ansi.MoveCursor(hintsRow, 1) + "\x1B[2K"))
 		rawWriteLocked(sep)
@@ -630,14 +632,14 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 			case chat.TypePrivate:
 				if ev.Message != nil {
-					writeChatLine(fmt.Sprintf(e.Strings().ChatPrivateMsgFormat, ev.Message.Handle, ev.Message.Text))
+					writeChatLine(fmt.Sprintf(e.Strings().ChatPrivateMsgFormat, chatText(ev.Message.Handle), chatText(ev.Message.Text)))
 				}
 			case chat.TypeJoin:
 				if ev.Join != nil {
 					newUsers := svc.Users()
 					rawMu.Lock()
 					currentUsers = newUsers
-					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatJoinMsg, ev.Join.Handle, ev.Join.Room))
+					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatJoinMsg, chatText(ev.Join.Handle), chatText(ev.Join.Room)))
 					drawHeaderLocked()
 					drawStatusBarLocked()
 					rawMu.Unlock()
@@ -647,7 +649,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					newUsers := svc.Users()
 					rawMu.Lock()
 					currentUsers = newUsers
-					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatLeaveMsg, ev.Leave.Handle, ev.Leave.Room))
+					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatLeaveMsg, chatText(ev.Leave.Handle), chatText(ev.Leave.Room)))
 					drawHeaderLocked()
 					drawStatusBarLocked()
 					rawMu.Unlock()
@@ -656,7 +658,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				if ev.Topic != nil {
 					rawMu.Lock()
 					currentTopic = ev.Topic.Topic
-					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatTopicMsg, ev.Topic.Room, ev.Topic.Topic))
+					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatTopicMsg, chatText(ev.Topic.Room), chatText(ev.Topic.Topic)))
 					drawHeaderLocked()
 					rawMu.Unlock()
 				}
@@ -664,7 +666,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				if ev.Reconnect {
 					writeChatLine(e.Strings().ChatReconnected)
 				} else if ev.Text != "" {
-					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, ev.Text))
+					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, chatText(ev.Text)))
 				}
 			}
 		}
@@ -807,11 +809,11 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			_, joinHistory, joinErr := svc.Join(newRoom)
 			if joinErr != nil {
-				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not join room: "+joinErr.Error()))
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not join room: "+chatText(joinErr.Error())))
 				rejoined := false
 				if oldRoom != "" {
 					if _, _, rejoinErr := svc.Join(oldRoom); rejoinErr != nil {
-						writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not rejoin #"+oldRoom+": "+rejoinErr.Error()))
+						writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not rejoin #"+chatText(oldRoom)+": "+chatText(rejoinErr.Error())))
 					} else {
 						rejoined = true
 					}
@@ -864,11 +866,11 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			for i, net := range nets {
 				switch {
 				case !net.avail:
-					writeChatLine(fmt.Sprintf("|08 %d.|07 %-15s |08(unavailable)|07", i+1, net.name))
+					writeChatLine(fmt.Sprintf("|08 %d.|07 %-15s |08(unavailable)|07", i+1, chatText(net.name)))
 				case net.isLocal:
-					writeChatLine(fmt.Sprintf("|08 %d.|07 %-15s |08(this BBS only)|07", i+1, net.name))
+					writeChatLine(fmt.Sprintf("|08 %d.|07 %-15s |08(this BBS only)|07", i+1, chatText(net.name)))
 				default:
-					writeChatLine(fmt.Sprintf("|08 %d.|07 %-15s |08(%d users online)|07", i+1, net.name, net.users))
+					writeChatLine(fmt.Sprintf("|08 %d.|07 %-15s |08(%d users online)|07", i+1, chatText(net.name), net.users))
 				}
 			}
 
@@ -923,7 +925,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					if topic == "" {
 						topic = "no topic"
 					}
-					writeChatLine(fmt.Sprintf("|08 %d.|07 %-12s |08(%d)|07 %s", i+1, r.Name, r.UserCount, topic))
+					writeChatLine(fmt.Sprintf("|08 %d.|07 %-12s |08(%d)|07 %s", i+1, chatText(r.Name), r.UserCount, chatText(topic)))
 				}
 				roomInput, roomErr2 := chatReadLine(s, &rawMu, scr, "Select room [lobby]: ")
 				if errors.Is(roomErr2, editor.ErrIdleTimeout) {
@@ -943,7 +945,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			// Join the new room.
 			_, newHistory, joinErr := newSvc.Join(newRoom)
 			if joinErr != nil {
-				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not join room: "+joinErr.Error()))
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not join room: "+chatText(joinErr.Error())))
 				newSvc.Close() //nolint:errcheck
 				newSvc, err = chat.NewLocalChatService(handle, dbPath)
 				if err != nil {
@@ -989,11 +991,11 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		if upper == "/ROOMS" {
 			rooms, roomErr := svc.Rooms()
 			if roomErr != nil {
-				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not list rooms: "+roomErr.Error()))
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not list rooms: "+chatText(roomErr.Error())))
 			} else {
 				writeChatLine(e.Strings().ChatRoomListHeader)
 				for _, r := range rooms {
-					writeChatLine(fmt.Sprintf(e.Strings().ChatRoomListEntry, r.Name, r.UserCount, r.Topic))
+					writeChatLine(fmt.Sprintf(e.Strings().ChatRoomListEntry, chatText(r.Name), r.UserCount, chatText(r.Topic)))
 				}
 			}
 			continue
@@ -1009,7 +1011,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				continue
 			}
 			if topicErr := svc.SetTopic(currentRoom, arg); topicErr != nil {
-				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not set topic: "+topicErr.Error()))
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not set topic: "+chatText(topicErr.Error())))
 			}
 			continue
 		}
@@ -1028,7 +1030,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				toNode = target[atIdx+1:]
 			}
 			if msgErr := svc.Private(toHandle, toNode, message); msgErr != nil {
-				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not send private message: "+msgErr.Error()))
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not send private message: "+chatText(msgErr.Error())))
 			}
 			continue
 		}
@@ -1044,7 +1046,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 		if isCommand {
 			cmd, _, _ := strings.Cut(trimmed, " ")
-			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, fmt.Sprintf(e.Strings().ChatUnknownCommand, cmd)))
+			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, fmt.Sprintf(e.Strings().ChatUnknownCommand, chatText(cmd))))
 			continue
 		}
 		if strings.HasPrefix(trimmed, "//") {
@@ -1056,7 +1058,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 		if postErr := svc.Post(currentRoom, trimmed); postErr != nil {
-			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not post: "+postErr.Error()))
+			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not post: "+chatText(postErr.Error())))
 			continue
 		}
 
@@ -1071,11 +1073,20 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	return nil, "", nil
 }
 
+// chatText prepares text from a caller, a hub or another board to go into a
+// pipe-coded chat line: flattened to one line with no control characters, and
+// with only its colour codes left to act. A line is expanded once, whether it is
+// drawn now or replayed from the scrollback, so "|CL" shows as just that. Formats
+// from strings.json keep every pipe code, so escape the arguments, not the line.
+func chatText(s string) string {
+	return ansi.EscapeScreenPipeCodes(toastLine(s))
+}
+
 func formatChatMessage(msg chat.ChatMessage, systemFmt, userFmt string) string {
 	if msg.IsSystem {
-		return fmt.Sprintf(systemFmt, msg.Text)
+		return fmt.Sprintf(systemFmt, chatText(msg.Text))
 	}
-	return fmt.Sprintf(userFmt, msg.Handle, msg.Text)
+	return fmt.Sprintf(userFmt, chatText(msg.Handle), chatText(msg.Text))
 }
 
 // chatArtReplace fills the @name####@ placeholder in ANSI art data with
@@ -1221,16 +1232,23 @@ func chatWordRune(r rune) bool {
 }
 
 // pipeDisplayLen returns the number of visible characters in a pipe-code string,
-// skipping |XX color codes.
+// as ReplacePipeCodes will show it: colour codes take no room and "||" takes one.
 func pipeDisplayLen(s string) int {
 	n := 0
 	for i := 0; i < len(s); {
-		if i+2 < len(s) && s[i] == '|' && s[i+1] >= '0' && s[i+1] <= '9' && s[i+2] >= '0' && s[i+2] <= '9' {
-			i += 3
-		} else {
-			n++
-			i++
+		if s[i] == '|' {
+			if i+1 < len(s) && s[i+1] == '|' {
+				n++
+				i += 2
+				continue
+			}
+			if code := ansi.ColorPipeCodeLen(s[i:]); code > 0 {
+				i += code
+				continue
+			}
 		}
+		n++
+		i++
 	}
 	return n
 }
