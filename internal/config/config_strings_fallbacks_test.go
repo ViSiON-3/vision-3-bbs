@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -95,5 +97,32 @@ func TestApplyStringDefaultsFillsOnlyEmpty(t *testing.T) {
 	}
 	if want := StringFallbacks["searchFilesPrompt"]; c.SearchFilesPrompt != want {
 		t.Errorf("empty field not filled: got %q, want %q", c.SearchFilesPrompt, want)
+	}
+}
+
+// TestLoadStringsDoesNotWarnAboutMissingDefaults checks that an upgraded install
+// whose strings.json predates the toast strings gets no warning that they are
+// empty, since the loader fills them in.
+func TestLoadStringsDoesNotWarnAboutMissingDefaults(t *testing.T) {
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "strings.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := LoadStrings(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ToastLogon != StringMissingDefaults["toastLogon"] {
+		t.Errorf("ToastLogon = %q, want the missing-key default", c.ToastLogon)
+	}
+	for _, key := range []string{"toastLogon", "toastLogoff", "toastOverlayFormat"} {
+		if strings.Contains(logs.String(), "key="+key+" ") {
+			t.Errorf("%s was reported though the loader fills it in", key)
+		}
 	}
 }

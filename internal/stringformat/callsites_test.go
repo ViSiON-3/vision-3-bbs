@@ -505,7 +505,7 @@ func TestEmptyFormattedStringIsReported(t *testing.T) {
 	defaults := shippedDefaults(t)
 	values := map[string]string{"pageNodeListEntry": ""}
 
-	problems := stringformat.Validate(values, nil, defaults)
+	problems := stringformat.Validate(values, nil, nil, defaults)
 
 	var found bool
 	for _, p := range problems {
@@ -522,10 +522,44 @@ func TestEmptyFormattedStringIsReported(t *testing.T) {
 
 	// But an empty value with a runtime fallback is fine: the BBS substitutes.
 	fallbacks := map[string]string{"pageNodeListEntry": defaults["pageNodeListEntry"]}
-	for _, p := range stringformat.Validate(values, fallbacks, defaults) {
+	for _, p := range stringformat.Validate(values, fallbacks, nil, defaults) {
 		if p.Key == "pageNodeListEntry" {
 			t.Errorf("a fallback-covered empty value was reported: %v", p)
 		}
+	}
+}
+
+// TestMissingDefaultKeys covers keys that upgraded installs do not have in their
+// strings.json. Absent, the BBS prints the missing-key default. Blank, the string
+// is switched off. Neither is a problem, but a malformed override still is.
+func TestMissingDefaultKeys(t *testing.T) {
+	shipped := shippedDefaults(t)
+	defaults := stringformat.MergeDefaults(config.StringFallbacks, shipped)
+	const key = "toastLogon"
+
+	tests := []struct {
+		name       string
+		edit       func(map[string]string)
+		wantReport bool
+	}{
+		{"absent", func(v map[string]string) { delete(v, key) }, false},
+		{"blank", func(v map[string]string) { v[key] = "" }, false},
+		{"malformed", func(v map[string]string) { v[key] = "|15logged on|07" }, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values := installValues(t, shipped)
+			tt.edit(values)
+			var got bool
+			for _, p := range stringformat.Validate(values, config.StringFallbacks, config.StringMissingDefaults, defaults) {
+				if p.Key == key {
+					got = true
+				}
+			}
+			if got != tt.wantReport {
+				t.Errorf("reported = %v, want %v", got, tt.wantReport)
+			}
+		})
 	}
 }
 
@@ -567,7 +601,7 @@ func TestFallbackOnlyKeysAreCheckable(t *testing.T) {
 	values[key] = "|15Search results|07" // the %s dropped
 
 	reportedFor := func(defaults map[string]string) bool {
-		for _, p := range stringformat.Validate(values, config.StringFallbacks, defaults) {
+		for _, p := range stringformat.Validate(values, config.StringFallbacks, config.StringMissingDefaults, defaults) {
 			if p.Key == key {
 				return true
 			}
@@ -590,7 +624,7 @@ func TestHealthyInstallReportsNothing(t *testing.T) {
 	values := installValues(t, shipped)
 	defaults := stringformat.MergeDefaults(config.StringFallbacks, shipped)
 
-	if problems := stringformat.Validate(values, config.StringFallbacks, defaults); len(problems) > 0 {
+	if problems := stringformat.Validate(values, config.StringFallbacks, config.StringMissingDefaults, defaults); len(problems) > 0 {
 		for _, p := range problems {
 			t.Errorf("stock configuration reports: %v", p)
 		}
