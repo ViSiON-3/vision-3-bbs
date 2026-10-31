@@ -76,7 +76,11 @@ func (st *userEditorState) renderActionBar() error {
 			deleteLabel = "Un-Delete"
 			deleteColor = "|10" // Green for un-delete
 		}
-		barText = fmt.Sprintf("|08[|15G|08] %s%s |08[|15I|08] |14Info |08[|15P|08] |14Passwd |08[|150|08] %s%s |08[|159|08] %s%s |08[|15Q|08] |11Quit|07", validateColor, validateLabel, banColor, banLabel, deleteColor, deleteLabel)
+		devices := ""
+		if st.deviceScreenAvailable() {
+			devices = "|08[|15V|08] |14QWK "
+		}
+		barText = fmt.Sprintf("|08[|15G|08] %s%s |08[|15I|08] |14Info |08[|15P|08] |14Passwd %s|08[|150|08] %s%s |08[|159|08] %s%s |08[|15Q|08] |11Quit|07", validateColor, validateLabel, devices, banColor, banLabel, deleteColor, deleteLabel)
 	}
 	if err := st.clearRow(st.layout.actionRow); err != nil {
 		return err

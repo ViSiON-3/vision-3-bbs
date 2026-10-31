@@ -185,6 +185,7 @@ func (um *UserMgr) mergeExternalEditsFrom(onDisk map[string]*User) {
 		if memUser, ok := um.users[key]; ok {
 			combined := *memUser
 			sysopOwnedFields(&combined, diskUser)
+			combined.APIDevices = um.mergedAPIDevices(memUser.APIDevices, diskUser.APIDevices)
 			// Mark the record as having moved on, so any copy a session is
 			// already holding is recognised as predating this edit.
 			combined.gen = memUser.gen + 1
@@ -219,6 +220,33 @@ func (um *UserMgr) mergeExternalEditsFrom(onDisk map[string]*User) {
 			um.nextUserID = u.ID + 1
 		}
 	}
+}
+
+// mergedAPIDevices applies an unpairing made in ./ue to the in-memory device list.
+//
+// The list stays the BBS's: it alone pairs devices and records their last use,
+// so sysopOwnedFields leaves it out and the in-memory entries are the ones kept.
+// The one thing ./ue may do is remove a device, so a device in memory that is
+// gone from disk is dropped, unless its pairing is still being saved. A device
+// on disk but not in memory is never taken up: it was unpaired here after ./ue
+// read the file, and a stale copy must not bring it back.
+//
+// A forced save from ./ue over a newer file can drop a device paired since ./ue
+// loaded. That errs the safe way: the user pairs again.
+//
+// Called with um.mu already held.
+func (um *UserMgr) mergedAPIDevices(mem, disk []APIDevice) []APIDevice {
+	onDisk := make(map[string]bool, len(disk))
+	for _, d := range disk {
+		onDisk[d.ID] = true
+	}
+	var out []APIDevice
+	for _, d := range mem {
+		if onDisk[d.ID] || um.unsavedDevices[d.ID] {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // FingerprintFile returns a short content fingerprint of path, or "" when the

@@ -53,6 +53,29 @@ func (u *User) ValidAPIDevices() []APIDevice {
 	return out
 }
 
+// ShowsAPIDevices reports whether device screens should offer this user's
+// paired devices. The QWK API is optional, so a board that has not enabled it
+// shows nothing. A user who still has devices from when it was on sees them
+// anyway, since they would work again if the API is turned back on.
+func (u *User) ShowsAPIDevices(apiEnabled bool) bool {
+	return apiEnabled || len(u.ValidAPIDevices()) > 0
+}
+
+// DropAPIDevice removes a device from this copy of the record, reporting whether
+// it was there. It is for ./ue, which edits users.json directly. Inside the BBS
+// use UserMgr.RemoveAPIDevice, which works on the stored record and saves.
+func (u *User) DropAPIDevice(id string) bool {
+	out := make([]APIDevice, 0, len(u.APIDevices))
+	for _, d := range u.APIDevices {
+		if d.ID != id {
+			out = append(out, d)
+		}
+	}
+	dropped := len(out) != len(u.APIDevices)
+	u.APIDevices = out
+	return dropped
+}
+
 // APIDevice returns the valid device with the given ID.
 func (u *User) APIDevice(id string) (APIDevice, bool) {
 	for _, d := range u.ValidAPIDevices() {
@@ -159,9 +182,38 @@ func (um *UserMgr) mutateAPIDevices(userID int, fn func(u *User, valid []APIDevi
 	}
 	previous := target.APIDevices
 	target.APIDevices = next
+	// A save merges any ./ue edit first, and these are not on disk yet.
+	um.unsavedDevices = newDeviceIDs(next, previous)
+	defer func() { um.unsavedDevices = nil }()
 	if err := um.saveUsersLocked(); err != nil {
-		target.APIDevices = previous
+		// The save may have merged an external edit first, which replaces the
+		// stored records, so target can be stale by now. Look the record up
+		// again, or a failed pairing would stay live in memory.
+		for _, u := range um.users {
+			if u.ID == userID {
+				u.APIDevices = previous
+				break
+			}
+		}
 		return err
 	}
 	return nil
+}
+
+// newDeviceIDs returns the IDs in next that are not in previous, or nil if none.
+func newDeviceIDs(next, previous []APIDevice) map[string]bool {
+	known := make(map[string]bool, len(previous))
+	for _, d := range previous {
+		known[d.ID] = true
+	}
+	var added map[string]bool
+	for _, d := range next {
+		if !known[d.ID] {
+			if added == nil {
+				added = make(map[string]bool)
+			}
+			added[d.ID] = true
+		}
+	}
+	return added
 }

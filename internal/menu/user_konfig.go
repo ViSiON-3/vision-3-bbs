@@ -136,7 +136,11 @@ func runUserKonfig(c *cmdCtx, args string) (*user.User, string, error) {
 	// Work on a copy of the context: edits update the size it carries.
 	ctx := *c
 	st := &konfigState{c: &ctx, ih: getSessionIH(c.s)}
-	st.items, st.headings = layoutKonfig(konfigSections(c.e.Strings()))
+	cols := konfigSections(c.e.Strings())
+	if !apiDevicesShown(c) {
+		cols = withoutKonfigItem(cols, qwkDevicesKonfigKey)
+	}
+	st.items, st.headings = layoutKonfig(cols)
 
 	hidden := c.e.hideCursorIfNeeded(c.terminal, c.outputMode, cursorHideContextDefault)
 	defer c.e.showCursorIfHidden(c.terminal, c.outputMode, hidden)
@@ -342,6 +346,10 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					help:  str.KonfigPasswordHelp,
 					value: func(*konfigState) konfigValue { return konfigValue{"********", toneDim} },
 					edit:  editPassword},
+				{key: qwkDevicesKonfigKey, label: str.KonfigQwkDevicesLabel,
+					help:  str.KonfigQwkDevicesHelp,
+					value: qwkDevicesValue,
+					edit:  editQwkDevices},
 			}},
 			{title: str.KonfigSectionFiles, items: []*konfigItem{
 				{key: 'K', label: str.KonfigListingModeLabel, flips: true,

@@ -190,6 +190,7 @@ func CloneUser(u *user.User) *user.User {
 	// PublicKeys in particular must not share a backing array: removing a key
 	// shifts the slice in place, which would rewrite the copy F10 restores.
 	c.PublicKeys = slices.Clone(u.PublicKeys)
+	c.APIDevices = slices.Clone(u.APIDevices)
 	c.TaggedFileAreaIDs = slices.Clone(u.TaggedFileAreaIDs)
 	c.TaggedFileAreaTags = slices.Clone(u.TaggedFileAreaTags)
 	c.SeenNewscanNetworks = slices.Clone(u.SeenNewscanNetworks)
