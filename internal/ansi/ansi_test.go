@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -1495,5 +1496,34 @@ func TestEscapeScreenPipeCodes(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("expanded EscapeScreenPipeCodes(%q) = %q, want %q", tt.in, got, tt.want)
 		}
+	}
+}
+
+func TestFieldCoordsAtWidthFollowsAutowrap(t *testing.T) {
+	x := func(n int) string { return strings.Repeat("x", n) }
+	tests := []struct {
+		name string
+		art  string
+		want struct{ X, Y int }
+	}{
+		{"inside the row", x(5) + "~TO", struct{ X, Y int }{6, 1}},
+		{"just filled the row", x(80) + "~TO", struct{ X, Y int }{1, 2}},
+		{"past the row", x(81) + "~TO", struct{ X, Y int }{2, 2}},
+		{"two rows on", x(165) + "~TO", struct{ X, Y int }{6, 3}},
+		{"line feed then wrap", "a\n" + x(81) + "~TO", struct{ X, Y int }{2, 3}},
+		{"positioned first", "\x1b[5;79H" + x(3) + "~TO", struct{ X, Y int }{2, 6}},
+		{"cursor forward stops at the margin", "\x1b[200C~TO", struct{ X, Y int }{80, 1}},
+		{"colour codes take no room", "|04" + x(80) + "|07~TO", struct{ X, Y int }{1, 2}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			coords, err := FieldCoordsAtWidth([]byte(tt.art), 80)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := coords["TO"]; got != tt.want {
+				t.Errorf("TO at %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 }

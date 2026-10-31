@@ -211,6 +211,21 @@ func (e *MenuExecutor) setToastAnchor(nodeNumber int, res ansi.ProcessAnsiResult
 	sess.ClearToastAnchor()
 }
 
+// wrapToastAnchor moves the anchor in res to where it lands on a terminal that
+// wraps raw at width: art that runs past the last column continues a row down.
+func wrapToastAnchor(res *ansi.ProcessAnsiResult, raw []byte, width int) {
+	if _, ok := res.FieldCoords[toastAnchorCode]; !ok {
+		return
+	}
+	coords, err := ansi.FieldCoordsAtWidth(raw, width)
+	if err != nil {
+		return
+	}
+	if pos, ok := coords[toastAnchorCode]; ok {
+		res.FieldCoords[toastAnchorCode] = pos
+	}
+}
+
 // clearToastAnchor ends setToastAnchor when the menu stops waiting for input.
 func (e *MenuExecutor) clearToastAnchor(nodeNumber int) {
 	if sess := e.nodeSession(nodeNumber); sess != nil {
@@ -274,12 +289,7 @@ func (e *MenuExecutor) drawToastOverlay(s ssh.Session, w io.Writer, sess *sessio
 	full := string(toastPipes(text))
 	cfgRow, cfgCol := toastEdgeRow(cfg.ToastEdge, cfg.ToastOffset, height), cfg.ToastCol
 	if cfg.ToastCenter {
-		konfigWidth := 0
-		sess.Mutex.RLock()
-		if sess.User != nil {
-			konfigWidth = sess.User.ScreenWidth
-		}
-		sess.Mutex.RUnlock()
+		_, konfigWidth, _ := sess.ToastViewer()
 		cfgCol = toastCenterCol(columnWidth(ansi.StripAnsi(full), utf8.ValidString(full), mode), konfigWidth, width)
 	}
 	if r, c, ok := sess.ToastAnchor(); ok {

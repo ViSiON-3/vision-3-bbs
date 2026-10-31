@@ -56,6 +56,7 @@ type BbsSession struct {
 	toastWake       chan struct{}   // see ToastWake; guarded by Mutex
 	toastsReady     atomic.Bool     // see SetToastsReady
 	toastsAnnounced map[string]bool // see NoteToastAnnounced; guarded by Mutex
+	toastViewer     *toastViewer    // see SetToastViewer; guarded by Mutex
 	toastAnchorRow  int             // see SetToastAnchor; guarded by Mutex
 	toastAnchorCol  int             // see SetToastAnchor; guarded by Mutex
 	toastsShown     map[string]bool // see NoteToastShown; guarded by Mutex

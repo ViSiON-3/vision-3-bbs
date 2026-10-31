@@ -555,6 +555,21 @@ type ProcessAnsiResult struct {
 // and returns the final byte slice for display and the coordinate map.
 // Added outputMode parameter to control character encoding.
 func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (ProcessAnsiResult, error) {
+	return processAnsi(rawContent, outputMode, 0)
+}
+
+// FieldCoordsAtWidth returns the field coordinates of rawContent as drawn on a
+// terminal width columns wide, where text past the last column wraps to the next
+// row and cursor moves stop at it. ProcessAnsiAndExtractCoords counts columns
+// without a margin, as positioned fields in art that never reaches it expect.
+func FieldCoordsAtWidth(rawContent []byte, width int) (map[string]struct{ X, Y int }, error) {
+	res, err := processAnsi(rawContent, OutputModeCP437, width)
+	return res.FieldCoords, err
+}
+
+// processAnsi is ProcessAnsiAndExtractCoords; wrapWidth, when above zero, makes
+// the coordinates follow autowrap at that column.
+func processAnsi(rawContent []byte, outputMode OutputMode, wrapWidth int) (ProcessAnsiResult, error) {
 	result := ProcessAnsiResult{
 		FieldCoords: make(map[string]struct{ X, Y int }),
 		FieldColors: make(map[string]string),
@@ -683,6 +698,10 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 
 	i := 0
 	for i < len(content) {
+		if wrapWidth > 0 && currentX > wrapWidth {
+			currentX = 1
+			currentY++
+		}
 		b := content[i]
 		consumed := 1 // Default consumption
 
@@ -813,6 +832,9 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 						currentY += getParam(0, 1)
 					case 'C': // Cursor Forward
 						currentX += getParam(0, 1)
+						if wrapWidth > 0 && currentX > wrapWidth {
+							currentX = wrapWidth // the margin stops a cursor move
+						}
 					case 'D': // Cursor Back
 						currentX -= getParam(0, 1)
 						if currentX < 1 {
@@ -828,6 +850,9 @@ func ProcessAnsiAndExtractCoords(rawContent []byte, outputMode OutputMode) (Proc
 						}
 						if currentX < 1 {
 							currentX = 1
+						}
+						if wrapWidth > 0 && currentX > wrapWidth {
+							currentX = wrapWidth // the margin stops a cursor move
 						}
 					case 's': // Save cursor position (DEC)
 						// We might need to store this if |P uses it, but handle simple cases first

@@ -98,6 +98,10 @@ func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 		return ansi.ProcessAnsiResult{}, fmt.Errorf("failed to process screen file %s: %w", ansFilename, processErr)
 	}
 
+	// Art wraps at the terminal's edge, or at ArtWidth once fitArt has made that
+	// wrap explicit for a wider terminal.
+	wrapToastAnchor(&ansiProcessResult, rawAnsiContent, min(artWidth(terminal, st.termWidth), ansi.ArtWidth))
+
 	// DisplayBytes are still raw CP437 here, one byte per cell, so measure
 	// them as such before any UTF-8 conversion.
 	ansiProcessResult.DisplayBytes = fitArt(terminal, ansiProcessResult.DisplayBytes, st.termWidth, false)

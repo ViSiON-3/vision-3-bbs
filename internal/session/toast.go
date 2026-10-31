@@ -59,6 +59,35 @@ func (s *BbsSession) ToastAnnounced(id string) bool {
 	return s.toastsAnnounced[id]
 }
 
+// toastViewer is what toast delivery needs to know about the account right now.
+type toastViewer struct {
+	accessLevel int
+	screenWidth int
+}
+
+// SetToastViewer publishes the current values of the caller's record for other
+// sessions to read. User stays the record taken at login: the session goroutine
+// works on its own copy, changing it in place, so that copy cannot be shared.
+func (s *BbsSession) SetToastViewer(accessLevel, screenWidth int) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	s.toastViewer = &toastViewer{accessLevel: accessLevel, screenWidth: screenWidth}
+}
+
+// ToastViewer returns what SetToastViewer last published, or the login record's
+// values until it has run. ok is false when nobody is logged in.
+func (s *BbsSession) ToastViewer() (accessLevel, screenWidth int, ok bool) {
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
+	if s.toastViewer != nil {
+		return s.toastViewer.accessLevel, s.toastViewer.screenWidth, true
+	}
+	if s.User == nil {
+		return 0, 0, false
+	}
+	return s.User.AccessLevel, s.User.ScreenWidth, true
+}
+
 // SetToastAnchor sets where toasts go while the current menu screen is up.
 func (s *BbsSession) SetToastAnchor(row, col int) {
 	s.Mutex.Lock()
