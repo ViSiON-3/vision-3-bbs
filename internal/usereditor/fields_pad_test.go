@@ -3,12 +3,14 @@ package usereditor
 import (
 	"testing"
 	"unicode/utf8"
+
+	"github.com/mattn/go-runewidth"
 )
 
 // padRight and padLeft lay out the user editor's columns. The fields they
 // render — handle, real name, group location, private note — are edited in this
 // TUI without the BBS prompts' ASCII gate, so they can hold multi-byte text and
-// must be measured and cut in characters.
+// must be measured and cut in terminal cells.
 func TestPadHelpersUseColumnsNotBytes(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -32,7 +34,7 @@ func TestPadHelpersUseColumnsNotBytes(t *testing.T) {
 				if !utf8.ValidString(got) {
 					t.Fatalf("%s(%q, %d) produced invalid UTF-8: %q", fn.name, tt.s, tt.width, got)
 				}
-				if n := utf8.RuneCountInString(got); n != tt.width {
+				if n := runewidth.StringWidth(got); n != tt.width {
 					t.Errorf("%s(%q, %d) = %d columns, want %d (%q)", fn.name, tt.s, tt.width, n, tt.width, got)
 				}
 			})

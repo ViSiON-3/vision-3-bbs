@@ -8,6 +8,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/mattn/go-runewidth"
 )
 
 // viewEditScreen renders the per-user field editor.
@@ -216,8 +217,9 @@ func (m Model) renderField(fieldIdx int, f fieldDef, u *userType, budget int) (s
 
 	if isActive && m.mode == modeEdit {
 		// Highlighted field (ready to edit)
-		fillStr := strings.Repeat(string(fieldFillChar), max(0, f.Width-len(value)))
-		return fieldLabelStyle.Render(label) + fieldEditStyle.Render(value+fillStr), rawW
+		shown := runewidth.Truncate(value, f.Width, "")
+		fillStr := strings.Repeat(string(fieldFillChar), max(0, f.Width-runewidth.StringWidth(shown)))
+		return fieldLabelStyle.Render(label) + fieldEditStyle.Render(shown+fillStr), rawW
 	}
 
 	switch f.Type {
