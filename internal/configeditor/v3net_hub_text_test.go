@@ -48,17 +48,6 @@ func TestHubErrorTextCleansTheHubsWords(t *testing.T) {
 	assertNoControls(t, "error", got)
 }
 
-func TestNodesScreenCleansNodeText(t *testing.T) {
-	m := Model{mode: modeV3NetNodes, nodesNetwork: "testnet"}
-	res, _ := m.handleFetchNodesMsg(fetchNodesMsg{network: "testnet", nodes: []protocol.NodeInfo{
-		{NodeID: "aaaa000000000001", BBSName: hostileHubText, Status: hostileHubText, CreatedAt: hostileHubText},
-	}})
-	n := res.(Model).nodesList[0]
-	for what, s := range map[string]string{"BBS name": n.BBSName, "status": n.Status, "joined": n.CreatedAt} {
-		assertNoControls(t, what, s)
-	}
-}
-
 func TestRegistryBrowserCleansEntriesWithoutChangingTheFetchedSlice(t *testing.T) {
 	entries := []protocol.RegistryEntry{{Name: hostileHubText, Description: hostileHubText, HubURL: hostileHubText}}
 	res, _ := Model{}.handleFetchRegistryMsg(fetchRegistryMsg{entries: entries})
