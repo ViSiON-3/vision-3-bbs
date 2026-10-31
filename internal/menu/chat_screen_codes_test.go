@@ -166,7 +166,7 @@ func TestChatFallbackHeaderCannotRunScreenCodes(t *testing.T) {
 func TestChatArtHeaderShowsPipesOnce(t *testing.T) {
 	env := newMenuEnv(t)
 	r := chatcovChat(env, env.caller, "/topic x|CLy\r/q\r")
-	if !strings.Contains(r.raw, "Topic: x|CLy") || strings.Contains(r.raw, "x||CLy") {
+	if !chatcovHas(r, "Topic: x|CLy") || strings.Contains(r.raw, "x||CLy") {
 		t.Errorf("header does not show the topic as typed:\n%s", chatcovText(r))
 	}
 }
