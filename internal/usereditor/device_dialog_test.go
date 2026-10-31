@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -98,5 +99,24 @@ func TestCloneUserCopiesDevices(t *testing.T) {
 	u.APIDevices[0].Name = "changed"
 	if c.APIDevices[0].Name == "changed" {
 		t.Error("clone shares its device slice")
+	}
+}
+
+// A device or handle using double-width characters must not widen the dialog.
+func TestDeviceDialogFitsWideNames(t *testing.T) {
+	bob := pairedBob()
+	bob.Handle = strings.Repeat("界", 40)
+	bob.APIDevices[0].Name = strings.Repeat("界", 44)
+	m, _ := editorOver(t, &user.User{ID: 1, Handle: "Sysop", AccessLevel: 255}, bob)
+	m = press(t, m, tea.WindowSizeMsg{Width: 80, Height: 25}, key(tea.KeyDown), key(tea.KeyEnter))
+	m = focusField(t, m, qwkDevicesField)
+	m = press(t, m, key(tea.KeyEnter))
+	for i, line := range strings.Split(stripANSIGolden(m.View()), "\n") {
+		if !strings.Contains(line, "║") {
+			continue // the edit screen behind the dialog
+		}
+		if w := runewidth.StringWidth(line); w > 80 {
+			t.Errorf("row %d is %d cells wide: %q", i, w, line)
+		}
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -67,6 +68,12 @@ func (m Model) updateDeviceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// fitCells cuts and pads s to width terminal cells. A device names itself and may
+// use double-width characters, so counting runes would overflow the dialog.
+func fitCells(s string, width int) string {
+	return runewidth.FillRight(runewidth.Truncate(s, width, ""), width)
+}
+
 // overlayDeviceDialog draws the device dialog over background.
 func (m Model) overlayDeviceDialog(background string) string {
 	u := m.editingUser()
@@ -75,9 +82,9 @@ func (m Model) overlayDeviceDialog(background string) string {
 	inner := dialogW - 2
 	side := dialogBorderStyle.Render("║")
 	centered := func(text string) string {
-		text = truncateRunes(text, inner)
-		pad := (inner - len([]rune(text))) / 2
-		return strings.Repeat(" ", pad) + padRight(text, inner-pad)
+		text = runewidth.Truncate(text, inner, "")
+		pad := (inner - runewidth.StringWidth(text)) / 2
+		return strings.Repeat(" ", pad) + fitCells(text, inner-pad)
 	}
 
 	rows := []string{
@@ -94,7 +101,7 @@ func (m Model) overlayDeviceDialog(background string) string {
 		if !d.LastUsed.IsZero() {
 			last = d.LastUsed.Local().Format("2006-01-02")
 		}
-		row := padRight(truncateRunes(d.Name, nameW), nameW) + "  " + d.CreatedAt.Local().Format("2006-01-02") + "  " + padRight(last, 12)
+		row := fitCells(d.Name, nameW) + "  " + d.CreatedAt.Local().Format("2006-01-02") + "  " + padRight(last, 12)
 		style := dialogTextStyle
 		if i == m.keySelected {
 			style = buttonActiveStyle
