@@ -86,6 +86,7 @@ func TestChatNetworkTextCannotRunScreenCodes(t *testing.T) {
 	env := newMenuEnv(t)
 	n := chatcovFakeNet(env)
 	n.name = "net" + evil
+	env.e.ChatLeaves = chatcovLeaves{n.leaf()} // the leaf holds a copy of the name
 	n.rooms = []chat.RoomInfo{
 		{Name: "lobby", UserCount: 1, Topic: "pickertopic" + evil},
 		{Name: "room" + evil, UserCount: 1},
@@ -107,6 +108,7 @@ func TestChatNetworkTextCannotRunScreenCodes(t *testing.T) {
 	r := chatcovChat(env, env.caller, "1\r1\r/rooms\r/network\r\r\r/nosuch"+evil+"\r/q\r")
 	chatCheckNoScreenCodes(t, "network text", r.raw)
 	for _, want := range []string{
+		"net" + evil,
 		"pickertopic" + evil,
 		"room" + evil,
 		"user" + evil,
