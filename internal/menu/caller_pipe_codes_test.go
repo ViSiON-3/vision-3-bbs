@@ -148,6 +148,38 @@ func TestFileListContinuationsCannotRunScreenCodes(t *testing.T) {
 	chatCheckNoScreenCodes(t, "a description line", string(ansi.ReplacePipeCodes([]byte(more[0]))))
 }
 
+// A lightbar row is expanded a second time with the file's fields in. A handle in
+// the template has been through the first pass by then.
+func TestFileLightbarRowCannotRunTemplateHandleCodes(t *testing.T) {
+	first := string(ansi.ReplacePipeCodes([]byte("|04" + callerText(chatScreenCodesMsg) + " ^DESC")))
+	lb := &fileLightbar{
+		allFiles:             []file.FileRecord{{Filename: "A.ZIP", Description: "desc"}},
+		processedMidTemplate: lightbarMidTemplate(first),
+		currentUser:          &user.User{},
+		descColWidth:         40,
+	}
+	rows := lb.buildFileEntry(0, false, 1)
+	if len(rows) != 1 {
+		t.Fatalf("rows = %q", rows)
+	}
+	chatCheckNoScreenCodes(t, "a lightbar row", rows[0])
+	if !strings.Contains(rows[0], chatScreenCodesMsg) || !strings.Contains(rows[0], "desc") {
+		t.Errorf("row = %q", rows[0])
+	}
+}
+
+// An old rumor reaches art that has no "||" escape, so its pipes must not survive.
+func TestRandomRumorHasNoPipes(t *testing.T) {
+	dir := t.TempDir()
+	rd := &rumorsData{NextID: 2, Rumors: []RumorRecord{{ID: 1, Text: "old|CLrumor", MinLevel: 0}}}
+	if err := saveRumorsData(dir, rd); err != nil {
+		t.Fatal(err)
+	}
+	if got := getRandomRumorText(dir, 10); strings.Contains(got, "|") {
+		t.Errorf("rumor = %q", got)
+	}
+}
+
 func TestValidateHandleRejectsPipe(t *testing.T) {
 	for _, h := range []string{"|CL", "Bad|Guy", "abc|", "|04Red", "||x"} {
 		if validateHandle(h) {

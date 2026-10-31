@@ -537,7 +537,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			if edited.Sponsor != prevSponsor {
 				dirty = true
 			}
-			refreshFieldRow(9, fmt.Sprintf("|11S|07) Sponsor       : |15%s", edited.Sponsor))
+			refreshFieldRow(9, fmt.Sprintf("|11S|07) Sponsor       : |15%s", callerText(edited.Sponsor)))
 
 		case int('m'), int('M'):
 			prevMax := edited.MaxMessages

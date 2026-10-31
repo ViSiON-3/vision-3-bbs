@@ -29,6 +29,14 @@ func (lb *fileLightbar) errMsgPause(msg string) {
 	uiPause(1 * time.Second)
 }
 
+// lightbarMidTemplate readies the expanded FILELIST.MID for buildFileEntry, which
+// expands each row again once the file's fields are in. The tokens in the template
+// (|UH) are expanded by then, so a handle's escaped "|CL" reads as a code unless
+// the pipes left in the template are escaped for that second pass.
+func lightbarMidTemplate(processed string) string {
+	return ansi.EscapePipes(processed)
+}
+
 func (lb *fileLightbar) buildFileEntry(idx int, highlighted bool, maxLines int) []string {
 	if idx < 0 || idx >= len(lb.allFiles) {
 		return nil

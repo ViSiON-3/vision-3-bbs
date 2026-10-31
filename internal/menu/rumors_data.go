@@ -200,6 +200,8 @@ func getRandomRumorText(dataDir string, userLevel int) string {
 	}
 
 	idx := visible[rand.Intn(len(visible))]
-	// New rumors have their pipes replaced when posted; older ones may not.
-	return callerText(rd.Rumors[idx].Text)
+	// New rumors have their pipes replaced when posted; older ones may not. This
+	// also goes into art read by ProcessAnsiAndExtractCoords, which does not treat
+	// "||" as an escape, so doubling the pipes would not do here.
+	return rumorSanitize(rd.Rumors[idx].Text)
 }

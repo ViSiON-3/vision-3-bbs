@@ -280,8 +280,6 @@ func stringCatalog() []StringEntry {
 		{Label: "New User: PW Too Short", Key: "newUserPasswordTooShort", Description: "Shown when new user password is too short"},
 		{Label: "New User: PW Mismatch", Key: "newUserPasswordMismatch", Description: "Shown when password confirmation doesn't match"},
 		{Label: "New User: Invalid Name", Key: "newUserInvalidRealName", Description: "Shown when real name format is invalid"},
-		{Label: "New User: Name Has Pipe", Key: "newUserRealNamePipe", Description: "Shown when a real name contains a | character"},
-		{Label: "New User: Handle Has Pipe", Key: "newUserHandlePipe", Description: "Shown when a handle contains a | character"},
 		{Label: "New User: Too Many Try", Key: "newUserTooManyAttempts", Description: "Shown after too many invalid attempts"},
 		{Label: "New User: Created", Key: "newUserAccountCreated", Description: "Shown after account creation (pending validation)"},
 		{Label: "New User: Error", Key: "newUserCreationError", Description: "Shown on account creation error"},
@@ -620,7 +618,6 @@ func stringCatalog() []StringEntry {
 		{Label: "Konfig: Encoding Mismatch", Key: "konfigEncodingMismatch", Description: "Encoding forced to one this terminal is not using (%s=in use, %s=saved)"},
 		{Label: "Konfig: Name Required", Key: "konfigRealNameRequired", Description: "Real name left empty"},
 		{Label: "Konfig: Name Too Short", Key: "konfigRealNameTooShort", Description: "Real name too short (%d=minimum)"},
-		{Label: "Konfig: Name Has Pipe", Key: "konfigRealNamePipe", Description: "Real name containing a | character"},
 		{Label: "Konfig: Name Needs Space", Key: "konfigRealNameNeedsSpace", Description: "Real name without a space"},
 		{Label: "Konfig: Current Password", Key: "konfigPwCurrent", Description: "Prompt for the current password. Plain text, no colour codes"},
 		{Label: "Konfig: New Password", Key: "konfigPwNew", Description: "Prompt for the new password. Plain text, no colour codes"},
@@ -722,5 +719,10 @@ func stringCatalog() []StringEntry {
 		{Label: "Toast: Body Hint", Key: "toastBodyHint", Description: "Follows a toast whose details wait for the next menu"},
 		{Label: "Toast: Logon", Key: "toastLogon", Description: "Shown to other callers when someone logs on (%s=handle, %d=node)"},
 		{Label: "Toast: Logoff", Key: "toastLogoff", Description: "Shown to other callers when someone logs off (%s=handle, %d=node)"},
+
+		// Pipes in names. New entries go last: an entry's number is its position.
+		{Label: "New User: Name Has Pipe", Key: "newUserRealNamePipe", Description: "Shown when a real name contains a | character"},
+		{Label: "New User: Handle Has Pipe", Key: "newUserHandlePipe", Description: "Shown when a handle contains a | character"},
+		{Label: "Konfig: Name Has Pipe", Key: "konfigRealNamePipe", Description: "Real name containing a | character"},
 	}
 }

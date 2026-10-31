@@ -315,9 +315,9 @@ func (s *Screen) processPipeCodes(content []byte, subject, recipient, fromName s
 
 		// All substitutions in a single pass (including @I@ initial placeholder).
 		subs := map[byte]string{
-			'S': ansi.EscapeScreenPipeCodes(recipient),
-			'F': ansi.EscapeScreenPipeCodes(fromName),
-			'E': ansi.EscapeScreenPipeCodes(subject),
+			'S': headerField(recipient),
+			'F': headerField(fromName),
+			'E': headerField(subject),
 			'T': timeStr,
 			'D': dateStr,
 			'I': "   ", // initial value; updated dynamically by updateDynamicHeaderFields
@@ -336,33 +336,41 @@ func (s *Screen) processPipeCodes(content []byte, subject, recipient, fromName s
 		// WriteStringCP437 correctly round-trips UTF-8 → CP437 via the
 		// UnicodeToCP437 reverse map.
 		utf8Content := ansi.CP437BytesToUTF8(content)
-		str = string(ansi.ProcessEditorPlaceholders(utf8Content, subs))
+		str = string(ansi.ProcessEditorPlaceholders(s.expandHeaderTemplate(utf8Content), subs))
 	} else {
 		// --- Legacy |X format ---
 		anonStr := "No "
 		if isAnon {
 			anonStr = "Yes"
 		}
-		replacements := map[string]string{
-			"|S": ansi.EscapeScreenPipeCodes(recipient),
-			"|E": ansi.EscapeScreenPipeCodes(subject),
-			"|D": dateStr,
-			"|T": timeStr,
-			"|A": anonStr,
-			"|I": "   ", // Insert mode indicator (updated dynamically)
-			"|L": "   ", // Line number (updated dynamically)
-		}
-		for code, value := range replacements {
-			str = strings.ReplaceAll(str, code, value)
-		}
+		// One pass, so a subject holding "|S" is not filled in by the next code.
+		str = strings.NewReplacer(
+			"|S", headerField(recipient),
+			"|E", headerField(subject),
+			"|D", dateStr,
+			"|T", timeStr,
+			"|A", anonStr,
+			"|I", "   ", // Insert mode indicator (updated dynamically)
+			"|L", "   ", // Line number (updated dynamically)
+		).Replace(string(s.expandHeaderTemplate(content)))
 	}
 
-	// Strip geometry markers (|#N, |=N) — these are processed by parseGeometryMarkers
-	// and must not appear in the rendered output.
-	str = s.removeControlMarkers(str)
+	return []byte(str)
+}
 
-	// Process any residual |XX pipe color codes (no-op for raw ANSI files).
-	return ansi.ReplacePipeCodes([]byte(str))
+// headerField prepares a caller's text for the header: its colour codes are
+// expanded and its other pipes print as typed. It goes in after the template has
+// been expanded, so nothing reads it for codes or markers again, and the field
+// widths measure what shows.
+func headerField(value string) string {
+	return string(ansi.ReplacePipeCodes([]byte(ansi.EscapeScreenPipeCodes(value))))
+}
+
+// expandHeaderTemplate strips the geometry markers (|#N, |=N), which
+// parseGeometryMarkers has already read and must not appear in the rendered
+// output, and expands the template's pipe codes (no-op for raw ANSI files).
+func (s *Screen) expandHeaderTemplate(template []byte) []byte {
+	return ansi.ReplacePipeCodes([]byte(s.removeControlMarkers(string(template))))
 }
 
 // removeControlMarkers removes control markers like |#8 and |=15; from the template

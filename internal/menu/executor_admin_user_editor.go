@@ -75,20 +75,10 @@ func computeUserEditorLayout(termHeight int) userEditorLayout {
 	}
 }
 
-// visualPipeWidth returns the display width of s, treating |NN pipe color
-// codes as zero-width.
+// visualPipeWidth returns the display width of s: colour codes take no room and
+// an escaped "||" takes one column.
 func visualPipeWidth(s string) int {
-	width := 0
-	i := 0
-	for i < len(s) {
-		if s[i] == '|' && i+2 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' && s[i+2] >= '0' && s[i+2] <= '9' {
-			i += 3 // Skip pipe code
-		} else {
-			width++
-			i++
-		}
-	}
-	return width
+	return pipeDisplayLen(s)
 }
 
 // userEditorState holds the dependencies and mutable state for a single

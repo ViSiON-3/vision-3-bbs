@@ -102,7 +102,8 @@ func runListFilesLightbar(st *fileListState) (*user.User, string, error) {
 	headerLines, botContent, botLineCount, reservedBottom, visibleRows, fileAreaStartRow, cmdBarRow, separatorRow :=
 		computeVerticalLayout(termHeight, st.topTemplateBytes, st.processedBotTemplate, st.totalFiles, fconfpath)
 
-	ansiRe, descPrefixLen, descColWidth, descIndentStr := computeDescMetrics(st.processedMidTemplate, termWidth)
+	midTemplate := lightbarMidTemplate(st.processedMidTemplate)
+	ansiRe, descPrefixLen, descColWidth, descIndentStr := computeDescMetrics(midTemplate, termWidth)
 
 	lb := &fileLightbar{
 		e:                    st.e,
@@ -118,7 +119,7 @@ func runListFilesLightbar(st *fileListState) (*user.User, string, error) {
 		outputMode:           st.outputMode,
 		ih:                   ih,
 		topTemplateBytes:     st.topTemplateBytes,
-		processedMidTemplate: st.processedMidTemplate,
+		processedMidTemplate: midTemplate,
 		processedBotTemplate: st.processedBotTemplate,
 		filesPerPage:         st.filesPerPage,
 		totalFiles:           st.totalFiles,

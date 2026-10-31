@@ -329,22 +329,28 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 			if lightbar && i == selected {
 				color, plain = hi, true
 			}
-			if plain || cols > 1 {
+			// write expands the cell again, so pipes left after this pass, such
+			// as a handle's escaped "|CL", are escaped for it.
+			expanded := plain || cols > 1
+			if expanded {
 				s = string(ansi.ReplacePipeCodes([]byte(s)))
 			}
 			if plain {
 				s = doorMenuSGR.ReplaceAllString(s, "")
 			}
 			if cols == 1 {
+				if expanded {
+					s = ansi.EscapePipes(s)
+				}
 				return color + s + "\x1b[0m"
 			}
-			return color + fit(s)
+			return color + ansi.EscapePipes(fit(s))
 		}
 		if heading != "" && onPage > 0 {
 			head := expand(heading, page+1, pages)
 			if cols > 1 {
 				one := string(ansi.ReplacePipeCodes([]byte(head)))
-				head = strings.Repeat(fit(one), (onPage+rowsOnPage-1)/rowsOnPage)
+				head = strings.Repeat(ansi.EscapePipes(fit(one)), (onPage+rowsOnPage-1)/rowsOnPage)
 			}
 			if err := block(head); err != nil {
 				return c.currentUser, "", err
