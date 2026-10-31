@@ -34,16 +34,19 @@ func (p Problem) Error() string {
 // arguments its call site supplies, and returns one Problem per mismatch.
 //
 // values holds what strings.json carries, fallbacks holds the defaults the
-// runtime substitutes for an empty field, and defaults holds the shipped
-// template. The effective value is the configured one where it is non-empty and
-// the fallback otherwise, matching what the BBS will actually print.
+// runtime substitutes for an empty field, missing holds the defaults it uses
+// only for a key absent from the file, and defaults holds the shipped template.
+// The effective value is the configured one where it is non-empty, the missing
+// default for an absent key, and the fallback otherwise, matching what the BBS
+// will actually print.
 //
 // An empty effective value is a problem in its own right for a formatted key.
 // Call sites pass their arguments unconditionally, so fmt renders
 // "%!(EXTRA string=...)" onto the caller's screen rather than printing nothing.
-// A key absent from defaults cannot be checked and is skipped rather than
-// guessed at.
-func Validate(values, fallbacks, defaults map[string]string) []Problem {
+// The exception is a key in missing that the file sets blank: that switches the
+// string off, and its call sites check for it. A key absent from defaults cannot
+// be checked and is skipped rather than guessed at.
+func Validate(values, fallbacks, missing, defaults map[string]string) []Problem {
 	var problems []Problem
 
 	for _, key := range FormattedKeys {
@@ -51,7 +54,7 @@ func Validate(values, fallbacks, defaults map[string]string) []Problem {
 		if !ok || def == "" {
 			continue // nothing to compare against
 		}
-		value := effectiveValue(key, values, fallbacks)
+		value := effectiveValue(key, values, fallbacks, missing)
 		want, err := formatspec.Parse(def)
 		if err != nil {
 			// A malformed shipped default is a bug in the template, reported
@@ -64,7 +67,7 @@ func Validate(values, fallbacks, defaults map[string]string) []Problem {
 			continue
 		}
 		if value == "" {
-			if want.Arity() > 0 {
+			if _, canSwitchOff := missing[key]; !canSwitchOff && want.Arity() > 0 {
 				problems = append(problems, Problem{
 					Key:      key,
 					Expected: want.String(),
@@ -160,10 +163,15 @@ func formattedPart(key, value string) (string, bool) {
 }
 
 // effectiveValue returns what the BBS will actually print for a key: the
-// configured value where it is non-empty, otherwise the runtime's fallback.
-func effectiveValue(key string, values, fallbacks map[string]string) string {
-	if v := values[key]; v != "" {
+// configured value where it is non-empty, the missing-key default where the key
+// is absent and has one, otherwise the runtime's fallback.
+func effectiveValue(key string, values, fallbacks, missing map[string]string) string {
+	v, present := values[key]
+	if v != "" {
 		return v
+	}
+	if m := missing[key]; !present && m != "" {
+		return m
 	}
 	return fallbacks[key]
 }

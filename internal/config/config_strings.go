@@ -64,7 +64,7 @@ func warnFormatMismatches(data []byte, filePath string) {
 	if len(defaults) == 0 {
 		return
 	}
-	for _, p := range stringformat.Validate(values, StringFallbacks, defaults) {
+	for _, p := range stringformat.Validate(values, StringFallbacks, StringMissingDefaults, defaults) {
 		slog.Warn("configured string does not match the arguments the BBS passes it; "+
 			"it will print a malformed message until corrected",
 			"path", filePath, "key", p.Key, "expected", p.Expected, "problem", p.Detail)
@@ -382,7 +382,9 @@ var StringFallbacks = map[string]string{
 
 // StringMissingDefaults maps a strings.json key to the value the runtime uses
 // when the key is absent from the file. Unlike StringFallbacks, a key that is
-// present but blank stays blank, so the sysop can switch the string off.
+// present but blank stays blank, so the sysop can switch the string off. A
+// formatted string listed here must have call sites that check for blank before
+// passing it to fmt, because stringformat.Validate accepts it blank.
 var StringMissingDefaults = map[string]string{
 	// Shown when NICETRY.ANS is missing and a caller has used up their
 	// password tries (#726). Blank means no notice before the disconnect.
