@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/registry"
 )
@@ -80,11 +81,19 @@ func (m Model) handleFetchRegistryMsg(msg fetchRegistryMsg) (tea.Model, tea.Cmd)
 		if errors.As(msg.err, &urlErr) {
 			cause = urlErr.Err
 		}
-		m.regBrowserError = fmt.Sprintf("Could not fetch registry: %v", sanitizeRegistryField(cause.Error()))
+		m.regBrowserError = fmt.Sprintf("Could not fetch registry: %v", ansi.OneLine(cause.Error()))
 		return m, nil
 	}
 	m.regBrowserError = ""
-	m.regBrowserEntries = msg.entries
+	// Registry text reaches the terminal as written, so its control characters
+	// go here, on the way in. The cache behind registry.Fetch shares this slice.
+	m.regBrowserEntries = make([]protocol.RegistryEntry, len(msg.entries))
+	for i, e := range msg.entries {
+		e.Name = ansi.OneLine(e.Name)
+		e.Description = ansi.OneLine(e.Description)
+		e.HubURL = ansi.OneLine(e.HubURL)
+		m.regBrowserEntries[i] = e
+	}
 	return m, nil
 }
 

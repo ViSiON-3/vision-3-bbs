@@ -35,7 +35,7 @@ func (m Model) viewV3NetNodes() string {
 			n := m.nodesList[i]
 			joined := ansi.TruncateRunes(n.CreatedAt, 10, "") // date only
 			return fmt.Sprintf("   %-16s %-20s %-8s %s",
-				n.NodeID, padRight(sanitizeRegistryField(n.BBSName), 20), padRight(n.Status, 8), joined)
+				ansi.OneLine(n.NodeID), padRight(n.BBSName, 20), padRight(n.Status, 8), joined)
 		})
 	lb.bottomBorder()
 	lb.bgRows(lb.bottomPad)

@@ -107,9 +107,9 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 			// Simplify common error for display.
 			errStr := fetchErrors[0]
 			if strings.Contains(errStr, "status 404") {
-				msg = fmt.Sprintf("|04No area list published for %s yet.|07", networks[0])
+				msg = fmt.Sprintf("|04No area list published for %s yet.|07", v3netText(networks[0]))
 			} else {
-				msg = fmt.Sprintf("|04Could not fetch area list: %s|07", errStr)
+				msg = fmt.Sprintf("|04Could not fetch area list: %s|07", v3netText(errStr))
 			}
 		}
 		return v3netAreasShowMessage(e, terminal, s, outputMode, termWidth, termHeight, msg)
@@ -164,10 +164,12 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 		if ent.subscribed {
 			status = "[*]"
 		}
-		tag := padRight(truncateStr(ent.area.Tag, 24), 24)
-		name := padRight(truncateStr(ent.area.Name, 28), 28)
-		access := padRight(ent.area.Access.Mode, 8)
-		net := ent.network
+		// This row is written without expanding pipe codes, so only control
+		// characters need removing: the hub's text could otherwise run them.
+		tag := padRight(truncateStr(ansi.OneLine(ent.area.Tag), 24), 24)
+		name := padRight(truncateStr(ansi.OneLine(ent.area.Name), 28), 28)
+		access := padRight(ansi.OneLine(ent.area.Access.Mode), 8)
+		net := ansi.OneLine(ent.network)
 
 		line := fmt.Sprintf(" %s %-24s %-28s %-8s %s", status, tag, name, access, net)
 		maxW := termWidth - 1 // leave 1 col to prevent terminal auto-wrap
@@ -194,7 +196,7 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 		buf.WriteString(ansi.MoveCursor(1, 1))
 		header := "|12V3Net Area Subscriptions|07"
 		if len(networks) == 1 {
-			header = fmt.Sprintf("|12V3Net Areas: %s|07", networks[0])
+			header = fmt.Sprintf("|12V3Net Areas: %s|07", v3netText(networks[0]))
 		}
 		buf.Write(ansi.ReplacePipeCodes([]byte(header)))
 
@@ -320,16 +322,16 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 			if ent.subscribed {
 				// Unsubscribe: remove leaf config.
 				if err := v3netUnsubscribe(e.RootConfigPath, ent.network, ent.area.Tag); err != nil {
-					statusMsg = fmt.Sprintf("|04Unsubscribe failed: %s|07", err)
+					statusMsg = fmt.Sprintf("|04Unsubscribe failed: %s|07", v3netText(err.Error()))
 				} else {
 					ent.subscribed = false
 					subSet[ent.network+":"+ent.area.Tag] = false
-					statusMsg = fmt.Sprintf("|10Unsubscribed from %s. Restart to apply.|07", ent.area.Tag)
+					statusMsg = fmt.Sprintf("|10Unsubscribed from %s. Restart to apply.|07", v3netText(ent.area.Tag))
 					if e.V3NetReload != nil {
 						if rerr := e.V3NetReload(); rerr != nil {
-							statusMsg = fmt.Sprintf("|10Unsubscribed from %s.|07 |04Live apply failed (%s); restart to apply.|07", ent.area.Tag, rerr)
+							statusMsg = fmt.Sprintf("|10Unsubscribed from %s.|07 |04Live apply failed (%s); restart to apply.|07", v3netText(ent.area.Tag), v3netText(rerr.Error()))
 						} else {
-							statusMsg = fmt.Sprintf("|10Unsubscribed from %s. Now inactive.|07", ent.area.Tag)
+							statusMsg = fmt.Sprintf("|10Unsubscribed from %s. Now inactive.|07", v3netText(ent.area.Tag))
 						}
 					}
 				}
@@ -340,23 +342,23 @@ func runV3NetAreas(c *cmdCtx, args string) (*user.User, string, error) {
 				// if one exists).
 				autoJoin := true
 				if !v3netHasLeaf(e.RootConfigPath, ent.network) {
-					yes, perr := e.PromptYesNo(s, terminal, fmt.Sprintf("|15Add |14%s|15 areas to users' newscan by default?", ent.network), outputMode, nodeNumber, termWidth, termHeight, true)
+					yes, perr := e.PromptYesNo(s, terminal, fmt.Sprintf("|15Add |14%s|15 areas to users' newscan by default?", v3netText(ent.network)), outputMode, nodeNumber, termWidth, termHeight, true)
 					if perr != nil {
 						return nil, "", perr
 					}
 					autoJoin = yes
 				}
 				if err := v3netSubscribe(e.RootConfigPath, e.MessageMgr, ent.network, ent.hubURL, ent.area, autoJoin); err != nil {
-					statusMsg = fmt.Sprintf("|04Subscribe failed: %s|07", err)
+					statusMsg = fmt.Sprintf("|04Subscribe failed: %s|07", v3netText(err.Error()))
 				} else {
 					ent.subscribed = true
 					subSet[ent.network+":"+ent.area.Tag] = true
-					statusMsg = fmt.Sprintf("|10Subscribed to %s. Restart to activate.|07", ent.area.Tag)
+					statusMsg = fmt.Sprintf("|10Subscribed to %s. Restart to activate.|07", v3netText(ent.area.Tag))
 					if e.V3NetReload != nil {
 						if rerr := e.V3NetReload(); rerr != nil {
-							statusMsg = fmt.Sprintf("|10Subscribed to %s.|07 |04Live apply failed (%s); restart to activate.|07", ent.area.Tag, rerr)
+							statusMsg = fmt.Sprintf("|10Subscribed to %s.|07 |04Live apply failed (%s); restart to activate.|07", v3netText(ent.area.Tag), v3netText(rerr.Error()))
 						} else {
-							statusMsg = fmt.Sprintf("|10Subscribed to %s. Now active.|07", ent.area.Tag)
+							statusMsg = fmt.Sprintf("|10Subscribed to %s. Now active.|07", v3netText(ent.area.Tag))
 						}
 					}
 				}
@@ -388,7 +390,14 @@ func v3netHasLeaf(configPath, network string) bool {
 // autoJoin sets the newscan-default flag for a newly created leaf; when a
 // leaf already exists for the network, its own AutoJoinAreas setting is used
 // instead so the sysop's original choice is respected.
+//
+// The tag and name come from the hub. The tag names files and config entries, so
+// one that is not a valid tag is refused. The name is kept as a local area name
+// that callers' screens expand, so it is stored as plain text.
 func v3netSubscribe(configPath string, mgr *message.MessageManager, network, hubURL string, area protocol.Area, autoJoin bool) error {
+	if err := protocol.ValidateAreaTag(area.Tag); err != nil {
+		return err
+	}
 	effectiveAutoJoin := autoJoin
 	err := config.UpdateV3NetConfig(configPath, func(cfg *config.V3NetConfig) error {
 		// Check if already subscribed.
@@ -435,7 +444,7 @@ func v3netSubscribe(configPath string, mgr *message.MessageManager, network, hub
 
 		_, err := mgr.AddArea(message.MessageArea{
 			Tag:          area.Tag,
-			Name:         area.Name,
+			Name:         ansi.PlainName(area.Name),
 			AreaType:     "v3net",
 			Network:      network,
 			EchoTag:      area.Tag,

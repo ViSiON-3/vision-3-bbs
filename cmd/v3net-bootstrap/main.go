@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
@@ -116,7 +117,7 @@ func main() {
 
 	// Diagnostic output only: cap the read; truncation is acceptable.
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	fmt.Printf("Response: %d %s\n", resp.StatusCode, string(respBody))
+	fmt.Printf("Response: %d %s\n", resp.StatusCode, ansi.OneLine(string(respBody)))
 
 	if resp.StatusCode != http.StatusOK {
 		os.Exit(1)

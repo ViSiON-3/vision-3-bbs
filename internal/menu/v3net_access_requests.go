@@ -61,9 +61,9 @@ func runV3NetAccessRequests(c *cmdCtx, args string) (*user.User, string, error) 
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  #  NETWORK     AREA TAG          BBS NAME              NODE ID   REQUESTED|07\r\n")))
 		now := time.Now()
 		for i, r := range rows {
-			line := fmt.Sprintf("|15%3d|07  %-10s  %-16s  %-20s  %-8s  %s",
-				i+1, truncateStr(r.network, 10), truncateStr(r.tag, 16),
-				truncateStr(r.req.BBSName, 20), truncateStr(r.req.NodeID, 8), v3netAgo(r.req.RequestedAt, now))
+			line := fmt.Sprintf("|15%3d|07  %s  %s  %s  %s  %s",
+				i+1, v3netCell(r.network, 10), v3netCell(r.tag, 16),
+				v3netCell(r.req.BBSName, 20), v3netCell(r.req.NodeID, 8), v3netText(v3netAgo(r.req.RequestedAt, now)))
 			buf.Write(ansi.ReplacePipeCodes([]byte(line + "\r\n")))
 		}
 		switch {
@@ -73,7 +73,7 @@ func runV3NetAccessRequests(c *cmdCtx, args string) (*user.User, string, error) 
 			buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|08  No pending access requests for the %d area(s) you manage.|07\r\n", len(managed)))))
 		}
 		for _, msg := range errs {
-			buf.Write(ansi.ReplacePipeCodes([]byte("|04  " + truncateStr(msg, termWidth-4) + "|07\r\n")))
+			buf.Write(ansi.ReplacePipeCodes([]byte("|04  " + v3netClip(msg, termWidth-4) + "|07\r\n")))
 		}
 		buf.WriteString("\r\n")
 		buf.Write(ansi.ReplacePipeCodes([]byte(v3netRule(termWidth))))
@@ -115,17 +115,17 @@ func runV3NetAccessRequests(c *cmdCtx, args string) (*user.User, string, error) 
 		case 'A':
 			err = svc.ApproveAccess(ctx, row.network, row.tag, []string{row.req.NodeID})
 			if err == nil {
-				status = fmt.Sprintf("|10Approved %s for %s.|07", row.req.BBSName, row.tag)
+				status = fmt.Sprintf("|10Approved %s for %s.|07", v3netText(row.req.BBSName), v3netText(row.tag))
 			}
 		case 'D':
 			err = svc.DenyAccess(ctx, row.network, row.tag, []string{row.req.NodeID}, reason)
 			if err == nil {
-				status = fmt.Sprintf("|14Denied %s for %s and added it to the deny list.|07", row.req.BBSName, row.tag)
+				status = fmt.Sprintf("|14Denied %s for %s and added it to the deny list.|07", v3netText(row.req.BBSName), v3netText(row.tag))
 			}
 		}
 		cancel()
 		if err != nil {
-			status = "|04" + truncateStr(err.Error(), termWidth-4) + "|07"
+			status = "|04" + v3netClip(err.Error(), termWidth-4) + "|07"
 		}
 	}
 }

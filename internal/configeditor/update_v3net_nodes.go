@@ -3,6 +3,7 @@ package configeditor
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -39,7 +40,15 @@ func (m Model) handleFetchNodesMsg(msg fetchNodesMsg) (tea.Model, tea.Cmd) {
 		m.message = errText
 		return m, nil
 	}
+	// Nodes choose their own names, and the terminal gets them as written. The
+	// node ID stays exact in the list because actions send it back to the hub;
+	// the view draws a clean copy of it.
 	m.nodesList = msg.nodes
+	for i := range m.nodesList {
+		m.nodesList[i].BBSName = ansi.OneLine(m.nodesList[i].BBSName)
+		m.nodesList[i].Status = ansi.OneLine(m.nodesList[i].Status)
+		m.nodesList[i].CreatedAt = ansi.OneLine(m.nodesList[i].CreatedAt)
+	}
 	m.nodesCursor = 0
 	m.nodesScroll = 0
 	m.nodesError = ""

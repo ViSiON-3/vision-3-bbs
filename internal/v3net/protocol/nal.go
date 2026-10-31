@@ -120,6 +120,19 @@ func nameCharsValid(s string) bool {
 	return true
 }
 
+// ValidateAreaText checks the text a node proposes for an area. Every board that
+// lists the area shows it, so it cannot hold control characters or pipes, which
+// BBS screens read as codes. Boards still clean what they display, because a NAL
+// can hold areas created before this check.
+func ValidateAreaText(field, value string) error {
+	for _, r := range value {
+		if r == '|' || r < 0x20 || (r >= 0x7F && r <= 0x9F) {
+			return fmt.Errorf("area %s cannot contain pipes or control characters", field)
+		}
+	}
+	return nil
+}
+
 // ValidateAccessMode checks that a mode string is one of the valid access modes.
 func ValidateAccessMode(mode string) error {
 	switch mode {

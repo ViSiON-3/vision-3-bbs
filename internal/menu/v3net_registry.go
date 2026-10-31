@@ -40,7 +40,7 @@ func runV3NetRegistry(c *cmdCtx, _ string) (*user.User, string, error) {
 		regURL := e.V3NetStatus.RegistryURL()
 
 		buf.Write(ansi.ReplacePipeCodes([]byte(
-			fmt.Sprintf("|08  Source: |07%s|07\r\n\r\n", regURL))))
+			fmt.Sprintf("|08  Source: |07%s|07\r\n\r\n", v3netText(regURL)))))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
@@ -48,7 +48,7 @@ func runV3NetRegistry(c *cmdCtx, _ string) (*user.User, string, error) {
 		networks, err := registry.Fetch(ctx, regURL)
 		if err != nil {
 			buf.Write(ansi.ReplacePipeCodes([]byte(
-				fmt.Sprintf("|04  Error fetching registry: %s|07\r\n", err))))
+				fmt.Sprintf("|04  Error fetching registry: %s|07\r\n", v3netText(err.Error())))))
 		} else if len(networks) == 0 {
 			buf.Write(ansi.ReplacePipeCodes([]byte(
 				"|08  No networks listed in registry.|07\r\n")))
@@ -70,10 +70,10 @@ func runV3NetRegistry(c *cmdCtx, _ string) (*user.User, string, error) {
 				if subscribed[net.Name] {
 					marker = "|10* "
 				}
-				name := truncateStr(net.Name, 18)
-				desc := truncateStr(net.Description, 28)
-				hub := truncateStr(net.HubURL, 24)
-				line := fmt.Sprintf("%s|11%-18s |07%-28s |08%s|07\r\n",
+				name := v3netCell(net.Name, 18)
+				desc := v3netCell(net.Description, 28)
+				hub := v3netClip(net.HubURL, 24)
+				line := fmt.Sprintf("%s|11%s |07%s |08%s|07\r\n",
 					marker, name, desc, hub)
 				buf.Write(ansi.ReplacePipeCodes([]byte(line)))
 			}

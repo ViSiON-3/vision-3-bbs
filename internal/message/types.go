@@ -1,9 +1,26 @@
 package message
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
+
+// UnmarshalJSON reads an area. A V3Net area's name may have been copied from a
+// hub by a build that stored it as sent, and screens expand area names, so its
+// screen codes and control characters are made harmless wherever it is loaded.
+func (a *MessageArea) UnmarshalJSON(data []byte) error {
+	type plain MessageArea
+	if err := json.Unmarshal(data, (*plain)(a)); err != nil {
+		return err
+	}
+	if a.AreaType == "v3net" {
+		a.Name = ansi.DefangScreenCodes(a.Name)
+	}
+	return nil
+}
 
 // MessageArea defines the structure for a message base/forum.
 type MessageArea struct {
