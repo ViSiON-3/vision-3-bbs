@@ -138,6 +138,9 @@ type InputHandler struct {
 	// move the deadline, so a stream of toasts cannot keep an idle caller on.
 	toastWake <-chan struct{}
 	toastFn   func()
+	// screenRedraw, when set, redraws the screen waiting on this read without
+	// relying on the session's catch-up buffer.
+	screenRedraw func()
 }
 
 // SetBreakIn registers fn to run whenever ch fires while a read is waiting
@@ -181,6 +184,13 @@ func (ih *InputHandler) SetToastHook(ch <-chan struct{}, fn func()) {
 	ih.toastWake = ch
 	ih.toastFn = fn
 }
+
+// SetScreenRedraw names how the screen waiting on the next read redraws itself,
+// or clears it with nil. Only the screen's own goroutine may call it.
+func (ih *InputHandler) SetScreenRedraw(fn func()) { ih.screenRedraw = fn }
+
+// ScreenRedraw returns what SetScreenRedraw set.
+func (ih *InputHandler) ScreenRedraw() func() { return ih.screenRedraw }
 
 // toastChan is the channel to select on, or nil when the wait must not service
 // the toast hook.

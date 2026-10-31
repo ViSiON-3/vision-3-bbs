@@ -23,7 +23,9 @@ import (
 
 // Toasts reach a caller in one of two ways. While a read waits for a key, the
 // screen's owner is idle, so the input handler's toast hook draws the toast on
-// the configured position and replays the tap's catch-up buffer to restore the screen.
+// the configured position and restores the screen: by its own redraw if it has
+// one, otherwise by replaying the tap's catch-up buffer. Teleconference takes
+// them as lines in its scroll region instead.
 // At a menu prompt, or at login, toasts are written inline and bodies are
 // shown. Whatever cannot be drawn yet stays queued for the next of those.
 
@@ -129,22 +131,33 @@ func (e *MenuExecutor) nextOverlayToast(sess *session.BbsSession) (t toast.Toast
 
 // serviceToasts is the input handler's toast hook. It runs on the reading
 // goroutine, so the screen's owner is waiting for this key and draws nothing
-// meanwhile. Only ModeBBS screens qualify: teleconference draws from a second
-// goroutine, and doors and transfers do not read through this hook at all.
+// meanwhile. Only ModeBBS screens get the overlay: teleconference draws from a
+// second goroutine, and doors and transfers do not read through this hook at all.
 func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, sess *session.BbsSession) {
 	tap := tapOf(s)
+	if !sess.ToastsReady() || tap == nil {
+		return
+	}
+	if tap.Mode() == snoop.ModeTeleconf {
+		e.serviceToastLines(s, sess)
+		return
+	}
 	v, hasOut := sessionOutputs.Load(s)
-	if !sess.ToastsReady() || tap == nil || !hasOut || tap.Mode() != snoop.ModeBBS {
+	if !hasOut || tap.Mode() != snoop.ModeBBS {
 		return
 	}
 	w := v.(io.Writer)
 	for {
 		// The snapshot must predate the overlay, or the replay would redraw it.
-		// One that has overflowed cannot restore the screen, so the toast waits
-		// for the next menu prompt.
-		snap, overflowed := tap.Snapshot()
-		if overflowed {
-			return
+		// One that has overflowed cannot restore the screen, so without a redraw
+		// of its own the toast waits for the next menu prompt.
+		redraw := ih.ScreenRedraw()
+		var snap []byte
+		if redraw == nil {
+			var overflowed bool
+			if snap, overflowed = tap.Snapshot(); overflowed {
+				return
+			}
 		}
 		t, stored, ok := e.nextOverlayToast(sess)
 		if !ok {
@@ -161,15 +174,60 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 			return
 		}
 		keyed := ih.WaitForInput(toastDwell)
-		// Same reset as the end of sysop chat: the snapshot carries its own
-		// scroll region, colours and cursor position.
-		_, _ = fmt.Fprint(w, "\x1b[r\x1b[0m\x1b[2J\x1b[H") // best-effort display
-		if _, err := w.Write(snap); err != nil {
-			return
+		if redraw != nil {
+			redraw()
+		} else {
+			// Same reset as the end of sysop chat: the snapshot carries its own
+			// scroll region, colours and cursor position.
+			_, _ = fmt.Fprint(w, "\x1b[r\x1b[0m\x1b[2J\x1b[H") // best-effort display
+			if _, err := w.Write(snap); err != nil {
+				return
+			}
 		}
 		if keyed {
 			time.AfterFunc(toastRearm, sess.WakeToasts)
 			return
+		}
+	}
+}
+
+// toastLineScreen is a screen that takes toasts as lines of its own.
+type toastLineScreen struct {
+	ready func() bool       // false holds toasts, as while chat is paged back
+	write func(text string) // shows one line
+}
+
+// sessionToastLines holds the toastLineScreen of each session in teleconference.
+var sessionToastLines sync.Map
+
+// setToastLineScreen gives s a toastLineScreen until the returned func runs, and
+// wakes the session for whatever was held until now.
+func setToastLineScreen(s ssh.Session, sess *session.BbsSession, screen toastLineScreen) (clear func()) {
+	key := unwrapSession(s)
+	sessionToastLines.Store(key, screen)
+	if sess != nil {
+		sess.WakeToasts()
+	}
+	return func() { sessionToastLines.Delete(key) }
+}
+
+// serviceToastLines hands waiting toasts to the session's toastLineScreen. With
+// none, as at chat's room pickers, they wait.
+func (e *MenuExecutor) serviceToastLines(s ssh.Session, sess *session.BbsSession) {
+	v, ok := sessionToastLines.Load(unwrapSession(s))
+	if !ok {
+		return
+	}
+	screen := v.(toastLineScreen)
+	for screen.ready() {
+		t, stored, ok := e.nextOverlayToast(sess)
+		if !ok {
+			return
+		}
+		screen.write(e.toastText(t))
+		e.settleOverlayToast(sess, t, stored)
+		if stored {
+			e.toastStore().Release(t.ID)
 		}
 	}
 }
@@ -233,6 +291,19 @@ func toastPlacement(cfgRow, cfgCol, width, height int) (row, col int) {
 	return row, col
 }
 
+// toastText is t as one line of pipe-coded text, formatted for the screen.
+func (e *MenuExecutor) toastText(t toast.Toast) string {
+	st := e.Strings()
+	text := toastLine(t.Text)
+	if t.Body != "" {
+		text += st.ToastBodyHint
+	}
+	if st.ToastOverlayFormat != "" {
+		text = fmt.Sprintf(st.ToastOverlayFormat, text)
+	}
+	return text
+}
+
 // drawToastOverlay writes t at the configured position, leaving the cursor and colours
 // where they were.
 func (e *MenuExecutor) drawToastOverlay(s ssh.Session, w io.Writer, sess *session.BbsSession, t toast.Toast) error {
@@ -243,16 +314,8 @@ func (e *MenuExecutor) drawToastOverlay(s ssh.Session, w io.Writer, sess *sessio
 	if height <= 0 {
 		height = 24
 	}
-	st := e.Strings()
-	text := toastLine(t.Text)
-	if t.Body != "" {
-		text += st.ToastBodyHint
-	}
-	if st.ToastOverlayFormat != "" {
-		text = fmt.Sprintf(st.ToastOverlayFormat, text)
-	}
 	cfg := e.GetServerConfig()
-	line := string(ansi.ReplacePipeCodes([]byte(text)))
+	line := string(ansi.ReplacePipeCodes([]byte(e.toastText(t))))
 	cfgRow, cfgCol := toastEdgeRow(cfg.ToastEdge, cfg.ToastOffset, height), cfg.ToastCol
 	if cfg.ToastCenter {
 		konfigWidth := 0

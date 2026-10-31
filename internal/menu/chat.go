@@ -464,12 +464,22 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	scr.redrawRegion = drawRegionLocked
 
+	// wakeToastsLocked calls for toasts held while the view was paged back.
+	wakeToastsLocked := func() {
+		if sess := e.nodeSession(nodeNumber); sess != nil {
+			sess.WakeToasts()
+		}
+	}
+
 	// scr.page moves the view a page up or down the scrollback, with the
 	// hint bar saying when it is off the live view. Called with rawMu held.
 	scr.page = func(dir int) {
 		if scrollback.page(dir, scr.scrollBottom()-chatTop+1) {
 			drawRegionLocked()
 			drawStatusBarLocked()
+			if scrollback.live() {
+				wakeToastsLocked()
+			}
 		}
 	}
 
@@ -560,6 +570,17 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	// Draw initial input prompt. chatReadLine will manage it from here on.
 	chatPrompt := fmt.Sprintf("<%s> ", handle)
 	rawWrite([]byte(fmt.Sprintf("\x1B[%d;1H\x1B[2K%s", scr.height, chatPrompt)))
+
+	// Toasts become lines in the room. A line written while paged back would
+	// only be kept, unseen, so they hold until the view is live again.
+	defer setToastLineScreen(s, e.nodeSession(nodeNumber), toastLineScreen{
+		ready: func() bool {
+			rawMu.Lock()
+			defer rawMu.Unlock()
+			return scrollback.live()
+		},
+		write: writeChatLine,
+	})()
 
 	// pumpEvents shows the events svc delivers until its Events channel is
 	// closed, then closes done. It runs on its own goroutine, one per
@@ -708,6 +729,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		if scrollback.toLive() {
 			drawRegionLocked()
 			drawStatusBarLocked()
+			wakeToastsLocked()
 		}
 		rawMu.Unlock()
 

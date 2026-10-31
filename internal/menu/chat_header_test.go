@@ -17,6 +17,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -95,7 +96,10 @@ type chatLiveSession struct {
 	in  *io.PipeReader
 	mu  sync.Mutex
 	out bytes.Buffer
+	tap *snoop.Tap
 }
+
+func (s *chatLiveSession) Tap() *snoop.Tap { return s.tap }
 
 func (s *chatLiveSession) Read(p []byte) (int, error) { return s.in.Read(p) }
 
@@ -122,10 +126,19 @@ type chatLive struct {
 // startChatLive runs chat for u on its own goroutine.
 func startChatLive(env *menuEnv, u *user.User) *chatLive {
 	env.t.Helper()
+	return startChatLiveWith(env, u, nil)
+}
+
+// startChatLiveWith is startChatLive with setup run on the session first.
+func startChatLiveWith(env *menuEnv, u *user.User, setup func(s *chatLiveSession)) *chatLive {
+	env.t.Helper()
 	r, w := io.Pipe()
 	s := &chatLiveSession{testSession: newTestSession(""), in: r}
 	s.addr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 2222}
 	SetSessionOutputMode(s, env.outputMode)
+	if setup != nil {
+		setup(s)
+	}
 	c := &cmdCtx{
 		e: env.e, s: s, terminal: term.NewTerminal(s, ""), userManager: env.um,
 		currentUser: u, nodeNumber: 1, sessionStartTime: time.Now(),
