@@ -27,7 +27,7 @@ lists, not a list of blocked authors. When it is off:
 Saved lists are not touched. Turning the switch back on applies them again.
 A `config.json` from before this setting existed has no `twitListEnabled` key;
 that is read as on, so upgraded boards keep the behaviour they had. The menu
-art is static, so the stock MSGMENU still shows [I] Twit List while the feature
+art is static, so the stock MSGMENU still shows [T] Twit List while the feature
 is off; selecting it shows the notice.
 
 The list size (`twitListMax`, 50 by default) and the level at which local
@@ -199,4 +199,4 @@ The User Konfig item uses `konfigTwitListLabel` and `konfigTwitListHelp`.
 
 | Command | Where it is bound in the stock menus |
 | --- | --- |
-| `RUN:CFG_TWITLIST` | `I` in `MSGMENU.CFG`; item `M` of `RUN:USERCONFIG` (`K` on the main menu) |
+| `RUN:CFG_TWITLIST` | `T` in `MSGMENU.CFG` (`I` still works, for hands used to the earlier key); item `M` of `RUN:USERCONFIG` (`K` on the main menu) |
