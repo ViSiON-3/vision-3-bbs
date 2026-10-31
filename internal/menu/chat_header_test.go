@@ -9,6 +9,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -97,6 +98,8 @@ type chatLiveSession struct {
 	mu  sync.Mutex
 	out bytes.Buffer
 	tap *snoop.Tap
+	// failWrites makes every write fail, as on a dropped connection.
+	failWrites atomic.Bool
 }
 
 func (s *chatLiveSession) Tap() *snoop.Tap { return s.tap }
@@ -104,6 +107,9 @@ func (s *chatLiveSession) Tap() *snoop.Tap { return s.tap }
 func (s *chatLiveSession) Read(p []byte) (int, error) { return s.in.Read(p) }
 
 func (s *chatLiveSession) Write(p []byte) (int, error) {
+	if s.failWrites.Load() {
+		return 0, io.ErrClosedPipe
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.out.Write(p)

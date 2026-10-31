@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -76,6 +77,7 @@ func TestToastOverEditorPastReplayLimitKeepsTypedText(t *testing.T) {
 // replay limit a toast waits there.
 func TestEditorPromptDoesNotUseTheEditorRedraw(t *testing.T) {
 	env := newToastEnv(t)
+	toastDwell = 10 * time.Second
 	ih := getSessionIH(env.s)
 	ed := editor.NewFSEditor(env.s, env.s, 0, 80, 24, "", "", "", "", "", "", ih)
 	done := make(chan string, 1)
@@ -96,6 +98,8 @@ func TestEditorPromptDoesNotUseTheEditorRedraw(t *testing.T) {
 	}
 
 	env.s.Send(" ") // any key leaves the error text
+	// Back in the editor's own wait, the held toast needs no new wake.
+	toastWaitFor(t, "the held toast", func() bool { return strings.Contains(env.term.Snapshot(), ">> Held at prompt") })
 	env.s.Send("hi\x1a")
 	if got := <-done; got != "hi" {
 		t.Errorf("content = %q", got)
@@ -165,5 +169,87 @@ func TestTeleconferenceHoldsToastWhilePagedBack(t *testing.T) {
 
 	live.typeKeys("\r") // a blank line returns to the live view
 	toastWaitFor(t, "the room line", func() bool { return strings.Contains(live.s.output(), "Wait for me") })
+	live.typeKeys("/q\r")
+}
+
+func TestTeleconferenceToastCannotRunScreenCodes(t *testing.T) {
+	env, live, _ := startToastChat(t)
+	mark := len(live.s.output())
+	store := env.e.toastStore()
+	if err := env.e.SessionRegistry.SendToast(store, env.caller.ID, toast.Toast{Text: "a|CLb|PPc"}); err != nil {
+		t.Fatal(err)
+	}
+	toastWaitFor(t, "the room line", func() bool { return strings.Contains(live.s.output()[mark:], "a|CLb|PPc") })
+
+	// The scrollback replays the line through the same expander.
+	for range 30 {
+		live.typeKeys("filler\r")
+	}
+	mark = len(live.s.output())
+	live.typeKeys("\x1b[5~")
+	toastWaitFor(t, "the line replayed", func() bool { return strings.Contains(live.s.output()[mark:], "a|CLb|PPc") })
+	if strings.Contains(live.s.output()[mark:], "\x1b[2J") {
+		t.Error("replaying the toast cleared the screen")
+	}
+	live.typeKeys("\r/q\r")
+}
+
+// A page taller than the room shows its newest lines and keeps the rest in the
+// scrollback, instead of writing over the header.
+func TestTeleconferenceLongToastStaysInTheRoom(t *testing.T) {
+	env, live, _ := startToastChat(t)
+	mark := len(live.s.output())
+	text := "FIRSTWORD " + strings.Repeat("word ", 800) + "LASTWORD"
+	if err := env.e.SessionRegistry.SendToast(env.e.toastStore(), env.caller.ID, toast.Toast{Text: text}); err != nil {
+		t.Fatal(err)
+	}
+	toastWaitFor(t, "the end of the toast", func() bool { return strings.Contains(live.s.output()[mark:], "LASTWORD") })
+	if strings.Contains(live.s.output()[mark:], "FIRSTWORD") {
+		t.Error("lines above the room were written to the screen")
+	}
+	for range 5 {
+		live.typeKeys("\x1b[5~")
+	}
+	toastWaitFor(t, "the start in the scrollback", func() bool { return strings.Contains(live.s.output()[mark:], "FIRSTWORD") })
+	live.typeKeys("\r/q\r")
+}
+
+// A failed write leaves the toast queued, unclaimed, for the next login.
+func TestToastLineWriteFailureKeepsTheToast(t *testing.T) {
+	env := newToastEnv(t)
+	env.s.tap.SetMode(snoop.ModeTeleconf)
+	store := env.e.toastStore()
+	if err := store.Enqueue(env.u.ID, toast.Toast{ID: "a", Text: "keep me"}); err != nil {
+		t.Fatal(err)
+	}
+	defer setToastLineScreen(env.s, nil, toastLineScreen{
+		ready: func() bool { return true },
+		write: func(string) error { return errors.New("gone") },
+	})()
+	env.e.serviceToasts(env.s, getSessionIH(env.s), env.sess, 0)
+	if q := mustPeek(t, store, env.u.ID); len(q) != 1 {
+		t.Fatalf("queue = %+v, want the toast kept", q)
+	}
+	if !store.Claim(env.u.ID, "a") {
+		t.Error("claim left held after the failed write")
+	}
+	store.Release("a")
+}
+
+// Teleconference's writer reports a dropped connection to the toast path.
+func TestTeleconferenceWriteFailureKeepsTheToast(t *testing.T) {
+	env, live, _ := startToastChat(t)
+	store := env.e.toastStore()
+	live.s.failWrites.Store(true)
+	if err := env.e.SessionRegistry.SendToast(store, env.caller.ID, toast.Toast{Text: "keep me"}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if q := mustPeek(t, store, env.caller.ID); len(q) != 1 {
+		t.Errorf("queue = %+v, want the toast kept", q)
+	}
+	live.s.failWrites.Store(false)
+	env.e.nodeSession(1).WakeToasts()
+	toastWaitFor(t, "the room line", func() bool { return strings.Contains(live.s.output(), "keep me") })
 	live.typeKeys("/q\r")
 }

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -262,6 +263,9 @@ const chatNoRoomMsg = "You are not in a room. Use /JOIN <room> to join one."
 const chatContPrefix = "|08      \xC0|07 "
 const chatContPrefixLen = 8
 
+// errToastLineNotWritten says a toast's room line did not reach the caller.
+var errToastLineNotWritten = errors.New("toast line not written")
+
 func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
 	s := c.s
@@ -341,8 +345,13 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 	var rawMu sync.Mutex
 
+	// writeFailed notes a failed write for those that need to know, as a toast
+	// that must stay queued if it did not reach the caller.
+	var writeFailed atomic.Bool
 	rawWriteLocked := func(data []byte) {
-		terminalio.WriteProcessedBytes(s, data, outputMode)
+		if err := terminalio.WriteProcessedBytes(s, data, outputMode); err != nil {
+			writeFailed.Store(true)
+		}
 	}
 	scr := &chatScreen{height: height, width: termWidth, chatTop: chatTop, inputRows: 1, write: rawWriteLocked}
 
@@ -508,8 +517,13 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		if !scrollback.live() {
 			return
 		}
-		// Scroll the chat region up by n lines.
+		// A message taller than the chat region shows its newest lines; the
+		// rest are in the scrollback. Any more would write over the header.
 		scrollBottom := scr.scrollBottom()
+		if room := max(scrollBottom-chatTop+1, 1); n > room {
+			lines, n = lines[n-room:], room
+		}
+		// Scroll the chat region up by n lines.
 		rawWriteLocked([]byte(ansi.MoveCursor(scrollBottom, 1)))
 		for i := 0; i < n; i++ {
 			rawWriteLocked([]byte("\r\n"))
@@ -579,7 +593,16 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			defer rawMu.Unlock()
 			return scrollback.live()
 		},
-		write: writeChatLine,
+		write: func(text string) error {
+			rawMu.Lock()
+			defer rawMu.Unlock()
+			writeFailed.Store(false)
+			writeChatLineLocked(text)
+			if writeFailed.Load() {
+				return errToastLineNotWritten
+			}
+			return nil
+		},
 	})()
 
 	// pumpEvents shows the events svc delivers until its Events channel is

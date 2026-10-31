@@ -173,6 +173,7 @@ func (e *FSEditor) Run() (string, bool, error) {
 		// Only this wait can redraw from the buffer: a prompt or the quote picker
 		// reading keys under handleKey has a screen of its own.
 		e.input.SetScreenRedraw(e.redrawScreen)
+		e.input.RetryHeldToasts()
 		key, win, resized, err := readKeyOrEvent(e.input, e.resizes)
 		e.input.SetScreenRedraw(nil)
 		if err != nil {
