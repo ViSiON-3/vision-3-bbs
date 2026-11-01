@@ -459,8 +459,8 @@ terminal's modes or character set, reset it, ring its bell, or ask it a question
 whose answer would land in the caller's input. Text inside an OSC, DCS, APC, PM
 or SOS string is not shown; a string that never ends costs the rest of its line,
 and the message carries on from the next one. Raw CP437 is untouched, including
-0x80 to 0x9F. The stored message does not change and networks get it as it
-arrived, so a sysop's `K` view, exports and packets see the original.
+0x80 to 0x9F. The stored message does not change, and network exports and QWK
+packets carry it as it arrived.
 
 ### Composing Messages
 
