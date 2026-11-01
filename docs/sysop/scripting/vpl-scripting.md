@@ -497,13 +497,20 @@ Message area access — read, post, and search messages.
 | `from` | string | Sender handle |
 | `to` | string | Recipient handle |
 | `subject` | string | Subject line |
-| `body` | string | Message body text |
+| `body` | string | Message body exactly as stored, including any colour codes, terminal escape sequences and control characters |
+| `text` | string | The body as plain text, safe to print: decoded to Unicode by the message's character set, with every escape sequence and control character removed and line breaks as `\n`. Pipe codes are text and stay |
 | `date` | number | Timestamp (Unix) |
 | `msgID` | string | Unique message ID |
 | `replyID` | string | ID of the message being replied to |
 | `replyToNum` | number | Message number being replied to |
 | `isPrivate` | boolean | Whether this is a private message |
 | `areaID` | number | Area ID the message belongs to |
+
+To show a message to the caller, print `text`, not `body`, and with
+`v3.console.write` or `writeln` rather than `print`, which would expand pipe
+codes the author typed. A message from another system can carry sequences that
+clear the screen, move the cursor or send queries to the caller's terminal;
+`body` keeps them, so use it only to store, repost or examine the message.
 
 **Post options object** (for `post` and `postPrivate`):
 

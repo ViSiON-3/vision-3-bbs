@@ -3,6 +3,7 @@ package scripting
 import (
 	"fmt"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -181,6 +182,13 @@ func messageAreaToJS(vm *goja.Runtime, a *message.MessageArea) goja.Value {
 	return obj
 }
 
+// displayMessageToJS converts a message for v3.message.get.
+//
+// body is the message as stored, escape sequences and all, for a script that
+// keeps, reposts or exports it. text is the same body decoded to UTF-8 by its
+// charset with every escape sequence and control character taken out
+// (ansi.PlainText), for a script that prints it: printed raw, body could clear
+// the caller's screen or move the cursor.
 func displayMessageToJS(vm *goja.Runtime, msg *message.DisplayMessage) goja.Value {
 	obj := vm.NewObject()
 	jsutil.Set(obj, "msgNum", msg.MsgNum)
@@ -188,6 +196,7 @@ func displayMessageToJS(vm *goja.Runtime, msg *message.DisplayMessage) goja.Valu
 	jsutil.Set(obj, "to", msg.To)
 	jsutil.Set(obj, "subject", msg.Subject)
 	jsutil.Set(obj, "body", msg.Body)
+	jsutil.Set(obj, "text", ansi.PlainText(ansi.DecodeBody(msg.Body, msg.Charset)))
 	jsutil.Set(obj, "date", msg.DateTime.Unix())
 	jsutil.Set(obj, "msgID", msg.MsgID)
 	jsutil.Set(obj, "replyID", msg.ReplyID)

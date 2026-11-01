@@ -192,3 +192,44 @@ func bodyStringEnd(s string, i int, osc bool) int {
 	}
 	return limit
 }
+
+// PlainText returns a message body as plain text, for a consumer that prints
+// it with no idea what it holds, such as a script. Everything BodyText takes out
+// goes, and so do the sequences it keeps: colour, cursor movement, erasing and
+// cursor save and restore. Line breaks (CR LF, a lone CR or LF) all become LF.
+// Tab stays; every other control character goes. Pipe codes are text and stay.
+//
+// s should be UTF-8, as DecodeBody returns it. A byte that is not valid UTF-8 is
+// kept as it is, as in BodyText.
+func PlainText(s string) string {
+	s = BodyText(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case r == 0x1B:
+			// BodyText leaves only complete CSI sequences and ESC 7 / ESC 8.
+			if i+1 < len(s) && s[i+1] == '[' {
+				i, _ = csiEnd(s, i+2)
+			} else {
+				i += 2
+			}
+		case r == '\r':
+			b.WriteByte('\n')
+			i += size
+			if i < len(s) && s[i] == '\n' {
+				i++
+			}
+		case r == '\n' || r == '\t':
+			b.WriteRune(r)
+			i += size
+		case r < 0x20 || r == 0x7F || (r >= 0x80 && r <= 0x9F):
+			i += size
+		default:
+			b.WriteString(s[i : i+size])
+			i += size
+		}
+	}
+	return b.String()
+}
