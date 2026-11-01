@@ -54,10 +54,27 @@ func TestChatRoomMessageCannotRunScreenCodes(t *testing.T) {
 		t.Errorf("the codes are not shown as typed: %q", got)
 	}
 
-	for range 30 {
+	// Each line is echoed before the next key is read, so PgUp runs after them
+	// all. Twenty puts the marked line mid-page, not on the top row PgUp reaches.
+	for range 20 {
 		live.typeKeys("filler\r")
 	}
 	mark = len(live.s.output())
+	// #844: this wait once timed out on Windows under -race and the cause isn't
+	// known. If it happens again, show what the screen got and whether chat ended,
+	// as it would if a stalled runner split PgUp's bytes into a bare ESC.
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		ended := false
+		select {
+		case <-live.done:
+			ended = true
+		default:
+		}
+		t.Logf("chat ended: %v; output since the last mark: %q", ended, live.s.output()[mark:])
+	})
 	live.typeKeys("\x1b[5~")
 	toastWaitFor(t, "the line replayed", func() bool { return strings.Contains(live.s.output()[mark:], "ENDMARK") })
 	got = live.s.output()[mark:]
