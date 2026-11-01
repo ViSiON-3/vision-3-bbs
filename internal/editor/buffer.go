@@ -63,7 +63,12 @@ func (mb *MessageBuffer) SetWordSplit(lineNum int, split bool) {
 	mb.wordSplit[lineNum] = split
 }
 
-// LoadContent loads initial content into the buffer
+// LoadContent replaces the buffer with content, one buffer line per
+// "\n"-separated line, each ending in a hard break. Only the first MaxLines
+// lines are loaded: the rest is dropped without notice. Lines are not wrapped,
+// so a line longer than MaxLineLength stays long until it is edited. Today
+// the only caller is the auto-signature editor, which holds a few lines; a
+// path that loads a whole message for editing must check the line count first.
 func (mb *MessageBuffer) LoadContent(content string) {
 	mb.lines = [MaxLines + 1]string{}
 	mb.hardNewline = [MaxLines + 1]bool{}
@@ -360,8 +365,11 @@ func (mb *MessageBuffer) JoinLines(lineNum int) bool {
 	return true
 }
 
-// GetContent returns the entire buffer content as a string.
-// Uses GetContentLineCount to trim trailing empty lines for storage.
+// GetContent returns the entire buffer content as a string, lines joined by
+// "\n", soft wraps included. Trailing lines that are empty or hold only
+// spaces are left off (see GetContentLineCount), so text loaded with
+// LoadContent does not always come back byte for byte: trailing blank lines
+// go, as do lines past MaxLines that LoadContent dropped.
 func (mb *MessageBuffer) GetContent() string {
 	var result strings.Builder
 
