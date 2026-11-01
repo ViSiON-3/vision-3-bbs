@@ -61,6 +61,9 @@ type quoteSession struct {
 	hasTop     bool // the block opens with a "Said" banner at blockStart
 	hasBottom  bool // the block closes with a "Done" banner at insertAt
 	origLine   int  // cursor line CTRL-Q was pressed on
+	// aboveHard is the hard-newline flag the line above the block had before
+	// the block opened and forced it hard, restored if the block is dropped.
+	aboveHard bool
 
 	composeTop   int  // first buffer line shown in the compose pane
 	composeFocus bool // true = arrows scroll the compose pane instead of moving the bar
@@ -420,7 +423,7 @@ func (qs *quoteSession) undoLast() {
 }
 
 // dropBlock removes the "Said" / "Done" banners of a block that holds no
-// quoted lines.
+// quoted lines, and gives the line above the block back its own line break.
 func (qs *quoteSession) dropBlock() {
 	if qs.hasTop {
 		qs.ch.buffer.DeleteLine(qs.blockStart) // "Said"
@@ -428,6 +431,8 @@ func (qs *quoteSession) dropBlock() {
 	if qs.hasBottom {
 		qs.ch.buffer.DeleteLine(qs.blockStart) // "Done" shifted up into its place
 	}
+	// The line above flows on into what follows again, as it did before.
+	qs.ch.buffer.SetHardNewline(qs.blockStart-1, qs.aboveHard)
 	qs.blockStart = 0
 	qs.insertAt = 0
 	qs.hasTop, qs.hasBottom = false, false
@@ -446,6 +451,7 @@ func (qs *quoteSession) ensureBlock() bool {
 	if at < 1 {
 		at = 1
 	}
+	aboveHard := qs.ch.buffer.IsHardNewline(at - 1)
 	next := at
 	if top != "" {
 		if !qs.insertBufferLine(next, top) {
@@ -456,10 +462,12 @@ func (qs *quoteSession) ensureBlock() bool {
 	if bottom != "" && !qs.insertBufferLine(next, bottom) {
 		if top != "" {
 			qs.ch.buffer.DeleteLine(at)
+			qs.ch.buffer.SetHardNewline(at-1, aboveHard)
 		}
 		return false
 	}
 	qs.blockStart = at
+	qs.aboveHard = aboveHard
 	qs.insertAt = next // the "Done" banner if any; quoted lines push it down
 	qs.hasTop, qs.hasBottom = top != "", bottom != ""
 	return true
