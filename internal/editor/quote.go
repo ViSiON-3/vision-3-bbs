@@ -793,11 +793,18 @@ func SplitQuotePrefix(line string) (prefix, body string) {
 }
 
 // QuoteSourceWidth estimates the width the source message was wrapped at: its
-// longest line, ignoring lines too long to have been wrapped at all.
+// longest line, ignoring lines too long to have been wrapped at all. Lines are
+// measured in characters; QuoteSourceWidthMeasured takes another measure.
 func QuoteSourceWidth(lines []string) int {
+	return QuoteSourceWidthMeasured(lines, runeLen)
+}
+
+// QuoteSourceWidthMeasured is QuoteSourceWidth with lines measured by measure,
+// such as display columns, where double-width text takes two per character.
+func QuoteSourceWidthMeasured(lines []string, measure func(string) int) int {
 	width := 0
 	for _, line := range lines {
-		if n := runeLen(line); n <= maxSourceWidth && n > width {
+		if n := measure(line); n <= maxSourceWidth && n > width {
 			width = n
 		}
 	}
@@ -810,8 +817,17 @@ func QuoteSourceWidth(lines []string) int {
 // author's editor wrapped next onto its own line only when its first word
 // would not fit on prev, so a prev with room left for that word ended where it
 // did on purpose. Blank lines, a change of quote depth or indent, and list
-// items also break a paragraph. width is the wrap width of the source.
+// items also break a paragraph. width is the wrap width of the source, in
+// characters; ContinuesParagraphMeasured takes another measure.
 func ContinuesParagraph(prev, next string, width int) bool {
+	return ContinuesParagraphMeasured(prev, next, width, runeLen)
+}
+
+// ContinuesParagraphMeasured is ContinuesParagraph with lengths taken by
+// measure, in the same unit as width. Where measure gives the next line's first
+// character more than one column, it is double-width text, which an editor may
+// break before any character, so that character alone is what did not fit.
+func ContinuesParagraphMeasured(prev, next string, width int, measure func(string) int) bool {
 	if width < minReflowWidth {
 		return false
 	}
@@ -832,11 +848,15 @@ func ContinuesParagraph(prev, next string, width int) bool {
 	}
 	// A line too long to have been wrapped is a whole paragraph, whichever
 	// side of the pair it is on.
-	prevLen := runeLen(prev)
-	if prevLen > width || runeLen(next) > width {
+	prevLen := measure(prev)
+	if prevLen > width || measure(next) > width {
 		return false
 	}
-	return prevLen+1+runeLen(words[0]) > width
+	first := words[0]
+	if c := firstChar(first); measure(c) > 1 {
+		first = c
+	}
+	return prevLen+1+measure(first) > width
 }
 
 // leadingSpace counts the blanks a line of text is indented by.

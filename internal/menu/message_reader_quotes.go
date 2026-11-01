@@ -6,6 +6,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/mattn/go-runewidth"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 )
@@ -158,11 +160,22 @@ func reflowQuotes(body string, width int, mode ansi.OutputMode, banners quoteBan
 	if len(byPrefix) == 0 {
 		return body
 	}
+	// The quoter's editor measured lines in characters or in columns, which
+	// differ for double-width text, so each is tried. For text without any
+	// double-width characters the two agree.
 	sourceWidth := make(map[string]int, len(byPrefix))
+	sourceColumns := make(map[string]int, len(byPrefix))
 	for prefix, lines := range byPrefix {
 		if w := editor.QuoteSourceWidth(lines); w >= quoteReflowMinSourceWidth {
 			sourceWidth[prefix] = w
 		}
+		if w := editor.QuoteSourceWidthMeasured(lines, quoteColumns); w >= quoteReflowMinSourceWidth {
+			sourceColumns[prefix] = w
+		}
+	}
+	continues := func(prev, next *quoteLine) bool {
+		return editor.ContinuesParagraph(prev.plain, next.plain, sourceWidth[prev.prefix]) ||
+			editor.ContinuesParagraphMeasured(prev.plain, next.plain, sourceColumns[prev.prefix], quoteColumns)
 	}
 
 	out := make([]string, 0, len(rows))
@@ -172,8 +185,7 @@ func reflowQuotes(body string, width int, mode ansi.OutputMode, banners quoteBan
 			continue
 		}
 		para := []*quoteLine{parsed[i]}
-		for i+1 < len(rows) && parsed[i+1] != nil &&
-			editor.ContinuesParagraph(parsed[i].plain, parsed[i+1].plain, sourceWidth[parsed[i].prefix]) {
+		for i+1 < len(rows) && parsed[i+1] != nil && continues(parsed[i], parsed[i+1]) {
 			i++
 			para = append(para, parsed[i])
 		}
@@ -205,16 +217,17 @@ func wrapQuoteParagraph(para []*quoteLine, width int, mode ansi.OutputMode) []st
 		}
 	}
 
-	bodies := make([]string, len(para))
+	var b strings.Builder
 	for i, q := range para {
-		bodies[i] = q.body
 		// A stored line usually closes its own colour, so each later line has
 		// to open its colour again or the rest of the paragraph loses it.
 		if i > 0 {
-			bodies[i] = q.head + q.body
+			b.WriteString(quoteJoinSeparator(para[i-1].body, q.body))
+			b.WriteString(q.head)
 		}
+		b.WriteString(q.body)
 	}
-	joined := strings.Join(bodies, " ")
+	joined := b.String()
 
 	var out []string
 	var colour sgrState
@@ -319,4 +332,26 @@ func (c *sgrState) String() string {
 		params = "0;" + params
 	}
 	return "\x1b[" + params + "m"
+}
+
+// quoteColumns measures a quote line in display columns, the way an editor
+// that wraps double-width text by width would have. A line that is not valid
+// UTF-8 is CP437, one column per byte.
+func quoteColumns(s string) int {
+	if !utf8.ValidString(s) {
+		return len(s)
+	}
+	return runewidth.StringWidth(s)
+}
+
+// quoteJoinSeparator is what goes between two stored lines of a paragraph when
+// they are joined: a space, which the wrap had stood for, except beside
+// double-width text, which is written without spaces between its words.
+func quoteJoinSeparator(prev, next string) string {
+	last, _ := utf8.DecodeLastRuneInString(stripEscapes(prev))
+	first, _ := utf8.DecodeRuneInString(stripEscapes(next))
+	if runewidth.RuneWidth(last) > 1 || runewidth.RuneWidth(first) > 1 {
+		return ""
+	}
+	return " "
 }

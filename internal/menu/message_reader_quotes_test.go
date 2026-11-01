@@ -406,3 +406,61 @@ func TestIsQuoteLineAgreesWithTheEditor(t *testing.T) {
 		}
 	}
 }
+
+// splitRunes cuts s into lines of n runes each.
+func splitRunes(s string, n int) []string {
+	r := []rune(s)
+	var out []string
+	for len(r) > n {
+		out = append(out, string(r[:n]))
+		r = r[n:]
+	}
+	return append(out, string(r))
+}
+
+// #864: double-width text the quoter's editor wrapped rejoins on display, and
+// no space is written into it where the lines meet. Editors wrap such text by
+// columns (36 runes is 72 columns) or by runes (70 runes), so both rejoin.
+func TestReaderJoinsWrappedDoubleWidthQuoteLines(t *testing.T) {
+	text := strings.Repeat("日本語の文章です。", 20) // 180 runes, no spaces
+	for _, perLine := range []int{36, 70} {
+		src := splitRunes(text, perLine)
+		for i := range src {
+			src[i] = "RW> " + src[i]
+		}
+		lines := messageBodyLines(strings.Join(src, "\n"), "", 100, ansi.OutputModeUTF8)
+		// 95 columns beside " RW> " hold 47 wide runes: 180 runes fill 4 rows
+		// only if the stored lines were joined into one run first.
+		if len(lines) != 4 {
+			t.Errorf("%d per line: %d rows from %d stored lines, want 4", perLine, len(lines), len(src))
+		}
+		var got strings.Builder
+		for _, line := range lines {
+			if w := visibleColumns(line, ansi.OutputModeUTF8); w > 100 {
+				t.Errorf("%d per line: row is %d columns", perLine, w)
+			}
+			if !strings.HasPrefix(line, " RW> ") {
+				t.Fatalf("%d per line: row %q lost the prefix", perLine, line)
+			}
+			got.WriteString(strings.TrimPrefix(line, " RW> "))
+		}
+		if got.String() != text {
+			t.Errorf("%d per line: text = %q, want it back with no spaces added", perLine, got.String())
+		}
+	}
+}
+
+// A join between double-width text and a Latin word keeps no space either side
+// that is wide, but Latin text still joins with one.
+func TestQuoteJoinSeparator(t *testing.T) {
+	for _, tc := range []struct{ a, b, want string }{
+		{"word", "next", " "},
+		{"文章", "です", ""},
+		{"word", "です", ""},
+		{"文章", "next", ""},
+	} {
+		if got := quoteJoinSeparator(tc.a, tc.b); got != tc.want {
+			t.Errorf("quoteJoinSeparator(%q, %q) = %q, want %q", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
