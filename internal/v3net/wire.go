@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
@@ -23,14 +24,14 @@ func BuildWireMessage(network, areaTag, originNode, originBoard, from, to, subje
 		ThreadUUID:  uuid,
 		ParentUUID:  nil,
 		OriginNode:  originNode,
-		OriginBoard: originBoard,
+		OriginBoard: ansi.HeaderText(originBoard),
 		From:        from,
 		To:          to,
 		Subject:     protocol.CleanSubject(subject),
 		DateUTC:     time.Now().UTC().Format(time.RFC3339),
 		Body:        body,
 		Tearline:    DefaultTearline(),
-		Origin:      origin,
+		Origin:      ansi.HeaderText(origin),
 		Kludges:     map[string]any{},
 	}
 }

@@ -112,6 +112,15 @@ func (m *Message) Validate() error {
 			return fmt.Errorf("subject contains control character: %U", r)
 		}
 	}
+	for _, f := range []struct{ name, value string }{
+		{"origin_board", m.OriginBoard}, {"tearline", m.Tearline}, {"origin", m.Origin},
+	} {
+		for _, r := range f.value {
+			if unicode.IsControl(r) {
+				return fmt.Errorf("%s contains control character: %U", f.name, r)
+			}
+		}
+	}
 	if len(m.Body) == 0 {
 		return fmt.Errorf("body must not be empty")
 	}

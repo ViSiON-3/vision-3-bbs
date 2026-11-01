@@ -30,6 +30,7 @@ func TestCleanQuoteLineDropsControls(t *testing.T) {
 		"a\u009d0;PAYLOAD\u009cb":   "ab",
 		"a\x1b]0;PAYLOAD\x07b":      "ab",
 		"a\x07\x05b":                "ab",
+		"a\tb\t\r":                  "a b",
 		"a\x1b|01[2Jb":              "ab",
 		"cent 5\x9b \xdb\xb0":       "cent 5\x9b \xdb\xb0",
 		"\x1b[1;31mred\x1b[0m text": "red text",

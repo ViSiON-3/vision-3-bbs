@@ -133,9 +133,11 @@ while does not lose anything.
 3. The message (with its remote tearline/origin) is written to the local JAM base
 4. The message is recorded in the dedup index
 
-A hub refuses a post whose subject holds a control character, with a 422. A
-message a hub already holds with one is still imported, with each such character
-turned into a space; its signature is checked against the original first. See
+A hub refuses a post whose subject, board name, tearline or origin holds a
+control character, with a 422. A message a hub already holds with one is still
+imported, with each such character turned into a space; its signature is checked
+against the original first. A sender cleans its own origin and board name the
+same way, so one set with a control character does not get every post refused. See
 [Message Format](#message-format) for other header fields.
 
 ## Posting from the Command Line
@@ -203,7 +205,8 @@ From, To and Subject never hold control characters. On every kind of area they
 are cleaned when a message is stored and again when it is read or exported, each
 control character (C0, DEL and C1) becoming a space, so messages stored by older
 versions are safe to show too. The stored copy of an older message is left as it
-was. Message bodies are not affected, since they may carry ANSI art.
+was. Message bodies are stored as they arrive, since they may carry ANSI art; the
+reader [filters what it sends](../messages/message-areas.md).
 
 ### Pending Marker and Wire UUID
 

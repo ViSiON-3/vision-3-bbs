@@ -86,6 +86,7 @@ func excerpt(body string) string {
 	if !utf8.ValidString(body) {
 		body = string(ansi.CP437BytesToUTF8([]byte(body)))
 	}
+	body = ansi.BodyText(body) // or a terminal string's payload could be the excerpt
 	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimRight(line, "\r")
 		if strings.TrimSpace(line) == "" || isQuoteLine(line) || isTearLine(line) || isOriginLine(line) {

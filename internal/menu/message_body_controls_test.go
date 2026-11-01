@@ -53,7 +53,8 @@ var hostileBodySeqs = []struct{ name, seq string }{
 	{"bracketed paste", "\x1b[?2004h"},
 	{"insert mode", "\x1b[4h"},
 	{"modifyOtherKeys", "\x1b[>4;2m"},
-	{"key remap", "\x1b[1;\"x\"p"},
+	{"conformance level", "\x1b[61;1\"p"},
+	{"auto-wrap off", "\x1b[?7l"},
 	{"printer", "\x1b[5i"},
 	{"window resize", "\x1b[8;1;1t"},
 	{"scroll region", "\x1b[1;5r"},
@@ -189,7 +190,6 @@ func TestBodyControlsOtherScreens(t *testing.T) {
 
 	for _, tc := range []struct{ name, cmd, args, keys string }{
 		{"newscan", "NEWSCAN", "current", "\rQ"},
-		{"list", "LISTMSGS", "", "QQ"},
 		{"list opened", "LISTMSGS", "", "\rQQ"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -304,9 +304,43 @@ func TestShippedArtBodyUnchanged(t *testing.T) {
 			art = "\x1b[H" + art
 		}
 		want := RenderANSIArtToLines(bodyAsUTF8(art, ""), ansi.ArtWidth, 500)
-		got := messageBodyLines(art, "", 80, ansi.OutputModeUTF8)
+		got := messageBodyLines(bodyForDisplay(art, ""), "", 80, ansi.OutputModeUTF8)
 		if strings.Join(got, "\n") != strings.Join(want, "\n") {
 			t.Errorf("%s: the art changed", filepath.Base(f))
 		}
+	}
+}
+
+// Art that turns wrapping off still gets its effect: the row is cut at the margin
+// as it was before the filter, not wrapped onto the next.
+func TestArtKeepsAutoWrapForRenderer(t *testing.T) {
+	art := "\x1b[?7l\x1b[1;1H" + strings.Repeat("x", 90) + "\r\nnext\r\n"
+	got := messageBodyLines(bodyForDisplay(art, ""), "", 80, ansi.OutputModeUTF8)
+	if len(got) < 2 || !strings.Contains(got[1], "next") {
+		t.Errorf("lines = %q", got)
+	}
+	// A plain body has no renderer to give it to.
+	if got := bodyForDisplay("text\x1b[?7lmore", ""); got != "textmore" {
+		t.Errorf("plain body = %q", got)
+	}
+}
+
+// A string's payload is not the line of the body that stands for the message in
+// the list and the thread pane.
+func TestExcerptSkipsStringPayload(t *testing.T) {
+	if got := excerpt("\x1b]0;PAYLOAD\x07\nfirst real line\n"); got != "first real line" {
+		t.Errorf("excerpt = %q", got)
+	}
+}
+
+// The charset is settled before the filter: a CP437 body's 0x9B stays a cent sign
+// even beside the bytes that spell U+009B in UTF-8, while a UTF-8 body's U+009B
+// is a control.
+func TestBodyForDisplayChecksCharsetFirst(t *testing.T) {
+	if got := bodyForDisplay("5\x9b \xdb\xc2\x9b2J", "CP437"); got != "5¢ █┬¢2J" {
+		t.Errorf("CP437 body = %q", got)
+	}
+	if got := bodyForDisplay("caf\xc3\xa9\xc2\x9b2J", "UTF-8"); got != "café" {
+		t.Errorf("UTF-8 body = %q", got)
 	}
 }
