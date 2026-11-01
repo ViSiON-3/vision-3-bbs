@@ -245,29 +245,67 @@ func (ww *WordWrapper) ReformatParagraph(startLine int) int {
 	return endLine
 }
 
+// reflowAfterDelete reflows the paragraph around lineNum after text was removed
+// from it. A shorter line can let the words after it move up, and if its first
+// word got shorter that word can move up onto the line above, so the reflow
+// starts at the top of the paragraph. The cursor (lineNum, col) is carried
+// through, and may end up on a line above lineNum.
+func (ww *WordWrapper) reflowAfterDelete(lineNum, col int) (int, int) {
+	return ww.ReflowRange(ww.deleteReflowStart(lineNum), lineNum, col)
+}
+
+// deleteReflowStart returns the line to start a reflow on after a deletion on
+// lineNum: the first line of its paragraph, walking back over soft wraps.
+//
+// A line just emptied stays where it is. The soft break above it stands for
+// the space between words, and starting above would drop that space, so the
+// next word typed would fuse onto the line above.
+//
+// The walk also stops below a word split at the margin. That split has no
+// space behind it, and rejoining the lines would write one into the word.
+// Such a line is full, so nothing could move up onto it anyway.
+func (ww *WordWrapper) deleteReflowStart(lineNum int) int {
+	if ww.buffer.GetLineLength(lineNum) == 0 {
+		return lineNum
+	}
+	for lineNum > 1 && !ww.buffer.IsHardNewline(lineNum-1) && !ww.buffer.IsLineEmpty(lineNum-1) &&
+		!isSplitWordLine(ww.buffer.GetLine(lineNum-1)) {
+		lineNum--
+	}
+	return lineNum
+}
+
+// isSplitWordLine reports whether line could be the front of a word too long
+// for the margin. ReflowRange splits a word only when findWrapPosition finds no
+// space past the first column, leaving a line with none. A word of exactly the
+// margin's width also matches, which is harmless: that line is full too.
+func isSplitWordLine(line string) bool {
+	return len(line) >= MaxLineLength && !strings.Contains(line[1:], " ")
+}
+
 // HandleBackspace handles backspace at the given position.
-// Deletes the character before the cursor and reflows the paragraph to pull
-// words up from subsequent soft-wrapped lines. At start-of-line, joins with
-// the previous line and reflows.
+// Deletes the character before the cursor and reflows the paragraph, pulling
+// words up from the lines below and onto the line above. At start-of-line,
+// joins with the previous line and reflows.
 // Returns new cursor position (line, col) and whether a change was made.
 func (ww *WordWrapper) HandleBackspace(lineNum, col int) (int, int, bool) {
 	if col > 1 {
 		if ww.buffer.DeleteChar(lineNum, col-1) {
-			newLine, newCol := ww.ReflowRange(lineNum, lineNum, col-1)
+			newLine, newCol := ww.reflowAfterDelete(lineNum, col-1)
 			return newLine, newCol, true
 		}
 		return lineNum, col, false
 	}
 
-	// At start of line - join with previous line
+	// At start of line - join with previous line. JoinLines gives the combined
+	// line the second line's hard-newline flag, so a paragraph break after it
+	// survives and the reflow stops there.
 	if lineNum > 1 {
 		prevLine := ww.buffer.GetLine(lineNum - 1)
 		prevLen := len(prevLine)
 
 		if ww.buffer.JoinLines(lineNum - 1) {
-			// Clear hardNewline after successful join so reflow flows across boundary
-			ww.buffer.SetHardNewline(lineNum-1, false)
-			newLine, newCol := ww.ReflowRange(lineNum-1, lineNum-1, prevLen+1)
+			newLine, newCol := ww.reflowAfterDelete(lineNum-1, prevLen+1)
 			return newLine, newCol, true
 		}
 	}
@@ -284,18 +322,17 @@ func (ww *WordWrapper) HandleDelete(lineNum, col int) (int, int, bool) {
 
 	if col <= lineLen {
 		if ww.buffer.DeleteChar(lineNum, col) {
-			newLine, newCol := ww.ReflowRange(lineNum, lineNum, col)
+			newLine, newCol := ww.reflowAfterDelete(lineNum, col)
 			return newLine, newCol, true
 		}
 		return lineNum, col, false
 	}
 
-	// At end of line - join with next line
+	// At end of line - join with next line. As in HandleBackspace, the combined
+	// line keeps the next line's hard-newline flag.
 	if lineNum < ww.buffer.GetLineCount() {
 		if ww.buffer.JoinLines(lineNum) {
-			// Clear hardNewline after successful join so reflow flows across boundary
-			ww.buffer.SetHardNewline(lineNum, false)
-			newLine, newCol := ww.ReflowRange(lineNum, lineNum, col)
+			newLine, newCol := ww.reflowAfterDelete(lineNum, col)
 			return newLine, newCol, true
 		}
 	}
@@ -328,7 +365,7 @@ func (ww *WordWrapper) DeleteWord(lineNum, col int) (int, int, bool) {
 	if i > col-1 {
 		newLine := line[:col-1] + line[i:]
 		ww.buffer.SetLine(lineNum, newLine)
-		newLn, newCol := ww.ReflowRange(lineNum, lineNum, col)
+		newLn, newCol := ww.reflowAfterDelete(lineNum, col)
 		return newLn, newCol, true
 	}
 
