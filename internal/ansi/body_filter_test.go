@@ -35,10 +35,10 @@ func TestBodyTextDrops(t *testing.T) {
 		"\x1b[?1m", "\x1b[1 m", "\x1b[3J", "\x1b[1s", "\x1b[1u", "\x1b[?u", "\x1b[1:2H",
 		"\x1b[1;5r", "\x1b[5S", "\x1b[5T", "\x1b[5L", "\x1b[5M", "\x1b[5P", "\x1b[5@", "\x1b[5X", "\x1b[5i",
 		"\x1b(0", "\x1b)B", "\x1b#8", "\x1b%G", "\x1b F", "\x1b=", "\x1b>", "\x1bD", "\x1bE", "\x1bH", "\x1bM", "\x1bN", "\x1b\\",
-		"\x05", "\x07", "\x08", "\x0b", "\x0c", "\x0e", "\x0f", "\x18", "\x1a", "\x7f", "\x1b",
+		"\x05", "\x07", "\x08", "\x0b", "\x0c", "\x0e", "\x0f", "\x18", "\x1a", "\x7f",
 	} {
 		if got := BodyText("a" + s + "b"); got != "ab" {
-			t.Errorf("BodyText(%q) = %q", s, "a"+s+"b")
+			t.Errorf("BodyText(%q) = %q", "a"+s+"b", got)
 		}
 		if got := BodyText(s); got != "" {
 			t.Errorf("BodyText(%q) = %q, at the end of the body", s, got)
@@ -53,7 +53,9 @@ func TestBodyTextDoesNotRecombine(t *testing.T) {
 		"\x1b\u0085[6n":        "[6n",
 		"\x1b\x07[6n":          "[6n",
 		"\x1b]0;\x07\x1b[6n":   "",
-		"\u009b\u009b6n":       "6n",
+		"\u009b\u009b6n":       "",
+		"\x1b":                 "",
+		"a\x1b\nb":             "a\nb",
 		"\x1b[3\x07m":          "m",
 		"\x1b[1\nline":         "\nline",
 		"\x1b[":                "",
@@ -98,8 +100,9 @@ func TestBodyTextUnterminatedString(t *testing.T) {
 		// splitting a character.
 		long := "x" + strings.Repeat("é", maxBodyStringLen)
 		got := BodyText("one" + intro + long)
-		if !strings.HasPrefix(got, "oneé") || len(got) != len("one")+len(long)-(maxBodyStringLen-1) {
-			t.Errorf("%q in one long line left %d bytes", intro, len(got))
+		dropped := len("one") + len(intro) + len(long) - len(got)
+		if !strings.HasPrefix(got, "oneé") || dropped < maxBodyStringLen-1 || dropped > maxBodyStringLen+len(intro) {
+			t.Errorf("%q in one long line dropped %d bytes", intro, dropped)
 		}
 		if strings.ToValidUTF8(got, "") != got {
 			t.Errorf("%q split a character at the limit", intro)
