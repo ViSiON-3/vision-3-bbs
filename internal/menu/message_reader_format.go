@@ -8,6 +8,7 @@ import (
 	"golang.org/x/text/encoding/charmap"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 )
 
 // bodyAsUTF8 settles a message body's encoding once, for the whole body, and
@@ -80,6 +81,12 @@ func decodeCharmap(s string, cm *charmap.Charmap) string {
 // messageBodyLines turns a message body, colour pipe codes already expanded,
 // into the lines the reader paints, as UTF-8.
 func messageBodyLines(body, charset string, termWidth int, mode ansi.OutputMode) []string {
+	return messageBodyLinesWithBanners(body, charset, termWidth, mode, nil)
+}
+
+// messageBodyLinesWithBanners is messageBodyLines for a board whose quote
+// banners are known, so that a banner shaped like a quote line is not reflowed.
+func messageBodyLinesWithBanners(body, charset string, termWidth int, mode ansi.OutputMode, banners quoteBannerMatcher) []string {
 	body = bodyAsUTF8(body, charset)
 
 	if detectAnsiArtInMessage(body) {
@@ -97,10 +104,12 @@ func messageBodyLines(body, charset string, termWidth int, mode ansi.OutputMode)
 		return RenderANSIArtToLines(body, min(termWidth, ansi.ArtWidth), 500)
 	}
 
-	// Word wrap cannot break a run with no spaces (an ASCII rule, a row of
-	// blocks) or a quote line, which it leaves alone; whatever is still too
-	// wide is cut, or it spills onto the row below when drawn.
+	// Quote lines are reflowed here and word wrap leaves them alone. Word wrap
+	// also cannot break a run with no spaces (an ASCII rule, a row of blocks);
+	// whatever is still too wide is cut, or it spills onto the row below when
+	// drawn.
 	body = dropTruncatedEscapes(body)
+	body = reflowQuotes(body, termWidth, mode, banners)
 	return breakOversizedLines(wrapAnsiString(body, termWidth, mode), termWidth, mode)
 }
 
@@ -165,7 +174,8 @@ func isQuoteLine(line string) bool {
 	if strings.HasPrefix(trimmed, ">") {
 		return true
 	}
-	return quotePrefixRe.MatchString(trimmed)
+	prefix, _ := editor.SplitQuotePrefix(trimmed)
+	return prefix != ""
 }
 
 func isTearLine(line string) bool {

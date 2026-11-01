@@ -31,9 +31,9 @@ func TestSplitQuotePrefix(t *testing.T) {
 		{"-> an arrow, not a quote", "", "-> an arrow, not a quote"},
 		{"=> nor this", "", "=> nor this"},
 	} {
-		prefix, body := splitQuotePrefix(tc.line)
+		prefix, body := SplitQuotePrefix(tc.line)
 		if prefix != tc.prefix || body != tc.body {
-			t.Errorf("splitQuotePrefix(%q) = (%q, %q), want (%q, %q)", tc.line, prefix, body, tc.prefix, tc.body)
+			t.Errorf("SplitQuotePrefix(%q) = (%q, %q), want (%q, %q)", tc.line, prefix, body, tc.prefix, tc.body)
 		}
 	}
 }
@@ -62,8 +62,8 @@ func TestContinuesParagraph(t *testing.T) {
 		{"unwrapped long line stands alone", full + full, "nodelist", width, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := continuesParagraph(tc.prev, tc.next, tc.width); got != tc.want {
-				t.Errorf("continuesParagraph(%q, %q, %d) = %v, want %v", tc.prev, tc.next, tc.width, got, tc.want)
+			if got := ContinuesParagraph(tc.prev, tc.next, tc.width); got != tc.want {
+				t.Errorf("ContinuesParagraph(%q, %q, %d) = %v, want %v", tc.prev, tc.next, tc.width, got, tc.want)
 			}
 		})
 	}
@@ -71,8 +71,8 @@ func TestContinuesParagraph(t *testing.T) {
 
 func TestQuoteSourceWidthIgnoresUnwrappedLines(t *testing.T) {
 	lines := []string{"short", strings.Repeat("x", 76), strings.Repeat("y", 300)}
-	if got := quoteSourceWidth(lines); got != 76 {
-		t.Errorf("quoteSourceWidth() = %d, want 76", got)
+	if got := QuoteSourceWidth(lines); got != 76 {
+		t.Errorf("QuoteSourceWidth() = %d, want 76", got)
 	}
 }
 
@@ -144,8 +144,8 @@ func TestQuoteModeReflowsAParagraph(t *testing.T) {
 	if n < 3 {
 		t.Fatalf("quote block = %q, want the paragraph, a blank line and the second paragraph", got)
 	}
-	assertFilledParagraph(t, got[:n-2], "Bu> ", reflowText)
-	if got[n-2] != "Bu>" || got[n-1] != "Bu> Second paragraph here." {
+	assertFilledParagraph(t, got[:n-2], " Bu> ", reflowText)
+	if got[n-2] != " Bu>" || got[n-1] != " Bu> Second paragraph here." {
 		t.Errorf("block ends %q, want the blank line and second paragraph kept apart", got[n-2:])
 	}
 }
@@ -167,7 +167,7 @@ func TestQuoteModeKeepsUnwrappedLineApart(t *testing.T) {
 		t.Errorf("quoted %d paragraphs, want 2 — the unwrapped line was joined to the one before it", len(qs.paras))
 	}
 	got := strings.Join(quotedBlock(t, ch), "\n")
-	want := strings.Join(append(wrapQuoted("Bu> ", src[0], MaxLineLength), wrapQuoted("Bu> ", src[1], MaxLineLength)...), "\n")
+	want := strings.Join(append(wrapQuoted(" Bu> ", src[0], MaxLineLength), wrapQuoted(" Bu> ", src[1], MaxLineLength)...), "\n")
 	if got != want {
 		t.Errorf("quote block:\n%s\nwant:\n%s", got, want)
 	}
@@ -186,7 +186,7 @@ func TestQuoteModeDoesNotJoinAcrossSkippedLines(t *testing.T) {
 	qs.quoteSelected() // line 3, line 2 skipped
 
 	got := strings.Join(quotedBlock(t, ch), "\n")
-	want := strings.Join(append(wrapQuoted("Bu> ", src[0], MaxLineLength), wrapQuoted("Bu> ", src[2], MaxLineLength)...), "\n")
+	want := strings.Join(append(wrapQuoted(" Bu> ", src[0], MaxLineLength), wrapQuoted(" Bu> ", src[2], MaxLineLength)...), "\n")
 	if got != want {
 		t.Errorf("quote block:\n%s\nwant each line wrapped on its own:\n%s", got, want)
 	}
@@ -213,12 +213,45 @@ func TestQuoteModeUndoUnjoinsTheLastLine(t *testing.T) {
 	if qs.quoted[2] != 0 || qs.sel != 2 {
 		t.Errorf("quoted[2] = %d, sel = %d; want 0 and the bar back on line 3", qs.quoted[2], qs.sel)
 	}
-	assertFilledParagraph(t, quotedBlock(t, ch), "Bu> ", src[0]+" "+src[1])
+	assertFilledParagraph(t, quotedBlock(t, ch), " Bu> ", src[0]+" "+src[1])
 
 	qs.undoLast()
 	qs.undoLast()
 	if got := stripANSI(ch.buffer.GetContent()); got != "draft" {
 		t.Errorf("buffer = %q after undoing everything, want %q", got, "draft")
+	}
+}
+
+// #852: with the default prefix every quoted line starts with exactly one
+// space, and quoting a quote does not stack a second one anywhere in the prefix.
+func TestQuoteModeIndentsEveryLineOnce(t *testing.T) {
+	plain := wrapSource(reflowText, 78)
+	nested := wrapQuoted(" Sh> ", reflowText, 78)
+	old := wrapQuoted("Sh> ", reflowText, 78)
+	for _, tc := range []struct {
+		name   string
+		src    []string
+		prefix string
+	}{
+		{"plain source", plain, " Bu> "},
+		{"source with the new prefix", nested, " Bu> Sh> "},
+		{"source with the old prefix", old, " Bu> Sh> "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, ch, _, cleanup := newQuoteHarness(t, "", tc.src)
+			defer cleanup()
+			qs := newQuoteSession(ch, tc.src, 1)
+			for range tc.src {
+				qs.quoteSelected()
+			}
+			got := quotedBlock(t, ch)
+			for i, line := range got {
+				if strings.HasPrefix(line, "  ") || strings.Contains(line, ">  ") {
+					t.Errorf("line %d = %q has a stacked space", i, line)
+				}
+			}
+			assertFilledParagraph(t, got, tc.prefix, reflowText)
+		})
 	}
 }
 
@@ -249,7 +282,7 @@ func TestQuoteModeReflowNearTheLineLimit(t *testing.T) {
 	// Undo pulls the second line out and the first is whole again.
 	qs.undoLast()
 	got := quotedBlock(t, ch)
-	assertFilledParagraph(t, got, "Bu> ", src[0])
+	assertFilledParagraph(t, got, " Bu> ", src[0])
 	if qs.paras[0].closed {
 		t.Error("paragraph is still closed after undo, though it fits again")
 	}
