@@ -35,3 +35,18 @@ func TestQuoteBannerEmptyAddressee(t *testing.T) {
 		t.Errorf("banner = %q", top)
 	}
 }
+
+// A template's own text can't join a value to make a screen code.
+func TestQuoteBannerCodesCantFormAcrossTemplateBoundary(t *testing.T) {
+	for _, tc := range []struct{ tmpl, to string }{
+		{"[|^F]", "CL"},
+		{"[|C^F]", "L"},
+		{"[|^F]", "PP"},
+	} {
+		ch := &CommandHandler{quoteData: &QuoteData{To: tc.to}, quoteTopStr: tc.tmpl}
+		top, _ := ch.quoteBanners()
+		if strings.Contains(top, "\x1b[2J") || strings.Contains(top, "\x1b[u") {
+			t.Errorf("template %q with To %q ran a screen code: %q", tc.tmpl, tc.to, top)
+		}
+	}
+}

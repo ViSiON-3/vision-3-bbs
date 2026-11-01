@@ -671,7 +671,8 @@ func (ch *CommandHandler) quoteBanners() (top, bottom string) {
 	// The sysop's banner keeps every pipe code; the author and subject in it only
 	// get to colour, or a name like "|CL" would clear the screen when quoted.
 	banner := func(tmpl string) string {
-		return ch.processForBuffer(ch.expandQuoteCodes(tmpl, ansi.EscapeScreenPipeCodes))
+		field := func(v string) string { return ch.processForBuffer(ansi.EscapeScreenPipeCodes(v)) }
+		return ch.expandQuoteCodes(tmpl, ch.processForBuffer, field)
 	}
 	if !ch.networked {
 		return banner(ch.quoteTopText()), banner(ch.quoteBottomText())
