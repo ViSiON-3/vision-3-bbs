@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -392,15 +391,16 @@ readerLoop:
 
 		// Process message body and pre-format all lines
 		area, _ := e.MessageMgr.GetAreaByID(currentAreaID)
+		displayBody := bodyForDisplay(currentMsg.Body, currentMsg.Charset)
 		includeOrigin := area != nil && (area.AreaType == "echomail" || area.AreaType == "netmail") &&
-			currentMsg.OrigAddr != "" && !hasOriginLine(currentMsg.Body)
-		formattedBody := formatMessageBody(currentMsg.Body, currentMsg.OrigAddr, includeOrigin, quoteBanners)
+			currentMsg.OrigAddr != "" && !hasOriginLine(displayBody)
+		formattedBody := formatMessageBody(displayBody, currentMsg.OrigAddr, includeOrigin, quoteBanners)
 
 		// Convert colour pipe codes to ANSI sequences. Only colour: the body
 		// was written on another system, so "||" and the screen-control codes
 		// are text, not ViSiON/3 escapes.
 		processedBodyBytes := ansi.ReplaceColorPipeCodes([]byte(formattedBody))
-		wrappedBodyLines := messageBodyLines(string(processedBodyBytes), currentMsg.Charset, termWidth, outputMode)
+		wrappedBodyLines := messageBodyLinesWithBanners(string(processedBodyBytes), currentMsg.Charset, termWidth, outputMode, quoteBanners)
 
 		// Calculate available body height
 		// Find the actual bottom row of the header using ANSI cursor tracking
@@ -1066,8 +1066,6 @@ func readerThreadView(e *MenuExecutor, areaID, msgNum int, cur *message.DisplayM
 	}
 	return newThreadView(nodes, msgNum, load)
 }
-
-var quotePrefixRe = regexp.MustCompile(`^[A-Za-z0-9]{1,3}>`)
 
 // MessageHeaderTemplate represents a discovered message header template file.
 type MessageHeaderTemplate struct {

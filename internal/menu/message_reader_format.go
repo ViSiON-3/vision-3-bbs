@@ -77,9 +77,35 @@ func decodeCharmap(s string, cm *charmap.Charmap) string {
 	return out
 }
 
+// bodyForDisplay returns a stored body as UTF-8 with everything taken out that a
+// terminal would act on, for the reader. It runs before anything else looks at
+// the body, so nothing in a string's payload can pass for art, a quote or an
+// origin line, and a pipe code in one never expands into an escape that would
+// end it early. The charset has to be settled first: only then is 0x9B known to
+// be a cent sign and U+009B known to be CSI.
+//
+// The stored message stays as it arrived. Exports need its bytes, since FTN, QWK
+// and V3Net all use a body to recognise a message they have already seen.
+//
+// Auto-wrap is the one thing the art path may keep, because the renderer acts on
+// it and never passes it on.
+func bodyForDisplay(body, charset string) string {
+	decoded := bodyAsUTF8(body, charset)
+	if art := ansi.ArtBodyText(decoded); detectAnsiArtInMessage(art) {
+		return art
+	}
+	return ansi.BodyText(decoded)
+}
+
 // messageBodyLines turns a message body, colour pipe codes already expanded,
 // into the lines the reader paints, as UTF-8.
 func messageBodyLines(body, charset string, termWidth int, mode ansi.OutputMode) []string {
+	return messageBodyLinesWithBanners(body, charset, termWidth, mode, nil)
+}
+
+// messageBodyLinesWithBanners is messageBodyLines for a board whose quote
+// banners are known, so that a banner shaped like a quote line is not reflowed.
+func messageBodyLinesWithBanners(body, charset string, termWidth int, mode ansi.OutputMode, banners quoteBannerMatcher) []string {
 	body = bodyAsUTF8(body, charset)
 
 	if detectAnsiArtInMessage(body) {
@@ -97,10 +123,12 @@ func messageBodyLines(body, charset string, termWidth int, mode ansi.OutputMode)
 		return RenderANSIArtToLines(body, min(termWidth, ansi.ArtWidth), 500)
 	}
 
-	// Word wrap cannot break a run with no spaces (an ASCII rule, a row of
-	// blocks) or a quote line, which it leaves alone; whatever is still too
-	// wide is cut, or it spills onto the row below when drawn.
+	// Quote lines are reflowed here and word wrap leaves them alone. Word wrap
+	// also cannot break a run with no spaces (an ASCII rule, a row of blocks);
+	// whatever is still too wide is cut, or it spills onto the row below when
+	// drawn.
 	body = dropTruncatedEscapes(body)
+	body = reflowQuotes(body, termWidth, mode, banners)
 	return breakOversizedLines(wrapAnsiString(body, termWidth, mode), termWidth, mode)
 }
 
@@ -165,7 +193,8 @@ func isQuoteLine(line string) bool {
 	if strings.HasPrefix(trimmed, ">") {
 		return true
 	}
-	return quotePrefixRe.MatchString(trimmed)
+	prefix, _ := splitReaderQuotePrefix(trimmed)
+	return prefix != ""
 }
 
 func isTearLine(line string) bool {

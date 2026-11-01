@@ -13,6 +13,23 @@ func jamMessage(from, to, subject string) *jam.Message {
 	return msg
 }
 
+// cleanKludge drops C1 in its UTF-8 form, where U+009B is CSI, and keeps raw
+// CP437, where the same value is a cent sign.
+func TestCleanKludgeDropsC1(t *testing.T) {
+	for in, want := range map[string]string{
+		"\x01PID: a\u009b2Jb":  "PID: a2Jb",
+		"a\u0085\u009d\u009fb": "ab",
+		"a\x1b[2J\x7fb":        "a[2Jb",
+		"Caf\x82 \x9b5 \xdb":   "Caf\x82 \x9b5 \xdb",
+		"caf\xc3\xa9 \xc2\xa2": "caf\xc3\xa9 \xc2\xa2",
+		"  spaced  ":           "spaced",
+	} {
+		if got := cleanKludge(in); got != want {
+			t.Errorf("cleanKludge(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 // Whatever a post's fields hold, the base and the post hook get them clean.
 func TestAddMessageCleansHeaderFields(t *testing.T) {
 	mm := newReplyTestManager(t)

@@ -451,6 +451,17 @@ lines), are rendered on a virtual screen and shown as whole rows, so scrolling
 does not shear them. ANSI messages render at 80 columns at most, since that is
 what message art is drawn for; a wider terminal shows them at 80.
 
+**Terminal control in message bodies.** The reader sends a caller's terminal only
+what a body needs to draw: colour, cursor movement and position, erasing the
+line or screen (not the scrollback), and cursor save and restore. Everything else
+is left out without a trace, so a message cannot set a window title, change a
+terminal's modes or character set, reset it, ring its bell, or ask it a question
+whose answer would land in the caller's input. Text inside an OSC, DCS, APC, PM
+or SOS string is not shown; a string that never ends costs the rest of its line,
+and the message carries on from the next one. Raw CP437 is untouched, including
+0x80 to 0x9F. The stored message does not change, and network exports and QWK
+packets carry it as it arrived.
+
 ### Composing Messages
 
 The `COMPOSEMSG` function launches the built-in editor. Subject line required. For echomail areas, automatically adds MSGID, tearline, and origin line.
@@ -482,9 +493,13 @@ or offered if they have **Ask each post** on.
 ### Quoting in the Editor
 
 When a caller replies, the editor's quote picker lets them pull lines from the
-original into their message, prefixed with the author's initials
-(`QuotePrefix` in `strings.json`; `^I` = initials, `^N` = name). Two things
-happen to the quoted text:
+original into their message, prefixed with one space and the author's initials
+(`QuotePrefix` in `strings.json`, shipped as `" ^I> "`; `^I` = initials,
+`^N` = name). The prefix is used in every area, so in echomail and netmail the
+quoted lines go out in the usual FTN form, ` RW> text`, with no colour codes.
+A board set up before this default keeps its own value; see
+[Changed shipped strings](../getting-started/upgrading.md#changed-shipped-strings).
+Two things happen to the quoted text:
 
 - **Paragraphs are reflowed.** A run of source lines from one paragraph is
   joined and rewrapped under the quote prefix, so a near-full source line does
@@ -496,7 +511,8 @@ happen to the quoted text:
   taken as whole paragraphs. Only consecutive source lines join; skipping a
   line starts a new paragraph, so a quote never closes up over omitted text.
   Backspace takes the last line back out of its paragraph. A nested quote
-  prefix (`Sh> `) is carried onto every wrapped line (`Bu> Sh> …`).
+  prefix (`Sh> `) is carried onto every wrapped line (` Bu> Sh> …`), with the
+  one leading space only at the start.
 - **Quoted lines keep their breaks while editing.** Backspace and Delete refill
   the caller's own paragraph up to the margin, and words can move back onto the
   line above. Each quoted line stands alone, so that reflow never crosses into

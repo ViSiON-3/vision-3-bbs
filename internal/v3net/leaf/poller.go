@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -140,10 +141,14 @@ type pollCursor struct {
 // A control character in the subject is cleaned rather than refused. The hub
 // refuses a new one, but it may hold messages from before it did, and refusing
 // those would lose them on this board for the sake of one character. The author
-// signed the original, so that is what gets checked.
+// signed the original, so that is what gets checked. The board name, tearline and
+// origin get the same treatment, the last two because they join the stored body.
 func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
 	signed := msg
 	msg.Subject = protocol.CleanSubject(msg.Subject)
+	msg.OriginBoard = ansi.HeaderText(msg.OriginBoard)
+	msg.Tearline = ansi.HeaderText(msg.Tearline)
+	msg.Origin = ansi.HeaderText(msg.Origin)
 	if err := msg.Validate(); err != nil {
 		l.refuse(&msg, "leaf: invalid message from hub, skipping", "error", err)
 		return false, nil

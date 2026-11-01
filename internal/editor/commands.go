@@ -73,7 +73,7 @@ type CommandHandler struct {
 const (
 	defaultQuoteTop    = "|08[|15^N |07Said|08]"
 	defaultQuoteBottom = "|08[|15^N |07Done|08]|07"
-	defaultQuotePrefix = "^I> "
+	defaultQuotePrefix = " ^I> "
 )
 
 // NewCommandHandler creates a new command handler
