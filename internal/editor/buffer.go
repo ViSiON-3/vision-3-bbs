@@ -15,7 +15,11 @@ const (
 type MessageBuffer struct {
 	lines       [MaxLines + 1]string // 1-based indexing, line 0 unused
 	hardNewline [MaxLines + 1]bool   // true = user-created line break (Enter); false = soft wrap
-	lineCount   int                  // Number of lines with content
+	// wordSplit marks a soft wrap that fell inside a word too long for the
+	// margin. Such a break stands for no space, unlike an ordinary soft wrap,
+	// which stands for the one space between two words.
+	wordSplit [MaxLines + 1]bool
+	lineCount int // Number of lines with content
 }
 
 // NewMessageBuffer creates a new message buffer
@@ -41,10 +45,29 @@ func (mb *MessageBuffer) SetHardNewline(lineNum int, hard bool) {
 	mb.hardNewline[lineNum] = hard
 }
 
+// IsWordSplit reports whether the soft wrap at the end of lineNum fell inside
+// a word, so rejoining the line with the next must not add a space.
+func (mb *MessageBuffer) IsWordSplit(lineNum int) bool {
+	if lineNum < 1 || lineNum > MaxLines {
+		return false
+	}
+	return mb.wordSplit[lineNum]
+}
+
+// SetWordSplit sets or clears the word-split flag for a line. Only
+// WordWrapper sets it, when it breaks a word that has no space to wrap at.
+func (mb *MessageBuffer) SetWordSplit(lineNum int, split bool) {
+	if lineNum < 1 || lineNum > MaxLines {
+		return
+	}
+	mb.wordSplit[lineNum] = split
+}
+
 // LoadContent loads initial content into the buffer
 func (mb *MessageBuffer) LoadContent(content string) {
 	mb.lines = [MaxLines + 1]string{}
 	mb.hardNewline = [MaxLines + 1]bool{}
+	mb.wordSplit = [MaxLines + 1]bool{}
 	mb.lineCount = 1
 
 	if content == "" {
@@ -220,12 +243,14 @@ func (mb *MessageBuffer) InsertLine(lineNum int) bool {
 		if i+1 <= MaxLines {
 			mb.lines[i+1] = mb.lines[i]
 			mb.hardNewline[i+1] = mb.hardNewline[i]
+			mb.wordSplit[i+1] = mb.wordSplit[i]
 		}
 	}
 
 	// Clear the new line
 	mb.lines[lineNum] = ""
 	mb.hardNewline[lineNum] = false
+	mb.wordSplit[lineNum] = false
 	mb.lineCount++
 
 	return true
@@ -241,11 +266,13 @@ func (mb *MessageBuffer) DeleteLine(lineNum int) bool {
 	for i := lineNum; i < mb.lineCount; i++ {
 		mb.lines[i] = mb.lines[i+1]
 		mb.hardNewline[i] = mb.hardNewline[i+1]
+		mb.wordSplit[i] = mb.wordSplit[i+1]
 	}
 
 	// Clear the last line
 	mb.lines[mb.lineCount] = ""
 	mb.hardNewline[mb.lineCount] = false
+	mb.wordSplit[mb.lineCount] = false
 	mb.lineCount--
 
 	// Always have at least one line
@@ -260,7 +287,7 @@ func (mb *MessageBuffer) DeleteLine(lineNum int) bool {
 // SplitLine splits a line at the specified column (1-based).
 // The split line (lineNum) gets hardNewline=false; the caller sets it to true
 // for user-initiated splits (Enter, Ctrl+N). The new line (lineNum+1) inherits
-// the original hardNewline value of lineNum.
+// the original hardNewline and wordSplit values of lineNum.
 // Returns true if successful.
 func (mb *MessageBuffer) SplitLine(lineNum, col int) bool {
 	if lineNum < 1 || lineNum > mb.lineCount || mb.lineCount >= MaxLines {
@@ -269,6 +296,7 @@ func (mb *MessageBuffer) SplitLine(lineNum, col int) bool {
 
 	line := mb.lines[lineNum]
 	oldHardNewline := mb.hardNewline[lineNum]
+	oldWordSplit := mb.wordSplit[lineNum]
 
 	// Split the line at the column
 	var leftPart, rightPart string
@@ -298,13 +326,16 @@ func (mb *MessageBuffer) SplitLine(lineNum, col int) bool {
 	// Split line gets false (caller decides); new line inherits old value
 	mb.hardNewline[lineNum] = false
 	mb.hardNewline[lineNum+1] = oldHardNewline
+	mb.wordSplit[lineNum] = false
+	mb.wordSplit[lineNum+1] = oldWordSplit
 
 	return true
 }
 
 // JoinLines joins the current line with the next line.
 // The combined line inherits hardNewline from the second line (lineNum+1),
-// since the end of the combined line is where line lineNum+1 used to end.
+// since the end of the combined line is where line lineNum+1 used to end, and
+// its wordSplit flag for the same reason.
 func (mb *MessageBuffer) JoinLines(lineNum int) bool {
 	if lineNum < 1 || lineNum >= mb.lineCount {
 		return false
@@ -312,6 +343,7 @@ func (mb *MessageBuffer) JoinLines(lineNum int) bool {
 
 	// Save the second line's hardNewline before it gets shifted by DeleteLine
 	nextHardNewline := mb.hardNewline[lineNum+1]
+	nextWordSplit := mb.wordSplit[lineNum+1]
 
 	// Combine the two lines
 	combined := mb.lines[lineNum] + mb.lines[lineNum+1]
@@ -324,6 +356,7 @@ func (mb *MessageBuffer) JoinLines(lineNum int) bool {
 
 	// Combined line inherits the second line's hard newline status
 	mb.hardNewline[lineNum] = nextHardNewline
+	mb.wordSplit[lineNum] = nextWordSplit
 	return true
 }
 
@@ -348,6 +381,7 @@ func (mb *MessageBuffer) Clear() {
 	for i := 1; i <= MaxLines; i++ {
 		mb.lines[i] = ""
 		mb.hardNewline[i] = false
+		mb.wordSplit[i] = false
 	}
 	mb.lineCount = 1
 }

@@ -46,7 +46,9 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 		// Spaces in the buffer are editable content. Trimming them here would
 		// make a single Backspace delete extra characters and move the cursor.
 		line := ww.buffer.GetLine(i)
-		if i > startLine && collected.Len() > 0 && len(line) > 0 {
+		// A soft wrap stands for the space between two words, except where it
+		// split a word too long for the margin.
+		if i > startLine && collected.Len() > 0 && len(line) > 0 && !ww.buffer.IsWordSplit(i-1) {
 			collected.WriteByte(' ')
 			if !cursorFound {
 				cursorOffset++
@@ -74,6 +76,7 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 	// Track start offsets in the collected text for cursor mapping.
 	var outputLines []string
 	var lineStarts []int
+	var splits []bool // splits[i]: output line i ends inside a word
 	pos := 0
 
 	for pos < len(text) {
@@ -82,15 +85,23 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 
 		if len(remaining) <= MaxLineLength {
 			outputLines = append(outputLines, remaining)
+			splits = append(splits, false)
 			break
 		}
 
 		wrapPos := ww.findWrapPosition(remaining)
-		if wrapPos <= 0 {
+		split := wrapPos <= 0
+		if split {
 			wrapPos = MaxLineLength
 		}
 
 		outputLines = append(outputLines, remaining[:wrapPos])
+		splits = append(splits, split)
+		if split {
+			// No space was consumed, so there is none to restore below.
+			pos += wrapPos
+			continue
+		}
 
 		// The soft line break represents one separator space (restored when
 		// collecting above). Preserve any additional spaces on either side.
@@ -105,6 +116,7 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 				// together, losing the space.
 				lineStarts = append(lineStarts, pos)
 				outputLines = append(outputLines, "")
+				splits = append(splits, false)
 			}
 		}
 	}
@@ -112,6 +124,7 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 	if len(outputLines) == 0 {
 		outputLines = []string{""}
 		lineStarts = []int{0}
+		splits = []bool{false}
 	}
 
 	// Place output lines back into the buffer
@@ -126,6 +139,7 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 	for i := 0; i < commonCount; i++ {
 		ww.buffer.SetLine(startLine+i, outputLines[i])
 		ww.buffer.SetHardNewline(startLine+i, false)
+		ww.buffer.SetWordSplit(startLine+i, splits[i])
 	}
 
 	if newCount > originalCount {
@@ -143,7 +157,11 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 					ww.buffer.SetLine(last, ww.buffer.GetLine(last)+" ")
 				} else {
 					curr := ww.buffer.GetLine(last)
-					if curr != "" {
+					if ww.buffer.IsWordSplit(last) {
+						// The tail carries on a word split at the margin.
+						ww.buffer.SetLine(last, curr+tail)
+						ww.buffer.SetWordSplit(last, false)
+					} else if curr != "" {
 						ww.buffer.SetLine(last, curr+" "+tail)
 					} else {
 						ww.buffer.SetLine(last, tail)
@@ -153,6 +171,7 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 			}
 			ww.buffer.SetLine(startLine+i, outputLines[i])
 			ww.buffer.SetHardNewline(startLine+i, false)
+			ww.buffer.SetWordSplit(startLine+i, splits[i])
 			actualNew++
 		}
 		// Truncate tracking to what was actually written
@@ -173,8 +192,10 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 		newCount = bufLineCount - startLine + 1
 	}
 
-	// Last output line inherits the original paragraph-end hardNewline
+	// Last output line inherits the original paragraph-end hardNewline. Its
+	// end is the paragraph's end, so it splits no word.
 	ww.buffer.SetHardNewline(startLine+newCount-1, endHardNewline)
+	ww.buffer.SetWordSplit(startLine+newCount-1, false)
 
 	// Map cursor offset to output line/col using lineStarts.
 	// Use actual buffer line lengths (not outputLines) since buffer-full
@@ -261,26 +282,16 @@ func (ww *WordWrapper) reflowAfterDelete(lineNum, col int) (int, int) {
 // the space between words, and starting above would drop that space, so the
 // next word typed would fuse onto the line above.
 //
-// The walk also stops below a word split at the margin. That split has no
-// space behind it, and rejoining the lines would write one into the word.
-// Such a line is full, so nothing could move up onto it anyway.
+// The walk may cross a word split at the margin: the buffer's word-split flag
+// tells ReflowRange to rejoin it without a space.
 func (ww *WordWrapper) deleteReflowStart(lineNum int) int {
 	if ww.buffer.GetLineLength(lineNum) == 0 {
 		return lineNum
 	}
-	for lineNum > 1 && !ww.buffer.IsHardNewline(lineNum-1) && !ww.buffer.IsLineEmpty(lineNum-1) &&
-		!isSplitWordLine(ww.buffer.GetLine(lineNum-1)) {
+	for lineNum > 1 && !ww.buffer.IsHardNewline(lineNum-1) && !ww.buffer.IsLineEmpty(lineNum-1) {
 		lineNum--
 	}
 	return lineNum
-}
-
-// isSplitWordLine reports whether line could be the front of a word too long
-// for the margin. ReflowRange splits a word only when findWrapPosition finds no
-// space past the first column, leaving a line with none. A word of exactly the
-// margin's width also matches, which is harmless: that line is full too.
-func isSplitWordLine(line string) bool {
-	return len(line) >= MaxLineLength && !strings.Contains(line[1:], " ")
 }
 
 // HandleBackspace handles backspace at the given position.

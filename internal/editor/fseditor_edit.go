@@ -99,6 +99,8 @@ func (e *FSEditor) deleteLine() {
 // Backspace and Delete make at a line boundary, Ctrl-J joins two lines as
 // words: a space goes between them unless one side already has whitespace at
 // the join or is empty, so "one" and "two" become "one two", not "onetwo".
+// The exception is a word the wrapper split at the margin, which goes back
+// together whole.
 func (e *FSEditor) joinLines() {
 	if e.currentLine >= e.buffer.GetLineCount() {
 		return
@@ -109,7 +111,8 @@ func (e *FSEditor) joinLines() {
 	// the A0 of "à", would read as a space on its own.
 	last, _ := utf8.DecodeLastRuneInString(first)
 	next, _ := utf8.DecodeRuneInString(second)
-	if first != "" && second != "" && !unicode.IsSpace(last) && !unicode.IsSpace(next) {
+	if first != "" && second != "" && !unicode.IsSpace(last) && !unicode.IsSpace(next) &&
+		!e.buffer.IsWordSplit(e.currentLine) {
 		e.buffer.SetLine(e.currentLine, first+" ")
 	}
 	// Clear hardNewline so reflow can flow across the boundary
