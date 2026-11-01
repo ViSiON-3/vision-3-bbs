@@ -247,6 +247,84 @@ func TestReaderQuoteKeepsColourOnEveryRow(t *testing.T) {
 	}
 }
 
+// The reader colours each stored line and closes it, so joined text has to keep
+// the quote colour past each place where two lines met.
+func TestReaderJoinedQuoteStaysInQuoteColour(t *testing.T) {
+	src := wrapAsQuote("RW> ", quoteTestText+" "+quoteTestText, 72)
+	formatted := formatMessageBody(strings.Join(src, "\n"), "", false, nil)
+	lines := messageBodyLines(string(ansi.ReplaceColorPipeCodes([]byte(formatted))), "", 100, ansi.OutputModeCP437)
+	if len(lines) >= len(src) {
+		t.Fatalf("lines = %q, want them joined", lines)
+	}
+	yellow := string(ansi.ReplaceColorPipeCodes([]byte("|14")))
+	yellowParams := strings.TrimPrefix(yellow, "\x1b[")
+	for i, line := range lines {
+		current := ""
+		for j := 0; j < len(line); {
+			if n := escapeLen(line, j); n > 0 {
+				current = line[j : j+n]
+				j += n
+				continue
+			}
+			if line[j] != ' ' && !strings.HasSuffix(current, yellowParams) {
+				t.Errorf("line %d: %q is drawn in %q, want the quote colour: %q", i, line[j:], current, line)
+				break
+			}
+			j++
+		}
+	}
+}
+
+// Many colour changes cost a bounded amount per row, not the whole history.
+func TestReaderQuoteColourCarryIsBounded(t *testing.T) {
+	var body strings.Builder
+	body.WriteString("RW> ")
+	for i := range 500 {
+		body.WriteString("\x1b[3" + string(rune('1'+i%6)) + "mword ")
+	}
+	lines := messageBodyLines(body.String(), "", 60, ansi.OutputModeCP437)
+	if len(lines) < 10 {
+		t.Fatalf("got %d lines, want the quote wrapped", len(lines))
+	}
+	last := lines[len(lines)-1]
+	after := strings.TrimPrefix(last, " RW> ")
+	if end := strings.IndexByte(after, 'm'); end < 0 || end > len("\x1b[31") {
+		t.Errorf("last row carries more than one colour: %q", last)
+	}
+}
+
+func TestSGRStateKeepsWhatIsInForce(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"plain", ""},
+		{"\x1b[31m\x1b[32m", "\x1b[32m"},
+		{"\x1b[1;33m", "\x1b[1;33m"},
+		{"\x1b[1;33m\x1b[0;37m", "\x1b[0;37m"},
+		{"\x1b[31m\x1b[0m", "\x1b[0m"},
+		{"\x1b[31m\x1b[m", "\x1b[0m"},
+		{"\x1b[31m\x1b[44m\x1b[32m", "\x1b[44;32m"},
+		{"\x1b[38;5;200m\x1b[31m", "\x1b[31m"},
+		{"\x1b[31m\x1b[38;2;1;2;3m", "\x1b[38;2;1;2;3m"},
+		{"\x1b[2K", ""},
+	} {
+		var c sgrState
+		c.scan(tc.in)
+		if got := c.String(); got != tc.want {
+			t.Errorf("after %q: %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// Colour art whose row looks like initials is not treated as a quote, whether
+// it reaches the check as raw CP437 or decoded.
+func TestFormatMessageBodyLeavesBlockRowsAlone(t *testing.T) {
+	for _, row := range []string{"░▒▓> ████  ████", "\xb0\xb1\xb2> \xdb\xdb\xdb"} {
+		body := "before\n" + row + "\nafter"
+		if got := formatMessageBody(body, "", false, nil); got != body {
+			t.Errorf("formatMessageBody(%q) = %q, want it unchanged", body, got)
+		}
+	}
+}
+
 // The reader's own colouring still finds quote lines with the new leading space.
 func TestFormatMessageBodyColoursIndentedQuotes(t *testing.T) {
 	got := formatMessageBody("Hello\n RW> quoted\n Ém> also\nBye", "", false, nil)

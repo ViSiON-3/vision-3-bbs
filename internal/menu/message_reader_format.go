@@ -8,7 +8,6 @@ import (
 	"golang.org/x/text/encoding/charmap"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 )
 
 // bodyAsUTF8 settles a message body's encoding once, for the whole body, and
@@ -174,7 +173,7 @@ func isQuoteLine(line string) bool {
 	if strings.HasPrefix(trimmed, ">") {
 		return true
 	}
-	prefix, _ := editor.SplitQuotePrefix(trimmed)
+	prefix, _ := splitReaderQuotePrefix(trimmed)
 	return prefix != ""
 }
 

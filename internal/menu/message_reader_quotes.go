@@ -1,6 +1,8 @@
 package menu
 
 import (
+	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -30,16 +32,27 @@ type quoteLine struct {
 	body   string // the rest, with its escapes
 }
 
+// splitReaderQuotePrefix is editor.SplitQuotePrefix less the rows whose
+// "initials" are block or box glyphs, which are colour art. line may still be
+// raw CP437, as formatMessageBody sees it, or already decoded.
+func splitReaderQuotePrefix(line string) (prefix, body string) {
+	prefix, body = editor.SplitQuotePrefix(line)
+	decoded := prefix
+	if !utf8.ValidString(decoded) {
+		decoded = string(ansi.CP437BytesToUTF8([]byte(decoded)))
+	}
+	if strings.ContainsFunc(decoded, func(r rune) bool { return r >= 0x2500 && r <= 0x259F }) {
+		return "", line
+	}
+	return prefix, body
+}
+
 // parseQuoteLine takes line apart. It reports false for anything that is not a
-// quote line with a prefix: tearlines, origin lines, banners, and block or box
-// glyphs followed by '>', which are colour art rather than initials.
+// quote line with a prefix, including tearlines, origin lines and banners.
 func parseQuoteLine(line string, banners quoteBannerMatcher) (quoteLine, bool) {
 	plain := strings.TrimRight(stripEscapes(line), " \t\r")
-	prefix, plainBody := editor.SplitQuotePrefix(plain)
+	prefix, plainBody := splitReaderQuotePrefix(plain)
 	if prefix == "" || isTearLine(plain) || isOriginLine(plain) || banners.match(line) {
-		return quoteLine{}, false
-	}
-	if strings.ContainsFunc(prefix, func(r rune) bool { return r >= 0x2500 && r <= 0x259F }) {
 		return quoteLine{}, false
 	}
 
@@ -75,8 +88,8 @@ func splitQuoteBody(s string) (indent, body string) {
 		}
 		c := s[i]
 		i++
-		switch {
-		case c == ' ' || c == '\t' || c == '\r':
+		switch c {
+		case ' ', '\t', '\r':
 			if leading && c != '\r' {
 				ind.WriteByte(c)
 			} else if !leading {
@@ -179,11 +192,16 @@ func wrapQuoteParagraph(para []*quoteLine, width int, mode ansi.OutputMode) []st
 	bodies := make([]string, len(para))
 	for i, q := range para {
 		bodies[i] = q.body
+		// A stored line usually closes its own colour, so each later line has
+		// to open its colour again or the rest of the paragraph loses it.
+		if i > 0 {
+			bodies[i] = q.head + q.body
+		}
 	}
 	joined := strings.Join(bodies, " ")
 
 	var out []string
-	carry := ""
+	var colour sgrState
 	for _, row := range wrapVisualLine(joined, avail, utf8.ValidString(joined), mode) {
 		chunks := []string{row}
 		// A word wider than the room has to be cut, but under the prefix.
@@ -191,33 +209,98 @@ func wrapQuoteParagraph(para []*quoteLine, width int, mode ansi.OutputMode) []st
 			chunks = hardBreak(row, avail, mode)
 		}
 		for _, chunk := range chunks {
-			out = append(out, first.head+lead+carry+chunk)
-			carry = activeColour(carry, chunk)
+			out = append(out, first.head+lead+colour.String()+chunk)
+			colour.scan(chunk)
 		}
 	}
 	return out
 }
 
-// activeColour returns the colour sequences still in force after s, given those
-// in force before it. Each row's prefix is drawn in the quote's colour, so a
-// colour the text set on an earlier row has to be put back after the prefix.
-func activeColour(colour, s string) string {
+// sgrMaxParams bounds sgrState against a body built to grow it. Foreground and
+// background replace themselves, so only odd attributes ever reach this.
+const sgrMaxParams = 16
+
+// sgrState is the colour text has set and not yet changed. Each row's prefix is
+// drawn in the quote's colour, so a colour set on an earlier row has to be put
+// back after the prefix. Only what is still in force is kept, so the cost of
+// doing that does not grow with the number of colour changes in the paragraph.
+type sgrState struct {
+	reset  bool // the state starts from a reset, not from the prefix's colour
+	params []string
+}
+
+// scan applies every colour sequence in s.
+func (c *sgrState) scan(s string) {
 	for i := 0; i < len(s); {
 		n := escapeLen(s, i)
 		if n == 0 {
 			i++
 			continue
 		}
-		if seq := s[i : i+n]; strings.HasSuffix(seq, "m") {
-			// A sequence opening with a reset cancels all that came before.
-			params := strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b["), "m")
-			if params == "" || params == "0" || strings.HasPrefix(params, "0;") {
-				colour = seq
-			} else {
-				colour += seq
-			}
+		if seq := s[i : i+n]; strings.HasPrefix(seq, "\x1b[") && strings.HasSuffix(seq, "m") {
+			c.apply(strings.Split(seq[2:len(seq)-1], ";"))
 		}
 		i += n
 	}
-	return colour
+}
+
+func (c *sgrState) apply(params []string) {
+	for i := 0; i < len(params); i++ {
+		p := params[i]
+		if p == "" || p == "0" {
+			c.reset = true
+			c.params = nil
+			continue
+		}
+		// An extended colour takes the parameters that follow it.
+		if (p == "38" || p == "48") && i+1 < len(params) {
+			extra := 0
+			switch params[i+1] {
+			case "5":
+				extra = 2
+			case "2":
+				extra = 4
+			}
+			end := min(i+1+extra, len(params))
+			p = strings.Join(params[i:end], ";")
+			i = end - 1
+		}
+		class := sgrClass(p)
+		c.params = slices.DeleteFunc(c.params, func(q string) bool { return sgrClass(q) == class })
+		c.params = append(c.params, p)
+		if len(c.params) > sgrMaxParams {
+			c.params = c.params[1:]
+		}
+	}
+}
+
+// sgrClass names what a parameter sets, so that a later one of the same class
+// replaces it.
+func sgrClass(p string) string {
+	code, _, _ := strings.Cut(p, ";")
+	switch n, err := strconv.Atoi(code); {
+	case err != nil:
+		return p
+	case n >= 30 && n <= 39, n >= 90 && n <= 97:
+		return "fg"
+	case n >= 40 && n <= 49, n >= 100 && n <= 107:
+		return "bg"
+	}
+	return p
+}
+
+// String renders the state as one sequence, or "" if nothing has been set.
+func (c *sgrState) String() string {
+	if !c.reset && len(c.params) == 0 {
+		return ""
+	}
+	params := strings.Join(c.params, ";")
+	switch {
+	case !c.reset:
+	case params == "":
+		params = "0"
+	default:
+		params = "0;" + params
+	}
+	return "\x1b[" + params + "m"
 }
