@@ -10,6 +10,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
 
 // hostileBodySeqs are what a message from another board can carry that a
@@ -213,8 +214,13 @@ func TestBodyControlsOtherScreens(t *testing.T) {
 	// The threaded list shows a root's subject, so only a reply shows its excerpt.
 	t.Run("list excerpt", func(t *testing.T) {
 		env := newMsgEnv(t)
-		storeRawBody(t, env, generalAreaID, "root\n")
-		storeRawBody(t, env, generalAreaID, body)
+		mm := env.e.MessageMgr
+		if _, err := mm.Post(generalAreaID, "Remote Guy", "All", "Hostile", "root\n", message.PostOptions{}); err != nil {
+			t.Fatalf("Post root: %v", err)
+		}
+		if _, err := mm.Post(generalAreaID, "Remote Guy", "All", "Hostile", body, message.PostOptions{ReplyToNum: 1}); err != nil {
+			t.Fatalf("Post reply: %v", err)
+		}
 		r := env.runCmd("LISTMSGS", env.caller, "", "QQ")
 		if !r.has("OPENMARK") {
 			t.Fatalf("the excerpt was not drawn; output:\n%s", r.text())
