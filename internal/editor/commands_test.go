@@ -326,13 +326,14 @@ func TestHandleViewListsTheMessage(t *testing.T) {
 func TestProcessQuoteCodes(t *testing.T) {
 	_, ch, _, cleanup := newQuoteHarness(t, "", nil)
 	defer cleanup()
-	ch.SetQuoteData(&QuoteData{From: "John Smith", Title: "Re: doors", Date: "08/28/26", Time: "9:15 pm"})
+	ch.SetQuoteData(&QuoteData{From: "John Smith", Title: "Re: doors", To: "Jane Doe", Date: "08/28/26", Time: "9:15 pm"})
 
 	for _, tc := range []struct{ in, want string }{
 		{"^N wrote", "John Smith wrote"},
 		{"^n on ^D at ^W", "John Smith on 08/28/26 at 9:15 pm"},
 		{"^d ^w ^t", "08/28/26 9:15 pm Re: doors"},
 		{"[^T]", "[Re: doors]"},
+		{"^N to ^F, ^f", "John Smith to Jane Doe, Jane Doe"},
 		{"^I> ^i>", "JS> JS>"},
 		{"2^8 and a^", "2^8 and a^"}, // an unknown code and a trailing caret pass through
 		{"", ""},

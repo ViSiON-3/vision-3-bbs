@@ -15,8 +15,8 @@ var builtinQuoteBanners = []string{"|08[|15^N |07Said|08]", "|08[|15^N |07Done|0
 var pipeColourRe = regexp.MustCompile(`\|[0-9]{2}`)
 
 // quoteCodeRe matches the editor's quote substitutions (^N author, ^I
-// initials, ^T title, ^D date, ^W time).
-var quoteCodeRe = regexp.MustCompile(`\^[NnIiTtDdWw]`)
+// initials, ^T title, ^F who to, ^D date, ^W time).
+var quoteCodeRe = regexp.MustCompile(`\^[NnIiTtFfDdWw]`)
 
 // quoteBannerMatcher reports whether a message line is a quote banner the
 // editor wrote, for the board's configured templates and the built-in ones.

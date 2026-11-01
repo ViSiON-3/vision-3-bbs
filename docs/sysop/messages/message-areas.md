@@ -501,7 +501,9 @@ happen to the quoted text:
   is wrapped in the `quoteTop` and `quoteBottom` strings (shipped as
   `[Name Said]` / `[Name Done]`, with pipe colours). In echomail, netmail and
   QWK network areas the plain `quoteTopNet` and `quoteBottomNet` strings are
-  used instead, shipped as `^N wrote:` and no bottom line. Colours are
+  used instead, shipped as `^N wrote:` and no bottom line. All four accept
+  `^N` (author), `^I` (initials), `^T` (subject), `^F` (who the quoted message
+  was addressed to), `^D` (date) and `^W` (time). Colours are
   stripped from the net banners so no ANSI goes out over the network, and a
   blank value means no line at all (there is no fallback to the default).
   Keep them free of a leading `---`, which other software reads as a tearline.

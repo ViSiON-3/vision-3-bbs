@@ -76,3 +76,11 @@ func TestPlainQuoteBannersAreNotTearlines(t *testing.T) {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
 }
+
+// A banner using ^F is still recognised as a banner when reading the post back.
+func TestQuoteBannerMatcherWhoTo(t *testing.T) {
+	m := newQuoteBannerMatcher(&config.StringsConfig{QuoteTop: "|08[|15^N |07to |15^F|08]"})
+	if !m.match("[Bucko to All]") {
+		t.Error("a banner with ^F did not match")
+	}
+}

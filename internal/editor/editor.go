@@ -27,6 +27,7 @@ type EditorContext struct {
 	NextMsgNum int    // Next message number in the area (@#@)
 	ConfArea   string // "Conference > Area" combined string (@Z@)
 	Networked  bool   // area is echoed off the BBS: quote with the quote*Net strings
+	QuoteTo    string // who the quoted message was addressed to (^F in quote banners)
 }
 
 func resolveEditorPaths() (menuSetPath, rootConfigPath string) {
@@ -155,8 +156,13 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 
 	// Set quote data for /Q command
 	if len(quoteLines) > 0 {
+		var quoteTo string
+		if len(ctx) > 0 {
+			quoteTo = ctx[0].QuoteTo
+		}
 		quoteData := &QuoteData{
 			From:   quoteFrom,
+			To:     quoteTo,
 			Title:  quoteTitle,
 			Date:   quoteDate,
 			Time:   quoteTime,

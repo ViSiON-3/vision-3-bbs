@@ -36,6 +36,7 @@ const (
 // QuoteData holds message metadata for quoting
 type QuoteData struct {
 	From   string   // Message author
+	To     string   // Who the message was addressed to
 	Title  string   // Message subject/title
 	Date   string   // Message date
 	Time   string   // Message time
@@ -237,49 +238,49 @@ func (ch *CommandHandler) quoteNotice(inputHandler *InputHandler, text string) {
 	_, _ = inputHandler.ReadKey() // wait for any key
 }
 
-// processQuoteCodes processes ^N, ^T, ^D, ^W and ^I codes in quote strings
+// processQuoteCodes processes ^N, ^T, ^F, ^D, ^W and ^I codes in quote strings
 func (ch *CommandHandler) processQuoteCodes(text string) string {
-	return ch.expandQuoteCodes(text, func(s string) string { return s })
+	same := func(s string) string { return s }
+	return ch.expandQuoteCodes(text, same, same)
 }
 
-// expandQuoteCodes is processQuoteCodes with field applied to the author and
-// subject, which come from whoever wrote the message being quoted.
-func (ch *CommandHandler) expandQuoteCodes(text string, field func(string) string) string {
-	result := ""
-	i := 0
-	for i < len(text) {
-		if text[i] == '^' && i+1 < len(text) {
-			code := text[i+1]
-			switch code {
-			case 'N', 'n':
-				if ch.quoteData.IsAnon {
-					result += "Anonymous"
-				} else {
-					result += field(ch.quoteData.From)
-				}
-				i += 2
-			case 'I', 'i':
-				result += quoteInitials(ch.quoteAuthor())
-				i += 2
-			case 'T', 't':
-				result += field(ch.quoteData.Title)
-				i += 2
-			case 'D', 'd':
-				result += ch.quoteData.Date
-				i += 2
-			case 'W', 'w':
-				result += ch.quoteData.Time
-				i += 2
-			default:
-				result += string(text[i])
-				i++
-			}
-		} else {
-			result += string(text[i])
+// expandQuoteCodes is processQuoteCodes with literal applied to the template's
+// own text and field to each value put into it. They are applied separately so
+// a template ending in "|" or "|C" can't join a value such as "CL" or "L" to make
+// a screen code.
+func (ch *CommandHandler) expandQuoteCodes(text string, literal, field func(string) string) string {
+	var out strings.Builder
+	start := 0
+	for i := 0; i+1 < len(text); {
+		if text[i] != '^' {
 			i++
+			continue
 		}
+		var value string
+		switch text[i+1] {
+		case 'N', 'n':
+			value = ch.quoteAuthor()
+		case 'I', 'i':
+			value = quoteInitials(ch.quoteAuthor())
+		case 'T', 't':
+			value = ch.quoteData.Title
+		case 'F', 'f':
+			value = ch.quoteData.To
+		case 'D', 'd':
+			value = ch.quoteData.Date
+		case 'W', 'w':
+			value = ch.quoteData.Time
+		default:
+			i++
+			continue
+		}
+		out.WriteString(literal(text[start:i]))
+		out.WriteString(field(value))
+		i += 2
+		start = i
 	}
-	return result
+	out.WriteString(literal(text[start:]))
+	return out.String()
 }
 
 // filterPipeCodes removes pipe codes from quoted text if needed
