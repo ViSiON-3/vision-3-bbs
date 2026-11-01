@@ -210,6 +210,22 @@ func TestBodyControlsOtherScreens(t *testing.T) {
 		})
 	}
 
+	// The threaded list shows a root's subject, so only a reply shows its excerpt.
+	t.Run("list excerpt", func(t *testing.T) {
+		env := newMsgEnv(t)
+		storeRawBody(t, env, generalAreaID, "root\n")
+		storeRawBody(t, env, generalAreaID, body)
+		r := env.runCmd("LISTMSGS", env.caller, "", "QQ")
+		if !r.has("OPENMARK") {
+			t.Fatalf("the excerpt was not drawn; output:\n%s", r.text())
+		}
+		for _, seq := range sequences {
+			if strings.Contains(r.raw, seq) {
+				t.Errorf("the caller received %q", seq)
+			}
+		}
+	})
+
 	t.Run("private mail", func(t *testing.T) {
 		env := newMsgEnv(t)
 		if _, err := env.e.MessageMgr.AddPrivateMessage(privmailAreaID, "Sysop", "Caller", "Hostile", body, ""); err != nil {
@@ -281,6 +297,36 @@ func TestRawCP437BodySurvives(t *testing.T) {
 			r := env.runCmd("READMSGS", env.caller, "", "Q")
 			if !strings.Contains(testSGR.ReplaceAllString(r.raw, ""), "\xdb\xb0"+high+"\xb2") {
 				t.Errorf("the art changed; output:\n%q", r.raw)
+			}
+		})
+	}
+}
+
+// A UTF-8 body quoting raw CP437 is both at once: its U+009B is a control and its
+// 0x9B is a cent sign. The filter tells them apart in the same message.
+func TestMixedUTF8AndCP437Body(t *testing.T) {
+	const body = "\x01CHRS: UTF-8 4\rcaf\xc3\xa9 OPENMARK\xc2\x9b6n\xc2\x9d0;PAYLOAD\xc2\x9cCLOSEMARK 5\x9b \xdb\r"
+	for _, tc := range []struct {
+		name string
+		mode ansi.OutputMode
+		want string
+	}{
+		{"utf8", ansi.OutputModeUTF8, "CLOSEMARK 5¢ █"},
+		{"cp437", ansi.OutputModeCP437, "CLOSEMARK 5\x9b \xdb"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newMsgEnv(t)
+			env.outputMode = tc.mode
+			storeRawBody(t, env, generalAreaID, body)
+			r := env.runCmd("READMSGS", env.caller, "", "Q")
+			if got, ok := between(r.raw, "OPENMARK", "CLOSEMARK"); !ok || got != "" {
+				t.Errorf("between the marks: %q (drawn: %v)", got, ok)
+			}
+			if !strings.Contains(r.raw, tc.want) {
+				t.Errorf("the CP437 text changed; output:\n%q", r.raw)
+			}
+			if strings.Contains(r.raw, "PAYLOAD") {
+				t.Error("the payload was shown")
 			}
 		})
 	}
