@@ -47,11 +47,27 @@ func splitReaderQuotePrefix(line string) (prefix, body string) {
 	return prefix, body
 }
 
+// bareQuoteMarker splits a Usenet-style quote line, one or more '>' with no
+// space before the text (">text", ">>text"), into the marker and the text.
+// Leading blanks are dropped, as SplitQuotePrefix drops them. It returns ""
+// for a line that does not start with '>'. These lines have no prefix in the
+// editor's sense, but isQuoteLine has always coloured them as quotes.
+func bareQuoteMarker(line string) (marker, body string) {
+	trimmed := strings.TrimLeft(line, " \t")
+	n := len(trimmed) - len(strings.TrimLeft(trimmed, ">"))
+	return trimmed[:n], trimmed[n:]
+}
+
 // parseQuoteLine takes line apart. It reports false for anything that is not a
-// quote line with a prefix, including tearlines, origin lines and banners.
+// quote line with a prefix, including tearlines, origin lines and banners. A
+// ">text" line counts, with the bare marker as its prefix, so that it wraps at
+// word boundaries with the marker on every row.
 func parseQuoteLine(line string, banners quoteBannerMatcher) (quoteLine, bool) {
 	plain := strings.TrimRight(stripEscapes(line), " \t\r")
 	prefix, plainBody := splitReaderQuotePrefix(plain)
+	if prefix == "" {
+		prefix, plainBody = bareQuoteMarker(plain)
+	}
 	if prefix == "" || isTearLine(plain) || isOriginLine(plain) || banners.match(line) {
 		return quoteLine{}, false
 	}

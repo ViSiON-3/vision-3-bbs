@@ -54,6 +54,10 @@ func TestReaderWrapsLongQuoteLineUnderItsPrefix(t *testing.T) {
 		{"bare marker", "> " + quoteTestText, " > "},
 		{"nested", "Bu>  Sh> " + quoteTestText, " Bu> Sh> "},
 		{"doubled", "Sh>> " + quoteTestText, " Sh>> "},
+		// #862: Usenet style, with no space after the marker.
+		{"no space after marker", ">" + quoteTestText, " >"},
+		{"no space after doubled marker", ">>" + quoteTestText, " >>"},
+		{"indented, no space", "  >" + quoteTestText, " >"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rows := quoteRows(t, tc.line, 60)
