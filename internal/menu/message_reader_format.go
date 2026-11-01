@@ -207,7 +207,8 @@ func isOriginLine(line string) bool {
 
 // hasANSICursorMovement checks for ANSI cursor movement codes with digits
 func hasANSICursorMovement(text string) bool {
-	// Look for patterns like ESC[<digits>A/B/C/D or ESC[<digits>;<digits>H/f
+	// Look for patterns like ESC[<digits>A/B/C/D/G/d/E/F or
+	// ESC[<digits>;<digits>H/f
 	for i := 0; i < len(text)-3; i++ {
 		if text[i] == '\x1b' && i+1 < len(text) && text[i+1] == '[' {
 			// Found ESC[, now look for cursor codes
@@ -222,7 +223,9 @@ func hasANSICursorMovement(text string) bool {
 			// Check if followed by cursor movement letter
 			if hasDigit && j < len(text) {
 				switch text[j] {
-				case 'A', 'B', 'C', 'D', 'H', 'f': // Cursor movement or positioning
+				// Cursor movement or positioning, including column (G),
+				// row (d), next line (E) and previous line (F).
+				case 'A', 'B', 'C', 'D', 'H', 'f', 'G', 'd', 'E', 'F':
 					return true
 				}
 			}

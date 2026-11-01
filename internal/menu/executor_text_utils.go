@@ -65,7 +65,8 @@ func containsAnsiArt(text string) bool {
 	// - Cursor positioning: ESC[n;mH or ESC[n;mf
 	// - Cursor movement: ESC[nA, ESC[nB, ESC[nC, ESC[nD
 	// - Save/restore cursor: ESC[s, ESC[u
-	ansiArtIndicators := regexp.MustCompile(`\x1b\[(\d+;\d+[HhFf]|\d*[ABCDsu])`)
+	// - Column, row, next and previous line: ESC[nG, ESC[nd, ESC[nE, ESC[nF
+	ansiArtIndicators := regexp.MustCompile(`\x1b\[(\d+;\d+[HhFf]|\d*[ABCDsu]|\d+[GdEF])`)
 	return ansiArtIndicators.MatchString(text)
 }
 

@@ -315,6 +315,28 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 			}
 			return true
 
+		case 'G': // CHA: cursor to column n of this row (default 1)
+			r.pendingWrap = false
+			r.CursorX = clampInt(csiCount(params)-1, 0, r.Width-1)
+			return true
+
+		case 'd': // VPA: cursor to row n, same column (default 1)
+			r.pendingWrap = false
+			r.CursorY = clampInt(csiCount(params)-1, 0, r.Height-1)
+			return true
+
+		case 'E': // CNL: down n rows (default 1), to column 1
+			r.pendingWrap = false
+			r.CursorY = clampInt(r.CursorY+csiCount(params), 0, r.Height-1)
+			r.CursorX = 0
+			return true
+
+		case 'F': // CPL: up n rows (default 1), to column 1
+			r.pendingWrap = false
+			r.CursorY = clampInt(r.CursorY-csiCount(params), 0, r.Height-1)
+			r.CursorX = 0
+			return true
+
 		case 'H', 'f': // Cursor position
 			r.pendingWrap = false
 			row, col := 1, 1
@@ -442,6 +464,21 @@ func (r *ANSIRenderer) handleEscapeSequence(seq string) bool {
 		}
 	}
 	return false
+}
+
+// csiCount returns a CSI sequence's first parameter as a count or position,
+// where a missing or zero parameter means 1.
+func csiCount(params []int) int {
+	if len(params) > 0 && params[0] > 0 {
+		return params[0]
+	}
+	return 1
+}
+
+// clampInt limits v to [lo, hi]. Art drawn for another screen size routinely
+// moves past the edges, and a terminal stops the cursor there.
+func clampInt(v, lo, hi int) int {
+	return max(lo, min(v, hi))
 }
 
 // parseCSI extracts parameters and command from a CSI sequence
