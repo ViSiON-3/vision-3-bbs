@@ -183,8 +183,12 @@ func bodyStringEnd(s string, i int, osc bool) int {
 	if n := strings.IndexAny(s[i:limit], "\r\n"); n >= 0 {
 		return i + n
 	}
-	for limit < len(s) && !utf8.RuneStart(s[limit]) {
-		limit--
+	// Don't stop inside a character. Raw bytes may have no start to find, and going
+	// back past i would read the introducer again, forever.
+	for end := limit; end > i && end < len(s); end-- {
+		if utf8.RuneStart(s[end]) {
+			return end
+		}
 	}
 	return limit
 }

@@ -3,6 +3,7 @@ package ansi
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBodyTextKeeps(t *testing.T) {
@@ -106,6 +107,25 @@ func TestBodyTextUnterminatedString(t *testing.T) {
 		}
 		if strings.ToValidUTF8(got, "") != got {
 			t.Errorf("%q split a character at the limit", intro)
+		}
+	}
+}
+
+// Raw bytes that all look like the middle of a character give the limit nowhere
+// to back up to. A quote line can hold these, since it isn't decoded first, and
+// it once sent the filter round the same introducer forever.
+func TestBodyTextLongRawStringEnds(t *testing.T) {
+	for _, intro := range []string{"\u0090", "\u0098", "\u009d", "\u009e", "\u009f", "\x1b]", "\x1bP"} {
+		tail := strings.Repeat("\xb0", 8)
+		done := make(chan string, 1)
+		go func() { done <- BodyText(intro + strings.Repeat("\xb0", maxBodyStringLen) + tail) }()
+		select {
+		case got := <-done:
+			if got != tail {
+				t.Errorf("%q left %d bytes, want %d", intro, len(got), len(tail))
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("BodyText did not return for %q", intro)
 		}
 	}
 }

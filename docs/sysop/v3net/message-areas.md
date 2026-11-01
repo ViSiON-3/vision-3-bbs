@@ -206,7 +206,7 @@ are cleaned when a message is stored and again when it is read or exported, each
 control character (C0, DEL and C1) becoming a space, so messages stored by older
 versions are safe to show too. The stored copy of an older message is left as it
 was. Message bodies are stored as they arrive, since they may carry ANSI art; the
-reader [filters what it sends](../messages/message-areas.md).
+reader [filters what it sends](messages/message-areas.md).
 
 ### Pending Marker and Wire UUID
 
