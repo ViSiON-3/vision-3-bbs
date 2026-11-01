@@ -319,9 +319,13 @@ func TestRunEditingLoadedTextKeepsItsLines(t *testing.T) {
 	if len(first)+1+len(second) <= MaxLineLength {
 		t.Fatal("setup: the second line must not fit after the first")
 	}
-	// Up to the first line, End, Backspace, save.
-	got, saved := runKeys(t, first+"!\n"+second, "\x05\x10"+ctrlHBackspace+"\x1a")
-	if want := first + "\n" + second; !saved || got != want {
+	// Up to the first line, End, Backspace until the address would fit, save.
+	const cut = 30
+	if len(first)-cut+1+len(second) > MaxLineLength {
+		t.Fatal("setup: the cut must leave room for the second line")
+	}
+	got, saved := runKeys(t, first+"\n"+second, "\x05\x10"+strings.Repeat(ctrlHBackspace, cut)+"\x1a")
+	if want := first[:len(first)-cut] + "\n" + second; !saved || got != want {
 		t.Fatalf("saved=%v\n got %q\nwant %q", saved, got, want)
 	}
 }
