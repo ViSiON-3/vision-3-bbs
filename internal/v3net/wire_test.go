@@ -17,6 +17,21 @@ func TestBuildWireMessageCleansSubject(t *testing.T) {
 	}
 }
 
+// A control character in the sysop's origin or board name must not get every
+// post refused by the hub. A raw CP437 byte in one is not a control character.
+func TestBuildWireMessageCleansOriginFields(t *testing.T) {
+	msg := BuildWireMessage("testnet", "gen.general", "node", "Bo\x1b[2Jard", "From", "To", "Subject", "Body", "My\u009bBBS \x9b")
+	if msg.OriginBoard != "Bo [2Jard" {
+		t.Errorf("OriginBoard = %q", msg.OriginBoard)
+	}
+	if msg.Origin != "My BBS \x9b" {
+		t.Errorf("Origin = %q", msg.Origin)
+	}
+	if err := msg.Validate(); err != nil {
+		t.Errorf("Validate: %v", err)
+	}
+}
+
 func TestBuildWireMessageTearlineIsAlwaysDefault(t *testing.T) {
 	msg := BuildWireMessage("testnet", "gen.general", "abc123", "General", "Sysop", "All", "Hello", "body text", "My Cool BBS")
 	if !strings.HasPrefix(msg.Tearline, "--- ViSiON/3 ") {

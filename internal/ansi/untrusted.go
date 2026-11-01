@@ -42,6 +42,22 @@ func HeaderText(s string) string {
 	return b.String()
 }
 
+// DropControls returns s without its control characters: C0, DEL and C1. Like
+// HeaderText it keeps a byte that is not valid UTF-8, since there it is a CP437
+// character (0x9B is a cent sign).
+func DropControls(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r >= 0x20 && (r < 0x7F || r > 0x9F) {
+			b.WriteString(s[i : i+size])
+		}
+		i += size
+	}
+	return b.String()
+}
+
 // EscapePipes doubles every pipe, so ReplacePipeCodes prints s as written. Use
 // it for text that was never meant to carry colour. The doubled pipes draw as one
 // column each, so fit s to its column first.

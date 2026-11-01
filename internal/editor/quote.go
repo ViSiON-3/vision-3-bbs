@@ -700,10 +700,15 @@ func (ch *CommandHandler) quoteBottomText() string {
 	return defaultQuoteBottom
 }
 
-// cleanQuoteLine strips pipe codes, raw ANSI escapes and trailing whitespace so
-// quoted text carries no formatting from the original message.
+// cleanQuoteLine strips pipe codes, raw ANSI escapes, control characters and
+// trailing whitespace so quoted text carries no formatting from the original
+// message and nothing a terminal would act on. BodyText goes first because it
+// knows the 8-bit forms, whose payload would otherwise be left as text. A tab
+// becomes a space so the words either side of it stay apart.
 func (ch *CommandHandler) cleanQuoteLine(text string) string {
-	return strings.TrimRight(stripANSI(ch.filterPipeCodes(text)), " \t\r")
+	text = stripANSI(ansi.BodyText(ch.filterPipeCodes(text)))
+	text = stripControl(strings.ReplaceAll(text, "\t", " "))
+	return strings.TrimRight(text, " ")
 }
 
 // quoteInitials derives the FTN-style initials used in the "XX> " prefix:
@@ -994,15 +999,10 @@ func stripANSI(s string) string {
 	return b.String()
 }
 
-// stripControl removes the C0 control characters and DEL that stripANSI
-// leaves behind, such as a stray BEL.
+// stripControl removes the control characters stripANSI leaves behind, such as a
+// stray BEL or U+009B. A quoted body can be raw CP437, whose bytes stay.
 func stripControl(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7F {
-			return -1
-		}
-		return r
-	}, s)
+	return ansi.DropControls(s)
 }
 
 func runeLen(s string) int {

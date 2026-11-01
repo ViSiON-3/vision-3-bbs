@@ -77,6 +77,26 @@ func decodeCharmap(s string, cm *charmap.Charmap) string {
 	return out
 }
 
+// bodyForDisplay returns a stored body as UTF-8 with everything taken out that a
+// terminal would act on, for the reader. It runs before anything else looks at
+// the body, so nothing in a string's payload can pass for art, a quote or an
+// origin line, and a pipe code in one never expands into an escape that would
+// end it early. The charset has to be settled first: only then is 0x9B known to
+// be a cent sign and U+009B known to be CSI.
+//
+// The stored message stays as it arrived. Exports need its bytes, since FTN, QWK
+// and V3Net all use a body to recognise a message they have already seen.
+//
+// Auto-wrap is the one thing the art path may keep, because the renderer acts on
+// it and never passes it on.
+func bodyForDisplay(body, charset string) string {
+	decoded := bodyAsUTF8(body, charset)
+	if art := ansi.ArtBodyText(decoded); detectAnsiArtInMessage(art) {
+		return art
+	}
+	return ansi.BodyText(decoded)
+}
+
 // messageBodyLines turns a message body, colour pipe codes already expanded,
 // into the lines the reader paints, as UTF-8.
 func messageBodyLines(body, charset string, termWidth int, mode ansi.OutputMode) []string {
