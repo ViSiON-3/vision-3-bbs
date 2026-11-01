@@ -169,3 +169,44 @@ func TestQuotePickerWritesSoftWrapsUnderPrefix(t *testing.T) {
 		t.Errorf("reformatting the quote changed it:\n%s\nwant\n%s", mb.GetContent(), before)
 	}
 }
+
+// Ctrl-J joins two lines of the same quote as words: the second line's prefix
+// goes, and a space goes between the words either side of the join.
+func TestCtrlJJoinsQuotedLinesWithASpace(t *testing.T) {
+	const prefix = " Bu> "
+	mb, _ := setupBuffer([]string{prefix + "one", prefix + "two"}, 1, 2)
+	mb.SetQuotePrefix(1, prefix)
+	mb.SetQuotePrefix(2, prefix)
+	e := &FSEditor{buffer: mb, wordWrapper: NewWordWrapper(mb), currentLine: 1, currentCol: 1}
+	e.joinLines()
+	if got := mb.GetLine(1); got != prefix+"one two" {
+		t.Errorf("joined line = %q, want %q", got, prefix+"one two")
+	}
+}
+
+// A word too long for the line beside the prefix, such as a URL, is split by
+// the quote picker with no space; the break is marked so a later edit rejoins
+// it whole.
+func TestQuotePickerMarksSplitLongWords(t *testing.T) {
+	url := "http://example.com/" + strings.Repeat("x", 150)
+	src := []string{"see " + url + " there"}
+	_, ch, _, cleanup := newQuoteHarness(t, "", src)
+	defer cleanup()
+	qs := newQuoteSession(ch, src, 1)
+	qs.quoteSelected()
+	mb := ch.buffer
+	ww := NewWordWrapper(mb)
+	// Reformat the quote (line 2, below the Said banner): a split marked as a
+	// plain wrap would get a space written into the URL.
+	ww.ReformatParagraph(2)
+	var text strings.Builder
+	for i := 2; i <= mb.GetLineCount() && mb.QuotePrefix(i) != ""; i++ {
+		text.WriteString(mb.GetLine(i)[len(mb.QuotePrefix(i)):])
+		if !mb.IsWordSplit(i) {
+			text.WriteString(" ")
+		}
+	}
+	if !strings.Contains(text.String(), url) {
+		t.Errorf("the URL did not survive whole:\n%s", mb.GetContent())
+	}
+}

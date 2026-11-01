@@ -108,6 +108,11 @@ func (e *FSEditor) joinLines() {
 	}
 	first := e.buffer.GetLine(e.currentLine)
 	second := e.buffer.GetLine(e.currentLine + 1)
+	// Two lines of one quote join under one prefix: JoinLines drops the
+	// second copy, so the separator is judged on the text after it.
+	if p := e.buffer.QuotePrefix(e.currentLine); p != "" && e.buffer.QuotePrefix(e.currentLine+1) == p {
+		second = second[len(p):]
+	}
 	// Look at whole characters: the last byte of a multi-byte one, such as
 	// the A0 of "à", would read as a space on its own.
 	last, _ := utf8.DecodeLastRuneInString(first)

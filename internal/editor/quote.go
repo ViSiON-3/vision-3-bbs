@@ -384,7 +384,7 @@ func (qs *quoteSession) writePara(p *quotePara) bool {
 	for i, idx := range p.src {
 		text[i] = qs.ch.cleanQuoteLine(qs.src[idx])
 	}
-	wrapped := reflowQuoted(qs.prefix, text, MaxLineLength)
+	wrapped, splits := reflowQuotedSplits(qs.prefix, text, MaxLineLength)
 	prefix := qs.prefix + quoteInnerPrefix(text)
 	buf := qs.ch.buffer
 	first := qs.insertAt
@@ -393,6 +393,7 @@ func (qs *quoteSession) writePara(p *quotePara) bool {
 			break
 		}
 		buf.SetQuotePrefix(qs.insertAt, prefix)
+		buf.SetWordSplit(qs.insertAt, splits[p.bufLines])
 		qs.insertAt++
 		p.bufLines++
 	}
@@ -868,15 +869,22 @@ func leadingSpace(s string) int {
 // as a single block under prefix. A quote prefix the lines already carry is
 // kept on every wrapped line, so a nested quote stays nested after the wrap.
 func reflowQuoted(prefix string, lines []string, max int) []string {
+	out, _ := reflowQuotedSplits(prefix, lines, max)
+	return out
+}
+
+// reflowQuotedSplits is reflowQuoted that also reports, for each line, whether
+// it ends inside a word too long for the line (see wrapQuotedSplits).
+func reflowQuotedSplits(prefix string, lines []string, max int) ([]string, []bool) {
 	if len(lines) == 0 {
-		return nil
+		return nil, nil
 	}
 	inner := quoteInnerPrefix(lines)
 	bodies := make([]string, len(lines))
 	for i, line := range lines {
 		_, bodies[i] = SplitQuotePrefix(line)
 	}
-	return wrapQuoted(prefix+inner, strings.Join(bodies, " "), max)
+	return wrapQuotedSplits(prefix+inner, strings.Join(bodies, " "), max)
 }
 
 // quoteInnerPrefix returns the quote prefix a paragraph's lines already carry
@@ -893,6 +901,15 @@ func quoteInnerPrefix(lines []string) string {
 // prefix to every continuation line. Long unbreakable words are split rather
 // than truncated, which is what the old range-based quoter did to them.
 func wrapQuoted(prefix, text string, max int) []string {
+	out, _ := wrapQuotedSplits(prefix, text, max)
+	return out
+}
+
+// wrapQuotedSplits is wrapQuoted that also reports, for each line, whether it
+// ends inside a word: a long word cut to fit, which carries on at the start of
+// the next line with no space between. The editor marks those breaks so a
+// later reflow rejoins the word whole.
+func wrapQuotedSplits(prefix, text string, max int) ([]string, []bool) {
 	plen := runeLen(prefix)
 	avail := max - plen
 	if avail < 10 {
@@ -900,17 +917,19 @@ func wrapQuoted(prefix, text string, max int) []string {
 	}
 
 	if strings.TrimSpace(text) == "" {
-		return []string{strings.TrimRight(prefix, " ")}
+		return []string{strings.TrimRight(prefix, " ")}, []bool{false}
 	}
 
 	// The source line's own leading indent is dropped: it is almost always the
 	// margin left by a previous round of quoting, and keeping it would stack an
 	// extra space into the nesting on every reply ("Bu>  Sh> ...").
 	var out []string
+	var splits []bool
 	cur := ""
 	empty := true // cur holds no words yet, so the next one needs no space
 	flush := func() {
 		out = append(out, strings.TrimRight(prefix+cur, " "))
+		splits = append(splits, false)
 		cur = ""
 		empty = true
 	}
@@ -926,6 +945,9 @@ func wrapQuoted(prefix, text string, max int) []string {
 			chunk := truncRunes(word, avail)
 			out = append(out, prefix+chunk)
 			word = word[len(chunk):]
+			// The word carries on at the start of the next line, unless the
+			// cut fell exactly at its end.
+			splits = append(splits, word != "")
 		}
 		switch {
 		case empty:
@@ -944,8 +966,9 @@ func wrapQuoted(prefix, text string, max int) []string {
 	}
 	if len(out) == 0 {
 		out = append(out, strings.TrimRight(prefix, " "))
+		splits = append(splits, false)
 	}
-	return out
+	return out, splits
 }
 
 // prepareQuoteSource trims the message down to the part worth quoting: the FTN
