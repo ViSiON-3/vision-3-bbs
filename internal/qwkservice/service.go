@@ -240,7 +240,7 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 				To:            msg.To,
 				Subject:       msg.Subject,
 				DateTime:      msg.DateTime,
-				Body:          ansi.StoredBodyText(msg.Body),
+				Body:          ansi.StoredBodyText(msg.Body, msg.Charset),
 				Private:       msg.IsPrivate,
 				ReplyToNumber: msg.ReplyToNum,
 			})

@@ -38,12 +38,18 @@ func BodyText(s string) string {
 
 // StoredBodyText is BodyText for a body as it is stored, before its charset is
 // settled, for output that must keep the stored bytes, such as an offline mail
-// packet. A body that is valid UTF-8 gets BodyText. Any other body is single-byte
-// text, CP437 or another set, where every byte is one character: bytes 0x80 to
-// 0xFF are all kept, so a pair such as C2 9B (┬¢ in CP437) is not taken for the
-// UTF-8 form of CSI, and only the 7-bit escapes and controls are filtered.
-func StoredBodyText(s string) string {
-	return filterBody(s, false, !utf8.ValidString(s))
+// packet. charset is the message's CHRS kludge, or "".
+//
+// A body that is valid UTF-8, or that is labelled UTF-8 and holds a few stray
+// bytes (usually a quote of a CP437 message), is UTF-8: it is filtered as
+// BodyText filters it, encoded C1 controls included. Any other body is
+// single-byte text, CP437 or another set, where every byte is one character:
+// bytes 0x80 to 0xFF are all kept, so a pair such as C2 9B (┬¢ in CP437) is not
+// taken for the UTF-8 form of CSI, and only the 7-bit escapes and controls are
+// filtered, terminal strings included.
+func StoredBodyText(s, charset string) string {
+	singleByte := !utf8.ValidString(s) && charset != "UTF-8" && charset != "UTF8"
+	return filterBody(s, false, singleByte)
 }
 
 // ArtBodyText is BodyText for a body going to the ANSI art renderer rather than
@@ -67,7 +73,25 @@ func keptC0(c rune) bool {
 // filterBody does the work for BodyText, ArtBodyText and StoredBodyText. With
 // singleByte, s is read a byte at a time and every byte from 0x80 up is a
 // character to keep, never part of a UTF-8 sequence or a C1 control.
+//
+// Text that is not valid UTF-8 read as UTF-8 is filtered again until nothing
+// more goes: taking out a byte between two stray ones, such as the 05 in
+// C2 05 9B, can join them into a character, and here into U+009B, CSI. Each pass
+// only takes bytes out, so this ends. Valid UTF-8 loses whole characters and
+// stays valid, so one pass is enough for it, as for single-byte text, which is
+// never read as UTF-8.
 func filterBody(s string, art, singleByte bool) string {
+	for {
+		out := filterBodyOnce(s, art, singleByte)
+		if singleByte || out == s || utf8.ValidString(s) {
+			return out
+		}
+		s = out
+	}
+}
+
+// filterBodyOnce is one pass of filterBody.
+func filterBodyOnce(s string, art, singleByte bool) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); {
@@ -80,13 +104,13 @@ func filterBody(s string, art, singleByte bool) string {
 		}
 		switch {
 		case r == 0x1B:
-			i = filterEscape(&b, s, i, art)
+			i = filterEscape(&b, s, i, art, singleByte)
 		case r == 0x9B:
 			i, _ = csiEnd(s, i+size)
 		case r == 0x90 || r == 0x98 || r == 0x9E || r == 0x9F:
-			i = bodyStringEnd(s, i+size, false)
+			i = bodyStringEnd(s, i+size, false, singleByte)
 		case r == 0x9D:
-			i = bodyStringEnd(s, i+size, true)
+			i = bodyStringEnd(s, i+size, true, singleByte)
 		case r == 0x7F || (r >= 0x80 && r <= 0x9F), r < 0x20 && !keptC0(r):
 			i += size
 		default:
@@ -99,7 +123,7 @@ func filterBody(s string, art, singleByte bool) string {
 
 // filterEscape handles the ESC at s[i], writing it to b if it is allowed, and
 // returns where to go on from.
-func filterEscape(b *strings.Builder, s string, i int, art bool) int {
+func filterEscape(b *strings.Builder, s string, i int, art, singleByte bool) int {
 	j := i + 1
 	if j >= len(s) {
 		return j
@@ -112,9 +136,9 @@ func filterEscape(b *strings.Builder, s string, i int, art bool) int {
 		}
 		return end
 	case c == ']':
-		return bodyStringEnd(s, j+1, true)
+		return bodyStringEnd(s, j+1, true, singleByte)
 	case c == 'P' || c == 'X' || c == '^' || c == '_':
-		return bodyStringEnd(s, j+1, false)
+		return bodyStringEnd(s, j+1, false, singleByte)
 	case c == '7' || c == '8':
 		b.WriteString(s[i : j+1])
 		return j + 1
@@ -184,10 +208,17 @@ func writeAllowedCSI(b *strings.Builder, seq string, art bool) {
 
 // bodyStringEnd returns where a terminal string whose payload starts at s[i]
 // ends. The bounds are on BodyText.
-func bodyStringEnd(s string, i int, osc bool) int {
+func bodyStringEnd(s string, i int, osc, singleByte bool) int {
 	limit := min(len(s), i+maxBodyStringLen)
 	for k := i; k < limit; {
 		r, size := utf8.DecodeRuneInString(s[k:])
+		if singleByte {
+			// Every byte is a character; none from 0x80 up is ST (U+009C).
+			r, size = rune(s[k]), 1
+			if r >= utf8.RuneSelf {
+				r = utf8.RuneError
+			}
+		}
 		switch {
 		case r == 0x9C, r == 0x18, r == 0x1A, r == 0x07 && osc:
 			return k + size
@@ -218,10 +249,12 @@ func bodyStringEnd(s string, i int, osc bool) int {
 // cursor save and restore. Line breaks (CR LF, a lone CR or LF) all become LF.
 // Tab stays; every other control character goes. Pipe codes are text and stay.
 //
-// s should be UTF-8, as DecodeBody returns it. A byte that is not valid UTF-8 is
-// kept as it is, as in BodyText.
+// s should be UTF-8, as DecodeBody returns it. The result is always valid UTF-8:
+// a byte that is not, which DecodeBody can leave inside an escape sequence,
+// becomes U+FFFD first, so taking out the bytes around it cannot join it with
+// another into a control character.
 func PlainText(s string) string {
-	s = BodyText(s)
+	s = BodyText(strings.ToValidUTF8(s, "\uFFFD"))
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); {
