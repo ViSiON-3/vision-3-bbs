@@ -13,7 +13,9 @@ import (
 // BuildWireMessage constructs a V3Net protocol message from local post data.
 // The areaTag parameter is the V3Net area tag (e.g. "gen.general").
 // The origin parameter is the user-defined origin line text (e.g. "My Cool BBS").
-// The tearline is always the standard ViSiON/3 software identifier.
+// The tearline is always the standard ViSiON/3 software identifier. The board
+// name, tearline and origin are cut to the protocol's length limits, so a long
+// one costs its tail rather than having hubs refuse the post.
 func BuildWireMessage(network, areaTag, originNode, originBoard, from, to, subject, body, origin string) protocol.Message {
 	uuid := newUUID()
 	return protocol.Message{
@@ -24,14 +26,14 @@ func BuildWireMessage(network, areaTag, originNode, originBoard, from, to, subje
 		ThreadUUID:  uuid,
 		ParentUUID:  nil,
 		OriginNode:  originNode,
-		OriginBoard: ansi.HeaderText(originBoard),
+		OriginBoard: protocol.TrimField(ansi.HeaderText(originBoard), protocol.MaxOriginBoardLen),
 		From:        from,
 		To:          to,
 		Subject:     protocol.CleanSubject(subject),
 		DateUTC:     time.Now().UTC().Format(time.RFC3339),
 		Body:        body,
-		Tearline:    DefaultTearline(),
-		Origin:      ansi.HeaderText(origin),
+		Tearline:    protocol.TrimField(DefaultTearline(), protocol.MaxTearlineLen),
+		Origin:      protocol.TrimField(ansi.HeaderText(origin), protocol.MaxOriginLen),
 		Kludges:     map[string]any{},
 	}
 }

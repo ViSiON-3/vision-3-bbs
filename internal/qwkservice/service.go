@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"path/filepath"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwk"
@@ -229,6 +230,9 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 				continue
 			}
 
+			// The packet is for the caller's offline reader, so the body
+			// loses what a terminal would act on, as in the online reader.
+			// Network exports keep stored bodies, which dupe checks use.
 			pw.AddMessage(qwk.PacketMessage{
 				Conference:    entry.QWKNumber,
 				Number:        msg.MsgNum,
@@ -236,7 +240,7 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 				To:            msg.To,
 				Subject:       msg.Subject,
 				DateTime:      msg.DateTime,
-				Body:          msg.Body,
+				Body:          ansi.StoredBodyText(msg.Body, msg.Charset),
 				Private:       msg.IsPrivate,
 				ReplyToNumber: msg.ReplyToNum,
 			})

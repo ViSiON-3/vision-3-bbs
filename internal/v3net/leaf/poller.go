@@ -142,13 +142,14 @@ type pollCursor struct {
 // refuses a new one, but it may hold messages from before it did, and refusing
 // those would lose them on this board for the sake of one character. The author
 // signed the original, so that is what gets checked. The board name, tearline and
-// origin get the same treatment, the last two because they join the stored body.
+// origin get the same treatment, the last two because they join the stored body,
+// and are trimmed to their length limits for the same reason.
 func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
 	signed := msg
 	msg.Subject = protocol.CleanSubject(msg.Subject)
-	msg.OriginBoard = ansi.HeaderText(msg.OriginBoard)
-	msg.Tearline = ansi.HeaderText(msg.Tearline)
-	msg.Origin = ansi.HeaderText(msg.Origin)
+	msg.OriginBoard = protocol.TrimField(ansi.HeaderText(msg.OriginBoard), protocol.MaxOriginBoardLen)
+	msg.Tearline = protocol.TrimField(ansi.HeaderText(msg.Tearline), protocol.MaxTearlineLen)
+	msg.Origin = protocol.TrimField(ansi.HeaderText(msg.Origin), protocol.MaxOriginLen)
 	if err := msg.Validate(); err != nil {
 		l.refuse(&msg, "leaf: invalid message from hub, skipping", "error", err)
 		return false, nil
