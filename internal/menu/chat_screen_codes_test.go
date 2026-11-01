@@ -54,9 +54,23 @@ func TestChatRoomMessageCannotRunScreenCodes(t *testing.T) {
 		t.Errorf("the codes are not shown as typed: %q", got)
 	}
 
-	for range 30 {
+	// Our own lines come back through the chat service on another goroutine, so
+	// PgUp can overtake them: with less than a page after the line, the view
+	// doesn't move and nothing is redrawn. Wait until they are all on screen.
+	// Twenty lines put the marked line in the middle of the page PgUp shows.
+	const fillers = 20
+	mark = len(live.s.output())
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("output since the last mark: %q", live.s.output()[mark:])
+		}
+	})
+	for range fillers {
 		live.typeKeys("filler\r")
 	}
+	toastWaitFor(t, "the filler lines", func() bool {
+		return strings.Count(testAnsiEscape.ReplaceAllString(live.s.output()[mark:], ""), "<Caller> filler") >= fillers
+	})
 	mark = len(live.s.output())
 	live.typeKeys("\x1b[5~")
 	toastWaitFor(t, "the line replayed", func() bool { return strings.Contains(live.s.output()[mark:], "ENDMARK") })
