@@ -331,20 +331,20 @@ func TestListMsgsThreadedScreen(t *testing.T) {
 		t.Errorf("header = %q", screen.Row(4))
 	}
 	wantRows := []string{
-		"│N   12 Reddit gateway lag                          Mercury Retro... 10/",
-		"│N   13 └─Same here. Looks like the upstream pol... Kestrel_of_th... 10/",
-		"│N    6 Wanted: old .ANS packs                      Lux              10/",
-		"│N    2 Binkd poll schedule                         GrimmTheTosser   10/",
-		"│N    1 Topaz font in SyncTERM                      PhosphorDotMa... 10/",
-		"│N    3 ├─It's both. SyncTERM only switches font... Kestrel_of_th... 10/",
-		"│N    5 │ ├─That was it. Font sticks now, but th... PhosphorDotMa... 10/",
-		"│N    7 │ │ ├─That's the 80th column wrapping. T... Mercury Retro... 10/",
-		"│N   10 │ │ │ └─Or save it with a SAUCE record t... Kestrel_of_th... 10/",
-		"│N   15 │ │ └─Answering a private note in public... Lux              10/",
-		"│N   11 │ └─Which BBS packages actually send tha... GrimmTheTosser   10/",
+		"│N   12 Reddit gateway lag                          Mercury Retro... ",
+		"│N   13 └─Same here. Looks like the upstream pol... Kestrel_of_th... ",
+		"│N    6 Wanted: old .ANS packs                      Lux              ",
+		"│N    2 Binkd poll schedule                         GrimmTheTosser   ",
+		"│N    1 Topaz font in SyncTERM                      PhosphorDotMa... ",
+		"│N    3 ├─It's both. SyncTERM only switches font... Kestrel_of_th... ",
+		"│N    5 │ ├─That was it. Font sticks now, but th... PhosphorDotMa... ",
+		"│N    7 │ │ ├─That's the 80th column wrapping. T... Mercury Retro... ",
+		"│N   10 │ │ │ └─Or save it with a SAUCE record t... Kestrel_of_th... ",
+		"│N   15 │ │ └─Answering a private note in public... Lux              ",
+		"│N   11 │ └─Which BBS packages actually send tha... GrimmTheTosser   ",
 		"│       └─#4 deleted",
-		"│N    8   └─It does, but it can't do ZMODEM, so ... Lux              10/",
-		"│N   14     └─Fair. Sticking with SyncTERM then.    PhosphorDotMa... 10/",
+		"│N    8   └─It does, but it can't do ZMODEM, so ... Lux              ",
+		"│N   14     └─Fair. Sticking with SyncTERM then.    PhosphorDotMa... ",
 	}
 	for i, want := range wantRows {
 		if row := screen.Row(6 + i); !strings.HasPrefix(row, want) {
