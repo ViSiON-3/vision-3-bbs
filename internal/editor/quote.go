@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
@@ -731,15 +732,14 @@ func quoteInitials(name string) string {
 	case len(fields) == 0:
 		return ""
 	case len(fields) >= 2:
-		a := []rune(fields[0])
-		b := []rune(fields[1])
-		return string(unicode.ToUpper(a[0])) + string(unicode.ToUpper(b[0]))
+		return upperChar(firstChar(fields[0])) + upperChar(firstChar(fields[1]))
 	default:
-		r := []rune(fields[0])
-		if len(r) == 1 {
-			return string(unicode.ToUpper(r[0]))
+		first := firstChar(fields[0])
+		rest := fields[0][len(first):]
+		if rest == "" {
+			return upperChar(first)
 		}
-		return string(unicode.ToUpper(r[0])) + string(unicode.ToLower(r[1]))
+		return upperChar(first) + lowerChar(firstChar(rest))
 	}
 }
 
@@ -882,7 +882,7 @@ func wrapQuoted(prefix, text string, max int) []string {
 			}
 			chunk := truncRunes(word, avail)
 			out = append(out, prefix+chunk)
-			word = string([]rune(word)[runeLen(chunk):])
+			word = word[len(chunk):]
 		}
 		switch {
 		case empty:
@@ -1016,20 +1016,57 @@ func stripControl(s string) string {
 	return ansi.DropControls(s)
 }
 
+// Quoted text can be UTF-8 or raw CP437, so the helpers below count and cut
+// by character without converting to []rune: that would turn every byte that
+// is not valid UTF-8, which is most of CP437's upper half, into U+FFFD. A byte
+// that does not start a valid UTF-8 character counts as one character.
+
+// runeLen counts the characters in s, each invalid byte as one.
 func runeLen(s string) int {
-	return len([]rune(s))
+	return utf8.RuneCountInString(s)
 }
 
-// truncRunes cuts a string to n display cells without splitting a rune.
+// runePrefixLen returns the byte length of the first n characters of s, or
+// len(s) if it has fewer.
+func runePrefixLen(s string, n int) int {
+	i := 0
+	for ; n > 0 && i < len(s); n-- {
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+	}
+	return i
+}
+
+// truncRunes cuts a string to n display cells without splitting a rune. Bytes
+// are kept as they are, so raw CP437 survives.
 func truncRunes(s string, n int) string {
 	if n <= 0 {
 		return ""
 	}
-	r := []rune(s)
-	if len(r) <= n {
-		return s
+	return s[:runePrefixLen(s, n)]
+}
+
+// firstChar returns the first character of s as it appears there: a UTF-8
+// sequence, or a single byte when s does not start with valid UTF-8.
+func firstChar(s string) string {
+	return s[:runePrefixLen(s, 1)]
+}
+
+// upperChar upper-cases a character from firstChar. A raw byte is returned
+// as it is, since its meaning depends on the code page.
+func upperChar(c string) string {
+	if r, size := utf8.DecodeRuneInString(c); r != utf8.RuneError || size > 1 {
+		return string(unicode.ToUpper(r))
 	}
-	return string(r[:n])
+	return c
+}
+
+// lowerChar is upperChar's lower-case counterpart.
+func lowerChar(c string) string {
+	if r, size := utf8.DecodeRuneInString(c); r != utf8.RuneError || size > 1 {
+		return string(unicode.ToLower(r))
+	}
+	return c
 }
 
 // padRunes pads a string with spaces to n cells, truncating if it is longer.
