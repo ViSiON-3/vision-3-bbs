@@ -137,8 +137,16 @@ A hub refuses a post whose subject, board name, tearline or origin holds a
 control character, with a 422. A message a hub already holds with one is still
 imported, with each such character turned into a space; its signature is checked
 against the original first. A sender cleans its own origin and board name the
-same way, so one set with a control character does not get every post refused. See
-[Message Format](#message-format) for other header fields.
+same way, so one set with a control character does not get every post refused.
+
+The same three fields have length limits, in characters: 64 for the board name
+(`origin_board`), and 79 each for the tearline and origin, which become lines of
+the stored body. A hub refuses a new post over a limit with a 422. A message a
+hub already holds with a longer one is still imported, with the field cut to
+its limit after the signature check. A sender cuts its own board name, tearline
+and origin to the limits, so a long origin line in `v3net.json` loses its tail
+rather than getting every post refused. See [Message Format](#message-format)
+for other header fields.
 
 ## Posting from the Command Line
 

@@ -92,7 +92,7 @@ to subscribe to multiple networks.
 | `network` | string | — | Network name to subscribe to. Must match a network hosted by the hub. Required. |
 | `boards` | array | `[]` | Local message area tags for received messages (e.g. `["fn.general", "fn.tech"]`). A local post in any of these areas is sent to the hub, whatever the area's type and even while `enabled` is `false` — it waits for V3Net to come on. |
 | `pollInterval` | string | `"5m"` | How often to poll the hub for new messages. Accepts Go duration strings: `"30s"`, `"5m"`, `"1h"`. |
-| `origin` | string | BBS name | Origin line appended to outbound messages. Falls back to the BBS name from `config.json` if blank. |
+| `origin` | string | BBS name | Origin line appended to outbound messages. Falls back to the BBS name from `config.json` if blank. Cut to 79 characters when sent. |
 | `autoJoinAreas` | bool | unset (`true`) | **Newscan Default** in the editor. When true or unset, message areas created for this subscription are flagged as newscan defaults for users. Set `false` to leave new areas out of newscans until users add them. |
 | `requireSignedMessages` | bool | `false` | **Signed Messages** in the editor. When true, the leaf drops polled messages that carry no author signature. Leave it false until every node on the network signs its messages. See [Requiring signed messages](v3net/configuration.md#on-a-leaf). |
 | `coordinatorPubKey` | string | blank | **Coord Key** in the editor. The network coordinator's Ed25519 public key (base64). NALs signed by any other key are rejected. Blank pins the key of the next NAL the leaf verifies and writes it here. See [Coordinator Key Pinning](v3net/nal.md#coordinator-key-pinning). |
