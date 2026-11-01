@@ -136,7 +136,14 @@ type pollCursor struct {
 // seen. A rejected or unwritable message is logged and skipped, not marked
 // seen, so a genuine copy under the same UUID can still be imported later.
 // It returns an error only for a dedup index failure, which ends the poll.
+//
+// A control character in the subject is cleaned rather than refused. The hub
+// refuses a new one, but it may hold messages from before it did, and refusing
+// those would lose them on this board for the sake of one character. The author
+// signed the original, so that is what gets checked.
 func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
+	signed := msg
+	msg.Subject = protocol.CleanSubject(msg.Subject)
 	if err := msg.Validate(); err != nil {
 		l.refuse(&msg, "leaf: invalid message from hub, skipping", "error", err)
 		return false, nil
@@ -148,7 +155,7 @@ func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
 			"network", l.cfg.Network, "message_network", msg.Network)
 		return false, nil
 	}
-	if err := verifyAuthor(&msg, l.cfg.RequireSignedMessages); errors.Is(err, protocol.ErrMessageUnsigned) {
+	if err := verifyAuthor(&signed, l.cfg.RequireSignedMessages); errors.Is(err, protocol.ErrMessageUnsigned) {
 		l.refuse(&msg, "leaf: unsigned message from hub, dropping", "origin_node", msg.OriginNode)
 		return false, nil
 	} else if err != nil {

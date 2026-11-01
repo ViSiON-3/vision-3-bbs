@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -359,9 +360,9 @@ func (t *Tosser) createOutboundNetmailPacket(link *linkConfig, msgs []pendingNet
 			DestNet:  uint16(pm.destAddr.Net),
 			Attr:     linkMsgAttr(link.Flavour) | ftn.MsgAttrPrivate,
 			DateTime: ftn.FormatFTNDateTime(pm.msg.DateTime),
-			To:       ftn.EncodeFTNString(toName, chrs),
-			From:     ftn.EncodeFTNString(pm.msg.From, chrs),
-			Subject:  ftn.EncodeFTNString(pm.msg.Subject, chrs),
+			To:       ftn.EncodeFTNString(ansi.HeaderText(toName), chrs),
+			From:     ftn.EncodeFTNString(ansi.HeaderText(pm.msg.From), chrs),
+			Subject:  ftn.EncodeFTNString(ansi.HeaderText(pm.msg.Subject), chrs),
 			Body:     ftn.FormatPackedMessageBody(parsed),
 		})
 	}
@@ -479,9 +480,9 @@ func (t *Tosser) createOutboundPacket(link *linkConfig, msgs []pendingMsg) (int,
 			DestNet:  uint16(destAddr.Net),
 			Attr:     linkMsgAttr(link.Flavour),
 			DateTime: ftn.FormatFTNDateTime(pm.msg.DateTime),
-			To:       ftn.EncodeFTNString(pm.msg.To, chrs),
-			From:     ftn.EncodeFTNString(pm.msg.From, chrs),
-			Subject:  ftn.EncodeFTNString(pm.msg.Subject, chrs),
+			To:       ftn.EncodeFTNString(ansi.HeaderText(pm.msg.To), chrs),
+			From:     ftn.EncodeFTNString(ansi.HeaderText(pm.msg.From), chrs),
+			Subject:  ftn.EncodeFTNString(ansi.HeaderText(pm.msg.Subject), chrs),
 			Body:     body,
 		}
 		packedMsgs = append(packedMsgs, packed)

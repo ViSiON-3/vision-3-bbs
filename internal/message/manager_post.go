@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
 
@@ -40,6 +41,11 @@ func (mm *MessageManager) isV3NetArea(area *MessageArea) bool {
 // AddPrivateMessage, and AddReply.
 func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyToMsgID string,
 	replyToNum int, dateTime time.Time, private bool, kludges []string, senderHandle string) (int, error) {
+	// Every local post and V3Net import comes through here. A subject typed at a
+	// prompt can hold U+009B, and one in a QWK reply packet or a script any
+	// control character.
+	from, to, subject = ansi.HeaderText(from), ansi.HeaderText(to), ansi.HeaderText(subject)
+
 	b, area, err := mm.openBase(areaID)
 	if err != nil {
 		return 0, err

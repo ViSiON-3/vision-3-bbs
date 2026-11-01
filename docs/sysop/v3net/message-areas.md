@@ -133,6 +133,11 @@ while does not lose anything.
 3. The message (with its remote tearline/origin) is written to the local JAM base
 4. The message is recorded in the dedup index
 
+A hub refuses a post whose subject holds a control character, with a 422. A
+message a hub already holds with one is still imported, with each such character
+turned into a space; its signature is checked against the original first. See
+[Message Format](#message-format) for other header fields.
+
 ## Posting from the Command Line
 
 `helper post` writes a text file, an ANSI (`.ANS`) file or standard input
@@ -193,6 +198,12 @@ V3Net messages in JAM bases look like standard echomail messages with a few addi
 - A `V3NETUUID` kludge line (hidden from users) stores the message's UUID
 - A tearline (`--- ViSiON/3 vX.Y.Z/Platform`) identifies the posting software
 - An origin line (`* Origin: BBS Name (node_id)`) identifies the posting node
+
+From, To and Subject never hold control characters. On every kind of area they
+are cleaned when a message is stored and again when it is read or exported, each
+control character (C0, DEL and C1) becoming a space, so messages stored by older
+versions are safe to show too. The stored copy of an older message is left as it
+was. Message bodies are not affected, since they may carry ANSI art.
 
 ### Pending Marker and Wire UUID
 

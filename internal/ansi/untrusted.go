@@ -1,6 +1,9 @@
 package ansi
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // OneLine returns text from another system flattened to one line for display:
 // each control character becomes a space, so it cannot start an escape sequence,
@@ -17,6 +20,26 @@ func OneLine(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// HeaderText returns a message header field (from, to, subject, address) with
+// each control character turned into a space, like OneLine, for fields that may
+// be stored as raw CP437 rather than UTF-8. A byte that is not valid UTF-8 is kept
+// as it is, because there it is a CP437 character (0x9B is a cent sign), and the
+// output layers decode it as one. OneLine would turn it into U+FFFD.
+func HeaderText(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r < 0x20 || (r >= 0x7F && r <= 0x9F) {
+			b.WriteByte(' ')
+		} else {
+			b.WriteString(s[i : i+size])
+		}
+		i += size
+	}
+	return b.String()
 }
 
 // EscapePipes doubles every pipe, so ReplacePipeCodes prints s as written. Use
