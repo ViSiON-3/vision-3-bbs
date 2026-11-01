@@ -391,9 +391,10 @@ readerLoop:
 
 		// Process message body and pre-format all lines
 		area, _ := e.MessageMgr.GetAreaByID(currentAreaID)
+		displayBody := bodyForDisplay(currentMsg.Body, currentMsg.Charset)
 		includeOrigin := area != nil && (area.AreaType == "echomail" || area.AreaType == "netmail") &&
-			currentMsg.OrigAddr != "" && !hasOriginLine(currentMsg.Body)
-		formattedBody := formatMessageBody(currentMsg.Body, currentMsg.OrigAddr, includeOrigin, quoteBanners)
+			currentMsg.OrigAddr != "" && !hasOriginLine(displayBody)
+		formattedBody := formatMessageBody(displayBody, currentMsg.OrigAddr, includeOrigin, quoteBanners)
 
 		// Convert colour pipe codes to ANSI sequences. Only colour: the body
 		// was written on another system, so "||" and the screen-control codes

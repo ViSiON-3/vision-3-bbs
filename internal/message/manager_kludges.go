@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
 
@@ -105,19 +106,12 @@ func messageKludgeLines(msg *jam.Message) []string {
 	return append(lines, paths...)
 }
 
-// cleanKludge drops the ^A lead-in and any other ASCII control bytes, which
-// would otherwise reach the terminal, and trims surrounding spaces. It works
-// on bytes: values are the sender's raw text, often CP437, and decoding them
-// as UTF-8 would turn every byte above 0x7F into U+FFFD before the writer
-// could convert it.
+// cleanKludge drops the ^A lead-in and any other control characters, which would
+// otherwise reach the terminal, and trims surrounding spaces. Values are the
+// sender's raw text, often CP437, so a byte that is not valid UTF-8 stays for the
+// writer to convert.
 func cleanKludge(s string) string {
-	b := make([]byte, 0, len(s))
-	for i := 0; i < len(s); i++ {
-		if c := s[i]; c >= 0x20 && c != 0x7f {
-			b = append(b, c)
-		}
-	}
-	return strings.Trim(string(b), " ")
+	return strings.Trim(ansi.DropControls(s), " ")
 }
 
 // hasAnyPrefix reports whether s starts with one of prefixes.

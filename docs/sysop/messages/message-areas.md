@@ -451,6 +451,17 @@ lines), are rendered on a virtual screen and shown as whole rows, so scrolling
 does not shear them. ANSI messages render at 80 columns at most, since that is
 what message art is drawn for; a wider terminal shows them at 80.
 
+**Terminal control in message bodies.** The reader sends a caller's terminal only
+what a body needs to draw: colour, cursor movement and position, erasing the
+line or screen (not the scrollback), and cursor save and restore. Everything else
+is left out without a trace, so a message cannot set a window title, change a
+terminal's modes or character set, reset it, ring its bell, or ask it a question
+whose answer would land in the caller's input. Text inside an OSC, DCS, APC, PM
+or SOS string is not shown; a string that never ends costs the rest of its line,
+and the message carries on from the next one. Raw CP437 is untouched, including
+0x80 to 0x9F. The stored message does not change, and network exports and QWK
+packets carry it as it arrived.
+
 ### Composing Messages
 
 The `COMPOSEMSG` function launches the built-in editor. Subject line required. For echomail areas, automatically adds MSGID, tearline, and origin line.
