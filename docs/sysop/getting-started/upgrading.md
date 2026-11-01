@@ -235,6 +235,15 @@ saving from there writes it to your file. If you changed the string in any way,
 even by one space, your version is kept. The release notes say when this
 happens, so you can update your own text by hand.
 
+`QuotePrefix` is the exception. Its shipped value went from `"^I> "` to
+`" ^I> "`, so new quotes start with one space (` RW> text`), but it is not
+switched for you even if you never edited it, because it changes the text your
+board sends out in echomail and netmail. To take the new default, set **Quote
+Prefix** in `./strings` to ` ^I> `, with the leading space, or edit
+`configs/strings.json`. Your own prefix keeps working if you would rather leave
+it. Either way the message reader shows every quote line with one leading space
+and rewraps it to the caller's screen; stored messages are not changed.
+
 ## Check the board with doctor
 
 Before restarting, run the new binary's health check from the BBS directory:

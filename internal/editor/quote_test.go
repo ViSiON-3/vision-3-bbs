@@ -269,8 +269,8 @@ func TestQuoteModeInsertsSelectedLinesWithBannerAndPrefix(t *testing.T) {
 	got := stripANSI(ch.buffer.GetContent())
 	want := []string{
 		"[Bucko Said]",
-		"Bu> On 28 Aug 2026, Shurato said the following...",
-		"Bu> Sh> I'd be interested in this as well", // the source line's own indent is dropped
+		" Bu> On 28 Aug 2026, Shurato said the following...",
+		" Bu> Sh> I'd be interested in this as well", // the source line's own indent is dropped
 		"[Bucko Done]",
 	}
 	gotLines := strings.Split(got, "\n")
@@ -312,8 +312,8 @@ func TestQuoteModeLeavesOneBlankLineAfterBlock(t *testing.T) {
 			got := strings.Split(stripANSI(ch.buffer.GetContent()), "\n")
 			want := []string{
 				"[Bucko Said]",
-				"Bu> On 28 Aug 2026, Shurato said the following...",
-				"Bu> Sh> I'd be interested in this as well",
+				" Bu> On 28 Aug 2026, Shurato said the following...",
+				" Bu> Sh> I'd be interested in this as well",
 				"[Bucko Done]",
 				"",
 				"my own words",
@@ -428,8 +428,8 @@ func TestQuotePrefixHonoursConfiguredTemplate(t *testing.T) {
 	_, ch, _, cleanup := newQuoteHarness(t, "", quoteBody)
 	defer cleanup()
 
-	if got := ch.quotePrefix(); got != "Bu> " {
-		t.Errorf("default quotePrefix() = %q, want %q", got, "Bu> ")
+	if got := ch.quotePrefix(); got != " Bu> " {
+		t.Errorf("default quotePrefix() = %q, want %q", got, " Bu> ")
 	}
 
 	// A template with no token is a deliberate sysop choice and is used verbatim.
@@ -520,28 +520,28 @@ func TestQuoteModeNetworkedBanners(t *testing.T) {
 	}{
 		{"top only", "^N wrote:", "", []string{
 			"Bucko wrote:",
-			"Bu> On 28 Aug 2026, Shurato said the following...",
-			"Bu> Sh> I'd be interested in this as well",
+			" Bu> On 28 Aug 2026, Shurato said the following...",
+			" Bu> Sh> I'd be interested in this as well",
 			"",
 			"draft",
 		}, 5},
 		{"no banners", "", "", []string{
-			"Bu> On 28 Aug 2026, Shurato said the following...",
-			"Bu> Sh> I'd be interested in this as well",
+			" Bu> On 28 Aug 2026, Shurato said the following...",
+			" Bu> Sh> I'd be interested in this as well",
 			"",
 			"draft",
 		}, 4},
 		{"escapes stripped", "^N\x1b]10;red\x07 wrote:\x1b]0;x\x1b\\", "", []string{
 			"Bucko wrote:",
-			"Bu> On 28 Aug 2026, Shurato said the following...",
-			"Bu> Sh> I'd be interested in this as well",
+			" Bu> On 28 Aug 2026, Shurato said the following...",
+			" Bu> Sh> I'd be interested in this as well",
 			"",
 			"draft",
 		}, 5},
 		{"colors stripped", "|15^N |07wrote:|07", "|08-- end --", []string{
 			"Bucko wrote:",
-			"Bu> On 28 Aug 2026, Shurato said the following...",
-			"Bu> Sh> I'd be interested in this as well",
+			" Bu> On 28 Aug 2026, Shurato said the following...",
+			" Bu> Sh> I'd be interested in this as well",
 			"-- end --",
 			"",
 			"draft",

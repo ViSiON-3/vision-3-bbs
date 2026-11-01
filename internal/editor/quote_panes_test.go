@@ -102,7 +102,7 @@ func TestQuoteModeTabReturnsToSourcePane(t *testing.T) {
 		t.Errorf("divider = %q, want it labelled \"Quoting Bucko\" again", got)
 	}
 	got := strings.Split(stripANSI(ch.buffer.GetContent()), "\n")
-	want := []string{"line 29", "[Bucko Said]", "Bu> src 1", "[Bucko Done]", "", "line 30"}
+	want := []string{"line 29", "[Bucko Said]", " Bu> src 1", "[Bucko Done]", "", "line 30"}
 	if len(got) != 34 || strings.Join(got[28:], "\n") != strings.Join(want, "\n") {
 		t.Errorf("message tail = %q, want %q", got[len(got)-len(want):], want)
 	}
@@ -155,7 +155,7 @@ func TestQuoteModeAnonymousAuthor(t *testing.T) {
 	ch.HandleQuote(ih, 1, 1)
 
 	got := strings.Split(stripANSI(ch.buffer.GetContent()), "\n")
-	want := []string{"[Anonymous Said]", "An> hello there", "[Anonymous Done]"}
+	want := []string{"[Anonymous Said]", " An> hello there", "[Anonymous Done]"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("quote block = %q, want %q", got, want)
 	}
@@ -188,7 +188,7 @@ func TestQuoteModePagingKeysMoveTheBar(t *testing.T) {
 
 			ch.HandleQuote(ih, 1, 1)
 
-			if got, want := stripANSI(ch.buffer.GetLine(2)), "Bu> "+tc.want; got != want {
+			if got, want := stripANSI(ch.buffer.GetLine(2)), " Bu> "+tc.want; got != want {
 				t.Errorf("quoted line = %q, want %q", got, want)
 			}
 		})
@@ -218,9 +218,9 @@ func TestQuoteModeNearTheLineLimit(t *testing.T) {
 
 			line, col := ch.HandleQuote(ih, 5, 3)
 
-			want := []string{"line 4", "[Bucko Said]", "Bu> On 28 Aug 2026, Shurato said the following..."}
+			want := []string{"line 4", "[Bucko Said]", " Bu> On 28 Aug 2026, Shurato said the following..."}
 			if tc.wantQuoted == 2 {
-				want = append(want, "Bu> Sh> I'd be interested in this as well")
+				want = append(want, " Bu> Sh> I'd be interested in this as well")
 			}
 			want = append(want, "[Bucko Done]")
 			if tc.wantGap {

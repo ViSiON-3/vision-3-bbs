@@ -50,7 +50,7 @@ type quoteSession struct {
 	src      []string // source lines, cruft filtered out
 	quoted   []int    // how many times src[i] has been quoted into the message
 	prefix   string   // per-line quote prefix, e.g. "Bu> "
-	srcWidth int      // width the source was wrapped at, see quoteSourceWidth
+	srcWidth int      // width the source was wrapped at, see QuoteSourceWidth
 
 	sel int // selected source index (0-based)
 	top int // first visible source index (0-based)
@@ -115,7 +115,7 @@ func newQuoteSession(ch *CommandHandler, src []string, currentLine int) *quoteSe
 		src:      src,
 		quoted:   make([]int, len(src)),
 		prefix:   ch.quotePrefix(),
-		srcWidth: quoteSourceWidth(clean),
+		srcWidth: QuoteSourceWidth(clean),
 		origLine: currentLine,
 	}
 	qs.layout()
@@ -356,7 +356,7 @@ func (qs *quoteSession) joinsLast(idx int) bool {
 	if last.closed || idx == 0 || last.src[len(last.src)-1] != idx-1 {
 		return false
 	}
-	return continuesParagraph(qs.ch.cleanQuoteLine(qs.src[idx-1]), qs.ch.cleanQuoteLine(qs.src[idx]), qs.srcWidth)
+	return ContinuesParagraph(qs.ch.cleanQuoteLine(qs.src[idx-1]), qs.ch.cleanQuoteLine(qs.src[idx]), qs.srcWidth)
 }
 
 // removePara takes a paragraph's lines out of the buffer. Only the paragraph
@@ -757,10 +757,10 @@ var quotePrefixRE = regexp.MustCompile(`^[ \t]*((?:[^\s<>=-]{0,4}>+[ \t]+)*[^\s<
 // listItemRE matches the start of a bullet or numbered list item.
 var listItemRE = regexp.MustCompile(`^(?:[-*+•]|\d{1,3}[.)])[ \t]`)
 
-// splitQuotePrefix splits a cleaned source line into the quote prefix it
+// SplitQuotePrefix splits a cleaned source line into the quote prefix it
 // already carries, normalized to single spaces ("Sh> "), and the text after
 // it, indent included. A line with no prefix returns "" and the line unchanged.
-func splitQuotePrefix(line string) (prefix, body string) {
+func SplitQuotePrefix(line string) (prefix, body string) {
 	m := quotePrefixRE.FindStringSubmatchIndex(line)
 	if m == nil {
 		return "", line
@@ -768,9 +768,9 @@ func splitQuotePrefix(line string) (prefix, body string) {
 	return strings.Join(strings.Fields(line[m[2]:m[3]]), " ") + " ", line[m[1]:]
 }
 
-// quoteSourceWidth estimates the width the source message was wrapped at: its
+// QuoteSourceWidth estimates the width the source message was wrapped at: its
 // longest line, ignoring lines too long to have been wrapped at all.
-func quoteSourceWidth(lines []string) int {
+func QuoteSourceWidth(lines []string) int {
 	width := 0
 	for _, line := range lines {
 		if n := runeLen(line); n <= maxSourceWidth && n > width {
@@ -780,19 +780,19 @@ func quoteSourceWidth(lines []string) int {
 	return width
 }
 
-// continuesParagraph reports whether next, the source line after prev, is a
+// ContinuesParagraph reports whether next, the source line after prev, is a
 // continuation of the same paragraph rather than the start of a new one. The
 // source carries no paragraph marks, so this reads them off the layout: the
 // author's editor wrapped next onto its own line only when its first word
 // would not fit on prev, so a prev with room left for that word ended where it
 // did on purpose. Blank lines, a change of quote depth or indent, and list
 // items also break a paragraph. width is the wrap width of the source.
-func continuesParagraph(prev, next string, width int) bool {
+func ContinuesParagraph(prev, next string, width int) bool {
 	if width < minReflowWidth {
 		return false
 	}
-	prevPrefix, prevBody := splitQuotePrefix(prev)
-	nextPrefix, nextBody := splitQuotePrefix(next)
+	prevPrefix, prevBody := SplitQuotePrefix(prev)
+	nextPrefix, nextBody := SplitQuotePrefix(next)
 	if prevPrefix != nextPrefix {
 		return false
 	}
@@ -827,10 +827,10 @@ func reflowQuoted(prefix string, lines []string, max int) []string {
 	if len(lines) == 0 {
 		return nil
 	}
-	inner, _ := splitQuotePrefix(lines[0])
+	inner, _ := SplitQuotePrefix(lines[0])
 	bodies := make([]string, len(lines))
 	for i, line := range lines {
-		_, bodies[i] = splitQuotePrefix(line)
+		_, bodies[i] = SplitQuotePrefix(line)
 	}
 	return wrapQuoted(prefix+inner, strings.Join(bodies, " "), max)
 }
