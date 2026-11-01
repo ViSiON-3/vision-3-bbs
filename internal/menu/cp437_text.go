@@ -1,6 +1,10 @@
 package menu
 
-import "github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+import (
+	"unicode/utf8"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+)
 
 // unicodeASCIILookalikes maps Unicode characters that are visually identical (or nearly
 // identical) to ASCII characters but have no CP437 representation. Common in FTN handles
@@ -17,10 +21,19 @@ var unicodeASCIILookalikes = map[rune]byte{
 //  2. CP437 equivalent — mapped via UnicodeToCP437
 //  3. Visual ASCII lookalike — e.g. Cyrillic е → 'e'
 //  4. '?' fallback
+//
+// A byte that is not valid UTF-8 is kept as it is: it can only be text that
+// is already CP437, such as a subject from an FTN system, and it is the
+// character the sender meant.
 func toCP437Safe(s string) string {
 	out := make([]byte, 0, len(s))
-	for _, r := range s {
-		if r < 0x80 {
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		raw := s[i]
+		i += size
+		if r == utf8.RuneError && size == 1 {
+			out = append(out, raw)
+		} else if r < 0x80 {
 			out = append(out, byte(r))
 		} else if cp437Byte, ok := ansi.UnicodeToCP437[r]; ok {
 			out = append(out, cp437Byte)
