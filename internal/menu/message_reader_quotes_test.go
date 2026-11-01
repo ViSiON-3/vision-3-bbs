@@ -464,3 +464,15 @@ func TestQuoteJoinSeparator(t *testing.T) {
 		}
 	}
 }
+
+// Bare-marker quotes at different depths stay apart even when the first line
+// is full: the editor's continuation check can't see a bare marker, so the
+// reader compares the prefixes it parsed.
+func TestReaderKeepsBareMarkerDepthsApart(t *testing.T) {
+	full := ">" + strings.Repeat("word ", 15) + "end" // 79 columns
+	body := full + "\n>>inner reply\n>" + strings.Repeat("more ", 14) + "x"
+	got := reflowQuotes(body, 100, ansi.OutputModeCP437, nil)
+	if !strings.Contains(got, " >>inner reply") {
+		t.Errorf("the nested line lost its depth:\n%s", got)
+	}
+}

@@ -180,6 +180,12 @@ func reflowQuotes(body string, width int, mode ansi.OutputMode, banners quoteBan
 		}
 	}
 	continues := func(prev, next *quoteLine) bool {
+		// The editor's checks parse prefixes again and can't see a bare
+		// marker (">text", ">>text"), so a change of depth there would
+		// pass them. The prefixes parsed here have to match first.
+		if prev.prefix != next.prefix {
+			return false
+		}
 		return editor.ContinuesParagraph(prev.plain, next.plain, sourceWidth[prev.prefix]) ||
 			editor.ContinuesParagraphMeasured(prev.plain, next.plain, sourceColumns[prev.prefix], quoteColumns)
 	}
