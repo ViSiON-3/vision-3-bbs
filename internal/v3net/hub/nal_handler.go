@@ -250,6 +250,14 @@ func (h *Hub) handlePostNAL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Area text goes on every board's screens and tags into paths. The NAL is
+	// signed, so the hub can only refuse one that fails, not clean it. Areas
+	// kept as the stored NAL has them pass as they are (see ValidateNALAreas).
+	if err := protocol.ValidateNALAreas(n.Areas, existing); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+
 	// Handovers are served from their own table, never from a posted NAL.
 	n.Handovers = nil
 	if err := h.nalStore.Put(network, &n); err != nil {

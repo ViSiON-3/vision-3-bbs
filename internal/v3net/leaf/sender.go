@@ -23,9 +23,11 @@ func (l *Leaf) subscribe(ctx context.Context) error {
 		Network:   l.cfg.Network,
 		NodeID:    l.cfg.Keystore.NodeID(),
 		PubKeyB64: l.cfg.Keystore.PubKeyBase64(),
-		BBSName:   l.cfg.BBSName,
-		BBSHost:   l.cfg.BBSHost,
-		AreaTags:  l.cfg.AreaTags,
+		// Hubs refuse a name with pipes or control characters, which a board
+		// name with colour codes has, so it goes cleaned.
+		BBSName:  protocol.CleanBBSName(l.cfg.BBSName),
+		BBSHost:  l.cfg.BBSHost,
+		AreaTags: l.cfg.AreaTags,
 	}
 	data, err := json.Marshal(req)
 	if err != nil {

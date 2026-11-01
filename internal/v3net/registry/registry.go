@@ -96,7 +96,18 @@ func fetchRemote(ctx context.Context, url string) ([]protocol.RegistryEntry, err
 		return nil, fmt.Errorf("decode registry: %w", err)
 	}
 
-	return reg.Networks, nil
+	// A name goes into hub URLs and onto screens, and no hub carries a
+	// network whose name breaks the protocol's rule, so such an entry names
+	// nothing a board can join and is left out.
+	networks := make([]protocol.RegistryEntry, 0, len(reg.Networks))
+	for _, n := range reg.Networks {
+		if !protocol.ValidNetworkName(n.Name) {
+			slog.Warn("registry: skipping entry with an invalid network name", "url", url, "name", fmt.Sprintf("%q", n.Name))
+			continue
+		}
+		networks = append(networks, n)
+	}
+	return networks, nil
 }
 
 // ClearCache resets the in-memory cache (used in tests).

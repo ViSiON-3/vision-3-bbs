@@ -129,3 +129,26 @@ func TestFetch_NoCache_ReturnsError(t *testing.T) {
 		t.Error("expected error with no cache and failing server")
 	}
 }
+
+// #843: a registry entry whose name is not a valid network name is dropped:
+// the name goes into hub URLs, and no hub carries a network by that name.
+func TestFetch_DropsInvalidNetworkNames(t *testing.T) {
+	ClearCache()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"v3net_registry":"1.0","networks":[
+			{"name":"felonynet","hub_url":"https://a.example"},
+			{"name":"bad|CLnet","hub_url":"https://b.example"},
+			{"name":"../../admin","hub_url":"https://c.example"},
+			{"name":"Upper","hub_url":"https://d.example"},
+			{"name":"","hub_url":"https://e.example"}
+		]}`))
+	}))
+	defer ts.Close()
+	networks, err := Fetch(context.Background(), ts.URL)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if len(networks) != 1 || networks[0].Name != "felonynet" {
+		t.Errorf("networks = %+v, want only felonynet", networks)
+	}
+}

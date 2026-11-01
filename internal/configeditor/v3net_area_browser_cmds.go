@@ -168,7 +168,7 @@ func subscribeToAreas(hubURL, network string, areaTags []string,
 			Network:   network,
 			NodeID:    ks.NodeID(),
 			PubKeyB64: ks.PubKeyBase64(),
-			BBSName:   bbsName,
+			BBSName:   protocol.CleanBBSName(bbsName), // as the leaf sends it
 			BBSHost:   bbsHost,
 			AreaTags:  areaTags,
 		}

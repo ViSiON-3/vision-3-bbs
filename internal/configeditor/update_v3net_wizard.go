@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
 // fetchNetworksMsg is the result of an auto-fetch of hub networks.
@@ -36,9 +36,14 @@ func fetchHubNetworks(hubURL string) tea.Cmd {
 		if err := json.NewDecoder(resp.Body).Decode(&summaries); err != nil {
 			return fetchNetworksMsg{err: err}
 		}
+		// A name goes into hub URLs and the config. One that breaks the
+		// protocol's rule can't be joined, and cleaning it would name a
+		// different network, so it is left off the list.
 		var names []string
 		for _, s := range summaries {
-			names = append(names, ansi.OneLine(s.Name))
+			if protocol.ValidNetworkName(s.Name) {
+				names = append(names, s.Name)
+			}
 		}
 		return fetchNetworksMsg{names: names}
 	}

@@ -392,6 +392,16 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The name goes on every board's screens. A node the hub already holds
+	// may keep the name it has, even one from before this check, so it is not
+	// locked out; a new name has to pass.
+	if existing == nil || req.BBSName != existing.BBSName {
+		if err := protocol.ValidateBBSName(req.BBSName); err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
 	status := "pending"
 	if h.cfg.AutoApprove {
 		status = "active"

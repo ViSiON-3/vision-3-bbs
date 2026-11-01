@@ -125,12 +125,52 @@ func nameCharsValid(s string) bool {
 // BBS screens read as codes. Boards still clean what they display, because a NAL
 // can hold areas created before this check.
 func ValidateAreaText(field, value string) error {
-	for _, r := range value {
-		if r == '|' || r < 0x20 || (r >= 0x7F && r <= 0x9F) {
-			return fmt.Errorf("area %s cannot contain pipes or control characters", field)
+	if hasScreenCodes(value) {
+		return fmt.Errorf("area %s cannot contain pipes or control characters", field)
+	}
+	return nil
+}
+
+// ValidateNALAreas checks the areas of a NAL a coordinator posts: every tag
+// must be well formed, and no area's name, description or language may hold
+// pipes or control characters (see ValidateAreaText). An area that stored, the
+// NAL the hub holds now, already carries with the same tag and the same text is
+// let through as it is, so text from before these checks does not lock a
+// coordinator out of every other change. stored may be nil.
+func ValidateNALAreas(areas []Area, stored *NAL) error {
+	held := map[string]Area{}
+	if stored != nil {
+		for _, a := range stored.Areas {
+			held[a.Tag] = a
+		}
+	}
+	for i, a := range areas {
+		if old, ok := held[a.Tag]; ok && old.Name == a.Name && old.Description == a.Description && old.Language == a.Language {
+			continue
+		}
+		if !AreaTagRegexp.MatchString(a.Tag) {
+			return fmt.Errorf("area %d: invalid tag", i+1)
+		}
+		for _, f := range []struct{ field, value string }{
+			{"name", a.Name}, {"description", a.Description}, {"language", a.Language},
+		} {
+			if err := ValidateAreaText(f.field, f.value); err != nil {
+				return fmt.Errorf("area %s: %w", a.Tag, err)
+			}
 		}
 	}
 	return nil
+}
+
+// hasScreenCodes reports whether s holds a pipe, which BBS screens read as the
+// start of a code, or a control character (C0, DEL or C1).
+func hasScreenCodes(s string) bool {
+	for _, r := range s {
+		if r == '|' || r < 0x20 || (r >= 0x7F && r <= 0x9F) {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidateAccessMode checks that a mode string is one of the valid access modes.
