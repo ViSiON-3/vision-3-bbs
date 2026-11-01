@@ -205,8 +205,8 @@ func checkScreen(t *testing.T, tt *testterm.Term, ed *FSEditor, wantLine, wantCo
 }
 
 const (
-	keyDel  = "\x07" // Ctrl-G, the editor's Delete
-	keyBack = "\x08"
+	ctrlGDelete    = "\x07" // Ctrl-G, the editor's Delete
+	ctrlHBackspace = "\x08"
 )
 
 // The changed rows include one above the cursor, the cursor's own and the ones
@@ -214,7 +214,7 @@ const (
 func TestRunDeletePullsWordBackOnScreen(t *testing.T) {
 	tt, ed := runSeeded(t,
 		[]string{"intro", fullLine, longWord, "next paragraph", "last paragraph"},
-		[]int{1, 3, 4, 5}, 1, 3, 1, strings.Repeat(keyDel, 14))
+		[]int{1, 3, 4, 5}, 1, 3, 1, strings.Repeat(ctrlGDelete, 14))
 	checkBuffer(t, ed.buffer, []string{"intro", fullLine + " listic", "next paragraph", "last paragraph"}, 1, 2, 3, 4)
 	checkScreen(t, tt, ed, 2, len(fullLine)+2, 1)
 }
@@ -230,7 +230,7 @@ func TestRunPullBackAboveViewScrolls(t *testing.T) {
 		}
 	}
 	lines[9], lines[10] = fullLine, longWord+" tail"
-	tt, ed := runSeeded(t, lines, hard, 11, 11, 1, strings.Repeat(keyDel, 14))
+	tt, ed := runSeeded(t, lines, hard, 11, 11, 1, strings.Repeat(ctrlGDelete, 14))
 	if got, want := ed.buffer.GetLine(10), fullLine+" listic"; got != want {
 		t.Fatalf("line 10 = %q, want %q", got, want)
 	}
@@ -241,18 +241,18 @@ func TestRunEditOnFirstLine(t *testing.T) {
 	first := fullLine + " abcdef"
 	t.Run("the next word stays down until it fits", func(t *testing.T) {
 		tt, ed := runSeeded(t, []string{first, "tail words"}, []int{2}, 1, 1, len(first)+1,
-			strings.Repeat(keyBack, 3))
+			strings.Repeat(ctrlHBackspace, 3))
 		checkBuffer(t, ed.buffer, []string{fullLine + " abc", "tail words"}, 2)
 		checkScreen(t, tt, ed, 1, len(fullLine)+5, 1)
 	})
 	t.Run("then it comes up", func(t *testing.T) {
 		tt, ed := runSeeded(t, []string{first, "tail words"}, []int{2}, 1, 1, len(first)+1,
-			strings.Repeat(keyBack, 4))
+			strings.Repeat(ctrlHBackspace, 4))
 		checkBuffer(t, ed.buffer, []string{fullLine + " ab tail", "words"}, 2)
 		checkScreen(t, tt, ed, 1, len(fullLine)+4, 1)
 	})
 	t.Run("backspace at the very start does nothing", func(t *testing.T) {
-		tt, ed := runSeeded(t, []string{"one", "two"}, []int{1, 2}, 1, 1, 1, keyBack)
+		tt, ed := runSeeded(t, []string{"one", "two"}, []int{1, 2}, 1, 1, 1, ctrlHBackspace)
 		checkBuffer(t, ed.buffer, []string{"one", "two"}, 1, 2)
 		checkScreen(t, tt, ed, 1, 1, 1)
 	})
@@ -263,18 +263,18 @@ func TestRunEditOnFirstLine(t *testing.T) {
 // line above.
 func TestRunEmptiedLineKeepsCursorAndWordBreak(t *testing.T) {
 	prev := strings.Repeat("x", 39) + " " + strings.Repeat("y", 38) // 78: "c" does not fit
-	tt, ed := runSeeded(t, []string{prev, "c", "after"}, []int{2, 3}, 1, 2, 2, keyBack)
+	tt, ed := runSeeded(t, []string{prev, "c", "after"}, []int{2, 3}, 1, 2, 2, ctrlHBackspace)
 	checkBuffer(t, ed.buffer, []string{prev, "", "after"}, 2, 3)
 	checkScreen(t, tt, ed, 2, 1, 1)
 
-	_, ed = runSeeded(t, []string{prev, "c", "after"}, []int{2, 3}, 1, 2, 2, keyBack+"d")
+	_, ed = runSeeded(t, []string{prev, "c", "after"}, []int{2, 3}, 1, 2, 2, ctrlHBackspace+"d")
 	checkBuffer(t, ed.buffer, []string{prev, "d", "after"}, 2, 3)
 }
 
 // Joining two hard lines leaves the others on rows of their own.
 func TestRunBackspaceJoinOnScreen(t *testing.T) {
 	tt, ed := runSeeded(t, []string{"line one", "line two", "line three", "line four"},
-		[]int{1, 2, 3, 4}, 1, 2, 1, keyBack)
+		[]int{1, 2, 3, 4}, 1, 2, 1, ctrlHBackspace)
 	checkBuffer(t, ed.buffer, []string{"line oneline two", "line three", "line four"}, 1, 2, 3)
 	checkScreen(t, tt, ed, 1, 9, 1)
 }
@@ -316,7 +316,7 @@ func TestRunEditingLoadedTextKeepsItsLines(t *testing.T) {
 		t.Fatal("setup: the second line must not fit after the first")
 	}
 	// Up to the first line, End, Backspace, save.
-	got, saved := runKeys(t, first+"!\n"+second, "\x05\x10"+keyBack+"\x1a")
+	got, saved := runKeys(t, first+"!\n"+second, "\x05\x10"+ctrlHBackspace+"\x1a")
 	if want := first + "\n" + second; !saved || got != want {
 		t.Fatalf("saved=%v\n got %q\nwant %q", saved, got, want)
 	}
@@ -331,7 +331,7 @@ func TestRunQuotedLinesStayOutOfCallersParagraph(t *testing.T) {
 	first := strings.TrimSpace(strings.Repeat("mine ", 15))
 	// Type a wrapped paragraph, quote a line above its second row, then go to
 	// the end of the first row and delete a character.
-	sess := testterm.NewSession(nil, first+" "+longWord+"\x11 \x11"+"\x12\x10"+keyBack+"\x1a")
+	sess := testterm.NewSession(nil, first+" "+longWord+"\x11 \x11"+"\x12\x10"+ctrlHBackspace+"\x1a")
 	ed := NewFSEditor(sess, io.Discard, ansi.OutputModeUTF8, 80, 24, "", "", "", "", "", "", nil)
 	ed.SetNetworkQuoteStrings("", "")
 	ed.SetQuoteData(&QuoteData{From: "Bucko", Title: "t", Lines: []string{"quoted text"}})
