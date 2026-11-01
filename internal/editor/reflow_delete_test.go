@@ -164,7 +164,11 @@ func TestPullBackUsesTheWrappersByteMargin(t *testing.T) {
 // its keys run out. It returns the terminal and editor in their final state.
 func runSeeded(t *testing.T, lines []string, hard []int, top, line, col int, keys string) (*testterm.Term, *FSEditor) {
 	t.Helper()
-	tt, ed := newRunHarness(t, keys)
+	// A plain reader, unlike testterm.Session, reports EOF when the keys run
+	// out, so Run returns with the screen as the last key left it.
+	tt := testterm.New(80, 24)
+	ih := NewInputHandler(strings.NewReader(keys))
+	ed := NewFSEditor(testterm.NewSession(nil, ""), tt, ansi.OutputModeUTF8, 80, 24, "", "", "", "", "", "", ih)
 	for i, l := range lines {
 		ed.buffer.SetLine(i+1, l)
 	}
