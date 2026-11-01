@@ -266,16 +266,16 @@ func (ww *WordWrapper) ReformatParagraph(startLine int) int {
 	return endLine
 }
 
-// reflowAfterDelete reflows the paragraph around lineNum after text was removed
-// from it. A shorter line can let the words after it move up, and if its first
-// word got shorter that word can move up onto the line above, so the reflow
-// starts at the top of the paragraph. The cursor (lineNum, col) is carried
-// through, and may end up on a line above lineNum.
-func (ww *WordWrapper) reflowAfterDelete(lineNum, col int) (int, int) {
-	return ww.ReflowRange(ww.deleteReflowStart(lineNum), lineNum, col)
+// reflowParagraph reflows the paragraph around lineNum after an edit to it. A
+// shorter line can let the words after it move up, and if its first word got
+// shorter, by a deletion or a space typed into it, that word can move up onto
+// the line above, so the reflow starts at the top of the paragraph. The cursor
+// (lineNum, col) is carried through, and may end up on a line above lineNum.
+func (ww *WordWrapper) reflowParagraph(lineNum, col int) (int, int) {
+	return ww.ReflowRange(ww.paragraphReflowStart(lineNum), lineNum, col)
 }
 
-// deleteReflowStart returns the line to start a reflow on after a deletion on
+// paragraphReflowStart returns the line to start a reflow on after an edit on
 // lineNum: the first line of its paragraph, walking back over soft wraps.
 //
 // A line just emptied stays where it is. The soft break above it stands for
@@ -284,7 +284,7 @@ func (ww *WordWrapper) reflowAfterDelete(lineNum, col int) (int, int) {
 //
 // The walk may cross a word split at the margin: the buffer's word-split flag
 // tells ReflowRange to rejoin it without a space.
-func (ww *WordWrapper) deleteReflowStart(lineNum int) int {
+func (ww *WordWrapper) paragraphReflowStart(lineNum int) int {
 	if ww.buffer.GetLineLength(lineNum) == 0 {
 		return lineNum
 	}
@@ -302,7 +302,7 @@ func (ww *WordWrapper) deleteReflowStart(lineNum int) int {
 func (ww *WordWrapper) HandleBackspace(lineNum, col int) (int, int, bool) {
 	if col > 1 {
 		if ww.buffer.DeleteChar(lineNum, col-1) {
-			newLine, newCol := ww.reflowAfterDelete(lineNum, col-1)
+			newLine, newCol := ww.reflowParagraph(lineNum, col-1)
 			return newLine, newCol, true
 		}
 		return lineNum, col, false
@@ -316,7 +316,7 @@ func (ww *WordWrapper) HandleBackspace(lineNum, col int) (int, int, bool) {
 		prevLen := len(prevLine)
 
 		if ww.buffer.JoinLines(lineNum - 1) {
-			newLine, newCol := ww.reflowAfterDelete(lineNum-1, prevLen+1)
+			newLine, newCol := ww.reflowParagraph(lineNum-1, prevLen+1)
 			return newLine, newCol, true
 		}
 	}
@@ -333,7 +333,7 @@ func (ww *WordWrapper) HandleDelete(lineNum, col int) (int, int, bool) {
 
 	if col <= lineLen {
 		if ww.buffer.DeleteChar(lineNum, col) {
-			newLine, newCol := ww.reflowAfterDelete(lineNum, col)
+			newLine, newCol := ww.reflowParagraph(lineNum, col)
 			return newLine, newCol, true
 		}
 		return lineNum, col, false
@@ -343,7 +343,7 @@ func (ww *WordWrapper) HandleDelete(lineNum, col int) (int, int, bool) {
 	// line keeps the next line's hard-newline flag.
 	if lineNum < ww.buffer.GetLineCount() {
 		if ww.buffer.JoinLines(lineNum) {
-			newLine, newCol := ww.reflowAfterDelete(lineNum, col)
+			newLine, newCol := ww.reflowParagraph(lineNum, col)
 			return newLine, newCol, true
 		}
 	}
@@ -376,11 +376,36 @@ func (ww *WordWrapper) DeleteWord(lineNum, col int) (int, int, bool) {
 	if i > col-1 {
 		newLine := line[:col-1] + line[i:]
 		ww.buffer.SetLine(lineNum, newLine)
-		newLn, newCol := ww.reflowAfterDelete(lineNum, col)
+		newLn, newCol := ww.reflowParagraph(lineNum, col)
 		return newLn, newCol, true
 	}
 
 	return lineNum, col, false
+}
+
+// DeleteLine deletes lineNum and closes up the paragraph around it. A line
+// that ended its paragraph passes its hard break to the line above, so that
+// line does not run on into the next paragraph. A line that held the middle of
+// a split word leaves the parts either side of it as two words. Returns the
+// cursor position for the start of the text that followed the deleted line,
+// and whether a line was deleted.
+func (ww *WordWrapper) DeleteLine(lineNum int) (int, int, bool) {
+	wasHard := ww.buffer.IsHardNewline(lineNum)
+	if !ww.buffer.DeleteLine(lineNum) {
+		return lineNum, 1, false
+	}
+	if lineNum > 1 {
+		if wasHard {
+			ww.buffer.SetHardNewline(lineNum-1, true)
+		}
+		ww.buffer.SetWordSplit(lineNum-1, false)
+	}
+	if lineNum > ww.buffer.GetLineCount() {
+		// The last line went; the cursor goes to the start of the new last.
+		return ww.buffer.GetLineCount(), 1, true
+	}
+	newLine, newCol := ww.reflowParagraph(lineNum, 1)
+	return newLine, newCol, true
 }
 
 // FindWordLeft finds the start of the word to the left

@@ -21,6 +21,11 @@ func (e *FSEditor) insertCharacter(ch rune) {
 
 	// Check for word wrap
 	newLine, newCol := e.wordWrapper.WrapAfterInsert(e.currentLine, e.currentCol)
+	if unicode.IsSpace(ch) {
+		// A space can split a line's first word, and the front of it may now
+		// fit on the line above. Other characters only make words longer.
+		newLine, newCol = e.wordWrapper.reflowParagraph(newLine, newCol)
+	}
 	e.currentLine = newLine
 	e.currentCol = newCol
 }
@@ -80,18 +85,14 @@ func (e *FSEditor) deleteWord() {
 	}
 }
 
-// deleteLine deletes the current line
+// deleteLine deletes the current line (Ctrl-K, Ctrl-Y) and closes up the
+// paragraph around it.
 func (e *FSEditor) deleteLine() {
-	if e.buffer.DeleteLine(e.currentLine) {
+	newLine, newCol, changed := e.wordWrapper.DeleteLine(e.currentLine)
+	if changed {
+		e.currentLine = newLine
+		e.currentCol = newCol
 		e.modified = true
-		// Ensure cursor is on a valid line
-		if e.currentLine > e.buffer.GetLineCount() {
-			e.currentLine = e.buffer.GetLineCount()
-			if e.currentLine < 1 {
-				e.currentLine = 1
-			}
-		}
-		e.currentCol = 1
 	}
 }
 
