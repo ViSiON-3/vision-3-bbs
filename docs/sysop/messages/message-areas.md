@@ -513,12 +513,18 @@ Two things happen to the quoted text:
   Backspace takes the last line back out of its paragraph. A nested quote
   prefix (`Sh> `) is carried onto every wrapped line (` Bu> Sh> …`), with the
   one leading space only at the start.
-- **Quoted lines keep their breaks while editing.** Backspace and Delete refill
-  the caller's own paragraph up to the margin, and words can move back onto the
-  line above. Each quoted line stands alone, so that reflow never crosses into
-  or out of a quote. Pressing Backspace at the start of a line still joins it to
-  the line above, quoted or not. Text loaded into the editor, such as an
-  existing auto-signature, keeps its line breaks in the same way.
+- **Quoted paragraphs reflow under their prefix while editing.** Typing,
+  Backspace, Delete, Ctrl-K and Ctrl-B refill a paragraph up to the margin, and
+  words can move back onto the line above. In a quoted paragraph the prefix
+  stays on every line and the text is rewrapped beside it. That reflow never
+  crosses into or out of a quote, or between quotes at different depths, so a
+  quote and the caller's own text never run together. Banners and blank quoted
+  lines stay as they are. Pressing Enter inside a quoted line leaves the text
+  after the cursor as the caller's own, for replying between a quote's lines,
+  and deleting a line's prefix makes it the caller's own text too. Pressing
+  Backspace at the start of a line still joins it to the line above. Text
+  loaded into the editor, such as an existing auto-signature, keeps its line
+  breaks.
 - **Banners depend on the area.** In local and V3Net areas the quoted block
   is wrapped in the `quoteTop` and `quoteBottom` strings (shipped as
   `[Name Said]` / `[Name Done]`, with pipe colours). In echomail, netmail and

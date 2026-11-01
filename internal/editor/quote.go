@@ -375,18 +375,31 @@ func (qs *quoteSession) removePara(p *quotePara) {
 // writePara wraps a paragraph and inserts it at insertAt, as much of it as the
 // message has room for. It reports whether all of it fitted; a paragraph that
 // did not is closed, so nothing joins a quote that is already cut short.
+//
+// The paragraph's lines are written as one soft-wrapped paragraph under its
+// prefix, ending in a hard break, so editing it later reflows it under the
+// prefix instead of leaving it jagged.
 func (qs *quoteSession) writePara(p *quotePara) bool {
 	text := make([]string, len(p.src))
 	for i, idx := range p.src {
 		text[i] = qs.ch.cleanQuoteLine(qs.src[idx])
 	}
 	wrapped := reflowQuoted(qs.prefix, text, MaxLineLength)
+	prefix := qs.prefix + quoteInnerPrefix(text)
+	buf := qs.ch.buffer
+	first := qs.insertAt
 	for _, line := range wrapped {
 		if !qs.insertBufferLine(qs.insertAt, line) {
 			break
 		}
+		buf.SetQuotePrefix(qs.insertAt, prefix)
 		qs.insertAt++
 		p.bufLines++
+	}
+	// insertBufferLine hard-breaks each line above the one it inserts; within
+	// the paragraph those are wraps.
+	for n := first; n < qs.insertAt-1; n++ {
+		buf.SetHardNewline(n, false)
 	}
 	p.closed = p.bufLines < len(wrapped)
 	return !p.closed
@@ -838,12 +851,22 @@ func reflowQuoted(prefix string, lines []string, max int) []string {
 	if len(lines) == 0 {
 		return nil
 	}
-	inner, _ := SplitQuotePrefix(lines[0])
+	inner := quoteInnerPrefix(lines)
 	bodies := make([]string, len(lines))
 	for i, line := range lines {
 		_, bodies[i] = SplitQuotePrefix(line)
 	}
 	return wrapQuoted(prefix+inner, strings.Join(bodies, " "), max)
+}
+
+// quoteInnerPrefix returns the quote prefix a paragraph's lines already carry
+// from earlier rounds of quoting, normalized as SplitQuotePrefix does, or "".
+func quoteInnerPrefix(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	inner, _ := SplitQuotePrefix(lines[0])
+	return inner
 }
 
 // wrapQuoted breaks text into prefixed lines no wider than max, re-applying the
