@@ -36,6 +36,7 @@ const (
 // QuoteData holds message metadata for quoting
 type QuoteData struct {
 	From   string   // Message author
+	To     string   // Who the message was addressed to
 	Title  string   // Message subject/title
 	Date   string   // Message date
 	Time   string   // Message time
@@ -237,13 +238,13 @@ func (ch *CommandHandler) quoteNotice(inputHandler *InputHandler, text string) {
 	_, _ = inputHandler.ReadKey() // wait for any key
 }
 
-// processQuoteCodes processes ^N, ^T, ^D, ^W and ^I codes in quote strings
+// processQuoteCodes processes ^N, ^T, ^F, ^D, ^W and ^I codes in quote strings
 func (ch *CommandHandler) processQuoteCodes(text string) string {
 	return ch.expandQuoteCodes(text, func(s string) string { return s })
 }
 
-// expandQuoteCodes is processQuoteCodes with field applied to the author and
-// subject, which come from whoever wrote the message being quoted.
+// expandQuoteCodes is processQuoteCodes with field applied to the author,
+// addressee and subject, which come from whoever wrote the message being quoted.
 func (ch *CommandHandler) expandQuoteCodes(text string, field func(string) string) string {
 	result := ""
 	i := 0
@@ -263,6 +264,9 @@ func (ch *CommandHandler) expandQuoteCodes(text string, field func(string) strin
 				i += 2
 			case 'T', 't':
 				result += field(ch.quoteData.Title)
+				i += 2
+			case 'F', 'f':
+				result += field(ch.quoteData.To)
 				i += 2
 			case 'D', 'd':
 				result += ch.quoteData.Date

@@ -2,6 +2,8 @@ package menu
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -296,6 +298,32 @@ func TestMessageReaderReplyPostsThreadedReply(t *testing.T) {
 	}
 	if got := env.mustDiskUser(2).MessagesPosted; got != 1 {
 		t.Errorf("saved MessagesPosted = %d, want 1", got)
+	}
+}
+
+// TestMessageReaderReplyQuoteBannerNamesAddressee quotes through a real reply:
+// ^F in the banner is who the quoted message was addressed to, not who the
+// reply is going to.
+func TestMessageReaderReplyQuoteBannerNamesAddressee(t *testing.T) {
+	env := newMsgEnv(t)
+	env.postMsgs(generalAreaID, testMsg{from: "Sysop", to: "Bucko", subject: "hello"})
+
+	configDir := t.TempDir()
+	strs := []byte(`{"quoteTop": "[^N to ^F]", "quoteBottom": "[end]"}`)
+	if err := os.WriteFile(filepath.Join(configDir, "strings.json"), strs, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VISION3_MENU_PATH", t.TempDir())
+	t.Setenv("VISION3_CONFIG_PATH", configDir)
+
+	// R, open the quote picker, quote the first line, close it, save, quit.
+	r := env.runCmd("READMSGS", env.caller, "", "R\x11 \x11\x1aQ")
+	if !r.has("Reply posted successfully!") {
+		t.Fatalf("reply not confirmed; output:\n%s", r.text())
+	}
+	reply := env.mustMsg(generalAreaID, 2)
+	if !strings.Contains(reply.Body, "[Sysop to Bucko]") {
+		t.Errorf("reply body = %q, want the banner naming the quoted message's addressee", reply.Body)
 	}
 }
 

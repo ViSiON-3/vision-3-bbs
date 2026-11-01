@@ -17,3 +17,21 @@ func TestQuoteBannerEscapesAuthorScreenCodes(t *testing.T) {
 		t.Errorf("banner = %q", top)
 	}
 }
+
+// The addressee comes from the quoted message too, so it gets the same limits.
+func TestQuoteBannerEscapesAddresseeScreenCodes(t *testing.T) {
+	ch := &CommandHandler{quoteData: &QuoteData{To: "a|CLb"}, quoteTopStr: "|04^F"}
+	top, _ := ch.quoteBanners()
+	if strings.Contains(top, "\x1b[2J") || !strings.Contains(top, "a|CLb") {
+		t.Errorf("banner = %q", top)
+	}
+}
+
+// With nobody named, the code goes away rather than printing literally.
+func TestQuoteBannerEmptyAddressee(t *testing.T) {
+	ch := &CommandHandler{quoteData: &QuoteData{From: "Bucko"}, networked: true, quoteTopNetStr: "^N wrote to ^F:"}
+	top, _ := ch.quoteBanners()
+	if top != "Bucko wrote to :" {
+		t.Errorf("banner = %q", top)
+	}
+}
