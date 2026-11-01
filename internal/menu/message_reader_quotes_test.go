@@ -54,6 +54,10 @@ func TestReaderWrapsLongQuoteLineUnderItsPrefix(t *testing.T) {
 		{"bare marker", "> " + quoteTestText, " > "},
 		{"nested", "Bu>  Sh> " + quoteTestText, " Bu> Sh> "},
 		{"doubled", "Sh>> " + quoteTestText, " Sh>> "},
+		// #862: Usenet style, with no space after the marker.
+		{"no space after marker", ">" + quoteTestText, " >"},
+		{"no space after doubled marker", ">>" + quoteTestText, " >>"},
+		{"indented, no space", "  >" + quoteTestText, " >"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rows := quoteRows(t, tc.line, 60)
@@ -400,5 +404,75 @@ func TestIsQuoteLineAgreesWithTheEditor(t *testing.T) {
 		if got := isQuoteLine(line); got != want {
 			t.Errorf("isQuoteLine(%q) = %v, want %v", line, got, want)
 		}
+	}
+}
+
+// splitRunes cuts s into lines of n runes each.
+func splitRunes(s string, n int) []string {
+	r := []rune(s)
+	var out []string
+	for len(r) > n {
+		out = append(out, string(r[:n]))
+		r = r[n:]
+	}
+	return append(out, string(r))
+}
+
+// #864: double-width text the quoter's editor wrapped rejoins on display, and
+// no space is written into it where the lines meet. Editors wrap such text by
+// columns (36 runes is 72 columns) or by runes (70 runes), so both rejoin.
+func TestReaderJoinsWrappedDoubleWidthQuoteLines(t *testing.T) {
+	text := strings.Repeat("日本語の文章です。", 20) // 180 runes, no spaces
+	for _, perLine := range []int{36, 70} {
+		src := splitRunes(text, perLine)
+		for i := range src {
+			src[i] = "RW> " + src[i]
+		}
+		lines := messageBodyLines(strings.Join(src, "\n"), "", 100, ansi.OutputModeUTF8)
+		// 95 columns beside " RW> " hold 47 wide runes: 180 runes fill 4 rows
+		// only if the stored lines were joined into one run first.
+		if len(lines) != 4 {
+			t.Errorf("%d per line: %d rows from %d stored lines, want 4", perLine, len(lines), len(src))
+		}
+		var got strings.Builder
+		for _, line := range lines {
+			if w := visibleColumns(line, ansi.OutputModeUTF8); w > 100 {
+				t.Errorf("%d per line: row is %d columns", perLine, w)
+			}
+			if !strings.HasPrefix(line, " RW> ") {
+				t.Fatalf("%d per line: row %q lost the prefix", perLine, line)
+			}
+			got.WriteString(strings.TrimPrefix(line, " RW> "))
+		}
+		if got.String() != text {
+			t.Errorf("%d per line: text = %q, want it back with no spaces added", perLine, got.String())
+		}
+	}
+}
+
+// A join between double-width text and a Latin word keeps no space either side
+// that is wide, but Latin text still joins with one.
+func TestQuoteJoinSeparator(t *testing.T) {
+	for _, tc := range []struct{ a, b, want string }{
+		{"word", "next", " "},
+		{"文章", "です", ""},
+		{"word", "です", ""},
+		{"文章", "next", ""},
+	} {
+		if got := quoteJoinSeparator(tc.a, tc.b); got != tc.want {
+			t.Errorf("quoteJoinSeparator(%q, %q) = %q, want %q", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
+// Bare-marker quotes at different depths stay apart even when the first line
+// is full: the editor's continuation check can't see a bare marker, so the
+// reader compares the prefixes it parsed.
+func TestReaderKeepsBareMarkerDepthsApart(t *testing.T) {
+	full := ">" + strings.Repeat("word ", 15) + "end" // 79 columns
+	body := full + "\n>>inner reply\n>" + strings.Repeat("more ", 14) + "x"
+	got := reflowQuotes(body, 100, ansi.OutputModeCP437, nil)
+	if !strings.Contains(got, " >>inner reply") {
+		t.Errorf("the nested line lost its depth:\n%s", got)
 	}
 }

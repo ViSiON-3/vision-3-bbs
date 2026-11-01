@@ -334,20 +334,20 @@ func renderNewsBody(item *NewsItem, headerWidth, termWidth int, outputMode ansi.
 		return nil
 	}
 	// Pipe codes are converted to ANSI *before* wrapping, matching the
-	// reader. wrapAnsiString measures width with ANSI escapes stripped but
+	// reader. wrapNewsString measures width with ANSI escapes stripped but
 	// knows nothing about pipe codes, so wrapping first would count "|04"
 	// as three visible columns and break lines far too early.
 	//
-	// wrapAnsiString leaves ANSI art alone, so a sysop who pastes art into
+	// wrapNewsString leaves ANSI art alone, so a sysop who pastes art into
 	// an item still gets it positioned correctly.
 	width := newsBodyWidth(headerWidth, termWidth)
 	body := string(ansi.ReplacePipeCodes([]byte(normalizeNewsBody(item.Body))))
-	lines := wrapAnsiString(body, width, outputMode)
-	// wrapAnsiString breaks on spaces, so a token with no break opportunity
+	lines := wrapNewsString(body, width, outputMode)
+	// wrapNewsString breaks on spaces, so a token with no break opportunity
 	// (a long URL, a path) comes back oversized; break those explicitly
 	// rather than leaving the client terminal to chop them mid-token.
 	//
-	// Not for ANSI art: wrapAnsiString leaves art rows alone because they
+	// Not for ANSI art: wrapNewsString leaves art rows alone because they
 	// are positioned absolutely, and hard-breaking a full-width row would
 	// push everything below it down a line and wreck the picture.
 	if !containsAnsiArt(body) {

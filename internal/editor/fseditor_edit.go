@@ -21,6 +21,11 @@ func (e *FSEditor) insertCharacter(ch rune) {
 
 	// Check for word wrap
 	newLine, newCol := e.wordWrapper.WrapAfterInsert(e.currentLine, e.currentCol)
+	if unicode.IsSpace(ch) {
+		// A space can split a line's first word, and the front of it may now
+		// fit on the line above. Other characters only make words longer.
+		newLine, newCol = e.wordWrapper.reflowParagraph(newLine, newCol)
+	}
 	e.currentLine = newLine
 	e.currentCol = newCol
 }
@@ -80,18 +85,14 @@ func (e *FSEditor) deleteWord() {
 	}
 }
 
-// deleteLine deletes the current line
+// deleteLine deletes the current line (Ctrl-K, Ctrl-Y) and closes up the
+// paragraph around it.
 func (e *FSEditor) deleteLine() {
-	if e.buffer.DeleteLine(e.currentLine) {
+	newLine, newCol, changed := e.wordWrapper.DeleteLine(e.currentLine)
+	if changed {
+		e.currentLine = newLine
+		e.currentCol = newCol
 		e.modified = true
-		// Ensure cursor is on a valid line
-		if e.currentLine > e.buffer.GetLineCount() {
-			e.currentLine = e.buffer.GetLineCount()
-			if e.currentLine < 1 {
-				e.currentLine = 1
-			}
-		}
-		e.currentCol = 1
 	}
 }
 
@@ -99,17 +100,25 @@ func (e *FSEditor) deleteLine() {
 // Backspace and Delete make at a line boundary, Ctrl-J joins two lines as
 // words: a space goes between them unless one side already has whitespace at
 // the join or is empty, so "one" and "two" become "one two", not "onetwo".
+// The exception is a word the wrapper split at the margin, which goes back
+// together whole.
 func (e *FSEditor) joinLines() {
 	if e.currentLine >= e.buffer.GetLineCount() {
 		return
 	}
 	first := e.buffer.GetLine(e.currentLine)
 	second := e.buffer.GetLine(e.currentLine + 1)
+	// Two lines of one quote join under one prefix: JoinLines drops the
+	// second copy, so the separator is judged on the text after it.
+	if p := e.buffer.QuotePrefix(e.currentLine); p != "" && e.buffer.QuotePrefix(e.currentLine+1) == p {
+		second = second[len(p):]
+	}
 	// Look at whole characters: the last byte of a multi-byte one, such as
 	// the A0 of "à", would read as a space on its own.
 	last, _ := utf8.DecodeLastRuneInString(first)
 	next, _ := utf8.DecodeRuneInString(second)
-	if first != "" && second != "" && !unicode.IsSpace(last) && !unicode.IsSpace(next) {
+	if first != "" && second != "" && !unicode.IsSpace(last) && !unicode.IsSpace(next) &&
+		!e.buffer.IsWordSplit(e.currentLine) {
 		e.buffer.SetLine(e.currentLine, first+" ")
 	}
 	// Clear hardNewline so reflow can flow across the boundary

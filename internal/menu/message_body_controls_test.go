@@ -264,11 +264,11 @@ func TestKludgeViewDropsC1(t *testing.T) {
 	}
 }
 
-// Colour, cursor movement and erasing in a plain message still reach the caller.
+// Colour and erase-in-line in a plain message still reach the caller: they act
+// only within the body's own row.
 func TestBodyKeepsDisplaySequences(t *testing.T) {
 	for _, seq := range []string{
-		"\x1b[1;31m", "\x1b[0m", "\x1b[38;5;12m", "\x1b[38:5:12m", "\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D",
-		"\x1b[K", "\x1b[2K", "\x1b[J", "\x1b[2J",
+		"\x1b[1;31m", "\x1b[0m", "\x1b[38;5;12m", "\x1b[38:5:12m", "\x1b[K", "\x1b[2K",
 	} {
 		t.Run(fmt.Sprintf("%q", seq), func(t *testing.T) {
 			env := newMsgEnv(t)
@@ -276,6 +276,27 @@ func TestBodyKeepsDisplaySequences(t *testing.T) {
 			r := env.runCmd("READMSGS", env.caller, "", "Q")
 			if got, ok := between(r.raw, "OPENMARK", "CLOSEMARK"); !ok || got != seq {
 				t.Errorf("between the marks: %q, want %q", got, seq)
+			}
+		})
+	}
+}
+
+// #854: cursor movement and erasing the display are drawn by the art renderer
+// into the message area, so they never reach the caller to move about or clear
+// the reader's own screen. The renderer draws them as a terminal would: ESC[D
+// lets the second mark overwrite the end of the first, and ESC[2J erases the
+// first, but only within the message area.
+func TestBodyConfinesCursorAndEraseSequences(t *testing.T) {
+	for _, seq := range []string{"\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D", "\x1b[J", "\x1b[2J"} {
+		t.Run(fmt.Sprintf("%q", seq), func(t *testing.T) {
+			env := newMsgEnv(t)
+			storeRawBody(t, env, generalAreaID, "OPENMARK"+seq+"CLOSEMARK\n")
+			r := env.runCmd("READMSGS", env.caller, "", "Q")
+			if !r.has("CLOSEMARK") {
+				t.Fatalf("the message text was not drawn; output:\n%s", r.text())
+			}
+			if strings.Contains(r.raw, seq+"CLOSEMARK") {
+				t.Errorf("the caller received the body's %q", seq)
 			}
 		})
 	}

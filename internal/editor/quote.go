@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
@@ -61,6 +62,9 @@ type quoteSession struct {
 	hasTop     bool // the block opens with a "Said" banner at blockStart
 	hasBottom  bool // the block closes with a "Done" banner at insertAt
 	origLine   int  // cursor line CTRL-Q was pressed on
+	// aboveHard is the hard-newline flag the line above the block had before
+	// the block opened and forced it hard, restored if the block is dropped.
+	aboveHard bool
 
 	composeTop   int  // first buffer line shown in the compose pane
 	composeFocus bool // true = arrows scroll the compose pane instead of moving the bar
@@ -371,18 +375,32 @@ func (qs *quoteSession) removePara(p *quotePara) {
 // writePara wraps a paragraph and inserts it at insertAt, as much of it as the
 // message has room for. It reports whether all of it fitted; a paragraph that
 // did not is closed, so nothing joins a quote that is already cut short.
+//
+// The paragraph's lines are written as one soft-wrapped paragraph under its
+// prefix, ending in a hard break, so editing it later reflows it under the
+// prefix instead of leaving it jagged.
 func (qs *quoteSession) writePara(p *quotePara) bool {
 	text := make([]string, len(p.src))
 	for i, idx := range p.src {
 		text[i] = qs.ch.cleanQuoteLine(qs.src[idx])
 	}
-	wrapped := reflowQuoted(qs.prefix, text, MaxLineLength)
+	wrapped, splits := reflowQuotedSplits(qs.prefix, text, MaxLineLength)
+	prefix := qs.prefix + quoteInnerPrefix(text)
+	buf := qs.ch.buffer
+	first := qs.insertAt
 	for _, line := range wrapped {
 		if !qs.insertBufferLine(qs.insertAt, line) {
 			break
 		}
+		buf.SetQuotePrefix(qs.insertAt, prefix)
+		buf.SetWordSplit(qs.insertAt, splits[p.bufLines])
 		qs.insertAt++
 		p.bufLines++
+	}
+	// insertBufferLine hard-breaks each line above the one it inserts; within
+	// the paragraph those are wraps.
+	for n := first; n < qs.insertAt-1; n++ {
+		buf.SetHardNewline(n, false)
 	}
 	p.closed = p.bufLines < len(wrapped)
 	return !p.closed
@@ -420,7 +438,7 @@ func (qs *quoteSession) undoLast() {
 }
 
 // dropBlock removes the "Said" / "Done" banners of a block that holds no
-// quoted lines.
+// quoted lines, and gives the line above the block back its own line break.
 func (qs *quoteSession) dropBlock() {
 	if qs.hasTop {
 		qs.ch.buffer.DeleteLine(qs.blockStart) // "Said"
@@ -428,6 +446,8 @@ func (qs *quoteSession) dropBlock() {
 	if qs.hasBottom {
 		qs.ch.buffer.DeleteLine(qs.blockStart) // "Done" shifted up into its place
 	}
+	// The line above flows on into what follows again, as it did before.
+	qs.ch.buffer.SetHardNewline(qs.blockStart-1, qs.aboveHard)
 	qs.blockStart = 0
 	qs.insertAt = 0
 	qs.hasTop, qs.hasBottom = false, false
@@ -446,6 +466,7 @@ func (qs *quoteSession) ensureBlock() bool {
 	if at < 1 {
 		at = 1
 	}
+	aboveHard := qs.ch.buffer.IsHardNewline(at - 1)
 	next := at
 	if top != "" {
 		if !qs.insertBufferLine(next, top) {
@@ -456,10 +477,12 @@ func (qs *quoteSession) ensureBlock() bool {
 	if bottom != "" && !qs.insertBufferLine(next, bottom) {
 		if top != "" {
 			qs.ch.buffer.DeleteLine(at)
+			qs.ch.buffer.SetHardNewline(at-1, aboveHard)
 		}
 		return false
 	}
 	qs.blockStart = at
+	qs.aboveHard = aboveHard
 	qs.insertAt = next // the "Done" banner if any; quoted lines push it down
 	qs.hasTop, qs.hasBottom = top != "", bottom != ""
 	return true
@@ -723,15 +746,14 @@ func quoteInitials(name string) string {
 	case len(fields) == 0:
 		return ""
 	case len(fields) >= 2:
-		a := []rune(fields[0])
-		b := []rune(fields[1])
-		return string(unicode.ToUpper(a[0])) + string(unicode.ToUpper(b[0]))
+		return upperChar(firstChar(fields[0])) + upperChar(firstChar(fields[1]))
 	default:
-		r := []rune(fields[0])
-		if len(r) == 1 {
-			return string(unicode.ToUpper(r[0]))
+		first := firstChar(fields[0])
+		rest := fields[0][len(first):]
+		if rest == "" {
+			return upperChar(first)
 		}
-		return string(unicode.ToUpper(r[0])) + string(unicode.ToLower(r[1]))
+		return upperChar(first) + lowerChar(firstChar(rest))
 	}
 }
 
@@ -772,11 +794,18 @@ func SplitQuotePrefix(line string) (prefix, body string) {
 }
 
 // QuoteSourceWidth estimates the width the source message was wrapped at: its
-// longest line, ignoring lines too long to have been wrapped at all.
+// longest line, ignoring lines too long to have been wrapped at all. Lines are
+// measured in characters; QuoteSourceWidthMeasured takes another measure.
 func QuoteSourceWidth(lines []string) int {
+	return QuoteSourceWidthMeasured(lines, runeLen)
+}
+
+// QuoteSourceWidthMeasured is QuoteSourceWidth with lines measured by measure,
+// such as display columns, where double-width text takes two per character.
+func QuoteSourceWidthMeasured(lines []string, measure func(string) int) int {
 	width := 0
 	for _, line := range lines {
-		if n := runeLen(line); n <= maxSourceWidth && n > width {
+		if n := measure(line); n <= maxSourceWidth && n > width {
 			width = n
 		}
 	}
@@ -789,8 +818,17 @@ func QuoteSourceWidth(lines []string) int {
 // author's editor wrapped next onto its own line only when its first word
 // would not fit on prev, so a prev with room left for that word ended where it
 // did on purpose. Blank lines, a change of quote depth or indent, and list
-// items also break a paragraph. width is the wrap width of the source.
+// items also break a paragraph. width is the wrap width of the source, in
+// characters; ContinuesParagraphMeasured takes another measure.
 func ContinuesParagraph(prev, next string, width int) bool {
+	return ContinuesParagraphMeasured(prev, next, width, runeLen)
+}
+
+// ContinuesParagraphMeasured is ContinuesParagraph with lengths taken by
+// measure, in the same unit as width. Where measure gives the next line's first
+// character more than one column, it is double-width text, which an editor may
+// break before any character, so that character alone is what did not fit.
+func ContinuesParagraphMeasured(prev, next string, width int, measure func(string) int) bool {
 	if width < minReflowWidth {
 		return false
 	}
@@ -811,11 +849,15 @@ func ContinuesParagraph(prev, next string, width int) bool {
 	}
 	// A line too long to have been wrapped is a whole paragraph, whichever
 	// side of the pair it is on.
-	prevLen := runeLen(prev)
-	if prevLen > width || runeLen(next) > width {
+	prevLen := measure(prev)
+	if prevLen > width || measure(next) > width {
 		return false
 	}
-	return prevLen+1+runeLen(words[0]) > width
+	first := words[0]
+	if c := firstChar(first); measure(c) > 1 {
+		first = c
+	}
+	return prevLen+1+measure(first) > width
 }
 
 // leadingSpace counts the blanks a line of text is indented by.
@@ -827,21 +869,47 @@ func leadingSpace(s string) int {
 // as a single block under prefix. A quote prefix the lines already carry is
 // kept on every wrapped line, so a nested quote stays nested after the wrap.
 func reflowQuoted(prefix string, lines []string, max int) []string {
+	out, _ := reflowQuotedSplits(prefix, lines, max)
+	return out
+}
+
+// reflowQuotedSplits is reflowQuoted that also reports, for each line, whether
+// it ends inside a word too long for the line (see wrapQuotedSplits).
+func reflowQuotedSplits(prefix string, lines []string, max int) ([]string, []bool) {
 	if len(lines) == 0 {
-		return nil
+		return nil, nil
 	}
-	inner, _ := SplitQuotePrefix(lines[0])
+	inner := quoteInnerPrefix(lines)
 	bodies := make([]string, len(lines))
 	for i, line := range lines {
 		_, bodies[i] = SplitQuotePrefix(line)
 	}
-	return wrapQuoted(prefix+inner, strings.Join(bodies, " "), max)
+	return wrapQuotedSplits(prefix+inner, strings.Join(bodies, " "), max)
+}
+
+// quoteInnerPrefix returns the quote prefix a paragraph's lines already carry
+// from earlier rounds of quoting, normalized as SplitQuotePrefix does, or "".
+func quoteInnerPrefix(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	inner, _ := SplitQuotePrefix(lines[0])
+	return inner
 }
 
 // wrapQuoted breaks text into prefixed lines no wider than max, re-applying the
 // prefix to every continuation line. Long unbreakable words are split rather
 // than truncated, which is what the old range-based quoter did to them.
 func wrapQuoted(prefix, text string, max int) []string {
+	out, _ := wrapQuotedSplits(prefix, text, max)
+	return out
+}
+
+// wrapQuotedSplits is wrapQuoted that also reports, for each line, whether it
+// ends inside a word: a long word cut to fit, which carries on at the start of
+// the next line with no space between. The editor marks those breaks so a
+// later reflow rejoins the word whole.
+func wrapQuotedSplits(prefix, text string, max int) ([]string, []bool) {
 	plen := runeLen(prefix)
 	avail := max - plen
 	if avail < 10 {
@@ -849,17 +917,19 @@ func wrapQuoted(prefix, text string, max int) []string {
 	}
 
 	if strings.TrimSpace(text) == "" {
-		return []string{strings.TrimRight(prefix, " ")}
+		return []string{strings.TrimRight(prefix, " ")}, []bool{false}
 	}
 
 	// The source line's own leading indent is dropped: it is almost always the
 	// margin left by a previous round of quoting, and keeping it would stack an
 	// extra space into the nesting on every reply ("Bu>  Sh> ...").
 	var out []string
+	var splits []bool
 	cur := ""
 	empty := true // cur holds no words yet, so the next one needs no space
 	flush := func() {
 		out = append(out, strings.TrimRight(prefix+cur, " "))
+		splits = append(splits, false)
 		cur = ""
 		empty = true
 	}
@@ -874,7 +944,10 @@ func wrapQuoted(prefix, text string, max int) []string {
 			}
 			chunk := truncRunes(word, avail)
 			out = append(out, prefix+chunk)
-			word = string([]rune(word)[runeLen(chunk):])
+			word = word[len(chunk):]
+			// The word carries on at the start of the next line, unless the
+			// cut fell exactly at its end.
+			splits = append(splits, word != "")
 		}
 		switch {
 		case empty:
@@ -893,8 +966,9 @@ func wrapQuoted(prefix, text string, max int) []string {
 	}
 	if len(out) == 0 {
 		out = append(out, strings.TrimRight(prefix, " "))
+		splits = append(splits, false)
 	}
-	return out
+	return out, splits
 }
 
 // prepareQuoteSource trims the message down to the part worth quoting: the FTN
@@ -1008,20 +1082,57 @@ func stripControl(s string) string {
 	return ansi.DropControls(s)
 }
 
+// Quoted text can be UTF-8 or raw CP437, so the helpers below count and cut
+// by character without converting to []rune: that would turn every byte that
+// is not valid UTF-8, which is most of CP437's upper half, into U+FFFD. A byte
+// that does not start a valid UTF-8 character counts as one character.
+
+// runeLen counts the characters in s, each invalid byte as one.
 func runeLen(s string) int {
-	return len([]rune(s))
+	return utf8.RuneCountInString(s)
 }
 
-// truncRunes cuts a string to n display cells without splitting a rune.
+// runePrefixLen returns the byte length of the first n characters of s, or
+// len(s) if it has fewer.
+func runePrefixLen(s string, n int) int {
+	i := 0
+	for ; n > 0 && i < len(s); n-- {
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+	}
+	return i
+}
+
+// truncRunes cuts a string to n display cells without splitting a rune. Bytes
+// are kept as they are, so raw CP437 survives.
 func truncRunes(s string, n int) string {
 	if n <= 0 {
 		return ""
 	}
-	r := []rune(s)
-	if len(r) <= n {
-		return s
+	return s[:runePrefixLen(s, n)]
+}
+
+// firstChar returns the first character of s as it appears there: a UTF-8
+// sequence, or a single byte when s does not start with valid UTF-8.
+func firstChar(s string) string {
+	return s[:runePrefixLen(s, 1)]
+}
+
+// upperChar upper-cases a character from firstChar. A raw byte is returned
+// as it is, since its meaning depends on the code page.
+func upperChar(c string) string {
+	if r, size := utf8.DecodeRuneInString(c); r != utf8.RuneError || size > 1 {
+		return string(unicode.ToUpper(r))
 	}
-	return string(r[:n])
+	return c
+}
+
+// lowerChar is upperChar's lower-case counterpart.
+func lowerChar(c string) string {
+	if r, size := utf8.DecodeRuneInString(c); r != utf8.RuneError || size > 1 {
+		return string(unicode.ToLower(r))
+	}
+	return c
 }
 
 // padRunes pads a string with spaces to n cells, truncating if it is longer.

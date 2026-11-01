@@ -499,7 +499,7 @@ original into their message, prefixed with one space and the author's initials
 quoted lines go out in the usual FTN form, ` RW> text`, with no colour codes.
 A board set up before this default keeps its own value; see
 [Changed shipped strings](../getting-started/upgrading.md#changed-shipped-strings).
-Two things happen to the quoted text:
+Three things happen to the quoted text:
 
 - **Paragraphs are reflowed.** A run of source lines from one paragraph is
   joined and rewrapped under the quote prefix, so a near-full source line does
@@ -513,12 +513,18 @@ Two things happen to the quoted text:
   Backspace takes the last line back out of its paragraph. A nested quote
   prefix (`Sh> `) is carried onto every wrapped line (` Bu> Sh> …`), with the
   one leading space only at the start.
-- **Quoted lines keep their breaks while editing.** Backspace and Delete refill
-  the caller's own paragraph up to the margin, and words can move back onto the
-  line above. Each quoted line stands alone, so that reflow never crosses into
-  or out of a quote. Pressing Backspace at the start of a line still joins it to
-  the line above, quoted or not. Text loaded into the editor, such as an
-  existing auto-signature, keeps its line breaks in the same way.
+- **Quoted paragraphs reflow under their prefix while editing.** Typing,
+  Backspace, Delete, Ctrl-K and Ctrl-B refill a paragraph up to the margin, and
+  words can move back onto the line above. In a quoted paragraph the prefix
+  stays on every line and the text is rewrapped beside it. That reflow never
+  crosses into or out of a quote, or between quotes at different depths, so a
+  quote and the caller's own text never run together. Banners and blank quoted
+  lines stay as they are. Pressing Enter inside a quoted line leaves the text
+  after the cursor as the caller's own, for replying between a quote's lines,
+  and deleting a line's prefix makes it the caller's own text too. Pressing
+  Backspace at the start of a line still joins it to the line above. Text
+  loaded into the editor, such as an existing auto-signature, keeps its line
+  breaks.
 - **Banners depend on the area.** In local and V3Net areas the quoted block
   is wrapped in the `quoteTop` and `quoteBottom` strings (shipped as
   `[Name Said]` / `[Name Done]`, with pipe colours). In echomail, netmail and
@@ -532,6 +538,23 @@ Two things happen to the quoted text:
   All four are in the String Editor next to **Quote Prefix** (**Quoting Top
   Line**, **Quoting Bottom Line**, **Net Quoting Top Line**, **Net Quoting
   Bottom Line**).
+
+### Quotes in the Message Reader
+
+The reader rewraps quoted lines to the caller's screen, on a copy for display
+only: the stored message is unchanged. It joins the lines of a quoted
+paragraph by the same rules as the quote picker, but it judges them on every
+message, so it only joins at a quote depth whose longest line is at least 60
+columns. Every row keeps the quote's prefix, including a Usenet-style quote
+with no space after the marker (`>text`). Lines of double-width text, such as
+Chinese or Japanese, rejoin without a space added at the join, whether the
+quoter's editor wrapped them by characters or by columns.
+
+The rules read paragraphs off line widths, which has a known limit. In a
+quoted poem or list whose longest line is 60 columns or more, that line looks
+like a full line of prose, so the line after it can be joined onto it. The
+quote picker has the same limit at its 40-column floor. The text is all still
+there, but those two lines run together on the reader's screen.
 
 ### New Message Scan
 

@@ -205,56 +205,46 @@ func isOriginLine(line string) bool {
 	return strings.HasPrefix(strings.TrimSpace(line), "* Origin:")
 }
 
-// hasANSICursorMovement checks for ANSI cursor movement codes with digits
-func hasANSICursorMovement(text string) bool {
-	// Look for patterns like ESC[<digits>A/B/C/D or ESC[<digits>;<digits>H/f
-	for i := 0; i < len(text)-3; i++ {
-		if text[i] == '\x1b' && i+1 < len(text) && text[i+1] == '[' {
-			// Found ESC[, now look for cursor codes
-			j := i + 2
-			hasDigit := false
-			for j < len(text) && ((text[j] >= '0' && text[j] <= '9') || text[j] == ';') {
-				if text[j] >= '0' && text[j] <= '9' {
-					hasDigit = true
-				}
-				j++
-			}
-			// Check if followed by cursor movement letter
-			if hasDigit && j < len(text) {
-				switch text[j] {
-				case 'A', 'B', 'C', 'D', 'H', 'f': // Cursor movement or positioning
-					return true
-				}
-			}
+// hasCursorOrEraseSequence reports whether text holds a CSI sequence that
+// moves the cursor (A B C D E F G H d f), saves or restores it (s u), or
+// erases the display (J), with or without parameters. These are what the body
+// filter keeps besides colour and erase-in-line. Any of them sent straight to
+// the terminal can act outside the row being drawn: a bare ESC[A goes up into
+// the header and ESC[2J clears the reader's whole screen.
+func hasCursorOrEraseSequence(text string) bool {
+	for i := 0; i+2 < len(text); i++ {
+		if text[i] != '\x1b' || text[i+1] != '[' {
+			continue
+		}
+		j := i + 2
+		for j < len(text) && text[j] >= 0x20 && text[j] <= 0x3F {
+			j++
+		}
+		if j < len(text) && strings.IndexByte("ABCDEFGHdfJsu", text[j]) >= 0 {
+			return true
 		}
 	}
 	return false
 }
 
-// detectAnsiArtInMessage checks if message body contains ANSI art
+// detectAnsiArtInMessage reports whether a message body has to go through the
+// ANSI art renderer rather than straight to the terminal. Colour and
+// erase-in-line act only within the body's own rows, so a body with nothing
+// else is text. Anything that moves the cursor, saves or restores it, or
+// erases the display is art, or at least has to be drawn like it, so that it
+// stays inside the message area (#854). That covers:
+//  1. Cursor movement and positioning, with or without a count (ESC[A,
+//     ESC[5A, ESC[H, ESC[10;20H, ESC[G, ESC[d, ESC[E, ESC[F).
+//  2. Cursor save/restore (ESC[s / ESC[u, ESC 7 / ESC 8). Art posted from
+//     some systems uses nothing else: it splits each autowrapped row into
+//     short message lines with ESC[s CR ESC[u, which resumes exactly where
+//     the line was cut. Read as text, every piece becomes its own line and
+//     its ESC[u jumps to a stale position once the reader scrolls.
+//  3. Erase display (ESC[J, ESC[2J), which would clear the reader's screen.
 func detectAnsiArtInMessage(text string) bool {
-	// Must contain ANSI codes. ESC 7 / ESC 8 are not CSI sequences, so art
-	// that positions with nothing else would otherwise stop here.
-	if !strings.Contains(text, "\x1b[") && !strings.Contains(text, "\x1b7") && !strings.Contains(text, "\x1b8") {
-		return false
-	}
-
-	// Check for common ANSI art indicators:
-	// 1. Home cursor without row/col (ESC[H)
-	// 2. Explicit cursor positioning (ESC[f)
-	// 3. Cursor movement with digits (ESC[5A, ESC[10;20H, etc.)
-	// 4. Cursor save/restore (ESC[s / ESC[u, ESC 7 / ESC 8). Art posted from
-	//    some systems uses nothing else: it splits each autowrapped row into
-	//    short message lines with ESC[s CR ESC[u, which resumes exactly where
-	//    the line was cut. Read as text, every piece becomes its own line and
-	//    its ESC[u jumps to a stale position once the reader scrolls.
-	return strings.Contains(text, "\x1b[H") ||
-		strings.Contains(text, "\x1b[f") ||
-		strings.Contains(text, "\x1b[s") ||
-		strings.Contains(text, "\x1b[u") ||
-		strings.Contains(text, "\x1b7") ||
+	return strings.Contains(text, "\x1b7") ||
 		strings.Contains(text, "\x1b8") ||
-		hasANSICursorMovement(text)
+		hasCursorOrEraseSequence(text)
 }
 
 // formatMessageBody prepares a message body for the reader. Runs of quoted

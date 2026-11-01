@@ -65,7 +65,9 @@ func containsAnsiArt(text string) bool {
 	// - Cursor positioning: ESC[n;mH or ESC[n;mf
 	// - Cursor movement: ESC[nA, ESC[nB, ESC[nC, ESC[nD
 	// - Save/restore cursor: ESC[s, ESC[u
-	ansiArtIndicators := regexp.MustCompile(`\x1b\[(\d+;\d+[HhFf]|\d*[ABCDsu])`)
+	// - Column, row, next and previous line: ESC[nG, ESC[nd, ESC[nE, ESC[nF,
+	//   the count optional as for the moves above
+	ansiArtIndicators := regexp.MustCompile(`\x1b\[(\d+;\d+[HhFf]|\d*[ABCDsu]|\d*[GdEF])`)
 	return ansiArtIndicators.MatchString(text)
 }
 
@@ -138,7 +140,30 @@ func visibleColumns(s string, mode ansi.OutputMode) int {
 	return columnWidth(stripEscapes(s), utf8.ValidString(s), mode)
 }
 
+// wrapAnsiString word wraps a message body to width, leaving ANSI art, lines
+// that already fit, and quote, tear and origin lines as they are. The reader
+// reflows quote lines itself before this runs.
 func wrapAnsiString(text string, width int, mode ansi.OutputMode) []string {
+	return wrapAnsiLines(text, width, mode, isMessageTrailerOrQuote)
+}
+
+// wrapNewsString is wrapAnsiString for text that is not a message, such as a
+// news item: every line word wraps, including one that only looks like a
+// quote ("C:\> dir") or a tearline.
+func wrapNewsString(text string, width int, mode ansi.OutputMode) []string {
+	return wrapAnsiLines(text, width, mode, nil)
+}
+
+// isMessageTrailerOrQuote reports whether a message body line is a quote,
+// tearline or origin line, which wrapAnsiString leaves as they are.
+func isMessageTrailerOrQuote(plain string) bool {
+	return isQuoteLine(plain) || isTearLine(plain) || isOriginLine(plain)
+}
+
+// wrapAnsiLines does the wrapping for wrapAnsiString and wrapNewsString. A
+// line keep reports true for, given without escapes, is left as it is; keep
+// may be nil.
+func wrapAnsiLines(text string, width int, mode ansi.OutputMode, keep func(plain string) bool) []string {
 	if width <= 0 {
 		return strings.Split(text, "\n") // No wrapping if width is invalid
 	}
@@ -163,7 +188,7 @@ func wrapAnsiString(text string, width int, mode ansi.OutputMode) []string {
 			wrappedLines = append(wrappedLines, "")
 			continue
 		}
-		if isQuoteLine(plainLine) || isTearLine(plainLine) || isOriginLine(plainLine) {
+		if keep != nil && keep(plainLine) {
 			wrappedLines = append(wrappedLines, line)
 			continue
 		}

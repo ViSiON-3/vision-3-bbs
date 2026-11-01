@@ -76,25 +76,32 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 		truncatedNote = string(r[:maxUserNoteLen-3]) + "..."
 	}
 
+	// Header text from another system can be raw bytes in the message's
+	// charset, CP437 by default, like its body. It is decoded the same way
+	// for display; the stored names stay as they are for the lookups above.
+	fromName := bodyAsUTF8(msg.From, msg.Charset)
+	toName := bodyAsUTF8(msg.To, msg.Charset)
+	subject := bodyAsUTF8(msg.Subject, msg.Charset)
+
 	// Build From field with user note and/or network address.
 	// Names are truncated if needed to preserve the address suffix,
 	// preventing display like "(21:4/158" with a missing closing paren.
-	fromStr := msg.From
+	fromStr := fromName
 	if includeNoteInFrom && truncatedNote != "" && msg.OrigAddr != "" {
 		// Both user note and FidoNet address
-		fromStr = fmt.Sprintf("%s \"%s\" (%s)", msg.From, truncatedNote, msg.OrigAddr)
+		fromStr = fmt.Sprintf("%s \"%s\" (%s)", fromName, truncatedNote, msg.OrigAddr)
 	} else if includeNoteInFrom && truncatedNote != "" {
 		// Just user note
-		fromStr = fmt.Sprintf("%s \"%s\"", msg.From, truncatedNote)
+		fromStr = fmt.Sprintf("%s \"%s\"", fromName, truncatedNote)
 	} else if msg.OrigAddr != "" {
 		// FidoNet address
-		fromStr = buildNameWithAddr(msg.From, msg.OrigAddr)
+		fromStr = buildNameWithAddr(fromName, msg.OrigAddr)
 	}
 
 	// Build To field with FidoNet destination address if available
-	toStr := msg.To
+	toStr := toName
 	if msg.DestAddr != "" {
-		toStr = buildNameWithAddr(msg.To, msg.DestAddr)
+		toStr = buildNameWithAddr(toName, msg.DestAddr)
 	}
 
 	// Build message status string from message attributes and network type.
@@ -163,7 +170,7 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 
 	return map[byte]string{
 		'B': areaTag,
-		'T': msg.Subject,
+		'T': subject,
 		'F': fromStr,       // From with network address
 		'S': toStr,         // To with network address
 		'U': userNoteToUse, // User note from user profile (local only)

@@ -317,3 +317,30 @@ func TestNewsBodyArtIsExemptFromHardBreaking(t *testing.T) {
 		t.Skip("break pass no longer splits these rows; gate may be redundant")
 	}
 }
+
+// #865: a news line that happens to look like a quote ("C:\> dir", "Note>
+// text") or a tearline is still news text: it word wraps like any other line
+// rather than being cut at the margin.
+func TestNewsBodyWrapsQuoteShapedLines(t *testing.T) {
+	for _, body := range []string{
+		`C:\> dir /w lists every file in the directory in wide format, which is handy on a slow terminal.`,
+		"Note> the board will be down on Saturday morning while the hard drive is replaced and tested.",
+		"--- Update: the board will be down on Saturday morning while the hard drive is replaced and tested.",
+	} {
+		lines := renderNewsBody(&NewsItem{Body: body}, shippedHeaderWidth, 80, ansi.OutputModeUTF8)
+		width := newsBodyWidth(shippedHeaderWidth, 80)
+		if len(lines) < 2 {
+			t.Fatalf("%q: want it wrapped, got %q", body, lines)
+		}
+		for _, ln := range lines {
+			if len(ln) > width {
+				t.Errorf("line over %d cols: %q", width, ln)
+			}
+			for _, w := range strings.Fields(ln) {
+				if !strings.Contains(" "+body+" ", " "+w+" ") {
+					t.Errorf("%q: line %q cuts a word (%q)", body, ln, w)
+				}
+			}
+		}
+	}
+}

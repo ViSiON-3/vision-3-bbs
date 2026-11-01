@@ -287,3 +287,28 @@ func TestQuoteModeReflowNearTheLineLimit(t *testing.T) {
 		t.Error("paragraph is still closed after undo, though it fits again")
 	}
 }
+
+// #869: opening a quote block hard-breaks the line above it, so a reflow can't
+// pull quoted text up into it. Taking the whole block back out restores that
+// line's own flag, so its paragraph flows on as it did before.
+func TestQuoteModeUndoRestoresLineAboveFlag(t *testing.T) {
+	src := []string{"quoted line"}
+	_, ch, _, cleanup := newQuoteHarness(t, "", src)
+	defer cleanup()
+	ch.buffer.SetLine(1, "soft line")
+	ch.buffer.SetLine(2, "continues here")
+	ch.buffer.SetHardNewline(2, true)
+
+	qs := newQuoteSession(ch, src, 2)
+	qs.quoteSelected()
+	if !ch.buffer.IsHardNewline(1) {
+		t.Fatal("line above the block should be hard while the block is there")
+	}
+	qs.undoLast()
+	if ch.buffer.IsHardNewline(1) {
+		t.Error("line above the block is still hard after the block was undone")
+	}
+	if got := ch.buffer.GetContent(); got != "soft line\ncontinues here" {
+		t.Errorf("buffer = %q", got)
+	}
+}

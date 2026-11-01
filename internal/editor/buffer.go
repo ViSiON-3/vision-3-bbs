@@ -15,7 +15,15 @@ const (
 type MessageBuffer struct {
 	lines       [MaxLines + 1]string // 1-based indexing, line 0 unused
 	hardNewline [MaxLines + 1]bool   // true = user-created line break (Enter); false = soft wrap
-	lineCount   int                  // Number of lines with content
+	// wordSplit marks a soft wrap that fell inside a word too long for the
+	// margin. Such a break stands for no space, unlike an ordinary soft wrap,
+	// which stands for the one space between two words.
+	wordSplit [MaxLines + 1]bool
+	// quotePrefix holds the quote prefix ("Bu> ") a quoted line was written
+	// under, or "" for the caller's own text. A quoted paragraph reflows under
+	// its prefix and never merges with lines under another one.
+	quotePrefix [MaxLines + 1]string
+	lineCount   int // Number of lines with content
 }
 
 // NewMessageBuffer creates a new message buffer
@@ -41,10 +49,58 @@ func (mb *MessageBuffer) SetHardNewline(lineNum int, hard bool) {
 	mb.hardNewline[lineNum] = hard
 }
 
-// LoadContent loads initial content into the buffer
+// IsWordSplit reports whether the soft wrap at the end of lineNum fell inside
+// a word, so rejoining the line with the next must not add a space.
+func (mb *MessageBuffer) IsWordSplit(lineNum int) bool {
+	if lineNum < 1 || lineNum > MaxLines {
+		return false
+	}
+	return mb.wordSplit[lineNum]
+}
+
+// SetWordSplit sets or clears the word-split flag for a line. Only
+// WordWrapper sets it, when it breaks a word that has no space to wrap at.
+func (mb *MessageBuffer) SetWordSplit(lineNum int, split bool) {
+	if lineNum < 1 || lineNum > MaxLines {
+		return
+	}
+	mb.wordSplit[lineNum] = split
+}
+
+// QuotePrefix returns the quote prefix lineNum was written under, or "" for
+// the caller's own text. A line whose text no longer starts with its prefix,
+// because the caller edited it away, counts as their own text.
+func (mb *MessageBuffer) QuotePrefix(lineNum int) string {
+	if lineNum < 1 || lineNum > MaxLines {
+		return ""
+	}
+	p := mb.quotePrefix[lineNum]
+	if p == "" || !strings.HasPrefix(mb.lines[lineNum], p) {
+		return ""
+	}
+	return p
+}
+
+// SetQuotePrefix records the quote prefix lineNum's text starts with. The quote
+// picker sets it on the lines it writes, and WordWrapper on lines it rewraps.
+func (mb *MessageBuffer) SetQuotePrefix(lineNum int, prefix string) {
+	if lineNum < 1 || lineNum > MaxLines {
+		return
+	}
+	mb.quotePrefix[lineNum] = prefix
+}
+
+// LoadContent replaces the buffer with content, one buffer line per
+// "\n"-separated line, each ending in a hard break. Only the first MaxLines
+// lines are loaded: the rest is dropped without notice. Lines are not wrapped,
+// so a line longer than MaxLineLength stays long until it is edited. Today
+// the only caller is the auto-signature editor, which holds a few lines; a
+// path that loads a whole message for editing must check the line count first.
 func (mb *MessageBuffer) LoadContent(content string) {
 	mb.lines = [MaxLines + 1]string{}
 	mb.hardNewline = [MaxLines + 1]bool{}
+	mb.wordSplit = [MaxLines + 1]bool{}
+	mb.quotePrefix = [MaxLines + 1]string{}
 	mb.lineCount = 1
 
 	if content == "" {
@@ -220,12 +276,16 @@ func (mb *MessageBuffer) InsertLine(lineNum int) bool {
 		if i+1 <= MaxLines {
 			mb.lines[i+1] = mb.lines[i]
 			mb.hardNewline[i+1] = mb.hardNewline[i]
+			mb.wordSplit[i+1] = mb.wordSplit[i]
+			mb.quotePrefix[i+1] = mb.quotePrefix[i]
 		}
 	}
 
 	// Clear the new line
 	mb.lines[lineNum] = ""
 	mb.hardNewline[lineNum] = false
+	mb.wordSplit[lineNum] = false
+	mb.quotePrefix[lineNum] = ""
 	mb.lineCount++
 
 	return true
@@ -241,11 +301,15 @@ func (mb *MessageBuffer) DeleteLine(lineNum int) bool {
 	for i := lineNum; i < mb.lineCount; i++ {
 		mb.lines[i] = mb.lines[i+1]
 		mb.hardNewline[i] = mb.hardNewline[i+1]
+		mb.wordSplit[i] = mb.wordSplit[i+1]
+		mb.quotePrefix[i] = mb.quotePrefix[i+1]
 	}
 
 	// Clear the last line
 	mb.lines[mb.lineCount] = ""
 	mb.hardNewline[mb.lineCount] = false
+	mb.wordSplit[mb.lineCount] = false
+	mb.quotePrefix[mb.lineCount] = ""
 	mb.lineCount--
 
 	// Always have at least one line
@@ -260,7 +324,9 @@ func (mb *MessageBuffer) DeleteLine(lineNum int) bool {
 // SplitLine splits a line at the specified column (1-based).
 // The split line (lineNum) gets hardNewline=false; the caller sets it to true
 // for user-initiated splits (Enter, Ctrl+N). The new line (lineNum+1) inherits
-// the original hardNewline value of lineNum.
+// the original hardNewline and wordSplit values of lineNum. Both lines keep
+// lineNum's quote prefix, which QuotePrefix reports only for a part whose text
+// still starts with it.
 // Returns true if successful.
 func (mb *MessageBuffer) SplitLine(lineNum, col int) bool {
 	if lineNum < 1 || lineNum > mb.lineCount || mb.lineCount >= MaxLines {
@@ -269,6 +335,7 @@ func (mb *MessageBuffer) SplitLine(lineNum, col int) bool {
 
 	line := mb.lines[lineNum]
 	oldHardNewline := mb.hardNewline[lineNum]
+	oldWordSplit := mb.wordSplit[lineNum]
 
 	// Split the line at the column
 	var leftPart, rightPart string
@@ -298,13 +365,18 @@ func (mb *MessageBuffer) SplitLine(lineNum, col int) bool {
 	// Split line gets false (caller decides); new line inherits old value
 	mb.hardNewline[lineNum] = false
 	mb.hardNewline[lineNum+1] = oldHardNewline
+	mb.wordSplit[lineNum] = false
+	mb.wordSplit[lineNum+1] = oldWordSplit
+	mb.quotePrefix[lineNum+1] = mb.quotePrefix[lineNum]
 
 	return true
 }
 
 // JoinLines joins the current line with the next line.
 // The combined line inherits hardNewline from the second line (lineNum+1),
-// since the end of the combined line is where line lineNum+1 used to end.
+// since the end of the combined line is where line lineNum+1 used to end, and
+// its wordSplit flag for the same reason. Two lines of the same quote join as
+// one: the second line's copy of the prefix is dropped.
 func (mb *MessageBuffer) JoinLines(lineNum int) bool {
 	if lineNum < 1 || lineNum >= mb.lineCount {
 		return false
@@ -312,9 +384,14 @@ func (mb *MessageBuffer) JoinLines(lineNum int) bool {
 
 	// Save the second line's hardNewline before it gets shifted by DeleteLine
 	nextHardNewline := mb.hardNewline[lineNum+1]
+	nextWordSplit := mb.wordSplit[lineNum+1]
 
 	// Combine the two lines
-	combined := mb.lines[lineNum] + mb.lines[lineNum+1]
+	next := mb.lines[lineNum+1]
+	if p := mb.QuotePrefix(lineNum); p != "" && mb.QuotePrefix(lineNum+1) == p {
+		next = next[len(p):]
+	}
+	combined := mb.lines[lineNum] + next
 	mb.lines[lineNum] = combined
 
 	// Delete the next line
@@ -324,11 +401,15 @@ func (mb *MessageBuffer) JoinLines(lineNum int) bool {
 
 	// Combined line inherits the second line's hard newline status
 	mb.hardNewline[lineNum] = nextHardNewline
+	mb.wordSplit[lineNum] = nextWordSplit
 	return true
 }
 
-// GetContent returns the entire buffer content as a string.
-// Uses GetContentLineCount to trim trailing empty lines for storage.
+// GetContent returns the entire buffer content as a string, lines joined by
+// "\n", soft wraps included. Trailing lines that are empty or hold only
+// spaces are left off (see GetContentLineCount), so text loaded with
+// LoadContent does not always come back byte for byte: trailing blank lines
+// go, as do lines past MaxLines that LoadContent dropped.
 func (mb *MessageBuffer) GetContent() string {
 	var result strings.Builder
 
@@ -348,6 +429,8 @@ func (mb *MessageBuffer) Clear() {
 	for i := 1; i <= MaxLines; i++ {
 		mb.lines[i] = ""
 		mb.hardNewline[i] = false
+		mb.wordSplit[i] = false
+		mb.quotePrefix[i] = ""
 	}
 	mb.lineCount = 1
 }
