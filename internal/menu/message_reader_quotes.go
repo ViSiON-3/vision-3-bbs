@@ -17,6 +17,12 @@ const (
 	// joins quote lines. The editor's floor is lower because a caller is there
 	// to see the result; here it runs on every message, and verse quoted on its
 	// own would otherwise have its longest line read as a full one.
+	//
+	// The floor only narrows that case (#863): a quoted poem whose longest
+	// line is this wide or wider still reads as prose wrapped at that width,
+	// so the line after its longest is joined onto it. Widths carry no better
+	// signal, and the cost is two lines run together on screen, so this is a
+	// documented limit (docs/sysop/messages/message-areas.md).
 	quoteReflowMinSourceWidth = 60
 	// quoteReflowMinColumns is the least room for text beside a prefix. Below
 	// it, on a very narrow screen or under very deep nesting, the prefix would

@@ -499,7 +499,7 @@ original into their message, prefixed with one space and the author's initials
 quoted lines go out in the usual FTN form, ` RW> text`, with no colour codes.
 A board set up before this default keeps its own value; see
 [Changed shipped strings](../getting-started/upgrading.md#changed-shipped-strings).
-Two things happen to the quoted text:
+Three things happen to the quoted text:
 
 - **Paragraphs are reflowed.** A run of source lines from one paragraph is
   joined and rewrapped under the quote prefix, so a near-full source line does
@@ -538,6 +538,23 @@ Two things happen to the quoted text:
   All four are in the String Editor next to **Quote Prefix** (**Quoting Top
   Line**, **Quoting Bottom Line**, **Net Quoting Top Line**, **Net Quoting
   Bottom Line**).
+
+### Quotes in the Message Reader
+
+The reader rewraps quoted lines to the caller's screen, on a copy for display
+only: the stored message is unchanged. It joins the lines of a quoted
+paragraph by the same rules as the quote picker, but it judges them on every
+message, so it only joins at a quote depth whose longest line is at least 60
+columns. Every row keeps the quote's prefix, including a Usenet-style quote
+with no space after the marker (`>text`). Lines of double-width text, such as
+Chinese or Japanese, rejoin without a space added at the join, whether the
+quoter's editor wrapped them by characters or by columns.
+
+The rules read paragraphs off line widths, which has a known limit. In a
+quoted poem or list whose longest line is 60 columns or more, that line looks
+like a full line of prose, so the line after it can be joined onto it. The
+quote picker has the same limit at its 40-column floor. The text is all still
+there, but those two lines run together on the reader's screen.
 
 ### New Message Scan
 
