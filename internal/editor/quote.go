@@ -466,7 +466,8 @@ func (qs *quoteSession) ensureBlock() bool {
 }
 
 // insertBufferLine inserts content as a new hard-broken line, never overwriting
-// text the user already typed.
+// text the user already typed. The line above gets a hard break too: it may be
+// soft-wrapped, and a reflow must not carry on from it into the quote.
 func (qs *quoteSession) insertBufferLine(at int, content string) bool {
 	if at < 1 || at > MaxLines {
 		return false
@@ -478,6 +479,7 @@ func (qs *quoteSession) insertBufferLine(at int, content string) bool {
 		}
 		qs.ch.buffer.SetLine(at, content)
 		qs.ch.buffer.SetHardNewline(at, true)
+		qs.ch.buffer.SetHardNewline(at-1, true)
 		return true
 	}
 	if !qs.ch.buffer.InsertLine(at) {
@@ -485,6 +487,7 @@ func (qs *quoteSession) insertBufferLine(at int, content string) bool {
 	}
 	qs.ch.buffer.SetLine(at, content)
 	qs.ch.buffer.SetHardNewline(at, true)
+	qs.ch.buffer.SetHardNewline(at-1, true)
 	return true
 }
 
