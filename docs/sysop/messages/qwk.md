@@ -25,6 +25,14 @@ The QWK packet is a standard ZIP archive containing:
 
 REP packets follow the same block format: a ZIP containing `BBSID.MSG`.
 
+Message bodies in `MESSAGES.DAT` go through the same filter as the online
+message reader. Colour, cursor movement and erase sequences stay, for offline
+readers that draw ANSI. Terminal queries, window titles, mode changes and
+control characters that only act on a terminal are taken out, so a message from
+another system cannot send them to the caller's reader. Characters are left in
+the encoding they were stored in. QWK networking with a hub is a separate export
+and sends bodies exactly as stored.
+
 ## Menu Configuration
 
 The QWK menu is `QWKM.CFG`. It is reached with key `W` from the Message Menu (`MSGMENU.CFG`, `GOTO:QWKM`).

@@ -33,7 +33,17 @@ const maxBodyStringLen = 4096
 // that is not valid UTF-8 is kept as it is, because it is a CP437 character:
 // 0x9B is a cent sign, and only the encoded U+009B is CSI.
 func BodyText(s string) string {
-	return filterBody(s, false)
+	return filterBody(s, false, false)
+}
+
+// StoredBodyText is BodyText for a body as it is stored, before its charset is
+// settled, for output that must keep the stored bytes, such as an offline mail
+// packet. A body that is valid UTF-8 gets BodyText. Any other body is single-byte
+// text, CP437 or another set, where every byte is one character: bytes 0x80 to
+// 0xFF are all kept, so a pair such as C2 9B (┬¢ in CP437) is not taken for the
+// UTF-8 form of CSI, and only the 7-bit escapes and controls are filtered.
+func StoredBodyText(s string) string {
+	return filterBody(s, false, !utf8.ValidString(s))
 }
 
 // ArtBodyText is BodyText for a body going to the ANSI art renderer rather than
@@ -41,7 +51,7 @@ func BodyText(s string) string {
 // renderer acts on and art relies on, and which never reach the caller from
 // there. Nothing but the renderer may be given its result.
 func ArtBodyText(s string) string {
-	return filterBody(s, true)
+	return filterBody(s, true, false)
 }
 
 // keptC0 reports whether a C0 byte may stay in a body. Terminals ignore these or
@@ -54,11 +64,20 @@ func keptC0(c rune) bool {
 	return true
 }
 
-func filterBody(s string, art bool) string {
+// filterBody does the work for BodyText, ArtBodyText and StoredBodyText. With
+// singleByte, s is read a byte at a time and every byte from 0x80 up is a
+// character to keep, never part of a UTF-8 sequence or a C1 control.
+func filterBody(s string, art, singleByte bool) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); {
 		r, size := utf8.DecodeRuneInString(s[i:])
+		if singleByte {
+			r, size = rune(s[i]), 1
+			if r >= utf8.RuneSelf {
+				r = utf8.RuneError // kept by the default case
+			}
+		}
 		switch {
 		case r == 0x1B:
 			i = filterEscape(&b, s, i, art)

@@ -21,3 +21,18 @@ func TestPlainText(t *testing.T) {
 		}
 	}
 }
+
+// StoredBodyText filters a single-byte body a byte at a time, so CP437 pairs
+// that form a UTF-8 C1 control stay, while a UTF-8 body is filtered as
+// BodyText filters it.
+func TestStoredBodyText(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"CP\xc2\x9b\xdb\x05 \x1b[6nok\x1b[1mbold", "CP\xc2\x9b\xdb ok\x1b[1mbold"},
+		{"utf8 \u009b6n café\x1b]0;t\x07", "utf8  café"},
+		{"\x1b]0;unterminated\xdb\nnext", "\nnext"},
+	} {
+		if got := StoredBodyText(tc.in); got != tc.want {
+			t.Errorf("StoredBodyText(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
