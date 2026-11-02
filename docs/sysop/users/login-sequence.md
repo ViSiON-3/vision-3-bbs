@@ -468,7 +468,7 @@ in the room, held while the caller has paged back through the scrollback. Toasts
 wait while a caller is in a door, a file transfer or sysop chat, then show at
 their next menu prompt.
 
-The strings `toastOverlayFormat` and `toastBodyHint` set how a toast looks.
+The string `toastOverlayFormat` sets how a toast looks.
 
 Logon and logoff announcements are also toasts. They are off by default: turn
 them on with `toastLogons`, `toastLogoffs` and `toastAnnounceLevel`, and word

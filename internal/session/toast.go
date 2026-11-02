@@ -37,8 +37,8 @@ func (s *BbsSession) SetToastsReady(ready bool) { s.toastsReady.Store(ready) }
 func (s *BbsSession) ToastsReady() bool { return s.toastsReady.Load() }
 
 // NoteToastAnnounced records that this session has drawn a toast's line but not
-// yet all of it, its body or a line too long for the row, and reports whether it
-// is the first time.
+// all of it, the row having cut it short, and reports whether it is the first
+// time.
 func (s *BbsSession) NoteToastAnnounced(id string) bool {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()

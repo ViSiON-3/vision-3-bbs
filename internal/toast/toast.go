@@ -16,12 +16,10 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 )
 
-// Toast is one notice: a line of text, pipe codes included, and an optional
-// body such as the text of a refused post.
+// Toast is one notice: a line of text, pipe codes included.
 type Toast struct {
 	ID        string    `json:"id"`
 	Text      string    `json:"text"`
-	Body      string    `json:"body,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
