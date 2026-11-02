@@ -378,9 +378,11 @@ See [Chat screens](how-to-guides/wfc-console.md#chat-screens).
   coordinator and hub keys on first contact, writing them to `v3net.json`.
   All of it works with older hubs and leaves, and every "require" setting is
   off, so hubs and leaves can upgrade in any order. If a pinned key later
-  changes, the leaf pauses that network and sysops get a login notice until
-  the new key is accepted. A coordinator moving the network to a new key
-  should use a signed handover, which leaves follow without the sysop. See
+  changes, sysops get a login notice until the new key is accepted. A changed
+  coordinator key gets its NAL rejected, and the last accepted NAL stays in
+  effect; a changed hub key pauses syncing with that network. A coordinator
+  moving the network to a new key should use a signed handover, which leaves
+  follow without the sysop. See
   [Coordinator Key Pinning](v3net/nal.md#coordinator-key-pinning) and
   [Hub signatures](v3net/configuration.md#hub-signatures).
 - **V3Net hubs refuse bad names and text.** A hub now refuses a subscribe
