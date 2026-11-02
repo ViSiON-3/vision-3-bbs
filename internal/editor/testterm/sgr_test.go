@@ -148,3 +148,49 @@ func TestSGRBlinkIsModelledAndReproduced(t *testing.T) {
 		t.Errorf("RowCells(4) = %+v, want nil", cells)
 	}
 }
+
+// DECSC and DECRC carry the pen and the pending wrap; ESC[s and ESC[u do not.
+func TestDECSaveRestoreCarriesThePen(t *testing.T) {
+	tt := New(20, 3)
+	tt.Write([]byte("\x1b[31m\x1b7\x1b[34mX\x1b8B"))
+	if c := tt.Cell(1, 1); c.Rune != 'B' || c.Fg != 31 {
+		t.Errorf("Cell(1,1) = %+v, want a red B after DECRC", c)
+	}
+	sco := New(20, 3)
+	sco.Write([]byte("\x1b[31m\x1b[s\x1b[34mX\x1b[uB"))
+	if c := sco.Cell(1, 1); c.Rune != 'B' || c.Fg != 34 {
+		t.Errorf("Cell(1,1) = %+v, want a blue B after ESC[u", c)
+	}
+	// A wrap pending at the save is pending again after the restore.
+	wrap := New(5, 3)
+	wrap.Write([]byte("abcde\x1b7\x1b[1;1HZ\x1b8f"))
+	if got := wrap.Row(2); got != "f" {
+		t.Errorf("row 2 = %q, want the wrap to carry f there", got)
+	}
+	if got := tt.Doubts(); len(got) != 0 {
+		t.Errorf("Doubts = %q", got)
+	}
+}
+
+// A scroll and a character of uncertain width are not errors for a test, but
+// code reading the screen back has to know about them.
+func TestDoubtsRecordScrollsAndWidths(t *testing.T) {
+	tt := New(10, 2)
+	tt.Write([]byte("a\r\nb\r\nc"))
+	if got := tt.Doubts(); len(got) != 1 || got[0] != "scrolled" {
+		t.Errorf("Doubts after a scroll = %q", got)
+	}
+	if got := tt.Unhandled(); len(got) != 0 {
+		t.Errorf("Unhandled = %q, want a scroll not to count", got)
+	}
+	wide := New(10, 2)
+	wide.Write([]byte("漢é"))
+	if got := wide.Doubts(); len(got) != 1 || got[0] != "width of U+6F22" {
+		t.Errorf("Doubts after a wide rune = %q", got)
+	}
+	cp := New(10, 2, CP437())
+	cp.Write([]byte{0xcd, 0xcd})
+	if got := cp.Doubts(); len(got) != 0 {
+		t.Errorf("Doubts in CP437 mode = %q, want none", got)
+	}
+}

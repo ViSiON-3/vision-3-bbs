@@ -45,13 +45,13 @@ func overlayThenKey(t *testing.T, env *toastEnv, text string) (restore string) {
 	toastWaitFor(t, "the overlay", func() bool { return strings.Contains(env.term.Snapshot(), ">> "+text) })
 	drawn := len(rec.String())
 	env.s.Send("x")
+	// The key is handed to the read only once the toast hook, restore
+	// included, has returned, so the recording is complete here.
 	select {
 	case <-keys:
 	case <-time.After(3 * time.Second):
 		t.Fatal("key never reached the read")
 	}
-	toastWaitFor(t, "the restore", func() bool { return len(rec.String()) > drawn })
-	time.Sleep(20 * time.Millisecond) // let the restore finish writing
 	return rec.String()[drawn:]
 }
 
@@ -92,7 +92,12 @@ func TestToastRestoreReplaysAScreenItCannotModel(t *testing.T) {
 	}{
 		"scroll region":  {ansi.OutputModeAuto, "\x1b[1;23r\x1b[5;7H"},
 		"wide character": {ansi.OutputModeUTF8, "\x1b[2;1H漢字\x1b[5;7H"},
-		"last cell used": {ansi.OutputModeAuto, "\x1b[24;80HZ\x1b[5;7H"},
+		// Overwritten since, so the final screen does not show it, but
+		// whatever followed it on the row was two cells further right.
+		"wide character overwritten": {ansi.OutputModeUTF8, "\x1b[2;1H漢A\x1b[2;1H  \x1b[5;7H"},
+		"last cell used":             {ansi.OutputModeAuto, "\x1b[24;80HZ\x1b[5;7H"},
+		// A scrolled-in row's background is terminal-dependent.
+		"scrolled": {ansi.OutputModeAuto, "\x1b[24;1H\r\n\x1b[1;1HFULL SCREEN\x1b[24;1HBOTTOM TEXT\x1b[5;7H"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -127,6 +132,24 @@ func TestToastRestoreKeepsCP437Art(t *testing.T) {
 	}
 	if env.term.Cell(24, 1).Rune != '═' {
 		t.Errorf("row 24 = %q", env.term.Row(24))
+	}
+}
+
+// DECSC saves the pen with the cursor and DECRC brings it back, so colours set
+// between the two do not stick: the model has to agree with the terminal here,
+// since the overlay itself uses the pair around every toast.
+func TestToastRestoreModelsDECSavedPen(t *testing.T) {
+	env := newToastEnv(t)
+	_, _ = env.s.Write([]byte("\x1b[24;1H\x1b[31m\x1b7\x1b[34mX\x1b8BOTTOM TEXT\x1b[0m\x1b[5;7H"))
+	if c := env.term.Cell(24, 1); c.Rune != 'B' || c.Fg != 31 {
+		t.Fatalf("test terminal cell = %+v, want a red B", c)
+	}
+	restore := overlayThenKey(t, env, "Saved")
+	if strings.Contains(restore, "\x1b[2J") {
+		t.Errorf("restore replayed the whole screen: %q", restore)
+	}
+	if c := env.term.Cell(24, 1); c.Rune != 'B' || c.Fg != 31 {
+		t.Errorf("row 24 after restore = %+v, want the red B back", c)
 	}
 }
 

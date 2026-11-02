@@ -41,6 +41,9 @@ type runLoopState struct {
 	currentAreaName  string
 	userInput        string
 	isLightbarMenu   bool
+	// artScrolls notes that the current menu's art, as displayed, scrolls the
+	// screen, so coordinates taken from it no longer match (see setToastAnchor).
+	artScrolls bool
 	// commands is the current menu's command list, which hot-key input
 	// consults to decide whether a key completes a command on its own.
 	commands []CommandRecord
@@ -249,8 +252,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// var numericMatchAction string // Moved declaration up
 
 		// 4. Determine Input Mode / Method
-		e.setToastAnchor(nodeNumber, ansiProcessResult, menuRec.GetClrScrBefore(),
-			menuArtScrolls(ansiProcessResult.DisplayBytes, st.termWidth, st.termHeight))
+		e.setToastAnchor(nodeNumber, ansiProcessResult, menuRec.GetClrScrBefore(), st.artScrolls)
 		input, act, retErr := st.readMenuInput(ansiProcessResult, menuRec)
 		e.clearToastAnchor(nodeNumber)
 		switch act {

@@ -268,6 +268,16 @@ func (ih *InputHandler) Interrupt() {
 	}
 }
 
+// drainInterrupt discards an Interrupt sent for an event that has since been
+// taken, so it does not end a later dwell. A wait calls it before running the
+// toast hook, once it has seen that no event is waiting.
+func (ih *InputHandler) drainInterrupt() {
+	select {
+	case <-ih.interruptChan():
+	default:
+	}
+}
+
 // WaitForInput waits up to d for input, leaving it to be read, and reports
 // whether any came. A closed connection counts: the next read reports it. The
 // wait also ends early, reporting false, on a break-in or an Interrupt. The
@@ -654,6 +664,7 @@ func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 			ih.runBreakIn()
 			start = time.Now()
 		case <-ih.toastChan(breakIn):
+			ih.drainInterrupt()
 			if ih.runToastHook(0) { // this wait has no timeout to run out
 				ih.runBreakIn()
 				start = time.Now()
@@ -872,6 +883,7 @@ func (ih *InputHandler) waitByte(timeout time.Duration, breakIn bool) (b byte, b
 			if left <= 0 {
 				return 0, false, errTimeout
 			}
+			ih.drainInterrupt()
 			if ih.runToastHook(left) {
 				return 0, true, nil
 			}
@@ -1218,26 +1230,36 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 					return 0, ev, false, onTimeout
 				}
 			case <-ih.toastChan(true):
-				left, toastTimeout, toastExpired := ih.keyWait(start)
-				if toastExpired {
-					return 0, ev, false, toastTimeout
-				}
-				brokeIn := ih.runToastHook(left)
-				// An event that arrived during the hook goes first: a toast
-				// dwell ended for it, and another wake may be queued already.
+				// An event already waiting goes before any toast. With none
+				// waiting, an Interrupt still queued was sent for an event
+				// taken earlier and must not end this toast's dwell; one sent
+				// from here on is for an event the dwell should end for.
 				select {
 				case ev = <-events:
 					return 0, ev, true, nil
 				default:
 				}
-				if brokeIn {
+				ih.drainInterrupt()
+				left, toastTimeout, toastExpired := ih.keyWait(start)
+				if toastExpired {
+					return 0, ev, false, toastTimeout
+				}
+				if ih.runToastHook(left) {
+					// The break-in was taken off its channel, so it is
+					// serviced here or not at all.
 					if afterBreakIn() {
 						break wait
 					}
 					if expired {
 						return 0, ev, false, onTimeout
 					}
-					continue
+				}
+				// An event that arrived during the hook goes first: a toast
+				// dwell ended for it, and another wake may be queued already.
+				select {
+				case ev = <-events:
+					return 0, ev, true, nil
+				default:
 				}
 				if len(ih.unreadBuf) > 0 {
 					break wait

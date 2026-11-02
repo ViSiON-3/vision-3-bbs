@@ -11,7 +11,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/gliderlabs/ssh"
-	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -218,9 +217,10 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 // is a visible redraw at every toast.
 //
 // It reports false, having written nothing, when the model cannot be trusted:
-// snap holds a sequence the model does not handle, a character whose width on
-// the caller's terminal the model does not know, or the last cell of the last
-// row is in use, which some terminals scroll for. The caller then replays snap.
+// snap holds a sequence the model does not handle or an operation it is in
+// doubt about (a scroll, a character whose width on the caller's terminal it
+// does not know), or the last cell of the last row is in use, which some
+// terminals scroll for. The caller then replays snap.
 func (e *MenuExecutor) restoreOverlayRow(s ssh.Session, w io.Writer, sess *session.BbsSession, snap []byte, row int) bool {
 	width, height := sess.TermSize()
 	if width <= 0 || height <= 0 || row < 1 || row > height {
@@ -233,19 +233,8 @@ func (e *MenuExecutor) restoreOverlayRow(s ssh.Session, w io.Writer, sess *sessi
 	}
 	model := testterm.New(width, height, opts...)
 	_, _ = model.Write(snap)
-	if len(model.Unhandled()) > 0 {
+	if len(model.Unhandled()) > 0 || len(model.Doubts()) > 0 {
 		return false
-	}
-	// The model gives every character one cell. In CP437 mode that is so; in
-	// UTF-8 a wide or combining character anywhere would have shifted a row.
-	if mode != ansi.OutputModeCP437 {
-		for r := 1; r <= height; r++ {
-			for _, c := range model.RowCells(r) {
-				if c.Rune >= 0x80 && runewidth.RuneWidth(c.Rune) != 1 {
-					return false
-				}
-			}
-		}
 	}
 	cells := model.RowCells(row)
 	blank := testterm.Cell{Rune: ' ', Fg: -1, Bg: -1}

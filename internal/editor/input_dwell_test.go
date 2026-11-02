@@ -131,3 +131,72 @@ func TestInterruptBeforeTheDwellEndsIt(t *testing.T) {
 		t.Fatal("a used interrupt ended a later wait")
 	}
 }
+
+// A chat request and a window change during the same dwell: the chat request
+// was taken off its channel, so it is serviced, and the event still arrives.
+func TestBreakInAndEventDuringOneDwell(t *testing.T) {
+	pr, _ := io.Pipe()
+	ih := NewInputHandler(pr)
+	defer ih.Close()
+	brk := make(chan struct{}, 1)
+	ran := make(chan struct{})
+	ih.SetBreakIn(brk, func() { close(ran) })
+	wake, ended := dwellHook(t, ih)
+	events := make(chan int, 1)
+
+	res := make(chan int, 1)
+	go func() {
+		_, ev, isEvent, _ := ReadKeyOrEvent(ih, events)
+		if !isEvent {
+			ev = -1
+		}
+		res <- ev
+	}()
+	wake <- struct{}{}
+	time.Sleep(20 * time.Millisecond)
+	events <- 7
+	brk <- struct{}{}
+	select {
+	case <-ended:
+	case <-time.After(time.Second):
+		t.Fatal("dwell did not end")
+	}
+	select {
+	case <-ran:
+	case <-time.After(time.Second):
+		t.Fatal("break-in lost behind the queued event")
+	}
+	select {
+	case ev := <-res:
+		if ev != 7 {
+			t.Errorf("got %d, want event 7", ev)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("event not returned")
+	}
+}
+
+// An Interrupt sent for an event that was taken without a toast showing must
+// not end a later toast's dwell.
+func TestHandledEventDoesNotEndALaterDwell(t *testing.T) {
+	pr, _ := io.Pipe()
+	ih := NewInputHandler(pr)
+	defer ih.Close()
+	wake, ended := dwellHook(t, ih)
+	events := make(chan int, 1)
+
+	// The forwarder's order: the event, then the wake.
+	events <- 1
+	ih.Interrupt()
+	if _, ev, isEvent, _ := ReadKeyOrEvent(ih, events); !isEvent || ev != 1 {
+		t.Fatalf("first read = %d,%v, want event 1", ev, isEvent)
+	}
+
+	go func() { _, _, _, _ = ReadKeyOrEvent(ih, events) }()
+	wake <- struct{}{}
+	select {
+	case <-ended:
+		t.Fatal("a stale interrupt ended the dwell")
+	case <-time.After(150 * time.Millisecond):
+	}
+}
