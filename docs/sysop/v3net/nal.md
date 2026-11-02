@@ -83,6 +83,22 @@ After submitting, your proposal goes to the network coordinator for review. You'
 An area's name, description and language can't hold pipes or control characters.
 The hub refuses a proposal that has them, and the screen shows its error.
 
+The same rules apply to a NAL the coordinator posts directly: every area needs
+a valid tag, and its name, description and language can't hold pipes or
+control characters. The NAL is signed, so the hub refuses one that fails rather
+than cleaning it. An area kept exactly as the stored NAL has it (same tag,
+name, description and language) is let through, so text from before these
+checks doesn't block other changes. Fix it the next time you edit that area.
+
+A hub also checks the BBS name a node subscribes with: at most 64 characters,
+with no pipes or control characters. A node already registered can keep the
+name the hub holds for it. A leaf cleans its own board name before it sends it,
+pipes becoming `/`, so a name with colour codes still subscribes.
+
+Network names from the registry or a hub's network list must be valid network
+names (lowercase letters, digits, `_` and `-`, at most 32). An entry with any
+other name can't be joined, so it isn't listed.
+
 ## Text From Other Boards
 
 Area names, descriptions, BBS names, proposal fields and error messages from a

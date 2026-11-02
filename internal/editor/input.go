@@ -955,11 +955,22 @@ func (ih *InputHandler) ReadKeyWithTimeout(idleTimeout time.Duration) (int, erro
 // parseCSISequence parses ANSI CSI escape sequences (ESC [ ...).
 // '[' has already been consumed by ReadKey before this is called.
 func (ih *InputHandler) parseCSISequence() (int, error) {
-	// CSI sequences arrive in a burst; use a short inter-byte timeout.
+	// The rest of the sequence gets the same window as the byte after ESC
+	// (see ReadKey). A link that delays one byte of a key can delay the next,
+	// and a shorter wait here read PageUp whose "5~" came late as a bare ESC,
+	// which leaves chat and lightbars (#844). It costs nothing on a sequence
+	// that arrives whole; only one cut short waits out the window.
 	sequence := make([]byte, 0, 10)
 	for {
-		b, err := ih.readByteWithTimeout(100 * time.Millisecond)
+		b, err := ih.readByteWithTimeout(ih.escTimeout())
 		if err != nil {
+			break
+		}
+		// A CSI sequence holds only bytes 0x20-0x7E. Anything else, such as
+		// Ctrl-Z or Enter typed after a cut-off sequence, abandons it and is
+		// the next key, not part of this one.
+		if b < 0x20 || b > 0x7E {
+			ih.unreadByte(b)
 			break
 		}
 		sequence = append(sequence, b)

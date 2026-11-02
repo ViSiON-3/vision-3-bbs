@@ -18,7 +18,7 @@ lists, not a list of blocked authors. When it is off:
 
 - the reader's Twit command is removed from the bar and its help, and the I
   key does nothing;
-- `CFG_TWITLIST` (and so M in USERCONFIG and I in the message menu) shows
+- `CFG_TWITLIST` (and so M in USERCONFIG and T in the message menu) shows
   "Twit Lists are turned off" and returns, and USERCONFIG shows the field as Off;
 - no Twit List filtering is applied anywhere: reading, newscan, message lists,
   thread search, private mail, and QWK downloads from the terminal and the
@@ -37,7 +37,7 @@ users become exempt (`twitExemptLevel`) are not in the editor; set them in
 ## Managing the list
 
 Each caller manages their own list. Open **K (User Configuration)** and choose
-**M (Twit List)**, or choose **I (Twit List)** from the stock Message Menu.
+**M (Twit List)**, or choose **T (Twit List)** from the stock Message Menu.
 Custom menus can call `RUN:CFG_TWITLIST`. The current full-screen `USERCONFIG`
 replaces the older `USERCFG` menu mentioned in issue #398.
 

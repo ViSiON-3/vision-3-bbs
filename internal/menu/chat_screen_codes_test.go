@@ -60,9 +60,10 @@ func TestChatRoomMessageCannotRunScreenCodes(t *testing.T) {
 		live.typeKeys("filler\r")
 	}
 	mark = len(live.s.output())
-	// #844: this wait once timed out on Windows under -race and the cause isn't
-	// known. If it happens again, show what the screen got and whether chat ended,
-	// as it would if a stalled runner split PgUp's bytes into a bare ESC.
+	// #844: this wait timed out on Windows under -race. The input layer gave the
+	// bytes after "ESC [" only 100 ms, so a runner that stalled mid-PgUp read it as
+	// a bare ESC and chat ended; they now get the ESC window. If it happens again,
+	// show what the screen got and whether chat ended.
 	t.Cleanup(func() {
 		if !t.Failed() {
 			return

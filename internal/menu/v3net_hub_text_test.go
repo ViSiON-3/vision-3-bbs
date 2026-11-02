@@ -122,11 +122,15 @@ type registryFake struct {
 
 func (f *registryFake) RegistryURL() string { return f.url }
 
+// The registry's text is shown as plain text. An entry whose name isn't a valid
+// network name is left out altogether (#843), so the hostile text rides in the
+// fields that are shown, next to an entry named with it that must not appear.
 func TestRegistryScreenDoesNotRunRegistryText(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"networks": []protocol.RegistryEntry{{
-			Name: hostileV3NetText, Description: hostileV3NetText, HubURL: hostileV3NetText,
-		}}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"networks": []protocol.RegistryEntry{
+			{Name: "felonynet", Description: hostileV3NetText, HubURL: hostileV3NetText},
+			{Name: hostileV3NetText + "HIDDENNET", Description: "should not show"},
+		}})
 	}))
 	defer ts.Close()
 
@@ -141,7 +145,11 @@ func TestRegistryScreenDoesNotRunRegistryText(t *testing.T) {
 	if _, _, err := runV3NetRegistry(c, ""); err != nil && !errors.Is(err, errInputAborted) {
 		t.Fatalf("runV3NetRegistry: %v", err)
 	}
-	assertV3NetTextSafe(t, sess.output())
+	out := sess.output()
+	assertV3NetTextSafe(t, out)
+	if !strings.Contains(out, "felonynet") || strings.Contains(out, "HIDDENNET") || strings.Contains(out, "should not show") {
+		t.Errorf("want only the validly named entry listed:\n%q", out)
+	}
 }
 
 func TestKeyNoticeDoesNotRunNetworkName(t *testing.T) {
