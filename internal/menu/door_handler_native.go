@@ -183,9 +183,9 @@ func executeNativeDoor(ctx *DoorCtx) error {
 
 	// Execute command. Window changes come through winch, so the session loop
 	// still sees each one while the door drains its own copy below.
-	_, _, isPty := ctx.Session.Pty()
 	winChOrig, stopResizes := winch.Subscribe(ctx.Session)
 	defer stopResizes()
+	_, _, isPty := ctx.Session.Pty()
 	var cmdErr error
 
 	if doorConfig.RequiresRawTerminal && isPty {

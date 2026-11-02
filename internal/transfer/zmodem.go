@@ -557,14 +557,16 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	// Window changes come through winch, so the session loop sees them too.
+	// Subscribe before reading the size, so a change that lands between the
+	// two is queued rather than lost.
+	winCh, stopResizes := winch.Subscribe(s)
+	defer stopResizes()
 	ptyReq, _, isPty := s.Pty()
 	if !isPty {
 		slog.Warn("no PTY available for session, falling back to direct mode", "cmd", cmd.Path)
 		return RunCommandDirect(ctx, s, cmd, stdinIdleTimeout)
 	}
-	// Window changes come through winch, so the session loop sees them too.
-	winCh, stopResizes := winch.Subscribe(s)
-	defer stopResizes()
 
 	slog.Debug("starting command with PTY", "cmd", cmd.Path)
 	ptmx, err := pty.Start(cmd)
