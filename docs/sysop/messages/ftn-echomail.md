@@ -1159,11 +1159,14 @@ Groups message areas for display in the BBS menu:
 
 ### What goes out on the wire
 
-- **Headers are CP437.** From, To and Subject are stored as UTF-8 and
-  encoded to CP437 when a packet is written, unless the message's own `CHRS`
-  kludge declares UTF-8, in which case they stay UTF-8. A character CP437
-  cannot hold becomes `?`. Encoding happens before the packet writer cuts the
-  fields to their 36/72-byte limits, so a multibyte character is never split.
+- **Headers go out in the message's own character set.** From, To and
+  Subject are stored as UTF-8 and encoded when a packet is written: in UTF-8
+  when the message's `CHRS` kludge declares UTF-8, in Cyrillic when it names
+  `CP866` (`+7_FIDO`), `CP1251`, `KOI8-R` or `KOI8-U`, so mail tossed in one
+  of those sets is forwarded in it, and in CP437 for any other label or none.
+  A character the set cannot hold becomes `?`. Encoding happens before the
+  packet writer cuts the fields to their 36/72-byte limits, so a multibyte
+  character is never split.
   The same applies to the netmail `helper areafix` and `helper filefix` write.
 - **Imports are stored as received.** No MSGID is invented and no PID/TID is
   added to mail that arrives from a network (see
@@ -1176,6 +1179,15 @@ Groups message areas for display in the BBS menu:
   that named the old one, and the network's `domain` line follows a zone
   change while it still carries the old zone. Other `address` lines are
   treated as your AKAs and left alone.
+
+### How headers are read on import
+
+From, To and Subject are decoded once, when the message is tossed, and stored
+as UTF-8. The `CHRS` kludge decides how: `UTF-8` keeps the bytes as they are;
+`CP866` (`+7_FIDO`), `CP1251`, `KOI8-R` and `KOI8-U` are decoded as Cyrillic,
+by the same table the reader uses for bodies; anything else is CP437. Mail
+tossed by an earlier version keeps the headers it was stored with, so a Russian
+name it decoded as CP437 stays garbled.
 
 ### How message bodies are displayed
 

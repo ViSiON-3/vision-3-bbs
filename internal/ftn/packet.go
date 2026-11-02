@@ -15,6 +15,7 @@ import (
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/transform"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
@@ -551,8 +552,10 @@ func ParseFTNDateTime(s string) (time.Time, error) {
 // CHRS kludge value containing "UTF-8" (e.g., "UTF-8 4").
 //
 // If chrs contains "UTF-8" (case-insensitive), the string is assumed to be
-// valid UTF-8 and is returned unchanged. Otherwise, bytes 0x80–0xFF are
-// treated as CP437 and converted to their Unicode equivalents.
+// valid UTF-8 and is returned unchanged. Otherwise bytes 0x80–0xFF are read in
+// the set chrs names, where it is one the reader also decodes bodies by
+// (ansi.NamedCharmap: CP866, +7_FIDO, CP1251, KOI8-R, KOI8-U), and as CP437
+// for any other label or none. "CHRS: CP866 2" with "\x8f\xe0\xa8" gives "При".
 func DecodeFTNString(s, chrs string) string {
 	if strings.Contains(strings.ToUpper(chrs), "UTF-8") {
 		return s
@@ -568,8 +571,7 @@ func DecodeFTNString(s, chrs string) string {
 	if allASCII {
 		return s
 	}
-	// Decode CP437 bytes to UTF-8.
-	decoded, _, err := transform.String(charmap.CodePage437.NewDecoder(), s)
+	decoded, _, err := transform.String(headerCharmap(chrs).NewDecoder(), s)
 	if err != nil {
 		return s // Return original on decode error
 	}
@@ -581,9 +583,10 @@ func DecodeFTNString(s, chrs string) string {
 // DecodeFTNString for export.
 //
 // If chrs contains "UTF-8" (case-insensitive) the message declares UTF-8 and
-// s is returned unchanged. Otherwise s is encoded as CP437, the FTS default
-// for a message without a CHRS kludge: "Café ─ news" becomes
-// "Caf\x82 \xc4 news". A rune with no CP437 equivalent becomes '?'. A string
+// s is returned unchanged. Otherwise s is encoded in the set chrs names, as
+// DecodeFTNString reads it, so a message tossed in CP866 goes out in CP866;
+// with any other label or none that is CP437, the FTS default: "Café ─ news"
+// becomes "Caf\x82 \xc4 news". A rune the set has no byte for becomes '?'. A string
 // that is not valid UTF-8 is assumed to be CP437 bytes already and is
 // returned unchanged. Encoding before the packet writer cuts the fields to
 // their byte limits keeps a multibyte character from being split.
@@ -601,15 +604,26 @@ func EncodeFTNString(s, chrs string) string {
 	if ascii {
 		return s
 	}
+	cm := headerCharmap(chrs)
 	out := make([]byte, 0, len(s))
 	for _, r := range s {
-		if b, ok := charmap.CodePage437.EncodeRune(r); ok {
+		if b, ok := cm.EncodeRune(r); ok {
 			out = append(out, b)
 		} else {
 			out = append(out, '?')
 		}
 	}
 	return string(out)
+}
+
+// headerCharmap returns the single-byte set header fields are read and written
+// in for a message whose CHRS kludge value is chrs: the set it names when that
+// is one ansi.NamedCharmap knows, and CP437 otherwise.
+func headerCharmap(chrs string) *charmap.Charmap {
+	if cm := ansi.NamedCharmap(ansi.CharsetName(chrs)); cm != nil {
+		return cm
+	}
+	return charmap.CodePage437
 }
 
 // CP437Rune reports whether r can be written as a CP437 byte, so that

@@ -28,19 +28,49 @@ func DecodeBody(body, charset string) string {
 	if utf8.ValidString(body) {
 		return body
 	}
-	switch charset {
-	case "UTF-8", "UTF8":
+	if IsUTF8Charset(charset) {
 		return mixedUTF8(body)
-	case "CP866", "+7_FIDO", "+7":
-		return decodeCharmap(body, charmap.CodePage866)
-	case "CP1251":
-		return decodeCharmap(body, charmap.Windows1251)
-	case "KOI8-R":
-		return decodeCharmap(body, charmap.KOI8R)
-	case "KOI8-U":
-		return decodeCharmap(body, charmap.KOI8U)
+	}
+	if cm := NamedCharmap(charset); cm != nil {
+		return decodeCharmap(body, cm)
 	}
 	return string(CP437BytesToUTF8([]byte(body)))
+}
+
+// CharsetName returns the character set a CHRS kludge value names, upper
+// case: "cp866 2" gives "CP866", and "" gives "".
+func CharsetName(chrs string) string {
+	f := strings.Fields(chrs)
+	if len(f) == 0 {
+		return ""
+	}
+	return strings.ToUpper(f[0])
+}
+
+// IsUTF8Charset reports whether charset, a name as CharsetName returns it,
+// is UTF-8.
+func IsUTF8Charset(charset string) bool {
+	return charset == "UTF-8" || charset == "UTF8"
+}
+
+// NamedCharmap returns the single-byte set charset names, for the sets
+// decoded by name: the Cyrillic CP866 (also labelled +7_FIDO and +7),
+// CP1251, KOI8-R and KOI8-U. It returns nil for every other name, which the
+// callers read as CP437 (or as UTF-8, see IsUTF8Charset). charset is a name as
+// CharsetName returns it. Message bodies and FTN header fields share this
+// list, so a message's header and body agree on what its bytes say.
+func NamedCharmap(charset string) *charmap.Charmap {
+	switch charset {
+	case "CP866", "+7_FIDO", "+7":
+		return charmap.CodePage866
+	case "CP1251":
+		return charmap.Windows1251
+	case "KOI8-R":
+		return charmap.KOI8R
+	case "KOI8-U":
+		return charmap.KOI8U
+	}
+	return nil
 }
 
 // mixedUTF8 keeps every valid UTF-8 sequence in s and reads each byte that
