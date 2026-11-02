@@ -166,7 +166,7 @@ func TestToastCenterUsesThePublishedWidth(t *testing.T) {
 	env.sess.Width = 120
 	env.sess.SetToastViewer(0, 40)
 	var out strings.Builder
-	if _, err := env.e.drawToastOverlay(env.s, &out, env.sess, toast.Toast{Text: "x"}); err != nil {
+	if _, _, err := env.e.drawToastOverlay(env.s, &out, env.sess, toast.Toast{Text: "x"}); err != nil {
 		t.Fatal(err)
 	}
 	// ">> x" is four cells, centered on 40 columns.

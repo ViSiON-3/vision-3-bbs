@@ -8,12 +8,20 @@
 // Term is not a terminal emulator. It models the subset of ANSI that
 // internal/editor emits and records everything else in Unhandled, so a test can
 // catch output the double does not understand rather than silently passing.
+//
+// One piece of the BBS relies on it outside tests: toast delivery in
+// internal/menu replays a session's screen through a Term to redraw the one row
+// an overlay covered, and falls back to replaying the whole screen when
+// Unhandled is not empty. Anything added to the model must therefore be right,
+// not merely good enough for an assertion.
 package testterm
 
 import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/mattn/go-runewidth"
 )
 
 // Cell is one character position on the screen.
@@ -24,9 +32,42 @@ type Cell struct {
 	Rune   rune
 	Fg, Bg int
 	Bold   bool
+	Blink  bool
 }
 
 func blankCell() Cell { return Cell{Rune: ' ', Fg: -1, Bg: -1} }
+
+// withRune is the pen's attributes on r.
+func (c Cell) withRune(r rune) Cell {
+	c.Rune = r
+	return c
+}
+
+// SGR returns the escape sequence that sets a terminal's pen to c's attributes
+// from any state: a reset followed by each attribute c has.
+func (c Cell) SGR() string {
+	var sb strings.Builder
+	sb.WriteString("\x1b[0")
+	if c.Bold {
+		sb.WriteString(";1")
+	}
+	if c.Blink {
+		sb.WriteString(";5")
+	}
+	if c.Fg >= 0 {
+		fmt.Fprintf(&sb, ";%d", c.Fg)
+	}
+	if c.Bg >= 0 {
+		fmt.Fprintf(&sb, ";%d", c.Bg)
+	}
+	sb.WriteString("m")
+	return sb.String()
+}
+
+// SameAttrs reports whether c and o differ only in Rune.
+func (c Cell) SameAttrs(o Cell) bool {
+	return c.Fg == o.Fg && c.Bg == o.Bg && c.Bold == o.Bold && c.Blink == o.Blink
+}
 
 // Option configures a Term at construction.
 type Option func(*Term)
@@ -56,8 +97,15 @@ type Term struct {
 	pen   Cell // current SGR state; Rune is unused
 	cp437 bool
 
+	// savedPen and savedWrap go with savedRow and savedCol for DECSC (ESC 7),
+	// which saves the graphic attributes and the pending wrap along with the
+	// cursor; the SCO forms ESC[s and ESC[u save the cursor alone.
+	savedPen  Cell
+	savedWrap bool
+
 	pending   []byte // bytes held back mid-sequence or mid-rune
 	unhandled []string
+	doubts    []string
 }
 
 // New creates a Term of the given size with an empty screen and the cursor at
@@ -78,6 +126,7 @@ func New(width, height int, opts ...Option) *Term {
 		}
 	}
 	t.savedRow, t.savedCol = 1, 1
+	t.savedPen = blankCell()
 	for _, opt := range opts {
 		opt(t)
 	}
@@ -103,6 +152,27 @@ func (t *Term) rowLocked(row int) string {
 		sb.WriteRune(c.Rune)
 	}
 	return strings.TrimRight(sb.String(), " ")
+}
+
+// RowCells returns a copy of a 1-based row's cells, attributes included. An
+// out-of-range row returns nil.
+func (t *Term) RowCells(row int) []Cell {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if row < 1 || row > t.height {
+		return nil
+	}
+	out := make([]Cell, t.width)
+	copy(out, t.cells[row-1])
+	return out
+}
+
+// Pen returns the current SGR state: what the next character written would be
+// drawn with. Its Rune is unused.
+func (t *Term) Pen() Cell {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.pen
 }
 
 // Cell returns the cell at a 1-based row and column. Out-of-range coordinates
@@ -169,6 +239,28 @@ func (t *Term) Unhandled() []string {
 	return out
 }
 
+// Doubts returns the operations this Term carried out whose effect on a real
+// terminal it may have got wrong: a scroll, which some terminals fill with the
+// pen's background and this Term fills with the default, and a character the
+// Term gave one cell though a UTF-8 terminal may give it two or none. They are
+// not in Unhandled, since tests legitimately exercise both; code that reads the
+// screen back from a Term, as the toast restore does, must check them.
+func (t *Term) Doubts() []string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := make([]string, len(t.doubts))
+	copy(out, t.doubts)
+	return out
+}
+
+// doubt records one entry for Doubts, keeping the list short under repetition.
+func (t *Term) doubt(s string) {
+	if n := len(t.doubts); n > 0 && t.doubts[n-1] == s {
+		return
+	}
+	t.doubts = append(t.doubts, s)
+}
+
 // putRune writes r at the cursor using the current pen and advances the cursor,
 // wrapping at the right margin and scrolling at the bottom of the screen.
 //
@@ -193,7 +285,13 @@ func (t *Term) putRune(r rune) {
 		t.row = t.height
 	}
 	if t.row >= 1 && t.row <= t.height && t.col >= 1 && t.col <= t.width {
-		t.cells[t.row-1][t.col-1] = Cell{Rune: r, Fg: t.pen.Fg, Bg: t.pen.Bg, Bold: t.pen.Bold}
+		t.cells[t.row-1][t.col-1] = t.pen.withRune(r)
+	}
+	// One cell per character is right for CP437. A UTF-8 terminal gives a wide
+	// character two and a combining one none, and nothing after it on the row
+	// would be where this Term puts it.
+	if !t.cp437 && r >= 0x80 && runewidth.RuneWidth(r) != 1 {
+		t.doubt(fmt.Sprintf("width of %U", r))
 	}
 	if t.col >= t.width {
 		t.wrapPending = true
@@ -205,11 +303,12 @@ func (t *Term) putRune(r rune) {
 // scrollUp discards the top row and appends a blank row at the bottom. The new
 // row is filled with default colours rather than the current pen's background;
 // a real terminal paints it in the pen's background, but this Term deliberately
-// does not model that.
+// does not model that, and records a doubt instead.
 func (t *Term) scrollUp() {
 	if t.height == 0 {
 		return
 	}
+	t.doubt("scrolled")
 	copy(t.cells, t.cells[1:])
 	last := make([]Cell, t.width)
 	for c := range last {

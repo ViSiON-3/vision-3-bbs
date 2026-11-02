@@ -171,13 +171,17 @@ func moveCount(params []int) int {
 }
 
 func (t *Term) applyEscape(seq []byte) {
-	// DECSC and DECRC, the two-byte forms of ESC[s and ESC[u.
+	// DECSC and DECRC. Unlike ESC[s and ESC[u they save and restore the pen and
+	// the pending wrap along with the cursor, as xterm and the BBS's own
+	// renderer do.
 	if len(seq) == 2 && seq[1] == '7' {
 		t.savedRow, t.savedCol = t.row, t.col
+		t.savedPen, t.savedWrap = t.pen, t.wrapPending
 		return
 	}
 	if len(seq) == 2 && seq[1] == '8' {
 		t.row, t.col = t.savedRow, t.savedCol
+		t.pen, t.wrapPending = t.savedPen, t.savedWrap
 		return
 	}
 	params, final, private := csiParams(seq)

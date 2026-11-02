@@ -72,7 +72,7 @@ func (t *Term) eraseLine(mode int) bool {
 		// never trigger in practice. It stays as cheap defensive bounds
 		// checking rather than something load-bearing.
 		if c >= 1 && c <= t.width {
-			t.cells[t.row-1][c-1] = Cell{Rune: ' ', Fg: t.pen.Fg, Bg: t.pen.Bg, Bold: t.pen.Bold}
+			t.cells[t.row-1][c-1] = t.pen.withRune(' ')
 		}
 	}
 	return true
@@ -106,7 +106,7 @@ func (t *Term) eraseRows(from, to int) {
 			continue
 		}
 		for c := range t.cells[r-1] {
-			t.cells[r-1][c] = Cell{Rune: ' ', Fg: t.pen.Fg, Bg: t.pen.Bg, Bold: t.pen.Bold}
+			t.cells[r-1][c] = t.pen.withRune(' ')
 		}
 	}
 }

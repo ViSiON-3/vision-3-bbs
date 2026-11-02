@@ -477,7 +477,7 @@ For interactive positioning (like login screens):
 
 - `|{P}` - Mark username input position
 - `|{O}` - Mark password input position
-- `~TO` or `|TO` - Where toasts appear while this menu waits for input (the menu must have Clear Screen on)
+- `~TO` or `|TO` - Where toasts appear while this menu waits for input. Only the toast's own characters are written, so art to its right stays. The menu must have Clear Screen on, and the code is ignored when the art scrolls the screen or the row is off the caller's terminal
 
 ## Conditional Regions ({{acs}}...{{/}})
 

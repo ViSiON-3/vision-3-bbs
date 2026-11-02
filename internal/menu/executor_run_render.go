@@ -105,6 +105,9 @@ func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 	// DisplayBytes are still raw CP437 here, one byte per cell, so measure
 	// them as such before any UTF-8 conversion.
 	ansiProcessResult.DisplayBytes = fitArt(terminal, ansiProcessResult.DisplayBytes, st.termWidth, false)
+	// Whether the art scrolls the screen is measured here too, while each
+	// byte is one cell: ArtGeometry would count a UTF-8 box character as three.
+	st.artScrolls = menuArtScrolls(ansiProcessResult.DisplayBytes, artWidth(terminal, st.termWidth), st.termHeight)
 
 	// Convert encoding based on output mode (similar to SHOWSTATS fix)
 	if outputMode == ansi.OutputModeUTF8 {

@@ -143,6 +143,14 @@ type InputHandler struct {
 	// toastRetry makes the next key wait run toastFn without a wake.
 	toastsHeld bool
 	toastRetry bool
+	// breakInPending notes a break-in that fired during WaitForInput, for the
+	// wait that ran the toast hook to service once the hook returns. Only the
+	// reading goroutine touches it.
+	breakInPending bool
+	// interrupt, when it fires, ends a WaitForInput early (see Interrupt). It is
+	// buffered, so a wake sent while nothing waits is kept for the next wait.
+	interrupt     chan struct{}
+	interruptOnce sync.Once
 	// screenRedraw, when set, redraws the screen waiting on this read without
 	// relying on the session's catch-up buffer.
 	screenRedraw func()
@@ -186,8 +194,10 @@ func (ih *InputHandler) runBreakIn() {
 // for the first byte of a key, outside a break-in. Waits inside an escape
 // sequence do not service it. fn must return within limit, the time left before
 // the read's timeout, when limit is above zero, and fire ch again rather than
-// keep going if it has more to do, so the read gets to check its timeouts. Call
-// from the reading goroutine.
+// keep going if it has more to do, so the read gets to check its timeouts. A
+// WaitForInput inside fn ends early for a break-in or an Interrupt, and fn
+// should return then, so the wait that ran it can service them. Call from the
+// reading goroutine.
 func (ih *InputHandler) SetToastHook(ch <-chan struct{}, fn func(limit time.Duration)) {
 	ih.toastWake = ch
 	ih.toastFn = fn
@@ -232,14 +242,47 @@ func (ih *InputHandler) toastChan(allow bool) <-chan struct{} {
 	return ih.toastWake
 }
 
-// runToastHook runs the toast hook for a wait with limit left.
-func (ih *InputHandler) runToastHook(limit time.Duration) {
+// runToastHook runs the toast hook for a wait with limit left, and reports
+// whether a break-in fired meanwhile, which the caller then services as if it
+// had fired on its own wait.
+func (ih *InputHandler) runToastHook(limit time.Duration) (breakIn bool) {
 	ih.toastRetry = false
 	ih.toastFn(limit)
+	breakIn, ih.breakInPending = ih.breakInPending, false
+	return breakIn
+}
+
+// interruptChan returns the channel Interrupt sends on.
+func (ih *InputHandler) interruptChan() chan struct{} {
+	ih.interruptOnce.Do(func() { ih.interrupt = make(chan struct{}, 1) })
+	return ih.interrupt
+}
+
+// Interrupt ends a WaitForInput in progress, or the next one, early, so a
+// screen that is sent an event while a toast dwells can take it. It is safe to
+// call from another goroutine.
+func (ih *InputHandler) Interrupt() {
+	select {
+	case ih.interruptChan() <- struct{}{}:
+	default:
+	}
+}
+
+// drainInterrupt discards an Interrupt sent for an event that has since been
+// taken, so it does not end a later dwell. A wait calls it before running the
+// toast hook, once it has seen that no event is waiting.
+func (ih *InputHandler) drainInterrupt() {
+	select {
+	case <-ih.interruptChan():
+	default:
+	}
 }
 
 // WaitForInput waits up to d for input, leaving it to be read, and reports
-// whether any came. A closed connection counts: the next read reports it.
+// whether any came. A closed connection counts: the next read reports it. The
+// wait also ends early, reporting false, on a break-in or an Interrupt. The
+// break-in is left for the read that is running this wait's caller to service,
+// and an Interrupt sent before the wait began ends it at once.
 func (ih *InputHandler) WaitForInput(d time.Duration) bool {
 	if len(ih.unreadBuf) > 0 {
 		return true
@@ -258,6 +301,11 @@ func (ih *InputHandler) WaitForInput(d time.Duration) bool {
 			ih.unreadByte(b)
 			return true
 		case <-timer.C:
+			return false
+		case <-ih.breakInChan(true):
+			ih.breakInPending = true
+			return false
+		case <-ih.interruptChan():
 			return false
 		}
 	}
@@ -616,7 +664,11 @@ func (ih *InputHandler) readByteOpt(breakIn bool) (byte, error) {
 			ih.runBreakIn()
 			start = time.Now()
 		case <-ih.toastChan(breakIn):
-			ih.runToastHook(0) // this wait has no timeout to run out
+			ih.drainInterrupt()
+			if ih.runToastHook(0) { // this wait has no timeout to run out
+				ih.runBreakIn()
+				start = time.Now()
+			}
 		}
 	}
 }
@@ -831,7 +883,10 @@ func (ih *InputHandler) waitByte(timeout time.Duration, breakIn bool) (b byte, b
 			if left <= 0 {
 				return 0, false, errTimeout
 			}
-			ih.runToastHook(left)
+			ih.drainInterrupt()
+			if ih.runToastHook(left) {
+				return 0, true, nil
+			}
 			if len(ih.unreadBuf) > 0 {
 				b := ih.unreadBuf[0]
 				ih.unreadBuf = ih.unreadBuf[1:]
@@ -1111,6 +1166,37 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 			timer = time.NewTimer(wait)
 			idle = timer.C
 		}
+		// afterBreakIn services a break-in and starts the idle countdown over.
+		// It reports whether a byte the break-in pushed back ends the wait;
+		// otherwise it has set expired and onTimeout for the caller to check.
+		afterBreakIn := func() (haveByte bool) {
+			ih.runBreakIn()
+			if len(ih.unreadBuf) > 0 {
+				return true
+			}
+			start = time.Now()
+			wait, onTimeout, expired = ih.keyWait(start)
+			if expired {
+				return false
+			}
+			if timer != nil && !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			switch {
+			case wait <= 0:
+				idle = nil
+			case timer == nil:
+				timer = time.NewTimer(wait)
+				idle = timer.C
+			default:
+				timer.Reset(wait)
+				idle = timer.C
+			}
+			return false
+		}
 	wait:
 		for {
 			select {
@@ -1137,37 +1223,44 @@ func readKeyOrEvent[T any](ih *InputHandler, events <-chan T) (key int, ev T, is
 					timer.Reset(wait)
 				}
 			case <-ih.breakInChan(true):
-				ih.runBreakIn()
-				if len(ih.unreadBuf) > 0 {
+				if afterBreakIn() {
 					break wait
 				}
-				start = time.Now()
-				wait, onTimeout, expired = ih.keyWait(start)
 				if expired {
 					return 0, ev, false, onTimeout
 				}
-				if timer != nil && !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
-				switch {
-				case wait <= 0:
-					idle = nil
-				case timer == nil:
-					timer = time.NewTimer(wait)
-					idle = timer.C
-				default:
-					timer.Reset(wait)
-					idle = timer.C
-				}
 			case <-ih.toastChan(true):
+				// An event already waiting goes before any toast. With none
+				// waiting, an Interrupt still queued was sent for an event
+				// taken earlier and must not end this toast's dwell; one sent
+				// from here on is for an event the dwell should end for.
+				select {
+				case ev = <-events:
+					return 0, ev, true, nil
+				default:
+				}
+				ih.drainInterrupt()
 				left, toastTimeout, toastExpired := ih.keyWait(start)
 				if toastExpired {
 					return 0, ev, false, toastTimeout
 				}
-				ih.runToastHook(left)
+				if ih.runToastHook(left) {
+					// The break-in was taken off its channel, so it is
+					// serviced here or not at all.
+					if afterBreakIn() {
+						break wait
+					}
+					if expired {
+						return 0, ev, false, onTimeout
+					}
+				}
+				// An event that arrived during the hook goes first: a toast
+				// dwell ended for it, and another wake may be queued already.
+				select {
+				case ev = <-events:
+					return 0, ev, true, nil
+				default:
+				}
 				if len(ih.unreadBuf) > 0 {
 					break wait
 				}

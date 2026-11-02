@@ -459,7 +459,11 @@ All login sequence commands are also registered as menu runnables and can be use
 
 ## Toasts
 
-Node pages reach a caller as toasts: a line drawn over the screen while it waits for a key, which clears on the next key or after 5 seconds. A page
+Node pages reach a caller as toasts: a line drawn over the screen while it waits
+for a key, which clears on the next key or after 5 seconds. A sysop's chat
+request or a change of window size clears it at once. Clearing redraws only the
+row the toast covered, so a slow link does not see the whole screen repainted;
+a screen the BBS cannot redraw that way is replayed whole. A page
 for a caller who has left is kept in `data/toasts.json` and shown once, at the
 end of their next login. This happens on every install and is not a
 `login.json` step. A page too long for the row shows as much as fits, and all of
@@ -488,5 +492,8 @@ terminal, and `toastCol` is ignored. Toasts written at a menu prompt or at login
 A menu can place toasts itself: put the coordinate code `~TO` (or `|TO`) in its
 art, and toasts go there while that menu waits for input. It overrides those
 settings, which still apply to every other screen and to menus without the
-code. The menu must have Clear Screen on, because art coordinates count from the
-top of the art.
+code. A toast at the code writes only its own characters, so art to its right
+stays; at the configured position the rest of the row is cleared. The menu must
+have Clear Screen on, because art coordinates count from the top of the art,
+and the code is ignored when the art scrolls the screen or puts it on a row the
+caller's terminal does not have: the configured position is used instead.

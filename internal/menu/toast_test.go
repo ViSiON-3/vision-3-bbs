@@ -45,6 +45,13 @@ type toastEnv struct {
 
 func newToastEnv(t *testing.T) *toastEnv {
 	t.Helper()
+	return newToastEnvWith(t, ansi.OutputModeAuto)
+}
+
+// newToastEnvWith is newToastEnv for a session in the given output mode, with
+// a terminal that reads the wire the same way.
+func newToastEnvWith(t *testing.T, mode ansi.OutputMode) *toastEnv {
+	t.Helper()
 	oldDwell, oldRearm := toastDwell, toastRearm
 	toastDwell, toastRearm = 50*time.Millisecond, 10*time.Millisecond
 	t.Cleanup(func() { toastDwell, toastRearm = oldDwell, oldRearm })
@@ -54,13 +61,17 @@ func newToastEnv(t *testing.T) *toastEnv {
 	e.SetServerConfig(config.ServerConfig{DataDir: t.TempDir()})
 	e.SetStrings(config.StringsConfig{ToastOverlayFormat: ">> %s"})
 
-	term := testterm.New(80, 24)
+	var opts []testterm.Option
+	if mode == ansi.OutputModeCP437 {
+		opts = append(opts, testterm.CP437())
+	}
+	term := testterm.New(80, 24, opts...)
 	s := &toastSession{Session: testterm.NewSession(term, ""), tap: snoop.NewTap()}
 	u := &user.User{ID: 5, Handle: "Reader"}
 	sess := &session.BbsSession{ID: 1, NodeID: 1, User: u, Width: 80, Height: 24}
 	reg.Register(sess)
 	SetSessionOutput(s, s)
-	SetSessionOutputMode(s, 0)
+	SetSessionOutputMode(s, mode)
 	sess.SetToastsReady(true)
 	e.AttachToasts(s, sess)
 	t.Cleanup(func() {
@@ -400,12 +411,12 @@ func TestToastAnchorFromMenuArtOverridesConfiguredPosition(t *testing.T) {
 	}
 
 	// Without a cleared screen the art's coordinates mean nothing.
-	env.e.setToastAnchor(1, res, false)
+	env.e.setToastAnchor(1, res, false, false)
 	if _, _, ok := env.sess.ToastAnchor(); ok {
 		t.Error("anchor set on a menu that does not clear the screen")
 	}
 
-	env.e.setToastAnchor(1, res, true)
+	env.e.setToastAnchor(1, res, true, false)
 	keys := env.readKey()
 	env.sess.AddPage("Anchored")
 	toastWaitFor(t, "the overlay", func() bool { return strings.Contains(env.term.Row(3), ">> Anchored") })
@@ -431,7 +442,7 @@ func TestToastAnchorFromMenuArtOverridesConfiguredPosition(t *testing.T) {
 func TestToastTextCannotRunScreenCodes(t *testing.T) {
 	env := newToastEnv(t)
 	var out bytes.Buffer
-	if _, err := env.e.drawToastOverlay(env.s, &out, env.sess, toast.Toast{Text: "a|CLb|CRc|Pd|04e"}); err != nil {
+	if _, _, err := env.e.drawToastOverlay(env.s, &out, env.sess, toast.Toast{Text: "a|CLb|CRc|Pd|04e"}); err != nil {
 		t.Fatal(err)
 	}
 	got := out.String()
@@ -485,7 +496,7 @@ func TestToastOverlayClipsByColumns(t *testing.T) {
 	env := newToastEnv(t)
 	SetSessionOutputMode(env.s, ansi.OutputModeUTF8)
 	var out bytes.Buffer
-	clipped, err := env.e.drawToastOverlay(env.s, &out, env.sess, toast.Toast{Text: strings.Repeat("漢", 60)})
+	_, clipped, err := env.e.drawToastOverlay(env.s, &out, env.sess, toast.Toast{Text: strings.Repeat("漢", 60)})
 	if err != nil {
 		t.Fatal(err)
 	}

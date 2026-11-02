@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor/testterm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
@@ -157,7 +159,7 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	if !ok {
 		return
 	}
-	clipped, err := e.drawToastOverlay(s, w, sess, t)
+	row, clipped, err := e.drawToastOverlay(s, w, sess, t)
 	if err == nil {
 		e.settleOverlayToast(sess, t, stored, clipped)
 	}
@@ -171,10 +173,12 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	if limit > 0 && limit < dwell {
 		dwell = limit
 	}
+	// The wait also ends for a sysop's chat request or a window change, which
+	// the read services once this returns.
 	keyed := ih.WaitForInput(dwell)
 	if redraw != nil {
 		redraw()
-	} else {
+	} else if !e.restoreOverlayRow(s, w, sess, snap, row) {
 		// Same reset as the end of sysop chat: the snapshot carries its own
 		// scroll region, colours and cursor position.
 		_, _ = fmt.Fprint(w, "\x1b[r\x1b[0m\x1b[2J\x1b[H") // best-effort display
@@ -187,6 +191,59 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 		return
 	}
 	sess.WakeToasts()
+}
+
+// restoreOverlayRow redraws only the row an overlay covered, from a model of the
+// screen built by replaying snap through a terminal of the session's size, and
+// leaves the pen as the screen had it. That is a few hundred bytes where the
+// replay of the whole snapshot is the whole screen again, which on a slow link
+// is a visible redraw at every toast.
+//
+// It reports false, having written nothing, when the model cannot be trusted:
+// snap holds a sequence the model does not handle or an operation it is in
+// doubt about (a scroll, a character whose width on the caller's terminal it
+// does not know), or the last cell of the last row is in use, which some
+// terminals scroll for. The caller then replays snap.
+func (e *MenuExecutor) restoreOverlayRow(s ssh.Session, w io.Writer, sess *session.BbsSession, snap []byte, row int) bool {
+	width, height := sess.TermSize()
+	if width <= 0 || height <= 0 || row < 1 || row > height {
+		return false
+	}
+	mode := sessionOutputMode(s)
+	var opts []testterm.Option
+	if mode == ansi.OutputModeCP437 {
+		opts = append(opts, testterm.CP437())
+	}
+	model := testterm.New(width, height, opts...)
+	_, _ = model.Write(snap)
+	if len(model.Unhandled()) > 0 || len(model.Doubts()) > 0 {
+		return false
+	}
+	cells := model.RowCells(row)
+	blank := testterm.Cell{Rune: ' ', Fg: -1, Bg: -1}
+	end := len(cells)
+	for end > 0 && cells[end-1] == blank {
+		end--
+	}
+	if row == height && end == width {
+		return false
+	}
+	var out strings.Builder
+	out.WriteString("\x1b7" + ansi.MoveCursor(row, 1))
+	pen := blank
+	out.WriteString(pen.SGR())
+	for _, c := range cells[:end] {
+		if !c.SameAttrs(pen) {
+			pen = c
+			out.WriteString(pen.SGR())
+		}
+		out.WriteRune(c.Rune)
+	}
+	if end < width {
+		out.WriteString(blank.SGR() + "\x1b[K")
+	}
+	out.WriteString(model.Pen().SGR() + "\x1b8")
+	return terminalio.WriteProcessedBytes(w, []byte(out.String()), mode) == nil
 }
 
 // toastLineScreen is a screen that takes toasts as lines of its own.
@@ -246,17 +303,33 @@ const toastAnchorCode = "TO"
 
 // setToastAnchor places toasts where this menu's art has the anchor code. Art
 // coordinates count from the top of the art, so they only match the screen when
-// the menu clears it first; otherwise the configured position stands.
-func (e *MenuExecutor) setToastAnchor(nodeNumber int, res ansi.ProcessAnsiResult, clearsScreen bool) {
+// the menu clears it first, the art does not scroll it (see menuArtScrolls) and
+// the anchor's row is on it at all; otherwise the configured position stands.
+func (e *MenuExecutor) setToastAnchor(nodeNumber int, res ansi.ProcessAnsiResult, clearsScreen, scrolled bool) {
 	sess := e.nodeSession(nodeNumber)
 	if sess == nil {
 		return
 	}
-	if pos, ok := res.FieldCoords[toastAnchorCode]; ok && clearsScreen {
+	_, height := sess.TermSize()
+	if pos, ok := res.FieldCoords[toastAnchorCode]; ok && clearsScreen && !scrolled && (height <= 0 || pos.Y <= height) {
 		sess.SetToastAnchor(pos.Y, pos.X)
 		return
 	}
 	sess.ClearToastAnchor()
+}
+
+// menuArtScrolls reports whether menu art, written as displayMenuScreen writes
+// it, scrolls a terminal width by height. Lines past the height are cut before
+// the write, so only autowrap on the lines that remain can push the screen up
+// and leave an anchor's coordinates pointing at the wrong row.
+func menuArtScrolls(displayBytes []byte, width, height int) bool {
+	if height <= 0 {
+		return false
+	}
+	if lines := bytes.Split(displayBytes, []byte("\n")); len(lines) > height {
+		displayBytes = bytes.Join(lines[:height], []byte("\n"))
+	}
+	return ansi.ArtOverflowsHeight(displayBytes, width, height)
 }
 
 // wrapToastAnchor moves the anchor in res to where it lands on a terminal that
@@ -326,9 +399,12 @@ func (e *MenuExecutor) toastText(t toast.Toast) string {
 	return ansi.EscapeScreenPipeCodes(text)
 }
 
-// drawToastOverlay writes t at the configured position, leaving the cursor and colours
-// where they were, and reports whether the row cut it short.
-func (e *MenuExecutor) drawToastOverlay(s ssh.Session, w io.Writer, sess *session.BbsSession, t toast.Toast) (clipped bool, err error) {
+// drawToastOverlay writes t at the configured position, leaving the cursor and
+// colours where they were, and reports the row it took and whether the row cut
+// it short. At a configured position the rest of the row is cleared, so the
+// toast reads over whatever was there; at a menu's anchor only the toast's own
+// cells are written, since the sysop laid out the art around it.
+func (e *MenuExecutor) drawToastOverlay(s ssh.Session, w io.Writer, sess *session.BbsSession, t toast.Toast) (row int, clipped bool, err error) {
 	width, height := sess.TermSize()
 	if width <= 0 {
 		width = 80
@@ -344,15 +420,17 @@ func (e *MenuExecutor) drawToastOverlay(s ssh.Session, w io.Writer, sess *sessio
 		_, konfigWidth, _ := sess.ToastViewer()
 		cfgCol = toastCenterCol(columnWidth(ansi.StripAnsi(full), utf8.ValidString(full), mode), konfigWidth, width)
 	}
+	clearRest := "\x1b[K"
 	if r, c, ok := sess.ToastAnchor(); ok {
 		cfgRow, cfgCol = r, c
+		clearRest = ""
 	}
 	row, col := toastPlacement(cfgRow, cfgCol, width, height)
 	// One column short: a character in the last cell of the last row can scroll
 	// the screen on some terminals.
 	line := clipColumns(full, width-col, mode)
-	out := "\x1b7" + ansi.MoveCursor(row, col) + "\x1b[0m\x1b[K" + line + "\x1b[0m\x1b8"
-	return line != full, terminalio.WriteProcessedBytes(w, []byte(out), mode)
+	out := "\x1b7" + ansi.MoveCursor(row, col) + "\x1b[0m" + clearRest + line + "\x1b[0m\x1b8"
+	return row, line != full, terminalio.WriteProcessedBytes(w, []byte(out), mode)
 }
 
 // settleOverlayToast records that t has been drawn: it leaves its queue, unless
