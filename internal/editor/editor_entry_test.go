@@ -9,6 +9,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor/testterm"
+	"github.com/ViSiON-3/vision-3-bbs/internal/winch"
 	"github.com/gliderlabs/ssh"
 )
 
@@ -319,4 +320,83 @@ func TestResolveEditorPaths(t *testing.T) {
 			t.Errorf("resolveEditorPaths() = (%q, %q), want (%q, %q)", menu, cfg, gone, configDir)
 		}
 	})
+}
+
+// With the session loop owning the window channel through winch, as it does on
+// a live board, the loop and the editor each see every change rather than
+// competing for it (#883).
+func TestRunEditorWithMetadataSharesResizesWithTheSessionLoop(t *testing.T) {
+	installEditorConfig(t)
+	tt := testterm.New(100, 30)
+	sess := &ptySession{
+		Session: testterm.NewSession(tt, ""),
+		width:   80, height: 24,
+		resize: make(chan ssh.Window),
+	}
+	hub, loop := winch.Own(sess, sess.resize)
+	defer hub.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := RunEditorWithMetadata("", sess, tt, ansi.OutputModeUTF8,
+			"Hello", "bob", "alice", false, "", "", "", "", false, nil, nil)
+		done <- err
+	}()
+	// The Hub takes a change at once, so wait for the editor to be up and
+	// subscribed before sending any: its echo of a key shows it is. The key
+	// also gives the message a body, so CTRL-Z saves without asking.
+	sess.Send("x")
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(tt.Snapshot(), "x") {
+		if time.Now().After(deadline) {
+			t.Fatalf("editor never echoed the key:\n%s", tt.Snapshot())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	for _, size := range [][2]int{{90, 26}, {100, 28}} {
+		select {
+		case sess.resize <- ssh.Window{Width: size[0], Height: size[1]}:
+		case <-time.After(5 * time.Second):
+			t.Fatal("window change was not taken")
+		}
+		// The session loop's copy arrives whether or not the editor is reading.
+		select {
+		case w := <-loop:
+			if w.Width != size[0] {
+				t.Errorf("session loop got %+v, want width %d", w, size[0])
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("session loop never saw the %dx%d change", size[0], size[1])
+		}
+	}
+	// And the editor applied the last one: its footer is on row 27.
+	deadline = time.Now().Add(5 * time.Second)
+	for !strings.HasPrefix(tt.Row(27), " └─▌Test Board▐") {
+		if time.Now().After(deadline) {
+			t.Fatalf("editor never applied the 100x28 change:\n%s", tt.Snapshot())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	sess.Send("\x1a")
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("editor did not return after CTRL-Z")
+	}
+	// The editor's subscription ended with it: a change now reaches the loop only.
+	select {
+	case sess.resize <- ssh.Window{Width: 80, Height: 24}:
+	case <-time.After(5 * time.Second):
+		t.Fatal("window change was not taken after the editor returned")
+	}
+	select {
+	case <-loop:
+	case <-time.After(5 * time.Second):
+		t.Fatal("session loop did not see a change after the editor returned")
+	}
 }

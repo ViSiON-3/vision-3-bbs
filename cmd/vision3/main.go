@@ -48,6 +48,7 @@ import (
 	v3net "github.com/ViSiON-3/vision-3-bbs/internal/v3net"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/leaf"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
+	"github.com/ViSiON-3/vision-3-bbs/internal/winch"
 )
 
 var (
@@ -1122,7 +1123,11 @@ func sessionHandler(s ssh.Session) {
 	// --- Handle Window Size Changes ---
 	// Forward resize events to both our atomic values and the term.Terminal.
 	// Guard against nil winCh (ranging a nil channel blocks forever).
+	// This loop owns the transport's one channel through a winch.Hub; the
+	// editor, doors and transfers subscribe to the Hub for their own copies.
 	if isPty && winCh != nil {
+		hub, resizes := winch.Own(s, winCh)
+		defer hub.Close()
 		go func() {
 			type transferChecker interface{ IsTransferActive() bool }
 			var pendingResize atomic.Bool
@@ -1158,7 +1163,7 @@ func sessionHandler(s ssh.Session) {
 					}()
 				})
 			}
-			for win := range winCh {
+			for win := range resizes {
 				slog.Debug("window resize event", "node", nodeID, "width", win.Width, "height", win.Height)
 				if win.Width > 0 {
 					termWidth.Store(int32(win.Width))

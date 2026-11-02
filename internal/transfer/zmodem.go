@@ -19,6 +19,8 @@ import (
 	"github.com/creack/pty"
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/winch"
 )
 
 // readInterrupter is implemented by session adapters that support unblocking
@@ -555,11 +557,14 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ptyReq, winCh, isPty := s.Pty()
+	ptyReq, _, isPty := s.Pty()
 	if !isPty {
 		slog.Warn("no PTY available for session, falling back to direct mode", "cmd", cmd.Path)
 		return RunCommandDirect(ctx, s, cmd, stdinIdleTimeout)
 	}
+	// Window changes come through winch, so the session loop sees them too.
+	winCh, stopResizes := winch.Subscribe(s)
+	defer stopResizes()
 
 	slog.Debug("starting command with PTY", "cmd", cmd.Path)
 	ptmx, err := pty.Start(cmd)
