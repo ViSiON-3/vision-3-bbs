@@ -249,7 +249,8 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// var numericMatchAction string // Moved declaration up
 
 		// 4. Determine Input Mode / Method
-		e.setToastAnchor(nodeNumber, ansiProcessResult, menuRec.GetClrScrBefore())
+		e.setToastAnchor(nodeNumber, ansiProcessResult, menuRec.GetClrScrBefore(),
+			menuArtScrolls(ansiProcessResult.DisplayBytes, st.termWidth, st.termHeight))
 		input, act, retErr := st.readMenuInput(ansiProcessResult, menuRec)
 		e.clearToastAnchor(nodeNumber)
 		switch act {

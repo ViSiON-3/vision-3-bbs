@@ -8,6 +8,12 @@
 // Term is not a terminal emulator. It models the subset of ANSI that
 // internal/editor emits and records everything else in Unhandled, so a test can
 // catch output the double does not understand rather than silently passing.
+//
+// One piece of the BBS relies on it outside tests: toast delivery in
+// internal/menu replays a session's screen through a Term to redraw the one row
+// an overlay covered, and falls back to replaying the whole screen when
+// Unhandled is not empty. Anything added to the model must therefore be right,
+// not merely good enough for an assertion.
 package testterm
 
 import (
@@ -24,9 +30,42 @@ type Cell struct {
 	Rune   rune
 	Fg, Bg int
 	Bold   bool
+	Blink  bool
 }
 
 func blankCell() Cell { return Cell{Rune: ' ', Fg: -1, Bg: -1} }
+
+// withRune is the pen's attributes on r.
+func (c Cell) withRune(r rune) Cell {
+	c.Rune = r
+	return c
+}
+
+// SGR returns the escape sequence that sets a terminal's pen to c's attributes
+// from any state: a reset followed by each attribute c has.
+func (c Cell) SGR() string {
+	var sb strings.Builder
+	sb.WriteString("\x1b[0")
+	if c.Bold {
+		sb.WriteString(";1")
+	}
+	if c.Blink {
+		sb.WriteString(";5")
+	}
+	if c.Fg >= 0 {
+		fmt.Fprintf(&sb, ";%d", c.Fg)
+	}
+	if c.Bg >= 0 {
+		fmt.Fprintf(&sb, ";%d", c.Bg)
+	}
+	sb.WriteString("m")
+	return sb.String()
+}
+
+// SameAttrs reports whether c and o differ only in Rune.
+func (c Cell) SameAttrs(o Cell) bool {
+	return c.Fg == o.Fg && c.Bg == o.Bg && c.Bold == o.Bold && c.Blink == o.Blink
+}
 
 // Option configures a Term at construction.
 type Option func(*Term)
@@ -103,6 +142,27 @@ func (t *Term) rowLocked(row int) string {
 		sb.WriteRune(c.Rune)
 	}
 	return strings.TrimRight(sb.String(), " ")
+}
+
+// RowCells returns a copy of a 1-based row's cells, attributes included. An
+// out-of-range row returns nil.
+func (t *Term) RowCells(row int) []Cell {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if row < 1 || row > t.height {
+		return nil
+	}
+	out := make([]Cell, t.width)
+	copy(out, t.cells[row-1])
+	return out
+}
+
+// Pen returns the current SGR state: what the next character written would be
+// drawn with. Its Rune is unused.
+func (t *Term) Pen() Cell {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.pen
 }
 
 // Cell returns the cell at a 1-based row and column. Out-of-range coordinates
@@ -193,7 +253,7 @@ func (t *Term) putRune(r rune) {
 		t.row = t.height
 	}
 	if t.row >= 1 && t.row <= t.height && t.col >= 1 && t.col <= t.width {
-		t.cells[t.row-1][t.col-1] = Cell{Rune: r, Fg: t.pen.Fg, Bg: t.pen.Bg, Bold: t.pen.Bold}
+		t.cells[t.row-1][t.col-1] = t.pen.withRune(r)
 	}
 	if t.col >= t.width {
 		t.wrapPending = true

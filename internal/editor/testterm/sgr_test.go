@@ -50,33 +50,33 @@ func TestSGRIsNotRecordedAsUnhandled(t *testing.T) {
 	}
 }
 
-// Unknown SGR parameters (blink, reverse, 256-colour) must not vanish
-// silently: internal/ansi's |B12 pipe code expands to
-// ESC[104m ESC[48;5;12m, and the 48;5;12 half of that is unmodelled.
+// Unknown SGR parameters (reverse, 256-colour) must not vanish silently:
+// internal/ansi's |B12 pipe code expands to ESC[104m ESC[48;5;12m, and the
+// 48;5;12 half of that is unmodelled. It is recorded whole, so its 5 is not
+// taken for blink and the pen is left as it was.
 func TestSGRUnknownParametersAreRecorded(t *testing.T) {
 	tt := New(20, 3)
-	tt.Write([]byte("\x1b[5mA"))
-	if got := tt.Unhandled(); len(got) != 1 || got[0] != "SGR 5" {
-		t.Errorf("Unhandled() after ESC[5m = %q, want [%q]", got, "SGR 5")
-	}
-
-	tt2 := New(20, 3)
-	tt2.Write([]byte("\x1b[7mA"))
-	if got := tt2.Unhandled(); len(got) != 1 || got[0] != "SGR 7" {
+	tt.Write([]byte("\x1b[7mA"))
+	if got := tt.Unhandled(); len(got) != 1 || got[0] != "SGR 7" {
 		t.Errorf("Unhandled() after ESC[7m = %q, want [%q]", got, "SGR 7")
 	}
 
-	tt3 := New(20, 3)
-	tt3.Write([]byte("\x1b[48;5;12mA"))
-	want := []string{"SGR 48", "SGR 5", "SGR 12"}
-	got := tt3.Unhandled()
-	if len(got) != len(want) {
-		t.Fatalf("Unhandled() after ESC[48;5;12m = %q, want %q", got, want)
+	tt2 := New(20, 3)
+	tt2.Write([]byte("\x1b[48;5;12mA"))
+	if got := tt2.Unhandled(); len(got) != 1 || got[0] != "SGR 48;5;12" {
+		t.Errorf("Unhandled() after ESC[48;5;12m = %q, want [%q]", got, "SGR 48;5;12")
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("Unhandled()[%d] = %q, want %q", i, got[i], want[i])
-		}
+	if c := tt2.Cell(1, 1); c.Blink || c.Bg != -1 {
+		t.Errorf("Cell(1,1) = %+v, want no blink and the default background", c)
+	}
+
+	tt3 := New(20, 3)
+	tt3.Write([]byte("\x1b[1;38;2;10;20;30;5mA"))
+	if got := tt3.Unhandled(); len(got) != 1 || got[0] != "SGR 38;2;10;20;30" {
+		t.Errorf("Unhandled() after a truecolour SGR = %q, want [%q]", got, "SGR 38;2;10;20;30")
+	}
+	if c := tt3.Cell(1, 1); !c.Bold || !c.Blink {
+		t.Errorf("Cell(1,1) = %+v, want the bold and blink around the truecolour form applied", c)
 	}
 }
 
@@ -109,5 +109,42 @@ func TestSGRBoldOffAndDefaultColours(t *testing.T) {
 	}
 	if c := tt.Cell(1, 4); c.Bg != -1 {
 		t.Errorf("Cell(1,4) = %+v, want Bg default", c)
+	}
+}
+
+// Blink is the attribute BBS art uses for bright backgrounds, so it is modelled
+// and reproduced by SGR rather than recorded as unhandled.
+func TestSGRBlinkIsModelledAndReproduced(t *testing.T) {
+	tt := New(20, 3)
+	tt.Write([]byte("\x1b[5;33;41mA\x1b[25mB"))
+
+	a := tt.Cell(1, 1)
+	if !a.Blink || a.Fg != 33 || a.Bg != 41 {
+		t.Errorf("Cell(1,1) = %+v, want blink with Fg=33 Bg=41", a)
+	}
+	if b := tt.Cell(1, 2); b.Blink {
+		t.Errorf("Cell(1,2) = %+v, want blink off", b)
+	}
+	if got := tt.Unhandled(); len(got) != 0 {
+		t.Errorf("Unhandled = %q", got)
+	}
+
+	// SGR sets a fresh terminal's pen to exactly the cell's attributes.
+	again := New(20, 3)
+	again.Write([]byte(a.SGR() + "X"))
+	if x := again.Cell(1, 1); !x.SameAttrs(a) {
+		t.Errorf("after %q cell = %+v, want attrs of %+v", a.SGR(), x, a)
+	}
+	if got := blankCell().SGR(); got != "\x1b[0m" {
+		t.Errorf("blank SGR = %q", got)
+	}
+	if got := tt.Pen(); got.Blink || got.Fg != 33 || got.Bg != 41 {
+		t.Errorf("Pen = %+v, want Fg=33 Bg=41 with blink off", got)
+	}
+	if cells := tt.RowCells(1); len(cells) != 20 || cells[0].Rune != 'A' || cells[1].Rune != 'B' {
+		t.Errorf("RowCells(1) = %+v", cells)
+	}
+	if cells := tt.RowCells(4); cells != nil {
+		t.Errorf("RowCells(4) = %+v, want nil", cells)
 	}
 }
