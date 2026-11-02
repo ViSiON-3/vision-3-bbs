@@ -274,13 +274,13 @@ ports and hosts, SSH host keys, turning SSH or telnet on or off, and the
 logging directory and rolling settings. The full list is under
 [Applying Configuration Changes](configuration/configuration.md#applying-configuration-changes).
 
-## Coming from a version older than v0.9.4
+## Coming from a version older than v0.9.5
 
-The worked example below covers one step, v0.9.4 to v0.9.5. Upgrade notes are
+The worked example below covers one step, v0.9.5 to v0.9.6. Upgrade notes are
 cumulative: coming from further back, work through each release you are
 skipping, oldest first, before the one below. The notes for v0.9.0 to v0.9.3
-are in the guide as it stood at v0.9.3, and the v0.9.4 notes as it stood at
-v0.9.4:
+are in the guide as it stood at v0.9.3, and the later ones in the guide as it
+stood at each release:
 
 | Upgrading to | What needs doing by hand |
 | ------------ | ------------------------ |
@@ -289,34 +289,26 @@ v0.9.4:
 | [v0.9.2](https://github.com/ViSiON-3/vision-3-bbs/blob/v0.9.3/docs/sysop/getting-started/upgrading.md#worked-example-upgrading-to-v092) | Custom `login.json`: put `SYSOPNOTICES` and `NMAILSCAN` first |
 | [v0.9.3](https://github.com/ViSiON-3/vision-3-bbs/blob/v0.9.3/docs/sysop/getting-started/upgrading.md#worked-example-upgrading-to-v093) | Two or more FTN networks: each needed its own binkd outbound, which v0.9.4 now does for you |
 | [v0.9.4](https://github.com/ViSiON-3/vision-3-bbs/blob/v0.9.4/docs/sysop/getting-started/upgrading.md#worked-example-upgrading-to-v094) | Run `v3mail readdress --all` once; copy the changed menu files; repoint `GOTO:USERCFG` and removed `CFG_*` commands at `RUN:USERCONFIG` |
+| [v0.9.5](https://github.com/ViSiON-3/vision-3-bbs/blob/v0.9.5/docs/sysop/getting-started/upgrading.md#worked-example-upgrading-to-v095) | Copy `templates/configs/badusers.txt` into `configs/`; copy the changed menu files; review `configs/blocklist.txt`, because past auto-blocks now take effect |
 
 Where those notes say to restart after a config edit, see
 [Restarting](#restarting) instead: most files have reloaded on save since
 v0.9.2.
 
-## Worked example: upgrading to v0.9.5
+## Worked example: upgrading to v0.9.6
 
-Deploy the new programs, run `./vision3 doctor`, and restart as usual. Then
-copy `configs/badusers.txt` into place, and on an instance or bundle install
-copy the few menu files below. The rest of this section is behaviour that
-changed and is worth knowing about.
+Deploy the new programs, run `./vision3 doctor`, and restart as usual. Nothing
+in `configs/` has to change: every new setting has a default, and stored data
+(users, the V3Net hub and dedup databases) is migrated the first time the new
+version opens it. On an instance or bundle install, copy the menu files below.
+The rest of this section is behaviour that changed and is worth knowing about.
 
 `bin/binkd` and `bin/sexyz` are unchanged. Copy `wfc` along with the BBS:
-snoop, type-in and split-screen chat need both updated. See
-[WFC Console](how-to-guides/wfc-console.md).
+choosing and switching chat screens with **Alt-S** needs both updated. An
+older console against the new BBS still works, and chats on the default
+screen.
 
-### 1. Add `configs/badusers.txt`
-
-Signup now refuses the handles listed in `configs/badusers.txt`. A new install
-gets the template; an upgraded board does not, and `vision3 doctor` warns
-*bad user names ... is missing* until it does. Copy
-`templates/configs/badusers.txt` into `configs/` (it blocks `root`, `admin*`,
-`*sysop*`, `guest` and `anonymous`) and add your own. The path is
-`badUsersPath` in `config.json`, a sixth item, **Bad User Names**, under
-Access & Security in `./config`. See
-[Bad user names](configuration/configuration.md#bad-user-names).
-
-### 2. Bring the menu set up to date
+### 1. Bring the menu set up to date
 
 A **repo-in-place** install gets these from `git pull`. An **instance** or
 **bundle** install does not update `menus/`; copy these from the repo's
@@ -325,73 +317,86 @@ A **repo-in-place** install gets these from `git pull`. An **instance** or
 
 | Files | Why |
 | ----- | --- |
-| `cfg/MSGMENU.CFG`, `ansi/MSGMENU.ANS` | New **T** key, Twit List (`RUN:CFG_TWITLIST`); **I** is kept as an alias |
-| `ansi/SPONSORM.ANS`, `ansi/CHATHEADER.ANS`, `ansi/YOURSTAT.ANS` | Redrawn or corrected; the chat header gains the Users and Mentions counters |
-| `theme.json` | New `chatSysopColor` and `chatUserColor` for split-screen chat |
-| `mnu/DOORMENU.MNU`, `templates/DOORMENU*`, `templates/DOORCAT.*` | New: the [generated door menu](doors/generated-menu.md), needed only if you bind `RUN:DOORMENU` |
-| `mnu/TWITLIST.MNU`, `templates/TWITLIST.*` | New: the Twit List screen. Optional; missing files fall back to built-in copies |
+| `ansi/MAIN.ANS`, `ansi/FILEM.ANS`, `ansi/DOORSM.ANS`, `ansi/MSGMENU.ANS` | Redrawn; the message menu now shows **T** for the Twit List |
+| `cfg/MSGMENU.CFG` | Binds **T** to the Twit List to match the art; **I** still works |
+| `ansi/V3CHAT1.ANS`, `cfg/V3CHAT1.json` | New: the default split-screen chat screen |
+| `ansi/V2CHAT1.ANS`, `cfg/V2CHAT1.json`, `ansi/V2CHAT2.ANS`, `cfg/V2CHAT2.json` | New: ViSiON/2's two chat screens, picked with **Alt-S** in the WFC console |
+| `theme.json` | New `sysopChatScreen`, set to `V3CHAT1` |
+| `templates/message_headers/MSGHDR.1.ans`, `.2.ans`, `.8.ans` | Styles 2 and 8 now show the message total; style 1 shows the reply counts |
 
-To put the Twit List on a customised message menu, add:
-
-```json
-{
-    "KEYS": "I",
-    "CMD": "RUN:CFG_TWITLIST",
-    "ACS": "*",
-    "HIDDEN": false,
-    "NODE_ACTIVITY": "Editing Twit List"
-}
-```
-
-It is also item **M** of the user **K** editor. Twit Lists are on unless
-`twitListEnabled` is `false` in `config.json`. See
-[Twit List](messages/twit-list.md).
+`templates/USERLIST.icy` was unused and is gone from the set; delete your copy
+or leave it. Without `sysopChatScreen` in your `theme.json`, sysop chat keeps
+the built-in layout it had before. You can also set it from the config
+editor's new **C. Theme** page, which writes the overlay copy in `menus.d/`.
+See [Chat screens](how-to-guides/wfc-console.md#chat-screens).
 
 ### What else changed
 
-- **Auto-blocked IPs now block.** An IP locked out for failed logins has
-  always been appended to your blocklist file with an `# auto-blocked`
-  comment, but the comment made the loader skip the line, so the block was
-  lost at the next reload. Those lines are now honoured. Review
-  `configs/blocklist.txt` after upgrading: every IP auto-blocked in the past
-  is blocked for real from now on. Remove the line to unblock one.
-- **Encoding is detected at connect.** A caller whose encoding is unset is
-  now on Auto and detected every call, and the first-login UTF-8/CP437
-  prompt is gone. A caller who saved `CP437` on a UTF-8 terminal before this
-  release keeps that saved value and sees garbled art; tell them to open
-  **K** and press **Encoding** until it reads `Auto (...)`. See
-  [Encoding](advanced/encoding.md).
-- **Scheduled events wait instead of being dropped.** An event that fired
-  while every slot was busy used to be skipped with a warning. It now waits
-  for a slot, for up to its timeout, so a nightly purge that shared a minute
-  with the hub polls finally runs. Skips are counted in the event history
-  and the WFC Events tab. The template's nightly sequence changed too: the
-  fix runs at `3 2 * * *` and purge and pack follow it with `run_after`. If
-  you enabled the older examples, compare yours with
-  [Nightly Message Base Maintenance](advanced/event-scheduler.md#nightly-message-base-maintenance).
-- **Purge limits that nobody enforces are reported.** With `max_messages` or
-  `max_age` set on any area and no enabled event running `v3mail purge`, the
-  BBS logs a warning at startup and `./config` notes it when you set a limit.
-  If your areas have grown past their limits, this is why.
-- **Saves no longer overwrite each other.** `./config`, `helper` and the BBS
-  lock the shared config files and merge their changes, so a conference added
-  by `helper ftnsetup` survives a save in the editor you left open. You will
-  see `<file>.lock` sidecars appear in `configs/` while something is writing;
-  they are harmless and git-ignored. The editor now logs to
-  `data/logs/config.log`.
-- **Quote banners.** A `strings.json` without `quoteTopNet` gets `^N wrote:`
-  above quoted network text; a key that is present but blank means no
-  banner. The shipped local quote banners are now `[^N Said]` and
-  `[^N Done]`; an existing board keeps its own. `konfigAutoSigChoice` is
-  upgraded automatically unless you edited it, and `twitListEnabled` absent
-  from `config.json` means Twit Lists are on.
-- **Strings can run scripts or show files.** A `strings.json` value starting
-  with `!CODE` runs a `v3_script` door in place of its text, and one starting
-  with `%file.ext` shows an ANSI file first. Nothing changes until you use
-  it. The user **K** form's text now comes from new `konfig*` strings, all
-  with fallbacks. See [String Editor](advanced/string-editor.md).
-- **IPv6 listener hosts.** `sshHost`, `telnetHost` and the V3Net hub host
-  accept `::`, `::1` or a bracketed form. Nothing to do unless you want it.
-- **FTN own address follows into `binkd.conf`.** Correcting a network's own
-  address in the wizard or under Echomail Networks now rewrites the matching
-  `address` line in `binkd.conf`, which used to need a hand edit.
+- **Three wrong passwords drop the call.** The third wrong password on one
+  call shows `NICETRY.ANS` and hangs up, as BBSes traditionally did, instead
+  of drawing the login screen again. The count is `maxLoginTries` in
+  `config.json` (default `3`), separate from `maxFailedLogins`, which still
+  locks the IP out. An IP that is already locked out is now dropped rather
+  than kept at the prompt.
+- **Pipes are refused in new handles and real names.** A handle like `|CL`
+  used to run its screen code on other callers' screens. Existing accounts
+  keep their names and can still log in. Text that callers, hubs or other
+  boards set is now escaped wherever it is shown, so only its colour codes
+  act. This applies to anything passed into a `strings.json` format as well:
+  a `|CR` in a conference name now prints as text. See
+  [Pipes in Names](users/user-management.md#pipes-in-names).
+- **Message text is filtered on the way to the screen.** Bodies, subjects,
+  senders and recipients no longer pass terminal queries, window titles, mode
+  changes or C0/C1 controls to the caller; colour and erase-in-line still do.
+  A plain message that moves the cursor or clears the screen is now drawn as
+  ANSI art, at 80 columns without word wrap. Stored messages are unchanged.
+  Offline QWK packets get the same filter, and scripts get a new `text` field
+  alongside the raw `body`.
+- **Reply threads in the reader.** **T** in the reader now opens a thread
+  menu in a pane under the header, instead of searching by subject, and the
+  message list opens threaded; **T** in the list switches back to flat. Each
+  caller can turn the pane off with **Thread View** in Konfig. See
+  [Listing Messages](messages/message-areas.md#listing-messages).
+- **Quotes reflow in the reader**, and the editor's Backspace and Delete
+  refill a paragraph from its top line. New boards quote with a leading
+  space; existing boards keep their own `QuotePrefix`, as described under
+  [Changed shipped strings](#changed-shipped-strings).
+- **Toasts.** Node pages reach a caller wherever they are, as a line on the
+  bottom row, and a page they don't see before logging off waits for their
+  next login. Logon and logoff announcements are available but off: turn on
+  `toastLogons` / `toastLogoffs` under **System Setup → Toasts** in
+  `./config`. See [Toasts](users/login-sequence.md#toasts).
+- **The config editor moved some items.** **7. Door Programs** is now a
+  sub-menu holding **Doors** and **Door Categories**; the separate **C. Door
+  Categories** item is gone, and **C** is now **Theme**. WFC Access and the
+  page settings moved to **Access & Security → WFC & Paging**, and
+  **New User Voting** is now **New Users & Voting**.
+- **Screen width is at least 80.** A caller's stored width under 80 is raised
+  to 80 when `users.json` loads, and Konfig accepts 80 to 255.
+- **V3Net messages and hub replies are signed.** Messages carry their
+  author's signature, the hub signs its replies, and a leaf pins the
+  coordinator and hub keys on first contact, writing them to `v3net.json`.
+  All of it works with older hubs and leaves, and every "require" setting is
+  off, so hubs and leaves can upgrade in any order. If a pinned key later
+  changes, the leaf pauses that network and sysops get a login notice until
+  the new key is accepted. A coordinator moving the network to a new key
+  should use a signed handover, which leaves follow without the sysop. See
+  [Coordinator Key Pinning](v3net/nal.md#coordinator-key-pinning) and
+  [Hub signatures](v3net/configuration.md#hub-signatures).
+- **V3Net hubs refuse bad names and text.** A hub now refuses a subscribe
+  whose BBS name has pipes or control characters or is over 64 characters,
+  and a NAL or proposal with such text in an area. Updated leaves clean their
+  own board name before sending it, and a node already registered can
+  re-subscribe under the name the hub holds.
+- **The QWK API pairs devices.** A password login now only pairs a device;
+  packets need a device login, which signs a challenge with a key kept on the
+  phone. The API also follows the BBS blocklist, login lockouts and
+  `logonLevel`, and a password change ends every session and unpairs every
+  device. No mobile client had shipped, so nothing deployed breaks. Callers
+  can list and unpair devices with **O** in Konfig. See
+  [Paired devices](messages/qwk-api.md#paired-devices).
+- **FidoNet points leave SEEN-BY and PATH alone.** A point used to stamp its
+  boss's address into both, which hubs could reject as a loop. Headers of
+  mail labelled `CHRS: CP866` (and CP1251, KOI8-R, KOI8-U) are now decoded
+  and exported in that charset; headers stored before the upgrade stay as
+  they were.
