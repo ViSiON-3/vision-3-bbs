@@ -966,6 +966,13 @@ func (ih *InputHandler) parseCSISequence() (int, error) {
 		if err != nil {
 			break
 		}
+		// A CSI sequence holds only bytes 0x20-0x7E. Anything else, such as
+		// Ctrl-Z or Enter typed after a cut-off sequence, abandons it and is
+		// the next key, not part of this one.
+		if b < 0x20 || b > 0x7E {
+			ih.unreadByte(b)
+			break
+		}
 		sequence = append(sequence, b)
 		if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || b == '~' {
 			break

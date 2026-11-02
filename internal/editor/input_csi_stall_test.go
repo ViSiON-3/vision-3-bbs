@@ -62,3 +62,29 @@ func TestBareEscStillTimesOut(t *testing.T) {
 		t.Errorf("ReadKey = (%d, %v), want (KeyEsc, nil)", key, err)
 	}
 }
+
+// A byte that can't be part of a CSI sequence, such as Ctrl-Z (SUB) or Enter,
+// abandons it and is read as the next key, rather than being swallowed while
+// the sequence waits for its final byte.
+func TestControlByteAbandonsCSISequence(t *testing.T) {
+	for name, chunks := range map[string][]string{
+		"together":     {"\x1b[5\x1a"},
+		"150 ms later": {"\x1b[5", "\x1a"},
+		"enter":        {"\x1b[5\r"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ih := NewInputHandler(&stallingReader{chunks: chunks, pause: 150 * time.Millisecond})
+			first, err := ih.ReadKey()
+			if err != nil || first != int(KeyEsc) {
+				t.Fatalf("first key = (%d, %v), want the abandoned sequence as KeyEsc", first, err)
+			}
+			want := int(KeyCtrlZ)
+			if name == "enter" {
+				want = int(KeyEnter)
+			}
+			if second, err := ih.ReadKey(); err != nil || second != want {
+				t.Errorf("second key = (%d, %v), want %d", second, err, want)
+			}
+		})
+	}
+}
