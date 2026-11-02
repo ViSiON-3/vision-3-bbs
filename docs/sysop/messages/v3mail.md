@@ -104,7 +104,7 @@ the menu entry per hub).
 | Command    | Description                                                                |
 | ---------- | -------------------------------------------------------------------------- |
 | `toss`     | Unpack inbound ZIP bundles and toss `.pkt` files into JAM message bases, storing each message as received; deliver inbound file echo files (`.TIC`) into their file areas and compile nodelists among them; with **Auto-Create** on, create areas for unknown echoes |
-| `scan`     | Scan JAM bases for new outbound echomail and netmail and create staging `.pkt` files; From, To and Subject go out as CP437 unless the message declares `CHRS: UTF-8` |
+| `scan`     | Scan JAM bases for new outbound echomail and netmail and create staging `.pkt` files; From, To and Subject go out in the set the message's `CHRS` names (UTF-8, or Cyrillic for CP866, CP1251 and KOI8), and as CP437 otherwise |
 | `ftn-pack` | Pack staged `.pkt` files into ZIP bundles for binkd; writes BSO flow files |
 
 ### QWK Network Commands
