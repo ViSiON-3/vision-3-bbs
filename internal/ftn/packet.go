@@ -551,13 +551,13 @@ func ParseFTNDateTime(s string) (time.Time, error) {
 // software (e.g., Synchronet) may send UTF-8 encoded strings, signaled by a
 // CHRS kludge value containing "UTF-8" (e.g., "UTF-8 4").
 //
-// If chrs contains "UTF-8" (case-insensitive), the string is assumed to be
-// valid UTF-8 and is returned unchanged. Otherwise bytes 0x80–0xFF are read in
+// If chrs declares UTF-8 ("UTF-8 4" or "UTF8 4", case-insensitive), the
+// string is assumed to be valid UTF-8 and is returned unchanged. Otherwise bytes 0x80–0xFF are read in
 // the set chrs names, where it is one the reader also decodes bodies by
 // (ansi.NamedCharmap: CP866, +7_FIDO, CP1251, KOI8-R, KOI8-U), and as CP437
 // for any other label or none. "CHRS: CP866 2" with "\x8f\xe0\xa8" gives "При".
 func DecodeFTNString(s, chrs string) string {
-	if strings.Contains(strings.ToUpper(chrs), "UTF-8") {
+	if declaresUTF8(chrs) {
 		return s
 	}
 	// Quick path: pure ASCII needs no conversion.
@@ -582,16 +582,15 @@ func DecodeFTNString(s, chrs string) string {
 // to the bytes written in a packed message header. It is the inverse of
 // DecodeFTNString for export.
 //
-// If chrs contains "UTF-8" (case-insensitive) the message declares UTF-8 and
-// s is returned unchanged. Otherwise s is encoded in the set chrs names, as
-// DecodeFTNString reads it, so a message tossed in CP866 goes out in CP866;
-// with any other label or none that is CP437, the FTS default: "Café ─ news"
-// becomes "Caf\x82 \xc4 news". A rune the set has no byte for becomes '?'. A string
-// that is not valid UTF-8 is assumed to be CP437 bytes already and is
-// returned unchanged. Encoding before the packet writer cuts the fields to
+// If chrs declares UTF-8 (as for DecodeFTNString) s is returned unchanged.
+// Otherwise s is encoded in the set chrs names, as DecodeFTNString reads it,
+// so a message tossed in CP866 goes out in CP866; with any other label or none
+// that is CP437, the FTS default: "Café ─ news" becomes "Caf\x82 \xc4 news".
+// A rune the set has no byte for becomes '?'. A string that is not valid UTF-8
+// is assumed to be in the set already and is returned unchanged. Encoding before the packet writer cuts the fields to
 // their byte limits keeps a multibyte character from being split.
 func EncodeFTNString(s, chrs string) string {
-	if strings.Contains(strings.ToUpper(chrs), "UTF-8") || !utf8.ValidString(s) {
+	if declaresUTF8(chrs) || !utf8.ValidString(s) {
 		return s
 	}
 	ascii := true
@@ -614,6 +613,13 @@ func EncodeFTNString(s, chrs string) string {
 		}
 	}
 	return string(out)
+}
+
+// declaresUTF8 reports whether a CHRS kludge value declares UTF-8: it names
+// UTF-8 under either spelling the reader accepts for bodies ("UTF-8 4",
+// "UTF8 4"), or contains "UTF-8" anywhere, as headers have long been read.
+func declaresUTF8(chrs string) bool {
+	return ansi.IsUTF8Charset(ansi.CharsetName(chrs)) || strings.Contains(strings.ToUpper(chrs), "UTF-8")
 }
 
 // headerCharmap returns the single-byte set header fields are read and written

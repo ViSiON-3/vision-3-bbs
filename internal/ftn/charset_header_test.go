@@ -46,11 +46,14 @@ func TestHeaderStringsDefaultToCP437(t *testing.T) {
 			t.Errorf("EncodeFTNString with %q = %q", chrs, got)
 		}
 	}
-	if got := DecodeFTNString("Café", "UTF-8 4"); got != "Café" {
-		t.Errorf("UTF-8 label: %q", got)
-	}
-	if got := EncodeFTNString("Café", "UTF-8 4"); got != "Café" {
-		t.Errorf("UTF-8 label on export: %q", got)
+	// Both spellings of the UTF-8 label keep the bytes, as for bodies.
+	for _, chrs := range []string{"UTF-8 4", "UTF8 4", "utf8 4"} {
+		if got := DecodeFTNString("Café", chrs); got != "Café" {
+			t.Errorf("%q label: %q", chrs, got)
+		}
+		if got := EncodeFTNString("Café", chrs); got != "Café" {
+			t.Errorf("%q label on export: %q", chrs, got)
+		}
 	}
 	// A character the set has no byte for still becomes '?'.
 	if got := EncodeFTNString("日本", "CP866 2"); got != "??" {
