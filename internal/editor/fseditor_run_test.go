@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -142,8 +143,9 @@ func TestForwardResizes(t *testing.T) {
 	out := make(chan ssh.Window, 1)
 	done := make(chan struct{})
 	stopped := make(chan struct{})
+	var wakes atomic.Int32
 	go func() {
-		forwardResizes(in, out, done)
+		forwardResizes(in, out, done, func() { wakes.Add(1) })
 		close(stopped)
 	}()
 
@@ -167,6 +169,10 @@ func TestForwardResizes(t *testing.T) {
 			break
 		}
 	}
+	// Each change queued woke the key wait, so a toast dwell ends for it.
+	if got := wakes.Load(); got < 5 {
+		t.Errorf("wake called %d times for 6 changes", got)
+	}
 
 	close(done)
 	select {
@@ -180,7 +186,7 @@ func TestForwardResizes(t *testing.T) {
 	close(in2)
 	finished := make(chan struct{})
 	go func() {
-		forwardResizes(in2, out, make(chan struct{}))
+		forwardResizes(in2, out, make(chan struct{}), nil)
 		close(finished)
 	}()
 	select {

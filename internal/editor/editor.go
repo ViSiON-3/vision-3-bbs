@@ -188,7 +188,7 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			forwardResizes(winCh, resizes, done)
+			forwardResizes(winCh, resizes, done, editor.input.Interrupt)
 		}()
 		defer func() {
 			close(done)
@@ -209,8 +209,9 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 // prompt, because the SSH library blocks on delivering the next change until
 // the previous one is read. out holds at most the latest change: an older one
 // that the editor has not picked up yet is replaced, since only the final
-// size matters.
-func forwardResizes(in <-chan ssh.Window, out chan ssh.Window, done <-chan struct{}) {
+// size matters. wake, if set, is called after each change is queued, so a key
+// wait that is showing a toast can end its dwell and take the change.
+func forwardResizes(in <-chan ssh.Window, out chan ssh.Window, done <-chan struct{}, wake func()) {
 	for {
 		select {
 		case win, ok := <-in:
@@ -224,6 +225,9 @@ func forwardResizes(in <-chan ssh.Window, out chan ssh.Window, done <-chan struc
 			default:
 			}
 			out <- win
+			if wake != nil {
+				wake()
+			}
 		case <-done:
 			return
 		}
