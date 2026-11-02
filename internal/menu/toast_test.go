@@ -52,7 +52,7 @@ func newToastEnv(t *testing.T) *toastEnv {
 	reg := session.NewSessionRegistry()
 	e := &MenuExecutor{SessionRegistry: reg}
 	e.SetServerConfig(config.ServerConfig{DataDir: t.TempDir()})
-	e.SetStrings(config.StringsConfig{ToastOverlayFormat: ">> %s", ToastBodyHint: " (more)"})
+	e.SetStrings(config.StringsConfig{ToastOverlayFormat: ">> %s"})
 
 	term := testterm.New(80, 24)
 	s := &toastSession{Session: testterm.NewSession(term, ""), tap: snoop.NewTap()}
@@ -217,30 +217,6 @@ func TestToastsHeldWhenTheyCannotBeDrawn(t *testing.T) {
 			env.s.Send("x")
 			<-keys
 		})
-	}
-}
-
-func TestToastBodyAnnouncedOnceThenShownInlineLiterally(t *testing.T) {
-	env := newToastEnv(t)
-	toastDwell = time.Millisecond
-	store := env.e.toastStore()
-	keys := env.readKey()
-	_ = env.e.SessionRegistry.SendToast(store, env.u.ID, toast.Toast{Text: "Post refused", Body: "my |15text\nline two\x1b[2J"})
-
-	toastWaitFor(t, "the announcement", func() bool {
-		q := mustPeek(t, store, env.u.ID)
-		return len(q) == 1 && env.sess.ToastAnnounced(q[0].ID)
-	})
-	if q := mustPeek(t, store, env.u.ID); len(q) != 1 {
-		t.Fatalf("queue = %+v, want the body still kept", q)
-	}
-	env.s.Send("x")
-	<-keys
-	toastWaitFor(t, "the read to end", func() bool { return strings.Contains(env.term.Row(24), "BOTTOM") })
-
-	body := string(toastBody("my |15text\nline two\x1b[2J"))
-	if !strings.Contains(body, "my |15text\r\nline two[2J") {
-		t.Errorf("body = %q, want pipe codes literal and the escape removed", body)
 	}
 }
 
@@ -551,7 +527,7 @@ func TestLongToastDrawnOnceThenShownWholeInline(t *testing.T) {
 	// A board with only lightbar menus has no prompt, so it goes between menus.
 	env.s.Send("\r")
 	terminal := term.NewTerminal(env.s, "")
-	env.e.deliverToastBodies(env.s, terminal, 1, 0, 80, 24)
+	env.e.deliverHeldToasts(env.s, terminal, 1, 0, 80, 24)
 	if !strings.Contains(env.term.Snapshot(), "TAIL") {
 		t.Errorf("the end of the toast never shown:\n%s", env.term.Snapshot())
 	}

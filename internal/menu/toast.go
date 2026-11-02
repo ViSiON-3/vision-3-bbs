@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -89,26 +88,10 @@ func toastPipes(text string) []byte {
 	return ansi.ReplacePipeCodes([]byte(ansi.EscapeScreenPipeCodes(text)))
 }
 
-// toastBody prepares a body for the screen. It is a caller's own text, so pipe
-// codes stay literal and control characters other than line ends are dropped.
-func toastBody(body string) []byte {
-	body = strings.ReplaceAll(body, "\r\n", "\n")
-	body = strings.Map(func(r rune) rune {
-		if r == '\n' {
-			return r
-		}
-		if r < 0x20 || r == 0x7F {
-			return -1
-		}
-		return r
-	}, body)
-	return []byte(strings.ReplaceAll(body, "\n", "\r\n") + "\r\n")
-}
-
 // nextOverlayToast returns the next toast to draw over the screen, claimed if
 // it came from the store. Live toasts go first: they are the ones that go
-// stale. A toast is drawn once: what is left of it, a body or a line too long
-// for the row, waits for a menu, and one whose removal failed is not drawn again.
+// stale. A toast is drawn once: one too long for the row waits for a menu to
+// show the rest, and one whose removal failed is not drawn again.
 func (e *MenuExecutor) nextOverlayToast(sess *session.BbsSession) (t toast.Toast, stored, ok bool) {
 	if page, ok := sess.PeekPage(); ok {
 		return toast.Toast{Text: page}, false, true
@@ -337,9 +320,6 @@ func toastPlacement(cfgRow, cfgCol, width, height int) (row, col int) {
 func (e *MenuExecutor) toastText(t toast.Toast) string {
 	st := e.Strings()
 	text := toastLine(t.Text)
-	if t.Body != "" {
-		text += st.ToastBodyHint
-	}
 	if st.ToastOverlayFormat != "" {
 		text = fmt.Sprintf(st.ToastOverlayFormat, text)
 	}
@@ -376,7 +356,7 @@ func (e *MenuExecutor) drawToastOverlay(s ssh.Session, w io.Writer, sess *sessio
 }
 
 // settleOverlayToast records that t has been drawn: it leaves its queue, unless
-// its body or the rest of a clipped line is still to be shown.
+// the rest of a clipped line is still to be shown.
 func (e *MenuExecutor) settleOverlayToast(sess *session.BbsSession, t toast.Toast, stored, clipped bool) {
 	if !stored {
 		if clipped {
@@ -386,7 +366,7 @@ func (e *MenuExecutor) settleOverlayToast(sess *session.BbsSession, t toast.Toas
 		}
 		return
 	}
-	if t.Body != "" || clipped {
+	if clipped {
 		sess.NoteToastAnnounced(t.ID)
 		return
 	}
@@ -459,9 +439,6 @@ func (e *MenuExecutor) deliverToastsInline(s ssh.Session, terminal *term.Termina
 			continue
 		}
 		out := toastPipes("\r\n" + toastLine(t.Text) + "\r\n")
-		if t.Body != "" {
-			out = append(out, toastBody(t.Body)...)
-		}
 		err := terminalio.WriteProcessedBytes(terminal, out, outputMode)
 		if err == nil {
 			wrote = true
@@ -479,11 +456,11 @@ func (e *MenuExecutor) deliverToastsInline(s ssh.Session, terminal *term.Termina
 	return wrote
 }
 
-// deliverToastBodies shows any queued toast with more to show than the overlay
-// drew, and holds the screen so it can be read. Boards with only lightbar menus
-// have no prompt to wait for, so this runs between menus. Other toasts stay for
-// the overlay.
-func (e *MenuExecutor) deliverToastBodies(s ssh.Session, terminal *term.Terminal, nodeNumber int, outputMode ansi.OutputMode, termWidth, termHeight int) {
+// deliverHeldToasts shows any queued toast the overlay could not show whole, a
+// line too long for its row, and holds the screen so it can be read. Boards with
+// only lightbar menus have no prompt to wait for, so this runs between menus.
+// Other toasts stay for the overlay.
+func (e *MenuExecutor) deliverHeldToasts(s ssh.Session, terminal *term.Terminal, nodeNumber int, outputMode ansi.OutputMode, termWidth, termHeight int) {
 	sess := e.nodeSession(nodeNumber)
 	if sess == nil || !sess.ToastsReady() {
 		return
@@ -505,7 +482,7 @@ func (e *MenuExecutor) deliverToastBodies(s ssh.Session, terminal *term.Terminal
 		return
 	}
 	for _, t := range queue {
-		if t.Body != "" || sess.ToastAnnounced(t.ID) {
+		if sess.ToastAnnounced(t.ID) {
 			if e.deliverToastsInline(s, terminal, nodeNumber, outputMode) {
 				e.holdScreen(s, terminal, outputMode, termWidth, termHeight)
 			}

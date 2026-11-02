@@ -400,7 +400,6 @@ var StringMissingDefaults = map[string]string{
 	"toastLogon":         "|15%s|07 logged on to node |15%d|07",
 	"toastLogoff":        "|15%s|07 logged off node |15%d|07",
 	"toastOverlayFormat": "|09>> |07%s|07",
-	"toastBodyHint":      " |08(details at your next menu)|07",
 	// Quote banner for echomail/netmail/QWK replies (#632). Blank means no
 	// banner, so only an installation that predates the key gets the default.
 	"quoteTopNet": "^N wrote:",
