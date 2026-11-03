@@ -138,8 +138,10 @@ horizontally rather than truncating it.
 The top row is the sixteen foreground colours, the second the eight background colours plus
 `--` for none. Each swatch is drawn in its own colour, and the sample line is rendered by the same
 code as the value column, so it shows the colours the caller sees. `←` and `→` move along a row,
-`↑`, `↓` or `Tab` switch rows, and `Enter` inserts the codes at the input cursor, background first
-(`|B1|15`), leaving the cursor after them. `Esc` closes the picker with the input exactly as it was.
+`↑`, `↓` or `Tab` switch rows, and `Enter` inserts the codes at the input cursor, foreground first
+(`|15|B1`), leaving the cursor after them. The foreground goes first because `|00`–`|07` reset every
+attribute when the BBS expands them, which would undo a background placed before them. `Esc` closes
+the picker with the input exactly as it was.
 The picker remembers the last choice, so the same colour again is `F2`, `Enter`.
 
 The picker offers the codes the BBS renders, `|00`–`|15` and `|B0`–`|B7`, and nothing else. Codes

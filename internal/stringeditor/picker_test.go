@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // TestPickerInsertsAtCursor opens the picker from edit mode, chooses a colour
@@ -26,23 +28,47 @@ func TestPickerInsertsAtCursor(t *testing.T) {
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyDown}) // background row
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyRight})
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyRight}) // -- -> B0 -> B1
-	if got := m.pickerCode(); got != "|B1|14" {
-		t.Fatalf("code = %q, want |B1|14", got)
+	if got := m.pickerCode(); got != "|14|B1" {
+		t.Fatalf("code = %q, want |14|B1", got)
 	}
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if m.mode != modeEdit {
 		t.Fatalf("after Enter mode = %v, want modeEdit", m.mode)
 	}
-	if got := m.textInput.Value(); got != "a|B1|14b" {
-		t.Errorf("value = %q, want a|B1|14b", got)
+	if got := m.textInput.Value(); got != "a|14|B1b" {
+		t.Errorf("value = %q, want a|14|B1b", got)
 	}
-	if got := m.textInput.Position(); got != len("a|B1|14") {
-		t.Errorf("cursor = %d, want %d", got, len("a|B1|14"))
+	if got := m.textInput.Position(); got != len("a|14|B1") {
+		t.Errorf("cursor = %d, want %d", got, len("a|14|B1"))
 	}
 	// Accepting the edit stores the codes unchanged.
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if got := m.values[m.entries[m.cursor].Key]; got != "a|B1|14b" {
+	if got := m.values[m.entries[m.cursor].Key]; got != "a|14|B1b" {
 		t.Errorf("stored = %q", got)
+	}
+}
+
+// TestPickerCodeSurvivesRendering checks the inserted pair keeps both colours
+// once the BBS expands it: a dark foreground resets attributes, so it has to
+// come before the background.
+func TestPickerCodeSurvivesRendering(t *testing.T) {
+	m := newTestModel(t)
+	m.pickFG, m.pickBG = 4, 2 // |04 expands to ESC[0;31m
+	out := string(ansi.ReplacePipeCodes([]byte(m.pickerCode() + "x")))
+	if !strings.HasSuffix(out, "\x1b[42mx") {
+		t.Errorf("rendered %q: background lost", out)
+	}
+}
+
+// TestBackgroundSwatchesMatchRuntime checks the editor's background colours
+// follow the codes the BBS emits (|B1 red, |B4 blue), not the DOS order of
+// the foreground codes.
+func TestBackgroundSwatchesMatchRuntime(t *testing.T) {
+	if dosBgColors[1] != dosColors[dosRed] || dosBgColors[4] != dosColors[dosBlue] {
+		t.Errorf("B1=%q B4=%q; want red %q and blue %q", dosBgColors[1], dosBgColors[4], dosColors[dosRed], dosColors[dosBlue])
+	}
+	if dosBgColors[0] != dosColors[dosBlack] || dosBgColors[7] != dosColors[dosLightGray] {
+		t.Errorf("B0=%q B7=%q", dosBgColors[0], dosBgColors[7])
 	}
 }
 

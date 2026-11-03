@@ -1,8 +1,8 @@
 package stringeditor
 
 // The colour picker: a dialog opened with F2 while editing a value that
-// inserts a foreground pipe code, and a background code when one is chosen,
-// at the input cursor (#622). It offers exactly the codes the BBS renders,
+// inserts a foreground pipe code, followed by a background code when one is
+// chosen, at the input cursor (#622). It offers exactly the codes the BBS renders,
 // |00-|15 and |B0-|B7, drawn in the same palette the list preview uses, with
 // a sample line rendered by that preview so what the dialog shows is what the
 // caller sees.
@@ -74,13 +74,14 @@ func wrapBG(n int) int {
 	return n
 }
 
-// pickerCode is the text Enter inserts: the background code, when one is
-// chosen, followed by the foreground code, so the pair reads as the BBS
-// applies it.
+// pickerCode is the text Enter inserts: the foreground code, then the
+// background code when one is chosen. The foreground goes first because the
+// BBS expands |00-|07 to sequences that reset every attribute, which would
+// wipe a background set before them; a background set after survives.
 func (m Model) pickerCode() string {
 	code := fmt.Sprintf("|%02d", m.pickFG)
 	if m.pickBG != pickerNoBG {
-		code = fmt.Sprintf("|B%d", m.pickBG) + code
+		code += fmt.Sprintf("|B%d", m.pickBG)
 	}
 	return code
 }
@@ -126,7 +127,7 @@ func (m Model) overlayPicker(background string) string {
 	var bg strings.Builder
 	bg.WriteString(pickerSwatch("--", dialogButtonStyle, m.pickRow == pickerRowBG && m.pickBG == pickerNoBG))
 	for n := 0; n < 8; n++ {
-		bg.WriteString(pickerSwatch(fmt.Sprintf("B%d", n), tuiart.Color(n, dosWhite), m.pickRow == pickerRowBG && m.pickBG == n))
+		bg.WriteString(pickerSwatch(fmt.Sprintf("B%d", n), tuiart.Color(bgCodeToDOS[n], dosWhite), m.pickRow == pickerRowBG && m.pickBG == n))
 	}
 	code := m.pickerCode()
 	sample := dialogTextStyle.Render(code+" ") + RenderColorString(code+pickerSample, inner-len(code)-1)
