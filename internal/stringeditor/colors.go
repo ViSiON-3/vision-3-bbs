@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
@@ -79,6 +80,13 @@ func parseColorCodes(s string) []styledSpan {
 	}
 
 	for i < len(s) {
+		// "||" is the BBS's escape for one literal pipe, whatever follows it.
+		if s[i] == '|' && i+1 < len(s) && s[i+1] == '|' {
+			textBuf.WriteByte('|')
+			i += 2
+			continue
+		}
+
 		// Check for pipe codes: |XX
 		if s[i] == '|' && i+2 < len(s) {
 			code := s[i+1 : i+3]
@@ -115,14 +123,10 @@ func parseColorCodes(s string) []styledSpan {
 				continue
 			}
 
-			// |@ position codes — skip
-			if code[0] == '@' {
-				// Skip |@ followed by position data
-				i += 3
-				// May have additional position bytes; skip digits
-				for i < len(s) && s[i] >= '0' && s[i] <= '9' {
-					i++
-				}
+			// |XYcc,rr moves the caller's cursor; here it would move the
+			// editor's, so it draws nothing.
+			if _, n := ansi.CursorPipeCodeAt([]byte(s), i); n > 0 {
+				i += n
 				continue
 			}
 

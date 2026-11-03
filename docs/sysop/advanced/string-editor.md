@@ -435,11 +435,29 @@ String values support BBS pipe codes that are rendered with color in the editor.
 | `\|P` | Save the cursor position |
 | `\|PP` | Restore the saved cursor position |
 | `\|23` | Reset all attributes to the terminal default |
+| `\|XYcc,rr` | Move the cursor to column `cc` of row `rr` (hidden in the preview) |
 | `@` | At the end of a Yes/No prompt: where the Yes/No lightbar is drawn |
 
-A stored line break (`\r\n`, typed with the escapes above) does the same as `\|CR`. There is no
-code that moves the cursor to a row and column; a value that needs a fixed position is better
-drawn by a `%file.ext` hook (see above).
+A stored line break (`\r\n`, typed with the escapes above) does the same as `\|CR`.
+
+**Cursor position.** `|XYcc,rr` takes the column first, then the row, two digits each, counted
+from 1 at the top left: `|XY15,12` is column 15 of row 12, and `|XY01,01` is the top left corner.
+It sends the standard ANSI cursor-position sequence, so every terminal that shows colour honours
+it; `00` means `1`, and a position past the edge of the caller's screen stops at that edge. A code
+of the wrong shape, `|XY5,12` or `|XY15;12`, is not a code and prints as written. Combine it with
+`|P` and `|PP` to write somewhere else and come back:
+
+```json
+{
+    "pauseString": "|P|XY01,24|B4|15 Press Enter |B0|PP"
+}
+```
+
+The editor's preview hides the code, as it does `|CL`, so the list is not disturbed; the value
+column shows the text that follows it. The code acts wherever the BBS expands pipe codes: strings,
+menu prompts, and display files and templates that take pipe codes. A menu's own `.ANS` screen is
+drawn with its field coordinates tracked and keeps the code as text; position art with its own
+escape sequences.
 
 #### Dollar Codes (`$x`)
 

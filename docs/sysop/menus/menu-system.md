@@ -317,9 +317,16 @@ ANSI files contain the visual display for menus. They support:
 **Control Codes:**
 
 ```text
-|CL - Clear screen    |DE - Clear to end of line
-|CR - Carriage return  |23 - Reset attributes
+|CL - Clear screen       |DE - Clear to end of line
+|CR - Carriage return    |23 - Reset attributes
+|P  - Save cursor        |PP - Restore saved cursor
+|XYcc,rr - Move to column cc, row rr (two digits each, from 1)
 ```
+
+The control codes act wherever pipe codes are expanded: menu prompts, `strings.json` values, and
+display files and templates shown through the pipe-code expander. A menu's own `.ANS` screen is
+drawn with its field coordinates tracked and keeps `|XY` as text; position art with its own escape
+sequences. See [Screen Codes](advanced/string-editor.md#screen-codes) for the details of `|XY`.
 
 ### Special Placeholder Codes
 
