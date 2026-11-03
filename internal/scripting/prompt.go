@@ -11,8 +11,8 @@ import (
 // when a strings.json value runs the script in place of a prompt (#646).
 // The script reads the kind from v3.prompt.kind.
 const (
-	// PromptYesNo is a Yes/No question. The answer is a boolean, or a
-	// string starting with "y" or "n".
+	// PromptYesNo is a Yes/No question. The answer is a boolean, or one of
+	// the strings "y", "yes", "n" or "no" in any case.
 	PromptYesNo = "yesno"
 	// PromptPause is a "press Enter" pause. Any answer, or none, ends it.
 	PromptPause = "pause"
