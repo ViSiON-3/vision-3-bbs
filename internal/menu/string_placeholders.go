@@ -120,51 +120,50 @@ func namedSessionPlaceholders(text string) []string {
 	return named
 }
 
-// expandStringPlaceholders expands the session placeholders and |{...|}
-// optional groups in a strings.json value written to terminal, the way the
-// menu prompt expands them (see renderPromptText). The text is the sysop's
-// template, before any format verb or call-site code is filled in, so a
-// value substituted later cannot be read as a placeholder.
+// expandStringPlaceholders expands the session placeholders, the call site's
+// own codes and the |{...|} optional groups in a strings.json value written
+// to terminal, the way the menu prompt expands them (see renderPromptText).
+// The text has its format verbs filled in already; the values put there and
+// the call site's values are escaped (callerText), and "||" is left for the
+// pipe-code renderer, so none of them can be read as a code.
 //
-// owned lists codes the call site fills in itself (|UN as the new user's
-// number, say); those are left for it. When the value is formatted, a
-// percent sign in a substituted value is doubled so it cannot become a verb.
+// pairs are the call site's old, new codes (|UN as the new user's number,
+// say). They are matched in the same pass as the session placeholders, so a
+// code the call site owns keeps its meaning, a longer code is never eaten by
+// a shorter session one, and a group is judged with the call site's value.
 //
-// The caller is found from the terminal's registered session; with none (a
-// terminal outside a session) the text is returned unchanged.
-func (e *MenuExecutor) expandStringPlaceholders(terminal *term.Terminal, text string, owned []string, formatted bool) string {
+// The caller is found from the terminal's registered session: the user the
+// menu loop is working with where it has published one (SetStringHookUser),
+// else the session's. With no session (a terminal outside one) only the call
+// site's codes are filled in.
+func (e *MenuExecutor) expandStringPlaceholders(terminal *term.Terminal, text string, pairs []string) string {
+	placeholders := make(map[string]string, len(pairs)/2)
+	for i := 0; i+1 < len(pairs); i += 2 {
+		placeholders[pairs[i]] = pairs[i+1]
+	}
 	named := namedSessionPlaceholders(text)
-	if len(named) == 0 && !strings.Contains(text, optGroupOpen) {
-		return text
-	}
-	hs := lookupStringHookSession(terminal)
-	if hs == nil || hs.bbs == nil {
-		return text
-	}
-	hs.bbs.Mutex.RLock()
-	u, menuName := hs.bbs.User, hs.bbs.CurrentMenu
-	hs.bbs.Mutex.RUnlock()
-
-	countPending := false
-	for _, k := range named {
-		if k == "|PV" {
-			countPending = true
+	hasGroup := strings.Contains(text, optGroupOpen)
+	if len(named) > 0 || hasGroup {
+		if hs := lookupStringHookSession(terminal); hs != nil && hs.bbs != nil {
+			u := hs.currentUser()
+			hs.bbs.Mutex.RLock()
+			menuName := hs.bbs.CurrentMenu
+			hs.bbs.Mutex.RUnlock()
+			countPending := false
+			for _, k := range named {
+				if k == "|PV" {
+					countPending = true
+				}
+			}
+			for k, v := range e.sessionPlaceholders(hs.s, u, hs.userMgr, hs.bbs.NodeID, menuName, hs.bbs.StartTime, "", countPending) {
+				if _, owned := placeholders[k]; !owned {
+					placeholders[k] = v
+				}
+			}
 		}
 	}
-	placeholders := e.sessionPlaceholders(hs.s, u, hs.userMgr, hs.bbs.NodeID, menuName, hs.bbs.StartTime, "", countPending)
-	for _, k := range owned {
-		delete(placeholders, k)
+	if len(placeholders) == 0 && !hasGroup {
+		return text
 	}
-	if formatted {
-		for k, v := range placeholders {
-			placeholders[k] = strings.ReplaceAll(v, "%", "%%")
-		}
-	}
-
-	text = expandOptionalGroups(text, placeholders)
-	pairs := make([]string, 0, len(placeholders)*2)
-	for _, k := range placeholderKeysLongestFirst(placeholders) {
-		pairs = append(pairs, k, placeholders[k])
-	}
-	return strings.NewReplacer(pairs...).Replace(text)
+	return replacePlaceholders(expandOptionalGroups(text, placeholders), placeholders)
 }

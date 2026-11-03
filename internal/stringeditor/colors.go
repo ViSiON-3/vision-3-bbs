@@ -30,9 +30,20 @@ const (
 // colors ./config uses for its own chrome.
 var dosColors = tuiart.Palette
 
-// dosBgColors indexes the same palette for the eight DOS background colors.
-// Background codes |B0-|B7 cannot address the bright half of the palette.
-var dosBgColors = tuiart.Palette[:8]
+// bgCodeToDOS maps a background code |B0-|B7 to its DOS palette index. The
+// codes follow the ANSI order the BBS emits (ESC[40m-ESC[47m: black, red,
+// green, brown, blue, magenta, cyan, gray), which is not the DOS order of the
+// foreground codes: |B1 is red, |B4 is blue.
+var bgCodeToDOS = [8]int{0, 4, 2, 6, 1, 5, 3, 7}
+
+// dosBgColors is the palette colour of each background code |B0-|B7, in code
+// order. The codes cannot address the bright half of the palette.
+var dosBgColors = func() (c [8]string) {
+	for code, dos := range bgCodeToDOS {
+		c[code] = tuiart.Palette[dos]
+	}
+	return c
+}()
 
 // styledSpan represents a chunk of text with a specific style.
 type styledSpan struct {

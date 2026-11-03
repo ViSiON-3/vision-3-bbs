@@ -448,15 +448,10 @@ func (e *MenuExecutor) renderPromptText(prompt string, placeholders map[string]s
 	prompt = e.processFileIncludes(prompt, 0)
 	prompt = expandOptionalGroups(prompt, placeholders)
 
-	// Longest key first, so |CAN is matched before |CA. The ordering is shared
-	// with optional-group scanning rather than repeated here: the two have to
-	// agree on how prefix collisions resolve, and keeping one copy is what
-	// stops them drifting apart.
-	replacementPairs := make([]string, 0, len(placeholders)*2)
-	for _, key := range placeholderKeysLongestFirst(placeholders) {
-		replacementPairs = append(replacementPairs, key, placeholders[key])
-	}
-	prompt = strings.NewReplacer(replacementPairs...).Replace(prompt)
+	// Longest key first, so |CAN is matched before |CA, and "||" left alone,
+	// as optional-group scanning does: the two have to agree on how prefix
+	// collisions and escapes resolve, and one copy stops them drifting apart.
+	prompt = replacePlaceholders(prompt, placeholders)
 
 	out := replaceMenuATCode([]byte(prompt), "UC", strconv.Itoa(userCount))
 	out = replaceMenuATCode(out, "U", strconv.Itoa(activeCount))

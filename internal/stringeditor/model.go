@@ -81,6 +81,8 @@ const (
 	modeRevertConfirm
 	modeDefaultConfirm
 	modeSearch
+	// modePicker is the colour picker, open over the edit input (picker.go).
+	modePicker
 )
 
 // Model is the BubbleTea model for the string editor TUI.
@@ -119,6 +121,12 @@ type Model struct {
 
 	// Confirm dialog
 	confirmYes bool // true = Yes selected in confirm dialog
+
+	// Colour picker (picker.go): the chosen foreground 0-15, the chosen
+	// background 0-7 or pickerNoBG, and which row the cursor is on.
+	pickFG  int
+	pickBG  int
+	pickRow int
 
 	// Search
 	searchInput textinput.Model
@@ -186,6 +194,8 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 		textInput:       ti,
 		searchInput:     si,
 		confirmYes:      false,
+		pickFG:          dosWhite,
+		pickBG:          pickerNoBG,
 		backdrop:        tuiart.Shaded(minWidth, minHeight),
 	}
 	m.rebuildEntries()
@@ -273,6 +283,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateConfirm(msg)
 		case modeSearch:
 			return m.updateSearch(msg)
+		case modePicker:
+			return m.updatePicker(msg)
 		}
 	}
 	return m, nil
@@ -445,6 +457,8 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.editErr = ""
 		m.textInput.Blur()
 		return m, nil
+	case tea.KeyF2:
+		return m.openPicker()
 	default:
 		var cmd tea.Cmd
 		m.textInput, cmd = m.textInput.Update(msg)

@@ -28,6 +28,8 @@ to fill a larger terminal:
   Enter Edit  F1 Prefill  F3 Revert  F4 Default  F10 Save  Esc Quit
 ```
 
+While a value is being edited the last row reads `Enter Accept  F2 Colour  Esc Cancel`.
+
 - **First row** — Title bar, shared with `./config`
 - **List panel** — The DOS list, filling the terminal inside a one-column border:
   - Status bar showing current topic number, title, and page
@@ -71,6 +73,7 @@ the picture completely. It uses the shared shaded fill instead.
 | `F3` | Revert selected string to its last-saved value |
 | `F4` | Restore selected string to ViSiON/3 default (from templates/) |
 | `F10` | Save changes and exit |
+| `F2` (while editing) | Open the colour picker |
 | `Esc` | Abort — shows confirmation dialog if unsaved changes |
 | `/` | Search entries by name, key, or description |
 | `Ctrl-R` | Show or hide reserved placeholder entries |
@@ -89,6 +92,7 @@ prompt opens empty each time, so a repeated search means retyping the term.
 When editing a string value:
 
 - **Enter** — Save the new value
+- **F2** — Open the colour picker (below)
 - **Esc** — Cancel editing without changes
 
 Values are edited on a single line, so control characters are shown and typed as **escape
@@ -116,6 +120,35 @@ value too wide for the column ends with a magenta `»`.
 
 Values are not length-limited. A long custom string is stored in full, and the input scrolls
 horizontally rather than truncating it.
+
+### Colour Picker
+
+`F2` while editing opens a picker over the input:
+
+```text
+╔══════════════════════════════════════════════════════════════════╗
+║                          Insert Colour                           ║
+║ 00  01  02  03  04  05  06  07  08  09  10  11  12  13  14 [15]  ║
+║ --  B0  B1  B2  B3  B4  B5  B6  B7                               ║
+║ |15 The quick brown fox                                          ║
+║            ←→ colour   ↑↓ row   Enter insert   Esc cancel        ║
+╚══════════════════════════════════════════════════════════════════╝
+```
+
+The top row is the sixteen foreground colours, the second the eight background colours plus
+`--` for none. Each swatch is drawn in its own colour, and the sample line is rendered by the same
+code as the value column, so it shows the colours the caller sees. `←` and `→` move along a row,
+`↑`, `↓` or `Tab` switch rows, and `Enter` inserts the codes at the input cursor, foreground first
+(`|15|B1`), leaving the cursor after them. The foreground goes first because `|00`–`|07` reset every
+attribute when the BBS expands them, which would undo a background placed before them. When the
+cursor sits before a digit `0`–`5`, a background code would run into it (`|B1` + `0` reads as the
+bright background `|B10`), so a bright foreground is placed last instead (`|B1|15`); a dark
+foreground with a background has no safe order there, and the editor says so and inserts nothing.
+`Esc` closes the picker with the input exactly as it was.
+The picker remembers the last choice, so the same colour again is `F2`, `Enter`.
+
+The picker offers the codes the BBS renders, `|00`–`|15` and `|B0`–`|B7`, and nothing else. Codes
+typed by hand, dollar codes and the `|B8`–`|B15` bright backgrounds are left as they are.
 
 ### Confirmation Dialogs
 
@@ -435,11 +468,12 @@ What a placeholder shows depends on the caller's state when the string is printe
 - `|CA` and `|CAN` follow the caller's current message area; there is no override from the menu
   as there is for the prompt.
 
-Placeholders are expanded in your template before anything else is filled in. A handle, a file
-name or a subject the BBS inserts afterwards (a `%s` verb or a code such as `|NA`) is never read as
-a placeholder, and a percent sign in a placeholder's value does not disturb the verbs of a
-formatted string. A code the BBS fills in itself keeps its own meaning: in `yourUserNum`, `|UN` is
-the new caller's user number, not the user note. The description row names those codes.
+Placeholders are read from your template only. A handle, a file name or a subject the BBS fills
+into a `%s` verb or a code such as `|NA` is never read as a placeholder, and neither is anything
+written as `||`, which prints a literal pipe: `||UH` shows `|UH`. A `|{ ... |}` group is judged
+after the verbs are filled in, so a verb inside a group is never lost. A code the BBS fills in
+itself keeps its own meaning: in `yourUserNum`, `|UN` is the new caller's user number, not the
+user note. The description row names those codes.
 
 The `@U@` and `@UC@` AT-codes and `%%file.ans%%` includes are for prompts and display files only.
 
