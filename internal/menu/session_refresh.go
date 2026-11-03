@@ -46,6 +46,9 @@ func (st *runLoopState) refreshCurrentUser() bool {
 	}
 
 	st.currentUser = refreshed
+	// Strings written from this loop resolve |UH, |CA and the rest from
+	// this record, not the session's login-time copy.
+	SetStringHookUser(st.terminal, refreshed)
 	if sess := st.e.nodeSession(st.nodeNumber); sess != nil {
 		sess.SetToastViewer(refreshed.AccessLevel, refreshed.ScreenWidth)
 	}

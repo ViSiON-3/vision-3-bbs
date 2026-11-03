@@ -122,17 +122,19 @@ func namedSessionPlaceholders(text string) []string {
 
 // expandStringPlaceholders expands the session placeholders and |{...|}
 // optional groups in a strings.json value written to terminal, the way the
-// menu prompt expands them (see renderPromptText). The text is the sysop's
-// template, before any format verb or call-site code is filled in, so a
-// value substituted later cannot be read as a placeholder.
+// menu prompt expands them (see renderPromptText). The text has its format
+// verbs filled in already; the values put there, and the call site's own
+// codes filled in afterwards, are escaped (callerText), and "||" is left for
+// the pipe-code renderer, so neither can be read as a placeholder.
 //
 // owned lists codes the call site fills in itself (|UN as the new user's
-// number, say); those are left for it. When the value is formatted, a
-// percent sign in a substituted value is doubled so it cannot become a verb.
+// number, say); those are left for it.
 //
-// The caller is found from the terminal's registered session; with none (a
-// terminal outside a session) the text is returned unchanged.
-func (e *MenuExecutor) expandStringPlaceholders(terminal *term.Terminal, text string, owned []string, formatted bool) string {
+// The caller is found from the terminal's registered session: the user the
+// menu loop is working with where it has published one (SetStringHookUser),
+// else the session's. With no session (a terminal outside one) the text is
+// returned unchanged.
+func (e *MenuExecutor) expandStringPlaceholders(terminal *term.Terminal, text string, owned []string) string {
 	named := namedSessionPlaceholders(text)
 	if len(named) == 0 && !strings.Contains(text, optGroupOpen) {
 		return text
@@ -141,8 +143,9 @@ func (e *MenuExecutor) expandStringPlaceholders(terminal *term.Terminal, text st
 	if hs == nil || hs.bbs == nil {
 		return text
 	}
+	u := hs.currentUser()
 	hs.bbs.Mutex.RLock()
-	u, menuName := hs.bbs.User, hs.bbs.CurrentMenu
+	menuName := hs.bbs.CurrentMenu
 	hs.bbs.Mutex.RUnlock()
 
 	countPending := false
@@ -155,16 +158,5 @@ func (e *MenuExecutor) expandStringPlaceholders(terminal *term.Terminal, text st
 	for _, k := range owned {
 		delete(placeholders, k)
 	}
-	if formatted {
-		for k, v := range placeholders {
-			placeholders[k] = strings.ReplaceAll(v, "%", "%%")
-		}
-	}
-
-	text = expandOptionalGroups(text, placeholders)
-	pairs := make([]string, 0, len(placeholders)*2)
-	for _, k := range placeholderKeysLongestFirst(placeholders) {
-		pairs = append(pairs, k, placeholders[k])
-	}
-	return strings.NewReplacer(pairs...).Replace(text)
+	return replacePlaceholders(expandOptionalGroups(text, placeholders), placeholders)
 }

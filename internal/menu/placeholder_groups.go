@@ -29,20 +29,34 @@ func isCoordMarker(s string) bool {
 }
 
 // findGroupOpen returns the index of the next real optional-group opener in s,
-// skipping |{P} / |{O} coordinate markers, or -1 if there is none.
+// skipping |{P} / |{O} coordinate markers and "||" literal-pipe escapes, or
+// -1 if there is none.
 func findGroupOpen(s string) int {
-	for i := 0; ; {
-		j := strings.Index(s[i:], optGroupOpen)
-		if j < 0 {
-			return -1
-		}
-		at := i + j
-		if isCoordMarker(s[at:]) {
-			i = at + 4 // step over the whole marker
+	return findGroupDelim(s, optGroupOpen)
+}
+
+// findGroupDelim returns the index of the next delim in s that is not part of
+// a "||" escape or a coordinate marker, or -1.
+func findGroupDelim(s, delim string) int {
+	for i := 0; i < len(s); {
+		if s[i] != '|' {
+			i++
 			continue
 		}
-		return at
+		if i+1 < len(s) && s[i+1] == '|' {
+			i += 2 // a literal pipe, whatever follows it
+			continue
+		}
+		if isCoordMarker(s[i:]) {
+			i += 4 // step over the whole marker
+			continue
+		}
+		if strings.HasPrefix(s[i:], delim) {
+			return i
+		}
+		i++
 	}
+	return -1
 }
 
 // expandOptionalGroups resolves |{...|} groups in s against the placeholder
@@ -76,7 +90,7 @@ func expandOptionalGroups(s string, placeholders map[string]string) string {
 			break
 		}
 		rest := s[start+len(optGroupOpen):]
-		end := strings.Index(rest, optGroupClose)
+		end := findGroupDelim(rest, optGroupClose)
 		if end < 0 {
 			// Unmatched opener: emit the rest verbatim.
 			b.WriteString(s)
@@ -112,10 +126,14 @@ func placeholderKeysLongestFirst(placeholders map[string]string) []string {
 //
 // Matching walks the string longest-key-first and consumes each match, so a
 // group containing |CAN is judged on |CAN alone and not also on the |CA that
-// shares its prefix.
+// shares its prefix. A "||" escape is a literal pipe, so "||UH" is text.
 func groupIsEmpty(inner string, placeholders map[string]string, keys []string) bool {
 	found := false
 	for i := 0; i < len(inner); {
+		if inner[i] == '|' && i+1 < len(inner) && inner[i+1] == '|' {
+			i += 2
+			continue
+		}
 		matched := false
 		for _, k := range keys {
 			if strings.HasPrefix(inner[i:], k) {
@@ -133,4 +151,43 @@ func groupIsEmpty(inner string, placeholders map[string]string, keys []string) b
 		}
 	}
 	return found
+}
+
+// replacePlaceholders substitutes every placeholder in s, longest key first
+// so |CAN is matched before |CA, in one pass: a substituted value is never
+// scanned again. A "||" escape is kept as written for the pipe-code renderer,
+// which prints it as one pipe, so "||UH" comes out as the text "|UH".
+func replacePlaceholders(s string, placeholders map[string]string) string {
+	if !strings.Contains(s, "|") {
+		return s
+	}
+	keys := placeholderKeysLongestFirst(placeholders)
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if s[i] != '|' {
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		if i+1 < len(s) && s[i+1] == '|' {
+			b.WriteString("||")
+			i += 2
+			continue
+		}
+		matched := false
+		for _, k := range keys {
+			if strings.HasPrefix(s[i:], k) {
+				b.WriteString(placeholders[k])
+				i += len(k)
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			b.WriteByte('|')
+			i++
+		}
+	}
+	return b.String()
 }

@@ -11,6 +11,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // TestSessionPlaceholderKeys keeps the gate list in step with the map: a
@@ -72,6 +73,42 @@ func TestWriteStringPlaceholders(t *testing.T) {
 	t.Run("formatted argument is not expanded", func(t *testing.T) {
 		f := newStringHookFixture(t, "")
 		if out := f.write(t, "%s greets |UH", "Trinity|UH"); out != "Trinity|UH greets Neo" {
+			t.Fatalf("got %q", out)
+		}
+	})
+
+	t.Run("doubled pipe is a literal, not a placeholder", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		if out := f.write(t, "||UH is |UH; ||{|UN|} stays"); out != "|UH is Neo; |{|} stays" {
+			t.Fatalf("got %q", out)
+		}
+	})
+
+	t.Run("verb inside a dropped group keeps its argument", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		if out := f.write(t, "|{Subject: %s |GL|}Count: %d", "hello", 7); out != "Count: 7" {
+			t.Fatalf("got %q", out)
+		}
+	})
+
+	t.Run("published user wins over the session's", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		out := f.writeVia(t, func(terminal *term.Terminal) error {
+			SetStringHookUser(terminal, &user.User{ID: 8, Handle: "Trinity", AccessLevel: 60, TimeLimit: 60})
+			return f.e.writeString(terminal, ansi.OutputModeUTF8, "|UH/|LEVEL")
+		})
+		if out != "Trinity/60" {
+			t.Fatalf("got %q", out)
+		}
+	})
+
+	t.Run("centred pause prompt expands placeholders", func(t *testing.T) {
+		f := newStringHookFixture(t, "\r")
+		out := f.writeVia(t, func(terminal *term.Terminal) error {
+			defer resetSessionIH(f.s)
+			return f.e.writeCenteredPausePrompt(f.s, terminal, "|UH, press Enter", ansi.OutputModeUTF8, 80, 24)
+		})
+		if !strings.Contains(out, "Neo, press Enter") || strings.Contains(out, "|UH") {
 			t.Fatalf("got %q", out)
 		}
 	})

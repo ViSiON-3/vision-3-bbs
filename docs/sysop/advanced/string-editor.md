@@ -430,11 +430,12 @@ What a placeholder shows depends on the caller's state when the string is printe
 - `|CA` and `|CAN` follow the caller's current message area; there is no override from the menu
   as there is for the prompt.
 
-Placeholders are expanded in your template before anything else is filled in. A handle, a file
-name or a subject the BBS inserts afterwards (a `%s` verb or a code such as `|NA`) is never read as
-a placeholder, and a percent sign in a placeholder's value does not disturb the verbs of a
-formatted string. A code the BBS fills in itself keeps its own meaning: in `yourUserNum`, `|UN` is
-the new caller's user number, not the user note. The description row names those codes.
+Placeholders are read from your template only. A handle, a file name or a subject the BBS fills
+into a `%s` verb or a code such as `|NA` is never read as a placeholder, and neither is anything
+written as `||`, which prints a literal pipe: `||UH` shows `|UH`. A `|{ ... |}` group is judged
+after the verbs are filled in, so a verb inside a group is never lost. A code the BBS fills in
+itself keeps its own meaning: in `yourUserNum`, `|UN` is the new caller's user number, not the
+user note. The description row names those codes.
 
 The `@U@` and `@UC@` AT-codes and `%%file.ans%%` includes are for prompts and display files only.
 

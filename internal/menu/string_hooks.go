@@ -47,6 +47,20 @@ type stringHookSession struct {
 	// running is set while a string's script runs, so a string the script's
 	// door path prints (a busy or error message) cannot start another.
 	running atomic.Bool
+	// user is the record the menu loop is working with, published by
+	// SetStringHookUser; nil until then, when the session's user is read.
+	user atomic.Pointer[user.User]
+}
+
+// currentUser returns the caller's user record: the one the menu loop has
+// published, else the session's. It is nil before login.
+func (hs *stringHookSession) currentUser() *user.User {
+	if u := hs.user.Load(); u != nil {
+		return u
+	}
+	hs.bbs.Mutex.RLock()
+	defer hs.bbs.Mutex.RUnlock()
+	return hs.bbs.User
 }
 
 // stringHookSessions maps a *term.Terminal to its *stringHookSession.
@@ -62,6 +76,17 @@ func RegisterStringHookSession(t *term.Terminal, s ssh.Session, userMgr *user.Us
 // ClearStringHookSession drops t's session when the session ends.
 func ClearStringHookSession(t *term.Terminal) {
 	stringHookSessions.Delete(t)
+}
+
+// SetStringHookUser publishes u as the user record strings written to t
+// resolve placeholders from and run scripts for. The menu loop calls it with
+// the record it refreshes each time round, which the session's own User,
+// set at login, does not follow: areas and conferences the caller changes
+// are on the loop's copy. Call it on the goroutine that writes to t.
+func SetStringHookUser(t *term.Terminal, u *user.User) {
+	if hs := lookupStringHookSession(t); hs != nil {
+		hs.user.Store(u)
+	}
 }
 
 func lookupStringHookSession(t *term.Terminal) *stringHookSession {
@@ -130,19 +155,23 @@ func (e *MenuExecutor) writeStringNoScript(terminal *term.Terminal, outputMode a
 // are passed to a script after args, for values the call site substitutes
 // rather than formats.
 //
-// The text printed is expanded in this order: the session placeholders (|UH,
-// |TL and the rest, see string_placeholders.go) in the sysop's template,
-// then the format verbs, then the call site's pairs, then the pipe codes. A
-// handle or a subject filled in by the last two steps can therefore never be
-// read as a placeholder, and a code the call site fills in is its own.
+// The text printed is expanded in this order: the format verbs, then the
+// |{...|} optional groups and session placeholders (|UH, |TL and the rest,
+// see string_placeholders.go), then the call site's pairs, then the pipe
+// codes. The verbs go first so a group that holds one is judged with the
+// value in place rather than dropping the verb and shifting the arguments.
+// A handle or a subject filled into a verb or a pair is escaped (callerText),
+// which doubles the pipe of anything but a colour code, and a doubled pipe is
+// never read as a placeholder, so substituted text cannot start one. A code
+// the call site fills in is its own.
 func (e *MenuExecutor) renderString(terminal *term.Terminal, outputMode ansi.OutputMode, value string, allowScript bool, args []any, pairs []string, scriptArgs []any) error {
 	var owned []string
 	for i := 0; i+1 < len(pairs); i += 2 {
 		owned = append(owned, pairs[i])
 	}
 	text := func(v string) string {
-		v = e.expandStringPlaceholders(terminal, v, owned, args != nil)
 		v = formatStringValue(v, args)
+		v = e.expandStringPlaceholders(terminal, v, owned)
 		if len(pairs) > 0 {
 			v = strings.NewReplacer(pairs...).Replace(v)
 		}
@@ -228,9 +257,7 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 		warnStringHookOnce(value, "no session to run the script in")
 		return false, nil
 	}
-	hs.bbs.Mutex.RLock()
-	u := hs.bbs.User
-	hs.bbs.Mutex.RUnlock()
+	u := hs.currentUser()
 	if u == nil {
 		// Before login there is no user for the door's dropfile and ACS check.
 		// Not logged: login screens are shown on every connection.
