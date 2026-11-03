@@ -9,10 +9,15 @@ import (
 
 // ScriptConfig holds the configuration for a V3 script execution.
 type ScriptConfig struct {
-	Script     string        // Main JS file to execute
-	WorkingDir string        // Working directory (sandbox root)
-	Args       []string      // Script arguments (available as v3.args)
-	MaxRunTime time.Duration // Maximum execution time (0 = use default of 30 minutes)
+	Script     string   // Main JS file to execute
+	WorkingDir string   // Working directory (sandbox root)
+	Args       []string // Script arguments (available as v3.args)
+	// MaxRunTime is the wall-clock limit on one run of the script: zero
+	// means the default of 30 minutes, and a negative value means no limit.
+	// It is not a CPU budget; a script waiting on the caller uses it up too.
+	// Disconnect and whatever else ends the parent context still stop the
+	// script either way.
+	MaxRunTime time.Duration
 	// Prompt is the kind of prompt the script stands in for when it runs in
 	// place of a strings.json value: PromptYesNo, PromptPause, or "" for a
 	// script that is not replacing a prompt. Exposed as v3.prompt.kind.

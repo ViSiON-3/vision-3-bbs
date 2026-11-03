@@ -68,22 +68,27 @@ type readResult struct {
 	err  error
 }
 
-// defaultMaxRunTime is the maximum execution time for a script if not configured.
+// defaultMaxRunTime is the wall-clock limit for a script whose
+// ScriptConfig.MaxRunTime is zero.
 const defaultMaxRunTime = 30 * time.Minute
 
 // NewEngine creates a new V3 scripting engine for the given session and
 // registers the v3 API namespaces in a fresh goja runtime. The engine's
-// context is ctx limited to cfg.MaxRunTime (30 minutes when unset); when it
-// ends, running JavaScript is interrupted. providers may be nil for
+// context is ctx limited to cfg.MaxRunTime (30 minutes when zero, no limit
+// when negative); when it ends, running JavaScript is interrupted. providers may be nil for
 // console-only scripts; namespaces whose backing manager is nil (user,
 // message, file, nodes) are simply not registered. The caller must Close the
 // engine when the script finishes.
 func NewEngine(ctx context.Context, session *SessionContext, cfg ScriptConfig, providers *Providers) *Engine {
-	maxRunTime := cfg.MaxRunTime
-	if maxRunTime <= 0 {
-		maxRunTime = defaultMaxRunTime
+	var cancel context.CancelFunc
+	switch {
+	case cfg.MaxRunTime < 0:
+		ctx, cancel = context.WithCancel(ctx)
+	case cfg.MaxRunTime == 0:
+		ctx, cancel = context.WithTimeout(ctx, defaultMaxRunTime)
+	default:
+		ctx, cancel = context.WithTimeout(ctx, cfg.MaxRunTime)
 	}
-	ctx, cancel := context.WithTimeout(ctx, maxRunTime)
 	if providers == nil {
 		providers = &Providers{}
 	}

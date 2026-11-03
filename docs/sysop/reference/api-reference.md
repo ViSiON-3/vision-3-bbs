@@ -531,7 +531,7 @@ type ScriptConfig struct {
     Script     string        // Main JS file to execute
     WorkingDir string        // Working directory; scripts/data/ beside it is the sandbox and store root
     Args       []string      // Available as v3.args
-    MaxRunTime time.Duration // 0 = 30 minutes
+    MaxRunTime time.Duration // 0 = 30 minutes, < 0 = no limit (door: max_run_minutes)
 }
 
 type Providers struct {

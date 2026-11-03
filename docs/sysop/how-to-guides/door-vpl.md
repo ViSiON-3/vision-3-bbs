@@ -30,7 +30,7 @@ Run `./config`, press **7** for Door Programs and **1** for Doors, then **I** to
 | Working Dir | `scripts` |
 | Script | `greeting.js` |
 
-Leave **Script Args** blank unless the script reads `v3.args`. Press **Esc** to leave the record, then **Q** and answer **Y** to save. If you prefer to edit JSON, the record is shown under [Manual Configuration](#manual-configuration).
+Leave **Script Args** blank unless the script reads `v3.args`. **Max Run Mins** stops the script after that many minutes; leave it at `0` for the 30-minute default, or see [Run Time Limit](scripting/vpl-scripting.md#run-time-limit) for scripts callers stay in longer. Press **Esc** to leave the record, then **Q** and answer **Y** to save. If you prefer to edit JSON, the record is shown under [Manual Configuration](#manual-configuration).
 
 ## 3. Add it to a menu
 

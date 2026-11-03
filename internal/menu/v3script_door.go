@@ -43,6 +43,7 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		WorkingDir: workDir,
 		Args:       ctx.Config.Args,
 		Prompt:     ctx.Prompt,
+		MaxRunTime: ctx.Config.ScriptRunLimit(),
 	}
 
 	session := &scripting.SessionContext{
