@@ -243,9 +243,14 @@ text*.
 
 **Script arguments.** The script's `v3.args` holds the door's own `args` from `doors.json`, then the
 words after the door name, then the values the BBS would have formatted into the string, so a
-script can draw its own version of a message that names a door, a file or a user. The
-script replaces how the string looks; the BBS still reads the caller's answer to a prompt
-afterwards.
+script can draw its own version of a message that names a door, a file or a user.
+
+**Prompts.** A script in place of a Yes/No prompt or the pause string replaces how the prompt
+looks, and the BBS reads the caller's answer afterwards as usual: the Yes/No lightbar follows the
+script, the pause waits for Enter. The script can instead answer the prompt itself with
+`v3.prompt.answer(value)`, and the BBS uses that answer and reads nothing; `v3.prompt.kind` tells
+the script which prompt it is drawing. See [v3.prompt](scripting/vpl-scripting.md#v3prompt). Other
+prompts (a line of input, a hot key) do not take an answer yet.
 
 **Format verbs.** A `!CODE` value takes no verbs: the arguments go to the script instead. In a
 `%file.ext` value, the text after the file name carries the verbs the string normally has. The

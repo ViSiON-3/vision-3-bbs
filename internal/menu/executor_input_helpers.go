@@ -10,6 +10,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringhook"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/gliderlabs/ssh"
@@ -20,11 +21,17 @@ import (
 // Returns error on write/read failure or io.EOF on disconnect.
 func (e *MenuExecutor) writeCenteredPausePrompt(s ssh.Session, terminal *term.Terminal, pausePrompt string, outputMode ansi.OutputMode, termWidth int, termHeight int) error {
 	// A value that shows a file or runs a script draws its own prompt, so it
-	// is not centred (see string_hooks.go). The wait for Enter is the same.
+	// is not centred (see string_hooks.go). The wait for Enter is the same,
+	// unless the script answered the prompt (v3.prompt.answer), in which case
+	// it has already waited however it chose to.
 	switch h := stringhook.Parse(pausePrompt); h.Kind {
 	case stringhook.Script, stringhook.File:
-		if err := e.writeString(terminal, outputMode, pausePrompt); err != nil {
+		answer, err := e.renderPrompt(terminal, outputMode, pausePrompt, nil, scripting.PromptPause)
+		if err != nil {
 			return err
+		}
+		if answer.set {
+			return nil
 		}
 		return waitForEnter(s)
 	case stringhook.Escaped:

@@ -10,6 +10,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -48,15 +49,44 @@ type yesNoPrompt struct {
 	hook bool
 }
 
-// write writes the prompt followed by suffix.
-func (p yesNoPrompt) write(e *MenuExecutor, terminal *term.Terminal, outputMode ansi.OutputMode, suffix string) error {
-	if p.hook {
-		if err := e.renderString(terminal, outputMode, p.text, true, p.args, nil, nil); err != nil {
-			return err
-		}
-		return writeStringText(terminal, outputMode, suffix)
+// write writes the prompt followed by suffix. When a script ran in place of a
+// strings.json value and answered the question, the answer comes back as yes
+// and ok; the suffix is not written, since the script drew the prompt. A
+// script's answer of another type is logged and ignored, and the caller reads
+// the answer from the user as usual.
+func (p yesNoPrompt) write(e *MenuExecutor, terminal *term.Terminal, outputMode ansi.OutputMode, suffix string, nodeNumber int) (yes, ok bool, err error) {
+	if !p.hook {
+		return false, false, terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(p.text+suffix)), outputMode)
 	}
-	return terminalio.WriteStringCP437(terminal, ansi.ReplacePipeCodes([]byte(p.text+suffix)), outputMode)
+	answer, err := e.renderPrompt(terminal, outputMode, p.text, p.args, scripting.PromptYesNo)
+	if err != nil {
+		return false, false, err
+	}
+	if answer.set {
+		if yes, ok = yesNoAnswer(answer.value); ok {
+			return yes, true, nil
+		}
+		slog.Warn("string script answered a Yes/No prompt with something other than yes or no; asking the caller",
+			"node", nodeNumber, "answer", fmt.Sprintf("%#v", answer.value))
+	}
+	return false, false, writeStringText(terminal, outputMode, suffix)
+}
+
+// yesNoAnswer reads a script's answer to a Yes/No prompt: a boolean, or a
+// string reading yes, no, y or n in any case. ok is false for anything else.
+func yesNoAnswer(v any) (yes, ok bool) {
+	switch a := v.(type) {
+	case bool:
+		return a, true
+	case string:
+		switch strings.ToLower(strings.TrimSpace(a)) {
+		case "y", "yes":
+			return true, true
+		case "n", "no":
+			return false, true
+		}
+	}
+	return false, false
 }
 
 // promptYesNoLightbar displays a Yes/No prompt with lightbar selection.
@@ -94,10 +124,13 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 		regularColor := e.Theme().YesNoRegularColor
 
 		// Write the prompt text inline
-		err := prompt.write(e, terminal, outputMode, "")
+		yes, answered, err := prompt.write(e, terminal, outputMode, "", nodeNumber)
 		if err != nil {
 			slog.Error("failed writing Yes/No prompt text (lightbar mode)", "node", nodeNumber, "error", err)
 			return false, fmt.Errorf("failed writing prompt text: %w", err)
+		}
+		if answered {
+			return yes, nil
 		}
 
 		// Add spacing before options
@@ -257,10 +290,13 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 			slog.Warn("failed writing fallback pre-prompt spacing", "error", wErr)
 		}
 
-		err := prompt.write(e, terminal, outputMode, " "+yesNoHint+"? ")
+		yes, answered, err := prompt.write(e, terminal, outputMode, " "+yesNoHint+"? ", nodeNumber)
 		if err != nil {
 			slog.Error("failed writing Yes/No prompt text (fallback mode)", "node", nodeNumber, "error", err) // Use nodeNumber
 			return false, fmt.Errorf("failed writing fallback prompt text: %w", err)
+		}
+		if answered {
+			return yes, nil
 		}
 
 		// Read user input

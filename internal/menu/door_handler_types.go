@@ -49,6 +49,13 @@ type DoorCtx struct {
 	UserIDStr   string
 	Subs        map[string]string
 
+	// Prompt is the kind of prompt a string's script stands in for (see
+	// scripting.PromptYesNo); "" for a door run from a menu. Answer and
+	// Answered carry back what the script passed to v3.prompt.answer.
+	Prompt   string
+	Answer   any
+	Answered bool
+
 	// watch decides when the BBS must end the door. Set by executeDoor.
 	watch *doorWatch
 	// enterTrailer says the session's last reader took the CR of an Enter
