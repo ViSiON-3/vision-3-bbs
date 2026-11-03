@@ -414,7 +414,10 @@ of the wrong shape, `|XY5,12` or `|XY15;12`, is not a code and prints as written
 ```
 
 The editor's preview hides the code, as it does `|CL`, so the list is not disturbed; the value
-column shows the text that follows it. In display files and templates the code is not expanded.
+column shows the text that follows it. The code acts wherever the BBS expands pipe codes: strings,
+menu prompts, and display files and templates that take pipe codes. A menu's own `.ANS` screen is
+drawn with its field coordinates tracked and keeps the code as text; position art with its own
+escape sequences.
 
 #### Dollar Codes (`$x`)
 

@@ -69,6 +69,13 @@ func parseColorCodes(s string) []styledSpan {
 	}
 
 	for i < len(s) {
+		// "||" is the BBS's escape for one literal pipe, whatever follows it.
+		if s[i] == '|' && i+1 < len(s) && s[i+1] == '|' {
+			textBuf.WriteByte('|')
+			i += 2
+			continue
+		}
+
 		// Check for pipe codes: |XX
 		if s[i] == '|' && i+2 < len(s) {
 			code := s[i+1 : i+3]

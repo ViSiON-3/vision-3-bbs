@@ -21,3 +21,18 @@ func TestPreviewSkipsCursorCode(t *testing.T) {
 		t.Errorf("malformed code counted as %d cells", got)
 	}
 }
+
+// A doubled pipe is the BBS's literal-pipe escape: it previews as one pipe
+// and never starts a code, so "||XY15,12" is the eight cells of text the
+// caller sees, and "||CL" does not vanish.
+func TestPreviewDoubledPipeIsLiteral(t *testing.T) {
+	for in, want := range map[string]int{"||XY15,12": 8, "||CL": 3, "a||b": 3} {
+		if got := PlainTextLength(in); got != want {
+			t.Errorf("PlainTextLength(%q) = %d, want %d", in, got, want)
+		}
+	}
+	out := RenderColorString("||XY15,12", 40)
+	if !strings.Contains(out, "|XY15,12") || strings.Contains(out, "||") {
+		t.Errorf("RenderColorString = %q", out)
+	}
+}

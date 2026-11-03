@@ -323,9 +323,10 @@ ANSI files contain the visual display for menus. They support:
 |XYcc,rr - Move to column cc, row rr (two digits each, from 1)
 ```
 
-The control codes act in menu prompts and `strings.json` values. In `.ANS` files the art's own
-escape sequences position the cursor, and `|XY` is not expanded. See
-[Screen Codes](advanced/string-editor.md#screen-codes) for the details of `|XY`.
+The control codes act wherever pipe codes are expanded: menu prompts, `strings.json` values, and
+display files and templates shown through the pipe-code expander. A menu's own `.ANS` screen is
+drawn with its field coordinates tracked and keeps `|XY` as text; position art with its own escape
+sequences. See [Screen Codes](advanced/string-editor.md#screen-codes) for the details of `|XY`.
 
 ### Special Placeholder Codes
 
