@@ -48,6 +48,7 @@ import (
 	v3net "github.com/ViSiON-3/vision-3-bbs/internal/v3net"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/leaf"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
+	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 	"github.com/ViSiON-3/vision-3-bbs/internal/winch"
 )
 
@@ -2109,6 +2110,10 @@ func main() {
 		} else {
 			svc.BBSName = serverConfig.BoardName
 			svc.BBSHost = serverConfig.SSHHost
+			svc.CentralAddresses = v3net.CentralAddressesFor(serverConfig.SSHHost,
+				serverConfig.SSHEnabled, serverConfig.SSHPort,
+				serverConfig.TelnetEnabled, serverConfig.TelnetPort)
+			svc.CentralSoftware = "ViSiON/3 " + version.Number
 			v3netService = svc
 
 			// Auto-create message areas for V3Net subscriptions if missing.
@@ -2194,6 +2199,7 @@ func main() {
 			go v3netService.Start(v3netCtx)
 			go v3netOutbound.Run(v3netCtx)
 			menuExecutor.V3NetStatus = v3netService
+			menuExecutor.V3NetCentral = v3netCentralProvider(v3netService)
 			menuExecutor.ChatLeaves = v3netChatProvider(v3netService)
 			// Live subscription apply: re-read v3net.json and rebuild the
 			// leaf set. Used by the area browser after a subscribe or
@@ -2361,6 +2367,40 @@ func main() {
 		slog.Info("shutdown signal received, stopping", "signal", sig.String())
 		return
 	}
+}
+
+// v3netCentralProvider adapts the V3Net service to menu.V3NetCentralProvider.
+func v3netCentralProvider(svc *v3net.Service) menu.V3NetCentralProvider {
+	return &centralAdapter{svc: svc}
+}
+
+type centralAdapter struct {
+	svc *v3net.Service
+}
+
+func (a *centralAdapter) CentralNetworks() []menu.CentralNetworkInfo {
+	var out []menu.CentralNetworkInfo
+	for _, n := range a.svc.CentralNetworks() {
+		out = append(out, menu.CentralNetworkInfo{
+			Network:          n.Network,
+			HubURL:           n.HubURL,
+			Enabled:          n.Enabled,
+			Publishing:       n.Publishing,
+			SupportKnown:     n.SupportKnown,
+			Supported:        n.Supported,
+			Connected:        n.Connected,
+			LastPublished:    n.LastPublished,
+			Withdrawn:        n.Withdrawn,
+			LastError:        n.LastError,
+			DirectoryFetched: n.DirectoryFetched,
+			DirectoryCount:   n.DirectoryCount,
+		})
+	}
+	return out
+}
+
+func (a *centralAdapter) CentralDirectory(ctx context.Context, network string, force bool) ([]protocol.CentralDirectoryEntry, error) {
+	return a.svc.CentralDirectory(ctx, network, force)
 }
 
 // v3netChatProvider creates a menu.ChatLeafProvider from the V3Net service.

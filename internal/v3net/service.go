@@ -73,6 +73,12 @@ type Service struct {
 	// is enabled, written to the hub's own subscriber row by Start.
 	BBSName string
 	BBSHost string
+	// CentralAddresses are the connection addresses a Central listing
+	// carries when the subscription sets none, derived by the caller from
+	// the server's SSH and telnet settings (see CentralAddressesFor).
+	// CentralSoftware names the software in the listing.
+	CentralAddresses []string
+	CentralSoftware  string
 
 	// nalObserver holds the func(network string, n *protocol.NAL) set by
 	// SetNALObserver, called with each NAL a leaf fetches.
@@ -485,6 +491,8 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		},
 		BBSName:               s.BBSName,
 		BBSHost:               s.BBSHost,
+		CentralEnabled:        lcfg.CentralEnabled(),
+		CentralListing:        s.centralListingSpec(lcfg),
 		RequireSignedMessages: lcfg.RequireSignedMessages,
 		RequireSignedHub:      lcfg.RequireSignedHub,
 		HubSigned:             lcfg.HubSigned,
@@ -1163,4 +1171,85 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 	}
 	slog.Info("v3net: leaf subscriptions reloaded", "count", count)
 	return nil
+}
+
+// centralListingSpec builds the listing a leaf publishes for lcfg, or nil
+// when the subscription does not publish one. The name is the board's
+// name; the addresses are the subscription's own, or the service's
+// defaults when it sets none.
+func (s *Service) centralListingSpec(lcfg config.V3NetLeafConfig) *leaf.CentralListingSpec {
+	if !lcfg.CentralPublishes() {
+		return nil
+	}
+	name := protocol.CleanBBSName(s.BBSName)
+	if strings.TrimSpace(name) == "" {
+		name = s.ks.NodeID()
+	}
+	addrs := lcfg.Central.Addresses
+	if len(addrs) == 0 {
+		addrs = s.CentralAddresses
+	}
+	return &leaf.CentralListingSpec{
+		Name:        name,
+		Description: lcfg.Central.Description,
+		Addresses:   slices.Clone(addrs),
+		Software:    s.CentralSoftware,
+	}
+}
+
+// CentralAddressesFor derives a board's default Central listing addresses
+// from its server settings: ssh://host:port when SSH is enabled and
+// telnet://host:port when telnet is, each only with a host to give. host
+// is the public hostname (the server's SSH host); a blank one yields no
+// addresses, since a listing cannot say where the board is.
+func CentralAddressesFor(host string, sshEnabled bool, sshPort int, telnetEnabled bool, telnetPort int) []string {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return nil
+	}
+	var out []string
+	if sshEnabled && sshPort > 0 {
+		out = append(out, fmt.Sprintf("ssh://%s:%d", host, sshPort))
+	}
+	if telnetEnabled && telnetPort > 0 {
+		out = append(out, fmt.Sprintf("telnet://%s:%d", host, telnetPort))
+	}
+	return out
+}
+
+// CentralNetworkStatus is one subscription's V3Net Central state, for the
+// caller-facing status screen.
+type CentralNetworkStatus struct {
+	Network string
+	HubURL  string
+	leaf.CentralStatus
+}
+
+// CentralNetworks returns the Central state of every running subscription,
+// in configuration order.
+func (s *Service) CentralNetworks() []CentralNetworkStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]CentralNetworkStatus, 0, len(s.leaves))
+	for _, run := range s.leaves {
+		out = append(out, CentralNetworkStatus{
+			Network:       run.l.Network(),
+			HubURL:        run.l.HubURL(),
+			CentralStatus: run.l.CentralStatus(),
+		})
+	}
+	return out
+}
+
+// CentralDirectory returns the verified board directory of network (see
+// leaf.Leaf.FetchCentralDirectory). It returns ErrNoLeaf when no
+// subscription runs for the network.
+func (s *Service) CentralDirectory(ctx context.Context, network string, force bool) ([]protocol.CentralDirectoryEntry, error) {
+	s.mu.RLock()
+	run, ok := s.leafByNetwork[network]
+	s.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("%w %q", ErrNoLeaf, network)
+	}
+	return run.l.FetchCentralDirectory(ctx, force)
 }

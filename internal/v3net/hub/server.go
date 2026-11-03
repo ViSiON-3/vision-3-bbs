@@ -68,6 +68,14 @@ func (h *Hub) newMux() http.Handler {
 			case strings.HasSuffix(path, "/presence") && r.Method == http.MethodPost:
 				h.handlePresence(w, r)
 
+			// V3Net Central: the board directory.
+			case strings.HasSuffix(path, "/central/listing") && r.Method == http.MethodPut:
+				h.handlePutCentralListing(w, r, network)
+			case strings.HasSuffix(path, "/central/listing") && r.Method == http.MethodDelete:
+				h.handleDeleteCentralListing(w, r, network)
+			case strings.HasSuffix(path, "/central/listings") && r.Method == http.MethodGet:
+				h.handleGetCentralDirectory(w, r, network)
+
 			// NAL endpoint (POST requires coordinator auth).
 			case strings.HasSuffix(path, "/nal") && r.Method == http.MethodPost:
 				h.handlePostNAL(w, r)

@@ -60,6 +60,11 @@ type Leaf struct {
 
 	// refused remembers which refused messages were already logged at warn.
 	refused refusedLog
+
+	// central is the leaf's V3Net Central state (central.go).
+	central centralState
+	// sseConnected is set while the event stream is open.
+	sseConnected atomic.Bool
 }
 
 // New creates a new Leaf with the given configuration.
@@ -197,6 +202,12 @@ func (l *Leaf) Start(ctx context.Context) {
 	go func() {
 		defer wg.Done()
 		l.runSSE(ctx)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		l.runCentral(ctx)
 	}()
 
 	wg.Wait()

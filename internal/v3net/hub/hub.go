@@ -30,6 +30,9 @@ type Hub struct {
 	areaSubscriptions *AreaSubscriptionStore
 	chatStore         *ChatHistoryStore
 	chatRooms         *chatRooms
+	central           *CentralStore
+	centralLimiter    *rateLimiter // per node: listing publishes
+	online            *onlineNodes
 
 	// closeOnce makes Close idempotent; closeErr is the first call's result.
 	closeOnce sync.Once
@@ -98,6 +101,12 @@ func New(cfg Config) (*Hub, error) {
 		return nil, err
 	}
 
+	central, err := NewCentralStore(db)
+	if err != nil {
+		_ = db.Close() // cleanup on error path
+		return nil, err
+	}
+
 	h := &Hub{
 		cfg:               cfg,
 		db:                db,
@@ -112,6 +121,9 @@ func New(cfg Config) (*Hub, error) {
 		areaSubscriptions: areaSubs,
 		chatStore:         chatStore,
 		chatRooms:         newChatRooms(),
+		central:           central,
+		centralLimiter:    newBurstRateLimiter(centralPublishInterval, centralPublishBurst),
+		online:            newOnlineNodes(),
 	}
 
 	h.server = &http.Server{
@@ -128,6 +140,7 @@ func New(cfg Config) (*Hub, error) {
 func (h *Hub) Start(ctx context.Context) error {
 	go h.broadcaster.StartPing(ctx)
 	h.chatStore.StartPruner(ctx)
+	h.central.StartPruner(ctx)
 
 	go func() {
 		<-ctx.Done()
@@ -155,6 +168,7 @@ func (h *Hub) Close() error {
 func (h *Hub) close() error {
 	h.chatLimiter.Stop()
 	h.chatNodeLimiter.Stop()
+	h.centralLimiter.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	shutdownErr := h.server.Shutdown(ctx)
@@ -176,4 +190,9 @@ func (h *Hub) Subscribers() *SubscriberStore {
 // NALStore returns the NAL store (used for in-process seeding at startup).
 func (h *Hub) NALStore() *NALStore {
 	return h.nalStore
+}
+
+// Central returns the Central directory store (used in tests).
+func (h *Hub) Central() *CentralStore {
+	return h.central
 }

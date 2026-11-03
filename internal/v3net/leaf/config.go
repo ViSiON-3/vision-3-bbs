@@ -26,6 +26,16 @@ type Config struct {
 	BBSName string // Local BBS name for subscribe request
 	BBSHost string // Local BBS hostname for subscribe request
 
+	// CentralEnabled is the sysop's switch for V3Net Central on this
+	// network: with it set, the leaf fetches the board directory for
+	// callers. It sends nothing about the board or its callers to the hub.
+	CentralEnabled bool
+	// CentralListing is what the leaf publishes about the board to the
+	// network's directory. Nil, or a spec with no name, is publication off:
+	// the leaf then withdraws any listing it published before when it
+	// starts. Publication does not need CentralEnabled.
+	CentralListing *CentralListingSpec
+
 	// RequireSignedMessages drops polled messages without an author
 	// signature instead of importing them as legacy messages.
 	RequireSignedMessages bool

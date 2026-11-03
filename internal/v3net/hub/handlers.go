@@ -54,6 +54,7 @@ func (h *Hub) handleNetworkInfo(w http.ResponseWriter, r *http.Request) {
 			PollIntervalMin: 60,
 			RequireTearline: false,
 		},
+		Features: hubFeatures,
 	}
 	writeJSON(w, http.StatusOK, info)
 }
@@ -264,8 +265,14 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if h.cfg.Keystore != nil {
 		signer = h.cfg.Keystore
 	}
+	// An open stream is what the Central directory shows as online, and
+	// its opening and closing are the node's last-seen times.
+	h.online.add(nodeID, network)
+	h.noteNodeSeen(nodeID, network)
 	h.broadcaster.ServeSSE(w, r, network, signer)
 	// ServeSSE blocks until the client disconnects.
+	h.online.remove(nodeID, network)
+	h.noteNodeSeen(nodeID, network)
 	// Clean up chat room presence for the disconnected node.
 	removed := h.chatRooms.HandleDisconnect(network, nodeID)
 	sub := h.subscribers.Get(nodeID, network)

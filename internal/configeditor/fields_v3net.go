@@ -6,6 +6,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
 // fieldsV3NetHubNetwork returns fields for editing a single hub network.
@@ -183,7 +184,71 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 				return nil
 			},
 		},
+		// V3Net Central. Each switch is its own consent and defaults to N;
+		// the block is only written once a sysop touches it.
+		{
+			Label: "Central", Help: "Let callers open V3Net Central (the board directory) for this network; sends nothing about them", Type: ftYesNo, Col: 3, Row: 16, Width: 1,
+			Get: func() string { return uitext.BoolToYN(l.CentralEnabled()) },
+			Set: func(val string) error { v3netCentral(l).Enabled = uitext.YNToBool(val); return nil },
+		},
+		{
+			Label: "Publish Listing", Help: "List this board (name, description, addresses) in the network's directory; N withdraws it", Type: ftYesNo, Col: 3, Row: 17, Width: 1,
+			Get: func() string { return uitext.BoolToYN(l.CentralPublishes()) },
+			Set: func(val string) error { v3netCentral(l).PublishListing = uitext.YNToBool(val); return nil },
+		},
+		{
+			Label: "Listing Desc", Help: "One line about your board for the directory (240 chars, no pipe codes)", Type: ftString, Col: 3, Row: 18, Width: 49, MaxLen: 240,
+			Get: func() string {
+				if l.Central == nil {
+					return ""
+				}
+				return l.Central.Description
+			},
+			Set: func(val string) error {
+				if strings.ContainsFunc(val, func(r rune) bool { return r == '|' || r < 0x20 || r == 0x7f }) {
+					return fmt.Errorf("pipe codes and control characters are not sent")
+				}
+				v3netCentral(l).Description = val
+				return nil
+			},
+		},
+		{
+			Label: "Listing Addrs", Help: "Comma-separated scheme://host:port (telnet, ssh, rlogin, http, https); blank = from server setup", Type: ftString, Col: 3, Row: 19, Width: 49, MaxLen: 512,
+			Get: func() string {
+				if l.Central == nil {
+					return ""
+				}
+				return strings.Join(l.Central.Addresses, ",")
+			},
+			Set: func(val string) error {
+				var addrs []string
+				for _, part := range strings.Split(val, ",") {
+					a := strings.TrimSpace(part)
+					if a == "" {
+						continue
+					}
+					if err := protocol.ValidateCentralAddress(a); err != nil {
+						return err
+					}
+					addrs = append(addrs, a)
+				}
+				if len(addrs) > protocol.MaxCentralAddresses {
+					return fmt.Errorf("at most %d addresses", protocol.MaxCentralAddresses)
+				}
+				v3netCentral(l).Addresses = addrs
+				return nil
+			},
+		},
 	}
+}
+
+// v3netCentral returns the leaf's Central block, creating an all-off one
+// the first time a Central field is set.
+func v3netCentral(l *config.V3NetLeafConfig) *config.V3NetCentralConfig {
+	if l.Central == nil {
+		l.Central = &config.V3NetCentralConfig{}
+	}
+	return l.Central
 }
 
 // v3netPinField edits one of a leaf's pinned keys. A value must be a base64
