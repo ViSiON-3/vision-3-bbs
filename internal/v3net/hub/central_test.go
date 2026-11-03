@@ -410,3 +410,38 @@ func TestOnlineNodesCountsStreams(t *testing.T) {
 		t.Error("still offline")
 	}
 }
+
+// A listing's stamps may carry a timezone offset; the hub stores them in
+// UTC so an offset listing is neither served past its expiry nor dropped
+// before it.
+func TestCentralStoreNormalisesOffsetStamps(t *testing.T) {
+	h, _ := setupTestHub(t)
+	a := newLeafKS(t)
+	now := time.Now()
+	// Expires in 90 minutes, written in a -05:00 offset: as text it sorts
+	// before the UTC "now" the store compares against.
+	loc := time.FixedZone("minus5", -5*3600)
+	l := centralListingFor(t, a, "Offset")
+	l.PublishedAt = now.In(loc).Format(time.RFC3339)
+	l.ExpiresAt = now.Add(90 * time.Minute).In(loc).Format(time.RFC3339)
+	if err := l.Sign(a); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(l)
+	if err := h.Central().Put(l, raw, now); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := h.Central().List("testnet", now)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("unexpired offset listing not served: rows=%d err=%v", len(rows), err)
+	}
+	if !strings.HasSuffix(rows[0].ExpiresAt, "Z") {
+		t.Errorf("expires_at stored as %q, want UTC", rows[0].ExpiresAt)
+	}
+	if n, _ := h.Central().PruneExpired(now); n != 0 {
+		t.Errorf("pruned %d unexpired listing(s)", n)
+	}
+	if rows, _ := h.Central().List("testnet", now.Add(2*time.Hour)); len(rows) != 0 {
+		t.Error("listing served past its expiry")
+	}
+}

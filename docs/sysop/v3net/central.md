@@ -212,7 +212,8 @@ next directory fetch.
 
 A listing over any limit is refused by the hub with the reason, and the
 leaf shows it on the Status screen. The whole directory is fetched in one
-signed reply of at most 1 MB.
+signed reply; a leaf refuses one over 4 MB, which a full directory of 500
+listings at every limit stays well inside.
 
 ### Retention
 

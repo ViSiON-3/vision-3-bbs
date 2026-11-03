@@ -47,6 +47,12 @@ var (
 // drop a replayed event.
 const centralSeenEvents = 256
 
+// maxDirectoryRespBytes bounds a directory reply. The largest listing
+// within protocol's limits is under 3KB, so a full directory of
+// protocol.MaxCentralListings is under 2MB; the cap leaves room for the
+// hub's own fields around each one.
+const maxDirectoryRespBytes = 4 << 20
+
 // ErrCentralUnsupported is returned by FetchCentralDirectory when the hub
 // does not serve the directory, or has not said yet whether it does.
 var ErrCentralUnsupported = errors.New("leaf: hub does not serve the Central directory")
@@ -384,7 +390,7 @@ func (l *Leaf) FetchCentralDirectory(ctx context.Context, force bool) ([]protoco
 	if err != nil {
 		return nil, err
 	}
-	body, err := readBody(resp.Body, maxRespBytes)
+	body, err := readBody(resp.Body, maxDirectoryRespBytes)
 	_ = resp.Body.Close() // read side; already read in full
 	if err != nil {
 		return nil, fmt.Errorf("leaf: read directory: %w", err)

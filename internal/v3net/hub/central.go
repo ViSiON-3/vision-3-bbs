@@ -72,12 +72,25 @@ func NewCentralStore(db *sql.DB) (*CentralStore, error) {
 // stored listing's seq is not lower, and ErrCentralFull if the network is
 // at protocol.MaxCentralListings and this node has no row. now is recorded
 // as the node's last-seen time.
+//
+// The published and expiry stamps are stored in UTC, whatever offset the
+// listing wrote them with, so the text comparisons List and PruneExpired
+// make are comparisons in time.
 func (cs *CentralStore) Put(listing *protocol.CentralListing, raw []byte, now time.Time) error {
+	published, err := time.Parse(time.RFC3339, listing.PublishedAt)
+	if err != nil {
+		return fmt.Errorf("hub: listing published_at: %w", err)
+	}
+	expires, err := time.Parse(time.RFC3339, listing.ExpiresAt)
+	if err != nil {
+		return fmt.Errorf("hub: listing expires_at: %w", err)
+	}
+
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
 	var stored int64
-	err := cs.db.QueryRow(
+	err = cs.db.QueryRow(
 		"SELECT seq FROM central_listings WHERE node_id = ? AND network = ?",
 		listing.NodeID, listing.Network).Scan(&stored)
 	switch {
@@ -105,7 +118,7 @@ func (cs *CentralStore) Put(listing *protocol.CentralListing, raw []byte, now ti
 		   seq = excluded.seq, listing = excluded.listing, published_at = excluded.published_at,
 		   expires_at = excluded.expires_at, last_seen_at = excluded.last_seen_at`,
 		listing.NodeID, listing.Network, listing.Seq, string(raw),
-		listing.PublishedAt, listing.ExpiresAt, now.UTC().Format(time.RFC3339))
+		published.UTC().Format(time.RFC3339), expires.UTC().Format(time.RFC3339), now.UTC().Format(time.RFC3339))
 	if err != nil {
 		return fmt.Errorf("hub: store listing: %w", err)
 	}

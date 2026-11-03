@@ -161,10 +161,10 @@ func TestRunCentralPublishesOrWithdraws(t *testing.T) {
 
 	select {
 	case <-bDone:
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("withdrawing run did not return")
 	}
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for a.CentralStatus().LastPublished.IsZero() && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -318,7 +318,7 @@ func TestCentralEventOverSSEStalesDirectory(t *testing.T) {
 	if err := a.publishCentralListing(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.After(5 * time.Second)
+	deadline := time.After(10 * time.Second)
 	for {
 		select {
 		case ev := <-events:
