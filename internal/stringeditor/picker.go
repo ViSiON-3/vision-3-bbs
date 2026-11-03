@@ -54,7 +54,16 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyUp, tea.KeyDown, tea.KeyTab:
 		m.pickRow = 1 - m.pickRow
 	case tea.KeyEnter:
-		m.insertAtCursor(m.pickerCode())
+		code, ok := m.pickerCodeBefore(m.runeAfterCursor())
+		if !ok {
+			// Only a dark foreground with a background before a digit 0-5
+			// has no safe form; say so and leave the input as it was.
+			m.mode = modeEdit
+			m.editErr = fmt.Sprintf("%s before the digit %c would read as |B%d%c; move the cursor or type a space first",
+				code, m.runeAfterCursor(), m.pickBG, m.runeAfterCursor())
+			return m, nil
+		}
+		m.insertAtCursor(code)
 		m.mode = modeEdit
 		m.editErr = ""
 	case tea.KeyEscape:
@@ -79,11 +88,42 @@ func wrapBG(n int) int {
 // BBS expands |00-|07 to sequences that reset every attribute, which would
 // wipe a background set before them; a background set after survives.
 func (m Model) pickerCode() string {
-	code := fmt.Sprintf("|%02d", m.pickFG)
-	if m.pickBG != pickerNoBG {
-		code += fmt.Sprintf("|B%d", m.pickBG)
-	}
+	code, _ := m.pickerCodeBefore(0)
 	return code
+}
+
+// pickerCodeBefore is pickerCode for an insertion followed by next, the rune
+// after the cursor (0 at the end of the input). A background code |Bn
+// followed by a digit 0-5 would be read by the BBS as |Bn0-|Bn5, a bright
+// background, swallowing the digit. Before such a digit the background goes
+// first and the foreground, a bright one that does not reset it, last. A dark
+// foreground resets the background whichever side it is on, so that pair has
+// no safe form before such a digit: ok is false and the code is for the
+// message only.
+func (m Model) pickerCodeBefore(next rune) (code string, ok bool) {
+	fg := fmt.Sprintf("|%02d", m.pickFG)
+	if m.pickBG == pickerNoBG {
+		return fg, true
+	}
+	bg := fmt.Sprintf("|B%d", m.pickBG)
+	if next < '0' || next > '5' {
+		return fg + bg, true
+	}
+	if m.pickFG >= 8 {
+		return bg + fg, true
+	}
+	return fg + bg, false
+}
+
+// runeAfterCursor returns the rune just after the edit cursor, or 0 at the
+// end of the input.
+func (m Model) runeAfterCursor() rune {
+	runes := []rune(m.textInput.Value())
+	pos := m.textInput.Position()
+	if pos < 0 || pos >= len(runes) {
+		return 0
+	}
+	return runes[pos]
 }
 
 // insertAtCursor puts s into the edit input at the cursor and leaves the

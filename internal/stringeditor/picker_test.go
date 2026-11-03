@@ -48,6 +48,51 @@ func TestPickerInsertsAtCursor(t *testing.T) {
 	}
 }
 
+// TestPickerBeforeDigit checks a background code never swallows a digit that
+// follows the cursor: a bright foreground goes last, and a dark one with a
+// background is refused with the input unchanged.
+func TestPickerBeforeDigit(t *testing.T) {
+	for _, d := range "012345" {
+		m := newTestModel(t)
+		m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		m = key(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(string(d))})
+		m = key(t, m, tea.KeyMsg{Type: tea.KeyHome})
+		m.pickFG, m.pickBG = 15, 1
+		m = key(t, m, tea.KeyMsg{Type: tea.KeyF2})
+		m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+		want := "|B1|15" + string(d)
+		if got := m.textInput.Value(); got != want {
+			t.Errorf("before %c: value %q, want %q", d, got, want)
+		}
+		out := string(ansi.ReplacePipeCodes([]byte(m.textInput.Value())))
+		if !strings.HasSuffix(out, "m"+string(d)) || strings.Contains(out, "\x1b[10") {
+			t.Errorf("before %c: rendered %q, digit swallowed", d, out)
+		}
+	}
+	// 6-9 are never a bright background, so the usual order stands.
+	m := newTestModel(t)
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("7")})
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyHome})
+	m.pickFG, m.pickBG = 15, 1
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyF2})
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if got := m.textInput.Value(); got != "|15|B17" {
+		t.Errorf("before 7: value %q", got)
+	}
+	// A dark foreground with a background before a digit is refused.
+	m = newTestModel(t)
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("0")})
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyHome})
+	m.pickFG, m.pickBG = 4, 1
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyF2})
+	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.mode != modeEdit || m.textInput.Value() != "0" || !strings.Contains(m.editErr, "|B10") {
+		t.Errorf("dark fg before digit: mode %v value %q err %q", m.mode, m.textInput.Value(), m.editErr)
+	}
+}
+
 // TestPickerCodeSurvivesRendering checks the inserted pair keeps both colours
 // once the BBS expands it: a dark foreground resets attributes, so it has to
 // come before the background.
