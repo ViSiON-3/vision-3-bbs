@@ -317,9 +317,15 @@ ANSI files contain the visual display for menus. They support:
 **Control Codes:**
 
 ```text
-|CL - Clear screen    |DE - Clear to end of line
-|CR - Carriage return  |23 - Reset attributes
+|CL - Clear screen       |DE - Clear to end of line
+|CR - Carriage return    |23 - Reset attributes
+|P  - Save cursor        |PP - Restore saved cursor
+|XYcc,rr - Move to column cc, row rr (two digits each, from 1)
 ```
+
+The control codes act in menu prompts and `strings.json` values. In `.ANS` files the art's own
+escape sequences position the cursor, and `|XY` is not expanded. See
+[Screen Codes](advanced/string-editor.md#screen-codes) for the details of `|XY`.
 
 ### Special Placeholder Codes
 

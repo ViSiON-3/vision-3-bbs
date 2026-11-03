@@ -75,7 +75,7 @@ func PlainName(s string) string {
 
 // DefangScreenCodes returns a stored name made safe to expand when it may have
 // come from another system: one line, with the pipe of each screen code (|CL,
-// |CR, |DE, |P, |PP) turned into a slash. Colour codes, "||" and other pipes stay,
+// |CR, |DE, |P, |PP, |XYcc,rr) turned into a slash. Colour codes, "||" and other pipes stay,
 // because a sysop may have written them and every screen reads them the same way.
 func DefangScreenCodes(s string) string {
 	s = OneLine(s)
@@ -111,6 +111,9 @@ func DefangScreenCodes(s string) string {
 // screenPipeCodeAt reports whether ReplacePipeCodes would expand a code at
 // data[i]. The caller has already ruled out colour codes.
 func screenPipeCodeAt(data []byte, i int) bool {
+	if _, n := CursorPipeCodeAt(data, i); n > 0 {
+		return true
+	}
 	for n := 4; n >= 2; n-- {
 		if i+n <= len(data) {
 			if _, ok := pipeCodeReplacements[string(data[i:i+n])]; ok {
