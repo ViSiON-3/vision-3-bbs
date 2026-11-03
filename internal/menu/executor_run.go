@@ -192,10 +192,13 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				break
 			}
 		}
-		// Set default activity on session for Who's Online display
+		// Set default activity on session for Who's Online display, and the
+		// menu itself, which is read by the WFC console and by the |MN
+		// placeholder in strings written from this menu.
 		if sess := e.nodeSession(nodeNumber); sess != nil {
 			sess.Mutex.Lock()
 			sess.Activity = menuDefaultActivity
+			sess.CurrentMenu = st.currentMenuName
 			sess.Mutex.Unlock()
 		}
 

@@ -371,76 +371,9 @@ func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, men
 
 	slog.Debug("displaying menu prompt", "menu", currentMenuName)
 
-	newUsersStatus := "NO"
-	if e.GetServerConfig().AllowNewUsers {
-		newUsersStatus = "YES"
-	}
-
-	now := config.NowIn(e.GetServerConfig().Timezone)
-	currentAreaTag, currentAreaDisplayName := e.resolveCurrentAreaTokens(currentUser, currentAreaName)
-	currentFileAreaTag, currentFileAreaDisplayName := e.resolveCurrentFileAreaTokens(currentUser)
-
-	placeholders := map[string]string{
-		"|NODE":     strconv.Itoa(nodeNumber), // Node Number
-		"|DATE":     now.Format("01/02/06"),
-		"|TIME":     now.Format("3:04 pm"),
-		"|MN":       currentMenuName,            // Menu Name
-		"|PV":       "0",                        // Pending validations
-		"|UH":       "Guest",                    // User Handle
-		"|NEWUSERS": newUsersStatus,             // Allow new users (YES/NO)
-		"|ALIAS":    "Guest",                    // Default
-		"|HANDLE":   "Guest",                    // Default
-		"|LEVEL":    "0",                        // Default
-		"|NAME":     "Guest User",               // Default
-		"|GL":       "",                         // Group/Location default
-		"|UN":       "",                         // User note (privateNote) default
-		"|UPLDS":    "0",                        // Default
-		"|DNLDS":    "0",                        // Default
-		"|POSTS":    "0",                        // Default
-		"|CALLS":    "0",                        // Default
-		"|LCALL":    "Never",                    // Default
-		"|TL":       "N/A",                      // Default
-		"|CA":       currentAreaTag,             // Current message area tag
-		"|CAN":      currentAreaDisplayName,     // Current message area display name
-		"|CFA":      currentFileAreaTag,         // Current file area tag
-		"|CFAN":     currentFileAreaDisplayName, // Current file area display name
-		"|CC":       "None",                     // Current message conference tag default
-		"|CCN":      "None",                     // Current message conference name default
-		"|FC":       "None",                     // Current file conference tag default
-		"|FCN":      "None",                     // Current file conference name default
-	}
-
-	// Populate user-specific placeholders if logged in
-	if currentUser != nil {
-		applyUserPlaceholders(placeholders, currentUser)
-
-		// Set |CC/|CCN based on user's current message conference
-		if currentUser.CurrentMsgConferenceTag != "" {
-			placeholders["|CC"] = currentUser.CurrentMsgConferenceTag
-		}
-		if e.ConferenceMgr != nil && currentUser.CurrentMsgConferenceID != 0 {
-			if conf, ok := e.ConferenceMgr.GetByID(currentUser.CurrentMsgConferenceID); ok {
-				placeholders["|CCN"] = conf.Name
-			}
-		}
-
-		// Set |FC/|FCN based on user's current file conference
-		if currentUser.CurrentFileConferenceTag != "" {
-			placeholders["|FC"] = currentUser.CurrentFileConferenceTag
-		}
-		if e.ConferenceMgr != nil && currentUser.CurrentFileConferenceID != 0 {
-			if conf, ok := e.ConferenceMgr.GetByID(currentUser.CurrentFileConferenceID); ok {
-				placeholders["|FCN"] = conf.Name
-			}
-		}
-
-		// Calculate Time Left |TL
-		placeholders["|TL"] = e.timeLeftPlaceholder(s, currentUser, sessionStartTime)
-
-		if currentMenuName == "MAIN" && currentUser.AccessLevel >= 100 {
-			placeholders["|PV"] = strconv.Itoa(pendingValidationCount(userManager))
-		}
-	} // End if currentUser != nil
+	// The prompt gets every placeholder; |PV is counted when the menu and
+	// the caller's level call for it (see sessionPlaceholders).
+	placeholders := e.sessionPlaceholders(s, currentUser, userManager, nodeNumber, currentMenuName, sessionStartTime, currentAreaName, true)
 
 	rumorLevel := 1 // default MinLevel when no user context
 	if currentUser != nil {

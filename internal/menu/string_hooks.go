@@ -101,7 +101,7 @@ func (e *MenuExecutor) writeStringSubst(terminal *term.Terminal, outputMode ansi
 		values = append(values, pairs[i])
 		escaped[i] = callerText(pairs[i])
 	}
-	return e.renderString(terminal, outputMode, value, true, nil, strings.NewReplacer(escaped...).Replace, values)
+	return e.renderString(terminal, outputMode, value, true, nil, escaped, values)
 }
 
 // WriteString is writeString for code outside the menu package.
@@ -125,14 +125,26 @@ func (e *MenuExecutor) writeStringNoScript(terminal *term.Terminal, outputMode a
 
 // renderString writes value, running its hook if it has one and allowScript
 // permits. args is nil for a value printed verbatim, which is never passed to
-// fmt: some verbatim strings hold a literal "%". subst, when set, is applied to
-// the text printed, after formatting. scriptArgs are passed to a script after
-// args, for values the call site substitutes rather than formats.
-func (e *MenuExecutor) renderString(terminal *term.Terminal, outputMode ansi.OutputMode, value string, allowScript bool, args []any, subst func(string) string, scriptArgs []any) error {
+// fmt: some verbatim strings hold a literal "%". pairs are the call site's own
+// old, new codes, replaced in the text printed after formatting. scriptArgs
+// are passed to a script after args, for values the call site substitutes
+// rather than formats.
+//
+// The text printed is expanded in this order: the session placeholders (|UH,
+// |TL and the rest, see string_placeholders.go) in the sysop's template,
+// then the format verbs, then the call site's pairs, then the pipe codes. A
+// handle or a subject filled in by the last two steps can therefore never be
+// read as a placeholder, and a code the call site fills in is its own.
+func (e *MenuExecutor) renderString(terminal *term.Terminal, outputMode ansi.OutputMode, value string, allowScript bool, args []any, pairs []string, scriptArgs []any) error {
+	var owned []string
+	for i := 0; i+1 < len(pairs); i += 2 {
+		owned = append(owned, pairs[i])
+	}
 	text := func(v string) string {
+		v = e.expandStringPlaceholders(terminal, v, owned, args != nil)
 		v = formatStringValue(v, args)
-		if subst != nil {
-			v = subst(v)
+		if len(pairs) > 0 {
+			v = strings.NewReplacer(pairs...).Replace(v)
 		}
 		return v
 	}
