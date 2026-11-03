@@ -15,6 +15,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/winch"
 	"github.com/creack/pty"
 	"golang.org/x/term"
 )
@@ -180,8 +181,11 @@ func executeNativeDoor(ctx *DoorCtx) error {
 	cmd.Env = append(filteredEnv, fmt.Sprintf("LINES=%d", screenHeight), fmt.Sprintf("COLUMNS=%d", screenWidth))
 	slog.Debug("set door env LINES/COLUMNS", "node", ctx.NodeNumber, "lines", screenHeight, "columns", screenWidth)
 
-	// Execute command
-	_, winChOrig, isPty := ctx.Session.Pty()
+	// Execute command. Window changes come through winch, so the session loop
+	// still sees each one while the door drains its own copy below.
+	winChOrig, stopResizes := winch.Subscribe(ctx.Session)
+	defer stopResizes()
+	_, _, isPty := ctx.Session.Pty()
 	var cmdErr error
 
 	if doorConfig.RequiresRawTerminal && isPty {

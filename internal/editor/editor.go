@@ -16,6 +16,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/winch"
 	"github.com/gliderlabs/ssh"
 )
 
@@ -81,8 +82,12 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 	termWidth := 80
 	termHeight := 24
 
-	// Try to get PTY size from session
-	ptyReq, winCh, isPty := session.Pty()
+	// Window changes come through winch, so the session loop, which resizes
+	// the terminal, sees each one too. Subscribe before reading the size, so a
+	// change that lands between the two is queued rather than lost.
+	winCh, stopResizes := winch.Subscribe(session)
+	defer stopResizes()
+	ptyReq, _, isPty := session.Pty()
 	if isPty {
 		termWidth = ptyReq.Window.Width
 		termHeight = ptyReq.Window.Height
