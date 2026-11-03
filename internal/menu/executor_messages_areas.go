@@ -12,6 +12,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -37,12 +38,19 @@ func runListMessageAreas(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", err
 	}
 
-	// Wait for Enter using configured PauseString
+	// Wait for Enter using configured PauseString, unless a script in its
+	// place answered the pause (see string_hooks.go).
 	pausePrompt := e.Strings().PauseString
 	if pausePrompt == "" {
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
-	e.writeString(terminal, outputMode, pausePrompt)
+	answer, err := e.renderPrompt(terminal, outputMode, pausePrompt, nil, scripting.PromptPause)
+	if err != nil {
+		return nil, "", err
+	}
+	if answer.set {
+		return nil, "", nil
+	}
 
 	ih := getSessionIH(s)
 	for {

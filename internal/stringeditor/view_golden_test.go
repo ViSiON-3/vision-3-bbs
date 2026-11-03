@@ -60,6 +60,10 @@ func TestViewGolden(t *testing.T) {
 			m.textInput.SetValue(`\q`)
 			return key2(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 		}},
+		{"picker", func(t *testing.T, m Model) Model {
+			m = key2(t, m, tea.KeyMsg{Type: tea.KeyF1})
+			return key2(t, m, tea.KeyMsg{Type: tea.KeyF2})
+		}},
 		{"search", func(t *testing.T, m Model) Model {
 			return key2(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
 		}},

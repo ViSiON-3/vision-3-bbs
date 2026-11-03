@@ -95,7 +95,12 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		"node", ctx.NodeNumber, "door", ctx.DoorName, "script", ctx.Config.Script)
 
 	runErr := eng.Run(cfg.Script)
-	ctx.Answer, ctx.Answered = eng.Answer()
+	// An answer counts only from a script that ran to its end. Taken here,
+	// before a disconnect is folded into a nil return below, so a script cut
+	// off after answering does not have that answer acted on.
+	if runErr == nil {
+		ctx.Answer, ctx.Answered = eng.Answer()
+	}
 
 	// Interrupt the copier goroutine's blocked Read() so it exits without
 	// consuming the user's next keypress, then close the engine. Keys the
