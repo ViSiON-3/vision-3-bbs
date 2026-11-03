@@ -156,21 +156,17 @@ func groupIsEmpty(inner string, placeholders map[string]string, keys []string) b
 // replacePlaceholders substitutes every placeholder in s, longest key first
 // so |CAN is matched before |CA, in one pass: a substituted value is never
 // scanned again. A "||" escape is kept as written for the pipe-code renderer,
-// which prints it as one pipe, so "||UH" comes out as the text "|UH".
+// which prints it as one pipe, so "||UH" comes out as the text "|UH". Keys
+// need not start with a pipe: a call site's ^CN is matched the same way.
 func replacePlaceholders(s string, placeholders map[string]string) string {
-	if !strings.Contains(s, "|") {
+	if len(placeholders) == 0 {
 		return s
 	}
 	keys := placeholderKeysLongestFirst(placeholders)
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); {
-		if s[i] != '|' {
-			b.WriteByte(s[i])
-			i++
-			continue
-		}
-		if i+1 < len(s) && s[i+1] == '|' {
+		if s[i] == '|' && i+1 < len(s) && s[i+1] == '|' {
 			b.WriteString("||")
 			i += 2
 			continue
@@ -185,7 +181,7 @@ func replacePlaceholders(s string, placeholders map[string]string) string {
 			}
 		}
 		if !matched {
-			b.WriteByte('|')
+			b.WriteByte(s[i])
 			i++
 		}
 	}

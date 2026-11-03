@@ -155,27 +155,19 @@ func (e *MenuExecutor) writeStringNoScript(terminal *term.Terminal, outputMode a
 // are passed to a script after args, for values the call site substitutes
 // rather than formats.
 //
-// The text printed is expanded in this order: the format verbs, then the
-// |{...|} optional groups and session placeholders (|UH, |TL and the rest,
-// see string_placeholders.go), then the call site's pairs, then the pipe
-// codes. The verbs go first so a group that holds one is judged with the
+// The text printed is expanded in this order: the format verbs, then in one
+// pass the |{...|} optional groups, the session placeholders (|UH, |TL and
+// the rest, see string_placeholders.go) and the call site's pairs, then the
+// pipe codes. The verbs go first so a group that holds one is judged with the
 // value in place rather than dropping the verb and shifting the arguments.
 // A handle or a subject filled into a verb or a pair is escaped (callerText),
 // which doubles the pipe of anything but a colour code, and a doubled pipe is
-// never read as a placeholder, so substituted text cannot start one. A code
-// the call site fills in is its own.
+// never read as a code, so substituted text cannot start one; the single
+// pass means an inserted value is never scanned for codes at all. A code the
+// call site fills in is its own.
 func (e *MenuExecutor) renderString(terminal *term.Terminal, outputMode ansi.OutputMode, value string, allowScript bool, args []any, pairs []string, scriptArgs []any) error {
-	var owned []string
-	for i := 0; i+1 < len(pairs); i += 2 {
-		owned = append(owned, pairs[i])
-	}
 	text := func(v string) string {
-		v = formatStringValue(v, args)
-		v = e.expandStringPlaceholders(terminal, v, owned)
-		if len(pairs) > 0 {
-			v = strings.NewReplacer(pairs...).Replace(v)
-		}
-		return v
+		return e.expandStringPlaceholders(terminal, formatStringValue(v, args), pairs)
 	}
 	h := stringhook.Parse(value)
 	switch h.Kind {

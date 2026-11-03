@@ -132,6 +132,48 @@ func TestWriteStringPlaceholders(t *testing.T) {
 		}
 	})
 
+	t.Run("call site code inside an inserted handle stays literal", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		f.bbs.User.Handle = "Neo|UN"
+		out := f.writeVia(t, func(terminal *term.Terminal) error {
+			return f.e.writeStringSubst(terminal, ansi.OutputModeUTF8, "|UH |UN", "|UN", "42")
+		})
+		if out != "Neo|UN 42" {
+			t.Fatalf("got %q", out)
+		}
+	})
+
+	t.Run("owned longer code is not eaten by a shorter session one", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		out := f.writeVia(t, func(terminal *term.Terminal) error {
+			return f.e.writeStringSubst(terminal, ansi.OutputModeUTF8, "|CAN/|CA", "|CAN", "Chat")
+		})
+		if out != "Chat/None" {
+			t.Fatalf("got %q", out)
+		}
+	})
+
+	t.Run("group is judged with the call site's value", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		out := f.writeVia(t, func(terminal *term.Terminal) error {
+			return f.e.writeStringSubst(terminal, ansi.OutputModeUTF8, "#|{|GL |UN|}", "|UN", "42")
+		})
+		if out != "# 42" {
+			t.Fatalf("got %q", out)
+		}
+	})
+
+	t.Run("call site codes apply without a session", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		terminal := newDoorcovTerminal(f.s.doorcovSession)
+		if err := f.e.writeStringSubst(terminal, ansi.OutputModeUTF8, "^CN: |NA", "^CN", "Conf", "|NA", "Neo"); err != nil {
+			t.Fatal(err)
+		}
+		if out := f.term(); out != "Conf: Neo" {
+			t.Fatalf("got %q", out)
+		}
+	})
+
 	t.Run("substituted value is not expanded", func(t *testing.T) {
 		f := newStringHookFixture(t, "")
 		out := f.writeVia(t, func(terminal *term.Terminal) error {
