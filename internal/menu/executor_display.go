@@ -13,6 +13,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringhook"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
@@ -308,6 +309,24 @@ func applyUserPlaceholders(placeholders map[string]string, u *user.User) {
 }
 
 func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, menu *MenuRecord, currentUser *user.User, userManager *user.UserMgr, nodeNumber int, currentMenuName string, sessionStartTime time.Time, outputMode ansi.OutputMode, currentAreaName string) error {
+	// Display only: these callers read the caller's input themselves, so a
+	// script in place of the prompt is given no prompt kind to answer.
+	_, err := e.displayPromptKind(s, terminal, menu, currentUser, userManager, nodeNumber, currentMenuName, sessionStartTime, outputMode, currentAreaName, "")
+	return err
+}
+
+// displayMenuPrompt is displayPrompt for the run loop. When the default
+// prompt is a strings.json value that runs a script, the script stands in for
+// a menu prompt (scripting.PromptMenu) and may answer it; the answer comes
+// back for the loop to act on (see runLoopState.menuPromptAnswer).
+func (e *MenuExecutor) displayMenuPrompt(s ssh.Session, terminal *term.Terminal, menu *MenuRecord, currentUser *user.User, userManager *user.UserMgr, nodeNumber int, currentMenuName string, sessionStartTime time.Time, outputMode ansi.OutputMode, currentAreaName string) (promptAnswer, error) {
+	return e.displayPromptKind(s, terminal, menu, currentUser, userManager, nodeNumber, currentMenuName, sessionStartTime, outputMode, currentAreaName, scripting.PromptMenu)
+}
+
+// displayPromptKind is the body of displayPrompt and displayMenuPrompt; kind
+// is the prompt kind a script in place of the default prompt is given.
+func (e *MenuExecutor) displayPromptKind(s ssh.Session, terminal *term.Terminal, menu *MenuRecord, currentUser *user.User, userManager *user.UserMgr, nodeNumber int, currentMenuName string, sessionStartTime time.Time, outputMode ansi.OutputMode, currentAreaName string, kind string) (promptAnswer, error) {
+	var none promptAnswer
 	promptParts := make([]string, 0, 2)
 	if strings.TrimSpace(menu.Prompt1) != "" {
 		promptParts = append(promptParts, menu.Prompt1)
@@ -340,7 +359,7 @@ func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, men
 			promptString = e.Strings().DefPrompt
 		} else {
 			slog.Warn("default prompt empty and menu prompt fields empty, no prompt will be displayed", "menu", currentMenuName)
-			return nil // Explicitly return nil if no prompt string can be determined
+			return none, nil // Explicitly return nil if no prompt string can be determined
 		}
 		// The default prompt is a strings.json value, so it can run a script
 		// or show a file (see string_hooks.go). The hook is read before any
@@ -349,7 +368,7 @@ func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, men
 		switch h := stringhook.Parse(promptString); h.Kind {
 		case stringhook.Script:
 			_ = terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-			return e.writeString(terminal, outputMode, promptString)
+			return e.renderPrompt(terminal, outputMode, promptString, nil, kind)
 		case stringhook.File:
 			// A missing file leaves the whole value to be printed as written.
 			width, height := stringHookTermSize(terminal)
@@ -360,7 +379,7 @@ func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, men
 				break
 			}
 			if h.Rest == "" {
-				return nil
+				return none, nil
 			}
 			// The text continues where the file left the cursor.
 			promptString, leadWritten = h.Rest, true
@@ -412,10 +431,10 @@ func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, men
 	err := terminalio.WriteProcessedBytes(terminal, finalBuf.Bytes(), outputMode)
 	if err != nil {
 		slog.Error("failed writing processed prompt", "menu", currentMenuName, "error", err)
-		return err
+		return none, err
 	}
 
-	return nil
+	return none, nil
 }
 
 // includeTagRe matches %%filename.ext%% include tags. Package-level so menu
