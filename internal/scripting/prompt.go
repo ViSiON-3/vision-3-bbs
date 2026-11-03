@@ -16,6 +16,10 @@ const (
 	PromptYesNo = "yesno"
 	// PromptPause is a "press Enter" pause. Any answer, or none, ends it.
 	PromptPause = "pause"
+	// PromptMenu is a menu's command prompt. The answer is a string:
+	// "GOTO:NAME" goes to that menu, "LOGOFF" ends the call, and anything
+	// else is taken as the command line the caller would have typed.
+	PromptMenu = "menu"
 )
 
 // registerPrompt creates the v3.prompt object: the kind of prompt the script

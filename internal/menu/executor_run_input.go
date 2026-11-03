@@ -167,10 +167,17 @@ func (st *runLoopState) readStandardInput(menuRec *MenuRecord) (input string, ac
 	slog.Debug("checking prompt display for menu", "menu", st.currentMenuName, "usePrompt", menuRec.GetUsePrompt())
 	if menuRec.GetUsePrompt() { // Condition changed: Only check UsePrompt
 		slog.Debug("calling displayPrompt for menu", "menu", st.currentMenuName)
-		err := e.displayPrompt(s, terminal, menuRec, st.currentUser, userManager, nodeNumber, st.currentMenuName, sessionStartTime, outputMode, st.currentAreaName) // Pass st.currentAreaName
+		answer, err := e.displayMenuPrompt(s, terminal, menuRec, st.currentUser, userManager, nodeNumber, st.currentMenuName, sessionStartTime, outputMode, st.currentAreaName) // Pass st.currentAreaName
 		slog.Debug("returned from displayPrompt for menu", "menu", st.currentMenuName, "error", err)
 		if err != nil {
 			return "", loopReturn, err // Propagate the error
+		}
+		if line, act, handled := st.menuPromptAnswer(answer); handled {
+			if act != loopFallthrough {
+				return line, act, nil
+			}
+			st.userInput = line
+			return st.specialInput()
 		}
 	} else {
 		// Log message remains the same, but the condition causing it is now just UsePrompt==false
@@ -201,7 +208,62 @@ func (st *runLoopState) readStandardInput(menuRec *MenuRecord) (input string, ac
 	}
 	st.userInput = strings.ToUpper(strings.TrimSpace(rawInput))
 	slog.Debug("user input", "input", st.userInput)
+	return st.specialInput()
+}
 
+// menuPromptAnswer acts on a script's answer to the menu prompt (see
+// scripting.PromptMenu). handled is false when there is no usable answer and
+// the loop reads the caller's input as usual: no script answered, the answer
+// is not a string, or it names a menu that does not exist or that the caller
+// may not enter, which is logged and, for a denied menu, told to the caller.
+// Otherwise act is loopContinue with the menu changed, loopReturn with
+// "LOGOFF", or loopFallthrough with line as the caller's command line.
+func (st *runLoopState) menuPromptAnswer(answer promptAnswer) (line string, act loopAction, handled bool) {
+	if !answer.set {
+		return "", loopFallthrough, false
+	}
+	value, ok := answer.value.(string)
+	if !ok {
+		slog.Warn("string script answered the menu prompt with something other than text; reading input",
+			"node", st.nodeNumber, "menu", st.currentMenuName, "answer", fmt.Sprintf("%#v", answer.value))
+		return "", loopFallthrough, false
+	}
+	value = strings.ToUpper(strings.TrimSpace(value))
+	switch {
+	case value == "LOGOFF":
+		slog.Info("menu prompt script logged the caller off", "node", st.nodeNumber, "menu", st.currentMenuName)
+		return "LOGOFF", loopReturn, true
+	case strings.HasPrefix(value, "GOTO:"):
+		target := strings.TrimSpace(strings.TrimPrefix(value, "GOTO:"))
+		rec, err := LoadMenu(target, st.e.Menus())
+		if err != nil {
+			slog.Warn("menu prompt script named a menu that cannot be loaded; reading input",
+				"node", st.nodeNumber, "menu", st.currentMenuName, "target", target, "error", err)
+			return "", loopFallthrough, false
+		}
+		// The run loop logs a caller off when they reach a menu their ACS
+		// denies; a script's choice is not the caller's, so refuse it here.
+		if !checkACS(rec.ACS, st.currentUser, st.s, st.terminal, st.sessionStartTime) {
+			slog.Info("menu prompt script named a menu the caller may not enter; reading input",
+				"node", st.nodeNumber, "menu", st.currentMenuName, "target", target, "acs", rec.ACS)
+			if wErr := st.e.writeString(st.terminal, st.outputMode, st.e.Strings().ExecAccessDenied); wErr != nil {
+				slog.Error("failed writing ACS denied message", "error", wErr)
+			}
+			return "", loopFallthrough, false
+		}
+		slog.Debug("menu prompt script changed menu", "node", st.nodeNumber, "from", st.currentMenuName, "to", target)
+		st.previousMenuName = st.currentMenuName
+		st.currentMenuName = target
+		return "", loopContinue, true
+	}
+	slog.Debug("menu prompt script supplied the command line", "node", st.nodeNumber, "menu", st.currentMenuName, "input", value)
+	return value, loopFallthrough, true
+}
+
+// specialInput finishes readStandardInput once st.userInput holds the
+// caller's line: ^P goes back to the previous menu, anything else is returned
+// for command matching.
+func (st *runLoopState) specialInput() (input string, act loopAction, retErr error) {
 	// --- Special Input Handling (^P, ##) ---
 	if st.userInput == "\x10" || st.userInput == "^P" { // Ctrl+P is ASCII 16 (\x10)
 		if st.previousMenuName != "" {
