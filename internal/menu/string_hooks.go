@@ -166,35 +166,60 @@ func (e *MenuExecutor) writeStringNoScript(terminal *term.Terminal, outputMode a
 // pass means an inserted value is never scanned for codes at all. A code the
 // call site fills in is its own.
 func (e *MenuExecutor) renderString(terminal *term.Terminal, outputMode ansi.OutputMode, value string, allowScript bool, args []any, pairs []string, scriptArgs []any) error {
+	_, err := e.render(terminal, outputMode, value, allowScript, args, pairs, scriptArgs, "")
+	return err
+}
+
+// promptAnswer is what a string's script handed back for the prompt it
+// replaced (v3.prompt.answer). set is false when no script ran, or it ran
+// without answering; value is nil for answer() called with no argument.
+type promptAnswer struct {
+	set   bool
+	value any
+}
+
+// renderPrompt is renderString for a value shown as a prompt of the given
+// kind (scripting.PromptYesNo, scripting.PromptPause), formatted with args
+// when the call site supplies any. A script run in its place can answer the
+// prompt; the caller uses the answer when set and otherwise reads one from
+// the caller as usual.
+func (e *MenuExecutor) renderPrompt(terminal *term.Terminal, outputMode ansi.OutputMode, value string, args []any, kind string) (promptAnswer, error) {
+	return e.render(terminal, outputMode, value, true, args, nil, nil, kind)
+}
+
+// render is the body of renderString and renderPrompt; kind is the prompt
+// kind handed to a script, "" when the value is not a prompt.
+func (e *MenuExecutor) render(terminal *term.Terminal, outputMode ansi.OutputMode, value string, allowScript bool, args []any, pairs []string, scriptArgs []any, kind string) (promptAnswer, error) {
+	var none promptAnswer
 	text := func(v string) string {
 		return e.expandStringPlaceholders(terminal, formatStringValue(v, args), pairs)
 	}
 	h := stringhook.Parse(value)
 	switch h.Kind {
 	case stringhook.Escaped:
-		return writeStringText(terminal, outputMode, text(h.Rest))
+		return none, writeStringText(terminal, outputMode, text(h.Rest))
 	case stringhook.File:
 		width, height := stringHookTermSize(terminal)
 		if err := e.displayFileIfPresent(terminal, h.Target, outputMode, width, height); err != nil {
 			warnStringHookOnce(value, "file not found", "file", h.Target, "error", err)
 			if werr := writeStringText(terminal, outputMode, h.Prefix); werr != nil {
-				return werr
+				return none, werr
 			}
 		}
 		if h.Rest == "" {
-			return nil
+			return none, nil
 		}
-		return writeStringText(terminal, outputMode, text(h.Rest))
+		return none, writeStringText(terminal, outputMode, text(h.Rest))
 	case stringhook.Script:
-		ran, err := e.runStringScript(terminal, outputMode, value, h, allowScript, append(append([]any(nil), args...), scriptArgs...))
+		ran, answer, err := e.runStringScript(terminal, outputMode, value, h, allowScript, append(append([]any(nil), args...), scriptArgs...), kind)
 		if ran || err != nil {
-			return err
+			return answer, err
 		}
 		// A script value has no verbs, so formatting it would only append
 		// %!(EXTRA ...); it is printed as written.
-		return writeStringText(terminal, outputMode, value)
+		return none, writeStringText(terminal, outputMode, value)
 	}
-	return writeStringText(terminal, outputMode, text(value))
+	return none, writeStringText(terminal, outputMode, text(value))
 }
 
 // formatStringValue formats value with args, or returns it untouched when the
@@ -236,52 +261,54 @@ func stringHookTermSize(terminal *term.Terminal) (int, int) {
 }
 
 // runStringScript runs the V3 script door a !script value names. ran reports
-// whether it did; when it did not, the caller prints the value as text. err is
+// whether it did; when it did not, the caller prints the value as text. kind
+// is the prompt the string is shown as, or ""; answer is what the script
+// handed back for it, set only when the script ran and answered. err is
 // returned only for an error that ends the session (a hang-up, the idle
 // timeout or the time limit), which the caller's next read would also report.
-func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.OutputMode, value string, h stringhook.Hook, allowScript bool, args []any) (ran bool, err error) {
+func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.OutputMode, value string, h stringhook.Hook, allowScript bool, args []any, kind string) (ran bool, answer promptAnswer, err error) {
 	if !allowScript {
 		warnStringHookOnce(value, "scripts cannot run where this string is shown")
-		return false, nil
+		return false, answer, nil
 	}
 	hs := lookupStringHookSession(terminal)
 	if hs == nil || hs.bbs == nil {
 		warnStringHookOnce(value, "no session to run the script in")
-		return false, nil
+		return false, answer, nil
 	}
 	u := hs.currentUser()
 	if u == nil {
 		// Before login there is no user for the door's dropfile and ACS check.
 		// Not logged: login screens are shown on every connection.
-		return false, nil
+		return false, answer, nil
 	}
 
 	name := strings.ToUpper(h.Target)
 	doorConfig, ok := e.GetDoorConfig(name)
 	if !ok {
 		warnStringHookOnce(value, "no such door", "door", name)
-		return false, nil
+		return false, answer, nil
 	}
 	if doorConfig.Type != "v3_script" {
 		warnStringHookOnce(value, "door is not a v3_script door", "door", name, "type", doorConfig.Type)
-		return false, nil
+		return false, answer, nil
 	}
 	// A missing script fails to load before running anything; print the value
 	// rather than leave the string blank.
 	if !stringScriptExists(doorConfig) {
 		warnStringHookOnce(value, "script file not found", "door", name, "script", doorConfig.Script)
-		return false, nil
+		return false, answer, nil
 	}
 	if doorConfig.MinAccessLevel > 0 && u.AccessLevel < doorConfig.MinAccessLevel {
 		// Expected for a string shown to every caller but scripted only for
 		// some, so not a warning.
 		slog.Debug("string script below caller's access level, printed as text",
 			"door", name, "level", u.AccessLevel, "required", doorConfig.MinAccessLevel)
-		return false, nil
+		return false, answer, nil
 	}
 	if !hs.running.CompareAndSwap(false, true) {
 		warnStringHookOnce(value, "a string script is already running", "door", name)
-		return false, nil
+		return false, answer, nil
 	}
 	defer hs.running.Store(false)
 
@@ -302,10 +329,11 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 		doorConfig, name)
 	ctx.UserManager = hs.userMgr
 	ctx.CurrentUser = u
+	ctx.Prompt = kind
 	// A door is not started once the caller's time is up, which is exactly
 	// when the time-limit notice is shown: print that value as text.
 	if deadline := doorTimeLimitDeadline(ctx); !deadline.IsZero() && !time.Now().Before(deadline) {
-		return false, nil
+		return false, answer, nil
 	}
 
 	// executeDoor puts the snoop tap back in BBS mode afterwards; a string can
@@ -320,9 +348,14 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 	if restoreTap != nil {
 		restoreTap()
 	}
+	// An answer counts only from a script that ran to its end: one that
+	// failed part way may not have meant what it had set so far.
+	if runErr == nil && ctx.Answered {
+		answer = promptAnswer{set: true, value: ctx.Answer}
+	}
 	switch {
 	case runErr == nil:
-		return true, nil
+		return true, answer, nil
 	case isSessionFatal(runErr) || errors.Is(runErr, editor.ErrTimeLimit):
 		// Most callers do not check this error, and their next read would
 		// start a fresh idle interval. Latch it on the session's input
@@ -330,13 +363,13 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 		if v, ok := sessionInputHandlers.Load(hs.s); ok {
 			v.(*editor.InputHandler).Fail(runErr)
 		}
-		return true, runErr
+		return true, answer, runErr
 	case errors.Is(runErr, ErrDoorBusy):
 		slog.Info("string script door busy, printed as text", "door", name, "node", hs.bbs.NodeID)
-		return false, nil
+		return false, answer, nil
 	}
 	slog.Error("string script failed", "door", name, "node", hs.bbs.NodeID, "error", runErr)
-	return true, nil
+	return true, answer, nil
 }
 
 // stringScriptExists reports whether a v3_script door's script file is there,

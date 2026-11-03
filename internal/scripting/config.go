@@ -13,6 +13,10 @@ type ScriptConfig struct {
 	WorkingDir string        // Working directory (sandbox root)
 	Args       []string      // Script arguments (available as v3.args)
 	MaxRunTime time.Duration // Maximum execution time (0 = use default of 30 minutes)
+	// Prompt is the kind of prompt the script stands in for when it runs in
+	// place of a strings.json value: PromptYesNo, PromptPause, or "" for a
+	// script that is not replacing a prompt. Exposed as v3.prompt.kind.
+	Prompt string
 }
 
 // SessionContext holds the BBS session state needed by the V3 script engine.

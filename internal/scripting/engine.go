@@ -57,6 +57,9 @@ type Engine struct {
 	// the LF or NUL at the start of the next chunk is part of that Enter,
 	// not a key of its own.
 	crTrailer bool
+	// answer and answered record v3.prompt.answer (see prompt.go).
+	answer   any
+	answered bool
 }
 
 // readResult carries data or an error from the reader goroutine.
@@ -100,6 +103,7 @@ func NewEngine(ctx context.Context, session *SessionContext, cfg ScriptConfig, p
 	v3 := eng.vm.NewObject()
 	registerConsole(v3, eng)
 	registerSession(v3, eng)
+	registerPrompt(v3, eng)
 	if providers.UserMgr != nil && providers.CurrentUser != nil {
 		registerUser(v3, eng)
 		registerUsers(v3, eng)

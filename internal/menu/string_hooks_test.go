@@ -73,12 +73,27 @@ if (v3.args.indexOf("key") >= 0) { v3.console.print("[got " + v3.console.getkey(
 	if err := os.WriteFile(filepath.Join(scripts, "say.js"), []byte(say), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// answer.js prints the prompt kind, then answers the prompt as its
+	// arguments say: yes, no, str (the string "Yes"), text (a value that is
+	// not an answer), throw (answers, then fails), or nothing (answer()).
+	answer := `v3.console.print("[kind " + v3.prompt.kind + "]");
+var a = v3.args;
+if (a.indexOf("yes") >= 0) { v3.prompt.answer(true); }
+else if (a.indexOf("no") >= 0) { v3.prompt.answer(false); }
+else if (a.indexOf("str") >= 0) { v3.prompt.answer("Yes"); }
+else if (a.indexOf("text") >= 0) { v3.prompt.answer("maybe"); }
+else if (a.indexOf("throw") >= 0) { v3.prompt.answer(true); throw new Error("boom"); }
+else if (a.indexOf("silent") < 0) { v3.prompt.answer(); }`
+	if err := os.WriteFile(filepath.Join(scripts, "answer.js"), []byte(answer), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	e := &MenuExecutor{MenuSetPath: root, RootConfigPath: root}
 	e.SetStrings(config.StringsConfig{ExecFileLoadError: "Cannot load %s"})
 	e.SetServerConfig(config.ServerConfig{CoSysOpLevel: 250})
 	e.SetDoorRegistry(map[string]config.DoorConfig{
 		"SAY":    {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, Args: []string{"door"}},
+		"ANSWER": {Type: "v3_script", Script: "answer.js", WorkingDirectory: scripts},
 		"NATIVE": {Commands: []string{"/bin/true"}},
 		"LOCKED": {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, MinAccessLevel: 200},
 		"GONE":   {Type: "v3_script", Script: "gone.js", WorkingDirectory: scripts},

@@ -311,6 +311,40 @@ Read-only snapshot of the current user taken at session start.
 
 ---
 
+### v3.prompt
+
+For a script run in place of a `strings.json` value (see
+[Scripts and files in place of text](advanced/string-editor.md#scripts-and-files-in-place-of-text)).
+When that value is a prompt, the script can answer it, and the BBS then skips reading an answer
+from the caller.
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `kind` | string | The prompt the script stands in for: `"yesno"`, `"pause"`, or `""` when the value is not a prompt, or the script was started from a menu |
+| `answer(value)` | function | Hands `value` back as the prompt's answer. Calling it again replaces the earlier answer. Outside a prompt it is ignored |
+
+| Kind | What `answer` takes | Without an answer |
+|------|---------------------|-------------------|
+| `yesno` | `true`/`false`, or a string reading `yes`, `no`, `y` or `n` in any case. Anything else is logged and ignored | The BBS draws its Yes/No lightbar after the script and reads the answer |
+| `pause` | Anything, or `answer()` with no argument | The BBS waits for Enter after the script |
+
+```javascript
+// confirm.js — a Yes/No prompt drawn as a lightbar of our own
+if (v3.prompt.kind === "yesno") {
+    v3.console.println("|15" + v3.args.join(" "));
+    v3.prompt.answer(v3.console.yesno("|07Sure"));
+} else {
+    v3.console.println("|07" + v3.args.join(" "));
+}
+```
+
+An answer counts only when the script runs to its end: a script that answers and then throws, or
+is ended by a disconnect or the time limit, leaves the prompt to the BBS. When a script answers,
+the BBS prints nothing more for the prompt, so the script should leave the cursor where the caller
+expects it, normally at the start of a new line.
+
+---
+
 ### v3.user
 
 Current user with live accessor properties and write support. All properties reflect the current in-memory state.

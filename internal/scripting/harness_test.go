@@ -49,6 +49,8 @@ type harnessOpts struct {
 	session     func(*SessionContext)
 	// workingDir overrides the engine working dir (relative to root).
 	workingDir string
+	// prompt is the prompt kind the script stands in for (ScriptConfig.Prompt).
+	prompt string
 }
 
 // newHarness builds an engine for one test and registers its cleanup.
@@ -103,6 +105,7 @@ func newHarness(t *testing.T, o harnessOpts) *scriptHarness {
 		WorkingDir: wd,
 		Args:       o.args,
 		MaxRunTime: o.maxRunTime,
+		Prompt:     o.prompt,
 	}, o.providers)
 
 	h := &scriptHarness{
