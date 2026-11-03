@@ -323,7 +323,8 @@ ANSI files contain the visual display for menus. They support:
 
 ### Special Placeholder Codes
 
-Dynamic content placeholders in prompts and ANSI files:
+Dynamic content placeholders in prompts, ANSI files, and `strings.json` values (see
+[Placeholders](advanced/string-editor.md#placeholders) in the string editor guide):
 
 - `|UH` - User handle
 - `|ALIAS` - User handle (alias for `|UH`)

@@ -1,6 +1,6 @@
 # ViSiON/3 String Editor
 
-Every prompt, notice and error a caller sees — the pause string, the login prompt, "Press a key", the Yes/No labels — is a line of text in `configs/strings.json`, and the string editor (`./strings`) is where you reword, recolour or translate it. It is a Go reimplementation of the original ViSiON/2 `STRINGS.EXE` Turbo Pascal utility, down to the paginated three-column layout, with a few things the original did not have: search, safe editing of control characters, previews of the colour codes, and a check that a string the BBS fills in at runtime still has the right placeholders. A value can also hand off to a script or an ANSI file instead of printing text, which is how a board gets a full-screen custom prompt without touching Go.
+Every prompt, notice and error a caller sees — the pause string, the login prompt, "Press a key", the Yes/No labels — is a line of text in `configs/strings.json`, and the string editor (`./strings`) is where you reword, recolour or translate it. It is a Go reimplementation of the original ViSiON/2 `STRINGS.EXE` Turbo Pascal utility, down to the paginated three-column layout, with a few things the original did not have: search, safe editing of control characters, previews of the colour codes, and a check that a string the BBS fills in at runtime still has the right placeholders. A value can carry the same `|UH`, `|TL` and other [placeholders](#placeholders) as a menu prompt, and can hand off to a script or an ANSI file instead of printing text, which is how a board gets a full-screen custom prompt without touching Go.
 
 ## Running
 
@@ -261,7 +261,8 @@ file. Put a colour code before a leading `!` (`|12!Warning`) rather than after i
 escape.
 
 **Where hooks do not apply.** These strings are drawn into fixed screen layouts, or are not
-screen text at all, and are always printed or used as written:
+screen text at all, and are always printed or used as written, with no [placeholders](#placeholders)
+expanded:
 
 - Chat's split screen: messages, system lines, joins and leaves, and the header and status bar.
   The network and room pickers shown before it do take hooks.
@@ -384,22 +385,59 @@ String values support BBS pipe codes that are rendered with color in the editor.
 | `\|B6` | Cyan background |
 | `\|B7` | Light Gray background |
 
-#### Special Codes
+#### Screen Codes
 
 | Code | Meaning |
 |------|---------|
-| `\|CR` | Carriage return / newline (rendered as a space in the editor's preview) |
-| `\|CL` | Clear screen |
-| `\|DE` | Clear to end of line |
-| `@` | Yes/No selection bar |
+| `\|CR` | Carriage return and line feed (rendered as a space in the editor's preview) |
+| `\|CL` | Clear screen and home the cursor (hidden in the preview) |
+| `\|DE` | Clear to end of line (hidden in the preview) |
+| `\|P` | Save the cursor position |
+| `\|PP` | Restore the saved cursor position |
+| `\|23` | Reset all attributes to the terminal default |
+| `@` | At the end of a Yes/No prompt: where the Yes/No lightbar is drawn |
+
+A stored line break (`\r\n`, typed with the escapes above) does the same as `\|CR`. There is no
+code that moves the cursor to a row and column; a value that needs a fixed position is better
+drawn by a `%file.ext` hook (see above).
 
 #### Dollar Codes (`$x`)
 
 Legacy Vision/2 color codes using `$` followed by a letter. These map to the same 16 DOS colors (e.g., `$a` = dark blue, `$W` = white).
 
-#### MCI Codes
+#### Placeholders
 
-Runtime placeholder codes like `|MN` (menu name), `|TL` (time left), `|CB` (current board), `|UN` (user number), etc. These are displayed as literal text in the editor but expanded by the BBS server when shown to users.
+A value can carry the same `|XX` placeholders as a menu prompt: the caller's handle, the node,
+the time left, the current areas and conferences. The full list, with `|{ ... |}` optional groups,
+is in [Special Placeholder Codes](menus/menu-system.md#special-placeholder-codes). They expand in
+every value the BBS prints through its string writer, which is every value that can take a
+`!script` or `%file` hook; the strings listed under *Where hooks do not apply* are drawn as written.
+The editor shows them as literal text.
+
+```json
+{
+    "enterChat": "|13Greetings, |05|UH|{ from |GL|}...",
+    "pauseString": "|07[|15|TL|07 min left] Press a key"
+}
+```
+
+What a placeholder shows depends on the caller's state when the string is printed:
+
+- Before login, the user placeholders read as a guest: `|UH` is `Guest`, `|LEVEL` is `0`, `|TL`
+  is `N/A`, `|LCALL` is `Never`.
+- `|MN` is the menu the caller is in, so a string printed by a command shows the menu it was run
+  from. `|PV` is counted only on the `MAIN` menu for CoSysOps and above, and reads `0` elsewhere.
+- `|CA` and `|CAN` follow the caller's current message area; there is no override from the menu
+  as there is for the prompt.
+
+Placeholders are read from your template only. A handle, a file name or a subject the BBS fills
+into a `%s` verb or a code such as `|NA` is never read as a placeholder, and neither is anything
+written as `||`, which prints a literal pipe: `||UH` shows `|UH`. A `|{ ... |}` group is judged
+after the verbs are filled in, so a verb inside a group is never lost. A code the BBS fills in
+itself keeps its own meaning: in `yourUserNum`, `|UN` is the new caller's user number, not the
+user note. The description row names those codes.
+
+The `@U@` and `@UC@` AT-codes and `%%file.ans%%` includes are for prompts and display files only.
 
 ### Building
 

@@ -41,6 +41,9 @@ func (e *MenuExecutor) writeCenteredPausePrompt(s ssh.Session, terminal *term.Te
 	} else if strings.HasPrefix(pauseText, "\n") {
 		pauseText = strings.TrimPrefix(pauseText, "\n")
 	}
+	// A strings.json value takes placeholders (|TL and the rest); expand
+	// them before the text is measured for centring.
+	pauseText = e.expandStringPlaceholders(terminal, pauseText, nil)
 
 	// Process pipe codes and convert to CP437 if needed
 	var pauseBytesToWrite []byte
