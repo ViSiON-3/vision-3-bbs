@@ -90,14 +90,27 @@ const headerTitle = "-- ViSiON/3 String Configuration v1.0 --"
 const (
 	helpText        = "Enter Edit  |  F1 Prefill  |  F3 Revert  |  F4 Default  |  F10 Save  |  / Search  |  ^R Reserved  |  Esc Quit"
 	helpTextCompact = "Enter Edit  F1 Prefill  F3 Revert  F4 Default  F10 Save  / Search  ^R  Esc Quit"
+	// helpTextEdit is shown while a value is being edited, when the list
+	// keys do not apply and the picker does.
+	helpTextEdit = "Enter Accept  |  F2 Colour  |  Esc Cancel"
 )
 
-// helpBarText picks the widest help variant that fits the terminal.
-func helpBarText(width int) string {
+// helpBarText picks the help for the mode, in the widest variant that fits
+// the terminal.
+func (m Model) helpBarText(width int) string {
+	if m.editing() {
+		return helpTextEdit
+	}
 	if cellWidth(helpText) <= width {
 		return helpText
 	}
 	return helpTextCompact
+}
+
+// editing reports whether the edit input is open: in edit mode, or under the
+// colour picker, which returns to it.
+func (m Model) editing() bool {
+	return m.mode == modeEdit || m.mode == modePicker
 }
 
 // View implements tea.Model.
@@ -156,7 +169,7 @@ func (m Model) View() string {
 	panelLine(m.renderMessageBar(panelW))
 	line(m.renderDescriptionBar(row))
 	bgLines(bottomPad)
-	b.WriteString(tuiart.HelpBarStyle.Render(tuiart.CenterText(helpBarText(m.width), m.width)))
+	b.WriteString(tuiart.HelpBarStyle.Render(tuiart.CenterText(m.helpBarText(m.width), m.width)))
 
 	// === Overlay: Confirm Dialog ===
 	switch m.mode {
@@ -166,6 +179,8 @@ func (m Model) View() string {
 		return m.overlayDialog(b.String(), "Revert to Last Saved?")
 	case modeDefaultConfirm:
 		return m.overlayDialog(b.String(), "Restore ViSiON/3 Default?")
+	case modePicker:
+		return m.overlayPicker(b.String())
 	}
 
 	return b.String()
@@ -272,7 +287,7 @@ func (m Model) renderItem(idx, panelW int) string {
 		numStyle.Render("]") +
 		markerStyle.Render(state.marker())
 
-	if isSelected && m.mode == modeEdit {
+	if isSelected && m.editing() {
 		// Clip the input to the value column so a long escaped value can never
 		// push the row past the panel edge.
 		input := m.textInput.View()
@@ -453,21 +468,7 @@ func (m Model) renderDescriptionBar(row int) string {
 
 // overlayDialog renders a confirmation dialog centered over the content.
 func (m Model) overlayDialog(background string, title string) string {
-	lines := strings.Split(background, "\n")
-
-	// Dialog dimensions
 	dialogW := 30
-	dialogH := 5
-
-	// Calculate center position
-	startRow := (m.height - dialogH) / 2
-	startCol := (m.width - dialogW) / 2
-	if startRow < 0 {
-		startRow = 0
-	}
-	if startCol < 0 {
-		startCol = 0
-	}
 
 	// Build dialog lines
 	border := dialogBorderStyle.Render("╔" + strings.Repeat("═", dialogW-2) + "╗")
@@ -499,9 +500,16 @@ func (m Model) overlayDialog(background string, title string) string {
 		dialogTextStyle.Render(strings.Repeat(" ", max(0, dialogW-2-btnPad-11))) +
 		borderSide
 
-	dialogLines := []string{border, titleLine, emptyLine, buttonLine, borderBot}
+	return m.composeOverlay(background, []string{border, titleLine, emptyLine, buttonLine, borderBot}, dialogW)
+}
 
-	// Overlay dialog on background, padding each line to full terminal width
+// composeOverlay draws dialogLines, each dialogW cells wide, centred over the
+// rendered background, padding each affected row to the terminal width so no
+// gap appears on wide terminals.
+func (m Model) composeOverlay(background string, dialogLines []string, dialogW int) string {
+	lines := strings.Split(background, "\n")
+	startRow := max(0, (m.height-len(dialogLines))/2)
+	startCol := max(0, (m.width-dialogW)/2)
 	for i, dl := range dialogLines {
 		row := startRow + i
 		if row >= 0 && row < len(lines) {
@@ -510,14 +518,12 @@ func (m Model) overlayDialog(background string, title string) string {
 			left := padToCol(line, startCol)
 			right := skipVisual(line, startCol+dialogW)
 			composed := left + dl + right
-			// Pad to full terminal width so no gap appears on wide terminals
 			if vis := visualLen(composed); vis < m.width {
 				composed += strings.Repeat(" ", m.width-vis)
 			}
 			lines[row] = composed
 		}
 	}
-
 	return strings.Join(lines, "\n")
 }
 
