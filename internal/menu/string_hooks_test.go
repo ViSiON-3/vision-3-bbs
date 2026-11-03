@@ -86,6 +86,7 @@ else if (a.indexOf("throw") >= 0) { v3.prompt.answer(true); throw new Error("boo
 else if (a.indexOf("goto") >= 0) { v3.prompt.answer("goto:whoson"); }
 else if (a.indexOf("locked") >= 0) { v3.prompt.answer("GOTO:LOCKED"); }
 else if (a.indexOf("nomenu") >= 0) { v3.prompt.answer("GOTO:NOPE"); }
+else if (a.indexOf("noart") >= 0) { v3.prompt.answer("GOTO:NOART"); }
 else if (a.indexOf("cmd") >= 0) { v3.prompt.answer(" w "); }
 else if (a.indexOf("logoff") >= 0) { v3.prompt.answer("LOGOFF"); }
 else if (a.indexOf("silent") < 0) { v3.prompt.answer(); }`
@@ -93,12 +94,18 @@ else if (a.indexOf("silent") < 0) { v3.prompt.answer(); }`
 		t.Fatal(err)
 	}
 	// Menus a menu-prompt script can name: WHOSON for anyone, LOCKED for
-	// level 200 and above (the fixture's caller is level 50).
+	// level 200 and above (the fixture's caller is level 50), and NOART,
+	// which has a menu file but no screen.
 	if err := os.MkdirAll(filepath.Join(root, "mnu"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for name, mnu := range map[string]string{"WHOSON": `{"USEPROMPT": true}`, "LOCKED": `{"USEPROMPT": true, "ACS": "S200"}`} {
+	for name, mnu := range map[string]string{"WHOSON": `{"USEPROMPT": true}`, "LOCKED": `{"USEPROMPT": true, "ACS": "S200"}`, "NOART": `{"USEPROMPT": true}`} {
 		if err := os.WriteFile(filepath.Join(root, "mnu", name+".MNU"), []byte(mnu), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"WHOSON", "LOCKED"} {
+		if err := os.WriteFile(filepath.Join(root, "ansi", name+".ANS"), []byte("[menu art]"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}

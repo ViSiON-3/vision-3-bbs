@@ -95,6 +95,31 @@ func TestMenuPromptScriptAnswer(t *testing.T) {
 		}
 	})
 
+	t.Run("menu without a screen falls back to reading input", func(t *testing.T) {
+		f := newStringHookFixture(t, "x\r")
+		st, input, act, _ := f.readMenuInput(t, "!ANSWER noart")
+		if act != loopFallthrough || input != "X" || st.currentMenuName != "MAIN" {
+			t.Errorf("act=%v input=%q current=%q", act, input, st.currentMenuName)
+		}
+	})
+
+	t.Run("display-only prompt callers give the script no kind", func(t *testing.T) {
+		// displayPrompt is what the sponsor, door and twit-list menus call;
+		// they read input themselves, so the script must not be told it can
+		// answer a menu prompt.
+		f := newStringHookFixture(t, "")
+		f.e.SetStrings(config.StringsConfig{DefPrompt: "!ANSWER goto"})
+		terminal := newDoorcovTerminal(f.s.doorcovSession)
+		RegisterStringHookSession(terminal, f.s, nil, f.bbs)
+		defer ClearStringHookSession(terminal)
+		if err := f.e.displayPrompt(f.s, terminal, &MenuRecord{}, f.bbs.User, nil, 3, "SPONSORM", time.Now(), ansi.OutputModeUTF8, ""); err != nil {
+			t.Fatal(err)
+		}
+		if out := f.term(); !strings.Contains(out, "[kind ]") {
+			t.Errorf("output=%q", out)
+		}
+	})
+
 	t.Run("non-text answer falls back to reading input", func(t *testing.T) {
 		f := newStringHookFixture(t, "x\r")
 		_, input, act, _ := f.readMenuInput(t, "!ANSWER yes")

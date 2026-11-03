@@ -329,8 +329,10 @@ from the caller.
 | `pause` | Anything, or `answer()` with no argument | The BBS waits for Enter after the script |
 | `menu` | A string: `GOTO:NAME` goes to menu `NAME`, `LOGOFF` ends the call, and anything else is the command line the caller would have typed (`W`, `MR`, an empty string for Enter). Anything but a string is logged and ignored | The BBS reads the caller's command after the script |
 
-The `menu` kind is the default prompt (`defPrompt`) of a menu without a lightbar. A `GOTO:` to a
-menu that does not exist is logged and the caller is asked for a command as usual; one to a menu
+The `menu` kind is the default prompt (`defPrompt`) of a menu without a lightbar, as the main run
+loop shows it; the sponsor, door and twit-list menus draw the same prompt but read the command
+themselves, so a script there sees kind `""`. A `GOTO:` to a menu that does not exist, or whose
+screen file cannot be read, is logged and the caller is asked for a command as usual; one to a menu
 the caller's access does not allow shows the access-denied string and does the same, rather than
 logging the caller off as reaching such a menu by a command would. The menu's own ACS and
 password checks run when it is entered, as for any `GOTO:`.

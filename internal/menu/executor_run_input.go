@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 )
 
@@ -238,6 +239,13 @@ func (st *runLoopState) menuPromptAnswer(answer promptAnswer) (line string, act 
 		rec, err := LoadMenu(target, st.e.Menus())
 		if err != nil {
 			slog.Warn("menu prompt script named a menu that cannot be loaded; reading input",
+				"node", st.nodeNumber, "menu", st.currentMenuName, "target", target, "error", err)
+			return "", loopFallthrough, false
+		}
+		// The loop ends the call when a menu's screen cannot be read
+		// (renderMenuAnsi), so check it the same way before going there.
+		if _, err := ansi.GetAnsiFileContent(st.e.menuFile("ansi", target+".ANS")); err != nil {
+			slog.Warn("menu prompt script named a menu whose screen cannot be read; reading input",
 				"node", st.nodeNumber, "menu", st.currentMenuName, "target", target, "error", err)
 			return "", loopFallthrough, false
 		}

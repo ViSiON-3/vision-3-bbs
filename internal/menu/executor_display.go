@@ -309,7 +309,9 @@ func applyUserPlaceholders(placeholders map[string]string, u *user.User) {
 }
 
 func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, menu *MenuRecord, currentUser *user.User, userManager *user.UserMgr, nodeNumber int, currentMenuName string, sessionStartTime time.Time, outputMode ansi.OutputMode, currentAreaName string) error {
-	_, err := e.displayMenuPrompt(s, terminal, menu, currentUser, userManager, nodeNumber, currentMenuName, sessionStartTime, outputMode, currentAreaName)
+	// Display only: these callers read the caller's input themselves, so a
+	// script in place of the prompt is given no prompt kind to answer.
+	_, err := e.displayPromptKind(s, terminal, menu, currentUser, userManager, nodeNumber, currentMenuName, sessionStartTime, outputMode, currentAreaName, "")
 	return err
 }
 
@@ -318,6 +320,12 @@ func (e *MenuExecutor) displayPrompt(s ssh.Session, terminal *term.Terminal, men
 // a menu prompt (scripting.PromptMenu) and may answer it; the answer comes
 // back for the loop to act on (see runLoopState.menuPromptAnswer).
 func (e *MenuExecutor) displayMenuPrompt(s ssh.Session, terminal *term.Terminal, menu *MenuRecord, currentUser *user.User, userManager *user.UserMgr, nodeNumber int, currentMenuName string, sessionStartTime time.Time, outputMode ansi.OutputMode, currentAreaName string) (promptAnswer, error) {
+	return e.displayPromptKind(s, terminal, menu, currentUser, userManager, nodeNumber, currentMenuName, sessionStartTime, outputMode, currentAreaName, scripting.PromptMenu)
+}
+
+// displayPromptKind is the body of displayPrompt and displayMenuPrompt; kind
+// is the prompt kind a script in place of the default prompt is given.
+func (e *MenuExecutor) displayPromptKind(s ssh.Session, terminal *term.Terminal, menu *MenuRecord, currentUser *user.User, userManager *user.UserMgr, nodeNumber int, currentMenuName string, sessionStartTime time.Time, outputMode ansi.OutputMode, currentAreaName string, kind string) (promptAnswer, error) {
 	var none promptAnswer
 	promptParts := make([]string, 0, 2)
 	if strings.TrimSpace(menu.Prompt1) != "" {
@@ -360,7 +368,7 @@ func (e *MenuExecutor) displayMenuPrompt(s ssh.Session, terminal *term.Terminal,
 		switch h := stringhook.Parse(promptString); h.Kind {
 		case stringhook.Script:
 			_ = terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-			return e.renderPrompt(terminal, outputMode, promptString, nil, scripting.PromptMenu)
+			return e.renderPrompt(terminal, outputMode, promptString, nil, kind)
 		case stringhook.File:
 			// A missing file leaves the whole value to be printed as written.
 			width, height := stringHookTermSize(terminal)
