@@ -355,10 +355,10 @@ func ArtForOutput(data []byte, outputMode OutputMode) []byte {
 }
 
 // ReplacePipeCodes expands ViSiON/2 pipe codes into ANSI sequences: colours
-// |00-|15 and |23 (reset), backgrounds |B0-|B15, and the screen codes |CL,
-// |CR, |DE, |P and |PP. The longest matching code wins, "||" becomes a
-// literal "|", and every other byte, including an unknown |XX, passes
-// through unchanged.
+// |00-|15 and |23 (reset), backgrounds |B0-|B15, the screen codes |CL, |CR,
+// |DE, |P and |PP, and the cursor code |XYcc,rr (see CursorPipeCodeAt). The
+// longest matching code wins, "||" becomes a literal "|", and every other
+// byte, including an unknown |XX, passes through unchanged.
 func ReplacePipeCodes(data []byte) []byte {
 	var buf bytes.Buffer
 	i := 0
@@ -369,6 +369,12 @@ func ReplacePipeCodes(data []byte) []byte {
 		if data[i] == '|' && i+1 < dataLen && data[i+1] == '|' {
 			buf.WriteByte('|')
 			i += 2
+			continue
+		}
+
+		if replacement, n := CursorPipeCodeAt(data, i); n > 0 {
+			buf.WriteString(replacement)
+			i += n
 			continue
 		}
 
@@ -431,8 +437,8 @@ func ReplaceColorPipeCodes(data []byte) []byte {
 
 // EscapeScreenPipeCodes returns s made safe for ReplacePipeCodes when part of it
 // came from someone else: colour codes and "||" stay as they are and every other
-// pipe is doubled, so |CL, |CR, |DE, |P and |PP print as text instead of acting
-// on the screen.
+// pipe is doubled, so |CL, |CR, |DE, |P, |PP and |XYcc,rr print as text instead
+// of acting on the screen.
 func EscapeScreenPipeCodes(s string) string {
 	data := []byte(s)
 	var b strings.Builder
@@ -490,6 +496,34 @@ func colorPipeCodeAt(data []byte, i int) (string, int) {
 		}
 	}
 	return "", 0
+}
+
+// cursorPipeCodeLen is the length of a cursor code: |XY, two digits, a comma
+// and two digits.
+const cursorPipeCodeLen = 8
+
+// CursorPipeCodeAt returns the expansion of the cursor code starting at
+// data[i] and its length, or a zero length if there is none.
+//
+// The code is |XYcc,rr: column then row, two digits each, counted from 1 at
+// the top left, so |XY15,12 puts the cursor in column 15 of row 12. It
+// expands to the cursor-position sequence ESC[rr;ccH, which every ANSI
+// terminal understands, so 00 means 1 as it does there, and a position off
+// the caller's screen is pinned to the nearest edge by the terminal. A code
+// with the wrong shape (one digit, a letter, no comma) is not a cursor code
+// and is printed as written, like any unknown |XX.
+func CursorPipeCodeAt(data []byte, i int) (string, int) {
+	if i+cursorPipeCodeLen > len(data) || data[i] != '|' || data[i+1] != 'X' || data[i+2] != 'Y' || data[i+5] != ',' {
+		return "", 0
+	}
+	for _, j := range []int{i + 3, i + 4, i + 6, i + 7} {
+		if data[j] < '0' || data[j] > '9' {
+			return "", 0
+		}
+	}
+	col := int(data[i+3]-'0')*10 + int(data[i+4]-'0')
+	row := int(data[i+6]-'0')*10 + int(data[i+7]-'0')
+	return MoveCursor(max(row, 1), max(col, 1)), cursorPipeCodeLen
 }
 
 // ClearScreen returns an ANSI escape sequence that clears the screen and
