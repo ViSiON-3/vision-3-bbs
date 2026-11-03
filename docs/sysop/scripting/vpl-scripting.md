@@ -349,9 +349,15 @@ if (v3.prompt.kind === "yesno") {
 
 ```javascript
 // prompt.js — a main-menu prompt with a shortcut of its own
-var key = v3.console.getkey();
-if (key === "?") { v3.prompt.answer("GOTO:HELP"); }
-else { v3.prompt.answer(key); }
+v3.console.print("|15Command: ");
+if (v3.prompt.kind === "menu") {
+    // Read the whole command: menus take multi-key commands such as MR.
+    var cmd = v3.console.getstr(10);
+    if (cmd === "?") { v3.prompt.answer("GOTO:HELP"); }
+    else { v3.prompt.answer(cmd); }
+}
+// With any other kind the BBS reads the command itself after the script,
+// so reading here would swallow it.
 ```
 
 An answer counts only when the script runs to its end: a script that answers and then throws, or

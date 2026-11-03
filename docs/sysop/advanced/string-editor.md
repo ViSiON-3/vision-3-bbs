@@ -282,9 +282,11 @@ script can draw its own version of a message that names a door, a file or a user
 (`defPrompt`) replaces how the prompt looks, and the BBS reads the caller's answer afterwards as
 usual: the Yes/No lightbar follows the script, the pause waits for Enter, the menu reads a command.
 The script can instead answer the prompt itself with `v3.prompt.answer(value)`, and the BBS uses
-that answer and reads nothing; a menu prompt's script can answer `GOTO:NAME` to open another menu,
-which is how a string sends the caller to a menu. `v3.prompt.kind` tells the script which prompt it
-is drawing. See [v3.prompt](scripting/vpl-scripting.md#v3prompt). Other prompts (a line of input,
+that answer and reads nothing. On the main menu loop, a menu prompt's script can answer `GOTO:NAME`
+to open another menu, which is how a string sends the caller to a menu; a menu that does not exist,
+has no screen or is closed to the caller leaves the BBS reading a command as usual, and the sponsor,
+door and twit-list menus read their own commands and ignore a script's answer. `v3.prompt.kind`
+tells the script which prompt it is drawing. See [v3.prompt](scripting/vpl-scripting.md#v3prompt). Other prompts (a line of input,
 a hot key) do not take an answer yet.
 
 **Format verbs.** A `!CODE` value takes no verbs: the arguments go to the script instead. In a
