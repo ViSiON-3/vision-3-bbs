@@ -55,6 +55,7 @@ const (
 	modeKeyList                           // WFC key-manager: list/delete keys
 	modeKeyAdd                            // WFC key-manager: add a new key
 	modeDeviceList                        // Paired QWK API devices: list/unpair
+	modeACSTest                           // ACS tester for the user being edited
 )
 
 // Model is the BubbleTea model for the user editor TUI.
@@ -108,6 +109,10 @@ type Model struct {
 	keySelected  int    // 0-based index of selected key in modeKeyList
 	keyScroll    int    // 0-based index of the first visible key in the scroll window
 	keyDialogErr string // last error from keyDialogAdd/keyDialogDelete
+
+	// ACS tester (modeACSTest), and the sysop levels it checks with
+	acsTest                  acsTester
+	sysOpLevel, coSysOpLevel int
 
 	// Terminal
 	width   int
@@ -177,9 +182,12 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 	// Load retention days from config (best effort)
 	retDays := -1
 	qwkAPIEnabled := false
+	sysOp, coSysOp := config.DefaultSysOpLevel, config.DefaultCoSysOpLevel
 	if cfg, err := config.LoadServerConfig(configDir); err == nil {
 		retDays = cfg.DeletedUserRetentionDays
 		qwkAPIEnabled = cfg.QWKAPI.Enabled
+		cfg.SanitizeAccessLevels()
+		sysOp, coSysOp = cfg.SysOpLevel, cfg.CoSysOpLevel
 	}
 
 	// Sort users by ID with deleted users at the bottom
@@ -228,6 +236,8 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 		configDir:     configDir,
 		fileFP:        fingerprint,
 		retentionDays: retDays,
+		sysOpLevel:    sysOp,
+		coSysOpLevel:  coSysOp,
 		cursor:        0,
 		listType:      1,
 		tagged:        make(map[*user.User]bool),
@@ -290,6 +300,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateKeyAdd(msg)
 		case modeDeviceList:
 			return m.updateDeviceList(msg)
+		case modeACSTest:
+			return m.updateACSTest(msg)
 		}
 	}
 	return m, nil
@@ -499,6 +511,10 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if f.Label == qwkDevicesField {
 				m.openDeviceDialog()
 				return m, nil
+			}
+			if f.Label == acsTestField {
+				m.openACSTester()
+				return m, textinput.Blink
 			}
 			// Password field - enter password entry mode
 			m.mode = modePasswordEntry

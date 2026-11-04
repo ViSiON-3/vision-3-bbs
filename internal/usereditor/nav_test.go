@@ -106,7 +106,7 @@ func TestVerticalStaysInItsColumn(t *testing.T) {
 // walk did before, only scoped to the column.
 func TestVerticalWrapsWithinTheColumn(t *testing.T) {
 	m := editing(t)
-	m.editField = m.at(t, rightCol, 15) // WFC Read Only, last editable right field
+	m.editField = m.at(t, rightCol, 16) // ACS Test, last editable right field
 	m.editField = m.verticalField(1)
 
 	if f := m.fields[m.editField]; f.Col != rightCol || f.Row != 4 {
@@ -115,8 +115,8 @@ func TestVerticalWrapsWithinTheColumn(t *testing.T) {
 
 	m.editField = m.at(t, rightCol, 4)
 	m.editField = m.verticalField(-1)
-	if f := m.fields[m.editField]; f.Col != rightCol || f.Row != 15 {
-		t.Errorf("Up wrapped to col %d row %d, want col %d row 15", f.Col, f.Row, rightCol)
+	if f := m.fields[m.editField]; f.Col != rightCol || f.Row != 16 {
+		t.Errorf("Up wrapped to col %d row %d, want col %d row 16", f.Col, f.Row, rightCol)
 	}
 }
 
