@@ -82,3 +82,22 @@ func TestApplyConditionalRegionsKeywords(t *testing.T) {
 		})
 	}
 }
+
+// TestRegionConditions checks that the doctor's region scan finds the same
+// conditions the renderer evaluates, and on which line.
+func TestRegionConditions(t *testing.T) {
+	content := []byte("top {{PENDING_VALIDATIONS}}\r\n" +
+		"{{S255}}sysop{{/}} {{SPONSOR}}x{{/}}\r\n" +
+		"{{ decorative\r\n}} {{/}}\r\n" +
+		"{{!Q}}typo{{/}}{{FA}}no close")
+	got := RegionConditions(content)
+	want := []RegionCondition{{"S255", 2}, {"!Q", 5}, {"FA", 5}}
+	if len(got) != len(want) {
+		t.Fatalf("RegionConditions = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("condition %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+}

@@ -201,3 +201,53 @@ func blankRegion(region []byte) []byte {
 func isCSIFinal(b byte) bool {
 	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
 }
+
+// RegionKeywords are the {{...}} conditions resolved as keywords rather than
+// ACS (see the keywords map the menu renderer passes applyConditionalRegions).
+var RegionKeywords = map[string]bool{"SPONSOR": true}
+
+// RegionCondition is the condition of one {{acs}} region in menu art.
+type RegionCondition struct {
+	ACS  string // the text between {{ and }}
+	Line int    // 1-based line of the opening marker
+}
+
+// RegionConditions lists the ACS conditions of the {{acs}}...{{/}} regions in
+// menu ANSI content, in order, as applyConditionalRegions would find them:
+// keyword conditions (RegionKeywords), literal tokens such as
+// {{PENDING_VALIDATIONS}}, stray {{/}} and decorative braces spanning lines
+// are left out. vision3 doctor uses it to check every region's ACS.
+func RegionConditions(content []byte) []RegionCondition {
+	var out []RegionCondition
+	i := 0
+	for i < len(content) {
+		open := bytes.Index(content[i:], []byte(condOpen))
+		if open < 0 {
+			break
+		}
+		open += i
+		braceEnd := bytes.Index(content[open:], []byte("}}"))
+		if braceEnd < 0 {
+			break
+		}
+		inner := string(content[open+len(condOpen) : open+braceEnd])
+		markerEnd := open + braceEnd + 2
+		if strings.ContainsAny(inner, "\r\n") {
+			i = open + len(condOpen)
+			continue
+		}
+		if knownLiteralTokens[inner] || inner == "/" {
+			i = markerEnd
+			continue
+		}
+		next := len(content)
+		if closeIdx := bytes.Index(content[markerEnd:], []byte(condClose)); closeIdx >= 0 {
+			next = markerEnd + closeIdx + len(condClose)
+		}
+		if !RegionKeywords[strings.ToUpper(inner)] {
+			out = append(out, RegionCondition{ACS: inner, Line: 1 + bytes.Count(content[:open], []byte("\n"))})
+		}
+		i = next
+	}
+	return out
+}

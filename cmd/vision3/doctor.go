@@ -172,7 +172,7 @@ func printDoctorText(w io.Writer, report doctorReport) error {
 	}
 
 	sections := map[string][]doctorCheck{}
-	sectionOrder := []string{"BOARD FILES", "CONFIGURATION", "NETWORK & MESSAGING", "SECURITY", "MENUS & DOORS"}
+	sectionOrder := []string{"BOARD FILES", "CONFIGURATION", "NETWORK & MESSAGING", "SECURITY", "MENUS & DOORS", "ACCESS CONTROL"}
 	for _, check := range report.Checks {
 		section := doctorSection(check.Name)
 		sections[section] = append(sections[section], check)
@@ -276,6 +276,8 @@ func fixDoctorDirectories(root string, dryRun bool) []doctorFix {
 func doctorSection(name string) string {
 	lower := strings.ToLower(name)
 	switch {
+	case strings.HasPrefix(lower, "acs: ") || lower == "acs strings":
+		return "ACCESS CONTROL"
 	case strings.Contains(lower, ".cfg") || strings.Contains(lower, ".mnu") || strings.HasPrefix(lower, "doors") || strings.HasPrefix(lower, "menus/"):
 		return "MENUS & DOORS"
 	case strings.HasPrefix(lower, "ip ") || strings.Contains(lower, "permissions") || strings.Contains(lower, "qwk api") || strings.Contains(lower, "ssh host key"):
@@ -385,6 +387,7 @@ func inspectBoard(root string) doctorReport {
 	checkMenuFiles(filepath.Join(root, "menus", "v3"), configDir, add)
 	checkChatScreens(filepath.Join(root, "menus", "v3"), add)
 	checkDoors(configDir, root, add)
+	checkACSStrings(root, add)
 	checkWritablePaths(root, add)
 	return report
 }

@@ -2348,6 +2348,10 @@ func main() {
 	// goroutines; blocking here (rather than `select {}`) lets main() return
 	// on SIGINT/SIGTERM so all deferred cleanup runs (mailer stop, scheduler
 	// cancel, messageMgr close, etc.) instead of leaving them unreachable.
+	// Menus are read from disk each time they open, so this is the one place
+	// to find a bad ACS string before a caller does. It only logs.
+	logACSFindings(basePath)
+
 	slog.Info("Vision/3 BBS running")
 	sigCh := make(chan os.Signal, 1)
 	// SIGHUP re-reads configuration rather than terminating, matching the

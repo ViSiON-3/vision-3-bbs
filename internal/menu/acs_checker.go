@@ -1,210 +1,20 @@
 package menu
 
 import (
-	"fmt" // Added for errors
-	"log/slog"
-	"strconv"
-	"strings"
+	"net"
 	"sync/atomic"
 	"time"
 
 	"github.com/gliderlabs/ssh"
-	"golang.org/x/term" // Keep for potential future use (e.g., baud check)
+	"golang.org/x/term"
 
-	// Update local imports
+	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
-	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// --- Tokenizer ---
-type tokenType int
-
-const (
-	tokenCondition tokenType = iota
-	tokenOperator
-	tokenLParen
-	tokenRParen
-)
-
-type token struct {
-	typ   tokenType
-	value string // Condition string or operator symbol
-}
-
-// tokenizeACS breaks the ACS string into tokens (conditions, operators, parentheses).
-// This version handles operators/parentheses adjacent to conditions.
-func tokenizeACS(acsString string) ([]token, error) {
-	var tokens []token
-	var currentCondition strings.Builder
-	runes := []rune(acsString) // Work with runes for Unicode safety
-
-	flushCondition := func() {
-		if currentCondition.Len() > 0 {
-			tokens = append(tokens, token{typ: tokenCondition, value: currentCondition.String()})
-			currentCondition.Reset()
-		}
-	}
-
-	for i := 0; i < len(runes); i++ {
-		r := runes[i]
-
-		switch r {
-		case '(':
-			flushCondition()
-			tokens = append(tokens, token{typ: tokenLParen, value: string(r)})
-		case ')':
-			flushCondition()
-			tokens = append(tokens, token{typ: tokenRParen, value: string(r)})
-		case '&', '|', '!': // Operators are single characters
-			flushCondition()
-			tokens = append(tokens, token{typ: tokenOperator, value: string(r)})
-		case ' ': // Whitespace acts as separator
-			flushCondition()
-			// skip whitespace
-		default:
-			// Start of a potential condition
-			// Allow letters, numbers, '/', ':' within conditions
-			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '/' || r == ':' {
-				currentCondition.WriteRune(r)
-				// Continue consuming characters that are part of the condition
-				// (Letters, Numbers, '/', ':')
-				for i+1 < len(runes) {
-					nextRune := runes[i+1]
-					if (nextRune >= 'A' && nextRune <= 'Z') || (nextRune >= 'a' && nextRune <= 'z') || (nextRune >= '0' && nextRune <= '9') || nextRune == '/' || nextRune == ':' {
-						currentCondition.WriteRune(nextRune)
-						i++ // Consume the rune
-					} else {
-						break // End of condition characters
-					}
-				}
-				flushCondition() // Flush the completed condition
-			} else {
-				// If it doesn't start with a letter/number/allowed symbol, but isn't whitespace or an operator/paren, it's unexpected.
-				slog.Warn("ignoring unexpected character during ACS tokenization", "char", string(r))
-				// Consider returning an error instead? For now, just ignore.
-				// return nil, fmt.Errorf("unexpected character '%c' in ACS string", r)
-			}
-		}
-	}
-	flushCondition() // Add any trailing condition
-
-	slog.Debug("tokenized ACS", "acs", acsString, "tokens", tokens) // Log tokens
-	return tokens, nil
-}
-
-// --- Shunting-Yard ---
-var precedence = map[string]int{
-	"!": 3, // Unary NOT has high precedence
-	"&": 2,
-	"|": 1,
-}
-
-func getPrecedence(op string) int {
-	if p, ok := precedence[op]; ok {
-		return p
-	}
-	return 0
-}
-
-// infixToRPN converts infix token stream to Reverse Polish Notation using Shunting-Yard.
-func infixToRPN(tokens []token) ([]token, error) {
-	var outputQueue []token
-	var operatorStack []token
-
-	for _, t := range tokens {
-		switch t.typ {
-		case tokenCondition:
-			outputQueue = append(outputQueue, t)
-		case tokenOperator:
-			// Handle operator precedence and associativity (assuming left-associative for & |)
-			for len(operatorStack) > 0 && operatorStack[len(operatorStack)-1].typ == tokenOperator &&
-				getPrecedence(operatorStack[len(operatorStack)-1].value) >= getPrecedence(t.value) {
-				outputQueue = append(outputQueue, operatorStack[len(operatorStack)-1])
-				operatorStack = operatorStack[:len(operatorStack)-1]
-			}
-			operatorStack = append(operatorStack, t)
-		case tokenLParen:
-			operatorStack = append(operatorStack, t)
-		case tokenRParen:
-			foundLParen := false
-			for len(operatorStack) > 0 {
-				op := operatorStack[len(operatorStack)-1]
-				operatorStack = operatorStack[:len(operatorStack)-1] // Pop
-				if op.typ == tokenLParen {
-					foundLParen = true
-					break
-				}
-				outputQueue = append(outputQueue, op)
-			}
-			if !foundLParen {
-				return nil, fmt.Errorf("mismatched parentheses in ACS string")
-			}
-		}
-	}
-
-	// Pop remaining operators from stack to output queue
-	for len(operatorStack) > 0 {
-		op := operatorStack[len(operatorStack)-1]
-		if op.typ == tokenLParen {
-			return nil, fmt.Errorf("mismatched parentheses in ACS string")
-		}
-		outputQueue = append(outputQueue, op)
-		operatorStack = operatorStack[:len(operatorStack)-1]
-	}
-	slog.Debug("RPN output queue", "queue", outputQueue) // Log RPN
-	return outputQueue, nil
-}
-
-// --- RPN Evaluator ---
-// Updated to handle unary '!' operator
-func evaluateRPN(rpnQueue []token, u *user.User, s ssh.Session, terminal *term.Terminal, startTime time.Time) (bool, error) {
-	var evalStack []bool
-
-	for _, t := range rpnQueue {
-		switch t.typ {
-		case tokenCondition:
-			// Evaluate condition (note: evaluateCondition should NO LONGER handle '!')
-			result := evaluateCondition(t.value, u, s, terminal, startTime)
-			evalStack = append(evalStack, result)
-		case tokenOperator:
-			switch t.value {
-			case "!": // Unary NOT operator
-				if len(evalStack) < 1 {
-					return false, fmt.Errorf("invalid RPN expression: not enough operands for operator %s", t.value)
-				}
-				op1 := evalStack[len(evalStack)-1]
-				evalStack = evalStack[:len(evalStack)-1] // Pop one
-				evalStack = append(evalStack, !op1)      // Push negation
-			case "&", "|": // Binary AND, OR operators
-				if len(evalStack) < 2 {
-					return false, fmt.Errorf("invalid RPN expression: not enough operands for operator %s", t.value)
-				}
-				op2 := evalStack[len(evalStack)-1]
-				op1 := evalStack[len(evalStack)-2]
-				evalStack = evalStack[:len(evalStack)-2] // Pop two
-
-				var result bool
-				if t.value == "&" {
-					result = op1 && op2
-				} else { // "|"
-					result = op1 || op2
-				}
-				evalStack = append(evalStack, result) // Push result
-			default:
-				return false, fmt.Errorf("unknown operator in RPN evaluation: %s", t.value)
-			}
-		default:
-			return false, fmt.Errorf("unexpected token type in RPN queue: %v", t.typ)
-		}
-	}
-
-	if len(evalStack) != 1 {
-		return false, fmt.Errorf("invalid RPN expression: final stack size is %d, expected 1", len(evalStack))
-	}
-
-	return evalStack[0], nil
-}
+// The ACS language itself (parsing, terms, evaluation) lives in internal/acs;
+// this file connects it to the menu executor's sessions and sysop levels.
 
 // acsSysOpLevel and acsCoSysOpLevel are the thresholds behind the SYSOP and
 // COSYSOP keywords. They follow sysOpLevel and coSysOpLevel in config.json
@@ -226,6 +36,32 @@ func setACSSysOpLevels(sysOp, coSysOp int) {
 	acsCoSysOpLevel.Store(int64(coSysOp))
 }
 
+// acsSession adapts a caller's session to acs.Session. Each method reads the
+// session only when a term asks for it.
+type acsSession struct{ s ssh.Session }
+
+func (a acsSession) RemoteAddr() net.Addr      { return a.s.RemoteAddr() }
+func (a acsSession) ChatCredit() time.Duration { return chatCredit(a.s) }
+func (a acsSession) HasPTY() bool {
+	_, _, isPty := a.s.Pty()
+	return isPty
+}
+
+// acsContext is the evaluation context for u in session s (nil for none),
+// whose call began at startTime.
+func acsContext(u *user.User, s ssh.Session, startTime time.Time) acs.Context {
+	ctx := acs.Context{
+		User:         u,
+		Start:        startTime,
+		SysOpLevel:   int(acsSysOpLevel.Load()),
+		CoSysOpLevel: int(acsCoSysOpLevel.Load()),
+	}
+	if s != nil {
+		ctx.Session = acsSession{s}
+	}
+	return ctx
+}
+
 // CheckUserACS evaluates an ACS string against a user without requiring a
 // session or terminal. Use this for access checks outside of menu execution
 // (e.g., selecting default areas on login).
@@ -235,263 +71,11 @@ func CheckUserACS(acsString string, u *user.User) bool {
 
 // checkACS evaluates a ViSiON/2 Access Control String (ACS) against user credentials.
 // Returns true if the user meets the ACS requirements, false otherwise.
-func checkACS(acsString string, u *user.User, s ssh.Session, terminal *term.Terminal, startTime time.Time) bool {
-	// slog.Debug("checkACS received ACS", "acs", acsString, "length", len(acsString))
-
-	if acsString == "" {
-		// slog.Debug("checkACS empty ACS string, allowing access")
-		return true // No ACS defined, always allow
-	}
-
-	// Handle '*' wildcard explicitly *before* tokenization
-	if acsString == "*" { // <--- Check 2: Wildcard allows
-		// slog.Debug("checkACS wildcard '*' matched, allowing access")
-		return true
-	}
-
-	// Check if user is authenticated
-	if u == nil {
-		// slog.Debug("checkACS unauthenticated user, denying access", "acs", acsString)
-		return false // Unauthenticated users cannot pass non-empty, non-wildcard ACS
-	}
-
-	slog.Debug("checking ACS", "acs", acsString, "handle", u.Handle, "level", u.AccessLevel, "flags", u.Flags, "id", u.ID, "validated", u.Validated)
-
-	// 1. Tokenize
-	tokens, err := tokenizeACS(acsString)
-	if err != nil {
-		slog.Error("failed to tokenize ACS string", "acs", acsString, "error", err)
-		return false // Fail on tokenization error
-	}
-
-	// 2. Convert to RPN
-	rpnQueue, err := infixToRPN(tokens)
-	if err != nil {
-		slog.Error("failed to convert ACS string to RPN", "acs", acsString, "error", err)
-		return false // Fail on RPN conversion error
-	}
-
-	// 3. Evaluate RPN
-	result, err := evaluateRPN(rpnQueue, u, s, terminal, startTime)
-	if err != nil {
-		slog.Error("failed to evaluate RPN for ACS string", "acs", acsString, "error", err)
-		return false // Fail on evaluation error
-	}
-
-	slog.Debug("ACS check result", "acs", acsString, "result", result)
-	return result
+func checkACS(acsString string, u *user.User, s ssh.Session, _ *term.Terminal, startTime time.Time) bool {
+	return acs.Check(acsString, acsContext(u, s, startTime))
 }
 
-// evaluateCondition evaluates a single ACS condition (e.g., S50, L, Fx).
-// Note: It no longer handles the '!' prefix; that's done by the RPN evaluator.
-// Returns true if the condition is met, false otherwise.
+// evaluateCondition evaluates a single ACS term (e.g., S50, L, Fx) for u.
 func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Terminal, startTime time.Time) bool {
-	// Negation handling removed - done in evaluateRPN
-
-	if len(condition) == 0 {
-		slog.Warn("empty condition encountered in ACS string after tokenization")
-		return false // Treat empty condition as failing
-	}
-
-	// Handle multi-character keyword conditions before single-char parsing
-	upper := strings.ToUpper(condition)
-	switch upper {
-	case "SYSOP":
-		return u.AccessLevel >= int(acsSysOpLevel.Load())
-	case "COSYSOP":
-		return u.AccessLevel >= int(acsCoSysOpLevel.Load())
-	}
-
-	code := strings.ToUpper(condition[0:1])
-	value := ""
-	if len(condition) > 1 {
-		value = condition[1:]
-	}
-
-	var result bool
-	switch code {
-	case "S": // Security Level >= value
-		level, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid level value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = u.AccessLevel >= level
-		}
-	case "L": // Local connection
-		if s == nil {
-			result = false
-		} else {
-			network := s.RemoteAddr().Network()
-			addr := s.RemoteAddr().String()
-			isLoopback := strings.HasPrefix(addr, "127.") || strings.HasPrefix(addr, "[::1]")
-			result = (network == "pipe" || network == "unix" || isLoopback)
-			slog.Debug("ACS 'L' check", "network", network, "addr", addr, "isLoopback", isLoopback, "result", result)
-		}
-	case "A": // Session has a terminal: every telnet session, SSH with a PTY. Not an ANSI or encoding check.
-		if s == nil {
-			result = false
-		} else {
-			_, _, isPty := s.Pty()
-			result = isPty
-			slog.Debug("ACS 'A' check", "isPty", isPty, "result", result)
-		}
-	case "F": // Flag is set
-		if len(value) != 1 {
-			slog.Warn("invalid flag value in ACS condition: flag must be single character", "condition", condition)
-			result = false
-		} else {
-			result = strings.Contains(strings.ToUpper(u.Flags), strings.ToUpper(value))
-		}
-	case "U": // User ID == value
-		id, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid user ID value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = u.ID == id
-		}
-	case "V": // User is validated
-		result = u.Validated
-	case "D": // Access level >= value: the same test as S; there is no separate download level
-		level, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid level value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = u.AccessLevel >= level
-		}
-	case "E": // Uploads per call, as a percentage rounded down, >= value (uploads, not posts)
-		pcrThreshold, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid PCR value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			numLogons := u.TimesCalled
-			if numLogons <= 0 {
-				result = false
-			} else {
-				userPCR := (float64(u.NumUploads) / float64(numLogons)) * 100
-				result = int(userPCR) >= pcrThreshold
-				slog.Debug("ACS 'E' check", "uploads", u.NumUploads, "calls", numLogons, "pcr", userPCR, "threshold", pcrThreshold, "result", result)
-			}
-		}
-	case "H": // Current Hour == value
-		hour, err := strconv.Atoi(value)
-		if err != nil || hour < 0 || hour > 23 {
-			slog.Warn("invalid hour value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = time.Now().Hour() == hour
-		}
-	case "P": // File Points >= value
-		points, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid points value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = u.FilePoints >= points
-		}
-	case "T": // Time Left >= value (minutes)
-		minutesLeftThreshold, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid time left value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			// CoSysOps and above have no time limit (MenuExecutor.timeLimit).
-			if u.TimeLimit <= 0 || int64(u.AccessLevel) >= acsCoSysOpLevel.Load() {
-				slog.Debug("ACS 'T' check: user has no time limit, passing", "timeLimit", u.TimeLimit, "level", u.AccessLevel)
-				result = true
-			} else {
-				left, _ := timeleft.Remaining(u.TimeLimit, startTime, time.Now(), chatCredit(s))
-				threshold := time.Duration(minutesLeftThreshold) * time.Minute
-				result = left >= threshold
-				slog.Debug("ACS 'T' check", "limitMin", u.TimeLimit, "left", left, "threshold", threshold, "result", result)
-			}
-		}
-	case "W": // Day of Week == value (0=Sun, 1=Mon, ... 6=Sat)
-		day, err := strconv.Atoi(value)
-		if err != nil || day < 0 || day > 6 {
-			slog.Warn("invalid day of week value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = int(time.Now().Weekday()) == day
-		}
-	case "Z": // String exists in PrivateNote
-		result = strings.Contains(strings.ToUpper(u.PrivateNote), strings.ToUpper(value))
-	case "Y": // Within Time Range hh:mm/hh:mm
-		parts := strings.Split(value, "/")
-		if len(parts) != 2 {
-			slog.Warn("invalid time range format in ACS condition: expected hh:mm/hh:mm", "condition", condition)
-			result = false
-		} else {
-			startTimeStr := parts[0]
-			endTimeStr := parts[1]
-			now := time.Now()
-			layout := "15:04"
-			startTime, errStart := time.Parse(layout, startTimeStr)
-			endTime, errEnd := time.Parse(layout, endTimeStr)
-
-			if errStart != nil || errEnd != nil {
-				slog.Warn("invalid time format in ACS time range", "value", value, "startError", errStart, "endError", errEnd)
-				result = false
-			} else {
-				result = inTimeRange(now, startTime, endTime)
-				slog.Debug("ACS 'Y' check", "range", value, "now", now, "result", result)
-			}
-		}
-	case "B": // Upload/Download ratio >= value (as percentage)
-		ratioThreshold, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid ratio value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			if u.NumDownloads <= 0 {
-				// No downloads: ratio is infinite (always passes)
-				result = true
-			} else {
-				ratio := (float64(u.NumUploads) / float64(u.NumDownloads)) * 100
-				result = int(ratio) >= ratioThreshold
-			}
-			slog.Debug("ACS 'B' check", "uploads", u.NumUploads, "downloads", u.NumDownloads, "threshold", ratioThreshold, "result", result)
-		}
-	case "C": // Message Conference == value
-		confID, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid conference ID in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = u.CurrentMsgConferenceID == confID
-		}
-	case "I": // User has flag I: the same test as FI; any argument is ignored
-		result = strings.Contains(strings.ToUpper(u.Flags), "I")
-		slog.Debug("ACS 'I' check", "flags", u.Flags, "result", result)
-	case "X": // File Conference == value
-		confID, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid conference ID in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = u.CurrentFileConferenceID == confID
-		}
-	default:
-		slog.Warn("unknown ACS code in condition", "code", code, "condition", condition)
-		result = false
-	}
-
-	// Negation is handled by the RPN evaluator using the '!' operator
-	return result
-}
-
-// inTimeRange reports whether now's clock time falls within start-end, both
-// minutes included: 00:00/23:59 is the whole day, through 23:59:59. A range
-// whose end is before its start runs past midnight.
-func inTimeRange(now, start, end time.Time) bool {
-	m := now.Hour()*60 + now.Minute()
-	from := start.Hour()*60 + start.Minute()
-	to := end.Hour()*60 + end.Minute()
-	if to < from {
-		return m >= from || m <= to
-	}
-	return m >= from && m <= to
+	return acs.EvalTerm(condition, acsContext(u, s, startTime))
 }

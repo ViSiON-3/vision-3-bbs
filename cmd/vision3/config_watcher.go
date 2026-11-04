@@ -275,6 +275,7 @@ func (cw *ConfigWatcher) poll() {
 		if cw.changed(t.path, t.reloadOnRemove) {
 			slog.Info("config file change detected", "file", t.name)
 			t.reload()
+			cw.rescanACS()
 		}
 	}
 	for _, t := range cw.deferredTargets {
@@ -369,6 +370,7 @@ func (cw *ConfigWatcher) applyDeferred(t deferredTarget) {
 	delete(cw.pending, t.name)
 	cw.mu.Unlock()
 	slog.Info("deferred config reload applied", "file", t.name)
+	cw.rescanACS()
 }
 
 // PendingReloads lists the structural configs queued for the next idle
@@ -496,6 +498,13 @@ func (cw *ConfigWatcher) ReloadAll() {
 	for _, t := range cw.targets {
 		t.reload()
 	}
+	cw.rescanACS()
+}
+
+// rescanACS logs any ACS problem a reload brought in, once each (see
+// logACSFindings). The board directory is the parent of configs/.
+func (cw *ConfigWatcher) rescanACS() {
+	logACSFindings(filepath.Dir(cw.rootConfigPath))
 }
 
 // reloadDoors reloads the door configurations.
