@@ -14,8 +14,10 @@ var ansiBg = map[int]int{
 }
 
 // colorCodeToAnsi converts a DOS-style color code (0-255) to ANSI escape sequence.
-// Assumes Color = Background*16 + Foreground.
-func colorCodeToAnsi(code int) string {
+// Assumes Color = Background*16 + Foreground. With blackBg false a black
+// background is left out, so the terminal's own background stays behind the
+// text.
+func colorCodeToAnsi(code int, blackBg bool) string {
 	fgCode := code % 16
 	bgCode := code / 16
 
@@ -30,5 +32,8 @@ func colorCodeToAnsi(code int) string {
 		bgAnsi = 40 // Default to black background if invalid bg code
 	}
 
+	if bgAnsi == 40 && !blackBg {
+		return fmt.Sprintf("\x1b[%dm", fgAnsi)
+	}
 	return fmt.Sprintf("\x1b[%d;%dm", fgAnsi, bgAnsi)
 }

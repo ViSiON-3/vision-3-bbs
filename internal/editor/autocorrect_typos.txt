@@ -1,11 +1,12 @@
 # Message editor autocorrect: built-in typo list
 #
-# One fix per line: the misspelling, a space, then what it becomes (which
-# may be more than one word). Lines starting with # are ignored.
+# One fix per line: the misspelling, spaces or a tab, then what it becomes
+# (which may be more than one word). Lines starting with # are ignored.
 #
 # Only misspellings that are never a real word belong here: autocorrect
 # fixes them without asking, so a real word in the left column would get
-# "fixed" when someone meant it. Case is handled by the editor: teh and Teh
+# "fixed" when someone meant it. That rules out single letters too (a bare
+# "i" is also "i.e." and "(i)"). Case is handled by the editor: teh and Teh
 # become the and The, and ALL-CAPS words (acronyms: TI, IM, ANI) are never
 # touched.
 #
@@ -14,7 +15,6 @@
 # there turns a fix off.
 
 # --- the little words -------------------------------------------------
-i I
 teh the
 hte the
 tje the
@@ -178,7 +178,6 @@ benifit benefit
 bizzare bizarre
 buisness business
 busness business
-calender calendar
 camoflage camouflage
 carribean Caribbean
 catagory category

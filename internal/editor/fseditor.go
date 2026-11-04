@@ -40,13 +40,13 @@ type FSEditor struct {
 	// Autocorrect (see autocorrect.go): typos is nil when it is not enabled
 	typos     map[string]string
 	acOn      bool
-	acToggled func(on bool) // saves the caller's choice; may be nil
-	acUndo    *acFix        // the last fix, while Backspace can still undo it
-	acPending *wordMark     // the last fix, to highlight once its key is applied
-	acSGR     string        // colour a fixed word is highlighted in
-	acText    acText        // notice text
-	noticeAt  time.Time     // when a notice went up on the prompt row
-	noticeFor time.Duration // how long a notice stays up (autocorrectNotice)
+	acToggled func(on bool)    // saves the caller's choice; may be nil
+	acUndo    *acFix           // the last fix, while Backspace can still undo it
+	acPending *wordMark        // the last fix, to highlight once its key is applied
+	acSGR     string           // colour a fixed word is highlighted in
+	acText    acText           // notice text
+	noticeAt  time.Time        // when a notice went up on the prompt row
+	now       func() time.Time // the clock notices are timed by (time.Now)
 
 	// Metadata
 	subject     string
@@ -99,6 +99,7 @@ func NewFSEditor(session ssh.Session, terminal io.Writer, outputMode ansi.Output
 		session:        session,
 		outputMode:     outputMode,
 		menuSetPath:    menuSetPath,
+		now:            time.Now,
 	}
 }
 

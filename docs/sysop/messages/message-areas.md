@@ -71,8 +71,12 @@ To change either setting on many areas at once, see
 ### Autocorrect
 
 The message editor can fix common typos as callers type. When a word is
-finished (a space, punctuation or Enter), it is looked up in a list of known
+finished with a space, Tab or Enter, it is looked up in a list of known
 misspellings and, if it is one, replaced on the spot: `teh` becomes `the`.
+Sentence punctuation between the word and that key is fine (`teh,`
+`teh.` `(teh)` `"teh"` are fixed at the space after them), but punctuation on
+its own does not finish a word, so the fix waits for the space: `teh.com`,
+`teh_var` and `teh@example.com` are left alone.
 The fix goes in through the editor's own typing, so word wrap behaves as if
 the caller had typed it. For a moment afterwards the fix is shown on the
 prompt row (`teh » the`) and the corrected word is drawn in the theme's
@@ -87,7 +91,8 @@ It is off unless the sysop turns it on, and only listed typos are touched:
 - Case follows the word (`Teh` becomes `The`). ALL-CAPS words (acronyms),
   words touching digits or pipe codes, handles and paths (`@teh`, `/teh`), and
   quoted lines are left alone, as is anything typed in Overwrite mode.
-- Backspace straight after a fix puts the word back as typed.
+- Backspace straight after a fix puts the word back as typed. After a fix
+  made by Enter it puts the word back and keeps the line break.
 - **Ctrl+O** in the editor turns it off or on for the caller, and so does
   **Autocorrect** on their User Konfig screen; both save the same setting on
   their record (`autocorrectOff`).
@@ -113,7 +118,7 @@ Add fixes of your own, or turn built-in ones off, in
 entries win over the built-in list:
 
 ```text
-# one fix per line: the misspelling, a space, then what it becomes
+# one fix per line: the misspelling, spaces or a tab, then what it becomes
 fone phone
 recieve receive
 # "word -" turns a built-in fix off
@@ -121,7 +126,8 @@ teh -
 ```
 
 The misspelling is matched in any case and is one word; the fix may be
-several. A missing file is not an error.
+several. A line with a misspelling but no fix is skipped, with a warning in
+the log naming the line. A missing file is not an error.
 
 ### Auto Join Behavior
 

@@ -8,30 +8,26 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// editorAutocorrect decides the message editor's autocorrect for u writing
-// in area (nil for the auto-signature, which has none). offered is whether
-// the area, or the board default (config.json editorAutocorrect) when the
-// area does not say, has it on; on is whether it starts on, which also needs
-// the caller not to have turned it off. While it is offered the caller can
-// switch it with Ctrl-O.
-func editorAutocorrect(area *message.MessageArea, boardDefault bool, u *user.User) (offered, on bool) {
-	offered = area.AutocorrectOn(boardDefault)
-	return offered, offered && (u == nil || !u.AutocorrectOff)
+// editorAutocorrect sets ctx's autocorrect for u writing in area (nil for
+// the auto-signature, which follows the board default). It is offered
+// (ctx.Autocorrect) when the area, or the board default (config.json
+// editorAutocorrect) when the area does not say, has it on; it starts off
+// (ctx.AutocorrectOff) where it is offered but the caller has turned it off.
+// While it is offered the caller can switch it with Ctrl-O.
+func editorAutocorrect(ctx editor.EditorContext, area *message.MessageArea, boardDefault bool, u *user.User) editor.EditorContext {
+	ctx.Autocorrect = area.AutocorrectOn(boardDefault)
+	ctx.AutocorrectOff = ctx.Autocorrect && u != nil && u.AutocorrectOff
+	return ctx
 }
 
 // withAutocorrect sets ctx up with the autocorrect decision for u writing in
 // area, and a way to save the caller's choice when Ctrl-O changes it in the
 // editor. It returns ctx for use inline.
 func withAutocorrect(e *MenuExecutor, ctx editor.EditorContext, area *message.MessageArea, u *user.User, um *user.UserMgr) editor.EditorContext {
-	offered, _ := editorAutocorrect(area, e.GetServerConfig().EditorAutocorrect, u)
-	if !offered {
+	ctx = editorAutocorrect(ctx, area, e.GetServerConfig().EditorAutocorrect, u)
+	if !ctx.Autocorrect || u == nil {
 		return ctx
 	}
-	ctx.Autocorrect = true
-	if u == nil {
-		return ctx
-	}
-	ctx.AutocorrectOff = u.AutocorrectOff
 	ctx.SaveAutocorrect = func(on bool) {
 		u.AutocorrectOff = !on
 		if um == nil {

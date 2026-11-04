@@ -3,6 +3,7 @@ package editor
 import (
 	_ "embed"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,9 +12,11 @@ import (
 	"unicode"
 )
 
-// Autocorrect fixes common typos as a word is finished. When a word ends
-// (space, punctuation or Enter), the word before the cursor is looked up in
-// a list of known misspellings and replaced.
+// Autocorrect fixes common typos as a word is finished. When a space, Tab
+// or Enter is typed, the word before the cursor (or before the sentence
+// punctuation right after it: "teh," or "(teh)") is looked up in a list of
+// known misspellings and replaced. Punctuation alone does not end a word,
+// so "teh.com", "teh_var" and "teh@example.com" are left alone.
 //
 //   - Only listed typos are fixed: the built-in list plus the board's own
 //     configs/autocorrect.txt, which wins. There is no dictionary, so
@@ -31,8 +34,9 @@ import (
 // message area's autocorrect setting or the board default); see
 // EditorContext.Autocorrect.
 //
-// The board list has one fix per line, "wrong right" (right may be several
-// words); "wrong -" turns a built-in fix off; # starts a comment.
+// The board list has one fix per line, "wrong right" separated by spaces or
+// tabs (right may be several words); "wrong -" turns a built-in fix off; #
+// starts a comment. A line with no fix is logged and skipped.
 
 //go:embed autocorrect_typos.txt
 var builtinTypos string
@@ -50,52 +54,56 @@ const defaultAutocorrectColor = 15
 const textSGR = "\x1b[0m"
 
 // wordBefore is the word right before the cursor: letters with at most one
-// inner apostrophe, not glued to a digit, pipe code, path, address or handle.
-var wordBefore = regexp.MustCompile(`(?:^|[^A-Za-z0-9'_|@./\\-])([A-Za-z]+(?:'[A-Za-z]+)?)$`)
+// inner apostrophe, not glued to a digit, pipe code, path, address or handle,
+// then any sentence punctuation typed after it (the second group).
+var wordBefore = regexp.MustCompile(`(?:^|[^A-Za-z0-9'_|@./\\-])([A-Za-z]+(?:'[A-Za-z]+)?)([.,;:!?)\]}"]*)$`)
 
 // quoteLine matches a quoted line in a reply, which starts like " DI> ".
 var quoteLine = regexp.MustCompile(`^\s*[A-Za-z0-9_]{0,3}>`)
 
-// acFix is one fix: the word as typed, what it became, and the key that
-// ended it, kept so the next Backspace can undo it.
+// acFix is one fix: the word as typed, what it became, the punctuation
+// between it and the key that ended it, and what that key typed (after, the
+// punctuation included), kept so the next Backspace can undo it. enter is
+// set when the key was Enter, which typed nothing on the line but broke it.
 type acFix struct {
 	word, fixed string
-	boundary    rune
+	tail, after string
+	enter       bool
 }
 
 // wordMark is a word drawn in a highlight colour: the buffer line it is on,
 // its first column (1-based, in characters), the word, and the SGR sequence
-// it is drawn with. The buffer is not changed; see Screen.MarkWord.
+// it is drawn with. after is how many characters follow the word up to the
+// cursor once the key that ended it is in. The buffer is not changed; see
+// Screen.MarkWord.
 type wordMark struct {
 	line, col int
 	word, sgr string
+	after     int
 }
 
 // highlightSGR is the escape sequence for DOS colour code: the editor's
 // text pen with that foreground, and its background unless it is black, so a
 // terminal with a background of its own keeps it behind the word.
 func highlightSGR(code int) string {
-	fg, ok := ansiFg[code%16]
-	if !ok {
-		fg = 97
-	}
-	if bg := (code / 16) % 8; bg != 0 {
-		return fmt.Sprintf("\x1b[0;%d;%dm", fg, ansiBg[bg])
-	}
-	return fmt.Sprintf("\x1b[0;%dm", fg)
+	return textSGR + colorCodeToAnsi(code, false)
 }
 
-// parseTypos adds the fixes in text to list, or removes them for "wrong -".
-func parseTypos(text string, list map[string]string) {
-	for _, raw := range strings.Split(text, "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "#") {
+// parseTypos adds the fixes in text (from source, for the log) to list, or
+// removes them for "wrong -". The misspelling and its fix are separated by
+// any run of spaces or tabs; a line with no fix is logged and skipped.
+func parseTypos(source, text string, list map[string]string) {
+	for n, raw := range strings.Split(text, "\n") {
+		fields := strings.Fields(raw)
+		if len(fields) == 0 || strings.HasPrefix(fields[0], "#") {
 			continue
 		}
-		wrong, right, _ := strings.Cut(line, " ")
-		wrong = strings.ToLower(wrong)
-		right = strings.TrimSpace(right)
-		if right == "" || right == "-" {
+		if len(fields) == 1 {
+			slog.Warn("autocorrect: skipping entry with no fix", "file", source, "line", n+1, "entry", fields[0])
+			continue
+		}
+		wrong, right := strings.ToLower(fields[0]), strings.Join(fields[1:], " ")
+		if right == "-" {
 			delete(list, wrong)
 		} else {
 			list[wrong] = right
@@ -107,19 +115,30 @@ func parseTypos(text string, list map[string]string) {
 // applied over it. A missing board list is not an error.
 func loadTypos(configDir string) map[string]string {
 	list := make(map[string]string)
-	parseTypos(builtinTypos, list)
+	parseTypos("built-in", builtinTypos, list)
 	if configDir != "" {
-		if data, err := os.ReadFile(filepath.Join(configDir, "autocorrect.txt")); err == nil {
-			parseTypos(string(data), list)
+		path := filepath.Join(configDir, "autocorrect.txt")
+		if data, err := os.ReadFile(path); err == nil {
+			parseTypos(path, string(data), list)
 		}
 	}
 	return list
 }
 
-// isWordEnd reports whether r finishes a word: anything but a letter, a
-// digit, an apostrophe or a pipe.
-func isWordEnd(r rune) bool {
-	return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '\'' && r != '|'
+// acKeyText is what a key that ends a word types on the line, and whether
+// it ends one at all: a space, Tab (its spaces) or Enter (nothing; it breaks
+// the line). Punctuation does not: it waits for one of these, so the word
+// is only fixed once it is clear it was not part of "teh.com" or "teh_var".
+func acKeyText(key int) (string, bool) {
+	switch key {
+	case ' ':
+		return " ", true
+	case KeyTab:
+		return strings.Repeat(" ", tabSpaces), true
+	case KeyEnter:
+		return "", true
+	}
+	return "", false
 }
 
 // matchCase gives fix the word's leading capital: teh -> the, Teh -> The. A
@@ -153,7 +172,7 @@ func findFix(list map[string]string, before string) *acFix {
 	if fixed == word {
 		return nil
 	}
-	return &acFix{word: word, fixed: fixed}
+	return &acFix{word: word, fixed: fixed, tail: m[2]}
 }
 
 // EnableAutocorrect turns autocorrect on for this editor with the built-in
@@ -166,9 +185,6 @@ func (e *FSEditor) EnableAutocorrect(configDir string, on bool, onToggle func(on
 	e.acToggled = onToggle
 	if e.acSGR == "" {
 		e.acSGR = highlightSGR(defaultAutocorrectColor)
-	}
-	if e.noticeFor == 0 {
-		e.noticeFor = autocorrectNotice
 	}
 	if e.acText == (acText{}) {
 		e.acText = defaultACText
@@ -223,26 +239,32 @@ func (e *FSEditor) textBeforeCursor() string {
 	return string(line[:col])
 }
 
-// applyAutocorrect replaces the word before the cursor if it is a known
-// typo, through the editor's own backspace and typing so wrapping and redraw
+// applyAutocorrect replaces the word before the cursor (and any sentence
+// punctuation after it) if it is a known typo, when key ends a word. It goes
+// through the editor's own backspace and typing so wrapping and redraw
 // behave exactly as if the caller had typed the fix. It returns the fix, or
-// nil when there was none.
-func (e *FSEditor) applyAutocorrect() *acFix {
-	if e.typos == nil || !e.acOn || !e.insertMode || e.buffer.QuotePrefix(e.currentLine) != "" {
+// nil when there was none; the caller applies key and then keeps the fix in
+// acUndo.
+func (e *FSEditor) applyAutocorrect(key int) *acFix {
+	keyText, ends := acKeyText(key)
+	if !ends || e.typos == nil || !e.acOn || !e.insertMode || e.buffer.QuotePrefix(e.currentLine) != "" {
 		return nil
 	}
 	fix := findFix(e.typos, e.textBeforeCursor())
 	if fix == nil {
 		return nil
 	}
+	fix.after, fix.enter = fix.tail+keyText, key == KeyEnter
 	e.unmarkFix() // one highlight at a time
-	for range []rune(fix.word) {
+	for range []rune(fix.word + fix.tail) {
 		e.handleBackspace()
 	}
-	for _, r := range fix.fixed {
+	for _, r := range fix.fixed + fix.tail {
 		e.insertCharacter(r)
 	}
-	e.acPending = &wordMark{line: e.currentLine, col: e.currentCol - len([]rune(fix.fixed)), word: fix.fixed, sgr: e.acSGR}
+	tail := len([]rune(fix.tail))
+	e.acPending = &wordMark{line: e.currentLine, col: e.currentCol - tail - len([]rune(fix.fixed)),
+		word: fix.fixed, sgr: e.acSGR, after: len([]rune(fix.after))}
 	e.showNotice(fmt.Sprintf(e.acText.fixed, fix.word, fix.fixed))
 	return fix
 }
@@ -259,8 +281,8 @@ func (e *FSEditor) placeFixMark() {
 	}
 	if !e.buffer.wordAt(p.line, p.col, p.word) {
 		// Wrapped with the key that ended it: the word now ends just before
-		// that key, at the cursor.
-		col := e.currentCol - 1 - len([]rune(p.word))
+		// the punctuation and the key's spaces, at the cursor.
+		col := e.currentCol - p.after - len([]rune(p.word))
 		if !e.buffer.wordAt(e.currentLine, col, p.word) {
 			return
 		}
@@ -328,18 +350,32 @@ func (s *Screen) markedLine(lineNum int, content string) string {
 }
 
 // undoAutocorrect puts back the word u replaced, when the text before the
-// cursor still ends with the fix and the key that ended it, and reports
-// whether it did.
+// cursor still ends with the fix and what the key that ended it typed, and
+// reports whether it did. A fix made by Enter is undone at the start of the
+// new line: the break is joined, the word put back and the line broken
+// again, so the caller keeps the line break.
 func (e *FSEditor) undoAutocorrect(u *acFix) bool {
-	if u == nil || !strings.HasSuffix(e.textBeforeCursor(), u.fixed+string(u.boundary)) {
+	if u == nil {
 		return false
 	}
-	for range []rune(u.fixed + string(u.boundary)) {
+	if u.enter {
+		if e.currentCol != 1 || e.currentLine < 2 || !strings.HasSuffix(e.buffer.GetLine(e.currentLine-1), u.fixed+u.after) {
+			return false
+		}
+		e.handleBackspace() // back to the end of the fixed line
+	}
+	if !strings.HasSuffix(e.textBeforeCursor(), u.fixed+u.after) {
+		return false
+	}
+	for range []rune(u.fixed + u.after) {
 		e.handleBackspace()
 	}
 	e.unmarkFix() // the original word goes back plain
-	for _, r := range u.word + string(u.boundary) {
+	for _, r := range u.word + u.after {
 		e.insertCharacter(r)
+	}
+	if u.enter {
+		e.handleReturn()
 	}
 	e.showNotice(fmt.Sprintf(e.acText.kept, u.word))
 	return true
@@ -368,22 +404,17 @@ func (e *FSEditor) showNotice(text string) {
 	e.screen.ClearEOL()
 	e.screen.WriteDirectProcessed(text)
 	e.screen.WriteDirect(textSGR)
-	e.noticeAt = time.Now()
+	e.noticeAt = e.now()
 }
 
 // clearNotice restores the prompt row a notice has been on for at least
 // autocorrectNotice, and unmarks the fixed word; it is called before each
 // key.
 func (e *FSEditor) clearNotice() {
-	if e.noticeAt.IsZero() || time.Since(e.noticeAt) < e.noticeFor {
+	if e.noticeAt.IsZero() || e.now().Sub(e.noticeAt) < autocorrectNotice {
 		return
 	}
 	e.noticeAt = time.Time{}
 	e.unmarkFix()
-	if e.screen.HasFooter() {
-		e.screen.DisplayFooter()
-	} else {
-		e.screen.GoXY(1, e.screen.PromptRow())
-		e.screen.ClearEOL()
-	}
+	e.restorePromptRow()
 }

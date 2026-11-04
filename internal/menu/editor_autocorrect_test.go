@@ -40,7 +40,8 @@ func TestEditorAutocorrectRule(t *testing.T) {
 		{"caller off where it is not offered", off, true, callerOff, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			offered, ok := editorAutocorrect(tc.area, tc.board, tc.u)
+			ctx := editorAutocorrect(editor.EditorContext{}, tc.area, tc.board, tc.u)
+			offered, ok := ctx.Autocorrect, ctx.Autocorrect && !ctx.AutocorrectOff
 			if offered != tc.offered || ok != tc.ok {
 				t.Errorf("got offered=%v on=%v, want offered=%v on=%v", offered, ok, tc.offered, tc.ok)
 			}

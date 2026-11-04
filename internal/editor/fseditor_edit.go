@@ -62,10 +62,12 @@ func (e *FSEditor) handleDeleteKey() {
 	}
 }
 
+// tabSpaces is how many spaces Tab inserts.
+const tabSpaces = 4
+
 // handleTab inserts tab spaces
 func (e *FSEditor) handleTab() {
-	// Insert 4 spaces for tab
-	for i := 0; i < 4; i++ {
+	for i := 0; i < tabSpaces; i++ {
 		e.insertCharacter(' ')
 	}
 }
