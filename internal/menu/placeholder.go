@@ -164,6 +164,10 @@ func processPlaceholderTemplate(template []byte, substitutions map[byte]string, 
 					value = fitAreaAndCounter(value, substitutions['Z'], substitutions['C'], limit, cp437Values)
 				case "Z":
 					value = ellipsize(value, limit, cp437Values)
+				case "F":
+					value = fitNameAndAddr(value, substitutions['O'], substitutions['U'] != "", limit, cp437Values)
+				case "S":
+					value = fitNameAndAddr(value, substitutions['A'], false, limit, cp437Values)
 				}
 			}
 
@@ -217,11 +221,58 @@ func fitAreaAndCounter(x, z, c string, limit int, cp437Values bool) string {
 	if placeholderCells(x, cp437Values) <= limit || c == "" {
 		return ellipsize(x, limit, cp437Values)
 	}
-	room := limit - placeholderCells(c, cp437Values) - 1
-	if room < 1 {
-		return c // the field is narrower than the counter; fitting cuts it
+	return fitKeepingTail(z, " ", c, limit, cp437Values)
+}
+
+// fitNameAndAddr fits a From or To value, a name followed by its network
+// address in parentheses ("Name (3:633/2744.1)"), into limit cells. When it
+// does not fit, the name is shortened and the address kept whole: cut from
+// the right, the field lost the end of the address and its closing
+// parenthesis (#892). A field narrower than the parenthesised address shows
+// the address alone, without parentheses and shortened with "..." if need
+// be, never a cut-off "(3:633/274". With hasNote, a From value may carry the
+// author's quoted note after the name (`Name "note" (addr)`); the note is
+// shed first, whole, before the name is shortened. A value that doesn't end
+// in addr's parenthesised form (a local name, or no address) is otherwise
+// returned unchanged, for the field's width to cut as before.
+func fitNameAndAddr(value, addr string, hasNote bool, limit int, cp437Values bool) string {
+	if placeholderCells(value, cp437Values) <= limit {
+		return value
 	}
-	return ellipsize(z, room, cp437Values) + " " + c
+	name, tail := value, ""
+	if suffix := " (" + addr + ")"; addr != "" && strings.HasSuffix(value, suffix) {
+		name, tail = strings.TrimSuffix(value, suffix), suffix[1:]
+	}
+	if hasNote {
+		name = withoutNote(name)
+	}
+	if tail == "" {
+		return name
+	}
+	if placeholderCells(tail, cp437Values) > limit {
+		return ellipsize(addr, limit, cp437Values)
+	}
+	return fitKeepingTail(name, " ", tail, limit, cp437Values)
+}
+
+// withoutNote drops a quoted note from the end of a From name,
+// `Name "note"`, leaving the name. Anything else is returned unchanged.
+func withoutNote(name string) string {
+	if i := strings.Index(name, ` "`); i > 0 && len(name) > i+2 && strings.HasSuffix(name, `"`) {
+		return name[:i]
+	}
+	return name
+}
+
+// fitKeepingTail fits head, sep and tail into limit cells, shortening head
+// with "..." and keeping tail whole. When the field is too narrow for even
+// a little of head, it returns tail alone, for the field's width to cut.
+func fitKeepingTail(head, sep, tail string, limit int, cp437Values bool) string {
+	room := limit - placeholderCells(sep, cp437Values) - placeholderCells(tail, cp437Values)
+	if room < 1 {
+		return tail
+	}
+	return ellipsize(head, room, cp437Values) + sep + tail
 }
 
 // ellipsize shortens s to limit cells, ending it with "..." so the cut

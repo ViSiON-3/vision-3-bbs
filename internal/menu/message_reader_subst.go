@@ -83,9 +83,9 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 	toName := bodyAsUTF8(msg.To, msg.Charset)
 	subject := bodyAsUTF8(msg.Subject, msg.Charset)
 
-	// Build From field with user note and/or network address.
-	// Names are truncated if needed to preserve the address suffix,
-	// preventing display like "(21:4/158" with a missing closing paren.
+	// Build From field with user note and/or network address. The header
+	// field fits them to its width (fitNameAndAddr), shedding the note and
+	// shortening the name rather than cutting the address.
 	fromStr := fromName
 	if includeNoteInFrom && truncatedNote != "" && msg.OrigAddr != "" {
 		// Both user note and FidoNet address
@@ -230,27 +230,11 @@ func isFTNArea(area *message.MessageArea) bool {
 	return false
 }
 
-// buildNameWithAddr combines a display name with an FTN address suffix like "Name (21:4/158)".
-// If the combined string exceeds 45 visible characters, the name is truncated to ensure
-// the full address (with closing parenthesis) is always visible in constrained template fields.
+// buildNameWithAddr combines a display name with an FTN address suffix like
+// "Name (21:4/158)". It is fitted to the header field when rendered
+// (fitNameAndAddr), which shortens the name and keeps the address whole.
 func buildNameWithAddr(name, addr string) string {
-	const maxLen = 45
-	suffix := " (" + addr + ")"
-	if utf8.RuneCountInString(name)+utf8.RuneCountInString(suffix) <= maxLen {
-		return name + suffix
-	}
-	// Truncate name (by rune) to fit, preserving the address suffix. Clamp to the
-	// name's rune length so a short multi-byte name can't trigger an out-of-range
-	// or UTF-8-splitting slice.
-	nameMax := maxLen - utf8.RuneCountInString(suffix)
-	if nameMax < 3 {
-		nameMax = 3
-	}
-	r := []rune(name)
-	if nameMax > len(r) {
-		nameMax = len(r)
-	}
-	return string(r[:nameMax]) + suffix
+	return name + " (" + addr + ")"
 }
 
 // buildAutoWidths calculates the maximum display width for each placeholder code.

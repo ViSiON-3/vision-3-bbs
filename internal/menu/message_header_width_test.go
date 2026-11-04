@@ -121,6 +121,73 @@ func TestShippedHeadersKeepTheCounter(t *testing.T) {
 	}
 }
 
+// Every shipped header style shows a sender's full network address, however
+// long their name (#892): the name is shortened, not the address.
+func TestShippedHeadersKeepTheAddress(t *testing.T) {
+	addr, toAddr := "3:633/2744.1", "21:4/158.12"
+	subs := map[byte]string{
+		'B': "TAG", 'T': "Subject", 'U': "", 'M': "ECHOMAIL",
+		'L': "", '#': "33", 'N': "33", 'C': "[33/33]", 'V': "33 of 33",
+		'D': "11/03/26", 'W': "3:27 pm", 'P': "None", 'E': "0", 'H': "0", 'K': "1",
+		'Z': "Fidonet > Door Games", 'X': "Fidonet > Door Games [33/33]",
+		'O': addr, 'F': buildNameWithAddr("Dobbie Thiting of the Long Name BBS", addr),
+		'A': toAddr, 'S': buildNameWithAddr("Rosalind Featherstonehaugh-Smythe", toAddr),
+	}
+	dir := filepath.Join("..", "..", "menus", "v3", "templates", "message_headers")
+	for n := 1; n <= 15; n++ {
+		name := "MSGHDR." + strconv.Itoa(n) + ".ans"
+		tpl, err := ansi.GetAnsiFileContent(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		hasFrom, hasTo := strings.Contains(string(tpl), "@F"), strings.Contains(string(tpl), "@S")
+		if !hasFrom && !hasTo {
+			continue // this style shows neither name
+		}
+		for _, cp437 := range []bool{false, true} {
+			out := string(processTemplate(tpl, subs, buildAutoWidths(subs, 33, 80, cp437), cp437))
+			if hasFrom && !strings.Contains(out, "("+addr+")") {
+				t.Errorf("%s (cp437=%v): sender's address %s not shown in full", name, cp437, addr)
+			}
+			if hasTo && !strings.Contains(out, "("+toAddr+")") {
+				t.Errorf("%s (cp437=%v): recipient's address %s not shown in full", name, cp437, toAddr)
+			}
+		}
+	}
+}
+
+func TestFitNameAndAddr(t *testing.T) {
+	v := "Dobbie Thiting (3:633/2744.1)"         // 29 cells
+	n := `Dobbie Thiting "Sysop" (3:633/2744.1)` // 37 cells
+	for _, tc := range []struct {
+		value, addr string
+		hasNote     bool
+		limit       int
+		want        string
+	}{
+		{v, "3:633/2744.1", false, 40, v},                             // fits
+		{v, "3:633/2744.1", false, 27, "Dobbie Th... (3:633/2744.1)"}, // the header in #892
+		{v, "3:633/2744.1", false, 17, "Do (3:633/2744.1)"},           // little room for the name
+		{v, "3:633/2744.1", false, 14, "(3:633/2744.1)"},              // the address alone
+		{v, "3:633/2744.1", false, 12, "3:633/2744.1"},                // narrower than "(addr)": no parens
+		{v, "3:633/2744.1", false, 10, "3:633/2..."},                  // narrower than the address: shortened, never a cut paren
+		{"Dobbie Thiting", "", false, 10, "Dobbie Thiting"},           // no address: the field cuts it
+		{"Dobbie (Home)", "3:633/2744.1", false, 10, "Dobbie (Home)"}, // no matching address suffix
+		{n, "3:633/2744.1", true, 40, n},                              // note fits
+		{n, "3:633/2744.1", true, 29, v},                              // the note goes first, whole
+		{n, "3:633/2744.1", true, 27, "Dobbie Th... (3:633/2744.1)"},  // then the name is shortened
+		{`Dobbie Thiting "Sysop"`, "", true, 16, "Dobbie Thiting"},    // note, no address
+	} {
+		if got := fitNameAndAddr(tc.value, tc.addr, tc.hasNote, tc.limit, false); got != tc.want {
+			t.Errorf("fitNameAndAddr(%q, %q, %v, %d) = %q, want %q", tc.value, tc.addr, tc.hasNote, tc.limit, got, tc.want)
+		}
+	}
+	// CP437 values are one byte a cell: "\x82" is é.
+	if got, want := fitNameAndAddr("Ren\x82e Dubois (1:2/3)", "1:2/3", false, 18, true), "Ren\x82e D... (1:2/3)"; got != want {
+		t.Errorf("cp437: %q, want %q", got, want)
+	}
+}
+
 func TestFitAreaAndCounter(t *testing.T) {
 	z := "GENERAL > General Discussion"
 	x := z + " [1/42]"
