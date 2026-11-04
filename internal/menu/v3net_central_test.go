@@ -52,12 +52,19 @@ func centralEntry(name, desc, addr string, online bool, seenAgo time.Duration) p
 
 func runCentralScreen(t *testing.T, fake V3NetCentralProvider, input string, fn RunnableFunc, args string) string {
 	t.Helper()
+	return runCentralScreenMode(t, fake, input, fn, args, ansi.OutputModeUTF8)
+}
+
+// runCentralScreenMode is runCentralScreen for a caller in the given output
+// mode.
+func runCentralScreenMode(t *testing.T, fake V3NetCentralProvider, input string, fn RunnableFunc, args string, mode ansi.OutputMode) string {
+	t.Helper()
 	e := &MenuExecutor{V3NetCentral: fake, RootConfigPath: t.TempDir()}
 	ts := newTestSession(input)
 	c := &cmdCtx{
 		e: e, s: ts, terminal: newTestTerminal(ts),
 		currentUser: &user.User{Handle: "Caller", AccessLevel: 10},
-		outputMode:  ansi.OutputModeUTF8, termWidth: 80, termHeight: 24,
+		outputMode:  mode, termWidth: 80, termHeight: 24,
 	}
 	if _, _, err := fn(c, args); err != nil && !errors.Is(err, errInputAborted) {
 		t.Fatalf("screen returned error: %v", err)
@@ -129,7 +136,7 @@ func TestCentralBoardsListsFreshnessAndDetails(t *testing.T) {
 	if iS < 0 || iV < 0 || iO < 0 || iS >= iV || iV >= iO {
 		t.Errorf("rows not ordered online, recent, stale: S=%d V=%d O=%d", iS, iV, iO)
 	}
-	if !strings.Contains(out, "● Sector 7") || !strings.Contains(out, "○ The Vault") || !strings.Contains(out, "· Old Haunt") {
+	if !strings.Contains(out, "■ Sector 7") || !strings.Contains(out, "° The Vault") || !strings.Contains(out, "· Old Haunt") {
 		t.Errorf("freshness markers missing: %q", out)
 	}
 	// Pipe codes in another board's text are shown as written, not run.
@@ -145,6 +152,31 @@ func TestCentralBoardsListsFreshnessAndDetails(t *testing.T) {
 	}
 	if !strings.Contains(out, "aaaa1111bbbb2222") {
 		t.Errorf("details should show the node id: %q", out)
+	}
+}
+
+func TestCentralBoardsMarkersInCP437(t *testing.T) {
+	// A CP437 caller must see the three freshness markers as distinct
+	// CP437 glyphs: a rune with no CP437 byte is sent as '?', which made
+	// online and recent boards look the same.
+	fake := &centralFake{
+		nets: []CentralNetworkInfo{{Network: "testnet", Enabled: true, SupportKnown: true, Supported: true}},
+		dirs: map[string][]protocol.CentralDirectoryEntry{"testnet": {
+			centralEntry("Old Haunt", "Back someday", "telnet://haunt.example:23", false, 30*24*time.Hour),
+			centralEntry("Sector 7", "Demoscene", "ssh://sector7.example:2222", true, 0),
+			centralEntry("The Vault", "Files since 1991", "telnet://vault.example:23", false, 2*24*time.Hour),
+		}},
+	}
+	out := runCentralScreenMode(t, fake, "q", runV3NetCentralBoards, "", ansi.OutputModeCP437)
+	// The cursor hide/show escapes carry a '?' of their own.
+	text := strings.NewReplacer("\x1b[?25l", "", "\x1b[?25h", "").Replace(out)
+	if strings.Contains(text, "?") {
+		t.Errorf("a character with no CP437 byte was sent as '?': %q", out)
+	}
+	for _, want := range []string{"\xfe Sector 7", "\xf8 The Vault", "\xfa Old Haunt", "\xfe\x1b[1;30m online", "\xf8\x1b[1;30m seen this week"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("CP437 output missing %q: %q", want, out)
+		}
 	}
 }
 
