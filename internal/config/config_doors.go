@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // DoorConfig defines the configuration for a single external door program.
@@ -39,6 +40,9 @@ type DoorConfig struct {
 	LibraryPaths []string `json:"library_paths,omitempty"` // Search paths for load()/require()
 	Args         []string `json:"args,omitempty"`          // Script arguments (available as argv in JS)
 	ExecDir      string   `json:"exec_dir,omitempty"`      // Synchronet exec directory (system.exec_dir)
+	// MaxRunMinutes is the wall-clock limit on one run of a v3_script door:
+	// 0 for the default of 30 minutes, -1 for no limit. See ScriptRunLimit.
+	MaxRunMinutes int `json:"max_run_minutes,omitempty"`
 	// DOS door fields
 	IsDOS        bool   `json:"is_dos,omitempty"`        // true = DOS door launched via a DOS emulator
 	DriveCPath   string `json:"drive_c_path,omitempty"`  // Path to drive_c directory (default: ~/.dosemu/drive_c)
@@ -76,6 +80,27 @@ func (d DoorConfig) RemoteProtocol() string {
 	}
 	return ""
 }
+
+// ScriptRunLimit is the wall-clock limit MaxRunMinutes sets for a v3_script
+// door, in the form scripting.ScriptConfig.MaxRunTime takes: zero for the
+// engine's default, a negative duration for no limit (any negative setting
+// counts as -1), otherwise the minutes as a duration. A setting above
+// MaxScriptRunMinutes (only possible by editing doors.json by hand) counts as
+// MaxScriptRunMinutes, so a huge value can't overflow the duration.
+//
+// No limit leaves the door to the checks every door gets: it still ends when
+// the caller is idle too long, runs out of time or hangs up.
+func (d DoorConfig) ScriptRunLimit() time.Duration {
+	if d.MaxRunMinutes < 0 {
+		return -1
+	}
+	return time.Duration(min(d.MaxRunMinutes, MaxScriptRunMinutes)) * time.Minute
+}
+
+// MaxScriptRunMinutes is the largest max_run_minutes a v3_script door can
+// set: the most the config editor accepts, and what ScriptRunLimit uses for
+// anything larger.
+const MaxScriptRunMinutes = 9999
 
 // DefaultDisconnectKey is the control character that hangs up a remote door
 // session from the caller's end. Ctrl-] is what Synchronet's gateway uses, so

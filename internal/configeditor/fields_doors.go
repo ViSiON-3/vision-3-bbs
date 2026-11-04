@@ -364,6 +364,20 @@ func (m *Model) fieldsDoor() []fieldDef {
 			Get: func() string { return sliceToCSV(dPtr.Args) },
 			Set: func(val string) error { dPtr.Args = csvToSlice(val); save(); return nil },
 		})
+		row++
+		fields = append(fields, fieldDef{
+			Label: "Max Run Mins", Help: "Wall-clock limit per run (0=30 minutes, -1=none); idle and time left still apply", Type: ftInteger, Col: 3, Row: row, Width: 5, Min: -1, Max: config.MaxScriptRunMinutes,
+			Get: func() string { return strconv.Itoa(dPtr.MaxRunMinutes) },
+			Set: func(val string) error {
+				v, err := strconv.Atoi(strings.TrimSpace(val))
+				if err != nil || v < -1 {
+					return fmt.Errorf("max run minutes must be -1, 0 or a number of minutes")
+				}
+				dPtr.MaxRunMinutes = v
+				save()
+				return nil
+			},
+		})
 	} else if isRLogin(dPtr) || isTelnet(dPtr) {
 		// Outbound door-server fields. There is no local program, so nothing
 		// here concerns commands, dropfiles or the environment. Host, port,

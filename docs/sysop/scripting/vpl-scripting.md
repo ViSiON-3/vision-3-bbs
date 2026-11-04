@@ -101,6 +101,26 @@ Or use the **Configuration Editor** (`./config`, section 7 — Door Programs →
 | `args` | No | Array of arguments available as `v3.args` in the script |
 | `single_instance` | No | If `true`, only one node can run this door at a time |
 | `min_access_level` | No | Minimum user access level required (0 = no restriction) |
+| `max_run_minutes` | No | Wall-clock limit on one run, in minutes. `0` (default) is 30 minutes; `-1` is no limit. See [Run Time Limit](#run-time-limit) |
+
+#### Run Time Limit
+
+A script is stopped once it has run for **max_run_minutes** (**Max Run Mins** in the Configuration Editor), 30 minutes unless set. The limit is wall-clock time from the moment the script starts, not CPU time: a script waiting for the caller to press a key uses it up just as a busy one does. It is there to end a script that has gone wrong, such as one stuck in a loop.
+
+Raise it for a script callers stay in for a long time, such as a reader or a game. Set it to `-1` for no limit. Whatever the setting, the script still ends when the caller is idle for their idle timeout, runs out of time, or hangs up, as every door does. CoSysOps and above have no idle timeout or time limit, so with `-1` a sysop's script runs until it ends or the sysop hangs up.
+
+```json
+{
+    "code": "READER",
+    "name": "Text Reader",
+    "type": "v3_script",
+    "script": "reader.js",
+    "working_directory": "scripts",
+    "max_run_minutes": 240
+}
+```
+
+A change takes effect the next time the script is run.
 
 ### 3. Add to a Menu
 
@@ -207,7 +227,7 @@ v3.args.length
 | `exit()` | Stop the script. The door returns to the menu as if the script had run to its end |
 | `exit(code)` | Same, with a numeric code. A non-zero code is written to the log as `V3 script exited with non-zero code`; the caller sees no difference |
 
-`exit()` cannot be caught: `try`/`catch`/`finally` blocks do not run, and calling it from inside a nested function still stops the whole script. Scripts also stop after 30 minutes of running, and when the caller disconnects; neither counts as an error.
+`exit()` cannot be caught: `try`/`catch`/`finally` blocks do not run, and calling it from inside a nested function still stops the whole script. Scripts also stop when they reach their [run time limit](#run-time-limit) (30 minutes unless the door sets `max_run_minutes`), and when the caller disconnects; neither counts as an error.
 
 ---
 

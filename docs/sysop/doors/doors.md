@@ -349,7 +349,7 @@ Set `is_dos: true` to run a 16-bit DOS door game via dosemu2.
 
 #### Script Door Fields
 
-Used when `type` is `synchronet_js` or `v3_script`. Only `script` and `args` apply to a VPL script; see [Synchronet JS Doors](doors/synchronet-js-doors.md) and [VPL Scripting](scripting/vpl-scripting.md).
+Used when `type` is `synchronet_js` or `v3_script`. Only `script`, `args` and `max_run_minutes` apply to a VPL script; see [Synchronet JS Doors](doors/synchronet-js-doors.md) and [VPL Scripting](scripting/vpl-scripting.md).
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -357,6 +357,7 @@ Used when `type` is `synchronet_js` or `v3_script`. Only `script` and `args` app
 | `args` | []string | none | Arguments passed to the script (`argv` in Synchronet JS, `v3.args` in VPL). Placeholders are not substituted |
 | `exec_dir` | string | required (JS) | Synchronet's `exec/` directory (`system.exec_dir`) |
 | `library_paths` | []string | required (JS) | Search paths for `load()` and `require()` |
+| `max_run_minutes` | int | `0` (30 minutes) | VPL only. Wall-clock limit on one run; `-1` for none. See [Run Time Limit](scripting/vpl-scripting.md#run-time-limit) |
 
 #### Remote Door Fields
 

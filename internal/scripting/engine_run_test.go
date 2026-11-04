@@ -223,3 +223,46 @@ func TestToUpperASCII(t *testing.T) {
 		t.Errorf("toUpperASCII = %q", got)
 	}
 }
+
+// TestRunNegativeMaxRunTimeHasNoDeadline checks that a negative MaxRunTime
+// (a door's max_run_minutes of -1) leaves the engine without a deadline, so
+// only the session context can end the script; a hang-up still does.
+func TestRunNegativeMaxRunTimeHasNoDeadline(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	h := newHarness(t, harnessOpts{ctx: ctx, maxRunTime: -1})
+	if _, ok := h.eng.ctx.Deadline(); ok {
+		t.Fatal("engine context has a deadline with MaxRunTime < 0, want none")
+	}
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		cancel()
+	}()
+	if err := h.run(`while (true) {}`); !errors.Is(err, ErrDisconnect) {
+		t.Fatalf("Run = %v, want ErrDisconnect", err)
+	}
+}
+
+// TestNewEngineDeadlineFollowsMaxRunTime checks the deadline the engine sets:
+// the default when MaxRunTime is zero, the configured limit otherwise.
+func TestNewEngineDeadlineFollowsMaxRunTime(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		max  time.Duration
+		want time.Duration
+	}{
+		{"zero is the default", 0, defaultMaxRunTime},
+		{"configured limit", 2 * time.Hour, 2 * time.Hour},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := time.Now()
+			h := newHarness(t, harnessOpts{maxRunTime: tc.max})
+			deadline, ok := h.eng.ctx.Deadline()
+			if !ok {
+				t.Fatal("engine context has no deadline")
+			}
+			if got := deadline.Sub(before); got < tc.want || got > tc.want+time.Minute {
+				t.Errorf("deadline %v after start, want %v", got, tc.want)
+			}
+		})
+	}
+}

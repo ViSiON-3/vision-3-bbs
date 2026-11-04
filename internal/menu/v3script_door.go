@@ -4,7 +4,6 @@ package menu
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -43,6 +42,7 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		WorkingDir: workDir,
 		Args:       ctx.Config.Args,
 		Prompt:     ctx.Prompt,
+		MaxRunTime: ctx.Config.ScriptRunLimit(),
 	}
 
 	session := &scripting.SessionContext{
@@ -110,14 +110,7 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 	keepEnterTrailer(ctx.Session, eng.EnterTrailerPending())
 
 	if runErr != nil {
-		if errors.Is(runErr, scripting.ErrDisconnect) {
-			slog.Info("user disconnected from V3 script",
-				"node", ctx.NodeNumber, "door", ctx.DoorName)
-			return nil
-		}
-		slog.Error("V3 script error",
-			"node", ctx.NodeNumber, "door", ctx.DoorName, "error", runErr)
-		return runErr
+		return v3ScriptRunError(ctx, runErr)
 	}
 
 	slog.Info("V3 script completed normally",

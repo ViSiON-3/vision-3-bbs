@@ -160,3 +160,51 @@ func TestDropfileCaseFieldHiddenForDOS(t *testing.T) {
 		}
 	}
 }
+
+// The run limit is a VPL setting: it is shown for v3_script doors only, takes
+// -1 (no limit), 0 (default) or minutes, and refuses anything else.
+func TestMaxRunMinsField(t *testing.T) {
+	m := newDoorModel(map[string]config.DoorConfig{
+		"VAULT": {Code: "VAULT", Name: "The Vault", Type: "v3_script", Script: "vault.js"},
+	})
+	m.recordEditIdx = 0
+	fld := findField(t, m.buildRecordFields(), "Max Run Mins")
+	if fld.Min != -1 {
+		t.Errorf("Min = %d, want -1", fld.Min)
+	}
+	for _, v := range []string{"-1", "0", "120"} {
+		if err := fld.Set(v); err != nil {
+			t.Fatalf("Set(%s): %v", v, err)
+		}
+		if got := fld.Get(); got != v {
+			t.Errorf("after Set(%s), Get() = %q", v, got)
+		}
+	}
+	if got := m.configs.Doors["VAULT"].MaxRunMinutes; got != 120 {
+		t.Errorf("persisted MaxRunMinutes = %d, want 120", got)
+	}
+	for _, v := range []string{"-2", "soon"} {
+		if err := fld.Set(v); err == nil {
+			t.Errorf("Set(%q) accepted, want an error", v)
+		}
+	}
+	if got := m.configs.Doors["VAULT"].MaxRunMinutes; got != 120 {
+		t.Errorf("a refused value changed MaxRunMinutes to %d", got)
+	}
+}
+
+func TestMaxRunMinsFieldOnlyForVPL(t *testing.T) {
+	for _, d := range []config.DoorConfig{
+		{Code: "LORD", Name: "LORD"},
+		{Code: "SYNC", Name: "Sync", Type: "synchronet_js", Script: "x.js"},
+		{Code: "BBSLINK", Name: "Link", Type: "rlogin", Host: "example.org"},
+	} {
+		m := newDoorModel(map[string]config.DoorConfig{d.Code: d})
+		m.recordEditIdx = 0
+		for _, f := range m.buildRecordFields() {
+			if f.Label == "Max Run Mins" {
+				t.Errorf("%s door (type %q) shows Max Run Mins", d.Code, d.Type)
+			}
+		}
+	}
+}
