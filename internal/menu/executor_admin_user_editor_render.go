@@ -200,6 +200,11 @@ func (st *userEditorState) renderDetails(message string) error {
 		lineTwoCol("|08[|14F|08]|11 Level", getIntFieldValue("level", sel.AccessLevel), "|11Last Login", adminTime(sel.LastLogin)),
 		lineTwoCol("|08[|14G|08]|11 Validated", getBoolFieldValue("validated", sel.Validated), "|11Deleted", deletedStatus),
 	}
+	// The ACS tester's key, under the fields when the terminal has a row
+	// to spare above the status row.
+	if st.layout.detailStartRow+len(lines) < st.layout.statusRow {
+		lines = append(lines, "|08[|14T|08]|11 ACS Test|08: |03test an expression for this user|07")
+	}
 	for i, line := range lines {
 		if err := st.writeAt(st.layout.detailStartRow+i, 1, line); err != nil {
 			return err

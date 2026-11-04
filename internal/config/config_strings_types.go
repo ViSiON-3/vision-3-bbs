@@ -25,6 +25,19 @@ type StringsConfig struct {
 	QwkDevicesSaveFailed  string `json:"qwkDevicesSaveFailed"`
 	QwkDevicesDisabled    string `json:"qwkDevicesDisabled"`
 
+	AcsTestTitle          string `json:"acsTestTitle"`
+	AcsTestMenu           string `json:"acsTestMenu"`
+	AcsTestExprPrompt     string `json:"acsTestExprPrompt"`
+	AcsTestSessionPrompt  string `json:"acsTestSessionPrompt"`
+	AcsTestLocalPrompt    string `json:"acsTestLocalPrompt"`
+	AcsTestTerminalPrompt string `json:"acsTestTerminalPrompt"`
+	AcsTestElapsedPrompt  string `json:"acsTestElapsedPrompt"`
+	AcsTestCreditPrompt   string `json:"acsTestCreditPrompt"`
+	AcsTestTimePrompt     string `json:"acsTestTimePrompt"`
+	AcsTestBadNumber      string `json:"acsTestBadNumber"`
+	AcsTestBadTime        string `json:"acsTestBadTime"`
+	AcsTestDenied         string `json:"acsTestDenied"`
+
 	KonfigTwitListLabel string `json:"konfigTwitListLabel"`
 	KonfigTwitListHelp  string `json:"konfigTwitListHelp"`
 	TwitNamePrompt      string `json:"twitNamePrompt"`

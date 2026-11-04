@@ -247,6 +247,20 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 			}
 			refresh = true
 		}
+	case acsTesterKey, 'T':
+		// The ACS tester (#608), for the selected user as stored. Like the
+		// infoform and device screens it waits for staged edits first.
+		if !st.acsTesterAllowed() {
+			st.statusMessage = st.e.Strings().AcsTestDenied
+		} else if len(st.pendingChanges) == 0 {
+			if err := st.runACSTester(termWidth, termHeight); err != nil {
+				return false, true, nil, "LOGOFF", err
+			}
+			if err := st.renderHeader(); err != nil {
+				return false, true, nil, "", err
+			}
+			refresh = true
+		}
 	case '\r', '\n':
 		// Enter/Return pressed - do nothing (removed help text display)
 	case editor.KeyArrowUp:

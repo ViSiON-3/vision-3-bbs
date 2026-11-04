@@ -105,6 +105,7 @@ Opens a lightbar browser showing only **unvalidated** user accounts. The lower h
 | `E` | Edit access flags |
 | `F` | Edit access level (numeric) |
 | `I` | Browse the user's [InfoForms](menus/infoforms.md#infoform-browser-user-editor--validate) |
+| `T` | [ACS Test](#t--acs-test): check an ACS string against the user |
 | `S` | **Save** all staged changes |
 | `X` | **Abort** — discard all staged changes |
 | `Q` / Esc | Quit |
@@ -136,6 +137,32 @@ The lower half of the screen shows the following for the highlighted user:
 | `E` | Access flags | Created date |
 | `F` | Access level | Last login |
 | `G` | Validated (toggle) | Deleted status |
+
+### T — ACS Test
+
+Checks an [ACS string](reference/acs.md) against the highlighted user's
+saved record and shows how each part of it came out and why; see
+[Testing a string for a user](reference/acs.md#testing-a-string-for-a-user).
+Like `I`, it waits until staged changes are saved or aborted.
+
+The tester is for accounts at `sysOpLevel` or above (the level the `SYSOP`
+keyword means), checked when you press `T` whatever menu ACS let you into the
+editor: an explanation can show what a user's private note holds and which
+flags they have. Anyone below it gets `Only a SysOp can test ACS strings.`
+
+Type the expression at the prompt. The screen shows the user, the session and
+the time it was tested with, then the result, paged to your terminal. The
+context starts as no session and the current time, never your own call. Then:
+
+| Key | Action |
+|-----|--------|
+| `E` | Test another expression (the last one is filled in) |
+| `S` | Set a made-up session: local or not, with a terminal or not, minutes into the call and minutes of chat credit. Answer No to go back to no session |
+| `T` | Set the time: `hh:mm` today or `yyyy-mm-dd hh:mm`; Enter for now |
+| `Q` / Enter / Esc | Back to the user editor |
+
+The prompts are in `strings.json` under the `acsTest` keys and can be changed
+with the [string editor](advanced/string-editor.md).
 
 ### Online Indicator
 
