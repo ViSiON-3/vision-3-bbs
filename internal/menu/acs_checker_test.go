@@ -517,7 +517,7 @@ func TestEvaluateCondition_FileConference(t *testing.T) {
 	}
 }
 
-// --- D: Download Level ---
+// --- D: Access level (same as S) ---
 
 func TestEvaluateCondition_DownloadLevel(t *testing.T) {
 	u := &user.User{AccessLevel: 50}
@@ -529,9 +529,9 @@ func TestEvaluateCondition_DownloadLevel(t *testing.T) {
 	}
 }
 
-// --- E: Post/Call Ratio ---
+// --- E: Uploads per call ---
 
-func TestEvaluateCondition_PostCallRatio(t *testing.T) {
+func TestEvaluateCondition_UploadsPerCall(t *testing.T) {
 	u := &user.User{NumUploads: 10, TimesCalled: 20}
 	if !evaluateCondition("E50", u, nil, nil, time.Now()) {
 		t.Error("expected true for E50 with 10/20 ratio (50%)")

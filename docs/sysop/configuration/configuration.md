@@ -982,6 +982,8 @@ Defines file areas available on the BBS. The file contains an array of file area
 - `s20&fC` - Level 20+ AND flag C
 - `s10|fD` - Level 10+ OR flag D
 
+See [Access Control Strings](reference/acs.md) for every term and operator.
+
 ### message_areas.json
 
 > *Use the [Configuration Editor](#configuration-editor-tui) (key 3 → Areas and Conferences → Message Areas) to manage message area settings interactively. The JSON structure below is for reference.*
@@ -1041,7 +1043,7 @@ Located in the `configs/` directory. Defines conferences that group message area
 - `tag` - Short tag name (uppercase)
 - `name` - Display name shown in area listings
 - `description` - Conference description
-- `acs` - ACS string required to see this conference's areas (empty = visible to all)
+- `acs` - ACS string required to see this conference's areas (empty = visible to all); see [Access Control Strings](reference/acs.md)
 
 #### How Conference Grouping Works
 

@@ -328,7 +328,7 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 			result = (network == "pipe" || network == "unix" || isLoopback)
 			slog.Debug("ACS 'L' check", "network", network, "addr", addr, "isLoopback", isLoopback, "result", result)
 		}
-	case "A": // ANSI graphics supported
+	case "A": // Session has a terminal: every telnet session, SSH with a PTY. Not an ANSI or encoding check.
 		if s == nil {
 			result = false
 		} else {
@@ -353,16 +353,15 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 		}
 	case "V": // User is validated
 		result = u.Validated
-	case "D": // File download level >= value (Using AccessLevel for now)
+	case "D": // Access level >= value: the same test as S; there is no separate download level
 		level, err := strconv.Atoi(value)
 		if err != nil {
 			slog.Warn("invalid level value in ACS condition", "condition", condition, "error", err)
 			result = false
 		} else {
-			// TODO: Confirm if this should be AccessLevel or a separate FileLevel
 			result = u.AccessLevel >= level
 		}
-	case "E": // Post/Call Ratio >= value (Uploads / Calls)
+	case "E": // Uploads per call, as a percentage rounded down, >= value (uploads, not posts)
 		pcrThreshold, err := strconv.Atoi(value)
 		if err != nil {
 			slog.Warn("invalid PCR value in ACS condition", "condition", condition, "error", err)
@@ -464,7 +463,7 @@ func evaluateCondition(condition string, u *user.User, s ssh.Session, _ *term.Te
 		} else {
 			result = u.CurrentMsgConferenceID == confID
 		}
-	case "I": // Internet access flag — user has flag "I" set
+	case "I": // User has flag I: the same test as FI; any argument is ignored
 		result = strings.Contains(strings.ToUpper(u.Flags), "I")
 		slog.Debug("ACS 'I' check", "flags", u.Flags, "result", result)
 	case "X": // File Conference == value
