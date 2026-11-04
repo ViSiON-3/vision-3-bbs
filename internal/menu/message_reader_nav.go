@@ -155,7 +155,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		QuoteTo:    currentMsg.To,
 	}
 	replyBody, saved, editErr := editor.RunEditorWithMetadata("", s, sessionOutput(s), outputMode, newSubject, replyName, fromName, false,
-		currentMsg.From, currentMsg.Subject, quoteDate, quoteTime, false, quoteLines, ih, replyCtx)
+		currentMsg.From, currentMsg.Subject, quoteDate, quoteTime, false, quoteLines, ih, withAutocorrect(e, replyCtx, replyArea, currentUser, userManager))
 	if editErr != nil {
 		slog.Error("editor failed", "node", nodeNumber, "error", editErr)
 		e.writeString(terminal, outputMode, e.Strings().MsgEditorError)

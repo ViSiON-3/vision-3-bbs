@@ -29,6 +29,16 @@ type EditorContext struct {
 	ConfArea   string // "Conference > Area" combined string (@Z@)
 	Networked  bool   // area is echoed off the BBS: quote with the quote*Net strings
 	QuoteTo    string // who the quoted message was addressed to (^F in quote banners)
+
+	// Autocorrect makes autocorrect available in this editor: the message
+	// area (or, with no area, the board default) has it on. AutocorrectOff
+	// is the caller's own choice to have it off; Ctrl-O can still turn it
+	// back on while Autocorrect is set.
+	Autocorrect    bool
+	AutocorrectOff bool
+	// SaveAutocorrect, if set, keeps the caller's choice when Ctrl-O
+	// switches autocorrect; on is the new state.
+	SaveAutocorrect func(on bool)
 }
 
 func resolveEditorPaths() (menuSetPath, rootConfigPath string) {
@@ -143,6 +153,12 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 	if serverCfg, cfgErr := config.LoadServerConfig(rootConfigPath); cfgErr == nil {
 		editor.SetTimezone(serverCfg.Timezone)
 		editor.SetBoardName(serverCfg.BoardName)
+	}
+	if len(ctx) > 0 && ctx[0].Autocorrect {
+		editor.SetAutocorrectColor(theme.AutocorrectHighlightColor)
+		editor.SetAutocorrectStrings(stringsCfg.EditorAutocorrectFixed, stringsCfg.EditorAutocorrectKept,
+			stringsCfg.EditorAutocorrectOn, stringsCfg.EditorAutocorrectOff)
+		editor.EnableAutocorrect(rootConfigPath, !ctx[0].AutocorrectOff, ctx[0].SaveAutocorrect)
 	}
 
 	// Set metadata

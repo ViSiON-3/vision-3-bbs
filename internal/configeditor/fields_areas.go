@@ -168,29 +168,35 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 			Get: func() string { return uitext.BoolToYN(a.AllowAnon != nil && *a.AllowAnon) },
 			Set: func(val string) error { v := uitext.YNToBool(val); a.AllowAnon = &v; return nil },
 		},
+		{
+			Label: "Autocorrect", Help: "Fix common typos as callers type posts here; Default follows the board's Default Settings", Type: ftLookup, Col: 3, Row: 15, Width: 24,
+			Get:         func() string { return autocorrectAreaDisplay(a.Autocorrect) },
+			Set:         func(val string) error { a.Autocorrect = parseAutocorrectArea(val); return nil },
+			LookupItems: autocorrectAreaItems,
+		},
 	}
 
 	switch strings.ToLower(a.AreaType) {
 	case "echomail":
 		fields = append(fields,
 			fieldDef{
-				Label: "Network", Help: "FTN network key from ftn.json (e.g. fsxnet)", Type: ftLookup, Col: 3, Row: 15, Width: 20,
+				Label: "Network", Help: "FTN network key from ftn.json (e.g. fsxnet)", Type: ftLookup, Col: 3, Row: 16, Width: 20,
 				Get:         func() string { return a.Network },
 				Set:         func(val string) error { a.Network = val; return nil },
 				LookupItems: func() []LookupItem { return m.buildFTNNetworkLookupItems() },
 			},
 			fieldDef{
-				Label: "Echo Tag", Help: "FTN echo tag matching the network's area list (e.g. FSX_GEN)", Type: ftString, Col: 3, Row: 16, Width: 30,
+				Label: "Echo Tag", Help: "FTN echo tag matching the network's area list (e.g. FSX_GEN)", Type: ftString, Col: 3, Row: 17, Width: 30,
 				Get: func() string { return a.EchoTag },
 				Set: func(val string) error { a.EchoTag = val; return nil },
 			},
 			fieldDef{
-				Label: "Origin Addr", Help: "Your FTN origin address for this echo (e.g. 21:4/158.1)", Type: ftString, Col: 3, Row: 17, Width: 20,
+				Label: "Origin Addr", Help: "Your FTN origin address for this echo (e.g. 21:4/158.1)", Type: ftString, Col: 3, Row: 18, Width: 20,
 				Get: func() string { return a.OriginAddr },
 				Set: func(val string) error { a.OriginAddr = val; return nil },
 			},
 			fieldDef{
-				Label: "Sponsor", Help: "Handle of the echo sponsor/moderator (optional)", Type: ftString, Col: 3, Row: 18, Width: 30,
+				Label: "Sponsor", Help: "Handle of the echo sponsor/moderator (optional)", Type: ftString, Col: 3, Row: 19, Width: 30,
 				Get: func() string { return a.Sponsor },
 				Set: func(val string) error { a.Sponsor = val; return nil },
 			},
@@ -198,7 +204,7 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 	case "netmail":
 		fields = append(fields,
 			fieldDef{
-				Label: "Network", Help: "FTN network key this netmail area serves (e.g. fsxnet)", Type: ftLookup, Col: 3, Row: 15, Width: 20,
+				Label: "Network", Help: "FTN network key this netmail area serves (e.g. fsxnet)", Type: ftLookup, Col: 3, Row: 16, Width: 20,
 				Get:         func() string { return a.Network },
 				Set:         func(val string) error { a.Network = val; return nil },
 				LookupItems: func() []LookupItem { return m.buildFTNNetworkLookupItems() },
@@ -207,13 +213,13 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 	case "v3net":
 		fields = append(fields,
 			fieldDef{
-				Label: "Network", Help: "V3Net network name (e.g. felonynet)", Type: ftLookup, Col: 3, Row: 15, Width: 32,
+				Label: "Network", Help: "V3Net network name (e.g. felonynet)", Type: ftLookup, Col: 3, Row: 16, Width: 32,
 				Get:         func() string { return a.Network },
 				Set:         func(val string) error { a.Network = val; return nil },
 				LookupItems: func() []LookupItem { return m.buildV3NetNetworkLookupItems() },
 			},
 			fieldDef{
-				Label: "Echo Tag", Help: "V3Net area tag on the hub (e.g. fel.general)", Type: ftString, Col: 3, Row: 16, Width: 34,
+				Label: "Echo Tag", Help: "V3Net area tag on the hub (e.g. fel.general)", Type: ftString, Col: 3, Row: 17, Width: 34,
 				Get: func() string { return a.EchoTag },
 				Set: func(val string) error { a.EchoTag = val; return nil },
 			},
@@ -221,13 +227,13 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 	case "qwknet":
 		fields = append(fields,
 			fieldDef{
-				Label: "Network", Help: "QWK network key from qwknet.json (e.g. dovenet)", Type: ftLookup, Col: 3, Row: 15, Width: 20,
+				Label: "Network", Help: "QWK network key from qwknet.json (e.g. dovenet)", Type: ftLookup, Col: 3, Row: 16, Width: 20,
 				Get:         func() string { return a.Network },
 				Set:         func(val string) error { a.Network = val; return nil },
 				LookupItems: func() []LookupItem { return m.buildQWKNetworkLookupItems() },
 			},
 			fieldDef{
-				Label: "QWK Conference", Help: "The hub's conference number for this area (v3mail qwk-conferences lists them)", Type: ftInteger, Col: 3, Row: 16, Width: 6, Min: 0, Max: 65535,
+				Label: "QWK Conference", Help: "The hub's conference number for this area (v3mail qwk-conferences lists them)", Type: ftInteger, Col: 3, Row: 17, Width: 6, Min: 0, Max: 65535,
 				Get: func() string { return strconv.Itoa(a.QWKConference) },
 				Set: func(val string) error {
 					n, err := strconv.Atoi(val)
@@ -239,7 +245,7 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 				},
 			},
 			fieldDef{
-				Label: "Echo Tag", Help: "The hub's name for this conference (informational)", Type: ftString, Col: 3, Row: 17, Width: 34,
+				Label: "Echo Tag", Help: "The hub's name for this conference (informational)", Type: ftString, Col: 3, Row: 18, Width: 34,
 				Get: func() string { return a.EchoTag },
 				Set: func(val string) error { a.EchoTag = val; return nil },
 			},
@@ -247,6 +253,47 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 	}
 
 	return fields
+}
+
+// Message area autocorrect settings in the lookup picker. The area's
+// autocorrect key is unset (follow the board default), true or false.
+const (
+	autocorrectAreaDefault = "Default (board setting)"
+	autocorrectAreaOn      = "On"
+	autocorrectAreaOff     = "Off"
+)
+
+func autocorrectAreaItems() []LookupItem {
+	return []LookupItem{
+		{Value: "", Display: autocorrectAreaDefault},
+		{Value: "on", Display: autocorrectAreaOn},
+		{Value: "off", Display: autocorrectAreaOff},
+	}
+}
+
+// autocorrectAreaDisplay names an area's autocorrect setting.
+func autocorrectAreaDisplay(v *bool) string {
+	switch {
+	case v == nil:
+		return autocorrectAreaDefault
+	case *v:
+		return autocorrectAreaOn
+	}
+	return autocorrectAreaOff
+}
+
+// parseAutocorrectArea reads a picker value: "on", "off", or anything else
+// for the board default.
+func parseAutocorrectArea(val string) *bool {
+	switch val {
+	case "on":
+		v := true
+		return &v
+	case "off":
+		v := false
+		return &v
+	}
+	return nil
 }
 
 // fieldsFileArea returns fields for editing a file area.

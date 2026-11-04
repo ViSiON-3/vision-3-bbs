@@ -160,6 +160,12 @@ type ServerConfig struct {
 	// Disabled by default.
 	QWKAPI QWKAPIConfig `json:"qwkAPI"`
 
+	// EditorAutocorrect is the board-wide default for the message editor's
+	// autocorrect: known typos are fixed as each word is finished. A message
+	// area's own autocorrect setting overrides it; private mail and the
+	// auto-signature editor, which have no area, follow it. Off unless set.
+	EditorAutocorrect bool `json:"editorAutocorrect"`
+
 	// Logging configuration (file location, level, caching, rolling). Shared by
 	// all binaries; each supplies its own default log filename in code.
 	Logging LoggingConfig `json:"logging"`

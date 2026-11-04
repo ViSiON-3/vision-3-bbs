@@ -46,6 +46,7 @@ func printAreasHelp(errMsg string) {
 	_, _ = fmt.Fprintln(w, helpopt("--real-name on|off", "Require real names for posts"))
 	_, _ = fmt.Fprintln(w, helpopt("--anonymous on|off", "Allow anonymous posts"))
 	_, _ = fmt.Fprintln(w, helpopt("--auto-join on|off", "Auto-join the area for new users"))
+	_, _ = fmt.Fprintln(w, helpopt("--autocorrect on|off|default", "Editor autocorrect (default = board setting)"))
 	_, _ = fmt.Fprintln(w, helpopt("--acs-read ACS", "ACS required to read"))
 	_, _ = fmt.Fprintln(w, helpopt("--acs-write ACS", "ACS required to post"))
 	_, _ = fmt.Fprintln(w, helpopt("--max-messages N", "Messages to retain (0 = unlimited)"))
@@ -330,6 +331,29 @@ func buildAreaChanges(fs *flag.FlagSet) ([]areaChange, error) {
 				a.AutoJoin = on
 				return true
 			}})
+		case "autocorrect":
+			var want *bool
+			desc := "autocorrect = default"
+			if !strings.EqualFold(strings.TrimSpace(val), "default") {
+				on, err := parseOnOff(val)
+				if err != nil {
+					errs = append(errs, "--autocorrect: expected on, off or default, got "+strconv.Quote(val))
+					return
+				}
+				want, desc = &on, "autocorrect = "+yesNo(on)
+			}
+			changes = append(changes, areaChange{desc, func(a *message.MessageArea) bool {
+				if (a.Autocorrect == nil) == (want == nil) && (want == nil || *a.Autocorrect == *want) {
+					return false
+				}
+				if want == nil {
+					a.Autocorrect = nil
+				} else {
+					v := *want
+					a.Autocorrect = &v
+				}
+				return true
+			}})
 		case "acs-read":
 			changes = append(changes, stringChange("read ACS", val, func(a *message.MessageArea) *string { return &a.ACSRead }))
 		case "acs-write":
@@ -394,6 +418,7 @@ func runAreasSet(args []string) int {
 	fs.String("real-name", "", "Require real names: on or off")
 	fs.String("anonymous", "", "Allow anonymous posts: on or off")
 	fs.String("auto-join", "", "Auto-join for new users: on or off")
+	fs.String("autocorrect", "", "Editor autocorrect: on, off, or default (follow the board)")
 	fs.String("acs-read", "", "ACS required to read")
 	fs.String("acs-write", "", "ACS required to post")
 	fs.String("max-messages", "", "Messages to retain (0 = unlimited)")

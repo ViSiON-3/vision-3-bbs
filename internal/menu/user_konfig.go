@@ -82,7 +82,7 @@ type konfigHeading struct {
 const (
 	konfigHeaderRows = 5                    // rows reserved for KONFIG.ANS
 	konfigTopRow     = konfigHeaderRows + 2 // one blank row under the art
-	konfigFormRows   = 11                   // two sections a column, with their gaps
+	konfigFormRows   = 12                   // two sections a column, with their gaps
 	konfigColWidth   = 38
 	konfigLeftCol    = 2
 	konfigRightCol   = 42
@@ -139,6 +139,9 @@ func runUserKonfig(c *cmdCtx, args string) (*user.User, string, error) {
 	cols := konfigSections(c.e.Strings())
 	if !apiDevicesShown(c) {
 		cols = withoutKonfigItem(cols, qwkDevicesKonfigKey)
+	}
+	if !autocorrectOffered(c.e) {
+		cols = withoutKonfigItem(cols, autocorrectKonfigKey)
 	}
 	st.items, st.headings = layoutKonfig(cols)
 
@@ -326,6 +329,10 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					help:  str.KonfigThreadViewHelp,
 					value: func(st *konfigState) konfigValue { return st.onOffValue(!st.user().ThreadViewClosed) },
 					edit:  toggleThreadView},
+				{key: autocorrectKonfigKey, label: str.KonfigAutocorrectLabel, flips: true,
+					help:  str.KonfigAutocorrectHelp,
+					value: func(st *konfigState) konfigValue { return st.onOffValue(!st.user().AutocorrectOff) },
+					edit:  toggleAutocorrect},
 			}},
 		},
 		{
@@ -584,6 +591,24 @@ func toggleThreadView(st *konfigState) error {
 	if st.commit(label,
 		func(u *user.User) { u.ThreadViewClosed = !old },
 		func(u *user.User) { u.ThreadViewClosed = old }) {
+		st.saved(label, st.onOffValue(old).text)
+	}
+	return nil
+}
+
+// autocorrectKonfigKey is the Autocorrect item's hotkey. The item is left
+// out on boards where no message area offers autocorrect.
+const autocorrectKonfigKey = 'P'
+
+// toggleAutocorrect sets whether the message editor fixes typos as the
+// caller types, where the area offers it. Ctrl-O in the editor changes the
+// same setting.
+func toggleAutocorrect(st *konfigState) error {
+	old := st.user().AutocorrectOff
+	label := st.c.e.Strings().KonfigAutocorrectLabel
+	if st.commit(label,
+		func(u *user.User) { u.AutocorrectOff = !old },
+		func(u *user.User) { u.AutocorrectOff = old }) {
 		st.saved(label, st.onOffValue(old).text)
 	}
 	return nil

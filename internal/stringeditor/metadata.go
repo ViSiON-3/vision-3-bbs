@@ -714,6 +714,14 @@ func stringCatalog() []StringEntry {
 		{Label: "Konfig: Thread View Label", Key: "konfigThreadViewLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},
 		{Label: "Konfig: Thread View Help", Key: "konfigThreadViewHelp", Description: "Help line shown while Thread View is highlighted"},
 
+		// User Konfig and the message editor: autocorrect
+		{Label: "Konfig: Autocorrect Label", Key: "konfigAutocorrectLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},
+		{Label: "Konfig: Autocorrect Help", Key: "konfigAutocorrectHelp", Description: "Help line shown while Autocorrect is highlighted"},
+		{Label: "Editor: Autocorrect Fixed", Key: "editorAutocorrectFixed", Description: "Prompt-row notice after a fix (%s=word as typed, %s=the fix)"},
+		{Label: "Editor: Autocorrect Kept", Key: "editorAutocorrectKept", Description: "Prompt-row notice when Backspace undoes a fix (%s=the word kept)"},
+		{Label: "Editor: Autocorrect On", Key: "editorAutocorrectOn", Description: "Prompt-row notice when Ctrl-O turns autocorrect on"},
+		{Label: "Editor: Autocorrect Off", Key: "editorAutocorrectOff", Description: "Prompt-row notice when Ctrl-O turns autocorrect off"},
+
 		// Toasts
 		{Label: "Toast: Overlay Format", Key: "toastOverlayFormat", Description: "Frames a toast drawn over a screen, kept to one row (%s=the toast)"},
 		{Label: "Toast: Logon", Key: "toastLogon", Description: "Shown to other callers when someone logs on (%s=handle, %d=node)"},

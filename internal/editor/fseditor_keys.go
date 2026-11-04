@@ -5,12 +5,22 @@ package editor
 
 // handleKey processes a single key press
 func (e *FSEditor) handleKey(key int) {
+	// An autocorrect fix can only be undone by the very next key.
+	undo := e.acUndo
+	e.acUndo = nil
+	e.clearNotice()
+
 	// Handle key based on type
 	switch key {
 	case KeyEnter:
+		e.applyAutocorrect()
 		e.handleReturn()
 	case KeyBackspace:
-		e.handleBackspace()
+		if !e.undoAutocorrect(undo) {
+			e.handleBackspace()
+		}
+	case KeyCtrlO: // Autocorrect on/off
+		e.toggleAutocorrect()
 	case KeyTab:
 		e.handleTab()
 
@@ -77,7 +87,16 @@ func (e *FSEditor) handleKey(key int) {
 	default:
 		// Check if it's a printable character
 		if IsPrintable(key) {
-			e.insertCharacter(rune(key))
+			r := rune(key)
+			var fix *acFix
+			if isWordEnd(r) {
+				fix = e.applyAutocorrect()
+			}
+			e.insertCharacter(r)
+			if fix != nil {
+				fix.boundary = r
+				e.acUndo = fix
+			}
 		}
 	}
 }

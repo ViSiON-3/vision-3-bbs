@@ -111,6 +111,7 @@ func TestAreasSetRejectsBadInput(t *testing.T) {
 		"all plus filter":    {"--all", "--type", "echomail", "--real-name", "on"},
 		"no settings":        {"--conference", "FIDONET"},
 		"bad switch":         {"--conference", "FIDONET", "--real-name", "maybe"},
+		"bad autocorrect":    {"--conference", "FIDONET", "--autocorrect", "maybe"},
 		"negative number":    {"--conference", "FIDONET", "--max-age", "-1"},
 		"unknown conference": {"--conference", "NOPE", "--real-name", "on"},
 		"no matches":         {"--network", "fsxnet", "--real-name", "on"},
@@ -136,5 +137,33 @@ func TestAreasHelpExitsZero(t *testing.T) {
 	}
 	if rc := runAreasSet([]string{"-h"}); rc != 0 {
 		t.Errorf("set -h rc = %d, want 0", rc)
+	}
+}
+
+// --autocorrect sets the area's switch on or off, and default removes it so
+// the area follows the board again.
+func TestAreasSetAutocorrect(t *testing.T) {
+	dir := setupAreasConfig(t)
+	if rc := runAreasSet([]string{"--config", dir, "--type", "echomail", "--autocorrect", "on", "--quiet"}); rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	got := readAreas(t, dir)
+	if a := got["FD_LINUX"].Autocorrect; a == nil || !*a {
+		t.Errorf("FD_LINUX Autocorrect = %v, want on", a)
+	}
+	if a := got["GENERAL"].Autocorrect; a != nil {
+		t.Errorf("GENERAL Autocorrect = %v, want unset", a)
+	}
+	if rc := runAreasSet([]string{"--config", dir, "--tag", "FD_LINUX", "--autocorrect", "off", "--quiet"}); rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	if a := readAreas(t, dir)["FD_LINUX"].Autocorrect; a == nil || *a {
+		t.Errorf("FD_LINUX Autocorrect = %v, want off", a)
+	}
+	if rc := runAreasSet([]string{"--config", dir, "--tag", "FD_LINUX", "--autocorrect", "default", "--quiet"}); rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	if a := readAreas(t, dir)["FD_LINUX"].Autocorrect; a != nil {
+		t.Errorf("FD_LINUX Autocorrect = %v, want unset", a)
 	}
 }

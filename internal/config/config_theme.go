@@ -18,6 +18,10 @@ type ThemeConfig struct {
 	YesNoRegularColor   int `json:"yesNoRegularColor"`
 	ChatSysopColor      int `json:"chatSysopColor"` // sysop pane in split-screen chat
 	ChatUserColor       int `json:"chatUserColor"`  // caller pane in split-screen chat
+	// AutocorrectHighlightColor is the colour the message editor draws a
+	// word in just after autocorrect fixed it, while the fix is shown on the
+	// prompt row.
+	AutocorrectHighlightColor int `json:"autocorrectHighlightColor"`
 	// SysopChatScreen names the chat screen split-screen chat opens with:
 	// cfg/NAME.json and ansi/NAME.ANS in the menu set. Empty means the
 	// built-in layout, and "random" one of the set's screens each chat. The
@@ -39,6 +43,8 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 		YesNoRegularColor:   15,  // Bright White on Black
 		ChatSysopColor:      11,  // Light cyan
 		ChatUserColor:       10,  // Light green
+
+		AutocorrectHighlightColor: 15, // Bright white
 	}
 
 	if resolveErr != nil {

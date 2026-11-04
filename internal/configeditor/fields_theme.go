@@ -46,6 +46,7 @@ func themeFieldsPrompts(th *config.ThemeConfig) []fieldDef {
 	return []fieldDef{
 		themeColorField("Yes/No Highlight", "The selected answer in Yes/No prompts", 1, &th.YesNoHighlightColor),
 		themeColorField("Yes/No Regular", "The other answer in Yes/No prompts", 2, &th.YesNoRegularColor),
+		themeColorField("Autocorrect Fix", "A word the message editor just autocorrected, while the fix is shown", 3, &th.AutocorrectHighlightColor),
 	}
 }
 

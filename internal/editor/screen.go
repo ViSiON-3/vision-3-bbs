@@ -55,6 +55,9 @@ type Screen struct {
 	footerContent string
 	footerLine2   string // FSEDITORF.ANS line 2, processed; line 1 is built per width
 	footerHeight  int    // Number of rows the footer occupies (0 = no footer)
+	// mark is a word drawn highlighted over the text (see MarkWord); nil
+	// once anything redraws its line.
+	mark *wordMark
 }
 
 // NewScreen creates a new screen manager
@@ -678,6 +681,8 @@ func (s *Screen) RefreshLine(lineNum int, lineContent string, topLine int) {
 		return // Line not visible
 	}
 
+	lineContent = s.markedLine(lineNum, lineContent)
+
 	// Check if line changed
 	lastContent, exists := s.physicalLines[lineNum]
 	if exists && lastContent == lineContent {
@@ -729,6 +734,7 @@ func (s *Screen) RefreshScreen(buffer *MessageBuffer, topLine, currentLine, curr
 // ClearCache clears the screen cache to force a full redraw on next refresh
 func (s *Screen) ClearCache() {
 	s.physicalLines = make(map[int]string)
+	s.mark = nil
 }
 
 // Reposition moves cursor to the current editing position
@@ -746,6 +752,7 @@ func (s *Screen) Reposition(currentLine, currentCol, topLine int) {
 func (s *Screen) FullRedraw(buffer *MessageBuffer, topLine, currentLine, currentCol int, insertMode bool) {
 	// Clear physical state to force full redraw
 	s.physicalLines = make(map[int]string)
+	s.mark = nil
 
 	// Clear screen and display header and footer
 	s.ClearScreen()
@@ -808,6 +815,7 @@ func (s *Screen) Resize(newWidth, newHeight int) {
 	}
 	// Clear physical state to force full redraw on next refresh
 	s.physicalLines = make(map[int]string)
+	s.mark = nil
 }
 
 // WriteDirect writes directly to the terminal (for special messages)

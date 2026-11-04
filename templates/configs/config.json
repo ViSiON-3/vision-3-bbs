@@ -2,6 +2,7 @@
   "twitListEnabled": true,
   "twitListMax": 50,
   "twitExemptLevel": 0,
+  "editorAutocorrect": false,
   "boardName": "Another Fine ViSiON/3 BBS",
   "sysOpName": "felonius",
   "timezone": "America/Chicago",

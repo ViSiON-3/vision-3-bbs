@@ -33,6 +33,7 @@ type MessageArea struct {
 	ACSWrite     string `json:"acs_write"`                 // ACS string required to post
 	AllowAnon    *bool  `json:"allow_anonymous,omitempty"` // Optional: allow anonymous posts (nil = no; area must opt in)
 	RealNameOnly bool   `json:"real_name_only,omitempty"`  // Require real name for posts in this area
+	Autocorrect  *bool  `json:"autocorrect,omitempty"`     // Optional: editor autocorrect here (nil = board default; see AutocorrectOn)
 	ConferenceID int    `json:"conference_id,omitempty"`   // Conference this area belongs to (0=ungrouped)
 	BasePath     string `json:"base_path"`                 // Relative path to JAM base (e.g., "msgbases/general")
 	MaxMessages  int    `json:"max_messages,omitempty"`    // Max messages to retain (0=unlimited)
@@ -66,6 +67,18 @@ func (a *MessageArea) PostingName(handle, realName string) string {
 		return realName
 	}
 	return handle
+}
+
+// AutocorrectOn reports whether the message editor's autocorrect is on for
+// posts in the area: the area's own setting, or boardDefault (config.json
+// editorAutocorrect) when the area has none. A nil area (private mail, the
+// auto-signature) follows the board. A caller can still turn it off for
+// themselves.
+func (a *MessageArea) AutocorrectOn(boardDefault bool) bool {
+	if a == nil || a.Autocorrect == nil {
+		return boardDefault
+	}
+	return *a.Autocorrect
 }
 
 // DisplayMessage is a high-level message view for the UI layer.

@@ -105,6 +105,11 @@ func sysFieldsDefaults(cfg *config.ServerConfig) []fieldDef {
 			Get: func() string { return uitext.BoolToYN(cfg.TwitListsOn()) },
 			Set: func(val string) error { on := uitext.YNToBool(val); cfg.TwitListEnabled = &on; return nil },
 		},
+		{
+			Label: "Autocorrect", Help: "Fix common typos as callers type in the message editor, in areas left at Default and in private mail", Type: ftYesNo, Col: 3, Row: 6, Width: 1,
+			Get: func() string { return uitext.BoolToYN(cfg.EditorAutocorrect) },
+			Set: func(val string) error { cfg.EditorAutocorrect = uitext.YNToBool(val); return nil },
+		},
 	}
 	row := len(fields) + 1
 	fields = append(fields,

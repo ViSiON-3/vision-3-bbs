@@ -3,5 +3,6 @@
     "yesNoRegularColor": 13,
     "chatSysopColor": 11,
     "chatUserColor": 10,
+    "autocorrectHighlightColor": 15,
     "sysopChatScreen": "V3CHAT1"
 }
