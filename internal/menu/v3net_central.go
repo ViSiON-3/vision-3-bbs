@@ -462,7 +462,7 @@ func runV3NetCentralBoards(c *cmdCtx, args string) (*user.User, string, error) {
 		case "online":
 			marker = "■"
 		case "recent":
-			marker = "°"
+			marker = "√"
 		}
 		addr := ""
 		if len(l.Addresses) > 0 {
@@ -509,7 +509,7 @@ func runV3NetCentralBoards(c *cmdCtx, args string) (*user.User, string, error) {
 		var buf strings.Builder
 		buf.WriteString(ansi.ClearScreen())
 		buf.WriteString(ansi.MoveCursor(1, 1))
-		buf.Write(ansi.ReplacePipeCodes([]byte("|12V3Net Central: Boards|07  |10■|08 online  |14°|08 seen this week  |08· stale|07")))
+		buf.Write(ansi.ReplacePipeCodes([]byte("|12V3Net Central: Boards|07  |10■|08 online  |14√|08 seen this week  |08· stale|07")))
 		buf.WriteString(ansi.MoveCursor(2, 1))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|08" + strings.Repeat("─", termWidth-1) + "|07")))
 		buf.WriteString(ansi.MoveCursor(3, 1))
