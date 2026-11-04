@@ -528,8 +528,9 @@ Rules and caveats:
 - **Unclosed regions fail safe.** If you forget `{{/}}`, the region runs to
   the end of the file and is hidden from anyone failing the check (a
   warning is logged).
-- **Invalid ACS hides the region** and logs an error — a typo never leaks
-  restricted text.
+- **A string that can't be parsed hides the region** and logs an error. A
+  bad term is only false, though, so a negated typo (`{{!Q}}`) shows the
+  region to everyone; see [Failing terms and `!`](reference/acs.md#failing-terms-and-).
 - **Decorative braces are safe across lines.** A `{{` whose nearest `}}`
   falls on a later line is treated as literal art. But avoid a decorative
   `{{...}}` pair on a single line — it would be read as a condition.

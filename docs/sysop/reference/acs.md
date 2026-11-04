@@ -24,9 +24,10 @@ The examples on this page are checked by `internal/menu/acs_reference_test.go`.
 Doors themselves are gated by `min_access_level`, not an ACS string.
 
 Some of these checks run without a caller's session: the default message and
-file area chosen at login, QWK replies, and conditional regions in menu art.
-See [Terms that need a session](#terms-that-need-a-session) for what that
-changes.
+file area chosen at login, replies uploaded through the QWK API, and
+conditional regions in menu art. See
+[Terms that need a session](#terms-that-need-a-session) for what that changes.
+A REP packet uploaded during a call is checked with the caller's session.
 
 ## Empty and `*`
 
@@ -113,15 +114,16 @@ start runs past midnight: `Y22:00/06:00` is 10 pm through 6:00 am.
   asked for a terminal (a PTY). It doesn't check the terminal's encoding or
   whether it shows ANSI.
 
-Checked without a session (default areas at login, QWK, conditional regions
-in menu art), both fail — so `!L` passes there.
+Checked without a session (default areas at login, replies uploaded through
+the QWK API, conditional regions in menu art), both fail — so `!L` passes
+there.
 
 ## Operators
 
 | Operator | Meaning |
 |---|---|
 | `&` | and |
-| `|` | or |
+| `\|` | or |
 | `!` | not: the term or group after it |
 | `(` `)` | grouping |
 
