@@ -164,6 +164,10 @@ func processPlaceholderTemplate(template []byte, substitutions map[byte]string, 
 					value = fitAreaAndCounter(value, substitutions['Z'], substitutions['C'], limit, cp437Values)
 				case "Z":
 					value = ellipsize(value, limit, cp437Values)
+				case "F":
+					value = fitNameAndAddr(value, substitutions['O'], limit, cp437Values)
+				case "S":
+					value = fitNameAndAddr(value, substitutions['A'], limit, cp437Values)
 				}
 			}
 
@@ -222,6 +226,28 @@ func fitAreaAndCounter(x, z, c string, limit int, cp437Values bool) string {
 		return c // the field is narrower than the counter; fitting cuts it
 	}
 	return ellipsize(z, room, cp437Values) + " " + c
+}
+
+// fitNameAndAddr fits a From or To value, a name followed by its network
+// address in parentheses ("Name (3:633/2744.1)"), into limit cells. When it
+// does not fit, the name is shortened and the address kept whole: cut from
+// the right, the field lost the end of the address and its closing
+// parenthesis (#892). A value that doesn't end in addr's parenthesised form
+// (a local name, or no address) is returned unchanged, for the field's width
+// to cut as before.
+func fitNameAndAddr(value, addr string, limit int, cp437Values bool) string {
+	suffix := " (" + addr + ")"
+	if addr == "" || placeholderCells(value, cp437Values) <= limit || !strings.HasSuffix(value, suffix) {
+		return value
+	}
+	room := limit - placeholderCells(suffix, cp437Values)
+	if room < 1 {
+		// the field is narrower than the address: the address alone, for
+		// the field's width to cut
+		return suffix[1:]
+	}
+	name := strings.TrimSuffix(value, suffix)
+	return ellipsize(name, room, cp437Values) + suffix
 }
 
 // ellipsize shortens s to limit cells, ending it with "..." so the cut

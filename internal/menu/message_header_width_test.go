@@ -121,6 +121,57 @@ func TestShippedHeadersKeepTheCounter(t *testing.T) {
 	}
 }
 
+// Every shipped header style shows a sender's full network address, however
+// long their name (#892): the name is shortened, not the address.
+func TestShippedHeadersKeepTheAddress(t *testing.T) {
+	addr := "3:633/2744.1"
+	subs := map[byte]string{
+		'B': "TAG", 'T': "Subject", 'S': "All", 'U': "", 'M': "ECHOMAIL",
+		'L': "", '#': "33", 'N': "33", 'C': "[33/33]", 'V': "33 of 33",
+		'D': "11/03/26", 'W': "3:27 pm", 'P': "None", 'E': "0", 'H': "0", 'K': "1",
+		'Z': "Fidonet > Door Games", 'X': "Fidonet > Door Games [33/33]",
+		'O': addr, 'F': buildNameWithAddr("Dobbie Thiting of the Long Name BBS", addr),
+	}
+	dir := filepath.Join("..", "..", "menus", "v3", "templates", "message_headers")
+	for n := 1; n <= 15; n++ {
+		name := "MSGHDR." + strconv.Itoa(n) + ".ans"
+		tpl, err := ansi.GetAnsiFileContent(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if !strings.Contains(string(tpl), "@F") {
+			continue // this style doesn't show the sender
+		}
+		for _, cp437 := range []bool{false, true} {
+			out := string(processTemplate(tpl, subs, buildAutoWidths(subs, 33, 80, cp437), cp437))
+			if !strings.Contains(out, "("+addr+")") {
+				t.Errorf("%s (cp437=%v): address %s not shown in full", name, cp437, addr)
+			}
+		}
+	}
+}
+
+func TestFitNameAndAddr(t *testing.T) {
+	v := "Dobbie Thiting (3:633/2744.1)" // 29 cells
+	for _, tc := range []struct {
+		value, addr string
+		limit       int
+		want        string
+	}{
+		{v, "3:633/2744.1", 40, v},                             // fits
+		{v, "3:633/2744.1", 27, "Dobbie Th... (3:633/2744.1)"}, // the header in #892
+		{v, "3:633/2744.1", 17, "Do (3:633/2744.1)"},           // little room for the name
+		{v, "3:633/2744.1", 14, "(3:633/2744.1)"},              // the address alone
+		{v, "3:633/2744.1", 10, "(3:633/2744.1)"},              // narrower than the address: the field cuts it
+		{"Dobbie Thiting", "", 10, "Dobbie Thiting"},           // no address: the field cuts it
+		{"Dobbie (Home)", "3:633/2744.1", 10, "Dobbie (Home)"}, // no matching address suffix
+	} {
+		if got := fitNameAndAddr(tc.value, tc.addr, tc.limit, false); got != tc.want {
+			t.Errorf("fitNameAndAddr(%q, %q, %d) = %q, want %q", tc.value, tc.addr, tc.limit, got, tc.want)
+		}
+	}
+}
+
 func TestFitAreaAndCounter(t *testing.T) {
 	z := "GENERAL > General Discussion"
 	x := z + " [1/42]"
