@@ -136,7 +136,7 @@ func TestCentralBoardsListsFreshnessAndDetails(t *testing.T) {
 	if iS < 0 || iV < 0 || iO < 0 || iS >= iV || iV >= iO {
 		t.Errorf("rows not ordered online, recent, stale: S=%d V=%d O=%d", iS, iV, iO)
 	}
-	if !strings.Contains(out, "■ Sector 7") || !strings.Contains(out, "° The Vault") || !strings.Contains(out, "· Old Haunt") {
+	if !strings.Contains(out, "■ Sector 7") || !strings.Contains(out, "√ The Vault") || !strings.Contains(out, "· Old Haunt") {
 		t.Errorf("freshness markers missing: %q", out)
 	}
 	// Pipe codes in another board's text are shown as written, not run.
@@ -173,7 +173,7 @@ func TestCentralBoardsMarkersInCP437(t *testing.T) {
 	if strings.Contains(text, "?") {
 		t.Errorf("a character with no CP437 byte was sent as '?': %q", out)
 	}
-	for _, want := range []string{"\xfe Sector 7", "\xf8 The Vault", "\xfa Old Haunt", "\xfe\x1b[1;30m online", "\xf8\x1b[1;30m seen this week"} {
+	for _, want := range []string{"\xfe Sector 7", "\xfb The Vault", "\xfa Old Haunt", "\xfe\x1b[1;30m online", "\xfb\x1b[1;30m seen this week"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("CP437 output missing %q: %q", want, out)
 		}
