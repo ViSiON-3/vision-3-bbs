@@ -202,6 +202,69 @@ later comes back is logged again. It never refuses to start over a bad
 string and never changes one: a bad string keeps working, or failing, as it
 always has.
 
+## Testing a string for a user
+
+The ACS tester answers one question: does this expression pass for this
+user? It is in both user editors, for sysops only: **ACS Test** on the field
+editor in [`./ue`](users/user-editor.md#acs-test), and `T` in the
+[Admin Menu's user editor](users/admin-menu.md#t--acs-test). Type an
+expression and the tester shows how each part of it came out for the
+selected user, and why.
+
+The context is the tester's own, shown on screen with every result. It
+starts as **no session** and **the current time**: the tester never uses your
+own call as the selected user's. You can change both:
+
+- **Session.** With none, `L` and `A` fail and `T` counts the call as just
+  started, as for the checks the board makes outside a call (see
+  [Terms that need a session](#terms-that-need-a-session)). Or set a made-up
+  call: local or not (for `L`), with a terminal or not (for `A`), how many
+  minutes it has run and how much chat time was credited back (for `T`).
+- **Time**, for `H`, `W`, `Y` and `T`: `hh:mm` for that time today, or
+  `yyyy-mm-dd hh:mm`, in the server's clock.
+
+For a level-20 user with flags A and C, no session, at 22:00:
+
+```text
+User:       Bob (#5), level 20
+Session:    none: L and A fail, and T counts the call as just started
+Time:       Wed 2026-11-04 22:00
+Expression: S50&(FA|!Q)
+            ---  ++  ?
+Result:     FAIL
+
+  FAIL            S50&(FA|!Q)  both parts must pass: S50 failed
+  FAIL              S50        level 20 is below 50
+  PASS              FA|!Q      either part may pass: both passed
+  PASS                FA       has flag A (flags: AC)
+  PASS invalid        !Q       Q failed, so this passes; that rests on an
+                               invalid term, and a stricter ACS check will deny
+                               it
+  FAIL invalid          Q      "Q": Q is not an ACS term, so it is always false
+
+A pass means this expression passed for this user in this context. It doesn't
+mean every access check on a resource passes: a conference, area or door can
+have rules of its own.
+```
+
+The line under the expression marks each term: `+` passed, `-` failed, `?`
+invalid (an unknown letter or a bad argument), `~` needs a session the
+context doesn't have. `^` marks a character that was dropped, and `X` the
+place where a string that can't be read as a whole goes wrong; such a string
+shows its problems instead of the list of parts.
+
+Each part says whether it passed and, when the result isn't an ordinary
+pass or fail, whether it rests on an invalid term or a missing session. A
+part rests on one only when every part that decided it does: `S10|Q` passes on
+`S10` alone, but `S10&!Q` passes only because `!` turns the invalid `Q`
+into a pass. The tester shows what the board does today, so `!Q` passes in it
+too; a future, stricter ACS check will deny it.
+
+The tester and the board evaluate a string with the same code, so for the
+same user, session and time they always agree. A pass is about this one
+expression: a message area is also behind its conference's ACS, a door
+behind its level and category, private mail behind its own rules.
+
 ## Examples
 
 | String | Passes for |

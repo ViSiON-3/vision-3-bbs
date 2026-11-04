@@ -3,9 +3,11 @@
 // conference. docs/sysop/reference/acs.md describes the language.
 //
 // Parse turns a string into a tree with each node's position and a list of
-// diagnostics; Check and Expr.Eval evaluate it against a Context. The BBS,
-// vision3 doctor and the editors all go through this package, so a string
-// means the same thing everywhere.
+// diagnostics; Check and Expr.Eval evaluate it against a Context. Explain
+// evaluates it the same way part by part, with the reason for each result,
+// and Render lays that out as text for the ACS tester in both user editors.
+// The BBS, vision3 doctor and the editors all go through this package, so a
+// string means the same thing everywhere.
 //
 // Evaluation keeps the behaviour ACS strings have always had, including the
 // lenient parts the diagnostics report: a character the parser doesn't know
@@ -263,8 +265,15 @@ func Parse(s string) *Expr {
 	case 1:
 		e.Root = stack[0]
 	default:
-		// The roots are in source order; the second is the first term that
-		// follows another with no operator between them.
+		// Point at the first term that directly follows another term or a
+		// closing parenthesis. Failing that (F(A)), the roots are in source
+		// order and the second one starts where an operator is missing.
+		for i := 1; i < len(toks); i++ {
+			if toks[i].kind == tokTerm && (toks[i-1].kind == tokTerm || toks[i-1].kind == tokRParen) {
+				t := toks[i]
+				return fail(t.pos, t.end, fmt.Sprintf("no operator before %q: put & or | between terms", t.text))
+			}
+		}
 		extra := stack[1]
 		return fail(extra.Pos, extra.End, fmt.Sprintf("no operator before %q: put & or | between terms", textOf(s, extra)))
 	}
