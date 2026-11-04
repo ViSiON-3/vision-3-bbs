@@ -6,6 +6,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
@@ -63,6 +64,7 @@ func Check(s string, ctx Context) bool {
 	u := ctx.User
 	slog.Debug("checking ACS", "acs", s, "handle", u.Handle, "level", u.AccessLevel, "flags", u.Flags, "id", u.ID, "validated", u.Validated)
 	e := Parse(s)
+	warnOnce(e)
 	if !e.Valid() {
 		for _, d := range e.Diagnostics {
 			if d.Severity == Error {
@@ -74,6 +76,28 @@ func Check(s string, ctx Context) bool {
 	result := e.Eval(ctx)
 	slog.Debug("ACS check result", "acs", s, "result", result)
 	return result
+}
+
+// warned holds the strings whose warnings Check has logged.
+var warned sync.Map
+
+// warnOnce logs e's warnings the first time Check sees its string, so a
+// string from a source the startup scan doesn't read still leaves a trace of
+// what the parser dropped, without a line per evaluation.
+func warnOnce(e *Expr) {
+	var msgs []string
+	for _, d := range e.Diagnostics {
+		if d.Severity == Warning {
+			msgs = append(msgs, d.String())
+		}
+	}
+	if len(msgs) == 0 {
+		return
+	}
+	if _, seen := warned.LoadOrStore(e.Source, true); seen {
+		return
+	}
+	slog.Warn("ACS string warning", "acs", e.Source, "warning", strings.Join(msgs, "; "))
 }
 
 // Eval evaluates a valid expression against ctx; it is false for an

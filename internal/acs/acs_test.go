@@ -1,6 +1,8 @@
 package acs
 
 import (
+	"bytes"
+	"log/slog"
 	"math/rand"
 	"strings"
 	"testing"
@@ -239,5 +241,32 @@ func TestInTimeRange(t *testing.T) {
 			t.Errorf("InTimeRange(%s, %s-%s) = %v, want %v", tc.now.Format("15:04:05"),
 				tc.start.Format("15:04"), tc.end.Format("15:04"), got, tc.want)
 		}
+	}
+}
+
+// TestCheckWarnsOnce checks that Check logs a string's warnings, such as an
+// ignored character, the first time it sees the string and not on each
+// evaluation after.
+func TestCheckWarnsOnce(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	const s = "s10@&s5"
+	warned.Delete(s)
+	u := &user.User{AccessLevel: 20}
+	for range 3 {
+		Check(s, ctxFor(u))
+	}
+	if n := strings.Count(buf.String(), "ACS string warning"); n != 1 {
+		t.Errorf("%d warnings logged for %q over 3 checks, want 1:\n%s", n, s, buf.String())
+	}
+	if !strings.Contains(buf.String(), "unexpected character '@'") {
+		t.Errorf("warning doesn't name the ignored character:\n%s", buf.String())
+	}
+	Check("s10&s5", ctxFor(u))
+	if n := strings.Count(buf.String(), "ACS string warning"); n != 1 {
+		t.Errorf("a clean string logged a warning:\n%s", buf.String())
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
@@ -63,17 +64,19 @@ func (f acsFinding) String() string {
 }
 
 // scanACS checks every ACS string the board declares and returns the
-// problems found, ordered by file. It reads the files itself, so it covers
-// menus nobody has opened; a file it can't read or parse is left to the
-// checks that report on that file.
-func scanACS(root string) []acsFinding {
-	var findings []acsFinding
+// problems found, ordered by file, and how many non-empty strings it checked.
+// It reads the files itself, so it covers menus nobody has opened; a file it
+// can't read or parse is left to the checks that report on that file.
+func scanACS(root string) (findings []acsFinding, checked int) {
 	for _, src := range collectACSSources(root) {
+		if src.ACS != "" {
+			checked++
+		}
 		if diags := acs.Validate(src.ACS); len(diags) > 0 {
 			findings = append(findings, acsFinding{Source: src, Diags: diags})
 		}
 	}
-	return findings
+	return findings, checked
 }
 
 // collectACSSources lists every ACS string declared under root.
@@ -103,49 +106,73 @@ func collectACSSources(root string) []acsSource {
 			continue
 		}
 		ms := menuset.FromPath(filepath.Join(root, "menus", set.Name()))
-		menus := map[string]bool{}
-		if entries, err := ms.ReadDir("mnu"); err == nil {
+		// The BBS opens a menu's files by name, NAME.MNU, NAME.CFG and NAME.ANS
+		// with NAME in upper case, through Locate. So the listings only
+		// suggest names; each file is then located with the loader's own
+		// spelling. On a case-sensitive filesystem a stray main.cfg is not
+		// what LoadCommands("MAIN") opens and is skipped; where names fold
+		// case, Locate finds it just as the loader does.
+		names := map[string]bool{}
+		for _, sub := range []string{"mnu", "cfg"} {
+			entries, _ := ms.ReadDir(sub)
 			for _, e := range entries {
-				if !strings.EqualFold(filepath.Ext(e.Name), ".MNU") {
-					continue
-				}
-				name := strings.ToUpper(strings.TrimSuffix(e.Name, filepath.Ext(e.Name)))
-				menus[name] = true
-				var m menu.MenuRecord
-				if readJSON(e.Path, &m) {
-					out = append(out, acsSource{File: rel(e.Path), Record: "menu " + name, Field: "ACS", ACS: m.ACS})
+				ext := filepath.Ext(e.Name)
+				if strings.EqualFold(ext, "."+sub) {
+					names[strings.ToUpper(strings.TrimSuffix(e.Name, ext))] = true
 				}
 			}
 		}
-		if entries, err := ms.ReadDir("cfg"); err == nil {
-			for _, e := range entries {
-				if !strings.EqualFold(filepath.Ext(e.Name), ".CFG") {
-					continue
-				}
-				var cmds []menu.CommandRecord
-				if !readJSON(e.Path, &cmds) {
-					continue
-				}
-				for i, c := range cmds {
-					rec := fmt.Sprintf("command %d (%q)", i+1, c.Keys)
-					out = append(out, acsSource{File: rel(e.Path), Record: rec, Field: "ACS", ACS: c.ACS})
-				}
+		sorted := make([]string, 0, len(names))
+		for name := range names {
+			sorted = append(sorted, name)
+		}
+		sort.Strings(sorted)
+		locate := func(sub, file string) (string, bool) {
+			path, _, ok, err := ms.Locate(sub, file)
+			return path, ok && err == nil
+		}
+		isMenu := map[string]bool{}
+		for _, name := range sorted {
+			path, ok := locate("mnu", name+".MNU")
+			if !ok {
+				continue
+			}
+			isMenu[name] = true
+			var m menu.MenuRecord
+			if readJSON(path, &m) {
+				out = append(out, acsSource{File: rel(path), Record: "menu " + name, Field: "ACS", ACS: m.ACS})
 			}
 		}
-		// {{acs}} regions work only in the screen named after a menu.
-		if entries, err := ms.ReadDir("ansi"); err == nil {
-			for _, e := range entries {
-				name := strings.ToUpper(strings.TrimSuffix(e.Name, filepath.Ext(e.Name)))
-				if !strings.EqualFold(filepath.Ext(e.Name), ".ANS") || !menus[name] {
-					continue
-				}
-				data, err := os.ReadFile(e.Path)
-				if err != nil {
-					continue
-				}
-				for _, rc := range menu.RegionConditions(data) {
-					out = append(out, acsSource{File: rel(e.Path), Record: fmt.Sprintf("region on line %d", rc.Line), Field: "{{acs}}", ACS: rc.ACS})
-				}
+		for _, name := range sorted {
+			path, ok := locate("cfg", name+".CFG")
+			if !ok {
+				continue
+			}
+			var cmds []menu.CommandRecord
+			if !readJSON(path, &cmds) {
+				continue
+			}
+			for i, c := range cmds {
+				rec := fmt.Sprintf("command %d (%q)", i+1, c.Keys)
+				out = append(out, acsSource{File: rel(path), Record: rec, Field: "ACS", ACS: c.ACS})
+			}
+		}
+		// {{acs}} regions work only in the screen named after a menu. The art
+		// is read as the renderer reads it, SAUCE record stripped.
+		for _, name := range sorted {
+			if !isMenu[name] {
+				continue
+			}
+			path, ok := locate("ansi", name+".ANS")
+			if !ok {
+				continue
+			}
+			data, err := ansi.GetAnsiFileContent(path)
+			if err != nil {
+				continue
+			}
+			for _, rc := range menu.RegionConditions(data) {
+				out = append(out, acsSource{File: rel(path), Record: fmt.Sprintf("region on line %d", rc.Line), Field: "{{acs}}", ACS: rc.ACS})
 			}
 		}
 	}
@@ -215,9 +242,9 @@ func collectACSSources(root string) []acsSource {
 // caller) and a warning for one whose meaning a stricter ACS policy would
 // change; one passing check when everything reads cleanly.
 func checkACSStrings(root string, add func(string, doctorSeverity, string, string)) {
-	findings := scanACS(root)
+	findings, checked := scanACS(root)
 	if len(findings) == 0 {
-		add("ACS strings", doctorOK, fmt.Sprintf("%d strings checked", countACS(root)), "")
+		add("ACS strings", doctorOK, fmt.Sprintf("%d strings checked", checked), "")
 		return
 	}
 	for _, f := range findings {
@@ -229,43 +256,36 @@ func checkACSStrings(root string, add func(string, doctorSeverity, string, strin
 	}
 }
 
-// countACS is how many non-empty ACS strings the board declares.
-func countACS(root string) int {
-	n := 0
-	for _, s := range collectACSSources(root) {
-		if s.ACS != "" {
-			n++
-		}
-	}
-	return n
-}
-
-// acsLogged remembers which findings the BBS has logged, so each is logged
-// once: at startup, and again only when a reload brings a new one.
+// acsLogged is the set of findings in the last scan, so each problem is
+// logged once while it stays: at startup, and again only when a reload
+// brings a new one. Each scan replaces the set, so a string that is fixed
+// and later comes back is logged again.
 var acsLogged = struct {
 	sync.Mutex
 	seen map[string]bool
 }{seen: map[string]bool{}}
 
-// logACSFindings scans the board and logs each problem it hasn't logged
-// before, errors at error level and warnings at warn, with the text doctor
-// prints. It never stops the board and never changes a string: a bad string
-// keeps failing the way it always has. Called at startup and after a config
-// reload.
+// logACSFindings scans the board and logs each problem the previous scan
+// didn't have, errors at error level and warnings at warn, with the text
+// doctor prints. It never stops the board and never changes a string: a bad
+// string keeps failing the way it always has. Called at startup and after a
+// config reload.
 func logACSFindings(root string) {
-	findings := scanACS(root)
+	findings, _ := scanACS(root)
 	acsLogged.Lock()
 	defer acsLogged.Unlock()
+	seen := make(map[string]bool, len(findings))
 	for _, f := range findings {
 		key := f.Source.File + "\x00" + f.Source.Record + "\x00" + f.Source.Field + "\x00" + f.Source.ACS
+		seen[key] = true
 		if acsLogged.seen[key] {
 			continue
 		}
-		acsLogged.seen[key] = true
 		level := slog.LevelWarn
 		if f.Severity() == acs.Error {
 			level = slog.LevelError
 		}
 		slog.Log(context.Background(), level, "ACS string problem: "+f.String(), "file", f.Source.File)
 	}
+	acsLogged.seen = seen
 }

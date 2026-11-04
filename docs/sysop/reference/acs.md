@@ -162,7 +162,8 @@ fails outright: `!` can't rescue it.
 
 Errors and bad terms are logged (at `ERROR` and `WARN`) when a caller hits
 them, and once when the board starts; see
-[Checking your strings](#checking-your-strings).
+[Checking your strings](#checking-your-strings). An ignored character is
+logged at `WARN` the first time a caller's check reads the string.
 
 ## Checking your strings
 
@@ -184,9 +185,11 @@ problem:
   strings do, so fix them now.
 
 The BBS runs the same check when it starts and after it reloads a changed
-config file, and logs each problem once (failures at `ERROR`, warnings at
-`WARN`) with the same text. It never refuses to start over a bad string and
-never changes one: a bad string keeps working, or failing, as it always has.
+config file, and logs each problem once while it stays (failures at
+`ERROR`, warnings at `WARN`) with the same text; a problem that is fixed and
+later comes back is logged again. It never refuses to start over a bad
+string and never changes one: a bad string keeps working, or failing, as it
+always has.
 
 ## Examples
 

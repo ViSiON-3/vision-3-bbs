@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -202,9 +203,23 @@ func isCSIFinal(b byte) bool {
 	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
 }
 
-// RegionKeywords are the {{...}} conditions resolved as keywords rather than
-// ACS (see the keywords map the menu renderer passes applyConditionalRegions).
-var RegionKeywords = map[string]bool{"SPONSOR": true}
+// regionKeywords are the {{...}} conditions resolved as keywords rather than
+// ACS, each with how it is decided for one caller. The renderer builds its
+// keywords map from this table (resolveRegionKeywords) and RegionConditions
+// skips the same names, so a keyword added here is known to both.
+var regionKeywords = map[string]func(u *user.User, areas areaLookup, cfg config.ServerConfig) bool{
+	"SPONSOR": sponsorKeyword,
+}
+
+// resolveRegionKeywords decides every region keyword for u, as
+// applyConditionalRegions takes them.
+func resolveRegionKeywords(u *user.User, areas areaLookup, cfg config.ServerConfig) map[string]bool {
+	out := make(map[string]bool, len(regionKeywords))
+	for name, decide := range regionKeywords {
+		out[name] = decide(u, areas, cfg)
+	}
+	return out
+}
 
 // RegionCondition is the condition of one {{acs}} region in menu art.
 type RegionCondition struct {
@@ -214,7 +229,7 @@ type RegionCondition struct {
 
 // RegionConditions lists the ACS conditions of the {{acs}}...{{/}} regions in
 // menu ANSI content, in order, as applyConditionalRegions would find them:
-// keyword conditions (RegionKeywords), literal tokens such as
+// keyword conditions (regionKeywords), literal tokens such as
 // {{PENDING_VALIDATIONS}}, stray {{/}} and decorative braces spanning lines
 // are left out. vision3 doctor uses it to check every region's ACS.
 func RegionConditions(content []byte) []RegionCondition {
@@ -244,7 +259,7 @@ func RegionConditions(content []byte) []RegionCondition {
 		if closeIdx := bytes.Index(content[markerEnd:], []byte(condClose)); closeIdx >= 0 {
 			next = markerEnd + closeIdx + len(condClose)
 		}
-		if !RegionKeywords[strings.ToUpper(inner)] {
+		if _, isKeyword := regionKeywords[strings.ToUpper(inner)]; !isKeyword {
 			out = append(out, RegionCondition{ACS: inner, Line: 1 + bytes.Count(content[:open], []byte("\n"))})
 		}
 		i = next

@@ -40,9 +40,7 @@ func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 		if e.MessageMgr != nil {
 			areas = e.MessageMgr
 		}
-		keywords := map[string]bool{
-			"SPONSOR": sponsorKeyword(st.currentUser, areas, e.GetServerConfig()),
-		}
+		keywords := resolveRegionKeywords(st.currentUser, areas, e.GetServerConfig())
 		rawAnsiContent = applyConditionalRegions(rawAnsiContent, st.currentUser, keywords)
 		if st.currentMenuName == "ADMIN" {
 			pendingCount := pendingValidationCount(userManager)
