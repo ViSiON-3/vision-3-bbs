@@ -366,7 +366,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 		})
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Max Run Mins", Help: "Wall-clock limit per run (0=30 minutes, -1=none); idle and time left still apply", Type: ftInteger, Col: 3, Row: row, Width: 5, Min: -1, Max: 9999,
+			Label: "Max Run Mins", Help: "Wall-clock limit per run (0=30 minutes, -1=none); idle and time left still apply", Type: ftInteger, Col: 3, Row: row, Width: 5, Min: -1, Max: config.MaxScriptRunMinutes,
 			Get: func() string { return strconv.Itoa(dPtr.MaxRunMinutes) },
 			Set: func(val string) error {
 				v, err := strconv.Atoi(strings.TrimSpace(val))

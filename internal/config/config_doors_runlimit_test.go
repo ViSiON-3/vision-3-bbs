@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 )
@@ -18,6 +19,11 @@ func TestScriptRunLimit(t *testing.T) {
 		{240, 4 * time.Hour},
 		{-1, -1},
 		{-5, -1},
+		{MaxScriptRunMinutes, MaxScriptRunMinutes * time.Minute},
+		// a hand-edited doors.json past the editor's maximum: capped, so the
+		// duration can't overflow into "no limit" or a tiny limit
+		{MaxScriptRunMinutes + 1, MaxScriptRunMinutes * time.Minute},
+		{math.MaxInt, MaxScriptRunMinutes * time.Minute},
 	} {
 		d := DoorConfig{Code: "VAULT", Type: "v3_script", MaxRunMinutes: tc.minutes}
 		if got := d.ScriptRunLimit(); got != tc.want {

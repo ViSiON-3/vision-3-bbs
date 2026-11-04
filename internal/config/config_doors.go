@@ -84,7 +84,9 @@ func (d DoorConfig) RemoteProtocol() string {
 // ScriptRunLimit is the wall-clock limit MaxRunMinutes sets for a v3_script
 // door, in the form scripting.ScriptConfig.MaxRunTime takes: zero for the
 // engine's default, a negative duration for no limit (any negative setting
-// counts as -1), otherwise the minutes as a duration.
+// counts as -1), otherwise the minutes as a duration. A setting above
+// MaxScriptRunMinutes (only possible by editing doors.json by hand) counts as
+// MaxScriptRunMinutes, so a huge value can't overflow the duration.
 //
 // No limit leaves the door to the checks every door gets: it still ends when
 // the caller is idle too long, runs out of time or hangs up.
@@ -92,8 +94,13 @@ func (d DoorConfig) ScriptRunLimit() time.Duration {
 	if d.MaxRunMinutes < 0 {
 		return -1
 	}
-	return time.Duration(d.MaxRunMinutes) * time.Minute
+	return time.Duration(min(d.MaxRunMinutes, MaxScriptRunMinutes)) * time.Minute
 }
+
+// MaxScriptRunMinutes is the largest max_run_minutes a v3_script door can
+// set: the most the config editor accepts, and what ScriptRunLimit uses for
+// anything larger.
+const MaxScriptRunMinutes = 9999
 
 // DefaultDisconnectKey is the control character that hangs up a remote door
 // session from the caller's end. Ctrl-] is what Synchronet's gateway uses, so
