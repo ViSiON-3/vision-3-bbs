@@ -877,27 +877,13 @@ func (l *Leaf) followHubHandover(ctx context.Context, offered string) {
 // hubs) is skipped. A mismatch pauses syncing with the hub and returns an
 // error wrapping ErrHubKeyMismatch; a key that matches lifts any pause.
 func (l *Leaf) checkHubKey(ctx context.Context) error {
-	path := fmt.Sprintf("/v3net/v1/%s/info", l.cfg.Network)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, l.cfg.HubURL+path, nil)
+	info, err := l.fetchHubInfo(ctx)
 	if err != nil {
-		return fmt.Errorf("leaf: create GET request: %w", err)
+		return err
 	}
-	resp, err := l.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("leaf: GET %s: %w", path, err)
-	}
-	defer func() { _ = resp.Body.Close() }() // read side
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("leaf: GET %s: status %d", path, resp.StatusCode)
-	}
-	body, err := readBody(resp.Body, maxRespBytes)
-	if err != nil {
-		return fmt.Errorf("leaf: GET %s: %w", path, err)
-	}
-	var info protocol.NetworkInfo
-	if err := json.Unmarshal(body, &info); err != nil {
-		return fmt.Errorf("leaf: decode network info: %w", err)
-	}
+	// The feature list rides on the same reply, and is wanted whether or
+	// not the hub publishes a key.
+	l.noteHubFeatures(info.Features)
 	if info.HubPubKeyB64 == "" {
 		slog.Debug("leaf: hub does not publish its key; not pinned", "network", l.cfg.Network, "hub", l.cfg.HubURL)
 		return nil
@@ -916,6 +902,34 @@ func (l *Leaf) checkHubKey(ctx context.Context) error {
 	}
 	l.resumeHub()
 	return nil
+}
+
+// fetchHubInfo reads the network's /info. It is public on the hub, so the
+// request is unsigned and the reply is not checked against the hub key;
+// checkHubKey makes what it needs of the reply safe to use.
+func (l *Leaf) fetchHubInfo(ctx context.Context) (*protocol.NetworkInfo, error) {
+	path := fmt.Sprintf("/v3net/v1/%s/info", l.cfg.Network)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, l.cfg.HubURL+path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("leaf: create GET request: %w", err)
+	}
+	resp, err := l.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("leaf: GET %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }() // read side
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("leaf: GET %s: status %d", path, resp.StatusCode)
+	}
+	body, err := readBody(resp.Body, maxRespBytes)
+	if err != nil {
+		return nil, fmt.Errorf("leaf: GET %s: %w", path, err)
+	}
+	var info protocol.NetworkInfo
+	if err := json.Unmarshal(body, &info); err != nil {
+		return nil, fmt.Errorf("leaf: decode network info: %w", err)
+	}
+	return &info, nil
 }
 
 // normalizeKey trims the whitespace a sysop may paste around a key.

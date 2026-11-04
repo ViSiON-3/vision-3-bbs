@@ -223,6 +223,17 @@ Stock menus bind all of these in `V3NETM` with ACS `S255`. None of them check a 
 | `V3NETACCESSREQUESTS` | none | Pending subscription requests for every area this node manages, across all subscribed networks. `A` approves, `D` denies and adds the node to the area's deny list. | Area manager, checked by the hub |
 | `V3NETCOORDINATOR` | none | Coordinator panel for networks whose NAL names this node as coordinator. `P` opens the pending proposal queue, where `A` approves a proposal (asking for the access mode, Enter keeps the proposed one) and `R` rejects it with an optional reason. `M` lists the NAL's areas, where `C` hands an area to another active subscriber by node ID. | Network coordinator, checked by the hub |
 
+### V3Net Central
+
+Caller-facing. The stock main menu binds `V3NETCENTRAL` to `/V` and the word `CENTRAL`. Every screen shows only what the sysop enabled and the hub serves; see [V3Net Central](v3net/central.md).
+
+| Command | Data | What it does | Access |
+| --- | --- | --- | --- |
+| `V3NETCENTRAL` | none | The V3Net Central menu: `B` Boards (only when a network's directory is available), `P` My Preferences, `S` Connection Status. Says so and returns when V3Net is off or Central is enabled on no network. | |
+| `V3NETCENTRALBOARDS` | Network name, optional. Blank covers every network where the directory is available. | Lightbar over the verified board directory: online boards first, then boards seen in the last week, then stale ones. Enter shows a board's details, `/` filters by name, description or address, `R` fetches again. | Silent when nothing is available |
+| `V3NETCENTRALPREFS` | none | What V3Net Central shares about the caller. In phase 1, nothing; lists the coming features as not available. | |
+| `V3NETCENTRALSTATUS` | none | Per network: the Central and listing switches, whether the hub serves the directory, whether the event stream is up, the listing's state and when the directory was last fetched. | |
+
 ## SysOp and administration
 
 | Command | Data | What it does | Access |

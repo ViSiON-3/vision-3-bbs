@@ -162,6 +162,10 @@ the same Hub URL, Network, Poll Interval and Origin fields as the wizard, plus:
 | **Browse Areas** | Press **Enter** to open the area browser for this hub. |
 | **Signed Hub** | Default `N` accepts unsigned replies from a hub that predates hub signing, until the leaf has seen it sign. Set `Y` to refuse them from the start. See [Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies). |
 | **Hub Signs** | Set to `Y` by the leaf once the hub's signatures check out; unsigned replies from it are refused from then on. Set it to `N` only if the hub really stopped signing. |
+| **Central** | Default `N`. `Y` lets callers open V3Net Central (the board directory) for this network. Sends nothing about them. See [V3Net Central](v3net/central.md). |
+| **Publish Listing** | Default `N`. `Y` lists this board in the network's directory; `N` withdraws it. |
+| **Listing Desc** | One line about your board for the directory. |
+| **Listing Addrs** | Comma-separated connection addresses for the directory; blank publishes the ones from Server Setup. |
 
 ---
 

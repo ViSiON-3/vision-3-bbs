@@ -90,7 +90,7 @@ to subscribe to multiple networks.
 |-------|------|---------|-------------|
 | `hubUrl` | string | — | Full URL of the hub (e.g. `"https://felonynet.org"`). Required. |
 | `network` | string | — | Network name to subscribe to. Must match a network hosted by the hub. Required. |
-| `boards` | array | `[]` | Local message area tags for received messages (e.g. `["fn.general", "fn.tech"]`). A local post in any of these areas is sent to the hub, whatever the area's type and even while `enabled` is `false` — it waits for V3Net to come on. |
+| `boards` | array | `[]` | Local message area tags for received messages (e.g. `["fn.general", "fn.tech"]`). A local post in any of these areas is sent to the hub, whatever the area's type and even while `enabled` is `false` — it waits for V3Net to come on. A subscription with no boards runs only if its `central` block turns something on. |
 | `pollInterval` | string | `"5m"` | How often to poll the hub for new messages. Accepts Go duration strings: `"30s"`, `"5m"`, `"1h"`. |
 | `origin` | string | BBS name | Origin line appended to outbound messages. Falls back to the BBS name from `config.json` if blank. Cut to 79 characters when sent. |
 | `autoJoinAreas` | bool | unset (`true`) | **Newscan Default** in the editor. When true or unset, message areas created for this subscription are flagged as newscan defaults for users. Set `false` to leave new areas out of newscans until users add them. |
@@ -101,6 +101,20 @@ to subscribe to multiple networks.
 | `hubSigned` | bool | `false` | Written by the BBS, shown as **Hub Signs**. Set once the hub's signatures have checked out; from then on unsigned replies from it are refused, as with `requireSignedHub`. Remove it (or set it `false`) only if the hub really stopped signing. |
 | `hubSignedClears` | number | `0` | Raised by the editor each time **Hub Signs** is set to **N**. It tells a running leaf you cleared the record, for when the leaf could not write `hubSigned` and the file already reads `false`: raise it by one by hand to do the same. Lowering or removing it clears nothing. See [Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies). |
 | `pendingCoordinatorPubKey`, `pendingHubPubKey` | string | blank | Written by the BBS, shown as **Offered Coord** / **Offered Hub**. A key the hub offered that differs from the pin. It is rejected; copy it into the pin to accept it. |
+| `central` | object | absent | V3Net Central settings for this subscription. Absent means every Central feature is off. See below and [V3Net Central](v3net/central.md). |
+
+### Leaf Central Settings (`leaves[].central`)
+
+Each switch is a separate consent and defaults to `false`. `enabled` and
+`publishListing` are independent: a board can browse without being listed,
+or be listed without offering Central to its callers.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | **Central** in the editor. Lets callers open V3Net Central for this network: the board directory, and later features behind their own switches. Nothing about the board or its callers is sent for it. |
+| `publishListing` | bool | `false` | **Publish Listing** in the editor. Publishes this board's listing (name, `description`, `addresses`, capabilities, software) to the network's directory and refreshes it every six hours. Setting it `false` withdraws the listing at the next reload or start. |
+| `description` | string | `""` | **Listing Desc** in the editor. One line about the board, at most 240 characters. Pipe codes and control characters are refused. |
+| `addresses` | array | `[]` | **Listing Addrs** in the editor. Connection addresses, each `scheme://host[:port]` with scheme `telnet`, `ssh`, `rlogin`, `http` or `https`, at most 8. Empty publishes `ssh://` and `telnet://` addresses built from the server's SSH host and the enabled listeners' ports, unless that host is blank, a wildcard (`0.0.0.0`, `::`) or loopback, in which case nothing is published until this is set. |
 
 ---
 

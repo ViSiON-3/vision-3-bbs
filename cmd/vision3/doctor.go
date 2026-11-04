@@ -27,6 +27,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
@@ -1449,8 +1450,8 @@ func checkV3Net(configDir, root string, add func(string, doctorSeverity, string,
 			add("V3Net configuration", doctorWarn, fmt.Sprintf("%s has invalid pollInterval %q", label, leaf.PollInterval), "Use a positive duration such as 5m or 1h.")
 			issues++
 		}
-		if len(leaf.Boards) == 0 {
-			add("V3Net configuration", doctorWarn, label+" has no boards", "Select at least one local board to receive this network's messages.")
+		if len(leaf.Boards) == 0 && !leaf.CentralEnabled() && !leaf.CentralPublishes() {
+			add("V3Net configuration", doctorWarn, label+" has no boards", "Select at least one local board to receive this network's messages, or turn on V3Net Central for it.")
 			issues++
 		}
 		for _, pin := range []struct{ field, value string }{
@@ -1460,6 +1461,14 @@ func checkV3Net(configDir, root string, add func(string, doctorSeverity, string,
 			if strings.TrimSpace(pin.value) != "" && !config.ValidV3NetPubKey(pin.value) {
 				add("V3Net configuration", doctorWarn, fmt.Sprintf("%s has an invalid %s", label, pin.field), "Paste the network's base64 ed25519 key, or blank it to pin the key on first use.")
 				issues++
+			}
+		}
+		if leaf.Central != nil {
+			for _, a := range leaf.Central.Addresses {
+				if err := protocol.ValidateCentralAddress(a); err != nil {
+					add("V3Net configuration", doctorWarn, fmt.Sprintf("%s has an invalid central address %q: %v", label, a, err), "Use scheme://host[:port] with scheme telnet, ssh, rlogin, http or https, or blank the list to publish the server's own addresses.")
+					issues++
+				}
 			}
 		}
 		for _, pending := range []struct{ field, pin, value string }{

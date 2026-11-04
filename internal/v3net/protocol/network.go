@@ -9,6 +9,10 @@ type NetworkInfo struct {
 	LeafCount    int           `json:"leaf_count"`
 	MessageCount int64         `json:"message_count"`
 	Policy       NetworkPolicy `json:"policy"`
+	// Features names the optional features this hub serves on the network,
+	// such as FeatureCentralDirectory. A hub from before the field sends
+	// none, and a leaf then offers none of them.
+	Features []string `json:"features,omitempty"`
 }
 
 // NetworkPolicy defines hub-enforced limits for a network.

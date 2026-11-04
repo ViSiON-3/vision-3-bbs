@@ -167,6 +167,46 @@ type V3NetLeafConfig struct {
 	// PendingHubPubKey is a hub key /info served that differs from
 	// HubPubKey, recorded for the sysop like PendingCoordinatorPubKey.
 	PendingHubPubKey string `json:"pendingHubPubKey,omitempty"`
+
+	// Central is this subscription's V3Net Central settings. Absent, every
+	// Central feature is off for the network: a config from before Central
+	// takes part in nothing new.
+	Central *V3NetCentralConfig `json:"central,omitempty"`
+}
+
+// V3NetCentralConfig is a subscription's V3Net Central settings. Each
+// feature has its own switch and every switch defaults to off. Enabled and
+// PublishListing are independent: a board may browse the directory without
+// being listed, or be listed without offering Central to its callers.
+type V3NetCentralConfig struct {
+	// Enabled lets callers open V3Net Central for this network: the board
+	// directory, and later features as their own switches allow. Nothing
+	// about the board or its callers is sent to the hub for it.
+	Enabled bool `json:"enabled"`
+	// PublishListing publishes this board's listing (name, Description,
+	// Addresses and capabilities) to the network's directory, refreshed
+	// while the BBS runs. Turning it off withdraws the listing.
+	PublishListing bool `json:"publishListing"`
+	// Description is the listing's one-line description, at most 240
+	// characters; pipes and control characters are not sent.
+	Description string `json:"description,omitempty"`
+	// Addresses are the listing's connection addresses, each
+	// scheme://host[:port] with scheme telnet, ssh, rlogin, http or https,
+	// at most 8. Empty publishes the addresses derived from the server's
+	// SSH and telnet settings.
+	Addresses []string `json:"addresses,omitempty"`
+}
+
+// CentralEnabled reports whether callers may open V3Net Central for this
+// subscription.
+func (l V3NetLeafConfig) CentralEnabled() bool {
+	return l.Central != nil && l.Central.Enabled
+}
+
+// CentralPublishes reports whether this subscription publishes the board's
+// listing to the network's directory.
+func (l V3NetLeafConfig) CentralPublishes() bool {
+	return l.Central != nil && l.Central.PublishListing
 }
 
 // AutoJoinEnabled reports whether message areas created for this leaf

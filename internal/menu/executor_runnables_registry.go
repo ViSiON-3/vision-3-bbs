@@ -267,4 +267,8 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["V3NETACCESSREQUESTS"] = runV3NetAccessRequests // V3Net area access requests (manager)
 	registry["V3NETCOORDINATOR"] = runV3NetCoordinator       // V3Net coordinator panel
 	registry["V3NETREGISTRY"] = runV3NetRegistry             // V3Net network registry browser
+	registry["V3NETCENTRAL"] = runV3NetCentral               // V3Net Central menu (Boards, Preferences, Status)
+	registry["V3NETCENTRALBOARDS"] = runV3NetCentralBoards   // V3Net Central board directory
+	registry["V3NETCENTRALPREFS"] = runV3NetCentralPrefs     // V3Net Central caller preferences
+	registry["V3NETCENTRALSTATUS"] = runV3NetCentralStatus   // V3Net Central connection status
 }

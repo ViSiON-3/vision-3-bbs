@@ -122,6 +122,8 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 	}
 
 	slog.Info("leaf: SSE connected", "network", l.cfg.Network, "signed", verifier != nil)
+	l.sseConnected.Store(true)
+	defer l.sseConnected.Store(false)
 	if reconnect {
 		l.chatSessions.notifyReconnect()
 		// A nal_updated sent while the stream was down is lost, and Start's
@@ -161,6 +163,7 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 				l.onEvent(ev)
 				l.chatSessions.dispatch(ev)
 				l.dispatchNALEvent(ctx, ev)
+				l.dispatchCentralEvent(ev)
 			}
 			eventType, id, sig, data = "", "", "", nil
 			fields, size = 0, 0
