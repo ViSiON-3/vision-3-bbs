@@ -60,7 +60,8 @@ another added.
   new accounts out of the upload path.
 - **Downloading** — set `acs_download`; every file in an area shares it.
 
-All three accept the same ACS syntax as menus and message areas.
+All three accept the same ACS syntax as menus and message areas; see
+[Access Control Strings](reference/acs.md).
 
 ## The File Menu
 

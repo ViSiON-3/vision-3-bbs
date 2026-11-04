@@ -502,7 +502,7 @@ ACS expression — the same syntax used for menu commands:
 Users with level 255+ see `[*] Sysop Menu`; everyone else sees blank space
 of exactly the same size, so the surrounding art stays aligned.
 
-Any ACS expression works: `{{SYSOP}}`, `{{S50}}`, `{{F(A)}}`,
+Any ACS expression works: `{{SYSOP}}`, `{{S50}}`, `{{FA}}`,
 `{{S50&V}}`, `{{S255|S250}}`, etc. Regions can span multiple lines —
 hidden lines are blanked, not removed, so vertical layout is preserved.
 Pipe color codes inside a hidden region are discarded cleanly.
@@ -554,6 +554,8 @@ Control who can access menus and commands:
 - `!fB` - Must NOT have flag B
 - `s20&fC` - Level 20+ AND flag C
 - `s10|fD` - Level 10+ OR flag D
+
+See [Access Control Strings](reference/acs.md) for every term and operator.
 
 ## Creating a New Menu
 
