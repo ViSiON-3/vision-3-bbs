@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -911,7 +912,10 @@ func (s *Service) ConfigureLeaves(leafCfgs []config.V3NetLeafConfig, mgr *messag
 			resolvedBoards = append(resolvedBoards, tag)
 			s.RegisterArea(area.ID, lcfg.Network, lcfg.Origin)
 		}
-		if len(resolvedBoards) == 0 {
+		// A subscription that takes part in Central runs without message
+		// areas: it browses the directory or is listed in it, and the hub
+		// sends it no messages.
+		if len(resolvedBoards) == 0 && !lcfg.CentralEnabled() && !lcfg.CentralPublishes() {
 			slog.Warn("V3Net leaf: no resolvable boards, skipping", "network", lcfg.Network)
 			continue
 		}
@@ -928,6 +932,26 @@ func (s *Service) ConfigureLeaves(leafCfgs []config.V3NetLeafConfig, mgr *messag
 
 // leafKey identifies a subscription: one network on one hub.
 type leafKey struct{ network, hubURL string }
+
+// centralWithdrawTimeout bounds the withdrawal ReloadLeaves attempts before
+// stopping a leaf that published a listing.
+const centralWithdrawTimeout = 10 * time.Second
+
+// withdrawCentralBeforeStop withdraws run's Central listing if the leaf
+// published one and is running. Failures are logged; the leaf is stopped
+// either way.
+func (s *Service) withdrawCentralBeforeStop(run *leafRun) {
+	st := run.l.CentralStatus()
+	if !st.Publishing || !st.Supported || run.ctx == nil || run.ctx.Err() != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(run.ctx, centralWithdrawTimeout)
+	defer cancel()
+	if err := run.l.WithdrawCentralListing(ctx); err != nil {
+		slog.Warn("v3net: could not withdraw the Central listing before stopping the leaf; the hub expires it",
+			"network", run.l.Network(), "hub", run.l.HubURL(), "error", err)
+	}
+}
 
 // withoutKeys returns c with its pinned and pending key fields, and the
 // record that the hub signs and the count of its clears, cleared, for
@@ -1110,6 +1134,15 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 	settled := make(map[leafKey]leaf.Pins)
 	prevByKey, nextByKey := cfgsByKey(prev), cfgsByKey(leafCfgs)
 	for _, run := range old {
+		// A listing the old leaf published goes before the leaf does when
+		// the new set no longer publishes it: a removed or moved
+		// subscription has no replacement on that hub to withdraw it, and
+		// one with publication turned off should not wait for its
+		// replacement to start. Bounded, and only a best effort: the hub
+		// expires an unreachable board's listing on its own.
+		if next, ok := nextByKey[leafKey{run.l.Network(), run.l.HubURL()}]; !ok || !next.CentralPublishes() {
+			s.withdrawCentralBeforeStop(run)
+		}
 		s.stopLeaf(run)
 		key := leafKey{run.l.Network(), run.l.HubURL()}
 		if n := run.l.LastNAL(); n != nil {
@@ -1200,12 +1233,24 @@ func (s *Service) centralListingSpec(lcfg config.V3NetLeafConfig) *leaf.CentralL
 // CentralAddressesFor derives a board's default Central listing addresses
 // from its server settings: ssh://host:port when SSH is enabled and
 // telnet://host:port when telnet is, each only with a host to give. host
-// is the public hostname (the server's SSH host); a blank one yields no
-// addresses, since a listing cannot say where the board is.
+// is the server's SSH listen host. It is a bind address as often as a
+// public name, so a blank, wildcard (0.0.0.0, ::) or loopback host yields
+// no addresses: a listing cannot say where the board is, and the sysop
+// sets the subscription's addresses instead. An IPv6 literal is bracketed.
 func CentralAddressesFor(host string, sshEnabled bool, sshPort int, telnetEnabled bool, telnetPort int) []string {
 	host = strings.TrimSpace(host)
 	if host == "" {
 		return nil
+	}
+	if ip := net.ParseIP(strings.Trim(host, "[]")); ip != nil {
+		if ip.IsUnspecified() || ip.IsLoopback() {
+			return nil
+		}
+		if ip.To4() == nil {
+			host = "[" + ip.String() + "]"
+		} else {
+			host = ip.String()
+		}
 	}
 	var out []string
 	if sshEnabled && sshPort > 0 {

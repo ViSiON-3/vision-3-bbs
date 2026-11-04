@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -362,5 +365,76 @@ func TestBuildCentralListingCleansText(t *testing.T) {
 	l.cfg.CentralListing.Addresses = []string{"gopher://nope"}
 	if _, err := l.buildCentralListing(time.Now()); err == nil {
 		t.Error("bad address should refuse to build")
+	}
+}
+
+// A directory of protocol.MaxCentralListings listings at every field limit
+// is well over a megabyte; the leaf must read and verify all of it.
+func TestCentralFetchFullDirectory(t *testing.T) {
+	now := time.Now().UTC()
+	var dir protocol.CentralDirectory
+	dir.Network = "testnet"
+	dir.GeneratedAt = now.Format(time.RFC3339)
+	addrs := make([]string, protocol.MaxCentralAddresses)
+	for i := range addrs {
+		addrs[i] = "telnet://" + strings.Repeat("h", protocol.MaxCentralAddressLen-len("telnet://:65535")) + ":65535"
+	}
+	caps := make([]string, protocol.MaxCentralCapabilities)
+	for i := range caps {
+		caps[i] = strings.Repeat("c", protocol.MaxCentralCapabilityLen-2) + fmt.Sprintf("%02d", i)
+	}
+	for i := 0; i < protocol.MaxCentralListings; i++ {
+		ks, _, err := keystore.Load(filepath.Join(t.TempDir(), "k.key"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		l := protocol.CentralListing{
+			V3NetCentral: protocol.CentralListingVersion, Network: "testnet", Seq: int64(i + 1),
+			Name:        strings.Repeat("n", protocol.MaxCentralNameLen),
+			Description: strings.Repeat("d", protocol.MaxCentralDescriptionLen),
+			Addresses:   addrs, Capabilities: caps,
+			Software:    strings.Repeat("s", protocol.MaxCentralSoftwareLen),
+			PublishedAt: now.Format(time.RFC3339), ExpiresAt: now.Add(time.Hour).Format(time.RFC3339),
+		}
+		if err := l.Sign(ks); err != nil {
+			t.Fatal(err)
+		}
+		dir.Listings = append(dir.Listings, protocol.CentralDirectoryEntry{Listing: l, LastSeenAt: dir.GeneratedAt})
+	}
+	body, _ := json.Marshal(dir)
+	if len(body) <= maxRespBytes {
+		t.Fatalf("test directory is %d bytes, not over the small-reply cap", len(body))
+	}
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	defer fake.Close()
+
+	l, _ := setupLeaf(t, fake.URL, &mockJAMWriter{})
+	l.cfg.CentralEnabled = true
+	l.noteHubFeatures([]string{protocol.FeatureCentralDirectory})
+	got, err := l.FetchCentralDirectory(context.Background(), true)
+	if err != nil {
+		t.Fatalf("fetch of a %d-byte directory: %v", len(body), err)
+	}
+	if len(got) != protocol.MaxCentralListings {
+		t.Errorf("verified %d of %d listings", len(got), protocol.MaxCentralListings)
+	}
+}
+
+func TestHubErrorTextIsScreenSafe(t *testing.T) {
+	cases := map[string]string{
+		`{"error":"|04bad|07 \u001b[2J thing"}`: "04bad 07  [2J thing",
+		"plain \x07text":                        "plain  text",
+		`{"error":""} fallback`:                 `{"error":""} fallback`,
+	}
+	for in, want := range cases {
+		if got := hubErrorText([]byte(in)); got != want {
+			t.Errorf("hubErrorText(%q) = %q, want %q", in, got, want)
+		}
+	}
+	long := strings.Repeat("é", 300)
+	if got := hubErrorText([]byte(long)); utf8.RuneCountInString(got) != 200 || !utf8.ValidString(got) {
+		t.Errorf("long text clipped to %d runes, valid=%v", utf8.RuneCountInString(got), utf8.ValidString(got))
 	}
 }

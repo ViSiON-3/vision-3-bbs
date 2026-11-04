@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/dedup"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/hub"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/keystore"
@@ -129,15 +130,30 @@ func TestCentralTwoBoardsDiscoverEachOther(t *testing.T) {
 	browser := centralBoard(t, browserCtx, ts, "browser", false)
 
 	// Each listed board sees the other and itself; the browser sees both
-	// and is not listed.
+	// and is not listed. A listing can reach the directory before its
+	// board's event stream is up, so online is waited for, not assumed.
 	got := waitDirectory(t, alpha, "alpha", "beta")
 	for _, e := range got {
-		if !e.Online {
-			t.Errorf("%s has a stream open but is not online", e.Listing.Name)
-		}
 		if e.Listing.Description != "Board "+e.Listing.Name {
 			t.Errorf("%s description %q", e.Listing.Name, e.Listing.Description)
 		}
+	}
+	deadline := time.Now().Add(8 * time.Second)
+	for {
+		got = waitDirectory(t, alpha, "alpha", "beta")
+		online := 0
+		for _, e := range got {
+			if e.Online {
+				online++
+			}
+		}
+		if online == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("both boards never showed online: %+v", got)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	waitDirectory(t, beta, "alpha", "beta")
 	waitDirectory(t, browser, "alpha", "beta")
@@ -157,5 +173,56 @@ func TestCentralTwoBoardsDiscoverEachOther(t *testing.T) {
 	waitDirectory(t, alpha, "alpha")
 	if st := alpha.CentralStatus(); !st.Connected || !st.Supported || st.LastError != "" {
 		t.Errorf("alpha status: %+v", st)
+	}
+}
+
+// Turning publication off on reload withdraws the listing from the hub
+// before the old leaf stops, rather than leaving it for the hub to expire.
+func TestReloadWithdrawsListingWhenPublicationTurnedOff(t *testing.T) {
+	dir := t.TempDir()
+	hubKS, _, err := keystore.Load(filepath.Join(dir, "hub.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := hub.New(hub.Config{
+		ListenAddr: ":0", DataDir: dir, Keystore: hubKS, AutoApprove: true, RequireSignedSubscribe: true,
+		Networks: []hub.NetworkConfig{{Name: "testnet"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { h.Close() })
+	ts := httptest.NewServer(h.Mux())
+	t.Cleanup(ts.Close)
+
+	svc, mm := newReloadFixture(t, "ALPHA")
+	svc.BBSName = "Reloader"
+	on := config.V3NetLeafConfig{HubURL: ts.URL, Network: "testnet", Boards: []string{"ALPHA"},
+		Central: &config.V3NetCentralConfig{PublishListing: true}}
+	svc.ConfigureLeaves([]config.V3NetLeafConfig{on}, mm)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go svc.Start(ctx)
+
+	deadline := time.Now().Add(8 * time.Second)
+	for {
+		rows, _ := h.Central().List("testnet", time.Now())
+		if len(rows) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("listing never published")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	off := on
+	off.Central = &config.V3NetCentralConfig{PublishListing: false}
+	if err := svc.ReloadLeaves([]config.V3NetLeafConfig{off}, mm, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Withdrawn by the old leaf before it stopped: no waiting on the new one.
+	if rows, _ := h.Central().List("testnet", time.Now()); len(rows) != 0 {
+		t.Errorf("listing still held after reload turned publication off: %+v", rows)
 	}
 }

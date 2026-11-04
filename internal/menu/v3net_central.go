@@ -488,18 +488,21 @@ func runV3NetCentralBoards(c *cmdCtx, args string) (*user.User, string, error) {
 		return line
 	}
 
+	// helpLine returns the footer, pipe codes expanded and cut to the
+	// screen width: it sits on the last row, where a line that runs over
+	// would scroll the screen and put every later update on the wrong row.
 	helpLine := func() string {
 		help := "|08 [|15Enter|08] Details  [|15/|08] Search  [|15R|08] Refresh  [|15Q|08] Quit|07"
+		if len(rows) > 0 {
+			help += fmt.Sprintf("  |08%d/%d|07", selected+1, len(rows))
+		}
 		if filter != "" {
 			help += fmt.Sprintf("  |03/%s|07", v3netClip(filter, 16))
 		}
 		if statusMsg != "" {
 			help += "  " + statusMsg
 		}
-		if len(rows) > 0 {
-			help += fmt.Sprintf("  |08%d/%d|07", selected+1, len(rows))
-		}
-		return help
+		return clipColumns(string(ansi.ReplacePipeCodes([]byte(help))), termWidth-1, outputMode)
 	}
 
 	renderFull := func() {
@@ -527,7 +530,7 @@ func runV3NetCentralBoards(c *cmdCtx, args string) (*user.User, string, error) {
 		buf.WriteString(ansi.MoveCursor(sep, 1))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|08" + strings.Repeat("─", termWidth-1) + "|07")))
 		buf.WriteString(ansi.MoveCursor(sep+1, 1))
-		buf.Write(ansi.ReplacePipeCodes([]byte(helpLine())))
+		buf.WriteString(helpLine())
 		terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
 	}
 	renderItemRow := func(idx int) {
@@ -539,7 +542,7 @@ func runV3NetCentralBoards(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	renderHelpRow := func() {
 		row := headerRows + visibleRows + 2
-		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(row, 1)+"\x1b[2K"+string(ansi.ReplacePipeCodes([]byte(helpLine())))), outputMode)
+		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(row, 1)+"\x1b[2K"+helpLine()), outputMode)
 	}
 
 	if len(fetchErrs) > 0 {

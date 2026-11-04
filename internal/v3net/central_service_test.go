@@ -22,6 +22,13 @@ func TestCentralAddressesFor(t *testing.T) {
 		{"no host", "  ", true, 22, true, 23, nil},
 		{"nothing enabled", "bbs.example", false, 22, false, 23, nil},
 		{"zero port skipped", "bbs.example", true, 0, true, 23, []string{"telnet://bbs.example:23"}},
+		{"wildcard v4 bind", "0.0.0.0", true, 22, true, 23, nil},
+		{"wildcard v6 bind", "::", true, 22, true, 23, nil},
+		{"loopback", "127.0.0.1", true, 22, false, 0, nil},
+		{"loopback v6", "::1", true, 22, false, 0, nil},
+		{"public v4", "203.0.113.5", true, 22, false, 0, []string{"ssh://203.0.113.5:22"}},
+		{"public v6 bracketed", "2001:db8::5", true, 22, true, 23, []string{"ssh://[2001:db8::5]:22", "telnet://[2001:db8::5]:23"}},
+		{"already bracketed v6", "[2001:db8::5]", true, 22, false, 0, []string{"ssh://[2001:db8::5]:22"}},
 	}
 	for _, c := range cases {
 		if got := CentralAddressesFor(c.host, c.sshOn, c.sshPort, c.telnetOn, c.telnetPort); !reflect.DeepEqual(got, c.want) {
@@ -48,5 +55,30 @@ func TestCentralListingSpecFollowsConfig(t *testing.T) {
 	spec = s.centralListingSpec(config.V3NetLeafConfig{Central: &config.V3NetCentralConfig{PublishListing: true, Addresses: []string{"telnet://own.example:23"}}})
 	if !reflect.DeepEqual(spec.Addresses, []string{"telnet://own.example:23"}) {
 		t.Errorf("configured addresses not used: %v", spec.Addresses)
+	}
+}
+
+// A subscription with no boards runs when it takes part in Central; one
+// with neither boards nor Central is skipped as before.
+func TestConfigureLeavesRunsCentralOnlySubscription(t *testing.T) {
+	dir := t.TempDir()
+	svc, err := New(config.V3NetConfig{KeystorePath: dir + "/k.key", DedupDBPath: dir + "/d.sqlite"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+	svc.ConfigureLeaves([]config.V3NetLeafConfig{
+		{HubURL: "http://127.0.0.1:1", Network: "browse", Central: &config.V3NetCentralConfig{Enabled: true}},
+		{HubURL: "http://127.0.0.1:1", Network: "listed", Central: &config.V3NetCentralConfig{PublishListing: true}},
+		{HubURL: "http://127.0.0.1:1", Network: "nothing"},
+	}, nil)
+	got := svc.LeafNetworks()
+	if len(got) != 2 {
+		t.Fatalf("LeafNetworks() = %v, want browse and listed", got)
+	}
+	for _, n := range got {
+		if n == "nothing" {
+			t.Errorf("subscription with no boards and no Central was started")
+		}
 	}
 }

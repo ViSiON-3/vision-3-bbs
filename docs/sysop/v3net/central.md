@@ -86,15 +86,19 @@ Each subscription has its own Central block, in the editor under
 | **Central** | `enabled` | N | Callers may open Central for this network: the Boards screen fetches the directory. Nothing about your board or your callers is sent. |
 | **Publish Listing** | `publishListing` | N | Your board is listed in the network's directory. N withdraws it. |
 | **Listing Desc** | `description` | blank | One line about your board, at most 240 characters. |
-| **Listing Addrs** | `addresses` | blank | Where to call you: `ssh://host:port`, `telnet://host:port` and so on, up to 8. Blank publishes the addresses built from Server Setup (the SSH host, and each enabled listener's port). |
+| **Listing Addrs** | `addresses` | blank | Where to call you: `ssh://host:port`, `telnet://host:port` and so on, up to 8. Blank publishes addresses built from Server Setup (the SSH host, and each enabled listener's port) when that host is a public name or address; a wildcard or loopback bind address such as `0.0.0.0` publishes none, so set this field. |
 
 The two switches are independent. A board can offer the directory to its
-callers without being in it, or be in it without offering it.
+callers without being in it, or be in it without offering it. A
+subscription with either switch on runs even with no boards selected, so
+a board can take part in Central on a network whose message areas it does
+not carry.
 
 Changes to `leaves` apply to the running BBS without a restart, as any
-subscription change does. Turning **Publish Listing** off withdraws the
-listing when the subscription reloads; turning it on publishes within
-moments.
+subscription change does. Turning **Publish Listing** off, removing the
+subscription or moving it to another hub withdraws the listing from the
+hub that holds it as the subscription reloads; turning publication on
+publishes within moments.
 
 The listing's name is your board name from Server Setup, cleaned as it is
 for the network (pipes become slashes, control characters spaces, cut to
@@ -156,13 +160,15 @@ stream is open now. The Boards screen shows three states:
 
 ### Withdrawal
 
-Turning **Publish Listing** off withdraws the listing with
-`DELETE /v3net/v1/{network}/central/listing`. The hub deletes the row at
-once, tells connected leaves, and the board is gone from the next directory
-every leaf fetches. A leaf that was offline when the withdrawal happened
-simply never sees the listing again: directories are fetched whole, not as
-differences, so there is nothing left to propagate. The hub keeps no copy
-of a withdrawn listing.
+Turning **Publish Listing** off, or removing or moving the subscription,
+withdraws the listing with `DELETE /v3net/v1/{network}/central/listing`.
+The hub deletes the row at once, tells connected leaves, and the board is
+gone from the next directory every leaf fetches. A leaf that was offline
+when the withdrawal happened simply never sees the listing again:
+directories are fetched whole, not as differences, so there is nothing
+left to propagate. The hub keeps no copy of a withdrawn listing, only the
+highest sequence number the board has published, so that a captured
+publish cannot be replayed to undo the withdrawal.
 
 A board that cannot reach the hub to withdraw (the hub is down, or the
 board is gone for good) stays listed until its listing expires, at most 30

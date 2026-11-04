@@ -445,3 +445,33 @@ func TestCentralStoreNormalisesOffsetStamps(t *testing.T) {
 		t.Error("listing served past its expiry")
 	}
 }
+
+// A withdrawal must not reopen the door to a replay: the seq watermark
+// outlives the listing, so a captured publish is still refused after it.
+func TestCentralReplayRefusedAfterWithdrawal(t *testing.T) {
+	h, _ := setupTestHub(t)
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+	a := newLeafKS(t)
+	registerLeaf(t, ts, a)
+
+	captured := centralListingFor(t, a, "Board A")
+	if code, _ := putListing(t, ts, a, captured); code != http.StatusOK {
+		t.Fatal("publish")
+	}
+	resp, err := http.DefaultClient.Do(signedRequest(t, a, http.MethodDelete, ts.URL+"/v3net/v1/testnet/central/listing", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if code, _ := putListing(t, ts, a, captured); code != http.StatusConflict {
+		t.Errorf("replay after withdrawal: want 409, got %d", code)
+	}
+	if dir := getDirectory(t, ts, a); len(dir.Listings) != 0 {
+		t.Errorf("withdrawn listing restored by a replay: %+v", dir.Listings)
+	}
+	// A genuinely new listing is still accepted.
+	if code, _ := putListing(t, ts, a, centralListingFor(t, a, "Board A")); code != http.StatusOK {
+		t.Error("fresh publish after withdrawal refused")
+	}
+}

@@ -3,6 +3,7 @@ package menu
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -217,5 +218,38 @@ func TestCentralPrefsSharesNothing(t *testing.T) {
 	}
 	if fake.fetches != 0 {
 		t.Error("preferences must not fetch anything")
+	}
+}
+
+// The footer sits on the last row; a long search plus a status message
+// must be cut to the screen, or the terminal scrolls and every later
+// lightbar update lands a row off.
+func TestCentralBoardsFooterStaysOnOneRow(t *testing.T) {
+	fake := &centralFake{
+		nets: []CentralNetworkInfo{{Network: "testnet", Enabled: true, SupportKnown: true, Supported: true}},
+		dirs: map[string][]protocol.CentralDirectoryEntry{"testnet": {centralEntry("Sector 7 longnamehere", "x", "", true, 0)}},
+	}
+	// Search for a 16-character text that matches, then refresh (status
+	// "Refreshed."), then quit.
+	out := runCentralScreen(t, fake, "/sector 7 longnam\rrq", runV3NetCentralBoards, "")
+	// Each footer write starts with a move to row 24 and runs to the next
+	// cursor move or clear.
+	next := regexp.MustCompile(`\x1b\[(\d+;\d+H|2J|\?25[hl])`)
+	footers := 0
+	for _, chunk := range strings.Split(out, "\x1b[24;1H")[1:] {
+		row := chunk
+		if m := next.FindStringIndex(row); m != nil {
+			row = row[:m[0]]
+		}
+		footers++
+		if w := ansi.VisibleLength(strings.ReplaceAll(row, "\x1b[2K", "")); w > 79 {
+			t.Errorf("footer is %d columns wide: %q", w, row)
+		}
+	}
+	if footers == 0 {
+		t.Fatalf("no footer writes found: %q", out)
+	}
+	if !strings.Contains(out, "Refreshed.") && !strings.Contains(out, "/sector 7 longnam") {
+		t.Errorf("footer content missing: %q", out)
 	}
 }

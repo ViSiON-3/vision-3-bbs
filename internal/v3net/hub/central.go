@@ -30,6 +30,12 @@ CREATE TABLE IF NOT EXISTS central_listings (
 	last_seen_at TEXT NOT NULL,
 	PRIMARY KEY (node_id, network)
 );
+CREATE TABLE IF NOT EXISTS central_seq (
+	node_id TEXT NOT NULL,
+	network TEXT NOT NULL,
+	seq     INTEGER NOT NULL,
+	PRIMARY KEY (node_id, network)
+);
 `
 
 // Central publication limits. A node may refresh its listing a few times
@@ -69,9 +75,14 @@ func NewCentralStore(db *sql.DB) (*CentralStore, error) {
 // Put stores listing, already validated and verified, as the node's entry
 // on its network, replacing an older one. raw is the listing's JSON as
 // received, which is what List serves. It returns ErrCentralStale if the
-// stored listing's seq is not lower, and ErrCentralFull if the network is
+// node's seq watermark is not lower, and ErrCentralFull if the network is
 // at protocol.MaxCentralListings and this node has no row. now is recorded
 // as the node's last-seen time.
+//
+// The watermark is the highest seq the node has published, kept in its
+// own table so that withdrawing the listing (Delete) does not forget it:
+// otherwise a captured publish could be replayed after a withdrawal,
+// inside the request's clock-skew window, and undo it.
 //
 // The published and expiry stamps are stored in UTC, whatever offset the
 // listing wrote them with, so the text comparisons List and PruneExpired
@@ -89,16 +100,23 @@ func (cs *CentralStore) Put(listing *protocol.CentralListing, raw []byte, now ti
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
-	var stored int64
+	var mark int64
 	err = cs.db.QueryRow(
-		"SELECT seq FROM central_listings WHERE node_id = ? AND network = ?",
-		listing.NodeID, listing.Network).Scan(&stored)
-	switch {
-	case err == nil:
-		if listing.Seq <= stored {
-			return ErrCentralStale
-		}
-	case errors.Is(err, sql.ErrNoRows):
+		"SELECT seq FROM central_seq WHERE node_id = ? AND network = ?",
+		listing.NodeID, listing.Network).Scan(&mark)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("hub: read seq watermark: %w", err)
+	}
+	if err == nil && listing.Seq <= mark {
+		return ErrCentralStale
+	}
+	var rows int
+	if err := cs.db.QueryRow(
+		"SELECT COUNT(*) FROM central_listings WHERE node_id = ? AND network = ?",
+		listing.NodeID, listing.Network).Scan(&rows); err != nil {
+		return fmt.Errorf("hub: read listing: %w", err)
+	}
+	if rows == 0 {
 		var n int
 		if err := cs.db.QueryRow(
 			"SELECT COUNT(*) FROM central_listings WHERE network = ?", listing.Network).Scan(&n); err != nil {
@@ -107,10 +125,14 @@ func (cs *CentralStore) Put(listing *protocol.CentralListing, raw []byte, now ti
 		if n >= protocol.MaxCentralListings {
 			return ErrCentralFull
 		}
-	default:
-		return fmt.Errorf("hub: read listing: %w", err)
 	}
 
+	if _, err := cs.db.Exec(
+		`INSERT INTO central_seq (node_id, network, seq) VALUES (?, ?, ?)
+		 ON CONFLICT(node_id, network) DO UPDATE SET seq = excluded.seq`,
+		listing.NodeID, listing.Network, listing.Seq); err != nil {
+		return fmt.Errorf("hub: store seq watermark: %w", err)
+	}
 	_, err = cs.db.Exec(
 		`INSERT INTO central_listings (node_id, network, seq, listing, published_at, expires_at, last_seen_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -125,8 +147,8 @@ func (cs *CentralStore) Put(listing *protocol.CentralListing, raw []byte, now ti
 	return nil
 }
 
-// Delete removes the node's listing on network. It reports whether there
-// was one.
+// Delete removes the node's listing on network, keeping its seq watermark
+// (see Put). It reports whether there was a listing.
 func (cs *CentralStore) Delete(nodeID, network string) (bool, error) {
 	res, err := cs.db.Exec("DELETE FROM central_listings WHERE node_id = ? AND network = ?", nodeID, network)
 	if err != nil {

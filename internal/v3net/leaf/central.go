@@ -8,8 +8,10 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
@@ -338,27 +340,35 @@ func (l *Leaf) withdrawCentralListing(ctx context.Context) error {
 }
 
 // WithdrawCentralListing withdraws this board's listing from the hub now,
-// whatever the configuration says. The service calls it when a reload
-// turns publication off, so the listing goes at once rather than at the
-// replacement leaf's start.
+// whatever the configuration says. The service calls it before stopping a
+// leaf whose subscription is being removed, moved to another hub or having
+// publication turned off, so the listing goes at once and from the hub
+// that holds it, rather than waiting for a replacement leaf that may never
+// contact that hub.
 func (l *Leaf) WithdrawCentralListing(ctx context.Context) error {
 	return l.withdrawCentralListing(ctx)
 }
 
 // hubErrorText pulls the error field out of a hub's JSON error body, or
-// returns the body as text, clipped.
+// takes the body as text, and returns it fit for a caller's screen: pipes
+// and control characters become spaces, since the text ends up in status
+// lines every caller can see and a hub is not trusted with their
+// terminals, and it is cut to 200 characters on a rune boundary.
 func hubErrorText(body []byte) string {
 	var e struct {
 		Error string `json:"error"`
 	}
-	if json.Unmarshal(body, &e) == nil && e.Error != "" {
-		return e.Error
-	}
 	s := string(body)
-	if len(s) > 200 {
-		s = s[:200]
+	if json.Unmarshal(body, &e) == nil && e.Error != "" {
+		s = e.Error
 	}
-	return s
+	s = strings.Map(func(r rune) rune {
+		if r == '|' || r < 0x20 || (r >= 0x7F && r <= 0x9F) || r == utf8.RuneError {
+			return ' '
+		}
+		return r
+	}, s)
+	return protocol.TrimField(strings.TrimSpace(s), 200)
 }
 
 // FetchCentralDirectory returns the network's board directory: every
