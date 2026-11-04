@@ -160,10 +160,14 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 					l.hubSignatureFailed(ctx, "bad hub signature on "+path, false)
 					return fmt.Errorf("SSE event: %w", err)
 				}
+				// The leaf's own state goes first, so a callback set with
+				// SetOnEvent sees the event already applied: a Central
+				// listing event has staled the directory by the time the
+				// callback fires (#906).
+				l.dispatchCentralEvent(ev)
 				l.onEvent(ev)
 				l.chatSessions.dispatch(ev)
 				l.dispatchNALEvent(ctx, ev)
-				l.dispatchCentralEvent(ev)
 			}
 			eventType, id, sig, data = "", "", "", nil
 			fields, size = 0, 0
