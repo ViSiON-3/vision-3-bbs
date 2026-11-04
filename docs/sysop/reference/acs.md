@@ -161,7 +161,35 @@ A string that fails as a whole (the cases in [Syntax](#syntax) above)
 fails outright: `!` can't rescue it.
 
 Errors and bad terms are logged (at `ERROR` and `WARN`) when a caller hits
-them, not when the board starts.
+them, and once when the board starts; see
+[Checking your strings](#checking-your-strings). An ignored character is
+logged at `WARN` the first time a caller's check reads the string.
+
+## Checking your strings
+
+`vision3 doctor` checks every ACS string the board declares, including menus
+no caller has opened yet. Its **Access control** section names the file, the
+record (menu, command, area, conference), the field and the column of each
+problem:
+
+```text
+[FAIL]  ACS: menus/v3/cfg/MAIN.CFG  command 2 ("X"), ACS "S255&": column 5: '&' needs a term on each side
+[WARN]  ACS: configs/message_areas.json  area SYSOP, acs_write "!Q": column 2: "Q": Q is not an ACS term; it is false, and the '!' before it makes that part pass for everyone
+```
+
+- **FAIL** (doctor exits 2): the string can't be read as a whole (see
+  [Syntax](#syntax)), so it denies every caller.
+- **WARN** (doctor exits 1): the string works, but not as it reads — a term
+  that is always false (an unknown letter or a bad argument), or a character
+  that is ignored. A future, stricter ACS check will change what these
+  strings do, so fix them now.
+
+The BBS runs the same check when it starts and after it reloads a changed
+config file, and logs each problem once while it stays (failures at
+`ERROR`, warnings at `WARN`) with the same text; a problem that is fixed and
+later comes back is logged again. It never refuses to start over a bad
+string and never changes one: a bad string keeps working, or failing, as it
+always has.
 
 ## Examples
 

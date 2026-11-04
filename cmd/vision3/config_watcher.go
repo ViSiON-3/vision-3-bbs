@@ -75,6 +75,8 @@ type ConfigWatcher struct {
 	deferredTargets   []deferredTarget
 	sentinelPath      string
 	forceSentinelPath string
+	// acsRescan, when set, replaces the ACS scan rescanACS runs (tests).
+	acsRescan func()
 
 	mu      sync.Mutex           // guards mtimes, pending, and stop
 	mtimes  map[string]time.Time // last-seen modification time per polled path
@@ -233,15 +235,23 @@ func (cw *ConfigWatcher) pollLoop() {
 }
 
 // poll reloads every configuration file whose timestamp changed since the last
-// check. A touched sentinel reloads everything regardless of timestamps.
+// check. A touched sentinel reloads everything regardless of timestamps. If
+// anything reloaded, the ACS scan runs once at the end.
 func (cw *ConfigWatcher) poll() {
+	reloaded := false
+	defer func() {
+		if reloaded {
+			cw.rescanACS()
+		}
+	}()
 	if cw.changed(cw.forceSentinelPath, false) {
 		slog.Warn("force sentinel touched: applying all configuration now, including deferred structural changes",
 			"path", cw.forceSentinelPath, "active_sessions", cw.activeSessions())
 		for _, t := range cw.targets {
 			cw.changed(t.path, t.reloadOnRemove)
 		}
-		cw.ReloadAll()
+		cw.reloadTargets()
+		reloaded = true
 		for _, t := range cw.deferredTargets {
 			cw.changed(t.path, false)
 			cw.applyDeferred(t)
@@ -258,7 +268,8 @@ func (cw *ConfigWatcher) poll() {
 		for _, t := range cw.targets {
 			cw.changed(t.path, t.reloadOnRemove)
 		}
-		cw.ReloadAll()
+		cw.reloadTargets()
+		reloaded = true
 		// Deferred targets covered by the save are queued, not applied: the
 		// sentinel is touched automatically by v3config on every save, and
 		// automatic saves must not bypass the idle gate.
@@ -267,7 +278,9 @@ func (cw *ConfigWatcher) poll() {
 				cw.queueDeferred(t)
 			}
 		}
-		cw.applyPendingIfIdle()
+		if cw.applyPendingIfIdle() {
+			reloaded = true
+		}
 		return
 	}
 
@@ -275,6 +288,7 @@ func (cw *ConfigWatcher) poll() {
 		if cw.changed(t.path, t.reloadOnRemove) {
 			slog.Info("config file change detected", "file", t.name)
 			t.reload()
+			reloaded = true
 		}
 	}
 	for _, t := range cw.deferredTargets {
@@ -282,7 +296,9 @@ func (cw *ConfigWatcher) poll() {
 			cw.queueDeferred(t)
 		}
 	}
-	cw.applyPendingIfIdle()
+	if cw.applyPendingIfIdle() {
+		reloaded = true
+	}
 }
 
 // activeSessions reports how many callers are online, or 0 when no session
@@ -323,13 +339,13 @@ func (cw *ConfigWatcher) queueDeferred(t deferredTarget) {
 
 // applyPendingIfIdle applies every queued structural reload once the board
 // is idle. Called on each poll tick, so the reload lands within one poll
-// interval of the last caller logging off.
-func (cw *ConfigWatcher) applyPendingIfIdle() {
+// interval of the last caller logging off. It reports whether any applied.
+func (cw *ConfigWatcher) applyPendingIfIdle() (applied bool) {
 	cw.mu.Lock()
 	anyPending := len(cw.pending) > 0
 	cw.mu.Unlock()
 	if !anyPending || cw.activeSessions() > 0 {
-		return
+		return false
 	}
 	for _, t := range cw.deferredTargets {
 		// Re-check right before each apply: a caller may have connected while
@@ -342,15 +358,16 @@ func (cw *ConfigWatcher) applyPendingIfIdle() {
 		// reloads away from sessions mid-flight in longer operations, and a
 		// session admitted microseconds ago has none.
 		if cw.activeSessions() > 0 {
-			return
+			return applied
 		}
 		cw.mu.Lock()
 		isPending := cw.pending[t.name]
 		cw.mu.Unlock()
-		if isPending {
-			cw.applyDeferred(t)
+		if isPending && cw.applyDeferred(t) {
+			applied = true
 		}
 	}
+	return applied
 }
 
 // applyDeferred runs a deferred target's reload, clearing its pending mark
@@ -359,16 +376,17 @@ func (cw *ConfigWatcher) applyPendingIfIdle() {
 // is a transient problem (I/O, permissions) or a broken runtime dependency,
 // and either way silently de-queuing would strand the change until the file
 // happened to be touched again. The recurring error log while it retries is
-// deliberate visibility, not noise.
-func (cw *ConfigWatcher) applyDeferred(t deferredTarget) {
+// deliberate visibility, not noise. It reports whether the reload applied.
+func (cw *ConfigWatcher) applyDeferred(t deferredTarget) bool {
 	if err := t.apply(); err != nil {
 		slog.Error("failed to apply deferred config reload; will retry", "file", t.name, "error", err)
-		return
+		return false
 	}
 	cw.mu.Lock()
 	delete(cw.pending, t.name)
 	cw.mu.Unlock()
 	slog.Info("deferred config reload applied", "file", t.name)
+	return true
 }
 
 // PendingReloads lists the structural configs queued for the next idle
@@ -490,12 +508,29 @@ func (cw *ConfigWatcher) changed(path string, reloadOnRemove bool) bool {
 	return !seen || !mt.Equal(prev)
 }
 
-// ReloadAll re-reads every watched configuration file. Used by the reload
-// sentinel and by SIGHUP.
+// ReloadAll re-reads every watched configuration file and rescans ACS. Used
+// by SIGHUP; poll reloads through reloadTargets and rescans once at its end.
 func (cw *ConfigWatcher) ReloadAll() {
+	cw.reloadTargets()
+	cw.rescanACS()
+}
+
+// reloadTargets re-reads every watched (non-deferred) configuration file.
+func (cw *ConfigWatcher) reloadTargets() {
 	for _, t := range cw.targets {
 		t.reload()
 	}
+}
+
+// rescanACS logs any ACS problem a reload brought in, once each (see
+// logACSFindings). The board directory is the parent of configs/. poll
+// calls it once at the end if anything reloaded.
+func (cw *ConfigWatcher) rescanACS() {
+	if cw.acsRescan != nil {
+		cw.acsRescan()
+		return
+	}
+	logACSFindings(filepath.Dir(cw.rootConfigPath))
 }
 
 // reloadDoors reloads the door configurations.

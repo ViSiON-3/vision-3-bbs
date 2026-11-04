@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -200,4 +201,68 @@ func blankRegion(region []byte) []byte {
 
 func isCSIFinal(b byte) bool {
 	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
+}
+
+// regionKeywords are the {{...}} conditions resolved as keywords rather than
+// ACS, each with how it is decided for one caller. The renderer builds its
+// keywords map from this table (resolveRegionKeywords) and RegionConditions
+// skips the same names, so a keyword added here is known to both.
+var regionKeywords = map[string]func(u *user.User, areas areaLookup, cfg config.ServerConfig) bool{
+	"SPONSOR": sponsorKeyword,
+}
+
+// resolveRegionKeywords decides every region keyword for u, as
+// applyConditionalRegions takes them.
+func resolveRegionKeywords(u *user.User, areas areaLookup, cfg config.ServerConfig) map[string]bool {
+	out := make(map[string]bool, len(regionKeywords))
+	for name, decide := range regionKeywords {
+		out[name] = decide(u, areas, cfg)
+	}
+	return out
+}
+
+// RegionCondition is the condition of one {{acs}} region in menu art.
+type RegionCondition struct {
+	ACS  string // the text between {{ and }}
+	Line int    // 1-based line of the opening marker
+}
+
+// RegionConditions lists the ACS conditions of the {{acs}}...{{/}} regions in
+// menu ANSI content, in order, as applyConditionalRegions would find them:
+// keyword conditions (regionKeywords), literal tokens such as
+// {{PENDING_VALIDATIONS}}, stray {{/}} and decorative braces spanning lines
+// are left out. vision3 doctor uses it to check every region's ACS.
+func RegionConditions(content []byte) []RegionCondition {
+	var out []RegionCondition
+	i := 0
+	for i < len(content) {
+		open := bytes.Index(content[i:], []byte(condOpen))
+		if open < 0 {
+			break
+		}
+		open += i
+		braceEnd := bytes.Index(content[open:], []byte("}}"))
+		if braceEnd < 0 {
+			break
+		}
+		inner := string(content[open+len(condOpen) : open+braceEnd])
+		markerEnd := open + braceEnd + 2
+		if strings.ContainsAny(inner, "\r\n") {
+			i = open + len(condOpen)
+			continue
+		}
+		if knownLiteralTokens[inner] || inner == "/" {
+			i = markerEnd
+			continue
+		}
+		next := len(content)
+		if closeIdx := bytes.Index(content[markerEnd:], []byte(condClose)); closeIdx >= 0 {
+			next = markerEnd + closeIdx + len(condClose)
+		}
+		if _, isKeyword := regionKeywords[strings.ToUpper(inner)]; !isKeyword {
+			out = append(out, RegionCondition{ACS: inner, Line: 1 + bytes.Count(content[:open], []byte("\n"))})
+		}
+		i = next
+	}
+	return out
 }

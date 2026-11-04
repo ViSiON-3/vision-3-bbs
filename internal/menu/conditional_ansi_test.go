@@ -1,8 +1,10 @@
 package menu
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -80,5 +82,41 @@ func TestApplyConditionalRegionsKeywords(t *testing.T) {
 				t.Errorf("applyConditionalRegions(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestRegionConditions checks that the doctor's region scan finds the same
+// conditions the renderer evaluates, and on which line.
+func TestRegionConditions(t *testing.T) {
+	content := []byte("top {{PENDING_VALIDATIONS}}\r\n" +
+		"{{S255}}sysop{{/}} {{SPONSOR}}x{{/}}\r\n" +
+		"{{ decorative\r\n}} {{/}}\r\n" +
+		"{{!Q}}typo{{/}}{{FA}}no close")
+	got := RegionConditions(content)
+	want := []RegionCondition{{"S255", 2}, {"!Q", 5}, {"FA", 5}}
+	if len(got) != len(want) {
+		t.Fatalf("RegionConditions = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("condition %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+}
+
+// TestRegionKeywordsShared checks that every keyword the renderer resolves is
+// one RegionConditions leaves out, in any case, so doctor never reports a
+// keyword region as bad ACS.
+func TestRegionKeywordsShared(t *testing.T) {
+	resolved := resolveRegionKeywords(nil, nil, config.ServerConfig{})
+	if len(resolved) != len(regionKeywords) || len(resolved) == 0 {
+		t.Fatalf("resolveRegionKeywords = %v, want one entry per keyword in %d", resolved, len(regionKeywords))
+	}
+	for name := range resolved {
+		for _, spelling := range []string{name, strings.ToLower(name)} {
+			if got := RegionConditions([]byte("{{" + spelling + "}}x{{/}}")); len(got) != 0 {
+				t.Errorf("RegionConditions(%q region) = %v, want none", spelling, got)
+			}
+		}
 	}
 }

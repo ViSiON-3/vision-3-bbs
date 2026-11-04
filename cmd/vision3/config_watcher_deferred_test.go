@@ -559,3 +559,49 @@ func TestV3NetReloadOnHubSignsSave(t *testing.T) {
 		t.Errorf("leaves reloaded %d times after a Hub Signs save, want 1", reloads)
 	}
 }
+
+// TestPollRescansACSOnce: one poll that reloads several targets, and applies
+// a deferred one, runs the ACS scan once, at the end; a poll that reloads
+// nothing doesn't run it.
+func TestPollRescansACSOnce(t *testing.T) {
+	cw, dir, rec, _ := newDeferredTestWatcher(t)
+	for _, n := range []string{"a.json", "b.json"} {
+		path := filepath.Join(dir, n)
+		if err := os.WriteFile(path, []byte(`{}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+		cw.targets = append(cw.targets, reloadTarget{name: n, path: path, reload: rec.hit(n)})
+	}
+	cw.seed()
+	scans := 0
+	cw.acsRescan = func() {
+		if rec.count("a.json") != 1 || rec.count("b.json") != 1 || rec.count("structural.json") != 1 {
+			t.Error("ACS scan ran before every reload in the poll")
+		}
+		scans++
+	}
+
+	cw.poll()
+	if scans != 0 {
+		t.Errorf("poll with no change scanned %d times, want 0", scans)
+	}
+
+	touch(t, filepath.Join(dir, "a.json"), time.Second)
+	touch(t, filepath.Join(dir, "b.json"), time.Second)
+	touch(t, filepath.Join(dir, "structural.json"), time.Second)
+	cw.poll()
+	if scans != 1 {
+		t.Errorf("poll scanned %d times, want 1", scans)
+	}
+
+	// The sentinel reloads everything and applies the deferred target too:
+	// still one scan.
+	scans = 0
+	touch(t, filepath.Join(dir, "structural.json"), 2*time.Second)
+	touch(t, cw.sentinelPath, time.Second)
+	cw.acsRescan = func() { scans++ }
+	cw.poll()
+	if scans != 1 {
+		t.Errorf("sentinel poll scanned %d times, want 1", scans)
+	}
+}
