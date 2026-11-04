@@ -301,6 +301,12 @@ func doorErrorMessage(ctx *DoorCtx, msg string) error {
 	return waitDoorErrorEnter(ctx.Session)
 }
 
+// runListDoors, runOpenDoor and runDoorInfo mirror door_handler.go almost
+// line for line, but the tests that drive them (door_access_handlers_test.go
+// among them) are !windows, so these copies are vetted, not run. The access
+// rule itself is doorAllowed, shared by both; keep any other change to these
+// three in step with the Unix copies until they are merged into one file.
+
 // runListDoors lists configured doors from the door registry on Windows.
 func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
@@ -608,9 +614,8 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 		if doorConfig.MinAccessLevel > 0 {
 			info += fmt.Sprintf("|15Min Access: |07%d\r\n", doorConfig.MinAccessLevel)
 		}
-		if doorConfig.ACS != "" {
-			info += fmt.Sprintf("|15ACS: |07%s\r\n", doorConfig.ACS)
-		}
+		// The acs is not shown: it can name flags or a time window that the
+		// access-denied text deliberately keeps to itself.
 		if doorConfig.SingleInstance {
 			info += "|15Single Instance: |07Yes\r\n"
 		}

@@ -1,6 +1,9 @@
 package menu
 
 import (
+	"log/slog"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,6 +39,11 @@ func TestDoorAllowed(t *testing.T) {
 		// a malformed acs denies, as everywhere else
 		{"malformed acs", config.DoorConfig{ACS: "S20&"}, caller, false},
 		{"not logged in", config.DoorConfig{}, nil, false},
+		// a blank acs is no rule, however much whitespace it holds
+		{"whitespace acs is no rule", config.DoorConfig{ACS: " \t "}, caller, true},
+		{"whitespace acs, sysop", config.DoorConfig{ACS: "  "}, sysop, true},
+		{"whitespace acs keeps the level", config.DoorConfig{MinAccessLevel: 99, ACS: " "}, caller, false},
+		{"padded acs", config.DoorConfig{ACS: " FG "}, caller, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := doorAllowed(tc.door, tc.u, nil, nil, time.Now()); got != tc.want {
@@ -55,6 +63,7 @@ func TestDoorMenuEntriesDoorACS(t *testing.T) {
 		"BOTH":   {Code: "BOTH", Name: "Both", Category: "GAMES", MinAccessLevel: 99, ACS: "FG"},
 		"HIDDEN": {Code: "HIDDEN", Name: "Hidden", Category: "GAMES", ACS: "FG", Hidden: true},
 		"VIP":    {Code: "VIP", Name: "VIP", Category: "VIP"},
+		"BLANK":  {Code: "BLANK", Name: "Blank", Category: "GAMES", ACS: "  "},
 	}
 	cfg := config.ServerConfig{DoorCategories: []config.DoorCategory{
 		{Code: "GAMES", Name: "Games"},
@@ -64,12 +73,58 @@ func TestDoorMenuEntriesDoorACS(t *testing.T) {
 	allows := func(acs string) bool { return checkACS(acs, caller, nil, nil, time.Now()) }
 
 	got := doorMenuCodes(buildDoorMenuEntries(doors, cfg, "GAMES", caller.AccessLevel, allows, "Other"))
-	want := []string{"FLAG", "OPEN"}
-	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+	want := []string{"BLANK", "FLAG", "OPEN"}
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("GAMES lists %v, want %v (door acs, level and hidden applied)", got, want)
 	}
 	// a category the caller fails is left out of the menu, door and all
 	if got := doorMenuCodes(buildDoorMenuEntries(doors, cfg, "", caller.AccessLevel, allows, "Other")); len(got) != 1 || got[0] != "GAMES" {
 		t.Errorf("categories = %v, want only GAMES", got)
+	}
+}
+
+// The generated menu evaluates each door's ACS once while the caller pages
+// through it, so a malformed string is logged once, not on every redraw.
+func TestDoorMenuEvaluatesACSOncePerVisit(t *testing.T) {
+	c, s, _ := doorMenuHarness(t, "list", "][][q", 100)
+	doors := c.e.DoorRegistry()
+	d := doors["D50"]
+	d.ACS = "S10&"
+	doors["D50"] = d
+	c.e.SetDoorRegistry(doors)
+	var logged strings.Builder
+	restore := captureSlog(&logged, &slog.HandlerOptions{Level: slog.LevelError})
+	_, _, err := runDoorMenu(c, "")
+	restore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(logged.String(), "S10&"); n != 1 {
+		t.Errorf("malformed acs logged %d times over five redraws, want 1:\n%s", n, logged.String())
+	}
+	if strings.Contains(s.output(), "Door D50") {
+		t.Error("door with a malformed acs listed")
+	}
+}
+
+// The remembered answers are dropped after a door, which may have changed the
+// caller's record: a flag a door grants lists the door that needs it.
+func TestDoorMenuReevaluatesACSAfterDoor(t *testing.T) {
+	c, _, calls := doorMenuHarness(t, "list", "1\r1\rq", 0)
+	c.e.SetDoorRegistry(map[string]config.DoorConfig{
+		"FLAG": {Code: "FLAG", Name: "Flagged", ACS: "FG"},
+		"GIVE": {Code: "GIVE", Name: "Gives G"},
+	})
+	c.e.RunRegistry["DOOR:"] = func(c *cmdCtx, code string) (*user.User, string, error) {
+		*calls = append(*calls, code)
+		u := *c.currentUser
+		u.Flags = "G"
+		return &u, "", nil
+	}
+	if _, _, err := runDoorMenu(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"GIVE", "FLAG"}; !reflect.DeepEqual(*calls, want) {
+		t.Errorf("launched %v, want %v", *calls, want)
 	}
 }

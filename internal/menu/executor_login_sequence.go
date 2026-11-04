@@ -27,6 +27,7 @@ func (e *MenuExecutor) loginPausePrompt(s ssh.Session, terminal *term.Terminal, 
 // RunLoginSequence is the exported entry point for running the login sequence from main.go.
 // Returns the next menu name to enter (e.g., "MAIN") or "LOGOFF".
 func (e *MenuExecutor) RunLoginSequence(s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, outputMode ansi.OutputMode, termWidth int, termHeight int) (string, error) {
+	setStringHookStartTime(terminal, sessionStartTime)
 	_, nextAction, err := runFullLoginSequence(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, "")
 	if err != nil {
 		return "LOGOFF", err

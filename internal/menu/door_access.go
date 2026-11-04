@@ -2,6 +2,7 @@ package menu
 
 import (
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -14,10 +15,10 @@ import (
 // doorAllowed reports whether u may use door d: list it, see its details or
 // launch it. Both of the door's own rules must pass: min_access_level, and
 // its acs string, evaluated like any other ACS against the caller's session
-// and call start time. An empty acs adds no restriction and never lifts the
-// numeric minimum, and there is no sysop bypass: a sysop the rules exclude is
-// excluded. A malformed acs fails, as it does everywhere else. No user (not
-// logged in) is never allowed.
+// and call start time. An empty or all-whitespace acs adds no restriction and
+// never lifts the numeric minimum, and there is no sysop bypass: a sysop the
+// rules exclude is excluded. A malformed acs fails, as it does everywhere
+// else. No user (not logged in) is never allowed.
 //
 // Every door entry point checks this before any side effect (dropfile,
 // process, script or remote connection), and checks it again at launch even
@@ -28,10 +29,21 @@ func doorAllowed(d config.DoorConfig, u *user.User, s ssh.Session, terminal *ter
 	if u == nil {
 		return false
 	}
-	if d.MinAccessLevel > 0 && u.AccessLevel < d.MinAccessLevel {
+	return doorRulesPass(d, u.AccessLevel, func(acs string) bool {
+		return checkACS(acs, u, s, terminal, startTime)
+	})
+}
+
+// doorRulesPass is doorAllowed for a caller at level whose ACS strings allows
+// evaluates. It lets the generated door menu apply the same rule with an
+// evaluator that remembers its answers, rather than parse every door's ACS
+// on every redraw.
+func doorRulesPass(d config.DoorConfig, level int, allows func(string) bool) bool {
+	if d.MinAccessLevel > 0 && level < d.MinAccessLevel {
 		return false
 	}
-	return d.ACS == "" || checkACS(d.ACS, u, s, terminal, startTime)
+	acs := strings.TrimSpace(d.ACS)
+	return acs == "" || allows(acs)
 }
 
 // logDoorDenied records a refused door at WARN, with the rule that refused it.

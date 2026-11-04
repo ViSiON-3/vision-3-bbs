@@ -79,6 +79,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		currentUser:      currentUser,
 		currentAreaName:  currentAreaName,
 	}
+	setStringHookStartTime(terminal, sessionStartTime)
 	// previousMenuName starts at its zero value (""); tracked via st.previousMenuName below.
 	// var authenticatedUserResult *user.User // Unused
 

@@ -458,9 +458,8 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 		if doorConfig.MinAccessLevel > 0 {
 			info += fmt.Sprintf("|15Min Access: |07%d\r\n", doorConfig.MinAccessLevel)
 		}
-		if doorConfig.ACS != "" {
-			info += fmt.Sprintf("|15ACS: |07%s\r\n", doorConfig.ACS)
-		}
+		// The acs is not shown: it can name flags or a time window that the
+		// access-denied text deliberately keeps to itself.
 		if doorConfig.SingleInstance {
 			info += "|15Single Instance: |07Yes\r\n"
 		}

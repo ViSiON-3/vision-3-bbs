@@ -102,11 +102,11 @@ For DOS doors the setting does not exist: every dropfile format is always writte
 A door has two rules of its own, and a caller must pass both to list it, see its details or run it:
 
 - **Min Access Level** (`min_access_level`): the lowest access level allowed. `0` (default) is no restriction.
-- **ACS** (`acs`): an [Access Control String](reference/acs.md), such as `fG` (flag G) or `s20&Y18:00/23:59` (level 20 and up, in the evening). Blank (default) adds no restriction.
+- **ACS** (`acs`): an [Access Control String](reference/acs.md), such as `fG` (flag G) or `s20&Y18:00/23:59` (level 20 and up, in the evening). Blank (default), or only spaces, adds no restriction.
 
 They combine with AND. A blank or `*` ACS never lifts the minimum level, and neither rule has a sysop exception: a sysop the rules exclude is excluded like anyone else (use `SYSOP` in the ACS to let sysops in). An ACS string that is malformed denies, as it does everywhere else.
 
-A caller who fails either rule sees "access denied", and the door's details are not shown. Doors a caller fails are left out of `LISTDOORS` and the [generated door menu](doors/generated-menu.md). The rules are checked again when the door is launched, before any dropfile is written or anything is started, so a door listed a moment earlier is refused if a flag was taken away or an ACS time window closed in between.
+A caller who fails either rule sees "access denied", and the door's details are not shown. `DOORINFO` never shows the ACS itself, even to a caller who passes it, since it can name flags or a time window. Doors a caller fails are left out of `LISTDOORS` and the [generated door menu](doors/generated-menu.md). The rules are checked again when the door is launched, before any dropfile is written or anything is started, so a door listed a moment earlier is refused if a flag was taken away or an ACS time window closed in between.
 
 They apply on every way into a door: a `DOOR:CODE` menu command or login step, the generated door menu, `OPENDOOR`, `DOORINFO`, `LISTDOORS`, and a `!CODE` [string script](advanced/string-editor.md). The menu command that launches the door can carry an ACS of its own as well; see [Menus & ACS](menus/menu-system.md). A door category's **Min Access Level** and **ACS** are different: they only decide what the generated menu shows, not who may run the door.
 

@@ -146,7 +146,7 @@ func TestDoorACSCategoryIsAMenuFilter(t *testing.T) {
 }
 
 // OPENDOOR, DOORINFO and LISTDOORS apply the same rule; a denied door's
-// details are never shown.
+// details are never shown, and DOORINFO keeps the acs itself to itself.
 func TestDoorACSListOpenInfo(t *testing.T) {
 	f := newDoorACSFixture(t)
 	env := newMenuEnv(t)
@@ -174,7 +174,7 @@ func TestDoorACSListOpenInfo(t *testing.T) {
 			t.Errorf("denied door's details shown:\n%s", r.text())
 		}
 		r = env.sub(t).runCmd("DOORINFO", flagged, "", "flag\r")
-		if !r.has("Door: FLAG", "ACS: FG") {
+		if !r.has("Door: FLAG") || r.has("FG") {
 			t.Errorf("allowed caller:\n%s", r.text())
 		}
 	})

@@ -208,6 +208,9 @@ func LoadDoors(filePath string) (map[string]DoorConfig, error) {
 	doorMap := make(map[string]DoorConfig)
 	for position, door := range doors {
 		door.ConfigOrder = position
+		// A hand-edited "acs": " " means no rule, as blank does; untrimmed it
+		// would fail to parse and deny everyone.
+		door.ACS = strings.TrimSpace(door.ACS)
 		if door.Category != "" {
 			// An unusable category is not worth refusing every door over:
 			// clear it, which lists the door under Other.

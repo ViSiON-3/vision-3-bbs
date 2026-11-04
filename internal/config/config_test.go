@@ -77,6 +77,26 @@ func TestLoadDoors_UppercasesCodes(t *testing.T) {
 	}
 }
 
+// A blank or whitespace-only acs loads as no rule; a real one keeps its
+// text, less surrounding space.
+func TestLoadDoors_TrimsACS(t *testing.T) {
+	tmpDir := t.TempDir()
+	data := []byte(`[{"code":"BLANK","acs":" \t "},{"code":"FLAG","acs":"  fG "}]`)
+	if err := os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := LoadDoors(filepath.Join(tmpDir, "doors.json"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := result["BLANK"].ACS; got != "" {
+		t.Errorf("whitespace acs = %q, want empty", got)
+	}
+	if got := result["FLAG"].ACS; got != "fG" {
+		t.Errorf("acs = %q, want fG", got)
+	}
+}
+
 // The loader must enforce the same code contract as the editor
 // ([A-Z0-9_-]{1,16}), or hand-edited files can create registry keys that
 // DOOR:CODE commands and DOORLIST alignment don't expect.
