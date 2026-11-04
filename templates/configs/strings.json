@@ -382,6 +382,7 @@
   "msgSearchPrompt": "\r\n|15Search messages |08(|07words, |15\"phrases\"|07, |15AND OR NOT|07, |15( )|08)|15: |07",
   "msgSearchSearching": "\r\n|07Searching... |08(|07Esc stops|08)|07\r\n",
   "msgSearchStopped": "\r\n|07Search stopped.|07\r\n",
+  "msgSearchStoppedPartial": "|08Search stopped; matches found so far: %d.|07\r\n",
   "msgThreadPaneTitle": " Thread ",
   "msgTitleStr": "|08[|15Title|08] : ",
   "msgToStr": "|08[|15To|08   ] : ",

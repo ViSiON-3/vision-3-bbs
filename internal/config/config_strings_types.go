@@ -459,17 +459,18 @@ type StringsConfig struct {
 	FileOpenError      string `json:"fileOpenError"`
 
 	// Message search strings (SEARCHMSGS)
-	MsgSearchColumns    string `json:"msgSearchColumns"`
-	MsgSearchGone       string `json:"msgSearchGone"`
-	MsgSearchHeader     string `json:"msgSearchHeader"`
-	MsgSearchInvalid    string `json:"msgSearchInvalid"`
-	MsgSearchNoAreas    string `json:"msgSearchNoAreas"`
-	MsgSearchNoMatches  string `json:"msgSearchNoMatches"`
-	MsgSearchPagePrompt string `json:"msgSearchPagePrompt"`
-	MsgSearchPartial    string `json:"msgSearchPartial"`
-	MsgSearchPrompt     string `json:"msgSearchPrompt"`
-	MsgSearchSearching  string `json:"msgSearchSearching"`
-	MsgSearchStopped    string `json:"msgSearchStopped"`
+	MsgSearchColumns        string `json:"msgSearchColumns"`
+	MsgSearchGone           string `json:"msgSearchGone"`
+	MsgSearchHeader         string `json:"msgSearchHeader"`
+	MsgSearchInvalid        string `json:"msgSearchInvalid"`
+	MsgSearchNoAreas        string `json:"msgSearchNoAreas"`
+	MsgSearchNoMatches      string `json:"msgSearchNoMatches"`
+	MsgSearchPagePrompt     string `json:"msgSearchPagePrompt"`
+	MsgSearchPartial        string `json:"msgSearchPartial"`
+	MsgSearchPrompt         string `json:"msgSearchPrompt"`
+	MsgSearchSearching      string `json:"msgSearchSearching"`
+	MsgSearchStopped        string `json:"msgSearchStopped"`
+	MsgSearchStoppedPartial string `json:"msgSearchStoppedPartial"`
 
 	// File search strings
 	SearchFilesPrompt    string `json:"searchFilesPrompt"`

@@ -84,6 +84,7 @@ var FormattedKeys = []string{
 	"msgSearchInvalid",
 	"msgSearchPagePrompt",
 	"msgSearchPartial",
+	"msgSearchStoppedPartial",
 	"newUserEmailSubject",
 	"newUserSysopNotice",
 	"newUserSysopPage",

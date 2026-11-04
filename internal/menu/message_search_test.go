@@ -12,6 +12,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/msgsearch"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // addSearchArea adds a local area in conference confID with read ACS acs
@@ -266,6 +267,46 @@ func TestSearchMessagesStops(t *testing.T) {
 	hits, _, stopped = searchMessages(env.e, all, q, accept, accept, func() bool { return false })
 	if stopped || len(hits) != 3 {
 		t.Errorf("no stop: %d hits (want 3), stopped %v", len(hits), stopped)
+	}
+}
+
+// The line under the results header says why the list is short: the cap
+// asks the caller to narrow the search, a stopped search says it was
+// stopped, and a search that ran to the end says nothing.
+func TestMsgSearchResultsNotices(t *testing.T) {
+	env := searchEnv(t)
+	q := mustQuery(t, "blue")
+	accept := func(*message.DisplayMessage) bool { return true }
+	hits, _, _ := searchMessages(env.e, env.e.MessageMgr.ListAreas(), q, accept, accept, func() bool { return false })
+	if len(hits) != 3 {
+		t.Fatalf("%d hits, want 3", len(hits))
+	}
+	const capped, stoppedEarly = "Only the first 3 matches are shown", "Search stopped; matches found so far: 3."
+	for _, tc := range []struct {
+		name          string
+		full, stopped bool
+		want, notWant []string
+	}{
+		{"capped", true, false, []string{capped}, []string{stoppedEarly}},
+		{"stopped", false, true, []string{stoppedEarly}, []string{capped}},
+		{"complete", false, false, nil, []string{capped, stoppedEarly}},
+	} {
+		r := env.run(func(c *cmdCtx, _ string) (*user.User, string, error) {
+			return runMsgSearchResults(c, q, hits, tc.full, tc.stopped)
+		}, env.caller, "", "Q")
+		if !r.has("Messages matching") {
+			t.Errorf("%s: no results header:\n%s", tc.name, r.text())
+		}
+		for _, w := range tc.want {
+			if !r.has(w) {
+				t.Errorf("%s: %q not shown:\n%s", tc.name, w, r.text())
+			}
+		}
+		for _, w := range tc.notWant {
+			if r.has(w) {
+				t.Errorf("%s: %q shown:\n%s", tc.name, w, r.text())
+			}
+		}
 	}
 }
 

@@ -277,7 +277,7 @@ func runSearchMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		return u, "", nil
 	}
-	return runMsgSearchResults(c, q, hits, full || stopped)
+	return runMsgSearchResults(c, q, hits, full, stopped)
 }
 
 // msgSearchPageSize is how many results fit on one page of a screen with
@@ -294,10 +294,10 @@ func msgSearchPageSize(height int) int {
 
 // runMsgSearchResults shows hits a page at a time. The caller types a
 // result's number to read it, Enter or N for the next page (the last page
-// stays put), P for the previous one, and Q or Esc to leave. partial is set
-// when the search was stopped or capped, so the header says the list may be
-// incomplete.
-func runMsgSearchResults(c *cmdCtx, q *msgsearch.Query, hits []msgSearchHit, partial bool) (*user.User, string, error) {
+// stays put), P for the previous one, and Q or Esc to leave. full is set
+// when the search hit msgSearchMaxResults and stopped when the caller ended
+// it early, so a line under the header says the list is incomplete and why.
+func runMsgSearchResults(c *cmdCtx, q *msgsearch.Query, hits []msgSearchHit, full, stopped bool) (*user.User, string, error) {
 	e, terminal, outputMode, u := c.e, c.terminal, c.outputMode, c.currentUser
 	str := e.Strings()
 	ih := getSessionIH(c.s)
@@ -311,8 +311,11 @@ func runMsgSearchResults(c *cmdCtx, q *msgsearch.Query, hits []msgSearchHit, par
 	for {
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 		e.writeStringf(terminal, outputMode, str.MsgSearchHeader, callerText(q.String()), len(hits))
-		if partial {
+		switch {
+		case full:
 			e.writeStringf(terminal, outputMode, str.MsgSearchPartial, len(hits))
+		case stopped:
+			e.writeStringf(terminal, outputMode, str.MsgSearchStoppedPartial, len(hits))
 		}
 		e.writeString(terminal, outputMode, str.MsgSearchColumns)
 		start := page * perPage

@@ -512,7 +512,10 @@ ACS), deleted messages, private mail that isn't theirs and posts by
 authors on their [Twit List](messages/twit-list.md); none of those are
 counted. Esc or Ctrl-C stops a long search and shows what it found so
 far, and a caller hanging up stops it too; anything else typed meanwhile is
-kept for the results prompt. At most 500 matches are listed.
+kept for the results prompt. At most 500 matches are listed. A line under
+the results header says when the list is incomplete: `msgSearchPartial`
+when the search reached 500 matches, `msgSearchStoppedPartial` when the
+caller stopped it.
 
 Results show the conference and area, message number, subject, sender and
 date, a page at a time: type a result's number to read it, Enter or `N` for
