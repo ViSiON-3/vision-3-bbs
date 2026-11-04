@@ -122,6 +122,8 @@ else if (a.indexOf("silent") < 0) { v3.prompt.answer(); }`
 		"LOCKED":  {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, MinAccessLevel: 200},
 		"FLAGGED": {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, ACS: "FG"},
 		"TIMED":   {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, ACS: "T30"},
+		"NOTQ":    {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, ACS: "!Q"},
+		"BROKEN":  {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, ACS: "S10&"},
 		"GONE":    {Type: "v3_script", Script: "gone.js", WorkingDirectory: scripts},
 		"DIR":     {Type: "v3_script", Script: ".", WorkingDirectory: scripts},
 	})
@@ -227,6 +229,9 @@ func TestWriteStringScript(t *testing.T) {
 		{"not a script door", "!native", nil},
 		{"below the door's access level", "!locked", nil},
 		{"fails the door's acs", "!flagged", nil},
+		// strict door acs: !Q and a malformed string pass no one, sysops included
+		{"door acs negates an unknown term", "!notq", func(f *stringHookFixture) { f.bbs.User.AccessLevel = 255 }},
+		{"door acs is malformed", "!broken", func(f *stringHookFixture) { f.bbs.User.AccessLevel = 255 }},
 		{"script file missing", "!gone", nil},
 		{"script path is a directory", "!dir", nil},
 		{"before login", "!say", func(f *stringHookFixture) { f.bbs.User = nil }},

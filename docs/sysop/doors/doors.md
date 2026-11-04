@@ -104,7 +104,9 @@ A door has two rules of its own, and a caller must pass both to list it, see its
 - **Min Access Level** (`min_access_level`): the lowest access level allowed. `0` (default) is no restriction.
 - **ACS** (`acs`): an [Access Control String](reference/acs.md), such as `fG` (flag G) or `s20&Y18:00/23:59` (level 20 and up, in the evening). Blank (default), or only spaces, adds no restriction.
 
-They combine with AND. A blank or `*` ACS never lifts the minimum level, and neither rule has a sysop exception: a sysop the rules exclude is excluded like anyone else (use `SYSOP` in the ACS to let sysops in). An ACS string that is malformed denies, as it does everywhere else.
+They combine with AND. A blank or `*` ACS never lifts the minimum level, and neither rule has a sysop exception: a sysop the rules exclude is excluded like anyone else (use `SYSOP` in the ACS to let sysops in).
+
+A door's ACS is held to a stricter rule than other ACS strings: it must read cleanly, or the door is denied to everyone, sysops included. Anything `vision3 doctor` reports for it denies the door, not only a string that can't be read as a whole (`S20&`, `(S20`) but also a term that is always false (an unknown letter such as `Q`, or a bad argument such as `H25`) and an ignored character (`S<20`). So `!Q`, which passes everyone on a menu command, passes no one on a door. The config editor refuses such a string in the door's **ACS** field and says which column is wrong, and `vision3 doctor` and the startup check report one in `doors.json` as a failure; see [Checking your strings](reference/acs.md#checking-your-strings).
 
 A caller who fails either rule sees "access denied", and the door's details are not shown. `DOORINFO` never shows the ACS itself, even to a caller who passes it, since it can name flags or a time window. Doors a caller fails are left out of `LISTDOORS` and the [generated door menu](doors/generated-menu.md). The rules are checked again when the door is launched, before any dropfile is written or anything is started, so a door listed a moment earlier is refused if a flag was taken away or an ACS time window closed in between.
 
@@ -327,7 +329,7 @@ These fields apply to every door type unless the table says otherwise.
 | `dropfile_case` | string | `upper` | `upper` (`DOOR32.SYS`) or `lower` (`door32.sys`). Native doors only |
 | `dropfile_hide_personal` | bool | `false` | Leave the user's real name, location and IP address out of `DROPFILE.INI`. See [DROPFILE.INI](#dropfileini) |
 | `min_access_level` | int | `0` | Minimum user access level required (0 = no restriction) |
-| `acs` | string | blank | ACS string the caller must also pass (blank = no further restriction). See [Access Control](#access-control) |
+| `acs` | string | blank | ACS string the caller must also pass (blank = no further restriction). One that doesn't read cleanly denies the door to everyone. See [Access Control](#access-control) |
 | `single_instance` | bool | `false` | Only allow one node to run this door at a time |
 | `cleanup_command` | string | blank | Program to run after the door exits. Native and DOS doors |
 | `cleanup_args` | []string | none | Arguments for the cleanup program (supports placeholders) |

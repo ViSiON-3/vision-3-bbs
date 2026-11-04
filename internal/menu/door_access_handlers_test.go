@@ -68,6 +68,7 @@ func TestDoorACSDirectLaunch(t *testing.T) {
 		"BOTH":   f.door("BOTH", 10, "FG", false, ""),
 		"HIDDEN": f.door("HIDDEN", 0, "FG", true, ""),
 		"BADACS": f.door("BADACS", 0, "S10&", false, ""),
+		"NOTQ":   f.door("NOTQ", 0, "!Q", false, ""),
 	})
 	door := env.e.RunRegistry["DOOR:"]
 	flagged := withFlags(env.caller, "G")
@@ -87,6 +88,9 @@ func TestDoorACSDirectLaunch(t *testing.T) {
 		{"hidden but allowed still launches", "HIDDEN", flagged, true},
 		{"hidden and not allowed", "HIDDEN", env.caller, false},
 		{"malformed acs denies", "BADACS", env.sysop, false},
+		// strict: an unknown term negated does not pass
+		{"!Q denies the caller", "NOTQ", flagged, false},
+		{"!Q denies a sysop", "NOTQ", env.sysop, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f.reset(t)
@@ -154,6 +158,8 @@ func TestDoorACSListOpenInfo(t *testing.T) {
 		"OPEN":  f.door("OPEN", 0, "", false, ""),
 		"FLAG":  f.door("FLAG", 0, "FG", false, ""),
 		"OTHER": f.door("OTHER", 0, "FX", false, ""),
+		"NOTQ":  f.door("NOTQ", 0, "!Q", false, ""),
+		"BROKE": f.door("BROKE", 0, "S10&", false, ""),
 	})
 	flagged := withFlags(env.caller, "G")
 
@@ -166,6 +172,11 @@ func TestDoorACSListOpenInfo(t *testing.T) {
 		if !r.has("FLAG") || r.has("OTHER") {
 			t.Errorf("caller with flag G:\n%s", r.text())
 		}
+		// strict door acs: !Q and a malformed string list for no one
+		r = env.sub(t).runCmd("LISTDOORS", env.sysop, "", "")
+		if r.has("NOTQ") || r.has("BROKE") || !r.has("OPEN") {
+			t.Errorf("sysop, strict door acs:\n%s", r.text())
+		}
 	})
 
 	t.Run("DOORINFO", func(t *testing.T) {
@@ -176,6 +187,12 @@ func TestDoorACSListOpenInfo(t *testing.T) {
 		r = env.sub(t).runCmd("DOORINFO", flagged, "", "flag\r")
 		if !r.has("Door: FLAG") || r.has("FG") {
 			t.Errorf("allowed caller:\n%s", r.text())
+		}
+		for _, code := range []string{"notq", "broke"} {
+			r = env.sub(t).runCmd("DOORINFO", env.sysop, "", code+"\r")
+			if !r.has("Access denied") || r.has("Door: "+strings.ToUpper(code)) {
+				t.Errorf("sysop, strict door acs (%s):\n%s", code, r.text())
+			}
 		}
 	})
 
@@ -193,6 +210,15 @@ func TestDoorACSListOpenInfo(t *testing.T) {
 		doorcovRun(env.sub(t), s, runOpenDoor, flagged, "")
 		if !f.ran() {
 			t.Error("OPENDOOR refused a door the caller passes")
+		}
+		for _, code := range []string{"notq", "broke"} {
+			f.reset(t)
+			s = newDoorcovSession()
+			s.send(code + "\rq\r")
+			r = doorcovRun(env.sub(t), s, runOpenDoor, env.sysop, "")
+			if f.ran() || f.dropfile() || !r.has("Access denied") {
+				t.Errorf("OPENDOOR, strict door acs (%s), ran=%v:\n%s", code, f.ran(), r.text())
+			}
 		}
 	})
 }

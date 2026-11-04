@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -49,5 +50,42 @@ func TestDoorACSField(t *testing.T) {
 				t.Errorf("ACS after blank = %q, want empty", got)
 			}
 		})
+	}
+}
+
+// The ACS field refuses what the BBS would deny to everyone, as Min Access
+// Level refuses a non-number: a malformed string, and any term acs.Validate
+// reports, negated or not. The door keeps its previous acs; blank is allowed.
+func TestDoorACSFieldRejectsInvalid(t *testing.T) {
+	d := config.DoorConfig{Code: "LORD", Name: "LORD", ACS: "s20"}
+	m := newDoorModel(map[string]config.DoorConfig{d.Code: d})
+	m.recordEditIdx = 0
+	var fld *fieldDef
+	fields := m.buildRecordFields()
+	for i := range fields {
+		if fields[i].Label == "ACS" {
+			fld = &fields[i]
+		}
+	}
+	if fld == nil {
+		t.Fatal("no ACS field")
+	}
+	for _, bad := range []string{"S20&", "(s20", "s20 fA", "!Q", "fG|!Q", "H25", "s20@"} {
+		err := fld.Set(bad)
+		if err == nil {
+			t.Errorf("Set(%q) accepted", bad)
+			continue
+		}
+		if !strings.Contains(err.Error(), "column") {
+			t.Errorf("Set(%q) error %q does not say where", bad, err)
+		}
+		if got := m.configs.Doors[d.Code].ACS; got != "s20" {
+			t.Errorf("after Set(%q), ACS = %q, want s20 kept", bad, got)
+		}
+	}
+	for _, good := range []string{"", "   ", "*", "s50&!fX", "SYSOP|(s20&fG)"} {
+		if err := fld.Set(good); err != nil {
+			t.Errorf("Set(%q): %v", good, err)
+		}
 	}
 }

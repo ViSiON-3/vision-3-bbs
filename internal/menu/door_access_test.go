@@ -38,6 +38,14 @@ func TestDoorAllowed(t *testing.T) {
 		{"sysop passing", config.DoorConfig{ACS: "SYSOP"}, sysop, true},
 		// a malformed acs denies, as everywhere else
 		{"malformed acs", config.DoorConfig{ACS: "S20&"}, caller, false},
+		{"malformed acs, sysop", config.DoorConfig{ACS: "S20&"}, sysop, false},
+		// strict: a term Validate reports denies the door, even negated,
+		// where elsewhere !Q (Q is no ACS letter) passes everyone
+		{"negated unknown term", config.DoorConfig{ACS: "!Q"}, caller, false},
+		{"negated unknown term, sysop", config.DoorConfig{ACS: "!Q"}, sysop, false},
+		{"negated unknown term in an or", config.DoorConfig{ACS: "FG|!Q"}, caller, false},
+		{"bad argument", config.DoorConfig{ACS: "H25"}, caller, false},
+		{"dropped character", config.DoorConfig{ACS: "S20@"}, caller, false},
 		{"not logged in", config.DoorConfig{}, nil, false},
 		// a blank acs is no rule, however much whitespace it holds
 		{"whitespace acs is no rule", config.DoorConfig{ACS: " \t "}, caller, true},
@@ -64,6 +72,8 @@ func TestDoorMenuEntriesDoorACS(t *testing.T) {
 		"HIDDEN": {Code: "HIDDEN", Name: "Hidden", Category: "GAMES", ACS: "FG", Hidden: true},
 		"VIP":    {Code: "VIP", Name: "VIP", Category: "VIP"},
 		"BLANK":  {Code: "BLANK", Name: "Blank", Category: "GAMES", ACS: "  "},
+		"NOTQ":   {Code: "NOTQ", Name: "Not Q", Category: "GAMES", ACS: "!Q"},
+		"BROKEN": {Code: "BROKEN", Name: "Broken", Category: "GAMES", ACS: "S10&"},
 	}
 	cfg := config.ServerConfig{DoorCategories: []config.DoorCategory{
 		{Code: "GAMES", Name: "Games"},
@@ -75,7 +85,7 @@ func TestDoorMenuEntriesDoorACS(t *testing.T) {
 	got := doorMenuCodes(buildDoorMenuEntries(doors, cfg, "GAMES", caller.AccessLevel, allows, "Other"))
 	want := []string{"BLANK", "FLAG", "OPEN"}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("GAMES lists %v, want %v (door acs, level and hidden applied)", got, want)
+		t.Errorf("GAMES lists %v, want %v (door acs, strict rule, level and hidden applied)", got, want)
 	}
 	// a category the caller fails is left out of the menu, door and all
 	if got := doorMenuCodes(buildDoorMenuEntries(doors, cfg, "", caller.AccessLevel, allows, "Other")); len(got) != 1 || got[0] != "GAMES" {
@@ -84,26 +94,54 @@ func TestDoorMenuEntriesDoorACS(t *testing.T) {
 }
 
 // The generated menu evaluates each door's ACS once while the caller pages
-// through it, so a malformed string is logged once, not on every redraw.
+// through it, not on every redraw.
 func TestDoorMenuEvaluatesACSOncePerVisit(t *testing.T) {
-	c, s, _ := doorMenuHarness(t, "list", "][][q", 100)
+	c, _, _ := doorMenuHarness(t, "list", "][][q", 100)
 	doors := c.e.DoorRegistry()
 	d := doors["D50"]
-	d.ACS = "S10&"
+	d.ACS = "S5"
 	doors["D50"] = d
 	c.e.SetDoorRegistry(doors)
 	var logged strings.Builder
-	restore := captureSlog(&logged, &slog.HandlerOptions{Level: slog.LevelError})
+	restore := captureSlog(&logged, &slog.HandlerOptions{Level: slog.LevelDebug})
 	_, _, err := runDoorMenu(c, "")
 	restore()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := strings.Count(logged.String(), "S10&"); n != 1 {
-		t.Errorf("malformed acs logged %d times over five redraws, want 1:\n%s", n, logged.String())
+	n := 0
+	for _, line := range strings.Split(logged.String(), "\n") {
+		if strings.Contains(line, "checking ACS") && strings.Contains(line, "acs=S5 ") {
+			n++
+		}
 	}
-	if strings.Contains(s.output(), "Door D50") {
-		t.Error("door with a malformed acs listed")
+	if n != 1 {
+		t.Errorf("acs evaluated %d times over five redraws, want 1:\n%s", n, logged.String())
+	}
+}
+
+// The generated menu leaves out a door whose acs the strict rule rejects, a
+// negated unknown term (!Q) or a malformed string, even for a sysop: the
+// first entry is the door after it.
+func TestDoorMenuStrictDoorACS(t *testing.T) {
+	for _, rule := range []string{"!Q", "S10&"} {
+		t.Run(rule, func(t *testing.T) {
+			c, s, calls := doorMenuHarness(t, "list", "1\rq", 0)
+			c.currentUser.AccessLevel = 255
+			c.e.SetDoorRegistry(map[string]config.DoorConfig{
+				"BAD":  {Code: "BAD", Name: "Door BAD", ACS: rule},
+				"GOOD": {Code: "GOOD", Name: "Door GOOD", ACS: "S10"},
+			})
+			if _, _, err := runDoorMenu(c, ""); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(s.output(), "Door BAD") {
+				t.Errorf("door with acs %q listed", rule)
+			}
+			if want := []string{"GOOD"}; !reflect.DeepEqual(*calls, want) {
+				t.Errorf("launched %v, want %v", *calls, want)
+			}
+		})
 	}
 }
 

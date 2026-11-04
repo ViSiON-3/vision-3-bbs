@@ -17,7 +17,7 @@ The examples on this page are checked by `internal/menu/acs_reference_test.go`.
 | Message areas | `acs_read`, `acs_write` in `message_areas.json` |
 | File areas | `acs_list`, `acs_upload`, `acs_download` in `file_areas.json` |
 | Conferences | `acs` in `conferences.json` |
-| Doors | `acs` in `doors.json`, together with `min_access_level` |
+| Doors | `acs` in `doors.json`, together with `min_access_level`; held to the [strict rule](#doors-the-strict-rule) |
 | Door categories | `acs` in `doorCategories` (config.json) |
 | Menu art | `{{acs}}...{{/}}` [conditional regions](menus/menu-system.md#conditional-regions-acs) |
 | QWK | `acs_write` gates each reply in an uploaded REP packet |
@@ -154,7 +154,8 @@ The parser is lenient, and some mistakes don't do what they look like:
 A term that fails because it is malformed (an unknown letter, a bad
 argument, a session term with no session) is false like any other failing
 term, and `!` turns false into true. `!Q`, `!Sx` and, without a session,
-`!L` all pass. Write negated terms carefully.
+`!L` all pass. Write negated terms carefully. A door's `acs` is the
+exception: see [Doors: the strict rule](#doors-the-strict-rule).
 
 A string that fails as a whole (the cases in [Syntax](#syntax) above)
 fails outright: `!` can't rescue it.
@@ -164,12 +165,21 @@ them, and once when the board starts; see
 [Checking your strings](#checking-your-strings). An ignored character is
 logged at `WARN` the first time a caller's check reads the string.
 
+### Doors: the strict rule
+
+A door's `acs` in `doors.json` must read cleanly. Anything `vision3 doctor`
+reports for it, a failure or a warning, denies the door to every caller,
+sysops included: `!Q`, `S20&`, `H25` and `S<20` all lock the door. A blank
+or all-space `acs` is no rule. The config editor refuses such a string in a
+door's **ACS** field, naming the column, and doctor reports it as a
+**FAIL**. Every other ACS string keeps the lenient behaviour above.
+
 ## Checking your strings
 
 `vision3 doctor` checks every ACS string the board declares, including menus
 no caller has opened yet. Its **Access control** section names the file, the
-record (menu, command, area, conference), the field and the column of each
-problem:
+record (menu, command, area, conference, door), the field and the column of
+each problem:
 
 ```text
 [FAIL]  ACS: menus/v3/cfg/MAIN.CFG  command 2 ("X"), ACS "S255&": column 5: '&' needs a term on each side
@@ -177,7 +187,9 @@ problem:
 ```
 
 - **FAIL** (doctor exits 2): the string can't be read as a whole (see
-  [Syntax](#syntax)), so it denies every caller.
+  [Syntax](#syntax)), so it denies every caller; or it is a door's `acs`
+  with any problem at all, which denies the door to every caller (see
+  [Doors: the strict rule](#doors-the-strict-rule)).
 - **WARN** (doctor exits 1): the string works, but not as it reads — a term
   that is always false (an unknown letter or a bad argument), or a character
   that is ignored. A future, stricter ACS check will change what these

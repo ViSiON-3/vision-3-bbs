@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
@@ -17,6 +18,17 @@ const (
 	doorTextWidth  = 48
 	doorTextMaxLen = 1024
 )
+
+// doorACSError rejects a door acs the BBS would deny to everyone: one that
+// acs.Validate reports anything for, an error or a warning, since a door's
+// acs is held to the strict rule. It names the first problem. Blank is no
+// rule and is accepted.
+func doorACSError(rule string) error {
+	if diags := acs.Validate(rule); len(diags) > 0 {
+		return fmt.Errorf("ACS %s", diags[0])
+	}
+	return nil
+}
 
 // sliceToCSV joins a string slice with ", " for display.
 func sliceToCSV(s []string) string {
@@ -586,7 +598,15 @@ func (m *Model) fieldsDoor() []fieldDef {
 	fields = append(fields, fieldDef{
 		Label: "ACS", Help: "Access string the caller must also pass, with Min Access Level (blank=none)", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
 		Get: func() string { return dPtr.ACS },
-		Set: func(val string) error { dPtr.ACS = strings.TrimSpace(val); save(); return nil },
+		Set: func(val string) error {
+			val = strings.TrimSpace(val)
+			if err := doorACSError(val); err != nil {
+				return err
+			}
+			dPtr.ACS = val
+			save()
+			return nil
+		},
 	})
 
 	row++

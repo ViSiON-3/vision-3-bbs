@@ -119,9 +119,11 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 	allows := func(acs string) bool { return checkACS(acs, c.currentUser, c.s, c.terminal, c.sessionStartTime) }
 	// The listing evaluates each distinct door and category ACS once and
 	// reuses the answer across redraws, page changes and selections, so a
-	// malformed string is parsed and logged once, not on every keypress. The
-	// answers are dropped after each door, which may change the caller's
-	// record; the DOOR handler checks a launch afresh either way.
+	// string is parsed and logged once, not on every keypress. A door acs
+	// that doesn't read cleanly is never evaluated: doorRulesPass denies it
+	// first, here as at launch. The answers are dropped after each door,
+	// which may change the caller's record; the DOOR handler checks a launch
+	// afresh either way.
 	listed := map[string]bool{}
 	listAllows := func(acs string) bool {
 		ok, seen := listed[acs]
