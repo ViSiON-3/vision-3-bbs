@@ -202,7 +202,7 @@ func runListDoors(c *cmdCtx, args string) (*user.User, string, error) {
 		doorCfg := doorRegistryCopy[code]
 
 		// Filter out doors the user doesn't have access to
-		if doorCfg.MinAccessLevel > 0 && currentUser.AccessLevel < doorCfg.MinAccessLevel {
+		if !doorAllowed(doorCfg, currentUser, c.s, terminal, c.sessionStartTime) {
 			continue
 		}
 
@@ -291,10 +291,9 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 
-		// Check per-door access level
-		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
-			slog.Warn("user denied access to door",
-				"node", nodeNumber, "handle", currentUser.Handle, "level", currentUser.AccessLevel, "door", upperInput, "required", doorConfig.MinAccessLevel)
+		// The door's own rules (min_access_level and acs)
+		if !doorAllowed(doorConfig, currentUser, s, terminal, sessionStartTime) {
+			logDoorDenied("user denied access to door", nodeNumber, currentUser, upperInput, doorConfig)
 			e.writeStringf(terminal, outputMode, e.Strings().DoorAccessDenied, upperInput)
 			uiPause(1 * time.Second)
 			e.writeString(terminal, outputMode, e.Strings().DoorPrompt)
@@ -407,10 +406,9 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 			continue
 		}
 
-		// Check per-door access level
-		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
-			slog.Warn("user denied access to door info",
-				"node", nodeNumber, "handle", currentUser.Handle, "level", currentUser.AccessLevel, "door", upperInput, "required", doorConfig.MinAccessLevel)
+		// The door's own rules (min_access_level and acs)
+		if !doorAllowed(doorConfig, currentUser, s, terminal, sessionStartTime) {
+			logDoorDenied("user denied access to door info", nodeNumber, currentUser, upperInput, doorConfig)
 			e.writeStringf(terminal, outputMode, e.Strings().DoorAccessDenied, upperInput)
 			uiPause(1 * time.Second)
 			e.writeString(terminal, outputMode, e.Strings().DoorPrompt)
@@ -459,6 +457,9 @@ func runDoorInfo(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		if doorConfig.MinAccessLevel > 0 {
 			info += fmt.Sprintf("|15Min Access: |07%d\r\n", doorConfig.MinAccessLevel)
+		}
+		if doorConfig.ACS != "" {
+			info += fmt.Sprintf("|15ACS: |07%s\r\n", doorConfig.ACS)
 		}
 		if doorConfig.SingleInstance {
 			info += "|15Single Instance: |07Yes\r\n"

@@ -863,7 +863,9 @@ records, written by the Configuration Editor. Every key, its type and default
 is in the [Door Programs Technical Reference](doors/doors.md#technical-reference),
 with the dropfile formats, placeholders and environment variables. The `type`
 key is `synchronet_js`, `v3_script`, `rlogin`, `telnet`, or blank for a native
-door (`"is_dos": true` for DOS). The generated door menu adds `category`,
+door (`"is_dos": true` for DOS). Who may use a door is set by
+`min_access_level` and `acs`, which must both pass; see
+[Access Control](doors/doors.md#access-control). The generated door menu adds `category`,
 `description`, `hidden` and `sort_order`; see
 [Generated door menus](doors/generated-menu.md). The `code` of a `v3_script`
 door is also what a `strings.json` value names after `!` to run it in place of

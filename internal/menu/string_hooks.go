@@ -299,11 +299,11 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 		warnStringHookOnce(value, "script file not found", "door", name, "script", doorConfig.Script)
 		return false, answer, nil
 	}
-	if doorConfig.MinAccessLevel > 0 && u.AccessLevel < doorConfig.MinAccessLevel {
+	if !doorAllowed(doorConfig, u, hs.s, terminal, hs.bbs.StartTime) {
 		// Expected for a string shown to every caller but scripted only for
 		// some, so not a warning.
-		slog.Debug("string script below caller's access level, printed as text",
-			"door", name, "level", u.AccessLevel, "required", doorConfig.MinAccessLevel)
+		slog.Debug("string script door not allowed for caller, printed as text",
+			"door", name, "level", u.AccessLevel, "required", doorConfig.MinAccessLevel, "acs", doorConfig.ACS)
 		return false, answer, nil
 	}
 	if !hs.running.CompareAndSwap(false, true) {

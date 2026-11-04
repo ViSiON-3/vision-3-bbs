@@ -53,7 +53,7 @@ See [Menus & ACS](menus/menu-system.md) for the menu editor and the overlay.
 
 **Two callers cannot play at once, or save files get corrupted.** Set **Single Instance** to Yes for the door. The second caller sees a "door is in use" message instead.
 
-**The door works for you but not for callers.** Check the menu command's **ACS** and the door's **Min Access Level**. Doors above a caller's level are hidden from door lists and refuse to start. Time limits are another difference: CoSysOps and above are never timed out of a door, while a caller whose time runs out inside one is logged off.
+**The door works for you but not for callers.** Check the menu command's **ACS** and the door's own **Min Access Level** and **ACS**. Doors a caller fails are hidden from door lists and refuse to start, for sysops too. Time limits are another difference: CoSysOps and above are never timed out of a door, while a caller whose time runs out inside one is logged off.
 
 **The door quits straight back to the menu with no message.** A native door that exits with an error status is not reported to the caller; the BBS treats it as a normal exit and logs a warning in `data/logs/vision3.log`. Look there for the exit status, then run the door by hand from its directory with the same arguments.
 

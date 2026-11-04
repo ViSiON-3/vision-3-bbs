@@ -295,8 +295,8 @@ editor and the startup check apply these rules.
 
 **When it prints as text.** The value is printed as written, and logged once, when the door does not
 exist, is not a `v3_script` door, is busy, or the file is missing. It is also printed as text, without
-a log entry, before the caller has logged in, and when the caller's access level is below the door's
-`min_access_level`. A `!` value met while another string's script is running prints as text too.
+a log entry, before the caller has logged in, and when the caller fails the door's `min_access_level`
+or `acs`. A `!` value met while another string's script is running prints as text too.
 
 A file name needs an extension, so formatted strings such as `%d of %d` are never mistaken for a
 file. Put a colour code before a leading `!` (`|12!Warning`) rather than after it: `!|` is the

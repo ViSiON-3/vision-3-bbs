@@ -42,9 +42,14 @@ Run `./config`. Three places matter:
 
 A door has one category. Doors without a category, or referencing an unknown
 one, appear under **Other**. Inaccessible doors and categories are omitted, as
-are empty categories. **Hidden** hides a door only from the generated picker;
-explicit `DOOR:CODE` commands still work. Category access governs this picker,
-while the normal per-door minimum access still governs direct launches.
+are empty categories. A door is inaccessible when the caller fails its own
+**Min Access Level** or **ACS** ([Access Control](doors/doors.md#access-control)).
+**Hidden** hides a door only from the generated picker; it is not an access
+rule, and an explicit `DOOR:CODE` command still runs a hidden door for a
+caller who passes its rules. Category access (**Min Access Level** and
+**ACS** on the category) governs this picker only: a door in a category the
+caller can't see still runs from a `DOOR:CODE` command when its own rules
+pass. Launches always check the door's own rules.
 
 No restart is needed. The board checks `config.json` and `doors.json` every
 couple of seconds and reloads them, even with callers online, and the menu

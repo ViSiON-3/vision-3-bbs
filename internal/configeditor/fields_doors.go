@@ -584,6 +584,13 @@ func (m *Model) fieldsDoor() []fieldDef {
 
 	row++
 	fields = append(fields, fieldDef{
+		Label: "ACS", Help: "Access string the caller must also pass, with Min Access Level (blank=none)", Type: ftString, Col: 3, Row: row, Width: doorTextWidth, MaxLen: doorTextMaxLen,
+		Get: func() string { return dPtr.ACS },
+		Set: func(val string) error { dPtr.ACS = strings.TrimSpace(val); save(); return nil },
+	})
+
+	row++
+	fields = append(fields, fieldDef{
 		Label: "Single Instance", Help: "Only allow one node to run this door at a time", Type: ftYesNo, Col: 3, Row: row, Width: 1,
 		Get: func() string { return uitext.BoolToYN(dPtr.SingleInstance) },
 		Set: func(val string) error { dPtr.SingleInstance = uitext.YNToBool(val); save(); return nil },

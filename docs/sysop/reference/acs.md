@@ -17,11 +17,10 @@ The examples on this page are checked by `internal/menu/acs_reference_test.go`.
 | Message areas | `acs_read`, `acs_write` in `message_areas.json` |
 | File areas | `acs_list`, `acs_upload`, `acs_download` in `file_areas.json` |
 | Conferences | `acs` in `conferences.json` |
+| Doors | `acs` in `doors.json`, together with `min_access_level` |
 | Door categories | `acs` in `doorCategories` (config.json) |
 | Menu art | `{{acs}}...{{/}}` [conditional regions](menus/menu-system.md#conditional-regions-acs) |
 | QWK | `acs_write` gates each reply in an uploaded REP packet |
-
-Doors themselves are gated by `min_access_level`, not an ACS string.
 
 Some of these checks run without a caller's session: the default message and
 file area chosen at login, replies uploaded through the QWK API, and

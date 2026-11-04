@@ -114,12 +114,13 @@ else if (a.indexOf("silent") < 0) { v3.prompt.answer(); }`
 	e.SetStrings(config.StringsConfig{ExecFileLoadError: "Cannot load %s"})
 	e.SetServerConfig(config.ServerConfig{CoSysOpLevel: 250})
 	e.SetDoorRegistry(map[string]config.DoorConfig{
-		"SAY":    {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, Args: []string{"door"}},
-		"ANSWER": {Type: "v3_script", Script: "answer.js", WorkingDirectory: scripts},
-		"NATIVE": {Commands: []string{"/bin/true"}},
-		"LOCKED": {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, MinAccessLevel: 200},
-		"GONE":   {Type: "v3_script", Script: "gone.js", WorkingDirectory: scripts},
-		"DIR":    {Type: "v3_script", Script: ".", WorkingDirectory: scripts},
+		"SAY":     {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, Args: []string{"door"}},
+		"ANSWER":  {Type: "v3_script", Script: "answer.js", WorkingDirectory: scripts},
+		"NATIVE":  {Commands: []string{"/bin/true"}},
+		"LOCKED":  {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, MinAccessLevel: 200},
+		"FLAGGED": {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, ACS: "FG"},
+		"GONE":    {Type: "v3_script", Script: "gone.js", WorkingDirectory: scripts},
+		"DIR":     {Type: "v3_script", Script: ".", WorkingDirectory: scripts},
 	})
 
 	ds := newDoorcovSession()
@@ -219,6 +220,7 @@ func TestWriteStringScript(t *testing.T) {
 		{"no such door", "!missing", nil},
 		{"not a script door", "!native", nil},
 		{"below the door's access level", "!locked", nil},
+		{"fails the door's acs", "!flagged", nil},
 		{"script file missing", "!gone", nil},
 		{"script path is a directory", "!dir", nil},
 		{"before login", "!say", func(f *stringHookFixture) { f.bbs.User = nil }},
@@ -234,6 +236,15 @@ func TestWriteStringScript(t *testing.T) {
 			}
 		})
 	}
+
+	// A door's acs applies to its string scripts as it does to launches.
+	t.Run("passes the door's acs", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		f.bbs.User.Flags = "G"
+		if out := f.write(t, "!flagged"); !strings.Contains(out, "[script") {
+			t.Errorf("output = %q", out)
+		}
+	})
 
 	// Hooks are read from the configured value before formatting, so text a
 	// caller typed and the BBS formats into a string can never start one.

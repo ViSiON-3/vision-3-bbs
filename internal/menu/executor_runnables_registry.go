@@ -88,9 +88,11 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 			return nil, "", nil
 		}
 
-		// Check per-door access level
-		if doorConfig.MinAccessLevel > 0 && currentUser.AccessLevel < doorConfig.MinAccessLevel {
-			slog.Warn("user denied access to door", "node", nodeNumber, "handle", currentUser.Handle, "level", currentUser.AccessLevel, "door", doorName, "requires", doorConfig.MinAccessLevel)
+		// The door's own rules (min_access_level and acs), checked here at
+		// launch whatever listed the door: the generated menu, a menu
+		// command or a typed DOOR:CODE.
+		if !doorAllowed(doorConfig, currentUser, s, terminal, sessionStartTime) {
+			logDoorDenied("user denied access to door", nodeNumber, currentUser, doorName, doorConfig)
 			errFmt := e.Strings().DoorAccessDenied
 			if strings.TrimSpace(errFmt) == "" {
 				errFmt = "\r\n|14Access denied to door: |11%s|07\r\n"

@@ -239,7 +239,7 @@ The BBS log records the address of every remote door connection. The handshake f
 
 ## Technical Reference
 
-A remote door is one record in `configs/doors.json`, like any other door; the keys shared by every door type (`code`, `name`, `min_access_level`, `single_instance` and the generated-menu fields) are in the [Door Programs reference](doors/doors.md#doorsjson). `commands`, the dropfile keys and `environment_variables` are not used by a remote door.
+A remote door is one record in `configs/doors.json`, like any other door; the keys shared by every door type (`code`, `name`, `min_access_level`, `acs`, `single_instance` and the generated-menu fields) are in the [Door Programs reference](doors/doors.md#doorsjson). `commands`, the dropfile keys and `environment_variables` are not used by a remote door.
 
 ### doors.json keys
 
