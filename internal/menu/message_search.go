@@ -23,7 +23,7 @@ import (
 //
 // Searching and listing results never touch newscan tags or last-read
 // pointers. Opening a result runs the ordinary message reader on that
-// area, restricted to the messages that match; the area's last-read
+// area, stepping only between the messages that match; the area's last-read
 // pointer is put back when the reader returns, so a search never changes
 // what the next newscan shows.
 
@@ -107,27 +107,31 @@ func msgSearchAreas(c *cmdCtx, scope msgSearchScope) []*message.MessageArea {
 	return out
 }
 
-// msgSearchVisible is the filter a search applies to each message before
+// msgSearchFilters are the filters a search applies to each message before
 // matching it: not deleted, and visible to the caller under the same
 // private-mail and twit rules the reader and the message list use. A
-// message it rejects is never matched, listed or counted.
-func msgSearchVisible(c *cmdCtx) msgOwnershipFilter {
-	base := withPrivacy(privateMailReaderFor(c.e, c.userManager, c.currentUser), nil)
-	matcher := twitMatcher(c.e, c.userManager, c.currentUser)
-	visible := withTwit(func() *user.TwitMatcher { return matcher }, base, nil)
-	return func(m *message.DisplayMessage) bool {
-		return !m.IsDeleted && visible(m)
+// message they reject is never matched, listed or counted. header is the
+// part a message's header decides (deleted, private mail), so the search
+// can skip reading the body of a message it rejects; visible is all of it.
+func msgSearchFilters(c *cmdCtx) (header, visible msgOwnershipFilter) {
+	private := withPrivacy(privateMailReaderFor(c.e, c.userManager, c.currentUser), nil)
+	header = func(m *message.DisplayMessage) bool {
+		return !m.IsDeleted && private(m)
 	}
+	matcher := twitMatcher(c.e, c.userManager, c.currentUser)
+	return header, withTwit(func() *user.TwitMatcher { return matcher }, header, nil)
 }
 
 // searchMessages finds the messages in areas that visible accepts and q
-// matches, at most msgSearchMaxResults of them. stop is called between
-// areas and every msgSearchCheckEvery messages; when it returns true the
-// search ends with what it has. full reports that the cap was reached, and
-// stopped that stop ended it. An area whose base can't be read is logged
-// and skipped.
+// matches, at most msgSearchMaxResults of them. header sees each message
+// with only its header read first, and a message it rejects is skipped
+// without reading its body; visible must reject it too. stop is called
+// between areas and every msgSearchCheckEvery messages; when it returns
+// true the search ends with what it has. full reports that the cap was
+// reached, and stopped that stop ended it. An area whose base can't be
+// read is logged and skipped.
 func searchMessages(e *MenuExecutor, areas []*message.MessageArea, q *msgsearch.Query,
-	visible msgOwnershipFilter, stop func() bool) (hits []msgSearchHit, full, stopped bool) {
+	header, visible msgOwnershipFilter, stop func() bool) (hits []msgSearchHit, full, stopped bool) {
 	confTags := map[int]string{}
 	if e.ConferenceMgr != nil {
 		for _, conf := range e.ConferenceMgr.ListConferences() {
@@ -143,6 +147,11 @@ func searchMessages(e *MenuExecutor, areas []*message.MessageArea, q *msgsearch.
 			read++
 			if read%msgSearchCheckEvery == 0 && stop() {
 				stopped = true
+				return true // the walk ends on it below
+			}
+			return header(m)
+		}, func(m *message.DisplayMessage) bool {
+			if stopped {
 				return false
 			}
 			if !visible(m) || !q.Match(m.Subject, m.Body) {
@@ -173,17 +182,48 @@ func searchMessages(e *MenuExecutor, areas []*message.MessageArea, q *msgsearch.
 	return hits, false, false
 }
 
-// msgSearchStopKey reports whether the caller has pressed Esc or Ctrl-C to
-// stop a running search, without waiting. Anything else the caller has typed
-// is left to be read, so typing ahead (the number of a result, say) still
-// works.
+// msgSearchStopKey reports whether a running search should stop: the
+// caller has pressed Esc or Ctrl-C, or has gone (the connection closed or the
+// session ended), without waiting for a key. Anything else the caller has
+// typed is left to be read, so typing ahead (the number of a result, or an
+// arrow or PgDn, which start with an Esc) still works.
 func msgSearchStopKey(ih *editor.InputHandler) bool {
-	b, ok := ih.PendingByte(0)
-	if !ok || (b != 0x1b && b != 3) {
+	b, ok, err := ih.PendingByte(0)
+	switch {
+	case err != nil:
+		return true
+	case !ok:
+		return false
+	case b == 3:
+		_, _ = ih.ReadKey()
+		return true
+	case b != editor.KeyEsc:
 		return false
 	}
-	key, err := ih.ReadKey()
-	return err != nil || key == editor.KeyEsc || key == 3
+	// An Esc followed by [ or O is the start of a key's escape sequence,
+	// waited for as ReadKey does: give the Esc back for the results prompt.
+	if _, err := ih.ReadByteUntil(nil); err != nil {
+		return true
+	}
+	next, ok, err := ih.PendingByte(ih.EscTimeout())
+	if err == nil && ok && (next == '[' || next == 'O') {
+		ih.ReturnInput([]byte{editor.KeyEsc})
+		return false
+	}
+	return true
+}
+
+// msgSearchReadEnd is what SEARCHMSGS returns when reading the caller's
+// answer to one of its prompts fails with err: Esc leaves quietly, a
+// disconnect or idle timeout logs off, and anything else is passed up.
+func msgSearchReadEnd(u *user.User, err error) (*user.User, string, error) {
+	if errors.Is(err, errInputAborted) {
+		return u, "", nil
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, editor.ErrIdleTimeout) {
+		return nil, "LOGOFF", err
+	}
+	return u, "", err
 }
 
 // runSearchMsgs is the SEARCHMSGS runnable. args is the scope: blank or G
@@ -212,13 +252,7 @@ func runSearchMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 	e.writeString(terminal, outputMode, str.MsgSearchPrompt)
 	input, err := readScanLine(ih, terminal, outputMode, msgsearch.MaxQueryLen)
 	if err != nil {
-		if errors.Is(err, errInputAborted) {
-			return u, "", nil
-		}
-		if errors.Is(err, io.EOF) || errors.Is(err, editor.ErrIdleTimeout) {
-			return nil, "LOGOFF", err
-		}
-		return u, "", err
+		return msgSearchReadEnd(u, err)
 	}
 	if strings.TrimSpace(input) == "" {
 		return u, "", nil
@@ -231,8 +265,8 @@ func runSearchMsgs(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	e.writeString(terminal, outputMode, str.MsgSearchSearching)
-	visible := msgSearchVisible(c)
-	hits, full, stopped := searchMessages(e, areas, q, visible, func() bool { return msgSearchStopKey(ih) })
+	header, visible := msgSearchFilters(c)
+	hits, full, stopped := searchMessages(e, areas, q, header, visible, func() bool { return msgSearchStopKey(ih) })
 	slog.Debug("message search", "node", c.nodeNumber, "query", q.String(), "areas", len(areas),
 		"hits", len(hits), "full", full, "stopped", stopped)
 	if len(hits) == 0 {
@@ -259,9 +293,10 @@ func msgSearchPageSize(height int) int {
 }
 
 // runMsgSearchResults shows hits a page at a time. The caller types a
-// result's number to read it, Enter or N for the next page, P for the
-// previous one, and Q or Esc to leave. partial is set when the search was
-// stopped or capped, so the header says the list may be incomplete.
+// result's number to read it, Enter or N for the next page (the last page
+// stays put), P for the previous one, and Q or Esc to leave. partial is set
+// when the search was stopped or capped, so the header says the list may be
+// incomplete.
 func runMsgSearchResults(c *cmdCtx, q *msgsearch.Query, hits []msgSearchHit, partial bool) (*user.User, string, error) {
 	e, terminal, outputMode, u := c.e, c.terminal, c.outputMode, c.currentUser
 	str := e.Strings()
@@ -288,25 +323,15 @@ func runMsgSearchResults(c *cmdCtx, q *msgsearch.Query, hits []msgSearchHit, par
 		e.writeStringf(terminal, outputMode, str.MsgSearchPagePrompt, page+1, pages)
 		input, err := readScanLine(ih, terminal, outputMode, 4)
 		if err != nil {
-			if errors.Is(err, errInputAborted) {
-				return u, "", nil
-			}
-			if errors.Is(err, io.EOF) || errors.Is(err, editor.ErrIdleTimeout) {
-				return nil, "LOGOFF", err
-			}
-			return u, "", err
+			return msgSearchReadEnd(u, err)
 		}
 		switch strings.ToUpper(input) {
 		case "Q":
 			return u, "", nil
 		case "", "N":
-			if page+1 >= pages {
-				if input == "" {
-					return u, "", nil
-				}
-				continue
+			if page+1 < pages {
+				page++
 			}
-			page++
 			continue
 		case "P":
 			if page > 0 {
@@ -335,8 +360,11 @@ const (
 )
 
 // writeMsgSearchRow writes result n: its conference and area, message
-// number, subject, sender and date. Header text is the caller's, so it is
-// written with pipe codes escaped.
+// number, subject, sender and date. The subject and sender come from the
+// message, so as in the message list they are made inert and their pipes
+// doubled after fitting: a colour code in a subject prints as typed and
+// takes the columns it shows in, instead of recolouring and shifting the
+// rest of the row.
 func writeMsgSearchRow(terminal *term.Terminal, outputMode ansi.OutputMode, n int, h msgSearchHit) {
 	where := h.areaTag
 	if h.confTag != "" {
@@ -345,20 +373,24 @@ func writeMsgSearchRow(terminal *term.Terminal, outputMode ansi.OutputMode, n in
 	fit := func(s string, w int) string {
 		return ansi.PadRight(ansi.TruncateRunes(s, w, ""), w)
 	}
+	msgCell := func(s string, w int) string {
+		return threadEscapePipes(fit(threadPlainText(s), w))
+	}
 	line := fmt.Sprintf("\r\n|15%*d |09%s |07%*d |15%s |11%s |08%s",
 		msgSearchNumWidth-1, n,
 		callerText(fit(where, msgSearchAreaWidth)),
 		msgSearchMsgWidth, h.msgNum,
-		callerText(fit(h.subject, msgSearchSubjectWidth)),
-		callerText(fit(h.from, msgSearchFromWidth)),
+		msgCell(h.subject, msgSearchSubjectWidth),
+		msgCell(h.from, msgSearchFromWidth),
 		h.dateTime.Format("01/02/06"))
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 }
 
 // openMsgSearchHit opens h in the message reader, after checking again that
 // the caller may read its area and that the message is still there and
-// visible to them. The reader is limited to the area's messages q matches,
-// so N and P move between results, and L or Q comes back to the list. The
+// visible to them. Next and previous (N, S) in the reader move only between
+// the area's messages q matches; the thread pane and menu still show the
+// whole thread, as the caller may see it. L or Q comes back to the list. The
 // caller's current area and the area's last-read pointer are put back when
 // the reader returns.
 func openMsgSearchHit(c *cmdCtx, q *msgsearch.Query, h msgSearchHit) (string, error) {
@@ -369,7 +401,8 @@ func openMsgSearchHit(c *cmdCtx, q *msgsearch.Query, h msgSearchHit) (string, er
 		return "", nil
 	}
 	m, err := e.MessageMgr.GetMessage(h.areaID, h.msgNum)
-	if err != nil || !msgSearchVisible(c)(m) {
+	_, visible := msgSearchFilters(c)
+	if err != nil || !visible(m) {
 		e.showScanNotice(terminal, outputMode, e.Strings().MsgSearchGone)
 		return "", nil
 	}
@@ -405,8 +438,9 @@ func openMsgSearchHit(c *cmdCtx, q *msgsearch.Query, h msgSearchHit) (string, er
 	if height <= 0 {
 		height = 24
 	}
-	matches := func(m *message.DisplayMessage) bool { return !m.IsDeleted && q.Match(m.Subject, m.Body) }
+	matches := func(m *message.DisplayMessage) bool { return q.Match(m.Subject, m.Body) }
 	_, action, _, err := runMessageReaderOpts(e, c.s, terminal, c.userManager, u, c.nodeNumber,
-		c.sessionStartTime, outputMode, h.msgNum, total, false, width, height, matches, readerOpts{fromList: true})
+		c.sessionStartTime, outputMode, h.msgNum, total, false, width, height, nil,
+		readerOpts{fromList: true, navFilter: matches})
 	return action, err
 }

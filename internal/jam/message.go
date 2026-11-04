@@ -24,7 +24,15 @@ func (b *Base) ReadMessage(msgNum int) (*Message, error) {
 	if err != nil {
 		return nil, err
 	}
+	return MessageFrom(hdr, text), nil
+}
 
+// MessageFrom builds the message ReadMessage returns from a header, as
+// ReadMessageHeader reads it, and its text, as ReadMessageText reads it. With
+// empty text it is the header alone, for a caller that looks at the sender,
+// recipient and flags before deciding whether to read the text; an echomail
+// origin address that only the origin line gives is then missing.
+func MessageFrom(hdr *MessageHeader, text string) *Message {
 	msg := &Message{
 		Header:   hdr,
 		Text:     text,
@@ -70,7 +78,7 @@ func (b *Base) ReadMessage(msgNum int) (*Message, error) {
 		msg.OrigAddr = ExtractOriginAddress(text)
 	}
 
-	return msg, nil
+	return msg
 }
 
 // WriteMessage writes a complete local message to the base.

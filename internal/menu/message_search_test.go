@@ -1,11 +1,15 @@
 package menu
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/msgsearch"
 )
@@ -198,7 +202,7 @@ func TestSearchMsgsInvalidAndEmpty(t *testing.T) {
 	if !r.has("Can't search for that: unmatched ( at 1") {
 		t.Errorf("no parse error shown:\n%s", r.text())
 	}
-	r = env.runCmd("SEARCHMSGS", env.caller, "A", "purple\r")
+	r = env.runCmd("SEARCHMSGS", env.caller, "A", "purple\rQ")
 	if !r.has("No messages match your search") {
 		t.Errorf("no no-match notice:\n%s", r.text())
 	}
@@ -219,10 +223,23 @@ func TestSearchMsgsPages(t *testing.T) {
 		subjects = append(subjects, "many green "+strings.Repeat("x", i%3)+string(rune('a'+i%26)))
 	}
 	addSearchArea(env, "MANY", 1, "s10", subjects...)
-	// 30 results at 17 a page: Enter shows page 2, Enter on the last page leaves
-	r := env.runCmd("SEARCHMSGS", env.caller, "", "green\r\r\r")
+	// 30 results at 17 a page: Enter shows page 2, and Enter on the last
+	// page stays there, as N does, until Q
+	r := env.runCmd("SEARCHMSGS", env.caller, "", "green\r\r\r\rQ\r")
 	if !r.has("Page 1/2", "Page 2/2", "(30)") {
 		t.Errorf("paging:\n%s", r.text())
+	}
+	if n := strings.Count(r.text(), "Page 2/2"); n != 3 {
+		t.Errorf("Page 2/2 shown %d times, want 3 (Enter on the last page stays):\n%s", n, r.text())
+	}
+	if r.next == "LOGOFF" {
+		t.Error("the list ended before Q")
+	}
+
+	// one page: Enter shows it again
+	r = env.runCmd("SEARCHMSGS", env.caller, "C", "blue\r\rQ\r")
+	if n := strings.Count(r.text(), "Page 1/1"); n != 2 || r.next == "LOGOFF" {
+		t.Errorf("one page: Page 1/1 shown %d times (want 2), next %q", n, r.next)
 	}
 }
 
@@ -242,11 +259,11 @@ func TestSearchMessagesStops(t *testing.T) {
 	q := mustQuery(t, "blue")
 	all := env.e.MessageMgr.ListAreas()
 	accept := func(*message.DisplayMessage) bool { return true }
-	hits, full, stopped := searchMessages(env.e, all, q, accept, func() bool { return true })
+	hits, full, stopped := searchMessages(env.e, all, q, accept, accept, func() bool { return true })
 	if len(hits) != 0 || full || !stopped {
 		t.Errorf("stop at once: %d hits, full %v, stopped %v", len(hits), full, stopped)
 	}
-	hits, _, stopped = searchMessages(env.e, all, q, accept, func() bool { return false })
+	hits, _, stopped = searchMessages(env.e, all, q, accept, accept, func() bool { return false })
 	if stopped || len(hits) != 3 {
 		t.Errorf("no stop: %d hits (want 3), stopped %v", len(hits), stopped)
 	}
@@ -259,4 +276,114 @@ func mustQuery(t *testing.T, s string) *msgsearch.Query {
 		t.Fatalf("Parse(%q): %v", s, err)
 	}
 	return q
+}
+
+// A caller who hangs up during a search stops it: it doesn't go on reading
+// every base for nobody.
+func TestSearchMsgsStopsWhenTheCallerHangsUp(t *testing.T) {
+	env := searchEnv(t)
+	r := env.runCmd("SEARCHMSGS", env.caller, "A", "blue\r") // then the connection closes
+	if !r.has("Search stopped") || r.has("Messages matching") {
+		t.Errorf("the search ran on after the caller left:\n%s", r.text())
+	}
+}
+
+func TestMsgSearchStopKey(t *testing.T) {
+	newIH := func(t *testing.T, input string, closeAfter bool) *editor.InputHandler {
+		t.Helper()
+		pr, pw := io.Pipe()
+		ih := editor.NewInputHandler(pr)
+		ih.SetEscTimeout(50 * time.Millisecond)
+		t.Cleanup(func() { _ = pw.Close(); ih.Close() })
+		go func() {
+			_, _ = pw.Write([]byte(input))
+			if closeAfter {
+				_ = pw.Close()
+			}
+		}()
+		if !ih.WaitForInput(time.Second) {
+			t.Fatal("no input arrived")
+		}
+		return ih
+	}
+
+	t.Run("closed connection", func(t *testing.T) {
+		ih := newIH(t, "", true)
+		if !msgSearchStopKey(ih) {
+			t.Error("a closed connection didn't stop the search")
+		}
+	})
+	t.Run("Esc", func(t *testing.T) {
+		if !msgSearchStopKey(newIH(t, "\x1b", false)) {
+			t.Error("Esc didn't stop the search")
+		}
+	})
+	t.Run("Ctrl-C", func(t *testing.T) {
+		if !msgSearchStopKey(newIH(t, "\x03", false)) {
+			t.Error("Ctrl-C didn't stop the search")
+		}
+	})
+	// type-ahead, including a key that starts with Esc, is left whole
+	for name, tc := range map[string]struct {
+		input string
+		key   int
+	}{
+		"digit": {"7", '7'},
+		"PgDn":  {"\x1b[6~", editor.KeyPageDown},
+		"Up":    {"\x1b[A", editor.KeyArrowUp},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ih := newIH(t, tc.input, false)
+			if msgSearchStopKey(ih) {
+				t.Fatal("stopped the search")
+			}
+			if key, err := ih.ReadKey(); err != nil || key != tc.key {
+				t.Errorf("next key = %#x, %v; want %#x", key, err, tc.key)
+			}
+		})
+	}
+}
+
+// A colour code in a subject or sender prints as typed and doesn't move
+// the columns after it or recolour them.
+func TestMsgSearchRowEscapesPipes(t *testing.T) {
+	row := func(subject, from string) string {
+		t.Helper()
+		ts := newTestSession("")
+		writeMsgSearchRow(newTestTerminal(ts), ansi.OutputModeUTF8, 1, msgSearchHit{
+			confTag: "LOCAL", areaTag: "GENERAL", msgNum: 7, subject: subject, from: from,
+			dateTime: time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC),
+		})
+		return ts.output()
+	}
+	plain := testAnsiEscape.ReplaceAllString(row("plain subject", "Sysop"), "")
+	raw := row("|12URGENT|07 meeting", "|14Sy|Bsop")
+	coloured := testAnsiEscape.ReplaceAllString(raw, "")
+	if !strings.Contains(coloured, "|12URGENT|07 meeting") || !strings.Contains(coloured, "|14Sy|Bsop") {
+		t.Errorf("the codes weren't printed as typed: %q", coloured)
+	}
+	if strings.Contains(raw, string(ansi.ReplacePipeCodes([]byte("|12")))) || strings.Contains(raw, string(ansi.ReplacePipeCodes([]byte("|14")))) {
+		t.Errorf("a code from the message coloured the row: %q", raw)
+	}
+	if a, b := strings.Index(plain, "11/04/26"), strings.Index(coloured, "11/04/26"); a < 0 || a != b {
+		t.Errorf("the date moved: column %d, want %d\n%q\n%q", b, a, plain, coloured)
+	}
+}
+
+// Opening a result shows the whole thread in the pane, not only the replies
+// that match the search.
+func TestSearchMsgsThreadPaneIsNotFiltered(t *testing.T) {
+	withScanNoticePause(t)
+	env := newMsgEnv(t)
+	env.seedSampleThread()
+	// only #5 says "Font sticks"
+	r := env.runCmd("SEARCHMSGS", env.caller, "C", "\"Font sticks\"\r1\rQQ\r")
+	if !r.has("Reading message #5 ") {
+		t.Fatalf("the result wasn't opened:\n%s", r.text())
+	}
+	for _, reply := range []string{"#1 Phosphor", "#3 Kestrel_", "#7 Mercury "} {
+		if !r.has(reply) {
+			t.Errorf("the thread pane left out %s:\n%s", reply, r.text())
+		}
+	}
 }

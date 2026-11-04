@@ -118,10 +118,35 @@ func TestNormalize(t *testing.T) {
 		"  Hello\r\n\tWorld  ": "hello world",
 		"\x1b[1;31mRed\x1b[0m": "red",
 		"a\x1bb":               "ab",
+		"blue|15 box|07":       "blue box",
+		"|B1|12Red|B10 ok":     "red ok",
+		"a||15b":               "a||15b",
+		"|99 and |":            "|99 and |",
 		"":                     "",
 	} {
 		if got := Normalize(in); got != want {
 			t.Errorf("Normalize(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Colour pipe codes in a message are ignored: a phrase matches across one,
+// and the digits of a code are not text.
+func TestMatchIgnoresPipeCodes(t *testing.T) {
+	const body = "Plans for a |09blue|15 box|07, rev 2."
+	for query, want := range map[string]bool{
+		`"blue box"`: true,
+		"bluebox":    false,
+		"15":         false,
+		"09":         false,
+		"rev 2":      true,
+	} {
+		q, err := Parse(query)
+		if err != nil {
+			t.Fatalf("Parse(%q): %v", query, err)
+		}
+		if got := q.Match("", body); got != want {
+			t.Errorf("%s: Match = %v, want %v", query, got, want)
 		}
 	}
 }

@@ -501,6 +501,8 @@ and matches part of a word, so `box` finds "Blue Boxes". Combine terms with:
 `red OR blue box` is `red OR (blue AND box)`. The operator words work in any
 case; to search for one of them, quote it (`"or"`). A term matches in the
 subject or the body, and a phrase never runs from one into the other.
+Colour codes in a message (ANSI or pipe codes such as `|15`) are ignored, so
+`"blue box"` finds `blue|15 box` and `15` doesn't find every coloured message.
 Searches are up to 80 characters; an unbalanced parenthesis, an unclosed
 quote or an operator with nothing beside it is reported with its position.
 
@@ -509,16 +511,18 @@ and leaves out areas the caller can't read (conference ACS and area read
 ACS), deleted messages, private mail that isn't theirs and posts by
 authors on their [Twit List](messages/twit-list.md); none of those are
 counted. Esc or Ctrl-C stops a long search and shows what it found so
-far; anything else typed meanwhile is kept for the results prompt. At most 500 matches are listed.
+far, and a caller hanging up stops it too; anything else typed meanwhile is
+kept for the results prompt. At most 500 matches are listed.
 
 Results show the conference and area, message number, subject, sender and
 date, a page at a time: type a result's number to read it, Enter or `N` for
-the next page, `P` for the previous one, `Q` or Esc to leave. A result opens
-in the normal reader, which then moves only between the matching messages of
-that area; `L` or `Q` returns to the results. Access is checked again when a
-result is opened. Neither the search nor reading its results moves
-newscan pointers: the area's last-read pointer is put back when the reader
-returns.
+the next page (on the last page they stay there), `P` for the previous one,
+`Q` or Esc to leave. A result opens in the normal reader, where next and
+previous move only between the matching messages of that area; the thread
+pane still shows the whole thread. `L` or `Q` returns to the results. Access
+is checked again when a result is opened. Neither the search nor reading its
+results moves newscan pointers: the area's last-read pointer is put back when
+the reader returns.
 
 ### Listing Messages
 

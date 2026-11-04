@@ -16,13 +16,17 @@
 // Matching is case-insensitive and by substring: "box" matches "boxes" and
 // "Blue Box". Runs of whitespace (spaces, tabs, line breaks) count as one
 // space on both sides, so a phrase matches across a line break in a body.
-// ANSI escape sequences in the searched text are ignored.
+// ANSI escape sequences and colour pipe codes (|15) in the searched text are
+// ignored, so "blue box" matches "blue|15 box".
 package msgsearch
 
 import (
 	"fmt"
 	"strings"
 	"unicode"
+	"unicode/utf8"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // MaxQueryLen is the longest query, in runes, that Parse accepts. The menu
@@ -73,25 +77,43 @@ func (q *Query) MatchNormalized(texts ...string) bool {
 }
 
 // Normalize returns text as Match compares it: lower case, ANSI escape
-// sequences removed, and every run of whitespace replaced by one space.
+// sequences and colour pipe codes (|00-|23, |B0-|B15) removed, and every run
+// of whitespace replaced by one space. A doubled pipe is text, as the pipe-code
+// expander prints it, so "||15" stays.
 func Normalize(text string) string {
 	var b strings.Builder
 	b.Grow(len(text))
 	space := false
-	rs := []rune(text)
-	for i := 0; i < len(rs); i++ {
-		r := rs[i]
-		if r == 0x1b {
+	for i := 0; i < len(text); {
+		switch {
+		case text[i] == 0x1b:
 			// ESC [ params final: skip the whole CSI sequence; a lone ESC
 			// or another escape is dropped on its own
-			if i+1 < len(rs) && rs[i+1] == '[' {
-				i += 2
-				for i < len(rs) && (rs[i] < 0x40 || rs[i] > 0x7e) {
+			i++
+			if i < len(text) && text[i] == '[' {
+				i++
+				for i < len(text) && (text[i] < 0x40 || text[i] > 0x7e) {
 					i++
 				}
+				i++
 			}
 			continue
+		case strings.HasPrefix(text[i:], "||"):
+			if space {
+				b.WriteByte(' ')
+				space = false
+			}
+			b.WriteString("||")
+			i += 2
+			continue
+		case text[i] == '|':
+			if n := ansi.ColorPipeCodeLen(text[i:]); n > 0 {
+				i += n
+				continue
+			}
 		}
+		r, size := utf8.DecodeRuneInString(text[i:])
+		i += size
 		if unicode.IsSpace(r) {
 			space = b.Len() > 0
 			continue

@@ -316,13 +316,37 @@ func (ih *InputHandler) WaitForInput(d time.Duration) bool {
 // first byte waiting to be read without consuming it, so a caller can look
 // at type-ahead (for a key that stops a long job, say) and leave it for the
 // next read. ok is false when no byte came: the wait timed out or was ended
-// early, or the connection closed (the next read reports that). Like the
-// reads, it must be called from the goroutine that reads ih.
-func (ih *InputHandler) PendingByte(d time.Duration) (b byte, ok bool) {
-	if !ih.WaitForInput(d) || len(ih.unreadBuf) == 0 {
-		return 0, false
+// early. err is io.EOF once the connection has closed, or the error a Fail
+// latched, so a long job can end for a caller who is gone; the next read
+// reports it too. Like the reads, it must be called from the goroutine that
+// reads ih.
+func (ih *InputHandler) PendingByte(d time.Duration) (b byte, ok bool, err error) {
+	if err := ih.failed.Load(); err != nil {
+		return 0, false, *err
 	}
-	return ih.unreadBuf[0], true
+	// Take what is already queued first: WaitForInput's select would pick
+	// at random between it and a timer that has already run out.
+	for len(ih.unreadBuf) == 0 {
+		select {
+		case b, ok := <-ih.incoming:
+			if !ok {
+				return 0, false, io.EOF
+			}
+			if !ih.lateEnterTrailer(b) {
+				ih.unreadByte(b)
+			}
+			continue
+		default:
+		}
+		break
+	}
+	if !ih.WaitForInput(d) {
+		return 0, false, nil
+	}
+	if len(ih.unreadBuf) == 0 {
+		return 0, false, io.EOF // WaitForInput saw the channel close
+	}
+	return ih.unreadBuf[0], true, nil
 }
 
 // ReadKeyOrEvent is the exported form of readKeyOrEvent.
@@ -434,6 +458,10 @@ func (ih *InputHandler) Fail(err error) {
 func (ih *InputHandler) SetEscTimeout(d time.Duration) {
 	ih.escTimeoutNs.Store(d.Nanoseconds())
 }
+
+// EscTimeout is how long ReadKey waits after an ESC for the rest of a key's
+// escape sequence before taking it as a lone Esc.
+func (ih *InputHandler) EscTimeout() time.Duration { return ih.escTimeout() }
 
 func (ih *InputHandler) escTimeout() time.Duration {
 	if ns := ih.escTimeoutNs.Load(); ns > 0 {

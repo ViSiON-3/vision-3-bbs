@@ -22,17 +22,16 @@ func (mm *MessageManager) GetMessage(areaID, msgNum int) (*DisplayMessage, error
 		}
 	}()
 
-	return readDisplayMessage(b, areaID, msgNum)
-}
-
-// readDisplayMessage reads message msgNum of the open base b, in area
-// areaID, as GetMessage returns it.
-func readDisplayMessage(b *jam.Base, areaID, msgNum int) (*DisplayMessage, error) {
 	msg, err := b.ReadMessage(msgNum)
 	if err != nil {
 		return nil, err
 	}
+	return displayMessage(msg, areaID, msgNum), nil
+}
 
+// displayMessage is msg, message msgNum of area areaID, as GetMessage
+// returns it.
+func displayMessage(msg *jam.Message, areaID, msgNum int) *DisplayMessage {
 	replyToNum := 0
 	if msg.Header != nil && msg.Header.ReplyTo > 0 {
 		replyToNum = int(msg.Header.ReplyTo)
@@ -60,7 +59,7 @@ func readDisplayMessage(b *jam.Base, areaID, msgNum int) (*DisplayMessage, error
 		Charset:    messageCharset(msg),
 
 		SenderHandle: msg.SenderHandle,
-	}, nil
+	}
 }
 
 // EachMessage reads every message of an area in order, from message 1, and
@@ -70,7 +69,13 @@ func readDisplayMessage(b *jam.Base, areaID, msgNum int) (*DisplayMessage, error
 // message that can't be read is skipped and logged. It returns
 // ErrAreaNotFound for an unknown area, and an error if the base can't be
 // opened or counted. The base stays open while fn runs.
-func (mm *MessageManager) EachMessage(areaID int, fn func(*DisplayMessage) bool) error {
+//
+// When header is not nil it sees each message first with only its header
+// read: the body is empty, and an echomail origin address that only the
+// origin line gives is missing. A message it returns false for is skipped
+// without reading its text, so a walk that leaves out deleted messages or
+// other people's private mail doesn't pay for their bodies.
+func (mm *MessageManager) EachMessage(areaID int, header, fn func(*DisplayMessage) bool) error {
 	b, _, err := mm.openBase(areaID)
 	if err != nil {
 		return err
@@ -85,12 +90,20 @@ func (mm *MessageManager) EachMessage(areaID int, fn func(*DisplayMessage) bool)
 		return err
 	}
 	for n := 1; n <= total; n++ {
-		m, err := readDisplayMessage(b, areaID, n)
+		hdr, err := b.ReadMessageHeader(n)
 		if err != nil {
 			slog.Warn("skipping unreadable message", "area", areaID, "msg", n, "error", err)
 			continue
 		}
-		if !fn(m) {
+		if header != nil && !header(displayMessage(jam.MessageFrom(hdr, ""), areaID, n)) {
+			continue
+		}
+		text, err := b.ReadMessageText(hdr)
+		if err != nil {
+			slog.Warn("skipping unreadable message", "area", areaID, "msg", n, "error", err)
+			continue
+		}
+		if !fn(displayMessage(jam.MessageFrom(hdr, text), areaID, n)) {
 			return nil
 		}
 	}
