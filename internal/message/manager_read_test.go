@@ -346,3 +346,39 @@ func TestGetMessageReportsCharset(t *testing.T) {
 		})
 	}
 }
+
+func TestEachMessage(t *testing.T) {
+	mm := newReplyTestManager(t)
+	post(t, mm, 1, "All", "one")
+	post(t, mm, 1, "All", "two")
+	post(t, mm, 1, "All", "three")
+	if err := mm.DeleteMessage(1, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	var seen []string
+	if err := mm.EachMessage(1, func(m *DisplayMessage) bool {
+		seen = append(seen, m.Subject)
+		if m.MsgNum == 2 && !m.IsDeleted {
+			t.Error("message 2 not reported deleted")
+		}
+		if m.AreaID != 1 {
+			t.Errorf("AreaID = %d", m.AreaID)
+		}
+		return true
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(seen, ",") != "one,two,three" {
+		t.Errorf("walked %v", seen)
+	}
+
+	n := 0
+	if err := mm.EachMessage(1, func(*DisplayMessage) bool { n++; return false }); err != nil || n != 1 {
+		t.Errorf("stopping early: %d calls, %v", n, err)
+	}
+
+	if err := mm.EachMessage(99, func(*DisplayMessage) bool { return true }); !errors.Is(err, ErrAreaNotFound) {
+		t.Errorf("unknown area: %v, want ErrAreaNotFound", err)
+	}
+}

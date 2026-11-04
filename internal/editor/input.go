@@ -312,6 +312,19 @@ func (ih *InputHandler) WaitForInput(d time.Duration) bool {
 	}
 }
 
+// PendingByte waits up to d for input, as WaitForInput does, and returns the
+// first byte waiting to be read without consuming it, so a caller can look
+// at type-ahead (for a key that stops a long job, say) and leave it for the
+// next read. ok is false when no byte came: the wait timed out or was ended
+// early, or the connection closed (the next read reports that). Like the
+// reads, it must be called from the goroutine that reads ih.
+func (ih *InputHandler) PendingByte(d time.Duration) (b byte, ok bool) {
+	if !ih.WaitForInput(d) || len(ih.unreadBuf) == 0 {
+		return 0, false
+	}
+	return ih.unreadBuf[0], true
+}
+
 // ReadKeyOrEvent is the exported form of readKeyOrEvent.
 func ReadKeyOrEvent[T any](ih *InputHandler, events <-chan T) (int, T, bool, error) {
 	return readKeyOrEvent(ih, events)

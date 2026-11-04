@@ -22,6 +22,12 @@ func (mm *MessageManager) GetMessage(areaID, msgNum int) (*DisplayMessage, error
 		}
 	}()
 
+	return readDisplayMessage(b, areaID, msgNum)
+}
+
+// readDisplayMessage reads message msgNum of the open base b, in area
+// areaID, as GetMessage returns it.
+func readDisplayMessage(b *jam.Base, areaID, msgNum int) (*DisplayMessage, error) {
 	msg, err := b.ReadMessage(msgNum)
 	if err != nil {
 		return nil, err
@@ -55,6 +61,40 @@ func (mm *MessageManager) GetMessage(areaID, msgNum int) (*DisplayMessage, error
 
 		SenderHandle: msg.SenderHandle,
 	}, nil
+}
+
+// EachMessage reads every message of an area in order, from message 1, and
+// calls fn with each until fn returns false. The base is opened once for the
+// whole walk, so this is the way to look at every message of a large area.
+// Messages flagged deleted are passed too (DisplayMessage.IsDeleted); a
+// message that can't be read is skipped and logged. It returns
+// ErrAreaNotFound for an unknown area, and an error if the base can't be
+// opened or counted. The base stays open while fn runs.
+func (mm *MessageManager) EachMessage(areaID int, fn func(*DisplayMessage) bool) error {
+	b, _, err := mm.openBase(areaID)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
+	total, err := b.GetMessageCount()
+	if err != nil {
+		return err
+	}
+	for n := 1; n <= total; n++ {
+		m, err := readDisplayMessage(b, areaID, n)
+		if err != nil {
+			slog.Warn("skipping unreadable message", "area", areaID, "msg", n, "error", err)
+			continue
+		}
+		if !fn(m) {
+			return nil
+		}
+	}
+	return nil
 }
 
 // GetMessageCountForArea returns the total message count for an area.

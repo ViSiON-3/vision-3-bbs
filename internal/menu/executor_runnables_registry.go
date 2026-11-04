@@ -199,6 +199,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["NEWUSER"] = runNewUser                                 // Register new user application runnable
 	registry["GETHEADERTYPE"] = runGetHeaderType                     // Message header style selection
 	registry["LISTMSGS"] = runListMsgs                               // List messages in current area
+	registry["SEARCHMSGS"] = runSearchMsgs                           // Text search of message subjects and bodies
 	registry["SENDPRIVMAIL"] = runSendPrivateMail                    // Send private mail to user
 	registry["READPRIVMAIL"] = runReadPrivateMail                    // Read private mail
 	registry["LISTPRIVMAIL"] = runListPrivateMail                    // List private mail
