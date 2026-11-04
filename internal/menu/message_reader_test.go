@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -20,40 +19,12 @@ func TestBuildNameWithAddr_ShortFits(t *testing.T) {
 	}
 }
 
-func TestBuildNameWithAddr_TruncatesPreservingSuffix(t *testing.T) {
-	name := strings.Repeat("X", 60)
-	got := buildNameWithAddr(name, "21:1/100")
-	if !strings.HasSuffix(got, " (21:1/100)") {
-		t.Errorf("address suffix not preserved: %q", got)
-	}
-	if utf8.RuneCountInString(got) > 45 {
-		t.Errorf("result %d runes, want <= 45", utf8.RuneCountInString(got))
-	}
-}
-
-func TestBuildNameWithAddr_ShortNameLongAddrNoPanic(t *testing.T) {
-	// Regression: a short name with a very long address forced nameMax to 3,
-	// and the old byte-slice name[:3] panicked when len(name) < 3.
-	longAddr := strings.Repeat("a", 50)
-	got := buildNameWithAddr("Jo", longAddr) // must not panic
-	if !strings.HasSuffix(got, "("+longAddr+")") {
-		t.Errorf("suffix not preserved: %q", got)
-	}
-	if !strings.HasPrefix(got, "Jo") {
-		t.Errorf("short name should be preserved as-is: %q", got)
-	}
-}
-
-func TestBuildNameWithAddr_MultibyteTruncationStaysValid(t *testing.T) {
-	// Multibyte name that must be truncated: result must remain valid UTF-8
-	// (the old byte-slice could split a rune).
-	name := strings.Repeat("é", 50) // 50 runes, 100 bytes
-	got := buildNameWithAddr(name, "1:2/3")
-	if !utf8.ValidString(got) {
-		t.Errorf("truncation produced invalid UTF-8: %q", got)
-	}
-	if !strings.HasSuffix(got, " (1:2/3)") {
-		t.Errorf("suffix not preserved: %q", got)
+func TestBuildNameWithAddr_KeepsLongNameWhole(t *testing.T) {
+	// The header field fits the value to its own width (fitNameAndAddr); a
+	// fixed cap here cut long names in wide fields.
+	name := strings.Repeat("é", 60)
+	if got, want := buildNameWithAddr(name, "21:1/100"), name+" (21:1/100)"; got != want {
+		t.Errorf("buildNameWithAddr = %q, want %q", got, want)
 	}
 }
 
