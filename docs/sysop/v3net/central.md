@@ -50,11 +50,11 @@ returns. Sysops can also bind the screens separately; see
 ### The Boards Screen
 
 ```
-V3Net Central: Boards  ● online  ○ seen this week  · stale
+V3Net Central: Boards  ■ online  ° seen this week  · stale
 ───────────────────────────────────────────────────────────────────────────────
    Board                  Description             Address
- ● Sector 7               Demoscene and code      ssh://sector7.example:2222
- ○ The Vault              Files since 1991        telnet://vault.example:23
+ ■ Sector 7               Demoscene and code      ssh://sector7.example:2222
+ ° The Vault              Files since 1991        telnet://vault.example:23
  · Old Haunt              Back someday            telnet://haunt.example:23
 ───────────────────────────────────────────────────────────────────────────────
  [Enter] Details  [/] Search  [R] Refresh  [Q] Quit                      1/3
@@ -154,8 +154,8 @@ stream is open now. The Boards screen shows three states:
 
 | Marker | Meaning |
 |---|---|
-| `●` online | The board's event stream to the hub is open now. |
-| `○` seen this week | The hub had contact with the board in the last 7 days. |
+| `■` online | The board's event stream to the hub is open now. |
+| `°` seen this week | The hub had contact with the board in the last 7 days. |
 | `·` stale | No contact for over 7 days. The listing is still served until it expires. |
 
 ### Withdrawal
