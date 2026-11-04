@@ -395,6 +395,7 @@ const builtInHelp = `|15Full Screen Message Editor Help|07
   Ctrl+N                 - Split line at cursor
   Ctrl+B                 - Reformat paragraph
   Ctrl+L                 - Redraw screen
+  Ctrl+O                 - Autocorrect on/off (where the area offers it)
   Backspace              - Delete character to the left
   Tab                    - Insert tab (spaces)
 

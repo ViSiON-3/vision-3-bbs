@@ -67,7 +67,7 @@ Choosing **System Setup** (key 1) opens an inner menu of seven numbered items, a
 |------|------|--------|
 | 1 | BBS Registration | Board Name, SysOp Name, BBS Location, Timezone, QWK ID |
 | 2 | Server Setup | SSH enabled/host/port/legacy-algorithms, Telnet enabled/host/port, V3Net enabled + keystore/dedup/registry paths, V3Net hub settings, Binkd mailer settings |
-| 3 | Default Settings | Allow New Users (Y/N), Require Email (Y/N), File List Mode (lightbar/classic), Deleted User Retention Days, Twit Lists (Y/N) |
+| 3 | Default Settings | Allow New Users (Y/N), Require Email (Y/N), File List Mode (lightbar/classic), Deleted User Retention Days, Twit Lists (Y/N), Autocorrect (Y/N) |
 | 4 | DOS Emulation | DOSemu Path |
 | 5 | Logging | Log Directory, Min Level, Rolling Type, Cache Writes, Max Files, Max Size KB |
 | 6 | QWK Mobile API | Enabled, Host, Port, Cert File, Key File, Token TTL Hours |
@@ -163,7 +163,7 @@ Edits the menu set's `theme.json` (see [Theme Configuration](#theme-configuratio
 
 | Item | What it edits |
 |------|---------------|
-| Prompt Colors | Yes/No highlight and regular colours (DOS colour codes) |
+| Prompt Colors | Yes/No highlight and regular colours, and the message editor's autocorrect highlight (DOS colour codes) |
 | Split-Screen Chat | The chat screen chat opens with, picked from the menu set's screens, the built-in layout or **random**; and the sysop's and caller's text colours where a screen sets none |
 
 The theme is saved to the overlay, `menus.d/v3/theme.json`, so upgrading the
@@ -563,7 +563,7 @@ General BBS configuration. All settings in this file are managed through the **S
 |---------------|----------|
 | Board name, sysop name, location, timezone, QWK ID | System Setup → BBS Registration (item 1) |
 | SSH / Telnet ports and enabled flags, V3Net, Binkd | System Setup → Server Setup (item 2) |
-| New user registration, file list mode, retention, Twit Lists | System Setup → Default Settings (item 3) |
+| New user registration, file list mode, retention, Twit Lists, editor autocorrect default | System Setup → Default Settings (item 3) |
 | DOSemu binary path | System Setup → DOS Emulation (item 4) |
 | Log directory, level, rotation | System Setup → Logging (item 5) |
 | QWK mobile API listener and TLS files | System Setup → QWK Mobile API (item 6) |
@@ -665,6 +665,7 @@ under Security Levels in `./config`, to silence it.
 - `twitListEnabled` — Let callers keep personal [Twit Lists](messages/twit-list.md) and have them applied. Off hides the reader's Ignore command, refuses the list editor, and stops all Twit List filtering, including QWK downloads; saved lists are kept and apply again when it is turned back on (shipped and fallback: `true`, so a `config.json` without the key keeps Twit Lists on)
 - `twitListMax` — Most names one caller may put on their Twit List (shipped: `50`; `0` or less also means 50)
 - `twitExemptLevel` — Access level from which a user cannot be twit-listed (shipped: `0`, meaning only sysops and co-sysops are exempt). See the [Twit List Technical Reference](messages/twit-list.md#technical-reference)
+- `editorAutocorrect` — Board default for the message editor's [autocorrect](messages/message-areas.md#autocorrect), which fixes common typos as callers type. Applies to message areas whose own `autocorrect` is left out, to private mail when `PRIVMAIL` leaves it out, and to the auto-signature editor. Callers can still turn it off for themselves (shipped and fallback: `false`)
 
 **IP Blocklist/Allowlist:**
 
@@ -792,8 +793,11 @@ Other groups documented with their features: the quote banners
 `quoteTopNet` (fallback `^N wrote:`) and `quoteBottomNet` (blank means no
 bottom banner, and there is no fallback), the auto-signature prompts
 `msgAutoSigPrompt`, `konfigAutoSigChoice` and `konfigAutoSigAskOn`/`Off`/`Suffix`
-([Auto-Signature](messages/autosig.md#technical-reference)), and the `twit*`
-strings ([Twit List](messages/twit-list.md#technical-reference)).
+([Auto-Signature](messages/autosig.md#technical-reference)), the `twit*`
+strings ([Twit List](messages/twit-list.md#technical-reference)), and the
+editor's autocorrect notices `editorAutocorrectFixed` (`%s » %s`: the word as
+typed, then the fix), `editorAutocorrectKept` (`%s`: the word put back) and
+`editorAutocorrectOn`/`Off` ([Autocorrect](messages/message-areas.md#autocorrect)).
 
 #### Key String Categories
 
@@ -1244,6 +1248,7 @@ The `menus/v3/theme.json` file controls color schemes:
   "yesNoRegularColor": 15,
   "chatSysopColor": 11,
   "chatUserColor": 10,
+  "autocorrectHighlightColor": 15,
   "sysopChatScreen": "V3CHAT1"
 }
 ```
@@ -1254,6 +1259,7 @@ The `menus/v3/theme.json` file controls color schemes:
 - `yesNoRegularColor` - DOS color code for regular yes/no prompts
 - `chatSysopColor` - color of the sysop's text in split-screen chat where the chat screen sets none (default `11`)
 - `chatUserColor` - color of the caller's text in split-screen chat, likewise (default `10`)
+- `autocorrectHighlightColor` - color the message editor draws a word in right after [autocorrect](messages/message-areas.md#autocorrect) fixed it, for as long as the fix is shown on the prompt row; the screen only, the message is unchanged (default `15`, bright white). A background of 0 (black) leaves the terminal's own background behind the word
 - `sysopChatScreen` - the [chat screen](menus/menu-system.md#chat-screens) split-screen chat opens with: `cfg/NAME.json` and `ansi/NAME.ANS` in the menu set. Empty for the built-in layout, `random` for one of the set's screens each chat; the shipped set uses `V3CHAT1`
 
 The config editor's [Theme](#theme-sub-menu) page edits these fields.

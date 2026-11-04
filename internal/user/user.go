@@ -117,6 +117,7 @@ type User struct {
 	CustomPrompt    string `json:"customPrompt,omitempty"`
 	OutputMode      string `json:"outputMode,omitempty"`
 	FileListingMode string `json:"fileListingMode,omitempty"` // "lightbar" or "classic" (empty = server default)
+	AutocorrectOff  bool   `json:"autocorrectOff,omitempty"`  // the caller turned the message editor's autocorrect off (Ctrl-O or User Konfig)
 	FileListColumns struct {
 		Name        bool `json:"name"`
 		Size        bool `json:"size"`

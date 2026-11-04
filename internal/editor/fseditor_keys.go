@@ -5,14 +5,27 @@ package editor
 
 // handleKey processes a single key press
 func (e *FSEditor) handleKey(key int) {
+	// An autocorrect fix can only be undone by the very next key.
+	undo := e.acUndo
+	e.acUndo = nil
+	e.clearNotice()
+
 	// Handle key based on type
 	switch key {
 	case KeyEnter:
+		fix := e.applyAutocorrect(key)
 		e.handleReturn()
+		e.acUndo = fix
 	case KeyBackspace:
-		e.handleBackspace()
+		if !e.undoAutocorrect(undo) {
+			e.handleBackspace()
+		}
+	case KeyCtrlO: // Autocorrect on/off
+		e.toggleAutocorrect()
 	case KeyTab:
+		fix := e.applyAutocorrect(key)
 		e.handleTab()
+		e.acUndo = fix
 
 	// Escape: show option lightbar menu (Save / Abort / Edit / Help / Quote)
 	case KeyEsc:
@@ -77,7 +90,9 @@ func (e *FSEditor) handleKey(key int) {
 	default:
 		// Check if it's a printable character
 		if IsPrintable(key) {
+			fix := e.applyAutocorrect(key)
 			e.insertCharacter(rune(key))
+			e.acUndo = fix
 		}
 	}
 }
@@ -118,15 +133,7 @@ func (e *FSEditor) handleCommand(cmdType CommandType) {
 		// the main loop repaint the text from a cleared cache. A FullRedraw here
 		// would clear the screen and flash the header for no reason.
 		e.screen.ClearCache()
-		if e.screen.HasFooter() {
-			e.screen.DisplayFooter()
-		} else {
-			// Without a footer template the prompt row is a bare terminal row
-			// outside the editing area, so a notice left there is never
-			// repainted over — clear it explicitly.
-			e.screen.GoXY(1, e.screen.PromptRow())
-			e.screen.ClearEOL()
-		}
+		e.restorePromptRow()
 
 	case CommandHelp:
 		e.commands.HandleHelp(e.input)
@@ -135,5 +142,18 @@ func (e *FSEditor) handleCommand(cmdType CommandType) {
 	case CommandView:
 		e.commands.HandleView(e.input)
 		e.screen.FullRedraw(e.buffer, e.topLine, e.currentLine, e.currentCol, e.insertMode)
+	}
+}
+
+// restorePromptRow puts the footer back on the prompt row, over any notice
+// left there. Without a footer template the prompt row is a bare terminal
+// row outside the editing area, so a notice left there is never repainted
+// over; it is cleared instead.
+func (e *FSEditor) restorePromptRow() {
+	if e.screen.HasFooter() {
+		e.screen.DisplayFooter()
+	} else {
+		e.screen.GoXY(1, e.screen.PromptRow())
+		e.screen.ClearEOL()
 	}
 }

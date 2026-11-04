@@ -3,6 +3,13 @@ package config
 // StringsConfig holds all the configurable strings for the BBS.
 // This is the single source of truth.
 type StringsConfig struct {
+	KonfigAutocorrectLabel string `json:"konfigAutocorrectLabel"`
+	KonfigAutocorrectHelp  string `json:"konfigAutocorrectHelp"`
+	EditorAutocorrectFixed string `json:"editorAutocorrectFixed"`
+	EditorAutocorrectKept  string `json:"editorAutocorrectKept"`
+	EditorAutocorrectOn    string `json:"editorAutocorrectOn"`
+	EditorAutocorrectOff   string `json:"editorAutocorrectOff"`
+
 	KonfigThreadViewLabel string `json:"konfigThreadViewLabel"`
 	KonfigThreadViewHelp  string `json:"konfigThreadViewHelp"`
 

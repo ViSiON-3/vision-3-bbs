@@ -26,6 +26,7 @@ Each area has these fields in the editor:
 | **Max Messages**, **Max Age** | Purge limits ([Message Purge Configuration](#message-purge-configuration)). The editor warns when no enabled event runs `v3mail purge`, because nothing else enforces them. |
 | **Auto Join** | Newscan default for new callers ([Auto Join Behavior](#auto-join-behavior)) |
 | **Real Name Only**, **Allow Anonymous** | How posts are signed ([Posting names](#posting-names-real-names-and-anonymous-posts)) |
+| **Autocorrect** | Default, On or Off: whether the editor fixes common typos as callers type posts here ([Autocorrect](#autocorrect)) |
 | **Network**, **Echo Tag**, **Origin Addr**, **QWK Conference** | Shown for networked types only; see [Networked Areas](#networked-areas) |
 | **Sponsor** | Handle of the area's moderator ([Sponsor Menus](users/sponsor-menus.md)) |
 
@@ -66,6 +67,67 @@ Posts are signed with the caller's handle unless the area says otherwise:
 
 To change either setting on many areas at once, see
 [Changing Many Areas at Once](#changing-many-areas-at-once).
+
+### Autocorrect
+
+The message editor can fix common typos as callers type. When a word is
+finished with a space, Tab or Enter, it is looked up in a list of known
+misspellings and, if it is one, replaced on the spot: `teh` becomes `the`.
+Sentence punctuation between the word and that key is fine (`teh,`
+`teh.` `(teh)` `"teh"` are fixed at the space after them), but punctuation on
+its own does not finish a word, so the fix waits for the space: `teh.com`,
+`teh_var` and `teh@example.com` are left alone.
+The fix goes in through the editor's own typing, so word wrap behaves as if
+the caller had typed it. For a moment afterwards the fix is shown on the
+prompt row (`teh » the`) and the corrected word is drawn in the theme's
+`autocorrectHighlightColor` (see
+[Theme Configuration](configuration/configuration.md#theme-configuration)).
+
+It is off unless the sysop turns it on, and only listed typos are touched:
+
+- There is no dictionary, so handles, jargon and part numbers are never
+  "corrected". The built-in list is a few hundred misspellings that are never
+  real words.
+- Case follows the word (`Teh` becomes `The`). ALL-CAPS words (acronyms),
+  words touching digits or pipe codes, handles and paths (`@teh`, `/teh`), and
+  quoted lines are left alone, as is anything typed in Overwrite mode.
+- Backspace straight after a fix puts the word back as typed. After a fix
+  made by Enter it puts the word back and keeps the line break.
+- **Ctrl+O** in the editor turns it off or on for the caller, and so does
+  **Autocorrect** on their User Konfig screen; both save the same setting on
+  their record (`autocorrectOff`).
+
+Where it applies:
+
+| Setting | Where |
+| ------- | ----- |
+| Area **Autocorrect** (`autocorrect`) | `./config` → the area's **Autocorrect** field: **Default** (key left out) follows the board, **On** and **Off** override it |
+| Board default (`editorAutocorrect`) | `./config` → **System Setup** → **Default Settings** → **Autocorrect** (shipped off) |
+
+Autocorrect is on for a post when the area turns it on, or leaves it at
+Default and the board default is on, and the caller has not switched it off.
+Private mail follows the `PRIVMAIL` area's setting like any other area, so
+normally the board default; the auto-signature editor, which has no area,
+follows the board default. The caller's **Autocorrect** item only appears on
+User Konfig when autocorrect is on somewhere on the board.
+
+#### Board fixes
+
+Add fixes of your own, or turn built-in ones off, in
+`configs/autocorrect.txt`. It is read each time the editor opens, and its
+entries win over the built-in list:
+
+```text
+# one fix per line: the misspelling, spaces or a tab, then what it becomes
+fone phone
+recieve receive
+# "word -" turns a built-in fix off
+teh -
+```
+
+The misspelling is matched in any case and is one word; the fix may be
+several. A line with a misspelling but no fix is skipped, with a warning in
+the log naming the line. A missing file is not an error.
 
 ### Auto Join Behavior
 
@@ -490,7 +552,8 @@ The From name follows the area's **Real Name Only** setting, and an area that
 allows anonymous posts asks whether to post anonymously
 ([Posting names](#posting-names-real-names-and-anonymous-posts)). After the
 message is saved, the caller's [auto-signature](messages/autosig.md) is added,
-or offered if they have **Ask each post** on.
+or offered if they have **Ask each post** on. Where the area has it on, the
+editor fixes common typos as the caller types ([Autocorrect](#autocorrect)).
 
 ### Quoting in the Editor
 
@@ -722,6 +785,7 @@ Message areas are defined in `configs/message_areas.json` as an array:
 | `acs_write` | string | `""` | ACS required to post messages (empty = everyone) |
 | `allow_anonymous` | bool | absent (no) | Allow anonymous posts. The area must opt in; a conference's own `allow_anonymous: false` overrides it |
 | `real_name_only` | bool | `false` | Sign posts and replies with the caller's real name |
+| `autocorrect` | bool | absent (board default) | Editor [autocorrect](#autocorrect) for posts here; absent follows `editorAutocorrect` in `config.json` |
 | `conference_id` | int | `0` | Conference this area belongs to (0 or omitted = ungrouped) |
 | `base_path` | string | `msgbases/<tag>` | Relative path to JAM base files (under `data/`) |
 | `max_messages` | int | `0` | Maximum number of messages to retain (0 = no limit). Oldest messages are removed when the count is exceeded |
@@ -734,7 +798,7 @@ Message areas are defined in `configs/message_areas.json` as an array:
 | `qwk_conference` | int | `0` | For `qwknet` areas, the hub's conference number. Required; it is what messages are routed on |
 | `sponsor` | string | `""` | Handle of the area sponsor/moderator (optional). See [Sponsor Menus](users/sponsor-menus.md) |
 
-Keys marked `omitempty` in the source (`allow_anonymous`, `real_name_only`,
+Keys marked `omitempty` in the source (`allow_anonymous`, `real_name_only`, `autocorrect`,
 `conference_id`, `max_messages`, `max_age`, `auto_join`, `echo_tag`,
 `origin_addr`, `network`, `sponsor`, `qwk_conference`) are left out of the file
 when they hold their default.
@@ -855,6 +919,7 @@ read or not, matched on the recipient CRC stored in the JAM `.jdx` index.
 | `--real-name on\|off` | `set` | `real_name_only` |
 | `--anonymous on\|off` | `set` | `allow_anonymous` |
 | `--auto-join on\|off` | `set` | `auto_join` |
+| `--autocorrect on\|off\|default` | `set` | `autocorrect` (`default` removes it, so the area follows the board) |
 | `--acs-read <acs>`, `--acs-write <acs>` | `set` | `acs_read`, `acs_write` |
 | `--max-messages <n>`, `--max-age <days>` | `set` | Purge limits (0 = unlimited) |
 | `--sponsor <handle>` | `set` | `sponsor` |

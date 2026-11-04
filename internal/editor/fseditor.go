@@ -2,6 +2,7 @@ package editor
 
 import (
 	"io"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/gliderlabs/ssh"
@@ -35,6 +36,17 @@ type FSEditor struct {
 	modified       bool
 	saved          bool
 	quit           bool
+
+	// Autocorrect (see autocorrect.go): typos is nil when it is not enabled
+	typos     map[string]string
+	acOn      bool
+	acToggled func(on bool)    // saves the caller's choice; may be nil
+	acUndo    *acFix           // the last fix, while Backspace can still undo it
+	acPending *wordMark        // the last fix, to highlight once its key is applied
+	acSGR     string           // colour a fixed word is highlighted in
+	acText    acText           // notice text
+	noticeAt  time.Time        // when a notice went up on the prompt row
+	now       func() time.Time // the clock notices are timed by (time.Now)
 
 	// Metadata
 	subject     string
@@ -87,6 +99,7 @@ func NewFSEditor(session ssh.Session, terminal io.Writer, outputMode ansi.Output
 		session:        session,
 		outputMode:     outputMode,
 		menuSetPath:    menuSetPath,
+		now:            time.Now,
 	}
 }
 
@@ -189,6 +202,7 @@ func (e *FSEditor) Run() (string, bool, error) {
 
 		// Ensure view is updated to keep cursor visible
 		e.ensureCursorVisible()
+		e.placeFixMark()
 
 		// Determine if we need to update status line fields
 		statusChanged := (e.insertMode != e.lastInsertMode) || (e.topLine != e.lastTopLine)

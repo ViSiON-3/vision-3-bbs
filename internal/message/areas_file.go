@@ -461,7 +461,7 @@ func fieldsToArea(fields map[string]json.RawMessage) (MessageArea, error) {
 }
 
 // CloneAreas deep-copies areas, so a kept base snapshot cannot be changed
-// through a shared AllowAnon pointer.
+// through a shared AllowAnon or Autocorrect pointer.
 func CloneAreas(areas []MessageArea) []MessageArea {
 	if areas == nil {
 		return nil
@@ -471,6 +471,10 @@ func CloneAreas(areas []MessageArea) []MessageArea {
 		if a.AllowAnon != nil {
 			v := *a.AllowAnon
 			a.AllowAnon = &v
+		}
+		if a.Autocorrect != nil {
+			v := *a.Autocorrect
+			a.Autocorrect = &v
 		}
 		out[i] = a
 	}

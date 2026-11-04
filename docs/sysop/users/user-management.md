@@ -29,6 +29,7 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). F
 | Header Style | `msgHdr` |
 | Auto-Signature | `autoSignature`, `autoSigAsk` |
 | Thread View | `threadViewClosed`: whether the message reader shows the thread pane under the header (the default) or only while `T` (Thread) has the thread menu open |
+| Autocorrect | `autocorrectOff`: whether the message editor fixes common typos as the caller types, where the area offers it (Ctrl+O in the editor changes the same setting). Shown only when [autocorrect](messages/message-areas.md#autocorrect) is on somewhere on the board |
 | Real Name | `realName` (same rules as signup) |
 | Location | `group_location` |
 | User Note | `privateNote` |
@@ -930,6 +931,7 @@ These are the fields behind the User Konfig (`K`) screen; see
 - `file_list_columns` - Which columns the file lister shows. All `false` means every column is shown.
 - `autoSignature` - Auto-signature appended to messages (max 5 lines)
 - `autoSigAsk` - Ask before adding the auto-signature to each message. QWK replies get no signature while it is on. See [Auto-Signature](messages/autosig.md#asking-before-each-post).
+- `autocorrectOff` - The caller turned the message editor's [autocorrect](messages/message-areas.md#autocorrect) off (omitted while it is on)
 - `colors` - Array of 7 color values: [prompt, input, text, stat, text2, stat2, bar]. Stored but not yet applied ([#426](https://github.com/ViSiON-3/vision-3-bbs/issues/426)).
 
 ##### Soft Delete

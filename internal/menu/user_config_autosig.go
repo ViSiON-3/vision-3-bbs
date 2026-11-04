@@ -152,7 +152,7 @@ func runAutoSigEditor(c *cmdCtx, u *user.User) (body string, saved, truncated bo
 	body, saved, edErr := editor.RunEditorWithMetadata(
 		u.AutoSignature, c.s, sessionOutput(c.s), c.outputMode,
 		"Auto-Signature", "All", u.Handle, false,
-		"", "", "", "", false, nil, getSessionIH(c.s), editorCtx,
+		"", "", "", "", false, nil, getSessionIH(c.s), withAutocorrect(c.e, editorCtx, nil, u, c.userManager),
 	)
 	terminalio.WriteProcessedBytes(c.terminal, []byte(ansi.ClearScreen()), c.outputMode)
 	if edErr != nil {

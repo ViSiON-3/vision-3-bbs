@@ -375,7 +375,7 @@ func TestColorCodeToAnsi(t *testing.T) {
 		// A blink/bright background bit folds onto the standard background.
 		0x9E: "\x1b[93;44m",
 	} {
-		if got := colorCodeToAnsi(code); got != want {
+		if got := colorCodeToAnsi(code, true); got != want {
 			t.Errorf("colorCodeToAnsi(%d) = %q, want %q", code, got, want)
 		}
 	}

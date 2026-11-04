@@ -51,6 +51,7 @@ const (
 	KeyCtrlN = 0x0E // Split line (new line)
 	KeyCtrlB = 0x02 // Reformat paragraph
 	KeyCtrlL = 0x0C // Redisplay screen
+	KeyCtrlO = 0x0F // Autocorrect on/off
 
 	// Special keys
 	KeyEsc       = 0x1B // Escape
