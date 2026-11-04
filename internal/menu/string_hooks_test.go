@@ -53,6 +53,8 @@ type stringHookFixture struct {
 	s    hookSession
 	bbs  *session.BbsSession
 	term func() string
+	// start, when set, is published as the menu loop's call start time.
+	start time.Time
 }
 
 func newStringHookFixture(t *testing.T, input string) *stringHookFixture {
@@ -114,12 +116,16 @@ else if (a.indexOf("silent") < 0) { v3.prompt.answer(); }`
 	e.SetStrings(config.StringsConfig{ExecFileLoadError: "Cannot load %s"})
 	e.SetServerConfig(config.ServerConfig{CoSysOpLevel: 250})
 	e.SetDoorRegistry(map[string]config.DoorConfig{
-		"SAY":    {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, Args: []string{"door"}},
-		"ANSWER": {Type: "v3_script", Script: "answer.js", WorkingDirectory: scripts},
-		"NATIVE": {Commands: []string{"/bin/true"}},
-		"LOCKED": {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, MinAccessLevel: 200},
-		"GONE":   {Type: "v3_script", Script: "gone.js", WorkingDirectory: scripts},
-		"DIR":    {Type: "v3_script", Script: ".", WorkingDirectory: scripts},
+		"SAY":     {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, Args: []string{"door"}},
+		"ANSWER":  {Type: "v3_script", Script: "answer.js", WorkingDirectory: scripts},
+		"NATIVE":  {Commands: []string{"/bin/true"}},
+		"LOCKED":  {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, MinAccessLevel: 200},
+		"FLAGGED": {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, ACS: "FG"},
+		"TIMED":   {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, ACS: "T30"},
+		"NOTQ":    {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, ACS: "!Q"},
+		"BROKEN":  {Type: "v3_script", Script: "say.js", WorkingDirectory: scripts, ACS: "S10&"},
+		"GONE":    {Type: "v3_script", Script: "gone.js", WorkingDirectory: scripts},
+		"DIR":     {Type: "v3_script", Script: ".", WorkingDirectory: scripts},
 	})
 
 	ds := newDoorcovSession()
@@ -141,6 +147,9 @@ func (f *stringHookFixture) write(t *testing.T, value string, args ...any) strin
 	terminal := newDoorcovTerminal(f.s.doorcovSession)
 	RegisterStringHookSession(terminal, f.s, nil, f.bbs)
 	defer ClearStringHookSession(terminal)
+	if !f.start.IsZero() {
+		setStringHookStartTime(terminal, f.start)
+	}
 	done := make(chan error, 1)
 	go func() {
 		if args == nil {
@@ -219,6 +228,10 @@ func TestWriteStringScript(t *testing.T) {
 		{"no such door", "!missing", nil},
 		{"not a script door", "!native", nil},
 		{"below the door's access level", "!locked", nil},
+		{"fails the door's acs", "!flagged", nil},
+		// strict door acs: !Q and a malformed string pass no one, sysops included
+		{"door acs negates an unknown term", "!notq", func(f *stringHookFixture) { f.bbs.User.AccessLevel = 255 }},
+		{"door acs is malformed", "!broken", func(f *stringHookFixture) { f.bbs.User.AccessLevel = 255 }},
 		{"script file missing", "!gone", nil},
 		{"script path is a directory", "!dir", nil},
 		{"before login", "!say", func(f *stringHookFixture) { f.bbs.User = nil }},
@@ -234,6 +247,29 @@ func TestWriteStringScript(t *testing.T) {
 			}
 		})
 	}
+
+	// A door's acs applies to its string scripts as it does to launches.
+	t.Run("passes the door's acs", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		f.bbs.User.Flags = "G"
+		if out := f.write(t, "!flagged"); !strings.Contains(out, "[script") {
+			t.Errorf("output = %q", out)
+		}
+	})
+
+	// The door's acs is checked against the call start time the menu loop
+	// uses, so a T term answers as it would for DOOR:CODE.
+	t.Run("acs uses the menu's start time", func(t *testing.T) {
+		f := newStringHookFixture(t, "")
+		if out := f.write(t, "!timed"); !strings.Contains(out, "[script") {
+			t.Errorf("an hour left: output = %q", out)
+		}
+		f = newStringHookFixture(t, "")
+		f.start = time.Now().Add(-45 * time.Minute)
+		if out := f.write(t, "!timed"); strings.Contains(out, "[script") {
+			t.Errorf("15 minutes left by the menu's clock, T30 passed: output = %q", out)
+		}
+	})
 
 	// Hooks are read from the configured value before formatting, so text a
 	// caller typed and the BBS formats into a string can never start one.

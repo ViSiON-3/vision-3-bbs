@@ -146,6 +146,7 @@ A Synchronet JS door is a record in `configs/doors.json` with `"type": "synchron
 | `args` | []string | none | Arguments passed to the script as `argv`. Placeholders are not substituted |
 | `single_instance` | bool | `false` | Only allow one node at a time |
 | `min_access_level` | int | `0` | Minimum access level required |
+| `acs` | string | blank | ACS string the caller must also pass; see [Access Control](doors/doors.md#access-control) |
 
 The bundled games, as they appear inside the top-level array of
 `configs/doors.json`:

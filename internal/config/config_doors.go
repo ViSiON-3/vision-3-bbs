@@ -31,6 +31,7 @@ type DoorConfig struct {
 	UseShell             bool              `json:"use_shell,omitempty"`              // Wrap command in /bin/sh -c (Linux) or cmd /c (Windows)
 	SingleInstance       bool              `json:"single_instance,omitempty"`        // Only allow one node to run this door at a time
 	MinAccessLevel       int               `json:"min_access_level,omitempty"`       // Minimum user access level required (0 = no restriction)
+	ACS                  string            `json:"acs,omitempty"`                    // ACS string the caller must also pass (empty = no further restriction)
 	CleanupCommand       string            `json:"cleanup_command,omitempty"`        // Command to run after door exits (optional)
 	CleanupArgs          []string          `json:"cleanup_args,omitempty"`           // Arguments for cleanup command (supports placeholders)
 	EnvironmentVars      map[string]string `json:"environment_variables,omitempty"`  // Additional environment variables (optional)
@@ -207,6 +208,9 @@ func LoadDoors(filePath string) (map[string]DoorConfig, error) {
 	doorMap := make(map[string]DoorConfig)
 	for position, door := range doors {
 		door.ConfigOrder = position
+		// A hand-edited "acs": " " means no rule, as blank does; untrimmed it
+		// would fail to parse and deny everyone.
+		door.ACS = strings.TrimSpace(door.ACS)
 		if door.Category != "" {
 			// An unusable category is not worth refusing every door over:
 			// clear it, which lists the door under Other.

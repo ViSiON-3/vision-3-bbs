@@ -28,6 +28,9 @@ type acsSource struct {
 	Record string // e.g. `command "G"`, `area GENERAL`, `conference 1`
 	Field  string // e.g. "ACS", "acs_read"
 	ACS    string
+	// Strict marks a string held to the strict rule, a door's acs: anything
+	// acs.Validate reports denies it to every caller, warnings included.
+	Strict bool
 }
 
 // acsFinding is the diagnostics for one source string.
@@ -36,8 +39,12 @@ type acsFinding struct {
 	Diags  []acs.Diagnostic
 }
 
-// Severity is the finding's worst diagnostic.
+// Severity is the finding's worst diagnostic, or Error for any finding in a
+// strict string, which every caller fails whatever Validate found.
 func (f acsFinding) Severity() acs.Severity {
+	if f.Source.Strict {
+		return acs.Error
+	}
 	for _, d := range f.Diags {
 		if d.Severity == acs.Error {
 			return acs.Error
@@ -232,15 +239,23 @@ func collectACSSources(root string) []acsSource {
 				acsSource{File: "configs/ftn.json", Record: rec, Field: "acs_write", ACS: ac.ACSWrite})
 		}
 	}
-	// doors.json: doors have no ACS of their own yet, only min_access_level.
-	// When they do, list each door's acs here.
+	// doors.json, read as LoadDoors reads it: a blank or all-whitespace acs
+	// is no rule. A door's acs is strict (see acsSource.Strict).
+	var doors []config.DoorConfig
+	if readJSON(filepath.Join(configDir, "doors.json"), &doors) {
+		for i, d := range doors {
+			out = append(out, acsSource{File: "configs/doors.json", Record: fmt.Sprintf("door %d (%s)", i+1, d.Code),
+				Field: "acs", ACS: strings.TrimSpace(d.ACS), Strict: true})
+		}
+	}
 	return out
 }
 
 // checkACSStrings adds doctor's ACS section: one check per finding, a
-// failure for a string that can't be read as a whole (it fails for every
-// caller) and a warning for one whose meaning a stricter ACS policy would
-// change; one passing check when everything reads cleanly.
+// failure for a string that can't be read as a whole or a door acs with any
+// problem (either fails for every caller) and a warning for one whose
+// meaning a stricter ACS policy would change; one passing check when
+// everything reads cleanly.
 func checkACSStrings(root string, add func(string, doctorSeverity, string, string)) {
 	findings, checked := scanACS(root)
 	if len(findings) == 0 {
@@ -249,7 +264,10 @@ func checkACSStrings(root string, add func(string, doctorSeverity, string, strin
 	}
 	for _, f := range findings {
 		status, fix := doctorWarn, "It works as it always has for now, but a stricter ACS check will change what it does. Fix it; see docs/sysop/reference/acs.md."
-		if f.Severity() == acs.Error {
+		switch {
+		case f.Source.Strict:
+			status, fix = doctorFail, "A door's acs must read cleanly: this one denies the door to every caller, sysops included. Fix it; see docs/sysop/reference/acs.md."
+		case f.Severity() == acs.Error:
 			status, fix = doctorFail, "This string denies every caller. Fix it; see docs/sysop/reference/acs.md."
 		}
 		add("ACS: "+f.Source.File, status, f.Detail(), fix)

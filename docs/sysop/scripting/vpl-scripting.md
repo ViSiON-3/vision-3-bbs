@@ -101,6 +101,7 @@ Or use the **Configuration Editor** (`./config`, section 7 — Door Programs →
 | `args` | No | Array of arguments available as `v3.args` in the script |
 | `single_instance` | No | If `true`, only one node can run this door at a time |
 | `min_access_level` | No | Minimum user access level required (0 = no restriction) |
+| `acs` | No | ACS string the caller must also pass. See [Access Control](doors/doors.md#access-control) |
 | `max_run_minutes` | No | Wall-clock limit on one run, in minutes. `0` (default) is 30 minutes; `-1` is no limit. See [Run Time Limit](#run-time-limit) |
 
 #### Run Time Limit

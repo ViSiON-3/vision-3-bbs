@@ -117,6 +117,22 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 		return c.currentUser, next, err
 	}
 	allows := func(acs string) bool { return checkACS(acs, c.currentUser, c.s, c.terminal, c.sessionStartTime) }
+	// The listing evaluates each distinct door and category ACS once and
+	// reuses the answer across redraws, page changes and selections, so a
+	// string is parsed and logged once, not on every keypress. A door acs
+	// that doesn't read cleanly is never evaluated: doorRulesPass denies it
+	// first, here as at launch. The answers are dropped after each door,
+	// which may change the caller's record; the DOOR handler checks a launch
+	// afresh either way.
+	listed := map[string]bool{}
+	listAllows := func(acs string) bool {
+		ok, seen := listed[acs]
+		if !seen {
+			ok = allows(acs)
+			listed[acs] = ok
+		}
+		return ok
+	}
 	if !allows(rec.ACS) {
 		return denied()
 	}
@@ -159,7 +175,7 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 		}
 		categories := category == "" && len(cfg.DoorCategories) > 0
-		entries := buildDoorMenuEntries(e.DoorRegistry(), cfg, category, c.currentUser.AccessLevel, allows, e.Strings().DoorMenuOther)
+		entries := buildDoorMenuEntries(e.DoorRegistry(), cfg, category, c.currentUser.AccessLevel, listAllows, e.Strings().DoorMenuOther)
 		selected = max(0, min(selected, len(entries)-1))
 		w, h := c.termWidth, c.termHeight
 		if c.s != nil {
@@ -512,9 +528,9 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 			selected = 0
 			continue
 		}
-		// Recheck the snapshot after input, in case configuration or access changed
-		// while the caller was deciding. The normal door handler checks access too.
-		fresh := buildDoorMenuEntries(e.DoorRegistry(), e.GetServerConfig(), category, c.currentUser.AccessLevel, allows, e.Strings().DoorMenuOther)
+		// Recheck the snapshot after input, in case the configuration changed
+		// while the caller was deciding. The DOOR handler rechecks access itself.
+		fresh := buildDoorMenuEntries(e.DoorRegistry(), e.GetServerConfig(), category, c.currentUser.AccessLevel, listAllows, e.Strings().DoorMenuOther)
 		allowed := false
 		for _, d := range fresh {
 			if !d.category && d.code == entry.code {
@@ -533,6 +549,7 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 		if u != nil {
 			c.currentUser = u
 		}
+		clear(listed)
 		if next != "" || isSessionFatal(err) {
 			return c.currentUser, next, err
 		}
@@ -544,7 +561,7 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		// Keep the selected door across registry changes and recompute page geometry
 		// on the next redraw (including a resize performed while inside the door).
-		fresh = buildDoorMenuEntries(e.DoorRegistry(), e.GetServerConfig(), category, c.currentUser.AccessLevel, allows, e.Strings().DoorMenuOther)
+		fresh = buildDoorMenuEntries(e.DoorRegistry(), e.GetServerConfig(), category, c.currentUser.AccessLevel, listAllows, e.Strings().DoorMenuOther)
 		for i, d := range fresh {
 			if d.code == entry.code {
 				selected = i

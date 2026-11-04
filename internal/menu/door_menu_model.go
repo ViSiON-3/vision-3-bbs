@@ -15,6 +15,10 @@ type doorMenuEntry struct {
 
 // buildDoorMenuEntries is shared by both input modes. Unknown category names
 // join Other; known but inaccessible categories never leak through Other.
+// allows evaluates an ACS string for the caller. A door is listed when it is
+// not hidden and passes doorRulesPass, the rule the DOOR handler applies at
+// launch (doorAllowed); a category's own rules only decide whether the
+// category, and so its doors, appear in this menu.
 func buildDoorMenuEntries(doors map[string]config.DoorConfig, cfg config.ServerConfig, category string, level int, allows func(string) bool, otherName string) []doorMenuEntry {
 	cats := map[string]config.DoorCategory{}
 	for _, cat := range cfg.DoorCategories {
@@ -22,7 +26,7 @@ func buildDoorMenuEntries(doors map[string]config.DoorConfig, cfg config.ServerC
 	}
 	groups := map[string][]doorMenuEntry{}
 	for code, d := range doors {
-		if d.Hidden || d.MinAccessLevel > level {
+		if d.Hidden || !doorRulesPass(d, level, allows) {
 			continue
 		}
 		group := d.Category

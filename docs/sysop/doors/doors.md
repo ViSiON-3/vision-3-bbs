@@ -99,9 +99,18 @@ For DOS doors the setting does not exist: every dropfile format is always writte
 
 ## Access Control
 
-Set **Min Access Level** (`min_access_level`) to restrict a door to users with a minimum access level. Users below the required level will see an "access denied" message. A value of `0` (default) means no restriction.
+A door has two rules of its own, and a caller must pass both to list it, see its details or run it:
 
-Doors with access restrictions are hidden from the door list for unauthorized users. The menu command that launches the door can carry an ACS (Access Control String) as well; see [Menus & ACS](menus/menu-system.md).
+- **Min Access Level** (`min_access_level`): the lowest access level allowed. `0` (default) is no restriction.
+- **ACS** (`acs`): an [Access Control String](reference/acs.md), such as `fG` (flag G) or `s20&Y18:00/23:59` (level 20 and up, in the evening). Blank (default), or only spaces, adds no restriction.
+
+They combine with AND. A blank or `*` ACS never lifts the minimum level, and neither rule has a sysop exception: a sysop the rules exclude is excluded like anyone else (use `SYSOP` in the ACS to let sysops in).
+
+A door's ACS is held to a stricter rule than other ACS strings: it must read cleanly, or the door is denied to everyone, sysops included. Anything `vision3 doctor` reports for it denies the door, not only a string that can't be read as a whole (`S20&`, `(S20`) but also a term that is always false (an unknown letter such as `Q`, or a bad argument such as `H25`) and an ignored character (`S<20`). So `!Q`, which passes everyone on a menu command, passes no one on a door. The config editor refuses such a string in the door's **ACS** field and says which column is wrong, and `vision3 doctor` and the startup check report one in `doors.json` as a failure; see [Checking your strings](reference/acs.md#checking-your-strings).
+
+A caller who fails either rule sees "access denied", and the door's details are not shown. `DOORINFO` never shows the ACS itself, even to a caller who passes it, since it can name flags or a time window. Doors a caller fails are left out of `LISTDOORS` and the [generated door menu](doors/generated-menu.md). The rules are checked again when the door is launched, before any dropfile is written or anything is started, so a door listed a moment earlier is refused if a flag was taken away or an ACS time window closed in between.
+
+They apply on every way into a door: a `DOOR:CODE` menu command or login step, the generated door menu, `OPENDOOR`, `DOORINFO`, `LISTDOORS`, and a `!CODE` [string script](advanced/string-editor.md). The menu command that launches the door can carry an ACS of its own as well; see [Menus & ACS](menus/menu-system.md). A door category's **Min Access Level** and **ACS** are different: they only decide what the generated menu shows, not who may run the door.
 
 ## Single Instance Locking
 
@@ -236,7 +245,7 @@ A native door that exits with a nonzero status, or is ended by a signal, has sti
 
 A door that cannot be started at all, such as a missing executable or a DOS door whose dosemu2 did not start, shows the caller an error followed by `Press Enter to continue...`. The BBS waits for that Enter before returning to the menu, so the key never reaches the menu and relaunches the door. A caller who idles at that prompt for their idle timeout, or hangs up, is logged off as they would be anywhere else.
 
-Other messages a caller can see: **access denied** when their level is below the door's **Min Access Level**, **door is in use** when a **Single Instance** door is running on another node, and **not found** when a `DOOR:CODE` command names a code that is not in `doors.json`. The wording of each is in `strings.json` (`doorAccessDenied`, `doorBusyFormat`, `doorErrorFormat`, `doorNotFoundFormat` and their neighbours).
+Other messages a caller can see: **access denied** when they fail the door's **Min Access Level** or **ACS**, **door is in use** when a **Single Instance** door is running on another node, and **not found** when a `DOOR:CODE` command names a code that is not in `doors.json`. The wording of each is in `strings.json` (`doorAccessDenied`, `doorBusyFormat`, `doorErrorFormat`, `doorNotFoundFormat` and their neighbours).
 
 The door setup guide has a [troubleshooting list](how-to-guides/doors.md#troubleshooting) for doors that start but misbehave.
 
@@ -320,6 +329,7 @@ These fields apply to every door type unless the table says otherwise.
 | `dropfile_case` | string | `upper` | `upper` (`DOOR32.SYS`) or `lower` (`door32.sys`). Native doors only |
 | `dropfile_hide_personal` | bool | `false` | Leave the user's real name, location and IP address out of `DROPFILE.INI`. See [DROPFILE.INI](#dropfileini) |
 | `min_access_level` | int | `0` | Minimum user access level required (0 = no restriction) |
+| `acs` | string | blank | ACS string the caller must also pass (blank = no further restriction). One that doesn't read cleanly denies the door to everyone. See [Access Control](#access-control) |
 | `single_instance` | bool | `false` | Only allow one node to run this door at a time |
 | `cleanup_command` | string | blank | Program to run after the door exits. Native and DOS doors |
 | `cleanup_args` | []string | none | Arguments for the cleanup program (supports placeholders) |

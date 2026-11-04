@@ -323,9 +323,11 @@ What each section covers:
   script or executable exists.
 - **Access control** — every ACS string the board declares, in menus and
   commands (stock and overlay), `{{acs}}` regions in menu art, message and
-  file areas, conferences, door categories and FTN auto-create. A string
-  that can't be read, and so denies every caller, is a `FAIL`; one with a
-  term that is always false or a character that is ignored is a `WARN`. See
+  file areas, conferences, doors, door categories and FTN auto-create. A
+  string that can't be read, and so denies every caller, is a `FAIL`; one
+  with a term that is always false or a character that is ignored is a
+  `WARN`, except in a door's `acs`, where any problem denies the door to
+  everyone and is a `FAIL`. See
   [Checking your strings](reference/acs.md#checking-your-strings).
 
 ### Safe Fixes (`--fix`)
@@ -867,7 +869,9 @@ records, written by the Configuration Editor. Every key, its type and default
 is in the [Door Programs Technical Reference](doors/doors.md#technical-reference),
 with the dropfile formats, placeholders and environment variables. The `type`
 key is `synchronet_js`, `v3_script`, `rlogin`, `telnet`, or blank for a native
-door (`"is_dos": true` for DOS). The generated door menu adds `category`,
+door (`"is_dos": true` for DOS). Who may use a door is set by
+`min_access_level` and `acs`, which must both pass; see
+[Access Control](doors/doors.md#access-control). The generated door menu adds `category`,
 `description`, `hidden` and `sort_order`; see
 [Generated door menus](doors/generated-menu.md). The `code` of a `v3_script`
 door is also what a `strings.json` value names after `!` to run it in place of

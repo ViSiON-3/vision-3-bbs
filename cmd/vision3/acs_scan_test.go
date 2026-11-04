@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 )
 
 // writeACSFixture builds a board under t.TempDir with one questionable ACS
@@ -39,6 +41,7 @@ func writeACSFixture(t *testing.T) string {
 	write("configs/conferences.json", `[{"id": 1, "tag": "LOCAL", "acs": "s10)"}]`)
 	write("configs/config.json", `{"doorCategories": [{"code": "GAMES", "name": "Games", "acs": "S20&!Sx"}]}`)
 	write("configs/ftn.json", `{"networks": {"fsxnet": {"auto_create": {"enabled": true, "acs_read": "s10", "acs_write": "s20@"}}}}`)
+	write("configs/doors.json", `[{"code": "LORD", "name": "LORD", "acs": "s20&!Q"}]`)
 	return root
 }
 
@@ -55,6 +58,7 @@ func TestScanACS(t *testing.T) {
 		{"configs/conferences.json", "conference 1 (LOCAL)", "acs", "no matching '('"},
 		{"configs/config.json", "door category GAMES", "acs", "the '!' before it"},
 		{"configs/ftn.json", "network fsxnet auto_create", "acs_write", "unexpected character '@'"},
+		{"configs/doors.json", "door 1 (LORD)", "acs", "the '!' before it"},
 	}
 	findings, _ := scanACS(root)
 	for _, w := range wants {
@@ -109,6 +113,8 @@ func TestCheckACSStringsSeverities(t *testing.T) {
 		`"!Q"`:      doctorWarn,
 		`"H25"`:     doctorWarn,
 		`"s20@"`:    doctorWarn,
+		// a door's acs is strict: a warning anywhere else is a failure there
+		`"s20&!Q"`: doctorFail,
 	} {
 		var got doctorSeverity
 		for _, c := range checks {
@@ -134,6 +140,65 @@ func TestCheckACSStringsClean(t *testing.T) {
 	checkACSStrings(root, func(_ string, status doctorSeverity, _, _ string) { got = append(got, status) })
 	if len(got) != 1 || got[0] != doctorOK {
 		t.Errorf("clean board: %v, want one ok", got)
+	}
+}
+
+// TestScanACSDoors checks that each door's acs in doors.json is scanned,
+// trimmed as LoadDoors trims it, and that any problem in one is a failure:
+// the BBS denies such a door to every caller.
+func TestScanACSDoors(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "configs", "doors.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	doors := `[{"code": "NOTQ", "acs": "!Q"}, {"code": "BROKEN", "acs": "s20&"}, {"code": "GOOD", "acs": " s20&fG "},
+		{"code": "BLANK", "acs": "   "}, {"code": "NONE"}, {"code": "HOUR", "acs": "H25"}]`
+	if err := os.WriteFile(path, []byte(doors), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	findings, checked := scanACS(root)
+	if checked != 4 {
+		t.Errorf("checked %d door strings, want 4 (blank and missing are no rule)", checked)
+	}
+	got := map[string]acsFinding{}
+	for _, f := range findings {
+		if f.Source.File != "configs/doors.json" || f.Source.Field != "acs" {
+			t.Errorf("unexpected finding %s", f)
+		}
+		got[f.Source.Record] = f
+	}
+	for _, rec := range []string{"door 1 (NOTQ)", "door 2 (BROKEN)", "door 6 (HOUR)"} {
+		f, ok := got[rec]
+		if !ok {
+			t.Errorf("no finding for %s", rec)
+			continue
+		}
+		if f.Severity() != acs.Error {
+			t.Errorf("%s: severity %v, want error", f, f.Severity())
+		}
+	}
+	if len(got) != 3 {
+		t.Errorf("findings %v, want NOTQ, BROKEN and HOUR only", got)
+	}
+
+	var statuses []doctorSeverity
+	checkACSStrings(root, func(_ string, status doctorSeverity, _, _ string) { statuses = append(statuses, status) })
+	for _, st := range statuses {
+		if st != doctorFail {
+			t.Errorf("door acs check status %q, want fail", st)
+		}
+	}
+
+	resetACSLogged(t)
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	logACSFindings(root)
+	if n := strings.Count(buf.String(), "level=ERROR"); n != 3 || strings.Contains(buf.String(), "level=WARN") {
+		t.Errorf("want three door findings logged as errors:\n%s", buf.String())
 	}
 }
 

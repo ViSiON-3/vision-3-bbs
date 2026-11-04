@@ -50,6 +50,20 @@ type stringHookSession struct {
 	// user is the record the menu loop is working with, published by
 	// SetStringHookUser; nil until then, when the session's user is read.
 	user atomic.Pointer[user.User]
+	// start is the call start time the menu loop checks ACS and time left
+	// against, published by setStringHookStartTime; nil until then, when the
+	// session's is used.
+	start atomic.Pointer[time.Time]
+}
+
+// startTime returns the call start time a string's script is checked and run
+// against: the menu loop's, so a T term in a door's acs answers the same for
+// !CODE as for DOOR:CODE, else the session's.
+func (hs *stringHookSession) startTime() time.Time {
+	if t := hs.start.Load(); t != nil {
+		return *t
+	}
+	return hs.bbs.StartTime
 }
 
 // currentUser returns the caller's user record: the one the menu loop has
@@ -86,6 +100,14 @@ func ClearStringHookSession(t *term.Terminal) {
 func SetStringHookUser(t *term.Terminal, u *user.User) {
 	if hs := lookupStringHookSession(t); hs != nil {
 		hs.user.Store(u)
+	}
+}
+
+// setStringHookStartTime publishes start, the call start time the menu loop
+// writing to t runs with, for the scripts strings written to t start.
+func setStringHookStartTime(t *term.Terminal, start time.Time) {
+	if hs := lookupStringHookSession(t); hs != nil {
+		hs.start.Store(&start)
 	}
 }
 
@@ -299,11 +321,12 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 		warnStringHookOnce(value, "script file not found", "door", name, "script", doorConfig.Script)
 		return false, answer, nil
 	}
-	if doorConfig.MinAccessLevel > 0 && u.AccessLevel < doorConfig.MinAccessLevel {
+	startTime := hs.startTime()
+	if !doorAllowed(doorConfig, u, hs.s, terminal, startTime) {
 		// Expected for a string shown to every caller but scripted only for
 		// some, so not a warning.
-		slog.Debug("string script below caller's access level, printed as text",
-			"door", name, "level", u.AccessLevel, "required", doorConfig.MinAccessLevel)
+		slog.Debug("string script door not allowed for caller, printed as text",
+			"door", name, "level", u.AccessLevel, "required", doorConfig.MinAccessLevel, "acs", doorConfig.ACS)
 		return false, answer, nil
 	}
 	if !hs.running.CompareAndSwap(false, true) {
@@ -325,7 +348,7 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 		u.AccessLevel, u.TimeLimit, u.TimesCalled,
 		u.GroupLocation,
 		width, height,
-		hs.bbs.NodeID, hs.bbs.StartTime, outputMode,
+		hs.bbs.NodeID, startTime, outputMode,
 		doorConfig, name)
 	ctx.UserManager = hs.userMgr
 	ctx.CurrentUser = u
