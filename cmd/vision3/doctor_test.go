@@ -221,6 +221,44 @@ func TestCheckMenuFilesReportsDanglingCommandReferences(t *testing.T) {
 	}
 }
 
+func TestCheckMenuFilesReportsActualOverlaySource(t *testing.T) {
+	root := t.TempDir()
+	menus := filepath.Join(root, "menus", "v3")
+	baseFile := filepath.Join(menus, "cfg", "DOORSM.CFG")
+	overlayFile := filepath.Join(root, "menus.d", "v3", "cfg", "DOORSM.CFG")
+	for _, path := range []string{baseFile, overlayFile} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeDoctorFixture(t, baseFile, `[{"CMD":"DOOR:BASEONLY"}]`)
+	writeDoctorFixture(t, overlayFile, `[{"CMD":"DOOR:OLDOVERLAY"}]`)
+	run := func() []doctorCheck {
+		var checks []doctorCheck
+		checkMenuFiles(menus, filepath.Join(root, "configs"), func(name string, status doctorSeverity, message, fix string) {
+			checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+		})
+		return checks
+	}
+	checks := run()
+	if !hasDoctorCheck(checks, "menu references", doctorWarn, `menus.d/v3/cfg/DOORSM.CFG references missing door "OLDOVERLAY"`) {
+		t.Fatalf("expected actual overlay source: %#v", checks)
+	}
+	if hasDoctorCheck(checks, "menu references", doctorWarn, "BASEONLY") {
+		t.Fatal("checked shadowed base commands")
+	}
+	writeDoctorFixture(t, overlayFile, `[]`)
+	if checks := run(); !hasDoctorCheck(checks, "menu references", doctorOK, "targets resolve") {
+		t.Fatalf("removed overlay commands still reported: %#v", checks)
+	}
+	if err := os.Remove(overlayFile); err != nil {
+		t.Fatal(err)
+	}
+	if checks := run(); !hasDoctorCheck(checks, "menu references", doctorWarn, `menus/v3/cfg/DOORSM.CFG references missing door "BASEONLY"`) {
+		t.Fatalf("expected base source after overlay removal: %#v", checks)
+	}
+}
+
 func TestCheckBinkdAgreementReportsMismatchedHubAndNodeSettings(t *testing.T) {
 	root := t.TempDir()
 	cfg := config.FTNConfig{
