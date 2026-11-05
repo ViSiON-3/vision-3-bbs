@@ -141,6 +141,31 @@ func (cr *chatRooms) Users(network, room string) []string {
 	return cr.usersLocked(network, room)
 }
 
+// nodesForHandle returns the distinct nodes with this exact handle joined
+// to any room on network, sorted for stable disambiguation choices. Several
+// rooms on the same BBS represent one possible destination.
+func (cr *chatRooms) nodesForHandle(network, handle string) []string {
+	cr.mu.RLock()
+	defer cr.mu.RUnlock()
+	seen := make(map[string]bool)
+	for _, room := range cr.networks[network] {
+		for node, handles := range room.members {
+			for _, member := range handles {
+				if member == handle {
+					seen[node] = true
+					break
+				}
+			}
+		}
+	}
+	nodes := make([]string, 0, len(seen))
+	for node := range seen {
+		nodes = append(nodes, node)
+	}
+	sort.Strings(nodes)
+	return nodes
+}
+
 func (cr *chatRooms) usersLocked(network, room string) []string {
 	rooms := cr.networks[network]
 	if rooms == nil {

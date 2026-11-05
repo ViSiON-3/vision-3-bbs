@@ -346,11 +346,31 @@ func (s *ChatSession) Post(room, text string) error {
 }
 
 // Private implements chat.ChatService by asking the hub to deliver text
-// privately to handle on the given node.
+// privately to handle on the given node. With an empty node, the hub resolves
+// an unambiguous joined handle; its error explains unavailable or ambiguous
+// targets, including explicit handle@node choices.
 func (s *ChatSession) Private(handle, node, text string) error {
 	body, _ := json.Marshal(protocol.ChatPrivateRequest{ToHandle: handle, ToNode: node, Text: text, Handle: s.handle})
-	return s.leaf.signedPostCtx(context.Background(),
+	resp, err := s.leaf.signedPostWithResponse(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/private", s.leaf.cfg.Network), body)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }() // read side
+	if resp.StatusCode/100 == 2 {
+		return nil
+	}
+	data, err := readBody(resp.Body, maxRespBytes)
+	if err != nil {
+		return fmt.Errorf("private chat: hub returned %d: %w", resp.StatusCode, err)
+	}
+	var detail struct {
+		Error string `json:"error"`
+	}
+	if json.Unmarshal(data, &detail) == nil && detail.Error != "" {
+		return fmt.Errorf("private chat: hub returned %d: %s", resp.StatusCode, protocol.TrimField(detail.Error, 2048))
+	}
+	return fmt.Errorf("private chat: hub returned %d", resp.StatusCode)
 }
 
 // SetTopic implements chat.ChatService by asking the hub to change room's
