@@ -263,16 +263,18 @@ exactly that many columns, so the art keeps its shape.
 | `@TOPIC#…@` | Current room topic | `Welcome to FelonyNet` |
 | `@U#…@` | Users in the room | `·003` |
 | `@M#…@` | Messages since you joined the room that contain your handle as a word | `·01` |
-| `@L#…@` | Network round-trip time; blank on Local chat | `·042ms` |
+| `@L#…@` | Network round-trip time; `·local` on Local chat | `·042ms` |
 | `@B#…@` | Scrollback lines in use and the scrollback size | `·012/500` |
+| `@K@` | Link: `■` while the hub answers, `!` while it does not; blank on Local chat | ` ■ ` |
 
 The four counters are drawn as a `·` separator followed by the number,
 zero-padded to fill the field. A number with more digits than fit shows as all
 nines. `@L` ends in `ms`, and `@B` splits its digits between the two numbers.
 While the hub is unreachable `@L` shows dashes in place of the digits
-(`·---ms`). The stock art uses the narrowest fields: `@U#@` (4 columns),
-`@M@` (3), `@L###@` (6) and `@B#####@` (8). Make a field wider for more
-digits.
+(`·---ms`) and `@K` shows `!`; both follow the lag ping, taken every 15
+seconds. The stock art uses the narrowest fields: `@U#@` (4 columns),
+`@M@` (3), `@L###@` (6), `@B#####@` (8) and `@K@` (3, with the mark in the
+middle). Make a field wider for more digits.
 
 **Example**: a 16-character room field:
 

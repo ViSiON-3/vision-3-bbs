@@ -391,10 +391,11 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				"M":     func(w int) string { return chatCounter(w, mentions, "") },
 				"L": func(w int) string {
 					if !pinging {
-						return ""
+						return chatLocalField(w)
 					}
 					return chatLagField(w, lag, lagOK)
 				},
+				"K": func(w int) string { return chatLinkField(pinging, lagOK) },
 				"B": func(w int) string { return chatBufferField(w, scrollback.len(), chatScrollbackLines) },
 			})
 			// The art is UTF-8 by now; make wraps explicit so each header
@@ -495,11 +496,11 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 
-	// keepChatLineLocked wraps text into the scrollback as a timestamped
-	// line, without drawing it. Caller must hold rawMu.
-	keepChatLineLocked := func(text string) {
-		ts := time.Now().Format("15:04")
-		fullText := fmt.Sprintf("|08%s|07 %s", ts, text)
+	// keepChatLineLocked wraps text into the scrollback as a line stamped
+	// with the time at, or now when at is zero, without drawing it. Caller
+	// must hold rawMu.
+	keepChatLineLocked := func(text string, at time.Time) {
+		fullText := fmt.Sprintf("|08%s|07 %s", chatStamp(at, time.Now()), text)
 		// The last column stays free, as it does on the input rows: a terminal
 		// without a deferred wrap moves to the next row as soon as a character
 		// lands there, and on the bottom row of the region that scrolls the
@@ -537,20 +538,29 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	// and a script or a full-screen file would tear the layout apart.
 	writeChatLineLocked := func(text string) {
 		held := scrollback.len()
-		keepChatLineLocked(text)
+		keepChatLineLocked(text, time.Time{})
 		showChatLinesLocked(held)
 	}
 
-	// writeChatHistory shows the join notice for room and its history as one
-	// redraw of the region, not one per line.
+	// writeChatMessageLocked writes a room or private message as text,
+	// stamped with the time it was sent. Caller must hold rawMu.
+	writeChatMessageLocked := func(msg chat.ChatMessage, text string) {
+		held := scrollback.len()
+		keepChatLineLocked(text, msg.Timestamp)
+		showChatLinesLocked(held)
+	}
+
+	// writeChatHistory shows a room's history, each line at the time it was
+	// said, then the join notice, where the live room starts, as one redraw
+	// of the region rather than one per line.
 	writeChatHistory := func(room string, history []chat.ChatMessage) {
 		rawMu.Lock()
 		defer rawMu.Unlock()
 		held := scrollback.len()
-		keepChatLineLocked(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Joined #"+room))
 		for _, msg := range history {
-			keepChatLineLocked(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
+			keepChatLineLocked(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat), msg.Timestamp)
 		}
+		keepChatLineLocked(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Joined #"+room), time.Time{})
 		showChatLinesLocked(held)
 	}
 
@@ -636,7 +646,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			case chat.TypeMessage:
 				if ev.Message != nil {
 					rawMu.Lock()
-					writeChatLineLocked(formatChatMessage(*ev.Message, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
+					writeChatMessageLocked(*ev.Message, formatChatMessage(*ev.Message, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 					if !ev.Message.IsSystem && chatMentions(ev.Message.Text, handle) {
 						mentions++
 						drawHeaderLocked()
@@ -645,7 +655,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 			case chat.TypePrivate:
 				if ev.Message != nil {
-					writeChatLine(fmt.Sprintf(e.Strings().ChatPrivateMsgFormat, chatText(ev.Message.Handle), chatText(ev.Message.Text)))
+					rawMu.Lock()
+					writeChatMessageLocked(*ev.Message, fmt.Sprintf(e.Strings().ChatPrivateMsgFormat, chatText(ev.Message.Handle), chatText(ev.Message.Text)))
+					rawMu.Unlock()
 				}
 			case chat.TypeJoin:
 				if ev.Join != nil {
@@ -1196,6 +1208,45 @@ func chatLagField(width int, lag time.Duration, ok bool) string {
 		return "\u00b7" + strings.Repeat("-", digits) + "ms"
 	}
 	return "-"
+}
+
+// chatLocalField fills the Lag field on local chat, where there is no link
+// to measure: "·local" when it fits, else as much of "local" as does.
+func chatLocalField(width int) string {
+	if width >= 6 {
+		return "\u00b7local"
+	}
+	return runewidth.Truncate("local", width, "")
+}
+
+// chatLinkField fills the header's link field: blank on local chat, which
+// has no link, "■" while the hub answers the lag ping and "!" while it does
+// not, so a caller can see whether the room is live. The mark sits in the
+// middle of the three columns a placeholder takes at the least.
+func chatLinkField(pinging, ok bool) string {
+	switch {
+	case !pinging:
+		return ""
+	case ok:
+		return " \u25a0 "
+	}
+	return " ! "
+}
+
+// chatStamp is the timestamp shown in front of a chat line said at the time
+// at, as seen at now: the time of day for a line from today, and the
+// month and day, in the same five columns, for one from an earlier day, so
+// a room's history is not mistaken for a burst of live chat. A zero at
+// means now.
+func chatStamp(at, now time.Time) string {
+	if at.IsZero() {
+		at = now
+	}
+	at = at.In(now.Location())
+	if at.Year() == now.Year() && at.YearDay() == now.YearDay() {
+		return at.Format("15:04")
+	}
+	return at.Format("01/02")
 }
 
 // chatBufferField formats the scrollback use for a header field width columns

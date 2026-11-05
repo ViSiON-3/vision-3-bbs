@@ -44,6 +44,50 @@ func TestChatArtFill(t *testing.T) {
 	}
 }
 
+// The Lag field on local chat, and the link field in each of its states.
+func TestChatLocalAndLinkFields(t *testing.T) {
+	for w, want := range map[int]string{6: "·local", 8: "·local", 5: "local", 3: "loc"} {
+		if got := chatLocalField(w); got != want {
+			t.Errorf("chatLocalField(%d) = %q, want %q", w, got, want)
+		}
+	}
+	for _, tc := range []struct {
+		pinging, ok bool
+		want        string
+	}{
+		{false, false, ""},
+		{false, true, ""},
+		{true, true, " ■ "},
+		{true, false, " ! "},
+	} {
+		if got := chatLinkField(tc.pinging, tc.ok); got != tc.want {
+			t.Errorf("chatLinkField(%v, %v) = %q, want %q", tc.pinging, tc.ok, got, tc.want)
+		}
+	}
+}
+
+// A line's timestamp is its time of day when it is from today and the
+// month and day, in the same five columns, when it is older.
+func TestChatStamp(t *testing.T) {
+	loc := time.FixedZone("test", -8*3600)
+	now := time.Date(2026, 11, 5, 18, 40, 0, 0, loc)
+	for _, tc := range []struct {
+		name string
+		at   time.Time
+		want string
+	}{
+		{"zero is now", time.Time{}, "18:40"},
+		{"earlier today", time.Date(2026, 11, 5, 9, 5, 0, 0, loc), "09:05"},
+		{"yesterday", time.Date(2026, 11, 4, 23, 59, 0, 0, loc), "11/04"},
+		{"last year", time.Date(2025, 11, 5, 18, 40, 0, 0, loc), "11/05"},
+		{"today in UTC, which is tomorrow there", time.Date(2026, 11, 6, 2, 30, 0, 0, time.UTC), "18:30"},
+	} {
+		if got := chatStamp(tc.at, now); got != tc.want {
+			t.Errorf("%s: chatStamp = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestChatCounterFields(t *testing.T) {
 	for _, tc := range []struct {
 		name, got, want string
@@ -263,11 +307,12 @@ func TestChatHeaderUsersAndMentions(t *testing.T) {
 	live.typeKeys("/q\r")
 }
 
-// On Local chat there is no network to measure, so Lag is blank.
+// On Local chat there is no network to measure, so Lag says so and the
+// link field is blank.
 func TestChatHeaderLagBlankOnLocal(t *testing.T) {
 	env := newMenuEnv(t)
 	live := startChatLive(env, env.caller)
-	live.waitHeader("[Lag      ]", "[Users·001]")
+	live.waitHeader("[Lag·local]", "[Users·001]", "[   ]")
 	live.typeKeys("/q\r")
 }
 
@@ -353,7 +398,7 @@ func TestChatHeaderLag(t *testing.T) {
 	live.typeKeys("\r")
 	live.waitOutput("Select room [lobby]:")
 	live.typeKeys("\r")
-	live.waitHeader("[Lag·042ms]", "[Users·002]")
+	live.waitHeader("[Lag·042ms]", "[Users·002]", "[ ■ ]")
 
 	mu.Lock()
 	rtt = 1500 * time.Millisecond
@@ -363,13 +408,14 @@ func TestChatHeaderLag(t *testing.T) {
 	mu.Lock()
 	fail = true
 	mu.Unlock()
-	live.waitHeader("[Lag·---ms]")
+	live.waitHeader("[Lag·---ms]", "[ ! ]")
 
-	// /network to Local stops measuring and blanks the field.
+	// /network to Local stops measuring: Lag says so and the link field
+	// goes blank.
 	live.typeKeys("/network\r")
 	live.waitOutput("Select network [1]: ")
 	live.typeKeys("2\r")
-	live.waitHeader("Network: Local", "[Lag      ]")
+	live.waitHeader("Network: Local", "[Lag·local]", "[   ]")
 	live.typeKeys("/q\r")
 }
 
