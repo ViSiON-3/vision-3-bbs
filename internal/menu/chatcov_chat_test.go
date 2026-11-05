@@ -900,6 +900,8 @@ func TestChatcovNetworkCommandChoices(t *testing.T) {
 	}
 }
 
+// /network on a board with no V3Net leaves offers Local alone, and picking it
+// clears the room and joins it again with its history.
 func TestChatcovNetworkCommandWithoutNetworks(t *testing.T) {
 	env := newMenuEnv(t)
 
@@ -919,6 +921,11 @@ func TestChatcovNetworkCommandWithoutNetworks(t *testing.T) {
 	}
 	if i := strings.Index(region, "*** Joined #lobby"); i < 0 || strings.Index(region, "<Caller> one") < i {
 		t.Errorf("the history is not shown after the rejoin:\n%s", region)
+	}
+	// The picker was shown before the room was cleared, so its lines are
+	// gone from the final region along with the earlier join and echo.
+	if strings.Contains(region, "*** Chat Networks:") {
+		t.Errorf("the room was not cleared by /network:\n%s", region)
 	}
 	chatcovEqual(t, "local history", chatcovLocalHistory(env, "lobby"), []string{"Caller: one", "Caller: two"})
 
