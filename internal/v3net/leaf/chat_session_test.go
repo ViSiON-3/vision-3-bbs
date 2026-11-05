@@ -119,13 +119,29 @@ func TestChatSession_TopicPrivateAndLeave(t *testing.T) {
 		t.Errorf("Rooms = %+v", rooms)
 	}
 
+	privateEvents := watchEvents(t, bobLeaf)
+	bobSecond := bobLeaf.NewChatSession("bob")
+	defer bobSecond.Close()
 	bobNode := bobLeaf.cfg.Keystore.NodeID()
 	if err := alice.Private("bob", bobNode, "psst"); err != nil {
 		t.Fatalf("Private: %v", err)
 	}
-	private := awaitEvent[protocol.ChatMsgPayload](t, events, protocol.EventChatPrivate, nil)
+	private := awaitEvent[protocol.ChatMsgPayload](t, privateEvents, protocol.EventChatPrivate, nil)
 	if private.FromHandle != "alice" || private.ToHandle != "bob" || private.ToNode != bobNode || private.Text != "psst" {
 		t.Errorf("hub relayed private message %+v", private)
+	}
+	// Each active recipient session receives one copy, even when two
+	// sessions share the same handle on the destination BBS.
+	for _, session := range []*ChatSession{bob, bobSecond} {
+		ev := awaitChat(t, session, chat.TypePrivate)
+		if ev.Message == nil || ev.Message.Text != "psst" || ev.Message.Handle != "alice" {
+			t.Fatalf("recipient session private event: %+v", ev)
+		}
+		select {
+		case duplicate := <-session.Events():
+			t.Errorf("unexpected extra recipient event: %+v", duplicate)
+		default:
+		}
 	}
 	// Private messages to a node the hub does not know are refused.
 	if err := bob.Private("nobody", "0000000000000000", "x"); err == nil || !strings.Contains(err.Error(), "404") {
@@ -153,6 +169,7 @@ func TestChatSession_UsersOnOneBBS(t *testing.T) {
 	ts, _, _ := newTestHub(t, true)
 	board := subscribedLeaf(t, ts, "boardbbs")
 	events := watchEvents(t, subscribedLeaf(t, ts, "observer"))
+	privateEvents := watchEvents(t, board)
 
 	alice := board.NewChatSession("alice")
 	defer alice.Close()
@@ -183,7 +200,7 @@ func TestChatSession_UsersOnOneBBS(t *testing.T) {
 			t.Errorf("hub broadcast %+v, want a post from %s", msg, want)
 		}
 	}
-	private := awaitEvent[protocol.ChatMsgPayload](t, events, protocol.EventChatPrivate, nil)
+	private := awaitEvent[protocol.ChatMsgPayload](t, privateEvents, protocol.EventChatPrivate, nil)
 	if private.FromHandle != "alice" || private.ToHandle != "bob" {
 		t.Errorf("hub relayed private message %+v, want alice to bob", private)
 	}

@@ -193,11 +193,18 @@ func (h *Hub) handleChatPrivate(w http.ResponseWriter, r *http.Request, network 
 		jsonError(w, "storage error", http.StatusInternalServerError)
 		return
 	}
-	broadcastChatEvent(h.broadcaster, network, protocol.EventChatPrivate, protocol.ChatMsgPayload{
+	ev, err := protocol.NewEvent(protocol.EventChatPrivate, protocol.ChatMsgPayload{
 		FromHandle: fromHandle, FromNode: nodeID, FromBBS: bbsName,
 		ToHandle: req.ToHandle, ToNode: req.ToNode,
 		Text: req.Text, Timestamp: time.Now().UTC().Format(time.RFC3339),
 	})
+	if err != nil {
+		jsonError(w, "event encoding error", http.StatusInternalServerError)
+		return
+	}
+	// Only the destination BBS receives the payload. Its leaf dispatches to
+	// matching local sessions; there is no separate sender-node echo.
+	h.broadcaster.publishToNode(network, req.ToNode, ev)
 	w.WriteHeader(http.StatusNoContent)
 }
 

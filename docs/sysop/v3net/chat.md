@@ -103,6 +103,21 @@ A line that starts with `/` but is not a command is never posted: chat shows
 arguments show their usage. To post a line that starts with a slash, type two:
 `//shrug` posts `/shrug`.
 
+### Private Message Delivery
+
+The hub sends a private message only to authenticated event streams belonging
+to the destination BBS on that network. Other BBSes, including a separate
+sending BBS, receive no private-message event. On the destination BBS, the leaf
+delivers the message once to each active chat session with the target handle;
+multiple sessions with that handle each receive a copy. A message between two
+callers on the same BBS follows the same recipient filtering.
+
+Private messages are not end-to-end encrypted. The hub stores private-message
+history, and the hub and destination BBS can read the text. Use HTTPS to protect
+traffic in transit. Delivery is live and best effort: a successful send means
+the hub accepted and stored the message, not that a recipient read it. Offline
+or slow event streams can miss delivery; there is no private-history replay.
+
 ### Pipe Codes in Chat
 
 Callers can colour what they type with the colour pipe codes (`|00`-`|15`,

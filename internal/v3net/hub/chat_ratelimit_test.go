@@ -108,7 +108,7 @@ func TestChatPost_HandleMustBeJoined(t *testing.T) {
 func TestChatPrivate_UsesSenderHandle(t *testing.T) {
 	h, ts, leafKS := setupChatTest(t)
 	url := ts.URL + "/v3net/v1/testnet/chat/rooms/private"
-	ch, cancel := h.broadcaster.Subscribe("testnet")
+	ch, cancel := h.broadcaster.subscribe("testnet", leafKS.NodeID())
 	defer cancel()
 
 	// Users on one node send private messages back to back; none has

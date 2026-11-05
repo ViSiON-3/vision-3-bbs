@@ -19,23 +19,34 @@ const (
 // Broadcaster fans out SSE events to connected leaf nodes.
 type Broadcaster struct {
 	mu   sync.RWMutex
-	subs map[string][]chan protocol.Event // network → channels
+	subs map[string][]eventSubscription // network → subscriptions
+}
+
+type eventSubscription struct {
+	nodeID string
+	ch     chan protocol.Event
 }
 
 // NewBroadcaster creates a new event broadcaster.
 func NewBroadcaster() *Broadcaster {
 	return &Broadcaster{
-		subs: make(map[string][]chan protocol.Event),
+		subs: make(map[string][]eventSubscription),
 	}
 }
 
-// Subscribe returns a channel that receives events for the given network
-// and a cancel function to unsubscribe.
+// Subscribe returns a channel for network-wide events and a cancel function
+// to unsubscribe. It does not receive events addressed to a specific node.
 func (b *Broadcaster) Subscribe(network string) (<-chan protocol.Event, func()) {
+	return b.subscribe(network, "")
+}
+
+// subscribe binds a stream to the node authenticated by the hub's middleware.
+// An empty node ID receives only network-wide events.
+func (b *Broadcaster) subscribe(network, nodeID string) (<-chan protocol.Event, func()) {
 	ch := make(chan protocol.Event, eventBufSize)
 
 	b.mu.Lock()
-	b.subs[network] = append(b.subs[network], ch)
+	b.subs[network] = append(b.subs[network], eventSubscription{nodeID: nodeID, ch: ch})
 	b.mu.Unlock()
 
 	cancel := func() {
@@ -43,7 +54,7 @@ func (b *Broadcaster) Subscribe(network string) (<-chan protocol.Event, func()) 
 		defer b.mu.Unlock()
 		channels := b.subs[network]
 		for i, c := range channels {
-			if c == ch {
+			if c.ch == ch {
 				b.subs[network] = append(channels[:i], channels[i+1:]...)
 				close(ch)
 				ch = nil // prevent double-close
@@ -56,12 +67,28 @@ func (b *Broadcaster) Subscribe(network string) (<-chan protocol.Event, func()) 
 
 // Publish sends an event to all subscribers of a network.
 func (b *Broadcaster) Publish(network string, ev protocol.Event) {
+	b.publish(network, "", ev)
+}
+
+// publishToNode delivers only to streams authenticated as nodeID on network.
+// A missing destination must never turn a targeted event into a broadcast.
+func (b *Broadcaster) publishToNode(network, nodeID string, ev protocol.Event) {
+	if nodeID == "" {
+		return
+	}
+	b.publish(network, nodeID, ev)
+}
+
+func (b *Broadcaster) publish(network, nodeID string, ev protocol.Event) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	for _, ch := range b.subs[network] {
+	for _, sub := range b.subs[network] {
+		if nodeID != "" && sub.nodeID != nodeID {
+			continue
+		}
 		select {
-		case ch <- ev:
+		case sub.ch <- ev:
 		default:
 			// Slow consumer — drop event to avoid blocking.
 			slog.Warn("dropping SSE event for slow consumer", "network", network, "type", ev.Type)
@@ -97,7 +124,9 @@ func (b *Broadcaster) StartPing(ctx context.Context) {
 	}
 }
 
-// ServeSSE writes SSE events to the HTTP response for the given network.
+// ServeSSE writes network events and events addressed to the authenticated
+// X-V3Net-Node-ID to the response. The caller must authenticate the request
+// before calling ServeSSE; an absent node ID receives only network events.
 //
 // With a signer, each event also carries an id field, its sequence number in
 // this stream starting at 1, and a sig field, the signer's signature over
@@ -126,7 +155,7 @@ func (b *Broadcaster) ServeSSE(w http.ResponseWriter, r *http.Request, network s
 	// between receiving the headers and this handler registering its
 	// channel — that event would fan out to zero subscribers and be lost.
 	// Registering first closes that publish-before-subscribe race.
-	ch, cancel := b.Subscribe(network)
+	ch, cancel := b.subscribe(network, r.Header.Get(headerNodeID))
 	defer cancel()
 
 	w.Header().Set("Content-Type", "text/event-stream")
