@@ -62,3 +62,26 @@ func TestLoadStringsReplacesSuperseded(t *testing.T) {
 		})
 	}
 }
+
+// TestLoadStringsReplacesSupersededChatHelp: a strings.json shipped before
+// #919 still holds the old /msg help and usage text, and both are replaced.
+func TestLoadStringsReplacesSupersededChatHelp(t *testing.T) {
+	dir := t.TempDir()
+	data, _ := json.Marshal(map[string]string{
+		"chatHelp":     StringSuperseded["chatHelp"][0],
+		"chatMsgUsage": StringSuperseded["chatMsgUsage"][0],
+	})
+	if err := os.WriteFile(filepath.Join(dir, "strings.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := LoadStrings(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ChatHelp != StringFallbacks["chatHelp"] {
+		t.Errorf("ChatHelp = %q, want the current default", c.ChatHelp)
+	}
+	if c.ChatMsgUsage != StringFallbacks["chatMsgUsage"] {
+		t.Errorf("ChatMsgUsage = %q, want the current default", c.ChatMsgUsage)
+	}
+}
