@@ -10,6 +10,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/rivo/uniseg"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -462,33 +465,96 @@ func TestChatcovJoinCommand(t *testing.T) {
 	}
 }
 
+// A message too long for a chat row wraps at a word onto a continuation
+// row with the marker, and is stored whole.
 func TestChatcovLongMessageWraps(t *testing.T) {
 	env := newMenuEnv(t)
-	// 69 characters: fits the 70-column input line, but not an 80-column
-	// chat row once the timestamp and handle are in front of it.
-	msg := strings.TrimSpace(strings.Repeat("wordy ", 11)) + " end"
-	if len(msg) != 69 {
-		t.Fatalf("test message is %d chars, want 69", len(msg))
+	// 67 characters: fits the 70-column input line, but not a chat row once
+	// the timestamp and handle are in front of it.
+	msg := strings.Repeat("wordy ", 10) + "wor end"
+	if len(msg) != 67 {
+		t.Fatalf("test message is %d chars, want 67", len(msg))
 	}
 
 	r := chatcovChat(env, env.caller, msg+"\r/q\r")
-	// The last word moves to a continuation row: the region scrolls up two
-	// rows, then the message goes on row 20 and the prefixed remainder on 21.
+	row20, row21 := chatcovTwoRows(t, r)
+	if !strings.HasSuffix(row20, "<Caller> "+strings.TrimSuffix(msg, " end")) {
+		t.Errorf("row 20 = %q, want the message up to its last word", row20)
+	}
+	if !strings.HasPrefix(row21, "      \u2514 end") {
+		t.Errorf("row 21 starts %q, want the continuation marker and the wrapped word", row21[:min(len(row21), 20)])
+	}
+	chatcovEqual(t, "stored message", chatcovLocalHistory(env, "lobby"), []string{"Caller: " + msg})
+}
+
+// A row never reaches the last column (#911): a terminal that wraps as soon
+// as a character lands there would scroll the region by a row the BBS does
+// not know about, and every row written after it would land one row off.
+func TestChatcovRowLeavesLastColumnFree(t *testing.T) {
+	env := newMenuEnv(t)
+	// With the timestamp and handle in front, exactly 80 cells.
+	msg := strings.TrimSpace(strings.Repeat("wordy ", 11))
+	if len(msg) != 65 {
+		t.Fatalf("test message is %d chars, want 65", len(msg))
+	}
+
+	r := chatcovChat(env, env.caller, msg+"\r/q\r")
+	row20, row21 := chatcovTwoRows(t, r)
+	if !strings.HasSuffix(row20, "<Caller> "+strings.TrimSuffix(msg, " wordy")) || uniseg.StringWidth(row20) > 79 {
+		t.Errorf("row 20 = %q (%d cells), want the message up to its last word in 79 cells", row20, uniseg.StringWidth(row20))
+	}
+	if !strings.HasPrefix(row21, "      \u2514 wordy") {
+		t.Errorf("row 21 starts %q, want the continuation marker and the wrapped word", row21[:min(len(row21), 20)])
+	}
+}
+
+// A word wider than a row is cut at the edge rather than written past it
+// (#911), where the terminal would wrap it onto the next row by itself.
+func TestChatcovUnbrokenWordIsCut(t *testing.T) {
+	env := newMenuEnv(t)
+	msg := strings.Repeat("x", 120)
+
+	r := chatcovChat(env, env.caller, msg+"\r/q\r")
+	rows := 0
+	for _, m := range chatcovRegionRow.FindAllStringSubmatch(r.raw, -1) {
+		row := testAnsiEscape.ReplaceAllString(m[2], "")
+		if !strings.Contains(row, "xxx") {
+			continue // the status bar, which the growing input area moved up
+		}
+		rows++
+		if w := uniseg.StringWidth(row); w > 79 {
+			t.Errorf("row %s is %d cells wide: %q", m[1], w, row)
+		}
+	}
+	if rows != 2 {
+		t.Errorf("the word was written on %d rows, want 2", rows)
+	}
+	if !chatcovHas(r, "<Caller> "+msg[:64], "\u2514 "+msg[64:]) {
+		t.Errorf("the word is not cut at the edge of the row:\n%s", chatcovText(r))
+	}
+}
+
+// chatcovRegionRow matches a row written to the chat region on an 80x24
+// screen: its position and clear, then the text up to the next escape.
+var chatcovRegionRow = regexp.MustCompile(`\x1b\[(6|7|8|9|1\d|2[01]);1H\x1b\[2K([^\x1b]*(?:\x1b\[[0-9;]*m[^\x1b]*)*)`)
+
+// chatcovTwoRows returns the text of the two rows a two-row message was
+// written on: the region scrolls up two rows, then the message goes on row
+// 20 and the prefixed remainder on 21.
+func chatcovTwoRows(t *testing.T, r runResult) (row20, row21 string) {
+	t.Helper()
 	_, written, ok := strings.Cut(r.raw, "\x1b[21;1H\r\n\r\n\x1b[20;1H")
 	if !ok {
 		t.Fatalf("chat region not scrolled by two rows for a two-row message:\n%s", chatcovText(r))
 	}
-	row20, row21, ok := strings.Cut(written, "\x1b[21;1H")
+	row20, row21, ok = strings.Cut(written, "\x1b[21;1H")
 	if !ok {
 		t.Fatalf("no continuation row written at row 21")
 	}
-	if got := testAnsiEscape.ReplaceAllString(row20, ""); !strings.HasSuffix(got, "<Caller> "+strings.TrimSuffix(msg, " end")) {
-		t.Errorf("row 20 = %q, want the message up to its last word", got)
+	if i := strings.Index(row21, "\x1b[24;"); i >= 0 {
+		row21 = row21[:i] // up to the cursor going back to the input row
 	}
-	if got := testAnsiEscape.ReplaceAllString(row21, ""); !strings.HasPrefix(got, "      \u2514 end") {
-		t.Errorf("row 21 starts %q, want the continuation marker and the wrapped word", got[:min(len(got), 20)])
-	}
-	chatcovEqual(t, "stored message", chatcovLocalHistory(env, "lobby"), []string{"Caller: " + msg})
+	return testAnsiEscape.ReplaceAllString(row20, ""), testAnsiEscape.ReplaceAllString(row21, "")
 }
 
 // Without CHATHEADER.ANS in the menu set the header is drawn as text: the
@@ -954,6 +1020,9 @@ func TestChatcovReadLine(t *testing.T) {
 	}
 }
 
+// pipeDisplayLen measures what the terminal shows: no room for colour codes,
+// one cell for an escaped pipe, and cells rather than bytes for the rest,
+// by grapheme cluster on UTF-8 and by rune on CP437.
 func TestChatcovPipeDisplayLen(t *testing.T) {
 	for in, want := range map[string]int{
 		"":                 0,
@@ -964,14 +1033,37 @@ func TestChatcovPipeDisplayLen(t *testing.T) {
 		"|1":               2,
 		"|x5ab":            5,
 		"|08[|15C|08] |14": 4,
+		"café":             4, // cells, not bytes (#911)
+		"日本":               4, // a wide character takes two
+		"e\u0301":          1, // a combining accent takes none
+		"👨\u200d👩\u200d👧":  2, // a joined emoji is one cluster
+		"\xC0 ":            2, // a CP437 byte is one character
 	} {
-		if got := pipeDisplayLen(in); got != want {
+		if got := pipeDisplayLen(in, ansi.OutputModeUTF8); got != want {
 			t.Errorf("pipeDisplayLen(%q) = %d, want %d", in, got, want)
+		}
+	}
+	// A CP437 terminal is sent one byte per rune, a "?" where the code page
+	// has nothing, so every rune is one cell there.
+	for in, want := range map[string]int{
+		"café":             4,
+		"日本":               2,
+		"e\u0301":          2,
+		"👨\u200d👩\u200d👧":  5,
+		"\xC0 ":            2,
+		"|08[|15C|08] |14": 4,
+	} {
+		if got := pipeDisplayLen(in, ansi.OutputModeCP437); got != want {
+			t.Errorf("pipeDisplayLen(%q, CP437) = %d, want %d", in, got, want)
 		}
 	}
 }
 
+// wrapPipeText keeps every row within the width, moves or cuts words as
+// documented, keeps the spaces between words, drops those at a wrap and
+// carries the colour onto the continuation row.
 func TestChatcovWrapPipeText(t *testing.T) {
+	const white, red, redBG = "\x1b[1;37m", "\x1b[0;31m", "\x1b[41m"
 	for _, tc := range []struct {
 		name, text string
 		width      int
@@ -981,12 +1073,43 @@ func TestChatcovWrapPipeText(t *testing.T) {
 		{"fits once colour codes are discounted", "|15aaa|07 |12bbb|07", 7, []string{"|15aaa|07 |12bbb|07"}},
 		{"wraps at a word boundary", "aaa bbb ccc", 7, []string{"aaa bbb", ">> ccc"}},
 		{"continuation prefix counts against the width", "aaa bbb ccc dd", 7, []string{"aaa bbb", ">> ccc", ">> dd"}},
-		{"colour codes do not count when wrapping", "|15aaa|07 |12bbb|07 ccc", 7, []string{"|15aaa|07 |12bbb|07", ">> ccc"}},
-		{"a word longer than the width is not split", "abcdefghij", 4, []string{"abcdefghij"}},
-		{"nothing but spaces", "          ", 4, []string{"          "}},
+		{"colour codes do not count when wrapping", "|15aaa|07 |12bbb|07 ccc", 7, []string{"|15aaa|07 |12bbb|07", ">> \x1b[0;37mccc"}},
+		{"the row's colour carries on after the prefix", "|15aaa bbb ccc", 7, []string{"|15aaa bbb", ">> " + white + "ccc"}},
+		{"a background carries on with a bright foreground", "|B1|15aaa bbb ccc", 7, []string{"|B1|15aaa bbb", ">> " + white + redBG + "ccc"}},
+		{"a normal foreground resets the background", "|B1|15aaa bbb|04 ccc", 7, []string{"|B1|15aaa bbb|04", ">> " + red + "ccc"}},
+		{"a reset carries on as nothing", "|15aaa|23 bbb ccc", 7, []string{"|15aaa|23 bbb", ">> ccc"}},
+		{"a restored background is not read into a digit after it", "|07|B1aaa bbb 000", 7, []string{"|07|B1aaa bbb", ">> \x1b[0;37m" + redBG + "000"}},
+		{"a word wider than a row is cut at the edge", "abcdefghij", 7, []string{"abcdefg", ">> hij"}},
+		{"a word wider than a row fills the row it starts on", "ab cdefghijklm", 7, []string{"ab cdef", ">> ghij", ">> klm"}},
+		{"a cut lands after a colour code, not inside it", "abcdef|15ghij", 7, []string{"abcdef|15g", ">> " + white + "hij"}},
+		{"a cut lands after an escaped pipe, not inside it", "abcdef||ghij", 7, []string{"abcdef||", ">> ghij"}},
+		{"a wide character is two cells and is not cut", "abcdef日本", 7, []string{"abcdef", ">> 日本"}},
+		{"a joined emoji is one cluster", "abcde 👨‍👩‍👧 fgh", 7, []string{"abcde", ">> 👨‍👩‍👧", ">> fgh"}},
+		{"accented letters are one cell each", "café au lait", 8, []string{"café au", ">> lait"}},
+		{"spaces inside a row are kept", "a  b c   d", 6, []string{"a  b c", ">> d"}},
+		{"spaces at a wrap are dropped from both rows", "aaa bbb   ccc", 7, []string{"aaa bbb", ">> ccc"}},
+		{"spaces at the end are dropped", "aaa bbb ccc   ", 7, []string{"aaa bbb", ">> ccc"}},
+		{"colour codes among dropped spaces still act", "aaaaaa  |12bbbbbb", 7, []string{"aaaaaa|12b", ">> \x1b[1;31mbbbb", ">> \x1b[1;31mb"}},
+		{"a space with a combining mark on it is a space", "aaa \u0301bbb ccc", 7, []string{"aaa \u0301bbb", ">> ccc"}},
+		{"a combining mark on nothing starts a word", "\u0301aaaaaaaa", 7, []string{"\u0301aaaaaaa", ">> a"}},
+		{"nothing but spaces", "          ", 4, []string{""}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			chatcovEqual(t, "wrapPipeText", wrapPipeText(tc.text, tc.width, ">> ", 3), tc.want)
+			chatcovEqual(t, "wrapPipeText", wrapPipeText(tc.text, tc.width, ">> ", 3, ansi.OutputModeUTF8), tc.want)
+		})
+	}
+	// On a CP437 terminal each rune is a cell, so a combining accent and a
+	// joiner take room of their own and a wide character only one.
+	for _, tc := range []struct {
+		name, text string
+		width      int
+		want       []string
+	}{
+		{"a combining accent is a cell", "cafe\u0301 au lait", 7, []string{"cafe\u0301", ">> au", ">> lait"}},
+		{"a wide character is one cell", "abcdef日本", 8, []string{"abcdef日本"}},
+	} {
+		t.Run("CP437 "+tc.name, func(t *testing.T) {
+			chatcovEqual(t, "wrapPipeText", wrapPipeText(tc.text, tc.width, ">> ", 3, ansi.OutputModeCP437), tc.want)
 		})
 	}
 }

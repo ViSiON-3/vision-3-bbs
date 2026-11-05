@@ -237,13 +237,13 @@ func TestPipeDisplayLenCountsEscapes(t *testing.T) {
 		"|23":   0,
 		"end|":  4,
 	} {
-		if got := pipeDisplayLen(in); got != want {
+		if got := pipeDisplayLen(in, ansi.OutputModeUTF8); got != want {
 			t.Errorf("pipeDisplayLen(%q) = %d, want %d", in, got, want)
 		}
 	}
 
 	escaped := chatText("|CL |CL")
-	if got := wrapPipeText(escaped, 7, ">> ", 3); len(got) != 1 {
+	if got := wrapPipeText(escaped, 7, ">> ", 3, ansi.OutputModeUTF8); len(got) != 1 {
 		t.Errorf("wrapPipeText(%q, 7) = %q, want one line", escaped, got)
 	}
 }
