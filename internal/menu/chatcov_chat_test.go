@@ -12,6 +12,7 @@ import (
 
 	"github.com/rivo/uniseg"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -1033,13 +1034,28 @@ func TestChatcovPipeDisplayLen(t *testing.T) {
 		"👨\u200d👩\u200d👧":  2, // a joined emoji is one cluster
 		"\xC0 ":            2, // a CP437 byte is one character
 	} {
-		if got := pipeDisplayLen(in); got != want {
+		if got := pipeDisplayLen(in, ansi.OutputModeUTF8); got != want {
 			t.Errorf("pipeDisplayLen(%q) = %d, want %d", in, got, want)
+		}
+	}
+	// A CP437 terminal is sent one byte per rune, a "?" where the code page
+	// has nothing, so every rune is one cell there.
+	for in, want := range map[string]int{
+		"café":             4,
+		"日本":               2,
+		"e\u0301":          2,
+		"👨\u200d👩\u200d👧":  5,
+		"\xC0 ":            2,
+		"|08[|15C|08] |14": 4,
+	} {
+		if got := pipeDisplayLen(in, ansi.OutputModeCP437); got != want {
+			t.Errorf("pipeDisplayLen(%q, CP437) = %d, want %d", in, got, want)
 		}
 	}
 }
 
 func TestChatcovWrapPipeText(t *testing.T) {
+	const white, red, redBG = "\x1b[1;37m", "\x1b[0;31m", "\x1b[41m"
 	for _, tc := range []struct {
 		name, text string
 		width      int
@@ -1049,13 +1065,15 @@ func TestChatcovWrapPipeText(t *testing.T) {
 		{"fits once colour codes are discounted", "|15aaa|07 |12bbb|07", 7, []string{"|15aaa|07 |12bbb|07"}},
 		{"wraps at a word boundary", "aaa bbb ccc", 7, []string{"aaa bbb", ">> ccc"}},
 		{"continuation prefix counts against the width", "aaa bbb ccc dd", 7, []string{"aaa bbb", ">> ccc", ">> dd"}},
-		{"colour codes do not count when wrapping", "|15aaa|07 |12bbb|07 ccc", 7, []string{"|15aaa|07 |12bbb|07", ">> |07ccc"}},
-		{"the row's colour carries on after the prefix", "|15aaa bbb ccc", 7, []string{"|15aaa bbb", ">> |15ccc"}},
-		{"a background carries on with the foreground", "|B1|15aaa bbb|04 ccc", 7, []string{"|B1|15aaa bbb|04", ">> |04|B1ccc"}},
+		{"colour codes do not count when wrapping", "|15aaa|07 |12bbb|07 ccc", 7, []string{"|15aaa|07 |12bbb|07", ">> \x1b[0;37mccc"}},
+		{"the row's colour carries on after the prefix", "|15aaa bbb ccc", 7, []string{"|15aaa bbb", ">> " + white + "ccc"}},
+		{"a background carries on with a bright foreground", "|B1|15aaa bbb ccc", 7, []string{"|B1|15aaa bbb", ">> " + white + redBG + "ccc"}},
+		{"a normal foreground resets the background", "|B1|15aaa bbb|04 ccc", 7, []string{"|B1|15aaa bbb|04", ">> " + red + "ccc"}},
 		{"a reset carries on as nothing", "|15aaa|23 bbb ccc", 7, []string{"|15aaa|23 bbb", ">> ccc"}},
+		{"a restored background is not read into a digit after it", "|07|B1aaa bbb 000", 7, []string{"|07|B1aaa bbb", ">> \x1b[0;37m" + redBG + "000"}},
 		{"a word wider than a row is cut at the edge", "abcdefghij", 7, []string{"abcdefg", ">> hij"}},
 		{"a word wider than a row fills the row it starts on", "ab cdefghijklm", 7, []string{"ab cdef", ">> ghij", ">> klm"}},
-		{"a cut lands after a colour code, not inside it", "abcdef|15ghij", 7, []string{"abcdef|15g", ">> |15hij"}},
+		{"a cut lands after a colour code, not inside it", "abcdef|15ghij", 7, []string{"abcdef|15g", ">> " + white + "hij"}},
 		{"a cut lands after an escaped pipe, not inside it", "abcdef||ghij", 7, []string{"abcdef||", ">> ghij"}},
 		{"a wide character is two cells and is not cut", "abcdef日本", 7, []string{"abcdef", ">> 日本"}},
 		{"a joined emoji is one cluster", "abcde 👨‍👩‍👧 fgh", 7, []string{"abcde", ">> 👨‍👩‍👧", ">> fgh"}},
@@ -1063,10 +1081,27 @@ func TestChatcovWrapPipeText(t *testing.T) {
 		{"spaces inside a row are kept", "a  b c   d", 6, []string{"a  b c", ">> d"}},
 		{"spaces at a wrap are dropped from both rows", "aaa bbb   ccc", 7, []string{"aaa bbb", ">> ccc"}},
 		{"spaces at the end are dropped", "aaa bbb ccc   ", 7, []string{"aaa bbb", ">> ccc"}},
+		{"colour codes among dropped spaces still act", "aaaaaa  |12bbbbbb", 7, []string{"aaaaaa|12b", ">> \x1b[1;31mbbbb", ">> \x1b[1;31mb"}},
+		{"a space with a combining mark on it is a space", "aaa \u0301bbb ccc", 7, []string{"aaa \u0301bbb", ">> ccc"}},
+		{"a combining mark on nothing starts a word", "\u0301aaaaaaaa", 7, []string{"\u0301aaaaaaa", ">> a"}},
 		{"nothing but spaces", "          ", 4, []string{""}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			chatcovEqual(t, "wrapPipeText", wrapPipeText(tc.text, tc.width, ">> ", 3), tc.want)
+			chatcovEqual(t, "wrapPipeText", wrapPipeText(tc.text, tc.width, ">> ", 3, ansi.OutputModeUTF8), tc.want)
+		})
+	}
+	// On a CP437 terminal each rune is a cell, so a combining accent and a
+	// joiner take room of their own and a wide character only one.
+	for _, tc := range []struct {
+		name, text string
+		width      int
+		want       []string
+	}{
+		{"a combining accent is a cell", "cafe\u0301 au lait", 7, []string{"cafe\u0301", ">> au", ">> lait"}},
+		{"a wide character is one cell", "abcdef日本", 8, []string{"abcdef日本"}},
+	} {
+		t.Run("CP437 "+tc.name, func(t *testing.T) {
+			chatcovEqual(t, "wrapPipeText", wrapPipeText(tc.text, tc.width, ">> ", 3, ansi.OutputModeCP437), tc.want)
 		})
 	}
 }

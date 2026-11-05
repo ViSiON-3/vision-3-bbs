@@ -511,7 +511,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		// without a deferred wrap moves to the next row as soon as a character
 		// lands there, and on the bottom row of the region that scrolls the
 		// room by a row that nothing here accounts for (#911).
-		lines := wrapPipeText(fullText, max(termWidth-1, 1), chatContPrefix, chatContPrefixLen)
+		lines := wrapPipeText(fullText, max(termWidth-1, 1), chatContPrefix, chatContPrefixLen, outputMode)
 		n := len(lines)
 		if n == 0 {
 			return
@@ -1247,11 +1247,14 @@ func chatWordRune(r rune) bool {
 }
 
 // pipeUnitAt returns the first piece of pipe-code text s as ReplacePipeCodes
-// will show it: a colour code, which takes no cells and is reported as one;
-// "||", which shows as one "|"; or one grapheme cluster, with the cells it
-// takes on the terminal. A byte that is not UTF-8 is a CP437 character, one
-// cell wide. s must not be empty.
-func pipeUnitAt(s string) (unit string, cells int, code bool) {
+// will show it in output mode mode: a colour code, which takes no cells and
+// is reported as one; "||", which shows as one "|"; or one character, with
+// the cells it takes on the terminal. On a UTF-8 terminal a character is a
+// grapheme cluster, so a joined emoji is one unit and a wide character two
+// cells. A CP437 terminal is sent one byte per rune, with a "?" for a rune
+// the code page lacks, so there every rune is one cell. A byte that is not
+// UTF-8 is a CP437 character, one cell wide either way. s must not be empty.
+func pipeUnitAt(s string, mode ansi.OutputMode) (unit string, cells int, code bool) {
 	if s[0] == '|' {
 		if len(s) > 1 && s[1] == '|' {
 			return "||", 1, false
@@ -1260,17 +1263,21 @@ func pipeUnitAt(s string) (unit string, cells int, code bool) {
 			return s[:n], 0, true
 		}
 	}
+	if mode == ansi.OutputModeCP437 {
+		_, size := utf8.DecodeRuneInString(s)
+		return s[:size], 1, false
+	}
 	unit, _, cells, _ = uniseg.FirstGraphemeClusterInString(s, -1)
 	return unit, cells, false
 }
 
 // pipeDisplayLen returns the number of terminal cells a pipe-code string
-// takes, as ReplacePipeCodes will show it: colour codes take no room, "||"
-// takes one and a wide character two.
-func pipeDisplayLen(s string) int {
+// takes in output mode mode, as ReplacePipeCodes will show it: colour codes
+// take no room, "||" takes one, and a character what pipeUnitAt says.
+func pipeDisplayLen(s string, mode ansi.OutputMode) int {
 	n := 0
 	for s != "" {
-		unit, cells, _ := pipeUnitAt(s)
+		unit, cells, _ := pipeUnitAt(s, mode)
 		n += cells
 		s = s[len(unit):]
 	}
@@ -1278,7 +1285,10 @@ func pipeDisplayLen(s string) int {
 }
 
 // pipePen is the colour a run of pipe-code text leaves in effect: the last
-// foreground and background codes seen, each empty once |23 resets them.
+// foreground and background codes seen, each empty once reset. |23 resets
+// both; so does a normal foreground code, |00 to |07, which expands to a
+// reset before its colour, while a bright one, |08 to |15, leaves the
+// background alone.
 type pipePen struct {
 	fg, bg string
 }
@@ -1286,7 +1296,7 @@ type pipePen struct {
 // scan applies the colour codes in s to the pen.
 func (p *pipePen) scan(s string) {
 	for s != "" {
-		unit, _, code := pipeUnitAt(s)
+		unit, _, code := pipeUnitAt(s, ansi.OutputModeUTF8)
 		s = s[len(unit):]
 		switch {
 		case !code:
@@ -1294,36 +1304,41 @@ func (p *pipePen) scan(s string) {
 			p.fg, p.bg = "", ""
 		case unit[1] == 'B':
 			p.bg = unit
+		case unit <= "|07":
+			p.fg, p.bg = unit, ""
 		default:
 			p.fg = unit
 		}
 	}
 }
 
-// restore returns the codes that bring the colour from the pen state from
-// back to p. A foreground code resets the background, so one that changes is
-// followed by the background in effect.
+// restore returns what brings the colour from the pen state from back to p,
+// as the escape sequences the codes expand to rather than the codes: a "|B1"
+// put before text that starts with a digit would read as "|B10". A changed
+// foreground goes first, since one may reset the background.
 func (p pipePen) restore(from pipePen) string {
-	switch {
-	case p.fg != from.fg && p.fg != "":
-		return p.fg + p.bg
-	case p.bg != from.bg && p.bg != "":
-		return p.bg
+	codes := ""
+	if p.fg != from.fg && p.fg != "" {
+		codes = p.fg
 	}
-	return ""
+	if p.bg != "" && (codes != "" || p.bg != from.bg) {
+		codes += p.bg
+	}
+	return string(ansi.ReplacePipeCodes([]byte(codes)))
 }
 
-// wrapPipeText wraps pipe-code text to rows of at most width terminal cells,
-// measured as pipeDisplayLen does. Continuation rows start with contPrefix
-// (contLen cells) and go on in the colour the previous row ended in. A word
-// that does not fit on its row moves whole to the next one; a word wider than
-// a row fills what is left of its row and is cut at the edge, never inside a
-// colour code, a "||" or a grapheme cluster. Spaces between words on a row
-// stay as they are; those at a wrap and at the end of the text are dropped,
-// so no row ends in them.
-func wrapPipeText(text string, width int, contPrefix string, contLen int) []string {
+// wrapPipeText wraps pipe-code text to rows of at most width terminal cells
+// in output mode mode, measured as pipeDisplayLen does. Continuation rows
+// start with contPrefix (contLen cells) and go on in the colour the previous
+// row ended in. A word that does not fit on its row moves whole to the next
+// one; a word wider than a row fills what is left of its row and is cut at
+// the edge, never inside a colour code, a "||" or a character. Spaces
+// between words on a row stay as they are; those at a wrap and at the end of
+// the text are dropped, so no row ends in them, though the colour codes among
+// them still act.
+func wrapPipeText(text string, width int, contPrefix string, contLen int, mode ansi.OutputMode) []string {
 	width = max(width, 1)
-	if pipeDisplayLen(text) <= width {
+	if pipeDisplayLen(text, mode) <= width {
 		return []string{text}
 	}
 	var pen, prefixPen pipePen
@@ -1333,8 +1348,6 @@ func wrapPipeText(text string, width int, contPrefix string, contLen int) []stri
 	var cur strings.Builder
 	curLen := 0 // cells on the current row
 	base := 0   // cells its prefix took
-	// Spaces wait until the word after them is placed on the same row.
-	gap, gapLen := "", 0
 	newRow := func() {
 		lines = append(lines, cur.String())
 		cur.Reset()
@@ -1347,19 +1360,32 @@ func wrapPipeText(text string, width int, contPrefix string, contLen int) []stri
 		pen.scan(s)
 		curLen += cells
 	}
-	dropGap := func() {
-		pen.scan(gap) // its colour codes still count
+	// Spaces wait until the word after them is placed: on the same row they
+	// go in as they are, otherwise only their colour codes do.
+	gap, gapLen := "", 0
+	flushGap := func(keep bool) {
+		if keep {
+			put(gap, gapLen)
+		} else {
+			for gap != "" {
+				unit, _, code := pipeUnitAt(gap, mode)
+				if code {
+					put(unit, 0)
+				}
+				gap = gap[len(unit):]
+			}
+		}
 		gap, gapLen = "", 0
 	}
 
 	for text != "" {
 		// The next token: a run of spaces or a word, with the colour codes
-		// among them.
+		// among them. A space with a combining mark on it is a space.
 		space := text[0] == ' '
 		end, cells := 0, 0
 		for end < len(text) {
-			unit, n, code := pipeUnitAt(text[end:])
-			if !code && (unit == " ") != space {
+			unit, n, code := pipeUnitAt(text[end:], mode)
+			if !code && (unit[0] == ' ') != space && end > 0 {
 				break
 			}
 			end += len(unit)
@@ -1372,22 +1398,19 @@ func wrapPipeText(text string, width int, contPrefix string, contLen int) []stri
 		case space:
 			gap, gapLen = gap+tok, gapLen+cells
 		case curLen+gapLen+cells <= width:
-			put(gap, gapLen)
-			gap, gapLen = "", 0
+			flushGap(true)
 			put(tok, cells)
 		case contLen+cells <= width:
-			dropGap()
+			flushGap(false)
 			newRow()
 			put(tok, cells)
 		default:
 			// Wider than a row: fill this one and cut at the edge. The gap
 			// goes in only if the word's first cells follow it on the row.
-			if _, n, _ := pipeUnitAt(tok); curLen+gapLen+n <= width {
-				put(gap, gapLen)
-			}
-			dropGap()
+			_, n, _ := pipeUnitAt(tok, mode)
+			flushGap(curLen+gapLen+n <= width)
 			for tok != "" {
-				unit, n, _ := pipeUnitAt(tok)
+				unit, n, _ := pipeUnitAt(tok, mode)
 				if curLen+n > width && curLen > base {
 					newRow()
 				}
@@ -1396,6 +1419,6 @@ func wrapPipeText(text string, width int, contPrefix string, contLen int) []stri
 			}
 		}
 	}
-	dropGap()
+	flushGap(false)
 	return append(lines, cur.String())
 }

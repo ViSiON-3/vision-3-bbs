@@ -76,9 +76,10 @@ func computeUserEditorLayout(termHeight int) userEditorLayout {
 }
 
 // visualPipeWidth returns the display width of s: colour codes take no room and
-// an escaped "||" takes one column.
+// an escaped "||" takes one column. The editor's strings are ASCII, so the
+// output mode makes no difference.
 func visualPipeWidth(s string) int {
-	return pipeDisplayLen(s)
+	return pipeDisplayLen(s, ansi.OutputModeUTF8)
 }
 
 // userEditorState holds the dependencies and mutable state for a single
