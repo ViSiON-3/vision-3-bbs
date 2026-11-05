@@ -59,7 +59,7 @@ func TestChatEventPumpExitsOnClose(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(handlerWait):
 		t.Fatal("event pump goroutine did not exit after svc.Close(); cleanup would hang")
 	}
 
@@ -68,7 +68,7 @@ func TestChatEventPumpExitsOnClose(t *testing.T) {
 
 func waitChatNoGoroutineLeak(t *testing.T, baseline int) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(handlerWait)
 	for {
 		if runtime.NumGoroutine() <= baseline {
 			return

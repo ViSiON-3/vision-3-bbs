@@ -163,8 +163,8 @@ func (f *stringHookFixture) write(t *testing.T, value string, args ...any) strin
 		if err != nil {
 			t.Fatalf("write %q: %v", value, err)
 		}
-	case <-time.After(10 * time.Second):
-		t.Fatalf("write %q still running after 10s; output:\n%s", value, f.term())
+	case <-time.After(handlerWait):
+		t.Fatalf("write %q still running after %v; output:\n%s", value, handlerWait, f.term())
 	}
 	return f.term()
 }
@@ -472,8 +472,8 @@ func (f *stringHookFixture) prompt(t *testing.T, fn func(*MenuExecutor, ssh.Sess
 			t.Fatalf("prompt: %v; output:\n%s", r.err, f.term())
 		}
 		return r.yes, f.term()
-	case <-time.After(10 * time.Second):
-		t.Fatalf("prompt still running after 10s; output:\n%s", f.term())
+	case <-time.After(handlerWait):
+		t.Fatalf("prompt still running after %v; output:\n%s", handlerWait, f.term())
 		return false, ""
 	}
 }

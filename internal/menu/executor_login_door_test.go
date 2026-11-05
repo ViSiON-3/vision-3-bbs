@@ -83,7 +83,7 @@ func TestRunLoginDoor_StdinStopsAtExit(t *testing.T) {
 		if k != "x" {
 			t.Errorf("next read = %q, want the key typed after the door", k)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("the key typed after the door never reached the session's next reader")
 	}
 }

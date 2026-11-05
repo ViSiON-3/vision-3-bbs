@@ -26,8 +26,8 @@ func authOnSession(t *testing.T, env *menuEnv, ts *testSession) (next string, er
 	}()
 	select {
 	case <-done:
-	case <-time.After(10 * time.Second):
-		t.Fatal("RUN:AUTHENTICATE still running 10s after its input ran out")
+	case <-time.After(handlerWait):
+		t.Fatalf("RUN:AUTHENTICATE still running %v after its input ran out", handlerWait)
 	}
 	return next, err
 }

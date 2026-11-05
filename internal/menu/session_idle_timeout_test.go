@@ -33,7 +33,7 @@ func readKeyResult(t *testing.T, ih *editor.InputHandler) error {
 	select {
 	case err := <-errCh:
 		return err
-	case <-time.After(1 * time.Second):
+	case <-time.After(screenWait):
 		return nil // no timeout fired — caller treats nil as failure
 	}
 }

@@ -185,8 +185,8 @@ func doorcovRun(env *menuEnv, s *doorcovSession, fn RunnableFunc, u *user.User, 
 			r.err = nil
 		}
 		return runResult{raw: s.output(), user: r.u, next: r.next, err: r.err}
-	case <-time.After(10 * time.Second):
-		env.t.Fatalf("handler still running after 10s; output so far:\n%s", s.output())
+	case <-time.After(handlerWait):
+		env.t.Fatalf("handler still running after %v; output so far:\n%s", handlerWait, s.output())
 		return runResult{}
 	}
 }
@@ -230,8 +230,8 @@ func doorcovExec(t *testing.T, s *doorcovSession, exec func(*DoorCtx) error, ctx
 	select {
 	case err := <-done:
 		return err
-	case <-time.After(10 * time.Second):
-		t.Fatalf("door still running after 10s; output so far:\n%s", s.output())
+	case <-time.After(handlerWait):
+		t.Fatalf("door still running after %v; output so far:\n%s", handlerWait, s.output())
 		return nil
 	}
 }

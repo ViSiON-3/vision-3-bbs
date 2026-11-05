@@ -30,7 +30,7 @@ func TestDoorWatchIdle(t *testing.T) {
 
 	select {
 	case <-w.Ended():
-	case <-time.After(2 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("watch never fired once input stopped")
 	}
 	// Late input doesn't revive a watch that has fired.
@@ -166,7 +166,7 @@ func TestDoorIdleEndsRemoteDoor(t *testing.T) {
 		if !errors.Is(err, editor.ErrIdleTimeout) {
 			t.Errorf("err = %v, want editor.ErrIdleTimeout", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("remote door still running after the caller went idle")
 	}
 	// The door server sees the connection close.
@@ -203,7 +203,7 @@ func TestIdleDialContext(t *testing.T) {
 	defer cancel()
 	select {
 	case <-dialCtx.Done():
-	case <-time.After(2 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("dial context outlived the idle timeout")
 	}
 
@@ -223,7 +223,7 @@ func TestDoorWatchTimeLimit(t *testing.T) {
 	defer w.freeze()
 	select {
 	case <-w.Ended():
-	case <-time.After(2 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("watch outlived the time limit")
 	}
 	if got := w.endReason(); got != doorEndTimeLimit {
@@ -307,7 +307,7 @@ func TestDoorWatchEndsRLoginDoor(t *testing.T) {
 				t.Cleanup(func() { _ = conn.Close() })
 			case err := <-done:
 				t.Fatalf("door ended before connecting: %v", err)
-			case <-time.After(5 * time.Second):
+			case <-time.After(screenWait):
 				t.Fatal("door server never received a connection")
 			}
 			if tt.afterConnect {
@@ -321,7 +321,7 @@ func TestDoorWatchEndsRLoginDoor(t *testing.T) {
 				if !errors.Is(err, tt.want) {
 					t.Errorf("err = %v, want %v", err, tt.want)
 				}
-			case <-time.After(5 * time.Second):
+			case <-time.After(screenWait):
 				t.Fatal("RLogin door still running")
 			}
 			_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -356,7 +356,7 @@ func TestRemoteDoorTimeLimitWinsRace(t *testing.T) {
 	select {
 	case conn := <-ds.conns:
 		t.Cleanup(func() { _ = conn.Close() })
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("door server never received a connection")
 	}
 	select {
@@ -364,7 +364,7 @@ func TestRemoteDoorTimeLimitWinsRace(t *testing.T) {
 		if !errors.Is(err, editor.ErrTimeLimit) {
 			t.Errorf("err = %v, want editor.ErrTimeLimit", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("RLogin door outlived the time limit")
 	}
 }

@@ -139,7 +139,7 @@ func TestSelfIncludingFileTerminates(t *testing.T) {
 		if !strings.Contains(got, "%%loop.ans%%") {
 			t.Errorf("the tag that hit the cap was dropped rather than left visible: %q", got)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("a self-including file did not terminate")
 	}
 }

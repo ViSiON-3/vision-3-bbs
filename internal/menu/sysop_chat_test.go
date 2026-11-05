@@ -100,7 +100,7 @@ func waitDone(t *testing.T, done <-chan struct{}, what string) {
 	t.Helper()
 	select {
 	case <-done:
-	case <-time.After(3 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal(what)
 	}
 }
@@ -367,7 +367,7 @@ func (r *promptRig) nextKey(t *testing.T) int {
 	select {
 	case k := <-r.keys:
 		return k
-	case <-time.After(3 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("prompt read no key")
 		return 0
 	}
@@ -389,7 +389,7 @@ func (r *promptRig) finish(t *testing.T, rest, want string) {
 		if got != want {
 			t.Fatalf("line = %q; want %q", got, want)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("prompt did not finish the line")
 	}
 }
@@ -540,7 +540,7 @@ func TestChatTimeIsCreditedToTimeLimit(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read after chat = %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("read after chat did not get the key")
 	}
 }
@@ -561,7 +561,7 @@ func TestCallerEndedChatIsReported(t *testing.T) {
 		if tp != r.tap {
 			t.Fatal("ended reported for another tap")
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("caller-ended chat not reported")
 	}
 	if h := r.tap.KeyboardHolder(); h != "" {
@@ -625,7 +625,7 @@ func TestCallerEndedChatAuditsDroppedTypeIn(t *testing.T) {
 		if d.sysop != "SysOp" || d.n != 2 || d.held <= 0 {
 			t.Fatalf("audit = %+v", d)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("dropped type-in hold not audited")
 	}
 }

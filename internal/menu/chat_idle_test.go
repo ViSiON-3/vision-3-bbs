@@ -64,7 +64,7 @@ func startChatIdle(env *menuEnv, u *user.User, sessionUnits, chatUnits int) *cha
 		_ = w.Close()
 		select {
 		case <-run.done:
-		case <-time.After(10 * time.Second):
+		case <-time.After(handlerWait):
 			env.t.Errorf("chat still running after its input closed")
 		}
 		resetSessionIH(s)
