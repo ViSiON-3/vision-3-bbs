@@ -107,6 +107,23 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 
 	// --- Input ---
 
+	// readkey() or readkey(timeout_ms) — like getkey, but special keys come
+	// back by name ("UP", "PGDN", "ESC", ...) instead of being discarded
+	jsutil.Set(obj, "readkey", func(call goja.FunctionCall) goja.Value {
+		timeout := time.Duration(0)
+		if len(call.Arguments) > 0 {
+			ms := call.Arguments[0].ToInteger()
+			if ms > 0 {
+				timeout = time.Duration(ms) * time.Millisecond
+			}
+		}
+		key, err := eng.readNamedKey(timeout)
+		if err != nil {
+			return vm.ToValue("")
+		}
+		return vm.ToValue(key)
+	})
+
 	// getkey() or getkey(timeout_ms) — single key read
 	jsutil.Set(obj, "getkey", func(call goja.FunctionCall) goja.Value {
 		timeout := time.Duration(0)
