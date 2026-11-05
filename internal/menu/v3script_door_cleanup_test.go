@@ -193,10 +193,13 @@ func TestV3ScriptDoorEndedByBBS(t *testing.T) {
 
 // A caller who hangs up while the script is computing, not reading, ends the
 // script through the session's context: the door returns and nothing is left
-// reading the session.
+// reading the session. The script says LOOPING from inside its loop, and the
+// hang-up comes once that write has returned, so it is the loop that is
+// interrupted.
 func TestV3ScriptDoorHangUpWhileComputing(t *testing.T) {
-	s, err := runScriptDoor(t, `v3.console.write("READY"); for (;;) {}`, func(_ *DoorCtx, s *scriptDoorSession) {
-		s.whenOutput("READY", s.cancel)
+	const script = `for (var i = 0; ; i++) { if (i === 1000) v3.console.write("LOOPING"); }`
+	s, err := runScriptDoor(t, script, func(_ *DoorCtx, s *scriptDoorSession) {
+		s.whenOutput("LOOPING", func() { go s.cancel() })
 	})
 	if err != nil {
 		t.Errorf("door error = %v, want a normal end (the menu's next read sees the hang-up)", err)
