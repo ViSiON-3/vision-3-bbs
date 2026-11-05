@@ -146,6 +146,34 @@ func TestExplainSteps(t *testing.T) {
 			"Ztrusted": {true, Match, `contains "trusted"`},
 			"C2":       {true, Match, "message conference is 2"},
 		}},
+		// Comparisons, ranges and names, described from the same values.
+		{"LEVEL<50&S10-30", nil, true, Match, map[string]want{
+			"LEVEL<50": {true, Match, "level 20 is below 50"},
+			"S10-30":   {true, Match, "level 20 is between 10 and 30"},
+		}},
+		{"S>20|USER=3", nil, false, NoMatch, map[string]want{
+			"S>20":   {false, NoMatch, "level 20 is not above 20"},
+			"USER=3": {false, NoMatch, "user ID is 5, not 3"},
+		}},
+		{"H22-6&HOUR=8-17", nil, false, NoMatch, map[string]want{
+			"H22-6":     {true, Match, "the hour 22 is inside 22-6, which runs past the top"},
+			"HOUR=8-17": {false, NoMatch, "the hour 22 is not between 8 and 17"},
+		}},
+		{"W1-5&WEEKDAY=3", nil, true, Match, map[string]want{
+			"W1-5":      {true, Match, "today is 3 (Wednesday): 3 is between 1 and 5"},
+			"WEEKDAY=3": {true, Match, "today is 3 (Wednesday)"},
+		}},
+		{"UPLOADSPERCALL<=20|ULDLRATIO>60", nil, false, NoMatch, map[string]want{
+			"UPLOADSPERCALL<=20": {false, NoMatch, "3 uploads in 10 calls: 30% is above 20"},
+			"ULDLRATIO>60":       {false, NoMatch, "3 uploads per 6 downloads: 50% is not above 60"},
+		}},
+		{"TIMELEFT<30", session, true, Match, map[string]want{"TIMELEFT<30": {true, Match, "minutes left 10 is below 30 (limit 60)"}}},
+		{"FLAG:C&NOTE:caller&TIME:21:00/23:00&TERMINAL", session, true, Match, map[string]want{
+			"FLAG:C":           {true, Match, "has flag C"},
+			"NOTE:caller":      {true, Match, `contains "caller"`},
+			"TIME:21:00/23:00": {true, Match, "22:00 is inside 21:00-23:00"},
+			"TERMINAL":         {true, Match, "has a terminal"},
+		}},
 	} {
 		x := Tester{Session: tc.session, At: at22, SysOpLevel: 255, CoSysOpLevel: 250}.Explain(tc.acs, explainUser())
 		if x.Result != tc.result || x.Reason != tc.reason {
@@ -190,7 +218,7 @@ func TestExplainWholeString(t *testing.T) {
 		{"S0", false, false, NoMatch},
 		{"S20&", true, false, Invalid},
 		{"!!FA", true, false, Invalid},
-		{"T30|H8-17", true, false, Invalid},
+		{"T30|H25-3", true, false, Invalid},
 	} {
 		c := ctx
 		if !tc.user {
@@ -252,20 +280,17 @@ Result:     FAIL
 A pass means this expression passed for this user in this context. It doesn't
 mean every access check on a resource passes: a conference, area or door can
 have rules of its own.`},
-		{"T30|H8-17", Tester{At: at22}, `User:       Bob (#5), level 20
+		{"T30|H25-3", Tester{At: at22}, `User:       Bob (#5), level 20
 Session:    none: L and A fail, and T counts the call as just started
 Time:       Wed 2026-11-04 22:00
-Expression: T30|H8-17
-                  ^XX
+Expression: T30|H25-3
+                XXXXX
 Result:     FAIL: the string can't be read as a whole
 
 the string can't be read as a whole, so it fails for everyone and '!' can't
 make it pass
 
-  warning at column 7: unexpected character '-' is ignored and ends the term
-  before it
-  error at column 8: no operator before "17": put & or | between terms
-  warning at column 8: "17": 1 is not an ACS term
+  error at column 5: "H25-3": H needs an hour from 0 to 23
 
 A pass means this expression passed for this user in this context. It doesn't
 mean every access check on a resource passes: a conference, area or door can

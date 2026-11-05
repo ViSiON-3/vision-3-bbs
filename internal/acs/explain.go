@@ -5,8 +5,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 )
 
 // Reason is why a part of an expression passed or failed.
@@ -104,7 +102,7 @@ func Explain(s string, ctx Context) Explanation {
 	}
 	e := Parse(s)
 	x.Diagnostics = e.Diagnostics
-	_, x.Ignored = tokenize(s)
+	_, x.Ignored = tokenize(s, e.compare)
 	switch {
 	case ctx.User == nil:
 		x.Reason = NoMatch
@@ -255,14 +253,6 @@ func worse(a, b Reason) Reason {
 	return a
 }
 
-// percent describes a rounded-down percentage against the term's n.
-func percent(have, want int) string {
-	if have >= want {
-		return fmt.Sprintf("%d%% is at least %d", have, want)
-	}
-	return fmt.Sprintf("%d%% is below %d", have, want)
-}
-
 func outcome(result bool) Reason {
 	if result {
 		return Match
@@ -285,8 +275,9 @@ func passes(ok bool) string {
 }
 
 // explainTerm evaluates a term with EvalTerm and describes the values it
-// compared. A term Parse found a problem with is false without being
-// evaluated, as EvalTerm would make it (see termProblem).
+// compared, read with the same parseTerm and measure, so the description
+// can't drift from the result. A term Parse found a problem with is false
+// without being evaluated, as EvalTerm would make it (see termProblem).
 func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 	if n.termDiag != "" {
 		return false, Invalid, n.termDiag + ", so it is always false"
@@ -294,20 +285,8 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 	result := EvalTerm(n.Text, ctx)
 	reason := outcome(result)
 	u := ctx.User
-	code, value, keyword := splitTerm(n.Text)
-	num, _ := strconv.Atoi(value) // termProblem has checked every numeric argument
-	atLeast := func(what string, have, want int) string {
-		if have >= want {
-			return fmt.Sprintf("%s %d is at least %d", what, have, want)
-		}
-		return fmt.Sprintf("%s %d is below %d", what, have, want)
-	}
-	is := func(what string, have, want int) string {
-		if have == want {
-			return fmt.Sprintf("%s is %d", what, have)
-		}
-		return fmt.Sprintf("%s is %d, not %d", what, have, want)
-	}
+	t, _, _ := parseTerm(n.Text)
+	bare := t.op == "" && !t.ranged
 	hasFlag := func(flag string) string {
 		flags := u.Flags
 		if flags == "" {
@@ -318,19 +297,17 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 		}
 		return fmt.Sprintf("doesn't have flag %s (flags: %s)", strings.ToUpper(flag), flags)
 	}
-	if keyword {
-		if code == "SYSOP" {
-			return result, reason, atLeast("level", u.AccessLevel, ctx.SysOpLevel) + " (sysOpLevel)"
-		}
-		return result, reason, atLeast("level", u.AccessLevel, ctx.CoSysOpLevel) + " (coSysOpLevel)"
-	}
 	now := ctx.now()
 	var detail string
-	switch code {
+	switch t.code {
+	case "SYSOP":
+		detail = compared("level", u.AccessLevel, "", parsedTerm{code: "S", op: ">=", lo: ctx.SysOpLevel}) + " (sysOpLevel)"
+	case "COSYSOP":
+		detail = compared("level", u.AccessLevel, "", parsedTerm{code: "S", op: ">=", lo: ctx.CoSysOpLevel}) + " (coSysOpLevel)"
 	case "S", "D":
-		detail = atLeast("level", u.AccessLevel, num)
+		detail = compared("level", u.AccessLevel, "", t)
 	case "F":
-		detail = hasFlag(value)
+		detail = hasFlag(t.value)
 	case "I":
 		detail = hasFlag("I")
 	case "V":
@@ -340,78 +317,89 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 			detail = "not validated"
 		}
 	case "U":
-		detail = is("user ID", u.ID, num)
+		detail = compared("user ID", u.ID, "", t)
 	case "P":
-		detail = atLeast("file points", u.FilePoints, num)
+		detail = compared("file points", u.FilePoints, "", t)
 	case "E":
-		if u.TimesCalled <= 0 {
-			detail = "no calls yet, so E fails"
+		m := measure(t, ctx)
+		if m.none {
+			detail = "no calls yet, so it fails"
+			if bare {
+				detail = "no calls yet, so E fails"
+			}
 		} else {
-			pct := int(float64(u.NumUploads) / float64(u.TimesCalled) * 100)
-			detail = fmt.Sprintf("%d uploads in %d calls: ", u.NumUploads, u.TimesCalled) + percent(pct, num)
+			detail = fmt.Sprintf("%d uploads in %d calls: ", u.NumUploads, u.TimesCalled) + compared("", m.have, "%", t)
 		}
 	case "B":
-		if u.NumDownloads <= 0 {
+		m := measure(t, ctx)
+		switch {
+		case m.unlimited && bare:
 			detail = "no downloads yet, so B passes"
-		} else {
-			pct := int(float64(u.NumUploads) / float64(u.NumDownloads) * 100)
-			detail = fmt.Sprintf("%d uploads per %d downloads: ", u.NumUploads, u.NumDownloads) + percent(pct, num)
+		case m.unlimited:
+			detail = "no downloads yet, which is above every number, so it " + passes(result)
+		default:
+			detail = fmt.Sprintf("%d uploads per %d downloads: ", u.NumUploads, u.NumDownloads) + compared("", m.have, "%", t)
 		}
 	case "T":
+		m := measure(t, ctx)
+		var why string
 		switch {
 		case u.TimeLimit <= 0:
-			detail = "no time limit, so T passes"
+			why = "no time limit"
 		case u.AccessLevel >= ctx.CoSysOpLevel:
-			detail = "co-sysop level and up have no time limit, so T passes"
+			why = "co-sysop level and up have no time limit"
+		}
+		switch {
+		case why != "" && bare:
+			detail = why + ", so T passes"
+		case why != "":
+			detail = why + ", which is above every number, so it " + passes(result)
 		default:
-			var credit time.Duration
-			if ctx.Session != nil {
-				credit = ctx.Session.ChatCredit()
-			}
-			left, _ := timeleft.Remaining(u.TimeLimit, ctx.Start, now, credit)
-			// Whole minutes compare with n exactly as the duration does.
-			detail = atLeast("minutes left", int(left/time.Minute), num) + fmt.Sprintf(" (limit %d)", u.TimeLimit)
+			detail = compared("minutes left", m.have, "", t) + fmt.Sprintf(" (limit %d)", u.TimeLimit)
 			if ctx.Session == nil {
 				reason = NoSession
 				detail = "no session, so the call is taken to have just started: " + detail
 			}
 		}
 	case "Z":
-		if value == "" {
+		if t.value == "" {
 			detail = "Z with no text passes for everyone"
 		} else if result {
-			detail = fmt.Sprintf("the private note contains %q", value)
+			detail = fmt.Sprintf("the private note contains %q", t.value)
 		} else {
-			detail = fmt.Sprintf("the private note doesn't contain %q", value)
+			detail = fmt.Sprintf("the private note doesn't contain %q", t.value)
 		}
 	case "C":
-		detail = is("the message conference", u.CurrentMsgConferenceID, num)
+		detail = compared("the message conference", u.CurrentMsgConferenceID, "", t)
 	case "X":
-		detail = is("the file conference", u.CurrentFileConferenceID, num)
+		detail = compared("the file conference", u.CurrentFileConferenceID, "", t)
 	case "H":
-		detail = is("the hour", now.Hour(), num)
+		detail = compared("the hour", now.Hour(), "", t)
 	case "W":
 		day := now.Weekday()
-		if int(day) == num {
-			detail = fmt.Sprintf("today is %d (%s)", num, day)
-		} else {
-			detail = fmt.Sprintf("today is %d (%s), not %d (%s)", int(day), day, num, time.Weekday(num))
+		switch {
+		case (bare || (t.op == "=" && !t.ranged)) && int(day) == t.lo:
+			detail = fmt.Sprintf("today is %d (%s)", t.lo, day)
+		case bare || (t.op == "=" && !t.ranged):
+			detail = fmt.Sprintf("today is %d (%s), not %d (%s)", int(day), day, t.lo, time.Weekday(t.lo))
+		default:
+			detail = fmt.Sprintf("today is %d (%s): ", int(day), day) + compared("", int(day), "", t)
 		}
 	case "Y":
-		parts := strings.Split(value, "/")
+		from, to, _ := strings.Cut(t.value, "/")
 		in := "outside"
 		if result {
 			in = "inside"
 		}
-		detail = fmt.Sprintf("%s is %s %s-%s", now.Format("15:04"), in, parts[0], parts[1])
+		detail = fmt.Sprintf("%s is %s %s-%s", now.Format("15:04"), in, from, to)
 	case "L", "A":
 		switch {
 		case ctx.Session == nil:
 			reason = NoSession
 			detail = "needs a session and there is none, so it is false"
-		case code == "L" && result:
+		case t.code == "L" && result:
 			detail = fmt.Sprintf("the connection is local (%s)", ctx.Session.RemoteAddr())
-		case code == "L":
+		case t.code == "L":
 			detail = fmt.Sprintf("the connection is not local (%s)", ctx.Session.RemoteAddr())
 		case result:
 			detail = "the connection has a terminal"
@@ -420,4 +408,67 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 		}
 	}
 	return result, reason, detail
+}
+
+// compared describes a numeric term's comparison of have, the caller's value
+// (with unit after it, such as "%"): "level 20 is below 50", "user ID is 5,
+// not 3", "the hour is 23, inside 22-6, which runs past the top". what is
+// the value's name, or "" when the caller has said it already.
+func compared(what string, have int, unit string, t parsedTerm) string {
+	v := func(n int) string { return strconv.Itoa(n) + unit }
+	subject := v(have)
+	if what != "" {
+		subject = what + " " + subject
+	}
+	ok := t.compare(measured{have: have})
+	if t.ranged {
+		if t.lo > t.hi {
+			in := "outside"
+			if ok {
+				in = "inside"
+			}
+			return fmt.Sprintf("%s is %s %s-%s, which runs past the top", subject, in, v(t.lo), v(t.hi))
+		}
+		if ok {
+			return fmt.Sprintf("%s is between %s and %s", subject, v(t.lo), v(t.hi))
+		}
+		return fmt.Sprintf("%s is not between %s and %s", subject, v(t.lo), v(t.hi))
+	}
+	op := t.op
+	if op == "" {
+		op = numericCodes[t.code]
+	}
+	want := v(t.lo)
+	switch op {
+	case "=":
+		if what == "" {
+			if ok {
+				return fmt.Sprintf("%s is %s", subject, want)
+			}
+			return fmt.Sprintf("%s is not %s", subject, want)
+		}
+		if ok {
+			return fmt.Sprintf("%s is %s", what, v(have))
+		}
+		return fmt.Sprintf("%s is %s, not %s", what, v(have), want)
+	case ">=":
+		if ok {
+			return fmt.Sprintf("%s is at least %s", subject, want)
+		}
+		return fmt.Sprintf("%s is below %s", subject, want)
+	case ">":
+		if ok {
+			return fmt.Sprintf("%s is above %s", subject, want)
+		}
+		return fmt.Sprintf("%s is not above %s", subject, want)
+	case "<":
+		if ok {
+			return fmt.Sprintf("%s is below %s", subject, want)
+		}
+		return fmt.Sprintf("%s is not below %s", subject, want)
+	}
+	if ok { // <=
+		return fmt.Sprintf("%s is at most %s", subject, want)
+	}
+	return fmt.Sprintf("%s is above %s", subject, want)
 }

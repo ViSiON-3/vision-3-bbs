@@ -134,10 +134,22 @@ func TestACSReference(t *testing.T) {
 		{"unknown term fails", "Q", nil, false},
 		{"not an unknown term passes", "!Q", nil, true},
 		{"not a bad value passes", "!Sx", nil, true},
-		// a dropped character splits the term: S<20 is S and 20 with no
-		// operator between them, so it fails for every level
-		{"less-than splits the term", "S<30", nil, false},
-		{"less-than fails at any level", "S<20", func(u *user.User) { u.AccessLevel = 99 }, false},
+		// a dropped character splits the term: S@20 is S and 20 with no
+		// operator between them, so the string fails at any level
+		{"a dropped character splits the term", "S@20", func(u *user.User) { u.AccessLevel = 99 }, false},
+		// comparisons, ranges and readable names
+		{"less than", "S<30", nil, true},
+		{"less than, at level 99", "S<20", func(u *user.User) { u.AccessLevel = 99 }, false},
+		{"a level range", "S10-30", nil, true},
+		{"a readable name", "LEVEL>=20&FLAG:A", nil, true},
+		{"a range that runs backwards fails as a whole", "!LEVEL=99-20", nil, false},
+		// the Examples table's comparison rows
+		{"example: levels below 20", "S<20", func(u *user.User) { u.AccessLevel = 19 }, true},
+		{"example: levels below 20, at 20", "S<20", nil, false},
+		{"example: a range with a flag", "LEVEL=20-99&FLAG:C", nil, true},
+		{"example: every level but 20", "!(S=20)", nil, false},
+		{"example: every level but 20, at 21", "!(S=20)", func(u *user.User) { u.AccessLevel = 21 }, true},
+		{"example: level or file points", "S>=50|FILEPOINTS>=40", nil, true},
 		{"parentheses don't take a flag", "F(A)", nil, false},
 	}
 	for _, tt := range tests {
