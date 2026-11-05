@@ -1084,6 +1084,9 @@ func (ih *InputHandler) parseCSISequence() (int, error) {
 			break
 		}
 		sequence = append(sequence, b)
+		if len(sequence) >= MaxCSILength {
+			break
+		}
 		if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || b == '~' {
 			break
 		}

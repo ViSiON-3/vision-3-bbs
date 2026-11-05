@@ -1,6 +1,7 @@
 package scripting
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -49,6 +50,9 @@ func TestReadkeyNames(t *testing.T) {
 		{name: "sequence split in its parameters", input: "\x1b[1", chunks: []string{";5B"}, want: "DOWN"},
 		{name: "ss3 split", input: "\x1bO", chunks: []string{"B"}, want: "DOWN"},
 		{name: "alt key", input: "\x1bx", expr: two, want: "ESC|"},
+		{name: "sequence cut short", input: "\x1b[", want: "ESC"},
+		{name: "enter after a cut-off sequence", input: "\x1b[1\r", expr: two, want: "ESC|\r"},
+		{name: "overlong sequence", input: "\x1b[", chunks: []string{strings.Repeat("1;", 40) + "A"}, want: "ESC"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

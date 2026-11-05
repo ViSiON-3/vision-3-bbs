@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 	"time"
 )
@@ -47,6 +48,7 @@ func TestReadKeyDecodesCSISequences(t *testing.T) {
 		{"\x1b[16~", KeyEsc}, // the gap between F5 and F6
 		{"\x1b[~", KeyEsc},   // tilde with no code
 		{"\x1b[", KeyEsc},    // CSI cut short
+		{"\x1b[" + strings.Repeat("1;", 40) + "A", KeyEsc}, // past MaxCSILength
 	} {
 		ih := NewInputHandler(bytes.NewReader([]byte(tc.seq)))
 		got, err := ih.ReadKey()

@@ -261,7 +261,7 @@ Text is sent in the caller's encoding: UTF-8 terminals receive UTF-8, and CP437 
 | `getkey()` | `string` | Wait for a single keypress, returns the character |
 | `getkey(timeout_ms)` | `string` | Wait up to `timeout_ms` milliseconds. Returns `""` on timeout |
 | `readkey()` | `string` | Like `getkey()`, but arrows, paging and function keys come back by name (`"UP"`, `"PGDN"` ...) instead of being discarded. See [Reading special keys](#reading-special-keys) |
-| `readkey(timeout_ms)` | `string` | Wait up to `timeout_ms` milliseconds. Returns `""` on timeout |
+| `readkey(timeout_ms)` | `string` | Wait up to `timeout_ms` milliseconds for a key to start. Returns `""` on timeout |
 | `getstr(maxlen)` | `string` | Read a line of input up to `maxlen` characters |
 | `getstr(maxlen, opts)` | `string` | Read with options object (see below) |
 | `getnum(max)` | `number` | Read a number. Clamps to `max` if exceeded. Returns `0` on empty input |
@@ -314,7 +314,10 @@ skipped. Because Esc is also the first byte of every sequence, a lone Esc is
 held for half a second, as in the editor, in case the rest is still on its
 way over a slow link, so Esc reads a little slower than other keys. Pressing
 Esc and then another key at once is
-read as Alt plus that key and returns `"ESC"`.
+read as Alt plus that key and returns `"ESC"`. An escape sequence cut short, or one that never
+ends, also reads as `"ESC"`. As in the editor, the timeout limits the wait
+for a key to start: a key whose escape sequence has begun is still finished,
+so `readkey(timeout_ms)` can return up to half a second late.
 
 ```javascript
 var row = 0;

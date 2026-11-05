@@ -11,6 +11,12 @@ import (
 // long). The script engine's readkey uses the same window.
 const DefaultEscTimeout = 500 * time.Millisecond
 
+// MaxCSILength caps the bytes read after "ESC [" while waiting for a CSI
+// sequence's final byte. Every key in the table is far shorter; a sequence
+// that runs past it is abandoned and reads as Esc, so a client streaming
+// parameter bytes can't make the reader hold them without limit.
+const MaxCSILength = 32
+
 // This file is the one table of the keys that arrive as escape sequences.
 // ReadKey decodes them through it, and so does the script engine's readkey,
 // which names them with KeyName.

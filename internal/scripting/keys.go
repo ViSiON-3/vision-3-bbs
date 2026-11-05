@@ -55,11 +55,15 @@ func (eng *Engine) readNamedKey(timeout time.Duration) (string, error) {
 			return eng.keyName, nil
 		}
 		if key == "\x1b" {
-			seq, err := eng.completeEscape()
+			seq, rest, err := eng.completeEscape()
 			if err != nil {
 				return "", err
 			}
-			if len(seq) == 1 {
+			eng.inputBuf = append(rest, eng.inputBuf...)
+			if len(seq) == 1 || escapePending(seq) {
+				// A lone ESC, or a sequence cut short or abandoned:
+				// the Esc key, as the editor reads it. The bytes of an
+				// unfinished sequence are dropped.
 				return "ESC", nil
 			}
 			eng.inputBuf = append(seq, eng.inputBuf...)
@@ -77,22 +81,35 @@ func (eng *Engine) readNamedKey(timeout time.Duration) (string, error) {
 }
 
 // completeEscape gathers the bytes after a lone ESC until they make a whole
-// escape sequence, waiting editor.DefaultEscTimeout for each further piece, and returns them
-// with the ESC in front. Just the ESC comes back when nothing follows in
-// time; an unfinished sequence comes back as far as it got.
-func (eng *Engine) completeEscape() ([]byte, error) {
-	seq := []byte{0x1b}
+// escape sequence, waiting editor.DefaultEscTimeout for each further piece. It
+// returns the sequence with the ESC in front, and any bytes that arrived after
+// it. The sequence is unfinished (escapePending still true) when nothing more
+// came in time, when a byte that can't be part of it arrived (that byte and
+// what follows are returned as rest), or when it reached
+// editor.MaxCSILength.
+func (eng *Engine) completeEscape() (seq, rest []byte, err error) {
+	seq = []byte{0x1b}
 	for escapePending(seq) {
 		more, err := eng.awaitInput(editor.DefaultEscTimeout)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if len(more) == 0 {
-			break
+			return seq, nil, nil
 		}
-		seq = append(seq, more...)
+		for i, c := range more {
+			if len(seq) > 2 && seq[1] == '[' && (c < 0x20 || c > 0x7e) {
+				// Enter or a control key typed after a cut-off sequence
+				// is the next key, not part of this one.
+				return seq, more[i:], nil
+			}
+			seq = append(seq, c)
+			if !escapePending(seq) || len(seq)-2 >= editor.MaxCSILength {
+				return seq, more[i+1:], nil
+			}
+		}
 	}
-	return seq, nil
+	return seq, nil, nil
 }
 
 // escapePending reports whether b, starting with ESC, is the start of an
