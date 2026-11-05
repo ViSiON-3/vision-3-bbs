@@ -1,7 +1,6 @@
 package menu
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -175,7 +174,8 @@ func (a *acsTesterScreen) readSession() error {
 		a.write("\r\n")
 		return yes, err
 	}
-	on, err := yesNo(str.AcsTestSessionPrompt, a.tester.Session == nil)
+	// Enter keeps what's there: a session stays, none stays none.
+	on, err := yesNo(str.AcsTestSessionPrompt, a.tester.Session != nil)
 	if err != nil || !on {
 		a.tester.Session = nil
 		return err
@@ -190,29 +190,29 @@ func (a *acsTesterScreen) readSession() error {
 	if s.Terminal, err = yesNo(str.AcsTestTerminalPrompt, s.Terminal); err != nil {
 		return err
 	}
+	// A bad answer asks that prompt again, keeping the answers before it; a
+	// blank one keeps the current value.
 	minutes := func(prompt string, cur time.Duration) (time.Duration, error) {
-		line, err := a.readLine(prompt, strconv.Itoa(int(cur/time.Minute)))
-		if err != nil {
-			return 0, err
+		for {
+			line, err := a.readLine(prompt, strconv.Itoa(int(cur/time.Minute)))
+			if err != nil {
+				return 0, err
+			}
+			if line == "" {
+				return cur, nil
+			}
+			if n, perr := strconv.Atoi(line); perr == nil && n >= 0 {
+				return time.Duration(n) * time.Minute, nil
+			}
+			a.write("\r\n" + string(ansi.ReplacePipeCodes([]byte(str.AcsTestBadNumber))) + "\r\n")
 		}
-		n, perr := strconv.Atoi(line)
-		if perr != nil || n < 0 {
-			return 0, errBadMinutes
-		}
-		return time.Duration(n) * time.Minute, nil
 	}
-	if s.Elapsed, err = minutes(str.AcsTestElapsedPrompt, s.Elapsed); err == nil {
-		s.Credit, err = minutes(str.AcsTestCreditPrompt, s.Credit)
+	if s.Elapsed, err = minutes(str.AcsTestElapsedPrompt, s.Elapsed); err != nil {
+		return err
 	}
-	if errors.Is(err, errBadMinutes) {
-		a.notice = str.AcsTestBadNumber
-		return nil
-	}
-	if err != nil {
+	if s.Credit, err = minutes(str.AcsTestCreditPrompt, s.Credit); err != nil {
 		return err
 	}
 	a.tester.Session = &s
 	return nil
 }
-
-var errBadMinutes = errors.New("not a whole number of minutes")

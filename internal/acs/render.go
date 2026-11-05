@@ -263,18 +263,36 @@ func wrap(prefix, text string, width int) []string {
 	var out []string
 	line := prefix
 	n := 0
-	for _, word := range strings.Fields(text) {
-		w := utf8.RuneCountInString(word)
-		if n > 0 && n+1+w > room {
-			out = append(out, line)
-			line, n = indent, 0
+	for _, field := range strings.Fields(text) {
+		// A word longer than the room (an ACS string has no spaces to break
+		// at) is split at the room, so no line runs past width.
+		for _, word := range splitAt(field, room) {
+			w := utf8.RuneCountInString(word)
+			if n > 0 && n+1+w > room {
+				out = append(out, line)
+				line, n = indent, 0
+			}
+			if n > 0 {
+				line += " "
+				n++
+			}
+			line += word
+			n += w
 		}
-		if n > 0 {
-			line += " "
-			n++
-		}
-		line += word
-		n += w
 	}
 	return append(out, strings.TrimRight(line, " "))
+}
+
+// splitAt cuts word into pieces of at most n runes.
+func splitAt(word string, n int) []string {
+	r := []rune(word)
+	if len(r) <= n {
+		return []string{word}
+	}
+	var parts []string
+	for len(r) > n {
+		parts = append(parts, string(r[:n]))
+		r = r[n:]
+	}
+	return append(parts, string(r))
 }

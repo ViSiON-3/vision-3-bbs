@@ -295,12 +295,32 @@ have rules of its own.`},
 		}
 	}
 
-	// Every line fits the width asked for.
-	x := Tester{At: at22}.Explain("(S10&FA&FC&V&!FX&E30&B50)|(Ztrusted&C2&X3&U5&!L&T30&H22&W3&Y20:00/23:00)", explainUser())
-	for _, l := range Render(x, 40) {
-		if len([]rune(l)) > 40 {
-			t.Errorf("line wider than 40: %q", l)
+	// Every line fits the width asked for, including a detail that quotes a
+	// sub-expression longer than the room, which has no spaces to break at.
+	for _, expr := range []string{
+		"(S10&FA&FC&V&!FX&E30&B50)|(Ztrusted&C2&X3&U5&!L&T30&H22&W3&Y20:00/23:00)",
+		"(FB&FA&FC&FD&FE&FF&FG&FH&FI&FJ&FK&FL&FM&FN&FO)&S10",
+	} {
+		x := Tester{At: at22}.Explain(expr, explainUser())
+		for _, l := range Render(x, 40) {
+			if len([]rune(l)) > 40 {
+				t.Errorf("%s: line wider than 40: %q", expr, l)
+			}
 		}
+	}
+}
+
+// TestWrapSplitsLongWords pins wrap on a word longer than the room: it's
+// cut at the room, and the pieces carry on the indented lines.
+func TestWrapSplitsLongWords(t *testing.T) {
+	got := wrap("  x ", "must pass: S10&FA&FB&FC&FD&FE&FF&FG&FH&FI&FJ&FK failed", 30)
+	want := []string{
+		"  x must pass:",
+		"    S10&FA&FB&FC&FD&FE&FF&FG&F",
+		"    H&FI&FJ&FK failed",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("wrap:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
 

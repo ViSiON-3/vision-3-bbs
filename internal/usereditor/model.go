@@ -186,7 +186,6 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 	if cfg, err := config.LoadServerConfig(configDir); err == nil {
 		retDays = cfg.DeletedUserRetentionDays
 		qwkAPIEnabled = cfg.QWKAPI.Enabled
-		cfg.SanitizeAccessLevels()
 		sysOp, coSysOp = cfg.SysOpLevel, cfg.CoSysOpLevel
 	}
 

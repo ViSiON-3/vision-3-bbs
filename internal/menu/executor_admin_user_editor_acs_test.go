@@ -56,6 +56,30 @@ func TestUserEditor_ACSTesterSessionAndTime(t *testing.T) {
 	}
 }
 
+// TestUserEditor_ACSTesterSessionKeptAndReasked pins the session dialogue's
+// defaults: with a session set, S and Enter at each prompt keep it as it
+// was, and a bad minutes answer asks just that prompt again, keeping the
+// answers before it.
+func TestUserEditor_ACSTesterSessionKeptAndReasked(t *testing.T) {
+	env := newMenuEnv(t)
+	set := "s" + "y" + "y" + "n" + ueBS + "15\r" + "\r"
+	keep := "s" + "\r" + "\r" + "\r" + "\r" + "\r"
+	retry := "s" + "\r" + "\r" + "\r" + ueBS + ueBS + "x\r" + ueBS + ueBS + "20\r" + "\r"
+	input := "j" + "t" + "L&!A\r" + set + keep + retry + "q" + "q"
+	r := env.runCmd("ADMINLISTUSERS", env.sysop, "", input)
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	out := r.text()
+	kept := strings.Index(out, "local call, no terminal, 15 min in")
+	if kept < 0 || !strings.Contains(out[kept+1:], "local call, no terminal, 15 min in") {
+		t.Errorf("Enter through the prompts should keep the session:\n%s", out)
+	}
+	if !r.has("Enter a whole number of minutes.", "local call, no terminal, 20 min in", "Result:     PASS") {
+		t.Errorf("a bad minutes answer should re-ask only that prompt:\n%s", out)
+	}
+}
+
 // TestUserEditor_ACSTesterGate: the tester is for the SYSOP keyword's level
 // only. A caller below it can't open the editor, and an editor opened some
 // other way still refuses the key without drawing anything.
