@@ -55,21 +55,25 @@ func (cr *chatRooms) Join(network, room, nodeID, handle string) (users []string,
 	return cr.usersLocked(network, room), true
 }
 
-func (cr *chatRooms) Leave(network, room, nodeID, handle string) {
+// Leave removes a membership and reports whether one existed. Repeated
+// cleanup requests must not generate duplicate leave announcements.
+func (cr *chatRooms) Leave(network, room, nodeID, handle string) bool {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 	rooms := cr.networks[network]
 	if rooms == nil {
-		return
+		return false
 	}
 	rs := rooms[room]
 	if rs == nil {
-		return
+		return false
 	}
+	removed := false
 	handles := rs.members[nodeID]
 	for i, h := range handles {
 		if h == handle {
 			rs.members[nodeID] = append(handles[:i], handles[i+1:]...)
+			removed = true
 			break
 		}
 	}
@@ -82,6 +86,7 @@ func (cr *chatRooms) Leave(network, room, nodeID, handle string) {
 			delete(cr.networks, network)
 		}
 	}
+	return removed
 }
 
 func (cr *chatRooms) SetTopic(network, room, topic string) {

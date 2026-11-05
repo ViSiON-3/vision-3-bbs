@@ -148,6 +148,21 @@ A refused line is not delivered; the caller sees a system line reading
 room post or topic change is credited to the handle that sent it, which must
 have joined the room; the hub refuses it otherwise.
 
+### Reconnecting to a Hub
+
+When the event stream disconnects, chat keeps the intended room and blocks
+room posts and topic changes until membership is restored. Each distinct
+handle and room rejoins once, including when a caller has several active
+sessions. A failed recovery reports an error and retries with the event
+stream's backoff; the reconnected notice appears only after recovery succeeds.
+Leaving a room or closing chat during recovery abandons that session's room
+intent. Other active sessions sharing the membership remain joined.
+
+Recovery refreshes the room's users and topic. It keeps the existing scrollback
+and does not automatically append history from the gap, avoiding duplicate
+messages. Messages sent while disconnected may therefore be missing from the
+screen. An explicit room join still fetches recent history in the usual way.
+
 ### Troubleshooting
 
 | Symptom | What to check |
@@ -156,7 +171,7 @@ have joined the room; the hub refuses it otherwise.
 | Lag shows `·---ms` | The hub did not answer the last round-trip check (every 15 seconds). Look for `leaf: SSE reconnecting` in the log; the field fills in again once the hub answers. |
 | Lag is blank | Expected on **Local** chat, which has no hub. |
 | A network is missing from the picker | It has no subscription in `v3net.json`. Add it under **6 — ViSiON/3 Networking (V3Net) → 2. Subscriptions** in `./config`. |
-| `*** reconnected` appears mid-chat | The event stream to the hub dropped and came back. Nothing needs doing. |
+| `*** reconnected` appears mid-chat | The event stream returned and active room memberships were restored. Users and topic have been refreshed; missed messages are not automatically replayed. |
 
 ---
 

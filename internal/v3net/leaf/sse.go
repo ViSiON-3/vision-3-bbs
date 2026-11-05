@@ -124,12 +124,15 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 	slog.Info("leaf: SSE connected", "network", l.cfg.Network, "signed", verifier != nil)
 	l.sseConnected.Store(true)
 	defer l.sseConnected.Store(false)
+	defer l.chatSessions.suspend()
 	if reconnect {
-		l.chatSessions.notifyReconnect()
 		// A nal_updated sent while the stream was down is lost, and Start's
 		// one-off fetch has long passed, so check the NAL again now.
 		if l.cfg.OnNAL != nil && l.reconnectFetching.CompareAndSwap(false, true) {
 			go l.refreshNALAfterReconnect(ctx)
+		}
+		if err := l.recoverChat(streamCtx); err != nil {
+			return fmt.Errorf("SSE chat recovery: %w", err)
 		}
 	}
 

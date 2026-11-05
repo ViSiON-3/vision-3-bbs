@@ -664,7 +664,16 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 			case chat.TypeSystem:
 				if ev.Reconnect {
-					writeChatLine(e.Strings().ChatReconnected)
+					newUsers := svc.Users()
+					rawMu.Lock()
+					currentUsers = newUsers
+					if ev.Topic != nil && ev.Topic.Room == currentRoom {
+						currentTopic = ev.Topic.Topic
+					}
+					writeChatLineLocked(e.Strings().ChatReconnected)
+					drawHeaderLocked()
+					drawStatusBarLocked()
+					rawMu.Unlock()
 				} else if ev.Text != "" {
 					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, chatText(ev.Text)))
 				}

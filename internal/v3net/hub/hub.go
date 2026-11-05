@@ -33,6 +33,9 @@ type Hub struct {
 	central           *CentralStore
 	centralLimiter    *rateLimiter // per node: listing publishes
 	online            *onlineNodes
+	// chatStreamMu orders stream registration against last-stream cleanup.
+	// An old connection must not remove memberships restored by its replacement.
+	chatStreamMu sync.Mutex
 
 	// closeOnce makes Close idempotent; closeErr is the first call's result.
 	closeOnce sync.Once

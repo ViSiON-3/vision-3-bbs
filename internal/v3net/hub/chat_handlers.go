@@ -106,10 +106,11 @@ func (h *Hub) handleChatLeave(w http.ResponseWriter, r *http.Request, network st
 		return
 	}
 
-	h.chatRooms.Leave(network, room, nodeID, req.Handle)
-	broadcastChatEvent(h.broadcaster, network, protocol.EventChatLeave, protocol.ChatLeavePayload{
-		Room: room, Handle: req.Handle, BBS: bbsName,
-	})
+	if h.chatRooms.Leave(network, room, nodeID, req.Handle) {
+		broadcastChatEvent(h.broadcaster, network, protocol.EventChatLeave, protocol.ChatLeavePayload{
+			Room: room, Handle: req.Handle, BBS: bbsName,
+		})
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
