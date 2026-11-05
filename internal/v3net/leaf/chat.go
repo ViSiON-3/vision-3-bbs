@@ -280,6 +280,11 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 	if closed {
 		return nil, nil, fmt.Errorf("join chat: session closed")
 	}
+	// A recovery join may have found an existing membership and produced no
+	// echo. It must not suppress this later, explicitly requested join.
+	s.leaf.chatSessions.mu.Lock()
+	delete(s.leaf.chatSessions.rejoinEchoes, chatMembership{room, s.handle})
+	s.leaf.chatSessions.mu.Unlock()
 	body, _ := json.Marshal(protocol.ChatJoinRequest{Room: room, Handle: s.handle})
 	resp, err := s.leaf.signedPostWithResponse(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/join", s.leaf.cfg.Network), body)

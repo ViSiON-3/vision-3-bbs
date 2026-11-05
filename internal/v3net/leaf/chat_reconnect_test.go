@@ -448,3 +448,38 @@ func TestChatRecoveryClosesEarlierGroupWhileLaterGroupWaits(t *testing.T) {
 		t.Fatal("earlier closed session retained membership")
 	}
 }
+
+func TestChatRecoveryExistingMembershipDoesNotHideLaterJoin(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	board := subscribedLeaf(t, ts, "boardbbs")
+	alice := board.NewChatSession("alice")
+	defer alice.Close()
+	bob := board.NewChatSession("bob")
+	defer bob.Close()
+	for _, s := range []*ChatSession{alice, bob} {
+		if _, _, err := s.Join("lobby"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	watchEvents(t, board)
+	// Overlapping streams can reconnect while memberships still exist; the
+	// hub emits no join echoes for these idempotent restoration requests.
+	if err := board.recoverChat(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	awaitChat(t, bob, chat.TypeSystem)
+	if err := alice.Leave("lobby"); err != nil {
+		t.Fatal(err)
+	}
+	awaitChat(t, bob, chat.TypeLeave)
+	if _, _, err := alice.Join("lobby"); err != nil {
+		t.Fatal(err)
+	}
+	ev := awaitChat(t, bob, chat.TypeJoin)
+	if ev.Join == nil || ev.Join.Handle != "alice" {
+		t.Fatalf("normal join hidden: %+v", ev)
+	}
+	if users := bob.Users(); len(users) != 2 {
+		t.Fatalf("normal rejoin users: %v", users)
+	}
+}
