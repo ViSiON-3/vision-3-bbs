@@ -284,10 +284,15 @@ func TestChatHeaderKeepsArtWidth(t *testing.T) {
 			t.Fatalf("header row %d not drawn", row)
 		}
 		rest := screen[start+len(fmt.Sprintf("\x1b[%d;1H", row)):]
-		if end := strings.Index(rest, fmt.Sprintf("\x1b[%d;1H", row+1)); end >= 0 {
-			rest = rest[:end]
-		} else if end := strings.Index(rest, "\x1b[24;1H"); end >= 0 {
-			rest = rest[:end]
+		// The row ends where the next one starts, or where the cursor goes
+		// back to the input row after the last one, whichever comes first:
+		// the region redraw that follows the header starts at row 6 too.
+		next, back := strings.Index(rest, fmt.Sprintf("\x1b[%d;1H", row+1)), strings.Index(rest, "\x1b[24;1H")
+		switch {
+		case next >= 0 && (back < 0 || next < back):
+			rest = rest[:next]
+		case back >= 0:
+			rest = rest[:back]
 		}
 		widths = append(widths, utf8.RuneCountInString(testAnsiEscape.ReplaceAllString(rest, "")))
 	}

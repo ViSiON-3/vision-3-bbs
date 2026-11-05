@@ -495,53 +495,63 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 
-	// writeChatLineLocked writes a timestamped, word-wrapped message into the
-	// chat scroll region and the scrollback. While the caller is paged back
-	// the line is only kept, and shows when they return. Caller must hold
-	// rawMu.
-	//
-	// Strings shown inside the split screen are printed as text even when they
-	// start with !door or %file (see string_hooks.go): they are wrapped into
-	// the scroll region, many arrive on the receive goroutine with rawMu held,
-	// and a script or a full-screen file would tear the layout apart.
-	writeChatLineLocked := func(text string) {
+	// keepChatLineLocked wraps text into the scrollback as a timestamped
+	// line, without drawing it. Caller must hold rawMu.
+	keepChatLineLocked := func(text string) {
 		ts := time.Now().Format("15:04")
 		fullText := fmt.Sprintf("|08%s|07 %s", ts, text)
 		// The last column stays free, as it does on the input rows: a terminal
 		// without a deferred wrap moves to the next row as soon as a character
 		// lands there, and on the bottom row of the region that scrolls the
 		// room by a row that nothing here accounts for (#911).
-		lines := wrapPipeText(fullText, max(termWidth-1, 1), chatContPrefix, chatContPrefixLen, outputMode)
-		n := len(lines)
-		if n == 0 {
-			return
-		}
-		held := scrollback.len()
-		scrollback.add(lines...)
+		scrollback.add(wrapPipeText(fullText, max(termWidth-1, 1), chatContPrefix, chatContPrefixLen, outputMode)...)
+	}
+
+	// showChatLinesLocked redraws what keepChatLineLocked added since the
+	// scrollback held `held` lines: the Buffer counter if it changed, and the
+	// chat region unless the caller is paged back, when the lines show once
+	// they return. Caller must hold rawMu.
+	//
+	// The region is redrawn from the scrollback rather than scrolled. SyncTERM
+	// scrolls a DECSTBM region in its cell model but leaves the pixels where
+	// they were, and repaints only the cells whose contents change, so a line
+	// scrolled into place stayed on screen and showed through the spaces of
+	// the next line written over it (#911). Redrawing changes every cell of
+	// every row, so the terminal shows what the model holds.
+	showChatLinesLocked := func(held int) {
 		if scrollback.len() != held {
-			drawHeaderLocked() // the Buffer counter
+			drawHeaderLocked()
 		}
-		if !scrollback.live() {
-			return
+		if scrollback.live() {
+			drawRegionLocked()
 		}
-		// A message taller than the chat region shows its newest lines; the
-		// rest are in the scrollback. Any more would write over the header.
-		scrollBottom := scr.scrollBottom()
-		if room := max(scrollBottom-chatTop+1, 1); n > room {
-			lines, n = lines[n-room:], room
+	}
+
+	// writeChatLineLocked writes a timestamped, word-wrapped message into the
+	// chat region and the scrollback. While the caller is paged back the line
+	// is only kept, and shows when they return. Caller must hold rawMu.
+	//
+	// Strings shown inside the split screen are printed as text even when they
+	// start with !door or %file (see string_hooks.go): they are wrapped into
+	// the scroll region, many arrive on the receive goroutine with rawMu held,
+	// and a script or a full-screen file would tear the layout apart.
+	writeChatLineLocked := func(text string) {
+		held := scrollback.len()
+		keepChatLineLocked(text)
+		showChatLinesLocked(held)
+	}
+
+	// writeChatHistory shows the join notice for room and its history as one
+	// redraw of the region, not one per line.
+	writeChatHistory := func(room string, history []chat.ChatMessage) {
+		rawMu.Lock()
+		defer rawMu.Unlock()
+		held := scrollback.len()
+		keepChatLineLocked(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Joined #"+room))
+		for _, msg := range history {
+			keepChatLineLocked(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 		}
-		// Scroll the chat region up by n lines.
-		rawWriteLocked([]byte(ansi.MoveCursor(scrollBottom, 1)))
-		for i := 0; i < n; i++ {
-			rawWriteLocked([]byte("\r\n"))
-		}
-		// Write each line at its resulting position, on a cleared row: whatever
-		// the terminal left there after the scroll must not show through.
-		for i, line := range lines {
-			rawWriteLocked([]byte(ansi.MoveCursor(scrollBottom-n+1+i, 1) + "\x1B[2K"))
-			rawWriteLocked(ansi.ReplacePipeCodes([]byte(line)))
-		}
-		scr.restoreCursor()
+		showChatLinesLocked(held)
 	}
 
 	writeChatLine := func(text string) {
@@ -584,10 +594,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	rawMu.Unlock()
 
 	// Show join notice and scrollback history.
-	writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Joined #"+currentRoom))
-	for _, msg := range history {
-		writeChatLine(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
-	}
+	writeChatHistory(currentRoom, history)
 
 	// Draw initial input prompt. chatReadLine will manage it from here on.
 	chatPrompt := fmt.Sprintf("<%s> ", handle)
@@ -858,10 +865,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			drawHeaderLocked()
 			drawStatusBarLocked()
 			rawMu.Unlock()
-			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Joined #"+currentRoom))
-			for _, msg := range joinHistory {
-				writeChatLine(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
-			}
+			writeChatHistory(currentRoom, joinHistory)
 			continue
 		}
 
@@ -994,10 +998,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			drawStatusBarLocked()
 			rawMu.Unlock()
 
-			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Joined #"+currentRoom))
-			for _, msg := range newHistory {
-				writeChatLine(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
-			}
+			writeChatHistory(currentRoom, newHistory)
 
 			go pumpEvents(svc, done)
 			continue

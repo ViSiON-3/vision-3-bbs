@@ -516,14 +516,13 @@ func TestChatcovUnbrokenWordIsCut(t *testing.T) {
 
 	r := chatcovChat(env, env.caller, msg+"\r/q\r")
 	rows := 0
-	for _, m := range chatcovRegionRow.FindAllStringSubmatch(r.raw, -1) {
-		row := testAnsiEscape.ReplaceAllString(m[2], "")
+	for _, row := range strings.Split(chatcovLastRegion(t, r), "\n") {
 		if !strings.Contains(row, "xxx") {
-			continue // the status bar, which the growing input area moved up
+			continue
 		}
 		rows++
 		if w := uniseg.StringWidth(row); w > 79 {
-			t.Errorf("row %s is %d cells wide: %q", m[1], w, row)
+			t.Errorf("row is %d cells wide: %q", w, row)
 		}
 	}
 	if rows != 2 {
@@ -534,27 +533,42 @@ func TestChatcovUnbrokenWordIsCut(t *testing.T) {
 	}
 }
 
-// chatcovRegionRow matches a row written to the chat region on an 80x24
-// screen: its position and clear, then the text up to the next escape.
-var chatcovRegionRow = regexp.MustCompile(`\x1b\[(6|7|8|9|1\d|2[01]);1H\x1b\[2K([^\x1b]*(?:\x1b\[[0-9;]*m[^\x1b]*)*)`)
+// chatcovRegionRow matches a row drawn in the chat region on an 80x24
+// screen: its position, then text and colour codes up to the next move.
+var chatcovRegionRow = regexp.MustCompile(`\x1b\[(6|7|8|9|1\d|2[01]);1H((?:[^\x1b]|\x1b\[[0-9;]*m)+)`)
+
+// chatcovLastRegion returns the text of the chat region as its last redraw
+// left it, with colour codes stripped and rows separated by newlines.
+func chatcovLastRegion(t *testing.T, r runResult) string {
+	t.Helper()
+	i := strings.LastIndex(r.raw, "\x1b[6;1H\x1b[2K")
+	if i < 0 {
+		t.Fatalf("chat region never redrawn:\n%s", chatcovText(r))
+	}
+	var rows []string
+	for _, m := range chatcovRegionRow.FindAllStringSubmatch(r.raw[i:], -1) {
+		rows = append(rows, testAnsiEscape.ReplaceAllString(m[2], ""))
+	}
+	return strings.Join(rows, "\n")
+}
 
 // chatcovTwoRows returns the text of the two rows a two-row message was
-// written on: the region scrolls up two rows, then the message goes on row
-// 20 and the prefixed remainder on 21.
+// drawn on in the last redraw of the region: the message on row 20 and the
+// prefixed remainder on 21, above the status bars.
 func chatcovTwoRows(t *testing.T, r runResult) (row20, row21 string) {
 	t.Helper()
-	_, written, ok := strings.Cut(r.raw, "\x1b[21;1H\r\n\r\n\x1b[20;1H")
-	if !ok {
-		t.Fatalf("chat region not scrolled by two rows for a two-row message:\n%s", chatcovText(r))
+	i := strings.LastIndex(r.raw, "\x1b[6;1H\x1b[2K")
+	if i < 0 {
+		t.Fatalf("chat region never redrawn:\n%s", chatcovText(r))
 	}
-	row20, row21, ok = strings.Cut(written, "\x1b[21;1H")
-	if !ok {
-		t.Fatalf("no continuation row written at row 21")
+	rows := map[string]string{}
+	for _, m := range chatcovRegionRow.FindAllStringSubmatch(r.raw[i:], -1) {
+		rows[m[1]] = testAnsiEscape.ReplaceAllString(m[2], "")
 	}
-	if i := strings.Index(row21, "\x1b[24;"); i >= 0 {
-		row21 = row21[:i] // up to the cursor going back to the input row
+	if rows["20"] == "" || rows["21"] == "" {
+		t.Fatalf("rows 20 and 21 not both drawn in the last redraw:\n%s", chatcovLastRegion(t, r))
 	}
-	return testAnsiEscape.ReplaceAllString(row20, ""), testAnsiEscape.ReplaceAllString(row21, "")
+	return rows["20"], rows["21"]
 }
 
 // Without CHATHEADER.ANS in the menu set the header is drawn as text: the
@@ -894,12 +908,17 @@ func TestChatcovNetworkCommandWithoutNetworks(t *testing.T) {
 	if !chatcovHas(r, "*** Chat Networks:", " 1. Local           (this BBS only)", "<Caller> two") {
 		t.Errorf("/network on a local-only board wrong:\n%s", chatcovText(r))
 	}
-	if n := strings.Count(chatcovText(r), "*** Joined #lobby"); n != 2 {
-		t.Errorf("lobby joined %d times, want 2 (start + after /network)", n)
+	// /network clears the room, so the final region holds one join and the
+	// caller's first line once, back from the room's history.
+	region := chatcovLastRegion(t, r)
+	if n := strings.Count(region, "*** Joined #lobby"); n != 1 {
+		t.Errorf("lobby joined %d times in the final region, want 1:\n%s", n, region)
 	}
-	// Rejoining scrolls the room's history back in, including the caller's own line.
-	if n := strings.Count(chatcovText(r), "<Caller> one"); n != 2 {
-		t.Errorf("first message shown %d times, want 2 (echo + scrollback)", n)
+	if n := strings.Count(region, "<Caller> one"); n != 1 {
+		t.Errorf("first message shown %d times in the final region, want 1 (from history):\n%s", n, region)
+	}
+	if i := strings.Index(region, "*** Joined #lobby"); i < 0 || strings.Index(region, "<Caller> one") < i {
+		t.Errorf("the history is not shown after the rejoin:\n%s", region)
 	}
 	chatcovEqual(t, "local history", chatcovLocalHistory(env, "lobby"), []string{"Caller: one", "Caller: two"})
 
