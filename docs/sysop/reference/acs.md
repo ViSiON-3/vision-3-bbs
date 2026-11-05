@@ -120,6 +120,28 @@ A name stands for its letter, with the same test and the same argument:
 `D` and `I` have no names: `D` is the same test as `S`, and `I` the same as
 `FI`.
 
+### Terms from the user's record
+
+These are names only, with no letter:
+
+| Term | Passes when | Notes |
+|---|---|---|
+| `CALLS`*op n* | the user's number of calls compares | `CALLS>=10`, `CALLS=1-5` |
+| `POSTS`*op n* | messages posted compares | |
+| `UPLOADS`*op n* | files uploaded compares | |
+| `DOWNLOADS`*op n* | files downloaded compares | |
+| `AGE`*op n* | the account's age in days compares | see below |
+| `REALNAME` | the user has a real name set | takes nothing |
+
+They take a comparison or a range like the numeric names
+([Comparisons and ranges](#comparisons-and-ranges)); their ranges don't wrap.
+
+`AGE` is whole calendar days since the user signed up, counted in the
+board's `timezone` setting (or `VISION3_TIMEZONE`, then `TZ`): 0 on the day
+of sign-up, 1 from the next midnight. A user with no sign-up date on record
+has no age, so `AGE` fails for them whatever the comparison. `vision3
+doctor` lists such users under **user sign-up dates**.
+
 ### Ratios
 
 `E` and `B` work out a percentage and round it down before comparing:
@@ -307,12 +329,14 @@ have rules of its own.
 
 The line under the expression marks each term: `+` passed, `-` failed, `?`
 invalid (an unknown letter or a bad argument), `~` needs a session the
-context doesn't have. `^` marks a character that was dropped, and `X` the
+context doesn't have, or a value the user's record doesn't (`AGE` with no
+sign-up date). `^` marks a character that was dropped, and `X` the
 place where a string that can't be read as a whole goes wrong; such a string
 shows its problems instead of the list of parts.
 
 Each part says whether it passed and, when the result isn't an ordinary
-pass or fail, whether it rests on an invalid term or a missing session. A
+pass or fail, whether it rests on an invalid term, a missing session or a
+value the record lacks. A
 part rests on one only when every part that decided it does: `S10|Q` passes on
 `S10` alone, but `S10&!Q` passes only because `!` turns the invalid `Q`
 into a pass. The tester shows what the board does today, so `!Q` passes in it
@@ -336,6 +360,8 @@ behind its level and category, private mail behind its own rules.
 | `SYSOP\|U1` | sysops, and user 1 |
 | `(S50\|FM)&T10` | level 50 or flag M, with 10 minutes or more left |
 | `S<20` | levels below 20 |
+| `CALLS>=10&AGE>=7` | users with 10 calls or more who signed up a week or more ago |
+| `REALNAME\|SYSOP` | users with a real name set, and sysops |
 | `LEVEL=20-99&FLAG:C` | levels 20 to 99 with flag C |
 | `!(S=20)` | every level but 20 |
 | `S>=50\|FILEPOINTS>=40` | level 50 and up, or anyone with 40 file points |
