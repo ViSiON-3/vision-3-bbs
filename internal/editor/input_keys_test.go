@@ -30,13 +30,23 @@ func TestReadKeyDecodesCSISequences(t *testing.T) {
 		{"\x1b[4~", KeyEnd},
 		{"\x1b[5~", KeyPageUp},
 		{"\x1b[6~", KeyPageDown},
+		{"\x1b[7~", KeyHome}, // rxvt
+		{"\x1b[8~", KeyEnd},  // rxvt
+		{"\x1b[11~", KeyF1},
+		{"\x1b[15~", KeyF5}, // read as Home when only the first digit counted
+		{"\x1b[17~", KeyF6},
+		{"\x1b[21~", KeyF10},
+		{"\x1b[24~", KeyF12},
+		{"\x1b[Z", KeyBackTab},
 		{"\x1b[1;5C", KeyArrowRight}, // modifier parameters are skipped over
+		{"\x1b[5;5~", KeyPageUp},
 		// CSI K is "Erase in Line" echoed back by some clients; it must not
 		// read as End.
 		{"\x1b[K", KeyEsc},
-		{"\x1b[9~", KeyEsc}, // unknown tilde code
-		{"\x1b[~", KeyEsc},  // tilde with no code
-		{"\x1b[", KeyEsc},   // CSI cut short
+		{"\x1b[9~", KeyEsc},  // unknown tilde code
+		{"\x1b[16~", KeyEsc}, // the gap between F5 and F6
+		{"\x1b[~", KeyEsc},   // tilde with no code
+		{"\x1b[", KeyEsc},    // CSI cut short
 	} {
 		ih := NewInputHandler(bytes.NewReader([]byte(tc.seq)))
 		got, err := ih.ReadKey()
@@ -57,6 +67,8 @@ func TestReadKeyDecodesSS3Sequences(t *testing.T) {
 		{"\x1bOD", KeyArrowLeft},
 		{"\x1bOH", KeyHome},
 		{"\x1bOF", KeyEnd},
+		{"\x1bOP", KeyF1},
+		{"\x1bOS", KeyF4},
 		{"\x1bOZ", KeyEsc},
 	} {
 		ih := NewInputHandler(bytes.NewReader([]byte(tc.seq)))
@@ -339,6 +351,31 @@ func TestIsPrintable(t *testing.T) {
 	} {
 		if got := IsPrintable(key); got != want {
 			t.Errorf("IsPrintable(%#x) = %v, want %v", key, got, want)
+		}
+	}
+}
+
+// Every special key the table can return has a script name, and no ordinary
+// key has one.
+func TestKeyNameCoversTheTable(t *testing.T) {
+	var keys []int
+	for _, key := range csiFinalKeys {
+		keys = append(keys, key)
+	}
+	for _, key := range csiTildeKeys {
+		keys = append(keys, key)
+	}
+	for _, key := range ss3Keys {
+		keys = append(keys, key)
+	}
+	for _, key := range keys {
+		if KeyName(key) == "" {
+			t.Errorf("KeyName(%#x) is empty", key)
+		}
+	}
+	for _, key := range []int{'a', KeyEnter, KeyBackspace, KeyTab, KeyCtrlE, 0} {
+		if name := KeyName(key); name != "" {
+			t.Errorf("KeyName(%#x) = %q, want \"\"", key, name)
 		}
 	}
 }
