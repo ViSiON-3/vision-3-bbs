@@ -112,7 +112,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: scripts/coverage-check.sh coverage.out
       - name: go test -race
-        run: go test -race -timeout 20m ./...
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -race -timeout 20m -v ./... 2>&1 | grep -E '^(\s*--- |ok |FAIL|PASS|panic|\s+\S+_test\.go:[0-9]+:)'
       # The vendored forks under third_party/ are separate modules (wired in
       # with replace directives), so ./... above never reaches them. The
       # bubbletea fork carries local changes with their own tests (shifted
