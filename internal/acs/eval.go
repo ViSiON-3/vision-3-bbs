@@ -1,15 +1,12 @@
 package acs
 
 import (
-	"fmt"
 	"log/slog"
 	"net"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -129,241 +126,62 @@ func evalNode(n *Node, ctx Context) bool {
 // argument), or "" for a term that is evaluated. It follows EvalTerm: every
 // term it accepts, EvalTerm evaluates, and every term it rejects, EvalTerm
 // treats as false.
-func termProblem(term string) string {
-	code, value, keyword := splitTerm(term)
-	if keyword {
-		return ""
-	}
-	number := func() string {
-		if _, err := strconv.Atoi(value); err != nil {
-			return fmt.Sprintf("%q: %s needs a whole number after it", term, code)
-		}
-		return ""
-	}
-	switch code {
-	case "S", "D", "U", "P", "E", "B", "T", "C", "X":
-		return number()
-	case "H":
-		if h, err := strconv.Atoi(value); err != nil || h < 0 || h > 23 {
-			return fmt.Sprintf("%q: H needs an hour from 0 to 23", term)
-		}
-	case "W":
-		if d, err := strconv.Atoi(value); err != nil || d < 0 || d > 6 {
-			return fmt.Sprintf("%q: W needs a weekday from 0 (Sunday) to 6", term)
-		}
-	case "F":
-		if len(value) != 1 {
-			return fmt.Sprintf("%q: F takes exactly one flag letter or digit (use FA&FB for two)", term)
-		}
-	case "Y":
-		parts := strings.Split(value, "/")
-		if len(parts) != 2 {
-			return fmt.Sprintf("%q: Y needs a range written hh:mm/hh:mm", term)
-		}
-		if _, err := time.Parse("15:04", parts[0]); err != nil {
-			return fmt.Sprintf("%q: Y needs a range written hh:mm/hh:mm", term)
-		}
-		if _, err := time.Parse("15:04", parts[1]); err != nil {
-			return fmt.Sprintf("%q: Y needs a range written hh:mm/hh:mm", term)
-		}
-	case "L", "A", "V", "I", "Z":
-	default:
-		return fmt.Sprintf("%q: %s is not an ACS term", term, code)
-	}
-	return ""
+func termProblem(text string) string {
+	_, p, _ := parseTerm(text)
+	return p
 }
 
-// EvalTerm evaluates a single term, such as S50 or FA, against ctx, whose
-// User must not be nil. A term with an unknown letter or a bad argument is
-// false and logged as a warning.
+// EvalTerm evaluates a single term, such as S50, FA or LEVEL<20, against ctx,
+// whose User must not be nil. A term with an unknown letter or a bad argument
+// is false and logged as a warning.
 func EvalTerm(condition string, ctx Context) bool {
 	if len(condition) == 0 {
 		slog.Warn("empty condition encountered in ACS string after tokenization")
 		return false
 	}
-	u := ctx.User
-	s := ctx.Session
-
-	code, value, keyword := splitTerm(condition)
-	if keyword {
-		if code == "SYSOP" {
-			return u.AccessLevel >= ctx.SysOpLevel
-		}
-		return u.AccessLevel >= ctx.CoSysOpLevel
+	t, problem, _ := parseTerm(condition)
+	if problem != "" {
+		slog.Warn("invalid ACS term", "condition", condition, "problem", problem)
+		return false
 	}
+	result := evalTerm(t, ctx)
+	slog.Debug("ACS term", "condition", condition, "result", result)
+	return result
+}
 
-	var result bool
-	switch code {
-	case "S": // Access level >= value
-		level, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid level value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = u.AccessLevel >= level
-		}
+// evalTerm evaluates a term parseTerm read without a problem.
+func evalTerm(t parsedTerm, ctx Context) bool {
+	u, s := ctx.User, ctx.Session
+	switch t.code {
+	case "SYSOP":
+		return u.AccessLevel >= ctx.SysOpLevel
+	case "COSYSOP":
+		return u.AccessLevel >= ctx.CoSysOpLevel
 	case "L": // Local connection
 		if s == nil {
-			result = false
-		} else {
-			network := s.RemoteAddr().Network()
-			addr := s.RemoteAddr().String()
-			isLoopback := strings.HasPrefix(addr, "127.") || strings.HasPrefix(addr, "[::1]")
-			result = (network == "pipe" || network == "unix" || isLoopback)
-			slog.Debug("ACS 'L' check", "network", network, "addr", addr, "isLoopback", isLoopback, "result", result)
+			return false
 		}
+		network := s.RemoteAddr().Network()
+		addr := s.RemoteAddr().String()
+		isLoopback := strings.HasPrefix(addr, "127.") || strings.HasPrefix(addr, "[::1]")
+		return network == "pipe" || network == "unix" || isLoopback
 	case "A": // Session has a terminal: every telnet session, SSH with a PTY. Not an ANSI or encoding check.
-		if s == nil {
-			result = false
-		} else {
-			isPty := s.HasPTY()
-			result = isPty
-			slog.Debug("ACS 'A' check", "isPty", isPty, "result", result)
-		}
+		return s != nil && s.HasPTY()
 	case "F": // Flag is set
-		if len(value) != 1 {
-			slog.Warn("invalid flag value in ACS condition: flag must be single character", "condition", condition)
-			result = false
-		} else {
-			result = strings.Contains(strings.ToUpper(u.Flags), strings.ToUpper(value))
-		}
-	case "U": // User ID == value
-		id, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid user ID value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = u.ID == id
-		}
-	case "V": // User is validated
-		result = u.Validated
-	case "D": // Access level >= value: the same test as S; there is no separate download level
-		level, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid level value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = u.AccessLevel >= level
-		}
-	case "E": // Uploads per call, as a percentage rounded down, >= value (uploads, not posts)
-		pcrThreshold, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid PCR value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			numLogons := u.TimesCalled
-			if numLogons <= 0 {
-				result = false
-			} else {
-				userPCR := (float64(u.NumUploads) / float64(numLogons)) * 100
-				result = int(userPCR) >= pcrThreshold
-				slog.Debug("ACS 'E' check", "uploads", u.NumUploads, "calls", numLogons, "pcr", userPCR, "threshold", pcrThreshold, "result", result)
-			}
-		}
-	case "H": // Current Hour == value
-		hour, err := strconv.Atoi(value)
-		if err != nil || hour < 0 || hour > 23 {
-			slog.Warn("invalid hour value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = ctx.now().Hour() == hour
-		}
-	case "P": // File Points >= value
-		points, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid points value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = u.FilePoints >= points
-		}
-	case "T": // Time Left >= value (minutes)
-		minutesLeftThreshold, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid time left value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			// CoSysOps and above have no time limit (MenuExecutor.timeLimit).
-			if u.TimeLimit <= 0 || u.AccessLevel >= ctx.CoSysOpLevel {
-				slog.Debug("ACS 'T' check: user has no time limit, passing", "timeLimit", u.TimeLimit, "level", u.AccessLevel)
-				result = true
-			} else {
-				var credit time.Duration
-				if s != nil {
-					credit = s.ChatCredit()
-				}
-				left, _ := timeleft.Remaining(u.TimeLimit, ctx.Start, ctx.now(), credit)
-				threshold := time.Duration(minutesLeftThreshold) * time.Minute
-				result = left >= threshold
-				slog.Debug("ACS 'T' check", "limitMin", u.TimeLimit, "left", left, "threshold", threshold, "result", result)
-			}
-		}
-	case "W": // Day of Week == value (0=Sun, 1=Mon, ... 6=Sat)
-		day, err := strconv.Atoi(value)
-		if err != nil || day < 0 || day > 6 {
-			slog.Warn("invalid day of week value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = int(ctx.now().Weekday()) == day
-		}
-	case "Z": // String exists in PrivateNote
-		result = strings.Contains(strings.ToUpper(u.PrivateNote), strings.ToUpper(value))
-	case "Y": // Within Time Range hh:mm/hh:mm
-		parts := strings.Split(value, "/")
-		if len(parts) != 2 {
-			slog.Warn("invalid time range format in ACS condition: expected hh:mm/hh:mm", "condition", condition)
-			result = false
-		} else {
-			now := ctx.now()
-			layout := "15:04"
-			startTime, errStart := time.Parse(layout, parts[0])
-			endTime, errEnd := time.Parse(layout, parts[1])
-			if errStart != nil || errEnd != nil {
-				slog.Warn("invalid time format in ACS time range", "value", value, "startError", errStart, "endError", errEnd)
-				result = false
-			} else {
-				result = InTimeRange(now, startTime, endTime)
-				slog.Debug("ACS 'Y' check", "range", value, "now", now, "result", result)
-			}
-		}
-	case "B": // Upload/Download ratio >= value (as percentage)
-		ratioThreshold, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid ratio value in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			if u.NumDownloads <= 0 {
-				// No downloads: ratio is infinite (always passes)
-				result = true
-			} else {
-				ratio := (float64(u.NumUploads) / float64(u.NumDownloads)) * 100
-				result = int(ratio) >= ratioThreshold
-			}
-			slog.Debug("ACS 'B' check", "uploads", u.NumUploads, "downloads", u.NumDownloads, "threshold", ratioThreshold, "result", result)
-		}
-	case "C": // Message Conference == value
-		confID, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid conference ID in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = u.CurrentMsgConferenceID == confID
-		}
+		return strings.Contains(strings.ToUpper(u.Flags), strings.ToUpper(t.value))
 	case "I": // User has flag I: the same test as FI; any argument is ignored
-		result = strings.Contains(strings.ToUpper(u.Flags), "I")
-		slog.Debug("ACS 'I' check", "flags", u.Flags, "result", result)
-	case "X": // File Conference == value
-		confID, err := strconv.Atoi(value)
-		if err != nil {
-			slog.Warn("invalid conference ID in ACS condition", "condition", condition, "error", err)
-			result = false
-		} else {
-			result = u.CurrentFileConferenceID == confID
-		}
-	default:
-		slog.Warn("unknown ACS code in condition", "code", code, "condition", condition)
-		result = false
+		return strings.Contains(strings.ToUpper(u.Flags), "I")
+	case "V": // User is validated
+		return u.Validated
+	case "Z": // String exists in PrivateNote
+		return strings.Contains(strings.ToUpper(u.PrivateNote), strings.ToUpper(t.value))
+	case "Y": // Within Time Range hh:mm/hh:mm
+		from, to, _ := strings.Cut(t.value, "/")
+		start, _ := time.Parse("15:04", from) // parseTerm checked both
+		end, _ := time.Parse("15:04", to)
+		return InTimeRange(ctx.now(), start, end)
 	}
-	return result
+	return t.compare(measure(t, ctx))
 }
 
 // InTimeRange reports whether now's clock time falls within start-end, both

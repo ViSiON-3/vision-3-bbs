@@ -27,16 +27,99 @@ func oracleUsers() []*user.User {
 }
 
 // TestMatchesOldEvaluator checks that Check decides every string exactly as
-// the evaluator it replaced (oracle_test.go).
+// the evaluator it replaced (oracle_test.go). The one exception is a string
+// read with comparisons (S<20), which the old evaluator couldn't read as a
+// whole: it failed for everyone, and TestComparisons pins what it means now.
 func TestMatchesOldEvaluator(t *testing.T) {
 	start := time.Now()
 	for _, s := range oracleCases() {
+		withComparisons := Parse(s).compare
 		for _, u := range oracleUsers() {
 			want := oldCheckACS(s, u, nil, nil, start)
+			if withComparisons {
+				if want {
+					t.Errorf("old evaluator passed %q, which Parse read with comparisons", s)
+				}
+				continue
+			}
 			ctx := ctxFor(u)
 			ctx.Start = start
 			if got := Check(s, ctx); got != want {
 				t.Errorf("Check(%q) for %+v = %v, old evaluator %v", s, u, got, want)
+			}
+		}
+	}
+}
+
+// TestComparisons pins the comparisons, ranges and readable names against
+// the oracle's users: a new user (level 10, nothing else), a flagged
+// regular (level 50, ID 5, 3 uploads in 10 calls and per 6 downloads, 40
+// file points, conferences 2 and 3) and a sysop (level 255, no downloads,
+// a 60-minute limit), at 22:30 on a Wednesday.
+func TestComparisons(t *testing.T) {
+	now := time.Date(2026, 11, 4, 22, 30, 0, 0, time.Local)
+	for _, tc := range []struct {
+		acs  string
+		want [3]bool // new user, regular, sysop
+	}{
+		{"S<20", [3]bool{true, false, false}},
+		{"S<=50", [3]bool{true, true, false}},
+		{"S>50", [3]bool{false, false, true}},
+		{"S>=50", [3]bool{false, true, true}},
+		{"S=50", [3]bool{false, true, false}},
+		{"S20-99", [3]bool{false, true, false}},
+		{"S=20-99", [3]bool{false, true, false}},
+		{"D<20", [3]bool{true, false, false}},
+		{"LEVEL>=50", [3]bool{false, true, true}},
+		{"level<20", [3]bool{true, false, false}},
+		{"LEVEL=20-99", [3]bool{false, true, false}},
+		{"USER=5", [3]bool{false, true, false}},
+		{"U<5", [3]bool{true, false, false}},
+		{"FILEPOINTS>=40", [3]bool{false, true, false}},
+		{"P<40", [3]bool{true, false, true}},
+		{"UPLOADSPERCALL>=30", [3]bool{false, true, false}}, // no calls yet fails either way
+		{"E<30", [3]bool{false, false, false}},
+		{"ULDLRATIO>=50", [3]bool{true, true, true}}, // no downloads is above every number
+		{"B<50", [3]bool{false, false, false}},
+		{"B=0-49", [3]bool{false, false, false}},
+		{"TIMELEFT>=30", [3]bool{true, true, true}}, // no limit, or co-sysop and up
+		{"T<30", [3]bool{false, false, false}},
+		{"HOUR=22", [3]bool{true, true, true}},
+		{"H<22", [3]bool{false, false, false}},
+		{"H8-17", [3]bool{false, false, false}},
+		{"H22-6", [3]bool{true, true, true}},
+		{"HOUR=21-23", [3]bool{true, true, true}},
+		{"WEEKDAY=3", [3]bool{true, true, true}},
+		{"W1-5", [3]bool{true, true, true}},
+		{"W5-1", [3]bool{false, false, false}},
+		{"W4-2", [3]bool{false, false, false}},
+		{"W6-3", [3]bool{true, true, true}},
+		{"MSGCONF=2", [3]bool{false, true, false}},
+		{"FILECONF=3", [3]bool{false, true, false}},
+		{"C>0&X>0", [3]bool{false, true, false}},
+		{"FLAG:A", [3]bool{false, true, false}},
+		{"flag:c", [3]bool{false, true, false}},
+		{"NOTE:trust", [3]bool{false, true, false}},
+		{"TIME:22:00/06:00", [3]bool{true, true, true}},
+		{"VALIDATED", [3]bool{false, true, true}},
+		{"LEVEL>=50&FLAG:A|SYSOP", [3]bool{false, true, true}},
+		{"S<20 | S>99", [3]bool{true, false, true}},
+		{"!(S20-99)", [3]bool{true, false, true}},
+		// A comparison that can't be read fails the whole string, and '!'
+		// can't make it pass: such a string failed for everyone before.
+		{"!LEVEL=99-20", [3]bool{false, false, false}},
+		{"!S<<20", [3]bool{false, false, false}},
+		{"!H25-3", [3]bool{false, false, false}},
+		{"!S<20-30", [3]bool{false, false, false}},
+		{"!FA=B", [3]bool{false, false, false}},
+		{"!LOCAL=1", [3]bool{false, false, false}},
+	} {
+		users := oracleUsers()[1:]
+		for i, u := range users {
+			ctx := ctxFor(u)
+			ctx.Now = now
+			if got := Check(tc.acs, ctx); got != tc.want[i] {
+				t.Errorf("Check(%q) for user %d = %v, want %v", tc.acs, u.ID, got, tc.want[i])
 			}
 		}
 	}
@@ -147,11 +230,19 @@ func TestDiagnostics(t *testing.T) {
 		{"S20)", []d{{Error, 4, "no matching"}}},
 		{"!!FA", []d{{Error, 1, "nothing after it"}}},
 		{"S20 FA", []d{{Error, 5, `no operator before "FA"`}}},
-		{"T30|H8-17", []d{{Warning, 7, "unexpected character '-'"}, {Error, 8, `no operator before "17"`}, {Warning, 8, "1 is not an ACS term"}}},
+		{"T30|H8-17", nil},
+		{"S<20", nil},
+		{"LEVEL=99-20", []d{{Error, 1, "runs from low to high"}}},
+		{"S<<20", []d{{Error, 1, "the comparison is one of"}}},
+		{"S<20-30", []d{{Error, 1, "a range takes = or no comparison"}}},
+		{"T30|H25-3", []d{{Error, 5, "hour from 0 to 23"}}},
+		{"(S<20", []d{{Error, 1, "never closed"}}},
+		{"S20-&FA", []d{{Warning, 4, "unexpected character '-'"}}}, // dropped, as before
+		{"FLAG:AB", []d{{Warning, 1, "exactly one flag"}}},
+		{"TERMINAL|LOCAL", nil},
 		{"(S20)FA", []d{{Error, 6, `no operator before "FA"`}}},
 		{"S20FA", []d{{Warning, 1, "needs a whole number"}}},
 		{" ", []d{{Error, 1, "no term"}}},
-		{"S<20", []d{{Warning, 1, `"S": S needs a whole number`}, {Warning, 2, "unexpected character '<'"}, {Error, 3, `no operator before "20"`}, {Warning, 3, "2 is not an ACS term"}}},
 		{"S50@", []d{{Warning, 4, "unexpected character '@'"}}},
 		{"F(A)", []d{{Error, 3, `no operator before "A"`}, {Warning, 1, "exactly one flag"}}},
 		{"Q", []d{{Warning, 1, "not an ACS term, so it is always false"}}},
@@ -183,7 +274,7 @@ func TestDiagnostics(t *testing.T) {
 // TestTermProblemAgreesWithEvalTerm: a term termProblem reports is false for
 // every caller, and a term it accepts is evaluated.
 func TestTermProblemAgreesWithEvalTerm(t *testing.T) {
-	bad := []string{"Q", "Sx", "S", "D", "Ux", "Px", "Ex", "Bx", "Tx", "Cx", "Xx", "H24", "Hx", "W7", "W", "F", "FAB", "Y", "Y8", "Y8/17", "Y25:00/26:00", "S20FA"}
+	bad := []string{"Q", "Sx", "S", "D", "Ux", "Px", "Ex", "Bx", "Tx", "Cx", "Xx", "H24", "Hx", "W7", "W", "F", "FAB", "Y", "Y8", "Y8/17", "Y25:00/26:00", "S20FA", "FLAG:AB", "FLAG:", "NOTE:", "TIME:8/17", "LEVEL=99-20", "S<<20", "S<20-30", "H25-3", "W7-1", "LOCAL=1", "FA=B"}
 	for _, term := range bad {
 		if termProblem(term) == "" {
 			t.Errorf("termProblem(%q) = \"\", want a problem", term)
@@ -194,7 +285,7 @@ func TestTermProblemAgreesWithEvalTerm(t *testing.T) {
 			}
 		}
 	}
-	good := []string{"S10", "D0", "U1", "P0", "E0", "B0", "T0", "C0", "X0", "H0", "H23", "W0", "W6", "FA", "F1", "Y00:00/23:59", "L", "A", "V", "I", "Z", "Zx", "SYSOP", "cosysop", "V5", "I5"}
+	good := []string{"S10", "D0", "U1", "P0", "E0", "B0", "T0", "C0", "X0", "H0", "H23", "W0", "W6", "FA", "F1", "Y00:00/23:59", "L", "A", "V", "I", "Z", "Zx", "SYSOP", "cosysop", "V5", "I5", "S<20", "S=20-99", "LEVEL>=20", "HOUR=8-17", "H22-6", "W5-1", "FLAG:A", "NOTE:x", "TIME:22:00/06:00", "TERMINAL", "LOCAL", "VALIDATED", "Zfoo-bar"}
 	for _, term := range good {
 		if p := termProblem(term); p != "" {
 			t.Errorf("termProblem(%q) = %q, want none", term, p)

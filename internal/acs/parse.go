@@ -91,6 +91,8 @@ type Expr struct {
 	Root *Node
 	// Diagnostics lists every problem found, in order of position.
 	Diagnostics []Diagnostic
+	// compare is set when the string was read with comparisons (see Parse).
+	compare bool
 }
 
 // Valid reports whether the string can be read as a whole. A valid string
@@ -123,15 +125,19 @@ type token struct {
 }
 
 // isTermRune reports whether r can be part of a term: letters, digits, '/'
-// and ':'.
+// and ':'. The comparison characters (isCompareRune) join a term only between
+// term characters.
 func isTermRune(r rune) bool {
 	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '/' || r == ':'
 }
 
 // tokenize splits s into terms, operators and parentheses. Spaces separate
 // tokens; any other character it doesn't know is dropped, with a warning, and
-// ends the term it is in.
-func tokenize(s string) ([]token, []Diagnostic) {
+// ends the term it is in. With compare, the comparison and range characters
+// join a term when a term character follows them (S<20, H8-17, LEVEL>=20);
+// without it they are dropped like any other, as they were before
+// comparisons were added.
+func tokenize(s string, compare bool) ([]token, []Diagnostic) {
 	var toks []token
 	var diags []Diagnostic
 	runes := []rune(s)
@@ -147,8 +153,22 @@ func tokenize(s string) ([]token, []Diagnostic) {
 		case r == ' ':
 		case isTermRune(r):
 			start := i
-			for i+1 < len(runes) && isTermRune(runes[i+1]) {
-				i++
+			for i+1 < len(runes) {
+				if isTermRune(runes[i+1]) {
+					i++
+					continue
+				}
+				// With compare, comparison characters followed by a term
+				// character join the term; elsewhere they are dropped, so S20-
+				// is still S20.
+				j := i + 1
+				for compare && j < len(runes) && isCompareRune(runes[j]) {
+					j++
+				}
+				if j == i+1 || j == len(runes) || !isTermRune(runes[j]) {
+					break
+				}
+				i = j
 			}
 			toks = append(toks, token{kind: tokTerm, text: string(runes[start : i+1]), pos: start, end: i + 1})
 		default:
@@ -167,14 +187,32 @@ var precedence = map[string]int{"!": 3, "&": 2, "|": 1}
 // Root and an Error diagnostic. Parse doesn't treat "" and "*" specially;
 // Check does (they pass), and Validate reports nothing for them.
 //
+// A string is first read as it was before comparisons were added, with the
+// comparison and range characters dropped. If that reads as a whole, that is
+// the string's meaning, so every string that worked before still means what
+// it did. Only a string that can't be read that way, which fails for every
+// caller, is read again with comparisons and ranges (S<20, H8-17,
+// LEVEL>=20), and its diagnostics are that second reading's.
+func Parse(s string) *Expr {
+	if !strings.ContainsFunc(s, isCompareRune) {
+		return parse(s, false)
+	}
+	if e := parse(s, false); e.Valid() {
+		return e
+	}
+	return parse(s, true)
+}
+
+// parse reads s, with or without comparisons (see tokenize).
+//
 // The tree is built exactly as the evaluator has always read ACS: operators
 // by precedence with a shunting-yard pass, then the postfix form folded into
 // nodes. The checks that fail a string as a whole are the ones that made the
 // old evaluator give up: unbalanced parentheses, an operator without enough
 // operands (a trailing &, or !!), and terms with no operator between them.
-func Parse(s string) *Expr {
-	e := &Expr{Source: s}
-	toks, diags := tokenize(s)
+func parse(s string, compare bool) *Expr {
+	e := &Expr{Source: s, compare: compare}
+	toks, diags := tokenize(s, compare)
 	e.Diagnostics = diags
 
 	// Shunting-yard to postfix. ! is treated like the binary operators, as it
@@ -184,16 +222,34 @@ func Parse(s string) *Expr {
 	fail := func(pos, end int, msg string) *Expr {
 		e.Root = nil
 		e.Diagnostics = append(e.Diagnostics, Diagnostic{Severity: Error, Pos: pos, End: end, Message: msg})
-		// Terms that would be false on their own are worth fixing too.
+		// Terms that would be false on their own are worth fixing too, and a
+		// comparison that can't be read is an error of its own.
 		for _, t := range toks {
-			if t.kind == tokTerm {
-				if p := termProblem(t.text); p != "" {
-					e.Diagnostics = append(e.Diagnostics, Diagnostic{Severity: Warning, Pos: t.pos, End: t.end, Message: p})
-				}
+			if t.kind != tokTerm {
+				continue
+			}
+			_, p, strict := parseTerm(t.text)
+			switch {
+			case p == "" || (strict && t.pos == pos && p == msg):
+			case strict:
+				e.Diagnostics = append(e.Diagnostics, Diagnostic{Severity: Error, Pos: t.pos, End: t.end, Message: p})
+			default:
+				e.Diagnostics = append(e.Diagnostics, Diagnostic{Severity: Warning, Pos: t.pos, End: t.end, Message: p})
 			}
 		}
 		sortDiagnostics(e.Diagnostics)
 		return e
+	}
+	// A comparison or range that can't be read fails the whole string: the
+	// characters it uses were dropped before comparisons were added, which
+	// left terms with no operator between them, so such a string has always
+	// failed (see parseTerm).
+	for _, t := range toks {
+		if t.kind == tokTerm {
+			if _, p, strict := parseTerm(t.text); strict && p != "" {
+				return fail(t.pos, t.end, p)
+			}
+		}
 	}
 	for _, t := range toks {
 		switch t.kind {
@@ -331,14 +387,4 @@ func Validate(s string) []Diagnostic {
 		return nil
 	}
 	return Parse(s).Diagnostics
-}
-
-// splitTerm returns a term's letter (upper case) and its argument, or the
-// whole term upper-cased as the keyword for SYSOP and COSYSOP.
-func splitTerm(term string) (code, value string, keyword bool) {
-	upper := strings.ToUpper(term)
-	if upper == "SYSOP" || upper == "COSYSOP" {
-		return upper, "", true
-	}
-	return strings.ToUpper(term[0:1]), term[1:], false
 }
