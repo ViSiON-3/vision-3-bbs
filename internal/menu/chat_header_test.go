@@ -52,16 +52,17 @@ func TestChatLocalAndLinkFields(t *testing.T) {
 		}
 	}
 	for _, tc := range []struct {
-		pinging, ok bool
-		want        string
+		pinging, known, ok bool
+		want               string
 	}{
-		{false, false, ""},
-		{false, true, ""},
-		{true, true, " ■ "},
-		{true, false, " ! "},
+		{false, false, false, ""},
+		{false, true, true, ""},
+		{true, false, false, " ? "},
+		{true, true, true, " ■ "},
+		{true, true, false, " ! "},
 	} {
-		if got := chatLinkField(tc.pinging, tc.ok); got != tc.want {
-			t.Errorf("chatLinkField(%v, %v) = %q, want %q", tc.pinging, tc.ok, got, tc.want)
+		if got := chatLinkField(tc.pinging, tc.known, tc.ok); got != tc.want {
+			t.Errorf("chatLinkField(%v, %v, %v) = %q, want %q", tc.pinging, tc.known, tc.ok, got, tc.want)
 		}
 	}
 }

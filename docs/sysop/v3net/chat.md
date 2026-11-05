@@ -265,7 +265,7 @@ exactly that many columns, so the art keeps its shape.
 | `@M#…@` | Messages since you joined the room that contain your handle as a word | `·01` |
 | `@L#…@` | Network round-trip time; `·local` on Local chat | `·042ms` |
 | `@B#…@` | Scrollback lines in use and the scrollback size | `·012/500` |
-| `@K@` | Link: `■` while the hub answers, `!` while it does not; blank on Local chat | ` ■ ` |
+| `@K@` | Link: `?` until the first ping answers, `■` while the hub answers, `!` while it does not; blank on Local chat | ` ■ ` |
 
 The four counters are drawn as a `·` separator followed by the number,
 zero-padded to fill the field. A number with more digits than fit shows as all

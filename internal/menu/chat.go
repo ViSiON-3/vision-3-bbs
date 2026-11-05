@@ -339,9 +339,11 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	mentions := 0 // room messages naming the caller since joining the room
 	scrollback := &chatScrollback{capacity: chatScrollbackLines}
 	// Network round trip for the Lag field. pinging is false on a service
-	// that cannot be measured (Local), which leaves the field blank; lagOK
-	// is false until a measurement succeeds, which shows dashes.
-	pinging, lagOK := false, false
+	// that cannot be measured (Local), which marks the field local; lagOK
+	// is false until a measurement succeeds, which shows dashes; lagKnown
+	// is false until any measurement completes, which keeps the link field
+	// from calling the hub unreachable before it has been asked.
+	pinging, lagOK, lagKnown := false, false, false
 	var lag time.Duration
 
 	var rawMu sync.Mutex
@@ -395,7 +397,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					}
 					return chatLagField(w, lag, lagOK)
 				},
-				"K": func(w int) string { return chatLinkField(pinging, lagOK) },
+				"K": func(w int) string { return chatLinkField(pinging, lagKnown, lagOK) },
 				"B": func(w int) string { return chatBufferField(w, scrollback.len(), chatScrollbackLines) },
 			})
 			// The art is UTF-8 by now; make wraps explicit so each header
@@ -718,7 +720,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	startLag := func(svc chat.ChatService) func() {
 		p, ok := svc.(chat.Pinger)
 		rawMu.Lock()
-		pinging, lagOK = ok, false
+		pinging, lagOK, lagKnown = ok, false, false
 		rawMu.Unlock()
 		if !ok {
 			return func() {}
@@ -737,7 +739,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				rawMu.Lock()
 				if ctx.Err() == nil {
 					wasShown, wasOK := lag.Milliseconds(), lagOK
-					lag, lagOK = d, err == nil
+					lag, lagOK, lagKnown = d, err == nil, true
 					if first || lagOK != wasOK || (lagOK && lag.Milliseconds() != wasShown) {
 						drawHeaderLocked()
 					}
@@ -1223,13 +1225,16 @@ func chatLocalField(width int) string {
 }
 
 // chatLinkField fills the header's link field: blank on local chat, which
-// has no link, "■" while the hub answers the lag ping and "!" while it does
-// not, so a caller can see whether the room is live. The mark sits in the
-// middle of the three columns a placeholder takes at the least.
-func chatLinkField(pinging, ok bool) string {
+// has no link, "?" until the first lag ping has an answer either way, "■"
+// while the hub answers and "!" while it does not, so a caller can see
+// whether the room is live. The mark sits in the middle of the three
+// columns a placeholder takes at the least.
+func chatLinkField(pinging, known, ok bool) string {
 	switch {
 	case !pinging:
 		return ""
+	case !known:
+		return " ? "
 	case ok:
 		return " \u25a0 "
 	}

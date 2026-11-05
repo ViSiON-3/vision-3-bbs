@@ -614,21 +614,21 @@ func TestChatcovArtHeader(t *testing.T) {
 func TestChatcovHistoryTimes(t *testing.T) {
 	env := newMenuEnv(t)
 	net := chatcovFakeNet(env)
-	// Fixed times: the start of today, which stays today however long the
-	// test takes, and noon two days back, which is always an earlier day.
+	// Fixed times: noon today, an hour every zone has, and noon two days
+	// back, which is always an earlier day.
 	now := time.Now()
-	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	earlier := midnight.AddDate(0, 0, -2).Add(12 * time.Hour)
+	noon := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, now.Location())
+	earlier := noon.AddDate(0, 0, -2)
 	net.history = []chat.ChatMessage{
 		{Handle: "Bob", Text: "earlier on", Timestamp: earlier},
-		{IsSystem: true, Text: "server restarted", Timestamp: midnight},
+		{IsSystem: true, Text: "server restarted", Timestamp: noon},
 	}
 	net.events = nil
 
 	r := chatcovChat(env, env.caller, "\r2\r/q\r")
 	region := chatcovLastRegion(t, r)
 	day := earlier.Format("01/02")
-	bob, restarted, joined := strings.Index(region, day+" <Bob> earlier on"), strings.Index(region, "00:00  *** server restarted"), strings.Index(region, "*** Joined #den")
+	bob, restarted, joined := strings.Index(region, day+" <Bob> earlier on"), strings.Index(region, "12:00  *** server restarted"), strings.Index(region, "*** Joined #den")
 	if bob < 0 || restarted < bob || joined < restarted {
 		t.Errorf("history not shown at its own times, oldest first, before the join notice:\n%s", region)
 	}
