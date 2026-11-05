@@ -318,7 +318,7 @@ func TestChatPrivate_Errors(t *testing.T) {
 		want       int
 	}{
 		{"invalid JSON", `{"to_node":`, http.StatusBadRequest},
-		{"missing to_node", `{"to_handle":"bob","text":"x"}`, http.StatusBadRequest},
+		{"unavailable handle without node", `{"to_handle":"bob","text":"x"}`, http.StatusNotFound},
 		{"missing to_handle", `{"to_node":"abcd","text":"x"}`, http.StatusBadRequest},
 		{"unknown target node", `{"to_handle":"bob","to_node":"0000000000000000","text":"x"}`, http.StatusNotFound},
 	}

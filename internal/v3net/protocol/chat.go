@@ -29,7 +29,9 @@ type ChatPostRequest struct {
 
 // ChatPrivateRequest sends a direct message to a specific user+node. Handle
 // names the sending user; older leaves omit it, and the hub then picks one
-// of the node's joined handles, or its BBS name.
+// of the node's joined handles, or its BBS name. An empty ToNode asks the hub
+// to resolve ToHandle from joined chat memberships on the same network;
+// zero matches return 404 and multiple nodes return 409 without delivery.
 type ChatPrivateRequest struct {
 	ToHandle string `json:"to_handle"`
 	ToNode   string `json:"to_node"`

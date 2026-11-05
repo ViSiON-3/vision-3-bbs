@@ -2,6 +2,7 @@ package hub
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -163,13 +164,34 @@ func (h *Hub) handleChatPrivate(w http.ResponseWriter, r *http.Request, network 
 		jsonError(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if req.ToNode == "" || req.ToHandle == "" {
-		jsonError(w, "to_node and to_handle required", http.StatusBadRequest)
+	if req.ToHandle == "" {
+		jsonError(w, "to_handle required", http.StatusBadRequest)
 		return
 	}
+	if req.ToNode == "" {
+		var targets []string
+		for _, node := range h.chatRooms.nodesForHandle(network, req.ToHandle) {
+			if sub := h.subscribers.Get(node, network); sub != nil && sub.Status == "active" {
+				targets = append(targets, node)
+			}
+		}
+		switch len(targets) {
+		case 0:
+			jsonError(w, fmt.Sprintf("recipient %q is not joined to chat on this network; use handle@node for an explicit destination", req.ToHandle), http.StatusNotFound)
+			return
+		case 1:
+			req.ToNode = targets[0]
+		default:
+			for i, node := range targets {
+				targets[i] = req.ToHandle + "@" + node
+			}
+			jsonError(w, fmt.Sprintf("recipient %q is ambiguous; use handle@node: %s", req.ToHandle, strings.Join(targets, ", ")), http.StatusConflict)
+			return
+		}
+	}
 
-	if h.subscribers.Get(req.ToNode, network) == nil {
-		jsonError(w, "target node not found", http.StatusNotFound)
+	if sub := h.subscribers.Get(req.ToNode, network); sub == nil || sub.Status != "active" {
+		jsonError(w, "target node not found or inactive", http.StatusNotFound)
 		return
 	}
 

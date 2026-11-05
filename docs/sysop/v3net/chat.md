@@ -90,7 +90,7 @@ accepts it, and the copy the hub sends back is dropped.
 | `/join <room>` | Leave the current room and join another |
 | `/rooms` | List all rooms on the current network with user counts and topics |
 | `/topic <text>` | Set the topic for the current room |
-| `/msg <handle> <text>` | Send a private message to a user |
+| `/msg <handle>[@node] <text>` | Send a private message; select a BBS explicitly when the handle is ambiguous |
 | `/users` | Refresh the user list in the status bar |
 | `/network` | Switch to a different network mid-session |
 | `/?` or `/help` | List these commands on your own screen |
@@ -131,6 +131,22 @@ chat strings in `strings.json` are the sysop's and keep every pipe code.
 
 The fields of a `CHATHEADER.ANS` header are the exception: they are not expanded
 at all, so a topic holding `|04` or `||` shows exactly that there.
+
+### Choosing a Private Message Recipient
+
+On V3Net, `/msg bob hello` asks the hub to find the exact handle `bob` among
+joined chat memberships on that network. Handles are case-sensitive. One
+matching active BBS receives the message, even if that handle is in several
+rooms there. If several BBSes have that handle, the message is refused and the
+error lists explicit `bob@node` choices. Send `/msg bob@<node-id> hello` using
+one of those node IDs to select the intended BBS.
+
+A bare handle with no matching membership is reported as unavailable. An
+explicit `handle@node` target still works without a joined room, provided the
+BBS is an active network subscriber; delivery to a caller remains best effort.
+Local chat keeps its existing handle-based delivery and ignores the node part.
+Handle resolution requires an updated hub; an older hub still requires the
+explicit target syntax.
 
 ---
 
@@ -260,6 +276,10 @@ a topic or room name that happens to contain `@U@` is shown as typed.
 A leaf drives chat through the hub's `/v3net/v1/{network}/chat/rooms/...`
 endpoints: `join`, `leave`, `post`, `private` and `topic` are signed `POST`s,
 and the room list (`chat/rooms`) and a room's `history` are unsigned `GET`s.
+A private request may omit `to_node` for hub-side resolution: no joined match
+returns HTTP 404 and several matching nodes return HTTP 409 with explicit
+choices, without storing or sending the message. An explicit `to_node` keeps
+the existing direct-target behavior.
 Each post, private message and topic change names the sending `handle`; the
 hub returns HTTP 403 (`not joined to room`) for a room post or topic from a
 handle that has not joined, and HTTP 429 (`rate limit exceeded`) when a limit
