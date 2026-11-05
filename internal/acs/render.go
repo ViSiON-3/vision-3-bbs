@@ -33,7 +33,8 @@ const labelWidth = 12
 //
 // The header names the user, the session and the time used, then the
 // expression with a marker under each term (+ passed, - failed, ? invalid,
-// ~ needs a session, ^ ignored character, X error) and the verdict. Under
+// ~ needs a session or a value the record lacks, ^ ignored character, X
+// error) and the verdict. Under
 // it is every part of the expression, indented by depth, with its result and
 // why, and last the fixed note that a pass is about this expression only.
 func Render(x Explanation, width int) []string {
@@ -148,6 +149,8 @@ func verdict(x Explanation) string {
 		return v + ", resting on an invalid term (a stricter ACS check will change this)"
 	case x.Reason == NoSession:
 		return v + ", resting on a session the context doesn't have"
+	case x.Reason == Unavailable:
+		return v + ", resting on a value the user's record doesn't have"
 	}
 	return v
 }
@@ -171,7 +174,7 @@ func markers(x Explanation) []rune {
 			switch {
 			case st.Reason == Invalid:
 				r = markInvalid
-			case st.Reason == NoSession:
+			case st.Reason == NoSession || st.Reason == Unavailable:
 				r = markSession
 			case st.Result:
 				r = markPass

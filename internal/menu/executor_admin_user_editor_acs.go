@@ -7,6 +7,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -54,7 +55,7 @@ func (st *userEditorState) runACSTester(termWidth, termHeight int) error {
 	}
 	a := &acsTesterScreen{
 		st: st, target: target,
-		tester: acs.Tester{SysOpLevel: cfg.SysOpLevel, CoSysOpLevel: cfg.CoSysOpLevel},
+		tester: acs.Tester{SysOpLevel: cfg.SysOpLevel, CoSysOpLevel: cfg.CoSysOpLevel, Location: config.LoadTimezone(cfg.Timezone)},
 		width:  termWidth, height: termHeight,
 	}
 	if st.adminCursorHidden {

@@ -44,6 +44,8 @@ type Tester struct {
 	// SysOpLevel and CoSysOpLevel are sysOpLevel and coSysOpLevel from
 	// config.json, as the BBS uses them.
 	SysOpLevel, CoSysOpLevel int
+	// Location is the board's timezone, as for Context.Location.
+	Location *time.Location
 }
 
 // Context is the Context t describes for u. Without a session the call is
@@ -54,7 +56,7 @@ func (t Tester) Context(u *user.User) Context {
 	if now.IsZero() {
 		now = time.Now()
 	}
-	ctx := Context{User: u, Start: now, Now: now, SysOpLevel: t.SysOpLevel, CoSysOpLevel: t.CoSysOpLevel}
+	ctx := Context{User: u, Start: now, Now: now, SysOpLevel: t.SysOpLevel, CoSysOpLevel: t.CoSysOpLevel, Location: t.Location}
 	if t.Session != nil {
 		ctx.Session = t.Session
 		ctx.Start = now.Add(-t.Session.Elapsed)

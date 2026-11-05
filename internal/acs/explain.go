@@ -24,6 +24,10 @@ const (
 	// NoSession is a term that reads the caller's session when the context
 	// has none; for an operator, a result that rests on such a term.
 	NoSession
+	// Unavailable is a term that needs a value the user's record doesn't
+	// have (AGE without a creation date); for an operator, a result that
+	// rests on such a term.
+	Unavailable
 )
 
 func (r Reason) String() string {
@@ -34,13 +38,15 @@ func (r Reason) String() string {
 		return "no match"
 	case Invalid:
 		return "invalid"
-	default:
+	case NoSession:
 		return "no session"
+	default:
+		return "unavailable"
 	}
 }
 
 // problem reports whether r is a reason other than an ordinary pass or fail.
-func (r Reason) problem() bool { return r == Invalid || r == NoSession }
+func (r Reason) problem() bool { return r == Invalid || r == NoSession || r == Unavailable }
 
 // Step is one part of an explained expression: a node of the parsed tree
 // with what it evaluated to and why.
@@ -136,6 +142,8 @@ func explainNode(s string, n *Node, ctx Context) *Step {
 			st.Detail += "; that rests on an invalid term, and a stricter ACS check will deny it"
 		case NoSession:
 			st.Detail += "; that rests on a session the context doesn't have"
+		case Unavailable:
+			st.Detail += "; that rests on a value the user's record doesn't have"
 		}
 	case AndNode, OrNode:
 		st.X, st.Y = explainNode(s, n.X, ctx), explainNode(s, n.Y, ctx)
@@ -237,18 +245,22 @@ func combine(kind Kind, result bool, x, y *Step) (Reason, string) {
 		detail += "; the result rests on an invalid term"
 	case NoSession:
 		detail += "; the result rests on a session the context doesn't have"
+	case Unavailable:
+		detail += "; the result rests on a value the user's record doesn't have"
 	}
 	return reason, detail
 }
 
 // worse returns the more serious of a and b: Invalid, then NoSession, then
-// a; ordinary reasons don't replace one another.
+// Unavailable, then a; ordinary reasons don't replace one another.
 func worse(a, b Reason) Reason {
 	switch {
 	case a == Invalid || b == Invalid:
 		return Invalid
 	case a == NoSession || b == NoSession:
 		return NoSession
+	case a == Unavailable || b == Unavailable:
+		return Unavailable
 	}
 	return a
 }
@@ -368,6 +380,29 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 			detail = fmt.Sprintf("the private note contains %q", t.value)
 		} else {
 			detail = fmt.Sprintf("the private note doesn't contain %q", t.value)
+		}
+	case "CALLS":
+		detail = compared("calls", u.TimesCalled, "", t)
+	case "POSTS":
+		detail = compared("posts", u.MessagesPosted, "", t)
+	case "UPLOADS":
+		detail = compared("uploads", u.NumUploads, "", t)
+	case "DOWNLOADS":
+		detail = compared("downloads", u.NumDownloads, "", t)
+	case "REALNAME":
+		if result {
+			detail = "the real name is set"
+		} else {
+			detail = "no real name is set"
+		}
+	case "AGE":
+		m := measure(t, ctx)
+		if m.missing {
+			reason = Unavailable
+			detail = "the record has no sign-up date, so the account has no age and it is false"
+		} else {
+			detail = compared("account age", m.have, "", t) +
+				fmt.Sprintf(" (days since sign-up on %s, %s)", u.CreatedAt.In(ctx.location()).Format("2006-01-02"), ctx.location())
 		}
 	case "C":
 		detail = compared("the message conference", u.CurrentMsgConferenceID, "", t)

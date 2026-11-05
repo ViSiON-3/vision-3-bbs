@@ -150,6 +150,11 @@ func TestACSReference(t *testing.T) {
 		{"example: every level but 20", "!(S=20)", nil, false},
 		{"example: every level but 20, at 21", "!(S=20)", func(u *user.User) { u.AccessLevel = 21 }, true},
 		{"example: level or file points", "S>=50|FILEPOINTS>=40", nil, true},
+		{"example: calls and account age", "CALLS>=10&AGE>=7", func(u *user.User) { u.CreatedAt = time.Now().AddDate(0, 0, -30) }, true},
+		{"example: calls and a new account", "CALLS>=10&AGE>=7", func(u *user.User) { u.CreatedAt = time.Now() }, false},
+		{"example: no sign-up date has no age", "CALLS>=10&AGE>=7", nil, false},
+		{"example: a real name", "REALNAME|SYSOP", func(u *user.User) { u.RealName = "Bob Smith" }, true},
+		{"example: no real name", "REALNAME|SYSOP", nil, false},
 		{"parentheses don't take a flag", "F(A)", nil, false},
 	}
 	for _, tt := range tests {

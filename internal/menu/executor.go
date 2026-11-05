@@ -294,6 +294,7 @@ func (e *MenuExecutor) SetServerConfig(serverCfg config.ServerConfig) {
 	serverCfg.SanitizeAccessLevels()
 	e.serverCfg.Store(&serverCfg)
 	setACSSysOpLevels(serverCfg.SysOpLevel, serverCfg.CoSysOpLevel)
+	acsLocation.Store(config.LoadTimezone(serverCfg.Timezone))
 }
 
 // GetServerConfig atomically retrieves the server configuration.

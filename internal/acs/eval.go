@@ -35,10 +35,20 @@ type Context struct {
 	// Now, when set, is the time H, W, Y and T use; zero means the current
 	// time, read when each term is evaluated.
 	Now time.Time
+	// Location is the board's timezone (its timezone setting), which AGE counts
+	// calendar days in; nil is the server's local zone.
+	Location *time.Location
 	// SysOpLevel and CoSysOpLevel are the thresholds for SYSOP and COSYSOP
 	// and the level from which T always passes (sysOpLevel and coSysOpLevel
 	// in config.json).
 	SysOpLevel, CoSysOpLevel int
+}
+
+func (c Context) location() *time.Location {
+	if c.Location == nil {
+		return time.Local
+	}
+	return c.Location
 }
 
 func (c Context) now() time.Time {
@@ -173,6 +183,8 @@ func evalTerm(t parsedTerm, ctx Context) bool {
 		return strings.Contains(strings.ToUpper(u.Flags), "I")
 	case "V": // User is validated
 		return u.Validated
+	case "REALNAME": // The user's real name is set
+		return strings.TrimSpace(u.RealName) != ""
 	case "Z": // String exists in PrivateNote
 		return strings.Contains(strings.ToUpper(u.PrivateNote), strings.ToUpper(t.value))
 	case "Y": // Within Time Range hh:mm/hh:mm

@@ -23,6 +23,9 @@ import (
 var (
 	acsSysOpLevel   atomic.Int64
 	acsCoSysOpLevel atomic.Int64
+	// acsLocation is the board's timezone for AGE, resolved once from
+	// config.json's timezone when the config is set; nil until then.
+	acsLocation atomic.Pointer[time.Location]
 )
 
 func init() {
@@ -55,6 +58,7 @@ func acsContext(u *user.User, s ssh.Session, startTime time.Time) acs.Context {
 		Start:        startTime,
 		SysOpLevel:   int(acsSysOpLevel.Load()),
 		CoSysOpLevel: int(acsCoSysOpLevel.Load()),
+		Location:     acsLocation.Load(),
 	}
 	if s != nil {
 		ctx.Session = acsSession{s}

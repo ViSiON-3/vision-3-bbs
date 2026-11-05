@@ -657,6 +657,45 @@ func checkUserAndSecurity(configDir, root string, cfg config.ServerConfig, add f
 	}
 	checkInfoFormSetup(configDir, root, cfg, add)
 	checkDefaultSysopPassword(root, cfg, add)
+	checkUserCreationDates(root, add)
+}
+
+// checkUserCreationDates lists the users with no sign-up date. The ACS term
+// AGE counts days from it, and without one it fails for that user, which a
+// sysop wouldn't otherwise see. Deleted users are left out.
+func checkUserCreationDates(root string, add func(string, doctorSeverity, string, string)) {
+	data, err := os.ReadFile(filepath.Join(root, "data", "users", "users.json"))
+	if err != nil {
+		return
+	}
+	var users []struct {
+		ID          int       `json:"id"`
+		Handle      string    `json:"handle"`
+		CreatedAt   time.Time `json:"createdAt"`
+		DeletedUser bool      `json:"deletedUser"`
+	}
+	if err := json.Unmarshal(data, &users); err != nil {
+		add("user sign-up dates", doctorWarn, "data/users/users.json can't be read: "+jsonErrorLocation(data, err),
+			"Repair data/users/users.json while the BBS is stopped; a createdAt must be a full RFC 3339 time such as 2026-01-02T03:04:05Z.")
+		return
+	}
+	var missing []string
+	for _, u := range users {
+		if u.CreatedAt.IsZero() && !u.DeletedUser {
+			missing = append(missing, fmt.Sprintf("%s (#%d)", u.Handle, u.ID))
+		}
+	}
+	if len(missing) == 0 {
+		add("user sign-up dates", doctorOK, "every user has a sign-up date, so the ACS term AGE can count from it", "")
+		return
+	}
+	const shown = 10
+	list := strings.Join(missing[:min(len(missing), shown)], ", ")
+	if len(missing) > shown {
+		list += fmt.Sprintf(" and %d more", len(missing)-shown)
+	}
+	add("user sign-up dates", doctorInfo, fmt.Sprintf("%d user(s) have no sign-up date, so AGE fails for them: %s", len(missing), list),
+		"Set createdAt for them in data/users/users.json while the BBS is stopped, if an ACS string uses AGE.")
 }
 
 // checkBadUserNames validates and counts rules in the configured bad-name list.
