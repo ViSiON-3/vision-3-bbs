@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/rivo/uniseg"
 
@@ -607,6 +608,32 @@ func TestChatcovArtHeader(t *testing.T) {
 	}
 }
 
+// A room's history shows each line at the time it was said, with the day in
+// place of the time for a line from an earlier day, and the join notice
+// after it, where the live room starts.
+func TestChatcovHistoryTimes(t *testing.T) {
+	env := newMenuEnv(t)
+	net := chatcovFakeNet(env)
+	// Fixed times: noon today, an hour every zone has, and noon two days
+	// back, which is always an earlier day.
+	now := time.Now()
+	noon := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, now.Location())
+	earlier := noon.AddDate(0, 0, -2)
+	net.history = []chat.ChatMessage{
+		{Handle: "Bob", Text: "earlier on", Timestamp: earlier},
+		{IsSystem: true, Text: "server restarted", Timestamp: noon},
+	}
+	net.events = nil
+
+	r := chatcovChat(env, env.caller, "\r2\r/q\r")
+	region := chatcovLastRegion(t, r)
+	day := earlier.Format("01/02")
+	bob, restarted, joined := strings.Index(region, day+" <Bob> earlier on"), strings.Index(region, "12:00  *** server restarted"), strings.Index(region, "*** Joined #den")
+	if bob < 0 || restarted < bob || joined < restarted {
+		t.Errorf("history not shown at its own times, oldest first, before the join notice:\n%s", region)
+	}
+}
+
 // With no terminal size on the command context the chat layout uses the
 // height recorded for the node's session, or 24 rows if there is none.
 func TestChatcovScreenHeight(t *testing.T) {
@@ -919,8 +946,8 @@ func TestChatcovNetworkCommandWithoutNetworks(t *testing.T) {
 	if n := strings.Count(region, "<Caller> one"); n != 1 {
 		t.Errorf("first message shown %d times in the final region, want 1 (from history):\n%s", n, region)
 	}
-	if i := strings.Index(region, "*** Joined #lobby"); i < 0 || strings.Index(region, "<Caller> one") < i {
-		t.Errorf("the history is not shown after the rejoin:\n%s", region)
+	if i := strings.Index(region, "*** Joined #lobby"); i < 0 || strings.Index(region, "<Caller> one") > i {
+		t.Errorf("the history is not shown before the join notice:\n%s", region)
 	}
 	// The picker was shown before the room was cleared, so its lines are
 	// gone from the final region along with the earlier join and echo.
