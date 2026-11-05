@@ -346,3 +346,69 @@ func TestGetMessageReportsCharset(t *testing.T) {
 		})
 	}
 }
+
+func TestEachMessage(t *testing.T) {
+	mm := newReplyTestManager(t)
+	post(t, mm, 1, "All", "one")
+	post(t, mm, 1, "All", "two")
+	post(t, mm, 1, "All", "three")
+	if err := mm.DeleteMessage(1, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	var seen []string
+	if err := mm.EachMessage(1, nil, func(m *DisplayMessage) bool {
+		seen = append(seen, m.Subject)
+		if m.MsgNum == 2 && !m.IsDeleted {
+			t.Error("message 2 not reported deleted")
+		}
+		if m.AreaID != 1 {
+			t.Errorf("AreaID = %d", m.AreaID)
+		}
+		return true
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(seen, ",") != "one,two,three" {
+		t.Errorf("walked %v", seen)
+	}
+
+	n := 0
+	if err := mm.EachMessage(1, nil, func(*DisplayMessage) bool { n++; return false }); err != nil || n != 1 {
+		t.Errorf("stopping early: %d calls, %v", n, err)
+	}
+
+	if err := mm.EachMessage(99, nil, func(*DisplayMessage) bool { return true }); !errors.Is(err, ErrAreaNotFound) {
+		t.Errorf("unknown area: %v, want ErrAreaNotFound", err)
+	}
+}
+
+// The header pass sees each message's header without its body, and a
+// message it turns down never reaches fn.
+func TestEachMessageHeaderPass(t *testing.T) {
+	mm := newReplyTestManager(t)
+	post(t, mm, 1, "All", "one")
+	post(t, mm, 1, "Bob", "two")
+	post(t, mm, 1, "All", "three")
+
+	var headers, full []string
+	err := mm.EachMessage(1, func(m *DisplayMessage) bool {
+		if m.Body != "" {
+			t.Errorf("header pass got a body for #%d: %q", m.MsgNum, m.Body)
+		}
+		headers = append(headers, m.Subject)
+		return m.To != "Bob"
+	}, func(m *DisplayMessage) bool {
+		if m.Body == "" {
+			t.Errorf("#%d reached fn without its body", m.MsgNum)
+		}
+		full = append(full, m.Subject)
+		return true
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(headers, ",") != "one,two,three" || strings.Join(full, ",") != "one,three" {
+		t.Errorf("headers %v, full %v", headers, full)
+	}
+}

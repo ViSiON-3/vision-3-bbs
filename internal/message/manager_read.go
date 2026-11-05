@@ -26,7 +26,12 @@ func (mm *MessageManager) GetMessage(areaID, msgNum int) (*DisplayMessage, error
 	if err != nil {
 		return nil, err
 	}
+	return displayMessage(msg, areaID, msgNum), nil
+}
 
+// displayMessage is msg, message msgNum of area areaID, as GetMessage
+// returns it.
+func displayMessage(msg *jam.Message, areaID, msgNum int) *DisplayMessage {
 	replyToNum := 0
 	if msg.Header != nil && msg.Header.ReplyTo > 0 {
 		replyToNum = int(msg.Header.ReplyTo)
@@ -54,7 +59,55 @@ func (mm *MessageManager) GetMessage(areaID, msgNum int) (*DisplayMessage, error
 		Charset:    messageCharset(msg),
 
 		SenderHandle: msg.SenderHandle,
-	}, nil
+	}
+}
+
+// EachMessage reads every message of an area in order, from message 1, and
+// calls fn with each until fn returns false. The base is opened once for the
+// whole walk, so this is the way to look at every message of a large area.
+// Messages flagged deleted are passed too (DisplayMessage.IsDeleted); a
+// message that can't be read is skipped and logged. It returns
+// ErrAreaNotFound for an unknown area, and an error if the base can't be
+// opened or counted. The base stays open while fn runs.
+//
+// When header is not nil it sees each message first with only its header
+// read: the body is empty, and an echomail origin address that only the
+// origin line gives is missing. A message it returns false for is skipped
+// without reading its text, so a walk that leaves out deleted messages or
+// other people's private mail doesn't pay for their bodies.
+func (mm *MessageManager) EachMessage(areaID int, header, fn func(*DisplayMessage) bool) error {
+	b, _, err := mm.openBase(areaID)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
+	total, err := b.GetMessageCount()
+	if err != nil {
+		return err
+	}
+	for n := 1; n <= total; n++ {
+		hdr, err := b.ReadMessageHeader(n)
+		if err != nil {
+			slog.Warn("skipping unreadable message", "area", areaID, "msg", n, "error", err)
+			continue
+		}
+		if header != nil && !header(displayMessage(jam.MessageFrom(hdr, ""), areaID, n)) {
+			continue
+		}
+		text, err := b.ReadMessageText(hdr)
+		if err != nil {
+			slog.Warn("skipping unreadable message", "area", areaID, "msg", n, "error", err)
+			continue
+		}
+		if !fn(displayMessage(jam.MessageFrom(hdr, text), areaID, n)) {
+			return nil
+		}
+	}
+	return nil
 }
 
 // GetMessageCountForArea returns the total message count for an area.

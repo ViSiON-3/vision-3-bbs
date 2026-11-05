@@ -178,6 +178,20 @@ var StringFallbacks = map[string]string{
 	"scanInvalidRange": "\r\n|12Invalid range; range cleared.|07\r\n",
 	"scanNoMatches":    "\r\n|07No messages match the scan settings.|07\r\n",
 
+	// Message search (SEARCHMSGS)
+	"msgSearchColumns":        "\r\n|08  # |09Conf/Area            |07  Msg |15Subject                  |11From           |08Date|07\r\n|08───────────────────────────────────────────────────────────────────────────────|07",
+	"msgSearchGone":           "\r\n|12That message is no longer available.|07\r\n",
+	"msgSearchHeader":         "\r\n|15Messages matching: |11%s |08(|15%d|08)|07\r\n",
+	"msgSearchInvalid":        "\r\n|12Can't search for that: %s.|07\r\n",
+	"msgSearchNoAreas":        "\r\n|07No message areas to search.|07\r\n",
+	"msgSearchNoMatches":      "\r\n|07No messages match your search.|07\r\n",
+	"msgSearchPagePrompt":     "\r\n|07Page |15%d|07/|15%d|07  |15#|07 read  |15Enter|07 next  |15P|07rev  |15Q|07uit: |15",
+	"msgSearchPartial":        "|08Only the first %d matches are shown; narrow the search to see more.|07\r\n",
+	"msgSearchPrompt":         "\r\n|15Search messages |08(|07words, |15\"phrases\"|07, |15AND OR NOT|07, |15( )|08)|15: |07",
+	"msgSearchSearching":      "\r\n|07Searching... |08(|07Esc stops|08)|07\r\n",
+	"msgSearchStopped":        "\r\n|07Search stopped.|07\r\n",
+	"msgSearchStoppedPartial": "|08Search stopped; matches found so far: %d.|07\r\n",
+
 	// File search
 	"searchFilesPrompt":    "\r\n|15Enter search text |07(min 3 chars)|15: |07",
 	"searchFilesMinChars":  "\r\n|12Search text must be at least 3 characters.|07\r\n",

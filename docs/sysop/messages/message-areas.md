@@ -474,6 +474,59 @@ caller goes back and forth. A reader opened from the menu's list
 (`LISTMSGS`) returns to that list on `L` or `Q`, in the mode it was in,
 with the cursor on the message that was being read.
 
+### Searching Messages
+
+The `SEARCHMSGS` function finds text in the subjects and bodies of the
+messages a caller can read. Its data value sets where it looks:
+
+| Data | Searches |
+|------|----------|
+| blank or `G` | every area of the current conference |
+| `C` | the current area |
+| `A` | every area of every conference |
+
+The stock message menu runs it on `F` with `A`. A search is case-insensitive
+and matches part of a word, so `box` finds "Blue Boxes". Combine terms with:
+
+| Write | To find messages with |
+|-------|-----------------------|
+| `blue box` | both words, anywhere (terms next to each other are ANDed) |
+| `"blue box"` | the exact phrase; spaces and line breaks count as one space |
+| `bell AND tsps` | both terms (`AND` is optional) |
+| `tsps OR "operator services"` | either term |
+| `NOT 2600` | no "2600" |
+| `bell AND (tsps OR toll)` | grouped terms |
+
+`NOT` is applied first, then `AND`, then `OR`, left to right:
+`red OR blue box` is `red OR (blue AND box)`. The operator words work in any
+case; to search for one of them, quote it (`"or"`). A term matches in the
+subject or the body, and a phrase never runs from one into the other.
+Colour codes in a message (ANSI or pipe codes such as `|15`) are ignored, so
+`"blue box"` finds `blue|15 box` and `15` doesn't find every coloured message.
+Searches are up to 80 characters; an unbalanced parenthesis, an unclosed
+quote or an operator with nothing beside it is reported with its position.
+
+The search reads every message in its scope, including ones already read,
+and leaves out areas the caller can't read (conference ACS and area read
+ACS), deleted messages, private mail that isn't theirs and posts by
+authors on their [Twit List](messages/twit-list.md); none of those are
+counted. Esc or Ctrl-C stops a long search and shows what it found so
+far, and a caller hanging up stops it too; anything else typed meanwhile is
+kept for the results prompt. At most 500 matches are listed. A line under
+the results header says when the list is incomplete: `msgSearchPartial`
+when the search reached 500 matches, `msgSearchStoppedPartial` when the
+caller stopped it.
+
+Results show the conference and area, message number, subject, sender and
+date, a page at a time: type a result's number to read it, Enter or `N` for
+the next page (on the last page they stay there), `P` for the previous one,
+`Q` or Esc to leave. A result opens in the normal reader, where next and
+previous move only between the matching messages of that area; the thread
+pane still shows the whole thread. `L` or `Q` returns to the results. Access
+is checked again when a result is opened. Neither the search nor reading its
+results moves newscan pointers: the area's last-read pointer is put back when
+the reader returns.
+
 ### Listing Messages
 
 The `LISTMSGS` function lists the current area, newest first, in a framed

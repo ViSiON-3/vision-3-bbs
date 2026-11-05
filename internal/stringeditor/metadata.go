@@ -731,5 +731,19 @@ func stringCatalog() []StringEntry {
 		{Label: "New User: Name Has Pipe", Key: "newUserRealNamePipe", Description: "Shown when a real name contains a | character"},
 		{Label: "New User: Handle Has Pipe", Key: "newUserHandlePipe", Description: "Shown when a handle contains a | character"},
 		{Label: "Konfig: Name Has Pipe", Key: "konfigRealNamePipe", Description: "Real name containing a | character"},
+
+		// Message search (SEARCHMSGS)
+		{Label: "Msg Search: Prompt", Key: "msgSearchPrompt", Description: "Prompt for the message search query"},
+		{Label: "Msg Search: Invalid", Key: "msgSearchInvalid", Description: "Shown when the query can't be parsed (%s=reason)"},
+		{Label: "Msg Search: No Areas", Key: "msgSearchNoAreas", Description: "Shown when the caller can read no area in the search's scope"},
+		{Label: "Msg Search: Searching", Key: "msgSearchSearching", Description: "Shown while the search runs"},
+		{Label: "Msg Search: No Matches", Key: "msgSearchNoMatches", Description: "Shown when no message matches"},
+		{Label: "Msg Search: Stopped", Key: "msgSearchStopped", Description: "Shown when the caller stops a search before anything matched"},
+		{Label: "Msg Search: Results Header", Key: "msgSearchHeader", Description: "Header above the results (%s=query, %d=matches)"},
+		{Label: "Msg Search: Partial", Key: "msgSearchPartial", Description: "Shown under the header when the search hit its limit of 500 matches (%d=matches)"},
+		{Label: "Msg Search: Columns", Key: "msgSearchColumns", Description: "Column titles above the results"},
+		{Label: "Msg Search: Page Prompt", Key: "msgSearchPagePrompt", Description: "Prompt under each page of results (%d=page, %d=pages)"},
+		{Label: "Msg Search: Gone", Key: "msgSearchGone", Description: "Shown when a result can no longer be opened (deleted, or access changed)"},
+		{Label: "Msg Search: Stopped Early", Key: "msgSearchStoppedPartial", Description: "Shown under the header when the caller stopped the search (%d=matches)"},
 	}
 }

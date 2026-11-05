@@ -170,6 +170,12 @@ type readerOpts struct {
 	// returns "LIST" instead of opening a second list over the first, and
 	// the list re-selects the message.
 	fromList bool
+	// navFilter, when set, narrows the messages next and previous (N, S)
+	// and the move on after a quick twit step to, on top of msgFilter. The
+	// thread pane and menu, J and the message shown first are not narrowed,
+	// so a thread still shows every reply the caller may see. SEARCHMSGS
+	// sets it to its query, so next and previous step between results.
+	navFilter msgOwnershipFilter
 }
 
 // runMessageReaderOpts is runMessageReader with readerOpts. The extra result
@@ -302,6 +308,9 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		}
 		m, err := e.MessageMgr.GetMessage(currentAreaID, n)
 		if err != nil || m.IsDeleted {
+			return false
+		}
+		if opts.navFilter != nil && !opts.navFilter(m) {
 			return false
 		}
 		return msgFilter == nil || msgFilter(m)

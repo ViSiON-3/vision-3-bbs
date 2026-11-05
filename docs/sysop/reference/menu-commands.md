@@ -92,6 +92,7 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | `NEWSCAN` | `CURRENT` to preset the scope to the current area. Anything else presets tagged areas. | Newscan setup screen (`NSCANHDR.ANS`), then reads new messages. The user can still change the scope on the setup screen. | Area read ACS |
 | `NEWSCANCONFIG` | none | Tag and untag areas for the personal newscan. The same tag set drives QWK downloads. | |
 | `UPDATENEWSCAN` | none | Moves last-read pointers. Prompts for a date, `A` for everything new or `N` for everything read, then asks for all conferences or the current one. | Area read ACS |
+| `SEARCHMSGS` | Scope: blank or `G` searches the current conference, `C` the current area, `A` every conference. | Asks for a search, then lists the messages whose subject or body matches, a page at a time. Words, "quoted phrases", `AND`, `OR`, `NOT` and parentheses; see [Searching Messages](messages/message-areas.md#searching-messages). Typing a result's number opens it in the reader. Doesn't move last-read pointers. | Conference and area read ACS; private mail and twit rules |
 | `GETHEADERTYPE` | none | Lightbar picker for the message header style, from `MSGHDR.BAR` and the files in `templates/message_headers/`. | Silent when logged out |
 
 ## Private mail
