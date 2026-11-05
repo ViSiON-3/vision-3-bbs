@@ -465,6 +465,8 @@ func TestChatcovJoinCommand(t *testing.T) {
 	}
 }
 
+// A message too long for a chat row wraps at a word onto a continuation
+// row with the marker, and is stored whole.
 func TestChatcovLongMessageWraps(t *testing.T) {
 	env := newMenuEnv(t)
 	// 67 characters: fits the 70-column input line, but not a chat row once
@@ -1018,6 +1020,9 @@ func TestChatcovReadLine(t *testing.T) {
 	}
 }
 
+// pipeDisplayLen measures what the terminal shows: no room for colour codes,
+// one cell for an escaped pipe, and cells rather than bytes for the rest,
+// by grapheme cluster on UTF-8 and by rune on CP437.
 func TestChatcovPipeDisplayLen(t *testing.T) {
 	for in, want := range map[string]int{
 		"":                 0,
@@ -1054,6 +1059,9 @@ func TestChatcovPipeDisplayLen(t *testing.T) {
 	}
 }
 
+// wrapPipeText keeps every row within the width, moves or cuts words as
+// documented, keeps the spaces between words, drops those at a wrap and
+// carries the colour onto the continuation row.
 func TestChatcovWrapPipeText(t *testing.T) {
 	const white, red, redBG = "\x1b[1;37m", "\x1b[0;31m", "\x1b[41m"
 	for _, tc := range []struct {
