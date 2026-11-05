@@ -853,7 +853,13 @@ func checkMenuFiles(menuRoot, configDir string, add func(string, doctorSeverity,
 				continue
 			}
 			count++
-			name := filepath.ToSlash(filepath.Join("menus", filepath.Base(menuRoot), subdir, entry.Name))
+			// Report the file actually read: an overlay may shadow the base
+			// file, and naming the base sends sysops to the wrong commands.
+			name := entry.Path
+			if rel, err := filepath.Rel(filepath.Dir(filepath.Dir(menuRoot)), entry.Path); err == nil {
+				name = rel
+			}
+			name = filepath.ToSlash(name)
 			data, err := os.ReadFile(entry.Path)
 			if err != nil {
 				add(name, doctorFail, err.Error(), "Check file permissions and restore the menu file if missing.")
