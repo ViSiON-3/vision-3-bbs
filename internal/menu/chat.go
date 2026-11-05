@@ -596,9 +596,12 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 
-	// Draw header and status bar with initial state.
+	// Draw header and status bar with initial state. The Lag and link fields
+	// show whether there is a link to measure from the first draw; startLag
+	// measures it once the room is on screen.
 	currentUsers = svc.Users()
 	rawMu.Lock()
+	_, pinging = svc.(chat.Pinger)
 	drawHeaderLocked()
 	drawStatusBarLocked()
 	rawMu.Unlock()
