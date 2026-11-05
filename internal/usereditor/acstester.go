@@ -36,7 +36,8 @@ type acsTester struct {
 	focus                    int
 	lines                    []string // what the output area shows
 	scroll                   int
-	sysOp, coSysOp           int // sysOpLevel and coSysOpLevel, for SYSOP, COSYSOP and T
+	sysOp, coSysOp           int            // sysOpLevel and coSysOpLevel, for SYSOP, COSYSOP and T
+	location                 *time.Location // the board's timezone, for AGE
 }
 
 // acsTestFieldDef is the edit-screen action for the tester.
@@ -79,11 +80,11 @@ func (m *Model) openACSTester() {
 	t.inputs[acsTime].SetValue("")
 	t.inputs[acsElapsed].SetValue("")
 	t.inputs[acsCredit].SetValue("")
-	t.sysOp, t.coSysOp = m.sysOpLevel, m.coSysOpLevel
+	t.sysOp, t.coSysOp, t.location = m.sysOpLevel, m.coSysOpLevel, m.boardLocation
 	t.scroll = 0
 	m.mode = modeACSTest
 	t.setFocus(acsExpr)
-	t.lines = acs.ContextLines(acs.Tester{SysOpLevel: t.sysOp, CoSysOpLevel: t.coSysOp}, m.editingUser(), acsOutputWidth)
+	t.lines = acs.ContextLines(acs.Tester{SysOpLevel: t.sysOp, CoSysOpLevel: t.coSysOp, Location: m.boardLocation}, m.editingUser(), acsOutputWidth)
 }
 
 // order is the fields that can take focus now.
@@ -143,7 +144,7 @@ func (t *acsTester) tester() (acs.Tester, string) {
 	if err != nil {
 		return acs.Tester{}, "Time: enter hh:mm or yyyy-mm-dd hh:mm, or leave it blank for now."
 	}
-	tc := acs.Tester{At: at, SysOpLevel: t.sysOp, CoSysOpLevel: t.coSysOp}
+	tc := acs.Tester{At: at, SysOpLevel: t.sysOp, CoSysOpLevel: t.coSysOp, Location: t.location}
 	if t.session {
 		minutes := func(id int) (time.Duration, bool) {
 			v := strings.TrimSpace(t.inputs[id].Value())

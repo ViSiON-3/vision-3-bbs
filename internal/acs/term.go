@@ -65,13 +65,22 @@ var termNames = map[string]termName{
 	"VALIDATED":      {"V", nameAlone},
 	"LOCAL":          {"L", nameAlone},
 	"TERMINAL":       {"A", nameAlone},
+	// Values from the user's record, with no letter of their own.
+	"CALLS":     {"CALLS", nameCompare},
+	"POSTS":     {"POSTS", nameCompare},
+	"UPLOADS":   {"UPLOADS", nameCompare},
+	"DOWNLOADS": {"DOWNLOADS", nameCompare},
+	"AGE":       {"AGE", nameCompare},
+	"REALNAME":  {"REALNAME", nameAlone},
 }
 
-// numericCodes are the letters that take a number, with what a bare number
-// means: at least (S20 is level >= 20) or exactly (U5 is user 5).
+// numericCodes are the terms that take a number, with what a bare number
+// means: at least (S20 is level >= 20) or exactly (U5 is user 5). The named
+// counts always take a comparison, so theirs is never used.
 var numericCodes = map[string]string{
 	"S": ">=", "D": ">=", "P": ">=", "E": ">=", "B": ">=", "T": ">=",
 	"U": "=", "H": "=", "W": "=", "C": "=", "X": "=",
+	"CALLS": ">=", "POSTS": ">=", "UPLOADS": ">=", "DOWNLOADS": ">=", "AGE": ">=",
 }
 
 // cyclic codes are the ones whose ranges may run past the top: H22-6 is
@@ -233,6 +242,9 @@ type measured struct {
 	unlimited bool
 	// none: there is no value (E before the first call), so the term fails.
 	none bool
+	// missing: the record lacks what the value is worked out from (AGE
+	// without a creation date), so the term fails; the tester says why.
+	missing bool
 }
 
 // measure reads the caller's value for a numeric term.
@@ -275,8 +287,32 @@ func measure(t parsedTerm, ctx Context) measured {
 		return measured{have: u.CurrentMsgConferenceID}
 	case "X":
 		return measured{have: u.CurrentFileConferenceID}
+	case "CALLS":
+		return measured{have: u.TimesCalled}
+	case "POSTS":
+		return measured{have: u.MessagesPosted}
+	case "UPLOADS":
+		return measured{have: u.NumUploads}
+	case "DOWNLOADS":
+		return measured{have: u.NumDownloads}
+	case "AGE":
+		if u.CreatedAt.IsZero() {
+			return measured{none: true, missing: true}
+		}
+		return measured{have: AccountAge(u.CreatedAt, ctx.now(), ctx.location())}
 	}
 	return measured{none: true}
+}
+
+// AccountAge is how many whole calendar days lie between created and now in
+// loc: 0 on the day of sign-up, 1 from the next midnight. A creation time
+// after now counts as 0.
+func AccountAge(created, now time.Time, loc *time.Location) int {
+	day := func(t time.Time) time.Time {
+		y, m, d := t.In(loc).Date()
+		return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	}
+	return max(int(day(now).Sub(day(created))/(24*time.Hour)), 0)
 }
 
 // compare decides a numeric term for a measured value.

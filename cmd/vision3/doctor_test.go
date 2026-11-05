@@ -382,6 +382,35 @@ func TestCheckDefaultSysopPasswordFindsBootstrapCredential(t *testing.T) {
 	}
 }
 
+// TestCheckUserCreationDates: users with no sign-up date are listed, as AGE
+// fails for them; deleted users are left out, and a board where every user
+// has one says so.
+func TestCheckUserCreationDates(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "data", "users", "users.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run := func() []doctorCheck {
+		var checks []doctorCheck
+		checkUserCreationDates(root, func(name string, status doctorSeverity, message, fix string) {
+			checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+		})
+		return checks
+	}
+	writeDoctorFixture(t, path, `[{"id":1,"handle":"Sysop","createdAt":"2026-01-02T03:04:05Z"},
+		{"id":2,"handle":"Old Timer"},
+		{"id":3,"handle":"Gone","deletedUser":true}]`)
+	checks := run()
+	if !hasDoctorCheck(checks, "user sign-up dates", doctorInfo, "1 user(s) have no sign-up date, so AGE fails for them: Old Timer (#2)") {
+		t.Fatalf("checks = %#v", checks)
+	}
+	writeDoctorFixture(t, path, `[{"id":1,"handle":"Sysop","createdAt":"2026-01-02T03:04:05Z"}]`)
+	if checks := run(); !hasDoctorCheck(checks, "user sign-up dates", doctorOK, "every user has a sign-up date") {
+		t.Fatalf("checks = %#v", checks)
+	}
+}
+
 func TestCheckShippedMenuReferencesResolve(t *testing.T) {
 	root := filepath.Clean(filepath.Join("..", ".."))
 	var checks []doctorCheck

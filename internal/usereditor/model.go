@@ -113,6 +113,8 @@ type Model struct {
 	// ACS tester (modeACSTest), and the sysop levels it checks with
 	acsTest                  acsTester
 	sysOpLevel, coSysOpLevel int
+	// boardLocation is config.json's timezone, for the ACS tester's AGE.
+	boardLocation *time.Location
 
 	// Terminal
 	width   int
@@ -183,10 +185,12 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 	retDays := -1
 	qwkAPIEnabled := false
 	sysOp, coSysOp := config.DefaultSysOpLevel, config.DefaultCoSysOpLevel
+	boardLoc := config.LoadTimezone("")
 	if cfg, err := config.LoadServerConfig(configDir); err == nil {
 		retDays = cfg.DeletedUserRetentionDays
 		qwkAPIEnabled = cfg.QWKAPI.Enabled
 		sysOp, coSysOp = cfg.SysOpLevel, cfg.CoSysOpLevel
+		boardLoc = config.LoadTimezone(cfg.Timezone)
 	}
 
 	// Sort users by ID with deleted users at the bottom
@@ -237,6 +241,7 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 		retentionDays: retDays,
 		sysOpLevel:    sysOp,
 		coSysOpLevel:  coSysOp,
+		boardLocation: boardLoc,
 		cursor:        0,
 		listType:      1,
 		tagged:        make(map[*user.User]bool),
