@@ -254,7 +254,7 @@ func TestChatPrivate(t *testing.T) {
 	registerLeaf(t, ts, bobKS)
 	base := ts.URL + "/v3net/v1/testnet/chat/rooms/"
 
-	ch, cancel := h.broadcaster.Subscribe("testnet")
+	ch, cancel := h.broadcaster.subscribe("testnet", bobKS.NodeID())
 	defer cancel()
 
 	// Without a joined room the sender's handle falls back to its BBS name.
