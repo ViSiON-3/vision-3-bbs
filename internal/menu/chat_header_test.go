@@ -204,7 +204,7 @@ func startChatLiveWith(env *menuEnv, u *user.User, setup func(s *chatLiveSession
 		_ = w.Close()
 		select {
 		case <-live.done:
-		case <-time.After(10 * time.Second):
+		case <-time.After(handlerWait):
 			env.t.Errorf("chat still running after its input closed")
 		}
 		resetSessionIH(s)
@@ -239,7 +239,7 @@ func (c *chatLive) header() string {
 // waitHeader waits until the last header drawn contains every one of want.
 func (c *chatLive) waitHeader(want ...string) {
 	c.t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(screenWait)
 	for {
 		h := c.header()
 		ok := true
@@ -259,7 +259,7 @@ func (c *chatLive) waitHeader(want ...string) {
 // waitOutput waits until the screen text contains marker.
 func (c *chatLive) waitOutput(marker string) {
 	c.t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(screenWait)
 	for !strings.Contains(testAnsiEscape.ReplaceAllString(c.s.output(), ""), marker) {
 		if time.Now().After(deadline) {
 			c.t.Fatalf("%q never shown", marker)

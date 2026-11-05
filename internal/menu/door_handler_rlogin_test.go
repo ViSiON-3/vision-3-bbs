@@ -357,7 +357,7 @@ func TestExecuteRLoginDoorRelaysBothDirections(t *testing.T) {
 		if got != want {
 			t.Errorf("handshake = %q, want %q", got, want)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("timed out waiting for the handshake")
 	}
 
@@ -389,7 +389,7 @@ func TestExecuteRLoginDoorRelaysBothDirections(t *testing.T) {
 		if err != nil {
 			t.Errorf("executeRLoginDoor: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("relay did not finish after the door server hung up")
 	}
 
@@ -425,7 +425,7 @@ func TestExecuteRLoginDoorDisconnectKeyEndsSession(t *testing.T) {
 		if err != nil {
 			t.Errorf("executeRLoginDoor: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("the disconnect key did not end the session")
 	}
 }
@@ -449,7 +449,7 @@ func TestExecuteRLoginDoorRefusesWhenTimeExhausted(t *testing.T) {
 		if err != nil {
 			t.Errorf("executeRLoginDoor: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("door did not return when the caller had no time left")
 	}
 
@@ -567,7 +567,7 @@ func TestRelayRemoteSessionStopsAtDeadline(t *testing.T) {
 		if elapsed := time.Since(started); elapsed > 5*time.Second {
 			t.Errorf("relay ran %v past a 300ms deadline", elapsed)
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("relay outlived its deadline")
 	}
 }
@@ -646,7 +646,7 @@ func TestExecuteRLoginDoorDefaultsHandshakeToHandle(t *testing.T) {
 		if want := "\x00Neo\x00Neo\x00ANSI/38400\x00"; got != want {
 			t.Errorf("handshake = %q, want %q", got, want)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("timed out waiting for the handshake")
 	}
 	conn := <-ds.conns
@@ -666,7 +666,7 @@ func TestRLoginDoorDispatches(t *testing.T) {
 
 	select {
 	case <-ds.handshake:
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("executeDoor did not route the rlogin door to the rlogin executor")
 	}
 	conn := <-ds.conns
@@ -683,7 +683,7 @@ func awaitHandshake(t *testing.T, ds *doorServer, done <-chan error) string {
 		return hs
 	case err := <-done:
 		t.Fatalf("executeRLoginDoor returned before dialling: %v", err)
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("door server never received a handshake")
 	}
 	return ""
@@ -714,7 +714,7 @@ func readHandshake(c net.Conn) (string, error) {
 // arrived.
 func waitFor(t *testing.T, cond func() bool, msg string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(screenWait)
 	for time.Now().Before(deadline) {
 		if cond() {
 			return

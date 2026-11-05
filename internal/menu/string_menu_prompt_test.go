@@ -40,8 +40,8 @@ func (f *stringHookFixture) readMenuInput(t *testing.T, value string) (st *runLo
 			t.Fatalf("readStandardInput: %v; output:\n%s", r.err, f.term())
 		}
 		return st, r.input, r.act, f.term()
-	case <-time.After(10 * time.Second):
-		t.Fatalf("readStandardInput still waiting after 10s; output:\n%s", f.term())
+	case <-time.After(handlerWait):
+		t.Fatalf("readStandardInput still waiting after %v; output:\n%s", handlerWait, f.term())
 		return nil, "", 0, ""
 	}
 }

@@ -385,8 +385,8 @@ func (env *menuEnv) screenRunHeight(cmd string, u *user.User, keys string, heigh
 	}()
 	select {
 	case <-done:
-	case <-time.After(10 * time.Second):
-		env.t.Fatalf("%s still running 10s after its input ran out", cmd)
+	case <-time.After(handlerWait):
+		env.t.Fatalf("%s still running %v after its input ran out", cmd, handlerWait)
 	}
 	return screen
 }

@@ -140,7 +140,7 @@ func (f *privacyFixture) run(t *testing.T, fn RunnableFunc, u *user.User, input 
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, errInputAborted) {
 			t.Fatalf("handler: %v", err)
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(handlerWait):
 		t.Fatal("handler still running after its input ran out")
 	}
 	return testAnsiEscape.ReplaceAllString(ts.output(), "")

@@ -101,7 +101,7 @@ func (env *toastEnv) readKey() <-chan int {
 
 func toastWaitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(screenWait)
 	for !cond() {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for %s", what)
@@ -137,7 +137,7 @@ func TestToastOverlayShowsDuringKeyWaitAndRestoresScreen(t *testing.T) {
 		if k != 'x' {
 			t.Errorf("read key %d, want x", k)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("key never reached the read")
 	}
 	if !strings.Contains(env.term.Row(24), "BOTTOM TEXT") || !strings.Contains(env.term.Row(1), "FULL SCREEN") {
@@ -198,7 +198,7 @@ func TestToastsDoNotExtendTheIdleTimeout(t *testing.T) {
 		if !errors.Is(err, editor.ErrIdleTimeout) {
 			t.Fatalf("read ended with %v, want idle timeout", err)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("toasts kept an idle caller connected")
 	}
 }
@@ -625,7 +625,7 @@ func TestToastDwellStopsAtTheIdleTimeout(t *testing.T) {
 		if !errors.Is(err, editor.ErrIdleTimeout) {
 			t.Fatalf("read ended with %v, want idle timeout", err)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(screenWait):
 		env.s.Send("x")
 		t.Fatal("the overlay's dwell outlasted the idle timeout")
 	}
@@ -660,7 +660,7 @@ func TestSteadyToastsYieldToTheIdleTimeout(t *testing.T) {
 		if !errors.Is(err, editor.ErrIdleTimeout) {
 			t.Fatalf("read ended with %v, want idle timeout", err)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("a steady stream of toasts starved the idle timeout")
 	}
 }

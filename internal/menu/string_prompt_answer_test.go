@@ -105,8 +105,8 @@ func (f *stringHookFixture) pause(t *testing.T, value string) string {
 		if err != nil {
 			t.Fatalf("pause: %v; output:\n%s", err, f.term())
 		}
-	case <-time.After(10 * time.Second):
-		t.Fatalf("pause still waiting after 10s; output:\n%s", f.term())
+	case <-time.After(handlerWait):
+		t.Fatalf("pause still waiting after %v; output:\n%s", handlerWait, f.term())
 	}
 	return f.term()
 }

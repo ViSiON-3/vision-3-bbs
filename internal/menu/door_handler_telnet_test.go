@@ -69,7 +69,7 @@ func (ds *telnetDoorServer) accept(t *testing.T, done <-chan error) net.Conn {
 		return c
 	case err := <-done:
 		t.Fatalf("executor returned before dialling: %v", err)
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("door server never received a connection")
 	}
 	return nil
@@ -96,7 +96,7 @@ func awaitDone(t *testing.T, done <-chan error, what string) {
 		if err != nil {
 			t.Errorf("%s: %v", what, err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatalf("%s: relay did not finish", what)
 	}
 }

@@ -5,9 +5,24 @@ import (
 	"net"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
+)
+
+// How long a test waits for the code under test to do something: handlerWait
+// for a handler to return once its input has run out, or a goroutine it
+// started to stop; screenWait for output, an event or a timeout to show.
+//
+// They are backstops that turn a hang into a failure with a message, not
+// bounds on how long the work should take. A Windows runner under the race
+// detector has needed over 10s for chat tests that take 0.1s elsewhere, and
+// the waits here were 3-10s, so otherwise green runs failed (#906). go test's
+// own -timeout still bounds a real hang.
+const (
+	handlerWait = 60 * time.Second
+	screenWait  = 30 * time.Second
 )
 
 // testSession is a minimal ssh.Session for driving interactive menu functions

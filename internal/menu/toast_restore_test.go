@@ -49,7 +49,7 @@ func overlayThenKey(t *testing.T, env *toastEnv, text string) (restore string) {
 	// included, has returned, so the recording is complete here.
 	select {
 	case <-keys:
-	case <-time.After(3 * time.Second):
+	case <-time.After(screenWait):
 		t.Fatal("key never reached the read")
 	}
 	return rec.String()[drawn:]

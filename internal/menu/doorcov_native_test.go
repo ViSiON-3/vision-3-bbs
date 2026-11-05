@@ -399,7 +399,7 @@ func TestDoorcovNativeDoorKeepsTypeAhead(t *testing.T) {
 	s.send("abc")
 	readKeys(getSessionIH(s), "a")
 	// Wait until the handler has taken b and c from the session.
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(screenWait)
 	for {
 		s.mu.Lock()
 		left := len(s.pending) + len(s.keys)

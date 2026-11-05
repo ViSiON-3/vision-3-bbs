@@ -261,7 +261,7 @@ func TestChatProbeTimeoutClosesSessionAfterRooms(t *testing.T) {
 	}
 
 	close(net.roomsBlock)
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(handlerWait)
 	for len(probe.log("close")) == 0 {
 		if time.Now().After(deadline) {
 			t.Fatal("probe session never closed after its room list returned")

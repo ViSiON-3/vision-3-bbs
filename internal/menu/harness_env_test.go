@@ -258,7 +258,7 @@ func (r runResult) has(want ...string) bool {
 // Each call gets a fresh session, so per-session state (the input handler,
 // output mode, idle timeout) never leaks between calls. The session connects
 // from env.remoteIP in env.outputMode. It fails the test if the handler has
-// not returned after 10 seconds.
+// not returned after handlerWait.
 func (env *menuEnv) run(fn RunnableFunc, u *user.User, args, input string) runResult {
 	env.t.Helper()
 	ts := newTestSession(input)
@@ -299,9 +299,9 @@ func (env *menuEnv) run(fn RunnableFunc, u *user.User, args, input string) runRe
 			r.err = nil
 		}
 		return runResult{raw: ts.output(), user: r.u, next: r.next, err: r.err}
-	case <-time.After(10 * time.Second):
+	case <-time.After(handlerWait):
 		// Don't read ts.out here: the handler goroutine may still be writing.
-		env.t.Fatalf("handler still running 10s after its input ran out")
+		env.t.Fatalf("handler still running %v after its input ran out", handlerWait)
 		return runResult{}
 	}
 }
