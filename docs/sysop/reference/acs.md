@@ -44,35 +44,81 @@ negated one such as `!FA`.
 ## Terms
 
 A term is a letter, usually followed by an argument with no space:
-`S20`, `FA`, `Y08:00/17:00`. Letters are case-insensitive (`s20` is
-`S20`). Numeric comparisons are "at least": `S20` passes at level 20 and
-above. There is no "less than" or "equal to" form.
+`S20`, `FA`, `Y08:00/17:00`. Most letters also have a readable name for the
+same test: `LEVEL>=20` is `S20`, `FLAG:A` is `FA`. Letters and names are
+case-insensitive (`s20` is `S20`, `level>=20` is `LEVEL>=20`).
 
-| Term | Passes when | Argument | Notes |
-|---|---|---|---|
-| `S`*n* | access level ≥ *n* | number | `S` with no number fails |
-| `D`*n* | access level ≥ *n* | number | the same test as `S`: there is no separate download level |
-| `SYSOP` | access level ≥ `sysOpLevel` | — | `sysOpLevel` in config.json, default 255 |
-| `COSYSOP` | access level ≥ `coSysOpLevel` | — | `coSysOpLevel` in config.json, default 250 |
-| `F`*x* | the user has flag *x* | one letter or digit | case-insensitive; `FAB` (two letters) fails — use `FA&FB` |
-| `I` | the user has flag `I` | ignored | the same test as `FI`; `I5` is `I` |
-| `V` | the user is validated | ignored | `V5` is `V` |
-| `U`*n* | the user's ID is *n* | number | |
-| `P`*n* | file points ≥ *n* | number | |
-| `E`*n* | uploads ÷ calls × 100 ≥ *n* | number | see [Ratios](#ratios). Uploads per call, not posts per call |
-| `B`*n* | uploads ÷ downloads × 100 ≥ *n* | number | see [Ratios](#ratios) |
-| `T`*n* | at least *n* minutes left this call | number | passes for anyone with no time limit |
-| `Z`*text* | *text* appears in the user's private note | letters, digits, `/`, `:` | case-insensitive; `Z` with no text passes for everyone |
-| `C`*n* | the current message conference's ID is *n* | number | |
-| `X`*n* | the current file conference's ID is *n* | number | |
-| `H`*n* | the hour now is *n* | 0–23 | see [Clock terms](#clock-terms) |
-| `W`*n* | today is weekday *n* | 0 (Sunday) – 6 (Saturday) | see [Clock terms](#clock-terms) |
-| `Y`*hh:mm*/*hh:mm* | the time now is in the range | two times, 24-hour | both minutes included; see [Clock terms](#clock-terms) |
-| `L` | the caller is local | ignored | needs a session; see below |
-| `A` | the caller's connection has a terminal | ignored | needs a session; see below |
+A number after a letter has the letter's own meaning: "at least" for `S`,
+`D`, `P`, `E`, `B` and `T` (`S20` passes at level 20 and above), "exactly" for
+`U`, `C`, `X`, `H` and `W` (`H8` is 8 am). Every numeric term also takes a
+comparison or a range: see [Comparisons and ranges](#comparisons-and-ranges).
+
+| Term | Name | Passes when | Argument | Notes |
+|---|---|---|---|---|
+| `S`*n* | `LEVEL` | access level ≥ *n* | number | `S` with no number fails |
+| `D`*n* | no name | access level ≥ *n* | number | the same test as `S`: there is no separate download level |
+| `SYSOP` | — | access level ≥ `sysOpLevel` | — | `sysOpLevel` in config.json, default 255 |
+| `COSYSOP` | — | access level ≥ `coSysOpLevel` | — | `coSysOpLevel` in config.json, default 250 |
+| `F`*x* | `FLAG:`*x* | the user has flag *x* | one letter or digit | case-insensitive; `FAB` (two letters) fails — use `FA&FB` |
+| `I` | no name | the user has flag `I` | ignored | the same test as `FI`; `I5` is `I` |
+| `V` | `VALIDATED` | the user is validated | ignored | `V5` is `V` |
+| `U`*n* | `USER` | the user's ID is *n* | number | |
+| `P`*n* | `FILEPOINTS` | file points ≥ *n* | number | |
+| `E`*n* | `UPLOADSPERCALL` | uploads ÷ calls × 100 ≥ *n* | number | see [Ratios](#ratios). Uploads per call, not posts per call |
+| `B`*n* | `ULDLRATIO` | uploads ÷ downloads × 100 ≥ *n* | number | see [Ratios](#ratios) |
+| `T`*n* | `TIMELEFT` | at least *n* minutes left this call | number | passes for anyone with no time limit |
+| `Z`*text* | `NOTE:`*text* | *text* appears in the user's private note | letters, digits, `/`, `:`, `-` | case-insensitive; `Z` with no text passes for everyone, `NOTE:` with none is a bad term |
+| `C`*n* | `MSGCONF` | the current message conference's ID is *n* | number | |
+| `X`*n* | `FILECONF` | the current file conference's ID is *n* | number | |
+| `H`*n* | `HOUR` | the hour now is *n* | 0–23 | see [Clock terms](#clock-terms) |
+| `W`*n* | `WEEKDAY` | today is weekday *n* | 0 (Sunday) – 6 (Saturday) | see [Clock terms](#clock-terms) |
+| `Y`*hh:mm*/*hh:mm* | `TIME:`*hh:mm*/*hh:mm* | the time now is in the range | two times, 24-hour | both minutes included; see [Clock terms](#clock-terms) |
+| `L` | `LOCAL` | the caller is local | ignored | needs a session; see below |
+| `A` | `TERMINAL` | the caller's connection has a terminal | ignored | needs a session; see below |
 
 A term whose argument isn't valid (`Sx`, `H25`, `Y8/17`) fails, as does an
 unknown letter (`Q`).
+
+### Comparisons and ranges
+
+The numeric terms (`S`, `D`, `U`, `P`, `E`, `B`, `T`, `C`, `X`, `H`, `W`)
+take a comparison before the number, or a range:
+
+| Form | Passes when the value is | Example |
+|---|---|---|
+| *n* | the letter's own meaning (see above) | `S20`, `H8` |
+| `=`*n* | exactly *n* | `S=20`, `HOUR=8` |
+| `<`*n*, `<=`*n* | below *n*, at most *n* | `S<20`, `LEVEL<=19` |
+| `>`*n*, `>=`*n* | above *n*, at least *n* | `S>19`, `LEVEL>=20` |
+| *a*`-`*b*, `=`*a*`-`*b* | from *a* to *b*, both included | `S20-99`, `LEVEL=20-99`, `H8-17` |
+
+There is no "not equal": write `!(S=20)`. A comparison is part of the term,
+with no spaces in it: `S < 20` is not `S<20`.
+
+A range runs from low to high. Only the clock terms wrap around: `H22-6` is
+10 pm through 6:59 am, and `W5-1` is Friday through Monday (`W1-5` is Monday
+through Friday). Any other backwards range, such as `LEVEL=99-20`, is an
+error.
+
+`B` with no downloads yet and `T` for a user with no time limit have no
+number to compare: they count as above every number, so `B>=50` and `T>30`
+pass and `B<50`, `T<30` and any range fail. `E` with no calls yet fails
+whatever the comparison.
+
+### Readable names
+
+A name stands for its letter, with the same test and the same argument:
+
+- The numeric names always take a comparison: `LEVEL>=20`, `HOUR=8-17`,
+  `USER=5`. A name with a bare number (`LEVEL20`) or nothing after it is read
+  as its first letter with an argument, as it always has been, so `LEVEL` on
+  its own is `L`, not a level test.
+- `FLAG`, `NOTE` and `TIME` take a colon: `FLAG:A`, `NOTE:trusted`,
+  `TIME:22:00/06:00`. `FLAG:` takes one flag letter or digit, like `F`.
+- `VALIDATED`, `LOCAL` and `TERMINAL` take nothing.
+
+`D` and `I` have no names: `D` is the same test as `S`, and `I` the same as
+`FI`.
 
 ### Ratios
 
@@ -142,9 +188,14 @@ The parser is lenient, and some mistakes don't do what they look like:
   argument `20FA` and fails. `S20 FA` (a space, no operator) fails.
 - **Characters other than letters, digits, `/`, `:`, operators, parentheses
   and spaces are dropped**, and a dropped character ends the term it is in.
-  `S<20` becomes `S` and `20` with no operator between them, so it fails for
+  `S@20` becomes `S` and `20` with no operator between them, so it fails for
   every level. `F(A)` becomes `F` and `A`, and fails even for a user with
-  flag A — write `FA`.
+  flag A — write `FA`. The comparison characters `<`, `>`, `=` and `-` are
+  part of a term only between term characters; elsewhere they are dropped
+  too, so `S20-` is `S20`.
+- **A comparison that can't be read fails the whole string**, like a trailing
+  operator: `LEVEL=99-20`, `S<<20`, `S<20-30` (a range takes `=` or nothing)
+  and `H25-3` all fail for everyone, and `!` can't make them pass.
 - **Two `!` in a row are an error**: `!!FA` fails. Use `FA`.
 - **A string that can't be read as a whole fails**: a trailing operator
   (`S20&`), an unclosed parenthesis (`(S20`), or only spaces.
@@ -160,6 +211,13 @@ exception: see [Doors: the strict rule](#doors-the-strict-rule).
 A string that fails as a whole (the cases in [Syntax](#syntax) above)
 fails outright: `!` can't rescue it.
 
+A string that read as a whole before comparisons were added keeps the
+meaning it had: the comparison characters in it are still dropped. Only a
+string that failed for everyone is read with comparisons. So `S<20` (which
+used to fail as a whole) is now "level below 20", while `|S<20` (which the
+stray `|` let read as `S|20`) still means what it did. `vision3 doctor`
+reports the dropped characters in such a string.
+
 Errors and bad terms are logged (at `ERROR` and `WARN`) when a caller hits
 them, and once when the board starts; see
 [Checking your strings](#checking-your-strings). An ignored character is
@@ -169,7 +227,7 @@ logged at `WARN` the first time a caller's check reads the string.
 
 A door's `acs` in `doors.json` must read cleanly. Anything `vision3 doctor`
 reports for it, a failure or a warning, denies the door to every caller,
-sysops included: `!Q`, `S20&`, `H25` and `S<20` all lock the door. A blank
+sysops included: `!Q`, `S20&`, `H25` and `S@20` all lock the door. A blank
 or all-space `acs` is no rule. The config editor refuses such a string in a
 door's **ACS** field, naming the column, and doctor reports it as a
 **FAIL**. Every other ACS string keeps the lenient behaviour above.
@@ -277,3 +335,7 @@ behind its level and category, private mail behind its own rules.
 | `V&!FX` | validated users without flag X |
 | `SYSOP\|U1` | sysops, and user 1 |
 | `(S50\|FM)&T10` | level 50 or flag M, with 10 minutes or more left |
+| `S<20` | levels below 20 |
+| `LEVEL=20-99&FLAG:C` | levels 20 to 99 with flag C |
+| `!(S=20)` | every level but 20 |
+| `S>=50\|FILEPOINTS>=40` | level 50 and up, or anyone with 40 file points |
