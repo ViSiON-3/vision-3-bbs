@@ -18,7 +18,7 @@ From your ViSiON/3 directory:
 ./ue --config /path/to/configs    # board config dir (default configs/)
 ```
 
-The editor reads and writes `data/users/users.json`. It uses optimistic concurrency — if the BBS modifies the user file while you have it open, you'll be warned before any save overwrites it. The config directory is read for the bad user names list and the deleted-user retention period; the two flags are independent, so an instance kept elsewhere can point `--data` and `--config` at different places.
+The editor reads and writes `data/users/users.json`. It uses optimistic concurrency — if the BBS modifies the user file while you have it open, you'll be warned before any save overwrites it. The config directory is read for the bad user names list, the deleted-user retention period and the sysop levels the ACS tester uses; the two flags are independent, so an instance kept elsewhere can point `--data` and `--config` at different places.
 
 ---
 
@@ -47,7 +47,7 @@ Press Enter on any user to open the field editor. It lays the fields out in two 
 
 **Left column:** Handle, Real Name, Access Level, Total Calls, Group/Location, Access Flags, Private Note, File Points, Custom Prompt, Time Limit, Password, WFC Keys
 
-**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted User (read-only), Deleted At (read-only), Auto Purge (read-only), WFC Read Only
+**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted User (read-only), Deleted At (read-only), Auto Purge (read-only), WFC Read Only, ACS Test
 
 **Read-only block:** Num Uploads, Msgs Posted, InfoForms, Created, Updated, Last Login, Bulletin
 
@@ -63,7 +63,30 @@ WFC Keys opens a list of the account's SSH public keys, shown by SHA256 fingerpr
 
 WFC Read Only (Y/N) limits the account's [WFC console](how-to-guides/wfc-console.md#read-only-accounts) to watching: the BBS refuses its kick, snoop, type-in and chat.
 
+ACS Test opens the [ACS tester](#acs-test) for the user.
+
 **Read-only fields:** Deleted User, Deleted At, and Auto Purge reflect the user's current deletion state and purge eligibility. InfoForms shows which infoform responses exist on disk (e.g., `1[x] 2[ ] 3[ ]`).
+
+### ACS Test
+
+The ACS tester checks an [ACS string](reference/acs.md) against the user
+you are editing, as the record stands in the editor (changes not saved yet
+included), and shows how each part of it came out and why. See
+[Testing a string for a user](reference/acs.md#testing-a-string-for-a-user)
+for what it shows.
+
+| Field | Meaning |
+|-------|---------|
+| Expression | The ACS string to test |
+| Time | Blank for now, `hh:mm` for that time today, or `yyyy-mm-dd hh:mm` |
+| Session | `N` (the default): no session. `Y`: a made-up call, with the fields below |
+| Local, Terminal | What `L` and `A` read from the call |
+| Mins In, Credit | How long the call has run and the chat time credited back, for `T` |
+
+Enter tests the expression. Tab and Shift-Tab (or Down and Up) move between
+the fields; Space, `Y` and `N` set the yes/no ones, which tests again at once.
+PgUp and PgDn scroll a long result, and Esc goes back to the field editor.
+`SYSOP` and `COSYSOP` use `sysOpLevel` and `coSysOpLevel` from `--config`.
 
 ---
 
@@ -214,6 +237,7 @@ internal/usereditor/
   fileio.go                       # JSON load/save with optimistic concurrency
   fields.go                       # Field definitions and edit types
   dialogs.go                      # Confirmation dialogs, help screen
+  acstester.go                    # ACS tester screen
 ```
 
 Source data: `data/users/users.json`. The editor imports `internal/user.User` directly — no duplicate type definitions.

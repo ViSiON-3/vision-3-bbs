@@ -11,6 +11,8 @@ import (
 // View implements tea.Model.
 func (m Model) View() string {
 	switch {
+	case m.mode == modeACSTest:
+		return m.viewACSTestScreen()
 	case m.mode == modeEdit || m.mode == modeEditField || m.mode == modePasswordEntry || m.mode == modeSaveOnLeave ||
 		m.mode == modeKeyList || m.mode == modeKeyAdd || m.mode == modeDeviceList:
 		return m.viewEditScreen()

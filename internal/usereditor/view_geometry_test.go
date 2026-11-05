@@ -69,6 +69,14 @@ func enterMode(t *testing.T, m Model, mode editorMode) Model {
 			m.editField = m.verticalField(1)
 		}
 		press(tea.KeyEnter)
+	case modeACSTest:
+		press(tea.KeyEnter)
+		for i, f := range m.fields {
+			if f.Label == acsTestField {
+				m.editField = i
+			}
+		}
+		press(tea.KeyEnter)
 	case modeSearch:
 		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 		m = updated.(Model)
@@ -116,6 +124,7 @@ func TestViewGeometry(t *testing.T) {
 		{"save_confirm", modeSaveConfirm},
 		{"save_on_leave", modeSaveOnLeave},
 		{"info_alert", modeInfoAlert},
+		{"acs_test", modeACSTest},
 	}
 
 	for _, size := range sizes {

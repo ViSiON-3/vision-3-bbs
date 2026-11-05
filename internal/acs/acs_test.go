@@ -27,9 +27,25 @@ func oracleUsers() []*user.User {
 }
 
 // TestMatchesOldEvaluator checks that Check decides every string exactly as
-// the evaluator it replaced (oracle_test.go): hand-picked strings, including
-// every quirk the reference documents, then random ones.
+// the evaluator it replaced (oracle_test.go).
 func TestMatchesOldEvaluator(t *testing.T) {
+	start := time.Now()
+	for _, s := range oracleCases() {
+		for _, u := range oracleUsers() {
+			want := oldCheckACS(s, u, nil, nil, start)
+			ctx := ctxFor(u)
+			ctx.Start = start
+			if got := Check(s, ctx); got != want {
+				t.Errorf("Check(%q) for %+v = %v, old evaluator %v", s, u, got, want)
+			}
+		}
+	}
+}
+
+// oracleCases are the strings TestMatchesOldEvaluator and the tester's
+// agreement test check: hand-picked ones, including every quirk the
+// reference documents, then random ones.
+func oracleCases() []string {
 	cases := []string{
 		"", "*", "**", " ", "*&S10", "S10", "s20", "S", "Sx", "S20FA", "S20 FA", "S20&FA", "S20 & FA",
 		"!FA", "!!FA", "!(FA|FB)", "(S99|FA)&FB", "S99|FA&FC", "FB&FA|FC", "!FA&S10", "S20&", "&S20",
@@ -48,17 +64,7 @@ func TestMatchesOldEvaluator(t *testing.T) {
 		}
 		cases = append(cases, b.String())
 	}
-	start := time.Now()
-	for _, s := range cases {
-		for _, u := range oracleUsers() {
-			want := oldCheckACS(s, u, nil, nil, start)
-			ctx := ctxFor(u)
-			ctx.Start = start
-			if got := Check(s, ctx); got != want {
-				t.Errorf("Check(%q) for %+v = %v, old evaluator %v", s, u, got, want)
-			}
-		}
-	}
+	return cases
 }
 
 // TestParseTree checks the tree's shape and precedence: ! before & before |,
@@ -141,6 +147,8 @@ func TestDiagnostics(t *testing.T) {
 		{"S20)", []d{{Error, 4, "no matching"}}},
 		{"!!FA", []d{{Error, 1, "nothing after it"}}},
 		{"S20 FA", []d{{Error, 5, `no operator before "FA"`}}},
+		{"T30|H8-17", []d{{Warning, 7, "unexpected character '-'"}, {Error, 8, `no operator before "17"`}, {Warning, 8, "1 is not an ACS term"}}},
+		{"(S20)FA", []d{{Error, 6, `no operator before "FA"`}}},
 		{"S20FA", []d{{Warning, 1, "needs a whole number"}}},
 		{" ", []d{{Error, 1, "no term"}}},
 		{"S<20", []d{{Warning, 1, `"S": S needs a whole number`}, {Warning, 2, "unexpected character '<'"}, {Error, 3, `no operator before "20"`}, {Warning, 3, "2 is not an ACS term"}}},

@@ -745,5 +745,19 @@ func stringCatalog() []StringEntry {
 		{Label: "Msg Search: Page Prompt", Key: "msgSearchPagePrompt", Description: "Prompt under each page of results (%d=page, %d=pages)"},
 		{Label: "Msg Search: Gone", Key: "msgSearchGone", Description: "Shown when a result can no longer be opened (deleted, or access changed)"},
 		{Label: "Msg Search: Stopped Early", Key: "msgSearchStoppedPartial", Description: "Shown under the header when the caller stopped the search (%d=matches)"},
+
+		// The sysop's ACS tester in the user editor (#608)
+		{Label: "ACS Test: Title", Key: "acsTestTitle", Description: "Heading of the sysop's ACS tester in the user editor; the user's handle follows"},
+		{Label: "ACS Test: Menu", Key: "acsTestMenu", Description: "Choices under the tester's result"},
+		{Label: "ACS Test: Expression", Key: "acsTestExprPrompt", Description: "Prompt for the expression to test"},
+		{Label: "ACS Test: Session?", Key: "acsTestSessionPrompt", Description: "Yes/No: test with a made-up session instead of none"},
+		{Label: "ACS Test: Local?", Key: "acsTestLocalPrompt", Description: "Yes/No: whether the made-up call is local"},
+		{Label: "ACS Test: Terminal?", Key: "acsTestTerminalPrompt", Description: "Yes/No: whether the made-up call has a terminal"},
+		{Label: "ACS Test: Minutes In", Key: "acsTestElapsedPrompt", Description: "Prompt for how long the made-up call has run"},
+		{Label: "ACS Test: Chat Credit", Key: "acsTestCreditPrompt", Description: "Prompt for the chat time credited back to the made-up call"},
+		{Label: "ACS Test: Time", Key: "acsTestTimePrompt", Description: "Prompt for the time the clock terms read"},
+		{Label: "ACS Test: Bad Number", Key: "acsTestBadNumber", Description: "Shown when a minutes answer is not a whole number"},
+		{Label: "ACS Test: Bad Time", Key: "acsTestBadTime", Description: "Shown when the time can't be read"},
+		{Label: "ACS Test: Denied", Key: "acsTestDenied", Description: "Shown in the user editor when someone below sysOpLevel asks for the tester"},
 	}
 }

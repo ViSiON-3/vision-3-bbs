@@ -251,6 +251,8 @@ func editFields() []fieldDef {
 			Get: func(u *user.User) string { return uitext.BoolToYN(u.WFCReadOnly) },
 			Set: func(u *user.User, val string) error { u.WFCReadOnly = uitext.YNToBool(val); return nil },
 		},
+		// Opens the ACS tester for this user (acstester.go).
+		acsTestFieldDef(),
 
 		// Row 17: separator rendered by view_edit.go
 

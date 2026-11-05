@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -144,8 +146,13 @@ func TestACSReference(t *testing.T) {
 			if tt.edit != nil {
 				tt.edit(u)
 			}
-			if got := checkACS(tt.acs, u, nil, nil, time.Now()); got != tt.want {
+			start := time.Now()
+			if got := checkACS(tt.acs, u, nil, nil, start); got != tt.want {
 				t.Errorf("checkACS(%q) = %v, want %v", tt.acs, got, tt.want)
+			}
+			// The tester explains the same decision (#608).
+			if got := acs.Explain(tt.acs, acsContext(u, nil, start)).Result; got != tt.want {
+				t.Errorf("acs.Explain(%q).Result = %v, want %v", tt.acs, got, tt.want)
 			}
 		})
 	}
@@ -153,9 +160,12 @@ func TestACSReference(t *testing.T) {
 
 // Before login there is no user: only an empty string and * pass.
 func TestACSReference_NoUser(t *testing.T) {
-	for acs, want := range map[string]bool{"": true, "*": true, "S0": false, "!FA": false} {
-		if got := checkACS(acs, nil, nil, nil, time.Now()); got != want {
-			t.Errorf("checkACS(%q, no user) = %v, want %v", acs, got, want)
+	for s, want := range map[string]bool{"": true, "*": true, "S0": false, "!FA": false} {
+		if got := checkACS(s, nil, nil, nil, time.Now()); got != want {
+			t.Errorf("checkACS(%q, no user) = %v, want %v", s, got, want)
+		}
+		if got := acs.Explain(s, acsContext(nil, nil, time.Now())).Result; got != want {
+			t.Errorf("acs.Explain(%q, no user).Result = %v, want %v", s, got, want)
 		}
 	}
 }
