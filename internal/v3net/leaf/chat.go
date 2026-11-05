@@ -23,9 +23,10 @@ var (
 // have chat open on more than one node, so several sessions may share a
 // handle (#662).
 type chatSessionRegistry struct {
-	mu       sync.RWMutex
-	sessions map[*ChatSession]struct{}
-	nodeID   string
+	mu           sync.RWMutex
+	sessions     map[*ChatSession]struct{}
+	nodeID       string
+	rejoinEchoes map[chatMembership]bool // protected by mu; cleared for each stream
 
 	// membership serializes Join and Leave requests to the hub. The hub keeps
 	// one membership per handle on a node, so a session leaving a room must
@@ -63,7 +64,10 @@ func (r *chatSessionRegistry) sharesRoom(s *ChatSession, room string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for o := range r.sessions {
-		if o != s && o.handle == s.handle && o.room() == room {
+		o.mu.Lock()
+		shares := o != s && !o.closed && o.handle == s.handle && o.currentRoom == room
+		o.mu.Unlock()
+		if shares {
 			return true
 		}
 	}
@@ -72,6 +76,9 @@ func (r *chatSessionRegistry) sharesRoom(s *ChatSession, room string) bool {
 
 // dispatch applies leaf-side filtering and delivers events to matching sessions.
 func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
+	if r.skipRejoinEcho(ev) {
+		return
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -120,10 +127,13 @@ func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
 func (r *chatSessionRegistry) notifyReconnect() {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	ev := chat.ChatEvent{Type: chat.TypeSystem, Reconnect: true, Text: "reconnected"}
 	for s := range r.sessions {
 		s.mu.Lock()
 		if !s.closed {
+			ev := chat.ChatEvent{Type: chat.TypeSystem, Reconnect: true, Text: "reconnected"}
+			if s.currentRoom != "" {
+				ev.Topic = &chat.ChatTopic{Room: s.currentRoom, Topic: s.currentTopic}
+			}
 			select {
 			case s.events <- ev:
 			default:
@@ -143,6 +153,8 @@ type ChatSession struct {
 	origin       string // sent with posts to recognise their echo; see ownPost
 	currentRoom  string
 	currentUsers []string
+	currentTopic string
+	recovering   bool
 	events       chan chat.ChatEvent
 	mu           sync.Mutex
 	closed       bool
@@ -217,6 +229,9 @@ func (s *ChatSession) deliver(ev protocol.Event) {
 			return // drop malformed event rather than delivering partial data
 		}
 		ce = chat.ChatEvent{Type: chat.TypeTopic, Topic: &chat.ChatTopic{Room: p.Room, Topic: p.Topic, SetBy: p.SetBy}}
+		s.mu.Lock()
+		s.currentTopic = p.Topic
+		s.mu.Unlock()
 	default:
 		return
 	}
@@ -259,6 +274,17 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 	}
 	s.leaf.chatSessions.membership.Lock()
 	defer s.leaf.chatSessions.membership.Unlock()
+	s.mu.Lock()
+	closed := s.closed
+	s.mu.Unlock()
+	if closed {
+		return nil, nil, fmt.Errorf("join chat: session closed")
+	}
+	// A recovery join may have found an existing membership and produced no
+	// echo. It must not suppress this later, explicitly requested join.
+	s.leaf.chatSessions.mu.Lock()
+	delete(s.leaf.chatSessions.rejoinEchoes, chatMembership{room, s.handle})
+	s.leaf.chatSessions.mu.Unlock()
 	body, _ := json.Marshal(protocol.ChatJoinRequest{Room: room, Handle: s.handle})
 	resp, err := s.leaf.signedPostWithResponse(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/join", s.leaf.cfg.Network), body)
@@ -283,8 +309,15 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 		return nil, nil, fmt.Errorf("join chat: %w", err)
 	}
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		s.undoJoin(room)
+		return nil, nil, fmt.Errorf("join chat: session closed")
+	}
 	s.currentRoom = room
-	s.currentUsers = joinResp.Users
+	s.currentUsers = slices.Clone(joinResp.Users)
+	s.currentTopic = roomTopic(joinResp.Rooms, room)
+	s.recovering = false
 	s.mu.Unlock()
 
 	rooms := make([]chat.RoomInfo, len(joinResp.Rooms))
@@ -316,10 +349,20 @@ func (s *ChatSession) undoJoin(room string) {
 }
 
 // Leave implements chat.ChatService, telling the hub this handle has left
-// room. The current room is cleared only if the hub accepted the request.
+// room. The current room is cleared if the hub accepted the request. During
+// recovery, room intent is abandoned immediately, even if the hub is offline.
 // While another session with this handle is still in room, the hub is not
 // told, since its membership is shared by both, and the room is just cleared.
 func (s *ChatSession) Leave(room string) error {
+	// Abandon recovery before waiting for its in-flight request. Recovery
+	// checks this intent again before accepting a join or marking us ready.
+	s.mu.Lock()
+	abandoned := s.recovering && s.currentRoom == room
+	if abandoned {
+		s.currentRoom = ""
+		s.currentUsers = nil
+	}
+	s.mu.Unlock()
 	s.leaf.chatSessions.membership.Lock()
 	defer s.leaf.chatSessions.membership.Unlock()
 	var err error
@@ -328,7 +371,7 @@ func (s *ChatSession) Leave(room string) error {
 		err = s.leaf.signedPostCtx(context.Background(),
 			fmt.Sprintf("/v3net/v1/%s/chat/rooms/leave", s.leaf.cfg.Network), body)
 	}
-	if err == nil {
+	if err == nil || abandoned {
 		s.mu.Lock()
 		s.currentRoom = ""
 		s.mu.Unlock()
@@ -340,6 +383,9 @@ func (s *ChatSession) Leave(room string) error {
 // The hub's copy sent back to this session is dropped by dispatch, so the
 // caller shows its own line once, when Post returns.
 func (s *ChatSession) Post(room, text string) error {
+	if err := s.chatReady(); err != nil {
+		return err
+	}
 	body, _ := json.Marshal(protocol.ChatPostRequest{Room: room, Text: text, Handle: s.handle, Origin: s.origin})
 	return s.leaf.signedPostCtx(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/post", s.leaf.cfg.Network), body)
@@ -376,6 +422,9 @@ func (s *ChatSession) Private(handle, node, text string) error {
 // SetTopic implements chat.ChatService by asking the hub to change room's
 // topic; the change arrives back as a topic event.
 func (s *ChatSession) SetTopic(room, topic string) error {
+	if err := s.chatReady(); err != nil {
+		return err
+	}
 	body, _ := json.Marshal(protocol.ChatTopicRequest{Room: room, Topic: topic, Handle: s.handle})
 	return s.leaf.signedPostCtx(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/topic", s.leaf.cfg.Network), body)

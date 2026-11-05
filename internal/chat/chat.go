@@ -59,7 +59,7 @@ type ChatEvent struct {
 	Message   *ChatMessage // TypeMessage, TypePrivate
 	Join      *ChatJoin    // TypeJoin
 	Leave     *ChatLeave   // TypeLeave
-	Topic     *ChatTopic   // TypeTopic
+	Topic     *ChatTopic   // TypeTopic; refreshed room topic on TypeSystem reconnect
 	Text      string       // TypeSystem human-readable text
 	Reconnect bool         // TypeSystem: true when reconnected
 }

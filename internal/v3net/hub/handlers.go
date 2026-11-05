@@ -267,12 +267,19 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	// An open stream is what the Central directory shows as online, and
 	// its opening and closing are the node's last-seen times.
+	h.chatStreamMu.Lock()
 	h.online.add(nodeID, network)
+	h.chatStreamMu.Unlock()
 	h.noteNodeSeen(nodeID, network)
 	h.broadcaster.ServeSSE(w, r, network, signer)
 	// ServeSSE blocks until the client disconnects.
+	h.chatStreamMu.Lock()
+	defer h.chatStreamMu.Unlock()
 	h.online.remove(nodeID, network)
 	h.noteNodeSeen(nodeID, network)
+	if h.online.online(nodeID, network) {
+		return // a replacement stream still owns this node's memberships
+	}
 	// Clean up chat room presence for the disconnected node.
 	removed := h.chatRooms.HandleDisconnect(network, nodeID)
 	sub := h.subscribers.Get(nodeID, network)
