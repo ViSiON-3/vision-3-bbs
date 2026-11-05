@@ -674,7 +674,9 @@ func checkUserCreationDates(root string, add func(string, doctorSeverity, string
 		CreatedAt   time.Time `json:"createdAt"`
 		DeletedUser bool      `json:"deletedUser"`
 	}
-	if json.Unmarshal(data, &users) != nil {
+	if err := json.Unmarshal(data, &users); err != nil {
+		add("user sign-up dates", doctorWarn, "data/users/users.json can't be read: "+jsonErrorLocation(data, err),
+			"Repair data/users/users.json while the BBS is stopped; a createdAt must be a full RFC 3339 time such as 2026-01-02T03:04:05Z.")
 		return
 	}
 	var missing []string

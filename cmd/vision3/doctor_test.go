@@ -409,6 +409,10 @@ func TestCheckUserCreationDates(t *testing.T) {
 	if checks := run(); !hasDoctorCheck(checks, "user sign-up dates", doctorOK, "every user has a sign-up date") {
 		t.Fatalf("checks = %#v", checks)
 	}
+	writeDoctorFixture(t, path, `[{"id":1,"handle":"Sysop","createdAt":"2026-01-02"}]`)
+	if checks := run(); !hasDoctorCheck(checks, "user sign-up dates", doctorWarn, "users.json can't be read") {
+		t.Fatalf("checks = %#v", checks)
+	}
 }
 
 func TestCheckShippedMenuReferencesResolve(t *testing.T) {
