@@ -102,20 +102,25 @@ func (h *Hub) Subscribe() (<-chan ssh.Window, func()) {
 
 // Close ends every subscription by closing its channel, stops taking from the
 // source and forgets the Hub, so Subscribe for the session falls back to Pty.
+//
+// The Hub is forgotten before any subscriber's channel closes, and under the
+// same lock that Subscribe takes, so a reader that sees its channel closed and
+// then looks the session up, or subscribes again, finds the Hub gone. With the
+// registry removed after the unlock, as before, a reader could run between the
+// two and still find it (#906).
 func (h *Hub) Close() {
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	if h.closed {
-		h.mu.Unlock()
 		return
 	}
 	h.closed = true
+	hubs.CompareAndDelete(h.key, h)
 	close(h.done)
 	for ch := range h.subs {
 		close(ch)
 		delete(h.subs, ch)
 	}
-	h.mu.Unlock()
-	hubs.CompareAndDelete(h.key, h)
 }
 
 // Subscribe is Hub.Subscribe on the Hub that owns s's window changes. With no
