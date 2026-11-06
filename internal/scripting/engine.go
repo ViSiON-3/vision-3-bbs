@@ -60,6 +60,14 @@ type Engine struct {
 	// answer and answered record v3.prompt.answer (see prompt.go).
 	answer   any
 	answered bool
+	// keyName is the name of the last special key parseInput consumed
+	// ("UP", "PGDN", ...; see keys.go), or "" when it consumed none.
+	// readNamedKey clears it before each read.
+	keyName string
+	// holdEscape, set while readNamedKey reads, makes parseInput return
+	// an unfinished escape sequence's ESC on its own and keep the rest,
+	// so readNamedKey can wait for the remaining bytes.
+	holdEscape bool
 }
 
 // readResult carries data or an error from the reader goroutine.
@@ -565,12 +573,29 @@ func (eng *Engine) parseInput(data []byte) string {
 	// rune (0xA9 -> "©", C2 A9). readKeyEcho decodes bytes >= 0x80.
 	result := string(data[:1])
 
-	if data[0] == 0x1b && len(data) > 1 {
-		if data[1] == '[' && len(data) > 2 {
-			// CSI sequences — consume and discard (arrow keys etc.)
+	if data[0] == 0x1b && eng.holdEscape && escapePending(data) {
+		consumed = 1
+	} else if data[0] == 0x1b && len(data) > 1 {
+		switch {
+		case data[1] == '[' && len(data) > 2:
+			// CSI sequences (arrow keys etc.): getkey discards them,
+			// readkey reports their name
 			consumed = skipCSI(data)
+			eng.keyName = csiKeyName(data[:consumed])
 			result = ""
-		} else {
+		case data[1] == 'O' && len(data) > 2:
+			// SS3: arrows in application cursor mode, and F1-F4
+			consumed = 3
+			eng.keyName = ss3KeyName(data[2])
+			result = ""
+		case eng.holdEscape:
+			// readkey: ESC and another key at once is Esc, then that
+			// key, as the editor reads it (the key is put back)
+			eng.keyName = "ESC"
+			result = ""
+		default:
+			// getkey: ESC and another key at once is Alt plus that key,
+			// and both go
 			consumed = 2
 			result = ""
 		}

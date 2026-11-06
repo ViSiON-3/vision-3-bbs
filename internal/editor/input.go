@@ -71,6 +71,19 @@ const (
 	KeyEnd        = 0x107 // Internal code for end
 	KeyInsert     = 0x108 // Internal code for insert
 	KeyDeleteKey  = 0x109 // Internal code for delete key
+	KeyF1         = 0x10A // Internal codes for F1-F12, in order
+	KeyF2         = 0x10B
+	KeyF3         = 0x10C
+	KeyF4         = 0x10D
+	KeyF5         = 0x10E
+	KeyF6         = 0x10F
+	KeyF7         = 0x110
+	KeyF8         = 0x111
+	KeyF9         = 0x112
+	KeyF10        = 0x113
+	KeyF11        = 0x114
+	KeyF12        = 0x115
+	KeyBackTab    = 0x116 // Internal code for Shift-Tab
 )
 
 // InputHandler handles keyboard input and escape sequence parsing.
@@ -467,7 +480,7 @@ func (ih *InputHandler) escTimeout() time.Duration {
 	if ns := ih.escTimeoutNs.Load(); ns > 0 {
 		return time.Duration(ns)
 	}
-	return 500 * time.Millisecond
+	return DefaultEscTimeout
 }
 
 func (ih *InputHandler) sessionIdleTimeout() time.Duration {
@@ -1071,6 +1084,9 @@ func (ih *InputHandler) parseCSISequence() (int, error) {
 			break
 		}
 		sequence = append(sequence, b)
+		if len(sequence) >= MaxCSILength {
+			break
+		}
 		if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || b == '~' {
 			break
 		}
@@ -1080,46 +1096,9 @@ func (ih *InputHandler) parseCSISequence() (int, error) {
 		return int(KeyEsc), nil
 	}
 
-	final := sequence[len(sequence)-1]
-	switch final {
-	case 'A':
-		return KeyArrowUp, nil
-	case 'B':
-		return KeyArrowDown, nil
-	case 'C':
-		return KeyArrowRight, nil
-	case 'D':
-		return KeyArrowLeft, nil
-	case 'H':
-		return KeyHome, nil
-	case 'F': // xterm / VT standard End
-		// NOTE: 'K' (CSI K = ANSI "Erase in Line") is intentionally NOT
-		// mapped here to avoid phantom End keypresses from clients that
-		// echo server output or have broken raw-mode passthrough.
-		return KeyEnd, nil
-	case 'U': // SyncTERM / EtherTerm PageDown (ESC [ U)
-		return KeyPageDown, nil
-	case 'V': // SyncTERM / EtherTerm PageUp (ESC [ V)
-		return KeyPageUp, nil
-	case '~':
-		if len(sequence) >= 2 {
-			switch sequence[0] {
-			case '1':
-				return KeyHome, nil
-			case '2':
-				return KeyInsert, nil
-			case '3':
-				return KeyDeleteKey, nil
-			case '4':
-				return KeyEnd, nil
-			case '5':
-				return KeyPageUp, nil
-			case '6':
-				return KeyPageDown, nil
-			}
-		}
+	if key := CSIKey(sequence[:len(sequence)-1], sequence[len(sequence)-1]); key != 0 {
+		return key, nil
 	}
-
 	return int(KeyEsc), nil
 }
 
@@ -1130,19 +1109,8 @@ func (ih *InputHandler) parseSS3Sequence() (int, error) {
 	if err != nil {
 		return int(KeyEsc), err
 	}
-	switch b {
-	case 'A':
-		return KeyArrowUp, nil
-	case 'B':
-		return KeyArrowDown, nil
-	case 'C':
-		return KeyArrowRight, nil
-	case 'D':
-		return KeyArrowLeft, nil
-	case 'H':
-		return KeyHome, nil
-	case 'F':
-		return KeyEnd, nil
+	if key := SS3Key(b); key != 0 {
+		return key, nil
 	}
 	return int(KeyEsc), nil
 }

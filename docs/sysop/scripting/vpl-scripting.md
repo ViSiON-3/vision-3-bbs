@@ -260,6 +260,8 @@ Text is sent in the caller's encoding: UTF-8 terminals receive UTF-8, and CP437 
 |----------|---------|-------------|
 | `getkey()` | `string` | Wait for a single keypress, returns the character |
 | `getkey(timeout_ms)` | `string` | Wait up to `timeout_ms` milliseconds. Returns `""` on timeout |
+| `readkey()` | `string` | Like `getkey()`, but arrows, paging and function keys come back by name (`"UP"`, `"PGDN"` ...) instead of being discarded. See [Reading special keys](#reading-special-keys) |
+| `readkey(timeout_ms)` | `string` | Wait up to `timeout_ms` milliseconds for a key to start. Returns `""` on timeout |
 | `getstr(maxlen)` | `string` | Read a line of input up to `maxlen` characters |
 | `getstr(maxlen, opts)` | `string` | Read with options object (see below) |
 | `getnum(max)` | `number` | Read a number. Clamps to `max` if exceeded. Returns `0` on empty input |
@@ -284,6 +286,50 @@ v3.console.getstr(5, { number: true });    // digits only
 `getnum()` with no `max` accepts up to ten digits. `getstr()` with no `maxlen` accepts 128 characters.
 
 **Typed characters are decoded for you.** Scripts always see Unicode strings, whatever the caller's terminal sends. On a CP437 terminal each typed byte is mapped to its Unicode character (`0xAB` becomes `½`), and on a UTF-8 terminal the bytes of one character are assembled into it even when they arrive in separate reads. The echo goes back in the caller's own encoding, `maxlen` counts characters rather than bytes, and backspace removes a whole character. A malformed UTF-8 sequence, or a CP437 byte with no Unicode equivalent, is dropped. `getkey()` returns `""` for an escape sequence it discards (arrow keys and the like) and on timeout or disconnect.
+
+#### Reading special keys
+
+`getkey()` swallows the escape sequences terminals send for arrows and the
+like, which suits a script that only wants typed characters. For a lightbar,
+a pager or a game, use `readkey()`, which returns those keys by name:
+
+| Key | `readkey()` returns |
+|-----|---------------------|
+| Arrows | `"UP"`, `"DOWN"`, `"LEFT"`, `"RIGHT"` |
+| Home, End | `"HOME"`, `"END"` |
+| Page Up, Page Down | `"PGUP"`, `"PGDN"` |
+| Insert, Delete | `"INS"`, `"DEL"` |
+| F1 to F12 | `"F1"` ... `"F12"` |
+| Shift-Tab | `"BACKTAB"` |
+| Esc | `"ESC"` |
+| Enter | `"\r"` |
+| Backspace | `"\x08"` or `"\x7f"`, as the terminal sends it |
+| Anything else | the character, as from `getkey()` |
+
+`readkey()` reads keys with the same table as the message editor, so the
+two always agree: the common sequences from xterm, VT100/VT220, rxvt and
+SyncTERM, including cursor keys in application mode. Shift, Ctrl and Alt held
+with an arrow are ignored (Ctrl-Up is `"UP"`). A sequence that is not a key is
+skipped. Because Esc is also the first byte of every sequence, a lone Esc is
+held for half a second, as in the editor, in case the rest is still on its
+way over a slow link, so Esc reads a little slower than other keys. A key
+pressed right after Esc that is not part of a sequence is the next key, as
+in the editor: Esc then Q reads as `"ESC"`, then `"Q"`. An escape sequence
+cut short, or one that never ends, also reads as `"ESC"`. With a timeout, the
+hold ends at the timeout too, so `readkey(timeout_ms)` returns within
+`timeout_ms`; a lone Esc that arrives just before it reads as `"ESC"`.
+
+```javascript
+var row = 0;
+for (;;) {
+    var k = v3.console.readkey();
+    if (k === "UP" && row > 0) row--;
+    else if (k === "DOWN") row++;
+    else if (k === "\r") break;           // Enter picks the row
+    else if (k === "ESC" || k === "q") exit();
+    // ... redraw the bar at row
+}
+```
 
 #### Properties
 
