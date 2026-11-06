@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"maps"
 	"net/http"
 	"time"
@@ -74,43 +73,65 @@ func (l *Leaf) SendMessage(msg protocol.Message) error {
 // (protocol.Message.Sign), so the signature covers exactly what the hub
 // stores and relays. The message's OriginNode must be this node's ID.
 func (l *Leaf) SendMessageCtx(ctx context.Context, msg protocol.Message) error {
+	data, err := l.signMessage(msg)
+	if err != nil {
+		return err
+	}
+	return l.postMessage(ctx, data)
+}
+
+// signMessage prepares msg for the wire as SendMessageCtx describes and
+// returns it signed and encoded. It fails, and nothing is sent, for a
+// message whose OriginNode is not this node.
+func (l *Leaf) signMessage(msg protocol.Message) ([]byte, error) {
 	msg.NormalizeUTF8()
 	if msg.NeedsTruncation() {
 		msg.Kludges = maps.Clone(msg.Kludges) // Truncate writes to it; leave the caller's alone
 		msg.Truncate()
 	}
 	if err := msg.Sign(l.cfg.Keystore); err != nil {
-		return fmt.Errorf("leaf: sign message: %w", err)
+		return nil, fmt.Errorf("leaf: sign message: %w", err)
 	}
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("leaf: marshal message: %w", err)
+		return nil, fmt.Errorf("leaf: marshal message: %w", err)
 	}
+	return data, nil
+}
+
+// postMessage POSTs a message signMessage encoded to the hub.
+func (l *Leaf) postMessage(ctx context.Context, data []byte) error {
 	path := fmt.Sprintf("/v3net/v1/%s/messages", l.cfg.Network)
 	return l.signedPostCtx(ctx, path, data)
 }
 
-// SendPost sends one of this BBS's posts, as SendMessageCtx does, and then
-// records it in the dedup index, so this leaf's poll does not import it
-// back. The hub can serve the post to a poll before its reply to the send
-// arrives, so the send and the record are made under postMu, which the
-// poll's import (store) also takes: the import of the post waits, then
-// finds it recorded. A record that fails is logged; the post was still
-// sent.
+// SendPost signs one of this BBS's posts, records it in the dedup index,
+// then sends it as SendMessageCtx does, so this leaf's poll never imports it
+// back. It signs first so a message signing refuses, such as one whose
+// OriginNode is another node's, is not recorded: that record would make the
+// poll skip the other node's genuine message with that UUID.
 //
-// The record awaits the poll (dedup.MarkSent): it does not move the poll
-// cursor until the poll reaches the post in the hub's order, so posts from
-// other nodes that the hub stored before it are still fetched.
+// The record comes first because the hub can store the post and serve it
+// to a poll before the send returns, or store it and still fail the send on
+// our side (a timeout, a dropped connection, an error after the write). A
+// record made only after a successful send misses both, and the poll
+// imports a second copy (#938, #947). If the record can't be made, the post
+// is not sent: the caller keeps it and tries again.
+//
+// The record awaits the poll (dedup.MarkSent): it is not the poll cursor
+// until the poll reaches the post in the hub's order, so posts from other
+// nodes that the hub stored before it are still fetched. A post the hub
+// never gets leaves a row that is seen but never the cursor; a retry sends
+// the same UUID and finds it recorded.
 func (l *Leaf) SendPost(ctx context.Context, msg protocol.Message) error {
-	l.postMu.Lock()
-	defer l.postMu.Unlock()
-	if err := l.SendMessageCtx(ctx, msg); err != nil {
+	data, err := l.signMessage(msg)
+	if err != nil {
 		return err
 	}
 	if err := l.cfg.DedupIndex.MarkSent(l.cfg.Network, msg.OriginNode, msg.MsgUUID); err != nil {
-		slog.Warn("leaf: failed to mark outbound message as seen", "network", l.cfg.Network, "uuid", msg.MsgUUID, "error", err)
+		return fmt.Errorf("leaf: record post before sending: %w", err)
 	}
-	return nil
+	return l.postMessage(ctx, data)
 }
 
 // SendChat sends an inter-BBS chat message to the hub.

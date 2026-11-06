@@ -184,11 +184,13 @@ func (ix *Index) MarkSeen(network, originNode, msgUUID string, localMsgNum *int6
 	return nil
 }
 
-// MarkSent records a post this node sent, as MarkSeen does, but as awaiting
-// the poll: it is seen, so the poll does not import it, and it is not the
-// poll cursor (LastSeen) until the poll reaches it (Passed). The hub may hold
-// posts from other nodes stored before it that the poll has not fetched; a
-// cursor on this post would skip them.
+// MarkSent records a post this node is about to send, as MarkSeen does, but
+// as awaiting the poll: it is seen, so the poll does not import it, and it is
+// not the poll cursor (LastSeen) until the poll reaches it (Passed). The hub
+// may hold posts from other nodes stored before it that the poll has not
+// fetched; a cursor on this post would skip them. It is made before the send
+// (leaf.SendPost), so a post the hub never stores leaves a row that is seen
+// but never the cursor, which does no harm.
 func (ix *Index) MarkSent(network, originNode, msgUUID string) error {
 	_, err := ix.db.Exec(
 		"INSERT OR IGNORE INTO seen_messages (network, origin_node, msg_uuid, awaiting_poll) VALUES (?, ?, ?, 1)",
