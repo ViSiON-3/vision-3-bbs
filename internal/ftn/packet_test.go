@@ -400,3 +400,54 @@ func TestParseBodyTolerantAreaLine(t *testing.T) {
 		t.Errorf("Text = %q, want %q", parsed.Text, "Hello")
 	}
 }
+
+// A name or subject at, or past, its field's size still reads back: the
+// writer leaves room for the NUL that ends it (35 and 71 bytes kept).
+func TestPacketFieldLimitsRoundTrip(t *testing.T) {
+	cases := []struct {
+		name          string
+		to, from, sub string
+		wantTo        string
+		wantFrom      string
+		wantSub       string
+	}{
+		{"fits", strings.Repeat("t", 35), strings.Repeat("f", 35), strings.Repeat("s", 71),
+			strings.Repeat("t", 35), strings.Repeat("f", 35), strings.Repeat("s", 71)},
+		{"one over", strings.Repeat("t", 36), strings.Repeat("f", 36), strings.Repeat("s", 72),
+			strings.Repeat("t", 35), strings.Repeat("f", 35), strings.Repeat("s", 71)},
+		{"far over", strings.Repeat("t", 80), strings.Repeat("f", 80), strings.Repeat("s", 200),
+			strings.Repeat("t", 35), strings.Repeat("f", 35), strings.Repeat("s", 71)},
+		// a multi-byte character is not split at the cut
+		{"utf-8 at the edge", strings.Repeat("t", 34) + "é", "f", strings.Repeat("s", 70) + "é",
+			strings.Repeat("t", 34), "f", strings.Repeat("s", 70)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			hdr := NewPacketHeader(1, 103, 705, 0, 1, 104, 56, 0, "")
+			msg := &PackedMessage{
+				MsgType: 2, OrigNode: 705, DestNode: 56, OrigNet: 103, DestNet: 104,
+				DateTime: FormatFTNDateTime(time.Now()),
+				To:       c.to, From: c.from, Subject: c.sub, Body: "Hello\r",
+			}
+			var buf bytes.Buffer
+			if err := WritePacket(&buf, hdr, []*PackedMessage{msg}); err != nil {
+				t.Fatalf("WritePacket: %v", err)
+			}
+			_, msgs, err := ReadPacket(bytes.NewReader(buf.Bytes()))
+			if err != nil {
+				t.Fatalf("ReadPacket: %v", err)
+			}
+			if len(msgs) != 1 {
+				t.Fatalf("got %d messages, want 1", len(msgs))
+			}
+			got := msgs[0]
+			if got.To != c.wantTo || got.From != c.wantFrom || got.Subject != c.wantSub {
+				t.Errorf("got To %q (%d) From %q (%d) Subject %q (%d)", got.To, len(got.To),
+					got.From, len(got.From), got.Subject, len(got.Subject))
+			}
+			if got.Body != "Hello\r" {
+				t.Errorf("body %q, want %q", got.Body, "Hello\r")
+			}
+		})
+	}
+}

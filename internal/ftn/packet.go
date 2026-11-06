@@ -29,6 +29,13 @@ const CWValidation = 0x0100
 // MaxFieldLen limits null-terminated string fields.
 const MaxFieldLen = 256
 
+// Sizes of a packed message's To/From and Subject fields (FTS-0001),
+// counting the NUL that ends them: a name holds 35 bytes, a subject 71.
+const (
+	NameFieldLen    = 36
+	SubjectFieldLen = 72
+)
+
 // maxPacketBytes caps how much of a .PKT stream ReadPacket will buffer.
 // Typical packets are well under 1MB (arcmail bundles are split by mailers);
 // 16MB is far beyond any legitimate packet and guards against memory
@@ -87,9 +94,9 @@ type PackedMessage struct {
 	Attr     uint16 // Message attribute flags
 	Cost     uint16
 	DateTime string // "DD Mon YY  HH:MM:SS\x00" format
-	To       string // Max 36 chars
-	From     string // Max 36 chars
-	Subject  string // Max 72 chars
+	To       string // Max 35 bytes (NameFieldLen with its NUL)
+	From     string // Max 35 bytes
+	Subject  string // Max 71 bytes (SubjectFieldLen with its NUL)
 	Body     string // Full message body including kludges
 }
 
@@ -276,19 +283,19 @@ func readPackedMessage(data []byte, pos int) (*PackedMessage, int, error) {
 	}
 	msg.DateTime = s
 
-	s, pos, err = readNullTerminated(data, pos, 36)
+	s, pos, err = readNullTerminated(data, pos, NameFieldLen)
 	if err != nil {
 		return nil, pos, fmt.Errorf("to: %w", err)
 	}
 	msg.To = s
 
-	s, pos, err = readNullTerminated(data, pos, 36)
+	s, pos, err = readNullTerminated(data, pos, NameFieldLen)
 	if err != nil {
 		return nil, pos, fmt.Errorf("from: %w", err)
 	}
 	msg.From = s
 
-	s, pos, err = readNullTerminated(data, pos, 72)
+	s, pos, err = readNullTerminated(data, pos, SubjectFieldLen)
 	if err != nil {
 		return nil, pos, fmt.Errorf("subject: %w", err)
 	}
@@ -361,10 +368,11 @@ func writePackedMessage(w io.Writer, msg *PackedMessage) error {
 		return err
 	}
 
-	// Write null-terminated string fields
-	to := util.TruncateBytes(msg.To, 36)
-	from := util.TruncateBytes(msg.From, 36)
-	subject := util.TruncateBytes(msg.Subject, 72)
+	// Write null-terminated string fields, cut to leave room in each field
+	// for its NUL, so the packet reads back (readPackedMessage)
+	to := util.TruncateBytes(msg.To, NameFieldLen-1)
+	from := util.TruncateBytes(msg.From, NameFieldLen-1)
+	subject := util.TruncateBytes(msg.Subject, SubjectFieldLen-1)
 	for _, s := range []string{msg.DateTime, to, from, subject, msg.Body} {
 		if _, err := w.Write(append([]byte(s), 0)); err != nil {
 			return err
