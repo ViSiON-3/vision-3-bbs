@@ -199,6 +199,10 @@ func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
 // area that is gone is nothing to settle: the JAM writer reports the message
 // found, as message 0, and the claim is confirmed.
 func (l *Leaf) store(msg protocol.Message) (bool, error) {
+	// Not while this node is sending a post: the hub may already serve it
+	// here before the send records it (see SendPost).
+	l.postMu.Lock()
+	defer l.postMu.Unlock()
 	ix, network := l.cfg.DedupIndex, l.cfg.Network
 	seen, pending, err := ix.Lookup(network, msg.OriginNode, msg.MsgUUID)
 	if err != nil {
