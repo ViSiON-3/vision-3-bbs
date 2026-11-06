@@ -38,7 +38,7 @@ func registerFS(v3 *goja.Object, eng *Engine) {
 		var data []byte
 		err := withSandbox(sandbox, call.Arguments[0].String(), false, func(root *os.Root, rel string) error {
 			var err error
-			data, err = readCapped(root, rel)
+			data, err = readSandboxFile(root, rel)
 			return err
 		})
 		if err != nil {
@@ -237,10 +237,10 @@ func withSandbox(sandbox, userPath string, create bool, fn func(root *os.Root, r
 	return fn(root, rel)
 }
 
-// readCapped reads the file rel under root for v3.fs.read, refusing one over
+// readSandboxFile reads the file rel under root for v3.fs.read, refusing one over
 // maxFSFileBytes. It reads at most one byte past the cap, so a file that
 // grows while it is read, or a special file with no size, is refused too.
-func readCapped(root *os.Root, rel string) ([]byte, error) {
+func readSandboxFile(root *os.Root, rel string) ([]byte, error) {
 	f, err := root.Open(rel)
 	if err != nil {
 		return nil, err
