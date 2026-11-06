@@ -131,7 +131,7 @@ func (lb *fileLightbar) toggleSysopBar() {
 func (lb *fileLightbar) dispatchCommand(key string, frame *lbFrame) (exit bool, result *user.User, action string, err error) {
 	switch key {
 	case " ": // Space: toggle mark
-		lb.toggleMark()
+		lb.toggleMark(frame)
 
 	case "q":
 		return true, nil, "", nil

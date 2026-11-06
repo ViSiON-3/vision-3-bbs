@@ -116,13 +116,53 @@ func TestFileLightbarSpaceMarkPersists(t *testing.T) {
 	env := lightbarListEnv(t)
 	ids := addDownloadRecords(t, env, "ONE.ZIP", "TWO.ZIP")
 
-	env.runCmd("LISTFILES", env.caller, "", "\x1b[B q")
-	if saved := env.mustDiskUser(env.caller.ID); len(saved.TaggedFileIDs) != 1 || saved.TaggedFileIDs[0] != ids[1] {
+	// The sysop passes the area's download ACS.
+	env.runCmd("LISTFILES", env.sysop, "", "\x1b[B q")
+	if saved := env.mustDiskUser(env.sysop.ID); len(saved.TaggedFileIDs) != 1 || saved.TaggedFileIDs[0] != ids[1] {
 		t.Errorf("saved tags = %v, want [%v]", saved.TaggedFileIDs, ids[1])
 	}
-	env.runCmd("LISTFILES", env.caller, "", "\x1b[B q")
-	if saved := env.mustDiskUser(env.caller.ID); len(saved.TaggedFileIDs) != 0 {
+	env.runCmd("LISTFILES", env.sysop, "", "\x1b[B q")
+	if saved := env.mustDiskUser(env.sysop.ID); len(saved.TaggedFileIDs) != 0 {
 		t.Errorf("saved tags = %v, want none after unmarking", saved.TaggedFileIDs)
+	}
+}
+
+// TestFileLightbarMarkChecks pins that Space marks only under DOWNLOADFILE's
+// checks: a caller who fails the area's download ACS, or whose queue is
+// full, is told why and nothing is marked; a file already marked can still
+// be unmarked.
+func TestFileLightbarMarkChecks(t *testing.T) {
+	env := lightbarListEnv(t)
+	ids := addDownloadRecords(t, env, "ONE.ZIP")
+
+	// The caller (level 10) fails GENERAL's download ACS (s25).
+	r := env.runCmd("LISTFILES", env.caller, "", " q")
+	if !r.has(stripPipes(env.e.Strings().YouCantDownloadHere)) {
+		t.Errorf("no download ACS message:\n%s", r.text())
+	}
+	if saved := env.mustDiskUser(env.caller.ID); len(saved.TaggedFileIDs) != 0 {
+		t.Errorf("caller's tags = %v, want none", saved.TaggedFileIDs)
+	}
+
+	// A mark made before the ACS changed can still be taken off.
+	env.caller.TaggedFileIDs = []uuid.UUID{ids[0]}
+	env.runCmd("LISTFILES", env.caller, "", " q")
+	if saved := env.mustDiskUser(env.caller.ID); len(saved.TaggedFileIDs) != 0 {
+		t.Errorf("caller's tags = %v, want none after unmarking", saved.TaggedFileIDs)
+	}
+
+	// A full queue takes no more.
+	full := make([]uuid.UUID, file.MaxBatchFiles)
+	for i := range full {
+		full[i] = uuid.New()
+	}
+	env.sysop.TaggedFileIDs = full
+	r = env.runCmd("LISTFILES", env.sysop, "", " q")
+	if !r.has(stripPipes(env.e.Strings().FiftyFilesMaximum)) {
+		t.Errorf("no batch limit message:\n%s", r.text())
+	}
+	if n := len(env.sysop.TaggedFileIDs); n != file.MaxBatchFiles {
+		t.Errorf("sysop has %d tags, want %d", n, file.MaxBatchFiles)
 	}
 }
 
