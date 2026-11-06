@@ -479,13 +479,15 @@ func TestService_StartRunsHubAndLeaf(t *testing.T) {
 		t.Errorf("hub message count = %d, want 1", info.MessageCount)
 	}
 
-	// A message the hub refuses is reported and not marked seen.
+	// A message the hub refuses is reported. It was recorded before the
+	// send, as every post is (#947), but only as awaiting the poll: it is
+	// never the poll cursor.
 	bad := BuildWireMessage("testnet", "gen.missing", svc.NodeID(), "General", "Alice", "All", "Hi", "Body", "")
 	if err := svc.SendMessage("testnet", bad); err == nil {
 		t.Error("SendMessage to an area not in the NAL should fail")
 	}
-	if seen, _ := svc.dedupIdx.Seen(bad.Network, bad.OriginNode, bad.MsgUUID); seen {
-		t.Error("a refused message must not be marked seen")
+	if last, _, err := svc.dedupIdx.LastSeen(bad.Network); err != nil || last == bad.MsgUUID {
+		t.Errorf("LastSeen = %q, %v; a refused message must not be the poll cursor", last, err)
 	}
 
 	// Presence is sent in the background; resend until the observer's stream,

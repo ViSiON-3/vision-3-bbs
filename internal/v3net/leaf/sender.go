@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"maps"
 	"net/http"
 	"time"
@@ -90,27 +89,26 @@ func (l *Leaf) SendMessageCtx(ctx context.Context, msg protocol.Message) error {
 	return l.signedPostCtx(ctx, path, data)
 }
 
-// SendPost sends one of this BBS's posts, as SendMessageCtx does, and then
-// records it in the dedup index, so this leaf's poll does not import it
-// back. The hub can serve the post to a poll before its reply to the send
-// arrives, so the send and the record are made under postMu, which the
-// poll's import (store) also takes: the import of the post waits, then
-// finds it recorded. A record that fails is logged; the post was still
-// sent.
+// SendPost records one of this BBS's posts in the dedup index, then sends
+// it as SendMessageCtx does, so this leaf's poll never imports it back.
 //
-// The record awaits the poll (dedup.MarkSent): it does not move the poll
-// cursor until the poll reaches the post in the hub's order, so posts from
-// other nodes that the hub stored before it are still fetched.
+// The record comes first because the hub can store the post and serve it
+// to a poll before the send returns, or store it and still fail the send on
+// our side (a timeout, a dropped connection, an error after the write). A
+// record made only after a successful send misses both, and the poll
+// imports a second copy (#938, #947). If the record can't be made, the post
+// is not sent: the caller keeps it and tries again.
+//
+// The record awaits the poll (dedup.MarkSent): it is not the poll cursor
+// until the poll reaches the post in the hub's order, so posts from other
+// nodes that the hub stored before it are still fetched. A post the hub
+// never gets leaves a row that is seen but never the cursor; a retry sends
+// the same UUID and finds it recorded.
 func (l *Leaf) SendPost(ctx context.Context, msg protocol.Message) error {
-	l.postMu.Lock()
-	defer l.postMu.Unlock()
-	if err := l.SendMessageCtx(ctx, msg); err != nil {
-		return err
-	}
 	if err := l.cfg.DedupIndex.MarkSent(l.cfg.Network, msg.OriginNode, msg.MsgUUID); err != nil {
-		slog.Warn("leaf: failed to mark outbound message as seen", "network", l.cfg.Network, "uuid", msg.MsgUUID, "error", err)
+		return fmt.Errorf("leaf: record post before sending: %w", err)
 	}
-	return nil
+	return l.SendMessageCtx(ctx, msg)
 }
 
 // SendChat sends an inter-BBS chat message to the hub.
