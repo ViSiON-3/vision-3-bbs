@@ -4,8 +4,13 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 )
+
+// v3ScriptRunLimit is the run time limit a v3_script door gives its script.
+// The limit is set in minutes; a test swaps this to reach it in milliseconds.
+var v3ScriptRunLimit = config.DoorConfig.ScriptRunLimit
 
 // v3ScriptRunError is what a v3_script door returns for runErr, a non-nil
 // error from the script engine's Run. A caller hanging up and a script
