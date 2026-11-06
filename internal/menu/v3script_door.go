@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
@@ -86,10 +85,7 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		FileMgr:         ctx.Executor.FileMgr,
 		SessionRegistry: ctx.Executor.SessionRegistry,
 		// The same check as a download from the area (see DOWNLOADFILE).
-		CanDownload: func(a *file.FileArea) bool {
-			return ctx.CurrentUser != nil && (a.ACSDownload == "" ||
-				checkACS(a.ACSDownload, ctx.CurrentUser, ctx.Session, ctx.Terminal, ctx.SessionStartTime))
-		},
+		CanDownload: v3ScriptCanDownload(ctx),
 	}
 
 	eng := scripting.NewEngine(engineCtx, session, cfg, providers)
