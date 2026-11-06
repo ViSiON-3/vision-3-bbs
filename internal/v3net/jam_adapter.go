@@ -21,11 +21,16 @@ func NewJAMAdapter(mgr *message.MessageManager, areaID int) *JAMAdapter {
 }
 
 // WriteMessage writes a V3Net protocol message to the local JAM base.
-// It prepends a V3NETUUID kludge line to the body for UUID recovery and
-// appends the tearline + origin line (matching FTN echomail convention).
+// It prepends the V3NETUUID and V3NETORIGIN kludge lines, the message's
+// identity, to the body for recovery (see FindMessage) and appends the
+// tearline + origin line (matching FTN echomail convention).
 func (a *JAMAdapter) WriteMessage(msg protocol.Message) (int64, error) {
-	// Prepend UUID kludge for recovery if dedup index is lost.
-	body := "\x01V3NETUUID: " + msg.MsgUUID + "\n" + msg.Body
+	// Prepend the identity kludges for recovery if the dedup index is lost.
+	body := message.V3NetUUIDPrefix + msg.MsgUUID + "\n"
+	if msg.OriginNode != "" {
+		body += message.V3NetOriginPrefix + msg.OriginNode + "\n"
+	}
+	body += msg.Body
 
 	// Append tearline and origin so users can see where the message came from.
 	body = AppendV3NetOrigin(body, msg.Tearline, msg.Origin, msg.OriginNode)
@@ -47,7 +52,7 @@ func (a *JAMAdapter) WriteMessage(msg protocol.Message) (int64, error) {
 // FindMessage reports whether the area already holds msg, imported earlier
 // by WriteMessage, and its local message number. See leaf.JAMFinder.
 func (a *JAMAdapter) FindMessage(msg protocol.Message) (int64, bool, error) {
-	n, found, err := a.mgr.FindV3NetMessage(a.areaID, msg.MsgUUID)
+	n, found, err := a.mgr.FindV3NetMessage(a.areaID, msg.MsgUUID, msg.OriginNode)
 	if err != nil {
 		return 0, false, fmt.Errorf("v3net jam: find message: %w", err)
 	}

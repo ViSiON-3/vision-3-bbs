@@ -136,7 +136,8 @@ type pollCursor struct {
 // invalid, fails its author check, belongs to another network, or has been
 // seen. A rejected or unwritable message is logged and skipped, not marked
 // seen, so a genuine copy under the same UUID can still be imported later.
-// It returns an error only for a dedup index failure, which ends the poll.
+// It returns an error for a dedup index failure, or an import it could not
+// settle (see store), which ends the poll.
 // See store for how the write is kept to one copy.
 //
 // A control character in the subject is cleaned rather than refused. The hub
@@ -191,6 +192,10 @@ func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
 // written a second time: the claim keeps the poll cursor before the message,
 // the next poll fetches it again, and the JAM writer is asked whether it
 // already holds it (JAMFinder) before writing.
+//
+// A claim it cannot settle (JAM cannot be checked, or the index cannot be
+// updated) is an error, which ends the poll: a later message would otherwise
+// become the cursor and leave this one behind it.
 func (l *Leaf) store(msg protocol.Message) (bool, error) {
 	ix, network := l.cfg.DedupIndex, l.cfg.Network
 	seen, pending, err := ix.Lookup(network, msg.OriginNode, msg.MsgUUID)
@@ -200,22 +205,19 @@ func (l *Leaf) store(msg protocol.Message) (bool, error) {
 	if seen && !pending {
 		return false, nil
 	}
+	finder, canFind := l.cfg.JAMWriter.(JAMFinder)
 	if pending {
-		finder, ok := l.cfg.JAMWriter.(JAMFinder)
-		if !ok {
+		if !canFind {
 			slog.Warn("leaf: an earlier import of this message did not finish, and the JAM writer cannot check for it; writing it again",
 				"uuid", msg.MsgUUID, "origin_node", msg.OriginNode)
 		} else {
 			localNum, found, err := finder.FindMessage(msg)
 			if err != nil {
-				// Not knowing, leave the claim for the next poll rather
-				// than risk a second copy.
-				slog.Error("leaf: look for an unfinished import in JAM", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode, "error", err)
-				return false, nil
+				return false, fmt.Errorf("leaf: look in JAM for unfinished import %s from %s: %w", msg.MsgUUID, msg.OriginNode, err)
 			}
 			if found {
 				if err := ix.Confirm(network, msg.OriginNode, msg.MsgUUID, localNum); err != nil {
-					slog.Error("leaf: confirm import", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode, "error", err)
+					return false, fmt.Errorf("leaf: confirm import: %w", err)
 				}
 				return false, nil
 			}
@@ -227,15 +229,29 @@ func (l *Leaf) store(msg protocol.Message) (bool, error) {
 	localNum, err := l.cfg.JAMWriter.WriteMessage(msg)
 	if err != nil {
 		slog.Error("leaf: write message to JAM", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode, "error", err)
+		// A write can fail after the message is stored (a failed sync,
+		// say), so look before giving up the claim.
+		if canFind {
+			n, found, ferr := finder.FindMessage(msg)
+			if ferr != nil {
+				return false, fmt.Errorf("leaf: write of %s from %s failed and JAM cannot be checked for it: %w", msg.MsgUUID, msg.OriginNode, ferr)
+			}
+			if found {
+				if err := ix.Confirm(network, msg.OriginNode, msg.MsgUUID, n); err != nil {
+					return false, fmt.Errorf("leaf: confirm import: %w", err)
+				}
+				return true, nil
+			}
+		}
 		if err := ix.Release(network, msg.OriginNode, msg.MsgUUID); err != nil {
-			slog.Error("leaf: release claim", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode, "error", err)
+			return false, fmt.Errorf("leaf: release claim: %w", err)
 		}
 		return false, nil
 	}
 	if err := ix.Confirm(network, msg.OriginNode, msg.MsgUUID, localNum); err != nil {
 		// The claim stays: the next poll fetches the message again and finds
 		// it in JAM rather than writing it twice.
-		slog.Error("leaf: confirm import", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode, "error", err)
+		return false, fmt.Errorf("leaf: confirm import: %w", err)
 	}
 	return true, nil
 }

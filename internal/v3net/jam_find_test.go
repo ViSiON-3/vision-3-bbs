@@ -7,7 +7,8 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
-// The JAM adapter finds a message it imported, by UUID, through the router;
+// The JAM adapter finds a message it imported, by UUID and origin node,
+// through the router;
 // the router reports a tag with no local area as found (there is nothing to
 // write), and an area whose writer cannot look as not found.
 func TestJAMFindMessage(t *testing.T) {
@@ -29,6 +30,12 @@ func TestJAMFindMessage(t *testing.T) {
 	}
 	if n, found, err := router.FindMessage(msg); err != nil || !found || n != wrote {
 		t.Errorf("after import: FindMessage = %d, %v, %v; want %d, true", n, found, err, wrote)
+	}
+
+	other := msg
+	other.OriginNode = "eeee"
+	if _, found, err := router.FindMessage(other); err != nil || found {
+		t.Errorf("same UUID from another node: found = %v, %v; want false", found, err)
 	}
 
 	if n, found, err := router.FindMessage(protocol.Message{AreaTag: "no.such", MsgUUID: "u-1"}); err != nil || !found || n != 0 {

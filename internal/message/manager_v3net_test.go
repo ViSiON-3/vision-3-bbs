@@ -191,8 +191,10 @@ func TestPendingOutbound_EchomailBoundArea(t *testing.T) {
 	}
 }
 
-// FindV3NetMessage finds a V3Net import by its UUID line, not a UUID that
-// only starts the same way, nor a local post that mentions it.
+// FindV3NetMessage finds a V3Net import by its UUID and origin lines: not
+// another node's message under the same UUID, a UUID that only starts the
+// same way, a local post that mentions it, or a legacy import with no origin
+// line (unless no origin is asked for).
 func TestFindV3NetMessage(t *testing.T) {
 	mm := newV3NetTestManager(t)
 	post := func(body string) int {
@@ -203,28 +205,51 @@ func TestFindV3NetMessage(t *testing.T) {
 		}
 		return n
 	}
-	imported := post(V3NetUUIDPrefix + "uuid-1\nfrom elsewhere")
-	post(V3NetUUIDPrefix + "uuid-10\nanother")
-	post("a local post about uuid-2")
-	only := post(V3NetUUIDPrefix + "uuid-3") // a UUID line with no body after it
+	fromA := post(V3NetUUIDPrefix + "uuid-1\n" + V3NetOriginPrefix + "node-a\nfrom elsewhere")
+	fromB := post(V3NetUUIDPrefix + "uuid-1\n" + V3NetOriginPrefix + "node-b\nsame UUID, another node")
+	post(V3NetUUIDPrefix + "uuid-10\n" + V3NetOriginPrefix + "node-a\nanother")
+	post("a local post about uuid-2 from node-a")
+	legacy := post(V3NetUUIDPrefix + "uuid-3\nimported before origin lines")
+	bare := post(V3NetUUIDPrefix + "uuid-4\n" + V3NetOriginPrefix + "node-a") // no body after
 
 	for _, tc := range []struct {
-		uuid  string
-		want  int
-		found bool
+		uuid, origin string
+		want         int
+		found        bool
 	}{
-		{"uuid-1", imported, true},
-		{"uuid-3", only, true},
-		{"uuid-2", 0, false},
-		{"uuid-", 0, false},
-		{"nope", 0, false},
+		{"uuid-1", "node-a", fromA, true},
+		{"uuid-1", "node-b", fromB, true},
+		{"uuid-1", "node-c", 0, false},
+		{"uuid-4", "node-a", bare, true},
+		{"uuid-3", "node-a", 0, false},
+		{"uuid-3", "", legacy, true},
+		{"uuid-2", "node-a", 0, false},
+		{"uuid-", "node-a", 0, false},
+		{"nope", "node-a", 0, false},
 	} {
-		n, found, err := mm.FindV3NetMessage(1, tc.uuid)
+		n, found, err := mm.FindV3NetMessage(1, tc.uuid, tc.origin)
 		if err != nil || found != tc.found || n != tc.want {
-			t.Errorf("FindV3NetMessage(%q) = %d, %v, %v; want %d, %v", tc.uuid, n, found, err, tc.want, tc.found)
+			t.Errorf("FindV3NetMessage(%q, %q) = %d, %v, %v; want %d, %v", tc.uuid, tc.origin, n, found, err, tc.want, tc.found)
 		}
 	}
-	if _, _, err := mm.FindV3NetMessage(99, "uuid-1"); err == nil {
+	if _, _, err := mm.FindV3NetMessage(99, "uuid-1", "node-a"); err == nil {
 		t.Error("FindV3NetMessage in a missing area returned no error")
+	}
+}
+
+// A message FindV3NetMessage cannot read might be the one it looks for, so
+// with no match it reports the read error rather than "not there".
+func TestFindV3NetMessageUnreadable(t *testing.T) {
+	mm := newV3NetTestManager(t)
+	if _, err := mm.AddMessage(1, "Bob", "All", "s", V3NetUUIDPrefix+"uuid-1\n"+V3NetOriginPrefix+"node-a\nhi", ""); err != nil {
+		t.Fatal(err)
+	}
+	area, _ := mm.GetAreaByID(1)
+	jdt := mm.resolveBasePath(area) + ".jdt"
+	if err := os.Truncate(jdt, 0); err != nil {
+		t.Fatal(err)
+	}
+	if n, found, err := mm.FindV3NetMessage(1, "uuid-1", "node-a"); err == nil || found {
+		t.Errorf("FindV3NetMessage over an unreadable message = %d, %v, %v; want an error", n, found, err)
 	}
 }

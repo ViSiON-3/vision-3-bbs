@@ -2,6 +2,7 @@ package message
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -121,10 +122,13 @@ func V3NetBoundAreas(mm *MessageManager, leaves []config.V3NetLeafConfig) func(a
 const v3NetFindWindow = 1000
 
 // FindV3NetMessage looks through the newest messages of the area for one
-// imported from V3Net with msgUUID (its body starting with V3NetUUIDPrefix
-// and the UUID), and returns its number and true if there is one. A message
-// that cannot be read is skipped.
-func (mm *MessageManager) FindV3NetMessage(areaID int, msgUUID string) (int, bool, error) {
+// imported from V3Net as msgUUID from originNode, and returns its number and
+// true if there is one. The import's body starts with its V3NetUUIDPrefix
+// line, followed by a V3NetOriginPrefix line naming originNode; an import
+// from before origin lines were written does not match unless originNode is
+// empty. A message that cannot be read might be the one wanted, so if none
+// matches, the first read error is returned rather than a plain "not there".
+func (mm *MessageManager) FindV3NetMessage(areaID int, msgUUID, originNode string) (int, bool, error) {
 	b, area, err := mm.openBase(areaID)
 	if err != nil {
 		return 0, false, err
@@ -139,18 +143,47 @@ func (mm *MessageManager) FindV3NetMessage(areaID int, msgUUID string) (int, boo
 	if err != nil {
 		return 0, false, err
 	}
-	want := V3NetUUIDPrefix + msgUUID
+	var readErr error
 	for n := count; n >= 1 && n > count-v3NetFindWindow; n-- {
 		msg, err := b.ReadMessage(n)
 		if err != nil {
-			slog.Warn("v3net: cannot read message while looking for an import", "area", area.Tag, "msg", n, "error", err)
+			if !errors.Is(err, jam.ErrNotFound) {
+				slog.Warn("v3net: cannot read message while looking for an import", "area", area.Tag, "msg", n, "error", err)
+				if readErr == nil {
+					readErr = fmt.Errorf("v3net: read message %d of %s: %w", n, area.Tag, err)
+				}
+			}
 			continue
 		}
-		// The kludge line ends the UUID (CR or LF, as the base stores it), so
-		// one UUID that starts another does not match.
-		if rest, ok := strings.CutPrefix(msg.Text, want); ok && (rest == "" || rest[0] == '\r' || rest[0] == '\n') {
+		if isV3NetImport(msg.Text, msgUUID, originNode) {
 			return n, true, nil
 		}
 	}
+	if readErr != nil {
+		return 0, false, readErr
+	}
 	return 0, false, nil
+}
+
+// isV3NetImport reports whether text is the body of the V3Net import
+// msgUUID from originNode: it starts with the UUID line, and one of the
+// kludge lines at its start names the origin (or originNode is empty). Lines
+// end in CR or LF, as the base stores them.
+func isV3NetImport(text, msgUUID, originNode string) bool {
+	lines := strings.FieldsFunc(text, func(r rune) bool { return r == '\r' || r == '\n' })
+	if len(lines) == 0 || lines[0] != V3NetUUIDPrefix+msgUUID {
+		return false
+	}
+	if originNode == "" {
+		return true
+	}
+	for _, line := range lines[1:] {
+		if !strings.HasPrefix(line, "\x01") {
+			break
+		}
+		if line == V3NetOriginPrefix+originNode {
+			return true
+		}
+	}
+	return false
 }
