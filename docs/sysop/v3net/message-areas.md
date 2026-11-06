@@ -130,8 +130,17 @@ while does not lose anything.
 1. The leaf client receives a message via polling or SSE notification
 2. The dedup index is checked — if this message (its origin node and UUID)
    has been seen, it is skipped
-3. The message (with its remote tearline/origin) is written to the local JAM base
-4. The message is recorded in the dedup index
+3. The message is claimed in the dedup index
+4. The message (with its remote tearline/origin) is written to the local JAM base
+5. The claim is confirmed
+
+If the BBS stops between steps 3 and 5, or the confirm fails, the claim is
+left behind. It does not move the poll position, so the next poll fetches the
+message again; the BBS then looks for it in the area's newest 1,000 messages
+by its UUID, and writes it only if it is not there. A message is never
+written twice, and one cut short before its write is not skipped. If the
+write itself fails, the claim is dropped and the message can be imported
+again.
 
 A hub refuses a post whose subject, board name, tearline or origin holds a
 control character, with a 422. A message a hub already holds with one is still
@@ -185,6 +194,7 @@ Users and sysops can propose new areas for a network. See the [NAL documentation
 |---------|-------------------|
 | A post shows `V3NET` but not `V3NET SENT` in the reader | It has not reached the hub yet. The sweep retries every minute; look for `v3net outbound: sending to hub; will retry` in the log. Only the first failure per message is logged at warning level, so a long outage does not flood the log. |
 | `v3net outbound: sent but could not mark as sent` | The hub accepted the post but the local flag could not be written. The next sweep sends it again under the same UUID, which the hub drops as a duplicate, and tries the mark again. Nothing is posted twice. |
+| `leaf: confirm import` or `leaf: look for an unfinished import in JAM` | The dedup index or the message base could not be updated or read after an import. The message is fetched again on the next poll and checked against the area before it is written, so it is not stored twice. |
 | `V3Net leaf: message area not found, skipping` | A subscription names a board tag with no local area. Re-subscribe from the area browser, or create the area with that tag. |
 | Old messages in an area never went out | Expected. Only posts made after an area was bound to a network are sent. |
 | A post from `helper post` never leaves | The BBS must be running with V3Net enabled; `helper` only writes the message. |

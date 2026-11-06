@@ -190,3 +190,41 @@ func TestPendingOutbound_EchomailBoundArea(t *testing.T) {
 		t.Error("MarkMessageSent stamped DateProcessed in an echomail area; the tosser would skip its export")
 	}
 }
+
+// FindV3NetMessage finds a V3Net import by its UUID line, not a UUID that
+// only starts the same way, nor a local post that mentions it.
+func TestFindV3NetMessage(t *testing.T) {
+	mm := newV3NetTestManager(t)
+	post := func(body string) int {
+		t.Helper()
+		n, err := mm.AddMessage(1, "Bob", "All", "s", body, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	imported := post(V3NetUUIDPrefix + "uuid-1\nfrom elsewhere")
+	post(V3NetUUIDPrefix + "uuid-10\nanother")
+	post("a local post about uuid-2")
+	only := post(V3NetUUIDPrefix + "uuid-3") // a UUID line with no body after it
+
+	for _, tc := range []struct {
+		uuid  string
+		want  int
+		found bool
+	}{
+		{"uuid-1", imported, true},
+		{"uuid-3", only, true},
+		{"uuid-2", 0, false},
+		{"uuid-", 0, false},
+		{"nope", 0, false},
+	} {
+		n, found, err := mm.FindV3NetMessage(1, tc.uuid)
+		if err != nil || found != tc.found || n != tc.want {
+			t.Errorf("FindV3NetMessage(%q) = %d, %v, %v; want %d, %v", tc.uuid, n, found, err, tc.want, tc.found)
+		}
+	}
+	if _, _, err := mm.FindV3NetMessage(99, "uuid-1"); err == nil {
+		t.Error("FindV3NetMessage in a missing area returned no error")
+	}
+}

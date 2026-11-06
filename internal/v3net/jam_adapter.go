@@ -44,6 +44,16 @@ func (a *JAMAdapter) WriteMessage(msg protocol.Message) (int64, error) {
 	return int64(msgNum), nil
 }
 
+// FindMessage reports whether the area already holds msg, imported earlier
+// by WriteMessage, and its local message number. See leaf.JAMFinder.
+func (a *JAMAdapter) FindMessage(msg protocol.Message) (int64, bool, error) {
+	n, found, err := a.mgr.FindV3NetMessage(a.areaID, msg.MsgUUID)
+	if err != nil {
+		return 0, false, fmt.Errorf("v3net jam: find message: %w", err)
+	}
+	return int64(n), found, nil
+}
+
 // AppendV3NetOrigin appends a tearline and origin line to the message body,
 // matching the FTN convention:
 //

@@ -114,3 +114,43 @@ func V3NetBoundAreas(mm *MessageManager, leaves []config.V3NetLeafConfig) func(a
 	}
 	return func(areaID int) bool { return bound[areaID] }
 }
+
+// v3NetFindWindow is how many of an area's newest messages FindV3NetMessage
+// looks through. It looks for a message an import may have written just
+// before the BBS stopped, so only the end of the area matters.
+const v3NetFindWindow = 1000
+
+// FindV3NetMessage looks through the newest messages of the area for one
+// imported from V3Net with msgUUID (its body starting with V3NetUUIDPrefix
+// and the UUID), and returns its number and true if there is one. A message
+// that cannot be read is skipped.
+func (mm *MessageManager) FindV3NetMessage(areaID int, msgUUID string) (int, bool, error) {
+	b, area, err := mm.openBase(areaID)
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
+
+	count, err := b.GetMessageCount()
+	if err != nil {
+		return 0, false, err
+	}
+	want := V3NetUUIDPrefix + msgUUID
+	for n := count; n >= 1 && n > count-v3NetFindWindow; n-- {
+		msg, err := b.ReadMessage(n)
+		if err != nil {
+			slog.Warn("v3net: cannot read message while looking for an import", "area", area.Tag, "msg", n, "error", err)
+			continue
+		}
+		// The kludge line ends the UUID (CR or LF, as the base stores it), so
+		// one UUID that starts another does not match.
+		if rest, ok := strings.CutPrefix(msg.Text, want); ok && (rest == "" || rest[0] == '\r' || rest[0] == '\n') {
+			return n, true, nil
+		}
+	}
+	return 0, false, nil
+}

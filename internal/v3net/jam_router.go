@@ -33,3 +33,19 @@ func (r *JAMRouter) WriteMessage(msg protocol.Message) (int64, error) {
 	}
 	return adapter.WriteMessage(msg)
 }
+
+// FindMessage asks the area the message's tag routes to whether it already
+// holds it (see leaf.JAMFinder). A tag with no local area is reported found,
+// as message 0: WriteMessage skips such a message, so there is nothing to
+// write again. An area whose writer cannot look is reported not found.
+func (r *JAMRouter) FindMessage(msg protocol.Message) (int64, bool, error) {
+	adapter, ok := r.adapters[msg.AreaTag]
+	if !ok {
+		return 0, true, nil
+	}
+	finder, ok := adapter.(leaf.JAMFinder)
+	if !ok {
+		return 0, false, nil
+	}
+	return finder.FindMessage(msg)
+}
