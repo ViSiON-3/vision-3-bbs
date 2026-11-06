@@ -6,6 +6,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// MaxBatchFiles is how many files a caller can mark for download at once.
+const MaxBatchFiles = 50
+
 // FileArea defines a logical grouping or directory for files.
 type FileArea struct {
 	ID           int    `json:"id"`

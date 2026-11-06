@@ -672,7 +672,8 @@ v3.message.postPrivate(1, {
 
 ### v3.file
 
-Read-only access to file areas and file listings.
+File areas and file listings, the contents of files and ZIP archives, and
+the caller's batch queue.
 
 | Function | Returns | Description |
 |----------|---------|-------------|
@@ -682,6 +683,84 @@ Read-only access to file areas and file listings.
 | `count(areaID)` | number | File count in an area |
 | `search(query)` | array | Keyword search across all areas |
 | `totalCount()` | number | Total files across all areas |
+| `read(areaID, filename)` | string \| `null` | A file's contents as text. See [read](#v3fileread) |
+| `members(areaID, filename)` | array \| `null` | A ZIP's entries. See [members](#v3filemembers) |
+| `readMember(areaID, filename, member)` | string \| `null` | One ZIP entry's contents as text. See [readMember](#v3filereadmember) |
+| `isMarked(areaID, filename)` | boolean | Whether a file is in the caller's batch queue. See [isMarked](#v3fileismarked) |
+| `mark(areaID, filename)` | boolean | Add a file to the batch queue. See [mark](#v3filemark) |
+| `unmark(areaID, filename)` | boolean | Take a file out of the batch queue. See [unmark](#v3fileunmark) |
+
+In every call that takes a filename, it matches ignoring case, as in the file
+list.
+
+#### v3.file.read
+
+`read(areaID, filename)` returns the whole file as text. The caller must pass
+the area's download ACS, the same check as a download. It returns `null`
+without it, for a file that isn't in the area, or for a file over 4 MB (the
+text pager's limit).
+
+Text comes back one character per byte: CP437 bytes from `0x80` up as their
+Unicode characters (`0xDB` is `█`), and every byte below `0x80` as itself,
+escape sequences included. So ANSI art read this way draws as intended through
+`v3.console.write` on CP437 and UTF-8 terminals alike.
+
+```javascript
+var text = v3.file.read(area.id, "README.TXT");
+if (text !== null) v3.console.write(text);
+```
+
+#### v3.file.members
+
+`members(areaID, filename)` lists a ZIP archive's entries as objects
+`{name, size, date, isDir}`: `size` is the unpacked size in bytes, `date` a
+Unix time. It needs the same download ACS as `read`, and returns `null` for a
+file that isn't a ZIP. Only ZIP archives can be opened; 7z, RAR, ARJ and LHA
+archives return `null`. At most 4096 entries are listed.
+
+#### v3.file.readMember
+
+`readMember(areaID, filename, member)` reads one entry of a ZIP archive, in
+memory, and returns it as text like `read`; nothing is extracted to disk.
+`member` is the entry's name as `members` gives it, matched exactly. It needs
+the same download ACS, and returns `null` for an entry that isn't in the
+archive, a directory, or one that unpacks to more than 4 MB.
+
+```javascript
+var list = v3.file.members(area.id, "ACID0796.ZIP") || [];
+for (var i = 0; i < list.length; i++) {
+    if (/\.ANS$/i.test(list[i].name)) {
+        v3.console.write(v3.file.readMember(area.id, "ACID0796.ZIP", list[i].name));
+        break;
+    }
+}
+```
+
+#### v3.file.isMarked
+
+`isMarked(areaID, filename)` reports whether the file is in the caller's batch
+queue, the files marked for download in the file list. It returns `false` for
+a file that isn't in the area.
+
+#### v3.file.mark
+
+`mark(areaID, filename)` adds the file to the batch queue, where the file list
+shows it as marked and a batch download picks it up. It applies the same
+checks as `DOWNLOADFILE`: the area's download ACS, and at most 50 files in the
+queue. It returns `true` when the file is in the queue afterwards (including
+when it already was) and `false` when it couldn't be added. The change is saved
+to the caller's record at once.
+
+#### v3.file.unmark
+
+`unmark(areaID, filename)` takes the file out of the batch queue and saves the
+change. It returns `true` when the file was in the queue.
+
+```javascript
+// a Tag key in a viewer
+if (v3.file.isMarked(areaID, name)) v3.file.unmark(areaID, name);
+else if (!v3.file.mark(areaID, name)) v3.console.println("Can't tag that one.");
+```
 
 **File area object fields** (returned by `areas`, `area`):
 

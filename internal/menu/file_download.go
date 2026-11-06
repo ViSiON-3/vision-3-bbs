@@ -12,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -113,7 +114,7 @@ func (e *MenuExecutor) downloadLoop(
 				return false
 			}
 		}
-		if len(currentUser.TaggedFileIDs) >= 50 {
+		if len(currentUser.TaggedFileIDs) >= file.MaxBatchFiles {
 			e.writeString(terminal, outputMode, e.Strings().FiftyFilesMaximum)
 			uiPause(1 * time.Second)
 			return false

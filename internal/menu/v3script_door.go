@@ -84,6 +84,8 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		MessageMgr:      ctx.Executor.MessageMgr,
 		FileMgr:         ctx.Executor.FileMgr,
 		SessionRegistry: ctx.Executor.SessionRegistry,
+		// The same check as a download from the area (see DOWNLOADFILE).
+		CanDownload: v3ScriptCanDownload(ctx),
 	}
 
 	eng := scripting.NewEngine(engineCtx, session, cfg, providers)

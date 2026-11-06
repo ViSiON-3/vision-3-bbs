@@ -81,6 +81,8 @@ func registerFile(v3 *goja.Object, eng *Engine) {
 		return vm.ToValue(mgr.GetTotalFileCount())
 	})
 
+	registerFileRead(obj, eng)
+	registerFileMark(obj, eng)
 	jsutil.Set(v3, "file", obj)
 }
 

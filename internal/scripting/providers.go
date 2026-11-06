@@ -16,4 +16,8 @@ type Providers struct {
 	MessageMgr      *message.MessageManager
 	FileMgr         *file.FileManager
 	SessionRegistry *session.SessionRegistry
+	// CanDownload reports whether the caller may download from an area,
+	// by its download ACS. v3.file.read, members, readMember and mark need
+	// it; nil means no area is readable or markable.
+	CanDownload func(*file.FileArea) bool
 }
