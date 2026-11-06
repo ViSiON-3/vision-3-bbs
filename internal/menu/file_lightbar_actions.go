@@ -38,18 +38,47 @@ func toggleTaggedID(taggedIDs []uuid.UUID, fileID uuid.UUID) []uuid.UUID {
 
 // toggleMark toggles whether the selected file is tagged for download,
 // saves the change to the user record, and redraws just the toggled row.
-func (lb *fileLightbar) toggleMark() {
-	if len(lb.allFiles) > 0 {
-		fileID := lb.allFiles[lb.selectedIndex].ID
-		lb.currentUser.TaggedFileIDs = toggleTaggedID(lb.currentUser.TaggedFileIDs, fileID)
-		if err := lb.userManager.UpdateUser(lb.currentUser); err != nil {
-			slog.Error("failed to save user after tag toggle", "node", lb.nodeNumber, "error", err)
-		}
-		// Redraw just the toggled row to show/hide the mark.
-		if row, h := lb.screenRowForFile(lb.selectedIndex); row >= 0 {
-			_ = lb.writeFileRow(row, lb.selectedIndex, true, h)
+// Marking takes DOWNLOADFILE's checks (markRefusal); one it fails shows its
+// message in the footer and leaves the file unmarked. Unmarking always works.
+func (lb *fileLightbar) toggleMark(frame *lbFrame) {
+	if len(lb.allFiles) == 0 {
+		return
+	}
+	fileID := lb.allFiles[lb.selectedIndex].ID
+	if !lb.isFileTagged(fileID) {
+		if msg := lb.markRefusal(); msg != "" {
+			lb.beginFooterPrompt()
+			lb.errMsgPause(msg)
+			lb.endFooterPrompt()
+			frame.needFullRedraw = true
+			return
 		}
 	}
+	lb.currentUser.TaggedFileIDs = toggleTaggedID(lb.currentUser.TaggedFileIDs, fileID)
+	if err := lb.userManager.UpdateUser(lb.currentUser); err != nil {
+		slog.Error("failed to save user after tag toggle", "node", lb.nodeNumber, "error", err)
+	}
+	// Redraw just the toggled row to show/hide the mark.
+	if row, h := lb.screenRowForFile(lb.selectedIndex); row >= 0 {
+		_ = lb.writeFileRow(row, lb.selectedIndex, true, h)
+	}
+}
+
+// markRefusal is why a file in this area can't be added to the caller's
+// batch queue, or "" if it can: the checks DOWNLOADFILE's tryAddFile makes,
+// the area's download ACS and the queue's limit (file.MaxBatchFiles). The
+// list ACS was checked when the area was opened.
+func (lb *fileLightbar) markRefusal() string {
+	if lb.area == nil {
+		return lb.e.Strings().FileAreaNotFound
+	}
+	if lb.area.ACSDownload != "" && !checkACS(lb.area.ACSDownload, lb.currentUser, lb.s, lb.terminal, lb.sessionStartTime) {
+		return lb.e.Strings().YouCantDownloadHere
+	}
+	if len(lb.currentUser.TaggedFileIDs) >= file.MaxBatchFiles {
+		return lb.e.Strings().FiftyFilesMaximum
+	}
+	return ""
 }
 
 // viewFile displays the selected file — the ziplab viewer for supported
