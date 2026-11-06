@@ -97,6 +97,9 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		subject := jsString(opts, "subject", "")
 		body := jsString(opts, "body", "")
 		replyTo := jsString(opts, "replyTo", "")
+		if err := checkPost("v3.message.post", to, subject, body, isNetmailArea(mgr, areaID)); err != nil {
+			panic(vm.NewGoError(err))
+		}
 
 		// Signed as the message reader signs a post: the real name where the
 		// area requires one. A missing area is left for AddMessage to report.
@@ -125,6 +128,9 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		subject := jsString(opts, "subject", "")
 		body := jsString(opts, "body", "")
 		replyTo := jsString(opts, "replyTo", "")
+		if err := checkPost("v3.message.postPrivate", to, subject, body, isNetmailArea(mgr, areaID)); err != nil {
+			panic(vm.NewGoError(err))
+		}
 
 		to, err := privateRecipient(mgr, eng.providers.UserMgr, areaID, to)
 		if err != nil {
@@ -204,4 +210,31 @@ func displayMessageToJS(vm *goja.Runtime, msg *message.DisplayMessage) goja.Valu
 	jsutil.Set(obj, "isPrivate", msg.IsPrivate)
 	jsutil.Set(obj, "areaID", msg.AreaID)
 	return obj
+}
+
+// checkPost returns a limitError when a message a script posts with call has
+// a To, subject or body over its limit. In a netmail area a To of
+// "name@zone:net/node" is split on export, so only the name counts; anywhere
+// else the whole To goes into the packet and counts.
+func checkPost(call, to, subject, body string, netmail bool) error {
+	name := to
+	if netmail {
+		if n, addr := message.SplitNetmailTo(to); addr != "" {
+			name = n
+		}
+	}
+	if err := checkChars(call, "to", name, maxToChars); err != nil {
+		return err
+	}
+	if err := checkChars(call, "subject", subject, maxSubjectChars); err != nil {
+		return err
+	}
+	return checkBytes(call, "body", len(body), maxMessageBodyBytes)
+}
+
+// isNetmailArea reports whether areaID is a netmail area. A missing area is
+// not: AddMessage reports it.
+func isNetmailArea(mgr *message.MessageManager, areaID int) bool {
+	area, ok := mgr.GetAreaByID(areaID)
+	return ok && jam.DetermineMessageType(area.AreaType, area.EchoTag).IsNetmail()
 }

@@ -206,7 +206,7 @@ func TestDataStoreInvalidDestinationPreservesContents(t *testing.T) {
 		t.Fatal(err)
 	}
 	ds := dataStore{path: path}
-	if err := ds.saveFile(map[string]any{"k": 1}); err == nil {
+	if err := ds.saveFile(map[string]any{"k": 1}, "v3.data.set"); err == nil {
 		t.Fatal("replacement unexpectedly succeeded")
 	}
 	entries, err := os.ReadDir(dir)

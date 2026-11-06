@@ -73,6 +73,9 @@ func registerNodes(v3 *goja.Object, eng *Engine) {
 		}
 		nodeNum := int(call.Arguments[0].ToInteger())
 		msg := call.Arguments[1].String()
+		if err := checkChars("v3.nodes.send", "the page", msg, maxPageChars); err != nil {
+			panic(vm.NewGoError(err))
+		}
 
 		target := registry.Get(nodeNum)
 		if target == nil {
@@ -90,6 +93,9 @@ func registerNodes(v3 *goja.Object, eng *Engine) {
 			return goja.Undefined()
 		}
 		msg := call.Arguments[0].String()
+		if err := checkChars("v3.nodes.broadcast", "the page", msg, maxPageChars); err != nil {
+			panic(vm.NewGoError(err))
+		}
 		formatted := fmt.Sprintf("[Node %d - %s] %s", eng.session.NodeNumber, eng.session.UserHandle, msg)
 
 		sessions := registry.ListActive()

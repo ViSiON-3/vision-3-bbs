@@ -1,7 +1,10 @@
 package scripting
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"math"
 	"os"
 	"path/filepath"
 
@@ -35,7 +38,7 @@ func registerFS(v3 *goja.Object, eng *Engine) {
 		var data []byte
 		err := withSandbox(sandbox, call.Arguments[0].String(), false, func(root *os.Root, rel string) error {
 			var err error
-			data, err = root.ReadFile(rel)
+			data, err = readCapped(root, rel)
 			return err
 		})
 		if err != nil {
@@ -51,6 +54,9 @@ func registerFS(v3 *goja.Object, eng *Engine) {
 			throw(errMissingArgs("write", "path, content"))
 		}
 		content := []byte(call.Arguments[1].String())
+		if err := checkBytes("v3.fs.write", "content", len(content), maxFSFileBytes); err != nil {
+			throw(err)
+		}
 		err := withSandbox(sandbox, call.Arguments[0].String(), true, func(root *os.Root, rel string) error {
 			if err := root.MkdirAll(filepath.Dir(rel), 0o755); err != nil {
 				return err
@@ -70,12 +76,23 @@ func registerFS(v3 *goja.Object, eng *Engine) {
 			throw(errMissingArgs("append", "path, content"))
 		}
 		content := call.Arguments[1].String()
+		if err := checkBytes("v3.fs.append", "content", len(content), maxFSFileBytes); err != nil {
+			throw(err)
+		}
 		err := withSandbox(sandbox, call.Arguments[0].String(), true, func(root *os.Root, rel string) error {
 			if err := root.MkdirAll(filepath.Dir(rel), 0o755); err != nil {
 				return err
 			}
 			f, err := root.OpenFile(rel, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			if err != nil {
+				return err
+			}
+			info, err := f.Stat()
+			if err == nil {
+				err = checkBytes("v3.fs.append", "the file after appending", int(min(info.Size()+int64(len(content)), math.MaxInt)), maxFSFileBytes)
+			}
+			if err != nil {
+				_ = f.Close() // nothing written yet
 				return err
 			}
 			if _, err := f.WriteString(content); err != nil {
@@ -125,10 +142,15 @@ func registerFS(v3 *goja.Object, eng *Engine) {
 			if err != nil {
 				return err
 			}
-			entries, err := d.ReadDir(-1)
+			// One past the cap tells an oversized directory apart without
+			// reading all of it.
+			entries, err := d.ReadDir(maxFSDirEntries + 1)
 			_ = d.Close() // read-only handle; nothing to flush
-			if err != nil {
+			if err != nil && !errors.Is(err, io.EOF) {
 				return err
+			}
+			if len(entries) > maxFSDirEntries {
+				return fmt.Errorf("v3.fs.list: %q has more than %d entries, the most one call returns", dir, maxFSDirEntries)
 			}
 			for i, entry := range entries {
 				item := vm.NewObject()
@@ -213,4 +235,26 @@ func withSandbox(sandbox, userPath string, create bool, fn func(root *os.Root, r
 	}
 	defer func() { _ = root.Close() }() // directory handle; close error is not actionable
 	return fn(root, rel)
+}
+
+// readCapped reads the file rel under root for v3.fs.read, refusing one over
+// maxFSFileBytes. It reads at most one byte past the cap, so a file that
+// grows while it is read, or a special file with no size, is refused too.
+func readCapped(root *os.Root, rel string) ([]byte, error) {
+	f, err := root.Open(rel)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }() // read-only handle; nothing to flush
+	if info, err := f.Stat(); err == nil && info.Mode().IsRegular() && info.Size() > maxFSFileBytes {
+		return nil, checkBytes("v3.fs.read", "the file", int(min(info.Size(), math.MaxInt)), maxFSFileBytes)
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxFSFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxFSFileBytes {
+		return nil, fmt.Errorf("v3.fs.read: the file is over the %s limit", formatBytes(maxFSFileBytes))
+	}
+	return data, nil
 }
