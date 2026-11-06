@@ -20,4 +20,8 @@ type Providers struct {
 	// by its download ACS. v3.file.read, members, readMember and mark need
 	// it; nil means no area is readable or markable.
 	CanDownload func(*file.FileArea) bool
+	// CanList reports whether the caller may see an area and its files, by
+	// its list ACS. v3.file.areas, area, list, count, search and totalCount
+	// leave out the areas it refuses; nil means no area is visible.
+	CanList func(*file.FileArea) bool
 }

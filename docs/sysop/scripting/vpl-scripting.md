@@ -708,12 +708,12 @@ the caller's batch queue.
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `areas()` | array | List all file areas |
+| `areas()` | array | List the file areas the caller can see |
 | `area(tag)` | object \| `null` | Get a file area by tag |
 | `list(areaID)` | array | List files in an area |
 | `count(areaID)` | number | File count in an area |
-| `search(query)` | array | Keyword search across all areas |
-| `totalCount()` | number | Total files across all areas |
+| `search(query)` | array | Keyword search across the areas the caller can see |
+| `totalCount()` | number | Total files across the areas the caller can see |
 | `read(areaID, filename)` | string \| `null` | A file's contents as text. See [read](#v3fileread) |
 | `members(areaID, filename)` | array \| `null` | A ZIP's entries. See [members](#v3filemembers) |
 | `readMember(areaID, filename, member)` | string \| `null` | One ZIP entry's contents as text. See [readMember](#v3filereadmember) |
@@ -723,6 +723,11 @@ the caller's batch queue.
 
 In every call that takes a filename, it matches ignoring case, as in the file
 list.
+
+A script sees only the areas the caller passes the list ACS of, as in the file
+area menus. An area hidden from the caller is left out of `areas()`,
+`search()` and `totalCount()`; `area()` returns `null` for it, `list()` an
+empty array and `count()` 0, the same as for an area that doesn't exist.
 
 #### v3.file.read
 

@@ -213,11 +213,13 @@ func TestMessageObject(t *testing.T) {
 	}
 }
 
-// TestFileObject lists and searches file areas through v3.file.
-func TestFileObject(t *testing.T) {
+// fileObjectManager builds two areas: UTILS (1) with PKZIP.ZIP and
+// LIST.ZIP, and GAMES (2), list ACS s100, with DOOM.ZIP.
+func fileObjectManager(t *testing.T) *file.FileManager {
+	t.Helper()
 	dataDir, cfgDir := t.TempDir(), t.TempDir()
 	areas := `[{"id": 1, "tag": "UTILS", "name": "Utilities", "description": "Tools", "path": "utils", "conference_id": 3},
-	           {"id": 2, "tag": "GAMES", "name": "Games", "path": "games"}]`
+	           {"id": 2, "tag": "GAMES", "name": "Games", "path": "games", "acs_list": "s100"}]`
 	if err := os.WriteFile(filepath.Join(cfgDir, "file_areas.json"), []byte(areas), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +237,47 @@ func TestFileObject(t *testing.T) {
 			t.Fatalf("AddFileRecord: %v", err)
 		}
 	}
-	h := newHarness(t, harnessOpts{providers: &Providers{FileMgr: fm}})
+	return fm
+}
+
+// An area hidden from the caller by its list ACS is left out of every
+// listing call, as if it didn't exist; no CanList hides every area.
+func TestFileObjectHidesAreas(t *testing.T) {
+	fm := fileObjectManager(t)
+	tests := []struct{ expr, want string }{
+		{`v3.file.areas().map(function(a){return a.tag}).join(",")`, "UTILS"},
+		{`String(v3.file.area("GAMES"))`, "null"},
+		{`v3.file.area("UTILS").tag`, "UTILS"},
+		{`String(v3.file.list(2).length)`, "0"},
+		{`String(v3.file.count(2))`, "0"},
+		{`String(v3.file.count(1))`, "2"},
+		{`String(v3.file.search("zip").length)`, "2"},
+		{`String(v3.file.search("game").length)`, "0"},
+		{`String(v3.file.totalCount())`, "2"},
+	}
+	visible := func(a *file.FileArea) bool { return a.ACSList == "" }
+	h := newHarness(t, harnessOpts{providers: &Providers{FileMgr: fm, CanList: visible}})
+	for _, tt := range tests {
+		if got := h.eval(tt.expr).String(); got != tt.want {
+			t.Errorf("%s = %q, want %q", tt.expr, got, tt.want)
+		}
+	}
+
+	none := newHarness(t, harnessOpts{providers: &Providers{FileMgr: fm}})
+	for _, expr := range []string{
+		`String(v3.file.areas().length)`, `String(v3.file.list(1).length)`,
+		`String(v3.file.search("zip").length)`, `String(v3.file.totalCount())`,
+	} {
+		if got := none.eval(expr).String(); got != "0" {
+			t.Errorf("no CanList: %s = %q, want 0", expr, got)
+		}
+	}
+}
+
+// TestFileObject lists and searches file areas through v3.file.
+func TestFileObject(t *testing.T) {
+	fm := fileObjectManager(t)
+	h := newHarness(t, harnessOpts{providers: &Providers{FileMgr: fm, CanList: func(*file.FileArea) bool { return true }}})
 
 	tests := []struct{ expr, want string }{
 		{`v3.file.areas().map(function(a){return a.id+":"+a.tag}).sort().join(",")`, "1:UTILS,2:GAMES"},
