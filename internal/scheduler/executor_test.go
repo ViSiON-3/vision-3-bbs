@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
@@ -11,6 +12,45 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
+
+// TestMain lets a copy of the test binary stand in for an event's process and
+// for the child it leaves behind; see orphanEnv.
+func TestMain(m *testing.M) {
+	switch os.Getenv(orphanEnv) {
+	case "event":
+		orphanEvent()
+	case "child":
+		time.Sleep(30 * time.Second)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+// orphanEnv tells a copy of the test binary which part it plays for
+// TestExecuteEvent_OrphanedChildDoesNotBlockCompletion: "event" is the
+// process executeEvent runs, "child" the one it leaves behind.
+const orphanEnv = "VISION_SCHEDULER_TEST_ORPHAN"
+
+// orphanEvent is the event's process. It starts a child that inherits its
+// stdout and sleeps, prints the child's pid for the test to kill, and exits
+// at once, leaving the child holding the event's output pipe.
+func orphanEvent() {
+	self, err := os.Executable()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	child := exec.Command(self)
+	child.Env = append(os.Environ(), orphanEnv+"=child")
+	child.Stdout = os.Stdout
+	child.Stderr = os.Stderr
+	if err := child.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Printf("started %d\n", child.Process.Pid)
+	os.Exit(0)
+}
 
 // testEventTimeout is the timeout for events that are expected to finish on
 // their own. It only has to outlast a slow CI runner: a shell on the Windows
@@ -224,17 +264,25 @@ func TestPlaceholderSubstitutionInCommand(t *testing.T) {
 // exited too, holding the event's concurrency slot and running-event mark for
 // however long the orphan lived, and a timeout kill did not help because it
 // reaches only the process we started.
+//
+// The event and its child are copies of this test binary (see TestMain), so
+// the pid the event prints is the child's own on every OS. The event used to
+// be a shell running "sleep 30 &" and printing $!, which under the MSYS
+// shell on the Windows runner is not a Windows pid: the child did not hold
+// the pipe there, so the test proved nothing, and killing that number twice
+// ended the test binary itself with no output (#930).
 func TestExecuteEvent_OrphanedChildDoesNotBlockCompletion(t *testing.T) {
 	s := &Scheduler{}
 
-	sleep := lookPath(t, "sleep") // resolved, so a missing sleep skips rather than passing vacuously
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
 	event := config.EventConfig{
-		ID:      "test_orphan",
-		Name:    "Test Orphaned Child",
-		Command: lookPath(t, "sh"),
-		// The shell exits at once; the sleep keeps stdout open for 30s. Its
-		// PID is printed so the test can kill it rather than leak it.
-		Args: []string{"-c", sleep + " 30 & echo started $!"},
+		ID:              "test_orphan",
+		Name:            "Test Orphaned Child",
+		Command:         self,
+		EnvironmentVars: map[string]string{orphanEnv: "event"},
 	}
 
 	start := time.Now()
@@ -242,7 +290,7 @@ func TestExecuteEvent_OrphanedChildDoesNotBlockCompletion(t *testing.T) {
 	duration := time.Since(start)
 
 	if !result.Success {
-		t.Errorf("the shell exited 0, so the event should succeed: exit=%d err=%v", result.ExitCode, result.Error)
+		t.Errorf("the event's process exited 0, so the event should succeed: exit=%d err=%v", result.ExitCode, result.Error)
 	}
 	fields := strings.Fields(result.Output)
 	if len(fields) != 2 || fields[0] != "started" {
@@ -250,10 +298,16 @@ func TestExecuteEvent_OrphanedChildDoesNotBlockCompletion(t *testing.T) {
 	}
 	pid, err := strconv.Atoi(fields[1])
 	if err != nil {
-		t.Fatalf("shell did not print the sleep's pid: %q", result.Output)
+		t.Fatalf("the event did not print its child's pid: %q", result.Output)
 	}
 	if p, err := os.FindProcess(pid); err == nil {
 		_ = p.Kill() // do not leak the orphan past the test
+	}
+	// The child held the pipe, so the run lasted the wait delay and no
+	// longer: shorter means the scenario never arose and the test proved
+	// nothing, longer means the orphan held the event open.
+	if duration < outputWaitDelay {
+		t.Errorf("event took %v; the orphaned child did not hold its output open", duration)
 	}
 	if duration > outputWaitDelay+5*time.Second {
 		t.Errorf("event took %v; the orphaned child must not hold it past the wait delay", duration)
