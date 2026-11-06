@@ -177,3 +177,30 @@ func TestSendPostUnrecordedIsNotSent(t *testing.T) {
 		t.Error("the hub got the post, want it not sent")
 	}
 }
+
+// A post signing refuses, here one naming another node as its origin, is
+// neither recorded nor sent: a record would make the poll skip that node's
+// genuine message with the same UUID.
+func TestSendPostForeignOriginNotRecorded(t *testing.T) {
+	hub := &postingHub{sinceHub: &sinceHub{}}
+	ts := httptest.NewServer(hub)
+	t.Cleanup(ts.Close)
+	w := &storeWriter{}
+	l, ix := setupLeaf(t, ts.URL, w)
+
+	foreign := testMessage(uA) // OriginNode is another node's
+	if err := l.SendPost(context.Background(), foreign); err == nil {
+		t.Fatal("SendPost with a foreign origin succeeded, want an error")
+	}
+	if seen, _, err := ix.Lookup("testnet", foreign.OriginNode, uA); err != nil || seen {
+		t.Errorf("foreign post: seen=%v err=%v; want not recorded", seen, err)
+	}
+	if hub.holds(uA) {
+		t.Error("the hub got the post, want it not sent")
+	}
+
+	// The other node's genuine message with that UUID is imported.
+	hub.add(foreign)
+	pollOK(t, l)
+	wantStored(t, w, uA)
+}
