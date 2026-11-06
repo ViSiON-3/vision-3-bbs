@@ -647,8 +647,8 @@ var ErrNoLeaf = errors.New("v3net: no leaf configured for network")
 // SendMessage sends a message to the hub for the given network. It returns
 // ErrNoLeaf (wrapped with the network name) when no leaf is configured for
 // that network, so the caller can keep the message for a later attempt.
-// Also marks the message as seen in the dedup index so the local leaf
-// does not re-import it when polling.
+// The leaf records the sent message in the dedup index, so it is not
+// imported back when polling (leaf.SendPost).
 func (s *Service) SendMessage(network string, msg protocol.Message) error {
 	s.mu.RLock()
 	run, ok := s.leafByNetwork[network]
@@ -656,14 +656,7 @@ func (s *Service) SendMessage(network string, msg protocol.Message) error {
 	if !ok {
 		return fmt.Errorf("%w %q", ErrNoLeaf, network)
 	}
-	if err := run.l.SendMessage(msg); err != nil {
-		return err
-	}
-	// Mark as seen so our own leaf won't write it back to JAM.
-	if err := s.dedupIdx.MarkSeen(network, msg.OriginNode, msg.MsgUUID, nil); err != nil {
-		slog.Warn("v3net: failed to mark outbound message as seen", "uuid", msg.MsgUUID, "error", err)
-	}
-	return nil
+	return run.l.SendPost(context.Background(), msg)
 }
 
 // SendLogon notifies all connected hubs of a user logon.

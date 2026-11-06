@@ -61,6 +61,13 @@ type Leaf struct {
 	// refused remembers which refused messages were already logged at warn.
 	refused refusedLog
 
+	// postMu orders this node's posts against imports (SendPost, store):
+	// a post holds it from sending until it is recorded in the dedup index,
+	// and an import holds it from its dedup lookup until the message is
+	// settled, so a poll that fetches the post while it is being sent
+	// cannot import it as a second copy.
+	postMu sync.Mutex
+
 	// central is the leaf's V3Net Central state (central.go).
 	central centralState
 	// sseConnected is set while the event stream is open.

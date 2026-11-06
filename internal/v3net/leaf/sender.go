@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"net/http"
 	"time"
@@ -87,6 +88,25 @@ func (l *Leaf) SendMessageCtx(ctx context.Context, msg protocol.Message) error {
 	}
 	path := fmt.Sprintf("/v3net/v1/%s/messages", l.cfg.Network)
 	return l.signedPostCtx(ctx, path, data)
+}
+
+// SendPost sends one of this BBS's posts, as SendMessageCtx does, and then
+// records it in the dedup index, so this leaf's poll does not import it
+// back. The hub can serve the post to a poll before its reply to the send
+// arrives, so the send and the record are made under postMu, which the
+// poll's import (store) also takes: the import of the post waits, then
+// finds it recorded. A record that fails is logged; the post was still
+// sent.
+func (l *Leaf) SendPost(ctx context.Context, msg protocol.Message) error {
+	l.postMu.Lock()
+	defer l.postMu.Unlock()
+	if err := l.SendMessageCtx(ctx, msg); err != nil {
+		return err
+	}
+	if err := l.cfg.DedupIndex.MarkSeen(l.cfg.Network, msg.OriginNode, msg.MsgUUID, nil); err != nil {
+		slog.Warn("leaf: failed to mark outbound message as seen", "network", l.cfg.Network, "uuid", msg.MsgUUID, "error", err)
+	}
+	return nil
 }
 
 // SendChat sends an inter-BBS chat message to the hub.
