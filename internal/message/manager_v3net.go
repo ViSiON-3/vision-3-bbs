@@ -166,9 +166,10 @@ func (mm *MessageManager) FindV3NetMessage(areaID int, msgUUID, originNode strin
 }
 
 // isV3NetImport reports whether text is the body of the V3Net import
-// msgUUID from originNode: it starts with the UUID line, and one of the
-// kludge lines at its start names the origin (or originNode is empty). Lines
-// end in CR or LF, as the base stores them.
+// msgUUID from originNode: it starts with the UUID line, and the line after
+// it names the origin (or originNode is empty). JAMAdapter.WriteMessage puts
+// the origin there; one further down could be part of another node's body.
+// Lines end in CR or LF, as the base stores them.
 func isV3NetImport(text, msgUUID, originNode string) bool {
 	lines := strings.FieldsFunc(text, func(r rune) bool { return r == '\r' || r == '\n' })
 	if len(lines) == 0 || lines[0] != V3NetUUIDPrefix+msgUUID {
@@ -177,13 +178,5 @@ func isV3NetImport(text, msgUUID, originNode string) bool {
 	if originNode == "" {
 		return true
 	}
-	for _, line := range lines[1:] {
-		if !strings.HasPrefix(line, "\x01") {
-			break
-		}
-		if line == V3NetOriginPrefix+originNode {
-			return true
-		}
-	}
-	return false
+	return len(lines) > 1 && lines[1] == V3NetOriginPrefix+originNode
 }

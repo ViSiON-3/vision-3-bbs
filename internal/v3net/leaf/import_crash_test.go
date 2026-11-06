@@ -24,6 +24,7 @@ type storeWriter struct {
 	failOnce   string // UUID whose next write returns an error
 	failStored string // UUID whose next write stores it, then returns an error
 	findErr    error  // returned by FindMessage while set
+	gone       string // UUID whose area is gone: writes fail, FindMessage reports message 0
 	findCalls  int
 }
 
@@ -31,6 +32,8 @@ func (w *storeWriter) WriteMessage(msg protocol.Message) (int64, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	switch msg.MsgUUID {
+	case w.gone:
+		return 0, errors.New("area not found")
 	case w.stopBefore:
 		w.stopBefore = ""
 		panic(errStopped)
@@ -56,6 +59,9 @@ func (w *storeWriter) FindMessage(msg protocol.Message) (int64, bool, error) {
 	w.findCalls++
 	if w.findErr != nil {
 		return 0, false, w.findErr
+	}
+	if msg.MsgUUID == w.gone {
+		return 0, true, nil
 	}
 	for i, m := range w.messages {
 		if m.MsgUUID == msg.MsgUUID && m.OriginNode == msg.OriginNode {
@@ -243,4 +249,42 @@ func TestImportWriteErrorAfterStoreIsConfirmed(t *testing.T) {
 	}
 	pollOK(t, l)
 	wantStored(t, w, uA)
+}
+
+// When the write fails and JAM cannot be checked either, the claim stays and
+// the poll stops; once JAM can be checked, the message is written once and
+// the poll goes on.
+func TestImportWriteAndFindBothFail(t *testing.T) {
+	_, ts := newSinceHub(t, testMessage(uA), testMessage(uB))
+	w := &storeWriter{failOnce: uA, findErr: errors.New("disk read error")}
+	l, ix := setupLeaf(t, ts.URL, w)
+
+	if _, err := l.Poll(context.Background()); err == nil {
+		t.Fatal("poll returned no error with a write and a check both failing")
+	}
+	wantStored(t, w)
+	if seen, pending, _ := ix.Lookup("testnet", "test.example.net", uA); !seen || !pending {
+		t.Errorf("a: seen=%v pending=%v; want the claim kept", seen, pending)
+	}
+	w.mu.Lock()
+	w.findErr = nil
+	w.mu.Unlock()
+	pollOK(t, l)
+	wantStored(t, w, uA, uB)
+}
+
+// A message whose area is gone is nothing to settle: its claim is confirmed
+// and the poll goes on to the next message.
+func TestImportAreaGoneIsSettled(t *testing.T) {
+	_, ts := newSinceHub(t, testMessage(uA), testMessage(uB))
+	w := &storeWriter{gone: uA}
+	l, ix := setupLeaf(t, ts.URL, w)
+
+	if n, err := l.Poll(context.Background()); err != nil || n != 1 {
+		t.Fatalf("poll = %d, %v; want 1 imported and no error", n, err)
+	}
+	wantStored(t, w, uB)
+	if seen, pending, _ := ix.Lookup("testnet", "test.example.net", uA); !seen || pending {
+		t.Errorf("a: seen=%v pending=%v; want confirmed", seen, pending)
+	}
 }

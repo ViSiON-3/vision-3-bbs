@@ -194,8 +194,10 @@ func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
 // already holds it (JAMFinder) before writing.
 //
 // A claim it cannot settle (JAM cannot be checked, or the index cannot be
-// updated) is an error, which ends the poll: a later message would otherwise
-// become the cursor and leave this one behind it.
+// updated) is an error, logged at error level, which ends the poll: a later
+// message would otherwise become the cursor and leave this one behind it. An
+// area that is gone is nothing to settle: the JAM writer reports the message
+// found, as message 0, and the claim is confirmed.
 func (l *Leaf) store(msg protocol.Message) (bool, error) {
 	ix, network := l.cfg.DedupIndex, l.cfg.Network
 	seen, pending, err := ix.Lookup(network, msg.OriginNode, msg.MsgUUID)
@@ -206,6 +208,13 @@ func (l *Leaf) store(msg protocol.Message) (bool, error) {
 		return false, nil
 	}
 	finder, canFind := l.cfg.JAMWriter.(JAMFinder)
+	// unsettled ends the poll for a claim that cannot be settled, and says
+	// so at error level: every later message on the network waits for it.
+	unsettled := func(err error) (bool, error) {
+		slog.Error("leaf: an import could not be settled; this network's poll stops here until it can be",
+			"network", network, "area_tag", msg.AreaTag, "uuid", msg.MsgUUID, "origin_node", msg.OriginNode, "error", err)
+		return false, err
+	}
 	if pending {
 		if !canFind {
 			slog.Warn("leaf: an earlier import of this message did not finish, and the JAM writer cannot check for it; writing it again",
@@ -213,11 +222,11 @@ func (l *Leaf) store(msg protocol.Message) (bool, error) {
 		} else {
 			localNum, found, err := finder.FindMessage(msg)
 			if err != nil {
-				return false, fmt.Errorf("leaf: look in JAM for unfinished import %s from %s: %w", msg.MsgUUID, msg.OriginNode, err)
+				return unsettled(fmt.Errorf("leaf: look in JAM for unfinished import %s from %s: %w", msg.MsgUUID, msg.OriginNode, err))
 			}
 			if found {
 				if err := ix.Confirm(network, msg.OriginNode, msg.MsgUUID, localNum); err != nil {
-					return false, fmt.Errorf("leaf: confirm import: %w", err)
+					return unsettled(fmt.Errorf("leaf: confirm import: %w", err))
 				}
 				return false, nil
 			}
@@ -234,24 +243,25 @@ func (l *Leaf) store(msg protocol.Message) (bool, error) {
 		if canFind {
 			n, found, ferr := finder.FindMessage(msg)
 			if ferr != nil {
-				return false, fmt.Errorf("leaf: write of %s from %s failed and JAM cannot be checked for it: %w", msg.MsgUUID, msg.OriginNode, ferr)
+				return unsettled(fmt.Errorf("leaf: write of %s from %s failed and JAM cannot be checked for it: %w", msg.MsgUUID, msg.OriginNode, ferr))
 			}
 			if found {
+				// Stored after all, or (message 0) its area is gone.
 				if err := ix.Confirm(network, msg.OriginNode, msg.MsgUUID, n); err != nil {
-					return false, fmt.Errorf("leaf: confirm import: %w", err)
+					return unsettled(fmt.Errorf("leaf: confirm import: %w", err))
 				}
-				return true, nil
+				return n != 0, nil
 			}
 		}
 		if err := ix.Release(network, msg.OriginNode, msg.MsgUUID); err != nil {
-			return false, fmt.Errorf("leaf: release claim: %w", err)
+			return unsettled(fmt.Errorf("leaf: release claim: %w", err))
 		}
 		return false, nil
 	}
 	if err := ix.Confirm(network, msg.OriginNode, msg.MsgUUID, localNum); err != nil {
 		// The claim stays: the next poll fetches the message again and finds
 		// it in JAM rather than writing it twice.
-		return false, fmt.Errorf("leaf: confirm import: %w", err)
+		return unsettled(fmt.Errorf("leaf: confirm import: %w", err))
 	}
 	return true, nil
 }

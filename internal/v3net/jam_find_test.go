@@ -44,4 +44,8 @@ func TestJAMFindMessage(t *testing.T) {
 	if _, found, err := router.FindMessage(protocol.Message{AreaTag: "fel.blind", MsgUUID: "u-1"}); err != nil || found {
 		t.Errorf("writer that cannot look: found = %v, %v; want false", found, err)
 	}
+	// An area removed by a reload: nothing to settle.
+	if n, found, err := NewJAMAdapter(mm, 99).FindMessage(msg); err != nil || !found || n != 0 {
+		t.Errorf("area gone: FindMessage = %d, %v, %v; want 0, true", n, found, err)
+	}
 }

@@ -211,6 +211,8 @@ func TestFindV3NetMessage(t *testing.T) {
 	post("a local post about uuid-2 from node-a")
 	legacy := post(V3NetUUIDPrefix + "uuid-3\nimported before origin lines")
 	bare := post(V3NetUUIDPrefix + "uuid-4\n" + V3NetOriginPrefix + "node-a") // no body after
+	// Another node's body that starts with an origin line of its own.
+	post(V3NetUUIDPrefix + "uuid-5\n" + V3NetOriginPrefix + "node-b\n" + V3NetOriginPrefix + "node-a\nspoof")
 
 	for _, tc := range []struct {
 		uuid, origin string
@@ -223,6 +225,7 @@ func TestFindV3NetMessage(t *testing.T) {
 		{"uuid-4", "node-a", bare, true},
 		{"uuid-3", "node-a", 0, false},
 		{"uuid-3", "", legacy, true},
+		{"uuid-5", "node-a", 0, false},
 		{"uuid-2", "node-a", 0, false},
 		{"uuid-", "node-a", 0, false},
 		{"nope", "node-a", 0, false},

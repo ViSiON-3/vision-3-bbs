@@ -1,6 +1,7 @@
 package v3net
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -53,6 +54,12 @@ func (a *JAMAdapter) WriteMessage(msg protocol.Message) (int64, error) {
 // by WriteMessage, and its local message number. See leaf.JAMFinder.
 func (a *JAMAdapter) FindMessage(msg protocol.Message) (int64, bool, error) {
 	n, found, err := a.mgr.FindV3NetMessage(a.areaID, msg.MsgUUID, msg.OriginNode)
+	if errors.Is(err, message.ErrAreaNotFound) {
+		// The area is gone (a reload removed it): there is nowhere to
+		// write the message, so nothing is left to settle. Reported found,
+		// as message 0, as the router reports a tag with no area.
+		return 0, true, nil
+	}
 	if err != nil {
 		return 0, false, fmt.Errorf("v3net jam: find message: %w", err)
 	}
