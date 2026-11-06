@@ -34,3 +34,27 @@ func TestV3ScriptCanDownload(t *testing.T) {
 		t.Error("CanDownload with no caller = true, want false")
 	}
 }
+
+// A script sees an area only if the caller passes its list ACS; the
+// download ACS doesn't hide it.
+func TestV3ScriptCanList(t *testing.T) {
+	ctx := &DoorCtx{CurrentUser: &user.User{ID: 7, Handle: "Neo", AccessLevel: 50}, SessionStartTime: time.Now()}
+	can := v3ScriptCanList(ctx)
+	for _, tc := range []struct {
+		name string
+		area file.FileArea
+		want bool
+	}{
+		{"open area", file.FileArea{}, true},
+		{"list ACS passed", file.FileArea{ACSList: "s50"}, true},
+		{"hidden by list ACS", file.FileArea{ACSList: "s100"}, false},
+		{"download ACS failed", file.FileArea{ACSDownload: "s100"}, true},
+	} {
+		if got := can(&tc.area); got != tc.want {
+			t.Errorf("%s: CanList = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+	if v3ScriptCanList(&DoorCtx{})(&file.FileArea{}) {
+		t.Error("CanList with no caller = true, want false")
+	}
+}

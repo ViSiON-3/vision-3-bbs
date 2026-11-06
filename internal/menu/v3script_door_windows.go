@@ -86,6 +86,8 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		SessionRegistry: ctx.Executor.SessionRegistry,
 		// The same check as a download from the area (see DOWNLOADFILE).
 		CanDownload: v3ScriptCanDownload(ctx),
+		// The same check as the file area menus (ACSList).
+		CanList: v3ScriptCanList(ctx),
 	}
 
 	eng := scripting.NewEngine(engineCtx, session, cfg, providers)

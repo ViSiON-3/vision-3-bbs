@@ -15,3 +15,13 @@ func v3ScriptCanDownload(ctx *DoorCtx) func(*file.FileArea) bool {
 			(a.ACSDownload == "" || checkACS(a.ACSDownload, u, ctx.Session, ctx.Terminal, ctx.SessionStartTime))
 	}
 }
+
+// v3ScriptCanList is the CanList a v3_script door gives its script: whether
+// the caller may see area a and its files, by the area's list ACS, as the
+// file area menus check it.
+func v3ScriptCanList(ctx *DoorCtx) func(*file.FileArea) bool {
+	return func(a *file.FileArea) bool {
+		u := ctx.CurrentUser
+		return u != nil && checkACS(a.ACSList, u, ctx.Session, ctx.Terminal, ctx.SessionStartTime)
+	}
+}
