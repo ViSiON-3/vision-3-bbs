@@ -209,6 +209,12 @@ func (l *Leaf) store(msg protocol.Message) (bool, error) {
 		return false, fmt.Errorf("leaf: dedup check: %w", err)
 	}
 	if seen && !pending {
+		// One of this node's posts, reached in the hub's order, can now be
+		// the cursor (dedup.MarkSent). If that fails, the cursor stays
+		// before it and the post is fetched, and skipped, again.
+		if err := ix.Passed(network, msg.OriginNode, msg.MsgUUID); err != nil {
+			slog.Warn("leaf: could not move the poll cursor past this node's post", "network", network, "uuid", msg.MsgUUID, "error", err)
+		}
 		return false, nil
 	}
 	finder, canFind := l.cfg.JAMWriter.(JAMFinder)

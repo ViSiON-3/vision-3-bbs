@@ -21,6 +21,11 @@ import (
 //
 // pending is 1 for a claim (see Claim): an import that has started but has
 // not been confirmed written to the message base.
+//
+// awaiting_poll is 1 for a post this node sent that its poll has not yet
+// reached in the hub's order (see MarkSent and Passed). It counts as seen,
+// but is not the poll cursor: posts the hub stored before it may not have
+// been fetched yet.
 // The UNIQUE columns put msg_uuid before origin_node so the index serves
 // Seen's lookup of both the exact and the legacy row.
 const schema = `
@@ -32,6 +37,7 @@ CREATE TABLE IF NOT EXISTS seen_messages (
 	local_jam_msgnum INTEGER,
 	seen_at          DATETIME DEFAULT (datetime('now')),
 	pending          INTEGER NOT NULL DEFAULT 0,
+	awaiting_poll    INTEGER NOT NULL DEFAULT 0,
 	UNIQUE(network, msg_uuid, origin_node)
 );
 `
@@ -92,23 +98,28 @@ func migrate(db *sql.DB) error {
 	if err := migrateOrigin(db); err != nil {
 		return err
 	}
-	return migratePending(db)
+	//  Rows from before these columns are all confirmed and not awaiting a
+	//  poll, so both get 0.
+	if err := addColumn(db, "pending"); err != nil {
+		return err
+	}
+	return addColumn(db, "awaiting_poll")
 }
 
-// migratePending adds the pending column to a table that predates it. Its
-// rows are all confirmed, so they get 0.
-func migratePending(db *sql.DB) error {
+// addColumn adds the flag column name, 0 by default, to a seen_messages
+// table that predates it.
+func addColumn(db *sql.DB, name string) error {
 	var n int
 	if err := db.QueryRow(
-		"SELECT COUNT(*) FROM pragma_table_info('seen_messages') WHERE name = 'pending'",
+		"SELECT COUNT(*) FROM pragma_table_info('seen_messages') WHERE name = ?", name,
 	).Scan(&n); err != nil {
 		return fmt.Errorf("dedup: migrate: %w", err)
 	}
 	if n > 0 {
 		return nil
 	}
-	if _, err := db.Exec("ALTER TABLE seen_messages ADD COLUMN pending INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return fmt.Errorf("dedup: migrate: add pending: %w", err)
+	if _, err := db.Exec("ALTER TABLE seen_messages ADD COLUMN " + name + " INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return fmt.Errorf("dedup: migrate: add %s: %w", name, err)
 	}
 	return nil
 }
@@ -169,6 +180,38 @@ func (ix *Index) MarkSeen(network, originNode, msgUUID string, localMsgNum *int6
 	)
 	if err != nil {
 		return fmt.Errorf("dedup: mark seen: %w", err)
+	}
+	return nil
+}
+
+// MarkSent records a post this node sent, as MarkSeen does, but as awaiting
+// the poll: it is seen, so the poll does not import it, and it is not the
+// poll cursor (LastSeen) until the poll reaches it (Passed). The hub may hold
+// posts from other nodes stored before it that the poll has not fetched; a
+// cursor on this post would skip them.
+func (ix *Index) MarkSent(network, originNode, msgUUID string) error {
+	_, err := ix.db.Exec(
+		"INSERT OR IGNORE INTO seen_messages (network, origin_node, msg_uuid, awaiting_poll) VALUES (?, ?, ?, 1)",
+		network, originNode, msgUUID,
+	)
+	if err != nil {
+		return fmt.Errorf("dedup: mark sent: %w", err)
+	}
+	return nil
+}
+
+// Passed tells the index that the poll has reached the message in the hub's
+// order. A post awaiting the poll (MarkSent) stops waiting and becomes the
+// newest row, so it is the cursor until a later message is recorded; any
+// other row is left alone.
+func (ix *Index) Passed(network, originNode, msgUUID string) error {
+	_, err := ix.db.Exec(
+		`UPDATE seen_messages SET awaiting_poll = 0, id = (SELECT MAX(id) FROM seen_messages) + 1
+		WHERE network = ? AND msg_uuid = ? AND origin_node = ? AND awaiting_poll = 1`,
+		network, msgUUID, originNode,
+	)
+	if err != nil {
+		return fmt.Errorf("dedup: passed: %w", err)
 	}
 	return nil
 }
@@ -234,11 +277,12 @@ func (ix *Index) Release(network, originNode, msgUUID string) error {
 // LastSeen returns the msg_uuid and origin_node of the most recently marked
 // message for a network, or "", "" if none. A claim not yet confirmed (see
 // Claim) is not a candidate: the poll cursor stays before it, so the message
-// is fetched again and its import finished. The origin is "" for a row
-// recorded before origin_node existed.
+// is fetched again and its import finished. Nor is a post awaiting the poll
+// (MarkSent). The origin is "" for a row recorded before origin_node
+// existed.
 func (ix *Index) LastSeen(network string) (msgUUID, originNode string, err error) {
 	err = ix.db.QueryRow(
-		"SELECT msg_uuid, origin_node FROM seen_messages WHERE network = ? AND pending = 0 ORDER BY id DESC LIMIT 1",
+		"SELECT msg_uuid, origin_node FROM seen_messages WHERE network = ? AND pending = 0 AND awaiting_poll = 0 ORDER BY id DESC LIMIT 1",
 		network,
 	).Scan(&msgUUID, &originNode)
 	if err == sql.ErrNoRows {

@@ -102,7 +102,53 @@ func TestLastSeenSkipsClaims(t *testing.T) {
 	}
 }
 
-// An index from before the pending column gets it, with every row confirmed.
+// A post this node sent is seen at once but is not the cursor until the
+// poll passes it; then it is the newest row. Passed leaves other rows alone.
+func TestMarkSentAwaitsPoll(t *testing.T) {
+	ix := openTestIndex(t)
+	wantLast := func(want string) {
+		t.Helper()
+		if last, _, err := ix.LastSeen("net"); err != nil || last != want {
+			t.Errorf("LastSeen = %q, %v; want %q", last, err, want)
+		}
+	}
+	if err := ix.MarkSeen("net", "node-a", "theirs-1", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := ix.MarkSent("net", "me", "mine"); err != nil {
+		t.Fatal(err)
+	}
+	if seen, pending := lookup(t, ix, "me", "mine"); !seen || pending {
+		t.Errorf("sent post: seen=%v pending=%v, want seen only", seen, pending)
+	}
+	wantLast("theirs-1")
+
+	// A post stored on the hub before ours is imported after we sent ours.
+	if err := ix.MarkSeen("net", "node-a", "theirs-2", nil); err != nil {
+		t.Fatal(err)
+	}
+	wantLast("theirs-2")
+	if err := ix.Passed("net", "me", "mine"); err != nil {
+		t.Fatal(err)
+	}
+	wantLast("mine")
+
+	// Passing it again, or passing a row that never awaited, changes nothing.
+	for _, uuid := range []string{"mine", "theirs-1"} {
+		origin := map[string]string{"mine": "me", "theirs-1": "node-a"}[uuid]
+		if err := ix.Passed("net", origin, uuid); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wantLast("mine")
+	if err := ix.MarkSent("net", "me", "mine"); err != nil {
+		t.Fatal(err)
+	}
+	wantLast("mine") // already recorded: MarkSent leaves it be
+}
+
+// An index from before the pending and awaiting_poll columns gets them,
+// with every row confirmed and none awaiting.
 func TestOpen_AddsPendingColumn(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "before-pending.sqlite")
 	db, err := sql.Open("sqlite", path)
@@ -135,6 +181,13 @@ INSERT INTO seen_messages (network, msg_uuid, origin_node, local_jam_msgnum) VAL
 		}
 		if last, _, err := ix.LastSeen("net"); err != nil || last != "old-1" {
 			t.Errorf("open %d: LastSeen = %q, %v; want old-1", pass, last, err)
+		}
+		// and the awaiting_poll column
+		if err := ix.MarkSent("net", "me", "sent-1"); err != nil {
+			t.Errorf("open %d: MarkSent: %v", pass, err)
+		}
+		if last, _, err := ix.LastSeen("net"); err != nil || last != "old-1" {
+			t.Errorf("open %d: LastSeen after MarkSent = %q, %v; want old-1", pass, last, err)
 		}
 		_ = ix.Close()
 	}

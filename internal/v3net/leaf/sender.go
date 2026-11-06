@@ -97,13 +97,17 @@ func (l *Leaf) SendMessageCtx(ctx context.Context, msg protocol.Message) error {
 // poll's import (store) also takes: the import of the post waits, then
 // finds it recorded. A record that fails is logged; the post was still
 // sent.
+//
+// The record awaits the poll (dedup.MarkSent): it does not move the poll
+// cursor until the poll reaches the post in the hub's order, so posts from
+// other nodes that the hub stored before it are still fetched.
 func (l *Leaf) SendPost(ctx context.Context, msg protocol.Message) error {
 	l.postMu.Lock()
 	defer l.postMu.Unlock()
 	if err := l.SendMessageCtx(ctx, msg); err != nil {
 		return err
 	}
-	if err := l.cfg.DedupIndex.MarkSeen(l.cfg.Network, msg.OriginNode, msg.MsgUUID, nil); err != nil {
+	if err := l.cfg.DedupIndex.MarkSent(l.cfg.Network, msg.OriginNode, msg.MsgUUID); err != nil {
 		slog.Warn("leaf: failed to mark outbound message as seen", "network", l.cfg.Network, "uuid", msg.MsgUUID, "error", err)
 	}
 	return nil
