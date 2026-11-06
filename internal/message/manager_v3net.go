@@ -2,6 +2,7 @@ package message
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -113,4 +114,69 @@ func V3NetBoundAreas(mm *MessageManager, leaves []config.V3NetLeafConfig) func(a
 		}
 	}
 	return func(areaID int) bool { return bound[areaID] }
+}
+
+// v3NetFindWindow is how many of an area's newest messages FindV3NetMessage
+// looks through. It looks for a message an import may have written just
+// before the BBS stopped, so only the end of the area matters.
+const v3NetFindWindow = 1000
+
+// FindV3NetMessage looks through the newest messages of the area for one
+// imported from V3Net as msgUUID from originNode, and returns its number and
+// true if there is one. The import's body starts with its V3NetUUIDPrefix
+// line, followed by a V3NetOriginPrefix line naming originNode; an import
+// from before origin lines were written does not match unless originNode is
+// empty. A message that cannot be read might be the one wanted, so if none
+// matches, the first read error is returned rather than a plain "not there".
+func (mm *MessageManager) FindV3NetMessage(areaID int, msgUUID, originNode string) (int, bool, error) {
+	b, area, err := mm.openBase(areaID)
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
+
+	count, err := b.GetMessageCount()
+	if err != nil {
+		return 0, false, err
+	}
+	var readErr error
+	for n := count; n >= 1 && n > count-v3NetFindWindow; n-- {
+		msg, err := b.ReadMessage(n)
+		if err != nil {
+			if !errors.Is(err, jam.ErrNotFound) {
+				slog.Warn("v3net: cannot read message while looking for an import", "area", area.Tag, "msg", n, "error", err)
+				if readErr == nil {
+					readErr = fmt.Errorf("v3net: read message %d of %s: %w", n, area.Tag, err)
+				}
+			}
+			continue
+		}
+		if isV3NetImport(msg.Text, msgUUID, originNode) {
+			return n, true, nil
+		}
+	}
+	if readErr != nil {
+		return 0, false, readErr
+	}
+	return 0, false, nil
+}
+
+// isV3NetImport reports whether text is the body of the V3Net import
+// msgUUID from originNode: it starts with the UUID line, and the line after
+// it names the origin (or originNode is empty). JAMAdapter.WriteMessage puts
+// the origin there; one further down could be part of another node's body.
+// Lines end in CR or LF, as the base stores them.
+func isV3NetImport(text, msgUUID, originNode string) bool {
+	lines := strings.FieldsFunc(text, func(r rune) bool { return r == '\r' || r == '\n' })
+	if len(lines) == 0 || lines[0] != V3NetUUIDPrefix+msgUUID {
+		return false
+	}
+	if originNode == "" {
+		return true
+	}
+	return len(lines) > 1 && lines[1] == V3NetOriginPrefix+originNode
 }

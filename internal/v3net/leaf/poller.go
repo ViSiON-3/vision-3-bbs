@@ -136,7 +136,9 @@ type pollCursor struct {
 // invalid, fails its author check, belongs to another network, or has been
 // seen. A rejected or unwritable message is logged and skipped, not marked
 // seen, so a genuine copy under the same UUID can still be imported later.
-// It returns an error only for a dedup index failure, which ends the poll.
+// It returns an error for a dedup index failure, or an import it could not
+// settle (see store), which ends the poll.
+// See store for how the write is kept to one copy.
 //
 // A control character in the subject is cleaned rather than refused. The hub
 // refuses a new one, but it may hold messages from before it did, and refusing
@@ -181,21 +183,85 @@ func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
 		msg.Truncate()
 	}
 
-	seen, err := l.cfg.DedupIndex.Seen(l.cfg.Network, msg.OriginNode, msg.MsgUUID)
+	return l.store(msg)
+}
+
+// store writes a checked message to JAM once. The dedup index claims the
+// message before the write and confirms it after, so an import cut short
+// between the two, by the BBS stopping or the confirm failing, is not
+// written a second time: the claim keeps the poll cursor before the message,
+// the next poll fetches it again, and the JAM writer is asked whether it
+// already holds it (JAMFinder) before writing.
+//
+// A claim it cannot settle (JAM cannot be checked, or the index cannot be
+// updated) is an error, logged at error level, which ends the poll: a later
+// message would otherwise become the cursor and leave this one behind it. An
+// area that is gone is nothing to settle: the JAM writer reports the message
+// found, as message 0, and the claim is confirmed.
+func (l *Leaf) store(msg protocol.Message) (bool, error) {
+	ix, network := l.cfg.DedupIndex, l.cfg.Network
+	seen, pending, err := ix.Lookup(network, msg.OriginNode, msg.MsgUUID)
 	if err != nil {
 		return false, fmt.Errorf("leaf: dedup check: %w", err)
 	}
-	if seen {
+	if seen && !pending {
 		return false, nil
+	}
+	finder, canFind := l.cfg.JAMWriter.(JAMFinder)
+	// unsettled ends the poll for a claim that cannot be settled, and says
+	// so at error level: every later message on the network waits for it.
+	unsettled := func(err error) (bool, error) {
+		slog.Error("leaf: an import could not be settled; this network's poll stops here until it can be",
+			"network", network, "area_tag", msg.AreaTag, "uuid", msg.MsgUUID, "origin_node", msg.OriginNode, "error", err)
+		return false, err
+	}
+	if pending {
+		if !canFind {
+			slog.Warn("leaf: an earlier import of this message did not finish, and the JAM writer cannot check for it; writing it again",
+				"uuid", msg.MsgUUID, "origin_node", msg.OriginNode)
+		} else {
+			localNum, found, err := finder.FindMessage(msg)
+			if err != nil {
+				return unsettled(fmt.Errorf("leaf: look in JAM for unfinished import %s from %s: %w", msg.MsgUUID, msg.OriginNode, err))
+			}
+			if found {
+				if err := ix.Confirm(network, msg.OriginNode, msg.MsgUUID, localNum); err != nil {
+					return unsettled(fmt.Errorf("leaf: confirm import: %w", err))
+				}
+				return false, nil
+			}
+		}
+	} else if err := ix.Claim(network, msg.OriginNode, msg.MsgUUID); err != nil {
+		return false, fmt.Errorf("leaf: dedup claim: %w", err)
 	}
 
 	localNum, err := l.cfg.JAMWriter.WriteMessage(msg)
 	if err != nil {
 		slog.Error("leaf: write message to JAM", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode, "error", err)
+		// A write can fail after the message is stored (a failed sync,
+		// say), so look before giving up the claim.
+		if canFind {
+			n, found, ferr := finder.FindMessage(msg)
+			if ferr != nil {
+				return unsettled(fmt.Errorf("leaf: write of %s from %s failed and JAM cannot be checked for it: %w", msg.MsgUUID, msg.OriginNode, ferr))
+			}
+			if found {
+				// Stored after all, or (message 0) its area is gone.
+				if err := ix.Confirm(network, msg.OriginNode, msg.MsgUUID, n); err != nil {
+					return unsettled(fmt.Errorf("leaf: confirm import: %w", err))
+				}
+				return n != 0, nil
+			}
+		}
+		if err := ix.Release(network, msg.OriginNode, msg.MsgUUID); err != nil {
+			return unsettled(fmt.Errorf("leaf: release claim: %w", err))
+		}
 		return false, nil
 	}
-	if err := l.cfg.DedupIndex.MarkSeen(l.cfg.Network, msg.OriginNode, msg.MsgUUID, &localNum); err != nil {
-		slog.Error("leaf: mark seen", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode, "error", err)
+	if err := ix.Confirm(network, msg.OriginNode, msg.MsgUUID, localNum); err != nil {
+		// The claim stays: the next poll fetches the message again and finds
+		// it in JAM rather than writing it twice.
+		return unsettled(fmt.Errorf("leaf: confirm import: %w", err))
 	}
 	return true, nil
 }

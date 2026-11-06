@@ -28,6 +28,12 @@ func SplitNetmailTo(to string) (name, addr string) {
 // kludge line carrying the message's network UUID.
 const V3NetUUIDPrefix = "\x01V3NETUUID: "
 
+// V3NetOriginPrefix starts the kludge line, right after the UUID line, that
+// names the node a V3Net import came from. A UUID is chosen by its sender, so
+// two nodes can use the same one; the pair is the message's identity. Imports
+// written before this line existed carry the UUID line alone.
+const V3NetOriginPrefix = "\x01V3NETORIGIN: "
+
 // isV3NetArea reports whether posts to area go out over V3Net: its type says
 // so, or the IsV3NetArea hook does.
 func (mm *MessageManager) isV3NetArea(area *MessageArea) bool {

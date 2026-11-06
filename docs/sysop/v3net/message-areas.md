@@ -130,8 +130,32 @@ while does not lose anything.
 1. The leaf client receives a message via polling or SSE notification
 2. The dedup index is checked — if this message (its origin node and UUID)
    has been seen, it is skipped
-3. The message (with its remote tearline/origin) is written to the local JAM base
-4. The message is recorded in the dedup index
+3. The message is claimed in the dedup index
+4. The message (with its remote tearline/origin) is written to the local JAM base
+5. The claim is confirmed
+
+If the BBS stops between steps 3 and 5, or the confirm fails, the claim is
+left behind. It does not move the poll position, so the next poll fetches the
+message again; the BBS then looks for it in the area's newest 1,000 messages
+by its UUID and origin node (the `V3NETUUID` and `V3NETORIGIN` lines at the
+start of every import), and writes it only if it is not there. A message is
+never written twice, and one cut short before its write is not skipped. If
+the write itself fails, the BBS looks for the message the same way before
+giving up the claim, since a write can fail after storing it; if it is not
+there, the claim is dropped and the message can be imported again.
+
+If a claim cannot be settled, because the area cannot be read or the dedup
+index cannot be updated, the poll stops there and tries again next time,
+rather than moving past the message. The log says so at error level:
+`leaf: an import could not be settled; this network's poll stops here until
+it can be`, with the area tag and message. Every later message on that
+network waits until it is fixed. An area that is gone, removed from
+`message_areas.json` while the BBS runs, is not a failure: there is nowhere
+to write the message, so it is recorded as seen and the poll goes on.
+
+Rolling back to a build from before claims, after an import was cut short,
+loses that one message: the older build reads the leftover claim as seen and
+polls from after it.
 
 A hub refuses a post whose subject, board name, tearline or origin holds a
 control character, with a 422. A message a hub already holds with one is still
@@ -185,6 +209,7 @@ Users and sysops can propose new areas for a network. See the [NAL documentation
 |---------|-------------------|
 | A post shows `V3NET` but not `V3NET SENT` in the reader | It has not reached the hub yet. The sweep retries every minute; look for `v3net outbound: sending to hub; will retry` in the log. Only the first failure per message is logged at warning level, so a long outage does not flood the log. |
 | `v3net outbound: sent but could not mark as sent` | The hub accepted the post but the local flag could not be written. The next sweep sends it again under the same UUID, which the hub drops as a duplicate, and tries the mark again. Nothing is posted twice. |
+| `leaf: an import could not be settled; this network's poll stops here until it can be` | The dedup index could not be updated, or the named area could not be read. The poll stops there and tries again on the next one, so nothing is skipped or stored twice, but the network's other areas wait too. If it repeats, check the dedup database and the area's message base (an unreadable message among its newest 1,000 blocks the check). |
 | `V3Net leaf: message area not found, skipping` | A subscription names a board tag with no local area. Re-subscribe from the area browser, or create the area with that tag. |
 | Old messages in an area never went out | Expected. Only posts made after an area was bound to a network are sent. |
 | A post from `helper post` never leaves | The BBS must be running with V3Net enabled; `helper` only writes the message. |

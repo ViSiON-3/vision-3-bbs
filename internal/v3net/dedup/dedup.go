@@ -18,6 +18,9 @@ import (
 //
 // Rows recorded before origin_node existed have an empty origin_node and match
 // any origin (see Seen), so nothing already imported is imported again.
+//
+// pending is 1 for a claim (see Claim): an import that has started but has
+// not been confirmed written to the message base.
 // The UNIQUE columns put msg_uuid before origin_node so the index serves
 // Seen's lookup of both the exact and the legacy row.
 const schema = `
@@ -28,6 +31,7 @@ CREATE TABLE IF NOT EXISTS seen_messages (
 	origin_node      TEXT NOT NULL DEFAULT '',
 	local_jam_msgnum INTEGER,
 	seen_at          DATETIME DEFAULT (datetime('now')),
+	pending          INTEGER NOT NULL DEFAULT 0,
 	UNIQUE(network, msg_uuid, origin_node)
 );
 `
@@ -44,6 +48,7 @@ CREATE TABLE seen_messages_v2 (
 	origin_node      TEXT NOT NULL DEFAULT '',
 	local_jam_msgnum INTEGER,
 	seen_at          DATETIME DEFAULT (datetime('now')),
+	pending          INTEGER NOT NULL DEFAULT 0,
 	UNIQUE(network, msg_uuid, origin_node)
 );
 INSERT INTO seen_messages_v2 (id, network, msg_uuid, origin_node, local_jam_msgnum, seen_at)
@@ -80,10 +85,37 @@ func Open(path string) (*Index, error) {
 	return &Index{db: db}, nil
 }
 
-// migrate rebuilds a seen_messages table that predates the origin_node
-// column. A table that already has it is left alone, so this is safe to run
-// on every open.
+// migrate brings a seen_messages table from an older version up to schema.
+// A table already up to date is left alone, so this is safe to run on every
+// open.
 func migrate(db *sql.DB) error {
+	if err := migrateOrigin(db); err != nil {
+		return err
+	}
+	return migratePending(db)
+}
+
+// migratePending adds the pending column to a table that predates it. Its
+// rows are all confirmed, so they get 0.
+func migratePending(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(
+		"SELECT COUNT(*) FROM pragma_table_info('seen_messages') WHERE name = 'pending'",
+	).Scan(&n); err != nil {
+		return fmt.Errorf("dedup: migrate: %w", err)
+	}
+	if n > 0 {
+		return nil
+	}
+	if _, err := db.Exec("ALTER TABLE seen_messages ADD COLUMN pending INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return fmt.Errorf("dedup: migrate: add pending: %w", err)
+	}
+	return nil
+}
+
+// migrateOrigin rebuilds a seen_messages table that predates the origin_node
+// column. A table that already has it is left alone.
+func migrateOrigin(db *sql.DB) error {
 	var n int
 	if err := db.QueryRow(
 		"SELECT COUNT(*) FROM pragma_table_info('seen_messages') WHERE name = 'origin_node'",
@@ -141,12 +173,72 @@ func (ix *Index) MarkSeen(network, originNode, msgUUID string, localMsgNum *int6
 	return nil
 }
 
+// Lookup reports whether the message (network, originNode, msgUUID) has been
+// recorded, as Seen does, and whether that record is only a claim not yet
+// confirmed (see Claim). A confirmed record, including a legacy one with no
+// origin, wins over a claim.
+func (ix *Index) Lookup(network, originNode, msgUUID string) (seen, pending bool, err error) {
+	var count, minPending int
+	err = ix.db.QueryRow(
+		"SELECT COUNT(*), COALESCE(MIN(pending), 0) FROM seen_messages WHERE network = ? AND msg_uuid = ? AND origin_node IN (?, '')",
+		network, msgUUID, originNode,
+	).Scan(&count, &minPending)
+	if err != nil {
+		return false, false, fmt.Errorf("dedup: lookup: %w", err)
+	}
+	return count > 0, count > 0 && minPending == 1, nil
+}
+
+// Claim records that an import of the message (network, originNode, msgUUID)
+// has started, before it is written to the message base. Confirm finishes it
+// once written; Release drops it if the write fails. A claim left behind,
+// because the BBS stopped or Confirm failed, tells the next import of the
+// message to look in the message base before writing it again. Claiming a
+// message already recorded does nothing.
+func (ix *Index) Claim(network, originNode, msgUUID string) error {
+	_, err := ix.db.Exec(
+		"INSERT OR IGNORE INTO seen_messages (network, origin_node, msg_uuid, pending) VALUES (?, ?, ?, 1)",
+		network, originNode, msgUUID,
+	)
+	if err != nil {
+		return fmt.Errorf("dedup: claim: %w", err)
+	}
+	return nil
+}
+
+// Confirm marks a claimed message written, as local message localMsgNum.
+func (ix *Index) Confirm(network, originNode, msgUUID string, localMsgNum int64) error {
+	_, err := ix.db.Exec(
+		"UPDATE seen_messages SET pending = 0, local_jam_msgnum = ? WHERE network = ? AND msg_uuid = ? AND origin_node = ?",
+		localMsgNum, network, msgUUID, originNode,
+	)
+	if err != nil {
+		return fmt.Errorf("dedup: confirm: %w", err)
+	}
+	return nil
+}
+
+// Release drops a claim whose write failed, so a later copy of the message
+// is imported as new. A confirmed record is left alone.
+func (ix *Index) Release(network, originNode, msgUUID string) error {
+	_, err := ix.db.Exec(
+		"DELETE FROM seen_messages WHERE network = ? AND msg_uuid = ? AND origin_node = ? AND pending = 1",
+		network, msgUUID, originNode,
+	)
+	if err != nil {
+		return fmt.Errorf("dedup: release: %w", err)
+	}
+	return nil
+}
+
 // LastSeen returns the msg_uuid and origin_node of the most recently marked
-// message for a network, or "", "" if none. The origin is "" for a row
+// message for a network, or "", "" if none. A claim not yet confirmed (see
+// Claim) is not a candidate: the poll cursor stays before it, so the message
+// is fetched again and its import finished. The origin is "" for a row
 // recorded before origin_node existed.
 func (ix *Index) LastSeen(network string) (msgUUID, originNode string, err error) {
 	err = ix.db.QueryRow(
-		"SELECT msg_uuid, origin_node FROM seen_messages WHERE network = ? ORDER BY id DESC LIMIT 1",
+		"SELECT msg_uuid, origin_node FROM seen_messages WHERE network = ? AND pending = 0 ORDER BY id DESC LIMIT 1",
 		network,
 	).Scan(&msgUUID, &originNode)
 	if err == sql.ErrNoRows {
