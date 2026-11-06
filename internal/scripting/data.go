@@ -264,12 +264,22 @@ func dataModeProbe(path string) (*os.File, error) {
 // checkStoreSize refuses a save of size bytes to the store at path when it is
 // over maxDataStoreBytes, unless it makes a store already over the cap
 // smaller: a store from before the cap, or edited by hand, can still shrink.
+// The current store is measured as a save would write it, so a compact file
+// edited by hand compares fairly with the indented one a save produces.
 func checkStoreSize(path, call string, size int) error {
 	err := checkBytes(call, "the data store", size, maxDataStoreBytes)
 	if err == nil {
 		return nil
 	}
-	if info, statErr := os.Stat(path); statErr == nil && int64(size) < info.Size() {
+	raw, readErr := os.ReadFile(path)
+	if readErr != nil {
+		return err
+	}
+	var current map[string]any
+	if json.Unmarshal(raw, &current) != nil {
+		return err
+	}
+	if saved, mErr := json.MarshalIndent(current, "", "  "); mErr == nil && size < len(saved) {
 		return nil
 	}
 	return err

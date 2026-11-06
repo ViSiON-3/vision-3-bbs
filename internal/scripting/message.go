@@ -2,7 +2,6 @@ package scripting
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
@@ -98,7 +97,7 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		subject := jsString(opts, "subject", "")
 		body := jsString(opts, "body", "")
 		replyTo := jsString(opts, "replyTo", "")
-		if err := checkPost("v3.message.post", to, subject, body); err != nil {
+		if err := checkPost("v3.message.post", to, subject, body, isNetmailArea(mgr, areaID)); err != nil {
 			panic(vm.NewGoError(err))
 		}
 
@@ -129,7 +128,7 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		subject := jsString(opts, "subject", "")
 		body := jsString(opts, "body", "")
 		replyTo := jsString(opts, "replyTo", "")
-		if err := checkPost("v3.message.postPrivate", to, subject, body); err != nil {
+		if err := checkPost("v3.message.postPrivate", to, subject, body, isNetmailArea(mgr, areaID)); err != nil {
 			panic(vm.NewGoError(err))
 		}
 
@@ -214,15 +213,14 @@ func displayMessageToJS(vm *goja.Runtime, msg *message.DisplayMessage) goja.Valu
 }
 
 // checkPost returns a limitError when a message a script posts with call has
-// a To, subject or body over its limit. A netmail To may end in
-// "@zone:net/node"; the name before it is what the limit counts, and the
-// address may add up to maxFTNAddressChars.
-func checkPost(call, to, subject, body string) error {
+// a To, subject or body over its limit. In a netmail area a To of
+// "name@zone:net/node" is split on export, so only the name counts; anywhere
+// else the whole To goes into the packet and counts.
+func checkPost(call, to, subject, body string, netmail bool) error {
 	name := to
-	if i := strings.LastIndex(to, "@"); i >= 0 {
-		name = to[:i]
-		if err := checkChars(call, "to (with its address)", to, maxToChars+1+maxFTNAddressChars); err != nil {
-			return err
+	if netmail {
+		if n, addr := message.SplitNetmailTo(to); addr != "" {
+			name = n
 		}
 	}
 	if err := checkChars(call, "to", name, maxToChars); err != nil {
@@ -232,4 +230,11 @@ func checkPost(call, to, subject, body string) error {
 		return err
 	}
 	return checkBytes(call, "body", len(body), maxMessageBodyBytes)
+}
+
+// isNetmailArea reports whether areaID is a netmail area. A missing area is
+// not: AddMessage reports it.
+func isNetmailArea(mgr *message.MessageManager, areaID int) bool {
+	area, ok := mgr.GetAreaByID(areaID)
+	return ok && jam.DetermineMessageType(area.AreaType, area.EchoTag).IsNetmail()
 }

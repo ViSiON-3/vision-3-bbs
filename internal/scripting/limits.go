@@ -26,15 +26,12 @@ const (
 	// maxMessageBodyBytes caps the body of a message a script posts.
 	maxMessageBodyBytes = 64 << 10
 
-	// maxSubjectChars and maxToChars cap a posted message's subject and To,
-	// at the lengths of the FidoNet message header (see internal/ftn), so a
-	// post can travel to an echo or netmail area without being cut.
-	maxSubjectChars = 72
-	maxToChars      = 36
-
-	// maxFTNAddressChars is the longest FTN address a netmail To can carry
-	// after its "@": "32767:32767/32767.32767".
-	maxFTNAddressChars = 23
+	// maxSubjectChars and maxToChars cap a posted message's subject and To so
+	// a post can travel to an echo or netmail area without being cut. The
+	// FidoNet packet header holds them in 72 and 36 bytes that end in a NUL
+	// (internal/ftn), which leaves 71 and 35.
+	maxSubjectChars = 71
+	maxToChars      = 35
 
 	// maxPageChars caps a page sent with v3.nodes.send or v3.nodes.broadcast.
 	maxPageChars = 255

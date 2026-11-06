@@ -216,10 +216,10 @@ Calls that move data between a script and the BBS have size limits, so a script 
 | Call | Limit |
 |------|-------|
 | `v3.fs.read` | A file of up to 4 MB |
-| `v3.fs.write`, `v3.fs.append` | Up to 4 MB a call; `append` also refuses to grow a file past 4 MB. The file is left as it was |
+| `v3.fs.write`, `v3.fs.append` | Up to 4 MB a call; `append` also refuses to grow a file past 4 MB. The file is left as it was. Two nodes appending to the same file at the same moment can take it a little past 4 MB |
 | `v3.fs.list` | Up to 10,000 entries in one directory |
 | `v3.data.set`, `v3.data.delete` | The store file may be up to 4 MB. A change that would leave it larger is refused and the previous store is kept. A store already over 4 MB (from before this limit, or edited by hand) can still be read and made smaller |
-| `v3.message.post`, `v3.message.postPrivate` | `to` up to 36 characters (in netmail, the name before `@`; the address may add up to 24 more), `subject` up to 72 characters, `body` up to 64 KB. These are the FidoNet message header's lengths, so a post can travel to an echo or netmail area without being cut |
+| `v3.message.post`, `v3.message.postPrivate` | `to` up to 35 characters, `subject` up to 71, `body` up to 64 KB. The FidoNet packet header holds To and subject in 36 and 72 bytes that end in a NUL, so a post within these limits can travel to an echo or netmail area without being cut. In a netmail area, a `to` of `Name@zone:net/node` counts only `Name`, since the address is split off when it is sent; anywhere else the whole `to` counts |
 | `v3.nodes.send`, `v3.nodes.broadcast` | A page of up to 255 characters |
 | `v3.util.padLeft`, `padRight`, `center` | A width of up to 4096 |
 
@@ -632,8 +632,9 @@ handle, and `postPrivate` throws if `to` matches no user or more than one. In a
 netmail area `to` is not resolved: pass `"Name@zone:net/node"`, and the message
 is stored with `to` set to `Name` and the destination address `zone:net/node`.
 
-`to` may be up to 36 characters (in netmail, the name before `@`), `subject` up
-to 72 and `body` up to 64 KB; a post over any of them throws and posts nothing.
+`to` may be up to 35 characters (in a netmail area, the name before `@`),
+`subject` up to 71 and `body` up to 64 KB; a post over any of them throws and
+posts nothing.
 See [Limits](#limits).
 
 ```javascript

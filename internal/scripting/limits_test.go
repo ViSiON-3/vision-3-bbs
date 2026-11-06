@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // wantLimit fails the test unless msg is a limit error from call that names
@@ -106,38 +108,66 @@ func TestDataStoreLimit(t *testing.T) {
 	wantLimit(t, h.evalErr(`v3.data.set("c", 1)`), "v3.data.set", "4 MB")
 	h.eval(`v3.data.delete("b")`)
 	h.eval(`v3.data.set("c", 1)`) // under the cap again
+
+	// A compact store over the cap, as a hand edit leaves it: saved indented,
+	// it would be larger than the file, but deleting a key still shrinks it.
+	compact := fmt.Sprintf(`{"a":%q,"b":%q,"c":1,"d":2}`, strings.Repeat("a", 3<<20), strings.Repeat("b", 3<<19))
+	if err := os.WriteFile(store, []byte(compact), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h.eval(`v3.data.delete("d")`)
+	wantLimit(t, h.evalErr(`v3.data.set("e", 1)`), "v3.data.set", "4 MB")
 	if v := h.eval(`v3.data.get("c")`).ToInteger(); v != 1 {
 		t.Errorf("c = %d, want 1", v)
 	}
 }
 
 // v3.message.post and postPrivate refuse a To, subject or body over its
-// limit, and post nothing.
+// limit, and post nothing. A To's "@address" is left out of the count only in
+// a netmail area, where export splits it off.
 func TestPostLimits(t *testing.T) {
-	h := newHarness(t, harnessOpts{providers: newMessageProviders(t)})
-	post := func(fn, to, subject string, bodyLen int) string {
-		return fmt.Sprintf(`v3.message.%s(1, {to: %q, subject: %q, body: "b".repeat(%d)})`, fn, to, subject, bodyLen)
+	mm, err := message.NewMessageManager(t.TempDir(), t.TempDir(), "TestBBS", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	name36 := strings.Repeat("n", 36)
+	localID, err := mm.AddArea(message.MessageArea{Tag: "LOCAL", Name: "Local", AreaType: "local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	netID, err := mm.AddArea(message.MessageArea{Tag: "NETMAIL", Name: "Netmail", AreaType: "netmail", OriginAddr: "21:1/100"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	um := user.NewUserMgrForTest(&user.User{ID: 1, Handle: "Sysop"})
+	h := newHarness(t, harnessOpts{providers: &Providers{MessageMgr: mm, UserMgr: um}})
+	post := func(fn string, area int, to, subject string, bodyLen int) string {
+		return fmt.Sprintf(`v3.message.%s(%d, {to: %q, subject: %q, body: "b".repeat(%d)})`, fn, area, to, subject, bodyLen)
+	}
+	name35 := strings.Repeat("n", 35)
 
-	h.eval(post("post", name36, strings.Repeat("s", 72), 64<<10))
+	h.eval(post("post", localID, name35, strings.Repeat("s", 71), 64<<10))
+	h.eval(post("post", netID, name35+"@21:1/101", "Hi", 1)) // the address is split off
 	for _, tc := range []struct {
 		name, expr, call, limit string
 	}{
-		{"to", post("post", name36+"n", "Hi", 1), "v3.message.post", "36"},
-		{"subject", post("post", "All", strings.Repeat("s", 73), 1), "v3.message.post", "72"},
-		{"body", post("post", "All", "Hi", 64<<10+1), "v3.message.post", "64 KB"},
-		{"address", post("post", name36+"@"+strings.Repeat("1", 24), "Hi", 1), "v3.message.post", "60"},
-		{"private subject", post("postPrivate", "Sysop", strings.Repeat("s", 73), 1), "v3.message.postPrivate", "72"},
+		{"to", post("post", localID, name35+"n", "Hi", 1), "v3.message.post", "35"},
+		{"subject", post("post", localID, "All", strings.Repeat("s", 72), 1), "v3.message.post", "71"},
+		{"body", post("post", localID, "All", "Hi", 64<<10+1), "v3.message.post", "64 KB"},
+		{"address outside netmail", post("post", localID, "Bob@21:1/101", "Hi", 1) + `; ` + post("post", localID, name35+"@21:1/101", "Hi", 1), "v3.message.post", "35"},
+		{"netmail name", post("post", netID, name35+"n@21:1/101", "Hi", 1), "v3.message.post", "35"},
+		{"netmail with no address", post("post", netID, name35+"@nowhere", "Hi", 1), "v3.message.post", "35"},
+		{"private subject", post("postPrivate", localID, "Sysop", strings.Repeat("s", 72), 1), "v3.message.postPrivate", "71"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			wantLimit(t, h.evalErr(tc.expr), tc.call, tc.limit)
 		})
 	}
-	// The name before a netmail address is what counts.
-	h.eval(post("post", name36+"@21:1/100", "Hi", 1))
-	if n := h.eval(`v3.message.count(1)`).ToInteger(); n != 2 {
-		t.Errorf("area holds %d messages, want the 2 under the limits", n)
+	// Under the limits: the first two posts, and the short echo To with an @.
+	if n := h.eval(fmt.Sprintf(`v3.message.count(%d)`, localID)).ToInteger(); n != 2 {
+		t.Errorf("local area holds %d messages, want 2", n)
+	}
+	if n := h.eval(fmt.Sprintf(`v3.message.count(%d)`, netID)).ToInteger(); n != 1 {
+		t.Errorf("netmail area holds %d messages, want 1", n)
 	}
 }
 
