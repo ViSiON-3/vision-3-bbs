@@ -588,10 +588,15 @@ func (eng *Engine) parseInput(data []byte) string {
 			consumed = 3
 			eng.keyName = ss3KeyName(data[2])
 			result = ""
-		default:
-			// ESC and another key at once: Alt plus that key
-			consumed = 2
+		case eng.holdEscape:
+			// readkey: ESC and another key at once is Esc, then that
+			// key, as the editor reads it (the key is put back)
 			eng.keyName = "ESC"
+			result = ""
+		default:
+			// getkey: ESC and another key at once is Alt plus that key,
+			// and both go
+			consumed = 2
 			result = ""
 		}
 	} else if data[0] == '\r' {

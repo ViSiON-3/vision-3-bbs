@@ -32,6 +32,9 @@ func ss3KeyName(b byte) string {
 // editor.KeyName), so readkey and the editor read every key the same way. A
 // lone ESC is held for editor.DefaultEscTimeout, the editor's window, in case
 // the rest of a sequence is on its way; if nothing follows, it is the Esc key.
+// The hold ends at the timeout too, so readkey(ms) never takes longer than
+// ms. A key that comes after ESC but is not part of a sequence is the next
+// key, as in the editor: Esc then Q reads as "ESC", then "Q".
 func (eng *Engine) readNamedKey(timeout time.Duration) (string, error) {
 	eng.holdEscape = true
 	defer func() { eng.holdEscape = false }()
@@ -55,7 +58,7 @@ func (eng *Engine) readNamedKey(timeout time.Duration) (string, error) {
 			return eng.keyName, nil
 		}
 		if key == "\x1b" {
-			seq, rest, err := eng.completeEscape()
+			seq, rest, err := eng.completeEscape(deadline)
 			if err != nil {
 				return "", err
 			}
@@ -81,16 +84,23 @@ func (eng *Engine) readNamedKey(timeout time.Duration) (string, error) {
 }
 
 // completeEscape gathers the bytes after a lone ESC until they make a whole
-// escape sequence, waiting editor.DefaultEscTimeout for each further piece. It
+// escape sequence, waiting editor.DefaultEscTimeout for each further piece,
+// or less if deadline (the zero time for none) comes sooner. It
 // returns the sequence with the ESC in front, and any bytes that arrived after
 // it. The sequence is unfinished (escapePending still true) when nothing more
 // came in time, when a byte that can't be part of it arrived (that byte and
 // what follows are returned as rest), or when it reached
 // editor.MaxCSILength.
-func (eng *Engine) completeEscape() (seq, rest []byte, err error) {
+func (eng *Engine) completeEscape(deadline time.Time) (seq, rest []byte, err error) {
 	seq = []byte{0x1b}
 	for escapePending(seq) {
-		more, err := eng.awaitInput(editor.DefaultEscTimeout)
+		wait := editor.DefaultEscTimeout
+		if !deadline.IsZero() {
+			if wait = min(wait, time.Until(deadline)); wait <= 0 {
+				return seq, nil, nil
+			}
+		}
+		more, err := eng.awaitInput(wait)
 		if err != nil {
 			return nil, nil, err
 		}

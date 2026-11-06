@@ -312,12 +312,12 @@ SyncTERM, including cursor keys in application mode. Shift, Ctrl and Alt held
 with an arrow are ignored (Ctrl-Up is `"UP"`). A sequence that is not a key is
 skipped. Because Esc is also the first byte of every sequence, a lone Esc is
 held for half a second, as in the editor, in case the rest is still on its
-way over a slow link, so Esc reads a little slower than other keys. Pressing
-Esc and then another key at once is
-read as Alt plus that key and returns `"ESC"`. An escape sequence cut short, or one that never
-ends, also reads as `"ESC"`. As in the editor, the timeout limits the wait
-for a key to start: a key whose escape sequence has begun is still finished,
-so `readkey(timeout_ms)` can return up to half a second late.
+way over a slow link, so Esc reads a little slower than other keys. A key
+pressed right after Esc that is not part of a sequence is the next key, as
+in the editor: Esc then Q reads as `"ESC"`, then `"Q"`. An escape sequence
+cut short, or one that never ends, also reads as `"ESC"`. With a timeout, the
+hold ends at the timeout too, so `readkey(timeout_ms)` returns within
+`timeout_ms`; a lone Esc that arrives just before it reads as `"ESC"`.
 
 ```javascript
 var row = 0;

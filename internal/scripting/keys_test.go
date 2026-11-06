@@ -49,7 +49,9 @@ func TestReadkeyNames(t *testing.T) {
 		{name: "sequence split after the bracket", input: "\x1b[", chunks: []string{"6~"}, want: "PGDN"},
 		{name: "sequence split in its parameters", input: "\x1b[1", chunks: []string{";5B"}, want: "DOWN"},
 		{name: "ss3 split", input: "\x1bO", chunks: []string{"B"}, want: "DOWN"},
-		{name: "alt key", input: "\x1bx", expr: two, want: "ESC|"},
+		{name: "escape then a key", input: "\x1bx", expr: two, want: "ESC|x"},
+		{name: "escape then a key, separately", input: "\x1b", chunks: []string{"q"}, expr: two, want: "ESC|q"},
+		{name: "escape twice", input: "\x1b\x1b", expr: two, want: "ESC|ESC"},
 		{name: "sequence cut short", input: "\x1b[", want: "ESC"},
 		{name: "enter after a cut-off sequence", input: "\x1b[1\r", expr: two, want: "ESC|\r"},
 		{name: "overlong sequence", input: "\x1b[", chunks: []string{strings.Repeat("1;", 40) + "A"}, want: "ESC"},
@@ -60,10 +62,6 @@ func TestReadkeyNames(t *testing.T) {
 			expr := tt.expr
 			if expr == "" {
 				expr = `v3.console.readkey()`
-			}
-			if tt.name == "alt key" {
-				// the second read has nothing to read: give it a timeout
-				expr = `v3.console.readkey() + "|" + v3.console.readkey(50)`
 			}
 			if got := h.eval(expr).String(); got != tt.want {
 				t.Errorf("%s = %q, want %q", expr, got, tt.want)
@@ -82,6 +80,15 @@ func TestReadkeyTimeout(t *testing.T) {
 	}
 	if el := time.Since(start); el < 80*time.Millisecond || el > 2*time.Second {
 		t.Errorf("readkey(80) took %v", el)
+	}
+	// A lone Esc is held only until the timeout, not the full Esc window.
+	h3 := newHarness(t, harnessOpts{input: "\x1b"})
+	start = time.Now()
+	if got := h3.eval(`v3.console.readkey(80)`).String(); got != "ESC" {
+		t.Errorf("readkey(80) with a lone Esc = %q, want ESC", got)
+	}
+	if el := time.Since(start); el > 400*time.Millisecond {
+		t.Errorf("readkey(80) with a lone Esc took %v, want about 80ms", el)
 	}
 	h2 := newHarness(t, harnessOpts{input: "\x1b[99z", inputChunks: []string{"k"}})
 	if got := h2.eval(`v3.console.readkey(2000)`).String(); got != "k" {
