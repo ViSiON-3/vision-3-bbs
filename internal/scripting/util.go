@@ -71,6 +71,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 		}
 		str := call.Arguments[0].String()
 		width := int(call.Arguments[1].ToInteger())
+		checkWidth(vm, "v3.util.padRight", width)
 		padChar := ' '
 		if len(call.Arguments) > 2 {
 			s := call.Arguments[2].String()
@@ -89,6 +90,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 		}
 		str := call.Arguments[0].String()
 		width := int(call.Arguments[1].ToInteger())
+		checkWidth(vm, "v3.util.padLeft", width)
 		padChar := ' '
 		if len(call.Arguments) > 2 {
 			s := call.Arguments[2].String()
@@ -111,6 +113,7 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 		}
 		str := call.Arguments[0].String()
 		width := int(call.Arguments[1].ToInteger())
+		checkWidth(vm, "v3.util.center", width)
 		return vm.ToValue(ansi.ApplyWidthConstraintAligned(str, width, ansi.AlignCenter))
 	})
 
@@ -146,4 +149,12 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 	})
 
 	jsutil.Set(v3, "util", obj)
+}
+
+// checkWidth throws a limitError when width, given to the v3.util call named
+// call, is over maxPadWidth.
+func checkWidth(vm *goja.Runtime, call string, width int) {
+	if width > maxPadWidth {
+		panic(vm.NewGoError(limitError(call, "width", width, maxPadWidth, "columns")))
+	}
 }

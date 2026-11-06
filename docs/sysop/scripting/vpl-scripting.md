@@ -209,6 +209,31 @@ v3.console.pause();
 
 All VPL APIs are accessed through the `v3` global object. Functions that fail silently return `null`, `undefined`, `0`, or an empty string/array as noted. Functions that encounter serious errors (e.g., database write failures) throw a JavaScript error that can be caught with `try/catch`. An error the script does not catch ends the script: the caller sees the door error message and the log records `V3 script error` with the reason.
 
+### Limits
+
+Calls that move data between a script and the BBS have size limits, so a script that has gone wrong cannot fill the disk, the data store or other callers' screens, or build a huge string in memory. A call over a limit throws an error naming the call, the size and the limit, such as `v3.fs.write: content is 5.2 MB, over the 4 MB limit`; nothing is cut short without the script knowing. Like any error, it can be caught with `try/catch`.
+
+| Call | Limit |
+|------|-------|
+| `v3.fs.read` | A file of up to 4 MB |
+| `v3.fs.write`, `v3.fs.append` | Up to 4 MB a call; `append` also refuses to grow a file past 4 MB. The file is left as it was |
+| `v3.fs.list` | Up to 10,000 entries in one directory |
+| `v3.data.set`, `v3.data.delete` | The store file may be up to 4 MB. A change that would leave it larger is refused and the previous store is kept. A store already over 4 MB (from before this limit, or edited by hand) can still be read and made smaller |
+| `v3.message.post`, `v3.message.postPrivate` | `to` up to 36 characters (in netmail, the name before `@`; the address may add up to 24 more), `subject` up to 72 characters, `body` up to 64 KB. These are the FidoNet message header's lengths, so a post can travel to an echo or netmail area without being cut |
+| `v3.nodes.send`, `v3.nodes.broadcast` | A page of up to 255 characters |
+| `v3.util.padLeft`, `padRight`, `center` | A width of up to 4096 |
+
+There is no limit on the total size of `scripts/data/`: it is shared with the sysop's own files, not private to one script.
+
+#### What these limits don't cover
+
+- **Memory.** Scripts run inside the BBS process, and there is no per-script memory limit. The limits above stop the BBS from handing a script, or taking from it, more than it should, but a script can still build large values of its own (`"x".repeat(1e9)`). Trust the scripts you install as you would any door.
+- **Waiting inside a call.** The [run time limit](#run-time-limit), the caller's idle timeout and time limit, and a hang-up stop a script between its own steps, and interrupt `v3.console` input and `v3.util.sleep` at once. A call that is busy inside the BBS finishes first. These can take a while:
+  - `v3.data` calls wait their turn while another node saves the same store, and read and write the whole file.
+  - `v3.file.search` reads every file area; `v3.file.list` and `v3.users.list` read every record they return.
+  - `v3.message.post` waits for the message base's lock.
+  - `v3.fs` calls on a slow or network disk.
+
 ### v3.args
 
 Array of string arguments passed via the `args` field in `doors.json`.
@@ -532,6 +557,7 @@ Every `v3.data` call reads the whole JSON file and, for `set()` and `delete()`, 
 | File is a symbolic link | Reads follow the link; `set()` and `delete()` throw `cannot safely replace script data at a symbolic link`. Replace the link with a real file |
 | File belongs to another user or group, or carries a file-specific ACL (POSIX ACL on Linux, extended ACL on macOS, custom DACL on Windows) | Reads work; `set()` and `delete()` throw `cannot safely replace script data ...`. The BBS will not rewrite a file whose access rules it cannot carry over to the new copy |
 | Operating system other than Linux, macOS or Windows | New stores can be created, but updating an existing one throws `safe script data replacement is unsupported on this platform` |
+| A change would leave the file over 4 MB | `set()` or `delete()` throws `the data store is ..., over the 4 MB limit` and the previous store is kept. A store already over 4 MB can still shrink. See [Limits](#limits) |
 
 Writes are atomic: the new contents go to a temporary file in `scripts/data/` and then replace the store in one step, so a crash or power cut mid-save leaves either the old file or the new one, never a half-written one. An existing store keeps its permission bits across saves. A new store is created with mode `0644` less the process umask, so a board run under a restrictive umask gets correspondingly tighter files.
 
@@ -606,6 +632,10 @@ handle, and `postPrivate` throws if `to` matches no user or more than one. In a
 netmail area `to` is not resolved: pass `"Name@zone:net/node"`, and the message
 is stored with `to` set to `Name` and the destination address `zone:net/node`.
 
+`to` may be up to 36 characters (in netmail, the name before `@`), `subject` up
+to 72 and `body` up to 64 KB; a post over any of them throws and posts nothing.
+See [Limits](#limits).
+
 ```javascript
 // Post a public message
 v3.message.post(1, {
@@ -668,12 +698,12 @@ Sandboxed file operations. All paths are resolved relative to `scripts/data/`, w
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `read(path)` | string | Read a text file. Throws if not found |
-| `write(path, content)` | — | Write a text file (overwrites if exists, creates parent dirs) |
-| `append(path, content)` | — | Append to a file (creates if not exists) |
+| `read(path)` | string | Read a text file of up to 4 MB. Throws if not found |
+| `write(path, content)` | — | Write a text file of up to 4 MB (overwrites if exists, creates parent dirs) |
+| `append(path, content)` | — | Append to a file (creates if not exists). The file may grow to 4 MB |
 | `exists(path)` | boolean | Check if file or directory exists |
 | `delete(path)` | boolean | Delete a file. Returns `true` if deleted |
-| `list(dir)` | array | List directory contents |
+| `list(dir)` | array | List directory contents, up to 10,000 entries |
 | `mkdir(path)` | — | Create a directory (and parents) |
 
 **Directory listing entry fields** (returned by `list`):
@@ -734,11 +764,11 @@ Common utility functions for scripting.
 | `time()` | number | Current Unix timestamp (seconds) |
 | `date()` | string | Current date/time as `"2006-01-02 15:04:05"` |
 | `date(format)` | string | Current date/time in Go format (see below) |
-| `padRight(str, width)` | string | Pad string on the right with spaces to `width` |
+| `padRight(str, width)` | string | Pad string on the right with spaces to `width` (up to 4096) |
 | `padRight(str, width, char)` | string | Pad with specified character |
-| `padLeft(str, width)` | string | Pad string on the left with spaces to `width` |
+| `padLeft(str, width)` | string | Pad string on the left with spaces to `width` (up to 4096) |
 | `padLeft(str, width, char)` | string | Pad with specified character |
-| `center(str, width)` | string | Center string within `width` characters |
+| `center(str, width)` | string | Center string within `width` characters (up to 4096) |
 | `stripAnsi(str)` | string | Remove ANSI escape sequences |
 | `stripPipe(str)` | string | Remove Vision/3 pipe codes |
 | `displayLen(str)` | number | Visible display length (ignoring ANSI and pipe codes) |
@@ -801,7 +831,7 @@ v3.nodes.send(2, "Hey, check out the new files!");
 v3.nodes.broadcast("System maintenance in 5 minutes");
 ```
 
-> **Note:** Page messages are delivered at the recipient's next menu prompt, not immediately.
+> **Note:** Page messages are delivered at the recipient's next menu prompt, not immediately. A page may be up to 255 characters; `send` and `broadcast` throw for a longer one.
 
 ---
 

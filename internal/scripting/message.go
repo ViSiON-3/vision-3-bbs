@@ -2,6 +2,7 @@ package scripting
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
@@ -97,6 +98,9 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		subject := jsString(opts, "subject", "")
 		body := jsString(opts, "body", "")
 		replyTo := jsString(opts, "replyTo", "")
+		if err := checkPost("v3.message.post", to, subject, body); err != nil {
+			panic(vm.NewGoError(err))
+		}
 
 		// Signed as the message reader signs a post: the real name where the
 		// area requires one. A missing area is left for AddMessage to report.
@@ -125,6 +129,9 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		subject := jsString(opts, "subject", "")
 		body := jsString(opts, "body", "")
 		replyTo := jsString(opts, "replyTo", "")
+		if err := checkPost("v3.message.postPrivate", to, subject, body); err != nil {
+			panic(vm.NewGoError(err))
+		}
 
 		to, err := privateRecipient(mgr, eng.providers.UserMgr, areaID, to)
 		if err != nil {
@@ -204,4 +211,25 @@ func displayMessageToJS(vm *goja.Runtime, msg *message.DisplayMessage) goja.Valu
 	jsutil.Set(obj, "isPrivate", msg.IsPrivate)
 	jsutil.Set(obj, "areaID", msg.AreaID)
 	return obj
+}
+
+// checkPost returns a limitError when a message a script posts with call has
+// a To, subject or body over its limit. A netmail To may end in
+// "@zone:net/node"; the name before it is what the limit counts, and the
+// address may add up to maxFTNAddressChars.
+func checkPost(call, to, subject, body string) error {
+	name := to
+	if i := strings.LastIndex(to, "@"); i >= 0 {
+		name = to[:i]
+		if err := checkChars(call, "to (with its address)", to, maxToChars+1+maxFTNAddressChars); err != nil {
+			return err
+		}
+	}
+	if err := checkChars(call, "to", name, maxToChars); err != nil {
+		return err
+	}
+	if err := checkChars(call, "subject", subject, maxSubjectChars); err != nil {
+		return err
+	}
+	return checkBytes(call, "body", len(body), maxMessageBodyBytes)
 }

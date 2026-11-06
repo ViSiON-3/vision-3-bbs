@@ -74,7 +74,7 @@ func registerData(v3 *goja.Object, eng *Engine) {
 			panic(vm.NewGoError(err))
 		}
 		data[key] = value
-		if err := store.saveFile(data); err != nil {
+		if err := store.saveFile(data, "v3.data.set"); err != nil {
 			panic(vm.NewGoError(err))
 		}
 		return goja.Undefined()
@@ -94,7 +94,7 @@ func registerData(v3 *goja.Object, eng *Engine) {
 			panic(vm.NewGoError(err))
 		}
 		delete(data, key)
-		if err := store.saveFile(data); err != nil {
+		if err := store.saveFile(data, "v3.data.delete"); err != nil {
 			panic(vm.NewGoError(err))
 		}
 		return goja.Undefined()
@@ -183,12 +183,15 @@ func (ds *dataStore) loadFile() (map[string]any, error) {
 }
 
 // saveFile writes the data file without acquiring the mutex (caller must hold it).
-func (ds *dataStore) saveFile(data map[string]any) error {
+func (ds *dataStore) saveFile(data map[string]any, call string) error {
 	if err := os.MkdirAll(filepath.Dir(ds.path), 0o755); err != nil {
 		return err
 	}
 	raw, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
+		return err
+	}
+	if err := checkStoreSize(ds.path, call, len(raw)); err != nil {
 		return err
 	}
 	info, err := os.Lstat(ds.path)
@@ -256,4 +259,18 @@ func dataModeProbe(path string) (*os.File, error) {
 		return nil, fmt.Errorf("create script data mode probe: %w", err)
 	}
 	return probe, nil
+}
+
+// checkStoreSize refuses a save of size bytes to the store at path when it is
+// over maxDataStoreBytes, unless it makes a store already over the cap
+// smaller: a store from before the cap, or edited by hand, can still shrink.
+func checkStoreSize(path, call string, size int) error {
+	err := checkBytes(call, "the data store", size, maxDataStoreBytes)
+	if err == nil {
+		return nil
+	}
+	if info, statErr := os.Stat(path); statErr == nil && int64(size) < info.Size() {
+		return nil
+	}
+	return err
 }
