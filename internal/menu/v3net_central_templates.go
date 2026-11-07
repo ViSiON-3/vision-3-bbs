@@ -66,10 +66,12 @@ func centralTemplateLines(s string) int {
 }
 
 // rowsThatFit returns how many MID rows fit on a termHeight-row screen with
-// TOP, BOT and footer more rows below them, at least one.
+// TOP, BOT and footer more rows below them, at least one. footer counts
+// every row drawn after BOT, the one the cursor is left on included, so a
+// screen whose last line ends without a break fills the terminal.
 func (t centralTemplate) rowsThatFit(termHeight, footer int) int {
 	per := max(centralTemplateLines(t.mid), 1)
-	free := termHeight - centralTemplateLines(t.top) - centralTemplateLines(t.bot) - footer - 1
+	free := termHeight - centralTemplateLines(t.top) - centralTemplateLines(t.bot) - footer
 	return max(free/per, 1)
 }
 
@@ -122,14 +124,15 @@ func renderWhoTemplate(t centralTemplate, rows []centralWhoRow, total int, netwo
 }
 
 // renderLastCallsTemplate draws network Last Callers with t. TOP and BOT
-// take @CT@ (calls shown), @NW@ (the networks) and @LEGEND@ (a line saying
-// what the From column means in this view). Each MID row takes @UN@
-// handle, @BB@ board, @NW@ where the call was (the network's name, or
+// take @CT@ (calls shown), @NW@ (the networks) and @LEGEND@ (what the From
+// column means in the combined view; blank in the network-only one). Each MID row takes @UN@
+// handle, @BB@ location (the board's name for a network call, the
+// caller's location field for a local one), @NW@ where the call was (the network's name, or
 // "local" for this board's own calls in the combined view), @DY@ the day
 // it began (Mon), @LO@ and @LT@ when it began and ended (03:04pm), and
 // @TO@ its length in minutes (- while unknown).
 func renderLastCallsTemplate(t centralTemplate, rows []centralCallRow, networks []string, includeLocal bool, timeLoc *time.Location) string {
-	legend := "Calls shared by callers on V3Net boards, kept 24 hours"
+	legend := ""
 	if includeLocal {
 		legend = "local = this board; a network name = shared from a V3Net board"
 	}
@@ -155,7 +158,7 @@ func renderLastCallsTemplate(t centralTemplate, rows []centralCallRow, networks 
 			mins = strconv.Itoa(int(r.ended.Sub(r.began).Minutes()))
 		}
 		b.WriteString(fillCentralTokens(t.mid, map[string]string{
-			"UN": r.handle, "BB": r.board, "NW": from, "DY": day, "LO": on, "LT": off, "TO": mins,
+			"UN": r.handle, "BB": r.location, "NW": from, "DY": day, "LO": on, "LT": off, "TO": mins,
 		}) + "\r\n")
 	}
 	b.WriteString(endLine(fillCentralTokens(t.bot, global)))

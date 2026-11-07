@@ -145,9 +145,9 @@ func TestCentralCallRowsMergeAndFlag(t *testing.T) {
 			// Past the limit since the feed was fetched: not drawn.
 			protocol.CentralActivityEntry{Handle: "Gone", At: at(25 * time.Hour)}),
 	}}
-	local := []user.CallRecord{{Handle: "Me", ConnectTime: now.Add(-time.Hour)}, {Handle: "Lou", ConnectTime: now.Add(-2 * time.Hour)}}
+	local := []user.CallRecord{{Handle: "Me", GroupLocation: "Akron, OH", ConnectTime: now.Add(-time.Hour)}, {Handle: "Lou", ConnectTime: now.Add(-2 * time.Hour)}}
 
-	rows := centralCallRows(feeds, "self", local, "Home", true, 10)
+	rows := centralCallRows(feeds, "self", local, true, 10)
 	var got []string
 	for _, r := range rows {
 		flag := r.network
@@ -159,8 +159,12 @@ func TestCentralCallRowsMergeAndFlag(t *testing.T) {
 	if strings.Join(got, ",") != "testnet:Bob,local:Lou,local:Me,testnet:Bea" {
 		t.Errorf("merged rows %v", got)
 	}
+	// Location: the board for a network call, the caller's own for a local one.
+	if rows[0].location != "Beta" || rows[2].location != "Akron, OH" || rows[1].location != "" {
+		t.Errorf("locations %+v", rows)
+	}
 	// Network only: this board's snapshot is shown as the network has it.
-	rows = centralCallRows(feeds, "self", local, "Home", false, 2)
+	rows = centralCallRows(feeds, "self", local, false, 2)
 	if len(rows) != 2 || rows[0].handle != "Me" || rows[1].handle != "Bea" || rows[0].local {
 		t.Errorf("network rows %+v", rows)
 	}

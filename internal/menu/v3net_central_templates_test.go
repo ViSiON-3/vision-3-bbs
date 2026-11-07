@@ -51,7 +51,7 @@ func TestLastCallersAllUsesTemplates(t *testing.T) {
 	if r.err != nil {
 		t.Fatal(r.err)
 	}
-	if !r.has("V3Net Central", "From", "Called", "local = this board", "testnet", "Bob", "Beta BBS", "Alpha", "12", "Hide this board's callers") {
+	if !r.has("From", "Location", "Called", "testnet", "Bob", "Beta BBS", "Alpha", "12", "Hide this board's callers") {
 		t.Errorf("output:\n%s", r.text())
 	}
 	if !strings.Contains(r.text(), "local      Alpha") || strings.Contains(r.text(), "@") || r.has("Sysop") {
@@ -86,8 +86,8 @@ func TestCentralTemplateValuesAreText(t *testing.T) {
 // Rows are trimmed so the template, footer and pause fit the screen.
 func TestCentralTemplateRowsThatFit(t *testing.T) {
 	tpl := centralTemplate{top: "a\r\nb\r\nc\r\n", mid: "row", bot: "z\r\n"}
-	if got := tpl.rowsThatFit(24, 3); got != 16 {
-		t.Errorf("rows %d, want 16", got)
+	if got := tpl.rowsThatFit(24, 3); got != 17 {
+		t.Errorf("rows %d, want 17", got)
 	}
 	if got := tpl.rowsThatFit(4, 3); got != 1 {
 		t.Errorf("rows %d on a tiny screen, want at least 1", got)

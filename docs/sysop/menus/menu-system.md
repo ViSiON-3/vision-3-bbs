@@ -936,7 +936,8 @@ fetched, the key help (`A`, `R`) on Last Callers, and the pause prompt.
 `LASTNET.MID` row tokens:
 
 - `@UN@` - Caller's handle
-- `@BB@` - Board the call was to
+- `@BB@` - Location: the board's name for a network call, the caller's
+  location field for a local one
 - `@NW@` - Where the call was: the network's name, or `local` for this
   board's own calls in the `--all` view
 - `@DY@` - Day the call began (`Mon`)
@@ -956,8 +957,9 @@ fetched, the key help (`A`, `R`) on Last Callers, and the pause prompt.
 
 - `@CT@` - Rows shown
 - `@NW@` - The networks shown, comma-separated
-- `@LEGEND@` - (`LASTNET` only) One line saying what the From column means
-  in the current view
+- `@LEGEND@` - (`LASTNET` only) What the From column means in the combined
+  view (`--all`); blank in the network-only one. The stock `LASTNET.BOT` is
+  empty, leaving every row below the header for calls
 - `@TT@` - (`WHONET` only) Callers in all, including any that did not fit
 
 ## Special Menu Names

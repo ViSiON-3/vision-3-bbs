@@ -146,9 +146,10 @@ func runV3NetCentralWho(c *cmdCtx, args string) (*user.User, string, error) {
 	rows := centralWhoRows(feeds)
 
 	if tpl, ok := e.loadCentralTemplate("WHONET"); ok {
-		// Footer: "...and N more", the errors, the pause prompt.
+		// Footer: "...and N more", the errors, the pause prompt and the
+		// break it may start with.
 		shown := rows
-		if fit := tpl.rowsThatFit(termHeight, 2+len(errs)); len(shown) > fit {
+		if fit := tpl.rowsThatFit(termHeight, 3+len(errs)); len(shown) > fit {
 			shown = shown[:fit]
 		}
 		var buf strings.Builder
@@ -213,10 +214,13 @@ func runV3NetCentralWho(c *cmdCtx, args string) (*user.User, string, error) {
 // centralCallRow is one call on the Last Callers screen: a call to this
 // board (local) or one a board on a network published.
 type centralCallRow struct {
-	local          bool
-	network, board string
-	handle         string
-	began, ended   time.Time
+	local   bool
+	network string
+	// location is where the call came from: the board's name for a
+	// network call, the caller's location field for a local one.
+	location     string
+	handle       string
+	began, ended time.Time
 }
 
 // lastCallersMode is what a Last Callers screen covers.
@@ -272,7 +276,7 @@ func runV3NetCentralLastCallers(c *cmdCtx, args string) (*user.User, string, err
 // its local calls are shown, since those are the same calls), plus this
 // board's visible calls when includeLocal is set. The most recent limit
 // are kept, oldest first, as the local list shows them.
-func centralCallRows(feeds map[string][]protocol.CentralActivityBoard, selfNode string, local []user.CallRecord, localBoard string, includeLocal bool, limit int) []centralCallRow {
+func centralCallRows(feeds map[string][]protocol.CentralActivityBoard, selfNode string, local []user.CallRecord, includeLocal bool, limit int) []centralCallRow {
 	var rows []centralCallRow
 	now := time.Now()
 	for net, boards := range feeds {
@@ -286,13 +290,13 @@ func centralCallRows(feeds map[string][]protocol.CentralActivityBoard, selfNode 
 				if now.Sub(e.Began()) > protocol.MaxCentralLastCallRetention {
 					continue
 				}
-				rows = append(rows, centralCallRow{network: net, board: b.Activity.BBS, handle: e.Handle, began: e.Began(), ended: e.Ended()})
+				rows = append(rows, centralCallRow{network: net, location: b.Activity.BBS, handle: e.Handle, began: e.Began(), ended: e.Ended()})
 			}
 		}
 	}
 	if includeLocal {
 		for _, r := range local {
-			rows = append(rows, centralCallRow{local: true, board: localBoard, handle: r.Handle, began: r.ConnectTime, ended: r.DisconnectTime})
+			rows = append(rows, centralCallRow{local: true, location: strings.TrimSpace(r.GroupLocation), handle: r.Handle, began: r.ConnectTime, ended: r.DisconnectTime})
 		}
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].began.Before(rows[j].began) })
@@ -327,10 +331,6 @@ func runCentralLastCallers(c *cmdCtx, limit int, includeLocal bool) (*user.User,
 	if e.V3NetCentral != nil {
 		selfNode = e.V3NetCentral.NodeID()
 	}
-	localBoard := strings.TrimSpace(e.GetServerConfig().BoardName)
-	if localBoard == "" {
-		localBoard = "This board"
-	}
 	timeLoc := getLastCallerTimeLocation(strings.TrimSpace(e.GetServerConfig().Timezone))
 
 	terminalio.WriteProcessedBytes(terminal, []byte(centralHeader(title, termWidth)+string(ansi.ReplacePipeCodes([]byte("|08  Fetching...|07\r\n")))), outputMode)
@@ -354,15 +354,16 @@ func runCentralLastCallers(c *cmdCtx, limit int, includeLocal bool) (*user.User,
 		var buf strings.Builder
 		var rows []centralCallRow
 		if haveTpl {
-			// Footer: the rule and key help, plus errors.
+			// Footer: the errors, the rule, and the key help the cursor is
+			// left on.
 			fit := tpl.rowsThatFit(termHeight, 2+len(errs))
-			rows = centralCallRows(feeds, selfNode, local, localBoard, includeLocal, min(limit, fit))
+			rows = centralCallRows(feeds, selfNode, local, includeLocal, min(limit, fit))
 			buf.WriteString(ansi.ClearScreen())
 			buf.WriteString(renderLastCallsTemplate(tpl, rows, networks, includeLocal, timeLoc))
 		} else {
 			// Title 2 rows, legend 1, column header 1, footer 2, plus errors.
 			fit := max(termHeight-6-len(errs), 1)
-			rows = centralCallRows(feeds, selfNode, local, localBoard, includeLocal, min(limit, fit))
+			rows = centralCallRows(feeds, selfNode, local, includeLocal, min(limit, fit))
 			buf.WriteString(centralHeader(title, termWidth))
 			writeBuiltinCallRows(&buf, rows, includeLocal, timeLoc, handleW, boardW, srcW)
 		}
@@ -581,7 +582,7 @@ func writeBuiltinCallRows(buf *strings.Builder, rows []centralCallRow, includeLo
 		legend = "|08  |14local|08 = this board,  |13network name|08 = shared from a V3Net board"
 	}
 	buf.Write(ansi.ReplacePipeCodes([]byte(legend + "|07\r\n")))
-	buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|03  %-*s %-*s %-*s %-12s %s|07\r\n", srcW, "From", handleW, "Caller", boardW, "Board", "On", "Mins"))))
+	buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|03  %-*s %-*s %-*s %-12s %s|07\r\n", srcW, "From", handleW, "Caller", boardW, "Location", "On", "Mins"))))
 	for _, r := range rows {
 		src := "|13" + v3netCell(r.network, srcW) + "|07"
 		if r.local {
@@ -596,6 +597,6 @@ func writeBuiltinCallRows(buf *strings.Builder, rows []centralCallRow, includeLo
 			mins = strconv.Itoa(int(r.ended.Sub(r.began).Minutes()))
 		}
 		buf.Write(ansi.ReplacePipeCodes([]byte("  " + src + " |15" + v3netCell(r.handle, handleW) + "|07 |11" +
-			v3netCell(r.board, boardW) + "|07 " + fmt.Sprintf("%-12s ", on) + mins + "\r\n")))
+			v3netCell(r.location, boardW) + "|07 " + fmt.Sprintf("%-12s ", on) + mins + "\r\n")))
 	}
 }

@@ -309,8 +309,8 @@ once, as the subscription reloads.
 
 On the stock main menu, `W` shows this board's callers and the network's
 together (`LASTCALLERS 20 --all`), each row flagged `local` or with the
-network's name, and `/L` **V3Net Callers** beside it the network's alone
-(`LASTCALLERS 20 --network`); `A` on either screen switches between them.
+network's name; `A` hides this board's callers to show the network's
+alone. Bind `LASTCALLERS 20 --network` to open on that view.
 While your board offers Last Callers on no network, `W` is the plain local
 screen, with no `A` or `R` keys, exactly as before. The Central menu has both feeds as `W` and `L`; see
 [menu commands](reference/menu-commands.md#v3net-central) to bind them
