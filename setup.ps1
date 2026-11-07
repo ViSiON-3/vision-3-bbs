@@ -209,6 +209,14 @@ if (-not (Test-Path "data\oneliners.json")) {
     [System.IO.File]::WriteAllText("$scriptRoot\data\oneliners.json", "[]", $utf8NoBom)
 }
 
+# Seed a starter set of rumors so the @RR@ slot on the menus isn't blank.
+$rumorsTemplate = Join-Path $scriptRoot "templates\data\rumors.json"
+$rumorsTarget = Join-Path $scriptRoot "data\rumors.json"
+if ((Test-Path $rumorsTemplate) -and -not (Test-Path $rumorsTarget)) {
+    Write-Host "Creating rumors.json from template..."
+    Copy-Item $rumorsTemplate $rumorsTarget
+}
+
 if (-not (Test-Path "data\users\users.json")) {
     Write-Host "Creating initial users.json with default sysop account..."
     $usersJson = @'

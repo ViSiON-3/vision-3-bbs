@@ -130,6 +130,8 @@ done
 # start (internal/user/manager.go), so writing it here would fork a second copy
 # of those defaults.
 [ -f /vision3/data/oneliners.json ]        || echo "[]" > /vision3/data/oneliners.json
+[ -f /vision3/data/rumors.json ] || [ ! -f /vision3/templates/data/rumors.json ] \
+    || cp /vision3/templates/data/rumors.json /vision3/data/rumors.json
 [ -f /vision3/data/users/callhistory.json ] || echo "[]" > /vision3/data/users/callhistory.json
 [ -f /vision3/data/users/callnumber.json ]  || echo "1"  > /vision3/data/users/callnumber.json
 

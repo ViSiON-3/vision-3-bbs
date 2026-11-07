@@ -1,6 +1,6 @@
 # Rumors
 
-The Rumors feature is a community graffiti wall where users can post short anonymous or signed messages — a modernization of ViSiON/2's `RUMORS.PAS`. Users can browse, add, delete, and search rumors, with access-level filtering and newscan support. A random rumor can also be dropped into any menu screen with the `@RR@` code, which is how the shipped main, message and door menus keep a little life on screen between calls. It needs no setup: the Rumors submenu is on the main menu's `R` key and the data file appears with the first rumor.
+The Rumors feature is a community graffiti wall where users can post short anonymous or signed messages — a modernization of ViSiON/2's `RUMORS.PAS`. Users can browse, add, delete, and search rumors, with access-level filtering and newscan support. A random rumor can also be dropped into any menu screen with the `@RR@` code, which is how the shipped main, message and door menus keep a little life on screen between calls. It needs no setup: the Rumors submenu is on the main menu's `R` key, and a new install starts with a handful of sample rumors so the menus aren't blank on day one.
 
 ---
 
@@ -224,7 +224,16 @@ Rumors are stored in `data/rumors.json`:
 }
 ```
 
-The file is created automatically when the first rumor is added. The `next_id` field auto-increments to ensure unique IDs. Concurrent access is mutex-protected.
+New installs are seeded from `templates/data/rumors.json`, a starter set of about twenty anonymous rumors; the installers and the Docker entrypoint copy it only when `data/rumors.json` doesn't already exist, so an existing board's rumors are never touched. To start with an empty board, delete the samples from the Rumors menu (as SysOp), or replace the file's contents with an empty set:
+
+```json
+{
+    "rumors": [],
+    "next_id": 1
+}
+```
+
+Don't remove the file itself to clear the board: a missing `data/rumors.json` is treated as a fresh install, so the next container start or installer rerun copies the samples back in. The `next_id` field auto-increments to ensure unique IDs. Concurrent access is mutex-protected.
 
 
 ### ViSiON/2 Compatibility

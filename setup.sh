@@ -198,6 +198,12 @@ if [ ! -f "data/oneliners.json" ]; then
     echo "[]" > data/oneliners.json
 fi
 
+# Seed a starter set of rumors so the @RR@ slot on the menus isn't blank.
+if [ -f "templates/data/rumors.json" ] && [ ! -f "data/rumors.json" ]; then
+    echo "Creating rumors.json from template..."
+    cp templates/data/rumors.json data/rumors.json
+fi
+
 if [ ! -f "data/users/users.json" ]; then
     echo "Creating initial users.json with default sysop account..."
     cat > data/users/users.json << 'EOF'

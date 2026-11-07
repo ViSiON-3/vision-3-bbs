@@ -205,6 +205,10 @@ if [[ ! -f "$TARGET/data/oneliners.json" ]]; then
     echo "[]" > "$TARGET/data/oneliners.json"
 fi
 
+if [[ -f "$REPO_DIR/templates/data/rumors.json" ]] && [[ ! -f "$TARGET/data/rumors.json" ]]; then
+    cp "$REPO_DIR/templates/data/rumors.json" "$TARGET/data/rumors.json"
+fi
+
 if [[ ! -f "$TARGET/data/users/users.json" ]]; then
     info "Creating default sysop account..."
   cat > "$TARGET/data/users/users.json" << 'EOF'
