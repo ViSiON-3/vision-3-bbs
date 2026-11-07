@@ -268,6 +268,7 @@ func (l *Leaf) runActivityKind(ctx context.Context, kind string) {
 	}
 }
 
+// setActivityError records the latest failure for kind, for Status.
 func (l *Leaf) setActivityError(kind, msg string) {
 	l.central.mu.Lock()
 	if st := l.central.activity[kind]; st != nil {
@@ -584,6 +585,8 @@ func liveActivityFeed(feed []protocol.CentralActivityBoard, kind string, now tim
 	return out
 }
 
+// cloneActivityFeed copies a feed deeply enough for the caller to change
+// its entries without touching the cache.
 func cloneActivityFeed(in []protocol.CentralActivityBoard) []protocol.CentralActivityBoard {
 	out := make([]protocol.CentralActivityBoard, len(in))
 	for i, b := range in {

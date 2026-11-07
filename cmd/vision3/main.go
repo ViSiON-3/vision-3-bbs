@@ -2418,12 +2418,15 @@ func (a *centralAdapter) CentralDirectory(ctx context.Context, network string, f
 	return a.svc.CentralDirectory(ctx, network, force)
 }
 
+// CentralActivity returns network's verified feed of kind.
 func (a *centralAdapter) CentralActivity(ctx context.Context, network, kind string, force bool) ([]protocol.CentralActivityBoard, error) {
 	return a.svc.CentralActivity(ctx, network, kind, force)
 }
 
+// NotifyCentralActivity asks every leaf to republish this board's activity.
 func (a *centralAdapter) NotifyCentralActivity() { a.svc.NotifyCentralActivity() }
 
+// NodeID returns this board's V3Net node ID.
 func (a *centralAdapter) NodeID() string { return a.svc.NodeID() }
 
 // centralActivityInfo converts a leaf's activity status for the menus.

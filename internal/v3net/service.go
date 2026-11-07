@@ -1353,6 +1353,7 @@ func (s *Service) activitySource() leaf.CentralActivitySource {
 
 type serviceActivitySource struct{ s *Service }
 
+// get returns the source SetCentralActivitySource set, or nil.
 func (a serviceActivitySource) get() leaf.CentralActivitySource {
 	if b, ok := a.s.activitySrc.Load().(*activitySourceBox); ok && b != nil {
 		return b.src
@@ -1360,6 +1361,7 @@ func (a serviceActivitySource) get() leaf.CentralActivitySource {
 	return nil
 }
 
+// CentralPresence defers to the set source; nothing before one is set.
 func (a serviceActivitySource) CentralPresence() []protocol.CentralActivityEntry {
 	if src := a.get(); src != nil {
 		return src.CentralPresence()
@@ -1367,6 +1369,7 @@ func (a serviceActivitySource) CentralPresence() []protocol.CentralActivityEntry
 	return nil
 }
 
+// CentralLastCalls defers to the set source; nothing before one is set.
 func (a serviceActivitySource) CentralLastCalls(since time.Time) []protocol.CentralActivityEntry {
 	if src := a.get(); src != nil {
 		return src.CentralLastCalls(since)

@@ -27,6 +27,7 @@ type centralFake struct {
 	node     string
 }
 
+// CentralActivity returns the scripted feed of kind on network.
 func (f *centralFake) CentralActivity(_ context.Context, network, kind string, _ bool) ([]protocol.CentralActivityBoard, error) {
 	f.fetches++
 	if err := f.errs[network]; err != nil {
@@ -34,8 +35,12 @@ func (f *centralFake) CentralActivity(_ context.Context, network, kind string, _
 	}
 	return f.acts[network][kind], nil
 }
+
+// NotifyCentralActivity counts the republish requests.
 func (f *centralFake) NotifyCentralActivity() { f.notifies++ }
-func (f *centralFake) NodeID() string         { return f.node }
+
+// NodeID returns the scripted node ID.
+func (f *centralFake) NodeID() string { return f.node }
 
 func (f *centralFake) CentralNetworks() []CentralNetworkInfo { return f.nets }
 func (f *centralFake) CentralDirectory(_ context.Context, network string, _ bool) ([]protocol.CentralDirectoryEntry, error) {

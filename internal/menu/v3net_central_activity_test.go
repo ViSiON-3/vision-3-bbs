@@ -18,6 +18,7 @@ func activityNet(name string) CentralNetworkInfo {
 	return CentralNetworkInfo{Network: name, Enabled: true, SupportKnown: true, Supported: true, Presence: on, LastCallers: on}
 }
 
+// activityBoardOf returns an online board's snapshot of kind with entries.
 func activityBoardOf(node, bbs, kind string, entries ...protocol.CentralActivityEntry) protocol.CentralActivityBoard {
 	return protocol.CentralActivityBoard{Online: true, Activity: protocol.CentralActivity{Kind: kind, NodeID: node, BBS: bbs, Entries: entries}}
 }
@@ -76,6 +77,8 @@ func TestCentralPrefsRefusesUnofferedFeature(t *testing.T) {
 	}
 }
 
+// The Central menu lists Who's Online and Last Callers only where the
+// sysop offers them and the hub serves them.
 func TestCentralMenuOffersActivityOnlyWhenAvailable(t *testing.T) {
 	off := &centralFake{nets: []CentralNetworkInfo{{Network: "testnet", Enabled: true, SupportKnown: true, Supported: true}}}
 	if out := runCentralScreen(t, off, "q\r", runV3NetCentral, ""); strings.Contains(out, "ho's Online") || strings.Contains(out, "ast Callers") {
@@ -108,6 +111,7 @@ func TestCentralWhoGroupsSessions(t *testing.T) {
 	}
 }
 
+// LASTCALLERS reads an optional count and a --network or --all flag.
 func TestParseLastCallersArgs(t *testing.T) {
 	for args, want := range map[string]struct {
 		limit int

@@ -11,6 +11,7 @@ import (
 
 type fakeSessions []*session.BbsSession
 
+// ListActive returns the scripted sessions.
 func (f fakeSessions) ListActive() []*session.BbsSession { return f }
 
 type fakeUsers struct {
@@ -18,6 +19,7 @@ type fakeUsers struct {
 	calls []user.CallRecord
 }
 
+// GetUserByID returns a copy of the scripted account, as UserMgr does.
 func (f *fakeUsers) GetUserByID(id int) (*user.User, bool) {
 	u, ok := f.byID[id]
 	if !ok {
@@ -26,6 +28,8 @@ func (f *fakeUsers) GetUserByID(id int) (*user.User, bool) {
 	c := *u
 	return &c, true
 }
+
+// GetLastCallers returns the scripted call history.
 func (f *fakeUsers) GetLastCallers() []user.CallRecord { return f.calls }
 
 // Only accounts that opted in are published, as they stand now, and never

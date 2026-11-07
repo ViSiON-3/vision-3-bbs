@@ -36,6 +36,8 @@ type centralActivitySource struct {
 	key [32]byte
 }
 
+// newCentralActivitySource returns a source reading sessions and users,
+// with a fresh random key for this process's session IDs.
 func newCentralActivitySource(sessions interface {
 	ListActive() []*session.BbsSession
 }, users interface {

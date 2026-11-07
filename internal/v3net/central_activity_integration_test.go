@@ -27,12 +27,14 @@ type fakeActivity struct {
 	calls    []protocol.CentralActivityEntry
 }
 
+// CentralPresence returns the scripted sessions.
 func (f *fakeActivity) CentralPresence() []protocol.CentralActivityEntry {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return slices.Clone(f.presence)
 }
 
+// CentralLastCalls returns the scripted calls that began after since.
 func (f *fakeActivity) CentralLastCalls(since time.Time) []protocol.CentralActivityEntry {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -45,16 +47,20 @@ func (f *fakeActivity) CentralLastCalls(since time.Time) []protocol.CentralActiv
 	return out
 }
 
+// set replaces what the board reports, as callers come, go and change
+// their minds.
 func (f *fakeActivity) set(presence, calls []protocol.CentralActivityEntry) {
 	f.mu.Lock()
 	f.presence, f.calls = presence, calls
 	f.mu.Unlock()
 }
 
+// online returns a presence entry for handle's session.
 func online(handle, session string) protocol.CentralActivityEntry {
 	return protocol.CentralActivityEntry{Handle: handle, Session: session}
 }
 
+// called returns a ten-minute call by handle that began ago.
 func called(handle string, ago time.Duration) protocol.CentralActivityEntry {
 	began := time.Now().UTC().Add(-ago)
 	return protocol.CentralActivityEntry{Handle: handle, At: began.Format(time.RFC3339), Until: began.Add(10 * time.Minute).Format(time.RFC3339)}
@@ -71,6 +77,8 @@ type activityBoard struct {
 	calls    bool
 }
 
+// newActivityBoard returns a board with a fresh key and source, offering
+// presence and calls as given.
 func newActivityBoard(t *testing.T, name string, presence, calls bool) *activityBoard {
 	t.Helper()
 	ks, _, err := keystore.Load(filepath.Join(t.TempDir(), "leaf.key"))
@@ -80,6 +88,8 @@ func newActivityBoard(t *testing.T, name string, presence, calls bool) *activity
 	return &activityBoard{name: name, ks: ks, src: &fakeActivity{}, presence: presence, calls: calls}
 }
 
+// start runs a leaf for the board against ts, returning it and a stop
+// func that is safe to call more than once.
 func (b *activityBoard) start(t *testing.T, ts *httptest.Server) (*leaf.Leaf, func()) {
 	t.Helper()
 	ix, err := dedup.Open(filepath.Join(t.TempDir(), "dedup.sqlite"))
@@ -151,6 +161,7 @@ func waitFeed(t *testing.T, l *leaf.Leaf, kind string, want ...string) {
 	}
 }
 
+// newActivityHub starts a hub serving testnet and its test server.
 func newActivityHub(t *testing.T) (*hub.Hub, *httptest.Server) {
 	t.Helper()
 	dir := t.TempDir()

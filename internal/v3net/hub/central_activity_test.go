@@ -38,6 +38,8 @@ func activityFor(t *testing.T, ks *keystore.Keystore, kind string, handles ...st
 	return a
 }
 
+// activityDo sends a signed request for kind as ks, with a as the body
+// when given, and returns the status and body.
 func activityDo(t *testing.T, ts *httptest.Server, ks *keystore.Keystore, method, kind string, a *protocol.CentralActivity) (int, []byte) {
 	t.Helper()
 	body := ""
@@ -54,6 +56,7 @@ func activityDo(t *testing.T, ts *httptest.Server, ks *keystore.Keystore, method
 	return resp.StatusCode, b
 }
 
+// getActivity fetches the feed of kind as ks.
 func getActivity(t *testing.T, ts *httptest.Server, ks *keystore.Keystore, kind string) protocol.CentralActivityFeed {
 	t.Helper()
 	code, body := activityDo(t, ts, ks, http.MethodGet, kind, nil)
@@ -90,6 +93,7 @@ func openStream(t *testing.T, h *Hub, ts *httptest.Server, ks *keystore.Keystore
 	return func() { resp.Body.Close() }
 }
 
+// waitFor polls ok until it holds, failing after three seconds.
 func waitFor(t *testing.T, what string, ok func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
@@ -101,6 +105,7 @@ func waitFor(t *testing.T, what string, ok func() bool) {
 	}
 }
 
+// The hub names both activity features for leaves to find in /info.
 func TestNetworkInfoAdvertisesActivityFeatures(t *testing.T) {
 	for _, f := range []string{protocol.FeatureCentralPresence, protocol.FeatureCentralLastCallers} {
 		if !slices.Contains(hubFeatures, f) {
@@ -273,6 +278,7 @@ func TestCentralActivityRejectsForgery(t *testing.T) {
 	}
 }
 
+// An expired snapshot is not listed, and the pruner removes it.
 func TestCentralActivityPruneAndExpiry(t *testing.T) {
 	h, _ := setupTestHub(t)
 	ks := newLeafKS(t)

@@ -10,6 +10,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
+// activityKS returns a fresh keystore.
 func activityKS(t *testing.T) *keystore.Keystore {
 	t.Helper()
 	ks, _, err := keystore.Load(filepath.Join(t.TempDir(), "k.key"))
@@ -19,6 +20,8 @@ func activityKS(t *testing.T) *keystore.Keystore {
 	return ks
 }
 
+// presenceSnapshot returns an unsigned presence snapshot on testnet
+// published at now, valid for three minutes.
 func presenceSnapshot(now time.Time, entries ...protocol.CentralActivityEntry) *protocol.CentralActivity {
 	return &protocol.CentralActivity{
 		V3NetCentral: protocol.CentralActivityVersion, Kind: protocol.CentralKindPresence, Network: "testnet", NodeID: "aaaa1111bbbb2222",
@@ -27,6 +30,7 @@ func presenceSnapshot(now time.Time, entries ...protocol.CentralActivityEntry) *
 	}
 }
 
+// A signed snapshot verifies, and any change to what it covers breaks it.
 func TestCentralActivitySignVerify(t *testing.T) {
 	ks := activityKS(t)
 	now := time.Now().UTC().Truncate(time.Second)
@@ -60,6 +64,7 @@ func TestCentralActivitySignVerify(t *testing.T) {
 	}
 }
 
+// Validate enforces each kind's form and limits, retention included.
 func TestCentralActivityValidate(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	at := func(d time.Duration) string { return now.Add(d).Format(time.RFC3339) }
@@ -115,6 +120,7 @@ func TestCentralActivityValidate(t *testing.T) {
 	}
 }
 
+// CleanCentralText makes text safe for a snapshot and cuts it to length.
 func TestCleanCentralText(t *testing.T) {
 	if got := protocol.CleanCentralText(" Al|ce\x07 ", 30); got != "Al/ce" {
 		t.Errorf("got %q", got)
