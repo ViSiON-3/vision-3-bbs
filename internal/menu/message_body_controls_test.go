@@ -376,7 +376,7 @@ func TestShippedArtBodyUnchanged(t *testing.T) {
 		if !detectAnsiArtInMessage(art) {
 			art = "\x1b[H" + art
 		}
-		want := RenderANSIArtToLines(bodyAsUTF8(art, ""), ansi.ArtWidth, 500)
+		want := ansi.RenderANSIArtToLines(bodyAsUTF8(art, ""), ansi.ArtWidth, 500)
 		got := messageBodyLines(bodyForDisplay(art, ""), "", 80, ansi.OutputModeUTF8)
 		if strings.Join(got, "\n") != strings.Join(want, "\n") {
 			t.Errorf("%s: the art changed", filepath.Base(f))

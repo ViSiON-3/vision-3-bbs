@@ -1,4 +1,4 @@
-package menu
+package ansi
 
 import (
 	"strings"
@@ -11,7 +11,7 @@ func plainRow(lines []string, n int) string {
 	if n >= len(lines) {
 		return ""
 	}
-	return strings.TrimRight(reWrapEsc.ReplaceAllString(lines[n], ""), " ")
+	return strings.TrimRight(StripAnsi(lines[n]), " ")
 }
 
 // ESC[s / ESC[u were no-ops, so every restore left the cursor wherever the

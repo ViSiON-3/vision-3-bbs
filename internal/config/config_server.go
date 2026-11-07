@@ -166,6 +166,16 @@ type ServerConfig struct {
 	// auto-signature editor, which have no area, follow it. Off unless set.
 	EditorAutocorrect bool `json:"editorAutocorrect"`
 
+	// ArchiveViewerDoor and TextViewerDoor are the codes of v3_script doors
+	// that view an archive, or any other file, in place of the built-in
+	// viewers (ZipLab's contents list and the text pager): from V in both
+	// file lists, VIEW_FILE and, for text, TYPE_TEXT_FILE. The script gets
+	// the file's area tag and filename after the door's own arguments.
+	// Empty, or naming a door that is missing or not a v3_script door: the
+	// built-in viewer (the BBS warns once at startup about the latter).
+	ArchiveViewerDoor string `json:"archiveViewerDoor,omitempty"`
+	TextViewerDoor    string `json:"textViewerDoor,omitempty"`
+
 	// Logging configuration (file location, level, caching, rolling). Shared by
 	// all binaries; each supplies its own default log filename in code.
 	Logging LoggingConfig `json:"logging"`

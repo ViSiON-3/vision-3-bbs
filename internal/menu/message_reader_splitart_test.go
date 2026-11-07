@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // splitArtBody builds a message body the way some systems post autowrapped
@@ -37,7 +39,7 @@ func TestDetectAnsiArt_CursorSaveRestoreOnly(t *testing.T) {
 
 func TestRenderSplitArt_RowsAreWholeAndSelfContained(t *testing.T) {
 	strip := regexp.MustCompile("\x1b\\[[0-9;?]*[A-Za-z]")
-	lines := RenderANSIArtToLines(splitArtBody(), 80, 500)
+	lines := ansi.RenderANSIArtToLines(splitArtBody(), 80, 500)
 	if len(lines) < 2 {
 		t.Fatalf("got %d lines, want at least 2", len(lines))
 	}
@@ -64,7 +66,7 @@ func TestSplitArt_DECSaveRestore(t *testing.T) {
 			if !detectAnsiArtInMessage(body) {
 				t.Fatal("not detected as ANSI art")
 			}
-			lines := RenderANSIArtToLines(body, 80, 10)
+			lines := ansi.RenderANSIArtToLines(body, 80, 10)
 			if got := strings.TrimRight(regexp.MustCompile("\x1b\\[[0-9;?]*[A-Za-z]").ReplaceAllString(lines[0], ""), " "); got != "ABCD" {
 				t.Errorf("row 1 = %q, want ABCD", got)
 			}
@@ -72,7 +74,7 @@ func TestSplitArt_DECSaveRestore(t *testing.T) {
 	}
 
 	// The colour saved with the cursor comes back with it.
-	r := NewANSIRenderer(20, 3)
+	r := ansi.NewANSIRenderer(20, 3)
 	r.Render("\x1b[31m\x1b7\x1b[34mA\x1b8B")
 	if c := r.Buffer[0][0]; c.Char != 'B' || !strings.Contains(c.Style, "31") {
 		t.Errorf("cell 0 = %q in %q; want B in the red saved by ESC 7", c.Char, c.Style)

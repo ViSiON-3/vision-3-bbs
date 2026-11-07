@@ -63,7 +63,108 @@ func registerAnsi(v3 *goja.Object, eng *Engine) {
 		return goja.Undefined()
 	})
 
+	// render(text, {width, rows}) — draw ANSI art the way ANSI.SYS would
+	// and return the screen it leaves, one string per row.
+	jsutil.Set(obj, "render", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			return vm.ToValue([]string{})
+		}
+		width, rows := renderOptions(call)
+		return vm.ToValue(renderArt(call.Arguments[0].String(), width, rows))
+	})
+
+	// sauce(text) — the SAUCE record's title, author and group, or null.
+	jsutil.Set(obj, "sauce", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			return goja.Null()
+		}
+		sc, ok := ansi.ReadSAUCE(cp437Bytes(call.Arguments[0].String()))
+		if !ok {
+			return goja.Null()
+		}
+		res := vm.NewObject()
+		jsutil.Set(res, "title", sc.Title)
+		jsutil.Set(res, "author", sc.Author)
+		jsutil.Set(res, "group", sc.Group)
+		return res
+	})
+
 	jsutil.Set(v3, "ansi", obj)
+}
+
+// The limits on v3.ansi.render: the widest screen it draws, the most rows
+// it keeps, the default number of rows, and the most cells a screen may
+// have (80 columns by 4000 rows), so a wide screen keeps fewer rows.
+const (
+	maxRenderWidth    = 255
+	maxRenderRows     = 4000
+	defaultRenderRows = 1000
+	maxRenderCells    = ansi.ArtWidth * maxRenderRows
+)
+
+// renderOptions reads render's optional {width, rows}, defaulting to the
+// art width (80) and defaultRenderRows, and clamping each to its limit and
+// the screen to maxRenderCells.
+func renderOptions(call goja.FunctionCall) (width, rows int) {
+	width, rows = ansi.ArtWidth, defaultRenderRows
+	if len(call.Arguments) < 2 {
+		return width, rows
+	}
+	opts, ok := call.Arguments[1].Export().(map[string]any)
+	if !ok {
+		return width, rows
+	}
+	read := func(key string, def, limit int) int {
+		v, ok := opts[key]
+		if !ok {
+			return def
+		}
+		var n int
+		switch x := v.(type) {
+		case int64:
+			n = int(x)
+		case float64:
+			n = int(x)
+		default:
+			return def
+		}
+		return min(max(n, 1), limit)
+	}
+	width = read("width", width, maxRenderWidth)
+	return width, min(read("rows", rows, maxRenderRows), maxRenderCells/width)
+}
+
+// renderArt draws text, as v3.file.read and readMember return it (one
+// character per byte), on a screen width columns wide and up to rows tall,
+// with the renderer the message reader uses (ansi.RenderANSIArtToLines):
+// ANSI.SYS semantics, auto-wrap at the last column, saved cursor positions.
+// Everything from the first Ctrl-Z, where SAUCE and comments start, is left
+// out. Trailing blank rows are dropped.
+func renderArt(text string, width, rows int) []string {
+	if i := strings.IndexByte(text, 0x1a); i >= 0 {
+		text = text[:i]
+	}
+	return ansi.RenderANSIArtToLines(text, width, rows)
+}
+
+// cp437Bytes turns text back into the bytes v3.file.read decoded it from:
+// one byte per character, characters below 0x80 as themselves and the rest
+// through ansi.UnicodeToCP437 ('?' for a character with no CP437 byte).
+func cp437Bytes(text string) []byte {
+	out := make([]byte, 0, len(text))
+	for _, r := range text {
+		switch {
+		case r < 0x80:
+			out = append(out, byte(r))
+		default:
+			if b, ok := ansi.UnicodeToCP437[r]; ok {
+				out = append(out, b)
+			} else {
+				out = append(out, '?')
+			}
+		}
+	}
+	return out
 }
 
 // artForSession prepares art file bytes for the session, as the menu does for

@@ -368,7 +368,7 @@ func TestViewFileByRecordMissingPath(t *testing.T) {
 	env := newMenuEnv(t)
 	rec := &file.FileRecord{ID: uuid.New(), AreaID: 99, Filename: "GONE.TXT"}
 	r := env.run(func(c *cmdCtx, _ string) (*user.User, string, error) {
-		viewFileByRecord(c.e, c.s, c.terminal, rec, c.outputMode, 80, 0, nil)
+		viewFileByRecord(c.e, viewerCaller{s: c.s, terminal: c.terminal, outputMode: c.outputMode, width: 80}, rec, nil)
 		return nil, "", nil
 	}, env.caller, "", "")
 	if !strings.Contains(r.text(), stripPipes(env.e.Strings().FileLocateError)) {
@@ -473,7 +473,7 @@ func TestViewMisnamedArchive(t *testing.T) {
 					if err != nil {
 						return nil, "", err
 					}
-					viewFileByRecord(c.e, c.s, c.terminal, rec, c.outputMode, 80, 24, nil)
+					viewFileByRecord(c.e, viewerCaller{s: c.s, terminal: c.terminal, outputMode: c.outputMode, width: 80, height: 24}, rec, nil)
 					return c.currentUser, "", nil
 				}
 			}

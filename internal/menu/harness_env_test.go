@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -88,6 +89,9 @@ type menuEnv struct {
 	// handler's cmdCtx.outputMode and the session-level mode the line reader
 	// uses to decode typed extended characters. Defaults to UTF-8.
 	outputMode ansi.OutputMode
+	// sessionContext gives each session a real context, which a script door
+	// needs; off, sessions report a nil one.
+	sessionContext bool
 }
 
 // defaultTestUsers are the users every menuEnv starts with.
@@ -264,6 +268,11 @@ func (env *menuEnv) run(fn RunnableFunc, u *user.User, args, input string) runRe
 	ts := newTestSession(input)
 	if env.remoteIP != "" {
 		ts.addr = &net.TCPAddr{IP: net.ParseIP(env.remoteIP), Port: 2222}
+	}
+	if env.sessionContext {
+		ctx, cancel := context.WithCancel(context.Background())
+		env.t.Cleanup(cancel)
+		ts.ctx = &testCtx{Context: ctx}
 	}
 	SetSessionOutputMode(ts, env.outputMode)
 	env.t.Cleanup(func() {

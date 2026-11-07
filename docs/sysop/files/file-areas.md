@@ -86,8 +86,8 @@ describes each command in full. The shipped bindings:
 | **B** | `BATCHDOWNLOAD` | Send every marked file |
 | **-** | `CLEAR_BATCH` | Empty the batch |
 | **U** | `UPLOADFILE` | Upload into the current area |
-| **V** | `VIEW_FILE` | View a file: archives open in the contents viewer, text is paged |
-| **T** | `TYPE_TEXT_FILE` | Page a file as plain text |
+| **V** | `VIEW_FILE` | View a file: archives open in the archive viewer, text in the text viewer (see [Viewer doors](#viewer-doors)) |
+| **T** | `TYPE_TEXT_FILE` | Show a file in the text viewer, or page it as plain text |
 | **I** | `SHOWFILEINFO` | Print a file's full record |
 | **K** | `CFG_FILECOLUMNS` | Choose the columns shown in file listings |
 | **E** | `EDITFILERECORD` | Sysop review queue (`ACS: SYSOP`) |
@@ -157,6 +157,51 @@ offering the protocol menu, so a cancelled transfer returns to the viewer
 cleanly — or **Q** to quit. Text files have any trailing SAUCE record
 stripped before display (see [SAUCE Metadata](files/sauce-metadata.md)) and
 are refused over 4 MB.
+
+These are the built-in viewers. A stock install replaces both with viewer
+doors, below; the built-in ones run when no viewer door is set.
+
+### Viewer doors
+
+Two settings in `config.json` name `v3_script` doors that view files in
+place of the built-in viewers:
+
+| Setting | Stock | Views |
+|---|---|---|
+| `archiveViewerDoor` | `ARTVIEW` | a ZIP archive, in place of ZipLab's contents list |
+| `textViewerDoor` | `TEXTVIEW` | any other file, in place of the text pager; `TYPE_TEXT_FILE` uses it too |
+
+They run from **V** in both file lists and from `VIEW_FILE`. The script gets
+the file's area tag and filename as its last two arguments, after the door's
+own `args`. A stock install ships both doors in `doors.json`, with
+`"hidden": true` so they stay off the door menu, and their scripts in
+`scripts/examples`:
+
+- **Text viewer** (`textview.js`): a full-screen pager with a command bar.
+  More/Back/Home/End page through the file, Find looks for text (Enter on
+  Find looks again), Tag adds the file to the caller's batch, and Prev/Next
+  open the previous or next text file in the area. Up/Down scroll a line.
+  ANSI files are drawn as ANSI.SYS would; binary files are refused.
+- **Archive viewer** (`artview.js`): a lightbar list of the archive's
+  entries, with each piece's SAUCE title and artist. Enter draws a piece and
+  shows it a screen at a time, N and P move to the next or previous piece,
+  and T tags the archive. Entries are read in memory; nothing is extracted to
+  disk.
+
+Both read files with the caller's download access to the area
+([`v3.file.read`](scripting/vpl-scripting.md#v3fileread)), so a caller who
+can't download from it is told so. A file tagged in a viewer shows as marked
+in the list. To change the labels or colours, edit the lists at the top of
+each script; to use your own viewer, point the setting at another door.
+
+The archive viewer, like ZipLab's, handles ZIP only. Other archives (7z, RAR,
+ARJ, LHA) go to the text viewer, which says it isn't a text file, where the
+built-in pager would page the raw bytes.
+
+The built-in viewer runs instead when the setting is empty, when it names a
+door that doesn't exist or isn't a `v3_script` door (the BBS logs a warning
+about that once at startup), or when the door's own `min_access_level` or
+`acs` refuses the caller.
 
 ### File newscan
 

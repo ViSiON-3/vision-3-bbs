@@ -6,6 +6,10 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/dop251/goja"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // TestAnsiDisplayLookupOrder checks v3.ansi.display resolves art from the
@@ -122,4 +126,66 @@ func TestFindBBSRoot(t *testing.T) {
 // jsQuote renders s as a JS string literal.
 func jsQuote(s string) string {
 	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
+}
+
+// TestAnsiRender: v3.ansi.render draws art as the message reader does and
+// returns its rows; the art stops at Ctrl-Z, and width and rows are
+// honoured and bounded.
+func TestAnsiRender(t *testing.T) {
+	h := newHarness(t, harnessOpts{})
+	rows := func(expr string) []string {
+		t.Helper()
+		var out []string
+		if err := h.eng.vm.ExportTo(h.eval(expr), &out); err != nil {
+			t.Fatal(err)
+		}
+		for i, l := range out {
+			out[i] = ansi.StripAnsi(l)
+		}
+		return out
+	}
+	// Cursor right, saved position, and a SAUCE tail after Ctrl-Z.
+	got := rows(`v3.ansi.render("ab\x1b[3Cc\r\n\x1b[sxy\x1b[uZ\x1aSAUCE00junk")`)
+	if len(got) != 2 || got[0] != "ab   c" || got[1] != "Zy" {
+		t.Errorf("render = %q", got)
+	}
+	// Width wraps; rows cuts.
+	if got := rows(`v3.ansi.render("abcdef", {width: 4})`); len(got) != 2 || got[0] != "abcd" || got[1] != "ef" {
+		t.Errorf("width 4 = %q", got)
+	}
+	if got := rows(`v3.ansi.render("1\r\n2\r\n3\r\n4", {rows: 2})`); len(got) != 2 {
+		t.Errorf("rows 2 = %q", got)
+	}
+	if got := rows(`v3.ansi.render()`); len(got) != 0 {
+		t.Errorf("no argument = %q", got)
+	}
+	w, r := renderOptionsFor(t, h, `({width: 9999, rows: 99999})`)
+	if w != maxRenderWidth || w*r > maxRenderCells {
+		t.Errorf("bounds: width %d rows %d", w, r)
+	}
+}
+
+// renderOptionsFor runs renderOptions on a JS options object.
+func renderOptionsFor(t *testing.T, h *scriptHarness, opts string) (int, int) {
+	t.Helper()
+	return renderOptions(goja.FunctionCall{Arguments: []goja.Value{h.eng.vm.ToValue(""), h.eval(opts)}})
+}
+
+// TestAnsiSauce reads a SAUCE record from text as v3.file.read returns it,
+// CP437 high bytes included, and gives null without one.
+func TestAnsiSauce(t *testing.T) {
+	h := newHarness(t, harnessOpts{})
+	rec := make([]byte, 128)
+	copy(rec, "SAUCE00")
+	copy(rec[7:], "Caf\x82 Night")
+	copy(rec[42:], "artist")
+	copy(rec[62:], "group")
+	h.eng.vm.Set("art", cp437Text(append([]byte("art\x1a"), rec...)))
+	v := h.eval(`JSON.stringify(v3.ansi.sauce(art))`).String()
+	if v != `{"title":"Café Night","author":"artist","group":"group"}` {
+		t.Errorf("sauce = %s", v)
+	}
+	if v := h.eval(`v3.ansi.sauce("no record")`); !goja.IsNull(v) {
+		t.Errorf("no record: %v", v)
+	}
 }

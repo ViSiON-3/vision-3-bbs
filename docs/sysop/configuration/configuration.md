@@ -665,6 +665,7 @@ under Security Levels in `./config`, to silence it.
 - `twitListEnabled` — Let callers keep personal [Twit Lists](messages/twit-list.md) and have them applied. Off hides the reader's Ignore command, refuses the list editor, and stops all Twit List filtering, including QWK downloads; saved lists are kept and apply again when it is turned back on (shipped and fallback: `true`, so a `config.json` without the key keeps Twit Lists on)
 - `twitListMax` — Most names one caller may put on their Twit List (shipped: `50`; `0` or less also means 50)
 - `twitExemptLevel` — Access level from which a user cannot be twit-listed (shipped: `0`, meaning only sysops and co-sysops are exempt). See the [Twit List Technical Reference](messages/twit-list.md#technical-reference)
+- `archiveViewerDoor`, `textViewerDoor` — Codes of `v3_script` doors that view a ZIP archive, or any other file, in place of the built-in viewers, from **V** in the file lists, `VIEW_FILE` and (text) `TYPE_TEXT_FILE`. See [Viewer doors](files/file-areas.md#viewer-doors) (shipped: `ARTVIEW` and `TEXTVIEW`; fallback: none, the built-in viewers)
 - `editorAutocorrect` — Board default for the message editor's [autocorrect](messages/message-areas.md#autocorrect), which fixes common typos as callers type. Applies to message areas whose own `autocorrect` is left out, to private mail when `PRIVMAIL` leaves it out, and to the auto-signature editor. Callers can still turn it off for themselves (shipped and fallback: `false`)
 
 **IP Blocklist/Allowlist:**

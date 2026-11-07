@@ -1,11 +1,9 @@
-package menu
+package ansi
 
 import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // ANSICell represents a single character cell with its attributes
@@ -27,7 +25,7 @@ type ANSIRenderer struct {
 	// rest to persist. Keeping just the last sequence dropped everything it did
 	// not mention, so a foreground set earlier reverted to the terminal default
 	// the moment a background was chosen.
-	sgr ansi.SGRState
+	sgr SGRState
 	// Auto-wrap (DECAWM), on by default as on a real terminal and toggled by
 	// ESC[?7h and ESC[?7l. Art of this era is written for an 80-column screen
 	// and leans on the wrap to start each new row.
@@ -53,7 +51,7 @@ type ANSIRenderer struct {
 	// that saves the graphic attributes along with the position.
 	decX, decY int
 	decWrap    bool
-	decSGR     ansi.SGRState
+	decSGR     SGRState
 	decStyle   string
 	decValid   bool
 }
@@ -83,7 +81,7 @@ func NewANSIRenderer(width, height int) *ANSIRenderer {
 		CursorX:      0,
 		CursorY:      0,
 		CurrentStyle: "\x1b[0m",
-		sgr:          ansi.NewSGRState(),
+		sgr:          NewSGRState(),
 		autoWrap:     true,
 	}
 }
@@ -117,7 +115,7 @@ func (r *ANSIRenderer) Render(text string) {
 		if ch >= utf8.RuneSelf {
 			ch, size = utf8.DecodeRuneInString(text[i:])
 			if ch == utf8.RuneError && size == 1 {
-				ch = ansi.Cp437ToUnicode[text[i]]
+				ch = Cp437ToUnicode[text[i]]
 			}
 		}
 		switch ch {
