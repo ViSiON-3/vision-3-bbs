@@ -404,28 +404,6 @@ func (e *MenuExecutor) displayTextWithPaging(s ssh.Session, terminal *term.Termi
 	e.pauseEnter(s, terminal, outputMode, e.Strings().FilePausePrompt)
 }
 
-// pauseMore displays a "More" prompt and waits for user input.
-// Returns true to continue, false to abort.
-func (e *MenuExecutor) pauseMore(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, prompt string) bool {
-	e.writeString(terminal, outputMode, prompt)
-
-	ih := getSessionIH(s)
-	for {
-		key, err := ih.ReadKey()
-		if err != nil {
-			return false
-		}
-		if key == int('q') || key == int('Q') {
-			terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-			return false
-		}
-		if key == int('\r') || key == int('\n') || key == int(' ') {
-			terminalio.WriteProcessedBytes(terminal, []byte("\r\x1b[K"), outputMode)
-			return true
-		}
-	}
-}
-
 // pauseEnter displays a simple "press Enter" prompt.
 func (e *MenuExecutor) pauseEnter(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, prompt string) {
 	e.writeString(terminal, outputMode, prompt)

@@ -149,3 +149,23 @@ func TestSearchFilesPagesLongResults(t *testing.T) {
 		t.Errorf("continuing should reach the end:\n%s", r.text())
 	}
 }
+
+// TestSearchFilesKeepsEveryHitOnScreen pins that clearing the More prompt
+// never takes a result row with it: every hit is still on the screen after
+// paging through to the end.
+func TestSearchFilesKeepsEveryHitOnScreen(t *testing.T) {
+	env := newMenuEnv(t)
+	names := make([]string, 50)
+	for i := range names {
+		names[i] = fmt.Sprintf("HIT%02d.ZIP", i)
+	}
+	addDownloadRecords(t, env, names...)
+
+	r := env.runCmd("SEARCH_FILES", env.sysop, "", "hit\r\r\r\r\r\r")
+	screen := strings.Join(ansi.RenderANSIArtToLines(r.raw, 200, 1000), "\n")
+	for _, n := range names {
+		if !strings.Contains(screen, n) {
+			t.Errorf("%s is missing from the screen:\n%s", n, screen)
+		}
+	}
+}

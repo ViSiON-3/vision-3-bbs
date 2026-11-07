@@ -132,17 +132,13 @@ func showInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, outpu
 		return
 	}
 
-	// Paging: track lines written and pause per screenful.
-	linesPerPage := termHeight - 3 // leave room for header + more prompt
-	if linesPerPage < 5 {
-		linesPerPage = 5
-	}
-	lineCount := 0
-
+	// Paging: a screenful at a time, leaving room for the header and the
+	// More prompt. The viewer isn't known here, so it always pauses.
 	morePrompt := e.Strings().FileMorePrompt
 	if morePrompt == "" {
 		morePrompt = "\r\n|08--- |15More|08 --- |07[Enter]=Continue [Q]=Stop"
 	}
+	pager := e.newMorePager(s, terminal, outputMode, nil, termHeight, 3, morePrompt)
 
 	// wvPaged writes a string and tracks newlines for paging.
 	// Returns false if the user pressed Q to abort.
@@ -156,13 +152,9 @@ func showInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, outpu
 		for j, line := range lines {
 			if j > 0 {
 				// Each \r\n is a new line
-				lineCount++
-				if lineCount >= linesPerPage {
-					if !e.pauseMore(s, terminal, outputMode, morePrompt) {
-						aborted = true
-						return
-					}
-					lineCount = 0
+				if !pager.Line() {
+					aborted = true
+					return
 				}
 			}
 			wv(terminal, line, outputMode)
