@@ -907,6 +907,54 @@ Width formatting is supported for all tokens:
 
 Legacy caret placeholders (`^UN`, `^ND`, etc.) remain supported for compatibility.
 
+### V3Net Last Callers and Who's Online (`LASTNET`, `WHONET`)
+
+The [V3Net Central](v3net/central.md#whos-online-and-last-callers) network
+screens are laid out by templates in the same way:
+
+- `LASTNET.TOP`, `LASTNET.MID`, `LASTNET.BOT` for `LASTCALLERS --network`,
+  `LASTCALLERS --all` and the Central menu's Last Callers
+- `WHONET.TOP`, `WHONET.MID`, `WHONET.BOT` for the Central menu's Who's Online
+  (`V3NETCENTRALWHO`)
+
+`TOP` and `BOT` are drawn once, `MID` once per row. Every width and alignment
+form works: `@UN:20@`, `@UN##########@`, `@UN|R:20@`, `@UN|C:20@`. A menu set
+missing any of a screen's three files gets the built-in layout instead, so an
+install whose menus predate these templates looks as it did.
+
+Values another board published are filled in after the template's pipe codes
+are expanded, so they are always drawn as plain text: a handle or board name
+can never change colours or clear the caller's screen. Under the bottom
+template the screen adds its own lines: any network that could not be
+fetched, the key help (`A`, `R`) on Last Callers, and the pause prompt.
+
+`LASTNET.MID` row tokens:
+
+- `@UN@` - Caller's handle
+- `@BB@` - Board the call was to
+- `@NW@` - Where the call was: the network's name, or `local` for this
+  board's own calls in the `--all` view
+- `@DY@` - Day the call began (`Mon`)
+- `@LO@` - Time the call began (`03:04pm`)
+- `@LT@` - Time the call ended (`03:04pm`); blank while unknown
+- `@TO@` - Length in minutes; `-` while unknown
+
+`WHONET.MID` row tokens (one row per caller per board):
+
+- `@UN@` - Caller's handle
+- `@BB@` - Board they are on
+- `@NW@` - Network
+- `@AV@` - Availability the caller shares: `available`, `busy`, or `-`
+- `@NS@` - `(2 nodes)` when the caller is on more than one node there, else blank
+
+`TOP`/`BOT` tokens, both screens:
+
+- `@CT@` - Rows shown
+- `@NW@` - The networks shown, comma-separated
+- `@LEGEND@` - (`LASTNET` only) One line saying what the From column means
+  in the current view
+- `@TT@` - (`WHONET` only) Callers in all, including any that did not fit
+
 ## Special Menu Names
 
 Some menu names have special behavior:

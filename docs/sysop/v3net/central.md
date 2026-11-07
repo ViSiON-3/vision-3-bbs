@@ -313,7 +313,9 @@ On the stock main menu, `W` is this board's Last Callers, as before, and
 `local` or with the network's name, and `A` on either screen switches
 between them. The Central menu has both feeds as `W` and `L`; see
 [menu commands](reference/menu-commands.md#v3net-central) to bind them
-elsewhere.
+elsewhere. Both screens are laid out by the menu set's `LASTNET` and
+`WHONET` templates, which you can edit as you would `LASTCALL` and
+`WHOONLN`; see [menu templates](menus/menu-system.md#v3net-last-callers-and-whos-online-lastnet-whonet).
 
 The **Status** screen shows each feature per network as `off`, `hub does
 not serve it`, `pending`, `failed` (with the hub's reason underneath), or

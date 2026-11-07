@@ -145,6 +145,28 @@ func runV3NetCentralWho(c *cmdCtx, args string) (*user.User, string, error) {
 	feeds, errs := fetchCentralActivity(e.V3NetCentral, networks, protocol.CentralKindPresence, false)
 	rows := centralWhoRows(feeds)
 
+	if tpl, ok := e.loadCentralTemplate("WHONET"); ok {
+		// Footer: "...and N more", the errors, the pause prompt.
+		shown := rows
+		if fit := tpl.rowsThatFit(termHeight, 2+len(errs)); len(shown) > fit {
+			shown = shown[:fit]
+		}
+		var buf strings.Builder
+		buf.WriteString(ansi.ClearScreen())
+		buf.WriteString(renderWhoTemplate(tpl, shown, len(rows), networks))
+		if len(rows) == 0 && len(errs) == 0 {
+			buf.Write(ansi.ReplacePipeCodes([]byte("|08  Nobody who chose to be shown is online right now.|07\r\n")))
+		}
+		if len(rows) > len(shown) {
+			buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|08  ...and %d more.|07\r\n", len(rows)-len(shown)))))
+		}
+		for _, msg := range errs {
+			buf.Write(ansi.ReplacePipeCodes([]byte("|04  " + v3netClip(msg, termWidth-4) + "|07\r\n")))
+		}
+		terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
+		return v3netPause(e, s, terminal, outputMode, termWidth, termHeight)
+	}
+
 	multi := len(networks) > 1
 	handleW, boardW, netW := 22, 26, 0
 	if multi {
@@ -164,13 +186,7 @@ func runV3NetCentralWho(c *cmdCtx, args string) (*user.User, string, error) {
 		shown = shown[:fit]
 	}
 	for _, r := range shown {
-		avail := "|08-|07"
-		switch r.availability {
-		case protocol.CentralAvailable:
-			avail = "|10available|07"
-		case protocol.CentralBusy:
-			avail = "|14busy|07"
-		}
+		avail := centralAvailabilityText(r.availability)
 		if r.sessions > 1 {
 			avail += fmt.Sprintf(" |08(%d nodes)|07", r.sessions)
 		}
@@ -321,38 +337,26 @@ func runCentralLastCallers(c *cmdCtx, limit int, includeLocal bool) (*user.User,
 
 	ih := getSessionIH(s)
 	handleW, boardW, srcW := 20, 24, 10
+	tpl, haveTpl := e.loadCentralTemplate("LASTNET")
 	for {
 		var local []user.CallRecord
 		if includeLocal && c.userManager != nil {
 			local = visibleCallRecords(c.userManager.GetLastCallers())
 		}
-		// Title 2 rows, legend 1, column header 1, footer 2, plus errors.
-		fit := max(termHeight-6-len(errs), 1)
-		rows := centralCallRows(feeds, selfNode, local, localBoard, includeLocal, min(limit, fit))
-
 		var buf strings.Builder
-		buf.WriteString(centralHeader(title, termWidth))
-		legend := "|08  Calls shared by callers on V3Net boards, kept 24 hours"
-		if includeLocal {
-			legend = "|08  |14local|08 = this board,  |13network name|08 = shared from a V3Net board"
-		}
-		buf.Write(ansi.ReplacePipeCodes([]byte(legend + "|07\r\n")))
-		buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|03  %-*s %-*s %-*s %-12s %s|07\r\n", srcW, "From", handleW, "Caller", boardW, "Board", "On", "Mins"))))
-		for _, r := range rows {
-			src := "|13" + v3netCell(r.network, srcW) + "|07"
-			if r.local {
-				src = "|14" + v3netCell("local", srcW) + "|07"
-			}
-			on := ""
-			if !r.began.IsZero() {
-				on = r.began.In(timeLoc).Format("Mon 03:04pm")
-			}
-			mins := "|08-|07"
-			if !r.ended.IsZero() && !r.ended.Before(r.began) {
-				mins = strconv.Itoa(int(r.ended.Sub(r.began).Minutes()))
-			}
-			buf.Write(ansi.ReplacePipeCodes([]byte("  " + src + " |15" + v3netCell(r.handle, handleW) + "|07 |11" +
-				v3netCell(r.board, boardW) + "|07 " + fmt.Sprintf("%-12s ", on) + mins + "\r\n")))
+		var rows []centralCallRow
+		if haveTpl {
+			// Footer: the rule and key help, plus errors.
+			fit := tpl.rowsThatFit(termHeight, 2+len(errs))
+			rows = centralCallRows(feeds, selfNode, local, localBoard, includeLocal, min(limit, fit))
+			buf.WriteString(ansi.ClearScreen())
+			buf.WriteString(renderLastCallsTemplate(tpl, rows, networks, includeLocal, timeLoc))
+		} else {
+			// Title 2 rows, legend 1, column header 1, footer 2, plus errors.
+			fit := max(termHeight-6-len(errs), 1)
+			rows = centralCallRows(feeds, selfNode, local, localBoard, includeLocal, min(limit, fit))
+			buf.WriteString(centralHeader(title, termWidth))
+			writeBuiltinCallRows(&buf, rows, includeLocal, timeLoc, handleW, boardW, srcW)
 		}
 		if len(rows) == 0 && len(errs) == 0 {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|08  No calls to show.|07\r\n")))
@@ -555,3 +559,30 @@ func centralPreviewHandle(h string) string {
 
 // centralPreviewPipeRe matches a handle's colour codes.
 var centralPreviewPipeRe = regexp.MustCompile(`\|[0-9]{2}`)
+
+// writeBuiltinCallRows draws the built-in Last Callers legend, column
+// header and rows, for a menu set without the LASTNET templates.
+func writeBuiltinCallRows(buf *strings.Builder, rows []centralCallRow, includeLocal bool, timeLoc *time.Location, handleW, boardW, srcW int) {
+	legend := "|08  Calls shared by callers on V3Net boards, kept 24 hours"
+	if includeLocal {
+		legend = "|08  |14local|08 = this board,  |13network name|08 = shared from a V3Net board"
+	}
+	buf.Write(ansi.ReplacePipeCodes([]byte(legend + "|07\r\n")))
+	buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|03  %-*s %-*s %-*s %-12s %s|07\r\n", srcW, "From", handleW, "Caller", boardW, "Board", "On", "Mins"))))
+	for _, r := range rows {
+		src := "|13" + v3netCell(r.network, srcW) + "|07"
+		if r.local {
+			src = "|14" + v3netCell("local", srcW) + "|07"
+		}
+		on := ""
+		if !r.began.IsZero() {
+			on = r.began.In(timeLoc).Format("Mon 03:04pm")
+		}
+		mins := "|08-|07"
+		if !r.ended.IsZero() && !r.ended.Before(r.began) {
+			mins = strconv.Itoa(int(r.ended.Sub(r.began).Minutes()))
+		}
+		buf.Write(ansi.ReplacePipeCodes([]byte("  " + src + " |15" + v3netCell(r.handle, handleW) + "|07 |11" +
+			v3netCell(r.board, boardW) + "|07 " + fmt.Sprintf("%-12s ", on) + mins + "\r\n")))
+	}
+}
