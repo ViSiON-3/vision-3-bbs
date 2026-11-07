@@ -51,7 +51,7 @@ func LoadLoginSequence(configPath string) ([]LoginItem, error) {
 // login.json is missing: the two items that carry news the caller would
 // otherwise miss entirely — queued sysop notices and the new-mail scan — then
 // system news (it clears the screen via NEWSHDR.ANS and is silent when there is
-// nothing new), then the legacy last callers / oneliners / user stats trio.
+// nothing new), then the last callers / oneliners / user stats trio.
 //
 // The order mirrors templates/configs/login.json, where the same two items lead
 // so that a FASTLOGIN jump (which ends the sequence) cannot skip them.
@@ -69,7 +69,9 @@ func defaultLoginSequence() []LoginItem {
 		// so it leads too, ahead of anything that might end the sequence early.
 		{Command: "NMAILSCAN"},
 		{Command: "PRINTNEWS"},
-		{Command: "LASTCALLS"},
+		// The combined Last Callers: this board's callers and V3Net's
+		// together, or the local screen alone while no network shares them.
+		{Command: "LASTCALLS", Data: "20 --all"},
 		{Command: "ONELINERS"},
 		{Command: "USERSTATS"},
 		// No SecLevel: this fallback runs when login.json is missing, so the

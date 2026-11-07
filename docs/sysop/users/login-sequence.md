@@ -65,11 +65,15 @@ The full list of step names, and the `RUN:` commands they map to, is also in the
 
 ### LASTCALLS
 
-Displays the last callers list using templates from `menus/v3/templates/` (`LASTCALL.TOP`, `LASTCALL.MID`, `LASTCALL.BOT`).
+Displays the last callers list. `data` takes the same arguments as `RUN:LASTCALLERS`: a row count, and `--all` or `--network`.
+
+The stock sequence uses `20 --all`, the same combined list as the main menu's `W`: this board's callers and those shared by [V3Net](../v3net/central.md#whos-online-and-last-callers) boards together, each row flagged `local` or with its network's name, laid out by the `LASTNET` templates. While no network shares Last Callers (V3Net off, or the feature not offered), it is the local list from the `LASTCALL` templates (`LASTCALL.TOP`, `LASTCALL.MID`, `LASTCALL.BOT`), as before.
 
 ```json
-{"command": "LASTCALLS"}
+{"command": "LASTCALLS", "data": "20 --all"}
 ```
+
+Leave `data` out for this board's callers only. Boards installed before this change keep their own `login.json`; add the `data` line to switch.
 
 ### ONELINERS
 
@@ -312,7 +316,7 @@ In this example, `SYSOP_NEWS.ANS` is only shown to users with access level 200 o
     {"command": "SYSOPNOTICES"},
     {"command": "NMAILSCAN"},
     {"command": "PRINTNEWS"},
-    {"command": "LASTCALLS"},
+    {"command": "LASTCALLS", "data": "20 --all"},
     {"command": "ONELINERS"},
     {"command": "USERSTATS"},
     {"command": "NEWUSERVAL"}
