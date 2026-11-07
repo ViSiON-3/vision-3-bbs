@@ -393,7 +393,7 @@ func TestDisplayTextWithPagingRefusesHugeFile(t *testing.T) {
 		strs := *c.e.Strings()
 		strs.FileViewingHeader, strs.FileOpenError = "Viewing %s", "OPEN ERROR"
 		c.e.SetStrings(strs)
-		c.e.displayTextWithPaging(c.s, c.terminal, p, "big.txt", c.outputMode, 24)
+		c.e.displayTextWithPaging(c.s, c.terminal, nil, p, "big.txt", c.outputMode, 24)
 		return nil, "", nil
 	}, env.caller, "", "")
 	if !r.has("OPEN ERROR") || r.has("Viewing") {
@@ -433,7 +433,7 @@ func TestDisplayTextWithPaging_ShowsEveryLineAndPagesCorrectly(t *testing.T) {
 	e := &MenuExecutor{}
 	e.SetStrings(config.StringsConfig{FileViewingHeader: "Viewing: %s\r\n", FileEndOfFile: "<EOF>",
 		FileMorePrompt: "<MORE>", FilePausePrompt: "<PAUSE>", FileOpenError: "<OPENERR>"})
-	e.displayTextWithPaging(ts, terminal, textPath, "readme.txt", ansi.OutputModeCP437, 9)
+	e.displayTextWithPaging(ts, terminal, nil, textPath, "readme.txt", ansi.OutputModeCP437, 9)
 
 	out := ts.output()
 	prev := -1

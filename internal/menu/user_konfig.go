@@ -28,8 +28,8 @@ import (
 // All of its text comes from the konfig* strings in strings.json.
 //
 // Only settings the board actually honours are offered. User.OutputMode,
-// MorePrompts, CustomPrompt and Colors are stored but nothing reads them, so
-// they stay out of the form until something does.
+// CustomPrompt and Colors are stored but nothing reads them, so they stay
+// out of the form until something does.
 
 // konfigTone picks the colour a value is drawn in.
 type konfigTone int
@@ -374,6 +374,10 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					help:  str.KonfigFileColumnsHelp,
 					value: fileColumnsValue,
 					edit:  editFileColumns},
+				{key: 'O', label: str.KonfigMorePromptsLabel, flips: true,
+					help:  str.KonfigMorePromptsHelp,
+					value: func(st *konfigState) konfigValue { return st.onOffValue(st.user().MorePromptsOn()) },
+					edit:  toggleMorePrompts},
 			}},
 		},
 	}
@@ -586,6 +590,20 @@ func toggleHotKeys(st *konfigState) error {
 		func(u *user.User) { u.HotKeys = !old },
 		func(u *user.User) { u.HotKeys = old }) {
 		st.saved(label, st.onOffValue(!old).text)
+	}
+	return nil
+}
+
+// toggleMorePrompts turns the More prompt on long output on or off (see
+// morePager). The setting is stored explicitly once changed.
+func toggleMorePrompts(st *konfigState) error {
+	old := st.user().MorePrompts
+	on := !st.user().MorePromptsOn()
+	label := st.c.e.Strings().KonfigMorePromptsLabel
+	if st.commit(label,
+		func(u *user.User) { u.MorePrompts = &on },
+		func(u *user.User) { u.MorePrompts = old }) {
+		st.saved(label, st.onOffValue(on).text)
 	}
 	return nil
 }

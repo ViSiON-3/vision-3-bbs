@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -56,7 +57,10 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 	// --- END Template Processing ---
 
 	// 2. Get user list data from UserManager
-	users := userManager.GetAllUsers() // Corrected method call
+	users := userManager.GetAllUsers()
+	// By user number, so the list reads the same every time and a screen
+	// at a time makes sense; GetAllUsers comes from a map, in no order.
+	slices.SortFunc(users, func(a, b *user.User) int { return a.ID - b.ID })
 	pendingCount := 0
 	for _, u := range users {
 		if isPendingValidationUser(u) {
@@ -87,7 +91,10 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	e.writeStringf(terminal, outputMode, e.Strings().ExecPendingValidation, pendingCount)
 
-	var outputBuffer bytes.Buffer
+	// Rows are written one at a time, a screen at a time; the top template,
+	// the pending count, the bottom template and the prompt take the rest.
+	reserved := bytes.Count(processedTopTemplate, []byte("\n")) + 4
+	pager := e.newMorePager(s, terminal, outputMode, c.currentUser, termHeight, reserved, "")
 
 	if len(users) == 0 {
 		// Optional: Handle empty state. The template might handle this.
@@ -123,18 +130,18 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 			line = strings.ReplaceAll(line, "|GL", groupLocation) // Use |GL for Group/Location (Replaces |UN)
 			line = strings.ReplaceAll(line, "|LV", level)         // Use |LV for Level
 
-			slog.Debug("about to write line for user", "handle", handle, "line", line)
-			outputBuffer.WriteString(line) // Add the fully substituted and processed line
-			slog.Debug("wrote line", "bufferSize", outputBuffer.Len())
+			if wErr := writeRaw([]byte(line)); wErr != nil {
+				slog.Error("failed writing USERLIST output", "node", nodeNumber, "error", wErr)
+				return nil, "", wErr
+			}
+			if !pager.Line() {
+				return c.currentUser, "", nil
+			}
 		}
 	}
 
-	slog.Debug("finished user loop", "bufferSize", outputBuffer.Len())
-	outputBuffer.Write(processedBotTemplate) // Write processed bottom template
-	slog.Debug("added BOT template", "bufferSize", outputBuffer.Len())
-
-	// 4. Display the list and the bottom template
-	if wErr := writeRaw(outputBuffer.Bytes()); wErr != nil {
+	// 4. The bottom template
+	if wErr := writeRaw(processedBotTemplate); wErr != nil {
 		slog.Error("failed writing USERLIST output", "node", nodeNumber, "error", wErr)
 		return nil, "", wErr
 	}

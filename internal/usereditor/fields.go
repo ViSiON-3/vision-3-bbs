@@ -164,8 +164,12 @@ func editFields() []fieldDef {
 		},
 		{
 			Label: "More Prompts", Type: ftYesNo, Col: 50, Row: 6, Width: 1,
-			Get: func(u *user.User) string { return uitext.BoolToYN(u.MorePrompts) },
-			Set: func(u *user.User, val string) error { u.MorePrompts = uitext.YNToBool(val); return nil },
+			Get: func(u *user.User) string { return uitext.BoolToYN(u.MorePromptsOn()) },
+			Set: func(u *user.User, val string) error {
+				on := uitext.YNToBool(val)
+				u.MorePrompts = &on
+				return nil
+			},
 		},
 		{
 			Label: "Screen Width", Type: ftInteger, Col: 50, Row: 7, Width: 3, Min: user.MinScreenWidth, Max: user.MaxScreenWidth,

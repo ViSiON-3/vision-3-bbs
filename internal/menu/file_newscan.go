@@ -105,14 +105,15 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(topRendered)), outputMode)
 
 	totalNew := 0
-	lineCount := 0
 	pausePrompt := e.Strings().PauseString
-	pageLines := termHeight - 4
-	if pageLines < 5 {
-		pageLines = 5
-	}
+	// A screen at a time, leaving room for the header and the prompt.
+	pager := e.newMorePager(s, terminal, outputMode, currentUser, termHeight, 4, "")
+	stopped := false
 
 	for _, area := range areas {
+		if stopped {
+			break
+		}
 		newFiles := e.FileMgr.GetFilesNewerThan(area.ID, since)
 		if len(newFiles) == 0 {
 			continue
@@ -124,7 +125,10 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 		areaHdr = strings.ReplaceAll(areaHdr, "@COUNT@", fmt.Sprintf("%d", len(newFiles)))
 		terminalio.WriteProcessedBytes(terminal,
 			ansi.ReplacePipeCodes([]byte(areaHdr)), outputMode)
-		lineCount += 2
+		if !pager.Lines(2) { // the header is two lines
+			stopped = true
+			break
+		}
 
 		for _, f := range newFiles {
 			desc := f.Description
@@ -156,20 +160,17 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 			line = strings.ReplaceAll(line, "^DESC", desc)
 
 			terminalio.WriteProcessedBytes(terminal, []byte(line), outputMode)
-			lineCount++
 			totalNew++
-
-			if lineCount >= pageLines {
-				lineCount = 0
-				err := e.writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
-				if err != nil {
-					if err == io.EOF {
-						return currentUser, "", nil
-					}
-					return currentUser, "", err
-				}
+			if !pager.Line() {
+				stopped = true
+				break
 			}
 		}
+	}
+
+	// The caller chose to stop (or hung up): back to the menu.
+	if stopped {
+		return currentUser, "", nil
 	}
 
 	// Footer

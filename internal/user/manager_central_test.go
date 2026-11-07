@@ -43,7 +43,8 @@ func TestCentralConsentSurvivesStaleSaves(t *testing.T) {
 		t.Fatal(err)
 	}
 	nodeA.CentralPresence = true
-	nodeA.MorePrompts = true
+	off := false
+	nodeA.MorePrompts = &off
 	if err := um.UpdateUserByID(nodeA); err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +57,7 @@ func TestCentralConsentSurvivesStaleSaves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r, _ := reloaded.GetUserByID(u.ID); r.CentralPresence || r.CentralLastCallsSince != nil || !r.MorePrompts {
+	if r, _ := reloaded.GetUserByID(u.ID); r.CentralPresence || r.CentralLastCallsSince != nil || r.MorePromptsOn() {
 		t.Errorf("after reload: %+v", r)
 	}
 	if _, err := um.SetCentralConsent(9999, func(*User) {}); err == nil {

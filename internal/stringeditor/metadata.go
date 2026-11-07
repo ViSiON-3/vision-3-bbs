@@ -762,5 +762,10 @@ func stringCatalog() []StringEntry {
 
 		{Label: "Konfig: V3Net Sharing", Key: "konfigV3NetSharingLabel", Description: "User configuration field label"},
 		{Label: "Konfig: V3Net Sharing Help", Key: "konfigV3NetSharingHelp", Description: "User configuration field help"},
+
+		// The shared More prompt (#424)
+		{Label: "More: Prompt", Key: "morePrompt", Description: "Pause after each screen of a long listing: Y/Enter/Space one more screen, C the rest, N/Q stop"},
+		{Label: "Konfig: More Prompts Label", Key: "konfigMorePromptsLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},
+		{Label: "Konfig: More Prompts Help", Key: "konfigMorePromptsHelp", Description: "Help line shown while More Prompts is highlighted"},
 	}
 }

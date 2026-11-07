@@ -90,13 +90,8 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	// Display header
 	e.writeStringf(terminal, outputMode, e.Strings().SearchResultsHeader, query)
 
-	// Paginate results: leave room for header/pause prompt
-	linesPerPage := termHeight - 3
-	if linesPerPage < 5 {
-		linesPerPage = 5
-	}
-
-	lineCount := 0
+	// A screen at a time, leaving room for the header and the prompt.
+	pager := e.newMorePager(s, terminal, outputMode, currentUser, termHeight, 3, "")
 	for _, r := range filtered {
 		fname := r.filename
 		if runes := []rune(fname); len(runes) > 12 {
@@ -105,13 +100,8 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 
 		line := fmt.Sprintf("\r\n|09%-8s |15%-12s |07%5dk |14%s", r.areaTag, callerText(fname), (r.size+1023)/1024, callerText(r.description))
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
-		lineCount++
-
-		if lineCount >= linesPerPage {
-			if err := e.writeCenteredPausePrompt(s, terminal, e.Strings().PauseString, outputMode, termWidth, termHeight); err != nil {
-				return currentUser, "", nil
-			}
-			lineCount = 0
+		if !pager.Line() {
+			return currentUser, "", nil
 		}
 	}
 
