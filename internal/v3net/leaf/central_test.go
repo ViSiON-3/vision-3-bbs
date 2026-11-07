@@ -438,3 +438,23 @@ func TestHubErrorTextIsScreenSafe(t *testing.T) {
 		t.Errorf("long text clipped to %d runes, valid=%v", utf8.RuneCountInString(got), utf8.ValidString(got))
 	}
 }
+
+// WithdrawCentralListing is final: the listing is gone and the leaf will
+// not publish it again, so a refresh racing the leaf's stop cannot put it
+// back on a hub no replacement leaf will withdraw from.
+func TestWithdrawCentralListingHaltsPublishing(t *testing.T) {
+	ts, h, _ := newTestHub(t, true)
+	l := centralLeaf(t, ts, "alpha", "Alpha BBS")
+	if err := l.publishCentralListing(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.WithdrawCentralListing(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.publishCentralListing(context.Background()); !errors.Is(err, errListingHalted) {
+		t.Errorf("publish after withdrawal: %v, want errListingHalted", err)
+	}
+	if rows, _ := h.Central().List("testnet", time.Now()); len(rows) != 0 {
+		t.Errorf("hub still lists %d boards", len(rows))
+	}
+}

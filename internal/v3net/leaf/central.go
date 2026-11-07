@@ -99,9 +99,16 @@ type CentralStatus struct {
 	DirectoryCount   int
 }
 
-// centralState is the leaf's Central bookkeeping. mu guards every field.
+// centralState is the leaf's Central bookkeeping. mu guards every field
+// but listingWire and listingHalted.
 type centralState struct {
 	mu sync.Mutex
+
+	// listingWire serializes the listing's PUTs and DELETEs, and
+	// listingHalted, set by WithdrawCentralListing, refuses every PUT after
+	// it, so a final withdrawal is never followed by a publish.
+	listingWire   sync.Mutex
+	listingHalted bool // guarded by listingWire
 
 	featuresKnown bool
 	features      []string
@@ -227,7 +234,11 @@ func (l *Leaf) runCentral(ctx context.Context) {
 	delay = centralRetryMin
 	for {
 		wait := centralRepublishInterval
-		if err := l.publishCentralListing(ctx); err != nil {
+		err := l.publishCentralListing(ctx)
+		if errors.Is(err, errListingHalted) {
+			return
+		}
+		if err != nil {
 			l.setCentralError("publish: " + err.Error())
 			slog.Warn("leaf: central listing publish failed; retrying", "network", l.cfg.Network, "error", err, "delay", delay)
 			wait = delay
@@ -296,6 +307,11 @@ func (l *Leaf) buildCentralListing(now time.Time) (*protocol.CentralListing, err
 
 // publishCentralListing signs and PUTs this board's listing.
 func (l *Leaf) publishCentralListing(ctx context.Context) error {
+	l.central.listingWire.Lock()
+	defer l.central.listingWire.Unlock()
+	if l.central.listingHalted {
+		return errListingHalted
+	}
 	listing, err := l.buildCentralListing(time.Now())
 	if err != nil {
 		return err
@@ -326,6 +342,14 @@ func (l *Leaf) publishCentralListing(ctx context.Context) error {
 // withdrawCentralListing DELETEs this board's listing. The hub answers the
 // same whether or not it held one.
 func (l *Leaf) withdrawCentralListing(ctx context.Context) error {
+	l.central.listingWire.Lock()
+	defer l.central.listingWire.Unlock()
+	return l.withdrawCentralListingLocked(ctx)
+}
+
+// withdrawCentralListingLocked is withdrawCentralListing with listingWire
+// held.
+func (l *Leaf) withdrawCentralListingLocked(ctx context.Context) error {
 	path := fmt.Sprintf("/v3net/v1/%s/central/listing", l.cfg.Network)
 	resp, err := l.signedDo(ctx, http.MethodDelete, path, nil)
 	if err != nil {
@@ -351,8 +375,18 @@ func (l *Leaf) withdrawCentralListing(ctx context.Context) error {
 // that holds it, rather than waiting for a replacement leaf that may never
 // contact that hub.
 func (l *Leaf) WithdrawCentralListing(ctx context.Context) error {
-	return l.withdrawCentralListing(ctx)
+	// For good: wait for a publish in flight, and publish no more, so a
+	// refresh or retry racing the stop cannot list the board again on a
+	// hub no replacement leaf will withdraw from.
+	l.central.listingWire.Lock()
+	defer l.central.listingWire.Unlock()
+	l.central.listingHalted = true
+	return l.withdrawCentralListingLocked(ctx)
 }
+
+// errListingHalted is returned by publishCentralListing once
+// WithdrawCentralListing has run.
+var errListingHalted = errors.New("leaf: listing withdrawn; not publishing")
 
 // hubErrorText pulls the error field out of a hub's JSON error body, or
 // takes the body as text, and returns it fit for a caller's screen: pipes
