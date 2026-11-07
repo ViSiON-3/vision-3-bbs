@@ -224,7 +224,16 @@ Rumors are stored in `data/rumors.json`:
 }
 ```
 
-New installs are seeded from `templates/data/rumors.json`, a starter set of about twenty anonymous rumors; the installers copy it only when `data/rumors.json` doesn't already exist, so an existing board's rumors are never touched. Delete them from the Rumors menu (as SysOp) or remove the file to start empty — without the file, it is created automatically when the first rumor is added. The `next_id` field auto-increments to ensure unique IDs. Concurrent access is mutex-protected.
+New installs are seeded from `templates/data/rumors.json`, a starter set of about twenty anonymous rumors; the installers and the Docker entrypoint copy it only when `data/rumors.json` doesn't already exist, so an existing board's rumors are never touched. To start with an empty board, delete the samples from the Rumors menu (as SysOp), or replace the file's contents with an empty set:
+
+```json
+{
+    "rumors": [],
+    "next_id": 1
+}
+```
+
+Don't remove the file itself to clear the board: a missing `data/rumors.json` is treated as a fresh install, so the next container start or installer rerun copies the samples back in. The `next_id` field auto-increments to ensure unique IDs. Concurrent access is mutex-protected.
 
 
 ### ViSiON/2 Compatibility
