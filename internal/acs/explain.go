@@ -245,19 +245,19 @@ func passes(ok bool) string {
 	return "fails"
 }
 
-// explainTerm evaluates a term with EvalTerm and describes the values it
-// compared, read with the same parseTerm and measure, so the description
+// explainTerm evaluates a term as Eval does and describes the values it
+// compared, read with the same parsed term and measure, so the description
 // can't drift from the result. A term that lacks its context fails without
 // being evaluated, as in Eval.
 func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
-	t, _ := parseTerm(n.Text)
+	t := n.term
 	if reason, missing := lacking(t, ctx); missing {
 		if reason == NoSession {
 			return false, reason, "needs a session and there is none, so the whole string fails"
 		}
 		return false, reason, "the record has no sign-up date, so the account has no age and the whole string fails"
 	}
-	result := EvalTerm(n.Text, ctx)
+	result := evalTerm(t, ctx)
 	reason := outcome(result)
 	u := ctx.User
 	bare := t.op == "" && !t.ranged

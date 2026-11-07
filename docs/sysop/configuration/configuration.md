@@ -324,7 +324,8 @@ What each section covers:
 - **Access control** — every ACS string the board declares, in menus and
   commands (stock and overlay), `{{acs}}` regions in menu art, message and
   file areas, conferences, doors, door categories and FTN auto-create. A
-  string with any problem denies every caller and is a `FAIL`. See
+  string with any problem denies every caller and is a `FAIL`; a QWK-checked
+  `acs_write` that uses `L` or `A` is a `WARN`. See
   [Checking your strings](reference/acs.md#checking-your-strings).
 
 ### Safe Fixes (`--fix`)

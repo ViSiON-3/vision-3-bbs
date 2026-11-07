@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -189,7 +190,15 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 		{
 			Label: "  ACS Read", Help: "Read access for new auto-created areas (empty = " + config.DefaultAutoCreateACSRead + ")", Type: ftString, Col: 3, Row: 9, Width: 20,
 			Get: func() string { return netPtr.AutoCreate.ACSRead },
-			Set: func(val string) error { netPtr.AutoCreate.ACSRead = strings.TrimSpace(val); save(); return nil },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := acs.FieldError(val); err != nil {
+					return err
+				}
+				netPtr.AutoCreate.ACSRead = val
+				save()
+				return nil
+			},
 			AfterSet: func(cur *Model, _ string) {
 				v := netPtr.AutoCreate.ReadACS()
 				cur.offerAreaSync(key, "ACS Read",
@@ -200,7 +209,15 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 		{
 			Label: "  ACS Write", Help: "Post access for new auto-created areas (empty = " + config.DefaultAutoCreateACSWrite + ")", Type: ftString, Col: 3, Row: 10, Width: 20,
 			Get: func() string { return netPtr.AutoCreate.ACSWrite },
-			Set: func(val string) error { netPtr.AutoCreate.ACSWrite = strings.TrimSpace(val); save(); return nil },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := acs.FieldError(val); err != nil {
+					return err
+				}
+				netPtr.AutoCreate.ACSWrite = val
+				save()
+				return nil
+			},
 			AfterSet: func(cur *Model, _ string) {
 				v := netPtr.AutoCreate.WriteACS()
 				cur.offerAreaSync(key, "ACS Write",

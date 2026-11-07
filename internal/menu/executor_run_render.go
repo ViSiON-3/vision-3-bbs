@@ -41,7 +41,7 @@ func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 			areas = e.MessageMgr
 		}
 		keywords := resolveRegionKeywords(st.currentUser, areas, e.GetServerConfig())
-		rawAnsiContent = applyConditionalRegions(rawAnsiContent, st.currentUser, keywords)
+		rawAnsiContent = applyConditionalRegions(rawAnsiContent, st.currentUser, st.s, st.sessionStartTime, keywords)
 		if st.currentMenuName == "ADMIN" {
 			pendingCount := pendingValidationCount(userManager)
 			rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("{{PENDING_VALIDATIONS}}"), []byte(strconv.Itoa(pendingCount)))

@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"log/slog"
 	"strings"
+	"time"
 
+	"github.com/gliderlabs/ssh"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -79,11 +83,12 @@ func pipeSequence(s []byte) (n int, keep bool) {
 }
 
 // applyConditionalRegions resolves {{condition}}...{{/}} regions in raw menu
-// ANSI content against the viewing user. A condition is resolved first
-// against the caller-supplied keywords map (e.g. "SPONSOR"), then as an ACS
-// expression. Safe for a nil user and a nil keywords map (all gated regions
-// hide, matching CheckUserACS).
-func applyConditionalRegions(content []byte, u *user.User, keywords map[string]bool) []byte {
+// ANSI content against the viewing user, in session s (nil for none) whose
+// call began at startTime. A condition is resolved first against the
+// caller-supplied keywords map (e.g. "SPONSOR"), then as an ACS expression
+// (see regionShown). Safe for a nil user, session and keywords map (all
+// gated regions hide).
+func applyConditionalRegions(content []byte, u *user.User, s ssh.Session, startTime time.Time, keywords map[string]bool) []byte {
 	if !bytes.Contains(content, []byte(condOpen)) {
 		return content
 	}
@@ -138,7 +143,7 @@ func applyConditionalRegions(content []byte, u *user.User, keywords map[string]b
 		}
 		show, isKeyword := keywords[strings.ToUpper(inner)]
 		if !isKeyword {
-			show = CheckUserACS(inner, u)
+			show = regionShown(inner, u, s, startTime)
 		}
 		if show {
 			out.Write(region)
@@ -148,6 +153,26 @@ func applyConditionalRegions(content []byte, u *user.User, keywords map[string]b
 		i = next
 	}
 	return out.Bytes()
+}
+
+// regionShown evaluates a region's condition as an ACS string with the
+// caller's session, so L and A answer for the call showing the art. A
+// condition that isn't a valid ACS string hides its region; it is logged
+// only at Debug, since art can hold decorative {{...}} text that was never
+// meant as a condition. vision3 doctor reports the ones in menu art.
+func regionShown(cond string, u *user.User, s ssh.Session, startTime time.Time) bool {
+	if cond == "" || cond == "*" {
+		return true
+	}
+	if u == nil {
+		return false
+	}
+	e := acs.Parse(cond)
+	if !e.Valid() {
+		slog.Debug("menu art condition is not a valid ACS string; region hidden", "acs", cond)
+		return false
+	}
+	return e.Eval(acsContext(u, s, startTime))
 }
 
 // blankRegion replaces a hidden region with whitespace of identical rendered

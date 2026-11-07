@@ -10,9 +10,9 @@ import (
 
 // QWKWriteAuthorizer returns a per-area write-ACS gate for use outside a
 // terminal session (the QWK packet API). ACS is evaluated headlessly: with no
-// ssh.Session, session-only conditions (L, A) are false, so only user-intrinsic
-// conditions (security level, flags, SYSOP) can grant access. Empty ACSWrite
-// allows the area, matching the terminal path.
+// ssh.Session, a string with a session term (L, A) in it fails as a whole,
+// whatever its other parts say; vision3 doctor warns about such strings.
+// Empty ACSWrite allows the area, matching the terminal path.
 func QWKWriteAuthorizer(u *user.User) func(area *message.MessageArea) bool {
 	return func(area *message.MessageArea) bool {
 		if area == nil {

@@ -3,7 +3,9 @@ package configeditor
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
@@ -85,7 +87,14 @@ func (m *Model) fieldsDoorCategory() []fieldDef {
 			c.MinAccessLevel = n
 			return nil
 		}},
-		{Label: "ACS", Help: "Category access requirement", Type: ftString, Col: 3, Row: 5, Width: doorTextWidth, MaxLen: doorTextMaxLen, Get: func() string { return c.ACS }, Set: func(v string) error { c.ACS = v; return nil }},
+		{Label: "ACS", Help: "Category access requirement", Type: ftString, Col: 3, Row: 5, Width: doorTextWidth, MaxLen: doorTextMaxLen, Get: func() string { return c.ACS }, Set: func(v string) error {
+			v = strings.TrimSpace(v)
+			if err := acs.FieldError(v); err != nil {
+				return err
+			}
+			c.ACS = v
+			return nil
+		}},
 		{Label: "Sort Order", Help: "Category position (lower comes first)", Type: ftInteger, Col: 3, Row: 6, Width: 6, Min: 0, Max: 999999, Get: func() string { return strconv.Itoa(c.SortOrder) }, Set: func(v string) error {
 			n, err := strconv.Atoi(v)
 			if err != nil {

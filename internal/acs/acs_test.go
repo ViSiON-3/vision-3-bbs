@@ -457,7 +457,7 @@ func TestCheckLogsInvalidOnce(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	const s = "s10@&s5"
-	logged.Delete(s)
+	ResetInvalidLog()
 	u := &user.User{AccessLevel: 20}
 	for range 3 {
 		if Check(s, ctxFor(u)) {
@@ -473,5 +473,69 @@ func TestCheckLogsInvalidOnce(t *testing.T) {
 	Check("s10&s5", ctxFor(u))
 	if n := strings.Count(buf.String(), "invalid ACS string"); n != 1 {
 		t.Errorf("a clean string was logged:\n%s", buf.String())
+	}
+	// After a reload the string is reported again.
+	ResetInvalidLog()
+	Check(s, ctxFor(u))
+	if n := strings.Count(buf.String(), "invalid ACS string"); n != 2 {
+		t.Errorf("after ResetInvalidLog: %d lines, want 2:\n%s", n, buf.String())
+	}
+}
+
+// TestWhitespaceSeparates checks that any whitespace separates tokens, as a
+// space does: a tab or a non-breaking space pasted into a hand-edited file
+// is not an error.
+func TestWhitespaceSeparates(t *testing.T) {
+	u := &user.User{AccessLevel: 20, Flags: "A"}
+	for _, s := range []string{"S20 &\tFA", "S20\u00a0&\u00a0FA", "\tS20&FA\n"} {
+		if e := Parse(s); !e.Valid() {
+			t.Errorf("Parse(%q): %v", s, e.Diagnostics)
+		}
+		if !Check(s, ctxFor(u)) {
+			t.Errorf("Check(%q) failed", s)
+		}
+	}
+	if Parse("S20\tFA").Valid() {
+		t.Error("two terms separated only by a tab are still two terms with no operator")
+	}
+}
+
+// TestUsesSession checks which strings read the caller's session.
+func TestUsesSession(t *testing.T) {
+	for s, want := range map[string]bool{
+		"S20": false, "L": true, "!L": true, "S20|A": true, "S20&(FA|!L)": true,
+		"LOCAL": true, "TERMINAL": true, "LEVEL>=20": false, "Q": false,
+	} {
+		if got := Parse(s).UsesSession(); got != want {
+			t.Errorf("Parse(%q).UsesSession() = %v, want %v", s, got, want)
+		}
+	}
+}
+
+// TestEvalLogsEachTerm checks that each term logs its result at Debug, so a
+// sysop debugging a denial sees which part failed.
+func TestEvalLogsEachTerm(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	Check("S50&FA", ctxFor(&user.User{AccessLevel: 20, Flags: "A"}))
+	for _, want := range []string{"condition=S50 result=false", "condition=FA result=true"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("debug log lacks %q:\n%s", want, buf.String())
+		}
+	}
+}
+
+// TestFieldError checks the editors' message: nil for a clean string, "" or
+// "*", and the first problem with its column otherwise.
+func TestFieldError(t *testing.T) {
+	for _, s := range []string{"", "*", "S20&FA", "LEVEL>=20|SYSOP"} {
+		if err := FieldError(s); err != nil {
+			t.Errorf("FieldError(%q) = %v", s, err)
+		}
+	}
+	if err := FieldError("S10|!Q"); err == nil || err.Error() != `ACS column 6: "Q": Q is not an ACS term` {
+		t.Errorf("FieldError(S10|!Q) = %v", err)
 	}
 }

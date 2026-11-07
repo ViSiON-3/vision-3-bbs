@@ -19,16 +19,6 @@ const (
 	doorTextMaxLen = 1024
 )
 
-// doorACSError rejects a door acs the BBS would deny to everyone: one that
-// acs.Validate reports anything for. It names the first problem. Blank is no
-// rule and is accepted.
-func doorACSError(rule string) error {
-	if diags := acs.Validate(rule); len(diags) > 0 {
-		return fmt.Errorf("ACS %s", diags[0])
-	}
-	return nil
-}
-
 // sliceToCSV joins a string slice with ", " for display.
 func sliceToCSV(s []string) string {
 	return strings.Join(s, ", ")
@@ -599,7 +589,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 		Get: func() string { return dPtr.ACS },
 		Set: func(val string) error {
 			val = strings.TrimSpace(val)
-			if err := doorACSError(val); err != nil {
+			if err := acs.FieldError(val); err != nil {
 				return err
 			}
 			dPtr.ACS = val

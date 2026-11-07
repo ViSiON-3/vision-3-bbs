@@ -22,11 +22,11 @@ The examples on this page are checked by `internal/menu/acs_reference_test.go`.
 | Menu art | `{{acs}}...{{/}}` [conditional regions](menus/menu-system.md#conditional-regions-acs) |
 | QWK | `acs_write` gates each reply in an uploaded REP packet |
 
-Some of these checks run without a caller's session: the default message and
-file area chosen at login, replies uploaded through the QWK API, and
-conditional regions in menu art. See
+One of these checks runs without a caller's session: a message area's
+`acs_write` for replies uploaded through the QWK API. See
 [Terms that need a session](#terms-that-need-a-session) for what that changes.
-A REP packet uploaded during a call is checked with the caller's session.
+A REP packet uploaded during a call, the default areas chosen at login and
+conditional regions in menu art are all checked with the caller's session.
 
 ## Empty and `*`
 
@@ -183,8 +183,8 @@ start runs past midnight: `Y22:00/06:00` is 10 pm through 6:00 am.
   asked for a terminal (a PTY). It doesn't check the terminal's encoding or
   whether it shows ANSI.
 
-Checked without a session (default areas at login, replies uploaded through
-the QWK API, conditional regions in menu art), a string with `L` or `A` in it
+Checked without a session (replies uploaded through the QWK API), a string
+with `L` or `A` in it
 fails as a whole, whatever its other parts say: `L`, `!L` and `SYSOP|L` all
 fail there, for sysops too (see
 [Problems and missing context](#problems-and-missing-context)).
@@ -282,13 +282,25 @@ each problem:
 [FAIL]  ACS: configs/message_areas.json  area SYSOP, acs_write "!Q": column 2: "Q": Q is not an ACS term
 ```
 
-Every finding is a **FAIL** (doctor exits 2): the string denies every
-caller until it is fixed (see
-[Problems and missing context](#problems-and-missing-context)).
+- **FAIL** (doctor exits 2): the string has a problem, so it denies every
+  caller until it is fixed (see
+  [Problems and missing context](#problems-and-missing-context)).
+- **WARN** (doctor exits 1): the string reads cleanly but uses `L` or `A`
+  where it is checked without a session, a message area's `acs_write` for
+  replies uploaded through the QWK API. Callers in a session are checked as
+  usual, but every QWK API reply to that area is refused.
+
+```text
+[WARN]  ACS: configs/message_areas.json  area LOCALS, acs_write "S20|!L": uses L or A, which fail the whole string for replies uploaded through the QWK API, where there is no session
+```
+
+Doctor's **user sign-up dates** check lists users with no sign-up date: a
+warning when one of the board's strings uses `AGE`, since that whole string
+fails for them.
 
 The BBS runs the same check when it starts and after it reloads a changed
-config file, and logs each problem once at `ERROR` while it stays, with the
-same text; a problem that is fixed and later comes back is logged again. It
+config file, and logs each problem once while it stays (failures at
+`ERROR`, warnings at `WARN`), with the same text; a problem that is fixed and later comes back is logged again. It
 never refuses to start over a bad string and never changes one: a bad string
 denies every caller until it is fixed.
 

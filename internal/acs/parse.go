@@ -19,6 +19,7 @@ package acs
 
 import (
 	"fmt"
+	"unicode"
 )
 
 // Diagnostic is one problem Parse found. Any diagnostic makes the string
@@ -60,6 +61,36 @@ type Node struct {
 	Op       int
 	Text     string // the term, for a TermNode
 	X, Y     *Node  // operands: X for NotNode, X and Y for AndNode and OrNode
+	// term is Text as parseTerm read it, kept so a term is parsed once
+	// rather than on every evaluation.
+	term parsedTerm
+}
+
+// UsesSession reports whether any term in the expression reads the
+// caller's session (L or A), so it fails as a whole where there is none.
+func (e *Expr) UsesSession() bool {
+	return e.uses(func(code string) bool { return code == "L" || code == "A" })
+}
+
+// UsesAge reports whether any term in the expression is AGE, so it fails as
+// a whole for a user with no sign-up date.
+func (e *Expr) UsesAge() bool {
+	return e.uses(func(code string) bool { return code == "AGE" })
+}
+
+// uses reports whether any term's code satisfies match.
+func (e *Expr) uses(match func(code string) bool) bool {
+	var walk func(n *Node) bool
+	walk = func(n *Node) bool {
+		if n == nil {
+			return false
+		}
+		if n.Kind == TermNode {
+			return match(n.term.code)
+		}
+		return walk(n.X) || walk(n.Y)
+	}
+	return walk(e.Root)
 }
 
 // Expr is a parsed ACS string.
@@ -98,8 +129,8 @@ func isTermRune(r rune) bool {
 	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '/' || r == ':'
 }
 
-// tokenize splits s into terms, operators and parentheses. Spaces separate
-// tokens. The comparison and range characters join a term when a term
+// tokenize splits s into terms, operators and parentheses. Whitespace (a
+// space, a tab, a non-breaking space) separates tokens. The comparison and range characters join a term when a term
 // character follows them (S<20, H8-17, LEVEL>=20). Any other character it
 // doesn't know is reported, and ends the term it is in.
 func tokenize(s string) ([]token, []Diagnostic) {
@@ -115,7 +146,7 @@ func tokenize(s string) ([]token, []Diagnostic) {
 			toks = append(toks, token{kind: tokRParen, text: ")", pos: i, end: i + 1})
 		case r == '&' || r == '|' || r == '!':
 			toks = append(toks, token{kind: tokOp, text: string(r), pos: i, end: i + 1})
-		case r == ' ':
+		case unicode.IsSpace(r):
 		case isTermRune(r):
 			start := i
 			for i+1 < len(runes) {
@@ -221,7 +252,8 @@ func Parse(s string) *Expr {
 	for _, t := range out {
 		switch {
 		case t.kind == tokTerm:
-			stack = append(stack, &Node{Kind: TermNode, Pos: t.pos, End: t.end, Op: t.pos, Text: t.text})
+			term, _ := parseTerm(t.text) // a term with a problem has failed Parse already
+			stack = append(stack, &Node{Kind: TermNode, Pos: t.pos, End: t.end, Op: t.pos, Text: t.text, term: term})
 		case t.text == "!":
 			if len(stack) < 1 {
 				return fail(t.pos, t.end, "'!' has nothing after it to negate (two '!' in a row are an error)")
@@ -283,6 +315,17 @@ func sortDiagnostics(d []Diagnostic) {
 			d[j], d[j-1] = d[j-1], d[j]
 		}
 	}
+}
+
+// FieldError is what an editor shows for an ACS string a sysop typed: nil
+// when it reads cleanly, or is "" or "*", otherwise its first problem, such
+// as `ACS column 2: "Q": Q is not an ACS term`. Editors check every ACS
+// field with it, since a string with any problem denies every caller.
+func FieldError(s string) error {
+	if d := Validate(s); len(d) > 0 {
+		return fmt.Errorf("ACS %s", d[0])
+	}
+	return nil
 }
 
 // Validate returns the diagnostics for an ACS string as configured: nothing

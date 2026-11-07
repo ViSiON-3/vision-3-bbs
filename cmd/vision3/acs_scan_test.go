@@ -140,6 +140,36 @@ func TestCheckACSStringsClean(t *testing.T) {
 	}
 }
 
+// TestScanACSWithoutSession checks that a message area's acs_write, which
+// the QWK API checks without a session, is a warning when it uses L or A,
+// and that the same string elsewhere, checked with a session, is not.
+func TestScanACSWithoutSession(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "configs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	areas := `[{"id": 1, "tag": "LOCALS", "acs_read": "S10|L", "acs_write": "S20|!L"}, {"id": 2, "tag": "PLAIN", "acs_write": "S20"}]`
+	if err := os.WriteFile(filepath.Join(root, "configs", "message_areas.json"), []byte(areas), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	type check struct {
+		status          doctorSeverity
+		message, remedy string
+	}
+	var got []check
+	checkACSStrings(root, func(_ string, status doctorSeverity, message, remedy string) {
+		got = append(got, check{status, message, remedy})
+	})
+	if len(got) != 1 {
+		t.Fatalf("checks %v, want one warning for LOCALS acs_write", got)
+	}
+	c := got[0]
+	if c.status != doctorWarn || !strings.Contains(c.message, `area LOCALS, acs_write "S20|!L"`) ||
+		!strings.Contains(c.message, "QWK API") || !strings.Contains(c.remedy, "refused") {
+		t.Errorf("check = %+v", c)
+	}
+}
+
 // TestScanACSDoors checks that each door's acs in doors.json is scanned,
 // trimmed as LoadDoors trims it, and that any problem in one is a failure:
 // the BBS denies such a door to every caller.

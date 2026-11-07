@@ -82,14 +82,42 @@ func Check(s string, ctx Context) bool {
 	return result
 }
 
-// logged holds the invalid strings Check has logged.
-var logged sync.Map
+// maxLogged bounds how many invalid strings logInvalid remembers. Past it
+// the set starts over, so a board fed endless distinct bad strings logs
+// some again rather than growing without limit.
+const maxLogged = 1024
+
+// logged holds the invalid strings Check has logged since the last
+// ResetInvalidLog.
+var logged = struct {
+	sync.Mutex
+	seen map[string]bool
+}{seen: map[string]bool{}}
+
+// ResetInvalidLog forgets which invalid strings Check has logged, so each is
+// logged again the next time a caller's check reads it. The BBS calls it
+// when a config file is reloaded, so a string that is fixed and later comes
+// back is reported again.
+func ResetInvalidLog() {
+	logged.Lock()
+	logged.seen = map[string]bool{}
+	logged.Unlock()
+}
 
 // logInvalid logs an invalid string's problems the first time Check sees
 // it, so a string from a source the startup scan doesn't read still leaves a
 // trace, without a line per evaluation.
 func logInvalid(e *Expr) {
-	if _, seen := logged.LoadOrStore(e.Source, true); seen {
+	logged.Lock()
+	seen := logged.seen[e.Source]
+	if !seen {
+		if len(logged.seen) >= maxLogged {
+			logged.seen = map[string]bool{}
+		}
+		logged.seen[e.Source] = true
+	}
+	logged.Unlock()
+	if seen {
 		return
 	}
 	msgs := make([]string, len(e.Diagnostics))
@@ -101,7 +129,7 @@ func logInvalid(e *Expr) {
 
 // Eval evaluates a valid expression against ctx; it is false for an
 // expression that isn't Valid. ctx.User must not be nil. Every term is
-// evaluated, as the BBS always has, so each logs its own check. A term that
+// evaluated, as the BBS always has, and each logs its result at Debug. A term that
 // needs context ctx lacks (see lacking) makes the whole expression false,
 // whatever the other parts say: '!' can't turn it into a pass, and another
 // branch of '|' can't pass in its place.
@@ -118,12 +146,13 @@ func (e *Expr) Eval(ctx Context) bool {
 func evalNode(n *Node, ctx Context) (result, lacks bool) {
 	switch n.Kind {
 	case TermNode:
-		t, _ := parseTerm(n.Text)
-		if _, missing := lacking(t, ctx); missing {
-			slog.Debug("ACS term lacks its context", "condition", n.Text)
+		if _, missing := lacking(n.term, ctx); missing {
+			slog.Debug("ACS term lacks its context, so the string fails", "condition", n.Text)
 			return false, true
 		}
-		return evalTerm(t, ctx), false
+		result = evalTerm(n.term, ctx)
+		slog.Debug("ACS term", "condition", n.Text, "result", result)
+		return result, false
 	case NotNode:
 		x, lx := evalNode(n.X, ctx)
 		return !x, lx
