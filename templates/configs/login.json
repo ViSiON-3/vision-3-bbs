@@ -14,7 +14,8 @@
         "command": "PRINTNEWS"
     },
     {
-        "command": "LASTCALLS"
+        "command": "LASTCALLS",
+        "data": "20 --all"
     },
     {
         "command": "ONELINERS"

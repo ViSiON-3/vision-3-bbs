@@ -280,6 +280,8 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if h.online.online(nodeID, network) {
 		return // a replacement stream still owns this node's memberships
 	}
+	// The board is off the network: its callers are no longer online here.
+	h.dropPresence(nodeID, network)
 	// Clean up chat room presence for the disconnected node.
 	removed := h.chatRooms.HandleDisconnect(network, nodeID)
 	sub := h.subscribers.Get(nodeID, network)

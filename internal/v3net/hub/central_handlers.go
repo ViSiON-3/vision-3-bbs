@@ -17,7 +17,7 @@ const maxCentralListingBytes = 16 * 1024
 
 // hubFeatures names the optional features this hub serves on every
 // network, for NetworkInfo.Features.
-var hubFeatures = []string{protocol.FeatureCentralDirectory}
+var hubFeatures = []string{protocol.FeatureCentralDirectory, protocol.FeatureCentralPresence, protocol.FeatureCentralLastCallers}
 
 // handlePutCentralListing: PUT /v3net/v1/{network}/central/listing (auth
 // required). The body is the node's signed listing. It is accepted when it

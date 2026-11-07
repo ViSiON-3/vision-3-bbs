@@ -474,6 +474,9 @@ func (e *MenuExecutor) renderPromptText(prompt string, placeholders map[string]s
 
 	out := replaceMenuATCode([]byte(prompt), "UC", strconv.Itoa(userCount))
 	out = replaceMenuATCode(out, "U", strconv.Itoa(activeCount))
+	if hasNetOnlineCode(out) {
+		out = replaceMenuATCode(out, "UN", strconv.Itoa(e.v3netOnlineCount()))
+	}
 	out = expandRandomRumorATCode(out, e.dataDir(), rumorLevel, false)
 
 	return ansi.ReplacePipeCodes(out)

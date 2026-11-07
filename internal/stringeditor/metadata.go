@@ -759,5 +759,8 @@ func stringCatalog() []StringEntry {
 		{Label: "ACS Test: Bad Number", Key: "acsTestBadNumber", Description: "Shown when a minutes answer is not a whole number"},
 		{Label: "ACS Test: Bad Time", Key: "acsTestBadTime", Description: "Shown when the time can't be read"},
 		{Label: "ACS Test: Denied", Key: "acsTestDenied", Description: "Shown in the user editor when someone below sysOpLevel asks for the tester"},
+
+		{Label: "Konfig: V3Net Sharing", Key: "konfigV3NetSharingLabel", Description: "User configuration field label"},
+		{Label: "Konfig: V3Net Sharing Help", Key: "konfigV3NetSharingHelp", Description: "User configuration field help"},
 	}
 }

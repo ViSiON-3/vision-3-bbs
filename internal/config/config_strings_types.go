@@ -15,15 +15,18 @@ type StringsConfig struct {
 
 	KonfigQwkDevicesLabel string `json:"konfigQwkDevicesLabel"`
 	KonfigQwkDevicesHelp  string `json:"konfigQwkDevicesHelp"`
-	QwkDevicesTitle       string `json:"qwkDevicesTitle"`
-	QwkDevicesHeader      string `json:"qwkDevicesHeader"`
-	QwkDevicesEmpty       string `json:"qwkDevicesEmpty"`
-	QwkDevicesNever       string `json:"qwkDevicesNever"`
-	QwkDevicesPrompt      string `json:"qwkDevicesPrompt"`
-	QwkDevicesRemoved     string `json:"qwkDevicesRemoved"`
-	QwkDevicesInvalid     string `json:"qwkDevicesInvalid"`
-	QwkDevicesSaveFailed  string `json:"qwkDevicesSaveFailed"`
-	QwkDevicesDisabled    string `json:"qwkDevicesDisabled"`
+
+	KonfigV3NetSharingLabel string `json:"konfigV3NetSharingLabel"`
+	KonfigV3NetSharingHelp  string `json:"konfigV3NetSharingHelp"`
+	QwkDevicesTitle         string `json:"qwkDevicesTitle"`
+	QwkDevicesHeader        string `json:"qwkDevicesHeader"`
+	QwkDevicesEmpty         string `json:"qwkDevicesEmpty"`
+	QwkDevicesNever         string `json:"qwkDevicesNever"`
+	QwkDevicesPrompt        string `json:"qwkDevicesPrompt"`
+	QwkDevicesRemoved       string `json:"qwkDevicesRemoved"`
+	QwkDevicesInvalid       string `json:"qwkDevicesInvalid"`
+	QwkDevicesSaveFailed    string `json:"qwkDevicesSaveFailed"`
+	QwkDevicesDisabled      string `json:"qwkDevicesDisabled"`
 
 	AcsTestTitle          string `json:"acsTestTitle"`
 	AcsTestMenu           string `json:"acsTestMenu"`

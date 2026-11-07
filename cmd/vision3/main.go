@@ -913,11 +913,6 @@ func sessionHandler(s ssh.Session) {
 			menuExecutor.AnnounceLogoff(bbsSession, authenticatedUser)
 		}
 
-		// V3Net logoff notification
-		if v3netService != nil && authenticatedUser != nil {
-			v3netService.SendLogoff(authenticatedUser.Handle)
-		}
-
 		// --- Record Call History ---
 		if authenticatedUser != nil {
 			slog.Debug("adding call record", "node", nodeID, "user", authenticatedUser.Handle, "id", authenticatedUser.ID)
@@ -948,6 +943,12 @@ func sessionHandler(s ssh.Session) {
 			userMgr.AddCallRecord(callRec)
 		} else {
 			slog.Debug("no authenticated user, skipping call record", "node", nodeID)
+		}
+		// The session is gone from the registry and its call recorded:
+		// let V3Net Central republish who is online and the last callers.
+		// Only callers who opted in are ever published.
+		if v3netService != nil && authenticatedUser != nil {
+			v3netService.NotifyCentralActivity()
 		}
 		// ------------------------
 		_ = s.Close() // ensure the session is closed; best-effort
@@ -1674,9 +1675,14 @@ func sessionHandler(s ssh.Session) {
 		logonAnnounced = true
 	}
 
-	// V3Net logon notification
+	// V3Net Central: a caller who opted in to network Who's Online shows
+	// there from now. No handle is sent for anyone else; the old
+	// unconditional logon/logoff notice is no longer sent at all. The
+	// session is only eligible from here, once the caller has chosen
+	// whether this login is visible.
+	bbsSession.SetCentralReady(true)
 	if v3netService != nil && authenticatedUser != nil {
-		v3netService.SendLogon(authenticatedUser.Handle)
+		v3netService.NotifyCentralActivity()
 	}
 
 	for {
@@ -2114,6 +2120,9 @@ func main() {
 				serverConfig.SSHEnabled, serverConfig.SSHPort,
 				serverConfig.TelnetEnabled, serverConfig.TelnetPort)
 			svc.CentralSoftware = "ViSiON/3 " + version.Number
+			// Network Who's Online and Last Callers publish only callers
+			// who opted in; the source applies that.
+			svc.SetCentralActivitySource(newCentralActivitySource(sessionRegistry, userMgr))
 			v3netService = svc
 
 			// Auto-create message areas for V3Net subscriptions if missing.
@@ -2398,6 +2407,8 @@ func (a *centralAdapter) CentralNetworks() []menu.CentralNetworkInfo {
 			LastError:        n.LastError,
 			DirectoryFetched: n.DirectoryFetched,
 			DirectoryCount:   n.DirectoryCount,
+			Presence:         centralActivityInfo(n.Presence),
+			LastCallers:      centralActivityInfo(n.LastCallers),
 		})
 	}
 	return out
@@ -2405,6 +2416,28 @@ func (a *centralAdapter) CentralNetworks() []menu.CentralNetworkInfo {
 
 func (a *centralAdapter) CentralDirectory(ctx context.Context, network string, force bool) ([]protocol.CentralDirectoryEntry, error) {
 	return a.svc.CentralDirectory(ctx, network, force)
+}
+
+// CentralActivity returns network's verified feed of kind.
+func (a *centralAdapter) CentralActivity(ctx context.Context, network, kind string, force bool) ([]protocol.CentralActivityBoard, error) {
+	return a.svc.CentralActivity(ctx, network, kind, force)
+}
+
+// NotifyCentralActivity asks every leaf to republish this board's activity.
+func (a *centralAdapter) NotifyCentralActivity() { a.svc.NotifyCentralActivity() }
+
+// NodeID returns this board's V3Net node ID.
+func (a *centralAdapter) NodeID() string { return a.svc.NodeID() }
+
+// centralActivityInfo converts a leaf's activity status for the menus.
+func centralActivityInfo(s leaf.ActivityStatus) menu.CentralActivityInfo {
+	return menu.CentralActivityInfo{
+		Enabled:       s.Enabled,
+		Supported:     s.Supported,
+		LastPublished: s.LastPublished,
+		LastCount:     s.LastCount,
+		LastError:     s.LastError,
+	}
 }
 
 // v3netChatProvider creates a menu.ChatLeafProvider from the V3Net service.

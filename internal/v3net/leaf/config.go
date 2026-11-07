@@ -35,6 +35,15 @@ type Config struct {
 	// the leaf then withdraws any listing it published before when it
 	// starts. Publication does not need CentralEnabled.
 	CentralListing *CentralListingSpec
+	// CentralPresence and CentralLastCallers are the sysop's switches for
+	// network Who's Online and Last Callers. Each needs CentralEnabled and
+	// Activity as well. With a switch off, the leaf withdraws what it
+	// published of that kind before, when it starts.
+	CentralPresence    bool
+	CentralLastCallers bool
+	// Activity says what the board may publish for those features: only
+	// callers who consented. Nil publishes nothing.
+	Activity CentralActivitySource
 
 	// RequireSignedMessages drops polled messages without an author
 	// signature instead of importing them as legacy messages.

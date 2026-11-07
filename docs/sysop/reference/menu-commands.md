@@ -60,7 +60,7 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | --- | --- | --- | --- |
 | `SHOWSTATS` | none | The caller's statistics on `YOURSTAT.ANS`, then a pause. Same screen as the `USERSTATS` login step. | |
 | `SYSTEMSTATS` | none | System totals from the `SYSSTATS.TOP` and `.BOT` templates. | |
-| `LASTCALLERS` | Row limit, whole number greater than 0. Default 20. | Recent callers from the `LASTCALL` templates. Non-numeric data falls back to 20. Hidden logins never use a row. | No login check |
+| `LASTCALLERS` | Row limit, whole number greater than 0. Default 20. Optionally `--network` or `--all`, e.g. `20 --all`. | Recent callers from the `LASTCALL` templates. Non-numeric data falls back to 20. Hidden logins never use a row. `--network` shows [V3Net Central](v3net/central.md#whos-online-and-last-callers)'s network Last Callers instead, from the `LASTNET` templates, and `--all` this board's callers and the network's together, each row flagged `local` or with its network's name; `A` on either screen switches between the two. With no network sharing Last Callers, `--all` is the local screen, with no `A` or `R` keys. The stock main menu binds `W` to `LASTCALLERS 20 --all`. | No login check |
 | `SHOWVERSION` | none | Clears the screen and prints the version string. | |
 | `LISTUSERS` | none | Public user list from the `USERLIST` templates, alphabetical. | No login check |
 | `WHOISONLINE` | none | Who is online, from the `WHOONLN` templates. Invisible nodes are shown only to CoSysOp+. | |
@@ -144,7 +144,7 @@ All of these apply to the logged-in user. The stock main menu binds `K` to `USER
 
 | Command | Data | What it does | Access |
 | --- | --- | --- | --- |
-| `USERCONFIG` | Optional menu name to go to on exit. Without one, the calling menu is redisplayed. | Full-screen settings editor: screen size, encoding, hot keys, message header style, auto-signature, autocorrect (where the board offers it), real name, location, note, password, file listing mode and columns. Draws `KONFIG.ANS` (at most 5 rows) as its header; the art may use the template tokens such as `\|UH`, `\|LEVEL`, `\|NODE` and `\|DATE`. Arrow keys move, Enter changes, a setting's letter jumps straight to it, Q or Esc leaves. Each change is saved as soon as it is confirmed. A new screen size applies at once; a new encoding applies from the next login. | |
+| `USERCONFIG` | Optional menu name to go to on exit. Without one, the calling menu is redisplayed. | Full-screen settings editor: screen size, encoding, hot keys, message header style, auto-signature, autocorrect (where the board offers it), real name, location, note, password, file listing mode and columns, and `R` V3Net Sharing (where a network offers [Who's Online or Last Callers](v3net/central.md#caller-controls)), which opens the same screen as V3Net Central's Preferences. Draws `KONFIG.ANS` (at most 5 rows) as its header; the art may use the template tokens such as `\|UH`, `\|LEVEL`, `\|NODE` and `\|DATE`. Arrow keys move, Enter changes, a setting's letter jumps straight to it, Q or Esc leaves. Each change is saved as soon as it is confirmed. A new screen size applies at once; a new encoding applies from the next login. | |
 | `CFG_FILECOLUMNS` | none | Toggle screen for the columns shown in file listings. | |
 | `CFG_PASSWORD` | none | Asks for the current password, then a new one. | |
 | `CFG_TWITLIST` | none | Full-screen editor for the caller's personal ignore list (Twit List): add, delete, clear, page, or quit. Drawn like the generated door menu from `TWITLIST.MNU` and `templates/TWITLIST.*`. Also available as M in USERCONFIG and I in the stock message menu. Shows a notice and returns when the sysop has turned Twit Lists off. | |
@@ -230,10 +230,12 @@ Caller-facing. The stock main menu binds `V3NETCENTRAL` to `/V` and the word `CE
 
 | Command | Data | What it does | Access |
 | --- | --- | --- | --- |
-| `V3NETCENTRAL` | none | The V3Net Central menu: `B` Boards (only when a network's directory is available), `P` My Preferences, `S` Connection Status. Says so and returns when V3Net is off or Central is enabled on no network. | |
+| `V3NETCENTRAL` | none | The V3Net Central menu: `B` Boards (only when a network's directory is available), `W` Who's Online and `L` Last Callers (each only when the sysop offers it on a network whose hub serves it), `P` Preferences (the V3Net Sharing screen, also `R` in `USERCONFIG`), `S` Connection Status. Says so and returns when V3Net is off or Central is enabled on no network. | |
 | `V3NETCENTRALBOARDS` | Network name, optional. Blank covers every network where the directory is available. | Lightbar over the verified board directory: online boards first, then boards seen in the last week, then stale ones. Enter shows a board's details, `/` filters by name, description or address, `R` fetches again. | Silent when nothing is available |
-| `V3NETCENTRALPREFS` | none | What V3Net Central shares about the caller. In phase 1, nothing; lists the coming features as not available. | |
-| `V3NETCENTRALSTATUS` | none | Per network: the Central and listing switches, whether the hub serves the directory, whether the event stream is up, the listing's state and when the directory was last fetched. | |
+| `V3NETCENTRALPREFS` | none | The caller's own V3Net Central switches, each off until they turn it on: show me on Who's Online, my availability (not shown, available, busy), show my calls on Last Callers. A switch for a feature no network offers is refused. Shows exactly what other boards would see. | |
+| `V3NETCENTRALWHO` | Network name, optional. Blank covers every network where it is available. | Network Who's Online from the `WHONET` templates (built-in layout without them): the callers on participating boards who chose to be shown, one row per caller per board with their availability. | Silent when nothing is available |
+| `V3NETCENTRALLASTCALLERS` | Row limit, optional, and `--all` to include this board's callers. | Network Last Callers, as `LASTCALLERS --network` (or `--all`). | Silent when nothing is available |
+| `V3NETCENTRALSTATUS` | none | Per network: the Central and listing switches, whether the hub serves the directory, whether the event stream is up, the listing's state and when the directory was last fetched; then Who's Online and Last Callers: off, not served by the hub, or how many entries this board last shared and when. | |
 
 ## SysOp and administration
 

@@ -20,7 +20,27 @@ type centralFake struct {
 	dirs    map[string][]protocol.CentralDirectoryEntry
 	errs    map[string]error
 	fetches int
+	// acts holds each network's activity feeds by kind; notifies counts
+	// NotifyCentralActivity calls; node is this board's node ID.
+	acts     map[string]map[string][]protocol.CentralActivityBoard
+	notifies int
+	node     string
 }
+
+// CentralActivity returns the scripted feed of kind on network.
+func (f *centralFake) CentralActivity(_ context.Context, network, kind string, _ bool) ([]protocol.CentralActivityBoard, error) {
+	f.fetches++
+	if err := f.errs[network]; err != nil {
+		return nil, err
+	}
+	return f.acts[network][kind], nil
+}
+
+// NotifyCentralActivity counts the republish requests.
+func (f *centralFake) NotifyCentralActivity() { f.notifies++ }
+
+// NodeID returns the scripted node ID.
+func (f *centralFake) NodeID() string { return f.node }
 
 func (f *centralFake) CentralNetworks() []CentralNetworkInfo { return f.nets }
 func (f *centralFake) CentralDirectory(_ context.Context, network string, _ bool) ([]protocol.CentralDirectoryEntry, error) {
@@ -245,8 +265,8 @@ func TestCentralPrefsSharesNothing(t *testing.T) {
 	if !strings.Contains(out, "Nothing about you is shared") {
 		t.Errorf("expected the nothing-shared statement, got %q", out)
 	}
-	if !strings.Contains(out, "not available yet") {
-		t.Errorf("expected coming features listed as not available, got %q", out)
+	if strings.Count(out, "not offered here") != 2 {
+		t.Errorf("expected both switches shown as not offered, got %q", out)
 	}
 	if fake.fetches != 0 {
 		t.Error("preferences must not fetch anything")

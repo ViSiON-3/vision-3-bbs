@@ -120,3 +120,34 @@ func TestShippedLoginSequencesLeadWithPriorityItems(t *testing.T) {
 		assertPriorityLeads(t, "config.defaultLoginSequence()", items)
 	})
 }
+
+// The shipped and built-in login sequences show the combined Last Callers,
+// as the stock main menu's W does.
+func TestShippedLoginSequencesShowCombinedLastCallers(t *testing.T) {
+	data, err := configtemplates.FS.ReadFile("login.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var shipped []config.LoginItem
+	if err := json.Unmarshal(data, &shipped); err != nil {
+		t.Fatal(err)
+	}
+	builtin, err := config.LoadLoginSequence(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for source, items := range map[string][]config.LoginItem{"templates/configs/login.json": shipped, "config.defaultLoginSequence()": builtin} {
+		found := false
+		for _, it := range items {
+			if strings.EqualFold(it.Command, "LASTCALLS") {
+				found = true
+				if _, mode := parseLastCallersArgs(it.Data); mode != lastCallersAll {
+					t.Errorf("%s: LASTCALLS data %q is not the combined list", source, it.Data)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("%s: no LASTCALLS step", source)
+		}
+	}
+}

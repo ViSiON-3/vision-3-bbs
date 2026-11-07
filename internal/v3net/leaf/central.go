@@ -99,9 +99,16 @@ type CentralStatus struct {
 	DirectoryCount   int
 }
 
-// centralState is the leaf's Central bookkeeping. mu guards every field.
+// centralState is the leaf's Central bookkeeping. mu guards every field
+// but listingWire and listingHalted.
 type centralState struct {
 	mu sync.Mutex
+
+	// listingWire serializes the listing's PUTs and DELETEs, and
+	// listingHalted, set by WithdrawCentralListing, refuses every PUT after
+	// it, so a final withdrawal is never followed by a publish.
+	listingWire   sync.Mutex
+	listingHalted bool // guarded by listingWire
 
 	featuresKnown bool
 	features      []string
@@ -116,6 +123,11 @@ type centralState struct {
 
 	seen     []string // ring of event IDs acted on
 	seenNext int
+
+	// activity is the per-kind state of Who's Online and Last Callers
+	// (central_activity.go). The map is fixed at New; mu guards the
+	// states' fields.
+	activity map[string]*activityState
 }
 
 // centralEnabled reports whether Central participation is on for this
@@ -222,7 +234,11 @@ func (l *Leaf) runCentral(ctx context.Context) {
 	delay = centralRetryMin
 	for {
 		wait := centralRepublishInterval
-		if err := l.publishCentralListing(ctx); err != nil {
+		err := l.publishCentralListing(ctx)
+		if errors.Is(err, errListingHalted) {
+			return
+		}
+		if err != nil {
 			l.setCentralError("publish: " + err.Error())
 			slog.Warn("leaf: central listing publish failed; retrying", "network", l.cfg.Network, "error", err, "delay", delay)
 			wait = delay
@@ -291,6 +307,11 @@ func (l *Leaf) buildCentralListing(now time.Time) (*protocol.CentralListing, err
 
 // publishCentralListing signs and PUTs this board's listing.
 func (l *Leaf) publishCentralListing(ctx context.Context) error {
+	l.central.listingWire.Lock()
+	defer l.central.listingWire.Unlock()
+	if l.central.listingHalted {
+		return errListingHalted
+	}
 	listing, err := l.buildCentralListing(time.Now())
 	if err != nil {
 		return err
@@ -321,6 +342,14 @@ func (l *Leaf) publishCentralListing(ctx context.Context) error {
 // withdrawCentralListing DELETEs this board's listing. The hub answers the
 // same whether or not it held one.
 func (l *Leaf) withdrawCentralListing(ctx context.Context) error {
+	l.central.listingWire.Lock()
+	defer l.central.listingWire.Unlock()
+	return l.withdrawCentralListingLocked(ctx)
+}
+
+// withdrawCentralListingLocked is withdrawCentralListing with listingWire
+// held.
+func (l *Leaf) withdrawCentralListingLocked(ctx context.Context) error {
 	path := fmt.Sprintf("/v3net/v1/%s/central/listing", l.cfg.Network)
 	resp, err := l.signedDo(ctx, http.MethodDelete, path, nil)
 	if err != nil {
@@ -346,8 +375,21 @@ func (l *Leaf) withdrawCentralListing(ctx context.Context) error {
 // that holds it, rather than waiting for a replacement leaf that may never
 // contact that hub.
 func (l *Leaf) WithdrawCentralListing(ctx context.Context) error {
-	return l.withdrawCentralListing(ctx)
+	// For good: wait for a publish in flight, and publish no more, so a
+	// refresh or retry racing the stop cannot list the board again on a
+	// hub no replacement leaf will withdraw from.
+	// The DELETE's time starts once the wait ends, as for WithdrawActivity.
+	l.central.listingWire.Lock()
+	defer l.central.listingWire.Unlock()
+	l.central.listingHalted = true
+	ctx, cancel := context.WithTimeout(ctx, centralWithdrawBudget)
+	defer cancel()
+	return l.withdrawCentralListingLocked(ctx)
 }
+
+// errListingHalted is returned by publishCentralListing once
+// WithdrawCentralListing has run.
+var errListingHalted = errors.New("leaf: listing withdrawn; not publishing")
 
 // hubErrorText pulls the error field out of a hub's JSON error body, or
 // takes the body as text, and returns it fit for a caller's screen: pipes
@@ -462,40 +504,57 @@ func verifyCentralDirectory(dir *protocol.CentralDirectory, network string, now 
 	return out
 }
 
-// dispatchCentralEvent acts on a Central listing event: a fresh one marks
-// the cached directory stale, so the next look fetches it again. One past
-// its expiry, or whose ID was acted on before, is dropped: a replay would
-// only cost a fetch, but the rule is the same for every Central event.
+// dispatchCentralEvent acts on a Central event: a fresh listing event
+// marks the cached directory stale, and a fresh activity event the cached
+// feed of its kind, so the next look fetches again. One past its expiry,
+// or whose ID was acted on before, is dropped: a replay would only cost a
+// fetch, but the rule is the same for every Central event.
 func (l *Leaf) dispatchCentralEvent(ev protocol.Event) {
+	var meta protocol.EventMeta
+	var network, kind string
 	switch ev.Type {
 	case protocol.EventCentralListingUpdated, protocol.EventCentralListingWithdrawn:
+		var p protocol.CentralListingEventPayload
+		if err := json.Unmarshal(ev.Data, &p); err != nil {
+			return
+		}
+		meta, network = p.EventMeta, p.Network
+	case protocol.EventCentralActivityUpdated:
+		var p protocol.CentralActivityEventPayload
+		if err := json.Unmarshal(ev.Data, &p); err != nil {
+			return
+		}
+		meta, network, kind = p.EventMeta, p.Network, p.Kind
+		if l.central.activity[kind] == nil {
+			return
+		}
 	default:
 		return
 	}
-	var p protocol.CentralListingEventPayload
-	if err := json.Unmarshal(ev.Data, &p); err != nil {
+	if network != "" && network != l.cfg.Network {
 		return
 	}
-	if p.Network != "" && p.Network != l.cfg.Network {
-		return
-	}
-	if p.Expired(time.Now()) {
-		slog.Debug("leaf: dropped expired central event", "network", l.cfg.Network, "type", ev.Type, "id", p.EventID)
+	if meta.Expired(time.Now()) {
+		slog.Debug("leaf: dropped expired central event", "network", l.cfg.Network, "type", ev.Type, "id", meta.EventID)
 		return
 	}
 	l.central.mu.Lock()
 	defer l.central.mu.Unlock()
-	if p.EventID != "" {
-		if slices.Contains(l.central.seen, p.EventID) {
-			slog.Debug("leaf: dropped replayed central event", "network", l.cfg.Network, "type", ev.Type, "id", p.EventID)
+	if meta.EventID != "" {
+		if slices.Contains(l.central.seen, meta.EventID) {
+			slog.Debug("leaf: dropped replayed central event", "network", l.cfg.Network, "type", ev.Type, "id", meta.EventID)
 			return
 		}
 		if len(l.central.seen) < centralSeenEvents {
-			l.central.seen = append(l.central.seen, p.EventID)
+			l.central.seen = append(l.central.seen, meta.EventID)
 		} else {
-			l.central.seen[l.central.seenNext] = p.EventID
+			l.central.seen[l.central.seenNext] = meta.EventID
 			l.central.seenNext = (l.central.seenNext + 1) % centralSeenEvents
 		}
+	}
+	if kind != "" {
+		l.central.activity[kind].stale = true
+		return
 	}
 	l.central.dirStale = true
 }

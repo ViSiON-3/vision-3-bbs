@@ -66,6 +66,7 @@ func (um *UserMgr) UpdateUserByID(u *User) error {
 	// Devices are changed only through the device methods; see UpdateUser.
 	if current != nil {
 		userCopy.APIDevices = current.APIDevices
+		keepCentralConsent(&userCopy, current) // see manager_central.go
 	}
 	um.users[newKey] = &userCopy
 	if err := um.saveUsersLocked(); err != nil {
@@ -111,6 +112,8 @@ func (um *UserMgr) UpdateUser(u *User) error {
 	// it is saved, so the stored list always wins.
 	if previous != nil {
 		userCopy.APIDevices = previous.APIDevices
+		// Central consent too: only SetCentralConsent changes it.
+		keepCentralConsent(&userCopy, previous)
 	}
 	um.users[lowerHandle] = &userCopy
 	if err := um.saveUsersLocked(); err != nil {

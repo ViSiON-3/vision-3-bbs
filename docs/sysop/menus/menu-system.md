@@ -443,6 +443,14 @@ Dynamic `@CODE@` placeholders are available in prompts, ANSI files, and template
 
 - `@U@` - Number of users currently online
 - `@UC@` - Total registered users (also `@USERCT@`)
+- `@UN@` - Number of callers online on other V3Net boards: those who turned
+  on network Who's Online, each counted once per board, across every network
+  your board shows [Who's Online](v3net/central.md#whos-online-and-last-callers)
+  for. Your own callers are left out (`@U@` counts them), and it is `0` while
+  no network offers Who's Online. The count is refreshed in the background
+  every 30 seconds, so a menu never waits on a hub. Menu screens and prompts
+  only; in the `LASTCALL`, `WHOONLN`, `LASTNET` and `WHONET` templates `@UN@`
+  is the caller's handle, as before
 
 **Width formats:**
 
@@ -866,6 +874,11 @@ Command usage examples:
 
 - `RUN:LASTCALLERS` - Uses default limit of 20 entries
 - `RUN:LASTCALLERS 25` - Shows last 25 entries
+- `RUN:LASTCALLERS 20 --all` - This board's callers and V3Net's together, each
+  row flagged `local` or with its network's name, from the `LASTNET` templates.
+  When no network shares Last Callers (V3Net off, or the feature not offered),
+  it is the plain local screen above, so a board without V3Net sees no change.
+  The stock main menu binds `W` to this.
 
 Either limit is trimmed to what fits on the caller's terminal: the rows taken
 by `LASTCALL.TOP`, `LASTCALL.BOT` and the pause prompt are subtracted from the
@@ -906,6 +919,56 @@ Width formatting is supported for all tokens:
 - `@CODE##@` - Visual width (value fills the same columns as the placeholder)
 
 Legacy caret placeholders (`^UN`, `^ND`, etc.) remain supported for compatibility.
+
+### V3Net Last Callers and Who's Online (`LASTNET`, `WHONET`)
+
+The [V3Net Central](v3net/central.md#whos-online-and-last-callers) network
+screens are laid out by templates in the same way:
+
+- `LASTNET.TOP`, `LASTNET.MID`, `LASTNET.BOT` for `LASTCALLERS --network`,
+  `LASTCALLERS --all` and the Central menu's Last Callers
+- `WHONET.TOP`, `WHONET.MID`, `WHONET.BOT` for the Central menu's Who's Online
+  (`V3NETCENTRALWHO`)
+
+`TOP` and `BOT` are drawn once, `MID` once per row. Every width and alignment
+form works: `@UN:20@`, `@UN##########@`, `@UN|R:20@`, `@UN|C:20@`. A menu set
+missing any of a screen's three files gets the built-in layout instead, so an
+install whose menus predate these templates looks as it did.
+
+Values another board published are filled in after the template's pipe codes
+are expanded, so they are always drawn as plain text: a handle or board name
+can never change colours or clear the caller's screen. Under the bottom
+template the screen adds its own lines: any network that could not be
+fetched, the key help (`A`, `R`) on Last Callers, and the pause prompt.
+
+`LASTNET.MID` row tokens:
+
+- `@UN@` - Caller's handle
+- `@BB@` - Location: the board's name for a network call, the caller's
+  location field for a local one
+- `@NW@` - Where the call was: the network's name, or `local` for this
+  board's own calls in the `--all` view
+- `@DY@` - Day the call began (`Mon`)
+- `@LO@` - Time the call began (`03:04pm`)
+- `@LT@` - Time the call ended (`03:04pm`); blank while unknown
+- `@TO@` - Length in minutes; `-` while unknown
+
+`WHONET.MID` row tokens (one row per caller per board):
+
+- `@UN@` - Caller's handle
+- `@BB@` - Board they are on
+- `@NW@` - Network
+- `@AV@` - Availability the caller shares: `available`, `busy`, or `-`
+- `@NS@` - `(2 nodes)` when the caller is on more than one node there, else blank
+
+`TOP`/`BOT` tokens, both screens:
+
+- `@CT@` - Rows shown
+- `@NW@` - The networks shown, comma-separated
+- `@LEGEND@` - (`LASTNET` only) What the From column means in the combined
+  view (`--all`); blank in the network-only one. The stock `LASTNET.BOT` is
+  empty, leaving every row below the header for calls
+- `@TT@` - (`WHONET` only) Callers in all, including any that did not fit
 
 ## Special Menu Names
 

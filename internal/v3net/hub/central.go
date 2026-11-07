@@ -150,6 +150,9 @@ func (cs *CentralStore) Put(listing *protocol.CentralListing, raw []byte, now ti
 // Delete removes the node's listing on network, keeping its seq watermark
 // (see Put). It reports whether there was a listing.
 func (cs *CentralStore) Delete(nodeID, network string) (bool, error) {
+	// Put's lock: a withdrawal must not land inside a Put and be undone.
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
 	res, err := cs.db.Exec("DELETE FROM central_listings WHERE node_id = ? AND network = ?", nodeID, network)
 	if err != nil {
 		return false, fmt.Errorf("hub: delete listing: %w", err)

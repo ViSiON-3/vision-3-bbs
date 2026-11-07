@@ -20,7 +20,9 @@
       "pollInterval": "5m",
       "central": {
         "enabled": false,
-        "publishListing": false
+        "publishListing": false,
+        "presence": false,
+        "lastCallers": false
       }
     }
   ]

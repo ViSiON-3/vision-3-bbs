@@ -66,6 +66,9 @@ func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 		rawAnsiContent = bytes.ReplaceAll(rawAnsiContent, []byte("|CA"), []byte(toCP437Safe(currentAreaTag)))
 		rawAnsiContent = replaceMenuATCode(rawAnsiContent, "UC", strconv.Itoa(userManager.GetUserCount()))
 		rawAnsiContent = replaceMenuATCode(rawAnsiContent, "U", strconv.Itoa(e.activeNodeCount()))
+		if hasNetOnlineCode(rawAnsiContent) {
+			rawAnsiContent = replaceMenuATCode(rawAnsiContent, "UN", strconv.Itoa(e.v3netOnlineCount()))
+		}
 		// @RR@ — Random Rumor text (supports @RR@, @RR:50@, @RR######@)
 		rumorLevel := 1 // default MinLevel when no user context
 		if st.currentUser != nil {
