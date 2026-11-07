@@ -51,7 +51,7 @@ func TestLastCallersAllUsesTemplates(t *testing.T) {
 	if r.err != nil {
 		t.Fatal(r.err)
 	}
-	if !r.has("V3Net Central: Last Callers", "local = this board", "testnet", "Bob", "Beta BBS", "Alpha", "12", "Hide this board's callers") {
+	if !r.has("V3Net Central", "From", "Called", "local = this board", "testnet", "Bob", "Beta BBS", "Alpha", "12", "Hide this board's callers") {
 		t.Errorf("output:\n%s", r.text())
 	}
 	if !strings.Contains(r.text(), "local      Alpha") || strings.Contains(r.text(), "@") || r.has("Sysop") {
