@@ -41,8 +41,13 @@ func TestCentralActivitySourceAppliesConsent(t *testing.T) {
 		4: {ID: 4, Handle: "Dave", CentralPresence: true, CentralLastCallsSince: &agreed, DeletedUser: true},
 	}}
 	sess := func(node int, id int, invisible bool) *session.BbsSession {
-		return &session.BbsSession{NodeID: node, StartTime: now.Add(-time.Duration(node) * time.Minute), User: &user.User{ID: id}, Invisible: invisible}
+		s := &session.BbsSession{NodeID: node, StartTime: now.Add(-time.Duration(node) * time.Minute), User: &user.User{ID: id}, Invisible: invisible}
+		s.SetCentralReady(true)
+		return s
 	}
+	// Alice on node 8 is still answering the invisible-login prompt: not
+	// published, though her account has opted in.
+	pending := &session.BbsSession{NodeID: 8, StartTime: now, User: &user.User{ID: 1}}
 	sessions := fakeSessions{
 		sess(1, 1, false),
 		sess(2, 1, false), // Alice on a second node
@@ -51,6 +56,7 @@ func TestCentralActivitySourceAppliesConsent(t *testing.T) {
 		sess(5, 3, true), // Carol hidden on this one
 		sess(6, 4, false),
 		{NodeID: 7, StartTime: now}, // still logging in
+		pending,
 	}
 	src := newCentralActivitySource(sessions, users)
 

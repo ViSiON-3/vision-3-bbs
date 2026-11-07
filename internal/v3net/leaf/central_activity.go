@@ -83,6 +83,13 @@ var activityKinds = []string{protocol.CentralKindPresence, protocol.CentralKindL
 type activityState struct {
 	kick chan struct{}
 
+	// wire serializes this kind's PUTs and DELETEs, and halted, set by
+	// WithdrawActivity, refuses every PUT after it: a final withdrawal
+	// waits for a publish in flight and is never followed by one, so the
+	// hub cannot be left holding a snapshot the board withdrew.
+	wire   sync.Mutex
+	halted bool // guarded by wire
+
 	lastSeq       int64
 	lastPublished time.Time
 	lastCount     int
@@ -227,6 +234,9 @@ func (l *Leaf) runActivityKind(ctx context.Context, kind string) {
 	delay := centralActivityRetryMin
 	for {
 		wait, err := l.publishActivity(ctx, kind)
+		if errors.Is(err, errActivityHalted) {
+			return
+		}
 		if err != nil {
 			if ctx.Err() != nil {
 				return
@@ -376,6 +386,12 @@ func (l *Leaf) buildActivity(kind string, now time.Time) (*protocol.CentralActiv
 // publishActivity builds and PUTs the board's snapshot of kind, returning
 // how long until the next heartbeat publish.
 func (l *Leaf) publishActivity(ctx context.Context, kind string) (time.Duration, error) {
+	st := l.central.activity[kind]
+	st.wire.Lock()
+	defer st.wire.Unlock()
+	if st.halted {
+		return 0, errActivityHalted
+	}
 	a, refresh, err := l.buildActivity(kind, time.Now())
 	if err != nil {
 		return 0, err
@@ -395,7 +411,6 @@ func (l *Leaf) publishActivity(ctx context.Context, kind string) (time.Duration,
 		return 0, fmt.Errorf("leaf: PUT %s returned %d: %s", path, resp.StatusCode, hubErrorText(body))
 	}
 	l.central.mu.Lock()
-	st := l.central.activity[kind]
 	st.lastPublished = time.Now()
 	st.lastCount = len(a.Entries)
 	st.lastError = ""
@@ -407,6 +422,14 @@ func (l *Leaf) publishActivity(ctx context.Context, kind string) (time.Duration,
 
 // withdrawActivity DELETEs the board's snapshot of kind.
 func (l *Leaf) withdrawActivity(ctx context.Context, kind string) error {
+	st := l.central.activity[kind]
+	st.wire.Lock()
+	defer st.wire.Unlock()
+	return l.withdrawActivityLocked(ctx, kind)
+}
+
+// withdrawActivityLocked is withdrawActivity with the kind's wire lock held.
+func (l *Leaf) withdrawActivityLocked(ctx context.Context, kind string) error {
 	path := fmt.Sprintf("/v3net/v1/%s/central/%s", l.cfg.Network, kind)
 	resp, err := l.signedDo(ctx, http.MethodDelete, path, nil)
 	if err != nil {
@@ -426,13 +449,24 @@ func (l *Leaf) withdrawActivity(ctx context.Context, kind string) error {
 	return nil
 }
 
-// WithdrawActivity withdraws the board's snapshot of kind now.
+// WithdrawActivity withdraws the board's snapshot of kind now, for good:
+// it waits for a publish in flight to finish, and this leaf publishes the
+// kind no more. The service calls it before stopping a leaf that will not
+// publish the kind again.
 func (l *Leaf) WithdrawActivity(ctx context.Context, kind string) error {
-	if l.central.activity[kind] == nil {
+	st := l.central.activity[kind]
+	if st == nil {
 		return fmt.Errorf("leaf: unknown activity kind %q", kind)
 	}
-	return l.withdrawActivity(ctx, kind)
+	st.wire.Lock()
+	defer st.wire.Unlock()
+	st.halted = true
+	return l.withdrawActivityLocked(ctx, kind)
 }
+
+// errActivityHalted is returned by publishActivity once WithdrawActivity
+// has run.
+var errActivityHalted = errors.New("leaf: activity withdrawn; not publishing")
 
 // FetchCentralActivity returns the network's feed of kind: every board's
 // snapshot the hub serves that validates, has not expired, and verifies
@@ -453,7 +487,9 @@ func (l *Leaf) FetchCentralActivity(ctx context.Context, kind string, force bool
 	}
 	l.central.mu.Lock()
 	if !force && !st.stale && !st.fetched.IsZero() && time.Since(st.fetched) < centralActivityCacheTTL {
-		out := cloneActivityFeed(st.feed)
+		// Expiry is checked again on the way out of the cache: a snapshot
+		// or call can pass its limit while cached, with no event to say so.
+		out := liveActivityFeed(st.feed, kind, time.Now())
 		l.central.mu.Unlock()
 		return out, nil
 	}
@@ -529,6 +565,21 @@ func verifyActivityFeed(feed *protocol.CentralActivityFeed, network, kind string
 			})
 		}
 		out = append(out, b)
+	}
+	return out
+}
+
+// liveActivityFeed returns a copy of feed without the snapshots that have
+// expired at now and, for last callers, the calls past the retention limit.
+func liveActivityFeed(feed []protocol.CentralActivityBoard, kind string, now time.Time) []protocol.CentralActivityBoard {
+	out := cloneActivityFeed(feed)
+	out = slices.DeleteFunc(out, func(b protocol.CentralActivityBoard) bool { return b.Activity.Expired(now) })
+	if kind == protocol.CentralKindLastCallers {
+		for i := range out {
+			out[i].Activity.Entries = slices.DeleteFunc(out[i].Activity.Entries, func(e protocol.CentralActivityEntry) bool {
+				return now.Sub(e.Began()) > protocol.MaxCentralLastCallRetention
+			})
+		}
 	}
 	return out
 }

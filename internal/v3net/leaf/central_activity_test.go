@@ -186,3 +186,46 @@ func TestActivityEventStalesItsKind(t *testing.T) {
 	ev, _ = protocol.NewEvent(protocol.EventCentralActivityUpdated, protocol.CentralActivityEventPayload{EventMeta: m2, Network: "testnet", Kind: "wall"})
 	l.dispatchCentralEvent(ev) // an unknown kind is ignored, not a panic
 }
+
+// WithdrawActivity is final: the hub holds nothing afterwards, and the
+// leaf refuses to publish the kind again, so a heartbeat or a change
+// notice racing a subscription's removal cannot put it back.
+func TestWithdrawActivityHaltsPublishing(t *testing.T) {
+	ts, h, _ := newTestHub(t, true)
+	l := centralLeaf(t, ts, "alpha", "")
+	l.cfg.CentralLastCallers = true
+	l.cfg.Activity = staticActivity{calls: []protocol.CentralActivityEntry{{Handle: "Alice", At: time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)}}}
+	kind := protocol.CentralKindLastCallers
+	if _, err := l.publishActivity(context.Background(), kind); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.WithdrawActivity(context.Background(), kind); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.publishActivity(context.Background(), kind); !errors.Is(err, errActivityHalted) {
+		t.Errorf("publish after withdrawal: %v, want errActivityHalted", err)
+	}
+	if rows, _ := h.Activity().List("testnet", kind, time.Now()); len(rows) != 0 {
+		t.Errorf("hub still holds %d snapshots", len(rows))
+	}
+}
+
+// A cached feed is filtered for expiry on the way out: a snapshot or call
+// that passed its limit while cached is not served.
+func TestLiveActivityFeedDropsExpired(t *testing.T) {
+	now := time.Now().UTC()
+	feed := []protocol.CentralActivityBoard{
+		{Activity: protocol.CentralActivity{NodeID: "a", ExpiresAt: now.Add(-time.Second).Format(time.RFC3339)}},
+		{Activity: protocol.CentralActivity{NodeID: "b", ExpiresAt: now.Add(time.Hour).Format(time.RFC3339), Entries: []protocol.CentralActivityEntry{
+			{Handle: "Old", At: now.Add(-24*time.Hour - time.Minute).Format(time.RFC3339)},
+			{Handle: "New", At: now.Add(-time.Hour).Format(time.RFC3339)},
+		}}},
+	}
+	out := liveActivityFeed(feed, protocol.CentralKindLastCallers, now)
+	if len(out) != 1 || out[0].Activity.NodeID != "b" || len(out[0].Activity.Entries) != 1 || out[0].Activity.Entries[0].Handle != "New" {
+		t.Errorf("live feed %+v", out)
+	}
+	if len(feed[1].Activity.Entries) != 2 {
+		t.Error("the cache itself was changed")
+	}
+}

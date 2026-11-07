@@ -1677,7 +1677,10 @@ func sessionHandler(s ssh.Session) {
 
 	// V3Net Central: a caller who opted in to network Who's Online shows
 	// there from now. No handle is sent for anyone else; the old
-	// unconditional logon/logoff notice is no longer sent at all.
+	// unconditional logon/logoff notice is no longer sent at all. The
+	// session is only eligible from here, once the caller has chosen
+	// whether this login is visible.
+	bbsSession.SetCentralReady(true)
 	if v3netService != nil && authenticatedUser != nil {
 		v3netService.NotifyCentralActivity()
 	}

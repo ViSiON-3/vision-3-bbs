@@ -245,12 +245,18 @@ func runV3NetCentralLastCallers(c *cmdCtx, args string) (*user.User, string, err
 // are kept, oldest first, as the local list shows them.
 func centralCallRows(feeds map[string][]protocol.CentralActivityBoard, selfNode string, local []user.CallRecord, localBoard string, includeLocal bool, limit int) []centralCallRow {
 	var rows []centralCallRow
+	now := time.Now()
 	for net, boards := range feeds {
 		for _, b := range boards {
 			if includeLocal && selfNode != "" && b.Activity.NodeID == selfNode {
 				continue
 			}
 			for _, e := range b.Activity.Entries {
+				// The screen redraws from one fetch; a call that passes the
+				// retention limit meanwhile is not drawn again.
+				if now.Sub(e.Began()) > protocol.MaxCentralLastCallRetention {
+					continue
+				}
 				rows = append(rows, centralCallRow{network: net, board: b.Activity.BBS, handle: e.Handle, began: e.Began(), ended: e.Ended()})
 			}
 		}
@@ -411,6 +417,13 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	status := ""
 	for {
+		// Show the stored consent: this session's copy may be older than
+		// a change made on another node.
+		if c.userManager != nil {
+			if stored, ok := c.userManager.GetUserByID(u.ID); ok {
+				centralConsentFrom(u, stored)
+			}
+		}
 		whoNets := centralOfferedNetworks(e.V3NetCentral, protocol.CentralKindPresence)
 		lastNets := centralOfferedNetworks(e.V3NetCentral, protocol.CentralKindLastCallers)
 
@@ -475,7 +488,10 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		if err != nil {
 			return u, next, err
 		}
-		var mutate, undo func()
+		// Each change is made to the stored account, from its stored
+		// values, not this session's copy: another node may have changed
+		// them since this call began.
+		var mutate func(x *user.User)
 		switch strings.ToUpper(line) {
 		case "", "Q":
 			return u, "", nil
@@ -484,45 +500,51 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 				status = "|04Your SysOp does not offer network Who's Online.|07"
 				continue
 			}
-			old := u.CentralPresence
-			mutate, undo = func() { u.CentralPresence = !old }, func() { u.CentralPresence = old }
+			mutate = func(x *user.User) { x.CentralPresence = !x.CentralPresence }
 		case "2":
-			old := u.CentralAvailability
-			nextAvail := map[string]string{"": protocol.CentralAvailable, protocol.CentralAvailable: protocol.CentralBusy}[old]
-			mutate, undo = func() { u.CentralAvailability = nextAvail }, func() { u.CentralAvailability = old }
+			mutate = func(x *user.User) {
+				x.CentralAvailability = map[string]string{"": protocol.CentralAvailable, protocol.CentralAvailable: protocol.CentralBusy}[x.CentralAvailability]
+			}
 		case "3":
 			if len(lastNets) == 0 && u.CentralLastCallsSince == nil {
 				status = "|04Your SysOp does not offer network Last Callers.|07"
 				continue
 			}
-			old := u.CentralLastCallsSince
-			mutate = func() {
-				if old != nil {
-					u.CentralLastCallsSince = nil
+			mutate = func(x *user.User) {
+				if x.CentralLastCallsSince != nil {
+					x.CentralLastCallsSince = nil
 					return
 				}
 				now := time.Now().UTC()
-				u.CentralLastCallsSince = &now
+				x.CentralLastCallsSince = &now
 			}
-			undo = func() { u.CentralLastCallsSince = old }
 		default:
 			status = "|04Enter 1, 2, 3 or Q.|07"
 			continue
 		}
-		mutate()
 		if c.userManager != nil {
-			if err := c.userManager.UpdateUser(u); err != nil {
-				undo()
+			saved, err := c.userManager.SetCentralConsent(u.ID, mutate)
+			if err != nil {
 				slog.Error("failed to save V3Net Central preference", "node", c.nodeNumber, "error", err)
 				status = "|04Could not save that; nothing changed.|07"
 				continue
 			}
+			centralConsentFrom(u, saved)
+		} else {
+			mutate(u)
 		}
 		if e.V3NetCentral != nil {
 			e.V3NetCentral.NotifyCentralActivity()
 		}
 		status = "|10Saved.|07"
 	}
+}
+
+// centralConsentFrom copies src's V3Net Central consent into dst.
+func centralConsentFrom(dst, src *user.User) {
+	dst.CentralPresence = src.CentralPresence
+	dst.CentralAvailability = src.CentralAvailability
+	dst.CentralLastCallsSince = src.CentralLastCallsSince
 }
 
 // centralPreviewHandle shows a handle as a snapshot would carry it: colour

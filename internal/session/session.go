@@ -55,6 +55,7 @@ type BbsSession struct {
 
 	toastWake       chan struct{}   // see ToastWake; guarded by Mutex
 	toastsReady     atomic.Bool     // see SetToastsReady
+	centralReady    atomic.Bool     // see SetCentralReady
 	toastsAnnounced map[string]bool // see NoteToastAnnounced; guarded by Mutex
 	toastViewer     *toastViewer    // see SetToastViewer; guarded by Mutex
 	toastAnchorRow  int             // see SetToastAnchor; guarded by Mutex
@@ -195,3 +196,12 @@ func (s *BbsSession) DrainPages() []string {
 // func (s *Session) GetUser() *user.User { ... }
 // func (s *Session) SetCurrentMenu(menuName string) { ... }
 // func (s *Session) GetCurrentMenu() string { ... }
+
+// SetCentralReady marks the session as past the login sequence, where the
+// caller has chosen whether this login is visible. V3Net Central does not
+// publish a session before then, whatever the account's consent, so a
+// caller who goes on to log in invisibly is never shown.
+func (s *BbsSession) SetCentralReady(ready bool) { s.centralReady.Store(ready) }
+
+// CentralReady reports what SetCentralReady last set.
+func (s *BbsSession) CentralReady() bool { return s.centralReady.Load() }

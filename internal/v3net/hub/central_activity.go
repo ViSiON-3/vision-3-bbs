@@ -128,8 +128,12 @@ func (cs *CentralActivityStore) Put(a *protocol.CentralActivity, raw []byte) err
 }
 
 // Delete removes the node's snapshot of kind on network, keeping its seq
-// watermark. It reports whether there was one.
+// watermark. It reports whether there was one. It takes Put's lock, so a
+// withdrawal cannot land between a Put's watermark and its write and be
+// undone by it.
 func (cs *CentralActivityStore) Delete(nodeID, network, kind string) (bool, error) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
 	res, err := cs.db.Exec("DELETE FROM central_activity WHERE node_id = ? AND network = ? AND kind = ?", nodeID, network, kind)
 	if err != nil {
 		return false, fmt.Errorf("hub: delete activity: %w", err)

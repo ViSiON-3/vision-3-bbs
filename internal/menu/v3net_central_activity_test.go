@@ -137,7 +137,9 @@ func TestCentralCallRowsMergeAndFlag(t *testing.T) {
 		activityBoardOf("self", "Home", protocol.CentralKindLastCallers, protocol.CentralActivityEntry{Handle: "Me", At: at(time.Hour)}),
 		activityBoardOf("bbbb", "Beta", protocol.CentralKindLastCallers,
 			protocol.CentralActivityEntry{Handle: "Bob", At: at(3 * time.Hour)},
-			protocol.CentralActivityEntry{Handle: "Bea", At: at(30 * time.Minute)}),
+			protocol.CentralActivityEntry{Handle: "Bea", At: at(30 * time.Minute)},
+			// Past the limit since the feed was fetched: not drawn.
+			protocol.CentralActivityEntry{Handle: "Gone", At: at(25 * time.Hour)}),
 	}}
 	local := []user.CallRecord{{Handle: "Me", ConnectTime: now.Add(-time.Hour)}, {Handle: "Lou", ConnectTime: now.Add(-2 * time.Hour)}}
 
