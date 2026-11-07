@@ -47,6 +47,12 @@ type runLoopState struct {
 	// commands is the current menu's command list, which hot-key input
 	// consults to decide whether a key completes a command on its own.
 	commands []CommandRecord
+	// pending holds the commands still to run from a chained command line
+	// ("M;N", see startChain), each matched at the menu the one before it
+	// reached. They are menu selections only: anything a command asks the
+	// caller still comes from the keyboard. Being part of this per-Run state,
+	// they go when the run ends, however it ends.
+	pending []string
 }
 
 // userHandle returns the current user's handle for logging, or "" when no user
@@ -256,9 +262,29 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// var numericMatchAction string // Moved declaration up
 
 		// 4. Determine Input Mode / Method
-		e.setToastAnchor(nodeNumber, ansiProcessResult, menuRec.GetClrScrBefore(), st.artScrolls)
-		input, act, retErr := st.readMenuInput(ansiProcessResult, menuRec)
-		e.clearToastAnchor(nodeNumber)
+		// The next command of a chain stands in for the caller's selection;
+		// otherwise read one, which may itself start a chain.
+		var input string
+		var act loopAction
+		var retErr error
+		if st.nextChained() {
+			slog.Debug("running chained command", "menu", st.currentMenuName, "input", st.userInput, "left", len(st.pending))
+			if retAction, ended, endErr := st.chainedSessionEnded(); ended {
+				return retAction, st.currentUser, endErr
+			}
+			st.drawChainedLightbar(ansiProcessResult)
+			input, act, retErr = st.specialInput()
+		} else {
+			e.setToastAnchor(nodeNumber, ansiProcessResult, menuRec.GetClrScrBefore(), st.artScrolls)
+			input, act, retErr = st.readMenuInput(ansiProcessResult, menuRec)
+			e.clearToastAnchor(nodeNumber)
+			if act == loopFallthrough {
+				if !st.startChain() {
+					continue
+				}
+				input, act, retErr = st.specialInput()
+			}
+		}
 		switch act {
 		case loopReturn:
 			// Every exit but the removed-account one hands back st.currentUser,
@@ -295,6 +321,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 			}
 		} else {
 			slog.Debug("input did not match any commands in menu", "input", st.userInput, "menu", st.currentMenuName)
+			st.cancelChain()
 
 			// Empty Enter should just redisplay the current menu, not fall through
 			// to fallback. This also covers ignored lightbar keypresses, which

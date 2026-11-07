@@ -163,9 +163,23 @@ func runNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 		currentUser = reloaded
 	}
 
-	// Determine if this is a "current area only" scan based on args
-	currentOnly := strings.ToUpper(strings.TrimSpace(args)) == "CURRENT"
-
+	currentOnly, skipSetup := newscanArgs(args)
 	return runNewScanAll(e, s, terminal, userManager, currentUser, nodeNumber,
-		sessionStartTime, outputMode, currentOnly, termWidth, termHeight)
+		sessionStartTime, outputMode, currentOnly, skipSetup, termWidth, termHeight)
+}
+
+// newscanArgs reads NEWSCAN's arguments, in any order and case: CURRENT
+// presets the scan to the current area, and NOW skips the setup screen and
+// scans straight away, so a key bound to RUN:NEWSCAN NOW finishes a command
+// chain such as M;N without a keypress (#949). Other words are ignored.
+func newscanArgs(args string) (currentOnly, skipSetup bool) {
+	for _, word := range strings.Fields(strings.ToUpper(args)) {
+		switch word {
+		case "CURRENT":
+			currentOnly = true
+		case "NOW":
+			skipSetup = true
+		}
+	}
+	return currentOnly, skipSetup
 }

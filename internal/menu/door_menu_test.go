@@ -236,7 +236,7 @@ func TestDoorMenuMNUAccessAndDispatch(t *testing.T) {
 		c, _, _ := doorMenuHarness(t, "list", "q", 1)
 		seen := "unset"
 		c.e.RunRegistry["DOORMENU"] = func(_ *cmdCtx, args string) (*user.User, string, error) { seen = args; return c.currentUser, "", nil }
-		kind, _, _ := c.e.executeCommandAction(action, c.s, c.terminal, nil, c.currentUser, 1, time.Now(), c.outputMode, 80, 24)
+		kind, _, _, _ := c.e.executeCommandAction(action, c.s, c.terminal, nil, c.currentUser, 1, time.Now(), c.outputMode, 80, 24)
 		want := ""
 		if strings.Contains(action, "GAMES") {
 			want = "GAMES"

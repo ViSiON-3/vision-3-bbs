@@ -127,7 +127,7 @@ func (st *runLoopState) runAutoRunCommands(commands []CommandRecord) (act loopAc
 				if cmd.Keys == "//" {
 					autoRunLog[autoRunKey] = true
 				}
-				nextAction, nextMenu, userResult := e.executeCommandAction(cmd.Command, s, terminal, userManager, st.currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
+				nextAction, nextMenu, userResult, _ := e.executeCommandAction(cmd.Command, s, terminal, userManager, st.currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
 				if nextAction == "GOTO" {
 					st.previousMenuName = st.currentMenuName
 					st.currentMenuName = nextMenu
@@ -168,6 +168,9 @@ func (st *runLoopState) runAutoRunCommands(commands []CommandRecord) (act loopAc
 // there is one and is otherwise left alone, so Run (which returns
 // st.currentUser as its second value) hands back the logged-in user rather
 // than nil.
+//
+// A command that failed (see executeCommandAction) ends any command chain it
+// was part of, so the commands after it are not run.
 func (st *runLoopState) dispatchMatchedAction(nextAction, nodeActivity, menuDefaultActivity string) (act loopAction, retAction string, retErr error) {
 	e := st.e
 	s := st.s
@@ -189,7 +192,10 @@ func (st *runLoopState) dispatchMatchedAction(nextAction, nodeActivity, menuDefa
 	}
 
 	// Execute the determined action here
-	nextActionType, nextMenuName, userResult := e.executeCommandAction(nextAction, s, terminal, userManager, st.currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
+	nextActionType, nextMenuName, userResult, failed := e.executeCommandAction(nextAction, s, terminal, userManager, st.currentUser, nodeNumber, sessionStartTime, outputMode, termWidth, termHeight)
+	if failed {
+		st.cancelChain()
+	}
 	switch nextActionType {
 	case "GOTO":
 		st.previousMenuName = st.currentMenuName // Store current before going to next

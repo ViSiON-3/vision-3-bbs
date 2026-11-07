@@ -15,21 +15,25 @@ import (
 )
 
 // executeCommandAction handles the logic for executing a command string (GOTO, RUN, DOOR, LOGOFF).
-// Returns: actionType (GOTO, LOGOFF, CONTINUE), nextMenu, resultingUser.
+// Returns: actionType (GOTO, LOGOFF, CONTINUE), nextMenu, resultingUser, and
+// failed, which is true when the command did not do its job: its handler
+// returned an error, it names a handler or door runner that does not exist,
+// or its action type is not one this knows. The menu carries on after a
+// failure either way; failed lets a command chain stop there (#949).
 //
 // A RUN: or DOOR: handler's error never escapes: a session-fatal one becomes
 // LOGOFF, and any other is reported to the caller and the menu carries on
 // (see commandFailure). resultingUser may be nil when a handler returned no
 // user; the Run loop reads that as "unchanged".
-func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, outputMode ansi.OutputMode, termWidth int, termHeight int) (actionType string, nextMenu string, userResult *user.User) {
+func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, terminal *term.Terminal, userManager *user.UserMgr, currentUser *user.User, nodeNumber int, sessionStartTime time.Time, outputMode ansi.OutputMode, termWidth int, termHeight int) (actionType string, nextMenu string, userResult *user.User, failed bool) {
 	if action == "DOORMENU" || strings.HasPrefix(action, "DOORMENU:") {
 		action = "RUN:DOORMENU " + strings.TrimPrefix(strings.TrimPrefix(action, "DOORMENU"), ":")
 	}
 	if strings.HasPrefix(action, "GOTO:") {
 		nextMenu = strings.ToUpper(strings.TrimPrefix(action, "GOTO:"))
-		return "GOTO", nextMenu, currentUser
+		return "GOTO", nextMenu, currentUser, false
 	} else if action == "LOGOFF" {
-		return "LOGOFF", "", currentUser
+		return "LOGOFF", "", currentUser, false
 	} else if strings.HasPrefix(action, "RUN:") {
 		parts := strings.SplitN(strings.TrimPrefix(action, "RUN:"), " ", 2)
 		runTarget := strings.ToUpper(parts[0])
@@ -51,7 +55,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 				actionType, userResult = e.commandFailure("RUN", runTarget, func() error {
 					return e.writeStringf(terminal, outputMode, e.Strings().ExecRunCommandError, runTarget, runErr)
 				}, runErr, nextActionStr, authUser, s, terminal, outputMode, nodeNumber, termWidth, termHeight)
-				return actionType, "", userResult
+				return actionType, "", userResult, true
 			}
 			slog.Debug("RUN function completed", "target", runTarget)
 
@@ -59,14 +63,14 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 			if strings.HasPrefix(nextActionStr, "GOTO:") {
 				nextMenu = strings.ToUpper(strings.TrimPrefix(nextActionStr, "GOTO:"))
 				slog.Debug("RUN requested GOTO", "target", runTarget, "menu", nextMenu)
-				return "GOTO", nextMenu, authUser
+				return "GOTO", nextMenu, authUser, false
 			} else if nextActionStr == "LOGOFF" {
 				slog.Debug("RUN requested LOGOFF", "target", runTarget)
-				return "LOGOFF", "", authUser
+				return "LOGOFF", "", authUser, false
 			}
 
 			// Default action for RUN is CONTINUE
-			return "CONTINUE", "", authUser
+			return "CONTINUE", "", authUser, false
 		} else {
 			slog.Warn("no internal function registered for RUN", "target", runTarget)
 			wErr := e.writeStringf(terminal, outputMode, e.Strings().ExecRunCommandNotFound, runTarget)
@@ -74,7 +78,7 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 				slog.Error("failed writing missing RUN command message", "error", wErr)
 			}
 			uiPause(1 * time.Second)
-			return "CONTINUE", "", currentUser
+			return "CONTINUE", "", currentUser, true
 		}
 	} else if strings.HasPrefix(action, "DOOR:") {
 		doorTarget := strings.TrimPrefix(action, "DOOR:")
@@ -86,22 +90,22 @@ func (e *MenuExecutor) executeCommandAction(action string, s ssh.Session, termin
 				actionType, userResult = e.commandFailure("DOOR", doorTarget, func() error {
 					return e.writeStringf(terminal, outputMode, e.Strings().ExecRunDoorError, doorTarget, doorErr)
 				}, doorErr, nextActionStrDoor, userResultDoor, s, terminal, outputMode, nodeNumber, termWidth, termHeight)
-				return actionType, "", userResult
+				return actionType, "", userResult, true
 			}
 			// Handle potential LOGOFF request from DOOR runnable (though currently returns "")
 			if nextActionStrDoor == "LOGOFF" {
 				slog.Debug("DOOR requested LOGOFF", "door", doorTarget)
-				return "LOGOFF", "", userResultDoor
+				return "LOGOFF", "", userResultDoor, false
 			}
 			slog.Debug("DOOR completed", "door", doorTarget)
-			return "CONTINUE", "", userResultDoor // Default CONTINUE after door
+			return "CONTINUE", "", userResultDoor, false // Default CONTINUE after door
 		} else {
 			slog.Error("DOOR function not registered")
-			return "CONTINUE", "", currentUser
+			return "CONTINUE", "", currentUser, true
 		}
 	} else {
 		slog.Warn("unhandled command action type in executeCommandAction", "action", action)
-		return "CONTINUE", "", currentUser
+		return "CONTINUE", "", currentUser, true
 	}
 }
 

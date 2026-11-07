@@ -9,6 +9,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 )
 
 // runLightbarInput drives the keyboard-navigation loop for a lightbar menu
@@ -19,6 +20,10 @@ import (
 // cursorHidden is the value returned by the e.hideCursorIfNeeded call Run
 // already made before drawing, needed here so the loop's own error/exit
 // paths can call e.showCursorIfHidden with the same value.
+//
+// A command line opened with the chain separator (see
+// readLightbarCommandLine) comes back the same way, or with act
+// loopContinue when it was left empty.
 //
 // Returns the selected option's hotkey as input with act set to
 // loopFallthrough so Run proceeds to match it against the menu's commands
@@ -31,7 +36,6 @@ func (st *runLoopState) runLightbarInput(options []LightbarOption, cursorHidden 
 	s := st.s
 	terminal := st.terminal
 	outputMode := st.outputMode
-	nodeNumber := st.nodeNumber
 	termHeight := st.termHeight
 
 	// Process keyboard navigation for lightbar.
@@ -50,16 +54,7 @@ func (st *runLoopState) runLightbarInput(options []LightbarOption, cursorHidden 
 		key, err := sessionIH.ReadKey()
 		if err != nil {
 			e.showCursorIfHidden(terminal, outputMode, cursorHidden)
-			if errors.Is(err, io.EOF) {
-				slog.Info("user disconnected during lightbar input", "menu", st.currentMenuName)
-				return "LOGOFF", loopReturn, nil
-			}
-			if errors.Is(err, editor.ErrIdleTimeout) {
-				e.handleSessionTimeout(s, terminal, outputMode, nodeNumber, st.termWidth, termHeight)
-				return "LOGOFF", loopReturn, nil
-			}
-			slog.Error("failed to read lightbar input", "menu", st.currentMenuName, "error", err)
-			return "", loopReturn, fmt.Errorf("failed reading lightbar input: %w", err)
+			return st.lightbarReadError(err)
 		}
 		slog.Debug("lightbar input key", "key", key)
 
@@ -130,6 +125,12 @@ func (st *runLoopState) runLightbarInput(options []LightbarOption, cursorHidden 
 						break
 					}
 				}
+				// The chain separator, unless an option claims it, opens a
+				// command line for a chain of commands (see startChain).
+				if inputLoop && keyStr == chainSeparator {
+					e.showCursorIfHidden(terminal, outputMode, cursorHidden)
+					return st.readLightbarCommandLine()
+				}
 			}
 			// Control chars and other special codes are ignored
 		}
@@ -137,6 +138,51 @@ func (st *runLoopState) runLightbarInput(options []LightbarOption, cursorHidden 
 	slog.Debug("processed lightbar input", "result", lightbarResult)
 	e.showCursorIfHidden(terminal, outputMode, cursorHidden)
 	return lightbarResult, loopFallthrough, nil
+}
+
+// lightbarReadError turns a failed read at a lightbar menu into what
+// runLightbarInput returns for it: a disconnect or idle timeout logs the
+// caller off, and any other error ends the run with it.
+func (st *runLoopState) lightbarReadError(err error) (input string, act loopAction, retErr error) {
+	if errors.Is(err, io.EOF) {
+		slog.Info("user disconnected during lightbar input", "menu", st.currentMenuName)
+		return "LOGOFF", loopReturn, nil
+	}
+	if errors.Is(err, editor.ErrIdleTimeout) {
+		st.e.handleSessionTimeout(st.s, st.terminal, st.outputMode, st.nodeNumber, st.termWidth, st.termHeight)
+		return "LOGOFF", loopReturn, nil
+	}
+	slog.Error("failed to read lightbar input", "menu", st.currentMenuName, "error", err)
+	return "", loopReturn, fmt.Errorf("failed reading lightbar input: %w", err)
+}
+
+// readLightbarCommandLine reads a typed command line at a lightbar menu,
+// which the chain separator opens: the line starts with it already typed, on
+// the screen's bottom row so it does not land on top of the options. The
+// line is held to one less than the screen width and Enter echoes no
+// newline, so neither typing nor submitting scrolls the screen. It comes
+// back for command matching like a lightbar pick; an empty one has act
+// loopContinue, so the menu is redisplayed.
+func (st *runLoopState) readLightbarCommandLine() (input string, act loopAction, retErr error) {
+	row, width := st.termHeight, st.termWidth
+	if row < 1 {
+		row = 24
+	}
+	if width < 2 {
+		width = 80
+	}
+	_ = terminalio.WriteProcessedBytes(st.terminal, []byte(fmt.Sprintf("\x1b[%d;1H\x1b[2K\x1b[0m", row)), st.outputMode) // best-effort placement
+	line, err := readLineFromSessionIHImpl(st.s, st.terminal, lineOpts{initial: chainSeparator, maxLen: width - 1, stayOnRow: true})
+	if err != nil {
+		return st.lightbarReadError(err)
+	}
+	line = strings.ToUpper(strings.TrimSpace(line))
+	if line == "" {
+		// Erased back to nothing: redisplay the menu, as for Enter on an
+		// empty typed prompt.
+		return "", loopContinue, nil
+	}
+	return line, loopFallthrough, nil
 }
 
 // readStandardInput implements the non-lightbar prompt+readline path: it
@@ -325,11 +371,12 @@ func (st *runLoopState) readHotKeyInput() (string, error) {
 // hotKeyNeedsLine reports whether k, the first key of a command typed with
 // hot keys on, might be the start of something longer than one key: a
 // multi-key command in the menu, a number when the menu takes numbers (##),
-// or the global /G hangup. Commands the caller cannot use (canUse is false
-// for their ACS) are ignored, so a sysop-only "XA" does not hold up X for
-// everyone else. A nil canUse allows every command.
+// the global /G hangup, or a chain of commands, which the separator typed
+// first opens (";M;N", see startChain). Commands the caller cannot use
+// (canUse is false for their ACS) are ignored, so a sysop-only "XA" does not
+// hold up X for everyone else. A nil canUse allows every command.
 func hotKeyNeedsLine(commands []CommandRecord, k string, canUse func(acs string) bool) bool {
-	if k == "/" {
+	if k == "/" || k == chainSeparator {
 		return true
 	}
 	isDigit := k[0] >= '0' && k[0] <= '9'

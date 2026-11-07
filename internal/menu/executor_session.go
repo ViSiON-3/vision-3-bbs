@@ -396,13 +396,13 @@ func (e *MenuExecutor) holdScreen(s ssh.Session, terminal *term.Terminal, output
 // readLineFromSessionIH reads a simple command line from the shared session
 // InputHandler so menu input never races with other session readers.
 func readLineFromSessionIH(s ssh.Session, terminal *term.Terminal) (string, error) {
-	return readLineFromSessionIHImpl(s, terminal, false, 0, "")
+	return readLineFromSessionIHImpl(s, terminal, lineOpts{})
 }
 
 // readLineFromSessionIHFrom reads a command line like readLineFromSessionIH,
 // starting with initial already typed. It echoes initial itself.
 func readLineFromSessionIHFrom(s ssh.Session, terminal *term.Terminal, initial string) (string, error) {
-	return readLineFromSessionIHImpl(s, terminal, false, 0, initial)
+	return readLineFromSessionIHImpl(s, terminal, lineOpts{initial: initial})
 }
 
 // readLineFromSessionIHMax reads a simple command line like
@@ -411,20 +411,27 @@ func readLineFromSessionIHFrom(s ssh.Session, terminal *term.Terminal, initial s
 // echo, so the caller never sees a value longer than maxLen. A maxLen of 0
 // means unlimited.
 func readLineFromSessionIHMax(s ssh.Session, terminal *term.Terminal, maxLen int) (string, error) {
-	return readLineFromSessionIHImpl(s, terminal, false, maxLen, "")
+	return readLineFromSessionIHImpl(s, terminal, lineOpts{maxLen: maxLen})
 }
 
 // readLineFromSessionIHAllowAbort reads a simple command line like
 // readLineFromSessionIH, but returns errInputAborted when ESC is pressed.
 func readLineFromSessionIHAllowAbort(s ssh.Session, terminal *term.Terminal) (string, error) {
-	return readLineFromSessionIHImpl(s, terminal, true, 0, "")
+	return readLineFromSessionIHImpl(s, terminal, lineOpts{allowAbort: true})
+}
+
+// lineOpts are the ways the command-line readers differ (see
+// readLineFromSessionIHImpl).
+type lineOpts struct {
+	allowAbort bool   // ESC ends the read with errInputAborted
+	maxLen     int    // cap on the line, in runes; 0 is no cap
+	initial    string // text already typed, echoed by the reader
+	stayOnRow  bool   // Enter does not echo a newline, so the screen does not scroll
 }
 
 // readLineFromSessionIHImpl is the shared implementation behind
 // readLineFromSessionIH, readLineFromSessionIHMax, readLineFromSessionIHFrom
-// and readLineFromSessionIHAllowAbort; they differ only in whether ESC aborts
-// the read, whether the line length is capped (maxLen > 0, counted in runes)
-// and whether it starts with text already typed.
+// and readLineFromSessionIHAllowAbort, which differ only in their lineOpts.
 //
 // Extended keystrokes (byte >= 128) are decoded per the session's output
 // mode via ansi.DecodeExtendedKey: a CP437 byte is a complete character on its
@@ -433,7 +440,8 @@ func readLineFromSessionIHAllowAbort(s ssh.Session, terminal *term.Terminal) (st
 // reports it complete. Backspace deletes one whole rune (see ansi.BackspaceRune)
 // rather than one byte, and clears any in-progress utf8Pending sequence
 // without touching line or echoing, since nothing was displayed for it yet.
-func readLineFromSessionIHImpl(s ssh.Session, terminal *term.Terminal, allowAbort bool, maxLen int, initial string) (string, error) {
+func readLineFromSessionIHImpl(s ssh.Session, terminal *term.Terminal, opts lineOpts) (string, error) {
+	allowAbort, maxLen, initial := opts.allowAbort, opts.maxLen, opts.initial
 	ih := getSessionIH(s)
 	mode := sessionOutputMode(s)
 	line := make([]byte, 0, 64)
@@ -454,7 +462,9 @@ func readLineFromSessionIHImpl(s ssh.Session, terminal *term.Terminal, allowAbor
 
 		switch key {
 		case editor.KeyEnter:
-			_, _ = terminal.Write([]byte("\r\n"))
+			if !opts.stayOnRow {
+				_, _ = terminal.Write([]byte("\r\n"))
+			}
 			return string(line), nil
 		case editor.KeyBackspace:
 			if len(utf8Pending) > 0 {

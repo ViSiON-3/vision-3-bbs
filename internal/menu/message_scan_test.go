@@ -374,7 +374,7 @@ func TestNewScanMultiAreaReportsNoMatches(t *testing.T) {
 	terminal := newTestTerminal(ts)
 	t.Cleanup(func() { resetSessionIH(ts) })
 
-	if _, action, err := runNewScanAll(e, ts, terminal, um, u, 1, time.Now(), ansi.OutputModeUTF8, false, 80, 24); err != nil || action == "LOGOFF" {
+	if _, action, err := runNewScanAll(e, ts, terminal, um, u, 1, time.Now(), ansi.OutputModeUTF8, false, false, 80, 24); err != nil || action == "LOGOFF" {
 		t.Fatalf("runNewScanAll: action=%q err=%v", action, err)
 	}
 
@@ -419,7 +419,7 @@ func TestNewScanCurrentAreaNothingNewCompletes(t *testing.T) {
 	terminal := newTestTerminal(ts)
 	t.Cleanup(func() { resetSessionIH(ts) })
 
-	if _, action, err := runNewScanAll(e, ts, terminal, um, u, 1, time.Now(), ansi.OutputModeUTF8, true, 80, 24); err != nil || action == "LOGOFF" {
+	if _, action, err := runNewScanAll(e, ts, terminal, um, u, 1, time.Now(), ansi.OutputModeUTF8, true, false, 80, 24); err != nil || action == "LOGOFF" {
 		t.Fatalf("runNewScanAll: action=%q err=%v", action, err)
 	}
 
@@ -429,6 +429,68 @@ func TestNewScanCurrentAreaNothingNewCompletes(t *testing.T) {
 	}
 	if strings.Contains(out, "No messages match") {
 		t.Errorf("plain newscan must not show the search no-matches notice; output:\n%s", out)
+	}
+}
+
+// TestNewScanSkipSetup checks NEWSCAN NOW: no setup screen, no keypress
+// read, and the scan runs with the setup screen's defaults.
+func TestNewScanSkipSetup(t *testing.T) {
+	scanNoticePause = 0
+	t.Cleanup(func() { scanNoticePause = time.Second })
+
+	mm, areaID := newScanTestArea(t)
+	if err := mm.SetLastRead(areaID, "Tester", 4); err != nil {
+		t.Fatalf("SetLastRead: %v", err)
+	}
+	um, err := user.NewUserManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewUserManager: %v", err)
+	}
+	u, err := um.AddUser("password", "Tester", "Real Name", "Loc")
+	if err != nil {
+		t.Fatalf("AddUser: %v", err)
+	}
+	u.CurrentMessageAreaID = areaID
+	u.CurrentMessageAreaTag = "GENERAL"
+
+	e := newExecutorWithStrings(loadTestStrings(t), func(e *MenuExecutor) {
+		e.MessageMgr = mm
+		e.MenuSetPath = t.TempDir()
+	})
+
+	// No input at all: reading a key would be a disconnect.
+	ts := newTestSession("")
+	terminal := newTestTerminal(ts)
+	t.Cleanup(func() { resetSessionIH(ts) })
+
+	if _, action, err := runNewScanAll(e, ts, terminal, um, u, 1, time.Now(), ansi.OutputModeUTF8, true, true, 80, 24); err != nil || action == "LOGOFF" {
+		t.Fatalf("runNewScanAll: action=%q err=%v", action, err)
+	}
+
+	out := testAnsiEscape.ReplaceAllString(ts.output(), "")
+	if strings.Contains(out, "Cr/Scan") {
+		t.Errorf("setup screen shown despite NOW; output:\n%s", out)
+	}
+	if !strings.Contains(out, "Newscan complete") {
+		t.Errorf("scan with nothing new should report completion; output:\n%s", out)
+	}
+}
+
+func TestNewscanArgs(t *testing.T) {
+	cases := []struct {
+		args         string
+		current, now bool
+	}{
+		{"", false, false},
+		{"current", true, false},
+		{"NOW", false, true},
+		{" now  Current ", true, true},
+		{"tagged", false, false},
+	}
+	for _, tc := range cases {
+		if c, n := newscanArgs(tc.args); c != tc.current || n != tc.now {
+			t.Errorf("newscanArgs(%q) = %v, %v; want %v, %v", tc.args, c, n, tc.current, tc.now)
+		}
 	}
 }
 
@@ -483,7 +545,7 @@ func TestNewScanCurrentAreaAppliesFromSearchAndKeepsPointers(t *testing.T) {
 	terminal := newTestTerminal(ts)
 	t.Cleanup(func() { resetSessionIH(ts) })
 
-	if _, action, err := runNewScanAll(e, ts, terminal, um, u, 1, time.Now(), ansi.OutputModeUTF8, true, 80, 24); err != nil || action == "LOGOFF" {
+	if _, action, err := runNewScanAll(e, ts, terminal, um, u, 1, time.Now(), ansi.OutputModeUTF8, true, false, 80, 24); err != nil || action == "LOGOFF" {
 		t.Fatalf("runNewScanAll: action=%q err=%v", action, err)
 	}
 
@@ -576,7 +638,7 @@ func TestNewScanRestoresAreaWhenCallerDrops(t *testing.T) {
 	terminal := newTestTerminal(ts)
 	t.Cleanup(func() { resetSessionIH(ts) })
 
-	_, action, _ := runNewScanAll(e, ts, terminal, um, u, 1, time.Now(), ansi.OutputModeUTF8, false, 80, 24)
+	_, action, _ := runNewScanAll(e, ts, terminal, um, u, 1, time.Now(), ansi.OutputModeUTF8, false, false, 80, 24)
 	if action != "LOGOFF" {
 		t.Fatalf("action = %q, want LOGOFF when the input runs out mid-scan", action)
 	}
