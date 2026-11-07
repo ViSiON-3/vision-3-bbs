@@ -40,6 +40,9 @@ type chatcovNet struct {
 	roomsErrFrom int
 	// roomsBlock, when set, holds every Rooms call until it is closed.
 	roomsBlock chan struct{}
+	// closeDelay, when set, makes every Close take that long before it is
+	// recorded, to widen any window in which a session is closed late.
+	closeDelay time.Duration
 
 	mu       sync.Mutex
 	calls    int
@@ -169,6 +172,9 @@ func (s *chatcovSvc) Events() <-chan chat.ChatEvent { return s.events }
 // second Close panics on the closed channel, exactly as LocalChatService
 // does, so a double close in runChat fails the test.
 func (s *chatcovSvc) Close() error {
+	if s.net.closeDelay > 0 {
+		time.Sleep(s.net.closeDelay)
+	}
 	s.record("close", "")
 	close(s.events)
 	return nil
@@ -690,6 +696,23 @@ func TestChatcovSetupFailure(t *testing.T) {
 	}
 	if !net.allClosed() {
 		t.Errorf("network session left open after the failed join")
+	}
+}
+
+// TestChatcovProbesClosedBeforePickerReturns checks that every probe session
+// that answered is closed by the time probeChatNetworks returns, even when
+// Close is slow: closing only after handing back the room list let the
+// picker, and runChat, return with a probe still open (#939).
+func TestChatcovProbesClosedBeforePickerReturns(t *testing.T) {
+	env := newMenuEnv(t)
+	net := chatcovFakeNet(env)
+	net.closeDelay = 50 * time.Millisecond
+	nets := probeChatNetworks([]ChatLeafInfo{net.leaf(), net.leaf()}, "Caller")
+	if !nets[0].avail || !nets[1].avail {
+		t.Fatalf("probes = %+v, want both networks available", nets)
+	}
+	if len(net.sessions) != 2 || !net.allClosed() {
+		t.Errorf("after probeChatNetworks: %d sessions, allClosed=%v; want 2, closed", len(net.sessions), net.allClosed())
 	}
 }
 
