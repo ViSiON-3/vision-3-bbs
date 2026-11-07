@@ -1226,12 +1226,12 @@ typed alone: aliases, multi-key commands and `##` numbers all work.
   that key runs it rather than being split.
 
 Since a chain cannot answer a command's own prompts, a command that opens
-with a setup screen stops there. For the newscan, bind a key to
-`RUN:NEWSCAN NOW`, which skips the setup screen and scans with its defaults.
-With `{ "KEYS": "X", "CMD": "RUN:NEWSCAN NOW" }` in `MSGMENU.CFG`, `M;X` at
-the main menu goes straight into reading new messages. Pick a key that does
-not start another of the menu's keys (`NN` would make hot-key callers press
-Enter after `N`).
+with a setup screen stops there. For the newscan, the stock `MSGMENU.CFG`
+binds `X` to `RUN:NEWSCAN NOW`, which skips the setup screen and scans with
+its defaults, so `M;X` at the main menu goes straight into reading new
+messages. `N` still opens the setup screen. To bind `NOW` to another key,
+pick one that does not start another of the menu's keys (`NN` would make
+hot-key callers press Enter after `N`).
 
 #### Command Actions
 
