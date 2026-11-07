@@ -60,7 +60,7 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | --- | --- | --- | --- |
 | `SHOWSTATS` | none | The caller's statistics on `YOURSTAT.ANS`, then a pause. Same screen as the `USERSTATS` login step. | |
 | `SYSTEMSTATS` | none | System totals from the `SYSSTATS.TOP` and `.BOT` templates. | |
-| `LASTCALLERS` | Row limit, whole number greater than 0. Default 20. | Recent callers from the `LASTCALL` templates. Non-numeric data falls back to 20. Hidden logins never use a row. | No login check |
+| `LASTCALLERS` | Row limit, whole number greater than 0. Default 20. Optionally `--network` or `--all`, e.g. `20 --all`. | Recent callers from the `LASTCALL` templates. Non-numeric data falls back to 20. Hidden logins never use a row. `--network` shows [V3Net Central](v3net/central.md#whos-online-and-last-callers)'s network Last Callers instead, and `--all` this board's callers and the network's together, each row flagged `local` or with its network's name; `A` on either screen switches between the two. The stock main menu binds `/L` to `LASTCALLERS 20 --network`. | No login check |
 | `SHOWVERSION` | none | Clears the screen and prints the version string. | |
 | `LISTUSERS` | none | Public user list from the `USERLIST` templates, alphabetical. | No login check |
 | `WHOISONLINE` | none | Who is online, from the `WHOONLN` templates. Invisible nodes are shown only to CoSysOp+. | |
@@ -230,10 +230,12 @@ Caller-facing. The stock main menu binds `V3NETCENTRAL` to `/V` and the word `CE
 
 | Command | Data | What it does | Access |
 | --- | --- | --- | --- |
-| `V3NETCENTRAL` | none | The V3Net Central menu: `B` Boards (only when a network's directory is available), `P` My Preferences, `S` Connection Status. Says so and returns when V3Net is off or Central is enabled on no network. | |
+| `V3NETCENTRAL` | none | The V3Net Central menu: `B` Boards (only when a network's directory is available), `W` Who's Online and `L` Last Callers (each only when the sysop offers it on a network whose hub serves it), `P` My Preferences, `S` Connection Status. Says so and returns when V3Net is off or Central is enabled on no network. | |
 | `V3NETCENTRALBOARDS` | Network name, optional. Blank covers every network where the directory is available. | Lightbar over the verified board directory: online boards first, then boards seen in the last week, then stale ones. Enter shows a board's details, `/` filters by name, description or address, `R` fetches again. | Silent when nothing is available |
-| `V3NETCENTRALPREFS` | none | What V3Net Central shares about the caller. In phase 1, nothing; lists the coming features as not available. | |
-| `V3NETCENTRALSTATUS` | none | Per network: the Central and listing switches, whether the hub serves the directory, whether the event stream is up, the listing's state and when the directory was last fetched. | |
+| `V3NETCENTRALPREFS` | none | The caller's own V3Net Central switches, each off until they turn it on: show me on Who's Online, my availability (not shown, available, busy), show my calls on Last Callers. A switch for a feature no network offers is refused. Shows exactly what other boards would see. | |
+| `V3NETCENTRALWHO` | Network name, optional. Blank covers every network where it is available. | Network Who's Online: the callers on participating boards who chose to be shown, one row per caller per board with their availability. | Silent when nothing is available |
+| `V3NETCENTRALLASTCALLERS` | Row limit, optional, and `--all` to include this board's callers. | Network Last Callers, as `LASTCALLERS --network` (or `--all`). | Silent when nothing is available |
+| `V3NETCENTRALSTATUS` | none | Per network: the Central and listing switches, whether the hub serves the directory, whether the event stream is up, the listing's state and when the directory was last fetched; then Who's Online and Last Callers: off, not served by the hub, or how many entries this board last shared and when. | |
 
 ## SysOp and administration
 

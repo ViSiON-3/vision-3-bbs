@@ -28,14 +28,15 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 
 	slog.Debug("running LASTCALLERS", "node", nodeNumber)
 
-	// Parse optional caller count argument (e.g., RUN:LASTCALLERS 25).
-	// An explicit argument overrides the default in either direction; either
-	// way the count is trimmed below to what fits on the caller's terminal.
-	callerLimit := defaultLastCallerRows
-	if strings.TrimSpace(args) != "" {
-		if parsedLimit, parseErr := strconv.Atoi(strings.TrimSpace(args)); parseErr == nil && parsedLimit > 0 {
-			callerLimit = parsedLimit
-		}
+	// Parse the optional caller count (e.g., RUN:LASTCALLERS 25) and
+	// source flag. An explicit count overrides the default in either
+	// direction; either way it is trimmed to what fits on the caller's
+	// terminal. --network shows V3Net Central's network Last Callers
+	// instead, and --all this board's callers and the network's together,
+	// each row flagged with where the call was.
+	callerLimit, mode := parseLastCallersArgs(args)
+	if mode != lastCallersLocal {
+		return runCentralLastCallers(c, callerLimit, mode == lastCallersAll)
 	}
 
 	// 1. Load Template Files from MenuSetPath/templates

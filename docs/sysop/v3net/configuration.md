@@ -166,6 +166,8 @@ the same Hub URL, Network, Poll Interval and Origin fields as the wizard, plus:
 | **Publish Listing** | Default `N`. `Y` lists this board in the network's directory; `N` withdraws it. |
 | **Listing Desc** | One line about your board for the directory. |
 | **Listing Addrs** | Comma-separated connection addresses for the directory; blank publishes the ones from Server Setup. |
+| **Who's Online** | Default `N`. `Y` offers network Who's Online (needs **Central**). Only callers who turn it on themselves are shown on other boards. See [Who's Online and Last Callers](v3net/central.md#whos-online-and-last-callers). |
+| **Last Callers** | Default `N`. `Y` offers network Last Callers (needs **Central**). Only calls of callers who turn it on themselves are shared, each for 24 hours. |
 
 ---
 

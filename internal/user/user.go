@@ -133,6 +133,22 @@ type User struct {
 	// closed; T in the reader still opens it for the rest of the call.
 	ThreadViewClosed bool `json:"threadViewClosed,omitempty"`
 
+	// V3Net Central consent. Each is off until the caller turns it on in
+	// Central's My Preferences, and none is ever turned on for them: an
+	// account from before these existed shares nothing. They only take
+	// effect on networks where the SysOp offers the feature.
+	//
+	// CentralPresence shows the caller's handle on network Who's Online
+	// while they are on, with CentralAvailability ("available", "busy" or
+	// "" for not shared) beside it.
+	CentralPresence     bool   `json:"centralPresence,omitempty"`
+	CentralAvailability string `json:"centralAvailability,omitempty"`
+	// CentralLastCallsSince is when the caller agreed to have their calls
+	// shown on network Last Callers; nil is not agreed. Only calls that
+	// began at or after it are published, so agreeing does not publish
+	// calls made before, and clearing it withdraws every call at once.
+	CentralLastCallsSince *time.Time `json:"centralLastCallsSince,omitempty"`
+
 	// Soft Delete (user marked as deleted but data preserved)
 	DeletedUser bool       `json:"deletedUser,omitempty"` // True if user is soft-deleted
 	DeletedAt   *time.Time `json:"deletedAt,omitempty"`   // Timestamp when user was deleted (nil if not deleted)

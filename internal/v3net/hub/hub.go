@@ -32,6 +32,8 @@ type Hub struct {
 	chatRooms         *chatRooms
 	central           *CentralStore
 	centralLimiter    *rateLimiter // per node: listing publishes
+	activity          *CentralActivityStore
+	activityLimiter   *rateLimiter // per node and kind: activity snapshots
 	online            *onlineNodes
 	// chatStreamMu orders stream registration against last-stream cleanup.
 	// An old connection must not remove memberships restored by its replacement.
@@ -110,6 +112,12 @@ func New(cfg Config) (*Hub, error) {
 		return nil, err
 	}
 
+	activity, err := NewCentralActivityStore(db)
+	if err != nil {
+		_ = db.Close() // cleanup on error path
+		return nil, err
+	}
+
 	h := &Hub{
 		cfg:               cfg,
 		db:                db,
@@ -126,6 +134,8 @@ func New(cfg Config) (*Hub, error) {
 		chatRooms:         newChatRooms(),
 		central:           central,
 		centralLimiter:    newBurstRateLimiter(centralPublishInterval, centralPublishBurst),
+		activity:          activity,
+		activityLimiter:   newBurstRateLimiter(centralActivityInterval, centralActivityBurst),
 		online:            newOnlineNodes(),
 	}
 
@@ -144,6 +154,7 @@ func (h *Hub) Start(ctx context.Context) error {
 	go h.broadcaster.StartPing(ctx)
 	h.chatStore.StartPruner(ctx)
 	h.central.StartPruner(ctx)
+	h.startActivityPruner(ctx)
 
 	go func() {
 		<-ctx.Done()
@@ -172,6 +183,7 @@ func (h *Hub) close() error {
 	h.chatLimiter.Stop()
 	h.chatNodeLimiter.Stop()
 	h.centralLimiter.Stop()
+	h.activityLimiter.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	shutdownErr := h.server.Shutdown(ctx)
@@ -193,6 +205,11 @@ func (h *Hub) Subscribers() *SubscriberStore {
 // NALStore returns the NAL store (used for in-process seeding at startup).
 func (h *Hub) NALStore() *NALStore {
 	return h.nalStore
+}
+
+// Activity returns the Central activity store (used in tests).
+func (h *Hub) Activity() *CentralActivityStore {
+	return h.activity
 }
 
 // Central returns the Central directory store (used in tests).

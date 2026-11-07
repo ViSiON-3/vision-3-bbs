@@ -93,6 +93,7 @@ func New(cfg Config) *Leaf {
 		l.eventCb.Store(cfg.OnEvent)
 	}
 	l.chatSessions = newChatSessionRegistry(cfg.Keystore.NodeID())
+	l.central.activity = newActivityStates()
 	return l
 }
 
@@ -208,6 +209,12 @@ func (l *Leaf) Start(ctx context.Context) {
 	go func() {
 		defer wg.Done()
 		l.runCentral(ctx)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		l.runCentralActivity(ctx)
 	}()
 
 	wg.Wait()

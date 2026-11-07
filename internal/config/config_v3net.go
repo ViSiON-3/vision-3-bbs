@@ -195,6 +195,28 @@ type V3NetCentralConfig struct {
 	// at most 8. Empty publishes the addresses derived from the server's
 	// SSH and telnet settings.
 	Addresses []string `json:"addresses,omitempty"`
+	// Presence offers network Who's Online on this network: callers may
+	// see who is on other participating boards, and each caller may choose
+	// to be shown there while on this one. It needs Enabled. Off, nothing
+	// about who is online here is sent, whatever callers chose.
+	Presence bool `json:"presence"`
+	// LastCallers offers network Last Callers on this network: callers may
+	// see recent calls to other participating boards, and each caller may
+	// choose to have their calls here shown, for at most 24 hours. It
+	// needs Enabled. Off, no call is sent, whatever callers chose.
+	LastCallers bool `json:"lastCallers"`
+}
+
+// CentralPresence reports whether network Who's Online is offered on this
+// subscription: Central and its Presence switch both on.
+func (l V3NetLeafConfig) CentralPresence() bool {
+	return l.CentralEnabled() && l.Central.Presence
+}
+
+// CentralLastCallers reports whether network Last Callers is offered on
+// this subscription: Central and its LastCallers switch both on.
+func (l V3NetLeafConfig) CentralLastCallers() bool {
+	return l.CentralEnabled() && l.Central.LastCallers
 }
 
 // CentralEnabled reports whether callers may open V3Net Central for this

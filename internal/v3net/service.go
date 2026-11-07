@@ -81,6 +81,11 @@ type Service struct {
 	CentralAddresses []string
 	CentralSoftware  string
 
+	// activitySrc holds the leaf.CentralActivitySource set by
+	// SetCentralActivitySource: what the BBS lets the leaves publish for
+	// network Who's Online and Last Callers.
+	activitySrc atomic.Value
+
 	// nalObserver holds the func(network string, n *protocol.NAL) set by
 	// SetNALObserver, called with each NAL a leaf fetches.
 	nalObserver atomic.Value
@@ -494,6 +499,9 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		BBSHost:               s.BBSHost,
 		CentralEnabled:        lcfg.CentralEnabled(),
 		CentralListing:        s.centralListingSpec(lcfg),
+		CentralPresence:       lcfg.CentralPresence(),
+		CentralLastCallers:    lcfg.CentralLastCallers(),
+		Activity:              s.activitySource(),
 		RequireSignedMessages: lcfg.RequireSignedMessages,
 		RequireSignedHub:      lcfg.RequireSignedHub,
 		HubSigned:             lcfg.HubSigned,
@@ -946,6 +954,31 @@ func (s *Service) withdrawCentralBeforeStop(run *leafRun) {
 	}
 }
 
+// withdrawActivityBeforeStop withdraws each activity kind run publishes
+// that the replacement subscription (next, when ok) will not. Failures are
+// logged; presence goes anyway when the leaf's stream closes, and last
+// calls when their snapshot expires.
+func (s *Service) withdrawActivityBeforeStop(run *leafRun, next config.V3NetLeafConfig, ok bool) {
+	if run.ctx == nil || run.ctx.Err() != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(run.ctx, centralWithdrawTimeout)
+	defer cancel()
+	for kind, keeps := range map[string]bool{
+		protocol.CentralKindPresence:    ok && next.CentralPresence(),
+		protocol.CentralKindLastCallers: ok && next.CentralLastCallers(),
+	} {
+		st := run.l.ActivityStatus(kind)
+		if keeps || !st.Enabled || !st.Supported {
+			continue
+		}
+		if err := run.l.WithdrawActivity(ctx, kind); err != nil {
+			slog.Warn("v3net: could not withdraw Central activity before stopping the leaf; the hub expires it",
+				"network", run.l.Network(), "hub", run.l.HubURL(), "kind", kind, "error", err)
+		}
+	}
+}
+
 // withoutKeys returns c with its pinned and pending key fields, and the
 // record that the hub signs and the count of its clears, cleared, for
 // comparing subscriptions while ignoring what the leaf records.
@@ -1136,6 +1169,11 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 		if next, ok := nextByKey[leafKey{run.l.Network(), run.l.HubURL()}]; !ok || !next.CentralPublishes() {
 			s.withdrawCentralBeforeStop(run)
 		}
+		// Likewise presence and last calls, so a caller's activity does not
+		// linger on a hub this board no longer publishes to.
+		if next, ok := nextByKey[leafKey{run.l.Network(), run.l.HubURL()}]; !ok || !next.CentralPresence() || !next.CentralLastCallers() {
+			s.withdrawActivityBeforeStop(run, next, ok)
+		}
 		s.stopLeaf(run)
 		key := leafKey{run.l.Network(), run.l.HubURL()}
 		if n := run.l.LastNAL(); n != nil {
@@ -1261,6 +1299,9 @@ type CentralNetworkStatus struct {
 	Network string
 	HubURL  string
 	leaf.CentralStatus
+	// Presence and LastCallers are network Who's Online and Last Callers.
+	Presence    leaf.ActivityStatus
+	LastCallers leaf.ActivityStatus
 }
 
 // CentralNetworks returns the Central state of every running subscription,
@@ -1274,6 +1315,8 @@ func (s *Service) CentralNetworks() []CentralNetworkStatus {
 			Network:       run.l.Network(),
 			HubURL:        run.l.HubURL(),
 			CentralStatus: run.l.CentralStatus(),
+			Presence:      run.l.ActivityStatus(protocol.CentralKindPresence),
+			LastCallers:   run.l.ActivityStatus(protocol.CentralKindLastCallers),
 		})
 	}
 	return out
@@ -1290,4 +1333,67 @@ func (s *Service) CentralDirectory(ctx context.Context, network string, force bo
 		return nil, fmt.Errorf("%w %q", ErrNoLeaf, network)
 	}
 	return run.l.FetchCentralDirectory(ctx, force)
+}
+
+// SetCentralActivitySource sets what the BBS lets every leaf publish for
+// network Who's Online and Last Callers. Until it is set, nothing is.
+func (s *Service) SetCentralActivitySource(src leaf.CentralActivitySource) {
+	s.activitySrc.Store(&activitySourceBox{src})
+}
+
+// activitySourceBox lets activitySrc hold any implementation.
+type activitySourceBox struct{ src leaf.CentralActivitySource }
+
+// activitySource returns the source handed to each leaf: it defers to the
+// one SetCentralActivitySource set, whenever that happens, and gives
+// nothing before.
+func (s *Service) activitySource() leaf.CentralActivitySource {
+	return serviceActivitySource{s}
+}
+
+type serviceActivitySource struct{ s *Service }
+
+func (a serviceActivitySource) get() leaf.CentralActivitySource {
+	if b, ok := a.s.activitySrc.Load().(*activitySourceBox); ok && b != nil {
+		return b.src
+	}
+	return nil
+}
+
+func (a serviceActivitySource) CentralPresence() []protocol.CentralActivityEntry {
+	if src := a.get(); src != nil {
+		return src.CentralPresence()
+	}
+	return nil
+}
+
+func (a serviceActivitySource) CentralLastCalls(since time.Time) []protocol.CentralActivityEntry {
+	if src := a.get(); src != nil {
+		return src.CentralLastCalls(since)
+	}
+	return nil
+}
+
+// NotifyCentralActivity tells every leaf the board's activity may have
+// changed: a caller logged on or off, or changed what they share. It never
+// blocks.
+func (s *Service) NotifyCentralActivity() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, run := range s.leaves {
+		run.l.NotifyCentralActivity()
+	}
+}
+
+// CentralActivity returns network's verified feed of kind (see
+// leaf.Leaf.FetchCentralActivity). It returns ErrNoLeaf when no
+// subscription runs for the network.
+func (s *Service) CentralActivity(ctx context.Context, network, kind string, force bool) ([]protocol.CentralActivityBoard, error) {
+	s.mu.RLock()
+	run, ok := s.leafByNetwork[network]
+	s.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("%w %q", ErrNoLeaf, network)
+	}
+	return run.l.FetchCentralActivity(ctx, kind, force)
 }

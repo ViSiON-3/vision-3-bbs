@@ -239,6 +239,16 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 				return nil
 			},
 		},
+		{
+			Label: "Who's Online", Help: "Offer network Who's Online (needs Central); only callers who opt in are shown elsewhere. N withdraws", Type: ftYesNo, Col: 3, Row: 20, Width: 1,
+			Get: func() string { return uitext.BoolToYN(l.Central != nil && l.Central.Presence) },
+			Set: func(val string) error { v3netCentral(l).Presence = uitext.YNToBool(val); return nil },
+		},
+		{
+			Label: "Last Callers", Help: "Offer network Last Callers (needs Central); only opted-in callers' calls, kept 24 hours. N withdraws", Type: ftYesNo, Col: 3, Row: 21, Width: 1,
+			Get: func() string { return uitext.BoolToYN(l.Central != nil && l.Central.LastCallers) },
+			Set: func(val string) error { v3netCentral(l).LastCallers = uitext.YNToBool(val); return nil },
+		},
 	}
 }
 

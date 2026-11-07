@@ -124,6 +124,9 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 	slog.Info("leaf: SSE connected", "network", l.cfg.Network, "signed", verifier != nil)
 	l.sseConnected.Store(true)
 	defer l.sseConnected.Store(false)
+	// The hub dropped this board's presence when its last stream closed;
+	// put it back now that one is open.
+	l.kickActivity(protocol.CentralKindPresence)
 	defer l.chatSessions.suspend()
 	if reconnect {
 		// A nal_updated sent while the stream was down is lost, and Start's

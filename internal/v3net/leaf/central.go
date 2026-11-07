@@ -116,6 +116,11 @@ type centralState struct {
 
 	seen     []string // ring of event IDs acted on
 	seenNext int
+
+	// activity is the per-kind state of Who's Online and Last Callers
+	// (central_activity.go). The map is fixed at New; mu guards the
+	// states' fields.
+	activity map[string]*activityState
 }
 
 // centralEnabled reports whether Central participation is on for this
@@ -462,40 +467,57 @@ func verifyCentralDirectory(dir *protocol.CentralDirectory, network string, now 
 	return out
 }
 
-// dispatchCentralEvent acts on a Central listing event: a fresh one marks
-// the cached directory stale, so the next look fetches it again. One past
-// its expiry, or whose ID was acted on before, is dropped: a replay would
-// only cost a fetch, but the rule is the same for every Central event.
+// dispatchCentralEvent acts on a Central event: a fresh listing event
+// marks the cached directory stale, and a fresh activity event the cached
+// feed of its kind, so the next look fetches again. One past its expiry,
+// or whose ID was acted on before, is dropped: a replay would only cost a
+// fetch, but the rule is the same for every Central event.
 func (l *Leaf) dispatchCentralEvent(ev protocol.Event) {
+	var meta protocol.EventMeta
+	var network, kind string
 	switch ev.Type {
 	case protocol.EventCentralListingUpdated, protocol.EventCentralListingWithdrawn:
+		var p protocol.CentralListingEventPayload
+		if err := json.Unmarshal(ev.Data, &p); err != nil {
+			return
+		}
+		meta, network = p.EventMeta, p.Network
+	case protocol.EventCentralActivityUpdated:
+		var p protocol.CentralActivityEventPayload
+		if err := json.Unmarshal(ev.Data, &p); err != nil {
+			return
+		}
+		meta, network, kind = p.EventMeta, p.Network, p.Kind
+		if l.central.activity[kind] == nil {
+			return
+		}
 	default:
 		return
 	}
-	var p protocol.CentralListingEventPayload
-	if err := json.Unmarshal(ev.Data, &p); err != nil {
+	if network != "" && network != l.cfg.Network {
 		return
 	}
-	if p.Network != "" && p.Network != l.cfg.Network {
-		return
-	}
-	if p.Expired(time.Now()) {
-		slog.Debug("leaf: dropped expired central event", "network", l.cfg.Network, "type", ev.Type, "id", p.EventID)
+	if meta.Expired(time.Now()) {
+		slog.Debug("leaf: dropped expired central event", "network", l.cfg.Network, "type", ev.Type, "id", meta.EventID)
 		return
 	}
 	l.central.mu.Lock()
 	defer l.central.mu.Unlock()
-	if p.EventID != "" {
-		if slices.Contains(l.central.seen, p.EventID) {
-			slog.Debug("leaf: dropped replayed central event", "network", l.cfg.Network, "type", ev.Type, "id", p.EventID)
+	if meta.EventID != "" {
+		if slices.Contains(l.central.seen, meta.EventID) {
+			slog.Debug("leaf: dropped replayed central event", "network", l.cfg.Network, "type", ev.Type, "id", meta.EventID)
 			return
 		}
 		if len(l.central.seen) < centralSeenEvents {
-			l.central.seen = append(l.central.seen, p.EventID)
+			l.central.seen = append(l.central.seen, meta.EventID)
 		} else {
-			l.central.seen[l.central.seenNext] = p.EventID
+			l.central.seen[l.central.seenNext] = meta.EventID
 			l.central.seenNext = (l.central.seenNext + 1) % centralSeenEvents
 		}
+	}
+	if kind != "" {
+		l.central.activity[kind].stale = true
+		return
 	}
 	l.central.dirStale = true
 }

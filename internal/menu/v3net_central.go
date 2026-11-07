@@ -48,6 +48,32 @@ type CentralNetworkInfo struct {
 	// never) and DirectoryCount how many boards it held.
 	DirectoryFetched time.Time
 	DirectoryCount   int
+	// Presence and LastCallers are network Who's Online and Last Callers
+	// on this network.
+	Presence    CentralActivityInfo
+	LastCallers CentralActivityInfo
+}
+
+// CentralActivityInfo is one activity feature's state on a network.
+type CentralActivityInfo struct {
+	// Enabled is the sysop's switch for the feature (which needs Central
+	// on); Supported whether the hub serves it.
+	Enabled   bool
+	Supported bool
+	// LastPublished is when this board's snapshot last reached the hub
+	// (zero if not this run) and LastCount how many entries it held;
+	// LastError the latest publish or withdrawal failure.
+	LastPublished time.Time
+	LastCount     int
+	LastError     string
+}
+
+// Activity returns the network's state of an activity kind.
+func (n CentralNetworkInfo) Activity(kind string) CentralActivityInfo {
+	if kind == protocol.CentralKindLastCallers {
+		return n.LastCallers
+	}
+	return n.Presence
 }
 
 // Available reports whether callers can use the directory on this
@@ -65,6 +91,15 @@ type V3NetCentralProvider interface {
 	// leaf.ErrCentralDisabled or leaf.ErrCentralUnsupported when the
 	// directory cannot be offered on the network.
 	CentralDirectory(ctx context.Context, network string, force bool) ([]protocol.CentralDirectoryEntry, error)
+	// CentralActivity returns network's verified feed of an activity kind
+	// (protocol.CentralKindPresence or CentralKindLastCallers).
+	CentralActivity(ctx context.Context, network, kind string, force bool) ([]protocol.CentralActivityBoard, error)
+	// NotifyCentralActivity says a caller's sharing choices changed, so
+	// the board republishes what it shares.
+	NotifyCentralActivity()
+	// NodeID is this board's node ID, to tell its own snapshots from
+	// other boards'.
+	NodeID() string
 }
 
 // centralRecentWindow separates a recently reachable board from a stale
@@ -172,6 +207,14 @@ func runV3NetCentral(c *cmdCtx, args string) (*user.User, string, error) {
 		if len(available) > 0 {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15B|03]oards            |08find participating boards and how to call them|07\r\n")))
 		}
+		whoOK := len(centralActivityNetworks(e.V3NetCentral, protocol.CentralKindPresence)) > 0
+		lastOK := len(centralActivityNetworks(e.V3NetCentral, protocol.CentralKindLastCallers)) > 0
+		if whoOK {
+			buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15W|03]ho's Online      |08callers on other boards who chose to be shown|07\r\n")))
+		}
+		if lastOK {
+			buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15L|03]ast Callers      |08recent calls to other boards, shared by choice|07\r\n")))
+		}
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15P|03]references       |08what, if anything, is shared about you|07\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15S|03]tatus            |08connection to each network's hub|07\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15Q|03]uit|07\r\n\r\n")))
@@ -207,6 +250,22 @@ func runV3NetCentral(c *cmdCtx, args string) (*user.User, string, error) {
 			if _, next, err := runV3NetCentralBoards(c, ""); err != nil {
 				return nil, next, err
 			}
+		case "W":
+			if !whoOK {
+				status = "|04Who's Online is not available on any network.|07"
+				continue
+			}
+			if _, next, err := runV3NetCentralWho(c, ""); err != nil {
+				return nil, next, err
+			}
+		case "L":
+			if !lastOK {
+				status = "|04Last Callers is not available on any network.|07"
+				continue
+			}
+			if _, next, err := runCentralLastCallers(c, defaultLastCallerRows, false); err != nil {
+				return nil, next, err
+			}
 		case "P":
 			if _, next, err := runV3NetCentralPrefs(c, ""); err != nil {
 				return nil, next, err
@@ -216,40 +275,9 @@ func runV3NetCentral(c *cmdCtx, args string) (*user.User, string, error) {
 				return nil, next, err
 			}
 		default:
-			status = "|04Enter B, P, S or Q.|07"
+			status = "|04Enter a letter from the menu, or Q.|07"
 		}
 	}
-}
-
-// runV3NetCentralPrefs shows the caller what V3Net Central shares about
-// them. In this phase that is nothing: the directory is browsed without
-// sending anything, and no feature that would publish anything exists
-// yet. Each later feature gets its own switch here, off until the caller
-// turns it on and only offered once the sysop has enabled it.
-func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
-	e := c.e
-	s := c.s
-	terminal := c.terminal
-	outputMode := c.outputMode
-	termWidth := c.termWidth
-	termHeight := c.termHeight
-
-	if c.currentUser == nil {
-		return nil, "", nil
-	}
-	var buf strings.Builder
-	buf.WriteString(centralHeader("My Preferences", termWidth))
-	buf.Write(ansi.ReplacePipeCodes([]byte("|15  Nothing about you is shared through V3Net Central.|07\r\n\r\n")))
-	buf.Write(ansi.ReplacePipeCodes([]byte("|07  Browsing the board directory sends nothing about you to any hub:\r\n")))
-	buf.Write(ansi.ReplacePipeCodes([]byte("|07  not your handle, not that you are online, not when you last called.\r\n\r\n")))
-	buf.Write(ansi.ReplacePipeCodes([]byte("|03  Feature                 Status|07\r\n")))
-	for _, f := range []string{"Presence (who's online)", "Lobby chat", "Event notifications", "The wall"} {
-		buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|07  %-24s|08not available yet|07\r\n", f))))
-	}
-	buf.Write(ansi.ReplacePipeCodes([]byte("\r\n|08  Each feature gets its own switch here once your SysOp enables it,\r\n")))
-	buf.Write(ansi.ReplacePipeCodes([]byte("|08  and stays off until you turn it on.|07\r\n")))
-	terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
-	return v3netPause(e, s, terminal, outputMode, termWidth, termHeight)
 }
 
 // runV3NetCentralStatus shows, per subscribed network, the sysop's Central
@@ -317,11 +345,49 @@ func runV3NetCentralStatus(c *cmdCtx, args string) (*user.User, string, error) {
 			errs = append(errs, n.Network+": "+n.LastError)
 		}
 	}
+	if len(nets) > 0 {
+		buf.Write(ansi.ReplacePipeCodes([]byte("\r\n|03  NETWORK       WHO'S ONLINE              LAST CALLERS|07\r\n")))
+		for _, n := range nets {
+			buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("  |11%s|07 %s %s\r\n",
+				v3netCell(n.Network, 13), centralActivityState(n, n.Presence, "online", now), centralActivityState(n, n.LastCallers, "calls", now)))))
+			for _, a := range []CentralActivityInfo{n.Presence, n.LastCallers} {
+				if a.LastError != "" {
+					errs = append(errs, n.Network+": "+a.LastError)
+				}
+			}
+		}
+	}
 	for _, msg := range errs {
 		buf.Write(ansi.ReplacePipeCodes([]byte("|04  " + v3netClip(msg, termWidth-4) + "|07\r\n")))
 	}
 	terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
 	return v3netPause(e, s, terminal, outputMode, termWidth, termHeight)
+}
+
+// centralActivityState is one Status cell for an activity feature: off,
+// not served by the hub, or how many entries this board last shared and
+// when. noun names the entries. The cell is 25 columns wide.
+func centralActivityState(n CentralNetworkInfo, a CentralActivityInfo, noun string, now time.Time) string {
+	var cell string
+	switch {
+	case !n.Enabled || !a.Enabled:
+		cell = "|08off|07"
+	case !n.SupportKnown:
+		cell = "|14checking...|07"
+	case !a.Supported:
+		cell = "|08hub does not serve it|07"
+	case a.LastError != "" && a.LastPublished.IsZero():
+		cell = "|04failed|07"
+	case a.LastPublished.IsZero():
+		cell = "|14pending|07"
+	default:
+		cell = fmt.Sprintf("|10on|07, |15%d|07 %s |08(%s)|07", a.LastCount, noun, v3netAgo(a.LastPublished.UTC().Format(time.RFC3339), now))
+	}
+	plain := len([]rune(string(ansi.StripAnsi(string(ansi.ReplacePipeCodes([]byte(cell)))))))
+	if plain < 25 {
+		cell += strings.Repeat(" ", 25-plain)
+	}
+	return cell
 }
 
 // runV3NetCentralBoards is the board directory: a lightbar over every

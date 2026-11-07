@@ -3,6 +3,8 @@ package hub
 import (
 	"net/http"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
 // Mux returns the HTTP handler for the hub. Used by the standalone hub binary
@@ -75,6 +77,20 @@ func (h *Hub) newMux() http.Handler {
 				h.handleDeleteCentralListing(w, r, network)
 			case strings.HasSuffix(path, "/central/listings") && r.Method == http.MethodGet:
 				h.handleGetCentralDirectory(w, r, network)
+
+			// V3Net Central: Who's Online and Last Callers.
+			case strings.HasSuffix(path, "/central/"+protocol.CentralKindPresence) || strings.HasSuffix(path, "/central/"+protocol.CentralKindLastCallers):
+				kind := path[strings.LastIndex(path, "/")+1:]
+				switch r.Method {
+				case http.MethodPut:
+					h.handlePutCentralActivity(w, r, network, kind)
+				case http.MethodDelete:
+					h.handleDeleteCentralActivity(w, r, network, kind)
+				case http.MethodGet:
+					h.handleGetCentralActivity(w, r, network, kind)
+				default:
+					jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+				}
 
 			// NAL endpoint (POST requires coordinator auth).
 			case strings.HasSuffix(path, "/nal") && r.Method == http.MethodPost:
