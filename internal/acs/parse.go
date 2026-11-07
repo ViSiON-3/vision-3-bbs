@@ -9,41 +9,22 @@
 // The BBS, vision3 doctor and the editors all go through this package, so a
 // string means the same thing everywhere.
 //
-// Evaluation keeps the behaviour ACS strings have always had, including the
-// lenient parts the diagnostics report: a character the parser doesn't know
-// is dropped and ends the term it is in, and a term with an unknown letter or
-// a bad argument is false, so negating it passes.
+// One policy covers every string. Anything Parse reports (a character it
+// doesn't know, a term with an unknown letter or a bad argument, a string
+// that can't be read as a whole) makes the string fail for every caller, and
+// '!' can't make it pass. A term that needs a session the context doesn't
+// have, or a value the user's record lacks, fails the whole evaluation in the
+// same way, whatever the other parts say.
 package acs
 
 import (
 	"fmt"
-	"strings"
 )
 
-// Severity is how much a Diagnostic matters.
-type Severity int
-
-const (
-	// Warning marks something the string does today that a stricter ACS
-	// policy would change: a dropped character, or a term that is always
-	// false because its letter is unknown or its argument is bad.
-	Warning Severity = iota
-	// Error marks a string that can't be read as a whole. It fails for every
-	// caller, and ! can't make it pass.
-	Error
-)
-
-func (s Severity) String() string {
-	if s == Error {
-		return "error"
-	}
-	return "warning"
-}
-
-// Diagnostic is one problem Parse found. Pos and End are rune offsets into
-// the string, End exclusive; Column is Pos+1, for messages.
+// Diagnostic is one problem Parse found. Any diagnostic makes the string
+// fail for every caller. Pos and End are rune offsets into the string, End
+// exclusive; Column is Pos+1, for messages.
 type Diagnostic struct {
-	Severity Severity
 	Pos, End int
 	Message  string
 }
@@ -79,35 +60,21 @@ type Node struct {
 	Op       int
 	Text     string // the term, for a TermNode
 	X, Y     *Node  // operands: X for NotNode, X and Y for AndNode and OrNode
-	termDiag string // why the term is always false, "" for a valid term
 }
 
 // Expr is a parsed ACS string.
 type Expr struct {
 	// Source is the string as given.
 	Source string
-	// Root is the expression tree, nil when the string can't be read as a
-	// whole (Diagnostics then holds an Error).
+	// Root is the expression tree, nil when Parse found any problem.
 	Root *Node
 	// Diagnostics lists every problem found, in order of position.
 	Diagnostics []Diagnostic
-	// compare is set when the string was read with comparisons (see Parse).
-	compare bool
 }
 
-// Valid reports whether the string can be read as a whole. A valid string
-// may still have warnings.
+// Valid reports whether Parse found no problem, so the string can be
+// evaluated. A string that isn't valid fails for every caller.
 func (e *Expr) Valid() bool { return e.Root != nil }
-
-// HasErrors reports whether any diagnostic is an Error.
-func (e *Expr) HasErrors() bool {
-	for _, d := range e.Diagnostics {
-		if d.Severity == Error {
-			return true
-		}
-	}
-	return false
-}
 
 type tokenKind int
 
@@ -132,12 +99,10 @@ func isTermRune(r rune) bool {
 }
 
 // tokenize splits s into terms, operators and parentheses. Spaces separate
-// tokens; any other character it doesn't know is dropped, with a warning, and
-// ends the term it is in. With compare, the comparison and range characters
-// join a term when a term character follows them (S<20, H8-17, LEVEL>=20);
-// without it they are dropped like any other, as they were before
-// comparisons were added.
-func tokenize(s string, compare bool) ([]token, []Diagnostic) {
+// tokens. The comparison and range characters join a term when a term
+// character follows them (S<20, H8-17, LEVEL>=20). Any other character it
+// doesn't know is reported, and ends the term it is in.
+func tokenize(s string) ([]token, []Diagnostic) {
 	var toks []token
 	var diags []Diagnostic
 	runes := []rune(s)
@@ -158,11 +123,10 @@ func tokenize(s string, compare bool) ([]token, []Diagnostic) {
 					i++
 					continue
 				}
-				// With compare, comparison characters followed by a term
-				// character join the term; elsewhere they are dropped, so S20-
-				// is still S20.
+				// Comparison characters followed by a term character join
+				// the term; elsewhere they are unexpected (S20-).
 				j := i + 1
-				for compare && j < len(runes) && isCompareRune(runes[j]) {
+				for j < len(runes) && isCompareRune(runes[j]) {
 					j++
 				}
 				if j == i+1 || j == len(runes) || !isTermRune(runes[j]) {
@@ -172,8 +136,8 @@ func tokenize(s string, compare bool) ([]token, []Diagnostic) {
 			}
 			toks = append(toks, token{kind: tokTerm, text: string(runes[start : i+1]), pos: start, end: i + 1})
 		default:
-			diags = append(diags, Diagnostic{Severity: Warning, Pos: i, End: i + 1,
-				Message: fmt.Sprintf("unexpected character %q is ignored and ends the term before it", r)})
+			diags = append(diags, Diagnostic{Pos: i, End: i + 1,
+				Message: fmt.Sprintf("unexpected character %q", r)})
 		}
 	}
 	return toks, diags
@@ -182,75 +146,39 @@ func tokenize(s string, compare bool) ([]token, []Diagnostic) {
 // precedence orders the operators: ! before & before |.
 var precedence = map[string]int{"!": 3, "&": 2, "|": 1}
 
-// Parse reads an ACS string into an expression tree and reports what it
-// finds. It never fails: a string that can't be read as a whole has a nil
-// Root and an Error diagnostic. Parse doesn't treat "" and "*" specially;
-// Check does (they pass), and Validate reports nothing for them.
+// Parse reads an ACS string into an expression tree and reports every
+// problem it finds. It never fails: a string with any problem has a nil Root
+// and its Diagnostics say what and where. Parse doesn't treat "" and "*"
+// specially; Check does (they pass), and Validate reports nothing for them.
 //
-// A string is first read as it was before comparisons were added, with the
-// comparison and range characters dropped. If that reads as a whole, that is
-// the string's meaning, so every string that worked before still means what
-// it did. Only a string that can't be read that way, which fails for every
-// caller, is read again with comparisons and ranges (S<20, H8-17,
-// LEVEL>=20), and its diagnostics are that second reading's.
+// The tree is built as the evaluator has always read ACS: operators by
+// precedence with a shunting-yard pass, then the postfix form folded into
+// nodes. Besides an unknown character and a term that can't be evaluated,
+// the problems are the ones that made the old evaluator give up: unbalanced
+// parentheses, an operator without enough operands (a trailing &, or !!),
+// and terms with no operator between them.
 func Parse(s string) *Expr {
-	if !strings.ContainsFunc(s, isCompareRune) {
-		return parse(s, false)
+	e := &Expr{Source: s}
+	toks, diags := tokenize(s)
+	for _, t := range toks {
+		if t.kind == tokTerm {
+			if _, p := parseTerm(t.text); p != "" {
+				diags = append(diags, Diagnostic{Pos: t.pos, End: t.end, Message: p})
+			}
+		}
 	}
-	if e := parse(s, false); e.Valid() {
+	e.Diagnostics = diags
+	fail := func(pos, end int, msg string) *Expr {
+		e.Root = nil
+		e.Diagnostics = append(e.Diagnostics, Diagnostic{Pos: pos, End: end, Message: msg})
+		sortDiagnostics(e.Diagnostics)
 		return e
 	}
-	return parse(s, true)
-}
-
-// parse reads s, with or without comparisons (see tokenize).
-//
-// The tree is built exactly as the evaluator has always read ACS: operators
-// by precedence with a shunting-yard pass, then the postfix form folded into
-// nodes. The checks that fail a string as a whole are the ones that made the
-// old evaluator give up: unbalanced parentheses, an operator without enough
-// operands (a trailing &, or !!), and terms with no operator between them.
-func parse(s string, compare bool) *Expr {
-	e := &Expr{Source: s, compare: compare}
-	toks, diags := tokenize(s, compare)
-	e.Diagnostics = diags
 
 	// Shunting-yard to postfix. ! is treated like the binary operators, as it
 	// always has been: an earlier ! on the stack is popped before a later one,
 	// which is why !!x leaves the first ! without an operand.
 	var out, ops []token
-	fail := func(pos, end int, msg string) *Expr {
-		e.Root = nil
-		e.Diagnostics = append(e.Diagnostics, Diagnostic{Severity: Error, Pos: pos, End: end, Message: msg})
-		// Terms that would be false on their own are worth fixing too, and a
-		// comparison that can't be read is an error of its own.
-		for _, t := range toks {
-			if t.kind != tokTerm {
-				continue
-			}
-			_, p, strict := parseTerm(t.text)
-			switch {
-			case p == "" || (strict && t.pos == pos && p == msg):
-			case strict:
-				e.Diagnostics = append(e.Diagnostics, Diagnostic{Severity: Error, Pos: t.pos, End: t.end, Message: p})
-			default:
-				e.Diagnostics = append(e.Diagnostics, Diagnostic{Severity: Warning, Pos: t.pos, End: t.end, Message: p})
-			}
-		}
-		sortDiagnostics(e.Diagnostics)
-		return e
-	}
-	// A comparison or range that can't be read fails the whole string: the
-	// characters it uses were dropped before comparisons were added, which
-	// left terms with no operator between them, so such a string has always
-	// failed (see parseTerm).
-	for _, t := range toks {
-		if t.kind == tokTerm {
-			if _, p, strict := parseTerm(t.text); strict && p != "" {
-				return fail(t.pos, t.end, p)
-			}
-		}
-	}
 	for _, t := range toks {
 		switch t.kind {
 		case tokTerm:
@@ -293,9 +221,7 @@ func parse(s string, compare bool) *Expr {
 	for _, t := range out {
 		switch {
 		case t.kind == tokTerm:
-			n := &Node{Kind: TermNode, Pos: t.pos, End: t.end, Op: t.pos, Text: t.text}
-			n.termDiag = termProblem(t.text)
-			stack = append(stack, n)
+			stack = append(stack, &Node{Kind: TermNode, Pos: t.pos, End: t.end, Op: t.pos, Text: t.text})
 		case t.text == "!":
 			if len(stack) < 1 {
 				return fail(t.pos, t.end, "'!' has nothing after it to negate (two '!' in a row are an error)")
@@ -334,32 +260,11 @@ func parse(s string, compare bool) *Expr {
 		return fail(extra.Pos, extra.End, fmt.Sprintf("no operator before %q: put & or | between terms", textOf(s, extra)))
 	}
 
-	e.Diagnostics = append(e.Diagnostics, termDiagnostics(e.Root, false)...)
-	sortDiagnostics(e.Diagnostics)
+	if len(e.Diagnostics) > 0 {
+		e.Root = nil
+		sortDiagnostics(e.Diagnostics)
+	}
 	return e
-}
-
-// termDiagnostics reports each term under n that is always false, noting
-// when it is negated (and so true for everyone).
-func termDiagnostics(n *Node, negated bool) []Diagnostic {
-	if n == nil {
-		return nil
-	}
-	switch n.Kind {
-	case TermNode:
-		if n.termDiag == "" {
-			return nil
-		}
-		msg := n.termDiag + ", so it is always false"
-		if negated {
-			msg = n.termDiag + "; it is false, and the '!' before it makes that part pass for everyone"
-		}
-		return []Diagnostic{{Severity: Warning, Pos: n.Pos, End: n.End, Message: msg}}
-	case NotNode:
-		return termDiagnostics(n.X, !negated)
-	default:
-		return append(termDiagnostics(n.X, negated), termDiagnostics(n.Y, negated)...)
-	}
 }
 
 // textOf is the source text n covers.

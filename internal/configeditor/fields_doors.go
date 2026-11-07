@@ -20,8 +20,7 @@ const (
 )
 
 // doorACSError rejects a door acs the BBS would deny to everyone: one that
-// acs.Validate reports anything for, an error or a warning, since a door's
-// acs is held to the strict rule. It names the first problem. Blank is no
+// acs.Validate reports anything for. It names the first problem. Blank is no
 // rule and is accepted.
 func doorACSError(rule string) error {
 	if diags := acs.Validate(rule); len(diags) > 0 {

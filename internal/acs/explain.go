@@ -16,17 +16,16 @@ const (
 	Match Reason = iota
 	// NoMatch is a term the user's values don't meet: an ordinary failure.
 	NoMatch
-	// Invalid is a term with an unknown letter or a bad argument, which is
-	// false for everyone; for an operator, a result that rests on such a
-	// term; for a whole explanation with no tree, a string that can't be read
-	// as a whole.
+	// Invalid is a string Parse found a problem with, which fails for
+	// everyone. Only a whole explanation, which then has no tree, has it.
 	Invalid
 	// NoSession is a term that reads the caller's session when the context
-	// has none; for an operator, a result that rests on such a term.
+	// has none; for an operator, one with such a term under it. Either fails,
+	// and so does the whole string.
 	NoSession
 	// Unavailable is a term that needs a value the user's record doesn't
-	// have (AGE without a creation date); for an operator, a result that
-	// rests on such a term.
+	// have (AGE without a sign-up date); for an operator, one with such a
+	// term under it. Either fails, and so does the whole string.
 	Unavailable
 )
 
@@ -75,10 +74,8 @@ type Explanation struct {
 	Detail string
 	// Root is the evaluated tree, nil when Detail explains the result.
 	Root *Step
-	// Diagnostics are Parse's, and Ignored the characters among them that
-	// were dropped: they are not in the tree, but they change what it says.
+	// Diagnostics are Parse's: any makes the string fail, with no tree.
 	Diagnostics []Diagnostic
-	Ignored     []Diagnostic
 	// Context is the context evaluated against, with Now filled in.
 	Context Context
 	// CurrentTime is set when Now was the current time rather than a time
@@ -108,14 +105,13 @@ func Explain(s string, ctx Context) Explanation {
 	}
 	e := Parse(s)
 	x.Diagnostics = e.Diagnostics
-	_, x.Ignored = tokenize(s, e.compare)
 	switch {
 	case ctx.User == nil:
 		x.Reason = NoMatch
 		x.Detail = "there is no user: only an empty string or a lone * passes"
 	case !e.Valid():
 		x.Reason = Invalid
-		x.Detail = "the string can't be read as a whole, so it fails for everyone and '!' can't make it pass"
+		x.Detail = "the string has a problem, so it fails for everyone and '!' can't make it pass"
 	default:
 		x.Root = explainNode(s, e.Root, ctx)
 		x.Result, x.Reason = x.Root.Result, x.Root.Reason
@@ -131,22 +127,21 @@ func explainNode(s string, n *Node, ctx Context) *Step {
 		st.Result, st.Reason, st.Detail = explainTerm(n, ctx)
 	case NotNode:
 		st.X = explainNode(s, n.X, ctx)
-		st.Result = !st.X.Result
-		st.Reason = outcome(st.Result)
 		if st.X.Reason.problem() {
 			st.Reason = st.X.Reason
+			st.Detail = st.X.Text + " can't be checked here, so this fails too"
+			break
 		}
+		st.Result = !st.X.Result
+		st.Reason = outcome(st.Result)
 		st.Detail = fmt.Sprintf("%s %s, so this %s", st.X.Text, passed(st.X.Result), passes(st.Result))
-		switch st.X.Reason {
-		case Invalid:
-			st.Detail += "; that rests on an invalid term, and a stricter ACS check will deny it"
-		case NoSession:
-			st.Detail += "; that rests on a session the context doesn't have"
-		case Unavailable:
-			st.Detail += "; that rests on a value the user's record doesn't have"
-		}
 	case AndNode, OrNode:
 		st.X, st.Y = explainNode(s, n.X, ctx), explainNode(s, n.Y, ctx)
+		if c := lackingPart(st.X, st.Y); c != nil {
+			st.Reason = c.Reason
+			st.Detail = c.Text + " can't be checked here, so this fails whatever the other part says"
+			break
+		}
 		if n.Kind == AndNode {
 			st.Result = st.X.Result && st.Y.Result
 		} else {
@@ -187,36 +182,22 @@ func partText(s string, n *Node) string {
 	return strings.TrimSpace(string(r[pos:end]))
 }
 
-// combine works out an operator's reason and detail. A result rests on an
-// invalid term or a missing session only when every part that decided it
-// does: S10|Q passes on S10 alone, but S10&!Q passes only because of !Q.
-func combine(kind Kind, result bool, x, y *Step) (Reason, string) {
-	var deciding []*Step
+// lackingPart is the first of x and y that lacks its context, nil if
+// neither does.
+func lackingPart(x, y *Step) *Step {
 	for _, c := range []*Step{x, y} {
-		// For & a failing part decides a failure and both decide a pass; for
-		// | a passing part decides a pass and both decide a failure.
-		if c.Result == result || (kind == AndNode) == result {
-			deciding = append(deciding, c)
+		if c.Reason.problem() {
+			return c
 		}
 	}
-	reason := outcome(result)
-	clean := false
-	for _, c := range deciding {
-		if !c.Reason.problem() {
-			clean = true
-		}
-	}
-	// A pass on & and a failure on | need every part, so any problem
-	// counts; otherwise one clean deciding part is enough.
-	if !clean || (kind == AndNode) == result {
-		for _, c := range deciding {
-			reason = worse(reason, c.Reason)
-		}
-	}
+	return nil
+}
 
-	var detail string
+// combine works out an operator's reason and detail when neither part lacks
+// its context.
+func combine(kind Kind, result bool, x, y *Step) (Reason, string) {
 	if kind == AndNode {
-		detail = "both parts must pass: "
+		detail := "both parts must pass: "
 		switch {
 		case result:
 			detail += "both passed"
@@ -227,42 +208,20 @@ func combine(kind Kind, result bool, x, y *Step) (Reason, string) {
 		default:
 			detail += y.Text + " failed"
 		}
-	} else {
-		detail = "either part may pass: "
-		switch {
-		case !result:
-			detail += "neither passed"
-		case x.Result && y.Result:
-			detail += "both passed"
-		case x.Result:
-			detail += x.Text + " passed"
-		default:
-			detail += y.Text + " passed"
-		}
+		return outcome(result), detail
 	}
-	switch reason {
-	case Invalid:
-		detail += "; the result rests on an invalid term"
-	case NoSession:
-		detail += "; the result rests on a session the context doesn't have"
-	case Unavailable:
-		detail += "; the result rests on a value the user's record doesn't have"
-	}
-	return reason, detail
-}
-
-// worse returns the more serious of a and b: Invalid, then NoSession, then
-// Unavailable, then a; ordinary reasons don't replace one another.
-func worse(a, b Reason) Reason {
+	detail := "either part may pass: "
 	switch {
-	case a == Invalid || b == Invalid:
-		return Invalid
-	case a == NoSession || b == NoSession:
-		return NoSession
-	case a == Unavailable || b == Unavailable:
-		return Unavailable
+	case !result:
+		detail += "neither passed"
+	case x.Result && y.Result:
+		detail += "both passed"
+	case x.Result:
+		detail += x.Text + " passed"
+	default:
+		detail += y.Text + " passed"
 	}
-	return a
+	return outcome(result), detail
 }
 
 func outcome(result bool) Reason {
@@ -288,16 +247,19 @@ func passes(ok bool) string {
 
 // explainTerm evaluates a term with EvalTerm and describes the values it
 // compared, read with the same parseTerm and measure, so the description
-// can't drift from the result. A term Parse found a problem with is false
-// without being evaluated, as EvalTerm would make it (see termProblem).
+// can't drift from the result. A term that lacks its context fails without
+// being evaluated, as in Eval.
 func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
-	if n.termDiag != "" {
-		return false, Invalid, n.termDiag + ", so it is always false"
+	t, _ := parseTerm(n.Text)
+	if reason, missing := lacking(t, ctx); missing {
+		if reason == NoSession {
+			return false, reason, "needs a session and there is none, so the whole string fails"
+		}
+		return false, reason, "the record has no sign-up date, so the account has no age and the whole string fails"
 	}
 	result := EvalTerm(n.Text, ctx)
 	reason := outcome(result)
 	u := ctx.User
-	t, _, _ := parseTerm(n.Text)
 	bare := t.op == "" && !t.ranged
 	hasFlag := func(flag string) string {
 		flags := u.Flags
@@ -369,7 +331,6 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 		default:
 			detail = compared("minutes left", m.have, "", t) + fmt.Sprintf(" (limit %d)", u.TimeLimit)
 			if ctx.Session == nil {
-				reason = NoSession
 				detail = "no session, so the call is taken to have just started: " + detail
 			}
 		}
@@ -396,14 +357,8 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 			detail = "no real name is set"
 		}
 	case "AGE":
-		m := measure(t, ctx)
-		if m.missing {
-			reason = Unavailable
-			detail = "the record has no sign-up date, so the account has no age and it is false"
-		} else {
-			detail = compared("account age", m.have, "", t) +
-				fmt.Sprintf(" (days since sign-up on %s, %s)", u.CreatedAt.In(ctx.location()).Format("2006-01-02"), ctx.location())
-		}
+		detail = compared("account age", measure(t, ctx).have, "", t) +
+			fmt.Sprintf(" (days since sign-up on %s, %s)", u.CreatedAt.In(ctx.location()).Format("2006-01-02"), ctx.location())
 	case "C":
 		detail = compared("the message conference", u.CurrentMsgConferenceID, "", t)
 	case "X":
@@ -429,9 +384,6 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 		detail = fmt.Sprintf("%s is %s %s-%s", now.Format("15:04"), in, from, to)
 	case "L", "A":
 		switch {
-		case ctx.Session == nil:
-			reason = NoSession
-			detail = "needs a session and there is none, so it is false"
 		case t.code == "L" && result:
 			detail = fmt.Sprintf("the connection is local (%s)", ctx.Session.RemoteAddr())
 		case t.code == "L":

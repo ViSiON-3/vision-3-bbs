@@ -87,22 +87,19 @@ var numericCodes = map[string]string{
 // 22:00 to 06:59, W5-1 Friday to Monday.
 func cyclic(code string) bool { return code == "H" || code == "W" }
 
-// isCompareRune reports whether r is part of a comparison or a range. These
-// characters were dropped before comparisons were added; the tokenizer still
-// drops them where they don't sit inside a term.
+// isCompareRune reports whether r is part of a comparison or a range. The
+// tokenizer takes them into a term only between term characters; anywhere
+// else they are unexpected characters.
 func isCompareRune(r rune) bool { return r == '<' || r == '>' || r == '=' || r == '-' }
 
-// parseTerm reads a term. problem says why it can't be evaluated ("" for a
-// term that can); strict marks a problem in a term that uses the comparison
-// characters, which made the whole string fail before comparisons were
-// added, so it still does. Every other problem leaves the term false, as it
-// always has.
-func parseTerm(text string) (t parsedTerm, problem string, strict bool) {
+// parseTerm reads a term. problem says why it can't be evaluated, "" for a
+// term that can; a string with such a term fails as a whole.
+func parseTerm(text string) (t parsedTerm, problem string) {
 	upper := strings.ToUpper(text)
 	if upper == "SYSOP" || upper == "COSYSOP" {
-		return parsedTerm{code: upper}, "", false
+		return parsedTerm{code: upper}, ""
 	}
-	strict = strings.ContainsFunc(text, isCompareRune)
+	compares := strings.ContainsFunc(text, isCompareRune)
 
 	// A readable name. A name that isn't followed by what it takes reads as
 	// the letter it starts with, as it always has: LEVEL alone is L with an
@@ -112,13 +109,13 @@ func parseTerm(text string) (t parsedTerm, problem string, strict bool) {
 	if n, ok := termNames[word]; ok {
 		switch {
 		case n.form == nameAlone && rest == "":
-			return parsedTerm{code: n.code}, "", false
+			return parsedTerm{code: n.code}, ""
 		case n.form == nameColon && strings.HasPrefix(rest, ":"):
-			return readValue(text, word, n.code, rest[1:], strict)
+			return readValue(text, word, n.code, rest[1:])
 		case n.form == nameCompare && rest != "" && strings.ContainsRune("<>=", rune(rest[0])):
 			return readNumber(text, word, n.code, rest)
-		case n.form == nameAlone && rest != "" && strict:
-			return parsedTerm{}, fmt.Sprintf("%q: %s takes nothing after it", text, word), true
+		case n.form == nameAlone && rest != "" && compares:
+			return parsedTerm{}, fmt.Sprintf("%q: %s takes nothing after it", text, word)
 		}
 	}
 
@@ -128,15 +125,15 @@ func parseTerm(text string) (t parsedTerm, problem string, strict bool) {
 	}
 	switch code {
 	case "F", "Z", "Y":
-		return readValue(text, code, code, value, strict)
+		return readValue(text, code, code, value)
 	case "L", "A", "V", "I":
 		// The argument is ignored, as it always has been.
-		if strict {
-			return parsedTerm{}, fmt.Sprintf("%q: %s takes no comparison", text, code), true
+		if compares {
+			return parsedTerm{}, fmt.Sprintf("%q: %s takes no comparison", text, code)
 		}
-		return parsedTerm{code: code}, "", false
+		return parsedTerm{code: code}, ""
 	}
-	return parsedTerm{}, fmt.Sprintf("%q: %s is not an ACS term", text, code), strict
+	return parsedTerm{}, fmt.Sprintf("%q: %s is not an ACS term", text, code)
 }
 
 // wordLen is the length of text's leading run of letters.
@@ -151,8 +148,7 @@ func wordLen(text string) int {
 
 // readNumber reads a numeric term's comparison and number or range. name is
 // how the term was written (S or LEVEL), for messages.
-func readNumber(text, name, code, arg string) (parsedTerm, string, bool) {
-	strict := strings.ContainsFunc(text, isCompareRune)
+func readNumber(text, name, code, arg string) (parsedTerm, string) {
 	t := parsedTerm{code: code}
 	for _, op := range []string{"<=", ">=", "<", ">", "="} {
 		if strings.HasPrefix(arg, op) {
@@ -160,8 +156,8 @@ func readNumber(text, name, code, arg string) (parsedTerm, string, bool) {
 			break
 		}
 	}
-	bad := func(msg string) (parsedTerm, string, bool) {
-		return parsedTerm{}, fmt.Sprintf("%q: %s", text, msg), strict
+	bad := func(msg string) (parsedTerm, string) {
+		return parsedTerm{}, fmt.Sprintf("%q: %s", text, msg)
 	}
 	if arg != "" && strings.ContainsRune("<>=", rune(arg[0])) {
 		return bad("the comparison is one of = < <= > >=")
@@ -196,13 +192,13 @@ func readNumber(text, name, code, arg string) (parsedTerm, string, bool) {
 	if ranged && t.lo > t.hi && !cyclic(code) {
 		return bad(fmt.Sprintf("a %s range runs from low to high (%d-%d); only the hour and weekday wrap around", name, t.hi, t.lo))
 	}
-	return t, "", false
+	return t, ""
 }
 
 // readValue reads the argument of F, Z and Y, or of their names.
-func readValue(text, name, code, arg string, strict bool) (parsedTerm, string, bool) {
-	bad := func(msg string) (parsedTerm, string, bool) {
-		return parsedTerm{}, fmt.Sprintf("%q: %s", text, msg), strict
+func readValue(text, name, code, arg string) (parsedTerm, string) {
+	bad := func(msg string) (parsedTerm, string) {
+		return parsedTerm{}, fmt.Sprintf("%q: %s", text, msg)
 	}
 	switch code {
 	case "F":
@@ -231,7 +227,7 @@ func readValue(text, name, code, arg string, strict bool) (parsedTerm, string, b
 			return bad(name + " needs a range written hh:mm/hh:mm")
 		}
 	}
-	return parsedTerm{code: code, value: arg}, "", false
+	return parsedTerm{code: code, value: arg}, ""
 }
 
 // measured is a caller's value for a numeric term.
@@ -242,9 +238,6 @@ type measured struct {
 	unlimited bool
 	// none: there is no value (E before the first call), so the term fails.
 	none bool
-	// missing: the record lacks what the value is worked out from (AGE
-	// without a creation date), so the term fails; the tester says why.
-	missing bool
 }
 
 // measure reads the caller's value for a numeric term.
@@ -296,8 +289,8 @@ func measure(t parsedTerm, ctx Context) measured {
 	case "DOWNLOADS":
 		return measured{have: u.NumDownloads}
 	case "AGE":
-		if u.CreatedAt.IsZero() {
-			return measured{none: true, missing: true}
+		if u.CreatedAt.IsZero() { // lacking stops the evaluation first
+			return measured{none: true}
 		}
 		return measured{have: AccountAge(u.CreatedAt, ctx.now(), ctx.location())}
 	}

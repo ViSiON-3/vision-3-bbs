@@ -40,12 +40,13 @@ func TestUserDataTerms(t *testing.T) {
 		}
 	}
 
-	// A user with no sign-up date has no age: AGE fails whatever the test.
+	// A user with no sign-up date has no age: AGE fails the whole string
+	// whatever the test, '!' included.
 	noDate := *u
 	noDate.CreatedAt, noDate.RealName = time.Time{}, "  "
 	c := ctx
 	c.User = &noDate
-	for _, acs := range []string{"AGE>=0", "AGE<99999", "REALNAME"} {
+	for _, acs := range []string{"AGE>=0", "AGE<99999", "!AGE>=0", "SYSOP|AGE>=0", "LEVEL>=20|AGE>=0", "REALNAME"} {
 		if Check(acs, c) {
 			t.Errorf("Check(%q) passed for a user with no sign-up date and a blank real name", acs)
 		}
@@ -54,7 +55,7 @@ func TestUserDataTerms(t *testing.T) {
 	if x.Reason != Unavailable || !strings.Contains(x.Root.Detail, "no sign-up date") {
 		t.Errorf("Explain(AGE) for no date = %s, %q", x.Reason, x.Root.Detail)
 	}
-	if r := strings.Join(Render(x, 79), "\n"); !strings.Contains(r, "resting on a value the user's record doesn't have") {
+	if r := strings.Join(Render(x, 79), "\n"); !strings.Contains(r, "a part needs a value the user's record doesn't have") {
 		t.Errorf("Render:\n%s", r)
 	}
 }
@@ -97,8 +98,8 @@ func TestUserDataNamesParse(t *testing.T) {
 		"REALNAME=1":  true,
 		"DOWNLOADS<x": true,
 	} {
-		if p := termProblem(term); (p != "") != wantProblem {
-			t.Errorf("termProblem(%q) = %q, want a problem: %v", term, p, wantProblem)
+		if _, p := parseTerm(term); (p != "") != wantProblem {
+			t.Errorf("parseTerm(%q) = %q, want a problem: %v", term, p, wantProblem)
 		}
 	}
 }

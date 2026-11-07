@@ -31,7 +31,9 @@ func testerContexts() []Tester {
 
 // TestExplainAgreesWithCheck is the tester's guarantee: for the same string
 // and context, Explain's result is Check's, and every step's result is
-// what evaluating that part on its own gives.
+// what evaluating that part on its own gives: a part with a term under it
+// that lacks its context fails, and otherwise the operators combine as
+// usual.
 func TestExplainAgreesWithCheck(t *testing.T) {
 	for _, s := range oracleCases() {
 		for _, u := range oracleUsers() {
@@ -52,12 +54,13 @@ func TestExplainAgreesWithCheck(t *testing.T) {
 func checkSteps(t *testing.T, s string, st *Step, ctx Context) {
 	t.Helper()
 	var want bool
+	lacks := func(c *Step) bool { return c.Reason == NoSession || c.Reason == Unavailable }
 	switch st.Kind {
 	case TermNode:
 		want = EvalTerm(st.Text, ctx)
 	case NotNode:
 		checkSteps(t, s, st.X, ctx)
-		want = !st.X.Result
+		want = !st.X.Result && !lacks(st.X)
 	case AndNode:
 		checkSteps(t, s, st.X, ctx)
 		checkSteps(t, s, st.Y, ctx)
@@ -65,7 +68,7 @@ func checkSteps(t *testing.T, s string, st *Step, ctx Context) {
 	default:
 		checkSteps(t, s, st.X, ctx)
 		checkSteps(t, s, st.Y, ctx)
-		want = st.X.Result || st.Y.Result
+		want = (st.X.Result || st.Y.Result) && !lacks(st.X) && !lacks(st.Y)
 	}
 	if st.Result != want {
 		t.Fatalf("Explain(%q): step %q = %v, want %v", s, st.Text, st.Result, want)
@@ -112,26 +115,19 @@ func TestExplainSteps(t *testing.T) {
 			"S99|FA":      {true, Match, "FA passed"},
 		}},
 		{"!(FA|FB)", nil, false, NoMatch, map[string]want{"!(FA|FB)": {false, NoMatch, "FA|FB passed, so this fails"}}},
-		// An invalid term is false, so ! makes it pass, as at runtime.
-		{"!Q", nil, true, Invalid, map[string]want{
-			"!Q": {true, Invalid, "stricter ACS check will deny it"},
-			"Q":  {false, Invalid, "Q is not an ACS term"},
-		}},
-		{"S10|Q", nil, true, Match, map[string]want{"S10|Q": {true, Match, "S10 passed"}}},
-		{"S10&!Q", nil, true, Invalid, map[string]want{"S10&!Q": {true, Invalid, "rests on an invalid term"}}},
-		{"S50&!Q", nil, false, NoMatch, map[string]want{"S50&!Q": {false, NoMatch, "S50 failed"}}},
-		{"Sx", nil, false, Invalid, map[string]want{"Sx": {false, Invalid, "S needs a whole number"}}},
-		{"FAB|S10", nil, true, Match, map[string]want{"FAB": {false, Invalid, "exactly one flag"}}},
-		// The dropped @ is reported; the tree is S10 alone.
-		{"S10@", nil, true, Match, map[string]want{"S10": {true, Match, "at least 10"}}},
-		// Session terms without a session, and with one.
+		// Session terms without a session fail the whole string, and with
+		// one are checked as usual.
 		{"L", nil, false, NoSession, map[string]want{"L": {false, NoSession, "needs a session"}}},
-		{"!A", nil, true, NoSession, map[string]want{"!A": {true, NoSession, "rests on a session"}}},
+		{"!A", nil, false, NoSession, map[string]want{"!A": {false, NoSession, "A can't be checked here"}}},
+		{"S10|L", nil, false, NoSession, map[string]want{
+			"S10|L": {false, NoSession, "L can't be checked here, so this fails whatever the other part says"},
+			"S10":   {true, Match, "at least 10"},
+		}},
 		{"A&!L", session, true, Match, map[string]want{
 			"A": {true, Match, "has a terminal"},
 			"L": {false, NoMatch, "not local"},
 		}},
-		{"T30", nil, true, NoSession, map[string]want{"T30": {true, NoSession, "taken to have just started: minutes left 60 is at least 30"}}},
+		{"T30", nil, true, Match, map[string]want{"T30": {true, Match, "taken to have just started: minutes left 60 is at least 30"}}},
 		{"T30", session, false, NoMatch, map[string]want{"T30": {false, NoMatch, "minutes left 10 is below 30"}}},
 		// Clock terms at 22:00 on a Wednesday.
 		{"H22&W3", nil, true, Match, map[string]want{"H22": {true, Match, "the hour is 22"}, "W3": {true, Match, "Wednesday"}}},
@@ -219,6 +215,11 @@ func TestExplainWholeString(t *testing.T) {
 		{"S20&", true, false, Invalid},
 		{"!!FA", true, false, Invalid},
 		{"T30|H25-3", true, false, Invalid},
+		// Any problem fails the string, and ! can't make it pass.
+		{"!Q", true, false, Invalid},
+		{"S10|!Q", true, false, Invalid},
+		{"FAB|S10", true, false, Invalid},
+		{"S10@", true, false, Invalid},
 	} {
 		c := ctx
 		if !tc.user {
@@ -230,8 +231,8 @@ func TestExplainWholeString(t *testing.T) {
 		}
 	}
 	x := Explain("S10@&s5", ctx)
-	if len(x.Ignored) != 1 || x.Ignored[0].Column() != 4 {
-		t.Errorf("Ignored = %v, want the @ at column 4", x.Ignored)
+	if len(x.Diagnostics) != 1 || x.Diagnostics[0].Column() != 4 {
+		t.Errorf("Diagnostics = %v, want the @ at column 4", x.Diagnostics)
 	}
 }
 
@@ -261,45 +262,42 @@ func TestRender(t *testing.T) {
 		tester Tester
 		want   string
 	}{
-		{"S50&(FA|!Q)", Tester{At: at22}, `User:       Bob (#5), level 20
-Session:    none: L and A fail, and T counts the call as just started
+		{"S50&(FA|!FB)", Tester{At: at22}, `User:       Bob (#5), level 20
+Session:    none: L or A fails the string, T as if the call just started
 Time:       Wed 2026-11-04 22:00
-Expression: S50&(FA|!Q)
-            ---  ++  ?
+Expression: S50&(FA|!FB)
+            ---  ++  --
 Result:     FAIL
 
-  FAIL            S50&(FA|!Q)  both parts must pass: S50 failed
-  FAIL              S50        level 20 is below 50
-  PASS              FA|!Q      either part may pass: both passed
-  PASS                FA       has flag A (flags: AC)
-  PASS invalid        !Q       Q failed, so this passes; that rests on an
-                               invalid term, and a stricter ACS check will deny
-                               it
-  FAIL invalid          Q      "Q": Q is not an ACS term, so it is always false
+  FAIL            S50&(FA|!FB)  both parts must pass: S50 failed
+  FAIL              S50         level 20 is below 50
+  PASS              FA|!FB      either part may pass: both passed
+  PASS                FA        has flag A (flags: AC)
+  PASS                !FB       FB failed, so this passes
+  FAIL                  FB      doesn't have flag B (flags: AC)
 
 A pass means this expression passed for this user in this context. It doesn't
 mean every access check on a resource passes: a conference, area or door can
 have rules of its own.`},
 		{"T30|H25-3", Tester{At: at22}, `User:       Bob (#5), level 20
-Session:    none: L and A fail, and T counts the call as just started
+Session:    none: L or A fails the string, T as if the call just started
 Time:       Wed 2026-11-04 22:00
 Expression: T30|H25-3
                 XXXXX
-Result:     FAIL: the string can't be read as a whole
+Result:     FAIL: the string has a problem
 
-the string can't be read as a whole, so it fails for everyone and '!' can't
-make it pass
+the string has a problem, so it fails for everyone and '!' can't make it pass
 
   error at column 5: "H25-3": H needs an hour from 0 to 23
 
 A pass means this expression passed for this user in this context. It doesn't
 mean every access check on a resource passes: a conference, area or door can
 have rules of its own.`},
-		{"T30&A|S10@", Tester{At: at22, Session: &TesterSession{Local: true, Elapsed: 40 * time.Minute}}, `User:       Bob (#5), level 20
+		{"T30&A|S10", Tester{At: at22, Session: &TesterSession{Local: true, Elapsed: 40 * time.Minute}}, `User:       Bob (#5), level 20
 Session:    local call, no terminal, 40 min in, 0 min chat credit
 Time:       Wed 2026-11-04 22:00
-Expression: T30&A|S10@
-            --- - +++^
+Expression: T30&A|S10
+            --- - +++
 Result:     PASS
 
   PASS            T30&A|S10  either part may pass: S10 passed
@@ -308,8 +306,22 @@ Result:     PASS
   FAIL                A      the connection has no terminal
   PASS              S10      level 20 is at least 10
 
-  warning at column 10: unexpected character '@' is ignored and ends the term
-  before it
+A pass means this expression passed for this user in this context. It doesn't
+mean every access check on a resource passes: a conference, area or door can
+have rules of its own.`},
+		{"S10|!L", Tester{At: at22}, `User:       Bob (#5), level 20
+Session:    none: L or A fails the string, T as if the call just started
+Time:       Wed 2026-11-04 22:00
+Expression: S10|!L
+            +++  ~
+Result:     FAIL: a part needs a session the context doesn't have
+
+  FAIL no session S10|!L  !L can't be checked here, so this fails whatever the
+                          other part says
+  PASS              S10   level 20 is at least 10
+  FAIL no session   !L    L can't be checked here, so this fails too
+  FAIL no session     L   needs a session and there is none, so the whole
+                          string fails
 
 A pass means this expression passed for this user in this context. It doesn't
 mean every access check on a resource passes: a conference, area or door can

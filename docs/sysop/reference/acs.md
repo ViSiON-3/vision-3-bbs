@@ -17,7 +17,7 @@ The examples on this page are checked by `internal/menu/acs_reference_test.go`.
 | Message areas | `acs_read`, `acs_write` in `message_areas.json` |
 | File areas | `acs_list`, `acs_upload`, `acs_download` in `file_areas.json` |
 | Conferences | `acs` in `conferences.json` |
-| Doors | `acs` in `doors.json`, together with `min_access_level`; held to the [strict rule](#doors-the-strict-rule) |
+| Doors | `acs` in `doors.json`, together with `min_access_level` |
 | Door categories | `acs` in `doorCategories` (config.json) |
 | Menu art | `{{acs}}...{{/}}` [conditional regions](menus/menu-system.md#conditional-regions-acs) |
 | QWK | `acs_write` gates each reply in an uploaded REP packet |
@@ -139,7 +139,9 @@ They take a comparison or a range like the numeric names
 `AGE` is whole calendar days since the user signed up, counted in the
 board's `timezone` setting (or `VISION3_TIMEZONE`, then `TZ`): 0 on the day
 of sign-up, 1 from the next midnight. A user with no sign-up date on record
-has no age, so `AGE` fails for them whatever the comparison. `vision3
+has no age, so for them a string with `AGE` in it fails as a whole, whatever
+the comparison and whatever its other parts say (see
+[Problems and missing context](#problems-and-missing-context)). `vision3
 doctor` lists such users under **user sign-up dates**.
 
 ### Ratios
@@ -182,8 +184,10 @@ start runs past midnight: `Y22:00/06:00` is 10 pm through 6:00 am.
   whether it shows ANSI.
 
 Checked without a session (default areas at login, replies uploaded through
-the QWK API, conditional regions in menu art), both fail — so `!L` passes
-there.
+the QWK API, conditional regions in menu art), a string with `L` or `A` in it
+fails as a whole, whatever its other parts say: `L`, `!L` and `SYSOP|L` all
+fail there, for sysops too (see
+[Problems and missing context](#problems-and-missing-context)).
 
 ## Operators
 
@@ -204,55 +208,67 @@ Spaces around operators are allowed: `S20 & FA`.
 
 ## Syntax
 
-The parser is lenient, and some mistakes don't do what they look like:
-
 - **Terms need an operator between them.** `S20FA` is read as `S` with the
-  argument `20FA` and fails. `S20 FA` (a space, no operator) fails.
-- **Characters other than letters, digits, `/`, `:`, operators, parentheses
-  and spaces are dropped**, and a dropped character ends the term it is in.
-  `S@20` becomes `S` and `20` with no operator between them, so it fails for
-  every level. `F(A)` becomes `F` and `A`, and fails even for a user with
-  flag A — write `FA`. The comparison characters `<`, `>`, `=` and `-` are
-  part of a term only between term characters; elsewhere they are dropped
-  too, so `S20-` is `S20`.
-- **A comparison that can't be read fails the whole string**, like a trailing
-  operator: `LEVEL=99-20`, `S<<20`, `S<20-30` (a range takes `=` or nothing)
-  and `H25-3` all fail for everyone, and `!` can't make them pass.
-- **Two `!` in a row are an error**: `!!FA` fails. Use `FA`.
-- **A string that can't be read as a whole fails**: a trailing operator
-  (`S20&`), an unclosed parenthesis (`(S20`), or only spaces.
+  argument `20FA`, which isn't a number. `S20 FA` (a space, no operator) is
+  two terms with nothing between them.
+- **Only letters, digits, `/`, `:`, operators, parentheses and spaces are
+  allowed.** The comparison characters `<`, `>`, `=` and `-` are allowed
+  only inside a term, between term characters: `S<20` and `H8-17` are
+  fine, `S20-` is not. Any other character is an error: `S@20`, `F(A)`
+  (write `FA`) and a stray `-` all fail.
+- **A comparison has to read cleanly**: `LEVEL=99-20`, `S<<20`, `S<20-30`
+  (a range takes `=` or nothing) and `H25-3` are errors.
+- **Every term has to be one the board knows, with a value it can use**:
+  `Q`, `Sx`, `FAB`, `H25` and `Y8/17` are errors.
+- **Two `!` in a row are an error**: `!!FA`. Use `FA`.
+- **The string has to read as a whole**: a trailing operator (`S20&`), an
+  unclosed parenthesis (`(S20`), or only spaces are errors.
 
-### Failing terms and `!`
+### Problems and missing context
 
-A term that fails because it is malformed (an unknown letter, a bad
-argument, a session term with no session) is false like any other failing
-term, and `!` turns false into true. `!Q`, `!Sx` and, without a session,
-`!L` all pass. Write negated terms carefully. A door's `acs` is the
-exception: see [Doors: the strict rule](#doors-the-strict-rule).
+A string with any of the problems above fails for every caller, sysops
+included, and `!` can't make it pass: `!Q`, `S10|!Q` and `S20-` fail for
+everyone. The same rule holds wherever the string is used: menus, commands,
+areas, conferences, doors, door categories, menu art and QWK.
 
-A string that fails as a whole (the cases in [Syntax](#syntax) above)
-fails outright: `!` can't rescue it.
+A term that needs something the check doesn't have fails the whole string
+in the same way, whatever the other parts say:
 
-A string that read as a whole before comparisons were added keeps the
-meaning it had: the comparison characters in it are still dropped. Only a
-string that failed for everyone is read with comparisons. So `S<20` (which
-used to fail as a whole) is now "level below 20", while `|S<20` (which the
-stray `|` let read as `S|20`) still means what it did. `vision3 doctor`
-reports the dropped characters in such a string.
+- `L` and `A` checked without a session (see
+  [Terms that need a session](#terms-that-need-a-session));
+- `AGE` for a user with no sign-up date.
 
-Errors and bad terms are logged (at `ERROR` and `WARN`) when a caller hits
-them, and once when the board starts; see
-[Checking your strings](#checking-your-strings). An ignored character is
-logged at `WARN` the first time a caller's check reads the string.
+So `!L`, `SYSOP|L` and `!AGE>=7` fail where those values are missing,
+rather than letting `!` or another branch pass. With the session or the
+date there, they are checked as usual. Other terms keep their documented
+outcomes without a session: `T` counts the call as just started (see
+[Time left](#time-left)).
 
-### Doors: the strict rule
+Every problem is logged at `ERROR` once when the board starts, and once the
+first time a caller's check reads a string the startup scan doesn't cover;
+see [Checking your strings](#checking-your-strings).
 
-A door's `acs` in `doors.json` must read cleanly. Anything `vision3 doctor`
-reports for it, a failure or a warning, denies the door to every caller,
-sysops included: `!Q`, `S20&`, `H25` and `S@20` all lock the door. A blank
-or all-space `acs` is no rule. The config editor refuses such a string in a
-door's **ACS** field, naming the column, and doctor reports it as a
-**FAIL**. Every other ACS string keeps the lenient behaviour above.
+### Strings that changed meaning
+
+Up to v0.9.7, a term with an unknown letter or a bad argument was false, so
+`!` made it pass, and a character the parser didn't know was dropped,
+leaving the rest of the string working. A door's `acs` was the only place
+held to the strict rule. Every string `vision3 doctor` reported as a
+**WARN** before is now a **FAIL**, and denies every caller:
+
+| String | Before | Now |
+|---|---|---|
+| `!Q` | everyone | no one |
+| `S10\|!Q` | everyone | no one |
+| `H25\|S50` | level 50 and up | no one |
+| `S20-` | level 20 and up | no one |
+| `S50@` | level 50 and up | no one |
+| `!L`, without a session | everyone | no one |
+| `SYSOP\|L`, without a session | sysops | no one |
+
+Run `vision3 doctor` and fix what its **Access control** section lists.
+A string that read cleanly before, with no session term checked outside a
+call, means what it did.
 
 ## Checking your strings
 
@@ -263,24 +279,18 @@ each problem:
 
 ```text
 [FAIL]  ACS: menus/v3/cfg/MAIN.CFG  command 2 ("X"), ACS "S255&": column 5: '&' needs a term on each side
-[WARN]  ACS: configs/message_areas.json  area SYSOP, acs_write "!Q": column 2: "Q": Q is not an ACS term; it is false, and the '!' before it makes that part pass for everyone
+[FAIL]  ACS: configs/message_areas.json  area SYSOP, acs_write "!Q": column 2: "Q": Q is not an ACS term
 ```
 
-- **FAIL** (doctor exits 2): the string can't be read as a whole (see
-  [Syntax](#syntax)), so it denies every caller; or it is a door's `acs`
-  with any problem at all, which denies the door to every caller (see
-  [Doors: the strict rule](#doors-the-strict-rule)).
-- **WARN** (doctor exits 1): the string works, but not as it reads — a term
-  that is always false (an unknown letter or a bad argument), or a character
-  that is ignored. A future, stricter ACS check will change what these
-  strings do, so fix them now.
+Every finding is a **FAIL** (doctor exits 2): the string denies every
+caller until it is fixed (see
+[Problems and missing context](#problems-and-missing-context)).
 
 The BBS runs the same check when it starts and after it reloads a changed
-config file, and logs each problem once while it stays (failures at
-`ERROR`, warnings at `WARN`) with the same text; a problem that is fixed and
-later comes back is logged again. It never refuses to start over a bad
-string and never changes one: a bad string keeps working, or failing, as it
-always has.
+config file, and logs each problem once at `ERROR` while it stays, with the
+same text; a problem that is fixed and later comes back is logged again. It
+never refuses to start over a bad string and never changes one: a bad string
+denies every caller until it is fixed.
 
 ## Testing a string for a user
 
@@ -295,8 +305,9 @@ The context is the tester's own, shown on screen with every result. It
 starts as **no session** and **the current time**: the tester never uses your
 own call as the selected user's. You can change both:
 
-- **Session.** With none, `L` and `A` fail and `T` counts the call as just
-  started, as for the checks the board makes outside a call (see
+- **Session.** With none, a string with `L` or `A` in it fails and `T`
+  counts the call as just started, as for the checks the board makes
+  outside a call (see
   [Terms that need a session](#terms-that-need-a-session)). Or set a made-up
   call: local or not (for `L`), with a terminal or not (for `A`), how many
   minutes it has run and how much chat time was credited back (for `T`).
@@ -307,40 +318,56 @@ For a level-20 user with flags A and C, no session, at 22:00:
 
 ```text
 User:       Bob (#5), level 20
-Session:    none: L and A fail, and T counts the call as just started
+Session:    none: L or A fails the string, T as if the call just started
 Time:       Wed 2026-11-04 22:00
-Expression: S50&(FA|!Q)
-            ---  ++  ?
+Expression: S50&(FA|!FB)
+            ---  ++  --
 Result:     FAIL
 
-  FAIL            S50&(FA|!Q)  both parts must pass: S50 failed
-  FAIL              S50        level 20 is below 50
-  PASS              FA|!Q      either part may pass: both passed
-  PASS                FA       has flag A (flags: AC)
-  PASS invalid        !Q       Q failed, so this passes; that rests on an
-                               invalid term, and a stricter ACS check will deny
-                               it
-  FAIL invalid          Q      "Q": Q is not an ACS term, so it is always false
+  FAIL            S50&(FA|!FB)  both parts must pass: S50 failed
+  FAIL              S50         level 20 is below 50
+  PASS              FA|!FB      either part may pass: both passed
+  PASS                FA        has flag A (flags: AC)
+  PASS                !FB       FB failed, so this passes
+  FAIL                  FB      doesn't have flag B (flags: AC)
 
 A pass means this expression passed for this user in this context. It doesn't
 mean every access check on a resource passes: a conference, area or door can
 have rules of its own.
 ```
 
-The line under the expression marks each term: `+` passed, `-` failed, `?`
-invalid (an unknown letter or a bad argument), `~` needs a session the
-context doesn't have, or a value the user's record doesn't (`AGE` with no
-sign-up date). `^` marks a character that was dropped, and `X` the
-place where a string that can't be read as a whole goes wrong; such a string
-shows its problems instead of the list of parts.
+The line under the expression marks each term: `+` passed, `-` failed, `~`
+needs a session the context doesn't have, or a value the user's record
+doesn't (`AGE` with no sign-up date).
 
-Each part says whether it passed and, when the result isn't an ordinary
-pass or fail, whether it rests on an invalid term, a missing session or a
-value the record lacks. A
-part rests on one only when every part that decided it does: `S10|Q` passes on
-`S10` alone, but `S10&!Q` passes only because `!` turns the invalid `Q`
-into a pass. The tester shows what the board does today, so `!Q` passes in it
-too; a future, stricter ACS check will deny it.
+A part that has such a term under it fails, and says so, whatever its other
+part did. `S10|!L` with no session:
+
+```text
+Expression: S10|!L
+            +++  ~
+Result:     FAIL: a part needs a session the context doesn't have
+
+  FAIL no session S10|!L  !L can't be checked here, so this fails whatever the
+                          other part says
+  PASS              S10   level 20 is at least 10
+  FAIL no session   !L    L can't be checked here, so this fails too
+  FAIL no session     L   needs a session and there is none, so the whole
+                          string fails
+```
+
+A string with a problem (see [Syntax](#syntax)) shows its problems instead
+of the list of parts, with `X` under each:
+
+```text
+Expression: S50&(FA|!Q)
+                     X
+Result:     FAIL: the string has a problem
+
+the string has a problem, so it fails for everyone and '!' can't make it pass
+
+  error at column 10: "Q": Q is not an ACS term
+```
 
 The tester and the board evaluate a string with the same code, so for the
 same user, session and time they always agree. A pass is about this one

@@ -324,10 +324,7 @@ What each section covers:
 - **Access control** — every ACS string the board declares, in menus and
   commands (stock and overlay), `{{acs}}` regions in menu art, message and
   file areas, conferences, doors, door categories and FTN auto-create. A
-  string that can't be read, and so denies every caller, is a `FAIL`; one
-  with a term that is always false or a character that is ignored is a
-  `WARN`, except in a door's `acs`, where any problem denies the door to
-  everyone and is a `FAIL`. See
+  string with any problem denies every caller and is a `FAIL`. See
   [Checking your strings](reference/acs.md#checking-your-strings).
 
 ### Safe Fixes (`--fix`)
