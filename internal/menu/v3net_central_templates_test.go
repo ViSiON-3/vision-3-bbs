@@ -113,3 +113,19 @@ func TestLastCallersAllWithoutNetworkIsLocal(t *testing.T) {
 		}
 	}
 }
+
+// A published value is drawn as written even when it looks like a token:
+// it is never expanded as one, in whatever order the codes are filled.
+func TestCentralTemplateValuesAreNotTokens(t *testing.T) {
+	tpl := centralTemplate{mid: "@UN:12@|@BB:10@|@NW@"}
+	for range 50 {
+		out := renderWhoTemplate(tpl, []centralWhoRow{{handle: "@BB:50@", board: "@UN:9999@", network: "@NS@"}}, 1, nil)
+		if out != "@BB:50@     |@UN:9999@ |@NS@\r\n" {
+			t.Fatalf("value expanded as a token: %q", out)
+		}
+	}
+	// Width forms and alignment still apply to the template's own tokens.
+	if got := fillCentralTokens("[@UN|R6@][@BB######@]\x00", map[string]string{"UN": "Al", "BB": "Beta"}); got != "[    Al][Beta      ]\x00" {
+		t.Errorf("filled %q", got)
+	}
+}

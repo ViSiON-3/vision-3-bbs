@@ -67,7 +67,7 @@ The full list of step names, and the `RUN:` commands they map to, is also in the
 
 Displays the last callers list. `data` takes the same arguments as `RUN:LASTCALLERS`: a row count, and `--all` or `--network`.
 
-The stock sequence uses `20 --all`, the same combined list as the main menu's `W`: this board's callers and those shared by [V3Net](../v3net/central.md#whos-online-and-last-callers) boards together, each row flagged `local` or with its network's name, laid out by the `LASTNET` templates. While no network shares Last Callers (V3Net off, or the feature not offered), it is the local list from the `LASTCALL` templates (`LASTCALL.TOP`, `LASTCALL.MID`, `LASTCALL.BOT`), as before.
+The stock sequence uses `20 --all`, the same combined list as the main menu's `W`: this board's callers and those shared by [V3Net](v3net/central.md#whos-online-and-last-callers) boards together, each row flagged `local` or with its network's name, laid out by the `LASTNET` templates. While no network shares Last Callers (V3Net off, or the feature not offered), it is the local list from the `LASTCALL` templates (`LASTCALL.TOP`, `LASTCALL.MID`, `LASTCALL.BOT`), as before.
 
 ```json
 {"command": "LASTCALLS", "data": "20 --all"}

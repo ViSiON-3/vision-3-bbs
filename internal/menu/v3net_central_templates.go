@@ -2,6 +2,8 @@ package menu
 
 import (
 	"log/slog"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -75,14 +77,29 @@ func (t centralTemplate) rowsThatFit(termHeight, footer int) int {
 	return max(free/per, 1)
 }
 
-// fillCentralTokens fills each @CODE@ token in s from vals. A value is cut
-// to one line first: it may be another board's text.
+// fillCentralTokens fills each @CODE@ token in s from vals, in every form
+// replaceMenuATCode takes. A value is cut to one line first: it may be
+// another board's text.
+//
+// The tokens are found in one pass over the template, and each is filled
+// on its own, so a value is never read again for tokens: a handle written
+// as "@BB:9999@" is drawn as those characters, not as a padded board name,
+// whatever order the codes are in.
 func fillCentralTokens(s string, vals map[string]string) string {
-	b := []byte(s)
-	for code, v := range vals {
-		b = replaceMenuATCode(b, code, ansi.OneLine(v))
+	if len(vals) == 0 {
+		return s
 	}
-	return string(b)
+	codes := make([]string, 0, len(vals))
+	for code := range vals {
+		codes = append(codes, regexp.QuoteMeta(code))
+	}
+	// Longest first, so @LEGEND@ is not read as a shorter code.
+	sort.Slice(codes, func(i, j int) bool { return len(codes[i]) > len(codes[j]) })
+	pat := regexp.MustCompile(`@(` + strings.Join(codes, "|") + `)(?:\|[LRC]\d*)?(?::\d+|#+)?@`)
+	return pat.ReplaceAllStringFunc(s, func(token string) string {
+		code := pat.FindStringSubmatch(token)[1]
+		return string(replaceMenuATCode([]byte(token), code, ansi.OneLine(vals[code])))
+	})
 }
 
 // endLine returns s ending in a line break.
