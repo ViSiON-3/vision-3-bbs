@@ -247,6 +247,19 @@ func parseLastCallersArgs(args string) (limit int, mode lastCallersMode) {
 	return limit, mode
 }
 
+// centralLastCallsNetworks names the networks whose Last Callers this
+// board offers and the hub serves; none when V3Net is off.
+func centralLastCallsNetworks(e *MenuExecutor) []string {
+	if e.V3NetCentral == nil {
+		return nil
+	}
+	var networks []string
+	for _, n := range centralActivityNetworks(e.V3NetCentral, protocol.CentralKindLastCallers) {
+		networks = append(networks, n.Network)
+	}
+	return networks
+}
+
 // runV3NetCentralLastCallers is network Last Callers as its own command:
 // args is an optional count and --all to include this board's callers.
 func runV3NetCentralLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
@@ -300,12 +313,7 @@ func runCentralLastCallers(c *cmdCtx, limit int, includeLocal bool) (*user.User,
 		return nil, "", nil
 	}
 	title := "Last Callers"
-	var networks []string
-	if e.V3NetCentral != nil {
-		for _, n := range centralActivityNetworks(e.V3NetCentral, protocol.CentralKindLastCallers) {
-			networks = append(networks, n.Network)
-		}
-	}
+	networks := centralLastCallsNetworks(e)
 	if len(networks) == 0 && !includeLocal {
 		msg := "|08Network Last Callers is not available on any network.|07"
 		if e.V3NetCentral == nil {
@@ -368,11 +376,13 @@ func runCentralLastCallers(c *cmdCtx, limit int, includeLocal bool) (*user.User,
 		if includeLocal {
 			toggle = "Hide this board's callers"
 		}
-		footer := "|08  [|15A|08] " + toggle
+		// With no network to show, there is nothing to toggle or refresh:
+		// only the way out is offered.
+		footer := "|08 "
 		if len(networks) > 0 {
-			footer += "  [|15R|08] Refresh"
+			footer += " [|15A|08] " + toggle + "  [|15R|08] Refresh "
 		}
-		footer += "  [|15any key|08] Continue|07"
+		footer += " [|15any key|08] Continue|07"
 		buf.Write(ansi.ReplacePipeCodes([]byte(v3netRule(termWidth))))
 		buf.WriteString(clipColumns(string(ansi.ReplacePipeCodes([]byte(footer))), termWidth-1, outputMode))
 		terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
@@ -389,12 +399,15 @@ func runCentralLastCallers(c *cmdCtx, limit int, includeLocal bool) (*user.User,
 		}
 		switch key {
 		case 'a', 'A':
-			if len(networks) == 0 && includeLocal {
-				// Nothing but this board's callers to show.
+			if len(networks) == 0 {
+				// Not offered: nothing but this board's callers to show.
 				return nil, "", nil
 			}
 			includeLocal = !includeLocal
 		case 'r', 'R':
+			if len(networks) == 0 {
+				return nil, "", nil
+			}
 			fetch(true)
 		default:
 			return nil, "", nil

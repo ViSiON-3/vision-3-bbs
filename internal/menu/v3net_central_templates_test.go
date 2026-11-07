@@ -93,3 +93,23 @@ func TestCentralTemplateRowsThatFit(t *testing.T) {
 		t.Errorf("rows %d on a tiny screen, want at least 1", got)
 	}
 }
+
+// With no network sharing calls, LASTCALLERS --all is the local screen,
+// laid out as LASTCALL, so a stock W on a board without V3Net is unchanged.
+func TestLastCallersAllWithoutNetworkIsLocal(t *testing.T) {
+	for name, central := range map[string]V3NetCentralProvider{
+		"no V3Net":    nil,
+		"feature off": &centralFake{nets: []CentralNetworkInfo{{Network: "testnet", Enabled: true, SupportKnown: true, Supported: true}}},
+	} {
+		env := newMenuEnv(t)
+		seedLastCallers(t, env)
+		env.e.V3NetCentral = central
+		r := env.runCmd("LASTCALLERS", env.caller, "20 --all", "\r")
+		if r.err != nil {
+			t.Fatal(r.err)
+		}
+		if !r.has("Total Users", "Alpha") || r.has("local = this board", "Show this board's callers") {
+			t.Errorf("%s: not the local screen:\n%s", name, r.text())
+		}
+	}
+}

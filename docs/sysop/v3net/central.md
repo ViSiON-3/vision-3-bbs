@@ -307,11 +307,12 @@ the network's hub, whatever your callers chose, and the feed is not shown
 on your board. Turning it off withdraws what your board published, at
 once, as the subscription reloads.
 
-On the stock main menu, `W` is this board's Last Callers, as before, and
-`/L` **V3Net Callers** beside it is the network's (`LASTCALLERS 20
---network`). `LASTCALLERS 20 --all` shows both together, each row flagged
-`local` or with the network's name, and `A` on either screen switches
-between them. The Central menu has both feeds as `W` and `L`; see
+On the stock main menu, `W` shows this board's callers and the network's
+together (`LASTCALLERS 20 --all`), each row flagged `local` or with the
+network's name, and `/L` **V3Net Callers** beside it the network's alone
+(`LASTCALLERS 20 --network`); `A` on either screen switches between them.
+While your board offers Last Callers on no network, `W` is the plain local
+screen, with no `A` or `R` keys, exactly as before. The Central menu has both feeds as `W` and `L`; see
 [menu commands](reference/menu-commands.md#v3net-central) to bind them
 elsewhere. Both screens are laid out by the menu set's `LASTNET` and
 `WHONET` templates, which you can edit as you would `LASTCALL` and

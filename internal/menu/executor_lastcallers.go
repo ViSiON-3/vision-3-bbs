@@ -35,6 +35,11 @@ func runLastCallers(c *cmdCtx, args string) (*user.User, string, error) {
 	// instead, and --all this board's callers and the network's together,
 	// each row flagged with where the call was.
 	callerLimit, mode := parseLastCallersArgs(args)
+	if mode == lastCallersAll && len(centralLastCallsNetworks(e)) == 0 {
+		// With no network sharing calls, every caller is a local one: the
+		// combined screen is the local screen, laid out as LASTCALL.
+		mode = lastCallersLocal
+	}
 	if mode != lastCallersLocal {
 		return runCentralLastCallers(c, callerLimit, mode == lastCallersAll)
 	}

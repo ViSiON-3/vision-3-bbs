@@ -866,6 +866,11 @@ Command usage examples:
 
 - `RUN:LASTCALLERS` - Uses default limit of 20 entries
 - `RUN:LASTCALLERS 25` - Shows last 25 entries
+- `RUN:LASTCALLERS 20 --all` - This board's callers and V3Net's together, each
+  row flagged `local` or with its network's name, from the `LASTNET` templates.
+  When no network shares Last Callers (V3Net off, or the feature not offered),
+  it is the plain local screen above, so a board without V3Net sees no change.
+  The stock main menu binds `W` to this.
 
 Either limit is trimmed to what fits on the caller's terminal: the rows taken
 by `LASTCALL.TOP`, `LASTCALL.BOT` and the pause prompt are subtracted from the
