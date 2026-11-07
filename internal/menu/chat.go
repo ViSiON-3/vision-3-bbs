@@ -122,9 +122,13 @@ func probeChatNetworks(leaves []ChatLeafInfo, handle string) []chatNetInfo {
 			// The goroutine asking for the room list owns the session and
 			// closes it once Rooms returns, so a probe that times out stops
 			// waiting without closing the session under a request in flight.
+			// It closes the session before handing the list back, so a probe
+			// that answered in time is closed by the time the picker returns
+			// (#939); only a timed-out probe is closed later, when its Rooms
+			// call finally returns.
 			go func() {
-				defer probe.Close() //nolint:errcheck
 				rooms, err := probe.Rooms()
+				probe.Close() //nolint:errcheck
 				ch <- result{rooms, err}
 			}()
 			select {
