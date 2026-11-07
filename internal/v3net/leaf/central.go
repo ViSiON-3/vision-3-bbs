@@ -378,9 +378,12 @@ func (l *Leaf) WithdrawCentralListing(ctx context.Context) error {
 	// For good: wait for a publish in flight, and publish no more, so a
 	// refresh or retry racing the stop cannot list the board again on a
 	// hub no replacement leaf will withdraw from.
+	// The DELETE's time starts once the wait ends, as for WithdrawActivity.
 	l.central.listingWire.Lock()
 	defer l.central.listingWire.Unlock()
 	l.central.listingHalted = true
+	ctx, cancel := context.WithTimeout(ctx, centralWithdrawBudget)
+	defer cancel()
 	return l.withdrawCentralListingLocked(ctx)
 }
 

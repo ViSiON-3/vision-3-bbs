@@ -934,10 +934,6 @@ func (s *Service) ConfigureLeaves(leafCfgs []config.V3NetLeafConfig, mgr *messag
 // leafKey identifies a subscription: one network on one hub.
 type leafKey struct{ network, hubURL string }
 
-// centralWithdrawTimeout bounds the withdrawal ReloadLeaves attempts before
-// stopping a leaf that published a listing.
-const centralWithdrawTimeout = 10 * time.Second
-
 // withdrawCentralBeforeStop withdraws run's Central listing if the leaf
 // published one and is running. Failures are logged; the leaf is stopped
 // either way.
@@ -946,9 +942,9 @@ func (s *Service) withdrawCentralBeforeStop(run *leafRun) {
 	if !st.Publishing || !st.Supported || run.ctx == nil || run.ctx.Err() != nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(run.ctx, centralWithdrawTimeout)
-	defer cancel()
-	if err := run.l.WithdrawCentralListing(ctx); err != nil {
+	// The leaf bounds the DELETE itself, from when any publish in flight
+	// is done; run.ctx ends it if the leaf stops first.
+	if err := run.l.WithdrawCentralListing(run.ctx); err != nil {
 		slog.Warn("v3net: could not withdraw the Central listing before stopping the leaf; the hub expires it",
 			"network", run.l.Network(), "hub", run.l.HubURL(), "error", err)
 	}
@@ -962,8 +958,9 @@ func (s *Service) withdrawActivityBeforeStop(run *leafRun, next config.V3NetLeaf
 	if run.ctx == nil || run.ctx.Err() != nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(run.ctx, centralWithdrawTimeout)
-	defer cancel()
+	// Each kind's DELETE gets its own time from the leaf, starting once
+	// any publish of it in flight is done; run.ctx ends them if the leaf
+	// stops first.
 	for kind, keeps := range map[string]bool{
 		protocol.CentralKindPresence:    ok && next.CentralPresence(),
 		protocol.CentralKindLastCallers: ok && next.CentralLastCallers(),
@@ -972,7 +969,7 @@ func (s *Service) withdrawActivityBeforeStop(run *leafRun, next config.V3NetLeaf
 		if keeps || !st.Enabled || !st.Supported {
 			continue
 		}
-		if err := run.l.WithdrawActivity(ctx, kind); err != nil {
+		if err := run.l.WithdrawActivity(run.ctx, kind); err != nil {
 			slog.Warn("v3net: could not withdraw Central activity before stopping the leaf; the hub expires it",
 				"network", run.l.Network(), "hub", run.l.HubURL(), "kind", kind, "error", err)
 		}

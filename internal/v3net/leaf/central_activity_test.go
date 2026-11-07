@@ -232,3 +232,40 @@ func TestLiveActivityFeedDropsExpired(t *testing.T) {
 		t.Error("the cache itself was changed")
 	}
 }
+
+// A final withdrawal's DELETE gets its whole budget once a publish in
+// flight is done: waiting for that publish does not use it up.
+func TestWithdrawActivityBudgetStartsAfterPublish(t *testing.T) {
+	ts, h, _ := newTestHub(t, true)
+	l := centralLeaf(t, ts, "alpha", "")
+	l.cfg.CentralLastCallers = true
+	l.cfg.Activity = staticActivity{calls: []protocol.CentralActivityEntry{{Handle: "Alice", At: time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)}}}
+	kind := protocol.CentralKindLastCallers
+	if _, err := l.publishActivity(context.Background(), kind); err != nil {
+		t.Fatal(err)
+	}
+	old := centralWithdrawBudget
+	centralWithdrawBudget = 2 * time.Second
+	t.Cleanup(func() { centralWithdrawBudget = old })
+
+	// A slow publish holds the wire for longer than the budget.
+	st := l.central.activity[kind]
+	st.wire.Lock()
+	go func() {
+		time.Sleep(3 * time.Second)
+		st.wire.Unlock()
+	}()
+	if err := l.WithdrawActivity(context.Background(), kind); err != nil {
+		t.Fatalf("withdrawal after a slow publish: %v", err)
+	}
+	if rows, _ := h.Activity().List("testnet", kind, time.Now()); len(rows) != 0 {
+		t.Errorf("hub still holds %d snapshots", len(rows))
+	}
+
+	// The caller can still end it.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := l.WithdrawActivity(ctx, kind); err == nil {
+		t.Error("withdrawal with a cancelled context succeeded")
+	}
+}

@@ -454,6 +454,10 @@ func (l *Leaf) withdrawActivityLocked(ctx context.Context, kind string) error {
 // it waits for a publish in flight to finish, and this leaf publishes the
 // kind no more. The service calls it before stopping a leaf that will not
 // publish the kind again.
+//
+// The DELETE gets centralWithdrawBudget from when the wait ends, so a slow
+// publish ahead of it cannot use up its time; the wait itself is bounded
+// by that publish's own request timeout. ctx still cancels both.
 func (l *Leaf) WithdrawActivity(ctx context.Context, kind string) error {
 	st := l.central.activity[kind]
 	if st == nil {
@@ -462,8 +466,14 @@ func (l *Leaf) WithdrawActivity(ctx context.Context, kind string) error {
 	st.wire.Lock()
 	defer st.wire.Unlock()
 	st.halted = true
+	ctx, cancel := context.WithTimeout(ctx, centralWithdrawBudget)
+	defer cancel()
 	return l.withdrawActivityLocked(ctx, kind)
 }
+
+// centralWithdrawBudget is how long a final withdrawal's DELETE may take,
+// counted from when it can be sent.
+var centralWithdrawBudget = 10 * time.Second
 
 // errActivityHalted is returned by publishActivity once WithdrawActivity
 // has run.
