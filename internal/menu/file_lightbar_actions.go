@@ -93,7 +93,9 @@ func (lb *fileLightbar) viewFile() (refresh bool) {
 	_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
 	tw, th := getTerminalSize(lb.s)
 	send := lb.e.zipLabSender(lb.s, lb.terminal, sel, lb.currentUser, lb.userManager, lb.nodeNumber, lb.sessionStartTime, lb.outputMode)
-	viewFileByRecord(lb.e, lb.s, lb.terminal, sel, lb.outputMode, tw, th, send)
+	viewFileByRecord(lb.e, viewerCaller{s: lb.s, terminal: lb.terminal, user: lb.currentUser, userManager: lb.userManager,
+		nodeNumber: lb.nodeNumber, sessionStartTime: lb.sessionStartTime, outputMode: lb.outputMode,
+		width: tw, height: th}, sel, send)
 	// A ZipLab extraction replaces the session InputHandler around the
 	// transfer, so the cached one is stale.
 	lb.ih = getSessionIH(lb.s)

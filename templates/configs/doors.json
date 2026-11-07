@@ -57,5 +57,23 @@
         "type": "v3_script",
         "script": "last10.js",
         "working_directory": "scripts/examples"
+    },
+    {
+        "code": "ARTVIEW",
+        "name": "Archive Viewer",
+        "description": "Views ZIP archives from the file lists (config.json archiveViewerDoor)",
+        "type": "v3_script",
+        "script": "artview.js",
+        "working_directory": "scripts/examples",
+        "hidden": true
+    },
+    {
+        "code": "TEXTVIEW",
+        "name": "Text Viewer",
+        "description": "Views text files from the file lists (config.json textViewerDoor)",
+        "type": "v3_script",
+        "script": "textview.js",
+        "working_directory": "scripts/examples",
+        "hidden": true
     }
 ]

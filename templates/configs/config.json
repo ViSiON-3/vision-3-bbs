@@ -3,6 +3,8 @@
   "twitListMax": 50,
   "twitExemptLevel": 0,
   "editorAutocorrect": false,
+  "archiveViewerDoor": "ARTVIEW",
+  "textViewerDoor": "TEXTVIEW",
   "boardName": "Another Fine ViSiON/3 BBS",
   "sysOpName": "felonius",
   "timezone": "America/Chicago",

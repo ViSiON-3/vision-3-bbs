@@ -15,6 +15,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -143,21 +144,15 @@ func runViewFile(c *cmdCtx, args string) (*user.User, string, error) {
 
 	slog.Debug("running VIEW_FILE", "node", nodeNumber)
 
-	record, filePath, retUser, retAction, retErr := promptAndResolveFile(e, s, terminal, currentUser, nodeNumber, "view", outputMode)
+	record, _, retUser, retAction, retErr := promptAndResolveFile(e, s, terminal, currentUser, nodeNumber, "view", outputMode)
 	if record == nil {
 		return retUser, retAction, retErr
 	}
 
-	if e.FileMgr.IsSupportedArchive(filePath) {
-		send := e.zipLabSender(s, terminal, record, currentUser, c.userManager, nodeNumber, c.sessionStartTime, outputMode)
-		ziplab.RunZipLabView(terminal, filePath, record.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s), send)
-	} else {
-		if termHeight <= 0 {
-			_, termHeight = getTerminalSize(s)
-		}
-		e.displayTextWithPaging(s, terminal, filePath, record.Filename, outputMode, termHeight)
-	}
-
+	send := e.zipLabSender(s, terminal, record, currentUser, c.userManager, nodeNumber, c.sessionStartTime, outputMode)
+	viewFileByRecord(e, viewerCaller{s: s, terminal: terminal, user: currentUser, userManager: c.userManager,
+		nodeNumber: nodeNumber, sessionStartTime: c.sessionStartTime, outputMode: outputMode,
+		width: c.termWidth, height: termHeight}, record, send)
 	return currentUser, "", nil
 }
 
@@ -178,6 +173,13 @@ func runTypeTextFile(c *cmdCtx, args string) (*user.User, string, error) {
 		return retUser, retAction, retErr
 	}
 
+	// The text viewer door, when one is set, shows it; otherwise the pager.
+	vc := viewerCaller{s: s, terminal: terminal, user: currentUser, userManager: c.userManager,
+		nodeNumber: nodeNumber, sessionStartTime: c.sessionStartTime, outputMode: outputMode,
+		width: c.termWidth, height: termHeight}
+	if e.viewWithDoor(vc, record, e.GetServerConfig().TextViewerDoor) {
+		return currentUser, "", nil
+	}
 	if termHeight <= 0 {
 		_, termHeight = getTerminalSize(s)
 	}
@@ -186,24 +188,128 @@ func runTypeTextFile(c *cmdCtx, args string) (*user.User, string, error) {
 	return currentUser, "", nil
 }
 
-// viewFileByRecord displays a file given its record, used from the file
-// lists: archives open in ZipLab, extracting members through send.
-func viewFileByRecord(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, record *file.FileRecord, outputMode ansi.OutputMode, termWidth int, termHeight int, send ziplab.SendFunc) {
+// viewerCaller is who a file is being viewed for and on what terminal, as
+// the viewers need it.
+type viewerCaller struct {
+	s                ssh.Session
+	terminal         *term.Terminal
+	user             *user.User
+	userManager      *user.UserMgr
+	nodeNumber       int
+	sessionStartTime time.Time
+	outputMode       ansi.OutputMode
+	width, height    int
+}
+
+// viewFileByRecord displays a file given its record, from either file list
+// or VIEW_FILE: in the viewer door config.json names for its kind
+// (archiveViewerDoor or textViewerDoor) when there is one the caller may
+// use, otherwise built in, archives in ZipLab (extracting members through
+// send) and everything else in the text pager.
+func viewFileByRecord(e *MenuExecutor, vc viewerCaller, record *file.FileRecord, send ziplab.SendFunc) {
 	filePath, err := e.FileMgr.GetFilePath(record.ID)
 	if err != nil {
 		slog.Error("failed to get path for file", "id", record.ID, "error", err)
-		e.writeString(terminal, outputMode, e.Strings().FileLocateError)
+		e.writeString(vc.terminal, vc.outputMode, e.Strings().FileLocateError)
 		uiPause(1 * time.Second)
 		return
 	}
 
-	if e.FileMgr.IsSupportedArchive(filePath) {
-		ziplab.RunZipLabView(terminal, filePath, record.Filename, outputMode, sessionReadLine(s, terminal), sessionReadKey(s), send)
-	} else {
-		if termHeight <= 0 {
-			_, termHeight = getTerminalSize(s)
+	isArchive := e.FileMgr.IsSupportedArchive(filePath)
+	door := e.GetServerConfig().TextViewerDoor
+	if isArchive {
+		door = e.GetServerConfig().ArchiveViewerDoor
+	}
+	if e.viewWithDoor(vc, record, door) {
+		return
+	}
+
+	if isArchive {
+		ziplab.RunZipLabView(vc.terminal, filePath, record.Filename, vc.outputMode, sessionReadLine(vc.s, vc.terminal), sessionReadKey(vc.s), send)
+		return
+	}
+	height := vc.height
+	if height <= 0 {
+		_, height = getTerminalSize(vc.s)
+	}
+	e.displayTextWithPaging(vc.s, vc.terminal, filePath, record.Filename, vc.outputMode, height)
+}
+
+// viewerDoor looks up the viewer door named code: ok when code is set and
+// names a v3_script door. why says what's wrong otherwise, "" for an unset
+// code.
+func (e *MenuExecutor) viewerDoor(code string) (door config.DoorConfig, why string, ok bool) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "" {
+		return config.DoorConfig{}, "", false
+	}
+	door, found := e.GetDoorConfig(code)
+	switch {
+	case !found:
+		return door, "no door has that code", false
+	case door.Type != "v3_script":
+		return door, "it is not a v3_script door", false
+	}
+	return door, "", true
+}
+
+// viewWithDoor runs the viewer door named code for record, with the area tag
+// and filename after the door's own arguments, and reports whether it ran.
+// It doesn't run, and the caller uses the built-in viewer, when code is
+// empty, names no v3_script door (WarnViewerDoors reports that at startup),
+// or the door's own rules (min_access_level and acs) refuse the caller.
+func (e *MenuExecutor) viewWithDoor(vc viewerCaller, record *file.FileRecord, code string) bool {
+	if vc.user == nil {
+		return false
+	}
+	door, _, ok := e.viewerDoor(code)
+	if !ok {
+		return false
+	}
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if !doorAllowed(door, vc.user, vc.s, vc.terminal, vc.sessionStartTime) {
+		slog.Debug("viewer door refused the caller; using the built-in viewer", "node", vc.nodeNumber, "door", code)
+		return false
+	}
+	area, ok := e.FileMgr.GetAreaByID(record.AreaID)
+	if !ok {
+		return false
+	}
+	door.Args = append(append([]string(nil), door.Args...), area.Tag, record.Filename)
+
+	ctx := buildDoorCtx(e, vc.s, vc.terminal,
+		vc.user.ID, vc.user.Handle, vc.user.RealName,
+		vc.user.AccessLevel, vc.user.TimeLimit, vc.user.TimesCalled,
+		vc.user.GroupLocation,
+		vc.width, vc.height,
+		vc.nodeNumber, vc.sessionStartTime, vc.outputMode,
+		door, code)
+	// The live record, so a file the viewer marks is marked in the list too.
+	ctx.UserManager = vc.userManager
+	ctx.CurrentUser = vc.user
+
+	handOffSessionIH(vc.s)
+	err := executeDoor(ctx)
+	_ = getSessionIH(vc.s)
+	// A session-ending error is seen again by the caller's next read.
+	if err != nil && !isSessionFatal(err) {
+		slog.Error("viewer door failed", "node", vc.nodeNumber, "door", code, "file", record.Filename, "error", err)
+	}
+	return true
+}
+
+// WarnViewerDoors logs a warning for each viewer door config.json names
+// that the BBS can't use (missing, or not a v3_script door), so a sysop
+// learns why the built-in viewer runs instead. Called once at startup.
+func (e *MenuExecutor) WarnViewerDoors() {
+	cfg := e.GetServerConfig()
+	for _, v := range []struct{ key, code string }{
+		{"archiveViewerDoor", cfg.ArchiveViewerDoor},
+		{"textViewerDoor", cfg.TextViewerDoor},
+	} {
+		if _, why, ok := e.viewerDoor(v.code); !ok && why != "" {
+			slog.Warn("viewer door can't be used; the built-in viewer runs instead", "setting", v.key, "door", v.code, "problem", why)
 		}
-		e.displayTextWithPaging(s, terminal, filePath, record.Filename, outputMode, termHeight)
 	}
 }
 
