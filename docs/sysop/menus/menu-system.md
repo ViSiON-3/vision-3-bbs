@@ -1124,7 +1124,7 @@ Menu configuration files are JSON files that define menu behavior and prompts.
 - `FORCEHELPLEVEL` - Force help display for users at or below this level *(currently unused — reserved from Pascal `MenuRec.ForceHelpLevel`)*
 - `MES_CONF` - Auto-switch user's active message conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.Mes_Conf`)*
 - `FILE_CONF` - Auto-switch user's active file conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.File_Conf`)*
-- `FORCEHOTKEY` - Force single-keypress (hotkey) input for this menu regardless of the user's Hot Keys setting. A key that could start a longer command (a multi-key command, a number on a `##` menu, or `/G`) still waits for Enter.
+- `FORCEHOTKEY` - Force single-keypress (hotkey) input for this menu regardless of the user's Hot Keys setting. A key that could start a longer command (a multi-key command, a number on a `##` menu, `/G`, or `;` to [chain commands](#chaining-commands)) still waits for Enter.
 
 ### Command Definition Files (.CFG)
 
@@ -1201,6 +1201,29 @@ Both are matched by the standard menu input loop. The pre-login matrix
 (`PDMATRIX`) reads keys itself and recognises only its own hotkeys, so neither
 shortcut applies there; give it a `DISCONNECT` option instead, as the shipped
 `PDMATRIX.CFG` does.
+
+#### Chaining Commands
+
+A caller can enter several menu commands at once, separated by semicolons.
+Each runs at the menu the one before it reached, so `M;N` at the main menu
+opens the message menu and starts a new-message scan. Spaces around each
+command and empty ones (`M;;N;`) are ignored, and commands match as they would
+typed alone: aliases, multi-key commands and `##` numbers all work.
+
+- With hot keys on (the caller's setting or `FORCEHOTKEY`), single keys still
+  act at once. Typing `;` first opens a command line: `;M;N` then Enter.
+- At a lightbar menu, `;` opens a command line on the bottom row, unless a
+  `.BAR` option uses `;` as its hotkey.
+- The chained commands are menu selections only. Anything a command asks
+  (the message reader, editors, yes/no questions, passwords, doors) still
+  comes from the keyboard, and the next command runs once it returns.
+- Each menu on the way is entered as usual: its screen is drawn, its password
+  asked and its autorun commands run before the next command is taken.
+- The rest of the chain is dropped when a command is not in the menu, is not
+  open to the caller, or fails (an error, or a `RUN:` that does not exist).
+  Logging off ends it too.
+- A menu that binds a key containing `;` keeps it: a line that is exactly
+  that key runs it rather than being split.
 
 #### Command Actions
 

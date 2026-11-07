@@ -28,7 +28,8 @@ import (
 // input loop or readStandardInput), with input/retErr carrying the values the
 // caller returns. act is loopContinue when readStandardInput signals ^P
 // back-navigation (its own st.currentMenuName/st.previousMenuName mutations
-// already applied inside readStandardInput). Otherwise act is loopFallthrough
+// already applied inside readStandardInput), or when a lightbar command line
+// was left empty. Otherwise act is loopFallthrough
 // and st.userInput already holds the final value for command matching.
 func (st *runLoopState) readMenuInput(ansiProcessResult ansi.ProcessAnsiResult, menuRec *MenuRecord) (input string, act loopAction, retErr error) {
 	e := st.e
@@ -62,8 +63,8 @@ func (st *runLoopState) readMenuInput(ansiProcessResult ansi.ProcessAnsiResult, 
 				st.isLightbarMenu = false
 			} else {
 				lightbarInput, act, retErr := st.runLightbarInput(lightbarOptions, cursorHidden)
-				if act == loopReturn {
-					return lightbarInput, loopReturn, retErr
+				if act == loopReturn || act == loopContinue {
+					return lightbarInput, act, retErr
 				}
 				// Set st.userInput to lightbar result if a selection was made
 				if lightbarInput != "" {
