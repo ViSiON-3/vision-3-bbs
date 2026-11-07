@@ -1,9 +1,11 @@
 package menu
 
 import (
+	"io"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -311,5 +313,85 @@ func TestExeccovChain_Lightbar(t *testing.T) {
 	execcovRun(env.sub(t), execcovCall{user: env.caller, start: "BARM", input: ";"})
 	if strings.Join(picks, ",") != "semi" {
 		t.Errorf("picks = %q, want the ; option", picks)
+	}
+}
+
+// A lightbar menu a chain passes through has its options drawn before the
+// queued command runs there, as when the caller picks from it.
+func TestExeccovChain_LightbarDrawnOnTheWay(t *testing.T) {
+	env, m, _, _ := execcovChainEnv(t)
+	env.e.RunRegistry["EXECCOVSHOUT"] = func(c *cmdCtx, a string) (*user.User, string, error) {
+		_, _ = c.terminal.Write([]byte("PICKED-" + a + "\r\n"))
+		return c.currentUser, "", nil
+	}
+	m.menu("MAIN", MenuRecord{}, "MAIN-SCREEN\r\n",
+		CommandRecord{Keys: "R", Command: "GOTO:BARM"},
+		CommandRecord{Keys: "Q", Command: "LOGOFF"})
+	m.menu("BARM", MenuRecord{}, "BARM-SCREEN\r\n",
+		CommandRecord{Keys: "A", Command: "RUN:EXECCOVSHOUT A"},
+		CommandRecord{Keys: "B", Command: "RUN:EXECCOVSHOUT B"},
+		CommandRecord{Keys: "C", Command: "RUN:EXECCOVSHOUT C"})
+	m.write("bar", "BARM.BAR", execcovBar)
+
+	r := execcovRun(env, execcovCall{user: env.caller, start: "MAIN", input: "r;b\r"})
+	out := r.text()
+	picked := strings.Index(out, "PICKED-B")
+	if picked < 0 {
+		t.Fatalf("B did not run:\n%s", out)
+	}
+	if beta := strings.Index(out, "Beta"); beta < 0 || beta > picked {
+		t.Errorf("options should be drawn before the queued pick runs:\n%s", out)
+	}
+}
+
+// The lightbar command line stays on its row: Enter echoes no newline.
+func TestExeccovChain_LightbarLineDoesNotScroll(t *testing.T) {
+	env, m, _, _ := execcovChainEnv(t)
+	m.menu("BARM", MenuRecord{}, "BARM-SCREEN\r\n",
+		CommandRecord{Keys: "A", Command: "LOGOFF"},
+		CommandRecord{Keys: "B", Command: "LOGOFF"},
+		CommandRecord{Keys: "C", Command: "LOGOFF"})
+	m.write("bar", "BARM.BAR", execcovBar)
+	r := execcovRun(env, execcovCall{user: env.caller, start: "BARM", input: ";b\r"})
+	// The terminal turns a written "\n" into "\r\n", so look for any newline.
+	if r.next != "LOGOFF" || !strings.Contains(r.raw, ";b") || strings.Contains(r.raw[strings.Index(r.raw, ";b"):], "\n") {
+		t.Errorf("next=%q raw=%q", r.next, r.raw)
+	}
+}
+
+// A chain does not outlive the session: when the time limit runs out, or a
+// disconnect is latched on the session's input, during a menu's autoruns,
+// the queued command is not run.
+func TestExeccovChain_StopsWhenSessionEnds(t *testing.T) {
+	env, m, args, _ := execcovChainEnv(t)
+	execcovStrings(env, func(s *config.StringsConfig) { s.TimeLimitExpired = "\r\nTIME-UP\r\n" })
+	env.e.RunRegistry["EXECCOVEXPIRE"] = func(c *cmdCtx, _ string) (*user.User, string, error) {
+		applySessionDeadline(c.s, time.Now().Add(-time.Minute))
+		return c.currentUser, "", nil
+	}
+	env.e.RunRegistry["EXECCOVHANGUP"] = func(c *cmdCtx, _ string) (*user.User, string, error) {
+		getSessionIH(c.s).Fail(io.EOF)
+		return c.currentUser, "", nil
+	}
+	for name, autorun := range map[string]string{"time limit": "RUN:EXECCOVEXPIRE", "latched disconnect": "RUN:EXECCOVHANGUP"} {
+		t.Run(name, func(t *testing.T) {
+			*args = nil
+			m.menu("MAIN", MenuRecord{}, "MAIN-SCREEN\r\n",
+				CommandRecord{Keys: "C", Command: "GOTO:CMDS"},
+				CommandRecord{Keys: "Q", Command: "LOGOFF"})
+			m.menu("CMDS", MenuRecord{}, "CMDS-SCREEN\r\n",
+				CommandRecord{Keys: "~~", Command: autorun},
+				CommandRecord{Keys: "W", Command: "RUN:EXECCOVARGS w"})
+			r := execcovRun(env.sub(t), execcovCall{user: env.caller, start: "MAIN", input: "c;w\r"})
+			if r.err != nil || r.next != "LOGOFF" || execcovHandle(r.user) != "Caller" {
+				t.Errorf("next=%q user=%s err=%v", r.next, execcovHandle(r.user), r.err)
+			}
+			if len(*args) != 0 {
+				t.Errorf("W ran after the session ended: %q", *args)
+			}
+			if got := r.has("TIME-UP"); got != (name == "time limit") {
+				t.Errorf("time-limit notice shown = %v:\n%s", got, r.text())
+			}
+		})
 	}
 }

@@ -466,6 +466,17 @@ func (ih *InputHandler) Fail(err error) {
 	}
 }
 
+// Failure returns the error a Fail latched, or nil, without reading. Code
+// about to act for the caller without reading a key first (a queued menu
+// command, say) checks it so it does not carry on for a session that has
+// already ended. Thread-safe.
+func (ih *InputHandler) Failure() error {
+	if err := ih.failed.Load(); err != nil {
+		return *err
+	}
+	return nil
+}
+
 // SetEscTimeout overrides the ESC disambiguation window used in ReadKey.
 // Pass 0 to restore the default (500 ms). Thread-safe.
 func (ih *InputHandler) SetEscTimeout(d time.Duration) {

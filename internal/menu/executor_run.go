@@ -269,6 +269,10 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		var retErr error
 		if st.nextChained() {
 			slog.Debug("running chained command", "menu", st.currentMenuName, "input", st.userInput, "left", len(st.pending))
+			if retAction, ended, endErr := st.chainedSessionEnded(); ended {
+				return retAction, st.currentUser, endErr
+			}
+			st.drawChainedLightbar(ansiProcessResult)
 			input, act, retErr = st.specialInput()
 		} else {
 			e.setToastAnchor(nodeNumber, ansiProcessResult, menuRec.GetClrScrBefore(), st.artScrolls)
