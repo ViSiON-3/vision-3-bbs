@@ -27,8 +27,9 @@ type Context struct {
 	// User is the caller. Check fails every non-empty string other than "*"
 	// for a nil User; Eval needs a non-nil one.
 	User *user.User
-	// Session is the caller's connection, nil when there is none: L and A
-	// are then false and T counts no chat credit.
+	// Session is the caller's connection, nil when there is none: a string
+	// with L or A in it then fails as a whole, and T counts the call as just
+	// started, with no chat credit.
 	Session Session
 	// Start is when the call began, for T.
 	Start time.Time
@@ -60,7 +61,8 @@ func (c Context) now() time.Time {
 
 // Check evaluates the ACS string s against ctx: true when it passes. An empty
 // string and a lone "*" pass for everyone, including a nil User; anything
-// else fails for a nil User. A string that can't be read as a whole fails.
+// else fails for a nil User. A string Parse reports any problem for fails for
+// every caller, and is logged once.
 func Check(s string, ctx Context) bool {
 	if s == "" || s == "*" {
 		return true
@@ -71,13 +73,8 @@ func Check(s string, ctx Context) bool {
 	u := ctx.User
 	slog.Debug("checking ACS", "acs", s, "handle", u.Handle, "level", u.AccessLevel, "flags", u.Flags, "id", u.ID, "validated", u.Validated)
 	e := Parse(s)
-	warnOnce(e)
 	if !e.Valid() {
-		for _, d := range e.Diagnostics {
-			if d.Severity == Error {
-				slog.Error("invalid ACS string", "acs", s, "error", d.String())
-			}
-		}
+		logInvalid(e)
 		return false
 	}
 	result := e.Eval(ctx)
@@ -85,73 +82,119 @@ func Check(s string, ctx Context) bool {
 	return result
 }
 
-// warned holds the strings whose warnings Check has logged.
-var warned sync.Map
+// maxLogged bounds how many invalid strings logInvalid remembers. Past it
+// the set starts over, so a board fed endless distinct bad strings logs
+// some again rather than growing without limit.
+const maxLogged = 1024
 
-// warnOnce logs e's warnings the first time Check sees its string, so a
-// string from a source the startup scan doesn't read still leaves a trace of
-// what the parser dropped, without a line per evaluation.
-func warnOnce(e *Expr) {
-	var msgs []string
-	for _, d := range e.Diagnostics {
-		if d.Severity == Warning {
-			msgs = append(msgs, d.String())
+// logged holds the invalid strings Check has logged since the last
+// ResetInvalidLog.
+var logged = struct {
+	sync.Mutex
+	seen map[string]bool
+}{seen: map[string]bool{}}
+
+// ResetInvalidLog forgets which invalid strings Check has logged, so each is
+// logged again the next time a caller's check reads it. The BBS calls it
+// when a config file is reloaded, so a string that is fixed and later comes
+// back is reported again.
+func ResetInvalidLog() {
+	logged.Lock()
+	logged.seen = map[string]bool{}
+	logged.Unlock()
+}
+
+// logInvalid logs an invalid string's problems the first time Check sees
+// it, so a string from a source the startup scan doesn't read still leaves a
+// trace, without a line per evaluation.
+func logInvalid(e *Expr) {
+	logged.Lock()
+	seen := logged.seen[e.Source]
+	if !seen {
+		if len(logged.seen) >= maxLogged {
+			logged.seen = map[string]bool{}
 		}
+		logged.seen[e.Source] = true
 	}
-	if len(msgs) == 0 {
+	logged.Unlock()
+	if seen {
 		return
 	}
-	if _, seen := warned.LoadOrStore(e.Source, true); seen {
-		return
+	msgs := make([]string, len(e.Diagnostics))
+	for i, d := range e.Diagnostics {
+		msgs[i] = d.String()
 	}
-	slog.Warn("ACS string warning", "acs", e.Source, "warning", strings.Join(msgs, "; "))
+	slog.Error("invalid ACS string denies every caller", "acs", e.Source, "error", strings.Join(msgs, "; "))
 }
 
 // Eval evaluates a valid expression against ctx; it is false for an
 // expression that isn't Valid. ctx.User must not be nil. Every term is
-// evaluated, as the BBS always has, so each logs its own check.
+// evaluated, as the BBS always has, and each logs its result at Debug. A term that
+// needs context ctx lacks (see lacking) makes the whole expression false,
+// whatever the other parts say: '!' can't turn it into a pass, and another
+// branch of '|' can't pass in its place.
 func (e *Expr) Eval(ctx Context) bool {
 	if e.Root == nil {
 		return false
 	}
-	return evalNode(e.Root, ctx)
+	result, lacks := evalNode(e.Root, ctx)
+	return result && !lacks
 }
 
-func evalNode(n *Node, ctx Context) bool {
+// evalNode evaluates n, and reports whether any term under it lacked its
+// context.
+func evalNode(n *Node, ctx Context) (result, lacks bool) {
 	switch n.Kind {
 	case TermNode:
-		return EvalTerm(n.Text, ctx)
+		if _, missing := lacking(n.term, ctx); missing {
+			slog.Debug("ACS term lacks its context, so the string fails", "condition", n.Text)
+			return false, true
+		}
+		result = evalTerm(n.term, ctx)
+		slog.Debug("ACS term", "condition", n.Text, "result", result)
+		return result, false
 	case NotNode:
-		return !evalNode(n.X, ctx)
+		x, lx := evalNode(n.X, ctx)
+		return !x, lx
 	case AndNode:
-		x, y := evalNode(n.X, ctx), evalNode(n.Y, ctx)
-		return x && y
+		x, lx := evalNode(n.X, ctx)
+		y, ly := evalNode(n.Y, ctx)
+		return x && y, lx || ly
 	default:
-		x, y := evalNode(n.X, ctx), evalNode(n.Y, ctx)
-		return x || y
+		x, lx := evalNode(n.X, ctx)
+		y, ly := evalNode(n.Y, ctx)
+		return x || y, lx || ly
 	}
 }
 
-// termProblem says why a term is always false (an unknown letter or a bad
-// argument), or "" for a term that is evaluated. It follows EvalTerm: every
-// term it accepts, EvalTerm evaluates, and every term it rejects, EvalTerm
-// treats as false.
-func termProblem(text string) string {
-	_, p, _ := parseTerm(text)
-	return p
+// lacking reports whether t needs context ctx doesn't have: a session for
+// L and A (NoSession), or a sign-up date on the user's record for AGE
+// (Unavailable).
+func lacking(t parsedTerm, ctx Context) (Reason, bool) {
+	switch {
+	case (t.code == "L" || t.code == "A") && ctx.Session == nil:
+		return NoSession, true
+	case t.code == "AGE" && ctx.User.CreatedAt.IsZero():
+		return Unavailable, true
+	}
+	return Match, false
 }
 
 // EvalTerm evaluates a single term, such as S50, FA or LEVEL<20, against ctx,
-// whose User must not be nil. A term with an unknown letter or a bad argument
-// is false and logged as a warning.
+// whose User must not be nil. A term with an unknown letter or a bad
+// argument, or one that lacks its context, is false; the first is logged as
+// a warning.
 func EvalTerm(condition string, ctx Context) bool {
 	if len(condition) == 0 {
 		slog.Warn("empty condition encountered in ACS string after tokenization")
 		return false
 	}
-	t, problem, _ := parseTerm(condition)
+	t, problem := parseTerm(condition)
 	if problem != "" {
 		slog.Warn("invalid ACS term", "condition", condition, "problem", problem)
+		return false
+	}
+	if _, missing := lacking(t, ctx); missing {
 		return false
 	}
 	result := evalTerm(t, ctx)
@@ -167,16 +210,13 @@ func evalTerm(t parsedTerm, ctx Context) bool {
 		return u.AccessLevel >= ctx.SysOpLevel
 	case "COSYSOP":
 		return u.AccessLevel >= ctx.CoSysOpLevel
-	case "L": // Local connection
-		if s == nil {
-			return false
-		}
+	case "L": // Local connection; lacking has checked there is a session
 		network := s.RemoteAddr().Network()
 		addr := s.RemoteAddr().String()
 		isLoopback := strings.HasPrefix(addr, "127.") || strings.HasPrefix(addr, "[::1]")
 		return network == "pipe" || network == "unix" || isLoopback
 	case "A": // Session has a terminal: every telnet session, SSH with a PTY. Not an ANSI or encoding check.
-		return s != nil && s.HasPTY()
+		return s.HasPTY()
 	case "F": // Flag is set
 		return strings.Contains(strings.ToUpper(u.Flags), strings.ToUpper(t.value))
 	case "I": // User has flag I: the same test as FI; any argument is ignored

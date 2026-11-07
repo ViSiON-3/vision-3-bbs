@@ -3,13 +3,11 @@ package menu
 import (
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -19,9 +17,8 @@ import (
 // its acs string, evaluated like any other ACS against the caller's session
 // and call start time. An empty or all-whitespace acs adds no restriction and
 // never lifts the numeric minimum, and there is no sysop bypass: a sysop the
-// rules exclude is excluded. A door's acs is held to the strict rule (see
-// doorACSValid): one acs.Validate reports anything for denies the door to
-// everyone. No user (not logged in) is never allowed.
+// rules exclude is excluded. An acs with any problem denies the door to
+// everyone, as any ACS string does. No user (not logged in) is never allowed.
 //
 // Every door entry point checks this before any side effect (dropfile,
 // process, script or remote connection), and checks it again at launch even
@@ -46,27 +43,7 @@ func doorRulesPass(d config.DoorConfig, level int, allows func(string) bool) boo
 		return false
 	}
 	rule := strings.TrimSpace(d.ACS)
-	return rule == "" || (doorACSValid(rule) && allows(rule))
-}
-
-// doorACSValidity remembers doorACSValid's answer for each string: Validate
-// is pure, and the generated door menu asks on every redraw.
-var doorACSValidity sync.Map
-
-// doorACSValid reports whether a door's acs reads cleanly: acs.Validate
-// reports nothing for it, neither an error nor a warning. Elsewhere a
-// warning only marks a string that still evaluates the way it always has,
-// for instance an unknown or bad term that is false, so "!Q" passes everyone.
-// Door acs strings are new, so they have no such past to keep: anything
-// Validate reports makes the string fail, "!Q" included. The startup scan
-// and vision3 doctor report these strings as failures.
-func doorACSValid(rule string) bool {
-	if v, ok := doorACSValidity.Load(rule); ok {
-		return v.(bool)
-	}
-	valid := len(acs.Validate(rule)) == 0
-	doorACSValidity.Store(rule, valid)
-	return valid
+	return rule == "" || allows(rule)
 }
 
 // logDoorDenied records a refused door at WARN, with the rule that refused it.

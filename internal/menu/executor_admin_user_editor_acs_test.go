@@ -14,7 +14,7 @@ import (
 // loopback, so L would pass if their session were used.
 func TestUserEditor_ACSTester(t *testing.T) {
 	env := newMenuEnv(t)
-	input := "j" + "t" + "S50&(V|!Q)\r" + "e" + strings.Repeat(ueBS, 10) + "L\r" + "q" + "q"
+	input := "j" + "t" + "S50&(V|!FQ)\r" + "e" + strings.Repeat(ueBS, 11) + "L\r" + "q" + "q"
 	r := env.runFrom("127.0.0.1", env.e.RunRegistry["ADMINLISTUSERS"], env.sysop, input)
 	if r.err != nil {
 		t.Fatalf("err = %v", r.err)
@@ -24,11 +24,11 @@ func TestUserEditor_ACSTester(t *testing.T) {
 		"[T] ACS Test",
 		"ACS Test / Caller",
 		"User:       Caller (#2), level 10",
-		"Session:    none: L and A fail",
+		"Session:    none: L or A fails the string",
 		"(now)",
-		"Expression: S50&(V|!Q)",
+		"Expression: S50&(V|!FQ)",
 		"level 10 is below 50",
-		"Q is not an ACS term",
+		"doesn't have flag Q",
 		"Expression: L",
 		"needs a session and there is none",
 		"A pass means this expression passed for this user",

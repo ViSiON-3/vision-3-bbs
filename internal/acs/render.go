@@ -13,9 +13,7 @@ import (
 const (
 	markPass    = '+'
 	markFail    = '-'
-	markInvalid = '?'
 	markSession = '~'
-	markIgnored = '^'
 	markError   = 'X'
 )
 
@@ -32,9 +30,9 @@ const labelWidth = 12
 // both show these lines as they are, so the two always say the same thing.
 //
 // The header names the user, the session and the time used, then the
-// expression with a marker under each term (+ passed, - failed, ? invalid,
-// ~ needs a session or a value the record lacks, ^ ignored character, X
-// error) and the verdict. Under
+// expression with a marker under each term (+ passed, - failed, ~ needs a
+// session or a value the record lacks) or under each problem (X), and the
+// verdict. Under
 // it is every part of the expression, indented by depth, with its result and
 // why, and last the fixed note that a pass is about this expression only.
 func Render(x Explanation, width int) []string {
@@ -73,14 +71,10 @@ func Render(x Explanation, width int) []string {
 		out = append(out, "")
 		out = append(out, wrap("", x.Detail, width)...)
 	}
-	notes := x.Ignored
-	if x.Root == nil {
-		notes = x.Diagnostics
-	}
-	if len(notes) > 0 {
+	if len(x.Diagnostics) > 0 {
 		out = append(out, "")
-		for _, d := range notes {
-			out = append(out, wrap("  ", fmt.Sprintf("%s at column %d: %s", d.Severity, d.Column(), d.Message), width)...)
+		for _, d := range x.Diagnostics {
+			out = append(out, wrap("  ", fmt.Sprintf("error at column %d: %s", d.Column(), d.Message), width)...)
 		}
 	}
 	out = append(out, "")
@@ -120,7 +114,7 @@ func describeUser(u *user.User) string {
 func describeSession(ctx Context) string {
 	s := ctx.Session
 	if s == nil {
-		return "none: L and A fail, and T counts the call as just started"
+		return "none: L or A fails the string, T as if the call just started"
 	}
 	where := "remote"
 	if EvalTerm("L", ctx) {
@@ -142,21 +136,19 @@ func verdict(x Explanation) string {
 	}
 	switch {
 	case x.Root == nil && x.Reason == Invalid:
-		return v + ": the string can't be read as a whole"
+		return v + ": the string has a problem"
 	case x.Root == nil:
 		return v
-	case x.Reason == Invalid:
-		return v + ", resting on an invalid term (a stricter ACS check will change this)"
 	case x.Reason == NoSession:
-		return v + ", resting on a session the context doesn't have"
+		return v + ": a part needs a session the context doesn't have"
 	case x.Reason == Unavailable:
-		return v + ", resting on a value the user's record doesn't have"
+		return v + ": a part needs a value the user's record doesn't have"
 	}
 	return v
 }
 
 // markers is the line under the expression: one marker per term character,
-// dropped characters and errors.
+// or per character of each problem.
 func markers(x Explanation) []rune {
 	m := []rune(strings.Repeat(" ", utf8.RuneCountInString(x.Source)))
 	fill := func(pos, end int, r rune) {
@@ -172,8 +164,6 @@ func markers(x Explanation) []rune {
 		if st.Kind == TermNode {
 			r := markFail
 			switch {
-			case st.Reason == Invalid:
-				r = markInvalid
 			case st.Reason == NoSession || st.Reason == Unavailable:
 				r = markSession
 			case st.Result:
@@ -185,22 +175,8 @@ func markers(x Explanation) []rune {
 		walk(st.Y)
 	}
 	walk(x.Root)
-	if x.Root == nil {
-		for _, d := range x.Diagnostics {
-			if d.Severity == Warning {
-				fill(d.Pos, d.End, markInvalid)
-			}
-		}
-	}
-	for _, d := range x.Ignored {
-		fill(d.Pos, d.End, markIgnored)
-	}
-	if x.Root == nil {
-		for _, d := range x.Diagnostics {
-			if d.Severity == Error {
-				fill(d.Pos, d.End, markError)
-			}
-		}
+	for _, d := range x.Diagnostics {
+		fill(d.Pos, d.End, markError)
 	}
 	return m
 }

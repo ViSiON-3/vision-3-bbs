@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -28,36 +27,36 @@ type acsSource struct {
 	Record string // e.g. `command "G"`, `area GENERAL`, `conference 1`
 	Field  string // e.g. "ACS", "acs_read"
 	ACS    string
-	// Strict marks a string held to the strict rule, a door's acs: anything
-	// acs.Validate reports denies it to every caller, warnings included.
-	Strict bool
+	// Headless says where the string is checked without a caller's session
+	// ("replies uploaded through the QWK API"), "" when it always has one.
+	// There, a string with L or A in it fails as a whole.
+	Headless string
 }
 
-// acsFinding is the diagnostics for one source string.
+// acsFinding is the diagnostics for one source string, or, for a string
+// that reads cleanly, a note that it uses L or A where it is checked
+// without a session.
 type acsFinding struct {
 	Source acsSource
 	Diags  []acs.Diagnostic
+	// NoSession is set for a valid string with L or A in it from a
+	// Headless source: it denies every caller there.
+	NoSession bool
 }
 
-// Severity is the finding's worst diagnostic, or Error for any finding in a
-// strict string, which every caller fails whatever Validate found.
-func (f acsFinding) Severity() acs.Severity {
-	if f.Source.Strict {
-		return acs.Error
-	}
-	for _, d := range f.Diags {
-		if d.Severity == acs.Error {
-			return acs.Error
-		}
-	}
-	return acs.Warning
-}
+// failing reports whether the string denies every caller everywhere (it
+// has diagnostics), rather than only where it has no session.
+func (f acsFinding) failing() bool { return len(f.Diags) > 0 }
 
 // Detail is the finding without its file, as doctor prints it under the
 // file's name, e.g.
 //
 //	command 3 ("G"), ACS "S20 FA": column 5: no operator before "FA": put & or | between terms
 func (f acsFinding) Detail() string {
+	if f.NoSession {
+		return fmt.Sprintf("%s, %s %q: uses L or A, which fail the whole string for %s, where there is no session",
+			f.Source.Record, f.Source.Field, f.Source.ACS, f.Source.Headless)
+	}
 	parts := make([]string, len(f.Diags))
 	for i, d := range f.Diags {
 		parts[i] = d.String()
@@ -81,6 +80,8 @@ func scanACS(root string) (findings []acsFinding, checked int) {
 		}
 		if diags := acs.Validate(src.ACS); len(diags) > 0 {
 			findings = append(findings, acsFinding{Source: src, Diags: diags})
+		} else if src.Headless != "" && src.ACS != "" && acs.Parse(src.ACS).UsesSession() {
+			findings = append(findings, acsFinding{Source: src, NoSession: true})
 		}
 	}
 	return findings, checked
@@ -190,7 +191,7 @@ func collectACSSources(root string) []acsSource {
 			rec := "area " + a.Tag
 			out = append(out,
 				acsSource{File: "configs/message_areas.json", Record: rec, Field: "acs_read", ACS: a.ACSRead},
-				acsSource{File: "configs/message_areas.json", Record: rec, Field: "acs_write", ACS: a.ACSWrite})
+				acsSource{File: "configs/message_areas.json", Record: rec, Field: "acs_write", ACS: a.ACSWrite, Headless: qwkAPIReplies})
 		}
 	}
 	// File-echo areas are file areas like any other; the wizard and helper
@@ -236,26 +237,29 @@ func collectACSSources(root string) []acsSource {
 			rec := "network " + name + " auto_create"
 			out = append(out,
 				acsSource{File: "configs/ftn.json", Record: rec, Field: "acs_read", ACS: ac.ACSRead},
-				acsSource{File: "configs/ftn.json", Record: rec, Field: "acs_write", ACS: ac.ACSWrite})
+				acsSource{File: "configs/ftn.json", Record: rec, Field: "acs_write", ACS: ac.ACSWrite, Headless: qwkAPIReplies})
 		}
 	}
 	// doors.json, read as LoadDoors reads it: a blank or all-whitespace acs
-	// is no rule. A door's acs is strict (see acsSource.Strict).
+	// is no rule.
 	var doors []config.DoorConfig
 	if readJSON(filepath.Join(configDir, "doors.json"), &doors) {
 		for i, d := range doors {
 			out = append(out, acsSource{File: "configs/doors.json", Record: fmt.Sprintf("door %d (%s)", i+1, d.Code),
-				Field: "acs", ACS: strings.TrimSpace(d.ACS), Strict: true})
+				Field: "acs", ACS: strings.TrimSpace(d.ACS)})
 		}
 	}
 	return out
 }
 
-// checkACSStrings adds doctor's ACS section: one check per finding, a
-// failure for a string that can't be read as a whole or a door acs with any
-// problem (either fails for every caller) and a warning for one whose
-// meaning a stricter ACS policy would change; one passing check when
-// everything reads cleanly.
+// qwkAPIReplies is where a message area's acs_write is checked without a
+// session: menu.QWKWriteAuthorizer, for replies the QWK API takes in.
+const qwkAPIReplies = "replies uploaded through the QWK API"
+
+// checkACSStrings adds doctor's ACS section: a failing check for each string
+// with a problem, since it denies every caller; a warning for each string
+// that uses L or A where it is checked without a session; one passing check
+// when there are neither.
 func checkACSStrings(root string, add func(string, doctorSeverity, string, string)) {
 	findings, checked := scanACS(root)
 	if len(findings) == 0 {
@@ -263,14 +267,13 @@ func checkACSStrings(root string, add func(string, doctorSeverity, string, strin
 		return
 	}
 	for _, f := range findings {
-		status, fix := doctorWarn, "It works as it always has for now, but a stricter ACS check will change what it does. Fix it; see docs/sysop/reference/acs.md."
-		switch {
-		case f.Source.Strict:
-			status, fix = doctorFail, "A door's acs must read cleanly: this one denies the door to every caller, sysops included. Fix it; see docs/sysop/reference/acs.md."
-		case f.Severity() == acs.Error:
-			status, fix = doctorFail, "This string denies every caller. Fix it; see docs/sysop/reference/acs.md."
+		if f.failing() {
+			add("ACS: "+f.Source.File, doctorFail, f.Detail(),
+				"This string denies every caller, sysops included. Fix it; see docs/sysop/reference/acs.md.")
+			continue
 		}
-		add("ACS: "+f.Source.File, status, f.Detail(), fix)
+		add("ACS: "+f.Source.File, doctorWarn, f.Detail(),
+			"Callers in a session are checked as usual, but every reply uploaded through the QWK API is refused. Take L and A out if those replies should go through; see docs/sysop/reference/acs.md.")
 	}
 }
 
@@ -284,10 +287,10 @@ var acsLogged = struct {
 }{seen: map[string]bool{}}
 
 // logACSFindings scans the board and logs each problem the previous scan
-// didn't have, errors at error level and warnings at warn, with the text
-// doctor prints. It never stops the board and never changes a string: a bad
-// string keeps failing the way it always has. Called at startup and after a
-// config reload.
+// didn't have, with the text doctor prints: a string with a problem at
+// error level, one using L or A without a session at warn. It never stops
+// the board and never changes a string: a bad string denies every caller
+// until it is fixed. Called at startup and after a config reload.
 func logACSFindings(root string) {
 	findings, _ := scanACS(root)
 	acsLogged.Lock()
@@ -299,11 +302,11 @@ func logACSFindings(root string) {
 		if acsLogged.seen[key] {
 			continue
 		}
-		level := slog.LevelWarn
-		if f.Severity() == acs.Error {
-			level = slog.LevelError
+		if f.failing() {
+			slog.Error("ACS string problem: "+f.String(), "file", f.Source.File)
+		} else {
+			slog.Warn("ACS string problem: "+f.String(), "file", f.Source.File)
 		}
-		slog.Log(context.Background(), level, "ACS string problem: "+f.String(), "file", f.Source.File)
 	}
 	acsLogged.seen = seen
 }

@@ -2,6 +2,7 @@ package menueditor
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strconv"
 	"strings"
@@ -75,7 +76,14 @@ func menuFields() []fieldDef {
 		{
 			Label: "ACS Required   ", Type: ftString, Row: 9, Width: 30,
 			GetM: func(d *MenuData) string { return d.ACS },
-			SetM: func(d *MenuData, val string) error { d.ACS = strings.ToUpper(val); return nil },
+			SetM: func(d *MenuData, val string) error {
+				val = strings.ToUpper(strings.TrimSpace(val))
+				if err := acs.FieldError(val); err != nil {
+					return err
+				}
+				d.ACS = val
+				return nil
+			},
 		},
 		{
 			Label: "Menu Password  ", Type: ftString, Row: 10, Width: 30,
@@ -154,7 +162,14 @@ func cmdFields() []fieldDef {
 		{
 			Label: "ACS Required   ", Type: ftString, Row: 6, Width: 30,
 			GetC: func(d *CmdData) string { return d.ACS },
-			SetC: func(d *CmdData, val string) error { d.ACS = strings.ToUpper(val); return nil },
+			SetC: func(d *CmdData, val string) error {
+				val = strings.ToUpper(strings.TrimSpace(val))
+				if err := acs.FieldError(val); err != nil {
+					return err
+				}
+				d.ACS = val
+				return nil
+			},
 		},
 		{
 			Label: "Hidden?        ", Type: ftYesNo, Row: 7, Width: 1,

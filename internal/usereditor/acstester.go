@@ -307,7 +307,7 @@ func (m Model) viewACSTestScreen() string {
 		field(&r, acsElapsed, "  Mins In", 5, "")
 		field(&r, acsCredit, "  Credit", 5, "")
 	} else {
-		text(&r, "  none: L and A fail, T starts the call now")
+		text(&r, "  none: L/A fail the string, T starts now")
 	}
 	end(&r)
 	row(separatorStyle.Render(strings.Repeat("─", boxW)))

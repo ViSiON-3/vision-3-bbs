@@ -21,6 +21,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
@@ -661,8 +662,10 @@ func checkUserAndSecurity(configDir, root string, cfg config.ServerConfig, add f
 }
 
 // checkUserCreationDates lists the users with no sign-up date. The ACS term
-// AGE counts days from it, and without one it fails for that user, which a
-// sysop wouldn't otherwise see. Deleted users are left out.
+// AGE counts days from it, and without one any string with AGE in it fails
+// as a whole for that user, which a sysop wouldn't otherwise see. It is a
+// warning when one of the board's ACS strings uses AGE, and a note when none
+// does. Deleted users are left out.
 func checkUserCreationDates(root string, add func(string, doctorSeverity, string, string)) {
 	data, err := os.ReadFile(filepath.Join(root, "data", "users", "users.json"))
 	if err != nil {
@@ -694,8 +697,19 @@ func checkUserCreationDates(root string, add func(string, doctorSeverity, string
 	if len(missing) > shown {
 		list += fmt.Sprintf(" and %d more", len(missing)-shown)
 	}
-	add("user sign-up dates", doctorInfo, fmt.Sprintf("%d user(s) have no sign-up date, so AGE fails for them: %s", len(missing), list),
-		"Set createdAt for them in data/users/users.json while the BBS is stopped, if an ACS string uses AGE.")
+	var usedIn []string
+	for _, src := range collectACSSources(root) {
+		if e := acs.Parse(src.ACS); e.Valid() && e.UsesAge() {
+			usedIn = append(usedIn, src.File+" "+src.Record+" "+src.Field)
+		}
+	}
+	if len(usedIn) == 0 {
+		add("user sign-up dates", doctorInfo, fmt.Sprintf("%d user(s) have no sign-up date, so any ACS string with AGE in it would fail as a whole for them; none uses AGE now: %s", len(missing), list),
+			"Set createdAt for them in data/users/users.json while the BBS is stopped before an ACS string uses AGE.")
+		return
+	}
+	add("user sign-up dates", doctorWarn, fmt.Sprintf("%d user(s) have no sign-up date, so every ACS string with AGE in it fails as a whole for them, whatever its other parts say (used in %s): %s", len(missing), strings.Join(usedIn, ", "), list),
+		"Set createdAt for them in data/users/users.json while the BBS is stopped.")
 }
 
 // checkBadUserNames validates and counts rules in the configured bad-name list.

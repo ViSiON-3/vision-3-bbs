@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 )
 
 // writeACSFixture builds a board under t.TempDir with one questionable ACS
@@ -51,14 +49,14 @@ func TestScanACS(t *testing.T) {
 	wants := []want{
 		{"menus/v3/mnu/MAIN.MNU", "menu MAIN", "ACS", `no operator before "FA"`},
 		{"menus/v3/cfg/MAIN.CFG", `command 2 ("X")`, "ACS", "needs a term on each side"},
-		{"menus.d/v3/cfg/MSGMENU.CFG", `command 1 ("R")`, "ACS", "the '!' before it"},
+		{"menus.d/v3/cfg/MSGMENU.CFG", `command 1 ("R")`, "ACS", "Q is not an ACS term"},
 		{"menus/v3/ansi/MAIN.ANS", "region on line 2", "{{acs}}", "exactly one flag"},
 		{"configs/message_areas.json", "area SYSOP", "acs_read", "unexpected character '@'"},
 		{"configs/file_areas.json", "area UTILS", "acs_download", "hour from 0 to 23"},
 		{"configs/conferences.json", "conference 1 (LOCAL)", "acs", "no matching '('"},
-		{"configs/config.json", "door category GAMES", "acs", "the '!' before it"},
+		{"configs/config.json", "door category GAMES", "acs", "S needs a whole number"},
 		{"configs/ftn.json", "network fsxnet auto_create", "acs_write", "unexpected character '@'"},
-		{"configs/doors.json", "door 1 (LORD)", "acs", "the '!' before it"},
+		{"configs/doors.json", "door 1 (LORD)", "acs", "Q is not an ACS term"},
 	}
 	findings, _ := scanACS(root)
 	for _, w := range wants {
@@ -104,17 +102,16 @@ func TestCheckACSStringsSeverities(t *testing.T) {
 		}
 		checks = append(checks, check{status, message})
 	})
-	// a string that fails as a whole is a failure; one only a stricter policy
-	// would change is a warning
+	// a string with any problem denies every caller, so every finding is a
+	// failure, in a door's acs or anywhere else
 	for text, want := range map[string]doctorSeverity{
 		`"S255&"`:   doctorFail,
 		`"S10 FA"`:  doctorFail,
 		`"(broken"`: "",
-		`"!Q"`:      doctorWarn,
-		`"H25"`:     doctorWarn,
-		`"s20@"`:    doctorWarn,
-		// a door's acs is strict: a warning anywhere else is a failure there
-		`"s20&!Q"`: doctorFail,
+		`"!Q"`:      doctorFail,
+		`"H25"`:     doctorFail,
+		`"s20@"`:    doctorFail,
+		`"s20&!Q"`:  doctorFail,
 	} {
 		var got doctorSeverity
 		for _, c := range checks {
@@ -140,6 +137,36 @@ func TestCheckACSStringsClean(t *testing.T) {
 	checkACSStrings(root, func(_ string, status doctorSeverity, _, _ string) { got = append(got, status) })
 	if len(got) != 1 || got[0] != doctorOK {
 		t.Errorf("clean board: %v, want one ok", got)
+	}
+}
+
+// TestScanACSWithoutSession checks that a message area's acs_write, which
+// the QWK API checks without a session, is a warning when it uses L or A,
+// and that the same string elsewhere, checked with a session, is not.
+func TestScanACSWithoutSession(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "configs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	areas := `[{"id": 1, "tag": "LOCALS", "acs_read": "S10|L", "acs_write": "S20|!L"}, {"id": 2, "tag": "PLAIN", "acs_write": "S20"}]`
+	if err := os.WriteFile(filepath.Join(root, "configs", "message_areas.json"), []byte(areas), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	type check struct {
+		status          doctorSeverity
+		message, remedy string
+	}
+	var got []check
+	checkACSStrings(root, func(_ string, status doctorSeverity, message, remedy string) {
+		got = append(got, check{status, message, remedy})
+	})
+	if len(got) != 1 {
+		t.Fatalf("checks %v, want one warning for LOCALS acs_write", got)
+	}
+	c := got[0]
+	if c.status != doctorWarn || !strings.Contains(c.message, `area LOCALS, acs_write "S20|!L"`) ||
+		!strings.Contains(c.message, "QWK API") || !strings.Contains(c.remedy, "refused") {
+		t.Errorf("check = %+v", c)
 	}
 }
 
@@ -170,13 +197,8 @@ func TestScanACSDoors(t *testing.T) {
 		got[f.Source.Record] = f
 	}
 	for _, rec := range []string{"door 1 (NOTQ)", "door 2 (BROKEN)", "door 6 (HOUR)"} {
-		f, ok := got[rec]
-		if !ok {
+		if _, ok := got[rec]; !ok {
 			t.Errorf("no finding for %s", rec)
-			continue
-		}
-		if f.Severity() != acs.Error {
-			t.Errorf("%s: severity %v, want error", f, f.Severity())
 		}
 	}
 	if len(got) != 3 {
@@ -217,8 +239,8 @@ func TestLogACSFindingsOnce(t *testing.T) {
 	if first == 0 {
 		t.Fatal("nothing logged at startup")
 	}
-	if !strings.Contains(buf.String(), "level=ERROR") || !strings.Contains(buf.String(), "level=WARN") {
-		t.Errorf("want errors and warnings at their own levels:\n%s", buf.String())
+	if strings.Count(buf.String(), "level=ERROR") != first || strings.Contains(buf.String(), "level=WARN") {
+		t.Errorf("want every problem logged as an error:\n%s", buf.String())
 	}
 	logACSFindings(root)
 	if n := strings.Count(buf.String(), "ACS string problem"); n != first {

@@ -105,7 +105,8 @@ func TestACSReference(t *testing.T) {
 		// Session terms without a session
 		{"L without a session", "L", nil, false},
 		{"A without a session", "A", nil, false},
-		{"not L without a session", "!L", nil, true},
+		{"not L without a session fails", "!L", nil, false},
+		{"L beside a passing branch fails without a session", "S10|L", nil, false},
 
 		// Operators and precedence: ! before & before |
 		{"and", "S20&FA", nil, true},
@@ -132,8 +133,10 @@ func TestACSReference(t *testing.T) {
 		{"trailing operator", "S20&", nil, false},
 		{"unclosed parenthesis", "(S20", nil, false},
 		{"unknown term fails", "Q", nil, false},
-		{"not an unknown term passes", "!Q", nil, true},
-		{"not a bad value passes", "!Sx", nil, true},
+		{"not an unknown term fails", "!Q", nil, false},
+		{"not a bad value fails", "!Sx", nil, false},
+		{"an unknown term beside a passing branch fails", "S10|Q", nil, false},
+		{"a stray character fails the string", "S20-", nil, false},
 		// a dropped character splits the term: S@20 is S and 20 with no
 		// operator between them, so the string fails at any level
 		{"a dropped character splits the term", "S@20", func(u *user.User) { u.AccessLevel = 99 }, false},

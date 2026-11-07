@@ -12,6 +12,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
@@ -526,6 +527,9 @@ func (cw *ConfigWatcher) reloadTargets() {
 // logACSFindings). The board directory is the parent of configs/. poll
 // calls it once at the end if anything reloaded.
 func (cw *ConfigWatcher) rescanACS() {
+	// Strings checked at runtime are reported afresh after a reload, so one
+	// that was fixed and comes back is logged again.
+	acs.ResetInvalidLog()
 	if cw.acsRescan != nil {
 		cw.acsRescan()
 		return

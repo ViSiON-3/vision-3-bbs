@@ -59,7 +59,7 @@ var (
 func TestACSTesterDefaultContext(t *testing.T) {
 	m := acsTesterOver(t, 80, 25)
 	view := stripANSIGolden(m.View())
-	for _, want := range []string{"ACS Tester: Bob", "Session:    none: L and A fail", "(now)", "Session   : N"} {
+	for _, want := range []string{"ACS Tester: Bob", "Session:    none: L or A fails the string", "(now)", "Session   : N"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("screen lacks %q:\n%s", want, view)
 		}
@@ -70,7 +70,7 @@ func TestACSTesterDefaultContext(t *testing.T) {
 		t.Errorf("lines:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	view = stripANSIGolden(m.View())
-	if !strings.Contains(view, "Q failed, so this passes") {
+	if !strings.Contains(view, "Q is not an ACS term") {
 		t.Errorf("explanation not on screen:\n%s", view)
 	}
 	if m = keys(t, m, tea.KeyMsg{Type: tea.KeyEscape}); m.mode != modeEdit {

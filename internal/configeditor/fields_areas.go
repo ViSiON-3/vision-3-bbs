@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"fmt"
+	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 	"strconv"
 	"strings"
@@ -94,12 +95,26 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 		{
 			Label: "ACS Read", Help: "Access string for reading (e.g. s20 = level 20+)", Type: ftString, Col: 3, Row: 6, Width: 20,
 			Get: func() string { return a.ACSRead },
-			Set: func(val string) error { a.ACSRead = val; return nil },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := acs.FieldError(val); err != nil {
+					return err
+				}
+				a.ACSRead = val
+				return nil
+			},
 		},
 		{
 			Label: "ACS Write", Help: "Access string for posting (e.g. s20 = level 20+)", Type: ftString, Col: 3, Row: 7, Width: 20,
 			Get: func() string { return a.ACSWrite },
-			Set: func(val string) error { a.ACSWrite = val; return nil },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := acs.FieldError(val); err != nil {
+					return err
+				}
+				a.ACSWrite = val
+				return nil
+			},
 		},
 		{
 			Label: "Base Path", Help: "Directory path for message base storage", Type: ftString, Col: 3, Row: 8, Width: 45,
@@ -327,17 +342,38 @@ func (m *Model) fieldsFileArea() []fieldDef {
 		{
 			Label: "ACS List", Help: "Access string for listing files", Type: ftString, Col: 3, Row: 5, Width: 20,
 			Get: func() string { return a.ACSList },
-			Set: func(val string) error { a.ACSList = val; return nil },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := acs.FieldError(val); err != nil {
+					return err
+				}
+				a.ACSList = val
+				return nil
+			},
 		},
 		{
 			Label: "ACS Upload", Help: "Access string for uploading files", Type: ftString, Col: 3, Row: 6, Width: 20,
 			Get: func() string { return a.ACSUpload },
-			Set: func(val string) error { a.ACSUpload = val; return nil },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := acs.FieldError(val); err != nil {
+					return err
+				}
+				a.ACSUpload = val
+				return nil
+			},
 		},
 		{
 			Label: "ACS Download", Help: "Access string for downloading files", Type: ftString, Col: 3, Row: 7, Width: 20,
 			Get: func() string { return a.ACSDownload },
-			Set: func(val string) error { a.ACSDownload = val; return nil },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := acs.FieldError(val); err != nil {
+					return err
+				}
+				a.ACSDownload = val
+				return nil
+			},
 		},
 		{
 			Label: "Conference", Help: "Select a conference", Type: ftLookup, Col: 3, Row: 8, Width: 40,
@@ -400,7 +436,14 @@ func (m *Model) fieldsConference() []fieldDef {
 		{
 			Label: "ACS", Help: "Access string for conference access", Type: ftString, Col: 3, Row: 5, Width: 10,
 			Get: func() string { return c.ACS },
-			Set: func(val string) error { c.ACS = val; return nil },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := acs.FieldError(val); err != nil {
+					return err
+				}
+				c.ACS = val
+				return nil
+			},
 		},
 	}
 }

@@ -1,8 +1,14 @@
 package menu
 
 import (
+	"bytes"
+	"log/slog"
+	"net"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/gliderlabs/ssh"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -48,7 +54,7 @@ func TestApplyConditionalRegions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := string(applyConditionalRegions([]byte(tt.in), tt.u, nil))
+			got := string(applyConditionalRegions([]byte(tt.in), tt.u, nil, time.Time{}, nil))
 			if got != tt.want {
 				t.Errorf("applyConditionalRegions(%q) = %q, want %q", tt.in, got, tt.want)
 			}
@@ -77,7 +83,7 @@ func TestApplyConditionalRegionsKeywords(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := string(applyConditionalRegions([]byte(tt.in), lowUser, tt.keywords))
+			got := string(applyConditionalRegions([]byte(tt.in), lowUser, nil, time.Time{}, tt.keywords))
 			if got != tt.want {
 				t.Errorf("applyConditionalRegions(%q) = %q, want %q", tt.in, got, tt.want)
 			}
@@ -118,5 +124,50 @@ func TestRegionKeywordsShared(t *testing.T) {
 				t.Errorf("RegionConditions(%q region) = %v, want none", spelling, got)
 			}
 		}
+	}
+}
+
+// TestConditionalRegionsUseTheSession checks that a region reads the session
+// showing the art, so L answers for that call: {{!L}} shows to a remote
+// caller and hides from a local one. Without a session, L can't be answered
+// and the region hides.
+func TestConditionalRegionsUseTheSession(t *testing.T) {
+	u := &user.User{AccessLevel: 10}
+	addr := func(a string) ssh.Session {
+		tcp, err := net.ResolveTCPAddr("tcp", a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return remoteAddrSession{addr: tcp}
+	}
+	const in = "a{{!L}}remote{{/}}b"
+	for _, tc := range []struct {
+		name string
+		s    ssh.Session
+		want string
+	}{
+		{"remote caller", addr("203.0.113.7:5000"), "aremoteb"},
+		{"local caller", addr("127.0.0.1:5000"), "a      b"},
+		{"no session", nil, "a      b"},
+	} {
+		if got := string(applyConditionalRegions([]byte(in), u, tc.s, time.Now(), nil)); got != tc.want {
+			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestConditionalRegionsDecorativeTextIsQuiet checks that {{...}} text that
+// isn't an ACS string hides its region without logging above Debug.
+func TestConditionalRegionsDecorativeTextIsQuiet(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	got := string(applyConditionalRegions([]byte("{{ ~~ welcome ~~ }}x{{/}}"), &user.User{AccessLevel: 255}, nil, time.Now(), nil))
+	if got != " " {
+		t.Errorf("got %q, want the region blanked", got)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("logged:\n%s", buf.String())
 	}
 }

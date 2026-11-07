@@ -1399,7 +1399,7 @@ func sessionHandler(s ssh.Session) {
 	defaultsChanged := false
 	if authenticatedUser.CurrentMessageAreaID == 0 && messageMgr != nil {
 		for _, area := range messageMgr.ListAreas() {
-			if menu.CheckUserACS(area.ACSRead, authenticatedUser) {
+			if menu.CheckUserACS(area.ACSRead, authenticatedUser, s, sessionStartTime) {
 				authenticatedUser.CurrentMessageAreaID = area.ID
 				authenticatedUser.CurrentMessageAreaTag = area.Tag
 				authenticatedUser.CurrentMsgConferenceID = area.ConferenceID
@@ -1416,7 +1416,7 @@ func sessionHandler(s ssh.Session) {
 	// Set default file area if not already set
 	if authenticatedUser.CurrentFileAreaID == 0 && fileMgr != nil {
 		for _, area := range fileMgr.ListAreas() {
-			if menu.CheckUserACS(area.ACSList, authenticatedUser) {
+			if menu.CheckUserACS(area.ACSList, authenticatedUser, s, sessionStartTime) {
 				authenticatedUser.CurrentFileAreaID = area.ID
 				authenticatedUser.CurrentFileAreaTag = area.Tag
 				authenticatedUser.CurrentFileConferenceID = area.ConferenceID

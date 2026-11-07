@@ -66,11 +66,12 @@ func acsContext(u *user.User, s ssh.Session, startTime time.Time) acs.Context {
 	return ctx
 }
 
-// CheckUserACS evaluates an ACS string against a user without requiring a
-// session or terminal. Use this for access checks outside of menu execution
-// (e.g., selecting default areas on login).
-func CheckUserACS(acsString string, u *user.User) bool {
-	return checkACS(acsString, u, nil, nil, time.Now())
+// CheckUserACS evaluates an ACS string against a user outside of menu
+// execution (e.g., selecting default areas on login), in session s whose
+// call began at startTime. Pass the session when there is one: without it
+// (s nil) a string with L or A in it fails as a whole.
+func CheckUserACS(acsString string, u *user.User, s ssh.Session, startTime time.Time) bool {
+	return checkACS(acsString, u, s, nil, startTime)
 }
 
 // checkACS evaluates a ViSiON/2 Access Control String (ACS) against user credentials.

@@ -382,9 +382,10 @@ func TestCheckDefaultSysopPasswordFindsBootstrapCredential(t *testing.T) {
 	}
 }
 
-// TestCheckUserCreationDates: users with no sign-up date are listed, as AGE
-// fails for them; deleted users are left out, and a board where every user
-// has one says so.
+// TestCheckUserCreationDates: users with no sign-up date are listed, as a
+// note while no ACS string uses AGE and a warning once one does, since the
+// whole string then fails for them; deleted users are left out, and a board
+// where every user has one says so.
 func TestCheckUserCreationDates(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "data", "users", "users.json")
@@ -402,7 +403,16 @@ func TestCheckUserCreationDates(t *testing.T) {
 		{"id":2,"handle":"Old Timer"},
 		{"id":3,"handle":"Gone","deletedUser":true}]`)
 	checks := run()
-	if !hasDoctorCheck(checks, "user sign-up dates", doctorInfo, "1 user(s) have no sign-up date, so AGE fails for them: Old Timer (#2)") {
+	if !hasDoctorCheck(checks, "user sign-up dates", doctorInfo, "none uses AGE now: Old Timer (#2)") {
+		t.Fatalf("checks = %#v", checks)
+	}
+	// Once a string uses AGE, it fails as a whole for them: a warning.
+	if err := os.MkdirAll(filepath.Join(root, "configs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeDoctorFixture(t, filepath.Join(root, "configs", "conferences.json"), `[{"id": 1, "tag": "VETS", "acs": "SYSOP|AGE>=30"}]`)
+	checks = run()
+	if !hasDoctorCheck(checks, "user sign-up dates", doctorWarn, "fails as a whole for them, whatever its other parts say (used in configs/conferences.json conference 1 (VETS) acs): Old Timer (#2)") {
 		t.Fatalf("checks = %#v", checks)
 	}
 	writeDoctorFixture(t, path, `[{"id":1,"handle":"Sysop","createdAt":"2026-01-02T03:04:05Z"}]`)
