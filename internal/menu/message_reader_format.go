@@ -64,7 +64,7 @@ func messageBodyLinesWithBanners(body, charset string, termWidth int, mode ansi.
 		// Message art is drawn for 80 columns and much of it relies on
 		// wrapping there, so a wider terminal still renders it at 80;
 		// wrapping at the terminal's width would shear it.
-		return RenderANSIArtToLines(body, min(termWidth, ansi.ArtWidth), 500)
+		return ansi.RenderANSIArtToLines(body, min(termWidth, ansi.ArtWidth), 500)
 	}
 
 	// Quote lines are reflowed here and word wrap leaves them alone. Word wrap

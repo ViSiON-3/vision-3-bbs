@@ -868,18 +868,57 @@ for (var i = 0; i < files.length; i++) {
 
 ### v3.ansi
 
-Display ANSI art files (.ANS) from scripts. Files are resolved by searching the script's working directory first, then `menus.d/v3/ansi/`, `menus/v3/ansi/`, `menus.d/v3/templates/`, and `menus/v3/templates/` in that order. Overlay files shadow shipped artwork.
+Display ANSI art files (.ANS) from scripts, and draw art a script has read. `display` and `displayRaw` resolve files by searching the script's working directory first, then `menus.d/v3/ansi/`, `menus/v3/ansi/`, `menus.d/v3/templates/`, and `menus/v3/templates/` in that order. Overlay files shadow shipped artwork.
 
 | Function | Description |
 |----------|-------------|
 | `display(filename)` | Read and display an .ANS file with pipe-code processing |
 | `displayRaw(filename)` | Display an .ANS file without pipe-code processing |
+| `render(text, options)` | Draw art into rows of text (see below) |
+| `sauce(text)` | Read art's SAUCE title, author and group (see below) |
 
 SAUCE metadata is automatically stripped. Art is displayed as menu screens are: CP437 terminals receive the file's bytes unchanged, and on UTF-8 terminals CP437 art is converted to UTF-8 (a file that is already valid UTF-8 is sent unchanged).
 
 ```javascript
 v3.ansi.display("welcome.ans");     // with pipe codes
 v3.ansi.displayRaw("artwork.ans");  // raw ANSI only
+```
+
+#### v3.ansi.render
+
+`render(text, options)` draws ANSI art the way ANSI.SYS would and returns the
+screen it leaves, one string per row, so a script can show it a screen at a
+time, scroll it, or put it in a window. It uses the renderer the message
+reader draws art with: cursor movement and positioning, saved positions
+(`ESC[s`/`ESC[u` and `ESC 7`/`ESC 8`), auto-wrap at the last column, and the
+colours carried from one sequence to the next. `text` is art as
+[`v3.file.read`](#v3fileread) and [`readMember`](#v3filereadmember) return
+it; everything from the first Ctrl-Z, where SAUCE and comments start, is left
+out.
+
+Each row is the text with the colour sequences it needs, ending in a reset,
+with trailing blank rows dropped. Write a row with `v3.console.write`, which
+sends it in the caller's encoding.
+
+| Option | Default | |
+|---|---|---|
+| `width` | 80 | Columns the art is drawn on, up to 255 |
+| `rows` | 1000 | Rows kept, up to 4000; a screen wider than 80 columns keeps proportionally fewer (at most 320,000 cells) |
+
+#### v3.ansi.sauce
+
+`sauce(text)` returns the SAUCE record at the end of `text` (as `read` and
+`readMember` return it) as `{title, author, group}`, padding trimmed, or
+`null` when there is none.
+
+```javascript
+var art = v3.file.readMember(area.id, "ACID0796.ZIP", "TC-ACID.ANS");
+var info = v3.ansi.sauce(art);
+var rows = v3.ansi.render(art);
+v3.console.writeln((info ? info.title + " by " + info.author : "untitled") + ", " + rows.length + " rows");
+for (var i = 0; i < Math.min(rows.length, 22); i++) {
+    v3.console.write(rows[i] + "\r\n");
+}
 ```
 
 ---
