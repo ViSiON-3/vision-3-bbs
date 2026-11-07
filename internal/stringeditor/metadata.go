@@ -676,6 +676,8 @@ func stringCatalog() []StringEntry {
 
 		{Label: "Konfig: QWK Devices", Key: "konfigQwkDevicesLabel", Description: "User configuration field label"},
 		{Label: "Konfig: QWK Devices Help", Key: "konfigQwkDevicesHelp", Description: "User configuration field help"},
+		{Label: "Konfig: V3Net Sharing", Key: "konfigV3NetSharingLabel", Description: "User configuration field label"},
+		{Label: "Konfig: V3Net Sharing Help", Key: "konfigV3NetSharingHelp", Description: "User configuration field help"},
 		{Label: "QWK Devices: Title", Key: "qwkDevicesTitle", Description: "Heading of the paired device screen"},
 		{Label: "QWK Devices: Header", Key: "qwkDevicesHeader", Description: "Column heading above the device list"},
 		{Label: "QWK Devices: Empty", Key: "qwkDevicesEmpty", Description: "Shown in place of the list when nothing is paired"},

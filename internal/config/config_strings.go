@@ -294,6 +294,8 @@ var StringFallbacks = map[string]string{
 	"konfigHeaderStyleHelp":   "How message headers look in the reader. Opens the style picker.",
 	"konfigQwkDevicesLabel":   "QWK Devices",
 	"konfigQwkDevicesHelp":    "Phones paired with the QWK API. Unpair one you lost or no longer use.",
+	"konfigV3NetSharingLabel": "V3Net Sharing",
+	"konfigV3NetSharingHelp":  "What other V3Net boards may show about you: Who's Online and Last Callers.",
 	"qwkDevicesTitle":         "|15Paired QWK Devices|07",
 	"qwkDevicesHeader":        "|08 #  Device                           Paired      Last Used|07",
 	"qwkDevicesEmpty":         "|07No devices are paired.|07",

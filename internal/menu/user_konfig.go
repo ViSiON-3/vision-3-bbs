@@ -143,6 +143,9 @@ func runUserKonfig(c *cmdCtx, args string) (*user.User, string, error) {
 	if !autocorrectOffered(c.e) {
 		cols = withoutKonfigItem(cols, autocorrectKonfigKey)
 	}
+	if !v3netSharingOffered(c.e) {
+		cols = withoutKonfigItem(cols, v3netSharingKonfigKey)
+	}
 	st.items, st.headings = layoutKonfig(cols)
 
 	hidden := c.e.hideCursorIfNeeded(c.terminal, c.outputMode, cursorHideContextDefault)
@@ -357,6 +360,10 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					help:  str.KonfigQwkDevicesHelp,
 					value: qwkDevicesValue,
 					edit:  editQwkDevices},
+				{key: v3netSharingKonfigKey, label: str.KonfigV3NetSharingLabel,
+					help:  str.KonfigV3NetSharingHelp,
+					value: v3netSharingValue,
+					edit:  editV3NetSharing},
 			}},
 			{title: str.KonfigSectionFiles, items: []*konfigItem{
 				{key: 'K', label: str.KonfigListingModeLabel, flips: true,

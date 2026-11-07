@@ -446,7 +446,7 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		lastNets := centralOfferedNetworks(e.V3NetCentral, protocol.CentralKindLastCallers)
 
 		var buf strings.Builder
-		buf.WriteString(centralHeader("My Preferences", termWidth))
+		buf.WriteString(centralHeader("Sharing", termWidth))
 		if !u.CentralPresence && u.CentralLastCallsSince == nil {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|15  Nothing about you is shared through V3Net Central.|07\r\n")))
 		} else {

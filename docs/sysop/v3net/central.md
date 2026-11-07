@@ -254,10 +254,13 @@ caller. Looking at either sends nothing about the caller who is looking.
 
 ### Caller Controls
 
-A caller's switches are on **V3Net Central → Preferences**:
+A caller's switches are on one screen, reached two ways: **V3Net Central →
+Preferences**, and **V3Net Sharing** (`R`) on Your Konfig (`K`). Konfig
+shows that item only while a network offers Who's Online or Last Callers,
+with what the caller shares beside it (Off, Online, Calls, or both):
 
 ```
-V3Net Central: My Preferences
+V3Net Central: Sharing
 ───────────────────────────────────────────────────────────────────────────────
   Nothing about you is shared through V3Net Central.
   Browsing boards, Who's Online and Last Callers sends nothing about you.
