@@ -20,11 +20,14 @@ import (
 	"golang.org/x/term"
 )
 
-// runNewScanAll implements the multi-area newscan flow matching Pascal's NewScanAll.
+// runNewScanAll implements the multi-area newscan flow matching Pascal's
+// NewScanAll. skipSetup leaves out the setup screen and scans with the
+// settings it starts from (see defaultScanConfig), as though the caller had
+// pressed Enter there.
 func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
 	sessionStartTime time.Time, outputMode ansi.OutputMode,
-	currentOnly bool, termWidth int, termHeight int) (*user.User, string, error) {
+	currentOnly, skipSetup bool, termWidth int, termHeight int) (*user.User, string, error) {
 
 	if currentUser == nil {
 		e.writeString(terminal, outputMode, e.Strings().ScanLoginRequired)
@@ -51,12 +54,16 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 	if termWidth <= 0 {
 		termWidth = currentUser.ScreenWidth
 	}
-	scanCfg, err := runGetScanType(scanIH, e, terminal, outputMode, numMsgs, currentOnly, termWidth)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return nil, "LOGOFF", io.EOF
+	scanCfg := defaultScanConfig(currentOnly)
+	if !skipSetup {
+		var err error
+		scanCfg, err = runGetScanType(scanIH, e, terminal, outputMode, numMsgs, currentOnly, termWidth)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, "LOGOFF", io.EOF
+			}
+			return nil, "", err
 		}
-		return nil, "", err
 	}
 	if scanCfg.Aborted {
 		return nil, "", nil

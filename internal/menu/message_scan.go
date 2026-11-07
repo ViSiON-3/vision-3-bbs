@@ -174,6 +174,21 @@ func (e *MenuExecutor) showScanNotice(terminal *term.Terminal, outputMode ansi.O
 	time.Sleep(scanNoticePause)
 }
 
+// defaultScanConfig is the scan the setup screen starts from, and the one
+// pressing Enter there at once runs: new messages in the tagged areas (the
+// current area when currentOnly), with last-read pointers updated.
+func defaultScanConfig(currentOnly bool) *ScanConfig {
+	cfg := &ScanConfig{
+		ScanDate:       scanDateNewOnly,
+		UpdatePointers: true,
+		WhichAreas:     1,
+	}
+	if currentOnly {
+		cfg.WhichAreas = 3
+	}
+	return cfg
+}
+
 // runGetScanType displays the Pascal-style scan configuration menu and
 // returns the chosen settings. Enter starts the scan; A, Q or ESC abort it.
 //
@@ -182,14 +197,7 @@ func (e *MenuExecutor) showScanNotice(terminal *term.Terminal, outputMode ansi.O
 func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Terminal,
 	outputMode ansi.OutputMode, numMsgs int, currentOnly bool, termWidth int) (*ScanConfig, error) {
 
-	cfg := &ScanConfig{
-		ScanDate:       scanDateNewOnly, // Default: new messages only
-		UpdatePointers: true,            // Default: update pointers
-		WhichAreas:     1,               // Default: tagged areas
-	}
-	if currentOnly {
-		cfg.WhichAreas = 3
-	}
+	cfg := defaultScanConfig(currentOnly)
 
 	showMenu := func() {
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
