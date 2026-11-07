@@ -443,6 +443,14 @@ Dynamic `@CODE@` placeholders are available in prompts, ANSI files, and template
 
 - `@U@` - Number of users currently online
 - `@UC@` - Total registered users (also `@USERCT@`)
+- `@UN@` - Number of callers online on other V3Net boards: those who turned
+  on network Who's Online, each counted once per board, across every network
+  your board shows [Who's Online](../v3net/central.md#whos-online-and-last-callers)
+  for. Your own callers are left out (`@U@` counts them), and it is `0` while
+  no network offers Who's Online. The count is refreshed in the background
+  every 30 seconds, so a menu never waits on a hub. Menu screens and prompts
+  only; in the `LASTCALL`, `WHOONLN`, `LASTNET` and `WHONET` templates `@UN@`
+  is the caller's handle, as before
 
 **Width formats:**
 
