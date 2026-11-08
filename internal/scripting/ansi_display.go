@@ -70,7 +70,16 @@ func registerAnsi(v3 *goja.Object, eng *Engine) {
 			return vm.ToValue([]string{})
 		}
 		width, rows := renderOptions(call)
-		return vm.ToValue(renderArt(call.Arguments[0].String(), width, rows))
+		return vm.ToValue(renderArt(sessionGlyphs(eng, call.Arguments[0].String()), width, rows))
+	})
+
+	// glyphs(text) — text with the control bytes CP437 draws as glyphs
+	// (☺ ♥ ► ▲ ▼ …) made visible on the caller's terminal.
+	jsutil.Set(obj, "glyphs", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			return vm.ToValue("")
+		}
+		return vm.ToValue(sessionGlyphs(eng, call.Arguments[0].String()))
 	})
 
 	// sauce(text) — the SAUCE record's title, author and group, or null.
@@ -145,6 +154,19 @@ func renderArt(text string, width, rows int) []string {
 		text = text[:i]
 	}
 	return ansi.RenderANSIArtToLines(text, width, rows)
+}
+
+// sessionGlyphs returns text, as v3.file.read returns it, with the control
+// bytes a CP437 terminal draws as glyphs (☺ ♥ ► ▲ ▼ …) ready for the
+// caller's terminal. A UTF-8 terminal draws nothing for them, so there they
+// become the glyphs' characters; a CP437 terminal draws them itself, so
+// there they stay as they are. Tab, CR, LF, ESC and the other bytes ANSI.SYS
+// acts on are left alone either way.
+func sessionGlyphs(eng *Engine, text string) string {
+	if eng.session == nil || eng.session.OutputMode != ansi.OutputModeUTF8 {
+		return text
+	}
+	return string(ansi.DrawCP437ControlGlyphs([]byte(text)))
 }
 
 // cp437Bytes turns text back into the bytes v3.file.read decoded it from:

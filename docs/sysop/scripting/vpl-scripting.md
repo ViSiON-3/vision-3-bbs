@@ -876,6 +876,7 @@ Display ANSI art files (.ANS) from scripts, and draw art a script has read. `dis
 | `displayRaw(filename)` | Display an .ANS file without pipe-code processing |
 | `render(text, options)` | Draw art into rows of text (see below) |
 | `sauce(text)` | Read art's SAUCE title, author and group (see below) |
+| `glyphs(text)` | Make the control bytes CP437 draws as glyphs show on the caller's terminal (see below) |
 
 SAUCE metadata is automatically stripped. Art is displayed as menu screens are: CP437 terminals receive the file's bytes unchanged, and on UTF-8 terminals CP437 art is converted to UTF-8 (a file that is already valid UTF-8 is sent unchanged).
 
@@ -898,12 +899,25 @@ out.
 
 Each row is the text with the colour sequences it needs, ending in a reset,
 with trailing blank rows dropped. Write a row with `v3.console.write`, which
-sends it in the caller's encoding.
+sends it in the caller's encoding. The control bytes CP437 draws as glyphs
+are drawn as [`glyphs`](#v3ansiglyphs) leaves them, so they show on either
+kind of terminal.
 
 | Option | Default | |
 |---|---|---|
 | `width` | 80 | Columns the art is drawn on, up to 255 |
 | `rows` | 1000 | Rows kept, up to 4000; a screen wider than 80 columns keeps proportionally fewer (at most 320,000 cells) |
+
+#### v3.ansi.glyphs
+
+`glyphs(text)` returns `text` (as `read` and `readMember` return it) with the
+control bytes CP437 draws as glyphs (☺ ☻ ♥ ♦ ♣ ♠ ► ◄ ▲ ▼ and the rest) made
+visible on the caller's terminal. A UTF-8 terminal draws nothing for those
+bytes, so for a UTF-8 caller they become the glyphs' characters; a CP437
+terminal draws them itself, so for a CP437 caller the text is returned as it
+is. Tab, CR, LF, ESC, BEL, BS, NUL and Ctrl-Z are left alone either way. Use
+it on text written without [`render`](#v3ansirender), which does this
+itself.
 
 #### v3.ansi.sauce
 

@@ -5,7 +5,10 @@
 // The BBS passes the archive's area tag and filename as the last two
 // arguments. A lightbar lists the archive's entries with each piece's SAUCE
 // title and artist. Enter shows a piece: ANSI art is drawn as ANSI.SYS
-// would (v3.ansi.render) and shown a screen at a time, text likewise.
+// would (v3.ansi.render) and shown a screen at a time, text likewise. What
+// counts as art or text is kindOf's call, below: entries are greyed by name
+// until read, an entry it can't place is shown if the caller says so, and
+// binary entries are refused.
 // Entries are read in memory with v3.file.readMember, which needs the
 // area's download access; nothing is extracted to disk.
 //
@@ -33,9 +36,40 @@ var COLORS = {
     status: "\x1b[0;1;33m"
 };
 
-// Entries the viewer can show: art and text by name, checked for binary
-// bytes when read.
-var VIEWABLE = /\.(ans|asc|ice|diz|nfo|txt|doc|lit|1st|me|now|ad|log|mem|lst|faq)$/i;
+// --- What the viewers can show. This block is the same in textview.js and
+// artview.js; keep the two in step (a test checks they match).
+
+// Files that are text by name: these extensions, and README or FILE_ID
+// without one. Others are judged by their contents alone.
+var TEXT_EXT = /\.(ans|asc|ice|diz|nfo|txt|doc|lit|1st|me|now|ad|log|mem|lst|faq|msg|inf|bbs|pcb|cfg|ini|bat|md)$/i;
+var TEXT_NAME = /(^|[\/\\])(readme|file_id)$/i;
+
+function textByName(name) {
+    return TEXT_EXT.test(name) || TEXT_NAME.test(name);
+}
+
+// kindOf says how data, from the file called name, can be shown, judging
+// the text before its Ctrl-Z (a SAUCE record and NUL padding follow it):
+//   "binary": it has NUL bytes, or control bytes make up a quarter or more;
+//   "text":   it has no control bytes, or its name says it's text (CP437 art
+//             draws bytes 1-31 as glyphs: ☺ ♥ ► ▲ ▼ and the rest);
+//   "ask":    a few control bytes and a name that says nothing, so the
+//             caller is asked whether to view it anyway.
+// Tab, CR, LF and ESC don't count as control bytes.
+function kindOf(name, data) {
+    var end = data.indexOf("\x1a");
+    var sample = data.slice(0, end >= 0 ? Math.min(end, 4096) : 4096);
+    var ctl = 0;
+    for (var i = 0; i < sample.length; i++) {
+        var c = sample.charCodeAt(i);
+        if (c === 0) return "binary";
+        if (c < 32 && c !== 9 && c !== 10 && c !== 13 && c !== 27) ctl++;
+    }
+    if (ctl > 0 && ctl * 4 >= sample.length) return "binary";
+    return ctl === 0 || textByName(name) ? "text" : "ask";
+}
+
+// --- End of the shared block.
 
 function sizeText(n) {
     if (n >= 1048576) return (n / 1048576).toFixed(1) + "M";
@@ -48,25 +82,12 @@ function pad(s, n) {
     return s.length >= n ? s.slice(0, n) : s + new Array(n - s.length + 1).join(" ");
 }
 
-// looksBinary reports whether data, up to its Ctrl-Z (where a SAUCE record
-// and its NUL padding start), looks like something other than text.
-function looksBinary(data) {
-    var end = data.indexOf("\x1a");
-    var sample = data.slice(0, end >= 0 ? Math.min(end, 4096) : 4096);
-    var low = 0;
-    for (var i = 0; i < sample.length; i++) {
-        var c = sample.charCodeAt(i);
-        if (c === 0) return true;
-        if (c < 8 && c !== 7) low++;
-    }
-    return low > 8;
-}
-
 function ArtView(tag, name) {
     this.area = v3.file.area(tag);
     this.name = name;
     this.entries = [];
     this.sauce = {};
+    this.kinds = {}; // kindOf for each entry read so far
     this.sel = 0;
     this.top = 0;
     this.status = "";
@@ -86,14 +107,30 @@ ArtView.prototype.rows = function () {
     return this.height() - (BOTTOM_RULE ? 4 : 3);
 };
 
+// viewable reports whether an entry is art or text, by its name until it
+// has been read and by its contents after.
 ArtView.prototype.viewable = function (e) {
-    return VIEWABLE.test(e.name);
+    var kind = this.kinds[e.name];
+    return kind ? kind === "text" : textByName(e.name);
 };
 
-// sauceOf reads and remembers an entry's SAUCE record (null for none).
+// kindOfEntry reads an entry and returns kindOf for it, or "unreadable"
+// when it can't be read, remembering the answer.
+ArtView.prototype.kindOfEntry = function (e) {
+    if (!(e.name in this.kinds)) {
+        var data = v3.file.readMember(this.area.id, this.name, e.name);
+        this.kinds[e.name] = data === null ? "unreadable" : kindOf(e.name, data);
+        if (data !== null && this.kinds[e.name] === "text") this.sauce[e.name] = v3.ansi.sauce(data);
+    }
+    return this.kinds[e.name];
+};
+
+// sauceOf reads and remembers an entry's SAUCE record (null for none). It
+// reads only entries named as text; others get theirs once read to be
+// shown (show and kindOfEntry fill it in).
 ArtView.prototype.sauceOf = function (e) {
     if (!(e.name in this.sauce)) {
-        var data = this.viewable(e) ? v3.file.readMember(this.area.id, this.name, e.name) : null;
+        var data = textByName(e.name) ? v3.file.readMember(this.area.id, this.name, e.name) : null;
         this.sauce[e.name] = data === null ? null : v3.ansi.sauce(data);
     }
     return this.sauce[e.name];
@@ -160,16 +197,33 @@ ArtView.prototype.toggleTag = function () {
 };
 
 // show displays entry index a screen at a time. It returns "next", "prev"
-// or "list", or "" when the caller has gone.
-ArtView.prototype.show = function (index) {
+// or "list", or "" when the caller has gone. An entry kindOf can't place is
+// shown only when ask is set and the caller says so.
+ArtView.prototype.show = function (index, ask) {
     var e = this.entries[index];
     var data = v3.file.readMember(this.area.id, this.name, e.name);
-    if (data === null || looksBinary(data)) {
-        this.status = e.name + ": can't be shown";
+    var kind = data === null ? "unreadable" : kindOf(e.name, data);
+    this.kinds[e.name] = kind;
+    if (kind === "unreadable") {
+        this.status = e.name + ": can't be read";
         return "list";
     }
+    if (kind === "binary") {
+        this.status = e.name + ": not art or text";
+        return "list";
+    }
+    if (kind === "ask") {
+        if (!ask) return "list";
+        v3.console.gotoxy(1, this.height());
+        v3.console.write(COLORS.status + " " + e.name + ": format unknown. View anyway? (Y/N) \x1b[0m\x1b[K");
+        var yes = v3.console.readkey().toLowerCase() === "y";
+        if (!v3.session.online) return "";
+        if (!yes) return "list";
+    }
     var lines = v3.ansi.render(data, { width: Math.min(this.width(), 80), rows: 4000 });
-    var s = this.sauceOf(e);
+    // The data is in hand, so its SAUCE is too, whatever the entry's name.
+    this.sauce[e.name] = v3.ansi.sauce(data);
+    var s = this.sauce[e.name];
     var title = e.name + (s && s.title ? "  " + s.title : "") + (s && s.author ? " by " + s.author : "");
     var page = this.rows();
     var top = 0;
@@ -201,10 +255,13 @@ ArtView.prototype.show = function (index) {
 };
 
 // open shows entries starting at index, moving to the next or previous
-// viewable one on N and P, and returns false when the caller has gone.
+// art or text on N and P (passing over entries kindOf can't place), and
+// returns false when the caller has gone.
 ArtView.prototype.open = function (index) {
+    var ask = true;
     for (;;) {
-        var r = this.show(index);
+        var r = this.show(index, ask);
+        ask = false;
         if (r === "") return false;
         var dir = r === "next" ? 1 : r === "prev" ? -1 : 0;
         if (dir === 0) {
@@ -213,7 +270,7 @@ ArtView.prototype.open = function (index) {
             return true;
         }
         var next = index + dir;
-        while (next >= 0 && next < this.entries.length && !this.viewable(this.entries[next])) next += dir;
+        while (next >= 0 && next < this.entries.length && this.kindOfEntry(this.entries[next]) !== "text") next += dir;
         if (next < 0 || next >= this.entries.length) {
             this.status = dir > 0 ? "That's the last piece" : "That's the first piece";
         } else {
@@ -252,11 +309,7 @@ ArtView.prototype.main = function () {
             case "end": this.sel = n - 1; break;
             case "t": this.toggleTag(); break;
             case "\r":
-                if (!this.viewable(this.entries[this.sel])) {
-                    this.status = this.entries[this.sel].name + ": not art or text";
-                } else if (!this.open(this.sel)) {
-                    return;
-                }
+                if (!this.open(this.sel)) return;
                 break;
             case "esc": case "q":
                 v3.console.write("\x1b[0m");

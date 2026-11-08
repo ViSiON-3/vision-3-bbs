@@ -181,7 +181,7 @@ own `args`. A stock install ships both doors in `doors.json`, with
   More/Back/Home/End page through the file, Find looks for text (Enter on
   Find looks again), Tag adds the file to the caller's batch, and Prev/Next
   open the previous or next text file in the area. Up/Down scroll a line.
-  ANSI files are drawn as ANSI.SYS would; binary files are refused.
+  ANSI files are drawn as ANSI.SYS would.
 - **Archive viewer** (`artview.js`): a lightbar list of the archive's
   entries, with each piece's SAUCE title and artist. Enter draws a piece and
   shows it a screen at a time, N and P move to the next or previous piece,
@@ -200,6 +200,26 @@ each script. Each script also has `BOTTOM_RULE`, a rule above the bottom bar
 to match the one under the header; set it to `false` for one more row of
 text or art on short screens. To use your own viewer, point the setting at
 another door.
+
+Both viewers decide what they can show the same way, from a file's name
+and a sample of its contents: the first 4096 characters, stopping at its
+Ctrl-Z, where a SAUCE record starts. Tab, CR, LF and ESC don't count as
+control bytes; the other bytes from 1 to 31 do.
+
+- **Binary**, refused: the sample has NUL bytes, or control bytes are a
+  quarter or more of it.
+- **Text**, shown: the sample has no control bytes, or the name says it's text. That
+  is one of `ans asc ice diz nfo txt doc lit 1st me now ad log mem lst faq
+  msg inf bbs pcb cfg ini bat md`, or `README` or `FILE_ID` with no
+  extension.
+- **Unknown**, the caller is asked `Format unknown. View anyway? (Y/N)`: a
+  few control bytes and a name that says nothing. Prev/Next and N/P pass over
+  these.
+
+CP437 art draws control bytes as glyphs (☺ ♥ ► ▲ ▼ and the rest), and so do
+the viewers: a CP437 terminal is sent the bytes, which it draws itself, and a
+UTF-8 terminal the glyphs' characters. In the archive viewer, entries whose
+names don't say they're text are greyed until they've been read.
 
 The archive viewer, like ZipLab's, handles ZIP only. Other archives (7z, RAR,
 ARJ, LHA) go to the text viewer, which says it isn't a text file, where the

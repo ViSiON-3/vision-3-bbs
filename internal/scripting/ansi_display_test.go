@@ -189,3 +189,36 @@ func TestAnsiSauce(t *testing.T) {
 		t.Errorf("no record: %v", v)
 	}
 }
+
+// TestAnsiGlyphs: the control bytes CP437 draws as glyphs reach a UTF-8
+// caller as those glyphs, from v3.ansi.glyphs and in v3.ansi.render's rows,
+// and a CP437 caller as the bytes themselves, which it draws. Tab, CR, LF
+// and escape sequences are left alone.
+func TestAnsiGlyphs(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		mode  ansi.OutputMode
+		glyph string
+	}{
+		{"utf8", ansi.OutputModeUTF8, "☺♥▲"},
+		{"cp437", ansi.OutputModeCP437, "\x01\x03\x1e"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t, harnessOpts{session: func(s *SessionContext) { s.OutputMode = tc.mode }})
+			if got := h.eval(`v3.ansi.glyphs("a\x01\x03\x1eb\tc\r\n\x1b[1m")`).String(); got != "a"+tc.glyph+"b\tc\r\n\x1b[1m" {
+				t.Errorf("glyphs = %q", got)
+			}
+			var rows []string
+			if err := h.eng.vm.ExportTo(h.eval(`v3.ansi.render("\x1b[31m\x01\x03\x1e!")`), &rows); err != nil {
+				t.Fatal(err)
+			}
+			if len(rows) != 1 || ansi.StripAnsi(rows[0]) != tc.glyph+"!" {
+				t.Errorf("render = %q", rows)
+			}
+		})
+	}
+	h := newHarness(t, harnessOpts{})
+	if got := h.eval(`v3.ansi.glyphs()`).String(); got != "" {
+		t.Errorf("no argument = %q", got)
+	}
+}
