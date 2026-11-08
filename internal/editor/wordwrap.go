@@ -41,7 +41,8 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 	for endLine < lineCount && !ww.buffer.IsHardNewline(endLine) && ww.buffer.QuotePrefix(endLine+1) == prefix {
 		endLine++
 	}
-	width := MaxLineLength - len(prefix)
+	// Less any column the screen adds beside the prefix, as wrapQuoted does.
+	width := MaxLineLength - len(prefix) - quoteLeadExtra(prefix)
 	if width < minQuoteWrapWidth {
 		width = minQuoteWrapWidth
 	}

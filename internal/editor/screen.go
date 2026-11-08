@@ -58,6 +58,10 @@ type Screen struct {
 	// mark is a word drawn highlighted over the text (see MarkWord); nil
 	// once anything redraws its line.
 	mark *wordMark
+	// colShift is how many columns each drawn buffer line's text sits to the
+	// right of where it is stored, for a quote line drawn the way the reader
+	// draws it (see displayQuoteLine). The cursor is moved with it.
+	colShift map[int]int
 }
 
 // NewScreen creates a new screen manager
@@ -68,6 +72,7 @@ func NewScreen(terminal io.Writer, outputMode ansi.OutputMode, termWidth, termHe
 		termWidth:     termWidth,
 		termHeight:    termHeight,
 		physicalLines: make(map[int]string),
+		colShift:      make(map[int]int),
 	}
 	s.calculateGeometry()
 	return s
@@ -673,7 +678,9 @@ func (s *Screen) updateDynamicHeaderFields(insertMode bool, currentLine, totalLi
 	s.WriteDirect("\x1b[0m") // reset colors after the restore (which may restore attributes) to prevent header background bleed into editing area
 }
 
-// RefreshLine redraws a single line if it has changed
+// RefreshLine redraws a single line if it has changed. A quote line is drawn
+// as the message reader will show it, which can put its text a column or so
+// from where the buffer holds it; Reposition moves the cursor to match.
 func (s *Screen) RefreshLine(lineNum int, lineContent string, topLine int) {
 	// Calculate screen position
 	screenLine := lineNum - topLine + 1
@@ -681,7 +688,17 @@ func (s *Screen) RefreshLine(lineNum int, lineContent string, topLine int) {
 		return // Line not visible
 	}
 
-	lineContent = s.markedLine(lineNum, lineContent)
+	disp := displayQuoteLine(lineContent)
+	restore := textSGR
+	if disp.quote {
+		restore += quoteSGR
+	}
+	lineContent = displayQuoteLine(s.markedLine(lineNum, lineContent, restore)).text
+	if disp.shift != 0 {
+		s.colShift[lineNum] = disp.shift
+	} else {
+		delete(s.colShift, lineNum)
+	}
 
 	// Check if line changed
 	lastContent, exists := s.physicalLines[lineNum]
@@ -695,7 +712,14 @@ func (s *Screen) RefreshLine(lineNum int, lineContent string, topLine int) {
 	// Position cursor and draw line
 	s.GoXY(1, s.editingStartY+screenLine-1)
 	terminalio.WriteProcessedBytes(s.terminal, []byte(lineContent), s.outputMode)
-	s.ClearEOL()
+	if disp.quote {
+		s.WriteDirect(textSGR)
+	}
+	// A row that reaches the last column leaves the cursor waiting to wrap,
+	// where erasing to the end of the line would take that column's character.
+	if !disp.quote || runeLen(stripANSI(lineContent)) < s.termWidth {
+		s.ClearEOL()
+	}
 }
 
 // RefreshScreen redraws all visible lines (incremental update)
@@ -734,6 +758,7 @@ func (s *Screen) RefreshScreen(buffer *MessageBuffer, topLine, currentLine, curr
 // ClearCache clears the screen cache to force a full redraw on next refresh
 func (s *Screen) ClearCache() {
 	s.physicalLines = make(map[int]string)
+	s.colShift = make(map[int]int)
 	s.mark = nil
 }
 
@@ -745,7 +770,7 @@ func (s *Screen) Reposition(currentLine, currentCol, topLine int) {
 	}
 
 	screenY := s.editingStartY + screenLine - 1
-	s.GoXY(currentCol, screenY)
+	s.GoXY(max(1, currentCol+s.colShift[currentLine]), screenY)
 }
 
 // FullRedraw performs a complete screen redraw
@@ -815,6 +840,7 @@ func (s *Screen) Resize(newWidth, newHeight int) {
 	}
 	// Clear physical state to force full redraw on next refresh
 	s.physicalLines = make(map[int]string)
+	s.colShift = make(map[int]int)
 	s.mark = nil
 }
 
