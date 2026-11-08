@@ -200,6 +200,12 @@ func TestStockArchiveViewer(t *testing.T) {
 // above its bottom bar, the row holding marker (BOTTOM_RULE, on in stock).
 func checkRuleAbove(t *testing.T, raw, marker string) {
 	t.Helper()
+	// Render only up to the bar: the viewer clears the screen as it exits,
+	// and whether that clear reaches the output before the session ends
+	// depends on timing.
+	if at := strings.LastIndex(raw, marker); at >= 0 {
+		raw = raw[:at+len(marker)]
+	}
 	lines := ansi.RenderANSIArtToLines(raw, 80, 100)
 	for i := len(lines) - 1; i > 0; i-- {
 		if strings.Contains(lines[i], marker) {
