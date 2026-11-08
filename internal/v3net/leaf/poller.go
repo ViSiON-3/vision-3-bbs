@@ -352,17 +352,46 @@ func (l *Leaf) runPoller(ctx context.Context) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	// The ticker is the fallback: it catches what an event never announced,
+	// such as messages posted while the stream was down.
 	for {
+		why := "interval"
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			slog.Debug("leaf: polling", "network", l.cfg.Network)
-			if count, err := l.poll(ctx); err != nil {
-				slog.Warn("leaf: poll failed", "network", l.cfg.Network, "error", err)
-			} else if count > 0 {
-				slog.Info("leaf: received messages", "network", l.cfg.Network, "count", count)
-			}
+		case <-l.pollNow:
+			why = "new_message"
+			ticker.Reset(interval)
 		}
+		slog.Debug("leaf: polling", "network", l.cfg.Network, "reason", why)
+		if count, err := l.poll(ctx); err != nil {
+			slog.Warn("leaf: poll failed", "network", l.cfg.Network, "error", err)
+		} else if count > 0 {
+			slog.Info("leaf: received messages", "network", l.cfg.Network, "count", count)
+		}
+	}
+}
+
+// dispatchMessageEvent asks the poll loop for a poll now when the hub
+// reports a new message on this leaf's network, so a post reaches this
+// board in seconds instead of at the next poll interval. Nothing is taken
+// from the event itself: the poll fetches the message through the signed,
+// deduplicated path, as the interval poll does. A message this node posted
+// is already here, so its event is passed over.
+func (l *Leaf) dispatchMessageEvent(ev protocol.Event) {
+	if ev.Type != protocol.EventNewMessage {
+		return
+	}
+	var p protocol.NewMessagePayload
+	if err := json.Unmarshal(ev.Data, &p); err != nil || p.Network != l.cfg.Network {
+		return
+	}
+	if p.OriginNode != "" && p.OriginNode == l.cfg.Keystore.NodeID() {
+		return
+	}
+	select {
+	case l.pollNow <- struct{}{}:
+	default: // a poll is already asked for
 	}
 }

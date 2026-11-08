@@ -171,6 +171,7 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 				// listing event has staled the directory by the time the
 				// callback fires (#906).
 				l.dispatchCentralEvent(ev)
+				l.dispatchMessageEvent(ev)
 				l.onEvent(ev)
 				l.chatSessions.dispatch(ev)
 				l.dispatchNALEvent(ctx, ev)

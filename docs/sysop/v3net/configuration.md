@@ -144,7 +144,7 @@ Enter - Edit  |  S - Save  |  ESC - Back
 | **Hub URL** | Full URL of the hub (e.g. `http://felonynet.org:8765`) |
 | **Network** | Network name to subscribe to (e.g. `felonynet`) |
 | **Areas** | Press **Enter** to open the area browser and choose which areas to subscribe to |
-| **Poll Interval** | How often to check for new messages. Accepts Go durations: `30s`, `5m`, `1h` |
+| **Poll Interval** | How often to check for new messages when none has been announced. A post on another node is fetched as soon as the hub's event for it arrives; the interval catches anything missed, such as posts made while the event stream was down. Accepts Go durations: `30s`, `5m`, `1h` |
 | **Origin** | Origin line appended to outbound messages. Identifies your BBS to readers on other nodes. Blank defaults to BBS name. |
 
 Press **Enter** on **Areas** to browse and subscribe. Press **S** to save.

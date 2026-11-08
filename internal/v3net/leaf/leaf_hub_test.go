@@ -714,3 +714,98 @@ func TestPoll_SameUUIDFromTwoNodesImportsBoth(t *testing.T) {
 		t.Errorf("fresh leaf's first Poll = %d, %v; want %d", count, err, len(want))
 	}
 }
+
+// TestStart_NewMessageEventPollsAtOnce checks that a message posted by
+// another node reaches this leaf as soon as the hub's new_message event
+// does, not at the next poll interval, which here is an hour.
+func TestStart_NewMessageEventPollsAtOnce(t *testing.T) {
+	ts, h, hubKS := newTestHub(t, true)
+	seedHubNAL(t, h, hubKS, "gen.general")
+	poster := subscribedLeaf(t, ts, "poster", "gen.general")
+
+	writer := &chanJAMWriter{written: make(chan protocol.Message, 8)}
+	l, _ := setupLeaf(t, ts.URL, writer)
+	l.cfg.BBSName = "eventbbs"
+	l.cfg.AreaTags = []string{"gen.general"}
+	l.cfg.PollInterval = time.Hour
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		l.Start(ctx)
+	}()
+	defer func() {
+		cancel()
+		<-done
+	}()
+	for deadline := time.Now().Add(5 * time.Second); !l.sseConnected.Load(); {
+		if time.Now().After(deadline) {
+			t.Fatal("event stream did not connect")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if err := poster.SendMessage(ownMessage(poster, testUUID1)); err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	select {
+	case m := <-writer.written:
+		if m.MsgUUID != testUUID1 {
+			t.Errorf("got %s, want %s", m.MsgUUID, testUUID1)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the posted message did not arrive on the new_message event")
+	}
+}
+
+// TestDispatchMessageEvent checks which events ask for a poll: a
+// new_message on this leaf's network from another node does, and a burst
+// of them asks once; this node's own post, another network, a malformed
+// payload and other events don't.
+func TestDispatchMessageEvent(t *testing.T) {
+	l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+	ev := func(typ string, p any) protocol.Event {
+		data, err := json.Marshal(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return protocol.Event{Type: typ, Data: data}
+	}
+	asked := func() bool {
+		select {
+		case <-l.pollNow:
+			return true
+		default:
+			return false
+		}
+	}
+	other := protocol.NewMessagePayload{Network: l.cfg.Network, MsgUUID: testUUID1, OriginNode: "someone-else"}
+	for range 3 {
+		l.dispatchMessageEvent(ev(protocol.EventNewMessage, other))
+	}
+	if !asked() || asked() {
+		t.Error("a burst of new_message events should ask for one poll")
+	}
+	legacy := other
+	legacy.OriginNode = "" // a hub from before origin_node
+	l.dispatchMessageEvent(ev(protocol.EventNewMessage, legacy))
+	if !asked() {
+		t.Error("an event without origin_node should ask for a poll")
+	}
+	own := other
+	own.OriginNode = l.cfg.Keystore.NodeID()
+	elsewhere := other
+	elsewhere.Network = "othernet"
+	for name, e := range map[string]protocol.Event{
+		"own post":      ev(protocol.EventNewMessage, own),
+		"other network": ev(protocol.EventNewMessage, elsewhere),
+		"malformed":     {Type: protocol.EventNewMessage, Data: json.RawMessage(`{"network":`)},
+		"other event":   ev(protocol.EventLogon, protocol.LogonPayload{Handle: "x"}),
+	} {
+		l.dispatchMessageEvent(e)
+		if asked() {
+			t.Errorf("%s asked for a poll", name)
+		}
+	}
+}
