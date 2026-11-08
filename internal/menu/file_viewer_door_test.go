@@ -290,6 +290,12 @@ func TestViewerKindOf(t *testing.T) {
 		{"NOISE.TXT", strings.Repeat("\x01\x02a", 20), "binary"},
 		{"SAUCED.ANS", "art\x1a" + strings.Repeat("\x00", 40), "text"},
 		{"EMPTY", "", "text"},
+		// A quarter control bytes is binary, whatever the name; just under
+		// is text by a text name and asks under any other.
+		{"QUARTER.TXT", strings.Repeat("abc\x01", 10), "binary"},
+		{"QUARTER.XYZ", strings.Repeat("abc\x01", 10), "binary"},
+		{"UNDER.TXT", strings.Repeat("abcd\x01", 10), "text"},
+		{"UNDER.XYZ", strings.Repeat("abcd\x01", 10), "ask"},
 	} {
 		got, err := kindOf(goja.Undefined(), vm.ToValue(tc.name), vm.ToValue(tc.data))
 		if err != nil {

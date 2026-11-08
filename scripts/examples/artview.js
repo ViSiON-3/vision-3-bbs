@@ -50,7 +50,7 @@ function textByName(name) {
 
 // kindOf says how data, from the file called name, can be shown, judging
 // the text before its Ctrl-Z (a SAUCE record and NUL padding follow it):
-//   "binary": it has NUL bytes, or control bytes make up a quarter of it;
+//   "binary": it has NUL bytes, or control bytes make up a quarter or more;
 //   "text":   it has no control bytes, or its name says it's text (CP437 art
 //             draws bytes 1-31 as glyphs: ☺ ♥ ► ▲ ▼ and the rest);
 //   "ask":    a few control bytes and a name that says nothing, so the
@@ -65,7 +65,7 @@ function kindOf(name, data) {
         if (c === 0) return "binary";
         if (c < 32 && c !== 9 && c !== 10 && c !== 13 && c !== 27) ctl++;
     }
-    if (ctl * 4 > sample.length) return "binary";
+    if (ctl > 0 && ctl * 4 >= sample.length) return "binary";
     return ctl === 0 || textByName(name) ? "text" : "ask";
 }
 

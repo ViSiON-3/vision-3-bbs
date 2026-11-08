@@ -204,7 +204,7 @@ another door.
 Both viewers decide what they can show the same way, from a file's
 contents (up to its Ctrl-Z, where a SAUCE record starts) and its name:
 
-- **Binary**, refused: it has NUL bytes, or control bytes make up a quarter
+- **Binary**, refused: it has NUL bytes, or control bytes make up a quarter or more
   of it.
 - **Text**, shown: it has no control bytes, or its name says it's text. That
   is one of `ans asc ice diz nfo txt doc lit 1st me now ad log mem lst faq
