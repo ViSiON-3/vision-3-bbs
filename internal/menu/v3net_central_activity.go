@@ -79,6 +79,20 @@ func centralSharedNetworks(p V3NetCentralProvider, kind string, u *user.User) (n
 	return names
 }
 
+// centralSharingOn reports whether a Sharing switch is on for u, which is
+// what pressing it turns off: shared on some offering network, or, when no
+// network offers kind now, the caller's own stored opt-in, so a caller can
+// still withdraw one the SysOp has since stopped offering.
+func centralSharingOn(p V3NetCentralProvider, kind string, u *user.User) bool {
+	if len(centralOfferedNetworks(p, kind)) == 0 {
+		if kind == protocol.CentralKindPresence {
+			return u.CentralPresence
+		}
+		return u.CentralLastCallsSince != nil
+	}
+	return len(centralSharedNetworks(p, kind, u)) > 0
+}
+
 // fetchCentralActivity fetches kind from each of networks, returning the
 // boards per network and one display error per network that failed.
 func fetchCentralActivity(p V3NetCentralProvider, networks []string, kind string, force bool) (map[string][]protocol.CentralActivityBoard, []string) {
@@ -556,7 +570,7 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 			// The switch flips what the caller sees, which may be the
 			// network's default; from then on it is their own choice.
 			mutate = func(x *user.User) {
-				x.CentralPresence = len(centralSharedNetworks(e.V3NetCentral, protocol.CentralKindPresence, x)) == 0
+				x.CentralPresence = !centralSharingOn(e.V3NetCentral, protocol.CentralKindPresence, x)
 				x.CentralPresenceChosen = true
 			}
 		case "2":
@@ -569,8 +583,11 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 				continue
 			}
 			mutate = func(x *user.User) {
+				// Read what the caller shares before recording the
+				// choice: once it is theirs, the default no longer counts.
+				on := centralSharingOn(e.V3NetCentral, protocol.CentralKindLastCallers, x)
 				x.CentralLastCallsChosen = true
-				if len(centralSharedNetworks(e.V3NetCentral, protocol.CentralKindLastCallers, x)) > 0 {
+				if on {
 					x.CentralLastCallsSince = nil
 					return
 				}
