@@ -165,3 +165,33 @@ func TestReflowRangeLeavesTheReadersColumn(t *testing.T) {
 		t.Errorf("line 1 = %q (%d), want it filled to %d", got, runeLen(got), MaxLineLength-1)
 	}
 }
+
+// A cursor inside a prefix the display normalizes sits on the character it is
+// at, not where the text's shift would put it: in "  RW>  Sh> text", drawn as
+// " RW> Sh> text", buffer column 4 holds the W, drawn at column 3.
+func TestQuoteDisplayCursorFollowsNormalizedPrefix(t *testing.T) {
+	for _, line := range []string{"  RW>  Sh> text", "RW> text", " RW> text", ">>text", "\x1b[1;36mRW>\x1b[0m text"} {
+		d := displayQuoteLine(line)
+		drawn := []rune(stripANSI(d.text))
+		inEscape := make([]bool, len(line))
+		for i := 0; i < len(line); {
+			n := max(1, escapeAt(line, i))
+			for k := i; k < i+n && escapeAt(line, i) > 0; k++ {
+				inEscape[k] = true
+			}
+			i += n
+		}
+		for col := 1; col <= len(line); col++ {
+			if line[col-1] == ' ' || inEscape[col-1] {
+				continue // blanks are normalized; escape bytes have no character
+			}
+			sc := d.screenCol(col)
+			if sc < 1 || sc > len(drawn) || drawn[sc-1] != rune(line[col-1]) {
+				t.Errorf("%q: buffer column %d (%q) is drawn at column %d of %q", line, col, line[col-1], sc, string(drawn))
+			}
+		}
+	}
+	if got := displayQuoteLine("  RW>  Sh> text").screenCol(4); got != 3 {
+		t.Errorf("screenCol(4) = %d, want 3, on the W", got)
+	}
+}

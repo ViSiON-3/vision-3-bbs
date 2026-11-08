@@ -58,10 +58,10 @@ type Screen struct {
 	// mark is a word drawn highlighted over the text (see MarkWord); nil
 	// once anything redraws its line.
 	mark *wordMark
-	// colShift is how many columns each drawn buffer line's text sits to the
-	// right of where it is stored, for a quote line drawn the way the reader
-	// draws it (see displayQuoteLine). The cursor is moved with it.
-	colShift map[int]int
+	// quoteLines holds how each drawn quote line is laid out, drawn the way
+	// the reader draws it (see displayQuoteLine), so the cursor can be put on
+	// the character it is at rather than where the buffer holds it.
+	quoteLines map[int]quoteDisplay
 }
 
 // NewScreen creates a new screen manager
@@ -72,7 +72,7 @@ func NewScreen(terminal io.Writer, outputMode ansi.OutputMode, termWidth, termHe
 		termWidth:     termWidth,
 		termHeight:    termHeight,
 		physicalLines: make(map[int]string),
-		colShift:      make(map[int]int),
+		quoteLines:    make(map[int]quoteDisplay),
 	}
 	s.calculateGeometry()
 	return s
@@ -694,10 +694,10 @@ func (s *Screen) RefreshLine(lineNum int, lineContent string, topLine int) {
 		restore += quoteSGR
 	}
 	lineContent = displayQuoteLine(s.markedLine(lineNum, lineContent, restore)).text
-	if disp.shift != 0 {
-		s.colShift[lineNum] = disp.shift
+	if disp.quote {
+		s.quoteLines[lineNum] = disp
 	} else {
-		delete(s.colShift, lineNum)
+		delete(s.quoteLines, lineNum)
 	}
 
 	// Check if line changed
@@ -758,7 +758,7 @@ func (s *Screen) RefreshScreen(buffer *MessageBuffer, topLine, currentLine, curr
 // ClearCache clears the screen cache to force a full redraw on next refresh
 func (s *Screen) ClearCache() {
 	s.physicalLines = make(map[int]string)
-	s.colShift = make(map[int]int)
+	s.quoteLines = make(map[int]quoteDisplay)
 	s.mark = nil
 }
 
@@ -770,7 +770,11 @@ func (s *Screen) Reposition(currentLine, currentCol, topLine int) {
 	}
 
 	screenY := s.editingStartY + screenLine - 1
-	s.GoXY(max(1, currentCol+s.colShift[currentLine]), screenY)
+	col := currentCol
+	if d, ok := s.quoteLines[currentLine]; ok {
+		col = d.screenCol(currentCol)
+	}
+	s.GoXY(max(1, col), screenY)
 }
 
 // FullRedraw performs a complete screen redraw
@@ -840,7 +844,7 @@ func (s *Screen) Resize(newWidth, newHeight int) {
 	}
 	// Clear physical state to force full redraw on next refresh
 	s.physicalLines = make(map[int]string)
-	s.colShift = make(map[int]int)
+	s.quoteLines = make(map[int]quoteDisplay)
 	s.mark = nil
 }
 

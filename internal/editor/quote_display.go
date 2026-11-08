@@ -66,7 +66,23 @@ type quoteDisplay struct {
 	text  string // what is drawn, escapes included
 	shift int    // columns the drawing adds before the text (may be negative)
 	at    int    // byte offset in the stored line where the text starts
-	quote bool
+	lead  int    // columns drawn before the text
+	// prefixCols is the 0-based screen column of each byte before at. The
+	// prefix is drawn with its blanks normalized, so a cursor in it has to be
+	// placed character by character, not by the text's shift.
+	prefixCols []int
+	quote      bool
+}
+
+// screenCol is the 1-based screen column buffer column col is drawn at.
+func (d quoteDisplay) screenCol(col int) int {
+	if !d.quote || col < 1 {
+		return col
+	}
+	if i := col - 1; i < d.at {
+		return d.prefixCols[i] + 1
+	}
+	return d.lead + col - d.at
 }
 
 // displayQuoteLine lays a stored editor line out the way the reader draws it,
@@ -101,12 +117,45 @@ func displayQuoteLine(line string) quoteDisplay {
 		lead = strings.TrimRight(lead, " ")
 	}
 	stored := utf8.RuneCountInString(plain[:len(plain)-len(body)])
+	leadRunes := []rune(lead)
 	return quoteDisplay{
-		text:  quoteSGR + head.String() + lead + line[at:],
-		shift: utf8.RuneCountInString(lead) - stored,
-		at:    at,
-		quote: true,
+		text:       quoteSGR + head.String() + lead + line[at:],
+		shift:      len(leadRunes) - stored,
+		at:         at,
+		lead:       len(leadRunes),
+		prefixCols: mapPrefixCols(line[:at], leadRunes),
+		quote:      true,
 	}
+}
+
+// mapPrefixCols gives each byte of stored, a line up to where its text starts,
+// the screen column it is drawn at under lead. Normalizing changes only blanks,
+// so each other character is found in lead in order; a blank, or an escape,
+// sits just after the character before it.
+func mapPrefixCols(stored string, lead []rune) []int {
+	cols := make([]int, len(stored))
+	li, last := 0, 0
+	for j := 0; j < len(stored); {
+		n := escapeAt(stored, j)
+		col := last
+		if n == 0 {
+			r, size := utf8.DecodeRuneInString(stored[j:])
+			n = size
+			if r != ' ' && r != '\t' {
+				for li < len(lead) && lead[li] != r {
+					li++
+				}
+				col = min(li, max(0, len(lead)-1))
+				li++
+				last = min(li, len(lead))
+			}
+		}
+		for k := j; k < j+n && k < len(cols); k++ {
+			cols[k] = min(col, len(lead))
+		}
+		j += n
+	}
+	return cols
 }
 
 // quoteLeadExtra is the columns the display adds beside prefix, the quote
