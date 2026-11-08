@@ -13,7 +13,11 @@
 // download batch (or takes it out). Prev/Next open the previous or next text
 // file in the area. Esc or Q leaves.
 //
-// To change the look, edit COMMANDS and COLORS below.
+// To change the look, edit COMMANDS, COLORS and BOTTOM_RULE below.
+
+// BOTTOM_RULE draws a rule above the command bar, matching the one under
+// the header. Set it to false for one more row of text on short screens.
+var BOTTOM_RULE = true;
 
 var COMMANDS = [
     { id: "more", label: "More", key: "m" },
@@ -113,9 +117,10 @@ TextView.prototype.height = function () {
     return Math.max(10, v3.console.height || 24);
 };
 
-// page is how many text rows fit between the header and the command bar.
+// page is how many text rows fit between the header and the command bar
+// (and the rule above it, with BOTTOM_RULE).
 TextView.prototype.page = function () {
-    return this.height() - 4;
+    return this.height() - (BOTTOM_RULE ? 5 : 4);
 };
 
 // load reads file index into lines, or returns why it can't be shown.
@@ -184,6 +189,10 @@ TextView.prototype.drawBar = function () {
     }
     var shown = this.lines.length ? Math.min(100, Math.round((this.top + this.page()) * 100 / this.lines.length)) : 100;
     var status = (this.status || shown + "%").slice(0, Math.max(0, room - used - 2));
+    if (BOTTOM_RULE) {
+        v3.console.gotoxy(1, this.height() - 1);
+        v3.console.write(COLORS.rule + new Array(this.width()).join("─") + "\x1b[0m\x1b[K");
+    }
     if (status !== "") out += COLORS.bar + "  " + (this.status ? COLORS.status : "") + status;
     v3.console.gotoxy(1, this.height());
     v3.console.write(out + "\x1b[0m\x1b[K");

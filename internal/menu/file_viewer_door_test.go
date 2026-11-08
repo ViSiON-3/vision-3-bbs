@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
@@ -174,6 +175,7 @@ func TestStockTextViewer(t *testing.T) {
 	if !strings.Contains(stripANSIForTest(r.text()), "green line") {
 		t.Errorf("ANSI text not drawn:\n%s", r.text())
 	}
+	checkRuleAbove(t, r.raw, "Quit")
 }
 
 // TestStockArchiveViewer runs scripts/examples/artview.js on a ZIP: the
@@ -191,6 +193,23 @@ func TestStockArchiveViewer(t *testing.T) {
 	if !r.has("PACK.ZIP", "2 entries", "TRAIN.ANS", "Night Train by someartist", "PROG.EXE", "Enter", "view") || r.has("Error") {
 		t.Errorf("archive viewer:\n%s", r.text())
 	}
+	checkRuleAbove(t, r.raw, "leave")
+}
+
+// checkRuleAbove checks that a stock viewer's screen has a rule on the row
+// above its bottom bar, the row holding marker (BOTTOM_RULE, on in stock).
+func checkRuleAbove(t *testing.T, raw, marker string) {
+	t.Helper()
+	lines := ansi.RenderANSIArtToLines(raw, 80, 100)
+	for i := len(lines) - 1; i > 0; i-- {
+		if strings.Contains(lines[i], marker) {
+			if !strings.HasPrefix(strings.TrimSpace(stripANSIForTest(lines[i-1])), "──────────") {
+				t.Errorf("no rule above the bar (row %d):\n%s", i, strings.Join(lines, "\n"))
+			}
+			return
+		}
+	}
+	t.Errorf("no bar holding %q:\n%s", marker, strings.Join(lines, "\n"))
 }
 
 // stripANSIForTest drops escape sequences so rendered art reads as text.

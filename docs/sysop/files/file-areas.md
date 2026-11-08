@@ -196,7 +196,10 @@ the stock viewers, a caller who can list an area but not download from it is
 told they have no access to view the file. To keep the old behaviour for
 such areas, leave `textViewerDoor` empty. A file tagged in a viewer shows as marked
 in the list. To change the labels or colours, edit the lists at the top of
-each script; to use your own viewer, point the setting at another door.
+each script. Each script also has `BOTTOM_RULE`, a rule above the bottom bar
+to match the one under the header; set it to `false` for one more row of
+text or art on short screens. To use your own viewer, point the setting at
+another door.
 
 The archive viewer, like ZipLab's, handles ZIP only. Other archives (7z, RAR,
 ARJ, LHA) go to the text viewer, which says it isn't a text file, where the
