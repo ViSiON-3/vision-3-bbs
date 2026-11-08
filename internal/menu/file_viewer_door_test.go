@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dop251/goja"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
@@ -233,4 +235,68 @@ func stripANSIForTest(s string) string {
 		b.WriteByte(s[i])
 	}
 	return b.String()
+}
+
+// viewerSharedBlock returns the "what the viewers can show" block of a
+// stock viewer script.
+func viewerSharedBlock(t *testing.T, script string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "scripts", "examples", script))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(data)
+	start := strings.Index(s, "// --- What the viewers can show.")
+	end := strings.Index(s, "// --- End of the shared block.")
+	if start < 0 || end < start {
+		t.Fatalf("%s has no shared block", script)
+	}
+	return s[start:end]
+}
+
+// TestViewerSharedBlockMatches checks that the two stock viewers decide
+// what they can show the same way.
+func TestViewerSharedBlockMatches(t *testing.T) {
+	if viewerSharedBlock(t, "textview.js") != viewerSharedBlock(t, "artview.js") {
+		t.Error("the shared block differs between textview.js and artview.js")
+	}
+}
+
+// TestViewerKindOf pins the stock viewers' kindOf: NUL bytes or a quarter
+// control bytes are binary; text with no control bytes, or with a few and
+// a name that says it's text, is text; a few control bytes under any other
+// name ask the caller.
+func TestViewerKindOf(t *testing.T) {
+	vm := goja.New()
+	if _, err := vm.RunString(viewerSharedBlock(t, "textview.js")); err != nil {
+		t.Fatal(err)
+	}
+	kindOf, ok := goja.AssertFunction(vm.Get("kindOf"))
+	if !ok {
+		t.Fatal("no kindOf")
+	}
+	art := "\x1b[1;31m\x03\x03 love \x01\x02\r\n" + strings.Repeat("plain text line\r\n", 4)
+	for _, tc := range []struct{ name, data, want string }{
+		{"README.TXT", "hello\r\n\tworld\r\n", "text"},
+		{"NOTES.XYZ", "hello\r\n\x1b[1mworld\r\n", "text"},
+		{"HEART.ICE", art, "text"},
+		{"RULES.MSG", art, "text"},
+		{"INFO.INF", art, "text"},
+		{"BOARD.BBS", art, "text"},
+		{"README", art, "text"},
+		{"docs/FILE_ID", art, "text"},
+		{"HEART.XYZ", art, "ask"},
+		{"PROG.EXE", "MZ\x00\x00\x90", "binary"},
+		{"NOISE.TXT", strings.Repeat("\x01\x02a", 20), "binary"},
+		{"SAUCED.ANS", "art\x1a" + strings.Repeat("\x00", 40), "text"},
+		{"EMPTY", "", "text"},
+	} {
+		got, err := kindOf(goja.Undefined(), vm.ToValue(tc.name), vm.ToValue(tc.data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.String() != tc.want {
+			t.Errorf("kindOf(%q) = %s, want %s", tc.name, got, tc.want)
+		}
+	}
 }

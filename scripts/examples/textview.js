@@ -5,13 +5,15 @@
 // The BBS passes the file's area tag and filename as the last two
 // arguments. The file is read with v3.file.read, which needs the area's
 // download access. ANSI files are drawn with v3.ansi.render; other text is
-// wrapped to the screen.
+// wrapped to the screen. What counts as text is kindOf's call, below: a
+// file it can't place is shown if the caller says so, and binary files are
+// refused.
 //
 // Keys: Up/Down a line, PgUp/PgDn (or Space) a screen, Home/End, Left/Right
 // and Enter on the command bar, or the command's hotkey. Find asks for text;
 // Enter on Find looks for the same text again. Tag adds the file to the
 // download batch (or takes it out). Prev/Next open the previous or next text
-// file in the area. Esc or Q leaves.
+// file in the area, passing over any kindOf can't place. Esc or Q leaves.
 //
 // To change the look, edit COMMANDS, COLORS and BOTTOM_RULE below.
 
@@ -44,8 +46,41 @@ var COLORS = {
     status: "\x1b[0;1;33m"
 };
 
-// Files that are text by name; anything else is checked for binary bytes.
-var TEXT_EXT = /\.(txt|doc|asc|ans|nfo|diz|lst|faq|me|1st|msg|log|now|ad|lit)$/i;
+// --- What the viewers can show. This block is the same in textview.js and
+// artview.js; keep the two in step (a test checks they match).
+
+// Files that are text by name: these extensions, and README or FILE_ID
+// without one. Others are judged by their contents alone.
+var TEXT_EXT = /\.(ans|asc|ice|diz|nfo|txt|doc|lit|1st|me|now|ad|log|mem|lst|faq|msg|inf|bbs|pcb|cfg|ini|bat|md)$/i;
+var TEXT_NAME = /(^|[\/\\])(readme|file_id)$/i;
+
+function textByName(name) {
+    return TEXT_EXT.test(name) || TEXT_NAME.test(name);
+}
+
+// kindOf says how data, from the file called name, can be shown, judging
+// the text before its Ctrl-Z (a SAUCE record and NUL padding follow it):
+//   "binary": it has NUL bytes, or control bytes make up a quarter of it;
+//   "text":   it has no control bytes, or its name says it's text (CP437 art
+//             draws bytes 1-31 as glyphs: ☺ ♥ ► ▲ ▼ and the rest);
+//   "ask":    a few control bytes and a name that says nothing, so the
+//             caller is asked whether to view it anyway.
+// Tab, CR, LF and ESC don't count as control bytes.
+function kindOf(name, data) {
+    var end = data.indexOf("\x1a");
+    var sample = data.slice(0, end >= 0 ? Math.min(end, 4096) : 4096);
+    var ctl = 0;
+    for (var i = 0; i < sample.length; i++) {
+        var c = sample.charCodeAt(i);
+        if (c === 0) return "binary";
+        if (c < 32 && c !== 9 && c !== 10 && c !== 13 && c !== 27) ctl++;
+    }
+    if (ctl * 4 > sample.length) return "binary";
+    return ctl === 0 || textByName(name) ? "text" : "ask";
+}
+
+// --- End of the shared block.
+
 var ARCHIVE = /\.zip$/i;
 var MAX_LINES = 100000;
 
@@ -58,18 +93,6 @@ function sizeText(n) {
 // stripSGR removes escape sequences, for searching what a line shows.
 function stripSGR(s) {
     return s.replace(/\x1b\[[0-9;?=]*[@-~]/g, "");
-}
-
-// isBinary reports whether data looks like something other than text.
-function isBinary(name, data) {
-    var sample = data.slice(0, 4096);
-    var low = 0;
-    for (var i = 0; i < sample.length; i++) {
-        var c = sample.charCodeAt(i);
-        if (c === 0) return true;
-        if (c < 8 && c !== 7) low++;
-    }
-    return low > 8 || (!TEXT_EXT.test(name) && low > 0);
 }
 
 // wrapText splits plain text into lines no wider than width.
@@ -123,20 +146,29 @@ TextView.prototype.page = function () {
     return this.height() - (BOTTOM_RULE ? 5 : 4);
 };
 
-// load reads file index into lines, or returns why it can't be shown.
-TextView.prototype.load = function (index) {
+// load reads file index into lines, or returns why it can't be shown. A
+// file kindOf can't place is shown only when ask is set and the caller says
+// so; "" from the question, as from success, means nothing more to say.
+TextView.prototype.load = function (index, ask) {
     var f = this.files[index];
     if (ARCHIVE.test(f.filename)) return "an archive";
     var data = v3.file.read(this.area.id, f.filename);
     if (data === null) return f.size > 4194304 ? "too big to view" : "no access to view it";
+    var kind = kindOf(f.filename, data);
+    if (kind === "binary") return "not a text file";
+    if (kind === "ask") {
+        if (!ask) return "format unknown";
+        v3.console.write(COLORS.status + f.filename + ": format unknown. View anyway? (Y/N) \x1b[0m");
+        if (v3.console.readkey().toLowerCase() !== "y") return "no";
+        v3.console.clear();
+    }
     // Ctrl-Z ends the text; a SAUCE record and its NUL padding follow it.
     var end = data.indexOf("\x1a");
     if (end >= 0) data = data.slice(0, end);
-    if (isBinary(f.filename, data)) return "not a text file";
     if (data.indexOf("\x1b[") >= 0) {
         this.lines = v3.ansi.render(data, { width: Math.min(this.width(), 80), rows: 4000 });
     } else {
-        this.lines = wrapText(data, this.width() - 1);
+        this.lines = wrapText(v3.ansi.glyphs(data), this.width() - 1);
     }
     this.at = index;
     this.top = 0;
@@ -306,7 +338,11 @@ TextView.prototype.loop = function () {
 
 TextView.prototype.main = function () {
     v3.console.clear();
-    var why = this.at < 0 ? "That file isn't in the file base." : this.load(this.at);
+    var why = this.at < 0 ? "That file isn't in the file base." : this.load(this.at, true);
+    if (why === "no") {
+        v3.console.clear();
+        return;
+    }
     if (why !== "") {
         if (this.at >= 0) why = this.files[this.at].filename + ": " + why + ".";
         v3.console.writeln(COLORS.status + why + "\x1b[0m");
