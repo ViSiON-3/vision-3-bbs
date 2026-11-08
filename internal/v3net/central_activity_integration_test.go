@@ -28,14 +28,14 @@ type fakeActivity struct {
 }
 
 // CentralPresence returns the scripted sessions.
-func (f *fakeActivity) CentralPresence() []protocol.CentralActivityEntry {
+func (f *fakeActivity) CentralPresence(bool) []protocol.CentralActivityEntry {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return slices.Clone(f.presence)
 }
 
 // CentralLastCalls returns the scripted calls that began after since.
-func (f *fakeActivity) CentralLastCalls(since time.Time) []protocol.CentralActivityEntry {
+func (f *fakeActivity) CentralLastCalls(since time.Time, _ bool) []protocol.CentralActivityEntry {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []protocol.CentralActivityEntry

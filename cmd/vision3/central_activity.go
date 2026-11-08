@@ -69,8 +69,9 @@ func (c *centralActivitySource) sessionID(node int, start time.Time) string {
 }
 
 // CentralPresence returns one entry per logged-in, visible session whose
-// account has opted in to network Who's Online.
-func (c *centralActivitySource) CentralPresence() []protocol.CentralActivityEntry {
+// account has opted in to network Who's Online, or has not chosen while
+// callersDefault is set.
+func (c *centralActivitySource) CentralPresence(callersDefault bool) []protocol.CentralActivityEntry {
 	var out []protocol.CentralActivityEntry
 	for _, sess := range c.sessions.ListActive() {
 		sess.Mutex.RLock()
@@ -82,7 +83,7 @@ func (c *centralActivitySource) CentralPresence() []protocol.CentralActivityEntr
 			continue
 		}
 		acct, ok := c.users.GetUserByID(u.ID)
-		if !ok || acct.DeletedUser || !acct.CentralPresence {
+		if !ok || acct.DeletedUser || !acct.CentralPresenceFor(callersDefault) {
 			continue
 		}
 		h := centralHandle(acct.Handle)
@@ -100,8 +101,9 @@ func (c *centralActivitySource) CentralPresence() []protocol.CentralActivityEntr
 
 // CentralLastCalls returns the visible calls since since by accounts that
 // have opted in to network Last Callers, each made after the account
-// opted in.
-func (c *centralActivitySource) CentralLastCalls(since time.Time) []protocol.CentralActivityEntry {
+// opted in, and those of accounts that have not chosen while
+// callersDefault is set.
+func (c *centralActivitySource) CentralLastCalls(since time.Time, callersDefault bool) []protocol.CentralActivityEntry {
 	var out []protocol.CentralActivityEntry
 	accounts := make(map[int]*user.User)
 	for _, rec := range c.users.GetLastCallers() {
@@ -115,7 +117,10 @@ func (c *centralActivitySource) CentralLastCalls(since time.Time) []protocol.Cen
 			}
 			accounts[rec.UserID] = acct
 		}
-		if acct == nil || acct.DeletedUser || acct.CentralLastCallsSince == nil || rec.ConnectTime.Before(*acct.CentralLastCallsSince) {
+		if acct == nil || acct.DeletedUser {
+			continue
+		}
+		if from, ok := acct.CentralLastCallsFrom(callersDefault); !ok || rec.ConnectTime.Before(from) {
 			continue
 		}
 		h := centralHandle(acct.Handle)

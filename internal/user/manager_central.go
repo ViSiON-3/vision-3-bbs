@@ -1,5 +1,7 @@
 package user
 
+import "time"
+
 // V3Net Central consent is owned by the stored record, as paired API
 // devices are: only SetCentralConsent changes it. A session's copy of the
 // user can be stale (another node may have changed the consent since the
@@ -11,6 +13,8 @@ package user
 func keepCentralConsent(dst, src *User) {
 	dst.CentralPresence = src.CentralPresence
 	dst.CentralAvailability = src.CentralAvailability
+	dst.CentralPresenceChosen = src.CentralPresenceChosen
+	dst.CentralLastCallsChosen = src.CentralLastCallsChosen
 	dst.CentralLastCallsSince = nil
 	if src.CentralLastCallsSince != nil {
 		t := *src.CentralLastCallsSince
@@ -65,4 +69,29 @@ func (um *UserMgr) SetCentralConsent(userID int, fn func(u *User)) (*User, error
 		}
 	}
 	return nil, ErrUserNotFound
+}
+
+// CentralPresenceFor reports whether the caller is shown on network Who's
+// Online on a network whose Callers Default switch is callersDefault: their
+// own choice if they made one, else that default.
+func (u *User) CentralPresenceFor(callersDefault bool) bool {
+	if u.CentralPresence || u.CentralPresenceChosen {
+		return u.CentralPresence
+	}
+	return callersDefault
+}
+
+// CentralLastCallsFrom reports whether the caller's calls are shown on
+// network Last Callers on a network whose Callers Default switch is
+// callersDefault, and from when. A caller who opted in shares the calls
+// from when they did; one counted in by the default has no start, so their
+// calls in the feed's 24 hours go.
+func (u *User) CentralLastCallsFrom(callersDefault bool) (time.Time, bool) {
+	if u.CentralLastCallsSince != nil {
+		return *u.CentralLastCallsSince, true
+	}
+	if u.CentralLastCallsChosen || !callersDefault {
+		return time.Time{}, false
+	}
+	return time.Time{}, true
 }

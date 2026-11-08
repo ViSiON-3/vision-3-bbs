@@ -416,6 +416,7 @@ func (m *Model) insertRecord() {
 		m.configs.V3Net.Leaves = append(m.configs.V3Net.Leaves, config.V3NetLeafConfig{
 			Network:      "newnetwork",
 			PollInterval: "5m",
+			Central:      config.NewV3NetLeafCentral(),
 		})
 	case "v3nethub":
 		m.configs.V3Net.Hub.Networks = append(m.configs.V3Net.Hub.Networks, config.V3NetHubNetwork{

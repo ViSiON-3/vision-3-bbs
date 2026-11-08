@@ -19,10 +19,11 @@
       "boards": [],
       "pollInterval": "5m",
       "central": {
-        "enabled": false,
+        "enabled": true,
         "publishListing": false,
-        "presence": false,
-        "lastCallers": false
+        "presence": true,
+        "lastCallers": true,
+        "callersDefault": true
       }
     }
   ]

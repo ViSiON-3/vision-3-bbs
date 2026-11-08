@@ -134,9 +134,9 @@ type User struct {
 	ThreadViewClosed bool `json:"threadViewClosed,omitempty"`
 
 	// V3Net Central consent. Each is off until the caller turns it on in
-	// Central's My Preferences, and none is ever turned on for them: an
-	// account from before these existed shares nothing. They only take
-	// effect on networks where the SysOp offers the feature.
+	// Central's My Preferences, unless a network's SysOp counts callers who
+	// have not chosen as opted in (Callers Default). They only take effect
+	// on networks where the SysOp offers the feature.
 	//
 	// CentralPresence shows the caller's handle on network Who's Online
 	// while they are on, with CentralAvailability ("available", "busy" or
@@ -148,6 +148,12 @@ type User struct {
 	// began at or after it are published, so agreeing does not publish
 	// calls made before, and clearing it withdraws every call at once.
 	CentralLastCallsSince *time.Time `json:"centralLastCallsSince,omitempty"`
+	// CentralPresenceChosen and CentralLastCallsChosen record that the
+	// caller set that switch themselves. Until they have, a network whose
+	// SysOp turned on Callers Default counts them as opted in there; see
+	// CentralPresenceFor and CentralLastCallsFrom.
+	CentralPresenceChosen  bool `json:"centralPresenceChosen,omitempty"`
+	CentralLastCallsChosen bool `json:"centralLastCallsChosen,omitempty"`
 
 	// Soft Delete (user marked as deleted but data preserved)
 	DeletedUser bool       `json:"deletedUser,omitempty"` // True if user is soft-deleted
