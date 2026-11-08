@@ -14,7 +14,11 @@
 // PgUp/PgDn (or Space) a screen, Home/End, N/P the next or previous piece,
 // T to tag, Esc or Q back to the list.
 //
-// To change the look, edit COLORS below.
+// To change the look, edit COLORS and BOTTOM_RULE below.
+
+// BOTTOM_RULE draws a rule above the footer, matching the one under the
+// header. Set it to false for one more row of art on short screens.
+var BOTTOM_RULE = true;
 
 var COLORS = {
     title: "\x1b[0;1;37m",
@@ -76,9 +80,10 @@ ArtView.prototype.height = function () {
     return Math.max(10, v3.console.height || 24);
 };
 
-// rows is how many rows fit between the two-row header and the footer.
+// rows is how many rows fit between the two-row header and the footer (and
+// the rule above it, with BOTTOM_RULE).
 ArtView.prototype.rows = function () {
-    return this.height() - 3;
+    return this.height() - (BOTTOM_RULE ? 4 : 3);
 };
 
 ArtView.prototype.viewable = function (e) {
@@ -107,6 +112,10 @@ ArtView.prototype.header = function (left) {
 };
 
 ArtView.prototype.footer = function (help) {
+    if (BOTTOM_RULE) {
+        v3.console.gotoxy(1, this.height() - 1);
+        v3.console.write(COLORS.rule + new Array(this.width()).join("─") + "\x1b[0m\x1b[K");
+    }
     v3.console.gotoxy(1, this.height());
     var text = this.status ? COLORS.status + " " + this.status : COLORS.help + " " + help;
     v3.console.write(text.replace(/\[(\w+)\]/g, COLORS.key + "$1" + COLORS.help) + "\x1b[0m\x1b[K");
