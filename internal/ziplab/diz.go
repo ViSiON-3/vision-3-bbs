@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/pkzip1"
 )
 
 // stripSauceMetadata removes the SAUCE metadata block (and optional COMNT block)
@@ -180,7 +181,7 @@ func ExtractDIZFromZip(archivePath string) (string, error) {
 		return "", nil
 	}
 
-	rc, err := dizFile.Open()
+	rc, err := pkzip1.Open(dizFile, maxLegacyMember)
 	if err != nil {
 		return "", fmt.Errorf("failed to read %s from %s: %w", dizFile.Name, archivePath, err)
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
+	"github.com/ViSiON-3/vision-3-bbs/internal/pkzip1"
 	"github.com/dop251/goja"
 )
 
@@ -50,8 +51,10 @@ func registerFileRead(obj *goja.Object, eng *Engine) {
 		return vm.ToValue(cp437Text(data))
 	})
 
-	// members(areaID, filename) — a ZIP's entries [{name, size, date, isDir}],
-	// or null for a file that is not a ZIP.
+	// members(areaID, filename) — a ZIP's entries [{name, size, date, isDir,
+	// method, encrypted, readable}], or null for a file that is not a ZIP.
+	// readable is whether readMember can unpack the entry: not encrypted,
+	// and stored, deflated or one of PKZIP 1.x's methods.
 	jsutil.Set(obj, "members", func(call goja.FunctionCall) goja.Value {
 		path, ok := eng.readableFile(call)
 		if !ok {
@@ -72,6 +75,9 @@ func registerFileRead(obj *goja.Object, eng *Engine) {
 			jsutil.Set(o, "size", int64(m.UncompressedSize64))
 			jsutil.Set(o, "date", m.Modified.Unix())
 			jsutil.Set(o, "isDir", m.FileInfo().IsDir())
+			jsutil.Set(o, "method", int(m.Method))
+			jsutil.Set(o, "encrypted", pkzip1.Encrypted(m))
+			jsutil.Set(o, "readable", pkzip1.Supported(m.Method) && !pkzip1.Encrypted(m))
 			jsutil.Set(arr, itoa(i), o)
 		}
 		return arr
@@ -96,8 +102,9 @@ func registerFileRead(obj *goja.Object, eng *Engine) {
 				continue
 			}
 			// The header's size can lie, so what is unpacked is capped
-			// too: readCapped stops past maxScriptRead.
-			r, err := m.Open()
+			// too: readCapped stops past maxScriptRead. PKZIP 1.x members
+			// (shrunk, reduced, imploded) are unpacked by pkzip1.
+			r, err := pkzip1.Open(m, maxScriptRead)
 			if err != nil {
 				return goja.Null()
 			}

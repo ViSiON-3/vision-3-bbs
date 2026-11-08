@@ -14,6 +14,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/pkzip1"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 )
@@ -29,6 +30,11 @@ type ReadKeyFunc func() (int, error)
 // sanitizeEntryName strips control characters (including ANSI ESC) and pipe
 // characters from ZIP entry names to prevent terminal escape injection and
 // pipe code injection when displayed on the BBS terminal.
+// maxLegacyMember caps a PKZIP 1.x member (shrunk, reduced or imploded),
+// which is unpacked in memory. Members of the archives that used those
+// methods are far smaller.
+const maxLegacyMember = 16 << 20
+
 func sanitizeEntryName(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
@@ -127,7 +133,8 @@ func extractSingleEntry(zipPath string, entryNum int) (string, func(), error) {
 	// Use Base to prevent zip slip
 	destPath := filepath.Join(tmpDir, filepath.Base(entry.Name))
 
-	rc, err := entry.Open()
+	// PKZIP 1.x members (shrunk, reduced, imploded) are unpacked by pkzip1.
+	rc, err := pkzip1.Open(entry, maxLegacyMember)
 	if err != nil {
 		cleanup()
 		return "", noop, fmt.Errorf("failed to open entry: %w", err)

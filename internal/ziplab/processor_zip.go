@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"fmt"
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
+	"github.com/ViSiON-3/vision-3-bbs/internal/pkzip1"
 	"io"
 	"os"
 	"path/filepath"
@@ -26,7 +27,9 @@ func (p *Processor) testZipIntegrity(zipPath string) error {
 	}()
 
 	for _, f := range r.File {
-		rc, err := f.Open()
+		// PKZIP 1.x members (shrunk, reduced, imploded) are unpacked by
+		// pkzip1, which also checks their CRC.
+		rc, err := pkzip1.Open(f, maxLegacyMember)
 		if err != nil {
 			return fmt.Errorf("corrupt entry %s: %w", f.Name, err)
 		}
@@ -76,7 +79,7 @@ func (p *Processor) extractZip(zipPath, destDir string) error {
 			return fmt.Errorf("failed to create %s: %w", targetPath, err)
 		}
 
-		rc, err := f.Open()
+		rc, err := pkzip1.Open(f, maxLegacyMember)
 		if err != nil {
 			_ = outFile.Close() // cleanup on error path
 			return fmt.Errorf("failed to open zip entry %s: %w", f.Name, err)
