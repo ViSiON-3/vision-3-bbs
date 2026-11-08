@@ -323,8 +323,33 @@ not chosen.
 With **Callers Default** on, a caller who has not chosen has their calls
 from the last 24 hours shown, including calls made before you turned it
 on. Callers who log in invisibly, and calls hidden from the local list,
-are still never sent. Tell your callers, in a bulletin or the logon
-news, before you turn it on for an existing board.
+are still never sent.
+
+#### Tell Your Callers With a News Item
+
+Callers counted in by **Callers Default** never chose to share, so tell
+them before or as you turn it on. The recommended way is a one-time
+[System News](../menus/news.md) item: post it from the Admin Menu (`%` →
+`W` → `A`) with **Always** set to N, and each caller sees it once, at
+their next login, and not again. It needs `PRINTNEWS` in the login
+sequence, which the default `configs/login.json` has.
+
+A suggested item (the title is at most 28 characters):
+
+```text
+Title:  V3Net Sharing Is On
+Always: N
+Body:
+This board shares who is online, and recent calls, with other
+boards on V3Net. Other boards see your handle and this board's
+name only: never your real name, location or what you are doing.
+
+You are included unless you turn it off. To change it, press
+K for Konfig, then R for V3Net Sharing.
+```
+
+Post it before switching **Callers Default** on for an existing board.
+On a new board, post it as part of setup, so the first callers see it.
 
 Your switch is the ceiling. With it off, nothing of that kind is sent to
 the network's hub, whatever your callers chose, and the feed is not shown
