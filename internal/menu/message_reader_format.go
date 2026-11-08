@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 )
 
 // bodyAsUTF8 settles a message body's encoding once, for the whole body, and
@@ -67,12 +68,13 @@ func messageBodyLinesWithBanners(body, charset string, termWidth int, mode ansi.
 		return ansi.RenderANSIArtToLines(body, min(termWidth, ansi.ArtWidth), 500)
 	}
 
-	// Quote lines are reflowed here and word wrap leaves them alone. Word wrap
+	// Quote lines are reflowed here and word wrap leaves them alone, kept off
+	// the last column as the editor keeps them (editor.QuoteDisplayWidth). Word wrap
 	// also cannot break a run with no spaces (an ASCII rule, a row of blocks);
 	// whatever is still too wide is cut, or it spills onto the row below when
 	// drawn.
 	body = dropTruncatedEscapes(body)
-	body = reflowQuotes(body, termWidth, mode, banners)
+	body = reflowQuotes(body, editor.QuoteDisplayWidth(termWidth), mode, banners)
 	return breakOversizedLines(wrapAnsiString(body, termWidth, mode), termWidth, mode)
 }
 
@@ -132,12 +134,10 @@ func hasOriginLine(text string) bool {
 	return false
 }
 
+// isQuoteLine reports a line the reader draws as a quote. The editor shares
+// the rule, so a reply shows its quotes as they will be read (#962).
 func isQuoteLine(line string) bool {
-	trimmed := strings.TrimLeft(line, " \t")
-	if strings.HasPrefix(trimmed, ">") {
-		return true
-	}
-	prefix, _ := splitReaderQuotePrefix(trimmed)
+	prefix, _ := editor.SplitDisplayQuotePrefix(stripEscapes(line))
 	return prefix != ""
 }
 
@@ -248,7 +248,7 @@ func formatMessageBody(body, originAddr string, includeOrigin bool, banners quot
 				out = append(out, "")
 			}
 
-			out = append(out, fmt.Sprintf("|14%s|07", line))
+			out = append(out, editor.QuoteColor+line+"|07")
 
 			nextLine := ""
 			if i+1 < len(lines) {

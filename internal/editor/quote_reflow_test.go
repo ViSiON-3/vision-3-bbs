@@ -86,19 +86,22 @@ func TestReflowQuotedKeepsNestedPrefix(t *testing.T) {
 
 // assertFilledParagraph checks that lines are one paragraph of want under
 // prefix, filled greedily: no line could have taken the next line's first word.
+// The width is what is left once the reader's blank before a prefix that has
+// none of its own is counted (#962).
 func assertFilledParagraph(t *testing.T, lines []string, prefix, want string) {
 	t.Helper()
+	limit := MaxLineLength - quoteLeadExtra(prefix)
 	var words []string
 	for i, line := range lines {
 		if !strings.HasPrefix(line, prefix) {
 			t.Fatalf("line %d = %q, want prefix %q", i, line, prefix)
 		}
-		if runeLen(line) > MaxLineLength {
-			t.Errorf("line %d is %d cells wide, want <= %d: %q", i, runeLen(line), MaxLineLength, line)
+		if runeLen(line) > limit {
+			t.Errorf("line %d is %d cells wide, want <= %d: %q", i, runeLen(line), limit, line)
 		}
 		body := strings.Fields(strings.TrimPrefix(line, prefix))
 		if i > 0 {
-			if prev := lines[i-1]; runeLen(prev)+1+runeLen(body[0]) <= MaxLineLength {
+			if prev := lines[i-1]; runeLen(prev)+1+runeLen(body[0]) <= limit {
 				t.Errorf("line %d = %q leaves room for %q — the paragraph is not reflowed", i-1, prev, body[0])
 			}
 		}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 )
 
 const quoteTestText = "This is the quoted paragraph and it runs on well past the width of " +
@@ -388,18 +389,19 @@ func TestReaderQuoteFallsBackWithNoRoomBesidePrefix(t *testing.T) {
 
 func TestIsQuoteLineAgreesWithTheEditor(t *testing.T) {
 	for line, want := range map[string]bool{
-		"RW> text":     true,
-		" RW> text":    true,
-		"Ém> text":     true,
-		"\x90m> text":  true,
-		"Sh>> text":    true,
-		"Bu> Sh> text": true,
-		"> text":       true,
-		">text":        true, // Usenet style, coloured as a quote as it always was
-		"RW>":          true,
-		"a>b text":     false,
-		"-> arrow":     false,
-		"plain text":   false,
+		"RW> text":          true,
+		" RW> text":         true,
+		"Ém> text":          true,
+		"\x90m> text":       true,
+		"Sh>> text":         true,
+		"Bu> Sh> text":      true,
+		"> text":            true,
+		">text":             true, // Usenet style, coloured as a quote as it always was
+		"RW>":               true,
+		"\x1b[33m RW> text": true, // a colour before the prefix, as reflow sees it
+		"a>b text":          false,
+		"-> arrow":          false,
+		"plain text":        false,
 	} {
 		if got := isQuoteLine(line); got != want {
 			t.Errorf("isQuoteLine(%q) = %v, want %v", line, got, want)
@@ -474,5 +476,44 @@ func TestReaderKeepsBareMarkerDepthsApart(t *testing.T) {
 	got := reflowQuotes(body, 100, ansi.OutputModeCP437, nil)
 	if !strings.Contains(got, " >>inner reply") {
 		t.Errorf("the nested line lost its depth:\n%s", got)
+	}
+}
+
+// A quote as the editor wraps it is drawn by the reader at 80 columns row for
+// row as the editor draws it, so a caller replying sees the quote as it will be
+// read (#962). The editor's own reflow makes the stored lines.
+func TestReaderDrawsEditorQuotesAsTheEditorDoes(t *testing.T) {
+	texts := []string{
+		quoteTestText + " " + quoteTestText,
+		strings.Repeat("lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore ", 4),
+		strings.Repeat("a bb ccc dddd eeeee ffffff ggggggg hhhhhhhh iiiiiiiii ", 6),
+	}
+	for _, prefix := range []string{" RW> ", "RW> ", " RW> Sh> ", "> "} {
+		for _, text := range texts {
+			buf := editor.NewMessageBuffer()
+			buf.SetLine(1, prefix+strings.TrimSpace(text))
+			buf.SetQuotePrefix(1, prefix)
+			buf.SetHardNewline(1, true)
+			editor.NewWordWrapper(buf).ReflowRange(1, 1, 1)
+
+			var stored, want []string
+			for n := 1; n <= buf.GetLineCount(); n++ {
+				line := buf.GetLine(n)
+				stored = append(stored, line)
+				p, rest := editor.SplitDisplayQuotePrefix(line)
+				want = append(want, editor.QuoteLead+p+rest)
+			}
+			body := "[RW Said]\n" + strings.Join(stored, "\n") + "\n[RW Done]\n\nMy reply."
+			rows := quoteRows(t, body, 80)
+			var got []string
+			for _, row := range rows {
+				if p, _ := editor.SplitDisplayQuotePrefix(row); p != "" {
+					got = append(got, strings.TrimRight(row, " "))
+				}
+			}
+			if strings.Join(got, "\n") != strings.Join(want, "\n") {
+				t.Errorf("prefix %q: reader rows\n%s\nwant the editor's\n%s", prefix, strings.Join(got, "\n"), strings.Join(want, "\n"))
+			}
+		}
 	}
 }

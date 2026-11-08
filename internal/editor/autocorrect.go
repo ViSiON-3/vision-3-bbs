@@ -333,8 +333,8 @@ func (s *Screen) UnmarkWord() {
 
 // markedLine is content as RefreshLine draws it for lineNum: with the marked
 // word in its colour when the line still holds it, or plain (dropping the
-// mark) when it does not.
-func (s *Screen) markedLine(lineNum int, content string) string {
+// mark) when it does not. restore is what the text after the word is drawn in.
+func (s *Screen) markedLine(lineNum int, content, restore string) string {
 	m := s.mark
 	if m == nil || m.line != lineNum {
 		return content
@@ -346,7 +346,7 @@ func (s *Screen) markedLine(lineNum int, content string) string {
 		s.mark = nil
 		return content
 	}
-	return string(runes[:m.col-1]) + m.sgr + m.word + textSGR + string(runes[end:])
+	return string(runes[:m.col-1]) + m.sgr + m.word + restore + string(runes[end:])
 }
 
 // undoAutocorrect puts back the word u replaced, when the text before the

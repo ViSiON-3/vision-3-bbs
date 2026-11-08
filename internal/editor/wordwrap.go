@@ -41,7 +41,8 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 	for endLine < lineCount && !ww.buffer.IsHardNewline(endLine) && ww.buffer.QuotePrefix(endLine+1) == prefix {
 		endLine++
 	}
-	width := MaxLineLength - len(prefix)
+	// Less any column the screen adds beside the prefix, as wrapQuoted does.
+	width := MaxLineLength - len(prefix) - quoteLeadExtra(prefix)
 	if width < minQuoteWrapWidth {
 		width = minQuoteWrapWidth
 	}
@@ -245,10 +246,11 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 }
 
 // WrapAfterInsert handles word wrap after a character insertion.
-// Fast path: only reflows if the current line exceeds MaxLineLength.
+// Fast path: only reflows if the current line exceeds MaxLineLength, less the
+// column the screen adds beside a quote prefix (see ReflowRange).
 func (ww *WordWrapper) WrapAfterInsert(lineNum, cursorCol int) (int, int) {
 	line := ww.buffer.GetLine(lineNum)
-	if len(line) <= MaxLineLength {
+	if len(line) <= MaxLineLength-quoteLeadExtra(ww.buffer.QuotePrefix(lineNum)) {
 		return lineNum, cursorCol
 	}
 	return ww.ReflowRange(lineNum, lineNum, cursorCol)

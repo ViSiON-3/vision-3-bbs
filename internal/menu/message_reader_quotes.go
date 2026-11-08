@@ -40,42 +40,13 @@ type quoteLine struct {
 	body   string // the rest, with its escapes
 }
 
-// splitReaderQuotePrefix is editor.SplitQuotePrefix less the rows whose
-// "initials" are block or box glyphs, which are colour art. line may still be
-// raw CP437, as formatMessageBody sees it, or already decoded.
-func splitReaderQuotePrefix(line string) (prefix, body string) {
-	prefix, body = editor.SplitQuotePrefix(line)
-	decoded := prefix
-	if !utf8.ValidString(decoded) {
-		decoded = string(ansi.CP437BytesToUTF8([]byte(decoded)))
-	}
-	if strings.ContainsFunc(decoded, func(r rune) bool { return r >= 0x2500 && r <= 0x259F }) {
-		return "", line
-	}
-	return prefix, body
-}
-
-// bareQuoteMarker splits a Usenet-style quote line, one or more '>' with no
-// space before the text (">text", ">>text"), into the marker and the text.
-// Leading blanks are dropped, as SplitQuotePrefix drops them. It returns ""
-// for a line that does not start with '>'. These lines have no prefix in the
-// editor's sense, but isQuoteLine has always coloured them as quotes.
-func bareQuoteMarker(line string) (marker, body string) {
-	trimmed := strings.TrimLeft(line, " \t")
-	n := len(trimmed) - len(strings.TrimLeft(trimmed, ">"))
-	return trimmed[:n], trimmed[n:]
-}
-
 // parseQuoteLine takes line apart. It reports false for anything that is not a
 // quote line with a prefix, including tearlines, origin lines and banners. A
 // ">text" line counts, with the bare marker as its prefix, so that it wraps at
 // word boundaries with the marker on every row.
 func parseQuoteLine(line string, banners quoteBannerMatcher) (quoteLine, bool) {
 	plain := strings.TrimRight(stripEscapes(line), " \t\r")
-	prefix, plainBody := splitReaderQuotePrefix(plain)
-	if prefix == "" {
-		prefix, plainBody = bareQuoteMarker(plain)
-	}
+	prefix, plainBody := editor.SplitDisplayQuotePrefix(plain)
 	if prefix == "" || isTearLine(plain) || isOriginLine(plain) || banners.match(line) {
 		return quoteLine{}, false
 	}
@@ -140,7 +111,7 @@ func splitQuoteBody(s string) (indent, body string) {
 }
 
 // reflowQuotes rewrites the quote lines of a colour-expanded UTF-8 body for
-// display at width, one leading space and the prefix on every row. It works on
+// display at width, editor.QuoteLead and the prefix on every row. It works on
 // a copy for the screen: the stored message is not touched.
 //
 // Which lines join is decided by the rules the editor uses for quoting (#551),
@@ -209,7 +180,7 @@ func reflowQuotes(body string, width int, mode ansi.OutputMode, banners quoteBan
 // wrapQuoteParagraph lays one paragraph out in rows no wider than width.
 func wrapQuoteParagraph(para []*quoteLine, width int, mode ansi.OutputMode) []string {
 	first := para[0]
-	lead := " " + first.prefix + first.indent
+	lead := editor.QuoteLead + first.prefix + first.indent
 	avail := width - visibleColumns(lead, mode)
 	if avail < quoteReflowMinColumns {
 		raw := make([]string, len(para))

@@ -122,6 +122,7 @@ func newQuoteSession(ch *CommandHandler, src []string, currentLine int) *quoteSe
 		srcWidth: QuoteSourceWidth(clean),
 		origLine: currentLine,
 	}
+	ch.screen.SetQuoteBanners(ch.quoteBanners())
 	qs.layout()
 	return qs
 }
@@ -546,7 +547,15 @@ func (qs *quoteSession) drawCompose(follow bool) {
 		s.GoXY(1, qs.composeY+i)
 		s.WriteDirect(qpReset)
 		if n := qs.composeTop + i; n <= lineCount {
-			s.WriteDirect(truncRunes(qs.ch.buffer.GetLine(n), qs.width))
+			// A quote line is drawn as the main editor and the reader draw it,
+			// cut first so what the display adds still fits the pane.
+			line := qs.ch.buffer.GetLine(n)
+			disp := s.displayLine(line)
+			if disp.quote {
+				s.WriteDirect(s.displayLine(truncRunes(line, qs.width-max(0, disp.shift))).text + qpReset)
+			} else {
+				s.WriteDirect(truncRunes(line, qs.width))
+			}
 		}
 		s.ClearEOL()
 	}
@@ -910,8 +919,10 @@ func wrapQuoted(prefix, text string, max int) []string {
 // the next line with no space between. The editor marks those breaks so a
 // later reflow rejoins the word whole.
 func wrapQuotedSplits(prefix, text string, max int) ([]string, []bool) {
+	// The reader draws the prefix with a blank before it when it has none of
+	// its own; that column is left free here so both wrap at the same word.
 	plen := runeLen(prefix)
-	avail := max - plen
+	avail := max - plen - quoteLeadExtra(prefix)
 	if avail < 10 {
 		avail = 10
 	}
@@ -1038,40 +1049,12 @@ func stripANSI(s string) string {
 	}
 	var b strings.Builder
 	for i := 0; i < len(s); {
-		if s[i] != 0x1B {
-			b.WriteByte(s[i])
-			i++
+		if n := escapeAt(s, i); n > 0 {
+			i += n
 			continue
 		}
+		b.WriteByte(s[i])
 		i++
-		if i >= len(s) {
-			break
-		}
-		switch c := s[i]; {
-		case c == '[':
-			i++
-			for i < len(s) && (s[i] < 0x40 || s[i] > 0x7E) {
-				i++
-			}
-			if i < len(s) {
-				i++ // final byte
-			}
-		case c == ']' || c == 'P' || c == 'X' || c == '^' || c == '_':
-			i++
-			for i < len(s) {
-				if s[i] == 0x07 {
-					i++
-					break
-				}
-				if s[i] == 0x1B && i+1 < len(s) && s[i+1] == '\\' {
-					i += 2
-					break
-				}
-				i++
-			}
-		case c >= 0x20 && c <= 0x7E:
-			i++ // two-byte escape
-		}
 	}
 	return b.String()
 }

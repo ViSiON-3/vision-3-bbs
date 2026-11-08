@@ -58,6 +58,14 @@ type Screen struct {
 	// mark is a word drawn highlighted over the text (see MarkWord); nil
 	// once anything redraws its line.
 	mark *wordMark
+	// quoteLines holds how each drawn quote line is laid out, drawn the way
+	// the reader draws it (see displayQuoteLine), so the cursor can be put on
+	// the character it is at rather than where the buffer holds it.
+	quoteLines map[int]quoteDisplay
+	// quoteBanners are the "Said" / "Done" lines the quote picker writes, with
+	// escapes removed. The reader leaves a banner shaped like a quote line
+	// ("Buck> said:") as it stands, so the editor does too.
+	quoteBanners []string
 }
 
 // NewScreen creates a new screen manager
@@ -68,6 +76,7 @@ func NewScreen(terminal io.Writer, outputMode ansi.OutputMode, termWidth, termHe
 		termWidth:     termWidth,
 		termHeight:    termHeight,
 		physicalLines: make(map[int]string),
+		quoteLines:    make(map[int]quoteDisplay),
 	}
 	s.calculateGeometry()
 	return s
@@ -673,7 +682,9 @@ func (s *Screen) updateDynamicHeaderFields(insertMode bool, currentLine, totalLi
 	s.WriteDirect("\x1b[0m") // reset colors after the restore (which may restore attributes) to prevent header background bleed into editing area
 }
 
-// RefreshLine redraws a single line if it has changed
+// RefreshLine redraws a single line if it has changed. A quote line is drawn
+// as the message reader will show it, which can put its text a column or so
+// from where the buffer holds it; Reposition moves the cursor to match.
 func (s *Screen) RefreshLine(lineNum int, lineContent string, topLine int) {
 	// Calculate screen position
 	screenLine := lineNum - topLine + 1
@@ -681,7 +692,17 @@ func (s *Screen) RefreshLine(lineNum int, lineContent string, topLine int) {
 		return // Line not visible
 	}
 
-	lineContent = s.markedLine(lineNum, lineContent)
+	disp := s.displayLine(lineContent)
+	restore := textSGR
+	if disp.quote {
+		restore += quoteSGR
+	}
+	lineContent = s.displayLine(s.markedLine(lineNum, lineContent, restore)).text
+	if disp.quote {
+		s.quoteLines[lineNum] = disp
+	} else {
+		delete(s.quoteLines, lineNum)
+	}
 
 	// Check if line changed
 	lastContent, exists := s.physicalLines[lineNum]
@@ -695,7 +716,42 @@ func (s *Screen) RefreshLine(lineNum int, lineContent string, topLine int) {
 	// Position cursor and draw line
 	s.GoXY(1, s.editingStartY+screenLine-1)
 	terminalio.WriteProcessedBytes(s.terminal, []byte(lineContent), s.outputMode)
-	s.ClearEOL()
+	if disp.quote {
+		s.WriteDirect(textSGR)
+	}
+	// A row that reaches the last column leaves the cursor waiting to wrap,
+	// where erasing to the end of the line would take that column's character.
+	if !disp.quote || runeLen(stripANSI(lineContent)) < s.termWidth {
+		s.ClearEOL()
+	}
+}
+
+// SetQuoteBanners records the quote banners the picker writes, so that one
+// shaped like a quote line is drawn as the reader draws it: unchanged.
+func (s *Screen) SetQuoteBanners(banners ...string) {
+	s.quoteBanners = s.quoteBanners[:0]
+	for _, b := range banners {
+		if b = strings.TrimSpace(stripANSI(b)); b != "" {
+			s.quoteBanners = append(s.quoteBanners, b)
+		}
+	}
+}
+
+// displayLine is a buffer line as the screen draws it (see displayQuoteLine).
+// A quote banner keeps its own layout, in the quote colour where the reader
+// gives it that.
+func (s *Screen) displayLine(line string) quoteDisplay {
+	d := displayQuoteLine(line)
+	if !d.quote {
+		return d
+	}
+	plain := strings.TrimSpace(stripANSI(line))
+	for _, b := range s.quoteBanners {
+		if plain == b {
+			return quoteDisplay{text: quoteSGR + line, at: 0, quote: true}
+		}
+	}
+	return d
 }
 
 // RefreshScreen redraws all visible lines (incremental update)
@@ -734,6 +790,7 @@ func (s *Screen) RefreshScreen(buffer *MessageBuffer, topLine, currentLine, curr
 // ClearCache clears the screen cache to force a full redraw on next refresh
 func (s *Screen) ClearCache() {
 	s.physicalLines = make(map[int]string)
+	s.quoteLines = make(map[int]quoteDisplay)
 	s.mark = nil
 }
 
@@ -745,7 +802,11 @@ func (s *Screen) Reposition(currentLine, currentCol, topLine int) {
 	}
 
 	screenY := s.editingStartY + screenLine - 1
-	s.GoXY(currentCol, screenY)
+	col := currentCol
+	if d, ok := s.quoteLines[currentLine]; ok {
+		col = d.screenCol(currentCol)
+	}
+	s.GoXY(max(1, col), screenY)
 }
 
 // FullRedraw performs a complete screen redraw
@@ -815,6 +876,7 @@ func (s *Screen) Resize(newWidth, newHeight int) {
 	}
 	// Clear physical state to force full redraw on next refresh
 	s.physicalLines = make(map[int]string)
+	s.quoteLines = make(map[int]quoteDisplay)
 	s.mark = nil
 }
 

@@ -660,7 +660,17 @@ Three things happen to the quoted text:
 ### Quotes in the Message Reader
 
 The reader rewraps quoted lines to the caller's screen, on a copy for display
-only: the stored message is unchanged. It joins the lines of a quoted
+only: the stored message is unchanged. Each row is drawn in yellow as one
+space, the prefix with single spaces (` RW> Sh> `), then the text, and is kept
+out of the screen's last column, the same margin the editor leaves. The editor
+draws quote lines the same way while a caller writes, in the message and in
+the quote picker's compose pane, so on an 80-column screen a reply's quotes
+look as they will be read. A wider screen rewraps quotes to its own width in
+the reader, which the editor, writing 79-column lines, can't show. The reader
+also puts a blank line around a run of quotes that has text right against it,
+as when a caller replies between a quote's lines; the editor shows only the
+blank lines that are really there. The quote picker's banners and the blank
+line it leaves after a quote mean a quote it adds needs none. The reader joins the lines of a quoted
 paragraph by the same rules as the quote picker, but it judges them on every
 message, so it only joins at a quote depth whose longest line is at least 60
 columns. Every row keeps the quote's prefix, including a Usenet-style quote
