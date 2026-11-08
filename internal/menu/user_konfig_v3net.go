@@ -31,10 +31,10 @@ func v3netSharingValue(st *konfigState) konfigValue {
 		}
 	}
 	var on []string
-	if u.CentralPresence {
+	if len(centralSharedNetworks(st.c.e.V3NetCentral, protocol.CentralKindPresence, u)) > 0 {
 		on = append(on, "Online")
 	}
-	if u.CentralLastCallsSince != nil {
+	if len(centralSharedNetworks(st.c.e.V3NetCentral, protocol.CentralKindLastCallers, u)) > 0 {
 		on = append(on, "Calls")
 	}
 	if len(on) == 0 {

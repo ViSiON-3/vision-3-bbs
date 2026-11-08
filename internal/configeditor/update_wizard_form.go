@@ -286,6 +286,7 @@ func (m Model) confirmLeafWizard() (Model, tea.Cmd) {
 		Boards:       boards,
 		PollInterval: m.wizard.pollInterval,
 		Origin:       m.wizard.origin,
+		Central:      config.NewV3NetLeafCentral(),
 	}
 	// Pin the keys the registry publishes, so the leaf does not have to
 	// trust whatever the hub serves on first contact. The areas were chosen

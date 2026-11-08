@@ -278,19 +278,24 @@ V3Net Central: Sharing
   Never your real name, location, user number, or what you are doing.
 ```
 
-- Every switch is off for every account, new or old. Upgrading never turns
-  one on, and nothing turns one on but the caller.
+- A switch the caller has not set follows the network's **Callers
+  Default**: off unless you turn that on, in which case the screen shows
+  it on for that network. Upgrading never turns one on by itself.
 - The preview shows exactly what is published: the handle (colour codes
   removed) and your board's name, plus the chosen availability for Who's
   Online and the call times for Last Callers. Nothing else about the
   account is sent.
-- **Show my calls** covers calls from the moment it is turned on. Calls
-  made before are never published.
+- **Show my calls**, turned on by the caller, covers calls from that
+  moment; calls made before are never published. A caller counted in by
+  **Callers Default** has their calls from the last 24 hours shown.
+- Pressing a switch flips what the screen shows, and from then on it is
+  the caller's own choice: a default no longer applies to it.
 - A switch for a feature you do not offer on any network says
   `not offered here` and cannot be turned on.
 - The choices are stored on the caller's account on this board
   (`centralPresence`, `centralAvailability` and `centralLastCallsSince` in
-  `users.json`). They are not linked to any account on another board.
+  `users.json`, with `centralPresenceChosen` and `centralLastCallsChosen`
+  recording that the caller set a switch themselves). They are not linked to any account on another board.
 
 Callers who log in invisibly are never published, whatever their switches
 say, and neither is a call they hid from the local last callers list.
@@ -302,8 +307,49 @@ phase 1 ones:
 
 | Editor field | JSON | Default | Effect |
 |---|---|---|---|
-| **Who's Online** | `presence` | N | Offers network Who's Online on this network: callers here can see it, and each can choose to be shown. Needs **Central**. |
-| **Last Callers** | `lastCallers` | N | Offers network Last Callers on this network: callers here can see it, and each can choose to have their calls shown. Needs **Central**. |
+| **Who's Online** | `presence` | Y on a new subscription | Offers network Who's Online on this network: callers here can see it, and each can choose to be shown. Needs **Central**. |
+| **Last Callers** | `lastCallers` | Y on a new subscription | Offers network Last Callers on this network: callers here can see it, and each can choose to have their calls shown. Needs **Central**. |
+| **Callers Default** | `callersDefault` | Y on a new subscription | Counts a caller who has not set a switch of their own as sharing on this network's Who's Online and Last Callers. N leaves them out until they opt in. A caller's own choice, on or off, always wins. |
+
+A subscription created by the setup wizard, the config editor, the
+bundled `configs/v3net.json` or a caller-side subscribe from the BBS starts
+with **Central**, **Who's Online**, **Last Callers** and **Callers
+Default** on (and **Publish Listing** off), so its callers show on the
+network until they turn sharing off under Preferences. A subscription from
+before this has no Central block, or one you set yourself, and is left as
+it is: switch **Callers Default** on yourself to share callers who have
+not chosen.
+
+With **Callers Default** on, a caller who has not chosen has their calls
+from the last 24 hours shown, including calls made before you turned it
+on. Callers who log in invisibly, and calls hidden from the local list,
+are still never sent.
+
+#### Tell Your Callers With a News Item
+
+Callers counted in by **Callers Default** never chose to share, so tell
+them before or as you turn it on. The recommended way is a one-time
+[System News](../menus/news.md) item: post it from the Admin Menu (`%` →
+`W` → `A`) with **Always** set to N, and each caller sees it once, at
+their next login, and not again. It needs `PRINTNEWS` in the login
+sequence, which the default `configs/login.json` has.
+
+A suggested item (the title is at most 28 characters):
+
+```text
+Title:  V3Net Sharing Is On
+Always: N
+Body:
+This board shares who is online, and recent calls, with other
+boards on V3Net. Other boards see your handle and this board's
+name only: never your real name, location or what you are doing.
+
+You are included unless you turn it off. To change it, press
+K for Konfig, then R for V3Net Sharing.
+```
+
+Post it before switching **Callers Default** on for an existing board.
+On a new board, post it as part of setup, so the first callers see it.
 
 Your switch is the ceiling. With it off, nothing of that kind is sent to
 the network's hub, whatever your callers chose, and the feed is not shown

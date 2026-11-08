@@ -54,6 +54,45 @@ func centralOfferedNetworks(p V3NetCentralProvider, kind string) (names []string
 	return names
 }
 
+// centralSharedNetworks returns the networks offering kind where u is
+// shared: by their own opt-in, or, until they choose, by the network's
+// Callers Default.
+func centralSharedNetworks(p V3NetCentralProvider, kind string, u *user.User) (names []string) {
+	if p == nil {
+		return nil
+	}
+	for _, n := range p.CentralNetworks() {
+		a := n.Activity(kind)
+		if !n.Enabled || !a.Enabled || (!a.Supported && n.SupportKnown) {
+			continue
+		}
+		var on bool
+		if kind == protocol.CentralKindPresence {
+			on = u.CentralPresenceFor(a.CallersDefault)
+		} else {
+			_, on = u.CentralLastCallsFrom(a.CallersDefault)
+		}
+		if on {
+			names = append(names, n.Network)
+		}
+	}
+	return names
+}
+
+// centralSharingOn reports whether a Sharing switch is on for u, which is
+// what pressing it turns off: shared on some offering network, or, when no
+// network offers kind now, the caller's own stored opt-in, so a caller can
+// still withdraw one the SysOp has since stopped offering.
+func centralSharingOn(p V3NetCentralProvider, kind string, u *user.User) bool {
+	if len(centralOfferedNetworks(p, kind)) == 0 {
+		if kind == protocol.CentralKindPresence {
+			return u.CentralPresence
+		}
+		return u.CentralLastCallsSince != nil
+	}
+	return len(centralSharedNetworks(p, kind, u)) > 0
+}
+
 // fetchCentralActivity fetches kind from each of networks, returning the
 // boards per network and one display error per network that failed.
 func fetchCentralActivity(p V3NetCentralProvider, networks []string, kind string, force bool) (map[string][]protocol.CentralActivityBoard, []string) {
@@ -445,21 +484,24 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		whoNets := centralOfferedNetworks(e.V3NetCentral, protocol.CentralKindPresence)
 		lastNets := centralOfferedNetworks(e.V3NetCentral, protocol.CentralKindLastCallers)
 
+		whoOn := centralSharedNetworks(e.V3NetCentral, protocol.CentralKindPresence, u)
+		lastOn := centralSharedNetworks(e.V3NetCentral, protocol.CentralKindLastCallers, u)
+
 		var buf strings.Builder
 		buf.WriteString(centralHeader("Sharing", termWidth))
-		if !u.CentralPresence && u.CentralLastCallsSince == nil {
+		if len(whoOn) == 0 && len(lastOn) == 0 {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|15  Nothing about you is shared through V3Net Central.|07\r\n")))
 		} else {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|15  You share what is switched on below, and nothing else.|07\r\n")))
 		}
 		buf.Write(ansi.ReplacePipeCodes([]byte("|08  Browsing boards, Who's Online and Last Callers sends nothing about you.|07\r\n\r\n")))
 
-		onOff := func(on bool, offered []string) string {
+		onOff := func(on, offered []string) string {
 			switch {
 			case len(offered) == 0:
 				return "|08not offered here|07"
-			case on:
-				return "|10On |07 |08(" + v3netClip(strings.Join(offered, ", "), 30) + ")|07"
+			case len(on) > 0:
+				return "|10On |07 |08(" + v3netClip(strings.Join(on, ", "), 30) + ")|07"
 			default:
 				return "|07Off|07"
 			}
@@ -468,9 +510,9 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		if availText == "" {
 			availText = "|07Not shown|07"
 		}
-		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|151|03] Show me on Who's Online        " + onOff(u.CentralPresence, whoNets) + "\r\n")))
+		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|151|03] Show me on Who's Online        " + onOff(whoOn, whoNets) + "\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|152|03] My availability               " + availText + "\r\n")))
-		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|153|03] Show my calls on Last Callers " + onOff(u.CentralLastCallsSince != nil, lastNets) + "\r\n\r\n")))
+		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|153|03] Show my calls on Last Callers " + onOff(lastOn, lastNets) + "\r\n\r\n")))
 
 		handle := centralPreviewHandle(u.Handle)
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  What other boards would see|07\r\n")))
@@ -489,8 +531,15 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		if len(lastNets) > 0 {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Last Callers: |15" + v3netClip(handle, 30) + "|07 on |11" + v3netClip(board, 30) + "|07\r\n")))
-			buf.Write(ansi.ReplacePipeCodes([]byte("|08                when each call began and ended; only calls from when you|07\r\n")))
-			buf.Write(ansi.ReplacePipeCodes([]byte("|08                turn it on, each kept 24 hours|07\r\n")))
+			if len(lastOn) > 0 && u.CentralLastCallsSince == nil {
+				// Counted in by the network's default: no start of
+				// their own, so the feed's whole 24 hours goes.
+				buf.Write(ansi.ReplacePipeCodes([]byte("|08                when each call began and ended; your calls from the|07\r\n")))
+				buf.Write(ansi.ReplacePipeCodes([]byte("|08                last 24 hours, each kept 24 hours|07\r\n")))
+			} else {
+				buf.Write(ansi.ReplacePipeCodes([]byte("|08                when each call began and ended; only calls from when you|07\r\n")))
+				buf.Write(ansi.ReplacePipeCodes([]byte("|08                turn it on, each kept 24 hours|07\r\n")))
+			}
 		}
 		buf.Write(ansi.ReplacePipeCodes([]byte("|08  Never your real name, location, user number, or what you are doing.|07\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|08  Turning a switch off takes you off at once on connected boards; an|07\r\n")))
@@ -518,7 +567,12 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 				status = "|04Your SysOp does not offer network Who's Online.|07"
 				continue
 			}
-			mutate = func(x *user.User) { x.CentralPresence = !x.CentralPresence }
+			// The switch flips what the caller sees, which may be the
+			// network's default; from then on it is their own choice.
+			mutate = func(x *user.User) {
+				x.CentralPresence = !centralSharingOn(e.V3NetCentral, protocol.CentralKindPresence, x)
+				x.CentralPresenceChosen = true
+			}
 		case "2":
 			mutate = func(x *user.User) {
 				x.CentralAvailability = map[string]string{"": protocol.CentralAvailable, protocol.CentralAvailable: protocol.CentralBusy}[x.CentralAvailability]
@@ -529,7 +583,11 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 				continue
 			}
 			mutate = func(x *user.User) {
-				if x.CentralLastCallsSince != nil {
+				// Read what the caller shares before recording the
+				// choice: once it is theirs, the default no longer counts.
+				on := centralSharingOn(e.V3NetCentral, protocol.CentralKindLastCallers, x)
+				x.CentralLastCallsChosen = true
+				if on {
 					x.CentralLastCallsSince = nil
 					return
 				}
@@ -563,6 +621,8 @@ func centralConsentFrom(dst, src *user.User) {
 	dst.CentralPresence = src.CentralPresence
 	dst.CentralAvailability = src.CentralAvailability
 	dst.CentralLastCallsSince = src.CentralLastCallsSince
+	dst.CentralPresenceChosen = src.CentralPresenceChosen
+	dst.CentralLastCallsChosen = src.CentralLastCallsChosen
 }
 
 // centralPreviewHandle shows a handle as a snapshot would carry it: colour

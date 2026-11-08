@@ -33,15 +33,17 @@ import (
 // CentralActivitySource is what the BBS tells a leaf it may publish. Both
 // methods return only callers who consented and are not hidden; the leaf
 // cleans, caps and signs what they return. The source is shared by every
-// leaf and must be safe for concurrent use.
+// leaf and must be safe for concurrent use. callersDefault is the
+// subscription's Callers Default switch: with it set, a caller who has not
+// chosen counts as consenting.
 type CentralActivitySource interface {
 	// CentralPresence returns one entry per visible, consenting session on
 	// the board now: Handle, a Session ID unique to the call, and the
 	// caller's chosen Availability, if any.
-	CentralPresence() []protocol.CentralActivityEntry
+	CentralPresence(callersDefault bool) []protocol.CentralActivityEntry
 	// CentralLastCalls returns the consenting callers' calls that began
 	// after since, each with Handle, At and (once it ended) Until.
-	CentralLastCalls(since time.Time) []protocol.CentralActivityEntry
+	CentralLastCalls(since time.Time, callersDefault bool) []protocol.CentralActivityEntry
 }
 
 // Activity timing.
@@ -107,6 +109,9 @@ type ActivityStatus struct {
 	// needs Central itself on; Supported whether the hub serves it.
 	Enabled   bool
 	Supported bool
+	// CallersDefault is whether callers who have not chosen count as
+	// opted in.
+	CallersDefault bool
 	// LastPublished is when a snapshot last reached the hub (zero if not
 	// this run) and LastCount how many entries it held; Withdrawn whether
 	// this run withdrew the kind; LastError the latest failure.
@@ -151,12 +156,13 @@ func (l *Leaf) ActivityStatus(kind string) ActivityStatus {
 	l.central.mu.Lock()
 	defer l.central.mu.Unlock()
 	return ActivityStatus{
-		Enabled:       l.activityEnabled(kind),
-		Supported:     supported,
-		LastPublished: st.lastPublished,
-		LastCount:     st.lastCount,
-		Withdrawn:     st.withdrawn,
-		LastError:     st.lastError,
+		Enabled:        l.activityEnabled(kind),
+		Supported:      supported,
+		CallersDefault: l.cfg.CentralCallersDefault,
+		LastPublished:  st.lastPublished,
+		LastCount:      st.lastCount,
+		Withdrawn:      st.withdrawn,
+		LastError:      st.lastError,
 	}
 }
 
@@ -296,7 +302,7 @@ func (l *Leaf) buildActivity(kind string, now time.Time) (*protocol.CentralActiv
 	switch kind {
 	case protocol.CentralKindPresence:
 		seen := make(map[string]bool)
-		for _, e := range src.CentralPresence() {
+		for _, e := range src.CentralPresence(l.cfg.CentralCallersDefault) {
 			h := protocol.CleanCentralText(e.Handle, protocol.MaxCentralHandleLen)
 			if h == "" || seen[e.Session] {
 				continue
@@ -313,7 +319,7 @@ func (l *Leaf) buildActivity(kind string, now time.Time) (*protocol.CentralActiv
 		}
 	case protocol.CentralKindLastCallers:
 		cutoff := now.Add(-centralLastCallsRetention)
-		calls := src.CentralLastCalls(cutoff)
+		calls := src.CentralLastCalls(cutoff, l.cfg.CentralCallersDefault)
 		type call struct {
 			e     protocol.CentralActivityEntry
 			began time.Time

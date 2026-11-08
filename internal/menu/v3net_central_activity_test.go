@@ -77,6 +77,43 @@ func TestCentralPrefsRefusesUnofferedFeature(t *testing.T) {
 	}
 }
 
+// A caller shared only by a network's Callers Default sees both switches
+// on, and pressing each turns it off as their own choice.
+func TestCentralPrefsCallersDefault(t *testing.T) {
+	net := activityNet("testnet")
+	net.Presence.CallersDefault, net.LastCallers.CallersDefault = true, true
+	fake := &centralFake{nets: []CentralNetworkInfo{net}}
+	u := &user.User{Handle: "Caller"}
+	out := ansi.StripAnsi(runPrefs(t, fake, u, "q\r"))
+	if strings.Contains(out, "Nothing about you is shared") || strings.Count(out, "On  (testnet)") != 2 {
+		t.Errorf("default-on caller not shown as sharing: %q", out)
+	}
+	runPrefs(t, fake, u, "1\r3\rq\r")
+	if u.CentralPresence || !u.CentralPresenceChosen || u.CentralLastCallsSince != nil || !u.CentralLastCallsChosen {
+		t.Fatalf("switches not turned off as the caller's choice: %+v", u)
+	}
+	if out := runPrefs(t, fake, u, "q\r"); !strings.Contains(out, "Nothing about you is shared") {
+		t.Errorf("opted-out caller still shown as sharing: %q", ansi.StripAnsi(out))
+	}
+	// Pressing again opts back in, calls from now.
+	runPrefs(t, fake, u, "1\r3\rq\r")
+	if !u.CentralPresence || u.CentralLastCallsSince == nil {
+		t.Errorf("switches not turned back on: %+v", u)
+	}
+}
+
+// A caller can still withdraw an opt-in once no network offers the
+// feature.
+func TestCentralPrefsWithdrawsUnofferedOptIn(t *testing.T) {
+	fake := &centralFake{nets: []CentralNetworkInfo{{Network: "testnet", Enabled: true, SupportKnown: true, Supported: true}}}
+	agreed := time.Now().UTC().Add(-time.Hour)
+	u := &user.User{Handle: "Caller", CentralPresence: true, CentralLastCallsSince: &agreed}
+	runPrefs(t, fake, u, "1\r3\rq\r")
+	if u.CentralPresence || u.CentralLastCallsSince != nil {
+		t.Errorf("opt-in not withdrawn: %+v", u)
+	}
+}
+
 // The Central menu lists Who's Online and Last Callers only where the
 // sysop offers them and the hub serves them.
 func TestCentralMenuOffersActivityOnlyWhenAvailable(t *testing.T) {

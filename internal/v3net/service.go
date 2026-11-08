@@ -501,6 +501,7 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		CentralListing:        s.centralListingSpec(lcfg),
 		CentralPresence:       lcfg.CentralPresence(),
 		CentralLastCallers:    lcfg.CentralLastCallers(),
+		CentralCallersDefault: lcfg.CentralCallersDefault(),
 		Activity:              s.activitySource(),
 		RequireSignedMessages: lcfg.RequireSignedMessages,
 		RequireSignedHub:      lcfg.RequireSignedHub,
@@ -1359,17 +1360,17 @@ func (a serviceActivitySource) get() leaf.CentralActivitySource {
 }
 
 // CentralPresence defers to the set source; nothing before one is set.
-func (a serviceActivitySource) CentralPresence() []protocol.CentralActivityEntry {
+func (a serviceActivitySource) CentralPresence(callersDefault bool) []protocol.CentralActivityEntry {
 	if src := a.get(); src != nil {
-		return src.CentralPresence()
+		return src.CentralPresence(callersDefault)
 	}
 	return nil
 }
 
 // CentralLastCalls defers to the set source; nothing before one is set.
-func (a serviceActivitySource) CentralLastCalls(since time.Time) []protocol.CentralActivityEntry {
+func (a serviceActivitySource) CentralLastCalls(since time.Time, callersDefault bool) []protocol.CentralActivityEntry {
 	if src := a.get(); src != nil {
-		return src.CentralLastCalls(since)
+		return src.CentralLastCalls(since, callersDefault)
 	}
 	return nil
 }

@@ -2435,11 +2435,12 @@ func (a *centralAdapter) NodeID() string { return a.svc.NodeID() }
 // centralActivityInfo converts a leaf's activity status for the menus.
 func centralActivityInfo(s leaf.ActivityStatus) menu.CentralActivityInfo {
 	return menu.CentralActivityInfo{
-		Enabled:       s.Enabled,
-		Supported:     s.Supported,
-		LastPublished: s.LastPublished,
-		LastCount:     s.LastCount,
-		LastError:     s.LastError,
+		Enabled:        s.Enabled,
+		Supported:      s.Supported,
+		CallersDefault: s.CallersDefault,
+		LastPublished:  s.LastPublished,
+		LastCount:      s.LastCount,
+		LastError:      s.LastError,
 	}
 }
 

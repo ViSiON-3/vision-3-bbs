@@ -310,5 +310,6 @@ func (m *Model) addSelfLeaf(network string, port int) {
 		Network:      network,
 		Boards:       boards,
 		PollInterval: "5m",
+		Central:      config.NewV3NetLeafCentral(),
 	})
 }

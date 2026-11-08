@@ -19,10 +19,10 @@ type staticActivity struct {
 }
 
 // CentralPresence returns the fixed sessions.
-func (s staticActivity) CentralPresence() []protocol.CentralActivityEntry { return s.presence }
+func (s staticActivity) CentralPresence(bool) []protocol.CentralActivityEntry { return s.presence }
 
 // CentralLastCalls returns the fixed calls, whatever since is.
-func (s staticActivity) CentralLastCalls(time.Time) []protocol.CentralActivityEntry {
+func (s staticActivity) CentralLastCalls(time.Time, bool) []protocol.CentralActivityEntry {
 	return s.calls
 }
 

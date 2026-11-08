@@ -175,7 +175,9 @@ type V3NetLeafConfig struct {
 }
 
 // V3NetCentralConfig is a subscription's V3Net Central settings. Each
-// feature has its own switch and every switch defaults to off. Enabled and
+// feature has its own switch. A leaf without a Central block has every
+// switch off; a subscription created by the editor or the BBS starts from
+// NewV3NetLeafCentral. Enabled and
 // PublishListing are independent: a board may browse the directory without
 // being listed, or be listed without offering Central to its callers.
 type V3NetCentralConfig struct {
@@ -205,6 +207,27 @@ type V3NetCentralConfig struct {
 	// choose to have their calls here shown, for at most 24 hours. It
 	// needs Enabled. Off, no call is sent, whatever callers chose.
 	LastCallers bool `json:"lastCallers"`
+	// CallersDefault counts a caller who has not set a switch of their own
+	// as opted in to Presence and LastCallers on this network, rather than
+	// out. A caller's own choice always wins, and with a feature off
+	// nothing of it is sent whatever this says.
+	CallersDefault bool `json:"callersDefault"`
+}
+
+// NewV3NetLeafCentral returns the Central block a newly created
+// subscription starts with: Central, network Who's Online and network Last
+// Callers on, with callers counted as opted in until they choose
+// otherwise, so a new board takes part in the network's activity feeds from
+// the start. The directory listing stays off until the sysop publishes it.
+// Configs written before a leaf had a Central block keep every feature off.
+func NewV3NetLeafCentral() *V3NetCentralConfig {
+	return &V3NetCentralConfig{Enabled: true, Presence: true, LastCallers: true, CallersDefault: true}
+}
+
+// CentralCallersDefault reports whether callers who have not chosen count
+// as opted in on this subscription: Central and CallersDefault both on.
+func (l V3NetLeafConfig) CentralCallersDefault() bool {
+	return l.CentralEnabled() && l.Central.CallersDefault
 }
 
 // CentralPresence reports whether network Who's Online is offered on this

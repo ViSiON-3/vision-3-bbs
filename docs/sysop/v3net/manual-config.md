@@ -105,18 +105,23 @@ to subscribe to multiple networks.
 
 ### Leaf Central Settings (`leaves[].central`)
 
-Each switch is a separate consent and defaults to `false`. `enabled` and
+Each switch is a separate consent. A leaf with no `central` block has
+every switch `false`. A subscription the setup wizard, the config editor
+or the BBS creates is written with `enabled`, `presence`, `lastCallers`
+and `callersDefault` set to `true` (`publishListing` stays `false`), and
+the bundled `configs/v3net.json` ships the same way. `enabled` and
 `publishListing` are independent: a board can browse without being listed,
 or be listed without offering Central to its callers.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled` | bool | `false` | **Central** in the editor. Lets callers open V3Net Central for this network: the board directory, and the features below behind their own switches. Nothing about the board or its callers is sent for it. |
+| `enabled` | bool | `false` (`true` on a new subscription) | **Central** in the editor. Lets callers open V3Net Central for this network: the board directory, and the features below behind their own switches. Nothing about the board or its callers is sent for it. |
 | `publishListing` | bool | `false` | **Publish Listing** in the editor. Publishes this board's listing (name, `description`, `addresses`, capabilities, software) to the network's directory and refreshes it every six hours. Setting it `false` withdraws the listing at the next reload or start. |
 | `description` | string | `""` | **Listing Desc** in the editor. One line about the board, at most 240 characters. Pipe codes and control characters are refused. |
 | `addresses` | array | `[]` | **Listing Addrs** in the editor. Connection addresses, each `scheme://host[:port]` with scheme `telnet`, `ssh`, `rlogin`, `http` or `https`, at most 8. Empty publishes `ssh://` and `telnet://` addresses built from the server's SSH host and the enabled listeners' ports, unless that host is blank, a wildcard (`0.0.0.0`, `::`) or loopback, in which case nothing is published until this is set. |
-| `presence` | bool | `false` | **Who's Online** in the editor. Offers network Who's Online on this network; needs `enabled`. Callers can see who is on other boards, and each caller can choose to be shown while on this one. `false` withdraws this board's presence at the next reload or start. |
-| `lastCallers` | bool | `false` | **Last Callers** in the editor. Offers network Last Callers on this network; needs `enabled`. Callers can see recent calls to other boards, and each caller can choose to have their calls here shown, each for 24 hours. `false` withdraws this board's calls at the next reload or start. |
+| `presence` | bool | `false` (`true` on a new subscription) | **Who's Online** in the editor. Offers network Who's Online on this network; needs `enabled`. Callers can see who is on other boards, and each caller can choose to be shown while on this one. `false` withdraws this board's presence at the next reload or start. |
+| `lastCallers` | bool | `false` (`true` on a new subscription) | **Last Callers** in the editor. Offers network Last Callers on this network; needs `enabled`. Callers can see recent calls to other boards, and each caller can choose to have their calls here shown, each for 24 hours. `false` withdraws this board's calls at the next reload or start. |
+| `callersDefault` | bool | `false` (`true` on a new subscription) | **Callers Default** in the editor. Counts a caller who has not set a switch of their own as opted in to `presence` and `lastCallers` on this network; their own choice, on or off, always wins. A caller counted in has their calls from the last 24 hours shown. |
 
 ---
 

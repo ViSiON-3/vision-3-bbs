@@ -60,6 +60,9 @@ type CentralActivityInfo struct {
 	// on); Supported whether the hub serves it.
 	Enabled   bool
 	Supported bool
+	// CallersDefault is whether callers who have not chosen count as
+	// opted in on this network.
+	CallersDefault bool
 	// LastPublished is when this board's snapshot last reached the hub
 	// (zero if not this run) and LastCount how many entries it held;
 	// LastError the latest publish or withdrawal failure.

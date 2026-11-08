@@ -421,6 +421,7 @@ func v3netSubscribe(configPath string, mgr *message.MessageManager, network, hub
 			Boards:        []string{area.Tag},
 			PollInterval:  "5m",
 			AutoJoinAreas: &autoJoin,
+			Central:       config.NewV3NetLeafCentral(),
 		})
 		return nil
 	})

@@ -249,6 +249,11 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			Get: func() string { return uitext.BoolToYN(l.Central != nil && l.Central.LastCallers) },
 			Set: func(val string) error { v3netCentral(l).LastCallers = uitext.YNToBool(val); return nil },
 		},
+		{
+			Label: "Callers Default", Help: "Y counts callers who have not chosen as sharing on Who's Online and Last Callers; their own choice wins", Type: ftYesNo, Col: 3, Row: 22, Width: 1,
+			Get: func() string { return uitext.BoolToYN(l.Central != nil && l.Central.CallersDefault) },
+			Set: func(val string) error { v3netCentral(l).CallersDefault = uitext.YNToBool(val); return nil },
+		},
 	}
 }
 

@@ -41,6 +41,9 @@ type Config struct {
 	// published of that kind before, when it starts.
 	CentralPresence    bool
 	CentralLastCallers bool
+	// CentralCallersDefault counts callers who have not chosen as opted
+	// in; the leaf passes it to Activity with each read.
+	CentralCallersDefault bool
 	// Activity says what the board may publish for those features: only
 	// callers who consented. Nil publishes nothing.
 	Activity CentralActivitySource

@@ -64,7 +64,7 @@ func TestCentralActivitySourceAppliesConsent(t *testing.T) {
 	}
 	src := newCentralActivitySource(sessions, users)
 
-	got := src.CentralPresence()
+	got := src.CentralPresence(false)
 	if len(got) != 3 {
 		t.Fatalf("presence %+v, want Alice twice and Carol once", got)
 	}
@@ -74,16 +74,16 @@ func TestCentralActivitySourceAppliesConsent(t *testing.T) {
 	if got[0].Session == got[1].Session {
 		t.Error("two sessions share a session ID")
 	}
-	if src.CentralPresence()[0].Session != got[0].Session {
+	if src.CentralPresence(false)[0].Session != got[0].Session {
 		t.Error("a session's ID changed between snapshots")
 	}
-	if other := newCentralActivitySource(sessions, users).CentralPresence(); other[0].Session == got[0].Session {
+	if other := newCentralActivitySource(sessions, users).CentralPresence(false); other[0].Session == got[0].Session {
 		t.Error("session IDs are not keyed per process")
 	}
 
 	// The account changes its mind: gone from the next snapshot.
 	users.byID[1].CentralPresence = false
-	if got := src.CentralPresence(); len(got) != 1 || got[0].Handle != "Carol" {
+	if got := src.CentralPresence(false); len(got) != 1 || got[0].Handle != "Carol" {
 		t.Errorf("after opting out: %+v", got)
 	}
 
@@ -95,16 +95,62 @@ func TestCentralActivitySourceAppliesConsent(t *testing.T) {
 		{UserID: 4, ConnectTime: now.Add(-time.Hour)},
 		{UserID: 9, ConnectTime: now.Add(-time.Hour)}, // no such account
 	}
-	calls := src.CentralLastCalls(now.Add(-24 * time.Hour))
+	calls := src.CentralLastCalls(now.Add(-24*time.Hour), false)
 	if len(calls) != 1 || calls[0].Handle != "Alice" || calls[0].Until == "" {
 		t.Fatalf("calls %+v, want only Alice's visible call since she agreed", calls)
 	}
-	if calls := src.CentralLastCalls(now.Add(-90 * time.Minute)); len(calls) != 0 {
+	if calls := src.CentralLastCalls(now.Add(-90*time.Minute), false); len(calls) != 0 {
 		t.Errorf("since not applied: %+v", calls)
 	}
 	// Withdrawing takes every call of hers out at once.
 	users.byID[1].CentralLastCallsSince = nil
-	if calls := src.CentralLastCalls(now.Add(-24 * time.Hour)); len(calls) != 0 {
+	if calls := src.CentralLastCalls(now.Add(-24*time.Hour), false); len(calls) != 0 {
 		t.Errorf("after withdrawing: %+v", calls)
+	}
+}
+
+// TestCentralActivityCallersDefault checks that a network's Callers Default
+// counts accounts that have not chosen as opted in, while an account's own
+// choice, either way, wins.
+func TestCentralActivityCallersDefault(t *testing.T) {
+	now := time.Now().UTC()
+	agreed := now.Add(-time.Hour)
+	users := &fakeUsers{byID: map[int]*user.User{
+		1: {ID: 1, Handle: "Alice"},                                                          // never chose
+		2: {ID: 2, Handle: "Bob", CentralPresenceChosen: true, CentralLastCallsChosen: true}, // opted out
+		3: {ID: 3, Handle: "Carol", CentralPresence: true, CentralPresenceChosen: true, CentralLastCallsSince: &agreed, CentralLastCallsChosen: true},
+	}}
+	var sessions fakeSessions
+	for id := 1; id <= 3; id++ {
+		s := &session.BbsSession{NodeID: id, StartTime: now, User: &user.User{ID: id}}
+		s.SetCentralReady(true)
+		sessions = append(sessions, s)
+	}
+	users.calls = []user.CallRecord{
+		{UserID: 1, ConnectTime: now.Add(-3 * time.Hour)},
+		{UserID: 2, ConnectTime: now.Add(-3 * time.Hour)},
+		{UserID: 3, ConnectTime: now.Add(-3 * time.Hour)}, // before Carol agreed
+		{UserID: 3, ConnectTime: now.Add(-30 * time.Minute)},
+	}
+	src := newCentralActivitySource(sessions, users)
+	handles := func(es []protocol.CentralActivityEntry) (out []string) {
+		for _, e := range es {
+			out = append(out, e.Handle)
+		}
+		return out
+	}
+
+	if got := handles(src.CentralPresence(false)); len(got) != 1 || got[0] != "Carol" {
+		t.Errorf("presence without default: %v, want [Carol]", got)
+	}
+	if got := handles(src.CentralPresence(true)); len(got) != 2 || got[0] != "Alice" || got[1] != "Carol" {
+		t.Errorf("presence with default: %v, want [Alice Carol]", got)
+	}
+	since := now.Add(-24 * time.Hour)
+	if got := handles(src.CentralLastCalls(since, false)); len(got) != 1 || got[0] != "Carol" {
+		t.Errorf("calls without default: %v, want [Carol]", got)
+	}
+	if got := handles(src.CentralLastCalls(since, true)); len(got) != 2 || got[0] != "Alice" || got[1] != "Carol" {
+		t.Errorf("calls with default: %v, want [Alice Carol]", got)
 	}
 }
