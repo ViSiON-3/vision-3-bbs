@@ -2,8 +2,11 @@ package menu
 
 import (
 	"bytes"
+	"context"
+	"io"
 	"net"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -41,6 +44,10 @@ type testSession struct {
 	hooks []outputHook
 
 	closed atomic.Bool // Close was called: the BBS hung up
+
+	// ctx is what Context returns; nil unless a test needs one, as a
+	// script door does.
+	ctx ssh.Context
 }
 
 type outputHook struct {
@@ -92,6 +99,22 @@ func (ts *testSession) hookFired(marker string) bool {
 	return false
 }
 
+// testCtx is a minimal ssh.Context for a testSession that needs one: the
+// script engine derives its own context from the session's.
+type testCtx struct {
+	context.Context
+	sync.Mutex
+}
+
+func (*testCtx) User() string                  { return "" }
+func (*testCtx) SessionID() string             { return "" }
+func (*testCtx) ClientVersion() string         { return "" }
+func (*testCtx) ServerVersion() string         { return "" }
+func (*testCtx) RemoteAddr() net.Addr          { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 2222} }
+func (*testCtx) LocalAddr() net.Addr           { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 2323} }
+func (*testCtx) Permissions() *ssh.Permissions { return &ssh.Permissions{} }
+func (*testCtx) SetValue(_, _ interface{})     {}
+
 // Pty reports no PTY, so functions under test fall back to their default
 // dimensions (typically 80x24). Returning false avoids the nil-interface panic
 // the embedded ssh.Session would otherwise cause.
@@ -112,7 +135,11 @@ func (ts *testSession) RemoteAddr() net.Addr {
 // so handlers that start ZipLab or a transfer can run. Code that derives a
 // context directly from s.Context() (context.WithTimeout and the like) would
 // panic on nil; give such tests a session with a real ssh.Context.
-func (ts *testSession) Context() ssh.Context { return nil }
+func (ts *testSession) Context() ssh.Context { return ts.ctx }
+
+// Stderr shares the session's output, as an SSH session's stderr reaches the
+// same terminal; door error messages are written there.
+func (ts *testSession) Stderr() io.ReadWriter { return ts }
 
 // output returns everything written to the session so far.
 func (ts *testSession) output() string { return ts.out.String() }

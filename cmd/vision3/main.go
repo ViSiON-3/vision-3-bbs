@@ -2360,6 +2360,9 @@ func main() {
 	// Menus are read from disk each time they open, so this is the one place
 	// to find a bad ACS string before a caller does. It only logs.
 	logACSFindings(basePath)
+	// A viewer door config.json names but the BBS can't use falls back to
+	// the built-in viewer; say so once, here.
+	menuExecutor.WarnViewerDoors()
 
 	slog.Info("Vision/3 BBS running")
 	sigCh := make(chan os.Signal, 1)
