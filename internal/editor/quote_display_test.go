@@ -195,3 +195,55 @@ func TestQuoteDisplayCursorFollowsNormalizedPrefix(t *testing.T) {
 		t.Errorf("screenCol(4) = %d, want 3, on the W", got)
 	}
 }
+
+// A banner shaped like a quote line ("Buck> said:") is left as it stands, as
+// the reader leaves it, rather than given the quote layout.
+func TestScreenLeavesAQuoteShapedBannerAlone(t *testing.T) {
+	tt := testterm.New(80, 24)
+	s := NewScreen(tt, ansi.OutputModeUTF8, 80, 24)
+	s.SetQuoteBanners("Buck> said:", "")
+	buf := NewMessageBuffer()
+	buf.SetLine(1, "Buck> said:")
+	buf.SetLine(2, "Bu> quoted")
+
+	s.RefreshScreen(buf, 1, 1, 3, true, true)
+
+	row := s.GetEditingStartY()
+	if got := tt.Row(row); got != "Buck> said:" {
+		t.Errorf("banner row = %q, want it unchanged", got)
+	}
+	if got := tt.Row(row + 1); got != " Bu> quoted" {
+		t.Errorf("quote row = %q, want %q", got, " Bu> quoted")
+	}
+	if r, c := tt.Cursor(); r != row || c != 3 {
+		t.Errorf("cursor = (%d,%d), want (%d,3) on the banner as stored", r, c, row)
+	}
+}
+
+// Typing onto a quote under a prefix with no blank of its own wraps at the
+// width the display leaves, not only once the stored line passes 79.
+func TestTypingWrapsAQuoteWhereTheReaderWill(t *testing.T) {
+	prefix := "RW> "
+	line := prefix + strings.Repeat("abcd ", 14) + "abcd" // 78 stored, 79 drawn
+	if len(line) != MaxLineLength-1 {
+		t.Fatalf("seed line is %d long, want %d", len(line), MaxLineLength-1)
+	}
+	ih := NewInputHandler(strings.NewReader("x"))
+	tt := testterm.New(80, 24)
+	ed := NewFSEditor(testterm.NewSession(nil, ""), tt, ansi.OutputModeUTF8, 80, 24, "", "", "", "", "", "", ih)
+	ed.buffer.SetLine(1, line)
+	ed.buffer.SetQuotePrefix(1, prefix)
+	ed.buffer.SetHardNewline(1, true)
+	ed.topLine, ed.lastTopLine = 1, 1
+	ed.currentLine, ed.currentCol = 1, len(line)+1
+	ed.Run() //nolint:errcheck // EOF once the key runs out
+
+	if ed.buffer.GetLineCount() != 2 || ed.buffer.GetLine(2) != prefix+"abcdx" {
+		t.Fatalf("buffer = %q / %q, want the last word wrapped under the prefix", ed.buffer.GetLine(1), ed.buffer.GetLine(2))
+	}
+	for n := 1; n <= 2; n++ {
+		if w := runeLen(stripANSI(displayQuoteLine(ed.buffer.GetLine(n)).text)); w > MaxLineLength {
+			t.Errorf("line %d is drawn %d columns wide, want <= %d", n, w, MaxLineLength)
+		}
+	}
+}

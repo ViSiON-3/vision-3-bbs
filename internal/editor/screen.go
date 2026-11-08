@@ -62,6 +62,10 @@ type Screen struct {
 	// the reader draws it (see displayQuoteLine), so the cursor can be put on
 	// the character it is at rather than where the buffer holds it.
 	quoteLines map[int]quoteDisplay
+	// quoteBanners are the "Said" / "Done" lines the quote picker writes, with
+	// escapes removed. The reader leaves a banner shaped like a quote line
+	// ("Buck> said:") as it stands, so the editor does too.
+	quoteBanners []string
 }
 
 // NewScreen creates a new screen manager
@@ -688,12 +692,12 @@ func (s *Screen) RefreshLine(lineNum int, lineContent string, topLine int) {
 		return // Line not visible
 	}
 
-	disp := displayQuoteLine(lineContent)
+	disp := s.displayLine(lineContent)
 	restore := textSGR
 	if disp.quote {
 		restore += quoteSGR
 	}
-	lineContent = displayQuoteLine(s.markedLine(lineNum, lineContent, restore)).text
+	lineContent = s.displayLine(s.markedLine(lineNum, lineContent, restore)).text
 	if disp.quote {
 		s.quoteLines[lineNum] = disp
 	} else {
@@ -720,6 +724,34 @@ func (s *Screen) RefreshLine(lineNum int, lineContent string, topLine int) {
 	if !disp.quote || runeLen(stripANSI(lineContent)) < s.termWidth {
 		s.ClearEOL()
 	}
+}
+
+// SetQuoteBanners records the quote banners the picker writes, so that one
+// shaped like a quote line is drawn as the reader draws it: unchanged.
+func (s *Screen) SetQuoteBanners(banners ...string) {
+	s.quoteBanners = s.quoteBanners[:0]
+	for _, b := range banners {
+		if b = strings.TrimSpace(stripANSI(b)); b != "" {
+			s.quoteBanners = append(s.quoteBanners, b)
+		}
+	}
+}
+
+// displayLine is a buffer line as the screen draws it (see displayQuoteLine).
+// A quote banner keeps its own layout, in the quote colour where the reader
+// gives it that.
+func (s *Screen) displayLine(line string) quoteDisplay {
+	d := displayQuoteLine(line)
+	if !d.quote {
+		return d
+	}
+	plain := strings.TrimSpace(stripANSI(line))
+	for _, b := range s.quoteBanners {
+		if plain == b {
+			return quoteDisplay{text: quoteSGR + line, at: 0, quote: true}
+		}
+	}
+	return d
 }
 
 // RefreshScreen redraws all visible lines (incremental update)

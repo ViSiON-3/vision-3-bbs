@@ -137,7 +137,7 @@ func hasOriginLine(text string) bool {
 // isQuoteLine reports a line the reader draws as a quote. The editor shares
 // the rule, so a reply shows its quotes as they will be read (#962).
 func isQuoteLine(line string) bool {
-	prefix, _ := editor.SplitDisplayQuotePrefix(line)
+	prefix, _ := editor.SplitDisplayQuotePrefix(stripEscapes(line))
 	return prefix != ""
 }
 

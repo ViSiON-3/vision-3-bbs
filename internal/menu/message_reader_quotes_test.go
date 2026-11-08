@@ -389,18 +389,19 @@ func TestReaderQuoteFallsBackWithNoRoomBesidePrefix(t *testing.T) {
 
 func TestIsQuoteLineAgreesWithTheEditor(t *testing.T) {
 	for line, want := range map[string]bool{
-		"RW> text":     true,
-		" RW> text":    true,
-		"Ém> text":     true,
-		"\x90m> text":  true,
-		"Sh>> text":    true,
-		"Bu> Sh> text": true,
-		"> text":       true,
-		">text":        true, // Usenet style, coloured as a quote as it always was
-		"RW>":          true,
-		"a>b text":     false,
-		"-> arrow":     false,
-		"plain text":   false,
+		"RW> text":          true,
+		" RW> text":         true,
+		"Ém> text":          true,
+		"\x90m> text":       true,
+		"Sh>> text":         true,
+		"Bu> Sh> text":      true,
+		"> text":            true,
+		">text":             true, // Usenet style, coloured as a quote as it always was
+		"RW>":               true,
+		"\x1b[33m RW> text": true, // a colour before the prefix, as reflow sees it
+		"a>b text":          false,
+		"-> arrow":          false,
+		"plain text":        false,
 	} {
 		if got := isQuoteLine(line); got != want {
 			t.Errorf("isQuoteLine(%q) = %v, want %v", line, got, want)

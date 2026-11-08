@@ -670,7 +670,7 @@ the reader, which the editor, writing 79-column lines, can't show. The reader
 also puts a blank line around a run of quotes that has text right against it,
 as when a caller replies between a quote's lines; the editor shows only the
 blank lines that are really there. The quote picker's banners and the blank
-line it leaves after a quote mean a quote it adds needs none. It joins the lines of a quoted
+line it leaves after a quote mean a quote it adds needs none. The reader joins the lines of a quoted
 paragraph by the same rules as the quote picker, but it judges them on every
 message, so it only joins at a quote depth whose longest line is at least 60
 columns. Every row keeps the quote's prefix, including a Usenet-style quote

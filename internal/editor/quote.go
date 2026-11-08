@@ -122,6 +122,7 @@ func newQuoteSession(ch *CommandHandler, src []string, currentLine int) *quoteSe
 		srcWidth: QuoteSourceWidth(clean),
 		origLine: currentLine,
 	}
+	ch.screen.SetQuoteBanners(ch.quoteBanners())
 	qs.layout()
 	return qs
 }
@@ -549,9 +550,9 @@ func (qs *quoteSession) drawCompose(follow bool) {
 			// A quote line is drawn as the main editor and the reader draw it,
 			// cut first so what the display adds still fits the pane.
 			line := qs.ch.buffer.GetLine(n)
-			disp := displayQuoteLine(line)
+			disp := s.displayLine(line)
 			if disp.quote {
-				s.WriteDirect(displayQuoteLine(truncRunes(line, qs.width-max(0, disp.shift))).text + qpReset)
+				s.WriteDirect(s.displayLine(truncRunes(line, qs.width-max(0, disp.shift))).text + qpReset)
 			} else {
 				s.WriteDirect(truncRunes(line, qs.width))
 			}
