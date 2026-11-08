@@ -120,11 +120,14 @@ ArtView.prototype.kindOfEntry = function (e) {
     if (!(e.name in this.kinds)) {
         var data = v3.file.readMember(this.area.id, this.name, e.name);
         this.kinds[e.name] = data === null ? "unreadable" : kindOf(e.name, data);
+        if (data !== null && this.kinds[e.name] === "text") this.sauce[e.name] = v3.ansi.sauce(data);
     }
     return this.kinds[e.name];
 };
 
-// sauceOf reads and remembers an entry's SAUCE record (null for none).
+// sauceOf reads and remembers an entry's SAUCE record (null for none). It
+// reads only entries named as text; others get theirs once read to be
+// shown (show and kindOfEntry fill it in).
 ArtView.prototype.sauceOf = function (e) {
     if (!(e.name in this.sauce)) {
         var data = textByName(e.name) ? v3.file.readMember(this.area.id, this.name, e.name) : null;
@@ -218,7 +221,9 @@ ArtView.prototype.show = function (index, ask) {
         if (!yes) return "list";
     }
     var lines = v3.ansi.render(data, { width: Math.min(this.width(), 80), rows: 4000 });
-    var s = this.sauceOf(e);
+    // The data is in hand, so its SAUCE is too, whatever the entry's name.
+    this.sauce[e.name] = v3.ansi.sauce(data);
+    var s = this.sauce[e.name];
     var title = e.name + (s && s.title ? "  " + s.title : "") + (s && s.author ? " by " + s.author : "");
     var page = this.rows();
     var top = 0;
