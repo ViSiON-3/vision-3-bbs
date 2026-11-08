@@ -212,6 +212,13 @@ type V3NetCentralConfig struct {
 	// out. A caller's own choice always wins, and with a feature off
 	// nothing of it is sent whatever this says.
 	CallersDefault bool `json:"callersDefault"`
+	// Chat offers network chat (the Central lobby) on this network: callers
+	// may join its rooms, where their handle and this board's name go to
+	// every board in the room with each line they type. It needs Enabled.
+	// Off, including on a new subscription and after an upgrade, callers
+	// here cannot join, and ones in a room are taken out. CallersDefault
+	// does not apply: a caller takes part only after agreeing themselves.
+	Chat bool `json:"chat"`
 }
 
 // NewV3NetLeafCentral returns the Central block a newly created
@@ -240,6 +247,12 @@ func (l V3NetLeafConfig) CentralPresence() bool {
 // this subscription: Central and its LastCallers switch both on.
 func (l V3NetLeafConfig) CentralLastCallers() bool {
 	return l.CentralEnabled() && l.Central.LastCallers
+}
+
+// CentralChat reports whether network chat is offered on this
+// subscription: Central and its Chat switch both on.
+func (l V3NetLeafConfig) CentralChat() bool {
+	return l.CentralEnabled() && l.Central.Chat
 }
 
 // CentralEnabled reports whether callers may open V3Net Central for this

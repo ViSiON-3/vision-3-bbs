@@ -102,6 +102,20 @@ type chatcovSvc struct {
 
 	mu    sync.Mutex
 	calls []string // "verb arg", in call order
+	ended bool     // endByLeaf closed events; Close must not again
+}
+
+// endByLeaf does what leaf.Leaf.CloseChatSessions does to a session: the
+// reason goes out as a system message and the events channel closes.
+func (s *chatcovSvc) endByLeaf(reason string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ended {
+		return
+	}
+	s.ended = true
+	s.events <- chat.ChatEvent{Type: chat.TypeSystem, Text: reason}
+	close(s.events)
 }
 
 func (s *chatcovSvc) record(verb, arg string) {
@@ -176,7 +190,12 @@ func (s *chatcovSvc) Close() error {
 		time.Sleep(s.net.closeDelay)
 	}
 	s.record("close", "")
-	close(s.events)
+	s.mu.Lock()
+	ended := s.ended
+	s.mu.Unlock()
+	if !ended {
+		close(s.events)
+	}
 	return nil
 }
 
@@ -216,7 +235,28 @@ func chatcovFakeNet(env *menuEnv) *chatcovNet {
 		},
 	}
 	env.e.ChatLeaves = chatcovLeaves{n.leaf()}
+	chatcovAgree(env, env.caller, env.sysop)
 	return n
+}
+
+// chatcovAgree records each user's agreement to network chat, on the stored
+// account and the test's copy, so runChat goes straight to the network
+// picker rather than showing the notice first.
+func chatcovAgree(env *menuEnv, users ...*user.User) {
+	env.t.Helper()
+	for _, u := range users {
+		if u == nil {
+			continue
+		}
+		agree := func(x *user.User) { x.CentralChat, x.CentralChatChosen = true, true }
+		if env.um != nil {
+			if saved, err := env.um.SetCentralConsent(u.ID, agree); err == nil {
+				centralConsentFrom(u, saved)
+				continue
+			}
+		}
+		agree(u)
+	}
 }
 
 // chatcovEventLines is what the events queued by chatcovFakeNet render as.

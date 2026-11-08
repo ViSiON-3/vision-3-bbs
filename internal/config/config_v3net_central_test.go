@@ -49,3 +49,23 @@ func TestV3NetCentralConfigRoundTrip(t *testing.T) {
 		t.Errorf("round trip: %+v", back.Leaves[0].Central)
 	}
 }
+
+// Network chat is its own switch, off on an old config, off with Central
+// off, and on only with Central and chat both on.
+func TestV3NetCentralChatSwitch(t *testing.T) {
+	cfg, err := ParseV3NetConfig([]byte(`{"leaves":[{"hubUrl":"h","network":"n","central":{"enabled":true,"chat":true}},
+		{"hubUrl":"h","network":"m","central":{"enabled":false,"chat":true}},
+		{"hubUrl":"h","network":"o","central":{"enabled":true}},
+		{"hubUrl":"h","network":"p"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []bool{true, false, false, false} {
+		if got := cfg.Leaves[i].CentralChat(); got != want {
+			t.Errorf("leaf %d CentralChat() = %v, want %v (%+v)", i, got, want, cfg.Leaves[i].Central)
+		}
+	}
+	if NewV3NetLeafCentral().Chat {
+		t.Error("a new subscription should start with chat off")
+	}
+}

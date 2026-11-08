@@ -1,0 +1,114 @@
+package leaf
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
+)
+
+// With the sysop's chat switch off, a session can neither join nor speak,
+// whatever the hub would allow; the hub is never asked.
+func TestChatRefusedWhenNotOffered(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	l := subscribedLeaf(t, ts, "alicebbs")
+	alice := l.NewChatSession("alice")
+	defer alice.Close()
+	if _, _, err := alice.Join("lobby"); err != nil {
+		t.Fatalf("join with chat offered: %v", err)
+	}
+
+	for name, off := range map[string]func(){
+		"chat off":    func() { l.cfg.CentralChat = false },
+		"central off": func() { l.cfg.CentralEnabled = false },
+	} {
+		t.Run(name, func(t *testing.T) {
+			offerChat(l)
+			off()
+			defer offerChat(l)
+			if st := l.ChatStatus(); st.Enabled {
+				t.Error("status says chat is enabled")
+			}
+			for what, err := range map[string]error{
+				"post":    alice.Post("lobby", "hello"),
+				"private": alice.Private("bob", "", "psst"),
+				"topic":   alice.SetTopic("lobby", "t"),
+			} {
+				if !errors.Is(err, ErrChatDisabled) {
+					t.Errorf("%s = %v, want ErrChatDisabled", what, err)
+				}
+			}
+			if _, _, err := alice.Join("den"); !errors.Is(err, ErrChatDisabled) {
+				t.Errorf("join = %v, want ErrChatDisabled", err)
+			}
+			// Rooms are public and still readable, for the picker.
+			if _, err := alice.Rooms(); err != nil {
+				t.Errorf("rooms = %v", err)
+			}
+		})
+	}
+}
+
+// ChatStatus follows the hub's feature list as the other features do.
+func TestChatStatusFollowsHubFeatures(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	l := subscribedLeaf(t, ts, "alicebbs")
+	if st := l.ChatStatus(); !st.Enabled || st.SupportKnown || st.Supported {
+		t.Errorf("before /info: %+v", st)
+	}
+	if err := l.fetchHubFeatures(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if st := l.ChatStatus(); !st.Enabled || !st.SupportKnown || !st.Supported {
+		t.Errorf("after /info from a hub that serves chat: %+v", st)
+	}
+	l.noteHubFeatures([]string{protocol.FeatureCentralDirectory})
+	if st := l.ChatStatus(); st.Supported {
+		t.Errorf("hub without chat: %+v", st)
+	}
+}
+
+// CloseChatSessions tells every session why and ends it: the reason is the
+// last event, the channel then closes, and the session is closed for
+// good. Closing twice is harmless.
+func TestCloseChatSessionsTellsAndEnds(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	l := subscribedLeaf(t, ts, "alicebbs")
+	alice := l.NewChatSession("alice")
+	bob := l.NewChatSession("bob")
+	if _, _, err := alice.Join("lobby"); err != nil {
+		t.Fatal(err)
+	}
+
+	l.CloseChatSessions("chat is over")
+	for name, s := range map[string]*ChatSession{"alice": alice, "bob": bob} {
+		var last chat.ChatEvent
+		var got int
+		timeout := time.After(2 * time.Second)
+	drain:
+		for {
+			select {
+			case ev, ok := <-s.Events():
+				if !ok {
+					break drain
+				}
+				last, got = ev, got+1
+			case <-timeout:
+				t.Fatalf("%s: events channel never closed", name)
+			}
+		}
+		if got == 0 || last.Type != chat.TypeSystem || last.Text != "chat is over" {
+			t.Errorf("%s: last event %+v (of %d), want the reason as a system message", name, last, got)
+		}
+		if err := s.Post("lobby", "x"); err == nil {
+			t.Errorf("%s: post after close succeeded", name)
+		}
+	}
+	l.CloseChatSessions("again")
+	if err := alice.Close(); err != nil {
+		t.Errorf("close after CloseChatSessions: %v", err)
+	}
+}

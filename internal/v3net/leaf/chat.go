@@ -268,6 +268,9 @@ func removeOne(ss []string, s string) []string {
 // events for that room are delivered here. It returns the hub's room list and
 // recent history; a non-2xx hub response is reported as an error.
 func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, error) {
+	if err := s.chatAllowed(); err != nil {
+		return nil, nil, err
+	}
 	room, err := chat.NormalizeRoom(room)
 	if err != nil {
 		return nil, nil, err
@@ -396,6 +399,9 @@ func (s *ChatSession) Post(room, text string) error {
 // an unambiguous joined handle; its error explains unavailable or ambiguous
 // targets, including explicit handle@node choices.
 func (s *ChatSession) Private(handle, node, text string) error {
+	if err := s.chatAllowed(); err != nil {
+		return err
+	}
 	body, _ := json.Marshal(protocol.ChatPrivateRequest{ToHandle: handle, ToNode: node, Text: text, Handle: s.handle})
 	resp, err := s.leaf.signedPostWithResponse(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/private", s.leaf.cfg.Network), body)

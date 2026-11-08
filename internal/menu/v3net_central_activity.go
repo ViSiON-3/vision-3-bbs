@@ -484,12 +484,21 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		whoNets := centralOfferedNetworks(e.V3NetCentral, protocol.CentralKindPresence)
 		lastNets := centralOfferedNetworks(e.V3NetCentral, protocol.CentralKindLastCallers)
 
+		chatNets := centralChatOfferedNetworks(e.V3NetCentral)
+
 		whoOn := centralSharedNetworks(e.V3NetCentral, protocol.CentralKindPresence, u)
 		lastOn := centralSharedNetworks(e.V3NetCentral, protocol.CentralKindLastCallers, u)
+		// Chat is shared only where it is offered and the caller agreed;
+		// the switch still shows On, with no network, for an agreement
+		// the caller can withdraw after the SysOp stopped offering it.
+		var chatOn []string
+		if u.CentralChat {
+			chatOn = chatNets
+		}
 
 		var buf strings.Builder
 		buf.WriteString(centralHeader("Sharing", termWidth))
-		if len(whoOn) == 0 && len(lastOn) == 0 {
+		if len(whoOn) == 0 && len(lastOn) == 0 && len(chatOn) == 0 {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|15  Nothing about you is shared through V3Net Central.|07\r\n")))
 		} else {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|15  You share what is switched on below, and nothing else.|07\r\n")))
@@ -512,11 +521,16 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|151|03] Show me on Who's Online        " + onOff(whoOn, whoNets) + "\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|152|03] My availability               " + availText + "\r\n")))
-		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|153|03] Show my calls on Last Callers " + onOff(lastOn, lastNets) + "\r\n\r\n")))
+		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|153|03] Show my calls on Last Callers " + onOff(lastOn, lastNets) + "\r\n")))
+		chatSwitch := onOff(chatOn, chatNets)
+		if len(chatNets) == 0 && u.CentralChat {
+			chatSwitch = "|10On |07 |08(not offered here now)|07"
+		}
+		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|154|03] Take part in network chat     " + chatSwitch + "\r\n\r\n")))
 
 		handle := centralPreviewHandle(u.Handle)
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  What other boards would see|07\r\n")))
-		if len(whoNets) == 0 && len(lastNets) == 0 {
+		if len(whoNets) == 0 && len(lastNets) == 0 && len(chatNets) == 0 {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Nothing: this board offers no feature that shares anything about you.\r\n")))
 		}
 		// Each preview is two lines: who and where, then what else goes
@@ -541,6 +555,11 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 				buf.Write(ansi.ReplacePipeCodes([]byte("|08                turn it on, each kept 24 hours|07\r\n")))
 			}
 		}
+		if len(chatNets) > 0 {
+			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Network chat: |15" + v3netClip(handle, 30) + "|07 on |11" + v3netClip(board, 30) + "|07\r\n")))
+			buf.Write(ansi.ReplacePipeCodes([]byte("|08                in the room's user list and with each line you type;|07\r\n")))
+			buf.Write(ansi.ReplacePipeCodes([]byte("|08                the hub keeps room history for callers who join later|07\r\n")))
+		}
 		buf.Write(ansi.ReplacePipeCodes([]byte("|08  Never your real name, location, user number, or what you are doing.|07\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|08  Turning a switch off takes you off at once on connected boards; an|07\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|08  offline board drops it within minutes (online) or 24 hours (calls).|07\r\n")))
@@ -551,7 +570,7 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
 
-		line, next, err := v3netPromptLine(s, terminal, outputMode, "|07  Choice (1-3, Q quits): ")
+		line, next, err := v3netPromptLine(s, terminal, outputMode, "|07  Choice (1-4, Q quits): ")
 		if err != nil {
 			return u, next, err
 		}
@@ -594,8 +613,33 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 				now := time.Now().UTC()
 				x.CentralLastCallsSince = &now
 			}
+		case "4":
+			if u.CentralChat {
+				// Withdrawing needs no notice; the next line the caller
+				// types in a network room ends their chat.
+				mutate = func(x *user.User) {
+					x.CentralChat = false
+					x.CentralChatChosen = true
+				}
+				break
+			}
+			if len(chatNets) == 0 {
+				status = "|04Your SysOp does not offer network chat.|07"
+				continue
+			}
+			// Turning it on is agreeing to the notice, which saves itself.
+			agreed, next, err := chatConsentNotice(c)
+			if err != nil {
+				return u, next, err
+			}
+			if !agreed {
+				status = "|07Network chat stays off.|07"
+				continue
+			}
+			status = "|10Saved.|07"
+			continue
 		default:
-			status = "|04Enter 1, 2, 3 or Q.|07"
+			status = "|04Enter 1, 2, 3, 4 or Q.|07"
 			continue
 		}
 		if c.userManager != nil {
@@ -623,6 +667,8 @@ func centralConsentFrom(dst, src *user.User) {
 	dst.CentralLastCallsSince = src.CentralLastCallsSince
 	dst.CentralPresenceChosen = src.CentralPresenceChosen
 	dst.CentralLastCallsChosen = src.CentralLastCallsChosen
+	dst.CentralChat = src.CentralChat
+	dst.CentralChatChosen = src.CentralChatChosen
 }
 
 // centralPreviewHandle shows a handle as a snapshot would carry it: colour

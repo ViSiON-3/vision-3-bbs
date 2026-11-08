@@ -502,6 +502,7 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		CentralPresence:       lcfg.CentralPresence(),
 		CentralLastCallers:    lcfg.CentralLastCallers(),
 		CentralCallersDefault: lcfg.CentralCallersDefault(),
+		CentralChat:           lcfg.CentralChat(),
 		Activity:              s.activitySource(),
 		RequireSignedMessages: lcfg.RequireSignedMessages,
 		RequireSignedHub:      lcfg.RequireSignedHub,
@@ -915,9 +916,9 @@ func (s *Service) ConfigureLeaves(leafCfgs []config.V3NetLeafConfig, mgr *messag
 			s.RegisterArea(area.ID, lcfg.Network, lcfg.Origin)
 		}
 		// A subscription that takes part in Central runs without message
-		// areas: it browses the directory or is listed in it, and the hub
-		// sends it no messages.
-		if len(resolvedBoards) == 0 && !lcfg.CentralEnabled() && !lcfg.CentralPublishes() {
+		// areas: it browses the directory, is listed in it or offers
+		// network chat, and the hub sends it no messages.
+		if len(resolvedBoards) == 0 && !lcfg.CentralEnabled() && !lcfg.CentralPublishes() && !lcfg.CentralChat() {
 			slog.Warn("V3Net leaf: no resolvable boards, skipping", "network", lcfg.Network)
 			continue
 		}
@@ -1172,12 +1173,16 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 		if next, ok := nextByKey[leafKey{run.l.Network(), run.l.HubURL()}]; !ok || !next.CentralPresence() || !next.CentralLastCallers() {
 			s.withdrawActivityBeforeStop(run, next, ok)
 		}
-		s.stopLeaf(run)
+		// Chat sessions on the old leaf would outlive it on a dead
+		// stream, still able to post: end them, saying why, before the
+		// leaf stops. The replacement leaf, if any, serves new sessions.
 		key := leafKey{run.l.Network(), run.l.HubURL()}
+		next, ok := nextByKey[key]
+		run.l.CloseChatSessions(chatCloseReason(next, ok))
+		s.stopLeaf(run)
 		if n := run.l.LastNAL(); n != nil {
 			carried[key] = n
 		}
-		next, ok := nextByKey[key]
 		if !ok {
 			run.l.EndStores()
 			continue
@@ -1233,6 +1238,19 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 	}
 	slog.Info("v3net: leaf subscriptions reloaded", "count", count)
 	return nil
+}
+
+// chatCloseReason is what chat sessions on a leaf being stopped by a
+// reload are told: next is the subscription replacing it, if ok.
+func chatCloseReason(next config.V3NetLeafConfig, ok bool) string {
+	switch {
+	case !ok:
+		return "This board left the network; network chat has ended."
+	case !next.CentralChat():
+		return "Network chat is no longer offered on this board."
+	default:
+		return "This board's network connection was reset; use /network to rejoin."
+	}
 }
 
 // centralListingSpec builds the listing a leaf publishes for lcfg, or nil
@@ -1300,6 +1318,8 @@ type CentralNetworkStatus struct {
 	// Presence and LastCallers are network Who's Online and Last Callers.
 	Presence    leaf.ActivityStatus
 	LastCallers leaf.ActivityStatus
+	// Chat is network chat.
+	Chat leaf.ChatStatus
 }
 
 // CentralNetworks returns the Central state of every running subscription,
@@ -1315,6 +1335,7 @@ func (s *Service) CentralNetworks() []CentralNetworkStatus {
 			CentralStatus: run.l.CentralStatus(),
 			Presence:      run.l.ActivityStatus(protocol.CentralKindPresence),
 			LastCallers:   run.l.ActivityStatus(protocol.CentralKindLastCallers),
+			Chat:          run.l.ChatStatus(),
 		})
 	}
 	return out

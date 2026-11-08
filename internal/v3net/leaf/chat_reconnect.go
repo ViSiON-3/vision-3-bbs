@@ -31,6 +31,9 @@ func (r *chatSessionRegistry) suspend() {
 }
 
 func (s *ChatSession) chatReady() error {
+	if err := s.chatAllowed(); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {

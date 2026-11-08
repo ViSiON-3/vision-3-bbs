@@ -254,6 +254,11 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			Get: func() string { return uitext.BoolToYN(l.Central != nil && l.Central.CallersDefault) },
 			Set: func(val string) error { v3netCentral(l).CallersDefault = uitext.YNToBool(val); return nil },
 		},
+		{
+			Label: "Lobby Chat", Help: "Offer network chat (needs Central); callers join only after agreeing to what is shared. N ends it for callers in a room", Type: ftYesNo, Col: 3, Row: 23, Width: 1,
+			Get: func() string { return uitext.BoolToYN(l.Central != nil && l.Central.Chat) },
+			Set: func(val string) error { v3netCentral(l).Chat = uitext.YNToBool(val); return nil },
+		},
 	}
 }
 

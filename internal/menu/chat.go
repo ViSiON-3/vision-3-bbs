@@ -27,7 +27,9 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// ChatLeafProvider supplies active V3Net chat leaf connections.
+// ChatLeafProvider supplies the active V3Net chat leaf connections a
+// caller may be offered: only subscriptions whose sysop switch offers
+// network chat (see config.V3NetLeafConfig.CentralChat).
 type ChatLeafProvider interface {
 	ActiveChatLeaves() []ChatLeafInfo
 }
@@ -38,11 +40,58 @@ type ChatLeafInfo struct {
 	NewSession  func(handle string) chat.ChatService
 }
 
+// chatEntry is how the CHAT command was asked to start, from its argument:
+// the usual picker over the offered networks and Local, network chat only
+// (NET, as V3Net Central's Chat entry runs it), or Local only (LOCAL).
+type chatEntry int
+
+const (
+	chatEntryAny chatEntry = iota
+	chatEntryNetwork
+	chatEntryLocal
+)
+
+// parseChatEntry reads the CHAT command's argument.
+func parseChatEntry(args string) chatEntry {
+	switch strings.ToUpper(strings.TrimSpace(args)) {
+	case "NET", "NETWORK":
+		return chatEntryNetwork
+	case "LOCAL":
+		return chatEntryLocal
+	}
+	return chatEntryAny
+}
+
+// chatNetworkLeaves returns the V3Net networks the caller may chat on now:
+// the ones the sysop offers (the provider lists no others), and only once
+// the caller has agreed to network chat. With networks offered and no
+// agreement yet, the notice is shown and their answer taken; a refusal
+// leaves them with Local for this call, and declined says so. next and
+// err are as v3netPromptLine returns them.
+func chatNetworkLeaves(c *cmdCtx) (leaves []ChatLeafInfo, declined bool, next string, err error) {
+	if c.e.ChatLeaves == nil {
+		return nil, false, "", nil
+	}
+	leaves = c.e.ChatLeaves.ActiveChatLeaves()
+	if len(leaves) == 0 || chatConsentStored(c) {
+		return leaves, false, "", nil
+	}
+	agreed, next, err := chatConsentNotice(c)
+	if err != nil || !agreed {
+		return nil, err == nil, next, err
+	}
+	return leaves, false, "", nil
+}
+
 // chatSelectService shows an interactive network picker (when multiple V3Net
 // networks are configured) and a room picker, then returns the connected
 // ChatService and the room to join. The pickers run in normal terminal mode;
-// the caller sets up the full-screen chat UI afterwards.
-func chatSelectService(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, handle string, outputMode ansi.OutputMode) (chat.ChatService, string, string, error) {
+// the caller sets up the full-screen chat UI afterwards. A nil service with
+// a nil error means there is nothing to chat on: network chat was asked for
+// and the caller declined it or no network is available.
+func chatSelectService(c *cmdCtx, entry chatEntry) (chat.ChatService, string, string, string, error) {
+	e, s, terminal, outputMode := c.e, c.s, c.terminal, c.outputMode
+	handle := c.currentUser.Handle
 	dbPath := e.GetServerConfig().DataDir + "/chat.db"
 
 	wt := func(text string) {
@@ -50,8 +99,14 @@ func chatSelectService(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 	}
 
 	var leaves []ChatLeafInfo
-	if e.ChatLeaves != nil {
-		leaves = e.ChatLeaves.ActiveChatLeaves()
+	var declined bool
+	if entry != chatEntryLocal {
+		var next string
+		var err error
+		leaves, declined, next, err = chatNetworkLeaves(c)
+		if err != nil {
+			return nil, "", "", next, err
+		}
 	}
 
 	var svc chat.ChatService
@@ -59,25 +114,31 @@ func chatSelectService(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 	var err error
 
 	switch {
+	case declined && entry == chatEntryNetwork:
+		wt("\r\n|07Network chat stays off for you. You can turn it on under Preferences.|07\r\n")
+		return nil, "", "", "", nil
+	case len(leaves) == 0 && entry == chatEntryNetwork:
+		wt("\r\n|07No network is available for chat right now.|07\r\n")
+		return nil, "", "", "", nil
 	case len(leaves) == 0:
 		svc, err = chat.NewLocalChatService(handle, dbPath)
 		if err != nil {
-			return nil, "", "", err
+			return nil, "", "", "", err
 		}
 		netName = "Local"
 	default:
-		svc, netName, err = chatNetworkPicker(e, s, terminal, handle, dbPath, leaves, outputMode, wt)
+		svc, netName, err = chatNetworkPicker(e, s, terminal, handle, dbPath, leaves, entry != chatEntryNetwork, outputMode, wt)
 		if err != nil || svc == nil {
-			return nil, "", "", err
+			return nil, "", "", "", err
 		}
 	}
 
 	room, err := chatRoomPicker(e, svc, s, terminal, outputMode, wt)
 	if err != nil {
 		svc.Close() //nolint:errcheck
-		return nil, "", "", err
+		return nil, "", "", "", err
 	}
-	return svc, room, netName, nil
+	return svc, room, netName, "", nil
 }
 
 // chatNetInfo is one entry in a chat network picker.
@@ -98,7 +159,16 @@ var chatProbeTimeout = 2 * time.Second
 // Rooms without error within chatProbeTimeout; users is then the total across
 // its rooms.
 func probeChatNetworks(leaves []ChatLeafInfo, handle string) []chatNetInfo {
-	nets := make([]chatNetInfo, len(leaves)+1)
+	return probeChatNetworksOpt(leaves, handle, true)
+}
+
+// probeChatNetworksOpt is probeChatNetworks with the Local entry optional.
+func probeChatNetworksOpt(leaves []ChatLeafInfo, handle string, withLocal bool) []chatNetInfo {
+	n := len(leaves)
+	if withLocal {
+		n++
+	}
+	nets := make([]chatNetInfo, n)
 	var wg sync.WaitGroup
 	for i, leaf := range leaves {
 		nets[i].name = leaf.NetworkName
@@ -145,14 +215,18 @@ func probeChatNetworks(leaves []ChatLeafInfo, handle string) []chatNetInfo {
 		}()
 	}
 	wg.Wait()
-	nets[len(leaves)] = chatNetInfo{name: "Local", users: -1, avail: true, isLocal: true}
+	if withLocal {
+		nets[len(leaves)] = chatNetInfo{name: "Local", users: -1, avail: true, isLocal: true}
+	}
 	return nets
 }
 
 // chatNetworkPicker displays a numbered network list, probes each for user
-// counts, and returns the ChatService for the selected network.
-func chatNetworkPicker(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, handle, dbPath string, leaves []ChatLeafInfo, outputMode ansi.OutputMode, wt func(string)) (chat.ChatService, string, error) {
-	nets := probeChatNetworks(leaves, handle)
+// counts, and returns the ChatService for the selected network. Without
+// withLocal there is no Local entry, and an unavailable choice gives a nil
+// service and no error rather than falling back to local chat.
+func chatNetworkPicker(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, handle, dbPath string, leaves []ChatLeafInfo, withLocal bool, outputMode ansi.OutputMode, wt func(string)) (chat.ChatService, string, error) {
+	nets := probeChatNetworksOpt(leaves, handle, withLocal)
 
 	wt("\r\n")
 	e.writeString(terminal, outputMode, e.Strings().ChatNetworkPickerHeader)
@@ -187,6 +261,10 @@ func chatNetworkPicker(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, 
 		n = 1
 	}
 	selected := nets[n-1]
+	if !selected.avail && !withLocal {
+		wt("|08Network unavailable.|07\r\n")
+		return nil, "", nil
+	}
 	if !selected.avail {
 		wt("|08Network unavailable, falling back to local.|07\r\n")
 		svc, err := chat.NewLocalChatService(handle, dbPath)
@@ -323,8 +401,8 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	chatTop := chatHeaderRows + 1 // row 6
 
 	// Network and room selection — runs in normal terminal mode before full-screen UI.
-	svc, selectedRoom, selectedNetwork, err := chatSelectService(e, s, terminal, handle, outputMode)
-	if errors.Is(err, editor.ErrIdleTimeout) {
+	svc, selectedRoom, selectedNetwork, next, err := chatSelectService(c, parseChatEntry(args))
+	if errors.Is(err, editor.ErrIdleTimeout) || next == "LOGOFF" {
 		return nil, "LOGOFF", err
 	}
 	if err != nil {
@@ -776,6 +854,11 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		<-done
 	}
 
+	// onNetwork is whether svc is a V3Net session rather than local chat:
+	// network chat is the caller's agreement to re-check (see
+	// chatConsentStored), and the leaf's to end (see done).
+	onNetwork := !chatIsLocal(svc)
+
 	for {
 		input, err := chatReadLine(s, &rawMu, scr, chatPrompt)
 		if err != nil {
@@ -789,6 +872,27 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			slog.Error("chat input error", "node", nodeNumber, "error", err)
 			break
+		}
+
+		// The leaf ends its sessions when a reload stops it (the reason
+		// was shown as a system line as it did), and the caller's
+		// agreement can be withdrawn under Preferences on another node.
+		// Either way network chat is over: say so and leave.
+		if onNetwork {
+			ended := false
+			select {
+			case <-done:
+				ended = true
+			default:
+			}
+			if !ended && !chatConsentStored(c) {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "You turned network chat off under Preferences; leaving."))
+				ended = true
+			}
+			if ended {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Network chat has ended."))
+				break
+			}
 		}
 
 		// Sending a line, even a blank one, returns a paged-back view to
@@ -894,9 +998,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			// Stop the current service and event goroutine.
 			cleanup()
 
-			// Probe available networks inline.
+			// Probe available networks inline: the ones the sysop offers,
+			// and only while the caller's agreement to network chat stands.
 			var leaves []ChatLeafInfo
-			if e.ChatLeaves != nil {
+			if e.ChatLeaves != nil && chatConsentStored(c) {
 				leaves = e.ChatLeaves.ActiveChatLeaves()
 			}
 			dbPath := e.GetServerConfig().DataDir + "/chat.db"
@@ -1005,6 +1110,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			svc = newSvc
 			currentRoom = newRoom
 			currentNetwork = newNetName
+			onNetwork = !chatIsLocal(svc)
 			done = make(chan struct{})
 			stopLag = startLag(svc)
 			rawMu.Lock()
@@ -1108,6 +1214,13 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	rawWrite([]byte("\x1B[r"))
 	terminal.SetPrompt("")
 	return nil, "", nil
+}
+
+// chatIsLocal reports whether svc is this board's local chat rather than a
+// network session.
+func chatIsLocal(svc chat.ChatService) bool {
+	_, ok := svc.(*chat.LocalChatService)
+	return ok
 }
 
 // chatText prepares text from a caller, a hub or another board to go into a
