@@ -91,7 +91,7 @@ to subscribe to multiple networks.
 | `hubUrl` | string | — | Full URL of the hub (e.g. `"https://felonynet.org"`). Required. |
 | `network` | string | — | Network name to subscribe to. Must match a network hosted by the hub. Required. |
 | `boards` | array | `[]` | Local message area tags for received messages (e.g. `["fn.general", "fn.tech"]`). A local post in any of these areas is sent to the hub, whatever the area's type and even while `enabled` is `false` — it waits for V3Net to come on. A subscription with no boards runs only if its `central` block turns something on. |
-| `pollInterval` | string | `"5m"` | How often to poll the hub for new messages. Accepts Go duration strings: `"30s"`, `"5m"`, `"1h"`. |
+| `pollInterval` | string | `"5m"` | How often to poll the hub for new messages when none has been announced. A post on another node is fetched as soon as the hub's `new_message` event arrives; the interval is the fallback for anything missed. Accepts Go duration strings: `"30s"`, `"5m"`, `"1h"`. |
 | `origin` | string | BBS name | Origin line appended to outbound messages. Falls back to the BBS name from `config.json` if blank. Cut to 79 characters when sent. |
 | `autoJoinAreas` | bool | unset (`true`) | **Newscan Default** in the editor. When true or unset, message areas created for this subscription are flagged as newscan defaults for users. Set `false` to leave new areas out of newscans until users add them. |
 | `requireSignedMessages` | bool | `false` | **Signed Messages** in the editor. When true, the leaf drops polled messages that carry no author signature. Leave it false until every node on the network signs its messages. See [Requiring signed messages](v3net/configuration.md#on-a-leaf). |

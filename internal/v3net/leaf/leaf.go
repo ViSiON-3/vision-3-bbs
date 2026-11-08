@@ -65,6 +65,10 @@ type Leaf struct {
 	central centralState
 	// sseConnected is set while the event stream is open.
 	sseConnected atomic.Bool
+	// pollNow wakes the poll loop for a poll ahead of its ticker, when the
+	// hub reports a new message (see dispatchMessageEvent). It holds one
+	// token, so a burst of events while a poll runs adds one poll after it.
+	pollNow chan struct{}
 }
 
 // New creates a new Leaf with the given configuration.
@@ -86,7 +90,8 @@ func New(cfg Config) *Leaf {
 			hubSigned:    cfg.HubSigned,
 			hubSignedCfg: cfg.HubSigned,
 		},
-		hub: newHubGate(),
+		hub:     newHubGate(),
+		pollNow: make(chan struct{}, 1),
 	}
 	l.nalCache.SetCheck(l.checkNAL)
 	if cfg.OnEvent != nil {

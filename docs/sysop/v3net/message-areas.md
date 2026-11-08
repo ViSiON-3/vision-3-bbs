@@ -127,7 +127,10 @@ while does not lose anything.
 
 ### Inbound (remote message arrives)
 
-1. The leaf client receives a message via polling or SSE notification
+1. The leaf client fetches the message with a signed poll of the hub: at once
+   when the hub's `new_message` event arrives over SSE, and every poll
+   interval in case an event was missed. The event only says a message is
+   waiting; the message itself always comes through the poll
 2. The dedup index is checked — if this message (its origin node and UUID)
    has been seen, it is skipped
 3. The message is claimed in the dedup index
