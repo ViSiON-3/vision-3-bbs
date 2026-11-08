@@ -111,4 +111,50 @@ func TestCloseChatSessionsTellsAndEnds(t *testing.T) {
 	if err := alice.Close(); err != nil {
 		t.Errorf("close after CloseChatSessions: %v", err)
 	}
+
+	// The leaf is retired for chat: a session a picker makes from it
+	// afterwards is closed as it is made, and says why.
+	late := l.NewChatSession("carol")
+	if _, _, err := late.Join("lobby"); !errors.Is(err, ErrChatEnded) {
+		t.Errorf("join on a retired leaf = %v, want ErrChatEnded", err)
+	}
+	if err := late.Private("alice", "", "hi"); !errors.Is(err, ErrChatEnded) {
+		t.Errorf("private on a retired leaf = %v, want ErrChatEnded", err)
+	}
+	if ev, ok := <-late.Events(); !ok || ev.Text != ErrChatEnded.Error() {
+		t.Errorf("late session's first event = %+v ok=%v, want the reason", ev, ok)
+	}
+	if _, ok := <-late.Events(); ok {
+		t.Error("late session's channel still open")
+	}
+}
+
+// A session whose buffer is full still gets the reason as its last event:
+// the oldest unread event makes room for it.
+func TestCloseChatSessionsReasonFitsFullBuffer(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	l := subscribedLeaf(t, ts, "alicebbs")
+	alice := l.NewChatSession("alice")
+	for i := 0; i < cap(alice.events); i++ {
+		alice.events <- chat.ChatEvent{Type: chat.TypeSystem, Text: "filler"}
+	}
+	l.CloseChatSessions("chat is over")
+	var last chat.ChatEvent
+	n := 0
+	for ev := range alice.Events() {
+		last, n = ev, n+1
+	}
+	if n != cap(alice.events) || last.Text != "chat is over" {
+		t.Errorf("got %d events ending %q, want a full buffer ending with the reason", n, last.Text)
+	}
+}
+
+// A closed session refuses a private message as it does a post.
+func TestChatPrivateRefusedOnClosedSession(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	alice := subscribedLeaf(t, ts, "alicebbs").NewChatSession("alice")
+	alice.Close()
+	if err := alice.Private("bob", "", "hi"); err == nil {
+		t.Error("private on a closed session succeeded")
+	}
 }

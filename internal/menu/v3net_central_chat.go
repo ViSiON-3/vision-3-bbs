@@ -110,6 +110,8 @@ func chatConsentNoticeText(handle, board string, width int) string {
 	w("|03  What is kept|07")
 	w("|07  The hub keeps room messages as history for callers who join later,")
 	w("|07  and private messages for the same time; a ViSiON/3 hub keeps 7 days.")
+	w("|07  Room history can be read by anyone who knows the hub's address, without")
+	w("|07  joining: treat what you say in a room as public.")
 	w("")
 	w("|03  Who moderates|07")
 	w("|07  Your SysOp decides whether this board takes part; the hub's operator")

@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -94,6 +95,58 @@ func TestChatEntryArguments(t *testing.T) {
 	}
 	if len(net.chatted()) != 1 {
 		t.Errorf("CHAT LOCAL reached the network")
+	}
+}
+
+// CHAT NET never lands in local chat: /network lists no Local, and a room
+// that cannot be joined, at the start or after /network, ends chat.
+func TestChatEntryNetworkNeverFallsBackToLocal(t *testing.T) {
+	env := newMenuEnv(t)
+	net := chatcovFakeNet(env)
+	net.events = nil
+
+	r := env.run(runChat, env.caller, "NET", "1\r\r/network\r1\r\rhi\r/q\r")
+	txt := chatcovText(r)
+	if strings.Contains(txt, "Local") || !strings.Contains(txt, "<Caller> hi") {
+		t.Errorf("/network under CHAT NET should offer no Local:\n%s", txt)
+	}
+
+	net.joinErr = func(string) error { return errors.New("room is full") }
+	r = env.run(runChat, env.caller, "NET", "1\r\rhi\r/q\r")
+	if !chatcovHas(r, "Could not join the room: room is full") || chatcovHas(r, "Network: Local", "<Caller> hi") {
+		t.Errorf("a failed join under CHAT NET should end chat, not fall back:\n%s", chatcovText(r))
+	}
+	if !net.allClosed() {
+		t.Error("network session left open")
+	}
+}
+
+// An agreement withdrawn on another node while the caller sits at a picker
+// stops the join: nothing is published.
+func TestChatWithdrawalDuringPickerPreventsJoin(t *testing.T) {
+	env := newMenuEnv(t)
+	net := chatcovFakeNet(env)
+	net.events = nil
+
+	live := startChatLive(env, env.caller)
+	live.waitOutput("Select network [1]:")
+	if _, err := env.um.SetCentralConsent(env.caller.ID, func(x *user.User) { x.CentralChat, x.CentralChatChosen = false, true }); err != nil {
+		t.Fatal(err)
+	}
+	live.typeKeys("1\r")
+	live.waitOutput("Select room [lobby]:")
+	live.typeKeys("\r")
+	live.waitOutput("Network chat is off for you")
+	select {
+	case <-live.done:
+	case <-time.After(handlerWait):
+		t.Fatal("chat did not end")
+	}
+	if len(net.chatted()) != 0 {
+		t.Error("joined a room after the agreement was withdrawn")
+	}
+	if !net.allClosed() {
+		t.Error("network session left open")
 	}
 }
 

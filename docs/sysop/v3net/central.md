@@ -506,6 +506,8 @@ V3Net Central: Network Chat
   What is kept
   The hub keeps room messages as history for callers who join later,
   and private messages for the same time; a ViSiON/3 hub keeps 7 days.
+  Room history can be read by anyone who knows the hub's address, without
+  joining: treat what you say in a room as public.
 
   Who moderates
   Your SysOp decides whether this board takes part; the hub's operator
@@ -530,8 +532,9 @@ V3Net Central: Network Chat
   agreed themselves.
 
 Withdrawing takes effect at once. A caller in a network room on another
-node ends chat with the next line they type (it is not posted), and the
-`/network` command no longer lists the networks.
+node ends chat with the next line they type (it is not posted), one
+waiting at a network or room picker is not joined, and the `/network`
+command no longer lists the networks.
 
 ### Offering It
 
@@ -573,10 +576,11 @@ callers; the hub treats both the same.
 ### Chat Retention and Access
 
 Room history is kept by the hub for its retention period (7 days on a
-ViSiON/3 hub), served to callers who join a room and to the `/rooms`
-list. The hub's room list and room history endpoints are readable
-without a node signature today, by anyone who knows the hub's address; a
-later phase decides and documents that access policy. Private messages
+ViSiON/3 hub) and served to callers who join a room. The hub's room list
+and room history endpoints are readable without a node signature today,
+by anyone who knows the hub's address, which is why the notice tells
+callers to treat a room as public; a later phase decides and documents
+that access policy. Private messages
 are stored for the same period and are never replayed; see
 [Private Message Delivery](v3net/chat.md#private-message-delivery). Mute,
 block and report controls, and network moderation beyond the hub's rate

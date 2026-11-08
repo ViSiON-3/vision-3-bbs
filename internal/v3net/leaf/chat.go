@@ -27,6 +27,9 @@ type chatSessionRegistry struct {
 	sessions     map[*ChatSession]struct{}
 	nodeID       string
 	rejoinEchoes map[chatMembership]bool // protected by mu; cleared for each stream
+	// retired is set by Leaf.CloseChatSessions: the leaf is being stopped,
+	// so no session may be registered or act after it. Protected by mu.
+	retired bool
 
 	// membership serializes Join and Leave requests to the hub. The hub keeps
 	// one membership per handle on a node, so a session leaving a room must
@@ -43,11 +46,18 @@ func newChatSessionRegistry(nodeID string) *chatSessionRegistry {
 }
 
 // register adds s to the sessions that dispatch delivers events to. Sessions
-// sharing a handle are each registered on their own.
+// sharing a handle are each registered on their own. On a retired registry
+// the session is closed instead, with the reason its operations return.
 func (r *chatSessionRegistry) register(s *ChatSession) {
 	r.mu.Lock()
-	r.sessions[s] = struct{}{}
+	retired := r.retired
+	if !retired {
+		r.sessions[s] = struct{}{}
+	}
 	r.mu.Unlock()
+	if retired {
+		s.endWith(ErrChatEnded.Error())
+	}
 }
 
 // deregister removes s, leaving any other session with its handle in place.

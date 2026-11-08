@@ -19,6 +19,14 @@ import (
 // offered on its subscription.
 var ErrChatDisabled = errors.New("leaf: network chat is not offered on this network")
 
+// ErrChatEnded is returned by a ChatSession on a leaf that a reload has
+// stopped (see CloseChatSessions): a picker that kept the old leaf's
+// session factory gets this rather than a session on a dead stream.
+var ErrChatEnded = errors.New("leaf: this board's connection to the network was reset; try again")
+
+// errChatSessionClosed is returned by a closed ChatSession.
+var errChatSessionClosed = errors.New("chat session closed")
+
 // ChatStatus is what a leaf knows about network chat on its network.
 type ChatStatus struct {
 	// Enabled is the sysop's switch for chat on this network, which needs
@@ -46,35 +54,75 @@ func (l *Leaf) ChatStatus() ChatStatus {
 	}
 }
 
-// chatAllowed is the policy check a session makes before a join or a post.
+// chatAllowed is the policy check a session makes before a join, a post
+// or a private message: the leaf still running, chat offered on it, and
+// the session open.
 func (s *ChatSession) chatAllowed() error {
+	s.leaf.chatSessions.mu.RLock()
+	retired := s.leaf.chatSessions.retired
+	s.leaf.chatSessions.mu.RUnlock()
+	if retired {
+		return ErrChatEnded
+	}
 	if !s.leaf.ChatEnabled() {
 		return ErrChatDisabled
+	}
+	s.mu.Lock()
+	closed := s.closed
+	s.mu.Unlock()
+	if closed {
+		return errChatSessionClosed
 	}
 	return nil
 }
 
-// CloseChatSessions ends every chat session on this leaf: each is sent
-// reason as a system message and then closed, so its Events channel
-// delivers the reason and ends. It does not tell the hub the sessions
-// left: the leaf is being stopped, and the hub drops the node's
-// memberships when its stream closes.
+// CloseChatSessions ends every chat session on this leaf and retires the
+// leaf for chat: each session is sent reason as a system message and then
+// closed, so its Events channel delivers the reason and ends, and a
+// session created afterwards (a caller's picker may still hold the leaf)
+// is closed as it is made. It does not tell the hub the sessions left:
+// the leaf is being stopped, and the hub drops the node's memberships
+// when its stream closes.
 func (l *Leaf) CloseChatSessions(reason string) {
-	l.chatSessions.mu.RLock()
-	sessions := make([]*ChatSession, 0, len(l.chatSessions.sessions))
-	for s := range l.chatSessions.sessions {
+	r := l.chatSessions
+	r.mu.Lock()
+	r.retired = true
+	sessions := make([]*ChatSession, 0, len(r.sessions))
+	for s := range r.sessions {
 		sessions = append(sessions, s)
 	}
-	l.chatSessions.mu.RUnlock()
+	r.mu.Unlock()
 	for _, s := range sessions {
-		s.mu.Lock()
-		if !s.closed && reason != "" {
+		s.endWith(reason)
+		r.deregister(s)
+	}
+}
+
+// endWith closes the session with reason as its last event. The reason
+// and the close happen under s.mu, which dispatch also takes to deliver,
+// so nothing follows the reason; a full buffer gives up its oldest event
+// to make room, so a slow reader still learns why the channel ended.
+func (s *ChatSession) endWith(reason string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return
+	}
+	if reason != "" {
+		ev := chat.ChatEvent{Type: chat.TypeSystem, Text: reason}
+		select {
+		case s.events <- ev:
+		default:
 			select {
-			case s.events <- chat.ChatEvent{Type: chat.TypeSystem, Text: reason}:
+			case <-s.events:
+			default:
+			}
+			select {
+			case s.events <- ev:
 			default:
 			}
 		}
-		s.mu.Unlock()
-		s.Close() //nolint:errcheck // always nil
 	}
+	s.closed = true
+	close(s.events)
 }

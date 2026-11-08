@@ -401,7 +401,8 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	chatTop := chatHeaderRows + 1 // row 6
 
 	// Network and room selection — runs in normal terminal mode before full-screen UI.
-	svc, selectedRoom, selectedNetwork, next, err := chatSelectService(c, parseChatEntry(args))
+	entry := parseChatEntry(args)
+	svc, selectedRoom, selectedNetwork, next, err := chatSelectService(c, entry)
 	if errors.Is(err, editor.ErrIdleTimeout) || next == "LOGOFF" {
 		return nil, "LOGOFF", err
 	}
@@ -660,7 +661,26 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	terminalio.WriteProcessedBytes(s, []byte(ansi.ClearScreen()), outputMode)
 	terminalio.WriteProcessedBytes(s, []byte(fmt.Sprintf("\x1B[%d;%dr", chatTop, scr.scrollBottom())), outputMode)
 
+	// The pickers took time, and the caller's agreement to network chat
+	// may have been withdrawn on another node meanwhile: check it again
+	// right before the join publishes their handle.
+	if !chatIsLocal(svc) && !chatConsentStored(c) {
+		svc.Close() //nolint:errcheck
+		rawWrite([]byte("\x1B[r" + ansi.ClearScreen()))
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|07Network chat is off for you. You can turn it on under V3Net Central -> Preferences.|07\r\n")), outputMode)
+		return nil, "", nil
+	}
+
 	_, history, err := svc.Join(currentRoom)
+	if err != nil && entry == chatEntryNetwork {
+		// Network chat only: no room is no chat, rather than local chat
+		// the caller did not ask for.
+		slog.Info("chat join failed", "node", nodeNumber, "error", err)
+		svc.Close() //nolint:errcheck
+		rawWrite([]byte("\x1B[r" + ansi.ClearScreen()))
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|07Could not join the room: "+chatText(err.Error())+"|07\r\n")), outputMode)
+		return nil, "", nil
+	}
 	if err != nil {
 		slog.Info("chat join failed, falling back to local chat", "node", nodeNumber, "error", err)
 		svc.Close() //nolint:errcheck
@@ -1000,12 +1020,25 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 			// Probe available networks inline: the ones the sysop offers,
 			// and only while the caller's agreement to network chat stands.
+			// Network-only chat lists no Local, and ends rather than fall
+			// back to it; cleanup has run, so these paths return directly.
 			var leaves []ChatLeafInfo
 			if e.ChatLeaves != nil && chatConsentStored(c) {
 				leaves = e.ChatLeaves.ActiveChatLeaves()
 			}
 			dbPath := e.GetServerConfig().DataDir + "/chat.db"
-			nets := probeChatNetworks(leaves, handle)
+			netOnly := entry == chatEntryNetwork
+			endNetOnly := func(why string) (*user.User, string, error) {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, why))
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Network chat has ended."))
+				rawWrite([]byte("\x1B[r"))
+				terminal.SetPrompt("")
+				return nil, "", nil
+			}
+			nets := probeChatNetworksOpt(leaves, handle, !netOnly)
+			if len(nets) == 0 {
+				return endNetOnly("No network is available for chat right now.")
+			}
 
 			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Chat Networks:"))
 			for i, net := range nets {
@@ -1028,6 +1061,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			var newSvc chat.ChatService
 			var newNetName string
+			if netErr != nil && netOnly {
+				return endNetOnly("No network chosen.")
+			}
 			if netErr != nil {
 				newSvc, err = chat.NewLocalChatService(handle, dbPath)
 				newNetName = "Local"
@@ -1043,6 +1079,8 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 				sel := nets[n-1]
 				switch {
+				case !sel.avail && netOnly:
+					return endNetOnly("Network unavailable.")
 				case !sel.avail:
 					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Network unavailable, using local."))
 					newSvc, err = chat.NewLocalChatService(handle, dbPath)
@@ -1087,8 +1125,19 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 			}
 
+			// The pickers took time: a withdrawal of the caller's agreement
+			// meanwhile means no network join now.
+			if !chatIsLocal(newSvc) && !chatConsentStored(c) {
+				newSvc.Close() //nolint:errcheck
+				return endNetOnly("You turned network chat off under Preferences; leaving.")
+			}
+
 			// Join the new room.
 			_, newHistory, joinErr := newSvc.Join(newRoom)
+			if joinErr != nil && netOnly {
+				newSvc.Close() //nolint:errcheck
+				return endNetOnly("Could not join room: " + chatText(joinErr.Error()))
+			}
 			if joinErr != nil {
 				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not join room: "+chatText(joinErr.Error())))
 				newSvc.Close() //nolint:errcheck

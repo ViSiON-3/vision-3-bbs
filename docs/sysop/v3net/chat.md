@@ -59,7 +59,7 @@ Two arguments change what is offered:
 | Command | Effect |
 |---------|--------|
 | `RUN:CHAT` | The network picker over every offered network, and Local. |
-| `RUN:CHAT NET` | Network chat only: no Local entry, and a caller who declines the notice is sent back to the menu. This is what **Chat** on the V3Net Central menu runs. |
+| `RUN:CHAT NET` | Network chat only: no Local entry anywhere, including `/network`, and a caller who declines the notice, or whose room cannot be joined, is sent back to the menu rather than into local chat. This is what **Chat** on the V3Net Central menu runs. |
 | `RUN:CHAT LOCAL` | Local chat only; no notice, no network picker. |
 
 ---
