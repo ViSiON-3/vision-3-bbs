@@ -135,7 +135,7 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 				return nil, "", wErr
 			}
 			if !pager.Line() {
-				return c.currentUser, "", nil
+				return pager.stopResult(c.currentUser)
 			}
 		}
 	}

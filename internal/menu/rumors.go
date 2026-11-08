@@ -71,7 +71,7 @@ func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
 		wv(terminal, fmt.Sprintf("|03%-4d|07%-42s|11%-16s|07%s\r\n",
 			r.ID, callerText(truncateRunes(r.Text, 41)), callerText(truncateRunes(author, 15)), r.PostedAt.Format("01/02/06")), outputMode)
 		if !pager.Line() {
-			return currentUser, "", nil
+			return pager.stopResult(currentUser)
 		}
 		// The author column is too narrow for "Author (RealUser)", so a sysop
 		// gets the real poster of a masked rumor on a line of its own,
@@ -86,7 +86,7 @@ func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
 				wv(terminal, fmt.Sprintf("%s|08(|11%s|08)|07\r\n",
 					strings.Repeat(" ", rumorListAuthorCol), callerText(poster)), outputMode)
 				if !pager.Line() {
-					return currentUser, "", nil
+					return pager.stopResult(currentUser)
 				}
 			}
 		}

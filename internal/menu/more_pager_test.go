@@ -1,11 +1,17 @@
 package menu
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
+	"golang.org/x/term"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -92,5 +98,107 @@ func TestUserListPages(t *testing.T) {
 	// By user number: the first screen starts with the earliest accounts.
 	if i, j := strings.Index(text, "Caller00"), strings.Index(text, "Caller01"); i < 0 || j < 0 || i > j {
 		t.Errorf("list not in user-number order:\n%s", text)
+	}
+}
+
+// idleAtMore runs fn for u under a one-unit session idle timeout, typing
+// keys and then nothing, and returns what it returned. The caller is
+// expected to be left sitting at a More prompt.
+func idleAtMore(t *testing.T, env *menuEnv, u *user.User, keys string, fn func(*cmdCtx, string) (*user.User, string, error)) (string, error) {
+	t.Helper()
+	old := sessionIdleUnit
+	sessionIdleUnit = 50 * time.Millisecond
+	t.Cleanup(func() { sessionIdleUnit = old })
+	cfg := env.e.GetServerConfig()
+	cfg.SessionIdleTimeoutMinutes, cfg.CoSysOpLevel, cfg.SysOpLevel = 1, 250, 255
+	env.e.SetServerConfig(cfg)
+
+	r, w := io.Pipe()
+	s := &chatLiveSession{testSession: newTestSession(""), in: r}
+	SetSessionOutputMode(s, env.outputMode)
+	applySessionIdleTimeout(s, env.e.idleTimeout(u))
+	t.Cleanup(func() {
+		_ = w.Close()
+		resetSessionIH(s)
+		clearSessionIdleTimeout(s)
+		ClearSessionOutputMode(s)
+	})
+	c := &cmdCtx{
+		e: env.e, s: s, terminal: term.NewTerminal(s, ""), userManager: env.um,
+		currentUser: u, nodeNumber: 1, sessionStartTime: time.Now(),
+		outputMode: env.outputMode, termWidth: 80, termHeight: 24,
+	}
+	go func() { _, _ = io.WriteString(w, keys) }()
+	type result struct {
+		next string
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		_, next, err := fn(c, "")
+		done <- result{next, err}
+	}()
+	select {
+	case res := <-done:
+		return res.next, res.err
+	case <-time.After(handlerWait):
+		t.Fatal("still waiting at the More prompt after the idle timeout")
+		return "", nil
+	}
+}
+
+// TestMorePagerIdleTimeoutEndsCall pins that an idle timeout at a More
+// prompt ends the call, as it does anywhere else, rather than dropping the
+// caller back at the menu.
+func TestMorePagerIdleTimeoutEndsCall(t *testing.T) {
+	t.Run("newscan", func(t *testing.T) {
+		env := newMenuEnv(t)
+		zero := time.Time{}
+		env.caller.FileNewscanSince = &zero
+		for i := 0; i < 30; i++ {
+			addNewscanRecord(t, env, 1, fmt.Sprintf("IDLE%02d.ZIP", i), time.Now())
+		}
+		next, err := idleAtMore(t, env, env.caller, "", runFileNewscan)
+		if next != "LOGOFF" || !errors.Is(err, editor.ErrIdleTimeout) {
+			t.Errorf("newscan = (%q, %v), want LOGOFF with editor.ErrIdleTimeout", next, err)
+		}
+	})
+	t.Run("search", func(t *testing.T) {
+		env := newMenuEnv(t)
+		names := make([]string, 30)
+		for i := range names {
+			names[i] = fmt.Sprintf("HIT%02d.ZIP", i)
+		}
+		addDownloadRecords(t, env, names...)
+		next, err := idleAtMore(t, env, env.caller, "hit\r", runSearchFiles)
+		if next != "LOGOFF" || !errors.Is(err, editor.ErrIdleTimeout) {
+			t.Errorf("search = (%q, %v), want LOGOFF with editor.ErrIdleTimeout", next, err)
+		}
+	})
+}
+
+// TestMorePagerStopResult pins what a command returns once its output
+// stops: the menu for a choice to stop or a hang-up, LOGOFF with any other
+// read error.
+func TestMorePagerStopResult(t *testing.T) {
+	u := &user.User{ID: 7}
+	for _, tc := range []struct {
+		name     string
+		err      error
+		wantNext string
+	}{
+		{"chose to stop", nil, ""},
+		{"hung up", io.EOF, ""},
+		{"idle timeout", editor.ErrIdleTimeout, "LOGOFF"},
+	} {
+		p := &morePager{stopped: true, err: tc.err}
+		got, next, err := p.stopResult(u)
+		wantErr := tc.err
+		if errors.Is(tc.err, io.EOF) {
+			wantErr = nil
+		}
+		if got != u || next != tc.wantNext || !errors.Is(err, wantErr) || (wantErr == nil && err != nil) {
+			t.Errorf("%s: stopResult = (%v, %q, %v)", tc.name, got, next, err)
+		}
 	}
 }

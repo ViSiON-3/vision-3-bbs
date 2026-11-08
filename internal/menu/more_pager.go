@@ -1,6 +1,9 @@
 package menu
 
 import (
+	"errors"
+	"io"
+
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
@@ -34,6 +37,7 @@ type morePager struct {
 	lines   int // lines written since the last pause
 	nonstop bool
 	stopped bool
+	err     error // the read error that stopped the output, if any
 }
 
 // morePromptsOn reports whether u wants long output paused (see
@@ -88,8 +92,25 @@ func (p *morePager) Lines(n int) bool {
 	return true
 }
 
-// Stopped reports whether the caller chose to stop the output.
+// Stopped reports whether the output stopped: the caller chose to, or
+// reading their answer failed.
 func (p *morePager) Stopped() bool { return p.stopped }
+
+// Err returns the error reading the caller's answer that stopped the
+// output, or nil when they chose to stop (or it hasn't stopped).
+func (p *morePager) Err() error { return p.err }
+
+// stopResult is what a menu command returns once its output has stopped:
+// back to the menu when the caller chose to stop or hung up (the hang-up is
+// seen again at the menu's next read), otherwise LOGOFF with the read
+// error, so an idle timeout at the prompt ends the call as it does
+// anywhere else.
+func (p *morePager) stopResult(u *user.User) (*user.User, string, error) {
+	if p.err != nil && !errors.Is(p.err, io.EOF) {
+		return u, "LOGOFF", p.err
+	}
+	return u, "", nil
+}
 
 // ask shows the prompt and waits for an answer: true to go on.
 func (p *morePager) ask() bool {
@@ -98,6 +119,7 @@ func (p *morePager) ask() bool {
 	for {
 		key, err := ih.ReadKey()
 		if err != nil {
+			p.err = err
 			return false
 		}
 		switch key {

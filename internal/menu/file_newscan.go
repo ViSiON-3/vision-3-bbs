@@ -168,9 +168,10 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 
-	// The caller chose to stop (or hung up): back to the menu.
+	// The caller chose to stop or hung up (back to the menu), or reading
+	// their answer failed (an idle timeout ends the call).
 	if stopped {
-		return currentUser, "", nil
+		return pager.stopResult(currentUser)
 	}
 
 	// Footer
