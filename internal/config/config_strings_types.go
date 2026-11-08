@@ -41,6 +41,11 @@ type StringsConfig struct {
 	AcsTestBadTime        string `json:"acsTestBadTime"`
 	AcsTestDenied         string `json:"acsTestDenied"`
 
+	// The shared More prompt that pauses long output, and its Konfig switch.
+	MorePrompt             string `json:"morePrompt"`
+	KonfigMorePromptsLabel string `json:"konfigMorePromptsLabel"`
+	KonfigMorePromptsHelp  string `json:"konfigMorePromptsHelp"`
+
 	KonfigTwitListLabel string `json:"konfigTwitListLabel"`
 	KonfigTwitListHelp  string `json:"konfigTwitListHelp"`
 	TwitNamePrompt      string `json:"twitNamePrompt"`

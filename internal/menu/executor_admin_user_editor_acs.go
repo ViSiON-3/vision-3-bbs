@@ -113,18 +113,15 @@ func (a *acsTesterScreen) draw() {
 	} else {
 		lines = acs.Render(a.tester.Explain(a.expr, a.target), a.width-1)
 	}
-	// One row stays free for the More prompt; the title took two.
-	rows := max(a.height-1, 4)
-	used := 2
-	for _, l := range lines {
-		if used >= rows {
-			if !a.st.e.pauseMore(a.st.s, a.st.terminal, a.st.outputMode, str.FileMorePrompt) {
-				break
-			}
-			used = 0
+	// One row stays free for the More prompt; the title took two. A line is
+	// counted before the next one is written, so the last line never pauses.
+	pager := a.st.e.newMorePager(a.st.s, a.st.terminal, a.st.outputMode, nil, a.height, 1, str.FileMorePrompt)
+	pager.Lines(2)
+	for i, l := range lines {
+		if i > 0 && !pager.Line() {
+			break
 		}
 		a.write(l + "\r\n")
-		used++
 	}
 	if a.notice != "" {
 		a.write("\r\n" + string(ansi.ReplacePipeCodes([]byte(a.notice))) + "\r\n")

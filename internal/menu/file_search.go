@@ -90,28 +90,21 @@ func runSearchFiles(c *cmdCtx, args string) (*user.User, string, error) {
 	// Display header
 	e.writeStringf(terminal, outputMode, e.Strings().SearchResultsHeader, query)
 
-	// Paginate results: leave room for header/pause prompt
-	linesPerPage := termHeight - 3
-	if linesPerPage < 5 {
-		linesPerPage = 5
-	}
-
-	lineCount := 0
+	// A screen at a time, leaving room for the header and the prompt. Each
+	// row ends its own line, so the More prompt starts on a fresh one and
+	// clearing it leaves the rows above alone.
+	pager := e.newMorePager(s, terminal, outputMode, currentUser, termHeight, 3, "")
+	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
 	for _, r := range filtered {
 		fname := r.filename
 		if runes := []rune(fname); len(runes) > 12 {
 			fname = string(runes[:12])
 		}
 
-		line := fmt.Sprintf("\r\n|09%-8s |15%-12s |07%5dk |14%s", r.areaTag, callerText(fname), (r.size+1023)/1024, callerText(r.description))
+		line := fmt.Sprintf("|09%-8s |15%-12s |07%5dk |14%s\r\n", r.areaTag, callerText(fname), (r.size+1023)/1024, callerText(r.description))
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
-		lineCount++
-
-		if lineCount >= linesPerPage {
-			if err := e.writeCenteredPausePrompt(s, terminal, e.Strings().PauseString, outputMode, termWidth, termHeight); err != nil {
-				return currentUser, "", nil
-			}
-			lineCount = 0
+		if !pager.Line() {
+			return pager.stopResult(currentUser)
 		}
 	}
 

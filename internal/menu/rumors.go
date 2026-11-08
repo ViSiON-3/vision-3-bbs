@@ -63,11 +63,16 @@ func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
 	wv(terminal, fmt.Sprintf("\r\n|11%-4s%-42s%-16s%s\r\n", "#", "Rumor", "Author", "Date"), outputMode)
 	wv(terminal, "|08"+strings.Repeat("\xc4", 70)+"\r\n", outputMode)
 
+	// A screen at a time, leaving room for the heading and the prompt.
+	pager := e.newMorePager(s, terminal, outputMode, currentUser, termHeight, 4, "")
 	for _, idx := range visible {
 		r := &rd.Rumors[idx]
 		author := rumorShownAuthor(r, anonName)
 		wv(terminal, fmt.Sprintf("|03%-4d|07%-42s|11%-16s|07%s\r\n",
 			r.ID, callerText(truncateRunes(r.Text, 41)), callerText(truncateRunes(author, 15)), r.PostedAt.Format("01/02/06")), outputMode)
+		if !pager.Line() {
+			return pager.stopResult(currentUser)
+		}
 		// The author column is too narrow for "Author (RealUser)", so a sysop
 		// gets the real poster of a masked rumor on a line of its own,
 		// under the author column.
@@ -80,6 +85,9 @@ func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 				wv(terminal, fmt.Sprintf("%s|08(|11%s|08)|07\r\n",
 					strings.Repeat(" ", rumorListAuthorCol), callerText(poster)), outputMode)
+				if !pager.Line() {
+					return pager.stopResult(currentUser)
+				}
 			}
 		}
 	}

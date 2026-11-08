@@ -51,7 +51,7 @@ Press Enter on any user to open the field editor. It lays the fields out in two 
 
 **Read-only block:** Num Uploads, Msgs Posted, InfoForms, Created, Updated, Last Login, Bulletin
 
-Custom Prompt, More Prompts and Output Mode are stored but not currently used by the board; see [User Management](users/user-management.md#user-configuration-preferences). Encoding is the field login applies: blank means Auto (detect on every call), `utf8` or `cp437` forces that encoding.
+Custom Prompt and Output Mode are stored but not currently used by the board; see [User Management](users/user-management.md#user-configuration-preferences). Encoding is the field login applies: blank means Auto (detect on every call), `utf8` or `cp437` forces that encoding.
 
 Time Limit is minutes per call, `0` for no limit. CoSysOps and above are never limited whatever the field says; see [Time Limits](users/user-management.md#time-limits). A change made while the caller is online applies from their next menu.
 
@@ -212,7 +212,7 @@ found or cannot be loaded.
 | WFC Keys | `publicKeys` | OpenSSH public-key lines |
 | Validated | `validated` | |
 | Hot Keys | `hotKeys` | |
-| More Prompts | `morePrompts` | Stored, not used |
+| More Prompts | `morePrompts` | Long output pauses a screen at a time; blank in `users.json` is on |
 | Screen Width / Height | `screenWidth` / `screenHeight` | 80–255 / 24–60 |
 | Encoding | `preferredEncoding` | blank, `utf8` or `cp437` |
 | Msg Header | `msgHdr` | 0–99 |

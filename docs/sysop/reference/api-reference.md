@@ -858,7 +858,7 @@ type User struct {
     PreferredEncoding        string
     MsgHdr                   int
     HotKeys                  bool
-    MorePrompts              bool
+    MorePrompts              *bool // nil is on; see User.MorePromptsOn
     CustomPrompt             string
     OutputMode               string
     FileListingMode          string

@@ -112,8 +112,12 @@ type User struct {
 	MsgHdr            int    `json:"msgHdr,omitempty"`            // Selected message header style; valid values are whatever MSGHDR.<n>.ans templates the menu set ships (0 = unset)
 
 	// User Configuration Preferences
-	HotKeys         bool   `json:"hotKeys,omitempty"`
-	MorePrompts     bool   `json:"morePrompts,omitempty"`
+	HotKeys bool `json:"hotKeys,omitempty"`
+	// MorePrompts is whether long output pauses a screenful at a time with
+	// a More prompt. Unset (nil) is on; use MorePromptsOn. It was stored as
+	// a plain bool that was never read, and never written as false, so an
+	// existing record keeps the pauses it always had.
+	MorePrompts     *bool  `json:"morePrompts,omitempty"`
 	CustomPrompt    string `json:"customPrompt,omitempty"`
 	OutputMode      string `json:"outputMode,omitempty"`
 	FileListingMode string `json:"fileListingMode,omitempty"` // "lightbar" or "classic" (empty = server default)
@@ -190,4 +194,10 @@ type CallRecord struct {
 	BaudRate       string        `json:"baudRate"`             // Static value for now
 	CallNumber     uint64        `json:"callNumber,omitempty"` // Overall call number
 	Invisible      bool          `json:"invisible,omitempty"`  // True if user was logged in invisibly
+}
+
+// MorePromptsOn reports whether u wants long output paused a screenful at a
+// time: on unless the user has turned it off.
+func (u *User) MorePromptsOn() bool {
+	return u.MorePrompts == nil || *u.MorePrompts
 }

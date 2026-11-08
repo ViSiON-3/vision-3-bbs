@@ -35,6 +35,7 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). F
 | User Note | `privateNote` |
 | Password | `passwordHash` (current password required) |
 | Listing Mode, File Columns | `fileListingMode`, `file_list_columns` |
+| More Prompts | `morePrompts`: whether long output pauses a screen at a time |
 
 Each change is saved as soon as the caller confirms it. The screen's header is `KONFIG.ANS` in the menu set. Keep it to 5 rows or fewer; it can show the caller's details with tokens like `|UH` (handle) and `|LEVEL`. Its text (setting names, help lines, values and messages) is the `konfig*` strings in `strings.json`, under **Konfig:** in `./strings`. Setting names, section titles, values and prompts are plain text in fixed-width cells: longer text is cut to fit, and colour codes are not expanded there. Help lines and messages take pipe colour codes. See [User settings](reference/menu-commands.md#user-settings) for `USERCONFIG` and the `CFG_AUTOSIG`, `CFG_PASSWORD` and `CFG_FILECOLUMNS` shortcuts.
 
@@ -924,7 +925,7 @@ These are the fields behind the User Konfig (`K`) screen; see
 [What callers can change themselves](#what-callers-can-change-themselves).
 
 - `hotKeys` - Hot keys: menu commands run on a single keypress. A key that could start a longer command (a multi-key command, a number on a `##` menu, or `/G`) still waits for Enter. A menu's `FORCEHOTKEY` turns this on for everyone on that menu.
-- `morePrompts` - Stored but not yet used; nothing pauses long output on it ([#424](https://github.com/ViSiON-3/vision-3-bbs/issues/424)).
+- `morePrompts` - Whether long output pauses a screen at a time with the More prompt (`morePrompt` in `strings.json`): **Y**, Enter or Space shows one more screen, **C** the rest without stopping, **N** or **Q** stops. Left out of the record, it is on, which is how every existing account starts; `false` means the output runs straight through. It covers the text pager, the user list, file search, file newscan and the rumors list. The text pager keeps its own prompt, `fileMorePrompt`.
 - `customPrompt` - Stored but not yet shown; menus always use their own prompt ([#425](https://github.com/ViSiON-3/vision-3-bbs/issues/425)).
 - `outputMode` - Legacy field, not read by the board. The encoding that login applies is `preferredEncoding`.
 - `fileListingMode` - File listing style: `"lightbar"` or `"classic"` (empty = server default)
