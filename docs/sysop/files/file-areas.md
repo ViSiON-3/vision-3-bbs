@@ -186,11 +186,15 @@ own `args`. A stock install ships both doors in `doors.json`, with
   entries, with each piece's SAUCE title and artist. Enter draws a piece and
   shows it a screen at a time, N and P move to the next or previous piece,
   and T tags the archive. Entries are read in memory; nothing is extracted to
-  disk.
+  disk. The first screen reads every piece once for its SAUCE line, so a
+  large art pack can take a moment to open.
 
-Both read files with the caller's download access to the area
-([`v3.file.read`](scripting/vpl-scripting.md#v3fileread)), so a caller who
-can't download from it is told so. A file tagged in a viewer shows as marked
+Both read files with the caller's **download** access to the area
+([`v3.file.read`](scripting/vpl-scripting.md#v3fileread)). This differs from
+the built-in pager, which shows a file to anyone who can list the area: with
+the stock viewers, a caller who can list an area but not download from it is
+told they have no access to view the file. To keep the old behaviour for
+such areas, leave `textViewerDoor` empty. A file tagged in a viewer shows as marked
 in the list. To change the labels or colours, edit the lists at the top of
 each script; to use your own viewer, point the setting at another door.
 
@@ -198,10 +202,14 @@ The archive viewer, like ZipLab's, handles ZIP only. Other archives (7z, RAR,
 ARJ, LHA) go to the text viewer, which says it isn't a text file, where the
 built-in pager would page the raw bytes.
 
-The built-in viewer runs instead when the setting is empty, when it names a
-door that doesn't exist or isn't a `v3_script` door (the BBS logs a warning
-about that once at startup), or when the door's own `min_access_level` or
-`acs` refuses the caller.
+The built-in viewer runs instead when:
+
+- the setting is empty;
+- it names a door that doesn't exist or isn't a `v3_script` door (the BBS
+  logs a warning about that once at startup);
+- the door's own `min_access_level` or `acs` refuses the caller;
+- the door is `single_instance` and in use on another node;
+- the door fails, after the caller is shown the door error.
 
 ### File newscan
 

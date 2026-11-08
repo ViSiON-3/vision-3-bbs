@@ -101,6 +101,7 @@ function TextView(tag, name) {
     this.top = 0;
     this.lines = [];
     this.search = "";
+    this.hit = -1; // line of the last Find match
     this.status = "";
 }
 
@@ -134,6 +135,7 @@ TextView.prototype.load = function (index) {
     }
     this.at = index;
     this.top = 0;
+    this.hit = -1;
     return "";
 };
 
@@ -162,13 +164,27 @@ TextView.prototype.drawBody = function () {
     }
 };
 
+// drawBar draws the command bar and status on the bottom row, kept short of
+// the last column so the row never wraps and scrolls the screen. On a narrow
+// screen the commands scroll to keep the selected one in view, and the
+// status is cut to the room that's left.
 TextView.prototype.drawBar = function () {
+    var room = Math.min(this.width(), v3.console.width || 80) - 1;
+    var cmdWidth = function (i) { return COMMANDS[i].label.length + 2; };
+    var first = 0, used = 0, i;
+    for (i = this.cmd; i >= 0 && used + cmdWidth(i) <= room; i--) {
+        used += cmdWidth(i);
+        first = i;
+    }
     var out = "";
-    for (var i = 0; i < COMMANDS.length; i++) {
+    used = 0;
+    for (i = first; i < COMMANDS.length && used + cmdWidth(i) <= room; i++) {
         out += (i === this.cmd ? COLORS.barHi : COLORS.bar) + " " + COMMANDS[i].label + " ";
+        used += cmdWidth(i);
     }
     var shown = this.lines.length ? Math.min(100, Math.round((this.top + this.page()) * 100 / this.lines.length)) : 100;
-    out += COLORS.bar + "  " + (this.status ? COLORS.status + this.status : shown + "%");
+    var status = (this.status || shown + "%").slice(0, Math.max(0, room - used - 2));
+    if (status !== "") out += COLORS.bar + "  " + (this.status ? COLORS.status : "") + status;
     v3.console.gotoxy(1, this.height());
     v3.console.write(out + "\x1b[0m\x1b[K");
     this.status = "";
@@ -193,18 +209,27 @@ TextView.prototype.step = function (dir) {
     this.status = dir > 0 ? "No more text files" : "No earlier text files";
 };
 
+// find looks for the search text, asking for it first when ask is set. A
+// repeated Find carries on after the last match while that match is still on
+// screen (near the end of a file the screen can't scroll to put it on top);
+// otherwise it starts at the top of the screen.
 TextView.prototype.find = function (ask) {
     if (ask || this.search === "") {
         v3.console.gotoxy(1, this.height());
         v3.console.write(COLORS.status + " Find: " + COLORS.text + "\x1b[K");
-        var text = v3.console.getstr(40);
+        var text = v3.console.getstr(Math.max(1, Math.min(40, this.width() - 8)));
         if (text === "") return;
         this.search = text;
+        this.hit = -1;
     }
+    var onScreen = this.hit >= this.top && this.hit < this.top + this.page();
+    var from = onScreen ? this.hit + 1 : this.top;
     var want = this.search.toLowerCase();
-    for (var i = this.top + 1; i < this.lines.length; i++) {
+    for (var i = from; i < this.lines.length; i++) {
         if (stripSGR(this.lines[i]).toLowerCase().indexOf(want) >= 0) {
+            this.hit = i;
             this.scrollTo(i);
+            this.status = "Found on line " + (i + 1);
             return;
         }
     }

@@ -3,6 +3,7 @@ package menu
 import (
 	"bytes"
 	"context"
+	"io"
 	"net"
 	"strings"
 	"sync"
@@ -135,6 +136,10 @@ func (ts *testSession) RemoteAddr() net.Addr {
 // context directly from s.Context() (context.WithTimeout and the like) would
 // panic on nil; give such tests a session with a real ssh.Context.
 func (ts *testSession) Context() ssh.Context { return ts.ctx }
+
+// Stderr shares the session's output, as an SSH session's stderr reaches the
+// same terminal; door error messages are written there.
+func (ts *testSession) Stderr() io.ReadWriter { return ts }
 
 // output returns everything written to the session so far.
 func (ts *testSession) output() string { return ts.out.String() }

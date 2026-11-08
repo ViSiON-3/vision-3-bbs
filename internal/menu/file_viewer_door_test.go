@@ -23,10 +23,15 @@ func viewerDoorEnv(t *testing.T, archive, text string) *menuEnv {
 	if err := os.WriteFile(filepath.Join(dir, "viewer.js"), []byte(script), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "broken.js"), []byte(`throw new Error("viewer broke");`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	env.e.SetDoorRegistry(map[string]config.DoorConfig{
 		"VIEWER": {Code: "VIEWER", Type: "v3_script", Script: "viewer.js", WorkingDirectory: dir, Args: []string{"own"}, Hidden: true},
 		"LOCKED": {Code: "LOCKED", Type: "v3_script", Script: "viewer.js", WorkingDirectory: dir, MinAccessLevel: 255, Hidden: true},
 		"NATIVE": {Code: "NATIVE", Commands: []string{"/bin/true"}},
+		"BUSY":   {Code: "BUSY", Type: "v3_script", Script: "viewer.js", WorkingDirectory: dir, SingleInstance: true, Hidden: true},
+		"BROKEN": {Code: "BROKEN", Type: "v3_script", Script: "broken.js", WorkingDirectory: dir, Hidden: true},
 	})
 	cfg := env.e.GetServerConfig()
 	cfg.ArchiveViewerDoor, cfg.TextViewerDoor = archive, text
@@ -79,6 +84,31 @@ func TestViewerDoorsFallBack(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestViewerDoorsBusyOrFailing checks that a viewer door that can't run
+// still leaves the caller the file: a single_instance door in use on
+// another node falls back to the built-in viewer, and one that fails shows
+// the door error and then falls back.
+func TestViewerDoorsBusyOrFailing(t *testing.T) {
+	t.Run("busy", func(t *testing.T) {
+		env := viewerDoorEnv(t, "", "BUSY")
+		if err := acquireDoorLock("BUSY", 99); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { releaseDoorLock("BUSY", 99) })
+		r := env.runCmd("VIEW_FILE", env.caller, "", "NOTES.TXT\r\r")
+		if r.has("[viewer") || !r.has("Viewing: NOTES.TXT", "plain text") {
+			t.Errorf("want the built-in pager:\n%s", r.text())
+		}
+	})
+	t.Run("failing", func(t *testing.T) {
+		env := viewerDoorEnv(t, "", "BROKEN")
+		r := env.runCmd("VIEW_FILE", env.caller, "", "NOTES.TXT\r\r\r")
+		if !r.has("Error running viewer 'BROKEN'", "viewer broke") || !r.has("Viewing: NOTES.TXT", "plain text") {
+			t.Errorf("want the door error, then the built-in pager:\n%s", r.text())
+		}
+	})
 }
 
 // TestWarnViewerDoors checks the startup warning: one line per setting that

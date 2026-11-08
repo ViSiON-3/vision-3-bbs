@@ -257,7 +257,10 @@ func (e *MenuExecutor) viewerDoor(code string) (door config.DoorConfig, why stri
 // and filename after the door's own arguments, and reports whether it ran.
 // It doesn't run, and the caller uses the built-in viewer, when code is
 // empty, names no v3_script door (WarnViewerDoors reports that at startup),
-// or the door's own rules (min_access_level and acs) refuse the caller.
+// or the door's own rules (min_access_level and acs) refuse the caller. It
+// also reports false, so the built-in viewer shows the file after all, when
+// the door is a single_instance door in use on another node, or fails (the
+// caller is shown the door error first, as the door menu shows it).
 func (e *MenuExecutor) viewWithDoor(vc viewerCaller, record *file.FileRecord, code string) bool {
 	if vc.user == nil {
 		return false
@@ -291,11 +294,21 @@ func (e *MenuExecutor) viewWithDoor(vc viewerCaller, record *file.FileRecord, co
 	handOffSessionIH(vc.s)
 	err := executeDoor(ctx)
 	_ = getSessionIH(vc.s)
-	// A session-ending error is seen again by the caller's next read.
-	if err != nil && !isSessionFatal(err) {
+	switch {
+	case err == nil, isSessionFatal(err):
+		// A session-ending error is seen again by the caller's next read.
+		return true
+	case errors.Is(err, ErrDoorBusy):
+		// Another node has a single_instance viewer open.
+		slog.Info("viewer door busy; using the built-in viewer", "node", vc.nodeNumber, "door", code)
+		return false
+	default:
 		slog.Error("viewer door failed", "node", vc.nodeNumber, "door", code, "file", record.Filename, "error", err)
+		if mErr := doorErrorMessage(ctx, fmt.Sprintf("Error running viewer '%s': %v", code, err)); isSessionFatal(mErr) {
+			return true
+		}
+		return false
 	}
-	return true
 }
 
 // WarnViewerDoors logs a warning for each viewer door config.json names
