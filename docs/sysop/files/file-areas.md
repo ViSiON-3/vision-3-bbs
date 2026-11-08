@@ -221,7 +221,9 @@ the viewers: a CP437 terminal is sent the bytes, which it draws itself, and a
 UTF-8 terminal the glyphs' characters. In the archive viewer, entries whose
 names don't say they're text are greyed until they've been read.
 
-The archive viewer, like ZipLab's, handles ZIP only. Other archives (7z, RAR,
+The archive viewer, like ZipLab's, handles ZIP only. That includes the old
+PKZIP 1.x methods (shrunk, reduced and imploded) that many art packs from
+before 1993 use; an entry packed some other way, or encrypted, says so. Other archives (7z, RAR,
 ARJ, LHA) go to the text viewer, which says it isn't a text file, where the
 built-in pager would page the raw bytes.
 

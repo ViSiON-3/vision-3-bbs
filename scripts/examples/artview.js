@@ -110,6 +110,7 @@ ArtView.prototype.rows = function () {
 // viewable reports whether an entry is art or text, by its name until it
 // has been read and by its contents after.
 ArtView.prototype.viewable = function (e) {
+    if (e.readable === false) return false;
     var kind = this.kinds[e.name];
     return kind ? kind === "text" : textByName(e.name);
 };
@@ -118,7 +119,7 @@ ArtView.prototype.viewable = function (e) {
 // when it can't be read, remembering the answer.
 ArtView.prototype.kindOfEntry = function (e) {
     if (!(e.name in this.kinds)) {
-        var data = v3.file.readMember(this.area.id, this.name, e.name);
+        var data = e.readable === false ? null : v3.file.readMember(this.area.id, this.name, e.name);
         this.kinds[e.name] = data === null ? "unreadable" : kindOf(e.name, data);
         if (data !== null && this.kinds[e.name] === "text") this.sauce[e.name] = v3.ansi.sauce(data);
     }
@@ -201,6 +202,11 @@ ArtView.prototype.toggleTag = function () {
 // shown only when ask is set and the caller says so.
 ArtView.prototype.show = function (index, ask) {
     var e = this.entries[index];
+    // members says when an entry can't be unpacked at all, and why.
+    if (e.readable === false) {
+        this.status = e.name + (e.encrypted ? ": encrypted" : ": compression method not supported");
+        return "list";
+    }
     var data = v3.file.readMember(this.area.id, this.name, e.name);
     var kind = data === null ? "unreadable" : kindOf(e.name, data);
     this.kinds[e.name] = kind;

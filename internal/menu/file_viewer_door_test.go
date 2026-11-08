@@ -306,3 +306,19 @@ func TestViewerKindOf(t *testing.T) {
 		}
 	}
 }
+
+// TestStockArchiveViewerOldZip runs scripts/examples/artview.js on an art
+// pack from before PKZIP 2.04: its imploded piece is read for its SAUCE
+// line in the list, as a deflated one is.
+func TestStockArchiveViewerOldZip(t *testing.T) {
+	env := stockViewerEnv(t)
+	data, err := os.ReadFile(filepath.Join("..", "pkzip1", "testdata", "oldpack.zip"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	addFileWithContent(t, env, 1, "OLDPACK.ZIP", data)
+	r := env.runCmd("VIEW_FILE", env.sysop, "", "OLDPACK.ZIP\r")
+	if !r.has("OLDPACK.ZIP", "4 entries", "FILE_ID.DIZ", "OLDPACK.ANS", "Old Pack Art by someartist", "README", "NOTES.TXT") || r.has("Error") {
+		t.Errorf("archive viewer:\n%s", r.text())
+	}
+}

@@ -58,12 +58,23 @@ func fileAreasProviders(t *testing.T, can func(*file.FileArea) bool) *Providers 
 	}
 	write("art", "ACID.ZIP", []byte(zbuf.String()))
 	write("art", "README.TXT", []byte("caf\x82 \xc9\xcd\xbb\r\n"))
+	// OLDPACK.ZIP: members packed with PKZIP 1.x's methods (imploded,
+	// shrunk, reduced); UNREAD.ZIP: a bzip2 member and an encrypted one.
+	for name, src := range map[string]string{"OLDPACK.ZIP": "oldpack.zip", "UNREAD.ZIP": "unreadable.zip"} {
+		data, err := os.ReadFile(filepath.Join("..", "pkzip1", "testdata", src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		write("art", name, data)
+	}
 	write("priv", "SECRET.TXT", []byte("not for you"))
 
 	up := time.Unix(1700000000, 0)
 	for _, r := range []file.FileRecord{
 		{ID: uuid.New(), AreaID: 1, Filename: "ACID.ZIP", UploadedAt: up},
 		{ID: uuid.New(), AreaID: 1, Filename: "README.TXT", UploadedAt: up},
+		{ID: uuid.New(), AreaID: 1, Filename: "OLDPACK.ZIP", UploadedAt: up},
+		{ID: uuid.New(), AreaID: 1, Filename: "UNREAD.ZIP", UploadedAt: up},
 		{ID: uuid.New(), AreaID: 2, Filename: "SECRET.TXT", UploadedAt: up},
 	} {
 		if err := fm.AddFileRecord(r); err != nil {
@@ -160,6 +171,28 @@ func TestReadMemberDecompressedCap(t *testing.T) {
 		expr := `String(v3.file.readMember(1, "BOMB.ZIP", "` + member + `"))`
 		if got := h.eval(expr).String(); got != "null" {
 			t.Errorf("%s returned %d characters, want null", expr, len(got))
+		}
+	}
+}
+
+// TestReadMemberOldMethods: readMember unpacks members packed with PKZIP
+// 1.x's methods, and members reports each entry's method and whether it can
+// be read, so a script can say why one can't.
+func TestReadMemberOldMethods(t *testing.T) {
+	h := fileReadHarness(t, func(a *file.FileArea) bool { return a.ACSDownload == "" })
+	for _, tc := range []struct{ expr, want string }{
+		{`v3.file.readMember(1, "OLDPACK.ZIP", "FILE_ID.DIZ").indexOf("OLD PACK") > 0`, "true"},
+		{`v3.file.readMember(1, "OLDPACK.ZIP", "OLDPACK.ANS").indexOf("OLD ██▓▒░ PACK") > 0`, "true"},
+		{`v3.file.readMember(1, "OLDPACK.ZIP", "README").indexOf("made for tests") >= 0`, "true"},
+		{`v3.file.readMember(1, "OLDPACK.ZIP", "NOTES.TXT").length`, "2000"},
+		{`v3.file.members(1, "OLDPACK.ZIP").map(function (m) { return m.method + ":" + m.readable; }).join(" ")`, "6:true 6:true 1:true 3:true"},
+		{`v3.file.members(1, "UNREAD.ZIP").map(function (m) { return m.name + ":" + m.method + ":" + m.encrypted + ":" + m.readable; }).join(" ")`,
+			"BZIP2.TXT:12:false:false SECRET.TXT:0:true:false"},
+		{`String(v3.file.readMember(1, "UNREAD.ZIP", "BZIP2.TXT"))`, "null"},
+		{`String(v3.file.readMember(1, "UNREAD.ZIP", "SECRET.TXT"))`, "null"},
+	} {
+		if got := h.eval(tc.expr).String(); got != tc.want {
+			t.Errorf("%s = %q, want %q", tc.expr, got, tc.want)
 		}
 	}
 }

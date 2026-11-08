@@ -749,8 +749,11 @@ if (text !== null) v3.console.write(text);
 #### v3.file.members
 
 `members(areaID, filename)` lists a ZIP archive's entries as objects
-`{name, size, date, isDir}`: `size` is the unpacked size in bytes, `date` a
-Unix time. It needs the same download ACS as `read`, and returns `null` for a
+`{name, size, date, isDir, method, encrypted, readable}`: `size` is the
+unpacked size in bytes, `date` a Unix time, and `method` the ZIP compression
+method number. `readable` says whether [`readMember`](#v3filereadmember) can
+unpack the entry: it isn't `encrypted`, and its method is one the BBS reads
+(see `readMember`). It needs the same download ACS as `read`, and returns `null` for a
 file that isn't a ZIP. Only ZIP archives can be opened; 7z, RAR, ARJ and LHA
 archives return `null`. At most 4096 entries are listed.
 
@@ -760,7 +763,13 @@ archives return `null`. At most 4096 entries are listed.
 memory, and returns it as text like `read`; nothing is extracted to disk.
 `member` is the entry's name as `members` gives it, matched exactly. It needs
 the same download ACS, and returns `null` for an entry that isn't in the
-archive, a directory, or one that unpacks to more than 4 MB.
+archive, a directory, one that unpacks to more than 4 MB, or one it can't
+unpack (`readable` false in `members`), or whose data is damaged.
+
+Entries can be stored or deflated, as any ZIP tool makes them, or packed with
+PKZIP 1.x's older methods, which archives from before 1993 often use:
+shrunk (method 1), reduced (2 to 5) and imploded (6). Other methods (such as
+bzip2 or LZMA) and encrypted entries can't be read.
 
 ```javascript
 var list = v3.file.members(area.id, "ACID0796.ZIP") || [];
