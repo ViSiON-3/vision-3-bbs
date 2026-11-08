@@ -201,12 +201,14 @@ to match the one under the header; set it to `false` for one more row of
 text or art on short screens. To use your own viewer, point the setting at
 another door.
 
-Both viewers decide what they can show the same way, from a file's
-contents (up to its Ctrl-Z, where a SAUCE record starts) and its name:
+Both viewers decide what they can show the same way, from a file's name
+and a sample of its contents: the first 4096 characters, stopping at its
+Ctrl-Z, where a SAUCE record starts. Tab, CR, LF and ESC don't count as
+control bytes; the other bytes from 1 to 31 do.
 
-- **Binary**, refused: it has NUL bytes, or control bytes make up a quarter or more
-  of it.
-- **Text**, shown: it has no control bytes, or its name says it's text. That
+- **Binary**, refused: the sample has NUL bytes, or control bytes are a
+  quarter or more of it.
+- **Text**, shown: the sample has no control bytes, or the name says it's text. That
   is one of `ans asc ice diz nfo txt doc lit 1st me now ad log mem lst faq
   msg inf bbs pcb cfg ini bat md`, or `README` or `FILE_ID` with no
   extension.
