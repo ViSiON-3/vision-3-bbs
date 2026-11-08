@@ -27,14 +27,14 @@ type ReadLineFunc func() (string, error)
 // ReadKeyFunc reads a single keypress and returns its integer code.
 type ReadKeyFunc func() (int, error)
 
-// sanitizeEntryName strips control characters (including ANSI ESC) and pipe
-// characters from ZIP entry names to prevent terminal escape injection and
-// pipe code injection when displayed on the BBS terminal.
 // maxLegacyMember caps a PKZIP 1.x member (shrunk, reduced or imploded),
 // which is unpacked in memory. Members of the archives that used those
 // methods are far smaller.
 const maxLegacyMember = 16 << 20
 
+// sanitizeEntryName strips control characters (including ANSI ESC) and pipe
+// characters from ZIP entry names to prevent terminal escape injection and
+// pipe code injection when displayed on the BBS terminal.
 func sanitizeEntryName(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
