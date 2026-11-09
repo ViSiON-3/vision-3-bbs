@@ -59,16 +59,12 @@ func (um *UserMgr) updateUserByID(u *User, chatBar *bool) error {
 	}
 
 	newKey := strings.ToLower(u.Handle)
-	var originalEntry *User
-	rekeyed := false
 	if newKey != oldKey {
 		// Handle changed — ensure no collision with a different user.
 		if existing, exists := um.users[newKey]; exists && existing.ID != u.ID {
 			return ErrHandleExists
 		}
-		originalEntry = um.users[oldKey] // save for rollback
 		delete(um.users, oldKey)
-		rekeyed = true
 	}
 
 	userCopy := *u
@@ -89,11 +85,11 @@ func (um *UserMgr) updateUserByID(u *User, chatBar *bool) error {
 	}
 	um.users[newKey] = &userCopy
 	if err := um.saveUsersLocked(); err != nil {
-		// Rollback in-memory map to match what is still on disk.
+		// Roll the map back to what is still on disk: the entry found above
+		// returns under its old key, whether or not the handle changed, so
+		// the account is not missing from the next save that succeeds.
 		delete(um.users, newKey)
-		if rekeyed {
-			um.users[oldKey] = originalEntry
-		}
+		um.users[oldKey] = current
 		return err
 	}
 	return nil
