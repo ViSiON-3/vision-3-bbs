@@ -16,7 +16,7 @@ Everything in Central is opt-in, per feature and per network. Joining a
 V3Net network for message areas enables none of it, and upgrading never
 turns anything on. The one exception is network chat, which boards had
 before Central: it stays on through an upgrade, and is on for a new
-subscription, until you turn it off (see [Offering It](#offering-it-1)). A caller's handle leaves the board only if the sysop
+subscription, until you turn it off (see [Offering It](#offering-it)). A caller's handle leaves the board only if the sysop
 offers a phase 2 feature on that network *and* the caller turns it on for
 themselves.
 
