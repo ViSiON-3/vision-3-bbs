@@ -169,14 +169,14 @@ type V3NetLeafConfig struct {
 	PendingHubPubKey string `json:"pendingHubPubKey,omitempty"`
 
 	// Central is this subscription's V3Net Central settings. Absent, every
-	// Central feature is off for the network: a config from before Central
-	// takes part in nothing new.
+	// Central feature but chat is off for the network: a config from before
+	// Central takes part in nothing new, and goes on chatting as it did.
 	Central *V3NetCentralConfig `json:"central,omitempty"`
 }
 
 // V3NetCentralConfig is a subscription's V3Net Central settings. Each
 // feature has its own switch. A leaf without a Central block has every
-// switch off; a subscription created by the editor or the BBS starts from
+// switch but Chat off; a subscription created by the editor or the BBS starts from
 // NewV3NetLeafCentral. Enabled and
 // PublishListing are independent: a board may browse the directory without
 // being listed, or be listed without offering Central to its callers.

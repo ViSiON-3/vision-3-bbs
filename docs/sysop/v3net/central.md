@@ -14,7 +14,9 @@ across the network, for callers who choose to be seen, and **phase 3,
 
 Everything in Central is opt-in, per feature and per network. Joining a
 V3Net network for message areas enables none of it, and upgrading never
-turns anything on. A caller's handle leaves the board only if the sysop
+turns anything on. The one exception is network chat, which boards had
+before Central: it stays on through an upgrade, and is on for a new
+subscription, until you turn it off (see [Offering It](#offering-it-1)). A caller's handle leaves the board only if the sysop
 offers a phase 2 feature on that network *and* the caller turns it on for
 themselves.
 
@@ -260,8 +262,9 @@ caller. Looking at either sends nothing about the caller who is looking.
 
 A caller's switches are on one screen, reached two ways: **V3Net Central →
 Preferences**, and **V3Net Sharing** (`R`) on Your Konfig (`K`). Konfig
-shows that item only while a network offers Who's Online or Last Callers,
-with what the caller shares beside it (Off, Online, Calls, or both):
+shows that item only while a network offers Who's Online, Last Callers or
+network chat, with what the caller shares beside it (Off, or Online, Calls
+and Chat as they apply):
 
 ```
 V3Net Central: Sharing
