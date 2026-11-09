@@ -477,8 +477,8 @@ one hub publish, discover and update each other's listings, a withdrawal
 removes a listing, a replayed event is ignored, a hub-altered listing is
 dropped by the leaf, and a leaf on a hub without the feature hides it.
 Evidence from a volunteer multi-board pilot on a live network is still to
-be gathered before Central is offered beyond development use; the tracking
-issue is [#670](https://github.com/ViSiON-3/vision-3-bbs/issues/670).
+be gathered before Central is offered beyond development use; the pilot is
+tracked on the epic, [#669](https://github.com/ViSiON-3/vision-3-bbs/issues/669).
 
 Phase 2 has been exercised the same way: three boards on one hub, two
 offering both features and one offering neither, though its callers had
@@ -490,8 +490,8 @@ that drops off takes its callers off Who's Online at once and brings
 them back when it reconnects. A call older than 24 hours is never
 published. A leaf on a hub without the features never calls them.
 Turning a feature off on reload withdraws it. A volunteer pilot on a live
-network is still to come; the tracking issue is
-[#671](https://github.com/ViSiON-3/vision-3-bbs/issues/671).
+network is still to come, tracked on the epic,
+[#669](https://github.com/ViSiON-3/vision-3-bbs/issues/669).
 
 ---
 
