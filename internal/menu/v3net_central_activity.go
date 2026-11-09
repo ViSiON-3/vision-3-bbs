@@ -492,7 +492,7 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		// the switch still shows On, with no network, for an agreement
 		// the caller can withdraw after the SysOp stopped offering it.
 		var chatOn []string
-		if u.CentralChat {
+		if u.CentralChat && !u.CentralChatBarred {
 			chatOn = chatNets
 		}
 
@@ -525,6 +525,9 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		chatSwitch := onOff(chatOn, chatNets)
 		if len(chatNets) == 0 && u.CentralChat {
 			chatSwitch = "|10On |07 |08(not offered here now)|07"
+		}
+		if u.CentralChatBarred {
+			chatSwitch = "|07Off |08(set by the SysOp)|07"
 		}
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|154|03] Take part in network chat     " + chatSwitch + "\r\n\r\n")))
 
@@ -614,6 +617,10 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 				x.CentralLastCallsSince = &now
 			}
 		case "4":
+			if u.CentralChatBarred {
+				status = "|04Your SysOp has turned network chat off for you.|07"
+				continue
+			}
 			if u.CentralChat {
 				// Withdrawing needs no notice; the next line the caller
 				// types in a network room ends their chat.
@@ -669,6 +676,7 @@ func centralConsentFrom(dst, src *user.User) {
 	dst.CentralLastCallsChosen = src.CentralLastCallsChosen
 	dst.CentralChat = src.CentralChat
 	dst.CentralChatChosen = src.CentralChatChosen
+	dst.CentralChatBarred = src.CentralChatBarred
 }
 
 // centralPreviewHandle shows a handle as a snapshot would carry it: colour

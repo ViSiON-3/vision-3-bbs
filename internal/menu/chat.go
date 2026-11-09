@@ -26,6 +26,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
 // ChatLeafProvider supplies the active V3Net chat leaf connections a
@@ -69,19 +70,44 @@ func parseChatEntry(args string) chatEntry {
 // agreement yet, the notice is shown and their answer taken; a refusal
 // leaves them with Local for this call, and declined says so. next and
 // err are as v3netPromptLine returns them.
-func chatNetworkLeaves(c *cmdCtx) (leaves []ChatLeafInfo, declined bool, next string, err error) {
+func chatNetworkLeaves(c *cmdCtx) (leaves []ChatLeafInfo, declined, barred bool, next string, err error) {
 	if c.e.ChatLeaves == nil {
-		return nil, false, "", nil
+		return nil, false, false, "", nil
 	}
 	leaves = c.e.ChatLeaves.ActiveChatLeaves()
-	if len(leaves) == 0 || chatConsentStored(c) {
-		return leaves, false, "", nil
+	if len(leaves) == 0 {
+		return leaves, false, false, "", nil
+	}
+	// The SysOp's bar comes before the caller's agreement: a barred
+	// caller is not asked.
+	if agreed, barred := chatNetworkAllowed(c); barred {
+		return nil, false, true, "", nil
+	} else if agreed {
+		return leaves, false, false, "", nil
 	}
 	agreed, next, err := chatConsentNotice(c)
 	if err != nil || !agreed {
-		return nil, err == nil, next, err
+		return nil, err == nil, false, next, err
 	}
-	return leaves, false, "", nil
+	return leaves, false, false, "", nil
+}
+
+// chatNetworkAllowed reports whether the caller may chat on a network now,
+// as the stored account has it: they agreed to network chat and the SysOp
+// has not barred them. barred says which, for the message.
+func chatNetworkAllowed(c *cmdCtx) (allowed, barred bool) {
+	agreed := chatConsentStored(c)
+	barred = c.currentUser != nil && c.currentUser.CentralChatBarred
+	return agreed && !barred, barred
+}
+
+// chatOffForYou is the line a caller gets when network chat is off for
+// them: barred by the SysOp, or not agreed to.
+func chatOffForYou(barred bool) string {
+	if barred {
+		return "|07Network chat is off for you: your SysOp has turned it off.|07"
+	}
+	return "|07Network chat is off for you. You can turn it on under Preferences (V3Net Central, or V3Net Sharing in Konfig).|07"
 }
 
 // chatSelectService shows an interactive network picker (when multiple V3Net
@@ -100,11 +126,11 @@ func chatSelectService(c *cmdCtx, entry chatEntry) (chat.ChatService, string, st
 	}
 
 	var leaves []ChatLeafInfo
-	var declined bool
+	var declined, barred bool
 	if entry != chatEntryLocal {
 		var next string
 		var err error
-		leaves, declined, next, err = chatNetworkLeaves(c)
+		leaves, declined, barred, next, err = chatNetworkLeaves(c)
 		if err != nil {
 			return nil, "", "", next, err
 		}
@@ -115,6 +141,9 @@ func chatSelectService(c *cmdCtx, entry chatEntry) (chat.ChatService, string, st
 	var err error
 
 	switch {
+	case barred && entry == chatEntryNetwork:
+		wt("\r\n" + chatOffForYou(true) + "\r\n")
+		return nil, "", "", "", nil
 	case declined && entry == chatEntryNetwork:
 		wt("\r\n|07Network chat stays off for you. You can turn it on under Preferences.|07\r\n")
 		return nil, "", "", "", nil
@@ -122,6 +151,9 @@ func chatSelectService(c *cmdCtx, entry chatEntry) (chat.ChatService, string, st
 		wt("\r\n|07No network is available for chat right now.|07\r\n")
 		return nil, "", "", "", nil
 	case len(leaves) == 0:
+		if barred {
+			wt("\r\n|07Your SysOp has turned network chat off for you; this chat is this board only.|07\r\n")
+		}
 		svc, err = chat.NewLocalChatService(handle, dbPath)
 		if err != nil {
 			return nil, "", "", "", err
@@ -424,6 +456,13 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	// a member or sender from this board apart from one on another board,
 	// who is named handle@Board; "" on local chat. See chatUserName.
 	homeNode := chatNodeOf(svc)
+	// mutes are the callers this session hides, by chatUserKey, and
+	// blocked is the caller's Twit List, which hides callers in chat as
+	// it hides authors in the message areas (see chatHiddenBy). Both are
+	// read under rawMu; /block and /unblock rebuild blocked.
+	mutes := map[string]bool{}
+	blocked := twitMatcher(e, c.userManager, currentUser)
+	hiddenLocked := func(h, node string) bool { return chatHiddenBy(mutes, blocked, h, node) }
 	mentions := 0 // room messages naming the caller since joining the room
 	scrollback := &chatScrollback{capacity: chatScrollbackLines}
 	// Network round trip for the Lag field. pinging is false on a service
@@ -648,6 +687,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		defer rawMu.Unlock()
 		held := scrollback.len()
 		for _, msg := range history {
+			if !msg.IsSystem && hiddenLocked(msg.Handle, msg.Node) {
+				continue
+			}
 			keepChatLineLocked(formatChatMessage(msg, homeNode, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat), msg.Timestamp)
 		}
 		keepChatLineLocked(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Joined #"+room), time.Time{})
@@ -669,10 +711,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	// The pickers took time, and the caller's agreement to network chat
 	// may have been withdrawn on another node meanwhile: check it again
 	// right before the join publishes their handle.
-	if !chatIsLocal(svc) && !chatConsentStored(c) {
+	if allowed, barred := chatNetworkAllowed(c); !chatIsLocal(svc) && !allowed {
 		svc.Close() //nolint:errcheck
 		rawWrite([]byte("\x1B[r" + ansi.ClearScreen()))
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|07Network chat is off for you. You can turn it on under Preferences (V3Net Central, or V3Net Sharing in Konfig).|07\r\n")), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(chatOffForYou(barred)+"\r\n")), outputMode)
 		return nil, "", nil
 	}
 
@@ -758,6 +800,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			case chat.TypeMessage:
 				if ev.Message != nil {
 					rawMu.Lock()
+					if !ev.Message.IsSystem && hiddenLocked(ev.Message.Handle, ev.Message.Node) {
+						rawMu.Unlock()
+						continue
+					}
 					writeChatMessageLocked(*ev.Message, formatChatMessage(*ev.Message, homeNode, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 					if !ev.Message.IsSystem && chatMentions(ev.Message.Text, handle) {
 						mentions++
@@ -768,6 +814,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			case chat.TypePrivate:
 				if ev.Message != nil {
 					rawMu.Lock()
+					if hiddenLocked(ev.Message.Handle, ev.Message.Node) {
+						rawMu.Unlock()
+						continue
+					}
 					from := chatUserName(ev.Message.Handle, ev.Message.Node, ev.Message.BBS, homeNode)
 					writeChatMessageLocked(*ev.Message, fmt.Sprintf(e.Strings().ChatPrivateMsgFormat, chatText(from), chatText(ev.Message.Text)))
 					rawMu.Unlock()
@@ -777,8 +827,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					newUsers := svc.Users()
 					rawMu.Lock()
 					currentUsers = newUsers
-					who := chatUserName(ev.Join.Handle, ev.Join.Node, ev.Join.BBS, homeNode)
-					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatJoinMsg, chatText(who), chatText(ev.Join.Room)))
+					if !hiddenLocked(ev.Join.Handle, ev.Join.Node) {
+						who := chatUserName(ev.Join.Handle, ev.Join.Node, ev.Join.BBS, homeNode)
+						writeChatLineLocked(fmt.Sprintf(e.Strings().ChatJoinMsg, chatText(who), chatText(ev.Join.Room)))
+					}
 					drawHeaderLocked()
 					drawStatusBarLocked()
 					rawMu.Unlock()
@@ -788,8 +840,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					newUsers := svc.Users()
 					rawMu.Lock()
 					currentUsers = newUsers
-					who := chatUserName(ev.Leave.Handle, ev.Leave.Node, ev.Leave.BBS, homeNode)
-					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatLeaveMsg, chatText(who), chatText(ev.Leave.Room)))
+					if !hiddenLocked(ev.Leave.Handle, ev.Leave.Node) {
+						who := chatUserName(ev.Leave.Handle, ev.Leave.Node, ev.Leave.BBS, homeNode)
+						writeChatLineLocked(fmt.Sprintf(e.Strings().ChatLeaveMsg, chatText(who), chatText(ev.Leave.Room)))
+					}
 					drawHeaderLocked()
 					drawStatusBarLocked()
 					rawMu.Unlock()
@@ -913,8 +967,12 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 				ended = true
 			default:
 			}
-			if !ended && !chatConsentStored(c) {
-				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "You turned network chat off under Preferences; leaving."))
+			if allowed, barred := chatNetworkAllowed(c); !ended && !allowed {
+				why := "You turned network chat off under Preferences; leaving."
+				if barred {
+					why = "Your SysOp has turned network chat off for you; leaving."
+				}
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, why))
 				ended = true
 			}
 			if ended {
@@ -1037,7 +1095,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			// Network-only chat lists no Local, and ends rather than fall
 			// back to it; cleanup has run, so these paths return directly.
 			var leaves []ChatLeafInfo
-			if e.ChatLeaves != nil && chatConsentStored(c) {
+			if allowed, _ := chatNetworkAllowed(c); e.ChatLeaves != nil && allowed {
 				leaves = e.ChatLeaves.ActiveChatLeaves()
 			}
 			dbPath := e.GetServerConfig().DataDir + "/chat.db"
@@ -1141,8 +1199,11 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 			// The pickers took time: a withdrawal of the caller's agreement
 			// meanwhile means no network join now.
-			if !chatIsLocal(newSvc) && !chatConsentStored(c) {
+			if allowed, barred := chatNetworkAllowed(c); !chatIsLocal(newSvc) && !allowed {
 				newSvc.Close() //nolint:errcheck
+				if barred {
+					return endNetOnly("Your SysOp has turned network chat off for you; leaving.")
+				}
 				return endNetOnly("You turned network chat off under Preferences; leaving.")
 			}
 
@@ -1219,6 +1280,63 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			if topicErr := svc.SetTopic(currentRoom, arg); topicErr != nil {
 				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not set topic: "+chatText(topicErr.Error())))
+			}
+			continue
+		}
+
+		if upper == "/MUTE" || upper == "/UNMUTE" || upper == "/BLOCK" || upper == "/UNBLOCK" {
+			if arg == "" {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Usage: "+strings.ToLower(upper)+" <who>"))
+				continue
+			}
+			rawMu.Lock()
+			users, home := currentUsers, homeNode
+			rawMu.Unlock()
+			who, whoErr := chatWhoTarget(arg, users, home)
+			if whoErr != nil {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, chatText(whoErr.Error())))
+				continue
+			}
+			name := chatUserName(who.Handle, who.Node, who.BBS, home)
+			if strings.EqualFold(who.Handle, handle) && (who.Node == "" || who.Node == home) {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "That is you."))
+				continue
+			}
+			key := chatUserKey(who.Handle, who.Node)
+			var result string
+			switch upper {
+			case "/MUTE":
+				rawMu.Lock()
+				mutes[key] = true
+				rawMu.Unlock()
+				result = "Muted " + name + " for this session; /unmute undoes it."
+			case "/UNMUTE":
+				rawMu.Lock()
+				was := mutes[key]
+				delete(mutes, key)
+				rawMu.Unlock()
+				result = name + " was not muted."
+				if was {
+					result = "No longer muting " + name + "."
+				}
+			case "/BLOCK":
+				result = chatBlock(c, who, name)
+			case "/UNBLOCK":
+				result = chatUnblock(c, who, name)
+			}
+			rawMu.Lock()
+			blocked = twitMatcher(e, c.userManager, currentUser)
+			rawMu.Unlock()
+			writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, chatText(result)))
+			continue
+		}
+
+		if upper == "/IGNORED" {
+			rawMu.Lock()
+			lines := chatIgnoredLines(mutes, currentUsers, currentUser.TwitList, homeNode)
+			rawMu.Unlock()
+			for _, line := range lines {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, chatText(line)))
 			}
 			continue
 		}
@@ -1355,12 +1473,40 @@ var errChatMsgUsage = errors.New("usage: /msg <who> <text>")
 // node ID, for the hub to resolve among the network's rooms. errChatMsgUsage
 // is returned for a missing recipient or text.
 func chatMsgTarget(arg string, users []chat.ChatUser, home string) (handle, node, text string, err error) {
+	found, rest := chatFindWho(arg, users, home)
+	switch len(found) {
+	case 0:
+		target, message, ok := strings.Cut(arg, " ")
+		message = strings.TrimSpace(message)
+		if !ok || message == "" {
+			return "", "", "", errChatMsgUsage
+		}
+		handle, node = target, ""
+		if at := strings.Index(target, "@"); at > 0 && at < len(target)-1 {
+			handle, node = target[:at], target[at+1:]
+		}
+		return handle, node, message, nil
+	case 1:
+		if rest == "" {
+			return "", "", "", errChatMsgUsage
+		}
+		return found[0].Handle, found[0].Node, rest, nil
+	}
+	return "", "", "", chatAmbiguous(found, home)
+}
+
+// chatFindWho finds the members of users that arg starts with, by the name
+// the list shows for them or by bare handle, as described on chatMsgTarget,
+// and returns them with what follows the name. A name as listed beats a
+// bare handle shared with someone elsewhere: "Bob" is this board's Bob when
+// there is one, not also Bob@Other BBS. No match returns nil and arg.
+func chatFindWho(arg string, users []chat.ChatUser, home string) (found []chat.ChatUser, rest string) {
 	type match struct {
 		user  chat.ChatUser
 		exact bool // matched by its name on the list, not by bare handle
 		rest  string
 	}
-	var found []match
+	var matches []match
 	longest := 0
 	for _, u := range users {
 		name := chatUserName(u.Handle, u.Node, u.BBS, home)
@@ -1376,55 +1522,172 @@ func chatMsgTarget(arg string, users []chat.ChatUser, home string) (handle, node
 				continue
 			}
 			if n > longest {
-				found, longest = nil, n
+				matches, longest = nil, n
 			}
-			found = append(found, match{u, try.exact, strings.TrimSpace(arg[n:])})
+			matches = append(matches, match{u, try.exact, strings.TrimSpace(arg[n:])})
 			break
 		}
 	}
-	// A name as listed beats a bare handle shared with someone elsewhere:
-	// "Bob" is this board's Bob when there is one, not also Bob@Other BBS.
-	if slices.ContainsFunc(found, func(m match) bool { return m.exact }) {
-		found = slices.DeleteFunc(found, func(m match) bool { return !m.exact })
+	if slices.ContainsFunc(matches, func(m match) bool { return m.exact }) {
+		matches = slices.DeleteFunc(matches, func(m match) bool { return !m.exact })
 	}
-	found = slices.CompactFunc(found, func(a, b match) bool {
+	matches = slices.CompactFunc(matches, func(a, b match) bool {
 		return a.user.Handle == b.user.Handle && a.user.Node == b.user.Node
 	})
-	switch len(found) {
-	case 0:
-		target, message, ok := strings.Cut(arg, " ")
-		message = strings.TrimSpace(message)
-		if !ok || message == "" {
-			return "", "", "", errChatMsgUsage
-		}
-		handle, node = target, ""
-		if at := strings.Index(target, "@"); at > 0 && at < len(target)-1 {
-			handle, node = target[:at], target[at+1:]
-		}
-		return handle, node, message, nil
-	case 1:
-		if found[0].rest == "" {
-			return "", "", "", errChatMsgUsage
-		}
-		return found[0].user.Handle, found[0].user.Node, found[0].rest, nil
+	if len(matches) == 0 {
+		return nil, arg
 	}
+	for _, m := range matches {
+		found = append(found, m.user)
+	}
+	return found, matches[0].rest
+}
+
+// chatAmbiguous is the refusal for a name that several members in found
+// answer to, naming each as the list does. Two boards with one name make
+// the names the same, as recipients are matched: ignoring case. The node
+// IDs, which the hub accepts after the @, then tell them apart.
+func chatAmbiguous(found []chat.ChatUser, home string) error {
 	names := make([]string, len(found))
-	for i, m := range found {
-		names[i] = chatUserName(m.user.Handle, m.user.Node, m.user.BBS, home)
+	for i, u := range found {
+		names[i] = chatUserName(u.Handle, u.Node, u.BBS, home)
 	}
-	// Two boards with one name make the names the same, as recipients are
-	// matched: ignoring case. The node IDs, which the hub accepts after the
-	// @, tell them apart.
 	folded := make([]string, len(names))
 	for i, n := range names {
 		folded[i] = strings.ToLower(n)
 	}
 	if len(slices.Compact(slices.Sorted(slices.Values(folded)))) < len(names) {
-		for i, m := range found {
-			names[i] = m.user.Handle + "@" + m.user.Node
+		for i, u := range found {
+			names[i] = u.Handle + "@" + u.Node
 		}
 	}
-	return "", "", "", fmt.Errorf("%s is here from more than one board; send to one of: %s", found[0].user.Handle, strings.Join(names, ", "))
+	return fmt.Errorf("%s is here from more than one board; send to one of: %s", found[0].Handle, strings.Join(names, ", "))
+}
+
+// chatWhoTarget reads the argument of /mute, /block and their undoings: one
+// caller, named as chatFindWho matches them, with nothing after the name.
+// Someone not in the room is named handle@node-id on a network, where a bare
+// handle would name nobody in particular, and by handle in local chat.
+func chatWhoTarget(arg string, users []chat.ChatUser, home string) (chat.ChatUser, error) {
+	found, rest := chatFindWho(arg, users, home)
+	switch {
+	case len(found) == 0:
+		if handle, node, ok := protocol.ParseChatTarget(arg); ok {
+			return chat.ChatUser{Handle: handle, Node: node}, nil
+		}
+		if home != "" {
+			return chat.ChatUser{}, fmt.Errorf("no one here is named %q; name them as the user list does, or as handle@node-id", strings.TrimSpace(arg))
+		}
+		return chat.ChatUser{Handle: strings.TrimSpace(arg)}, nil
+	case len(found) == 1 && rest == "":
+		return found[0], nil
+	case len(found) == 1:
+		return chat.ChatUser{}, fmt.Errorf("no one here is named %q", strings.TrimSpace(arg))
+	}
+	return chat.ChatUser{}, chatAmbiguous(found, home)
+}
+
+// chatUserKey identifies a caller for the session's mutes: the handle
+// folded, since boards differ about case, and the node as it is ("" in
+// local chat).
+func chatUserKey(handle, node string) string {
+	return strings.ToLower(strings.TrimSpace(handle)) + "@" + node
+}
+
+// chatHiddenBy reports whether a line from handle on node is hidden from
+// the caller: muted this session, or on their Twit List. A Twit entry for
+// a local account matches the handle from any board, as it does an author
+// in the message areas; a handle@node-id entry matches that board only.
+func chatHiddenBy(mutes map[string]bool, blocked *user.TwitMatcher, handle, node string) bool {
+	return mutes[chatUserKey(handle, node)] || blocked.Hidden(handle, node)
+}
+
+// chatBlock puts who on the caller's Twit List, as handle@node-id for a
+// caller on a network and by handle in local chat, and says what happened.
+// name is who as the room names them.
+func chatBlock(c *cmdCtx, who chat.ChatUser, name string) string {
+	if !twitListsOn(c.e) || c.userManager == nil {
+		return "Blocking is not available on this board; /mute hides " + name + " for this session."
+	}
+	text := who.Handle
+	if who.Node != "" {
+		text = who.Handle + "@" + who.Node
+	}
+	entry, err := user.NewTwitEntry(c.currentUser, c.userManager, text, twitPolicy(c.e))
+	switch {
+	case errors.Is(err, user.ErrTwitDuplicate):
+		return name + " is already blocked."
+	case errors.Is(err, user.ErrTwitFull):
+		return fmt.Sprintf("Your Twit List is full (%d entries); /unblock someone or trim it under Konfig.", twitPolicy(c.e).Limit())
+	case err != nil:
+		return "You cannot block " + name + "."
+	}
+	entries := append(append([]user.TwitEntry(nil), c.currentUser.TwitList...), entry)
+	if err := saveTwitList(c.userManager, c.currentUser, entries); err != nil {
+		slog.Error("chat block: save twit list", "node", c.nodeNumber, "error", err)
+		return "Could not save your Twit List; " + name + " is not blocked."
+	}
+	return "Blocked " + name + ": their lines and private messages are hidden from you. It is on your Twit List (Konfig)."
+}
+
+// chatUnblock takes who off the caller's Twit List and says what happened.
+func chatUnblock(c *cmdCtx, who chat.ChatUser, name string) string {
+	if c.userManager == nil {
+		return name + " is not on your Twit List."
+	}
+	var kept []user.TwitEntry
+	removed := false
+	for _, entry := range c.currentUser.TwitList {
+		if strings.EqualFold(strings.TrimSpace(entry.Name), who.Handle) && strings.EqualFold(strings.TrimSpace(entry.Addr), who.Node) {
+			removed = true
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	if !removed {
+		return name + " is not on your Twit List."
+	}
+	if err := saveTwitList(c.userManager, c.currentUser, kept); err != nil {
+		slog.Error("chat unblock: save twit list", "node", c.nodeNumber, "error", err)
+		return "Could not save your Twit List; " + name + " is still blocked."
+	}
+	return "Unblocked " + name + "."
+}
+
+// chatIgnoredLines is the answer to /ignored: who is muted this session,
+// named as the room names those present and by key otherwise, and what the
+// caller's Twit List holds.
+func chatIgnoredLines(mutes map[string]bool, users []chat.ChatUser, twits []user.TwitEntry, home string) []string {
+	var muted []string
+	named := map[string]bool{}
+	for _, u := range users {
+		if key := chatUserKey(u.Handle, u.Node); mutes[key] && !named[key] {
+			named[key] = true
+			muted = append(muted, chatUserName(u.Handle, u.Node, u.BBS, home))
+		}
+	}
+	for key := range mutes {
+		if !named[key] {
+			muted = append(muted, strings.TrimSuffix(key, "@"))
+		}
+	}
+	slices.Sort(muted)
+	var blocked []string
+	for _, entry := range twits {
+		if entry.Addr != "" {
+			blocked = append(blocked, entry.Name+"@"+entry.Addr)
+		} else {
+			blocked = append(blocked, entry.Name)
+		}
+	}
+	lines := []string{"Muted this session: nobody", "Blocked (your Twit List): nobody"}
+	if len(muted) > 0 {
+		lines[0] = "Muted this session: " + strings.Join(muted, ", ")
+	}
+	if len(blocked) > 0 {
+		lines[1] = "Blocked (your Twit List): " + strings.Join(blocked, ", ")
+	}
+	return lines
 }
 
 // chatArtReplace fills the @name####@ placeholder in ANSI art data with

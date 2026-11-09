@@ -169,6 +169,7 @@ the same Hub URL, Network, Poll Interval and Origin fields as the wizard, plus:
 | **Who's Online** | Default `N`. `Y` offers network Who's Online (needs **Central**). Only callers who turn it on themselves are shown on other boards. See [Who's Online and Last Callers](v3net/central.md#whos-online-and-last-callers). |
 | **Last Callers** | Default `N`. `Y` offers network Last Callers (needs **Central**). Only calls of callers who turn it on themselves are shared, each for 24 hours. |
 | **Lobby Chat** | Default `Y`, on every subscription, new or upgraded. Offers network chat on this network; unlike the switches above it does not need **Central**. Callers join only after agreeing to what is shared; `N` ends it for callers in a room. See [Network Chat](v3net/central.md#network-chat). |
+| **Chat Block List** | Default empty. Comma-separated `handle@node-id` of callers on other boards whose chat lines and private messages this board drops for everyone here. See [Moderation](v3net/central.md#moderation). |
 
 ---
 

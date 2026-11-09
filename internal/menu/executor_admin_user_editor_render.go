@@ -183,6 +183,12 @@ func (st *userEditorState) renderDetails(message string) error {
 	if sel.DeletedUser {
 		deletedStatus = "Yes"
 	}
+	// Net Chat is the SysOp's bar on the caller's network chat: Allowed
+	// unless barred, shown staged like the other fields.
+	chatBarValue := chatBarLabel(sel.CentralChatBarred)
+	if val, ok := st.pendingChanges["chatBarred"]; ok {
+		chatBarValue = "|14*|03" + chatBarLabel(val.(bool))
+	}
 
 	// Draw separator line above edit area
 	separator := "|08" + strings.Repeat("-", 79) + "|07"
@@ -199,6 +205,7 @@ func (st *userEditorState) renderDetails(message string) error {
 		lineTwoCol("|08[|14E|08]|11 Flags", getFieldValue("flags", sel.Flags), "|11Created", adminTime(sel.CreatedAt)),
 		lineTwoCol("|08[|14F|08]|11 Level", getIntFieldValue("level", sel.AccessLevel), "|11Last Login", adminTime(sel.LastLogin)),
 		lineTwoCol("|08[|14G|08]|11 Validated", getBoolFieldValue("validated", sel.Validated), "|11Deleted", deletedStatus),
+		"|08[|14N|08]|11 Net Chat|08: |03" + chatBarValue + "|07",
 	}
 	// The ACS tester's key, under the fields when the terminal has a row
 	// to spare above the status row.
@@ -220,4 +227,12 @@ func (st *userEditorState) renderDetails(message string) error {
 		}
 	}
 	return st.renderActionBar()
+}
+
+// chatBarLabel is the user editor's word for the network chat bar.
+func chatBarLabel(barred bool) string {
+	if barred {
+		return "Barred"
+	}
+	return "Allowed"
 }

@@ -227,6 +227,9 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 	if val, ok := pendingChanges["level"]; ok {
 		target.AccessLevel = val.(int)
 	}
+	if val, ok := pendingChanges["chatBarred"]; ok {
+		target.CentralChatBarred = val.(bool)
+	}
 	if val, ok := pendingChanges["validated"]; ok {
 		target.Validated = val.(bool)
 		// When validating, upgrade to regular user level if below it.
@@ -287,6 +290,8 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 			oldValue = fmt.Sprintf("%t", currentUserData.Validated)
 		case "deleted":
 			oldValue = fmt.Sprintf("%t", currentUserData.DeletedUser)
+		case "chatBarred":
+			oldValue = fmt.Sprintf("%t", currentUserData.CentralChatBarred)
 		case "password":
 			// Don't log actual password values for security.
 			oldValue = "********"

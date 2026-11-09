@@ -28,16 +28,16 @@ func TestComputeUserEditorLayout(t *testing.T) {
 		t.Fatal("taller terminal must not shrink pageSize")
 	}
 
-	// Exact geometry for a 24-row terminal: pageSize = 24-14 = 10 (within the
+	// Exact geometry for a 24-row terminal: pageSize = 24-15 = 9 (within the
 	// [3,12] clamp), and every row is derived from listStartRow+pageSize.
 	want := userEditorLayout{
-		pageSize:       10,
+		pageSize:       9,
 		titleRow:       1,
 		sepTopRow:      2,
 		headerRow:      3,
 		listStartRow:   4,
-		sepMidRow:      14,
-		detailStartRow: 15,
+		sepMidRow:      13,
+		detailStartRow: 14,
 		statusRow:      23,
 		actionRow:      24,
 	}

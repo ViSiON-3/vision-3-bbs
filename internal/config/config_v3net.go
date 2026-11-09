@@ -222,6 +222,12 @@ type V3NetCentralConfig struct {
 	// out. CallersDefault does not apply: a caller takes part only after
 	// agreeing themselves.
 	Chat *bool `json:"chat,omitempty"`
+	// ChatBlocked lists callers on other boards, each as handle@node-id,
+	// whose network chat lines, join and leave notices and private
+	// messages this board drops for every caller here: the sysop's shield
+	// against a known abuser while the network's operator is away. It is
+	// the editor's Chat Block List.
+	ChatBlocked []string `json:"chatBlocked,omitempty"`
 }
 
 // NewV3NetLeafCentral returns the Central block a newly created
@@ -259,6 +265,15 @@ func (l V3NetLeafConfig) CentralLastCallers() bool {
 // Central on, and a subscription without a Central block offers it.
 func (l V3NetLeafConfig) CentralChat() bool {
 	return l.Central == nil || l.Central.Chat == nil || *l.Central.Chat
+}
+
+// ChatBlocked returns the sysop's chat block list for this subscription,
+// each entry handle@node-id, or nil.
+func (l V3NetLeafConfig) ChatBlocked() []string {
+	if l.Central == nil {
+		return nil
+	}
+	return l.Central.ChatBlocked
 }
 
 // CentralEnabled reports whether callers may open V3Net Central for this

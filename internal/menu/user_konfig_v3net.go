@@ -38,7 +38,7 @@ func v3netSharingValue(st *konfigState) konfigValue {
 	if len(centralSharedNetworks(st.c.e.V3NetCentral, protocol.CentralKindLastCallers, u)) > 0 {
 		on = append(on, "Calls")
 	}
-	if u.CentralChat && len(centralChatOfferedNetworks(st.c.e.V3NetCentral)) > 0 {
+	if u.CentralChat && !u.CentralChatBarred && len(centralChatOfferedNetworks(st.c.e.V3NetCentral)) > 0 {
 		on = append(on, "Chat")
 	}
 	if len(on) == 0 {

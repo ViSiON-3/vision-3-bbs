@@ -503,6 +503,7 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		CentralLastCallers:    lcfg.CentralLastCallers(),
 		CentralCallersDefault: lcfg.CentralCallersDefault(),
 		CentralChat:           lcfg.CentralChat(),
+		ChatBlocked:           lcfg.ChatBlocked(),
 		Activity:              s.activitySource(),
 		RequireSignedMessages: lcfg.RequireSignedMessages,
 		RequireSignedHub:      lcfg.RequireSignedHub,

@@ -98,6 +98,7 @@ func New(cfg Config) *Leaf {
 		l.eventCb.Store(cfg.OnEvent)
 	}
 	l.chatSessions = newChatSessionRegistry(cfg.Keystore.NodeID())
+	l.chatSessions.blocked = chatBlockSet(cfg.ChatBlocked)
 	l.central.activity = newActivityStates()
 	return l
 }

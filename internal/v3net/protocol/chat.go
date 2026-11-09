@@ -1,5 +1,10 @@
 package protocol
 
+import (
+	"strings"
+	"unicode"
+)
+
 // --- Requests (leaf → hub, JSON body) ---
 
 // ChatJoinRequest asks the hub to add this leaf/handle to a room.
@@ -132,3 +137,20 @@ const (
 	EventChatLeave   = "chat_leave"
 	EventChatTopic   = "chat_topic"
 )
+
+// ParseChatTarget reads a caller named as handle@node, the form the chat
+// screen's user list falls back to and a sysop's block list uses: the
+// text up to the last "@" is the handle, the rest the node ID. Both must
+// be present, and neither may hold control characters.
+func ParseChatTarget(s string) (handle, node string, ok bool) {
+	s = strings.TrimSpace(s)
+	at := strings.LastIndex(s, "@")
+	if at <= 0 || at == len(s)-1 || strings.ContainsFunc(s, unicode.IsControl) {
+		return "", "", false
+	}
+	handle, node = strings.TrimSpace(s[:at]), strings.TrimSpace(s[at+1:])
+	if handle == "" || node == "" || strings.ContainsAny(node, " @") {
+		return "", "", false
+	}
+	return handle, node, true
+}

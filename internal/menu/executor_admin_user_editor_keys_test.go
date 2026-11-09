@@ -91,3 +91,27 @@ func TestHandleEditorKeyEscWarnsOnUnsavedChangesOutsidePendingOnly(t *testing.T)
 		t.Errorf("pendingChanges = %v, want unchanged (discard requires explicit X)", st.pendingChanges)
 	}
 }
+
+// N stages the network chat bar and a second press unstages it; the
+// caller's own agreement is not touched.
+func TestHandleEditorKeyToggleChatBarUnstagesOnDoublePress(t *testing.T) {
+	st := &userEditorState{
+		users:          []*user.User{{ID: 2, Handle: "Caller", CentralChat: true}},
+		pendingChanges: make(map[string]interface{}),
+	}
+	if _, exit, _, _, err := st.handleEditorKey('n', 80, 24); err != nil || exit {
+		t.Fatalf("first press: unexpected exit=%v err=%v", exit, err)
+	}
+	if v, ok := st.pendingChanges["chatBarred"]; !ok || v != true {
+		t.Fatalf("after first press: pendingChanges[chatBarred] = (%v, %v), want (true, true)", v, ok)
+	}
+	if _, exit, _, _, err := st.handleEditorKey('N', 80, 24); err != nil || exit {
+		t.Fatalf("second press: unexpected exit=%v err=%v", exit, err)
+	}
+	if _, ok := st.pendingChanges["chatBarred"]; ok {
+		t.Error("second press should unstage the bar")
+	}
+	if !st.users[0].CentralChat {
+		t.Error("the caller's agreement was changed")
+	}
+}

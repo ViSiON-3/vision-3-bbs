@@ -74,3 +74,17 @@ func TestV3NetCentralChatSwitch(t *testing.T) {
 		t.Error("a new subscription should write chat out as on")
 	}
 }
+
+// The chat block list is read as given and is nil without a Central block.
+func TestV3NetChatBlocked(t *testing.T) {
+	cfg, err := ParseV3NetConfig([]byte(`{"leaves":[{"hubUrl":"h","network":"n","central":{"chatBlocked":["Bob@n1","eve@n2"]}},{"hubUrl":"h","network":"m"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Leaves[0].ChatBlocked(); len(got) != 2 || got[0] != "Bob@n1" {
+		t.Errorf("ChatBlocked() = %v", got)
+	}
+	if cfg.Leaves[1].ChatBlocked() != nil {
+		t.Error("no Central block should mean no block list")
+	}
+}

@@ -166,6 +166,12 @@ type User struct {
 	// either way.
 	CentralChat       bool `json:"centralChat,omitempty"`
 	CentralChatChosen bool `json:"centralChatChosen,omitempty"`
+	// CentralChatBarred is the SysOp's bar on this caller's network chat,
+	// set in the user editor: barred, the caller cannot join or post on
+	// any network from this board, whatever they agreed to. It is kept
+	// with the consent fields, so a consent save on another node cannot
+	// clear it.
+	CentralChatBarred bool `json:"centralChatBarred,omitempty"`
 
 	// Soft Delete (user marked as deleted but data preserved)
 	DeletedUser bool       `json:"deletedUser,omitempty"` // True if user is soft-deleted

@@ -149,6 +149,26 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 			}
 			refresh = true
 		}
+	case 'n', 'N':
+		// Toggle the network chat bar. The caller's own agreement is left
+		// alone: lifting the bar gives them back whatever they chose.
+		sel := st.users[st.selectedIndex]
+		cur := sel.CentralChatBarred
+		if staged, ok := st.pendingChanges["chatBarred"].(bool); ok {
+			cur = staged
+		}
+		if barred := !cur; barred != sel.CentralChatBarred {
+			st.pendingChanges["chatBarred"] = barred
+			if barred {
+				st.statusMessage = "|11Network chat bar marked for update: barred.|07"
+			} else {
+				st.statusMessage = "|10Network chat bar marked for update: allowed.|07"
+			}
+		} else {
+			delete(st.pendingChanges, "chatBarred")
+			st.statusMessage = "|08No change.|07"
+		}
+		refresh = true
 	case 'p', 'P':
 		// Change password
 		if newPassword, editErr := st.readFieldInput("New Password", "", 50, true); editErr == nil {

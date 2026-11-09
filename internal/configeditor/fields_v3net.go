@@ -259,6 +259,26 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			Get: func() string { return uitext.BoolToYN(l.CentralChat()) },
 			Set: func(val string) error { v := uitext.YNToBool(val); v3netCentral(l).Chat = &v; return nil },
 		},
+		{
+			Label: "Chat Block List", Help: "Comma-separated handle@node-id of callers on other boards whose chat lines and private messages this board drops for everyone here", Type: ftString, Col: 3, Row: 24, Width: 49, MaxLen: 1024,
+			Get: func() string { return strings.Join(l.ChatBlocked(), ",") },
+			Set: func(val string) error {
+				var blocked []string
+				for _, part := range strings.Split(val, ",") {
+					entry := strings.TrimSpace(part)
+					if entry == "" {
+						continue
+					}
+					handle, node, ok := protocol.ParseChatTarget(entry)
+					if !ok {
+						return fmt.Errorf("%q is not handle@node-id", entry)
+					}
+					blocked = append(blocked, handle+"@"+node)
+				}
+				v3netCentral(l).ChatBlocked = blocked
+				return nil
+			},
+		},
 	}
 }
 
