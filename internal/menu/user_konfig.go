@@ -374,7 +374,7 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					help:  str.KonfigFileColumnsHelp,
 					value: fileColumnsValue,
 					edit:  editFileColumns},
-				{key: 'O', label: str.KonfigMorePromptsLabel, flips: true,
+				{key: morePromptsKonfigKey, label: str.KonfigMorePromptsLabel, flips: true,
 					help:  str.KonfigMorePromptsHelp,
 					value: func(st *konfigState) konfigValue { return st.onOffValue(st.user().MorePromptsOn()) },
 					edit:  toggleMorePrompts},
@@ -620,6 +620,10 @@ func toggleThreadView(st *konfigState) error {
 	}
 	return nil
 }
+
+// morePromptsKonfigKey is the More Prompts item's hotkey. Every item needs
+// its own: withoutKonfigItem drops items by key.
+const morePromptsKonfigKey = 'S'
 
 // autocorrectKonfigKey is the Autocorrect item's hotkey. The item is left
 // out on boards where no message area offers autocorrect.
