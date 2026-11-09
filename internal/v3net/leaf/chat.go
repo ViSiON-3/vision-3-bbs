@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +32,9 @@ type chatSessionRegistry struct {
 	// retired is set by Leaf.CloseChatSessions: the leaf is being stopped,
 	// so no session may be registered or act after it. Protected by mu.
 	retired bool
+	// blocked is the sysop's chat block list (Config.ChatBlocked) as
+	// chatBlockKey keys; set once when the leaf is made.
+	blocked map[string]bool
 
 	// membership serializes Join and Leave requests to the hub. The hub keeps
 	// one membership per handle on a node, so a session leaving a room must
@@ -105,6 +109,13 @@ func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
 		if err := json.Unmarshal(ev.Data, &msg); err != nil {
 			return // drop malformed event rather than routing it to the wrong room
 		}
+		// The sysop's block list: a line from those callers reaches no
+		// session here. Their joins and leaves go on to deliver, which
+		// keeps the member list right and then withholds the notice; a
+		// topic change names its setter but is the room's, so it is kept.
+		if ev.Type == protocol.EventChatMessage && r.isBlocked(msg.FromHandle, msg.FromNode) {
+			return
+		}
 		for s := range r.sessions {
 			// The hub sends a post back to its author too. The chat screen
 			// showed the line when Post returned, so this copy would show it
@@ -124,6 +135,9 @@ func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
 			return // drop malformed event rather than delivering partial data
 		}
 		if msg.ToNode != "" && msg.ToNode != r.nodeID {
+			return
+		}
+		if r.isBlocked(msg.FromHandle, msg.FromNode) {
 			return
 		}
 		for s := range r.sessions {
@@ -224,7 +238,10 @@ func (s *ChatSession) deliver(ev protocol.Event) {
 			s.currentUsers = append(s.currentUsers, chat.ChatUser{Handle: p.Handle, Node: p.Node, BBS: p.BBS})
 			s.mu.Unlock()
 		}
-		ce = chat.ChatEvent{Type: chat.TypeJoin, Join: &chat.ChatJoin{Room: p.Room, Handle: p.Handle, BBS: p.BBS, Node: p.Node}}
+		// A caller on the sysop's block list is counted, since they are in
+		// the room, but not announced: the event is silent.
+		ce = chat.ChatEvent{Type: chat.TypeJoin, Join: &chat.ChatJoin{Room: p.Room, Handle: p.Handle, BBS: p.BBS, Node: p.Node},
+			Silent: s.leaf.chatSessions.isBlocked(p.Handle, p.Node)}
 	case protocol.EventChatLeave:
 		var p protocol.ChatLeavePayload
 		if err := json.Unmarshal(ev.Data, &p); err != nil {
@@ -233,7 +250,8 @@ func (s *ChatSession) deliver(ev protocol.Event) {
 		s.mu.Lock()
 		s.currentUsers = removeMember(s.currentUsers, p.Handle, p.Node)
 		s.mu.Unlock()
-		ce = chat.ChatEvent{Type: chat.TypeLeave, Leave: &chat.ChatLeave{Room: p.Room, Handle: p.Handle, BBS: p.BBS, Node: p.Node}}
+		ce = chat.ChatEvent{Type: chat.TypeLeave, Leave: &chat.ChatLeave{Room: p.Room, Handle: p.Handle, BBS: p.BBS, Node: p.Node},
+			Silent: s.leaf.chatSessions.isBlocked(p.Handle, p.Node)}
 	case protocol.EventChatTopic:
 		var p protocol.ChatTopicPayload
 		if err := json.Unmarshal(ev.Data, &p); err != nil {
@@ -262,6 +280,33 @@ func protoMsgToDomain(p protocol.ChatMsgPayload) *chat.ChatMessage {
 		Room: p.Room, Handle: p.FromHandle, Node: p.FromNode,
 		BBS: p.FromBBS, Text: p.Text, Timestamp: t,
 	}
+}
+
+// chatBlockKey is how the block list keys a caller: the handle folded,
+// since boards are not consistent about case, and the node as it is.
+func chatBlockKey(handle, node string) string {
+	return strings.ToLower(strings.TrimSpace(handle)) + "@" + strings.TrimSpace(node)
+}
+
+// chatBlockSet turns a sysop's block list, entries of handle@node, into
+// chatBlockKey keys. Entries that are not handle@node are skipped.
+func chatBlockSet(entries []string) map[string]bool {
+	if len(entries) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		if handle, node, ok := protocol.ParseChatTarget(e); ok {
+			set[chatBlockKey(handle, node)] = true
+		}
+	}
+	return set
+}
+
+// isBlocked reports whether the sysop's block list names handle on node.
+// A caller the hub reports without a node cannot be matched.
+func (r *chatSessionRegistry) isBlocked(handle, node string) bool {
+	return node != "" && r.blocked[chatBlockKey(handle, node)]
 }
 
 // removeMember returns users without the first member with handle on node,
@@ -361,10 +406,14 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 	for i, r := range joinResp.Rooms {
 		rooms[i] = chat.RoomInfo{Name: r.Name, Topic: r.Topic, UserCount: r.UserCount}
 	}
-	msgs := make([]chat.ChatMessage, len(joinResp.History))
-	for i, m := range joinResp.History {
-		msgs[i] = *protoMsgToDomain(m)
-		msgs[i].Room = room
+	msgs := make([]chat.ChatMessage, 0, len(joinResp.History))
+	for _, m := range joinResp.History {
+		if s.leaf.chatSessions.isBlocked(m.FromHandle, m.FromNode) {
+			continue
+		}
+		msg := *protoMsgToDomain(m)
+		msg.Room = room
+		msgs = append(msgs, msg)
 	}
 	return rooms, msgs, nil
 }

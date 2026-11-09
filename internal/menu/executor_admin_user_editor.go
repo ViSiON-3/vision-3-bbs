@@ -45,7 +45,7 @@ type userEditorLayout struct {
 // substituting a default before calling this (e.g. when the terminal reports
 // height <= 0).
 func computeUserEditorLayout(termHeight int) userEditorLayout {
-	pageSize := termHeight - 14 // Reduced by 1 to account for header row
+	pageSize := termHeight - 15 // header row, and eight detail lines below the list
 	if pageSize < 3 {
 		pageSize = 3
 	}

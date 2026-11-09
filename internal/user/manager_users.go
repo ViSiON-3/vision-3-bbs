@@ -14,6 +14,22 @@ import (
 // rename a user's handle (e.g., admin editor); for all other updates prefer
 // UpdateUser.
 func (um *UserMgr) UpdateUserByID(u *User) error {
+	return um.updateUserByID(u, nil)
+}
+
+// UpdateUserByIDAndChatBar is UpdateUserByID that also sets the account's
+// network chat bar (CentralChatBarred), in the same save. The bar is one of
+// the consent fields UpdateUserByID keeps as stored (see keepCentralConsent
+// in manager_central.go), and the sysop's user editor is the one place that
+// changes it, along with whatever else it saves: one save, so a deletion
+// and a bar staged together land together or not at all.
+func (um *UserMgr) UpdateUserByIDAndChatBar(u *User, barred bool) error {
+	return um.updateUserByID(u, &barred)
+}
+
+// updateUserByID is UpdateUserByID, setting the chat bar too when chatBar
+// is not nil.
+func (um *UserMgr) updateUserByID(u *User, chatBar *bool) error {
 	if u == nil {
 		return fmt.Errorf("cannot update nil user")
 	}
@@ -43,16 +59,12 @@ func (um *UserMgr) UpdateUserByID(u *User) error {
 	}
 
 	newKey := strings.ToLower(u.Handle)
-	var originalEntry *User
-	rekeyed := false
 	if newKey != oldKey {
 		// Handle changed — ensure no collision with a different user.
 		if existing, exists := um.users[newKey]; exists && existing.ID != u.ID {
 			return ErrHandleExists
 		}
-		originalEntry = um.users[oldKey] // save for rollback
 		delete(um.users, oldKey)
-		rekeyed = true
 	}
 
 	userCopy := *u
@@ -68,13 +80,16 @@ func (um *UserMgr) UpdateUserByID(u *User) error {
 		userCopy.APIDevices = current.APIDevices
 		keepCentralConsent(&userCopy, current) // see manager_central.go
 	}
+	if chatBar != nil {
+		userCopy.CentralChatBarred = *chatBar
+	}
 	um.users[newKey] = &userCopy
 	if err := um.saveUsersLocked(); err != nil {
-		// Rollback in-memory map to match what is still on disk.
+		// Roll the map back to what is still on disk: the entry found above
+		// returns under its old key, whether or not the handle changed, so
+		// the account is not missing from the next save that succeeds.
 		delete(um.users, newKey)
-		if rekeyed {
-			um.users[oldKey] = originalEntry
-		}
+		um.users[oldKey] = current
 		return err
 	}
 	return nil

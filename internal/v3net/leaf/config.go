@@ -47,6 +47,12 @@ type Config struct {
 	// CentralChat is the sysop's switch for network chat. It does not need
 	// CentralEnabled. Off, chat sessions on this leaf cannot join or post.
 	CentralChat bool
+	// ChatBlocked is the sysop's chat block list, each entry handle@node:
+	// room lines, join and leave notices, history and private messages
+	// from those callers are dropped before any session here sees them;
+	// they still count as members of the rooms they are in, and their
+	// joins and leaves arrive as silent events (chat.ChatEvent.Silent).
+	ChatBlocked []string
 	// Activity says what the board may publish for those features: only
 	// callers who consented. Nil publishes nothing.
 	Activity CentralActivitySource

@@ -105,6 +105,9 @@ accepts it, and the copy the hub sends back is dropped.
 | `/rooms` | List all rooms on the current network with user counts and topics |
 | `/topic <text>` | Set the topic for the current room |
 | `/msg <who> <text>` | Send a private message to someone in the room, named as the user list names them: `bob`, or `bob@Other BBS` for a caller on another board. `bob@<node-id>` reaches a caller elsewhere on the network |
+| `/mute <who>` | Hide that caller's lines, private messages and join/leave notices for this session; `/unmute <who>` undoes it. Nobody is told |
+| `/block <who>` | As `/mute`, kept on your Twit List (as `handle@node-id` for a caller on another board); `/unblock <who>` takes them off |
+| `/ignored` | List who you mute this session and what your Twit List holds |
 | `/users` | Refresh the user list in the status bar |
 | `/network` | Switch to a different network mid-session (only networks the caller may chat on are listed; in `RUN:CHAT LOCAL` there is none, and it says so) |
 | `/?` or `/help` | List these commands on your own screen |
@@ -129,6 +132,32 @@ unique across a network, so two callers named `Bob` on two boards are
 
 A hub from before this version lists handles only; against it, everyone
 in the room is named by handle alone until the hub is updated.
+
+### Mute, Block and Ignore
+
+A caller decides what they see. `/mute <who>` hides that caller's room
+lines, private messages and join and leave notices until the end of this
+chat session; `/unmute <who>` shows them again. `/block <who>` does the
+same for good: the caller goes on the Twit List, as `handle@node-id` for
+someone on another board or by handle in local chat, so one list under
+Konfig holds everyone a caller would rather not read, with the same limit
+(`twitListMax`). `/unblock <who>` takes them off, as does the Twit List
+screen. `/ignored` lists both. Nobody is told; the other caller's lines
+still reach the board and everyone else in the room. A Twit entry for a
+local account hides that handle from every board, as it hides authors in
+the message areas; a `handle@node-id` entry hides that board's caller
+only, and does not hide their V3Net posts, whose author address is the
+area's, not the node's.
+
+`<who>` is named as `/msg` names recipients: as the user list shows them,
+or `handle@node-id` for someone not in the room. Boards with Twit Lists
+turned off (`twitListEnabled`) still have `/mute`.
+
+A sysop has two controls of their own, described under
+[Moderation](v3net/central.md#moderation): a bar on one of their callers,
+after which that caller's `/network`, joins and posts are refused with
+`Your SysOp has turned network chat off for you`, and a board-wide block
+list for callers on other boards.
 
 ### Private Message Delivery
 

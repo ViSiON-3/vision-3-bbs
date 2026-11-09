@@ -516,10 +516,12 @@ V3Net Central: Network Chat
   joining: treat what you say in a room as public.
 
   Who moderates
-  Your SysOp decides whether this board takes part; the hub's operator
-  decides which boards may. The hub limits how fast anyone can post.
-  You can turn network chat off at any time under V3Net Central ->
-  Preferences, and leave a room with /q.
+  Your SysOp decides whether this board takes part, and can turn network
+  chat off for you; the hub's operator decides which boards may. The hub
+  limits how fast anyone can post. You can mute or block anyone from your
+  screen (/mute for this session, /block for good).
+  You can turn network chat off at any time under Preferences (V3Net
+  Central, or V3Net Sharing in Konfig), and leave a room with /q.
 
   Take part in network chat? (Y/N):
 ```
@@ -532,7 +534,8 @@ V3Net Central: Network Chat
 - A caller who has agreed can withdraw under **Preferences**, switch **4**
   (**Take part in network chat**), reached from the Central menu or as
   **V3Net Sharing** in Konfig, which is there whenever a network offers
-  chat, with or without **Central** on. Turning it on again shows the notice
+  chat, with or without **Central** on. A caller you have barred sees the
+  switch as `Off (set by the SysOp)`; see [Moderation](#moderation). Turning it on again shows the notice
   again. The choice is stored on the local account (`centralChat`, with
   `centralChatChosen` recording that the caller answered) and is not
   linked to any account on another board.
@@ -557,6 +560,7 @@ One more switch in the subscription's Central block:
 | Editor field | JSON | Default | Effect |
 |---|---|---|---|
 | **Lobby Chat** | `chat` | Y | Offers network chat on this network: callers here can join its rooms once they agree. Does not need **Central**. N ends it for callers who are in a room. |
+| **Chat Block List** | `chatBlocked` | empty | Callers on other boards, each `handle@node-id`, whose lines, private messages and join/leave notices this board drops for everyone here. See [Moderation](#moderation). |
 
 The switch is on by default on every subscription, new or upgraded,
 including one from before Central, which has no Central block at all: a
@@ -592,6 +596,47 @@ callers; the hub treats both the same. A hub from before this version
 lists a room's members by handle alone, so against it a board names
 everyone in the room by handle, with no board.
 
+### Moderation
+
+Three parties have a say, and none overrides another's ground: a caller
+over what they see, you over your own callers and your board, the hub's
+operator over the network. Where two apply, the stricter wins.
+
+**Callers** have `/mute`, `/block`, `/unblock` and `/ignored`, described
+under [Mute, Block and Ignore](v3net/chat.md#mute-block-and-ignore). A
+block is a Twit List entry, so it is kept and managed where the caller's
+other Twit entries are.
+
+**You** have two controls:
+
+- **Net Chat** in the user editor (`N`), `Allowed` or `Barred`. A barred
+  caller cannot join, post or send private messages on any network from
+  this board, whatever they agreed to: `CHAT NET` says `your SysOp has
+  turned it off`, `CHAT` runs local chat, a caller in a network room is
+  taken out at their next line, and Preferences shows switch 4 as `Off
+  (set by the SysOp)`. Their own agreement is kept, so lifting the bar
+  gives them back what they chose. The flag is `centralChatBarred` on the
+  account. This is your answer to a complaint about one of your callers,
+  and what the hub's operator will expect you to use before they act.
+- **Chat Block List** on the subscription (`central.chatBlocked`), a list
+  of `handle@node-id`. Lines, private messages and join and leave notices
+  from a listed caller are dropped by the leaf before any session here
+  sees them, and their lines are left out of the history shown on a join.
+  Topic changes are the room's and are kept. The handle is matched
+  ignoring case, the node ID exactly: one board's caller, not every
+  caller with that handle. It is your shield against a known abuser while
+  the hub's operator is away, and costs the hub nothing.
+
+You cannot mute or ban a caller on another board for anyone but your own
+callers; that is the hub operator's, and the lever for it is a report.
+
+**Reports and network-wide sanctions** (`/report`, hub-side mute, ban,
+kick and room lock, with the network told why a voice stopped) are the
+remaining parts of [#672](https://github.com/ViSiON-3/vision-3-bbs/issues/672)
+and follow in their own releases; until then a complaint about a caller on
+another board goes to that board's sysop or the hub's operator by other
+means.
+
 ### Chat Retention and Access
 
 Room history is kept by the hub for its retention period (7 days on a
@@ -601,9 +646,10 @@ by anyone who knows the hub's address, which is why the notice tells
 callers to treat a room as public; a later phase decides and documents
 that access policy. Private messages
 are stored for the same period and are never replayed; see
-[Private Message Delivery](v3net/chat.md#private-message-delivery). Mute,
-block and report controls, and network moderation beyond the hub's rate
-limits and a sysop's own switches, are later phases of #672.
+[Private Message Delivery](v3net/chat.md#private-message-delivery). Mute
+and block controls, a sysop's bar and block list are under
+[Moderation](#moderation); reports and network-wide sanctions are later
+parts of #672.
 
 ---
 
