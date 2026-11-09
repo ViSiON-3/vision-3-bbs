@@ -145,6 +145,36 @@ func TestKonfigStockHeaderArtFits(t *testing.T) {
 	}
 }
 
+// Every item has its own hotkey: a shared one would jump to the wrong item,
+// and withoutKonfigItem, which drops an item the board doesn't offer by its
+// key, would drop the other one too.
+func TestKonfigHotkeysUnique(t *testing.T) {
+	seen := map[byte]string{}
+	for _, sections := range konfigSections(konfigTestExecutor(t).Strings()) {
+		for _, sec := range sections {
+			for _, it := range sec.items {
+				if other, ok := seen[it.key]; ok {
+					t.Errorf("%q and %q share hotkey %c", other, it.label, it.key)
+				}
+				seen[it.key] = it.label
+			}
+		}
+	}
+}
+
+// More Prompts stays on a board without the QWK API, whose Devices item is
+// left out.
+func TestKonfigMorePromptsWithoutDevices(t *testing.T) {
+	cols := withoutKonfigItem(konfigSections(konfigTestExecutor(t).Strings()), qwkDevicesKonfigKey)
+	items, _ := layoutKonfig(cols)
+	for _, it := range items {
+		if it.key == morePromptsKonfigKey {
+			return
+		}
+	}
+	t.Fatal("More Prompts missing once the Devices item is left out")
+}
+
 // The form must fit the smallest screen a caller can set, and the items must
 // stay clear of the rows below them.
 func TestKonfigLayoutFitsMinimumHeight(t *testing.T) {
