@@ -96,6 +96,16 @@ func TestChatEntryArguments(t *testing.T) {
 	if len(net.chatted()) != 1 {
 		t.Errorf("CHAT LOCAL reached the network")
 	}
+
+	// Nor does /network lead there: the caller has agreed, but this chat
+	// was started for this board only.
+	r = env.run(runChat, env.caller, "LOCAL", "/network\rhello\r/q\r")
+	if chatcovHas(r, "Chat Networks", "Select network") || !chatcovHas(r, "this board only; there is no network", "<Caller> hello") {
+		t.Errorf("CHAT LOCAL should refuse /network and stay local:\n%s", chatcovText(r))
+	}
+	if len(net.chatted()) != 1 {
+		t.Errorf("CHAT LOCAL reached the network through /network")
+	}
 }
 
 // CHAT NET never lands in local chat: /network lists no Local, and a room

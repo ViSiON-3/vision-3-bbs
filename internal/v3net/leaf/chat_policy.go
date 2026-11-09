@@ -58,10 +58,7 @@ func (l *Leaf) ChatStatus() ChatStatus {
 // or a private message: the leaf still running, chat offered on it, and
 // the session open.
 func (s *ChatSession) chatAllowed() error {
-	s.leaf.chatSessions.mu.RLock()
-	retired := s.leaf.chatSessions.retired
-	s.leaf.chatSessions.mu.RUnlock()
-	if retired {
+	if s.leaf.chatSessions.isRetired() {
 		return ErrChatEnded
 	}
 	if !s.leaf.ChatEnabled() {
@@ -74,6 +71,14 @@ func (s *ChatSession) chatAllowed() error {
 		return errChatSessionClosed
 	}
 	return nil
+}
+
+// isRetired reports whether CloseChatSessions has retired the leaf for
+// chat.
+func (r *chatSessionRegistry) isRetired() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.retired
 }
 
 // CloseChatSessions ends every chat session on this leaf and retires the

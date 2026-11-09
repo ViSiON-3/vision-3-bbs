@@ -1015,6 +1015,12 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		if upper == "/NETWORK" {
+			// CHAT LOCAL is this board only, whatever the caller agreed to:
+			// there is no network to switch to.
+			if entry == chatEntryLocal {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "This chat is for this board only; there is no network to switch to."))
+				continue
+			}
 			// Stop the current service and event goroutine.
 			cleanup()
 

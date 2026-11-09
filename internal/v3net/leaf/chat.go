@@ -366,6 +366,11 @@ func (s *ChatSession) undoJoin(room string) {
 // recovery, room intent is abandoned immediately, even if the hub is offline.
 // While another session with this handle is still in room, the hub is not
 // told, since its membership is shared by both, and the room is just cleared.
+// Nor is it told from a leaf a reload has stopped: the leaf that replaced it
+// has the same node, and the hub keeps one membership per handle and node,
+// so the leave would take the replacement's caller with this handle out of
+// the room (its next post would be refused). The hub drops what is left of
+// the old leaf's memberships itself when its stream closes unreplaced.
 func (s *ChatSession) Leave(room string) error {
 	// Abandon recovery before waiting for its in-flight request. Recovery
 	// checks this intent again before accepting a join or marking us ready.
@@ -379,7 +384,7 @@ func (s *ChatSession) Leave(room string) error {
 	s.leaf.chatSessions.membership.Lock()
 	defer s.leaf.chatSessions.membership.Unlock()
 	var err error
-	if !s.leaf.chatSessions.sharesRoom(s, room) {
+	if !s.leaf.chatSessions.isRetired() && !s.leaf.chatSessions.sharesRoom(s, room) {
 		body, _ := json.Marshal(protocol.ChatLeaveRequest{Room: room, Handle: s.handle})
 		err = s.leaf.signedPostCtx(context.Background(),
 			fmt.Sprintf("/v3net/v1/%s/chat/rooms/leave", s.leaf.cfg.Network), body)
