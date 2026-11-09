@@ -21,9 +21,16 @@ func TestChatRefusedWhenNotOffered(t *testing.T) {
 		t.Fatalf("join with chat offered: %v", err)
 	}
 
+	// Chat does not need Central: only its own switch turns it off.
+	l.cfg.CentralEnabled = false
+	if st := l.ChatStatus(); !st.Enabled {
+		t.Error("status says chat is off with Central off")
+	}
+	if err := alice.Post("lobby", "hello"); err != nil {
+		t.Errorf("post with Central off: %v", err)
+	}
 	for name, off := range map[string]func(){
-		"chat off":    func() { l.cfg.CentralChat = false },
-		"central off": func() { l.cfg.CentralEnabled = false },
+		"chat off": func() { l.cfg.CentralChat = false },
 	} {
 		t.Run(name, func(t *testing.T) {
 			offerChat(l)

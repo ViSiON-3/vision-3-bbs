@@ -1512,8 +1512,8 @@ func checkV3Net(configDir, root string, add func(string, doctorSeverity, string,
 			add("V3Net configuration", doctorWarn, fmt.Sprintf("%s has invalid pollInterval %q", label, leaf.PollInterval), "Use a positive duration such as 5m or 1h.")
 			issues++
 		}
-		if len(leaf.Boards) == 0 && !leaf.CentralEnabled() && !leaf.CentralPublishes() {
-			add("V3Net configuration", doctorWarn, label+" has no boards", "Select at least one local board to receive this network's messages, or turn on V3Net Central for it.")
+		if len(leaf.Boards) == 0 && !leaf.CentralEnabled() && !leaf.CentralPublishes() && !leaf.CentralChat() {
+			add("V3Net configuration", doctorWarn, label+" has no boards", "Select at least one local board to receive this network's messages, or turn on V3Net Central or Lobby Chat for it.")
 			issues++
 		}
 		for _, pin := range []struct{ field, value string }{

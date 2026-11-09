@@ -58,15 +58,16 @@ type CentralNetworkInfo struct {
 
 // CentralChatInfo is network chat's state on a network.
 type CentralChatInfo struct {
-	// Enabled is the sysop's switch for chat (which needs Central on);
-	// Supported whether the hub serves it.
+	// Enabled is the sysop's switch for chat (which, unlike the activity
+	// switches, does not need Central on); Supported whether the hub
+	// serves it.
 	Enabled   bool
 	Supported bool
 }
 
 // ChatOffered reports whether the sysop offers network chat on this
-// network.
-func (n CentralNetworkInfo) ChatOffered() bool { return n.Enabled && n.Chat.Enabled }
+// network. Chat does not need Central itself on.
+func (n CentralNetworkInfo) ChatOffered() bool { return n.Chat.Enabled }
 
 // ChatAvailable reports whether callers can use network chat on this
 // network now: offered, and served by the hub.

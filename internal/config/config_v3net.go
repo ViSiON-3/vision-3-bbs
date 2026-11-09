@@ -214,21 +214,26 @@ type V3NetCentralConfig struct {
 	CallersDefault bool `json:"callersDefault"`
 	// Chat offers network chat (the Central lobby) on this network: callers
 	// may join its rooms, where their handle and this board's name go to
-	// every board in the room with each line they type. It needs Enabled.
-	// Off, including on a new subscription and after an upgrade, callers
-	// here cannot join, and ones in a room are taken out. CallersDefault
-	// does not apply: a caller takes part only after agreeing themselves.
-	Chat bool `json:"chat"`
+	// every board in the room with each line they type. Unlike the other
+	// switches it does not need Enabled, and it is on unless set to false:
+	// chat predates Central, and a board that chats over V3Net goes on
+	// doing so through an upgrade, with or without a Central block. False
+	// turns it off: callers here cannot join, and ones in a room are taken
+	// out. CallersDefault does not apply: a caller takes part only after
+	// agreeing themselves.
+	Chat *bool `json:"chat,omitempty"`
 }
 
 // NewV3NetLeafCentral returns the Central block a newly created
 // subscription starts with: Central, network Who's Online and network Last
 // Callers on, with callers counted as opted in until they choose
 // otherwise, so a new board takes part in the network's activity feeds from
-// the start. The directory listing stays off until the sysop publishes it.
-// Configs written before a leaf had a Central block keep every feature off.
+// the start, and network chat written out as on, which it is anyway. The
+// directory listing stays off until the sysop publishes it. Configs written
+// before a leaf had a Central block keep every feature but chat off.
 func NewV3NetLeafCentral() *V3NetCentralConfig {
-	return &V3NetCentralConfig{Enabled: true, Presence: true, LastCallers: true, CallersDefault: true}
+	chat := true
+	return &V3NetCentralConfig{Enabled: true, Presence: true, LastCallers: true, CallersDefault: true, Chat: &chat}
 }
 
 // CentralCallersDefault reports whether callers who have not chosen count
@@ -250,9 +255,10 @@ func (l V3NetLeafConfig) CentralLastCallers() bool {
 }
 
 // CentralChat reports whether network chat is offered on this
-// subscription: Central and its Chat switch both on.
+// subscription: unless its Chat switch is set to false. It does not need
+// Central on, and a subscription without a Central block offers it.
 func (l V3NetLeafConfig) CentralChat() bool {
-	return l.CentralEnabled() && l.Central.Chat
+	return l.Central == nil || l.Central.Chat == nil || *l.Central.Chat
 }
 
 // CentralEnabled reports whether callers may open V3Net Central for this

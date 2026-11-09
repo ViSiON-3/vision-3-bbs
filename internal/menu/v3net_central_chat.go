@@ -116,8 +116,8 @@ func chatConsentNoticeText(handle, board string, width int) string {
 	w("|03  Who moderates|07")
 	w("|07  Your SysOp decides whether this board takes part; the hub's operator")
 	w("|07  decides which boards may. The hub limits how fast anyone can post.")
-	w("|08  You can turn network chat off at any time under V3Net Central ->|07")
-	w("|08  Preferences, and leave a room with /q.|07")
+	w("|08  You can turn network chat off at any time under Preferences (V3Net|07")
+	w("|08  Central, or V3Net Sharing in Konfig), and leave a room with /q.|07")
 	w("")
 	return b.String()
 }

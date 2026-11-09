@@ -56,16 +56,21 @@ func TestV3NetCentralChatSwitch(t *testing.T) {
 	cfg, err := ParseV3NetConfig([]byte(`{"leaves":[{"hubUrl":"h","network":"n","central":{"enabled":true,"chat":true}},
 		{"hubUrl":"h","network":"m","central":{"enabled":false,"chat":true}},
 		{"hubUrl":"h","network":"o","central":{"enabled":true}},
-		{"hubUrl":"h","network":"p"}]}`))
+		{"hubUrl":"h","network":"p"},
+		{"hubUrl":"h","network":"q","central":{"enabled":true,"chat":false}},
+		{"hubUrl":"h","network":"r","central":{"chat":false}}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i, want := range []bool{true, false, false, false} {
+	// Chat is on unless set to false, with or without Central, and on a
+	// subscription from before Central: a board that chats over V3Net
+	// goes on doing so through an upgrade.
+	for i, want := range []bool{true, true, true, true, false, false} {
 		if got := cfg.Leaves[i].CentralChat(); got != want {
 			t.Errorf("leaf %d CentralChat() = %v, want %v (%+v)", i, got, want, cfg.Leaves[i].Central)
 		}
 	}
-	if NewV3NetLeafCentral().Chat {
-		t.Error("a new subscription should start with chat off")
+	if c := NewV3NetLeafCentral(); c.Chat == nil || !*c.Chat {
+		t.Error("a new subscription should write chat out as on")
 	}
 }

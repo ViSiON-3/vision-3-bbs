@@ -480,7 +480,9 @@ Phase 3 lets callers on different boards meet in one room. It is the
 `CHAT` command's network side, which this phase puts under the same
 consent as the rest of Central: a switch for you per network, and an
 agreement from each caller before they join. Local chat (this board
-only) needs neither.
+only) needs neither. Unlike the other Central features, chat is on
+unless you turn it off, and does not need **Central** itself on: boards
+chatted over V3Net before Central, and go on doing so.
 
 ### What Callers See
 
@@ -524,7 +526,9 @@ V3Net Central: Network Chat
   gets local chat this time and is asked again next time; from the Central
   menu they are sent back.
 - A caller who has agreed can withdraw under **Preferences**, switch **4**
-  (**Take part in network chat**). Turning it on again shows the notice
+  (**Take part in network chat**), reached from the Central menu or as
+  **V3Net Sharing** in Konfig, which is there whenever a network offers
+  chat, with or without **Central** on. Turning it on again shows the notice
   again. The choice is stored on the local account (`centralChat`, with
   `centralChatChosen` recording that the caller answered) and is not
   linked to any account on another board.
@@ -548,12 +552,15 @@ One more switch in the subscription's Central block:
 
 | Editor field | JSON | Default | Effect |
 |---|---|---|---|
-| **Lobby Chat** | `chat` | N | Offers network chat on this network: callers here can join its rooms once they agree. Needs **Central**. N ends it for callers who are in a room. |
+| **Lobby Chat** | `chat` | Y | Offers network chat on this network: callers here can join its rooms once they agree. Does not need **Central**. N ends it for callers who are in a room. |
 
-The switch is off by default on every subscription, new or upgraded, so
-a board that chats over V3Net today turns it on once after upgrading.
-A subscription with only **Central** and **Lobby Chat** on runs with no
-message areas, as one with **Publish Listing** on does.
+The switch is on by default on every subscription, new or upgraded,
+including one from before Central, which has no Central block at all: a
+board that chats over V3Net today goes on doing so after upgrading, now
+with the caller notice in front of the first join. Set it to **N** on a
+network where you do not want chat. A subscription with only **Lobby
+Chat** on runs with no message areas, as one with **Central** or
+**Publish Listing** on does.
 
 Turning the switch off, or removing the subscription, ends the network
 chat sessions on this board at once: each caller sees why (`Network chat
@@ -576,7 +583,7 @@ the Central menu does not offer **Chat**; the main menu's `CHAT` command
 still lists the network if the hub answers its room list, since older
 hubs served chat without naming it. Update a hub before the boards that
 chat on it to get the Central entry. A board from before this version
-offers chat on every subscription, with no agreement asked of its
+offers chat on every subscription too, with no agreement asked of its
 callers; the hub treats both the same. A hub from before this version
 lists a room's members by handle alone, so against it a board names
 everyone in the room by handle, with no board.
