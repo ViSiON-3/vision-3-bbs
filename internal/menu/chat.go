@@ -1406,9 +1406,14 @@ func chatMsgTarget(arg string, users []chat.ChatUser, home string) (handle, node
 	for i, m := range found {
 		names[i] = chatUserName(m.user.Handle, m.user.Node, m.user.BBS, home)
 	}
-	// Two boards with one name make the names the same; the node IDs,
-	// which the hub accepts after the @, tell them apart.
-	if len(slices.Compact(slices.Sorted(slices.Values(names)))) < len(names) {
+	// Two boards with one name make the names the same, as recipients are
+	// matched: ignoring case. The node IDs, which the hub accepts after the
+	// @, tell them apart.
+	folded := make([]string, len(names))
+	for i, n := range names {
+		folded[i] = strings.ToLower(n)
+	}
+	if len(slices.Compact(slices.Sorted(slices.Values(folded)))) < len(names) {
 		for i, m := range found {
 			names[i] = m.user.Handle + "@" + m.user.Node
 		}

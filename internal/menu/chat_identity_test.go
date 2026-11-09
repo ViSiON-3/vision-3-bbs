@@ -85,6 +85,15 @@ func TestChatMsgTarget(t *testing.T) {
 	if _, _, _, err := chatMsgTarget("Eve hi", twins, "home"); err == nil || !strings.Contains(err.Error(), "Eve@b1, Eve@b2") {
 		t.Errorf("same-named boards: %v", err)
 	}
+	// Names that differ only in case match the same recipients, so they
+	// are told apart by node too.
+	cased := []chat.ChatUser{{Handle: "Bob", Node: "b1", BBS: "Beta"}, {Handle: "bob", Node: "b2", BBS: "Beta"}}
+	if _, _, _, err := chatMsgTarget("bob hi", cased, "home"); err == nil || !strings.Contains(err.Error(), "Bob@b1, bob@b2") {
+		t.Errorf("same-named boards, handles differing in case: %v", err)
+	}
+	if handle, node, _, err := chatMsgTarget("bob@b2 hi", cased, "home"); err != nil || handle != "bob" || node != "b2" {
+		t.Errorf("suggested choice = (%q, %q, %v), want bob on b2", handle, node, err)
+	}
 }
 
 // On network chat the user list, history, live lines, private messages and
