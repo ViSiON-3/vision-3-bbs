@@ -158,3 +158,37 @@ func TestChatPrivateRefusedOnClosedSession(t *testing.T) {
 		t.Error("private on a closed session succeeded")
 	}
 }
+
+// A session on a leaf that a reload has stopped tells the hub nothing when
+// it leaves. The replacement leaf has the same node, and the hub keeps one
+// membership per handle and node, so the old session's leave would take
+// the replacement's caller with that handle out of the room, and their next
+// post would be refused.
+func TestRetiredSessionLeaveKeepsReplacementMembership(t *testing.T) {
+	ts, _, _ := newTestHub(t, true)
+	old := subscribedLeaf(t, ts, "alicebbs")
+	alice := old.NewChatSession("alice")
+	if _, _, err := alice.Join("lobby"); err != nil {
+		t.Fatal(err)
+	}
+	old.CloseChatSessions("reload")
+
+	// The replacement leaf runs on the same key, so it is the same node.
+	next := offerChat(New(old.cfg))
+	if err := next.subscribe(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(next.Close)
+	again := next.NewChatSession("alice")
+	defer again.Close()
+	if _, _, err := again.Join("lobby"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := alice.Leave("lobby"); err != nil {
+		t.Errorf("leave on a retired leaf = %v, want nil", err)
+	}
+	if err := again.Post("lobby", "still here"); err != nil {
+		t.Errorf("post on the replacement leaf after the old session left: %v", err)
+	}
+}
