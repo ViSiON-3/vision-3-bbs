@@ -239,11 +239,9 @@ func (s *ChatSession) deliver(ev protocol.Event) {
 			s.mu.Unlock()
 		}
 		// A caller on the sysop's block list is counted, since they are in
-		// the room, but not announced.
-		if s.leaf.chatSessions.isBlocked(p.Handle, p.Node) {
-			return
-		}
-		ce = chat.ChatEvent{Type: chat.TypeJoin, Join: &chat.ChatJoin{Room: p.Room, Handle: p.Handle, BBS: p.BBS, Node: p.Node}}
+		// the room, but not announced: the event is silent.
+		ce = chat.ChatEvent{Type: chat.TypeJoin, Join: &chat.ChatJoin{Room: p.Room, Handle: p.Handle, BBS: p.BBS, Node: p.Node},
+			Silent: s.leaf.chatSessions.isBlocked(p.Handle, p.Node)}
 	case protocol.EventChatLeave:
 		var p protocol.ChatLeavePayload
 		if err := json.Unmarshal(ev.Data, &p); err != nil {
@@ -252,10 +250,8 @@ func (s *ChatSession) deliver(ev protocol.Event) {
 		s.mu.Lock()
 		s.currentUsers = removeMember(s.currentUsers, p.Handle, p.Node)
 		s.mu.Unlock()
-		if s.leaf.chatSessions.isBlocked(p.Handle, p.Node) {
-			return
-		}
-		ce = chat.ChatEvent{Type: chat.TypeLeave, Leave: &chat.ChatLeave{Room: p.Room, Handle: p.Handle, BBS: p.BBS, Node: p.Node}}
+		ce = chat.ChatEvent{Type: chat.TypeLeave, Leave: &chat.ChatLeave{Room: p.Room, Handle: p.Handle, BBS: p.BBS, Node: p.Node},
+			Silent: s.leaf.chatSessions.isBlocked(p.Handle, p.Node)}
 	case protocol.EventChatTopic:
 		var p protocol.ChatTopicPayload
 		if err := json.Unmarshal(ev.Data, &p); err != nil {

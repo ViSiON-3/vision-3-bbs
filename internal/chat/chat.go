@@ -70,6 +70,10 @@ type ChatEvent struct {
 	Topic     *ChatTopic   // TypeTopic; refreshed room topic on TypeSystem reconnect
 	Text      string       // TypeSystem human-readable text
 	Reconnect bool         // TypeSystem: true when reconnected
+	// Silent, on TypeJoin and TypeLeave, says the room's members changed
+	// but nothing is to be announced: the caller is on the board's block
+	// list. The screen refreshes its user list and shows no notice.
+	Silent bool
 }
 
 // ChatService is the interface for all chat backends (local or V3Net).

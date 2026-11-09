@@ -262,19 +262,18 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 	// Update timestamp for optimistic locking.
 	target.UpdatedAt = time.Now()
 
-	if updateErr := userManager.UpdateUserByID(target); updateErr != nil {
-		return fmt.Sprintf("|01Save failed: %v|07", updateErr), false
-	}
-	// The network chat bar lives with the consent fields, which every
-	// other save keeps as stored (see user.UserMgr.SetCentralConsent), so
-	// the save above left it alone: it is written through that path.
+	// The network chat bar lives with the consent fields, which an ordinary
+	// save keeps as stored, so it goes in the same save by its own path:
+	// staged with a deletion, both land or neither does.
+	var updateErr error
 	if val, ok := pendingChanges["chatBarred"]; ok {
-		barred := val.(bool)
-		saved, err := userManager.SetCentralConsent(target.ID, func(x *user.User) { x.CentralChatBarred = barred })
-		if err != nil {
-			return fmt.Sprintf("|01Save failed: %v|07", err), false
-		}
-		target.CentralChatBarred = saved.CentralChatBarred
+		target.CentralChatBarred = val.(bool)
+		updateErr = userManager.UpdateUserByIDAndChatBar(target, val.(bool))
+	} else {
+		updateErr = userManager.UpdateUserByID(target)
+	}
+	if updateErr != nil {
+		return fmt.Sprintf("|01Save failed: %v|07", updateErr), false
 	}
 	originalTimestamps[target.ID] = target.UpdatedAt
 

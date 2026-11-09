@@ -14,6 +14,22 @@ import (
 // rename a user's handle (e.g., admin editor); for all other updates prefer
 // UpdateUser.
 func (um *UserMgr) UpdateUserByID(u *User) error {
+	return um.updateUserByID(u, nil)
+}
+
+// UpdateUserByIDAndChatBar is UpdateUserByID that also sets the account's
+// network chat bar (CentralChatBarred), in the same save. The bar is one of
+// the consent fields UpdateUserByID keeps as stored (see keepCentralConsent
+// in manager_central.go), and the sysop's user editor is the one place that
+// changes it, along with whatever else it saves: one save, so a deletion
+// and a bar staged together land together or not at all.
+func (um *UserMgr) UpdateUserByIDAndChatBar(u *User, barred bool) error {
+	return um.updateUserByID(u, &barred)
+}
+
+// updateUserByID is UpdateUserByID, setting the chat bar too when chatBar
+// is not nil.
+func (um *UserMgr) updateUserByID(u *User, chatBar *bool) error {
 	if u == nil {
 		return fmt.Errorf("cannot update nil user")
 	}
@@ -67,6 +83,9 @@ func (um *UserMgr) UpdateUserByID(u *User) error {
 	if current != nil {
 		userCopy.APIDevices = current.APIDevices
 		keepCentralConsent(&userCopy, current) // see manager_central.go
+	}
+	if chatBar != nil {
+		userCopy.CentralChatBarred = *chatBar
 	}
 	um.users[newKey] = &userCopy
 	if err := um.saveUsersLocked(); err != nil {

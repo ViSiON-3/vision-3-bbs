@@ -45,8 +45,9 @@ func TestChatBlockListDropsCaller(t *testing.T) {
 		noEvent(t, alice, name+" from a blocked caller")
 	}
 	// Bob is in the room (the join listed him), so he is a member, just
-	// never announced: his leave takes him off the list in silence, and a
-	// later join puts him back the same way.
+	// never announced: his leave takes him off the list with a silent
+	// event, so the screen can refresh its list, and a later join puts him
+	// back the same way.
 	inRoom := func() bool {
 		for _, u := range alice.Users() {
 			if u.Handle == "bob" && u.Node == bobNode {
@@ -59,12 +60,16 @@ func TestChatBlockListDropsCaller(t *testing.T) {
 		t.Fatalf("blocked member missing from the list from the join: %+v", alice.Users())
 	}
 	reg.dispatch(chatEvent(t, protocol.EventChatLeave, protocol.ChatLeavePayload{Room: "lobby", Handle: "bob", BBS: "bobbbs", Node: bobNode}))
-	noEvent(t, alice, "leave of a blocked caller")
+	if ev := <-alice.events; ev.Type != chat.TypeLeave || !ev.Silent {
+		t.Errorf("leave of a blocked caller = %+v, want a silent leave", ev)
+	}
 	if inRoom() {
 		t.Error("blocked caller still listed after leaving")
 	}
 	reg.dispatch(chatEvent(t, protocol.EventChatJoin, protocol.ChatJoinPayload{Room: "lobby", Handle: "bob", BBS: "bobbbs", Node: bobNode}))
-	noEvent(t, alice, "join of a blocked caller")
+	if ev := <-alice.events; ev.Type != chat.TypeJoin || !ev.Silent {
+		t.Errorf("join of a blocked caller = %+v, want a silent join", ev)
+	}
 	if !inRoom() {
 		t.Error("blocked caller not listed after joining")
 	}

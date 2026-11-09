@@ -646,9 +646,10 @@ by anyone who knows the hub's address, which is why the notice tells
 callers to treat a room as public; a later phase decides and documents
 that access policy. Private messages
 are stored for the same period and are never replayed; see
-[Private Message Delivery](v3net/chat.md#private-message-delivery). Mute,
-block and report controls, and network moderation beyond the hub's rate
-limits and a sysop's own switches, are later phases of #672.
+[Private Message Delivery](v3net/chat.md#private-message-delivery). Mute
+and block controls, a sysop's bar and block list are under
+[Moderation](#moderation); reports and network-wide sanctions are later
+parts of #672.
 
 ---
 

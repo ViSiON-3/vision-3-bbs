@@ -827,7 +827,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					newUsers := svc.Users()
 					rawMu.Lock()
 					currentUsers = newUsers
-					if !hiddenLocked(ev.Join.Handle, ev.Join.Node) {
+					if !ev.Silent && !hiddenLocked(ev.Join.Handle, ev.Join.Node) {
 						who := chatUserName(ev.Join.Handle, ev.Join.Node, ev.Join.BBS, homeNode)
 						writeChatLineLocked(fmt.Sprintf(e.Strings().ChatJoinMsg, chatText(who), chatText(ev.Join.Room)))
 					}
@@ -840,7 +840,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					newUsers := svc.Users()
 					rawMu.Lock()
 					currentUsers = newUsers
-					if !hiddenLocked(ev.Leave.Handle, ev.Leave.Node) {
+					if !ev.Silent && !hiddenLocked(ev.Leave.Handle, ev.Leave.Node) {
 						who := chatUserName(ev.Leave.Handle, ev.Leave.Node, ev.Leave.BBS, homeNode)
 						writeChatLineLocked(fmt.Sprintf(e.Strings().ChatLeaveMsg, chatText(who), chatText(ev.Leave.Room)))
 					}

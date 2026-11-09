@@ -223,4 +223,14 @@ func TestUserEditorSavesChatBar(t *testing.T) {
 			t.Errorf("bar=%v: the caller's agreement was changed: %+v", barred, stored)
 		}
 	}
+
+	// A bar staged with a deletion is saved with it, as one save.
+	target, _ := env.um.GetUserByID(env.caller.ID)
+	orig := map[int]time.Time{target.ID: target.UpdatedAt}
+	if msg, saved := env.e.applyPendingUserChanges(env.um, env.sysop, target, map[string]interface{}{"deleted": true, "chatBarred": true}, orig); !saved {
+		t.Fatalf("deletion and bar together: not saved: %q", msg)
+	}
+	if stored, _ := env.um.GetUserByID(env.caller.ID); !stored.DeletedUser || !stored.CentralChatBarred {
+		t.Errorf("deletion and bar together: stored %+v", stored)
+	}
 }
