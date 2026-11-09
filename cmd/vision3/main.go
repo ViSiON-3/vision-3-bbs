@@ -2412,6 +2412,7 @@ func (a *centralAdapter) CentralNetworks() []menu.CentralNetworkInfo {
 			DirectoryCount:   n.DirectoryCount,
 			Presence:         centralActivityInfo(n.Presence),
 			LastCallers:      centralActivityInfo(n.LastCallers),
+			Chat:             menu.CentralChatInfo{Enabled: n.Chat.Enabled, Supported: n.Chat.Supported},
 		})
 	}
 	return out
@@ -2453,9 +2454,14 @@ type chatLeafAdapter struct {
 	svc *v3net.Service
 }
 
+// ActiveChatLeaves returns the subscriptions whose sysop switch offers
+// network chat; the rest are not shown to callers at all.
 func (a *chatLeafAdapter) ActiveChatLeaves() []menu.ChatLeafInfo {
 	var infos []menu.ChatLeafInfo
 	for _, l := range a.svc.Leaves() {
+		if !l.ChatEnabled() {
+			continue
+		}
 		lCopy := l // capture for closure
 		infos = append(infos, menu.ChatLeafInfo{
 			NetworkName: lCopy.Network(),

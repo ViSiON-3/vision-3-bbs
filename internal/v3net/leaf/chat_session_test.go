@@ -321,6 +321,7 @@ func TestChatSession_JoinLeaveWhileStreaming(t *testing.T) {
 func TestChatSession_HubErrors(t *testing.T) {
 	t.Run("join rejected by hub", func(t *testing.T) {
 		l, _ := setupLeaf(t, cannedHub(t, 500, `{"error":"boom"}`).URL, &mockJAMWriter{})
+		offerChat(l)
 		s := l.NewChatSession("alice")
 		if _, _, err := s.Join("lobby"); err == nil || !strings.Contains(err.Error(), "500") {
 			t.Errorf("Join = %v, want a status 500 error", err)
@@ -338,6 +339,7 @@ func TestChatSession_HubErrors(t *testing.T) {
 
 	t.Run("unparseable replies", func(t *testing.T) {
 		l, _ := setupLeaf(t, cannedHub(t, 200, `<html>not json</html>`).URL, &mockJAMWriter{})
+		offerChat(l)
 		s := l.NewChatSession("alice")
 		if _, _, err := s.Join("lobby"); err == nil {
 			t.Error("Join should fail on a non-JSON reply")
@@ -355,6 +357,7 @@ func TestChatSession_HubErrors(t *testing.T) {
 
 	t.Run("hub unreachable", func(t *testing.T) {
 		l, _ := setupLeaf(t, deadHubURL(t), &mockJAMWriter{})
+		offerChat(l)
 		s := l.NewChatSession("alice")
 		s.currentRoom = "lobby"
 		if _, _, err := s.Join("other"); err == nil {
@@ -403,6 +406,7 @@ func noEvent(t *testing.T, s *ChatSession, why string) {
 
 func TestDispatch_JoinLeaveTopicUpdateSession(t *testing.T) {
 	l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+	offerChat(l)
 	alice := newRoomSession(l, "alice", "lobby", "alice")
 	other := newRoomSession(l, "dave", "offtopic", "dave")
 	reg := l.chatSessions
@@ -463,6 +467,7 @@ func TestDispatch_JoinAndLeaveCountMemberships(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+			offerChat(l)
 			sess := newRoomSession(l, "sysop", "lobby", tc.users...)
 			node := tc.node
 			if node == self {
@@ -490,6 +495,7 @@ func TestDispatch_JoinAndLeaveCountMemberships(t *testing.T) {
 
 func TestDispatch_DropsMalformedAndUnknownEvents(t *testing.T) {
 	l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+	offerChat(l)
 	alice := newRoomSession(l, "alice", "lobby", "alice")
 	reg := l.chatSessions
 
@@ -518,6 +524,7 @@ func TestDispatch_DropsMalformedAndUnknownEvents(t *testing.T) {
 
 func TestSession_FullBufferAndClosedSessionDropEvents(t *testing.T) {
 	l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+	offerChat(l)
 	alice := newRoomSession(l, "alice", "lobby")
 	reg := l.chatSessions
 	msg := chatEvent(t, protocol.EventChatMessage, protocol.ChatMsgPayload{Room: "lobby", FromHandle: "bob", Text: "x"})
@@ -543,6 +550,7 @@ func TestSession_FullBufferAndClosedSessionDropEvents(t *testing.T) {
 
 func TestNotifyReconnect_TellsEverySession(t *testing.T) {
 	l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+	offerChat(l)
 	alice := newRoomSession(l, "alice", "lobby")
 	bob := newRoomSession(l, "bob", "")
 
@@ -584,6 +592,7 @@ func TestChatSession_JoinUndoneWhenReplyUnreadable(t *testing.T) {
 	defer hub.Close()
 
 	l, _ := setupLeaf(t, hub.URL, &mockJAMWriter{})
+	offerChat(l)
 	sess := newRoomSession(l, "alice", "lobby", "alice")
 
 	if _, _, err := sess.Join("den"); err == nil {
@@ -617,6 +626,7 @@ func TestDispatch_DropsEchoOfOwnMessage(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+			offerChat(l)
 			sess := newRoomSession(l, "sysop", "lobby", "sysop")
 			node := tc.node
 			if node == self {
@@ -693,6 +703,7 @@ func TestChatSession_Ping(t *testing.T) {
 	}))
 	t.Cleanup(slow.Close)
 	l, _ := setupLeaf(t, slow.URL, &mockJAMWriter{})
+	offerChat(l)
 	if d, err := l.NewChatSession("bob").Ping(context.Background()); err != nil || d < 60*time.Millisecond {
 		t.Errorf("Ping against a 60ms hub = (%v, %v), want at least 60ms", d, err)
 	}
@@ -717,6 +728,7 @@ func TestChatSession_Ping(t *testing.T) {
 // session of the same user on this BBS still shows the line.
 func TestDispatch_OriginIdentifiesOwnPost(t *testing.T) {
 	l, _ := setupLeaf(t, "http://hub.invalid", &mockJAMWriter{})
+	offerChat(l)
 	one := newRoomSession(l, "sysop", "lobby", "sysop")
 	two := newRoomSession(l, "sysop", "lobby", "sysop")
 	l.chatSessions.dispatch(chatEvent(t, protocol.EventChatMessage, protocol.ChatMsgPayload{

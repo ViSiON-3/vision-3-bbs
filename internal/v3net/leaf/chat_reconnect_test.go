@@ -175,6 +175,7 @@ func TestChatRecoveryFailureStaysUnreadyAndRetries(t *testing.T) {
 	}))
 	defer ts.Close()
 	l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
+	offerChat(l)
 	alice := newRoomSession(l, "alice", "lobby")
 	defer alice.Close()
 	if err := l.recoverChat(context.Background()); err == nil {
@@ -226,6 +227,7 @@ func TestChatRecoveryAbandonedWhileRequestInFlight(t *testing.T) {
 			// Always unblock handlers even when a test assertion fails.
 			defer close(release)
 			l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
+			offerChat(l)
 			alice := newRoomSession(l, "alice", "lobby")
 			defer alice.Close()
 			ctx, cancel := context.WithCancel(context.Background())
@@ -409,6 +411,7 @@ func TestChatRecoveryClosesEarlierGroupWhileLaterGroupWaits(t *testing.T) {
 	defer ts.Close()
 	defer close(release)
 	l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
+	offerChat(l)
 	sessions := map[string]*ChatSession{"alice": newRoomSession(l, "alice", "lobby"), "bob": newRoomSession(l, "bob", "lobby")}
 	for _, s := range sessions {
 		defer s.Close()

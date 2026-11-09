@@ -105,9 +105,10 @@ func waitFor(t *testing.T, what string, ok func() bool) {
 	}
 }
 
-// The hub names both activity features for leaves to find in /info.
+// The hub names both activity features, and chat, for leaves to find in
+// /info.
 func TestNetworkInfoAdvertisesActivityFeatures(t *testing.T) {
-	for _, f := range []string{protocol.FeatureCentralPresence, protocol.FeatureCentralLastCallers} {
+	for _, f := range []string{protocol.FeatureCentralPresence, protocol.FeatureCentralLastCallers, protocol.FeatureCentralChat} {
 		if !slices.Contains(hubFeatures, f) {
 			t.Errorf("hub does not advertise %s", f)
 		}

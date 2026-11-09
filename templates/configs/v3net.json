@@ -23,7 +23,8 @@
         "publishListing": false,
         "presence": true,
         "lastCallers": true,
-        "callersDefault": true
+        "callersDefault": true,
+        "chat": false
       }
     }
   ]

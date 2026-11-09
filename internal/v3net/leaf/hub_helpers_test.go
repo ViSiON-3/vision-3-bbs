@@ -81,10 +81,18 @@ func subscribedLeaf(t *testing.T, ts *httptest.Server, bbsName string, areaTags 
 	l.cfg.BBSName = bbsName
 	l.cfg.BBSHost = bbsName + ".example.net"
 	l.cfg.AreaTags = areaTags
+	offerChat(l)
 	if err := l.subscribe(context.Background()); err != nil {
 		t.Fatalf("subscribe %s: %v", bbsName, err)
 	}
 	t.Cleanup(l.Close)
+	return l
+}
+
+// offerChat turns the sysop's network chat switch on for l, as the chat
+// tests need; a test of Central itself turns Central off again.
+func offerChat(l *Leaf) *Leaf {
+	l.cfg.CentralEnabled, l.cfg.CentralChat = true, true
 	return l
 }
 

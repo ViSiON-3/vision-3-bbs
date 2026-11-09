@@ -122,6 +122,7 @@ or be listed without offering Central to its callers.
 | `presence` | bool | `false` (`true` on a new subscription) | **Who's Online** in the editor. Offers network Who's Online on this network; needs `enabled`. Callers can see who is on other boards, and each caller can choose to be shown while on this one. `false` withdraws this board's presence at the next reload or start. |
 | `lastCallers` | bool | `false` (`true` on a new subscription) | **Last Callers** in the editor. Offers network Last Callers on this network; needs `enabled`. Callers can see recent calls to other boards, and each caller can choose to have their calls here shown, each for 24 hours. `false` withdraws this board's calls at the next reload or start. |
 | `callersDefault` | bool | `false` (`true` on a new subscription) | **Callers Default** in the editor. Counts a caller who has not set a switch of their own as opted in to `presence` and `lastCallers` on this network; their own choice, on or off, always wins. A caller counted in has their calls from the last 24 hours shown. |
+| `chat` | bool | `false` | **Lobby Chat** in the editor. Offers network chat on this network; needs `enabled`. Callers join only after agreeing to the notice; `callersDefault` does not apply. `false` ends the network chat sessions on this board at the next reload. Off on every subscription until set, including ones upgraded from before the switch. |
 
 ---
 

@@ -85,6 +85,7 @@ func TestCentralPublishAndFetchDirectory(t *testing.T) {
 func TestCentralFetchRefusedWhenDisabled(t *testing.T) {
 	ts, _, _ := newTestHub(t, true)
 	l := subscribedLeaf(t, ts, "gamma")
+	l.cfg.CentralEnabled = false
 	if err := l.fetchHubFeatures(context.Background()); err != nil {
 		t.Fatal(err)
 	}

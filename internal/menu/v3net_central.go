@@ -52,7 +52,25 @@ type CentralNetworkInfo struct {
 	// on this network.
 	Presence    CentralActivityInfo
 	LastCallers CentralActivityInfo
+	// Chat is network chat on this network.
+	Chat CentralChatInfo
 }
+
+// CentralChatInfo is network chat's state on a network.
+type CentralChatInfo struct {
+	// Enabled is the sysop's switch for chat (which needs Central on);
+	// Supported whether the hub serves it.
+	Enabled   bool
+	Supported bool
+}
+
+// ChatOffered reports whether the sysop offers network chat on this
+// network.
+func (n CentralNetworkInfo) ChatOffered() bool { return n.Enabled && n.Chat.Enabled }
+
+// ChatAvailable reports whether callers can use network chat on this
+// network now: offered, and served by the hub.
+func (n CentralNetworkInfo) ChatAvailable() bool { return n.ChatOffered() && n.Chat.Supported }
 
 // CentralActivityInfo is one activity feature's state on a network.
 type CentralActivityInfo struct {
@@ -170,8 +188,9 @@ func centralHeader(title string, width int) string {
 	return ansi.ClearScreen() + string(ansi.ReplacePipeCodes([]byte("|12V3Net Central: "+title+"|07\r\n"+v3netRule(width))))
 }
 
-// runV3NetCentral is the V3Net Central menu: Boards, My Preferences and
-// Connection Status. A feature the sysop has not enabled, or the hub does
+// runV3NetCentral is the V3Net Central menu: Boards, Who's Online, Last
+// Callers, Chat, My Preferences and Connection Status. A feature the sysop
+// has not enabled, or the hub does
 // not serve, is left off the menu rather than shown refused. With V3Net
 // off, or Central enabled on no network, it says so and returns.
 func runV3NetCentral(c *cmdCtx, args string) (*user.User, string, error) {
@@ -217,6 +236,10 @@ func runV3NetCentral(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		if lastOK {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15L|03]ast Callers      |08recent calls to other boards, shared by choice|07\r\n")))
+		}
+		chatOK := centralChatAvailable(e.V3NetCentral)
+		if chatOK {
+			buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15C|03]hat              |08talk with callers on other boards, if you choose|07\r\n")))
 		}
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15P|03]references       |08what, if anything, is shared about you|07\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15S|03]tatus            |08connection to each network's hub|07\r\n")))
@@ -267,6 +290,14 @@ func runV3NetCentral(c *cmdCtx, args string) (*user.User, string, error) {
 				continue
 			}
 			if _, next, err := runCentralLastCallers(c, defaultLastCallerRows, false); err != nil {
+				return nil, next, err
+			}
+		case "C":
+			if !chatOK {
+				status = "|04Chat is not available on any network.|07"
+				continue
+			}
+			if _, next, err := runChat(c, "NET"); err != nil || next == "LOGOFF" {
 				return nil, next, err
 			}
 		case "P":
@@ -359,6 +390,10 @@ func runV3NetCentralStatus(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 			}
 		}
+		buf.Write(ansi.ReplacePipeCodes([]byte("\r\n|03  NETWORK       CHAT|07\r\n")))
+		for _, n := range nets {
+			buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("  |11%s|07 %s\r\n", v3netCell(n.Network, 13), centralChatState(n)))))
+		}
 	}
 	for _, msg := range errs {
 		buf.Write(ansi.ReplacePipeCodes([]byte("|04  " + v3netClip(msg, termWidth-4) + "|07\r\n")))
@@ -391,6 +426,21 @@ func centralActivityState(n CentralNetworkInfo, a CentralActivityInfo, noun stri
 		cell += strings.Repeat(" ", 25-plain)
 	}
 	return cell
+}
+
+// centralChatState is one Status cell for network chat: off, not served by
+// the hub, or on.
+func centralChatState(n CentralNetworkInfo) string {
+	switch {
+	case !n.ChatOffered():
+		return "|08off|07"
+	case !n.SupportKnown:
+		return "|14checking...|07"
+	case !n.Chat.Supported:
+		return "|08hub does not serve it|07"
+	default:
+		return "|10on|07"
+	}
 }
 
 // runV3NetCentralBoards is the board directory: a lightbar over every

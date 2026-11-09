@@ -158,6 +158,14 @@ type User struct {
 	// CentralPresenceFor and CentralLastCallsFrom.
 	CentralPresenceChosen  bool `json:"centralPresenceChosen,omitempty"`
 	CentralLastCallsChosen bool `json:"centralLastCallsChosen,omitempty"`
+	// CentralChat is the caller's agreement to take part in network chat,
+	// given on the notice shown before their first network join or under
+	// My Preferences: their handle and this board's name go to every
+	// board in a room with each line they type. No Callers Default
+	// applies; CentralChatChosen records that they answered the notice,
+	// either way.
+	CentralChat       bool `json:"centralChat,omitempty"`
+	CentralChatChosen bool `json:"centralChatChosen,omitempty"`
 
 	// Soft Delete (user marked as deleted but data preserved)
 	DeletedUser bool       `json:"deletedUser,omitempty"` // True if user is soft-deleted

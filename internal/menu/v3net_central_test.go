@@ -265,8 +265,8 @@ func TestCentralPrefsSharesNothing(t *testing.T) {
 	if !strings.Contains(out, "Nothing about you is shared") {
 		t.Errorf("expected the nothing-shared statement, got %q", out)
 	}
-	if strings.Count(out, "not offered here") != 2 {
-		t.Errorf("expected both switches shown as not offered, got %q", out)
+	if strings.Count(out, "not offered here") != 3 {
+		t.Errorf("expected every switch shown as not offered, got %q", out)
 	}
 	if fake.fetches != 0 {
 		t.Error("preferences must not fetch anything")

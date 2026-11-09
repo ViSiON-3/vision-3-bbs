@@ -13,15 +13,16 @@ import (
 const v3netSharingKonfigKey = 'R'
 
 // v3netSharingOffered reports whether Konfig shows V3Net Sharing: only
-// when some network offers Who's Online or Last Callers, so a board
-// without them never sees it.
+// when some network offers Who's Online, Last Callers or network chat, so
+// a board without them never sees it.
 func v3netSharingOffered(e *MenuExecutor) bool {
 	return len(centralOfferedNetworks(e.V3NetCentral, protocol.CentralKindPresence)) > 0 ||
-		len(centralOfferedNetworks(e.V3NetCentral, protocol.CentralKindLastCallers)) > 0
+		len(centralOfferedNetworks(e.V3NetCentral, protocol.CentralKindLastCallers)) > 0 ||
+		len(centralChatOfferedNetworks(e.V3NetCentral)) > 0
 }
 
 // v3netSharingValue sums up what the caller shares: Off, or which of
-// Online and Calls is on. It reads the stored record, which owns consent,
+// Online, Calls and Chat is on. It reads the stored record, which owns consent,
 // so a change made on another node shows here.
 func v3netSharingValue(st *konfigState) konfigValue {
 	u := st.user()
@@ -36,6 +37,9 @@ func v3netSharingValue(st *konfigState) konfigValue {
 	}
 	if len(centralSharedNetworks(st.c.e.V3NetCentral, protocol.CentralKindLastCallers, u)) > 0 {
 		on = append(on, "Calls")
+	}
+	if u.CentralChat && len(centralChatOfferedNetworks(st.c.e.V3NetCentral)) > 0 {
+		on = append(on, "Chat")
 	}
 	if len(on) == 0 {
 		return st.onOffValue(false)

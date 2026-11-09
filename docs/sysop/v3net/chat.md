@@ -21,8 +21,12 @@ real time.
 
 When a user enters chat from the main menu, they are presented with:
 
-1. **Network picker** — choose a configured V3Net network or local-only chat
-2. **Room picker** — choose a room on that network (or type a name to create one)
+1. **Network chat notice**, the first time only — what other boards see,
+   what the hub keeps and who moderates; they take part only after
+   answering Y. See [Network Chat](v3net/central.md#network-chat).
+2. **Network picker** — choose a V3Net network where the sysop offers
+   chat, or local-only chat
+3. **Room picker** — choose a room on that network (or type a name to create one)
 
 After selecting, the full-screen chat interface opens.
 
@@ -45,8 +49,18 @@ file (or add the command with the menu editor):
 ```
 
 No arguments are needed. The network and room pickers run automatically at
-launch. Chat needs no V3Net setup of its own: every subscription in
-`v3net.json` appears in the network picker, and **Local** is always offered.
+launch. A subscription appears in the network picker only when its
+**Lobby Chat** switch is on (see [Offering It](v3net/central.md#offering-it));
+**Local** is always offered. With no network offering chat, the picker is
+skipped and chat is local.
+
+Two arguments change what is offered:
+
+| Command | Effect |
+|---------|--------|
+| `RUN:CHAT` | The network picker over every offered network, and Local. |
+| `RUN:CHAT NET` | Network chat only: no Local entry anywhere, including `/network`, and a caller who declines the notice, or whose room cannot be joined, is sent back to the menu rather than into local chat. This is what **Chat** on the V3Net Central menu runs. |
+| `RUN:CHAT LOCAL` | Local chat only; no notice, no network picker; `/network` says there is no network to switch to and stays local. |
 
 ---
 
@@ -92,7 +106,7 @@ accepts it, and the copy the hub sends back is dropped.
 | `/topic <text>` | Set the topic for the current room |
 | `/msg <handle>[@node] <text>` | Send a private message; select a BBS explicitly when the handle is ambiguous |
 | `/users` | Refresh the user list in the status bar |
-| `/network` | Switch to a different network mid-session |
+| `/network` | Switch to a different network mid-session (only networks the caller may chat on are listed; in `RUN:CHAT LOCAL` there is none, and it says so) |
 | `/?` or `/help` | List these commands on your own screen |
 | PgUp / PgDn | Page back through the last 500 lines of chat; Enter or PgDn at the end returns |
 | `/q` or `/quit` | Exit chat |
@@ -156,8 +170,9 @@ If no V3Net networks are configured, chat runs in local mode — messages are
 only visible to users on this BBS. Local chat uses the same full-screen
 interface and commands.
 
-When V3Net networks are configured, **Local** always appears as an option in
-the network picker so you can still run a local-only session.
+When V3Net networks offer chat, **Local** always appears as an option in
+the network picker so you can still run a local-only session, and
+`RUN:CHAT LOCAL` goes straight to it.
 
 ---
 

@@ -7,9 +7,10 @@ V3Net Central is the caller-facing side of a V3Net network: a shared place
 for callers to find the other boards on the network, and, in later phases,
 to meet people and join activities across them. This page covers **phase 1,
 the board directory** (a V3Net Central menu for callers, and a listing each
-participating board can publish so others can find it and call it), and
+participating board can publish so others can find it and call it),
 **phase 2, [Who's Online and Last Callers](#whos-online-and-last-callers)**
-across the network, for callers who choose to be seen.
+across the network, for callers who choose to be seen, and **phase 3,
+[network chat](#network-chat)**, for callers who choose to talk.
 
 Everything in Central is opt-in, per feature and per network. Joining a
 V3Net network for message areas enables none of it, and upgrading never
@@ -43,10 +44,13 @@ V3Net Central: Menu
 - **Who's Online** and **Last Callers** are the phase 2 feeds, each shown
   only where you offer it and the hub serves it; see
   [below](#whos-online-and-last-callers).
+- **Chat** opens network chat on the networks where you offer it, once
+  the caller has agreed to take part; see [Network Chat](#network-chat).
 - **Preferences** is where the caller decides what Central shares about
-  them: a switch for each phase 2 feature, off until they turn it on, and
-  only offered once you have enabled the feature. Later features (the
-  lobby, events, the wall) will get their own switches here.
+  them: a switch for each phase 2 feature and one for network chat, off
+  until they turn it on, and only offered once you have enabled the
+  feature. Later features (events, the wall) will get their own switches
+  here.
 - **Status** shows, per network, your Central switches, whether the hub
   serves the directory, whether the event stream is up, the state of your
   own listing and when the directory was last fetched.
@@ -467,6 +471,120 @@ at logon and logoff, with no switch. This version no longer does: the
 only handles it sends are those of callers who opted in, in the snapshots
 above. A board still running an older version keeps sending them until it
 is upgraded.
+
+---
+
+## Network Chat
+
+Phase 3 lets callers on different boards meet in one room. It is the
+`CHAT` command's network side, which this phase puts under the same
+consent as the rest of Central: a switch for you per network, and an
+agreement from each caller before they join. Local chat (this board
+only) needs neither.
+
+### What Callers See
+
+**Chat** on the Central menu, where you offer chat and the hub serves it,
+runs network chat without the Local option. The main menu's `C` (the
+`CHAT` command) still offers the networks and Local as before; see
+[V3Net Chat](v3net/chat.md).
+
+Before a caller's first network join, on either path, they see what
+leaves the board and are asked to agree:
+
+```
+V3Net Central: Network Chat
+───────────────────────────────────────────────────────────────────────────────
+  Network chat puts you in a room with callers on other boards.
+
+  What other boards see
+  Your handle Caller and this board's name My BBS,
+  in the room's user list while you are there and on every line you
+  type. A private message goes to the hub and to the recipient's board.
+  Never your real name, location, user number, or what you are doing.
+
+  What is kept
+  The hub keeps room messages as history for callers who join later,
+  and private messages for the same time; a ViSiON/3 hub keeps 7 days.
+  Room history can be read by anyone who knows the hub's address, without
+  joining: treat what you say in a room as public.
+
+  Who moderates
+  Your SysOp decides whether this board takes part; the hub's operator
+  decides which boards may. The hub limits how fast anyone can post.
+  You can turn network chat off at any time under V3Net Central ->
+  Preferences, and leave a room with /q.
+
+  Take part in network chat? (Y/N):
+```
+
+- **Y** records the agreement on the caller's account and goes on to the
+  network picker. It is asked once; the notice is not shown again.
+- **N**, or anything else, records nothing. From the main menu the caller
+  gets local chat this time and is asked again next time; from the Central
+  menu they are sent back.
+- A caller who has agreed can withdraw under **Preferences**, switch **4**
+  (**Take part in network chat**). Turning it on again shows the notice
+  again. The choice is stored on the local account (`centralChat`, with
+  `centralChatChosen` recording that the caller answered) and is not
+  linked to any account on another board.
+- No **Callers Default** applies to chat: nobody is in a room until they
+  agreed themselves.
+
+Withdrawing takes effect at once. A caller in a network room on another
+node ends chat with the next line they type (it is not posted), one
+waiting at a network or room picker is not joined, and the `/network`
+command no longer lists the networks.
+
+### Offering It
+
+One more switch in the subscription's Central block:
+
+| Editor field | JSON | Default | Effect |
+|---|---|---|---|
+| **Lobby Chat** | `chat` | N | Offers network chat on this network: callers here can join its rooms once they agree. Needs **Central**. N ends it for callers who are in a room. |
+
+The switch is off by default on every subscription, new or upgraded, so
+a board that chats over V3Net today turns it on once after upgrading.
+A subscription with only **Central** and **Lobby Chat** on runs with no
+message areas, as one with **Publish Listing** on does.
+
+Turning the switch off, or removing the subscription, ends the network
+chat sessions on this board at once: each caller sees why (`Network chat
+is no longer offered on this board.` or `This board left the network`) and
+their next line ends chat rather than being posted. Any other change to
+the subscription restarts its connection, which also ends open chat
+sessions, with `This board's network connection was reset; use /network
+to rejoin.` The CHAT command, and the leaf behind it, refuse to join or
+post on a network whose switch is off whatever the caller's agreement
+says.
+
+**Status** shows a `CHAT` column per network: `off`, `checking...` until
+the hub's feature list has been read, `hub does not serve it`, or `on`.
+
+### Chat and Older Versions
+
+A hub lists `central.chat` among its features once it runs this version.
+Against a hub that does not, **Status** shows `hub does not serve it` and
+the Central menu does not offer **Chat**; the main menu's `CHAT` command
+still lists the network if the hub answers its room list, since older
+hubs served chat without naming it. Update a hub before the boards that
+chat on it to get the Central entry. A board from before this version
+offers chat on every subscription, with no agreement asked of its
+callers; the hub treats both the same.
+
+### Chat Retention and Access
+
+Room history is kept by the hub for its retention period (7 days on a
+ViSiON/3 hub) and served to callers who join a room. The hub's room list
+and room history endpoints are readable without a node signature today,
+by anyone who knows the hub's address, which is why the notice tells
+callers to treat a room as public; a later phase decides and documents
+that access policy. Private messages
+are stored for the same period and are never replayed; see
+[Private Message Delivery](v3net/chat.md#private-message-delivery). Mute,
+block and report controls, and network moderation beyond the hub's rate
+limits and a sysop's own switches, are later phases of #672.
 
 ---
 

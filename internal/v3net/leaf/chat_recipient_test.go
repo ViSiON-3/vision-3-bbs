@@ -107,6 +107,7 @@ func TestChatPrivateErrorBodyFallback(t *testing.T) {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusConflict); fmt.Fprint(w, body) }))
 			defer ts.Close()
 			l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
+			offerChat(l)
 			s := l.NewChatSession("alice")
 			defer s.Close()
 			err := s.Private("bob", "", "hello")

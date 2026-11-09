@@ -39,6 +39,10 @@ const (
 	// FeatureCentralDirectory is the board directory: the hub serves the
 	// Central listing endpoints, or the board publishes a listing.
 	FeatureCentralDirectory = "central.directory"
+	// FeatureCentralChat is network chat: the hub serves the chat room
+	// endpoints and event stream. A leaf offers chat on a network only
+	// when its hub names it.
+	FeatureCentralChat = "central.chat"
 )
 
 // CentralListingVersion is the value of CentralListing.V3NetCentral this
