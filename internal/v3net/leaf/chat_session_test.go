@@ -40,7 +40,7 @@ func TestChatSession_JoinPostAndHistory(t *testing.T) {
 	if len(history) != 0 {
 		t.Errorf("new room should have no history, got %+v", history)
 	}
-	if users := alice.Users(); len(users) != 1 || users[0] != "alice" {
+	if users := alice.Users(); len(users) != 1 || users[0].Handle != "alice" {
 		t.Errorf("alice.Users() = %v, want [alice]", users)
 	}
 	joined := awaitEvent[protocol.ChatJoinPayload](t, events, protocol.EventChatJoin, nil)
@@ -152,7 +152,7 @@ func TestChatSession_TopicPrivateAndLeave(t *testing.T) {
 		t.Fatalf("Leave: %v", err)
 	}
 	left := awaitEvent[protocol.ChatLeavePayload](t, events, protocol.EventChatLeave, nil)
-	if left != (protocol.ChatLeavePayload{Room: "lobby", Handle: "alice", BBS: "alicebbs"}) {
+	if left != (protocol.ChatLeavePayload{Room: "lobby", Handle: "alice", BBS: "alicebbs", Node: alice.NodeID()}) {
 		t.Errorf("hub announced leave %+v", left)
 	}
 	if alice.currentRoom != "" {
@@ -232,10 +232,10 @@ func TestChatSession_ReceivesHubEventsOverSSE(t *testing.T) {
 		t.Fatalf("bob join: %v", err)
 	}
 	join := awaitChat(t, alice, chat.TypeJoin)
-	if join.Join == nil || *join.Join != (chat.ChatJoin{Room: "lobby", Handle: "bob", BBS: "bobbbs"}) {
+	if join.Join == nil || *join.Join != (chat.ChatJoin{Room: "lobby", Handle: "bob", BBS: "bobbbs", Node: bob.NodeID()}) {
 		t.Errorf("join event = %+v", join.Join)
 	}
-	if users := alice.Users(); len(users) != 2 || users[1] != "bob" {
+	if users := alice.Users(); len(users) != 2 || users[1].Handle != "bob" {
 		t.Errorf("alice.Users() after bob joined = %v, want [alice bob]", users)
 	}
 
@@ -255,7 +255,7 @@ func TestChatSession_ReceivesHubEventsOverSSE(t *testing.T) {
 	if leave.Leave == nil || leave.Leave.Handle != "bob" {
 		t.Errorf("leave event = %+v", leave.Leave)
 	}
-	if users := alice.Users(); len(users) != 1 || users[0] != "alice" {
+	if users := alice.Users(); len(users) != 1 || users[0].Handle != "alice" {
 		t.Errorf("alice.Users() after bob left = %v, want [alice]", users)
 	}
 
@@ -380,8 +380,19 @@ func TestChatSession_HubErrors(t *testing.T) {
 func newRoomSession(l *Leaf, handle, room string, users ...string) *ChatSession {
 	s := l.NewChatSession(handle)
 	s.currentRoom = room
-	s.currentUsers = users
+	for _, h := range users {
+		s.currentUsers = append(s.currentUsers, chat.ChatUser{Handle: h})
+	}
 	return s
+}
+
+// userHandles returns the handles of users, in order.
+func userHandles(users []chat.ChatUser) []string {
+	out := make([]string, len(users))
+	for i, u := range users {
+		out[i] = u.Handle
+	}
+	return out
 }
 
 func chatEvent(t *testing.T, eventType string, payload any) protocol.Event {
@@ -416,7 +427,7 @@ func TestDispatch_JoinLeaveTopicUpdateSession(t *testing.T) {
 	if ev.Type != chat.TypeJoin || *ev.Join != (chat.ChatJoin{Room: "lobby", Handle: "bob", BBS: "B"}) {
 		t.Errorf("join event = %+v", ev)
 	}
-	if users := alice.Users(); len(users) != 2 || users[1] != "bob" {
+	if users := alice.Users(); len(users) != 2 || users[1].Handle != "bob" {
 		t.Errorf("users after join = %v", users)
 	}
 
@@ -431,13 +442,13 @@ func TestDispatch_JoinLeaveTopicUpdateSession(t *testing.T) {
 	if ev.Type != chat.TypeLeave || *ev.Leave != (chat.ChatLeave{Room: "lobby", Handle: "bob", BBS: "B"}) {
 		t.Errorf("leave event = %+v", ev)
 	}
-	if users := alice.Users(); len(users) != 1 || users[0] != "alice" {
+	if users := alice.Users(); len(users) != 1 || users[0].Handle != "alice" {
 		t.Errorf("users after leave = %v", users)
 	}
 
 	// Users returns a copy: changing it must not alter the session's list.
-	alice.Users()[0] = "mallory"
-	if users := alice.Users(); users[0] != "alice" {
+	alice.Users()[0].Handle = "mallory"
+	if users := alice.Users(); users[0].Handle != "alice" {
 		t.Errorf("Users() exposed internal state: %v", users)
 	}
 
@@ -486,7 +497,7 @@ func TestDispatch_JoinAndLeaveCountMemberships(t *testing.T) {
 			if got := <-sess.events; got.Type != wantType {
 				t.Errorf("event = %+v, want type %v", got, wantType)
 			}
-			if got := sess.Users(); strings.Join(got, ",") != strings.Join(tc.wantUsers, ",") {
+			if got := userHandles(sess.Users()); strings.Join(got, ",") != strings.Join(tc.wantUsers, ",") {
 				t.Errorf("users = %v, want %v", got, tc.wantUsers)
 			}
 		})
@@ -517,7 +528,7 @@ func TestDispatch_DropsMalformedAndUnknownEvents(t *testing.T) {
 	alice.deliver(chatEvent(t, protocol.EventLogon, protocol.LogonPayload{Handle: "alice"}))
 	noEvent(t, alice, "logon event")
 
-	if users := alice.Users(); len(users) != 1 || users[0] != "alice" {
+	if users := alice.Users(); len(users) != 1 || users[0].Handle != "alice" {
 		t.Errorf("malformed events changed the user list: %v", users)
 	}
 }

@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	_ chat.ChatService = (*ChatSession)(nil)
-	_ chat.Pinger      = (*ChatSession)(nil)
+	_ chat.ChatService    = (*ChatSession)(nil)
+	_ chat.Pinger         = (*ChatSession)(nil)
+	_ chat.NodeIdentifier = (*ChatSession)(nil)
 )
 
 // chatSessionRegistry tracks active ChatSessions on this leaf. A user can
@@ -162,7 +163,7 @@ type ChatSession struct {
 	handle       string
 	origin       string // sent with posts to recognise their echo; see ownPost
 	currentRoom  string
-	currentUsers []string
+	currentUsers []chat.ChatUser
 	currentTopic string
 	recovering   bool
 	events       chan chat.ChatEvent
@@ -220,19 +221,19 @@ func (s *ChatSession) deliver(ev protocol.Event) {
 		ownEcho := p.Handle == s.handle && p.Node != "" && p.Node == s.leaf.chatSessions.nodeID
 		if !ownEcho {
 			s.mu.Lock()
-			s.currentUsers = append(s.currentUsers, p.Handle)
+			s.currentUsers = append(s.currentUsers, chat.ChatUser{Handle: p.Handle, Node: p.Node, BBS: p.BBS})
 			s.mu.Unlock()
 		}
-		ce = chat.ChatEvent{Type: chat.TypeJoin, Join: &chat.ChatJoin{Room: p.Room, Handle: p.Handle, BBS: p.BBS}}
+		ce = chat.ChatEvent{Type: chat.TypeJoin, Join: &chat.ChatJoin{Room: p.Room, Handle: p.Handle, BBS: p.BBS, Node: p.Node}}
 	case protocol.EventChatLeave:
 		var p protocol.ChatLeavePayload
 		if err := json.Unmarshal(ev.Data, &p); err != nil {
 			return // drop malformed event rather than corrupting the user list
 		}
 		s.mu.Lock()
-		s.currentUsers = removeOne(s.currentUsers, p.Handle)
+		s.currentUsers = removeMember(s.currentUsers, p.Handle, p.Node)
 		s.mu.Unlock()
-		ce = chat.ChatEvent{Type: chat.TypeLeave, Leave: &chat.ChatLeave{Room: p.Room, Handle: p.Handle, BBS: p.BBS}}
+		ce = chat.ChatEvent{Type: chat.TypeLeave, Leave: &chat.ChatLeave{Room: p.Room, Handle: p.Handle, BBS: p.BBS, Node: p.Node}}
 	case protocol.EventChatTopic:
 		var p protocol.ChatTopicPayload
 		if err := json.Unmarshal(ev.Data, &p); err != nil {
@@ -263,14 +264,37 @@ func protoMsgToDomain(p protocol.ChatMsgPayload) *chat.ChatMessage {
 	}
 }
 
-// removeOne returns ss without its first occurrence of s. The user list has
-// one entry per membership, so when one of several users sharing a handle
-// leaves, the others stay listed.
-func removeOne(ss []string, s string) []string {
-	if i := slices.Index(ss, s); i >= 0 {
-		return slices.Delete(ss, i, i+1)
+// removeMember returns users without the first member with handle on node,
+// or, when node is empty, as a leave from a hub that predates nodes in them
+// is, without the first member with handle. The user list has one entry per
+// membership, so when one of several users sharing a handle leaves, the
+// others stay listed.
+func removeMember(users []chat.ChatUser, handle, node string) []chat.ChatUser {
+	i := slices.IndexFunc(users, func(u chat.ChatUser) bool {
+		return u.Handle == handle && (node == "" || u.Node == node)
+	})
+	if i >= 0 {
+		return slices.Delete(users, i, i+1)
 	}
-	return ss
+	return users
+}
+
+// membersOf returns the members a join response lists. A hub that predates
+// Members sends only handles; those members have no node or BBS, and show
+// as this board's until the hub is updated.
+func membersOf(resp protocol.ChatJoinResponse) []chat.ChatUser {
+	if len(resp.Members) > 0 {
+		out := make([]chat.ChatUser, len(resp.Members))
+		for i, m := range resp.Members {
+			out[i] = chat.ChatUser{Handle: m.Handle, Node: m.Node, BBS: m.BBS}
+		}
+		return out
+	}
+	out := make([]chat.ChatUser, len(resp.Users))
+	for i, h := range resp.Users {
+		out[i] = chat.ChatUser{Handle: h}
+	}
+	return out
 }
 
 // Join implements chat.ChatService. It normalizes room, asks the hub to add
@@ -328,7 +352,7 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 		return nil, nil, fmt.Errorf("join chat: session closed")
 	}
 	s.currentRoom = room
-	s.currentUsers = slices.Clone(joinResp.Users)
+	s.currentUsers = membersOf(joinResp)
 	s.currentTopic = roomTopic(joinResp.Rooms, room)
 	s.recovering = false
 	s.mu.Unlock()
@@ -484,15 +508,17 @@ func (s *ChatSession) History(room string, limit int) ([]chat.ChatMessage, error
 	return msgs, nil
 }
 
-// Users implements chat.ChatService, returning a copy of the handles in the
+// Users implements chat.ChatService, returning a copy of the members of the
 // current room: the list from Join, kept up to date by join and leave events.
-func (s *ChatSession) Users() []string {
+func (s *ChatSession) Users() []chat.ChatUser {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]string, len(s.currentUsers))
-	copy(out, s.currentUsers)
-	return out
+	return slices.Clone(s.currentUsers)
 }
+
+// NodeID implements chat.NodeIdentifier: this board's node ID on the
+// session's network, which members and messages from this board carry.
+func (s *ChatSession) NodeID() string { return s.leaf.chatSessions.nodeID }
 
 // Events implements chat.ChatService. Delivery is non-blocking, so events are
 // dropped when the channel's buffer is full. The channel is closed by Close.

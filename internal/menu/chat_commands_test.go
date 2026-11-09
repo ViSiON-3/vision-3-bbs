@@ -15,7 +15,7 @@ func TestChatSlashCommandsStayLocal(t *testing.T) {
 		show       []string // text that must appear in the chat area
 		posts      []string // what the network receives, as "room: text"
 	}{
-		{"/? lists the commands", "/?", []string{"/join <room>", "/topic <text>", "/msg <user> <text>", "/rooms", "/users", "/network", "/q"}, nil},
+		{"/? lists the commands", "/?", []string{"/join <room>", "/topic <text>", "/msg <who> <text>", "/rooms", "/users", "/network", "/q"}, nil},
 		{"/help lists the commands", "/help", []string{"/join <room>", "/q"}, nil},
 		{"/HELP is case-insensitive", "/HELP", []string{"/join <room>"}, nil},
 		{"unknown command", "/networks", []string{"*** Unknown command /networks - type /? for help."}, nil},
@@ -24,8 +24,8 @@ func TestChatSlashCommandsStayLocal(t *testing.T) {
 		{"bare /topic", "/topic", []string{"*** Usage: /topic <text>"}, nil},
 		{"bare /join", "/JOIN", []string{"*** Usage: /join <room>"}, nil},
 		{"/join with only spaces", "/join   ", []string{"*** Usage: /join <room>"}, nil},
-		{"bare /msg", "/msg", []string{"*** Usage: /msg <user>[@node] <text>"}, nil},
-		{"/msg without text", "/msg Bob", []string{"*** Usage: /msg <user>[@node] <text>"}, nil},
+		{"bare /msg", "/msg", []string{"*** Usage: /msg <who> <text>"}, nil},
+		{"/msg without text", "/msg Bob", []string{"*** Usage: /msg <who> <text>"}, nil},
 		{"double slash sends a literal slash", "//shrug", nil, []string{"lobby: /shrug"}},
 		{"double slash alone sends a slash", "//", nil, []string{"lobby: /"}},
 		{"plain text is posted", "hello", []string{"<Caller> hello"}, []string{"lobby: hello"}},

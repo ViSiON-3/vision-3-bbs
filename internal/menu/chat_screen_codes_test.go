@@ -109,7 +109,7 @@ func TestChatNetworkTextCannotRunScreenCodes(t *testing.T) {
 		{Name: "lobby", UserCount: 1, Topic: "pickertopic" + evil},
 		{Name: "room" + evil, UserCount: 1},
 	}
-	n.users = []string{"Caller", "user" + evil}
+	n.users = []chat.ChatUser{{Handle: "Caller"}, {Handle: "user" + evil}}
 	n.history = []chat.ChatMessage{
 		{Handle: "histhandle" + evil, Text: "histtext" + evil},
 		{IsSystem: true, Text: "histsystem" + evil},
@@ -203,7 +203,7 @@ func TestChatTextKeepsColoursAndTheEscapedPipe(t *testing.T) {
 		{"unknown code", "Bob", "|99", "<Bob> |99"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			line := formatChatMessage(chat.ChatMessage{Handle: tc.handle, Text: tc.text}, "", format)
+			line := formatChatMessage(chat.ChatMessage{Handle: tc.handle, Text: tc.text}, "", "", format)
 			if got := string(ansi.ReplacePipeCodes([]byte(line))); got != tc.want {
 				t.Errorf("expanded %q = %q, want %q", line, got, tc.want)
 			}
@@ -213,12 +213,12 @@ func TestChatTextKeepsColoursAndTheEscapedPipe(t *testing.T) {
 
 // A sysop's format keeps every pipe code; only what goes into it is escaped.
 func TestChatFormatsKeepScreenCodes(t *testing.T) {
-	line := formatChatMessage(chat.ChatMessage{Handle: "Bob", Text: "|CL"}, "", "|CL<%s> %s")
+	line := formatChatMessage(chat.ChatMessage{Handle: "Bob", Text: "|CL"}, "", "", "|CL<%s> %s")
 	got := string(ansi.ReplacePipeCodes([]byte(line)))
 	if want := "\x1b[2J\x1b[H<Bob> |CL"; got != want {
 		t.Errorf("expanded = %q, want %q", got, want)
 	}
-	line = formatChatMessage(chat.ChatMessage{IsSystem: true, Text: "|CL"}, "|CR*** %s", "")
+	line = formatChatMessage(chat.ChatMessage{IsSystem: true, Text: "|CL"}, "", "|CR*** %s", "")
 	got = string(ansi.ReplacePipeCodes([]byte(line)))
 	if want := "\r\n*** |CL"; got != want {
 		t.Errorf("expanded = %q, want %q", got, want)

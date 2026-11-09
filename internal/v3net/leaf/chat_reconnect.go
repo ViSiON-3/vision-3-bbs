@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -153,7 +152,7 @@ func (l *Leaf) recoverChat(ctx context.Context) error {
 	for s := range r.sessions {
 		s.mu.Lock()
 		if joined, ok := snapshots[s.currentRoom]; ok && !s.closed {
-			s.currentUsers = slices.Clone(joined.Users)
+			s.currentUsers = membersOf(joined)
 			s.currentTopic = roomTopic(joined.Rooms, s.currentRoom)
 			s.recovering = false
 		}

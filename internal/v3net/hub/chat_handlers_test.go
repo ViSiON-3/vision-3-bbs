@@ -153,7 +153,7 @@ func TestChatLeave(t *testing.T) {
 	if err := json.Unmarshal(waitEvent(t, ch, protocol.EventChatLeave).Data, &payload); err != nil {
 		t.Fatalf("decode leave event: %v", err)
 	}
-	want := protocol.ChatLeavePayload{Room: "lobby", Handle: "alice", BBS: "Test BBS"}
+	want := protocol.ChatLeavePayload{Room: "lobby", Handle: "alice", BBS: "Test BBS", Node: leafKS.NodeID()}
 	if payload != want {
 		t.Errorf("leave event = %+v, want %+v", payload, want)
 	}

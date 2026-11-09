@@ -44,11 +44,19 @@ const (
 	TypeSystem                       // system message (reconnecting, errors)
 )
 
-// ChatJoin carries join event data.
-type ChatJoin struct{ Room, Handle, BBS string }
+// ChatUser is a member of a room: a handle, and on a network the node and
+// BBS name of the board it is on. Handles are not unique across boards, so
+// a member is identified by handle and node together. Node and BBS are
+// empty in local chat, and Node is empty for a member reported by a hub
+// that predates members.
+type ChatUser struct{ Handle, Node, BBS string }
 
-// ChatLeave carries leave event data.
-type ChatLeave struct{ Room, Handle, BBS string }
+// ChatJoin carries join event data. Node is the joining board's node ID,
+// empty in local chat and from older hubs.
+type ChatJoin struct{ Room, Handle, BBS, Node string }
+
+// ChatLeave carries leave event data. Node is as for ChatJoin.
+type ChatLeave struct{ Room, Handle, BBS, Node string }
 
 // ChatTopic carries topic-change event data.
 type ChatTopic struct{ Room, Topic, SetBy string }
@@ -91,8 +99,8 @@ type ChatService interface {
 	// History returns up to limit recent messages for a room (max 200).
 	History(room string, limit int) ([]ChatMessage, error)
 
-	// Users returns the handles currently in the active room.
-	Users() []string
+	// Users returns the members of the active room, in a stable order.
+	Users() []ChatUser
 
 	// Events returns a channel delivering incoming chat events.
 	// The channel is closed when the session ends.
@@ -100,6 +108,14 @@ type ChatService interface {
 
 	// Close tears down the session cleanly.
 	Close() error
+}
+
+// NodeIdentifier is implemented by chat services on a network of boards.
+// NodeID is this board's node ID on that network: a member or message whose
+// Node is this one is from this board. LocalChatService does not implement
+// it, as everyone in local chat is from this board.
+type NodeIdentifier interface {
+	NodeID() string
 }
 
 // Pinger is implemented by chat services that talk to a remote server, such
