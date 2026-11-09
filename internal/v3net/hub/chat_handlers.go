@@ -71,7 +71,10 @@ func (h *Hub) handleChatJoin(w http.ResponseWriter, r *http.Request, network str
 		return
 	}
 
-	users, added := h.chatRooms.Join(network, room, nodeID, req.Handle)
+	members, added := h.chatRooms.Join(network, room, nodeID, req.Handle)
+	for i := range members {
+		members[i].BBS = h.subscriberBBSName(members[i].Node, network)
+	}
 
 	// A handle already in the room is not announced again: leaves add one
 	// user-list entry per join event, so a repeat would list it twice.
@@ -85,7 +88,8 @@ func (h *Hub) handleChatJoin(w http.ResponseWriter, r *http.Request, network str
 	resp := protocol.ChatJoinResponse{
 		Rooms:   h.chatRooms.RoomList(network),
 		History: history,
-		Users:   users,
+		Users:   handlesOf(members),
+		Members: members,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp) // best-effort response write
@@ -109,7 +113,7 @@ func (h *Hub) handleChatLeave(w http.ResponseWriter, r *http.Request, network st
 
 	if h.chatRooms.Leave(network, room, nodeID, req.Handle) {
 		broadcastChatEvent(h.broadcaster, network, protocol.EventChatLeave, protocol.ChatLeavePayload{
-			Room: room, Handle: req.Handle, BBS: bbsName,
+			Room: room, Handle: req.Handle, BBS: bbsName, Node: nodeID,
 		})
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -184,7 +188,7 @@ func (h *Hub) handleChatPrivate(w http.ResponseWriter, r *http.Request, network 
 			req.ToNode = targets[0]
 		default:
 			for i, node := range targets {
-				targets[i] = req.ToHandle + "@" + node
+				targets[i] = req.ToHandle + "@" + node + " (" + h.subscriberBBSName(node, network) + ")"
 			}
 			jsonError(w, fmt.Sprintf("recipient %q is ambiguous; use handle@node: %s", req.ToHandle, strings.Join(targets, ", ")), http.StatusConflict)
 			return

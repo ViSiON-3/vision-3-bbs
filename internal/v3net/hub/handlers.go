@@ -291,7 +291,7 @@ func (h *Hub) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, pair := range removed {
 		broadcastChatEvent(h.broadcaster, network, protocol.EventChatLeave,
-			protocol.ChatLeavePayload{Room: pair[0], Handle: pair[1], BBS: bbsName})
+			protocol.ChatLeavePayload{Room: pair[0], Handle: pair[1], BBS: bbsName, Node: nodeID})
 	}
 }
 

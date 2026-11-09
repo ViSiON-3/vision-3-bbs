@@ -3,6 +3,7 @@ package hub
 import (
 	"encoding/json"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
@@ -34,10 +35,10 @@ func (cr *chatRooms) roomsFor(network string) map[string]*roomState {
 	return rooms
 }
 
-// Join adds handle on nodeID to room and returns the room's users. added is
-// false if the handle was already a member, as it is when the same user has
-// chat open on two nodes of one BBS.
-func (cr *chatRooms) Join(network, room, nodeID, handle string) (users []string, added bool) {
+// Join adds handle on nodeID to room and returns the room's members, with
+// their nodes and no BBS names. added is false if the handle was already a
+// member, as it is when the same user has chat open on two nodes of one BBS.
+func (cr *chatRooms) Join(network, room, nodeID, handle string) (members []protocol.ChatMember, added bool) {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 	rooms := cr.roomsFor(network)
@@ -48,11 +49,11 @@ func (cr *chatRooms) Join(network, room, nodeID, handle string) (users []string,
 	}
 	for _, h := range rs.members[nodeID] {
 		if h == handle {
-			return cr.usersLocked(network, room), false
+			return cr.membersLocked(network, room), false
 		}
 	}
 	rs.members[nodeID] = append(rs.members[nodeID], handle)
-	return cr.usersLocked(network, room), true
+	return cr.membersLocked(network, room), true
 }
 
 // Leave removes a membership and reports whether one existed. Repeated
@@ -140,10 +141,30 @@ func (cr *chatRooms) RoomList(network string) []protocol.ProtoChatRoomInfo {
 	return list
 }
 
+// Users returns the handles in room, one per membership, as Members does.
 func (cr *chatRooms) Users(network, room string) []string {
+	return handlesOf(cr.Members(network, room))
+}
+
+// Members returns room's memberships with their nodes and no BBS names,
+// sorted by handle, then node, or nil for a room that does not exist.
+func (cr *chatRooms) Members(network, room string) []protocol.ChatMember {
 	cr.mu.RLock()
 	defer cr.mu.RUnlock()
-	return cr.usersLocked(network, room)
+	return cr.membersLocked(network, room)
+}
+
+// handlesOf returns the handles of members, in their order, or nil for no
+// members.
+func handlesOf(members []protocol.ChatMember) []string {
+	if members == nil {
+		return nil
+	}
+	out := make([]string, len(members))
+	for i, m := range members {
+		out[i] = m.Handle
+	}
+	return out
 }
 
 // nodesForHandle returns the distinct nodes with this exact handle joined
@@ -171,7 +192,10 @@ func (cr *chatRooms) nodesForHandle(network, handle string) []string {
 	return nodes
 }
 
-func (cr *chatRooms) usersLocked(network, room string) []string {
+// membersLocked is Members with the lock held. Memberships are kept per
+// node in a map, so the list is sorted for a stable order on every read:
+// by handle, case-insensitively, then node.
+func (cr *chatRooms) membersLocked(network, room string) []protocol.ChatMember {
 	rooms := cr.networks[network]
 	if rooms == nil {
 		return nil
@@ -180,10 +204,21 @@ func (cr *chatRooms) usersLocked(network, room string) []string {
 	if rs == nil {
 		return nil
 	}
-	var out []string
-	for _, handles := range rs.members {
-		out = append(out, handles...)
+	var out []protocol.ChatMember
+	for node, handles := range rs.members {
+		for _, h := range handles {
+			out = append(out, protocol.ChatMember{Handle: h, Node: node})
+		}
 	}
+	sort.Slice(out, func(i, j int) bool {
+		if a, b := strings.ToLower(out[i].Handle), strings.ToLower(out[j].Handle); a != b {
+			return a < b
+		}
+		if out[i].Handle != out[j].Handle {
+			return out[i].Handle < out[j].Handle
+		}
+		return out[i].Node < out[j].Node
+	})
 	return out
 }
 

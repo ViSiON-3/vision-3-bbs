@@ -95,7 +95,7 @@ func TestChatPrivateRecipientResolution(t *testing.T) {
 					t.Fatalf("rejected message was stored: %d rows", count)
 				}
 				if tc.want == http.StatusConflict {
-					choices := []string{"bob@" + bob.NodeID(), "bob@" + other.NodeID()}
+					choices := []string{"bob@" + bob.NodeID() + " (Test BBS)", "bob@" + other.NodeID() + " (Test BBS)"}
 					slices.Sort(choices)
 					if !strings.Contains(detail["error"], strings.Join(choices, ", ")) {
 						t.Fatalf("missing sorted disambiguation choices: %v", detail)

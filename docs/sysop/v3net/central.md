@@ -531,6 +531,12 @@ V3Net Central: Network Chat
 - No **Callers Default** applies to chat: nobody is in a room until they
   agreed themselves.
 
+In the room, a caller from another board is named with their board, as
+`Eve@Other BBS`, in the user list, on each line they type, on a private
+message from them and on join and leave notices; this board's own callers
+are named by handle alone. `/msg` takes the names as listed. See
+[Callers From Other Boards](v3net/chat.md#callers-from-other-boards).
+
 Withdrawing takes effect at once. A caller in a network room on another
 node ends chat with the next line they type (it is not posted), one
 waiting at a network or room picker is not joined, and the `/network`
@@ -571,7 +577,9 @@ still lists the network if the hub answers its room list, since older
 hubs served chat without naming it. Update a hub before the boards that
 chat on it to get the Central entry. A board from before this version
 offers chat on every subscription, with no agreement asked of its
-callers; the hub treats both the same.
+callers; the hub treats both the same. A hub from before this version
+lists a room's members by handle alone, so against it a board names
+everyone in the room by handle, with no board.
 
 ### Chat Retention and Access
 

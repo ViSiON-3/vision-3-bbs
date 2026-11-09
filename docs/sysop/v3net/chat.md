@@ -104,7 +104,7 @@ accepts it, and the copy the hub sends back is dropped.
 | `/join <room>` | Leave the current room and join another |
 | `/rooms` | List all rooms on the current network with user counts and topics |
 | `/topic <text>` | Set the topic for the current room |
-| `/msg <handle>[@node] <text>` | Send a private message; select a BBS explicitly when the handle is ambiguous |
+| `/msg <who> <text>` | Send a private message to someone in the room, named as the user list names them: `bob`, or `bob@Other BBS` for a caller on another board. `bob@<node-id>` reaches a caller elsewhere on the network |
 | `/users` | Refresh the user list in the status bar |
 | `/network` | Switch to a different network mid-session (only networks the caller may chat on are listed; in `RUN:CHAT LOCAL` there is none, and it says so) |
 | `/?` or `/help` | List these commands on your own screen |
@@ -116,6 +116,19 @@ A line that starts with `/` but is not a command is never posted: chat shows
 "unknown command" instead, and `/join`, `/topic` and `/msg` without their
 arguments show their usage. To post a line that starts with a slash, type two:
 `//shrug` posts `/shrug`.
+
+### Callers From Other Boards
+
+On a network, the hub lists each member of a room with the board they are
+on, and the chat screen names a caller from another board with it:
+`Eve@Other BBS` in the user list, on each line they type, on a private
+message from them and on join and leave notices. This board's own callers
+are named by handle alone, as everyone is in local chat. Handles are not
+unique across a network, so two callers named `Bob` on two boards are
+`Bob` and `Bob@Other BBS`.
+
+A hub from before this version lists handles only; against it, everyone
+in the room is named by handle alone until the hub is updated.
 
 ### Private Message Delivery
 
@@ -148,19 +161,26 @@ at all, so a topic holding `|04` or `||` shows exactly that there.
 
 ### Choosing a Private Message Recipient
 
-On V3Net, `/msg bob hello` asks the hub to find the exact handle `bob` among
-joined chat memberships on that network. Handles are case-sensitive. One
-matching active BBS receives the message, even if that handle is in several
-rooms there. If several BBSes have that handle, the message is refused and the
-error lists explicit `bob@node` choices. Send `/msg bob@<node-id> hello` using
-one of those node IDs to select the intended BBS.
+`/msg` names its recipient as the user list does, so what the caller sees
+is what they type. `/msg Eve@Other BBS hello` reaches Eve on Other BBS;
+the name may hold spaces, and case does not matter. `/msg eve hello`
+reaches her too while nobody on this board is named Eve and she is in the
+room from one board only; with an Eve here as well, the bare handle is
+this board's Eve, and with Eves on several other boards the message is
+refused and the refusal names them. The text is whatever follows the
+name.
 
-A bare handle with no matching membership is reported as unavailable. An
-explicit `handle@node` target still works without a joined room, provided the
-BBS is an active network subscriber; delivery to a caller remains best effort.
-Local chat keeps its existing handle-based delivery and ignores the node part.
-Handle resolution requires an updated hub; an older hub still requires the
-explicit target syntax.
+A recipient who is not in the room is sent to the hub as typed: the first
+word is the handle, with an optional `@node-id` naming their board. The
+hub looks for that exact handle, case-sensitively, among the rooms on the
+network. One matching active BBS receives the message, even if the handle
+is in several rooms there. If several BBSes have it, the message is refused
+and the error lists `handle@node-id` choices with each board's name. An
+explicit `handle@node-id` target works without a joined room, provided the
+BBS is an active network subscriber; delivery to a caller remains best
+effort. Local chat delivers by handle and ignores any node part. Resolving
+a bare handle needs an updated hub; an older hub takes only the explicit
+target.
 
 ---
 

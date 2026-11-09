@@ -106,7 +106,7 @@ func TestChatReconnectRestoresMembership(t *testing.T) {
 			break
 		}
 	}
-	if users := side.Users(); len(users) != 1 || users[0] != "alice" {
+	if users := side.Users(); len(users) != 1 || users[0].Handle != "alice" {
 		t.Fatalf("second room users: %v", users)
 	}
 	if err := alice.Post("lobby", "after reconnect"); err != nil {

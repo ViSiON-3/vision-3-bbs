@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -418,7 +419,11 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	currentRoom := selectedRoom
 	currentNetwork := selectedNetwork
 	currentTopic := ""
-	currentUsers := []string{}
+	currentUsers := []chat.ChatUser{}
+	// homeNode is this board's node ID on the current network, which tells
+	// a member or sender from this board apart from one on another board,
+	// who is named handle@Board; "" on local chat. See chatUserName.
+	homeNode := chatNodeOf(svc)
 	mentions := 0 // room messages naming the caller since joining the room
 	scrollback := &chatScrollback{capacity: chatScrollbackLines}
 	// Network round trip for the Lag field. pinging is false on a service
@@ -523,7 +528,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		// Users line
 		rawWriteLocked([]byte(ansi.MoveCursor(usersRow, 1) + "\x1B[2K"))
 		rawWriteLocked(sep)
-		userStr := strings.Join(currentUsers, ", ")
+		userStr := chatUserList(currentUsers, homeNode)
 		if userStr == "" {
 			userStr = handle
 		}
@@ -643,7 +648,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		defer rawMu.Unlock()
 		held := scrollback.len()
 		for _, msg := range history {
-			keepChatLineLocked(formatChatMessage(msg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat), msg.Timestamp)
+			keepChatLineLocked(formatChatMessage(msg, homeNode, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat), msg.Timestamp)
 		}
 		keepChatLineLocked(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Joined #"+room), time.Time{})
 		showChatLinesLocked(held)
@@ -753,7 +758,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			case chat.TypeMessage:
 				if ev.Message != nil {
 					rawMu.Lock()
-					writeChatMessageLocked(*ev.Message, formatChatMessage(*ev.Message, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
+					writeChatMessageLocked(*ev.Message, formatChatMessage(*ev.Message, homeNode, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 					if !ev.Message.IsSystem && chatMentions(ev.Message.Text, handle) {
 						mentions++
 						drawHeaderLocked()
@@ -763,7 +768,8 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			case chat.TypePrivate:
 				if ev.Message != nil {
 					rawMu.Lock()
-					writeChatMessageLocked(*ev.Message, fmt.Sprintf(e.Strings().ChatPrivateMsgFormat, chatText(ev.Message.Handle), chatText(ev.Message.Text)))
+					from := chatUserName(ev.Message.Handle, ev.Message.Node, ev.Message.BBS, homeNode)
+					writeChatMessageLocked(*ev.Message, fmt.Sprintf(e.Strings().ChatPrivateMsgFormat, chatText(from), chatText(ev.Message.Text)))
 					rawMu.Unlock()
 				}
 			case chat.TypeJoin:
@@ -771,7 +777,8 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					newUsers := svc.Users()
 					rawMu.Lock()
 					currentUsers = newUsers
-					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatJoinMsg, chatText(ev.Join.Handle), chatText(ev.Join.Room)))
+					who := chatUserName(ev.Join.Handle, ev.Join.Node, ev.Join.BBS, homeNode)
+					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatJoinMsg, chatText(who), chatText(ev.Join.Room)))
 					drawHeaderLocked()
 					drawStatusBarLocked()
 					rawMu.Unlock()
@@ -781,7 +788,8 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					newUsers := svc.Users()
 					rawMu.Lock()
 					currentUsers = newUsers
-					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatLeaveMsg, chatText(ev.Leave.Handle), chatText(ev.Leave.Room)))
+					who := chatUserName(ev.Leave.Handle, ev.Leave.Node, ev.Leave.BBS, homeNode)
+					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatLeaveMsg, chatText(who), chatText(ev.Leave.Room)))
 					drawHeaderLocked()
 					drawStatusBarLocked()
 					rawMu.Unlock()
@@ -1169,6 +1177,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			done = make(chan struct{})
 			stopLag = startLag(svc)
 			rawMu.Lock()
+			homeNode = chatNodeOf(svc)
 			currentTopic = ""
 			mentions = 0
 			currentUsers = svc.Users()
@@ -1215,17 +1224,17 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		if upper == "/MSG" {
-			target, message, ok := strings.Cut(arg, " ")
-			message = strings.TrimSpace(message)
-			if !ok || message == "" {
+			rawMu.Lock()
+			users, home := currentUsers, homeNode
+			rawMu.Unlock()
+			toHandle, toNode, message, targetErr := chatMsgTarget(arg, users, home)
+			if errors.Is(targetErr, errChatMsgUsage) {
 				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, e.Strings().ChatMsgUsage))
 				continue
 			}
-			toHandle := target
-			toNode := ""
-			if atIdx := strings.Index(target, "@"); atIdx > 0 && atIdx < len(target)-1 {
-				toHandle = target[:atIdx]
-				toNode = target[atIdx+1:]
+			if targetErr != nil {
+				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, chatText(targetErr.Error())))
+				continue
 			}
 			if msgErr := svc.Private(toHandle, toNode, message); msgErr != nil {
 				writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Could not send private message: "+chatText(msgErr.Error())))
@@ -1262,7 +1271,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 		// Echo own message locally.
 		ownMsg := chat.ChatMessage{Handle: handle, Text: trimmed, Timestamp: time.Now()}
-		writeChatLine(formatChatMessage(ownMsg, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
+		writeChatLine(formatChatMessage(ownMsg, homeNode, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
 	}
 
 	cleanup()
@@ -1287,11 +1296,135 @@ func chatText(s string) string {
 	return ansi.EscapeScreenPipeCodes(toastLine(s))
 }
 
-func formatChatMessage(msg chat.ChatMessage, systemFmt, userFmt string) string {
+// formatChatMessage formats a room message as a chat line: a system message
+// with systemFmt, anyone else's with userFmt, named as chatUserName names
+// them against home, this board's node ID.
+func formatChatMessage(msg chat.ChatMessage, home, systemFmt, userFmt string) string {
 	if msg.IsSystem {
 		return fmt.Sprintf(systemFmt, chatText(msg.Text))
 	}
-	return fmt.Sprintf(userFmt, chatText(msg.Handle), chatText(msg.Text))
+	return fmt.Sprintf(userFmt, chatText(chatUserName(msg.Handle, msg.Node, msg.BBS, home)), chatText(msg.Text))
+}
+
+// chatNodeOf returns this board's node ID on svc's network, or "" for a
+// service with no network, such as local chat.
+func chatNodeOf(svc chat.ChatService) string {
+	if n, ok := svc.(chat.NodeIdentifier); ok {
+		return n.NodeID()
+	}
+	return ""
+}
+
+// chatUserName is how a member or sender is named on the chat screen: the
+// bare handle for someone on this board, whose node is home, or who has no
+// node (local chat, or a hub that predates members), and handle@Board for
+// someone on another board, with the board's node ID in place of a name
+// the hub does not have.
+func chatUserName(handle, node, bbs, home string) string {
+	if node == "" || node == home {
+		return handle
+	}
+	if bbs == "" {
+		bbs = node
+	}
+	return handle + "@" + bbs
+}
+
+// chatUserList is the status bar's user list: the members as chatUserName
+// names them, comma-separated, in the order the service lists them.
+func chatUserList(users []chat.ChatUser, home string) string {
+	names := make([]string, len(users))
+	for i, u := range users {
+		names[i] = chatUserName(u.Handle, u.Node, u.BBS, home)
+	}
+	return strings.Join(names, ", ")
+}
+
+// errChatMsgUsage says a /msg had no recipient or no text.
+var errChatMsgUsage = errors.New("usage: /msg <who> <text>")
+
+// chatMsgTarget reads the argument of /msg: who the message is for, and the
+// text. The recipient is looked for in the room's user list first, as the
+// status bar names them: the bare handle of someone on this board, or
+// handle@Board for someone on another, either of which may hold spaces, so
+// the longest name the argument starts with wins and the text is what
+// follows it. Someone on another board may be named by bare handle too, when
+// nobody on this board has it; a handle that several boards in the room
+// share is refused with an error naming them. A recipient not in the room is
+// read as before: the first word, with an @node suffix naming the board's
+// node ID, for the hub to resolve among the network's rooms. errChatMsgUsage
+// is returned for a missing recipient or text.
+func chatMsgTarget(arg string, users []chat.ChatUser, home string) (handle, node, text string, err error) {
+	type match struct {
+		user  chat.ChatUser
+		exact bool // matched by its name on the list, not by bare handle
+		rest  string
+	}
+	var found []match
+	longest := 0
+	for _, u := range users {
+		name := chatUserName(u.Handle, u.Node, u.BBS, home)
+		for _, try := range []struct {
+			name  string
+			exact bool
+		}{{name, true}, {u.Handle, false}} {
+			n := len(try.name)
+			if n == 0 || n < longest || len(arg) < n || !strings.EqualFold(arg[:n], try.name) {
+				continue
+			}
+			if len(arg) > n && arg[n] != ' ' {
+				continue
+			}
+			if n > longest {
+				found, longest = nil, n
+			}
+			found = append(found, match{u, try.exact, strings.TrimSpace(arg[n:])})
+			break
+		}
+	}
+	// A name as listed beats a bare handle shared with someone elsewhere:
+	// "Bob" is this board's Bob when there is one, not also Bob@Other BBS.
+	if slices.ContainsFunc(found, func(m match) bool { return m.exact }) {
+		found = slices.DeleteFunc(found, func(m match) bool { return !m.exact })
+	}
+	found = slices.CompactFunc(found, func(a, b match) bool {
+		return a.user.Handle == b.user.Handle && a.user.Node == b.user.Node
+	})
+	switch len(found) {
+	case 0:
+		target, message, ok := strings.Cut(arg, " ")
+		message = strings.TrimSpace(message)
+		if !ok || message == "" {
+			return "", "", "", errChatMsgUsage
+		}
+		handle, node = target, ""
+		if at := strings.Index(target, "@"); at > 0 && at < len(target)-1 {
+			handle, node = target[:at], target[at+1:]
+		}
+		return handle, node, message, nil
+	case 1:
+		if found[0].rest == "" {
+			return "", "", "", errChatMsgUsage
+		}
+		return found[0].user.Handle, found[0].user.Node, found[0].rest, nil
+	}
+	names := make([]string, len(found))
+	for i, m := range found {
+		names[i] = chatUserName(m.user.Handle, m.user.Node, m.user.BBS, home)
+	}
+	// Two boards with one name make the names the same, as recipients are
+	// matched: ignoring case. The node IDs, which the hub accepts after the
+	// @, tell them apart.
+	folded := make([]string, len(names))
+	for i, n := range names {
+		folded[i] = strings.ToLower(n)
+	}
+	if len(slices.Compact(slices.Sorted(slices.Values(folded)))) < len(names) {
+		for i, m := range found {
+			names[i] = m.user.Handle + "@" + m.user.Node
+		}
+	}
+	return "", "", "", fmt.Errorf("%s is here from more than one board; send to one of: %s", found[0].user.Handle, strings.Join(names, ", "))
 }
 
 // chatArtReplace fills the @name####@ placeholder in ANSI art data with

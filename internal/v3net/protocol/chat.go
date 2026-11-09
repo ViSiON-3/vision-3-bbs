@@ -71,11 +71,23 @@ type ChatMsgPayload struct {
 	Origin string `json:"origin,omitempty"`
 }
 
-// ChatJoinResponse is returned by POST /chat/rooms/join.
+// ChatMember is one membership of a room: a handle on a node, with the
+// node's BBS name as the hub knows it. Handles are not unique across a
+// network, so a member is identified by handle and node together.
+type ChatMember struct {
+	Handle string `json:"handle"`
+	Node   string `json:"node"`
+	BBS    string `json:"bbs"`
+}
+
+// ChatJoinResponse is returned by POST /chat/rooms/join. Members and Users
+// list the same memberships of the joined room; Users, the bare handles, is
+// kept for leaves that predate Members.
 type ChatJoinResponse struct {
 	Rooms   []ProtoChatRoomInfo `json:"rooms"`
 	History []ChatMsgPayload    `json:"history"` // up to 50 recent messages
 	Users   []string            `json:"users"`   // handles currently in joined room
+	Members []ChatMember        `json:"members,omitempty"`
 }
 
 // ChatRoomListResponse is returned by GET /chat/rooms.
@@ -99,6 +111,10 @@ type ChatLeavePayload struct {
 	Room   string `json:"room"`
 	Handle string `json:"handle"`
 	BBS    string `json:"bbs"`
+	// Node is the leaving node's ID, so a leaf can take the right member
+	// out of its list when boards share a handle. Empty from hubs that
+	// predate the field.
+	Node string `json:"node,omitempty"`
 }
 
 // ChatTopicPayload is the data for a "chat_topic" SSE event.

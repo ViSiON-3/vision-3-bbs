@@ -25,9 +25,10 @@ import (
 // runChat sent to the network rather than only on what it drew.
 type chatcovNet struct {
 	name    string
+	node    string // this board's node ID on the network; "" is unknown
 	rooms   []chat.RoomInfo
 	history []chat.ChatMessage // returned by every successful Join
-	users   []string
+	users   []chat.ChatUser
 	events  []chat.ChatEvent // waiting on each session's Events channel from the start
 
 	roomsErr, postErr, topicErr, privErr error
@@ -178,7 +179,10 @@ func (s *chatcovSvc) Rooms() ([]chat.RoomInfo, error) {
 
 func (s *chatcovSvc) History(string, int) ([]chat.ChatMessage, error) { return s.net.history, nil }
 
-func (s *chatcovSvc) Users() []string { return s.net.users }
+func (s *chatcovSvc) Users() []chat.ChatUser { return s.net.users }
+
+// NodeID implements chat.NodeIdentifier with the network's node.
+func (s *chatcovSvc) NodeID() string { return s.net.node }
 
 func (s *chatcovSvc) Events() <-chan chat.ChatEvent { return s.events }
 
@@ -213,7 +217,7 @@ func chatcovFakeNet(env *menuEnv) *chatcovNet {
 			{Name: "lobby", UserCount: 3, Topic: "General"},
 			{Name: "den", UserCount: 2},
 		},
-		users: []string{"Caller", "Bob"},
+		users: []chat.ChatUser{{Handle: "Caller"}, {Handle: "Bob"}},
 		history: []chat.ChatMessage{
 			{Handle: "Bob", Text: "earlier on"},
 			{IsSystem: true, Text: "server restarted"},
@@ -1232,11 +1236,11 @@ func TestChatcovWrapPipeText(t *testing.T) {
 
 func TestChatcovFormatChatMessage(t *testing.T) {
 	const sysFmt, userFmt = "*** %s", "<%s> %s"
-	if got := formatChatMessage(chat.ChatMessage{Handle: "Bob", Text: "hi"}, sysFmt, userFmt); got != "<Bob> hi" {
+	if got := formatChatMessage(chat.ChatMessage{Handle: "Bob", Text: "hi"}, "", sysFmt, userFmt); got != "<Bob> hi" {
 		t.Errorf("user message = %q, want %q", got, "<Bob> hi")
 	}
 	// A system message has no author to show, whatever Handle holds.
-	if got := formatChatMessage(chat.ChatMessage{Handle: "Bob", Text: "hub restarted", IsSystem: true}, sysFmt, userFmt); got != "*** hub restarted" {
+	if got := formatChatMessage(chat.ChatMessage{Handle: "Bob", Text: "hub restarted", IsSystem: true}, "", sysFmt, userFmt); got != "*** hub restarted" {
 		t.Errorf("system message = %q, want %q", got, "*** hub restarted")
 	}
 }

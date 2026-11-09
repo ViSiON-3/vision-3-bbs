@@ -261,9 +261,9 @@ var StringFallbacks = map[string]string{
 	// Chat slash-command replies (#659). Before these existed an unknown or
 	// incomplete command was posted to the room, so an upgraded strings.json
 	// must still have something to show in its place.
-	"chatHelp":       "|15Chat commands|07\r\n |11/join <room>|07       join another room\r\n |11/rooms|07             list the rooms\r\n |11/topic <text>|07      set the room topic\r\n |11/msg <user> <text>|07 private message; @node selects BBS\r\n |11/users|07             refresh the user list\r\n |11/network|07           switch chat network\r\n |11/q|07                 leave chat\r\n |11PgUp/PgDn|07          page back through chat\r\n |11//text|07             send a line starting with /",
+	"chatHelp":       "|15Chat commands|07\r\n |11/join <room>|07       join another room\r\n |11/rooms|07             list the rooms\r\n |11/topic <text>|07      set the room topic\r\n |11/msg <who> <text>|07  private message; who as listed in Users\r\n |11/users|07             refresh the user list\r\n |11/network|07           switch chat network\r\n |11/q|07                 leave chat\r\n |11PgUp/PgDn|07          page back through chat\r\n |11//text|07             send a line starting with /",
 	"chatJoinUsage":  "Usage: /join <room>",
-	"chatMsgUsage":   "Usage: /msg <user>[@node] <text> (use @node if ambiguous)",
+	"chatMsgUsage":   "Usage: /msg <who> <text> (who as listed in Users, e.g. bob or bob@Other BBS)",
 	"chatTopicUsage": "Usage: /topic <text>",
 	// The hint bar while the chat region is paged back (#660).
 	"chatScrollbackHint": " |14Scrollback|08: |07PgUp/PgDn to page, Enter to return",
@@ -462,12 +462,15 @@ var StringSuperseded = map[string][]string{
 	"konfigScreenWidthHelp": {
 		"Columns your terminal shows (40-255). Used for layout and word wrap.",
 	},
-	// #919 let /msg take a bare handle, with @node for an ambiguous one.
+	// #919 let /msg take a bare handle, with @node for an ambiguous one;
+	// #672 names recipients as the user list does (handle@Board).
 	"chatHelp": {
 		"|15Chat commands|07\r\n |11/join <room>|07       join another room\r\n |11/rooms|07             list the rooms\r\n |11/topic <text>|07      set the room topic\r\n |11/msg <user> <text>|07 private message (user@node)\r\n |11/users|07             refresh the user list\r\n |11/network|07           switch chat network\r\n |11/q|07                 leave chat\r\n |11PgUp/PgDn|07          page back through chat\r\n |11//text|07             send a line starting with /",
+		"|15Chat commands|07\r\n |11/join <room>|07       join another room\r\n |11/rooms|07             list the rooms\r\n |11/topic <text>|07      set the room topic\r\n |11/msg <user> <text>|07 private message; @node selects BBS\r\n |11/users|07             refresh the user list\r\n |11/network|07           switch chat network\r\n |11/q|07                 leave chat\r\n |11PgUp/PgDn|07          page back through chat\r\n |11//text|07             send a line starting with /",
 	},
 	"chatMsgUsage": {
 		"Usage: /msg <user>[@node] <text>",
+		"Usage: /msg <user>[@node] <text> (use @node if ambiguous)",
 	},
 }
 

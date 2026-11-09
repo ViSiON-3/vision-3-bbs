@@ -239,18 +239,25 @@ func (s *LocalChatService) History(room string, limit int) ([]ChatMessage, error
 	return msgs, nil
 }
 
-// Users implements ChatService. It returns the handles in this session's
-// current room as they are now, sorted, or nil when it is in no room. The
-// slice is the caller's to keep.
-func (s *LocalChatService) Users() []string {
+// Users implements ChatService. It returns the members of this session's
+// current room as they are now, sorted by handle, or nil when it is in no
+// room. Local members have no node or BBS. The slice is the caller's to keep.
+func (s *LocalChatService) Users() []ChatUser {
 	s.mu.RLock()
 	room := s.currentRoom
 	s.mu.RUnlock()
 	if room == "" {
 		return nil
 	}
-	users := localUsersInRoom(room)
-	slices.Sort(users)
+	handles := localUsersInRoom(room)
+	if handles == nil {
+		return nil
+	}
+	slices.Sort(handles)
+	users := make([]ChatUser, len(handles))
+	for i, h := range handles {
+		users[i] = ChatUser{Handle: h}
+	}
 	return users
 }
 

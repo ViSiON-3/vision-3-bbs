@@ -135,7 +135,7 @@ func TestLocalChatJoinSurvivesHistoryError(t *testing.T) {
 	if len(history) != 0 || len(rooms) != 1 || rooms[0].Name != "lobby" {
 		t.Errorf("rooms = %+v, history = %v; want lobby and no history", rooms, history)
 	}
-	if users := alice.Users(); len(users) != 1 || users[0] != "alice" {
+	if users := alice.Users(); len(users) != 1 || users[0].Handle != "alice" {
 		t.Errorf("users = %v, want alice in the room", users)
 	}
 }
@@ -164,13 +164,13 @@ func TestLocalChatUsersFollowsRoom(t *testing.T) {
 	if _, _, err := bob.Join("lobby"); err != nil {
 		t.Fatal(err)
 	}
-	if got := alice.Users(); len(got) != 2 || got[0] != "alice" || got[1] != "bob" {
+	if got := alice.Users(); len(got) != 2 || got[0].Handle != "alice" || got[1].Handle != "bob" {
 		t.Errorf("alice.Users() after bob joined = %v, want [alice bob]", got)
 	}
 	if err := bob.Leave("lobby"); err != nil {
 		t.Fatal(err)
 	}
-	if got := alice.Users(); len(got) != 1 || got[0] != "alice" {
+	if got := alice.Users(); len(got) != 1 || got[0].Handle != "alice" {
 		t.Errorf("alice.Users() after bob left = %v, want [alice]", got)
 	}
 	if err := alice.Leave("lobby"); err != nil {
