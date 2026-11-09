@@ -105,16 +105,15 @@ func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
 			FromHandle string `json:"from_handle"`
 			FromNode   string `json:"from_node"`
 			Origin     string `json:"origin"`
-			Handle     string `json:"handle"` // join and leave
-			Node       string `json:"node"`
 		}
 		if err := json.Unmarshal(ev.Data, &msg); err != nil {
 			return // drop malformed event rather than routing it to the wrong room
 		}
-		// The sysop's block list: nothing from those callers reaches a
-		// session here. A topic change names its setter but is the
-		// room's, so it is kept.
-		if ev.Type != protocol.EventChatTopic && r.isBlocked(msg.FromHandle+msg.Handle, msg.FromNode+msg.Node) {
+		// The sysop's block list: a line from those callers reaches no
+		// session here. Their joins and leaves go on to deliver, which
+		// keeps the member list right and then withholds the notice; a
+		// topic change names its setter but is the room's, so it is kept.
+		if ev.Type == protocol.EventChatMessage && r.isBlocked(msg.FromHandle, msg.FromNode) {
 			return
 		}
 		for s := range r.sessions {
@@ -239,6 +238,11 @@ func (s *ChatSession) deliver(ev protocol.Event) {
 			s.currentUsers = append(s.currentUsers, chat.ChatUser{Handle: p.Handle, Node: p.Node, BBS: p.BBS})
 			s.mu.Unlock()
 		}
+		// A caller on the sysop's block list is counted, since they are in
+		// the room, but not announced.
+		if s.leaf.chatSessions.isBlocked(p.Handle, p.Node) {
+			return
+		}
 		ce = chat.ChatEvent{Type: chat.TypeJoin, Join: &chat.ChatJoin{Room: p.Room, Handle: p.Handle, BBS: p.BBS, Node: p.Node}}
 	case protocol.EventChatLeave:
 		var p protocol.ChatLeavePayload
@@ -248,6 +252,9 @@ func (s *ChatSession) deliver(ev protocol.Event) {
 		s.mu.Lock()
 		s.currentUsers = removeMember(s.currentUsers, p.Handle, p.Node)
 		s.mu.Unlock()
+		if s.leaf.chatSessions.isBlocked(p.Handle, p.Node) {
+			return
+		}
 		ce = chat.ChatEvent{Type: chat.TypeLeave, Leave: &chat.ChatLeave{Room: p.Room, Handle: p.Handle, BBS: p.BBS, Node: p.Node}}
 	case protocol.EventChatTopic:
 		var p protocol.ChatTopicPayload

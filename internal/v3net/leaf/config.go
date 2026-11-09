@@ -49,7 +49,8 @@ type Config struct {
 	CentralChat bool
 	// ChatBlocked is the sysop's chat block list, each entry handle@node:
 	// room lines, join and leave notices, history and private messages
-	// from those callers are dropped before any session here sees them.
+	// from those callers are dropped before any session here sees them;
+	// they still count as members of the rooms they are in.
 	ChatBlocked []string
 	// Activity says what the board may publish for those features: only
 	// callers who consented. Nil publishes nothing.

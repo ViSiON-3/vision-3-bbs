@@ -227,9 +227,6 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 	if val, ok := pendingChanges["level"]; ok {
 		target.AccessLevel = val.(int)
 	}
-	if val, ok := pendingChanges["chatBarred"]; ok {
-		target.CentralChatBarred = val.(bool)
-	}
 	if val, ok := pendingChanges["validated"]; ok {
 		target.Validated = val.(bool)
 		// When validating, upgrade to regular user level if below it.
@@ -267,6 +264,17 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 
 	if updateErr := userManager.UpdateUserByID(target); updateErr != nil {
 		return fmt.Sprintf("|01Save failed: %v|07", updateErr), false
+	}
+	// The network chat bar lives with the consent fields, which every
+	// other save keeps as stored (see user.UserMgr.SetCentralConsent), so
+	// the save above left it alone: it is written through that path.
+	if val, ok := pendingChanges["chatBarred"]; ok {
+		barred := val.(bool)
+		saved, err := userManager.SetCentralConsent(target.ID, func(x *user.User) { x.CentralChatBarred = barred })
+		if err != nil {
+			return fmt.Sprintf("|01Save failed: %v|07", err), false
+		}
+		target.CentralChatBarred = saved.CentralChatBarred
 	}
 	originalTimestamps[target.ID] = target.UpdatedAt
 

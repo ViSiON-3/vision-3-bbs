@@ -199,3 +199,28 @@ func TestChatSysopBar(t *testing.T) {
 		t.Errorf("posted after the bar: %v", posts)
 	}
 }
+
+// The Net Chat bar saved from the user editor reaches the stored account,
+// although every other save keeps the consent fields as stored, and
+// lifting it leaves the caller's own agreement as it was.
+func TestUserEditorSavesChatBar(t *testing.T) {
+	env := newMenuEnv(t)
+	if _, err := env.um.SetCentralConsent(env.caller.ID, func(x *user.User) { x.CentralChat, x.CentralChatChosen = true, true }); err != nil {
+		t.Fatal(err)
+	}
+	for _, barred := range []bool{true, false} {
+		target, _ := env.um.GetUserByID(env.caller.ID)
+		orig := map[int]time.Time{target.ID: target.UpdatedAt}
+		msg, saved := env.e.applyPendingUserChanges(env.um, env.sysop, target, map[string]interface{}{"chatBarred": barred}, orig)
+		if !saved {
+			t.Fatalf("bar=%v: not saved: %q", barred, msg)
+		}
+		stored, _ := env.um.GetUserByID(env.caller.ID)
+		if stored.CentralChatBarred != barred || target.CentralChatBarred != barred {
+			t.Errorf("bar=%v: stored %v, target %v", barred, stored.CentralChatBarred, target.CentralChatBarred)
+		}
+		if !stored.CentralChat || !stored.CentralChatChosen {
+			t.Errorf("bar=%v: the caller's agreement was changed: %+v", barred, stored)
+		}
+	}
+}

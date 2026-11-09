@@ -40,11 +40,33 @@ func TestChatBlockListDropsCaller(t *testing.T) {
 	for name, ev := range map[string]protocol.Event{
 		"message": chatEvent(t, protocol.EventChatMessage, protocol.ChatMsgPayload{Room: "lobby", FromHandle: "bob", FromNode: bobNode, Text: "x", Timestamp: stamp}),
 		"private": chatEvent(t, protocol.EventChatPrivate, protocol.ChatMsgPayload{FromHandle: "bob", FromNode: bobNode, ToHandle: "alice", ToNode: reg.nodeID, Text: "psst", Timestamp: stamp}),
-		"join":    chatEvent(t, protocol.EventChatJoin, protocol.ChatJoinPayload{Room: "lobby", Handle: "bob", BBS: "bobbbs", Node: bobNode}),
-		"leave":   chatEvent(t, protocol.EventChatLeave, protocol.ChatLeavePayload{Room: "lobby", Handle: "bob", BBS: "bobbbs", Node: bobNode}),
 	} {
 		reg.dispatch(ev)
 		noEvent(t, alice, name+" from a blocked caller")
+	}
+	// Bob is in the room (the join listed him), so he is a member, just
+	// never announced: his leave takes him off the list in silence, and a
+	// later join puts him back the same way.
+	inRoom := func() bool {
+		for _, u := range alice.Users() {
+			if u.Handle == "bob" && u.Node == bobNode {
+				return true
+			}
+		}
+		return false
+	}
+	if !inRoom() {
+		t.Fatalf("blocked member missing from the list from the join: %+v", alice.Users())
+	}
+	reg.dispatch(chatEvent(t, protocol.EventChatLeave, protocol.ChatLeavePayload{Room: "lobby", Handle: "bob", BBS: "bobbbs", Node: bobNode}))
+	noEvent(t, alice, "leave of a blocked caller")
+	if inRoom() {
+		t.Error("blocked caller still listed after leaving")
+	}
+	reg.dispatch(chatEvent(t, protocol.EventChatJoin, protocol.ChatJoinPayload{Room: "lobby", Handle: "bob", BBS: "bobbbs", Node: bobNode}))
+	noEvent(t, alice, "join of a blocked caller")
+	if !inRoom() {
+		t.Error("blocked caller not listed after joining")
 	}
 	// Someone else on bob's board is not blocked, and bob's topic is kept.
 	reg.dispatch(chatEvent(t, protocol.EventChatMessage, protocol.ChatMsgPayload{Room: "lobby", FromHandle: "carol", FromNode: bobNode, Text: "hi", Timestamp: stamp}))
