@@ -44,7 +44,7 @@ type Config struct {
 	// CentralCallersDefault counts callers who have not chosen as opted
 	// in; the leaf passes it to Activity with each read.
 	CentralCallersDefault bool
-	// CentralChat is the sysop's switch for network chat. It needs
+	// CentralChat is the sysop's switch for network chat. It does not need
 	// CentralEnabled. Off, chat sessions on this leaf cannot join or post.
 	CentralChat bool
 	// Activity says what the board may publish for those features: only

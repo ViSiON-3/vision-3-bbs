@@ -24,7 +24,7 @@
         "presence": true,
         "lastCallers": true,
         "callersDefault": true,
-        "chat": false
+        "chat": true
       }
     }
   ]

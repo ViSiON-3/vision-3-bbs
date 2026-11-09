@@ -90,7 +90,7 @@ to subscribe to multiple networks.
 |-------|------|---------|-------------|
 | `hubUrl` | string | — | Full URL of the hub (e.g. `"https://felonynet.org"`). Required. |
 | `network` | string | — | Network name to subscribe to. Must match a network hosted by the hub. Required. |
-| `boards` | array | `[]` | Local message area tags for received messages (e.g. `["fn.general", "fn.tech"]`). A local post in any of these areas is sent to the hub, whatever the area's type and even while `enabled` is `false` — it waits for V3Net to come on. A subscription with no boards runs only if its `central` block turns something on. |
+| `boards` | array | `[]` | Local message area tags for received messages (e.g. `["fn.general", "fn.tech"]`). A local post in any of these areas is sent to the hub, whatever the area's type and even while `enabled` is `false` — it waits for V3Net to come on. A subscription with no boards still runs while it offers network chat (which it does unless `central.chat` is `false`), browses the directory or publishes a listing. |
 | `pollInterval` | string | `"5m"` | How often to poll the hub for new messages when none has been announced. A post on another node is fetched as soon as the hub's `new_message` event arrives; the interval is the fallback for anything missed. Accepts Go duration strings: `"30s"`, `"5m"`, `"1h"`. |
 | `origin` | string | BBS name | Origin line appended to outbound messages. Falls back to the BBS name from `config.json` if blank. Cut to 79 characters when sent. |
 | `autoJoinAreas` | bool | unset (`true`) | **Newscan Default** in the editor. When true or unset, message areas created for this subscription are flagged as newscan defaults for users. Set `false` to leave new areas out of newscans until users add them. |
@@ -101,15 +101,16 @@ to subscribe to multiple networks.
 | `hubSigned` | bool | `false` | Written by the BBS, shown as **Hub Signs**. Set once the hub's signatures have checked out; from then on unsigned replies from it are refused, as with `requireSignedHub`. Remove it (or set it `false`) only if the hub really stopped signing. |
 | `hubSignedClears` | number | `0` | Raised by the editor each time **Hub Signs** is set to **N**. It tells a running leaf you cleared the record, for when the leaf could not write `hubSigned` and the file already reads `false`: raise it by one by hand to do the same. Lowering or removing it clears nothing. See [Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies). |
 | `pendingCoordinatorPubKey`, `pendingHubPubKey` | string | blank | Written by the BBS, shown as **Offered Coord** / **Offered Hub**. A key the hub offered that differs from the pin. It is rejected; copy it into the pin to accept it. |
-| `central` | object | absent | V3Net Central settings for this subscription. Absent means every Central feature is off. See below and [V3Net Central](v3net/central.md). |
+| `central` | object | absent | V3Net Central settings for this subscription. Absent means every Central feature is off except network chat, which is on until `chat` is set `false`. See below and [V3Net Central](v3net/central.md). |
 
 ### Leaf Central Settings (`leaves[].central`)
 
 Each switch is a separate consent. A leaf with no `central` block has
-every switch `false`. A subscription the setup wizard, the config editor
-or the BBS creates is written with `enabled`, `presence`, `lastCallers`
-and `callersDefault` set to `true` (`publishListing` stays `false`), and
-the bundled `configs/v3net.json` ships the same way. `enabled` and
+every switch `false` but `chat`, which is `true` until set otherwise. A
+subscription the setup wizard, the config editor or the BBS creates is
+written with `enabled`, `presence`, `lastCallers`, `callersDefault` and
+`chat` set to `true` (`publishListing` stays `false`), and the bundled
+`configs/v3net.json` ships the same way. `enabled` and
 `publishListing` are independent: a board can browse without being listed,
 or be listed without offering Central to its callers.
 
@@ -122,7 +123,7 @@ or be listed without offering Central to its callers.
 | `presence` | bool | `false` (`true` on a new subscription) | **Who's Online** in the editor. Offers network Who's Online on this network; needs `enabled`. Callers can see who is on other boards, and each caller can choose to be shown while on this one. `false` withdraws this board's presence at the next reload or start. |
 | `lastCallers` | bool | `false` (`true` on a new subscription) | **Last Callers** in the editor. Offers network Last Callers on this network; needs `enabled`. Callers can see recent calls to other boards, and each caller can choose to have their calls here shown, each for 24 hours. `false` withdraws this board's calls at the next reload or start. |
 | `callersDefault` | bool | `false` (`true` on a new subscription) | **Callers Default** in the editor. Counts a caller who has not set a switch of their own as opted in to `presence` and `lastCallers` on this network; their own choice, on or off, always wins. A caller counted in has their calls from the last 24 hours shown. |
-| `chat` | bool | `false` | **Lobby Chat** in the editor. Offers network chat on this network; needs `enabled`. Callers join only after agreeing to the notice; `callersDefault` does not apply. `false` ends the network chat sessions on this board at the next reload. Off on every subscription until set, including ones upgraded from before the switch. |
+| `chat` | bool | `true` | **Lobby Chat** in the editor. Offers network chat on this network; does not need `enabled`. Callers join only after agreeing to the notice; `callersDefault` does not apply. Absent is `true`, on every subscription, including ones from before the switch and ones with no `central` block. `false` ends the network chat sessions on this board at the next reload. |
 
 ---
 

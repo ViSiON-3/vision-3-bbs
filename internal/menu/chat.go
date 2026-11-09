@@ -672,7 +672,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	if !chatIsLocal(svc) && !chatConsentStored(c) {
 		svc.Close() //nolint:errcheck
 		rawWrite([]byte("\x1B[r" + ansi.ClearScreen()))
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|07Network chat is off for you. You can turn it on under V3Net Central -> Preferences.|07\r\n")), outputMode)
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("|07Network chat is off for you. You can turn it on under Preferences (V3Net Central, or V3Net Sharing in Konfig).|07\r\n")), outputMode)
 		return nil, "", nil
 	}
 

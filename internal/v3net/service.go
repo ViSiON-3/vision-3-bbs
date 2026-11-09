@@ -917,7 +917,8 @@ func (s *Service) ConfigureLeaves(leafCfgs []config.V3NetLeafConfig, mgr *messag
 		}
 		// A subscription that takes part in Central runs without message
 		// areas: it browses the directory, is listed in it or offers
-		// network chat, and the hub sends it no messages.
+		// network chat (which it does unless the sysop turned chat off),
+		// and the hub sends it no messages.
 		if len(resolvedBoards) == 0 && !lcfg.CentralEnabled() && !lcfg.CentralPublishes() && !lcfg.CentralChat() {
 			slog.Warn("V3Net leaf: no resolvable boards, skipping", "network", lcfg.Network)
 			continue

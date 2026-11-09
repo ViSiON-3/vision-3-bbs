@@ -9,7 +9,8 @@ import (
 )
 
 // Network chat is offered on a subscription only with the sysop's Chat
-// switch on (which needs Central on). The switch is checked on the leaf,
+// switch on (which, unlike the other Central switches, does not need
+// Central itself on). The switch is checked on the leaf,
 // at each join and post, so a session that was handed out while the
 // switch was on cannot carry on after a reload turned it off; and a
 // reload ends the sessions of the leaf it stops (CloseChatSessions), so
@@ -29,8 +30,8 @@ var errChatSessionClosed = errors.New("chat session closed")
 
 // ChatStatus is what a leaf knows about network chat on its network.
 type ChatStatus struct {
-	// Enabled is the sysop's switch for chat on this network, which needs
-	// Central itself on.
+	// Enabled is the sysop's switch for chat on this network. It does not
+	// need Central itself on.
 	Enabled bool
 	// SupportKnown is whether the hub's feature list has been read, and
 	// Supported whether it names chat.
@@ -39,8 +40,8 @@ type ChatStatus struct {
 }
 
 // ChatEnabled reports whether the sysop offers network chat on this
-// subscription.
-func (l *Leaf) ChatEnabled() bool { return l.cfg.CentralEnabled && l.cfg.CentralChat }
+// subscription. Chat does not need Central on.
+func (l *Leaf) ChatEnabled() bool { return l.cfg.CentralChat }
 
 // ChatStatus returns what the leaf knows about network chat on its
 // network.

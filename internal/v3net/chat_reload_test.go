@@ -11,8 +11,9 @@ import (
 // board left the network, chat was turned off, or only the connection
 // was reset.
 func TestChatCloseReason(t *testing.T) {
-	on := config.V3NetLeafConfig{Central: &config.V3NetCentralConfig{Enabled: true, Chat: true}}
-	off := config.V3NetLeafConfig{Central: &config.V3NetCentralConfig{Enabled: true}}
+	chatOff := false
+	on := config.V3NetLeafConfig{Central: &config.V3NetCentralConfig{Enabled: true}}
+	off := config.V3NetLeafConfig{Central: &config.V3NetCentralConfig{Enabled: true, Chat: &chatOff}}
 	for name, tc := range map[string]struct {
 		next config.V3NetLeafConfig
 		ok   bool

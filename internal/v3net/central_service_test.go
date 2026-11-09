@@ -58,8 +58,9 @@ func TestCentralListingSpecFollowsConfig(t *testing.T) {
 	}
 }
 
-// A subscription with no boards runs when it takes part in Central; one
-// with neither boards nor Central is skipped as before.
+// A subscription with no boards runs when it takes part in Central, which
+// it does by offering network chat unless the sysop turned chat off; one
+// with no boards, no Central and chat off is skipped as before.
 func TestConfigureLeavesRunsCentralOnlySubscription(t *testing.T) {
 	dir := t.TempDir()
 	svc, err := New(config.V3NetConfig{KeystorePath: dir + "/k.key", DedupDBPath: dir + "/d.sqlite"})
@@ -67,18 +68,20 @@ func TestConfigureLeavesRunsCentralOnlySubscription(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = svc.Close() })
+	chatOff := false
 	svc.ConfigureLeaves([]config.V3NetLeafConfig{
-		{HubURL: "http://127.0.0.1:1", Network: "browse", Central: &config.V3NetCentralConfig{Enabled: true}},
-		{HubURL: "http://127.0.0.1:1", Network: "listed", Central: &config.V3NetCentralConfig{PublishListing: true}},
-		{HubURL: "http://127.0.0.1:1", Network: "nothing"},
+		{HubURL: "http://127.0.0.1:1", Network: "browse", Central: &config.V3NetCentralConfig{Enabled: true, Chat: &chatOff}},
+		{HubURL: "http://127.0.0.1:1", Network: "listed", Central: &config.V3NetCentralConfig{PublishListing: true, Chat: &chatOff}},
+		{HubURL: "http://127.0.0.1:1", Network: "chat"},
+		{HubURL: "http://127.0.0.1:1", Network: "nothing", Central: &config.V3NetCentralConfig{Chat: &chatOff}},
 	}, nil)
 	got := svc.LeafNetworks()
-	if len(got) != 2 {
-		t.Fatalf("LeafNetworks() = %v, want browse and listed", got)
+	if len(got) != 3 {
+		t.Fatalf("LeafNetworks() = %v, want browse, listed and chat", got)
 	}
 	for _, n := range got {
 		if n == "nothing" {
-			t.Errorf("subscription with no boards and no Central was started")
+			t.Errorf("subscription with no boards, no Central and chat off was started")
 		}
 	}
 }
