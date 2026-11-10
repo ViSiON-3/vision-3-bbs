@@ -1,7 +1,8 @@
 # Contributing to ViSiON/3
 
 Contributions are welcome. Open an issue or a pull request; CI runs
-`gofmt`, `go vet`, `go test` and `golangci-lint` on every PR.
+`gofmt`, `go vet`, `go test` and `golangci-lint` on every PR, and
+`govulncheck` on main, weekly and on PRs that change `go.mod`.
 
 ## Doc comments
 
