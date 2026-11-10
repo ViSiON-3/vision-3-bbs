@@ -16,8 +16,11 @@ import (
 // The hub records the latest report for each node, with the time it arrived,
 // and shows it to the hub operator (NodeInfo); nothing about it is published
 // to other boards. A leaf subscribes each time it starts, so an upgrade or
-// downgrade replaces the record on the next start, and a node whose software
-// sends no report has its old one cleared.
+// downgrade replaces the record on the next start. A subscribe without a
+// report leaves the record as it was: the config editor's area browser sends
+// one in the board's name, and so does a leaf from before reports, so a
+// board downgraded that far keeps its last report, which then ages. A report
+// that fails Validate clears the record.
 //
 // The report is what the node says about itself, not proof of the binary it
 // runs. Capabilities decide what a node is told it supports; the version is

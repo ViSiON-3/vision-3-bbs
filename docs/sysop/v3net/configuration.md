@@ -251,7 +251,11 @@ rows under the list describe the node under the cursor:
 - **Reported** is when the node last sent it, and whether the node is
   online now. A node reports each time it starts, so an online node's
   report is from the run it is on; an offline node may have upgraded or
-  downgraded since, and the row says it may be stale.
+  downgraded since, and the row says it may be stale. A subscribe without a
+  report leaves the last one in place: subscribing to areas from the config
+  editor's area browser sends none, and neither does a release from before
+  reporting. A board moved back to such a release keeps its last report, so
+  one that is days old while the node is online is a sign of that.
 - **Features** sums up, for each optional V3Net feature your hub serves,
   whether the node's software supports it. It says *supported*, not *on*:
   whether a board turns a feature on, and whether its callers opt in, is
@@ -259,7 +263,7 @@ rows under the list describe the node under the cursor:
 
 | Shown | Meaning |
 |-------|---------|
-| `Version ?`, `Software: unknown (not reported)` | The node has sent no report: ViSiON/3 from before reporting, or other software. Unknown, not out of date: nothing is assumed about what it supports. |
+| `Version ?`, `Software: unknown (not reported)` | The node has sent no report: ViSiON/3 from before reporting, or other software. Unknown, not out of date: nothing is assumed about what it supports. `Its last report was not valid` means the hub refused its latest report and cleared the old one. |
 | `Features: supports all this hub serves` | Every feature the hub serves is among the node's reported capabilities. |
 | `Upgrade for: Central directory (v0.9.7+)` | The node reports a ViSiON/3 release older than the first one with the feature. Its sysop upgrades to get it. |
 | `Not in its software: Network chat` | The node's software does not list the feature, and no release can be named: the feature has not shipped in a release yet, the node runs other software, or its build differs from the release it names. |
@@ -271,8 +275,9 @@ it. It is not proof of the program the node really runs. Only the features a
 node lists as capabilities count as supported; the version is shown, and used
 to name a release to upgrade to, but never turns a feature on. A report that
 breaks the limits (a name over 32 characters, a version that is not a
-version number, control characters) is ignored whole, the subscribe goes
-ahead, and the hub logs `v3net hub: ignoring malformed software report`.
+version number, control characters) is ignored whole and clears the node's
+record, the subscribe goes ahead, and the hub logs
+`v3net hub: ignoring malformed software report`.
 
 The report is only shown here, to you as the hub operator. It is not
 published to other boards: the software line on a board's

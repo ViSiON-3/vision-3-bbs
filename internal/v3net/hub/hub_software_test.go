@@ -80,8 +80,8 @@ func allFeatures() []string {
 }
 
 // A signed subscribe's report reaches the operator's node list with when it
-// came, and later subscribes replace it: an upgrade with the new version, a
-// downgrade to software that sends none with no report at all.
+// came, and a later report replaces it, an upgrade or a downgrade alike. A
+// subscribe that carries none leaves it as it was.
 func TestSoftwareReport_RecordedAndReplaced(t *testing.T) {
 	_, ts, hubKS, leafKS := softwareHub(t)
 
@@ -135,11 +135,37 @@ func TestSoftwareReport_RecordedAndReplaced(t *testing.T) {
 		}
 	}
 
-	// Downgraded to software that sends no report.
+	// Downgraded to a release that still reports.
+	subscribeWithSoftware(t, ts, leafKS, &protocol.SoftwareReport{
+		Name: protocol.SoftwareNameVision3, Version: "0.9.7", Capabilities: []string{protocol.FeatureCentralDirectory},
+	}, false)
+	n = listedNode(t, ts, hubKS, leafKS.NodeID())
+	if n.Software.String() != "ViSiON/3 0.9.7" {
+		t.Errorf("after downgrade: software = %q", n.Software.String())
+	}
+
+	// A signed subscribe with no report: the config editor subscribing to an
+	// area in the board's name, or a leaf from before reports. The record,
+	// and when it came, stay as they were.
+	reportedAt := n.SoftwareReportedAt
 	subscribeWithSoftware(t, ts, leafKS, nil, false)
 	n = listedNode(t, ts, hubKS, leafKS.NodeID())
-	if n.Software != nil || n.SoftwareReportedAt == "" {
-		t.Errorf("after downgrade: software %+v at %q, want none, with the time it subscribed", n.Software, n.SoftwareReportedAt)
+	if n.Software.String() != "ViSiON/3 0.9.7" || n.SoftwareReportedAt != reportedAt {
+		t.Errorf("subscribe without a report changed the record to %q at %q", n.Software.String(), n.SoftwareReportedAt)
+	}
+}
+
+// The config editor's area browser subscribes in the board's name, signed,
+// with area tags and no report. Managing areas must not erase what the
+// running board reported.
+func TestSoftwareReport_AreaSubscribeKeepsReport(t *testing.T) {
+	h, ts, hubKS, leafKS := softwareHub(t)
+	seedTestNAL(t, h, hubKS)
+	subscribeWithSoftware(t, ts, leafKS, &protocol.SoftwareReport{Name: protocol.SoftwareNameVision3, Version: "0.9.8"}, false)
+
+	registerLeafWithAreas(t, ts, leafKS, []string{"gen.general"})
+	if n := listedNode(t, ts, hubKS, leafKS.NodeID()); n.Software.String() != "ViSiON/3 0.9.8" {
+		t.Errorf("area subscribe changed the report to %q", n.Software.String())
 	}
 }
 
@@ -157,7 +183,8 @@ func TestSoftwareReport_UnsignedIgnored(t *testing.T) {
 }
 
 // A report that breaks the limits is dropped whole and the subscribe still
-// succeeds; the node then reads as not reported.
+// succeeds; the node then reads as not reported, rather than keeping a report
+// it no longer stands by.
 func TestSoftwareReport_MalformedDropped(t *testing.T) {
 	_, ts, hubKS, leafKS := softwareHub(t)
 	subscribeWithSoftware(t, ts, leafKS, &protocol.SoftwareReport{Name: protocol.SoftwareNameVision3, Version: "0.9.8"}, false)
@@ -168,8 +195,8 @@ func TestSoftwareReport_MalformedDropped(t *testing.T) {
 		{Name: protocol.SoftwareNameVision3, Capabilities: []string{"NOT A FEATURE"}},
 	} {
 		subscribeWithSoftware(t, ts, leafKS, bad, false)
-		if n := listedNode(t, ts, hubKS, leafKS.NodeID()); n.Software != nil {
-			t.Errorf("malformed report %+v stored as %+v", bad, n.Software)
+		if n := listedNode(t, ts, hubKS, leafKS.NodeID()); n.Software != nil || n.SoftwareReportedAt == "" {
+			t.Errorf("malformed report %+v: record %+v at %q, want cleared with its time", bad, n.Software, n.SoftwareReportedAt)
 		}
 	}
 }

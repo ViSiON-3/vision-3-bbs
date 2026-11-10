@@ -314,11 +314,10 @@ func (ss *SubscriberStore) SetProfileUnlessBanned(nodeID, network, bbsName, bbsH
 }
 
 // SetSoftware records report as the node's latest software report, received
-// at, replacing the one before. A nil report clears it: the node subscribed
-// without one, after a downgrade say, and the hub no longer knows what it
-// runs. at is still recorded, as when the node was last heard from. Callers
-// must only pass a node ID they have authenticated and a report that passed
-// Validate. It returns ErrUnknownNode if no row matches.
+// at, replacing the one before. A nil report clears it, for a node whose
+// report the hub could not accept; at is still recorded, as when that
+// happened. Callers must only pass a node ID they have authenticated and a
+// report that passed Validate. It returns ErrUnknownNode if no row matches.
 func (ss *SubscriberStore) SetSoftware(nodeID, network string, report *protocol.SoftwareReport, at time.Time) error {
 	software := ""
 	if report != nil {

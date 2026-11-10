@@ -54,11 +54,11 @@ func TestNodeDetail(t *testing.T) {
 			},
 		},
 		{
-			name: "subscribed without a report",
+			name: "last report not valid",
 			n:    protocol.NodeInfo{SoftwareReportedAt: "2026-11-10T11:30:00Z"},
 			want: [3]string{
 				"Software: unknown (not reported)",
-				"No report when it last subscribed (30m ago); offline, may be stale",
+				"Its last report was not valid (30m ago); offline, may be stale",
 				"Features: not assessed by this hub",
 			},
 		},

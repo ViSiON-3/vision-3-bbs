@@ -91,12 +91,10 @@ func nodeDetail(n protocol.NodeInfo, now time.Time) [nodesDetailRows]string {
 	if n.Software == nil {
 		// Unknown, which is not the same as out of date.
 		out[0] = "Software: unknown (not reported)"
-		switch {
-		case timeErr == nil:
-			// Subscribed, signed, without a report: software older than
-			// reporting, or another package, on its last start.
-			out[1] = "No report when it last subscribed (" + ago(reported, now) + ")" + nodeOnline(n)
-		default:
+		if timeErr == nil {
+			// The hub refused its last report as malformed.
+			out[1] = "Its last report was not valid (" + ago(reported, now) + ")" + nodeOnline(n)
+		} else {
 			out[1] = "Never reported to this hub" + nodeOnline(n)
 		}
 	} else {
