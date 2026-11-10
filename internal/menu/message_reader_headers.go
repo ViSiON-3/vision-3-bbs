@@ -130,8 +130,9 @@ func runGetHeaderType(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
-	// Load lightbar options from MSGHDR.BAR
-	options, err := loadLightbarOptions("MSGHDR", e)
+	// MSGHDR.BAR is a standalone picker with no MSGHDR.CFG, so load it
+	// without the CFG hotkey check, which would warn once per style.
+	options, err := loadBarFile("MSGHDR", e)
 	if err != nil {
 		slog.Error("failed to load MSGHDR.BAR", "node", nodeNumber, "error", err)
 		msg := "\r\n|01Error loading MSGHDR.BAR!|07\r\n"
