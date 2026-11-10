@@ -19,7 +19,9 @@ func (h *Hub) requireOperator(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// handleListNodes serves GET /v3net/v1/{network}/nodes (operator only).
+// handleListNodes serves GET /v3net/v1/{network}/nodes (operator only):
+// each node's registration, with the software it last reported, whether it
+// is online now, and which optional features it supports on this hub.
 func (h *Hub) handleListNodes(w http.ResponseWriter, r *http.Request) {
 	if !h.requireOperator(w, r) {
 		return
@@ -40,6 +42,9 @@ func (h *Hub) handleListNodes(w http.ResponseWriter, r *http.Request) {
 		nodes = append(nodes, protocol.NodeInfo{
 			NodeID: s.NodeID, BBSName: s.BBSName, BBSHost: s.BBSHost,
 			Status: s.Status, CreatedAt: s.CreatedAt,
+			Software: s.Software, SoftwareReportedAt: s.SoftwareReportedAt,
+			Online:   h.online.online(s.NodeID, network),
+			Features: protocol.AssessFeatures(s.Software, hubFeatures),
 		})
 	}
 	writeJSON(w, http.StatusOK, nodes)

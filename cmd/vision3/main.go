@@ -2119,7 +2119,11 @@ func main() {
 			svc.CentralAddresses = v3net.CentralAddressesFor(serverConfig.SSHHost,
 				serverConfig.SSHEnabled, serverConfig.SSHPort,
 				serverConfig.TelnetEnabled, serverConfig.TelnetPort)
-			svc.CentralSoftware = "ViSiON/3 " + version.Number
+			svc.Software = protocol.SoftwareReport{
+				Name:    protocol.SoftwareNameVision3,
+				Version: strings.TrimPrefix(strings.TrimSpace(version.Number), "v"),
+				Build:   version.Build(),
+			}
 			// Network Who's Online and Last Callers publish only callers
 			// who opted in; the source applies that.
 			svc.SetCentralActivitySource(newCentralActivitySource(sessionRegistry, userMgr))

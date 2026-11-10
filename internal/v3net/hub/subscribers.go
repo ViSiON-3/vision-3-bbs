@@ -10,6 +10,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
 const subscribersSchema = `
@@ -28,6 +31,14 @@ CREATE TABLE IF NOT EXISTS subscribers (
 // requestedAreasMigration adds the column holding the area tags a node asked
 // for when it first registered (see Subscriber.RequestedAreas).
 const requestedAreasMigration = `ALTER TABLE subscribers ADD COLUMN requested_area_tags TEXT NOT NULL DEFAULT '[]'`
+
+// softwareMigrations add the columns holding a node's latest software report
+// (see Subscriber.Software): the report as JSON, empty for none, and when
+// the hub recorded it.
+var softwareMigrations = []string{
+	`ALTER TABLE subscribers ADD COLUMN software_json TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE subscribers ADD COLUMN software_reported_at TEXT NOT NULL DEFAULT ''`,
+}
 
 // ErrUnknownNode is returned by SetStatus and Delete when no subscriber
 // row matches the node/network pair.
@@ -48,6 +59,13 @@ type Subscriber struct {
 	// so those areas are only subscribed when it re-subscribes after
 	// approval; older leaves do that unsigned, and may apply these tags.
 	RequestedAreas []string
+
+	// Software is the node's latest software report, nil if it sent none,
+	// and SoftwareReportedAt when the hub recorded it (RFC 3339 UTC), empty
+	// if no signed subscribe has arrived since the hub began recording.
+	// Populated by List only.
+	Software           *protocol.SoftwareReport
+	SoftwareReportedAt string
 }
 
 // SubscriberStore manages leaf node subscriptions with SQLite persistence
@@ -68,6 +86,11 @@ func NewSubscriberStore(db *sql.DB) (*SubscriberStore, error) {
 		// Ignore "duplicate column" — migration already applied.
 		if !strings.Contains(err.Error(), "duplicate column") {
 			return nil, fmt.Errorf("hub: migrate add requested_area_tags column: %w", err)
+		}
+	}
+	for _, m := range softwareMigrations {
+		if _, err := db.Exec(m); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return nil, fmt.Errorf("hub: migrate add software columns: %w", err)
 		}
 	}
 
@@ -185,7 +208,7 @@ func (ss *SubscriberStore) ActiveCount(network string) int {
 func (ss *SubscriberStore) List(network string) ([]Subscriber, error) {
 	rows, err := ss.db.Query(
 		`SELECT node_id, network, pubkey_b64, COALESCE(bbs_name, ''),
-		        COALESCE(bbs_host, ''), status, created_at
+		        COALESCE(bbs_host, ''), status, created_at, software_json, software_reported_at
 		 FROM subscribers WHERE network = ? ORDER BY created_at`, network)
 	if err != nil {
 		return nil, fmt.Errorf("hub: list subscribers: %w", err)
@@ -195,9 +218,17 @@ func (ss *SubscriberStore) List(network string) ([]Subscriber, error) {
 	var subs []Subscriber
 	for rows.Next() {
 		var s Subscriber
+		var software string
 		if err := rows.Scan(&s.NodeID, &s.Network, &s.PubKeyB64,
-			&s.BBSName, &s.BBSHost, &s.Status, &s.CreatedAt); err != nil {
+			&s.BBSName, &s.BBSHost, &s.Status, &s.CreatedAt, &software, &s.SoftwareReportedAt); err != nil {
 			return nil, fmt.Errorf("hub: scan subscriber: %w", err)
+		}
+		if software != "" {
+			// A row that does not decode reads as no report.
+			var r protocol.SoftwareReport
+			if json.Unmarshal([]byte(software), &r) == nil && r.Validate() == nil {
+				s.Software = &r
+			}
 		}
 		subs = append(subs, s)
 	}
@@ -280,6 +311,35 @@ func (ss *SubscriberStore) SetProfileUnlessBanned(nodeID, network, bbsName, bbsH
 		s.BBSHost = bbsHost
 	}
 	return true, nil
+}
+
+// SetSoftware records report as the node's latest software report, received
+// at, replacing the one before. A nil report clears it: the node subscribed
+// without one, after a downgrade say, and the hub no longer knows what it
+// runs. at is still recorded, as when the node was last heard from. Callers
+// must only pass a node ID they have authenticated and a report that passed
+// Validate. It returns ErrUnknownNode if no row matches.
+func (ss *SubscriberStore) SetSoftware(nodeID, network string, report *protocol.SoftwareReport, at time.Time) error {
+	software := ""
+	if report != nil {
+		data, err := json.Marshal(report)
+		if err != nil {
+			return fmt.Errorf("hub: encode software report: %w", err)
+		}
+		software = string(data)
+	}
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	res, err := ss.db.Exec(
+		"UPDATE subscribers SET software_json = ?, software_reported_at = ? WHERE node_id = ? AND network = ?",
+		software, at.UTC().Format(time.RFC3339), nodeID, network)
+	if err != nil {
+		return fmt.Errorf("hub: set software: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return fmt.Errorf("%w: %s on %s", ErrUnknownNode, nodeID, network)
+	}
+	return nil
 }
 
 // Delete removes a subscriber registration from the DB and cache.

@@ -62,6 +62,9 @@ type SubscribeRequest struct {
 	BBSName   string   `json:"bbs_name"`
 	BBSHost   string   `json:"bbs_host"`
 	AreaTags  []string `json:"area_tags,omitempty"`
+	// Software is what the node says it runs (see SoftwareReport). A hub
+	// records it only from a signed request; an older leaf sends none.
+	Software *SoftwareReport `json:"software,omitempty"`
 }
 
 // SubscribeResponse is the response to a subscribe request.
@@ -180,11 +183,27 @@ type SubscribeWithAreasResponse struct {
 }
 
 // NodeInfo describes a subscriber node registration on a hub. Served by
-// the hub-operator nodes admin endpoints.
+// the hub-operator nodes admin endpoints. A hub from before software
+// reports sends none of the fields from Software on, which read as a node
+// that has not reported.
 type NodeInfo struct {
 	NodeID    string `json:"node_id"`
 	BBSName   string `json:"bbs_name"`
 	BBSHost   string `json:"bbs_host"`
 	Status    string `json:"status"` // "active" | "pending" | "banned"
 	CreatedAt string `json:"created_at"`
+	// Software is the node's latest software report, nil if it has sent
+	// none (an older leaf, or one whose report the hub could not accept).
+	// It is self-reported, not proof of what the node runs.
+	Software *SoftwareReport `json:"software,omitempty"`
+	// SoftwareReportedAt is when the hub recorded that report, or when the
+	// node last subscribed without one, RFC 3339 UTC; empty if it never
+	// has since the hub began recording reports.
+	SoftwareReportedAt string `json:"software_reported_at,omitempty"`
+	// Online is whether the node has an event stream open on the network
+	// now. A node that is offline may have changed its software since it
+	// last reported.
+	Online bool `json:"online"`
+	// Features is AssessFeatures for the node on this hub.
+	Features []FeatureSupport `json:"features,omitempty"`
 }

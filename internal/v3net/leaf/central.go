@@ -209,7 +209,8 @@ func (l *Leaf) runCentral(ctx context.Context) {
 		delay = min(delay*2, centralRetryMax)
 	}
 	if supported, _ := l.HubSupports(protocol.FeatureCentralDirectory); !supported {
-		slog.Info("leaf: hub does not serve the Central directory; Central is off for this network", "network", l.cfg.Network, "hub", l.cfg.HubURL)
+		slog.Info("leaf: hub does not serve the Central directory; Central is off for this network", "network", l.cfg.Network,
+			"hub", l.cfg.HubURL, "needs", hubFeatureAdvice(protocol.FeatureCentralDirectory))
 		return
 	}
 

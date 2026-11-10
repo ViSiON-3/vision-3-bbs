@@ -451,6 +451,25 @@ func (h *Hub) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Only a signed request is bound to the node, so only one updates what
+	// the hub records about the node's software. A report that does not
+	// validate is dropped and the subscribe goes ahead; the hub then holds
+	// no report rather than half of one.
+	if signed {
+		report := req.Software
+		if report != nil {
+			if err := report.Validate(); err != nil {
+				slog.Warn("v3net hub: ignoring malformed software report", "node", req.NodeID,
+					"network", req.Network, "error", err)
+				report = nil
+			}
+		}
+		if err := h.subscribers.SetSoftware(req.NodeID, req.Network, report, time.Now()); err != nil {
+			// Diagnostics only: the registration itself stands.
+			slog.Warn("v3net hub: record software report", "node", req.NodeID, "network", req.Network, "error", err)
+		}
+	}
+
 	// Anyone can build an unsigned request for a known node, so one must not
 	// change an existing node's area subscriptions or file access requests
 	// in its name. It may only apply the areas the node's first registration

@@ -77,9 +77,14 @@ type Service struct {
 	// CentralAddresses are the connection addresses a Central listing
 	// carries when the subscription sets none, derived by the caller from
 	// the server's SSH and telnet settings (see CentralAddressesFor).
-	// CentralSoftware names the software in the listing.
 	CentralAddresses []string
-	CentralSoftware  string
+	// Software is the software this board runs, set by the caller before
+	// Start. It is the one source for both places the board names it: the
+	// software line of its Central listing (name and version only), and
+	// the report each leaf sends the hub when it subscribes, which the
+	// hub's operator sees (see protocol.SoftwareReport). An empty Name
+	// sends no report and lists no software.
+	Software protocol.SoftwareReport
 
 	// activitySrc holds the leaf.CentralActivitySource set by
 	// SetCentralActivitySource: what the BBS lets the leaves publish for
@@ -497,6 +502,7 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		},
 		BBSName:               s.BBSName,
 		BBSHost:               s.BBSHost,
+		Software:              s.softwareReport(),
 		CentralEnabled:        lcfg.CentralEnabled(),
 		CentralListing:        s.centralListingSpec(lcfg),
 		CentralPresence:       lcfg.CentralPresence(),
@@ -573,6 +579,17 @@ func (s *Service) stopLeaf(run *leafRun) {
 	})
 }
 
+// softwareReport returns a copy of Software for a leaf to send, or nil when
+// it names no software.
+func (s *Service) softwareReport() *protocol.SoftwareReport {
+	if s.Software.Name == "" {
+		return nil
+	}
+	r := s.Software
+	r.Capabilities = slices.Clone(r.Capabilities)
+	return &r
+}
+
 // updateHubSelfProfile writes the configured BBSName and BBSHost into the
 // hub's own subscriber row for each hosted network. hubAutoInit runs in New,
 // before the caller has set them, so it registers the node under a
@@ -595,6 +612,28 @@ func (s *Service) updateHubSelfProfile() {
 	}
 }
 
+// updateHubSelfSoftware records Software, with the leaf's capabilities, as
+// the software report on the hub's own subscriber row for each hosted
+// network, as a signed subscribe does for any other node: the hub may host
+// a network it runs no leaf for. It runs on every start, so the row follows
+// an upgrade.
+func (s *Service) updateHubSelfSoftware() {
+	report := s.softwareReport()
+	if report != nil {
+		report.Capabilities = leaf.SupportedFeatures()
+		if err := report.Validate(); err != nil {
+			slog.Warn("v3net: software report not valid; the hub's own row gets none", "error", err)
+			report = nil
+		}
+	}
+	now := time.Now()
+	for _, n := range s.cfg.Hub.Networks {
+		if err := s.hub.Subscribers().SetSoftware(s.ks.NodeID(), n.Name, report, now); err != nil {
+			slog.Warn("v3net: could not record the hub's software", "network", n.Name, "error", err)
+		}
+	}
+}
+
 // Start launches the hub (if enabled) and all leaf clients, then blocks
 // until ctx is cancelled, at which point every running leaf is stopped and
 // waited for.
@@ -602,6 +641,7 @@ func (s *Service) Start(ctx context.Context) {
 	hubDone := make(chan struct{})
 	if s.hub != nil {
 		s.updateHubSelfProfile()
+		s.updateHubSelfSoftware()
 		go func() {
 			defer close(hubDone)
 			if err := s.hub.Start(ctx); err != nil {
@@ -1275,7 +1315,7 @@ func (s *Service) centralListingSpec(lcfg config.V3NetLeafConfig) *leaf.CentralL
 		Name:        name,
 		Description: lcfg.Central.Description,
 		Addresses:   slices.Clone(addrs),
-		Software:    s.CentralSoftware,
+		Software:    strings.TrimSpace(s.Software.Name + " " + s.Software.Version),
 	}
 }
 

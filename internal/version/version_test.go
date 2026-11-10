@@ -2,6 +2,7 @@ package version
 
 import (
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -33,5 +34,14 @@ func TestPlatform(t *testing.T) {
 	}
 	if runtime.GOOS == "darwin" && got != "macOS" {
 		t.Errorf("Platform() on darwin = %q, want %q", got, "macOS")
+	}
+}
+
+// Build is a short revision, optionally marked dirty, or nothing; it goes
+// into the software report a leaf sends its hub, which refuses spaces.
+func TestBuildFormat(t *testing.T) {
+	b := Build()
+	if len(b) > len("0123456789ab-dirty") || strings.ContainsAny(b, " \t\n|") {
+		t.Errorf("Build() = %q", b)
 	}
 }
