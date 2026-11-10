@@ -64,11 +64,19 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		uiPause(1 * time.Second)
 		return nil, "", nil
 	}
-	defer func() {
+	// The base is closed once the mail is counted, before the reader opens:
+	// a delete there packs it, and Windows can't replace files held open.
+	closed := false
+	closeBase := func() {
+		if closed {
+			return
+		}
+		closed = true
 		if cerr := base.Close(); cerr != nil {
 			slog.Warn("closing JAM base", "error", cerr)
 		}
-	}()
+	}
+	defer closeBase()
 
 	// Get total message count
 	totalMessages, err := e.MessageMgr.GetMessageCountForArea(privmailArea.ID)
@@ -107,6 +115,8 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 			privateMessages = append(privateMessages, msgNum)
 		}
 	}
+
+	closeBase()
 
 	if len(privateMessages) == 0 {
 		msg := "\r\n|07No private mail found for you.|07\r\n"

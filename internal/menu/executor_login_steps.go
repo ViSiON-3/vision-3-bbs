@@ -48,11 +48,19 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 		slog.Warn("JAM base not open for PRIVMAIL area", "node", nodeNumber, "error", err)
 		return currentUser, "", nil
 	}
-	defer func() {
+	// The base is closed once the mail is counted, before the reader opens:
+	// a delete there packs it, and Windows can't replace files held open.
+	closed := false
+	closeBase := func() {
+		if closed {
+			return
+		}
+		closed = true
 		if cerr := base.Close(); cerr != nil {
 			slog.Warn("closing JAM base", "error", cerr)
 		}
-	}()
+	}
+	defer closeBase()
 
 	// Get total message count
 	totalMessages, err := e.MessageMgr.GetMessageCountForArea(privmailArea.ID)
@@ -87,6 +95,8 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 			newMailCount++
 		}
 	}
+
+	closeBase()
 
 	if newMailCount > 0 {
 		e.writeStringf(terminal, outputMode, e.Strings().ExecNewMailCount, newMailCount)
