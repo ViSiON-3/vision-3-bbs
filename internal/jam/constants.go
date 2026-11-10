@@ -84,4 +84,7 @@ var (
 	ErrInvalidMessage   = errors.New("jam: invalid message number")
 	ErrBaseNotOpen      = errors.New("jam: message base not open")
 	ErrNotFound         = errors.New("jam: not found")
+	// ErrMessageChanged is DeleteMessageIf's answer when the message is
+	// gone or no longer the one its check expects.
+	ErrMessageChanged = errors.New("jam: message changed")
 )

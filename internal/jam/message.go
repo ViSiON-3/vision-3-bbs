@@ -1,6 +1,7 @@
 package jam
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -192,35 +193,86 @@ func (b *Base) DeleteMessage(msgNum int) error {
 		if err != nil {
 			return err
 		}
+		return b.markDeletedLocked(msgNum, hdr)
+	})
+}
 
-		hdr.Attribute |= MsgDeleted
-		hdr.TxtLen = 0
+// DeleteMessageIf deletes message msgNum, as DeleteMessage does, only when
+// check accepts the message as it is at that moment. The message is read,
+// checked and deleted under the base's file lock, through files opened once
+// the lock is held, so no other session's delete, pack or post can come
+// between the check and the delete, even one that replaced the files after
+// b was opened. A message number past the end, a message already deleted,
+// or one check refuses gives ErrMessageChanged, and nothing is deleted.
+// b's own view of the base (its fixed header) is not refreshed.
+func (b *Base) DeleteMessageIf(msgNum int, check func(*Message) bool) error {
+	return b.withFileLock(func() error {
+		base := b
+		if b.BasePath != "" {
+			fresh, err := Open(b.BasePath)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = fresh.Close() }()
+			base = fresh
+		}
+		base.mu.Lock()
+		defer base.mu.Unlock()
+		if !base.isOpen {
+			return ErrBaseNotOpen
+		}
 
-		idx, err := b.readIndexRecordLocked(msgNum)
+		hdr, err := base.readMessageHeaderLocked(msgNum)
+		if errors.Is(err, ErrInvalidMessage) {
+			return ErrMessageChanged
+		}
 		if err != nil {
 			return err
 		}
-
-		// Rewrite header at original offset
-		if _, err := b.jhrFile.Seek(int64(idx.HdrOffset), 0); err != nil {
-			return fmt.Errorf("jam: seek header for delete: %w", err)
+		if hdr.Attribute&MsgDeleted != 0 {
+			return ErrMessageChanged
 		}
-		for _, field := range []interface{}{
-			hdr.Signature, hdr.Revision, hdr.ReservedWord, hdr.SubfieldLen,
-			hdr.TimesRead, hdr.MSGIDcrc, hdr.REPLYcrc, hdr.ReplyTo,
-			hdr.Reply1st, hdr.ReplyNext, hdr.DateWritten, hdr.DateReceived,
-			hdr.DateProcessed, hdr.MessageNumber, hdr.Attribute, hdr.Attribute2,
-			hdr.Offset, hdr.TxtLen, hdr.PasswordCRC, hdr.Cost,
-		} {
-			if err := writeBinaryLE(b.jhrFile, field, "deleted message header field"); err != nil {
-				return err
-			}
+		text, err := base.readMessageTextLocked(hdr)
+		if err != nil {
+			return err
 		}
-
-		b.fixedHeader.ActiveMsgs--
-		b.fixedHeader.ModCounter++
-		return b.writeFixedHeader()
+		if !check(MessageFrom(hdr, text)) {
+			return ErrMessageChanged
+		}
+		return base.markDeletedLocked(msgNum, hdr)
 	})
+}
+
+// markDeletedLocked flags message msgNum, whose header is hdr, deleted.
+// Callers hold the file lock and b.mu.
+func (b *Base) markDeletedLocked(msgNum int, hdr *MessageHeader) error {
+	hdr.Attribute |= MsgDeleted
+	hdr.TxtLen = 0
+
+	idx, err := b.readIndexRecordLocked(msgNum)
+	if err != nil {
+		return err
+	}
+
+	// Rewrite header at original offset
+	if _, err := b.jhrFile.Seek(int64(idx.HdrOffset), 0); err != nil {
+		return fmt.Errorf("jam: seek header for delete: %w", err)
+	}
+	for _, field := range []interface{}{
+		hdr.Signature, hdr.Revision, hdr.ReservedWord, hdr.SubfieldLen,
+		hdr.TimesRead, hdr.MSGIDcrc, hdr.REPLYcrc, hdr.ReplyTo,
+		hdr.Reply1st, hdr.ReplyNext, hdr.DateWritten, hdr.DateReceived,
+		hdr.DateProcessed, hdr.MessageNumber, hdr.Attribute, hdr.Attribute2,
+		hdr.Offset, hdr.TxtLen, hdr.PasswordCRC, hdr.Cost,
+	} {
+		if err := writeBinaryLE(b.jhrFile, field, "deleted message header field"); err != nil {
+			return err
+		}
+	}
+
+	b.fixedHeader.ActiveMsgs--
+	b.fixedHeader.ModCounter++
+	return b.writeFixedHeader()
 }
 
 // ScanMessages reads up to maxMessages starting from startMsg (1-based),

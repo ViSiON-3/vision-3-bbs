@@ -225,7 +225,7 @@ func (e *MenuExecutor) handleJump(reader *bufio.Reader, terminal *term.Terminal,
 }
 
 // displayReaderHelp shows the help screen for message reader commands.
-func displayReaderHelp(terminal *term.Terminal, outputMode ansi.OutputMode, isSysop, twitOn bool) {
+func displayReaderHelp(terminal *term.Terminal, outputMode ansi.OutputMode, isSysop, canDelete, twitOn bool) {
 	help := "\r\n" +
 		"|15Message Reader Help|07\r\n" +
 		"|08" + strings.Repeat("-", 40) + "|07\r\n" +
@@ -239,6 +239,8 @@ func displayReaderHelp(terminal *term.Terminal, outputMode ansi.OutputMode, isSy
 	}
 	if isSysop {
 		help += "|01D|07elete Message        |01K|07ludges / Control Info\r\n"
+	} else if canDelete {
+		help += "|01D|07elete Message\r\n"
 	}
 	help += "|08" + strings.Repeat("-", 40) + "|07\r\n"
 

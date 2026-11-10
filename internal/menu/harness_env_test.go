@@ -92,6 +92,9 @@ type menuEnv struct {
 	// sessionContext gives each session a real context, which a script door
 	// needs; off, sessions report a nil one.
 	sessionContext bool
+	// hooks go to the next run's session (testSession.whenOutput), then
+	// are cleared. See menuEnv.whenOutput.
+	hooks []outputHook
 }
 
 // defaultTestUsers are the users every menuEnv starts with.
@@ -266,6 +269,7 @@ func (r runResult) has(want ...string) bool {
 func (env *menuEnv) run(fn RunnableFunc, u *user.User, args, input string) runResult {
 	env.t.Helper()
 	ts := newTestSession(input)
+	ts.hooks, env.hooks = env.hooks, nil
 	if env.remoteIP != "" {
 		ts.addr = &net.TCPAddr{IP: net.ParseIP(env.remoteIP), Port: 2222}
 	}
@@ -333,4 +337,11 @@ func (env *menuEnv) runCmd(cmd string, u *user.User, args, input string) runResu
 		env.t.Fatalf("no runnable registered as %q", cmd)
 	}
 	return env.run(fn, u, args, input)
+}
+
+// whenOutput has the next run call fn once, the first time the command
+// writes marker: before it reads the reply to a prompt keyed on marker, so
+// fn can play another session changing shared data in between.
+func (env *menuEnv) whenOutput(marker string, fn func()) {
+	env.hooks = append(env.hooks, outputHook{marker: marker, fn: fn})
 }

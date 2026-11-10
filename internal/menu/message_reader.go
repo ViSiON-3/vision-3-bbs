@@ -72,7 +72,8 @@ func dimmedOptions(opts []MsgLightbarOption) []MsgLightbarOption {
 	return out
 }
 
-// msgReaderDeleteOption is appended to the lightbar for sysop/co-sysop users only.
+// msgReaderDeleteOption is appended to the lightbar for sysop/co-sysop users,
+// and for everyone reading their mail (PRIVMAIL).
 // LoColor 4 (dark red) distinguishes it from regular options.
 var msgReaderDeleteOption = MsgLightbarOption{Label: " Del ", HotKey: 'D', LoColor: 4}
 
@@ -277,7 +278,13 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		}
 		activeOptions = append(activeOptions, opt)
 	}
-	if isSysop {
+	// A co-sysop may delete any message, a caller their own private mail
+	// (message.DisplayMessage.MailFor). Delete is on the bar for a co-sysop,
+	// and in the mailbox for everyone, lit on a message they may delete.
+	canDelete := func(m *message.DisplayMessage) bool {
+		return isSysop || m.MailFor(currentUser.Handle)
+	}
+	if isSysop || strings.EqualFold(currentAreaTag, "PRIVMAIL") {
 		activeOptions = append(activeOptions, msgReaderDeleteOption)
 	}
 	barSuffix := e.Strings().MsgReadingSuffix
@@ -470,11 +477,18 @@ readerLoop:
 		}
 		threadMenu = keepThreadMenu && canMenu
 		layoutPane()
-		// The bar's Thread item is lit only when there is a menu to open.
+		// The bar's Thread item is lit only when there is a menu to open,
+		// Delete only on a message the caller may delete.
 		for i := range activeOptions {
-			if activeOptions[i].HotKey == 'T' {
+			switch activeOptions[i].HotKey {
+			case 'T':
 				activeOptions[i].LoColor = 0
 				if !canMenu {
+					activeOptions[i].LoColor = msgReaderInactiveColor
+				}
+			case 'D':
+				activeOptions[i].LoColor = msgReaderDeleteOption.LoColor
+				if !canDelete(currentMsg) {
 					activeOptions[i].LoColor = msgReaderInactiveColor
 				}
 			}
@@ -965,8 +979,8 @@ readerLoop:
 				}
 				break scrollLoop
 
-			case 'D': // Delete message (sysop/co-sysop only)
-				if !isSysop {
+			case 'D': // Delete message: a co-sysop any, a caller their own mail
+				if !canDelete(currentMsg) {
 					continue // Ignore if triggered without access
 				}
 				confirmed, confErr := promptSingleChar(reader, terminal,
@@ -975,7 +989,28 @@ readerLoop:
 					needsRedraw = true
 					continue
 				}
-				if delErr := e.MessageMgr.DeleteMessage(currentAreaID, currentMsg.MsgNum); delErr != nil {
+				// The message is checked again as the delete happens, under
+				// the base's lock: while the caller was answering, another
+				// session may have deleted it, or packed the base and moved
+				// someone else's message into its number.
+				shown := currentMsg
+				delErr := e.MessageMgr.DeleteMessageIf(currentAreaID, shown.MsgNum, func(m *message.DisplayMessage) bool {
+					return message.SameMessage(m, shown) && canDelete(m)
+				})
+				if errors.Is(delErr, message.ErrMessageChanged) {
+					e.showReaderNotice(terminal, outputMode, "|01That message was changed or deleted elsewhere. Nothing was deleted.|07", termHeight)
+					if n, cErr := e.MessageMgr.GetMessageCountForArea(currentAreaID); cErr == nil {
+						totalMsgCount = n
+					}
+					if totalMsgCount <= 0 {
+						break readerLoop
+					}
+					if currentMsgNum > totalMsgCount {
+						currentMsgNum = totalMsgCount
+					}
+					break scrollLoop
+				}
+				if delErr != nil {
 					slog.Error("delete message", "node", nodeNumber, "msg", currentMsg.MsgNum, "area", currentAreaID, "error", delErr)
 					terminalio.WriteProcessedBytes(terminal,
 						ansi.ReplacePipeCodes([]byte("\r\n|01Error deleting message.|07\r\n")), outputMode)
@@ -1031,7 +1066,7 @@ readerLoop:
 				break readerLoop
 
 			case '?': // Help
-				displayReaderHelp(terminal, outputMode, isSysop, twitOn)
+				displayReaderHelp(terminal, outputMode, isSysop, canDelete(currentMsg), twitOn)
 				needsRedraw = true
 				continue
 

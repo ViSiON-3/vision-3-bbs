@@ -35,3 +35,23 @@ func TestVisibleTo(t *testing.T) {
 		}
 	}
 }
+
+// MailFor is true only for the recipient of private mail, by handle.
+func TestMailFor(t *testing.T) {
+	priv := &DisplayMessage{IsPrivate: true, From: "Sysop", To: " Bob "}
+	for _, tc := range []struct {
+		m      *DisplayMessage
+		handle string
+		want   bool
+	}{
+		{priv, "bob", true},
+		{priv, "Sysop", false}, // the sender may read it, not delete it
+		{priv, "", false},
+		{&DisplayMessage{IsPrivate: true}, " ", false},
+		{&DisplayMessage{From: "Sysop", To: "Bob"}, "Bob", false}, // public
+	} {
+		if got := tc.m.MailFor(tc.handle); got != tc.want {
+			t.Errorf("MailFor(%q) on %+v = %v, want %v", tc.handle, *tc.m, got, tc.want)
+		}
+	}
+}

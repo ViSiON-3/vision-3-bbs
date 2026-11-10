@@ -25,6 +25,11 @@ Users access private mail through the Email Menu (press `E` from the main menu):
 
 Mail you have sent is not in your mailbox. It shows when you read the `PRIVMAIL` area with the message reader, list or newscan.
 
+In the reader, `D` deletes a private message addressed to you, after a
+`Delete this message? [Y/N]` check. In the mailbox it is on the bar as Del,
+lit on your mail. A deleted message is gone for good: the base is packed at
+once, as when a co-sysop deletes. You can't delete mail you sent.
+
 Posting with `COMPOSEMSG` while `PRIVMAIL` is the current area works the same way: the recipient must be an existing user, and the message is saved as private.
 
 Private mail is always signed with the sender's handle, even on a board that
