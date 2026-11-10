@@ -216,23 +216,6 @@ func TestV3NetSaveHubURLChangeBeatsKeyPin(t *testing.T) {
 	}
 }
 
-// The BBS recording that the old hub signs is per-hub state too, so it
-// does not keep the old leaf and does not carry over to the new hub.
-func TestV3NetSaveHubURLChangeBeatsHubSigned(t *testing.T) {
-	leaves, conflicts := saveV3NetHubRace(t, hubMoveBase(), func(c *V3NetConfig) {
-		c.Leaves[0].HubSigned = true
-	}, moveHub)
-	if len(conflicts) != 0 {
-		t.Errorf("conflicts = %+v", conflicts)
-	}
-	if len(leaves) != 2 || leaves[0].HubURL != "https://new.example" || leaves[1].Network != "netb" {
-		t.Fatalf("leaves = %+v, want neta at the new hub and netb", leaves)
-	}
-	if leaves[0].HubSigned {
-		t.Errorf("neta = %+v; hubSigned for the old hub must not carry over", leaves[0])
-	}
-}
-
 // An edit elsewhere to anything but the old leaf's keys is not the BBS
 // pinning a key, so it is kept and reported as before.
 func TestV3NetSaveHubURLChangeKeepsOtherEdits(t *testing.T) {
@@ -329,11 +312,9 @@ func TestV3NetSaveHubMovedBothSides(t *testing.T) {
 		c.Leaves[0].HubURL = "https://other.example"
 		c.Leaves[0].Boards = []string{"A", "A2"}
 		c.Leaves[0].PollInterval = "9m"
-		c.Leaves[0].RequireSignedHub = true
 		c.Leaves[0].CoordinatorPubKey = "other-c"
 		c.Leaves[0].HubPubKey = "other-h"
 		c.Leaves[0].PendingHubPubKey = "other-p"
-		c.Leaves[0].HubSigned = true
 	}, func(c *V3NetConfig) {
 		moveHub(c)
 		c.Leaves[0].Origin = "ours"
@@ -342,10 +323,10 @@ func TestV3NetSaveHubMovedBothSides(t *testing.T) {
 		t.Fatalf("leaves = %+v, want neta at this save's hub and netb", leaves)
 	}
 	l := leaves[0]
-	if !slices.Equal(l.Boards, []string{"A", "A2"}) || l.PollInterval != "9m" || !l.RequireSignedHub || l.Origin != "ours" {
+	if !slices.Equal(l.Boards, []string{"A", "A2"}) || l.PollInterval != "9m" || l.Origin != "ours" {
 		t.Errorf("neta = %+v; want both sessions' edits", l)
 	}
-	if l.CoordinatorPubKey != "C" || l.HubPubKey != "" || l.PendingHubPubKey != "" || l.HubSigned {
+	if l.CoordinatorPubKey != "C" || l.HubPubKey != "" || l.PendingHubPubKey != "" {
 		t.Errorf("neta = %+v; want the other hub's state left out", l)
 	}
 	if len(conflicts) != 1 || conflicts[0].Field != "hubUrl" ||
@@ -415,7 +396,7 @@ func TestV3NetHubMovedBothSidesKeepsInputs(t *testing.T) {
 
 // v3netLeafOnHubOf copies exactly the hub URL and the hub state.
 func TestV3NetLeafOnHubOf(t *testing.T) {
-	l := V3NetLeafConfig{HubURL: "l", Network: "n", Origin: "o", CoordinatorPubKey: "l", HubSigned: true}
+	l := V3NetLeafConfig{HubURL: "l", Network: "n", Origin: "o", CoordinatorPubKey: "l", PendingHubPubKey: "l-p"}
 	got := v3netLeafOnHubOf(l, V3NetLeafConfig{HubURL: "h", Network: "x", Origin: "x", HubPubKey: "h"})
 	want := V3NetLeafConfig{HubURL: "h", Network: "n", Origin: "o", HubPubKey: "h"}
 	if !reflect.DeepEqual(got, want) {
@@ -468,81 +449,5 @@ func TestV3NetSaveHubMoveBesideSecondHub(t *testing.T) {
 		if got := hubs(leaves); !slices.Equal(got, want) {
 			t.Errorf("%s: neta hubs = %v, want %v", tc.name, got, want)
 		}
-	}
-}
-
-// clearsBase is a two-leaf file whose first leaf has been cleared before.
-func clearsBase() V3NetConfig {
-	b := hubMoveBase()
-	b.Leaves[0].HubSignedClears = 3
-	return b
-}
-
-// Both sessions clearing Hub Signs on one leaf are two clears: the count ends
-// above both without a conflict, so a leaf that applied either save still sees
-// it move. The other leaf's count stays, and one side's raise is taken as is.
-func TestV3NetSaveHubSignedClears(t *testing.T) {
-	raise := func(n int) func(*V3NetConfig) {
-		return func(c *V3NetConfig) { c.Leaves[0].HubSignedClears = n }
-	}
-	cases := []struct {
-		name       string
-		disk, edit func(*V3NetConfig)
-		want       int
-	}{
-		{"only here", func(*V3NetConfig) {}, raise(4), 4},
-		{"only elsewhere", raise(4), func(*V3NetConfig) {}, 4},
-		{"both to the same count", raise(4), raise(4), 5},
-		{"higher here", raise(4), raise(6), 7},
-		{"higher elsewhere", raise(6), raise(4), 7},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			leaves, conflicts := saveV3NetHubRace(t, clearsBase(), c.disk, c.edit)
-			if len(conflicts) != 0 {
-				t.Errorf("conflicts = %+v", conflicts)
-			}
-			if leaves[0].HubSignedClears != c.want || leaves[1].HubSignedClears != 0 {
-				t.Errorf("counts = %d and %d, want %d and 0", leaves[0].HubSignedClears, leaves[1].HubSignedClears, c.want)
-			}
-		})
-	}
-}
-
-// A clear on the old hub is per-hub state too: it does not keep a leaf whose
-// hub URL was changed.
-func TestV3NetSaveHubURLChangeBeatsHubSignedClears(t *testing.T) {
-	leaves, conflicts := saveV3NetHubRace(t, hubMoveBase(), func(c *V3NetConfig) {
-		c.Leaves[0].HubSignedClears = 1
-	}, moveHub)
-	if len(conflicts) != 0 {
-		t.Errorf("conflicts = %+v", conflicts)
-	}
-	if len(leaves) != 2 || leaves[0].HubURL != "https://new.example" || leaves[1].Network != "netb" {
-		t.Fatalf("leaves = %+v, want neta at the new hub and netb", leaves)
-	}
-}
-
-// Setting Hub Signs to N beats a record the leaf stored after this session
-// loaded the file, though N is also what the session loaded. A save that does
-// not raise the count leaves the record alone.
-func TestV3NetSaveHubSignedClearBeatsLeafRecord(t *testing.T) {
-	record := func(c *V3NetConfig) { c.Leaves[0].HubSigned = true }
-
-	leaves, conflicts := saveV3NetHubRace(t, hubMoveBase(), record, func(c *V3NetConfig) {
-		c.Leaves[0].HubSignedClears = 1
-	})
-	if len(conflicts) != 0 {
-		t.Errorf("conflicts = %+v", conflicts)
-	}
-	if leaves[0].HubSigned || leaves[0].HubSignedClears != 1 {
-		t.Errorf("after a clear: %+v; want hubSigned off and the count raised", leaves[0])
-	}
-
-	leaves, _ = saveV3NetHubRace(t, hubMoveBase(), record, func(c *V3NetConfig) {
-		c.Leaves[0].PollInterval = "9m"
-	})
-	if !leaves[0].HubSigned {
-		t.Errorf("after another edit: %+v; want the record kept", leaves[0])
 	}
 }

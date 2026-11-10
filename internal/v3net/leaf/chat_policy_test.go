@@ -62,7 +62,8 @@ func TestChatRefusedWhenNotOffered(t *testing.T) {
 // ChatStatus follows the hub's feature list as the other features do.
 func TestChatStatusFollowsHubFeatures(t *testing.T) {
 	ts, _, _ := newTestHub(t, true)
-	l := subscribedLeaf(t, ts, "alicebbs")
+	l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
+	offerChat(l)
 	if st := l.ChatStatus(); !st.Enabled || st.SupportKnown || st.Supported {
 		t.Errorf("before /info: %+v", st)
 	}

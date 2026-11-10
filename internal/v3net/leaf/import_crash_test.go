@@ -92,7 +92,7 @@ func (p plainWriter) WriteMessage(msg protocol.Message) (int64, error) { return 
 func newSinceHub(t *testing.T, msgs ...protocol.Message) (*sinceHub, *httptest.Server) {
 	t.Helper()
 	h := &sinceHub{messages: msgs}
-	ts := httptest.NewServer(h)
+	ts := signedHub(t, h)
 	t.Cleanup(ts.Close)
 	return h, ts
 }

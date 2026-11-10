@@ -181,15 +181,8 @@ func switchedHubServer(t *testing.T, sender *keystore.Keystore, keys ...*keystor
 	t.Cleanup(func() { _ = h.Close() })
 	ts := httptest.NewServer(h.Mux())
 	t.Cleanup(ts.Close)
-	sub, _ := json.Marshal(protocol.SubscribeRequest{Network: "testnet", NodeID: sender.NodeID(),
-		PubKeyB64: sender.PubKeyBase64(), BBSName: "Sender", BBSHost: "sender.example.net"})
-	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", bytes.NewReader(sub))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("subscribe: status %d", resp.StatusCode)
+	if status := subscribeNode(t, ts.URL, sender, "Sender"); status != http.StatusOK {
+		t.Fatalf("subscribe: status %d", status)
 	}
 	return ts
 }
@@ -522,13 +515,7 @@ func TestMatchChainAgreesWithHub(t *testing.T) {
 					}
 				}
 				if i == 0 {
-					sub, _ := json.Marshal(protocol.SubscribeRequest{Network: "testnet", NodeID: sender.NodeID(),
-						PubKeyB64: sender.PubKeyBase64(), BBSName: "Sender", BBSHost: "sender.example.net"})
-					resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", bytes.NewReader(sub))
-					if err != nil {
-						t.Fatal(err)
-					}
-					_ = resp.Body.Close()
+					subscribeNode(t, ts.URL, sender, "Sender")
 				}
 			}
 

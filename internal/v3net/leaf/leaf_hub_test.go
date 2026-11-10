@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -222,7 +221,7 @@ func TestSendChat_JoinsLobbyAndPosts(t *testing.T) {
 
 func TestSendChat_PostTransportFailure(t *testing.T) {
 	// The hub accepts the join, then drops the connection on the post.
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/join") {
 			_, _ = w.Write([]byte(`{}`))
 			return
@@ -516,7 +515,7 @@ func TestPoll_FollowsHasMoreWithCursor(t *testing.T) {
 		{testMessage(testUUID1)},
 		{testMessage(testUUID2), testMessage(testUUID3)},
 	}}
-	ts := httptest.NewServer(ph)
+	ts := signedHub(t, ph)
 	defer ts.Close()
 
 	writer := &mockJAMWriter{}

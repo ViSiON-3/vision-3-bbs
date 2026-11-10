@@ -159,15 +159,8 @@ func TestPublishChainToHub(t *testing.T) {
 	if err := h.NALStore().Put("testnet", n); err != nil {
 		t.Fatal(err)
 	}
-	sub, _ := json.Marshal(protocol.SubscribeRequest{Network: "testnet", NodeID: keys[0].NodeID(),
-		PubKeyB64: keys[0].PubKeyBase64(), BBSName: "Old Hub", BBSHost: "old.example.net"})
-	resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", bytes.NewReader(sub))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("subscribe the old key's node: status %d", resp.StatusCode)
+	if status := subscribeNode(t, ts.URL, keys[0], "Old Hub"); status != http.StatusOK {
+		t.Fatalf("subscribe the old key's node: status %d", status)
 	}
 	for _, ks := range keys[1:] {
 		_ = h.Close()

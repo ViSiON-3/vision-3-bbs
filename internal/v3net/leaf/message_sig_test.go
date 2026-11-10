@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -82,7 +81,7 @@ func TestPoll_VerifiesAuthorSignatures(t *testing.T) {
 
 func TestSendMessage_SignsTruncatedMessage(t *testing.T) {
 	var posted protocol.Message
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(body, &posted)
 		w.Header().Set("Content-Type", "application/json")
@@ -221,7 +220,7 @@ func TestPoll_StopsWhenHubDoesNotAdvance(t *testing.T) {
 	// more, as one does when handed a UUID it does not know.
 	page := []protocol.Message{testMessage(sigUUID(1)), testMessage(sigUUID(2))}
 	var requests int
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-V3Net-Has-More", "true")
@@ -317,7 +316,7 @@ func TestPoll_RefusedNewestMessageWarnsOnceAndGenuineImports(t *testing.T) {
 	tampered.Body = "a proxy rewrote this"
 
 	h := &sinceHub{messages: []protocol.Message{testMessage(sigUUID(1)), tampered}}
-	ts := httptest.NewServer(h)
+	ts := signedHub(t, h)
 	defer ts.Close()
 	writer := &mockJAMWriter{}
 	l, ix := setupLeaf(t, ts.URL, writer)
@@ -381,7 +380,7 @@ func TestRefusedLog_ForgetsOldestWhenFull(t *testing.T) {
 
 func TestPoll_RetriesUnwritableMessage(t *testing.T) {
 	h := &sinceHub{messages: []protocol.Message{testMessage(sigUUID(1)), testMessage(sigUUID(2))}}
-	ts := httptest.NewServer(h)
+	ts := signedHub(t, h)
 	defer ts.Close()
 	writer := &failingJAMWriter{failUUID: sigUUID(2)}
 	l, _ := setupLeaf(t, ts.URL, writer)

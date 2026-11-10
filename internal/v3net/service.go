@@ -186,39 +186,6 @@ func (s *Service) persistKeyEvent(ev leaf.KeyEvent) error {
 	return nil
 }
 
-// persistHubSigned sets hubSigned in the v3net.json entry for network and
-// hubURL, once its leaf has seen the hub sign, so a restart keeps refusing
-// unsigned replies from that hub. It lives beside the pins it depends on,
-// where the sysop can see it and clear it after a hub really stops signing.
-// Without a config path (tests, tools) nothing is written. It returns an
-// error only when the file could not be read or written, so the leaf can
-// retry later.
-func (s *Service) persistHubSigned(network, hubURL string) error {
-	if s.cfg.ConfigPath == "" {
-		return nil
-	}
-	err := config.UpdateV3NetConfig(s.cfg.ConfigPath, func(cfg *config.V3NetConfig) error {
-		for i := range cfg.Leaves {
-			lc := &cfg.Leaves[i]
-			if lc.Network != network || lc.HubURL != hubURL {
-				continue
-			}
-			if lc.HubSigned {
-				return config.ErrNoChange
-			}
-			lc.HubSigned = true
-			return nil
-		}
-		return config.ErrNoChange
-	})
-	if err != nil && !errors.Is(err, config.ErrNoChange) {
-		slog.Warn("v3net: could not record in v3net.json that the hub signs",
-			"network", network, "hub", hubURL, "error", err)
-		return err
-	}
-	return nil
-}
-
 // storedLeaf reads the v3net.json entry for network and hubURL as it is when
 // called. A missing file holds no entry, and no entry is leaf.ErrNoStoredEntry.
 func (s *Service) storedLeaf(network, hubURL string) (config.V3NetLeafConfig, error) {
@@ -239,23 +206,6 @@ func (s *Service) storedLeaf(network, hubURL string) (config.V3NetLeafConfig, er
 		}
 	}
 	return config.V3NetLeafConfig{}, leaf.ErrNoStoredEntry
-}
-
-// hubSignedStored returns a leaf's Config.HubSignedStored: the hubSigned record
-// and its count of clears that the v3net.json entry for network and hubURL holds
-// now, read from the file. A missing file or entry is leaf.ErrNoStoredEntry.
-// Without a config path there is no store to read, and it returns nil.
-func (s *Service) hubSignedStored(network, hubURL string) func() (leaf.StoredHubSigned, error) {
-	if s.cfg.ConfigPath == "" {
-		return nil
-	}
-	return func() (leaf.StoredHubSigned, error) {
-		lc, err := s.storedLeaf(network, hubURL)
-		if err != nil {
-			return leaf.StoredHubSigned{}, err
-		}
-		return leaf.StoredHubSigned{Signed: lc.HubSigned, Clears: lc.HubSignedClears}, nil
-	}
 }
 
 // pinStored returns a leaf's Config.PinStored: the pin and pending key the
@@ -455,13 +405,12 @@ func New(cfg config.V3NetConfig) (*Service, error) {
 			return nil, fmt.Errorf("v3net: create hub data dir: %w", err)
 		}
 		h, err := hub.New(hub.Config{
-			ListenAddr:             cfg.Hub.ListenAddr(),
-			DataDir:                cfg.Hub.DataDir,
-			Keystore:               ks,
-			AutoApprove:            cfg.Hub.AutoApprove,
-			RequireSignedSubscribe: cfg.Hub.RequireSignedSubscribe,
-			AutoApproveAreas:       cfg.Hub.AreaProposalsAutoApproved(),
-			Networks:               networks,
+			ListenAddr:       cfg.Hub.ListenAddr(),
+			DataDir:          cfg.Hub.DataDir,
+			Keystore:         ks,
+			AutoApprove:      cfg.Hub.AutoApprove,
+			AutoApproveAreas: cfg.Hub.AreaProposalsAutoApproved(),
+			Networks:         networks,
 		})
 		if err != nil {
 			_ = ix.Close() // cleanup on error path
@@ -510,10 +459,6 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		CentralChat:           lcfg.CentralChat(),
 		ChatBlocked:           lcfg.ChatBlocked(),
 		Activity:              s.activitySource(),
-		RequireSignedHub:      lcfg.RequireSignedHub,
-		HubSigned:             lcfg.HubSigned,
-		OnHubSigned:           func() error { return s.persistHubSigned(lcfg.Network, lcfg.HubURL) },
-		HubSignedStored:       s.hubSignedStored(lcfg.Network, lcfg.HubURL),
 		CoordPubKeyB64:        lcfg.CoordinatorPubKey,
 		HubPubKeyB64:          lcfg.HubPubKey,
 		PendingCoordPubKeyB64: lcfg.PendingCoordinatorPubKey,
@@ -1018,20 +963,16 @@ func (s *Service) withdrawActivityBeforeStop(run *leafRun, next config.V3NetLeaf
 	}
 }
 
-// withoutKeys returns c with its pinned and pending key fields, and the
-// record that the hub signs and the count of its clears, cleared, for
+// withoutKeys returns c with its pinned and pending key fields cleared, for
 // comparing subscriptions while ignoring what the leaf records.
 func withoutKeys(c config.V3NetLeafConfig) config.V3NetLeafConfig {
 	c.CoordinatorPubKey, c.HubPubKey = "", ""
 	c.PendingCoordinatorPubKey, c.PendingHubPubKey = "", ""
-	c.HubSigned = false
-	c.HubSignedClears = 0
 	return c
 }
 
 // keysOnlyChange reports whether next differs from prev, if at all, only in
-// the leaves' pinned and pending key fields and their hubSigned records and
-// clears.
+// the leaves' pinned and pending key fields.
 func keysOnlyChange(prev, next []config.V3NetLeafConfig) bool {
 	if len(prev) != len(next) {
 		return false
@@ -1044,17 +985,14 @@ func keysOnlyChange(prev, next []config.V3NetLeafConfig) bool {
 	return true
 }
 
-// leafEdits says which of a leaf's recorded fields were written between prev
-// and next, two copies of its v3net.json entry. A sysop's clear of hubSigned
-// shows in hubSignedClears rising even when the value of hubSigned cannot show
-// it, because the file never got the record; next may be the older copy, so a
-// lower count is no clear. A changed pin may be the leaf's own
+// leafEdits says which of a leaf's pins were written between prev and next,
+// two copies of its v3net.json entry. A changed pin may be the leaf's own
 // store reaching the reload; the leaf tells that from an edit (see
 // leaf.Leaf.UpdatePins).
-func leafEdits(prev, next config.V3NetLeafConfig) (coord, hub, hubSigned bool) {
+func leafEdits(prev, next config.V3NetLeafConfig) (coord, hub bool) {
 	coord = strings.TrimSpace(prev.CoordinatorPubKey) != strings.TrimSpace(next.CoordinatorPubKey)
 	hub = strings.TrimSpace(prev.HubPubKey) != strings.TrimSpace(next.HubPubKey)
-	return coord, hub, prev.HubSigned != next.HubSigned || next.HubSignedClears > prev.HubSignedClears
+	return coord, hub
 }
 
 // withUncheckedFrom returns c, a reload's baseline, with the recorded fields p
@@ -1068,9 +1006,6 @@ func withUncheckedFrom(c, before config.V3NetLeafConfig, p leaf.Pins) config.V3N
 	}
 	if p.HubUnread {
 		c.HubPubKey, c.PendingHubPubKey = before.HubPubKey, before.PendingHubPubKey
-	}
-	if p.HubSignedUnread {
-		c.HubSigned, c.HubSignedClears = before.HubSigned, before.HubSignedClears
 	}
 	return c
 }
@@ -1112,16 +1047,14 @@ func (s *Service) applyPins(prev, leafCfgs []config.V3NetLeafConfig) {
 			continue // skipped at configure time (no resolvable boards)
 		}
 		before := prevByKey[leafKey{c.Network, c.HubURL}]
-		coordEdited, hubEdited, hubSignedEdited := leafEdits(before, *c)
+		coordEdited, hubEdited := leafEdits(before, *c)
 		p := run.l.UpdatePins(run.ctx, leaf.Pins{
 			Coord: c.CoordinatorPubKey, Hub: c.HubPubKey,
 			PendingCoord: c.PendingCoordinatorPubKey, PendingHub: c.PendingHubPubKey,
-			HubSigned: c.HubSigned, HubSignedClears: max(before.HubSignedClears, c.HubSignedClears),
-			CoordEdited: coordEdited, HubEdited: hubEdited, HubSignedEdited: hubSignedEdited,
+			CoordEdited: coordEdited, HubEdited: hubEdited,
 		})
 		c.CoordinatorPubKey, c.HubPubKey = p.Coord, p.Hub
 		c.PendingCoordinatorPubKey, c.PendingHubPubKey = p.PendingCoord, p.PendingHub
-		c.HubSignedClears = p.HubSignedClears
 		*c = withUncheckedFrom(*c, before, p)
 	}
 	s.mu.Lock()
@@ -1141,17 +1074,14 @@ func (s *Service) applyPins(prev, leafCfgs []config.V3NetLeafConfig) {
 // and a caller mid-chat on a V3Net leaf has that chat's stream cancelled.
 //
 // Two things soften that. An edit that only changes pinned or pending keys
-// or hubSigned (the leaf recording a key or that the hub signs, or the sysop
-// accepting a key or clearing the record) is applied to the
+// (the leaf recording a key, or the sysop accepting one) is applied to the
 // running leaves in place, with no rebuild. And a rebuilt leaf starts with
 // the last NAL its predecessor accepted, when the coordinator pin is the
 // same, so it never runs without a trusted area list.
 //
 // Either way a leaf keeps what it has not managed to store yet (see
 // leaf.UnsavedState), unless the reload shows the sysop wrote that field: a
-// file that merely lacks it says nothing about it, whatever else changed. A
-// reply a replaced leaf verifies late reaches its replacement (see
-// leaf.Leaf.HandLateRepliesTo).
+// file that merely lacks it says nothing about it, whatever else changed.
 //
 // leafCfgs was read from the file before this call, so a leaf may have stored
 // a pin since. Each leaf therefore checks its pins against the file as it is
@@ -1227,12 +1157,11 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 			run.l.EndStores()
 			continue
 		}
-		coordEdited, hubEdited, hubSignedEdited := leafEdits(prevByKey[key], next)
+		coordEdited, hubEdited := leafEdits(prevByKey[key], next)
 		pins, u := run.l.Retire(leaf.Pins{
 			Coord: next.CoordinatorPubKey, Hub: next.HubPubKey,
 			PendingCoord: next.PendingCoordinatorPubKey, PendingHub: next.PendingHubPubKey,
-			HubSigned: next.HubSigned, HubSignedClears: max(prevByKey[key].HubSignedClears, next.HubSignedClears),
-			CoordEdited: coordEdited, HubEdited: hubEdited, HubSignedEdited: hubSignedEdited,
+			CoordEdited: coordEdited, HubEdited: hubEdited,
 		})
 		settled[key] = pins
 		unsaved[key] = u
@@ -1249,7 +1178,6 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 		if p, ok := settled[leafKey{c.Network, c.HubURL}]; ok {
 			c.CoordinatorPubKey, c.HubPubKey = p.Coord, p.Hub
 			c.PendingCoordinatorPubKey, c.PendingHubPubKey = p.PendingCoord, p.PendingHub
-			c.HubSigned, c.HubSignedClears = p.HubSigned, p.HubSignedClears
 		}
 	}
 	s.ConfigureLeaves(leafCfgs, mgr)
@@ -1264,18 +1192,7 @@ func (s *Service) ReloadLeaves(leafCfgs []config.V3NetLeafConfig, mgr *message.M
 	s.carriedNALs = nil
 	s.carriedUnsaved = nil
 	count := len(s.leaves)
-	replacements := make(map[leafKey]*leaf.Leaf, count)
-	for _, run := range s.leaves {
-		replacements[leafKey{run.l.Network(), run.l.HubURL()}] = run.l
-	}
 	s.mu.Unlock()
-	// Keyed by network and hub, so what a leaf learned never reaches a leaf on
-	// another hub. Outside s.mu: this can store a record.
-	for _, run := range old {
-		if next, ok := replacements[leafKey{run.l.Network(), run.l.HubURL()}]; ok {
-			run.l.HandLateRepliesTo(next)
-		}
-	}
 	slog.Info("v3net: leaf subscriptions reloaded", "count", count)
 	return nil
 }

@@ -17,8 +17,7 @@ import (
 )
 
 // unsavedFixture is a service with two leaves, built from a real v3net.json,
-// whose first leaf holds a hubSigned record and a coordinator pin it has not
-// stored.
+// whose first leaf holds a coordinator pin it has not stored.
 type unsavedFixture struct {
 	t    *testing.T
 	svc  *v3net.Service
@@ -39,7 +38,7 @@ func newUnsavedFixture(t *testing.T) *unsavedFixture {
 	}
 	f.write()
 	svc.ConfigureLeaves(f.cfgs, mm)
-	f.leaf().RestoreUnsaved(leaf.UnsavedState{Coord: unsavedPin, HubSigned: true})
+	f.leaf().RestoreUnsaved(leaf.UnsavedState{Coord: unsavedPin})
 	return f
 }
 
@@ -78,9 +77,9 @@ func (f *unsavedFixture) reload() {
 func (f *unsavedFixture) wantKept(when string) {
 	f.t.Helper()
 	got := f.leaf().UnsavedState()
-	if got.Coord != unsavedPin || !got.HubSigned || !f.leaf().HubSigned() || f.leaf().PinnedKey(leaf.KeyCoordinator) != unsavedPin {
-		f.t.Errorf("%s: unsaved %+v, hubSigned=%v, pin %q; want the record and pin kept unsaved",
-			when, got, f.leaf().HubSigned(), f.leaf().PinnedKey(leaf.KeyCoordinator))
+	if got.Coord != unsavedPin || f.leaf().PinnedKey(leaf.KeyCoordinator) != unsavedPin {
+		f.t.Errorf("%s: unsaved %+v, pin %q; want the pin kept unsaved",
+			when, got, f.leaf().PinnedKey(leaf.KeyCoordinator))
 	}
 }
 
@@ -147,82 +146,15 @@ func TestReloadReplacesEditedUnsavedPin(t *testing.T) {
 		if got := l.PinnedKey(leaf.KeyCoordinator); got != "sysop-key" {
 			t.Errorf("rebuild=%v: pin %q, want the sysop's key", rebuild, got)
 		}
-		if got := l.UnsavedState(); got.Coord != "" || !got.HubSigned {
-			t.Errorf("rebuild=%v: unsaved %+v, want the pin replaced and the record kept", rebuild, got)
+		if got := l.UnsavedState(); got.Coord != "" {
+			t.Errorf("rebuild=%v: unsaved %+v, want the pin replaced", rebuild, got)
 		}
 	}
 }
 
-// The sysop setting Hub Signs to the N the file holds raises hubSignedClears.
-// That drops the record, not the pin, whether the leaf is rebuilt or not, and
-// whatever else the same save changed (#804).
-func TestReloadOfRaisedClearsDropsUnsavedHubSigned(t *testing.T) {
-	cases := []struct {
-		name    string
-		rebuild bool
-		other   func(f *unsavedFixture)
-	}{
-		{name: "alone"},
-		{name: "with another leaf's key", other: func(f *unsavedFixture) { f.cfgs[1].HubPubKey = "other-leaf-key" }},
-		{name: "with another leaf's boards", rebuild: true, other: func(f *unsavedFixture) { f.cfgs[1].Boards = []string{"GAMMA"} }},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			f := newUnsavedFixture(t)
-			first := f.leaf()
-			f.cfgs[0].HubSignedClears++
-			if c.other != nil {
-				c.other(f)
-			}
-			f.write()
-			f.reload()
-			if rebuilt := f.leaf() != first; rebuilt != c.rebuild {
-				t.Fatalf("rebuilt = %v, want %v", rebuilt, c.rebuild)
-			}
-			got := f.leaf().UnsavedState()
-			if got.HubSigned || f.leaf().HubSigned() {
-				t.Errorf("unsaved %+v, hubSigned=%v; want the record dropped", got, f.leaf().HubSigned())
-			}
-			if got.Coord != unsavedPin {
-				t.Errorf("unsaved %+v; want the pin kept", got)
-			}
-		})
-	}
-}
-
-// A clear still reaches the leaf when it was saved while another change was
-// queued, so the leaf first sees both in one reload, and later reloads of the
-// same count are not clears again (#804).
-func TestReloadOfQueuedClearsDropsOnce(t *testing.T) {
-	f := newUnsavedFixture(t)
-	f.cfgs[0].HubSignedClears = 1
-	f.write()
-	f.cfgs[1].HubPubKey = "queued-key"
-	f.write()
-	f.reload()
-	if f.leaf().HubSigned() {
-		t.Fatal("the clear saved before a queued change did not drop the record")
-	}
-
-	f.leaf().RestoreUnsaved(leaf.UnsavedState{HubSigned: true})
-	f.reload()
-	if !f.leaf().HubSigned() {
-		t.Error("a second reload of the same count dropped a new record")
-	}
-}
-
-// A clear belongs to one leaf: another leaf holding a record keeps it (#804).
-func TestRaisedClearsDropsOnlyThatLeaf(t *testing.T) {
-	f := newUnsavedFixture(t)
-	f.cfgs[1].HubSignedClears = 1
-	f.write()
-	f.reload()
-	f.wantKept("another leaf's Hub Signs was cleared")
-}
-
-// A reload without a raised count says nothing about the record, however the
-// file's timestamp moved (#804).
-func TestReloadWithoutRaisedClearsKeepsUnsaved(t *testing.T) {
+// A reload without an edit says nothing about the pin, however the file's
+// timestamp moved (#804).
+func TestReloadWithoutEditKeepsUnsaved(t *testing.T) {
 	f := newUnsavedFixture(t)
 	f.reload()
 	f.wantKept("nothing changed")
@@ -254,7 +186,7 @@ func TestReloadOfOwnStoredPin(t *testing.T) {
 				f.cfgs[0].CoordinatorPubKey = "key-applied"
 				f.write()
 				f.reload()
-				f.leaf().RestoreUnsaved(leaf.UnsavedState{Coord: unsavedPin, CoordMovedFrom: stored, HubSigned: true})
+				f.leaf().RestoreUnsaved(leaf.UnsavedState{Coord: unsavedPin, CoordMovedFrom: stored})
 
 				f.cfgs[0].CoordinatorPubKey = c.file
 				if rebuild {
@@ -374,68 +306,6 @@ func TestReloadEditBackToLateCopysPin(t *testing.T) {
 	}
 }
 
-// leafFor returns the current leaf for network.
-func (f *unsavedFixture) leafFor(network string) *leaf.Leaf {
-	f.t.Helper()
-	for _, l := range f.svc.Leaves() {
-		if l.Network() == network {
-			return l
-		}
-	}
-	f.t.Fatalf("no leaf for %s", network)
-	return nil
-}
-
-// A rebuild whose copy of the file predates a hubSigned record in the file starts
-// the new leaf with the record in force, and the sysop can still clear it (#821).
-func TestRebuildKeepsHubSignedStoredSinceRead(t *testing.T) {
-	f := newUnsavedFixture(t)
-	copyOfFile := slices.Clone(f.cfgs)
-	copyOfFile[1].Boards = []string{"GAMMA"}
-
-	f.cfgs[1].Boards = []string{"GAMMA"}
-	f.cfgs[1].HubSigned = true
-	f.write()
-	if err := f.svc.ReloadLeaves(copyOfFile, f.mm, nil); err != nil {
-		t.Fatal(err)
-	}
-	if l := f.leafFor("net-b"); !l.HubSigned() || l.UnsavedState().HubSigned {
-		t.Fatalf("hubSigned=%v, unsaved %+v; want the stored record in force", l.HubSigned(), l.UnsavedState())
-	}
-
-	f.cfgs[1].HubSigned = false
-	f.cfgs[1].HubSignedClears++
-	f.write()
-	f.reload()
-	if f.leafFor("net-b").HubSigned() {
-		t.Error("the sysop's clear after the rebuild did not apply")
-	}
-}
-
-// A clear written after the rebuild's copy was read drops a record not yet
-// stored, and the reload the clear's own save triggers is not a second one (#821).
-func TestRebuildHonoursClearSinceRead(t *testing.T) {
-	f := newUnsavedFixture(t)
-	copyOfFile := slices.Clone(f.cfgs)
-	copyOfFile[1].Boards = []string{"GAMMA"}
-
-	f.cfgs[1].Boards = []string{"GAMMA"}
-	f.cfgs[0].HubSignedClears = 1
-	f.write()
-	if err := f.svc.ReloadLeaves(copyOfFile, f.mm, nil); err != nil {
-		t.Fatal(err)
-	}
-	if got := f.leaf().UnsavedState(); got.HubSigned || f.leaf().HubSigned() {
-		t.Fatalf("unsaved %+v, hubSigned=%v; want the record dropped", got, f.leaf().HubSigned())
-	}
-
-	f.leaf().RestoreUnsaved(leaf.UnsavedState{HubSigned: true})
-	f.reload()
-	if !f.leaf().HubSigned() {
-		t.Error("the reload of the same count dropped a new record")
-	}
-}
-
 // With v3net.json broken, or without the entry, a reload's copy is not acted on,
 // even when it holds an edit: the leaf's state stands, rebuilt or not. Once the
 // file is right again the edit counts as one (#821).
@@ -461,15 +331,7 @@ func TestReloadKeepsLeafWhenFileUnusable(t *testing.T) {
 		for _, rebuild := range []bool{false, true} {
 			t.Run(name, func(t *testing.T) {
 				f := newUnsavedFixture(t)
-				// A second record, one the file holds.
-				f.cfgs[1].HubSigned = true
-				f.write()
-				f.reload()
-
 				f.cfgs[0].CoordinatorPubKey = "sysop-key"
-				f.cfgs[0].HubSignedClears = 1
-				f.cfgs[1].HubSigned = false
-				f.cfgs[1].HubSignedClears = 1
 				if rebuild {
 					f.cfgs[1].Boards = []string{"GAMMA"}
 				}
@@ -479,9 +341,6 @@ func TestReloadKeepsLeafWhenFileUnusable(t *testing.T) {
 					t.Fatal(err)
 				}
 				f.wantKept("the file could not be checked")
-				if !f.leafFor("net-b").HubSigned() {
-					t.Error("net-b's stored record was dropped on a clear the file could not confirm")
-				}
 
 				if err := os.Remove(filepath.Join(f.dir, "v3net.json")); err != nil && !os.IsNotExist(err) {
 					t.Fatal(err)
@@ -491,11 +350,8 @@ func TestReloadKeepsLeafWhenFileUnusable(t *testing.T) {
 				if got := f.leaf().PinnedKey(leaf.KeyCoordinator); got != "sysop-key" {
 					t.Errorf("pin %q after the file was fixed, want the sysop's", got)
 				}
-				if got := f.leaf().UnsavedState(); got.Coord != "" || got.HubSigned || f.leaf().HubSigned() {
-					t.Errorf("unsaved %+v, hubSigned=%v after the file was fixed; want the edits in force", got, f.leaf().HubSigned())
-				}
-				if f.leafFor("net-b").HubSigned() {
-					t.Error("net-b's clear did not apply once the file was fixed")
+				if got := f.leaf().UnsavedState(); got.Coord != "" {
+					t.Errorf("unsaved %+v after the file was fixed; want the edit in force", got)
 				}
 			})
 		}

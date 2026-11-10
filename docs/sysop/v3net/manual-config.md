@@ -51,7 +51,6 @@ configuration to join an existing network.
 | `dataDir` | string | `""` | Directory for hub data (SQLite database, NAL files). Created on first start if missing. Example: `"data/v3net_hub"` |
 | `autoApprove` | bool | `false` | When `true`, new subscriber registrations are approved automatically. |
 | `autoApproveAreas` | bool | unset | When `true`, area proposals are added to the NAL on arrival; when `false`, they wait for the coordinator in the Coordinator Panel. Unset follows `autoApprove`, which covered proposals too before this setting existed. Recommended `false` outside testing. |
-| `requireSignedSubscribe` | bool | `false` | Require signed subscriptions. Leave false during rolling upgrades; true rejects older unsigned leaves with HTTP 401. Restart to apply; see [independent upgrades](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently). |
 | `networks` | array | `[]` | List of networks hosted by this hub. See below. |
 | `initialAreas` | array | `[]` | Area specs for the initial NAL seed. Consumed once on first hub start, then removed automatically. See below. |
 
@@ -95,9 +94,6 @@ to subscribe to multiple networks.
 | `autoJoinAreas` | bool | unset (`true`) | **Newscan Default** in the editor. When true or unset, message areas created for this subscription are flagged as newscan defaults for users. Set `false` to leave new areas out of newscans until users add them. |
 | `coordinatorPubKey` | string | blank | **Coord Key** in the editor. The network coordinator's Ed25519 public key (base64). NALs signed by any other key are rejected. Blank pins the key of the next NAL the leaf verifies and writes it here. See [Coordinator Key Pinning](v3net/nal.md#coordinator-key-pinning). |
 | `hubPubKey` | string | blank | **Hub Key** in the editor. The hub's Ed25519 public key (base64) from the network's `/info`. Pinned and checked the same way. |
-| `requireSignedHub` | bool | `false` | **Signed Hub** in the editor. When true, the leaf refuses replies from the hub that carry no hub signature, and pauses as for a bad one. See [Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies). |
-| `hubSigned` | bool | `false` | Written by the BBS, shown as **Hub Signs**. Set once the hub's signatures have checked out; from then on unsigned replies from it are refused, as with `requireSignedHub`. Remove it (or set it `false`) only if the hub really stopped signing. |
-| `hubSignedClears` | number | `0` | Raised by the editor each time **Hub Signs** is set to **N**. It tells a running leaf you cleared the record, for when the leaf could not write `hubSigned` and the file already reads `false`: raise it by one by hand to do the same. Lowering or removing it clears nothing. See [Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies). |
 | `pendingCoordinatorPubKey`, `pendingHubPubKey` | string | blank | Written by the BBS, shown as **Offered Coord** / **Offered Hub**. A key the hub offered that differs from the pin. It is rejected; copy it into the pin to accept it. |
 | `central` | object | absent | V3Net Central settings for this subscription. Absent means every Central feature is off except network chat, which is on until `chat` is set `false`. See below and [V3Net Central](v3net/central.md). |
 
@@ -198,7 +194,6 @@ To add your network to the public registry, submit a PR to the
     "dataDir": "data/v3net_hub",
     "autoApprove": false,
     "autoApproveAreas": false,
-    "requireSignedSubscribe": false,
     "networks": [
       {
         "name": "mynet",

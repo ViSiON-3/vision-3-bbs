@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -63,7 +62,7 @@ func (h *postingHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // before the import can look it up (#938).
 func TestPollDuringSendDoesNotImportOwnPost(t *testing.T) {
 	hub := &postingHub{sinceHub: &sinceHub{}}
-	ts := httptest.NewServer(hub)
+	ts := signedHub(t, hub)
 	t.Cleanup(ts.Close)
 	w := &storeWriter{}
 	l, ix := setupLeaf(t, ts.URL, w)
@@ -107,7 +106,7 @@ func TestPollDuringSendDoesNotImportOwnPost(t *testing.T) {
 // starts after it.
 func TestOwnPostDoesNotSkipEarlierPosts(t *testing.T) {
 	hub := &postingHub{sinceHub: &sinceHub{}}
-	ts := httptest.NewServer(hub)
+	ts := signedHub(t, hub)
 	t.Cleanup(ts.Close)
 	w := &storeWriter{}
 	l, ix := setupLeaf(t, ts.URL, w)
@@ -138,7 +137,7 @@ func TestOwnPostDoesNotSkipEarlierPosts(t *testing.T) {
 func TestFailedSendStoredByHubNotImported(t *testing.T) {
 	hub := &postingHub{sinceHub: &sinceHub{}}
 	hub.failPosts.Store(true)
-	ts := httptest.NewServer(hub)
+	ts := signedHub(t, hub)
 	t.Cleanup(ts.Close)
 	w := &storeWriter{}
 	l, ix := setupLeaf(t, ts.URL, w)
@@ -165,7 +164,7 @@ func TestFailedSendStoredByHubNotImported(t *testing.T) {
 // would import it back. The caller keeps it for a later attempt.
 func TestSendPostUnrecordedIsNotSent(t *testing.T) {
 	hub := &postingHub{sinceHub: &sinceHub{}}
-	ts := httptest.NewServer(hub)
+	ts := signedHub(t, hub)
 	t.Cleanup(ts.Close)
 	l, ix := setupLeaf(t, ts.URL, &storeWriter{})
 	_ = ix.Close()
@@ -183,7 +182,7 @@ func TestSendPostUnrecordedIsNotSent(t *testing.T) {
 // genuine message with the same UUID.
 func TestSendPostForeignOriginNotRecorded(t *testing.T) {
 	hub := &postingHub{sinceHub: &sinceHub{}}
-	ts := httptest.NewServer(hub)
+	ts := signedHub(t, hub)
 	t.Cleanup(ts.Close)
 	w := &storeWriter{}
 	l, ix := setupLeaf(t, ts.URL, w)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -104,7 +103,7 @@ func TestChatPrivateExplicitTargetWithoutRoomMembership(t *testing.T) {
 func TestChatPrivateErrorBodyFallback(t *testing.T) {
 	for _, body := range []string{`not JSON`, `{"error":""}`} {
 		t.Run(body, func(t *testing.T) {
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusConflict); fmt.Fprint(w, body) }))
+			ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusConflict); fmt.Fprint(w, body) }))
 			defer ts.Close()
 			l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
 			offerChat(l)

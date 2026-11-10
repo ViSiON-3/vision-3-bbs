@@ -23,7 +23,7 @@ type recordedCall struct {
 func newManageHub(t *testing.T, status int, reply string) (*httptest.Server, *[]recordedCall) {
 	t.Helper()
 	var calls []recordedCall
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		calls = append(calls, recordedCall{r.Method, r.URL.Path, r.Header.Get("X-V3Net-Node-ID"), string(b)})
 		if r.Header.Get("X-V3Net-Signature") == "" {

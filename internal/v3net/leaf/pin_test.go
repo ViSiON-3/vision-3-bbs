@@ -262,6 +262,7 @@ func TestChangedKeyReportedOnceAndAccepted(t *testing.T) {
 func TestHubKeyPinnedFromInfo(t *testing.T) {
 	ts, _, hubKS := newTestHub(t, true)
 	l, rec := pinnedLeaf(t, ts, "")
+	l.pins.hub = "" // a leaf that has never seen this hub
 	ctx := context.Background()
 
 	if err := l.checkHubKey(ctx); err != nil {

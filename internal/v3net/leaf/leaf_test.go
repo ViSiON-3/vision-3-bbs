@@ -39,36 +39,70 @@ func (m *mockJAMWriter) count() int {
 	return len(m.messages)
 }
 
-// mockHub simulates a V3Net hub for testing.
+// mockHub simulates a V3Net hub for testing. It serves its key on /info and
+// signs its replies as a hub does, unless unsigned is set, which stands for
+// a hub from before hub signing.
 type mockHub struct {
 	ks       *keystore.Keystore
 	messages []protocol.Message
+	unsigned bool
 }
 
+// mockHubKeys maps a mock hub's URL to its key, so setupLeaf can pin it as
+// a v3net.json that has talked to the hub before would.
+var mockHubKeys sync.Map
+
 func newMockHub(t *testing.T, messages []protocol.Message) (*httptest.Server, *keystore.Keystore) {
+	t.Helper()
+	return newMockHubSigning(t, messages, true)
+}
+
+// newUnsignedMockHub is a mock hub that signs nothing: a hub older than
+// v0.9.6.
+func newUnsignedMockHub(t *testing.T, messages []protocol.Message) (*httptest.Server, *keystore.Keystore) {
+	t.Helper()
+	return newMockHubSigning(t, messages, false)
+}
+
+func newMockHubSigning(t *testing.T, messages []protocol.Message, signs bool) (*httptest.Server, *keystore.Keystore) {
 	t.Helper()
 	hubKS, _, err := keystore.Load(filepath.Join(t.TempDir(), "hub.key"))
 	if err != nil {
 		t.Fatalf("load hub keystore: %v", err)
 	}
 
-	mh := &mockHub{ks: hubKS, messages: messages}
+	mh := &mockHub{ks: hubKS, messages: messages, unsigned: !signs}
 	ts := httptest.NewServer(http.HandlerFunc(mh.handler))
 	t.Cleanup(ts.Close)
+	mockHubKeys.Store(ts.URL, hubKS.PubKeyBase64())
 	return ts, hubKS
 }
 
 func (mh *mockHub) handler(w http.ResponseWriter, r *http.Request) {
 	// Skip auth validation in mock — just serve messages.
+	if r.Method == http.MethodGet && contains(r.URL.Path, "/info") {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(protocol.NetworkInfo{Name: "testnet", HubNodeID: mh.ks.NodeID(), HubPubKeyB64: mh.ks.PubKeyBase64()})
+		return
+	}
+	req := reqBinding{sig: r.Header.Get("X-V3Net-Signature"), nonce: r.Header.Get(protocol.HeaderNonce)}
+	reply := func(status int, body []byte) {
+		if !mh.unsigned {
+			sig, _ := protocol.SignResponse(mh.ks, req.sig, req.nonce, status, body)
+			w.Header().Set(protocol.HeaderHubSignature, sig)
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write(body)
+	}
 	switch {
 	case r.Method == http.MethodGet && contains(r.URL.Path, "/messages"):
 		data, _ := json.Marshal(mh.messages)
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(data)
+		reply(http.StatusOK, data)
 
 	case r.Method == http.MethodPost && contains(r.URL.Path, "/messages"):
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"ok":true,"msg_uuid":"test"}`))
+		reply(http.StatusOK, []byte(`{"ok":true,"msg_uuid":"test"}`))
 
 	case r.Method == http.MethodGet && contains(r.URL.Path, "/events"):
 		flusher, ok := w.(http.Flusher)
@@ -77,7 +111,7 @@ func (mh *mockHub) handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(200)
+		reply(http.StatusOK, nil)
 		flusher.Flush()
 		// Keep connection open until client disconnects.
 		<-r.Context().Done()
@@ -122,6 +156,11 @@ func setupLeaf(t *testing.T, hubURL string, writer JAMWriter) (*Leaf, *dedup.Ind
 		Keystore:     ks,
 		DedupIndex:   ix,
 		JAMWriter:    writer,
+	}
+	// A mock hub's key is pinned up front, as a board that has talked to
+	// the hub before holds it in v3net.json.
+	if key, ok := mockHubKeys.Load(hubURL); ok {
+		cfg.HubPubKeyB64 = key.(string)
 	}
 
 	return New(cfg), ix
@@ -245,7 +284,7 @@ func TestSendMessage_Signs(t *testing.T) {
 	var receivedNodeID string
 	var receivedSig string
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedNodeID = r.Header.Get("X-V3Net-Node-ID")
 		receivedSig = r.Header.Get("X-V3Net-Signature")
 		w.Header().Set("Content-Type", "application/json")

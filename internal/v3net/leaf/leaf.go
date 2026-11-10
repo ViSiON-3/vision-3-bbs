@@ -37,8 +37,6 @@ type Leaf struct {
 	// signatures do not match the pinned hub key (see hubsig.go).
 	hubMu sync.Mutex
 	hub   hubGate
-	// unsignedHubLogged is set once an unsigned hub response is logged.
-	unsignedHubLogged atomic.Bool
 	// unsignedRefusedLogged is set once a refused unsigned reply is logged,
 	// and cleared when a hub signature next verifies.
 	unsignedRefusedLogged atomic.Bool
@@ -48,12 +46,6 @@ type Leaf struct {
 	pins  keyPins
 	// coordSaveMu and hubSaveMu serialize savePin for each key kind.
 	coordSaveMu, hubSaveMu sync.Mutex
-	// hubSignedSaveMu orders storing hubSigned against confirming a clear
-	// of it (noteHubSigned, applyHubSigned).
-	hubSignedSaveMu sync.Mutex
-	// hubSignedReadHook, if set (tests only), runs between applyHubSigned's
-	// first read of the record and its update.
-	hubSignedReadHook func()
 	// pinReadHook, if set (tests only), runs between applyFilePin's read of
 	// the store and its update of the pin.
 	pinReadHook func(KeyKind)
@@ -87,8 +79,6 @@ func New(cfg Config) *Leaf {
 			hub:          normalizeKey(cfg.HubPubKeyB64),
 			pendingCoord: normalizeKey(cfg.PendingCoordPubKeyB64),
 			pendingHub:   normalizeKey(cfg.PendingHubPubKeyB64),
-			hubSigned:    cfg.HubSigned,
-			hubSignedCfg: cfg.HubSigned,
 		},
 		hub:     newHubGate(),
 		pollNow: make(chan struct{}, 1),
@@ -155,13 +145,19 @@ func (l *Leaf) NewChatSession(handle string) *ChatSession {
 func (l *Leaf) Start(ctx context.Context) {
 	slog.Info("leaf: starting", "network", l.cfg.Network, "hub", l.cfg.HubURL)
 
-	// Subscribe to the hub (bootstrap — signed with the existing node key).
-	// Retry with exponential backoff if the hub is temporarily unreachable.
+	// Pin the hub's key from /info, then subscribe (bootstrap, signed with
+	// the existing node key): every reply after that is checked against the
+	// pin. Retry with exponential backoff if the hub is temporarily
+	// unreachable.
 	subscribeBackoff := 5 * time.Second
 	for {
-		if err := l.subscribe(ctx); err != nil {
-			// A bad signature on the reply pauses syncing; wait for the
-			// sysop rather than backing off.
+		err := l.checkHubKey(ctx)
+		if err == nil {
+			err = l.subscribe(ctx)
+		}
+		if err != nil {
+			// A changed key, or a bad signature on the reply, pauses
+			// syncing; wait for the sysop rather than backing off.
 			if l.HubPaused() {
 				if l.waitHubTrusted(ctx) != nil {
 					return
@@ -183,13 +179,6 @@ func (l *Leaf) Start(ctx context.Context) {
 		break
 	}
 	slog.Info("leaf: subscribed to hub", "network", l.cfg.Network, "hub", l.cfg.HubURL)
-
-	// Check the hub's key against the pin (or pin it). A changed key pauses
-	// polling, SSE and sending until the sysop accepts it; other failures
-	// are logged and the leaf carries on.
-	if err := l.checkHubKey(ctx); err != nil {
-		slog.Warn("leaf: hub key check failed", "network", l.cfg.Network, "hub", l.cfg.HubURL, "error", err)
-	}
 
 	// Fetch the NAL once up front, so areas the hub added while this node
 	// was offline reach OnNAL without waiting for the next change event.

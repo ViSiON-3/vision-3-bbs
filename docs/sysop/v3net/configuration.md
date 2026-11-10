@@ -48,7 +48,6 @@ V3Net settings live in two places in the TUI config editor (`./config`):
 │  Hub Data Dir    :                                                   │
 │  Auto Approve    : N                                                 │
 │  Auto Approve Areas : N                                              │
-│  Signed Subscribe : N                                                │
 │                                                                      │
 │                          Screen 2 of 8                               │
 └──────────────────────────────────────────────────────────────────────┘
@@ -67,7 +66,6 @@ Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return
 | **Hub Data Dir** | Directory for hub database and NAL files. Recommended: `data/v3net_hub` |
 | **Auto Approve** | When `Y`, new leaf subscriptions are approved automatically. |
 | **Auto Approve Areas** | When `Y`, area proposals are added to the network straight away instead of waiting in the Coordinator Panel. If `autoApproveAreas` has never been set, it follows **Auto Approve**, which used to cover proposals too. Changing **Auto Approve** in the editor saves the area setting as it stood, so it no longer follows. |
-| **Signed Subscribe** | Default `N` preserves compatibility with older leaves. Set `Y` to reject unsigned subscriptions after leaves have upgraded. Save and restart the BBS to apply. See [Independent hub and leaf upgrades](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently). |
 
 Press **S** to save after making changes.
 
@@ -157,8 +155,6 @@ the same Hub URL, Network, Poll Interval and Origin fields as the wizard, plus:
 | **Boards** | Comma-separated local area tags this subscription feeds (e.g. `fel.general,fel.tech`). Normally filled by the area browser. |
 | **Newscan Default** | `Y` (the default) flags areas created for this network as newscan defaults for your users, so new callers see them in their newscan without opting in. |
 | **Browse Areas** | Press **Enter** to open the area browser for this hub. |
-| **Signed Hub** | Default `N` accepts unsigned replies from a hub that predates hub signing, until the leaf has seen it sign. Set `Y` to refuse them from the start. See [Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies). |
-| **Hub Signs** | Set to `Y` by the leaf once the hub's signatures check out; unsigned replies from it are refused from then on. Set it to `N` only if the hub really stopped signing. |
 | **Central** | Default `N`. `Y` lets callers open V3Net Central (the board directory) for this network. Sends nothing about them. See [V3Net Central](v3net/central.md). |
 | **Publish Listing** | Default `N`. `Y` lists this board in the network's directory; `N` withdraws it. |
 | **Listing Desc** | One line about your board for the directory. |
@@ -266,9 +262,9 @@ rows under the list describe the node under the cursor:
 | `Not in its software: Network chat` | The node's software does not list the feature, and no release can be named: the feature has not shipped in a release yet, the node runs other software, or its build differs from the release it names. |
 | `hub does not serve …` | Your hub does not offer the feature, whatever the node runs; upgrading the node would not help. |
 
-A node's report is what it says about itself, sent in its signed subscribe
-request, so it is bound to the node's key; an unsigned request cannot change
-it. It is not proof of the program the node really runs. Only the features a
+A node's report is what it says about itself, sent in its subscribe
+request, which is signed, so it is bound to the node's key. It is not proof
+of the program the node really runs. Only the features a
 node lists as capabilities count as supported; the version is shown, and used
 to name a release to upgrade to, but never turns a feature on. A report that
 breaks the limits (a name over 32 characters, a version that is not a
@@ -349,8 +345,8 @@ A change that needs no restart still does not always apply the moment you save
 it. A saved `v3net.json`, from the config editor or a text editor, waits until
 no callers are online, then applies within a couple of seconds of the last one
 logging off. On a busy board a save can look like it did nothing, including an
-edit to a key pin, **Hub Signs**, **Signed Hub**, a subscription's **Signed
-Messages** or a subscription's boards. To apply it right away, with callers online:
+edit to a key pin or a subscription's boards. To apply it right away, with
+callers online:
 
 ```bash
 touch configs/reload.force
@@ -380,76 +376,56 @@ See [vision3 doctor](configuration/configuration.md#doctor).
 | `V3Net leaf: message area not found, skipping` | A board tag in a subscription matches no local area. Open the subscription, press **Enter** on **Browse Areas**, and re-subscribe; `vision3 doctor` lists these too. |
 | `leaf: poll failed` | The hub is unreachable or rejecting you. Check the hub URL and that the hub is up. If the error says the sync is paused, see the next row. |
 | `leaf: pausing sync with the hub` | The hub's key, or the key it signs with, is not the pinned **Hub Key**. Polling, the event stream and sending stop for that network until you accept the key; see [hub signatures](v3net/configuration.md#hub-signatures). |
-| `leaf: hub does not sign its responses (older hub)` | Logged once. The hub predates hub signatures; the leaf works with it as before, unverified. |
+| `leaf: refusing an unsigned reply from the hub` | The hub answered without a signature. Hubs sign since v0.9.6, so the hub needs upgrading; if it is current, something between your BBS and the hub (a proxy) is removing the header. Logged once, then at debug level; the leaf tries again at each poll and is not paused. See [hub signatures](v3net/configuration.md#hub-signatures). |
+| `leaf: hub does not publish its key (older than v0.9.6)` | The hub's `/info` serves no key, so nothing it sends can be checked and its replies are refused. The hub needs upgrading. |
 | `leaf: subscribe failed, retrying` with `subscription status "pending"` | The hub has not approved your node. The leaf retries on its own; ask the hub sysop to approve you in Node Management. |
 | `V3Net is disabled in server configuration` on a V3Net screen in the BBS | The master switch is `N`. Set **V3Net** to `Y` in Server Setup and restart. |
 | `v3net hub: rejected unsigned message` on your hub | A leaf older than v0.9.6 posted without a signature. The leaf gets HTTP 401 and must upgrade, keeping its node key; see [signed messages](v3net/configuration.md#signed-messages). |
 | `v3net hub: rejected message with bad signature` on your hub | A post's author signature did not verify, or its `origin_node` is not derived from its key. Always rejected (HTTP 403). |
 | `leaf: unsigned message from hub, dropping` | The hub relayed a message without an author signature: one posted before its node upgraded to v0.9.6, which a new subscription meets in the hub's history, or a new post through a hub old enough to still accept unsigned posts. It is not imported. Each one is logged at this level once, then at debug level. See [signed messages](v3net/configuration.md#signed-messages). |
 | `leaf: message failed author signature check, dropping` | The hub relayed a message whose author signature does not verify: it was changed after the author signed it, or claims another node's identity. The leaf skips it and carries on. It is not marked as seen, so a genuine copy of the message can still arrive: if it was the newest message, the leaf fetches it again on each poll until a newer message arrives. Each refused message is logged at this level once, then at debug level. If it keeps happening, raise it with the hub sysop. |
-| `v3net hub: unsigned subscribe` on your hub | An older leaf registered without a signature. Harmless in compatibility mode; see [upgrading nodes independently](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently). |
+| `v3net hub: rejected unsigned subscribe` on your hub | A leaf older than v0.9.5 registered without a signature. It gets HTTP 401 and must upgrade, keeping its node key; see [signed subscribes](v3net/configuration.md#signed-subscribes). |
 | `NEW IDENTITY CREATED` on startup | No key file was found, so a new identity was made. If you meant to keep the old one, stop, restore the key or recover from the seed phrase, and restart. |
 
 ---
 
-## Upgrading hub and leaf nodes independently
+## Signed subscribes
 
-Existing hubs can be rebuilt and restarted before their leaves upgrade.
-**Signed Subscribe defaults to N** (`hub.requireSignedSubscribe: false`),
-including when the setting is absent from an older configuration. There is
-no automatic deadline or switch to strict mode.
+A leaf signs its subscribe request with its node key, and the hub checks the
+signature against the key the request submits, so a registration can only be
+filed by the node it names. Node keys are public: without the signature anyone
+could register, or re-register, in another node's name. A re-subscribe is how
+a node updates its own BBS name and host on the hub, and a node ID already
+registered under a different key is refused with HTTP 409.
 
-1. Stop the BBS and back up its configuration, node key (normally
-   `data/v3net.key`), and configured V3Net data directory.
-2. Update, run `./build.sh`, and restart using the same configuration, key,
-   and data. Leave **Signed Subscribe** at **N** in the config editor's
-   **System Setup → Server Setup** screen.
-3. Leaf sysops can update, rebuild, and restart independently, keeping their
-   existing configuration, node key, and data. Updated BBS binaries and config
-   editors sign subscriptions automatically. No re-registration or re-approval
-   is needed; existing node statuses and area approvals remain in place.
+An unsigned subscribe, from a leaf older than v0.9.5, is refused with HTTP
+401 and a reply saying to upgrade; the hub logs `v3net hub: rejected unsigned
+subscribe` with the node it claimed to be. Nothing in the hub's data changes.
+The leaf's sysop updates, rebuilds and restarts with the same configuration,
+node key and data: an updated BBS and config editor sign subscriptions with
+that key, so no re-registration or re-approval is needed, and the node's
+status and area approvals stay as they were. Signed first registrations work
+without prior approval; the hub's approval policy still decides whether the
+registration becomes active.
 
-In compatibility mode, unsigned requests retain the older hub behavior: they
-can register a new node but cannot change an existing node's name or host.
-An unsigned re-subscribe can apply only area tags saved in the first
-registration, allowing manually approved legacy nodes to finish subscribing.
-Changing an existing node's requested areas requires an updated, signing client.
-Malformed or invalid signatures are rejected in both modes.
-
-A signed re-subscribe is how a node updates its own BBS name and host on the
-hub. Node keys are public, so without the signature anyone could have filed a
-subscribe request in another node's name; a signed request proves the caller
-holds the key. A node ID that is already registered under a different key is
-refused with HTTP 409.
-
-The hub logs **every unsigned subscription**, even without area tags, as
-`v3net hub: unsigned subscribe`, with `claimed_node`, `network`, `known_node`,
-and `rejected`. These logs identify claimed legacy identities, not verified
-callers. A quiet log alone does not prove all nodes have upgraded: an offline
-node may return later. Coordinate with those sysops before enforcing signatures.
-
-When you choose to require signatures, set **Signed Subscribe** to **Y**
-(or `hub.requireSignedSubscribe` to `true` in `configs/v3net.json`) and restart
-the BBS. All unsigned subscriptions then receive HTTP 401 without changing
-hub data, with a response explaining how to upgrade while preserving the key.
-Signed first registrations work without prior approval; normal hub approval
-policy still determines whether the registration becomes active.
-
-If an older leaf is still needed, set the option back to **N** and restart.
-Its registration remains intact. Neither enabling nor disabling enforcement
-requires database cleanup, key rotation, or a binary rollback.
+To upgrade a hub: stop the BBS, back up its configuration, node key (normally
+`data/v3net.key`) and V3Net data directory, update, run `./build.sh`, and
+restart with the same configuration, key and data. Leaves need no change for
+it.
 
 ---
 
 ## Hub signatures
 
-An updated hub signs everything it sends a leaf in answer to a signed
-request (message pages, replies to posts, chat and sysop calls, and each
-event on the live event stream) with its node key. That is the key its
-`/info` page serves and the leaf pins as **Hub Key** (`hubPubKey`); see
+A hub signs everything it sends a leaf in answer to a signed request
+(message pages, replies to posts, chat and sysop calls, and each event on
+the live event stream) with its node key. That is the key its `/info` page
+serves and the leaf pins as **Hub Key** (`hubPubKey`); see
 [Coordinator Key Pinning](v3net/nal.md#coordinator-key-pinning). The leaf
-checks every signature against the pinned key, so a reply altered on the way,
-or one from a server that is not your hub, is refused. Each signature is tied
+reads `/info` and pins the key before its first signed request, so even the
+reply to its registration is checked. It checks every signature against the
+pinned key, so a reply altered on the way, or one from a server that is not
+your hub, is refused. Each signature is tied
 to the request it answers (through a random nonce the leaf sends with each
 request) and each event to its place in the stream, so an old reply or event
 cannot be passed off as a new one. A refusal of the event stream is checked
@@ -483,78 +459,17 @@ A single reply whose signature fails while `/info` still serves the pinned
 key is refused on its own (the poll or send fails and is retried as usual);
 the leaf does not stay paused.
 
-**Older hubs** do not sign. The leaf logs
-`leaf: hub does not sign its responses (older hub)` once and carries on
-unverified, as before, so leaves and hubs can be upgraded in any order. A
-leaf with no **Hub Key** pinned (a hub that does not publish one) cannot
-check signatures either. The signature format is in
-[Hub Signatures](v3net/message-areas.md#hub-signatures).
-
-### Refusing unsigned replies
-
-A reply with its signature removed looks just like one from an older hub,
-and anything between your BBS and the hub (a plain-HTTP hop, a proxy) can
-remove it. So the leaf refuses unsigned replies from a hub in two cases:
-
-- **Once it has seen the hub sign.** The first time a hub signature checks
-  out against **Hub Key**, the leaf logs `leaf: hub signs its responses;
-  unsigned replies from it are refused from now on` and sets **Hub Signs**
-  (`hubSigned`) on the subscription in `v3net.json`. From then on it refuses
-  that hub's unsigned replies, after a restart too. You do not need to do
-  anything for this.
-- **When you turn on Signed Hub** (`requireSignedHub`) on the subscription.
-  The leaf then refuses unsigned replies from the start, before it has seen
-  the hub sign, and a hub that does not sign at all keeps the network paused.
-  It defaults to **N** while hubs upgrade; turn it on once you know your hub
-  signs (**Hub Signs** shows **Y**). A later release will turn it on by
-  default.
-
-An unsigned reply is handled like one whose signature fails: the leaf logs
-`leaf: refusing an unsigned reply from the hub`, pauses, checks the hub's
-`/info`, and, if it still serves the pinned key, resumes, having dropped
-only that reply. If replies keep arriving unsigned, nothing gets through. An
-event stream that was opened unsigned before the leaf required signatures is
-dropped the same way before its next event is used. If the hub's `/info`
-serves no key at all, the pause holds until you clear **Hub Signs** as below;
-a pause because the hub's key changed holds until you accept the key, as
-above, whatever you do with **Hub Signs**.
-
-**If your hub really stopped signing**, for example because its operator
-went back to an older version, every reply is refused until you clear the
-record. Check with the hub's operator first: if the hub still signs,
-something on the way is removing its signatures. Then, in the subscription's
-edit form, set **Hub Signs** to **N** (or remove `"hubSigned": true` from the
-entry in `v3net.json`) and make sure **Signed Hub** is **N**. The running BBS
-picks the change up without a restart ([it waits for callers to log off](v3net/configuration.md#when-changes-to-v3netjson-apply)) and accepts the hub's unsigned
-replies again. When the hub signs again, the leaf notices and sets **Hub
-Signs** back on its own.
-
-If the leaf could not write **Hub Signs** to `v3net.json` (it logs `leaf:
-could not record that the hub signs; will retry at the next reply`), it
-still refuses unsigned replies while it runs, and the field shows **N**.
-Set **Hub Signs** to **N** anyway and save. The editor raises a count in that
-subscription's entry (`hubSignedClears`), so the save changes the file and the
-running BBS re-reads it ([once callers log off](v3net/configuration.md#when-changes-to-v3netjson-apply)).
-The leaf for that subscription then drops the record and does not write it
-later unless the hub signs again (it logs `leaf: config does not record that
-the hub signs; dropping the record not yet stored`). Other subscriptions keep
-theirs. It makes no difference whether the same save changes something else, or
-another change is still waiting to be applied.
-
-If you edit the file by hand, raise `hubSignedClears` in that subscription's
-entry by one, adding `"hubSignedClears": 1` if it isn't there. Only a rise in
-the number counts: saving the file as it was, or `touch configs/v3net.json`,
-drops nothing, and neither does lowering the number or removing the field. The
-leaf keeps its record, and once the BBS has re-read the file the next rise
-counts from the lower number. Restarting the BBS also works, since it starts
-from what the file holds.
-
-Any other change saved to `v3net.json` while the write is failing leaves the
-record and the retry alone, and the same goes for a key the leaf has pinned
-but could not write yet. To replace such a key, set the pin to another key: that
-wins even if you pick one the leaf used earlier. The one exception is the pin
-the file holds already, because saving that changes nothing: the leaf keeps the
-newer key a signed handover moved it to, and writes it when it can.
+**A reply with no signature is refused.** Hubs sign since v0.9.6, so a
+leaf on this release needs a hub at least that new. The leaf logs
+`leaf: refusing an unsigned reply from the hub` once, with what to do, then
+at debug level, and tries again at its next poll or reconnect. It does not
+pause for this: there is no key for you to accept, and nothing on your side
+to set. Ask the hub's operator to upgrade; if the hub is current, something
+between your BBS and the hub (a plain-HTTP hop, a proxy) is removing its
+signatures. A hub whose `/info` serves no key at all (one older than hub
+signatures) is logged as `leaf: hub does not publish its key (older than
+v0.9.6)`, and its replies are refused for want of a pin. The signature
+format is in [Hub Signatures](v3net/message-areas.md#hub-signatures).
 
 ---
 

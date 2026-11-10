@@ -21,19 +21,14 @@ func TestV3NetLeafAutoJoinEnabledDefaultsTrue(t *testing.T) {
 	}
 }
 
-func TestV3NetLeafSignedHubFieldsDefaultOff(t *testing.T) {
+// The rolling-upgrade keys of releases before signatures were required are
+// ignored: a v3net.json that still holds them loads, and nothing reads them.
+func TestV3NetLeafIgnoresRemovedSigningKeys(t *testing.T) {
 	var l V3NetLeafConfig
-	if err := json.Unmarshal([]byte(`{"hubUrl":"http://x","network":"felonynet"}`), &l); err != nil {
+	if err := json.Unmarshal([]byte(`{"hubUrl":"http://x","network":"felonynet","requireSignedHub":true,"hubSigned":true,"hubSignedClears":2}`), &l); err != nil {
 		t.Fatal(err)
 	}
-	if l.RequireSignedHub || l.HubSigned {
-		t.Errorf("requireSignedHub=%v hubSigned=%v by default, want both off", l.RequireSignedHub, l.HubSigned)
-	}
-
-	if err := json.Unmarshal([]byte(`{"hubUrl":"http://x","network":"felonynet","requireSignedHub":true,"hubSigned":true}`), &l); err != nil {
-		t.Fatal(err)
-	}
-	if !l.RequireSignedHub || !l.HubSigned {
-		t.Errorf("requireSignedHub=%v hubSigned=%v, want both read as true", l.RequireSignedHub, l.HubSigned)
+	if l.HubURL != "http://x" || l.Network != "felonynet" {
+		t.Errorf("leaf = %+v, want the known fields read", l)
 	}
 }

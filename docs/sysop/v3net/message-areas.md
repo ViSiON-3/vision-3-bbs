@@ -739,11 +739,9 @@ event at 16 lines and 1 MB of field text and drops a stream that sends more,
 signed or not. The hub's events are four lines each.
 
 A hub that predates hub signatures sends neither the header nor the extra
-fields, and a leaf with no hub key pinned cannot check either. Since
-removing the header makes a reply look like one from such a hub, a leaf
-refuses unsigned replies and streams from a hub it has seen sign before, or
-whose sysop requires hub signatures
-([Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies)).
+fields. A leaf refuses a reply or stream without them, so a hub must be at
+least v0.9.6 for a current leaf
+([Hub signatures](v3net/configuration.md#hub-signatures)).
 
 #### Hub signature example
 

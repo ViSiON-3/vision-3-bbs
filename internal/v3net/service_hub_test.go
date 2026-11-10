@@ -42,15 +42,14 @@ func newHubService(t *testing.T, port int) (*Service, *httptest.Server) {
 		KeystorePath: filepath.Join(dir, "v3net.key"),
 		DedupDBPath:  filepath.Join(dir, "dedup.sqlite"),
 		Hub: config.V3NetHubConfig{
-			Enabled:                true,
-			Host:                   "127.0.0.1",
-			Port:                   port,
-			DataDir:                filepath.Join(dir, "hub"),
-			AutoApprove:            true,
-			RequireSignedSubscribe: true,
-			AutoApproveAreas:       &reviewAreas,
-			Networks:               []config.V3NetHubNetwork{{Name: "testnet"}},
-			InitialAreas:           []config.V3NetHubArea{{Tag: "gen.general", Name: "General"}},
+			Enabled:          true,
+			Host:             "127.0.0.1",
+			Port:             port,
+			DataDir:          filepath.Join(dir, "hub"),
+			AutoApprove:      true,
+			AutoApproveAreas: &reviewAreas,
+			Networks:         []config.V3NetHubNetwork{{Name: "testnet"}},
+			InitialAreas:     []config.V3NetHubArea{{Tag: "gen.general", Name: "General"}},
 		},
 	})
 	if err != nil {
@@ -116,9 +115,25 @@ func newRemoteNode(t *testing.T, hubURL, bbsName string, onEvent func(protocol.E
 	l := leaf.New(leaf.Config{
 		HubURL: hubURL, Network: "testnet", Keystore: ks, DedupIndex: ix,
 		JAMWriter: &mockWriter{}, OnEvent: onEvent,
+		HubPubKeyB64: hubKeyOf(t, hubURL), // pinned, as after a first start
 	})
 	t.Cleanup(l.Close)
 	return &remoteNode{l: l, nodeID: ks.NodeID(), pubKey: ks.PubKeyBase64(), areas: sr.Areas}
+}
+
+// hubKeyOf reads the hub's key from testnet's /info, as a leaf pins it.
+func hubKeyOf(t *testing.T, hubURL string) string {
+	t.Helper()
+	resp, err := http.Get(hubURL + "/v3net/v1/testnet/info")
+	if err != nil {
+		t.Fatalf("hub info: %v", err)
+	}
+	defer resp.Body.Close()
+	var info protocol.NetworkInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil || info.HubPubKeyB64 == "" {
+		t.Fatalf("hub info: status %d, key %q, error %v", resp.StatusCode, info.HubPubKeyB64, err)
+	}
+	return info.HubPubKeyB64
 }
 
 func mustFetchNAL(t *testing.T, svc *Service) *protocol.NAL {
@@ -191,7 +206,7 @@ func TestService_Accessors(t *testing.T) {
 func TestService_CoordinatorReviewsProposals(t *testing.T) {
 	svc, ts := newHubService(t, 0)
 	ctx := context.Background()
-	if err := svc.AddLeaf(config.V3NetLeafConfig{Network: "testnet", HubURL: ts.URL}, &mockWriter{}, nil); err != nil {
+	if err := svc.AddLeaf(config.V3NetLeafConfig{Network: "testnet", HubURL: ts.URL, HubPubKey: hubKeyOf(t, ts.URL)}, &mockWriter{}, nil); err != nil {
 		t.Fatalf("AddLeaf: %v", err)
 	}
 
@@ -259,7 +274,7 @@ func TestService_CoordinatorReviewsProposals(t *testing.T) {
 func TestService_ManagerReviewsAccessRequests(t *testing.T) {
 	svc, ts := newHubService(t, 0)
 	ctx := context.Background()
-	if err := svc.AddLeaf(config.V3NetLeafConfig{Network: "testnet", HubURL: ts.URL}, &mockWriter{}, nil); err != nil {
+	if err := svc.AddLeaf(config.V3NetLeafConfig{Network: "testnet", HubURL: ts.URL, HubPubKey: hubKeyOf(t, ts.URL)}, &mockWriter{}, nil); err != nil {
 		t.Fatalf("AddLeaf: %v", err)
 	}
 
@@ -905,16 +920,16 @@ func TestSyncAreas_InfersConference(t *testing.T) {
 	}
 }
 
-// Old JSON configs remain compatible; enabling enforcement reaches the actual
-// HTTP handler, and a bad signature never falls back to unsigned registration.
+// An unsigned subscribe is refused through the actual HTTP handler whatever
+// the config says, including one from before the switch was removed, and a
+// bad signature never falls back to unsigned registration.
 func TestHubSubscribeEnforcementConfig(t *testing.T) {
 	for _, tc := range []struct {
 		name, hubJSON string
-		want          int
 	}{
-		{"existing config", `{"enabled":true,"autoApprove":true}`, http.StatusOK},
-		{"explicit compatibility", `{"enabled":true,"autoApprove":true,"requireSignedSubscribe":false}`, http.StatusOK},
-		{"strict", `{"enabled":true,"autoApprove":true,"requireSignedSubscribe":true}`, http.StatusUnauthorized},
+		{"current config", `{"enabled":true,"autoApprove":true}`},
+		{"old compatibility key", `{"enabled":true,"autoApprove":true,"requireSignedSubscribe":false}`},
+		{"old strict key", `{"enabled":true,"autoApprove":true,"requireSignedSubscribe":true}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -947,15 +962,15 @@ func TestHubSubscribeEnforcementConfig(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// First registration and a restart/re-subscribe both work by default.
+			// Neither a first registration nor a re-subscribe gets in unsigned.
 			for i := 0; i < 2; i++ {
 				resp, err := http.Post(ts.URL+"/v3net/v1/subscribe", "application/json", bytes.NewReader(body))
 				if err != nil {
 					t.Fatal(err)
 				}
 				resp.Body.Close()
-				if resp.StatusCode != tc.want {
-					t.Fatalf("unsigned attempt %d: %d, want %d", i, resp.StatusCode, tc.want)
+				if resp.StatusCode != http.StatusUnauthorized {
+					t.Fatalf("unsigned attempt %d: %d, want 401", i, resp.StatusCode)
 				}
 			}
 			req, err := http.NewRequest("POST", ts.URL+"/v3net/v1/subscribe", bytes.NewReader(body))

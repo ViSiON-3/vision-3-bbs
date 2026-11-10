@@ -120,8 +120,8 @@ func TestSignedHubResponsesVerify(t *testing.T) {
 	if err := l.SendLogon("tester"); err != nil {
 		t.Fatalf("SendLogon: %v", err)
 	}
-	if l.HubPaused() || l.unsignedHubLogged.Load() {
-		t.Errorf("paused=%v unsignedLogged=%v for a signing hub with the right pin", l.HubPaused(), l.unsignedHubLogged.Load())
+	if l.HubPaused() {
+		t.Error("paused for a signing hub with the right pin")
 	}
 	if _, changed := rec.counts(); changed != 0 {
 		t.Errorf("key changes reported: %+v", rec.changed)
@@ -246,24 +246,24 @@ func TestPauseDropsOpenStream(t *testing.T) {
 	}
 }
 
-// A hub that predates signing (no signature header) is accepted
-// unverified, even with a hub key pinned, and noted once.
-func TestUnsignedHubTolerated(t *testing.T) {
-	ts, _ := newMockHub(t, []protocol.Message{testMessage("550e8400-e29b-41d4-a716-446655440000")})
+// A hub that predates signing (no signature header) is refused, with a hub
+// key pinned or not: nothing it serves is imported, nothing is sent to it,
+// and the leaf is not paused, since there is no key for the sysop to accept.
+func TestUnsignedHubRefused(t *testing.T) {
+	ts, _ := newUnsignedMockHub(t, []protocol.Message{testMessage("550e8400-e29b-41d4-a716-446655440000")})
 	l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
 	l.pins.hub = newCoordKey(t).PubKeyBase64()
 
-	if n, err := l.Poll(context.Background()); err != nil || n != 1 {
-		t.Fatalf("Poll = %d, %v; want 1 message", n, err)
+	for i := 0; i < 2; i++ {
+		if n, err := l.Poll(context.Background()); !errors.Is(err, ErrHubUnsigned) || n != 0 {
+			t.Fatalf("Poll %d = %d, %v; want ErrHubUnsigned and nothing imported", i, n, err)
+		}
 	}
-	if err := l.SendMessage(ownMessage(l, "550e8400-e29b-41d4-a716-446655440001")); err != nil {
-		t.Fatalf("SendMessage: %v", err)
+	if err := l.SendMessage(ownMessage(l, "550e8400-e29b-41d4-a716-446655440001")); !errors.Is(err, ErrHubUnsigned) {
+		t.Errorf("SendMessage = %v, want ErrHubUnsigned", err)
 	}
 	if l.HubPaused() {
 		t.Error("paused by an unsigned hub")
-	}
-	if !l.unsignedHubLogged.Load() {
-		t.Error("unsigned hub not noted")
 	}
 }
 
@@ -402,40 +402,32 @@ func TestLegacyLeafReadsSignedStream(t *testing.T) {
 	}
 }
 
-// rawSSEHub serves an unsigned SSE stream with the given body.
-func rawSSEHub(t *testing.T, body string) *httptest.Server {
-	t.Helper()
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, body)
-	}))
-	t.Cleanup(ts.Close)
-	return ts
-}
-
 // An event is buffered until its blank line, so its field count and size
-// are capped; a stream over either cap is dropped, signed or not. The caps
-// apply per event: many normal events in a row are fine.
+// are capped; an event over either cap drops the stream before its
+// signature is looked at. The caps apply per event: many normal events in a
+// row are fine.
 func TestSSEEventLimits(t *testing.T) {
 	line := "data: " + strings.Repeat("x", 128<<10) + "\n" // 128KB, well under the line cap
 	hubKS := newCoordKey(t)
+	raw := func(body string) func(t *testing.T) *httptest.Server {
+		return func(t *testing.T) *httptest.Server {
+			return fakeSSEHub(t, hubKS, func(w io.Writer, _ reqBinding) { _, _ = io.WriteString(w, body) })
+		}
+	}
 	cases := map[string]struct {
 		hub     func(t *testing.T) *httptest.Server
 		wantErr error
 		events  int64
 	}{
 		"too many fields": {
-			hub: func(t *testing.T) *httptest.Server {
-				return rawSSEHub(t, "event: ping\n"+strings.Repeat("data: {}\n", maxSSEEventFields)+"\n")
-			},
+			hub:     raw("event: ping\n" + strings.Repeat("data: {}\n", maxSSEEventFields) + "\n"),
 			wantErr: errSSEEventTooLarge,
 		},
 		"too many bytes": {
-			hub:     func(t *testing.T) *httptest.Server { return rawSSEHub(t, "event: ping\n"+strings.Repeat(line, 9)+"\n") },
+			hub:     raw("event: ping\n" + strings.Repeat(line, 9) + "\n"),
 			wantErr: errSSEEventTooLarge,
 		},
-		"too many bytes, signed": {
+		"too many bytes after a good event": {
 			hub: func(t *testing.T) *httptest.Server {
 				return fakeSSEHub(t, hubKS, func(w io.Writer, req reqBinding) {
 					_, _ = io.WriteString(w, signedEvent(t, hubKS, req, 1, "ping", "{}")+"event: ping\nid: 2\n"+strings.Repeat(line, 9)+"\n")
@@ -446,8 +438,12 @@ func TestSSEEventLimits(t *testing.T) {
 		},
 		"limits reset per event": {
 			hub: func(t *testing.T) *httptest.Server {
-				ev := "event: ping\n" + strings.Repeat(line, 7) + "\n" // 896KB, 8 fields
-				return rawSSEHub(t, strings.Repeat(ev, 4))
+				big := strings.Repeat("x", 896<<10) // 896KB in one data line
+				return fakeSSEHub(t, hubKS, func(w io.Writer, req reqBinding) {
+					for seq := uint64(1); seq <= 4; seq++ {
+						_, _ = io.WriteString(w, signedEvent(t, hubKS, req, seq, "ping", big))
+					}
+				})
 			},
 			events: 4,
 		},

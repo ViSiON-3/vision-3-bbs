@@ -26,13 +26,12 @@ func newTestHub(t *testing.T, autoApprove bool) (*httptest.Server, *hub.Hub, *ke
 		t.Fatalf("load hub keystore: %v", err)
 	}
 	h, err := hub.New(hub.Config{
-		ListenAddr:             ":0",
-		DataDir:                dir,
-		Keystore:               ks,
-		AutoApprove:            autoApprove,
-		RequireSignedSubscribe: true,
-		AutoApproveAreas:       true,
-		Networks:               []hub.NetworkConfig{{Name: "testnet", Description: "Test network"}},
+		ListenAddr:       ":0",
+		DataDir:          dir,
+		Keystore:         ks,
+		AutoApprove:      autoApprove,
+		AutoApproveAreas: true,
+		Networks:         []hub.NetworkConfig{{Name: "testnet", Description: "Test network"}},
 	})
 	if err != nil {
 		t.Fatalf("create hub: %v", err)
@@ -42,6 +41,7 @@ func newTestHub(t *testing.T, autoApprove bool) (*httptest.Server, *hub.Hub, *ke
 		ts.Close()
 		_ = h.Close()
 	})
+	mockHubKeys.Store(ts.URL, ks.PubKeyBase64())
 	return ts, h, ks
 }
 
@@ -74,7 +74,8 @@ func seedHubNAL(t *testing.T, h *hub.Hub, ks *keystore.Keystore, tags ...string)
 	}
 }
 
-// subscribedLeaf creates a leaf named bbsName and registers it with the hub.
+// subscribedLeaf creates a leaf named bbsName, pins the hub's key from
+// /info as Start does, and registers it with the hub.
 func subscribedLeaf(t *testing.T, ts *httptest.Server, bbsName string, areaTags ...string) *Leaf {
 	t.Helper()
 	l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})
@@ -82,6 +83,9 @@ func subscribedLeaf(t *testing.T, ts *httptest.Server, bbsName string, areaTags 
 	l.cfg.BBSHost = bbsName + ".example.net"
 	l.cfg.AreaTags = areaTags
 	offerChat(l)
+	if err := l.checkHubKey(context.Background()); err != nil {
+		t.Fatalf("pin hub key for %s: %v", bbsName, err)
+	}
 	if err := l.subscribe(context.Background()); err != nil {
 		t.Fatalf("subscribe %s: %v", bbsName, err)
 	}
@@ -189,15 +193,13 @@ func awaitChat(t *testing.T, s *ChatSession, eventType chat.ChatEventType) chat.
 	}
 }
 
-// cannedHub answers every request with the given status and body.
+// cannedHub answers every request with the given status and body, signed.
 func cannedHub(t *testing.T, status int, body string) *httptest.Server {
 	t.Helper()
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
 	}))
-	t.Cleanup(ts.Close)
-	return ts
 }
 
 // deadHubURL returns the URL of a hub that has already shut down.

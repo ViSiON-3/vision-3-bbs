@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -166,7 +165,7 @@ func waitChatConnected(t *testing.T, l *Leaf) {
 
 func TestChatRecoveryFailureStaysUnreadyAndRetries(t *testing.T) {
 	var attempts atomic.Int32
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if attempts.Add(1) == 1 {
 			http.Error(w, "try again", http.StatusServiceUnavailable)
 			return
@@ -209,7 +208,7 @@ func TestChatRecoveryAbandonedWhileRequestInFlight(t *testing.T) {
 			started := make(chan struct{})
 			release := make(chan struct{}, 1)
 			var leaves atomic.Int32
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if strings.HasSuffix(r.URL.Path, "/leave") {
 					leaves.Add(1)
 					w.WriteHeader(http.StatusNoContent)
@@ -385,7 +384,7 @@ func TestChatRecoveryClosesEarlierGroupWhileLaterGroupWaits(t *testing.T) {
 	release := make(chan struct{}, 1)
 	leaves := make(chan string, 2)
 	var joins atomic.Int32
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req protocol.ChatJoinRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), 400)
