@@ -715,7 +715,7 @@ the caller's batch queue.
 | `search(query)` | array | Keyword search across the areas the caller can see |
 | `totalCount()` | number | Total files across the areas the caller can see |
 | `read(areaID, filename)` | string \| `null` | A file's contents as text. See [read](#v3fileread) |
-| `members(areaID, filename)` | array \| `null` | A ZIP's entries. See [members](#v3filemembers) |
+| `members(areaID, filename[, sampleBytes])` | array \| `null` | A ZIP's entries, optionally with the start of each. See [members](#v3filemembers) |
 | `readMember(areaID, filename, member)` | string \| `null` | One ZIP entry's contents as text. See [readMember](#v3filereadmember) |
 | `isMarked(areaID, filename)` | boolean | Whether a file is in the caller's batch queue. See [isMarked](#v3fileismarked) |
 | `mark(areaID, filename)` | boolean | Add a file to the batch queue. See [mark](#v3filemark) |
@@ -756,6 +756,25 @@ unpack the entry: it isn't `encrypted`, and its method is one the BBS reads
 (see `readMember`). It needs the same download ACS as `read`, and returns `null` for a
 file that isn't a ZIP. Only ZIP archives can be opened; 7z, RAR, ARJ and LHA
 archives return `null`. At most 4096 entries are listed.
+
+With `sampleBytes`, each entry that `readable` says can be read, other than
+directories, also gets `sample`: its first `sampleBytes` characters (at most
+65536), as `readMember` would give them, or `null` for an entry over 4 MB or
+whose data can't be unpacked. The archive is opened once and only those
+starts are unpacked, which is far quicker than a `readMember` for each when a
+script only needs to tell art from binaries. Samples count against a 4 MB
+budget by their length (a `null` one costs nothing); once less than
+`sampleBytes` of it is left, later entries have no `sample`.
+
+```javascript
+var list = v3.file.members(area.id, "ACID0796.ZIP", 4096) || [];
+for (var i = 0; i < list.length; i++) {
+    var e = list[i];
+    if ("sample" in e && e.sample !== null && e.sample.indexOf("\x00") < 0) {
+        v3.console.writeln(e.name + " looks like text");
+    }
+}
+```
 
 #### v3.file.readMember
 

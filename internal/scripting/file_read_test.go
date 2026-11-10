@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/flate"
+	"fmt"
 	"hash/crc32"
 	"os"
 	"path/filepath"
@@ -194,5 +195,76 @@ func TestReadMemberOldMethods(t *testing.T) {
 		if got := h.eval(tc.expr).String(); got != tc.want {
 			t.Errorf("%s = %q, want %q", tc.expr, got, tc.want)
 		}
+	}
+}
+
+// TestMembersSample: with a sample size, members gives each readable file
+// entry the start of its text, the same as readMember's, and none to
+// directories, entries it can't read, or anything without the argument.
+func TestMembersSample(t *testing.T) {
+	h := fileReadHarness(t, func(a *file.FileArea) bool { return a.ACSDownload == "" })
+	for _, tc := range []struct{ expr, want string }{
+		// every OLDPACK.ZIP member (imploded, shrunk, reduced) and ACID.ZIP's
+		// deflated one: the sample is the start of what readMember gives
+		{`v3.file.members(1, "OLDPACK.ZIP", 100).map(function (m) {
+			return m.sample === v3.file.readMember(1, "OLDPACK.ZIP", m.name).slice(0, 100); }).join(" ")`, "true true true true"},
+		{`v3.file.members(1, "OLDPACK.ZIP", 4096).map(function (m) { return m.sample.length; }).join(" ")`, "70 1539 272 2000"},
+		{`v3.file.members(1, "ACID.ZIP", 4096)[0].sample === v3.file.readMember(1, "ACID.ZIP", "ACID-01.ANS")`, "true"},
+		// a directory, unreadable entries, no argument, a zero size
+		{`"sample" in v3.file.members(1, "ACID.ZIP", 4096)[1]`, "false"},
+		{`v3.file.members(1, "UNREAD.ZIP", 4096).map(function (m) { return "sample" in m; }).join(" ")`, "false false"},
+		{`"sample" in v3.file.members(1, "ACID.ZIP")[0]`, "false"},
+		{`"sample" in v3.file.members(1, "ACID.ZIP", 0)[0]`, "false"},
+		// a size past the cap is cut to it
+		{`v3.file.members(1, "OLDPACK.ZIP", 1e9)[3].sample.length`, "2000"},
+	} {
+		if got := h.eval(tc.expr).String(); got != tc.want {
+			t.Errorf("%s = %q, want %q", tc.expr, got, tc.want)
+		}
+	}
+}
+
+// members charges each sample against maxScriptRead by its length, so many
+// small entries all get theirs, and stops once less than the sample size is
+// left. An entry over maxScriptRead gets null, as readMember gives, and
+// costs nothing.
+func TestMembersSampleBudget(t *testing.T) {
+	p := fileAreasProviders(t, func(a *file.FileArea) bool { return true })
+	var zbuf bytes.Buffer
+	zw := zip.NewWriter(&zbuf)
+	w, _ := zw.Create("HUGE.TXT")
+	_, _ = w.Write(bytes.Repeat([]byte{' '}, maxScriptRead+1))
+	const small = 200
+	for i := 0; i < small; i++ {
+		w, _ := zw.Create(fmt.Sprintf("SMALL%03d.ANS", i))
+		_, _ = w.Write([]byte("art"))
+	}
+	full := maxScriptRead / maxMemberSample
+	for i := 0; i < full+5; i++ {
+		w, _ := zw.Create(fmt.Sprintf("FULL%03d.ANS", i))
+		_, _ = w.Write(bytes.Repeat([]byte{'x'}, maxMemberSample))
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	path, err := p.FileMgr.GetFilePath(p.FileMgr.GetFilesForArea(1)[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(path), "MANY.ZIP"), zbuf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.FileMgr.AddFileRecord(file.FileRecord{ID: uuid.New(), AreaID: 1, Filename: "MANY.ZIP", UploadedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	h := newHarness(t, harnessOpts{providers: p})
+	got := h.eval(`(function () {
+		var list = v3.file.members(1, "MANY.ZIP", 65536), sampled = 0;
+		for (var i = 0; i < list.length; i++) if (typeof list[i].sample === "string") sampled++;
+		return String(list[0].sample) + " " + sampled + " " + ("sample" in list[list.length - 1]);
+	})()`).String()
+	// The small samples take 600 bytes, so one full one fewer fits.
+	if want := fmt.Sprintf("null %d false", small+full-1); got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

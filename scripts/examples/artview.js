@@ -6,9 +6,10 @@
 // arguments. A lightbar lists the archive's entries with each piece's SAUCE
 // title and artist. Enter shows a piece: ANSI art is drawn as ANSI.SYS
 // would (v3.ansi.render) and shown a screen at a time, text likewise. What
-// counts as art or text is kindOf's call, below: entries are greyed by name
-// until read, an entry it can't place is shown if the caller says so, and
-// binary entries are refused.
+// counts as art or text is kindOf's call, below, made for every entry when
+// the archive is opened from the sample v3.file.members gives each (entries
+// without one are greyed by name until read). An entry it can't place is
+// shown if the caller says so, and binary entries are refused.
 // Entries are read in memory with v3.file.readMember, which needs the
 // area's download access; nothing is extracted to disk.
 //
@@ -18,6 +19,10 @@
 // T to tag, Esc or Q back to the list.
 //
 // To change the look, edit COLORS and BOTTOM_RULE below.
+
+// SAMPLE_BYTES is how much of each entry v3.file.members hands over for
+// kindOf, which looks at no more than the first 4096 bytes.
+var SAMPLE_BYTES = 4096;
 
 // BOTTOM_RULE draws a rule above the footer, matching the one under the
 // header. Set it to false for one more row of art on short screens.
@@ -87,7 +92,7 @@ function ArtView(tag, name) {
     this.name = name;
     this.entries = [];
     this.sauce = {};
-    this.kinds = {}; // kindOf for each entry read so far
+    this.kinds = {}; // kindOf for each entry, from members' sample or once read
     this.sel = 0;
     this.top = 0;
     this.status = "";
@@ -107,16 +112,18 @@ ArtView.prototype.rows = function () {
     return this.height() - (BOTTOM_RULE ? 4 : 3);
 };
 
-// viewable reports whether an entry is art or text, by its name until it
-// has been read and by its contents after.
+// viewable reports whether an entry is art or text: by its contents once
+// kindOf has seen them (from members' sample, or once read), by its name
+// before.
 ArtView.prototype.viewable = function (e) {
     if (e.readable === false) return false;
     var kind = this.kinds[e.name];
     return kind ? kind === "text" : textByName(e.name);
 };
 
-// kindOfEntry reads an entry and returns kindOf for it, or "unreadable"
-// when it can't be read, remembering the answer.
+// kindOfEntry returns kindOf for an entry, or "unreadable" when it can't be
+// read. Most entries have their answer from members' sample already; others
+// (past members' sample budget) are read here, once.
 ArtView.prototype.kindOfEntry = function (e) {
     if (!(e.name in this.kinds)) {
         var data = e.readable === false ? null : v3.file.readMember(this.area.id, this.name, e.name);
@@ -287,14 +294,22 @@ ArtView.prototype.open = function (index) {
 
 ArtView.prototype.main = function () {
     v3.console.clear();
-    var list = this.area ? v3.file.members(this.area.id, this.name) : null;
+    var list = this.area ? v3.file.members(this.area.id, this.name, SAMPLE_BYTES) : null;
     if (list === null) {
         v3.console.writeln(COLORS.status + this.name + ": can't be opened." + "\x1b[0m");
         v3.console.pause();
         return;
     }
     for (var i = 0; i < list.length; i++) {
-        if (!list[i].isDir) this.entries.push(list[i]);
+        var e = list[i];
+        if (e.isDir) continue;
+        // kindOf needs no more than the sample, so N/P and the list's
+        // colours need no readMember for entries that have one.
+        if ("sample" in e) {
+            this.kinds[e.name] = e.sample === null ? "unreadable" : kindOf(e.name, e.sample);
+            delete e.sample;
+        }
+        this.entries.push(e);
     }
     if (!this.entries.length) {
         v3.console.writeln(COLORS.status + this.name + " is empty." + "\x1b[0m");
