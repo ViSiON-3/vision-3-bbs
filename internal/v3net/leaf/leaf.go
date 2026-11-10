@@ -3,8 +3,10 @@ package leaf
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -71,6 +73,27 @@ type Leaf struct {
 	pollNow chan struct{}
 }
 
+// maxHubRedirects is how many redirects a hub request follows, as Go's own
+// default.
+const maxHubRedirects = 10
+
+// sameHostRedirect is the CheckRedirect of the leaf's HTTP clients: a
+// redirect is followed only to the scheme and host (with port) the request
+// was first sent to. Go's default follows a redirect anywhere, so a hub, or
+// anyone between it and the leaf on plain HTTP, could send the leaf's
+// requests, with their bodies on a 307 or 308, to any address, including
+// ones on the leaf's own network. A refused redirect fails the request.
+func sameHostRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxHubRedirects {
+		return fmt.Errorf("leaf: stopped after %d redirects", maxHubRedirects)
+	}
+	first := via[0].URL
+	if !strings.EqualFold(req.URL.Scheme, first.Scheme) || !strings.EqualFold(req.URL.Host, first.Host) {
+		return fmt.Errorf("leaf: refusing redirect from %s://%s to %s://%s", first.Scheme, first.Host, req.URL.Scheme, req.URL.Host)
+	}
+	return nil
+}
+
 // New creates a new Leaf with the given configuration.
 func New(cfg Config) *Leaf {
 	if cfg.PollInterval <= 0 {
@@ -79,9 +102,9 @@ func New(cfg Config) *Leaf {
 
 	l := &Leaf{
 		cfg:       cfg,
-		client:    &http.Client{Timeout: 10 * time.Second},
-		sseClient: &http.Client{},
-		nalCache:  nal.NewCache(1*time.Hour, &http.Client{Timeout: 30 * time.Second}),
+		client:    &http.Client{Timeout: 10 * time.Second, CheckRedirect: sameHostRedirect},
+		sseClient: &http.Client{CheckRedirect: sameHostRedirect},
+		nalCache:  nal.NewCache(1*time.Hour, &http.Client{Timeout: 30 * time.Second, CheckRedirect: sameHostRedirect}),
 		pins: keyPins{
 			coord:        normalizeKey(cfg.CoordPubKeyB64),
 			hub:          normalizeKey(cfg.HubPubKeyB64),
