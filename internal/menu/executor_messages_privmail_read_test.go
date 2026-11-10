@@ -186,3 +186,56 @@ func TestReadPrivateMailDeleteLastEndsReader(t *testing.T) {
 		t.Errorf("PRIVMAIL kept %q, want for-sysop", s)
 	}
 }
+
+// TestReadPrivateMailDeleteRace is the race from review: while the caller
+// is at the delete prompt for their message 1, another session deletes it
+// and packs, so the sysop's mail moves to number 1. Y must not delete it:
+// the message is checked again as the delete happens, and nothing goes.
+func TestReadPrivateMailDeleteRace(t *testing.T) {
+	env := newMsgEnv(t)
+	env.postMsgs(privmailAreaID,
+		testMsg{from: "Sysop", to: "Caller", subject: "for-caller", private: true},
+		testMsg{from: "Caller", to: "Sysop", subject: "for-sysop", private: true},
+	)
+	fired := false
+	env.whenOutput("Delete this message?", func() {
+		fired = true
+		if err := env.e.MessageMgr.DeleteMessage(privmailAreaID, 1); err != nil {
+			t.Errorf("other session's delete: %v", err)
+		}
+		if err := env.e.MessageMgr.PackAndLinkArea(privmailAreaID); err != nil {
+			t.Errorf("other session's pack: %v", err)
+		}
+	})
+	r := env.runCmd("READPRIVMAIL", env.caller, "", "DYQ")
+	if !fired {
+		t.Fatalf("the delete prompt never showed; output:\n%s", r.text())
+	}
+	if n := env.msgCount(privmailAreaID); n != 1 {
+		t.Fatalf("PRIVMAIL has %d messages, want the sysop's 1", n)
+	}
+	if s := env.mustMsg(privmailAreaID, 1).Subject; s != "for-sysop" {
+		t.Errorf("PRIVMAIL kept %q, want for-sysop", s)
+	}
+	if !r.has("Nothing was deleted.") {
+		t.Errorf("the caller wasn't told; output:\n%s", r.text())
+	}
+}
+
+// The same for a co-sysop: a pack under the prompt mustn't turn their
+// delete onto the message that moved into the number.
+func TestMessageReaderSysopDeleteRace(t *testing.T) {
+	env := newMsgEnv(t)
+	env.generalMsgs(3)
+	env.whenOutput("Delete this message?", func() {
+		_ = env.e.MessageMgr.DeleteMessage(generalAreaID, 1)
+		_ = env.e.MessageMgr.PackAndLinkArea(generalAreaID)
+	})
+	env.runCmd("READMSGS", env.sysop, "", "DYQ")
+	if n := env.msgCount(generalAreaID); n != 2 {
+		t.Fatalf("GENERAL has %d messages, want 2", n)
+	}
+	if s := env.mustMsg(generalAreaID, 1).Subject; s != "subj-2" {
+		t.Errorf("message 1 = %q, want subj-2 kept", s)
+	}
+}

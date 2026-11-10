@@ -989,7 +989,28 @@ readerLoop:
 					needsRedraw = true
 					continue
 				}
-				if delErr := e.MessageMgr.DeleteMessage(currentAreaID, currentMsg.MsgNum); delErr != nil {
+				// The message is checked again as the delete happens, under
+				// the base's lock: while the caller was answering, another
+				// session may have deleted it, or packed the base and moved
+				// someone else's message into its number.
+				shown := currentMsg
+				delErr := e.MessageMgr.DeleteMessageIf(currentAreaID, shown.MsgNum, func(m *message.DisplayMessage) bool {
+					return message.SameMessage(m, shown) && canDelete(m)
+				})
+				if errors.Is(delErr, message.ErrMessageChanged) {
+					e.showReaderNotice(terminal, outputMode, "|01That message was changed or deleted elsewhere. Nothing was deleted.|07", termHeight)
+					if n, cErr := e.MessageMgr.GetMessageCountForArea(currentAreaID); cErr == nil {
+						totalMsgCount = n
+					}
+					if totalMsgCount <= 0 {
+						break readerLoop
+					}
+					if currentMsgNum > totalMsgCount {
+						currentMsgNum = totalMsgCount
+					}
+					break scrollLoop
+				}
+				if delErr != nil {
 					slog.Error("delete message", "node", nodeNumber, "msg", currentMsg.MsgNum, "area", currentAreaID, "error", delErr)
 					terminalio.WriteProcessedBytes(terminal,
 						ansi.ReplacePipeCodes([]byte("\r\n|01Error deleting message.|07\r\n")), outputMode)

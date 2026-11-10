@@ -350,6 +350,48 @@ func (mm *MessageManager) DeleteMessage(areaID, msgNum int) error {
 	return nil
 }
 
+// ErrMessageChanged is DeleteMessageIf's answer when the message is gone or
+// no longer the one its check expects.
+var ErrMessageChanged = jam.ErrMessageChanged
+
+// DeleteMessageIf deletes message msgNum of an area only when check accepts
+// the message as it is at that moment, read under the same lock as the
+// delete (jam.Base.DeleteMessageIf). Use it when the message was shown to
+// someone before they confirmed: another session may have deleted it, or
+// packed the base and moved another message into its number, meanwhile. It
+// returns ErrMessageChanged, deleting nothing, when check refuses.
+func (mm *MessageManager) DeleteMessageIf(areaID, msgNum int, check func(*DisplayMessage) bool) error {
+	b, _, err := mm.openBase(areaID)
+	if err != nil {
+		return fmt.Errorf("open base for area %d: %w", areaID, err)
+	}
+	defer func() {
+		if cerr := b.Close(); cerr != nil {
+			slog.Warn("closing JAM base", "error", cerr)
+		}
+	}()
+	err = b.DeleteMessageIf(msgNum, func(m *jam.Message) bool {
+		return check(displayMessage(m, areaID, msgNum))
+	})
+	if err != nil {
+		if errors.Is(err, ErrMessageChanged) {
+			return ErrMessageChanged
+		}
+		return fmt.Errorf("delete message %d in area %d: %w", msgNum, areaID, err)
+	}
+	mm.invalidateThreadIndex(areaID)
+	return nil
+}
+
+// SameMessage reports whether a and b are the same message: the same
+// sender, recipient, subject, date, MSGID and text. A message's number
+// isn't enough, as a pack renumbers the base.
+func SameMessage(a, b *DisplayMessage) bool {
+	return a.From == b.From && a.To == b.To && a.Subject == b.Subject &&
+		a.DateTime.Equal(b.DateTime) && a.MsgID == b.MsgID && a.Body == b.Body &&
+		a.SenderHandle == b.SenderHandle
+}
+
 // AreaCounts holds the per-area message tallies shown in area listings.
 type AreaCounts struct {
 	Total    int // messages in the base
