@@ -48,9 +48,17 @@ type mockHub struct {
 	unsigned bool
 }
 
-// mockHubKeys maps a mock hub's URL to its key, so setupLeaf can pin it as
-// a v3net.json that has talked to the hub before would.
+// mockHubKeys maps a test hub's URL to its key, so setupLeaf can pin it as
+// a v3net.json that has talked to the hub before would. An entry goes when
+// its server closes, before the port can be reused by another.
 var mockHubKeys sync.Map
+
+// registerHubKey records key for the hub at ts until ts closes.
+func registerHubKey(t *testing.T, ts *httptest.Server, key string) {
+	t.Helper()
+	mockHubKeys.Store(ts.URL, key)
+	t.Cleanup(func() { mockHubKeys.Delete(ts.URL) })
+}
 
 func newMockHub(t *testing.T, messages []protocol.Message) (*httptest.Server, *keystore.Keystore) {
 	t.Helper()
@@ -74,7 +82,7 @@ func newMockHubSigning(t *testing.T, messages []protocol.Message, signs bool) (*
 	mh := &mockHub{ks: hubKS, messages: messages, unsigned: !signs}
 	ts := httptest.NewServer(http.HandlerFunc(mh.handler))
 	t.Cleanup(ts.Close)
-	mockHubKeys.Store(ts.URL, hubKS.PubKeyBase64())
+	registerHubKey(t, ts, hubKS.PubKeyBase64())
 	return ts, hubKS
 }
 
@@ -322,7 +330,7 @@ func TestSSE_ReconnectsOnDisconnect(t *testing.T) {
 	connectCount := 0
 	var mu sync.Mutex
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if containsStr(r.URL.Path, "/events") {
 			mu.Lock()
 			connectCount++
@@ -352,8 +360,18 @@ func TestSSE_ReconnectsOnDisconnect(t *testing.T) {
 	l, _ := setupLeaf(t, ts.URL, writer)
 
 	ctx, cancel := context.WithCancel(context.Background())
-
-	go l.runSSE(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		l.runSSE(ctx)
+	}()
+	// The loop reads the backoff settings until it exits, so it must be
+	// gone before Cleanup restores them.
+	stop := func() {
+		cancel()
+		ts.Close()
+		<-done
+	}
 
 	// Wait for at least 2 connections (initial + reconnect).
 	deadline := time.After(2500 * time.Millisecond)
@@ -362,15 +380,12 @@ func TestSSE_ReconnectsOnDisconnect(t *testing.T) {
 		c := connectCount
 		mu.Unlock()
 		if c >= 2 {
-			// Cancel first so the SSE goroutine exits and releases the connection.
-			cancel()
-			ts.Close()
+			stop()
 			return
 		}
 		select {
 		case <-deadline:
-			cancel()
-			ts.Close()
+			stop()
 			t.Fatalf("expected at least 2 SSE connections, got %d", c)
 		case <-time.After(50 * time.Millisecond):
 		}

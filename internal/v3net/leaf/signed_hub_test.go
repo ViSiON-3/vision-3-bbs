@@ -48,7 +48,7 @@ func signedHub(t *testing.T, h http.Handler) *httptest.Server {
 		sw.finish()
 	}))
 	t.Cleanup(ts.Close)
-	mockHubKeys.Store(ts.URL, hubKS.PubKeyBase64())
+	registerHubKey(t, ts, hubKS.PubKeyBase64())
 	return ts
 }
 

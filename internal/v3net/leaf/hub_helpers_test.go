@@ -41,7 +41,7 @@ func newTestHub(t *testing.T, autoApprove bool) (*httptest.Server, *hub.Hub, *ke
 		ts.Close()
 		_ = h.Close()
 	})
-	mockHubKeys.Store(ts.URL, ks.PubKeyBase64())
+	registerHubKey(t, ts, ks.PubKeyBase64())
 	return ts, h, ks
 }
 
