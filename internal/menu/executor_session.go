@@ -85,6 +85,7 @@ func ClearSessionIdleTimeout(s ssh.Session) {
 	sessionTypeAhead.Delete(s)
 	sessionEnterTrailers.Delete(s)
 	clearLoginFailures(s)
+	clearCurrentMail(s)
 }
 
 // sessionDeadlines remembers when each session's time limit runs out, for the

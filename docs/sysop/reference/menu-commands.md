@@ -102,6 +102,7 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | `SENDPRIVMAIL` | none | Asks for a recipient handle and subject, then opens the editor. Posts to the `PRIVMAIL` area as a private message. | Needs a `PRIVMAIL` area |
 | `READPRIVMAIL` | none | Reads mail addressed to the caller in the `PRIVMAIL` area. | Needs a `PRIVMAIL` area |
 | `LISTPRIVMAIL` | none | Header list of the caller's private mail. | Needs a `PRIVMAIL` area |
+| `DELETEPRIVMAIL` | none | Deletes the caller's current mail (the last of their mail the reader showed this call) after a Y/N; with none, asks which by the number `LISTPRIVMAIL` shows (`?` lists). Only mail addressed to the caller. `D` on the stock `EMAILM`. | Needs a `PRIVMAIL` area |
 | `NMAILSCAN` | none | Counts unread private mail and offers to read it now. Silent when mail is not configured. Shipped as a login step, not bound in any stock menu. | |
 
 ## QWK offline mail
