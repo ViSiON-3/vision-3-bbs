@@ -533,24 +533,22 @@ func TestPoll_FollowsHasMoreWithCursor(t *testing.T) {
 		t.Errorf("request cursors = %q, want [\"\" %s]", ph.cursor, testUUID1)
 	}
 	// The cursor names the message's origin node too.
-	if len(ph.origins) != 2 || ph.origins[0] != "" || ph.origins[1] != "test.example.net" {
-		t.Errorf("request since_origin = %q, want [\"\" test.example.net]", ph.origins)
+	if len(ph.origins) != 2 || ph.origins[0] != "" || ph.origins[1] != testOrigin {
+		t.Errorf("request since_origin = %q, want [\"\" %s]", ph.origins, testOrigin)
 	}
 	// Every request, the first with no cursor included, asks for per-origin
 	// identity, so the hub serves every copy of a UUID.
 	if len(ph.identities) != 2 || ph.identities[0] != protocol.IdentityOrigin || ph.identities[1] != protocol.IdentityOrigin {
 		t.Errorf("request identity = %q, want origin on both", ph.identities)
 	}
-	if last, origin, err := ix.LastSeen("testnet"); err != nil || last != testUUID3 || origin != "test.example.net" {
-		t.Errorf("LastSeen = %q, %q, %v; want %s, test.example.net", last, origin, err, testUUID3)
+	if last, origin, err := ix.LastSeen("testnet"); err != nil || last != testUUID3 || origin != testOrigin {
+		t.Errorf("LastSeen = %q, %q, %v; want %s, %s", last, origin, err, testUUID3, testOrigin)
 	}
 }
 
 func TestPoll_SkipsInvalidAndUnwritableMessages(t *testing.T) {
 	invalid := testMessage("not-a-uuid")
-	oversized := testMessage(testUUID3)
-	oversized.Body = strings.Repeat("x", protocol.MaxBodyBytes+500)
-	ts, _ := newMockHub(t, []protocol.Message{invalid, testMessage(testUUID1), testMessage(testUUID2), oversized})
+	ts, _ := newMockHub(t, []protocol.Message{invalid, testMessage(testUUID1), testMessage(testUUID2), testMessage(testUUID3)})
 
 	writer := &failingJAMWriter{failUUID: testUUID1}
 	l, ix := setupLeaf(t, ts.URL, writer)
@@ -564,15 +562,11 @@ func TestPoll_SkipsInvalidAndUnwritableMessages(t *testing.T) {
 	if writer.messages[0].MsgUUID != testUUID2 {
 		t.Errorf("first written message = %s, want %s", writer.messages[0].MsgUUID, testUUID2)
 	}
-	// An over-long body is cut to the protocol limit and flagged.
-	if got := writer.messages[1]; len(got.Body) > protocol.MaxBodyBytes || !got.IsTruncated() {
-		t.Errorf("oversized message: body %d bytes, truncated flag %v", len(got.Body), got.IsTruncated())
-	}
 	// A message the JAM base refused is not marked seen.
-	if seen, _ := ix.Seen("testnet", "test.example.net", testUUID1); seen {
+	if seen, _ := ix.Seen("testnet", testOrigin, testUUID1); seen {
 		t.Error("unwritable message was marked seen")
 	}
-	if seen, _ := ix.Seen("testnet", "test.example.net", testUUID2); !seen {
+	if seen, _ := ix.Seen("testnet", testOrigin, testUUID2); !seen {
 		t.Error("written message was not marked seen")
 	}
 }

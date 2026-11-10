@@ -57,9 +57,6 @@ type Config struct {
 	// callers who consented. Nil publishes nothing.
 	Activity CentralActivitySource
 
-	// RequireSignedMessages drops polled messages without an author
-	// signature instead of importing them as legacy messages.
-	RequireSignedMessages bool
 	// RequireSignedHub refuses unsigned replies to signed requests and
 	// unsigned SSE streams, pausing syncing as a bad signature does,
 	// instead of taking them as from a hub that predates hub signing.

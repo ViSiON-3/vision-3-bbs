@@ -2,6 +2,8 @@ package leaf
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -125,14 +127,37 @@ func setupLeaf(t *testing.T, hubURL string, writer JAMWriter) (*Leaf, *dedup.Ind
 	return New(cfg), ix
 }
 
+// testSigner signs test messages as testAuthor, a fixed node standing in
+// for another board on the network. It implements protocol.MessageSigner.
+type testSigner struct{ key ed25519.PrivateKey }
+
+func (s testSigner) pub() ed25519.PublicKey { return s.key.Public().(ed25519.PublicKey) }
+
+// NodeID implements protocol.MessageSigner.
+func (s testSigner) NodeID() string { return keystore.NodeIDFromPubKey(s.pub()) }
+
+// PubKeyBase64 implements protocol.MessageSigner.
+func (s testSigner) PubKeyBase64() string { return base64.StdEncoding.EncodeToString(s.pub()) }
+
+// SignRaw implements protocol.MessageSigner.
+func (s testSigner) SignRaw(payload []byte) ([]byte, error) { return ed25519.Sign(s.key, payload), nil }
+
+// testAuthor is the author of testMessage, and testOrigin its node ID.
+var (
+	testAuthor = testSigner{ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))}
+	testOrigin = testAuthor.NodeID()
+)
+
+// testMessage returns a message authored and signed by testAuthor. A test
+// that changes a signed field afterwards re-signs it with resign.
 func testMessage(uuid string) protocol.Message {
-	return protocol.Message{
+	return resign(protocol.Message{
 		V3Net:       "1.0",
 		Network:     "testnet",
 		AreaTag:     "gen.general",
 		MsgUUID:     uuid,
 		ThreadUUID:  uuid,
-		OriginNode:  "test.example.net",
+		OriginNode:  testOrigin,
 		OriginBoard: "General",
 		From:        "Tester",
 		To:          "All",
@@ -140,7 +165,25 @@ func testMessage(uuid string) protocol.Message {
 		DateUTC:     "2026-03-16T04:20:00Z",
 		Body:        "Hello!",
 		Kludges:     map[string]any{},
+	})
+}
+
+// unsignedMessage returns testMessage(uuid) without its signature, as a
+// node older than v0.9.6 posted it.
+func unsignedMessage(uuid string) protocol.Message {
+	msg := testMessage(uuid)
+	msg.OriginPubKeyB64, msg.SignatureB64 = "", ""
+	return msg
+}
+
+// resign signs msg again as testAuthor, as it now stands, and returns it.
+// It panics if msg cannot be signed (a body over the limit, say).
+func resign(msg protocol.Message) protocol.Message {
+	msg.OriginNode = testOrigin
+	if err := msg.Sign(testAuthor); err != nil {
+		panic(err)
 	}
+	return msg
 }
 
 // ownMessage returns testMessage(uuid) authored by l's node, which is what

@@ -30,10 +30,9 @@ func TestPollCleansSubjectControls(t *testing.T) {
 	good := signed(1, "Signed\x1b[2Jone")
 	altered := signed(2, "Signed\x1b[2Jtwo")
 	altered.Subject = "Altered\x1b[2Jtwo"
-	unsigned := testMessage(sigUUID(3))
-	unsigned.Subject = "Unsigned\u009b2J"
+	c1 := signed(3, "Signed\u009b2J")
 
-	ts, _ := newMockHub(t, []protocol.Message{good, altered, unsigned})
+	ts, _ := newMockHub(t, []protocol.Message{good, altered, c1})
 	writer := &mockJAMWriter{}
 	l, _ := setupLeaf(t, ts.URL, writer)
 	n, err := l.Poll(context.Background())
@@ -46,8 +45,8 @@ func TestPollCleansSubjectControls(t *testing.T) {
 	if got := writer.messages[0].Subject; got != "Signed [2Jone" {
 		t.Errorf("signed subject = %q", got)
 	}
-	if got := writer.messages[1].Subject; got != "Unsigned 2J" {
-		t.Errorf("unsigned subject = %q", got)
+	if got := writer.messages[1].Subject; got != "Signed 2J" {
+		t.Errorf("C1 control subject = %q", got)
 	}
 }
 

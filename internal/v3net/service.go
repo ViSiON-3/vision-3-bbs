@@ -455,7 +455,6 @@ func New(cfg config.V3NetConfig) (*Service, error) {
 			Keystore:               ks,
 			AutoApprove:            cfg.Hub.AutoApprove,
 			RequireSignedSubscribe: cfg.Hub.RequireSignedSubscribe,
-			RequireSignedMessages:  cfg.Hub.RequireSignedMessages,
 			AutoApproveAreas:       cfg.Hub.AreaProposalsAutoApproved(),
 			Networks:               networks,
 		})
@@ -505,7 +504,6 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		CentralChat:           lcfg.CentralChat(),
 		ChatBlocked:           lcfg.ChatBlocked(),
 		Activity:              s.activitySource(),
-		RequireSignedMessages: lcfg.RequireSignedMessages,
 		RequireSignedHub:      lcfg.RequireSignedHub,
 		HubSigned:             lcfg.HubSigned,
 		OnHubSigned:           func() error { return s.persistHubSigned(lcfg.Network, lcfg.HubURL) },

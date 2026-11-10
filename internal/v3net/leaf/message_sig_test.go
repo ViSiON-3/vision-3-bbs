@@ -55,7 +55,7 @@ func TestPoll_VerifiesAuthorSignatures(t *testing.T) {
 	keyStripped.OriginPubKeyB64 = ""
 
 	good := signed(6)
-	unsigned := testMessage(sigUUID(7))
+	unsigned := unsignedMessage(sigUUID(7))
 
 	ts, _ := newMockHub(t, []protocol.Message{
 		bodyEdited, subjectEdited, wrongOrigin, impersonated, keyStripped, good, unsigned,
@@ -67,14 +67,13 @@ func TestPoll_VerifiesAuthorSignatures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Poll: %v", err)
 	}
-	if count != 2 || len(writer.messages) != 2 {
-		t.Fatalf("Poll imported %d (wrote %d), want 2", count, len(writer.messages))
+	if count != 1 || len(writer.messages) != 1 {
+		t.Fatalf("Poll imported %d (wrote %d), want 1", count, len(writer.messages))
 	}
-	if writer.messages[0].MsgUUID != good.MsgUUID || writer.messages[1].MsgUUID != unsigned.MsgUUID {
-		t.Errorf("imported %s and %s, want the signed and the unsigned message",
-			writer.messages[0].MsgUUID, writer.messages[1].MsgUUID)
+	if writer.messages[0].MsgUUID != good.MsgUUID {
+		t.Errorf("imported %s, want only the well-signed message", writer.messages[0].MsgUUID)
 	}
-	for _, m := range []protocol.Message{bodyEdited, subjectEdited, wrongOrigin, impersonated, keyStripped} {
+	for _, m := range []protocol.Message{bodyEdited, subjectEdited, wrongOrigin, impersonated, keyStripped, unsigned} {
 		if seen, _ := ix.Seen(m.Network, m.OriginNode, m.MsgUUID); seen {
 			t.Errorf("dropped message %s was marked seen", m.MsgUUID)
 		}
@@ -163,6 +162,7 @@ func TestPoll_DropsMessageFromAnotherNetwork(t *testing.T) {
 	}
 	unsignedElsewhere := testMessage(sigUUID(2))
 	unsignedElsewhere.Network = "othernet"
+	unsignedElsewhere = resign(unsignedElsewhere)
 	ours := testMessage(sigUUID(3))
 
 	ts, _ := newMockHub(t, []protocol.Message{replayed, unsignedElsewhere, ours})
@@ -199,19 +199,20 @@ func TestPoll_DropsOversizeSignedMessage(t *testing.T) {
 	if err := big.VerifySignature(); err != nil {
 		t.Fatalf("hand-signed message does not verify: %v", err)
 	}
-	legacy := testMessage(sigUUID(2))
+	// An oversize legacy message is no longer cut down and imported: it is
+	// dropped for want of a signature.
+	legacy := unsignedMessage(sigUUID(2))
 	legacy.Body = big.Body
+	fits := testMessage(sigUUID(3))
 
-	ts, _ := newMockHub(t, []protocol.Message{big, legacy})
+	ts, _ := newMockHub(t, []protocol.Message{big, legacy, fits})
 	writer := &mockJAMWriter{}
 	l, _ := setupLeaf(t, ts.URL, writer)
 	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
 		t.Fatalf("Poll = %d, %v; want 1", count, err)
 	}
-	got := writer.messages[0]
-	if got.MsgUUID != legacy.MsgUUID || !got.IsTruncated() || len(got.Body) > protocol.MaxBodyBytes {
-		t.Errorf("imported %s (truncated %v, %d bytes), want only the unsigned message, truncated",
-			got.MsgUUID, got.IsTruncated(), len(got.Body))
+	if got := writer.messages[0]; got.MsgUUID != fits.MsgUUID {
+		t.Errorf("imported %s, want only the message within the limit", got.MsgUUID)
 	}
 }
 
@@ -398,7 +399,7 @@ func TestPoll_RetriesUnwritableMessage(t *testing.T) {
 	}
 }
 
-func TestPoll_RequireSignedMessagesDropsUnsigned(t *testing.T) {
+func TestPoll_DropsUnsigned(t *testing.T) {
 	author, _, err := keystore.Load(filepath.Join(t.TempDir(), "author.key"))
 	if err != nil {
 		t.Fatal(err)
@@ -408,12 +409,11 @@ func TestPoll_RequireSignedMessagesDropsUnsigned(t *testing.T) {
 	if err := signed.Sign(author); err != nil {
 		t.Fatal(err)
 	}
-	unsigned := testMessage(sigUUID(2))
+	unsigned := unsignedMessage(sigUUID(2))
 
 	ts, _ := newMockHub(t, []protocol.Message{signed, unsigned})
 	writer := &mockJAMWriter{}
 	l, ix := setupLeaf(t, ts.URL, writer)
-	l.cfg.RequireSignedMessages = true
 
 	if count, err := l.Poll(context.Background()); err != nil || count != 1 {
 		t.Fatalf("Poll = %d, %v; want 1", count, err)

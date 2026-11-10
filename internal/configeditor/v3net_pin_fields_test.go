@@ -45,28 +45,6 @@ func TestV3NetPinFieldValidatesAndClearsPending(t *testing.T) {
 	}
 }
 
-func TestV3NetLeafSignedMessagesField(t *testing.T) {
-	m := Model{configs: &allConfigs{}}
-	m.configs.V3Net.Leaves = []config.V3NetLeafConfig{{HubURL: "http://hub.example", Network: "testnet"}}
-	f := findField(t, m.fieldsV3NetLeaf(), "Signed Messages")
-
-	if got := f.Get(); got != "N" {
-		t.Fatalf("default = %q, want N", got)
-	}
-	if err := f.Set("Y"); err != nil {
-		t.Fatal(err)
-	}
-	if !m.configs.V3Net.Leaves[0].RequireSignedMessages {
-		t.Error("Set(Y) did not enable requireSignedMessages")
-	}
-	if err := f.Set("N"); err != nil {
-		t.Fatal(err)
-	}
-	if m.configs.V3Net.Leaves[0].RequireSignedMessages {
-		t.Error("Set(N) did not disable requireSignedMessages")
-	}
-}
-
 func TestV3NetLeafSignedHubFields(t *testing.T) {
 	m := Model{configs: &allConfigs{}}
 	m.configs.V3Net.Leaves = []config.V3NetLeafConfig{{HubURL: "http://hub.example", Network: "testnet", HubSigned: true}}

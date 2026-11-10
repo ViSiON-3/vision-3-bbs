@@ -62,10 +62,6 @@ func TestSignedSubscribeSetting(t *testing.T) {
 	testHubYesNoSetting(t, "Signed Subscribe", func(m *Model) bool { return m.configs.V3Net.Hub.RequireSignedSubscribe })
 }
 
-func TestSignedMessagesSetting(t *testing.T) {
-	testHubYesNoSetting(t, "Signed Messages", func(m *Model) bool { return m.configs.V3Net.Hub.RequireSignedMessages })
-}
-
 // testHubYesNoSetting checks that the hub Y/N field label defaults to N and
 // that Y and N round-trip into the config value stored reads.
 func testHubYesNoSetting(t *testing.T, label string, stored func(*Model) bool) {

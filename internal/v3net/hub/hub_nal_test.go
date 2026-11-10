@@ -300,6 +300,7 @@ func TestGetMessages_Pagination(t *testing.T) {
 			"body":"Body %d",
 			"kludges":{}
 		}`, uuid, uuid, leafKS.NodeID(), i+1, i+1)
+		msgJSON = signMsgJSON(t, leafKS, msgJSON)
 
 		req := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/messages", msgJSON)
 		resp, postErr := http.DefaultClient.Do(req)
