@@ -36,3 +36,12 @@ func (m *DisplayMessage) VisibleTo(handle string) bool {
 	return strings.EqualFold(strings.TrimSpace(m.To), handle) ||
 		strings.EqualFold(strings.TrimSpace(sender), handle)
 }
+
+// MailFor reports whether m is private mail addressed to the user with the
+// given handle: its recipient, who may delete it. The sender, whom VisibleTo
+// also lets read it, is not. Like VisibleTo it matches the handle only,
+// ignoring case and surrounding space, and a blank handle never matches.
+func (m *DisplayMessage) MailFor(handle string) bool {
+	handle = strings.TrimSpace(handle)
+	return m.IsPrivate && handle != "" && strings.EqualFold(strings.TrimSpace(m.To), handle)
+}

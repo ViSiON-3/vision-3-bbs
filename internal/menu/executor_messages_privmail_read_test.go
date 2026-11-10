@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -130,5 +131,58 @@ func TestListPrivateMailShowsOnlyOwnMail(t *testing.T) {
 
 	if r := env.runCmd("LISTPRIVMAIL", nil, "", ""); !r.has("You must be logged in to list private mail.") {
 		t.Errorf("anonymous caller output:\n%s", r.text())
+	}
+}
+
+// TestReadPrivateMailDeleteOwn checks a caller can delete their own mail:
+// D asks first, N keeps it, Y deletes it and packs the base, and the reader
+// goes on to their next message. Mail to others is untouched.
+func TestReadPrivateMailDeleteOwn(t *testing.T) {
+	env := newMsgEnv(t)
+	seedPrivmail(env)
+
+	r := env.runCmd("READPRIVMAIL", env.caller, "", "DNDY?Q")
+	if !r.has("Delete this message?") {
+		t.Fatalf("delete should be confirmed; output:\n%s", r.text())
+	}
+	if !r.has(" Del ") {
+		t.Errorf("Delete missing from the mailbox bar; output:\n%s", r.text())
+	}
+	if !r.has("elete Message") {
+		t.Errorf("the mailbox help should list Delete; output:\n%s", r.text())
+	}
+	if n := env.msgCount(privmailAreaID); n != 3 {
+		t.Fatalf("PRIVMAIL has %d messages after delete, want 3", n)
+	}
+	var subjects []string
+	for i := 1; i <= 3; i++ {
+		subjects = append(subjects, env.mustMsg(privmailAreaID, i).Subject)
+	}
+	if got := strings.Join(subjects, ","); got != "for-sysop,for-caller-2,public-note" {
+		t.Errorf("PRIVMAIL after delete = %s", got)
+	}
+	if !r.has("for-caller-2-body") {
+		t.Errorf("reader should move on to the next mail; output:\n%s", r.text())
+	}
+}
+
+// TestReadPrivateMailDeleteLastEndsReader deletes a caller's only mail: the
+// reader has nothing of theirs left and returns, leaving others' mail.
+func TestReadPrivateMailDeleteLastEndsReader(t *testing.T) {
+	env := newMsgEnv(t)
+	env.postMsgs(privmailAreaID,
+		testMsg{from: "Caller", to: "Sysop", subject: "for-sysop", private: true},
+		testMsg{from: "Sysop", to: "Caller", subject: "for-caller", private: true},
+	)
+
+	r := env.runCmd("READPRIVMAIL", env.caller, "", "DY")
+	if r.err != nil {
+		t.Fatalf("READPRIVMAIL: %v", r.err)
+	}
+	if n := env.msgCount(privmailAreaID); n != 1 {
+		t.Fatalf("PRIVMAIL has %d messages, want 1", n)
+	}
+	if s := env.mustMsg(privmailAreaID, 1).Subject; s != "for-sysop" {
+		t.Errorf("PRIVMAIL kept %q, want for-sysop", s)
 	}
 }
