@@ -218,8 +218,10 @@ control bytes; the other bytes from 1 to 31 do.
 
 CP437 art draws control bytes as glyphs (☺ ♥ ► ▲ ▼ and the rest), and so do
 the viewers: a CP437 terminal is sent the bytes, which it draws itself, and a
-UTF-8 terminal the glyphs' characters. In the archive viewer, entries whose
-names don't say they're text are greyed until they've been read.
+UTF-8 terminal the glyphs' characters. The archive viewer judges every entry
+when it opens the archive, from the start of each, so its list greys what
+can't be shown from the first screen, and N/P go straight to the next piece
+without opening the ones between.
 
 The archive viewer, like ZipLab's, handles ZIP only. That includes the old
 PKZIP 1.x methods (shrunk, reduced and imploded) that many art packs from

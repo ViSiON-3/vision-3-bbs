@@ -198,6 +198,33 @@ func TestStockArchiveViewer(t *testing.T) {
 	checkRuleAbove(t, r.raw, "leave")
 }
 
+// TestStockArchiveViewerSortsByContents: artview sorts every entry by the
+// sample v3.file.members gives it, so the list colours an entry by what it
+// holds before any is opened: HEART.XYZ is plain text under a name that
+// says nothing, PROG.TXT is binary under a text name.
+func TestStockArchiveViewerSortsByContents(t *testing.T) {
+	env := stockViewerEnv(t)
+	addFileWithContent(t, env, 1, "MIXED.ZIP", zipBytes(t, map[string]string{
+		"HEART.XYZ": "plain words\r\n",
+		"PROG.TXT":  "MZ\x00\x00\x90\x90",
+		"NOTE.ANS":  "\x1b[1;31mred\x1b[0m\r\n",
+	}))
+	r := env.runCmd("VIEW_FILE", env.sysop, "", "MIXED.ZIP\r")
+	if r.has("Error") {
+		t.Fatalf("archive viewer:\n%s", r.text())
+	}
+	const item, other, hi = "\x1b[0;37m", "\x1b[0;1;30m", "\x1b[0;1;37;44m"
+	for name, want := range map[string]string{"HEART.XYZ": item, "PROG.TXT": other, "NOTE.ANS": item} {
+		row := " " + name
+		switch {
+		case strings.Contains(r.raw, hi+row):
+			// the selected row is drawn highlighted whatever it holds
+		case !strings.Contains(r.raw, want+row):
+			t.Errorf("%s not drawn in %q:\n%q", name, want, r.raw)
+		}
+	}
+}
+
 // checkRuleAbove checks that a stock viewer's screen has a rule on the row
 // above its bottom bar, the row holding marker (BOTTOM_RULE, on in stock).
 func checkRuleAbove(t *testing.T, raw, marker string) {

@@ -2,7 +2,9 @@ package pkzip1
 
 import (
 	"archive/zip"
+	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 )
@@ -181,4 +183,96 @@ func FuzzDecompress(f *testing.F) {
 			t.Errorf("method %d: %d bytes, want %d", method%7, len(out), size)
 		}
 	})
+}
+
+// TestSample checks that Sample gives the start of every member, whatever
+// its method, as Open would read it, and refuses what Open refuses.
+func TestSample(t *testing.T) {
+	for _, archive := range []string{"shrink.zip", "implode.zip", "reduce.zip", "oldpack.zip", "store+deflate"} {
+		var files []*zip.File
+		if archive == "store+deflate" {
+			files = storedAndDeflated(t)
+		} else {
+			zr, err := zip.OpenReader("testdata/" + archive)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = zr.Close() }()
+			files = zr.File
+		}
+		for _, f := range files {
+			if !Supported(f.Method) || Encrypted(f) || f.FileInfo().IsDir() {
+				continue
+			}
+			rc, err := Open(f, 1<<20)
+			if err != nil {
+				t.Fatalf("%s %s: %v", archive, f.Name, err)
+			}
+			full, _ := io.ReadAll(rc)
+			_ = rc.Close()
+			for _, n := range []int{-1, 0, 1, 100, 4096, len(full) - 1, len(full), len(full) + 10} {
+				got, err := Sample(f, n, 1<<20)
+				want := full[:max(0, min(n, len(full)))]
+				if err != nil || !bytes.Equal(got, want) {
+					t.Errorf("%s %s (method %d): Sample(%d) = %d bytes, %v; want %d", archive, f.Name, f.Method, n, len(got), err, len(want))
+				}
+			}
+		}
+	}
+
+	zr, err := zip.OpenReader("testdata/shrink.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = zr.Close() }()
+	f := zr.File[0]
+	if _, err := Sample(f, 4096, 10); !errors.Is(err, ErrTooLarge) {
+		t.Errorf("over the limit: %v", err)
+	}
+	enc := *f
+	enc.Flags |= 1
+	if _, err := Sample(&enc, 4096, 1<<20); !errors.Is(err, zip.ErrAlgorithm) {
+		t.Errorf("encrypted: %v", err)
+	}
+	other := *f
+	other.Method = 12 // bzip2
+	if _, err := Sample(&other, 4096, 1<<20); !errors.Is(err, zip.ErrAlgorithm) {
+		t.Errorf("bzip2: %v", err)
+	}
+	// The CRC covers the whole member, so it's checked only when the sample
+	// is all of it.
+	badCRC := *f
+	badCRC.CRC32 ^= 1
+	if _, err := Sample(&badCRC, int(f.UncompressedSize64), 1<<20); !errors.Is(err, zip.ErrChecksum) {
+		t.Errorf("bad CRC, whole member: %v", err)
+	}
+	if _, err := Sample(&badCRC, 10, 1<<20); err != nil {
+		t.Errorf("bad CRC, first 10 bytes: %v", err)
+	}
+}
+
+// storedAndDeflated returns a stored and a deflated member, made here: the
+// testdata archives hold only PKZIP 1.x methods.
+func storedAndDeflated(t *testing.T) []*zip.File {
+	t.Helper()
+	text := bytes.Repeat([]byte("The quick brown fox jumps over the lazy dog.\r\n"), 200)
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, m := range []uint16{zip.Store, zip.Deflate} {
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: fmt.Sprintf("method%d.txt", m), Method: m})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(text); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return zr.File
 }
