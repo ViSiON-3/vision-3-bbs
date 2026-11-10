@@ -555,8 +555,10 @@ fields carry the signature:
 | `origin_pubkey_b64` | The author node's Ed25519 public key, 32 bytes in standard base64 |
 | `signature_b64` | The Ed25519 signature over the signed payload below, 64 bytes in standard base64 |
 
-A legacy unsigned message has neither field. A message with either one claims
-a signature and must verify; it is never treated as unsigned.
+A message from a node older than v0.9.6 has neither field, and is refused:
+the hub does not accept it and leaves do not import it (see
+[Signed messages](v3net/configuration.md#signed-messages)). A message with
+either field claims a signature and must verify.
 
 **Signed payload.** The signature covers these bytes, with no trailing
 newline:

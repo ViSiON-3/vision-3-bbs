@@ -49,7 +49,6 @@ V3Net settings live in two places in the TUI config editor (`./config`):
 │  Auto Approve    : N                                                 │
 │  Auto Approve Areas : N                                              │
 │  Signed Subscribe : N                                                │
-│  Signed Messages : N                                                 │
 │                                                                      │
 │                          Screen 2 of 8                               │
 └──────────────────────────────────────────────────────────────────────┘
@@ -69,7 +68,6 @@ Enter - Edit  |  PgUp/PgDn - Screens  |  ESC - Return
 | **Auto Approve** | When `Y`, new leaf subscriptions are approved automatically. |
 | **Auto Approve Areas** | When `Y`, area proposals are added to the network straight away instead of waiting in the Coordinator Panel. If `autoApproveAreas` has never been set, it follows **Auto Approve**, which used to cover proposals too. Changing **Auto Approve** in the editor saves the area setting as it stood, so it no longer follows. |
 | **Signed Subscribe** | Default `N` preserves compatibility with older leaves. Set `Y` to reject unsigned subscriptions after leaves have upgraded. Save and restart the BBS to apply. See [Independent hub and leaf upgrades](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently). |
-| **Signed Messages** | Default `N` accepts unsigned message posts from older leaves. Set `Y` to reject them once every leaf signs its messages. Save and restart the BBS to apply. See [Requiring signed messages](v3net/configuration.md#requiring-signed-messages). |
 
 Press **S** to save after making changes.
 
@@ -158,7 +156,6 @@ the same Hub URL, Network, Poll Interval and Origin fields as the wizard, plus:
 |-------|-------------|
 | **Boards** | Comma-separated local area tags this subscription feeds (e.g. `fel.general,fel.tech`). Normally filled by the area browser. |
 | **Newscan Default** | `Y` (the default) flags areas created for this network as newscan defaults for your users, so new callers see them in their newscan without opting in. |
-| **Signed Messages** | Default `N` imports unsigned messages from older nodes. Set `Y` to drop them once every node on the network signs its messages. See [Requiring signed messages](v3net/configuration.md#requiring-signed-messages). |
 | **Browse Areas** | Press **Enter** to open the area browser for this hub. |
 | **Signed Hub** | Default `N` accepts unsigned replies from a hub that predates hub signing, until the leaf has seen it sign. Set `Y` to refuse them from the start. See [Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies). |
 | **Hub Signs** | Set to `Y` by the leaf once the hub's signatures check out; unsigned replies from it are refused from then on. Set it to `N` only if the hub really stopped signing. |
@@ -319,9 +316,9 @@ See [vision3 doctor](configuration/configuration.md#doctor).
 | `leaf: hub does not sign its responses (older hub)` | Logged once. The hub predates hub signatures; the leaf works with it as before, unverified. |
 | `leaf: subscribe failed, retrying` with `subscription status "pending"` | The hub has not approved your node. The leaf retries on its own; ask the hub sysop to approve you in Node Management. |
 | `V3Net is disabled in server configuration` on a V3Net screen in the BBS | The master switch is `N`. Set **V3Net** to `Y` in Server Setup and restart. |
-| `v3net hub: rejected unsigned message` on your hub | **Signed Messages** is `Y` and an older leaf posted without a signature. The leaf gets HTTP 401 and must upgrade; see [requiring signed messages](v3net/configuration.md#requiring-signed-messages). |
+| `v3net hub: rejected unsigned message` on your hub | A leaf older than v0.9.6 posted without a signature. The leaf gets HTTP 401 and must upgrade, keeping its node key; see [signed messages](v3net/configuration.md#signed-messages). |
 | `v3net hub: rejected message with bad signature` on your hub | A post's author signature did not verify, or its `origin_node` is not derived from its key. Always rejected (HTTP 403). |
-| `leaf: unsigned message from hub, dropping` | **Signed Messages** is `Y` on this subscription and the hub relayed a message without a signature, from a node that has not upgraded. Set it back to `N` if that node's messages should still arrive; see [requiring signed messages](v3net/configuration.md#on-a-leaf). |
+| `leaf: unsigned message from hub, dropping` | The hub relayed a message without an author signature: one posted before its node upgraded to v0.9.6, which a new subscription meets in the hub's history, or a new post through a hub old enough to still accept unsigned posts. It is not imported. Each one is logged at this level once, then at debug level. See [signed messages](v3net/configuration.md#signed-messages). |
 | `leaf: message failed author signature check, dropping` | The hub relayed a message whose author signature does not verify: it was changed after the author signed it, or claims another node's identity. The leaf skips it and carries on. It is not marked as seen, so a genuine copy of the message can still arrive: if it was the newest message, the leaf fetches it again on each poll until a newer message arrives. Each refused message is logged at this level once, then at debug level. If it keeps happening, raise it with the hub sysop. |
 | `v3net hub: unsigned subscribe` on your hub | An older leaf registered without a signature. Harmless in compatibility mode; see [upgrading nodes independently](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently). |
 | `NEW IDENTITY CREATED` on startup | No key file was found, so a new identity was made. If you meant to keep the old one, stop, restore the key or recover from the seed phrase, and restart. |
@@ -494,75 +491,49 @@ newer key a signed handover moved it to, and writes it when it can.
 
 ---
 
-## Requiring signed messages
+## Signed messages
 
-Updated leaves sign every message they post with their node key, so readers
-do not have to take the hub's word for who wrote it. The message carries the
-author's public key (`origin_pubkey_b64`) and an ed25519 signature
-(`signature_b64`) over its author-set fields: network, area, the message,
-thread and parent UUIDs, origin node and board, from, to, subject, date,
-body, tearline, origin line and attributes. Kludges are not signed. The
+Every message on a V3Net network is signed by the node that wrote it, so
+readers do not have to take the hub's word for who wrote it. Leaves have
+signed their posts since v0.9.6, and since this release signatures are
+required: there is no setting to accept unsigned messages. The message
+carries the author's public key (`origin_pubkey_b64`) and an ed25519
+signature (`signature_b64`) over its author-set fields: network, area, the
+message, thread and parent UUIDs, origin node and board, from, to, subject,
+date, body, tearline, origin line and attributes. Kludges are not signed. The
 exact bytes signed are in [Message Signatures](v3net/message-areas.md#message-signatures).
 
-- **The hub** rejects a signed post (HTTP 403) unless the signature verifies,
+- **The hub** refuses a post with no signature (HTTP 401, telling the leaf
+  to upgrade), and a signed post (HTTP 403) unless the signature verifies,
   the key is the one the posting node subscribed with, and `origin_node` is
   that key's node ID. It stores the message unchanged, signature included.
 - **Every leaf** checks the signature again when it polls, independently of
-  the hub. A message that was altered after signing, or whose `origin_node`
-  does not match its key, is logged as
-  `leaf: message failed author signature check, dropping` and not imported.
-  The leaf also drops a message labelled with a different network than the
-  one it is polling, and a signed message over 32 KB, rather than cutting
+  the hub. A message with no signature is logged as
+  `leaf: unsigned message from hub, dropping`, and one that was altered after
+  signing, or whose `origin_node` does not match its key, as
+  `leaf: message failed author signature check, dropping`. Neither is
+  imported. The leaf also drops a message labelled with a different network
+  than the one it is polling, and a message over 32 KB, rather than cutting
   text the signature covers. The rest of the poll continues.
 - **Long messages**: the leaf cuts a body over 32 KB down before signing, so
-  the signature covers the body readers get. The hub never shortens a signed
-  message; a signed post over the limit is refused with HTTP 413. Unsigned
-  posts from older leaves are still shortened by the hub as before.
-- **Every post**, signed or not, must name the posting node as its
-  `origin_node`; a post claiming another node is refused with HTTP 403.
+  the signature covers the body readers get. The hub never shortens a
+  message; a post over the limit is refused with HTTP 413.
 
-**Signed Messages defaults to N** (`hub.requireSignedMessages: false`),
-including when the setting is absent from an older configuration. In that
-mode the hub accepts unsigned posts from older leaves, logging each at debug
-level as `v3net hub: accepting unsigned message`, and leaves import unsigned
-messages as before unless they are set to refuse them ([on a leaf](v3net/configuration.md#on-a-leaf)). A message that carries a signature which does not verify
-is rejected in both modes.
+**Upgrading.** A leaf older than v0.9.6 can no longer post to an upgraded
+hub, and its posts relayed through an older hub are dropped by upgraded
+leaves. Its sysop upgrades, keeping the node key, and carries on: nothing
+needs resetting.
 
-To move a network to signed messages:
+**Older messages.** Messages already in your message bases are not touched.
+The hub keeps the unsigned messages it stored before its nodes upgraded, and
+a leaf that has already imported them does not fetch them again. A board
+that subscribes to the network from now on, or resets its poll position,
+meets them in the hub's history and drops each one, so its copy of an area
+starts at the first signed message.
 
-1. Upgrade the hub. Nothing changes for existing leaves.
-2. Leaf sysops upgrade, rebuild, and restart at their own pace, keeping their
-   node key. Their new posts are signed automatically.
-3. Watch the hub log at debug level for `v3net hub: accepting unsigned message`
-   to see which nodes still post unsigned. As with signed subscriptions, a
-   quiet log does not prove every node has upgraded; check with sysops.
-4. Set **Signed Messages** to **Y** (or `hub.requireSignedMessages` to `true`
-   in `configs/v3net.json`) and restart the BBS. Unsigned posts then get
-   HTTP 401 telling the leaf to upgrade.
-
-Setting it back to **N** and restarting undoes this; no data changes either
-way. Messages stored before the switch stay as they are, and leaves keep
-importing those that are unsigned.
-
-### On a leaf
-
-A leaf can refuse unsigned messages too, whatever the hub does. Set
-**Signed Messages** to **Y** in the subscription's edit form (or
-`requireSignedMessages` to `true` on the entry in `leaves`). The running BBS
-applies it without a restart ([it waits for callers to log off](v3net/configuration.md#when-changes-to-v3netjson-apply)). From then on the leaf drops every unsigned
-message it polls from that network, logging each as
-`leaf: unsigned message from hub, dropping`, and imports only messages whose
-signature verifies. Messages already in your message bases are not touched.
-
-It defaults to **N**, including when the setting is absent, because an
-unsigned message is still normal while nodes upgrade. Leave it at **N** until
-every node on the network signs its posts, or the leaf drops their messages.
-Setting it back to **N** applies to messages polled from then on. Unsigned
-messages dropped while it was on are not fetched again, apart from any newer
-than the last message the leaf imported.
-
-Signed messages are not yet required by default on either side. That will
-come in a later release, once nodes have upgraded.
+The `requireSignedMessages` setting that earlier releases had on the hub and
+on each subscription is gone. A `configs/v3net.json` that still has it works
+as before; the key is ignored.
 
 ---
 

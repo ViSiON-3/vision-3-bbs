@@ -96,7 +96,7 @@ func TestPostMessage_SignedIsStoredIntact(t *testing.T) {
 }
 
 func TestPostMessage_RejectsBadSignatures(t *testing.T) {
-	h, ts, leafKS := sigTestHub(t)
+	_, ts, leafKS := sigTestHub(t)
 	otherKS := loadTestKeystore(t, "other.key")
 	const uuid = "a20e8400-e29b-41d4-a716-446655440002"
 
@@ -127,14 +127,10 @@ func TestPostMessage_RejectsBadSignatures(t *testing.T) {
 		{"not the subscriber's key", foreign, "not the posting node's registered key"},
 		{"origin_node not derived from key", mismatched, "signature invalid"},
 	}
-	// A bad signature is rejected whether or not unsigned posts are allowed.
-	for _, require := range []bool{false, true} {
-		h.cfg.RequireSignedMessages = require
-		for _, tc := range cases {
-			status, body := postAs(t, ts, leafKS, tc.msg)
-			if status != http.StatusForbidden || !strings.Contains(body, tc.want) {
-				t.Errorf("require=%v %s: POST = %d %s, want 403 %q", require, tc.name, status, body, tc.want)
-			}
+	for _, tc := range cases {
+		status, body := postAs(t, ts, leafKS, tc.msg)
+		if status != http.StatusForbidden || !strings.Contains(body, tc.want) {
+			t.Errorf("%s: POST = %d %s, want 403 %q", tc.name, status, body, tc.want)
 		}
 	}
 	if msgs := storedMessages(t, ts, leafKS); len(msgs) != 0 {
@@ -142,47 +138,48 @@ func TestPostMessage_RejectsBadSignatures(t *testing.T) {
 	}
 }
 
-func TestPostMessage_RequireSignedMessages(t *testing.T) {
-	h, ts, leafKS := sigTestHub(t)
+func TestPostMessage_UnsignedRejected(t *testing.T) {
+	_, ts, leafKS := sigTestHub(t)
 
-	h.cfg.RequireSignedMessages = true
 	unsigned := sigTestMessage(leafKS.NodeID(), "a30e8400-e29b-41d4-a716-446655440003")
-	if status, body := postAs(t, ts, leafKS, unsigned); status != http.StatusUnauthorized {
-		t.Errorf("flag on, unsigned: POST = %d %s, want 401", status, body)
+	if status, body := postAs(t, ts, leafKS, unsigned); status != http.StatusUnauthorized ||
+		!strings.Contains(body, "upgrade the leaf") {
+		t.Errorf("unsigned: POST = %d %s, want 401 asking for an upgrade", status, body)
 	}
 	signed := sigTestMessage(leafKS.NodeID(), "a40e8400-e29b-41d4-a716-446655440004")
 	if err := signed.Sign(leafKS); err != nil {
 		t.Fatal(err)
 	}
 	if status, body := postAs(t, ts, leafKS, signed); status != http.StatusOK {
-		t.Errorf("flag on, signed: POST = %d %s, want 200", status, body)
+		t.Errorf("signed: POST = %d %s, want 200", status, body)
 	}
-
-	h.cfg.RequireSignedMessages = false
-	if status, body := postAs(t, ts, leafKS, unsigned); status != http.StatusOK {
-		t.Errorf("flag off, unsigned: POST = %d %s, want 200", status, body)
-	}
-	if msgs := storedMessages(t, ts, leafKS); len(msgs) != 2 {
-		t.Errorf("stored %d messages, want 2", len(msgs))
+	if msgs := storedMessages(t, ts, leafKS); len(msgs) != 1 || msgs[0].MsgUUID != signed.MsgUUID {
+		t.Errorf("stored %+v, want only the signed message", msgs)
 	}
 }
 
-func TestPostMessage_OriginNodeMustBeAuthenticatedNode(t *testing.T) {
+func TestPostMessage_AnotherNodesMessageRejected(t *testing.T) {
 	_, ts, leafKS := sigTestHub(t)
 	otherKS := loadTestKeystore(t, "other.key")
 
+	// Validly signed by another node, relayed by this one.
 	spoofed := sigTestMessage(otherKS.NodeID(), "a50e8400-e29b-41d4-a716-446655440005")
-	if status, body := postAs(t, ts, leafKS, spoofed); status != http.StatusForbidden ||
-		!strings.Contains(body, "origin_node does not match") {
-		t.Errorf("unsigned post as another node = %d %s, want 403", status, body)
+	if err := spoofed.Sign(otherKS); err != nil {
+		t.Fatal(err)
+	}
+	if status, body := postAs(t, ts, leafKS, spoofed); status != http.StatusForbidden {
+		t.Errorf("post of another node's message = %d %s, want 403", status, body)
 	}
 	own := sigTestMessage(leafKS.NodeID(), "a60e8400-e29b-41d4-a716-446655440006")
+	if err := own.Sign(leafKS); err != nil {
+		t.Fatal(err)
+	}
 	if status, body := postAs(t, ts, leafKS, own); status != http.StatusOK {
-		t.Errorf("unsigned post as itself = %d %s, want 200", status, body)
+		t.Errorf("post of its own message = %d %s, want 200", status, body)
 	}
 }
 
-func TestPostMessage_OversizeSignedRejectedUnsignedTruncated(t *testing.T) {
+func TestPostMessage_OversizeSignedRejected(t *testing.T) {
 	_, ts, leafKS := sigTestHub(t)
 	big := strings.Repeat("x", protocol.MaxBodyBytes+100)
 
@@ -206,17 +203,7 @@ func TestPostMessage_OversizeSignedRejectedUnsignedTruncated(t *testing.T) {
 	if status, body := postAs(t, ts, leafKS, signed); status != http.StatusRequestEntityTooLarge {
 		t.Errorf("oversize signed: POST = %d %s, want 413", status, body)
 	}
-
-	unsigned := sigTestMessage(leafKS.NodeID(), "a80e8400-e29b-41d4-a716-446655440008")
-	unsigned.Body = big
-	if status, body := postAs(t, ts, leafKS, unsigned); status != http.StatusOK {
-		t.Fatalf("oversize unsigned: POST = %d %s, want 200", status, body)
-	}
-	msgs := storedMessages(t, ts, leafKS)
-	if len(msgs) != 1 || msgs[0].MsgUUID != unsigned.MsgUUID {
-		t.Fatalf("stored %+v, want only the unsigned message", msgs)
-	}
-	if len(msgs[0].Body) > protocol.MaxBodyBytes || !msgs[0].IsTruncated() {
-		t.Errorf("legacy unsigned message not truncated: %d bytes, flag %v", len(msgs[0].Body), msgs[0].IsTruncated())
+	if msgs := storedMessages(t, ts, leafKS); len(msgs) != 0 {
+		t.Errorf("stored %+v, want nothing", msgs)
 	}
 }

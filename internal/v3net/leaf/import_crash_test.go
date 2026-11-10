@@ -153,7 +153,7 @@ func TestImportStoppedAfterWriteIsNotDuplicated(t *testing.T) {
 	pollStopped(t, l)
 	pollOK(t, l)
 	wantStored(t, w, uA, uB)
-	if seen, pending, err := ix.Lookup("testnet", "test.example.net", uA); err != nil || !seen || pending {
+	if seen, pending, err := ix.Lookup("testnet", testOrigin, uA); err != nil || !seen || pending {
 		t.Errorf("a: seen=%v pending=%v err=%v; want recorded and confirmed", seen, pending, err)
 	}
 	pollOK(t, l)
@@ -186,7 +186,7 @@ func TestImportWriteFailureReleasesClaim(t *testing.T) {
 	l, ix := setupLeaf(t, ts.URL, w)
 
 	pollOK(t, l)
-	if seen, _, err := ix.Lookup("testnet", "test.example.net", uA); err != nil || seen {
+	if seen, _, err := ix.Lookup("testnet", testOrigin, uA); err != nil || seen {
 		t.Errorf("a after a failed write: seen=%v err=%v; want not recorded", seen, err)
 	}
 	pollOK(t, l)
@@ -203,7 +203,7 @@ func TestImportUnfinishedWithoutFinderIsWrittenAgain(t *testing.T) {
 	pollStopped(t, l)
 	pollOK(t, l)
 	wantStored(t, w, uA, uA)
-	if seen, pending, _ := ix.Lookup("testnet", "test.example.net", uA); !seen || pending {
+	if seen, pending, _ := ix.Lookup("testnet", testOrigin, uA); !seen || pending {
 		t.Errorf("a: seen=%v pending=%v; want confirmed", seen, pending)
 	}
 }
@@ -244,7 +244,7 @@ func TestImportWriteErrorAfterStoreIsConfirmed(t *testing.T) {
 	l, ix := setupLeaf(t, ts.URL, w)
 
 	pollOK(t, l)
-	if seen, pending, _ := ix.Lookup("testnet", "test.example.net", uA); !seen || pending {
+	if seen, pending, _ := ix.Lookup("testnet", testOrigin, uA); !seen || pending {
 		t.Errorf("a: seen=%v pending=%v; want confirmed", seen, pending)
 	}
 	pollOK(t, l)
@@ -263,7 +263,7 @@ func TestImportWriteAndFindBothFail(t *testing.T) {
 		t.Fatal("poll returned no error with a write and a check both failing")
 	}
 	wantStored(t, w)
-	if seen, pending, _ := ix.Lookup("testnet", "test.example.net", uA); !seen || !pending {
+	if seen, pending, _ := ix.Lookup("testnet", testOrigin, uA); !seen || !pending {
 		t.Errorf("a: seen=%v pending=%v; want the claim kept", seen, pending)
 	}
 	w.mu.Lock()
@@ -284,7 +284,7 @@ func TestImportAreaGoneIsSettled(t *testing.T) {
 		t.Fatalf("poll = %d, %v; want 1 imported and no error", n, err)
 	}
 	wantStored(t, w, uB)
-	if seen, pending, _ := ix.Lookup("testnet", "test.example.net", uA); !seen || pending {
+	if seen, pending, _ := ix.Lookup("testnet", testOrigin, uA); !seen || pending {
 		t.Errorf("a: seen=%v pending=%v; want confirmed", seen, pending)
 	}
 }

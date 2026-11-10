@@ -73,10 +73,6 @@ type V3NetHubConfig struct {
 	// RequireSignedSubscribe rejects legacy unsigned registrations when enabled.
 	// Default false keeps existing networks working during rolling upgrades.
 	RequireSignedSubscribe bool `json:"requireSignedSubscribe"`
-	// RequireSignedMessages rejects posted messages without an author
-	// signature when enabled. Default false accepts legacy unsigned posts
-	// during rolling upgrades.
-	RequireSignedMessages bool `json:"requireSignedMessages"`
 	// AutoApproveAreas adds proposed areas to the NAL without the coordinator
 	// reviewing them. Unset follows AutoApprove, which used to cover both;
 	// see AreaProposalsAutoApproved.
@@ -126,11 +122,6 @@ type V3NetLeafConfig struct {
 	PollInterval  string   `json:"pollInterval"`            // Duration string (e.g., "5m")
 	Origin        string   `json:"origin,omitempty"`        // Origin line text (e.g. "My Cool BBS - bbs.example.com")
 	AutoJoinAreas *bool    `json:"autoJoinAreas,omitempty"` // Flag created areas as newscan defaults (nil = true)
-	// RequireSignedMessages drops polled messages that carry no author
-	// signature. Default false imports legacy unsigned messages while the
-	// network's nodes upgrade; a signature that does not verify is refused
-	// either way.
-	RequireSignedMessages bool `json:"requireSignedMessages,omitempty"`
 	// RequireSignedHub refuses any reply to a signed request, or SSE stream,
 	// that the hub has not signed, and pauses syncing as a bad signature
 	// does. Default false accepts unsigned replies from hubs that predate

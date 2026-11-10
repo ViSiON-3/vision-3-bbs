@@ -145,12 +145,7 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			},
 		},
 		{
-			Label: "Signed Messages", Help: "Drop unsigned messages from the hub; leave N until the network's nodes sign theirs", Type: ftYesNo, Col: 3, Row: 7, Width: 1,
-			Get: func() string { return uitext.BoolToYN(l.RequireSignedMessages) },
-			Set: func(val string) error { l.RequireSignedMessages = uitext.YNToBool(val); return nil },
-		},
-		{
-			Label: "Browse Areas", Help: "Press Enter to browse and subscribe to hub areas", Type: ftDisplay, Col: 3, Row: 8, Width: 49,
+			Label: "Browse Areas", Help: "Press Enter to browse and subscribe to hub areas", Type: ftDisplay, Col: 3, Row: 7, Width: 49,
 			Get: func() string {
 				n := len(l.Boards)
 				if n == 0 {
@@ -160,18 +155,18 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			},
 		},
 		v3netPinField("Coord Key", "Pinned coordinator key; NALs signed by any other key are rejected. Blank = pin on first use",
-			9, &l.CoordinatorPubKey, &l.PendingCoordinatorPubKey),
+			8, &l.CoordinatorPubKey, &l.PendingCoordinatorPubKey),
 		v3netPinField("Hub Key", "Pinned hub key from the network's /info. Blank = pin on first use",
-			10, &l.HubPubKey, &l.PendingHubPubKey),
-		v3netPendingField("Offered Coord", 11, &l.PendingCoordinatorPubKey),
-		v3netPendingField("Offered Hub", 12, &l.PendingHubPubKey),
+			9, &l.HubPubKey, &l.PendingHubPubKey),
+		v3netPendingField("Offered Coord", 10, &l.PendingCoordinatorPubKey),
+		v3netPendingField("Offered Hub", 11, &l.PendingHubPubKey),
 		{
-			Label: "Signed Hub", Help: "Refuse unsigned replies from the hub; leave N until the hub signs", Type: ftYesNo, Col: 3, Row: 13, Width: 1,
+			Label: "Signed Hub", Help: "Refuse unsigned replies from the hub; leave N until the hub signs", Type: ftYesNo, Col: 3, Row: 12, Width: 1,
 			Get: func() string { return uitext.BoolToYN(l.RequireSignedHub) },
 			Set: func(val string) error { l.RequireSignedHub = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Hub Signs", Help: "Set by the leaf once the hub signs; its unsigned replies are then refused. N only if it stopped signing", Type: ftYesNo, Col: 3, Row: 14, Width: 1,
+			Label: "Hub Signs", Help: "Set by the leaf once the hub signs; its unsigned replies are then refused. N only if it stopped signing", Type: ftYesNo, Col: 3, Row: 13, Width: 1,
 			Get: func() string { return uitext.BoolToYN(l.HubSigned) },
 			Set: func(val string) error {
 				l.HubSigned = uitext.YNToBool(val)
@@ -187,17 +182,17 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 		// V3Net Central. Each switch is its own consent and defaults to N;
 		// the block is only written once a sysop touches it.
 		{
-			Label: "Central", Help: "Let callers open V3Net Central (the board directory) for this network; sends nothing about them", Type: ftYesNo, Col: 3, Row: 16, Width: 1,
+			Label: "Central", Help: "Let callers open V3Net Central (the board directory) for this network; sends nothing about them", Type: ftYesNo, Col: 3, Row: 15, Width: 1,
 			Get: func() string { return uitext.BoolToYN(l.CentralEnabled()) },
 			Set: func(val string) error { v3netCentral(l).Enabled = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Publish Listing", Help: "List this board (name, description, addresses) in the network's directory; N withdraws it", Type: ftYesNo, Col: 3, Row: 17, Width: 1,
+			Label: "Publish Listing", Help: "List this board (name, description, addresses) in the network's directory; N withdraws it", Type: ftYesNo, Col: 3, Row: 16, Width: 1,
 			Get: func() string { return uitext.BoolToYN(l.CentralPublishes()) },
 			Set: func(val string) error { v3netCentral(l).PublishListing = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Listing Desc", Help: "One line about your board for the directory (240 chars, no pipe codes)", Type: ftString, Col: 3, Row: 18, Width: 49, MaxLen: 240,
+			Label: "Listing Desc", Help: "One line about your board for the directory (240 chars, no pipe codes)", Type: ftString, Col: 3, Row: 17, Width: 49, MaxLen: 240,
 			Get: func() string {
 				if l.Central == nil {
 					return ""
@@ -213,7 +208,7 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			},
 		},
 		{
-			Label: "Listing Addrs", Help: "Comma-separated scheme://host:port (telnet, ssh, rlogin, http, https); blank = from server setup", Type: ftString, Col: 3, Row: 19, Width: 49, MaxLen: 512,
+			Label: "Listing Addrs", Help: "Comma-separated scheme://host:port (telnet, ssh, rlogin, http, https); blank = from server setup", Type: ftString, Col: 3, Row: 18, Width: 49, MaxLen: 512,
 			Get: func() string {
 				if l.Central == nil {
 					return ""
@@ -240,27 +235,27 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			},
 		},
 		{
-			Label: "Who's Online", Help: "Offer network Who's Online (needs Central); only callers who opt in are shown elsewhere. N withdraws", Type: ftYesNo, Col: 3, Row: 20, Width: 1,
+			Label: "Who's Online", Help: "Offer network Who's Online (needs Central); only callers who opt in are shown elsewhere. N withdraws", Type: ftYesNo, Col: 3, Row: 19, Width: 1,
 			Get: func() string { return uitext.BoolToYN(l.Central != nil && l.Central.Presence) },
 			Set: func(val string) error { v3netCentral(l).Presence = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Last Callers", Help: "Offer network Last Callers (needs Central); only opted-in callers' calls, kept 24 hours. N withdraws", Type: ftYesNo, Col: 3, Row: 21, Width: 1,
+			Label: "Last Callers", Help: "Offer network Last Callers (needs Central); only opted-in callers' calls, kept 24 hours. N withdraws", Type: ftYesNo, Col: 3, Row: 20, Width: 1,
 			Get: func() string { return uitext.BoolToYN(l.Central != nil && l.Central.LastCallers) },
 			Set: func(val string) error { v3netCentral(l).LastCallers = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Callers Default", Help: "Y counts callers who have not chosen as sharing on Who's Online and Last Callers; their own choice wins", Type: ftYesNo, Col: 3, Row: 22, Width: 1,
+			Label: "Callers Default", Help: "Y counts callers who have not chosen as sharing on Who's Online and Last Callers; their own choice wins", Type: ftYesNo, Col: 3, Row: 21, Width: 1,
 			Get: func() string { return uitext.BoolToYN(l.Central != nil && l.Central.CallersDefault) },
 			Set: func(val string) error { v3netCentral(l).CallersDefault = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Lobby Chat", Help: "Offer network chat on this network; on unless set to N, and does not need Central. Callers join only after agreeing to what is shared. N ends it for callers in a room", Type: ftYesNo, Col: 3, Row: 23, Width: 1,
+			Label: "Lobby Chat", Help: "Offer network chat on this network; on unless set to N, and does not need Central. Callers join only after agreeing to what is shared. N ends it for callers in a room", Type: ftYesNo, Col: 3, Row: 22, Width: 1,
 			Get: func() string { return uitext.BoolToYN(l.CentralChat()) },
 			Set: func(val string) error { v := uitext.YNToBool(val); v3netCentral(l).Chat = &v; return nil },
 		},
 		{
-			Label: "Chat Block List", Help: "Comma-separated handle@node-id of callers on other boards whose chat lines and private messages this board drops for everyone here", Type: ftString, Col: 3, Row: 24, Width: 49, MaxLen: 1024,
+			Label: "Chat Block List", Help: "Comma-separated handle@node-id of callers on other boards whose chat lines and private messages this board drops for everyone here", Type: ftString, Col: 3, Row: 23, Width: 49, MaxLen: 1024,
 			Get: func() string { return strings.Join(l.ChatBlocked(), ",") },
 			Set: func(val string) error {
 				var blocked []string

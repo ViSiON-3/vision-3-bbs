@@ -49,15 +49,25 @@ func assertNoHeaderControls(t *testing.T, label, raw string) {
 // them through a real leaf and JAM adapter into GENERAL.
 func importV3NetSubjects(t *testing.T, env *menuEnv) {
 	t.Helper()
+	// The remote board signs what it wrote, hostile subject and all, as
+	// every node does; leaves drop unsigned messages.
+	remote, _, err := keystore.Load(filepath.Join(t.TempDir(), "remote.key"))
+	if err != nil {
+		t.Fatalf("load remote keystore: %v", err)
+	}
 	msgs := make([]protocol.Message, 0, len(hostileHeaders))
 	for i, h := range hostileHeaders {
 		uuid := fmt.Sprintf("00000000-0000-4000-8000-%012d", i+1)
-		msgs = append(msgs, protocol.Message{
+		msg := protocol.Message{
 			V3Net: protocol.ProtocolVersion, Network: "testnet", AreaTag: "gen.general",
-			MsgUUID: uuid, ThreadUUID: uuid, OriginNode: "remote.example.net", OriginBoard: "Remote",
+			MsgUUID: uuid, ThreadUUID: uuid, OriginNode: remote.NodeID(), OriginBoard: "Remote",
 			From: "Remote Guy", To: "All", Subject: h.text, DateUTC: "2026-03-16T04:20:00Z",
 			Body: "body " + h.mark, Kludges: map[string]any{},
-		})
+		}
+		if err := msg.Sign(remote); err != nil {
+			t.Fatalf("sign: %v", err)
+		}
+		msgs = append(msgs, msg)
 	}
 	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/info") {

@@ -163,7 +163,9 @@ func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
 			"network", l.cfg.Network, "message_network", msg.Network)
 		return false, nil
 	}
-	if err := verifyAuthor(&signed, l.cfg.RequireSignedMessages); errors.Is(err, protocol.ErrMessageUnsigned) {
+	if err := signed.VerifySignature(); errors.Is(err, protocol.ErrMessageUnsigned) {
+		// Authored before v0.9.6, or by a node that has not upgraded, and
+		// relayed by a hub that still holds or accepts it.
 		l.refuse(&msg, "leaf: unsigned message from hub, dropping", "origin_node", msg.OriginNode)
 		return false, nil
 	} else if err != nil {
@@ -172,15 +174,12 @@ func (l *Leaf) importMessage(msg protocol.Message) (bool, error) {
 		return false, nil
 	}
 	if msg.NeedsTruncation() {
-		if msg.IsSigned() {
-			// The author truncates before signing and the hub refuses
-			// oversize signed posts, so this was not sent as signed; cutting
-			// it would import text the signature does not cover.
-			l.refuse(&msg, "leaf: signed message over the body limit, dropping",
-				"origin_node", msg.OriginNode, "bytes", len(msg.Body))
-			return false, nil
-		}
-		msg.Truncate()
+		// The author truncates before signing and the hub refuses oversize
+		// signed posts, so this was not sent as signed; cutting it would
+		// import text the signature does not cover.
+		l.refuse(&msg, "leaf: signed message over the body limit, dropping",
+			"origin_node", msg.OriginNode, "bytes", len(msg.Body))
+		return false, nil
 	}
 
 	return l.store(msg)
@@ -270,23 +269,6 @@ func (l *Leaf) store(msg protocol.Message) (bool, error) {
 		return unsettled(fmt.Errorf("leaf: confirm import: %w", err))
 	}
 	return true, nil
-}
-
-// verifyAuthor checks a polled message's author signature independently of
-// the hub: the signature must verify and origin_node must be derived from
-// origin_pubkey_b64. A message that claims a signature which does not check
-// out gets its VerifySignature error, so it is never imported. Legacy
-// unsigned messages are accepted while networks migrate to signing, unless
-// requireSigned is set; then they get protocol.ErrMessageUnsigned.
-func verifyAuthor(msg *protocol.Message, requireSigned bool) error {
-	if !msg.IsSigned() {
-		if requireSigned {
-			return protocol.ErrMessageUnsigned
-		}
-		slog.Debug("leaf: accepting unsigned message from hub", "uuid", msg.MsgUUID, "origin_node", msg.OriginNode)
-		return nil
-	}
-	return msg.VerifySignature()
 }
 
 // refuse logs a message the leaf will not import: at warn the first time its

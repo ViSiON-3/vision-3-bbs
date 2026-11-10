@@ -52,7 +52,6 @@ configuration to join an existing network.
 | `autoApprove` | bool | `false` | When `true`, new subscriber registrations are approved automatically. |
 | `autoApproveAreas` | bool | unset | When `true`, area proposals are added to the NAL on arrival; when `false`, they wait for the coordinator in the Coordinator Panel. Unset follows `autoApprove`, which covered proposals too before this setting existed. Recommended `false` outside testing. |
 | `requireSignedSubscribe` | bool | `false` | Require signed subscriptions. Leave false during rolling upgrades; true rejects older unsigned leaves with HTTP 401. Restart to apply; see [independent upgrades](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently). |
-| `requireSignedMessages` | bool | `false` | Reject message posts without an author signature (HTTP 401). Leave false until every leaf signs its messages; posts with a bad signature are rejected either way. Restart to apply; see [requiring signed messages](v3net/configuration.md#requiring-signed-messages). |
 | `networks` | array | `[]` | List of networks hosted by this hub. See below. |
 | `initialAreas` | array | `[]` | Area specs for the initial NAL seed. Consumed once on first hub start, then removed automatically. See below. |
 
@@ -94,7 +93,6 @@ to subscribe to multiple networks.
 | `pollInterval` | string | `"5m"` | How often to poll the hub for new messages when none has been announced. A post on another node is fetched as soon as the hub's `new_message` event arrives; the interval is the fallback for anything missed. Accepts Go duration strings: `"30s"`, `"5m"`, `"1h"`. |
 | `origin` | string | BBS name | Origin line appended to outbound messages. Falls back to the BBS name from `config.json` if blank. Cut to 79 characters when sent. |
 | `autoJoinAreas` | bool | unset (`true`) | **Newscan Default** in the editor. When true or unset, message areas created for this subscription are flagged as newscan defaults for users. Set `false` to leave new areas out of newscans until users add them. |
-| `requireSignedMessages` | bool | `false` | **Signed Messages** in the editor. When true, the leaf drops polled messages that carry no author signature. Leave it false until every node on the network signs its messages. See [Requiring signed messages](v3net/configuration.md#on-a-leaf). |
 | `coordinatorPubKey` | string | blank | **Coord Key** in the editor. The network coordinator's Ed25519 public key (base64). NALs signed by any other key are rejected. Blank pins the key of the next NAL the leaf verifies and writes it here. See [Coordinator Key Pinning](v3net/nal.md#coordinator-key-pinning). |
 | `hubPubKey` | string | blank | **Hub Key** in the editor. The hub's Ed25519 public key (base64) from the network's `/info`. Pinned and checked the same way. |
 | `requireSignedHub` | bool | `false` | **Signed Hub** in the editor. When true, the leaf refuses replies from the hub that carry no hub signature, and pauses as for a bad one. See [Refusing unsigned replies](v3net/configuration.md#refusing-unsigned-replies). |
@@ -201,7 +199,6 @@ To add your network to the public registry, submit a PR to the
     "autoApprove": false,
     "autoApproveAreas": false,
     "requireSignedSubscribe": false,
-    "requireSignedMessages": false,
     "networks": [
       {
         "name": "mynet",

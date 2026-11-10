@@ -192,7 +192,7 @@ func TestPostMessage_ActiveSubscription_Returns200(t *testing.T) {
 	seedAreaMsgNAL(t, h, hubKS)
 	registerLeafWithAreas(t, ts, leafKS, []string{"gen.general"})
 
-	msgJSON := testMsgJSON(leafKS.NodeID(), "gen.general", "ad0e8400-e29b-41d4-a716-446655440004")
+	msgJSON := signMsgJSON(t, leafKS, testMsgJSON(leafKS.NodeID(), "gen.general", "ad0e8400-e29b-41d4-a716-446655440004"))
 	req := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/messages", msgJSON)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

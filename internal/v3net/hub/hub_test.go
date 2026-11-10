@@ -179,6 +179,9 @@ func TestPostAndGetMessage(t *testing.T) {
 		Body:        "Hello V3Net!",
 		Kludges:     map[string]any{},
 	}
+	if err := msg.Sign(leafKS); err != nil {
+		t.Fatal(err)
+	}
 	msgJSON, _ := json.Marshal(msg)
 
 	req := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/messages", string(msgJSON))
@@ -246,7 +249,7 @@ func TestDuplicatePostReturns200(t *testing.T) {
 		"body": "Hello!",
 		"kludges": {}
 	}`
-	msgJSON = strings.Replace(msgJSON, "ORIGIN_NODE", leafKS.NodeID(), 1)
+	msgJSON = signMsgJSON(t, leafKS, strings.Replace(msgJSON, "ORIGIN_NODE", leafKS.NodeID(), 1))
 
 	// Post twice.
 	for i := 0; i < 2; i++ {
@@ -309,7 +312,7 @@ func TestSSEReceivesNewMessageEvent(t *testing.T) {
 		"body": "Testing SSE",
 		"kludges": {}
 	}`
-	msgJSON = strings.Replace(msgJSON, "ORIGIN_NODE", leafKS.NodeID(), 1)
+	msgJSON = signMsgJSON(t, leafKS, strings.Replace(msgJSON, "ORIGIN_NODE", leafKS.NodeID(), 1))
 	postReq := signedRequest(t, leafKS, "POST", ts.URL+"/v3net/v1/testnet/messages", msgJSON)
 	postResp, err := http.DefaultClient.Do(postReq)
 	if err != nil {
@@ -565,4 +568,22 @@ func TestChat_RateLimited(t *testing.T) {
 	if resp2.StatusCode != http.StatusTooManyRequests {
 		t.Errorf("second chat expected 429, got %d", resp2.StatusCode)
 	}
+}
+
+// signMsgJSON signs the message in msgJSON as ks, the node it names as its
+// origin, and returns it encoded again: the hub refuses unsigned posts.
+func signMsgJSON(t *testing.T, ks *keystore.Keystore, msgJSON string) string {
+	t.Helper()
+	var msg protocol.Message
+	if err := json.Unmarshal([]byte(msgJSON), &msg); err != nil {
+		t.Fatalf("decode test message: %v", err)
+	}
+	if err := msg.Sign(ks); err != nil {
+		t.Fatalf("sign test message: %v", err)
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
