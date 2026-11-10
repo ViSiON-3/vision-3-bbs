@@ -25,6 +25,11 @@ type Config struct {
 	OnNAL   func(*protocol.NAL)
 	BBSName string // Local BBS name for subscribe request
 	BBSHost string // Local BBS hostname for subscribe request
+	// Software names the software this board runs, for the hub operator's
+	// node list (protocol.SoftwareReport). The leaf fills in Capabilities
+	// itself, from SupportedFeatures, when it subscribes; whatever the
+	// caller put there is replaced. Nil sends no report.
+	Software *protocol.SoftwareReport
 
 	// CentralEnabled is the sysop's switch for V3Net Central on this
 	// network: with it set, the leaf fetches the board directory for

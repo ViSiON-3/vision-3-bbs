@@ -15,9 +15,49 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
-// subscribe registers this leaf with the hub, or updates its registration.
-// This is the bootstrap step that must succeed before any authenticated
-// requests will work.
+// SupportedFeatures returns the optional V3Net features (protocol.Feature*
+// names) this leaf implements, which its software report names as its
+// capabilities. A feature is listed because the code supports it, whether
+// or not the sysop has it turned on. A new feature is added here when the
+// leaf learns it, and to protocol.FeatureRequirements. The caller owns the
+// returned slice.
+func SupportedFeatures() []string {
+	return []string{
+		protocol.FeatureCentralDirectory,
+		protocol.FeatureCentralPresence,
+		protocol.FeatureCentralLastCallers,
+		protocol.FeatureCentralChat,
+	}
+}
+
+// hubFeatureAdvice says, for a log line, what it takes for the hub to serve
+// a feature it does not: the limit is the hub's, so upgrading this board
+// would not help. It names the ViSiON/3 release with the feature when one
+// is known (protocol.FeatureMinVersion).
+func hubFeatureAdvice(feature string) string {
+	if v := protocol.FeatureMinVersion(feature); v != "" {
+		return "the hub running ViSiON/3 v" + v + " or later, or other software that serves it; ask the hub operator"
+	}
+	return "a hub whose software serves it; ask the hub operator"
+}
+
+// softwareReport returns the software report the subscribe request carries:
+// Config.Software with SupportedFeatures as its capabilities, or nil when
+// there is no Config.Software.
+func (l *Leaf) softwareReport() *protocol.SoftwareReport {
+	if l.cfg.Software == nil {
+		return nil
+	}
+	r := *l.cfg.Software
+	r.Capabilities = SupportedFeatures()
+	return &r
+}
+
+// subscribe registers this leaf with the hub, or updates its registration,
+// and sends the hub its software report (see protocol.SoftwareReport); the
+// leaf subscribes each time it starts, so an upgrade reaches the hub's
+// record on the first start after it. This is the bootstrap step that must
+// succeed before any authenticated requests will work.
 func (l *Leaf) subscribe(ctx context.Context) error {
 	req := protocol.SubscribeRequest{
 		Network:   l.cfg.Network,
@@ -28,6 +68,7 @@ func (l *Leaf) subscribe(ctx context.Context) error {
 		BBSName:  protocol.CleanBBSName(l.cfg.BBSName),
 		BBSHost:  l.cfg.BBSHost,
 		AreaTags: l.cfg.AreaTags,
+		Software: l.softwareReport(),
 	}
 	data, err := json.Marshal(req)
 	if err != nil {

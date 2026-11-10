@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
 func TestCentralAddressesFor(t *testing.T) {
@@ -38,7 +39,7 @@ func TestCentralAddressesFor(t *testing.T) {
 }
 
 func TestCentralListingSpecFollowsConfig(t *testing.T) {
-	s := &Service{BBSName: "|04My|07 Board", CentralAddresses: []string{"ssh://d.example:22"}, CentralSoftware: "ViSiON/3 x"}
+	s := &Service{BBSName: "|04My|07 Board", CentralAddresses: []string{"ssh://d.example:22"}, Software: protocol.SoftwareReport{Name: "ViSiON/3", Version: "x", Build: "abc123"}}
 	if spec := s.centralListingSpec(config.V3NetLeafConfig{}); spec != nil {
 		t.Errorf("no central block: want no listing, got %+v", spec)
 	}
@@ -46,7 +47,7 @@ func TestCentralListingSpecFollowsConfig(t *testing.T) {
 		t.Errorf("enabled without publish: want no listing, got %+v", spec)
 	}
 	spec := s.centralListingSpec(config.V3NetLeafConfig{Central: &config.V3NetCentralConfig{PublishListing: true, Description: "Hi"}})
-	if spec == nil || spec.Name != "/04My/07 Board" || spec.Description != "Hi" || spec.Software != "ViSiON/3 x" {
+	if spec == nil || spec.Name != "/04My/07 Board" || spec.Description != "Hi" || spec.Software != "ViSiON/3 x" { // the build stays off the public listing
 		t.Fatalf("spec: %+v", spec)
 	}
 	if !reflect.DeepEqual(spec.Addresses, []string{"ssh://d.example:22"}) {

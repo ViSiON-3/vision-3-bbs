@@ -230,6 +230,73 @@ so changes take effect immediately, with no restart. With **Auto-Approve**
 set to `Y`, new nodes activate on registration and approval is never
 needed; ban and delete still apply.
 
+#### Node software and upgrades
+
+The **Version** column shows the ViSiON/3 version each node reports, and the
+rows under the list describe the node under the cursor:
+
+```
+│ Software: ViSiON/3 0.9.8 (a23f12a7c0de) (self-reported)              │
+│ Reported 2026-11-10 09:00 UTC (3h ago); online now                   │
+│ Features: supports all this hub serves                               │
+```
+
+- **Software** is the package, version and, for a build from a git
+  checkout, the source revision it was built from (`-dirty` when the
+  checkout had local changes). Two builds between releases carry the same
+  version, so the revision is what tells them apart.
+- **Reported** is when the node last sent it, and whether the node is
+  online now. A node reports each time it starts, so an online node's
+  report is from the run it is on; an offline node may have upgraded or
+  downgraded since, and the row says it may be stale. A subscribe without a
+  report leaves the last one in place: subscribing to areas from the config
+  editor's area browser sends none, and neither does a release from before
+  reporting. A board moved back to such a release keeps its last report, so
+  one that is days old while the node is online is a sign of that.
+- **Features** sums up, for each optional V3Net feature your hub serves,
+  whether the node's software supports it. It says *supported*, not *on*:
+  whether a board turns a feature on, and whether its callers opt in, is
+  theirs to choose, and your hub is not told.
+
+| Shown | Meaning |
+|-------|---------|
+| `Version ?`, `Software: unknown (not reported)` | The node has sent no report: ViSiON/3 from before reporting, or other software. Unknown, not out of date: nothing is assumed about what it supports. `Its last report was not valid` means the hub refused its latest report and cleared the old one. |
+| `Features: supports all this hub serves` | Every feature the hub serves is among the node's reported capabilities. |
+| `Upgrade for: Central directory (v0.9.7+)` | The node reports a ViSiON/3 release older than the first one with the feature. Its sysop upgrades to get it. |
+| `Not in its software: Network chat` | The node's software does not list the feature, and no release can be named: the feature has not shipped in a release yet, the node runs other software, or its build differs from the release it names. |
+| `hub does not serve …` | Your hub does not offer the feature, whatever the node runs; upgrading the node would not help. |
+
+A node's report is what it says about itself, sent in its signed subscribe
+request, so it is bound to the node's key; an unsigned request cannot change
+it. It is not proof of the program the node really runs. Only the features a
+node lists as capabilities count as supported; the version is shown, and used
+to name a release to upgrade to, but never turns a feature on. A report that
+breaks the limits (a name over 32 characters, a version that is not a
+version number, control characters) is ignored whole and clears the node's
+record, the subscribe goes ahead, and the hub logs
+`v3net hub: ignoring malformed software report`.
+
+The report is only shown here, to you as the hub operator. It is not
+published to other boards: the software line on a board's
+[Central](v3net/central.md) listing is separate, and appears only if that
+board chose to publish a listing.
+
+Older hubs and leaves keep working with this. A leaf from before reporting
+sends nothing and shows as unknown; a config editor talking to an older hub
+gets no report fields and shows every node as unknown.
+
+When a leaf finds that your hub does not serve a feature, its log says so
+(`leaf: hub does not serve …`, with a `needs` value naming the hub
+software required), so the leaf sysop knows the limit is the hub's.
+
+**Maintaining the feature list.** The features assessed, and the release
+that first had each, are `protocol.FeatureRequirements` in
+`internal/v3net/protocol/software.go`; the capabilities a leaf reports are
+`leaf.SupportedFeatures`. A new feature is added to both, with no release
+number. The release that ships it fills in the release number; a number is
+only ever set to a release that has shipped with the feature, never a
+planned one, so the advice is never wrong about where to get it.
+
 ---
 
 ## Node Identity

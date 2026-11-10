@@ -216,7 +216,8 @@ func (l *Leaf) runActivityKind(ctx context.Context, kind string) {
 		}
 	}
 	if supported, _ := l.HubSupports(feature); !supported {
-		slog.Info("leaf: hub does not serve a Central feature; it is off for this network", "network", l.cfg.Network, "feature", feature)
+		slog.Info("leaf: hub does not serve a Central feature; it is off for this network", "network", l.cfg.Network,
+			"feature", feature, "needs", hubFeatureAdvice(feature))
 		return
 	}
 	st := l.central.activity[kind]

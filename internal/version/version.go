@@ -4,6 +4,7 @@ package version
 
 import (
 	"runtime"
+	"runtime/debug"
 	"strings"
 )
 
@@ -59,4 +60,37 @@ func Platform() string {
 	default:
 		return runtime.GOOS
 	}
+}
+
+// Build identifies the source this binary was built from: the first 12
+// characters of the git revision Go records when it builds from a checkout,
+// with "-dirty" added when the checkout had uncommitted changes, such as
+// "a23f12a7c0de-dirty". Number alone cannot tell two builds between
+// releases apart. It is "" when the build recorded no revision (built
+// outside a git checkout, or with -buildvcs=false).
+func Build() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	var rev string
+	var dirty bool
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			rev = s.Value
+		case "vcs.modified":
+			dirty = s.Value == "true"
+		}
+	}
+	if rev == "" {
+		return ""
+	}
+	if len(rev) > 12 {
+		rev = rev[:12]
+	}
+	if dirty {
+		rev += "-dirty"
+	}
+	return rev
 }
