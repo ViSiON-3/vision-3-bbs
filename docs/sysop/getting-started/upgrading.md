@@ -274,9 +274,9 @@ ports and hosts, SSH host keys, turning SSH or telnet on or off, and the
 logging directory and rolling settings. The full list is under
 [Applying Configuration Changes](configuration/configuration.md#applying-configuration-changes).
 
-## Coming from a version older than v0.9.5
+## Coming from a version older than v0.9.6
 
-The worked example below covers one step, v0.9.5 to v0.9.6. Upgrade notes are
+The worked example below covers one step, v0.9.6 to v0.9.7. Upgrade notes are
 cumulative: coming from further back, work through each release you are
 skipping, oldest first, before the one below. The notes for v0.9.0 to v0.9.3
 are in the guide as it stood at v0.9.3, and the later ones in the guide as it
@@ -290,23 +290,28 @@ stood at each release:
 | [v0.9.3](https://github.com/ViSiON-3/vision-3-bbs/blob/v0.9.3/docs/sysop/getting-started/upgrading.md#worked-example-upgrading-to-v093) | Two or more FTN networks: each needed its own binkd outbound, which v0.9.4 now does for you |
 | [v0.9.4](https://github.com/ViSiON-3/vision-3-bbs/blob/v0.9.4/docs/sysop/getting-started/upgrading.md#worked-example-upgrading-to-v094) | Run `v3mail readdress --all` once; copy the changed menu files; repoint `GOTO:USERCFG` and removed `CFG_*` commands at `RUN:USERCONFIG` |
 | [v0.9.5](https://github.com/ViSiON-3/vision-3-bbs/blob/v0.9.5/docs/sysop/getting-started/upgrading.md#worked-example-upgrading-to-v095) | Copy `templates/configs/badusers.txt` into `configs/`; copy the changed menu files; review `configs/blocklist.txt`, because past auto-blocks now take effect |
+| [v0.9.6](https://github.com/ViSiON-3/vision-3-bbs/blob/v0.9.6/docs/sysop/getting-started/upgrading.md#worked-example-upgrading-to-v096) | Copy the changed menu files and `wfc` with the BBS; set `QuotePrefix` to ` ^I> ` if you want the new quote style, as it is not switched for you |
 
 Where those notes say to restart after a config edit, see
 [Restarting](#restarting) instead: most files have reloaded on save since
 v0.9.2.
 
-## Worked example: upgrading to v0.9.6
+## Worked example: upgrading to v0.9.7
 
 Deploy the new programs, run `./vision3 doctor`, and restart as usual. Nothing
-in `configs/` has to change: every new setting has a default, and stored data
-(users, the V3Net hub and dedup databases) is migrated the first time the new
-version opens it. On an instance or bundle install, copy the menu files below.
-The rest of this section is behaviour that changed and is worth knowing about.
+in `configs/` has to change: every new setting has a default that keeps the
+board as it was, and the V3Net dedup database is migrated the first time the
+new version opens it. On an instance or bundle install, copy the menu files
+below. The rest of this section is behaviour that changed and is worth
+knowing about.
 
-`bin/binkd` and `bin/sexyz` are unchanged. Copy `wfc` along with the BBS:
-choosing and switching chat screens with **Alt-S** needs both updated. An
-older console against the new BBS still works, and chats on the default
-screen.
+`bin/binkd`, `bin/sexyz` and the `wfc` console are unchanged.
+
+v0.9.7 calls itself v0.9.6. The release shipped before its version number
+was bumped, so everything that shows the version still says 0.9.6: `./vision3
+doctor`, `wfc`, `helper` and `v3mail`, the tearline on posts your board sends,
+your Central listing and door drop files. Go by the release tag or the git
+commit you built from, not the banner. Later builds show the right number.
 
 ### 1. Bring the menu set up to date
 
@@ -317,88 +322,92 @@ A **repo-in-place** install gets these from `git pull`. An **instance** or
 
 | Files | Why |
 | ----- | --- |
-| `ansi/MAIN.ANS`, `ansi/FILEM.ANS`, `ansi/DOORSM.ANS`, `ansi/MSGMENU.ANS` | Redrawn; the message menu now shows **T** for the Twit List |
-| `cfg/MSGMENU.CFG` | Binds **T** to the Twit List to match the art; **I** still works |
-| `ansi/V3CHAT1.ANS`, `cfg/V3CHAT1.json` | New: the default split-screen chat screen |
-| `ansi/V2CHAT1.ANS`, `cfg/V2CHAT1.json`, `ansi/V2CHAT2.ANS`, `cfg/V2CHAT2.json` | New: ViSiON/2's two chat screens, picked with **Alt-S** in the WFC console |
-| `theme.json` | New `sysopChatScreen`, set to `V3CHAT1` |
-| `templates/message_headers/MSGHDR.1.ans`, `.2.ans`, `.8.ans` | Styles 2 and 8 now show the message total; style 1 shows the reply counts |
+| `ansi/MSGMENU.ANS`, `cfg/MSGMENU.CFG` | New **F** (Find Msgs) on the message menu, running `SEARCHMSGS A` over every conference |
+| `cfg/MAIN.CFG` | New `/V CENTRAL` command, which opens V3Net Central |
+| `ansi/MAIN.ANS` | Redrawn |
+| `ansi/FASTLOGN.ANS` | Redrawn login screen |
+| `ansi/CHATHEADER.ANS` | The empty bracket at the end of the header row is now a link field: `■` while the hub answers, `!` while it does not, blank in local chat |
+| `theme.json` | New `autocorrectHighlightColor` (default `15`); without it the editor uses `15` anyway |
 
-`templates/USERLIST.icy` was unused and is gone from the set; delete your copy
-or leave it. Without `sysopChatScreen` in your `theme.json`, sysop chat keeps
-the built-in layout it had before. You can also set it from the config
-editor's new **C. Theme** page, which writes the overlay copy in `menus.d/`.
-See [Chat screens](how-to-guides/wfc-console.md#chat-screens).
+If you have your own message menu, add a command for `RUN:SEARCHMSGS` to get
+message search: no data searches the current conference, `C` the current
+area and `A` every conference. See
+[Searching Messages](messages/message-areas.md#searching-messages).
 
 ### What else changed
 
-- **Three wrong passwords drop the call.** The third wrong password on one
-  call shows `NICETRY.ANS` and hangs up, as BBSes traditionally did, instead
-  of drawing the login screen again. The count is `maxLoginTries` in
-  `config.json` (default `3`), separate from `maxFailedLogins`, which still
-  locks the IP out. An IP that is already locked out is now dropped rather
-  than kept at the prompt.
-- **Pipes are refused in new handles and real names.** A handle like `|CL`
-  used to run its screen code on other callers' screens. Existing accounts
-  keep their names and can still log in. Text that callers, hubs or other
-  boards set is now escaped wherever it is shown, so only its colour codes
-  act. This applies to anything passed into a `strings.json` format as well:
-  a `|CR` in a conference name now prints as text. See
-  [Pipes in Names](users/user-management.md#pipes-in-names).
-- **Message text is filtered on the way to the screen.** Bodies, subjects,
-  senders and recipients no longer pass terminal queries, window titles, mode
-  changes or C0/C1 controls to the caller; colour and erase-in-line still do.
-  A plain message that moves the cursor or clears the screen is now drawn as
-  ANSI art, at 80 columns without word wrap. Stored messages are unchanged.
-  Offline QWK packets get the same filter, and scripts get a new `text` field
-  alongside the raw `body`.
-- **Reply threads in the reader.** **T** in the reader now opens a thread
-  menu in a pane under the header, instead of searching by subject, and the
-  message list opens threaded; **T** in the list switches back to flat. Each
-  caller can turn the pane off with **Thread View** in Konfig. See
-  [Listing Messages](messages/message-areas.md#listing-messages).
-- **Quotes reflow in the reader**, and the editor's Backspace and Delete
-  refill a paragraph from its top line. New boards quote with a leading
-  space; existing boards keep their own `QuotePrefix`, as described under
-  [Changed shipped strings](#changed-shipped-strings).
-- **Toasts.** Node pages reach a caller wherever they are, as a line on the
-  bottom row, and a page they don't see before logging off waits for their
-  next login. Logon and logoff announcements are available but off: turn on
-  `toastLogons` / `toastLogoffs` under **System Setup → Toasts** in
-  `./config`. See [Toasts](users/login-sequence.md#toasts).
-- **The config editor moved some items.** **7. Door Programs** is now a
-  sub-menu holding **Doors** and **Door Categories**; the separate **C. Door
-  Categories** item is gone, and **C** is now **Theme**. WFC Access and the
-  page settings moved to **Access & Security → WFC & Paging**, and
-  **New User Voting** is now **New Users & Voting**.
-- **Screen width is at least 80.** A caller's stored width under 80 is raised
-  to 80 when `users.json` loads, and Konfig accepts 80 to 255.
-- **V3Net messages and hub replies are signed.** Messages carry their
-  author's signature, the hub signs its replies, and a leaf pins the
-  coordinator and hub keys on first contact, writing them to `v3net.json`.
-  All of it works with older hubs and leaves, and every "require" setting is
-  off, so hubs and leaves can upgrade in any order. If a pinned key later
-  changes, sysops get a login notice until the new key is accepted. A changed
-  coordinator key gets its NAL rejected, and the last accepted NAL stays in
-  effect; a changed hub key pauses syncing with that network. A coordinator
-  moving the network to a new key should use a signed handover, which leaves
-  follow without the sysop. See
-  [Coordinator Key Pinning](v3net/nal.md#coordinator-key-pinning) and
-  [Hub signatures](v3net/configuration.md#hub-signatures).
-- **V3Net hubs refuse bad names and text.** A hub now refuses a subscribe
-  whose BBS name has pipes or control characters or is over 64 characters,
-  and a NAL or proposal with such text in an area. Updated leaves clean their
-  own board name before sending it, and a node already registered can
-  re-subscribe under the name the hub holds.
-- **The QWK API pairs devices.** A password login now only pairs a device;
-  packets need a device login, which signs a challenge with a key kept on the
-  phone. The API also follows the BBS blocklist, login lockouts and
-  `logonLevel`, and a password change ends every session and unpairs every
-  device. No mobile client had shipped, so nothing deployed breaks. Callers
-  can list and unpair devices with **O** in Konfig. See
-  [Paired devices](messages/qwk-api.md#paired-devices).
-- **FidoNet points leave SEEN-BY and PATH alone.** A point used to stamp its
-  boss's address into both, which hubs could reject as a loop. Headers of
-  mail labelled `CHRS: CP866` (and CP1251, KOI8-R, KOI8-U) are now decoded
-  and exported in that charset; headers stored before the upgrade stay as
-  they were.
+- **V3Net Central, the board directory, is new and off.** Each subscription
+  gets two switches: **Central**, which lets your callers browse the
+  directory, and **Publish Listing**, which lists your board in it. Both
+  default to `N`, and nothing about your board or callers is sent until you
+  turn them on. The directory needs a v0.9.7 hub; on an older hub the
+  subscription's Central status says the hub does not serve it. See
+  [V3Net Central](v3net/central.md).
+- **Message search.** `SEARCHMSGS` searches subjects and bodies with words,
+  `"quoted phrases"`, `AND`, `OR`, `NOT` and parentheses. Esc stops a long
+  search, and only the first matches are listed when there are many.
+- **Optional autocorrect in the message editor.** It fixes common typos as
+  a caller types, and is off unless you turn it on: board-wide with
+  **Autocorrect** under **System Setup → Default Settings**
+  (`editorAutocorrect`), or per area with the area's **Autocorrect** field.
+  Callers can turn it off for themselves with **Ctrl+O** or in Konfig. See
+  [Autocorrect](messages/message-areas.md#autocorrect).
+- **`vision3 doctor` and the BBS check every ACS string.** Doctor's new
+  **Access control** section names the file, record, field and column of
+  each problem. A string that cannot be read at all is a **FAIL**: it was
+  already denying every caller. A string that works, but not as it reads,
+  is a **WARN**, such as an unknown letter, which is always false. Fix the
+  warnings now: a future, stricter ACS check will change what those strings
+  do. The BBS logs the same problems at startup and on reload, and never
+  changes a string or refuses to start. See
+  [Checking your strings](reference/acs.md#checking-your-strings).
+- **ACS gains comparisons, ranges and user-record terms**, such as `S>=20`,
+  `CALLS>=10`, `POSTS>0` and `AGE>=7`, and there is an ACS tester in `./ue`
+  and the admin user editor. Existing strings mean what they did. See the
+  [ACS reference](reference/acs.md).
+- **Doors can be gated by ACS.** A door may now carry an `acs` string, set
+  with the **ACS** field in `./config`, as well as `min_access_level`; a
+  caller needs both. Leave it blank and nothing changes. A door's ACS is
+  held to a stricter rule than other strings: any problem doctor reports
+  denies the door to everyone, sysops included. See
+  [Doors](doors/doors.md).
+- **Session placeholders work in `strings.json`.** Values now expand the same
+  `|XX` codes as menu prompts (`|UH`, `|TL`, `|MN`, `|NODE` and so on) and
+  `|{ … |}` groups, and a new `|XYcc,rr` code moves the cursor. A custom
+  string that happens to contain one of these codes as plain text now
+  expands it; double the pipe (`||UH`) to print it as text. Text inserted
+  into a string, such as a handle or a subject, is never expanded. The
+  string editor gains a colour picker on **F2**.
+- **Script doors are bounded.** A `v3_script` door now has a run time limit
+  you can set per door (**Max Run Mins**; unset keeps the 30-minute limit,
+  `-1` turns it off), and calls that pass or return too much data throw an
+  error naming the limit instead of running unbounded. Scripts can read
+  files and ZIP archives from a file area and tag files for download, and
+  `v3.console.readkey` reads one key. `v3.file` listings no longer show
+  areas the caller cannot list.
+- **Marking a file in the file list checks the download rules.** Space in
+  the lightbar file list now applies the area's download ACS and the batch
+  size limit, as the download command does, and shows the reason when it
+  refuses.
+- **Network chat fixes that need the hub upgraded.** Private messages now go
+  only to the recipient's board, instead of to every board on the network,
+  which then filtered them. `/msg bob hello`, with no `@node`, now finds
+  `bob` among the people in chat, and asks which board when more than one
+  has that handle. Both are done by the hub: until it is upgraded, use the
+  explicit `/msg bob@<node-id>` form. Callers stay in their rooms across a
+  reconnect, chat lines wrap at the screen edge, and history shows when each
+  line was said.
+- **V3Net no longer imports your own posts back, or skips messages around
+  them.** A post that failed to send, or was polled back while it was being
+  sent, could arrive as a second copy, and a poll could miss another
+  board's message posted just before yours. An import cut short by a crash
+  is neither written twice nor skipped.
+- **A long network address stays whole in message headers.** When the From
+  or To field is too narrow, the name is shortened instead:
+  `From: Dobbie Th... (3:633/2744.1)`.
+- **FTN packets keep room for the NUL.** A 36-character name or 72-character
+  subject made a packet the BBS's own reader rejected; those fields are now
+  cut one character shorter.
+- **Doctor names the menu file it read.** A problem in an override in
+  `menus.d/` is reported against that file, not the shipped one under
+  `menus/`.
