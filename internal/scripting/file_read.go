@@ -65,7 +65,8 @@ func registerFileRead(obj *goja.Object, eng *Engine) {
 	// unpacked. The archive is
 	// opened once for them all, and only the samples are unpacked, so a
 	// script can sort entries by their contents without a readMember each.
-	// Entries past maxScriptRead of samples in all get none.
+	// Samples count against maxScriptRead by their length: once less than
+	// sampleBytes of it is left, later entries get none.
 	jsutil.Set(obj, "members", func(call goja.FunctionCall) goja.Value {
 		path, ok := eng.readableFile(call)
 		if !ok {
@@ -96,8 +97,13 @@ func registerFileRead(obj *goja.Object, eng *Engine) {
 			readable := pkzip1.Supported(m.Method) && !pkzip1.Encrypted(m)
 			jsutil.Set(o, "readable", readable)
 			if sampleBytes > 0 && readable && !m.FileInfo().IsDir() && budget >= sampleBytes {
-				budget -= sampleBytes
-				jsutil.Set(o, "sample", memberSample(vm, m, sampleBytes))
+				data, ok := memberSample(m, sampleBytes)
+				if ok {
+					budget -= len(data)
+					jsutil.Set(o, "sample", cp437Text(data))
+				} else {
+					jsutil.Set(o, "sample", goja.Null())
+				}
 			}
 			jsutil.Set(arr, itoa(i), o)
 		}
@@ -140,17 +146,14 @@ func registerFileRead(obj *goja.Object, eng *Engine) {
 	})
 }
 
-// memberSample is m's first n bytes as text, or null where readMember would
-// give null: a member over maxScriptRead, or one that can't be unpacked.
-func memberSample(vm *goja.Runtime, m *zip.File, n int) goja.Value {
+// memberSample is m's first n bytes, or false for a member over
+// maxScriptRead or one that can't be unpacked.
+func memberSample(m *zip.File, n int) ([]byte, bool) {
 	if m.UncompressedSize64 > maxScriptRead {
-		return goja.Null()
+		return nil, false
 	}
 	data, err := pkzip1.Sample(m, n, maxScriptRead)
-	if err != nil {
-		return goja.Null()
-	}
-	return vm.ToValue(cp437Text(data))
+	return data, err == nil
 }
 
 // readableFile resolves call's (areaID, filename) to the file's path when the

@@ -276,3 +276,28 @@ func storedAndDeflated(t *testing.T) []*zip.File {
 	}
 	return zr.File
 }
+
+// TestSamplePackedBound checks samplePacked's reasoning on every fixture
+// member: the first n bytes unpack from no more than 3n bytes of packed
+// data plus a small fixed overhead (1 KB here, against the 64 KB Sample
+// allows).
+func TestSamplePackedBound(t *testing.T) {
+	for _, archive := range []string{"shrink.zip", "implode.zip", "reduce.zip", "oldpack.zip"} {
+		for _, m := range members(t, archive) {
+			full, err := Decompress(m.method, m.flags, m.src, m.size)
+			if err != nil {
+				t.Fatalf("%s method %d: %v", archive, m.method, err)
+			}
+			for _, n := range []int{1, 2, 10, 100, 1000, 4096, m.size - 1} {
+				if n <= 0 || n >= m.size {
+					continue
+				}
+				src := m.src[:min(len(m.src), 3*n+1024)]
+				got, err := Decompress(m.method, m.flags, src, n)
+				if err != nil || !bytes.Equal(got, full[:n]) {
+					t.Errorf("%s method %d: first %d bytes from %d packed: %v", archive, m.method, n, len(src), err)
+				}
+			}
+		}
+	}
+}

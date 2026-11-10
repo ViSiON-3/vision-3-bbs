@@ -224,18 +224,25 @@ func TestMembersSample(t *testing.T) {
 	}
 }
 
-// members stops giving samples once they add up to maxScriptRead, and gives
-// null for an entry over it, which readMember won't read either.
+// members charges each sample against maxScriptRead by its length, so many
+// small entries all get theirs, and stops once less than the sample size is
+// left. An entry over maxScriptRead gets null, as readMember gives, and
+// costs nothing.
 func TestMembersSampleBudget(t *testing.T) {
 	p := fileAreasProviders(t, func(a *file.FileArea) bool { return true })
 	var zbuf bytes.Buffer
 	zw := zip.NewWriter(&zbuf)
 	w, _ := zw.Create("HUGE.TXT")
 	_, _ = w.Write(bytes.Repeat([]byte{' '}, maxScriptRead+1))
-	perEntry := maxScriptRead / maxMemberSample
-	for i := 0; i < perEntry+5; i++ {
-		w, _ := zw.Create(fmt.Sprintf("PIECE%03d.ANS", i))
+	const small = 200
+	for i := 0; i < small; i++ {
+		w, _ := zw.Create(fmt.Sprintf("SMALL%03d.ANS", i))
 		_, _ = w.Write([]byte("art"))
+	}
+	full := maxScriptRead / maxMemberSample
+	for i := 0; i < full+5; i++ {
+		w, _ := zw.Create(fmt.Sprintf("FULL%03d.ANS", i))
+		_, _ = w.Write(bytes.Repeat([]byte{'x'}, maxMemberSample))
 	}
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
@@ -256,8 +263,8 @@ func TestMembersSampleBudget(t *testing.T) {
 		for (var i = 0; i < list.length; i++) if (typeof list[i].sample === "string") sampled++;
 		return String(list[0].sample) + " " + sampled + " " + ("sample" in list[list.length - 1]);
 	})()`).String()
-	// HUGE.TXT's sample counts toward the budget though it's null.
-	if want := fmt.Sprintf("null %d false", perEntry-1); got != want {
+	// The small samples take 600 bytes, so one full one fewer fits.
+	if want := fmt.Sprintf("null %d false", small+full-1); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }

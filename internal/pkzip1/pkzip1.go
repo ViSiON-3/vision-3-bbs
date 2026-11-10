@@ -91,19 +91,24 @@ func Sample(f *zip.File, n int, limit int64) ([]byte, error) {
 	if f.UncompressedSize64 > uint64(limit) {
 		return nil, ErrTooLarge
 	}
+	size, whole := int(f.UncompressedSize64), true
+	if n < size {
+		size, whole = n, false
+	}
+	// A whole member is read as Open reads it. A sample needs only the
+	// packed data that unpacks to it: no method here takes more than
+	// samplePacked(n) bytes for n bytes out.
+	packed := limit + 64*1024
+	if !whole {
+		packed = min(packed, samplePacked(n))
+	}
 	raw, err := f.OpenRaw()
 	if err != nil {
 		return nil, err
 	}
-	// The packed data is read whole: how much of it n bytes need isn't
-	// known until they're unpacked. Open bounds it the same way.
-	src, err := io.ReadAll(io.LimitReader(raw, limit+64*1024))
+	src, err := io.ReadAll(io.LimitReader(raw, packed))
 	if err != nil {
 		return nil, err
-	}
-	size, whole := int(f.UncompressedSize64), true
-	if n < size {
-		size, whole = n, false
 	}
 	data, err := Decompress(f.Method, f.Flags, src, size)
 	if err != nil {
@@ -113,6 +118,15 @@ func Sample(f *zip.File, n int, limit int64) ([]byte, error) {
 		return nil, zip.ErrChecksum
 	}
 	return data, nil
+}
+
+// samplePacked bounds the packed data that unpacks to n bytes. The most a
+// byte out can cost is an imploded literal, a flag bit and a code of up to
+// 16 bits; shrink's codes are at most 13 bits, reduce's literals 9. On top
+// of that come a little fixed overhead (implode's trees, shrink's clears
+// and width changes), for which 64 KB is far more than enough.
+func samplePacked(n int) int64 {
+	return 3*int64(n) + 64*1024
 }
 
 // Decompress unpacks src, compressed with method (one of the PKZIP 1.x

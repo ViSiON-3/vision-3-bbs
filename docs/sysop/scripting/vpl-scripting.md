@@ -762,8 +762,9 @@ directories, also gets `sample`: its first `sampleBytes` characters (at most
 65536), as `readMember` would give them, or `null` for an entry over 4 MB or
 whose data can't be unpacked. The archive is opened once and only those
 starts are unpacked, which is far quicker than a `readMember` for each when a
-script only needs to tell art from binaries. Samples stop once they add up to
-4 MB; entries past that have no `sample`.
+script only needs to tell art from binaries. Samples count against a 4 MB
+budget by their length (a `null` one costs nothing); once less than
+`sampleBytes` of it is left, later entries have no `sample`.
 
 ```javascript
 var list = v3.file.members(area.id, "ACID0796.ZIP", 4096) || [];
