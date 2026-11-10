@@ -67,8 +67,11 @@ internal/configeditor/reload.now
 # FTN NA (nodelist area) files — site-specific, not tracked in git
 *.na
 
-# SSH host keys (generated during setup, not tracked in git)
+# SSH host keys (generated during setup, not tracked in git), wherever one
+# lands in the tree
 /configs/ssh_host_*
+ssh_host_*_key
+ssh_host_*_key.pub
 
 # Config reload semaphores (touched at runtime to signal a config reload)
 /configs/reload.now
