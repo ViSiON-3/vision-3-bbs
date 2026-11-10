@@ -491,7 +491,7 @@ Protect against brute-force attacks with automatic **IP-based** lockout after fa
 
 **How it works:**
 
-1. Each failed login attempt from an IP address is tracked in memory
+1. Each failed login attempt from an IP address is tracked in memory, whether at the login prompt or as a wrong password given with an SSH connection for a known handle
 2. After reaching the threshold, the IP is locked out
 3. During lockout, login attempts from that IP show:
    ```text
@@ -560,7 +560,8 @@ ViSiON/3 implements a **two-tier authentication design** that balances BBS usabi
 **For existing users:**
 - SSH password is validated against the bcrypt hash in `data/users/users.json`
 - If correct, user is automatically logged in to the BBS
-- If incorrect, SSH authentication fails at the protocol level
+- If incorrect or empty, the connection still goes through and the caller gets the BBS login prompt
+- The same [Authentication Lockout](#authentication-lockout) applies: a wrong (non-empty) SSH password counts as a failed login from that IP, a correct one clears the count, and a locked-out IP is never logged in automatically: it gets the login prompt and its lockout message
 
 **For unknown users (not in database):**
 - SSH authentication **intentionally allows** the connection through
@@ -580,8 +581,8 @@ This design enables the classic BBS new user experience while maintaining securi
 
 2. **Authentication-level protection:**
    - **IP-based lockout** after failed BBS login attempts (see [Authentication Lockout](#authentication-lockout))
-   - Failed attempts tracked at application layer, not SSH layer
-   - Prevents brute force attacks at the BBS login prompt
+   - Failed attempts are counted at the BBS login prompt and for passwords given at the SSH layer alike
+   - Prevents brute force attacks through either
 
 3. **Why not reject unknown users at SSH level?**
    - Would prevent new user registration entirely

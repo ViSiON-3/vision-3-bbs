@@ -5,7 +5,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/sshserver"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -63,23 +65,48 @@ func sshPasswordHandler(ctx ssh.Context, password string) bool {
 	username := ctx.User()
 	slog.Debug("SSH password auth", "user", username, "addr", ctx.RemoteAddr())
 
-	// If username matches a known BBS user and password is correct,
-	// stash the authenticated user for auto-login. Otherwise accept
-	// the connection anyway and let the BBS LOGIN menu handle it.
-	if username != "" && userMgr != nil {
-		if bbsUser, found := userMgr.GetUser(username); found && bbsUser != nil {
-			authedUser, ok := userMgr.Authenticate(username, password)
-			if ok {
-				ctx.SetValue(sshAuthUserKey{}, authedUser)
-				slog.Info("SSH pre-authenticated user", "user", username, "addr", ctx.RemoteAddr())
-			} else {
-				slog.Info("SSH password mismatch, deferring to BBS login", "user", username, "addr", ctx.RemoteAddr())
-			}
+	// The connection is always accepted: a caller whose SSH login doesn't
+	// pre-authenticate gets the BBS LOGIN menu instead.
+	if authedUser := sshPreAuthenticate(userMgr, connectionTracker, username, password, extractIP(ctx.RemoteAddr())); authedUser != nil {
+		ctx.SetValue(sshAuthUserKey{}, authedUser)
+	}
+	return true
+}
+
+// sshPreAuthenticate checks an SSH login's username and password against
+// the BBS users, for logging the caller straight in. It returns the user on
+// a match and nil otherwise. It keeps the same per-IP failed-login lockout as
+// the LOGIN menu (ct may be nil): a locked-out IP is not checked at all, a
+// wrong password for a known user counts as a failed attempt, and a match
+// clears the count. An empty password isn't counted: clients that don't
+// store one send it, and those callers just get the LOGIN menu.
+func sshPreAuthenticate(um *user.UserMgr, ct *ConnectionTracker, username, password, ip string) *user.User {
+	if username == "" || um == nil {
+		return nil
+	}
+	if bbsUser, found := um.GetUser(username); !found || bbsUser == nil {
+		return nil
+	}
+	if ct != nil {
+		if locked, lockedUntil, _ := ct.IsIPLockedOut(ip); locked {
+			logging.Security("SSH login from locked IP, deferring to BBS login",
+				"user", username, "ip", ip, "locked_until", lockedUntil.Format(time.RFC3339))
+			return nil
 		}
 	}
-
-	return true
-
+	authedUser, ok := um.Authenticate(username, password)
+	if !ok {
+		slog.Info("SSH password mismatch, deferring to BBS login", "user", username, "ip", ip)
+		if ct != nil && password != "" {
+			ct.RecordFailedLoginAttempt(ip)
+		}
+		return nil
+	}
+	if ct != nil {
+		ct.ClearFailedLoginAttempts(ip)
+	}
+	slog.Info("SSH pre-authenticated user", "user", username, "ip", ip)
+	return authedUser
 }
 
 func sshKeyboardInteractiveHandler(ctx ssh.Context, challenger gossh.KeyboardInteractiveChallenge) bool {
