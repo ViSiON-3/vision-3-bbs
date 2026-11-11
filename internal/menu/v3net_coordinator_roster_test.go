@@ -202,3 +202,30 @@ func TestRosterOpenClose(t *testing.T) {
 		t.Errorf("admit while open: %+v", f.roster)
 	}
 }
+
+// Status says what the roster does: an open one shows all, whether or not
+// the hub still serves rosters, and a hub that stopped is called out.
+func TestCentralRosterStateCell(t *testing.T) {
+	for name, tc := range map[string]struct {
+		info  CentralRosterInfo
+		known bool
+		want  []string
+		not   string
+	}{
+		"closed":              {CentralRosterInfo{Supported: true, Held: true, Members: 3}, true, []string{"on", "3"}, "open"},
+		"open":                {CentralRosterInfo{Supported: true, Held: true, Open: true, Members: 3}, true, []string{"open", "all shown"}, "stopped"},
+		"open, hub stopped":   {CentralRosterInfo{Held: true, Open: true, Members: 3}, true, []string{"open", "all shown", "stopped"}, "boards"},
+		"closed, hub stopped": {CentralRosterInfo{Held: true, Members: 3}, true, []string{"on", "stopped"}, "open"},
+		"none":                {CentralRosterInfo{Supported: true}, true, []string{"none"}, "on,"},
+	} {
+		cell := string(ansi.StripAnsi(string(ansi.ReplacePipeCodes([]byte(centralRosterState(CentralNetworkInfo{SupportKnown: tc.known, Roster: tc.info}))))))
+		for _, w := range tc.want {
+			if !strings.Contains(cell, w) {
+				t.Errorf("%s: %q lacks %q", name, cell, w)
+			}
+		}
+		if strings.Contains(cell, tc.not) {
+			t.Errorf("%s: %q has %q", name, cell, tc.not)
+		}
+	}
+}

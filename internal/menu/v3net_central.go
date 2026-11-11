@@ -459,8 +459,12 @@ func centralActivityState(n CentralNetworkInfo, a CentralActivityInfo, noun stri
 // centralRosterState is the Status cell for the board roster: in force
 // with how many boards, none (every board shown), or not served.
 func centralRosterState(n CentralNetworkInfo) string {
+	stopped := n.Roster.Held && n.SupportKnown && !n.Roster.Supported
 	switch {
-	case n.Roster.Held && n.SupportKnown && !n.Roster.Supported:
+	case n.Roster.Held && n.Roster.Open && stopped:
+		// Open, so nothing is filtered, but no update can reach this board.
+		return "|07open |08(all shown)|07 |04(hub stopped serving it)|07"
+	case stopped:
 		// Still in force, but no update can reach this board.
 		return fmt.Sprintf("|10on|07, |15%d|07 boards |04(hub stopped serving it)|07", n.Roster.Members)
 	case n.Roster.Held && n.Roster.Open:
