@@ -38,9 +38,15 @@ func TestV3NetPinFieldValidatesAndClearsPending(t *testing.T) {
 		t.Errorf("after blanking: pin %q, pending %q; want both blank", pin, pending)
 	}
 
-	g := v3netPendingField("Offered Coord", 11, &pending)
-	if got := g.Get(); got != "(none) - hub matches pinned key" {
-		t.Errorf("empty pending shows %q", got)
+	g := v3netPendingField("Offered Coord", 11, &pin, &pending)
+	// Blank pin and nothing pending: before first contact, or after the
+	// URL or pin was cleared. Must not read as a verified match.
+	if got := g.Get(); got != "(none) - nothing pinned yet" {
+		t.Errorf("blank pin, empty pending shows %q", got)
+	}
+	pin = key
+	if got := g.Get(); got != "(none) - no changed key offered" {
+		t.Errorf("pinned, empty pending shows %q", got)
 	}
 	pending = key
 	if got := g.Get(); got != "NEW: "+key {
@@ -54,8 +60,8 @@ func TestV3NetPinFieldValidatesAndClearsPending(t *testing.T) {
 // The offered-key help explains a read-only warning field; losing its tail
 // to the two-line ellipsis would drop the "paste it into the key" step.
 func TestV3NetPendingFieldHelpFitsTwoLines(t *testing.T) {
-	var pending string
-	help := fieldHelpText(v3netPendingField("Offered Hub", 11, &pending))
+	var pin, pending string
+	help := fieldHelpText(v3netPendingField("Offered Hub", 11, &pin, &pending))
 	l1, l2 := wrapHelpTwoLines(help, 71) // boxW(70)+1
 	if strings.HasSuffix(l2, "…") || strings.HasSuffix(l1, "…") {
 		t.Errorf("help is truncated: %q | %q", l1, l2)
