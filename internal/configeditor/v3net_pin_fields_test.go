@@ -3,6 +3,7 @@ package configeditor
 import (
 	"crypto/ed25519"
 	"encoding/base64"
+	"strings"
 	"testing"
 )
 
@@ -37,8 +38,41 @@ func TestV3NetPinFieldValidatesAndClearsPending(t *testing.T) {
 		t.Errorf("after blanking: pin %q, pending %q; want both blank", pin, pending)
 	}
 
-	g := v3netPendingField("Offered Coord", 11, &pending)
-	if got := g.Get(); got != "(none)" {
-		t.Errorf("empty pending shows %q", got)
+	g := v3netPendingField("Offered Coord", "Coord Key", 11, &pin, &pending)
+	// Blank pin and nothing pending: before first contact, or after the
+	// URL or pin was cleared. Must not read as a verified match.
+	if got := g.Get(); got != "(none) - nothing pinned yet" {
+		t.Errorf("blank pin, empty pending shows %q", got)
+	}
+	pin = key
+	if got := g.Get(); got != "(none) - no changed key offered" {
+		t.Errorf("pinned, empty pending shows %q", got)
+	}
+	pending = key
+	if got := g.Get(); got != "NEW: "+key {
+		t.Errorf("offered key shows %q", got)
+	}
+	if n := len(g.Get()); n > g.Width {
+		t.Errorf("offered key display is %d chars, wider than the %d-char field", n, g.Width)
+	}
+}
+
+// The offered-key help explains a read-only warning field; losing its tail
+// to the two-line ellipsis would drop the step naming which pin to paste
+// into. Each field's help must name its own pin field.
+func TestV3NetPendingFieldHelpFitsTwoLines(t *testing.T) {
+	var pin, pending string
+	for _, pinLabel := range []string{"Coord Key", "Hub Key"} {
+		help := fieldHelpText(v3netPendingField("Offered", pinLabel, 11, &pin, &pending))
+		if !strings.HasSuffix(help, pinLabel) {
+			t.Errorf("help does not name the %s field: %q", pinLabel, help)
+		}
+		l1, l2 := wrapHelpTwoLines(help, 71) // boxW(70)+1
+		if strings.HasSuffix(l2, "…") || strings.HasSuffix(l1, "…") {
+			t.Errorf("help is truncated: %q | %q", l1, l2)
+		}
+		if got := strings.Join(strings.Fields(l1+" "+l2), " "); got != help {
+			t.Errorf("help text not preserved:\n got %q\nwant %q", got, help)
+		}
 	}
 }
