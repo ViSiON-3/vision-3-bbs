@@ -156,8 +156,8 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 			8, &l.CoordinatorPubKey, &l.PendingCoordinatorPubKey),
 		v3netPinField("Hub Key", "Pinned hub key from the network's /info. Blank = pin on first use",
 			9, &l.HubPubKey, &l.PendingHubPubKey),
-		v3netPendingField("Offered Coord", 10, &l.CoordinatorPubKey, &l.PendingCoordinatorPubKey),
-		v3netPendingField("Offered Hub", 11, &l.HubPubKey, &l.PendingHubPubKey),
+		v3netPendingField("Offered Coord", "Coord Key", 10, &l.CoordinatorPubKey, &l.PendingCoordinatorPubKey),
+		v3netPendingField("Offered Hub", "Hub Key", 11, &l.HubPubKey, &l.PendingHubPubKey),
 		// V3Net Central. Each switch is its own consent and defaults to N;
 		// the block is only written once a sysop touches it.
 		{
@@ -288,12 +288,14 @@ func v3netPinField(label, help string, row int, pin, pending *string) fieldDef {
 
 // v3netPendingField shows a key the hub offered that differs from the pin.
 // The leaf records it and keeps rejecting it; copying it into the pin field
-// above (after checking it with the network operator) accepts it. An empty
+// named by pinLabel (after checking it with the network operator) accepts
+// it; the help names that field because the one directly above Offered
+// Coord is Hub Key, not Coord Key. An empty
 // pending value only means no changed key is recorded: it says nothing about
 // whether the hub was ever contacted, so the display never claims a match.
-func v3netPendingField(label string, row int, pin, pending *string) fieldDef {
+func v3netPendingField(label, pinLabel string, row int, pin, pending *string) fieldDef {
 	return fieldDef{
-		Label: label, Help: "Read-only: (none) = no changed key offered. A NEW key is rejected; verify it with the hub operator, then paste it into the key above",
+		Label: label, Help: "Read-only: (none) = no changed key offered. A NEW key is rejected; verify it with the hub operator, then paste it into " + pinLabel,
 		Type: ftDisplay, Col: 3, Row: row, Width: 49,
 		Get: func() string {
 			switch {

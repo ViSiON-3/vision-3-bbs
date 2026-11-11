@@ -38,7 +38,7 @@ func TestV3NetPinFieldValidatesAndClearsPending(t *testing.T) {
 		t.Errorf("after blanking: pin %q, pending %q; want both blank", pin, pending)
 	}
 
-	g := v3netPendingField("Offered Coord", 11, &pin, &pending)
+	g := v3netPendingField("Offered Coord", "Coord Key", 11, &pin, &pending)
 	// Blank pin and nothing pending: before first contact, or after the
 	// URL or pin was cleared. Must not read as a verified match.
 	if got := g.Get(); got != "(none) - nothing pinned yet" {
@@ -58,15 +58,21 @@ func TestV3NetPinFieldValidatesAndClearsPending(t *testing.T) {
 }
 
 // The offered-key help explains a read-only warning field; losing its tail
-// to the two-line ellipsis would drop the "paste it into the key" step.
+// to the two-line ellipsis would drop the step naming which pin to paste
+// into. Each field's help must name its own pin field.
 func TestV3NetPendingFieldHelpFitsTwoLines(t *testing.T) {
 	var pin, pending string
-	help := fieldHelpText(v3netPendingField("Offered Hub", 11, &pin, &pending))
-	l1, l2 := wrapHelpTwoLines(help, 71) // boxW(70)+1
-	if strings.HasSuffix(l2, "…") || strings.HasSuffix(l1, "…") {
-		t.Errorf("help is truncated: %q | %q", l1, l2)
-	}
-	if got := strings.Join(strings.Fields(l1+" "+l2), " "); got != help {
-		t.Errorf("help text not preserved:\n got %q\nwant %q", got, help)
+	for _, pinLabel := range []string{"Coord Key", "Hub Key"} {
+		help := fieldHelpText(v3netPendingField("Offered", pinLabel, 11, &pin, &pending))
+		if !strings.HasSuffix(help, pinLabel) {
+			t.Errorf("help does not name the %s field: %q", pinLabel, help)
+		}
+		l1, l2 := wrapHelpTwoLines(help, 71) // boxW(70)+1
+		if strings.HasSuffix(l2, "…") || strings.HasSuffix(l1, "…") {
+			t.Errorf("help is truncated: %q | %q", l1, l2)
+		}
+		if got := strings.Join(strings.Fields(l1+" "+l2), " "); got != help {
+			t.Errorf("help text not preserved:\n got %q\nwant %q", got, help)
+		}
 	}
 }
