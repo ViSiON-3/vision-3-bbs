@@ -291,12 +291,13 @@ func v3netPinField(label, help string, row int, pin, pending *string) fieldDef {
 // above (after checking it with the network operator) accepts it.
 func v3netPendingField(label string, row int, pending *string) fieldDef {
 	return fieldDef{
-		Label: label, Help: "Changed key the hub offered, rejected until you paste it into the pinned key above", Type: ftDisplay, Col: 3, Row: row, Width: 49,
+		Label: label, Help: "Read-only: (none) = hub matches the pinned key. A NEW key is rejected; verify it with the hub operator, then paste it into the key above",
+		Type: ftDisplay, Col: 3, Row: row, Width: 49,
 		Get: func() string {
 			if *pending == "" {
-				return "(none)"
+				return "(none) - hub matches pinned key"
 			}
-			return *pending
+			return "NEW: " + *pending
 		},
 	}
 }

@@ -3,6 +3,7 @@ package configeditor
 import (
 	"crypto/ed25519"
 	"encoding/base64"
+	"strings"
 	"testing"
 )
 
@@ -38,7 +39,28 @@ func TestV3NetPinFieldValidatesAndClearsPending(t *testing.T) {
 	}
 
 	g := v3netPendingField("Offered Coord", 11, &pending)
-	if got := g.Get(); got != "(none)" {
+	if got := g.Get(); got != "(none) - hub matches pinned key" {
 		t.Errorf("empty pending shows %q", got)
+	}
+	pending = key
+	if got := g.Get(); got != "NEW: "+key {
+		t.Errorf("offered key shows %q", got)
+	}
+	if n := len(g.Get()); n > g.Width {
+		t.Errorf("offered key display is %d chars, wider than the %d-char field", n, g.Width)
+	}
+}
+
+// The offered-key help explains a read-only warning field; losing its tail
+// to the two-line ellipsis would drop the "paste it into the key" step.
+func TestV3NetPendingFieldHelpFitsTwoLines(t *testing.T) {
+	var pending string
+	help := fieldHelpText(v3netPendingField("Offered Hub", 11, &pending))
+	l1, l2 := wrapHelpTwoLines(help, 71) // boxW(70)+1
+	if strings.HasSuffix(l2, "…") || strings.HasSuffix(l1, "…") {
+		t.Errorf("help is truncated: %q | %q", l1, l2)
+	}
+	if got := strings.Join(strings.Fields(l1+" "+l2), " "); got != help {
+		t.Errorf("help text not preserved:\n got %q\nwant %q", got, help)
 	}
 }
