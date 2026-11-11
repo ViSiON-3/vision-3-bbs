@@ -484,6 +484,11 @@ them with `toastLogon` and `toastLogoff`. They go only to callers online at the
 time, and are dropped if they cannot be shown within a minute. Invisible callers
 are never announced.
 
+[V3Net Central activity alerts](v3net/central.md#activity-alerts) are toasts
+too: logons, logoffs, chat joins and posts on other boards of a network, for
+callers who ask for them. Like announcements they are live only, dropped if
+they cannot be shown within a minute, and never kept for a later login.
+
 `toastEdge`, `toastOffset`, `toastCenter` and `toastCol` set where a toast is drawn, for the
 whole board; in `./config` they are on **System Setup → Toasts**. The offset
 counts rows in from the top or bottom edge, so the default of `bottom` and `0` is
