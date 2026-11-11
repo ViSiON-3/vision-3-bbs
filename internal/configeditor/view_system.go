@@ -8,6 +8,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart/colorpick"
 )
 
 // viewSysConfigEdit renders the system config field editor.
@@ -205,6 +207,19 @@ func (m Model) renderSysField(fieldIdx int, f fieldDef) (string, int) {
 
 	if isActive && m.mode == modeSysConfigField {
 		return fieldLabelStyle.Render(label) + m.textInput.View(), rawW
+	}
+
+	// A ramp shows as its colours, each in itself.
+	if f.Type == ftColorRamp {
+		steps, ok := config.ParseToastFadeColors(value)
+		if !ok {
+			steps, _ = config.ParseToastFadeColors(config.DefaultToastFadeColors)
+		}
+		swatches := rampSwatches(steps, 0, false, colorpick.Styles{Text: fieldDisplayStyle, Button: fieldDisplayStyle, Active: fieldDisplayStyle})
+		if isActive && m.mode == modeSysConfigEdit {
+			swatches += fieldEditStyle.Render(" Enter to edit ")
+		}
+		return fieldLabelStyle.Render(label) + swatches, rawW
 	}
 
 	displayValue := padRight(value, f.Width)

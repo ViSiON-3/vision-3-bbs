@@ -17,6 +17,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringformat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart/colorpick"
 )
 
 const (
@@ -124,9 +125,7 @@ type Model struct {
 
 	// Colour picker (picker.go): the chosen foreground 0-15, the chosen
 	// background 0-7 or pickerNoBG, and which row the cursor is on.
-	pickFG  int
-	pickBG  int
-	pickRow int
+	pick colorpick.Picker
 
 	// Search
 	searchInput textinput.Model
@@ -194,8 +193,7 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 		textInput:       ti,
 		searchInput:     si,
 		confirmYes:      false,
-		pickFG:          dosWhite,
-		pickBG:          pickerNoBG,
+		pick:            colorpick.New(dosWhite, false),
 		backdrop:        tuiart.Shaded(minWidth, minHeight),
 	}
 	m.rebuildEntries()

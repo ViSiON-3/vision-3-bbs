@@ -13,24 +13,20 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart/colorpick"
 )
 
-const (
-	// pickerRowFG and pickerRowBG name the two swatch rows.
-	pickerRowFG = 0
-	pickerRowBG = 1
-	// pickerNoBG is the background choice that inserts no background code.
-	pickerNoBG = -1
-	// pickerSample is the text the dialog previews in the chosen colours.
-	pickerSample = "The quick brown fox"
-)
+// pickerNoBG is the background choice that inserts no background code.
+const pickerNoBG = colorpick.NoBG
+
+// pickerSample is the text the dialog previews in the chosen colours.
+const pickerSample = "The quick brown fox"
 
 // openPicker enters the picker from edit mode. The last choice is kept
 // between openings, so inserting the same colour twice is two keystrokes.
 func (m Model) openPicker() (tea.Model, tea.Cmd) {
 	m.mode = modePicker
-	m.pickRow = pickerRowFG
+	m.pick.Row = colorpick.RowFG
 	return m, nil
 }
 
@@ -38,21 +34,10 @@ func (m Model) openPicker() (tea.Model, tea.Cmd) {
 // row, Up and Down (or Tab) switch rows, Enter inserts the chosen codes and
 // Esc returns to the input with its value as it was.
 func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.pick.Key(msg) {
+		return m, nil
+	}
 	switch msg.Type {
-	case tea.KeyLeft:
-		if m.pickRow == pickerRowFG {
-			m.pickFG = (m.pickFG + 15) % 16
-		} else {
-			m.pickBG = wrapBG(m.pickBG - 1)
-		}
-	case tea.KeyRight:
-		if m.pickRow == pickerRowFG {
-			m.pickFG = (m.pickFG + 1) % 16
-		} else {
-			m.pickBG = wrapBG(m.pickBG + 1)
-		}
-	case tea.KeyUp, tea.KeyDown, tea.KeyTab:
-		m.pickRow = 1 - m.pickRow
 	case tea.KeyEnter:
 		code, ok := m.pickerCodeBefore(m.runeAfterCursor())
 		if !ok {
@@ -60,7 +45,7 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// has no safe form; say so and leave the input as it was.
 			m.mode = modeEdit
 			m.editErr = fmt.Sprintf("%s before the digit %c would read as |B%d%c; move the cursor or type a space first",
-				code, m.runeAfterCursor(), m.pickBG, m.runeAfterCursor())
+				code, m.runeAfterCursor(), m.pick.BG, m.runeAfterCursor())
 			return m, nil
 		}
 		m.insertAtCursor(code)
@@ -70,17 +55,6 @@ func (m Model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeEdit
 	}
 	return m, nil
-}
-
-// wrapBG keeps a background choice within pickerNoBG..7, wrapping at the ends.
-func wrapBG(n int) int {
-	if n < pickerNoBG {
-		return 7
-	}
-	if n > 7 {
-		return pickerNoBG
-	}
-	return n
 }
 
 // pickerCode is the text Enter inserts: the foreground code, then the
@@ -101,15 +75,15 @@ func (m Model) pickerCode() string {
 // no safe form before such a digit: ok is false and the code is for the
 // message only.
 func (m Model) pickerCodeBefore(next rune) (code string, ok bool) {
-	fg := fmt.Sprintf("|%02d", m.pickFG)
-	if m.pickBG == pickerNoBG {
+	fg := fmt.Sprintf("|%02d", m.pick.FG)
+	if m.pick.BG == pickerNoBG {
 		return fg, true
 	}
-	bg := fmt.Sprintf("|B%d", m.pickBG)
+	bg := fmt.Sprintf("|B%d", m.pick.BG)
 	if next < '0' || next > '5' {
 		return fg + bg, true
 	}
-	if m.pickFG >= 8 {
+	if m.pick.FG >= 8 {
 		return bg + fg, true
 	}
 	return fg + bg, false
@@ -143,7 +117,7 @@ func (m *Model) insertAtCursor(s string) {
 
 // pickerWidth is the dialog's outer width: sixteen four-cell swatches inside
 // the border, which also fits the nine background cells and the sample.
-const pickerWidth = 16*4 + 2
+const pickerWidth = colorpick.Width
 
 // overlayPicker draws the picker dialog centred over the rendered screen.
 func (m Model) overlayPicker(background string) string {
@@ -160,23 +134,16 @@ func (m Model) overlayPicker(background string) string {
 		return row(dialogTextStyle.Render(strings.Repeat(" ", pad)) + text)
 	}
 
-	var fg strings.Builder
-	for n := 0; n < 16; n++ {
-		fg.WriteString(pickerSwatch(fmt.Sprintf("%02d", n), swatchStyleFG(n), m.pickRow == pickerRowFG && m.pickFG == n))
-	}
-	var bg strings.Builder
-	bg.WriteString(pickerSwatch("--", dialogButtonStyle, m.pickRow == pickerRowBG && m.pickBG == pickerNoBG))
-	for n := 0; n < 8; n++ {
-		bg.WriteString(pickerSwatch(fmt.Sprintf("B%d", n), tuiart.Color(bgCodeToDOS[n], dosWhite), m.pickRow == pickerRowBG && m.pickBG == n))
-	}
+	st := pickerStyles()
+	fg, bg := m.pick.FGRow(st), m.pick.BGRow(st)
 	code := m.pickerCode()
 	sample := dialogTextStyle.Render(code+" ") + RenderColorString(code+pickerSample, inner-len(code)-1)
 
 	lines := []string{
 		dialogBorderStyle.Render("╔" + strings.Repeat("═", inner) + "╗"),
 		center(dialogTextStyle.Render("Insert Colour")),
-		row(fg.String()),
-		row(bg.String()),
+		row(fg),
+		row(bg),
 		row(sample),
 		center(dialogTextStyle.Render("←→ colour   ↑↓ row   Enter insert   Esc cancel")),
 		dialogBorderStyle.Render("╚" + strings.Repeat("═", inner) + "╝"),
@@ -184,20 +151,7 @@ func (m Model) overlayPicker(background string) string {
 	return m.composeOverlay(background, lines, pickerWidth)
 }
 
-// pickerSwatch draws one four-cell swatch: the code in its colour, in
-// brackets when it is the selected cell.
-func pickerSwatch(code string, style interface{ Render(...string) string }, selected bool) string {
-	if selected {
-		return dialogButtonActiveStyle.Render("[") + style.Render(code) + dialogButtonActiveStyle.Render("]")
-	}
-	return dialogTextStyle.Render(" ") + style.Render(code) + dialogTextStyle.Render(" ")
-}
-
-// swatchStyleFG draws foreground colour n on black, as the list preview
-// does; black itself sits on dark gray so it can be seen.
-func swatchStyleFG(n int) interface{ Render(...string) string } {
-	if n == dosBlack {
-		return tuiart.Color(dosDarkGray, dosBlack)
-	}
-	return tuiart.Color(dosBlack, n)
+// pickerStyles are this editor's dialog colours, for the shared picker.
+func pickerStyles() colorpick.Styles {
+	return colorpick.Styles{Text: dialogTextStyle, Button: dialogButtonStyle, Active: dialogButtonActiveStyle}
 }

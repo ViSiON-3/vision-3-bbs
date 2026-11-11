@@ -68,6 +68,7 @@ const (
 	modeQWKConfFetching                          // Progress state while the hub's conference list downloads
 	modeQWKWizardPicker                          // Add-new vs edit-existing choice on QWK wizard entry
 	modeAreaSyncConfirm                          // Apply an Auto-Create change to the network's existing areas
+	modeColorRamp                                // Colour ramp editor over the edit screen (color_ramp.go)
 )
 
 // topMenuItem defines an entry in the top-level menu.
@@ -210,6 +211,7 @@ type Model struct {
 	pickerCursor     int          // highlighted item
 	pickerScroll     int          // scroll offset
 	pickerReturnMode editorMode   // mode to return to on cancel/select
+	ramp             rampEditor   // colour ramp editor state (color_ramp.go)
 
 	// Confirm dialog
 	confirmYes        bool
@@ -473,6 +475,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case qwkConfsMsg:
 		return m.handleQWKConfsMsg(msg)
 
+	case rampTickMsg:
+		return m.handleRampTick(msg)
+
 	case tea.KeyMsg:
 		if m.splashActive {
 			m.splashActive = false
@@ -505,6 +510,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			result, cmd = m.updateConfirm(msg)
 		case modeLookupPicker:
 			result, cmd = m.updateLookupPicker(msg)
+		case modeColorRamp:
+			result, cmd = m.updateColorRamp(msg)
 		case modeHelp:
 			result, cmd = m.updateHelp(msg)
 		case modeWizardForm:

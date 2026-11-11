@@ -83,6 +83,9 @@ func (m Model) updateSysConfigEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.toggleSysYesNo(f)
 			return m, nil
 		}
+		if f.Type == ftColorRamp {
+			return m.startRampEdit(f)
+		}
 		return m.startSysFieldEdit()
 
 	case tea.KeySpace:

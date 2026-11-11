@@ -509,6 +509,21 @@ too: logons, logoffs, chat joins and posts on other boards of a network, for
 callers who ask for them. Like announcements they are live only, dropped if
 they cannot be shown within a minute, and never kept for a later login.
 
+A toast drawn over the screen can fade in and out instead of appearing and
+vanishing at once. Turn it on with `toastFade` (**Toast Fade** on **System Setup
+→ Toasts**). The toast then comes in through the theme's colour ramp, shows in
+its own colours, and goes out through the ramp reversed before the row is put
+back. The ramp is `toastFadeColors` in the menu set's `theme.json`: dark gray,
+light gray, white (`8,7,15`) unless the set chooses otherwise. Edit it under
+**Theme → Toasts → Fade Colors**, where Enter opens the ramp with the same
+colour picker the string editor uses, plays a preview, and lets you add, remove
+and reorder steps. `toastFadeMs` (**Fade Step ms**) sets how long each colour
+shows. The fade comes out of the toast's usual 5 seconds, not on top of them,
+and a toast with too little time for it just appears. A key pressed during the
+fade stops it, puts the row back at once, and reaches the screen as usual.
+Toasts written as lines (teleconference) or inline (at a prompt or login) never
+fade.
+
 `toastEdge`, `toastOffset`, `toastCenter` and `toastCol` set where a toast is drawn, for the
 whole board; in `./config` they are on **System Setup → Toasts**. The offset
 counts rows in from the top or bottom edge, so the default of `bottom` and `0` is

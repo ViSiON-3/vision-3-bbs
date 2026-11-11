@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,6 +24,7 @@ func themeMenuItems() []sysConfigMenuItem {
 		{Label: "Split-Screen Chat", Build: func(m *Model) []fieldDef {
 			return themeFieldsChat(&m.configs.Theme, func() []themeChatScreen { return themeChatScreens(m.configPath) })
 		}},
+		{Label: "Toasts", Build: func(m *Model) []fieldDef { return themeFieldsToasts(&m.configs.Theme) }},
 	}
 }
 
@@ -148,4 +150,23 @@ func themeChatScreens(configPath string) []themeChatScreen {
 		screens = append(screens, sc)
 	}
 	return screens
+}
+
+// themeFieldsToasts edits the theme's toast settings: the colours a toast
+// fades through when the board has fading on (System Setup -> Toasts).
+func themeFieldsToasts(th *config.ThemeConfig) []fieldDef {
+	return []fieldDef{
+		{
+			Label: "Fade Colors", Help: "Colours a toast fades in through, and out through in reverse, when Toast Fade is on; Enter edits them with the colour picker",
+			Type: ftColorRamp, Col: 3, Row: 1, Width: 4 * config.MaxToastFadeSteps,
+			Get: func() string { return config.FormatToastFadeColors(th.FadeColors()) },
+			Set: func(val string) error {
+				if _, ok := config.ParseToastFadeColors(val); !ok {
+					return fmt.Errorf("1 to %d colours 0-15", config.MaxToastFadeSteps)
+				}
+				th.ToastFadeColors = val
+				return nil
+			},
+		},
+	}
 }

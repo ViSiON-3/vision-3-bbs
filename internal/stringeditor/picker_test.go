@@ -57,7 +57,7 @@ func TestPickerBeforeDigit(t *testing.T) {
 		m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 		m = key(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(string(d))})
 		m = key(t, m, tea.KeyMsg{Type: tea.KeyHome})
-		m.pickFG, m.pickBG = 15, 1
+		m.pick.FG, m.pick.BG = 15, 1
 		m = key(t, m, tea.KeyMsg{Type: tea.KeyF2})
 		m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 		want := "|B1|15" + string(d)
@@ -74,7 +74,7 @@ func TestPickerBeforeDigit(t *testing.T) {
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("7")})
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyHome})
-	m.pickFG, m.pickBG = 15, 1
+	m.pick.FG, m.pick.BG = 15, 1
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyF2})
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if got := m.textInput.Value(); got != "|15|B17" {
@@ -85,7 +85,7 @@ func TestPickerBeforeDigit(t *testing.T) {
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("0")})
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyHome})
-	m.pickFG, m.pickBG = 4, 1
+	m.pick.FG, m.pick.BG = 4, 1
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyF2})
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if m.mode != modeEdit || m.textInput.Value() != "0" || !strings.Contains(m.editErr, "|B10") {
@@ -98,7 +98,7 @@ func TestPickerBeforeDigit(t *testing.T) {
 // come before the background.
 func TestPickerCodeSurvivesRendering(t *testing.T) {
 	m := newTestModel(t)
-	m.pickFG, m.pickBG = 4, 2 // |04 expands to ESC[0;31m
+	m.pick.FG, m.pick.BG = 4, 2 // |04 expands to ESC[0;31m
 	out := string(ansi.ReplacePipeCodes([]byte(m.pickerCode() + "x")))
 	if !strings.HasSuffix(out, "\x1b[42mx") {
 		t.Errorf("rendered %q: background lost", out)
@@ -141,17 +141,17 @@ func TestPickerWraps(t *testing.T) {
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyF2})
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyRight}) // 15 -> 0
-	if m.pickFG != 0 {
-		t.Errorf("fg after wrap = %d, want 0", m.pickFG)
+	if m.pick.FG != 0 {
+		t.Errorf("fg after wrap = %d, want 0", m.pick.FG)
 	}
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyTab})
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyLeft}) // none -> B7
-	if m.pickBG != 7 {
-		t.Errorf("bg after wrap = %d, want 7", m.pickBG)
+	if m.pick.BG != 7 {
+		t.Errorf("bg after wrap = %d, want 7", m.pick.BG)
 	}
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyRight}) // B7 -> none
-	if m.pickBG != pickerNoBG {
-		t.Errorf("bg after wrap = %d, want none", m.pickBG)
+	if m.pick.BG != pickerNoBG {
+		t.Errorf("bg after wrap = %d, want none", m.pick.BG)
 	}
 }
 

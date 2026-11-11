@@ -11,11 +11,12 @@ import (
 type fieldType int
 
 const (
-	ftString  fieldType = iota // Free-text string input
-	ftInteger                  // Integer with min/max validation
-	ftYesNo                    // Y/N boolean toggle
-	ftDisplay                  // Read-only display
-	ftLookup                   // Lookup picker (select from list)
+	ftString    fieldType = iota // Free-text string input
+	ftInteger                    // Integer with min/max validation
+	ftYesNo                      // Y/N boolean toggle
+	ftDisplay                    // Read-only display
+	ftLookup                     // Lookup picker (select from list)
+	ftColorRamp                  // Colour ramp, edited in the ramp editor (color_ramp.go)
 )
 
 // LookupItem represents a selectable item in a lookup picker.
