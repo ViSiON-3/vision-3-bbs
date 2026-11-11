@@ -26,8 +26,10 @@ func (fm *FileManager) GetFileRecordByID(fileID uuid.UUID) (*FileRecord, error) 
 	return nil, fmt.Errorf("file record with ID %s not found", fileID)
 }
 
-// SearchFiles returns file records whose filename or description contains
-// query (case-insensitive) across all areas.
+// SearchFiles returns file records whose filename, description or uploader's
+// handle contains query (case-insensitive) across all areas. The uploader is
+// matched as ViSiON/2's file search did, so a handle finds that caller's
+// uploads.
 func (fm *FileManager) SearchFiles(query string) []FileRecord {
 	fm.refreshAll()
 	fm.muFiles.RLock()
@@ -38,7 +40,8 @@ func (fm *FileManager) SearchFiles(query string) []FileRecord {
 	for _, records := range fm.fileRecords {
 		for _, rec := range records {
 			if strings.Contains(strings.ToLower(rec.Filename), lowerQuery) ||
-				strings.Contains(strings.ToLower(rec.Description), lowerQuery) {
+				strings.Contains(strings.ToLower(rec.Description), lowerQuery) ||
+				strings.Contains(strings.ToLower(rec.UploadedBy), lowerQuery) {
 				results = append(results, rec)
 			}
 		}

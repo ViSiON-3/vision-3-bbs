@@ -220,6 +220,8 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["DOWNLOADFILE"] = runDownloadFile                       // V2-style download: prompt, add to batch, transfer
 	registry["BATCHDOWNLOAD"] = runBatchDownload                     // Download tagged batch files
 	registry["CLEAR_BATCH"] = runClearBatch                          // Clear tagged file batch queue
+	registry["REMOVEFROMBATCH"] = runRemoveFromBatch                 // Take one file off the batch (V2 FR)
+	registry["EDITUPLOAD"] = runEditUpload                           // Edit the description of your own upload (V2 FE)
 	registry["SEARCH_FILES"] = runSearchFiles                        // Search files across all areas
 	registry["SHOWFILEINFO"] = runShowFileInfo                       // Show file metadata
 	registry["FILE_NEWSCAN"] = runFileNewscan                        // Scan file areas for new uploads
