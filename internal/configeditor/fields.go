@@ -17,6 +17,7 @@ const (
 	ftDisplay                    // Read-only display
 	ftLookup                     // Lookup picker (select from list)
 	ftColorRamp                  // Colour ramp, edited in the ramp editor (color_ramp.go)
+	ftColorAttr                  // DOS colour attribute 0-255, picked in color_attr.go
 )
 
 // LookupItem represents a selectable item in a lookup picker.

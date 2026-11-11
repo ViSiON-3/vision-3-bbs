@@ -49,10 +49,12 @@ type Styles struct {
 }
 
 // Picker is a colour choice: FG 0-15, BG 0-7 or NoBG, and the row the cursor
-// is on. With FGOnly there is no background row.
+// is on. With FGOnly there is no background row; with BGRequired the
+// background row has no "none" and BG is always 0-7.
 type Picker struct {
 	FG, BG, Row int
 	FGOnly      bool
+	BGRequired  bool
 }
 
 // New returns a picker on foreground fg with no background.
@@ -68,13 +70,13 @@ func (p *Picker) Key(msg tea.KeyMsg) bool {
 		if p.Row == RowFG {
 			p.FG = (p.FG + 15) % 16
 		} else {
-			p.BG = wrapBG(p.BG - 1)
+			p.BG = p.wrapBG(p.BG - 1)
 		}
 	case tea.KeyRight:
 		if p.Row == RowFG {
 			p.FG = (p.FG + 1) % 16
 		} else {
-			p.BG = wrapBG(p.BG + 1)
+			p.BG = p.wrapBG(p.BG + 1)
 		}
 	case tea.KeyUp, tea.KeyDown, tea.KeyTab:
 		if !p.FGOnly {
@@ -86,23 +88,29 @@ func (p *Picker) Key(msg tea.KeyMsg) bool {
 	return true
 }
 
-// wrapBG keeps a background choice within NoBG..7, wrapping at the ends.
-func wrapBG(n int) int {
-	if n < NoBG {
+// wrapBG keeps a background choice within NoBG..7 (0..7 with
+// BGRequired), wrapping at the ends.
+func (p Picker) wrapBG(n int) int {
+	lo := NoBG
+	if p.BGRequired {
+		lo = 0
+	}
+	if n < lo {
 		return 7
 	}
 	if n > 7 {
-		return NoBG
+		return lo
 	}
 	return n
 }
 
 // FGRow draws the sixteen foreground swatches, the chosen one bracketed
-// while the cursor is on the row.
+// while the cursor is on the row (on either row with BGRequired, where both
+// choices make up the value).
 func (p Picker) FGRow(st Styles) string {
 	var b strings.Builder
 	for n := 0; n < 16; n++ {
-		b.WriteString(Swatch(fmt.Sprintf("%02d", n), FGStyle(n), p.Row == RowFG && p.FG == n, st))
+		b.WriteString(Swatch(fmt.Sprintf("%02d", n), FGStyle(n), (p.Row == RowFG || p.BGRequired) && p.FG == n, st))
 	}
 	return b.String()
 }
@@ -110,9 +118,11 @@ func (p Picker) FGRow(st Styles) string {
 // BGRow draws "no background" and the eight background swatches.
 func (p Picker) BGRow(st Styles) string {
 	var b strings.Builder
-	b.WriteString(Swatch("--", st.Button, p.Row == RowBG && p.BG == NoBG, st))
+	if !p.BGRequired {
+		b.WriteString(Swatch("--", st.Button, p.Row == RowBG && p.BG == NoBG, st))
+	}
 	for n := 0; n < 8; n++ {
-		b.WriteString(Swatch(fmt.Sprintf("B%d", n), BGStyle(n), p.Row == RowBG && p.BG == n, st))
+		b.WriteString(Swatch(fmt.Sprintf("B%d", n), BGStyle(n), (p.Row == RowBG || p.BGRequired) && p.BG == n, st))
 	}
 	return b.String()
 }
@@ -138,4 +148,33 @@ func FGStyle(n int) lipgloss.Style {
 // BGStyle draws background code |Bn behind white.
 func BGStyle(n int) lipgloss.Style {
 	return tuiart.Color(bgToDOS[n], dosWhite)
+}
+
+// BGToDOS returns the DOS colour of background code |Bn.
+func BGToDOS(n int) int { return bgToDOS[n&7] }
+
+// DOSToBG returns the background code |Bn that draws DOS colour d (0-7).
+func DOSToBG(d int) int {
+	for n, c := range bgToDOS {
+		if c == d&7 {
+			return n
+		}
+	}
+	return 0
+}
+
+// FromAttr returns a picker on a DOS text attribute (bg*16 + fg), with a
+// required background.
+func FromAttr(attr int) Picker {
+	return Picker{FG: attr & 0x0F, BG: DOSToBG((attr >> 4) & 0x07), BGRequired: true}
+}
+
+// Attr returns the picker's choice as a DOS text attribute, keeping the
+// blink bit (0x80) of was, which the picker does not offer.
+func (p Picker) Attr(was int) int {
+	bg := 0
+	if p.BG != NoBG {
+		bg = BGToDOS(p.BG)
+	}
+	return (was & 0x80) | bg<<4 | p.FG&0x0F
 }
