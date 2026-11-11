@@ -123,6 +123,9 @@ func TestSSHAuthLockoutDuringCheck(t *testing.T) {
 	if locked, _, _ := ct.IsIPLockedOut(ip); !locked {
 		t.Error("the lockout started during the check was cleared")
 	}
+	if u, _ := um.GetUser("TestUser"); u.TimesCalled != 0 || !u.LastLogin.IsZero() {
+		t.Errorf("a call was recorded for a login that was turned away: TimesCalled %d, LastLogin %v", u.TimesCalled, u.LastLogin)
+	}
 }
 
 // AdmitLogin clears an IP's failed attempts unless it is locked out, which

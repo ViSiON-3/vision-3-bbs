@@ -101,8 +101,9 @@ func sshPreAuthenticate(um *user.UserMgr, ct *ConnectionTracker, username, passw
 			return nil
 		}
 	}
-	authedUser, ok := um.Authenticate(username, password)
-	if !ok {
+	// Only the password here: the call is recorded (BeginSession) once the
+	// login is admitted below, so a caller turned away isn't counted.
+	if !um.VerifyPassword(username, password) {
 		slog.Info("SSH password mismatch, deferring to BBS login", "user", username, "ip", ip)
 		if ct != nil && password != "" {
 			ct.RecordFailedLoginAttempt(ip)
@@ -115,6 +116,10 @@ func sshPreAuthenticate(um *user.UserMgr, ct *ConnectionTracker, username, passw
 	if ct != nil && !ct.AdmitLogin(ip) {
 		logging.Security("SSH login from IP locked out during the password check, deferring to BBS login",
 			"user", username, "ip", ip)
+		return nil
+	}
+	authedUser, ok := um.BeginSession(username)
+	if !ok {
 		return nil
 	}
 	slog.Info("SSH pre-authenticated user", "user", username, "ip", ip)
