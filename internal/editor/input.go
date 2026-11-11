@@ -306,11 +306,11 @@ func (ih *InputHandler) WaitForInput(d time.Duration) bool {
 type WaitOutcome int
 
 const (
-	// WaitInput: input came (or the connection closed), left to be read.
+	// WaitInput means input came (or the connection closed), left to be read.
 	WaitInput WaitOutcome = iota
-	// WaitElapsed: the whole wait passed with nothing.
+	// WaitElapsed means the whole wait passed with nothing.
 	WaitElapsed
-	// WaitInterrupted: a break-in or an Interrupt ended the wait early; the
+	// WaitInterrupted means a break-in or an Interrupt ended the wait early; the
 	// caller should hand the screen back to its owner at once.
 	WaitInterrupted
 )
