@@ -164,15 +164,17 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	if limit > 0 && limit < dwell {
 		dwell = limit
 	}
+	// Everything below, frames and waits alike, ends by this deadline, so
+	// slow output cannot stretch a toast past the read's own limit.
+	deadline := time.Now().Add(dwell)
 	// A fading toast comes in and goes out through the theme's ramp, inside
 	// the same dwell; one too short for the fade, or with fading off, just
 	// appears and goes.
 	ramp, step := e.toastFade()
 	if fadeTime := time.Duration(2*len(ramp)) * step; len(ramp) == 0 || fadeTime >= dwell {
 		ramp = nil
-	} else {
-		dwell -= fadeTime
 	}
+	fadeOut := time.Duration(len(ramp)) * step
 	lay := e.toastLayout(s, sess, t)
 	first := lay.line
 	if len(ramp) > 0 {
@@ -192,11 +194,14 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	// A key, or a sysop's chat request or a window change (which the read
 	// services once this returns), ends any wait here: the fade stops where
 	// it is and the row goes straight back.
-	ended := fadeToast(ih, lay, w, ramp, step, true)
-	if ended == editor.WaitElapsed && (len(ramp) == 0 || lay.write(w, lay.line) == nil) {
-		ended = ih.WaitFor(dwell)
+	ended := fadeToast(ih, lay, w, ramp, step, true, deadline)
+	if ended == editor.WaitElapsed && time.Until(deadline) > 0 && (len(ramp) == 0 || lay.write(w, lay.line) == nil) {
+		// Hold for what is left, keeping the fade-out's share.
+		if hold := time.Until(deadline) - fadeOut; hold > 0 {
+			ended = ih.WaitFor(hold)
+		}
 		if ended == editor.WaitElapsed {
-			ended = fadeToast(ih, lay, w, reversed(ramp), step, false)
+			ended = fadeToast(ih, lay, w, reversed(ramp), step, false, deadline)
 		}
 	}
 	keyed := ended == editor.WaitInput
@@ -468,18 +473,23 @@ func (e *MenuExecutor) toastFade() (ramp []int, step time.Duration) {
 }
 
 // fadeToast draws lay through ramp, step apart, and reports what ended it:
-// WaitElapsed when it ran to the end, or the key or interruption that cut it
-// short. drawn says the first step is on screen already. An empty ramp draws
-// nothing. A write that fails ends it as an interruption, so the caller
-// restores the row.
-func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, step time.Duration, drawn bool) editor.WaitOutcome {
+// WaitElapsed when it ran to the end or reached deadline, or the key or
+// interruption that cut it short. No frame is drawn, and no wait runs, past
+// deadline. drawn says the first step is on screen already. An empty ramp
+// draws nothing. A write that fails ends it as an interruption, so the
+// caller restores the row.
+func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, step time.Duration, drawn bool, deadline time.Time) editor.WaitOutcome {
 	for i, c := range ramp {
+		left := time.Until(deadline)
+		if left <= 0 {
+			return editor.WaitElapsed
+		}
 		if i > 0 || !drawn {
 			if lay.write(w, lay.frame(c)) != nil {
 				return editor.WaitInterrupted
 			}
 		}
-		if out := ih.WaitFor(step); out != editor.WaitElapsed {
+		if out := ih.WaitFor(min(step, left)); out != editor.WaitElapsed {
 			return out
 		}
 	}

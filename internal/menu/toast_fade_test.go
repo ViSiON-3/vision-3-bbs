@@ -172,3 +172,33 @@ func TestToastFadeStopsOnInterrupt(t *testing.T) {
 		t.Errorf("fade went on after the interruption:\n%q", got)
 	}
 }
+
+// slowWriter delays every write, as a slow link does.
+type slowWriter struct {
+	*wireLog
+	delay time.Duration
+}
+
+func (s slowWriter) Write(p []byte) (int, error) {
+	time.Sleep(s.delay)
+	return s.wireLog.Write(p)
+}
+
+// Slow output does not stretch a fading toast past its dwell: the frames
+// and waits share one deadline, so the row is back about when the dwell
+// says, however long each write takes.
+func TestToastFadeKeepsToDeadline(t *testing.T) {
+	env, log := fadeEnv(t, true, 50*time.Millisecond)
+	toastDwell = 600 * time.Millisecond
+	SetSessionOutput(env.s, slowWriter{wireLog: log, delay: 80 * time.Millisecond})
+	env.readKey()
+	start := time.Now()
+	env.sess.AddPage("Hello there")
+	toastWaitFor(t, "the toast drawn", func() bool { return strings.Contains(log.String(), "Hello there") })
+	toastWaitFor(t, "the screen restored", func() bool { return strings.Contains(env.term.Row(24), "BOTTOM TEXT") })
+	// Six frames and a hold at 80ms a write would run well over a second
+	// without the deadline; with it, the dwell plus one slow write or two.
+	if took := time.Since(start); took > 900*time.Millisecond {
+		t.Errorf("toast took %s against a 600ms dwell", took)
+	}
+}
