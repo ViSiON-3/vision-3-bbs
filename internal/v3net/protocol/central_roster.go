@@ -86,15 +86,20 @@ type CentralRosterMember struct {
 // coordinator's stored roster, so two edits made from the same roster
 // cannot silently undo each other. Every field but SignatureB64 is covered.
 type CentralRoster struct {
-	V3NetCentral   string                `json:"v3net_central"`
-	Network        string                `json:"network"`
-	CoordNodeID    string                `json:"coordinator_node_id"`
-	CoordPubKeyB64 string                `json:"coordinator_pubkey_b64"`
-	Seq            int64                 `json:"seq"`
-	PrevSeq        int64                 `json:"prev_seq"`
-	Members        []CentralRosterMember `json:"members"`
-	PublishedAt    string                `json:"published_at"`
-	SignatureB64   string                `json:"signature_b64,omitempty"`
+	V3NetCentral   string `json:"v3net_central"`
+	Network        string `json:"network"`
+	CoordNodeID    string `json:"coordinator_node_id"`
+	CoordPubKeyB64 string `json:"coordinator_pubkey_b64"`
+	Seq            int64  `json:"seq"`
+	PrevSeq        int64  `json:"prev_seq"`
+	// Open says the coordinator has opened the network again: boards that
+	// take this roster stop filtering by it, and show every board, while
+	// keeping it so that no older, filtering roster can be put back.
+	// Members stay as the coordinator left them, for closing it again.
+	Open         bool                  `json:"open,omitempty"`
+	Members      []CentralRosterMember `json:"members"`
+	PublishedAt  string                `json:"published_at"`
+	SignatureB64 string                `json:"signature_b64,omitempty"`
 }
 
 // canonicalCentralRoster and canonicalRosterMember are the signed forms,
@@ -109,6 +114,7 @@ type canonicalCentralRoster struct {
 	CoordPubKeyB64 string                  `json:"coordinator_pubkey_b64"`
 	Members        []canonicalRosterMember `json:"members"`
 	Network        string                  `json:"network"`
+	Open           bool                    `json:"open,omitempty"` // only when set, so a closed roster signs as before
 	PrevSeq        int64                   `json:"prev_seq"`
 	PublishedAt    string                  `json:"published_at"`
 	Seq            int64                   `json:"seq"`
@@ -128,6 +134,7 @@ func (r *CentralRoster) SignedPayload() ([]byte, error) {
 		CoordPubKeyB64: r.CoordPubKeyB64,
 		Members:        members,
 		Network:        r.Network,
+		Open:           r.Open,
 		PrevSeq:        r.PrevSeq,
 		PublishedAt:    r.PublishedAt,
 		Seq:            r.Seq,
@@ -251,9 +258,13 @@ func (r *CentralRoster) Validate(network string) error {
 	return nil
 }
 
-// Admits reports whether the roster names the board with this public key
-// (standard base64) and node ID.
+// Admits reports whether the roster admits the board with this public key
+// (standard base64) and node ID: it names that board with that key, or it
+// is open.
 func (r *CentralRoster) Admits(nodeID, pubKeyB64 string) bool {
+	if r.Open {
+		return true
+	}
 	for _, m := range r.Members {
 		if m.NodeID == nodeID && m.PubKeyB64 == pubKeyB64 {
 			return true

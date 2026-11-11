@@ -95,3 +95,47 @@ func TestCentralRosterValidate(t *testing.T) {
 		t.Error("a bad key made a member")
 	}
 }
+
+// An open roster admits every board, and its flag is signed: a hub cannot
+// open or close a roster the coordinator signed.
+func TestCentralRosterOpen(t *testing.T) {
+	coord, a, c := activityKS(t), activityKS(t), activityKS(t)
+	r := rosterOf(t, 2, a)
+	r.PrevSeq, r.Open = 1, true
+	if err := r.Sign(coord); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Verify(); err != nil {
+		t.Fatal(err)
+	}
+	if !r.Admits(c.NodeID(), c.PubKeyBase64()) {
+		t.Error("an open roster refused a board")
+	}
+	flipped := *r
+	flipped.Open = false
+	if flipped.Verify() == nil {
+		t.Error("closing a signed open roster still verifies")
+	}
+	closed := rosterOf(t, 3, a)
+	closed.PrevSeq = 2
+	_ = closed.Sign(coord)
+	opened := *closed
+	opened.Open = true
+	if opened.Verify() == nil {
+		t.Error("opening a signed closed roster still verifies")
+	}
+}
+
+// A closed roster signs exactly as before the open flag existed, so boards
+// that predate it still verify it.
+func TestCentralRosterClosedSignsAsBefore(t *testing.T) {
+	coord, a := activityKS(t), activityKS(t)
+	r := rosterOf(t, 1, a)
+	if err := r.Sign(coord); err != nil {
+		t.Fatal(err)
+	}
+	payload, _ := r.SignedPayload()
+	if strings.Contains(string(payload), "open") {
+		t.Errorf("closed roster's payload names open: %s", payload)
+	}
+}

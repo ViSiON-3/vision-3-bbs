@@ -87,7 +87,7 @@ func TestRosterFiltersCentral(t *testing.T) {
 	}
 
 	// The coordinator admits Alpha and Beta, not Gamma.
-	if _, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha), memberOf(beta)}); err != nil {
+	if _, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha), memberOf(beta)}, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := beta.fetchRoster(context.Background()); err != nil {
@@ -133,7 +133,7 @@ func TestRosterTrustAndKeeping(t *testing.T) {
 	alpha.cfg.RosterPath = path
 	pinCoord(t, alpha, hubKS)
 
-	first, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)})
+	first, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,12 +216,12 @@ func TestRosterUpdateDuringFetchNotLost(t *testing.T) {
 	}
 	alpha.rosterState.fetching, alpha.rosterState.again = false, false
 
-	first, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)})
+	first, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	alpha.refreshRosterSoon(context.Background())
-	second, err := coord.PublishRoster(context.Background(), first.Seq, nil)
+	second, err := coord.PublishRoster(context.Background(), first.Seq, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +239,7 @@ func TestRosterRetriedAfterPinMoves(t *testing.T) {
 	stale := subscribedLeaf(t, ts, "OldCoord")
 	pinCoord(t, alpha, stale.cfg.Keystore) // pinned to the coordinator before the handover
 
-	r, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)})
+	r, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestRosterUnsavedRetried(t *testing.T) {
 	alpha.cfg.RosterPath = filepath.Join(blocker, "testnet.json")
 	pinCoord(t, alpha, hubKS)
 
-	r, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)})
+	r, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,12 +299,12 @@ func TestPublishRosterChangedSinceEdit(t *testing.T) {
 	coord := coordLeaf(t, ts, hubKS)
 	alpha := subscribedLeaf(t, ts, "Alpha")
 
-	first, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)})
+	first, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Another session, still showing no roster, edits from nothing.
-	if _, err := coord.PublishRoster(context.Background(), 0, nil); !errors.Is(err, ErrRosterChanged) {
+	if _, err := coord.PublishRoster(context.Background(), 0, nil, false); !errors.Is(err, ErrRosterChanged) {
 		t.Errorf("edit from a stale view: %v, want ErrRosterChanged", err)
 	}
 	// A second coordinator session that never fetched sees the hub's roster
@@ -312,10 +312,10 @@ func TestPublishRosterChangedSinceEdit(t *testing.T) {
 	other := New(coord.cfg)
 	other.noteHubFeatures([]string{protocol.FeatureCentralRoster})
 	pinCoord(t, other, hubKS)
-	if _, err := other.PublishRoster(context.Background(), 0, nil); !errors.Is(err, ErrRosterChanged) {
+	if _, err := other.PublishRoster(context.Background(), 0, nil, false); !errors.Is(err, ErrRosterChanged) {
 		t.Errorf("unfetched session: %v, want ErrRosterChanged", err)
 	}
-	if _, err := coord.PublishRoster(context.Background(), first.Seq, nil); err != nil {
+	if _, err := coord.PublishRoster(context.Background(), first.Seq, nil, false); err != nil {
 		t.Errorf("edit from the current roster: %v", err)
 	}
 }
@@ -336,7 +336,7 @@ func TestPublishRosterSeqExhausted(t *testing.T) {
 		t.Fatal(err)
 	}
 	coord.noteHubFeatures(nil) // keep the fetch from replacing it
-	if _, err := coord.PublishRoster(context.Background(), math.MaxInt64, nil); err == nil || !strings.Contains(err.Error(), "exhausted") {
+	if _, err := coord.PublishRoster(context.Background(), math.MaxInt64, nil, false); err == nil || !strings.Contains(err.Error(), "exhausted") {
 		t.Errorf("got %v, want the sequence exhausted", err)
 	}
 }
@@ -348,7 +348,7 @@ func TestStartRosterRetries(t *testing.T) {
 	seedHubNAL(t, h, hubKS)
 	coord := coordLeaf(t, ts, hubKS)
 	alpha := subscribedLeaf(t, ts, "Alpha")
-	r, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)})
+	r, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -376,5 +376,60 @@ func TestStartRosterRetries(t *testing.T) {
 	}
 	if alpha.RosterStatus().Seq != r.Seq {
 		t.Errorf("holding seq %d, want %d", alpha.RosterStatus().Seq, r.Seq)
+	}
+}
+
+// Opening the network turns filtering off on boards that take the open
+// roster; the older, filtering roster cannot then be put back, and closing
+// it again filters by the members it kept.
+func TestRosterOpenAndClose(t *testing.T) {
+	ts, h, hubKS := newTestHub(t, true)
+	seedHubNAL(t, h, hubKS)
+	coord := coordLeaf(t, ts, hubKS)
+	alpha := subscribedLeaf(t, ts, "Alpha")
+	pinCoord(t, alpha, hubKS)
+	stranger, _, err := keystore.Load(filepath.Join(t.TempDir(), "s.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	closed, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := alpha.fetchRoster(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if alpha.rosterAdmits(stranger.NodeID(), stranger.PubKeyBase64()) {
+		t.Fatal("closed roster admitted a stranger")
+	}
+	open, err := coord.PublishRoster(context.Background(), closed.Seq, closed.Members, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := alpha.fetchRoster(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if st := alpha.RosterStatus(); !st.Held || !st.Open || st.Seq != open.Seq {
+		t.Fatalf("status %+v", st)
+	}
+	if !alpha.rosterAdmits(stranger.NodeID(), stranger.PubKeyBase64()) {
+		t.Error("open roster still filtering")
+	}
+	// A hub replaying the closed roster changes nothing.
+	raw, _ := json.Marshal(closed)
+	_ = alpha.takeRoster(closed, raw)
+	if !alpha.RosterStatus().Open {
+		t.Error("the older closed roster replaced the open one")
+	}
+	// Closing again filters by the members kept.
+	if _, err := coord.PublishRoster(context.Background(), open.Seq, open.Members, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := alpha.fetchRoster(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if alpha.rosterAdmits(stranger.NodeID(), stranger.PubKeyBase64()) || alpha.RosterStatus().Open {
+		t.Error("closed again but not filtering")
 	}
 }

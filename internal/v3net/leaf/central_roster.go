@@ -31,7 +31,9 @@ import (
 // With a roster, the board's own Central screens and alerts show only
 // boards on it: a directory listing, an activity snapshot or an alert from
 // any other board is dropped, matched on node ID and full public key. This
-// board itself always passes. Without one, nothing is dropped, as before.
+// board itself always passes. Without one, or with an open one (which the
+// leaf holds all the same, so no older filtering roster replaces it),
+// nothing is dropped.
 
 // rosterState is the leaf's roster: the newest it has taken, and what it
 // knows of the last fetch.
@@ -65,6 +67,8 @@ type RosterStatus struct {
 	Held      bool
 	Seq       int64
 	Members   int
+	// Open is whether the held roster is open: held, but filtering nothing.
+	Open bool
 	// LastFetch is when a fetch last reached the hub, LastError the
 	// latest failure or refusal.
 	LastFetch time.Time
@@ -78,7 +82,7 @@ func (l *Leaf) RosterStatus() RosterStatus {
 	l.rosterState.mu.Lock()
 	defer l.rosterState.mu.Unlock()
 	if r := l.rosterState.roster; r != nil {
-		st.Held, st.Seq, st.Members = true, r.Seq, len(r.Members)
+		st.Held, st.Seq, st.Members, st.Open = true, r.Seq, len(r.Members), r.Open
 	}
 	st.LastFetch, st.LastError = l.rosterState.lastFetch, l.rosterState.lastErr
 	return st
@@ -357,9 +361,10 @@ var ErrRosterChanged = errors.New("leaf: the roster changed since this edit bega
 // coordinator in force. base is the seq of the roster the edit started
 // from, 0 for none: it fetches the hub's roster first, and if this
 // coordinator's latest is no longer base it publishes nothing and returns
-// ErrRosterChanged, as the hub does for a race it alone sees. On success
-// the leaf holds the new roster.
-func (l *Leaf) PublishRoster(ctx context.Context, base int64, members []protocol.CentralRosterMember) (*protocol.CentralRoster, error) {
+// ErrRosterChanged, as the hub does for a race it alone sees. open
+// publishes it open: boards keep it but filter by it no longer (see
+// protocol.CentralRoster.Open). On success the leaf holds the new roster.
+func (l *Leaf) PublishRoster(ctx context.Context, base int64, members []protocol.CentralRosterMember, open bool) (*protocol.CentralRoster, error) {
 	if err := l.fetchRoster(ctx); err != nil && !errors.Is(err, errNoRoster) {
 		return nil, fmt.Errorf("leaf: fetch the roster before editing it: %w", err)
 	}
@@ -386,6 +391,7 @@ func (l *Leaf) PublishRoster(ctx context.Context, base int64, members []protocol
 		Network:      l.cfg.Network,
 		Seq:          seq,
 		PrevSeq:      prev,
+		Open:         open,
 		Members:      slices.Clone(members),
 		PublishedAt:  time.Now().UTC().Format(time.RFC3339),
 	}

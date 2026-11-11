@@ -31,8 +31,9 @@ type V3NetRosterProvider interface {
 	// PublishCentralRoster signs members as the roster, this board being
 	// the coordinator, and posts it. base is the seq of the roster the edit
 	// started from (0 for none); a roster changed since then is not
-	// replaced, and the error says so.
-	PublishCentralRoster(ctx context.Context, network string, base int64, members []protocol.CentralRosterMember) (*protocol.CentralRoster, error)
+	// replaced, and the error says so. open publishes it open: boards keep
+	// it but stop filtering by it.
+	PublishCentralRoster(ctx context.Context, network string, base int64, members []protocol.CentralRosterMember, open bool) (*protocol.CentralRoster, error)
 	// NodePubKeyB64 is this board's public key, which the first roster
 	// always names.
 	NodePubKeyB64() string
@@ -113,10 +114,14 @@ func runV3NetRoster(c *cmdCtx, networks []string) (string, string, error) {
 		var buf strings.Builder
 		buf.WriteString(ansi.ClearScreen())
 		buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|12V3Net: Board Roster|07 |08— %s|07\r\n", v3netText(network)) + v3netRule(termWidth))))
-		if roster == nil {
+		switch {
+		case roster == nil:
 			buf.Write(ansi.ReplacePipeCodes([]byte("|07  No roster yet: boards show every board's Central listings, activity and alerts.\r\n")))
 			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Once you publish one, boards that hold it show only the boards on it.|07\r\n\r\n")))
-		} else {
+		case roster.Open:
+			buf.Write(ansi.ReplacePipeCodes([]byte("|14  The network is open:|07 boards that hold the roster show every board.\r\n")))
+			buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|07  %d boards are kept on it, for closing it again with C.|07\r\n\r\n", len(roster.Members)))))
+		default:
 			buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|07  %d boards on the roster. Boards that hold it show Central only from these.|07\r\n\r\n", len(roster.Members)))))
 		}
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  #  ROSTER  BOARD                          NODE ID|07\r\n")))
@@ -149,8 +154,14 @@ func runV3NetRoster(c *cmdCtx, networks []string) (string, string, error) {
 		}
 		terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
 
-		line, next, err := v3netPromptLine(s, terminal, outputMode,
-			"|08  [|15A|08]dmit #  [|15R|08]emove #  [|15K|08] admit by key  [|15Q|08]uit: |07")
+		prompt := "|08  [|15A|08]dmit #  [|15R|08]emove #  [|15K|08] by key  "
+		switch {
+		case roster != nil && roster.Open:
+			prompt += "[|15C|08]lose  "
+		case roster != nil:
+			prompt += "[|15O|08]pen  "
+		}
+		line, next, err := v3netPromptLine(s, terminal, outputMode, prompt+"[|15Q|08]uit: |07")
 		if err != nil {
 			return "", next, err
 		}
@@ -159,11 +170,31 @@ func runV3NetRoster(c *cmdCtx, networks []string) (string, string, error) {
 		}
 
 		var members []protocol.CentralRosterMember
+		open := false
 		if roster != nil {
 			members = slices.Clone(roster.Members)
+			open = roster.Open
 		}
 		var changed string
 		switch {
+		case roster != nil && (strings.EqualFold(line, "O") && !roster.Open || strings.EqualFold(line, "C") && roster.Open):
+			// Opening stops every board that takes it from filtering;
+			// closing starts them again, by the boards kept on it.
+			open = !roster.Open
+			question := "|07  Close the network again: boards show only the boards on the roster (y/N)? "
+			changed = "|10Closed: boards that take it show only the boards on the roster.|07"
+			if open {
+				question = "|07  Open the network: boards that take it show every board again (y/N)? "
+				changed = "|10Opened: boards that take it show every board.|07"
+			}
+			answer, next, err := v3netPromptLine(s, terminal, outputMode, question)
+			if err != nil {
+				return "", next, err
+			}
+			if !strings.EqualFold(answer, "Y") {
+				status = "|07Nothing published.|07"
+				continue
+			}
 		case strings.EqualFold(line, "K"):
 			key, next, err := v3netPromptLine(s, terminal, outputMode, "|07  Board's public key (base64, Enter cancels): ")
 			if err != nil {
@@ -213,7 +244,8 @@ func runV3NetRoster(c *cmdCtx, networks []string) (string, string, error) {
 			buf.Reset()
 			buf.Write(ansi.ReplacePipeCodes([]byte("\r\n|14  Publishing the first roster turns it on for this network:|07\r\n")))
 			buf.Write(ansi.ReplacePipeCodes([]byte("|07  boards that take it show Central listings, activity and alerts only from\r\n")))
-			buf.Write(ansi.ReplacePipeCodes([]byte("|07  boards on it, and keep it. You can change it later, but not withdraw it.|07\r\n")))
+			buf.Write(ansi.ReplacePipeCodes([]byte("|07  boards on it, and keep it. You can change it later, or open the network\r\n")))
+			buf.Write(ansi.ReplacePipeCodes([]byte("|07  again with O, but boards keep the roster either way.|07\r\n")))
 			terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
 			answer, next, err := v3netPromptLine(s, terminal, outputMode, "|07  Publish it (y/N)? ")
 			if err != nil {
@@ -234,7 +266,7 @@ func runV3NetRoster(c *cmdCtx, networks []string) (string, string, error) {
 			base = roster.Seq
 		}
 		ctx, cancel = context.WithTimeout(context.Background(), v3netManageTimeout)
-		_, err = rp.PublishCentralRoster(ctx, network, base, members)
+		_, err = rp.PublishCentralRoster(ctx, network, base, members, open)
 		cancel()
 		if err != nil {
 			if strings.Contains(err.Error(), "changed since") {

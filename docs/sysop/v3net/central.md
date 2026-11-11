@@ -848,8 +848,15 @@ row number removes one, and `K` admits a board by its public key, for one
 that publishes no listing. Each change is signed and published at once.
 
 The first roster asks before it goes out, and always names your own board:
-once boards take a roster they keep it, so it can be changed but not
-withdrawn.
+once boards take a roster they keep it.
+
+To stop filtering, open the network with `O`: after a yes, you publish the
+roster marked open, and boards that take it show every board again. They
+keep holding it, so a hub cannot put an older, filtering roster back, and
+the boards on it stay on it: `C` closes the network again and boards filter
+by them once more. You can admit and remove boards while it is open, ready
+for closing it. Boards from before opening existed cannot read an open
+roster and go on filtering by the last one they took.
 
 Admit a board only once you have checked its key through a channel the
 hub does not control: ask its sysop for the key (or its node ID) by mail,
@@ -882,8 +889,8 @@ it shows every board, and a hub that withholds the roster from it keeps it
 that way. Tell your network's sysops when you publish the first roster, and
 ask them to check **Status** shows it `on`.
 
-**Status** shows a `ROSTER` column per network: `on, N boards`, `none (all
-shown)`, or `hub does not serve it`. A hub lists `central.roster` among its
+**Status** shows a `ROSTER` column per network: `on, N boards`, `open (all
+shown)`, `none (all shown)`, or `hub does not serve it`. A hub lists `central.roster` among its
 features once it runs this version; boards from before it ignore rosters
 and show every board, as they did.
 

@@ -2466,7 +2466,7 @@ func (a *centralAdapter) CentralNetworks() []menu.CentralNetworkInfo {
 			LastCallers:      centralActivityInfo(n.LastCallers),
 			Chat:             menu.CentralChatInfo{Enabled: n.Chat.Enabled, Supported: n.Chat.Supported},
 			Alerts:           menu.CentralAlertInfo{Enabled: n.Alerts.Enabled, Supported: n.Alerts.Supported},
-			Roster: menu.CentralRosterInfo{Supported: n.Roster.Supported, Held: n.Roster.Held,
+			Roster: menu.CentralRosterInfo{Supported: n.Roster.Supported, Held: n.Roster.Held, Open: n.Roster.Open,
 				Members: n.Roster.Members, LastError: n.Roster.LastError},
 		})
 	}
