@@ -9,6 +9,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/toast"
 )
 
@@ -197,8 +198,45 @@ func TestToastFadeKeepsToDeadline(t *testing.T) {
 	toastWaitFor(t, "the toast drawn", func() bool { return strings.Contains(log.String(), "Hello there") })
 	toastWaitFor(t, "the screen restored", func() bool { return strings.Contains(env.term.Row(24), "BOTTOM TEXT") })
 	// Six frames and a hold at 80ms a write would run well over a second
-	// without the deadline; with it, the dwell plus one slow write or two.
-	if took := time.Since(start); took > 900*time.Millisecond {
+	// without the deadline; with it, the dwell, the write in flight when it
+	// passes, and the restore.
+	if took := time.Since(start); took > 600*time.Millisecond+2*80*time.Millisecond+60*time.Millisecond {
 		t.Errorf("toast took %s against a 600ms dwell", took)
+	}
+}
+
+// countingSlowWriter counts writes and takes delay over each.
+type countingSlowWriter struct {
+	delay time.Duration
+	n     int
+}
+
+func (c *countingSlowWriter) Write(p []byte) (int, error) {
+	time.Sleep(c.delay)
+	c.n++
+	return len(p), nil
+}
+
+// A frame write that crosses the deadline ends the fade at once: no wait
+// after it, and no further frame.
+func TestFadeToastStopsWhenAWriteCrossesTheDeadline(t *testing.T) {
+	env, _ := fadeEnv(t, true, 80*time.Millisecond)
+	ih := getSessionIH(env.s)
+	w := &countingSlowWriter{delay: 150 * time.Millisecond}
+	lay := toastDraw{row: 24, col: 1, line: "Hello", mode: ansi.OutputModeUTF8}
+
+	start := time.Now()
+	out := fadeToast(ih, lay, w, []int{8, 7, 15}, 80*time.Millisecond, false, start.Add(100*time.Millisecond))
+	took := time.Since(start)
+	if out != editor.WaitElapsed {
+		t.Errorf("ended %v, want elapsed", out)
+	}
+	if w.n != 1 {
+		t.Errorf("%d frames drawn, want 1", w.n)
+	}
+	// The one write (150ms) and nothing after it: a wait of the step on top
+	// would make it 230ms.
+	if took > 200*time.Millisecond {
+		t.Errorf("took %s: waited after the write that crossed the deadline", took)
 	}
 }

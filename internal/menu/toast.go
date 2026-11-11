@@ -131,6 +131,14 @@ func (e *MenuExecutor) nextOverlayToast(sess *session.BbsSession) (t toast.Toast
 // idle timeout and time limit in between. limit is what remains of the read's
 // wait, or 0 for no bound; the toast comes down in that time.
 func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, sess *session.BbsSession, limit time.Duration) {
+	// Everything here, the snapshot and the lookup as well as the frames
+	// and waits, ends by this deadline, so slow output cannot stretch a
+	// toast past the read's own limit.
+	dwell := toastDwell
+	if limit > 0 && limit < dwell {
+		dwell = limit
+	}
+	deadline := time.Now().Add(dwell)
 	tap := tapOf(s)
 	if !sess.ToastsReady() || tap == nil {
 		return
@@ -160,18 +168,11 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	if !ok {
 		return
 	}
-	dwell := toastDwell
-	if limit > 0 && limit < dwell {
-		dwell = limit
-	}
-	// Everything below, frames and waits alike, ends by this deadline, so
-	// slow output cannot stretch a toast past the read's own limit.
-	deadline := time.Now().Add(dwell)
 	// A fading toast comes in and goes out through the theme's ramp, inside
 	// the same dwell; one too short for the fade, or with fading off, just
 	// appears and goes.
 	ramp, step := e.toastFade()
-	if fadeTime := time.Duration(2*len(ramp)) * step; len(ramp) == 0 || fadeTime >= dwell {
+	if fadeTime := time.Duration(2*len(ramp)) * step; len(ramp) == 0 || fadeTime >= time.Until(deadline) {
 		ramp = nil
 	}
 	fadeOut := time.Duration(len(ramp)) * step
@@ -480,14 +481,18 @@ func (e *MenuExecutor) toastFade() (ramp []int, step time.Duration) {
 // caller restores the row.
 func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, step time.Duration, drawn bool, deadline time.Time) editor.WaitOutcome {
 	for i, c := range ramp {
-		left := time.Until(deadline)
-		if left <= 0 {
+		if time.Until(deadline) <= 0 {
 			return editor.WaitElapsed
 		}
 		if i > 0 || !drawn {
 			if lay.write(w, lay.frame(c)) != nil {
 				return editor.WaitInterrupted
 			}
+		}
+		// The write may have taken the time that was left.
+		left := time.Until(deadline)
+		if left <= 0 {
+			return editor.WaitElapsed
 		}
 		if out := ih.WaitFor(min(step, left)); out != editor.WaitElapsed {
 			return out
