@@ -689,6 +689,31 @@ func (ct *ConnectionTracker) AppendToBlocklist(ip string) error {
 	return nil
 }
 
+// AdmitLogin is the last step of a login from ip whose password checked out:
+// it reports whether ip is free of a lockout and, if so, clears its failed
+// attempts, in one step under the tracker's lock. Checking for a lockout and
+// clearing separately would lose one that another login from ip started
+// while this password was being checked (bcrypt takes a while): the clear
+// would delete it and let this login in. Here that lockout stays and this
+// login is refused.
+func (ct *ConnectionTracker) AdmitLogin(ip string) bool {
+	ct.mu.Lock()
+	defer ct.mu.Unlock()
+
+	tracker, exists := ct.failedLogins[ip]
+	if !exists {
+		return true
+	}
+	if !tracker.LockedUntil.IsZero() && time.Now().Before(tracker.LockedUntil) {
+		return false
+	}
+	if tracker.Attempts > 0 {
+		slog.Info("cleared failed login attempts", "ip", ip, "attempts", tracker.Attempts)
+	}
+	delete(ct.failedLogins, ip)
+	return true
+}
+
 // ClearFailedLoginAttempts clears the failed login counter for an IP on successful authentication.
 func (ct *ConnectionTracker) ClearFailedLoginAttempts(ip string) {
 	ct.mu.Lock()

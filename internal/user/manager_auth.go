@@ -14,31 +14,38 @@ import (
 // Handle lookup is case-insensitive.
 // Returns: (user, success)
 func (um *UserMgr) Authenticate(handle, password string) (*User, bool) {
+	if !um.VerifyPassword(handle, password) {
+		return nil, false
+	}
+	// Password verified; record the call.
+	return um.BeginSession(handle)
+}
+
+// VerifyPassword reports whether password is handle's, for an account that
+// isn't deleted, without recording a call. Handle lookup is case-insensitive.
+// It is Authenticate without BeginSession, for a login that has more to pass
+// after the password (the SSH pre-authentication's lockout check) before the
+// call is recorded.
+func (um *UserMgr) VerifyPassword(handle, password string) bool {
 	lowerHandle := strings.ToLower(handle)
 
 	um.mu.RLock()
 	user, exists := um.users[lowerHandle]
 	if !exists {
 		um.mu.RUnlock()
-		return nil, false
+		return false
 	}
 	// Deny login if user is deleted
 	if user.DeletedUser {
 		um.mu.RUnlock()
-		return nil, false
+		return false
 	}
 	// Copy the password hash while holding the read lock
 	passwordHash := user.PasswordHash
 	um.mu.RUnlock()
 
 	// Compare hashed password outside any lock (bcrypt is CPU-intensive)
-	err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password))
-	if err != nil {
-		return nil, false
-	}
-
-	// Password verified; record the call.
-	return um.BeginSession(handle)
+	return bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password)) == nil
 }
 
 // BeginSession stamps the login bookkeeping for a handle and returns a
