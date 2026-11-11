@@ -1,0 +1,39 @@
+name: govulncheck
+
+# Known vulnerabilities in the Go modules and standard library that the code
+# actually reaches (https://go.dev/doc/security/vuln). Separate from CI so a
+# newly published vulnerability fails this check, not every pull request: it
+# runs on main, weekly (the database changes without any commit here), on
+# pull requests that change the modules, and by hand.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - go.mod
+      - go.sum
+      - .github/workflows/govulncheck.yml
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # The Go release go.mod names, the same one CI builds with: its
+      # standard library is the one govulncheck checks.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          govulncheck ./...
