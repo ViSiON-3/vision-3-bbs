@@ -773,5 +773,6 @@ func stringCatalog() []StringEntry {
 		{Label: "Alert: Network Logoff", Key: "centralAlertLogoff", Description: "Toast: a caller elsewhere logged off (%s=handle, %s=board, %s=network); blank = none"},
 		{Label: "Alert: Network Chat", Key: "centralAlertChatJoin", Description: "Toast: a caller elsewhere joined net chat (%s=handle, %s=board, %s=room, %s=network)"},
 		{Label: "Alert: Network Post", Key: "centralAlertPost", Description: "Toast: a caller elsewhere posted (%s=handle, %s=board, %s=area, %s=network); blank = none"},
+		{Label: "Toast: Post", Key: "toastPost", Description: "Shown to other callers here when someone posts (%s=handle, %s=area); blank = none"},
 	}
 }

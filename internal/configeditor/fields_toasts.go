@@ -27,7 +27,15 @@ func sysFieldsToasts(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Toast Level", Help: "Minimum level to see logon and logoff announcements", Type: ftInteger, Col: 3, Row: 3, Width: 3, Min: 0, Max: 255,
+			Label: "Toast Posts", Help: "Announce new posts to other online callers who may read the area; N turns it off for everyone", Type: ftYesNo, Col: 3, Row: 3, Width: 1,
+			Get: func() string { return uitext.BoolToYN(cfg.ToastPosts) },
+			Set: func(val string) error {
+				cfg.ToastPosts = uitext.YNToBool(val)
+				return nil
+			},
+		},
+		{
+			Label: "Toast Level", Help: "Minimum level to see logon, logoff and post announcements", Type: ftInteger, Col: 3, Row: 4, Width: 3, Min: 0, Max: 255,
 			Get: func() string { return strconv.Itoa(cfg.ToastAnnounceLevel) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -39,7 +47,7 @@ func sysFieldsToasts(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Toast Edge", Help: "Screen edge a toast is placed from", Type: ftLookup, Col: 3, Row: 4, Width: 6,
+			Label: "Toast Edge", Help: "Screen edge a toast is placed from", Type: ftLookup, Col: 3, Row: 5, Width: 6,
 			Get: func() string {
 				if cfg.ToastEdge == config.ToastEdgeTop {
 					return config.ToastEdgeTop
@@ -55,7 +63,7 @@ func sysFieldsToasts(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Toast Offset", Help: "Rows in from that edge, towards the middle of the screen", Type: ftInteger, Col: 3, Row: 5, Width: 2, Min: 0, Max: 50,
+			Label: "Toast Offset", Help: "Rows in from that edge, towards the middle of the screen", Type: ftInteger, Col: 3, Row: 6, Width: 2, Min: 0, Max: 50,
 			Get: func() string { return strconv.Itoa(cfg.ToastOffset) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)
@@ -67,7 +75,7 @@ func sysFieldsToasts(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Toast Center", Help: "Center on the caller's Konfig screen width; Toast Col is then ignored", Type: ftYesNo, Col: 3, Row: 6, Width: 1,
+			Label: "Toast Center", Help: "Center on the caller's Konfig screen width; Toast Col is then ignored", Type: ftYesNo, Col: 3, Row: 7, Width: 1,
 			Get: func() string { return uitext.BoolToYN(cfg.ToastCenter) },
 			Set: func(val string) error {
 				cfg.ToastCenter = uitext.YNToBool(val)
@@ -75,7 +83,7 @@ func sysFieldsToasts(cfg *config.ServerConfig) []fieldDef {
 			},
 		},
 		{
-			Label: "Toast Col", Help: "Column a toast starts at", Type: ftInteger, Col: 3, Row: 7, Width: 3, Min: 1, Max: 255,
+			Label: "Toast Col", Help: "Column a toast starts at", Type: ftInteger, Col: 3, Row: 8, Width: 3, Min: 1, Max: 255,
 			Get: func() string { return strconv.Itoa(max(1, cfg.ToastCol)) },
 			Set: func(val string) error {
 				n, err := strconv.Atoi(val)

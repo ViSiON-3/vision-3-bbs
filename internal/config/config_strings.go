@@ -438,6 +438,7 @@ var StringMissingDefaults = map[string]string{
 
 	"toastLogon":         "|15%s|07 logged on to node |15%d|07",
 	"toastLogoff":        "|15%s|07 logged off node |15%d|07",
+	"toastPost":          "|15%s|07 posted in |14%s|07",
 	"toastOverlayFormat": "|09>> |07%s|07",
 	// V3Net Central activity alerts (#978). Blank shows no alert of the kind.
 	"centralAlertLogon":    "|15%s|07 on |11%s|07 logged on |08(%s)|07",

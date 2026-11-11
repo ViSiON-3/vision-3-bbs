@@ -92,6 +92,7 @@ var FormattedKeys = []string{
 	"pageMessageFormat",
 	"toastLogoff",
 	"toastLogon",
+	"toastPost",
 	"toastOverlayFormat",
 	"centralAlertChatJoin",
 	"centralAlertLogoff",

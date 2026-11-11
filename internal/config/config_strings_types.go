@@ -316,6 +316,9 @@ type StringsConfig struct {
 	// %d=node). An empty string sends nothing.
 	ToastLogon  string `json:"toastLogon"`
 	ToastLogoff string `json:"toastLogoff"`
+	// ToastPost announces a caller's post to other callers here (%s=handle,
+	// %s=area). An empty string sends nothing.
+	ToastPost string `json:"toastPost"`
 	// ToastOverlayFormat frames a toast drawn over a screen (%s=the toast).
 	ToastOverlayFormat string `json:"toastOverlayFormat"`
 	// CentralAlertLogon, CentralAlertLogoff, CentralAlertChatJoin and

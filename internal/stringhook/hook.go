@@ -239,6 +239,7 @@ var NoHookKeys = map[string]bool{
 	"pageMessageFormat":         true,
 	"toastLogoff":               true,
 	"toastLogon":                true,
+	"toastPost":                 true,
 	"toastOverlayFormat":        true,
 	"centralAlertChatJoin":      true,
 	"centralAlertLogoff":        true,

@@ -484,6 +484,25 @@ them with `toastLogon` and `toastLogoff`. They go only to callers online at the
 time, and are dropped if they cannot be shown within a minute. Invisible callers
 are never announced.
 
+Post announcements are toasts too, for callers on this board. Turn them on with
+`toastPosts` (**Toast Posts** on the config editor's Toasts screen) and word
+them with `toastPost` (the handle, then the area's name). They follow the same
+rules as logon announcements: callers at or above `toastAnnounceLevel`, live
+only, dropped after a minute, never the poster's own sessions or an invisible
+poster. On top of that a caller sees one only for an area they may read, its
+read ACS and its conference's both checked, and not from someone on their Twit
+List. A post or reply saved in the message editor is announced, in any public
+area: local, echomail such as Fidonet or fsxNet, QWK network or V3Net. Private
+mail, netmail and anonymous posts are not, and neither are messages that arrive
+by import (an FTN toss, a QWK or V3Net poll), QWK reply uploads, `helper post` or
+scripts. Callers have no switch of their own, as with logons; set the switch to
+`N` to turn announcements off for everyone.
+
+A post here in a V3Net area reaches each caller once: callers on this board get
+this toast, and callers on other boards get the network's
+[activity alert](v3net/central.md#activity-alerts) if they asked for it, which
+is never shown on the board it came from.
+
 [V3Net Central activity alerts](v3net/central.md#activity-alerts) are toasts
 too: logons, logoffs, chat joins and posts on other boards of a network, for
 callers who ask for them. Like announcements they are live only, dropped if
