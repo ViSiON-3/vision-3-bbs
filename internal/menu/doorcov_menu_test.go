@@ -423,7 +423,7 @@ func TestDoorcovDoorErrorWaitsForEnter(t *testing.T) {
 		t.Fatalf("failure not reported:\n%s", r.text())
 	}
 	if key, err := getSessionIH(s).ReadKey(); err != nil || key != 'Q' {
-		t.Errorf("next key = %q, %v; want 'Q' (the Enter consumed by the prompt)", key, err)
+		t.Errorf("next key = %q, %v; want 'Q' (the Enter consumed by the prompt)", rune(key), err)
 	}
 }
 

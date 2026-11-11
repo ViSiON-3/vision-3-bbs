@@ -8,7 +8,7 @@ cd vision-3-bbs
 go build ./cmd/vision3
 ```
 
-`go.mod` requires Go 1.25. The other programs build the same way: `go build ./cmd/wfc`, `./cmd/config`, `./cmd/helper`, `./cmd/v3mail`, `./cmd/menuedit`, `./cmd/ue`, `./cmd/strings`.
+`go.mod` requires Go 1.27.4. The other programs build the same way: `go build ./cmd/wfc`, `./cmd/config`, `./cmd/helper`, `./cmd/v3mail`, `./cmd/menuedit`, `./cmd/ue`, `./cmd/strings`.
 
 ## Architecture
 

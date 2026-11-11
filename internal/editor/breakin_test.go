@@ -30,7 +30,7 @@ func TestBreakInRunsDuringReadKeyThenReadContinues(t *testing.T) {
 	select {
 	case k := <-keyc:
 		if k != 'z' {
-			t.Fatalf("key = %q", k)
+			t.Fatalf("key = %q", rune(k))
 		}
 	case <-time.After(time.Second):
 		t.Fatal("original read did not continue")
@@ -56,11 +56,11 @@ func TestBreakInFnCanReadKeys(t *testing.T) {
 	<-started
 	_, _ = pw.Write([]byte("a"))
 	if k := <-inner; k != 'a' {
-		t.Fatalf("inner = %q", k)
+		t.Fatalf("inner = %q", rune(k))
 	}
 	_, _ = pw.Write([]byte("b"))
 	if k := <-outer; k != 'b' {
-		t.Fatalf("outer = %q", k)
+		t.Fatalf("outer = %q", rune(k))
 	}
 }
 
@@ -259,7 +259,7 @@ func pushBackInBreakIn(t *testing.T) (*InputHandler, chan struct{}, chan struct{
 	ih.SetBreakIn(brk, func() {
 		go func() { _, _ = pw.Write([]byte("\x1bq")) }()
 		if k, err := ih.ReadKey(); err != nil || k != KeyEsc {
-			t.Errorf("inner key = %q, %v; want ESC", k, err)
+			t.Errorf("inner key = %q, %v; want ESC", rune(k), err)
 		}
 		close(ran)
 	})
@@ -275,7 +275,7 @@ func TestBreakInPushedBackByteReadFirst(t *testing.T) {
 	select {
 	case k := <-outer:
 		if k != 'q' {
-			t.Fatalf("outer = %q; want q", k)
+			t.Fatalf("outer = %q; want q", rune(k))
 		}
 	case <-time.After(time.Second):
 		t.Fatal("pushed-back byte stranded after break-in")
@@ -294,7 +294,7 @@ func TestBreakInPushedBackByteReadFirstWithEvents(t *testing.T) {
 	select {
 	case k := <-outer:
 		if k != 'q' {
-			t.Fatalf("outer = %q; want q", k)
+			t.Fatalf("outer = %q; want q", rune(k))
 		}
 	case <-time.After(time.Second):
 		t.Fatal("pushed-back byte stranded after break-in")

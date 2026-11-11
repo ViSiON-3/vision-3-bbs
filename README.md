@@ -152,7 +152,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 
 ## Technology Stack
 
-*   **Language:** Go 1.25+
+*   **Language:** Go 1.27+
 *   **SSH Server:** `github.com/gliderlabs/ssh` — pure-Go SSH server with legacy algorithm support (SyncTerm, NetRunner compatible)
 *   **TUI Framework:** Charmbracelet BubbleTea (`github.com/charmbracelet/bubbletea`) — full-screen terminal editors and admin tools (patched copies of `bubbletea` and `charmbracelet/x/term` live in `third_party/`)
 *   **JavaScript Engine:** `github.com/dop251/goja` — embedded JS runtime for V3 scripting and SyncJS door support
@@ -338,7 +338,7 @@ See [Docker Deployment Guide](docs/sysop/getting-started/docker.md) for detailed
 
 ### Option 3: Build from Source
 
-**Go 1.25+** is the only build requirement.
+**Go 1.27+** is the only build requirement.
 
 1. **Clone and set up:**
     ```bash

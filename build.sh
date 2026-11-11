@@ -8,8 +8,8 @@
 
 # Check Go is installed and meets the minimum required version
 MIN_GO_MAJOR=1
-MIN_GO_MINOR=24
-MIN_GO_PATCH=2
+MIN_GO_MINOR=27
+MIN_GO_PATCH=4
 if ! command -v go &>/dev/null; then
     echo "Error: Go is not installed. Download it from https://go.dev/dl/"
     exit 1
