@@ -31,7 +31,12 @@ import (
 type IPLockoutChecker interface {
 	IsIPLockedOut(ip string) (bool, time.Time, int)
 	RecordFailedLoginAttempt(ip string) bool
-	ClearFailedLoginAttempts(ip string)
+	// LoginAttempt waits for ip's turn to check a password and returns the
+	// func that ends it: password checks from one IP run one at a time.
+	LoginAttempt(ip string) (done func())
+	// AdmitLogin reports whether ip is free of a lockout and, if so, clears
+	// its failed attempts, in one step.
+	AdmitLogin(ip string) bool
 }
 
 // cmdCtx bundles the per-invocation context shared by every RunnableFunc,

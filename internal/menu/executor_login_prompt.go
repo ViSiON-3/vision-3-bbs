@@ -123,39 +123,34 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 	// Get remote IP address for lockout checking
 	remoteIP := remoteIPFromSession(s)
 
-	// Check if this IP is currently locked out
-	if e.IPLockoutCheck != nil {
-		isLocked, lockedUntil, attempts := e.IPLockoutCheck.IsIPLockedOut(remoteIP)
-		if isLocked {
-			logging.Security("login attempt from locked IP",
-				"node", nodeNumber, "ip", remoteIP, "locked_until", lockedUntil.Format("2006-01-02 15:04:05"), "attempts", attempts)
-			terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
-			minutesLeft := int(math.Ceil(time.Until(lockedUntil).Minutes()))
-			wErr := e.writeStringf(terminal, outputMode, e.Strings().ExecIPLockout, minutesLeft)
-			if wErr != nil {
-				slog.Error("failed writing IP lockout message", "error", wErr)
-			}
-			uiPause(2 * time.Second)
-			if e.loginFailed(s, terminal, outputMode, nodeNumber, true, termWidth, termHeight) {
-				return nil, io.EOF
-			}
-			return nil, nil
+	// The lockout message, for a locked-out IP; the call is dropped after it.
+	lockedOut := func(lockedUntil time.Time) (*user.User, error) {
+		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode)
+		minutesLeft := max(int(math.Ceil(time.Until(lockedUntil).Minutes())), 1)
+		wErr := e.writeStringf(terminal, outputMode, e.Strings().ExecIPLockout, minutesLeft)
+		if wErr != nil {
+			slog.Error("failed writing IP lockout message", "error", wErr)
 		}
+		uiPause(2 * time.Second)
+		if e.loginFailed(s, terminal, outputMode, nodeNumber, true, termWidth, termHeight) {
+			return nil, io.EOF
+		}
+		return nil, nil
 	}
 
-	// Attempt Authentication via UserManager
+	// Check the password, unless this IP is locked out. The call isn't
+	// recorded until the login is admitted below.
 	slog.Debug("attempting authentication", "node", nodeNumber, "handle", username, "ip", remoteIP)
-	authUser, authenticated := userManager.Authenticate(username, password)
-	if !authenticated {
+	result, authUser, lockedUntil, attempts, wasLocked := e.checkLoginPassword(userManager, username, password, remoteIP)
+	if result == loginPasswordLocked {
+		logging.Security("login attempt from locked IP",
+			"node", nodeNumber, "ip", remoteIP, "locked_until", lockedUntil.Format("2006-01-02 15:04:05"), "attempts", attempts)
+		return lockedOut(lockedUntil)
+	}
+	if result != loginPasswordOK {
 		slog.Warn("failed authentication attempt", "node", nodeNumber, "handle", username, "ip", remoteIP)
-
-		// Record failed login attempt for this IP
-		wasLocked := false
-		if e.IPLockoutCheck != nil {
-			wasLocked = e.IPLockoutCheck.RecordFailedLoginAttempt(remoteIP)
-			if wasLocked {
-				logging.Security("IP locked out after too many failed attempts", "node", nodeNumber, "ip", remoteIP)
-			}
+		if wasLocked {
+			logging.Security("IP locked out after too many failed attempts", "node", nodeNumber, "ip", remoteIP)
 		}
 
 		terminalio.WriteProcessedBytes(terminal, []byte(ansi.MoveCursor(errorRow, 1)), outputMode) // Move cursor for message
@@ -201,14 +196,22 @@ func (e *MenuExecutor) handleLoginPrompt(s ssh.Session, terminal *term.Terminal,
 		return nil, nil // Insufficient level, treat as failed login
 	}
 
+	// Admit the login: the IP's failed attempts are cleared and the call is
+	// recorded, unless another login locked the IP out meanwhile.
+	authUser, admitted := e.admitLogin(userManager, authUser.Handle, remoteIP, nodeNumber)
+	if !admitted {
+		_, lockedUntil, _ := e.IPLockoutCheck.IsIPLockedOut(remoteIP)
+		return lockedOut(lockedUntil)
+	}
+	if authUser == nil {
+		slog.Warn("account went away during login", "node", nodeNumber, "handle", username)
+		return nil, nil
+	}
+
 	slog.Info("user authenticated successfully via LOGIN prompt", "node", nodeNumber, "handle", authUser.Handle)
 
-	// Clear failed login attempts for this IP and this call
+	// Clear this call's failed logins
 	clearLoginFailures(s)
-	if e.IPLockoutCheck != nil {
-		e.IPLockoutCheck.ClearFailedLoginAttempts(remoteIP)
-		slog.Debug("cleared failed login attempts", "node", nodeNumber, "ip", remoteIP)
-	}
 
 	return authUser, nil // Success!
 }

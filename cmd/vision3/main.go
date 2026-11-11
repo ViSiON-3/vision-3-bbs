@@ -141,6 +141,10 @@ type ConnectionTracker struct {
 	connRateBan     time.Duration
 	connAttempts    map[string][]time.Time // IP -> recent accept timestamps
 	connTempBans    map[string]time.Time   // IP -> ban expiry
+
+	// One password check at a time per IP, across SSH and the LOGIN menu
+	// (LoginAttempt).
+	loginLocks ipLocks
 }
 
 // NewConnectionTracker creates a new connection tracker
@@ -712,6 +716,56 @@ func (ct *ConnectionTracker) AdmitLogin(ip string) bool {
 	}
 	delete(ct.failedLogins, ip)
 	return true
+}
+
+// LoginAttempt waits for ip's turn to check a password and returns done,
+// which ends it. A login holds its turn from the lockout check to recording
+// the outcome (RecordFailedLoginAttempt for a wrong password), so attempts
+// from one IP, by SSH or at the LOGIN menu, are checked one at a time.
+// Otherwise logins opened together would all pass the lockout check before
+// any of their failures is recorded, and get more guesses than
+// maxFailedLogins allows. Other addresses aren't held up.
+func (ct *ConnectionTracker) LoginAttempt(ip string) (done func()) {
+	return ct.loginLocks.lock(ip)
+}
+
+// ipLocks hands out one lock per IP address. A lock is created when first
+// wanted and dropped when nobody holds or waits for it, so the map only
+// holds addresses with a login in progress.
+type ipLocks struct {
+	mu    sync.Mutex
+	locks map[string]*ipLock
+}
+
+type ipLock struct {
+	mu   sync.Mutex
+	refs int // holders and waiters
+}
+
+// lock takes ip's lock, waiting for it if needed, and returns its unlock.
+func (l *ipLocks) lock(ip string) (unlock func()) {
+	l.mu.Lock()
+	if l.locks == nil {
+		l.locks = make(map[string]*ipLock)
+	}
+	k := l.locks[ip]
+	if k == nil {
+		k = &ipLock{}
+		l.locks[ip] = k
+	}
+	k.refs++
+	l.mu.Unlock()
+
+	k.mu.Lock()
+	return func() {
+		k.mu.Unlock()
+		l.mu.Lock()
+		k.refs--
+		if k.refs == 0 {
+			delete(l.locks, ip)
+		}
+		l.mu.Unlock()
+	}
 }
 
 // ClearFailedLoginAttempts clears the failed login counter for an IP on successful authentication.
