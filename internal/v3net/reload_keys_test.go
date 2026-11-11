@@ -106,33 +106,3 @@ func TestReloadLeavesKeyOnlyChangeKeepsLeafAndNAL(t *testing.T) {
 		t.Errorf("carried a NAL signed by a key that is no longer pinned: %+v", n)
 	}
 }
-
-// hubSigned is handed to the leaf it configures and, being the leaf's own
-// record, a change to it alone (the leaf storing it, or the sysop clearing
-// it after a hub stopped signing) is applied in place. requireSignedHub is
-// a setting and rebuilds the leaf like any other.
-func TestReloadLeavesHubSignedInPlace(t *testing.T) {
-	svc, mm := newReloadFixture(t, "ALPHA")
-	cfg := leafCfg("net-a", "ALPHA")
-	cfg.HubSigned = true
-	svc.ConfigureLeaves([]config.V3NetLeafConfig{cfg}, mm)
-	first := svc.Leaves()[0]
-	if !first.HubSigned() {
-		t.Fatal("hubSigned from the config did not reach the leaf")
-	}
-
-	cfg.HubSigned = false
-	saveAndReload(t, svc, mm, cfg)
-	if got := svc.Leaves()[0]; got != first {
-		t.Fatal("clearing hubSigned rebuilt the leaf")
-	}
-	if first.HubSigned() {
-		t.Error("clearing hubSigned in the config did not reach the running leaf")
-	}
-
-	cfg.RequireSignedHub = true
-	saveAndReload(t, svc, mm, cfg)
-	if got := svc.Leaves()[0]; got == first {
-		t.Error("turning on requireSignedHub did not rebuild the leaf")
-	}
-}

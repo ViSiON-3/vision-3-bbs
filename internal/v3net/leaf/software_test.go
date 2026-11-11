@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"slices"
 	"sync"
 	"testing"
@@ -33,7 +32,7 @@ func (c *subscribeCapture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // leaf given no software sends no report.
 func TestSubscribeSendsSoftwareReport(t *testing.T) {
 	hub := &subscribeCapture{}
-	ts := httptest.NewServer(hub)
+	ts := signedHub(t, hub)
 	defer ts.Close()
 
 	l, _ := setupLeaf(t, ts.URL, &mockJAMWriter{})

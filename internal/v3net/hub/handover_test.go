@@ -332,7 +332,7 @@ func TestPostNALRequiresKeyInForce(t *testing.T) {
 	open := func(ks *keystore.Keystore) (*Hub, *httptest.Server) {
 		t.Helper()
 		h, err := New(Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
-			RequireSignedSubscribe: true, Networks: []NetworkConfig{{Name: "testnet"}}})
+			Networks: []NetworkConfig{{Name: "testnet"}}})
 		if err != nil {
 			t.Fatalf("create hub: %v", err)
 		}
@@ -404,7 +404,7 @@ func TestLateHandoverAdopted(t *testing.T) {
 	open := func(ks *keystore.Keystore) (*Hub, *httptest.Server) {
 		t.Helper()
 		h, err := New(Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
-			RequireSignedSubscribe: true, Networks: []NetworkConfig{{Name: "testnet"}}})
+			Networks: []NetworkConfig{{Name: "testnet"}}})
 		if err != nil {
 			t.Fatalf("create hub: %v", err)
 		}
@@ -479,7 +479,7 @@ func TestLateHandoverAfterResign(t *testing.T) {
 	open := func(ks *keystore.Keystore) (*Hub, *httptest.Server) {
 		t.Helper()
 		h, err := New(Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
-			RequireSignedSubscribe: true, Networks: []NetworkConfig{{Name: "testnet"}}})
+			Networks: []NetworkConfig{{Name: "testnet"}}})
 		if err != nil {
 			t.Fatalf("create hub: %v", err)
 		}
@@ -599,7 +599,7 @@ func TestLateHandoverAdoptFailureReported(t *testing.T) {
 	open := func(ks *keystore.Keystore) (*Hub, *httptest.Server) {
 		t.Helper()
 		h, err := New(Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
-			RequireSignedSubscribe: true, Networks: []NetworkConfig{{Name: "testnet"}}})
+			Networks: []NetworkConfig{{Name: "testnet"}}})
 		if err != nil {
 			t.Fatalf("create hub: %v", err)
 		}

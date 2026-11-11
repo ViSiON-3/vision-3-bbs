@@ -495,12 +495,11 @@ func TestServerConfigReloadUpdatesBoardNameFallback(t *testing.T) {
 	}
 }
 
-// TestV3NetReloadOnHubSignsSave drives the real v3net.json target through what
-// a v3config save does when the sysop sets Hub Signs to the N the file already
-// holds: hubSignedClears is raised, so the file changes, and the save sentinel
-// is touched. That reloads the leaves, so a leaf enforcing a record it could
-// not write drops it. A save that leaves v3net.json alone does not reload them.
-func TestV3NetReloadOnHubSignsSave(t *testing.T) {
+// TestV3NetReloadOnSubscriptionSave drives the real v3net.json target through
+// what a v3config save does when the sysop changes a subscription: the file
+// changes and the save sentinel is touched, which reloads the leaves. A save
+// that leaves v3net.json alone does not reload them.
+func TestV3NetReloadOnSubscriptionSave(t *testing.T) {
 	configDir := t.TempDir()
 	path := filepath.Join(configDir, "v3net.json")
 	if err := config.SaveV3NetConfig(configDir, config.V3NetConfig{
@@ -545,7 +544,7 @@ func TestV3NetReloadOnHubSignsSave(t *testing.T) {
 	}
 
 	if err := config.UpdateV3NetConfig(configDir, func(c *config.V3NetConfig) error {
-		c.Leaves[0].HubSignedClears++
+		c.Leaves[0].PollInterval = "9m"
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -556,7 +555,7 @@ func TestV3NetReloadOnHubSignsSave(t *testing.T) {
 	}
 	cw.poll()
 	if reloads != 1 {
-		t.Errorf("leaves reloaded %d times after a Hub Signs save, want 1", reloads)
+		t.Errorf("leaves reloaded %d times after a subscription save, want 1", reloads)
 	}
 }
 

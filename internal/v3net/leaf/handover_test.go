@@ -144,7 +144,7 @@ func TestHandoverThroughHubMovesBothPins(t *testing.T) {
 	open := func(ks *keystore.Keystore) *hub.Hub {
 		t.Helper()
 		h, err := hub.New(hub.Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
-			RequireSignedSubscribe: true, Networks: []hub.NetworkConfig{{Name: "testnet"}}})
+			Networks: []hub.NetworkConfig{{Name: "testnet"}}})
 		if err != nil {
 			t.Fatalf("create hub: %v", err)
 		}
@@ -245,7 +245,7 @@ func testLateHandoverThroughHub(t *testing.T, resign bool) {
 	open := func(ks *keystore.Keystore) *hub.Hub {
 		t.Helper()
 		h, err := hub.New(hub.Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
-			RequireSignedSubscribe: true, Networks: []hub.NetworkConfig{{Name: "testnet"}}})
+			Networks: []hub.NetworkConfig{{Name: "testnet"}}})
 		if err != nil {
 			t.Fatalf("create hub: %v", err)
 		}
@@ -307,6 +307,8 @@ func testLateHandoverThroughHub(t *testing.T, resign bool) {
 		t.Fatal(err)
 	}
 	body, _ := json.Marshal(ho)
+	// The poster trusts the hub's new key already; it is l that is tested.
+	poster.pins.hub = newKS.PubKeyBase64()
 	resp, err := poster.signedPostWithResponse(ctx, "/v3net/v1/testnet/nal/handover", body)
 	if err != nil {
 		t.Fatalf("post handover: %v", err)
@@ -371,7 +373,7 @@ func TestLateHandoverChainThroughHubMovesBothPins(t *testing.T) {
 	open := func(ks *keystore.Keystore) *hub.Hub {
 		t.Helper()
 		h, err := hub.New(hub.Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
-			RequireSignedSubscribe: true, Networks: []hub.NetworkConfig{{Name: "testnet"}}})
+			Networks: []hub.NetworkConfig{{Name: "testnet"}}})
 		if err != nil {
 			t.Fatalf("create hub: %v", err)
 		}
@@ -426,6 +428,8 @@ func TestLateHandoverChainThroughHubMovesBothPins(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(handoverChain(t, keys...))
+	// The poster trusts the hub's last key already; it is l that is tested.
+	poster.pins.hub = c.PubKeyBase64()
 	resp, err := poster.signedPostWithResponse(ctx, "/v3net/v1/testnet/nal/handover", body)
 	if err != nil {
 		t.Fatalf("post chain: %v", err)

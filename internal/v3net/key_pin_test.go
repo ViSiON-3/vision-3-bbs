@@ -81,69 +81,6 @@ func TestPersistKeyEvent(t *testing.T) {
 	(&Service{}).persistKeyEvent(ev(leaf.KeyCoordinator, "Z", "Z"))
 }
 
-// persistHubSigned sets hubSigned in the matching leaf entry of v3net.json
-// only, and leaves it alone once set.
-func TestPersistHubSigned(t *testing.T) {
-	dir := t.TempDir()
-	if err := config.SaveV3NetConfig(dir, config.V3NetConfig{Leaves: []config.V3NetLeafConfig{
-		{HubURL: "https://other.example", Network: "testnet"},
-		{HubURL: "https://hub.example", Network: "testnet"},
-	}}); err != nil {
-		t.Fatal(err)
-	}
-	s := &Service{cfg: config.V3NetConfig{ConfigPath: dir}}
-	for range 2 {
-		if err := s.persistHubSigned("testnet", "https://hub.example"); err != nil {
-			t.Fatalf("persistHubSigned: %v", err)
-		}
-	}
-	cfg, err := config.LoadV3NetConfig(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Leaves[0].HubSigned || !cfg.Leaves[1].HubSigned {
-		t.Errorf("hubSigned = %v, %v; want only the matching leaf set", cfg.Leaves[0].HubSigned, cfg.Leaves[1].HubSigned)
-	}
-
-	// No config path: nothing to write, nothing to fail.
-	if err := (&Service{}).persistHubSigned("testnet", "https://hub.example"); err != nil {
-		t.Errorf("persistHubSigned without a config path: %v", err)
-	}
-}
-
-// hubSignedStored reads the matching entry's hubSigned and count of clears from
-// v3net.json as it is when called.
-func TestHubSignedStored(t *testing.T) {
-	dir := t.TempDir()
-	s := &Service{cfg: config.V3NetConfig{ConfigPath: dir}}
-	stored := s.hubSignedStored("testnet", "https://hub.example")
-	if got, err := stored(); !errors.Is(err, leaf.ErrNoStoredEntry) {
-		t.Fatalf("with no v3net.json: %+v, %v; want no entry", got, err)
-	}
-	if err := config.SaveV3NetConfig(dir, config.V3NetConfig{Leaves: []config.V3NetLeafConfig{
-		{HubURL: "https://other.example", Network: "testnet", HubSigned: true},
-		{HubURL: "https://hub.example", Network: "testnet", HubSignedClears: 2},
-	}}); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := stored(); err != nil || got != (leaf.StoredHubSigned{Clears: 2}) {
-		t.Fatalf("before the store: %+v, %v; want unset with 2 clears", got, err)
-	}
-	if err := s.persistHubSigned("testnet", "https://hub.example"); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := stored(); err != nil || got != (leaf.StoredHubSigned{Signed: true, Clears: 2}) {
-		t.Errorf("after the store: %+v, %v; want set with 2 clears", got, err)
-	}
-	other := s.hubSignedStored("othernet", "https://hub.example")
-	if got, err := other(); !errors.Is(err, leaf.ErrNoStoredEntry) {
-		t.Errorf("with no entry: %+v, %v; want no entry", got, err)
-	}
-	if (&Service{}).hubSignedStored("testnet", "https://hub.example") != nil {
-		t.Error("a service without a config path has a store to read")
-	}
-}
-
 // pinStored reads the matching entry's pins from v3net.json as it is when
 // called.
 func TestPinStored(t *testing.T) {
@@ -207,18 +144,17 @@ func TestKeyPinnedNotifiesHandover(t *testing.T) {
 	}
 }
 
-// A reload's baseline goes back only for the fields it could not check, so a clear
-// it applied is not seen as a clear again after a pin's read failed (#821).
+// A reload's baseline goes back only for the pins it could not check, so an
+// edit it applied is not seen as an edit again after another pin's read
+// failed (#821).
 func TestWithUncheckedFrom(t *testing.T) {
 	before := config.V3NetLeafConfig{
 		CoordinatorPubKey: "old-coord", PendingCoordinatorPubKey: "old-coord-pending",
 		HubPubKey: "old-hub", PendingHubPubKey: "old-hub-pending",
-		HubSigned: true, HubSignedClears: 1,
 	}
 	checked := config.V3NetLeafConfig{
 		CoordinatorPubKey: "new-coord", PendingCoordinatorPubKey: "new-coord-pending",
 		HubPubKey: "new-hub", PendingHubPubKey: "new-hub-pending",
-		HubSignedClears: 2,
 	}
 	check := func(name string, p leaf.Pins, want config.V3NetLeafConfig) {
 		t.Helper()
@@ -226,11 +162,9 @@ func TestWithUncheckedFrom(t *testing.T) {
 			t.Errorf("%s: %+v, want %+v", name, got, want)
 		}
 	}
-	want := before
-	want.HubSigned, want.HubSignedClears = false, 2
-	check("pins unread", leaf.Pins{CoordUnread: true, HubUnread: true}, want)
-	want = checked
-	want.HubSigned, want.HubSignedClears = true, 1
-	check("hubSigned unread", leaf.Pins{HubSignedUnread: true}, want)
+	check("pins unread", leaf.Pins{CoordUnread: true, HubUnread: true}, before)
+	want := checked
+	want.HubPubKey, want.PendingHubPubKey = before.HubPubKey, before.PendingHubPubKey
+	check("hub pin unread", leaf.Pins{HubUnread: true}, want)
 	check("all read", leaf.Pins{}, checked)
 }

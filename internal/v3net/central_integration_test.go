@@ -112,7 +112,7 @@ func TestCentralTwoBoardsDiscoverEachOther(t *testing.T) {
 		t.Fatal(err)
 	}
 	h, err := hub.New(hub.Config{
-		ListenAddr: ":0", DataDir: dir, Keystore: hubKS, AutoApprove: true, RequireSignedSubscribe: true,
+		ListenAddr: ":0", DataDir: dir, Keystore: hubKS, AutoApprove: true,
 		Networks: []hub.NetworkConfig{{Name: "testnet", Description: "Central test"}},
 	})
 	if err != nil {
@@ -185,7 +185,7 @@ func TestReloadWithdrawsListingWhenPublicationTurnedOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	h, err := hub.New(hub.Config{
-		ListenAddr: ":0", DataDir: dir, Keystore: hubKS, AutoApprove: true, RequireSignedSubscribe: true,
+		ListenAddr: ":0", DataDir: dir, Keystore: hubKS, AutoApprove: true,
 		Networks: []hub.NetworkConfig{{Name: "testnet"}},
 	})
 	if err != nil {

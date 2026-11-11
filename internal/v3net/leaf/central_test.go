@@ -216,7 +216,7 @@ func TestCentralDirectoryDropsTamperedListings(t *testing.T) {
 	dir := protocol.CentralDirectory{Network: "testnet", GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 		Listings: []protocol.CentralDirectoryEntry{{Listing: honest, Online: true}, {Listing: altered}, {Listing: expired}, {Listing: wrongNet}, {Listing: dup}}}
 
-	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fake := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v3net/v1/testnet/central/listings" {
 			_ = json.NewEncoder(w).Encode(dir)
 			return
@@ -406,7 +406,7 @@ func TestCentralFetchFullDirectory(t *testing.T) {
 	if len(body) <= maxRespBytes {
 		t.Fatalf("test directory is %d bytes, not over the small-reply cap", len(body))
 	}
-	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fake := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(body)
 	}))
 	defer fake.Close()

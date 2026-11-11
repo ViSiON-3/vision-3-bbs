@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -46,7 +45,7 @@ func TestSSE_NALUpdatedTriggersRefetch(t *testing.T) {
 	var mu sync.Mutex
 	nalFetches := 0
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v3net/v1/testnet/events":
 			flusher, ok := w.(http.Flusher)
@@ -120,7 +119,7 @@ func TestNALUpdatedRefetchBypassesCacheAndNotifies(t *testing.T) {
 
 	var mu sync.Mutex
 	current := signedJSON("test.a")
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v3net/v1/testnet/events":
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -193,7 +192,7 @@ func TestSSEReconnectRefetchesNAL(t *testing.T) {
 
 	var mu sync.Mutex
 	connects := 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v3net/v1/testnet/events":
 			mu.Lock()
@@ -257,7 +256,7 @@ func TestNALUpdatedBurstFetchesOnce(t *testing.T) {
 	nalJSON := signedTestNAL(t)
 	var mu sync.Mutex
 	fetches := 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v3net/v1/testnet/events":
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -311,7 +310,7 @@ func TestSSEReconnectRetriesFailedNALFetch(t *testing.T) {
 	nalJSON := signedTestNAL(t)
 	var mu sync.Mutex
 	connects, nalCalls := 0, 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v3net/v1/testnet/events":
 			mu.Lock()

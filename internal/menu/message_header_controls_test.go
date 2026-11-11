@@ -69,16 +69,23 @@ func importV3NetSubjects(t *testing.T, env *menuEnv) {
 		}
 		msgs = append(msgs, msg)
 	}
+	dir := t.TempDir()
+	hubKS, _, err := keystore.Load(filepath.Join(dir, "hub.key"))
+	if err != nil {
+		t.Fatalf("load hub keystore: %v", err)
+	}
 	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/info") {
-			_ = json.NewEncoder(w).Encode(protocol.NetworkInfo{Name: "testnet"})
+			_ = json.NewEncoder(w).Encode(protocol.NetworkInfo{Name: "testnet", HubNodeID: hubKS.NodeID(), HubPubKeyB64: hubKS.PubKeyBase64()})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(protocol.MessagePage{Messages: msgs})
+		body, _ := json.Marshal(protocol.MessagePage{Messages: msgs})
+		sig, _ := protocol.SignResponse(hubKS, r.Header.Get("X-V3Net-Signature"), r.Header.Get(protocol.HeaderNonce), http.StatusOK, body)
+		w.Header().Set(protocol.HeaderHubSignature, sig)
+		_, _ = w.Write(body)
 	}))
 	t.Cleanup(hub.Close)
 
-	dir := t.TempDir()
 	ks, _, err := keystore.Load(filepath.Join(dir, "leaf.key"))
 	if err != nil {
 		t.Fatalf("load keystore: %v", err)
@@ -91,7 +98,8 @@ func importV3NetSubjects(t *testing.T, env *menuEnv) {
 
 	l := leaf.New(leaf.Config{
 		HubURL: hub.URL, Network: "testnet", Keystore: ks, DedupIndex: ix,
-		JAMWriter: v3net.NewJAMAdapter(env.e.MessageMgr, generalAreaID),
+		JAMWriter:    v3net.NewJAMAdapter(env.e.MessageMgr, generalAreaID),
+		HubPubKeyB64: hubKS.PubKeyBase64(),
 	})
 	n, err := l.Poll(context.Background())
 	if err != nil {

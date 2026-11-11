@@ -154,7 +154,7 @@ func TestHandoverKeepsAreasUntilAdopted(t *testing.T) {
 func openTestHubAt(t *testing.T, dir string, ks *keystore.Keystore) *Hub {
 	t.Helper()
 	h, err := New(Config{ListenAddr: ":0", DataDir: dir, Keystore: ks, AutoApprove: true,
-		RequireSignedSubscribe: true, Networks: []NetworkConfig{{Name: "testnet"}}})
+		Networks: []NetworkConfig{{Name: "testnet"}}})
 	if err != nil {
 		t.Fatalf("create hub: %v", err)
 	}

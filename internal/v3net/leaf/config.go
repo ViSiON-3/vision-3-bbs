@@ -62,30 +62,6 @@ type Config struct {
 	// callers who consented. Nil publishes nothing.
 	Activity CentralActivitySource
 
-	// RequireSignedHub refuses unsigned replies to signed requests and
-	// unsigned SSE streams, pausing syncing as a bad signature does,
-	// instead of taking them as from a hub that predates hub signing.
-	RequireSignedHub bool
-	// HubSigned is whether this leaf has seen the hub sign before, as the
-	// caller stored it through OnHubSigned. Once set, unsigned replies are
-	// refused as with RequireSignedHub.
-	HubSigned bool
-	// OnHubSigned is called when a hub signature first verifies while
-	// HubSigned is unset, so the caller can store HubSigned and a restart
-	// cannot be used to accept unsigned replies again. It runs on the
-	// leaf's goroutine. An error means it was not stored; the leaf keeps
-	// enforcing it and calls OnHubSigned again at the next verified reply,
-	// unless UpdatePins meanwhile is told the sysop wrote HubSigned and
-	// finds it still unset in the store, which drops the record.
-	OnHubSigned func() error
-	// HubSignedStored reports whether the caller's store holds HubSigned
-	// now. When UpdatePins is handed HubSigned false while the leaf
-	// enforces it, the leaf asks this before taking it as the sysop's
-	// clear, since a copy of the config read before OnHubSigned stored the
-	// record looks the same; Retire asks it too. It returns ErrNoStoredEntry
-	// when the store has no entry for this subscription. An error keeps the
-	// record in force. Nil takes the copy's value as it is.
-	HubSignedStored func() (StoredHubSigned, error)
 	// PinStored returns what the caller's store holds for kind now, or
 	// ErrNoStoredEntry when it has no entry for this subscription. A reload
 	// is a copy of the store read earlier, and the leaf may have stored a pin

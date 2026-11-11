@@ -217,12 +217,10 @@ BBS. This rebuilds both the BBS and config editor. Keep your existing
 configuration, node key, and data: updated clients sign subscriptions
 automatically with that key, without re-registration or re-approval.
 
-Hub and leaf updates can happen independently while the hub keeps
-**Signed Subscribe** at its default **N**. A hub rebuild does not automatically
-enforce signatures. Hub operators can enable enforcement later; older unsigned
-clients must update before connecting to a hub that requires signatures.
-See [Independent hub and leaf upgrades](v3net/configuration.md#upgrading-hub-and-leaf-nodes-independently)
-for the hub procedure and compatibility setting.
+A current hub refuses registrations from leaves older than v0.9.5, and a
+current leaf needs a hub of v0.9.6 or later, which signs its replies. See
+[Signed subscribes](v3net/configuration.md#signed-subscribes) and
+[Hub signatures](v3net/configuration.md#hub-signatures).
 
 ---
 
@@ -248,13 +246,12 @@ when it was posted. The BBS retries every minute and logs the first failure
 as `v3net outbound: sending to hub; will retry`; nothing is lost. See
 [How Messages Flow](v3net/message-areas.md#how-messages-flow).
 
-**"signed subscribe required" / subscription HTTP 401** — If the hub requires
-signed subscriptions, update both the BBS and config editor and restart with
-your existing key. Do not delete your registration or generate a new key.
-If an updated client still gets 401, check the hub's error details: invalid
-signatures or stale request dates may indicate a signing or clock problem.
-The hub operator can restore older-client compatibility by setting **Signed
-Subscribe** to **N** and restarting.
+**"signed subscribe required" / subscription HTTP 401** — The BBS or config
+editor is older than v0.9.5 and sent an unsigned registration. Update both
+and restart with your existing key. Do not delete your registration or
+generate a new key. If an updated client still gets 401, check the hub's
+error details: invalid signatures or stale request dates may indicate a
+signing or clock problem.
 
 **Lost keypair** — If you have your 24-word recovery seed phrase, restore it
 via `./config → 6 — ViSiON/3 Networking (V3Net) → 1. Node Identity → [R] Recover`.

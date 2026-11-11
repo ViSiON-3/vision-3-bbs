@@ -170,7 +170,7 @@ func newActivityHub(t *testing.T) (*hub.Hub, *httptest.Server) {
 		t.Fatal(err)
 	}
 	h, err := hub.New(hub.Config{
-		ListenAddr: ":0", DataDir: dir, Keystore: hubKS, AutoApprove: true, RequireSignedSubscribe: true,
+		ListenAddr: ":0", DataDir: dir, Keystore: hubKS, AutoApprove: true,
 		Networks: []hub.NetworkConfig{{Name: "testnet"}},
 	})
 	if err != nil {

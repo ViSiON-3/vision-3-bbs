@@ -72,11 +72,10 @@ func setupIntegration(t *testing.T) (
 	}
 
 	hubCfg := hub.Config{
-		ListenAddr:             ":0",
-		DataDir:                dir,
-		Keystore:               hubKS,
-		AutoApprove:            true,
-		RequireSignedSubscribe: true,
+		ListenAddr:  ":0",
+		DataDir:     dir,
+		Keystore:    hubKS,
+		AutoApprove: true,
 		Networks: []hub.NetworkConfig{
 			{Name: "testnet", Description: "Integration test network"},
 		},
@@ -153,6 +152,7 @@ func setupIntegration(t *testing.T) (
 		Keystore:     leafKS,
 		DedupIndex:   dedupIx,
 		JAMWriter:    writer,
+		HubPubKeyB64: hubKS.PubKeyBase64(), // pinned, as after a first start
 	}
 
 	l = leaf.New(leafCfg)
@@ -423,6 +423,7 @@ func TestIntegration_AreaFilteredPolling(t *testing.T) {
 		Keystore:     leaf2KS,
 		DedupIndex:   leaf2Dedup,
 		JAMWriter:    leaf2Writer,
+		HubPubKeyB64: hubKS.PubKeyBase64(),
 	})
 
 	codingMsg := protocol.Message{

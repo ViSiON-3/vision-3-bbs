@@ -13,7 +13,8 @@ import (
 )
 
 // subscribeWithSoftware subscribes ks with report, signed unless unsigned
-// is set, and fails the test on anything but 200.
+// is set, and fails the test on anything but 200, or 401 for an unsigned
+// request.
 func subscribeWithSoftware(t *testing.T, ts *httptest.Server, ks *keystore.Keystore, report *protocol.SoftwareReport, unsigned bool) {
 	t.Helper()
 	body, err := json.Marshal(protocol.SubscribeRequest{
@@ -24,19 +25,19 @@ func subscribeWithSoftware(t *testing.T, ts *httptest.Server, ks *keystore.Keyst
 		t.Fatal(err)
 	}
 	url := ts.URL + "/v3net/v1/subscribe"
-	var code int
+	code, want := 0, http.StatusOK
 	if unsigned {
 		resp, err := http.Post(url, "application/json", strings.NewReader(string(body)))
 		if err != nil {
 			t.Fatal(err)
 		}
 		_ = resp.Body.Close()
-		code = resp.StatusCode
+		code, want = resp.StatusCode, http.StatusUnauthorized
 	} else {
 		code = postSubscribe(t, signedRequest(t, ks, "POST", url, string(body)))
 	}
-	if code != http.StatusOK {
-		t.Fatalf("subscribe: status %d, want 200", code)
+	if code != want {
+		t.Fatalf("subscribe: status %d, want %d", code, want)
 	}
 }
 
@@ -169,11 +170,10 @@ func TestSoftwareReport_AreaSubscribeKeepsReport(t *testing.T) {
 	}
 }
 
-// Anyone can send an unsigned subscribe naming a known node, so it must not
-// change what the hub records about that node's software.
-func TestSoftwareReport_UnsignedIgnored(t *testing.T) {
-	h, ts, hubKS, leafKS := softwareHub(t)
-	h.cfg.RequireSignedSubscribe = false
+// Anyone can send an unsigned subscribe naming a known node; it is refused
+// and changes nothing the hub records about that node's software.
+func TestSoftwareReport_UnsignedRefused(t *testing.T) {
+	_, ts, hubKS, leafKS := softwareHub(t)
 	subscribeWithSoftware(t, ts, leafKS, &protocol.SoftwareReport{Name: protocol.SoftwareNameVision3, Version: "0.9.8"}, false)
 
 	subscribeWithSoftware(t, ts, leafKS, &protocol.SoftwareReport{Name: "Forged", Version: "6.6.6"}, true)

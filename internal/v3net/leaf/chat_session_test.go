@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -585,7 +584,7 @@ func TestNotifyReconnect_TellsEverySession(t *testing.T) {
 func TestChatSession_JoinUndoneWhenReplyUnreadable(t *testing.T) {
 	var mu sync.Mutex
 	var leaves []string
-	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	hub := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v3net/v1/testnet/chat/rooms/join":
 			_, _ = w.Write([]byte("not json"))
@@ -708,7 +707,7 @@ func TestChatSession_Ping(t *testing.T) {
 	}
 
 	// The time is the whole round trip.
-	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	slow := signedHub(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(60 * time.Millisecond)
 		_, _ = w.Write([]byte("[]"))
 	}))
