@@ -27,6 +27,7 @@ func SupportedFeatures() []string {
 		protocol.FeatureCentralPresence,
 		protocol.FeatureCentralLastCallers,
 		protocol.FeatureCentralChat,
+		protocol.FeatureCentralAlerts,
 	}
 }
 

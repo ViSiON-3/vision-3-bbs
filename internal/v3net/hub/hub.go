@@ -34,6 +34,8 @@ type Hub struct {
 	centralLimiter    *rateLimiter // per node: listing publishes
 	activity          *CentralActivityStore
 	activityLimiter   *rateLimiter // per node and kind: activity snapshots
+	alertLimiter      *rateLimiter // per node: activity alerts
+	alertSeen         *alertSeen   // IDs of the alerts relayed, until they expire
 	online            *onlineNodes
 	// chatStreamMu orders stream registration against last-stream cleanup.
 	// An old connection must not remove memberships restored by its replacement.
@@ -136,6 +138,8 @@ func New(cfg Config) (*Hub, error) {
 		centralLimiter:    newBurstRateLimiter(centralPublishInterval, centralPublishBurst),
 		activity:          activity,
 		activityLimiter:   newBurstRateLimiter(centralActivityInterval, centralActivityBurst),
+		alertLimiter:      newBurstRateLimiter(centralAlertInterval, centralAlertBurst),
+		alertSeen:         newAlertSeen(),
 		online:            newOnlineNodes(),
 	}
 
@@ -155,6 +159,7 @@ func (h *Hub) Start(ctx context.Context) error {
 	h.chatStore.StartPruner(ctx)
 	h.central.StartPruner(ctx)
 	h.startActivityPruner(ctx)
+	h.startAlertPruner(ctx)
 
 	go func() {
 		<-ctx.Done()
@@ -184,6 +189,7 @@ func (h *Hub) close() error {
 	h.chatNodeLimiter.Stop()
 	h.centralLimiter.Stop()
 	h.activityLimiter.Stop()
+	h.alertLimiter.Stop()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	shutdownErr := h.server.Shutdown(ctx)

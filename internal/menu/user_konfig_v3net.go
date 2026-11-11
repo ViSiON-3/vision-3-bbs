@@ -18,7 +18,8 @@ const v3netSharingKonfigKey = 'R'
 func v3netSharingOffered(e *MenuExecutor) bool {
 	return len(centralOfferedNetworks(e.V3NetCentral, protocol.CentralKindPresence)) > 0 ||
 		len(centralOfferedNetworks(e.V3NetCentral, protocol.CentralKindLastCallers)) > 0 ||
-		len(centralChatOfferedNetworks(e.V3NetCentral)) > 0
+		len(centralChatOfferedNetworks(e.V3NetCentral)) > 0 ||
+		centralAlertsOffered(e.V3NetCentral)
 }
 
 // v3netSharingValue sums up what the caller shares: Off, or which of
@@ -40,6 +41,9 @@ func v3netSharingValue(st *konfigState) konfigValue {
 	}
 	if u.CentralChat && !u.CentralChatBarred && len(centralChatOfferedNetworks(st.c.e.V3NetCentral)) > 0 {
 		on = append(on, "Chat")
+	}
+	if centralAlertsShared(st.c.e.V3NetCentral, u) {
+		on = append(on, "Alerts")
 	}
 	if len(on) == 0 {
 		return st.onOffValue(false)

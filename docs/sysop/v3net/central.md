@@ -9,8 +9,11 @@ to meet people and join activities across them. This page covers **phase 1,
 the board directory** (a V3Net Central menu for callers, and a listing each
 participating board can publish so others can find it and call it),
 **phase 2, [Who's Online and Last Callers](#whos-online-and-last-callers)**
-across the network, for callers who choose to be seen, and **phase 3,
-[network chat](#network-chat)**, for callers who choose to talk.
+across the network, for callers who choose to be seen, **phase 3,
+[network chat](#network-chat)**, for callers who choose to talk, and
+**[activity alerts](#activity-alerts)**, live toasts of who logs on, joins
+network chat or posts on the other boards, for callers who choose to send
+or see them.
 
 Everything in Central is opt-in, per feature and per network. Joining a
 V3Net network for message areas enables none of it, and upgrading never
@@ -18,8 +21,8 @@ turns anything on. The one exception is network chat, which boards had
 before Central: it stays on through an upgrade, and is on for a new
 subscription, until you turn it off (see [Offering It](#offering-it)). A
 caller's handle leaves the board only if the sysop offers a phase 2
-feature on that network *and* the caller turns it on for themselves, or
-if the caller agrees to network chat and joins a room.
+feature or an activity alert on that network *and* the caller turns it on
+for themselves, or if the caller agrees to network chat and joins a room.
 
 ---
 
@@ -272,10 +275,11 @@ V3Net Central: Sharing
 ───────────────────────────────────────────────────────────────────────────────
   Nothing about you is shared through V3Net Central.
   Browsing boards, Who's Online and Last Callers sends nothing about you.
-
   [1] Show me on Who's Online        Off
   [2] My availability               Not shown
   [3] Show my calls on Last Callers Off
+  [4] Take part in network chat     Off
+  [5] Activity alerts               Off
 
   What other boards would see
   Who's Online: Caller on My BBS
@@ -651,6 +655,150 @@ and block controls, a sysop's bar and block list are under
 [Moderation](#moderation); reports and network-wide sanctions are later
 parts of #672.
 
+## Activity Alerts
+
+Activity alerts are short live notices, shown as
+[toasts](users/login-sequence.md#toasts), of what callers do on the other boards of a
+network:
+
+| Kind | Sent when | Example |
+|---|---|---|
+| Logon | a caller finishes logging on | `Alice on Example BBS logged on (examplenet)` |
+| Logoff | a caller's session ends after login | `Alice on Example BBS logged off (examplenet)` |
+| Chat | a caller joins a network chat room | `Alice on Example BBS entered network chat (lobby on examplenet)` |
+| Post | a caller saves a post in one of the network's message areas | `Alice on Example BBS posted in General on examplenet` |
+
+An alert names the caller by handle and their board by name, so two
+callers with one handle on different boards read differently. A chat
+alert names the room; a post alert names the area as *your* board names
+it. An alert never carries a message, its subject, private mail, a
+private chat message, or anything about a caller's account beyond the
+handle.
+
+Everything here is off until you and the caller both turn it on. Offering
+Who's Online, Last Callers or chat, a caller sharing their presence,
+agreeing to chat, or **Callers Default** never sends an alert or
+subscribes anyone to them, and upgrading changes nothing.
+
+### Choosing Alerts
+
+Callers choose under **V3Net Central → Preferences → [5] Activity
+alerts**, also reached through **V3Net Sharing** on Your Konfig. The entry
+appears only while some network offers an alert. The screen has two
+columns of switches:
+
+```
+V3Net Central: Activity Alerts
+───────────────────────────────────────────────────────────────────────────────
+  Alerts are short live notices of what callers do on other boards.
+  Sharing and seeing are separate; each switch starts off.
+
+  Tell other boards when...     Show me when, on other boards...
+  [1] I log on             Off   [5] someone logs on        Off
+  [2] I log off            Off   [6] someone logs off       Off
+  [3] I join network chat  Off   [7] someone joins net chat Off
+  [4] I post a message     Off   [8] someone posts          Off
+```
+
+- **Tell other boards** (1-4) is the caller's permission to announce what
+  they do here. **Show me** (5-8) is their subscription to what callers
+  elsewhere do. The two are independent: subscribing announces nothing,
+  and announcing subscribes to nothing.
+- Each kind has its own pair, so logons and logoffs are chosen apart.
+- A kind no network offers shows `n/a` and cannot be turned on. One left
+  on after you stop offering it shows `On*` and can still be turned off.
+- The choices are stored on the account (`centralAlerts` in `users.json`)
+  and read at the moment they matter: turning a switch off on one node
+  stops the next alert from or to that caller at once, on every node.
+- An invisible login is never announced, and neither is a private or
+  anonymous post.
+- Post alerts cover posts and replies written in the BBS's message
+  editor. Replies uploaded in a QWK packet, and posts made with `helper
+  post` or a script, are not announced.
+
+### Offering Alerts
+
+Each kind is its own switch on the subscription, below **Chat Block
+List** in the editor:
+
+| Editor field | JSON (`central.alerts`) | Default | Effect |
+|---|---|---|---|
+| **Alert Logons** | `logons` | N | Logon alerts on this network. Needs **Central**. |
+| **Alert Logoffs** | `logoffs` | N | Logoff alerts on this network. Needs **Central**. |
+| **Alert Chat** | `chat` | N | Chat join alerts on this network. Needs **Central** and **Lobby Chat**. |
+| **Alert Posts** | `posts` | N | Post alerts for this network's message areas. Needs **Central**. |
+
+A switch covers both directions on its network: on, this board announces
+its sharing callers' actions of that kind and shows the other boards'
+alerts of that kind to its subscribed callers; off, it does neither,
+whatever callers chose. A caller's choice cannot override it.
+
+Who sees an alert is decided on the receiving board, from each caller's
+stored record:
+
+- only callers who are past login and subscribed to its kind;
+- a post alert only where this board carries the area on that network,
+  and only to callers who pass the area's read ACS and its conference's
+  ACS, each checked against the caller's own connection as the menus do;
+- a chat alert not to a caller you have barred from network chat;
+- nothing from a caller on the viewer's Twit List, or on your **Chat
+  Block List**;
+- nothing from your own board: your callers already see your local
+  [logon and logoff toasts](users/login-sequence.md#toasts).
+
+The four lines are strings you can change in the string editor
+(**Alert: Network Logon**, **Logoff**, **Chat** and **Post**;
+`centralAlertLogon`, `centralAlertLogoff`, `centralAlertChatJoin` and
+`centralAlertPost` in `strings.json`). Each takes the handle, the board
+and the network, with the room or the area before the network for chat
+and posts. A blank string shows no alert of that kind.
+
+### How Alerts Work
+
+The board where a caller acts writes the alert, signs it with its node
+key, and posts it to the hub. The hub checks the signature against the
+board's registered key, as it does a listing, and relays the alert as
+signed to every board on the network as a `central_alert` event; each
+board checks the signature again before showing it, so a hub cannot alter
+an alert or send one in another board's name. As with listings, a board is
+known by its key, and a hub that set out to deceive its network could still
+invent a board of its own and alerts from it; trust in the hub's operator
+is part of joining a network. One action on a board in several networks
+goes to each network with one ID, and a board on several of them shows it
+once.
+
+Alerts are news, not records:
+
+- An alert is valid for **two minutes** (a hub refuses one longer than
+  five) and is dropped once it expires, wherever it is. A board that
+  cannot reach its hub retries the same alert until shortly before then,
+  then gives up rather than send it late.
+- The hub stores no alert. It remembers the IDs it has relayed until
+  they expire, so a retry after a lost reply, or a replayed alert, is
+  acknowledged and not sent again; each board also drops an ID it has
+  seen.
+- There is **no inbox and no catch-up**. An alert waits for a caller who
+  cannot be shown it yet (one in a door, say) for at most 60 seconds, and
+  is never queued for a later login. A board that reconnects to its hub,
+  or a caller who reconnects, is sent nothing that happened meanwhile.
+- A logoff alert comes only from a caller's own session ending on their
+  board. A board losing its link to the hub, or the hub dropping a
+  board's presence, never produces one.
+- A failed action announces nothing: a chat alert follows a successful
+  join, and a post alert a successful save. Rejoining after a reconnect,
+  network message imports and presence refreshes send none.
+
+A hub relays at most 30 alerts in a burst, then one a second, per board
+and network.
+
+### Alerts and Older Versions
+
+A hub lists `central.alerts` among its features once it runs this
+version. A board sends and shows alerts on a network only when its hub
+names it; against an older hub the switches do nothing and **Activity
+alerts** is not offered for that network. Boards from before this
+version neither send nor show alerts, and nothing else changes for them.
+
 ---
 
 ## Pilot Status
@@ -675,6 +823,16 @@ published. A leaf on a hub without the features never calls them.
 Turning a feature off on reload withdraws it. A volunteer pilot on a live
 network is still to come, tracked on the epic,
 [#669](https://github.com/ViSiON-3/vision-3-bbs/issues/669).
+
+Activity alerts have been exercised in automated tests: two boards on one
+hub exchange all four kinds, verified and naming the right board, caller,
+room and area; the sending board does not alert itself; a retry reaches
+no one twice; a board whose sysop has a kind off neither sends nor shows
+it; expired, forged and blocked alerts are dropped; a board that cannot
+reach its hub gives up once the alert would be stale. On the BBS side,
+only subscribed callers past login see an alert, a withdrawn choice
+stops the next one, post alerts follow the area's read ACS, and the
+Twit List and chat bar apply. A live multi-board pilot is still to come.
 
 ---
 

@@ -18,6 +18,7 @@ func keepCentralConsent(dst, src *User) {
 	dst.CentralChat = src.CentralChat
 	dst.CentralChatChosen = src.CentralChatChosen
 	dst.CentralChatBarred = src.CentralChatBarred
+	dst.CentralAlerts = src.CentralAlerts
 	dst.CentralLastCallsSince = nil
 	if src.CentralLastCallsSince != nil {
 		t := *src.CentralLastCallsSince

@@ -97,6 +97,11 @@ type Service struct {
 
 	// keyObserver holds the func(leaf.KeyEvent) set by SetKeyChangeObserver.
 	keyObserver atomic.Value
+
+	// alertSink holds the alertSinkBox set by SetCentralAlertSink, and
+	// alertsSeen the alerts handed to it (service_alerts.go).
+	alertSink  atomic.Value
+	alertsSeen alertDedup
 }
 
 // SetKeyChangeObserver registers fn to hear when a leaf's hub offers a
@@ -459,6 +464,8 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		CentralChat:           lcfg.CentralChat(),
 		ChatBlocked:           lcfg.ChatBlocked(),
 		Activity:              s.activitySource(),
+		CentralAlerts:         lcfg.CentralAlerts(),
+		OnAlert:               s.receiveAlert,
 		CoordPubKeyB64:        lcfg.CoordinatorPubKey,
 		HubPubKeyB64:          lcfg.HubPubKey,
 		PendingCoordPubKeyB64: lcfg.PendingCoordinatorPubKey,
@@ -1277,6 +1284,8 @@ type CentralNetworkStatus struct {
 	LastCallers leaf.ActivityStatus
 	// Chat is network chat.
 	Chat leaf.ChatStatus
+	// Alerts is activity alerts.
+	Alerts leaf.AlertStatus
 }
 
 // CentralNetworks returns the Central state of every running subscription,
@@ -1293,6 +1302,7 @@ func (s *Service) CentralNetworks() []CentralNetworkStatus {
 			Presence:      run.l.ActivityStatus(protocol.CentralKindPresence),
 			LastCallers:   run.l.ActivityStatus(protocol.CentralKindLastCallers),
 			Chat:          run.l.ChatStatus(),
+			Alerts:        run.l.AlertStatus(),
 		})
 	}
 	return out

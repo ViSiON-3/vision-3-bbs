@@ -197,6 +197,26 @@ type V3NetCentralConfig struct {
 	// against a known abuser while the network's operator is away. It is
 	// the editor's Chat Block List.
 	ChatBlocked []string `json:"chatBlocked,omitempty"`
+	// Alerts are the activity alert switches for this network, one per
+	// kind of alert. Each needs Enabled (and a chat join, Chat as well),
+	// and each is off until the sysop turns it on: a config from before
+	// alerts takes part in none. On, this board sends that kind of alert
+	// for each caller here who agreed to it, and shows the other boards'
+	// to each caller here who asked for it; CallersDefault does not apply.
+	// Off, it does neither, whatever callers chose.
+	Alerts V3NetCentralAlerts `json:"alerts,omitzero"`
+}
+
+// V3NetCentralAlerts are a subscription's activity alert switches.
+type V3NetCentralAlerts struct {
+	// Logons and Logoffs are callers logging on to and off a board.
+	Logons  bool `json:"logons,omitempty"`
+	Logoffs bool `json:"logoffs,omitempty"`
+	// Chat is callers joining a network chat room, with the room.
+	Chat bool `json:"chat,omitempty"`
+	// Posts is callers posting in one of the network's message areas,
+	// with the area; never the subject or the message.
+	Posts bool `json:"posts,omitempty"`
 }
 
 // NewV3NetLeafCentral returns the Central block a newly created
@@ -243,6 +263,26 @@ func (l V3NetLeafConfig) ChatBlocked() []string {
 		return nil
 	}
 	return l.Central.ChatBlocked
+}
+
+// CentralAlerts returns the activity alert kinds (protocol.CentralAlert*
+// names) the sysop has on for this subscription, each true. Every kind
+// needs Central on, and a chat join network chat as well; with Central off
+// it is empty.
+func (l V3NetLeafConfig) CentralAlerts() map[string]bool {
+	out := map[string]bool{}
+	if !l.CentralEnabled() {
+		return out
+	}
+	a := l.Central.Alerts
+	for kind, on := range map[string]bool{
+		"logon": a.Logons, "logoff": a.Logoffs, "chat_join": a.Chat && l.CentralChat(), "post": a.Posts,
+	} {
+		if on {
+			out[kind] = true
+		}
+	}
+	return out
 }
 
 // CentralEnabled reports whether callers may open V3Net Central for this

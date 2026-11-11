@@ -59,6 +59,8 @@ type Leaf struct {
 
 	// central is the leaf's V3Net Central state (central.go).
 	central centralState
+	// alerts is the leaf's activity alert state (central_alert.go).
+	alerts alertState
 	// sseConnected is set while the event stream is open.
 	sseConnected atomic.Bool
 	// pollNow wakes the poll loop for a poll ahead of its ticker, when the

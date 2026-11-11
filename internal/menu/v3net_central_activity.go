@@ -496,14 +496,21 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 			chatOn = chatNets
 		}
 
+		// Activity alerts have a screen of their own, offered here where
+		// any network has them on, or while the caller has one on.
+		alertsShared := centralAlertsShared(e.V3NetCentral, u)
+		alertsEntry := centralAlertsOffered(e.V3NetCentral) || u.CentralAlerts != (user.CentralAlertPrefs{})
+
 		var buf strings.Builder
 		buf.WriteString(centralHeader("Sharing", termWidth))
-		if len(whoOn) == 0 && len(lastOn) == 0 && len(chatOn) == 0 {
+		if len(whoOn) == 0 && len(lastOn) == 0 && len(chatOn) == 0 && !alertsShared {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|15  Nothing about you is shared through V3Net Central.|07\r\n")))
 		} else {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|15  You share what is switched on below, and nothing else.|07\r\n")))
 		}
-		buf.Write(ansi.ReplacePipeCodes([]byte("|08  Browsing boards, Who's Online and Last Callers sends nothing about you.|07\r\n\r\n")))
+		// No blank line under this: with every feature offered, the screen
+		// takes all 24 rows.
+		buf.Write(ansi.ReplacePipeCodes([]byte("|08  Browsing boards, Who's Online and Last Callers sends nothing about you.|07\r\n")))
 
 		onOff := func(on, offered []string) string {
 			switch {
@@ -529,12 +536,20 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		if u.CentralChatBarred {
 			chatSwitch = "|07Off |08(set by the SysOp)|07"
 		}
-		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|154|03] Take part in network chat     " + chatSwitch + "\r\n\r\n")))
+		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|154|03] Take part in network chat     " + chatSwitch + "\r\n")))
+		if alertsEntry {
+			buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|155|03] Activity alerts               " + centralAlertsSummary(u) + "\r\n")))
+		}
+		buf.WriteString("\r\n")
 
 		handle := centralPreviewHandle(u.Handle)
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  What other boards would see|07\r\n")))
-		if len(whoNets) == 0 && len(lastNets) == 0 && len(chatNets) == 0 {
+		alertsOffered := centralAlertsOffered(e.V3NetCentral)
+		switch {
+		case len(whoNets) == 0 && len(lastNets) == 0 && len(chatNets) == 0 && !alertsOffered:
 			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Nothing: this board offers no feature that shares anything about you.\r\n")))
+		case len(whoNets) == 0 && len(lastNets) == 0 && len(chatNets) == 0:
+			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Only activity alerts you share: see [5] for what they say.\r\n")))
 		}
 		// Each preview is two lines: who and where, then what else goes
 		// with it, so a long handle and board name still fit 80 columns.
@@ -560,10 +575,15 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		if len(chatNets) > 0 {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Network chat: |15" + v3netClip(handle, 30) + "|07 on |11" + v3netClip(board, 30) + "|07\r\n")))
-			buf.Write(ansi.ReplacePipeCodes([]byte("|08                in the room's user list and with each line you type;|07\r\n")))
-			buf.Write(ansi.ReplacePipeCodes([]byte("|08                the hub keeps room history for callers who join later|07\r\n")))
+			buf.Write(ansi.ReplacePipeCodes([]byte("|08                in the user list and each room message; kept in room history|07\r\n")))
 		}
-		buf.Write(ansi.ReplacePipeCodes([]byte("|08  Never your real name, location, user number, or what you are doing.|07\r\n")))
+		if alertsOffered {
+			// Alerts say what a caller does when shared, as chat's joins,
+			// leaves and lines do: whatever is switched on above.
+			buf.Write(ansi.ReplacePipeCodes([]byte("|08  Never your real name, location or user number; activity only as switched on.|07\r\n")))
+		} else {
+			buf.Write(ansi.ReplacePipeCodes([]byte("|08  Never your real name, location, user number, or what you are doing.|07\r\n")))
+		}
 		buf.Write(ansi.ReplacePipeCodes([]byte("|08  Turning a switch off takes you off at once on connected boards; an|07\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|08  offline board drops it within minutes (online) or 24 hours (calls).|07\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte(v3netRule(termWidth))))
@@ -573,7 +593,11 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
 
-		line, next, err := v3netPromptLine(s, terminal, outputMode, "|07  Choice (1-4, Q quits): ")
+		prompt := "|07  Choice (1-4, Q quits): "
+		if alertsEntry {
+			prompt = "|07  Choice (1-5, Q quits): "
+		}
+		line, next, err := v3netPromptLine(s, terminal, outputMode, prompt)
 		if err != nil {
 			return u, next, err
 		}
@@ -645,8 +669,20 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 			status = "|10Saved.|07"
 			continue
+		case "5":
+			if !alertsEntry {
+				status = "|04Enter 1, 2, 3, 4 or Q.|07"
+				continue
+			}
+			if next, err := runV3NetCentralAlerts(c); err != nil {
+				return u, next, err
+			}
+			continue
 		default:
 			status = "|04Enter 1, 2, 3, 4 or Q.|07"
+			if alertsEntry {
+				status = "|04Enter 1 to 5, or Q.|07"
+			}
 			continue
 		}
 		if c.userManager != nil {
@@ -677,6 +713,7 @@ func centralConsentFrom(dst, src *user.User) {
 	dst.CentralChat = src.CentralChat
 	dst.CentralChatChosen = src.CentralChatChosen
 	dst.CentralChatBarred = src.CentralChatBarred
+	dst.CentralAlerts = src.CentralAlerts
 }
 
 // centralPreviewHandle shows a handle as a snapshot would carry it: colour

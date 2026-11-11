@@ -172,6 +172,11 @@ type User struct {
 	// with the consent fields, so a consent save on another node cannot
 	// clear it.
 	CentralChatBarred bool `json:"centralChatBarred,omitempty"`
+	// CentralAlerts are the caller's V3Net Central activity alert choices.
+	// They stand apart from the switches above: sharing presence or taking
+	// part in chat does not share alerts or subscribe to them, and no
+	// Callers Default applies.
+	CentralAlerts CentralAlertPrefs `json:"centralAlerts,omitzero"`
 
 	// Soft Delete (user marked as deleted but data preserved)
 	DeletedUser bool       `json:"deletedUser,omitempty"` // True if user is soft-deleted
