@@ -78,6 +78,10 @@ func (h *Hub) newMux() http.Handler {
 			case strings.HasSuffix(path, "/central/listings") && r.Method == http.MethodGet:
 				h.handleGetCentralDirectory(w, r, network)
 
+			// V3Net Central: activity alerts.
+			case strings.HasSuffix(path, "/central/alerts") && r.Method == http.MethodPost:
+				h.handlePostCentralAlert(w, r, network)
+
 			// V3Net Central: Who's Online and Last Callers.
 			case strings.HasSuffix(path, "/central/"+protocol.CentralKindPresence) || strings.HasSuffix(path, "/central/"+protocol.CentralKindLastCallers):
 				kind := path[strings.LastIndex(path, "/")+1:]
