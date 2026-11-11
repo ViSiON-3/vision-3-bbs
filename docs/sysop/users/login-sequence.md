@@ -486,12 +486,13 @@ are never announced.
 
 Post announcements are toasts too, for callers on this board. Turn them on with
 `toastPosts` (**Toast Posts** on the config editor's Toasts screen) and word
-them with `toastPost` (the handle, then the area's name). They follow the same
+them with `toastPost` (the poster as the post names them, which is the real
+name in an area that requires one, then the area's name). They follow the same
 rules as logon announcements: callers at or above `toastAnnounceLevel`, live
 only, dropped after a minute, never the poster's own sessions or an invisible
 poster. On top of that a caller sees one only for an area they may read, its
-read ACS and its conference's both checked, and not from someone on their Twit
-List. A post or reply saved in the message editor is announced, in any public
+read ACS and its conference's both checked, and not when their Twit List names
+the poster's handle or the name the post carries. A post or reply saved in the message editor is announced, in any public
 area: local, echomail such as Fidonet or fsxNet, QWK network or V3Net. Private
 mail, netmail and anonymous posts are not, and neither are messages that arrive
 by import (an FTN toss, a QWK or V3Net poll), QWK reply uploads, `helper post` or

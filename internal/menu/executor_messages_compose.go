@@ -293,7 +293,7 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	// Saved: callers online here may be told, if the sysop announces posts,
 	// and other boards on the area's network, if the caller shares posts.
 	// Never for a private or anonymous one.
-	e.AnnouncePost(userManager, e.nodeSession(nodeNumber), currentUser, area, private, isAnonymous)
+	e.AnnouncePost(userManager, e.nodeSession(nodeNumber), currentUser, area, fromName, private, isAnonymous)
 	e.sendPostAlert(userManager, nodeNumber, currentUser, area.ID, area.Tag, private, isAnonymous)
 
 	// 9. Confirmation

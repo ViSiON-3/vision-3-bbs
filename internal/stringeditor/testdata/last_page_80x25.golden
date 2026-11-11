@@ -21,5 +21,5 @@
 [38;2;170;170;170;48;2;0;0;0m                                                                                [0m
 [38;2;170;170;170;48;2;0;0;0m                                                                                [0m
 [38;2;170;170;170;48;2;0;0;0m                                                                                [0m
-[38;2;255;85;255;48;2;0;0;0m Shown to other callers here when someone posts (%s=handle, %s=area); blank = no[0m
+[38;2;255;85;255;48;2;0;0;0m Shown to other callers here when someone posts (%s=poster, %s=area); blank = no[0m
 [1;38;2;255;255;255;48;2;85;85;85mEnter Edit  F1 Prefill  F3 Revert  F4 Default  F10 Save  / Search  ^R  Esc Quit [0m

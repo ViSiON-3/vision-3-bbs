@@ -192,7 +192,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 			slog.Error("failed to update MessagesPosted", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 		}
 		if area, ok := e.MessageMgr.GetAreaByID(currentAreaID); ok {
-			e.AnnouncePost(userManager, e.nodeSession(nodeNumber), currentUser, area, currentMsg.IsPrivate, false)
+			e.AnnouncePost(userManager, e.nodeSession(nodeNumber), currentUser, area, fromName, currentMsg.IsPrivate, false)
 			e.sendPostAlert(userManager, nodeNumber, currentUser, area.ID, area.Tag, currentMsg.IsPrivate, false)
 		}
 		e.writeString(terminal, outputMode, e.Strings().MsgReplySuccess)

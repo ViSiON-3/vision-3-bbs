@@ -2,6 +2,7 @@ package menu
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -40,12 +41,16 @@ func (e *MenuExecutor) AnnounceLogoff(sess *session.BbsSession, u *user.User) {
 // this toast; and a post made here is never shown here as an alert, which the
 // leaf drops for its own board.
 //
+// author is the name the post was saved under, as readers of the area see it
+// (the real name in an area that requires one); the toast names the poster
+// by it, falling back to the handle.
+//
 // Who sees it follows the logon toasts: past login, at or above
 // toastAnnounceLevel, not the poster's own sessions. On top of that the
 // viewer must pass the area's read ACS and its conference's (on their stored
 // record when um is given, and their own connection), and their Twit List
-// must not hide the poster.
-func (e *MenuExecutor) AnnouncePost(um *user.UserMgr, sess *session.BbsSession, u *user.User, area *message.MessageArea, private, anonymous bool) {
+// must hide neither the poster's handle nor the post's author.
+func (e *MenuExecutor) AnnouncePost(um *user.UserMgr, sess *session.BbsSession, u *user.User, area *message.MessageArea, author string, private, anonymous bool) {
 	format := e.Strings().ToastPost
 	if sess == nil || u == nil || area == nil || format == "" || !e.GetServerConfig().ToastPosts {
 		return
@@ -53,7 +58,11 @@ func (e *MenuExecutor) AnnouncePost(um *user.UserMgr, sess *session.BbsSession, 
 	if private || anonymous || isNetmailArea(area) || composeRecipientKindFor(area) == recipientPrivate {
 		return
 	}
-	msg := fmt.Sprintf(format, threadEscapePipes(u.Handle), threadEscapePipes(alertAreaName(area)))
+	author = strings.TrimSpace(author)
+	if author == "" {
+		author = u.Handle
+	}
+	msg := fmt.Sprintf(format, threadEscapePipes(author), threadEscapePipes(alertAreaName(area)))
 	e.announce(sess, u, msg, func(viewer *session.BbsSession, vu *user.User) bool {
 		acct := vu
 		if um != nil {
@@ -66,7 +75,11 @@ func (e *MenuExecutor) AnnouncePost(um *user.UserMgr, sess *session.BbsSession, 
 		viewer.Mutex.RLock()
 		start := viewer.StartTime
 		viewer.Mutex.RUnlock()
-		return e.mayReadAlertArea(acct, viewer, start, area) && !twitMatcher(e, um, acct).Hidden(u.Handle, "")
+		if !e.mayReadAlertArea(acct, viewer, start, area) {
+			return false
+		}
+		twits := twitMatcher(e, um, acct)
+		return !twits.Hidden(u.Handle, "") && !twits.Hidden(author, "")
 	})
 }
 

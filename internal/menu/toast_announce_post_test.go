@@ -43,7 +43,7 @@ func TestAnnouncePostReachesAllowedCallers(t *testing.T) {
 	samePoster.SetToastsReady(true)
 	f.e.SessionRegistry.Register(samePoster)
 
-	f.e.AnnouncePost(f.um, poster, pu, areaByTag(t, f, "fel.local"), false, false)
+	f.e.AnnouncePost(f.um, poster, pu, areaByTag(t, f, "fel.local"), "Poster", false, false)
 	if got := reader.DrainPages(); len(got) != 1 || got[0] != "post Poster Not networked" {
 		t.Errorf("reader got %q", got)
 	}
@@ -66,10 +66,29 @@ func TestAnnouncePostFollowsAreaAccess(t *testing.T) {
 	if err := f.um.UpdateUser(tu); err != nil {
 		t.Fatal(err)
 	}
+	// A name-only entry for the real name the post carries in a real-name
+	// area: no account ID, so it matches that name and nothing else.
+	realNamer, ru := f.caller(t, 5, "RealNamer", 60, user.CentralAlertPrefs{}, true)
+	ru.TwitList = []user.TwitEntry{{Name: "Poster Real"}}
+	if err := f.um.UpdateUser(ru); err != nil {
+		t.Fatal(err)
+	}
 
-	f.e.AnnouncePost(f.um, poster, pu, areaByTag(t, f, "fel.elite"), false, false)
+	f.e.AnnouncePost(f.um, poster, pu, areaByTag(t, f, "fel.elite"), "Poster", false, false)
 	if got := member.DrainPages(); len(got) != 1 {
 		t.Errorf("member got %q", got)
+	}
+	if got := realNamer.DrainPages(); len(got) != 1 {
+		t.Errorf("a name-only entry for another name hid the toast: %q", got)
+	}
+	// The same post saved under the poster's real name, as a real-name area
+	// requires: named so, and hidden by that entry.
+	f.e.AnnouncePost(f.um, poster, pu, areaByTag(t, f, "fel.elite"), "Poster Real", false, false)
+	if got := member.DrainPages(); len(got) != 1 || got[0] != "post Poster Real Elite" {
+		t.Errorf("member got %q for the real-name post", got)
+	}
+	if got := realNamer.DrainPages(); len(got) != 0 {
+		t.Errorf("a Twit entry for the post's real name did not hide it: %q", got)
 	}
 	if got := outsider.DrainPages(); len(got) != 0 {
 		t.Errorf("caller outside the conference got %q", got)
@@ -93,31 +112,31 @@ func TestAnnouncePostNeverAnnounced(t *testing.T) {
 		}
 	}
 
-	f.e.AnnouncePost(f.um, poster, pu, local, true, false)
+	f.e.AnnouncePost(f.um, poster, pu, local, "Poster", true, false)
 	check("a private post")
-	f.e.AnnouncePost(f.um, poster, pu, local, false, true)
+	f.e.AnnouncePost(f.um, poster, pu, local, "Poster", false, true)
 	check("an anonymous post")
-	f.e.AnnouncePost(f.um, poster, pu, &message.MessageArea{ID: 9, Tag: "PRIVMAIL", Name: "Private Mail"}, false, false)
+	f.e.AnnouncePost(f.um, poster, pu, &message.MessageArea{ID: 9, Tag: "PRIVMAIL", Name: "Private Mail"}, "Poster", false, false)
 	check("PRIVMAIL")
-	f.e.AnnouncePost(f.um, poster, pu, &message.MessageArea{ID: 10, Tag: "NETMAIL", Name: "Netmail", AreaType: "netmail"}, false, false)
+	f.e.AnnouncePost(f.um, poster, pu, &message.MessageArea{ID: 10, Tag: "NETMAIL", Name: "Netmail", AreaType: "netmail"}, "Poster", false, false)
 	check("netmail")
 
 	poster.Invisible = true
-	f.e.AnnouncePost(f.um, poster, pu, local, false, false)
+	f.e.AnnouncePost(f.um, poster, pu, local, "Poster", false, false)
 	check("an invisible poster")
 	poster.Invisible = false
 
 	strs := *f.e.Strings()
 	strs.ToastPost = ""
 	f.e.SetStrings(strs)
-	f.e.AnnouncePost(f.um, poster, pu, local, false, false)
+	f.e.AnnouncePost(f.um, poster, pu, local, "Poster", false, false)
 	check("a blank string")
 
 	f = postToastFixture(t)
 	f.e.SetServerConfig(config.ServerConfig{ToastAnnounceLevel: 20})
 	poster, pu = f.caller(t, 1, "Poster", 30, user.CentralAlertPrefs{}, true)
 	reader, _ = f.caller(t, 2, "Reader", 30, user.CentralAlertPrefs{}, true)
-	f.e.AnnouncePost(f.um, poster, pu, local, false, false)
+	f.e.AnnouncePost(f.um, poster, pu, local, "Poster", false, false)
 	check("posts with the switch off")
 }
 
@@ -134,7 +153,7 @@ func TestAnnouncePostNoDoubleToasts(t *testing.T) {
 	area := areaByTag(t, f, "fel.general")
 
 	// As the compose and reply paths do after a save.
-	f.e.AnnouncePost(f.um, poster, pu, area, false, false)
+	f.e.AnnouncePost(f.um, poster, pu, area, "Poster", false, false)
 	f.e.sendPostAlert(f.um, 1, pu, area.ID, area.Tag, false, false)
 	if got := reader.DrainPages(); len(got) != 1 || got[0] != "post Poster FelonyNet General" {
 		t.Errorf("reader here got %q, want the one local toast", got)
