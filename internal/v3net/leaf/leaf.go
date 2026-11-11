@@ -263,10 +263,13 @@ func (l *Leaf) Start(ctx context.Context) {
 		slog.Warn("leaf: initial NAL fetch failed", "network", l.cfg.Network, "error", err)
 	}
 	// The roster needs the coordinator pin the NAL fetch settles, and the
-	// hub's feature list.
-	if err := l.fetchHubFeatures(ctx); err == nil {
-		_ = l.fetchRoster(ctx) // logged; a 404 just means none yet
-	}
+	// hub's feature list; startRoster retries until the hub has answered.
+	wgRoster := make(chan struct{})
+	go func() {
+		defer close(wgRoster)
+		l.startRoster(ctx)
+	}()
+	defer func() { <-wgRoster }()
 
 	var wg sync.WaitGroup
 

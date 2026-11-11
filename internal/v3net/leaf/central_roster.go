@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -51,6 +52,9 @@ type rosterState struct {
 	// pinRefused says the last roster was refused for its coordinator
 	// key, so a NAL refresh that moves the pin fetches again.
 	pinRefused bool
+	// writeMu serializes writes to RosterPath; each writes the roster held
+	// when it starts, so the last write is always of the newest.
+	writeMu sync.Mutex
 }
 
 // RosterStatus is what a leaf knows about its network's roster.
@@ -137,6 +141,10 @@ func (l *Leaf) pinnedCoordKey() string {
 // errNoRoster is returned by fetchRoster when the hub has none.
 var errNoRoster = errors.New("leaf: the network has no roster")
 
+// errRosterRefused wraps the reason the leaf refused a roster the hub
+// served.
+var errRosterRefused = errors.New("leaf: roster refused")
+
 // fetchRoster asks the hub for the network's roster and takes it if it
 // passes (see the notes above). It reports why one was not taken.
 func (l *Leaf) fetchRoster(ctx context.Context) error {
@@ -184,24 +192,26 @@ func (l *Leaf) fetchRoster(ctx context.Context) error {
 // coordinator key, and newer than the one held (or from a new coordinator).
 func (l *Leaf) takeRoster(r *protocol.CentralRoster, raw []byte) error {
 	if err := r.Validate(l.cfg.Network); err != nil {
-		return fmt.Errorf("leaf: roster refused: %w", err)
+		return fmt.Errorf("%w: %w", errRosterRefused, err)
 	}
 	if err := r.Verify(); err != nil {
-		return fmt.Errorf("leaf: roster refused: %w", err)
+		return fmt.Errorf("%w: %w", errRosterRefused, err)
 	}
+	// The pin is read and the roster committed under one lock, so a NAL
+	// refresh that moves the pin either sees this roster held (and
+	// fetches again, see rosterAfterNAL) or is seen here.
+	l.rosterState.mu.Lock()
 	coord := l.pinnedCoordKey()
 	if coord == "" || r.CoordPubKeyB64 != coord {
 		// Perhaps the pin has yet to follow a handover: the next NAL
 		// refresh fetches again.
-		l.rosterState.mu.Lock()
 		l.rosterState.pinRefused = true
 		l.rosterState.mu.Unlock()
 		if coord == "" {
-			return errors.New("leaf: roster refused: no coordinator key pinned yet")
+			return fmt.Errorf("%w: no coordinator key pinned yet", errRosterRefused)
 		}
-		return errors.New("leaf: roster refused: not signed by the pinned coordinator key")
+		return fmt.Errorf("%w: not signed by the pinned coordinator key", errRosterRefused)
 	}
-	l.rosterState.mu.Lock()
 	l.rosterState.pinRefused = false
 	held := l.rosterState.roster
 	if held != nil && held.CoordPubKeyB64 == r.CoordPubKeyB64 && r.Seq <= held.Seq {
@@ -226,6 +236,10 @@ func (l *Leaf) takeRoster(r *protocol.CentralRoster, raw []byte) error {
 // keepRoster writes the held roster to RosterPath if it has not reached it
 // yet. A failure leaves it marked unsaved, so the next fetch tries again.
 func (l *Leaf) keepRoster() error {
+	l.rosterState.writeMu.Lock()
+	defer l.rosterState.writeMu.Unlock()
+	// Whatever is held now is what goes to disk: a write for an older
+	// roster that waited here writes the newest instead.
 	l.rosterState.mu.Lock()
 	raw, unsaved := l.rosterState.raw, l.rosterState.unsaved
 	l.rosterState.mu.Unlock()
@@ -333,21 +347,45 @@ func (l *Leaf) rosterFilterActivity(boards []protocol.CentralActivityBoard) []pr
 	})
 }
 
+// ErrRosterChanged is returned by PublishRoster when the roster changed
+// since the edit began: another session of the coordinator's published one,
+// or the hub held one this board had not fetched. Fetch it and edit again.
+var ErrRosterChanged = errors.New("leaf: the roster changed since this edit began")
+
 // PublishRoster signs members as the network's roster, with this board as
 // its coordinator, and posts it to the hub, which takes it only from the
-// coordinator in force. Its seq is above any roster the leaf holds. On
-// success the leaf holds it too.
-func (l *Leaf) PublishRoster(ctx context.Context, members []protocol.CentralRosterMember) (*protocol.CentralRoster, error) {
-	seq := time.Now().UnixNano()
+// coordinator in force. base is the seq of the roster the edit started
+// from, 0 for none: it fetches the hub's roster first, and if this
+// coordinator's latest is no longer base it publishes nothing and returns
+// ErrRosterChanged, as the hub does for a race it alone sees. On success
+// the leaf holds the new roster.
+func (l *Leaf) PublishRoster(ctx context.Context, base int64, members []protocol.CentralRosterMember) (*protocol.CentralRoster, error) {
+	if err := l.fetchRoster(ctx); err != nil && !errors.Is(err, errNoRoster) {
+		return nil, fmt.Errorf("leaf: fetch the roster before editing it: %w", err)
+	}
+	me := l.cfg.Keystore.PubKeyBase64()
+	seq, prev := time.Now().UnixNano(), int64(0)
 	l.rosterState.mu.Lock()
-	if held := l.rosterState.roster; held != nil && held.Seq >= seq {
-		seq = held.Seq + 1
+	held := l.rosterState.roster
+	if held != nil && held.CoordPubKeyB64 == me {
+		// Our own sequence goes on; a predecessor's roster is replaced
+		// by a sequence of our own.
+		prev = held.Seq
+		if held.Seq == math.MaxInt64 {
+			l.rosterState.mu.Unlock()
+			return nil, errors.New("leaf: the roster's sequence is exhausted")
+		}
+		seq = max(seq, held.Seq+1)
 	}
 	l.rosterState.mu.Unlock()
+	if prev != base {
+		return nil, ErrRosterChanged
+	}
 	r := &protocol.CentralRoster{
 		V3NetCentral: protocol.CentralRosterVersion,
 		Network:      l.cfg.Network,
 		Seq:          seq,
+		PrevSeq:      prev,
 		Members:      slices.Clone(members),
 		PublishedAt:  time.Now().UTC().Format(time.RFC3339),
 	}
@@ -368,6 +406,9 @@ func (l *Leaf) PublishRoster(ctx context.Context, members []protocol.CentralRost
 	}
 	body, _ := readBody(resp.Body, maxRespBytes)
 	_ = resp.Body.Close() // read side; already read in full
+	if resp.StatusCode == http.StatusConflict {
+		return nil, fmt.Errorf("%w: %s", ErrRosterChanged, hubErrorText(body))
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("leaf: POST %s returned %d: %s", path, resp.StatusCode, hubErrorText(body))
 	}
@@ -375,4 +416,41 @@ func (l *Leaf) PublishRoster(ctx context.Context, members []protocol.CentralRost
 		slog.Warn("leaf: published roster not held here", "network", l.cfg.Network, "error", err)
 	}
 	return r, nil
+}
+
+// Initial roster fetch retry bounds.
+var (
+	rosterRetryMin = 5 * time.Second
+	rosterRetryMax = 5 * time.Minute
+)
+
+// startRoster fetches the roster when the leaf starts, retrying with
+// backoff until the hub has answered: with a roster, or that it has none
+// or does not serve them. A stream that then stays open brings no event to
+// try again, so a failed first fetch must not be the last.
+func (l *Leaf) startRoster(ctx context.Context) {
+	wait := rosterRetryMin
+	for {
+		if _, known := l.HubSupports(protocol.FeatureCentralRoster); !known {
+			_ = l.fetchHubFeatures(ctx) // logged by the caller of the next try
+		}
+		_, known := l.HubSupports(protocol.FeatureCentralRoster)
+		err := l.fetchRoster(ctx)
+		if known && (err == nil || errors.Is(err, errNoRoster) || l.rosterRefusal(err)) {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		wait = min(wait*2, rosterRetryMax)
+	}
+}
+
+// rosterRefusal reports whether err is the leaf refusing what the hub
+// served, which another try would only repeat; the hub's own event or the
+// next NAL refresh brings the next attempt.
+func (l *Leaf) rosterRefusal(err error) bool {
+	return errors.Is(err, errRosterRefused)
 }

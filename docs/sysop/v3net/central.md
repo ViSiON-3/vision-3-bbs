@@ -846,9 +846,20 @@ that publishes no listing. Each change is signed and published at once.
 
 The first roster asks before it goes out, and always names your own board:
 once boards take a roster they keep it, so it can be changed but not
-withdrawn. Admit a board only once you know its key is really that
-board's, from its sysop, its signed listing or another channel you trust:
-the directory itself is served by the hub you are guarding against.
+withdrawn.
+
+Admit a board only once you have checked its key through a channel the
+hub does not control: ask its sysop for the key (or its node ID) by mail,
+in person, or on another network, and compare it with the one on screen. A
+signed listing proves only that whoever holds the key wrote it; a dishonest
+hub can make up a key and sign a listing with it, and the directory you
+choose from is served by that hub. The roster is only as good as these
+checks.
+
+Each edit is made from the roster on screen. If the roster changed in the
+meantime (from another session of yours, say), the edit is refused rather
+than undoing the other change, and the screen shows the roster as it now
+is.
 
 ### How Boards Use It
 
@@ -861,6 +872,12 @@ one, and after its event stream reconnects, and keeps the one it took in
 roster in force, and a hub that stops serving it or serves an older one
 changes nothing; a board that sees its hub stop serving the roster it holds
 says so on **Status**.
+
+A board is protected only once it has taken a roster. Until then (a board
+new to the network, or one that has never fetched since you first published)
+it shows every board, and a hub that withholds the roster from it keeps it
+that way. Tell your network's sysops when you publish the first roster, and
+ask them to check **Status** shows it `on`.
 
 **Status** shows a `ROSTER` column per network: `on, N boards`, `none (all
 shown)`, or `hub does not serve it`. A hub lists `central.roster` among its

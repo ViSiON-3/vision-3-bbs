@@ -3,9 +3,11 @@ package hub
 import (
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,10 +15,17 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
-// signedRoster returns coord's roster of members at seq.
+// signedRoster returns coord's roster of members at seq, edited from the
+// roster at seq-1 (0, none, for the first).
 func signedRoster(t *testing.T, coord *keystore.Keystore, seq int64, members ...*keystore.Keystore) *protocol.CentralRoster {
 	t.Helper()
-	r := &protocol.CentralRoster{V3NetCentral: protocol.CentralRosterVersion, Network: "testnet", Seq: seq,
+	return signedRosterFrom(t, coord, seq, seq-1, members...)
+}
+
+// signedRosterFrom is signedRoster edited from the roster at prev.
+func signedRosterFrom(t *testing.T, coord *keystore.Keystore, seq, prev int64, members ...*keystore.Keystore) *protocol.CentralRoster {
+	t.Helper()
+	r := &protocol.CentralRoster{V3NetCentral: protocol.CentralRosterVersion, Network: "testnet", Seq: seq, PrevSeq: prev,
 		PublishedAt: time.Now().UTC().Format(time.RFC3339)}
 	for _, m := range members {
 		r.Members = append(r.Members, protocol.CentralRosterMember{NodeID: m.NodeID(), PubKeyB64: m.PubKeyBase64()})
@@ -126,5 +135,49 @@ func TestCentralRosterRefusals(t *testing.T) {
 	forged.Members = append(forged.Members, protocol.CentralRosterMember{NodeID: hubKS.NodeID(), PubKeyB64: hubKS.PubKeyBase64()})
 	if code, _ := rosterDo(t, ts, hubKS, http.MethodPost, forged); code != http.StatusForbidden {
 		t.Errorf("forged roster: %d, want 403", code)
+	}
+}
+
+// Two edits made from the same roster cannot both land: the second names
+// a prev_seq that is no longer the stored roster's, and is refused, so it
+// cannot silently drop the board the first admitted.
+func TestCentralRosterConflictingEdits(t *testing.T) {
+	h, hubKS := setupTestHub(t)
+	seedNALWithAreas(t, h, hubKS, nil)
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+	a, b := newLeafKS(t), newLeafKS(t)
+	registerHubAsLeaf(t, ts, hubKS)
+
+	if code, _ := rosterDo(t, ts, hubKS, http.MethodPost, signedRoster(t, hubKS, 1)); code != http.StatusOK {
+		t.Fatal("first roster")
+	}
+	if code, _ := rosterDo(t, ts, hubKS, http.MethodPost, signedRosterFrom(t, hubKS, 2, 1, a)); code != http.StatusOK {
+		t.Fatal("edit admitting a")
+	}
+	code, body := rosterDo(t, ts, hubKS, http.MethodPost, signedRosterFrom(t, hubKS, 3, 1, b))
+	if code != http.StatusConflict || !strings.Contains(string(body), "changed since") {
+		t.Errorf("edit from the older roster: %d %s, want a conflict", code, body)
+	}
+	// A coordinator that had not yet seen any roster cannot replace one.
+	if code, _ := rosterDo(t, ts, hubKS, http.MethodPost, signedRosterFrom(t, hubKS, 9, 0, b)); code != http.StatusConflict {
+		t.Errorf("first-roster edit over a stored one: %d, want 409", code)
+	}
+}
+
+// A new coordinator's roster replaces the old coordinator's whatever its
+// seq, so an old roster at the highest seq cannot lock the network.
+func TestCentralRosterNewCoordinatorStartsOwnSeq(t *testing.T) {
+	h, _ := setupTestHub(t)
+	oldCoord, newCoord := newLeafKS(t), newLeafKS(t)
+	old := signedRosterFrom(t, oldCoord, math.MaxInt64, 0)
+	raw, _ := json.Marshal(old)
+	if err := h.roster.Put(old, raw); err != nil {
+		t.Fatal(err)
+	}
+	fresh := signedRoster(t, newCoord, 1)
+	raw, _ = json.Marshal(fresh)
+	if err := h.roster.Put(fresh, raw); err != nil {
+		t.Fatalf("new coordinator refused: %v", err)
 	}
 }

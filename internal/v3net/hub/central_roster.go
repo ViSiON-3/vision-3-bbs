@@ -16,16 +16,20 @@ import (
 // The Central board roster on a hub (see protocol.CentralRoster): the
 // coordinator's latest signed roster per network, stored and served byte for
 // byte. Only the coordinator in force (the holder of the key the network's
-// NAL and handovers lead to) may publish one, and each must have a higher
-// seq than the one stored, so an older roster cannot be put back. Boards
+// NAL and handovers lead to) may publish one. Against a roster of its own
+// it must have a higher seq, so an older roster cannot be put back, and name
+// the stored seq as its prev_seq, so an edit made from an older roster is
+// refused rather than undoing a newer one. A new coordinator, after a
+// handover, replaces the old one's roster whatever their seqs. Boards
 // check the coordinator's signature themselves, against the key they pin;
 // the hub's checks only keep it from storing what boards would refuse.
 
 const centralRosterSchema = `
 CREATE TABLE IF NOT EXISTS central_roster (
-	network TEXT PRIMARY KEY,
-	seq     INTEGER NOT NULL,
-	roster  TEXT NOT NULL
+	network   TEXT PRIMARY KEY,
+	seq       INTEGER NOT NULL,
+	coord_key TEXT NOT NULL,
+	roster    TEXT NOT NULL
 );
 `
 
@@ -47,23 +51,35 @@ func NewCentralRosterStore(db *sql.DB) (*CentralRosterStore, error) {
 	return &CentralRosterStore{db: db}, nil
 }
 
-// Put stores raw, r's JSON as received, as network's roster. It returns
-// ErrCentralStale unless r.Seq is above the stored roster's.
+// ErrRosterConflict is returned by Put for a roster edited from one that is
+// no longer the coordinator's stored roster.
+var ErrRosterConflict = errors.New("hub: roster edited from an older roster")
+
+// Put stores raw, r's JSON as received, as network's roster. Against a
+// stored roster by the same coordinator it returns ErrCentralStale unless
+// r.Seq is above the stored seq, and ErrRosterConflict unless r.PrevSeq is
+// the stored seq. A roster by another coordinator is replaced whatever its
+// seq: the caller has checked that r's is the coordinator in force.
 func (rs *CentralRosterStore) Put(r *protocol.CentralRoster, raw []byte) error {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	var seq int64
-	switch err := rs.db.QueryRow("SELECT seq FROM central_roster WHERE network = ?", r.Network).Scan(&seq); {
+	var key string
+	switch err := rs.db.QueryRow("SELECT seq, coord_key FROM central_roster WHERE network = ?", r.Network).Scan(&seq, &key); {
 	case errors.Is(err, sql.ErrNoRows):
 	case err != nil:
 		return fmt.Errorf("hub: read roster: %w", err)
+	case key != r.CoordPubKeyB64:
+		// A new coordinator starts its own sequence.
 	case r.Seq <= seq:
 		return ErrCentralStale
+	case r.PrevSeq != seq:
+		return ErrRosterConflict
 	}
 	if _, err := rs.db.Exec(
-		`INSERT INTO central_roster (network, seq, roster) VALUES (?, ?, ?)
-		 ON CONFLICT(network) DO UPDATE SET seq = excluded.seq, roster = excluded.roster`,
-		r.Network, r.Seq, string(raw)); err != nil {
+		`INSERT INTO central_roster (network, seq, coord_key, roster) VALUES (?, ?, ?, ?)
+		 ON CONFLICT(network) DO UPDATE SET seq = excluded.seq, coord_key = excluded.coord_key, roster = excluded.roster`,
+		r.Network, r.Seq, r.CoordPubKeyB64, string(raw)); err != nil {
 		return fmt.Errorf("hub: store roster: %w", err)
 	}
 	return nil
@@ -108,35 +124,45 @@ func (h *Hub) handlePostCentralRoster(w http.ResponseWriter, r *http.Request, ne
 	}
 
 	// The coordinator is the holder of the key in force, as for the NAL.
+	// nalMu is held from the check through the store, so a handover cannot
+	// land between them and let the old coordinator's roster in after it.
 	h.nalMu.Lock()
 	existing, err := h.nalStore.Get(network)
 	var hs []protocol.CoordHandover
 	if err == nil && existing != nil {
 		hs, err = h.nalStore.Handovers(network)
 	}
-	h.nalMu.Unlock()
 	if err != nil {
+		h.nalMu.Unlock()
 		slog.Error("v3net hub: read NAL for roster", "network", network, "error", err)
 		jsonError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	if existing == nil {
+		h.nalMu.Unlock()
 		jsonError(w, "the network has no NAL, so no coordinator", http.StatusConflict)
 		return
 	}
 	key := coordKeyInForce(existing, hs)
 	if nodeIDOf(key) != nodeID {
+		h.nalMu.Unlock()
 		jsonError(w, "only the coordinator may publish the roster", http.StatusForbidden)
 		return
 	}
 	if roster.CoordPubKeyB64 != key {
+		h.nalMu.Unlock()
 		jsonError(w, "roster is not signed by the coordinator key in force", http.StatusForbidden)
 		return
 	}
+	err = h.roster.Put(&roster, raw)
+	h.nalMu.Unlock()
 
-	switch err := h.roster.Put(&roster, raw); {
+	switch {
 	case errors.Is(err, ErrCentralStale):
 		jsonError(w, "seq is not above the stored roster's", http.StatusConflict)
+		return
+	case errors.Is(err, ErrRosterConflict):
+		jsonError(w, "the roster changed since this edit began; fetch it and edit again", http.StatusConflict)
 		return
 	case err != nil:
 		slog.Error("v3net hub: store roster", "network", network, "error", err)

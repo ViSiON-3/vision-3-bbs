@@ -459,6 +459,9 @@ func centralActivityState(n CentralNetworkInfo, a CentralActivityInfo, noun stri
 // with how many boards, none (every board shown), or not served.
 func centralRosterState(n CentralNetworkInfo) string {
 	switch {
+	case n.Roster.Held && n.SupportKnown && !n.Roster.Supported:
+		// Still in force, but no update can reach this board.
+		return fmt.Sprintf("|10on|07, |15%d|07 boards |04(hub stopped serving it)|07", n.Roster.Members)
 	case n.Roster.Held:
 		return fmt.Sprintf("|10on|07, |15%d|07 boards", n.Roster.Members)
 	case !n.SupportKnown:

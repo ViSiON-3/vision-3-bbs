@@ -3,9 +3,12 @@ package leaf
 import (
 	"context"
 	"encoding/json"
-	"os"
+	"errors"
+	"math"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,7 +87,7 @@ func TestRosterFiltersCentral(t *testing.T) {
 	}
 
 	// The coordinator admits Alpha and Beta, not Gamma.
-	if _, err := coord.PublishRoster(context.Background(), []protocol.CentralRosterMember{memberOf(alpha), memberOf(beta)}); err != nil {
+	if _, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha), memberOf(beta)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := beta.fetchRoster(context.Background()); err != nil {
@@ -130,7 +133,7 @@ func TestRosterTrustAndKeeping(t *testing.T) {
 	alpha.cfg.RosterPath = path
 	pinCoord(t, alpha, hubKS)
 
-	first, err := coord.PublishRoster(context.Background(), []protocol.CentralRosterMember{memberOf(alpha)})
+	first, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,11 +216,12 @@ func TestRosterUpdateDuringFetchNotLost(t *testing.T) {
 	}
 	alpha.rosterState.fetching, alpha.rosterState.again = false, false
 
-	if _, err := coord.PublishRoster(context.Background(), []protocol.CentralRosterMember{memberOf(alpha)}); err != nil {
+	first, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)})
+	if err != nil {
 		t.Fatal(err)
 	}
 	alpha.refreshRosterSoon(context.Background())
-	second, err := coord.PublishRoster(context.Background(), nil)
+	second, err := coord.PublishRoster(context.Background(), first.Seq, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +239,7 @@ func TestRosterRetriedAfterPinMoves(t *testing.T) {
 	stale := subscribedLeaf(t, ts, "OldCoord")
 	pinCoord(t, alpha, stale.cfg.Keystore) // pinned to the coordinator before the handover
 
-	r, err := coord.PublishRoster(context.Background(), []protocol.CentralRosterMember{memberOf(alpha)})
+	r, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +269,7 @@ func TestRosterUnsavedRetried(t *testing.T) {
 	alpha.cfg.RosterPath = filepath.Join(blocker, "testnet.json")
 	pinCoord(t, alpha, hubKS)
 
-	r, err := coord.PublishRoster(context.Background(), []protocol.CentralRosterMember{memberOf(alpha)})
+	r, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,5 +288,93 @@ func TestRosterUnsavedRetried(t *testing.T) {
 	}
 	if again := New(alpha.cfg); again.RosterStatus().Seq != r.Seq {
 		t.Errorf("after restart holding seq %d, want %d", again.RosterStatus().Seq, r.Seq)
+	}
+}
+
+// An edit started from a roster that has since changed publishes nothing
+// and says so; one from the current roster goes through.
+func TestPublishRosterChangedSinceEdit(t *testing.T) {
+	ts, h, hubKS := newTestHub(t, true)
+	seedHubNAL(t, h, hubKS)
+	coord := coordLeaf(t, ts, hubKS)
+	alpha := subscribedLeaf(t, ts, "Alpha")
+
+	first, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Another session, still showing no roster, edits from nothing.
+	if _, err := coord.PublishRoster(context.Background(), 0, nil); !errors.Is(err, ErrRosterChanged) {
+		t.Errorf("edit from a stale view: %v, want ErrRosterChanged", err)
+	}
+	// A second coordinator session that never fetched sees the hub's roster
+	// first, and so refuses the stale edit too.
+	other := New(coord.cfg)
+	other.noteHubFeatures([]string{protocol.FeatureCentralRoster})
+	pinCoord(t, other, hubKS)
+	if _, err := other.PublishRoster(context.Background(), 0, nil); !errors.Is(err, ErrRosterChanged) {
+		t.Errorf("unfetched session: %v, want ErrRosterChanged", err)
+	}
+	if _, err := coord.PublishRoster(context.Background(), first.Seq, nil); err != nil {
+		t.Errorf("edit from the current roster: %v", err)
+	}
+}
+
+// The coordinator's sequence never wraps: at the top it refuses to publish
+// rather than send a negative seq.
+func TestPublishRosterSeqExhausted(t *testing.T) {
+	ts, h, hubKS := newTestHub(t, true)
+	seedHubNAL(t, h, hubKS)
+	coord := coordLeaf(t, ts, hubKS)
+	top := &protocol.CentralRoster{V3NetCentral: protocol.CentralRosterVersion, Network: "testnet", Seq: math.MaxInt64,
+		PublishedAt: time.Now().UTC().Format(time.RFC3339)}
+	if err := top.Sign(hubKS); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(top)
+	if err := coord.takeRoster(top, raw); err != nil {
+		t.Fatal(err)
+	}
+	coord.noteHubFeatures(nil) // keep the fetch from replacing it
+	if _, err := coord.PublishRoster(context.Background(), math.MaxInt64, nil); err == nil || !strings.Contains(err.Error(), "exhausted") {
+		t.Errorf("got %v, want the sequence exhausted", err)
+	}
+}
+
+// A first fetch that fails is tried again, so a board does not run
+// unfiltered for want of a later event.
+func TestStartRosterRetries(t *testing.T) {
+	ts, h, hubKS := newTestHub(t, true)
+	seedHubNAL(t, h, hubKS)
+	coord := coordLeaf(t, ts, hubKS)
+	alpha := subscribedLeaf(t, ts, "Alpha")
+	r, err := coord.PublishRoster(context.Background(), 0, []protocol.CentralRosterMember{memberOf(alpha)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldMin := rosterRetryMin
+	rosterRetryMin = 20 * time.Millisecond
+	t.Cleanup(func() { rosterRetryMin = oldMin })
+	// No coordinator pinned yet: refused, but that is final for now. Pin
+	// it, then make the hub fail the first fetch by pausing the leaf.
+	pinCoord(t, alpha, hubKS)
+	alpha.hubMu.Lock()
+	alpha.hub.paused = true
+	alpha.hubMu.Unlock()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { alpha.startRoster(ctx); close(done) }()
+	time.Sleep(60 * time.Millisecond)
+	alpha.hubMu.Lock()
+	alpha.hub.paused = false
+	alpha.hubMu.Unlock()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("startRoster never finished")
+	}
+	if alpha.RosterStatus().Seq != r.Seq {
+		t.Errorf("holding seq %d, want %d", alpha.RosterStatus().Seq, r.Seq)
 	}
 }

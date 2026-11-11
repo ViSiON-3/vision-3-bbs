@@ -29,8 +29,10 @@ type V3NetRosterProvider interface {
 	// the network, on the roster or not.
 	CentralRosterCandidates(ctx context.Context, network string) ([]protocol.CentralDirectoryEntry, error)
 	// PublishCentralRoster signs members as the roster, this board being
-	// the coordinator, and posts it.
-	PublishCentralRoster(ctx context.Context, network string, members []protocol.CentralRosterMember) (*protocol.CentralRoster, error)
+	// the coordinator, and posts it. base is the seq of the roster the edit
+	// started from (0 for none); a roster changed since then is not
+	// replaced, and the error says so.
+	PublishCentralRoster(ctx context.Context, network string, base int64, members []protocol.CentralRosterMember) (*protocol.CentralRoster, error)
 	// NodePubKeyB64 is this board's public key, which the first roster
 	// always names.
 	NodePubKeyB64() string
@@ -227,10 +229,18 @@ func runV3NetRoster(c *cmdCtx, networks []string) (string, string, error) {
 			}
 		}
 
+		var base int64
+		if roster != nil && roster.CoordPubKeyB64 == rp.NodePubKeyB64() {
+			base = roster.Seq
+		}
 		ctx, cancel = context.WithTimeout(context.Background(), v3netManageTimeout)
-		_, err = rp.PublishCentralRoster(ctx, network, members)
+		_, err = rp.PublishCentralRoster(ctx, network, base, members)
 		cancel()
 		if err != nil {
+			if strings.Contains(err.Error(), "changed since") {
+				status = "|04The roster changed since you opened it (another session?). Nothing published; here it is now.|07"
+				continue
+			}
 			status = "|04" + v3netClip(err.Error(), termWidth-4) + "|07"
 			continue
 		}

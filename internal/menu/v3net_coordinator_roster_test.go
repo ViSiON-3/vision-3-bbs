@@ -20,6 +20,8 @@ type rosterFake struct {
 	roster    *protocol.CentralRoster
 	dir       []protocol.CentralDirectoryEntry
 	published [][]protocol.CentralRosterMember
+	bases     []int64
+	conflict  bool
 }
 
 func (f *rosterFake) CentralRoster(string) (*protocol.CentralRoster, error) { return f.roster, nil }
@@ -27,9 +29,13 @@ func (f *rosterFake) CentralRosterCandidates(context.Context, string) ([]protoco
 	return f.dir, nil
 }
 func (f *rosterFake) NodePubKeyB64() string { return f.self.PubKeyBase64() }
-func (f *rosterFake) PublishCentralRoster(_ context.Context, network string, members []protocol.CentralRosterMember) (*protocol.CentralRoster, error) {
+func (f *rosterFake) PublishCentralRoster(_ context.Context, network string, base int64, members []protocol.CentralRosterMember) (*protocol.CentralRoster, error) {
+	f.bases = append(f.bases, base)
+	if f.conflict {
+		return nil, errors.New("leaf: the roster changed since this edit began")
+	}
 	f.published = append(f.published, members)
-	f.roster = &protocol.CentralRoster{Network: network, Seq: int64(len(f.published)), Members: members}
+	f.roster = &protocol.CentralRoster{Network: network, Seq: int64(len(f.published)) * 10, Members: members, CoordPubKeyB64: f.self.PubKeyBase64()}
 	return f.roster, nil
 }
 
@@ -145,5 +151,25 @@ func TestCoordinatorPanelOffersRoster(t *testing.T) {
 	plain := runManageScreen(t, newManageFake(true), "q\r", runV3NetCoordinator)
 	if strings.Contains(plain, "oard roster") {
 		t.Error("Board roster offered by a service without rosters")
+	}
+}
+
+// Each edit names the roster it started from; a conflict publishes nothing
+// and says the roster changed.
+func TestRosterEditBaseAndConflict(t *testing.T) {
+	f, alpha, _ := newRosterFake(t)
+	f.roster = &protocol.CentralRoster{Network: "testnet", Seq: 7, CoordPubKeyB64: f.self.PubKeyBase64(),
+		Members: []protocol.CentralRosterMember{{NodeID: alpha.NodeID(), PubKeyB64: alpha.PubKeyBase64()}}}
+	runRosterScreen(t, f, "a2\rq\r")
+	if len(f.bases) != 1 || f.bases[0] != 7 {
+		t.Errorf("edit based on %v, want 7", f.bases)
+	}
+	f.conflict = true
+	out := runRosterScreen(t, f, "r1\rq\r")
+	if !strings.Contains(out, "changed since you opened it") {
+		t.Errorf("conflict not reported:\n%s", out)
+	}
+	if len(f.published) != 1 {
+		t.Errorf("a conflicting edit was published")
 	}
 }

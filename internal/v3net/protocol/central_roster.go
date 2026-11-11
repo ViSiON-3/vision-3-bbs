@@ -79,14 +79,19 @@ type CentralRosterMember struct {
 }
 
 // CentralRoster is a network's board roster, written and signed by its
-// coordinator. Seq orders the coordinator's rosters: a higher one replaces a
-// lower one, whole. Every field but SignatureB64 is covered.
+// coordinator. Seq orders one coordinator's rosters: a higher one replaces a
+// lower one, whole; a new coordinator, after a handover, starts its own.
+// PrevSeq is the seq of the roster this one was edited from (0 for the
+// coordinator's first): the hub takes it only while that is still the
+// coordinator's stored roster, so two edits made from the same roster
+// cannot silently undo each other. Every field but SignatureB64 is covered.
 type CentralRoster struct {
 	V3NetCentral   string                `json:"v3net_central"`
 	Network        string                `json:"network"`
 	CoordNodeID    string                `json:"coordinator_node_id"`
 	CoordPubKeyB64 string                `json:"coordinator_pubkey_b64"`
 	Seq            int64                 `json:"seq"`
+	PrevSeq        int64                 `json:"prev_seq"`
 	Members        []CentralRosterMember `json:"members"`
 	PublishedAt    string                `json:"published_at"`
 	SignatureB64   string                `json:"signature_b64,omitempty"`
@@ -104,6 +109,7 @@ type canonicalCentralRoster struct {
 	CoordPubKeyB64 string                  `json:"coordinator_pubkey_b64"`
 	Members        []canonicalRosterMember `json:"members"`
 	Network        string                  `json:"network"`
+	PrevSeq        int64                   `json:"prev_seq"`
 	PublishedAt    string                  `json:"published_at"`
 	Seq            int64                   `json:"seq"`
 	V3NetCentral   string                  `json:"v3net_central"`
@@ -122,6 +128,7 @@ func (r *CentralRoster) SignedPayload() ([]byte, error) {
 		CoordPubKeyB64: r.CoordPubKeyB64,
 		Members:        members,
 		Network:        r.Network,
+		PrevSeq:        r.PrevSeq,
 		PublishedAt:    r.PublishedAt,
 		Seq:            r.Seq,
 		V3NetCentral:   r.V3NetCentral,
@@ -217,6 +224,9 @@ func (r *CentralRoster) Validate(network string) error {
 	}
 	if r.Seq <= 0 {
 		return errors.New("seq must be positive")
+	}
+	if r.PrevSeq < 0 || r.PrevSeq >= r.Seq {
+		return errors.New("prev_seq must be from 0 up to below seq")
 	}
 	if _, err := time.Parse(time.RFC3339, r.PublishedAt); err != nil {
 		return errors.New("published_at must be RFC 3339")
