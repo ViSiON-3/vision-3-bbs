@@ -713,8 +713,11 @@ V3Net Central: Activity Alerts
 - An invisible login is never announced, and neither is a private or
   anonymous post.
 - Post alerts cover posts and replies written in the BBS's message
-  editor. Replies uploaded in a QWK packet, and posts made with `helper
-  post` or a script, are not announced.
+  editor, and replies uploaded in a QWK packet, from the BBS or through
+  the QWK API. A packet sends one alert per V3Net area it posted to, after
+  the upload, and at most five, however many replies it holds; its
+  private mail is never announced. Posts made with `helper post` or a
+  script have no caller to ask, and are not announced.
 
 ### Offering Alerts
 

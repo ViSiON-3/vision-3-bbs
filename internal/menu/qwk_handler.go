@@ -259,7 +259,12 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// The service owns parsing and posting; the menu supplies the ACS gate and
 	// per-area progress output as callbacks so terminal/UI concerns stay here.
+	// What it posted is gathered for V3Net Central post alerts, sent once
+	// the import is done.
+	alerts := &uploadPostAlerts{}
+	defer e.sendUploadPostAlerts(userManager, e.nodeSession(nodeNumber), currentUser, alerts)
 	importRes, err := svc.ImportREP(repData, qwkservice.ImportOptions{
+		Posted:    alerts.posted,
 		Handle:    currentUser.Handle,
 		Signature: currentUser.OfflineSignature(),
 		Authorize: func(area *message.MessageArea) bool {

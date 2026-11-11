@@ -57,6 +57,11 @@ type Deps struct {
 	// Guard, when non-nil, applies the BBS's IP blocklist to every request and
 	// its per-IP failed-login lockout to logins.
 	Guard LoginGuard
+	// PostedFor, when non-nil, returns what to tell of each reply an upload
+	// by u saved (see qwkservice.ImportOptions.Posted), and a func to call
+	// once the upload is done; the BBS uses it for V3Net Central post
+	// alerts. Nil reports nothing.
+	PostedFor func(u *user.User) (posted func(area *message.MessageArea, private bool), done func())
 }
 
 // Server is the QWK packet transport API.

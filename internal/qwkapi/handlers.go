@@ -178,11 +178,17 @@ func (s *Server) handleReply(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusRequestEntityTooLarge, "too_large", "packet exceeds 16 MiB")
 		return
 	}
-	res, err := s.deps.Service.ImportREP(data, qwkservice.ImportOptions{
+	opts := qwkservice.ImportOptions{
 		Handle:    u.Handle,
 		Signature: u.OfflineSignature(),
 		Authorize: s.deps.AuthorizeFor(u),
-	})
+	}
+	if s.deps.PostedFor != nil {
+		posted, done := s.deps.PostedFor(u)
+		opts.Posted = posted
+		defer done()
+	}
+	res, err := s.deps.Service.ImportREP(data, opts)
 	if err != nil {
 		if errors.Is(err, qwkservice.ErrWrongBBS) {
 			slog.Info("qwk api reply", "handle", u.Handle, "remote", clientIP(r), "outcome", "wrongBBS")

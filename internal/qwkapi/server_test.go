@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwkservice"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // --- fakes ---
@@ -19,6 +21,9 @@ type fakeSvc struct {
 	imp       *qwkservice.ImportResult
 	impErr    error
 	committed bool
+	// saved is the areas ImportREP reports through Posted, as if it
+	// saved one public reply in each.
+	saved []*message.MessageArea
 }
 
 func (f *fakeSvc) BuildPacket(o qwkservice.ExportOptions) (*qwkservice.ExportResult, error) {
@@ -26,6 +31,11 @@ func (f *fakeSvc) BuildPacket(o qwkservice.ExportOptions) (*qwkservice.ExportRes
 }
 func (f *fakeSvc) CommitExport(h string, r *qwkservice.ExportResult) { f.committed = true }
 func (f *fakeSvc) ImportREP(d []byte, o qwkservice.ImportOptions) (*qwkservice.ImportResult, error) {
+	if o.Posted != nil {
+		for _, a := range f.saved {
+			o.Posted(a, false)
+		}
+	}
 	return f.imp, f.impErr
 }
 
@@ -146,5 +156,38 @@ func TestAPI_ReplyResultAndWrongBBS(t *testing.T) {
 	_ = json.Unmarshal(rr2.Body.Bytes(), &resp2)
 	if !resp2.WrongBBS {
 		t.Error("wrongBBS not set")
+	}
+}
+
+// An upload reports what it saved to PostedFor for the uploading account,
+// and calls its done once the import is over.
+func TestAPI_ReplyReportsPosted(t *testing.T) {
+	area := &message.MessageArea{ID: 7, Tag: "fel.general"}
+	svc := &fakeSvc{imp: &qwkservice.ImportResult{Posted: 1}, saved: []*message.MessageArea{area}}
+	deps := testDeps(t, newAccountStore(testAccount()), svc)
+	var handle string
+	var got []int
+	doneCalls := 0
+	deps.PostedFor = func(u *user.User) (func(*message.MessageArea, bool), func()) {
+		handle = u.Handle
+		return func(a *message.MessageArea, _ bool) { got = append(got, a.ID) },
+			func() {
+				if len(got) == 0 {
+					t.Error("done called before anything was reported")
+				}
+				doneCalls++
+			}
+	}
+	h := newTestServer(t, deps)
+	tok := login(t, h)
+	r := clientReq("POST", "/api/qwk/reply", []byte("PK\x03\x04rep"))
+	r.Header.Set("Authorization", "Bearer "+tok)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, r)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	if handle != testAccount().Handle || len(got) != 1 || got[0] != 7 || doneCalls != 1 {
+		t.Errorf("handle %q, reported %v, done %d times", handle, got, doneCalls)
 	}
 }
