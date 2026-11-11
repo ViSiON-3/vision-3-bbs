@@ -149,3 +149,26 @@ func TestToastFadeSkippedWhenDwellTooShort(t *testing.T) {
 		t.Error("faded within a dwell too short for it")
 	}
 }
+
+// A sysop chat request or a window change during the fade (an interrupted
+// wait) hands the screen back at once: the fade stops and the row is
+// restored, with no more frames drawn over it.
+func TestToastFadeStopsOnInterrupt(t *testing.T) {
+	env, log := fadeEnv(t, true, 400*time.Millisecond)
+	toastDwell = 10 * time.Second
+	env.readKey()
+	env.sess.AddPage("Hello there")
+	text := ">> Hello there"
+	toastWaitFor(t, "the first fade step", func() bool { return strings.Contains(log.String(), fadeFrame(8, text)) })
+
+	start := time.Now()
+	getSessionIH(env.s).Interrupt()
+	toastWaitFor(t, "the screen restored", func() bool { return strings.Contains(env.term.Row(24), "BOTTOM TEXT") })
+	if took := time.Since(start); took > 300*time.Millisecond {
+		t.Errorf("restore took %s after the interruption", took)
+	}
+	time.Sleep(500 * time.Millisecond) // a further step would have drawn by now
+	if got := log.String(); strings.Contains(got, fadeFrame(7, text)) || strings.Contains(got, fadeFrame(15, text)) {
+		t.Errorf("fade went on after the interruption:\n%q", got)
+	}
+}

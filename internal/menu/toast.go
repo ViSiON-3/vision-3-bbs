@@ -189,16 +189,17 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 		return
 	}
 	row := lay.row
-	// Each wait also ends for a sysop's chat request or a window change,
-	// which the read services once this returns, and for a key, which stops
-	// the fade where it is and goes straight to the restore.
-	keyed := fadeToast(ih, lay, w, ramp, step, true)
-	if !keyed && (len(ramp) == 0 || lay.write(w, lay.line) == nil) {
-		keyed = ih.WaitForInput(dwell)
-		if !keyed {
-			keyed = fadeToast(ih, lay, w, reversed(ramp), step, false)
+	// A key, or a sysop's chat request or a window change (which the read
+	// services once this returns), ends any wait here: the fade stops where
+	// it is and the row goes straight back.
+	ended := fadeToast(ih, lay, w, ramp, step, true)
+	if ended == editor.WaitElapsed && (len(ramp) == 0 || lay.write(w, lay.line) == nil) {
+		ended = ih.WaitFor(dwell)
+		if ended == editor.WaitElapsed {
+			ended = fadeToast(ih, lay, w, reversed(ramp), step, false)
 		}
 	}
+	keyed := ended == editor.WaitInput
 	if redraw != nil {
 		redraw()
 	} else if !e.restoreOverlayRow(s, w, sess, snap, row) {
@@ -466,21 +467,23 @@ func (e *MenuExecutor) toastFade() (ramp []int, step time.Duration) {
 	return e.Theme().FadeColors(), cfg.ToastFadeStep()
 }
 
-// fadeToast draws lay through ramp, step apart, and reports whether a key
-// ended it early. drawn says the first step is on screen already. An empty
-// ramp draws nothing.
-func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, step time.Duration, drawn bool) (keyed bool) {
+// fadeToast draws lay through ramp, step apart, and reports what ended it:
+// WaitElapsed when it ran to the end, or the key or interruption that cut it
+// short. drawn says the first step is on screen already. An empty ramp draws
+// nothing. A write that fails ends it as an interruption, so the caller
+// restores the row.
+func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, step time.Duration, drawn bool) editor.WaitOutcome {
 	for i, c := range ramp {
 		if i > 0 || !drawn {
 			if lay.write(w, lay.frame(c)) != nil {
-				return false
+				return editor.WaitInterrupted
 			}
 		}
-		if ih.WaitForInput(step) {
-			return true
+		if out := ih.WaitFor(step); out != editor.WaitElapsed {
+			return out
 		}
 	}
-	return false
+	return editor.WaitElapsed
 }
 
 // reversed returns ramp back to front, for the fade out.

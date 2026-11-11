@@ -296,10 +296,29 @@ func (ih *InputHandler) drainInterrupt() {
 // whether any came. A closed connection counts: the next read reports it. The
 // wait also ends early, reporting false, on a break-in or an Interrupt. The
 // break-in is left for the read that is running this wait's caller to service,
-// and an Interrupt sent before the wait began ends it at once.
+// and an Interrupt sent before the wait began ends it at once. WaitFor says
+// which of those ended it.
 func (ih *InputHandler) WaitForInput(d time.Duration) bool {
+	return ih.WaitFor(d) == WaitInput
+}
+
+// WaitOutcome is what ended a WaitFor.
+type WaitOutcome int
+
+const (
+	// WaitInput: input came (or the connection closed), left to be read.
+	WaitInput WaitOutcome = iota
+	// WaitElapsed: the whole wait passed with nothing.
+	WaitElapsed
+	// WaitInterrupted: a break-in or an Interrupt ended the wait early; the
+	// caller should hand the screen back to its owner at once.
+	WaitInterrupted
+)
+
+// WaitFor is WaitForInput, reporting what ended the wait.
+func (ih *InputHandler) WaitFor(d time.Duration) WaitOutcome {
 	if len(ih.unreadBuf) > 0 {
-		return true
+		return WaitInput
 	}
 	timer := time.NewTimer(d)
 	defer timer.Stop()
@@ -307,20 +326,20 @@ func (ih *InputHandler) WaitForInput(d time.Duration) bool {
 		select {
 		case b, ok := <-ih.incoming:
 			if !ok {
-				return true
+				return WaitInput
 			}
 			if ih.lateEnterTrailer(b) {
 				continue
 			}
 			ih.unreadByte(b)
-			return true
+			return WaitInput
 		case <-timer.C:
-			return false
+			return WaitElapsed
 		case <-ih.breakInChan(true):
 			ih.breakInPending = true
-			return false
+			return WaitInterrupted
 		case <-ih.interruptChan():
-			return false
+			return WaitInterrupted
 		}
 	}
 }
