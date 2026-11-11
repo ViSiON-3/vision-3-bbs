@@ -209,3 +209,57 @@ func TestSSHPasswordHandlerFallsBackToLogin(t *testing.T) {
 		})
 	}
 }
+
+// TestSSHAuthConcurrentGuesses: SSH connections from one IP that try
+// passwords at the same moment get no more guesses than maxFailedLogins.
+// Without the per-IP serialization they would all pass the lockout check
+// before any failure was recorded. A correct password among the late ones
+// isn't admitted once the IP is locked out.
+func TestSSHAuthConcurrentGuesses(t *testing.T) {
+	um := newTestUserMgr(t)
+	ct := NewConnectionTracker(0, 0, 3, 15, "", "")
+	const ip = "192.0.2.77"
+
+	var start, done sync.WaitGroup
+	start.Add(1)
+	admitted := make(chan bool, 11)
+	for i := 0; i < 10; i++ {
+		done.Add(1)
+		go func() {
+			defer done.Done()
+			start.Wait()
+			admitted <- sshPreAuthenticate(um, ct, "TestUser", "guess", ip) != nil
+		}()
+	}
+	start.Done()
+	done.Wait()
+
+	ct.mu.Lock()
+	attempts := ct.failedLogins[ip].Attempts
+	ct.mu.Unlock()
+	if attempts != 3 {
+		t.Errorf("failed attempts recorded = %d, want 3: more guesses got past the lockout check than maxFailedLogins", attempts)
+	}
+	if u := sshPreAuthenticate(um, ct, "TestUser", "secret123", ip); u != nil {
+		t.Error("the right password was admitted from a locked-out IP")
+	}
+	close(admitted)
+	for a := range admitted {
+		if a {
+			t.Error("a wrong password was admitted")
+		}
+	}
+}
+
+// ipLocks drops an address's lock once nobody holds or waits for it.
+func TestIPLocksForget(t *testing.T) {
+	var l ipLocks
+	unlock := l.lock("192.0.2.1")
+	unlock()
+	l.mu.Lock()
+	n := len(l.locks)
+	l.mu.Unlock()
+	if n != 0 {
+		t.Errorf("%d lock(s) left after unlocking, want 0", n)
+	}
+}
