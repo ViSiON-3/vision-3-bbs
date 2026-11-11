@@ -20,7 +20,7 @@ Report privately through GitHub instead:
 
 The report is visible only to you and the project maintainers.
 
-If you do not have a GitHub account, email **spaceman@vision3bbs.com** with
+If you do not have a GitHub account, email **j0hnnya1pha@proton.me** with
 "SECURITY" in the subject line. Email is not encrypted, so send a short note
 first if the details are sensitive and we will arrange how to share them.
 
