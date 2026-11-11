@@ -767,5 +767,11 @@ func stringCatalog() []StringEntry {
 		{Label: "More: Prompt", Key: "morePrompt", Description: "Pause after each screen of a long listing: Y/Enter/Space one more screen, C the rest, N/Q stop"},
 		{Label: "Konfig: More Prompts Label", Key: "konfigMorePromptsLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},
 		{Label: "Konfig: More Prompts Help", Key: "konfigMorePromptsHelp", Description: "Help line shown while More Prompts is highlighted"},
+
+		// V3Net Central activity alerts (#978)
+		{Label: "Alert: Network Logon", Key: "centralAlertLogon", Description: "Toast: a caller elsewhere logged on (%s=handle, %s=board, %s=network); blank = none"},
+		{Label: "Alert: Network Logoff", Key: "centralAlertLogoff", Description: "Toast: a caller elsewhere logged off (%s=handle, %s=board, %s=network); blank = none"},
+		{Label: "Alert: Network Chat", Key: "centralAlertChatJoin", Description: "Toast: a caller elsewhere joined net chat (%s=handle, %s=board, %s=room, %s=network)"},
+		{Label: "Alert: Network Post", Key: "centralAlertPost", Description: "Toast: a caller elsewhere posted (%s=handle, %s=board, %s=area, %s=network); blank = none"},
 	}
 }

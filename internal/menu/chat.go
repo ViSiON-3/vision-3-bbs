@@ -746,6 +746,10 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			return nil, "", nil
 		}
 	}
+	// In the room: other boards may be told, if the caller shares it.
+	if !chatIsLocal(svc) {
+		e.sendChatJoinAlert(c, currentNetwork, currentRoom)
+	}
 
 	// Draw header and status bar with initial state. The Lag and link fields
 	// show whether there is a link to measure from the first draw; startLag
@@ -1076,6 +1080,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			drawHeaderLocked()
 			drawStatusBarLocked()
 			rawMu.Unlock()
+			if !chatIsLocal(svc) {
+				e.sendChatJoinAlert(c, currentNetwork, newRoom)
+			}
 			writeChatHistory(currentRoom, joinHistory)
 			continue
 		}
@@ -1235,6 +1242,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			currentRoom = newRoom
 			currentNetwork = newNetName
 			onNetwork = !chatIsLocal(svc)
+			if onNetwork {
+				e.sendChatJoinAlert(c, currentNetwork, currentRoom)
+			}
 			done = make(chan struct{})
 			stopLag = startLag(svc)
 			rawMu.Lock()

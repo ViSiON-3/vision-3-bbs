@@ -439,6 +439,11 @@ var StringMissingDefaults = map[string]string{
 	"toastLogon":         "|15%s|07 logged on to node |15%d|07",
 	"toastLogoff":        "|15%s|07 logged off node |15%d|07",
 	"toastOverlayFormat": "|09>> |07%s|07",
+	// V3Net Central activity alerts (#978). Blank shows no alert of the kind.
+	"centralAlertLogon":    "|15%s|07 on |11%s|07 logged on |08(%s)|07",
+	"centralAlertLogoff":   "|15%s|07 on |11%s|07 logged off |08(%s)|07",
+	"centralAlertChatJoin": "|15%s|07 on |11%s|07 entered network chat |08(%s on %s)|07",
+	"centralAlertPost":     "|15%s|07 on |11%s|07 posted in |14%s|07 on |13%s|07",
 	// Quote banner for echomail/netmail/QWK replies (#632). Blank means no
 	// banner, so only an installation that predates the key gets the default.
 	"quoteTopNet": "^N wrote:",

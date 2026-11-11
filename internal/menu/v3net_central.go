@@ -54,6 +54,8 @@ type CentralNetworkInfo struct {
 	LastCallers CentralActivityInfo
 	// Chat is network chat on this network.
 	Chat CentralChatInfo
+	// Alerts is activity alerts on this network.
+	Alerts CentralAlertInfo
 }
 
 // CentralChatInfo is network chat's state on a network.
@@ -122,6 +124,15 @@ type V3NetCentralProvider interface {
 	// NodeID is this board's node ID, to tell its own snapshots from
 	// other boards'.
 	NodeID() string
+	// SendCentralAlert announces a caller's action, which they agreed to
+	// share, on network, or with network "" on every network: kind is a
+	// protocol.CentralAlert* name, handle as other boards will see it,
+	// room set for a chat join and area (the area's tag) for a post. Each
+	// network's sysop switch for the kind still applies. It never blocks.
+	SendCentralAlert(network, kind, handle, room, area string)
+	// NetworkForArea returns the V3Net network a local message area is
+	// bound to, or "" for an area on none.
+	NetworkForArea(areaID int) string
 }
 
 // centralRecentWindow separates a recently reachable board from a stale

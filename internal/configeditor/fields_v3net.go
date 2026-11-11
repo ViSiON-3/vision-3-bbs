@@ -253,6 +253,31 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 				return nil
 			},
 		},
+		// Activity alerts: each kind its own switch, off until set. Callers
+		// still choose for themselves whether to share and to see each.
+		v3netAlertField("Alert Logons", "Activity alerts for callers logging on (needs Central); only callers who share them are announced, only to callers who ask", 22,
+			func(a *config.V3NetCentralAlerts) *bool { return &a.Logons }, l),
+		v3netAlertField("Alert Logoffs", "Activity alerts for callers logging off (needs Central); only callers who share them are announced, only to callers who ask", 23,
+			func(a *config.V3NetCentralAlerts) *bool { return &a.Logoffs }, l),
+		v3netAlertField("Alert Chat", "Activity alerts for callers joining network chat, with the room (needs Central and Lobby Chat)", 24,
+			func(a *config.V3NetCentralAlerts) *bool { return &a.Chat }, l),
+		v3netAlertField("Alert Posts", "Activity alerts for callers posting in this network's areas, with the area; never the message (needs Central)", 25,
+			func(a *config.V3NetCentralAlerts) *bool { return &a.Posts }, l),
+	}
+}
+
+// v3netAlertField is the Y/N field for one activity alert switch of l, the
+// one sw picks out of its Central block.
+func v3netAlertField(label, help string, row int, sw func(*config.V3NetCentralAlerts) *bool, l *config.V3NetLeafConfig) fieldDef {
+	return fieldDef{
+		Label: label, Help: help, Type: ftYesNo, Col: 3, Row: row, Width: 1,
+		Get: func() string {
+			if l.Central == nil {
+				return uitext.BoolToYN(false)
+			}
+			return uitext.BoolToYN(*sw(&l.Central.Alerts))
+		},
+		Set: func(val string) error { *sw(&v3netCentral(l).Alerts) = uitext.YNToBool(val); return nil },
 	}
 }
 

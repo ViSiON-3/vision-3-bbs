@@ -912,6 +912,12 @@ func sessionHandler(s ssh.Session) {
 		if logonAnnounced {
 			menuExecutor.AnnounceLogoff(bbsSession, authenticatedUser)
 		}
+		// V3Net Central: the caller's session has ended. Only a session
+		// that got past login is announced, and only to a caller who
+		// shares logoffs; a board losing its hub never announces any.
+		if bbsSession != nil && authenticatedUser != nil && bbsSession.CentralReady() {
+			menuExecutor.SendCentralLogoffAlert(userMgr, bbsSession, authenticatedUser)
+		}
 
 		// --- Record Call History ---
 		if authenticatedUser != nil {
@@ -1683,6 +1689,9 @@ func sessionHandler(s ssh.Session) {
 	bbsSession.SetCentralReady(true)
 	if v3netService != nil && authenticatedUser != nil {
 		v3netService.NotifyCentralActivity()
+		// Activity alerts: other boards hear of the logon only from a
+		// caller who shares logons, and never of an invisible one.
+		menuExecutor.SendCentralLogonAlert(userMgr, bbsSession, authenticatedUser)
 	}
 
 	for {
@@ -2127,6 +2136,9 @@ func main() {
 			// Network Who's Online and Last Callers publish only callers
 			// who opted in; the source applies that.
 			svc.SetCentralActivitySource(newCentralActivitySource(sessionRegistry, userMgr))
+			// Activity alerts from other boards go to the callers here who
+			// asked for them, as live toasts.
+			svc.SetCentralAlertSink(func(a protocol.CentralAlert) { menuExecutor.DeliverCentralAlert(a, userMgr) })
 			v3netService = svc
 
 			// Auto-create message areas for V3Net subscriptions if missing.
@@ -2417,6 +2429,7 @@ func (a *centralAdapter) CentralNetworks() []menu.CentralNetworkInfo {
 			Presence:         centralActivityInfo(n.Presence),
 			LastCallers:      centralActivityInfo(n.LastCallers),
 			Chat:             menu.CentralChatInfo{Enabled: n.Chat.Enabled, Supported: n.Chat.Supported},
+			Alerts:           menu.CentralAlertInfo{Enabled: n.Alerts.Enabled, Supported: n.Alerts.Supported},
 		})
 	}
 	return out
@@ -2436,6 +2449,15 @@ func (a *centralAdapter) NotifyCentralActivity() { a.svc.NotifyCentralActivity()
 
 // NodeID returns this board's V3Net node ID.
 func (a *centralAdapter) NodeID() string { return a.svc.NodeID() }
+
+// SendCentralAlert hands a caller's action to every leaf that offers its
+// kind, which sends it in the background.
+func (a *centralAdapter) SendCentralAlert(network, kind, handle, room, area string) {
+	a.svc.SendCentralAlert(network, leaf.AlertSpec{Kind: kind, Handle: handle, Room: room, Area: area})
+}
+
+// NetworkForArea returns the network a local area is bound to, or "".
+func (a *centralAdapter) NetworkForArea(areaID int) string { return a.svc.NetworkForArea(areaID) }
 
 // centralActivityInfo converts a leaf's activity status for the menus.
 func centralActivityInfo(s leaf.ActivityStatus) menu.CentralActivityInfo {

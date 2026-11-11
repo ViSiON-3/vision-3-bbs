@@ -25,6 +25,10 @@ type centralFake struct {
 	acts     map[string]map[string][]protocol.CentralActivityBoard
 	notifies int
 	node     string
+	// alerts records SendCentralAlert calls; areaNets binds area IDs to
+	// networks for NetworkForArea.
+	alerts   []sentAlert
+	areaNets map[int]string
 }
 
 // CentralActivity returns the scripted feed of kind on network.
@@ -41,6 +45,17 @@ func (f *centralFake) NotifyCentralActivity() { f.notifies++ }
 
 // NodeID returns the scripted node ID.
 func (f *centralFake) NodeID() string { return f.node }
+
+// sentAlert is one SendCentralAlert call.
+type sentAlert struct{ network, kind, handle, room, area string }
+
+// SendCentralAlert records the alert.
+func (f *centralFake) SendCentralAlert(network, kind, handle, room, area string) {
+	f.alerts = append(f.alerts, sentAlert{network, kind, handle, room, area})
+}
+
+// NetworkForArea returns the scripted binding.
+func (f *centralFake) NetworkForArea(areaID int) string { return f.areaNets[areaID] }
 
 func (f *centralFake) CentralNetworks() []CentralNetworkInfo { return f.nets }
 func (f *centralFake) CentralDirectory(_ context.Context, network string, _ bool) ([]protocol.CentralDirectoryEntry, error) {

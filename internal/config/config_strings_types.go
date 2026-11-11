@@ -318,6 +318,14 @@ type StringsConfig struct {
 	ToastLogoff string `json:"toastLogoff"`
 	// ToastOverlayFormat frames a toast drawn over a screen (%s=the toast).
 	ToastOverlayFormat string `json:"toastOverlayFormat"`
+	// CentralAlertLogon, CentralAlertLogoff, CentralAlertChatJoin and
+	// CentralAlertPost are V3Net Central activity alerts from other boards
+	// (%s=handle, %s=board, then for a chat join %s=room and for a post
+	// %s=area, then %s=network). An empty string shows no alert of that kind.
+	CentralAlertLogon    string `json:"centralAlertLogon"`
+	CentralAlertLogoff   string `json:"centralAlertLogoff"`
+	CentralAlertChatJoin string `json:"centralAlertChatJoin"`
+	CentralAlertPost     string `json:"centralAlertPost"`
 	// NewUserSysopPage is queued to every online co-sysop when a signup
 	// completes, and delivered through the same page queue as PageMessageFormat.
 	NewUserSysopPage string `json:"newUserSysopPage"`

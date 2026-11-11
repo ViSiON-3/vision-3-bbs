@@ -191,6 +191,9 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		if err := userManager.UpdateUser(currentUser); err != nil {
 			slog.Error("failed to update MessagesPosted", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 		}
+		if area, ok := e.MessageMgr.GetAreaByID(currentAreaID); ok {
+			e.sendPostAlert(userManager, nodeNumber, currentUser, area.ID, area.Tag, currentMsg.IsPrivate, false)
+		}
 		e.writeString(terminal, outputMode, e.Strings().MsgReplySuccess)
 		uiPause(1 * time.Second)
 		*totalMsgCount++
