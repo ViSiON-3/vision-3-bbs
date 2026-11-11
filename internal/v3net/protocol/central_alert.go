@@ -21,9 +21,14 @@ import (
 // it logs on, logs off, joins a network chat room, or posts in a network
 // message area. The board writes and signs the alert, as it does its
 // listing and activity snapshots, so a hub relays it but cannot alter it
-// or make one up; the hub sends it on to every board on the network as a
-// central_alert event, and each board shows it to its own callers who
-// asked for that kind of alert.
+// or put one in another board's name; the hub sends it on to every board
+// on the network as a central_alert event, and each board shows it to its
+// own callers who asked for that kind of alert. A board is known by its
+// key (its node ID derives from it), and nothing on a network vouches for
+// a key the hub has not been given by the board itself: a hub willing to
+// lie could make up a board of its own, as it could a listing. The hub's
+// signature on the event stream makes that the hub's word, never a third
+// party's.
 //
 // An alert is news, not a record. It lives at most MaxCentralAlertTTL and
 // is never stored: a hub keeps only the IDs it has relayed, until they

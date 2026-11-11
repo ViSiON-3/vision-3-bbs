@@ -759,9 +759,13 @@ The board where a caller acts writes the alert, signs it with its node
 key, and posts it to the hub. The hub checks the signature against the
 board's registered key, as it does a listing, and relays the alert as
 signed to every board on the network as a `central_alert` event; each
-board checks the signature again before showing it, so a hub cannot make
-one up or alter one. One action on a board in several networks goes to
-each network with one ID, and a board on several of them shows it once.
+board checks the signature again before showing it, so a hub cannot alter
+an alert or send one in another board's name. As with listings, a board is
+known by its key, and a hub that set out to deceive its network could still
+invent a board of its own and alerts from it; trust in the hub's operator
+is part of joining a network. One action on a board in several networks
+goes to each network with one ID, and a board on several of them shows it
+once.
 
 Alerts are news, not records:
 
