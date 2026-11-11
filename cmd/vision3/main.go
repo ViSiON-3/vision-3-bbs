@@ -2379,6 +2379,9 @@ func main() {
 			TwitMatcherFor: func(u *user.User) *user.TwitMatcher {
 				return menuExecutor.TwitMatcher(userMgr, u)
 			},
+			// Replies uploaded to V3Net areas raise post alerts, for an
+			// uploader who shares them, as uploads from the BBS do.
+			PostedFor: menuExecutor.QWKAPIPostAlerts(userMgr),
 		})
 		if apiErr != nil {
 			logging.Fatal("failed to create QWK API server", "error", apiErr)

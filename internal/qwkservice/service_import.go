@@ -26,6 +26,10 @@ type ImportOptions struct {
 	// Notify, when set, is called just before posting to an area. It is a UI
 	// hook (e.g. printing "Posting to <area>") and must not block.
 	Notify func(area *message.MessageArea)
+	// Posted, when set, is called after each reply is saved, with its area
+	// and whether it went in as private mail. A reply that failed to save,
+	// or was skipped, is never reported. It must not block.
+	Posted func(area *message.MessageArea, private bool)
 }
 
 // ImportResult summarizes a REP import.
@@ -119,6 +123,9 @@ func (s *Service) ImportREP(data []byte, opts ImportOptions) (*ImportResult, err
 			continue
 		}
 		res.Posted++
+		if opts.Posted != nil {
+			opts.Posted(area, kind == KindPrivateMail)
+		}
 	}
 
 	return res, nil
