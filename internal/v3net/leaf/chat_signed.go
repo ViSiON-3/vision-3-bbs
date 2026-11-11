@@ -18,10 +18,13 @@ import (
 // message must carry a signed action that verifies, says what the hub says
 // it does (kind, board, handle, room, text, recipient), and is signed with
 // a key the roster admits; a live one must also be fresh and not seen
-// before. This board's own chat always passes. A room's member list, which
-// the hub reports, keeps only members whose board is on the roster. Leaves
-// and topic changes pass as the hub reports them. Without a roster, or
-// with an open one, chat is shown as before, signed or not.
+// before. This board's own chat is held to the same signature checks (the
+// hub only says where a message came from), and passes the roster as this
+// board's. A room's member list, which the hub reports, keeps only members
+// whose board is on the roster, and of this board's own only the handles a
+// session here really has in that room. Leaves and topic changes pass as
+// the hub reports them. Without a roster, or with an open one, chat is
+// shown as before, signed or not.
 
 // chatSeenSize is how many live signed chat IDs a leaf remembers, to drop
 // a replayed line.
@@ -72,7 +75,10 @@ type chatClaim struct {
 // chatAdmits reports whether chat the hub reports as c, carrying signed,
 // may reach this board's callers (see the notes above).
 func (l *Leaf) chatAdmits(c chatClaim, signed *protocol.ChatSigned) bool {
-	if !l.rosterFiltering() || c.fromNode == l.cfg.Keystore.NodeID() {
+	// A claim to come from this board is the hub's word like any other, so
+	// it is checked as any other; only the roster's membership test treats
+	// this board as admitted (rosterAdmits).
+	if !l.rosterFiltering() {
 		return true
 	}
 	if signed == nil || signed.Validate(l.cfg.Network) != nil || signed.Verify() != nil {
@@ -92,6 +98,12 @@ func (l *Leaf) chatAdmits(c chatClaim, signed *protocol.ChatSigned) bool {
 		}
 	case protocol.ChatSignedPrivate:
 		if signed.ToHandle != c.toHandle || signed.Text != c.text {
+			return false
+		}
+		// Addressed to a board, it must be this one: the hub cannot send
+		// on a message signed for someone else's Bob. An empty node is one
+		// the hub was asked to resolve.
+		if signed.ToNode != "" && signed.ToNode != l.cfg.Keystore.NodeID() {
 			return false
 		}
 	}
@@ -118,9 +130,11 @@ func (l *Leaf) chatAdmitsHistory(room string, msgs []protocol.ChatMsgPayload) []
 	return out
 }
 
-// chatAdmitsMembers keeps the room members whose board the roster names,
-// and this board's own.
-func (l *Leaf) chatAdmitsMembers(users []chat.ChatUser) []chat.ChatUser {
+// chatAdmitsMembers keeps a room's members whose board the roster names,
+// and of this board's own only those in local, the handles sessions here
+// have in the room: the hub could otherwise list callers of this board who
+// are not there. It takes no session lock, so callers may hold one.
+func (l *Leaf) chatAdmitsMembers(local map[string]bool, users []chat.ChatUser) []chat.ChatUser {
 	if !l.rosterFiltering() {
 		return users
 	}
@@ -129,7 +143,13 @@ func (l *Leaf) chatAdmitsMembers(users []chat.ChatUser) []chat.ChatUser {
 	l.rosterState.mu.Unlock()
 	var out []chat.ChatUser
 	for _, u := range users {
-		if u.Node == l.cfg.Keystore.NodeID() || rosterNamesNode(r, u.Node) {
+		if u.Node == l.cfg.Keystore.NodeID() {
+			if local[u.Handle] {
+				out = append(out, u)
+			}
+			continue
+		}
+		if rosterNamesNode(r, u.Node) {
 			out = append(out, u)
 		}
 	}

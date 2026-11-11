@@ -163,3 +163,83 @@ func TestSignedChatHistoryFiltered(t *testing.T) {
 		t.Errorf("history %+v, want Alpha's line only", history)
 	}
 }
+
+// A hub saying a message comes from this board is not believed on its
+// word: unsigned, it is dropped like any other.
+func TestSignedChatOwnBoardClaimChecked(t *testing.T) {
+	r := newRosterRoom(t)
+	join(t, r.beta, "Bob")
+	carol := join(t, r.beta, "Carol")
+	data, _ := json.Marshal(protocol.ChatMsgPayload{FromHandle: "Bob", FromNode: r.beta.cfg.Keystore.NodeID(),
+		ToHandle: "Carol", ToNode: r.beta.cfg.Keystore.NodeID(), Text: "forged from home",
+		Timestamp: time.Now().UTC().Format(time.RFC3339)})
+	r.beta.chatSessions.dispatch(protocol.Event{Type: protocol.EventChatPrivate, Data: data})
+	select {
+	case ev := <-carol.Events():
+		if ev.Type == chat.TypePrivate {
+			t.Errorf("an unsigned private message claimed from this board was delivered: %+v", ev.Message)
+		}
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// A private message signed for a caller on another board is not delivered
+// here, whatever node the hub puts on it.
+func TestSignedChatPrivateForAnotherBoard(t *testing.T) {
+	r := newRosterRoom(t)
+	bob := join(t, r.beta, "Bob")
+	signed, err := r.alpha.signChat(protocol.ChatSignedPrivate, "Alice", func(c *protocol.ChatSigned) {
+		c.ToHandle, c.ToNode, c.Text = "Bob", r.gamma.cfg.Keystore.NodeID(), "for Gamma's Bob"
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(protocol.ChatMsgPayload{FromHandle: "Alice", FromNode: r.alpha.cfg.Keystore.NodeID(),
+		ToHandle: "Bob", ToNode: r.beta.cfg.Keystore.NodeID(), Text: signed.Text,
+		Timestamp: time.Now().UTC().Format(time.RFC3339), Signed: signed})
+	r.beta.chatSessions.dispatch(protocol.Event{Type: protocol.EventChatPrivate, Data: data})
+	select {
+	case ev := <-bob.Events():
+		if ev.Type == chat.TypePrivate {
+			t.Errorf("a message signed for another board was delivered: %+v", ev.Message)
+		}
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// The member list keeps this board's callers only where a session here is
+// in the room: a hub cannot list a caller of this board who is not there.
+func TestSignedChatLocalMembersChecked(t *testing.T) {
+	r := newRosterRoom(t)
+	me := r.beta.cfg.Keystore.NodeID()
+	users := []chat.ChatUser{{Handle: "Bob", Node: me}, {Handle: "Ghost", Node: me}, {Handle: "Alice", Node: r.alpha.cfg.Keystore.NodeID()}}
+	got := r.beta.chatAdmitsMembers(map[string]bool{"Bob": true}, users)
+	if len(got) != 2 || got[0].Handle != "Bob" || got[1].Handle != "Alice" {
+		t.Errorf("members %+v, want Bob and Alice", got)
+	}
+}
+
+// A board rejoining after a reconnect signs the join, so boards holding a
+// roster put its caller back in the member list.
+func TestSignedChatRejoinSigned(t *testing.T) {
+	r := newRosterRoom(t)
+	alice := join(t, r.alpha, "Alice")
+	bob := join(t, r.beta, "Bob")
+	if err := alice.Leave("lobby"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.alpha.rejoinChat(context.Background(), chatMembership{room: "lobby", handle: "Alice"}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case ev := <-bob.Events():
+			if ev.Type == chat.TypeJoin && ev.Join.Handle == "Alice" {
+				return
+			}
+		case <-deadline:
+			t.Fatal("the rejoin never reached a board holding the roster")
+		}
+	}
+}

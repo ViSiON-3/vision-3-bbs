@@ -78,6 +78,34 @@ func (r *chatSessionRegistry) deregister(s *ChatSession) {
 
 // sharesRoom reports whether a session other than s, with s's handle, is in
 // room. The caller holds r.membership.
+// localHandlesIn returns the handles of this board's sessions in room, and
+// also, when it is not "", the handle of a session joining it: the callers
+// here the hub may truly list as members. The caller must hold neither r.mu
+// nor any session's lock.
+func (r *chatSessionRegistry) localHandlesIn(room, joining string) map[string]bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.localHandlesInLocked(room, joining)
+}
+
+// localHandlesInLocked is localHandlesIn for a caller holding r.mu (read)
+// and no session's lock.
+func (r *chatSessionRegistry) localHandlesInLocked(room, joining string) map[string]bool {
+	out := map[string]bool{}
+	if joining != "" {
+		out[joining] = true
+	}
+	for s := range r.sessions {
+		s.mu.Lock()
+		in := s.currentRoom == room
+		s.mu.Unlock()
+		if in {
+			out[s.handle] = true
+		}
+	}
+	return out
+}
+
 func (r *chatSessionRegistry) sharesRoom(s *ChatSession, room string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -421,6 +449,9 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 		s.undoJoin(room)
 		return nil, nil, fmt.Errorf("join chat: %w", err)
 	}
+	// Filtered before this session's lock is taken: the check reads the
+	// other sessions' rooms under theirs.
+	users := s.leaf.chatAdmitsMembers(s.leaf.chatSessions.localHandlesIn(room, s.handle), membersOf(joinResp))
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -428,7 +459,7 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 		return nil, nil, fmt.Errorf("join chat: session closed")
 	}
 	s.currentRoom = room
-	s.currentUsers = s.leaf.chatAdmitsMembers(membersOf(joinResp))
+	s.currentUsers = users
 	s.currentTopic = roomTopic(joinResp.Rooms, room)
 	s.recovering = false
 	s.mu.Unlock()
