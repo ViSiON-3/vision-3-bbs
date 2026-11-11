@@ -61,6 +61,17 @@ type Config struct {
 	// Activity says what the board may publish for those features: only
 	// callers who consented. Nil publishes nothing.
 	Activity CentralActivitySource
+	// CentralAlerts is the sysop's switch for each kind of activity alert
+	// (protocol.CentralAlert*) on this network: whether this board sends
+	// its consenting callers' alerts of that kind, and passes on the other
+	// boards' to OnAlert. Every kind needs CentralEnabled; chat joins also
+	// need CentralChat. A kind not set is off.
+	CentralAlerts map[string]bool
+	// OnAlert receives each alert from another board that the leaf has
+	// verified, found fresh and not seen before, of a kind the sysop has
+	// on. It runs on the event stream's goroutine, so it must not block.
+	// Nil drops every alert.
+	OnAlert func(protocol.CentralAlert)
 
 	// PinStored returns what the caller's store holds for kind now, or
 	// ErrNoStoredEntry when it has no entry for this subscription. A reload
