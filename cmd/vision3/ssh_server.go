@@ -73,13 +73,20 @@ func sshPasswordHandler(ctx ssh.Context, password string) bool {
 	return true
 }
 
+// sshPasswordChecked runs after a password from ip checks out and before the
+// lockout is checked again. It does nothing; tests set it to play another
+// login locking ip out at that moment.
+var sshPasswordChecked = func(ip string) {}
+
 // sshPreAuthenticate checks an SSH login's username and password against
 // the BBS users, for logging the caller straight in. It returns the user on
 // a match and nil otherwise. It keeps the same per-IP failed-login lockout as
 // the LOGIN menu (ct may be nil): a locked-out IP is not checked at all, a
 // wrong password for a known user counts as a failed attempt, and a match
-// clears the count. An empty password isn't counted: clients that don't
-// store one send it, and those callers just get the LOGIN menu.
+// clears the count, unless the IP was locked out while the password was
+// being checked (ConnectionTracker.AdmitLogin). An empty password isn't
+// counted: clients that don't store one send it, and those callers just get
+// the LOGIN menu.
 func sshPreAuthenticate(um *user.UserMgr, ct *ConnectionTracker, username, password, ip string) *user.User {
 	if username == "" || um == nil {
 		return nil
@@ -102,8 +109,13 @@ func sshPreAuthenticate(um *user.UserMgr, ct *ConnectionTracker, username, passw
 		}
 		return nil
 	}
-	if ct != nil {
-		ct.ClearFailedLoginAttempts(ip)
+	sshPasswordChecked(ip)
+	// The lockout is checked again as the count is cleared: another login
+	// from ip may have locked it out while this password was being checked.
+	if ct != nil && !ct.AdmitLogin(ip) {
+		logging.Security("SSH login from IP locked out during the password check, deferring to BBS login",
+			"user", username, "ip", ip)
+		return nil
 	}
 	slog.Info("SSH pre-authenticated user", "user", username, "ip", ip)
 	return authedUser
