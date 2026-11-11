@@ -1,6 +1,7 @@
 package colorpick
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -39,5 +40,27 @@ func TestPickerKeys(t *testing.T) {
 	fgOnly.Key(tea.KeyMsg{Type: tea.KeyDown})
 	if fgOnly.Row != RowFG {
 		t.Error("a foreground-only picker moved to the background row")
+	}
+}
+
+// An attribute round-trips through the picker, the blink bit kept, and a
+// required background never offers "none".
+func TestPickerAttr(t *testing.T) {
+	for _, attr := range []int{31, 112, 15, 0x9E} {
+		p := FromAttr(attr)
+		if got := p.Attr(attr); got != attr {
+			t.Errorf("attr %d round-tripped to %d", attr, got)
+		}
+	}
+	p := FromAttr(0x1F) // white on blue
+	p.Row = RowBG
+	for range 8 {
+		p.Key(tea.KeyMsg{Type: tea.KeyLeft})
+		if p.BG == NoBG {
+			t.Fatal("a required background offered none")
+		}
+	}
+	if row := p.BGRow(Styles{}); strings.Contains(row, "--") {
+		t.Error("required background row shows the none swatch")
 	}
 }

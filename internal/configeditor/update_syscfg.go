@@ -86,6 +86,9 @@ func (m Model) updateSysConfigEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if f.Type == ftColorRamp {
 			return m.startRampEdit(f)
 		}
+		if f.Type == ftColorAttr {
+			return m.startAttrEdit(f)
+		}
 		return m.startSysFieldEdit()
 
 	case tea.KeySpace:
@@ -256,7 +259,7 @@ func (m Model) updateSysConfigField(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if f.Type == ftInteger {
+		if f.Type == ftInteger || f.Type == ftColorAttr {
 			if len(msg.Runes) == 1 {
 				ch := msg.Runes[0]
 				if (ch < '0' || ch > '9') && ch != '-' {
@@ -275,7 +278,7 @@ func (m *Model) applySysFieldValue(f fieldDef) error {
 	val := m.textInput.Value()
 
 	switch f.Type {
-	case ftInteger:
+	case ftInteger, ftColorAttr:
 		n, err := strconv.Atoi(val)
 		if err != nil {
 			return fmt.Errorf("not a number")

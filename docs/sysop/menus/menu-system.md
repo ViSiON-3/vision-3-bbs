@@ -1031,6 +1031,12 @@ them by hand.
 `menus.d/<set>/theme.json` overrides it. The color numbers are the same as
 for `yesNoHighlightColor`.
 
+In `./config`, under **Theme → Prompt Colors**, Enter on **Yes/No
+Highlight** or **Yes/No Regular** opens a colour picker with a foreground
+row and a background row and a preview of the prompt; Enter sets the
+colour, `T` types the number instead, and Esc leaves it as it was. A
+colour's blink bit (backgrounds 8-15) is kept as it was.
+
 | Field | Default | Meaning |
 |-------|---------|---------|
 | `yesNoHighlightColor` | `112` | The highlight bar in lightbars (message reader, message and file area lists, BBS list, message scan, file command bar, generated door menu) and the highlighted yes/no choice |
