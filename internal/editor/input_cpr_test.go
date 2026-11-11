@@ -23,7 +23,7 @@ func TestReadCursorReportKeepsEarlierKeys(t *testing.T) {
 	}
 	for _, want := range []int{'a', 'b', 'c'} {
 		if k, err := ih.ReadKey(); err != nil || k != want {
-			t.Fatalf("ReadKey = %q, err = %v; want %q", k, err, want)
+			t.Fatalf("ReadKey = %q, err = %v; want %q", rune(k), err, rune(want))
 		}
 	}
 }
@@ -45,7 +45,7 @@ func TestReadCursorReportTimesOut(t *testing.T) {
 		t.Fatalf("ReadCursorReport took %v, want about 100ms", elapsed)
 	}
 	if k, err := ih.ReadKey(); err != nil || k != 'x' {
-		t.Fatalf("ReadKey = %q, err = %v; want 'x'", k, err)
+		t.Fatalf("ReadKey = %q, err = %v; want 'x'", rune(k), err)
 	}
 }
 

@@ -163,7 +163,7 @@ func TestSetReceiverNameNormalisesReceiverSubfields(t *testing.T) {
 		}
 		got := hdr.GetAllSubfieldsByType(SfldReceiverName)
 		if len(got) != 1 || string(got[0].Buffer) != "Sysop" {
-			t.Errorf("message %d receiver subfields = %q, want exactly [Sysop]", msgNum, got)
+			t.Errorf("message %d receiver subfields = %+v, want exactly [Sysop]", msgNum, got)
 		}
 		// SubfieldLen must describe what was written or the next reader
 		// would run into the following header.

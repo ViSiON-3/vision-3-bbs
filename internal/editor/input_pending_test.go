@@ -27,7 +27,7 @@ func TestPendingByteLeavesTheKey(t *testing.T) {
 	}
 	key, err := ih.ReadKey()
 	if err != nil || key != 'x' {
-		t.Fatalf("ReadKey = %q, %v; want 'x'", key, err)
+		t.Fatalf("ReadKey = %q, %v; want 'x'", rune(key), err)
 	}
 	_ = pw.Close()
 	if _, ok, err := ih.PendingByte(time.Second); ok || !errors.Is(err, io.EOF) {

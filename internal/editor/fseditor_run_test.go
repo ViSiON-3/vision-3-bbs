@@ -129,7 +129,7 @@ func TestDiscardPendingByteOnlyDropsTheMatchingByte(t *testing.T) {
 		t.Fatal("a non-matching byte must not be dropped")
 	}
 	if key, err := ih.ReadKey(); err != nil || key != 'x' {
-		t.Fatalf("the non-matching byte must stay readable: key=%q err=%v", key, err)
+		t.Fatalf("the non-matching byte must stay readable: key=%q err=%v", rune(key), err)
 	}
 	if ih.DiscardPendingByte(KeyCtrlP, 20*time.Millisecond) {
 		t.Fatal("nothing pending must report false")
@@ -210,7 +210,7 @@ func TestReadKeyOrEventPrefersBufferedKey(t *testing.T) {
 
 	key, _, isEvent, err := readKeyOrEvent(ih, events)
 	if err != nil || isEvent || key != 'a' {
-		t.Fatalf("first call = (%q, event=%v, %v), want the buffered key", key, isEvent, err)
+		t.Fatalf("first call = (%q, event=%v, %v), want the buffered key", rune(key), isEvent, err)
 	}
 	_, win, isEvent, err := readKeyOrEvent(ih, events)
 	if err != nil || !isEvent || win.Width != 100 {

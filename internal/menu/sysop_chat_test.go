@@ -413,7 +413,7 @@ func TestChatEscEscKeyGoesToPromptFirst(t *testing.T) {
 	// x arrives inside the ESC window, so ReadKey pushes it back.
 	r.sess.Send("\x1b\x1bx")
 	if k := r.nextKey(t); k != 'x' {
-		t.Fatalf("prompt key after chat = %q; want x", k)
+		t.Fatalf("prompt key after chat = %q; want x", rune(k))
 	}
 	r.finish(t, "z\r", "abxz")
 }

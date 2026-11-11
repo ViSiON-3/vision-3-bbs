@@ -252,7 +252,7 @@ func TestRunEditorWithMetadataSharesInputHandler(t *testing.T) {
 
 	// Keys typed after the save belong to whoever reads next.
 	if key, err := shared.ReadKeyWithTimeout(5 * time.Second); err != nil || key != 'm' {
-		t.Errorf("next key on the shared handler = %q, %v; want 'm'", key, err)
+		t.Errorf("next key on the shared handler = %q, %v; want 'm'", rune(key), err)
 	}
 }
 

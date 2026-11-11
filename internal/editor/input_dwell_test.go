@@ -59,7 +59,7 @@ func TestBreakInEndsAToastDwell(t *testing.T) {
 		select {
 		case k := <-keyc:
 			if k != 'z' {
-				t.Errorf("events=%v: key = %q", withEvents, k)
+				t.Errorf("events=%v: key = %q", withEvents, rune(k))
 			}
 		case <-time.After(time.Second):
 			t.Fatalf("events=%v: read did not continue", withEvents)

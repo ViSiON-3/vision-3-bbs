@@ -1,6 +1,6 @@
 module github.com/ViSiON-3/vision-3-bbs
 
-go 1.25.0
+go 1.27.4
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0
@@ -15,13 +15,16 @@ require (
 	github.com/muesli/cancelreader v0.2.2
 	github.com/muesli/termenv v0.16.0
 	github.com/rivo/uniseg v0.4.7
-	golang.org/x/crypto v0.55.0
-	golang.org/x/term v0.45.0
-	golang.org/x/text v0.41.0
+	github.com/robfig/cron/v3 v3.0.1
+	golang.org/x/crypto v0.59.0
+	golang.org/x/sys v0.50.0
+	golang.org/x/term v0.48.0
+	golang.org/x/text v0.44.0
 	modernc.org/sqlite v1.46.2
 )
 
 require (
+	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bitbored/go-ansicon v0.0.0-20150813185003-cc47149d371d // indirect
@@ -47,12 +50,6 @@ require (
 	modernc.org/libc v1.70.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-)
-
-require (
-	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
-	github.com/robfig/cron/v3 v3.0.1
-	golang.org/x/sys v0.47.0
 )
 
 // Patched copies of upstream packages to fix ENABLE_VIRTUAL_TERMINAL_INPUT

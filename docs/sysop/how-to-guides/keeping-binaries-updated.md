@@ -2,7 +2,7 @@
 
 This guide is for sysops who want to track active development — running the latest unreleased code without downloading a new release archive each time. ViSiON/3 is pure Go, so a build is a single command and a few seconds; the trick is arranging your install so that a rebuild in the repo *is* the update, with nothing to copy and nothing of yours overwritten.
 
-> **Prerequisites:** Go 1.25+ ([install Go](https://golang.org/dl/)), Git.
+> **Prerequisites:** Go 1.27+ ([install Go](https://golang.org/dl/)), Git.
 >
 > For upgrading a BBS you already run — what a new version does and does not
 > bring with it, and which settings you have to add by hand — see

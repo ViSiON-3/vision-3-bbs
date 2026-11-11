@@ -9,7 +9,7 @@
 # Keep this in step with the `go` directive in go.mod. The official images pin
 # GOTOOLCHAIN=local, so a base image older than go.mod fails outright at
 # `go mod download` rather than fetching a newer toolchain.
-FROM golang:1.25-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git

@@ -44,7 +44,7 @@ if (-not $goExe) {
         if ($LASTEXITCODE -ne 0) { throw "go version failed" }
         if ($goVersionOutput -match "go(\d+\.\d+\.\d+)") {
             $GO_VERSION = $Matches[1]
-            $REQUIRED_VERSION = [version]"1.25.0"
+            $REQUIRED_VERSION = [version]"1.27.4"
             $parsedGo = [version]$GO_VERSION
             if ($parsedGo -ge $REQUIRED_VERSION) {
                 Write-Host "[OK] Go $GO_VERSION (required: $REQUIRED_VERSION or higher)" -ForegroundColor Green
