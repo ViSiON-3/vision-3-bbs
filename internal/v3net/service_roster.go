@@ -43,12 +43,13 @@ func (s *Service) CentralRoster(network string) (*protocol.CentralRoster, error)
 // its coordinator, and posts it to the hub. base is the seq of the roster
 // the edit started from, 0 for none; a roster changed since then is not
 // replaced (leaf.ErrRosterChanged).
-func (s *Service) PublishCentralRoster(ctx context.Context, network string, base int64, members []protocol.CentralRosterMember) (*protocol.CentralRoster, error) {
+// open publishes it open (protocol.CentralRoster.Open).
+func (s *Service) PublishCentralRoster(ctx context.Context, network string, base int64, members []protocol.CentralRosterMember, open bool) (*protocol.CentralRoster, error) {
 	run, err := s.leafFor(network)
 	if err != nil {
 		return nil, err
 	}
-	r, err := run.PublishRoster(ctx, base, members)
+	r, err := run.PublishRoster(ctx, base, members, open)
 	if err != nil {
 		return nil, fmt.Errorf("publish roster for %s: %w", network, err)
 	}

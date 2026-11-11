@@ -29,13 +29,13 @@ func (f *rosterFake) CentralRosterCandidates(context.Context, string) ([]protoco
 	return f.dir, nil
 }
 func (f *rosterFake) NodePubKeyB64() string { return f.self.PubKeyBase64() }
-func (f *rosterFake) PublishCentralRoster(_ context.Context, network string, base int64, members []protocol.CentralRosterMember) (*protocol.CentralRoster, error) {
+func (f *rosterFake) PublishCentralRoster(_ context.Context, network string, base int64, members []protocol.CentralRosterMember, open bool) (*protocol.CentralRoster, error) {
 	f.bases = append(f.bases, base)
 	if f.conflict {
 		return nil, errors.New("leaf: the roster changed since this edit began")
 	}
 	f.published = append(f.published, members)
-	f.roster = &protocol.CentralRoster{Network: network, Seq: int64(len(f.published)) * 10, Members: members, CoordPubKeyB64: f.self.PubKeyBase64()}
+	f.roster = &protocol.CentralRoster{Network: network, Seq: int64(len(f.published)) * 10, Members: members, Open: open, CoordPubKeyB64: f.self.PubKeyBase64()}
 	return f.roster, nil
 }
 
@@ -82,7 +82,7 @@ func runRosterScreen(t *testing.T, f *rosterFake, input string) string {
 func TestRosterFirstPublish(t *testing.T) {
 	f, alpha, _ := newRosterFake(t)
 	out := runRosterScreen(t, f, "a1\rn\rq\r")
-	if len(f.published) != 0 || !strings.Contains(out, "No roster yet") || !strings.Contains(out, "not withdraw it") {
+	if len(f.published) != 0 || !strings.Contains(out, "No roster yet") || !strings.Contains(out, "keep the roster either way") {
 		t.Fatalf("declined: published %d\n%s", len(f.published), out)
 	}
 	runRosterScreen(t, f, "a1\ry\rq\r")
@@ -171,5 +171,34 @@ func TestRosterEditBaseAndConflict(t *testing.T) {
 	}
 	if len(f.published) != 1 {
 		t.Errorf("a conflicting edit was published")
+	}
+}
+
+// O opens the network after a yes, keeping the members; C closes it again;
+// a no publishes nothing.
+func TestRosterOpenClose(t *testing.T) {
+	f, alpha, _ := newRosterFake(t)
+	f.roster = &protocol.CentralRoster{Network: "testnet", Seq: 1, CoordPubKeyB64: f.self.PubKeyBase64(),
+		Members: []protocol.CentralRosterMember{{NodeID: alpha.NodeID(), PubKeyB64: alpha.PubKeyBase64()}}}
+	runRosterScreen(t, f, "o\rn\rq\r")
+	if len(f.published) != 0 {
+		t.Fatal("declining to open published")
+	}
+	out := runRosterScreen(t, f, "o\ry\rq\r")
+	if !f.roster.Open || len(f.roster.Members) != 1 || !strings.Contains(out, "Opened") || !strings.Contains(out, "The network is open") {
+		t.Fatalf("open: %+v\n%s", f.roster, out)
+	}
+	if !strings.Contains(out, "]lose") {
+		t.Errorf("open roster does not offer Close:\n%s", out)
+	}
+	runRosterScreen(t, f, "c\ry\rq\r")
+	if f.roster.Open || len(f.roster.Members) != 1 {
+		t.Errorf("close: %+v", f.roster)
+	}
+	// Admitting while open keeps it open.
+	f.roster.Open = true
+	runRosterScreen(t, f, "a2\rq\r")
+	if !f.roster.Open || len(f.roster.Members) != 2 {
+		t.Errorf("admit while open: %+v", f.roster)
 	}
 }

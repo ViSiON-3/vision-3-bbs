@@ -66,6 +66,7 @@ type CentralNetworkInfo struct {
 type CentralRosterInfo struct {
 	Supported bool
 	Held      bool
+	Open      bool // held, but open: filtering nothing
 	Members   int
 	LastError string
 }
@@ -462,6 +463,8 @@ func centralRosterState(n CentralNetworkInfo) string {
 	case n.Roster.Held && n.SupportKnown && !n.Roster.Supported:
 		// Still in force, but no update can reach this board.
 		return fmt.Sprintf("|10on|07, |15%d|07 boards |04(hub stopped serving it)|07", n.Roster.Members)
+	case n.Roster.Held && n.Roster.Open:
+		return "|07open |08(all shown)|07"
 	case n.Roster.Held:
 		return fmt.Sprintf("|10on|07, |15%d|07 boards", n.Roster.Members)
 	case !n.SupportKnown:
