@@ -173,9 +173,9 @@ func (l *Leaf) fetchRoster(ctx context.Context) error {
 		held := l.rosterState.roster != nil
 		l.rosterState.mu.Unlock()
 		if held {
-			l.noteRosterErr(errors.New("the hub serves no roster; keeping the one this board holds"))
+			_ = l.noteRosterErr(errors.New("the hub serves no roster; keeping the one this board holds")) // recorded for Status
 		} else {
-			l.noteRosterErr(nil)
+			_ = l.noteRosterErr(nil) // clears the last error
 		}
 		return errNoRoster
 	default:
