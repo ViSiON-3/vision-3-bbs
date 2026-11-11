@@ -28,6 +28,7 @@ func SupportedFeatures() []string {
 		protocol.FeatureCentralLastCallers,
 		protocol.FeatureCentralChat,
 		protocol.FeatureCentralAlerts,
+		protocol.FeatureCentralRoster,
 	}
 }
 

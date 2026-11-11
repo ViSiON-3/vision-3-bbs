@@ -133,6 +133,9 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 		if l.cfg.OnNAL != nil && l.reconnectFetching.CompareAndSwap(false, true) {
 			go l.refreshNALAfterReconnect(ctx)
 		}
+		// A roster published while the stream was down sent its event to
+		// no one here.
+		l.refreshRosterSoon(ctx)
 		if err := l.recoverChat(streamCtx); err != nil {
 			return fmt.Errorf("SSE chat recovery: %w", err)
 		}
@@ -163,6 +166,7 @@ func (l *Leaf) connectSSE(ctx context.Context, reconnect bool) error {
 				// callback fires (#906).
 				l.dispatchCentralEvent(ev)
 				l.dispatchAlertEvent(ev)
+				l.dispatchRosterEvent(ctx, ev)
 				l.dispatchMessageEvent(ev)
 				l.onEvent(ev)
 				l.chatSessions.dispatch(ev)

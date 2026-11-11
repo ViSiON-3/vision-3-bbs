@@ -423,6 +423,23 @@ func hubErrorText(body []byte) string {
 // is off for this subscription and ErrCentralUnsupported when the hub does
 // not serve the directory. The slice is the caller's to keep.
 func (l *Leaf) FetchCentralDirectory(ctx context.Context, force bool) ([]protocol.CentralDirectoryEntry, error) {
+	entries, err := l.fetchCentralDirectory(ctx, force)
+	if err != nil {
+		return nil, err
+	}
+	return l.rosterFilterDirectory(entries), nil
+}
+
+// FetchCentralDirectoryUnfiltered is FetchCentralDirectory without the
+// roster's filter: every verified listing, roster or not. It is for the
+// coordinator choosing which boards to admit.
+func (l *Leaf) FetchCentralDirectoryUnfiltered(ctx context.Context, force bool) ([]protocol.CentralDirectoryEntry, error) {
+	return l.fetchCentralDirectory(ctx, force)
+}
+
+// fetchCentralDirectory is the verified directory, from the cache when it
+// is fresh, without the roster's filter.
+func (l *Leaf) fetchCentralDirectory(ctx context.Context, force bool) ([]protocol.CentralDirectoryEntry, error) {
 	if !l.centralEnabled() {
 		return nil, ErrCentralDisabled
 	}

@@ -155,6 +155,7 @@ var FeatureRequirements = []FeatureRequirement{
 	{Feature: FeatureCentralLastCallers, Title: "Last Callers"},
 	{Feature: FeatureCentralChat, Title: "Network chat"},
 	{Feature: FeatureCentralAlerts, Title: "Activity alerts"},
+	{Feature: FeatureCentralRoster, Title: "Board roster"},
 }
 
 // FeatureMinVersion returns FeatureRequirements' MinVersion for feature: the

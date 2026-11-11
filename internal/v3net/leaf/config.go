@@ -67,6 +67,11 @@ type Config struct {
 	// boards' to OnAlert. Every kind needs CentralEnabled; chat joins also
 	// need CentralChat. A kind not set is off.
 	CentralAlerts map[string]bool
+	// RosterPath is the file the leaf keeps the network's board roster in
+	// once it has taken one (see central_roster.go), so the roster stays in
+	// force across restarts whatever the hub serves. Empty keeps it in
+	// memory only.
+	RosterPath string
 	// OnAlert receives each alert from another board that the leaf has
 	// verified, found fresh and not seen before, of a kind the sysop has
 	// on. It runs on the event stream's goroutine, so it must not block.

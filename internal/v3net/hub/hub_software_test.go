@@ -77,7 +77,7 @@ func softwareHub(t *testing.T) (*Hub, *httptest.Server, *keystore.Keystore, *key
 
 func allFeatures() []string {
 	return []string{protocol.FeatureCentralDirectory, protocol.FeatureCentralPresence,
-		protocol.FeatureCentralLastCallers, protocol.FeatureCentralChat, protocol.FeatureCentralAlerts}
+		protocol.FeatureCentralLastCallers, protocol.FeatureCentralChat, protocol.FeatureCentralAlerts, protocol.FeatureCentralRoster}
 }
 
 // A signed subscribe's report reaches the operator's node list with when it

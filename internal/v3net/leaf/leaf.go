@@ -61,6 +61,8 @@ type Leaf struct {
 	central centralState
 	// alerts is the leaf's activity alert state (central_alert.go).
 	alerts alertState
+	// rosterState is the network's board roster (central_roster.go).
+	rosterState rosterState
 	// sseConnected is set while the event stream is open.
 	sseConnected atomic.Bool
 	// pollNow wakes the poll loop for a poll ahead of its ticker, when the
@@ -164,6 +166,7 @@ func New(cfg Config) *Leaf {
 	l.chatSessions = newChatSessionRegistry(cfg.Keystore.NodeID())
 	l.chatSessions.blocked = chatBlockSet(cfg.ChatBlocked)
 	l.central.activity = newActivityStates()
+	l.loadRoster()
 	return l
 }
 
@@ -258,6 +261,11 @@ func (l *Leaf) Start(ctx context.Context) {
 	// was offline reach OnNAL without waiting for the next change event.
 	if err := l.refreshNAL(ctx); err != nil {
 		slog.Warn("leaf: initial NAL fetch failed", "network", l.cfg.Network, "error", err)
+	}
+	// The roster needs the coordinator pin the NAL fetch settles, and the
+	// hub's feature list.
+	if err := l.fetchHubFeatures(ctx); err == nil {
+		_ = l.fetchRoster(ctx) // logged; a 404 just means none yet
 	}
 
 	var wg sync.WaitGroup

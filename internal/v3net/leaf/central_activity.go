@@ -509,7 +509,7 @@ func (l *Leaf) FetchCentralActivity(ctx context.Context, kind string, force bool
 		// or call can pass its limit while cached, with no event to say so.
 		out := liveActivityFeed(st.feed, kind, time.Now())
 		l.central.mu.Unlock()
-		return out, nil
+		return l.rosterFilterActivity(out), nil
 	}
 	l.central.mu.Unlock()
 
@@ -540,7 +540,7 @@ func (l *Leaf) FetchCentralActivity(ctx context.Context, kind string, force bool
 	st.fetched = time.Now()
 	st.stale = false
 	l.central.mu.Unlock()
-	return cloneActivityFeed(boards), nil
+	return l.rosterFilterActivity(cloneActivityFeed(boards)), nil
 }
 
 // verifyActivityFeed keeps the feed's boards whose snapshot is for network
