@@ -3,11 +3,15 @@ package leaf
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/nal"
@@ -63,6 +67,74 @@ type Leaf struct {
 	pollNow chan struct{}
 }
 
+// maxHubRedirects is how many redirects a hub request follows, as Go's own
+// default.
+const maxHubRedirects = 10
+
+// sameHostRedirect is the CheckRedirect of the leaf's HTTP clients: a
+// redirect is followed only to the scheme, host and port the request was
+// first sent to (sameDialTarget). Go's default follows a redirect anywhere,
+// so a hub, or anyone between it and the leaf on plain HTTP, could send the
+// leaf's requests, with their bodies on a 307 or 308, to any address,
+// including ones on the leaf's own network. A refused redirect fails the
+// request.
+func sameHostRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxHubRedirects {
+		return fmt.Errorf("leaf: stopped after %d redirects", maxHubRedirects)
+	}
+	first := via[0].URL
+	if !sameDialTarget(first, req.URL) {
+		return fmt.Errorf("leaf: refusing redirect from %s://%s to %s://%s", first.Scheme, first.Host, req.URL.Scheme, req.URL.Host)
+	}
+	return nil
+}
+
+// sameDialTarget reports whether a and b have the same scheme, host and
+// port, the port being the scheme's default when the URL gives none. An
+// ASCII hostname is compared ignoring case, as DNS does. A hostname with
+// anything else in it must match byte for byte: Go's transport dials its
+// IDNA ASCII form, and Unicode case folding (strings.EqualFold) can call two
+// hostnames equal that IDNA turns into different names. Identical strings
+// always dial the same name.
+func sameDialTarget(a, b *url.URL) bool {
+	// A scheme url.Parse accepts is ASCII, so folding it is plain ASCII case.
+	if !strings.EqualFold(a.Scheme, b.Scheme) {
+		return false
+	}
+	if dialPort(a) != dialPort(b) {
+		return false
+	}
+	ha, hb := a.Hostname(), b.Hostname()
+	if isASCII(ha) && isASCII(hb) {
+		return strings.EqualFold(ha, hb)
+	}
+	return ha == hb
+}
+
+// dialPort is u's port, or its scheme's default when it gives none.
+func dialPort(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http":
+		return "80"
+	case "https":
+		return "443"
+	}
+	return ""
+}
+
+// isASCII reports whether s is all ASCII.
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
+}
+
 // New creates a new Leaf with the given configuration.
 func New(cfg Config) *Leaf {
 	if cfg.PollInterval <= 0 {
@@ -71,9 +143,9 @@ func New(cfg Config) *Leaf {
 
 	l := &Leaf{
 		cfg:       cfg,
-		client:    &http.Client{Timeout: 10 * time.Second},
-		sseClient: &http.Client{},
-		nalCache:  nal.NewCache(1*time.Hour, &http.Client{Timeout: 30 * time.Second}),
+		client:    &http.Client{Timeout: 10 * time.Second, CheckRedirect: sameHostRedirect},
+		sseClient: &http.Client{CheckRedirect: sameHostRedirect},
+		nalCache:  nal.NewCache(1*time.Hour, &http.Client{Timeout: 30 * time.Second, CheckRedirect: sameHostRedirect}),
 		pins: keyPins{
 			coord:        normalizeKey(cfg.CoordPubKeyB64),
 			hub:          normalizeKey(cfg.HubPubKeyB64),
