@@ -578,8 +578,9 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|08                in the user list and each room message; kept in room history|07\r\n")))
 		}
 		if alertsOffered {
-			// Alerts do say what a caller does, when they share them.
-			buf.Write(ansi.ReplacePipeCodes([]byte("|08  No real name, location or user number; what you do only in alerts you share.|07\r\n")))
+			// Alerts say what a caller does when shared, as chat's joins,
+			// leaves and lines do: whatever is switched on above.
+			buf.Write(ansi.ReplacePipeCodes([]byte("|08  Never your real name, location or user number; activity only as switched on.|07\r\n")))
 		} else {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|08  Never your real name, location, user number, or what you are doing.|07\r\n")))
 		}

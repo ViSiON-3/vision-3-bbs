@@ -441,19 +441,31 @@ func TestCentralAlertsOfferedWhileSupportUnknown(t *testing.T) {
 	}
 }
 
-// With alerts the only feature offered, My Preferences does not claim
-// nothing is shared, and says alerts tell what the caller does.
-func TestCentralPrefsAlertsOnly(t *testing.T) {
+// With alerts offered, My Preferences does not claim nothing is shared or
+// that what the caller does never is: alone, it points at the alerts; with
+// chat too, its closing line covers chat's joins and lines as well, not
+// alerts alone.
+func TestCentralPrefsAlertsPreview(t *testing.T) {
 	f := newAlertFixture(t)
 	n := CentralNetworkInfo{Network: "testnet", Enabled: true, SupportKnown: true, Supported: true}
 	n.Alerts = alertNet("testnet").Alerts
 	f.fake.nets = []CentralNetworkInfo{n}
 	_, u := f.caller(t, 1, "Caller", 30, user.CentralAlertPrefs{}, true)
+	const closing = "activity only as switched on"
 	snap := runAlertScreen(t, f, u, "q\r").Snapshot()
 	if strings.Contains(snap, "offers no feature") || strings.Contains(snap, "or what you are doing") {
-		t.Errorf("preview denies what alerts share:\n%s", snap)
+		t.Errorf("alerts only: preview denies what alerts share:\n%s", snap)
 	}
-	if !strings.Contains(snap, "Only activity alerts you share") || !strings.Contains(snap, "what you do only in alerts you share") {
-		t.Errorf("preview does not mention alerts:\n%s", snap)
+	if !strings.Contains(snap, "Only activity alerts you share") || !strings.Contains(snap, closing) {
+		t.Errorf("alerts only: preview does not mention alerts:\n%s", snap)
+	}
+
+	f.fake.nets = []CentralNetworkInfo{alertNet("testnet")} // chat offered too
+	snap = runAlertScreen(t, f, u, "q\r").Snapshot()
+	if !strings.Contains(snap, "Network chat:") || !strings.Contains(snap, closing) || strings.Contains(snap, "only in alerts") {
+		t.Errorf("chat and alerts: closing line should cover every switch:\n%s", snap)
+	}
+	if first := strings.SplitN(snap, "\n", 2)[0]; !strings.Contains(first, "V3Net Central: Sharing") {
+		t.Errorf("chat and alerts: screen scrolled off 80x24:\n%s", snap)
 	}
 }
