@@ -247,6 +247,17 @@ func TestToastNotDrawnPastDeadline(t *testing.T) {
 	env, log := fadeEnv(t, false, 20*time.Millisecond)
 	env.sess.AddPage("Hello there")
 	ih := getSessionIH(env.s)
+	// A clock that moves on a millisecond each time it is read: the 1ns
+	// limit has passed by the time the toast would be drawn, on any
+	// platform's timer resolution.
+	base, mu, calls := time.Now(), sync.Mutex{}, 0
+	toastNow = func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		calls++
+		return base.Add(time.Duration(calls) * time.Millisecond)
+	}
+	t.Cleanup(func() { toastNow = time.Now })
 	env.e.serviceToasts(env.s, ih, env.sess, time.Nanosecond)
 	if strings.Contains(log.String(), "Hello there") {
 		t.Error("drawn after the read's time ran out")

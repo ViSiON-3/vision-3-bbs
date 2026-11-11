@@ -36,6 +36,13 @@ import (
 // toastDwell is how long an overlay stays up when no key clears it.
 var toastDwell = 5 * time.Second
 
+// toastNow is the clock a toast's deadline is kept by; tests replace it,
+// since some platforms' clocks are too coarse to see a short limit pass.
+var toastNow = time.Now
+
+// toastLeft is how long remains until deadline by toastNow.
+func toastLeft(deadline time.Time) time.Duration { return deadline.Sub(toastNow()) }
+
 // toastRearm is how long a key that cleared an overlay holds off the next one,
 // so a queue of toasts does not flash past someone who is typing.
 var toastRearm = time.Second
@@ -138,7 +145,7 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	if limit > 0 && limit < dwell {
 		dwell = limit
 	}
-	deadline := time.Now().Add(dwell)
+	deadline := toastNow().Add(dwell)
 	tap := tapOf(s)
 	if !sess.ToastsReady() || tap == nil {
 		return
@@ -172,12 +179,12 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	// the same dwell; one too short for the fade, or with fading off, just
 	// appears and goes.
 	ramp, step := e.toastFade()
-	if fadeTime := time.Duration(2*len(ramp)) * step; len(ramp) == 0 || fadeTime >= time.Until(deadline) {
+	if fadeTime := time.Duration(2*len(ramp)) * step; len(ramp) == 0 || fadeTime >= toastLeft(deadline) {
 		ramp = nil
 	}
 	fadeOut := time.Duration(len(ramp)) * step
 	lay := e.toastLayout(s, sess, t)
-	if time.Until(deadline) <= 0 {
+	if toastLeft(deadline) <= 0 {
 		// Getting here took the read's time: draw nothing, leave the toast
 		// queued, and let the next wait show it.
 		if stored {
@@ -205,9 +212,9 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	// services once this returns), ends any wait here: the fade stops where
 	// it is and the row goes straight back.
 	ended := fadeToast(ih, lay, w, ramp, step, true, deadline)
-	if ended == editor.WaitElapsed && time.Until(deadline) > 0 && (len(ramp) == 0 || lay.write(w, lay.line) == nil) {
+	if ended == editor.WaitElapsed && toastLeft(deadline) > 0 && (len(ramp) == 0 || lay.write(w, lay.line) == nil) {
 		// Hold for what is left, keeping the fade-out's share.
-		if hold := time.Until(deadline) - fadeOut; hold > 0 {
+		if hold := toastLeft(deadline) - fadeOut; hold > 0 {
 			ended = ih.WaitFor(hold)
 		}
 		if ended == editor.WaitElapsed {
@@ -490,7 +497,7 @@ func (e *MenuExecutor) toastFade() (ramp []int, step time.Duration) {
 // caller restores the row.
 func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, step time.Duration, drawn bool, deadline time.Time) editor.WaitOutcome {
 	for i, c := range ramp {
-		if time.Until(deadline) <= 0 {
+		if toastLeft(deadline) <= 0 {
 			return editor.WaitElapsed
 		}
 		if i > 0 || !drawn {
@@ -499,7 +506,7 @@ func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, 
 			}
 		}
 		// The write may have taken the time that was left.
-		left := time.Until(deadline)
+		left := toastLeft(deadline)
 		if left <= 0 {
 			return editor.WaitElapsed
 		}
