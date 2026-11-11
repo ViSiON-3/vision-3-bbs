@@ -764,9 +764,10 @@ board's registered key, as it does a listing, and relays the alert as
 signed to every board on the network as a `central_alert` event; each
 board checks the signature again before showing it, so a hub cannot alter
 an alert or send one in another board's name. As with listings, a board is
-known by its key, and a hub that set out to deceive its network could still
-invent a board of its own and alerts from it; trust in the hub's operator
-is part of joining a network. One action on a board in several networks
+known by its key, so a hub that set out to deceive its network could still
+invent a board of its own and alerts from it, unless the network's
+coordinator publishes a [board roster](#board-roster). One action on a board
+in several networks
 goes to each network with one ID, and a board on several of them shows it
 once.
 
@@ -801,6 +802,90 @@ version. A board sends and shows alerts on a network only when its hub
 names it; against an older hub the switches do nothing and **Activity
 alerts** is not offered for that network. Boards from before this
 version neither send nor show alerts, and nothing else changes for them.
+
+## Board Roster
+
+Every Central listing, activity snapshot and alert is signed by the board
+it is about, so a hub cannot change one or send one in another board's
+name. But a board is known only by its key, and nothing else on a network
+vouches for keys: a hub operator who set out to deceive could make up a key,
+and with it a board, its listing, its callers and their alerts. A board
+roster closes that gap with the one key on a network the hub does not hold:
+the coordinator's, which every board pins the first time it verifies the
+network's NAL.
+
+The roster is the coordinator's signed list of the boards (node ID and
+public key) it vouches for. A board that holds one shows Central listings,
+Who's Online, Last Callers and activity alerts only from boards on it,
+matched on the full public key; the others are dropped as though they were
+not there. Its own board always shows. A network whose coordinator has
+never published a roster works as before, showing every board.
+
+It protects only where the coordinator is not the hub's operator: a hub
+operator who is also the coordinator holds both keys. It covers Central;
+network chat lines are relayed by the hub and not signed by boards, so the
+roster does not apply to them.
+
+### Publishing a Roster
+
+The coordinator keeps the roster under **V3Net → Coordinator Panel → [B]oard
+roster**:
+
+```
+V3Net: Board Roster — felonynet
+───────────────────────────────────────────────────────────────────────────────
+  2 boards on the roster. Boards that hold it show Central only from these.
+
+  #  ROSTER  BOARD                          NODE ID
+  1  on      Alpha BBS                      a1b2c3d4e5f60718
+  2  on      Hub BBS                        0f1e2d3c4b5a6978 (this node)
+  3  -       Gamma BBS                      9988776655443322
+```
+
+The screen lists the roster's boards and the directory's other boards,
+with each board's node ID. `A` and a row number admits a board, `R` and a
+row number removes one, and `K` admits a board by its public key, for one
+that publishes no listing. Each change is signed and published at once.
+
+The first roster asks before it goes out, and always names your own board:
+once boards take a roster they keep it, so it can be changed but not
+withdrawn.
+
+Admit a board only once you have checked its key through a channel the
+hub does not control: ask its sysop for the key (or its node ID) by mail,
+in person, or on another network, and compare it with the one on screen. A
+signed listing proves only that whoever holds the key wrote it; a dishonest
+hub can make up a key and sign a listing with it, and the directory you
+choose from is served by that hub. The roster is only as good as these
+checks.
+
+Each edit is made from the roster on screen. If the roster changed in the
+meantime (from another session of yours, say), the edit is refused rather
+than undoing the other change, and the screen shows the roster as it now
+is.
+
+### How Boards Use It
+
+A board takes a roster only when it is signed by the coordinator key its
+subscription pins, and only a newer one replaces it; a roster from a new
+coordinator, after a handover moved the pin, replaces the old
+coordinator's. The board fetches it at start, when the hub announces a new
+one, and after its event stream reconnects, and keeps the one it took in
+`data/v3net_rosters/`, one file per subscription. So a restart keeps the
+roster in force, and a hub that stops serving it or serves an older one
+changes nothing; a board that sees its hub stop serving the roster it holds
+says so on **Status**.
+
+A board is protected only once it has taken a roster. Until then (a board
+new to the network, or one that has never fetched since you first published)
+it shows every board, and a hub that withholds the roster from it keeps it
+that way. Tell your network's sysops when you publish the first roster, and
+ask them to check **Status** shows it `on`.
+
+**Status** shows a `ROSTER` column per network: `on, N boards`, `none (all
+shown)`, or `hub does not serve it`. A hub lists `central.roster` among its
+features once it runs this version; boards from before it ignore rosters
+and show every board, as they did.
 
 ---
 

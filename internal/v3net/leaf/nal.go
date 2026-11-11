@@ -144,6 +144,8 @@ func (l *Leaf) refreshNAL(ctx context.Context) error {
 	if l.cfg.OnNAL != nil {
 		l.cfg.OnNAL(n)
 	}
+	// The NAL may have moved the coordinator pin along a handover.
+	l.rosterAfterNAL(ctx)
 	return nil
 }
 

@@ -465,6 +465,7 @@ func (s *Service) AddLeaf(lcfg config.V3NetLeafConfig, writer JAMWriter, onEvent
 		ChatBlocked:           lcfg.ChatBlocked(),
 		Activity:              s.activitySource(),
 		CentralAlerts:         lcfg.CentralAlerts(),
+		RosterPath:            s.rosterPathFor(lcfg.Network, lcfg.HubURL),
 		OnAlert:               s.receiveAlert,
 		CoordPubKeyB64:        lcfg.CoordinatorPubKey,
 		HubPubKeyB64:          lcfg.HubPubKey,
@@ -1286,6 +1287,8 @@ type CentralNetworkStatus struct {
 	Chat leaf.ChatStatus
 	// Alerts is activity alerts.
 	Alerts leaf.AlertStatus
+	// Roster is the network's board roster.
+	Roster leaf.RosterStatus
 }
 
 // CentralNetworks returns the Central state of every running subscription,
@@ -1303,6 +1306,7 @@ func (s *Service) CentralNetworks() []CentralNetworkStatus {
 			LastCallers:   run.l.ActivityStatus(protocol.CentralKindLastCallers),
 			Chat:          run.l.ChatStatus(),
 			Alerts:        run.l.AlertStatus(),
+			Roster:        run.l.RosterStatus(),
 		})
 	}
 	return out

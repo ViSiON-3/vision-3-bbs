@@ -78,6 +78,12 @@ func (h *Hub) newMux() http.Handler {
 			case strings.HasSuffix(path, "/central/listings") && r.Method == http.MethodGet:
 				h.handleGetCentralDirectory(w, r, network)
 
+			// V3Net Central: the coordinator's board roster.
+			case strings.HasSuffix(path, "/central/roster") && r.Method == http.MethodPost:
+				h.handlePostCentralRoster(w, r, network)
+			case strings.HasSuffix(path, "/central/roster") && r.Method == http.MethodGet:
+				h.handleGetCentralRoster(w, r, network)
+
 			// V3Net Central: activity alerts.
 			case strings.HasSuffix(path, "/central/alerts") && r.Method == http.MethodPost:
 				h.handlePostCentralAlert(w, r, network)

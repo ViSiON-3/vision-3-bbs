@@ -65,6 +65,10 @@ func runV3NetCoordinator(c *cmdCtx, args string) (*user.User, string, error) {
 		buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|12V3Net: Coordinator Panel|07 |08— %s|07\r\n", v3netText(strings.Join(coordinated, ", "))) + v3netRule(termWidth) + "\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|03  [|15P|03]ending area proposals  |08(%d)|07\r\n", len(rows)))))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15M|03]anage area managers|07\r\n")))
+		_, rosters := svc.(V3NetRosterProvider)
+		if rosters {
+			buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15B|03]oard roster|07\r\n")))
+		}
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|15Q|03]uit|07\r\n\r\n")))
 		for _, msg := range fetchErrs {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|04  " + v3netClip(msg, termWidth-4) + "|07\r\n")))
@@ -95,8 +99,21 @@ func runV3NetCoordinator(c *cmdCtx, args string) (*user.User, string, error) {
 				return nil, next, err
 			}
 			status = msg
+		case "B":
+			if !rosters {
+				status = "|04Enter P, M or Q.|07"
+				break
+			}
+			msg, next, err := runV3NetRoster(c, coordinated)
+			if err != nil {
+				return nil, next, err
+			}
+			status = msg
 		default:
 			status = "|04Enter P, M or Q.|07"
+			if rosters {
+				status = "|04Enter P, M, B or Q.|07"
+			}
 		}
 	}
 }

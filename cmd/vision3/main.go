@@ -2433,6 +2433,10 @@ func main() {
 	}
 }
 
+// The service is the Coordinator Panel's roster provider as well as its
+// status provider; the panel finds it by a type assertion, so check here.
+var _ menu.V3NetRosterProvider = (*v3net.Service)(nil)
+
 // v3netCentralProvider adapts the V3Net service to menu.V3NetCentralProvider.
 func v3netCentralProvider(svc *v3net.Service) menu.V3NetCentralProvider {
 	return &centralAdapter{svc: svc}
@@ -2462,6 +2466,8 @@ func (a *centralAdapter) CentralNetworks() []menu.CentralNetworkInfo {
 			LastCallers:      centralActivityInfo(n.LastCallers),
 			Chat:             menu.CentralChatInfo{Enabled: n.Chat.Enabled, Supported: n.Chat.Supported},
 			Alerts:           menu.CentralAlertInfo{Enabled: n.Alerts.Enabled, Supported: n.Alerts.Supported},
+			Roster: menu.CentralRosterInfo{Supported: n.Roster.Supported, Held: n.Roster.Held,
+				Members: n.Roster.Members, LastError: n.Roster.LastError},
 		})
 	}
 	return out

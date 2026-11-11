@@ -33,6 +33,7 @@ type Hub struct {
 	central           *CentralStore
 	centralLimiter    *rateLimiter // per node: listing publishes
 	activity          *CentralActivityStore
+	roster            *CentralRosterStore
 	activityLimiter   *rateLimiter // per node and kind: activity snapshots
 	alertLimiter      *rateLimiter // per node: activity alerts
 	alertSeen         *alertSeen   // IDs of the alerts relayed, until they expire
@@ -120,6 +121,12 @@ func New(cfg Config) (*Hub, error) {
 		return nil, err
 	}
 
+	roster, err := NewCentralRosterStore(db)
+	if err != nil {
+		_ = db.Close() // cleanup on error path
+		return nil, err
+	}
+
 	h := &Hub{
 		cfg:               cfg,
 		db:                db,
@@ -137,6 +144,7 @@ func New(cfg Config) (*Hub, error) {
 		central:           central,
 		centralLimiter:    newBurstRateLimiter(centralPublishInterval, centralPublishBurst),
 		activity:          activity,
+		roster:            roster,
 		activityLimiter:   newBurstRateLimiter(centralActivityInterval, centralActivityBurst),
 		alertLimiter:      newBurstRateLimiter(centralAlertInterval, centralAlertBurst),
 		alertSeen:         newAlertSeen(),

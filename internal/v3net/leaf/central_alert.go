@@ -225,7 +225,8 @@ func (l *Leaf) dispatchAlertEvent(ev protocol.Event) {
 		slog.Debug("leaf: dropped central alert", "network", l.cfg.Network, "node", a.NodeID, "reason", why)
 		return
 	}
-	if a.NodeID == l.cfg.Keystore.NodeID() || !l.AlertsEnabled(a.Kind) || l.chatSessions.isBlocked(a.Handle, a.NodeID) {
+	if a.NodeID == l.cfg.Keystore.NodeID() || !l.AlertsEnabled(a.Kind) || l.chatSessions.isBlocked(a.Handle, a.NodeID) ||
+		!l.rosterAdmits(a.NodeID, a.OriginPubKeyB64) {
 		return
 	}
 	if !l.alerts.claim(a.NodeID, a.ID) {

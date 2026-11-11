@@ -56,6 +56,18 @@ type CentralNetworkInfo struct {
 	Chat CentralChatInfo
 	// Alerts is activity alerts on this network.
 	Alerts CentralAlertInfo
+	// Roster is the network's board roster.
+	Roster CentralRosterInfo
+}
+
+// CentralRosterInfo is the board roster's state on a network: whether the
+// hub serves rosters, and whether this board holds one (and so shows
+// Central only from the boards on it), with how many boards it names.
+type CentralRosterInfo struct {
+	Supported bool
+	Held      bool
+	Members   int
+	LastError string
 }
 
 // CentralChatInfo is network chat's state on a network.
@@ -402,9 +414,12 @@ func runV3NetCentralStatus(c *cmdCtx, args string) (*user.User, string, error) {
 				}
 			}
 		}
-		buf.Write(ansi.ReplacePipeCodes([]byte("\r\n|03  NETWORK       CHAT|07\r\n")))
+		buf.Write(ansi.ReplacePipeCodes([]byte("\r\n|03  NETWORK       CHAT                      ROSTER|07\r\n")))
 		for _, n := range nets {
-			buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("  |11%s|07 %s\r\n", v3netCell(n.Network, 13), centralChatState(n)))))
+			buf.Write(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("  |11%s|07 %s %s\r\n", v3netCell(n.Network, 13), padPipes(centralChatState(n), 25), centralRosterState(n)))))
+			if n.Roster.LastError != "" {
+				errs = append(errs, n.Network+": roster: "+n.Roster.LastError)
+			}
 		}
 	}
 	for _, msg := range errs {
@@ -438,6 +453,24 @@ func centralActivityState(n CentralNetworkInfo, a CentralActivityInfo, noun stri
 		cell += strings.Repeat(" ", 25-plain)
 	}
 	return cell
+}
+
+// centralRosterState is the Status cell for the board roster: in force
+// with how many boards, none (every board shown), or not served.
+func centralRosterState(n CentralNetworkInfo) string {
+	switch {
+	case n.Roster.Held && n.SupportKnown && !n.Roster.Supported:
+		// Still in force, but no update can reach this board.
+		return fmt.Sprintf("|10on|07, |15%d|07 boards |04(hub stopped serving it)|07", n.Roster.Members)
+	case n.Roster.Held:
+		return fmt.Sprintf("|10on|07, |15%d|07 boards", n.Roster.Members)
+	case !n.SupportKnown:
+		return "|14checking...|07"
+	case !n.Roster.Supported:
+		return "|08hub does not serve it|07"
+	default:
+		return "|07none |08(all shown)|07"
+	}
 }
 
 // centralChatState is one Status cell for network chat: off, not served by

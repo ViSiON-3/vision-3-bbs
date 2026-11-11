@@ -151,8 +151,13 @@ Coordinators see the **Coordinator Panel** in the V3Net menu:
 
   [P]ending area proposals  (2)
   [M]anage area managers
+  [B]oard roster
   [Q]uit
 ```
+
+**Board roster** is the list of boards your signature vouches for in V3Net
+Central, so a hub cannot invent boards of its own; see
+[Board Roster](v3net/central.md#board-roster).
 
 The panel appears only when the NAL of a subscribed network names your node as its coordinator.
 
