@@ -9,6 +9,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart/colorpick"
 )
 
@@ -207,6 +208,16 @@ func (m Model) renderSysField(fieldIdx int, f fieldDef) (string, int) {
 
 	if isActive && m.mode == modeSysConfigField {
 		return fieldLabelStyle.Render(label) + m.textInput.View(), rawW
+	}
+
+	// A colour attribute shows as itself, with its number.
+	if f.Type == ftColorAttr {
+		v := attrValue(f)
+		shown := tuiart.Style(byte(v)).Render(fmt.Sprintf(" %3d ", v))
+		if isActive && m.mode == modeSysConfigEdit {
+			shown += fieldEditStyle.Render(" Enter to pick ")
+		}
+		return fieldLabelStyle.Render(label) + shown, rawW
 	}
 
 	// A ramp shows as its colours, each in itself.

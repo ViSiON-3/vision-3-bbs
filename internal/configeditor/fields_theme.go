@@ -44,10 +44,18 @@ func themeColorField(label, help string, row int, v *int) fieldDef {
 	}
 }
 
+// themeAttrField is themeColorField picked with the colour picker: Enter
+// opens it, and T in it types the number as before.
+func themeAttrField(label, help string, row int, v *int) fieldDef {
+	f := themeColorField(label, help+"; Enter picks it, T types the number", row, v)
+	f.Type = ftColorAttr
+	return f
+}
+
 func themeFieldsPrompts(th *config.ThemeConfig) []fieldDef {
 	return []fieldDef{
-		themeColorField("Yes/No Highlight", "The selected answer in Yes/No prompts", 1, &th.YesNoHighlightColor),
-		themeColorField("Yes/No Regular", "The other answer in Yes/No prompts", 2, &th.YesNoRegularColor),
+		themeAttrField("Yes/No Highlight", "The selected answer in Yes/No prompts", 1, &th.YesNoHighlightColor),
+		themeAttrField("Yes/No Regular", "The other answer in Yes/No prompts", 2, &th.YesNoRegularColor),
 		themeColorField("Autocorrect Fix", "A word the message editor just autocorrected, while the fix is shown", 3, &th.AutocorrectHighlightColor),
 	}
 }
