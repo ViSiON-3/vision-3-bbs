@@ -15,9 +15,9 @@ require (
 	github.com/muesli/cancelreader v0.2.2
 	github.com/muesli/termenv v0.16.0
 	github.com/rivo/uniseg v0.4.7
-	golang.org/x/crypto v0.52.0
-	golang.org/x/term v0.43.0
-	golang.org/x/text v0.37.0
+	golang.org/x/crypto v0.55.0
+	golang.org/x/term v0.45.0
+	golang.org/x/text v0.41.0
 	modernc.org/sqlite v1.46.2
 )
 
@@ -52,7 +52,7 @@ require (
 require (
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/robfig/cron/v3 v3.0.1
-	golang.org/x/sys v0.45.0
+	golang.org/x/sys v0.47.0
 )
 
 // Patched copies of upstream packages to fix ENABLE_VIRTUAL_TERMINAL_INPUT
