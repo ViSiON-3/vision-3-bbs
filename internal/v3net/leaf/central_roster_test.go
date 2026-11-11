@@ -3,6 +3,7 @@ package leaf
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
@@ -180,5 +181,108 @@ func TestRosterUnsupportedHub(t *testing.T) {
 	}
 	if alpha.RosterStatus().Held || !alpha.rosterAdmits("anyone", "anykey") {
 		t.Error("filtering without a roster")
+	}
+}
+
+// waitRoster waits until l holds a roster at seq.
+func waitRoster(t *testing.T, l *Leaf, seq int64, what string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for l.RosterStatus().Seq != seq {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: holding seq %d, want %d", what, l.RosterStatus().Seq, seq)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// An update announced while a fetch is running is not lost: the fetch runs
+// once more after it.
+func TestRosterUpdateDuringFetchNotLost(t *testing.T) {
+	ts, h, hubKS := newTestHub(t, true)
+	seedHubNAL(t, h, hubKS)
+	coord := coordLeaf(t, ts, hubKS)
+	alpha := subscribedLeaf(t, ts, "Alpha")
+	pinCoord(t, alpha, hubKS)
+
+	// A second request while one runs is remembered.
+	alpha.rosterState.fetching = true
+	alpha.refreshRosterSoon(context.Background())
+	if !alpha.rosterState.again {
+		t.Fatal("a request during a fetch was dropped")
+	}
+	alpha.rosterState.fetching, alpha.rosterState.again = false, false
+
+	if _, err := coord.PublishRoster(context.Background(), []protocol.CentralRosterMember{memberOf(alpha)}); err != nil {
+		t.Fatal(err)
+	}
+	alpha.refreshRosterSoon(context.Background())
+	second, err := coord.PublishRoster(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alpha.refreshRosterSoon(context.Background())
+	waitRoster(t, alpha, second.Seq, "after two updates")
+}
+
+// A roster refused because the pin had not yet followed a handover is
+// fetched again once a NAL refresh moves the pin.
+func TestRosterRetriedAfterPinMoves(t *testing.T) {
+	ts, h, hubKS := newTestHub(t, true)
+	seedHubNAL(t, h, hubKS)
+	coord := coordLeaf(t, ts, hubKS)
+	alpha := subscribedLeaf(t, ts, "Alpha")
+	stale := subscribedLeaf(t, ts, "OldCoord")
+	pinCoord(t, alpha, stale.cfg.Keystore) // pinned to the coordinator before the handover
+
+	r, err := coord.PublishRoster(context.Background(), []protocol.CentralRosterMember{memberOf(alpha)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := alpha.fetchRoster(context.Background()); err == nil {
+		t.Fatal("a roster from another key than the pin was taken")
+	}
+	// The NAL refresh follows the handover and moves the pin.
+	alpha.pinMu.Lock()
+	alpha.pins.coord = hubKS.PubKeyBase64()
+	alpha.pinMu.Unlock()
+	alpha.rosterAfterNAL(context.Background())
+	waitRoster(t, alpha, r.Seq, "after the pin moved")
+}
+
+// A roster taken but not written to disk is written on the next sight of
+// it, so a restart cannot fall back to an older one.
+func TestRosterUnsavedRetried(t *testing.T) {
+	ts, h, hubKS := newTestHub(t, true)
+	seedHubNAL(t, h, hubKS)
+	coord := coordLeaf(t, ts, hubKS)
+	alpha := subscribedLeaf(t, ts, "Alpha")
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "rosters")
+	if err := os.WriteFile(blocker, []byte("a file where the directory goes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	alpha.cfg.RosterPath = filepath.Join(blocker, "testnet.json")
+	pinCoord(t, alpha, hubKS)
+
+	r, err := coord.PublishRoster(context.Background(), []protocol.CentralRosterMember{memberOf(alpha)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := alpha.fetchRoster(context.Background()); err == nil {
+		t.Fatal("keeping the roster should have failed")
+	}
+	if !alpha.RosterStatus().Held {
+		t.Fatal("the roster should be in force in memory")
+	}
+	// The disk recovers; the next fetch of the same roster keeps it.
+	if err := os.Remove(blocker); err != nil {
+		t.Fatal(err)
+	}
+	if err := alpha.fetchRoster(context.Background()); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if again := New(alpha.cfg); again.RosterStatus().Seq != r.Seq {
+		t.Errorf("after restart holding seq %d, want %d", again.RosterStatus().Seq, r.Seq)
 	}
 }

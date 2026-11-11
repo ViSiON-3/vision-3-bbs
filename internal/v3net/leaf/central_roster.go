@@ -39,9 +39,18 @@ type rosterState struct {
 	roster    *protocol.CentralRoster
 	lastFetch time.Time
 	lastErr   string
-	// fetching is set while an event's fetch is running, so a burst of
-	// events makes one fetch.
-	fetching bool
+	// fetching is set while a background fetch runs, so a burst of
+	// events makes one fetch; again is set when another request came
+	// meanwhile, so the fetch runs once more when it ends and an update
+	// published during it is not missed.
+	fetching, again bool
+	// raw is the held roster as served, and unsaved says it has not yet
+	// reached RosterPath, so the next sight of it writes it again.
+	raw     []byte
+	unsaved bool
+	// pinRefused says the last roster was refused for its coordinator
+	// key, so a NAL refresh that moves the pin fetches again.
+	pinRefused bool
 }
 
 // RosterStatus is what a leaf knows about its network's roster.
@@ -114,6 +123,7 @@ func (l *Leaf) loadRoster() {
 		return
 	}
 	l.rosterState.roster = &r
+	l.rosterState.raw = data
 }
 
 // pinnedCoordKey returns the coordinator key this subscription pins, or ""
@@ -180,31 +190,74 @@ func (l *Leaf) takeRoster(r *protocol.CentralRoster, raw []byte) error {
 		return fmt.Errorf("leaf: roster refused: %w", err)
 	}
 	coord := l.pinnedCoordKey()
-	if coord == "" {
-		return errors.New("leaf: roster refused: no coordinator key pinned yet")
-	}
-	if r.CoordPubKeyB64 != coord {
+	if coord == "" || r.CoordPubKeyB64 != coord {
+		// Perhaps the pin has yet to follow a handover: the next NAL
+		// refresh fetches again.
+		l.rosterState.mu.Lock()
+		l.rosterState.pinRefused = true
+		l.rosterState.mu.Unlock()
+		if coord == "" {
+			return errors.New("leaf: roster refused: no coordinator key pinned yet")
+		}
 		return errors.New("leaf: roster refused: not signed by the pinned coordinator key")
 	}
 	l.rosterState.mu.Lock()
+	l.rosterState.pinRefused = false
 	held := l.rosterState.roster
 	if held != nil && held.CoordPubKeyB64 == r.CoordPubKeyB64 && r.Seq <= held.Seq {
+		// The one held, or an older one: nothing to take, but the one
+		// held may still be waiting to be kept.
+		retry := l.rosterState.unsaved
 		l.rosterState.mu.Unlock()
-		return nil // the one held, or an older one: nothing to do
+		if retry {
+			return l.keepRoster()
+		}
+		return nil
 	}
 	l.rosterState.roster = r
+	l.rosterState.raw = slices.Clone(raw)
+	l.rosterState.unsaved = l.cfg.RosterPath != ""
 	l.rosterState.mu.Unlock()
 
 	slog.Info("leaf: central roster taken", "network", l.cfg.Network, "seq", r.Seq, "members", len(r.Members))
-	if l.cfg.RosterPath != "" {
-		if err := os.MkdirAll(filepath.Dir(l.cfg.RosterPath), 0o755); err != nil {
-			return fmt.Errorf("leaf: keep roster: %w", err)
-		}
-		if err := atomicfile.WriteFile(l.cfg.RosterPath, raw, 0o644); err != nil {
-			return fmt.Errorf("leaf: keep roster: %w", err)
-		}
+	return l.keepRoster()
+}
+
+// keepRoster writes the held roster to RosterPath if it has not reached it
+// yet. A failure leaves it marked unsaved, so the next fetch tries again.
+func (l *Leaf) keepRoster() error {
+	l.rosterState.mu.Lock()
+	raw, unsaved := l.rosterState.raw, l.rosterState.unsaved
+	l.rosterState.mu.Unlock()
+	if !unsaved || l.cfg.RosterPath == "" {
+		return nil
 	}
+	if err := os.MkdirAll(filepath.Dir(l.cfg.RosterPath), 0o755); err != nil {
+		return fmt.Errorf("leaf: keep roster: %w", err)
+	}
+	if err := atomicfile.WriteFile(l.cfg.RosterPath, raw, 0o644); err != nil {
+		return fmt.Errorf("leaf: keep roster: %w", err)
+	}
+	l.rosterState.mu.Lock()
+	if string(l.rosterState.raw) == string(raw) {
+		l.rosterState.unsaved = false
+	}
+	l.rosterState.mu.Unlock()
 	return nil
+}
+
+// rosterAfterNAL fetches the roster again once a NAL refresh may have
+// moved the coordinator pin: when the last roster was refused for its key,
+// or the one held is not the pinned coordinator's.
+func (l *Leaf) rosterAfterNAL(ctx context.Context) {
+	coord := l.pinnedCoordKey()
+	l.rosterState.mu.Lock()
+	need := l.rosterState.pinRefused ||
+		(l.rosterState.roster != nil && coord != "" && l.rosterState.roster.CoordPubKeyB64 != coord)
+	l.rosterState.mu.Unlock()
+	if need {
+		l.refreshRosterSoon(ctx)
+	}
 }
 
 // noteRosterErr records err as the last roster failure (nil clears it)
@@ -228,20 +281,28 @@ func (l *Leaf) noteRosterErr(err error) error {
 func (l *Leaf) refreshRosterSoon(ctx context.Context) {
 	l.rosterState.mu.Lock()
 	if l.rosterState.fetching {
+		// The fetch in flight may have read the hub before this update:
+		// run once more after it.
+		l.rosterState.again = true
 		l.rosterState.mu.Unlock()
 		return
 	}
 	l.rosterState.fetching = true
 	l.rosterState.mu.Unlock()
 	go func() {
-		defer func() {
+		for {
+			fctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			_ = l.fetchRoster(fctx) // logged
+			cancel()
 			l.rosterState.mu.Lock()
-			l.rosterState.fetching = false
+			if !l.rosterState.again || ctx.Err() != nil {
+				l.rosterState.fetching, l.rosterState.again = false, false
+				l.rosterState.mu.Unlock()
+				return
+			}
+			l.rosterState.again = false
 			l.rosterState.mu.Unlock()
-		}()
-		fctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		_ = l.fetchRoster(fctx) // logged
+		}
 	}()
 }
 
