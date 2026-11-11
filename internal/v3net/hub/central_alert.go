@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -135,8 +136,16 @@ func (h *Hub) handlePostCentralAlert(w http.ResponseWriter, r *http.Request, net
 		writeJSON(w, http.StatusOK, protocol.CentralAlertResponse{OK: true, Duplicate: true})
 		return
 	}
-	// The alert goes on as the board sent it, so its signature still
-	// covers it; the event stream's own signature covers the relay.
-	h.broadcaster.Publish(network, protocol.Event{Type: protocol.EventCentralAlert, Data: json.RawMessage(raw)})
+	// The alert goes on as the board sent it, compacted to one line: its
+	// signature covers the parsed fields, not the bytes, and an event's
+	// data is one SSE line, so a newline in the body would split the event
+	// the hub signs from the one a leaf reads, and every leaf would drop
+	// its stream. The event stream's own signature covers the relay.
+	var line bytes.Buffer
+	if err := json.Compact(&line, raw); err != nil {
+		jsonError(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	h.broadcaster.Publish(network, protocol.Event{Type: protocol.EventCentralAlert, Data: json.RawMessage(line.Bytes())})
 	writeJSON(w, http.StatusOK, protocol.CentralAlertResponse{OK: true})
 }

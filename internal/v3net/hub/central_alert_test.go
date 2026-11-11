@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -183,5 +184,40 @@ func TestAlertSeenPrune(t *testing.T) {
 	s.prune(now.Add(time.Minute))
 	if len(s.ids) != 0 {
 		t.Errorf("%d IDs kept past expiry", len(s.ids))
+	}
+}
+
+// A signed alert sent as indented JSON is relayed as one line: an event's
+// data is a single SSE line, and a newline in it would break every leaf's
+// check of the hub's event signature.
+func TestCentralAlertRelayedCompact(t *testing.T) {
+	h, _ := setupTestHub(t)
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+	a := newLeafKS(t)
+	registerLeaf(t, ts, a)
+	events, cancel := h.broadcaster.Subscribe("testnet")
+	defer cancel()
+
+	alert := alertFor(t, a, protocol.CentralAlertLogon, "Alice", time.Now())
+	pretty, _ := json.MarshalIndent(alert, "", "  ")
+	resp, err := http.DefaultClient.Do(signedRequest(t, a, http.MethodPost, ts.URL+"/v3net/v1/testnet/central/alerts", string(pretty)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	ev, ok := nextAlertEvent(t, events, time.Second)
+	if !ok {
+		t.Fatal("not relayed")
+	}
+	if bytes.ContainsAny(ev.Data, "\r\n") {
+		t.Errorf("relayed data spans lines: %q", ev.Data)
+	}
+	var got protocol.CentralAlert
+	if err := json.Unmarshal(ev.Data, &got); err != nil || got.Verify() != nil {
+		t.Errorf("relayed alert: %v / %v", err, got.Verify())
 	}
 }

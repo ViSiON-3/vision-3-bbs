@@ -45,13 +45,15 @@ type CentralAlertInfo struct {
 }
 
 // centralAlertNetworks returns the networks where alerts of kind are
-// offered: the sysop has them on and the hub relays them.
+// offered: the sysop has them on, and the hub relays them or has not yet
+// said whether it does, as for the other Central features. The leaf sends
+// nothing until the hub has said it relays them.
 func centralAlertNetworks(p V3NetCentralProvider, kind string) (names []string) {
 	if p == nil {
 		return nil
 	}
 	for _, n := range p.CentralNetworks() {
-		if n.Alerts.Supported && n.Alerts.Enabled[kind] {
+		if n.Alerts.Enabled[kind] && (n.Alerts.Supported || !n.SupportKnown) {
 			names = append(names, n.Network)
 		}
 	}

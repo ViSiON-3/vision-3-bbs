@@ -424,3 +424,36 @@ func TestCentralAlertsScreenUnoffered(t *testing.T) {
 		t.Errorf("Activity alerts offered where no network has them:\n%s", snap)
 	}
 }
+
+// Before the hub's feature list is read, alerts the sysop has on are
+// offered, as the other Central features are; once the hub says it does
+// not relay them they are not.
+func TestCentralAlertsOfferedWhileSupportUnknown(t *testing.T) {
+	n := alertNet("testnet")
+	n.SupportKnown, n.Alerts.Supported = false, false
+	fake := &centralFake{nets: []CentralNetworkInfo{n}}
+	if !centralAlertsOffered(fake) {
+		t.Error("alerts hidden while hub support is unknown")
+	}
+	fake.nets[0].SupportKnown = true
+	if centralAlertsOffered(fake) {
+		t.Error("alerts offered on a hub that does not relay them")
+	}
+}
+
+// With alerts the only feature offered, My Preferences does not claim
+// nothing is shared, and says alerts tell what the caller does.
+func TestCentralPrefsAlertsOnly(t *testing.T) {
+	f := newAlertFixture(t)
+	n := CentralNetworkInfo{Network: "testnet", Enabled: true, SupportKnown: true, Supported: true}
+	n.Alerts = alertNet("testnet").Alerts
+	f.fake.nets = []CentralNetworkInfo{n}
+	_, u := f.caller(t, 1, "Caller", 30, user.CentralAlertPrefs{}, true)
+	snap := runAlertScreen(t, f, u, "q\r").Snapshot()
+	if strings.Contains(snap, "offers no feature") || strings.Contains(snap, "or what you are doing") {
+		t.Errorf("preview denies what alerts share:\n%s", snap)
+	}
+	if !strings.Contains(snap, "Only activity alerts you share") || !strings.Contains(snap, "what you do only in alerts you share") {
+		t.Errorf("preview does not mention alerts:\n%s", snap)
+	}
+}

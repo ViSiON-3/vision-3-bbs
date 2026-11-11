@@ -913,9 +913,10 @@ func sessionHandler(s ssh.Session) {
 			menuExecutor.AnnounceLogoff(bbsSession, authenticatedUser)
 		}
 		// V3Net Central: the caller's session has ended. Only a session
-		// that got past login is announced, and only to a caller who
-		// shares logoffs; a board losing its hub never announces any.
-		if bbsSession != nil && authenticatedUser != nil && bbsSession.CentralReady() {
+		// whose logon completed is announced (the same test as the local
+		// logoff toast), and only to a caller who shares logoffs; a board
+		// losing its hub never announces any.
+		if logonAnnounced && bbsSession != nil && authenticatedUser != nil {
 			menuExecutor.SendCentralLogoffAlert(userMgr, bbsSession, authenticatedUser)
 		}
 
@@ -1690,8 +1691,11 @@ func sessionHandler(s ssh.Session) {
 	if v3netService != nil && authenticatedUser != nil {
 		v3netService.NotifyCentralActivity()
 		// Activity alerts: other boards hear of the logon only from a
-		// caller who shares logons, and never of an invisible one.
-		menuExecutor.SendCentralLogonAlert(userMgr, bbsSession, authenticatedUser)
+		// caller who shares logons, never of an invisible one, and not
+		// when the login sequence ended the call.
+		if logonAnnounced {
+			menuExecutor.SendCentralLogonAlert(userMgr, bbsSession, authenticatedUser)
+		}
 	}
 
 	for {

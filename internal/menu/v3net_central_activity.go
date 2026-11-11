@@ -544,8 +544,12 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 
 		handle := centralPreviewHandle(u.Handle)
 		buf.Write(ansi.ReplacePipeCodes([]byte("|03  What other boards would see|07\r\n")))
-		if len(whoNets) == 0 && len(lastNets) == 0 && len(chatNets) == 0 {
+		alertsOffered := centralAlertsOffered(e.V3NetCentral)
+		switch {
+		case len(whoNets) == 0 && len(lastNets) == 0 && len(chatNets) == 0 && !alertsOffered:
 			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Nothing: this board offers no feature that shares anything about you.\r\n")))
+		case len(whoNets) == 0 && len(lastNets) == 0 && len(chatNets) == 0:
+			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Only activity alerts you share: see [5] for what they say.\r\n")))
 		}
 		// Each preview is two lines: who and where, then what else goes
 		// with it, so a long handle and board name still fit 80 columns.
@@ -571,9 +575,14 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		if len(chatNets) > 0 {
 			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Network chat: |15" + v3netClip(handle, 30) + "|07 on |11" + v3netClip(board, 30) + "|07\r\n")))
-			buf.Write(ansi.ReplacePipeCodes([]byte("|08                in the user list and each line you type; kept in room history|07\r\n")))
+			buf.Write(ansi.ReplacePipeCodes([]byte("|08                in the user list and each room message; kept in room history|07\r\n")))
 		}
-		buf.Write(ansi.ReplacePipeCodes([]byte("|08  Never your real name, location, user number, or what you are doing.|07\r\n")))
+		if alertsOffered {
+			// Alerts do say what a caller does, when they share them.
+			buf.Write(ansi.ReplacePipeCodes([]byte("|08  No real name, location or user number; what you do only in alerts you share.|07\r\n")))
+		} else {
+			buf.Write(ansi.ReplacePipeCodes([]byte("|08  Never your real name, location, user number, or what you are doing.|07\r\n")))
+		}
 		buf.Write(ansi.ReplacePipeCodes([]byte("|08  Turning a switch off takes you off at once on connected boards; an|07\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte("|08  offline board drops it within minutes (online) or 24 hours (calls).|07\r\n")))
 		buf.Write(ansi.ReplacePipeCodes([]byte(v3netRule(termWidth))))
