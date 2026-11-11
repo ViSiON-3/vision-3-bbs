@@ -48,6 +48,40 @@ func TestDeletePrivateMailCurrent(t *testing.T) {
 	}
 }
 
+// readPackThenDelete is readThenDelete with another caller's delete and pack
+// in between: the sysop's mail at #2 goes, so the caller's mail at #3 moves to
+// #2 after they've read it.
+func readPackThenDelete(env *menuEnv) RunnableFunc {
+	return func(c *cmdCtx, args string) (*user.User, string, error) {
+		if u, next, err := runReadPrivateMail(c, ""); err != nil || next == "LOGOFF" || strings.HasPrefix(next, "GOTO:") {
+			return u, next, err
+		}
+		_ = env.e.MessageMgr.DeleteMessage(privmailAreaID, 2)
+		_ = env.e.MessageMgr.PackAndLinkArea(privmailAreaID)
+		return runDeletePrivateMail(c, "")
+	}
+}
+
+// TestDeletePrivateMailCurrentAfterPack: a pack that renumbers the current
+// mail doesn't lose it. D finds it at its new number and deletes it, without
+// asking for one.
+func TestDeletePrivateMailCurrentAfterPack(t *testing.T) {
+	env := newMsgEnv(t)
+	seedPrivmail(env)
+
+	// N moves from for-caller-1 (#1) to for-caller-2 (#3), the current mail.
+	r := env.run(readPackThenDelete(env), env.caller, "", "NQY")
+	if r.has("Mail # to delete") {
+		t.Errorf("asked for a number although the current mail was only renumbered; output:\n%s", r.text())
+	}
+	if !r.has("has been deleted") {
+		t.Errorf("current mail not deleted; output:\n%s", r.text())
+	}
+	if got := privmailSubjects(env); got != "for-caller-1,public-note" {
+		t.Errorf("PRIVMAIL after delete = %s, want for-caller-2 gone", got)
+	}
+}
+
 // TestDeletePrivateMailByNumber: with no current mail, D asks which mail by
 // the number LISTPRIVMAIL shows; ? lists only the caller's own mail.
 func TestDeletePrivateMailByNumber(t *testing.T) {

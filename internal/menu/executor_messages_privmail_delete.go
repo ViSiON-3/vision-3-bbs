@@ -37,20 +37,31 @@ func clearCurrentMail(s ssh.Session) {
 }
 
 // currentMailOf returns s's current mail if it is still in the PRIVMAIL area
-// (areaID) unchanged and addressed to handle: a pack since it was read can
-// have moved it to another number or put someone else's mail in its place.
+// (areaID), unchanged and addressed to handle. It is looked for at the
+// number it was read at first; a pack since then (another caller's delete)
+// can have moved it to a lower number, so if that number now holds another
+// message it is looked for among handle's mail. Gone, it is forgotten.
 func currentMailOf(e *MenuExecutor, s ssh.Session, areaID int, handle string) *message.DisplayMessage {
 	v, ok := sessionCurrentMail.Load(s)
 	if !ok {
 		return nil
 	}
 	shown := v.(*message.DisplayMessage)
-	m, err := e.MessageMgr.GetMessage(areaID, shown.MsgNum)
-	if err != nil || m.IsDeleted || !message.SameMessage(m, shown) || !m.MailFor(handle) {
-		clearCurrentMail(s)
-		return nil
+	if m, err := e.MessageMgr.GetMessage(areaID, shown.MsgNum); err == nil &&
+		!m.IsDeleted && message.SameMessage(m, shown) && m.MailFor(handle) {
+		return m
 	}
-	return m
+	mail, err := ownPrivateMail(e, areaID, handle)
+	if err == nil {
+		for _, m := range mail {
+			if message.SameMessage(m, shown) {
+				setCurrentMail(s, m)
+				return m
+			}
+		}
+	}
+	clearCurrentMail(s)
+	return nil
 }
 
 // ownPrivateMail returns the caller's undeleted private mail in the PRIVMAIL
