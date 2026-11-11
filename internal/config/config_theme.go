@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
@@ -27,7 +29,58 @@ type ThemeConfig struct {
 	// built-in layout, and "random" one of the set's screens each chat. The
 	// sysop can pick another from the WFC.
 	SysopChatScreen string `json:"sysopChatScreen"`
+	// ToastFadeColors is the colour ramp a toast fades in through, and out
+	// through in reverse, when the board has toast fading on (#1002): DOS
+	// foreground colours 0-15, comma-separated, in fade-in order, 1 to
+	// MaxToastFadeSteps of them. Kept as text so the theme stays comparable
+	// and merges as one value. Read it through FadeColors, which falls back
+	// to the default ramp for a value it cannot use.
+	ToastFadeColors string `json:"toastFadeColors"`
 	// Add other theme elements here as needed (e.g., default menu colors)
+}
+
+// DefaultToastFadeColors is the ramp a theme without one fades through:
+// dark gray, light gray, white.
+const DefaultToastFadeColors = "8,7,15"
+
+// MaxToastFadeSteps is the longest fade ramp.
+const MaxToastFadeSteps = 8
+
+// ParseToastFadeColors reads a fade ramp: 1 to MaxToastFadeSteps
+// foreground colours 0-15, separated by commas or spaces. ok is false for
+// anything else.
+func ParseToastFadeColors(s string) (colors []int, ok bool) {
+	fields := strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' })
+	if len(fields) == 0 || len(fields) > MaxToastFadeSteps {
+		return nil, false
+	}
+	for _, f := range fields {
+		n, err := strconv.Atoi(f)
+		if err != nil || n < 0 || n > 15 {
+			return nil, false
+		}
+		colors = append(colors, n)
+	}
+	return colors, true
+}
+
+// FormatToastFadeColors writes a ramp as ToastFadeColors stores it.
+func FormatToastFadeColors(colors []int) string {
+	parts := make([]string, len(colors))
+	for i, c := range colors {
+		parts[i] = strconv.Itoa(c)
+	}
+	return strings.Join(parts, ",")
+}
+
+// FadeColors returns the theme's fade ramp, or the default one when the
+// theme's is missing or cannot be used.
+func (t ThemeConfig) FadeColors() []int {
+	if colors, ok := ParseToastFadeColors(t.ToastFadeColors); ok {
+		return colors
+	}
+	colors, _ := ParseToastFadeColors(DefaultToastFadeColors)
+	return colors
 }
 
 // LoadThemeConfig loads theme settings from theme.json within a specific menu
@@ -45,6 +98,7 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 		ChatUserColor:       10,  // Light green
 
 		AutocorrectHighlightColor: 15, // Bright white
+		ToastFadeColors:           DefaultToastFadeColors,
 	}
 
 	if resolveErr != nil {

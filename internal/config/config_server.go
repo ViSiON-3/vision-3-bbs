@@ -8,10 +8,34 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/configmerge"
 )
+
+// Toast fade step times, ServerConfig.ToastFadeMs: the default when it is
+// unset, and the range it is held to.
+const (
+	DefaultToastFadeMs = 80
+	MinToastFadeMs     = 20
+	MaxToastFadeMs     = 500
+)
+
+// ToastFadeStep returns how long each step of a toast's fade shows:
+// ToastFadeMs held to its range, or the default when it is unset.
+func (c ServerConfig) ToastFadeStep() time.Duration {
+	ms := c.ToastFadeMs
+	switch {
+	case ms <= 0:
+		ms = DefaultToastFadeMs
+	case ms < MinToastFadeMs:
+		ms = MinToastFadeMs
+	case ms > MaxToastFadeMs:
+		ms = MaxToastFadeMs
+	}
+	return time.Duration(ms) * time.Millisecond
+}
 
 // Values of ServerConfig.ToastEdge.
 const (
@@ -60,6 +84,11 @@ type ServerConfig struct {
 	// to the other online callers at or above ToastAnnounceLevel who may
 	// read that area (#1001). Off by default, like ToastLogons.
 	ToastPosts bool `json:"toastPosts"`
+	// ToastFade fades a toast drawn over the screen in, and out again,
+	// through the theme's ToastFadeColors, ToastFadeMs per step (#1002). Off
+	// by default: a toast appears and goes at once, as before.
+	ToastFade   bool `json:"toastFade"`
+	ToastFadeMs int  `json:"toastFadeMs"`
 	// ToastEdge and ToastOffset place a toast drawn over a screen: the rows in
 	// from the top or bottom edge, so a position holds on any terminal height.
 	// An empty edge reads as the bottom. ToastCenter centers on the caller's

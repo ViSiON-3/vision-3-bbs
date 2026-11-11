@@ -160,9 +160,27 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	if !ok {
 		return
 	}
-	row, clipped, err := e.drawToastOverlay(s, w, sess, t)
+	dwell := toastDwell
+	if limit > 0 && limit < dwell {
+		dwell = limit
+	}
+	// A fading toast comes in and goes out through the theme's ramp, inside
+	// the same dwell; one too short for the fade, or with fading off, just
+	// appears and goes.
+	ramp, step := e.toastFade()
+	if fadeTime := time.Duration(2*len(ramp)) * step; len(ramp) == 0 || fadeTime >= dwell {
+		ramp = nil
+	} else {
+		dwell -= fadeTime
+	}
+	lay := e.toastLayout(s, sess, t)
+	first := lay.line
+	if len(ramp) > 0 {
+		first = lay.frame(ramp[0])
+	}
+	err := lay.write(w, first)
 	if err == nil {
-		e.settleOverlayToast(sess, t, stored, clipped)
+		e.settleOverlayToast(sess, t, stored, lay.clipped)
 	}
 	if stored {
 		e.toastStore().Release(t.ID)
@@ -170,13 +188,17 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	if err != nil {
 		return
 	}
-	dwell := toastDwell
-	if limit > 0 && limit < dwell {
-		dwell = limit
+	row := lay.row
+	// Each wait also ends for a sysop's chat request or a window change,
+	// which the read services once this returns, and for a key, which stops
+	// the fade where it is and goes straight to the restore.
+	keyed := fadeToast(ih, lay, w, ramp, step, true)
+	if !keyed && (len(ramp) == 0 || lay.write(w, lay.line) == nil) {
+		keyed = ih.WaitForInput(dwell)
+		if !keyed {
+			keyed = fadeToast(ih, lay, w, reversed(ramp), step, false)
+		}
 	}
-	// The wait also ends for a sysop's chat request or a window change, which
-	// the read services once this returns.
-	keyed := ih.WaitForInput(dwell)
 	if redraw != nil {
 		redraw()
 	} else if !e.restoreOverlayRow(s, w, sess, snap, row) {
@@ -406,6 +428,72 @@ func (e *MenuExecutor) toastText(t toast.Toast) string {
 // toast reads over whatever was there; at a menu's anchor only the toast's own
 // cells are written, since the sysop laid out the art around it.
 func (e *MenuExecutor) drawToastOverlay(s ssh.Session, w io.Writer, sess *session.BbsSession, t toast.Toast) (row int, clipped bool, err error) {
+	lay := e.toastLayout(s, sess, t)
+	return lay.row, lay.clipped, lay.write(w, lay.line)
+}
+
+// toastDraw is where and how an overlay toast is drawn: its row and column,
+// its text as rendered and cut to the row, and whether the rest of the row is
+// cleared. A fade draws the same cells in one colour at a time.
+type toastDraw struct {
+	row, col  int
+	line      string // the toast, colour sequences included, cut to the row
+	clipped   bool   // the row cut it short
+	clearRest string // "\x1b[K" at a configured position, "" at an anchor
+	mode      ansi.OutputMode
+}
+
+// write draws text, one of lay's renderings, in lay's cells.
+func (lay toastDraw) write(w io.Writer, text string) error {
+	out := "\x1b7" + ansi.MoveCursor(lay.row, lay.col) + "\x1b[0m" + lay.clearRest + text + "\x1b[0m\x1b8"
+	return terminalio.WriteProcessedBytes(w, []byte(out), lay.mode)
+}
+
+// frame is the toast's text in one DOS colour, for a fade step: the same
+// characters as line, without their own colours.
+func (lay toastDraw) frame(color int) string {
+	return string(ansi.ReplacePipeCodes([]byte(fmt.Sprintf("|%02d", color)))) + ansi.StripAnsi(lay.line)
+}
+
+// toastFade returns the colours a toast fades through, in fade-in order,
+// and how long each shows, or no colours when the board does not fade
+// toasts.
+func (e *MenuExecutor) toastFade() (ramp []int, step time.Duration) {
+	cfg := e.GetServerConfig()
+	if !cfg.ToastFade {
+		return nil, 0
+	}
+	return e.Theme().FadeColors(), cfg.ToastFadeStep()
+}
+
+// fadeToast draws lay through ramp, step apart, and reports whether a key
+// ended it early. drawn says the first step is on screen already. An empty
+// ramp draws nothing.
+func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, step time.Duration, drawn bool) (keyed bool) {
+	for i, c := range ramp {
+		if i > 0 || !drawn {
+			if lay.write(w, lay.frame(c)) != nil {
+				return false
+			}
+		}
+		if ih.WaitForInput(step) {
+			return true
+		}
+	}
+	return false
+}
+
+// reversed returns ramp back to front, for the fade out.
+func reversed(ramp []int) []int {
+	out := make([]int, len(ramp))
+	for i, c := range ramp {
+		out[len(ramp)-1-i] = c
+	}
+	return out
+}
+
+// toastLayout works out where and how t is drawn on sess's screen now.
+func (e *MenuExecutor) toastLayout(s ssh.Session, sess *session.BbsSession, t toast.Toast) toastDraw {
 	width, height := sess.TermSize()
 	if width <= 0 {
 		width = 80
@@ -430,8 +518,7 @@ func (e *MenuExecutor) drawToastOverlay(s ssh.Session, w io.Writer, sess *sessio
 	// One column short: a character in the last cell of the last row can scroll
 	// the screen on some terminals.
 	line := clipColumns(full, width-col, mode)
-	out := "\x1b7" + ansi.MoveCursor(row, col) + "\x1b[0m" + clearRest + line + "\x1b[0m\x1b8"
-	return row, line != full, terminalio.WriteProcessedBytes(w, []byte(out), mode)
+	return toastDraw{row: row, col: col, line: line, clipped: line != full, clearRest: clearRest, mode: mode}
 }
 
 // settleOverlayToast records that t has been drawn: it leaves its queue, unless

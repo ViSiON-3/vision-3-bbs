@@ -20,6 +20,8 @@
   "toastLogoffs": false,
   "toastAnnounceLevel": 0,
   "toastPosts": false,
+  "toastFade": false,
+  "toastFadeMs": 80,
   "toastEdge": "bottom",
   "toastOffset": 0,
   "toastCenter": false,

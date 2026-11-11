@@ -4,5 +4,6 @@
     "chatSysopColor": 11,
     "chatUserColor": 10,
     "autocorrectHighlightColor": 15,
-    "sysopChatScreen": "V3CHAT1"
+    "sysopChatScreen": "V3CHAT1",
+    "toastFadeColors": "8,7,15"
 }
