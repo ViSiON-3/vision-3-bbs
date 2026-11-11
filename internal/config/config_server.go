@@ -56,6 +56,10 @@ type ServerConfig struct {
 	ToastLogons        bool `json:"toastLogons"`
 	ToastLogoffs       bool `json:"toastLogoffs"`
 	ToastAnnounceLevel int  `json:"toastAnnounceLevel"`
+	// ToastPosts announces a caller's new post or reply, in any public area,
+	// to the other online callers at or above ToastAnnounceLevel who may
+	// read that area (#1001). Off by default, like ToastLogons.
+	ToastPosts bool `json:"toastPosts"`
 	// ToastEdge and ToastOffset place a toast drawn over a screen: the rows in
 	// from the top or bottom edge, so a position holds on any terminal height.
 	// An empty edge reads as the bottom. ToastCenter centers on the caller's

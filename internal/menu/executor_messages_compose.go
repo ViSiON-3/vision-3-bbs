@@ -290,8 +290,10 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 		slog.Error("failed to update MessagesPosted", "node", nodeNumber, "handle", currentUser.Handle, "error", err)
 	}
 
-	// Saved: other boards on the area's network may be told, if the caller
-	// shares posts. Never for a private or anonymous one.
+	// Saved: callers online here may be told, if the sysop announces posts,
+	// and other boards on the area's network, if the caller shares posts.
+	// Never for a private or anonymous one.
+	e.AnnouncePost(userManager, e.nodeSession(nodeNumber), currentUser, area, fromName, private, isAnonymous)
 	e.sendPostAlert(userManager, nodeNumber, currentUser, area.ID, area.Tag, private, isAnonymous)
 
 	// 9. Confirmation

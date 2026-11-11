@@ -682,6 +682,7 @@ Both files are plain text: one IP or CIDR range per line, `#` for comments. They
 | `toastLogons` | `false` | `false` | Announce logons to other online callers |
 | `toastLogoffs` | `false` | `false` | Announce logoffs to other online callers |
 | `toastAnnounceLevel` | `0` | `0` | Minimum access level to see those announcements |
+| `toastPosts` | `false` | `false` | Announce new posts and replies to other online callers who may read the area |
 | `toastEdge` | `bottom` | empty, read as `bottom` | Screen edge a toast is placed from: `top` or `bottom` |
 | `toastOffset` | `0` | `0` | Rows in from that edge, towards the middle of the screen. The config TUI accepts 0–50 |
 | `toastCenter` | `false` | `false` | Center a toast on the caller's Konfig screen width, in place of `toastCol` |

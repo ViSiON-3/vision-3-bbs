@@ -19,6 +19,7 @@
   "toastLogons": false,
   "toastLogoffs": false,
   "toastAnnounceLevel": 0,
+  "toastPosts": false,
   "toastEdge": "bottom",
   "toastOffset": 0,
   "toastCenter": false,
