@@ -540,6 +540,12 @@ func (s *ChatSession) Post(room, text string) error {
 	if err := s.chatReady(); err != nil {
 		return err
 	}
+	// Signed as the hub will name it: the hub normalizes the room and
+	// refuses a signature naming it otherwise.
+	room, err := chat.NormalizeRoom(room)
+	if err != nil {
+		return err
+	}
 	signed, err := s.leaf.signChat(protocol.ChatSignedLine, s.handle, func(c *protocol.ChatSigned) { c.Room, c.Text = room, text })
 	if err != nil {
 		return fmt.Errorf("chat post: %w", err)
@@ -619,6 +625,11 @@ func (s *ChatSession) Rooms() ([]chat.RoomInfo, error) {
 // History implements chat.ChatService, fetching up to limit recent messages
 // for room from the hub. The limit is passed through; the hub enforces any cap.
 func (s *ChatSession) History(room string, limit int) ([]chat.ChatMessage, error) {
+	// Checked against the room as the hub names it in its signed lines.
+	room, err := chat.NormalizeRoom(room)
+	if err != nil {
+		return nil, err
+	}
 	url := fmt.Sprintf("/v3net/v1/%s/chat/rooms/%s/history?limit=%d",
 		s.leaf.cfg.Network, room, limit)
 	data, err := s.leaf.get(url)

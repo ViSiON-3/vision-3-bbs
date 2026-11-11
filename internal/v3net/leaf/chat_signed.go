@@ -26,34 +26,45 @@ import (
 // the hub reports them. Without a roster, or with an open one, chat is
 // shown as before, signed or not.
 
-// chatSeenSize is how many live signed chat IDs a leaf remembers, to drop
-// a replayed line.
-const chatSeenSize = 4096
+// chatSeenSize is the most live signed chat IDs a leaf holds at once.
+// Each is kept until its action can no longer pass as fresh, so a replay
+// is always caught; when that many are all still fresh, a new action is
+// refused rather than one forgotten that could then be replayed.
+const chatSeenSize = 16384
 
-// chatSeen remembers the IDs of live signed chat actions acted on.
+// chatSeen remembers the IDs of live signed chat actions acted on, each
+// until the action it names is too old to be taken as live.
 type chatSeen struct {
-	mu    sync.Mutex
-	seen  map[string]bool
-	order []string
+	mu   sync.Mutex
+	seen map[string]time.Time // node \x00 id -> when it stops mattering
 }
 
-// claim records node's id and reports whether it is new.
-func (c *chatSeen) claim(node, id string) bool {
+// claim records node's action id, issued at issued, and reports whether it
+// may be acted on: it is new, and there is room to remember it for as long
+// as it could be replayed.
+func (c *chatSeen) claim(node, id string, issued, now time.Time) bool {
 	key := node + "\x00" + id
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.seen[key] {
+	if _, ok := c.seen[key]; ok {
 		return false
 	}
 	if c.seen == nil {
-		c.seen = make(map[string]bool)
+		c.seen = make(map[string]time.Time)
 	}
-	if len(c.order) >= chatSeenSize {
-		delete(c.seen, c.order[0])
-		c.order = c.order[1:]
+	if len(c.seen) >= chatSeenSize {
+		for k, until := range c.seen {
+			if !until.After(now) {
+				delete(c.seen, k)
+			}
+		}
+		if len(c.seen) >= chatSeenSize {
+			return false
+		}
 	}
-	c.seen[key] = true
-	c.order = append(c.order, key)
+	// Fresh until MaxChatSignedAge after issue; a clock running ahead by
+	// up to the allowed skew stretches that.
+	c.seen[key] = issued.Add(protocol.MaxChatSignedAge + protocol.MaxCentralClockSkew)
 	return true
 }
 
@@ -109,7 +120,8 @@ func (l *Leaf) chatAdmits(c chatClaim, signed *protocol.ChatSigned) bool {
 	}
 	if c.live {
 		age := time.Since(signed.Issued())
-		if age > protocol.MaxChatSignedAge || age < -protocol.MaxCentralClockSkew || !l.chatSeen.claim(signed.NodeID, signed.ID) {
+		if age > protocol.MaxChatSignedAge || age < -protocol.MaxCentralClockSkew ||
+			!l.chatSeen.claim(signed.NodeID, signed.ID, signed.Issued(), time.Now()) {
 			return false
 		}
 	}

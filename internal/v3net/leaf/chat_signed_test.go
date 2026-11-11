@@ -243,3 +243,51 @@ func TestSignedChatRejoinSigned(t *testing.T) {
 		}
 	}
 }
+
+// An ID is kept for as long as its action could pass as fresh, however
+// many others arrive: when the memory is full of fresh IDs, a new action
+// is refused rather than an old one forgotten; once they go stale there
+// is room again.
+func TestChatSeenKeepsFreshIDs(t *testing.T) {
+	var c chatSeen
+	now := time.Now()
+	if !c.claim("n", "first", now, now) {
+		t.Fatal("first claim refused")
+	}
+	for i := 1; i < chatSeenSize; i++ {
+		if !c.claim("n", fmt.Sprintf("id%d", i), now, now) {
+			t.Fatalf("claim %d refused", i)
+		}
+	}
+	if c.claim("n", "overflow", now, now) {
+		t.Error("a new action was taken with no room to remember it")
+	}
+	if c.claim("n", "first", now, now) {
+		t.Error("the first action's replay was taken after the memory filled")
+	}
+	later := now.Add(protocol.MaxChatSignedAge + protocol.MaxCentralClockSkew + time.Second)
+	if !c.claim("n", "after", later, later) {
+		t.Error("no room once the old IDs went stale")
+	}
+}
+
+// Posting to, and reading the history of, a room named as the caller typed
+// it works as for its normalized name.
+func TestSignedChatRoomNormalized(t *testing.T) {
+	r := newRosterRoom(t)
+	alice := join(t, r.alpha, "Alice")
+	bob := join(t, r.beta, "Bob")
+	if err := alice.Post("LOBBY", "loud room name"); err != nil {
+		t.Fatalf("post to LOBBY: %v", err)
+	}
+	if got := lines(bob, 500*time.Millisecond); len(got) != 1 {
+		t.Errorf("Bob saw %q", got)
+	}
+	hist, err := bob.History("LOBBY", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hist) != 1 || hist[0].Text != "loud room name" {
+		t.Errorf("history %+v, want the signed line", hist)
+	}
+}

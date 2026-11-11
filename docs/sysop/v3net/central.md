@@ -826,7 +826,8 @@ operator who is also the coordinator holds both keys.
 
 It covers network chat too. Boards sign every room line, room join and
 private message they send, and the hub passes the signature on with it;
-while a board holds a roster it shows a line, join or private message only
+while a board holds a roster that is not open it shows a line, join or
+private message only
 when it is signed by a board on the roster and says what the hub says it
 does, and a live one only if it is fresh and not seen before. Room history
 is checked the same way when a caller joins, and the room's member list
