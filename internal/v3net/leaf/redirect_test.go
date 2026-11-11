@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -67,6 +68,39 @@ func TestLeafClientsCheckRedirects(t *testing.T) {
 	for name, c := range map[string]*http.Client{"client": l.client, "sseClient": l.sseClient} {
 		if c.CheckRedirect == nil {
 			t.Errorf("%s has no CheckRedirect", name)
+		}
+	}
+}
+
+// sameDialTarget compares what Go will dial: scheme, port (with the scheme's
+// default) and host, ignoring ASCII case only. Unicode case folding must not
+// make two hostnames match: U+212A KELVIN SIGN folds to "k" but is a
+// different name once IDNA turns it into ASCII.
+func TestSameDialTarget(t *testing.T) {
+	for _, tt := range []struct {
+		a, b string
+		want bool
+	}{
+		{"http://hub.example:8765/x", "http://hub.example:8765/y", true},
+		{"http://HUB.Example:8765/x", "http://hub.example:8765/y", true},
+		{"http://hub.example/x", "http://hub.example:80/y", true},
+		{"https://hub.example/x", "https://hub.example:443/y", true},
+		{"http://hub.example:8765/x", "http://hub.example:8766/x", false},
+		{"http://hub.example/x", "https://hub.example/x", false},
+		{"http://hub.example:443/x", "https://hub.example/x", false},
+		{"http://hub.example/x", "http://other.example/x", false},
+		{"http://kub.example/x", "http://\u212Aub.example/x", false},
+		{"http://\u212Aub.example/x", "http://\u212Aub.example/y", true},
+		{"http://[::1]:8765/x", "http://[::1]:8765/y", true},
+		{"http://127.0.0.1:8765/x", "http://[::1]:8765/x", false},
+	} {
+		a, errA := url.Parse(tt.a)
+		b, errB := url.Parse(tt.b)
+		if errA != nil || errB != nil {
+			t.Fatalf("parse %q, %q: %v %v", tt.a, tt.b, errA, errB)
+		}
+		if got := sameDialTarget(a, b); got != tt.want {
+			t.Errorf("sameDialTarget(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.want)
 		}
 	}
 }
