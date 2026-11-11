@@ -25,6 +25,9 @@ var (
 // have chat open on more than one node, so several sessions may share a
 // handle (#662).
 type chatSessionRegistry struct {
+	// leaf is the leaf the registry belongs to, for the roster's check on
+	// what reaches its sessions; nil in tests that build one bare.
+	leaf         *Leaf
 	mu           sync.RWMutex
 	sessions     map[*ChatSession]struct{}
 	nodeID       string
@@ -101,13 +104,33 @@ func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
 	case protocol.EventChatMessage, protocol.EventChatJoin,
 		protocol.EventChatLeave, protocol.EventChatTopic:
 		var msg struct {
-			Room       string `json:"room"`
-			FromHandle string `json:"from_handle"`
-			FromNode   string `json:"from_node"`
-			Origin     string `json:"origin"`
+			Room       string               `json:"room"`
+			FromHandle string               `json:"from_handle"`
+			FromNode   string               `json:"from_node"`
+			Origin     string               `json:"origin"`
+			Text       string               `json:"text"`
+			Handle     string               `json:"handle"`
+			Node       string               `json:"node"`
+			Signed     *protocol.ChatSigned `json:"signed"`
 		}
 		if err := json.Unmarshal(ev.Data, &msg); err != nil {
 			return // drop malformed event rather than routing it to the wrong room
+		}
+		// With a roster in force, lines and joins reach no session here
+		// unless signed by a board on it (chat_signed.go).
+		if r.leaf != nil {
+			switch ev.Type {
+			case protocol.EventChatMessage:
+				if !r.leaf.chatAdmits(chatClaim{kind: protocol.ChatSignedLine, fromNode: msg.FromNode, handle: msg.FromHandle,
+					room: msg.Room, text: msg.Text, live: true}, msg.Signed) {
+					return
+				}
+			case protocol.EventChatJoin:
+				if !r.leaf.chatAdmits(chatClaim{kind: protocol.ChatSignedJoin, fromNode: msg.Node, handle: msg.Handle,
+					room: msg.Room, live: true}, msg.Signed) {
+					return
+				}
+			}
 		}
 		// The sysop's block list: a line from those callers reaches no
 		// session here. Their joins and leaves go on to deliver, which
@@ -138,6 +161,10 @@ func (r *chatSessionRegistry) dispatch(ev protocol.Event) {
 			return
 		}
 		if r.isBlocked(msg.FromHandle, msg.FromNode) {
+			return
+		}
+		if r.leaf != nil && !r.leaf.chatAdmits(chatClaim{kind: protocol.ChatSignedPrivate, fromNode: msg.FromNode,
+			handle: msg.FromHandle, text: msg.Text, toHandle: msg.ToHandle, live: true}, msg.Signed) {
 			return
 		}
 		for s := range r.sessions {
@@ -367,7 +394,11 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 	s.leaf.chatSessions.mu.Lock()
 	delete(s.leaf.chatSessions.rejoinEchoes, chatMembership{room, s.handle})
 	s.leaf.chatSessions.mu.Unlock()
-	body, _ := json.Marshal(protocol.ChatJoinRequest{Room: room, Handle: s.handle})
+	signed, err := s.leaf.signChat(protocol.ChatSignedJoin, s.handle, func(c *protocol.ChatSigned) { c.Room = room })
+	if err != nil {
+		return nil, nil, fmt.Errorf("join chat: %w", err)
+	}
+	body, _ := json.Marshal(protocol.ChatJoinRequest{Room: room, Handle: s.handle, Signed: signed})
 	resp, err := s.leaf.signedPostWithResponse(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/join", s.leaf.cfg.Network), body)
 	if err != nil {
@@ -397,10 +428,11 @@ func (s *ChatSession) Join(room string) ([]chat.RoomInfo, []chat.ChatMessage, er
 		return nil, nil, fmt.Errorf("join chat: session closed")
 	}
 	s.currentRoom = room
-	s.currentUsers = membersOf(joinResp)
+	s.currentUsers = s.leaf.chatAdmitsMembers(membersOf(joinResp))
 	s.currentTopic = roomTopic(joinResp.Rooms, room)
 	s.recovering = false
 	s.mu.Unlock()
+	joinResp.History = s.leaf.chatAdmitsHistory(room, joinResp.History)
 
 	rooms := make([]chat.RoomInfo, len(joinResp.Rooms))
 	for i, r := range joinResp.Rooms {
@@ -477,7 +509,12 @@ func (s *ChatSession) Post(room, text string) error {
 	if err := s.chatReady(); err != nil {
 		return err
 	}
-	body, _ := json.Marshal(protocol.ChatPostRequest{Room: room, Text: text, Handle: s.handle, Origin: s.origin})
+	signed, err := s.leaf.signChat(protocol.ChatSignedLine, s.handle, func(c *protocol.ChatSigned) { c.Room, c.Text = room, text })
+	if err != nil {
+		return fmt.Errorf("chat post: %w", err)
+	}
+	// The text goes as signed, so the hub's check that they match holds.
+	body, _ := json.Marshal(protocol.ChatPostRequest{Room: room, Text: signed.Text, Handle: s.handle, Origin: s.origin, Signed: signed})
 	return s.leaf.signedPostCtx(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/post", s.leaf.cfg.Network), body)
 }
@@ -490,7 +527,13 @@ func (s *ChatSession) Private(handle, node, text string) error {
 	if err := s.chatAllowed(); err != nil {
 		return err
 	}
-	body, _ := json.Marshal(protocol.ChatPrivateRequest{ToHandle: handle, ToNode: node, Text: text, Handle: s.handle})
+	signed, err := s.leaf.signChat(protocol.ChatSignedPrivate, s.handle, func(c *protocol.ChatSigned) {
+		c.ToHandle, c.ToNode, c.Text = handle, node, text
+	})
+	if err != nil {
+		return fmt.Errorf("private chat: %w", err)
+	}
+	body, _ := json.Marshal(protocol.ChatPrivateRequest{ToHandle: signed.ToHandle, ToNode: signed.ToNode, Text: signed.Text, Handle: s.handle, Signed: signed})
 	resp, err := s.leaf.signedPostWithResponse(context.Background(),
 		fmt.Sprintf("/v3net/v1/%s/chat/rooms/private", s.leaf.cfg.Network), body)
 	if err != nil {
@@ -555,6 +598,7 @@ func (s *ChatSession) History(room string, limit int) ([]chat.ChatMessage, error
 	if err := json.Unmarshal(data, &protoMsgs); err != nil {
 		return nil, err
 	}
+	protoMsgs = s.leaf.chatAdmitsHistory(room, protoMsgs)
 	msgs := make([]chat.ChatMessage, len(protoMsgs))
 	for i, m := range protoMsgs {
 		msgs[i] = *protoMsgToDomain(m)

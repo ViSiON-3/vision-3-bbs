@@ -11,6 +11,9 @@ import (
 type ChatJoinRequest struct {
 	Room   string `json:"room"`
 	Handle string `json:"handle"`
+	// Signed is the board's signed join (ChatSigned), from boards that
+	// sign; older ones omit it.
+	Signed *ChatSigned `json:"signed,omitempty"`
 }
 
 // ChatLeaveRequest removes this leaf/handle from a room.
@@ -30,6 +33,9 @@ type ChatPostRequest struct {
 	Text   string `json:"text"`
 	Handle string `json:"handle,omitempty"`
 	Origin string `json:"origin,omitempty"`
+	// Signed is the board's signed line (ChatSigned), from boards that
+	// sign; older ones omit it.
+	Signed *ChatSigned `json:"signed,omitempty"`
 }
 
 // ChatPrivateRequest sends a direct message to a specific user+node. Handle
@@ -42,6 +48,9 @@ type ChatPrivateRequest struct {
 	ToNode   string `json:"to_node"`
 	Text     string `json:"text"`
 	Handle   string `json:"handle,omitempty"`
+	// Signed is the board's signed private message (ChatSigned), from
+	// boards that sign; older ones omit it.
+	Signed *ChatSigned `json:"signed,omitempty"`
 }
 
 // ChatTopicRequest sets the topic for a room. Handle names the user setting
@@ -74,6 +83,9 @@ type ChatMsgPayload struct {
 	// Origin is the posting session's ChatPostRequest.Origin. Set on room
 	// message broadcasts only; empty from older leaves and hubs.
 	Origin string `json:"origin,omitempty"`
+	// Signed is the sending board's signed line or private message, as it
+	// sent it; absent from boards and hubs that predate signed chat.
+	Signed *ChatSigned `json:"signed,omitempty"`
 }
 
 // ChatMember is one membership of a room: a handle on a node, with the
@@ -109,6 +121,9 @@ type ChatJoinPayload struct {
 	// own join, which its join response already counted. Empty from hubs
 	// that predate the field.
 	Node string `json:"node,omitempty"`
+	// Signed is the joining board's signed join; absent from boards and
+	// hubs that predate signed chat.
+	Signed *ChatSigned `json:"signed,omitempty"`
 }
 
 // ChatLeavePayload is the data for a "chat_leave" SSE event.

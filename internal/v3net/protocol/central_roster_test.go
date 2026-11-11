@@ -139,3 +139,41 @@ func TestCentralRosterClosedSignsAsBefore(t *testing.T) {
 		t.Errorf("closed roster's payload names open: %s", payload)
 	}
 }
+
+// A signed chat action verifies, is refused once changed, and must name
+// what its kind needs.
+func TestChatSignedSignVerifyValidate(t *testing.T) {
+	ks := activityKS(t)
+	c, err := protocol.NewChatSigned(ks, protocol.ChatSignedLine, "testnet", "Alice", func(c *protocol.ChatSigned) { c.Room, c.Text = "lobby", "hi" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Validate("testnet"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Verify(); err != nil {
+		t.Fatal(err)
+	}
+	changed := *c
+	changed.Text = "bye"
+	if changed.Verify() == nil {
+		t.Error("changed text still verifies")
+	}
+	for name, mutate := range map[string]func(c *protocol.ChatSigned){
+		"line with recipient": func(c *protocol.ChatSigned) { c.ToHandle = "Bob" },
+		"no room":             func(c *protocol.ChatSigned) { c.Room = "" },
+		"no handle":           func(c *protocol.ChatSigned) { c.Handle = " " },
+		"other network":       func(c *protocol.ChatSigned) { c.Network = "othernet" },
+		"kind":                func(c *protocol.ChatSigned) { c.Kind = "topic" },
+	} {
+		x := *c
+		mutate(&x)
+		if x.Validate("testnet") == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	p, _ := protocol.NewChatSigned(ks, protocol.ChatSignedPrivate, "testnet", "Alice", func(c *protocol.ChatSigned) { c.ToHandle, c.Text = "Bob", "psst" })
+	if p.Validate("testnet") != nil || p.Verify() != nil {
+		t.Error("a private message does not validate")
+	}
+}

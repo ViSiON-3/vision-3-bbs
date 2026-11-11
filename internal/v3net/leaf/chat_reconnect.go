@@ -152,7 +152,7 @@ func (l *Leaf) recoverChat(ctx context.Context) error {
 	for s := range r.sessions {
 		s.mu.Lock()
 		if joined, ok := snapshots[s.currentRoom]; ok && !s.closed {
-			s.currentUsers = membersOf(joined)
+			s.currentUsers = s.leaf.chatAdmitsMembers(membersOf(joined))
 			s.currentTopic = roomTopic(joined.Rooms, s.currentRoom)
 			s.recovering = false
 		}
