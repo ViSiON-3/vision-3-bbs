@@ -240,3 +240,18 @@ func TestFadeToastStopsWhenAWriteCrossesTheDeadline(t *testing.T) {
 		t.Errorf("took %s: waited after the write that crossed the deadline", took)
 	}
 }
+
+// A toast whose read has no time left by the time it would be drawn is
+// not drawn: it stays queued for the next wait.
+func TestToastNotDrawnPastDeadline(t *testing.T) {
+	env, log := fadeEnv(t, false, 20*time.Millisecond)
+	env.sess.AddPage("Hello there")
+	ih := getSessionIH(env.s)
+	env.e.serviceToasts(env.s, ih, env.sess, time.Nanosecond)
+	if strings.Contains(log.String(), "Hello there") {
+		t.Error("drawn after the read's time ran out")
+	}
+	if page, ok := env.sess.PeekPage(); !ok || page != "Hello there" {
+		t.Errorf("toast not kept for later: %q %v", page, ok)
+	}
+}

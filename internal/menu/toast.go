@@ -177,6 +177,15 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	}
 	fadeOut := time.Duration(len(ramp)) * step
 	lay := e.toastLayout(s, sess, t)
+	if time.Until(deadline) <= 0 {
+		// Getting here took the read's time: draw nothing, leave the toast
+		// queued, and let the next wait show it.
+		if stored {
+			e.toastStore().Release(t.ID)
+		}
+		sess.WakeToasts()
+		return
+	}
 	first := lay.line
 	if len(ramp) > 0 {
 		first = lay.frame(ramp[0])
