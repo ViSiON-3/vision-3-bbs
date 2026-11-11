@@ -8,10 +8,12 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
+	"github.com/gliderlabs/ssh"
 )
 
 // V3Net Central activity alerts on the BBS: short live toasts that say a
@@ -189,28 +191,49 @@ func (e *MenuExecutor) centralAlertText(a protocol.CentralAlert, areaName string
 
 // postAlertArea returns the local area a post alert names, when this board
 // carries it for the alert's network.
-func (e *MenuExecutor) postAlertArea(a protocol.CentralAlert) (name, acs string, ok bool) {
+func (e *MenuExecutor) postAlertArea(a protocol.CentralAlert) (*message.MessageArea, bool) {
 	if e.MessageMgr == nil || e.V3NetCentral == nil {
-		return "", "", false
+		return nil, false
 	}
 	area, found := e.MessageMgr.GetAreaByTag(a.Area)
 	if !found || e.V3NetCentral.NetworkForArea(area.ID) != a.Network {
-		return "", "", false
+		return nil, false
 	}
-	name = strings.TrimSpace(area.Name)
-	if name == "" {
-		name = area.Tag
+	return area, true
+}
+
+// alertAreaName is how this board names area in a post alert.
+func alertAreaName(area *message.MessageArea) string {
+	if name := strings.TrimSpace(area.Name); name != "" {
+		return name
 	}
-	return name, area.ACSRead, true
+	return area.Tag
+}
+
+// mayReadAlertArea reports whether acct, in sess, may read area: its read
+// ACS and its conference's, as message search checks them. Each is
+// evaluated against the caller's own connection, so a term such as L or A
+// reads it as the menus would.
+func (e *MenuExecutor) mayReadAlertArea(acct *user.User, sess *session.BbsSession, start time.Time, area *message.MessageArea) bool {
+	conn, _ := sess.Channel.(ssh.Session) // nil for a session with no connection
+	if !CheckUserACS(area.ACSRead, acct, conn, start) {
+		return false
+	}
+	if area.ConferenceID != 0 && e.ConferenceMgr != nil {
+		if conf, ok := e.ConferenceMgr.GetByID(area.ConferenceID); ok && !CheckUserACS(conf.ACS, acct, conn, start) {
+			return false
+		}
+	}
+	return true
 }
 
 // DeliverCentralAlert shows a, an alert from another board that the
 // service has verified, to every caller here who should see it: logged in
 // and past login, asking (on their stored record) for alerts of its kind,
 // not hiding its caller with their Twit List, and allowed to see what it
-// is about. A post is shown only to callers who may read the area here,
-// and only where this board carries it; a chat join not to a caller the
-// SysOp barred from network chat. It never blocks.
+// is about. A post is shown only to callers who may read the area and
+// its conference here, and only where this board carries it; a chat join
+// not to a caller the SysOp barred from network chat. It never blocks.
 func (e *MenuExecutor) DeliverCentralAlert(a protocol.CentralAlert, um *user.UserMgr) {
 	if e.SessionRegistry == nil || um == nil {
 		return
@@ -219,12 +242,14 @@ func (e *MenuExecutor) DeliverCentralAlert(a protocol.CentralAlert, um *user.Use
 	if ttl <= 0 {
 		return
 	}
-	var areaName, areaACS string
+	var area *message.MessageArea
+	var areaName string
 	if a.Kind == protocol.CentralAlertPost {
 		var ok bool
-		if areaName, areaACS, ok = e.postAlertArea(a); !ok {
+		if area, ok = e.postAlertArea(a); !ok {
 			return
 		}
+		areaName = alertAreaName(area)
 	}
 	text := e.centralAlertText(a, areaName)
 	if text == "" {
@@ -245,7 +270,7 @@ func (e *MenuExecutor) DeliverCentralAlert(a protocol.CentralAlert, um *user.Use
 		if a.Kind == protocol.CentralAlertChatJoin && acct.CentralChatBarred {
 			continue
 		}
-		if a.Kind == protocol.CentralAlertPost && !CheckUserACS(areaACS, acct, nil, start) {
+		if area != nil && !e.mayReadAlertArea(acct, sess, start, area) {
 			continue
 		}
 		if twitMatcher(e, um, acct).Hidden(a.Handle, a.NodeID) {

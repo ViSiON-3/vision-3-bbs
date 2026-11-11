@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor/testterm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -62,7 +63,18 @@ func newAlertFixture(t *testing.T) *alertFixture {
 	areas, _ := json.Marshal([]message.MessageArea{
 		{ID: 1, Position: 1, Tag: "fel.general", Name: "FelonyNet General", ACSRead: "s20", ACSWrite: "s20", BasePath: "msgbases/fel_general", AreaType: "v3net"},
 		{ID: 2, Position: 2, Tag: "fel.local", Name: "Not networked", ACSRead: "s10", ACSWrite: "s10", BasePath: "msgbases/fel_local", AreaType: "local"},
+		// Open to anyone with a terminal, but in a conference for s50.
+		{ID: 3, Position: 3, Tag: "fel.elite", Name: "Elite", ACSRead: "s10|A", ACSWrite: "s10", ConferenceID: 2, BasePath: "msgbases/fel_elite", AreaType: "v3net"},
 	})
+	confs := `[{"id": 1, "position": 1, "tag": "LOCAL", "name": "Local", "acs": ""},
+		{"id": 2, "position": 2, "tag": "ELITE", "name": "Elite", "acs": "s50"}]`
+	if err := os.WriteFile(filepath.Join(cfgDir, "conferences.json"), []byte(confs), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cm, err := conference.NewConferenceManager(cfgDir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(cfgDir, "message_areas.json"), areas, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -78,8 +90,8 @@ func newAlertFixture(t *testing.T) *alertFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fake := &centralFake{nets: []CentralNetworkInfo{alertNet("testnet")}, areaNets: map[int]string{area.ID: "testnet"}}
-	e := &MenuExecutor{SessionRegistry: session.NewSessionRegistry(), MessageMgr: mm, V3NetCentral: fake, RootConfigPath: t.TempDir()}
+	fake := &centralFake{nets: []CentralNetworkInfo{alertNet("testnet")}, areaNets: map[int]string{area.ID: "testnet", 3: "testnet"}}
+	e := &MenuExecutor{SessionRegistry: session.NewSessionRegistry(), MessageMgr: mm, ConferenceMgr: cm, V3NetCentral: fake, RootConfigPath: t.TempDir()}
 	e.SetStrings(alertStrings())
 	return &alertFixture{e: e, um: um, fake: fake, area: area}
 }
@@ -101,7 +113,8 @@ func (f *alertFixture) caller(t *testing.T, node int, handle string, level int, 
 		t.Fatal(err)
 	}
 	stored, _ := f.um.GetUserByID(u.ID)
-	s := &session.BbsSession{ID: node, NodeID: node, User: stored, StartTime: time.Now()}
+	// The connection is a test session: a local call with no terminal.
+	s := &session.BbsSession{ID: node, NodeID: node, User: stored, StartTime: time.Now(), Channel: newTestSession("")}
 	s.SetToastsReady(ready)
 	f.e.SessionRegistry.Register(s)
 	return s, stored
@@ -232,6 +245,35 @@ func TestDeliverCentralAlertRespectsAccess(t *testing.T) {
 	f.e.DeliverCentralAlert(stale, f.um)
 	if got := reader.DrainPages(); len(got) != 0 {
 		t.Errorf("an expired alert was shown: %q", got)
+	}
+}
+
+// A post alert follows the area's read ACS as evaluated on the viewer's
+// own connection, so a term that needs one (A here) is read rather than
+// failing the whole string, and the area's conference ACS as well.
+func TestDeliverCentralAlertAreaAndConferenceACS(t *testing.T) {
+	f := newAlertFixture(t)
+	prefs := user.CentralAlertPrefs{SeePosts: true}
+	member, _ := f.caller(t, 1, "Member", 60, prefs, true)
+	outsider, _ := f.caller(t, 2, "Outsider", 30, prefs, true)
+
+	// fel.general needs s20, an alternative-free string: both may read it.
+	f.e.DeliverCentralAlert(incoming(protocol.CentralAlertPost), f.um)
+	for name, s := range map[string]*session.BbsSession{"member": member, "outsider": outsider} {
+		if got := s.DrainPages(); len(got) != 1 {
+			t.Errorf("%s got %q for fel.general", name, got)
+		}
+	}
+
+	// fel.elite is s10|A, in a conference for s50: only the member may.
+	elite := incoming(protocol.CentralAlertPost)
+	elite.Area = "fel.elite"
+	f.e.DeliverCentralAlert(elite, f.um)
+	if got := member.DrainPages(); len(got) != 1 || !strings.Contains(got[0], "Elite") {
+		t.Errorf("member got %q for fel.elite", got)
+	}
+	if got := outsider.DrainPages(); len(got) != 0 {
+		t.Errorf("a caller outside the area's conference got %q", got)
 	}
 }
 

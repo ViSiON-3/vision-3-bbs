@@ -738,7 +738,8 @@ stored record:
 
 - only callers who are past login and subscribed to its kind;
 - a post alert only where this board carries the area on that network,
-  and only to callers whose access passes the area's read ACS;
+  and only to callers who pass the area's read ACS and its conference's
+  ACS, each checked against the caller's own connection as the menus do;
 - a chat alert not to a caller you have barred from network chat;
 - nothing from a caller on the viewer's Twit List, or on your **Chat
   Block List**;
