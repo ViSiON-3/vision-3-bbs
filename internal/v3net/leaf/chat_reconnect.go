@@ -149,10 +149,16 @@ func (l *Leaf) recoverChat(ctx context.Context) error {
 		return err
 	}
 	r.mu.RLock()
+	// This board's handles in each room, read before any session's lock is
+	// held, for the member lists below.
+	local := map[string]map[string]bool{}
+	for room := range snapshots {
+		local[room] = r.localHandlesInLocked(room, "")
+	}
 	for s := range r.sessions {
 		s.mu.Lock()
 		if joined, ok := snapshots[s.currentRoom]; ok && !s.closed {
-			s.currentUsers = membersOf(joined)
+			s.currentUsers = s.leaf.chatAdmitsMembers(local[s.currentRoom], membersOf(joined))
 			s.currentTopic = roomTopic(joined.Rooms, s.currentRoom)
 			s.recovering = false
 		}
@@ -165,7 +171,13 @@ func (l *Leaf) recoverChat(ctx context.Context) error {
 
 func (l *Leaf) rejoinChat(ctx context.Context, key chatMembership) (protocol.ChatJoinResponse, error) {
 	var joined protocol.ChatJoinResponse
-	body, _ := json.Marshal(protocol.ChatJoinRequest{Room: key.room, Handle: key.handle})
+	// Signed as an explicit join is, or boards holding a roster would drop
+	// the rejoin and lose these members after a reconnect.
+	signed, err := l.signChat(protocol.ChatSignedJoin, key.handle, func(c *protocol.ChatSigned) { c.Room = key.room })
+	if err != nil {
+		return joined, fmt.Errorf("rejoin chat: %w", err)
+	}
+	body, _ := json.Marshal(protocol.ChatJoinRequest{Room: key.room, Handle: key.handle, Signed: signed})
 	resp, err := l.signedPostWithResponse(ctx, fmt.Sprintf("/v3net/v1/%s/chat/rooms/join", l.cfg.Network), body)
 	if err != nil {
 		return joined, err

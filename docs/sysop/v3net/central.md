@@ -822,9 +822,19 @@ not there. Its own board always shows. A network whose coordinator has
 never published a roster works as before, showing every board.
 
 It protects only where the coordinator is not the hub's operator: a hub
-operator who is also the coordinator holds both keys. It covers Central;
-network chat lines are relayed by the hub and not signed by boards, so the
-roster does not apply to them.
+operator who is also the coordinator holds both keys.
+
+It covers network chat too. Boards sign every room line, room join and
+private message they send, and the hub passes the signature on with it;
+while a board holds a roster that is not open it shows a line, join or
+private message only
+when it is signed by a board on the roster and says what the hub says it
+does, and a live one only if it is fresh and not seen before. Room history
+is checked the same way when a caller joins, and the room's member list
+leaves out boards not on the roster. Leaves and topic changes are shown as
+the hub reports them. Boards from before signed chat send their lines
+unsigned: while a roster is in force, other boards do not show them, so
+upgrade the network's boards before publishing a roster if they chat.
 
 ### Publishing a Roster
 

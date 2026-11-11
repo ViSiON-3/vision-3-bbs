@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -53,6 +54,12 @@ func NewChatHistoryStore(db *sql.DB, retentionDays int) (*ChatHistoryStore, erro
 	if _, err := db.Exec(chatSchema); err != nil {
 		return nil, fmt.Errorf("hub: create chat history tables: %w", err)
 	}
+	// Signed chat (#1008): a room line's signed form, kept so a board that
+	// joins later can check history as it checks live lines. Hubs from
+	// before it have the table without the column.
+	if err := addColumnIfMissing(db, "chat_history", "signed", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return nil, err
+	}
 
 	store := &ChatHistoryStore{
 		db:            db,
@@ -62,12 +69,54 @@ func NewChatHistoryStore(db *sql.DB, retentionDays int) (*ChatHistoryStore, erro
 	return store, nil
 }
 
-// SaveMessage saves a public room message to chat_history.
-func (chs *ChatHistoryStore) SaveMessage(network, room, fromHandle, fromNode, fromBBS, text string) error {
+// addColumnIfMissing adds column (with its declaration) to table unless
+// it is there already.
+func addColumnIfMissing(db *sql.DB, table, column, decl string) error {
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return fmt.Errorf("hub: read %s columns: %w", table, err)
+	}
+	found := false
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, typ string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dflt, &pk); err != nil {
+			_ = rows.Close() // read-only
+			return fmt.Errorf("hub: read %s columns: %w", table, err)
+		}
+		if name == column {
+			found = true
+		}
+	}
+	_ = rows.Close() // read-only
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("hub: read %s columns: %w", table, err)
+	}
+	if found {
+		return nil
+	}
+	if _, err := db.Exec("ALTER TABLE " + table + " ADD COLUMN " + column + " " + decl); err != nil {
+		return fmt.Errorf("hub: add %s.%s: %w", table, column, err)
+	}
+	return nil
+}
+
+// SaveMessage saves a public room message to chat_history, with its signed
+// form when the sending board signed it.
+func (chs *ChatHistoryStore) SaveMessage(network, room, fromHandle, fromNode, fromBBS, text string, signed *protocol.ChatSigned) error {
+	var signedJSON string
+	if signed != nil {
+		b, err := json.Marshal(signed)
+		if err != nil {
+			return fmt.Errorf("hub: encode signed chat: %w", err)
+		}
+		signedJSON = string(b)
+	}
 	_, err := chs.db.Exec(
-		`INSERT INTO chat_history (network, room, from_handle, from_node, from_bbs, text, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		network, room, fromHandle, fromNode, fromBBS, text, time.Now().UTC(),
+		`INSERT INTO chat_history (network, room, from_handle, from_node, from_bbs, text, created_at, signed)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		network, room, fromHandle, fromNode, fromBBS, text, time.Now().UTC(), signedJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("hub: save chat message: %w", err)
@@ -97,7 +146,7 @@ func (chs *ChatHistoryStore) RoomHistory(network, room string, limit int) ([]pro
 	}
 
 	rows, err := chs.db.Query(
-		`SELECT from_handle, from_node, from_bbs, text, created_at
+		`SELECT from_handle, from_node, from_bbs, text, created_at, signed
 		 FROM chat_history
 		 WHERE network = ? AND room = ?
 		 ORDER BY created_at DESC
@@ -111,19 +160,26 @@ func (chs *ChatHistoryStore) RoomHistory(network, room string, limit int) ([]pro
 
 	var results []protocol.ChatMsgPayload
 	for rows.Next() {
-		var fromHandle, fromNode, fromBBS, text string
+		var fromHandle, fromNode, fromBBS, text, signedJSON string
 		var createdAt time.Time
-		if err := rows.Scan(&fromHandle, &fromNode, &fromBBS, &text, &createdAt); err != nil {
+		if err := rows.Scan(&fromHandle, &fromNode, &fromBBS, &text, &createdAt, &signedJSON); err != nil {
 			return nil, fmt.Errorf("hub: scan room history row: %w", err)
 		}
-		results = append(results, protocol.ChatMsgPayload{
+		msg := protocol.ChatMsgPayload{
 			Room:       room,
 			FromHandle: fromHandle,
 			FromNode:   fromNode,
 			FromBBS:    fromBBS,
 			Text:       text,
 			Timestamp:  createdAt.Format(time.RFC3339),
-		})
+		}
+		if signedJSON != "" {
+			var sc protocol.ChatSigned
+			if json.Unmarshal([]byte(signedJSON), &sc) == nil {
+				msg.Signed = &sc
+			}
+		}
+		results = append(results, msg)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("hub: iterate room history: %w", err)

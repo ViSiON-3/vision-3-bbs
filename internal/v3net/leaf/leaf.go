@@ -63,6 +63,8 @@ type Leaf struct {
 	alerts alertState
 	// rosterState is the network's board roster (central_roster.go).
 	rosterState rosterState
+	// chatSeen is the live signed chat already acted on (chat_signed.go).
+	chatSeen chatSeen
 	// sseConnected is set while the event stream is open.
 	sseConnected atomic.Bool
 	// pollNow wakes the poll loop for a poll ahead of its ticker, when the
@@ -164,6 +166,7 @@ func New(cfg Config) *Leaf {
 		l.eventCb.Store(cfg.OnEvent)
 	}
 	l.chatSessions = newChatSessionRegistry(cfg.Keystore.NodeID())
+	l.chatSessions.leaf = l
 	l.chatSessions.blocked = chatBlockSet(cfg.ChatBlocked)
 	l.central.activity = newActivityStates()
 	l.loadRoster()

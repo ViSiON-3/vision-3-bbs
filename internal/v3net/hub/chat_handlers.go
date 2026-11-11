@@ -1,6 +1,8 @@
 package hub
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -51,6 +53,36 @@ func (h *Hub) roomSender(network, room, nodeID, handle string) string {
 	return handle
 }
 
+// checkSignedChat checks a board's signed chat action (protocol.ChatSigned)
+// sent with a request: it is valid for the network and of kind, it is the
+// authenticated node's, and it verifies under the key the node subscribed
+// with. Whether it says what the request says is for the handler to check.
+// It returns 0 when it passes, else the status and message to refuse with.
+// A request with no signed action, from a board that predates signed chat,
+// is not checked here and passes as before.
+func (h *Hub) checkSignedChat(sc *protocol.ChatSigned, nodeID, network, kind string) (int, string) {
+	if sc == nil {
+		return 0, ""
+	}
+	if err := sc.Validate(network); err != nil {
+		return http.StatusUnprocessableEntity, "signed chat: " + err.Error()
+	}
+	if sc.Kind != kind {
+		return http.StatusUnprocessableEntity, "signed chat is a " + sc.Kind + ", not a " + kind
+	}
+	if sc.NodeID != nodeID {
+		return http.StatusForbidden, "signed chat is not the authenticated node's"
+	}
+	if err := sc.Verify(); err != nil {
+		return http.StatusForbidden, "signed chat signature invalid: " + err.Error()
+	}
+	pub, err := base64.StdEncoding.DecodeString(sc.OriginPubKeyB64)
+	if registered := h.subscribers.GetPubKey(nodeID, network); err != nil || registered == nil || !registered.Equal(ed25519.PublicKey(pub)) {
+		return http.StatusForbidden, "signed chat is not signed by the node's registered key"
+	}
+	return 0, ""
+}
+
 // handleChatJoin: POST /v3net/v1/{network}/chat/rooms/join
 func (h *Hub) handleChatJoin(w http.ResponseWriter, r *http.Request, network string) {
 	nodeID := r.Header.Get(headerNodeID)
@@ -70,6 +102,14 @@ func (h *Hub) handleChatJoin(w http.ResponseWriter, r *http.Request, network str
 		jsonError(w, "handle required", http.StatusBadRequest)
 		return
 	}
+	if code, msg := h.checkSignedChat(req.Signed, nodeID, network, protocol.ChatSignedJoin); code != 0 {
+		jsonError(w, msg, code)
+		return
+	}
+	if req.Signed != nil && (req.Signed.Room != room || req.Signed.Handle != req.Handle) {
+		jsonError(w, "signed join does not match the request", http.StatusUnprocessableEntity)
+		return
+	}
 
 	members, added := h.chatRooms.Join(network, room, nodeID, req.Handle)
 	for i := range members {
@@ -80,7 +120,7 @@ func (h *Hub) handleChatJoin(w http.ResponseWriter, r *http.Request, network str
 	// user-list entry per join event, so a repeat would list it twice.
 	if added {
 		broadcastChatEvent(h.broadcaster, network, protocol.EventChatJoin, protocol.ChatJoinPayload{
-			Room: room, Handle: req.Handle, BBS: bbsName, Node: nodeID,
+			Room: room, Handle: req.Handle, BBS: bbsName, Node: nodeID, Signed: req.Signed,
 		})
 	}
 
@@ -140,6 +180,14 @@ func (h *Hub) handleChatPost(w http.ResponseWriter, r *http.Request, network str
 		jsonError(w, "not joined to room", http.StatusForbidden)
 		return
 	}
+	if code, msg := h.checkSignedChat(req.Signed, nodeID, network, protocol.ChatSignedLine); code != 0 {
+		jsonError(w, msg, code)
+		return
+	}
+	if req.Signed != nil && (req.Signed.Room != room || req.Signed.Handle != handle || req.Signed.Text != req.Text) {
+		jsonError(w, "signed line does not match the request", http.StatusUnprocessableEntity)
+		return
+	}
 
 	// Take the rate-limit token only once the request is known to be valid,
 	// so a rejected request does not throttle the user's next real message.
@@ -148,13 +196,14 @@ func (h *Hub) handleChatPost(w http.ResponseWriter, r *http.Request, network str
 		return
 	}
 
-	if err := h.chatStore.SaveMessage(network, room, handle, nodeID, bbsName, req.Text); err != nil {
+	if err := h.chatStore.SaveMessage(network, room, handle, nodeID, bbsName, req.Text, req.Signed); err != nil {
 		jsonError(w, "storage error", http.StatusInternalServerError)
 		return
 	}
 	broadcastChatEvent(h.broadcaster, network, protocol.EventChatMessage, protocol.ChatMsgPayload{
 		Room: room, FromHandle: handle, FromNode: nodeID, FromBBS: bbsName,
 		Text: req.Text, Timestamp: time.Now().UTC().Format(time.RFC3339), Origin: req.Origin,
+		Signed: req.Signed,
 	})
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -171,6 +220,17 @@ func (h *Hub) handleChatPrivate(w http.ResponseWriter, r *http.Request, network 
 	}
 	if req.ToHandle == "" {
 		jsonError(w, "to_handle required", http.StatusBadRequest)
+		return
+	}
+	if code, msg := h.checkSignedChat(req.Signed, nodeID, network, protocol.ChatSignedPrivate); code != 0 {
+		jsonError(w, msg, code)
+		return
+	}
+	// The signed message names the recipient as the board asked for it:
+	// with no node, the hub resolves one below.
+	if req.Signed != nil && (req.Signed.ToHandle != req.ToHandle || req.Signed.ToNode != req.ToNode ||
+		req.Signed.Text != req.Text || (req.Handle != "" && req.Signed.Handle != req.Handle)) {
+		jsonError(w, "signed message does not match the request", http.StatusUnprocessableEntity)
 		return
 	}
 	if req.ToNode == "" {
@@ -224,6 +284,7 @@ func (h *Hub) handleChatPrivate(w http.ResponseWriter, r *http.Request, network 
 		FromHandle: fromHandle, FromNode: nodeID, FromBBS: bbsName,
 		ToHandle: req.ToHandle, ToNode: req.ToNode,
 		Text: req.Text, Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Signed: req.Signed,
 	})
 	if err != nil {
 		jsonError(w, "event encoding error", http.StatusInternalServerError)

@@ -181,3 +181,66 @@ func TestCentralRosterNewCoordinatorStartsOwnSeq(t *testing.T) {
 		t.Fatalf("new coordinator refused: %v", err)
 	}
 }
+
+// The hub relays a board's signed line with the line and keeps it in
+// history; it refuses one that does not match the request or is signed by
+// another key, and still takes an unsigned line from an older board.
+func TestSignedChatAtTheHub(t *testing.T) {
+	h, _ := setupTestHub(t)
+	ts := httptest.NewServer(h.newMux())
+	defer ts.Close()
+	a, other := newLeafKS(t), newLeafKS(t)
+	registerLeaf(t, ts, a)
+	// Several posts in a row: the per-user limit is not under test here.
+	h.chatLimiter.Stop()
+	h.chatLimiter = newRateLimiter(time.Nanosecond)
+	events, cancel := h.broadcaster.Subscribe("testnet")
+	defer cancel()
+	post := func(as *keystore.Keystore, path string, body any) int {
+		b, _ := json.Marshal(body)
+		resp, err := http.DefaultClient.Do(signedRequest(t, as, http.MethodPost, ts.URL+"/v3net/v1/testnet/chat/rooms/"+path, string(b)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	join, _ := protocol.NewChatSigned(a, protocol.ChatSignedJoin, "testnet", "Alice", func(c *protocol.ChatSigned) { c.Room = "lobby" })
+	if code := post(a, "join", protocol.ChatJoinRequest{Room: "lobby", Handle: "Alice", Signed: join}); code != http.StatusOK {
+		t.Fatalf("signed join: %d", code)
+	}
+	line, _ := protocol.NewChatSigned(a, protocol.ChatSignedLine, "testnet", "Alice", func(c *protocol.ChatSigned) { c.Room, c.Text = "lobby", "hi" })
+	if code := post(a, "post", protocol.ChatPostRequest{Room: "lobby", Handle: "Alice", Text: "hi", Signed: line}); code != http.StatusNoContent {
+		t.Fatalf("signed post: %d", code)
+	}
+	deadline := time.After(time.Second)
+	for got := false; !got; {
+		select {
+		case ev := <-events:
+			if ev.Type == protocol.EventChatMessage {
+				var p protocol.ChatMsgPayload
+				_ = json.Unmarshal(ev.Data, &p)
+				if p.Signed == nil || p.Signed.Verify() != nil || p.Signed.ID != line.ID {
+					t.Errorf("relayed without its signed line: %+v", p.Signed)
+				}
+				got = true
+			}
+		case <-deadline:
+			t.Fatal("no chat_message")
+		}
+	}
+	hist, _ := h.chatStore.RoomHistory("testnet", "lobby", 10)
+	if len(hist) != 1 || hist[0].Signed == nil || hist[0].Signed.ID != line.ID {
+		t.Errorf("history %+v", hist)
+	}
+	if code := post(a, "post", protocol.ChatPostRequest{Room: "lobby", Handle: "Alice", Text: "changed", Signed: line}); code != http.StatusUnprocessableEntity {
+		t.Errorf("mismatched text: %d, want 422", code)
+	}
+	foreign, _ := protocol.NewChatSigned(other, protocol.ChatSignedLine, "testnet", "Alice", func(c *protocol.ChatSigned) { c.Room, c.Text = "lobby", "hi" })
+	if code := post(a, "post", protocol.ChatPostRequest{Room: "lobby", Handle: "Alice", Text: "hi", Signed: foreign}); code != http.StatusForbidden {
+		t.Errorf("another key's line: %d, want 403", code)
+	}
+	if code := post(a, "post", protocol.ChatPostRequest{Room: "lobby", Handle: "Alice", Text: "unsigned"}); code != http.StatusNoContent {
+		t.Errorf("unsigned line from an older board: %d, want 204", code)
+	}
+}

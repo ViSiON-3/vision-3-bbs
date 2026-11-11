@@ -615,7 +615,7 @@ func TestChatStore_ErrorsOnClosedDB(t *testing.T) {
 	}
 	db.Close()
 
-	if err := store.SaveMessage("net", "lobby", "a", "n", "b", "x"); err == nil {
+	if err := store.SaveMessage("net", "lobby", "a", "n", "b", "x", nil); err == nil {
 		t.Error("SaveMessage on closed DB should fail")
 	}
 	if err := store.SavePrivate("net", "a", "n", "b", "n2", "x"); err == nil {
