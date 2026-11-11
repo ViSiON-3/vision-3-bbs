@@ -367,6 +367,11 @@ readerLoop:
 			currentMsgNum += navDir
 			continue
 		}
+		// In the mailbox, the caller's own mail on screen is their current
+		// mail, for DELETEPRIVMAIL on the mail menu.
+		if strings.EqualFold(currentAreaTag, "PRIVMAIL") && currentMsg.MailFor(currentUser.Handle) {
+			setCurrentMail(s, currentMsg)
+		}
 
 		// The reply thread this message sits in, as this caller may see it.
 		tv := readerThreadView(e, currentAreaID, currentMsgNum, currentMsg, threadFilter)

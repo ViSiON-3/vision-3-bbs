@@ -22,13 +22,15 @@ Users access private mail through the Email Menu (press `E` from the main menu):
 - **SENDPRIVMAIL** — Send private mail to another user; validates recipient exists, prompts for subject, launches the full-screen editor
 - **READPRIVMAIL** — Read private mail; shows only messages addressed to the current user
 - **LISTPRIVMAIL** — List private mail headers, for the same messages
+- **DELETEPRIVMAIL** — Delete a mail (`D`): your current mail, the last of yours you read this call, after a Y/N; or, before you've read one, the mail whose number you give (the number `LISTPRIVMAIL` shows; `?` lists yours)
 
 Mail you have sent is not in your mailbox. It shows when you read the `PRIVMAIL` area with the message reader, list or newscan.
 
 In the reader, `D` deletes a private message addressed to you, after a
 `Delete this message? [Y/N]` check. In the mailbox it is on the bar as Del,
-lit on your mail. A deleted message is gone for good: the base is packed at
-once, as when a co-sysop deletes. You can't delete mail you sent.
+lit on your mail. `D` on the Email Menu (`DELETEPRIVMAIL`) does the same
+from outside the reader. A deleted message is gone for good: the base is
+packed at once, as when a co-sysop deletes. You can't delete mail you sent.
 
 Posting with `COMPOSEMSG` while `PRIVMAIL` is the current area works the same way: the recipient must be an existing user, and the message is saved as private.
 
