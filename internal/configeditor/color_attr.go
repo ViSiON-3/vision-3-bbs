@@ -52,10 +52,14 @@ func (m Model) updateColorAttr(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEnter:
-		val := m.attr.pick.Attr(m.attr.was)
-		if err := m.attr.field.Set(strconv.Itoa(val)); err != nil {
+		val := strconv.Itoa(m.attr.pick.Attr(m.attr.was))
+		// Compare with what the field held, not with the value the picker
+		// opened on: a stored value it could not read (300, say) opened
+		// as 0, and setting 0 is still a change to save.
+		before := m.attr.field.Get()
+		if err := m.attr.field.Set(val); err != nil {
 			m.message = err.Error()
-		} else if val != m.attr.was {
+		} else if val != before {
 			m.dirty = true
 			m.message = ""
 		}

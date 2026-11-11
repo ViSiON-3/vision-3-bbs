@@ -73,3 +73,14 @@ func TestYesNoColorFits80(t *testing.T) {
 		}
 	}
 }
+
+// A stored value the picker cannot read opens as 0; setting it is still a
+// change, so the editor will not exit without saving it.
+func TestYesNoColorOutOfRangeMarkedDirty(t *testing.T) {
+	m := openYesNo(t)
+	m.configs.Theme.YesNoHighlightColor = 300
+	m = press(t, m, "enter", "enter")
+	if m.configs.Theme.YesNoHighlightColor != 0 || !m.dirty {
+		t.Errorf("value %d, dirty %v", m.configs.Theme.YesNoHighlightColor, m.dirty)
+	}
+}
