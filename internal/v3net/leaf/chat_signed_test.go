@@ -291,3 +291,33 @@ func TestSignedChatRoomNormalized(t *testing.T) {
 		t.Errorf("history %+v, want the signed line", hist)
 	}
 }
+
+// A signed line from a board off the roster is refused before the replay
+// cache records it, so such boards cannot fill the cache and crowd out
+// the boards the roster admits.
+func TestSignedChatOffRosterNotRemembered(t *testing.T) {
+	r := newRosterRoom(t)
+	join(t, r.gamma, "Mallory")
+	bob := join(t, r.beta, "Bob")
+	lines(bob, 200*time.Millisecond) // let the joins settle
+	seen := func() int {
+		r.beta.chatSeen.mu.Lock()
+		defer r.beta.chatSeen.mu.Unlock()
+		return len(r.beta.chatSeen.seen)
+	}
+	before := seen()
+
+	signed, err := r.gamma.signChat(protocol.ChatSignedLine, "Mallory", func(c *protocol.ChatSigned) { c.Room, c.Text = "lobby", "flood" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(protocol.ChatMsgPayload{Room: "lobby", FromHandle: "Mallory", FromNode: r.gamma.cfg.Keystore.NodeID(),
+		Text: "flood", Timestamp: time.Now().UTC().Format(time.RFC3339), Signed: signed})
+	r.beta.chatSessions.dispatch(protocol.Event{Type: protocol.EventChatMessage, Data: data})
+	if got := lines(bob, 200*time.Millisecond); len(got) != 0 {
+		t.Errorf("Bob saw a line from off the roster: %q", got)
+	}
+	if n := seen(); n != before {
+		t.Errorf("the replay cache went from %d to %d entries for an off-roster line", before, n)
+	}
+}

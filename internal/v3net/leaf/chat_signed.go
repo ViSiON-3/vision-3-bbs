@@ -118,6 +118,11 @@ func (l *Leaf) chatAdmits(c chatClaim, signed *protocol.ChatSigned) bool {
 			return false
 		}
 	}
+	// The roster is checked before the replay cache records the action, so
+	// off-roster boards cannot fill it and crowd out admitted ones.
+	if !l.rosterAdmits(signed.NodeID, signed.OriginPubKeyB64) {
+		return false
+	}
 	if c.live {
 		age := time.Since(signed.Issued())
 		if age > protocol.MaxChatSignedAge || age < -protocol.MaxCentralClockSkew ||
@@ -125,7 +130,7 @@ func (l *Leaf) chatAdmits(c chatClaim, signed *protocol.ChatSigned) bool {
 			return false
 		}
 	}
-	return l.rosterAdmits(signed.NodeID, signed.OriginPubKeyB64)
+	return true
 }
 
 // chatAdmitsHistory keeps the room history lines chatAdmits passes.
