@@ -1038,10 +1038,11 @@ for `yesNoHighlightColor`.
 | `chatSysopColor` | `11` | Sysop's text in [split-screen chat](how-to-guides/wfc-console.md#chat), where the chat screen sets no colour of its own |
 | `chatUserColor` | `10` | Caller's text in split-screen chat, likewise |
 | `sysopChatScreen` | (none) | The [chat screen](#chat-screens) split-screen chat opens with; empty means the built-in layout, `random` one of the set's screens each chat |
+| `toastFadeColors` | `"8,7,15"` | The colours a [toast](users/login-sequence.md#toasts) fades in through, and out through in reverse, when the board has `toastFade` on: 1 to 8 foreground colours `0`-`15`, comma-separated, in fade-in order. A value that can't be read uses the default. Set it in `./config` under **Theme → Toasts → Fade Colors**, with the colour picker |
 
 The defaults apply to fields missing from `theme.json`. The shipped `v3`
 set's `theme.json` sets `yesNoHighlightColor` to `31`, `yesNoRegularColor`
-to `13` and `sysopChatScreen` to `V3CHAT1`.
+to `13`, `sysopChatScreen` to `V3CHAT1` and `toastFadeColors` to the default.
 
 A color number is the background times 16 plus the foreground, using the 16
 DOS colors: `31` is bright white (15) on blue (1).

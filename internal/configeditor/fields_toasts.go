@@ -2,6 +2,7 @@ package configeditor
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
@@ -91,6 +92,27 @@ func sysFieldsToasts(cfg *config.ServerConfig) []fieldDef {
 					return err
 				}
 				cfg.ToastCol = n
+				return nil
+			},
+		},
+		{
+			Label: "Toast Fade", Help: "Fade toasts in and out through the theme's Toast Fade Colors; N shows them at once, as before", Type: ftYesNo, Col: 3, Row: 9, Width: 1,
+			Get: func() string { return uitext.BoolToYN(cfg.ToastFade) },
+			Set: func(val string) error {
+				cfg.ToastFade = uitext.YNToBool(val)
+				return nil
+			},
+		},
+		{
+			Label: "Fade Step ms", Help: "How long each fade colour shows, in milliseconds", Type: ftInteger, Col: 3, Row: 10, Width: 3,
+			Min: config.MinToastFadeMs, Max: config.MaxToastFadeMs,
+			Get: func() string { return strconv.Itoa(int(cfg.ToastFadeStep() / time.Millisecond)) },
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				cfg.ToastFadeMs = n
 				return nil
 			},
 		},

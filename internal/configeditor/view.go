@@ -25,6 +25,8 @@ func (m Model) View() string {
 		return m.viewRecordEdit()
 	case modeLookupPicker:
 		return m.viewLookupPicker()
+	case modeColorRamp:
+		return m.viewColorRamp()
 	case modeExitConfirm, modeSaveConfirm:
 		result := m.viewTopMenu()
 		return m.overlayConfirmDialog(result, "-- Unsaved Changes --",
