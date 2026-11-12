@@ -281,3 +281,40 @@ func TestRunCtrlKDeletesLine(t *testing.T) {
 		t.Fatalf("content = %q, want %q", content, want)
 	}
 }
+
+// TestRunCtrlKIgnoresSyncTERMTrailer replays what SyncTERM sends for CTRL-K:
+// 0x0B immediately followed by 0x25, the K key's scancode. The 0x25 used to be
+// typed as "%" onto the line that moved up into the deleted one's place
+// (#1000). A "%" typed afterwards on its own must still go in.
+func TestRunCtrlKIgnoresSyncTERMTrailer(t *testing.T) {
+	for _, tc := range []struct {
+		name, keys, want string
+	}{
+		{"plain CTRL-K", "\x0b", "one\nthree"},
+		{"SyncTERM CTRL-K with 0x25 trailer", "\x0b%", "one\nthree"},
+		{"CTRL-Y keeps a following percent", "\x19%", "one\n%three"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// The cursor starts on the last line; CTRL-E moves up to "two".
+			content, saved := runKeys(t, "one\ntwo\nthree", "\x05"+tc.keys+"\x1a")
+			if !saved || content != tc.want {
+				t.Fatalf("saved=%v content=%q, want %q", saved, content, tc.want)
+			}
+		})
+	}
+
+	// A "%" typed after the burst has gone is text, not a trailer.
+	tt := testterm.New(80, 24)
+	sess := testterm.NewSession(tt, "\x05\x0b")
+	ed := NewFSEditor(sess, tt, ansi.OutputModeUTF8, 80, 24, "", "", "", "", "", "", nil)
+	ed.input.SetEscTimeout(10 * time.Millisecond)
+	ed.LoadContent("one\ntwo\nthree")
+	go func() {
+		time.Sleep(4 * scancodeTrailerWindow)
+		sess.Send("%\x1a")
+	}()
+	content, saved, err := ed.Run()
+	if err != nil || !saved || content != "one\n%three" {
+		t.Fatalf("Run = (%q,%v,%v), want %q", content, saved, err, "one\n%three")
+	}
+}
