@@ -518,24 +518,22 @@ V3Net Central: Network Chat
   Network chat puts you in a room with callers on other boards.
 
   What other boards see
-  Your handle Caller and this board's name My BBS,
-  in the room's user list while you are there and on every line you
-  type. A private message goes to the hub and to the recipient's board.
+  You appear as Caller @ My BBS
+  in the room's user list and on every line you type. Private messages go
+  to the hub and the recipient's board.
   Never your real name, location, user number, or what you are doing.
 
   What is kept
-  The hub keeps room messages as history for callers who join later,
-  and private messages for the same time; a ViSiON/3 hub keeps 7 days.
-  Room history can be read by anyone who knows the hub's address, without
-  joining: treat what you say in a room as public.
+  The hub keeps room messages as history for callers who join later, and
+  private messages just as long; a ViSiON/3 hub keeps 7 days. Anyone with
+  the hub's address can read room history: treat a room as public.
 
   Who moderates
-  Your SysOp decides whether this board takes part, and can turn network
-  chat off for you; the hub's operator decides which boards may. The hub
-  limits how fast anyone can post. You can mute or block anyone from your
-  screen (/mute for this session, /block for good).
-  You can turn network chat off at any time under Preferences (V3Net
-  Central, or V3Net Sharing in Konfig), and leave a room with /q.
+  Your SysOp decides whether this board takes part and can turn chat off
+  for you; the hub's operator decides which boards may. The hub limits how
+  fast anyone can post. /mute hides someone this session, /block for good.
+  Turn chat off any time in Preferences (V3Net Central, or V3Net Sharing
+  in Konfig); leave a room with /q.
 
   Take part in network chat? (Y/N):
 ```

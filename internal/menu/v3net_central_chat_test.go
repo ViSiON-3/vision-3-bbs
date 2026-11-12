@@ -2,9 +2,11 @@ package menu
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -307,5 +309,22 @@ func TestKonfigV3NetSharingShowsChat(t *testing.T) {
 	}
 	if snap := runSharingKonfig(t, um, u, fake, "q").Snapshot(); !strings.Contains(snap, "Chat") {
 		t.Errorf("agreement not summed up as Chat:\n%s", snap)
+	}
+}
+
+// The notice and its prompt fit an 80x24 screen without scrolling or
+// wrapping, with the longest handle and board name it shows.
+func TestChatNoticeFits80x24(t *testing.T) {
+	long := strings.Repeat("W", 40)
+	text := chatConsentNoticeText(long, long, 80)
+	text = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`).ReplaceAllString(text, "")
+	lines := strings.Split(strings.TrimSuffix(text, "\r\n"), "\r\n")
+	if rows := len(lines) + 1; rows > chatNoticeRows { // and the prompt
+		t.Errorf("notice and prompt take %d rows, more than %d:\n%s", rows, chatNoticeRows, text)
+	}
+	for _, l := range lines {
+		if n := utf8.RuneCountInString(l); n > 79 {
+			t.Errorf("line is %d columns, would wrap: %q", n, l)
+		}
 	}
 }

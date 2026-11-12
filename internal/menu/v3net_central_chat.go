@@ -94,7 +94,12 @@ func chatNoticeBoard(e *MenuExecutor) string {
 
 // chatConsentNoticeText is the network chat notice: what other boards see,
 // what the hub keeps and who moderates, for a caller with handle on board.
-// It ends without a prompt.
+// It ends without a prompt, and with the prompt fits an 80x24 screen
+// without scrolling: chatNoticeRows is the most it may take.
+// chatNoticeRows is the most rows the notice and its prompt may take,
+// leaving a row under the prompt on a 24-row terminal for an error.
+const chatNoticeRows = 23
+
 func chatConsentNoticeText(handle, board string, width int) string {
 	var b strings.Builder
 	b.WriteString(centralHeader("Network Chat", width))
@@ -102,24 +107,22 @@ func chatConsentNoticeText(handle, board string, width int) string {
 	w("|15  Network chat puts you in a room with callers on other boards.|07")
 	w("")
 	w("|03  What other boards see|07")
-	w("|07  Your handle |15" + v3netClip(centralPreviewHandle(handle), 30) + "|07 and this board's name |11" + v3netClip(board, 30) + "|07,")
-	w("|07  in the room's user list while you are there and on every line you")
-	w("|07  type. A private message goes to the hub and to the recipient's board.")
+	w("|07  You appear as |15" + v3netClip(centralPreviewHandle(handle), 30) + "|07 @ |11" + v3netClip(board, 30) + "|07")
+	w("|07  in the room's user list and on every line you type. Private messages go")
+	w("|07  to the hub and the recipient's board.")
 	w("|08  Never your real name, location, user number, or what you are doing.|07")
 	w("")
 	w("|03  What is kept|07")
-	w("|07  The hub keeps room messages as history for callers who join later,")
-	w("|07  and private messages for the same time; a ViSiON/3 hub keeps 7 days.")
-	w("|07  Room history can be read by anyone who knows the hub's address, without")
-	w("|07  joining: treat what you say in a room as public.")
+	w("|07  The hub keeps room messages as history for callers who join later, and")
+	w("|07  private messages just as long; a ViSiON/3 hub keeps 7 days. Anyone with")
+	w("|07  the hub's address can read room history: treat a room as public.")
 	w("")
 	w("|03  Who moderates|07")
-	w("|07  Your SysOp decides whether this board takes part, and can turn network")
-	w("|07  chat off for you; the hub's operator decides which boards may. The hub")
-	w("|07  limits how fast anyone can post. You can mute or block anyone from your")
-	w("|07  screen (/mute for this session, /block for good).")
-	w("|08  You can turn network chat off at any time under Preferences (V3Net|07")
-	w("|08  Central, or V3Net Sharing in Konfig), and leave a room with /q.|07")
+	w("|07  Your SysOp decides whether this board takes part and can turn chat off")
+	w("|07  for you; the hub's operator decides which boards may. The hub limits how")
+	w("|07  fast anyone can post. /mute hides someone this session, /block for good.")
+	w("|08  Turn chat off any time in Preferences (V3Net Central, or V3Net Sharing")
+	w("|08  in Konfig); leave a room with /q.|07")
 	w("")
 	return b.String()
 }
