@@ -435,30 +435,6 @@ hot key:
 | `?` | Help | List the commands |
 | `Q` | Quit | Leave the reader |
 
-**Editing a posted message (E).** `E` asks for the subject, starting with
-the current one (Enter keeps it), then opens the text in the full-screen
-editor. Saving replaces the message and adds a last line saying who edited
-it and when, such as ` * Edited by Felonius on 11/12/26 at 1:05 pm`; a
-message edited again carries only its latest. Leaving the editor without
-saving changes nothing. The message keeps its number, sender, date and
-place in its thread.
-
-- **Who:** the author, by the handle the message was posted under (a post
-  signed with a real name keeps the handle with it), the area's sponsor,
-  and sysops and co-sysops. An anonymous post records no author, so only a
-  sponsor or the sysop can edit it.
-- **Where:** local areas only. Echomail, netmail, QWK network and V3Net
-  messages have already been sent to other boards, so an edit would change
-  this board's copy alone; private mail has already been delivered. A
-  message stored in a character set other than UTF-8 isn't offered either.
-- **Checked again on saving:** the right to edit, and that the message is
-  still the one shown. If another session edited, deleted or moved it
-  meanwhile, or the sysop removed the sponsor, nothing is saved and the
-  caller is told.
-- **Storage:** the new text and header are written at the end of the JAM
-  base and the index points to them; the old ones stay as unused space
-  until the base is next packed.
-
 **Reply threads (T).** The thread follows the reply links a message
 carries (the JAM `ReplyTo`, or the `REPLY` kludge of echomail), not its
 subject, so it shows the actual conversation. When the message is part of
@@ -533,6 +509,32 @@ cancels), then asks `Move this message to ...? [Y/N]`.
   can't be read, the caller is told a copy was left in the other area, and
   the log says which. Check both areas before deleting anything: delete one
   only if the message is in both.
+
+### Editing a Posted Message
+
+`E` in the reader edits the message shown. It asks for the subject, starting with
+the current one (Enter keeps it), then opens the text in the full-screen
+editor. Saving replaces the message and adds a last line saying who edited
+it and when, such as ` * Edited by Felonius on 11/12/26 at 1:05 pm`; a
+message edited again carries only its latest. Leaving the editor without
+saving changes nothing. The message keeps its number, sender, date and
+place in its thread.
+
+- **Who:** the author, by the handle the message was posted under (a post
+  signed with a real name keeps the handle with it), the area's sponsor,
+  and sysops and co-sysops. An anonymous post records no author, so only a
+  sponsor or the sysop can edit it.
+- **Where:** local areas only. Echomail, netmail, QWK network and V3Net
+  messages have already been sent to other boards, so an edit would change
+  this board's copy alone; private mail has already been delivered. A
+  message stored in a character set other than UTF-8 isn't offered either.
+- **Checked again on saving:** the right to edit, and that the message is
+  still the one shown. If another session edited, deleted or moved it
+  meanwhile, or the sysop removed the sponsor, nothing is saved and the
+  caller is told.
+- **Storage:** the new text and header are written at the end of the JAM
+  base and the index points to them; the old ones stay as unused space
+  until the base is next packed.
 
 ### Searching Messages
 
