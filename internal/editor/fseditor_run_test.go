@@ -310,7 +310,17 @@ func TestRunCtrlKIgnoresSyncTERMTrailer(t *testing.T) {
 	ed.input.SetEscTimeout(10 * time.Millisecond)
 	ed.LoadContent("one\ntwo\nthree")
 	go func() {
-		time.Sleep(4 * scancodeTrailerWindow)
+		// CTRL-K waits out the trailer window before it deletes the line, so
+		// once "two" is gone from the screen the window has closed. Waiting on
+		// that, not a fixed sleep, keeps a slow runner from sending "%" early.
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			screen := tt.Snapshot()
+			if strings.Contains(screen, "three") && !strings.Contains(screen, "two") {
+				break
+			}
+			time.Sleep(time.Millisecond)
+		}
 		sess.Send("%\x1a")
 	}()
 	content, saved, err := ed.Run()
