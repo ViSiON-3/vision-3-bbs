@@ -122,6 +122,14 @@ func waitForEnter(s ssh.Session) error {
 	}
 }
 
+// pauseAnswered writes a pause prompt where the cursor is and reports whether
+// a script in its place answered it (v3.prompt.answer). Such a script has
+// already waited however it chose to, so the call site reads nothing.
+func (e *MenuExecutor) pauseAnswered(terminal *term.Terminal, outputMode ansi.OutputMode, pausePrompt string) bool {
+	answer, err := e.renderPrompt(terminal, outputMode, pausePrompt, nil, scripting.PromptPause)
+	return err == nil && answer.set
+}
+
 // styledInput reads input with character-by-character display styling.
 // Mimics Pascal NoCRInput with a shaded cursor cell, solid blue typed area,
 // and a bright blue background fill for remaining space.

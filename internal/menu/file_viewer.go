@@ -406,7 +406,9 @@ func (e *MenuExecutor) displayTextWithPaging(s ssh.Session, terminal *term.Termi
 
 // pauseEnter displays a simple "press Enter" prompt.
 func (e *MenuExecutor) pauseEnter(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, prompt string) {
-	e.writeString(terminal, outputMode, prompt)
+	if e.pauseAnswered(terminal, outputMode, prompt) {
+		return
+	}
 
 	ih := getSessionIH(s)
 	for {
