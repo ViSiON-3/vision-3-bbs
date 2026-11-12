@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -46,6 +47,9 @@ type Tester struct {
 	SysOpLevel, CoSysOpLevel int
 	// Location is the board's timezone, as for Context.Location.
 	Location *time.Location
+	// Roles are configs/roles.json's roles, as for Context.Roles: nil is the
+	// running BBS's set, which ./ue, a separate process, must not rely on.
+	Roles *perm.Roles
 }
 
 // Context is the Context t describes for u. Without a session the call is
@@ -56,7 +60,7 @@ func (t Tester) Context(u *user.User) Context {
 	if now.IsZero() {
 		now = time.Now()
 	}
-	ctx := Context{User: u, Start: now, Now: now, SysOpLevel: t.SysOpLevel, CoSysOpLevel: t.CoSysOpLevel, Location: t.Location}
+	ctx := Context{User: u, Start: now, Now: now, SysOpLevel: t.SysOpLevel, CoSysOpLevel: t.CoSysOpLevel, Location: t.Location, Roles: t.Roles}
 	if t.Session != nil {
 		ctx.Session = t.Session
 		ctx.Start = now.Add(-t.Session.Elapsed)

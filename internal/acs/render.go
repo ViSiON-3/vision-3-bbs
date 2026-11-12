@@ -6,6 +6,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -94,6 +95,9 @@ func contextLines(ctx Context, current bool, width int) []string {
 		out = append(out, wrap(fmt.Sprintf("%-*s", labelWidth, label), text, width)...)
 	}
 	field("User:", describeUser(ctx.User))
+	if ctx.User != nil && len(perm.NormalizeRoles(ctx.User.Roles)) > 0 {
+		field("Roles:", perm.FormatRoleList(ctx.User.Roles))
+	}
 	field("Session:", describeSession(ctx))
 	when := ctx.Now.Format("Mon 2006-01-02 15:04")
 	if current {
@@ -143,6 +147,8 @@ func verdict(x Explanation) string {
 		return v + ": a part needs a session the context doesn't have"
 	case x.Reason == Unavailable:
 		return v + ": a part needs a value the user's record doesn't have"
+	case x.Reason == Undefined:
+		return v + ": a part names a role configs/roles.json doesn't define"
 	}
 	return v
 }
@@ -164,7 +170,7 @@ func markers(x Explanation) []rune {
 		if st.Kind == TermNode {
 			r := markFail
 			switch {
-			case st.Reason == NoSession || st.Reason == Unavailable:
+			case st.Reason == NoSession || st.Reason == Unavailable || st.Reason == Undefined:
 				r = markSession
 			case st.Result:
 				r = markPass
