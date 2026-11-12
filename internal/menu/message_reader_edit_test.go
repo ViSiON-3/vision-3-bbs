@@ -39,6 +39,31 @@ func TestReaderAuthorEditsOwnPost(t *testing.T) {
 // lastLine is the last line of s.
 func lastLine(s string) string { return s[strings.LastIndex(s, "\n")+1:] }
 
+// The edited line is stamped in the board's time zone, as the editor's clock
+// shows it, not the host's.
+func TestReaderEditLineInBoardTimezone(t *testing.T) {
+	env := newMsgEnv(t)
+	cfg := env.e.GetServerConfig()
+	cfg.Timezone = "Pacific/Kiritimati" // UTC+14: never the host's zone and hour
+	env.e.SetServerConfig(cfg)
+	env.postMsgs(generalAreaID, testMsg{from: "Caller", to: "All", subject: "mine"})
+
+	before := time.Now()
+	env.runCmd("READMSGS", env.caller, "", "E\r\x1aQ")
+	after := time.Now()
+	loc, err := time.LoadLocation("Pacific/Kiritimati")
+	if err != nil {
+		t.Skip("no time zone database:", err)
+	}
+	got := lastLine(env.mustMsg(generalAreaID, 1).Body)
+	want := func(at time.Time) string {
+		return " * Edited by Caller on " + strings.ToLower(at.In(loc).Format("01/02/06 at 3:04 PM"))
+	}
+	if got != want(before) && got != want(after) {
+		t.Errorf("edited line = %q, want %q (the board's zone)", got, want(after))
+	}
+}
+
 // The subject can be changed at its prompt; a message edited again carries
 // only its latest edited line.
 func TestReaderEditChangesSubjectOnce(t *testing.T) {

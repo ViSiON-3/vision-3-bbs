@@ -13,6 +13,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -141,7 +142,8 @@ func (e *MenuExecutor) editPostedMessage(s ssh.Session, ih *editor.InputHandler,
 		notice("|07Edit cancelled. The message is as it was.")
 		return false, nil
 	}
-	body = withEditedLine(body, currentUser.Handle, time.Now())
+	// In the board's time zone, as the editor's clock shows it.
+	body = withEditedLine(body, currentUser.Handle, config.NowIn(e.GetServerConfig().Timezone))
 
 	// The right to edit is checked again now: the sysop may have changed the
 	// area's sponsor while the caller typed. Then, under the base's lock, the
