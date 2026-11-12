@@ -514,3 +514,35 @@ func TestCentralPrefsHeaderArt(t *testing.T) {
 		t.Errorf("sysop art not drawn as the header:\n%s", snap)
 	}
 }
+
+// The header art is measured in glyphs, not bytes: the stock art is three
+// rows in either encoding, so it fits a room of three rows and not two. A
+// known terminal with no room left takes no art; only one of unknown
+// height takes it whatever its size.
+func TestCentralPrefsArtFit(t *testing.T) {
+	e := &MenuExecutor{MenuSetPath: filepath.Join("..", "..", "menus", "v3")}
+	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
+		for _, tc := range []struct {
+			room int
+			want bool
+		}{{3, true}, {2, false}, {0, false}, {-1, true}} {
+			if _, got := e.centralPrefsArt(mode, tc.room); got != tc.want {
+				t.Errorf("mode %v, room %d: art drawn = %v, want %v", mode, tc.room, got, tc.want)
+			}
+		}
+	}
+
+	// UTF-8 art is measured the same way.
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "ansi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	row := strings.Repeat("█", 70) + "\r\n"
+	if err := os.WriteFile(filepath.Join(dir, "ansi", centralPrefsArt), []byte(row+row), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.MenuSetPath = dir
+	if _, ok := e.centralPrefsArt(ansi.OutputModeUTF8, 2); !ok {
+		t.Error("two rows of UTF-8 art measured as more than two")
+	}
+}

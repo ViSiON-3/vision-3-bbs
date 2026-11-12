@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -733,7 +734,13 @@ const centralPrefsArt = "V3SHARE.ANS"
 // else the built-in title. Pipe codes in the art are expanded.
 func (e *MenuExecutor) writeCentralPrefsHeader(c *cmdCtx, bodyRows int) {
 	terminalio.WriteProcessedBytes(c.terminal, []byte(ansi.ClearScreen()), c.outputMode)
-	if art, ok := e.centralPrefsArt(c.outputMode, c.termHeight-bodyRows); ok {
+	// A terminal of unknown height does not limit the art; a known one
+	// with no row to spare takes none.
+	room := -1
+	if c.termHeight > 0 {
+		room = max(c.termHeight-bodyRows, 0)
+	}
+	if art, ok := e.centralPrefsArt(c.outputMode, room); ok {
 		err := writeArt(c.terminal, art, c.outputMode, c.termWidth)
 		if err == nil {
 			return
@@ -746,25 +753,43 @@ func (e *MenuExecutor) writeCentralPrefsHeader(c *cmdCtx, bodyRows int) {
 
 // centralPrefsArt loads the Sharing header art, ready for outputMode and
 // ending in a line break. It reports false when the art is missing, or
-// takes more than maxRows rows (maxRows of zero or less, from a terminal
-// of unknown height, does not limit it).
+// takes more than maxRows rows (a negative maxRows, from a terminal of
+// unknown height, does not limit it).
 func (e *MenuExecutor) centralPrefsArt(outputMode ansi.OutputMode, maxRows int) ([]byte, bool) {
 	data, err := ansi.GetAnsiFileContent(e.menuFile("ansi", centralPrefsArt))
 	if err != nil {
 		slog.Debug("Sharing header art not found; using the built-in title", "file", centralPrefsArt, "error", err)
 		return nil, false
 	}
-	data = ansi.ArtForOutput(data, outputMode)
 	data = ansi.ReplacePipeCodes(data)
 	// Whatever the art ends with, it ends here in one line break, colours
 	// reset, so the row the cursor is left on is the body's first.
 	data = append(centralArtTailRe.ReplaceAll(data, nil), "\x1b[0m\r\n"...)
-	rows, _ := ansi.ArtGeometry(data, ansi.ArtWidth)
-	if maxRows > 0 && rows-1 > maxRows {
+	rows, _ := ansi.ArtGeometry(oneBytePerGlyph(data), ansi.ArtWidth)
+	if maxRows >= 0 && rows-1 > maxRows {
 		slog.Debug("Sharing header art too tall for the terminal; using the built-in title", "file", centralPrefsArt, "rows", rows-1, "room", maxRows)
 		return nil, false
 	}
-	return data, true
+	return ansi.ArtForOutput(data, outputMode), true
+}
+
+// oneBytePerGlyph returns art with each glyph one byte, for
+// ansi.ArtGeometry, which counts a cell per byte: art held as UTF-8 has
+// two or three bytes for each block or line glyph, and measured as it is,
+// a row of them would seem to wrap. CP437 art is read as UTF-8 first.
+func oneBytePerGlyph(data []byte) []byte {
+	data = ansi.CP437ArtToUTF8(data)
+	out := make([]byte, 0, len(data))
+	for len(data) > 0 {
+		r, size := utf8.DecodeRune(data)
+		if r < utf8.RuneSelf {
+			out = append(out, data[0])
+		} else {
+			out = append(out, '#')
+		}
+		data = data[size:]
+	}
+	return out
 }
 
 // centralArtTailRe matches the line breaks and colour codes art ends with.
