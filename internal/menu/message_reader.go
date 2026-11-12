@@ -278,13 +278,17 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		}
 		activeOptions = append(activeOptions, opt)
 	}
-	// A co-sysop may delete any message, a caller their own private mail
+	// A co-sysop may delete any message, an area's sponsor any message in
+	// their area (sponsorsArea), and a caller their own private mail
 	// (message.DisplayMessage.MailFor). Delete is on the bar for a co-sysop,
-	// and in the mailbox for everyone, lit on a message they may delete.
-	canDelete := func(m *message.DisplayMessage) bool {
-		return isSysop || m.MailFor(currentUser.Handle)
+	// for the sponsor in their area, and in the mailbox for everyone, lit on
+	// a message they may delete.
+	isSponsor := func() bool { return sponsorsArea(currentUser, e.MessageMgr, currentAreaID) }
+	mayDelete := func(m *message.DisplayMessage, sponsor bool) bool {
+		return isSysop || sponsor || m.MailFor(currentUser.Handle)
 	}
-	if isSysop || strings.EqualFold(currentAreaTag, "PRIVMAIL") {
+	canDelete := func(m *message.DisplayMessage) bool { return mayDelete(m, isSponsor()) }
+	if isSysop || isSponsor() || strings.EqualFold(currentAreaTag, "PRIVMAIL") {
 		activeOptions = append(activeOptions, msgReaderDeleteOption)
 	}
 	barSuffix := e.Strings().MsgReadingSuffix
@@ -984,7 +988,7 @@ readerLoop:
 				}
 				break scrollLoop
 
-			case 'D': // Delete message: a co-sysop any, a caller their own mail
+			case 'D': // Delete message: a co-sysop any, a sponsor any in their area, a caller their own mail
 				if !canDelete(currentMsg) {
 					continue // Ignore if triggered without access
 				}
@@ -998,9 +1002,17 @@ readerLoop:
 				// the base's lock: while the caller was answering, another
 				// session may have deleted it, or packed the base and moved
 				// someone else's message into its number.
+				// Sponsorship is checked again now, before the base is locked:
+				// the sysop may have changed the area's sponsor meanwhile.
 				shown := currentMsg
+				sponsor := isSponsor()
+				if !mayDelete(shown, sponsor) {
+					e.showReaderNotice(terminal, outputMode, "|01You can no longer delete messages in this area. Nothing was deleted.|07", termHeight)
+					needsRedraw = true
+					continue
+				}
 				delErr := e.MessageMgr.DeleteMessageIf(currentAreaID, shown.MsgNum, func(m *message.DisplayMessage) bool {
-					return message.SameMessage(m, shown) && canDelete(m)
+					return message.SameMessage(m, shown) && mayDelete(m, sponsor)
 				})
 				if errors.Is(delErr, message.ErrMessageChanged) {
 					e.showReaderNotice(terminal, outputMode, "|01That message was changed or deleted elsewhere. Nothing was deleted.|07", termHeight)

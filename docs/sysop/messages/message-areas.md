@@ -428,7 +428,7 @@ hot key:
 | `J` / `#` | Jump | Go to a message number |
 | `L` | List | List message titles, cursor on this message (flat or threaded, as the caller last had it) |
 | `I` | Twit | Add the author to your Twit List (hidden while Twit Lists are off) |
-| `D` | Del | Delete the message (shown in red): any message for a sysop or co-sysop, and a caller's own private mail ([Private mail](messages/private-mail.md#user-access)); greyed where the caller can't. On the bar for co-sysops, and for everyone in `PRIVMAIL` |
+| `D` | Del | Delete the message (shown in red): any message for a sysop or co-sysop, any message in their own area for the area's [sponsor](users/sponsor-menus.md#moderating-messages), and a caller's own private mail ([Private mail](messages/private-mail.md#user-access)); greyed where the caller can't. On the bar for co-sysops, for a sponsor in their area, and for everyone in `PRIVMAIL` |
 | `K` | Kludges | Show the message's control information (sysop and co-sysop only; not on the bar) |
 | `?` | Help | List the commands |
 | `Q` | Quit | Leave the reader |
@@ -741,8 +741,9 @@ Tagged areas are saved to the user's profile in `users.json`.
 
 ### Not Yet Implemented
 
-- Per-message editing (sponsors can edit area settings and sysops can delete
-  a message from the reader; editing a posted message is not available)
+- Per-message editing (sponsors can edit area settings, and sysops and an
+  area's sponsor can delete a message from the reader; editing a posted
+  message is not available)
 - Full-text message search (newscan can filter by To, From, date and range)
 - File attachments
 
