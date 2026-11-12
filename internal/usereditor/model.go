@@ -20,6 +20,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -113,6 +114,9 @@ type Model struct {
 	// ACS tester (modeACSTest), and the sysop levels it checks with
 	acsTest                  acsTester
 	sysOpLevel, coSysOpLevel int
+	// roles are configs/roles.json's, for the Roles field and the ACS
+	// tester; nil when the file can't be read, which defines none.
+	roles *perm.Roles
 	// boardLocation is config.json's timezone, for the ACS tester's AGE.
 	boardLocation *time.Location
 
@@ -193,6 +197,10 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 		boardLoc = config.LoadTimezone(cfg.Timezone)
 	}
 
+	// Admin roles, for the Roles field and the ACS tester. A file that can't
+	// be read defines none, as the BBS treats it, and the field says why.
+	roles, _, rolesErr := perm.Load(configDir)
+
 	// Sort users by ID with deleted users at the bottom
 	sortUsers(users, false)
 
@@ -208,6 +216,18 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 			capturedDD := dd
 			fields[i].Get = func(u *user.User) string {
 				return infoformStatus(capturedDD, u.ID)
+			}
+		case rolesField:
+			fields[i].Set = func(u *user.User, val string) error {
+				if rolesErr != nil {
+					return fmt.Errorf("configs/roles.json can't be read: %v", rolesErr)
+				}
+				names, err := perm.ParseRoleList(val, roles)
+				if err != nil {
+					return err
+				}
+				u.Roles = names
+				return nil
 			}
 		case "Auto Purge":
 			capturedRet := retDays
@@ -241,6 +261,7 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 		retentionDays: retDays,
 		sysOpLevel:    sysOp,
 		coSysOpLevel:  coSysOp,
+		roles:         roles,
 		boardLocation: boardLoc,
 		cursor:        0,
 		listType:      1,

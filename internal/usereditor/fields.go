@@ -9,9 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/mattn/go-runewidth"
 )
+
+// rolesField is the label of the admin roles field.
+const rolesField = "Roles"
 
 // fieldType defines the edit behavior for a field.
 type fieldType int
@@ -232,17 +236,20 @@ func editFields() []fieldDef {
 			Set: func(u *user.User, val string) error { u.OutputMode = val; return nil },
 		},
 		{
-			Label: "Deleted User", Type: ftDisplay, Col: 50, Row: 12, Width: 1,
-			Get: func(u *user.User) string { return uitext.BoolToYN(u.DeletedUser) },
+			// Whether the account is deleted, and when: "Y 01/02/06 3:04PM".
+			Label: "Deleted", Type: ftDisplay, Col: 50, Row: 12, Width: 18,
+			Get: func(u *user.User) string {
+				if u.DeletedUser && u.DeletedAt != nil {
+					return "Y " + formatTime(*u.DeletedAt)
+				}
+				return uitext.BoolToYN(u.DeletedUser)
+			},
 		},
 		{
-			Label: "Deleted At", Type: ftDisplay, Col: 50, Row: 13, Width: 16,
-			Get: func(u *user.User) string {
-				if u.DeletedAt != nil {
-					return formatTime(*u.DeletedAt)
-				}
-				return ""
-			},
+			// Admin roles (#610), checked against configs/roles.json: Model
+			// sets Set once it has read the file.
+			Label: rolesField, Type: ftString, Col: 50, Row: 13, Width: 18,
+			Get: func(u *user.User) string { return perm.FormatRoleList(u.Roles) },
 		},
 		{
 			Label: "Auto Purge", Type: ftDisplay, Col: 50, Row: 14, Width: 16,

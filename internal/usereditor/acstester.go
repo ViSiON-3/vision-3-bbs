@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
@@ -38,6 +39,7 @@ type acsTester struct {
 	scroll                   int
 	sysOp, coSysOp           int            // sysOpLevel and coSysOpLevel, for SYSOP, COSYSOP and T
 	location                 *time.Location // the board's timezone, for AGE
+	roles                    *perm.Roles    // configs/roles.json's, for ROLE and PERM
 }
 
 // acsTestFieldDef is the edit-screen action for the tester.
@@ -81,10 +83,11 @@ func (m *Model) openACSTester() {
 	t.inputs[acsElapsed].SetValue("")
 	t.inputs[acsCredit].SetValue("")
 	t.sysOp, t.coSysOp, t.location = m.sysOpLevel, m.coSysOpLevel, m.boardLocation
+	t.roles = m.roles
 	t.scroll = 0
 	m.mode = modeACSTest
 	t.setFocus(acsExpr)
-	t.lines = acs.ContextLines(acs.Tester{SysOpLevel: t.sysOp, CoSysOpLevel: t.coSysOp, Location: m.boardLocation}, m.editingUser(), acsOutputWidth)
+	t.lines = acs.ContextLines(acs.Tester{SysOpLevel: t.sysOp, CoSysOpLevel: t.coSysOp, Location: m.boardLocation, Roles: t.roles}, m.editingUser(), acsOutputWidth)
 }
 
 // order is the fields that can take focus now.
@@ -144,7 +147,7 @@ func (t *acsTester) tester() (acs.Tester, string) {
 	if err != nil {
 		return acs.Tester{}, "Time: enter hh:mm or yyyy-mm-dd hh:mm, or leave it blank for now."
 	}
-	tc := acs.Tester{At: at, SysOpLevel: t.sysOp, CoSysOpLevel: t.coSysOp, Location: t.location}
+	tc := acs.Tester{At: at, SysOpLevel: t.sysOp, CoSysOpLevel: t.coSysOp, Location: t.location, Roles: t.roles}
 	if t.session {
 		minutes := func(id int) (time.Duration, bool) {
 			v := strings.TrimSpace(t.inputs[id].Value())
