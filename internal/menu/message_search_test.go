@@ -393,7 +393,7 @@ func TestMsgSearchRowEscapesPipes(t *testing.T) {
 		ts := newTestSession("")
 		writeMsgSearchRow(newTestTerminal(ts), ansi.OutputModeUTF8, 1, msgSearchHit{
 			confTag: "LOCAL", areaTag: "GENERAL", msgNum: 7, subject: subject, from: from,
-			dateTime: time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC),
+			dateTime: time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC), // midday: 11/04 in any zone
 		})
 		return ts.output()
 	}

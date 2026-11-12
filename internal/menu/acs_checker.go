@@ -23,8 +23,9 @@ import (
 var (
 	acsSysOpLevel   atomic.Int64
 	acsCoSysOpLevel atomic.Int64
-	// acsLocation is the board's timezone for AGE, resolved once from
-	// config.json's timezone when the config is set; nil until then.
+	// acsLocation is the board's timezone, for AGE and for the dates
+	// screens show (boardTime), resolved once from config.json's timezone
+	// when the config is set; nil until then.
 	acsLocation atomic.Pointer[time.Location]
 )
 
