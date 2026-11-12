@@ -325,8 +325,11 @@ What each section covers:
   commands (stock and overlay), `{{acs}}` regions in menu art, message and
   file areas, conferences, doors, door categories and FTN auto-create. A
   string with any problem denies every caller and is a `FAIL`; a QWK-checked
-  `acs_write` that uses `L` or `A` is a `WARN`. See
-  [Checking your strings](reference/acs.md#checking-your-strings).
+  `acs_write` that uses `L` or `A` is a `WARN`, and a `ROLE:` term for a role
+  `roles.json` doesn't define is a `FAIL`. See
+  [Checking your strings](reference/acs.md#checking-your-strings). **Admin
+  roles** checks `roles.json` and lists users with a role it doesn't define;
+  see [Admin Roles](users/admin-roles.md).
 
 ### Safe Fixes (`--fix`)
 
@@ -372,6 +375,7 @@ the TUI signals the BBS once every file in the save has been written.
 | `configs/protocols.json` | |
 | `configs/events.json` | Reschedules cron events; see notes below |
 | `configs/conferences.json` | A caller whose conference was removed sees "None" and re-selects |
+| `configs/roles.json` | A role removed there stops granting at the caller's next protected action; removing the file removes every role. See [Admin Roles](users/admin-roles.md) |
 | `configs/archivers.json` | Re-read on each archive operation |
 | IP blocklist/allowlist files | Watched separately, reloaded on save |
 | `configs/ftn.json` | Origin lines apply on save; the mailer's runtime settings (port, log level, links) apply on its next cycle. Enabling or disabling the binkd mailer itself still requires a restart |
@@ -533,6 +537,7 @@ Configuration files are split between two directories:
 - `archivers.json` - Archive format definitions (ZIP, 7z, RAR, ARJ, LHA)
 - `ziplab.json` - ZipLab upload processing (see [ZipLab](files/ziplab.md#ziplabjson))
 - `login.json` - Login sequence steps (see [Login Sequence](users/login-sequence.md))
+- `roles.json` - Admin roles: admin jobs given below SysOp level (see [Admin Roles](users/admin-roles.md))
 - `protocols.json` - File transfer protocols (see [File Transfer](files/file-transfer.md))
 - `qwknet.json` - QWK network hubs (see [QWK Networking](messages/qwk-networking.md))
 - `v3net.json` - V3Net identity, subscriptions and hub (see [V3Net](v3net/configuration.md))

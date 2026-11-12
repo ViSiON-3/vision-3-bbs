@@ -170,6 +170,9 @@ have their access level set (`F`).
 Silent for everyone else. The command checks SysOp access itself, so a missing
 or too-low `sec_level` cannot leak the pending count to an ordinary caller;
 `sec_level` remains the way to remove the item for a SysOp who does not want it.
+A user below SysOp level whose [admin role](users/admin-roles.md) grants
+`users.validate` is offered the queue too, once `sec_level` lets them reach
+the step, and there may only approve.
 It is also silent when nothing is pending, so it costs a SysOp nothing on a
 quiet day. Leave `clear_screen` off for the same reason: the sequence clears
 before the command decides whether it has anything to say, so setting it would

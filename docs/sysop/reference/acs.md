@@ -144,6 +144,23 @@ the comparison and whatever its other parts say (see
 [Problems and missing context](#problems-and-missing-context)). `vision3
 doctor` lists such users under **user sign-up dates**.
 
+### Admin roles and permissions
+
+These are names only, taking a colon, for the
+[admin roles](users/admin-roles.md) in `configs/roles.json`:
+
+| Term | Passes when | Notes |
+|---|---|---|
+| `PERM:`*permission* | the user holds the permission: a SysOp (level ≥ `sysOpLevel`), or a user with a role that grants it | `PERM:users.validate`. Use this to offer an admin command: the command checks the same thing |
+| `ROLE:`*name* | the user's record lists the role | `ROLE:validator`. Being a SysOp doesn't make anyone a member |
+
+A permission the BBS doesn't define (`PERM:users.vaildate`) is an error, like
+an unknown letter. A role name follows the rules in `roles.json`: a letter,
+then letters, digits, `_` and `-`. A `ROLE:` term naming a role `roles.json`
+doesn't define fails the whole string (see
+[Problems and missing context](#problems-and-missing-context)), so a
+misspelt `!ROLE:validatr` can't pass for everyone.
+
 ### Ratios
 
 `E` and `B` work out a percentage and round it down before comparing:
@@ -211,8 +228,9 @@ Spaces around operators are allowed: `S20 & FA`.
 - **Terms need an operator between them.** `S20FA` is read as `S` with the
   argument `20FA`, which isn't a number. `S20 FA` (a space, no operator) is
   two terms with nothing between them.
-- **Only letters, digits, `/`, `:`, operators, parentheses and spaces are
-  allowed.** The comparison characters `<`, `>`, `=` and `-` are allowed
+- **Only letters, digits, `/`, `:`, `.`, `_`, operators, parentheses and
+  spaces are allowed.** `.` and `_` are for permission and role names
+  (`PERM:users.validate`, `ROLE:msg_ops`). The comparison characters `<`, `>`, `=` and `-` are allowed
   only inside a term, between term characters: `S<20` and `H8-17` are
   fine, `S20-` is not. Any other character is an error: `S@20`, `F(A)`
   (write `FA`) and a stray `-` all fail.
@@ -236,9 +254,11 @@ in the same way, whatever the other parts say:
 
 - `L` and `A` checked without a session (see
   [Terms that need a session](#terms-that-need-a-session));
-- `AGE` for a user with no sign-up date.
+- `AGE` for a user with no sign-up date;
+- `ROLE:`*name* for a role `configs/roles.json` doesn't define.
 
-So `!L`, `SYSOP|L` and `!AGE>=7` fail where those values are missing,
+So `!L`, `SYSOP|L`, `!AGE>=7` and `!ROLE:validatr` fail where those values
+are missing,
 rather than letting `!` or another branch pass. With the session or the
 date there, they are checked as usual. Other terms keep their documented
 outcomes without a session: `T` counts the call as just started (see
@@ -298,6 +318,16 @@ Doctor's **user sign-up dates** check lists users with no sign-up date: a
 warning when one of the board's strings uses `AGE`, since that whole string
 fails for them.
 
+A string with a `ROLE:` term for a role `configs/roles.json` doesn't define
+is a **FAIL**, since it denies every caller:
+
+```text
+[FAIL]  ACS: menus/v3/cfg/MAIN.CFG  command 30 ("/VAL"), ACS "ROLE:validatr": names ROLE:validatr, which configs/roles.json doesn't define, so it fails for every caller
+```
+
+Doctor's **admin roles** check reports problems in `roles.json` itself; see
+[Admin Roles](users/admin-roles.md#rolesjson).
+
 The BBS runs the same check when it starts and after it reloads a changed
 config file, and logs each problem once while it stays (failures at
 `ERROR`, warnings at `WARN`), with the same text; a problem that is fixed and later comes back is logged again. It
@@ -349,8 +379,15 @@ have rules of its own.
 ```
 
 The line under the expression marks each term: `+` passed, `-` failed, `~`
-needs a session the context doesn't have, or a value the user's record
-doesn't (`AGE` with no sign-up date).
+needs a session the context doesn't have, a value the user's record
+doesn't (`AGE` with no sign-up date), or a role `roles.json` doesn't define.
+
+A user with roles has a **Roles:** line under **User:**. For `PERM:` the
+tester says where the permission came from:
+
+```text
+  PASS              PERM:users.validate  has users.validate through role validator
+```
 
 A part that has such a term under it fails, and says so, whatever its other
 part did. `S10|!L` with no session:
@@ -397,6 +434,7 @@ behind its level and category, private mail behind its own rules.
 | `s10\|fD` | level 10 and up, or anyone with flag D |
 | `V&!FX` | validated users without flag X |
 | `SYSOP\|U1` | sysops, and user 1 |
+| `PERM:users.validate` | sysops, and users with a role granting `users.validate` |
 | `(S50\|FM)&T10` | level 50 or flag M, with 10 minutes or more left |
 | `S<20` | levels below 20 |
 | `CALLS>=10&AGE>=7` | users with 10 calls or more who signed up a week or more ago |

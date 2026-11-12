@@ -8,3 +8,4 @@ Manage user accounts, access levels, and the login experience.
 - **[Login Sequence](users/login-sequence.md)** — what callers see between the password and the main menu, configured in `login.json`
 - **[New User Voting (NUV)](users/nuv.md)** — let the community vote newcomers in
 - **[Sponsor Menus](users/sponsor-menus.md)** — per-area sponsor/moderator controls
+- **[Admin Roles](users/admin-roles.md)** — give one admin job, such as validating new users, without raising an access level
