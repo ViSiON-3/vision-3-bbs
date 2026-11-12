@@ -82,6 +82,14 @@ func (s *doorcovSession) Read(p []byte) (int, error) {
 	case b, ok := <-s.keys:
 		return s.take(p, b, ok)
 	case <-intr:
+		// Keys sent and then the interrupt, while this Read was between
+		// the two selects, leave both ready, and select picks either. The
+		// keys came first, so they are still read first.
+		select {
+		case b, ok := <-s.keys:
+			return s.take(p, b, ok)
+		default:
+		}
 		return 0, errors.New("read interrupted")
 	}
 }
