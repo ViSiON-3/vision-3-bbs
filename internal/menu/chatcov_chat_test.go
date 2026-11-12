@@ -664,9 +664,10 @@ func TestChatcovArtHeader(t *testing.T) {
 func TestChatcovHistoryTimes(t *testing.T) {
 	env := newMenuEnv(t)
 	net := chatcovFakeNet(env)
-	// Fixed times: noon today, an hour every zone has, and noon two days
-	// back, which is always an earlier day.
-	now := time.Now()
+	// Fixed times: noon today on the board, an hour every zone has, and noon
+	// two days back, which is always an earlier day. The room shows times in
+	// the board's zone.
+	now := boardTime(time.Now())
 	noon := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, now.Location())
 	earlier := noon.AddDate(0, 0, -2)
 	net.history = []chat.ChatMessage{

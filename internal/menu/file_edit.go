@@ -154,7 +154,7 @@ func editFileShowAndPrompt(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
 
 	sizeStr := formatReviewSize(rec.Size)
-	dateStr := rec.UploadedAt.Format("01/02/2006 15:04")
+	dateStr := boardTime(rec.UploadedAt).Format("01/02/2006 15:04")
 
 	info := fmt.Sprintf(
 		"|15Filename  : |07%s\r\n"+

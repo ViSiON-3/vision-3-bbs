@@ -81,7 +81,7 @@ func TestBuildFileEntryRendersColumnsAndDIZ(t *testing.T) {
 		t.Fatalf("got %d lines, want 3 (main + 2 continuation): %q", len(lines), lines)
 	}
 	main := testAnsiEscape.ReplaceAllString(lines[0], "")
-	for _, want := range []string{"*  1", "a-very-long-", "01/02/26", "first line"} {
+	for _, want := range []string{"*  1", "a-very-long-", boardTime(fixedUploadTime).Format("01/02/06"), "first line"} {
 		if !strings.Contains(main, want) {
 			t.Errorf("main row %q missing %q", main, want)
 		}

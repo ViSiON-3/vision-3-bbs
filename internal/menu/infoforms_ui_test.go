@@ -146,7 +146,7 @@ func TestInfoFormsViewShowsAnswers(t *testing.T) {
 	saveInfoformAnswers(t, env, env.caller, 1, "|12Carl", "")
 
 	r := env.runCmd("INFOFORMS", env.caller, "", "V\r1\r\rQ\r")
-	if !r.has("Filled out on: 05/06/2026 at 02:30 PM", "Name: |12Carl", "Age: No answer", "Pet: No answer", "End.") {
+	if !r.has("Filled out on: "+boardTime(time.Date(2026, 5, 6, 14, 30, 0, 0, time.UTC)).Format("01/02/2006 at 03:04 PM"), "Name: |12Carl", "Age: No answer", "Pet: No answer", "End.") {
 		t.Errorf("view output wrong:\n%s", r.text())
 	}
 }

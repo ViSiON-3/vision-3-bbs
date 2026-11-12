@@ -49,7 +49,7 @@ func (lb *fileLightbar) buildFileEntry(idx int, highlighted bool, maxLines int) 
 		name = string(r[:12])
 	}
 	fileNameStr := fmt.Sprintf("%-12s", name)
-	dateStr := fileRec.UploadedAt.Format("01/02/06")
+	dateStr := boardTime(fileRec.UploadedAt).Format("01/02/06")
 	sizeStr := fmt.Sprintf("%5s", compactFileSize(fileRec.Size))
 
 	markStr := " "

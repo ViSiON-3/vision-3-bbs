@@ -42,7 +42,7 @@ func (lb *fileLightbar) showFileInfo() (refresh bool, exit bool, result *user.Us
 		_ = lb.writePipe("|15Desc      : |07(none)\r\n")
 	}
 
-	d3 := fmt.Sprintf("|15Uploaded  : |07%s\r\n", sel.UploadedAt.Format("01/02/2006 15:04"))
+	d3 := fmt.Sprintf("|15Uploaded  : |07%s\r\n", boardTime(sel.UploadedAt).Format("01/02/2006 15:04"))
 	d4 := fmt.Sprintf("|15Uploader  : |07%s\r\n", callerText(sel.UploadedBy))
 	d5 := fmt.Sprintf("|15Downloads : |07%d\r\n", sel.DownloadCount)
 	_ = lb.writePipe(d3)

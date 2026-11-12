@@ -27,7 +27,7 @@ func TestShowFileInfoDisplaysRecord(t *testing.T) {
 	env.caller.CurrentFileAreaID = 1
 
 	r := env.runCmd("SHOWFILEINFO", env.caller, "", "big.zip\r\r")
-	if !r.has("BIG.ZIP", "5 KB", "02/03/2026", "Uploader", "Downloads   : 7", "General Files", "A big one") {
+	if !r.has("BIG.ZIP", "5 KB", boardTime(time.Date(2026, 2, 3, 0, 0, 0, 0, time.UTC)).Format("01/02/2006"), "Uploader", "Downloads   : 7", "General Files", "A big one") {
 		t.Errorf("metadata missing:\n%s", r.text())
 	}
 	if r := env.runCmd("SHOWFILEINFO", env.caller, "", "TINY.TXT\r\r"); !r.has("12 bytes") {

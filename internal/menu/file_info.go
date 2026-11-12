@@ -88,7 +88,7 @@ func runShowFileInfo(c *cmdCtx, args string) (*user.User, string, error) {
 			"|15Description : |07%s\r\n",
 		callerText(rec.Filename),
 		sizeStr,
-		rec.UploadedAt.Format("01/02/2006"),
+		boardTime(rec.UploadedAt).Format("01/02/2006"),
 		callerText(rec.UploadedBy),
 		rec.DownloadCount,
 		areaName,

@@ -76,7 +76,7 @@ func TestEditFileRecordChangeDescription(t *testing.T) {
 	if r.err != nil {
 		t.Fatalf("err = %v", r.err)
 	}
-	if !r.has("GAME.ZIP", "2k", "Caller", "03/04/2026 05:06", "General Files", "original desc") {
+	if !r.has("GAME.ZIP", "2k", "Caller", boardTime(time.Date(2026, 3, 4, 5, 6, 0, 0, time.UTC)).Format("01/02/2006 15:04"), "General Files", "original desc") {
 		t.Errorf("review screen missing the record's details:\n%s", r.text())
 	}
 	rec := reloadedFileRecord(t, env, id)

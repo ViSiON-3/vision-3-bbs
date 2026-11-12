@@ -582,7 +582,7 @@ General BBS configuration. All settings in this file are managed through the **S
 - `boardName` — BBS name displayed to users (default: `"ViSiON/3 BBS"`)
 - `sysOpName` — Sysop's handle
 - `bbsLocation` — Location string (city/region)
-- `timezone` — IANA timezone for display formatting (e.g., `America/Los_Angeles`): the clocks on screens and in the editor, and the dates of messages in the reader, message list, thread pane, search results and quote banners. If unset, falls back to `VISION3_TIMEZONE` env var, then `TZ`, then server local time.
+- `timezone` — IANA timezone for display formatting (e.g., `America/Los_Angeles`): the clocks on screens and in the editor, and every date the BBS shows: messages (reader, list, thread pane, search, quote banners), news, rumors, NUV, uploaded files, info forms, the BBS list, chat timestamps, QWK devices, `|LCALL` and the sysop's user and purge screens. A newscan date a caller types (Set Scan Date, file newscan date) means midnight in this zone. If unset, falls back to `VISION3_TIMEZONE` env var, then `TZ`, then server local time.
 
 **Server Setup:**
 

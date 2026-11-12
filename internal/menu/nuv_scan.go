@@ -189,7 +189,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 				voted = "|10Yes"
 			}
 			wv(terminal, fmt.Sprintf("|07%-4d |11%-20s |07%-10s |10%4d |12%4d |07%s\r\n",
-				i+1, callerText(c.Handle), c.When.Format("01/02/06"), yes, no, voted), outputMode)
+				i+1, callerText(c.Handle), boardTime(c.When).Format("01/02/06"), yes, no, voted), outputMode)
 		}
 	}
 	wv(terminal, "\r\n", outputMode)
@@ -337,7 +337,7 @@ func runNUVList(c *cmdCtx, args string) (*user.User, string, error) {
 					voted = "|10Yes"
 				}
 				wv(terminal, fmt.Sprintf("|07%-4d |11%-20s |07%-10s |10%4d |12%4d |07%s\r\n",
-					i+1, callerText(c.Handle), c.When.Format("01/02/06"), yes, no, voted), outputMode)
+					i+1, callerText(c.Handle), boardTime(c.When).Format("01/02/06"), yes, no, voted), outputMode)
 			}
 		}
 		wv(terminal, "\r\n", outputMode)

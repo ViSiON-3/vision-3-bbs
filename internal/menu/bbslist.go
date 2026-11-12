@@ -312,7 +312,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 		detailRow++
 		renderDetailField(detailRow, rightPanelCol, "Added By", entry.AddedBy, "|07", rw)
 		detailRow++
-		renderDetailField(detailRow, rightPanelCol, "Date", entry.AddedDate.Format("01/02/2006"), "|07", rw)
+		renderDetailField(detailRow, rightPanelCol, "Date", boardTime(entry.AddedDate).Format("01/02/2006"), "|07", rw)
 		detailRow++
 
 		verifiedStr := "No"

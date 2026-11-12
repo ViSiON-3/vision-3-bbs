@@ -85,13 +85,13 @@ func runPurgeUsers(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Show eligible users
 	header := fmt.Sprintf("\r\n|11Purge Deleted Users|07 (retention: |15%d|07 days, cutoff: |15%s|07)\r\n\r\n",
-		retentionDays, cutoff.Format("2006-01-02"))
+		retentionDays, boardTime(cutoff).Format("2006-01-02"))
 	_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(header)), outputMode)
 
 	for _, u := range eligible {
 		deletedOn := "(no timestamp)"
 		if u.DeletedAt != nil {
-			deletedOn = u.DeletedAt.Format("2006-01-02")
+			deletedOn = boardTime(*u.DeletedAt).Format("2006-01-02")
 		}
 		line := fmt.Sprintf("  |15#%-4d|07  %-20s  deleted |14%s|07\r\n",
 			u.ID, callerText(u.Handle), deletedOn)

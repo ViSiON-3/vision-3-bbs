@@ -245,7 +245,7 @@ func renderNewsHeader(e *MenuExecutor, item *NewsItem, idx int, outputMode ansi.
 	if err != nil {
 		// Fallback plain header if NEWSHDR.ANS is missing.
 		fallback := fmt.Sprintf("\r\n|15News #%d: |11%s\r\n|07From: |11%s |07  Date: |11%s\r\n|08%s\r\n",
-			idx, callerText(item.Title), callerText(item.From), item.When.Format("01/02/2006"),
+			idx, callerText(item.Title), callerText(item.From), boardTime(item.When).Format("01/02/2006"),
 			strings.Repeat("\xc4", newsFallbackHeaderWidth))
 		return trimTrailingBlankRows(ansi.ReplacePipeCodes([]byte(fallback))), newsFallbackHeaderWidth
 	}
@@ -258,8 +258,8 @@ func renderNewsHeader(e *MenuExecutor, item *NewsItem, idx int, outputMode ansi.
 	hdr = strings.ReplaceAll(hdr, "^NM", strconv.Itoa(idx))
 	hdr = strings.ReplaceAll(hdr, "^TI", callerText(item.Title))
 	hdr = strings.ReplaceAll(hdr, "^FR", callerText(item.From))
-	hdr = strings.ReplaceAll(hdr, "^DT", item.When.Format("01/02/2006"))
-	hdr = strings.ReplaceAll(hdr, "^TM", item.When.Format("3:04 pm"))
+	hdr = strings.ReplaceAll(hdr, "^DT", boardTime(item.When).Format("01/02/2006"))
+	hdr = strings.ReplaceAll(hdr, "^TM", boardTime(item.When).Format("3:04 pm"))
 	hdr = strings.ReplaceAll(hdr, "^LV", strconv.Itoa(item.Level))
 	hdr = strings.ReplaceAll(hdr, "^MX", maxStr)
 	return trimTrailingBlankRows(ansi.ReplacePipeCodes([]byte(hdr))), headerTemplateWidth(string(raw), outputMode)
@@ -585,7 +585,7 @@ func runListNews(c *cmdCtx, args string) (*user.User, string, error) {
 				newTag = "|12[NEW]|07"
 			}
 			wv(terminal, fmt.Sprintf("  |11%2d|07. |15%-28s |07%s |11%s\r\n",
-				rank+1, item.Title, newTag, item.When.Format("01/02/06")), outputMode)
+				rank+1, item.Title, newTag, boardTime(item.When).Format("01/02/06")), outputMode)
 		}
 		wv(terminal, "|08"+strings.Repeat("\xc4", 70)+"\r\n", outputMode)
 	}

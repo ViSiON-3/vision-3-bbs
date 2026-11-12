@@ -161,7 +161,7 @@ func nuvDisplayStats(e *MenuExecutor, terminal *term.Terminal, c *NUVCandidate, 
 		"|NV", fmt.Sprintf("%d", no), "|NT", fmt.Sprintf("%d", cfg.NUVNoVotes))
 	wv(terminal, "\r\n", outputMode)
 
-	wv(terminal, fmt.Sprintf("|07Added      : |11%s\r\n", c.When.Format("01/02/2006")), outputMode)
+	wv(terminal, fmt.Sprintf("|07Added      : |11%s\r\n", boardTime(c.When).Format("01/02/2006")), outputMode)
 
 	// V2: NUV_Comment_Header = '|08C|07o|15mments |08S|07o |08F|07a|15r|09...'
 	commentHdr := e.Strings().NUVCommentHeader
@@ -177,7 +177,7 @@ func nuvDisplayStats(e *MenuExecutor, terminal *term.Terminal, c *NUVCandidate, 
 				hasComments = true
 				dateSuffix := ""
 				if !v.VotedAt.IsZero() {
-					dateSuffix = fmt.Sprintf(" |08%s", v.VotedAt.Format("01/02/06"))
+					dateSuffix = fmt.Sprintf(" |08%s", boardTime(v.VotedAt).Format("01/02/06"))
 				}
 				// V2 style: Tab(Voter,27) then ': "comment"'
 				wv(terminal, fmt.Sprintf("|07%-27s|09: |07\"%s\"%s\r\n", callerText(v.Voter), callerText(v.Comment), dateSuffix), outputMode)

@@ -166,7 +166,7 @@ func showInfoForm(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, outpu
 
 	// Show completion date (V2: first line of stored message)
 	wvPaged(fmt.Sprintf("\r\n|08Filled out on: %s\r\n\r\n",
-		resp.FilledOutAt.Format("01/02/2006 at 03:04 PM")))
+		boardTime(resp.FilledOutAt).Format("01/02/2006 at 03:04 PM")))
 
 	// Replay template with answers interpolated at * markers
 	answerIdx := 0

@@ -167,7 +167,7 @@ func TestFileNewscanListsFilesSinceCutoff(t *testing.T) {
 	env.sysop.FileNewscanSince = &cut
 
 	r := env.runCmd("FILE_NEWSCAN", env.sysop, "", "\r")
-	if !r.has("FRESH.ZIP", "QUEUED.ZIP", "FRESH.ZIP desc", "03/01/2026") {
+	if !r.has("FRESH.ZIP", "QUEUED.ZIP", "FRESH.ZIP desc", boardTime(cut).Format("01/02/2006"), boardTime(cut.Add(time.Hour)).Format("01/02/06")) {
 		t.Errorf("new files missing:\n%s", r.text())
 	}
 	if r.has("OLD.ZIP") || r.has("second line") {
