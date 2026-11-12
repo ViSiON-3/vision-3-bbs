@@ -53,7 +53,7 @@ func TestCentralPrefsSwitches(t *testing.T) {
 	if !strings.Contains(out, "Nothing about you is shared") || !strings.Contains(out, "What other boards would see") {
 		t.Errorf("missing statement or preview: %q", out)
 	}
-	if !strings.Contains(ansi.StripAnsi(out), "Who's Online: Caller on") {
+	if !strings.Contains(ansi.StripAnsi(out), "Online Caller @") {
 		t.Errorf("preview should show the handle as published, colour codes out: %q", ansi.StripAnsi(out))
 	}
 

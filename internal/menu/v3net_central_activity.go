@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
@@ -501,101 +502,123 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 		alertsShared := centralAlertsShared(e.V3NetCentral, u)
 		alertsEntry := centralAlertsOffered(e.V3NetCentral) || u.CentralAlerts != (user.CentralAlertPrefs{})
 
+		// The body is laid out first, so the header can be chosen to fit
+		// it: the sysop's art where it leaves room, else the built-in title.
 		var buf strings.Builder
-		buf.WriteString(centralHeader("Sharing", termWidth))
+		put := func(s string) { buf.Write(ansi.ReplacePipeCodes([]byte(s + "|07\r\n"))) }
+		buf.WriteString("\r\n")
 		if len(whoOn) == 0 && len(lastOn) == 0 && len(chatOn) == 0 && !alertsShared {
-			buf.Write(ansi.ReplacePipeCodes([]byte("|15  Nothing about you is shared through V3Net Central.|07\r\n")))
+			put("|07  Nothing about you is shared. |08Browsing sends nothing either.")
 		} else {
-			buf.Write(ansi.ReplacePipeCodes([]byte("|15  You share what is switched on below, and nothing else.|07\r\n")))
+			put("|07  You share |10only what is On|07 below. |08Browsing sends nothing.")
 		}
-		// No blank line under this: with every feature offered, the screen
-		// takes all 24 rows.
-		buf.Write(ansi.ReplacePipeCodes([]byte("|08  Browsing boards, Who's Online and Last Callers sends nothing about you.|07\r\n")))
+		buf.WriteString("\r\n")
 
 		onOff := func(on, offered []string) string {
 			switch {
 			case len(offered) == 0:
-				return "|08not offered here|07"
+				return "|08not offered here"
 			case len(on) > 0:
-				return "|10On |07 |08(" + v3netClip(strings.Join(on, ", "), 30) + ")|07"
+				return "|10On  |02(" + v3netClip(strings.Join(on, ", "), 40) + ")"
 			default:
-				return "|07Off|07"
+				return "|04Off"
 			}
 		}
-		availText := map[string]string{"": "|07Not shown|07", protocol.CentralAvailable: "|10Available|07", protocol.CentralBusy: "|14Busy|07"}[u.CentralAvailability]
-		if availText == "" {
-			availText = "|07Not shown|07"
+		// Availability has three settings and [2] steps through them, so
+		// the row lists all three with the current one bracketed: the
+		// brackets mark it where colour does not show.
+		avail := u.CentralAvailability
+		if avail != protocol.CentralAvailable && avail != protocol.CentralBusy {
+			avail = ""
 		}
-		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|151|03] Show me on Who's Online        " + onOff(whoOn, whoNets) + "\r\n")))
-		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|152|03] My availability               " + availText + "\r\n")))
-		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|153|03] Show my calls on Last Callers " + onOff(lastOn, lastNets) + "\r\n")))
+		var availText string
+		for _, st := range []struct{ value, label, colour string }{
+			{"", "Not shown", "|07"},
+			{protocol.CentralAvailable, "Available", "|10"},
+			{protocol.CentralBusy, "Busy", "|14"},
+		} {
+			if st.value == avail {
+				availText += "|08[" + st.colour + st.label + "|08]"
+			} else {
+				availText += " |08" + st.label + " "
+			}
+		}
 		chatSwitch := onOff(chatOn, chatNets)
 		if len(chatNets) == 0 && u.CentralChat {
-			chatSwitch = "|10On |07 |08(not offered here now)|07"
+			chatSwitch = "|10On  |08(not offered here now)"
 		}
 		if u.CentralChatBarred {
-			chatSwitch = "|07Off |08(set by the SysOp)|07"
+			chatSwitch = "|04Off |08(set by the SysOp)"
 		}
-		buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|154|03] Take part in network chat     " + chatSwitch + "\r\n")))
+		item := func(key, label, value string) {
+			put("  |05[|13" + key + "|05] |11" + padRight(label, 17) + value)
+		}
+		item("1", "Who's Online", onOff(whoOn, whoNets))
+		item("2", "Availability", availText)
+		item("3", "Last Callers", onOff(lastOn, lastNets))
+		item("4", "Network chat", chatSwitch)
 		if alertsEntry {
-			buf.Write(ansi.ReplacePipeCodes([]byte("|03  [|155|03] Activity alerts               " + centralAlertsSummary(u) + "\r\n")))
+			item("5", "Activity alerts", centralAlertsSummary(u))
 		}
 		buf.WriteString("\r\n")
 
-		handle := centralPreviewHandle(u.Handle)
-		buf.Write(ansi.ReplacePipeCodes([]byte("|03  What other boards would see|07\r\n")))
+		// What other boards would see: one line for each feature offered,
+		// the handle and board as published, then what goes with them.
+		handle := v3netClip(centralPreviewHandle(u.Handle), 20)
+		at := "|15" + handle + " |05@ |11" + v3netClip(board, 22)
+		heading := "|05── |13What other boards would see |05"
+		put(heading + strings.Repeat("─", max(termWidth-1-33, 3)))
 		alertsOffered := centralAlertsOffered(e.V3NetCentral)
 		switch {
 		case len(whoNets) == 0 && len(lastNets) == 0 && len(chatNets) == 0 && !alertsOffered:
-			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Nothing: this board offers no feature that shares anything about you.\r\n")))
+			put("|07  Nothing: this board offers no feature that shares anything about you.")
 		case len(whoNets) == 0 && len(lastNets) == 0 && len(chatNets) == 0:
-			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Only activity alerts you share: see [5] for what they say.\r\n")))
+			put("|07  Only activity alerts you share: see [5] for what they say.")
 		}
-		// Each preview is two lines: who and where, then what else goes
-		// with it, so a long handle and board name still fit 80 columns.
+		preview := func(label, detail string) {
+			put("  |03" + padRight(label, 7) + at + " |08· " + detail)
+		}
 		if len(whoNets) > 0 {
 			detail := "while you are on"
 			if u.CentralAvailability != "" {
-				detail = "shown as " + u.CentralAvailability + ", while you are on"
+				detail = "while on, " + u.CentralAvailability
 			}
-			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Who's Online: |15" + v3netClip(handle, 30) + "|07 on |11" + v3netClip(board, 30) + "|07\r\n")))
-			buf.Write(ansi.ReplacePipeCodes([]byte("|08                " + detail + "|07\r\n")))
+			preview("Online", detail)
 		}
 		if len(lastNets) > 0 {
-			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Last Callers: |15" + v3netClip(handle, 30) + "|07 on |11" + v3netClip(board, 30) + "|07\r\n")))
+			// Counted in by the network's default, with no start of their
+			// own, the feed's whole 24 hours goes; turned on by the caller,
+			// only calls from then.
+			detail := "call times from opt-in"
 			if len(lastOn) > 0 && u.CentralLastCallsSince == nil {
-				// Counted in by the network's default: no start of
-				// their own, so the feed's whole 24 hours goes.
-				buf.Write(ansi.ReplacePipeCodes([]byte("|08                when each call began and ended; your calls from the|07\r\n")))
-				buf.Write(ansi.ReplacePipeCodes([]byte("|08                last 24 hours, each kept 24 hours|07\r\n")))
-			} else {
-				buf.Write(ansi.ReplacePipeCodes([]byte("|08                when each call began and ended; only calls from when you|07\r\n")))
-				buf.Write(ansi.ReplacePipeCodes([]byte("|08                turn it on, each kept 24 hours|07\r\n")))
+				detail = "call times, last 24h"
 			}
+			preview("Calls", detail)
 		}
 		if len(chatNets) > 0 {
-			buf.Write(ansi.ReplacePipeCodes([]byte("|07  Network chat: |15" + v3netClip(handle, 30) + "|07 on |11" + v3netClip(board, 30) + "|07\r\n")))
-			buf.Write(ansi.ReplacePipeCodes([]byte("|08                in the user list and each room message; kept in room history|07\r\n")))
+			preview("Chat", "in rooms; lines logged")
 		}
 		if alertsOffered {
 			// Alerts say what a caller does when shared, as chat's joins,
 			// leaves and lines do: whatever is switched on above.
-			buf.Write(ansi.ReplacePipeCodes([]byte("|08  Never your real name, location or user number; activity only as switched on.|07\r\n")))
+			put("|08  Never your real name, location or user number; activity only as switched on.")
 		} else {
-			buf.Write(ansi.ReplacePipeCodes([]byte("|08  Never your real name, location, user number, or what you are doing.|07\r\n")))
+			put("|08  Never your real name, location, user number, or what you are doing.")
 		}
-		buf.Write(ansi.ReplacePipeCodes([]byte("|08  Turning a switch off takes you off at once on connected boards; an|07\r\n")))
-		buf.Write(ansi.ReplacePipeCodes([]byte("|08  offline board drops it within minutes (online) or 24 hours (calls).|07\r\n")))
+		put("|08  Off is instant on connected boards; offline ones drop you within 24h.")
 		buf.Write(ansi.ReplacePipeCodes([]byte(v3netRule(termWidth))))
 		if status != "" {
-			buf.Write(ansi.ReplacePipeCodes([]byte("  " + status + "\r\n")))
+			put("  " + status)
 			status = ""
 		}
+
+		// The prompt takes the row after the body.
+		e.writeCentralPrefsHeader(c, strings.Count(buf.String(), "\n")+1)
 		terminalio.WriteProcessedBytes(terminal, []byte(buf.String()), outputMode)
 
-		prompt := "|07  Choice (1-4, Q quits): "
+		prompt := "|05  Choice |08(|131-4|08, |13Q|08 quits)|07: "
 		if alertsEntry {
-			prompt = "|07  Choice (1-5, Q quits): "
+			prompt = "|05  Choice |08(|131-5|08, |13Q|08 quits)|07: "
 		}
 		line, next, err := v3netPromptLine(s, terminal, outputMode, prompt)
 		if err != nil {
@@ -700,6 +723,17 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 			e.V3NetCentral.NotifyCentralActivity()
 		}
 		status = "|10Saved.|07"
+		if line == "2" {
+			// Say what the setting just stepped to means.
+			switch u.CentralAvailability {
+			case protocol.CentralAvailable:
+				status += " |07Who's Online shows you as |10available|07."
+			case protocol.CentralBusy:
+				status += " |07Who's Online shows you as |14busy|07."
+			default:
+				status += " |07Who's Online shows no availability for you."
+			}
+		}
 	}
 }
 
@@ -715,6 +749,83 @@ func centralConsentFrom(dst, src *user.User) {
 	dst.CentralChatBarred = src.CentralChatBarred
 	dst.CentralAlerts = src.CentralAlerts
 }
+
+// centralPrefsArt is the Sharing screen's header art in the menu set's
+// ansi folder. Without it, or where it would push the screen past the
+// bottom of the terminal, the screen has the built-in title instead.
+const centralPrefsArt = "V3SHARE.ANS"
+
+// writeCentralPrefsHeader clears the screen and draws the Sharing header:
+// the menu set's art when it and the bodyRows below it fit the terminal,
+// else the built-in title. Pipe codes in the art are expanded.
+func (e *MenuExecutor) writeCentralPrefsHeader(c *cmdCtx, bodyRows int) {
+	terminalio.WriteProcessedBytes(c.terminal, []byte(ansi.ClearScreen()), c.outputMode)
+	// A terminal of unknown height does not limit the art; a known one
+	// with no row to spare takes none.
+	room := -1
+	if c.termHeight > 0 {
+		room = max(c.termHeight-bodyRows, 0)
+	}
+	// Art wider than an 80-column terminal is broken at 80 by fitArt; on a
+	// narrower one its rows wrap at the terminal's edge.
+	width := ansi.ArtWidth
+	if w := artWidth(c.terminal, c.termWidth); w > 0 && w < width {
+		width = w
+	}
+	if art, ok := e.centralPrefsArt(c.outputMode, room, width); ok {
+		err := writeArt(c.terminal, art, c.outputMode, c.termWidth)
+		if err == nil {
+			return
+		}
+		slog.Error("failed to write the Sharing header art", "file", centralPrefsArt, "error", err)
+	}
+	// centralHeader clears the screen again, harmlessly: nothing is drawn yet.
+	terminalio.WriteProcessedBytes(c.terminal, []byte(centralHeader("Sharing", c.termWidth)), c.outputMode)
+}
+
+// centralPrefsArt loads the Sharing header art, ready for outputMode and
+// ending in a line break. It reports false when the art is missing, or
+// takes more than maxRows rows on a terminal width columns wide (a negative maxRows, from a terminal of
+// unknown height, does not limit it).
+func (e *MenuExecutor) centralPrefsArt(outputMode ansi.OutputMode, maxRows, width int) ([]byte, bool) {
+	data, err := ansi.GetAnsiFileContent(e.menuFile("ansi", centralPrefsArt))
+	if err != nil {
+		slog.Debug("Sharing header art not found; using the built-in title", "file", centralPrefsArt, "error", err)
+		return nil, false
+	}
+	data = ansi.ReplacePipeCodes(data)
+	// Whatever the art ends with, it ends here in one line break, colours
+	// reset, so the row the cursor is left on is the body's first.
+	data = append(centralArtTailRe.ReplaceAll(data, nil), "\x1b[0m\r\n"...)
+	rows, _ := ansi.ArtGeometry(oneBytePerGlyph(data), width)
+	if maxRows >= 0 && rows-1 > maxRows {
+		slog.Debug("Sharing header art too tall for the terminal; using the built-in title", "file", centralPrefsArt, "rows", rows-1, "room", maxRows)
+		return nil, false
+	}
+	return ansi.ArtForOutput(data, outputMode), true
+}
+
+// oneBytePerGlyph returns art with each glyph one byte, for
+// ansi.ArtGeometry, which counts a cell per byte: art held as UTF-8 has
+// two or three bytes for each block or line glyph, and measured as it is,
+// a row of them would seem to wrap. CP437 art is read as UTF-8 first.
+func oneBytePerGlyph(data []byte) []byte {
+	data = ansi.CP437ArtToUTF8(data)
+	out := make([]byte, 0, len(data))
+	for len(data) > 0 {
+		r, size := utf8.DecodeRune(data)
+		if r < utf8.RuneSelf {
+			out = append(out, data[0])
+		} else {
+			out = append(out, '#')
+		}
+		data = data[size:]
+	}
+	return out
+}
+
+// centralArtTailRe matches the line breaks and colour codes art ends with.
+var centralArtTailRe = regexp.MustCompile(`(?:\x1b\[[0-9;]*m|[\r\n])+$`)
 
 // centralPreviewHandle shows a handle as a snapshot would carry it: colour
 // codes and control characters out, cut to the protocol's limit.

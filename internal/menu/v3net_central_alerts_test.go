@@ -462,10 +462,115 @@ func TestCentralPrefsAlertsPreview(t *testing.T) {
 
 	f.fake.nets = []CentralNetworkInfo{alertNet("testnet")} // chat offered too
 	snap = runAlertScreen(t, f, u, "q\r").Snapshot()
-	if !strings.Contains(snap, "Network chat:") || !strings.Contains(snap, closing) || strings.Contains(snap, "only in alerts") {
+	if !strings.Contains(snap, "Chat   Caller @") || !strings.Contains(snap, closing) || strings.Contains(snap, "only in alerts") {
 		t.Errorf("chat and alerts: closing line should cover every switch:\n%s", snap)
 	}
 	if first := strings.SplitN(snap, "\n", 2)[0]; !strings.Contains(first, "V3Net Central: Sharing") {
 		t.Errorf("chat and alerts: screen scrolled off 80x24:\n%s", snap)
+	}
+}
+
+// The Sharing screen draws the menu set's V3SHARE.ANS over the switches:
+// the shipped art fits 80x24 with every feature offered and a status line
+// showing. Art too tall to leave the body room gives way to the built-in
+// title rather than scrolling the screen.
+func TestCentralPrefsHeaderArt(t *testing.T) {
+	f := newAlertFixture(t)
+	f.fake.nets = []CentralNetworkInfo{alertNet("testnet")}
+	_, u := f.caller(t, 1, "Caller", 30, user.CentralAlertPrefs{}, true)
+
+	f.e.MenuSetPath = filepath.Join("..", "..", "menus", "v3")
+	snap := runAlertScreen(t, f, u, "1\rq\r").Snapshot()
+	lines := strings.Split(snap, "\n")
+	if !strings.Contains(lines[1], "ViSiON/3 Network Sharing") || strings.Contains(snap, "V3Net Central: Sharing") {
+		t.Errorf("shipped header art not drawn on top:\n%s", snap)
+	}
+	for _, want := range []string{"[5] Activity alerts", "Chat   Caller @", "Saved.", "Choice (1-5"} {
+		if !strings.Contains(snap, want) {
+			t.Errorf("screen lacks %q; scrolled or cut off 80x24:\n%s", want, snap)
+		}
+	}
+
+	tall := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tall, "ansi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	art := strings.Repeat("|13TALL ART\r\n", 12)
+	if err := os.WriteFile(filepath.Join(tall, "ansi", centralPrefsArt), []byte(art), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.e.MenuSetPath = tall
+	snap = runAlertScreen(t, f, u, "q\r").Snapshot()
+	if first := strings.SplitN(snap, "\n", 2)[0]; !strings.Contains(first, "V3Net Central: Sharing") || strings.Contains(snap, "TALL ART") {
+		t.Errorf("too-tall art should give way to the built-in title:\n%s", snap)
+	}
+
+	// Art that fits is drawn, its pipe codes expanded.
+	if err := os.WriteFile(filepath.Join(tall, "ansi", centralPrefsArt), []byte("|13MY BOARD|07\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	snap = runAlertScreen(t, f, u, "q\r").Snapshot()
+	if first := strings.SplitN(snap, "\n", 2)[0]; !strings.Contains(first, "MY BOARD") || strings.Contains(snap, "|13") {
+		t.Errorf("sysop art not drawn as the header:\n%s", snap)
+	}
+}
+
+// The header art is measured in glyphs, not bytes: the stock art is three
+// rows in either encoding, so it fits a room of three rows and not two. A
+// known terminal with no room left takes no art; only one of unknown
+// height takes it whatever its size.
+func TestCentralPrefsArtFit(t *testing.T) {
+	e := &MenuExecutor{MenuSetPath: filepath.Join("..", "..", "menus", "v3")}
+	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
+		for _, tc := range []struct {
+			room int
+			want bool
+		}{{3, true}, {2, false}, {0, false}, {-1, true}} {
+			if _, got := e.centralPrefsArt(mode, tc.room, ansi.ArtWidth); got != tc.want {
+				t.Errorf("mode %v, room %d: art drawn = %v, want %v", mode, tc.room, got, tc.want)
+			}
+		}
+	}
+
+	// UTF-8 art is measured the same way.
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "ansi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	row := strings.Repeat("█", 70) + "\r\n"
+	if err := os.WriteFile(filepath.Join(dir, "ansi", centralPrefsArt), []byte(row+row), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.MenuSetPath = dir
+	if _, ok := e.centralPrefsArt(ansi.OutputModeUTF8, 2, ansi.ArtWidth); !ok {
+		t.Error("two rows of UTF-8 art measured as more than two")
+	}
+	// On a 40-column terminal each 70-glyph row wraps onto a second.
+	if _, ok := e.centralPrefsArt(ansi.OutputModeUTF8, 3, 40); ok {
+		t.Error("art wrapping on a narrow terminal measured at 80 columns")
+	}
+	if _, ok := e.centralPrefsArt(ansi.OutputModeUTF8, 4, 40); !ok {
+		t.Error("two wrapped rows of art should fit four rows on 40 columns")
+	}
+}
+
+// Availability has three settings: its row lists them all with the
+// current one bracketed, and stepping it says what the new one means.
+func TestCentralPrefsAvailabilityChoices(t *testing.T) {
+	f := newAlertFixture(t)
+	f.fake.nets = []CentralNetworkInfo{alertNet("testnet")}
+	_, u := f.caller(t, 1, "Caller", 30, user.CentralAlertPrefs{}, true)
+
+	snap := runAlertScreen(t, f, u, "q\r").Snapshot()
+	if !strings.Contains(snap, "[Not shown] Available  Busy") {
+		t.Errorf("row does not list the three settings, Not shown current:\n%s", snap)
+	}
+	snap = runAlertScreen(t, f, u, "2\rq\r").Snapshot()
+	if !strings.Contains(snap, "Not shown [Available] Busy") || !strings.Contains(snap, "Who's Online shows you as available.") {
+		t.Errorf("one step should reach Available and say so:\n%s", snap)
+	}
+	snap = runAlertScreen(t, f, u, "2\r2\rq\r").Snapshot()
+	if !strings.Contains(snap, "[Not shown] Available  Busy") || !strings.Contains(snap, "shows no availability for you.") {
+		t.Errorf("two more steps should pass Busy and return to Not shown:\n%s", snap)
 	}
 }
