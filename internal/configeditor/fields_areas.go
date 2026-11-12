@@ -93,7 +93,7 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 			},
 		},
 		{
-			Label: "ACS Read", Help: "Access string for reading (e.g. s20 = level 20+)", Type: ftString, Col: 3, Row: 6, Width: 20,
+			Label: "ACS Read", Help: "Access string for reading (e.g. s20 = level 20+)", Type: ftString, Col: 3, Row: 6, Width: 20, MaxLen: acsMaxLen,
 			Get: func() string { return a.ACSRead },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -105,7 +105,7 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 			},
 		},
 		{
-			Label: "ACS Write", Help: "Access string for posting (e.g. s20 = level 20+)", Type: ftString, Col: 3, Row: 7, Width: 20,
+			Label: "ACS Write", Help: "Access string for posting (e.g. s20 = level 20+)", Type: ftString, Col: 3, Row: 7, Width: 20, MaxLen: acsMaxLen,
 			Get: func() string { return a.ACSWrite },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -340,7 +340,7 @@ func (m *Model) fieldsFileArea() []fieldDef {
 			Set: func(val string) error { a.Path = val; return nil },
 		},
 		{
-			Label: "ACS List", Help: "Access string for listing files", Type: ftString, Col: 3, Row: 5, Width: 20,
+			Label: "ACS List", Help: "Access string for listing files", Type: ftString, Col: 3, Row: 5, Width: 20, MaxLen: acsMaxLen,
 			Get: func() string { return a.ACSList },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -352,7 +352,7 @@ func (m *Model) fieldsFileArea() []fieldDef {
 			},
 		},
 		{
-			Label: "ACS Upload", Help: "Access string for uploading files", Type: ftString, Col: 3, Row: 6, Width: 20,
+			Label: "ACS Upload", Help: "Access string for uploading files", Type: ftString, Col: 3, Row: 6, Width: 20, MaxLen: acsMaxLen,
 			Get: func() string { return a.ACSUpload },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -364,7 +364,7 @@ func (m *Model) fieldsFileArea() []fieldDef {
 			},
 		},
 		{
-			Label: "ACS Download", Help: "Access string for downloading files", Type: ftString, Col: 3, Row: 7, Width: 20,
+			Label: "ACS Download", Help: "Access string for downloading files", Type: ftString, Col: 3, Row: 7, Width: 20, MaxLen: acsMaxLen,
 			Get: func() string { return a.ACSDownload },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -434,7 +434,7 @@ func (m *Model) fieldsConference() []fieldDef {
 			Set: func(val string) error { c.Description = val; return nil },
 		},
 		{
-			Label: "ACS", Help: "Access string for conference access", Type: ftString, Col: 3, Row: 5, Width: 10,
+			Label: "ACS", Help: "Access string for conference access", Type: ftString, Col: 3, Row: 5, Width: 20, MaxLen: acsMaxLen,
 			Get: func() string { return c.ACS },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)

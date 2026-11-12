@@ -191,8 +191,9 @@ func (m Model) startCmdFieldEdit() (Model, tea.Cmd) {
 	}
 
 	m.mode = modeCommandEditField
+	// CharLimit first: SetValue truncates to whatever limit is already set.
+	m.textInput.CharLimit = f.charLimit()
 	m.textInput.SetValue(val)
-	m.textInput.CharLimit = f.Width
 	m.textInput.Width = f.Width
 	m.textInput.Placeholder = ""
 	m.textInput.CursorEnd()

@@ -26,14 +26,30 @@ type fieldDef struct {
 	Type  fieldType
 	Row   int // Row position (y) relative to box interior top
 	Width int // Input field width
-	GetM  func(d *MenuData) string
-	SetM  func(d *MenuData, val string) error
-	GetC  func(d *CmdData) string
-	SetC  func(d *CmdData, val string) error
+	// MaxLen is the longest value the field accepts; 0 is Width. Longer
+	// values scroll while editing.
+	MaxLen int
+	GetM   func(d *MenuData) string
+	SetM   func(d *MenuData, val string) error
+	GetC   func(d *CmdData) string
+	SetC   func(d *CmdData, val string) error
 	// Render, if non-nil, renders the display value with pipe-code translation.
 	// Called only in the normal (non-active) display path; active/edit paths
 	// always show the raw value so the user can see what they're editing.
 	Render func(val string, width int) string
+}
+
+// acsMaxLen is how long an ACS field accepts, whatever its width on screen:
+// enough for a compound expression with readable names, roles and
+// permissions, such as (LEVEL>=20&FLAG:M)|SYSOP.
+const acsMaxLen = 255
+
+// charLimit is the longest value f accepts.
+func (f fieldDef) charLimit() int {
+	if f.MaxLen > 0 {
+		return f.MaxLen
+	}
+	return f.Width
 }
 
 // menuFields returns the ordered editable fields for a MenuData record.
@@ -74,7 +90,7 @@ func menuFields() []fieldDef {
 			SetM: func(d *MenuData, val string) error { d.Fallback = strings.ToUpper(val); return nil },
 		},
 		{
-			Label: "ACS Required   ", Type: ftString, Row: 9, Width: 30,
+			Label: "ACS Required   ", Type: ftString, Row: 9, Width: 30, MaxLen: acsMaxLen,
 			GetM: func(d *MenuData) string { return d.ACS },
 			SetM: func(d *MenuData, val string) error {
 				val = strings.ToUpper(strings.TrimSpace(val))
@@ -160,7 +176,7 @@ func cmdFields() []fieldDef {
 			SetC: func(d *CmdData, val string) error { d.Command = val; return nil },
 		},
 		{
-			Label: "ACS Required   ", Type: ftString, Row: 6, Width: 30,
+			Label: "ACS Required   ", Type: ftString, Row: 6, Width: 30, MaxLen: acsMaxLen,
 			GetC: func(d *CmdData) string { return d.ACS },
 			SetC: func(d *CmdData, val string) error {
 				val = strings.ToUpper(strings.TrimSpace(val))
