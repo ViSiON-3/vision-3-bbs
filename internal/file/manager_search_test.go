@@ -43,6 +43,22 @@ func TestSearchFiles(t *testing.T) {
 	}
 }
 
+// The uploader's handle is matched too, as ViSiON/2's file search did, so
+// a handle finds that caller's uploads.
+func TestSearchFilesMatchesUploader(t *testing.T) {
+	fm := setupTestFileManager(t, []FileArea{
+		{ID: 1, Tag: "UTILS", Name: "Utilities", Path: "utils"},
+		{ID: 2, Tag: "GAMES", Name: "Games", Path: "games"},
+	})
+	fm.AddFileRecord(FileRecord{ID: uuid.New(), AreaID: 1, Filename: "A.ZIP", Description: "one", UploadedBy: "Phreak"})
+	fm.AddFileRecord(FileRecord{ID: uuid.New(), AreaID: 2, Filename: "B.ZIP", Description: "two", UploadedBy: "phreak"})
+	fm.AddFileRecord(FileRecord{ID: uuid.New(), AreaID: 1, Filename: "C.ZIP", Description: "three", UploadedBy: "Other"})
+
+	if got := len(fm.SearchFiles("PHREAK")); got != 2 {
+		t.Errorf("SearchFiles(PHREAK) = %d results, want Phreak's 2 uploads", got)
+	}
+}
+
 func TestGetFilesNewerThan(t *testing.T) {
 	areas := []FileArea{
 		{ID: 1, Tag: "UTILS", Name: "Utilities", Path: "utils"},

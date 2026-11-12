@@ -128,16 +128,18 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | `VIEW_FILE` | none | Asks for a filename in the current area. Archives open in the contents viewer, other files are paged as text. | Needs a current area |
 | `TYPE_TEXT_FILE` | none | Asks for a filename in the current area and pages it as plain text. | Needs a current area |
 | `SHOWFILEINFO` | none | Asks for a filename in the current area and prints its full record. | Needs a current area |
-| `SEARCH_FILES` | none | Asks for a search string of at least three characters and searches names and descriptions across all areas. | Area ACS on results |
+| `SEARCH_FILES` | none | Asks for a search string of at least three characters and searches names, descriptions and uploaders' handles across all areas, so a handle finds that caller's uploads. | Area ACS on results |
 | `DOWNLOADFILE` | none | Asks for a filename, adds it to the batch, then starts the transfer. | Area download ACS |
 | `BATCHDOWNLOAD` | none | Transfers the tagged batch queue. | Area download ACS |
 | `CLEAR_BATCH` | none | Empties the tagged batch queue. | |
+| `REMOVEFROMBATCH` | none | Lists the tagged batch queue, numbered, and takes one file off it, given by its number or filename (ViSiON/2's `FR`). | |
 | `UPLOADFILE` | none | ZMODEM upload into the current area, then duplicate check and description prompts. | Area upload ACS |
 | `FILE_NEWSCAN` | `CURRENT` to scan only the current area. Anything else scans the areas tagged in `FILENEWSCANCONFIG`, or every listable area when nothing is tagged. | Lists files uploaded since the newscan cutoff, grouped by area, from the `FILESCAN` templates. The cutoff is set by `SETFILESCANDATE`, or the previous logon. | Area list ACS |
 | `FILENEWSCANCONFIG` | none | Tag and untag file areas for the file newscan. | |
 | `SETFILESCANDATE` | none | Sets the file newscan cutoff until the caller logs off. Accepts a date as MM/DD/YY, `A` for all files, or `R` to reset to the previous logon. | |
 | `WANTLIST` | none | For CoSysOp+, manages the file want list. For everyone else, asks for a filename and reason and adds a request. Stock menus restrict it to sysops. | Branches on CoSysOp+ |
 | `EDITFILERECORD` | none | Upload review queue. Asks whether to review all areas or the current one, then edits, moves, or deletes each unreviewed file. | CoSysOp+ |
+| `EDITUPLOAD` | none | Asks for a filename in the current area and changes its description: one line of up to 60 characters, as at upload; an empty line keeps the old one. Only the caller who uploaded the file may, or a co-sysop (ViSiON/2's `FE`). The stock menu binds it to `E` after `EDITFILERECORD`, so a sysop's `E` stays the review queue. | Uploader or CoSysOp+ |
 
 ## User settings
 

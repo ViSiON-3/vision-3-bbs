@@ -13,13 +13,15 @@ All file menu commands are implemented (no PLACEHOLDERs remain). The names below
 | `RUN:LISTFILES` | Paginated file listing with marking and lightbar navigation |
 | `RUN:LISTFILEAR` | List available file areas |
 | `RUN:SELECTFILEAREA` | Change current file area |
-| `RUN:SEARCH_FILES` | Keyword search across file names and descriptions |
+| `RUN:SEARCH_FILES` | Keyword search across file names, descriptions and uploaders |
 | `RUN:SHOWFILEINFO` | Detailed file record display |
 | `RUN:FILE_NEWSCAN` | Scan tagged areas for files newer than the newscan cutoff |
 | `RUN:FILENEWSCANCONFIG` | Per-user file area tagging for newscans |
 | `RUN:SETFILESCANDATE` | Set the file newscan cutoff for this session |
 | `RUN:EDITFILERECORD` | Sysop review queue for unreviewed uploads |
+| `RUN:EDITUPLOAD` | Caller edits the description of their own upload |
 | `RUN:BATCHDOWNLOAD` | Download marked files via ZMODEM |
+| `RUN:REMOVEFROMBATCH` | Take one file off the marked batch |
 | `RUN:UPLOADFILE` | Upload file to current area |
 | `RUN:WANTLIST` | User-maintained list of wanted files |
 
@@ -31,7 +33,7 @@ All user-facing strings are fields of `config.StringsConfig` (`internal/config/c
 
 Key methods on `FileManager` (`internal/file/manager_query.go`):
 
-- `SearchFiles(query string) []FileRecord` — case-insensitive search across names and descriptions in all areas.
+- `SearchFiles(query string) []FileRecord` — case-insensitive search across names, descriptions and uploaders' handles in all areas.
 - `GetFilesNewerThan(areaID int, since time.Time) []FileRecord` — returns files uploaded after the given timestamp.
 - `GetUnreviewedFiles(areaID int) []FileRecord` — returns files in an area where `Reviewed == false`.
 - `GetFileRecordByID(fileID uuid.UUID) (*FileRecord, error)` — fetch a single file record by its UUID.

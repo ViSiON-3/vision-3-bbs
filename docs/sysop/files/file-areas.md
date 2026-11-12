@@ -78,19 +78,20 @@ describes each command in full. The shipped bindings:
 | **}** / **{** | `NEXTFILECONF` / `PREVFILECONF` | Step through conferences (also for the message menu) |
 | **F** or **L** | `LISTFILES` | List the current area |
 | **W** | `LISTFILES_EXTENDED` | List with every column shown |
-| **S** | `SEARCH_FILES` | Search names and descriptions across every area (three characters or more) |
+| **S** | `SEARCH_FILES` | Search names, descriptions and uploaders across every area (three characters or more) |
 | **N** | `FILE_NEWSCAN` | Files uploaded since the newscan cutoff, in the tagged areas |
 | **Z** | `FILENEWSCANCONFIG` | Tag and untag areas for the file newscan |
 | **Y** | `SETFILESCANDATE` | Change the newscan cutoff for this session |
 | **D** | `DOWNLOADFILE` | Ask for a filename, add it to the batch, start the transfer |
 | **B** | `BATCHDOWNLOAD` | Send every marked file |
 | **-** | `CLEAR_BATCH` | Empty the batch |
+| **R** | `REMOVEFROMBATCH` | Take one file off the batch, by number or name |
 | **U** | `UPLOADFILE` | Upload into the current area |
 | **V** | `VIEW_FILE` | View a file: archives open in the archive viewer, text in the text viewer (see [Viewer doors](#viewer-doors)) |
 | **T** | `TYPE_TEXT_FILE` | Show a file in the text viewer, or page it as plain text |
 | **I** | `SHOWFILEINFO` | Print a file's full record |
 | **K** | `CFG_FILECOLUMNS` | Choose the columns shown in file listings |
-| **E** | `EDITFILERECORD` | Sysop review queue (`ACS: SYSOP`) |
+| **E** | `EDITFILERECORD` / `EDITUPLOAD` | Sysops get the review queue (`ACS: SYSOP`); everyone else edits the description of a file they uploaded |
 | **X** | `WANTLIST` | File want list |
 | **M** / **Q** / **G** | — | Message menu / main menu / log off |
 
