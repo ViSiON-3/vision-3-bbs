@@ -26,21 +26,13 @@ import (
 // change ours alone, and private mail has already been delivered.
 
 // editableArea reports whether messages in area may be edited: a local area
-// other than private mail.
-func editableArea(area *message.MessageArea) bool {
+// other than private mail that no network shares (MessageManager.IsNetworked,
+// which also counts a local area a V3Net leaf binds).
+func editableArea(mm *message.MessageManager, area *message.MessageArea) bool {
 	if area == nil || strings.EqualFold(area.Tag, "PRIVMAIL") {
 		return false
 	}
-	t := strings.ToLower(strings.TrimSpace(area.AreaType))
-	return t == "" || t == "local"
-}
-
-// editableCharset reports whether a message's text can go into the editor
-// as stored: UTF-8, or no character set named. The reader decodes others for
-// display only.
-func editableCharset(m *message.DisplayMessage) bool {
-	cs := strings.ToUpper(strings.TrimSpace(m.Charset))
-	return cs == "" || cs == "UTF-8" || cs == "UTF8"
+	return !mm.IsNetworked(area)
 }
 
 // ownMessage reports whether u wrote m. A post signed with a real name keeps

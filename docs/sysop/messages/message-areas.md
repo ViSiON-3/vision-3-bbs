@@ -527,7 +527,9 @@ place in its thread.
 - **Where:** local areas only. Echomail, netmail, QWK network and V3Net
   messages have already been sent to other boards, so an edit would change
   this board's copy alone; private mail has already been delivered. A
-  message stored in a character set other than UTF-8 isn't offered either.
+  `local` area that a V3Net leaf lists in its `boards` counts as V3Net
+  here. A message stored in a character set other than UTF-8 isn't offered
+  either.
 - **Checked again on saving:** the right to edit, and that the message is
   still the one shown. If another session edited, deleted or moved it
   meanwhile, or the sysop removed the sponsor, nothing is saved and the

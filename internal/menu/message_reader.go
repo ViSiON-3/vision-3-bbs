@@ -324,7 +324,7 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	}
 	mayEdit := func(m *message.DisplayMessage, moderator bool) bool {
 		area, ok := e.MessageMgr.GetAreaByID(currentAreaID)
-		if !ok || !editableArea(area) || !editableCharset(m) {
+		if !ok || !editableArea(e.MessageMgr, area) || !m.StoredAsUTF8() {
 			return false
 		}
 		return moderator || ownMessage(m, currentUser, anonymousName)

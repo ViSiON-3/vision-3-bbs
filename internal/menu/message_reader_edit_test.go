@@ -214,7 +214,23 @@ func TestReaderEditNotOtherCharset(t *testing.T) {
 	}
 }
 
+// A local area a V3Net leaf binds by tag shares its messages with the
+// network, so an edit there would change only this board's copy.
+func TestReaderEditNotV3NetBound(t *testing.T) {
+	env := newMsgEnv(t)
+	env.postMsgs(generalAreaID, testMsg{from: "Caller", to: "All", subject: "mine"})
+	env.e.MessageMgr.IsV3NetArea = func(id int) bool { return id == generalAreaID }
+	r := env.runCmd("READMSGS", env.sysop, "", "?E\r\x1aQ")
+	if r.has("dit Message") || r.has("Subject:") {
+		t.Errorf("edit offered in a bound area; output:\n%s", r.text())
+	}
+	if b := env.mustMsg(generalAreaID, 1).Body; b != "mine-body" {
+		t.Errorf("body = %q, want it unchanged", b)
+	}
+}
+
 func TestEditableArea(t *testing.T) {
+	mm := &message.MessageManager{IsV3NetArea: func(id int) bool { return id == 9 }}
 	for _, tc := range []struct {
 		area *message.MessageArea
 		want bool
@@ -226,9 +242,10 @@ func TestEditableArea(t *testing.T) {
 		{&message.MessageArea{Tag: "NETMAIL", AreaType: "netmail"}, false},
 		{&message.MessageArea{Tag: "DOVE", AreaType: "qwknet"}, false},
 		{&message.MessageArea{Tag: "FELONY", AreaType: "v3net"}, false},
+		{&message.MessageArea{ID: 9, Tag: "BOUND", AreaType: "local"}, false},
 		{nil, false},
 	} {
-		if got := editableArea(tc.area); got != tc.want {
+		if got := editableArea(mm, tc.area); got != tc.want {
 			t.Errorf("editableArea(%+v) = %v, want %v", tc.area, got, tc.want)
 		}
 	}
