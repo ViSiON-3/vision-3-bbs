@@ -271,24 +271,34 @@ network chat, with what the caller shares beside it (Off, or Online, Calls
 and Chat as they apply):
 
 ```
-V3Net Central: Sharing
-───────────────────────────────────────────────────────────────────────────────
-  Nothing about you is shared through V3Net Central.
-  Browsing boards, Who's Online and Last Callers sends nothing about you.
-  [1] Show me on Who's Online        Off
-  [2] My availability               Not shown
-  [3] Show my calls on Last Callers Off
-  [4] Take part in network chat     Off
-  [5] Activity alerts               Off
+ █   █ ▀▀▀█ █▄  █ █▀▀▀ ▀▀█▀▀   ····································
+ ▀▄ ▄▀  ▀▀█ █ ▀▄█ █▀▀    █     ViSiON/3 Network Sharing
+   ▀   ▀▀▀  ▀   ▀ ▀▀▀▀   ▀     ····································
 
-  What other boards would see
-  Who's Online: Caller on My BBS
-                while you are on
-  Last Callers: Caller on My BBS
-                when each call began and ended; only calls from when you
-                turn it on, each kept 24 hours
-  Never your real name, location, user number, or what you are doing.
+  Nothing about you is shared. Browsing sends nothing either.
+
+  [1] Who's Online     Off
+  [2] Availability     Not shown
+  [3] Last Callers     Off
+  [4] Network chat     Off
+  [5] Activity alerts  Off
+
+── What other boards would see ──────────────────────────────────────────────
+  Online Caller @ My BBS · while you are on
+  Calls  Caller @ My BBS · call times from opt-in
+  Chat   Caller @ My BBS · in rooms; lines logged
+  Never your real name, location or user number; activity only as switched on.
+  Off is instant on connected boards; offline ones drop you within 24h.
+───────────────────────────────────────────────────────────────────────────────
+  Choice (1-5, Q quits):
 ```
+
+The header is `ansi/V3SHARE.ANS` in the menu set: replace it (or put your
+own in `menus.d/`) to theme the screen. Pipe codes in it are expanded. It
+should stay short: when the art would push the screen past the bottom of
+the caller's terminal, or the file is missing, the screen shows a plain
+`V3Net Central: Sharing` title instead. The stock art is three rows, which
+leaves room on 80x24 with every feature offered.
 
 - A switch the caller has not set follows the network's **Callers
   Default**: off unless you turn that on, in which case the screen shows
@@ -297,7 +307,7 @@ V3Net Central: Sharing
   removed) and your board's name, plus the chosen availability for Who's
   Online and the call times for Last Callers. Nothing else about the
   account is sent.
-- **Show my calls**, turned on by the caller, covers calls from that
+- **Last Callers**, turned on by the caller, covers calls from that
   moment; calls made before are never published. A caller counted in by
   **Callers Default** has their calls from the last 24 hours shown.
 - Pressing a switch flips what the screen shows, and from then on it is

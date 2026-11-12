@@ -277,7 +277,7 @@ func TestCentralPrefsChatSwitch(t *testing.T) {
 		t.Fatalf("agreement not recorded: %+v", u)
 	}
 	plain := ansi.StripAnsi(out)
-	if !strings.Contains(plain, "Take part in network chat     On  (testnet)") || !strings.Contains(plain, "Network chat: Caller on") {
+	if !strings.Contains(plain, "[4] Network chat     On  (testnet)") || !strings.Contains(plain, "Chat   Caller @") {
 		t.Errorf("switch not shown on with its preview:\n%s", plain)
 	}
 	runPrefs(t, fake, u, "4\rq\r")

@@ -462,10 +462,55 @@ func TestCentralPrefsAlertsPreview(t *testing.T) {
 
 	f.fake.nets = []CentralNetworkInfo{alertNet("testnet")} // chat offered too
 	snap = runAlertScreen(t, f, u, "q\r").Snapshot()
-	if !strings.Contains(snap, "Network chat:") || !strings.Contains(snap, closing) || strings.Contains(snap, "only in alerts") {
+	if !strings.Contains(snap, "Chat   Caller @") || !strings.Contains(snap, closing) || strings.Contains(snap, "only in alerts") {
 		t.Errorf("chat and alerts: closing line should cover every switch:\n%s", snap)
 	}
 	if first := strings.SplitN(snap, "\n", 2)[0]; !strings.Contains(first, "V3Net Central: Sharing") {
 		t.Errorf("chat and alerts: screen scrolled off 80x24:\n%s", snap)
+	}
+}
+
+// The Sharing screen draws the menu set's V3SHARE.ANS over the switches:
+// the shipped art fits 80x24 with every feature offered and a status line
+// showing. Art too tall to leave the body room gives way to the built-in
+// title rather than scrolling the screen.
+func TestCentralPrefsHeaderArt(t *testing.T) {
+	f := newAlertFixture(t)
+	f.fake.nets = []CentralNetworkInfo{alertNet("testnet")}
+	_, u := f.caller(t, 1, "Caller", 30, user.CentralAlertPrefs{}, true)
+
+	f.e.MenuSetPath = filepath.Join("..", "..", "menus", "v3")
+	snap := runAlertScreen(t, f, u, "1\rq\r").Snapshot()
+	lines := strings.Split(snap, "\n")
+	if !strings.Contains(lines[1], "ViSiON/3 Network Sharing") || strings.Contains(snap, "V3Net Central: Sharing") {
+		t.Errorf("shipped header art not drawn on top:\n%s", snap)
+	}
+	for _, want := range []string{"[5] Activity alerts", "Chat   Caller @", "Saved.", "Choice (1-5"} {
+		if !strings.Contains(snap, want) {
+			t.Errorf("screen lacks %q; scrolled or cut off 80x24:\n%s", want, snap)
+		}
+	}
+
+	tall := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tall, "ansi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	art := strings.Repeat("|13TALL ART\r\n", 12)
+	if err := os.WriteFile(filepath.Join(tall, "ansi", centralPrefsArt), []byte(art), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.e.MenuSetPath = tall
+	snap = runAlertScreen(t, f, u, "q\r").Snapshot()
+	if first := strings.SplitN(snap, "\n", 2)[0]; !strings.Contains(first, "V3Net Central: Sharing") || strings.Contains(snap, "TALL ART") {
+		t.Errorf("too-tall art should give way to the built-in title:\n%s", snap)
+	}
+
+	// Art that fits is drawn, its pipe codes expanded.
+	if err := os.WriteFile(filepath.Join(tall, "ansi", centralPrefsArt), []byte("|13MY BOARD|07\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	snap = runAlertScreen(t, f, u, "q\r").Snapshot()
+	if first := strings.SplitN(snap, "\n", 2)[0]; !strings.Contains(first, "MY BOARD") || strings.Contains(snap, "|13") {
+		t.Errorf("sysop art not drawn as the header:\n%s", snap)
 	}
 }
