@@ -93,6 +93,20 @@ func (um *UserMgr) RefreshSessionUser(current *User) (*User, bool) {
 	return &refreshed, true
 }
 
+// CurrentUserByID is the stored record for id, brought up to date with
+// anything a sysop has changed on disk first, as RefreshSessionUser is. It is
+// for authorization just before a protected write: a level or role taken
+// away in ./ue or the BBS's own editor stops the next such write, not the
+// next call. It reports false for an ID with no record. The returned pointer
+// is a copy.
+func (um *UserMgr) CurrentUserByID(id int) (*User, bool) {
+	if id <= 0 {
+		return nil, false
+	}
+	um.syncFromDisk()
+	return um.GetUserByID(id)
+}
+
 // lookupForRefresh finds the stored record for a session, by handle first and
 // by ID when that misses.
 //
