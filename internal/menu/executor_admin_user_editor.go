@@ -24,6 +24,11 @@ type userEditorConfig struct {
 	emptyMessage string // shown when no users match (pipe-coded, no trailing reset)
 	logLabel     string // optional startup debug label ("" = no log line)
 	pendingOnly  bool   // restrict to users awaiting validation + queue behavior
+	// validateOnly is the pending queue for a user below sysop level who
+	// holds users.validate (#610): approving is the only action, and only
+	// what deciding needs is shown. runUserEditor sets it; the save path
+	// enforces the same rule on its own (authorizeUserChanges).
+	validateOnly bool
 }
 
 // userEditorLayout is the fixed screen geometry of the admin user editor,
@@ -170,11 +175,17 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 	if currentUser == nil || userManager == nil {
 		return nil, "", nil
 	}
+	// A sysop gets the whole editor, as before. Below sysop level the only
+	// way in is the pending queue with users.validate, read from the stored
+	// record, and then only to approve.
 	sysOpACS := fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel)
 	if !checkACS(sysOpACS, currentUser, s, terminal, sessionStartTime) {
-		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Access denied.|07\r\n")), outputMode)
-		uiPause(1 * time.Second)
-		return nil, "", nil
+		if !cfg.pendingOnly || !e.mayValidateUsers(userManager, currentUser) {
+			_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Access denied.|07\r\n")), outputMode)
+			uiPause(1 * time.Second)
+			return nil, "", nil
+		}
+		cfg.validateOnly = true
 	}
 
 	st := &userEditorState{

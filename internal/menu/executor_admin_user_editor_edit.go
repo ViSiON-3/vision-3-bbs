@@ -10,6 +10,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"golang.org/x/crypto/bcrypt"
@@ -174,6 +175,15 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 		return "|01User data changed by another admin! Please refresh (X) and try again.|07", false
 	}
 
+	// Who may make these changes is decided here, on the record as stored,
+	// whatever screen staged them: a key the validator's view hides can't
+	// reach a field by another route, and a permission removed while the
+	// editor was open stops this save.
+	via, denied := e.authorizeUserChanges(userManager, adminUser, currentUserData, pendingChanges)
+	if denied != "" {
+		return denied, false
+	}
+
 	// Protect User ID 1 from critical changes.
 	if target.ID == 1 {
 		if val, ok := pendingChanges["level"]; ok {
@@ -226,6 +236,15 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 	}
 	if val, ok := pendingChanges["level"]; ok {
 		target.AccessLevel = val.(int)
+	}
+	if val, ok := pendingChanges["roles"]; ok {
+		// Checked again here: roles.json may have changed since the edit was
+		// staged.
+		names, err := perm.ParseRoleList(val.(string), perm.Current())
+		if err != nil {
+			return "|01" + err.Error() + "|07", false
+		}
+		target.Roles = names
 	}
 	if val, ok := pendingChanges["validated"]; ok {
 		target.Validated = val.(bool)
@@ -291,6 +310,8 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 			oldValue = currentUserData.PrivateNote
 		case "flags":
 			oldValue = currentUserData.Flags
+		case "roles":
+			oldValue = perm.FormatRoleList(currentUserData.Roles)
 		case "level":
 			oldValue = fmt.Sprintf("%d", currentUserData.AccessLevel)
 		case "validated":
@@ -313,6 +334,8 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 			oldValue,
 			fmt.Sprintf("%v", newValue),
 		)
+		// A change made below sysop level records the grant that allowed it.
+		logEntry.Notes = via
 		if logErr := userManager.LogAdminActivity(logEntry); logErr != nil {
 			// Don't fail the save, but make the audit gap observable.
 			slog.Error("admin audit log write failed", "id", target.ID, "field", fieldName, "error", logErr)

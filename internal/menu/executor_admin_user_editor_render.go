@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 )
 
@@ -55,6 +56,8 @@ func (st *userEditorState) renderActionBar() error {
 	var barText string
 	if len(st.pendingChanges) > 0 {
 		barText = "|08[|15S|08] |14Save Changes  |08[|15X|08] |14Abort  |08[|15Q|08] |14Quit|07"
+	} else if st.cfg.validateOnly {
+		barText = "|08[|15G|08] |10Approve  |08[|15Q|08] |11Quit|07"
 	} else {
 		sel := st.users[st.selectedIndex]
 		// Dynamic labels based on user state
@@ -196,6 +199,14 @@ func (st *userEditorState) renderDetails(message string) error {
 		return err
 	}
 
+	rolesValue := callerText(adminTruncate(perm.FormatRoleList(sel.Roles), 24))
+	if val, ok := st.pendingChanges["roles"]; ok {
+		rolesValue = fmt.Sprintf("|14*|03%s|07", callerText(adminTruncate(val.(string), 23)))
+	}
+	if rolesValue == "" {
+		rolesValue = "none"
+	}
+
 	lines := []string{
 		// Editable fields (A-G) in LEFT column, read-only stats in RIGHT column
 		lineTwoCol("|08[|14A|08]|11 Handle", getFieldValue("handle", sel.Handle), "|11Calls", fmt.Sprintf("%d", sel.TimesCalled)),
@@ -205,11 +216,22 @@ func (st *userEditorState) renderDetails(message string) error {
 		lineTwoCol("|08[|14E|08]|11 Flags", getFieldValue("flags", sel.Flags), "|11Created", adminTime(sel.CreatedAt)),
 		lineTwoCol("|08[|14F|08]|11 Level", getIntFieldValue("level", sel.AccessLevel), "|11Last Login", adminTime(sel.LastLogin)),
 		lineTwoCol("|08[|14G|08]|11 Validated", getBoolFieldValue("validated", sel.Validated), "|11Deleted", deletedStatus),
-		"|08[|14N|08]|11 Net Chat|08: |03" + chatBarValue + "|07",
+		lineTwoCol("|08[|14N|08]|11 Net Chat", chatBarValue, "|08[|14R|08]|11 Roles", rolesValue),
+	}
+	if st.cfg.validateOnly {
+		// users.validate decides on an account and approves it: who it is
+		// and when it signed up, not its notes, flags or level, and nothing
+		// to edit but the approval.
+		lines = []string{
+			lineTwoCol("|11Handle", callerText(adminTruncate(sel.Handle, 24)), "|11Created", adminTime(sel.CreatedAt)),
+			lineTwoCol("|11Real Name", callerText(adminTruncate(sel.RealName, 24)), "|11Calls", fmt.Sprintf("%d", sel.TimesCalled)),
+			"|11Group/Loc|08: |03" + callerText(adminTruncate(sel.GroupLocation, 24)) + "|07",
+			"|08[|14G|08]|11 Approve|08: |03" + getBoolFieldValue("validated", sel.Validated) + "|07",
+		}
 	}
 	// The ACS tester's key, under the fields when the terminal has a row
 	// to spare above the status row.
-	if st.layout.detailStartRow+len(lines) < st.layout.statusRow {
+	if !st.cfg.validateOnly && st.layout.detailStartRow+len(lines) < st.layout.statusRow {
 		lines = append(lines, "|08[|14T|08]|11 ACS Test|08: |03test an expression for this user|07")
 	}
 	for i, line := range lines {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -18,6 +19,10 @@ import (
 // main-loop switch; all field mutations (pendingChanges, statusMessage, etc.)
 // happen directly on st exactly as they did in the inline switch.
 func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (refresh bool, exit bool, result *user.User, action string, err error) {
+	if st.cfg.validateOnly && !validatorEditorKey(key) {
+		st.statusMessage = "|11Only approving is available here: [G] approve, [S] save, [Q] quit.|07"
+		return false, false, nil, "", nil
+	}
 	switch key {
 	case 'k', 'K', 'w', 'W':
 		if len(st.pendingChanges) == 0 {
@@ -167,6 +172,29 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 		} else {
 			delete(st.pendingChanges, "chatBarred")
 			st.statusMessage = "|08No change.|07"
+		}
+		refresh = true
+	case 'r', 'R':
+		// Admin roles (#610), checked against configs/roles.json as typed so
+		// a role that would grant nothing isn't assigned unnoticed.
+		sel := st.users[st.selectedIndex]
+		orig := perm.FormatRoleList(sel.Roles)
+		cur := orig
+		if staged, ok := st.pendingChanges["roles"].(string); ok {
+			cur = staged
+		}
+		if newVal, editErr := st.readFieldInput("Roles", cur, 60, false); editErr == nil {
+			if names, parseErr := perm.ParseRoleList(newVal, perm.Current()); parseErr != nil {
+				st.statusMessage = "|01" + parseErr.Error() + "|07"
+			} else if formatted := perm.FormatRoleList(names); formatted != orig {
+				st.pendingChanges["roles"] = formatted
+				st.statusMessage = "|10Field marked for update.|07"
+			} else {
+				delete(st.pendingChanges, "roles")
+				st.statusMessage = "|08No change.|07"
+			}
+		} else if editErr.Error() != "cancelled" {
+			st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
 		}
 		refresh = true
 	case 'p', 'P':
