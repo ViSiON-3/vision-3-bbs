@@ -190,6 +190,9 @@ type PostOptions struct {
 	// "CHRS: CP437 2". They are stored with the message and the tosser
 	// copies them into the exported packet. AREA lines are dropped.
 	Kludges []string
+	// Date is the date the message is stamped with; zero means now. A
+	// message moved from another area keeps the date it was posted.
+	Date time.Time
 	// SenderHandle is the handle of the local account posting, when from
 	// is another name (a real name in a real_name_only area). It is stored
 	// with the message so private mail stays visible to its sender
@@ -204,5 +207,9 @@ type PostOptions struct {
 // tearline and origin as a post made from the BBS editor. Returns the
 // 1-based message number assigned.
 func (mm *MessageManager) Post(areaID int, from, to, subject, body string, opts PostOptions) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, opts.ReplyToMsgID, opts.ReplyToNum, time.Now(), opts.Private, opts.Kludges, opts.SenderHandle)
+	date := opts.Date
+	if date.IsZero() {
+		date = time.Now()
+	}
+	return mm.addMessage(areaID, from, to, subject, body, opts.ReplyToMsgID, opts.ReplyToNum, date, opts.Private, opts.Kludges, opts.SenderHandle)
 }

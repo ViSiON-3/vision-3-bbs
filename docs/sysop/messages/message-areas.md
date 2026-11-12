@@ -429,6 +429,7 @@ hot key:
 | `L` | List | List message titles, cursor on this message (flat or threaded, as the caller last had it) |
 | `I` | Twit | Add the author to your Twit List (hidden while Twit Lists are off) |
 | `D` | Del | Delete the message (shown in red): any message for a sysop or co-sysop, any message in their own area for the area's [sponsor](users/sponsor-menus.md#moderating-messages), and a caller's own private mail ([Private mail](messages/private-mail.md#user-access)); greyed where the caller can't. On the bar for co-sysops, for a sponsor in their area, and for everyone in `PRIVMAIL` |
+| `V` | Move | Move the message to another local area ([Moving a message](#moving-a-message)): a sysop or co-sysop any message, an area's [sponsor](users/sponsor-menus.md#moderating-messages) one out of their area. Not on the bar; `?` lists it where it applies |
 | `K` | Kludges | Show the message's control information (sysop and co-sysop only; not on the bar) |
 | `?` | Help | List the commands |
 | `Q` | Quit | Leave the reader |
@@ -473,6 +474,29 @@ opened from. No second reader is opened underneath, however many times the
 caller goes back and forth. A reader opened from the menu's list
 (`LISTMSGS`) returns to that list on `L` or `Q`, in the mode it was in,
 with the cursor on the message that was being read.
+
+### Moving a Message
+
+`V` in the reader moves the message shown to another area. It lists the
+areas it can go to, numbered, and takes a number or an area tag (Enter
+cancels), then asks `Move this message to ...? [Y/N]`.
+
+- **Who:** sysops and co-sysops, any message; an area's sponsor, a message
+  out of the area they sponsor.
+- **Where:** between local areas only, and only into one the caller may
+  read and post in. A move into an echomail, netmail, QWK network or V3Net
+  area would send the message to other boards, and one out of them would
+  only take away this board's copy. Private mail isn't moved.
+- **What arrives:** the message keeps its sender, recipient, subject, date
+  and private flag, and gets a last line saying where it came from, who
+  moved it and when, such as ` * Moved from General Discussion by Felonius
+  on 11/12/26 at 2:10 pm`. It loses its reply links, which name messages in
+  the area it left. The area it left is packed, as after a delete.
+- **Checked again on moving:** the copy is written first, and the original
+  is deleted only if it is still the message shown and the caller may still
+  move it. If another session deleted, edited or moved it meanwhile, or the
+  sysop removed the sponsor, the copy is taken back and the caller is told,
+  so a message is never lost or left in both areas.
 
 ### Searching Messages
 

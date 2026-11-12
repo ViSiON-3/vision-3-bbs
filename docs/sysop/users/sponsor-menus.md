@@ -8,7 +8,7 @@ Each message area in `configs/message_areas.json` can have a `"sponsor"` field c
 
 Sysops and co-sysops automatically have sponsor access to all areas.
 
-A sponsor also moderates their area's messages: they can delete any message in it from the message reader. See [Moderating Messages](#moderating-messages).
+A sponsor also moderates their area's messages: they can delete any message in it, or move one to another local area, from the message reader. See [Moderating Messages](#moderating-messages).
 
 ## Access Levels
 
@@ -67,7 +67,9 @@ The `SPONSORM.ANS` header is displayed, followed by a prompt:
 
 In the message reader, an area's sponsor can delete any message in that area, as a co-sysop can in every area. `Del` is on the reader's bar for them there, and `D` asks `Delete this message? [Y/N]` before deleting. A deleted message is gone for good: the base is packed at once.
 
-This is per area: sponsoring one area gives nothing in another. Sponsorship is checked again when the delete is confirmed, so a sponsor the sysop removes meanwhile deletes nothing. The `PRIVMAIL` area has no moderator: a sponsor set on it doesn't let anyone delete other callers' mail.
+`V` moves a message out of the area, into another local area the sponsor may read and post in ([Moving a message](messages/message-areas.md#moving-a-message)).
+
+This is per area: sponsoring one area gives nothing in another. Sponsorship is checked again when a delete or move is confirmed, so a sponsor the sysop removes meanwhile deletes or moves nothing. The `PRIVMAIL` area has no moderator: a sponsor set on it doesn't let anyone delete other callers' mail.
 
 ## Edit Area Screen
 
