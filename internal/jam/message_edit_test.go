@@ -1,0 +1,179 @@
+package jam
+
+import (
+	"encoding/binary"
+	"errors"
+	"os"
+	"slices"
+	"testing"
+)
+
+// replaceWith is an edit that sets subject and text.
+func replaceWith(subject, text string) func(*Message) (string, string, bool) {
+	return func(*Message) (string, string, bool) { return subject, text, true }
+}
+
+// attributeAt reads the Attribute of the header stored at offset in b's .jhr.
+func attributeAt(t *testing.T, b *Base, offset uint32) uint32 {
+	t.Helper()
+	data, err := os.ReadFile(b.BasePath + ".jhr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Signature, Revision, ReservedWord, then eleven 4-byte fields come
+	// before Attribute.
+	return binary.LittleEndian.Uint32(data[offset+52:])
+}
+
+// hdrOffset is where message msgNum's header is, by the index.
+func hdrOffset(t *testing.T, b *Base, msgNum int) uint32 {
+	t.Helper()
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	idx, err := b.readIndexRecordLocked(msgNum)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return idx.HdrOffset
+}
+
+// The subject and text change, longer than before; the message keeps its
+// number, sender, links and kludges, and the others are untouched.
+func TestReplaceMessageIf(t *testing.T) {
+	b := openTestBase(t)
+	writeSubjects(t, b, "one")
+	msg := NewMessage()
+	msg.From, msg.To, msg.Subject, msg.Text = "Caller", "All", "two", "two body"
+	msg.MsgID, msg.ReplyTo, msg.SenderHandle = "1:2/3 abcd1234", 1, "caller"
+	msg.Kludges = []string{"CHRS: CP437 2"}
+	if _, err := b.WriteMessage(msg); err != nil {
+		t.Fatal(err)
+	}
+	writeSubjects(t, b, "three")
+	active := b.fixedHeader.ActiveMsgs
+
+	var seen *Message
+	err := b.ReplaceMessageIf(2, func(m *Message) (string, string, bool) {
+		seen = m
+		return "a much longer subject than two", "new body\nsecond line", true
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen == nil || seen.Subject != "two" || seen.Text != "two body" {
+		t.Fatalf("edit saw %+v, want message 2 as stored", seen)
+	}
+
+	m, err := b.ReadMessage(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Subject != "a much longer subject than two" || m.Text != "new body\rsecond line" {
+		t.Errorf("subject %q text %q", m.Subject, m.Text)
+	}
+	if m.From != "Caller" || m.To != "All" || m.MsgID != msg.MsgID || m.Header.ReplyTo != 1 ||
+		m.SenderHandle != "caller" || !slices.Equal(m.Kludges, msg.Kludges) || m.IsDeleted() {
+		t.Errorf("other fields changed: %+v", m)
+	}
+	for n, subj := range map[int]string{1: "one", 3: "three"} {
+		if o, err := b.ReadMessage(n); err != nil || o.Subject != subj || o.Text != subj+" body" {
+			t.Errorf("message %d = %+v, %v", n, o, err)
+		}
+	}
+	if n, _ := b.GetMessageCount(); n != 3 {
+		t.Errorf("count = %d, want 3", n)
+	}
+	if _, err := b.RefreshFixedHeader(); err != nil {
+		t.Fatal(err)
+	}
+	if b.fixedHeader.ActiveMsgs != active {
+		t.Errorf("active messages = %d, want %d", b.fixedHeader.ActiveMsgs, active)
+	}
+}
+
+// The old header is marked deleted, so a tool walking the .jhr skips it,
+// and a pack reclaims it and the old text.
+func TestReplaceMessageIfRetiresOldHeader(t *testing.T) {
+	b := openTestBase(t)
+	writeSubjects(t, b, "one", "two")
+	old := hdrOffset(t, b, 1)
+
+	if err := b.ReplaceMessageIf(1, replaceWith("one", "short")); err != nil {
+		t.Fatal(err)
+	}
+	if now := hdrOffset(t, b, 1); now == old {
+		t.Fatal("the index still points at the old header")
+	}
+	if attributeAt(t, b, old)&MsgDeleted == 0 {
+		t.Error("the old header isn't marked deleted")
+	}
+
+	before, _ := os.Stat(b.BasePath + ".jdt")
+	if _, err := b.Pack(); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.Stat(b.BasePath + ".jdt")
+	if want := int64(len("short") + len("two body")); after.Size() != want || before.Size() <= want {
+		t.Errorf(".jdt is %d bytes after the pack (%d before), want %d", after.Size(), before.Size(), want)
+	}
+	for n, text := range map[int]string{1: "short", 2: "two body"} {
+		if m, err := b.ReadMessage(n); err != nil || m.Text != text {
+			t.Errorf("after pack, message %d = %+v, %v", n, m, err)
+		}
+	}
+}
+
+// A refused edit, a deleted message and a number past the end change
+// nothing and give ErrMessageChanged.
+func TestReplaceMessageIfRefusals(t *testing.T) {
+	b := openTestBase(t)
+	writeSubjects(t, b, "one", "two")
+	if err := b.DeleteMessage(2); err != nil {
+		t.Fatal(err)
+	}
+	jdt, _ := os.Stat(b.BasePath + ".jdt")
+
+	refuse := func(*Message) (string, string, bool) { return "x", "x", false }
+	for name, err := range map[string]error{
+		"refused":  b.ReplaceMessageIf(1, refuse),
+		"deleted":  b.ReplaceMessageIf(2, replaceWith("x", "x")),
+		"past end": b.ReplaceMessageIf(9, replaceWith("x", "x")),
+	} {
+		if !errors.Is(err, ErrMessageChanged) {
+			t.Errorf("%s: err = %v, want ErrMessageChanged", name, err)
+		}
+	}
+	if m, _ := b.ReadMessage(1); m.Subject != "one" || m.Text != "one body" {
+		t.Errorf("message 1 = %+v, want it unchanged", m)
+	}
+	if now, _ := os.Stat(b.BasePath + ".jdt"); now.Size() != jdt.Size() {
+		t.Errorf(".jdt grew from %d to %d bytes", jdt.Size(), now.Size())
+	}
+}
+
+// withSubject replaces the subject where it is, adds one when there's none,
+// and drops it for an empty subject.
+func TestWithSubject(t *testing.T) {
+	from := CreateSubfield(SfldSenderName, "Caller")
+	subj := CreateSubfield(SfldSubject, "old")
+	to := CreateSubfield(SfldReceiverName, "All")
+	ids := func(sfs []Subfield) (out []string) {
+		for _, sf := range sfs {
+			out = append(out, string(sf.Buffer))
+		}
+		return out
+	}
+	for _, tc := range []struct {
+		in      []Subfield
+		subject string
+		want    []string
+	}{
+		{[]Subfield{from, subj, to}, "new", []string{"Caller", "new", "All"}},
+		{[]Subfield{from, to}, "new", []string{"Caller", "All", "new"}},
+		{[]Subfield{from, subj, to}, "", []string{"Caller", "All"}},
+	} {
+		if got := ids(withSubject(tc.in, tc.subject)); !slices.Equal(got, tc.want) {
+			t.Errorf("withSubject(%q) = %v, want %v", tc.subject, got, tc.want)
+		}
+	}
+}

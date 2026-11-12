@@ -315,6 +315,21 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		return ok && localPublicArea(e.MessageMgr, area) && m.StoredAsUTF8() && moderator
 	}
 	canMove := func(m *message.DisplayMessage) bool { return mayMove(m, isModerator()) }
+	// The author or whoever moderates the area may edit a message in a
+	// local public area (editPostedMessage). Edit isn't on the bar, which has
+	// no room for it; the help lists it on a message the caller may edit.
+	anonymousName := strings.TrimSpace(e.Strings().AnonymousName)
+	if anonymousName == "" {
+		anonymousName = "Anonymous"
+	}
+	mayEdit := func(m *message.DisplayMessage, moderator bool) bool {
+		area, ok := e.MessageMgr.GetAreaByID(currentAreaID)
+		if !ok || !editableArea(area) || !editableCharset(m) {
+			return false
+		}
+		return moderator || ownMessage(m, currentUser, anonymousName)
+	}
+	canEdit := func(m *message.DisplayMessage) bool { return mayEdit(m, isModerator()) }
 	barSuffix := e.Strings().MsgReadingSuffix
 	if isNewScan {
 		barSuffix = e.Strings().MsgNewScanSuffix
@@ -771,7 +786,7 @@ readerLoop:
 					singleKey := rune(key)
 					// Check if it's a direct command key
 					switch unicode.ToUpper(singleKey) {
-					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'V', 'K', 'I', '?':
+					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'V', 'E', 'K', 'I', '?':
 						selectedKey = unicode.ToUpper(singleKey)
 					default:
 						// Not a recognized command, show lightbar
@@ -1163,6 +1178,32 @@ readerLoop:
 				}
 				break scrollLoop
 
+			case 'E': // Edit message: its author, the area's sponsor or a co-sysop, in a local area
+				if !canEdit(currentMsg) {
+					continue // Ignore if triggered without access
+				}
+				area, ok := e.MessageMgr.GetAreaByID(currentAreaID)
+				if !ok {
+					continue
+				}
+				saved, edErr := e.editPostedMessage(s, sessionIH, terminal, userManager, currentUser, nodeNumber, outputMode,
+					area, currentMsg, confName, mayEdit, isModerator, termWidth, termHeight)
+				if errors.Is(edErr, editor.ErrIdleTimeout) {
+					return nil, "LOGOFF", currentMsgNum, editor.ErrIdleTimeout
+				}
+				if errors.Is(edErr, io.EOF) {
+					return nil, "LOGOFF", currentMsgNum, io.EOF
+				}
+				if edErr != nil {
+					slog.Error("edit message", "node", nodeNumber, "msg", currentMsg.MsgNum, "area", currentAreaID, "error", edErr)
+				}
+				if saved {
+					// Reload the message: its subject and text have changed.
+					continue readerLoop
+				}
+				needsRedraw = true
+				continue
+
 			case 'K': // Kludges: control information (sysop/co-sysop only)
 				if !isSysop {
 					continue
@@ -1190,7 +1231,7 @@ readerLoop:
 				break readerLoop
 
 			case '?': // Help
-				displayReaderHelp(terminal, outputMode, isSysop, canDelete(currentMsg), canMove(currentMsg), twitOn)
+				displayReaderHelp(terminal, outputMode, isSysop, canDelete(currentMsg), canMove(currentMsg), canEdit(currentMsg), twitOn)
 				needsRedraw = true
 				continue
 
