@@ -1,9 +1,12 @@
 package qwkapi
 
 import (
+	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 )
 
 // LoginGuard is the BBS-wide failed-login and IP blocklist state (satisfied by
@@ -15,7 +18,15 @@ type LoginGuard interface {
 	IsBlocked(ip string) bool
 	IsIPLockedOut(ip string) (bool, time.Time, int)
 	RecordFailedLoginAttempt(ip string) bool
-	ClearFailedLoginAttempts(ip string)
+	// LoginAttempt waits for ip's turn to check a login and returns done,
+	// which ends it. A login holds its turn from the lockout check until its
+	// outcome is recorded, so logins from one IP, here or at the terminal,
+	// are checked one at a time and can't all pass the check together.
+	LoginAttempt(ip string) (done func())
+	// AdmitLogin clears ip's failed attempts for a login that checked out,
+	// unless ip is locked out, and then reports false: a lockout another
+	// login started while this one was being checked stays.
+	AdmitLogin(ip string) bool
 }
 
 // Per-handle lockout thresholds. The per-IP lockout does nothing against
@@ -122,4 +133,36 @@ func (hl *handleLockouts) size() int {
 	hl.mu.Lock()
 	defer hl.mu.Unlock()
 	return len(hl.m)
+}
+
+// takeLoginTurn waits for ip's login turn and checks the IP's lockout again
+// inside it: a login that waited may find the IP locked by the logins ahead of
+// it. It returns done, which ends the turn; when the IP is locked out it has
+// answered 429, logged event, ended the turn, and ok is false. With no Guard
+// there is no turn to take.
+func (s *Server) takeLoginTurn(w http.ResponseWriter, ip, event string) (done func(), ok bool) {
+	if s.deps.Guard == nil {
+		return func() {}, true
+	}
+	done = s.deps.Guard.LoginAttempt(ip)
+	if locked, until, _ := s.deps.Guard.IsIPLockedOut(ip); locked {
+		done()
+		logging.Security(event, "remote", ip, "locked_until", until.Format(time.RFC3339))
+		writeLockedOut(w, until, "too many failed logins from this address")
+		return nil, false
+	}
+	return done, true
+}
+
+// admitLogin admits a login whose credentials checked out, clearing ip's
+// failed attempts. If another login locked ip out meanwhile, the lockout
+// stays: it answers 429 and reports false. event names the login in the log.
+func (s *Server) admitLogin(w http.ResponseWriter, ip, event string) bool {
+	if s.deps.Guard == nil || s.deps.Guard.AdmitLogin(ip) {
+		return true
+	}
+	_, until, _ := s.deps.Guard.IsIPLockedOut(ip)
+	logging.Security(event+" refused: IP locked out during the check", "remote", ip, "locked_until", until.Format(time.RFC3339))
+	writeLockedOut(w, until, "too many failed logins from this address")
+	return false
 }

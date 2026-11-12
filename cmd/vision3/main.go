@@ -768,19 +768,6 @@ func (l *ipLocks) lock(ip string) (unlock func()) {
 	}
 }
 
-// ClearFailedLoginAttempts clears the failed login counter for an IP on successful authentication.
-func (ct *ConnectionTracker) ClearFailedLoginAttempts(ip string) {
-	ct.mu.Lock()
-	defer ct.mu.Unlock()
-
-	if tracker, exists := ct.failedLogins[ip]; exists {
-		if tracker.Attempts > 0 {
-			slog.Info("cleared failed login attempts", "ip", ip, "attempts", tracker.Attempts)
-		}
-		delete(ct.failedLogins, ip)
-	}
-}
-
 // reloadIPLists reloads the blocklist and allowlist from disk.
 // Both lists are loaded outside the lock and swapped atomically under a single lock.
 func (ct *ConnectionTracker) reloadIPLists() {

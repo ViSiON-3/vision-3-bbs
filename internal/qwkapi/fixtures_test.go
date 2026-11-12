@@ -36,13 +36,26 @@ type accountStore struct {
 	mu    sync.Mutex
 	users []*user.User
 	syncs int
+	// sessions counts BeginSession calls: the logins that recorded a call.
+	sessions int
+	// checking, when set, runs as a password or device key is checked, where
+	// the real store would be busy with bcrypt or a signature.
+	checking func()
 }
 
 func newAccountStore(users ...*user.User) *accountStore { return &accountStore{users: users} }
 
 func (a *accountStore) Authenticate(handle, password string) (*user.User, bool) {
+	if a.checking != nil {
+		a.checking()
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	return a.findLocked(handle, password)
+}
+
+// findLocked is the account handle names, if password is right; a.mu is held.
+func (a *accountStore) findLocked(handle, password string) (*user.User, bool) {
 	for _, u := range a.users {
 		if strings.EqualFold(u.Handle, handle) && !u.DeletedUser && password == "pw" {
 			c := *u
@@ -69,7 +82,10 @@ func (a *accountStore) GetUserByID(id int) (*user.User, bool) {
 }
 
 func (a *accountStore) BeginSession(handle string) (*user.User, bool) {
-	return a.Authenticate(handle, "pw")
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.sessions++
+	return a.findLocked(handle, "pw")
 }
 
 func (a *accountStore) AddAPIDevice(userID int, d user.APIDevice, max int) error {
@@ -129,6 +145,9 @@ func (a *accountStore) TouchAPIDevice(userID int, deviceID string, at time.Time)
 }
 
 func (a *accountStore) FindAPIDevice(deviceID string) (*user.User, user.APIDevice, bool) {
+	if a.checking != nil {
+		a.checking()
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for _, u := range a.users {
