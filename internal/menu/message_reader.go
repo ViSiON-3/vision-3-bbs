@@ -292,12 +292,12 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		activeOptions = append(activeOptions, msgReaderDeleteOption)
 	}
 	// A co-sysop may move any message to another area, and the area's
-	// sponsor a message out of it, between local public areas
-	// (moveMessage). Move isn't on the bar, which has no room for it; the
+	// sponsor a message out of it, between local public areas, if it is
+	// stored as UTF-8 (moveMessage). Move isn't on the bar, which has no room for it; the
 	// help lists it where it applies.
-	mayMove := func(_ *message.DisplayMessage, sponsor bool) bool {
+	mayMove := func(m *message.DisplayMessage, sponsor bool) bool {
 		area, ok := e.MessageMgr.GetAreaByID(currentAreaID)
-		return ok && localPublicArea(area) && (isSysop || sponsor)
+		return ok && localPublicArea(e.MessageMgr, area) && m.StoredAsUTF8() && (isSysop || sponsor)
 	}
 	canMove := func(m *message.DisplayMessage) bool { return mayMove(m, isSponsor()) }
 	barSuffix := e.Strings().MsgReadingSuffix

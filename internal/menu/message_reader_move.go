@@ -21,18 +21,19 @@ import (
 // Moving a message to another area from the reader (V): ViSiON/2's &M. A
 // co-sysop may move any message, and an area's sponsor a message out of
 // their area, into another local area they may post in. Only local public
-// areas take part: a move into echomail, QWK or V3Net would send the message
-// to other boards, one out of them would only take away this board's copy,
-// and private mail belongs to its recipient.
+// areas take part: a move into echomail, QWK or V3Net, or into a local area
+// a V3Net leaf binds, would send the message to other boards, one out of them
+// would only take away this board's copy, and private mail belongs to its
+// recipient. A message stored in another character set than UTF-8 isn't
+// moved: the copy is posted from its decoded text, without its CHRS kludge.
 
 // localPublicArea reports whether area is a local area other than private
-// mail.
-func localPublicArea(area *message.MessageArea) bool {
+// mail that no network shares (MessageManager.IsNetworked).
+func localPublicArea(mm *message.MessageManager, area *message.MessageArea) bool {
 	if area == nil || strings.EqualFold(area.Tag, "PRIVMAIL") {
 		return false
 	}
-	t := strings.ToLower(strings.TrimSpace(area.AreaType))
-	return t == "" || t == "local"
+	return !mm.IsNetworked(area)
 }
 
 // areaPlainName is area's name with its colour codes taken out, for text
@@ -62,7 +63,7 @@ func withMovedLine(body, fromName, handle string, when time.Time) string {
 func moveTargets(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u *user.User, from *message.MessageArea, sessionStart time.Time) []*message.MessageArea {
 	var out []*message.MessageArea
 	for _, a := range e.MessageMgr.ListAreas() {
-		if a.ID == from.ID || !localPublicArea(a) {
+		if a.ID == from.ID || !localPublicArea(e.MessageMgr, a) {
 			continue
 		}
 		if a.ACSRead != "" && !checkACS(a.ACSRead, u, s, terminal, sessionStart) {

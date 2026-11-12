@@ -155,6 +155,7 @@ func TestReaderMoveSponsorRemoved(t *testing.T) {
 }
 
 func TestLocalPublicArea(t *testing.T) {
+	mm := &message.MessageManager{IsV3NetArea: func(id int) bool { return id == 9 }}
 	for _, tc := range []struct {
 		area *message.MessageArea
 		want bool
@@ -166,11 +167,56 @@ func TestLocalPublicArea(t *testing.T) {
 		{&message.MessageArea{Tag: "NET", AreaType: "netmail"}, false},
 		{&message.MessageArea{Tag: "DOVE", AreaType: "qwknet"}, false},
 		{&message.MessageArea{Tag: "FELONY", AreaType: "v3net"}, false},
+		{&message.MessageArea{ID: 9, Tag: "BOUND", AreaType: "local"}, false},
 		{nil, false},
 	} {
-		if got := localPublicArea(tc.area); got != tc.want {
+		if got := localPublicArea(mm, tc.area); got != tc.want {
 			t.Errorf("localPublicArea(%+v) = %v, want %v", tc.area, got, tc.want)
 		}
+	}
+}
+
+// A local area a V3Net leaf binds by tag shares its messages with the
+// network: nothing moves into it, and nothing out of it.
+func TestReaderMoveNotV3NetBound(t *testing.T) {
+	env := newMsgEnv(t)
+	env.generalMsgs(1)
+	addMoveArea(env, "TECH", "local", "")
+	bound := addMoveArea(env, "BOUND", "local", "")
+	env.e.MessageMgr.IsV3NetArea = func(id int) bool { return id == bound }
+	r := env.runCmd("READMSGS", env.sysop, "", "Vbound\rQ")
+	if !r.has("TECH Area", "That isn't one of the areas listed.") || r.has("BOUND Area") {
+		t.Errorf("into a bound area; output:\n%s", r.text())
+	}
+	if env.msgCount(generalAreaID) != 1 || env.msgCount(bound) != 0 {
+		t.Error("the message moved")
+	}
+
+	env = newMsgEnv(t)
+	env.generalMsgs(1)
+	tech := addMoveArea(env, "TECH", "local", "")
+	env.e.MessageMgr.IsV3NetArea = func(id int) bool { return id == generalAreaID }
+	if r := env.runCmd("READMSGS", env.sysop, "", "?VtechQ"); r.has("Move to Another Area") || r.has("Move this message to") {
+		t.Errorf("move offered out of a bound area; output:\n%s", r.text())
+	}
+	if env.msgCount(generalAreaID) != 1 || env.msgCount(tech) != 0 {
+		t.Error("the message moved")
+	}
+}
+
+// A message stored in another character set than UTF-8 isn't offered a
+// move: its copy would lose the CHRS kludge that says how to read it.
+func TestReaderMoveNotOtherCharset(t *testing.T) {
+	env := newMsgEnv(t)
+	tech := addMoveArea(env, "TECH", "local", "")
+	if _, err := env.e.MessageMgr.Post(generalAreaID, "Caller", "All", "dos", "caf\x82", message.PostOptions{Kludges: []string{"CHRS: CP437 2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if r := env.runCmd("READMSGS", env.sysop, "", "?VtechQ"); r.has("Move to Another Area") || r.has("Move this message to") {
+		t.Errorf("move offered on a CP437 message; output:\n%s", r.text())
+	}
+	if env.msgCount(generalAreaID) != 1 || env.msgCount(tech) != 0 {
+		t.Error("the message moved")
 	}
 }
 

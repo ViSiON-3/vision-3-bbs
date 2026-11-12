@@ -486,7 +486,10 @@ cancels), then asks `Move this message to ...? [Y/N]`.
 - **Where:** between local areas only, and only into one the caller may
   read and post in. A move into an echomail, netmail, QWK network or V3Net
   area would send the message to other boards, and one out of them would
-  only take away this board's copy. Private mail isn't moved.
+  only take away this board's copy. A `local` area that a V3Net leaf lists
+  in its `boards` counts as V3Net here. Private mail isn't moved, nor a
+  message stored in a character set other than UTF-8 (its copy would lose
+  the `CHRS` kludge that says how to read it).
 - **What arrives:** the message keeps its sender, recipient, subject, date
   and private flag, and gets a last line saying where it came from, who
   moved it and when, such as ` * Moved from General Discussion by Felonius
