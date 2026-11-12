@@ -546,3 +546,24 @@ func TestCentralPrefsArtFit(t *testing.T) {
 		t.Error("two rows of UTF-8 art measured as more than two")
 	}
 }
+
+// Availability has three settings: its row lists them all with the
+// current one bracketed, and stepping it says what the new one means.
+func TestCentralPrefsAvailabilityChoices(t *testing.T) {
+	f := newAlertFixture(t)
+	f.fake.nets = []CentralNetworkInfo{alertNet("testnet")}
+	_, u := f.caller(t, 1, "Caller", 30, user.CentralAlertPrefs{}, true)
+
+	snap := runAlertScreen(t, f, u, "q\r").Snapshot()
+	if !strings.Contains(snap, "[Not shown] Available  Busy") {
+		t.Errorf("row does not list the three settings, Not shown current:\n%s", snap)
+	}
+	snap = runAlertScreen(t, f, u, "2\rq\r").Snapshot()
+	if !strings.Contains(snap, "Not shown [Available] Busy") || !strings.Contains(snap, "Who's Online shows you as available.") {
+		t.Errorf("one step should reach Available and say so:\n%s", snap)
+	}
+	snap = runAlertScreen(t, f, u, "2\r2\rq\r").Snapshot()
+	if !strings.Contains(snap, "[Not shown] Available  Busy") || !strings.Contains(snap, "shows no availability for you.") {
+		t.Errorf("two more steps should pass Busy and return to Not shown:\n%s", snap)
+	}
+}

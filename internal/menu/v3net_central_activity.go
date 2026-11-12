@@ -524,9 +524,24 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 				return "|04Off"
 			}
 		}
-		availText := map[string]string{"": "|08Not shown", protocol.CentralAvailable: "|10Available", protocol.CentralBusy: "|14Busy"}[u.CentralAvailability]
-		if availText == "" {
-			availText = "|08Not shown"
+		// Availability has three settings and [2] steps through them, so
+		// the row lists all three with the current one bracketed: the
+		// brackets mark it where colour does not show.
+		avail := u.CentralAvailability
+		if avail != protocol.CentralAvailable && avail != protocol.CentralBusy {
+			avail = ""
+		}
+		var availText string
+		for _, st := range []struct{ value, label, colour string }{
+			{"", "Not shown", "|07"},
+			{protocol.CentralAvailable, "Available", "|10"},
+			{protocol.CentralBusy, "Busy", "|14"},
+		} {
+			if st.value == avail {
+				availText += "|08[" + st.colour + st.label + "|08]"
+			} else {
+				availText += " |08" + st.label + " "
+			}
 		}
 		chatSwitch := onOff(chatOn, chatNets)
 		if len(chatNets) == 0 && u.CentralChat {
@@ -708,6 +723,17 @@ func runV3NetCentralPrefs(c *cmdCtx, args string) (*user.User, string, error) {
 			e.V3NetCentral.NotifyCentralActivity()
 		}
 		status = "|10Saved.|07"
+		if line == "2" {
+			// Say what the setting just stepped to means.
+			switch u.CentralAvailability {
+			case protocol.CentralAvailable:
+				status += " |07Who's Online shows you as |10available|07."
+			case protocol.CentralBusy:
+				status += " |07Who's Online shows you as |14busy|07."
+			default:
+				status += " |07Who's Online shows no availability for you."
+			}
+		}
 	}
 }
 

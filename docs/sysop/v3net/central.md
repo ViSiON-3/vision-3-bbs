@@ -278,7 +278,7 @@ and Chat as they apply):
   Nothing about you is shared. Browsing sends nothing either.
 
   [1] Who's Online     Off
-  [2] Availability     Not shown
+  [2] Availability     [Not shown] Available  Busy
   [3] Last Callers     Off
   [4] Network chat     Off
   [5] Activity alerts  Off
