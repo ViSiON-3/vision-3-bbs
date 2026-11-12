@@ -147,6 +147,8 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 		{name: "events.json", path: filepath.Join(rootConfigPath, "events.json"), reload: cw.reloadEvents},
 		{name: "conferences.json", path: filepath.Join(rootConfigPath, "conferences.json"), reload: cw.reloadConferences},
 		{name: "ftn.json", path: filepath.Join(rootConfigPath, "ftn.json"), reload: cw.reloadFTNOrigins},
+		// Removing roles.json removes every role, so that reloads too.
+		{name: "roles.json", path: filepath.Join(rootConfigPath, "roles.json"), reload: cw.reloadRoles, reloadOnRemove: true},
 	}...)
 	cw.deferredTargets = []deferredTarget{
 		{
@@ -551,6 +553,14 @@ func (cw *ConfigWatcher) reloadDoors() {
 	// Update MenuExecutor's DoorRegistry atomically
 	cw.menuExecutor.SetDoorRegistry(newDoors)
 	slog.Info("doors.json reloaded", "count", len(newDoors))
+}
+
+// reloadRoles reloads configs/roles.json (see loadRoles). A role removed
+// there stops granting at the next protected action, including a save from
+// an editor that is already open.
+func (cw *ConfigWatcher) reloadRoles() {
+	slog.Info("reloading roles.json")
+	loadRoles(cw.rootConfigPath)
 }
 
 // reloadLoginSequence reloads the login sequence configuration.

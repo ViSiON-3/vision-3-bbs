@@ -277,7 +277,7 @@ func fixDoctorDirectories(root string, dryRun bool) []doctorFix {
 func doctorSection(name string) string {
 	lower := strings.ToLower(name)
 	switch {
-	case strings.HasPrefix(lower, "acs: ") || lower == "acs strings":
+	case strings.HasPrefix(lower, "acs: ") || lower == "acs strings" || lower == "admin roles":
 		return "ACCESS CONTROL"
 	case strings.Contains(lower, ".cfg") || strings.Contains(lower, ".mnu") || strings.HasPrefix(lower, "doors") || strings.HasPrefix(lower, "menus/"):
 		return "MENUS & DOORS"
@@ -389,6 +389,7 @@ func inspectBoard(root string) doctorReport {
 	checkChatScreens(filepath.Join(root, "menus", "v3"), add)
 	checkDoors(configDir, root, add)
 	checkACSStrings(root, add)
+	checkRoles(root, add)
 	checkWritablePaths(root, add)
 	return report
 }
