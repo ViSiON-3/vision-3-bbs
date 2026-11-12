@@ -10,6 +10,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -27,7 +28,14 @@ var (
 	// screens show (boardTime), resolved once from config.json's timezone
 	// when the config is set; nil until then.
 	acsLocation atomic.Pointer[time.Location]
+	// acsAreaScope is the message area PERM asks a scoped permission about
+	// for a user: their current area, with its conference and sponsor. nil
+	// until an executor is made, when PERM reads the tags on the record.
+	acsAreaScope atomic.Pointer[func(*user.User) perm.Scope]
 )
+
+// setACSAreaScope sets how acsContext finds a user's current message area.
+func setACSAreaScope(f func(*user.User) perm.Scope) { acsAreaScope.Store(&f) }
 
 func init() {
 	setACSSysOpLevels(config.DefaultSysOpLevel, config.DefaultCoSysOpLevel)
@@ -63,6 +71,9 @@ func acsContext(u *user.User, s ssh.Session, startTime time.Time) acs.Context {
 	}
 	if s != nil {
 		ctx.Session = acsSession{s}
+	}
+	if f := acsAreaScope.Load(); f != nil && u != nil {
+		ctx.Scope = func() perm.Scope { return (*f)(u) }
 	}
 	return ctx
 }

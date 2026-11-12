@@ -151,7 +151,7 @@ These are names only, taking a colon, for the
 
 | Term | Passes when | Notes |
 |---|---|---|
-| `PERM:`*permission* | the user holds the permission: a SysOp (level ≥ `sysOpLevel`), or a user with a role that grants it | `PERM:users.validate`. Use this to offer an admin command: the command checks the same thing |
+| `PERM:`*permission* | the user holds the permission: a SysOp (level ≥ `sysOpLevel`), or a user with a role that grants it | `PERM:users.validate`. Use this to offer an admin command: the command checks the same thing. `PERM:messages.moderate` answers for the caller's current message area, where a co-SysOp and the area's sponsor hold it too |
 | `ROLE:`*name* | the user's record lists the role | `ROLE:validator`. Being a SysOp doesn't make anyone a member |
 
 A permission the BBS doesn't define (`PERM:users.vaildate`) is an error, like

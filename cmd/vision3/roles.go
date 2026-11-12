@@ -60,6 +60,11 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 	for _, d := range diags {
 		add("admin roles", doctorWarn, "configs/roles.json: "+d.String(), "See docs/sysop/users/admin-roles.md for role names and the permissions there are.")
 	}
+	unknownTags := checkGrantTags(configDir, roles)
+	for _, msg := range unknownTags {
+		add("admin roles", doctorWarn, "configs/roles.json: "+msg,
+			"Correct the tag, or take it out of the grant; see docs/sysop/users/admin-roles.md.")
+	}
 
 	var users []struct {
 		ID          int      `json:"id"`
@@ -95,7 +100,48 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 			}
 		}
 	}
-	if len(diags) == 0 && usersChecked {
+	if len(diags) == 0 && len(unknownTags) == 0 && usersChecked {
 		add("admin roles", doctorOK, fmt.Sprintf("%d role(s) defined, %d user(s) with a role", roles.Len(), members), "")
 	}
+}
+
+// checkGrantTags lists the area and conference tags roles' grants name that
+// message_areas.json and conferences.json don't have. Such a tag covers
+// nothing, so the grant is narrower than it reads. A file that can't be
+// read is left to the checks that report on it.
+func checkGrantTags(configDir string, roles *perm.Roles) []string {
+	var areas []struct {
+		Tag string `json:"tag"`
+	}
+	var confs []struct {
+		Tag string `json:"tag"`
+	}
+	read := func(name string, v any) bool {
+		data, err := os.ReadFile(filepath.Join(configDir, name))
+		return err == nil && json.Unmarshal(data, v) == nil
+	}
+	haveAreas, haveConfs := read("message_areas.json", &areas), read("conferences.json", &confs)
+	areaTags, confTags := map[string]bool{}, map[string]bool{}
+	for _, a := range areas {
+		areaTags[strings.ToUpper(strings.TrimSpace(a.Tag))] = true
+	}
+	for _, c := range confs {
+		confTags[strings.ToUpper(strings.TrimSpace(c.Tag))] = true
+	}
+	var out []string
+	for _, role := range roles.List() {
+		for _, g := range role.Permissions {
+			for _, tag := range g.Areas {
+				if haveAreas && !areaTags[tag] {
+					out = append(out, fmt.Sprintf("role %s: %s names area %s, which message_areas.json doesn't have, so it covers nothing there", role.Name, g.Permission, tag))
+				}
+			}
+			for _, tag := range g.Conferences {
+				if haveConfs && !confTags[tag] {
+					out = append(out, fmt.Sprintf("role %s: %s names conference %s, which conferences.json doesn't have, so it covers nothing there", role.Name, g.Permission, tag))
+				}
+			}
+		}
+	}
+	return out
 }

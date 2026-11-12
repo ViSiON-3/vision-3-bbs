@@ -308,7 +308,7 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 	case "ROLE":
 		detail = roleDetail(u, t.value, result)
 	case "PERM":
-		detail = permDetail(perm.Check(u, perm.Permission(t.value), ctx.SysOpLevel, ctx.roles()), u, ctx.SysOpLevel)
+		detail = permDetail(ctx.permission(perm.Permission(t.value)), u, ctx)
 	case "U":
 		detail = compared("user ID", u.ID, "", t)
 	case "P":
@@ -443,17 +443,31 @@ func roleDetail(u *user.User, name string, member bool) string {
 }
 
 // permDetail explains a PERM term: where the permission came from, or why
-// nothing grants it.
-func permDetail(d perm.Decision, u *user.User, sysOpLevel int) string {
+// nothing grants it. A scoped permission names the area it was asked about.
+func permDetail(d perm.Decision, u *user.User, ctx Context) string {
+	where := ""
+	if d.Area != "" {
+		where = " in " + d.Area
+	} else if perm.IsScoped(d.Permission) {
+		where = " with no current message area"
+	}
 	switch {
-	case d.Sysop:
-		return fmt.Sprintf("has %s: level %d is at least %d (sysOpLevel), which holds every permission", d.Permission, u.AccessLevel, sysOpLevel)
+	case d.Level && d.LevelOf == perm.CoSysOpLevel:
+		return fmt.Sprintf("has %s: level %d is at least %d (coSysOpLevel), which holds it in every area", d.Permission, u.AccessLevel, ctx.CoSysOpLevel)
+	case d.Level:
+		return fmt.Sprintf("has %s: level %d is at least %d (sysOpLevel), which holds every permission", d.Permission, u.AccessLevel, ctx.SysOpLevel)
 	case d.Allowed:
-		return fmt.Sprintf("has %s through %s", d.Permission, d.Source())
+		return fmt.Sprintf("has %s%s through %s", d.Permission, where, d.Source())
 	case u.DeletedUser:
 		return fmt.Sprintf("doesn't have %s: the account is deleted", d.Permission)
+	case perm.IsScoped(d.Permission) && strings.EqualFold(d.Area, perm.PrivateMailTag):
+		return fmt.Sprintf("doesn't have %s in %s: below its level, nothing grants it in private mail", d.Permission, d.Area)
 	}
-	return fmt.Sprintf("doesn't have %s: level %d is below %d (sysOpLevel) and no role grants it (roles: %s)", d.Permission, u.AccessLevel, sysOpLevel, userRoles(u))
+	threshold, name := ctx.SysOpLevel, "sysOpLevel"
+	if perm.LevelOf(d.Permission) == perm.CoSysOpLevel && ctx.CoSysOpLevel > 0 {
+		threshold, name = ctx.CoSysOpLevel, "coSysOpLevel"
+	}
+	return fmt.Sprintf("doesn't have %s%s: level %d is below %d (%s) and no role grants it (roles: %s)", d.Permission, where, u.AccessLevel, threshold, name, userRoles(u))
 }
 
 // compared describes a numeric term's comparison of have, the caller's value

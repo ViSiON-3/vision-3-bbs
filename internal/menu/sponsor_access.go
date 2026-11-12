@@ -1,7 +1,6 @@
 package menu
 
 import (
-	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -46,20 +45,4 @@ func sponsorKeyword(u *user.User, areas areaLookup, cfg config.ServerConfig) boo
 		return false
 	}
 	return CanAccessSponsorMenu(u, area, cfg)
-}
-
-// sponsorsArea reports whether u is the sponsor of message area areaID, and
-// so may moderate it in the message reader: delete any message there, as a
-// co-sysop can anywhere. The area is looked up afresh, so a sponsor the
-// sysop has just removed loses it at once. Private mail has no moderator:
-// PRIVMAIL's sponsor field gives nobody other callers' mail.
-func sponsorsArea(u *user.User, areas areaLookup, areaID int) bool {
-	if u == nil || areas == nil {
-		return false
-	}
-	area, found := areas.GetAreaByID(areaID)
-	if !found || area == nil || strings.EqualFold(area.Tag, "PRIVMAIL") {
-		return false
-	}
-	return area.SponsoredBy(u.ID)
 }

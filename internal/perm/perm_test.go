@@ -11,6 +11,8 @@ import (
 
 const sysOp = 255
 
+var levels = Levels{SysOp: sysOp, CoSysOp: 250}
+
 func mustParse(t *testing.T, data string) *Roles {
 	t.Helper()
 	r, diags, err := Parse([]byte(data))
@@ -30,8 +32,8 @@ const validatorRoles = `{"roles": [
 
 func TestCheckSysopHoldsEveryPermissionWithoutRoles(t *testing.T) {
 	u := &user.User{AccessLevel: sysOp}
-	d := Check(u, UsersValidate, sysOp, &Roles{})
-	if !d.Allowed || !d.Sysop || d.Source() != "sysop level" {
+	d := Check(u, UsersValidate, Scope{}, levels, &Roles{})
+	if !d.Allowed || !d.Level || d.Source() != "sysop level" {
 		t.Fatalf("sysop decision = %+v (%q)", d, d.Source())
 	}
 	if Member(u, "validator", mustParse(t, validatorRoles)) {
@@ -42,8 +44,8 @@ func TestCheckSysopHoldsEveryPermissionWithoutRoles(t *testing.T) {
 func TestCheckRoleGrantsBelowSysop(t *testing.T) {
 	roles := mustParse(t, validatorRoles)
 	u := &user.User{AccessLevel: 20, Roles: []string{"VALIDATOR", "helper", "validator"}}
-	d := Check(u, UsersValidate, sysOp, roles)
-	if !d.Allowed || d.Sysop {
+	d := Check(u, UsersValidate, Scope{}, levels, roles)
+	if !d.Allowed || d.Level {
 		t.Fatalf("decision = %+v", d)
 	}
 	if got := d.Source(); got != "roles helper, validator" {
@@ -64,7 +66,7 @@ func TestCheckDenies(t *testing.T) {
 		"deleted sysop":  {AccessLevel: sysOp, DeletedUser: true},
 	}
 	for name, u := range cases {
-		if d := Check(u, UsersValidate, sysOp, roles); d.Allowed || d.Source() != "" {
+		if d := Check(u, UsersValidate, Scope{}, levels, roles); d.Allowed || d.Source() != "" {
 			t.Errorf("%s: decision = %+v", name, d)
 		}
 	}
@@ -73,15 +75,15 @@ func TestCheckDenies(t *testing.T) {
 func TestCheckNilRolesReadsCurrent(t *testing.T) {
 	t.Cleanup(func() { SetCurrent(nil) })
 	u := &user.User{AccessLevel: 20, Roles: []string{"validator"}}
-	if Check(u, UsersValidate, sysOp, nil).Allowed {
+	if Check(u, UsersValidate, Scope{}, levels, nil).Allowed {
 		t.Fatal("allowed before any roles were loaded")
 	}
 	SetCurrent(mustParse(t, validatorRoles))
-	if !Check(u, UsersValidate, sysOp, nil).Allowed {
+	if !Check(u, UsersValidate, Scope{}, levels, nil).Allowed {
 		t.Fatal("not allowed after SetCurrent")
 	}
 	SetCurrent(&Roles{})
-	if Check(u, UsersValidate, sysOp, nil).Allowed {
+	if Check(u, UsersValidate, Scope{}, levels, nil).Allowed {
 		t.Fatal("still allowed after the role was removed")
 	}
 }
@@ -120,7 +122,7 @@ func TestParseDiagnosticsOnlyGrantLess(t *testing.T) {
 			t.Errorf("diagnostic %d = %q, want prefix %q", i, diags[i], w)
 		}
 	}
-	if Check(&user.User{AccessLevel: 1, Roles: []string{"typo"}}, UsersValidate, sysOp, r).Allowed {
+	if Check(&user.User{AccessLevel: 1, Roles: []string{"typo"}}, UsersValidate, Scope{}, levels, r).Allowed {
 		t.Fatal("a misspelt permission granted access")
 	}
 }

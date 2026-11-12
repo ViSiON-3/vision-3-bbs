@@ -2,9 +2,6 @@ package menu
 
 import (
 	"testing"
-
-	"github.com/ViSiON-3/vision-3-bbs/internal/message"
-	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // An area's sponsor may delete any message in it from the reader, as a
@@ -64,46 +61,5 @@ func TestMessageReaderSponsorRemovedBeforeConfirm(t *testing.T) {
 	}
 	if !r.has("You can no longer delete messages in this area.") {
 		t.Errorf("no notice; output:\n%s", r.text())
-	}
-}
-
-// fakeAreas is an areaLookup over a fixed set of areas.
-type fakeAreas map[int]*message.MessageArea
-
-func (f fakeAreas) GetAreaByID(id int) (*message.MessageArea, bool) {
-	a, ok := f[id]
-	return a, ok
-}
-
-// sponsorsArea: the sponsor's account, by ID, not whoever has the handle;
-// nobody for an area with no sponsor, an unknown area or no caller; and
-// nobody for PRIVMAIL, whose sponsor field gives no one other callers' mail.
-func TestSponsorsArea(t *testing.T) {
-	areas := fakeAreas{
-		1: {ID: 1, Tag: "GENERAL", Sponsor: "TechGuru", SponsorID: 7},
-		2: {ID: 2, Tag: "PRIVMAIL", Sponsor: "TechGuru", SponsorID: 7},
-		3: {ID: 3, Tag: "TECH"},
-	}
-	guru := &user.User{ID: 7, Handle: "techguru"}
-	for _, tc := range []struct {
-		name string
-		u    *user.User
-		area int
-		want bool
-	}{
-		{"sponsor", guru, 1, true},
-		{"someone else", &user.User{ID: 8, Handle: "Other"}, 1, false},
-		{"someone else with the handle", &user.User{ID: 9, Handle: "TechGuru"}, 1, false},
-		{"private mail", guru, 2, false},
-		{"no sponsor", guru, 3, false},
-		{"unknown area", guru, 9, false},
-		{"no caller", nil, 1, false},
-	} {
-		if got := sponsorsArea(tc.u, areas, tc.area); got != tc.want {
-			t.Errorf("%s: sponsorsArea = %v, want %v", tc.name, got, tc.want)
-		}
-	}
-	if sponsorsArea(guru, nil, 1) {
-		t.Error("no area lookup: sponsorsArea = true")
 	}
 }

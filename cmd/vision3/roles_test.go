@@ -121,7 +121,9 @@ func TestLoadRolesFailsClosed(t *testing.T) {
 	t.Cleanup(func() { perm.SetCurrent(nil) })
 	dir := t.TempDir()
 	member := &user.User{AccessLevel: 20, Roles: []string{"validator"}}
-	allowed := func() bool { return perm.Check(member, perm.UsersValidate, 255, nil).Allowed }
+	allowed := func() bool {
+		return perm.Check(member, perm.UsersValidate, perm.Scope{}, perm.Levels{SysOp: 255, CoSysOp: 250}, nil).Allowed
+	}
 
 	writeBoardFile(t, dir, perm.FileName, `{"roles": [{"name": "validator", "permissions": ["users.validate"]}]}`)
 	loadRoles(dir)
@@ -141,5 +143,29 @@ func TestLoadRolesFailsClosed(t *testing.T) {
 	loadRoles(dir)
 	if allowed() {
 		t.Fatal("role still in force after roles.json was removed")
+	}
+}
+
+func TestCheckRolesUnknownGrantTags(t *testing.T) {
+	root := t.TempDir()
+	writeBoardFile(t, root, "configs/message_areas.json", `[{"id": 1, "tag": "GENERAL"}]`)
+	writeBoardFile(t, root, "configs/conferences.json", `[{"id": 1, "tag": "LOCAL"}]`)
+	writeBoardFile(t, root, "configs/roles.json", `{"roles": [{"name": "mod", "permissions": [
+		{"permission": "messages.moderate", "areas": ["general", "GENRAL"], "conferences": ["local", "FSX"]}]}]}`)
+	var msgs []string
+	for _, c := range collectChecks(root, checkRoles) {
+		if c.status != doctorWarn {
+			t.Errorf("check %+v is not a warning", c)
+		}
+		msgs = append(msgs, c.message)
+	}
+	joined := strings.Join(msgs, "\n")
+	for _, want := range []string{"names area GENRAL, which message_areas.json doesn't have", "names conference FSX, which conferences.json doesn't have"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("checks lack %q:\n%s", want, joined)
+		}
+	}
+	if len(msgs) != 2 {
+		t.Errorf("checks = %v", msgs)
 	}
 }
