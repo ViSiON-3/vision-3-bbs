@@ -80,11 +80,14 @@ func parseScanDate(input string) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	for _, layout := range scanDateLayouts {
-		t, err := time.ParseInLocation(layout, input, time.Local)
+		// The date is the board's: midnight in its zone, as its screens show
+		// dates.
+		loc := boardLocation()
+		t, err := time.ParseInLocation(layout, input, loc)
 		if err != nil {
 			continue
 		}
-		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local), true
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc), true
 	}
 	return time.Time{}, false
 }
@@ -216,7 +219,7 @@ func runGetScanType(ih *editor.InputHandler, e *MenuExecutor, terminal *term.Ter
 		if cfg.ScanDate == scanDateAll {
 			dateStr = "ALL Messages"
 		} else if cfg.ScanDate > 0 {
-			dateStr = fmt.Sprintf("Since %s", cfg.since().Format("01/02/06"))
+			dateStr = fmt.Sprintf("Since %s", boardTime(cfg.since()).Format("01/02/06"))
 		}
 		e.writeStringf(terminal, outputMode, e.Strings().ScanDateLine, dateStr)
 

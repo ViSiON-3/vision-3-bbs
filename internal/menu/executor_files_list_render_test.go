@@ -65,7 +65,7 @@ func TestFormatFileListLine_TokenSubstitution(t *testing.T) {
 	if !strings.Contains(line, "TESTFILE.ZIP") {
 		t.Errorf("expected filename in line, got %q", line)
 	}
-	if !strings.Contains(line, "03/15/24") {
+	if !strings.Contains(line, boardTime(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC)).Format("01/02/06")) {
 		t.Errorf("expected formatted date in line, got %q", line)
 	}
 	if !strings.Contains(line, "2k") {

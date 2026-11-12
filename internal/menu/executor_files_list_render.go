@@ -172,7 +172,7 @@ func formatFileListLine(rec file.FileRecord, currentUser *user.User, extendedMod
 	}
 	dateStr := ""
 	if fileColumnEnabled(currentUser, "date", extendedMode) {
-		dateStr = rec.UploadedAt.Format("01/02/06")
+		dateStr = boardTime(rec.UploadedAt).Format("01/02/06")
 	} else {
 		dateStr = strings.Repeat(" ", 8)
 	}

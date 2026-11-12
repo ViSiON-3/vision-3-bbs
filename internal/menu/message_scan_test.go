@@ -16,7 +16,7 @@ import (
 // TestParseScanDate checks every accepted date layout yields local midnight of
 // the same day and that malformed or ambiguous input is rejected.
 func TestParseScanDate(t *testing.T) {
-	want := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.Local)
+	want := time.Date(2026, time.September, 1, 0, 0, 0, 0, boardLocation()) // midnight on the board
 	for _, in := range []string{
 		"09/01/26", "9/1/26", "09/01/2026", "9/1/2026",
 		"09-01-26", "9-1-2026",
@@ -234,7 +234,7 @@ func TestRunGetScanTypeCollectsSearchFields(t *testing.T) {
 // format, a bad date is reported and leaves the setting alone, and "all"
 // selects every message.
 func TestRunGetScanTypeDateAcceptsCommonFormatsAndReportsBadOnes(t *testing.T) {
-	want := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.Local)
+	want := time.Date(2026, time.September, 1, 0, 0, 0, 0, boardLocation()) // midnight on the board
 
 	cfg, out := runScanTypeWithInput(t, "D2026-09-01\r\r", 10)
 	if cfg.ScanDate != want.Unix() {

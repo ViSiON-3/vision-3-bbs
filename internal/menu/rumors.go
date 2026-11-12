@@ -69,7 +69,7 @@ func runRumorsList(c *cmdCtx, args string) (*user.User, string, error) {
 		r := &rd.Rumors[idx]
 		author := rumorShownAuthor(r, anonName)
 		wv(terminal, fmt.Sprintf("|03%-4d|07%-42s|11%-16s|07%s\r\n",
-			r.ID, callerText(truncateRunes(r.Text, 41)), callerText(truncateRunes(author, 15)), r.PostedAt.Format("01/02/06")), outputMode)
+			r.ID, callerText(truncateRunes(r.Text, 41)), callerText(truncateRunes(author, 15)), boardTime(r.PostedAt).Format("01/02/06")), outputMode)
 		if !pager.Line() {
 			return pager.stopResult(currentUser)
 		}

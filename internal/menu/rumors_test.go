@@ -48,7 +48,7 @@ func TestRumorsListHonoursLevelAndAnonymity(t *testing.T) {
 	if r.err != nil {
 		t.Fatalf("err = %v", r.err)
 	}
-	if !r.has("The modem pool is haunted", "Someone ate the donuts", "03/04/26") {
+	if !r.has("The modem pool is haunted", "Someone ate the donuts", boardTime(time.Date(2026, 3, 4, 0, 0, 0, 0, time.UTC)).Format("01/02/06")) {
 		t.Errorf("caller list missing visible rumors:\n%s", r.text())
 	}
 	if r.has("Secret upgrade") {

@@ -95,7 +95,7 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 	botRendered := ansi.ReplacePipeCodes(e.applyCommonTemplateTokens(botBytes, currentUser, nodeNumber))
 
 	// Replace date placeholder in header
-	dateLabel := since.Format("01/02/2006")
+	dateLabel := boardTime(since).Format("01/02/2006")
 	if since.IsZero() {
 		// A zero cutoff (SETFILESCANDATE "all") includes every file; showing
 		// 01/01/0001 in the header would be nonsense.
@@ -155,7 +155,7 @@ func runFileNewscan(c *cmdCtx, args string) (*user.User, string, error) {
 
 			line := midTemplate
 			line = strings.ReplaceAll(line, "^NAME", fmt.Sprintf("%-12s", fname))
-			line = strings.ReplaceAll(line, "^DATE", f.UploadedAt.Format("01/02/06"))
+			line = strings.ReplaceAll(line, "^DATE", boardTime(f.UploadedAt).Format("01/02/06"))
 			line = strings.ReplaceAll(line, "^SIZE", fmt.Sprintf("%5dk", (f.Size+1023)/1024))
 			line = strings.ReplaceAll(line, "^DESC", desc)
 

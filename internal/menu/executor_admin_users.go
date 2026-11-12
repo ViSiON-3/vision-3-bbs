@@ -213,14 +213,14 @@ func adminTime(t time.Time) string {
 	if t.IsZero() {
 		return "N/A"
 	}
-	return t.Format("2006-01-02 15:04")
+	return boardTime(t).Format("2006-01-02 15:04")
 }
 
 func adminDate(t time.Time) string {
 	if t.IsZero() {
 		return "N/A"
 	}
-	return t.Format("2006-01-02")
+	return boardTime(t).Format("2006-01-02")
 }
 
 func adminUserLightbarBrowser(s ssh.Session, terminal *term.Terminal, users []*user.User, title string, instruction string, outputMode ansi.OutputMode, selectOnEnter bool) (*user.User, bool, error) {

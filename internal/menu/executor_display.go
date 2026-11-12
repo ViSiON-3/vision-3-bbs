@@ -304,7 +304,7 @@ func applyUserPlaceholders(placeholders map[string]string, u *user.User) {
 	// at the start of the session, so |LCALL would otherwise always read as
 	// today. A first-time caller has no previous visit and keeps "Never".
 	if !u.PreviousLogin.IsZero() {
-		placeholders["|LCALL"] = u.PreviousLogin.Format("01/02/06")
+		placeholders["|LCALL"] = boardTime(u.PreviousLogin).Format("01/02/06")
 	}
 }
 

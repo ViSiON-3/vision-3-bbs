@@ -182,7 +182,7 @@ func (d deviceScreen) draw(devices []user.APIDevice, notice string) {
 		write(pipe(st.QwkDevicesHeader) + "\r\n")
 		for i, dev := range devices {
 			write(pipe("|15") + fmt.Sprintf("%2d  ", i+1) + pipe("|07") + d.deviceCell(dev.Name) + " " + pipe("|08") +
-				dev.CreatedAt.Local().Format(deviceDateFormat) + "  " + deviceLastUsed(dev.LastUsed, st.QwkDevicesNever) + pipe("|07") + "\r\n")
+				boardTime(dev.CreatedAt).Format(deviceDateFormat) + "  " + deviceLastUsed(dev.LastUsed, st.QwkDevicesNever) + pipe("|07") + "\r\n")
 		}
 	}
 	write("\r\n")
@@ -203,5 +203,5 @@ func deviceLastUsed(at time.Time, never string) string {
 	if at.IsZero() {
 		return never
 	}
-	return at.Local().Format(deviceDateFormat)
+	return boardTime(at).Format(deviceDateFormat)
 }

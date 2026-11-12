@@ -629,7 +629,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	// with the time at, or now when at is zero, without drawing it. Caller
 	// must hold rawMu.
 	keepChatLineLocked := func(text string, at time.Time) {
-		fullText := fmt.Sprintf("|08%s|07 %s", chatStamp(at, time.Now()), text)
+		fullText := fmt.Sprintf("|08%s|07 %s", chatStamp(at, boardTime(time.Now())), text)
 		// The last column stays free, as it does on the input rows: a terminal
 		// without a deferred wrap moves to the next row as soon as a character
 		// lands there, and on the bottom row of the region that scrolls the
