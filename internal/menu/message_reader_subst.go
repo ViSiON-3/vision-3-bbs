@@ -179,8 +179,8 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 		'#': strconv.Itoa(msgNum),
 		'N': strconv.Itoa(totalMsgs),
 		'C': fmt.Sprintf("[%d/%d]", msgNum, totalMsgs), // Message count display
-		'D': msg.DateTime.Format("01/02/06"),
-		'W': msg.DateTime.Format("3:04 pm"),
+		'D': boardTime(msg.DateTime).Format("01/02/06"),
+		'W': boardTime(msg.DateTime).Format("3:04 pm"),
 		'P': replyStr,
 		'E': strconv.Itoa(replyCount),
 		'O': originAddr,                                                            // Origin: FTN address or V3Net node ID

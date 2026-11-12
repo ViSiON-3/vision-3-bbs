@@ -385,7 +385,7 @@ func writeMsgSearchRow(terminal *term.Terminal, outputMode ansi.OutputMode, n in
 		msgSearchMsgWidth, h.msgNum,
 		msgCell(h.subject, msgSearchSubjectWidth),
 		msgCell(h.from, msgSearchFromWidth),
-		h.dateTime.Format("01/02/06"))
+		boardTime(h.dateTime).Format("01/02/06"))
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(line)), outputMode)
 }
 

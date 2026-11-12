@@ -234,7 +234,7 @@ func listDateCell(t time.Time) string {
 	if t.IsZero() {
 		return strings.Repeat(" ", listDateWidth)
 	}
-	return ansi.PadRight(ansi.TruncateRunes(t.Format("01/02/06"), listDateWidth, ""), listDateWidth)
+	return ansi.PadRight(ansi.TruncateRunes(boardTime(t).Format("01/02/06"), listDateWidth, ""), listDateWidth)
 }
 
 // messageListRow builds every column of one message row except the status

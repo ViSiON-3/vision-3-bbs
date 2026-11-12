@@ -303,7 +303,7 @@ func renderTreeRow(r threadRow, current, highlight, dim bool, width int, g threa
 	}
 	date := strings.Repeat(" ", paneDateWidth)
 	if r.Msg != nil && !r.Msg.DateTime.IsZero() {
-		date = r.Msg.DateTime.Format("01/02/06")
+		date = boardTime(r.Msg.DateTime).Format("01/02/06")
 	}
 	if used+2+paneDateWidth <= width {
 		b.WriteString("  " + dateColour + date)

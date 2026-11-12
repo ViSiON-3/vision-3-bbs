@@ -106,8 +106,8 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	quoteLines := strings.Split(currentMsg.Body, "\n")
 
 	// Format date/time from message
-	quoteDate := currentMsg.DateTime.Format("01/02/2006")
-	quoteTime := currentMsg.DateTime.Format("3:04 PM")
+	quoteDate := boardTime(currentMsg.DateTime).Format("01/02/2006")
+	quoteTime := boardTime(currentMsg.DateTime).Format("3:04 PM")
 
 	// Auto-generate subject with "RE: " prefix (no prompt needed)
 	newSubject := generateReplySubject(currentMsg.Subject)
