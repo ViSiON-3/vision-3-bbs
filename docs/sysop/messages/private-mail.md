@@ -23,14 +23,48 @@ Users access private mail through the Email Menu (press `E` from the main menu):
 - **READPRIVMAIL** — Read private mail; shows only messages addressed to the current user
 - **LISTPRIVMAIL** — List private mail headers, for the same messages
 - **DELETEPRIVMAIL** — Delete a mail (`D`): your current mail, the last of yours you read this call, after a Y/N; or, before you've read one, the mail whose number you give (the number `LISTPRIVMAIL` shows; `?` lists yours)
+- **SENTPRIVMAIL** — View the mail you sent (`V`, ViSiON/2's View Outgoing Mail) in the message reader; `L` lists it. Reading it there doesn't mark your own unread mail as read.
+- **COPYPRIVMAIL** — Copy a mail to another user (`C`): your current mail, or the one whose number you give, as `DELETEPRIVMAIL` picks it
+- **FORWARDPRIVMAIL** — Forward a mail (`W`, hidden: the stock menu art doesn't list it): a copy, after which your own is deleted
 
-Mail you have sent is not in your mailbox. It shows when you read the `PRIVMAIL` area with the message reader, list or newscan.
+Mail you have sent is not in your mailbox. `V` shows it, and so does reading the `PRIVMAIL` area with the message reader, list or newscan.
+
+### Copying and forwarding
+
+`C` and `W` ask for the user to send it to (a handle; a deleted account is
+refused), then `Add a note of your own?`. With a note, the full-screen editor
+opens for it; leaving the editor without saving sends nothing. The mail sent
+is private, from you, titled `Fwd: <subject>` (once, however often it is
+forwarded on), and reads:
+
+```text
+<your note, if any>
+
+--- Forwarded mail ---
+From: <original sender>
+To: <original recipient>
+Date: <date, in the board's time zone>
+Subject: <original subject>
+
+<original text>
+```
+
+The original's text goes as it was; you can't change it on the way. After a
+forward your own copy is deleted, checked again as it is deleted. If it was
+changed or deleted elsewhere meanwhile, the forward has still gone and you
+are told yours was kept.
 
 In the reader, `D` deletes a private message addressed to you, after a
 `Delete this message? [Y/N]` check. In the mailbox it is on the bar as Del,
 lit on your mail. `D` on the Email Menu (`DELETEPRIVMAIL`) does the same
 from outside the reader. A deleted message is gone for good: the base is
-packed at once, as when a co-sysop deletes. You can't delete mail you sent.
+packed at once, as when a co-sysop deletes.
+
+You can unsend mail you sent while its recipient hasn't read it: `D` on it in
+`V`'s reader (ViSiON/2's Kill Outgoing Mail) deletes it after the same check.
+It counts as read once the recipient's last-read pointer in the mailbox has
+reached it, and then it is theirs: Del is greyed and `D` does nothing. If they
+read it while you're answering the Y/N, nothing is deleted and you're told.
 
 Posting with `COMPOSEMSG` while `PRIVMAIL` is the current area works the same way: the recipient must be an existing user, and the message is saved as private.
 

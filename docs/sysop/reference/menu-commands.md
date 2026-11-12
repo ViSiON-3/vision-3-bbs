@@ -103,6 +103,9 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | `READPRIVMAIL` | none | Reads mail addressed to the caller in the `PRIVMAIL` area. | Needs a `PRIVMAIL` area |
 | `LISTPRIVMAIL` | none | Header list of the caller's private mail. | Needs a `PRIVMAIL` area |
 | `DELETEPRIVMAIL` | none | Deletes the caller's current mail (the last of their mail the reader showed this call) after a Y/N; with none, asks which by the number `LISTPRIVMAIL` shows (`?` lists). Only mail addressed to the caller. `D` on the stock `EMAILM`. | Needs a `PRIVMAIL` area |
+| `SENTPRIVMAIL` | none | The mail the caller sent, in the message reader (ViSiON/2's View Outgoing Mail). `D` there unsends a letter its recipient hasn't read yet. Reading it leaves the caller's own last-read pointer alone. | Needs a `PRIVMAIL` area |
+| `COPYPRIVMAIL` | none | Copies the caller's current mail (or the one they name by number) to another user as private mail titled `Fwd: <subject>`, with an optional note, a header naming the original sender, recipient and date, and the original text. | Needs a `PRIVMAIL` area |
+| `FORWARDPRIVMAIL` | none | As `COPYPRIVMAIL`, then deletes the caller's own copy, checked again under the base's lock. | Needs a `PRIVMAIL` area |
 | `NMAILSCAN` | none | Counts unread private mail and offers to read it now. Silent when mail is not configured. Shipped as a login step, not bound in any stock menu. | |
 
 ## QWK offline mail

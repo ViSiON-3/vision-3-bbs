@@ -26,15 +26,28 @@ func (m *DisplayMessage) VisibleTo(handle string) bool {
 	if handle == "" {
 		return false
 	}
-	// A post signed with a real name names its sender by SenderHandle; its
-	// From is then only a display name, and must not match an account whose
-	// handle happens to equal it.
-	sender := m.From
-	if strings.TrimSpace(m.SenderHandle) != "" {
-		sender = m.SenderHandle
-	}
 	return strings.EqualFold(strings.TrimSpace(m.To), handle) ||
-		strings.EqualFold(strings.TrimSpace(sender), handle)
+		strings.EqualFold(m.sender(), handle)
+}
+
+// sender is the handle that sent m: the SenderHandle a local post signed
+// with a real name records, else From. A post signed with a real name names
+// its sender by SenderHandle; its From is then only a display name, and must
+// not match an account whose handle happens to equal it.
+func (m *DisplayMessage) sender() string {
+	if s := strings.TrimSpace(m.SenderHandle); s != "" {
+		return s
+	}
+	return strings.TrimSpace(m.From)
+}
+
+// SentBy reports whether m is private mail the user with the given handle
+// sent, by the rule VisibleTo uses for the sender. Like MailFor it matches
+// the handle only, ignoring case and surrounding space, and a blank handle
+// never matches.
+func (m *DisplayMessage) SentBy(handle string) bool {
+	handle = strings.TrimSpace(handle)
+	return m.IsPrivate && handle != "" && strings.EqualFold(m.sender(), handle)
 }
 
 // MailFor reports whether m is private mail addressed to the user with the

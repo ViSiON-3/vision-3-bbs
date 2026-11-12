@@ -109,50 +109,15 @@ func runDeletePrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	target := currentMailOf(e, s, area.ID, currentUser.Handle)
+	target, err := chooseOwnMail(c, area.ID, "delete")
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, "LOGOFF", io.EOF
+		}
+		return currentUser, "", nil
+	}
 	if target == nil {
-		mail, err := ownPrivateMail(e, area.ID, currentUser.Handle)
-		if err != nil {
-			slog.Error("DELETEPRIVMAIL: listing mail", "node", nodeNumber, "error", err)
-			say("\r\n|01Error loading private mail.|07\r\n")
-			return currentUser, "", nil
-		}
-		if len(mail) == 0 {
-			say("\r\n|07You have no mail.|07\r\n")
-			return currentUser, "", nil
-		}
-		for target == nil {
-			say("\r\n|07Mail # to delete (|15?|07/List): |15")
-			line, err := readLineFromSessionIHMax(s, terminal, 8)
-			say("|07")
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					return nil, "LOGOFF", io.EOF
-				}
-				return currentUser, "", nil
-			}
-			line = strings.TrimSpace(line)
-			switch line {
-			case "":
-				return currentUser, "", nil
-			case "?":
-				say("\r\n")
-				for _, m := range mail {
-					say(fmt.Sprintf("|15%5d |07%-24.24s |11%s|07\r\n", m.MsgNum, callerText(m.From), callerText(m.Subject)))
-				}
-				continue
-			}
-			n, convErr := strconv.Atoi(line)
-			for _, m := range mail {
-				if convErr == nil && m.MsgNum == n {
-					target = m
-					break
-				}
-			}
-			if target == nil {
-				say("\r\n|01That isn't one of your mails.|07\r\n")
-			}
-		}
+		return currentUser, "", nil
 	}
 
 	say(fmt.Sprintf("\r\n|11%s|07 by |15%s|07\r\n", callerText(target.Subject), callerText(target.From)))
@@ -191,4 +156,59 @@ func runDeletePrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	say(fmt.Sprintf("\r\n|11%s|07 by |15%s|07 has been deleted.\r\n", callerText(shown.Subject), callerText(shown.From)))
 	return currentUser, "", nil
+}
+
+// chooseOwnMail is the mail a mail menu command acts on: the caller's current
+// mail (the last mail of theirs the reader showed this call), or, with none,
+// the one they name by the number LISTPRIVMAIL shows ("?" lists it), as
+// ViSiON/2's mail menu asked. verb names the command in the prompt. It
+// returns nil when they have no mail or answer with a blank line, and the
+// error reading their answer.
+func chooseOwnMail(c *cmdCtx, areaID int, verb string) (*message.DisplayMessage, error) {
+	e := c.e
+	say := func(text string) {
+		if err := e.writeString(c.terminal, c.outputMode, text); err != nil {
+			slog.Debug("mail menu write", "node", c.nodeNumber, "error", err)
+		}
+	}
+	if target := currentMailOf(e, c.s, areaID, c.currentUser.Handle); target != nil {
+		return target, nil
+	}
+	mail, err := ownPrivateMail(e, areaID, c.currentUser.Handle)
+	if err != nil {
+		slog.Error("mail menu: listing mail", "node", c.nodeNumber, "error", err)
+		say("\r\n|01Error loading private mail.|07\r\n")
+		return nil, nil
+	}
+	if len(mail) == 0 {
+		say("\r\n|07You have no mail.|07\r\n")
+		return nil, nil
+	}
+	for {
+		say(fmt.Sprintf("\r\n|07Mail # to %s (|15?|07/List): |15", verb))
+		line, err := readLineFromSessionIHMax(c.s, c.terminal, 8)
+		say("|07")
+		if err != nil {
+			return nil, err
+		}
+		line = strings.TrimSpace(line)
+		switch line {
+		case "":
+			return nil, nil
+		case "?":
+			say("\r\n")
+			for _, m := range mail {
+				say(fmt.Sprintf("|15%5d |07%-24.24s |11%s|07\r\n", m.MsgNum, callerText(m.From), callerText(m.Subject)))
+			}
+			continue
+		}
+		if n, convErr := strconv.Atoi(line); convErr == nil {
+			for _, m := range mail {
+				if m.MsgNum == n {
+					return m, nil
+				}
+			}
+		}
+		say("\r\n|01That isn't one of your mails.|07\r\n")
+	}
 }

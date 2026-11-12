@@ -206,6 +206,9 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["READPRIVMAIL"] = runReadPrivateMail                    // Read private mail
 	registry["LISTPRIVMAIL"] = runListPrivateMail                    // List private mail
 	registry["DELETEPRIVMAIL"] = runDeletePrivateMail                // Delete current private mail (ViSiON/2 mail menu D)
+	registry["SENTPRIVMAIL"] = runSentPrivateMail                    // Read the mail you sent; unsend unread mail (ViSiON/2 EV/EO, E!)
+	registry["COPYPRIVMAIL"] = runCopyPrivateMail                    // Copy current mail to another user (ViSiON/2 EC)
+	registry["FORWARDPRIVMAIL"] = runForwardPrivateMail              // Forward current mail to another user (ViSiON/2 EW)
 	registry["NEWSCANCONFIG"] = runNewscanConfig                     // Configure newscan tagged areas
 	registry["UPDATENEWSCAN"] = runUpdateNewscanPointers             // Update newscan pointers to a specific date
 	registry["NMAILSCAN"] = runNewMailScan                           // New mail scan

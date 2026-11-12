@@ -177,6 +177,10 @@ type readerOpts struct {
 	// so a thread still shows every reply the caller may see. SEARCHMSGS
 	// sets it to its query, so next and previous step between results.
 	navFilter msgOwnershipFilter
+	// keepLastRead leaves the caller's lastread pointer alone. SENTPRIVMAIL
+	// sets it: reading mail one sent must not mark one's own unread mail
+	// in the same area as read.
+	keepLastRead bool
 }
 
 // runMessageReaderOpts is runMessageReader with readerOpts. The extra result
@@ -280,14 +284,22 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	}
 	// A co-sysop may delete any message, an area's sponsor any message in
 	// their area (sponsorsArea), and a caller their own private mail
-	// (message.DisplayMessage.MailFor). Delete is on the bar for a co-sysop,
-	// for the sponsor in their area, and in the mailbox for everyone, lit on
-	// a message they may delete.
+	// (message.DisplayMessage.MailFor), and, in the mailbox, mail they sent
+	// that its recipient hasn't read yet (unsendable): ViSiON/2's kill
+	// outgoing. Delete is on the bar for a co-sysop, for the sponsor in their
+	// area, and in the mailbox for everyone, lit on a message they may
+	// delete.
 	isSponsor := func() bool { return sponsorsArea(currentUser, e.MessageMgr, currentAreaID) }
-	mayDelete := func(m *message.DisplayMessage, sponsor bool) bool {
-		return isSysop || sponsor || m.MailFor(currentUser.Handle)
+	inMailbox := strings.EqualFold(currentAreaTag, "PRIVMAIL")
+	unsendable := func(m *message.DisplayMessage) bool {
+		return inMailbox && unsendableMail(e, currentAreaID, m, currentUser.Handle)
 	}
-	canDelete := func(m *message.DisplayMessage) bool { return mayDelete(m, isSponsor()) }
+	// unsend says whether the caller may unsend m, worked out before the
+	// base is locked: reading the recipient's lastread takes that lock too.
+	mayDelete := func(m *message.DisplayMessage, sponsor, unsend bool) bool {
+		return isSysop || sponsor || m.MailFor(currentUser.Handle) || (unsend && m.SentBy(currentUser.Handle))
+	}
+	canDelete := func(m *message.DisplayMessage) bool { return mayDelete(m, isSponsor(), unsendable(m)) }
 	if isSysop || isSponsor() || strings.EqualFold(currentAreaTag, "PRIVMAIL") {
 		activeOptions = append(activeOptions, msgReaderDeleteOption)
 	}
@@ -548,8 +560,10 @@ readerLoop:
 		// Update lastread when first displaying message. Advance only:
 		// paging back to an older message must not mark newer ones unread
 		// again, or the new-mail and newscan counts report them twice.
-		if lrErr := e.MessageMgr.AdvanceLastRead(currentAreaID, currentUser.Handle, currentMsgNum); lrErr != nil {
-			slog.Error("failed to update last read", "node", nodeNumber, "error", lrErr)
+		if !opts.keepLastRead {
+			if lrErr := e.MessageMgr.AdvanceLastRead(currentAreaID, currentUser.Handle, currentMsgNum); lrErr != nil {
+				slog.Error("failed to update last read", "node", nodeNumber, "error", lrErr)
+			}
 		}
 
 		// readerScrollKeys end the interactive lightbar and are handed back
@@ -1006,13 +1020,18 @@ readerLoop:
 				// the sysop may have changed the area's sponsor meanwhile.
 				shown := currentMsg
 				sponsor := isSponsor()
-				if !mayDelete(shown, sponsor) {
-					e.showReaderNotice(terminal, outputMode, "|01You can no longer delete messages in this area. Nothing was deleted.|07", termHeight)
+				unsend := unsendable(shown)
+				if !mayDelete(shown, sponsor, unsend) {
+					notice := "|01You can no longer delete messages in this area. Nothing was deleted.|07"
+					if shown.SentBy(currentUser.Handle) {
+						notice = "|01That mail has been read, so it can't be unsent now. Nothing was deleted.|07"
+					}
+					e.showReaderNotice(terminal, outputMode, notice, termHeight)
 					needsRedraw = true
 					continue
 				}
 				delErr := e.MessageMgr.DeleteMessageIf(currentAreaID, shown.MsgNum, func(m *message.DisplayMessage) bool {
-					return message.SameMessage(m, shown) && mayDelete(m, sponsor)
+					return message.SameMessage(m, shown) && mayDelete(m, sponsor, unsend)
 				})
 				if errors.Is(delErr, message.ErrMessageChanged) {
 					e.showReaderNotice(terminal, outputMode, "|01That message was changed or deleted elsewhere. Nothing was deleted.|07", termHeight)
@@ -1094,7 +1113,7 @@ readerLoop:
 	}
 
 	// Update lastread on exit (advance only, as above)
-	if currentMsgNum >= 1 && currentMsgNum <= totalMsgCount {
+	if !opts.keepLastRead && currentMsgNum >= 1 && currentMsgNum <= totalMsgCount {
 		if lrErr := e.MessageMgr.AdvanceLastRead(currentAreaID, currentUser.Handle, currentMsgNum); lrErr != nil {
 			slog.Error("failed to update last read on exit", "node", nodeNumber, "error", lrErr)
 		}
