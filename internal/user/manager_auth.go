@@ -24,8 +24,8 @@ func (um *UserMgr) Authenticate(handle, password string) (*User, bool) {
 // VerifyPassword reports whether password is handle's, for an account that
 // isn't deleted, without recording a call. Handle lookup is case-insensitive.
 // It is Authenticate without BeginSession, for a login that has more to pass
-// after the password (the SSH pre-authentication's lockout check) before the
-// call is recorded.
+// after the password (the lockout check again, and at the LOGIN menu the
+// new-user intro and the logon level) before the call is recorded.
 func (um *UserMgr) VerifyPassword(handle, password string) bool {
 	lowerHandle := strings.ToLower(handle)
 

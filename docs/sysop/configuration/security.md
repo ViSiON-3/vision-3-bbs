@@ -492,13 +492,13 @@ Protect against brute-force attacks with automatic **IP-based** lockout after fa
 **How it works:**
 
 1. Each failed login attempt from an IP address is tracked in memory, whether at the login prompt or as a wrong password given with an SSH connection for a known handle
-2. After reaching the threshold, the IP is locked out
+2. After reaching the threshold, the IP is locked out. Passwords from one IP are checked one at a time, so several connections sending guesses together get no more tries than the threshold
 3. During lockout, login attempts from that IP show:
    ```text
    Too many failed login attempts from your IP.
    Please try again in X minutes.
    ```
-4. Successful login from an IP clears the failed attempt counter for that IP
+4. A successful login from an IP clears the failed attempt counter for that IP. Only a login that gets in clears it: a right password for an account below the logon level, or one made while another connection locked the IP out, doesn't
 5. Lockout automatically expires after the configured time
 
 **Why IP-based instead of user-based?**

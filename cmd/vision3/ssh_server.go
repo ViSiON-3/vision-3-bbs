@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
@@ -74,49 +73,6 @@ func sshPasswordHandler(ctx ssh.Context, password string) bool {
 	return true
 }
 
-// ipLocks hands out one lock per IP address. A lock is created when first
-// wanted and dropped when nobody holds or waits for it, so the map only
-// holds addresses with a login in progress.
-type ipLocks struct {
-	mu    sync.Mutex
-	locks map[string]*ipLock
-}
-
-type ipLock struct {
-	mu   sync.Mutex
-	refs int // holders and waiters
-}
-
-// lock takes ip's lock, waiting for it if needed, and returns its unlock.
-func (l *ipLocks) lock(ip string) (unlock func()) {
-	l.mu.Lock()
-	if l.locks == nil {
-		l.locks = make(map[string]*ipLock)
-	}
-	k := l.locks[ip]
-	if k == nil {
-		k = &ipLock{}
-		l.locks[ip] = k
-	}
-	k.refs++
-	l.mu.Unlock()
-
-	k.mu.Lock()
-	return func() {
-		k.mu.Unlock()
-		l.mu.Lock()
-		k.refs--
-		if k.refs == 0 {
-			delete(l.locks, ip)
-		}
-		l.mu.Unlock()
-	}
-}
-
-// sshLoginLocks serializes SSH password attempts from one IP (see
-// sshPreAuthenticate).
-var sshLoginLocks ipLocks
-
 // sshPasswordChecked runs after a password from ip checks out and before the
 // lockout is checked again. It does nothing; tests set it to play another
 // login locking ip out at that moment.
@@ -129,7 +85,8 @@ var sshPasswordChecked = func(ip string) {}
 // wrong password for a known user counts as a failed attempt, and a match
 // clears the count, unless the IP was locked out while the password was
 // being checked (ConnectionTracker.AdmitLogin). Attempts from one IP run one
-// at a time (sshLoginLocks). An empty password isn't counted: clients that
+// at a time, together with the LOGIN menu's (ConnectionTracker.LoginAttempt).
+// An empty password isn't counted: clients that
 // don't store one send it, and those callers just get the LOGIN menu.
 func sshPreAuthenticate(um *user.UserMgr, ct *ConnectionTracker, username, password, ip string) *user.User {
 	if username == "" || um == nil {
@@ -142,9 +99,9 @@ func sshPreAuthenticate(um *user.UserMgr, ct *ConnectionTracker, username, passw
 	// its outcome. Otherwise connections opened together all pass the check
 	// before any failure is recorded, and get more guesses than
 	// maxFailedLogins allows. Other addresses aren't held up.
-	unlock := sshLoginLocks.lock(ip)
-	defer unlock()
 	if ct != nil {
+		done := ct.LoginAttempt(ip)
+		defer done()
 		if locked, lockedUntil, _ := ct.IsIPLockedOut(ip); locked {
 			logging.Security("SSH login from locked IP, deferring to BBS login",
 				"user", username, "ip", ip, "locked_until", lockedUntil.Format(time.RFC3339))

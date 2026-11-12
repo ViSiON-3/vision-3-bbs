@@ -10,11 +10,15 @@ import (
 )
 
 // fakeLockout records what the login handler reports to the IP lockout
-// checker, and can be told to report an IP as locked.
+// checker, and can be told to report an IP as locked. With max set, an IP
+// is also locked once it has max failed attempts, as ConnectionTracker does.
+// LoginAttempt is one turn at a time for all addresses.
 type fakeLockout struct {
 	mu       sync.Mutex
+	turn     sync.Mutex
 	lockedIP string
 	until    time.Time
+	max      int
 	failed   map[string]int
 	cleared  []string
 	queried  []string
@@ -22,12 +26,21 @@ type fakeLockout struct {
 
 func newFakeLockout() *fakeLockout { return &fakeLockout{failed: map[string]int{}} }
 
+// lockedLocked reports whether ip is locked out; f.mu is held.
+func (f *fakeLockout) lockedLocked(ip string) bool {
+	return ip == f.lockedIP || (f.max > 0 && f.failed[ip] >= f.max)
+}
+
 func (f *fakeLockout) IsIPLockedOut(ip string) (bool, time.Time, int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.queried = append(f.queried, ip)
-	if ip == f.lockedIP {
-		return true, f.until, 5
+	if f.lockedLocked(ip) {
+		until := f.until
+		if until.IsZero() {
+			until = time.Now().Add(10 * time.Minute)
+		}
+		return true, until, 0
 	}
 	return false, time.Time{}, 0
 }
@@ -36,13 +49,22 @@ func (f *fakeLockout) RecordFailedLoginAttempt(ip string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.failed[ip]++
-	return false
+	return f.max > 0 && f.failed[ip] == f.max
 }
 
-func (f *fakeLockout) ClearFailedLoginAttempts(ip string) {
+func (f *fakeLockout) LoginAttempt(ip string) (done func()) {
+	f.turn.Lock()
+	return f.turn.Unlock
+}
+
+func (f *fakeLockout) AdmitLogin(ip string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.lockedLocked(ip) {
+		return false
+	}
 	f.cleared = append(f.cleared, ip)
+	return true
 }
 
 // addLoginUser creates an account with a real bcrypt password at level.
