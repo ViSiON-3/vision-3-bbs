@@ -93,8 +93,9 @@ func (e *MenuExecutor) handleNewUserApplication(
 		if pausePrompt == "" {
 			pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 		}
-		e.writeString(terminal, outputMode, pausePrompt)
-		_, _ = readLineFromSessionIH(s, terminal)
+		if !e.pauseAnswered(terminal, outputMode, pausePrompt) {
+			_, _ = readLineFromSessionIH(s, terminal)
+		}
 		return nil, nil
 	}
 
@@ -300,7 +301,9 @@ func (e *MenuExecutor) handleNewUserApplication(
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
-	e.writeString(terminal, outputMode, pausePrompt)
+	if e.pauseAnswered(terminal, outputMode, pausePrompt) {
+		return newUser, nil
+	}
 	if _, pauseErr := readLineFromSessionIH(s, terminal); pauseErr != nil {
 		// The account is created and saved either way, but a caller who has
 		// dropped must not have a session opened for them: the callers' io.EOF
