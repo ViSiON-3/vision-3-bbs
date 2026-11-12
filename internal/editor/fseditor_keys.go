@@ -40,13 +40,12 @@ func (e *FSEditor) handleKey(key int) {
 	case KeyCtrlZ: // Save
 		e.handleCommand(CommandSave)
 	case KeyCtrlQ: // Quote
-		// SyncTERM (seen on macOS over SSH) sends CTRL-Q as two bytes in one
-		// burst: 0x11 followed by 0x10, which is also the PC scancode of the
-		// Q key. 0x10 is CTRL-P, which the quote picker reads as End, so the
-		// lightbar jumped to the last source line the moment the picker
-		// opened (#318). Nobody can press End that fast after CTRL-Q, so a
-		// 0x10 arriving with the keypress is dropped as part of it.
-		e.input.DiscardPendingByte(KeyCtrlP, ctrlQTrailerWindow)
+		// SyncTERM sends CTRL-Q as 0x11 0x10 (see ctrlQScancode). 0x10 is
+		// CTRL-P, which the quote picker reads as End, so the lightbar jumped
+		// to the last source line the moment the picker opened (#318). Nobody
+		// can press End that fast after CTRL-Q, so a 0x10 arriving with the
+		// keypress is dropped as part of it.
+		e.input.DiscardPendingByte(ctrlQScancode, scancodeTrailerWindow)
 		e.handleCommand(CommandQuote)
 
 	// Navigation
@@ -77,6 +76,12 @@ func (e *FSEditor) handleKey(key int) {
 	case KeyCtrlT: // Delete word
 		e.deleteWord()
 	case KeyCtrlY, KeyCtrlK: // Delete line (Ctrl-K as in Mystic)
+		if key == KeyCtrlK {
+			// SyncTERM sends CTRL-K as 0x0B 0x25 (see ctrlKScancode), and the
+			// "%" was typed onto the line that moved up into the deleted
+			// one's place (#1000).
+			e.input.DiscardPendingByte(ctrlKScancode, scancodeTrailerWindow)
+		}
 		e.deleteLine()
 	case KeyCtrlJ: // Join lines
 		e.joinLines()

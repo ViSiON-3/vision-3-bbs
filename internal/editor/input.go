@@ -981,11 +981,20 @@ func (ih *InputHandler) waitByte(timeout time.Duration, breakIn bool) (b byte, b
 	}
 }
 
-// ctrlQTrailerWindow is how long the editor waits, after CTRL-Q, for the
-// stray 0x10 some clients send with it. The two bytes leave the client in one
-// write, so the second is normally already queued; the window only has to
-// cover them being split across reads.
-const ctrlQTrailerWindow = 40 * time.Millisecond
+// SyncTERM (seen on macOS over SSH) follows some control keys with the PC
+// scancode of the letter key, in the same burst: CTRL-Q arrives as 0x11 0x10
+// (#318) and CTRL-K as 0x0B 0x25 (#1000). 0x25 is "%", so the trailer would be
+// typed into the message.
+const (
+	ctrlQScancode = 0x10 // Q key; reads as CTRL-P (End)
+	ctrlKScancode = 0x25 // K key; reads as "%"
+)
+
+// scancodeTrailerWindow is how long the editor waits, after one of those
+// keys, for the scancode byte. The two bytes leave the client in one write, so
+// the second is normally already queued; the window only has to cover them
+// being split across reads.
+const scancodeTrailerWindow = 40 * time.Millisecond
 
 // DiscardPendingByte drops the next input byte if it equals b and is already
 // queued or arrives within wait. Any other byte is left for the next read. It
