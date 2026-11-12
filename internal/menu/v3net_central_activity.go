@@ -766,7 +766,13 @@ func (e *MenuExecutor) writeCentralPrefsHeader(c *cmdCtx, bodyRows int) {
 	if c.termHeight > 0 {
 		room = max(c.termHeight-bodyRows, 0)
 	}
-	if art, ok := e.centralPrefsArt(c.outputMode, room); ok {
+	// Art wider than an 80-column terminal is broken at 80 by fitArt; on a
+	// narrower one its rows wrap at the terminal's edge.
+	width := ansi.ArtWidth
+	if w := artWidth(c.terminal, c.termWidth); w > 0 && w < width {
+		width = w
+	}
+	if art, ok := e.centralPrefsArt(c.outputMode, room, width); ok {
 		err := writeArt(c.terminal, art, c.outputMode, c.termWidth)
 		if err == nil {
 			return
@@ -779,9 +785,9 @@ func (e *MenuExecutor) writeCentralPrefsHeader(c *cmdCtx, bodyRows int) {
 
 // centralPrefsArt loads the Sharing header art, ready for outputMode and
 // ending in a line break. It reports false when the art is missing, or
-// takes more than maxRows rows (a negative maxRows, from a terminal of
+// takes more than maxRows rows on a terminal width columns wide (a negative maxRows, from a terminal of
 // unknown height, does not limit it).
-func (e *MenuExecutor) centralPrefsArt(outputMode ansi.OutputMode, maxRows int) ([]byte, bool) {
+func (e *MenuExecutor) centralPrefsArt(outputMode ansi.OutputMode, maxRows, width int) ([]byte, bool) {
 	data, err := ansi.GetAnsiFileContent(e.menuFile("ansi", centralPrefsArt))
 	if err != nil {
 		slog.Debug("Sharing header art not found; using the built-in title", "file", centralPrefsArt, "error", err)
@@ -791,7 +797,7 @@ func (e *MenuExecutor) centralPrefsArt(outputMode ansi.OutputMode, maxRows int) 
 	// Whatever the art ends with, it ends here in one line break, colours
 	// reset, so the row the cursor is left on is the body's first.
 	data = append(centralArtTailRe.ReplaceAll(data, nil), "\x1b[0m\r\n"...)
-	rows, _ := ansi.ArtGeometry(oneBytePerGlyph(data), ansi.ArtWidth)
+	rows, _ := ansi.ArtGeometry(oneBytePerGlyph(data), width)
 	if maxRows >= 0 && rows-1 > maxRows {
 		slog.Debug("Sharing header art too tall for the terminal; using the built-in title", "file", centralPrefsArt, "rows", rows-1, "room", maxRows)
 		return nil, false

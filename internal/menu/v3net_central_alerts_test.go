@@ -526,7 +526,7 @@ func TestCentralPrefsArtFit(t *testing.T) {
 			room int
 			want bool
 		}{{3, true}, {2, false}, {0, false}, {-1, true}} {
-			if _, got := e.centralPrefsArt(mode, tc.room); got != tc.want {
+			if _, got := e.centralPrefsArt(mode, tc.room, ansi.ArtWidth); got != tc.want {
 				t.Errorf("mode %v, room %d: art drawn = %v, want %v", mode, tc.room, got, tc.want)
 			}
 		}
@@ -542,8 +542,15 @@ func TestCentralPrefsArtFit(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.MenuSetPath = dir
-	if _, ok := e.centralPrefsArt(ansi.OutputModeUTF8, 2); !ok {
+	if _, ok := e.centralPrefsArt(ansi.OutputModeUTF8, 2, ansi.ArtWidth); !ok {
 		t.Error("two rows of UTF-8 art measured as more than two")
+	}
+	// On a 40-column terminal each 70-glyph row wraps onto a second.
+	if _, ok := e.centralPrefsArt(ansi.OutputModeUTF8, 3, 40); ok {
+		t.Error("art wrapping on a narrow terminal measured at 80 columns")
+	}
+	if _, ok := e.centralPrefsArt(ansi.OutputModeUTF8, 4, 40); !ok {
+		t.Error("two wrapped rows of art should fit four rows on 40 columns")
 	}
 }
 
