@@ -104,6 +104,10 @@ What this means for you as SysOp:
   the same per-IP `maxFailedLogins` / `lockoutMinutes` lockout as the terminal
   login prompt, so guesses can't be split between the two to dodge it — and an
   IP that trips it is added to the blocklist just as it would be from telnet.
+  Logins from one IP are checked one at a time, with the terminal's, so
+  guesses sent together get no more tries than the limit. A lockout that
+  another login sets while a password or device key is being checked stays:
+  that login gets `429` even if it was right.
   See [IP Blocklist/Allowlist Files](configuration/configuration.md#ip-blocklistallowlist-files).
 - **Each handle also locks after 10 failed API logins** within 15 minutes, for
   15 minutes, whichever IPs the attempts came from — this is what stops
@@ -214,6 +218,7 @@ API activity.
 | INFO | `qwk api login` | `outcome=success` / `outcome=fail`, with `handle` and `remote`; `outcome=denied` with `reason=logon_level` or `intro_pending` for a correct password on an account that may not log in. A malformed body logs `outcome=badRequest` with `remote` and `error` but **no** `handle` — on a decode failure that field may be partial or hold the password. |
 | WARN | `qwk api login` | `outcome=rateLimited` — too many login attempts from one IP. |
 | WARN | `qwk api login from locked IP` | A login refused because its IP is in the per-IP lockout, with `remote` and `locked_until`. |
+| WARN | `qwk api login refused: IP locked out during the check` | A right password refused because another login locked the IP out while it was being checked, with `remote` and `locked_until`. `qwk api device login refused: …` is the same for a device login. |
 | WARN | `qwk api login for locked handle` | A login refused because the handle is locked, with `handle`, `remote`, and `locked_until`. |
 | WARN | `qwk api handle locked out after failed logins` | A handle just reached the failure limit, with `handle`, `remote`, and `minutes`. |
 | ERROR | `qwk api login: token issue failed` | The server could not mint a token. |

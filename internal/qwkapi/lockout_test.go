@@ -6,16 +6,24 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
-// fakeGuard records the calls the API makes into the BBS login guard.
+// fakeGuard records the calls the API makes into the BBS login guard. With
+// max set, an IP is locked out once that many failures are recorded for it.
 type fakeGuard struct {
+	mu          sync.Mutex
+	turn        sync.Mutex
+	max         int
 	blocked     map[string]bool
 	lockedUntil map[string]time.Time
 	failed      map[string]int
 	cleared     map[string]int
+	// arrived counts the logins that have asked for a turn, before they wait
+	// for it.
+	arrived int
 }
 
 func newFakeGuard() *fakeGuard {
@@ -27,13 +35,64 @@ func newFakeGuard() *fakeGuard {
 	}
 }
 
-func (g *fakeGuard) IsBlocked(ip string) bool { return g.blocked[ip] }
-func (g *fakeGuard) IsIPLockedOut(ip string) (bool, time.Time, int) {
-	until, ok := g.lockedUntil[ip]
-	return ok && time.Now().Before(until), until, 0
+// lockedLocked reports whether ip is locked out, and until when; g.mu is held.
+func (g *fakeGuard) lockedLocked(ip string) (bool, time.Time) {
+	if until, ok := g.lockedUntil[ip]; ok && time.Now().Before(until) {
+		return true, until
+	}
+	if g.max > 0 && g.failed[ip] >= g.max {
+		return true, time.Now().Add(10 * time.Minute)
+	}
+	return false, time.Time{}
 }
-func (g *fakeGuard) RecordFailedLoginAttempt(ip string) bool { g.failed[ip]++; return false }
-func (g *fakeGuard) ClearFailedLoginAttempts(ip string)      { g.cleared[ip]++ }
+
+func (g *fakeGuard) IsBlocked(ip string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.blocked[ip]
+}
+
+func (g *fakeGuard) IsIPLockedOut(ip string) (bool, time.Time, int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	locked, until := g.lockedLocked(ip)
+	return locked, until, 0
+}
+
+func (g *fakeGuard) RecordFailedLoginAttempt(ip string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.failed[ip]++
+	return g.max > 0 && g.failed[ip] == g.max
+}
+
+// LoginAttempt is one turn for every IP, which is enough for these tests.
+func (g *fakeGuard) LoginAttempt(string) (done func()) {
+	g.mu.Lock()
+	g.arrived++
+	g.mu.Unlock()
+	g.turn.Lock()
+	return g.turn.Unlock
+}
+
+func (g *fakeGuard) AdmitLogin(ip string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if locked, _ := g.lockedLocked(ip); locked {
+		return false
+	}
+	g.cleared[ip]++
+	delete(g.failed, ip)
+	return true
+}
+
+// lockIP locks ip out for ten minutes, as another login reaching the limit
+// would.
+func (g *fakeGuard) lockIP(ip string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.lockedUntil[ip] = time.Now().Add(10 * time.Minute)
+}
 
 func guardedServer(t *testing.T, g LoginGuard) http.Handler {
 	t.Helper()

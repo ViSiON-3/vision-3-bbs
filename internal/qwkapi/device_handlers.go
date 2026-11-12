@@ -190,6 +190,11 @@ func (s *Server) handleDeviceLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
 		return
 	}
+	done, ok := s.takeLoginTurn(w, ip, "qwk api device login from locked IP")
+	if !ok {
+		return
+	}
+	defer done()
 	// An expired or reused challenge is what a slow network looks like as
 	// much as a replay, so it is reported but not counted as a failed login.
 	if !s.challenges.consume(req.Challenge, req.DeviceID) {
@@ -226,13 +231,15 @@ func (s *Server) handleDeviceLogin(w http.ResponseWriter, r *http.Request) {
 		writeDenied(w, reason)
 		return
 	}
+	// Admitted before the session begins, which records the call, so a login
+	// refused here leaves no trace on the account.
+	if !s.admitLogin(w, ip, "qwk api device login") {
+		return
+	}
 	snap, ok := s.deps.Devices.BeginSession(u.Handle)
 	if !ok {
 		fail("unknownDevice")
 		return
-	}
-	if s.deps.Guard != nil {
-		s.deps.Guard.ClearFailedLoginAttempts(ip)
 	}
 	tok, exp, err := s.tokens.Issue(snap, scopeDevice, dev.ID)
 	if err != nil {

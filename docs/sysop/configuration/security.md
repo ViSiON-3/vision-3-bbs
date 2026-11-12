@@ -491,8 +491,8 @@ Protect against brute-force attacks with automatic **IP-based** lockout after fa
 
 **How it works:**
 
-1. Each failed login attempt from an IP address is tracked in memory, whether at the login prompt or as a wrong password given with an SSH connection for a known handle
-2. After reaching the threshold, the IP is locked out. Passwords from one IP are checked one at a time, so several connections sending guesses together get no more tries than the threshold
+1. Each failed login attempt from an IP address is tracked in memory, whether at the login prompt, as a wrong password given with an SSH connection for a known handle, or at the [QWK API](messages/qwk-api.md)'s login
+2. After reaching the threshold, the IP is locked out. Passwords from one IP are checked one at a time, by SSH, at the login prompt and over the QWK API alike, so several connections sending guesses together get no more tries than the threshold
 3. During lockout, login attempts from that IP show:
    ```text
    Too many failed login attempts from your IP.
@@ -505,7 +505,7 @@ Protect against brute-force attacks with automatic **IP-based** lockout after fa
 
 IP-based lockout prevents **Denial of Service (DoS)** attacks where an attacker repeatedly tries to log in to legitimate user accounts to lock them out. With IP-based lockout:
 - Attackers lock themselves out, not your users
-- Multiple users behind the same IP (like a NAT) share a counter (use higher limits or allowlist trusted IPs)
+- Multiple users behind the same IP (like a NAT, a Docker bridge or a web-terminal gateway) share a counter (use higher limits or allowlist trusted IPs), and their logins are checked one at a time, so a caller logging in waits for the checks ahead of theirs
 - Better suited for BBS/community systems where user accounts are valuable
 
 **Persistence:**

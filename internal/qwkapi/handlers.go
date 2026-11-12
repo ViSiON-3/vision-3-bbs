@@ -45,6 +45,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON")
 		return
 	}
+	// From here to the outcome being recorded this login holds the IP's turn,
+	// and the IP's lockout is checked again inside it.
+	done, ok := s.takeLoginTurn(w, ip, "qwk api login from locked IP")
+	if !ok {
+		return
+	}
+	defer done()
 	// A locked handle is refused before the password is checked, so a correct
 	// guess during the lockout does not get through.
 	if until, locked := s.handleLocks.lockedUntil(req.Handle); locked {
@@ -74,8 +81,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeDenied(w, reason)
 		return
 	}
-	if s.deps.Guard != nil {
-		s.deps.Guard.ClearFailedLoginAttempts(ip)
+	if !s.admitLogin(w, ip, "qwk api login") {
+		return
 	}
 	s.handleLocks.clear(req.Handle)
 	// A password login only ever yields a pair token: enough to register a
