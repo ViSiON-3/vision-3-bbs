@@ -21,6 +21,9 @@ type fakeGuard struct {
 	lockedUntil map[string]time.Time
 	failed      map[string]int
 	cleared     map[string]int
+	// arrived counts the logins that have asked for a turn, before they wait
+	// for it.
+	arrived int
 }
 
 func newFakeGuard() *fakeGuard {
@@ -65,6 +68,9 @@ func (g *fakeGuard) RecordFailedLoginAttempt(ip string) bool {
 
 // LoginAttempt is one turn for every IP, which is enough for these tests.
 func (g *fakeGuard) LoginAttempt(string) (done func()) {
+	g.mu.Lock()
+	g.arrived++
+	g.mu.Unlock()
 	g.turn.Lock()
 	return g.turn.Unlock
 }

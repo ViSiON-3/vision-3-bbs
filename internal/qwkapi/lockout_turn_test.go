@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -42,10 +43,32 @@ func together(t *testing.T, n int, fn func(i int)) {
 	}
 }
 
-// slowCheck makes each password or key check take a while, as bcrypt does,
-// so logins sent together are all in flight at once.
-func slowCheck(accounts *accountStore) {
-	accounts.checking = func() { time.Sleep(20 * time.Millisecond) }
+// overlapChecks makes the first password or key check wait until all n
+// logins have asked the guard for their turn, so the logins sent together
+// are all in flight while it runs, and fails the test if they never all ask.
+// Each check then takes a moment, as bcrypt does.
+func overlapChecks(t *testing.T, accounts *accountStore, g *fakeGuard, n int) {
+	t.Helper()
+	var once sync.Once
+	accounts.checking = func() {
+		once.Do(func() {
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				g.mu.Lock()
+				arrived := g.arrived
+				g.mu.Unlock()
+				if arrived >= n {
+					return
+				}
+				if time.Now().After(deadline) {
+					t.Errorf("%d of %d logins asked for the IP's turn", arrived, n)
+					return
+				}
+				time.Sleep(time.Millisecond)
+			}
+		})
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 // A lockout another login starts while this password is being checked
@@ -72,10 +95,10 @@ func TestAPI_LockoutDuringPasswordCheckKeepsIt(t *testing.T) {
 func TestAPI_ConcurrentPasswordGuessesFromOneIP(t *testing.T) {
 	h, accounts, g := turnServer(t)
 	g.max = 3
-	slowCheck(accounts)
 	const ip = "198.51.100.30"
 
 	codes := make([]int, 5) // the login rate limit's worth
+	overlapChecks(t, accounts, g, len(codes))
 	together(t, len(codes), func(i int) {
 		codes[i] = loginFrom(h, ip, "felonius", "guess").Code
 	})
@@ -137,16 +160,29 @@ func TestDevice_ConcurrentBadSignaturesFromOneIP(t *testing.T) {
 	for i := range chs {
 		chs[i] = challenge(t, h, d)
 	}
-	slowCheck(accounts)
+	g.mu.Lock()
+	before := g.arrived // the password login's turn
+	g.mu.Unlock()
+	overlapChecks(t, accounts, g, before+len(chs))
 	bad := base64.StdEncoding.EncodeToString(make([]byte, 64))
-	codes := make([]int, len(chs))
+	answers := make([]string, len(chs))
 	together(t, len(chs), func(i int) {
-		codes[i] = deviceLoginWith(h, d, chs[i], bad).Code
+		rr := deviceLoginWith(h, d, chs[i], bad)
+		answers[i] = strconv.Itoa(rr.Code) + " " + bodyError(t, rr.Body.Bytes())
 	})
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.failed[ip] != g.max {
-		t.Errorf("%d bad signatures tried, want %d (the lockout's limit); statuses %v", g.failed[ip], g.max, codes)
+		t.Errorf("%d bad signatures tried, want %d (the lockout's limit); answers %v", g.failed[ip], g.max, answers)
+	}
+	// Three are checked and refused; the fourth finds the IP locked out,
+	// not rate limited.
+	count := map[string]int{}
+	for _, a := range answers {
+		count[a]++
+	}
+	if count["401 unauthorized"] != 3 || count["429 locked_out"] != 1 {
+		t.Errorf("answers %v, want three 401 unauthorized and one 429 locked_out", answers)
 	}
 }

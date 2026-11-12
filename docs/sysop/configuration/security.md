@@ -505,7 +505,7 @@ Protect against brute-force attacks with automatic **IP-based** lockout after fa
 
 IP-based lockout prevents **Denial of Service (DoS)** attacks where an attacker repeatedly tries to log in to legitimate user accounts to lock them out. With IP-based lockout:
 - Attackers lock themselves out, not your users
-- Multiple users behind the same IP (like a NAT, a Docker bridge or a web-terminal gateway) share a counter (use higher limits or allowlist trusted IPs), and their password checks wait for each other. Each check is one bcrypt, so callers logging in at the same moment wait a fraction of a second each
+- Multiple users behind the same IP (like a NAT, a Docker bridge or a web-terminal gateway) share a counter (use higher limits or allowlist trusted IPs), and their logins are checked one at a time, so a caller logging in waits for the checks ahead of theirs
 - Better suited for BBS/community systems where user accounts are valuable
 
 **Persistence:**
