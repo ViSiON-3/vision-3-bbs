@@ -1044,7 +1044,12 @@ readerLoop:
 					needsRedraw = true
 					continue
 				}
+				// And again under the base's lock, as the message is deleted,
+				// so a role or sponsor taken away between the check above and
+				// the delete stops it. Only the base is locked here, so the
+				// area and the user record can be read.
 				delErr := e.MessageMgr.DeleteMessageIf(currentAreaID, shown.MsgNum, func(m *message.DisplayMessage) bool {
+					mod = moderates()
 					return message.SameMessage(m, shown) && mayDelete(m, mod.Allowed, unsend)
 				})
 				if errors.Is(delErr, message.ErrMessageChanged) {
