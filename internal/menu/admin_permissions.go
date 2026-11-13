@@ -3,6 +3,8 @@ package menu
 import (
 	"log/slog"
 
+	"github.com/google/uuid"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
@@ -111,6 +113,13 @@ func (e *MenuExecutor) currentFileAreaScope(u *user.User) perm.Scope {
 // so each action calls it again just before it changes anything.
 func (e *MenuExecutor) fileManagement(um *user.UserMgr, actor *user.User, areaID int) perm.Decision {
 	return perm.Check(storedActor(um, actor), perm.FilesManage, e.fileAreaScope(areaID), e.levels(), nil)
+}
+
+// fileRecordGone reports whether file id is no longer in area areaID: moved
+// to another area or deleted. A change authorised for areaID is refused then.
+func (e *MenuExecutor) fileRecordGone(id uuid.UUID, areaID int) bool {
+	rec, err := e.FileMgr.GetFileRecordByID(id)
+	return err != nil || rec == nil || rec.AreaID != areaID
 }
 
 // managedFileAreas lists the file areas actor manages, in listing order.

@@ -27,6 +27,11 @@ import (
 // the caller was at a prompt.
 const msgNoLongerManage = "\r\n|01You can no longer manage files in this area. Nothing was changed.|07\r\n"
 
+// msgFileMovedElsewhere is the notice when the file left the area while the
+// caller was at a prompt: the change is refused, since the caller's grant is
+// for this area.
+const msgFileMovedElsewhere = "\r\n|01That file has been moved or deleted elsewhere. Nothing was changed.|07\r\n"
+
 // recheckManage decides files.manage in areaID again just before a change,
 // telling the caller when it has been taken away.
 func (lb *fileLightbar) recheckManage(areaID int) (perm.Decision, bool) {
@@ -125,7 +130,13 @@ func (lb *fileLightbar) editDescription(frame *lbFrame) {
 			frame.needFullRedraw = true
 			return
 		}
-		if updErr := lb.e.FileMgr.UpdateFileDescription(rec.ID, newDesc); updErr != nil {
+		// The change is made only while the file is still in this area,
+		// the one the grant was checked for.
+		updErr := lb.e.FileMgr.UpdateFileRecordInArea(rec.ID, lb.currentAreaID, func(r *file.FileRecord) { r.Description = newDesc })
+		if errors.Is(updErr, file.ErrRecordMoved) {
+			lb.errMsgPause(msgFileMovedElsewhere)
+			lb.refreshFileList()
+		} else if updErr != nil {
 			slog.Error("failed to update description", "node", lb.nodeNumber, "file", rec.Filename, "error", updErr)
 		} else {
 			logFileAction(d, "description changed", lb.nodeNumber, lb.currentUser.Handle, rec)
@@ -157,7 +168,12 @@ func (lb *fileLightbar) killFile(frame *lbFrame) (exit bool, result *user.User, 
 			frame.needFullRedraw = true
 			return false, nil, "", nil
 		}
-		if delErr := lb.e.FileMgr.DeleteFileRecord(rec.ID, true); delErr != nil {
+		// Deleted only if it is still in this area, under the area's lock.
+		deleted, delErr := lb.e.FileMgr.DeleteFileRecordIf(rec.ID, true, func(r file.FileRecord) bool { return r.AreaID == lb.currentAreaID })
+		if delErr == nil && !deleted || delErr != nil && lb.e.fileRecordGone(rec.ID, lb.currentAreaID) {
+			lb.errMsgPause(msgFileMovedElsewhere)
+			lb.refreshFileList()
+		} else if delErr != nil {
 			slog.Error("failed to delete file", "node", lb.nodeNumber, "file", rec.Filename, "error", delErr)
 		} else {
 			slog.Info("sysop deleted file from area", "node", lb.nodeNumber, "file", rec.Filename, "area", lb.currentAreaID)
@@ -223,7 +239,11 @@ func (lb *fileLightbar) moveFile(frame *lbFrame) (exit bool, result *user.User, 
 			frame.needFullRedraw = true
 			return false, nil, "", nil
 		}
-		if mvErr := lb.e.FileMgr.MoveFileRecord(rec.ID, targetAreaID); mvErr != nil {
+		mvErr := lb.e.FileMgr.MoveFileRecordFromArea(rec.ID, lb.currentAreaID, targetAreaID)
+		if errors.Is(mvErr, file.ErrRecordMoved) {
+			lb.errMsgPause(msgFileMovedElsewhere)
+			lb.refreshFileList()
+		} else if mvErr != nil {
 			slog.Error("failed to move file to area", "node", lb.nodeNumber, "file", rec.Filename, "area", targetAreaID, "error", mvErr)
 		} else {
 			slog.Info("sysop moved file to area", "node", lb.nodeNumber, "file", rec.Filename, "area", targetAreaID, "tag", targetArea.Tag)
@@ -258,6 +278,12 @@ func (lb *fileLightbar) renameFile(frame *lbFrame) (exit bool, result *user.User
 		frame.needFullRedraw = true
 		return false, nil, "", nil
 	}
+	if lb.e.fileRecordGone(rec.ID, lb.currentAreaID) {
+		lb.errMsgPause(msgFileMovedElsewhere)
+		lb.refreshFileList()
+		frame.needFullRedraw = true
+		return false, nil, "", nil
+	}
 	oldPath, pathErr := lb.e.FileMgr.GetFilePath(rec.ID)
 	if pathErr != nil {
 		slog.Error("failed to resolve path", "node", lb.nodeNumber, "file", rec.Filename, "error", pathErr)
@@ -283,12 +309,16 @@ func (lb *fileLightbar) renameFile(frame *lbFrame) (exit bool, result *user.User
 		frame.needFullRedraw = true
 		return false, nil, "", nil
 	}
-	if updErr := lb.e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
+	if updErr := lb.e.FileMgr.UpdateFileRecordInArea(rec.ID, lb.currentAreaID, func(r *file.FileRecord) {
 		r.Filename = newName
 	}); updErr != nil {
 		slog.Error("failed to update record", "node", lb.nodeNumber, "file", newName, "error", updErr)
 		if rollbackErr := os.Rename(newPath, oldPath); rollbackErr != nil {
 			slog.Error("rollback rename failed (disk/DB inconsistent)", "node", lb.nodeNumber, "file", newName, "error", rollbackErr)
+		}
+		if errors.Is(updErr, file.ErrRecordMoved) {
+			lb.errMsgPause(msgFileMovedElsewhere)
+			lb.refreshFileList()
 		}
 	} else {
 		slog.Info("sysop renamed file in area", "node", lb.nodeNumber, "from", rec.Filename, "to", newName, "area", lb.currentAreaID)

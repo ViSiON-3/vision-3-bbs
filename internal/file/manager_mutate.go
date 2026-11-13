@@ -144,6 +144,19 @@ func (fm *FileManager) MoveFileRecord(fileID uuid.UUID, targetAreaID int) error 
 	if srcAreaID == -1 {
 		return fmt.Errorf("file record with ID %s not found", fileID)
 	}
+	return fm.moveFileRecord(fileID, srcAreaID, targetAreaID, false)
+}
+
+// MoveFileRecordFromArea is MoveFileRecord for a file the caller expects in
+// fromAreaID: the move is made only if the record is in that area's list on
+// disk, under its lock, and ErrRecordMoved is returned otherwise. A caller
+// authorised for fromAreaID alone can't move a file that someone else has
+// moved to another area meanwhile.
+func (fm *FileManager) MoveFileRecordFromArea(fileID uuid.UUID, fromAreaID, targetAreaID int) error {
+	return fm.moveFileRecord(fileID, fromAreaID, targetAreaID, true)
+}
+
+func (fm *FileManager) moveFileRecord(fileID uuid.UUID, srcAreaID, targetAreaID int, expected bool) error {
 	if srcAreaID == targetAreaID {
 		return fmt.Errorf("file is already in area %d", targetAreaID)
 	}
@@ -162,6 +175,9 @@ func (fm *FileManager) MoveFileRecord(fileID uuid.UUID, targetAreaID int) error 
 		srcRecords := lists[srcAreaID]
 		idx := indexOfRecord(srcRecords, fileID)
 		if idx == -1 {
+			if expected {
+				return nil, ErrRecordMoved
+			}
 			return nil, fmt.Errorf("file record with ID %s not found", fileID)
 		}
 		record := srcRecords[idx]

@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -43,6 +44,9 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 	// mayAct decides files.manage in areaID again just before a change.
+	// The change itself is then made only while the file is still in that
+	// area (the ...InArea / ...FromArea / conditional operations), so a file
+	// moved elsewhere meanwhile isn't changed on the strength of this area.
 	mayAct := func(areaID int) (perm.Decision, bool) {
 		d := e.fileManagement(um, currentUser, areaID)
 		if !d.Allowed {
@@ -149,15 +153,19 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 				if cur, gErr := e.FileMgr.GetFileRecordByID(rec.ID); gErr == nil && cur != nil {
 					areaID = cur.AreaID
 				}
-				if _, ok := mayAct(areaID); !ok {
+				d, ok := mayAct(areaID)
+				if !ok {
 					continue
 				}
-				updateErr := e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
+				updateErr := e.FileMgr.UpdateFileRecordInArea(rec.ID, areaID, func(r *file.FileRecord) {
 					r.Reviewed = true
 				})
-				if updateErr != nil {
+				if errors.Is(updateErr, file.ErrRecordMoved) {
+					wv(terminal, editFileMovedElsewhere, outputMode)
+				} else if updateErr != nil {
 					slog.Error("failed to mark file as reviewed", "node", nodeNumber, "file", rec.Filename, "error", updateErr)
 				} else {
+					logFileAction(d, "marked reviewed", nodeNumber, currentUser.Handle, rec)
 					e.writeString(terminal, outputMode, e.Strings().SysopReviewMarked)
 					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
 				}
@@ -216,16 +224,22 @@ func editFileChangeDescription(e *MenuExecutor, s ssh.Session, terminal *term.Te
 	if !ok {
 		return nil
 	}
-	updateErr := e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
+	updateErr := e.FileMgr.UpdateFileRecordInArea(rec.ID, rec.AreaID, func(r *file.FileRecord) {
 		r.Description = newDesc
 	})
-	if updateErr != nil {
+	if errors.Is(updateErr, file.ErrRecordMoved) {
+		wv(terminal, editFileMovedElsewhere, outputMode)
+	} else if updateErr != nil {
 		slog.Error("failed to update description", "node", nodeNumber, "file", rec.Filename, "error", updateErr)
 	} else {
 		logFileAction(d, "description changed", nodeNumber, handle, rec)
 	}
 	return nil
 }
+
+// editFileMovedElsewhere is the notice when the file left the area it was
+// listed in while the caller was at a prompt.
+const editFileMovedElsewhere = "\r\n|12That file has been moved or deleted elsewhere. Nothing was changed.\r\n"
 
 // editFileRenameFailed tells the sysop a rename did not happen.
 const editFileRenameFailed = "\r\n|12Rename failed.\r\n"
@@ -259,6 +273,10 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 	if !ok {
 		return false, nil
 	}
+	if e.fileRecordGone(rec.ID, rec.AreaID) {
+		wv(terminal, editFileMovedElsewhere, outputMode)
+		return false, nil
+	}
 
 	oldPath, pathErr := e.FileMgr.GetFilePath(rec.ID)
 	if pathErr != nil {
@@ -276,7 +294,7 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 		return false, nil
 	}
 
-	updateErr := e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
+	updateErr := e.FileMgr.UpdateFileRecordInArea(rec.ID, rec.AreaID, func(r *file.FileRecord) {
 		r.Filename = safeName
 	})
 	if updateErr != nil {
@@ -309,7 +327,11 @@ func editFileDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 		return false, nil
 	}
 
-	delErr := e.FileMgr.DeleteFileRecord(rec.ID, true)
+	deleted, delErr := e.FileMgr.DeleteFileRecordIf(rec.ID, true, func(r file.FileRecord) bool { return r.AreaID == rec.AreaID })
+	if delErr == nil && !deleted || delErr != nil && e.fileRecordGone(rec.ID, rec.AreaID) {
+		wv(terminal, editFileMovedElsewhere, outputMode)
+		return false, nil
+	}
 	if delErr != nil {
 		slog.Error("failed to delete file", "node", nodeNumber, "file", rec.Filename, "error", delErr)
 		return false, nil
@@ -374,7 +396,11 @@ func editFileMove(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec f
 		return false, nil
 	}
 
-	moveErr := e.FileMgr.MoveFileRecord(rec.ID, targetID)
+	moveErr := e.FileMgr.MoveFileRecordFromArea(rec.ID, rec.AreaID, targetID)
+	if errors.Is(moveErr, file.ErrRecordMoved) {
+		wv(terminal, editFileMovedElsewhere, outputMode)
+		return false, nil
+	}
 	if moveErr != nil {
 		slog.Error("failed to move file to area", "node", nodeNumber, "file", rec.Filename, "area", targetID, "error", moveErr)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Move failed.\r\n")), outputMode)

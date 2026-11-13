@@ -132,3 +132,55 @@ func TestFilesManageEditsAnyDescriptionInArea(t *testing.T) {
 		t.Errorf("a manager of another area edited it:\n%s", r.text())
 	}
 }
+
+// A file moved out of the caller's area while they are at a prompt isn't
+// changed: their grant is for the area it was in (#1047 review).
+func TestFilesManageFileMovedAwayAtPrompt(t *testing.T) {
+	useRoles(t, filesManageRoles)
+	for _, tc := range []struct {
+		name, prompt, input string
+	}{
+		{"kill", "Delete DOOMED.ZIP from disk?", "kYq"},
+		{"description", "New description:", "eSneaky words\rq"},
+		{"rename", "New filename:", "rSNEAKY.ZIP\rq"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := lightbarListEnv(t)
+			setCallerRoles(t, env, "general_files")
+			id, _ := addReviewUpload(t, env, 1, "DOOMED.ZIP", 4)
+			env.whenOutput(tc.prompt, func() {
+				if err := env.e.FileMgr.MoveFileRecord(id, 2); err != nil {
+					t.Error(err)
+				}
+			})
+			r := env.runCmd("LISTFILES", env.caller, "", tc.input)
+			if !r.has("That file has been moved or deleted elsewhere. Nothing was changed.") {
+				t.Errorf("no refusal:\n%s", r.text())
+			}
+			rec := reloadedFileRecord(t, env, id)
+			if rec == nil || rec.AreaID != 2 || rec.Filename != "DOOMED.ZIP" || rec.Description != "original desc" {
+				t.Errorf("the moved file was changed: %+v", rec)
+			}
+		})
+	}
+}
+
+// The same in the review queue.
+func TestFilesManageReviewFileMovedAwayAtPrompt(t *testing.T) {
+	useRoles(t, filesManageRoles)
+	env := newMenuEnv(t)
+	setCallerRoles(t, env, "general_files")
+	id, _ := addReviewUpload(t, env, 1, "DOOMED.ZIP", 4)
+	env.whenOutput("Delete this file?", func() {
+		if err := env.e.FileMgr.MoveFileRecord(id, 2); err != nil {
+			t.Error(err)
+		}
+	})
+	r := env.runCmd("EDITFILERECORD", env.caller, "", "Y\rD\rY\rQ\r")
+	if !r.has("That file has been moved or deleted elsewhere. Nothing was changed.") {
+		t.Errorf("no refusal:\n%s", r.text())
+	}
+	if rec := reloadedFileRecord(t, env, id); rec == nil || rec.AreaID != 2 {
+		t.Errorf("the moved file was deleted: %+v", rec)
+	}
+}
