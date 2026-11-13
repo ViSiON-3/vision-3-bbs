@@ -75,6 +75,16 @@ func (um *UserMgr) PurgeDeletedUsers(retentionDays int) ([]PurgeResult, error) {
 	if err := raiseNextUserID(um.path, max(um.nextUserID, maxID+1)); err != nil {
 		return nil, fmt.Errorf("storing the next user ID before purging: %w", err)
 	}
+	// Their handles are retired first too: private mail is matched by
+	// handle, so a new account with one would read the purged account's
+	// mail (#1048). If they can't be recorded, nothing is purged.
+	handles := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		handles = append(handles, c.user.Handle)
+	}
+	if err := RetireHandles(um.path, handles...); err != nil {
+		return nil, fmt.Errorf("retiring purged handles: %w", err)
+	}
 
 	// Phase 2: remove from in-memory store, then persist.
 	// Roll back in-memory changes if save fails so the store stays consistent.

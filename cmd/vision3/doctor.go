@@ -379,6 +379,7 @@ func inspectBoard(root string) doctorReport {
 	checkAreasAndConferences(configDir, root, ftnCfg, add)
 	checkSponsors(configDir, root, add)
 	checkUserIDMark(root, add)
+	checkRetiredHandles(root, add)
 	checkQWKNet(configDir, serverCfg, serverErr, root, add)
 	checkV3Net(configDir, root, add)
 	checkFTNRuntime(ftnCfg, root, add)

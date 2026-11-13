@@ -60,9 +60,20 @@ func (um *UserMgr) updateUserByID(u *User, chatBar *bool) error {
 
 	newKey := strings.ToLower(u.Handle)
 	if newKey != oldKey {
-		// Handle changed — ensure no collision with a different user.
+		// Handle changed — ensure no collision with a different user, and
+		// not a purged account's retired handle (#1048).
 		if existing, exists := um.users[newKey]; exists && existing.ID != u.ID {
 			return ErrHandleExists
+		}
+		if err := um.handleRetired(u.Handle); err != nil {
+			return err
+		}
+		// The old handle is retired, as a purged account's is: mail
+		// addressed to it stays, matched by handle, and must not pass to
+		// whoever registers it next (#1048). A case-only change keeps the
+		// key, and isn't a rename here.
+		if err := RetireHandles(um.path, current.Handle); err != nil {
+			return fmt.Errorf("retiring the old handle: %w", err)
 		}
 		delete(um.users, oldKey)
 	}
@@ -238,6 +249,10 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 	// restart could hand out again.
 	if um.idMarkErr != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUserIDMark, um.idMarkErr)
+	}
+	// A purged account's handle is retired (#1048).
+	if err := um.handleRetired(handle); err != nil {
+		return nil, err
 	}
 	if err := raiseNextUserID(um.path, um.nextUserID+1); err != nil {
 		return nil, fmt.Errorf("storing the next user ID: %w", err)

@@ -1,6 +1,7 @@
 package usereditor
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -407,5 +408,39 @@ func TestEveryFieldAcceptsAnEdit(t *testing.T) {
 				t.Errorf("%s on disk = %q, want %q", f.Label, have, want)
 			}
 		}
+	}
+}
+
+// Purging in ./ue retires the handle, as the BBS's purge does, and the
+// Handle field refuses a retired handle for another account (#1048).
+func TestPurgeRetiresHandleInUE(t *testing.T) {
+	m, path := editBob(t)
+	m = press(t, m, key(tea.KeyF2), char('y'), char('n'))
+	m = press(t, m, key(tea.KeyF4), char('y'))
+	if len(m.users) != 1 {
+		t.Fatalf("users = %d, want Bob purged", len(m.users))
+	}
+	if retired, err := user.HandleRetired(path, "BOB"); err != nil || !retired {
+		t.Fatalf("Bob not retired: %v %v", retired, err)
+	}
+	var set func(*user.User, string) error
+	for _, f := range m.fields {
+		if f.Label == "Handle" {
+			set = f.Set
+		}
+	}
+	sysop := m.users[0]
+	if err := set(sysop, "bob"); !errors.Is(err, user.ErrHandleRetired) {
+		t.Errorf("renaming to a retired handle: %v", err)
+	}
+	if err := set(sysop, "Sysop"); err != nil {
+		t.Errorf("keeping one's own handle: %v", err)
+	}
+	// A rename retires the old handle, as the BBS's does.
+	if err := set(sysop, "Boss"); err != nil || sysop.Handle != "Boss" {
+		t.Fatalf("rename: %v, handle %q", err, sysop.Handle)
+	}
+	if retired, _ := user.HandleRetired(path, "sysop"); !retired {
+		t.Error("the old handle wasn't retired by the rename")
 	}
 }

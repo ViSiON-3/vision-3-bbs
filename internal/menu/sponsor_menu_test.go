@@ -1212,6 +1212,7 @@ func TestSponsorEditAreaEnterKeepsRenamedSponsor(t *testing.T) {
 	if err := env.um.UpdateUserByID(renamed); err != nil {
 		t.Fatal(err)
 	}
+	releaseRetiredHandles(t, env) // the rename retired "Caller"; a sysop released it
 	if _, err := env.um.AddUser("password1", "Caller", "New Person", ""); err != nil {
 		t.Fatal(err)
 	}

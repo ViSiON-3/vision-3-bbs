@@ -217,6 +217,35 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 	// Wire up dynamic display fields that need runtime context.
 	for i := range fields {
 		switch fields[i].Label {
+		case "Handle":
+			// A purged account's handle is retired and can't be given to
+			// another account (#1048), checked as the BBS does.
+			capturedPath, set := filePath, fields[i].Set
+			fields[i].Set = func(u *user.User, val string) error {
+				if strings.EqualFold(strings.TrimSpace(val), u.Handle) {
+					return set(u, val)
+				}
+				retired, err := user.HandleRetired(capturedPath, val)
+				if err != nil {
+					return err
+				}
+				if retired {
+					return user.ErrHandleRetired
+				}
+				old := u.Handle
+				if err := set(u, val); err != nil {
+					return err
+				}
+				// The old handle is retired as the BBS's rename does, so
+				// mail addressed to it doesn't pass to a new account. It is
+				// done now, not at save: retiring a handle that ends up
+				// kept only means the sysop deletes its line.
+				if err := user.RetireHandles(capturedPath, old); err != nil {
+					u.Handle = old
+					return err
+				}
+				return nil
+			}
 		case "InfoForms":
 			capturedDD := dd
 			fields[i].Get = func(u *user.User) string {
@@ -1383,6 +1412,13 @@ func (m *Model) purgeUser(idx int) bool {
 	u := m.users[idx]
 	handle := u.Handle
 	userID := u.ID
+
+	// Retire the handle before anything goes, as the BBS's purge does: the
+	// purged account's private mail is matched by handle (#1048).
+	if err := user.RetireHandles(m.filePath, handle); err != nil {
+		m.message = fmt.Sprintf("Purge of %s failed: %v", handle, err)
+		return false
+	}
 
 	// Remove infoform responses for this user before removing the record.
 	if m.dataDir != "" {

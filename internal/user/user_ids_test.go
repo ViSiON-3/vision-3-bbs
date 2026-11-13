@@ -36,6 +36,11 @@ func TestPurgedUserIDIsNotReused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The purge retired the handle; the sysop releases it, so the new
+	// account can take it and the ID is what tells them apart.
+	if err := os.Remove(filepath.Join(dir, RetiredHandlesFile)); err != nil {
+		t.Fatal(err)
+	}
 	fresh, err := again.AddUser("password2", "Gone", "Someone Else", "")
 	if err != nil {
 		t.Fatal(err)

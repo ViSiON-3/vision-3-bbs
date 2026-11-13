@@ -148,3 +148,28 @@ func checkUserIDMark(root string, add func(string, doctorSeverity, string, strin
 	}
 	add(name, doctorOK, fmt.Sprintf("the next user ID is %d", n), "")
 }
+
+// checkRetiredHandles adds doctor's note on data/users/retired_handles
+// (#1048): how many purged accounts' handles can't be used again, or that
+// the list can't be read, which stops new accounts and renames.
+func checkRetiredHandles(root string, add func(string, doctorSeverity, string, string)) {
+	const name = "retired handles"
+	usersPath := filepath.Join(root, "data", "users", "users.json")
+	if _, err := os.Stat(filepath.Join(filepath.Dir(usersPath), user.RetiredHandlesFile)); os.IsNotExist(err) {
+		return
+	}
+	n := 0
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(usersPath), user.RetiredHandlesFile))
+	if err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if l := strings.TrimSpace(line); l != "" && !strings.HasPrefix(l, "#") {
+				n++
+			}
+		}
+	}
+	if err != nil {
+		add(name, doctorFail, "data/users/retired_handles can't be read, so new accounts and renames are refused: "+err.Error(), "Fix the file's permissions.")
+		return
+	}
+	add(name, doctorInfo, fmt.Sprintf("%d purged account handle(s) retired; delete a line in data/users/retired_handles to release one", n), "")
+}

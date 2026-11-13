@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // addUploads adds files to area 1, each uploaded by the handle given with it,
@@ -252,6 +253,7 @@ func TestEditUploadFollowsTheAccount(t *testing.T) {
 	if err := env.um.UpdateUserByID(renamed); err != nil {
 		t.Fatal(err)
 	}
+	releaseRetiredHandles(t, env) // the rename retired "Caller"; a sysop released it
 	newcomer, err := env.um.AddUser("password1", "Caller", "New Person", "")
 	if err != nil {
 		t.Fatal(err)
@@ -266,5 +268,14 @@ func TestEditUploadFollowsTheAccount(t *testing.T) {
 	env.sub(t).runCmd("EDITUPLOAD", carl, "", "mine.zip\rstill mine\r")
 	if got := fileDesc(t, env, ids["MINE.ZIP"]); got != "still mine" {
 		t.Errorf("description = %q, want the renamed uploader's edit", got)
+	}
+}
+
+// releaseRetiredHandles deletes env's retired-handle list, as a sysop
+// releases a handle, so a test can give an old handle to a new account.
+func releaseRetiredHandles(t *testing.T, env *menuEnv) {
+	t.Helper()
+	if err := os.Remove(filepath.Join(env.dataDir(), user.RetiredHandlesFile)); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
 	}
 }
