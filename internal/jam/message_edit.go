@@ -46,7 +46,8 @@ func (b *Base) ReplaceMessageIf(msgNum int, edit func(*Message) (subject, text s
 		}
 
 		hdr, err := base.readMessageHeaderLocked(msgNum)
-		if errors.Is(err, ErrInvalidMessage) {
+		// Past the end, or an index entry another tool blanked out.
+		if errors.Is(err, ErrInvalidMessage) || errors.Is(err, ErrNotFound) {
 			return ErrMessageChanged
 		}
 		if err != nil {

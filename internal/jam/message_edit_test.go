@@ -198,12 +198,16 @@ func TestReplaceMessageIfRetireFailure(t *testing.T) {
 	}
 }
 
-// A refused edit, a deleted message and a number past the end change
+// A refused edit, a deleted message, one whose index entry is blanked out
+// (as another JAM tool may leave it) and a number past the end change
 // nothing and give ErrMessageChanged.
 func TestReplaceMessageIfRefusals(t *testing.T) {
 	b := openTestBase(t)
-	writeSubjects(t, b, "one", "two")
+	writeSubjects(t, b, "one", "two", "three")
 	if err := b.DeleteMessage(2); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.writeIndexRecord(3, &IndexRecord{ToCRC: 0xFFFFFFFF, HdrOffset: 0xFFFFFFFF}); err != nil {
 		t.Fatal(err)
 	}
 	jdt, _ := os.Stat(b.BasePath + ".jdt")
@@ -212,6 +216,7 @@ func TestReplaceMessageIfRefusals(t *testing.T) {
 	for name, err := range map[string]error{
 		"refused":  b.ReplaceMessageIf(1, refuse),
 		"deleted":  b.ReplaceMessageIf(2, replaceWith("x", "x")),
+		"blanked":  b.ReplaceMessageIf(3, replaceWith("x", "x")),
 		"past end": b.ReplaceMessageIf(9, replaceWith("x", "x")),
 	} {
 		if !errors.Is(err, ErrMessageChanged) {

@@ -89,6 +89,16 @@ func asciiText(s string) bool {
 	return true
 }
 
+// widestLine is the length of text's longest line, in bytes: characters,
+// for ASCII text.
+func widestLine(text string) int {
+	w := 0
+	for line := range strings.SplitSeq(text, "\n") {
+		w = max(w, len(strings.TrimRight(line, "\r")))
+	}
+	return w
+}
+
 // editResult is how an edit from the reader ended.
 type editResult int
 
@@ -130,6 +140,12 @@ func (e *MenuExecutor) editPostedMessage(s ssh.Session, ih *editor.InputHandler,
 	// accented letter that came in by QWK or v3mail, or in a quote.
 	if !asciiText(text) {
 		notice("|01This message has characters other than plain ASCII, which the editor can't handle. It can't be edited here.|07")
+		return editNone, nil
+	}
+	// And it loads lines as they are, without wrapping, but shows each as one
+	// screen row, so a wider line, as from v3mail, couldn't be seen whole.
+	if w := widestLine(text); w > editor.MaxLineLength {
+		notice(fmt.Sprintf("|01This message has a line %d characters wide, more than the editor shows (%d). It can't be edited here.|07", w, editor.MaxLineLength))
 		return editNone, nil
 	}
 

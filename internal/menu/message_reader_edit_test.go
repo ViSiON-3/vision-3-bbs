@@ -361,6 +361,37 @@ func TestReaderEditTooLong(t *testing.T) {
 	}
 }
 
+// A line wider than the editor shows, as a v3mail post can have, isn't
+// opened in it: the editor doesn't wrap what it loads, so the caller
+// couldn't see the whole line. One exactly as wide as it shows is.
+func TestReaderEditTooWide(t *testing.T) {
+	env := newMsgEnv(t)
+	wide := strings.Repeat("x", editor.MaxLineLength+1) + "\nshort"
+	if _, err := env.e.MessageMgr.Post(generalAreaID, "Caller", "All", "wide", wide, message.PostOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	r := env.runCmd("READMSGS", env.sysop, "", "E\r\x1aQ")
+	if !r.has(fmt.Sprintf("a line %d characters wide", editor.MaxLineLength+1)) || r.has("Subject:") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	if b := env.mustMsg(generalAreaID, 1).Body; b != wide {
+		t.Errorf("body = %q, want it unchanged", b)
+	}
+
+	env = newMsgEnv(t)
+	fits := strings.Repeat("x", editor.MaxLineLength)
+	if _, err := env.e.MessageMgr.Post(generalAreaID, "Caller", "All", "fits", fits, message.PostOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	r = env.runCmd("READMSGS", env.sysop, "", "E\r\x1aQ")
+	if !r.has("Message saved.") {
+		t.Errorf("a %d-character line wasn't edited; output:\n%s", editor.MaxLineLength, r.text())
+	}
+	if b := env.mustMsg(generalAreaID, 1).Body; !strings.HasPrefix(b, fits+"\n\n * Edited by Sysop on ") {
+		t.Errorf("body = %q, want the line kept", b)
+	}
+}
+
 // A local area a V3Net leaf binds by tag shares its messages with the
 // network, so an edit there would change only this board's copy.
 func TestReaderEditNotV3NetBound(t *testing.T) {

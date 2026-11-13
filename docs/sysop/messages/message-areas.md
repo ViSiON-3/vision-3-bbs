@@ -537,9 +537,10 @@ place in its thread.
   its bytes. Not one with any character other than plain ASCII, such as an
   accented letter or a line-drawing character from a QWK reply, a
   `v3mail post` or a quote: the editor works in bytes, so a Backspace would
-  cut the character in half. And not one longer than the editor holds, 100
-  lines, as a QWK or `v3mail post` message can be. In the last two cases
-  the caller is told why.
+  cut the character in half. Not one longer than the editor holds, 100
+  lines, as a QWK or `v3mail post` message can be, nor one with a line
+  wider than it shows, 79 characters: the editor doesn't wrap the text it
+  opens. In these last three cases the caller is told why.
 - **Checked again on saving:** the right to edit, and that the message is
   still the one shown. If another session edited, deleted or moved it
   meanwhile, or the caller no longer moderates the area, nothing is saved
