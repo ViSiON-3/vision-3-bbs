@@ -77,3 +77,48 @@ func TestEditorBackspaceOnAccentedText(t *testing.T) {
 		t.Errorf("line = %q, want \"Grüße aus KöXY\"", got)
 	}
 }
+
+// Raw CP437 bytes a quote carries aren't valid UTF-8. Editing next to them,
+// splitting, joining and rewrapping keep them byte for byte (#1059 review):
+// each byte is one character, and no line is converted to []rune.
+func TestRawCP437BytesSurviveEdits(t *testing.T) {
+	quoted := "> \xdb\xc4 box"
+	mb, ww := setupBuffer([]string{quoted}, 1)
+	if got := mb.GetLineLength(1); got != 8 {
+		t.Fatalf("GetLineLength = %d, want 8 (each raw byte is one column)", got)
+	}
+	mb.InsertChar(1, 5, 'X') // after the two drawing bytes
+	if got := mb.GetLine(1); got != "> \xdb\xc4X box" {
+		t.Errorf("insert: %q", got)
+	}
+	mb.DeleteChar(1, 5)         // the X again
+	mb.OverwriteChar(1, 7, 'B') // the o of "box"
+	if got := mb.GetLine(1); got != "> \xdb\xc4 bBx" {
+		t.Errorf("overwrite: %q", got)
+	}
+	if !mb.SplitLine(1, 5) || mb.GetLine(1) != "> \xdb\xc4" || mb.GetLine(2) != " bBx" {
+		t.Errorf("split: %q / %q", mb.GetLine(1), mb.GetLine(2))
+	}
+	mb.JoinLines(1)
+	ww.ReflowRange(1, 1, 1)
+	if got := mb.GetLine(1); got != "> \xdb\xc4 bBx" {
+		t.Errorf("after join and reflow: %q", got)
+	}
+	if got := ww.FindWordRight(1, 1); got != 3 {
+		t.Errorf("FindWordRight = %d, want 3", got)
+	}
+}
+
+// On a quote whose initials are multi-byte, the cursor is drawn at the
+// character being edited (#1059 review): buffer columns are characters, so
+// the screen mapping counts characters too.
+func TestQuoteCursorWithMultiByteInitials(t *testing.T) {
+	d := displayQuoteLine("ÉS> hello")
+	// Column 5 is the "h": the lead (1) and "ÉS> " (4) come before it.
+	if got := d.screenCol(5); got != 6 {
+		t.Errorf("screenCol(5) = %d, want 6, on the h", got)
+	}
+	if got := d.screenCol(2); got != 3 {
+		t.Errorf("screenCol(2) = %d, want 3, on the S", got)
+	}
+}

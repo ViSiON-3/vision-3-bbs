@@ -187,22 +187,20 @@ func (mb *MessageBuffer) InsertChar(lineNum, col int, ch rune) bool {
 		return false
 	}
 
-	line := []rune(mb.lines[lineNum])
+	line := mb.lines[lineNum]
 
 	// Ensure col is valid
 	if col < 1 {
 		col = 1
 	}
-	if col > len(line)+1 {
-		col = len(line) + 1
+	if n := utf8.RuneCountInString(line); col > n+1 {
+		col = n + 1
 	}
 
-	// Insert character
-	out := make([]rune, 0, len(line)+1)
-	out = append(out, line[:col-1]...)
-	out = append(out, ch)
-	out = append(out, line[col-1:]...)
-	mb.lines[lineNum] = string(out)
+	// Insert character, slicing at a character boundary so every other
+	// byte, raw CP437 included, stays as it was.
+	at := runePrefixLen(line, col-1)
+	mb.lines[lineNum] = line[:at] + string(ch) + line[at:]
 
 	// Update line count if needed
 	if lineNum > mb.lineCount {
@@ -218,13 +216,13 @@ func (mb *MessageBuffer) DeleteChar(lineNum, col int) bool {
 		return false
 	}
 
-	line := []rune(mb.lines[lineNum])
-	if col < 1 || col > len(line) {
+	line := mb.lines[lineNum]
+	if col < 1 || col > utf8.RuneCountInString(line) {
 		return false
 	}
 
-	// Delete character
-	mb.lines[lineNum] = string(line[:col-1]) + string(line[col:])
+	// Delete character: the bytes of one character, valid UTF-8 or not.
+	mb.lines[lineNum] = line[:runePrefixLen(line, col-1)] + line[runePrefixLen(line, col):]
 
 	return true
 }
@@ -235,7 +233,7 @@ func (mb *MessageBuffer) OverwriteChar(lineNum, col int, ch rune) bool {
 		return false
 	}
 
-	line := []rune(mb.lines[lineNum])
+	line := mb.lines[lineNum]
 
 	// Ensure col is valid
 	if col < 1 {
@@ -243,17 +241,17 @@ func (mb *MessageBuffer) OverwriteChar(lineNum, col int, ch rune) bool {
 	}
 
 	// Pad with spaces if needed
-	for len(line) < col-1 {
-		line = append(line, ' ')
+	if n := utf8.RuneCountInString(line); n < col-1 {
+		line += strings.Repeat(" ", col-1-n)
 	}
 
-	if col > len(line) {
-		line = append(line, ch)
+	if col > utf8.RuneCountInString(line) {
+		line += string(ch)
 	} else {
-		line[col-1] = ch
+		line = line[:runePrefixLen(line, col-1)] + string(ch) + line[runePrefixLen(line, col):]
 	}
 
-	mb.lines[lineNum] = string(line)
+	mb.lines[lineNum] = line
 
 	// Update line count if needed
 	if lineNum > mb.lineCount {
@@ -340,12 +338,13 @@ func (mb *MessageBuffer) SplitLine(lineNum, col int) bool {
 	if col <= 1 {
 		leftPart = ""
 		rightPart = line
-	} else if r := []rune(line); col > len(r) {
+	} else if col > utf8.RuneCountInString(line) {
 		leftPart = line
 		rightPart = ""
 	} else {
-		leftPart = string(r[:col-1])
-		rightPart = string(r[col-1:])
+		at := runePrefixLen(line, col-1)
+		leftPart = line[:at]
+		rightPart = line[at:]
 	}
 
 	// Set the current line to the left part

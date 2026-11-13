@@ -2,7 +2,6 @@ package editor
 
 import (
 	"strings"
-	"unicode"
 	"unicode/utf8"
 )
 
@@ -42,9 +41,9 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 	for endLine < lineCount && !ww.buffer.IsHardNewline(endLine) && ww.buffer.QuotePrefix(endLine+1) == prefix {
 		endLine++
 	}
-	// All of this works in characters (runes), not bytes (#1051), so a
-	// multi-byte character is never split and widths count what the screen
-	// shows. Less any column the screen adds beside the prefix, as
+	// All of this works in characters, not bytes (#1051), so a multi-byte
+	// character is never split and widths count what the screen shows; see
+	// splitChars for why a line is never converted to []rune. Less any column the screen adds beside the prefix, as
 	// wrapQuoted does.
 	prefixLen := utf8.RuneCountInString(prefix)
 	width := MaxLineLength - prefixLen - quoteLeadExtra(prefix)
@@ -54,18 +53,18 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 	endHardNewline := ww.buffer.IsHardNewline(endLine)
 
 	// Collect text from all lines in the paragraph and compute cursor offset
-	var collected []rune
+	var collected []string
 	cursorOffset := 0
 	cursorFound := false
 
 	for i := startLine; i <= endLine; i++ {
 		// Spaces in the buffer are editable content. Trimming them here would
 		// make a single Backspace delete extra characters and move the cursor.
-		line := []rune(strings.TrimPrefix(ww.buffer.GetLine(i), prefix))
+		line := splitChars(strings.TrimPrefix(ww.buffer.GetLine(i), prefix))
 		// A soft wrap stands for the space between two words, except where it
 		// split a word too long for the margin.
 		if i > startLine && len(collected) > 0 && len(line) > 0 && !ww.buffer.IsWordSplit(i-1) {
-			collected = append(collected, ' ')
+			collected = append(collected, " ")
 			if !cursorFound {
 				cursorOffset++
 			}
@@ -103,7 +102,7 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 		remaining := text[pos:]
 
 		if len(remaining) <= width {
-			outputLines = append(outputLines, string(remaining))
+			outputLines = append(outputLines, joinChars(remaining))
 			splits = append(splits, false)
 			break
 		}
@@ -114,7 +113,7 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 			wrapPos = width
 		}
 
-		outputLines = append(outputLines, string(remaining[:wrapPos]))
+		outputLines = append(outputLines, joinChars(remaining[:wrapPos]))
 		splits = append(splits, split)
 		if split {
 			// No space was consumed, so there is none to restore below.
@@ -125,7 +124,7 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 		// The soft line break represents one separator space (restored when
 		// collecting above). Preserve any additional spaces on either side.
 		pos += wrapPos
-		if pos < len(text) && text[pos] == ' ' {
+		if pos < len(text) && text[pos] == " " {
 			pos++
 			if pos == len(text) {
 				// The separator was the last character — typically the space
@@ -172,7 +171,7 @@ func (ww *WordWrapper) ReflowRange(startLine, cursorLine, cursorCol int) (int, i
 			if !ww.buffer.InsertLine(startLine + i) {
 				// Buffer full: append remaining text to last written line
 				last := startLine + actualNew - 1
-				tail := string(text[lineStarts[i]:]) // text only; the line has the prefix
+				tail := joinChars(text[lineStarts[i]:]) // text only; the line has the prefix
 				if tail == "" {
 					// Only the separator space was left to place (see the
 					// empty continuation line above). Keep it on the last
@@ -267,9 +266,9 @@ const minQuoteWrapWidth = 10
 // findWrapPosition finds the best position to wrap the line at width.
 // Returns the index of the last space at or before width, or -1 if there is
 // none past the first column. Indexes and width are in characters.
-func findWrapPosition(line []rune, width int) int {
+func findWrapPosition(line []string, width int) int {
 	for i := width; i > 0; i-- {
-		if i < len(line) && line[i] == ' ' {
+		if i < len(line) && line[i] == " " {
 			return i
 		}
 	}
@@ -386,7 +385,7 @@ func (ww *WordWrapper) HandleDelete(lineNum, col int) (int, int, bool) {
 // DeleteWord deletes the word to the right of the cursor and reflows.
 // Returns new cursor position (line, col) and whether a change was made.
 func (ww *WordWrapper) DeleteWord(lineNum, col int) (int, int, bool) {
-	line := []rune(ww.buffer.GetLine(lineNum))
+	line := splitChars(ww.buffer.GetLine(lineNum))
 	if col > len(line) {
 		return lineNum, col, false
 	}
@@ -397,16 +396,16 @@ func (ww *WordWrapper) DeleteWord(lineNum, col int) (int, int, bool) {
 	}
 
 	// Skip initial whitespace
-	for i < len(line) && unicode.IsSpace(line[i]) {
+	for i < len(line) && isSpaceChar(line[i]) {
 		i++
 	}
 	// Skip word characters
-	for i < len(line) && !unicode.IsSpace(line[i]) {
+	for i < len(line) && !isSpaceChar(line[i]) {
 		i++
 	}
 
 	if i > col-1 {
-		newLine := string(line[:col-1]) + string(line[i:])
+		newLine := joinChars(line[:col-1]) + joinChars(line[i:])
 		ww.buffer.SetLine(lineNum, newLine)
 		newLn, newCol := ww.reflowParagraph(lineNum, col)
 		return newLn, newCol, true
@@ -442,7 +441,7 @@ func (ww *WordWrapper) DeleteLine(lineNum int) (int, int, bool) {
 
 // FindWordLeft finds the start of the word to the left
 func (ww *WordWrapper) FindWordLeft(lineNum, col int) int {
-	line := []rune(ww.buffer.GetLine(lineNum))
+	line := splitChars(ww.buffer.GetLine(lineNum))
 	if col <= 1 {
 		return 1
 	}
@@ -450,11 +449,11 @@ func (ww *WordWrapper) FindWordLeft(lineNum, col int) int {
 	pos := col - 2 // Start before cursor
 
 	// Skip trailing whitespace
-	for pos >= 0 && pos < len(line) && unicode.IsSpace(line[pos]) {
+	for pos >= 0 && pos < len(line) && isSpaceChar(line[pos]) {
 		pos--
 	}
 	// Skip word characters
-	for pos >= 0 && pos < len(line) && !unicode.IsSpace(line[pos]) {
+	for pos >= 0 && pos < len(line) && !isSpaceChar(line[pos]) {
 		pos--
 	}
 
@@ -463,7 +462,7 @@ func (ww *WordWrapper) FindWordLeft(lineNum, col int) int {
 
 // FindWordRight finds the start of the word to the right
 func (ww *WordWrapper) FindWordRight(lineNum, col int) int {
-	line := []rune(ww.buffer.GetLine(lineNum))
+	line := splitChars(ww.buffer.GetLine(lineNum))
 	if col > len(line) {
 		return len(line) + 1
 	}
@@ -471,11 +470,11 @@ func (ww *WordWrapper) FindWordRight(lineNum, col int) int {
 	pos := col - 1 // Current position (0-based)
 
 	// Skip current word
-	for pos < len(line) && !unicode.IsSpace(line[pos]) {
+	for pos < len(line) && !isSpaceChar(line[pos]) {
 		pos++
 	}
 	// Skip whitespace
-	for pos < len(line) && unicode.IsSpace(line[pos]) {
+	for pos < len(line) && isSpaceChar(line[pos]) {
 		pos++
 	}
 
