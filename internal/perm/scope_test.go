@@ -22,7 +22,7 @@ func TestScopedGrants(t *testing.T) {
 	roles := mustParse(t, scopedRoles)
 	general := Scope{Area: "GENERAL", Conference: "LOCAL"}
 	fsxGen := Scope{Area: "FSX_GEN", Conference: "FSXNET"}
-	mail := Scope{Area: "PRIVMAIL", Conference: "LOCAL", Sponsor: "Mod"}
+	mail := Scope{Area: "PRIVMAIL", Conference: "LOCAL", SponsorID: 9}
 	tests := []struct {
 		name  string
 		roles []string
@@ -54,19 +54,20 @@ func TestScopedGrants(t *testing.T) {
 }
 
 func TestSponsorAndLevelsHoldModeration(t *testing.T) {
-	general := Scope{Area: "GENERAL", Sponsor: " techguru "}
+	general := Scope{Area: "GENERAL", SponsorID: 7}
 	tests := []struct {
 		name string
 		u    *user.User
 		at   Scope
 		want string
 	}{
-		{"sponsor, any case", &user.User{Handle: "TechGuru", AccessLevel: 20}, general, "sponsor of GENERAL"},
-		{"someone else", &user.User{Handle: "Other", AccessLevel: 20}, general, ""},
-		{"sponsor field on private mail", &user.User{Handle: "TechGuru", AccessLevel: 20}, Scope{Area: "privmail", Sponsor: "TechGuru"}, ""},
+		{"the sponsor's account", &user.User{ID: 7, Handle: "TechGuru", AccessLevel: 20}, general, "sponsor of GENERAL"},
+		{"someone else", &user.User{ID: 8, Handle: "Other", AccessLevel: 20}, general, ""},
+		{"another account with the sponsor's handle", &user.User{ID: 8, Handle: "TechGuru", AccessLevel: 20}, general, ""},
+		{"sponsor field on private mail", &user.User{ID: 7, Handle: "TechGuru", AccessLevel: 20}, Scope{Area: "privmail", SponsorID: 7}, ""},
 		{"co-sysop everywhere", &user.User{AccessLevel: 250}, Scope{Area: "PRIVMAIL"}, "co-sysop level"},
 		{"sysop", &user.User{AccessLevel: 255}, general, "sysop level"},
-		{"deleted sponsor", &user.User{Handle: "TechGuru", AccessLevel: 20, DeletedUser: true}, general, ""},
+		{"deleted sponsor", &user.User{ID: 7, Handle: "TechGuru", AccessLevel: 20, DeletedUser: true}, general, ""},
 	}
 	for _, tt := range tests {
 		d := moderates(tt.u, tt.at, &Roles{})
@@ -85,7 +86,7 @@ func TestSponsorAndLevelsHoldModeration(t *testing.T) {
 	if Check(&user.User{AccessLevel: 1}, MessagesModerate, general, Levels{SysOp: 255}, &Roles{}).Allowed {
 		t.Error("coSysOpLevel 0 let level 1 moderate")
 	}
-	d := moderates(&user.User{Handle: "TechGuru", AccessLevel: 20, Roles: []string{"all_mod"}}, general, mustParse(t, scopedRoles))
+	d := moderates(&user.User{ID: 7, Handle: "TechGuru", AccessLevel: 20, Roles: []string{"all_mod"}}, general, mustParse(t, scopedRoles))
 	if d.Source() != "sponsor of GENERAL and role all_mod" {
 		t.Errorf("sponsor and role: %q", d.Source())
 	}

@@ -135,10 +135,12 @@ func (lv Levels) holds(level int, l Level) bool {
 const PrivateMailTag = "PRIVMAIL"
 
 // Scope is the message area a scoped permission is asked about: its tag,
-// its conference's tag, and its sponsor's handle. The zero Scope is no area,
+// its conference's tag, and its sponsor's account ID (0 for none; the
+// sponsor is an account, not a handle, #1020). The zero Scope is no area,
 // which only a grant for every area, a level, covers.
 type Scope struct {
-	Area, Conference, Sponsor string
+	Area, Conference string
+	SponsorID        int
 }
 
 // private reports whether s is the private mail area.
@@ -216,7 +218,7 @@ func Check(u *user.User, p Permission, at Scope, lv Levels, roles *Roles) Decisi
 	if pi.Scoped && at.private() {
 		return d
 	}
-	if pi.Scoped && at.Sponsor != "" && strings.EqualFold(strings.TrimSpace(at.Sponsor), strings.TrimSpace(u.Handle)) {
+	if pi.Scoped && at.SponsorID > 0 && at.SponsorID == u.ID {
 		d.Sponsor = true
 	}
 	if roles == nil {

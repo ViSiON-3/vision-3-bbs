@@ -52,7 +52,10 @@ func (e *MenuExecutor) areaScope(areaID int) perm.Scope {
 	if !ok || area == nil {
 		return perm.Scope{}
 	}
-	scope := perm.Scope{Area: area.Tag, Sponsor: area.Sponsor}
+	scope := perm.Scope{Area: area.Tag}
+	if area.Sponsor != "" && area.SponsorID > 0 {
+		scope.SponsorID = area.SponsorID
+	}
 	if e.ConferenceMgr != nil && area.ConferenceID != 0 {
 		if conf, ok := e.ConferenceMgr.GetByID(area.ConferenceID); ok && conf != nil {
 			scope.Conference = conf.Tag

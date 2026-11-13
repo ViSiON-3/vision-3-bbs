@@ -305,15 +305,16 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	if isModerator() || strings.EqualFold(currentAreaTag, "PRIVMAIL") {
 		activeOptions = append(activeOptions, msgReaderDeleteOption)
 	}
-	// A co-sysop may move any message to another area, and the area's
-	// sponsor a message out of it, between local public areas, if it is
-	// stored as UTF-8 (moveMessage). Move isn't on the bar, which has no room for it; the
-	// help lists it where it applies.
-	mayMove := func(m *message.DisplayMessage, sponsor bool) bool {
+	// Whoever moderates the area may move a message out of it to another
+	// area, between local public areas, if it is stored as UTF-8
+	// (moveMessage): a co-sysop anywhere, the area's sponsor, or a role
+	// granting messages.moderate there. Move isn't on the bar, which has no
+	// room for it; the help lists it where it applies.
+	mayMove := func(m *message.DisplayMessage, moderator bool) bool {
 		area, ok := e.MessageMgr.GetAreaByID(currentAreaID)
-		return ok && localPublicArea(e.MessageMgr, area) && m.StoredAsUTF8() && (isSysop || sponsor)
+		return ok && localPublicArea(e.MessageMgr, area) && m.StoredAsUTF8() && moderator
 	}
-	canMove := func(m *message.DisplayMessage) bool { return mayMove(m, isSponsor()) }
+	canMove := func(m *message.DisplayMessage) bool { return mayMove(m, isModerator()) }
 	barSuffix := e.Strings().MsgReadingSuffix
 	if isNewScan {
 		barSuffix = e.Strings().MsgNewScanSuffix
@@ -1095,7 +1096,7 @@ readerLoop:
 				}
 				break scrollLoop
 
-			case 'V': // Move message: a co-sysop any, a sponsor one out of their area
+			case 'V': // Move message: whoever moderates the area, out of it
 				if !canMove(currentMsg) {
 					continue // Ignore if triggered without access
 				}
@@ -1104,7 +1105,7 @@ readerLoop:
 					continue
 				}
 				result, mvErr := e.moveMessage(s, reader, terminal, currentUser, nodeNumber, outputMode, sessionStartTime,
-					area, currentMsg, mayMove, isSponsor, termHeight)
+					area, currentMsg, mayMove, isModerator, termHeight)
 				if errors.Is(mvErr, editor.ErrIdleTimeout) {
 					return nil, "LOGOFF", currentMsgNum, editor.ErrIdleTimeout
 				}

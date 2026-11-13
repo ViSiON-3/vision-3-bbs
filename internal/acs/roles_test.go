@@ -174,9 +174,9 @@ func TestExplainScopedPerm(t *testing.T) {
 		}
 	}
 	// The BBS's own scope (with the area's sponsor) wins over the record's tags.
-	ctx := ctxFor(&user.User{Handle: "Guru", AccessLevel: 20})
+	ctx := ctxFor(&user.User{ID: 4, Handle: "Guru", AccessLevel: 20})
 	ctx.Roles = roles
-	ctx.Scope = func() perm.Scope { return perm.Scope{Area: "TECH", Sponsor: "guru"} }
+	ctx.Scope = func() perm.Scope { return perm.Scope{Area: "TECH", SponsorID: 4} }
 	if !Check("PERM:messages.moderate", ctx) {
 		t.Error("a sponsor through Context.Scope fails PERM:messages.moderate")
 	}
