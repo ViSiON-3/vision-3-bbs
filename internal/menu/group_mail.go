@@ -250,8 +250,8 @@ func (e *MenuExecutor) groupLetterCopies(areaID int, id, handle string, accountI
 
 // unreadCopy reports whether m's recipient hasn't read it: their lastread in
 // the area hasn't reached it. A lastread that can't be read counts as read.
-func (e *MenuExecutor) unreadCopy(areaID int, m *message.DisplayMessage) bool {
-	lastRead, err := e.MessageMgr.GetLastRead(areaID, strings.TrimSpace(m.To))
+func (e *MenuExecutor) unreadCopy(um *user.UserMgr, areaID int, m *message.DisplayMessage) bool {
+	lastRead, err := e.recipientLastRead(um, areaID, m)
 	if err != nil {
 		slog.Warn("unsend: recipient's lastread", "area", areaID, "to", m.To, "error", err)
 		return false
@@ -259,11 +259,33 @@ func (e *MenuExecutor) unreadCopy(areaID int, m *message.DisplayMessage) bool {
 	return lastRead < m.MsgNum
 }
 
+// recipientLastRead is how far m's recipient has read in areaID. Lastread
+// is kept per handle, so for mail that records its recipient's account
+// (#1048) it is the further of the pointers under the handle in To and
+// under the account's handle now: a recipient renamed after reading keeps
+// the old pointer, and one renamed before reads under the new handle.
+func (e *MenuExecutor) recipientLastRead(um *user.UserMgr, areaID int, m *message.DisplayMessage) (int, error) {
+	lastRead, err := e.MessageMgr.GetLastRead(areaID, strings.TrimSpace(m.To))
+	if err != nil {
+		return 0, err
+	}
+	if m.RecipientID > 0 && um != nil {
+		if u, ok := um.GetUserByID(m.RecipientID); ok && !strings.EqualFold(u.Handle, strings.TrimSpace(m.To)) {
+			now, err := e.MessageMgr.GetLastRead(areaID, u.Handle)
+			if err != nil {
+				return 0, err
+			}
+			lastRead = max(lastRead, now)
+		}
+	}
+	return lastRead, nil
+}
+
 // groupLetterUnsendable reports whether any copy of m's group letter is
 // still unread, so its sender may unsend it.
-func (e *MenuExecutor) groupLetterUnsendable(areaID int, m *message.DisplayMessage, handle string, accountID int) bool {
+func (e *MenuExecutor) groupLetterUnsendable(um *user.UserMgr, areaID int, m *message.DisplayMessage, handle string, accountID int) bool {
 	for _, c := range e.groupLetterCopies(areaID, m.MailGroupID, handle, accountID) {
-		if e.unreadCopy(areaID, c) {
+		if e.unreadCopy(um, areaID, c) {
 			return true
 		}
 	}
@@ -273,15 +295,15 @@ func (e *MenuExecutor) groupLetterUnsendable(areaID int, m *message.DisplayMessa
 // unsendGroupLetter deletes every copy of m's group letter whose recipient
 // hasn't read it, each checked again as it is deleted, and packs the base
 // once. It reports how many copies went and how many had been read and stay.
-func (e *MenuExecutor) unsendGroupLetter(areaID int, m *message.DisplayMessage, handle string, accountID int) (removed, kept int, err error) {
+func (e *MenuExecutor) unsendGroupLetter(um *user.UserMgr, areaID int, m *message.DisplayMessage, handle string, accountID int) (removed, kept int, err error) {
 	for _, c := range e.groupLetterCopies(areaID, m.MailGroupID, handle, accountID) {
-		if !e.unreadCopy(areaID, c) {
+		if !e.unreadCopy(um, areaID, c) {
 			kept++
 			continue
 		}
 		copyShown := c
 		derr := e.MessageMgr.DeleteMessageIf(areaID, c.MsgNum, func(cur *message.DisplayMessage) bool {
-			return message.SameMessage(cur, copyShown) && e.unreadCopy(areaID, cur)
+			return message.SameMessage(cur, copyShown) && e.unreadCopy(um, areaID, cur)
 		})
 		switch {
 		case errors.Is(derr, message.ErrMessageChanged):

@@ -91,6 +91,35 @@ func privateReplyHandle(um *user.UserMgr, msg *message.DisplayMessage, replier, 
 	return "", fmt.Sprintf("Can't tell which user '%s' is, so the reply could not be sent.", name), false
 }
 
+// privateReplyAccount is who a private reply to msg goes to: the other
+// account of the letter, by the ID it recorded (#1048), so a reply reaches
+// the account that wrote or received it even after a rename, and never
+// whoever holds its old handle now. A recorded account that is gone or
+// deleted refuses the reply. A letter that records no ID falls back to
+// privateReplyHandle, by name.
+func privateReplyAccount(um *user.UserMgr, msg *message.DisplayMessage, replier *user.User, anonymousName string) (handle string, id int, reason string, ok bool) {
+	other := msg.SenderID
+	if replier != nil && msg.SentBy(replier.Handle, replier.ID) && !msg.MailFor(replier.Handle, replier.ID) {
+		other = msg.RecipientID
+	}
+	if other > 0 && um != nil {
+		u, found := um.GetUserByID(other)
+		if !found || u.DeletedUser {
+			return "", 0, "That account no longer exists here, so the reply could not be sent.", false
+		}
+		return u.Handle, u.ID, "", true
+	}
+	name := ""
+	if replier != nil {
+		name = replier.Handle
+	}
+	handle, reason, ok = privateReplyHandle(um, msg, name, anonymousName)
+	if ok {
+		id = accountIDOf(um, handle)
+	}
+	return handle, id, reason, ok
+}
+
 // handleReply manages the reply flow matching Pascal's reply handling.
 //
 // The reader goes on showing the message that was replied to, so a reply
@@ -162,8 +191,10 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	// private mail is delivered to (and signed by one: the reply's From is
 	// always the replier's handle). A reply no account could read is refused
 	// before the editor opens, so no typing is lost.
+	replyToID := 0
 	if currentMsg.IsPrivate && !isNetmailArea(replyArea) && !toGroup {
-		handle, reason, ok := privateReplyHandle(userManager, currentMsg, currentUser.Handle, e.Strings().AnonymousName)
+		handle, id, reason, ok := privateReplyAccount(userManager, currentMsg, currentUser, e.Strings().AnonymousName)
+		replyToID = id
 		if !ok {
 			slog.Info("private reply refused: addressee not identified", "node", nodeNumber,
 				"handle", currentUser.Handle, "area", currentAreaID, "msg", currentMsg.MsgNum, "from", currentMsg.From)
@@ -226,7 +257,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		ReplyToMsgID: currentMsg.MsgID,
 		SenderHandle: currentUser.Handle,
 		SenderID:     currentUser.ID,
-		RecipientID:  accountIDOf(userManager, replyTo),
+		RecipientID:  replyToID,
 	})
 	if err != nil {
 		slog.Error("failed to save reply", "node", nodeNumber, "error", err)

@@ -91,6 +91,9 @@ type msgOwnershipFilter func(*message.DisplayMessage) bool
 // not). *user.UserMgr implements it.
 type handleDirectory interface {
 	HandleExists(handle string) bool
+	// AccountExists reports whether an account with this ID is on file,
+	// deleted or not.
+	AccountExists(id int) bool
 }
 
 // privateMailReader is who is reading, for withPrivacy: the user, the access
@@ -122,8 +125,11 @@ func privateMailReaderFor(e *MenuExecutor, um *user.UserMgr, u *user.User) priva
 //   - A private message is visible to the account whose handle is its To or
 //     From (message.DisplayMessage.VisibleTo). This is the only rule for
 //     every other user and for all mail that reached an account.
-//   - A private message is "undeliverable" when its To is not the handle of
-//     any account, deleted or not (user.UserMgr.HandleExists): typically
+//   - A private message is "undeliverable" when it reached no account: it
+//     records no recipient ID and its To is not the handle of any account,
+//     deleted or not (user.UserMgr.HandleExists), or the account it records
+//     is no longer on file. Mail to a renamed account keeps its old To but
+//     still reaches it by ID (#1048), so it isn't undeliverable. Typically
 //     netmail or QWK mail addressed to a real name that could not be resolved
 //     to one user when it was imported (see user.UserMgr.ResolveRecipient and
 //     'v3mail readdress'). A sysop (access level at or above SysOpLevel) may
@@ -144,12 +150,22 @@ func withPrivacy(r privateMailReader, f msgOwnershipFilter) msgOwnershipFilter {
 			r.handles != nil && r.handles.HandleExists(handle)
 	}
 	return func(m *message.DisplayMessage) bool {
-		undeliverable := sysop && !r.handles.HandleExists(m.To)
+		undeliverable := sysop && undeliverableMail(r.handles, m)
 		if !m.VisibleTo(handle, accountID) && !undeliverable {
 			return false
 		}
 		return f == nil || f(m)
 	}
+}
+
+// undeliverableMail reports whether private message m reached no account:
+// the account it records by ID is gone, or it records none and no account
+// has the handle in its To.
+func undeliverableMail(dir handleDirectory, m *message.DisplayMessage) bool {
+	if m.RecipientID > 0 {
+		return !dir.AccountExists(m.RecipientID)
+	}
+	return !dir.HandleExists(m.To)
 }
 
 // runMessageReader is the core message reading loop matching Pascal's Scanboard + Readcurbul.
@@ -295,7 +311,7 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	isModerator := func() bool { return moderates().Allowed }
 	inMailbox := strings.EqualFold(currentAreaTag, "PRIVMAIL")
 	unsendable := func(m *message.DisplayMessage) bool {
-		return inMailbox && unsendableMail(e, currentAreaID, m, currentUser.Handle, currentUser.ID)
+		return inMailbox && unsendableMail(e, userManager, currentAreaID, m, currentUser.Handle, currentUser.ID)
 	}
 	// unsend says whether the caller may unsend m: the recipient hasn't read
 	// it. The delete works it out again inside its locked check (#1031):
@@ -1066,7 +1082,7 @@ readerLoop:
 				// Unsending a group letter (#1036) takes back every copy no
 				// member has read yet, not just the one shown.
 				if shown.MailGroupID != "" && unsend && shown.SentBy(currentUser.Handle, currentUser.ID) && !shown.MailFor(currentUser.Handle, currentUser.ID) {
-					removed, kept, uErr := e.unsendGroupLetter(currentAreaID, shown, currentUser.Handle, currentUser.ID)
+					removed, kept, uErr := e.unsendGroupLetter(userManager, currentAreaID, shown, currentUser.Handle, currentUser.ID)
 					notice := fmt.Sprintf("|02Unsent from %d member(s) of %s.|07", removed, shown.GroupAddress())
 					if kept > 0 {
 						notice = fmt.Sprintf("|02Unsent from %d member(s) of %s; %d had already read it.|07", removed, shown.GroupAddress(), kept)

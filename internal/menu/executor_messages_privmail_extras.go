@@ -28,15 +28,15 @@ func sentMailFilter(handle string, accountID int) msgOwnershipFilter {
 // area: they sent it, and the recipient's lastread there hasn't reached it,
 // so they haven't read it. (Mail to oneself is deletable as its recipient
 // anyway.) If the recipient's lastread can't be read, it counts as read.
-func unsendableMail(e *MenuExecutor, areaID int, m *message.DisplayMessage, handle string, accountID int) bool {
+func unsendableMail(e *MenuExecutor, um *user.UserMgr, areaID int, m *message.DisplayMessage, handle string, accountID int) bool {
 	if !m.SentBy(handle, accountID) {
 		return false
 	}
 	// A group letter (#1036) can be unsent while any member hasn't read it.
 	if m.MailGroupID != "" {
-		return e.groupLetterUnsendable(areaID, m, handle, accountID)
+		return e.groupLetterUnsendable(um, areaID, m, handle, accountID)
 	}
-	lastRead, err := e.MessageMgr.GetLastRead(areaID, strings.TrimSpace(m.To))
+	lastRead, err := e.recipientLastRead(um, areaID, m)
 	if err != nil {
 		slog.Warn("unsend: recipient's lastread", "area", areaID, "to", m.To, "error", err)
 		return false

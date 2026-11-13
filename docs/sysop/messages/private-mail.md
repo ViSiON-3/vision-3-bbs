@@ -157,11 +157,14 @@ The keys are the same as for any area; see
 ### Read Filter
 
 A private message is visible to its recipient and its sender. The BBS
-records the sender's and recipient's **account IDs** with each message it
-writes (sent, replied, forwarded, group mail, QWK uploads, the script API).
-For those messages the ID decides: an account keeps its mail through a
-rename, and a new account given an old handle can't read it. Mail without
-IDs (from before this, or from other boards) is matched by **handle**,
+records the sender's **account ID** with each message it writes (sent,
+replied, forwarded, group mail, QWK uploads, the script API), and the
+recipient's when the address names an account; a QWK upload or a helper
+post to a name no account has records none for the recipient. Where an ID
+is recorded it decides: an account keeps its mail through a rename, and a
+new account given an old handle can't read it. Where it isn't (mail from
+before this, from other boards, or to an unresolved name), that side is
+matched by **handle**,
 ignoring case, against its To field or its sender (the handle a post signed
 with a real name records, else From).
 

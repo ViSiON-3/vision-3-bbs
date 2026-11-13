@@ -112,6 +112,13 @@ func (um *UserMgr) handleTakenLocked(handle string, except int) bool {
 	return false
 }
 
+// AccountExists reports whether an account with ID id is on file, deleted
+// or not.
+func (um *UserMgr) AccountExists(id int) bool {
+	_, ok := um.GetUserByID(id)
+	return ok
+}
+
 // RecipientResolver is the part of UserMgr that writes private mail: mail
 // importers take one so tests can supply a fixed set of accounts, and so a
 // caller without the users file can pass nil and resolve nothing.
