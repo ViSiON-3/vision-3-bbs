@@ -252,3 +252,19 @@ func TestWithSubject(t *testing.T) {
 		}
 	}
 }
+
+// An index entry another tool blanked (#1049) is a changed message for an
+// edit and a delete alike, not a generic error.
+func TestBlankedIndexEntryIsAConflict(t *testing.T) {
+	b := openTestBase(t)
+	writeSubjects(t, b, "one", "two")
+	if err := b.writeIndexRecord(2, &IndexRecord{ToCRC: 0xFFFFFFFF, HdrOffset: 0xFFFFFFFF}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ReplaceMessageIf(2, replaceWith("x", "x")); !errors.Is(err, ErrMessageChanged) {
+		t.Errorf("edit: err = %v, want ErrMessageChanged", err)
+	}
+	if err := b.DeleteMessageIf(2, func(*Message) bool { return true }); !errors.Is(err, ErrMessageChanged) {
+		t.Errorf("delete: err = %v, want ErrMessageChanged", err)
+	}
+}

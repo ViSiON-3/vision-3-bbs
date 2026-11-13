@@ -225,7 +225,9 @@ func (b *Base) DeleteMessageIf(msgNum int, check func(*Message) bool) error {
 		}
 
 		hdr, err := base.readMessageHeaderLocked(msgNum)
-		if errors.Is(err, ErrInvalidMessage) {
+		// A number past the end, or an index entry another tool blanked
+		// (ErrNotFound), is a message that changed since it was shown.
+		if errors.Is(err, ErrInvalidMessage) || errors.Is(err, ErrNotFound) {
 			return ErrMessageChanged
 		}
 		if err != nil {

@@ -440,3 +440,20 @@ func TestEditedLine(t *testing.T) {
 		t.Errorf("a body that is only the edited line: %q", back)
 	}
 }
+
+// A message with a line wider than the editor's margin, as from QWK, isn't
+// opened in it (#1049): the editor would draw it past the screen's edge.
+func TestReaderEditTooWide(t *testing.T) {
+	env := newMsgEnv(t)
+	wide := "short line\n" + strings.Repeat("w", editor.MaxLineLength+1)
+	if _, err := env.e.MessageMgr.Post(generalAreaID, "Caller", "All", "wide", wide, message.PostOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	r := env.runCmd("READMSGS", env.sysop, "", "E\r\x1aQ")
+	if !r.has(fmt.Sprintf("This message has a line %d characters wide", editor.MaxLineLength+1)) || r.has("Subject:") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	if b := env.mustMsg(generalAreaID, 1).Body; b != wide {
+		t.Errorf("body changed: %q", b)
+	}
+}
