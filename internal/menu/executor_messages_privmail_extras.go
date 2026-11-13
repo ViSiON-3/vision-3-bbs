@@ -74,10 +74,10 @@ func runSentPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	sent := sentMailFilter(currentUser.Handle)
 	err := e.MessageMgr.EachMessage(area.ID, func(m *message.DisplayMessage) bool { return !m.IsDeleted && sent(m) },
 		func(m *message.DisplayMessage) bool {
-			if first == 0 {
-				first = m.MsgNum
-			}
-			return true
+			// The first sent letter is all the reader needs to start; the
+			// walk stops there instead of reading every later letter (#1032).
+			first = m.MsgNum
+			return false
 		})
 	if err == nil {
 		total, err = e.MessageMgr.GetMessageCountForArea(area.ID)
