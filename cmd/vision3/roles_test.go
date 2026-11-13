@@ -107,6 +107,12 @@ func TestCheckRoles(t *testing.T) {
 	if got := collectChecks(root, checkRoles); len(got) != 1 || got[0].status != doctorOK || got[0].message != "2 role(s) defined, 2 user(s) with a role" {
 		t.Fatalf("clean: %+v", got)
 	}
+
+	// A users.json doctor can't decode is said, not passed over as OK.
+	writeBoardFile(t, root, "data/users/users.json", `[{"id": 1,`)
+	if got := collectChecks(root, checkRoles); len(got) != 1 || got[0].status != doctorWarn || !strings.Contains(got[0].message, "users' roles weren't checked") {
+		t.Fatalf("bad users.json: %+v", got)
+	}
 }
 
 // A roles.json that can't be read grants nothing, at startup or on reload,

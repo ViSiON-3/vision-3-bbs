@@ -83,6 +83,13 @@ func (um *UserMgr) updateUserByID(u *User, chatBar *bool) error {
 	if chatBar != nil {
 		userCopy.CentralChatBarred = *chatBar
 	}
+	// This is the sysop's editor (or a script saving its own user), and what
+	// it stores is now the record's sysop-owned state, just as an edit in
+	// ./ue is. Moving the generation on makes every copy taken before this
+	// save, such as the target's own session halfway through composing a
+	// message, look stale to UpdateUser, so it can't write the old level or
+	// roles back over the change.
+	userCopy.gen = max(userCopy.gen, current.gen) + 1
 	um.users[newKey] = &userCopy
 	if err := um.saveUsersLocked(); err != nil {
 		// Roll the map back to what is still on disk: the entry found above
@@ -92,6 +99,9 @@ func (um *UserMgr) updateUserByID(u *User, chatBar *bool) error {
 		um.users[oldKey] = current
 		return err
 	}
+	// The caller's copy is the one just stored, so it is current, and a
+	// second save from the same editor isn't mistaken for a stale one.
+	u.gen = userCopy.gen
 	return nil
 }
 

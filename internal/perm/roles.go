@@ -192,7 +192,8 @@ func SetCurrent(r *Roles) { current.Store(r) }
 func NormalizeRoleName(name string) string { return strings.ToLower(strings.TrimSpace(name)) }
 
 // CheckRoleName reports what is wrong with a role name, nil for one that can
-// be used: a letter, then letters, digits, _ and -, up to 24 in all. The same
+// be used: a letter, then letters, digits, _ and -, up to 24 in all, not
+// ending in -. The same
 // characters are what the ACS term ROLE:name reads.
 func CheckRoleName(name string) error {
 	if name == "" {
@@ -209,6 +210,11 @@ func CheckRoleName(name string) error {
 		case !letter && (c < '0' || c > '9') && c != '_' && c != '-':
 			return fmt.Errorf("role name %q has %q in it; use letters, digits, _ and -", name, c)
 		}
+	}
+	// ROLE:name- can't be read: a '-' joins an ACS term only when a term
+	// character follows it.
+	if strings.HasSuffix(name, "-") {
+		return fmt.Errorf("role name %q ends in '-'; end it with a letter, digit or _", name)
 	}
 	return nil
 }

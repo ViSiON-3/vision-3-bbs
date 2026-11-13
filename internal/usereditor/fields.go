@@ -39,6 +39,10 @@ type fieldDef struct {
 	Max   int       // Maximum value (for ftInteger)
 	Get   func(u *user.User) string
 	Set   func(u *user.User, val string) error
+
+	// MaxLen is the longest value that may be typed, when it is more than
+	// Width: the input scrolls.
+	MaxLen int
 }
 
 // editFields returns the ordered list of editable fields.
@@ -248,7 +252,7 @@ func editFields() []fieldDef {
 		{
 			// Admin roles (#610), checked against configs/roles.json: Model
 			// sets Set once it has read the file.
-			Label: rolesField, Type: ftString, Col: 50, Row: 13, Width: 18,
+			Label: rolesField, Type: ftString, Col: 50, Row: 13, Width: 18, MaxLen: 200,
 			Get: func(u *user.User) string { return perm.FormatRoleList(u.Roles) },
 		},
 		{

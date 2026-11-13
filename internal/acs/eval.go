@@ -51,6 +51,14 @@ type Context struct {
 	Roles *perm.Roles
 }
 
+// withRoles is ctx with its roles fixed for one evaluation: a reload of
+// roles.json part way through can't make one term see the old roles and
+// another the new.
+func (c Context) withRoles() Context {
+	c.Roles = c.roles()
+	return c
+}
+
 func (c Context) roles() *perm.Roles {
 	if c.Roles == nil {
 		return perm.Current()
@@ -150,7 +158,7 @@ func (e *Expr) Eval(ctx Context) bool {
 	if e.Root == nil {
 		return false
 	}
-	result, lacks := evalNode(e.Root, ctx)
+	result, lacks := evalNode(e.Root, ctx.withRoles())
 	return result && !lacks
 }
 
@@ -211,6 +219,7 @@ func EvalTerm(condition string, ctx Context) bool {
 		slog.Warn("invalid ACS term", "condition", condition, "problem", problem)
 		return false
 	}
+	ctx = ctx.withRoles()
 	if _, missing := lacking(t, ctx); missing {
 		return false
 	}

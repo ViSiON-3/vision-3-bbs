@@ -159,20 +159,20 @@ queued sysop notice or an unread-mail alert.
 
 ### NEWUSERVAL
 
-Tells a SysOp how many accounts are waiting for review and offers to open the
-pending-validation queue, where each user can be viewed, validated (`G`), or
-have their access level set (`F`).
+Tells a SysOp, or anyone whose [admin role](users/admin-roles.md) grants
+`users.validate`, how many accounts are waiting for review and offers to open
+the pending-validation queue. There a SysOp can view each user, validate them
+(`G`) or set their access level (`F`); a role holder can only approve.
 
 ```json
 {"command": "NEWUSERVAL", "sec_level": 255}
 ```
 
-Silent for everyone else. The command checks SysOp access itself, so a missing
-or too-low `sec_level` cannot leak the pending count to an ordinary caller;
-`sec_level` remains the way to remove the item for a SysOp who does not want it.
-A user below SysOp level whose [admin role](users/admin-roles.md) grants
-`users.validate` is offered the queue too, once `sec_level` lets them reach
-the step, and there may only approve.
+Silent for everyone else. The command checks for SysOp access or
+`users.validate` itself, so a missing or too-low `sec_level` cannot leak the
+pending count to an ordinary caller. `sec_level` decides who reaches the step
+at all: the shipped 255 leaves role holders out until you lower it, and it
+remains the way to remove the item for a SysOp who does not want it.
 It is also silent when nothing is pending, so it costs a SysOp nothing on a
 quiet day. Leave `clear_screen` off for the same reason: the sequence clears
 before the command decides whether it has anything to say, so setting it would
@@ -326,9 +326,9 @@ In this example, `SYSOP_NEWS.ANS` is only shown to users with access level 200 o
 ]
 ```
 
-`SYSOPNOTICES` and `NEWUSERVAL` are silent for non-SysOps, `NMAILSCAN` is silent
-without a PRIVMAIL area, and `PRINTNEWS` is silent when the user has no unread
-news — so on a quiet system this still behaves like the legacy three-item
+`SYSOPNOTICES` is silent for non-SysOps, `NEWUSERVAL` for anyone without
+`users.validate`, `NMAILSCAN` without a PRIVMAIL area, and `PRINTNEWS` when
+the user has no unread news — so on a quiet system this still behaves like the legacy three-item
 sequence.
 
 ### Full-Featured Login

@@ -142,8 +142,13 @@ func TestSysopSavesUnchangedWithRoles(t *testing.T) {
 	// A role that has since left roles.json is refused at save.
 	useRoles(t, `{"roles": []}`)
 	orig[target.ID] = got.UpdatedAt
-	if msg, saved := e.applyPendingUserChanges(um, sysop, got, map[string]interface{}{"roles": "validator"}, orig); saved || !strings.Contains(msg, "no role named validator") {
+	if msg, saved := e.applyPendingUserChanges(um, sysop, got, map[string]interface{}{"roles": "validator", "level": 70, "flags": "Z"}, orig); saved || !strings.Contains(msg, "no role named validator") {
 		t.Fatalf("undefined role: saved=%v msg=%q", saved, msg)
+	}
+	// The refused save left the editor's copy as it was, so nothing staged
+	// with the bad role rides along on a later save.
+	if got.AccessLevel != 50 || got.Flags != "AB" {
+		t.Fatalf("refused save changed the editor's copy: level %d, flags %q", got.AccessLevel, got.Flags)
 	}
 
 	// A sysop demoted while the editor is open is refused too.
@@ -250,5 +255,25 @@ func TestUserEditor_AssignsRoles(t *testing.T) {
 	}
 	if !checkACS("PERM:users.validate&ROLE:validator", u, nil, nil, time.Now()) {
 		t.Error("PERM:/ROLE: fail for the saved record")
+	}
+}
+
+// The editor's mode comes from the stored record: a sysop demoted since
+// login, holding no role, is turned away rather than shown the full editor
+// on the strength of their session copy.
+func TestUserEditor_DemotedSysopTurnedAway(t *testing.T) {
+	useRoles(t, validatorRole)
+	env := newMenuEnv(t)
+	stored, _ := env.um.GetUserByID(env.sysop.ID)
+	stored.AccessLevel = 20
+	if err := env.um.UpdateUserByID(stored); err != nil {
+		t.Fatal(err)
+	}
+	r := env.runCmd("ADMINLISTUSERS", env.sysop, "", "q")
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	if !r.has("Access denied.") {
+		t.Errorf("output:\n%s", r.text())
 	}
 }

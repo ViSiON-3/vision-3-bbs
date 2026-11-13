@@ -50,7 +50,7 @@ each will be listed here.
 
 | Field | Meaning |
 |---|---|
-| `name` | The role's name: a letter, then letters, digits, `_` and `-`, up to 24 characters. Case doesn't matter; it is stored in lower case. |
+| `name` | The role's name: a letter, then letters, digits, `_` and `-`, up to 24 characters, not ending in `-`. Case doesn't matter; it is stored in lower case. |
 | `description` | Optional, for your own notes. |
 | `permissions` | The permissions the role grants, from the table above. |
 

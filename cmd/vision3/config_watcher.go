@@ -174,6 +174,10 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 	// Record current timestamps so the first poll does not reload everything
 	// that already loaded cleanly at startup.
 	cw.seed()
+	// Roles are read again now the file's state is recorded: a change, or
+	// a removal, between startup's read and the seed would otherwise never
+	// be seen, and a role the sysop removed in that gap would stay in force.
+	loadRoles(rootConfigPath)
 
 	go cw.pollLoop()
 

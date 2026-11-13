@@ -85,3 +85,23 @@ func TestRolesFieldWithoutRolesJSON(t *testing.T) {
 		t.Fatalf("broken roles.json: %v", err)
 	}
 }
+
+// The Roles field is narrower than a list of several roles; the input takes
+// the whole list and scrolls.
+func TestRolesFieldTakesLongerLists(t *testing.T) {
+	long := "validator, msg_ops, fsxnet_mod"
+	m := rolesModel(t, `{"roles": []}`, &user.User{ID: 2, Handle: "Val", AccessLevel: 20})
+	for i, f := range m.fields {
+		if f.Label == rolesField {
+			m.editField = i
+		}
+	}
+	m.users[m.editIndex].Roles = []string{"validator", "msg_ops", "fsxnet_mod"}
+	m, _ = m.startFieldEdit()
+	if got := m.textInput.Value(); got != long {
+		t.Fatalf("value = %q, want %q", got, long)
+	}
+	if m.textInput.CharLimit < 200 {
+		t.Errorf("CharLimit = %d", m.textInput.CharLimit)
+	}
+}

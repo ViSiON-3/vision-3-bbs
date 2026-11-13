@@ -108,6 +108,7 @@ func Explain(s string, ctx Context) Explanation {
 	if x.CurrentTime {
 		ctx.Now = time.Now()
 	}
+	ctx = ctx.withRoles()
 	x.Context = ctx
 	if s == "" || s == "*" {
 		x.Result, x.Reason = true, Match

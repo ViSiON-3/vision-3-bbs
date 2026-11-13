@@ -177,9 +177,12 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 	}
 	// A sysop gets the whole editor, as before. Below sysop level the only
 	// way in is the pending queue with users.validate, read from the stored
-	// record, and then only to approve.
+	// record, and then only to approve. The mode is decided from the stored
+	// record too, so a sysop demoted since login gets the approve-only view
+	// (or nothing), not the full editor.
 	sysOpACS := fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel)
-	if !checkACS(sysOpACS, currentUser, s, terminal, sessionStartTime) {
+	actor := storedActor(userManager, currentUser)
+	if actor == nil || !checkACS(sysOpACS, actor, s, terminal, sessionStartTime) {
 		if !cfg.pendingOnly || !e.mayValidateUsers(userManager, currentUser) {
 			_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Access denied.|07\r\n")), outputMode)
 			uiPause(1 * time.Second)

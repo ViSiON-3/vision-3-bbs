@@ -68,7 +68,19 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 		DeletedUser bool     `json:"deletedUser"`
 	}
 	members := 0
-	if data, err := os.ReadFile(filepath.Join(root, "data", "users", "users.json")); err == nil && json.Unmarshal(data, &users) == nil {
+	// No users.json yet is a new board; one that can't be read or decoded
+	// means the members weren't checked, which the summary must not hide.
+	usersChecked := true
+	usersPath := filepath.Join(root, "data", "users", "users.json")
+	data, err = os.ReadFile(usersPath)
+	if err == nil {
+		err = json.Unmarshal(data, &users)
+	}
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		usersChecked = false
+		add("admin roles", doctorWarn, "data/users/users.json can't be read, so users' roles weren't checked: "+err.Error(), "")
+	}
+	if usersChecked {
 		for _, u := range users {
 			if u.DeletedUser {
 				continue
@@ -83,7 +95,7 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 			}
 		}
 	}
-	if len(diags) == 0 {
+	if len(diags) == 0 && usersChecked {
 		add("admin roles", doctorOK, fmt.Sprintf("%d role(s) defined, %d user(s) with a role", roles.Len(), members), "")
 	}
 }

@@ -807,8 +807,10 @@ func (m Model) startFieldEdit() (Model, tea.Cmd) {
 	val := f.Get(u)
 
 	m.mode = modeEditField
+	// The limit is set before the value, which textinput cuts to it, and is
+	// never below the value already stored.
+	m.textInput.CharLimit = max(max(f.Width, f.MaxLen), len([]rune(val)))
 	m.textInput.SetValue(val)
-	m.textInput.CharLimit = f.Width
 	m.textInput.Width = f.Width
 	m.textInput.EchoMode = textinput.EchoNormal
 	m.textInput.Placeholder = ""

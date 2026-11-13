@@ -171,3 +171,12 @@ func TestParseRoleList(t *testing.T) {
 		t.Fatalf("Undefined = %v", got)
 	}
 }
+
+// Every name CheckRoleName accepts can be written as ROLE:name.
+func TestCheckRoleNameTrailingDash(t *testing.T) {
+	for name, ok := range map[string]bool{"validator-": false, "a-": false, "a-b": true, "a--b": true, "a_": true} {
+		if err := CheckRoleName(name); (err == nil) != ok {
+			t.Errorf("CheckRoleName(%q) = %v", name, err)
+		}
+	}
+}

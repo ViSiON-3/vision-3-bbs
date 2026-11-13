@@ -184,6 +184,17 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 		return denied, false
 	}
 
+	// A refused or failed save leaves target as it was. Otherwise a check
+	// that fails halfway (an undefined role, say) leaves the fields before
+	// it changed on the session's copy, and the next save writes them
+	// without an audit entry.
+	before := *target
+	defer func() {
+		if !saved {
+			*target = before
+		}
+	}()
+
 	// Protect User ID 1 from critical changes.
 	if target.ID == 1 {
 		if val, ok := pendingChanges["level"]; ok {

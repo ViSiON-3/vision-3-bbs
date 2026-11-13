@@ -566,3 +566,38 @@ func TestFailedPairingRollsBackAfterMerge(t *testing.T) {
 		t.Errorf("devices = %v, want the failed pairing rolled back", deviceIDs(got.APIDevices))
 	}
 }
+
+// The sysop's in-BBS editor saves through UpdateUserByID. A role taken away
+// there must stay taken away when the holder's session, which has been
+// composing a message on its old copy all along, saves next.
+func TestEditorChangeSurvivesStaleSessionSave(t *testing.T) {
+	um, path := mgrWithUser(t, &User{
+		ID: 2, Handle: "Val", AccessLevel: 20, Validated: true,
+		Roles: []string{"validator"},
+	})
+	sessionCopy, _ := um.GetUser("Val")
+
+	target, _ := um.GetUserByID(2)
+	target.Roles = nil
+	target.AccessLevel = 10
+	if err := um.UpdateUserByID(target); err != nil {
+		t.Fatalf("UpdateUserByID: %v", err)
+	}
+	// A second save from the same editor is not mistaken for a stale one.
+	target.Flags = "A"
+	if err := um.UpdateUserByID(target); err != nil {
+		t.Fatalf("second UpdateUserByID: %v", err)
+	}
+
+	sessionCopy.MessagesPosted++
+	if err := um.UpdateUser(sessionCopy); err != nil {
+		t.Fatalf("UpdateUser: %v", err)
+	}
+	got := readUsersFile(t, path)["val"]
+	if len(got.Roles) != 0 || got.AccessLevel != 10 || got.Flags != "A" {
+		t.Errorf("stale session save reverted the editor: roles %v, level %d, flags %q", got.Roles, got.AccessLevel, got.Flags)
+	}
+	if got.MessagesPosted != 1 {
+		t.Errorf("MessagesPosted = %d, want the session's 1", got.MessagesPosted)
+	}
+}
