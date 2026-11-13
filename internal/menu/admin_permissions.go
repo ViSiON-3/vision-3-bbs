@@ -2,6 +2,7 @@ package menu
 
 import (
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -158,43 +159,145 @@ const (
 	msgAdminNoLongerAllowed = "|01Access denied: your account no longer has that permission.|07"
 	msgValidatorApproveOnly = "|01Access denied: you may only approve an account awaiting validation.|07"
 	msgValidatorNotPending  = "|01That account is no longer awaiting validation.|07"
+	msgAdminAboveCeiling    = "|01Access denied: your role reaches only accounts below co-sysop level.|07"
+	msgAdminFieldNotAllowed = "|01Access denied: your role doesn't allow that change.|07"
+	msgAdminNoSelfBan       = "|01You can't ban yourself.|07"
 )
 
-// authorizeUserChanges decides whether actor may save changes to target,
-// whose stored record is stored, re-reading the actor's own record first so
-// a level or role removed while an editor is open stops the save. A sysop
-// may make any change, as before. Below sysop level the one change allowed
-// is approving an account awaiting validation (validated: true, which brings
-// the level up to regularUserLevel), and only with users.validate.
+// authorizeUserChanges decides whether actor may save changes to stored, the
+// account as it is on disk. A sysop may make any change. Below sysop level
+// every change needs a permission, read from actor's stored record (#610,
+// #1045):
 //
-// via is where a below-sysop grant came from, for the audit log
-// ("users.validate via role validator"); it is "" for a sysop. denied is the
-// status message for a refused save, "" when it may go ahead.
+//   - users.validate approves an account awaiting validation:
+//     {"validated": true} and nothing else.
+//   - users.edit changes realname, grouploc and note.
+//   - users.ban bans ({"validated": false, "level": 0}), un-validates
+//     ({"validated": false}) and un-bans a banned account back to
+//     regularUserLevel ({"validated": true, "level": regular}).
+//
+// users.edit and users.ban reach only accounts below coSysOpLevel, never
+// User #1, and nobody bans themselves. Any other field (handle, level, flags,
+// roles, groups, password, deletion, the chat bar) stays the sysop's. via
+// names the grants used, for the audit log; denied is the message when the
+// save is refused.
 func (e *MenuExecutor) authorizeUserChanges(um *user.UserMgr, actor, stored *user.User, changes map[string]interface{}) (via, denied string) {
 	fresh := storedActor(um, actor)
 	if fresh == nil {
 		return "", msgAdminNoLongerAllowed
 	}
-	if fresh.AccessLevel >= e.GetServerConfig().SysOpLevel {
+	cfg := e.GetServerConfig()
+	if fresh.AccessLevel >= cfg.SysOpLevel {
 		return "", ""
 	}
-	d := perm.Check(fresh, perm.UsersValidate, perm.Scope{}, e.levels(), nil)
-	if !d.Allowed {
-		return "", msgAdminNoLongerAllowed
+	hold := func(p perm.Permission) perm.Decision { return perm.Check(fresh, p, perm.Scope{}, e.levels(), nil) }
+	validate, edit, ban := hold(perm.UsersValidate), hold(perm.UsersEdit), hold(perm.UsersBan)
+
+	// Approving a pending account is users.validate's, as before.
+	if approved, ok := changes["validated"].(bool); ok && approved && len(changes) == 1 && validate.Allowed {
+		if !isPendingValidationUser(stored) {
+			return "", msgValidatorNotPending
+		}
+		return string(perm.UsersValidate) + " via " + validate.Source(), ""
 	}
-	if approved, ok := changes["validated"].(bool); !ok || !approved || len(changes) != 1 {
-		return "", msgValidatorApproveOnly
-	}
-	if !isPendingValidationUser(stored) {
+	if !edit.Allowed && !ban.Allowed {
+		if !validate.Allowed {
+			return "", msgAdminNoLongerAllowed
+		}
+		if approved, ok := changes["validated"].(bool); !ok || !approved || len(changes) != 1 {
+			return "", msgValidatorApproveOnly
+		}
 		return "", msgValidatorNotPending
 	}
-	return string(perm.UsersValidate) + " via " + d.Source(), ""
+
+	if stored == nil || stored.ID == 1 || (cfg.CoSysOpLevel > 0 && stored.AccessLevel >= cfg.CoSysOpLevel) {
+		return "", msgAdminAboveCeiling
+	}
+	need := map[perm.Permission]bool{}
+	for field := range changes {
+		switch field {
+		case "realname", "grouploc", "note":
+			need[perm.UsersEdit] = true
+		case "validated", "level":
+		default:
+			return "", msgAdminFieldNotAllowed
+		}
+	}
+	if _, v := changes["validated"]; v || changes["level"] != nil {
+		validated, hasValidated := changes["validated"].(bool)
+		level, hasLevel := changes["level"].(int)
+		regular := cfg.RegularUserLevel
+		if regular <= 0 {
+			regular = 10
+		}
+		banned := stored.AccessLevel == 0 && !stored.Validated
+		switch {
+		case hasValidated && !validated && hasLevel && level == 0: // ban
+			if stored.ID == fresh.ID {
+				return "", msgAdminNoSelfBan
+			}
+		case hasValidated && !validated && !hasLevel: // un-validate
+		case hasValidated && validated && hasLevel && level == regular && banned: // un-ban
+		default:
+			return "", msgAdminFieldNotAllowed
+		}
+		need[perm.UsersBan] = true
+	}
+	var grants []string
+	for _, p := range []perm.Permission{perm.UsersEdit, perm.UsersBan} {
+		if !need[p] {
+			continue
+		}
+		d := map[perm.Permission]perm.Decision{perm.UsersEdit: edit, perm.UsersBan: ban}[p]
+		if !d.Allowed {
+			return "", msgAdminFieldNotAllowed
+		}
+		grants = append(grants, string(p)+" via "+d.Source())
+	}
+	return strings.Join(grants, "; "), ""
+}
+
+// mayManageUsers reports whether actor, below sysop level, holds users.edit
+// or users.ban, which open the user editor's limited view: edit and ban
+// tell which.
+func (e *MenuExecutor) mayManageUsers(um *user.UserMgr, actor *user.User) (edit, ban bool) {
+	return e.permission(um, actor, perm.UsersEdit).Allowed, e.permission(um, actor, perm.UsersBan).Allowed
+}
+
+// mayBanUsers reports whether actor may use BANUSER and UNVALIDATEUSER: a
+// sysop, or a holder of users.ban.
+func (e *MenuExecutor) mayBanUsers(um *user.UserMgr, actor *user.User) bool {
+	return e.permission(um, actor, perm.UsersBan).Allowed
+}
+
+// belowUserCeiling reports whether u is an account users.edit and users.ban
+// reach: below coSysOpLevel, not User #1, and not deleted.
+func (e *MenuExecutor) belowUserCeiling(u *user.User) bool {
+	cfg := e.GetServerConfig()
+	return u != nil && u.ID != 1 && !u.DeletedUser && (cfg.CoSysOpLevel <= 0 || u.AccessLevel < cfg.CoSysOpLevel)
 }
 
 // validatorEditorKey reports whether key does anything in the validator's
 // view of the pending queue: moving, approving, saving, abandoning and
 // leaving. Every other key of the shared editor edits something
 // users.validate doesn't cover, or shows what it doesn't need to see.
+// limitedEditorKey reports whether key works in the editor's users.edit /
+// users.ban view: moving, saving and quitting, B/C/D (real name,
+// group/location, note) with users.edit, and G (validated) and 0 (ban)
+// with users.ban.
+func limitedEditorKey(key int, edit, ban bool) bool {
+	switch key {
+	case 'k', 'K', 'w', 'W', 'j', 'J', 's', 'S', 'q', 'Q', 'x', 'X', '\r', '\n',
+		editor.KeyArrowUp, editor.KeyArrowDown, editor.KeyEsc:
+		return true
+	case 'b', 'B', 'c', 'C', 'd', 'D':
+		return edit
+	case 'g', 'G', '0':
+		return ban
+	}
+	return false
+}
+
 func validatorEditorKey(key int) bool {
 	switch key {
 	case 'k', 'K', 'w', 'W', 'j', 'J', 's', 'S', 'q', 'Q', 'x', 'X', 'g', 'G', '\r', '\n',

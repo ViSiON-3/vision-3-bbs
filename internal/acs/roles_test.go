@@ -90,7 +90,7 @@ func TestUndefinedRoleFailsWholeString(t *testing.T) {
 
 func TestRolePermDiagnostics(t *testing.T) {
 	tests := map[string]string{
-		"PERM:users.vaildate": `"users.vaildate" is not a permission (known: users.validate, messages.moderate, files.manage)`,
+		"PERM:users.vaildate": `"users.vaildate" is not a permission (known: users.validate, messages.moderate, files.manage, users.edit, users.ban)`,
 		"PERM:":               "needs a permission name",
 		"ROLE:9x":             "must start with a letter",
 		"ROLE:":               "a role needs a name",

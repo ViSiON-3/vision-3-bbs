@@ -50,6 +50,13 @@ const (
 	// both areas. It gives nothing over the areas themselves (their ACS,
 	// path or name), which stay with the sysop.
 	FilesManage Permission = "files.manage"
+	// UsersEdit edits a few fields of accounts below co-sysop level in the
+	// user editor: real name, group/location and the private note. Never
+	// level, flags, roles, groups, password, handle or deletion.
+	UsersEdit Permission = "users.edit"
+	// UsersBan bans, un-bans and un-validates accounts below co-sysop
+	// level. Deleting an account stays the sysop's.
+	UsersBan Permission = "users.ban"
 )
 
 // AreaKind is the kind of area a scoped permission applies in, which is what
@@ -101,6 +108,8 @@ var registry = []Info{
 	{UsersValidate, "review accounts awaiting validation and approve them with the board's validation defaults", SysOpLevel, false, MessageAreas},
 	{MessagesModerate, "delete any message in a message area (not private mail)", CoSysOpLevel, true, MessageAreas},
 	{FilesManage, "edit, delete, move and rename the files in a file area, and review uploads there", CoSysOpLevel, true, FileAreas},
+	{UsersEdit, "edit the real name, group/location and private note of accounts below co-sysop level", SysOpLevel, false, MessageAreas},
+	{UsersBan, "ban, un-ban and un-validate accounts below co-sysop level", SysOpLevel, false, MessageAreas},
 }
 
 // Known lists the permissions the BBS defines.

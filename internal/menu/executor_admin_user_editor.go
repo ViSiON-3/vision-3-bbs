@@ -29,7 +29,15 @@ type userEditorConfig struct {
 	// what deciding needs is shown. runUserEditor sets it; the save path
 	// enforces the same rule on its own (authorizeUserChanges).
 	validateOnly bool
+	// limitedEdit and limitedBan are the full list for a user below sysop
+	// level who holds users.edit or users.ban (#1045): only accounts below
+	// co-sysop level, and only the keys those permissions use. As with
+	// validateOnly, the save path enforces the rule itself.
+	limitedEdit, limitedBan bool
 }
+
+// limited reports whether the editor is in users.edit / users.ban's view.
+func (c userEditorConfig) limited() bool { return c.limitedEdit || c.limitedBan }
 
 // userEditorLayout is the fixed screen geometry of the admin user editor,
 // derived once from the (already-resolved) terminal height.
@@ -117,6 +125,15 @@ type userEditorState struct {
 // validation when cfg.pendingOnly is set.
 func (st *userEditorState) loadEditorUsers() []*user.User {
 	all := sortedUsersByID(st.userManager.GetAllUsers())
+	if st.cfg.limited() {
+		reachable := make([]*user.User, 0, len(all))
+		for _, u := range all {
+			if st.e.belowUserCeiling(u) {
+				reachable = append(reachable, u)
+			}
+		}
+		return reachable
+	}
 	if !st.cfg.pendingOnly {
 		return all
 	}
@@ -183,12 +200,19 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 	sysOpACS := fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel)
 	actor := storedActor(userManager, currentUser)
 	if actor == nil || !checkACS(sysOpACS, actor, s, terminal, sessionStartTime) {
-		if !cfg.pendingOnly || !e.mayValidateUsers(userManager, currentUser) {
+		edit, ban := e.mayManageUsers(userManager, currentUser)
+		switch {
+		case actor != nil && cfg.pendingOnly && e.mayValidateUsers(userManager, currentUser):
+			cfg.validateOnly = true
+		case actor != nil && !cfg.pendingOnly && (edit || ban):
+			// users.edit / users.ban (#1045): accounts below co-sysop
+			// level, with only the keys the permissions use.
+			cfg.limitedEdit, cfg.limitedBan = edit, ban
+		default:
 			_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|01Access denied.|07\r\n")), outputMode)
 			uiPause(1 * time.Second)
 			return nil, "", nil
 		}
-		cfg.validateOnly = true
 	}
 
 	st := &userEditorState{

@@ -23,6 +23,10 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 		st.statusMessage = "|11Only approving is available here: [G] approve, [S] save, [Q] quit.|07"
 		return false, false, nil, "", nil
 	}
+	if st.cfg.limited() && !limitedEditorKey(key, st.cfg.limitedEdit, st.cfg.limitedBan) {
+		st.statusMessage = "|11Your role doesn't allow that here.|07"
+		return false, false, nil, "", nil
+	}
 	switch key {
 	case 'k', 'K', 'w', 'W':
 		if len(st.pendingChanges) == 0 {

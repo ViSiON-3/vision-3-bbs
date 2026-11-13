@@ -58,6 +58,24 @@ func (st *userEditorState) renderActionBar() error {
 		barText = "|08[|15S|08] |14Save Changes  |08[|15X|08] |14Abort  |08[|15Q|08] |14Quit|07"
 	} else if st.cfg.validateOnly {
 		barText = "|08[|15G|08] |10Approve  |08[|15Q|08] |11Quit|07"
+	} else if st.cfg.limited() {
+		var parts []string
+		if st.cfg.limitedEdit {
+			parts = append(parts, "|08[|15B|08/|15C|08/|15D|08] |14Edit")
+		}
+		if st.cfg.limitedBan {
+			sel := st.users[st.selectedIndex]
+			validateLabel := "|10Validate"
+			if sel.Validated {
+				validateLabel = "|11Un-Validate"
+			}
+			banLabel := "|12Ban"
+			if sel.AccessLevel == 0 && !sel.Validated {
+				banLabel = "|10Un-Ban"
+			}
+			parts = append(parts, "|08[|15G|08] "+validateLabel, "|08[|150|08] "+banLabel)
+		}
+		barText = strings.Join(append(parts, "|08[|15Q|08] |11Quit|07"), "  ")
 	} else {
 		sel := st.users[st.selectedIndex]
 		// Dynamic labels based on user state
@@ -236,9 +254,28 @@ func (st *userEditorState) renderDetails(message string) error {
 			"|08[|14G|08]|11 Approve|08: |03" + getBoolFieldValue("validated", sel.Validated) + "|07",
 		}
 	}
+	if st.cfg.limited() {
+		// users.edit / users.ban (#1045): the fields they change, and the
+		// account's standing, without keys for what they can't touch.
+		key := func(k, label string, ok bool) string {
+			if ok {
+				return "|08[|14" + k + "|08]|11 " + label
+			}
+			return "|11" + label
+		}
+		lines = []string{
+			lineTwoCol("|11Handle", callerText(adminTruncate(sel.Handle, 24)), "|11Created", adminTime(sel.CreatedAt)),
+			lineTwoCol(key("B", "Real Name", st.cfg.limitedEdit), getFieldValue("realname", sel.RealName), "|11Last Login", adminTime(sel.LastLogin)),
+			lineTwoCol(key("C", "Group/Loc", st.cfg.limitedEdit), getFieldValue("grouploc", sel.GroupLocation), "|11Calls", fmt.Sprintf("%d", sel.TimesCalled)),
+			lineTwoCol(key("G", "Validated", st.cfg.limitedBan), getBoolFieldValue("validated", sel.Validated), "|11Level", getIntFieldValue("level", sel.AccessLevel)),
+		}
+		if st.cfg.limitedEdit {
+			lines = append(lines, key("D", "Note", true)+"|08: |03"+getFieldValue("note", sel.PrivateNote)+"|07")
+		}
+	}
 	// Groups and the ACS tester's key, under the fields when the terminal
 	// has a row to spare above the status row (it does from 80x24 up).
-	if !st.cfg.validateOnly && st.layout.detailStartRow+len(lines) < st.layout.statusRow {
+	if !st.cfg.validateOnly && !st.cfg.limited() && st.layout.detailStartRow+len(lines) < st.layout.statusRow {
 		lines = append(lines, lineTwoCol("|08[|14U|08]|11 Groups", groupsValue, "|08[|14T|08]|11 ACS Test", "test this user"))
 	}
 	for i, line := range lines {

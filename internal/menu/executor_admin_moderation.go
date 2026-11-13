@@ -41,8 +41,11 @@ func runBanUser(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
+	// A sysop, or below sysop level a holder of users.ban (#1045), who
+	// sees only the accounts it reaches; the save checks again.
 	sysOpACS := fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel)
-	if !checkACS(sysOpACS, currentUser, s, terminal, sessionStartTime) {
+	sysop := checkACS(sysOpACS, storedActor(userManager, currentUser), s, terminal, sessionStartTime)
+	if !sysop && !e.mayBanUsers(userManager, currentUser) {
 		msg := "\r\n|01Access denied.|07\r\n"
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 		uiPause(1 * time.Second)
@@ -50,6 +53,15 @@ func runBanUser(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	users := sortedUsersByID(userManager.GetAllUsers())
+	if !sysop {
+		reachable := users[:0]
+		for _, u := range users {
+			if e.belowUserCeiling(u) && u.ID != currentUser.ID {
+				reachable = append(reachable, u)
+			}
+		}
+		users = reachable
+	}
 	if len(users) == 0 {
 		_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 		_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|10No users found.|07")), outputMode)
