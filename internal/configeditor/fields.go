@@ -44,6 +44,12 @@ type fieldDef struct {
 	LookupItems func() []LookupItem        // provider for ftLookup
 }
 
+// acsMaxLen is how long an ACS field accepts, whatever its width on screen:
+// enough for a compound expression with readable names, roles and
+// permissions, such as (LEVEL>=20&FLAG:M)|SYSOP. Longer values scroll while
+// editing.
+const acsMaxLen = 255
+
 // charLimit returns the textinput character limit for f.
 func (f fieldDef) charLimit() int {
 	if f.MaxLen > 0 {

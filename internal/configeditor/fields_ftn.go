@@ -188,7 +188,7 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			Set: func(val string) error { netPtr.AutoCreate.Enabled = uitext.YNToBool(val); save(); return nil },
 		},
 		{
-			Label: "  ACS Read", Help: "Read access for new auto-created areas (empty = " + config.DefaultAutoCreateACSRead + ")", Type: ftString, Col: 3, Row: 9, Width: 20,
+			Label: "  ACS Read", Help: "Read access for new auto-created areas (empty = " + config.DefaultAutoCreateACSRead + ")", Type: ftString, Col: 3, Row: 9, Width: 20, MaxLen: acsMaxLen,
 			Get: func() string { return netPtr.AutoCreate.ACSRead },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
@@ -207,7 +207,7 @@ func (m *Model) fieldsFTNLink() []fieldDef {
 			},
 		},
 		{
-			Label: "  ACS Write", Help: "Post access for new auto-created areas (empty = " + config.DefaultAutoCreateACSWrite + ")", Type: ftString, Col: 3, Row: 10, Width: 20,
+			Label: "  ACS Write", Help: "Post access for new auto-created areas (empty = " + config.DefaultAutoCreateACSWrite + ")", Type: ftString, Col: 3, Row: 10, Width: 20, MaxLen: acsMaxLen,
 			Get: func() string { return netPtr.AutoCreate.ACSWrite },
 			Set: func(val string) error {
 				val = strings.TrimSpace(val)
