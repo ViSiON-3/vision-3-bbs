@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 )
@@ -39,7 +41,15 @@ type Grant struct {
 	Permission  string   `json:"permission"`
 	Areas       []string `json:"areas,omitempty"`
 	Conferences []string `json:"conferences,omitempty"`
+
+	// unknown are the object's keys that aren't one of the three above.
+	// Parse ignores a grant that has any: "area" for "areas" would
+	// otherwise leave the grant unlimited, the opposite of what was meant.
+	unknown []string
 }
+
+// grantKeys are the keys a grant object may have.
+var grantKeys = map[string]bool{"permission": true, "areas": true, "conferences": true}
 
 // UnmarshalJSON reads a grant written as a string or as an object.
 func (g *Grant) UnmarshalJSON(data []byte) error {
@@ -54,6 +64,15 @@ func (g *Grant) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("a permission is a name or {\"permission\": ..., \"areas\": [...], \"conferences\": [...]}: %w", err)
 	}
 	*g = Grant(p)
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(data, &keys); err == nil {
+		for k := range keys {
+			if !grantKeys[k] {
+				g.unknown = append(g.unknown, k)
+			}
+		}
+		sort.Strings(g.unknown)
+	}
 	return nil
 }
 
@@ -236,6 +255,10 @@ func Parse(data []byte) (*Roles, []Diagnostic, error) {
 		grants := map[Permission][]scope{}
 		var kept []Grant
 		for _, g := range role.Permissions {
+			if len(g.unknown) > 0 {
+				bad("a grant of %q has %s, which isn't one of permission, areas and conferences, so the grant is ignored", g.Permission, quoteList(g.unknown))
+				continue
+			}
 			p, ok := Lookup(g.Permission)
 			if !ok {
 				bad("%q is not a permission (known: %s); it grants nothing", g.Permission, KnownNames())
@@ -380,4 +403,13 @@ func Undefined(names []string, roles *Roles) []string {
 		}
 	}
 	return out
+}
+
+// quoteList is names quoted and joined: "a", "b".
+func quoteList(names []string) string {
+	q := make([]string, len(names))
+	for i, n := range names {
+		q[i] = strconv.Quote(n)
+	}
+	return strings.Join(q, ", ")
 }

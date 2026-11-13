@@ -94,7 +94,8 @@ func TestSponsorAndLevelsHoldModeration(t *testing.T) {
 func TestGrantDiagnostics(t *testing.T) {
 	_, diags, err := Parse([]byte(`{"roles": [
 		{"name": "a", "permissions": [{"permission": "users.validate", "areas": ["GENERAL"]}]},
-		{"name": "b", "permissions": [{"permission": "messages.moderate", "areas": [" "]}]}
+		{"name": "b", "permissions": [{"permission": "messages.moderate", "areas": [" "]}]},
+		{"name": "c", "permissions": [{"permission": "messages.moderate", "area": ["GENERAL"]}, "users.validate"]}
 	]}`))
 	if err != nil {
 		t.Fatal(err)
@@ -104,6 +105,7 @@ func TestGrantDiagnostics(t *testing.T) {
 		`role 1 ("a"): grants no permissions`,
 		`role 2 ("b"): messages.moderate lists only blank areas and conferences, so this grant is ignored`,
 		`role 2 ("b"): grants no permissions`,
+		`role 3 ("c"): a grant of "messages.moderate" has "area", which isn't one of permission, areas and conferences, so the grant is ignored`,
 	}
 	if len(diags) != len(want) {
 		t.Fatalf("diagnostics = %v", diags)
@@ -112,6 +114,11 @@ func TestGrantDiagnostics(t *testing.T) {
 		if !strings.HasPrefix(diags[i].String(), w) {
 			t.Errorf("diagnostic %d = %q, want prefix %q", i, diags[i], w)
 		}
+	}
+	// "area" for "areas" doesn't leave a grant that moderates everywhere.
+	r, _, _ := Parse([]byte(`{"roles": [{"name": "c", "permissions": [{"permission": "messages.moderate", "area": ["GENERAL"]}]}]}`))
+	if moderates(&user.User{AccessLevel: 20, Roles: []string{"c"}}, Scope{Area: "OTHER"}, r).Allowed {
+		t.Error("a grant with a misspelt key moderates")
 	}
 	if _, _, err := Parse([]byte(`{"roles": [{"name": "c", "permissions": [42]}]}`)); err == nil {
 		t.Error("a grant that is neither a name nor an object parsed")

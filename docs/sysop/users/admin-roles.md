@@ -95,6 +95,9 @@ only ever grant less:
 
 - A role with a bad or repeated name is ignored.
 - A permission the BBS doesn't know (`users.vaildate`) grants nothing.
+- A grant object with a key other than `permission`, `areas` and
+  `conferences` (`"area"` for `"areas"`) is ignored, rather than read as a
+  grant for every area.
 - If the file isn't valid JSON, no role grants anything until it is fixed.
   Deleting the file removes every role.
 
