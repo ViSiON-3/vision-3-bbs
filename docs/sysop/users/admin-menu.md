@@ -116,6 +116,17 @@ Changes to individual fields are **staged** (shown with a `*` prefix). Nothing i
 >
 > **User #1 protection:** The primary SysOp account (user ID 1) cannot be unvalidated, banned, or deleted through any admin screen.
 
+### Validating without SysOp access
+
+A user below SysOp level whose [admin role](users/admin-roles.md) grants
+`users.validate` can open this queue too, through any menu command running
+`VALIDATEUSER` that they can reach. Their view is reduced to approving: it
+shows each account's handle, real name, group/location, sign-up date and
+calls, and the only keys are the cursor keys, `G` (Approve), `S`, `X` and
+`Q`. Any other key says `Only approving is available here`. The BBS checks
+the same rule again when the change is saved, against the user's record as
+it is then.
+
 ---
 
 ## E — Edit Users
@@ -137,6 +148,16 @@ The lower half of the screen shows the following for the highlighted user:
 | `E` | Access flags | Created date |
 | `F` | Access level | Last login |
 | `G` | Validated (toggle) | Deleted status |
+| `N` | Network chat bar | |
+| `R` | [Admin roles](users/admin-roles.md) | |
+
+### R — Roles
+
+Sets the user's [admin roles](users/admin-roles.md): type the role names
+separated by commas or spaces, or clear the line to remove them all. Each name
+is checked against `configs/roles.json` as you press Enter, and one the file
+doesn't define is refused (`no role named ... in configs/roles.json`). Saved
+with `S` like any other field, and logged in the admin activity log.
 
 ### T — ACS Test
 

@@ -47,7 +47,7 @@ Press Enter on any user to open the field editor. It lays the fields out in two 
 
 **Left column:** Handle, Real Name, Access Level, Total Calls, Group/Location, Access Flags, Private Note, File Points, Custom Prompt, Time Limit, Password, WFC Keys
 
-**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted User (read-only), Deleted At (read-only), Auto Purge (read-only), WFC Read Only, ACS Test
+**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted (read-only), Roles, Auto Purge (read-only), WFC Read Only, ACS Test
 
 **Read-only block:** Num Uploads, Msgs Posted, InfoForms, Created, Updated, Last Login, Bulletin
 
@@ -63,9 +63,15 @@ WFC Keys opens a list of the account's SSH public keys, shown by SHA256 fingerpr
 
 WFC Read Only (Y/N) limits the account's [WFC console](how-to-guides/wfc-console.md#read-only-accounts) to watching: the BBS refuses its kick, snoop, type-in and chat.
 
-ACS Test opens the [ACS tester](#acs-test) for the user.
+Roles are the user's [admin roles](users/admin-roles.md), names separated by
+commas or spaces. Each is checked against `roles.json` in the `--config`
+directory, and a role it doesn't define is refused.
 
-**Read-only fields:** Deleted User, Deleted At, and Auto Purge reflect the user's current deletion state and purge eligibility. InfoForms shows which infoform responses exist on disk (e.g., `1[x] 2[ ] 3[ ]`).
+ACS Test opens the [ACS tester](#acs-test) for the user. `ROLE:` and `PERM:`
+read the same `roles.json`.
+
+**Read-only fields:** Deleted (`Y` with the date and time it was deleted,
+or `N`) and Auto Purge reflect the user's current deletion state and purge eligibility. InfoForms shows which infoform responses exist on disk (e.g., `1[x] 2[ ] 3[ ]`).
 
 ### ACS Test
 
@@ -217,7 +223,8 @@ found or cannot be loaded.
 | Encoding | `preferredEncoding` | blank, `utf8` or `cp437` |
 | Msg Header | `msgHdr` | 0–99 |
 | Output Mode | `outputMode` | Legacy, not read |
-| Deleted User / Deleted At | `deletedUser` / `deletedAt` | Read-only; set by F2 |
+| Deleted | `deletedUser` / `deletedAt` | Read-only; set by F2 |
+| Roles | `roles` | Checked against `roles.json` |
 | WFC Read Only | `wfcReadOnly` | |
 
 The full record is described in

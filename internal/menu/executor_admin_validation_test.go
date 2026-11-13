@@ -180,3 +180,80 @@ func TestUnvalidateUser_RefusesUserOneAndHonoursNo(t *testing.T) {
 		t.Errorf("quit: err = %v output:\n%s", r.err, r.text())
 	}
 }
+
+// TestValidateUser_ValidatorApprovesOnly pins the queue for a user below
+// sysop level who holds users.validate (#610): the edit keys do nothing, the
+// note and flags aren't shown, and [G] [S] approves with the board's
+// defaults, audited with the grant that allowed it.
+func TestValidateUser_ValidatorApprovesOnly(t *testing.T) {
+	useRoles(t, validatorRole)
+	env := newMenuEnv(t)
+	newbie := pendingNewbie(3, "Newbie")
+	newbie.PrivateNote = "secret sysop note"
+	newbie.Flags = "Q"
+	validator := &user.User{ID: 7, Handle: "Val", AccessLevel: 20, Validated: true, TimeLimit: 60, Roles: []string{"validator"}}
+	env.seedUsers(newbie, validator)
+	val, _ := env.um.GetUserByID(7)
+
+	r := env.runCmd("VALIDATEUSER", val, "", "efp0gs\r")
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	if !r.has("Validate Pending Users", "Newbie", "Approve", "Only approving is available here", "All users have been validated!") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	for _, hidden := range []string{"secret sysop note", "Flags", "Password", "Net Chat"} {
+		if r.has(hidden) {
+			t.Errorf("validator's view shows %q", hidden)
+		}
+	}
+	u, _ := env.diskUser(3)
+	if !u.Validated || u.AccessLevel != env.e.GetServerConfig().RegularUserLevel || u.Flags != "Q" || u.PasswordHash != "" {
+		t.Errorf("newbie on disk = %+v", u)
+	}
+	l, ok := modLogField(modAdminLog(t, env), 3, "validated")
+	if !ok || l.AdminID != 7 || l.Notes != "users.validate via role validator" {
+		t.Errorf("validated audit entry = %+v (found %v)", l, ok)
+	}
+	if self, _ := env.diskUser(7); self.AccessLevel != 20 {
+		t.Errorf("validator's own level changed to %d", self.AccessLevel)
+	}
+}
+
+// TestValidateUser_DeniedWithoutPermission keeps the queue closed to a
+// caller below sysop level without users.validate, including a co-sysop and
+// a caller whose role roles.json doesn't define.
+func TestValidateUser_DeniedWithoutPermission(t *testing.T) {
+	useRoles(t, validatorRole)
+	env := newMenuEnv(t)
+	env.seedUsers(pendingNewbie(3, "Newbie"),
+		&user.User{ID: 8, Handle: "CoSys", AccessLevel: 250, Validated: true, TimeLimit: 60},
+		&user.User{ID: 9, Handle: "Typo", AccessLevel: 20, Validated: true, TimeLimit: 60, Roles: []string{"validatr"}})
+	for _, id := range []int{2, 8, 9} {
+		u, _ := env.um.GetUserByID(id)
+		r := env.runCmd("VALIDATEUSER", u, "", "gs\r")
+		if !r.has("Access denied.") || r.has("Newbie") {
+			t.Errorf("user %d: output:\n%s", id, r.text())
+		}
+		if r := env.runCmd("NEWUSERVAL", u, "", "y"); r.has("new user") {
+			t.Errorf("user %d: NEWUSERVAL showed the count:\n%s", id, r.text())
+		}
+	}
+	if u, _ := env.diskUser(3); u.Validated {
+		t.Error("newbie validated")
+	}
+}
+
+// TestNewUserValidation_ValidatorPrompted offers the login prompt to a
+// holder of users.validate.
+func TestNewUserValidation_ValidatorPrompted(t *testing.T) {
+	useRoles(t, validatorRole)
+	env := newMenuEnv(t)
+	env.seedUsers(pendingNewbie(3, "Newbie"),
+		&user.User{ID: 7, Handle: "Val", AccessLevel: 20, Validated: true, TimeLimit: 60, Roles: []string{"validator"}})
+	val, _ := env.um.GetUserByID(7)
+	r := env.runCmd("NEWUSERVAL", val, "", "n")
+	if !r.has("1 new user") {
+		t.Errorf("output:\n%s", r.text())
+	}
+}

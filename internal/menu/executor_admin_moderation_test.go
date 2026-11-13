@@ -160,7 +160,9 @@ func TestBanUser_DisconnectAtPickerLogsOff(t *testing.T) {
 }
 
 // TestModeration_EmptyUserList pins the "No users found." screen when the
-// user file is empty (the acting sysop is not in it).
+// user file is empty (the acting sysop is not in it). The user editor
+// decides who may open it from the actor's stored record, so with none it
+// turns them away instead.
 func TestModeration_EmptyUserList(t *testing.T) {
 	for _, cmd := range []string{"BANUSER", "DELETEUSER", "UNVALIDATEUSER", "ADMINLISTUSERS"} {
 		t.Run(cmd, func(t *testing.T) {
@@ -168,7 +170,11 @@ func TestModeration_EmptyUserList(t *testing.T) {
 			sysop := env.sysop
 			env.writeUsers()
 			r := env.runCmd(cmd, sysop, "", "\r")
-			if r.err != nil || !r.has("No users found.") {
+			want := "No users found."
+			if cmd == "ADMINLISTUSERS" {
+				want = "Access denied."
+			}
+			if r.err != nil || !r.has(want) {
 				t.Errorf("err = %v output:\n%s", r.err, r.text())
 			}
 		})

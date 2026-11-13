@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -41,8 +42,28 @@ type Context struct {
 	Location *time.Location
 	// SysOpLevel and CoSysOpLevel are the thresholds for SYSOP and COSYSOP
 	// and the level from which T always passes (sysOpLevel and coSysOpLevel
-	// in config.json).
+	// in config.json). SysOpLevel is also the level that holds every
+	// permission, for PERM.
 	SysOpLevel, CoSysOpLevel int
+	// Roles are the roles ROLE and PERM read; nil is the BBS's current set
+	// (perm.Current). A ROLE term naming a role the set doesn't define fails
+	// the whole string.
+	Roles *perm.Roles
+}
+
+// withRoles is ctx with its roles fixed for one evaluation: a reload of
+// roles.json part way through can't make one term see the old roles and
+// another the new.
+func (c Context) withRoles() Context {
+	c.Roles = c.roles()
+	return c
+}
+
+func (c Context) roles() *perm.Roles {
+	if c.Roles == nil {
+		return perm.Current()
+	}
+	return c.Roles
 }
 
 func (c Context) location() *time.Location {
@@ -137,7 +158,7 @@ func (e *Expr) Eval(ctx Context) bool {
 	if e.Root == nil {
 		return false
 	}
-	result, lacks := evalNode(e.Root, ctx)
+	result, lacks := evalNode(e.Root, ctx.withRoles())
 	return result && !lacks
 }
 
@@ -168,14 +189,18 @@ func evalNode(n *Node, ctx Context) (result, lacks bool) {
 }
 
 // lacking reports whether t needs context ctx doesn't have: a session for
-// L and A (NoSession), or a sign-up date on the user's record for AGE
-// (Unavailable).
+// L and A (NoSession), a sign-up date on the user's record for AGE
+// (Unavailable), or for ROLE a role the board defines (Undefined). The last
+// is what keeps a misspelt role from passing through '!' or another branch
+// of '|'.
 func lacking(t parsedTerm, ctx Context) (Reason, bool) {
 	switch {
 	case (t.code == "L" || t.code == "A") && ctx.Session == nil:
 		return NoSession, true
 	case t.code == "AGE" && ctx.User.CreatedAt.IsZero():
 		return Unavailable, true
+	case t.code == "ROLE" && !ctx.roles().Defined(t.value):
+		return Undefined, true
 	}
 	return Match, false
 }
@@ -194,6 +219,7 @@ func EvalTerm(condition string, ctx Context) bool {
 		slog.Warn("invalid ACS term", "condition", condition, "problem", problem)
 		return false
 	}
+	ctx = ctx.withRoles()
 	if _, missing := lacking(t, ctx); missing {
 		return false
 	}
@@ -223,6 +249,10 @@ func evalTerm(t parsedTerm, ctx Context) bool {
 		return strings.Contains(strings.ToUpper(u.Flags), "I")
 	case "V": // User is validated
 		return u.Validated
+	case "ROLE": // The record lists the role; lacking has checked it is defined
+		return perm.Member(u, t.value, ctx.roles())
+	case "PERM": // A sysop, or a role on the record grants it
+		return perm.Check(u, perm.Permission(t.value), ctx.SysOpLevel, ctx.roles()).Allowed
 	case "REALNAME": // The user's real name is set
 		return strings.TrimSpace(u.RealName) != ""
 	case "Z": // String exists in PrivateNote

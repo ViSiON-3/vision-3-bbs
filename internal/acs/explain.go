@@ -5,6 +5,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // Reason is why a part of an expression passed or failed.
@@ -27,6 +30,10 @@ const (
 	// have (AGE without a sign-up date); for an operator, one with such a
 	// term under it. Either fails, and so does the whole string.
 	Unavailable
+	// Undefined is a ROLE term naming a role configs/roles.json doesn't
+	// define; for an operator, one with such a term under it. Either fails,
+	// and so does the whole string.
+	Undefined
 )
 
 func (r Reason) String() string {
@@ -39,13 +46,17 @@ func (r Reason) String() string {
 		return "invalid"
 	case NoSession:
 		return "no session"
+	case Undefined:
+		return "undefined"
 	default:
 		return "unavailable"
 	}
 }
 
 // problem reports whether r is a reason other than an ordinary pass or fail.
-func (r Reason) problem() bool { return r == Invalid || r == NoSession || r == Unavailable }
+func (r Reason) problem() bool {
+	return r == Invalid || r == NoSession || r == Unavailable || r == Undefined
+}
 
 // Step is one part of an explained expression: a node of the parsed tree
 // with what it evaluated to and why.
@@ -97,6 +108,7 @@ func Explain(s string, ctx Context) Explanation {
 	if x.CurrentTime {
 		ctx.Now = time.Now()
 	}
+	ctx = ctx.withRoles()
 	x.Context = ctx
 	if s == "" || s == "*" {
 		x.Result, x.Reason = true, Match
@@ -252,8 +264,11 @@ func passes(ok bool) string {
 func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 	t := n.term
 	if reason, missing := lacking(t, ctx); missing {
-		if reason == NoSession {
+		switch reason {
+		case NoSession:
 			return false, reason, "needs a session and there is none, so the whole string fails"
+		case Undefined:
+			return false, reason, undefinedRole(t.value, ctx.roles())
 		}
 		return false, reason, "the record has no sign-up date, so the account has no age and the whole string fails"
 	}
@@ -290,6 +305,10 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 		} else {
 			detail = "not validated"
 		}
+	case "ROLE":
+		detail = roleDetail(u, t.value, result)
+	case "PERM":
+		detail = permDetail(perm.Check(u, perm.Permission(t.value), ctx.SysOpLevel, ctx.roles()), u, ctx.SysOpLevel)
 	case "U":
 		detail = compared("user ID", u.ID, "", t)
 	case "P":
@@ -395,6 +414,46 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 		}
 	}
 	return result, reason, detail
+}
+
+// undefinedRole explains a ROLE term whose role isn't defined.
+func undefinedRole(name string, roles *perm.Roles) string {
+	defined := "it defines none"
+	if roles.Len() > 0 {
+		defined = "defined: " + strings.Join(roles.Names(), ", ")
+	}
+	return fmt.Sprintf("configs/roles.json has no role named %s (%s), so the whole string fails", name, defined)
+}
+
+// userRoles is a record's roles for an explanation: "validator, msgops" or
+// "none".
+func userRoles(u *user.User) string {
+	if r := perm.FormatRoleList(u.Roles); r != "" {
+		return r
+	}
+	return "none"
+}
+
+// roleDetail explains a ROLE term for a defined role.
+func roleDetail(u *user.User, name string, member bool) string {
+	if member {
+		return fmt.Sprintf("has role %s (roles: %s)", name, userRoles(u))
+	}
+	return fmt.Sprintf("doesn't have role %s (roles: %s); a sysop's level doesn't make them a member", name, userRoles(u))
+}
+
+// permDetail explains a PERM term: where the permission came from, or why
+// nothing grants it.
+func permDetail(d perm.Decision, u *user.User, sysOpLevel int) string {
+	switch {
+	case d.Sysop:
+		return fmt.Sprintf("has %s: level %d is at least %d (sysOpLevel), which holds every permission", d.Permission, u.AccessLevel, sysOpLevel)
+	case d.Allowed:
+		return fmt.Sprintf("has %s through %s", d.Permission, d.Source())
+	case u.DeletedUser:
+		return fmt.Sprintf("doesn't have %s: the account is deleted", d.Permission)
+	}
+	return fmt.Sprintf("doesn't have %s: level %d is below %d (sysOpLevel) and no role grants it (roles: %s)", d.Permission, u.AccessLevel, sysOpLevel, userRoles(u))
 }
 
 // compared describes a numeric term's comparison of have, the caller's value

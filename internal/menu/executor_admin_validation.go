@@ -14,7 +14,8 @@ import (
 
 // runValidateUser presents the pending-validation queue: a filtered view of the
 // shared user editor (runUserEditor) that drops users from the list as they are
-// validated.
+// validated. A sysop has the whole editor there; a user below sysop level
+// with users.validate (#610) may only approve.
 func runValidateUser(c *cmdCtx, args string) (*user.User, string, error) {
 	return runUserEditor(c, userEditorConfig{
 		title:        "|15ViSiON|03/|113 |08- |14Validate Pending Users|07",
@@ -55,8 +56,11 @@ func runNewUserValidation(c *cmdCtx, args string) (*user.User, string, error) {
 	// editor behind it refused them. The count is the sysop's business, so a
 	// misconfigured sec_level must not leak it. sec_level still works, and is
 	// still the way to remove the item for sysops who do not want it.
-	if !checkACS(fmt.Sprintf("S%d", e.GetServerConfig().SysOpLevel), currentUser, s, terminal, sessionStartTime) {
-		slog.Debug("NEWUSERVAL skipped: not a sysop", "node", nodeNumber, "handle", currentUser.Handle)
+	//
+	// A user below sysop level who holds users.validate (#610) gets the
+	// prompt too, provided sec_level lets them reach it.
+	if !e.mayValidateUsers(userManager, currentUser) {
+		slog.Debug("NEWUSERVAL skipped: may not validate users", "node", nodeNumber, "handle", currentUser.Handle)
 		return nil, "", nil
 	}
 

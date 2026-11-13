@@ -51,6 +51,12 @@ type User struct {
 	PublicKeys     []string  `json:"publicKeys,omitempty"`  // OpenSSH authorized_keys lines authorized for WFC admin
 	WFCReadOnly    bool      `json:"wfcReadOnly,omitempty"` // WFC console may watch only: no kick, snoop, type-in or chat
 	LastLogin      time.Time `json:"lastLogin"`
+
+	// Roles are the admin roles the sysop has given this user, by name, as
+	// configs/roles.json defines them (internal/perm). Only a sysop sets
+	// them; a role the file doesn't define grants nothing.
+	Roles []string `json:"roles,omitempty"`
+
 	// PreviousLogin is the LastLogin value from before the current session's
 	// authentication. Authenticate() overwrites LastLogin with time.Now()
 	// before the login sequence runs, so anything asking "what is new since

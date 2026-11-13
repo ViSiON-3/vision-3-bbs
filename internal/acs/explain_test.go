@@ -54,7 +54,7 @@ func TestExplainAgreesWithCheck(t *testing.T) {
 func checkSteps(t *testing.T, s string, st *Step, ctx Context) {
 	t.Helper()
 	var want bool
-	lacks := func(c *Step) bool { return c.Reason == NoSession || c.Reason == Unavailable }
+	lacks := func(c *Step) bool { return c.Reason == NoSession || c.Reason == Unavailable || c.Reason == Undefined }
 	switch st.Kind {
 	case TermNode:
 		want = EvalTerm(st.Text, ctx)

@@ -18,6 +18,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 )
 
 // acsSource is one ACS string in the board's configuration: which file holds
@@ -42,11 +43,15 @@ type acsFinding struct {
 	// NoSession is set for a valid string with L or A in it from a
 	// Headless source: it denies every caller there.
 	NoSession bool
+	// Undefined lists the roles a valid string's ROLE terms name that
+	// configs/roles.json doesn't define; any makes it deny every caller.
+	Undefined []string
 }
 
 // failing reports whether the string denies every caller everywhere (it
-// has diagnostics), rather than only where it has no session.
-func (f acsFinding) failing() bool { return len(f.Diags) > 0 }
+// has diagnostics or names an undefined role), rather than only where it has
+// no session.
+func (f acsFinding) failing() bool { return len(f.Diags) > 0 || len(f.Undefined) > 0 }
 
 // Detail is the finding without its file, as doctor prints it under the
 // file's name, e.g.
@@ -56,6 +61,10 @@ func (f acsFinding) Detail() string {
 	if f.NoSession {
 		return fmt.Sprintf("%s, %s %q: uses L or A, which fail the whole string for %s, where there is no session",
 			f.Source.Record, f.Source.Field, f.Source.ACS, f.Source.Headless)
+	}
+	if len(f.Undefined) > 0 {
+		return fmt.Sprintf("%s, %s %q: names %s, which configs/roles.json doesn't define, so it fails for every caller",
+			f.Source.Record, f.Source.Field, f.Source.ACS, "ROLE:"+strings.Join(f.Undefined, ", ROLE:"))
 	}
 	parts := make([]string, len(f.Diags))
 	for i, d := range f.Diags {
@@ -73,14 +82,26 @@ func (f acsFinding) String() string {
 // problems found, ordered by file, and how many non-empty strings it checked.
 // It reads the files itself, so it covers menus nobody has opened; a file it
 // can't read or parse is left to the checks that report on that file.
+//
+// ROLE terms are checked against configs/roles.json as it is on disk; a file
+// that can't be read defines no roles, as the BBS treats it.
 func scanACS(root string) (findings []acsFinding, checked int) {
+	roles, _, err := perm.Load(filepath.Join(root, "configs"))
+	if err != nil {
+		roles = nil
+	}
 	for _, src := range collectACSSources(root) {
 		if src.ACS != "" {
 			checked++
 		}
 		if diags := acs.Validate(src.ACS); len(diags) > 0 {
 			findings = append(findings, acsFinding{Source: src, Diags: diags})
-		} else if src.Headless != "" && src.ACS != "" && acs.Parse(src.ACS).UsesSession() {
+			continue
+		}
+		e := acs.Parse(src.ACS)
+		if undefined := perm.Undefined(e.RoleNames(), roles); len(undefined) > 0 {
+			findings = append(findings, acsFinding{Source: src, Undefined: undefined})
+		} else if src.Headless != "" && src.ACS != "" && e.UsesSession() {
 			findings = append(findings, acsFinding{Source: src, NoSession: true})
 		}
 	}
@@ -267,6 +288,11 @@ func checkACSStrings(root string, add func(string, doctorSeverity, string, strin
 		return
 	}
 	for _, f := range findings {
+		if len(f.Undefined) > 0 {
+			add("ACS: "+f.Source.File, doctorFail, f.Detail(),
+				"This string denies every caller, sysops included. Define the role in configs/roles.json or correct its name; see docs/sysop/users/admin-roles.md.")
+			continue
+		}
 		if f.failing() {
 			add("ACS: "+f.Source.File, doctorFail, f.Detail(),
 				"This string denies every caller, sysops included. Fix it; see docs/sysop/reference/acs.md.")

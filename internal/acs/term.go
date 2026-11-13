@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 )
 
@@ -27,7 +28,8 @@ type parsedTerm struct {
 	// past the top (H22-6, W5-1); only the clock and calendar terms allow it.
 	lo, hi int
 	ranged bool
-	// value is the argument of F, Z and Y.
+	// value is the argument of F, Z and Y, the role name of ROLE (lower
+	// case) and the permission of PERM.
 	value string
 }
 
@@ -72,6 +74,11 @@ var termNames = map[string]termName{
 	"DOWNLOADS": {"DOWNLOADS", nameCompare},
 	"AGE":       {"AGE", nameCompare},
 	"REALNAME":  {"REALNAME", nameAlone},
+	// Admin roles and permissions (internal/perm), which have no letter.
+	// ROLE:name is membership in a role configs/roles.json defines;
+	// PERM:name is holding a permission, which a sysop always does.
+	"ROLE": {"ROLE", nameColon},
+	"PERM": {"PERM", nameColon},
 }
 
 // numericCodes are the terms that take a number, with what a bare number
@@ -195,7 +202,8 @@ func readNumber(text, name, code, arg string) (parsedTerm, string) {
 	return t, ""
 }
 
-// readValue reads the argument of F, Z and Y, or of their names.
+// readValue reads the argument of F, Z, Y, ROLE and PERM, or of their
+// names.
 func readValue(text, name, code, arg string) (parsedTerm, string) {
 	bad := func(msg string) (parsedTerm, string) {
 		return parsedTerm{}, fmt.Sprintf("%q: %s", text, msg)
@@ -215,6 +223,20 @@ func readValue(text, name, code, arg string) (parsedTerm, string) {
 		if name != "Z" && arg == "" {
 			return bad(name + ": needs the text to look for")
 		}
+	case "ROLE":
+		if err := perm.CheckRoleName(arg); err != nil {
+			return bad(name + ": " + err.Error())
+		}
+		return parsedTerm{code: code, value: perm.NormalizeRoleName(arg)}, ""
+	case "PERM":
+		p, ok := perm.Lookup(arg)
+		if !ok {
+			if arg == "" {
+				return bad(name + ": needs a permission name (known: " + perm.KnownNames() + ")")
+			}
+			return bad(fmt.Sprintf("%s: %q is not a permission (known: %s)", name, arg, perm.KnownNames()))
+		}
+		return parsedTerm{code: code, value: string(p)}, ""
 	case "Y":
 		parts := strings.Split(arg, "/")
 		ok := len(parts) == 2

@@ -1959,6 +1959,9 @@ func main() {
 		logging.Fatal("failed to load door configuration", "error", err)
 	}
 
+	// Admin roles (#610): who holds which admin permission below sysop level.
+	loadRoles(rootConfigPath)
+
 	// Networks sharing one BSO outbound are split at load. Write the split to
 	// ftn.json, and repoint binkd.conf's domain lines, so it holds from now
 	// on rather than being worked out again at every start.

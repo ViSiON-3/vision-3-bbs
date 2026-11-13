@@ -57,6 +57,7 @@
 * [Login Sequence](users/login-sequence.md)
 * [New User Voting (NUV)](users/nuv.md)
 * [Sponsor Menus](users/sponsor-menus.md)
+* [Admin Roles](users/admin-roles.md)
 
 * **MESSAGES**
 * [Message Areas](messages/message-areas.md)

@@ -248,9 +248,9 @@ Caller-facing. The stock main menu binds `V3NETCENTRAL` to `/V` and the word `CE
 | Command | Data | What it does | Access |
 | --- | --- | --- | --- |
 | `PENDINGVALIDATIONNOTICE` | none | One-line notice that users await validation. Silent when none do. Bound to the `//` auto-run key in the stock main menu. | SysOp |
-| `NEWUSERVAL` | none | Counts pending users and offers to review them. Silent when none. Shipped as a login step. | SysOp, checked in code regardless of `sec_level` |
+| `NEWUSERVAL` | none | Counts pending users and offers to review them. Silent when none. Shipped as a login step. | SysOp or `users.validate` ([admin roles](users/admin-roles.md)), checked in code regardless of `sec_level` |
 | `SYSOPNOTICES` | none | Shows queued sysop notices such as new user joins. Shipped as the first login step. | CoSysOp+ |
-| `VALIDATEUSER` | none | The user editor, filtered to accounts awaiting validation. | SysOp |
+| `VALIDATEUSER` | none | The user editor, filtered to accounts awaiting validation. Below SysOp level, with `users.validate`, approving only. | SysOp, or `users.validate` ([admin roles](users/admin-roles.md)) |
 | `ADMINLISTUSERS` | none | The full user editor. | SysOp |
 | `UNVALIDATEUSER` | none | Lightbar user picker, then removes validation. Not bound in the stock menus. | SysOp |
 | `BANUSER` | none | Lightbar user picker, then bans the account. Not bound in the stock menus. | SysOp |

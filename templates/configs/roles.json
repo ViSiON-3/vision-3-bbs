@@ -1,0 +1,9 @@
+{
+    "roles": [
+        {
+            "name": "validator",
+            "description": "Reviews new accounts and approves them",
+            "permissions": ["users.validate"]
+        }
+    ]
+}
