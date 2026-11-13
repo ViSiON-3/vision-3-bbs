@@ -164,7 +164,9 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 				} else if updateErr != nil {
 					slog.Error("failed to mark file as reviewed", "node", nodeNumber, "file", rec.Filename, "error", updateErr)
 				} else {
-					logFileAction(d, "marked reviewed", nodeNumber, currentUser.Handle, rec)
+					reviewed := rec
+					reviewed.AreaID = areaID // where it was approved, if it moved
+					logFileAction(d, "marked reviewed", nodeNumber, currentUser.Handle, reviewed)
 					e.writeString(terminal, outputMode, e.Strings().SysopReviewMarked)
 					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
 				}

@@ -262,6 +262,17 @@ func (fm *FileManager) RenameFileInArea(fileID uuid.UUID, areaID int, newName st
 				return nil, ErrRenameTargetExists
 			}
 		}
+		// A file on disk with the new name in any case, other than the one
+		// being renamed, is a collision on a case-sensitive filesystem too.
+		if entries, readErr := os.ReadDir(dir); readErr == nil {
+			for _, ent := range entries {
+				if ent.Name() != oldName && strings.EqualFold(ent.Name(), safeNew) {
+					return nil, ErrRenameTargetExists
+				}
+			}
+		} else {
+			return nil, fmt.Errorf("reading %s: %w", dir, readErr)
+		}
 		oldPath, newPath := filepath.Join(dir, oldName), filepath.Join(dir, safeNew)
 		if newInfo, statErr := os.Stat(newPath); statErr == nil {
 			oldInfo, oldErr := os.Stat(oldPath)

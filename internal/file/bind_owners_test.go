@@ -154,6 +154,7 @@ func TestRenameFileInArea(t *testing.T) {
 		{1, "TAKEN.ZIP", ErrRenameTargetExists}, // another record's name
 		{1, "taken.zip", ErrRenameTargetExists}, // ignoring case
 		{1, "STRAY.ZIP", ErrRenameTargetExists}, // a file on disk with no record
+		{1, "stray.zip", ErrRenameTargetExists}, // ...in any case
 		{1, "../escape.zip", nil},               // refused as a path (checked below)
 	} {
 		err := fm.RenameFileInArea(id, tc.area, tc.name)
