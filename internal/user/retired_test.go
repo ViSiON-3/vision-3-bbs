@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 )
 
 // Purging an account retires its handle: it can't be registered, or taken
@@ -162,5 +164,40 @@ func TestFoldEqualRenameAndControlHandles(t *testing.T) {
 	}
 	if err := ValidateHandleEdit("Sam", "Tab\there"); !errors.Is(err, ErrHandleControl) {
 		t.Errorf("ValidateHandleEdit with a tab: %v", err)
+	}
+}
+
+// A handle with a line break, from an account made before those were
+// refused, is retired as one entry, not two.
+func TestRetireLegacyControlHandle(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "users.json")
+	if err := RetireHandles(path, "A\nB", `"quoted`); err != nil {
+		t.Fatal(err)
+	}
+	for h, want := range map[string]bool{"A\nB": true, `"quoted`: true, "A": false, "B": false} {
+		if got, err := HandleRetired(path, h); err != nil || got != want {
+			t.Errorf("HandleRetired(%q) = %v, %v; want %v", h, got, err, want)
+		}
+	}
+}
+
+// A retry that finds the entry already written still syncs the directory,
+// so a purge never goes ahead on a rename whose sync failed.
+func TestRetryStillSyncsDirectory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "users.json")
+	if err := RetireHandles(path, "Bob"); err != nil {
+		t.Fatal(err)
+	}
+	if err := raiseNextUserID(path, 5); err != nil {
+		t.Fatal(err)
+	}
+	failing := errors.New("sync failed")
+	syncDir = func(string) error { return failing }
+	t.Cleanup(func() { syncDir = atomicfile.SyncDir })
+	if err := RetireHandles(path, "bob"); !errors.Is(err, failing) {
+		t.Errorf("RetireHandles retry: %v, want the sync error", err)
+	}
+	if err := raiseNextUserID(path, 3); !errors.Is(err, failing) {
+		t.Errorf("raiseNextUserID retry: %v, want the sync error", err)
 	}
 }

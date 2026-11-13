@@ -80,7 +80,9 @@ func raiseNextUserID(usersPath string, next int) error {
 		return err // never overwrite a mark that couldn't be read
 	}
 	if next <= stored {
-		return nil
+		// Already there, perhaps from an attempt whose directory sync
+		// failed: sync now, as RetireHandles does.
+		return syncDir(filepath.Dir(path))
 	}
 	// Durable: an account is saved, and a purge removes accounts, once
 	// this returns.

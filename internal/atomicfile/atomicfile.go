@@ -103,3 +103,8 @@ func WriteFileDurable(path string, data []byte, perm os.FileMode) error {
 	}
 	return nil
 }
+
+// SyncDir flushes dir's entries to disk (a no-op on Windows). A caller that
+// found a durable write already in place, on a retry after a failed sync,
+// calls it to be sure that write's rename is on disk too.
+func SyncDir(dir string) error { return syncDir(dir) }

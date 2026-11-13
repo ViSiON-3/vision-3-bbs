@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
@@ -30,6 +31,9 @@ import (
 // count as the same retired handle. A sysop releases a handle by deleting
 // its line, once they're sure nothing still addressed to it should stay
 // private.
+
+// syncDir is atomicfile.SyncDir; a test replaces it to make a sync fail.
+var syncDir = atomicfile.SyncDir
 
 // RetiredHandlesFile is the retired-handle list's name, beside users.json.
 const RetiredHandlesFile = "retired_handles"
@@ -64,6 +68,14 @@ func readRetired(usersPath string) ([]string, error) {
 		case line == "" || strings.HasPrefix(line, "#"):
 		case strings.HasPrefix(line, `\`):
 			out = append(out, line[1:])
+		case strings.HasPrefix(line, `"`):
+			// A handle with a control character, from before those were
+			// refused, written Go-quoted (see retiredEntry).
+			if h, err := strconv.Unquote(line); err == nil {
+				out = append(out, h)
+			} else {
+				out = append(out, line)
+			}
 		default:
 			out = append(out, line)
 		}
@@ -71,10 +83,15 @@ func readRetired(usersPath string) ([]string, error) {
 	return out, sc.Err()
 }
 
-// retiredEntry is handle as a line of the list: a leading '#' or '\' is
-// escaped with '\'.
+// retiredEntry is handle as a line of the list. A handle with a control
+// character (an account from before those were refused, which might hold a
+// line break) is written Go-quoted, so it stays one line and one entry. A
+// leading '#', '\' or '"' is escaped with '\'.
 func retiredEntry(handle string) string {
-	if strings.HasPrefix(handle, "#") || strings.HasPrefix(handle, `\`) {
+	if hasControl(handle) {
+		return strconv.Quote(handle)
+	}
+	if strings.HasPrefix(handle, "#") || strings.HasPrefix(handle, `\`) || strings.HasPrefix(handle, `"`) {
 		return `\` + handle
 	}
 	return handle
@@ -130,7 +147,10 @@ func RetireHandles(usersPath string, handles ...string) error {
 		}
 	}
 	if !changed {
-		return nil
+		// Already listed, perhaps by an earlier attempt whose directory
+		// sync failed: sync now, so the purge that follows never relies
+		// on a rename that isn't on disk.
+		return syncDir(filepath.Dir(path))
 	}
 	sort.Strings(list)
 	lines := make([]string, len(list))
