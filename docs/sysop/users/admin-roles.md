@@ -23,6 +23,8 @@ A permission is an admin action the BBS defines:
 |---|---|
 | `users.validate` | Review accounts waiting for validation and approve them. Approving sets the account validated and raises its level to `regularUserLevel` if it is below that. |
 | `messages.moderate` | Delete any message in a message area from the reader. A role can grant it in some areas or conferences only (see [Limiting a grant to some areas](#limiting-a-grant-to-some-areas)). It never covers private mail. |
+| `users.edit` | In the user editor, change the real name, group/location and private note of accounts below `coSysOpLevel`. |
+| `users.ban` | Ban, un-ban and un-validate accounts below `coSysOpLevel`, in the user editor or with `BANUSER` and `UNVALIDATEUSER`. |
 | `files.manage` | Look after the files in a file area: edit any file's description, delete, move and rename files, and work through the upload review queue. A role can grant it in some file areas or conferences only. |
 
 `users.validate` is approval and nothing more. In the queue, someone who has
@@ -41,6 +43,26 @@ stays with its sponsor and co-SysOps.
 Every delete made through a role or a sponsorship is logged at `INFO` as
 `message deleted by moderator`, with the area, the message, its author and
 subject, and the grant that allowed it.
+
+`users.edit` and `users.ban` open the user editor's full list (`ADMINLISTUSERS`)
+in a limited view. It lists only accounts below `coSysOpLevel` (never User #1,
+never deleted accounts), and offers only the keys the holder's permissions
+use:
+
+- **`users.edit`:** `B` real name, `C` group/location, `D` private note.
+- **`users.ban`:** `G` validated (to un-validate) and `0` ban / un-ban. An
+  un-ban restores the account to `regularUserLevel` and validates it.
+  Nobody can ban themselves.
+
+Level, flags, roles, groups, handle, password, the network chat bar and
+deleting an account stay the SysOp's. So does the time limit, which only
+`./ue` edits. As with validation, the BBS checks each change when it's
+saved, so another screen can't get round it. The audit log's `notes` records
+the grant, for example `users.ban via role moderator`.
+
+The shipped Admin Menu stays SysOp-only. To give a holder the editor, add a
+command such as `RUN:ADMINLISTUSERS` with `ACS: PERM:users.edit|PERM:users.ban`,
+or `RUN:BANUSER` with `ACS: PERM:users.ban`.
 
 `files.manage` is what a co-SysOp could already do with the files in any
 area. In the file list (lightbar), the holder gets the management keys
@@ -236,8 +258,8 @@ Roles don't replace or widen what a level or a sponsorship already gives.
 
 - A co-SysOp holds `messages.moderate` and `files.manage` in every area by
   level, as before, and no other permission unless a role grants it:
-  `users.validate` isn't theirs by level, any more than validation was
-  before.
+  `users.validate`, `users.edit` and `users.ban` aren't theirs by level,
+  any more than the user editor was before.
 - A message-area [sponsor](users/sponsor-menus.md) keeps their area: they
   hold `messages.moderate` there, and only the sponsor and co-SysOps can
   change its settings. A role that grants moderation in an area doesn't

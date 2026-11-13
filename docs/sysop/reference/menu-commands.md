@@ -251,9 +251,9 @@ Caller-facing. The stock main menu binds `V3NETCENTRAL` to `/V` and the word `CE
 | `NEWUSERVAL` | none | Counts pending users and offers to review them. Silent when none. Shipped as a login step. | SysOp or `users.validate` ([admin roles](users/admin-roles.md)), checked in code regardless of `sec_level` |
 | `SYSOPNOTICES` | none | Shows queued sysop notices such as new user joins. Shipped as the first login step. | CoSysOp+ |
 | `VALIDATEUSER` | none | The user editor, filtered to accounts awaiting validation. Below SysOp level, with `users.validate`, approving only. | SysOp, or `users.validate` ([admin roles](users/admin-roles.md)) |
-| `ADMINLISTUSERS` | none | The full user editor. | SysOp |
-| `UNVALIDATEUSER` | none | Lightbar user picker, then removes validation. Not bound in the stock menus. | SysOp |
-| `BANUSER` | none | Lightbar user picker, then bans the account. Not bound in the stock menus. | SysOp |
+| `ADMINLISTUSERS` | none | The full user editor. Below SysOp level, a holder of [`users.edit` or `users.ban`](users/admin-roles.md#permissions) gets a limited view of accounts below `coSysOpLevel`. | SysOp, `users.edit` or `users.ban` |
+| `UNVALIDATEUSER` | none | Lightbar user picker, then removes validation. Below SysOp level, `users.ban` lists accounts below `coSysOpLevel` only. Not bound in the stock menus. | SysOp or `users.ban` |
+| `BANUSER` | none | Lightbar user picker, then bans the account. Below SysOp level, `users.ban` lists accounts below `coSysOpLevel` only, never the caller. Not bound in the stock menus. | SysOp or `users.ban` |
 | `DELETEUSER` | none | Lightbar user picker, then soft-deletes the account. Not bound in the stock menus. | SysOp |
 | `PURGEUSERS` | none | Permanently removes soft-deleted users older than `deletedUserRetentionDays`. A negative value disables purging. | SysOp |
 | `TOGGLEALLOWNEWUSERS` | none | Flips `allowNewUsers` in `config.json` and reports the new state. | SysOp |
