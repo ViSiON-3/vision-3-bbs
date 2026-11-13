@@ -461,3 +461,23 @@ func TestClampRumorText(t *testing.T) {
 		})
 	}
 }
+
+// The stock seed rumors read as the day they're dated in any board's zone,
+// from UTC-12 to UTC+11, so none shows the day before on a US board.
+func TestSeedRumorDatesInEveryZone(t *testing.T) {
+	rd, err := loadRumorsData(filepath.Join("..", "..", "templates", "data"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rd.Rumors) == 0 {
+		t.Fatal("no seed rumors")
+	}
+	for _, r := range rd.Rumors {
+		utc := r.PostedAt.UTC().Format("01/02/06")
+		for _, off := range []int{-12, 11} {
+			if got := r.PostedAt.In(time.FixedZone("", off*3600)).Format("01/02/06"); got != utc {
+				t.Errorf("rumor %d dated %s shows %s at UTC%+d", r.ID, utc, got, off)
+			}
+		}
+	}
+}

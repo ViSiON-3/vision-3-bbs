@@ -196,6 +196,7 @@ func TestListDatesInBoardZone(t *testing.T) {
 
 // The file lightbar's info view gives the upload time in the board's zone.
 func TestFileLightbarInfoInBoardZone(t *testing.T) {
+	inKiritimati(t) // so a missing conversion shows on a UTC host too
 	_, _, out, _ := runFileLightbar(t, "i q q")
 	if want := boardTime(fixedUploadTime).Format("01/02/2006 15:04"); !strings.Contains(testAnsiEscape.ReplaceAllString(out, ""), "Uploaded  : "+want) {
 		t.Errorf("info view, want %s:\n%s", want, out)
