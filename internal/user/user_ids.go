@@ -2,12 +2,15 @@ package user
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 )
 
 // User IDs are never handed out twice (#1020). Sponsorship and upload
@@ -47,12 +50,28 @@ func readNextUserID(usersPath string) int {
 }
 
 // raiseNextUserID stores next as the mark unless the stored one is already
-// at or past it. It never lowers the mark.
+// at or past it. It never lowers the mark. The read and the write are one
+// step under the mark's own cross-process lock: the BBS and ./ue both raise
+// it, and without the lock one could write a lower mark over the other's
+// higher one. The lock is the mark's, not users.json's, so a caller already
+// holding that one can't deadlock here.
 func raiseNextUserID(usersPath string, next int) error {
-	if usersPath == "" || next <= readNextUserID(usersPath) {
+	if usersPath == "" {
 		return nil
 	}
-	return writeFileAtomic(nextUserIDPath(usersPath), []byte(strconv.Itoa(next)+"\n"), 0o600)
+	path := nextUserIDPath(usersPath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return err
+	}
+	lock, err := filelock.Acquire(path, filelock.DefaultTimeout)
+	if err != nil {
+		return fmt.Errorf("locking %s: %w", path, err)
+	}
+	defer lock.Release()
+	if next <= readNextUserID(usersPath) {
+		return nil
+	}
+	return writeFileAtomic(path, []byte(strconv.Itoa(next)+"\n"), 0o600)
 }
 
 // RecordUserIDs raises the mark past every ID in users, for a tool that

@@ -57,6 +57,10 @@ is renamed keeps the area.
 - **A name that matches no account** then is bound to nobody
   (`"sponsor_id": -1`), so the area has no sponsor until you set it again.
   Doctor warns about it.
+- **Setting the sponsor again**, even to the same name, in the Sponsor Menu,
+  the config editor or the helper, rebinds it to whoever holds that name
+  now. That's how a sponsor bound to nobody is put right once the account
+  exists.
 - **Changing `"sponsor"` by hand:** delete `"sponsor_id"` too, or the old
   account stays the sponsor. Doctor warns when the two disagree. That also
   happens after a rename, and setting the sponsor again updates the name.

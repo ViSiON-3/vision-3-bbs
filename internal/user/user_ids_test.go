@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -58,5 +59,24 @@ func TestRecordUserIDsOnlyRaises(t *testing.T) {
 	}
 	if got := readNextUserID(path); got != 8 {
 		t.Errorf("mark = %d, want 8", got)
+	}
+}
+
+// Raises racing from many writers leave the highest mark.
+func TestRaiseNextUserIDConcurrent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "users.json")
+	var wg sync.WaitGroup
+	for n := 1; n <= 40; n++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			if err := raiseNextUserID(path, n); err != nil {
+				t.Error(err)
+			}
+		}(n)
+	}
+	wg.Wait()
+	if got := readNextUserID(path); got != 40 {
+		t.Errorf("mark = %d, want 40", got)
 	}
 }

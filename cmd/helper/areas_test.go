@@ -183,3 +183,18 @@ func TestAreasSetSponsorClearsBinding(t *testing.T) {
 		t.Errorf("sponsor = %q, id %d; want New, 0", got.Sponsor, got.SponsorID)
 	}
 }
+
+// Naming the same sponsor again rebinds it: a sponsor bound to nobody before
+// the account existed is put right by setting it again.
+func TestAreasSetSameSponsorRebinds(t *testing.T) {
+	dir := setupAreasConfig(t)
+	g := readAreas(t, dir)["GENERAL"]
+	g.Sponsor, g.SponsorID = "Late", message.NoSponsorID
+	writeJSONFile(t, filepath.Join(dir, "message_areas.json"), []message.MessageArea{g})
+	if rc := runAreasSet([]string{"--config", dir, "--tag", "GENERAL", "--sponsor", "Late", "--quiet"}); rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	if got := readAreas(t, dir)["GENERAL"]; got.Sponsor != "Late" || got.SponsorID != 0 {
+		t.Errorf("sponsor = %q, id %d; want Late, 0", got.Sponsor, got.SponsorID)
+	}
+}
