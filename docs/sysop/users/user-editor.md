@@ -47,7 +47,7 @@ Press Enter on any user to open the field editor. It lays the fields out in two 
 
 **Left column:** Handle, Real Name, Access Level, Total Calls, Group/Location, Access Flags, Private Note, File Points, Custom Prompt, Time Limit, Password, WFC Keys
 
-**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted (read-only), Roles, Groups, WFC Read Only, ACS Test
+**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted (read-only), Roles/Groups, WFC Read Only, ACS Test
 
 **Read-only block:** Num Uploads, Msgs Posted, InfoForms, Auto Purge, Created, Updated, Last Login, Bulletin
 
@@ -63,12 +63,12 @@ WFC Keys opens a list of the account's SSH public keys, shown by SHA256 fingerpr
 
 WFC Read Only (Y/N) limits the account's [WFC console](how-to-guides/wfc-console.md#read-only-accounts) to watching: the BBS refuses its kick, snoop, type-in and chat.
 
-Roles are the user's [admin roles](users/admin-roles.md), names separated by
-commas or spaces. Each is checked against `roles.json` in the `--config`
-directory, and a role it doesn't define is refused.
-
-Groups are the user's [groups](users/admin-roles.md#groups), checked the
-same way.
+Roles/Groups shows how many [admin roles](users/admin-roles.md) and
+[groups](users/admin-roles.md#groups) the user has, and Enter opens a
+dialog with one line for each: names separated by commas or spaces, Tab to
+move between them, Enter to keep them, Esc to leave them as they were. The
+dialog lists the roles and groups `roles.json` in the `--config` directory
+defines, and a name it doesn't define is refused with the reason.
 
 ACS Test opens the [ACS tester](#acs-test) for the user. `ROLE:`, `GROUP:`
 and `PERM:` read the same `roles.json`.
@@ -227,8 +227,7 @@ found or cannot be loaded.
 | Msg Header | `msgHdr` | 0–99 |
 | Output Mode | `outputMode` | Legacy, not read |
 | Deleted | `deletedUser` / `deletedAt` | Read-only; set by F2 |
-| Roles | `roles` | Checked against `roles.json` |
-| Groups | `groups` | Checked against `roles.json` |
+| Roles/Groups | `roles` / `groups` | Dialog; checked against `roles.json` |
 | WFC Read Only | `wfcReadOnly` | |
 
 The full record is described in

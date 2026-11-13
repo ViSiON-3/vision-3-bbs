@@ -9,16 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/mattn/go-runewidth"
-)
-
-// rolesField and groupsField are the labels of the admin roles and user
-// groups fields.
-const (
-	rolesField  = "Roles"
-	groupsField = "Groups"
 )
 
 // fieldType defines the edit behavior for a field.
@@ -43,10 +35,6 @@ type fieldDef struct {
 	Max   int       // Maximum value (for ftInteger)
 	Get   func(u *user.User) string
 	Set   func(u *user.User, val string) error
-
-	// MaxLen is the longest value that may be typed, when it is more than
-	// Width: the input scrolls.
-	MaxLen int
 }
 
 // editFields returns the ordered list of editable fields.
@@ -253,18 +241,9 @@ func editFields() []fieldDef {
 				return uitext.BoolToYN(u.DeletedUser)
 			},
 		},
-		{
-			// Admin roles (#610), checked against configs/roles.json: Model
-			// sets Set once it has read the file.
-			Label: rolesField, Type: ftString, Col: 50, Row: 13, Width: 18, MaxLen: 200,
-			Get: func(u *user.User) string { return perm.FormatRoleList(u.Roles) },
-		},
-		{
-			// User groups (#1036), checked against configs/roles.json like
-			// Roles: Model sets Set once it has read the file.
-			Label: groupsField, Type: ftString, Col: 50, Row: 14, Width: 18, MaxLen: 200,
-			Get: func(u *user.User) string { return perm.FormatRoleList(u.Groups) },
-		},
+		// Admin roles and user groups, edited in their own dialog
+		// (membership_dialog.go). Row 14 is free for the next setting.
+		membershipFieldDef(),
 		{
 			// Limits the account's WFC console to watching; the daemon
 			// refuses its kick, snoop, type-in and chat.

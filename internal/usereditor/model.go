@@ -57,6 +57,7 @@ const (
 	modeKeyAdd                            // WFC key-manager: add a new key
 	modeDeviceList                        // Paired QWK API devices: list/unpair
 	modeACSTest                           // ACS tester for the user being edited
+	modeMembership                        // Roles and groups dialog for the user being edited
 )
 
 // Model is the BubbleTea model for the user editor TUI.
@@ -114,9 +115,13 @@ type Model struct {
 	// ACS tester (modeACSTest), and the sysop levels it checks with
 	acsTest                  acsTester
 	sysOpLevel, coSysOpLevel int
-	// roles are configs/roles.json's, for the Roles field and the ACS
-	// tester; nil when the file can't be read, which defines none.
-	roles *perm.Roles
+	// roles are configs/roles.json's, for the roles and groups dialog and
+	// the ACS tester; nil when the file can't be read (rolesErr), which
+	// defines none.
+	roles    *perm.Roles
+	rolesErr error
+	// membership is the roles and groups dialog (modeMembership).
+	membership membershipDialog
 	// boardLocation is config.json's timezone, for the ACS tester's AGE.
 	boardLocation *time.Location
 
@@ -197,7 +202,7 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 		boardLoc = config.LoadTimezone(cfg.Timezone)
 	}
 
-	// Admin roles and groups, for their fields and the ACS tester. A file that can't
+	// Admin roles and groups, for their dialog and the ACS tester. A file that can't
 	// be read defines none, as the BBS treats it, and the field says why.
 	roles, _, rolesErr := perm.Load(configDir)
 
@@ -216,30 +221,6 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 			capturedDD := dd
 			fields[i].Get = func(u *user.User) string {
 				return infoformStatus(capturedDD, u.ID)
-			}
-		case rolesField:
-			fields[i].Set = func(u *user.User, val string) error {
-				if rolesErr != nil {
-					return fmt.Errorf("configs/roles.json can't be read: %v", rolesErr)
-				}
-				names, err := perm.ParseRoleList(val, roles)
-				if err != nil {
-					return err
-				}
-				u.Roles = names
-				return nil
-			}
-		case groupsField:
-			fields[i].Set = func(u *user.User, val string) error {
-				if rolesErr != nil {
-					return fmt.Errorf("configs/roles.json can't be read: %v", rolesErr)
-				}
-				names, err := perm.ParseGroupList(val, roles)
-				if err != nil {
-					return err
-				}
-				u.Groups = names
-				return nil
 			}
 		case "Auto Purge":
 			capturedRet := retDays
@@ -274,6 +255,7 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 		sysOpLevel:    sysOp,
 		coSysOpLevel:  coSysOp,
 		roles:         roles,
+		rolesErr:      rolesErr,
 		boardLocation: boardLoc,
 		cursor:        0,
 		listType:      1,
@@ -339,6 +321,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateDeviceList(msg)
 		case modeACSTest:
 			return m.updateACSTest(msg)
+		case modeMembership:
+			return m.updateMembership(msg)
 		}
 	}
 	return m, nil
@@ -551,6 +535,10 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			if f.Label == acsTestField {
 				m.openACSTester()
+				return m, textinput.Blink
+			}
+			if f.Label == membershipField {
+				m.openMembershipDialog()
 				return m, textinput.Blink
 			}
 			// Password field - enter password entry mode
@@ -821,7 +809,7 @@ func (m Model) startFieldEdit() (Model, tea.Cmd) {
 	m.mode = modeEditField
 	// The limit is set before the value, which textinput cuts to it, and is
 	// never below the value already stored.
-	m.textInput.CharLimit = max(max(f.Width, f.MaxLen), len([]rune(val)))
+	m.textInput.CharLimit = max(f.Width, len([]rune(val)))
 	m.textInput.SetValue(val)
 	m.textInput.Width = f.Width
 	m.textInput.EchoMode = textinput.EchoNormal

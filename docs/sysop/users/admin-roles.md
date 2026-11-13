@@ -128,7 +128,7 @@ Group names follow the same rules as role names. A group and a role may
 share a name; they are separate. A group with a bad or repeated name is
 ignored, and doctor reports it.
 
-Put someone in a group in `./ue` (the **Groups** field) or the Admin Menu's
+Put someone in a group in `./ue` (the **Roles/Groups** dialog) or the Admin Menu's
 user editor (`U`), the same way as roles.
 
 A group can also be sent mail as `@fsxnet-ops`: see
@@ -144,8 +144,8 @@ Doctor checks `mail_acs` like every other ACS string.
 
 ## Giving someone a role
 
-- **`./ue`:** the **Roles** field on the edit screen. Type role names
-  separated by commas or spaces; clear the field to remove them all.
+- **`./ue`:** **Roles/Groups** on the edit screen opens a dialog. Type role
+  names separated by commas or spaces; clear the line to remove them all.
 - **Admin Menu:** `E` (Edit Users), select the user, press `R`.
 
 Both check each name against `roles.json` as you type it, so a misspelt or
