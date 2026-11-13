@@ -61,3 +61,28 @@ func TestCheckSponsors(t *testing.T) {
 		t.Errorf("%d findings, want 3:\n%s", len(got), joined)
 	}
 }
+
+func TestCheckUserIDMark(t *testing.T) {
+	for _, tc := range []struct {
+		mark string
+		want doctorSeverity
+	}{
+		{"", doctorInfo},
+		{"lots", doctorFail},
+		{"3", doctorWarn},
+		{"9", doctorOK},
+	} {
+		root := t.TempDir()
+		writeOwnersFile(t, root, "data/users/users.json", `[{"id": 1}, {"id": 4}]`)
+		if tc.mark != "" {
+			writeOwnersFile(t, root, "data/users/next_user_id", tc.mark+"\n")
+		}
+		var got []sponsorFinding
+		checkUserIDMark(root, func(name string, status doctorSeverity, message, _ string) {
+			got = append(got, sponsorFinding{name, message, status})
+		})
+		if len(got) != 1 || got[0].status != tc.want {
+			t.Errorf("mark %q: %+v, want %s", tc.mark, got, tc.want)
+		}
+	}
+}

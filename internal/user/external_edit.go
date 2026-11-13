@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 )
@@ -224,7 +225,9 @@ func (um *UserMgr) mergeExternalEditsFrom(onDisk map[string]*User) {
 		}
 	}
 	if raised {
-		um.noteNextUserID()
+		if err := um.noteNextUserID(); err != nil {
+			slog.Error("can't store the next user ID", "error", err)
+		}
 	}
 }
 

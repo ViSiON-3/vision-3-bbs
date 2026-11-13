@@ -123,6 +123,17 @@ const (
 // areas were loaded. Nobody is that area's sponsor until it is set again.
 const NoSponsorID = -1
 
+// KeepsSponsorBinding reports whether setting a's sponsor to name leaves its
+// account binding as it is: the same name, already bound to an account. A
+// sponsor who was renamed keeps the area that way, and so does pressing
+// Enter on the field, even after someone else has taken the old handle. A
+// binding to nobody (NoSponsorID) is not kept, so entering the name again
+// binds it once the account exists. To hand an area to whoever holds the
+// name now, clear the sponsor and set it again.
+func (a MessageArea) KeepsSponsorBinding(name string) bool {
+	return a.SponsorID > 0 && strings.EqualFold(strings.TrimSpace(name), strings.TrimSpace(a.Sponsor))
+}
+
 // SponsoredBy reports whether the account with ID id is a's sponsor.
 func (a MessageArea) SponsoredBy(id int) bool {
 	return id > 0 && a.Sponsor != "" && a.SponsorID == id

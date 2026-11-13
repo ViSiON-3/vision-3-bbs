@@ -1,6 +1,7 @@
 package user
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,7 +58,7 @@ func TestRecordUserIDsOnlyRaises(t *testing.T) {
 	if err := RecordUserIDs(path, []*User{{ID: 2}}); err != nil {
 		t.Fatal(err)
 	}
-	if got := readNextUserID(path); got != 8 {
+	if got, _ := readNextUserID(path); got != 8 {
 		t.Errorf("mark = %d, want 8", got)
 	}
 }
@@ -76,7 +77,68 @@ func TestRaiseNextUserIDConcurrent(t *testing.T) {
 		}(n)
 	}
 	wg.Wait()
-	if got := readNextUserID(path); got != 40 {
+	if got, _ := readNextUserID(path); got != 40 {
 		t.Errorf("mark = %d, want 40", got)
+	}
+}
+
+// A mark that can't be trusted stops new accounts and purges rather than
+// guessing from users.json, which could hand out a retired ID.
+func TestBadMarkRefusesNewAccountsAndPurges(t *testing.T) {
+	for name, bad := range map[string]func(path string) error{
+		"not a number": func(p string) error { return os.WriteFile(p, []byte("lots\n"), 0o600) },
+		"unreadable":   func(p string) error { return os.Mkdir(p, 0o700) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			um, err := NewUserManager(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			gone, _ := um.AddUser("password1", "Gone", "Gone Away", "")
+			stored, _ := um.GetUserByID(gone.ID)
+			old := time.Now().AddDate(0, 0, -30)
+			stored.DeletedUser, stored.DeletedAt = true, &old
+			if err := um.UpdateUserByID(stored); err != nil {
+				t.Fatal(err)
+			}
+			mark := filepath.Join(dir, NextUserIDFile)
+			if err := os.Remove(mark); err != nil {
+				t.Fatal(err)
+			}
+			if err := bad(mark); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := um.PurgeDeletedUsers(1); err == nil {
+				t.Error("purged with a bad mark")
+			}
+			if _, ok := um.GetUserByID(gone.ID); !ok {
+				t.Error("the account went though the purge failed")
+			}
+
+			again, err := NewUserManager(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := again.AddUser("password2", "Newcomer", "New Person", ""); !errors.Is(err, ErrUserIDMark) {
+				t.Errorf("AddUser with a bad mark: %v", err)
+			}
+		})
+	}
+}
+
+// The mark is past the new account's ID before the account is saved.
+func TestAddUserStoresTheMarkFirst(t *testing.T) {
+	dir := t.TempDir()
+	um, err := NewUserManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := um.AddUser("password1", "Someone", "Some One", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := readNextUserID(filepath.Join(dir, "users.json")); err != nil || got <= u.ID {
+		t.Errorf("mark = %d (%v), want past %d", got, err, u.ID)
 	}
 }

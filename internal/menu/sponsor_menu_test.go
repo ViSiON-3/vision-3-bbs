@@ -1202,3 +1202,21 @@ func TestSponsorEditAreaAreaType(t *testing.T) {
 		}
 	}
 }
+
+// Enter on the Sponsor field keeps the sponsor's account, even after it was
+// renamed and someone else registered the old handle (#1020).
+func TestSponsorEditAreaEnterKeepsRenamedSponsor(t *testing.T) {
+	env := sponsorNewEnv(t) // area 1 sponsored by Caller (#2)
+	renamed, _ := env.um.GetUserByID(2)
+	renamed.Handle = "Carl"
+	if err := env.um.UpdateUserByID(renamed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.um.AddUser("password1", "Caller", "New Person", ""); err != nil {
+		t.Fatal(err)
+	}
+	env.runCmd("SPONSOREDITAREA", env.sysop, "", "s\rq")
+	if got := sponsorDiskArea(env, 1); got.SponsorID != 2 {
+		t.Errorf("sponsor = %q #%d, want account #2 kept", got.Sponsor, got.SponsorID)
+	}
+}

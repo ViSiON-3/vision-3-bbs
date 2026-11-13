@@ -467,8 +467,8 @@ func (cw *ConfigWatcher) applyMessageAreas() error {
 		return err
 	}
 	// A sponsor set by name in the config editor or helper arrives unbound.
-	bindSponsors(cw.userMgr, cw.menuExecutor.MessageMgr)
-	return nil
+	// A failure is returned so the reload is tried again.
+	return bindSponsors(cw.userMgr, cw.menuExecutor.MessageMgr)
 }
 
 // validateV3Net is the signal-time check for v3net.json: parse only.

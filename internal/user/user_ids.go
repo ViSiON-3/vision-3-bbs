@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -28,25 +27,32 @@ func nextUserIDPath(usersPath string) string {
 	return filepath.Join(filepath.Dir(usersPath), NextUserIDFile)
 }
 
-// readNextUserID is the stored mark, or 0 when there is none or it can't be
-// read; the caller then has only users.json to go on.
-func readNextUserID(usersPath string) int {
+// errNoMark is readNextUserID's result for a mark that has never been
+// written: a board from before the mark, or a new one.
+var errNoMark = errors.New("no next user ID stored")
+
+// readNextUserID is the stored mark. A mark that has never been written
+// returns errNoMark, and the caller has only users.json to go on. Any other
+// error, a mark that can't be read or doesn't hold a number, is returned as
+// it is: the mark may be higher than any ID left in users.json, and guessing
+// would hand out retired IDs.
+func readNextUserID(usersPath string) (int, error) {
 	if usersPath == "" {
-		return 0
+		return 0, errNoMark
 	}
-	data, err := os.ReadFile(nextUserIDPath(usersPath))
+	path := nextUserIDPath(usersPath)
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, errNoMark
+	}
 	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			slog.Warn("can't read the next user ID", "path", nextUserIDPath(usersPath), "error", err)
-		}
-		return 0
+		return 0, fmt.Errorf("reading %s: %w", path, err)
 	}
 	n, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil || n < 1 {
-		slog.Warn("ignoring a bad next user ID", "path", nextUserIDPath(usersPath), "value", strings.TrimSpace(string(data)))
-		return 0
+		return 0, fmt.Errorf("%s holds %q, not a user ID; put the next unused ID in it (one more than the highest ever given out)", path, strings.TrimSpace(string(data)))
 	}
-	return n
+	return n, nil
 }
 
 // raiseNextUserID stores next as the mark unless the stored one is already
@@ -68,7 +74,11 @@ func raiseNextUserID(usersPath string, next int) error {
 		return fmt.Errorf("locking %s: %w", path, err)
 	}
 	defer lock.Release()
-	if next <= readNextUserID(usersPath) {
+	stored, err := readNextUserID(usersPath)
+	if err != nil && !errors.Is(err, errNoMark) {
+		return err // never overwrite a mark that couldn't be read
+	}
+	if next <= stored {
 		return nil
 	}
 	return writeFileAtomic(path, []byte(strconv.Itoa(next)+"\n"), 0o600)
@@ -87,11 +97,13 @@ func RecordUserIDs(usersPath string, users []*User) error {
 	return raiseNextUserID(usersPath, maxID+1)
 }
 
-// noteNextUserID stores um.nextUserID as the mark, logging a failure: the
-// account is already saved, and the mark is put right on the next start
-// unless the newest account is purged first. Called with um.mu held.
-func (um *UserMgr) noteNextUserID() {
-	if err := raiseNextUserID(um.path, um.nextUserID); err != nil {
-		slog.Error("can't store the next user ID; a purged account's ID could be reused", "path", nextUserIDPath(um.path), "error", err)
-	}
+// noteNextUserID stores um.nextUserID as the mark. Called with um.mu held.
+func (um *UserMgr) noteNextUserID() error {
+	return raiseNextUserID(um.path, um.nextUserID)
 }
+
+// ErrUserIDMark is returned by AddUser when the next user ID can't be
+// trusted: next_user_id couldn't be read, or held something other than an
+// ID, when the users were loaded. No account is created until it is put
+// right and the BBS restarted.
+var ErrUserIDMark = errors.New("the next user ID can't be read, so no account can be created")

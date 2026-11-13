@@ -520,6 +520,9 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			switch {
 			case newHandle == "-":
 				edited.Sponsor, edited.SponsorID = "", 0
+			case edited.KeepsSponsorBinding(newHandle):
+				// Enter (or the same name): the sponsor stays the account
+				// it is, even if another account now has that handle.
 			case newHandle != "":
 				if userManager != nil {
 					if sponsor, exists := userManager.GetUser(newHandle); !exists {

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
@@ -27,13 +28,18 @@ func accountIDFor(um *user.UserMgr) func(string) int {
 
 // bindSponsors binds message area sponsors named only by handle to their
 // accounts (#1020). Called at startup and after message_areas.json reloads.
-func bindSponsors(um *user.UserMgr, mm *message.MessageManager) {
+// An area it couldn't bind has no sponsor until it is (SponsoredBy needs an
+// ID), so a failure grants nothing; the error goes back to the caller so the
+// config watcher tries the reload again.
+func bindSponsors(um *user.UserMgr, mm *message.MessageManager) error {
 	if um == nil || mm == nil {
-		return
+		return nil
 	}
 	if _, _, err := mm.BindSponsors(accountIDFor(um)); err != nil {
-		slog.Error("binding area sponsors to accounts", "error", err)
+		slog.Error("binding area sponsors to accounts failed; the areas left unbound have no sponsor until it succeeds", "error", err)
+		return err
 	}
+	return nil
 }
 
 // bindUploaders binds file records from before uploader IDs to the
@@ -42,9 +48,11 @@ func bindUploaders(um *user.UserMgr, fm *file.FileManager) {
 	if um == nil || fm == nil {
 		return
 	}
+	// A record left unbound is nobody's to edit until a later start binds
+	// it (UploadedByAccount needs an ID), so a failure grants nothing.
 	bound, unowned, err := fm.BindUploaders(accountIDFor(um))
 	if err != nil {
-		slog.Error("binding uploads to accounts", "error", err)
+		slog.Error("binding uploads to accounts failed; the uploads left unbound can be edited only by co-sysops until the next start binds them", "error", err)
 	}
 	if bound+unowned > 0 {
 		slog.Info("uploads bound to accounts", "bound", bound, "no_account", unowned)
@@ -105,4 +113,38 @@ func checkSponsors(configDir, root string, add func(string, doctorSeverity, stri
 	if problems == 0 {
 		add(name, doctorOK, "every sponsor is bound to a live account, or will be at the next start", "")
 	}
+}
+
+// checkUserIDMark adds doctor's finding on data/users/next_user_id (#1020):
+// it must hold a number past every user ID, or the BBS refuses new accounts
+// rather than risk giving out a purged account's ID.
+func checkUserIDMark(root string, add func(string, doctorSeverity, string, string)) {
+	const name = "user ID mark"
+	path := filepath.Join(root, "data", "users", user.NextUserIDFile)
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		add(name, doctorInfo, "data/users/next_user_id is absent; the BBS writes it at its next start", "")
+		return
+	}
+	n, perr := 0, err
+	if err == nil {
+		n, perr = strconv.Atoi(strings.TrimSpace(string(data)))
+	}
+	if perr != nil || n < 1 {
+		add(name, doctorFail, "data/users/next_user_id can't be read or doesn't hold a user ID, so the BBS refuses new accounts",
+			"Write the next unused user ID into it: one more than the highest ID ever given out, including purged accounts.")
+		return
+	}
+	var users []struct {
+		ID int `json:"id"`
+	}
+	if data, err := os.ReadFile(filepath.Join(root, "data", "users", "users.json")); err == nil && json.Unmarshal(data, &users) == nil {
+		for _, u := range users {
+			if u.ID >= n {
+				add(name, doctorWarn, fmt.Sprintf("data/users/next_user_id is %d, but account #%d exists; the BBS raises it at its next start", n, u.ID), "")
+				return
+			}
+		}
+	}
+	add(name, doctorOK, fmt.Sprintf("the next user ID is %d", n), "")
 }

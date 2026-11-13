@@ -213,13 +213,14 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 			fieldDef{
 				Label: "Sponsor", Help: "Handle of the echo sponsor/moderator (optional)", Type: ftString, Col: 3, Row: 19, Width: 30,
 				Get: func() string { return a.Sponsor },
-				// Entering the sponsor, even unchanged, sets it again:
-				// the BBS binds the name to the account holding it when it
-				// next loads the areas (#1020). That is how a sponsor bound
-				// to nobody, or to an account that has since given up the
-				// handle, is put right.
+				// A new name, or the same one while the area is bound to
+				// nobody, is bound by the BBS to the account holding it
+				// when it next loads the areas (#1020). The same name on a
+				// working binding keeps it (see KeepsSponsorBinding).
 				Set: func(val string) error {
-					a.Sponsor, a.SponsorID = val, 0
+					if !a.KeepsSponsorBinding(val) {
+						a.Sponsor, a.SponsorID = val, 0
+					}
 					return nil
 				},
 			},

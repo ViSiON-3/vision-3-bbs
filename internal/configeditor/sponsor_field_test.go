@@ -6,9 +6,10 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
 
-// Entering the sponsor, even the same name, clears its account binding, so
-// the BBS binds it again (#1020): this is how a sponsor bound to nobody is
-// put right once the account exists.
+// The same name rebinds an area bound to nobody (that is how it's put right
+// once the account exists) but keeps a working binding, so Enter on the
+// field can't hand the area to someone who took a renamed sponsor's old
+// handle. A new name is always bound afresh (#1020).
 func TestSponsorFieldClearsBinding(t *testing.T) {
 	m := configuredModel()
 	m.recordEditIdx, m.recordType = 0, "msgarea"
@@ -27,6 +28,9 @@ func TestSponsorFieldClearsBinding(t *testing.T) {
 		t.Errorf("same name: sponsor %q, id %d, err %v", a.Sponsor, a.SponsorID, err)
 	}
 	a.SponsorID = 4
+	if err := set("late"); err != nil || a.SponsorID != 4 {
+		t.Errorf("same name on a binding: id %d, err %v; want 4 kept", a.SponsorID, err)
+	}
 	if err := set("New"); err != nil || a.Sponsor != "New" || a.SponsorID != 0 {
 		t.Errorf("new name: sponsor %q, id %d, err %v", a.Sponsor, a.SponsorID, err)
 	}

@@ -198,3 +198,18 @@ func TestAreasSetSameSponsorRebinds(t *testing.T) {
 		t.Errorf("sponsor = %q, id %d; want Late, 0", got.Sponsor, got.SponsorID)
 	}
 }
+
+// The same name on a working binding keeps it: re-running a command can't
+// hand the area to whoever took a renamed sponsor's old handle.
+func TestAreasSetSameSponsorKeepsBinding(t *testing.T) {
+	dir := setupAreasConfig(t)
+	g := readAreas(t, dir)["GENERAL"]
+	g.Sponsor, g.SponsorID = "Alice", 10
+	writeJSONFile(t, filepath.Join(dir, "message_areas.json"), []message.MessageArea{g})
+	if rc := runAreasSet([]string{"--config", dir, "--tag", "GENERAL", "--sponsor", "alice", "--quiet"}); rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	if got := readAreas(t, dir)["GENERAL"]; got.SponsorID != 10 {
+		t.Errorf("sponsor id = %d, want 10 kept", got.SponsorID)
+	}
+}
