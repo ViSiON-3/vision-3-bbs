@@ -12,12 +12,30 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// fileLightbar sysop-only commands: edit description, kill, move, rename —
-// plus the pure decision helpers they share.
+// fileLightbar file-management commands: edit description, kill, move,
+// rename — plus the pure decision helpers they share. They are offered to
+// whoever manages the area (files.manage: a co-sysop, or a role granting it
+// there, #1044), and each one checks again, against the stored record and
+// the area as they are, just before it changes anything.
+
+// msgNoLongerManage is the notice when files.manage was taken away while
+// the caller was at a prompt.
+const msgNoLongerManage = "\r\n|01You can no longer manage files in this area. Nothing was changed.|07\r\n"
+
+// recheckManage decides files.manage in areaID again just before a change,
+// telling the caller when it has been taken away.
+func (lb *fileLightbar) recheckManage(areaID int) (perm.Decision, bool) {
+	d := lb.e.fileManagement(lb.userManager, lb.currentUser, areaID)
+	if !d.Allowed {
+		lb.errMsgPause(msgNoLongerManage)
+	}
+	return d, d.Allowed
+}
 
 // resolveTargetArea resolves a user-typed "move to area" input to a target
 // area: numeric input is looked up by area ID, anything else by area tag.
@@ -102,9 +120,15 @@ func (lb *fileLightbar) editDescription(frame *lbFrame) {
 	newDesc, readErr := readLineFromSessionIHAllowAbort(lb.s, lb.terminal)
 	lb.endFooterPrompt()
 	if readErr == nil && newDesc != "" {
+		d, ok := lb.recheckManage(lb.currentAreaID)
+		if !ok {
+			frame.needFullRedraw = true
+			return
+		}
 		if updErr := lb.e.FileMgr.UpdateFileDescription(rec.ID, newDesc); updErr != nil {
 			slog.Error("failed to update description", "node", lb.nodeNumber, "file", rec.Filename, "error", updErr)
 		} else {
+			logFileAction(d, "description changed", lb.nodeNumber, lb.currentUser.Handle, rec)
 			lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
 		}
 	}
@@ -128,10 +152,16 @@ func (lb *fileLightbar) killFile(frame *lbFrame) (exit bool, result *user.User, 
 		return false, nil, "", nil
 	}
 	if proceed {
+		d, ok := lb.recheckManage(lb.currentAreaID)
+		if !ok {
+			frame.needFullRedraw = true
+			return false, nil, "", nil
+		}
 		if delErr := lb.e.FileMgr.DeleteFileRecord(rec.ID, true); delErr != nil {
 			slog.Error("failed to delete file", "node", lb.nodeNumber, "file", rec.Filename, "error", delErr)
 		} else {
 			slog.Info("sysop deleted file from area", "node", lb.nodeNumber, "file", rec.Filename, "area", lb.currentAreaID)
+			logFileAction(d, "deleted", lb.nodeNumber, lb.currentUser.Handle, rec)
 			// Remove from user's tag list so stale IDs don't reach batch download.
 			filtered := lb.currentUser.TaggedFileIDs[:0]
 			for _, tid := range lb.currentUser.TaggedFileIDs {
@@ -166,6 +196,12 @@ func (lb *fileLightbar) moveFile(frame *lbFrame) (exit bool, result *user.User, 
 		frame.needFullRedraw = true
 		return false, nil, "", nil
 	}
+	// A move needs files.manage in the area it goes to as well (#1044).
+	if !lb.e.fileManagement(lb.userManager, lb.currentUser, targetAreaID).Allowed {
+		lb.errMsgPause(fmt.Sprintf("\r\n|01You don't manage the files in %s.|07\r\n", callerText(targetArea.Name)))
+		frame.needFullRedraw = true
+		return false, nil, "", nil
+	}
 	confirmPrompt := fmt.Sprintf("Move %s to %s?", callerText(rec.Filename), targetArea.Name)
 	_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
 	tw, th := getTerminalSize(lb.s)
@@ -179,10 +215,19 @@ func (lb *fileLightbar) moveFile(frame *lbFrame) (exit bool, result *user.User, 
 		return false, nil, "", nil
 	}
 	if proceed {
+		d, ok := lb.recheckManage(lb.currentAreaID)
+		if ok {
+			_, ok = lb.recheckManage(targetAreaID)
+		}
+		if !ok {
+			frame.needFullRedraw = true
+			return false, nil, "", nil
+		}
 		if mvErr := lb.e.FileMgr.MoveFileRecord(rec.ID, targetAreaID); mvErr != nil {
 			slog.Error("failed to move file to area", "node", lb.nodeNumber, "file", rec.Filename, "area", targetAreaID, "error", mvErr)
 		} else {
 			slog.Info("sysop moved file to area", "node", lb.nodeNumber, "file", rec.Filename, "area", targetAreaID, "tag", targetArea.Tag)
+			logFileAction(d, "moved", lb.nodeNumber, lb.currentUser.Handle, rec, "to_area", targetAreaID)
 			lb.refreshFileList()
 		}
 	}
@@ -205,6 +250,11 @@ func (lb *fileLightbar) renameFile(frame *lbFrame) (exit bool, result *user.User
 	newName, validateErrMsg := validateNewName(newNameInput, lb.allFiles, rec.ID)
 	if validateErrMsg != "" {
 		lb.errMsgPause(validateErrMsg)
+		frame.needFullRedraw = true
+		return false, nil, "", nil
+	}
+	d, ok := lb.recheckManage(lb.currentAreaID)
+	if !ok {
 		frame.needFullRedraw = true
 		return false, nil, "", nil
 	}
@@ -242,6 +292,7 @@ func (lb *fileLightbar) renameFile(frame *lbFrame) (exit bool, result *user.User
 		}
 	} else {
 		slog.Info("sysop renamed file in area", "node", lb.nodeNumber, "from", rec.Filename, "to", newName, "area", lb.currentAreaID)
+		logFileAction(d, "renamed", lb.nodeNumber, lb.currentUser.Handle, rec, "to", newName)
 		lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
 	}
 	frame.needFullRedraw = true

@@ -463,7 +463,7 @@ func permDetail(d perm.Decision, u *user.User, ctx Context) string {
 	if d.Area != "" {
 		where = " in " + d.Area
 	} else if perm.IsScoped(d.Permission) {
-		where = " with no current message area"
+		where = " with no current " + perm.KindOf(d.Permission).String()
 	}
 	switch {
 	case d.Level && d.LevelOf == perm.CoSysOpLevel:
@@ -474,7 +474,7 @@ func permDetail(d perm.Decision, u *user.User, ctx Context) string {
 		return fmt.Sprintf("has %s%s through %s", d.Permission, where, d.Source())
 	case u.DeletedUser:
 		return fmt.Sprintf("doesn't have %s: the account is deleted", d.Permission)
-	case perm.IsScoped(d.Permission) && strings.EqualFold(d.Area, perm.PrivateMailTag):
+	case perm.IsScoped(d.Permission) && perm.KindOf(d.Permission) == perm.MessageAreas && strings.EqualFold(d.Area, perm.PrivateMailTag):
 		return fmt.Sprintf("doesn't have %s in %s: below its level, nothing grants it in private mail", d.Permission, d.Area)
 	}
 	threshold, name := ctx.SysOpLevel, "sysOpLevel"

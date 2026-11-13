@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -21,9 +22,11 @@ const maxUploadDescription = 60
 
 // mayEditUpload reports whether u may change rec's description: the account
 // that uploaded it, matched by ID so a new caller who takes a purged or
-// renamed uploader's handle gets nothing (#1020), or a co-sysop.
-func mayEditUpload(rec *file.FileRecord, u *user.User, coSysOpLevel int) bool {
-	return u.AccessLevel >= coSysOpLevel || rec.UploadedByAccount(u.ID)
+// renamed uploader's handle gets nothing (#1020), or whoever manages the
+// files in its area (manages: files.manage there, which a co-sysop holds
+// everywhere, #1044).
+func mayEditUpload(rec *file.FileRecord, u *user.User, manages bool) bool {
+	return manages || rec.UploadedByAccount(u.ID)
 }
 
 // runEditUpload is EDITUPLOAD, ViSiON/2's "Edit Upload" (FE): a caller
@@ -78,8 +81,9 @@ func runEditUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		uiPause(1 * time.Second)
 		return currentUser, "", nil
 	}
-	coSysOp := e.GetServerConfig().CoSysOpLevel
-	if !mayEditUpload(rec, currentUser, coSysOp) {
+	// Who may manage the file's area, decided afresh each time it is asked.
+	manages := func(areaID int) perm.Decision { return e.fileManagement(c.userManager, currentUser, areaID) }
+	if !mayEditUpload(rec, currentUser, manages(rec.AreaID).Allowed) {
 		return notice("\r\n|01That file wasn't uploaded by you.|07\r\n")
 	}
 
@@ -101,8 +105,10 @@ func runEditUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	// on disk: the sysop may have changed it since it was looked up. A file
 	// deleted or moved to another area meanwhile isn't found.
 	saved := false
+	var via perm.Decision
 	err = e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
-		if mayEditUpload(r, currentUser, coSysOp) {
+		via = manages(r.AreaID)
+		if mayEditUpload(r, currentUser, via.Allowed) {
 			r.Description = desc
 			saved = true
 		}
@@ -113,6 +119,9 @@ func runEditUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	if !saved {
 		return notice("\r\n|01That file was changed elsewhere. Nothing was saved.|07\r\n")
+	}
+	if via.Allowed && !rec.UploadedByAccount(currentUser.ID) {
+		logFileAction(via, "description changed", nodeNumber, currentUser.Handle, *rec)
 	}
 	slog.Info("caller edited an upload's description", "node", nodeNumber, "handle", currentUser.Handle, "file", rec.Filename)
 	return notice("\r\n|07Description saved.\r\n")

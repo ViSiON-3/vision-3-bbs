@@ -17,12 +17,13 @@ function whether or not any roles are defined.
 
 ## Permissions
 
-A permission is an admin action the BBS defines. There is one so far:
+A permission is an admin action the BBS defines:
 
 | Permission | What it allows |
 |---|---|
 | `users.validate` | Review accounts waiting for validation and approve them. Approving sets the account validated and raises its level to `regularUserLevel` if it is below that. |
 | `messages.moderate` | Delete any message in a message area from the reader. A role can grant it in some areas or conferences only (see [Limiting a grant to some areas](#limiting-a-grant-to-some-areas)). It never covers private mail. |
+| `files.manage` | Look after the files in a file area: edit any file's description, delete, move and rename files, and work through the upload review queue. A role can grant it in some file areas or conferences only. |
 
 `users.validate` is approval and nothing more. In the queue, someone who has
 it below SysOp level sees each pending account's handle, real name,
@@ -41,8 +42,20 @@ Every delete made through a role or a sponsorship is logged at `INFO` as
 `message deleted by moderator`, with the area, the message, its author and
 subject, and the grant that allowed it.
 
-More permissions (file area management) are planned; each will be listed
-here.
+`files.manage` is what a co-SysOp could already do with the files in any
+area. In the file list (lightbar), the holder gets the management keys
+(`*` shows them): **Edit** description, **Kill**, **Move** and **Rename**,
+in the areas the grant covers. **Move** needs the grant in the area the
+file goes to as well. `EDITUPLOAD` lets them change any file's
+description in those areas, not only their own uploads. The review queue
+(`EDITFILERECORD`) opens for them and lists only those areas. The areas
+themselves (their ACS, path or name) stay with the SysOp.
+
+Every change made through a role is logged at `INFO` as `file deleted by
+file manager` (or `moved`, `renamed`, `description changed`), with the file,
+the area and the grant that allowed it. Each action checks the grant again
+just before it changes anything, so one taken away while the holder is at a
+prompt stops it.
 
 ## roles.json
 
@@ -70,8 +83,9 @@ nobody.
 ### Limiting a grant to some areas
 
 A permission can be written as an object instead of a name. A scoped
-permission (`messages.moderate`) then applies only in the areas it lists by
-tag, and in every area of the conferences it lists by tag:
+permission then applies only in the areas it lists by tag, and in every area
+of the conferences it lists by tag. The areas are of the permission's kind:
+message areas for `messages.moderate`, file areas for `files.manage`:
 
 ```json
 {
@@ -79,6 +93,13 @@ tag, and in every area of the conferences it lists by tag:
     "description": "Moderates fsxNet and the local general area",
     "permissions": [
         {"permission": "messages.moderate", "conferences": ["FSXNET"], "areas": ["GENERAL"]}
+    ]
+},
+{
+    "name": "librarian",
+    "description": "Looks after the utilities and the upload drop box",
+    "permissions": [
+        {"permission": "files.manage", "areas": ["UTILS", "UPLOADS"]}
     ]
 }
 ```
@@ -169,6 +190,11 @@ follow roles:
   since it uses the same check as the command itself.
 - `PERM:messages.moderate` answers for the caller's current message area:
   a co-SysOp, the area's sponsor, or a role that grants it there.
+- `PERM:files.manage` answers for the caller's current file area: a
+  co-SysOp, or a role that grants it there. The shipped file menu's `E`
+  opens the review queue for SysOps only (`ACS: SYSOP`). To give a holder
+  the queue, add a command for `RUN:EDITFILERECORD` with
+  `ACS: PERM:files.manage`.
 - `ROLE:validator` passes for a member of the role. A SysOp is not a member
   of a role unless it is assigned to them.
 - `GROUP:fsxnet-ops` passes for a member of the group, in the same way.
@@ -208,9 +234,10 @@ in `notes`, for example `users.validate via role validator`.
 
 Roles don't replace or widen what a level or a sponsorship already gives.
 
-- A co-SysOp holds `messages.moderate` in every area by level, as before,
-  and no other permission unless a role grants it: `users.validate` isn't
-  theirs by level, any more than validation was before.
+- A co-SysOp holds `messages.moderate` and `files.manage` in every area by
+  level, as before, and no other permission unless a role grants it:
+  `users.validate` isn't theirs by level, any more than validation was
+  before.
 - A message-area [sponsor](users/sponsor-menus.md) keeps their area: they
   hold `messages.moderate` there, and only the sponsor and co-SysOps can
   change its settings. A role that grants moderation in an area doesn't

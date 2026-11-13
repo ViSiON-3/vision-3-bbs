@@ -32,10 +32,16 @@ var (
 	// for a user: their current area, with its conference and sponsor. nil
 	// until an executor is made, when PERM reads the tags on the record.
 	acsAreaScope atomic.Pointer[func(*user.User) perm.Scope]
+	// acsFileScope is acsAreaScope for permissions scoped to file areas:
+	// the user's current file area, with its conference.
+	acsFileScope atomic.Pointer[func(*user.User) perm.Scope]
 )
 
 // setACSAreaScope sets how acsContext finds a user's current message area.
 func setACSAreaScope(f func(*user.User) perm.Scope) { acsAreaScope.Store(&f) }
+
+// setACSFileScope sets how acsContext finds a user's current file area.
+func setACSFileScope(f func(*user.User) perm.Scope) { acsFileScope.Store(&f) }
 
 func init() {
 	setACSSysOpLevels(config.DefaultSysOpLevel, config.DefaultCoSysOpLevel)
@@ -74,6 +80,9 @@ func acsContext(u *user.User, s ssh.Session, startTime time.Time) acs.Context {
 	}
 	if f := acsAreaScope.Load(); f != nil && u != nil {
 		ctx.Scope = func() perm.Scope { return (*f)(u) }
+	}
+	if f := acsFileScope.Load(); f != nil && u != nil {
+		ctx.FileScope = func() perm.Scope { return (*f)(u) }
 	}
 	return ctx
 }

@@ -13,13 +13,17 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// runEditFileRecord implements the EDITFILERECORD sysop command for reviewing
+// runEditFileRecord implements the EDITFILERECORD review queue for reviewing
 // uploaded files one at a time with actions to change description, rename,
-// delete, move, skip, or quit.
+// delete, move, skip, or quit. It is open to whoever manages a file area
+// (files.manage: a co-sysop, or a role granting it, #1044), and lists only
+// the areas they manage. Each action checks again, against the stored
+// record and the area as they are, just before it changes anything.
 func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
 	s := c.s
@@ -32,9 +36,19 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	if !e.isCoSysOpOrAbove(currentUser) {
-		wv(terminal, "\r\n|04CoSysOp access required.\r\n", outputMode)
+	um := c.userManager
+	managed := e.managedFileAreas(um, currentUser)
+	if len(managed) == 0 && !e.isCoSysOpOrAbove(storedActor(um, currentUser)) {
+		wv(terminal, "\r\n|04You don't manage any file areas.\r\n", outputMode)
 		return currentUser, "", nil
+	}
+	// mayAct decides files.manage in areaID again just before a change.
+	mayAct := func(areaID int) (perm.Decision, bool) {
+		d := e.fileManagement(um, currentUser, areaID)
+		if !d.Allowed {
+			wv(terminal, "\r\n|12You can no longer manage files in this area. Nothing was changed.\r\n", outputMode)
+		}
+		return d, d.Allowed
 	}
 
 	// Ask whether to scan all areas or current only.
@@ -49,13 +63,15 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 	// Collect unreviewed files from chosen areas.
 	var unreviewed []file.FileRecord
 	if scanAll {
-		for _, area := range e.FileMgr.ListAreas() {
+		for _, area := range managed {
 			unreviewed = append(unreviewed, e.FileMgr.GetUnreviewedFiles(area.ID)...)
 		}
 	} else {
 		currentAreaID := currentUser.CurrentFileAreaID
-		if currentAreaID > 0 {
-			unreviewed = e.FileMgr.GetUnreviewedFiles(currentAreaID)
+		for _, area := range managed {
+			if area.ID == currentAreaID {
+				unreviewed = e.FileMgr.GetUnreviewedFiles(currentAreaID)
+			}
 		}
 	}
 
@@ -83,20 +99,20 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 
 		switch strings.ToUpper(action) {
 		case "C":
-			if err := editFileChangeDescription(e, s, terminal, rec, nodeNumber, outputMode); err != nil {
+			if err := editFileChangeDescription(e, s, terminal, rec, currentUser.Handle, mayAct, nodeNumber, outputMode); err != nil {
 				return currentUser, "", err
 			}
 			markReviewed = true
 
 		case "R":
-			renamed, err := editFileRename(e, s, terminal, rec, nodeNumber, outputMode)
+			renamed, err := editFileRename(e, s, terminal, rec, currentUser.Handle, mayAct, nodeNumber, outputMode)
 			if err != nil {
 				return currentUser, "", err
 			}
 			markReviewed = renamed // Only offer review after a rename that happened.
 
 		case "D":
-			deleted, err := editFileDelete(e, s, terminal, rec, nodeNumber, outputMode)
+			deleted, err := editFileDelete(e, s, terminal, rec, currentUser.Handle, mayAct, nodeNumber, outputMode)
 			if err != nil {
 				return currentUser, "", err
 			}
@@ -105,7 +121,7 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 
 		case "M":
-			moved, err := editFileMove(e, s, terminal, rec, nodeNumber, outputMode)
+			moved, err := editFileMove(e, s, terminal, rec, currentUser.Handle, managed, mayAct, nodeNumber, outputMode)
 			if err != nil {
 				return currentUser, "", err
 			}
@@ -128,6 +144,14 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 				return currentUser, "", err
 			}
 			if strings.EqualFold(reviewInput, "Y") {
+				// A moved file is reviewed in the area it is in now.
+				areaID := rec.AreaID
+				if cur, gErr := e.FileMgr.GetFileRecordByID(rec.ID); gErr == nil && cur != nil {
+					areaID = cur.AreaID
+				}
+				if _, ok := mayAct(areaID); !ok {
+					continue
+				}
 				updateErr := e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
 					r.Reviewed = true
 				})
@@ -178,7 +202,7 @@ func editFileShowAndPrompt(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 }
 
 // editFileChangeDescription prompts for a new description and updates the record.
-func editFileChangeDescription(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, nodeNumber int, outputMode ansi.OutputMode) error {
+func editFileChangeDescription(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, handle string, mayAct fileActGuard, nodeNumber int, outputMode ansi.OutputMode) error {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|15New description: |07")), outputMode)
 	newDesc, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
@@ -188,11 +212,17 @@ func editFileChangeDescription(e *MenuExecutor, s ssh.Session, terminal *term.Te
 	if newDesc == "" {
 		return nil
 	}
+	d, ok := mayAct(rec.AreaID)
+	if !ok {
+		return nil
+	}
 	updateErr := e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
 		r.Description = newDesc
 	})
 	if updateErr != nil {
 		slog.Error("failed to update description", "node", nodeNumber, "file", rec.Filename, "error", updateErr)
+	} else {
+		logFileAction(d, "description changed", nodeNumber, handle, rec)
 	}
 	return nil
 }
@@ -203,7 +233,7 @@ const editFileRenameFailed = "\r\n|12Rename failed.\r\n"
 // editFileRename prompts for a new filename, validates it, renames on disk, and updates the record.
 // It reports whether the file was renamed; a cancelled, invalid or failed
 // rename returns false.
-func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, nodeNumber int, outputMode ansi.OutputMode) (bool, error) {
+func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, handle string, mayAct fileActGuard, nodeNumber int, outputMode ansi.OutputMode) (bool, error) {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|15New filename: |07")), outputMode)
 	newName, err := readLineFromSessionIH(s, terminal)
 	if err != nil {
@@ -223,6 +253,10 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 	// The same name is not a rename (a case-only change still is): leave the
 	// disk alone so the caller doesn't treat it as a change to review.
 	if newName == rec.Filename {
+		return false, nil
+	}
+	d, ok := mayAct(rec.AreaID)
+	if !ok {
 		return false, nil
 	}
 
@@ -254,6 +288,7 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 		return false, nil
 	}
 
+	logFileAction(d, "renamed", nodeNumber, handle, rec, "to", safeName)
 	e.writeString(terminal, outputMode, e.Strings().SysopReviewRenamed)
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
 	return true, nil
@@ -261,12 +296,16 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 
 // editFileDelete confirms deletion and removes the file record and disk file.
 // Returns true if the file was deleted.
-func editFileDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, nodeNumber int, outputMode ansi.OutputMode) (bool, error) {
+func editFileDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, handle string, mayAct fileActGuard, nodeNumber int, outputMode ansi.OutputMode) (bool, error) {
 	confirm, err := editFilePromptYN(e, s, terminal, "\r\n|12Delete this file? |07[|15Y|07/|15N|07]: ", outputMode)
 	if err != nil {
 		return false, err
 	}
 	if !strings.EqualFold(confirm, "Y") {
+		return false, nil
+	}
+	d, ok := mayAct(rec.AreaID)
+	if !ok {
 		return false, nil
 	}
 
@@ -275,15 +314,15 @@ func editFileDelete(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 		slog.Error("failed to delete file", "node", nodeNumber, "file", rec.Filename, "error", delErr)
 		return false, nil
 	}
+	logFileAction(d, "deleted", nodeNumber, handle, rec)
 	return true, nil
 }
 
-// editFileMove shows a list of areas, prompts for a target, confirms, and moves the file.
+// editFileMove shows the areas the caller manages, prompts for a target,
+// confirms, and moves the file: a move needs files.manage in both areas.
 // It reports whether the file was moved; a cancelled, invalid or failed move
 // returns false.
-func editFileMove(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, nodeNumber int, outputMode ansi.OutputMode) (bool, error) {
-	areas := e.FileMgr.ListAreas()
-
+func editFileMove(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, handle string, areas []file.FileArea, mayAct fileActGuard, nodeNumber int, outputMode ansi.OutputMode) (bool, error) {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|15Available areas:\r\n")), outputMode)
 	for _, a := range areas {
 		if a.ID == rec.AreaID {
@@ -310,7 +349,11 @@ func editFileMove(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec f
 	}
 
 	targetArea, found := e.FileMgr.GetAreaByID(targetID)
-	if !found {
+	listed := false
+	for _, a := range areas {
+		listed = listed || (a.ID == targetID && a.ID != rec.AreaID)
+	}
+	if !found || !listed {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Area not found.\r\n")), outputMode)
 		return false, nil
 	}
@@ -323,6 +366,13 @@ func editFileMove(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec f
 	if !strings.EqualFold(confirm, "Y") {
 		return false, nil
 	}
+	d, ok := mayAct(rec.AreaID)
+	if ok {
+		_, ok = mayAct(targetID)
+	}
+	if !ok {
+		return false, nil
+	}
 
 	moveErr := e.FileMgr.MoveFileRecord(rec.ID, targetID)
 	if moveErr != nil {
@@ -330,8 +380,13 @@ func editFileMove(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec f
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|12Move failed.\r\n")), outputMode)
 		return false, nil
 	}
+	logFileAction(d, "moved", nodeNumber, handle, rec, "to_area", targetID)
 	return true, nil
 }
+
+// fileActGuard decides files.manage in an area again just before a change,
+// and tells the caller when it has been taken away.
+type fileActGuard func(areaID int) (perm.Decision, bool)
 
 // editFilePromptYN writes a prompt and reads a single-line response.
 func editFilePromptYN(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, prompt string, outputMode ansi.OutputMode) (string, error) {

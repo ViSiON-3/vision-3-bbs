@@ -52,13 +52,13 @@ func reloadedFileRecord(t *testing.T, env *menuEnv, id uuid.UUID) *file.FileReco
 }
 
 // TestEditFileRecordRequiresCoSysop pins that EDITFILERECORD refuses a caller
-// below the CoSysOp level without prompting.
+// below the CoSysOp level who manages no file area, without prompting.
 func TestEditFileRecordRequiresCoSysop(t *testing.T) {
 	env := newMenuEnv(t)
 	addReviewUpload(t, env, 1, "SECRET.ZIP", 10)
 
 	r := env.runCmd("EDITFILERECORD", env.caller, "", "Y\r")
-	if !r.has("CoSysOp access required.") {
+	if !r.has("You don't manage any file areas.") {
 		t.Errorf("want the access refusal:\n%s", r.text())
 	}
 	if r.has("SECRET.ZIP") {
