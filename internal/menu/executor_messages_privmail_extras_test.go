@@ -238,3 +238,24 @@ func TestStockMailMenuBindsExtras(t *testing.T) {
 		}
 	}
 }
+
+// A letter its recipient opens between the unsend pre-check and the locked
+// delete is kept, and the sender is told it was read (#1031): "still
+// unread" is decided under the same lock as the delete.
+func TestUnsendReadBeforeTheLock(t *testing.T) {
+	env := newMsgEnv(t)
+	seedPrivmail(env)
+	beforeLockedDelete = func() {
+		if err := env.e.MessageMgr.AdvanceLastRead(privmailAreaID, "Sysop", 2); err != nil {
+			t.Error(err)
+		}
+	}
+	t.Cleanup(func() { beforeLockedDelete = nil })
+	r := env.run(runSentPrivateMail, env.caller, "", "DYQ")
+	if !r.has("Delete this message?", "That mail has been read, so it can't be unsent now. Nothing was deleted.") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	if got := privmailSubjects(env); !strings.Contains(got, "for-sysop") {
+		t.Errorf("PRIVMAIL = %s, want for-sysop kept", got)
+	}
+}

@@ -296,8 +296,11 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	unsendable := func(m *message.DisplayMessage) bool {
 		return inMailbox && unsendableMail(e, currentAreaID, m, currentUser.Handle)
 	}
-	// unsend says whether the caller may unsend m, worked out before the
-	// base is locked: reading the recipient's lastread takes that lock too.
+	// unsend says whether the caller may unsend m: the recipient hasn't read
+	// it. The delete works it out again inside its locked check (#1031):
+	// reading the lastread doesn't take the base's file lock, but advancing
+	// it (the recipient opening the letter) does, so in there the answer
+	// can't change before the delete.
 	mayDelete := func(m *message.DisplayMessage, moderator, unsend bool) bool {
 		return moderator || m.MailFor(currentUser.Handle) || (unsend && m.SentBy(currentUser.Handle))
 	}
@@ -1087,12 +1090,31 @@ readerLoop:
 				// so a role or sponsor taken away between the check above and
 				// the delete stops it. Only the base is locked here, so the
 				// area and the user record can be read.
+				// Whether it is still unread is decided in there too
+				// (#1031): the recipient may have opened it since the check
+				// above, and then it stays.
+				if beforeLockedDelete != nil {
+					beforeLockedDelete()
+				}
+				readMeanwhile := false
 				delErr := e.MessageMgr.DeleteMessageIf(currentAreaID, shown.MsgNum, func(m *message.DisplayMessage) bool {
 					mod = moderates()
-					return message.SameMessage(m, shown) && mayDelete(m, mod.Allowed, unsend)
+					if !message.SameMessage(m, shown) {
+						return false
+					}
+					unsendNow := unsend && unsendable(m)
+					if mayDelete(m, mod.Allowed, unsendNow) {
+						return true
+					}
+					readMeanwhile = unsend && !unsendNow
+					return false
 				})
 				if errors.Is(delErr, message.ErrMessageChanged) {
-					e.showReaderNotice(terminal, outputMode, "|01That message was changed or deleted elsewhere. Nothing was deleted.|07", termHeight)
+					notice := "|01That message was changed or deleted elsewhere. Nothing was deleted.|07"
+					if readMeanwhile {
+						notice = "|01That mail has been read, so it can't be unsent now. Nothing was deleted.|07"
+					}
+					e.showReaderNotice(terminal, outputMode, notice, termHeight)
 					if n, cErr := e.MessageMgr.GetMessageCountForArea(currentAreaID); cErr == nil {
 						totalMsgCount = n
 					}
@@ -1315,3 +1337,8 @@ var headerDisplayNames = map[int]string{
 	13: "Renegade Header",
 	14: "ViSiON-X Grey/White Header",
 }
+
+// beforeLockedDelete, when set, runs between the reader's delete pre-check
+// and the locked delete: a test sets it to change what the locked check
+// sees (#1031). It is nil in the BBS.
+var beforeLockedDelete func()
