@@ -534,13 +534,10 @@ place in its thread.
 - **What:** not a private message, wherever it is. Not a message stored in a
   character set other than UTF-8, nor one whose text isn't valid UTF-8 (an
   older program's raw CP437, or a wrong label): the editor would rewrite
-  its bytes. Not one with any character other than plain ASCII, such as an
-  accented letter or a line-drawing character from a QWK reply, a
-  `v3mail post` or a quote: the editor works in bytes, so a Backspace would
-  cut the character in half. Not one longer than the editor holds, 100
-  lines, nor one with a line wider than its 79 columns, as a QWK or
-  `v3mail post` message can have. In the last three cases the caller is
-  told why.
+  its bytes. Not one longer than the editor holds, 100 lines, nor one with
+  a line wider than its 79 columns, as a QWK or `v3mail post` message can
+  have; the caller is told why. Accented letters and other non-ASCII
+  characters are fine: the editor counts and deletes whole characters.
 - **Checked again on saving:** the right to edit, and that the message is
   still the one shown. If another session edited, deleted or moved it
   meanwhile, or the caller no longer moderates the area, nothing is saved

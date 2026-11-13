@@ -2,6 +2,7 @@ package editor
 
 import (
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -167,12 +168,17 @@ func (mb *MessageBuffer) GetContentLineCount() int {
 	return count
 }
 
-// GetLineLength returns the length of a line
+// Columns are characters (runes), not bytes (#1051): a line can hold
+// multi-byte UTF-8 text from a quote or a posted message, and a column that
+// counted bytes would split a character in half. Each character takes one
+// screen column.
+
+// GetLineLength returns the length of a line in characters.
 func (mb *MessageBuffer) GetLineLength(lineNum int) int {
 	if lineNum < 1 || lineNum > MaxLines {
 		return 0
 	}
-	return len(mb.lines[lineNum])
+	return utf8.RuneCountInString(mb.lines[lineNum])
 }
 
 // InsertChar inserts a character at the specified position (1-based line and col)
@@ -181,7 +187,7 @@ func (mb *MessageBuffer) InsertChar(lineNum, col int, ch rune) bool {
 		return false
 	}
 
-	line := mb.lines[lineNum]
+	line := []rune(mb.lines[lineNum])
 
 	// Ensure col is valid
 	if col < 1 {
@@ -192,19 +198,11 @@ func (mb *MessageBuffer) InsertChar(lineNum, col int, ch rune) bool {
 	}
 
 	// Insert character
-	if col == 1 {
-		line = string(ch) + line
-	} else if col > len(line) {
-		// Pad with spaces if needed and append
-		for len(line) < col-1 {
-			line += " "
-		}
-		line += string(ch)
-	} else {
-		line = line[:col-1] + string(ch) + line[col-1:]
-	}
-
-	mb.lines[lineNum] = line
+	out := make([]rune, 0, len(line)+1)
+	out = append(out, line[:col-1]...)
+	out = append(out, ch)
+	out = append(out, line[col-1:]...)
+	mb.lines[lineNum] = string(out)
 
 	// Update line count if needed
 	if lineNum > mb.lineCount {
@@ -220,13 +218,13 @@ func (mb *MessageBuffer) DeleteChar(lineNum, col int) bool {
 		return false
 	}
 
-	line := mb.lines[lineNum]
+	line := []rune(mb.lines[lineNum])
 	if col < 1 || col > len(line) {
 		return false
 	}
 
 	// Delete character
-	mb.lines[lineNum] = line[:col-1] + line[col:]
+	mb.lines[lineNum] = string(line[:col-1]) + string(line[col:])
 
 	return true
 }
@@ -237,7 +235,7 @@ func (mb *MessageBuffer) OverwriteChar(lineNum, col int, ch rune) bool {
 		return false
 	}
 
-	line := mb.lines[lineNum]
+	line := []rune(mb.lines[lineNum])
 
 	// Ensure col is valid
 	if col < 1 {
@@ -246,16 +244,16 @@ func (mb *MessageBuffer) OverwriteChar(lineNum, col int, ch rune) bool {
 
 	// Pad with spaces if needed
 	for len(line) < col-1 {
-		line += " "
+		line = append(line, ' ')
 	}
 
 	if col > len(line) {
-		line += string(ch)
+		line = append(line, ch)
 	} else {
-		line = line[:col-1] + string(ch) + line[col:]
+		line[col-1] = ch
 	}
 
-	mb.lines[lineNum] = line
+	mb.lines[lineNum] = string(line)
 
 	// Update line count if needed
 	if lineNum > mb.lineCount {
@@ -342,12 +340,12 @@ func (mb *MessageBuffer) SplitLine(lineNum, col int) bool {
 	if col <= 1 {
 		leftPart = ""
 		rightPart = line
-	} else if col > len(line) {
+	} else if r := []rune(line); col > len(r) {
 		leftPart = line
 		rightPart = ""
 	} else {
-		leftPart = line[:col-1]
-		rightPart = line[col-1:]
+		leftPart = string(r[:col-1])
+		rightPart = string(r[col-1:])
 	}
 
 	// Set the current line to the left part
