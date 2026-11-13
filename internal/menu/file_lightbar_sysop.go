@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -76,43 +75,6 @@ func validateNewName(newName string, existingFiles []file.FileRecord, currentID 
 		}
 	}
 	return cleaned, ""
-}
-
-// renameConflict classifies why safeRenameOnDisk refused to rename, so the
-// caller can log and message the user exactly as the original inline case
-// did for each distinct failure.
-type renameConflict int
-
-const (
-	renameOK renameConflict = iota
-	renameTargetExists
-	renameStatFailed
-	renameFailed
-)
-
-// safeRenameOnDisk renames oldPath to newPath, refusing to clobber an
-// untracked file already on disk at the target path (the duplicate check in
-// validateNewName only consults DB records). os.SameFile permits a
-// case-only rename of the same file on a case-insensitive filesystem. A
-// stat error other than "not exist" means we cannot prove the target is
-// safe to overwrite, so it also refuses. renErr is the underlying error the
-// caller should log alongside its own node/file context; it is nil on
-// renameOK and renameTargetExists (which isn't itself an error).
-func safeRenameOnDisk(oldPath, newPath string) (conflict renameConflict, renErr error) {
-	newInfo, statErr := os.Stat(newPath)
-	switch {
-	case statErr == nil:
-		oldInfo, oldStatErr := os.Stat(oldPath)
-		if oldStatErr != nil || !os.SameFile(oldInfo, newInfo) {
-			return renameTargetExists, nil
-		}
-	case !errors.Is(statErr, os.ErrNotExist):
-		return renameStatFailed, statErr
-	}
-	if err := os.Rename(oldPath, newPath); err != nil {
-		return renameFailed, err
-	}
-	return renameOK, nil
 }
 
 // editDescription runs the "e" sysop command: prompt for a new description
@@ -278,49 +240,19 @@ func (lb *fileLightbar) renameFile(frame *lbFrame) (exit bool, result *user.User
 		frame.needFullRedraw = true
 		return false, nil, "", nil
 	}
-	if lb.e.fileRecordGone(rec.ID, lb.currentAreaID) {
+	// One step under the area's lock: the file must still be in this area,
+	// the name free, and the disk and the record change together.
+	renErr := lb.e.FileMgr.RenameFileInArea(rec.ID, lb.currentAreaID, newName)
+	switch {
+	case errors.Is(renErr, file.ErrRecordMoved):
 		lb.errMsgPause(msgFileMovedElsewhere)
 		lb.refreshFileList()
-		frame.needFullRedraw = true
-		return false, nil, "", nil
-	}
-	oldPath, pathErr := lb.e.FileMgr.GetFilePath(rec.ID)
-	if pathErr != nil {
-		slog.Error("failed to resolve path", "node", lb.nodeNumber, "file", rec.Filename, "error", pathErr)
-		frame.needFullRedraw = true
-		return false, nil, "", nil
-	}
-	newPath := filepath.Join(filepath.Dir(oldPath), newName)
-	conflict, renErr := safeRenameOnDisk(oldPath, newPath)
-	switch conflict {
-	case renameTargetExists:
-		slog.Error("rename target already exists on disk", "node", lb.nodeNumber, "path", newPath)
+	case errors.Is(renErr, file.ErrRenameTargetExists):
 		lb.errMsgPause("\r\n|01A file with that name already exists.|07\r\n")
-		frame.needFullRedraw = true
-		return false, nil, "", nil
-	case renameStatFailed:
-		slog.Error("cannot stat rename target", "node", lb.nodeNumber, "path", newPath, "error", renErr)
-		lb.errMsgPause("\r\n|01Rename failed.|07\r\n")
-		frame.needFullRedraw = true
-		return false, nil, "", nil
-	case renameFailed:
+	case renErr != nil:
 		slog.Error("failed to rename file", "node", lb.nodeNumber, "from", rec.Filename, "to", newName, "error", renErr)
 		lb.errMsgPause("\r\n|01Rename failed.|07\r\n")
-		frame.needFullRedraw = true
-		return false, nil, "", nil
-	}
-	if updErr := lb.e.FileMgr.UpdateFileRecordInArea(rec.ID, lb.currentAreaID, func(r *file.FileRecord) {
-		r.Filename = newName
-	}); updErr != nil {
-		slog.Error("failed to update record", "node", lb.nodeNumber, "file", newName, "error", updErr)
-		if rollbackErr := os.Rename(newPath, oldPath); rollbackErr != nil {
-			slog.Error("rollback rename failed (disk/DB inconsistent)", "node", lb.nodeNumber, "file", newName, "error", rollbackErr)
-		}
-		if errors.Is(updErr, file.ErrRecordMoved) {
-			lb.errMsgPause(msgFileMovedElsewhere)
-			lb.refreshFileList()
-		}
-	} else {
+	default:
 		slog.Info("sysop renamed file in area", "node", lb.nodeNumber, "from", rec.Filename, "to", newName, "area", lb.currentAreaID)
 		logFileAction(d, "renamed", lb.nodeNumber, lb.currentUser.Handle, rec, "to", newName)
 		lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)

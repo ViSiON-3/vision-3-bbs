@@ -106,3 +106,96 @@ func TestAreaGuardedUpdateAndMove(t *testing.T) {
 		t.Errorf("record = %+v", got)
 	}
 }
+
+// RenameFileInArea renames on disk and in the record together, only while
+// the file is in the expected area, and never over another file.
+func TestRenameFileInArea(t *testing.T) {
+	dir := t.TempDir()
+	dataDir, configDir := filepath.Join(dir, "data"), filepath.Join(dir, "configs")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal([]FileArea{{ID: 1, Tag: "A", Name: "A", Path: "a"}, {ID: 2, Tag: "B", Name: "B", Path: "b"}})
+	if err := os.WriteFile(filepath.Join(configDir, "file_areas.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fm, err := NewFileManager(dataDir, configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	add := func(area int, name string) uuid.UUID {
+		t.Helper()
+		id := uuid.New()
+		if err := fm.AddFileRecord(FileRecord{ID: id, AreaID: area, Filename: name}); err != nil {
+			t.Fatal(err)
+		}
+		p, _ := fm.GetFilePath(id)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	id := add(1, "OLD.ZIP")
+	add(1, "TAKEN.ZIP")
+	areaA, _ := fm.areaDir(1)
+	if err := os.WriteFile(filepath.Join(areaA, "STRAY.ZIP"), []byte("stray"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		area int
+		name string
+		want error
+	}{
+		{2, "NEW.ZIP", ErrRecordMoved},          // not in area 2
+		{1, "TAKEN.ZIP", ErrRenameTargetExists}, // another record's name
+		{1, "taken.zip", ErrRenameTargetExists}, // ignoring case
+		{1, "STRAY.ZIP", ErrRenameTargetExists}, // a file on disk with no record
+		{1, "../escape.zip", nil},               // refused as a path (checked below)
+	} {
+		err := fm.RenameFileInArea(id, tc.area, tc.name)
+		if tc.want == nil {
+			if err == nil {
+				t.Errorf("rename to %q succeeded", tc.name)
+			}
+			continue
+		}
+		if !errors.Is(err, tc.want) {
+			t.Errorf("rename to %q in area %d: %v, want %v", tc.name, tc.area, err, tc.want)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(areaA, "STRAY.ZIP")); string(b) != "stray" {
+		t.Error("the stray file was overwritten")
+	}
+
+	if err := fm.RenameFileInArea(id, 1, "NEW.ZIP"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := fm.GetFileRecordByID(id)
+	if got.Filename != "NEW.ZIP" {
+		t.Errorf("record name = %q", got.Filename)
+	}
+	if _, err := os.Stat(filepath.Join(areaA, "NEW.ZIP")); err != nil {
+		t.Errorf("file not renamed on disk: %v", err)
+	}
+	// A case-only change is allowed.
+	if err := fm.RenameFileInArea(id, 1, "new.zip"); err != nil {
+		t.Errorf("case-only rename: %v", err)
+	}
+
+	// Moved to area 2, it can't be renamed as area 1's file, and nothing in
+	// area 2 changes.
+	if err := fm.MoveFileRecord(id, 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := fm.RenameFileInArea(id, 1, "SNEAKY.ZIP"); !errors.Is(err, ErrRecordMoved) {
+		t.Errorf("rename after a move: %v", err)
+	}
+	areaB, _ := fm.areaDir(2)
+	if _, err := os.Stat(filepath.Join(areaB, "SNEAKY.ZIP")); !os.IsNotExist(err) {
+		t.Error("the moved file was renamed in its new area")
+	}
+}

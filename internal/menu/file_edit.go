@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -273,35 +272,16 @@ func editFileRename(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec
 	if !ok {
 		return false, nil
 	}
-	if e.fileRecordGone(rec.ID, rec.AreaID) {
+	// One step under the area's lock: the file must still be in the area it
+	// was listed in, the name free, and the disk and the record change
+	// together.
+	renErr := e.FileMgr.RenameFileInArea(rec.ID, rec.AreaID, safeName)
+	switch {
+	case errors.Is(renErr, file.ErrRecordMoved):
 		wv(terminal, editFileMovedElsewhere, outputMode)
 		return false, nil
-	}
-
-	oldPath, pathErr := e.FileMgr.GetFilePath(rec.ID)
-	if pathErr != nil {
-		slog.Error("failed to get file path", "node", nodeNumber, "file", rec.Filename, "error", pathErr)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(editFileRenameFailed)), outputMode)
-		return false, nil
-	}
-
-	dir := filepath.Dir(oldPath)
-	newPath := filepath.Join(dir, safeName)
-
-	if renameErr := os.Rename(oldPath, newPath); renameErr != nil {
-		slog.Error("failed to rename file", "node", nodeNumber, "from", oldPath, "to", newPath, "error", renameErr)
-		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(editFileRenameFailed)), outputMode)
-		return false, nil
-	}
-
-	updateErr := e.FileMgr.UpdateFileRecordInArea(rec.ID, rec.AreaID, func(r *file.FileRecord) {
-		r.Filename = safeName
-	})
-	if updateErr != nil {
-		slog.Error("failed to update filename record", "node", nodeNumber, "file", rec.Filename, "error", updateErr)
-		if rollbackErr := os.Rename(newPath, oldPath); rollbackErr != nil {
-			slog.Error("rollback rename failed (disk/DB inconsistent)", "node", nodeNumber, "from", newPath, "to", oldPath, "error", rollbackErr)
-		}
+	case renErr != nil:
+		slog.Error("failed to rename file", "node", nodeNumber, "from", rec.Filename, "to", safeName, "error", renErr)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(editFileRenameFailed)), outputMode)
 		return false, nil
 	}

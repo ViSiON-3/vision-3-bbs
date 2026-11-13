@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -220,4 +221,65 @@ func (fm *FileManager) moveFileRecord(fileID uuid.UUID, srcAreaID, targetAreaID 
 
 	slog.Info("moved file", "file", safeFilename, "id", fileID, "from", srcAreaID, "to", targetAreaID)
 	return nil
+}
+
+// ErrRenameTargetExists is RenameFileInArea's result when another file in
+// the area, on disk or in its list, already has the new name.
+var ErrRenameTargetExists = errors.New("a file with that name already exists")
+
+// RenameFileInArea renames file fileID to newName, on disk and in its
+// record, only while the record is in area areaID: it returns
+// ErrRecordMoved otherwise. The check, the disk rename and the record update
+// are one step under the area's lock, so a file moved to another area
+// meanwhile is never renamed there, and a name another file has (on disk or
+// in the list, ignoring case) is refused with ErrRenameTargetExists. A
+// rename that changes only the case of the name is allowed. If the list
+// then fails to save, the file is renamed back.
+func (fm *FileManager) RenameFileInArea(fileID uuid.UUID, areaID int, newName string) error {
+	safeNew, err := validateFilename(newName)
+	if err != nil {
+		return err
+	}
+	dir, err := fm.areaDir(areaID)
+	if err != nil {
+		return ErrRecordMoved
+	}
+	return fm.mutateAreas([]int{areaID}, func(lists map[int][]FileRecord) (func(), error) {
+		records := lists[areaID]
+		idx := indexOfRecord(records, fileID)
+		if idx == -1 {
+			return nil, ErrRecordMoved
+		}
+		oldName, err := validateFilename(records[idx].Filename)
+		if err != nil {
+			return nil, err
+		}
+		if oldName == safeNew {
+			return nil, nil
+		}
+		for i := range records {
+			if i != idx && strings.EqualFold(records[i].Filename, safeNew) {
+				return nil, ErrRenameTargetExists
+			}
+		}
+		oldPath, newPath := filepath.Join(dir, oldName), filepath.Join(dir, safeNew)
+		if newInfo, statErr := os.Stat(newPath); statErr == nil {
+			oldInfo, oldErr := os.Stat(oldPath)
+			if oldErr != nil || !os.SameFile(oldInfo, newInfo) {
+				return nil, ErrRenameTargetExists
+			}
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			return nil, fmt.Errorf("checking %s: %w", newPath, statErr)
+		}
+		if err := os.Rename(oldPath, newPath); err != nil {
+			return nil, fmt.Errorf("renaming %s to %s: %w", oldPath, newPath, err)
+		}
+		records[idx].Filename = safeNew
+		undo := func() {
+			if err := os.Rename(newPath, oldPath); err != nil {
+				slog.Error("failed to roll back a rename after the file list failed to save", "from", newPath, "to", oldPath, "error", err)
+			}
+		}
+		return undo, nil
+	})
 }
