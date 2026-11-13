@@ -132,6 +132,14 @@ func (e *MenuExecutor) editPostedMessage(s ssh.Session, ih *editor.InputHandler,
 		notice("|01This message has characters other than plain ASCII, which the editor can't handle. It can't be edited here.|07")
 		return editNone, nil
 	}
+	// And it keeps a line wider than its margin unwrapped, drawing it past
+	// the edge of the screen. The text is ASCII here, so bytes are columns.
+	for _, line := range strings.Split(text, "\n") {
+		if w := len(strings.TrimRight(line, "\r")); w > editor.MaxLineLength {
+			notice(fmt.Sprintf("|01This message has a line %d characters wide, more than the editor shows (%d). It can't be edited here.|07", w, editor.MaxLineLength))
+			return editNone, nil
+		}
+	}
 
 	limit := max(minEditSubject, utf8.RuneCountInString(msg.Subject))
 	val, aborted, err := e.promptComposeField(s, terminal, "\r\n|07Subject: |15", limit, msg.Subject, "subject", outputMode, nodeNumber, termWidth, termHeight)
