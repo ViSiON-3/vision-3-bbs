@@ -108,3 +108,28 @@ func TestRenameRetiresOldHandle(t *testing.T) {
 		t.Errorf("registering a renamed account's old handle: %v", err)
 	}
 }
+
+// Retired handles match as private mail matches handles (EqualFold), so a
+// handle that only folds to a retired one is refused too; and a handle
+// starting with '#' or '\' survives the list's comment syntax.
+func TestRetiredHandlesFoldAndEscape(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "users.json")
+	if err := RetireHandles(path, "Sam", "#hash", `\slash`); err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range []string{"sam", "SAM", "ſam", "#HASH", `\slash`} {
+		if retired, err := HandleRetired(path, h); err != nil || !retired {
+			t.Errorf("HandleRetired(%q) = %v, %v; want true", h, retired, err)
+		}
+	}
+	if retired, _ := HandleRetired(path, "hash"); retired {
+		t.Error("an unrelated handle reads as retired")
+	}
+	// Retiring a fold-equal handle again adds nothing.
+	if err := RetireHandles(path, "ſAM"); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := readRetired(path); len(list) != 3 {
+		t.Errorf("list = %q, want 3 entries", list)
+	}
+}

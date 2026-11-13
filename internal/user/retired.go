@@ -21,9 +21,14 @@ import (
 // Retiring the handle keeps that mail with nobody and deletes nothing, so
 // the people the purged account wrote to keep their letters.
 //
-// The list lives beside users.json, one handle per line, in lower case. A
-// sysop releases a handle by deleting its line, once they're sure nothing
-// still addressed to it should stay private.
+// The list lives beside users.json, one handle per line. A line starting
+// with '#' is a comment; a handle that itself starts with '#' or '\' is
+// written with a '\' in front, so it can't be read as one. Handles are
+// compared the way private mail compares them (strings.EqualFold, Unicode
+// case folding), not by lower-casing: "ſam" folds to "Sam", so it must
+// count as the same retired handle. A sysop releases a handle by deleting
+// its line, once they're sure nothing still addressed to it should stay
+// private.
 
 // RetiredHandlesFile is the retired-handle list's name, beside users.json.
 const RetiredHandlesFile = "retired_handles"
@@ -35,40 +40,65 @@ func retiredPath(usersPath string) string {
 	return filepath.Join(filepath.Dir(usersPath), RetiredHandlesFile)
 }
 
-// readRetired is the retired list as a set of lower-case handles. A list
-// that has never been written is empty; one that can't be read is an error,
-// and callers then refuse rather than allow (a retired handle must never be
-// reissued because its list was unreadable).
-func readRetired(usersPath string) (map[string]bool, error) {
-	out := map[string]bool{}
+// readRetired is the retired list's handles. A list that has never been
+// written is empty; one that can't be read is an error, and callers then
+// refuse rather than allow (a retired handle must never be reissued because
+// its list was unreadable).
+func readRetired(usersPath string) ([]string, error) {
 	if usersPath == "" {
-		return out, nil
+		return nil, nil
 	}
 	data, err := os.ReadFile(retiredPath(usersPath))
 	if errors.Is(err, fs.ErrNotExist) {
-		return out, nil
+		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", retiredPath(usersPath), err)
 	}
+	var out []string
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	for sc.Scan() {
-		if h := strings.ToLower(strings.TrimSpace(sc.Text())); h != "" && !strings.HasPrefix(h, "#") {
-			out[h] = true
+		line := strings.TrimSpace(sc.Text())
+		switch {
+		case line == "" || strings.HasPrefix(line, "#"):
+		case strings.HasPrefix(line, `\`):
+			out = append(out, line[1:])
+		default:
+			out = append(out, line)
 		}
 	}
 	return out, sc.Err()
 }
 
+// retiredEntry is handle as a line of the list: a leading '#' or '\' is
+// escaped with '\'.
+func retiredEntry(handle string) string {
+	if strings.HasPrefix(handle, "#") || strings.HasPrefix(handle, `\`) {
+		return `\` + handle
+	}
+	return handle
+}
+
+// containsFold reports whether list has handle, compared as private mail
+// compares handles.
+func containsFold(list []string, handle string) bool {
+	for _, h := range list {
+		if strings.EqualFold(h, handle) {
+			return true
+		}
+	}
+	return false
+}
+
 // HandleRetired reports whether handle is on the retired list beside
-// usersPath. An error means the list couldn't be read: treat the handle as
-// unavailable.
+// usersPath, compared as private mail compares handles. An error means the
+// list couldn't be read: treat the handle as unavailable.
 func HandleRetired(usersPath, handle string) (bool, error) {
-	set, err := readRetired(usersPath)
+	list, err := readRetired(usersPath)
 	if err != nil {
 		return false, err
 	}
-	return set[strings.ToLower(strings.TrimSpace(handle))], nil
+	return containsFold(list, strings.TrimSpace(handle)), nil
 }
 
 // RetireHandles adds handles to the retired list beside usersPath, under
@@ -87,26 +117,26 @@ func RetireHandles(usersPath string, handles ...string) error {
 		return fmt.Errorf("locking %s: %w", path, err)
 	}
 	defer lock.Release()
-	set, err := readRetired(usersPath)
+	list, err := readRetired(usersPath)
 	if err != nil {
 		return err
 	}
 	changed := false
 	for _, h := range handles {
-		if h = strings.ToLower(strings.TrimSpace(h)); h != "" && !set[h] {
-			set[h] = true
+		if h = strings.TrimSpace(h); h != "" && !containsFold(list, h) {
+			list = append(list, h)
 			changed = true
 		}
 	}
 	if !changed {
 		return nil
 	}
-	list := make([]string, 0, len(set))
-	for h := range set {
-		list = append(list, h)
-	}
 	sort.Strings(list)
-	body := "# Handles of purged accounts, which can't be used again (see docs/sysop/users/user-management.md).\n# Delete a line to release that handle.\n" + strings.Join(list, "\n") + "\n"
+	lines := make([]string, len(list))
+	for i, h := range list {
+		lines[i] = retiredEntry(h)
+	}
+	body := "# Handles of purged and renamed accounts, which can't be used again\n# (see docs/sysop/users/user-management.md). Delete a line to release one.\n" + strings.Join(lines, "\n") + "\n"
 	return writeFileAtomic(path, []byte(body), 0o600)
 }
 
