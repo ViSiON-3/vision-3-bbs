@@ -29,9 +29,52 @@ func storedActor(um *user.UserMgr, actor *user.User) *user.User {
 	return stored
 }
 
-// permission decides whether actor holds p, from the stored record.
+// levels are config.json's sysOpLevel and coSysOpLevel, for perm.Check.
+func (e *MenuExecutor) levels() perm.Levels {
+	cfg := e.GetServerConfig()
+	return perm.Levels{SysOp: cfg.SysOpLevel, CoSysOp: cfg.CoSysOpLevel}
+}
+
+// permission decides whether actor holds p, which isn't scoped, from the
+// stored record.
 func (e *MenuExecutor) permission(um *user.UserMgr, actor *user.User, p perm.Permission) perm.Decision {
-	return perm.Check(storedActor(um, actor), p, e.GetServerConfig().SysOpLevel, nil)
+	return perm.Check(storedActor(um, actor), p, perm.Scope{}, e.levels(), nil)
+}
+
+// areaScope is message area areaID as perm.Check asks about it: its tag,
+// its conference's tag and its sponsor, read afresh so a sponsor the sysop
+// has just changed counts at once. An unknown area is the zero Scope.
+func (e *MenuExecutor) areaScope(areaID int) perm.Scope {
+	if e.MessageMgr == nil || areaID <= 0 {
+		return perm.Scope{}
+	}
+	area, ok := e.MessageMgr.GetAreaByID(areaID)
+	if !ok || area == nil {
+		return perm.Scope{}
+	}
+	scope := perm.Scope{Area: area.Tag}
+	if area.Sponsor != "" && area.SponsorID > 0 {
+		scope.SponsorID = area.SponsorID
+	}
+	if e.ConferenceMgr != nil && area.ConferenceID != 0 {
+		if conf, ok := e.ConferenceMgr.GetByID(area.ConferenceID); ok && conf != nil {
+			scope.Conference = conf.Tag
+		}
+	}
+	return scope
+}
+
+// currentAreaScope is u's current message area, for the ACS term PERM.
+func (e *MenuExecutor) currentAreaScope(u *user.User) perm.Scope {
+	return e.areaScope(u.CurrentMessageAreaID)
+}
+
+// moderation decides whether actor may moderate message area areaID
+// (messages.moderate): co-sysop level and up anywhere, the area's sponsor
+// there, or a role that grants it there. It reads the actor's stored record
+// and the area afresh, so it is called again just before a delete.
+func (e *MenuExecutor) moderation(um *user.UserMgr, actor *user.User, areaID int) perm.Decision {
+	return perm.Check(storedActor(um, actor), perm.MessagesModerate, e.areaScope(areaID), e.levels(), nil)
 }
 
 // mayValidateUsers reports whether actor may open the pending-validation
@@ -62,11 +105,10 @@ func (e *MenuExecutor) authorizeUserChanges(um *user.UserMgr, actor, stored *use
 	if fresh == nil {
 		return "", msgAdminNoLongerAllowed
 	}
-	sysOpLevel := e.GetServerConfig().SysOpLevel
-	if fresh.AccessLevel >= sysOpLevel {
+	if fresh.AccessLevel >= e.GetServerConfig().SysOpLevel {
 		return "", ""
 	}
-	d := perm.Check(fresh, perm.UsersValidate, sysOpLevel, nil)
+	d := perm.Check(fresh, perm.UsersValidate, perm.Scope{}, e.levels(), nil)
 	if !d.Allowed {
 		return "", msgAdminNoLongerAllowed
 	}

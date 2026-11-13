@@ -336,3 +336,34 @@ func TestReaderMoveIncomplete(t *testing.T) {
 		t.Errorf("after the failed move, want subj-2 shown, not subj-1:\n%s", after)
 	}
 }
+
+// A role granting messages.moderate in an area moves messages out of it, as
+// its sponsor can; the same role scoped to another area gives no Move here.
+func TestReaderRoleModeratorMovesMessage(t *testing.T) {
+	useRoles(t, `{"roles": [{"name": "gen_mod", "permissions": [{"permission": "messages.moderate", "areas": ["GENERAL"]}]},
+		{"name": "tech_mod", "permissions": [{"permission": "messages.moderate", "areas": ["TECH"]}]}]}`)
+	setup := func(roles ...string) (*menuEnv, int) {
+		t.Helper()
+		env := newMsgEnv(t)
+		env.generalMsgs(1)
+		tech := addMoveArea(env, "TECH", "local", "")
+		stored, _ := env.um.GetUserByID(env.caller.ID)
+		stored.Roles = roles
+		if err := env.um.UpdateUserByID(stored); err != nil {
+			t.Fatal(err)
+		}
+		env.caller.Roles = roles
+		return env, tech
+	}
+
+	env, _ := setup("tech_mod")
+	if r := env.runCmd("READMSGS", env.caller, "", "VQ"); r.has("Move this message to") {
+		t.Errorf("a moderator of another area was offered the move:\n%s", r.text())
+	}
+
+	env, tech := setup("gen_mod")
+	r := env.runCmd("READMSGS", env.caller, "", "V1\rY")
+	if !r.has("Message moved to TECH Area.") || env.msgCount(tech) != 1 {
+		t.Errorf("TECH %d; output:\n%s", env.msgCount(tech), r.text())
+	}
+}

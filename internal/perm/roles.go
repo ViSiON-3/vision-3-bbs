@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 )
@@ -21,9 +23,128 @@ const maxRoleName = 24
 
 // Role is one role as configs/roles.json writes it.
 type Role struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
-	Permissions []string `json:"permissions"`
+	Name        string  `json:"name"`
+	Description string  `json:"description,omitempty"`
+	Permissions []Grant `json:"permissions"`
+}
+
+// Grant is one entry in a role's permissions: a permission name, written as
+// a plain string, or an object that limits a scoped permission to some
+// message areas and conferences by tag:
+//
+//	"users.validate"
+//	{"permission": "messages.moderate", "areas": ["GENERAL"], "conferences": ["FSXNET"]}
+//
+// A grant with neither list applies in every area. With either, it applies
+// in an area whose tag is listed or whose conference's tag is.
+type Grant struct {
+	Permission  string   `json:"permission"`
+	Areas       []string `json:"areas,omitempty"`
+	Conferences []string `json:"conferences,omitempty"`
+
+	// unknown are the object's keys that aren't one of the three above.
+	// Parse ignores a grant that has any: "area" for "areas" would
+	// otherwise leave the grant unlimited, the opposite of what was meant.
+	unknown []string
+	// scopeKey records that the object named "areas" or "conferences",
+	// whatever it gave them. A list left empty ([] or null) then limits
+	// the grant to nothing rather than to nowhere-in-particular: Parse
+	// ignores it instead of granting every area.
+	scopeKey bool
+}
+
+// grantKeys are the keys a grant object may have.
+var grantKeys = map[string]bool{"permission": true, "areas": true, "conferences": true}
+
+// UnmarshalJSON reads a grant written as a string or as an object.
+func (g *Grant) UnmarshalJSON(data []byte) error {
+	var name string
+	if err := json.Unmarshal(data, &name); err == nil {
+		*g = Grant{Permission: name}
+		return nil
+	}
+	type plain Grant
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return fmt.Errorf("a permission is a name or {\"permission\": ..., \"areas\": [...], \"conferences\": [...]}: %w", err)
+	}
+	*g = Grant(p)
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(data, &keys); err == nil {
+		for k := range keys {
+			if !grantKeys[k] {
+				g.unknown = append(g.unknown, k)
+			}
+			if k == "areas" || k == "conferences" {
+				g.scopeKey = true
+			}
+		}
+		sort.Strings(g.unknown)
+	}
+	return nil
+}
+
+// MarshalJSON writes a grant with no limits as its name alone.
+func (g Grant) MarshalJSON() ([]byte, error) {
+	if !g.limited() {
+		return json.Marshal(g.Permission)
+	}
+	type plain Grant
+	return json.Marshal(plain(g))
+}
+
+// limited reports whether g names any area or conference.
+func (g Grant) limited() bool { return len(g.Areas) > 0 || len(g.Conferences) > 0 }
+
+// String is the grant as diagnostics show it: "messages.moderate in areas
+// GENERAL and conferences FSXNET".
+func (g Grant) String() string {
+	if !g.limited() {
+		return g.Permission
+	}
+	var where []string
+	if len(g.Areas) > 0 {
+		where = append(where, "areas "+strings.Join(g.Areas, ", "))
+	}
+	if len(g.Conferences) > 0 {
+		where = append(where, "conferences "+strings.Join(g.Conferences, ", "))
+	}
+	return g.Permission + " in " + strings.Join(where, " and ")
+}
+
+// scope is where one grant applies: everywhere, or in the listed areas and
+// conferences (tags upper case).
+type scope struct {
+	all          bool
+	areas, confs map[string]bool
+}
+
+func (sc scope) covers(at Scope) bool {
+	return sc.all || sc.areas[strings.ToUpper(strings.TrimSpace(at.Area))] || sc.confs[strings.ToUpper(strings.TrimSpace(at.Conference))]
+}
+
+// everywhere reports whether any of scopes covers every area.
+func everywhere(scopes []scope) bool {
+	for _, sc := range scopes {
+		if sc.all {
+			return true
+		}
+	}
+	return false
+}
+
+// tagSet is tags upper-cased, blanks dropped.
+func tagSet(tags []string) (map[string]bool, []string) {
+	set := map[string]bool{}
+	var kept []string
+	for _, t := range tags {
+		t = strings.ToUpper(strings.TrimSpace(t))
+		if t != "" && !set[t] {
+			set[t] = true
+			kept = append(kept, t)
+		}
+	}
+	return set, kept
 }
 
 // file is configs/roles.json.
@@ -53,7 +174,7 @@ func (d Diagnostic) String() string {
 // both the empty set: no roles, so nothing is granted below sysop level.
 type Roles struct {
 	list   []Role // as loaded, names normalized, invalid entries left out
-	byName map[string]map[Permission]bool
+	byName map[string]map[Permission][]scope
 }
 
 // Len is the number of roles defined.
@@ -71,7 +192,7 @@ func (r *Roles) List() []Role {
 	}
 	out := make([]Role, len(r.list))
 	for i, role := range r.list {
-		role.Permissions = append([]string(nil), role.Permissions...)
+		role.Permissions = append([]Grant(nil), role.Permissions...)
 		out[i] = role
 	}
 	return out
@@ -99,12 +220,17 @@ func (r *Roles) Defined(name string) bool {
 }
 
 // grants reports whether the role named name (already normalized) exists
-// and grants p.
-func (r *Roles) grants(name string, p Permission) bool {
+// and grants p where at is.
+func (r *Roles) grants(name string, p Permission, at Scope) bool {
 	if r == nil {
 		return false
 	}
-	return r.byName[name][p]
+	for _, sc := range r.byName[name][p] {
+		if sc.covers(at) {
+			return true
+		}
+	}
+	return false
 }
 
 // Parse reads the contents of configs/roles.json. It fails only for JSON
@@ -112,7 +238,7 @@ func (r *Roles) grants(name string, p Permission) bool {
 // entry they concern left out.
 func Parse(data []byte) (*Roles, []Diagnostic, error) {
 	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
-	r := &Roles{byName: map[string]map[Permission]bool{}}
+	r := &Roles{byName: map[string]map[Permission][]scope{}}
 	if len(bytes.TrimSpace(data)) == 0 {
 		return r, nil, nil
 	}
@@ -134,18 +260,38 @@ func Parse(data []byte) (*Roles, []Diagnostic, error) {
 			bad("another role is already named %s; this one is ignored", name)
 			continue
 		}
-		grants := map[Permission]bool{}
-		var kept []string
-		for _, ps := range role.Permissions {
-			p, ok := Lookup(ps)
-			if !ok {
-				bad("%q is not a permission (known: %s); it grants nothing", ps, KnownNames())
+		grants := map[Permission][]scope{}
+		var kept []Grant
+		for _, g := range role.Permissions {
+			if len(g.unknown) > 0 {
+				bad("a grant of %q has %s, which isn't one of permission, areas and conferences, so the grant is ignored", g.Permission, quoteList(g.unknown))
 				continue
 			}
-			if !grants[p] {
-				grants[p] = true
-				kept = append(kept, string(p))
+			p, ok := Lookup(g.Permission)
+			if !ok {
+				bad("%q is not a permission (known: %s); it grants nothing", g.Permission, KnownNames())
+				continue
 			}
+			areas, keptAreas := tagSet(g.Areas)
+			confs, keptConfs := tagSet(g.Conferences)
+			limited := len(keptAreas) > 0 || len(keptConfs) > 0
+			if limited && !info(p).Scoped {
+				bad("%s can't be limited to areas or conferences, so this grant is ignored", p)
+				continue
+			}
+			if !limited && g.limited() {
+				bad("%s lists only blank areas and conferences, so this grant is ignored", p)
+				continue
+			}
+			if !limited && g.scopeKey {
+				bad("%s names areas or conferences but lists none, so this grant is ignored; leave both out to grant it everywhere", p)
+				continue
+			}
+			if !limited && everywhere(grants[p]) {
+				continue // a repeat of a grant that already covers every area
+			}
+			grants[p] = append(grants[p], scope{all: !limited, areas: areas, confs: confs})
+			kept = append(kept, Grant{Permission: string(p), Areas: keptAreas, Conferences: keptConfs})
 		}
 		if len(kept) == 0 {
 			bad("grants no permissions, so its members can do nothing a role gives")
@@ -164,7 +310,7 @@ func Path(configDir string) string { return filepath.Join(configDir, FileName) }
 func Load(configDir string) (*Roles, []Diagnostic, error) {
 	data, err := os.ReadFile(Path(configDir))
 	if errors.Is(err, fs.ErrNotExist) {
-		return &Roles{byName: map[string]map[Permission]bool{}}, nil, nil
+		return &Roles{byName: map[string]map[Permission][]scope{}}, nil, nil
 	}
 	if err != nil {
 		return nil, nil, err
@@ -269,4 +415,13 @@ func Undefined(names []string, roles *Roles) []string {
 		}
 	}
 	return out
+}
+
+// quoteList is names quoted and joined: "a", "b".
+func quoteList(names []string) string {
+	q := make([]string, len(names))
+	for i, n := range names {
+		q[i] = strconv.Quote(n)
+	}
+	return strings.Join(q, ", ")
 }

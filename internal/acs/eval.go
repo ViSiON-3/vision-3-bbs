@@ -49,6 +49,30 @@ type Context struct {
 	// (perm.Current). A ROLE term naming a role the set doesn't define fails
 	// the whole string.
 	Roles *perm.Roles
+	// Scope finds the message area PERM asks a scoped permission
+	// (messages.moderate) about, called only for such a term. nil is the
+	// user's current message area by the tags on their record, with no
+	// sponsor; the BBS looks the area up, sponsor included (see
+	// menu.acsContext).
+	Scope func() perm.Scope
+}
+
+// scope is the area PERM asks about.
+func (c Context) scope() perm.Scope {
+	if c.Scope != nil {
+		return c.Scope()
+	}
+	return perm.Scope{Area: c.User.CurrentMessageAreaTag, Conference: c.User.CurrentMsgConferenceTag}
+}
+
+// permission decides PERM's permission p for the context's user, in their
+// current message area when p is scoped.
+func (c Context) permission(p perm.Permission) perm.Decision {
+	var at perm.Scope
+	if perm.IsScoped(p) {
+		at = c.scope()
+	}
+	return perm.Check(c.User, p, at, perm.Levels{SysOp: c.SysOpLevel, CoSysOp: c.CoSysOpLevel}, c.roles())
 }
 
 // withRoles is ctx with its roles fixed for one evaluation: a reload of
@@ -251,8 +275,8 @@ func evalTerm(t parsedTerm, ctx Context) bool {
 		return u.Validated
 	case "ROLE": // The record lists the role; lacking has checked it is defined
 		return perm.Member(u, t.value, ctx.roles())
-	case "PERM": // A sysop, or a role on the record grants it
-		return perm.Check(u, perm.Permission(t.value), ctx.SysOpLevel, ctx.roles()).Allowed
+	case "PERM": // The level holds it, or a sponsorship or a role grants it here
+		return ctx.permission(perm.Permission(t.value)).Allowed
 	case "REALNAME": // The user's real name is set
 		return strings.TrimSpace(u.RealName) != ""
 	case "Z": // String exists in PrivateNote

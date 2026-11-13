@@ -15,6 +15,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
@@ -282,36 +283,38 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 		}
 		activeOptions = append(activeOptions, opt)
 	}
-	// A co-sysop may delete any message, an area's sponsor any message in
-	// their area (sponsorsArea), and a caller their own private mail
-	// (message.DisplayMessage.MailFor), and, in the mailbox, mail they sent
-	// that its recipient hasn't read yet (unsendable): ViSiON/2's kill
-	// outgoing. Delete is on the bar for a co-sysop, for the sponsor in their
-	// area, and in the mailbox for everyone, lit on a message they may
-	// delete.
-	isSponsor := func() bool { return sponsorsArea(currentUser, e.MessageMgr, currentAreaID) }
+	// A moderator may delete any message in the area: messages.moderate,
+	// which a co-sysop holds everywhere, an area's sponsor in their area, and
+	// a role where it grants it (#1037). A caller may delete their own
+	// private mail (message.DisplayMessage.MailFor) and, in the mailbox, mail
+	// they sent that its recipient hasn't read yet (unsendable): ViSiON/2's
+	// kill outgoing. Delete is on the bar for a moderator and in the mailbox
+	// for everyone, lit on a message they may delete.
+	moderates := func() perm.Decision { return e.moderation(userManager, currentUser, currentAreaID) }
+	isModerator := func() bool { return moderates().Allowed }
 	inMailbox := strings.EqualFold(currentAreaTag, "PRIVMAIL")
 	unsendable := func(m *message.DisplayMessage) bool {
 		return inMailbox && unsendableMail(e, currentAreaID, m, currentUser.Handle)
 	}
 	// unsend says whether the caller may unsend m, worked out before the
 	// base is locked: reading the recipient's lastread takes that lock too.
-	mayDelete := func(m *message.DisplayMessage, sponsor, unsend bool) bool {
-		return isSysop || sponsor || m.MailFor(currentUser.Handle) || (unsend && m.SentBy(currentUser.Handle))
+	mayDelete := func(m *message.DisplayMessage, moderator, unsend bool) bool {
+		return moderator || m.MailFor(currentUser.Handle) || (unsend && m.SentBy(currentUser.Handle))
 	}
-	canDelete := func(m *message.DisplayMessage) bool { return mayDelete(m, isSponsor(), unsendable(m)) }
-	if isSysop || isSponsor() || strings.EqualFold(currentAreaTag, "PRIVMAIL") {
+	canDelete := func(m *message.DisplayMessage) bool { return mayDelete(m, isModerator(), unsendable(m)) }
+	if isModerator() || strings.EqualFold(currentAreaTag, "PRIVMAIL") {
 		activeOptions = append(activeOptions, msgReaderDeleteOption)
 	}
-	// A co-sysop may move any message to another area, and the area's
-	// sponsor a message out of it, between local public areas, if it is
-	// stored as UTF-8 (moveMessage). Move isn't on the bar, which has no room for it; the
-	// help lists it where it applies.
-	mayMove := func(m *message.DisplayMessage, sponsor bool) bool {
+	// Whoever moderates the area may move a message out of it to another
+	// area, between local public areas, if it is stored as UTF-8
+	// (moveMessage): a co-sysop anywhere, the area's sponsor, or a role
+	// granting messages.moderate there. Move isn't on the bar, which has no
+	// room for it; the help lists it where it applies.
+	mayMove := func(m *message.DisplayMessage, moderator bool) bool {
 		area, ok := e.MessageMgr.GetAreaByID(currentAreaID)
-		return ok && localPublicArea(e.MessageMgr, area) && m.StoredAsUTF8() && (isSysop || sponsor)
+		return ok && localPublicArea(e.MessageMgr, area) && m.StoredAsUTF8() && moderator
 	}
-	canMove := func(m *message.DisplayMessage) bool { return mayMove(m, isSponsor()) }
+	canMove := func(m *message.DisplayMessage) bool { return mayMove(m, isModerator()) }
 	barSuffix := e.Strings().MsgReadingSuffix
 	if isNewScan {
 		barSuffix = e.Strings().MsgNewScanSuffix
@@ -1025,12 +1028,14 @@ readerLoop:
 				// the base's lock: while the caller was answering, another
 				// session may have deleted it, or packed the base and moved
 				// someone else's message into its number.
-				// Sponsorship is checked again now, before the base is locked:
-				// the sysop may have changed the area's sponsor meanwhile.
+				// Moderation is checked again now, before the base is locked,
+				// against the stored record and the area as they are: the
+				// sysop may have changed the area's sponsor or the caller's
+				// roles meanwhile.
 				shown := currentMsg
-				sponsor := isSponsor()
+				mod := moderates()
 				unsend := unsendable(shown)
-				if !mayDelete(shown, sponsor, unsend) {
+				if !mayDelete(shown, mod.Allowed, unsend) {
 					notice := "|01You can no longer delete messages in this area. Nothing was deleted.|07"
 					if shown.SentBy(currentUser.Handle) {
 						notice = "|01That mail has been read, so it can't be unsent now. Nothing was deleted.|07"
@@ -1039,8 +1044,13 @@ readerLoop:
 					needsRedraw = true
 					continue
 				}
+				// And again under the base's lock, as the message is deleted,
+				// so a role or sponsor taken away between the check above and
+				// the delete stops it. Only the base is locked here, so the
+				// area and the user record can be read.
 				delErr := e.MessageMgr.DeleteMessageIf(currentAreaID, shown.MsgNum, func(m *message.DisplayMessage) bool {
-					return message.SameMessage(m, shown) && mayDelete(m, sponsor, unsend)
+					mod = moderates()
+					return message.SameMessage(m, shown) && mayDelete(m, mod.Allowed, unsend)
 				})
 				if errors.Is(delErr, message.ErrMessageChanged) {
 					e.showReaderNotice(terminal, outputMode, "|01That message was changed or deleted elsewhere. Nothing was deleted.|07", termHeight)
@@ -1063,6 +1073,13 @@ readerLoop:
 					needsRedraw = true
 					continue
 				}
+				// A delete made as a moderator below co-sysop level is logged
+				// with the grant that allowed it.
+				if mod.Allowed && !mod.Level && !shown.MailFor(currentUser.Handle) && !shown.SentBy(currentUser.Handle) {
+					slog.Info("message deleted by moderator", "node", nodeNumber, "handle", currentUser.Handle,
+						"area", mod.Area, "msg", shown.MsgNum, "from", shown.From, "subject", shown.Subject,
+						"via", string(perm.MessagesModerate)+" via "+mod.Source())
+				}
 				// Pack the base (physically remove deleted messages and
 				// renumber) then rebuild reply threading chains.
 				if packErr := e.MessageMgr.PackAndLinkArea(currentAreaID); packErr != nil {
@@ -1084,7 +1101,7 @@ readerLoop:
 				}
 				break scrollLoop
 
-			case 'V': // Move message: a co-sysop any, a sponsor one out of their area
+			case 'V': // Move message: whoever moderates the area, out of it
 				if !canMove(currentMsg) {
 					continue // Ignore if triggered without access
 				}
@@ -1093,7 +1110,7 @@ readerLoop:
 					continue
 				}
 				result, mvErr := e.moveMessage(s, reader, terminal, currentUser, nodeNumber, outputMode, sessionStartTime,
-					area, currentMsg, mayMove, isSponsor, termHeight)
+					area, currentMsg, mayMove, isModerator, termHeight)
 				if errors.Is(mvErr, editor.ErrIdleTimeout) {
 					return nil, "LOGOFF", currentMsgNum, editor.ErrIdleTimeout
 				}

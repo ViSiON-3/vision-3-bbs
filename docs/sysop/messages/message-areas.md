@@ -428,8 +428,8 @@ hot key:
 | `J` / `#` | Jump | Go to a message number |
 | `L` | List | List message titles, cursor on this message (flat or threaded, as the caller last had it) |
 | `I` | Twit | Add the author to your Twit List (hidden while Twit Lists are off) |
-| `D` | Del | Delete the message (shown in red): any message for a sysop or co-sysop, any message in their own area for the area's [sponsor](users/sponsor-menus.md#moderating-messages), and a caller's own private mail ([Private mail](messages/private-mail.md#user-access)); greyed where the caller can't. On the bar for co-sysops, for a sponsor in their area, and for everyone in `PRIVMAIL` |
-| `V` | Move | Move the message to another local area ([Moving a message](#moving-a-message)): a sysop or co-sysop any message, an area's [sponsor](users/sponsor-menus.md#moderating-messages) one out of their area. Not on the bar; `?` lists it where it applies |
+| `D` | Del | Delete the message (shown in red): any message for a sysop or co-sysop, any message in their own area for the area's [sponsor](users/sponsor-menus.md#moderating-messages), any message where an [admin role](users/admin-roles.md) grants `messages.moderate`, and a caller's own private mail ([Private mail](messages/private-mail.md#user-access)); greyed where the caller can't. On the bar for co-sysops, for a sponsor in their area, for a role's moderator where it applies, and for everyone in `PRIVMAIL` |
+| `V` | Move | Move the message to another local area ([Moving a message](#moving-a-message)): a sysop or co-sysop any message, an area's [sponsor](users/sponsor-menus.md#moderating-messages), or a holder of `messages.moderate` there through an [admin role](users/admin-roles.md), one out of that area. Not on the bar; `?` lists it where it applies |
 | `K` | Kludges | Show the message's control information (sysop and co-sysop only; not on the bar) |
 | `?` | Help | List the commands |
 | `Q` | Quit | Leave the reader |

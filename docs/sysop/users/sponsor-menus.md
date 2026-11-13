@@ -102,6 +102,10 @@ In the message reader, an area's sponsor can delete any message in that area, as
 
 This is per area: sponsoring one area gives nothing in another. Sponsorship is checked again when a delete or move is confirmed, so a sponsor the sysop removes meanwhile deletes or moves nothing. The `PRIVMAIL` area has no moderator: a sponsor set on it doesn't let anyone delete other callers' mail.
 
+To let someone moderate without making them an area's sponsor, or across a
+whole conference, give them an [admin role](users/admin-roles.md) with
+`messages.moderate`.
+
 ## Edit Area Screen
 
 Press `E` from the Sponsor Menu to open the area editor. The current field values are displayed:

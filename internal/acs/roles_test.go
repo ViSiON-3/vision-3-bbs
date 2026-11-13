@@ -90,7 +90,7 @@ func TestUndefinedRoleFailsWholeString(t *testing.T) {
 
 func TestRolePermDiagnostics(t *testing.T) {
 	tests := map[string]string{
-		"PERM:users.vaildate": `"users.vaildate" is not a permission (known: users.validate)`,
+		"PERM:users.vaildate": `"users.vaildate" is not a permission (known: users.validate, messages.moderate)`,
 		"PERM:":               "needs a permission name",
 		"ROLE:9x":             "must start with a letter",
 		"ROLE:":               "a role needs a name",
@@ -148,5 +148,36 @@ func TestTesterCarriesRoles(t *testing.T) {
 	}
 	if lines := strings.Join(Render(x, 0), "\n"); !strings.Contains(lines, "Roles:      validator") {
 		t.Errorf("render lacks the roles line:\n%s", lines)
+	}
+}
+
+func TestExplainScopedPerm(t *testing.T) {
+	roles, _, err := perm.Parse([]byte(`{"roles": [{"name": "gen", "permissions": [{"permission": "messages.moderate", "areas": ["GENERAL"]}]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := &user.User{AccessLevel: 20, Roles: []string{"gen"}, CurrentMessageAreaTag: "GENERAL"}
+	for _, tt := range []struct {
+		area, want string
+		pass       bool
+	}{
+		{"GENERAL", "has messages.moderate in GENERAL through role gen", true},
+		{"OTHER", "doesn't have messages.moderate in OTHER: level 20 is below 250 (coSysOpLevel) and no role grants it (roles: gen)", false},
+		{"PRIVMAIL", "doesn't have messages.moderate in PRIVMAIL: below its level, nothing grants it in private mail", false},
+	} {
+		u.CurrentMessageAreaTag = tt.area
+		ctx := ctxFor(u)
+		ctx.Roles = roles
+		x := Explain("PERM:messages.moderate", ctx)
+		if x.Result != tt.pass || x.Root == nil || x.Root.Detail != tt.want {
+			t.Errorf("%s: %v %+v, want %q", tt.area, x.Result, x.Root, tt.want)
+		}
+	}
+	// The BBS's own scope (with the area's sponsor) wins over the record's tags.
+	ctx := ctxFor(&user.User{ID: 4, Handle: "Guru", AccessLevel: 20})
+	ctx.Roles = roles
+	ctx.Scope = func() perm.Scope { return perm.Scope{Area: "TECH", SponsorID: 4} }
+	if !Check("PERM:messages.moderate", ctx) {
+		t.Error("a sponsor through Context.Scope fails PERM:messages.moderate")
 	}
 }

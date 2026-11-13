@@ -22,6 +22,7 @@ A permission is an admin action the BBS defines. There is one so far:
 | Permission | What it allows |
 |---|---|
 | `users.validate` | Review accounts waiting for validation and approve them. Approving sets the account validated and raises its level to `regularUserLevel` if it is below that. |
+| `messages.moderate` | Delete any message in a message area from the reader. A role can grant it in some areas or conferences only (see [Limiting a grant to some areas](#limiting-a-grant-to-some-areas)). It never covers private mail. |
 
 `users.validate` is approval and nothing more. In the queue, someone who has
 it below SysOp level sees each pending account's handle, real name,
@@ -31,8 +32,17 @@ can't change a level, flags, roles or password, ban, delete or
 un-validate. The BBS checks this when the change is saved, not only by
 hiding keys, so there is no way round it through another screen.
 
-More permissions (message moderation, file area management) are planned;
-each will be listed here.
+`messages.moderate` is what an area's [sponsor](users/sponsor-menus.md#moderating-messages)
+can already do in their area, and a co-SysOp in every area. A role hands it
+out without a sponsorship or a co-SysOp level. Editing an area's settings
+stays with its sponsor and co-SysOps.
+
+Every delete made through a role or a sponsorship is logged at `INFO` as
+`message deleted by moderator`, with the area, the message, its author and
+subject, and the grant that allowed it.
+
+More permissions (file area management) are planned; each will be listed
+here.
 
 ## roles.json
 
@@ -55,7 +65,31 @@ each will be listed here.
 | `permissions` | The permissions the role grants, from the table above. |
 
 New installs ship this file with the `validator` role above, assigned to
-nobody. Roles only ever add permissions. There are no deny rules and no
+nobody.
+
+### Limiting a grant to some areas
+
+A permission can be written as an object instead of a name. A scoped
+permission (`messages.moderate`) then applies only in the areas it lists by
+tag, and in every area of the conferences it lists by tag:
+
+```json
+{
+    "name": "fsxnet_mod",
+    "description": "Moderates fsxNet and the local general area",
+    "permissions": [
+        {"permission": "messages.moderate", "conferences": ["FSXNET"], "areas": ["GENERAL"]}
+    ]
+}
+```
+
+A plain name, or an object with neither list, covers every area. An object
+that names `areas` or `conferences` but leaves the list empty is ignored,
+rather than read as every area. Tags are
+matched without regard to case. A tag that doesn't match any area or
+conference covers nothing, and doctor warns about it. A permission that
+isn't scoped (`users.validate`) can't be limited; a grant that tries is
+ignored. Roles only ever add permissions. There are no deny rules and no
 inheritance: a user with two roles has what both grant.
 
 The BBS rereads `roles.json` when it changes, with no restart. Mistakes can
@@ -63,6 +97,9 @@ only ever grant less:
 
 - A role with a bad or repeated name is ignored.
 - A permission the BBS doesn't know (`users.vaildate`) grants nothing.
+- A grant object with a key other than `permission`, `areas` and
+  `conferences` (`"area"` for `"areas"`) is ignored, rather than read as a
+  grant for every area.
 - If the file isn't valid JSON, no role grants anything until it is fixed.
   Deleting the file removes every role.
 
@@ -95,6 +132,8 @@ follow roles:
 - `PERM:users.validate` passes for anyone who holds the permission: a
   SysOp, or a user with a role that grants it. Use this to offer a command,
   since it uses the same check as the command itself.
+- `PERM:messages.moderate` answers for the caller's current message area:
+  a co-SysOp, the area's sponsor, or a role that grants it there.
 - `ROLE:validator` passes for a member of the role. A SysOp is not a member
   of a role unless it is assigned to them.
 
@@ -132,6 +171,13 @@ in `notes`, for example `users.validate via role validator`.
 ## Co-SysOps and sponsors
 
 Roles don't replace or widen what a level or a sponsorship already gives.
-A co-SysOp keeps their co-SysOp powers and gets no permission unless a role
-grants it: `users.validate` isn't theirs by level, any more than validation
-was before. A message-area [sponsor](users/sponsor-menus.md) keeps their area.
+
+- A co-SysOp holds `messages.moderate` in every area by level, as before,
+  and no other permission unless a role grants it: `users.validate` isn't
+  theirs by level, any more than validation was before.
+- A message-area [sponsor](users/sponsor-menus.md) keeps their area: they
+  hold `messages.moderate` there, and only the sponsor and co-SysOps can
+  change its settings. A role that grants moderation in an area doesn't
+  make anyone its sponsor.
+- Neither a role nor a sponsorship reaches `PRIVMAIL`: private mail has no
+  moderator below co-SysOp level.

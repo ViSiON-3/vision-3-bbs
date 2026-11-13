@@ -18,9 +18,10 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// Moving a message to another area from the reader (V): ViSiON/2's &M. A
-// co-sysop may move any message, and an area's sponsor a message out of
-// their area, into another local area they may post in. Only local public
+// Moving a message to another area from the reader (V): ViSiON/2's &M.
+// Whoever moderates an area (a co-sysop, its sponsor, or a role granting
+// messages.moderate there) may move a message out of it into another local
+// area they may post in. Only local public
 // areas take part: a move into echomail, QWK or V3Net, or into a local area
 // a V3Net leaf binds, would send the message to other boards, one out of them
 // would only take away this board's copy, and private mail belongs to its
@@ -99,7 +100,8 @@ func stillTarget(targets []*message.MessageArea, id int) *message.MessageArea {
 // moveMessage moves msg, which the reader is showing in area from, for
 // currentUser: it lists the areas it can go to, takes one by number or tag,
 // and asks to confirm. may reports whether the caller may move a message,
-// as a sponsor or not; sponsor tells whether they are one now. Both are asked
+// as a moderator of the area or not; moderator tells whether they are one
+// now. Both are asked
 // again as the original is deleted, along with whether it is still the
 // message shown, and the area picked is checked again after the caller
 // confirms. It returns what came of it, and an error reading the caller's
@@ -107,7 +109,7 @@ func stillTarget(targets []*message.MessageArea, id int) *message.MessageArea {
 func (e *MenuExecutor) moveMessage(s ssh.Session, reader *bufio.Reader, terminal *term.Terminal,
 	currentUser *user.User, nodeNumber int, outputMode ansi.OutputMode, sessionStart time.Time,
 	from *message.MessageArea, msg *message.DisplayMessage,
-	may func(m *message.DisplayMessage, sponsor bool) bool, sponsor func() bool,
+	may func(m *message.DisplayMessage, moderator bool) bool, moderator func() bool,
 	termHeight int) (moveResult, error) {
 
 	notice := func(text string) {
@@ -173,9 +175,9 @@ func (e *MenuExecutor) moveMessage(s ssh.Session, reader *bufio.Reader, terminal
 	}
 
 	// The right to move is checked again now: the sysop may have changed the
-	// area's sponsor meanwhile. Then the message must still be the one shown,
+	// area's sponsor, or a role, meanwhile. Then the message must still be the one shown,
 	// and still theirs to move, when the original is deleted.
-	if !may(msg, sponsor()) {
+	if !may(msg, moderator()) {
 		notice("|01You can no longer move this message. Nothing was moved.|07")
 		return moveNone, nil
 	}
@@ -189,7 +191,7 @@ func (e *MenuExecutor) moveMessage(s ssh.Session, reader *bufio.Reader, terminal
 	fromName := areaPlainName(from)
 	when := config.NowIn(e.GetServerConfig().Timezone)
 	_, err = e.MessageMgr.MoveMessageIf(from.ID, msg.MsgNum, to.ID,
-		func(m *message.DisplayMessage) bool { return message.SameMessage(m, msg) && may(m, sponsor()) },
+		func(m *message.DisplayMessage) bool { return message.SameMessage(m, msg) && may(m, moderator()) },
 		func(m *message.DisplayMessage) string {
 			return withMovedLine(m.Body, fromName, currentUser.Handle, when)
 		})
