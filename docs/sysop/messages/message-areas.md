@@ -490,8 +490,8 @@ cancels), then asks `Move this message to ...? [Y/N]`.
   only take away this board's copy. A `local` area that a V3Net leaf lists
   in its `boards` counts as V3Net here. Private mail isn't moved, nor a
   message stored in a character set other than UTF-8 (its copy would lose
-  the `CHRS` kludge that says how to read it), nor one with no `CHRS`
-  kludge whose text isn't valid UTF-8.
+  the `CHRS` kludge that says how to read it), nor one whose text isn't
+  valid UTF-8, whether it has no `CHRS` kludge or one that says UTF-8.
 - **What arrives:** the message keeps its sender, recipient, subject, date
   and private flag, and gets a last line saying where it came from, who
   moved it and when, such as ` * Moved from General Discussion by Felonius
@@ -522,29 +522,36 @@ saving changes nothing. The message keeps its number, sender, date and
 place in its thread.
 
 - **Who:** the author, by the handle the message was posted under (a post
-  signed with a real name keeps the handle with it), the area's sponsor,
-  and sysops and co-sysops. An anonymous post records no author, so only a
-  sponsor or the sysop can edit it.
+  signed with a real name keeps the handle with it), and whoever moderates
+  the area: its sponsor, a holder of `messages.moderate` there through an
+  [admin role](users/admin-roles.md), and sysops and co-sysops. An
+  anonymous post records no author, so only a moderator can edit it.
 - **Where:** local areas only. Echomail, netmail, QWK network and V3Net
   messages have already been sent to other boards, so an edit would change
   this board's copy alone; private mail has already been delivered. A
   `local` area that a V3Net leaf lists in its `boards` counts as V3Net
   here.
 - **What:** not a private message, wherever it is. Not a message stored in a
-  character set other than UTF-8, nor one with no `CHRS` kludge whose text
-  isn't valid UTF-8 (an older program's raw CP437): the editor would
-  rewrite its bytes. And not one longer than the editor holds, 100 lines,
-  as a QWK or `v3mail post` message can be: the caller is told, since
-  saving would drop the rest.
+  character set other than UTF-8, nor one whose text isn't valid UTF-8 (an
+  older program's raw CP437, or a wrong label): the editor would rewrite
+  its bytes. Not one with any character other than plain ASCII, such as an
+  accented letter or a line-drawing character from a QWK reply, a
+  `v3mail post` or a quote: the editor works in bytes, so a Backspace would
+  cut the character in half. And not one longer than the editor holds, 100
+  lines, as a QWK or `v3mail post` message can be. In the last two cases
+  the caller is told why.
 - **Checked again on saving:** the right to edit, and that the message is
   still the one shown. If another session edited, deleted or moved it
-  meanwhile, or the sysop removed the sponsor, nothing is saved and the
-  caller is told.
+  meanwhile, or the caller no longer moderates the area, nothing is saved
+  and the caller is told. The reader then reads the message again, so it
+  shows what is stored now.
 - **Storage:** the new text and header are written at the end of the JAM
   base and the index points to them; the old ones stay as unused space
   until the base is next packed. If writing fails before the index points
   to the new header, the index is put back and the caller is told nothing
-  was saved; the message is as it was.
+  was saved; the message is as it was. If putting the index back fails
+  too, the caller is told the message may or may not have been saved, the
+  log has the error, and the reader reads the message again.
 
 ### Searching Messages
 

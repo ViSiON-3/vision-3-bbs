@@ -1178,7 +1178,7 @@ readerLoop:
 				}
 				break scrollLoop
 
-			case 'E': // Edit message: its author, the area's sponsor or a co-sysop, in a local area
+			case 'E': // Edit message: its author or whoever moderates the area, in a local area
 				if !canEdit(currentMsg) {
 					continue // Ignore if triggered without access
 				}
@@ -1186,7 +1186,7 @@ readerLoop:
 				if !ok {
 					continue
 				}
-				saved, edErr := e.editPostedMessage(s, sessionIH, terminal, userManager, currentUser, nodeNumber, outputMode,
+				result, edErr := e.editPostedMessage(s, sessionIH, terminal, userManager, currentUser, nodeNumber, outputMode,
 					area, currentMsg, confName, mayEdit, isModerator, termWidth, termHeight)
 				if errors.Is(edErr, editor.ErrIdleTimeout) {
 					return nil, "LOGOFF", currentMsgNum, editor.ErrIdleTimeout
@@ -1197,9 +1197,24 @@ readerLoop:
 				if edErr != nil {
 					slog.Error("edit message", "node", nodeNumber, "msg", currentMsg.MsgNum, "area", currentAreaID, "error", edErr)
 				}
-				if saved {
+				switch result {
+				case editSaved:
 					// Reload the message: its subject and text have changed.
 					continue readerLoop
+				case editStale:
+					// Changed or deleted elsewhere, as after a refused delete:
+					// the count and the message are read again, so the next E
+					// opens what is stored now.
+					if n, cErr := e.MessageMgr.GetMessageCountForArea(currentAreaID); cErr == nil {
+						totalMsgCount = n
+					}
+					if totalMsgCount <= 0 {
+						break readerLoop
+					}
+					if currentMsgNum > totalMsgCount {
+						currentMsgNum = totalMsgCount
+					}
+					break scrollLoop
 				}
 				needsRedraw = true
 				continue

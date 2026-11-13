@@ -78,6 +78,26 @@ func withEditedLine(body, handle string, when time.Time) string {
 		fmt.Sprintf(editedLineFormat, handle, strings.ToLower(when.Format("01/02/06 at 3:04 PM")))
 }
 
+// asciiText reports whether s is all ASCII. The editor counts columns and
+// deletes in bytes, so it would split a multibyte character.
+func asciiText(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
+}
+
+// editResult is how an edit from the reader ended.
+type editResult int
+
+const (
+	editNone  editResult = iota // nothing saved; the message is as shown
+	editSaved                   // saved
+	editStale                   // the message changed elsewhere, or the save may have half gone through: read it again
+)
+
 // minEditSubject is the shortest the subject prompt allows: what a new post
 // is given. A longer subject, such as a reply's "Re: ...", gets its length.
 const minEditSubject = 30
@@ -85,15 +105,15 @@ const minEditSubject = 30
 // editPostedMessage edits msg, which the reader is showing in area, for
 // currentUser: the subject at a prompt that starts with the current one,
 // then the text in the full-screen editor. may reports whether the caller
-// may edit a message, as a sponsor or not; sponsor tells whether they are
-// one now. Both are asked again as the message is saved, under the base's
-// lock, along with whether it is still the message shown. It returns true
-// when the message was saved, and io.EOF when the caller hung up.
+// may edit a message, as a moderator of the area or not; moderator tells
+// whether they are one now. Both are asked again as the message is saved,
+// under the base's lock, along with whether it is still the message shown.
+// It returns io.EOF when the caller hung up.
 func (e *MenuExecutor) editPostedMessage(s ssh.Session, ih *editor.InputHandler, terminal *term.Terminal,
 	userManager *user.UserMgr, currentUser *user.User, nodeNumber int, outputMode ansi.OutputMode,
 	area *message.MessageArea, msg *message.DisplayMessage, confName string,
-	may func(m *message.DisplayMessage, sponsor bool) bool, sponsor func() bool,
-	termWidth, termHeight int) (bool, error) {
+	may func(m *message.DisplayMessage, moderator bool) bool, moderator func() bool,
+	termWidth, termHeight int) (editResult, error) {
 
 	notice := func(text string) {
 		e.showReaderNotice(terminal, outputMode, text, termHeight)
@@ -104,16 +124,22 @@ func (e *MenuExecutor) editPostedMessage(s ssh.Session, ih *editor.InputHandler,
 	text := withoutEditedLine(msg.Body)
 	if n := strings.Count(strings.TrimRight(text, "\n"), "\n") + 1; n > editor.MaxLines {
 		notice(fmt.Sprintf("|01This message is %d lines long, more than the editor holds (%d). It can't be edited here.|07", n, editor.MaxLines))
-		return false, nil
+		return editNone, nil
+	}
+	// It also works in bytes, so it would split a character such as an
+	// accented letter that came in by QWK or v3mail, or in a quote.
+	if !asciiText(text) {
+		notice("|01This message has characters other than plain ASCII, which the editor can't handle. It can't be edited here.|07")
+		return editNone, nil
 	}
 
 	limit := max(minEditSubject, utf8.RuneCountInString(msg.Subject))
 	val, aborted, err := e.promptComposeField(s, terminal, "\r\n|07Subject: |15", limit, msg.Subject, "subject", outputMode, nodeNumber, termWidth, termHeight)
 	if err != nil {
-		return false, err
+		return editNone, err
 	}
 	if aborted {
-		return false, nil
+		return editNone, nil
 	}
 	subject := strings.TrimSpace(val)
 	if subject == "" {
@@ -131,44 +157,49 @@ func (e *MenuExecutor) editPostedMessage(s ssh.Session, ih *editor.InputHandler,
 		withAutocorrect(e, ctx, area, currentUser, userManager))
 	if err != nil {
 		if errors.Is(err, editor.ErrIdleTimeout) {
-			return false, err
+			return editNone, err
 		}
 		slog.Error("editor failed", "node", nodeNumber, "error", err)
 		e.writeString(terminal, outputMode, e.Strings().MsgEditorError)
 		uiPause(2 * time.Second)
-		return false, nil
+		return editNone, nil
 	}
 	if !saved {
 		notice("|07Edit cancelled. The message is as it was.")
-		return false, nil
+		return editNone, nil
 	}
 	// In the board's time zone, as the editor's clock shows it.
 	body = withEditedLine(body, currentUser.Handle, config.NowIn(e.GetServerConfig().Timezone))
 
 	// The right to edit is checked again now: the sysop may have changed the
-	// area's sponsor while the caller typed. Then, under the base's lock, the
-	// message must still be the one shown, and still theirs to edit, with
-	// sponsorship read again there too.
-	if !may(msg, sponsor()) {
+	// area's sponsor or the caller's roles while they typed. Then, under the
+	// base's lock, the message must still be the one shown, and still theirs
+	// to edit, with moderation read again there too.
+	if !may(msg, moderator()) {
 		notice("|01You can no longer edit this message. Nothing was saved.|07")
-		return false, nil
+		return editNone, nil
 	}
 	err = e.MessageMgr.EditMessageIf(area.ID, msg.MsgNum, func(m *message.DisplayMessage) (string, string, bool) {
-		if !message.SameMessage(m, msg) || !may(m, sponsor()) {
+		if !message.SameMessage(m, msg) || !may(m, moderator()) {
 			return "", "", false
 		}
 		return subject, body, true
 	})
 	if errors.Is(err, message.ErrMessageChanged) {
 		notice("|01That message was changed or deleted elsewhere. Nothing was saved.|07")
-		return false, nil
+		return editStale, nil
+	}
+	if errors.Is(err, message.ErrEditUncertain) {
+		slog.Error("edit message", "node", nodeNumber, "area", area.ID, "msg", msg.MsgNum, "error", err)
+		notice("|01Error saving the message. It may or may not have been saved.|07")
+		return editStale, nil
 	}
 	if err != nil {
 		slog.Error("edit message", "node", nodeNumber, "area", area.ID, "msg", msg.MsgNum, "error", err)
 		notice("|01Error saving the message.|07")
-		return false, nil
+		return editNone, nil
 	}
 	slog.Info("message edited", "node", nodeNumber, "handle", currentUser.Handle, "area", area.Tag, "msg", msg.MsgNum, "author", msg.From)
 	notice("|07Message saved.")
-	return true, nil
+	return editSaved, nil
 }

@@ -100,7 +100,7 @@ In the message reader, an area's sponsor can delete any message in that area, as
 
 `V` moves a message out of the area, into another local area the sponsor may read and post in ([Moving a message](messages/message-areas.md#moving-a-message)).
 
-`E` edits a message in the area, if the area is local (not echomail, netmail, QWK network or V3Net, and not bound by a V3Net leaf): its subject and text, signed with a last line naming the sponsor as editor. Private messages aren't edited, nor text that isn't stored as UTF-8, nor a message longer than the editor holds (100 lines). See [Editing a posted message](messages/message-areas.md#editing-a-posted-message).
+`E` edits a message in the area, if the area is local (not echomail, netmail, QWK network or V3Net, and not bound by a V3Net leaf): its subject and text, signed with a last line naming the sponsor as editor. Private messages aren't edited, nor a message whose text isn't plain ASCII (the editor works in bytes, so it would cut an accented letter in half), nor one longer than the editor holds (100 lines). See [Editing a posted message](messages/message-areas.md#editing-a-posted-message).
 
 This is per area: sponsoring one area gives nothing in another. Sponsorship is checked again when a delete or move is confirmed or an edit saved, so a sponsor the sysop removes meanwhile deletes, moves or changes nothing. The `PRIVMAIL` area has no moderator: a sponsor set on it doesn't let anyone delete other callers' mail.
 

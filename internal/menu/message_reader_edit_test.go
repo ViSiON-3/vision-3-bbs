@@ -169,12 +169,14 @@ func TestReaderEditChangedMeanwhile(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	r = env3.runCmd("READMSGS", env3.caller, "", "E\r\x1aQ")
-	if !r.has("That message was changed or deleted elsewhere. Nothing was saved.") {
+	// The reader then reads the message again, so a second E opens the
+	// other session's text and saves.
+	r = env3.runCmd("READMSGS", env3.caller, "", "E\r\x1aE\r\x1aQ")
+	if !r.has("That message was changed or deleted elsewhere. Nothing was saved.", "Message saved.") {
 		t.Errorf("output:\n%s", r.text())
 	}
-	if b := env3.mustMsg(generalAreaID, 1).Body; b != "edited elsewhere" {
-		t.Errorf("body = %q, want the other session's edit kept", b)
+	if b := env3.mustMsg(generalAreaID, 1).Body; !strings.HasPrefix(b, "edited elsewhere\n\n * Edited by Caller on ") {
+		t.Errorf("body = %q, want the other session's edit, then this one", b)
 	}
 
 	env2 := newMsgEnv(t)
@@ -229,6 +231,78 @@ func TestReaderEditNotUnlabelledCP437(t *testing.T) {
 	}
 	if b := env.mustMsg(generalAreaID, 1).Body; b != "caf\x82 \xb2\xdb" {
 		t.Errorf("body = %q, want it unchanged", b)
+	}
+}
+
+// A message labelled UTF-8 whose text isn't is refused like an unlabelled
+// one: the label is wrong.
+func TestReaderEditNotInvalidUTF8(t *testing.T) {
+	env := newMsgEnv(t)
+	if _, err := env.e.MessageMgr.Post(generalAreaID, "Caller", "All", "bad", "caf\x82", message.PostOptions{Kludges: []string{"CHRS: UTF-8 4"}}); err != nil {
+		t.Fatal(err)
+	}
+	r := env.runCmd("READMSGS", env.sysop, "", "?E\r\x1aQ")
+	if r.has("dit Message") || r.has("Subject:") {
+		t.Errorf("edit offered on invalid UTF-8; output:\n%s", r.text())
+	}
+	if b := env.mustMsg(generalAreaID, 1).Body; b != "caf\x82" {
+		t.Errorf("body = %q, want it unchanged", b)
+	}
+}
+
+// The editor works in bytes, so text with a multibyte character, labelled
+// UTF-8 or not, isn't opened in it: a Backspace would cut the character in
+// half. The caller is told why, and the message is unchanged.
+func TestReaderEditNotNonASCII(t *testing.T) {
+	for _, kludges := range [][]string{nil, {"CHRS: UTF-8 4"}} {
+		env := newMsgEnv(t)
+		if _, err := env.e.MessageMgr.Post(generalAreaID, "Caller", "All", "menu", "caf\u00e9", message.PostOptions{Kludges: kludges}); err != nil {
+			t.Fatal(err)
+		}
+		r := env.runCmd("READMSGS", env.caller, "", "E\r\b\x1aQ")
+		if !r.has("characters other than plain ASCII") || r.has("Subject:") {
+			t.Errorf("%v: output:\n%s", kludges, r.text())
+		}
+		if b := env.mustMsg(generalAreaID, 1).Body; b != "caf\u00e9" {
+			t.Errorf("%v: body = %q, want it unchanged", kludges, b)
+		}
+	}
+
+	// Only the text counts: an earlier edit's line, which the edit replaces,
+	// may name a handle that isn't ASCII.
+	env := newMsgEnv(t)
+	body := "plain\n\n * Edited by J\u00f6rg on 11/13/26 at 3:04 pm"
+	if _, err := env.e.MessageMgr.Post(generalAreaID, "Caller", "All", "again", body, message.PostOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	env.runCmd("READMSGS", env.caller, "", "E\r\x1aQ")
+	if b := env.mustMsg(generalAreaID, 1).Body; !strings.HasPrefix(b, "plain\n\n * Edited by Caller on ") {
+		t.Errorf("body = %q, want it edited", b)
+	}
+}
+
+// A role granting messages.moderate in the area edits any message there, as
+// the sponsor can; the same role scoped to another area doesn't.
+func TestReaderRoleModeratorEdits(t *testing.T) {
+	useRoles(t, `{"roles": [{"name": "gen_mod", "permissions": [{"permission": "messages.moderate", "areas": ["GENERAL"]}]},
+		{"name": "tech_mod", "permissions": [{"permission": "messages.moderate", "areas": ["TECH"]}]}]}`)
+	for _, tc := range []struct {
+		role string
+		want bool
+	}{{"tech_mod", false}, {"gen_mod", true}} {
+		env := newMsgEnv(t)
+		env.generalMsgs(1)
+		stored, _ := env.um.GetUserByID(env.caller.ID)
+		stored.Roles = []string{tc.role}
+		if err := env.um.UpdateUserByID(stored); err != nil {
+			t.Fatal(err)
+		}
+		env.caller.Roles = stored.Roles
+		env.runCmd("READMSGS", env.caller, "", "E\r\x1aQ")
+		b := env.mustMsg(generalAreaID, 1).Body
+		if got := strings.Contains(b, " * Edited by Caller on "); got != tc.want {
+			t.Errorf("%s: body = %q, want edited %v", tc.role, b, tc.want)
+		}
 	}
 }
 

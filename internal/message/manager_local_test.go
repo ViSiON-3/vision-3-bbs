@@ -36,13 +36,13 @@ func TestStoredAsUTF8(t *testing.T) {
 			t.Errorf("StoredAsUTF8 with %q = %v, want %v", cs, got, want)
 		}
 	}
-	// Unlabelled text counts only when it is valid UTF-8; raw CP437 isn't.
-	for body, want := range map[string]bool{"plain ascii": true, "caf\u00e9 \u2593": true, "caf\xe9 \xb2\xdb": false} {
-		if got := (&DisplayMessage{Body: body}).StoredAsUTF8(); got != want {
-			t.Errorf("StoredAsUTF8 unlabelled %q = %v, want %v", body, got, want)
+	// Unlabelled or UTF-8 text counts only when it is valid UTF-8: raw CP437
+	// isn't, and a label can be wrong.
+	for _, cs := range []string{"", "UTF-8", "UTF8"} {
+		for body, want := range map[string]bool{"plain ascii": true, "caf\u00e9 \u2593": true, "caf\xe9 \xb2\xdb": false} {
+			if got := (&DisplayMessage{Charset: cs, Body: body}).StoredAsUTF8(); got != want {
+				t.Errorf("StoredAsUTF8 %q body %q = %v, want %v", cs, body, got, want)
+			}
 		}
-	}
-	if !(&DisplayMessage{Charset: "UTF-8", Body: "\xe9"}).StoredAsUTF8() {
-		t.Error("a message labelled UTF-8 was judged by its text")
 	}
 }
