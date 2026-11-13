@@ -56,8 +56,12 @@ func (mm *MessageManager) MoveMessageIf(fromArea, msgNum, toArea int, check func
 	}
 	if err != nil {
 		err = fmt.Errorf("move message %d from area %d: copy to area %d: %w", msgNum, fromArea, toArea, err)
-		if newNum > 0 { // the copy was written; only closing the base failed
-			if rerr := mm.removeCopy(toArea, newNum, m, text); rerr != nil {
+		// The copy may have been written, with only a later step failing.
+		// newNum can name a slot the write never reached, so only that slot
+		// is looked at: an earlier message there may be an identical copy
+		// from an earlier move, whose original is gone.
+		if newNum > 0 {
+			if rerr := mm.removeCopyAt(toArea, newNum, m, text); rerr != nil {
 				return 0, fmt.Errorf("%w: %w", ErrMoveIncomplete, err)
 			}
 		}
@@ -119,6 +123,36 @@ func (mm *MessageManager) fault(step string) error {
 	return mm.moveFault(step)
 }
 
+// copyMatch reports whether c is the copy of m a move wrote with text: the
+// same sender, recipient, subject, date and text.
+func copyMatch(c, m *DisplayMessage, text string) bool {
+	return c.From == m.From && c.To == m.To && c.Subject == m.Subject &&
+		c.DateTime.Equal(m.DateTime) && c.Body == normalizeLineEndings(text)
+}
+
+// removeCopyAt takes back the copy of m written to area as message num, if
+// that message is it, and packs the area. It returns an error only if the
+// copy may still be there: a slot past the end of the area, which the write
+// never reached, or one holding something else, reads as changed and is no
+// error.
+func (mm *MessageManager) removeCopyAt(area, num int, m *DisplayMessage, text string) error {
+	err := mm.fault("takeback")
+	if err == nil {
+		err = mm.DeleteMessageIf(area, num, func(c *DisplayMessage) bool { return copyMatch(c, m, text) })
+	}
+	if errors.Is(err, ErrMessageChanged) {
+		return nil
+	}
+	if err != nil {
+		slog.Error("remove the copy of a message whose move failed", "area", area, "msg", num, "error", err)
+		return err
+	}
+	if err := mm.PackAndLinkArea(area); err != nil {
+		slog.Error("pack area after taking back a move", "area", area, "error", err)
+	}
+	return nil
+}
+
 // removeCopy takes back the copy of m a failed move wrote to area as message
 // num with text, and packs the area. It returns an error if the copy is
 // still there; a copy already gone (deleted elsewhere) is no error.
@@ -131,10 +165,7 @@ func (mm *MessageManager) fault(step string) error {
 // Local posts carry no MSGID, so the copy is known by its sender,
 // recipient, subject, date and text.
 func (mm *MessageManager) removeCopy(area, num int, m *DisplayMessage, text string) error {
-	isCopy := func(c *DisplayMessage) bool {
-		return c.From == m.From && c.To == m.To && c.Subject == m.Subject &&
-			c.DateTime.Equal(m.DateTime) && c.Body == normalizeLineEndings(text)
-	}
+	isCopy := func(c *DisplayMessage) bool { return copyMatch(c, m, text) }
 	for i := num; i >= 1; i-- {
 		err := mm.fault("takeback")
 		if err == nil {

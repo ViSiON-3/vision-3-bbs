@@ -504,9 +504,10 @@ cancels), then asks `Move this message to ...? [Y/N]`.
   the caller is told, so a message is never lost.
 - **If something fails:** a message is kept rather than lost. If the
   original's delete fails, the copy is taken back only when the original is
-  certainly still there. If a copy can't be taken back, the caller is told
-  a copy was left in the other area, and the log says which; delete one of
-  the two.
+  certainly still there. If a copy can't be taken back, or the original
+  can't be read, the caller is told a copy was left in the other area, and
+  the log says which. Check both areas before deleting anything: delete one
+  only if the message is in both.
 
 ### Searching Messages
 

@@ -332,3 +332,68 @@ func TestMoveMessageIfDeleteErrorOtherDeleted(t *testing.T) {
 		t.Errorf("area 2 holds %d, want the copy taken back", count(t, mm, 2))
 	}
 }
+
+// After a copy error, only the copy's own number is taken back. When that
+// slot holds nothing (the write never reached it), an identical copy left
+// by an earlier move is not mistaken for it.
+func TestMoveMessageIfCopyErrorKeepsEarlierCopy(t *testing.T) {
+	mm := newMoveTestManager(t)
+	when := time.Date(2026, 11, 1, 9, 30, 0, 0, time.Local)
+	var nums []int
+	for i := 0; i < 2; i++ {
+		n, err := mm.Post(1, "alice", "All", "twin", "same text", PostOptions{Date: when})
+		if err != nil {
+			t.Fatal(err)
+		}
+		nums = append(nums, n)
+	}
+	if _, err := mm.MoveMessageIf(1, nums[0], 2, always, sameBody); err != nil {
+		t.Fatal(err)
+	}
+	// The second move's copy is written, then lost, as if its index write
+	// had failed: the slot it was given is empty.
+	mm.moveFault = func(step string) error {
+		if step != "copy" {
+			return nil
+		}
+		if err := mm.DeleteMessage(2, 2); err != nil {
+			t.Fatal(err)
+		}
+		if err := mm.PackAndLinkArea(2); err != nil {
+			t.Fatal(err)
+		}
+		return errors.New("fault at copy")
+	}
+	if _, err := mm.MoveMessageIf(1, 1, 2, always, sameBody); err == nil || errors.Is(err, ErrMoveIncomplete) {
+		t.Errorf("err = %v, want a plain error", err)
+	}
+	if count(t, mm, 1) != 1 || count(t, mm, 2) != 1 {
+		t.Errorf("areas hold %d and %d, want 1 and 1 (the earlier copy kept)", count(t, mm, 1), count(t, mm, 2))
+	}
+}
+
+// After a copy error, a different message now in the copy's slot is left
+// alone.
+func TestMoveMessageIfCopyErrorOtherInSlot(t *testing.T) {
+	mm := newMoveTestManager(t)
+	n := post(t, mm, 1, "All", "stays")
+	mm.moveFault = func(step string) error {
+		if step != "copy" {
+			return nil
+		}
+		if err := mm.DeleteMessage(2, 1); err != nil {
+			t.Fatal(err)
+		}
+		if err := mm.PackAndLinkArea(2); err != nil {
+			t.Fatal(err)
+		}
+		post(t, mm, 2, "All", "someone else's")
+		return errors.New("fault at copy")
+	}
+	if _, err := mm.MoveMessageIf(1, n, 2, always, sameBody); err == nil || errors.Is(err, ErrMoveIncomplete) {
+		t.Errorf("err = %v, want a plain error", err)
+	}
+	if m, err := mm.GetMessage(2, 1); err != nil || m.IsDeleted || m.Subject != "someone else's" {
+		t.Errorf("area 2 message 1 = %+v, %v; want \"someone else's\" untouched", m, err)
+	}
+}
