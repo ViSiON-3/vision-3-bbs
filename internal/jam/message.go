@@ -69,6 +69,8 @@ func MessageFrom(hdr *MessageHeader, text string) *Message {
 			msg.Flags = val
 		case SfldV3SenderHandle:
 			msg.SenderHandle = val
+		case SfldV3MailGroup:
+			msg.MailGroup = val
 		}
 	}
 

@@ -76,6 +76,10 @@ const (
 	// a message signed with another name (its real name). Other software
 	// skips subfields it does not know, and the tosser never exports it.
 	SfldV3SenderHandle = 0x5633
+	// SfldV3MailGroup is ViSiON/3's subfield on one member's copy of mail
+	// sent to a user group: the group's name and the id every copy of that
+	// letter shares, "name id". Local private mail only, never exported.
+	SfldV3MailGroup = 0x5634
 )
 
 // Sentinel errors

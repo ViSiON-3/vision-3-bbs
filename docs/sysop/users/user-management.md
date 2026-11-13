@@ -41,7 +41,7 @@ Each change is saved as soon as the caller confirms it. The screen's header is `
 
 ## Pipes in Names
 
-A new handle or real name cannot contain `|`, because screens print names through the pipe-code expander. Signup, `USERCONFIG`, the admin user editor, `./ue` and the scripting API all refuse one.
+A new handle or real name cannot contain `|`, because screens print names through the pipe-code expander. Signup, `USERCONFIG`, the admin user editor, `./ue` and the scripting API all refuse one. A new handle also can't start with `@`, which addresses mail to a [user group](messages/private-mail.md#mail-to-a-group); an existing one keeps it.
 
 Accounts that already have a `|` in their handle or real name keep it. They can log in and save other settings, and retyping the same name is not refused. Only a change to a new name with a `|` in it is. To clean up an old account, set its name in `./ue` or the admin user editor.
 
@@ -361,6 +361,7 @@ When a user types "new" at the login screen username field, the new user applica
 3. **Handle/Alias** — Prompted with `newUserNameStr`. Validated against these rules:
    - Minimum 3 characters
    - No special characters: `?`, `#`, `/`, `*`, `&`, `:`, `|`, and no control characters
+   - Can't start with `@`, which addresses a [user group's mail](messages/private-mail.md#mail-to-a-group)
    - Cannot be reserved words: "new", "q", "sysop"
    - Cannot be purely numeric
    - Cannot match a rule in your **bad user names** list (see

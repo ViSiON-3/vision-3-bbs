@@ -207,7 +207,7 @@ found or cannot be loaded.
 
 | Field | Key | Notes |
 |-------|-----|-------|
-| Handle | `handle` | Warns on a bad-user-names match. A new handle cannot contain `\|` |
+| Handle | `handle` | Warns on a bad-user-names match. A new handle cannot contain `\|` or start with `@` |
 | Real Name | `realName` | A new real name cannot contain `\|` |
 | Access Level | `accessLevel` | 0–255 |
 | Total Calls | `timesCalled` | |

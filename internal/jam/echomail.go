@@ -156,6 +156,9 @@ func (b *Base) writeMessageExt(msg *Message, msgType MessageType, originText str
 		if local && msg.SenderHandle != "" {
 			hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldV3SenderHandle, msg.SenderHandle))
 		}
+		if local && msg.MailGroup != "" {
+			hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldV3MailGroup, msg.MailGroup))
+		}
 
 		// Calculate total subfield length
 		hdr.SubfieldLen = 0

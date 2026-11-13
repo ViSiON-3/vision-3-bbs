@@ -36,6 +36,12 @@ var ErrRealNameNeedsSpace = errors.New("real name must contain a space (first an
 // code and prints as written.
 var ErrNamePipe = errors.New("names cannot contain the pipe (|) character")
 
+// ErrHandleGroupPrefix is returned for a new handle starting with '@', which
+// mail addresses use for a user group ("@fsxnet-ops"). An account that
+// already has one keeps it: a recipient that is exactly a handle is that
+// user before it is a group.
+var ErrHandleGroupPrefix = errors.New("handles cannot start with @, which addresses a user group")
+
 // RealNameMinLen is the shortest accepted real name, in runes.
 const RealNameMinLen = 4
 
@@ -66,11 +72,18 @@ func ValidateRealNameEdit(old, name string) error {
 	return ValidateRealName(name)
 }
 
-// ValidateHandleEdit applies the pipe rule to a handle change. Existing accounts
-// keep their handles, so leaving one as it was is never refused.
+// ValidateHandleEdit applies the pipe and '@' rules to a handle change.
+// Existing accounts keep their handles, so leaving one as it was is never
+// refused.
 func ValidateHandleEdit(old, handle string) error {
-	if strings.TrimSpace(handle) != strings.TrimSpace(old) && strings.Contains(handle, "|") {
+	if strings.TrimSpace(handle) == strings.TrimSpace(old) {
+		return nil
+	}
+	if strings.Contains(handle, "|") {
 		return ErrNamePipe
+	}
+	if strings.HasPrefix(strings.TrimSpace(handle), "@") {
+		return ErrHandleGroupPrefix
 	}
 	return nil
 }

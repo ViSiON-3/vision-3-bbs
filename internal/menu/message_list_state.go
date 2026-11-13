@@ -257,7 +257,7 @@ func buildMessageList(msgMgr *message.MessageManager, areaID int, username strin
 			MsgNum:    msgNum,
 			Subject:   msg.Subject,
 			From:      msg.From,
-			To:        msg.To,
+			To:        mailTo(msg),
 			Date:      msg.DateTime,
 			IsPrivate: isPrivate,
 			IsRead:    isRead,
@@ -333,7 +333,7 @@ func buildThreadedMessageList(msgMgr *message.MessageManager, areaID int, userna
 			entries = append(entries, e)
 			continue
 		}
-		e.Subject, e.From, e.To, e.Date = r.Msg.Subject, r.Msg.From, r.Msg.To, r.Msg.DateTime
+		e.Subject, e.From, e.To, e.Date = r.Msg.Subject, r.Msg.From, mailTo(r.Msg), r.Msg.DateTime
 		e.IsPrivate, e.IsRead = r.Msg.IsPrivate, r.Num <= lastRead
 		e.Excerpt = excerpt(r.Msg.Body)
 		// A reply shows its own first line, not "Re: ..." again, unless it

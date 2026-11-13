@@ -56,7 +56,8 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 			slog.Warn("failed to write recipient prompt", "node", nodeNumber, "error", wErr)
 		}
 		var inputErr error
-		recipient, inputErr = styledInput(terminal, s, outputMode, 24, "")
+		// 25 fits "@" and a group name as long as roles.json allows.
+		recipient, inputErr = styledInput(terminal, s, outputMode, 25, "")
 		if inputErr != nil {
 			if errors.Is(inputErr, io.EOF) {
 				slog.Info("user disconnected during recipient input", "node", nodeNumber)
@@ -90,9 +91,23 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 
+	// "@name" is a user group (#1036): checked now, before the editor opens,
+	// and written as one copy per member when saved.
+	group, toGroup := mailGroupFor(userManager, recipient)
+	if toGroup {
+		if refusal := e.checkGroupMail(userManager, currentUser, group, s, c.sessionStartTime); refusal != "" {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+refusal+"\r\n")), outputMode)
+			uiPause(1 * time.Second)
+			return nil, "", nil
+		}
+	}
+
 	// Validate recipient user exists. A deleted account is refused as
 	// COMPOSEMSG refuses it: nobody will read the mail.
 	recipientUser, found := userManager.GetUser(recipient)
+	if toGroup {
+		recipientUser, found = &user.User{Handle: "@" + group.Name}, true
+	}
 	if !found || recipientUser == nil || recipientUser.DeletedUser {
 		msg := fmt.Sprintf("\r\n|01Error: User '%s' not found.|07\r\n", callerText(recipient))
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
@@ -185,6 +200,12 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Append auto-signature if user has one
 	body = e.appendAutoSig(s, terminal, currentUser, body, outputMode, nodeNumber, termWidth, termHeight)
+
+	if toGroup {
+		sent, gerr := e.sendGroupMail(userManager, currentUser, group, privmailArea.ID, currentUser.Handle, subject, body, s, c.sessionStartTime)
+		e.reportGroupMail(terminal, outputMode, userManager, currentUser, group, sent, gerr)
+		return nil, "", nil
+	}
 
 	// Save the private message with MSG_PRIVATE flag
 	msgNum, err := e.MessageMgr.AddPrivateMessage(privmailArea.ID, currentUser.Handle, recipientUser.Handle, subject, body, "")

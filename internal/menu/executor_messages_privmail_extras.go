@@ -32,6 +32,10 @@ func unsendableMail(e *MenuExecutor, areaID int, m *message.DisplayMessage, hand
 	if !m.SentBy(handle) {
 		return false
 	}
+	// A group letter (#1036) can be unsent while any member hasn't read it.
+	if m.MailGroupID != "" {
+		return e.groupLetterUnsendable(areaID, m, handle)
+	}
 	lastRead, err := e.MessageMgr.GetLastRead(areaID, strings.TrimSpace(m.To))
 	if err != nil {
 		slog.Warn("unsend: recipient's lastread", "area", areaID, "to", m.To, "error", err)
@@ -70,10 +74,10 @@ func runSentPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	sent := sentMailFilter(currentUser.Handle)
 	err := e.MessageMgr.EachMessage(area.ID, func(m *message.DisplayMessage) bool { return !m.IsDeleted && sent(m) },
 		func(m *message.DisplayMessage) bool {
-			if first == 0 {
-				first = m.MsgNum
-			}
-			return true
+			// The first sent letter is all the reader needs to start; the
+			// walk stops there instead of reading every later letter (#1032).
+			first = m.MsgNum
+			return false
 		})
 	if err == nil {
 		total, err = e.MessageMgr.GetMessageCountForArea(area.ID)
@@ -89,10 +93,15 @@ func runSentPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
+	// A group letter (#1036) is listed once, by its first copy, not once per
+	// member; the first copy is also the first message found above.
+	groupLetters := newSentLetters(e, area.ID, currentUser.Handle)
+	letters := func(m *message.DisplayMessage) bool { return sent(m) && groupLetters.shows(m) }
+
 	origID, origTag := currentUser.CurrentMessageAreaID, currentUser.CurrentMessageAreaTag
 	currentUser.CurrentMessageAreaID, currentUser.CurrentMessageAreaTag = area.ID, area.Tag
 	updated, next, _, err := runMessageReaderOpts(e, c.s, c.terminal, c.userManager, currentUser, c.nodeNumber,
-		c.sessionStartTime, c.outputMode, first, total, false, c.termWidth, c.termHeight, sent, readerOpts{keepLastRead: true})
+		c.sessionStartTime, c.outputMode, first, total, false, c.termWidth, c.termHeight, letters, readerOpts{keepLastRead: true})
 	currentUser.CurrentMessageAreaID, currentUser.CurrentMessageAreaTag = origID, origTag
 	if updated != nil {
 		updated.CurrentMessageAreaID, updated.CurrentMessageAreaTag = origID, origTag
@@ -127,7 +136,7 @@ func forwardedBody(note string, m *message.DisplayMessage, loc *time.Location) s
 		b.WriteString(note + "\n\n")
 	}
 	fmt.Fprintf(&b, "--- Forwarded mail ---\nFrom: %s\nTo: %s\nDate: %s\nSubject: %s\n\n",
-		m.From, m.To, strings.ToLower(m.DateTime.In(loc).Format("01/02/06 at 3:04 PM")), m.Subject)
+		m.From, mailTo(m), strings.ToLower(m.DateTime.In(loc).Format("01/02/06 at 3:04 PM")), m.Subject)
 	b.WriteString(m.Body)
 	return b.String()
 }
@@ -202,7 +211,19 @@ func sendOnPrivateMail(c *cmdCtx, forward bool) (*user.User, string, error) {
 	if name == "" {
 		return currentUser, "", nil
 	}
+	// "@name" sends it on to a user group (#1036), one copy per member.
+	group, toGroup := mailGroupFor(c.userManager, name)
+	if toGroup {
+		if refusal := e.checkGroupMail(c.userManager, currentUser, group, s, c.sessionStartTime); refusal != "" {
+			say("\r\n" + refusal + "\r\n")
+			uiPause(1 * time.Second)
+			return currentUser, "", nil
+		}
+	}
 	recipient, found := c.userManager.GetUser(name)
+	if toGroup {
+		recipient, found = &user.User{Handle: "@" + group.Name}, true
+	}
 	if !found || recipient == nil || recipient.DeletedUser {
 		say(fmt.Sprintf("\r\n|01Error: User '%s' not found.|07\r\n", callerText(name)))
 		uiPause(1 * time.Second)
@@ -236,7 +257,18 @@ func sendOnPrivateMail(c *cmdCtx, forward bool) (*user.User, string, error) {
 	}
 
 	body := forwardedBody(note, target, config.LoadTimezone(e.GetServerConfig().Timezone))
-	if _, err := e.MessageMgr.AddPrivateMessage(area.ID, currentUser.Handle, recipient.Handle, subject, body, ""); err != nil {
+	if toGroup {
+		sent, gerr := e.sendGroupMail(c.userManager, currentUser, group, area.ID, currentUser.Handle, subject, body, s, c.sessionStartTime)
+		if gerr != nil {
+			msg := groupMailRefusal(group, gerr)
+			if sent > 0 {
+				msg = fmt.Sprintf("|01Error: the mail reached only part of @%s, so yours was kept.|07", group.Name)
+			}
+			say("\r\n" + msg + "\r\n")
+			uiPause(2 * time.Second)
+			return currentUser, "", nil
+		}
+	} else if _, err := e.MessageMgr.AddPrivateMessage(area.ID, currentUser.Handle, recipient.Handle, subject, body, ""); err != nil {
 		slog.Error(cmd+": saving", "node", nodeNumber, "to", recipient.Handle, "error", err)
 		say("\r\n|01Error saving private message!|07\r\n")
 		uiPause(2 * time.Second)

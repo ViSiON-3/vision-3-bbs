@@ -201,6 +201,9 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 	if strings.Contains(handle, "|") || strings.Contains(realName, "|") {
 		return nil, ErrNamePipe
 	}
+	if strings.HasPrefix(handle, "@") {
+		return nil, ErrHandleGroupPrefix
+	}
 	lowerHandle := strings.ToLower(handle)
 
 	// Reject a duplicate handle before doing the expensive work, so the common

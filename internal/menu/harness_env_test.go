@@ -95,6 +95,8 @@ type menuEnv struct {
 	// hooks go to the next run's session (testSession.whenOutput), then
 	// are cleared. See menuEnv.whenOutput.
 	hooks []outputHook
+	// calledFor is how long ago each run's session started; zero is now.
+	calledFor time.Duration
 }
 
 // defaultTestUsers are the users every menuEnv starts with.
@@ -290,7 +292,7 @@ func (env *menuEnv) run(fn RunnableFunc, u *user.User, args, input string) runRe
 		userManager:      env.um,
 		currentUser:      u,
 		nodeNumber:       1,
-		sessionStartTime: time.Now(),
+		sessionStartTime: time.Now().Add(-env.calledFor),
 		outputMode:       env.outputMode,
 		termWidth:        80,
 		termHeight:       24,

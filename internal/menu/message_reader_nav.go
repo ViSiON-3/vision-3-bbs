@@ -11,6 +11,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
@@ -99,7 +100,8 @@ func privateReplyHandle(um *user.UserMgr, msg *message.DisplayMessage, replier, 
 func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, terminal *term.Terminal,
 	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
 	outputMode ansi.OutputMode, currentMsg *message.DisplayMessage,
-	currentAreaID int, totalMsgCount *int, confName, areaName string, termWidth, termHeight int) string {
+	currentAreaID int, totalMsgCount *int, confName, areaName string, termWidth, termHeight int,
+	sessionStartTime time.Time) string {
 
 	// Prepare quote data for /Q command
 	// Split message body into lines for quoting
@@ -122,11 +124,45 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	replyArea, _ := e.MessageMgr.GetAreaByID(currentAreaID)
 	replyName, replyTo := replyAddressee(replyArea, currentMsg)
 
+	// A member's copy of group mail (#1036) may be answered to the whole
+	// group. Its sender always answers the group: their copy names one member,
+	// and a private reply to them would show who that is. That is decided by
+	// the copy's own marker, not by the group as roles.json has it now, so a
+	// group removed or renamed since refuses the sender's reply rather than
+	// sending it to the member.
+	group, toGroup := perm.Group{}, false
+	if currentMsg.IsPrivate && currentMsg.MailGroup != "" {
+		senderCopy := currentMsg.SentBy(currentUser.Handle) && !currentMsg.MailFor(currentUser.Handle)
+		g, ok := perm.Current().Group(currentMsg.MailGroup)
+		if !ok && senderCopy {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+groupMailRefusal(perm.Group{Name: currentMsg.MailGroup}, errGroupMailGone)+"\r\n")), outputMode)
+			uiPause(1 * time.Second)
+			return ""
+		}
+		toGroup = ok && senderCopy
+		if ok && !toGroup {
+			all, err := e.PromptYesNo(s, terminal, fmt.Sprintf("\r\n|07Reply to all of |15@%s|07 (No: only %s)? @", g.Name, callerText(currentMsg.From)), outputMode, nodeNumber, termWidth, termHeight, false)
+			if err != nil {
+				return ""
+			}
+			toGroup = all
+		}
+		group = g
+	}
+	if toGroup {
+		if refusal := e.checkGroupMail(userManager, currentUser, group, s, sessionStartTime); refusal != "" {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+refusal+"\r\n")), outputMode)
+			uiPause(1 * time.Second)
+			return ""
+		}
+		replyName, replyTo = "@"+group.Name, "@"+group.Name
+	}
+
 	// A private reply outside netmail is addressed by handle, the only name
 	// private mail is delivered to (and signed by one: the reply's From is
 	// always the replier's handle). A reply no account could read is refused
 	// before the editor opens, so no typing is lost.
-	if currentMsg.IsPrivate && !isNetmailArea(replyArea) {
+	if currentMsg.IsPrivate && !isNetmailArea(replyArea) && !toGroup {
 		handle, reason, ok := privateReplyHandle(userManager, currentMsg, currentUser.Handle, e.Strings().AnonymousName)
 		if !ok {
 			slog.Info("private reply refused: addressee not identified", "node", nodeNumber,
@@ -152,7 +188,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		NextMsgNum: replyNextMsg,
 		ConfArea:   fmt.Sprintf("%s > %s", confName, areaName),
 		Networked:  isNetworkedArea(replyArea),
-		QuoteTo:    currentMsg.To,
+		QuoteTo:    mailTo(currentMsg),
 	}
 	replyBody, saved, editErr := editor.RunEditorWithMetadata("", s, sessionOutput(s), outputMode, newSubject, replyName, fromName, false,
 		currentMsg.From, currentMsg.Subject, quoteDate, quoteTime, false, quoteLines, ih, withAutocorrect(e, replyCtx, replyArea, currentUser, userManager))
@@ -176,6 +212,14 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	// a private message stays private so it remains visible to its recipient,
 	// and records the replier's handle so a reply signed with the real name
 	// (netmail) stays visible to its sender too.
+	if toGroup {
+		sent, gerr := e.sendGroupMail(userManager, currentUser, group, currentAreaID, fromName, newSubject, replyBody, s, sessionStartTime)
+		e.reportGroupMail(terminal, outputMode, userManager, currentUser, group, sent, gerr)
+		if sent > 0 {
+			*totalMsgCount += sent
+		}
+		return ""
+	}
 	_, err := e.MessageMgr.Post(currentAreaID, fromName, replyTo, newSubject, replyBody, message.PostOptions{
 		Private:      currentMsg.IsPrivate,
 		ReplyToNum:   currentMsg.MsgNum,
