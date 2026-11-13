@@ -3,6 +3,7 @@ package message
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -57,8 +58,10 @@ func TestBindSponsors(t *testing.T) {
 // A binding that can't be saved is put back in memory too: the running BBS
 // gives no sponsor until the file holds the binding.
 func TestBindSponsorsSaveFailureLeavesAreasUnbound(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores directory permissions")
+	// The save is made to fail with a read-only directory, which Windows
+	// doesn't enforce and root ignores.
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("directory permissions aren't enforced here")
 	}
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "config")
