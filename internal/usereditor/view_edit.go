@@ -76,6 +76,8 @@ func (m Model) viewEditScreen() string {
 		result = m.overlayKeyAddDialog(result)
 	case modeDeviceList:
 		result = m.overlayDeviceDialog(result)
+	case modeMembership:
+		result = m.overlayMembershipDialog(result)
 	case modeDeleteConfirm:
 		result = m.overlayDeleteDialog(result, u.Handle)
 	case modePurgeConfirm:

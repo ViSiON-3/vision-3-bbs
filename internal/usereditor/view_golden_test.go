@@ -92,6 +92,7 @@ func TestViewGolden(t *testing.T) {
 		{"key_list", modeKeyList, ""},
 		{"delete_confirm", modeDeleteConfirm, ""},
 		{"help", modeHelp, ""},
+		{"membership", modeMembership, "x"},
 	}
 
 	for _, size := range []struct{ w, h int }{{80, 25}, {120, 45}} {

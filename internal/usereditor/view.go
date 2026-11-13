@@ -14,7 +14,7 @@ func (m Model) View() string {
 	case m.mode == modeACSTest:
 		return m.viewACSTestScreen()
 	case m.mode == modeEdit || m.mode == modeEditField || m.mode == modePasswordEntry || m.mode == modeSaveOnLeave ||
-		m.mode == modeKeyList || m.mode == modeKeyAdd || m.mode == modeDeviceList:
+		m.mode == modeKeyList || m.mode == modeKeyAdd || m.mode == modeDeviceList || m.mode == modeMembership:
 		return m.viewEditScreen()
 	case m.confirmFromEdit && (m.mode == modeDeleteConfirm || m.mode == modeUndeleteConfirm || m.mode == modePurgeConfirm || m.mode == modeValidate):
 		return m.viewEditScreen()
