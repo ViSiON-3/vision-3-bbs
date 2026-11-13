@@ -261,7 +261,13 @@ func (cw *ConfigWatcher) poll() {
 		reloaded = true
 		for _, t := range cw.deferredTargets {
 			cw.changed(t.path, false)
-			cw.applyDeferred(t)
+			// The file's change is consumed above, so a failure has to be
+			// queued here or nothing retries it until the file changes.
+			if !cw.applyDeferred(t) {
+				cw.mu.Lock()
+				cw.pending[t.name] = true
+				cw.mu.Unlock()
+			}
 		}
 		return
 	}

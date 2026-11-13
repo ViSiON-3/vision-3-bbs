@@ -604,3 +604,31 @@ func TestPollRescansACSOnce(t *testing.T) {
 		t.Errorf("sentinel poll scanned %d times, want 1", scans)
 	}
 }
+
+// A forced apply that fails is queued, so the next idle poll tries it again
+// without the file having to change.
+func TestForceSentinelQueuesFailedApply(t *testing.T) {
+	cw, dir, rec, _ := newDeferredTestWatcher(t)
+	fail := true
+	cw.deferredTargets[0].apply = func() error {
+		rec.hit("structural.json")()
+		if fail {
+			return os.ErrPermission
+		}
+		return nil
+	}
+	touch(t, filepath.Join(dir, "structural.json"), time.Second)
+	touch(t, config.ReloadForceSentinelPath(dir), 2*time.Second)
+	cw.poll()
+	if got := cw.PendingReloads(); len(got) != 1 {
+		t.Fatalf("failed forced apply not queued: %v", got)
+	}
+	fail = false
+	cw.poll()
+	if got := rec.count("structural.json"); got != 2 {
+		t.Errorf("applied %d times, want the retry", got)
+	}
+	if got := cw.PendingReloads(); got != nil {
+		t.Errorf("PendingReloads() = %v after the retry, want nil", got)
+	}
+}

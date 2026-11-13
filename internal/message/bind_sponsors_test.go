@@ -53,3 +53,31 @@ func TestBindSponsors(t *testing.T) {
 		t.Error("a later account with the handle became the sponsor")
 	}
 }
+
+// A binding that can't be saved is put back in memory too: the running BBS
+// gives no sponsor until the file holds the binding.
+func TestBindSponsorsSaveFailureLeavesAreasUnbound(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "config")
+	if err := os.MkdirAll(cfg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeMsgAreas(t, cfg, `[{"id":1,"position":1,"tag":"A","name":"A","sponsor":"Alice"}]`)
+	mm, err := NewMessageManager(tmp, cfg, "TestBBS", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(cfg, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(cfg, 0o755) })
+	if _, _, err := mm.BindSponsors(func(string) int { return 5 }); err == nil {
+		t.Fatal("BindSponsors saved into a read-only directory")
+	}
+	if a, _ := mm.GetAreaByID(1); a.SponsorID != 0 || a.SponsoredBy(5) {
+		t.Errorf("after a failed save, SponsorID = %d", a.SponsorID)
+	}
+}
