@@ -90,7 +90,7 @@ func TestUndefinedRoleFailsWholeString(t *testing.T) {
 
 func TestRolePermDiagnostics(t *testing.T) {
 	tests := map[string]string{
-		"PERM:users.vaildate": `"users.vaildate" is not a permission (known: users.validate, messages.moderate)`,
+		"PERM:users.vaildate": `"users.vaildate" is not a permission (known: users.validate, messages.moderate, files.manage)`,
 		"PERM:":               "needs a permission name",
 		"ROLE:9x":             "must start with a letter",
 		"ROLE:":               "a role needs a name",
@@ -231,5 +231,30 @@ func TestGroupTerm(t *testing.T) {
 	}
 	if got := strings.Join(Parse("GROUP:a|ROLE:b|GROUP:A").GroupNames(), ","); got != "a" {
 		t.Errorf("GroupNames = %q", got)
+	}
+}
+
+// PERM:files.manage asks about the caller's current file area: the BBS's
+// FileScope, or the file area tags on the record.
+func TestPermFilesManageUsesFileArea(t *testing.T) {
+	roles, _, err := perm.Parse([]byte(`{"roles": [{"name": "utils", "permissions": [{"permission": "files.manage", "areas": ["UTILS"]}]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := &user.User{AccessLevel: 20, Roles: []string{"utils"}, CurrentFileAreaTag: "UTILS", CurrentMessageAreaTag: "GENERAL"}
+	ctx := ctxFor(u)
+	ctx.Roles = roles
+	if !Check("PERM:files.manage", ctx) {
+		t.Error("record's file area UTILS: PERM:files.manage failed")
+	}
+	ctx.FileScope = func() perm.Scope { return perm.Scope{Area: "GAMES"} }
+	if Check("PERM:files.manage", ctx) {
+		t.Error("BBS file scope GAMES: PERM:files.manage passed")
+	}
+	u.CurrentFileAreaTag = ""
+	ctx = ctxFor(u)
+	ctx.Roles = roles
+	if x := Explain("PERM:files.manage", ctx); x.Root == nil || !strings.Contains(x.Root.Detail, "with no current file area") {
+		t.Errorf("detail = %+v", x.Root)
 	}
 }

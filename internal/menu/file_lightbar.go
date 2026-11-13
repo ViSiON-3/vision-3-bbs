@@ -92,7 +92,8 @@ func runListFilesLightbar(st *fileListState) (*user.User, string, error) {
 	ih := getSessionIH(st.s)
 
 	// Build command bar entries (user bar, sysop bar) and the file-row highlight.
-	cmdEntries, sysopEntries, userEntries, hiColorSeq, isSysop := buildFileListCmdBar(st.e, st.currentUser, st.cmdBarOptions, st.hiBarOptions)
+	manages := st.e.fileManagement(st.userManager, st.currentUser, st.currentAreaID).Allowed
+	cmdEntries, sysopEntries, userEntries, hiColorSeq, isSysop := buildFileListCmdBar(st.e, manages, st.cmdBarOptions, st.hiBarOptions)
 	showSysopBar := false
 
 	// Determine terminal dimensions.

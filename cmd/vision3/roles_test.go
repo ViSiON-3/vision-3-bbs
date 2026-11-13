@@ -149,9 +149,13 @@ func TestLoadRolesFailsClosed(t *testing.T) {
 func TestCheckRolesUnknownGrantTags(t *testing.T) {
 	root := t.TempDir()
 	writeBoardFile(t, root, "configs/message_areas.json", `[{"id": 1, "tag": "GENERAL"}]`)
+	writeBoardFile(t, root, "configs/file_areas.json", `[{"id": 1, "tag": "UTILS"}]`)
 	writeBoardFile(t, root, "configs/conferences.json", `[{"id": 1, "tag": "LOCAL"}]`)
+	// files.manage's areas are file areas: GENERAL is a message area, so
+	// it covers nothing; UTILS is a file area and is fine.
 	writeBoardFile(t, root, "configs/roles.json", `{"roles": [{"name": "mod", "permissions": [
-		{"permission": "messages.moderate", "areas": ["general", "GENRAL"], "conferences": ["local", "FSX"]}]}]}`)
+		{"permission": "messages.moderate", "areas": ["general", "GENRAL"], "conferences": ["local", "FSX"]},
+		{"permission": "files.manage", "areas": ["utils", "GENERAL"]}]}]}`)
 	var msgs []string
 	for _, c := range collectChecks(root, checkRoles) {
 		if c.status != doctorWarn {
@@ -160,12 +164,16 @@ func TestCheckRolesUnknownGrantTags(t *testing.T) {
 		msgs = append(msgs, c.message)
 	}
 	joined := strings.Join(msgs, "\n")
-	for _, want := range []string{"names area GENRAL, which message_areas.json doesn't have", "names conference FSX, which conferences.json doesn't have"} {
+	for _, want := range []string{
+		"messages.moderate names message area GENRAL, which message_areas.json doesn't have",
+		"names conference FSX, which conferences.json doesn't have",
+		"files.manage names file area GENERAL, which file_areas.json doesn't have",
+	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("checks lack %q:\n%s", want, joined)
 		}
 	}
-	if len(msgs) != 2 {
+	if len(msgs) != 3 {
 		t.Errorf("checks = %v", msgs)
 	}
 }

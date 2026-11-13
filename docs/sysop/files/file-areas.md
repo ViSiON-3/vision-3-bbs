@@ -265,11 +265,17 @@ once chose **A** is not shown every file forever. The prompt text is the
 
 ### Reviewing uploads
 
-New uploads are recorded as unreviewed. `EDITFILERECORD` (**E**, sysop only)
-walks the queue — all areas or the current one — and lets you edit the
+New uploads are recorded as unreviewed. `EDITFILERECORD` (**E**, sysop only
+on the stock menu) walks the queue — all areas or the current one — and lets
+you edit the
 description, move the file to another area (out of an UPLOADS drop box into
 the public library, say) or delete it, marking each file reviewed as you go.
 The lightbar listing's sysop keys do the same jobs one file at a time.
+
+To hand some areas' files to someone without a co-SysOp level, give them a
+role with [`files.manage`](users/admin-roles.md#permissions) in those areas.
+They get the listing's management keys there, can edit any description
+there, and the review queue lists only their areas.
 
 ### Removing a file
 

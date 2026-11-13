@@ -143,6 +143,7 @@ func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners [
 	e.SetProtocols(protocols)
 	SetSysopChatEnv(chatEnv{theme: e.Theme, strings: e.Strings, menus: e.Menus, caller: e.chatCaller, ended: e.chatEnded, holdDropped: e.chatHoldDropped})
 	setACSAreaScope(e.currentAreaScope)
+	setACSFileScope(e.currentFileAreaScope)
 	return e
 }
 

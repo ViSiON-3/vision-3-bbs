@@ -1,7 +1,12 @@
 package menu
 
 import (
+	"log/slog"
+
+	"github.com/google/uuid"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -75,6 +80,71 @@ func (e *MenuExecutor) currentAreaScope(u *user.User) perm.Scope {
 // and the area afresh, so it is called again just before a delete.
 func (e *MenuExecutor) moderation(um *user.UserMgr, actor *user.User, areaID int) perm.Decision {
 	return perm.Check(storedActor(um, actor), perm.MessagesModerate, e.areaScope(areaID), e.levels(), nil)
+}
+
+// fileAreaScope is file area areaID for a permission scoped to file areas
+// (files.manage): its tag and its conference's tag, read afresh. File areas
+// have no sponsor. An unknown area is the zero Scope.
+func (e *MenuExecutor) fileAreaScope(areaID int) perm.Scope {
+	if e.FileMgr == nil || areaID <= 0 {
+		return perm.Scope{}
+	}
+	area, ok := e.FileMgr.GetAreaByID(areaID)
+	if !ok || area == nil {
+		return perm.Scope{}
+	}
+	scope := perm.Scope{Area: area.Tag}
+	if e.ConferenceMgr != nil && area.ConferenceID != 0 {
+		if conf, ok := e.ConferenceMgr.GetByID(area.ConferenceID); ok && conf != nil {
+			scope.Conference = conf.Tag
+		}
+	}
+	return scope
+}
+
+// currentFileAreaScope is u's current file area, for the ACS term PERM.
+func (e *MenuExecutor) currentFileAreaScope(u *user.User) perm.Scope {
+	return e.fileAreaScope(u.CurrentFileAreaID)
+}
+
+// fileManagement decides whether actor may manage the files in file area
+// areaID (files.manage): co-sysop level and up anywhere, or a role that
+// grants it there. It reads the actor's stored record and the area afresh,
+// so each action calls it again just before it changes anything.
+func (e *MenuExecutor) fileManagement(um *user.UserMgr, actor *user.User, areaID int) perm.Decision {
+	return perm.Check(storedActor(um, actor), perm.FilesManage, e.fileAreaScope(areaID), e.levels(), nil)
+}
+
+// fileRecordGone reports whether file id is no longer in area areaID: moved
+// to another area or deleted. A change authorised for areaID is refused then.
+func (e *MenuExecutor) fileRecordGone(id uuid.UUID, areaID int) bool {
+	rec, err := e.FileMgr.GetFileRecordByID(id)
+	return err != nil || rec == nil || rec.AreaID != areaID
+}
+
+// managedFileAreas lists the file areas actor manages, in listing order.
+func (e *MenuExecutor) managedFileAreas(um *user.UserMgr, actor *user.User) []file.FileArea {
+	if e.FileMgr == nil {
+		return nil
+	}
+	var out []file.FileArea
+	for _, a := range e.FileMgr.ListAreas() {
+		if e.fileManagement(um, actor, a.ID).Allowed {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// logFileAction logs a change made to a file through files.manage below
+// co-sysop level, with the grant that allowed it, as moderator deletes are.
+// A co-sysop's actions keep their existing log lines.
+func logFileAction(d perm.Decision, action string, nodeNumber int, handle string, rec file.FileRecord, attrs ...any) {
+	if d.Level {
+		return
+	}
+	args := append([]any{"node", nodeNumber, "handle", handle, "file", rec.Filename, "area", rec.AreaID, "via", d.Source()}, attrs...)
+	slog.Info("file "+action+" by file manager", args...)
 }
 
 // mayValidateUsers reports whether actor may open the pending-validation

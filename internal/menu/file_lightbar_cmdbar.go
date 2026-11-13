@@ -6,7 +6,6 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
-	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // cmdEntry is one entry in the file-lightbar command bar.
@@ -22,7 +21,7 @@ type cmdEntry struct {
 // sysop-only bar (toggled with '*'), and a copy of the user bar used to restore
 // it. It also returns the file-row highlight color and whether the current user
 // is a sysop.
-func buildFileListCmdBar(e *MenuExecutor, currentUser *user.User, cmdBarOptions, hiBarOptions []LightbarOption) (cmdEntries, sysopEntries, userEntries []cmdEntry, hiColorSeq string, isSysop bool) {
+func buildFileListCmdBar(e *MenuExecutor, manages bool, cmdBarOptions, hiBarOptions []LightbarOption) (cmdEntries, sysopEntries, userEntries []cmdEntry, hiColorSeq string, isSysop bool) {
 	if len(cmdBarOptions) > 0 {
 		for _, opt := range cmdBarOptions {
 			cmdEntries = append(cmdEntries, cmdEntry{
@@ -57,8 +56,9 @@ func buildFileListCmdBar(e *MenuExecutor, currentUser *user.User, cmdBarOptions,
 		}
 	}
 
-	// Build sysop-only entries (toggled with the '*' key).
-	isSysop = e.isCoSysOpOrAbove(currentUser)
+	// Build the file-management entries (toggled with the '*' key), for
+	// whoever manages this area (files.manage, #1044).
+	isSysop = manages
 	if isSysop {
 		defHiSysop := colorCodeToAnsi(e.Theme().YesNoHighlightColor)
 		defLoSysop := colorCodeToAnsi(e.Theme().YesNoRegularColor)

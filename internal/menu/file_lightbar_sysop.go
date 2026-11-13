@@ -5,19 +5,41 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// fileLightbar sysop-only commands: edit description, kill, move, rename —
-// plus the pure decision helpers they share.
+// fileLightbar file-management commands: edit description, kill, move,
+// rename — plus the pure decision helpers they share. They are offered to
+// whoever manages the area (files.manage: a co-sysop, or a role granting it
+// there, #1044), and each one checks again, against the stored record and
+// the area as they are, just before it changes anything.
+
+// msgNoLongerManage is the notice when files.manage was taken away while
+// the caller was at a prompt.
+const msgNoLongerManage = "\r\n|01You can no longer manage files in this area. Nothing was changed.|07\r\n"
+
+// msgFileMovedElsewhere is the notice when the file left the area while the
+// caller was at a prompt: the change is refused, since the caller's grant is
+// for this area.
+const msgFileMovedElsewhere = "\r\n|01That file has been moved or deleted elsewhere. Nothing was changed.|07\r\n"
+
+// recheckManage decides files.manage in areaID again just before a change,
+// telling the caller when it has been taken away.
+func (lb *fileLightbar) recheckManage(areaID int) (perm.Decision, bool) {
+	d := lb.e.fileManagement(lb.userManager, lb.currentUser, areaID)
+	if !d.Allowed {
+		lb.errMsgPause(msgNoLongerManage)
+	}
+	return d, d.Allowed
+}
 
 // resolveTargetArea resolves a user-typed "move to area" input to a target
 // area: numeric input is looked up by area ID, anything else by area tag.
@@ -55,43 +77,6 @@ func validateNewName(newName string, existingFiles []file.FileRecord, currentID 
 	return cleaned, ""
 }
 
-// renameConflict classifies why safeRenameOnDisk refused to rename, so the
-// caller can log and message the user exactly as the original inline case
-// did for each distinct failure.
-type renameConflict int
-
-const (
-	renameOK renameConflict = iota
-	renameTargetExists
-	renameStatFailed
-	renameFailed
-)
-
-// safeRenameOnDisk renames oldPath to newPath, refusing to clobber an
-// untracked file already on disk at the target path (the duplicate check in
-// validateNewName only consults DB records). os.SameFile permits a
-// case-only rename of the same file on a case-insensitive filesystem. A
-// stat error other than "not exist" means we cannot prove the target is
-// safe to overwrite, so it also refuses. renErr is the underlying error the
-// caller should log alongside its own node/file context; it is nil on
-// renameOK and renameTargetExists (which isn't itself an error).
-func safeRenameOnDisk(oldPath, newPath string) (conflict renameConflict, renErr error) {
-	newInfo, statErr := os.Stat(newPath)
-	switch {
-	case statErr == nil:
-		oldInfo, oldStatErr := os.Stat(oldPath)
-		if oldStatErr != nil || !os.SameFile(oldInfo, newInfo) {
-			return renameTargetExists, nil
-		}
-	case !errors.Is(statErr, os.ErrNotExist):
-		return renameStatFailed, statErr
-	}
-	if err := os.Rename(oldPath, newPath); err != nil {
-		return renameFailed, err
-	}
-	return renameOK, nil
-}
-
 // editDescription runs the "e" sysop command: prompt for a new description
 // and save it. There's no disconnect-mid-prompt LOGOFF path here (an abort
 // or read error just means "don't save"), so this is a plain void method.
@@ -102,9 +87,21 @@ func (lb *fileLightbar) editDescription(frame *lbFrame) {
 	newDesc, readErr := readLineFromSessionIHAllowAbort(lb.s, lb.terminal)
 	lb.endFooterPrompt()
 	if readErr == nil && newDesc != "" {
-		if updErr := lb.e.FileMgr.UpdateFileDescription(rec.ID, newDesc); updErr != nil {
+		d, ok := lb.recheckManage(lb.currentAreaID)
+		if !ok {
+			frame.needFullRedraw = true
+			return
+		}
+		// The change is made only while the file is still in this area,
+		// the one the grant was checked for.
+		updErr := lb.e.FileMgr.UpdateFileRecordInArea(rec.ID, lb.currentAreaID, func(r *file.FileRecord) { r.Description = newDesc })
+		if errors.Is(updErr, file.ErrRecordMoved) {
+			lb.errMsgPause(msgFileMovedElsewhere)
+			lb.refreshFileList()
+		} else if updErr != nil {
 			slog.Error("failed to update description", "node", lb.nodeNumber, "file", rec.Filename, "error", updErr)
 		} else {
+			logFileAction(d, "description changed", lb.nodeNumber, lb.currentUser.Handle, rec)
 			lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
 		}
 	}
@@ -128,10 +125,21 @@ func (lb *fileLightbar) killFile(frame *lbFrame) (exit bool, result *user.User, 
 		return false, nil, "", nil
 	}
 	if proceed {
-		if delErr := lb.e.FileMgr.DeleteFileRecord(rec.ID, true); delErr != nil {
+		d, ok := lb.recheckManage(lb.currentAreaID)
+		if !ok {
+			frame.needFullRedraw = true
+			return false, nil, "", nil
+		}
+		// Deleted only if it is still in this area, under the area's lock.
+		deleted, delErr := lb.e.FileMgr.DeleteFileRecordIf(rec.ID, true, func(r file.FileRecord) bool { return r.AreaID == lb.currentAreaID })
+		if delErr == nil && !deleted || delErr != nil && lb.e.fileRecordGone(rec.ID, lb.currentAreaID) {
+			lb.errMsgPause(msgFileMovedElsewhere)
+			lb.refreshFileList()
+		} else if delErr != nil {
 			slog.Error("failed to delete file", "node", lb.nodeNumber, "file", rec.Filename, "error", delErr)
 		} else {
 			slog.Info("sysop deleted file from area", "node", lb.nodeNumber, "file", rec.Filename, "area", lb.currentAreaID)
+			logFileAction(d, "deleted", lb.nodeNumber, lb.currentUser.Handle, rec)
 			// Remove from user's tag list so stale IDs don't reach batch download.
 			filtered := lb.currentUser.TaggedFileIDs[:0]
 			for _, tid := range lb.currentUser.TaggedFileIDs {
@@ -166,6 +174,12 @@ func (lb *fileLightbar) moveFile(frame *lbFrame) (exit bool, result *user.User, 
 		frame.needFullRedraw = true
 		return false, nil, "", nil
 	}
+	// A move needs files.manage in the area it goes to as well (#1044).
+	if !lb.e.fileManagement(lb.userManager, lb.currentUser, targetAreaID).Allowed {
+		lb.errMsgPause(fmt.Sprintf("\r\n|01You don't manage the files in %s.|07\r\n", callerText(targetArea.Name)))
+		frame.needFullRedraw = true
+		return false, nil, "", nil
+	}
 	confirmPrompt := fmt.Sprintf("Move %s to %s?", callerText(rec.Filename), targetArea.Name)
 	_ = terminalio.WriteProcessedBytes(lb.terminal, []byte("\x1b[?25h"), lb.outputMode)
 	tw, th := getTerminalSize(lb.s)
@@ -179,10 +193,23 @@ func (lb *fileLightbar) moveFile(frame *lbFrame) (exit bool, result *user.User, 
 		return false, nil, "", nil
 	}
 	if proceed {
-		if mvErr := lb.e.FileMgr.MoveFileRecord(rec.ID, targetAreaID); mvErr != nil {
+		d, ok := lb.recheckManage(lb.currentAreaID)
+		if ok {
+			_, ok = lb.recheckManage(targetAreaID)
+		}
+		if !ok {
+			frame.needFullRedraw = true
+			return false, nil, "", nil
+		}
+		mvErr := lb.e.FileMgr.MoveFileRecordFromArea(rec.ID, lb.currentAreaID, targetAreaID)
+		if errors.Is(mvErr, file.ErrRecordMoved) {
+			lb.errMsgPause(msgFileMovedElsewhere)
+			lb.refreshFileList()
+		} else if mvErr != nil {
 			slog.Error("failed to move file to area", "node", lb.nodeNumber, "file", rec.Filename, "area", targetAreaID, "error", mvErr)
 		} else {
 			slog.Info("sysop moved file to area", "node", lb.nodeNumber, "file", rec.Filename, "area", targetAreaID, "tag", targetArea.Tag)
+			logFileAction(d, "moved", lb.nodeNumber, lb.currentUser.Handle, rec, "to_area", targetAreaID)
 			lb.refreshFileList()
 		}
 	}
@@ -208,40 +235,26 @@ func (lb *fileLightbar) renameFile(frame *lbFrame) (exit bool, result *user.User
 		frame.needFullRedraw = true
 		return false, nil, "", nil
 	}
-	oldPath, pathErr := lb.e.FileMgr.GetFilePath(rec.ID)
-	if pathErr != nil {
-		slog.Error("failed to resolve path", "node", lb.nodeNumber, "file", rec.Filename, "error", pathErr)
+	d, ok := lb.recheckManage(lb.currentAreaID)
+	if !ok {
 		frame.needFullRedraw = true
 		return false, nil, "", nil
 	}
-	newPath := filepath.Join(filepath.Dir(oldPath), newName)
-	conflict, renErr := safeRenameOnDisk(oldPath, newPath)
-	switch conflict {
-	case renameTargetExists:
-		slog.Error("rename target already exists on disk", "node", lb.nodeNumber, "path", newPath)
+	// One step under the area's lock: the file must still be in this area,
+	// the name free, and the disk and the record change together.
+	renErr := lb.e.FileMgr.RenameFileInArea(rec.ID, lb.currentAreaID, newName)
+	switch {
+	case errors.Is(renErr, file.ErrRecordMoved):
+		lb.errMsgPause(msgFileMovedElsewhere)
+		lb.refreshFileList()
+	case errors.Is(renErr, file.ErrRenameTargetExists):
 		lb.errMsgPause("\r\n|01A file with that name already exists.|07\r\n")
-		frame.needFullRedraw = true
-		return false, nil, "", nil
-	case renameStatFailed:
-		slog.Error("cannot stat rename target", "node", lb.nodeNumber, "path", newPath, "error", renErr)
-		lb.errMsgPause("\r\n|01Rename failed.|07\r\n")
-		frame.needFullRedraw = true
-		return false, nil, "", nil
-	case renameFailed:
+	case renErr != nil:
 		slog.Error("failed to rename file", "node", lb.nodeNumber, "from", rec.Filename, "to", newName, "error", renErr)
 		lb.errMsgPause("\r\n|01Rename failed.|07\r\n")
-		frame.needFullRedraw = true
-		return false, nil, "", nil
-	}
-	if updErr := lb.e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
-		r.Filename = newName
-	}); updErr != nil {
-		slog.Error("failed to update record", "node", lb.nodeNumber, "file", newName, "error", updErr)
-		if rollbackErr := os.Rename(newPath, oldPath); rollbackErr != nil {
-			slog.Error("rollback rename failed (disk/DB inconsistent)", "node", lb.nodeNumber, "file", newName, "error", rollbackErr)
-		}
-	} else {
+	default:
 		slog.Info("sysop renamed file in area", "node", lb.nodeNumber, "from", rec.Filename, "to", newName, "area", lb.currentAreaID)
+		logFileAction(d, "renamed", lb.nodeNumber, lb.currentUser.Handle, rec, "to", newName)
 		lb.allFiles = lb.e.FileMgr.GetFilesForArea(lb.currentAreaID)
 	}
 	frame.needFullRedraw = true

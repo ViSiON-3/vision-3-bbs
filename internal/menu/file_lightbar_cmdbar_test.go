@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
-	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 func TestCompactFileSize(t *testing.T) {
@@ -38,12 +37,10 @@ func hotkeys(entries []cmdEntry) []string {
 
 func TestBuildFileListCmdBar_Defaults(t *testing.T) {
 	e := newExecutorWithServerConfig(config.ServerConfig{CoSysOpLevel: 100})
-	regular := &user.User{Handle: "Reg", AccessLevel: 10}
-
-	cmd, sysop, userBar, _, isSysop := buildFileListCmdBar(e, regular, nil, nil)
+	cmd, sysop, userBar, _, isSysop := buildFileListCmdBar(e, false, nil, nil)
 
 	if isSysop {
-		t.Error("regular user (level 10 < CoSysOp 100) should not be sysop")
+		t.Error("a caller who doesn't manage the area got the management bar")
 	}
 	if len(sysop) != 0 {
 		t.Errorf("non-sysop should get no sysop entries, got %d", len(sysop))
@@ -66,11 +63,9 @@ func TestBuildFileListCmdBar_Defaults(t *testing.T) {
 
 func TestBuildFileListCmdBar_SysopEntries(t *testing.T) {
 	e := newExecutorWithServerConfig(config.ServerConfig{CoSysOpLevel: 100})
-	sysopUser := &user.User{Handle: "Sys", AccessLevel: 255}
-
-	_, sysop, _, _, isSysop := buildFileListCmdBar(e, sysopUser, nil, nil)
+	_, sysop, _, _, isSysop := buildFileListCmdBar(e, true, nil, nil)
 	if !isSysop {
-		t.Fatal("level-255 user should be a sysop with CoSysOp 100")
+		t.Fatal("a caller who manages the area has no management bar")
 	}
 	wantHK := []string{"e", "k", "m", "r"}
 	gotHK := hotkeys(sysop)
@@ -86,12 +81,11 @@ func TestBuildFileListCmdBar_SysopEntries(t *testing.T) {
 
 func TestBuildFileListCmdBar_UsesConfiguredOptions(t *testing.T) {
 	e := newExecutorWithServerConfig(config.ServerConfig{CoSysOpLevel: 100})
-	regular := &user.User{Handle: "Reg", AccessLevel: 10}
 	opts := []LightbarOption{
 		{Text: "Go", HotKey: "G"},
 		{Text: "Back", HotKey: "B"},
 	}
-	cmd, _, _, _, _ := buildFileListCmdBar(e, regular, opts, nil)
+	cmd, _, _, _, _ := buildFileListCmdBar(e, false, opts, nil)
 	if len(cmd) != 2 {
 		t.Fatalf("configured cmd bar = %d entries, want 2", len(cmd))
 	}

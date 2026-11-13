@@ -55,10 +55,20 @@ type Context struct {
 	// sponsor; the BBS looks the area up, sponsor included (see
 	// menu.acsContext).
 	Scope func() perm.Scope
+	// FileScope is Scope for a permission scoped to file areas
+	// (files.manage): the user's current file area. nil is the tags on
+	// their record.
+	FileScope func() perm.Scope
 }
 
-// scope is the area PERM asks about.
-func (c Context) scope() perm.Scope {
+// scope is the area PERM asks a permission of kind k about.
+func (c Context) scope(k perm.AreaKind) perm.Scope {
+	if k == perm.FileAreas {
+		if c.FileScope != nil {
+			return c.FileScope()
+		}
+		return perm.Scope{Area: c.User.CurrentFileAreaTag, Conference: c.User.CurrentFileConferenceTag}
+	}
 	if c.Scope != nil {
 		return c.Scope()
 	}
@@ -66,11 +76,11 @@ func (c Context) scope() perm.Scope {
 }
 
 // permission decides PERM's permission p for the context's user, in their
-// current message area when p is scoped.
+// current area of p's kind when p is scoped.
 func (c Context) permission(p perm.Permission) perm.Decision {
 	var at perm.Scope
 	if perm.IsScoped(p) {
-		at = c.scope()
+		at = c.scope(perm.KindOf(p))
 	}
 	return perm.Check(c.User, p, at, perm.Levels{SysOp: c.SysOpLevel, CoSysOp: c.CoSysOpLevel}, c.roles())
 }

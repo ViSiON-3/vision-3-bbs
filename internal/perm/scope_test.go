@@ -155,3 +155,40 @@ func TestGrantJSON(t *testing.T) {
 		}
 	}
 }
+
+// files.manage is scoped to file areas: a grant names file area and
+// conference tags, a co-sysop holds it everywhere, and a file area doesn't
+// count as private mail whatever it is called.
+func TestFilesManage(t *testing.T) {
+	roles := mustParse(t, `{"roles": [
+		{"name": "utils", "permissions": [{"permission": "files.manage", "areas": ["UTILS"]}]},
+		{"name": "fsx_files", "permissions": [{"permission": "files.manage", "conferences": ["FSXNET"]}]}
+	]}`)
+	if !IsScoped(FilesManage) || KindOf(FilesManage) != FileAreas || KindOf(MessagesModerate) != MessageAreas {
+		t.Fatal("files.manage isn't a file-area permission")
+	}
+	member := func(r string) *user.User { return &user.User{ID: 5, AccessLevel: 20, Roles: []string{r}} }
+	for _, tt := range []struct {
+		name string
+		u    *user.User
+		at   Scope
+		want string
+	}{
+		{"by area", member("utils"), Scope{Area: "UTILS"}, "role utils"},
+		{"another area", member("utils"), Scope{Area: "GAMES"}, ""},
+		{"by conference", member("fsx_files"), Scope{Area: "FSX_NODELIST", Conference: "FSXNET"}, "role fsx_files"},
+		{"co-sysop", &user.User{AccessLevel: 250}, Scope{Area: "GAMES"}, "co-sysop level"},
+		{"a file area called PRIVMAIL", member("utils"), Scope{Area: "PRIVMAIL"}, ""},
+		{"no area", member("utils"), Scope{}, ""},
+	} {
+		d := Check(tt.u, FilesManage, tt.at, levels, roles)
+		if d.Source() != tt.want {
+			t.Errorf("%s: %q, want %q", tt.name, d.Source(), tt.want)
+		}
+	}
+	// A message-area moderation grant gives nothing over files.
+	mod := mustParse(t, `{"roles": [{"name": "m", "permissions": [{"permission": "messages.moderate", "areas": ["UTILS"]}]}]}`)
+	if Check(member("m"), FilesManage, Scope{Area: "UTILS"}, levels, mod).Allowed {
+		t.Error("messages.moderate granted files.manage")
+	}
+}

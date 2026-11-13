@@ -1,6 +1,7 @@
 package file
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -92,6 +93,32 @@ func (fm *FileManager) UpdateFileRecord(fileID uuid.UUID, updateFunc func(*FileR
 
 	slog.Debug("updated file record", "file", filename, "id", fileID)
 	return nil
+}
+
+// ErrRecordMoved is returned by the ...InArea / ...FromArea operations when
+// the record isn't in the area the caller expected, read under that area's
+// lock: it was moved or deleted meanwhile. Nothing is changed.
+var ErrRecordMoved = errors.New("the file is no longer in that area")
+
+// UpdateFileRecordInArea is UpdateFileRecord for a file the caller expects
+// in areaID: updateFunc runs only if the record is in that area's list on
+// disk, under its lock, and ErrRecordMoved is returned otherwise. A caller
+// authorised for areaID alone can't change a file that has been moved to
+// another area meanwhile.
+func (fm *FileManager) UpdateFileRecordInArea(fileID uuid.UUID, areaID int, updateFunc func(*FileRecord)) error {
+	if _, ok := fm.GetAreaByID(areaID); !ok {
+		return ErrRecordMoved
+	}
+	return fm.mutateAreas([]int{areaID}, func(lists map[int][]FileRecord) (func(), error) {
+		records := lists[areaID]
+		for i := range records {
+			if records[i].ID == fileID {
+				updateFunc(&records[i])
+				return nil, nil
+			}
+		}
+		return nil, ErrRecordMoved
+	})
 }
 
 // UpdateFileDescription updates the description of a file record.

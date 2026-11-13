@@ -129,30 +129,39 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 // nothing, so the grant is narrower than it reads. A file that can't be
 // read is left to the checks that report on it.
 func checkGrantTags(configDir string, roles *perm.Roles) []string {
-	var areas []struct {
+	type tagged struct {
 		Tag string `json:"tag"`
 	}
-	var confs []struct {
-		Tag string `json:"tag"`
-	}
-	read := func(name string, v any) bool {
+	// tags reads a config file's tags; ok is false when it can't be read,
+	// and then its tags aren't checked.
+	tags := func(name string) (map[string]bool, bool) {
+		var list []tagged
 		data, err := os.ReadFile(filepath.Join(configDir, name))
-		return err == nil && json.Unmarshal(data, v) == nil
+		if err != nil || json.Unmarshal(data, &list) != nil {
+			return nil, false
+		}
+		out := map[string]bool{}
+		for _, t := range list {
+			out[strings.ToUpper(strings.TrimSpace(t.Tag))] = true
+		}
+		return out, true
 	}
-	haveAreas, haveConfs := read("message_areas.json", &areas), read("conferences.json", &confs)
-	areaTags, confTags := map[string]bool{}, map[string]bool{}
-	for _, a := range areas {
-		areaTags[strings.ToUpper(strings.TrimSpace(a.Tag))] = true
+	// A grant's areas are of its permission's kind: message areas for
+	// messages.moderate, file areas for files.manage.
+	areaFile := map[perm.AreaKind]string{perm.MessageAreas: "message_areas.json", perm.FileAreas: "file_areas.json"}
+	areaTags := map[perm.AreaKind]map[string]bool{}
+	haveAreas := map[perm.AreaKind]bool{}
+	for k, name := range areaFile {
+		areaTags[k], haveAreas[k] = tags(name)
 	}
-	for _, c := range confs {
-		confTags[strings.ToUpper(strings.TrimSpace(c.Tag))] = true
-	}
+	confTags, haveConfs := tags("conferences.json")
 	var out []string
 	for _, role := range roles.List() {
 		for _, g := range role.Permissions {
+			kind := perm.KindOf(perm.Permission(g.Permission))
 			for _, tag := range g.Areas {
-				if haveAreas && !areaTags[tag] {
-					out = append(out, fmt.Sprintf("role %s: %s names area %s, which message_areas.json doesn't have, so it covers nothing there", role.Name, g.Permission, tag))
+				if haveAreas[kind] && !areaTags[kind][tag] {
+					out = append(out, fmt.Sprintf("role %s: %s names %s %s, which %s doesn't have, so it covers nothing there", role.Name, g.Permission, kind, tag, areaFile[kind]))
 				}
 			}
 			for _, tag := range g.Conferences {

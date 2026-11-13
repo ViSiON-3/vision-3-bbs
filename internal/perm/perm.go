@@ -6,8 +6,9 @@
 // when their access level holds it (sysOpLevel holds every permission,
 // coSysOpLevel the ones co-sysops always had), when they sponsor the message
 // area a scoped permission is asked about, or when one of their roles grants
-// it there. A role can grant a scoped permission (messages.moderate) in some
-// areas or conferences only.
+// it there. A role can grant a scoped permission (messages.moderate in
+// message areas, files.manage in file areas) in some areas or conferences
+// only.
 //
 // Roles only ever add: there are no deny rules and no inheritance, and a
 // board with no roles behaves exactly as one without this package. Holding a
@@ -43,7 +44,32 @@ const (
 	// reader. A role can grant it in some areas or conferences only, and it
 	// never covers private mail through a role or a sponsorship.
 	MessagesModerate Permission = "messages.moderate"
+	// FilesManage edits, deletes, moves and renames the files in a file
+	// area, and their descriptions, including the review queue. A role can
+	// grant it in some file areas or conferences only; a move needs it in
+	// both areas. It gives nothing over the areas themselves (their ACS,
+	// path or name), which stay with the sysop.
+	FilesManage Permission = "files.manage"
 )
+
+// AreaKind is the kind of area a scoped permission applies in, which is what
+// a grant's "areas" tags name.
+type AreaKind int
+
+const (
+	// MessageAreas are configs/message_areas.json's areas.
+	MessageAreas AreaKind = iota
+	// FileAreas are configs/file_areas.json's areas.
+	FileAreas
+)
+
+// String is the kind as the documentation and messages name it.
+func (k AreaKind) String() string {
+	if k == FileAreas {
+		return "file area"
+	}
+	return "message area"
+}
 
 // Level is the access level that holds a permission without a role.
 type Level int
@@ -63,16 +89,18 @@ type Info struct {
 	// Level is the lowest access level that holds the permission whatever
 	// the user's roles.
 	Level Level
-	// Scoped permissions apply in a message area: a role can grant them in
-	// some areas or conferences only, and an area's sponsor holds them in
-	// that area.
+	// Scoped permissions apply in an area of kind Kind: a role can grant
+	// them in some areas or conferences only, and a message area's sponsor
+	// holds them in that area.
 	Scoped bool
+	Kind   AreaKind
 }
 
 // registry is every permission the BBS defines, in the order they are listed.
 var registry = []Info{
-	{UsersValidate, "review accounts awaiting validation and approve them with the board's validation defaults", SysOpLevel, false},
-	{MessagesModerate, "delete any message in a message area (not private mail)", CoSysOpLevel, true},
+	{UsersValidate, "review accounts awaiting validation and approve them with the board's validation defaults", SysOpLevel, false, MessageAreas},
+	{MessagesModerate, "delete any message in a message area (not private mail)", CoSysOpLevel, true, MessageAreas},
+	{FilesManage, "edit, delete, move and rename the files in a file area, and review uploads there", CoSysOpLevel, true, FileAreas},
 }
 
 // Known lists the permissions the BBS defines.
@@ -110,8 +138,11 @@ func info(p Permission) Info {
 	return Info{Name: p, Level: SysOpLevel}
 }
 
-// IsScoped reports whether p applies in a message area.
+// IsScoped reports whether p applies in an area.
 func IsScoped(p Permission) bool { return info(p).Scoped }
+
+// KindOf is the kind of area a scoped permission p applies in.
+func KindOf(p Permission) AreaKind { return info(p).Kind }
 
 // LevelOf is the access level that holds p without a role.
 func LevelOf(p Permission) Level { return info(p).Level }
@@ -130,14 +161,16 @@ func (lv Levels) holds(level int, l Level) bool {
 	return l == CoSysOpLevel && lv.CoSysOp > 0 && level >= lv.CoSysOp
 }
 
-// PrivateMailTag is the private mail area's tag. A scoped permission never
-// reaches it through a role or a sponsorship: private mail has no moderator.
+// PrivateMailTag is the private mail area's tag. A message-area permission
+// never reaches it through a role or a sponsorship: private mail has no
+// moderator.
 const PrivateMailTag = "PRIVMAIL"
 
-// Scope is the message area a scoped permission is asked about: its tag,
-// its conference's tag, and its sponsor's account ID (0 for none; the
-// sponsor is an account, not a handle, #1020). The zero Scope is no area,
-// which only a grant for every area, a level, covers.
+// Scope is the area a scoped permission is asked about, of the permission's
+// kind: its tag, its conference's tag, and for a message area its
+// sponsor's account ID (0 for none; the sponsor is an account, not a
+// handle, #1020). The zero Scope is no area, which only a grant for every
+// area, a level, covers.
 type Scope struct {
 	Area, Conference string
 	SponsorID        int
@@ -215,10 +248,10 @@ func Check(u *user.User, p Permission, at Scope, lv Levels, roles *Roles) Decisi
 		}
 		return d
 	}
-	if pi.Scoped && at.private() {
+	if pi.Scoped && pi.Kind == MessageAreas && at.private() {
 		return d
 	}
-	if pi.Scoped && at.SponsorID > 0 && at.SponsorID == u.ID {
+	if pi.Scoped && pi.Kind == MessageAreas && at.SponsorID > 0 && at.SponsorID == u.ID {
 		d.Sponsor = true
 	}
 	if roles == nil {
