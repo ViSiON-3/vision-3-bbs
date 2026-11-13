@@ -430,6 +430,7 @@ hot key:
 | `I` | Twit | Add the author to your Twit List (hidden while Twit Lists are off) |
 | `D` | Del | Delete the message (shown in red): any message for a sysop or co-sysop, any message in their own area for the area's [sponsor](users/sponsor-menus.md#moderating-messages), any message where an [admin role](users/admin-roles.md) grants `messages.moderate`, and a caller's own private mail ([Private mail](messages/private-mail.md#user-access)); greyed where the caller can't. On the bar for co-sysops, for a sponsor in their area, for a role's moderator where it applies, and for everyone in `PRIVMAIL` |
 | `V` | Move | Move the message to another local area ([Moving a message](#moving-a-message)): a sysop or co-sysop any message, an area's [sponsor](users/sponsor-menus.md#moderating-messages), or a holder of `messages.moderate` there through an [admin role](users/admin-roles.md), one out of that area. Not on the bar; `?` lists it where it applies |
+| `E` | Edit | Edit the message's subject and text ([Editing a posted message](#editing-a-posted-message)): a caller their own, and any for a sysop or co-sysop, an area's [sponsor](users/sponsor-menus.md#moderating-messages) in their area, or a holder of `messages.moderate` there through an [admin role](users/admin-roles.md), in local areas only and never private ones. Not on the bar; `?` lists it on a message the caller may edit |
 | `K` | Kludges | Show the message's control information (sysop and co-sysop only; not on the bar) |
 | `?` | Help | List the commands |
 | `Q` | Quit | Leave the reader |
@@ -489,7 +490,8 @@ cancels), then asks `Move this message to ...? [Y/N]`.
   only take away this board's copy. A `local` area that a V3Net leaf lists
   in its `boards` counts as V3Net here. Private mail isn't moved, nor a
   message stored in a character set other than UTF-8 (its copy would lose
-  the `CHRS` kludge that says how to read it).
+  the `CHRS` kludge that says how to read it), nor one whose text isn't
+  valid UTF-8, whether it has no `CHRS` kludge or one that says UTF-8.
 - **What arrives:** the message keeps its sender, recipient, subject, date
   and private flag, and gets a last line saying where it came from, who
   moved it and when, such as ` * Moved from General Discussion by Felonius
@@ -508,6 +510,48 @@ cancels), then asks `Move this message to ...? [Y/N]`.
   can't be read, the caller is told a copy was left in the other area, and
   the log says which. Check both areas before deleting anything: delete one
   only if the message is in both.
+
+### Editing a Posted Message
+
+`E` in the reader edits the message shown. It asks for the subject, starting with
+the current one (Enter keeps it), then opens the text in the full-screen
+editor. Saving replaces the message and adds a last line saying who edited
+it and when, such as ` * Edited by Felonius on 11/12/26 at 1:05 pm`; a
+message edited again carries only its latest. Leaving the editor without
+saving changes nothing. The message keeps its number, sender, date and
+place in its thread.
+
+- **Who:** the author, by the handle the message was posted under (a post
+  signed with a real name keeps the handle with it), and whoever moderates
+  the area: its sponsor, a holder of `messages.moderate` there through an
+  [admin role](users/admin-roles.md), and sysops and co-sysops. An
+  anonymous post records no author, so only a moderator can edit it.
+- **Where:** local areas only. Echomail, netmail, QWK network and V3Net
+  messages have already been sent to other boards, so an edit would change
+  this board's copy alone; private mail has already been delivered. A
+  `local` area that a V3Net leaf lists in its `boards` counts as V3Net
+  here.
+- **What:** not a private message, wherever it is. Not a message stored in a
+  character set other than UTF-8, nor one whose text isn't valid UTF-8 (an
+  older program's raw CP437, or a wrong label): the editor would rewrite
+  its bytes. Not one with any character other than plain ASCII, such as an
+  accented letter or a line-drawing character from a QWK reply, a
+  `v3mail post` or a quote: the editor works in bytes, so a Backspace would
+  cut the character in half. And not one longer than the editor holds, 100
+  lines, as a QWK or `v3mail post` message can be. In the last two cases
+  the caller is told why.
+- **Checked again on saving:** the right to edit, and that the message is
+  still the one shown. If another session edited, deleted or moved it
+  meanwhile, or the caller no longer moderates the area, nothing is saved
+  and the caller is told. The reader then reads the message again, so it
+  shows what is stored now.
+- **Storage:** the new text and header are written at the end of the JAM
+  base and the index points to them; the old ones stay as unused space
+  until the base is next packed. If writing fails before the index points
+  to the new header, the index is put back and the caller is told nothing
+  was saved; the message is as it was. If putting the index back fails
+  too, the caller is told the message may or may not have been saved, the
+  log has the error, and the reader reads the message again.
 
 ### Searching Messages
 
@@ -776,9 +820,6 @@ Tagged areas are saved to the user's profile in `users.json`.
 
 ### Not Yet Implemented
 
-- Per-message editing (sponsors can edit area settings, and sysops and an
-  area's sponsor can delete a message from the reader; editing a posted
-  message is not available)
 - Full-text message search (newscan can filter by To, From, date and range)
 - File attachments
 

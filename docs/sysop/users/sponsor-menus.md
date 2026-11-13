@@ -8,7 +8,7 @@ Each message area in `configs/message_areas.json` can have a `"sponsor"` field c
 
 Sysops and co-sysops automatically have sponsor access to all areas.
 
-A sponsor also moderates their area's messages: they can delete any message in it, or move one to another local area, from the message reader. See [Moderating Messages](#moderating-messages).
+A sponsor also moderates their area's messages from the message reader: they can delete any message in it, edit one in a local area, or move one to another local area. See [Moderating Messages](#moderating-messages).
 
 ## Access Levels
 
@@ -100,7 +100,9 @@ In the message reader, an area's sponsor can delete any message in that area, as
 
 `V` moves a message out of the area, into another local area the sponsor may read and post in ([Moving a message](messages/message-areas.md#moving-a-message)).
 
-This is per area: sponsoring one area gives nothing in another. Sponsorship is checked again when a delete or move is confirmed, so a sponsor the sysop removes meanwhile deletes or moves nothing. The `PRIVMAIL` area has no moderator: a sponsor set on it doesn't let anyone delete other callers' mail.
+`E` edits a message in the area, if the area is local (not echomail, netmail, QWK network or V3Net, and not bound by a V3Net leaf): its subject and text, signed with a last line naming the sponsor as editor. Private messages aren't edited, nor a message whose text isn't plain ASCII (the editor works in bytes, so it would cut an accented letter in half), nor one longer than the editor holds (100 lines). See [Editing a posted message](messages/message-areas.md#editing-a-posted-message).
+
+This is per area: sponsoring one area gives nothing in another. Sponsorship is checked again when a delete or move is confirmed or an edit saved, so a sponsor the sysop removes meanwhile deletes, moves or changes nothing. The `PRIVMAIL` area has no moderator: a sponsor set on it doesn't let anyone delete other callers' mail.
 
 To let someone moderate without making them an area's sponsor, or across a
 whole conference, give them an [admin role](users/admin-roles.md) with
