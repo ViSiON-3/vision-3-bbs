@@ -56,6 +56,10 @@ type User struct {
 	// configs/roles.json defines them (internal/perm). Only a sysop sets
 	// them; a role the file doesn't define grants nothing.
 	Roles []string `json:"roles,omitempty"`
+	// Groups are the user groups the sysop has put this user in, by name,
+	// as configs/roles.json defines them, for the ACS term GROUP:. Being in
+	// a group grants no admin permission.
+	Groups []string `json:"groups,omitempty"`
 
 	// PreviousLogin is the LastLogin value from before the current session's
 	// authentication. Authenticate() overwrites LastLogin with time.Now()

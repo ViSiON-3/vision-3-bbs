@@ -46,8 +46,8 @@ type Context struct {
 	// permission, for PERM.
 	SysOpLevel, CoSysOpLevel int
 	// Roles are the roles ROLE and PERM read; nil is the BBS's current set
-	// (perm.Current). A ROLE term naming a role the set doesn't define fails
-	// the whole string.
+	// (perm.Current). A ROLE or GROUP term naming a role or group the set
+	// doesn't define fails the whole string.
 	Roles *perm.Roles
 	// Scope finds the message area PERM asks a scoped permission
 	// (messages.moderate) about, called only for such a term. nil is the
@@ -214,9 +214,9 @@ func evalNode(n *Node, ctx Context) (result, lacks bool) {
 
 // lacking reports whether t needs context ctx doesn't have: a session for
 // L and A (NoSession), a sign-up date on the user's record for AGE
-// (Unavailable), or for ROLE a role the board defines (Undefined). The last
-// is what keeps a misspelt role from passing through '!' or another branch
-// of '|'.
+// (Unavailable), or for ROLE and GROUP a role or group the board defines
+// (Undefined). The last is what keeps a misspelt name from passing through
+// '!' or another branch of '|'.
 func lacking(t parsedTerm, ctx Context) (Reason, bool) {
 	switch {
 	case (t.code == "L" || t.code == "A") && ctx.Session == nil:
@@ -224,6 +224,8 @@ func lacking(t parsedTerm, ctx Context) (Reason, bool) {
 	case t.code == "AGE" && ctx.User.CreatedAt.IsZero():
 		return Unavailable, true
 	case t.code == "ROLE" && !ctx.roles().Defined(t.value):
+		return Undefined, true
+	case t.code == "GROUP" && !ctx.roles().GroupDefined(t.value):
 		return Undefined, true
 	}
 	return Match, false
@@ -275,6 +277,8 @@ func evalTerm(t parsedTerm, ctx Context) bool {
 		return u.Validated
 	case "ROLE": // The record lists the role; lacking has checked it is defined
 		return perm.Member(u, t.value, ctx.roles())
+	case "GROUP": // The record lists the group; lacking has checked it is defined
+		return perm.InGroup(u, t.value, ctx.roles())
 	case "PERM": // The level holds it, or a sponsorship or a role grants it here
 		return ctx.permission(perm.Permission(t.value)).Allowed
 	case "REALNAME": // The user's real name is set

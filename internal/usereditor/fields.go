@@ -14,8 +14,12 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-// rolesField is the label of the admin roles field.
-const rolesField = "Roles"
+// rolesField and groupsField are the labels of the admin roles and user
+// groups fields.
+const (
+	rolesField  = "Roles"
+	groupsField = "Groups"
+)
 
 // fieldType defines the edit behavior for a field.
 type fieldType int
@@ -256,8 +260,10 @@ func editFields() []fieldDef {
 			Get: func(u *user.User) string { return perm.FormatRoleList(u.Roles) },
 		},
 		{
-			Label: "Auto Purge", Type: ftDisplay, Col: 50, Row: 14, Width: 16,
-			// Get is set dynamically by Model after creation (needs retentionDays)
+			// User groups (#1036), checked against configs/roles.json like
+			// Roles: Model sets Set once it has read the file.
+			Label: groupsField, Type: ftString, Col: 50, Row: 14, Width: 18, MaxLen: 200,
+			Get: func(u *user.User) string { return perm.FormatRoleList(u.Groups) },
 		},
 		{
 			// Limits the account's WFC console to watching; the daemon
@@ -284,6 +290,10 @@ func editFields() []fieldDef {
 		{
 			Label: "InfoForms", Type: ftDisplay, Col: 3, Row: 20, Width: 24,
 			// Get is set dynamically by Model after creation (needs dataDir)
+		},
+		{
+			Label: "Auto Purge", Type: ftDisplay, Col: 3, Row: 21, Width: 16,
+			// Get is set dynamically by Model after creation (needs retentionDays)
 		},
 		// Right column display fields
 		{

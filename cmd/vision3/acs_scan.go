@@ -43,8 +43,9 @@ type acsFinding struct {
 	// NoSession is set for a valid string with L or A in it from a
 	// Headless source: it denies every caller there.
 	NoSession bool
-	// Undefined lists the roles a valid string's ROLE terms name that
-	// configs/roles.json doesn't define; any makes it deny every caller.
+	// Undefined lists the roles and groups a valid string's ROLE and GROUP
+	// terms name that configs/roles.json doesn't define, as the terms are
+	// written (ROLE:name, GROUP:name); any makes it deny every caller.
 	Undefined []string
 }
 
@@ -64,7 +65,7 @@ func (f acsFinding) Detail() string {
 	}
 	if len(f.Undefined) > 0 {
 		return fmt.Sprintf("%s, %s %q: names %s, which configs/roles.json doesn't define, so it fails for every caller",
-			f.Source.Record, f.Source.Field, f.Source.ACS, "ROLE:"+strings.Join(f.Undefined, ", ROLE:"))
+			f.Source.Record, f.Source.Field, f.Source.ACS, strings.Join(f.Undefined, ", "))
 	}
 	parts := make([]string, len(f.Diags))
 	for i, d := range f.Diags {
@@ -83,8 +84,8 @@ func (f acsFinding) String() string {
 // It reads the files itself, so it covers menus nobody has opened; a file it
 // can't read or parse is left to the checks that report on that file.
 //
-// ROLE terms are checked against configs/roles.json as it is on disk; a file
-// that can't be read defines no roles, as the BBS treats it.
+// ROLE and GROUP terms are checked against configs/roles.json as it is on
+// disk; a file that can't be read defines none, as the BBS treats it.
 func scanACS(root string) (findings []acsFinding, checked int) {
 	roles, _, err := perm.Load(filepath.Join(root, "configs"))
 	if err != nil {
@@ -99,7 +100,14 @@ func scanACS(root string) (findings []acsFinding, checked int) {
 			continue
 		}
 		e := acs.Parse(src.ACS)
-		if undefined := perm.Undefined(e.RoleNames(), roles); len(undefined) > 0 {
+		var undefined []string
+		for _, r := range perm.Undefined(e.RoleNames(), roles) {
+			undefined = append(undefined, "ROLE:"+r)
+		}
+		for _, g := range perm.UndefinedGroups(e.GroupNames(), roles) {
+			undefined = append(undefined, "GROUP:"+g)
+		}
+		if len(undefined) > 0 {
 			findings = append(findings, acsFinding{Source: src, Undefined: undefined})
 		} else if src.Headless != "" && src.ACS != "" && e.UsesSession() {
 			findings = append(findings, acsFinding{Source: src, NoSession: true})
@@ -290,7 +298,7 @@ func checkACSStrings(root string, add func(string, doctorSeverity, string, strin
 	for _, f := range findings {
 		if len(f.Undefined) > 0 {
 			add("ACS: "+f.Source.File, doctorFail, f.Detail(),
-				"This string denies every caller, sysops included. Define the role in configs/roles.json or correct its name; see docs/sysop/users/admin-roles.md.")
+				"This string denies every caller, sysops included. Define the role or group in configs/roles.json or correct its name; see docs/sysop/users/admin-roles.md.")
 			continue
 		}
 		if f.failing() {

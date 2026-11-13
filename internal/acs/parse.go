@@ -81,7 +81,13 @@ func (e *Expr) UsesAge() bool {
 // RoleNames lists the roles the expression's ROLE terms name, lower case,
 // each once, in order. A role configs/roles.json doesn't define makes the
 // whole string fail, so the startup scan and doctor check these.
-func (e *Expr) RoleNames() []string {
+func (e *Expr) RoleNames() []string { return e.names("ROLE") }
+
+// GroupNames is RoleNames for GROUP terms.
+func (e *Expr) GroupNames() []string { return e.names("GROUP") }
+
+// names lists the values of the terms with code, each once, in order.
+func (e *Expr) names(code string) []string {
 	var names []string
 	seen := map[string]bool{}
 	var walk func(n *Node)
@@ -89,7 +95,7 @@ func (e *Expr) RoleNames() []string {
 		if n == nil {
 			return
 		}
-		if n.Kind == TermNode && n.term.code == "ROLE" && !seen[n.term.value] {
+		if n.Kind == TermNode && n.term.code == code && !seen[n.term.value] {
 			seen[n.term.value] = true
 			names = append(names, n.term.value)
 		}
@@ -145,8 +151,8 @@ type token struct {
 }
 
 // isTermRune reports whether r can be part of a term: letters, digits, '/',
-// ':', and the '.' and '_' of permission and role names (PERM:users.validate,
-// ROLE:msg_ops). The comparison characters (isCompareRune) join a term only
+// ':', and the '.' and '_' of permission, role and group names
+// (PERM:users.validate, ROLE:msg_ops). The comparison characters (isCompareRune) join a term only
 // between term characters, which is how a role name takes a '-'.
 func isTermRune(r rune) bool {
 	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '/' || r == ':' || r == '.' || r == '_'

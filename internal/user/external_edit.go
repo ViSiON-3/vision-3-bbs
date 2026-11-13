@@ -51,6 +51,7 @@ func sysopOwnedFields(dst, src *User) {
 	dst.AccessLevel = src.AccessLevel
 	dst.Flags = src.Flags
 	dst.Roles = append([]string(nil), src.Roles...)
+	dst.Groups = append([]string(nil), src.Groups...)
 	dst.Validated = src.Validated
 	dst.TimeLimit = src.TimeLimit
 	dst.GroupLocation = src.GroupLocation

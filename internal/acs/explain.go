@@ -30,9 +30,9 @@ const (
 	// have (AGE without a sign-up date); for an operator, one with such a
 	// term under it. Either fails, and so does the whole string.
 	Unavailable
-	// Undefined is a ROLE term naming a role configs/roles.json doesn't
-	// define; for an operator, one with such a term under it. Either fails,
-	// and so does the whole string.
+	// Undefined is a ROLE or GROUP term naming a role or group
+	// configs/roles.json doesn't define; for an operator, one with such a
+	// term under it. Either fails, and so does the whole string.
 	Undefined
 )
 
@@ -268,7 +268,10 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 		case NoSession:
 			return false, reason, "needs a session and there is none, so the whole string fails"
 		case Undefined:
-			return false, reason, undefinedRole(t.value, ctx.roles())
+			if t.code == "GROUP" {
+				return false, reason, undefinedName("group", t.value, ctx.roles().GroupNames())
+			}
+			return false, reason, undefinedName("role", t.value, ctx.roles().Names())
 		}
 		return false, reason, "the record has no sign-up date, so the account has no age and the whole string fails"
 	}
@@ -307,6 +310,16 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 		}
 	case "ROLE":
 		detail = roleDetail(u, t.value, result)
+	case "GROUP":
+		groups := perm.FormatRoleList(u.Groups)
+		if groups == "" {
+			groups = "none"
+		}
+		if result {
+			detail = fmt.Sprintf("is in group %s (groups: %s)", t.value, groups)
+		} else {
+			detail = fmt.Sprintf("isn't in group %s (groups: %s)", t.value, groups)
+		}
 	case "PERM":
 		detail = permDetail(ctx.permission(perm.Permission(t.value)), u, ctx)
 	case "U":
@@ -416,13 +429,14 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 	return result, reason, detail
 }
 
-// undefinedRole explains a ROLE term whose role isn't defined.
-func undefinedRole(name string, roles *perm.Roles) string {
-	defined := "it defines none"
-	if roles.Len() > 0 {
-		defined = "defined: " + strings.Join(roles.Names(), ", ")
+// undefinedName explains a ROLE or GROUP term (kind) whose name isn't one
+// of defined.
+func undefinedName(kind, name string, defined []string) string {
+	list := "it defines none"
+	if len(defined) > 0 {
+		list = "defined: " + strings.Join(defined, ", ")
 	}
-	return fmt.Sprintf("configs/roles.json has no role named %s (%s), so the whole string fails", name, defined)
+	return fmt.Sprintf("configs/roles.json has no %s named %s (%s), so the whole string fails", kind, name, list)
 }
 
 // userRoles is a record's roles for an explanation: "validator, msgops" or

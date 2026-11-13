@@ -110,7 +110,7 @@ func TestCheckRoles(t *testing.T) {
 
 	// A users.json doctor can't decode is said, not passed over as OK.
 	writeBoardFile(t, root, "data/users/users.json", `[{"id": 1,`)
-	if got := collectChecks(root, checkRoles); len(got) != 1 || got[0].status != doctorWarn || !strings.Contains(got[0].message, "users' roles weren't checked") {
+	if got := collectChecks(root, checkRoles); len(got) != 1 || got[0].status != doctorWarn || !strings.Contains(got[0].message, "users' roles and groups weren't checked") {
 		t.Fatalf("bad users.json: %+v", got)
 	}
 }
@@ -167,5 +167,32 @@ func TestCheckRolesUnknownGrantTags(t *testing.T) {
 	}
 	if len(msgs) != 2 {
 		t.Errorf("checks = %v", msgs)
+	}
+}
+
+func TestDoctorGroups(t *testing.T) {
+	root := t.TempDir()
+	writeBoardFile(t, root, "configs/roles.json", `{"roles": [], "groups": [{"name": "ops"}, {"name": "ops"}]}`)
+	writeBoardFile(t, root, "data/users/users.json", `[{"id": 2, "handle": "Op", "groups": ["ops", "gone"]}]`)
+	writeBoardFile(t, root, "menus/v3/mnu/MAIN.MNU", `{"ACS": ""}`)
+	writeBoardFile(t, root, "menus/v3/cfg/MAIN.CFG", `[{"KEYS": "O", "CMD": "GOTO:ADMIN", "ACS": "GROUP:ops|GROUP:opz|ROLE:nope"}]`)
+	var msgs []string
+	for _, c := range collectChecks(root, checkRoles) {
+		msgs = append(msgs, c.message)
+	}
+	joined := strings.Join(msgs, "\n")
+	for _, want := range []string{`group 2 ("ops"): another group is already named ops`, "Op (#2) is in group gone, which configs/roles.json doesn't define"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("checks lack %q:\n%s", want, joined)
+		}
+	}
+	findings, _ := scanACS(root)
+	if len(findings) != 1 || !strings.Contains(findings[0].Detail(), "names ROLE:nope, GROUP:opz, which configs/roles.json doesn't define") {
+		t.Errorf("findings = %v", findings)
+	}
+
+	writeBoardFile(t, root, "configs/roles.json", `{"roles": [], "groups": [{"name": "ops"}, {"name": "gone"}]}`)
+	if got := collectChecks(root, checkRoles); len(got) != 1 || got[0].message != "0 role(s) defined, 0 user(s) with a role; 2 group(s) defined, 1 user(s) in a group" {
+		t.Errorf("clean: %+v", got)
 	}
 }

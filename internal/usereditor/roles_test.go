@@ -86,22 +86,50 @@ func TestRolesFieldWithoutRolesJSON(t *testing.T) {
 	}
 }
 
-// The Roles field is narrower than a list of several roles; the input takes
+// The Roles and Groups fields are narrower than a list of several names; the input takes
 // the whole list and scrolls.
 func TestRolesFieldTakesLongerLists(t *testing.T) {
 	long := "validator, msg_ops, fsxnet_mod"
 	m := rolesModel(t, `{"roles": []}`, &user.User{ID: 2, Handle: "Val", AccessLevel: 20})
-	for i, f := range m.fields {
-		if f.Label == rolesField {
-			m.editField = i
+	m.users[m.editIndex].Roles = []string{"validator", "msg_ops", "fsxnet_mod"}
+	m.users[m.editIndex].Groups = []string{"validator", "msg_ops", "fsxnet_mod"}
+	for _, label := range []string{rolesField, groupsField} {
+		for i, f := range m.fields {
+			if f.Label == label {
+				m.editField = i
+			}
+		}
+		m, _ = m.startFieldEdit()
+		if got := m.textInput.Value(); got != long {
+			t.Fatalf("%s: value = %q, want %q", label, got, long)
+		}
+		if m.textInput.CharLimit < 200 {
+			t.Errorf("%s: CharLimit = %d", label, m.textInput.CharLimit)
 		}
 	}
-	m.users[m.editIndex].Roles = []string{"validator", "msg_ops", "fsxnet_mod"}
-	m, _ = m.startFieldEdit()
-	if got := m.textInput.Value(); got != long {
-		t.Fatalf("value = %q, want %q", got, long)
+}
+
+func TestGroupsFieldChecksRolesJSON(t *testing.T) {
+	m := rolesModel(t, `{"roles": [], "groups": [{"name": "fsxnet-ops"}]}`, &user.User{ID: 2, Handle: "Op", AccessLevel: 20})
+	var f fieldDef
+	for _, fd := range m.fields {
+		if fd.Label == groupsField {
+			f = fd
+		}
 	}
-	if m.textInput.CharLimit < 200 {
-		t.Errorf("CharLimit = %d", m.textInput.CharLimit)
+	if f.Set == nil {
+		t.Fatal("no Groups field")
+	}
+	u := &user.User{Handle: "Op"}
+	if err := f.Set(u, "ops"); err == nil || !strings.Contains(err.Error(), "no group named ops") {
+		t.Fatalf("undefined group: %v", err)
+	}
+	if err := f.Set(u, "FSXNET-OPS"); err != nil || f.Get(u) != "fsxnet-ops" {
+		t.Fatalf("Set = %v, Get = %q", err, f.Get(u))
+	}
+	m.openACSTester()
+	tc, _ := m.acsTest.tester()
+	if x := tc.Explain("GROUP:fsxnet-ops", u); !x.Result {
+		t.Errorf("tester: %+v", x)
 	}
 }

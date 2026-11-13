@@ -28,8 +28,8 @@ type parsedTerm struct {
 	// past the top (H22-6, W5-1); only the clock and calendar terms allow it.
 	lo, hi int
 	ranged bool
-	// value is the argument of F, Z and Y, the role name of ROLE (lower
-	// case) and the permission of PERM.
+	// value is the argument of F, Z and Y, the role or group name of ROLE
+	// and GROUP (lower case) and the permission of PERM.
 	value string
 }
 
@@ -79,6 +79,8 @@ var termNames = map[string]termName{
 	// PERM:name is holding a permission, which a sysop always does.
 	"ROLE": {"ROLE", nameColon},
 	"PERM": {"PERM", nameColon},
+	// GROUP:name is membership in a user group configs/roles.json defines.
+	"GROUP": {"GROUP", nameColon},
 }
 
 // numericCodes are the terms that take a number, with what a bare number
@@ -202,8 +204,8 @@ func readNumber(text, name, code, arg string) (parsedTerm, string) {
 	return t, ""
 }
 
-// readValue reads the argument of F, Z, Y, ROLE and PERM, or of their
-// names.
+// readValue reads the argument of F, Z, Y, ROLE, GROUP and PERM, or of
+// their names.
 func readValue(text, name, code, arg string) (parsedTerm, string) {
 	bad := func(msg string) (parsedTerm, string) {
 		return parsedTerm{}, fmt.Sprintf("%q: %s", text, msg)
@@ -225,6 +227,11 @@ func readValue(text, name, code, arg string) (parsedTerm, string) {
 		}
 	case "ROLE":
 		if err := perm.CheckRoleName(arg); err != nil {
+			return bad(name + ": " + err.Error())
+		}
+		return parsedTerm{code: code, value: perm.NormalizeRoleName(arg)}, ""
+	case "GROUP":
+		if err := perm.CheckGroupName(arg); err != nil {
 			return bad(name + ": " + err.Error())
 		}
 		return parsedTerm{code: code, value: perm.NormalizeRoleName(arg)}, ""

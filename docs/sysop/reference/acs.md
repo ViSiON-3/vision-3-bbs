@@ -153,11 +153,13 @@ These are names only, taking a colon, for the
 |---|---|---|
 | `PERM:`*permission* | the user holds the permission: a SysOp (level ≥ `sysOpLevel`), or a user with a role that grants it | `PERM:users.validate`. Use this to offer an admin command: the command checks the same thing. `PERM:messages.moderate` answers for the caller's current message area, where a co-SysOp and the area's sponsor hold it too |
 | `ROLE:`*name* | the user's record lists the role | `ROLE:validator`. Being a SysOp doesn't make anyone a member |
+| `GROUP:`*name* | the user's record lists the group | `GROUP:fsxnet-ops`. A [group](users/admin-roles.md#groups) only identifies people; it grants nothing |
 
 A permission the BBS doesn't define (`PERM:users.vaildate`) is an error, like
 an unknown letter. A role name follows the rules in `roles.json`: a letter,
-then letters, digits, `_` and `-`. A `ROLE:` term naming a role `roles.json`
-doesn't define fails the whole string (see
+then letters, digits, `_` and `-`, and so do group names. A `ROLE:` or
+`GROUP:` term naming a role or group `roles.json` doesn't define fails the
+whole string (see
 [Problems and missing context](#problems-and-missing-context)), so a
 misspelt `!ROLE:validatr` can't pass for everyone.
 
@@ -255,7 +257,8 @@ in the same way, whatever the other parts say:
 - `L` and `A` checked without a session (see
   [Terms that need a session](#terms-that-need-a-session));
 - `AGE` for a user with no sign-up date;
-- `ROLE:`*name* for a role `configs/roles.json` doesn't define.
+- `ROLE:`*name* or `GROUP:`*name* for a role or group `configs/roles.json`
+  doesn't define.
 
 So `!L`, `SYSOP|L`, `!AGE>=7` and `!ROLE:validatr` fail where those values
 are missing,
@@ -318,8 +321,9 @@ Doctor's **user sign-up dates** check lists users with no sign-up date: a
 warning when one of the board's strings uses `AGE`, since that whole string
 fails for them.
 
-A string with a `ROLE:` term for a role `configs/roles.json` doesn't define
-is a **FAIL**, since it denies every caller:
+A string with a `ROLE:` or `GROUP:` term for a role or group
+`configs/roles.json` doesn't define is a **FAIL**, since it denies every
+caller:
 
 ```text
 [FAIL]  ACS: menus/v3/cfg/MAIN.CFG  command 30 ("/VAL"), ACS "ROLE:validatr": names ROLE:validatr, which configs/roles.json doesn't define, so it fails for every caller
@@ -380,9 +384,11 @@ have rules of its own.
 
 The line under the expression marks each term: `+` passed, `-` failed, `~`
 needs a session the context doesn't have, a value the user's record
-doesn't (`AGE` with no sign-up date), or a role `roles.json` doesn't define.
+doesn't (`AGE` with no sign-up date), or a role or group `roles.json`
+doesn't define.
 
-A user with roles has a **Roles:** line under **User:**. For `PERM:` the
+A user with roles or groups has a **Roles:** or **Groups:** line under
+**User:**. For `PERM:` the
 tester says where the permission came from:
 
 ```text

@@ -81,7 +81,7 @@ func TestUndefinedRoleFailsWholeString(t *testing.T) {
 	}
 	x := Explain("!ROLE:validatr", roleCtx(t, u))
 	lines := strings.Join(Render(x, 0), "\n")
-	for _, want := range []string{"FAIL: a part names a role configs/roles.json doesn't define", "no role named validatr (defined: validator, msg_ops, greeter-2)", "~"} {
+	for _, want := range []string{"FAIL: a part names a role or group configs/roles.json doesn't define", "no role named validatr (defined: validator, msg_ops, greeter-2)", "~"} {
 		if !strings.Contains(lines, want) {
 			t.Errorf("render lacks %q:\n%s", want, lines)
 		}
@@ -179,5 +179,57 @@ func TestExplainScopedPerm(t *testing.T) {
 	ctx.Scope = func() perm.Scope { return perm.Scope{Area: "TECH", SponsorID: 4} }
 	if !Check("PERM:messages.moderate", ctx) {
 		t.Error("a sponsor through Context.Scope fails PERM:messages.moderate")
+	}
+}
+
+func TestGroupTerm(t *testing.T) {
+	roles, diags, err := perm.Parse([]byte(`{"roles": [], "groups": [{"name": "fsxnet-ops"}, {"name": "Beta_Testers"}]}`))
+	if err != nil || len(diags) > 0 {
+		t.Fatalf("roles: %v %v", err, diags)
+	}
+	member := &user.User{AccessLevel: 20, Groups: []string{"FSXNET-OPS"}}
+	sysop := &user.User{AccessLevel: oracleSysOp}
+	for _, tt := range []struct {
+		acs  string
+		u    *user.User
+		want bool
+	}{
+		{"GROUP:fsxnet-ops", member, true},
+		{"group:FSXNET-OPS&S20", member, true},
+		{"GROUP:beta_testers", member, false},
+		{"!GROUP:beta_testers", member, true},
+		{"GROUP:fsxnet-ops", sysop, false},
+		// An undefined group fails the whole string, '!' and '|' included.
+		{"GROUP:fsxnet-op", member, false},
+		{"!GROUP:fsxnet-op", member, false},
+		{"SYSOP|GROUP:fsxnet-op", sysop, false},
+	} {
+		ctx := ctxFor(tt.u)
+		ctx.Roles = roles
+		if got := Check(tt.acs, ctx); got != tt.want {
+			t.Errorf("Check(%q) = %v, want %v", tt.acs, got, tt.want)
+		}
+		if x := Explain(tt.acs, ctx); x.Result != tt.want {
+			t.Errorf("Explain(%q) = %v", tt.acs, x.Result)
+		}
+	}
+	ctx := ctxFor(member)
+	ctx.Roles = roles
+	x := Explain("GROUP:fsxnet-op", ctx)
+	if x.Reason != Undefined || x.Root == nil || !strings.Contains(x.Root.Detail, "no group named fsxnet-op (defined: fsxnet-ops, beta_testers)") {
+		t.Errorf("undefined group = %+v", x.Root)
+	}
+	x = Explain("GROUP:fsxnet-ops", ctx)
+	if x.Root == nil || x.Root.Detail != "is in group fsxnet-ops (groups: fsxnet-ops)" {
+		t.Errorf("member detail = %+v", x.Root)
+	}
+	if !strings.Contains(strings.Join(Render(x, 0), "\n"), "Groups:     fsxnet-ops") {
+		t.Error("render lacks the Groups line")
+	}
+	if d := Validate("GROUP:9x"); len(d) == 0 || !strings.Contains(d[0].Message, "group name") {
+		t.Errorf("Validate(GROUP:9x) = %v", d)
+	}
+	if got := strings.Join(Parse("GROUP:a|ROLE:b|GROUP:A").GroupNames(), ","); got != "a" {
+		t.Errorf("GroupNames = %q", got)
 	}
 }
