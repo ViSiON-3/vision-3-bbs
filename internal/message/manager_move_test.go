@@ -152,3 +152,51 @@ func TestMoveMessageIfNumberReused(t *testing.T) {
 		t.Errorf("the copy wasn't taken back: area 2 holds %d", count(t, mm, 2))
 	}
 }
+
+// If another session deletes an earlier message in the destination and
+// packs it before the original's delete is refused, the copy has moved to a
+// lower number, with a message much like it posted after it; it is still
+// found and taken back, and the destination's other messages are left alone.
+func TestMoveMessageIfCopyRenumbered(t *testing.T) {
+	mm := newMoveTestManager(t)
+	n := post(t, mm, 1, "All", "stays")
+	orig, err := mm.GetMessage(1, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	early := post(t, mm, 2, "All", "early")
+	post(t, mm, 2, "All", "later")
+	calls := 0
+	packFirst := func(*DisplayMessage) bool {
+		calls++
+		if calls == 1 {
+			return true
+		}
+		if err := mm.DeleteMessage(2, early); err != nil {
+			t.Fatal(err)
+		}
+		if err := mm.PackAndLinkArea(2); err != nil {
+			t.Fatal(err)
+		}
+		// The same sender, recipient, subject and date as the copy, but
+		// other text: not the copy.
+		if _, err := mm.Post(2, "alice", "All", "stays", "other text", PostOptions{Date: orig.DateTime}); err != nil {
+			t.Fatal(err)
+		}
+		return false
+	}
+	if _, err := mm.MoveMessageIf(1, n, 2, packFirst, sameBody); !errors.Is(err, ErrMessageChanged) {
+		t.Errorf("err = %v, want ErrMessageChanged", err)
+	}
+	if count(t, mm, 1) != 1 {
+		t.Errorf("area 1 holds %d, want the original kept", count(t, mm, 1))
+	}
+	if count(t, mm, 2) != 2 {
+		t.Fatalf("area 2 holds %d, want later and the other \"stays\" (the copy taken back)", count(t, mm, 2))
+	}
+	for i, want := range []string{"body", "other text"} {
+		if m, _ := mm.GetMessage(2, i+1); m.Body != want || m.IsDeleted {
+			t.Errorf("area 2 message %d = %+v, want the one with text %q", i+1, m, want)
+		}
+	}
+}

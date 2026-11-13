@@ -57,17 +57,33 @@ func (mm *MessageManager) MoveMessageIf(fromArea, msgNum, toArea int, check func
 }
 
 // removeCopy takes back the copy of m a failed move wrote to area as message
-// num with text, if it is still there, and packs the area.
+// num with text, and packs the area.
+//
+// The area isn't locked between the copy and its take-back, so another
+// session may have deleted earlier messages there and packed it meanwhile,
+// moving the copy to a lower number. A pack only ever moves a message down,
+// so the copy is looked for at num first and then at each number below it,
+// each one checked under the base's lock (DeleteMessageIf) to be the copy.
+// Local posts carry no MSGID, so the copy is known by its sender,
+// recipient, subject, date and text.
 func (mm *MessageManager) removeCopy(area, num int, m *DisplayMessage, text string) {
-	err := mm.DeleteMessageIf(area, num, func(c *DisplayMessage) bool {
+	isCopy := func(c *DisplayMessage) bool {
 		return c.From == m.From && c.To == m.To && c.Subject == m.Subject &&
 			c.DateTime.Equal(m.DateTime) && c.Body == normalizeLineEndings(text)
-	})
-	if err != nil {
-		slog.Error("remove the copy of a message whose move failed", "area", area, "msg", num, "error", err)
+	}
+	for i := num; i >= 1; i-- {
+		err := mm.DeleteMessageIf(area, i, isCopy)
+		if errors.Is(err, ErrMessageChanged) {
+			continue
+		}
+		if err != nil {
+			slog.Error("remove the copy of a message whose move failed", "area", area, "msg", i, "error", err)
+			return
+		}
+		if err := mm.PackAndLinkArea(area); err != nil {
+			slog.Error("pack area after taking back a move", "area", area, "error", err)
+		}
 		return
 	}
-	if err := mm.PackAndLinkArea(area); err != nil {
-		slog.Error("pack area after taking back a move", "area", area, "error", err)
-	}
+	slog.Error("remove the copy of a message whose move failed: copy not found", "area", area, "msg", num)
 }
