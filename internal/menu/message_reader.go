@@ -303,6 +303,15 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	if isSysop || isSponsor() || strings.EqualFold(currentAreaTag, "PRIVMAIL") {
 		activeOptions = append(activeOptions, msgReaderDeleteOption)
 	}
+	// A co-sysop may move any message to another area, and the area's
+	// sponsor a message out of it, between local public areas, if it is
+	// stored as UTF-8 (moveMessage). Move isn't on the bar, which has no room for it; the
+	// help lists it where it applies.
+	mayMove := func(m *message.DisplayMessage, sponsor bool) bool {
+		area, ok := e.MessageMgr.GetAreaByID(currentAreaID)
+		return ok && localPublicArea(e.MessageMgr, area) && m.StoredAsUTF8() && (isSysop || sponsor)
+	}
+	canMove := func(m *message.DisplayMessage) bool { return mayMove(m, isSponsor()) }
 	barSuffix := e.Strings().MsgReadingSuffix
 	if isNewScan {
 		barSuffix = e.Strings().MsgNewScanSuffix
@@ -759,7 +768,7 @@ readerLoop:
 					singleKey := rune(key)
 					// Check if it's a direct command key
 					switch unicode.ToUpper(singleKey) {
-					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'K', 'I', '?':
+					case 'N', 'R', 'S', 'T', 'P', 'J', 'M', 'L', 'Q', 'D', 'V', 'K', 'I', '?':
 						selectedKey = unicode.ToUpper(singleKey)
 					default:
 						// Not a recognized command, show lightbar
@@ -1075,6 +1084,44 @@ readerLoop:
 				}
 				break scrollLoop
 
+			case 'V': // Move message: a co-sysop any, a sponsor one out of their area
+				if !canMove(currentMsg) {
+					continue // Ignore if triggered without access
+				}
+				area, ok := e.MessageMgr.GetAreaByID(currentAreaID)
+				if !ok {
+					continue
+				}
+				result, mvErr := e.moveMessage(s, reader, terminal, currentUser, nodeNumber, outputMode, sessionStartTime,
+					area, currentMsg, mayMove, isSponsor, termHeight)
+				if errors.Is(mvErr, editor.ErrIdleTimeout) {
+					return nil, "LOGOFF", currentMsgNum, editor.ErrIdleTimeout
+				}
+				if errors.Is(mvErr, io.EOF) {
+					return nil, "LOGOFF", currentMsgNum, io.EOF
+				}
+				if mvErr != nil {
+					slog.Error("move message", "node", nodeNumber, "msg", currentMsg.MsgNum, "area", currentAreaID, "error", mvErr)
+				}
+				if result == moveNone {
+					needsRedraw = true
+					continue
+				}
+				// Moved, so the area was packed and the message after it now
+				// has its number; or changed elsewhere, as after a refused
+				// delete. Either way the count and the message are read
+				// again. Moving the last one leaves the reader.
+				if n, cErr := e.MessageMgr.GetMessageCountForArea(currentAreaID); cErr == nil {
+					totalMsgCount = n
+				}
+				if totalMsgCount <= 0 {
+					break readerLoop
+				}
+				if currentMsgNum > totalMsgCount {
+					currentMsgNum = totalMsgCount
+				}
+				break scrollLoop
+
 			case 'K': // Kludges: control information (sysop/co-sysop only)
 				if !isSysop {
 					continue
@@ -1102,7 +1149,7 @@ readerLoop:
 				break readerLoop
 
 			case '?': // Help
-				displayReaderHelp(terminal, outputMode, isSysop, canDelete(currentMsg), twitOn)
+				displayReaderHelp(terminal, outputMode, isSysop, canDelete(currentMsg), canMove(currentMsg), twitOn)
 				needsRedraw = true
 				continue
 
