@@ -142,7 +142,7 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | `SETFILESCANDATE` | none | Sets the file newscan cutoff until the caller logs off. Accepts a date as MM/DD/YY, `A` for all files, or `R` to reset to the previous logon. | |
 | `WANTLIST` | none | For CoSysOp+, manages the file want list. For everyone else, asks for a filename and reason and adds a request. Stock menus restrict it to sysops. | Branches on CoSysOp+ |
 | `EDITFILERECORD` | none | Upload review queue. Asks whether to review all areas or the current one, then edits, moves, or deletes each unreviewed file. | CoSysOp+ |
-| `EDITUPLOAD` | none | Asks for a filename in the current area and changes its description: one line of up to 60 characters, as at upload; an empty line keeps the old one. Only the caller who uploaded the file may, or a co-sysop (ViSiON/2's `FE`). The stock menu binds it to `E` after `EDITFILERECORD`, so a sysop's `E` stays the review queue. | Uploader or CoSysOp+ |
+| `EDITUPLOAD` | none | Asks for a filename in the current area and changes its description: one line of up to 60 characters, as at upload; an empty line keeps the old one. Only the account that uploaded the file may, matched by account ID so a new caller with a purged or renamed uploader's old handle can't, or a co-sysop (ViSiON/2's `FE`). Files that came by TIC or `helper files import` belong to no caller. The stock menu binds it to `E` after `EDITFILERECORD`, so a sysop's `E` stays the review queue. | Uploader or CoSysOp+ |
 
 ## User settings
 

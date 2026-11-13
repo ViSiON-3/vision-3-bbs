@@ -14,7 +14,7 @@ import (
 // Access is granted when any of the following is true:
 //   - u.AccessLevel >= cfg.SysOpLevel   (full sysop)
 //   - u.AccessLevel >= cfg.CoSysOpLevel (co-sysop)
-//   - area.Sponsor is non-empty and matches u.Handle (case-insensitive)
+//   - u's account is area's sponsor, by ID (see message.MessageArea.SponsoredBy)
 func CanAccessSponsorMenu(u *user.User, area *message.MessageArea, cfg config.ServerConfig) bool {
 	if u == nil || area == nil {
 		return false
@@ -25,10 +25,7 @@ func CanAccessSponsorMenu(u *user.User, area *message.MessageArea, cfg config.Se
 	if u.AccessLevel >= cfg.CoSysOpLevel {
 		return true
 	}
-	if area.Sponsor != "" && strings.EqualFold(area.Sponsor, u.Handle) {
-		return true
-	}
-	return false
+	return area.SponsoredBy(u.ID)
 }
 
 // areaLookup is the subset of MessageManager's method set the sponsor keyword needs,
@@ -64,5 +61,5 @@ func sponsorsArea(u *user.User, areas areaLookup, areaID int) bool {
 	if !found || area == nil || strings.EqualFold(area.Tag, "PRIVMAIL") {
 		return false
 	}
-	return area.Sponsor != "" && strings.EqualFold(area.Sponsor, u.Handle)
+	return area.SponsoredBy(u.ID)
 }

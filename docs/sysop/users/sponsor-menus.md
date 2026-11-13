@@ -18,7 +18,7 @@ The Sponsor Menu (`%` in the Messages Menu) is accessible to:
 |-----|-----------|
 | SysOp | `accessLevel >= sysOpLevel` (default 255) |
 | Co-SysOp | `accessLevel >= coSysOpLevel` (default 250) |
-| Area Sponsor | `handle` matches the area's `"sponsor"` field (case-insensitive) |
+| Area Sponsor | the caller's account is the area's sponsor (`"sponsor_id"`, see [Configuring a Sponsor](#configuring-a-sponsor)) |
 
 All other users are silently refused — the `%` key does nothing for them, and no error is displayed.
 
@@ -42,7 +42,28 @@ Alternatively, set the `"sponsor"` field directly in `configs/message_areas.json
 }
 ```
 
-The handle comparison is **case-insensitive** — `"techguru"`, `"TechGuru"`, and `"TECHGURU"` all match a user whose handle is `TechGuru`.
+### The sponsor is an account, not a name
+
+The sponsor is the account that held the handle when it was set, stored as
+`"sponsor_id"` beside the name. Someone who later registers that handle
+gets nothing, whether the old account was purged or renamed. A sponsor who
+is renamed keeps the area.
+
+- **Sponsor Menu:** setting the sponsor stores the account directly.
+- **Config editor, `helper areas set --sponsor`, or `"sponsor"` written by
+  hand without `"sponsor_id"`:** the BBS binds the name to the account that
+  holds it when it next loads the areas, at startup or after the file
+  changes, and saves the ID. The handle is matched without regard to case.
+- **A name that matches no account** then is bound to nobody
+  (`"sponsor_id": -1`), so the area has no sponsor until you set it again.
+  Doctor warns about it.
+- **Changing `"sponsor"` by hand:** delete `"sponsor_id"` too, or the old
+  account stays the sponsor. Doctor warns when the two disagree. That also
+  happens after a rename, and setting the sponsor again updates the name.
+
+User IDs are never reused: the BBS keeps the next ID in
+`data/users/next_user_id`, so a purged account's ID isn't given to a new
+caller.
 
 ## Using the Sponsor Menu
 
@@ -251,7 +272,7 @@ The `[` (previous area) and `]` (next area) navigation keys are handled internal
 
 #### Access Check
 
-`CanAccessSponsorMenu(user, area, serverConfig)` in `internal/menu/sponsor_access.go` performs the three-way check. It is called by both `runSponsorMenu` and `runSponsorEditArea` so neither handler can be reached without passing the gate.
+`CanAccessSponsorMenu(user, area, serverConfig)` in `internal/menu/sponsor_access.go` performs the three-way check, matching the sponsor by account ID (`MessageArea.SponsoredBy`). It is called by both `runSponsorMenu` and `runSponsorEditArea` so neither handler can be reached without passing the gate.
 
 #### Persistence
 
@@ -259,6 +280,6 @@ The `[` (previous area) and `]` (next area) navigation keys are handled internal
 
 #### Vision/2 Lineage
 
-In Vision/2, the `BoardRec.Sponsor` (message areas) and `AreaRec.Sponsor` (file areas) fields stored a sponsor username. The `sponsoron()` function checked `match(curboard.sponsor, unam) OR tempsysop`. Vision/3's `CanAccessSponsorMenu` mirrors this logic, using `strings.EqualFold` for the case-insensitive handle match and `accessLevel` thresholds for sysop/co-sysop.
+In Vision/2, the `BoardRec.Sponsor` (message areas) and `AreaRec.Sponsor` (file areas) fields stored a sponsor username. The `sponsoron()` function checked `match(curboard.sponsor, unam) OR tempsysop`. Vision/3's `CanAccessSponsorMenu` mirrors this logic, but matches the sponsor's account ID rather than the name (#1020), with `accessLevel` thresholds for sysop/co-sysop.
 
 Vision/2 had no dedicated sponsor menu — sponsor status conferred only the ability to delete and edit others' messages, plus exemption from upload/download ratios. The Sponsor Menu with Edit Area is a Vision/3 enhancement.

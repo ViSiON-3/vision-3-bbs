@@ -255,6 +255,7 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 		return nil, err
 	}
 
+	um.noteNextUserID()
 	slog.Info("added user", "handle", newUser.Handle, "id", newUser.ID)
 	return newUser, nil
 }

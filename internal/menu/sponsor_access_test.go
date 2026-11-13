@@ -17,12 +17,12 @@ func TestCanAccessSponsorMenu(t *testing.T) {
 	generalArea := &message.MessageArea{
 		ID:      1,
 		Tag:     "GENERAL",
-		Sponsor: "Alice",
+		Sponsor: "Alice", SponsorID: 10,
 	}
 	otherArea := &message.MessageArea{
 		ID:      2,
 		Tag:     "OTHER",
-		Sponsor: "Bob",
+		Sponsor: "Bob", SponsorID: 11,
 	}
 	noSponsorArea := &message.MessageArea{
 		ID:  3,
@@ -48,22 +48,22 @@ func TestCanAccessSponsorMenu(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "named sponsor has access (exact case)",
-			u:    &user.User{Handle: "Alice", AccessLevel: 10},
+			name: "the sponsor's account has access",
+			u:    &user.User{ID: 10, Handle: "Alice", AccessLevel: 10},
 			area: generalArea,
 			want: true,
 		},
 		{
-			name: "named sponsor has access (different case)",
-			u:    &user.User{Handle: "ALICE", AccessLevel: 10},
+			name: "the sponsor keeps access after a rename",
+			u:    &user.User{ID: 10, Handle: "Alicia", AccessLevel: 10},
 			area: generalArea,
 			want: true,
 		},
 		{
-			name: "named sponsor has access (lower case)",
-			u:    &user.User{Handle: "alice", AccessLevel: 10},
+			name: "another account with the sponsor's old handle is denied (#1020)",
+			u:    &user.User{ID: 12, Handle: "alice", AccessLevel: 10},
 			area: generalArea,
-			want: true,
+			want: false,
 		},
 		{
 			name: "regular user without sponsor status is denied",
@@ -73,7 +73,7 @@ func TestCanAccessSponsorMenu(t *testing.T) {
 		},
 		{
 			name: "sponsor of a different area is denied",
-			u:    &user.User{Handle: "Alice", AccessLevel: 10},
+			u:    &user.User{ID: 10, Handle: "Alice", AccessLevel: 10},
 			area: otherArea,
 			want: false,
 		},
@@ -131,7 +131,7 @@ func (f fakeAreaLookup) GetAreaByID(id int) (*message.MessageArea, bool) {
 func TestSponsorKeyword(t *testing.T) {
 	cfg := config.ServerConfig{SysOpLevel: 255, CoSysOpLevel: 250}
 	lookup := fakeAreaLookup{areas: map[int]*message.MessageArea{
-		1: {ID: 1, Tag: "GENERAL", Sponsor: "Alice"},
+		1: {ID: 1, Tag: "GENERAL", Sponsor: "Alice", SponsorID: 10},
 		2: {ID: 2, Tag: "EMPTY"},
 	}}
 
@@ -140,12 +140,12 @@ func TestSponsorKeyword(t *testing.T) {
 		u    *user.User
 		want bool
 	}{
-		{"sponsor of current area", &user.User{Handle: "Alice", AccessLevel: 50, CurrentMessageAreaID: 1}, true},
-		{"sponsor match is case-insensitive", &user.User{Handle: "alice", AccessLevel: 50, CurrentMessageAreaID: 1}, true},
+		{"sponsor of current area", &user.User{ID: 10, Handle: "Alice", AccessLevel: 50, CurrentMessageAreaID: 1}, true},
+		{"the handle alone is not the sponsor", &user.User{ID: 12, Handle: "alice", AccessLevel: 50, CurrentMessageAreaID: 1}, false},
 		{"non-sponsor denied", &user.User{Handle: "Mallory", AccessLevel: 50, CurrentMessageAreaID: 1}, false},
 		{"cosysop allowed without sponsorship", &user.User{Handle: "Carol", AccessLevel: 250, CurrentMessageAreaID: 2}, true},
-		{"no current area denied", &user.User{Handle: "Alice", AccessLevel: 50, CurrentMessageAreaID: 0}, false},
-		{"unknown area id denied", &user.User{Handle: "Alice", AccessLevel: 50, CurrentMessageAreaID: 99}, false},
+		{"no current area denied", &user.User{ID: 10, Handle: "Alice", AccessLevel: 50, CurrentMessageAreaID: 0}, false},
+		{"unknown area id denied", &user.User{ID: 10, Handle: "Alice", AccessLevel: 50, CurrentMessageAreaID: 99}, false},
 		{"nil user denied", nil, false},
 	}
 

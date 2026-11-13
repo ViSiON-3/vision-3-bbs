@@ -223,7 +223,10 @@ func (um *UserMgr) determineNextUserID() { // Receiver uses renamed type
 	um.mu.RUnlock()
 
 	um.mu.Lock() // Need write lock to set nextUserID
-	um.nextUserID = maxID + 1
+	// Past every ID in use, and past every ID ever handed out: an account
+	// purged since keeps its ID retired (see user_ids.go).
+	um.nextUserID = max(maxID+1, readNextUserID(um.path))
+	um.noteNextUserID()
 	slog.Debug("determined next user ID", "id", um.nextUserID)
 	um.mu.Unlock()
 }

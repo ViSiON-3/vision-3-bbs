@@ -19,8 +19,12 @@ func addUploads(t *testing.T, env *menuEnv, byName map[string]string) map[string
 	ids := map[string]uuid.UUID{}
 	for name, by := range byName {
 		ids[name] = uuid.New()
+		byID := file.NoUploaderID
+		if u, ok := env.um.GetUser(by); ok {
+			byID = u.ID
+		}
 		if err := env.e.FileMgr.AddFileRecord(file.FileRecord{ID: ids[name], AreaID: 1, Filename: name, Size: 2048,
-			UploadedBy: by, Description: "old words"}); err != nil {
+			UploadedBy: by, UploadedByID: byID, Description: "old words"}); err != nil {
 			t.Fatalf("AddFileRecord: %v", err)
 		}
 	}
@@ -105,7 +109,7 @@ func TestEditUploadReassignedWhileTyping(t *testing.T) {
 	ids := addUploads(t, env, map[string]string{"MINE.ZIP": "Caller"})
 	env.caller.CurrentFileAreaID = 1
 	env.whenOutput("New description:", func() {
-		if err := env.e.FileMgr.UpdateFileRecord(ids["MINE.ZIP"], func(r *file.FileRecord) { r.UploadedBy = "Someone" }); err != nil {
+		if err := env.e.FileMgr.UpdateFileRecord(ids["MINE.ZIP"], func(r *file.FileRecord) { r.UploadedBy, r.UploadedByID = "Someone", file.NoUploaderID }); err != nil {
 			t.Error(err)
 		}
 	})
@@ -235,5 +239,32 @@ func TestStockFileMenuBindsCallerFileCommands(t *testing.T) {
 	}
 	if strings.Join(r, ",") != "RUN:REMOVEFROMBATCH" {
 		t.Errorf("R runs %v, want RUN:REMOVEFROMBATCH", r)
+	}
+}
+
+// An upload belongs to the account, not the handle (#1020): renamed, the
+// uploader keeps it; a new account given the old handle gets nothing.
+func TestEditUploadFollowsTheAccount(t *testing.T) {
+	env := newMenuEnv(t)
+	ids := addUploads(t, env, map[string]string{"MINE.ZIP": "Caller"})
+	renamed, _ := env.um.GetUserByID(env.caller.ID)
+	renamed.Handle = "Carl"
+	if err := env.um.UpdateUserByID(renamed); err != nil {
+		t.Fatal(err)
+	}
+	newcomer, err := env.um.AddUser("password1", "Caller", "New Person", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newcomer.CurrentFileAreaID = 1
+	r := env.runCmd("EDITUPLOAD", newcomer, "", "mine.zip\rtaken over\r")
+	if !r.has("That file wasn't uploaded by you.") {
+		t.Errorf("newcomer:\n%s", r.text())
+	}
+	carl, _ := env.um.GetUserByID(env.caller.ID)
+	carl.CurrentFileAreaID = 1
+	env.sub(t).runCmd("EDITUPLOAD", carl, "", "mine.zip\rstill mine\r")
+	if got := fileDesc(t, env, ids["MINE.ZIP"]); got != "still mine" {
+		t.Errorf("description = %q, want the renamed uploader's edit", got)
 	}
 }

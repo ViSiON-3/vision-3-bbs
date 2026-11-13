@@ -203,6 +203,9 @@ func cmdFilesImport(args []string) {
 			Size:        info.Size(),
 			UploadedAt:  uploadTime,
 			UploadedBy:  *uploader,
+			// Imported by the sysop, so no caller owns it, whatever
+			// --uploader names.
+			UploadedByID: file.NoUploaderID,
 		}
 		newRecords = append(newRecords, record)
 		existingNames[strings.ToUpper(name)] = true

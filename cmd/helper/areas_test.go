@@ -167,3 +167,19 @@ func TestAreasSetAutocorrect(t *testing.T) {
 		t.Errorf("FD_LINUX Autocorrect = %v, want unset", a)
 	}
 }
+
+// A new sponsor set by name drops the old account binding, so the BBS binds
+// the new name (#1020) instead of leaving the old account in place.
+func TestAreasSetSponsorClearsBinding(t *testing.T) {
+	dir := setupAreasConfig(t)
+	areas := readAreas(t, dir)
+	g := areas["GENERAL"]
+	g.Sponsor, g.SponsorID = "Old", 5
+	writeJSONFile(t, filepath.Join(dir, "message_areas.json"), []message.MessageArea{g})
+	if rc := runAreasSet([]string{"--config", dir, "--tag", "GENERAL", "--sponsor", "New", "--quiet"}); rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	if got := readAreas(t, dir)["GENERAL"]; got.Sponsor != "New" || got.SponsorID != 0 {
+		t.Errorf("sponsor = %q, id %d; want New, 0", got.Sponsor, got.SponsorID)
+	}
+}

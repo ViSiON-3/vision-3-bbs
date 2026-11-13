@@ -463,7 +463,12 @@ func (cw *ConfigWatcher) applyMessageAreas() error {
 	if cw.menuExecutor == nil || cw.menuExecutor.MessageMgr == nil {
 		return fmt.Errorf("message manager not running")
 	}
-	return cw.menuExecutor.MessageMgr.Reload()
+	if err := cw.menuExecutor.MessageMgr.Reload(); err != nil {
+		return err
+	}
+	// A sponsor set by name in the config editor or helper arrives unbound.
+	bindSponsors(cw.userMgr, cw.menuExecutor.MessageMgr)
+	return nil
 }
 
 // validateV3Net is the signal-time check for v3net.json: parse only.

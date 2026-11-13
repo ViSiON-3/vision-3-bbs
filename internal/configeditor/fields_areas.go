@@ -213,7 +213,14 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 			fieldDef{
 				Label: "Sponsor", Help: "Handle of the echo sponsor/moderator (optional)", Type: ftString, Col: 3, Row: 19, Width: 30,
 				Get: func() string { return a.Sponsor },
-				Set: func(val string) error { a.Sponsor = val; return nil },
+				// The BBS binds the new name to its account when it
+				// next loads the areas (#1020).
+				Set: func(val string) error {
+					if val != a.Sponsor {
+						a.Sponsor, a.SponsorID = val, 0
+					}
+					return nil
+				},
 			},
 		)
 	case "netmail":

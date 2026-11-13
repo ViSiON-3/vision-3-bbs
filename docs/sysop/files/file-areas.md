@@ -379,6 +379,7 @@ file has changed, so the processes can run side by side.
 | `size` | integer | `0` | Size in bytes |
 | `uploaded_at` | RFC 3339 time | required | Upload timestamp; the newscan compares against it |
 | `uploaded_by` | string | `""` | Uploader's handle (an FTN address for files that arrived by TIC) |
+| `uploaded_by_id` | int | `0` | The uploading account's ID, which decides who may edit the description; `uploaded_by` is only the name shown. `-1` for a file no caller owns (TIC, `helper files import`). Records from before this field are bound once at startup to the account that then holds `uploaded_by`, or to `-1` |
 | `download_count` | integer | `0` | Number of downloads |
 | `reviewed` | bool | `false` | Set when a sysop has reviewed the file; unreviewed files make up the `EDITFILERECORD` queue |
 | `crc32` | string | omitted | CRC-32 as 8 uppercase hex digits, recorded for files that arrived by TIC |

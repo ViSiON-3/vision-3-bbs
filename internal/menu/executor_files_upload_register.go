@@ -141,6 +141,7 @@ func (e *MenuExecutor) registerUploadedFiles(
 			Size:          nf.size,
 			UploadedAt:    time.Now(),
 			UploadedBy:    currentUser.Handle,
+			UploadedByID:  currentUser.ID,
 			DownloadCount: 0,
 		}
 

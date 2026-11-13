@@ -2024,6 +2024,11 @@ func main() {
 		logging.Fatal("failed to initialize file manager", "error", err)
 	}
 
+	// Sponsors and uploads are owned by account ID; bind any still named
+	// only by handle (#1020).
+	bindSponsors(userMgr, messageMgr)
+	bindUploaders(userMgr, fileMgr)
+
 	// Initialize ConferenceManager (non-fatal if conferences.json is missing)
 	confMgr, err = conference.NewConferenceManager(rootConfigPath)
 	if err != nil {
