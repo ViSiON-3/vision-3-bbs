@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
@@ -250,21 +251,22 @@ func TestReaderEditNotInvalidUTF8(t *testing.T) {
 	}
 }
 
-// The editor works in bytes, so text with a multibyte character, labelled
-// UTF-8 or not, isn't opened in it: a Backspace would cut the character in
-// half. The caller is told why, and the message is unchanged.
-func TestReaderEditNotNonASCII(t *testing.T) {
+// Accented text, unlabelled or labelled UTF-8, edits safely now the editor
+// counts characters (#1051): one Backspace removes the whole é, and the
+// saved text is valid UTF-8.
+func TestReaderEditNonASCII(t *testing.T) {
 	for _, kludges := range [][]string{nil, {"CHRS: UTF-8 4"}} {
 		env := newMsgEnv(t)
 		if _, err := env.e.MessageMgr.Post(generalAreaID, "Caller", "All", "menu", "caf\u00e9", message.PostOptions{Kludges: kludges}); err != nil {
 			t.Fatal(err)
 		}
 		r := env.runCmd("READMSGS", env.caller, "", "E\r\b\x1aQ")
-		if !r.has("characters other than plain ASCII") || r.has("Subject:") {
+		if !r.has("Subject:", "Message saved.") {
 			t.Errorf("%v: output:\n%s", kludges, r.text())
 		}
-		if b := env.mustMsg(generalAreaID, 1).Body; b != "caf\u00e9" {
-			t.Errorf("%v: body = %q, want it unchanged", kludges, b)
+		b := env.mustMsg(generalAreaID, 1).Body
+		if !strings.HasPrefix(b, "caf\n\n * Edited by Caller on ") || !utf8.ValidString(b) {
+			t.Errorf("%v: body = %q, want \"caf\" and the edited line", kludges, b)
 		}
 	}
 

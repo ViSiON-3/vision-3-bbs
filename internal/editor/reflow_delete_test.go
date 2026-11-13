@@ -144,15 +144,15 @@ func TestDeleteBelowForceBrokenWordLeavesItWhole(t *testing.T) {
 	}
 }
 
-// Byte lengths set the margin, as everywhere in WordWrapper, so a multi-byte
-// word that would fit by characters but not by bytes stays down.
-func TestPullBackUsesTheWrappersByteMargin(t *testing.T) {
-	word := "ééé" // 3 characters, 6 bytes: 71+1+6 = 78 fits
+// The margin counts characters, not bytes (#1051): a multi-byte word that
+// fits by characters comes up, one character too long stays down.
+func TestPullBackUsesTheWrappersCharacterMargin(t *testing.T) {
+	word := strings.Repeat("é", 7) // 7 characters, 14 bytes: 71+1+7 = 79 fits
 	mb, ww := setupBuffer([]string{fullLine, "a" + word + " tail"}, 2)
 	ww.HandleDelete(2, 1)
 	checkBuffer(t, mb, []string{fullLine + " " + word, "tail"}, 2)
 
-	word = "éééé" // 4 characters, 8 bytes: 71+1+8 = 80 does not
+	word = strings.Repeat("é", 8) // 8 characters: 71+1+8 = 80 does not
 	mb, ww = setupBuffer([]string{fullLine, "a" + word + " tail"}, 2)
 	ww.HandleDelete(2, 1)
 	checkBuffer(t, mb, []string{fullLine, word + " tail"}, 2)

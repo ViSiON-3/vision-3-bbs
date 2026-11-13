@@ -66,10 +66,12 @@ type quoteDisplay struct {
 	text  string // what is drawn, escapes included
 	shift int    // columns the drawing adds before the text (may be negative)
 	at    int    // byte offset in the stored line where the text starts
-	lead  int    // columns drawn before the text
-	// prefixCols is the 0-based screen column of each byte before at. The
-	// prefix is drawn with its blanks normalized, so a cursor in it has to be
-	// placed character by character, not by the text's shift.
+	// atChars is at in characters, the unit of buffer columns (#1051).
+	atChars int
+	lead    int // columns drawn before the text
+	// prefixCols is the 0-based screen column of each character before at.
+	// The prefix is drawn with its blanks normalized, so a cursor in it has
+	// to be placed character by character, not by the text's shift.
 	prefixCols []int
 	quote      bool
 }
@@ -79,10 +81,10 @@ func (d quoteDisplay) screenCol(col int) int {
 	if !d.quote || col < 1 {
 		return col
 	}
-	if i := col - 1; i < d.at {
+	if i := col - 1; i < d.atChars {
 		return d.prefixCols[i] + 1
 	}
-	return d.lead + col - d.at
+	return d.lead + col - d.atChars
 }
 
 // displayQuoteLine lays a stored editor line out the way the reader draws it,
@@ -122,8 +124,9 @@ func displayQuoteLine(line string) quoteDisplay {
 		text:       quoteSGR + head.String() + lead + line[at:],
 		shift:      len(leadRunes) - stored,
 		at:         at,
+		atChars:    utf8.RuneCountInString(line[:at]),
 		lead:       len(leadRunes),
-		prefixCols: mapPrefixCols(line[:at], leadRunes),
+		prefixCols: charCols(line[:at], mapPrefixCols(line[:at], leadRunes)),
 		quote:      true,
 	}
 }
@@ -212,4 +215,17 @@ func escapeAt(s string, i int) int {
 		j++ // two-byte escape
 	}
 	return j - i
+}
+
+// charCols turns mapPrefixCols's column per byte of stored into one per
+// character, the unit buffer columns count (#1051): each character takes
+// the column of its first byte.
+func charCols(stored string, byteCols []int) []int {
+	out := make([]int, 0, len(stored))
+	for i := 0; i < len(stored); {
+		out = append(out, byteCols[i])
+		_, size := utf8.DecodeRuneInString(stored[i:])
+		i += size
+	}
+	return out
 }

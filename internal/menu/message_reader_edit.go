@@ -78,17 +78,6 @@ func withEditedLine(body, handle string, when time.Time) string {
 		fmt.Sprintf(editedLineFormat, handle, strings.ToLower(when.Format("01/02/06 at 3:04 PM")))
 }
 
-// asciiText reports whether s is all ASCII. The editor counts columns and
-// deletes in bytes, so it would split a multibyte character.
-func asciiText(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] >= utf8.RuneSelf {
-			return false
-		}
-	}
-	return true
-}
-
 // editResult is how an edit from the reader ended.
 type editResult int
 
@@ -126,16 +115,12 @@ func (e *MenuExecutor) editPostedMessage(s ssh.Session, ih *editor.InputHandler,
 		notice(fmt.Sprintf("|01This message is %d lines long, more than the editor holds (%d). It can't be edited here.|07", n, editor.MaxLines))
 		return editNone, nil
 	}
-	// It also works in bytes, so it would split a character such as an
-	// accented letter that came in by QWK or v3mail, or in a quote.
-	if !asciiText(text) {
-		notice("|01This message has characters other than plain ASCII, which the editor can't handle. It can't be edited here.|07")
-		return editNone, nil
-	}
-	// And it keeps a line wider than its margin unwrapped, drawing it past
-	// the edge of the screen. The text is ASCII here, so bytes are columns.
+	// It keeps a line wider than its margin unwrapped, drawing it past the
+	// edge of the screen. The editor counts columns in characters (#1051),
+	// so accented and other non-ASCII text edits safely and is measured
+	// the same way.
 	for _, line := range strings.Split(text, "\n") {
-		if w := len(strings.TrimRight(line, "\r")); w > editor.MaxLineLength {
+		if w := utf8.RuneCountInString(strings.TrimRight(line, "\r")); w > editor.MaxLineLength {
 			notice(fmt.Sprintf("|01This message has a line %d characters wide, more than the editor shows (%d). It can't be edited here.|07", w, editor.MaxLineLength))
 			return editNone, nil
 		}
