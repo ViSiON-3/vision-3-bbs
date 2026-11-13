@@ -89,3 +89,17 @@ func WriteFile(path string, data []byte, perm os.FileMode) error {
 	}
 	return nil
 }
+
+// WriteFileDurable is WriteFile, then a sync of the directory, so the
+// rename itself is on disk when it returns, not only the file's contents.
+// It is for a write that a later irreversible step relies on: a purge
+// removes an account only after its handle's retirement is written.
+func WriteFileDurable(path string, data []byte, perm os.FileMode) error {
+	if err := WriteFile(path, data, perm); err != nil {
+		return err
+	}
+	if err := syncDir(filepath.Dir(path)); err != nil {
+		return fmt.Errorf("sync directory of %s: %w", path, err)
+	}
+	return nil
+}

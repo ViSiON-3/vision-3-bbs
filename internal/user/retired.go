@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 )
 
@@ -137,7 +138,8 @@ func RetireHandles(usersPath string, handles ...string) error {
 		lines[i] = retiredEntry(h)
 	}
 	body := "# Handles of purged and renamed accounts, which can't be used again\n# (see docs/sysop/users/user-management.md). Delete a line to release one.\n" + strings.Join(lines, "\n") + "\n"
-	return writeFileAtomic(path, []byte(body), 0o600)
+	// Durable: a purge removes the accounts once this returns.
+	return atomicfile.WriteFileDurable(path, []byte(body), 0o600)
 }
 
 // handleRetired is HandleRetired for this manager's users.json, as an error:

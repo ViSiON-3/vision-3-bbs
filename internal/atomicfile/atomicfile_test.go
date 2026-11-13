@@ -211,3 +211,16 @@ func TestReplaceWhileDestinationIsOpen(t *testing.T) {
 			waited, hold)
 	}
 }
+
+func TestWriteFileDurable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "durable")
+	if err := WriteFileDurable(path, []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(path); err != nil || string(b) != "x\n" {
+		t.Errorf("read back %q, %v", b, err)
+	}
+	if err := WriteFileDurable(filepath.Join(t.TempDir(), "missing", "f"), nil, 0o600); err == nil {
+		t.Error("write into a missing directory succeeded")
+	}
+}

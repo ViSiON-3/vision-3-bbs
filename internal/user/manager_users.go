@@ -72,8 +72,12 @@ func (um *UserMgr) updateUserByID(u *User, chatBar *bool) error {
 		// addressed to it stays, matched by handle, and must not pass to
 		// whoever registers it next (#1048). A case-only change keeps the
 		// key, and isn't a rename here.
-		if err := RetireHandles(um.path, current.Handle); err != nil {
-			return fmt.Errorf("retiring the old handle: %w", err)
+		// A change mail sees as the same handle (EqualFold) isn't a rename
+		// for retiring either, or the account couldn't change back.
+		if !strings.EqualFold(current.Handle, u.Handle) {
+			if err := RetireHandles(um.path, current.Handle); err != nil {
+				return fmt.Errorf("retiring the old handle: %w", err)
+			}
 		}
 		delete(um.users, oldKey)
 	}
@@ -253,6 +257,9 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 	// A purged account's handle is retired (#1048).
 	if err := um.handleRetired(handle); err != nil {
 		return nil, err
+	}
+	if hasControl(handle) {
+		return nil, ErrHandleControl
 	}
 	if err := raiseNextUserID(um.path, um.nextUserID+1); err != nil {
 		return nil, fmt.Errorf("storing the next user ID: %w", err)

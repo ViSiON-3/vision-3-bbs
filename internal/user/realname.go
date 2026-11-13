@@ -3,6 +3,7 @@ package user
 import (
 	"errors"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -85,7 +86,25 @@ func ValidateHandleEdit(old, handle string) error {
 	if strings.HasPrefix(strings.TrimSpace(handle), "@") {
 		return ErrHandleGroupPrefix
 	}
+	if hasControl(handle) {
+		return ErrHandleControl
+	}
 	return nil
+}
+
+// ErrHandleControl refuses a handle with a control character (a line break,
+// a tab, an escape). Signup already refuses them; the editors and AddUser
+// do too, since a handle is written one per line in the retired list and
+// shown on callers' screens.
+var ErrHandleControl = errors.New("handles cannot contain control characters")
+
+func hasControl(s string) bool {
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			return true
+		}
+	}
+	return false
 }
 
 func validateRealNameForm(name string) error {

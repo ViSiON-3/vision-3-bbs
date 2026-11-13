@@ -133,3 +133,34 @@ func TestRetiredHandlesFoldAndEscape(t *testing.T) {
 		t.Errorf("list = %q, want 3 entries", list)
 	}
 }
+
+// A change mail sees as the same handle isn't retired, so the account can
+// change back; a handle with a line break or other control character is
+// refused outright, so the list stays one handle per line.
+func TestFoldEqualRenameAndControlHandles(t *testing.T) {
+	dir := t.TempDir()
+	um, err := NewUserManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sam, _ := um.AddUser("password1", "Sam", "Sam Smith", "")
+	u, _ := um.GetUserByID(sam.ID)
+	u.Handle = "ſam"
+	if err := um.UpdateUserByID(u); err != nil {
+		t.Fatal(err)
+	}
+	if um.HandleRetired("Sam") {
+		t.Fatal("a fold-equal change retired the handle")
+	}
+	u.Handle = "Sam"
+	if err := um.UpdateUserByID(u); err != nil {
+		t.Errorf("changing back: %v", err)
+	}
+
+	if _, err := um.AddUser("password1", "Two\nLines", "Two Lines", ""); !errors.Is(err, ErrHandleControl) {
+		t.Errorf("AddUser with a line break: %v", err)
+	}
+	if err := ValidateHandleEdit("Sam", "Tab\there"); !errors.Is(err, ErrHandleControl) {
+		t.Errorf("ValidateHandleEdit with a tab: %v", err)
+	}
+}
