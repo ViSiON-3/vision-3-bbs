@@ -93,13 +93,19 @@ func (e *MenuExecutor) promptComposeRecipient(s ssh.Session, terminal *term.Term
 	switch composeRecipientKindFor(area) {
 	case recipientPrivate:
 		for {
-			val, aborted, err := ask(toPrompt, 24, "", "'to'")
+			// 25 fits "@" and a group name as long as roles.json allows.
+			val, aborted, err := ask(toPrompt, 25, "", "'to'")
 			if err != nil || aborted {
 				return "", "", aborted, err
 			}
 			if val == "" {
 				showPostAborted(terminal, outputMode)
 				return "", "", true, nil
+			}
+			// "@name" is a user group (#1036); whether the caller may send to
+			// it is the caller's check, before the editor opens.
+			if g, ok := mailGroupFor(userManager, val); ok {
+				return "@" + g.Name, "@" + g.Name, false, nil
 			}
 			if userManager != nil {
 				if u, ok := userManager.GetUser(val); ok && u != nil && !u.DeletedUser {

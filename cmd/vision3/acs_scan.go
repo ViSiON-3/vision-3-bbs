@@ -269,6 +269,19 @@ func collectACSSources(root string) []acsSource {
 				acsSource{File: "configs/ftn.json", Record: rec, Field: "acs_write", ACS: ac.ACSWrite, Headless: qwkAPIReplies})
 		}
 	}
+	// roles.json: who may mail each user group (#1036).
+	var roles struct {
+		Groups []struct {
+			Name    string `json:"name"`
+			MailACS string `json:"mail_acs"`
+		} `json:"groups"`
+	}
+	if readJSON(filepath.Join(configDir, "roles.json"), &roles) {
+		for i, g := range roles.Groups {
+			out = append(out, acsSource{File: "configs/roles.json", Record: fmt.Sprintf("group %d (%s)", i+1, g.Name),
+				Field: "mail_acs", ACS: strings.TrimSpace(g.MailACS)})
+		}
+	}
 	// doors.json, read as LoadDoors reads it: a blank or all-whitespace acs
 	// is no rule.
 	var doors []config.DoorConfig

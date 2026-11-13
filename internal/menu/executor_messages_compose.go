@@ -11,6 +11,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
@@ -165,6 +166,20 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	}
 	private := composeRecipientKindFor(area) == recipientPrivate
 
+	// Mail to a user group (#1036) is checked before the editor opens, so no
+	// typing is lost, and written as one copy per member when saved.
+	group, toGroup := perm.Group{}, false
+	if private {
+		group, toGroup = mailGroupFor(userManager, toUser)
+	}
+	if toGroup {
+		if refusal := e.checkGroupMail(userManager, currentUser, group, s, sessionStartTime); refusal != "" {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+refusal+"\r\n")), outputMode)
+			uiPause(1 * time.Second)
+			return nil, "", nil
+		}
+	}
+
 	// Private mail belongs to the handles on it: only the account whose
 	// handle is in To or From can read it (message.DisplayMessage.VisibleTo).
 	// So it is signed with the sender's handle whatever the area's
@@ -271,6 +286,11 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	// never shows it and the area lists it to everyone. A post signed with
 	// the real name records the handle too, so netmail (always private)
 	// stays visible to its sender; an anonymous post records nothing.
+	if toGroup {
+		sent, gerr := e.sendGroupMail(userManager, currentUser, group, area.ID, fromName, subject, body, s, sessionStartTime)
+		e.reportGroupMail(terminal, outputMode, userManager, currentUser, group, sent, gerr)
+		return nil, "", nil
+	}
 	opts := message.PostOptions{Private: private}
 	if !isAnonymous {
 		opts.SenderHandle = currentUser.Handle

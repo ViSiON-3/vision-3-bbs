@@ -13,6 +13,11 @@ import (
 type Group struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
+	// MailACS is the ACS string a caller must pass to send mail to the
+	// group (@name). Empty is the group's members and co-sysops and up.
+	// It is read as written; the BBS and doctor check it like any other
+	// ACS string.
+	MailACS string `json:"mail_acs,omitempty"`
 }
 
 // parseGroups reads the file's groups into r, returning a diagnostic for
@@ -34,7 +39,7 @@ func (r *Roles) parseGroups(groups []Group) []Diagnostic {
 			continue
 		}
 		r.inGroup[name] = true
-		r.groups = append(r.groups, Group{Name: name, Description: strings.TrimSpace(g.Description)})
+		r.groups = append(r.groups, Group{Name: name, Description: strings.TrimSpace(g.Description), MailACS: strings.TrimSpace(g.MailACS)})
 	}
 	return diags
 }
@@ -45,6 +50,20 @@ func (r *Roles) GroupDefined(name string) bool {
 		return false
 	}
 	return r.inGroup[NormalizeRoleName(name)]
+}
+
+// Group is the defined group named name, ignoring case.
+func (r *Roles) Group(name string) (Group, bool) {
+	if r == nil {
+		return Group{}, false
+	}
+	name = NormalizeRoleName(name)
+	for _, g := range r.groups {
+		if g.Name == name {
+			return g, true
+		}
+	}
+	return Group{}, false
 }
 
 // GroupNames is the defined groups' names, in file order.

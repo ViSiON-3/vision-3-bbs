@@ -131,6 +131,17 @@ ignored, and doctor reports it.
 Put someone in a group in `./ue` (the **Groups** field) or the Admin Menu's
 user editor (`U`), the same way as roles.
 
+A group can also be sent mail as `@fsxnet-ops`: see
+[Mail to a group](messages/private-mail.md#mail-to-a-group). `mail_acs`
+decides who may send it; without one, the group's members and co-SysOps
+and up may:
+
+```json
+{"name": "fsxnet-ops", "mail_acs": "S20&V"}
+```
+
+Doctor checks `mail_acs` like every other ACS string.
+
 ## Giving someone a role
 
 - **`./ue`:** the **Roles** field on the edit screen. Type role names

@@ -1044,6 +1044,30 @@ readerLoop:
 					needsRedraw = true
 					continue
 				}
+				// Unsending a group letter (#1036) takes back every copy no
+				// member has read yet, not just the one shown.
+				if shown.MailGroupID != "" && unsend && shown.SentBy(currentUser.Handle) && !shown.MailFor(currentUser.Handle) {
+					removed, kept, uErr := e.unsendGroupLetter(currentAreaID, shown, currentUser.Handle)
+					notice := fmt.Sprintf("|02Unsent from %d member(s) of %s.|07", removed, shown.GroupAddress())
+					if kept > 0 {
+						notice = fmt.Sprintf("|02Unsent from %d member(s) of %s; %d had already read it.|07", removed, shown.GroupAddress(), kept)
+					}
+					if uErr != nil {
+						slog.Error("unsend group letter", "node", nodeNumber, "area", currentAreaID, "error", uErr)
+						notice = "|01Error unsending the letter; some copies may remain.|07"
+					}
+					e.showReaderNotice(terminal, outputMode, notice, termHeight)
+					if n, cErr := e.MessageMgr.GetMessageCountForArea(currentAreaID); cErr == nil {
+						totalMsgCount = n
+					}
+					if totalMsgCount <= 0 {
+						break readerLoop
+					}
+					if currentMsgNum > totalMsgCount {
+						currentMsgNum = totalMsgCount
+					}
+					break scrollLoop
+				}
 				// And again under the base's lock, as the message is deleted,
 				// so a role or sponsor taken away between the check above and
 				// the delete stops it. Only the base is locked here, so the

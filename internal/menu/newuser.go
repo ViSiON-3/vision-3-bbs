@@ -678,8 +678,8 @@ func (e *MenuExecutor) promptForUserNote(
 }
 
 // validateHandle checks a handle against rules from Pascal ValidUserName().
-// Rules: not empty, min 3 chars, no special chars (?#/*&:|),
-// cannot be "new" or "q", cannot be purely numeric.
+// Rules: not empty, min 3 chars, no special chars (?#/*&:|), not starting
+// with @, cannot be "new" or "q", cannot be purely numeric.
 func validateHandle(handle string) bool {
 	if len(handle) < 3 {
 		return false
@@ -688,6 +688,11 @@ func validateHandle(handle string) bool {
 	// Reject invalid UTF-8 outright: malformed byte sequences render
 	// unpredictably and defeat per-rune inspection below.
 	if !utf8.ValidString(handle) {
+		return false
+	}
+
+	// '@' starts a user group's mail address (@fsxnet-ops).
+	if strings.HasPrefix(handle, "@") {
 		return false
 	}
 

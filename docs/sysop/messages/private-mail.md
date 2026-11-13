@@ -78,6 +78,38 @@ has **Ask each post** on is asked first (see [Auto-Signature](messages/autosig.m
 A caller's [Twit List](messages/twit-list.md) hides private mail from the
 authors on it as well.
 
+### Mail to a group
+
+Address mail to `@name` to send it to every member of a
+[user group](users/admin-roles.md#groups), for example `@fsxnet-ops`. That
+works at **Send private mail to**, at **To:** when composing in `PRIVMAIL`,
+and when copying or forwarding mail.
+
+- Each member gets their own copy, which behaves like any other private
+  mail: it has its own read status, and they can delete it. The sender gets
+  no copy, and neither do deleted or banned members. A copy already
+  delivered stays with its recipient, even after they leave the group.
+- Every copy shows **To: @fsxnet-ops**. No one is shown who else is in the
+  group, the sender included.
+- Who may send to a group is the group's `mail_acs` in `roles.json`. If it
+  has none, the group's members and co-SysOps and up may send. Anyone else
+  is told `You may not send mail to @name.` before the editor opens.
+- A group with no one to deliver to, or with more than 500 members, refuses
+  the letter.
+- **Sent mail** (`SENTPRIVMAIL`) lists the letter once, to `@fsxnet-ops`.
+  `D` there unsends every copy no member has read yet. The copies already
+  read stay, and the notice says how many.
+- Replying to your copy asks `Reply to all of @fsxnet-ops?`. No (the
+  default) replies to the sender alone; Yes sends the reply to the group,
+  under the same rule for who may send. The sender of a group letter always
+  replies to the group from their sent mail, since their copy names one
+  member.
+
+A recipient that is exactly someone's handle is that user, so an old
+account whose handle starts with `@` still gets its mail. New handles can't
+start with `@`, and doctor warns about an old one that matches a group's
+address.
+
 ## Troubleshooting
 
 - **A caller cannot see mail that was sent to them.** The mail is addressed

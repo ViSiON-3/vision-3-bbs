@@ -97,6 +97,12 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 			if len(perm.NormalizeRoles(u.Groups)) > 0 {
 				grouped++
 			}
+			// Mail to "@name" goes to that handle, not the group (#1036).
+			if h := strings.TrimSpace(u.Handle); strings.HasPrefix(h, "@") && roles.GroupDefined(strings.TrimPrefix(h, "@")) {
+				add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has a handle that is also group %s's mail address, so mail to %s goes to the user, not the group",
+					u.Handle, u.ID, strings.TrimPrefix(h, "@"), h),
+					"Rename the user (new handles can't start with @), or rename the group in configs/roles.json.")
+			}
 			if undefined := perm.Undefined(u.Roles, roles); len(undefined) > 0 {
 				add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has role %s, which configs/roles.json doesn't define, so it grants nothing",
 					u.Handle, u.ID, strings.Join(undefined, ", ")),

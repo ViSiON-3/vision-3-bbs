@@ -196,3 +196,21 @@ func TestDoctorGroups(t *testing.T) {
 		t.Errorf("clean: %+v", got)
 	}
 }
+
+func TestDoctorGroupMail(t *testing.T) {
+	root := t.TempDir()
+	writeBoardFile(t, root, "configs/roles.json", `{"roles": [], "groups": [{"name": "ops", "mail_acs": "S10&"}]}`)
+	writeBoardFile(t, root, "data/users/users.json", `[{"id": 2, "handle": "@ops"}, {"id": 3, "handle": "@other"}]`)
+	var msgs []string
+	for _, c := range collectChecks(root, checkRoles) {
+		msgs = append(msgs, c.message)
+	}
+	joined := strings.Join(msgs, "\n")
+	if !strings.Contains(joined, "@ops (#2) has a handle that is also group ops's mail address") || strings.Contains(joined, "@other") {
+		t.Errorf("checks:\n%s", joined)
+	}
+	findings, _ := scanACS(root)
+	if len(findings) != 1 || findings[0].Source.Field != "mail_acs" || findings[0].Source.Record != "group 1 (ops)" {
+		t.Errorf("findings = %v", findings)
+	}
+}

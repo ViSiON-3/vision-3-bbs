@@ -112,6 +112,20 @@ type DisplayMessage struct {
 	// SenderHandle is the handle of the local account that wrote the
 	// message when From is another name (PostOptions.SenderHandle).
 	SenderHandle string
+	// MailGroup is set on one member's copy of private mail sent to a user
+	// group: the group's name, which headers show as the recipient
+	// ("@fsxnet-ops") in place of the member's handle in To. MailGroupID is
+	// the id every copy of that letter shares, so the sender's sent mail
+	// shows it once and unsending reaches each unread copy.
+	MailGroup, MailGroupID string
+}
+
+// GroupAddress is how a header shows mail sent to a user group: "@name".
+func (m *DisplayMessage) GroupAddress() string {
+	if m.MailGroup == "" {
+		return ""
+	}
+	return "@" + m.MailGroup
 }
 
 // Constants for standard message fields.

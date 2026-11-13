@@ -80,7 +80,8 @@ func buildMsgSubstitutions(msg *message.DisplayMessage, areaTag string, msgNum, 
 	// charset, CP437 by default, like its body. It is decoded the same way
 	// for display; the stored names stay as they are for the lookups above.
 	fromName := bodyAsUTF8(msg.From, msg.Charset)
-	toName := bodyAsUTF8(msg.To, msg.Charset)
+	// A member's copy of group mail shows the group, not the member (#1036).
+	toName := bodyAsUTF8(mailTo(msg), msg.Charset)
 	subject := bodyAsUTF8(msg.Subject, msg.Charset)
 
 	// Build From field with user note and/or network address. The header

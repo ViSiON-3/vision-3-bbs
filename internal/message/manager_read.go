@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -59,7 +60,20 @@ func displayMessage(msg *jam.Message, areaID, msgNum int) *DisplayMessage {
 		Charset:    messageCharset(msg),
 
 		SenderHandle: msg.SenderHandle,
+		MailGroup:    mailGroupName(msg.MailGroup),
+		MailGroupID:  mailGroupID(msg.MailGroup),
 	}
+}
+
+// mailGroupName and mailGroupID split a SfldV3MailGroup value, "name id".
+func mailGroupName(v string) string {
+	name, _, _ := strings.Cut(strings.TrimSpace(v), " ")
+	return ansi.HeaderText(name)
+}
+
+func mailGroupID(v string) string {
+	_, id, _ := strings.Cut(strings.TrimSpace(v), " ")
+	return strings.TrimSpace(id)
 }
 
 // EachMessage reads every message of an area in order, from message 1, and

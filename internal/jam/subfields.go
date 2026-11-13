@@ -38,6 +38,9 @@ func buildSubfields(msg *Message) []Subfield {
 	if msg.SenderHandle != "" {
 		sfs = append(sfs, CreateSubfield(SfldV3SenderHandle, msg.SenderHandle))
 	}
+	if msg.MailGroup != "" {
+		sfs = append(sfs, CreateSubfield(SfldV3MailGroup, msg.MailGroup))
+	}
 	return sfs
 }
 
