@@ -220,7 +220,7 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 		case "Handle":
 			// A purged account's handle is retired and can't be given to
 			// another account (#1048), checked as the BBS does.
-			capturedPath, set := filePath, fields[i].Set
+			capturedPath, set, loaded := filePath, fields[i].Set, users
 			fields[i].Set = func(u *user.User, val string) error {
 				if strings.EqualFold(strings.TrimSpace(val), u.Handle) {
 					return set(u, val)
@@ -231,6 +231,13 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 				}
 				if retired {
 					return user.ErrHandleRetired
+				}
+				// Nor may another account have it, compared as private
+				// mail compares handles (#1056).
+				for _, other := range loaded {
+					if other != u && other.ID != u.ID && user.SameHandle(other.Handle, val) {
+						return user.ErrHandleExists
+					}
 				}
 				old := u.Handle
 				if err := set(u, val); err != nil {

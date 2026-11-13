@@ -444,3 +444,24 @@ func TestPurgeRetiresHandleInUE(t *testing.T) {
 		t.Error("the old handle wasn't retired by the rename")
 	}
 }
+
+// ./ue's Handle field refuses another account's handle, compared as
+// private mail compares handles (#1056); before, it had no duplicate check.
+func TestHandleFieldRefusesTakenHandle(t *testing.T) {
+	m, _ := editBob(t)
+	var set func(*user.User, string) error
+	for _, f := range m.fields {
+		if f.Label == "Handle" {
+			set = f.Set
+		}
+	}
+	bob := m.users[m.editIndex]
+	for _, h := range []string{"Sysop", "SYSOP", "ſysop"} {
+		if err := set(bob, h); !errors.Is(err, user.ErrHandleExists) {
+			t.Errorf("renaming Bob to %q: %v", h, err)
+		}
+	}
+	if bob.Handle != "Bob" {
+		t.Errorf("handle = %q after refusals", bob.Handle)
+	}
+}

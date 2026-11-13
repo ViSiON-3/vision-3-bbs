@@ -86,3 +86,15 @@ func TestCheckUserIDMark(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckHandleCollisions(t *testing.T) {
+	root := t.TempDir()
+	writeOwnersFile(t, root, "data/users/users.json", `[{"id": 1, "handle": "Sam"}, {"id": 2, "handle": "ſam"}, {"id": 3, "handle": "Ann"}]`)
+	var got []sponsorFinding
+	checkHandleCollisions(root, func(name string, status doctorSeverity, message, _ string) {
+		got = append(got, sponsorFinding{name, message, status})
+	})
+	if len(got) != 1 || got[0].status != doctorWarn || !strings.Contains(got[0].message, `"Sam" (#1) and "ſam" (#2)`) {
+		t.Errorf("findings = %+v", got)
+	}
+}

@@ -43,6 +43,8 @@ Each change is saved as soon as the caller confirms it. The screen's header is `
 
 A new handle or real name cannot contain `|`, because screens print names through the pipe-code expander. Signup, `USERCONFIG`, the admin user editor, `./ue` and the scripting API all refuse one. A new handle also can't start with `@`, which addresses mail to a [user group](messages/private-mail.md#mail-to-a-group); an existing one keeps it.
 
+No two accounts can have handles that differ only in case, compared the way private mail compares them: Unicode case folding, so `ſam` (with a long s) counts as `Sam`. Signup, the admin user editor and `./ue` refuse such a handle, and control characters too. `vision3 doctor` warns about any such pair already on a board, since each account could read the other's private mail. Rename one of them.
+
 Accounts that already have a `|` in their handle or real name keep it. They can log in and save other settings, and retyping the same name is not refused. Only a change to a new name with a `|` in it is. To clean up an old account, set its name in `./ue` or the admin user editor.
 
 Colour codes in an old handle, and in a location, note or one-liner, still colour it on the screens where they did before. The screen codes `|CL`, `|CR`, `|DE`, `|P` and `|PP` print as typed there, so a caller's text cannot clear or scroll someone else's screen. Formats in `strings.json`, menus and templates are the sysop's and keep every code. That also goes for anything passed into a `strings.json` format, such as a conference name: only its colour codes act.
