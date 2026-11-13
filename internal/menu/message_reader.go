@@ -1073,7 +1073,7 @@ readerLoop:
 				if !ok {
 					continue
 				}
-				moved, mvErr := e.moveMessage(s, reader, terminal, currentUser, nodeNumber, outputMode, sessionStartTime,
+				result, mvErr := e.moveMessage(s, reader, terminal, currentUser, nodeNumber, outputMode, sessionStartTime,
 					area, currentMsg, mayMove, isSponsor, termHeight)
 				if errors.Is(mvErr, editor.ErrIdleTimeout) {
 					return nil, "LOGOFF", currentMsgNum, editor.ErrIdleTimeout
@@ -1084,12 +1084,14 @@ readerLoop:
 				if mvErr != nil {
 					slog.Error("move message", "node", nodeNumber, "msg", currentMsg.MsgNum, "area", currentAreaID, "error", mvErr)
 				}
-				if !moved {
+				if result == moveNone {
 					needsRedraw = true
 					continue
 				}
-				// The area was packed: the message after the moved one now
-				// has its number. Moving the last one leaves the reader.
+				// Moved, so the area was packed and the message after it now
+				// has its number; or changed elsewhere, as after a refused
+				// delete. Either way the count and the message are read
+				// again. Moving the last one leaves the reader.
 				if n, cErr := e.MessageMgr.GetMessageCountForArea(currentAreaID); cErr == nil {
 					totalMsgCount = n
 				}

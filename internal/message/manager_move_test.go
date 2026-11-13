@@ -200,3 +200,135 @@ func TestMoveMessageIfCopyRenumbered(t *testing.T) {
 		}
 	}
 }
+
+// faultAt makes the move's test hook fail at each of steps.
+func faultAt(mm *MessageManager, steps ...string) {
+	mm.moveFault = func(step string) error {
+		for _, s := range steps {
+			if s == step {
+				return errors.New("fault at " + step)
+			}
+		}
+		return nil
+	}
+}
+
+// A move whose copy reaches the base but then reports an error takes the
+// copy back; if it can't, it says the message is in both areas.
+func TestMoveMessageIfCopyError(t *testing.T) {
+	mm := newMoveTestManager(t)
+	n := post(t, mm, 1, "All", "stays")
+	faultAt(mm, "copy")
+	_, err := mm.MoveMessageIf(1, n, 2, always, sameBody)
+	if err == nil || errors.Is(err, ErrMoveIncomplete) || errors.Is(err, ErrMessageChanged) {
+		t.Errorf("err = %v, want a plain error", err)
+	}
+	if count(t, mm, 1) != 1 || count(t, mm, 2) != 0 {
+		t.Errorf("areas hold %d and %d, want 1 and 0", count(t, mm, 1), count(t, mm, 2))
+	}
+
+	mm = newMoveTestManager(t)
+	n = post(t, mm, 1, "All", "stays")
+	faultAt(mm, "copy", "takeback")
+	if _, err := mm.MoveMessageIf(1, n, 2, always, sameBody); !errors.Is(err, ErrMoveIncomplete) {
+		t.Errorf("take-back failed: err = %v, want ErrMoveIncomplete", err)
+	}
+	if count(t, mm, 1) != 1 || count(t, mm, 2) != 1 {
+		t.Errorf("areas hold %d and %d, want 1 and 1", count(t, mm, 1), count(t, mm, 2))
+	}
+}
+
+// A delete that reports an error is judged by the original: still there,
+// the copy is taken back; deleted after all, the move stands; unreadable,
+// the copy is kept, so the message is never lost.
+func TestMoveMessageIfDeleteError(t *testing.T) {
+	mm := newMoveTestManager(t)
+	n := post(t, mm, 1, "All", "stays")
+	faultAt(mm, "nodelete")
+	_, err := mm.MoveMessageIf(1, n, 2, always, sameBody)
+	if err == nil || errors.Is(err, ErrMoveIncomplete) || errors.Is(err, ErrMessageChanged) {
+		t.Errorf("not deleted: err = %v, want a plain error", err)
+	}
+	if count(t, mm, 1) != 1 || count(t, mm, 2) != 0 {
+		t.Errorf("not deleted: areas hold %d and %d, want 1 and 0", count(t, mm, 1), count(t, mm, 2))
+	}
+
+	mm = newMoveTestManager(t)
+	n = post(t, mm, 1, "All", "moves")
+	faultAt(mm, "delete")
+	got, err := mm.MoveMessageIf(1, n, 2, always, sameBody)
+	if err != nil || got != 1 {
+		t.Errorf("deleted anyway: got %d, %v; want 1, nil", got, err)
+	}
+	if count(t, mm, 1) != 0 || count(t, mm, 2) != 1 {
+		t.Errorf("deleted anyway: areas hold %d and %d, want 0 and 1", count(t, mm, 1), count(t, mm, 2))
+	}
+
+	mm = newMoveTestManager(t)
+	n = post(t, mm, 1, "All", "moves")
+	from, _ := mm.GetAreaByID(1)
+	mm.moveFault = func(step string) error {
+		if step != "delete" {
+			return nil
+		}
+		for _, ext := range []string{".jhr", ".jdt", ".jdx", ".jlr"} {
+			_ = os.Remove(mm.resolveBasePath(from) + ext)
+		}
+		return errors.New("fault at delete")
+	}
+	if _, err := mm.MoveMessageIf(1, n, 2, always, sameBody); !errors.Is(err, ErrMoveIncomplete) {
+		t.Errorf("unreadable: err = %v, want ErrMoveIncomplete", err)
+	}
+	if count(t, mm, 2) != 1 {
+		t.Errorf("unreadable: area 2 holds %d, want the copy kept", count(t, mm, 2))
+	}
+}
+
+// A refused delete whose copy can't be taken back says so, and is still a
+// refusal.
+func TestMoveMessageIfTakebackFails(t *testing.T) {
+	mm := newMoveTestManager(t)
+	n := post(t, mm, 1, "All", "stays")
+	faultAt(mm, "takeback")
+	calls := 0
+	onceOnly := func(*DisplayMessage) bool { calls++; return calls == 1 }
+	_, err := mm.MoveMessageIf(1, n, 2, onceOnly, sameBody)
+	if !errors.Is(err, ErrMoveIncomplete) || !errors.Is(err, ErrMessageChanged) {
+		t.Errorf("err = %v, want ErrMoveIncomplete and ErrMessageChanged", err)
+	}
+	if count(t, mm, 1) != 1 || count(t, mm, 2) != 1 {
+		t.Errorf("areas hold %d and %d, want 1 and 1", count(t, mm, 1), count(t, mm, 2))
+	}
+}
+
+// A failed delete whose number now holds another message, deleted, doesn't
+// count as the move done: the original went elsewhere, so the copy is taken
+// back.
+func TestMoveMessageIfDeleteErrorOtherDeleted(t *testing.T) {
+	mm := newMoveTestManager(t)
+	n := post(t, mm, 1, "All", "first")
+	post(t, mm, 1, "All", "second")
+	mm.moveFault = func(step string) error {
+		if step != "nodelete" {
+			return nil
+		}
+		// Elsewhere: the original is deleted and the area packed, and the
+		// message now at its number is deleted too.
+		for _, f := range []func() error{
+			func() error { return mm.DeleteMessage(1, n) },
+			func() error { return mm.PackAndLinkArea(1) },
+			func() error { return mm.DeleteMessage(1, n) },
+		} {
+			if err := f(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return errors.New("fault at nodelete")
+	}
+	if _, err := mm.MoveMessageIf(1, n, 2, always, sameBody); err == nil || errors.Is(err, ErrMoveIncomplete) {
+		t.Errorf("err = %v, want a plain error", err)
+	}
+	if count(t, mm, 2) != 0 {
+		t.Errorf("area 2 holds %d, want the copy taken back", count(t, mm, 2))
+	}
+}

@@ -101,6 +101,15 @@ type MessageManager struct {
 	// for the V3Net outbound sweep to send; see PendingOutbound. May be nil,
 	// as it is outside the BBS, where only the area type is known.
 	IsV3NetArea func(areaID int) bool
+
+	// moveFault is set by tests only. MoveMessageIf calls it after the copy
+	// is written ("copy"), before and after the original is deleted
+	// ("nodelete", "delete"), and before each try at taking a copy back
+	// ("takeback").
+	// An error it returns stands in for that step failing: after it took
+	// effect for "copy" and "delete", before it for "nodelete" and
+	// "takeback".
+	moveFault func(step string) error
 }
 
 // NewMessageManager creates and initializes a new MessageManager.

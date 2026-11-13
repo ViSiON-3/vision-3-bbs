@@ -77,18 +77,38 @@ func moveTargets(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, u *use
 	return out
 }
 
+// moveResult is what came of moveMessage.
+type moveResult int
+
+const (
+	moveNone    moveResult = iota // cancelled or refused; the message is as it was
+	moveDone                      // moved; the area it left was packed
+	moveChanged                   // the message changed elsewhere, or the move left it in both areas; reload it
+)
+
+// stillTarget is the area numbered id among targets, or nil.
+func stillTarget(targets []*message.MessageArea, id int) *message.MessageArea {
+	for _, a := range targets {
+		if a.ID == id {
+			return a
+		}
+	}
+	return nil
+}
+
 // moveMessage moves msg, which the reader is showing in area from, for
 // currentUser: it lists the areas it can go to, takes one by number or tag,
 // and asks to confirm. may reports whether the caller may move a message,
 // as a sponsor or not; sponsor tells whether they are one now. Both are asked
-// again as it moves, along with whether it is still the message shown. It
-// returns true when the message was moved, and an error reading the caller's
+// again as the original is deleted, along with whether it is still the
+// message shown, and the area picked is checked again after the caller
+// confirms. It returns what came of it, and an error reading the caller's
 // answers.
 func (e *MenuExecutor) moveMessage(s ssh.Session, reader *bufio.Reader, terminal *term.Terminal,
 	currentUser *user.User, nodeNumber int, outputMode ansi.OutputMode, sessionStart time.Time,
 	from *message.MessageArea, msg *message.DisplayMessage,
 	may func(m *message.DisplayMessage, sponsor bool) bool, sponsor func() bool,
-	termHeight int) (bool, error) {
+	termHeight int) (moveResult, error) {
 
 	notice := func(text string) {
 		e.showReaderNotice(terminal, outputMode, text, termHeight)
@@ -102,7 +122,7 @@ func (e *MenuExecutor) moveMessage(s ssh.Session, reader *bufio.Reader, terminal
 	targets := moveTargets(e, s, terminal, currentUser, from, sessionStart)
 	if len(targets) == 0 {
 		notice("|07There's no other area to move it to.")
-		return false, nil
+		return moveNone, nil
 	}
 	say("\r\n|15Move this message to:|07\r\n")
 	pager := e.newMorePager(s, terminal, outputMode, currentUser, termHeight, 2, "")
@@ -110,7 +130,7 @@ func (e *MenuExecutor) moveMessage(s ssh.Session, reader *bufio.Reader, terminal
 		say(fmt.Sprintf("|15%3d|07. |11%-12s |07%s\r\n", i+1, callerText(a.Tag), callerText(areaPlainName(a))))
 		if !pager.Line() {
 			if err := pager.Err(); err != nil {
-				return false, err
+				return moveNone, err
 			}
 			break
 		}
@@ -119,11 +139,11 @@ func (e *MenuExecutor) moveMessage(s ssh.Session, reader *bufio.Reader, terminal
 	input, err := readLineFromSessionIHMax(s, terminal, 20)
 	say("|07")
 	if err != nil {
-		return false, err
+		return moveNone, err
 	}
 	input = strings.TrimSpace(input)
 	if input == "" {
-		return false, nil
+		return moveNone, nil
 	}
 	var to *message.MessageArea
 	if n, convErr := strconv.Atoi(input); convErr == nil {
@@ -140,43 +160,54 @@ func (e *MenuExecutor) moveMessage(s ssh.Session, reader *bufio.Reader, terminal
 	}
 	if to == nil {
 		notice("|01That isn't one of the areas listed.|07")
-		return false, nil
+		return moveNone, nil
 	}
 
 	confirmed, err := promptSingleChar(reader, terminal,
 		fmt.Sprintf("\r\n |07Move this message to |15%s|07? [Y/N] ", callerText(areaPlainName(to))), outputMode)
 	if err != nil {
-		return false, err
+		return moveNone, err
 	}
 	if confirmed != 'Y' {
-		return false, nil
+		return moveNone, nil
 	}
 
 	// The right to move is checked again now: the sysop may have changed the
 	// area's sponsor meanwhile. Then the message must still be the one shown,
 	// and still theirs to move, when the original is deleted.
-	isSponsor := sponsor()
-	if !may(msg, isSponsor) {
+	if !may(msg, sponsor()) {
 		notice("|01You can no longer move this message. Nothing was moved.|07")
-		return false, nil
+		return moveNone, nil
+	}
+	// The area picked may have changed while the caller answered: bound to
+	// a network, its ACS raised or removed. It must still be one listed now.
+	to = stillTarget(moveTargets(e, s, terminal, currentUser, from, sessionStart), to.ID)
+	if to == nil {
+		notice("|01That area can no longer take it. Nothing was moved.|07")
+		return moveNone, nil
 	}
 	fromName := areaPlainName(from)
 	when := config.NowIn(e.GetServerConfig().Timezone)
 	_, err = e.MessageMgr.MoveMessageIf(from.ID, msg.MsgNum, to.ID,
-		func(m *message.DisplayMessage) bool { return message.SameMessage(m, msg) && may(m, isSponsor) },
+		func(m *message.DisplayMessage) bool { return message.SameMessage(m, msg) && may(m, sponsor()) },
 		func(m *message.DisplayMessage) string {
 			return withMovedLine(m.Body, fromName, currentUser.Handle, when)
 		})
+	if errors.Is(err, message.ErrMoveIncomplete) {
+		slog.Error("move message left it in both areas", "node", nodeNumber, "from", from.Tag, "to", to.Tag, "msg", msg.MsgNum, "error", err)
+		notice(fmt.Sprintf("|01The move failed, and a copy was left in |15%s|01. Please tell the sysop.|07", callerText(areaPlainName(to))))
+		return moveChanged, nil
+	}
 	if errors.Is(err, message.ErrMessageChanged) {
 		notice("|01That message was changed or deleted elsewhere. Nothing was moved.|07")
-		return false, nil
+		return moveChanged, nil
 	}
 	if err != nil {
 		slog.Error("move message", "node", nodeNumber, "from", from.Tag, "to", to.Tag, "msg", msg.MsgNum, "error", err)
 		notice("|01Error moving the message.|07")
-		return false, nil
+		return moveNone, nil
 	}
 	slog.Info("message moved", "node", nodeNumber, "handle", currentUser.Handle, "from", from.Tag, "to", to.Tag, "msg", msg.MsgNum, "author", msg.From)
 	notice(fmt.Sprintf("|07Message moved to |15%s|07.", callerText(areaPlainName(to))))
-	return true, nil
+	return moveDone, nil
 }

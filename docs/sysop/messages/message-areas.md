@@ -495,11 +495,18 @@ cancels), then asks `Move this message to ...? [Y/N]`.
   moved it and when, such as ` * Moved from General Discussion by Felonius
   on 11/12/26 at 2:10 pm`. It loses its reply links, which name messages in
   the area it left. The area it left is packed, as after a delete.
-- **Checked again on moving:** the copy is written first, and the original
-  is deleted only if it is still the message shown and the caller may still
-  move it. If another session deleted, edited or moved it meanwhile, or the
-  sysop removed the sponsor, the copy is taken back and the caller is told,
-  so a message is never lost or left in both areas.
+- **Checked again on moving:** after the caller confirms, the area picked
+  must still be one they may move into (still local, still not bound by a
+  V3Net leaf, its ACS still met). The copy is written first, and the
+  original is deleted only if it is still the message shown and the caller
+  may still move it. If another session deleted, edited or moved it
+  meanwhile, or the sysop removed the sponsor, the copy is taken back and
+  the caller is told, so a message is never lost.
+- **If something fails:** a message is kept rather than lost. If the
+  original's delete fails, the copy is taken back only when the original is
+  certainly still there. If a copy can't be taken back, the caller is told
+  a copy was left in the other area, and the log says which; delete one of
+  the two.
 
 ### Searching Messages
 

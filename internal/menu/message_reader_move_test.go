@@ -1,6 +1,8 @@
 package menu
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -230,5 +232,107 @@ func TestMovedLine(t *testing.T) {
 	}
 	if got := areaPlainName(&message.MessageArea{Tag: "GEN", Name: "|12"}); got != "GEN" {
 		t.Errorf("areaPlainName of a name that's only codes = %q, want the tag", got)
+	}
+}
+
+// An area that stops being one the caller may move into while they confirm
+// (here, a V3Net leaf binds it) takes nothing.
+func TestReaderMoveTargetChangedMeanwhile(t *testing.T) {
+	env := newMsgEnv(t)
+	env.generalMsgs(1)
+	tech := addMoveArea(env, "TECH", "local", "")
+	env.whenOutput("[Y/N]", func() {
+		env.e.MessageMgr.IsV3NetArea = func(id int) bool { return id == tech }
+	})
+	r := env.runCmd("READMSGS", env.sysop, "", "Vtech\rYQ")
+	if !r.has("That area can no longer take it. Nothing was moved.") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	if env.msgCount(generalAreaID) != 1 || env.msgCount(tech) != 0 {
+		t.Errorf("GENERAL %d, TECH %d, want 1 and 0", env.msgCount(generalAreaID), env.msgCount(tech))
+	}
+}
+
+// A sponsor the sysop removes while the copy is being written moves
+// nothing: the right to move is asked again as the original is deleted.
+func TestReaderMoveSponsorRemovedDuringCopy(t *testing.T) {
+	env := newMsgEnv(t)
+	env.generalMsgs(1)
+	tech := addMoveArea(env, "TECH", "local", "")
+	sponsorSetSponsor(env, generalAreaID, "caller")
+	env.e.MessageMgr.OnMessagePosted = func(a *message.MessageArea, _ int, _, _, _, _ string) {
+		if a.ID == tech {
+			sponsorSetSponsor(env, generalAreaID, "")
+		}
+	}
+	env.runCmd("READMSGS", env.caller, "", "V1\rYQ")
+	if env.msgCount(generalAreaID) != 1 || env.msgCount(tech) != 0 {
+		t.Errorf("GENERAL %d, TECH %d, want 1 and 0", env.msgCount(generalAreaID), env.msgCount(tech))
+	}
+}
+
+// When the message is deleted elsewhere and the area packed while the
+// caller confirms, the reader shows what is in its place now, as after a
+// refused delete.
+func TestReaderMoveConflictReloads(t *testing.T) {
+	env := newMsgEnv(t)
+	env.generalMsgs(2)
+	addMoveArea(env, "TECH", "local", "")
+	env.whenOutput("[Y/N]", func() {
+		if err := env.e.MessageMgr.DeleteMessage(generalAreaID, 1); err != nil {
+			t.Error(err)
+		}
+		if err := env.e.MessageMgr.PackAndLinkArea(generalAreaID); err != nil {
+			t.Error(err)
+		}
+	})
+	r := env.runCmd("READMSGS", env.sysop, "", "Vtech\rYQ")
+	out := r.text()
+	i := strings.Index(out, "Nothing was moved.")
+	if i < 0 {
+		t.Fatalf("output:\n%s", out)
+	}
+	if after := out[i:]; !strings.Contains(after, "subj-2") || strings.Contains(after, "subj-1") {
+		t.Errorf("after the conflict, want subj-2 shown, not subj-1:\n%s", after)
+	}
+}
+
+// A move that fails and can't take its copy back says a copy was left, and
+// the reader shows what is in the message's place now.
+func TestReaderMoveIncomplete(t *testing.T) {
+	env := newMsgEnv(t)
+	env.generalMsgs(2)
+	tech := addMoveArea(env, "TECH", "local", "")
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env.e.MessageMgr.OnMessagePosted = func(a *message.MessageArea, _ int, _, _, _, _ string) {
+		if a.ID != tech {
+			return
+		}
+		// Elsewhere: the original is deleted and GENERAL packed, so the
+		// move is refused, and TECH's base can't be opened to take the
+		// copy back.
+		if err := env.e.MessageMgr.DeleteMessage(generalAreaID, 1); err != nil {
+			t.Error(err)
+		}
+		if err := env.e.MessageMgr.PackAndLinkArea(generalAreaID); err != nil {
+			t.Error(err)
+		}
+		bad := *a
+		bad.BasePath = filepath.Join(blocker, "tech")
+		if err := env.e.MessageMgr.UpdateAreaByID(tech, bad); err != nil {
+			t.Error(err)
+		}
+	}
+	r := env.runCmd("READMSGS", env.sysop, "", "Vtech\rYQ")
+	out := r.text()
+	i := strings.Index(out, "a copy was left in")
+	if i < 0 {
+		t.Fatalf("output:\n%s", out)
+	}
+	if after := out[i:]; !strings.Contains(after, "subj-2") || strings.Contains(after, "subj-1") {
+		t.Errorf("after the failed move, want subj-2 shown, not subj-1:\n%s", after)
 	}
 }
