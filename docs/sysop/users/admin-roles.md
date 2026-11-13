@@ -83,7 +83,9 @@ tag, and in every area of the conferences it lists by tag:
 }
 ```
 
-A plain name, or an object with neither list, covers every area. Tags are
+A plain name, or an object with neither list, covers every area. An object
+that names `areas` or `conferences` but leaves the list empty is ignored,
+rather than read as every area. Tags are
 matched without regard to case. A tag that doesn't match any area or
 conference covers nothing, and doctor warns about it. A permission that
 isn't scoped (`users.validate`) can't be limited; a grant that tries is

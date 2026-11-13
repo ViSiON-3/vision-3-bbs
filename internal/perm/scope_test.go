@@ -95,7 +95,8 @@ func TestGrantDiagnostics(t *testing.T) {
 	_, diags, err := Parse([]byte(`{"roles": [
 		{"name": "a", "permissions": [{"permission": "users.validate", "areas": ["GENERAL"]}]},
 		{"name": "b", "permissions": [{"permission": "messages.moderate", "areas": [" "]}]},
-		{"name": "c", "permissions": [{"permission": "messages.moderate", "area": ["GENERAL"]}, "users.validate"]}
+		{"name": "c", "permissions": [{"permission": "messages.moderate", "area": ["GENERAL"]}, "users.validate"]},
+		{"name": "d", "permissions": [{"permission": "messages.moderate", "areas": []}, {"permission": "messages.moderate", "conferences": null}, "users.validate"]}
 	]}`))
 	if err != nil {
 		t.Fatal(err)
@@ -106,6 +107,8 @@ func TestGrantDiagnostics(t *testing.T) {
 		`role 2 ("b"): messages.moderate lists only blank areas and conferences, so this grant is ignored`,
 		`role 2 ("b"): grants no permissions`,
 		`role 3 ("c"): a grant of "messages.moderate" has "area", which isn't one of permission, areas and conferences, so the grant is ignored`,
+		`role 4 ("d"): messages.moderate names areas or conferences but lists none, so this grant is ignored`,
+		`role 4 ("d"): messages.moderate names areas or conferences but lists none, so this grant is ignored`,
 	}
 	if len(diags) != len(want) {
 		t.Fatalf("diagnostics = %v", diags)
@@ -115,8 +118,13 @@ func TestGrantDiagnostics(t *testing.T) {
 			t.Errorf("diagnostic %d = %q, want prefix %q", i, diags[i], w)
 		}
 	}
+	// An emptied list doesn't leave a grant that moderates everywhere.
+	r, _, _ := Parse([]byte(`{"roles": [{"name": "e", "permissions": [{"permission": "messages.moderate", "areas": []}]}]}`))
+	if moderates(&user.User{AccessLevel: 20, Roles: []string{"e"}}, Scope{Area: "OTHER"}, r).Allowed {
+		t.Error(`a grant with "areas": [] moderates`)
+	}
 	// "area" for "areas" doesn't leave a grant that moderates everywhere.
-	r, _, _ := Parse([]byte(`{"roles": [{"name": "c", "permissions": [{"permission": "messages.moderate", "area": ["GENERAL"]}]}]}`))
+	r, _, _ = Parse([]byte(`{"roles": [{"name": "c", "permissions": [{"permission": "messages.moderate", "area": ["GENERAL"]}]}]}`))
 	if moderates(&user.User{AccessLevel: 20, Roles: []string{"c"}}, Scope{Area: "OTHER"}, r).Allowed {
 		t.Error("a grant with a misspelt key moderates")
 	}

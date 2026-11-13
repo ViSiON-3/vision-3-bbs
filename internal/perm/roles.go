@@ -46,6 +46,11 @@ type Grant struct {
 	// Parse ignores a grant that has any: "area" for "areas" would
 	// otherwise leave the grant unlimited, the opposite of what was meant.
 	unknown []string
+	// scopeKey records that the object named "areas" or "conferences",
+	// whatever it gave them. A list left empty ([] or null) then limits
+	// the grant to nothing rather than to nowhere-in-particular: Parse
+	// ignores it instead of granting every area.
+	scopeKey bool
 }
 
 // grantKeys are the keys a grant object may have.
@@ -69,6 +74,9 @@ func (g *Grant) UnmarshalJSON(data []byte) error {
 		for k := range keys {
 			if !grantKeys[k] {
 				g.unknown = append(g.unknown, k)
+			}
+			if k == "areas" || k == "conferences" {
+				g.scopeKey = true
 			}
 		}
 		sort.Strings(g.unknown)
@@ -273,6 +281,10 @@ func Parse(data []byte) (*Roles, []Diagnostic, error) {
 			}
 			if !limited && g.limited() {
 				bad("%s lists only blank areas and conferences, so this grant is ignored", p)
+				continue
+			}
+			if !limited && g.scopeKey {
+				bad("%s names areas or conferences but lists none, so this grant is ignored; leave both out to grant it everywhere", p)
 				continue
 			}
 			if !limited && everywhere(grants[p]) {
