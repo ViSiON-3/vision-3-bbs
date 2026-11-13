@@ -201,3 +201,27 @@ func TestRetryStillSyncsDirectory(t *testing.T) {
 		t.Errorf("raiseNextUserID retry: %v, want the sync error", err)
 	}
 }
+
+// Two accounts can't have handles private mail treats as one (#1056): not
+// by signup, nor by a rename.
+func TestHandlesUniqueAsMailComparesThem(t *testing.T) {
+	um, err := NewUserManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := um.AddUser("password1", "Sam", "Sam Smith", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := um.AddUser("password1", "ſam", "Long S", ""); !errors.Is(err, ErrHandleExists) {
+		t.Errorf("AddUser(ſam) with Sam present: %v", err)
+	}
+	if !um.HandleTaken("ſAM", 0) {
+		t.Error("HandleTaken(ſAM) = false")
+	}
+	ann, _ := um.AddUser("password1", "Ann", "Ann Here", "")
+	u, _ := um.GetUserByID(ann.ID)
+	u.Handle = "ſam"
+	if err := um.UpdateUserByID(u); !errors.Is(err, ErrHandleExists) {
+		t.Errorf("renaming Ann to ſam: %v", err)
+	}
+}

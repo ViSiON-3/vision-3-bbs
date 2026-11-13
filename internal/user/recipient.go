@@ -81,6 +81,37 @@ func (um *UserMgr) HandleExists(handle string) bool {
 	return ok
 }
 
+// SameHandle reports whether two handles name the same person, as private
+// mail compares them (strings.EqualFold, Unicode case folding), ignoring
+// surrounding space. Account uniqueness uses this comparison too (#1056):
+// lower-casing alone lets "Sam" and "ſam" both exist, which mail would then
+// treat as one person.
+func SameHandle(a, b string) bool {
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
+}
+
+// HandleTaken reports whether an account other than the one with ID except
+// (0 for none) has a handle mail would treat as handle, deleted accounts
+// included.
+func (um *UserMgr) HandleTaken(handle string, except int) bool {
+	if um == nil {
+		return false
+	}
+	um.mu.RLock()
+	defer um.mu.RUnlock()
+	return um.handleTakenLocked(handle, except)
+}
+
+// handleTakenLocked is HandleTaken with um.mu held.
+func (um *UserMgr) handleTakenLocked(handle string, except int) bool {
+	for _, u := range um.users {
+		if u.ID != except && SameHandle(u.Handle, handle) {
+			return true
+		}
+	}
+	return false
+}
+
 // RecipientResolver is the part of UserMgr that writes private mail: mail
 // importers take one so tests can supply a fixed set of accounts, and so a
 // caller without the users file can pass nil and resolve nothing.

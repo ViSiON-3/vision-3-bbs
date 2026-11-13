@@ -173,3 +173,31 @@ func checkRetiredHandles(root string, add func(string, doctorSeverity, string, s
 	}
 	add(name, doctorInfo, fmt.Sprintf("%d purged account handle(s) retired; delete a line in data/users/retired_handles to release one", n), "")
 }
+
+// checkHandleCollisions adds doctor's warning for accounts whose handles
+// private mail would treat as the same person (#1056): different by
+// lower-casing, so both could be created before the BBS refused it, but
+// equal by case folding, so each can read the other's mail.
+func checkHandleCollisions(root string, add func(string, doctorSeverity, string, string)) {
+	var users []struct {
+		ID     int    `json:"id"`
+		Handle string `json:"handle"`
+	}
+	data, err := os.ReadFile(filepath.Join(root, "data", "users", "users.json"))
+	if err != nil || json.Unmarshal(data, &users) != nil {
+		return
+	}
+	found := false
+	for i := range users {
+		for j := i + 1; j < len(users); j++ {
+			if user.SameHandle(users[i].Handle, users[j].Handle) {
+				found = true
+				add("account handles", doctorWarn, fmt.Sprintf("%q (#%d) and %q (#%d) are the same handle to private mail, so each can read the other's", users[i].Handle, users[i].ID, users[j].Handle, users[j].ID),
+					"Rename one of them in ./ue or the admin user editor.")
+			}
+		}
+	}
+	if !found && len(users) > 0 {
+		add("account handles", doctorOK, "no two accounts share a handle as private mail compares them", "")
+	}
+}

@@ -65,6 +65,10 @@ func (um *UserMgr) updateUserByID(u *User, chatBar *bool) error {
 		if existing, exists := um.users[newKey]; exists && existing.ID != u.ID {
 			return ErrHandleExists
 		}
+		// Nor a handle mail would treat as another account's (#1056).
+		if um.handleTakenLocked(u.Handle, u.ID) {
+			return ErrHandleExists
+		}
 		if err := um.handleRetired(u.Handle); err != nil {
 			return err
 		}
@@ -225,6 +229,7 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 	// error path is unchanged and costs nothing.
 	um.mu.RLock()
 	_, exists := um.users[lowerHandle]
+	exists = exists || um.handleTakenLocked(handle, 0)
 	um.mu.RUnlock()
 	if exists {
 		return nil, ErrHandleExists
@@ -244,7 +249,7 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 
 	// Re-check under the write lock: another registration may have taken the
 	// handle while we were hashing.
-	if _, exists := um.users[lowerHandle]; exists {
+	if _, exists := um.users[lowerHandle]; exists || um.handleTakenLocked(handle, 0) {
 		return nil, ErrHandleExists
 	}
 
