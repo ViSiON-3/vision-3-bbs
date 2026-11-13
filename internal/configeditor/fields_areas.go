@@ -213,7 +213,16 @@ func (m *Model) fieldsMsgArea() []fieldDef {
 			fieldDef{
 				Label: "Sponsor", Help: "Handle of the echo sponsor/moderator (optional)", Type: ftString, Col: 3, Row: 19, Width: 30,
 				Get: func() string { return a.Sponsor },
-				Set: func(val string) error { a.Sponsor = val; return nil },
+				// A new name, or the same one while the area is bound to
+				// nobody, is bound by the BBS to the account holding it
+				// when it next loads the areas (#1020). The same name on a
+				// working binding keeps it (see KeepsSponsorBinding).
+				Set: func(val string) error {
+					if !a.KeepsSponsorBinding(val) {
+						a.Sponsor, a.SponsorID = val, 0
+					}
+					return nil
+				},
 			},
 		)
 	case "netmail":

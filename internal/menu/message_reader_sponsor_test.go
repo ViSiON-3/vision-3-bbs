@@ -75,16 +75,16 @@ func (f fakeAreas) GetAreaByID(id int) (*message.MessageArea, bool) {
 	return a, ok
 }
 
-// sponsorsArea: the sponsor of the area, whatever the case of the handle;
+// sponsorsArea: the sponsor's account, by ID, not whoever has the handle;
 // nobody for an area with no sponsor, an unknown area or no caller; and
 // nobody for PRIVMAIL, whose sponsor field gives no one other callers' mail.
 func TestSponsorsArea(t *testing.T) {
 	areas := fakeAreas{
-		1: {ID: 1, Tag: "GENERAL", Sponsor: "TechGuru"},
-		2: {ID: 2, Tag: "PRIVMAIL", Sponsor: "TechGuru"},
+		1: {ID: 1, Tag: "GENERAL", Sponsor: "TechGuru", SponsorID: 7},
+		2: {ID: 2, Tag: "PRIVMAIL", Sponsor: "TechGuru", SponsorID: 7},
 		3: {ID: 3, Tag: "TECH"},
 	}
-	guru := &user.User{Handle: "techguru"}
+	guru := &user.User{ID: 7, Handle: "techguru"}
 	for _, tc := range []struct {
 		name string
 		u    *user.User
@@ -92,7 +92,8 @@ func TestSponsorsArea(t *testing.T) {
 		want bool
 	}{
 		{"sponsor", guru, 1, true},
-		{"someone else", &user.User{Handle: "Other"}, 1, false},
+		{"someone else", &user.User{ID: 8, Handle: "Other"}, 1, false},
+		{"someone else with the handle", &user.User{ID: 9, Handle: "TechGuru"}, 1, false},
 		{"private mail", guru, 2, false},
 		{"no sponsor", guru, 3, false},
 		{"unknown area", guru, 9, false},

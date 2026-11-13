@@ -178,6 +178,12 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 	// a removal, between startup's read and the seed would otherwise never
 	// be seen, and a role the sysop removed in that gap would stay in force.
 	loadRoles(rootConfigPath)
+	// A sponsor binding that failed at startup is retried like a failed
+	// reload: run it again now, and if it still fails, queue the message
+	// areas so each idle poll tries again without the file having to change.
+	if cw.menuExecutor != nil && bindSponsors(userMgr, cw.menuExecutor.MessageMgr) != nil {
+		cw.pending["message_areas.json"] = true
+	}
 
 	go cw.pollLoop()
 
@@ -261,7 +267,13 @@ func (cw *ConfigWatcher) poll() {
 		reloaded = true
 		for _, t := range cw.deferredTargets {
 			cw.changed(t.path, false)
-			cw.applyDeferred(t)
+			// The file's change is consumed above, so a failure has to be
+			// queued here or nothing retries it until the file changes.
+			if !cw.applyDeferred(t) {
+				cw.mu.Lock()
+				cw.pending[t.name] = true
+				cw.mu.Unlock()
+			}
 		}
 		return
 	}
@@ -463,7 +475,12 @@ func (cw *ConfigWatcher) applyMessageAreas() error {
 	if cw.menuExecutor == nil || cw.menuExecutor.MessageMgr == nil {
 		return fmt.Errorf("message manager not running")
 	}
-	return cw.menuExecutor.MessageMgr.Reload()
+	if err := cw.menuExecutor.MessageMgr.Reload(); err != nil {
+		return err
+	}
+	// A sponsor set by name in the config editor or helper arrives unbound.
+	// A failure is returned so the reload is tried again.
+	return bindSponsors(cw.userMgr, cw.menuExecutor.MessageMgr)
 }
 
 // validateV3Net is the signal-time check for v3net.json: parse only.

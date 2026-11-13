@@ -19,10 +19,11 @@ import (
 // can give: the same as at upload.
 const maxUploadDescription = 60
 
-// mayEditUpload reports whether u may change rec's description: the caller
-// who uploaded it, or a co-sysop.
+// mayEditUpload reports whether u may change rec's description: the account
+// that uploaded it, matched by ID so a new caller who takes a purged or
+// renamed uploader's handle gets nothing (#1020), or a co-sysop.
 func mayEditUpload(rec *file.FileRecord, u *user.User, coSysOpLevel int) bool {
-	return u.AccessLevel >= coSysOpLevel || strings.EqualFold(rec.UploadedBy, u.Handle)
+	return u.AccessLevel >= coSysOpLevel || rec.UploadedByAccount(u.ID)
 }
 
 // runEditUpload is EDITUPLOAD, ViSiON/2's "Edit Upload" (FE): a caller

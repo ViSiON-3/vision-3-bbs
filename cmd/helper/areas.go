@@ -359,7 +359,20 @@ func buildAreaChanges(fs *flag.FlagSet) ([]areaChange, error) {
 		case "acs-write":
 			changes = append(changes, stringChange("write ACS", val, func(a *message.MessageArea) *string { return &a.ACSWrite }))
 		case "sponsor":
-			changes = append(changes, stringChange("sponsor", val, func(a *message.MessageArea) *string { return &a.Sponsor }))
+			// A new name, or the same one while the area is bound to
+			// nobody, is bound by the BBS to the account holding it when it
+			// next loads the areas (#1020). The same name on a working
+			// binding keeps it (see KeepsSponsorBinding).
+			set := stringChange("sponsor", val, func(a *message.MessageArea) *string { return &a.Sponsor })
+			set.apply = func(a *message.MessageArea) bool {
+				if a.KeepsSponsorBinding(val) {
+					return false
+				}
+				changed := a.Sponsor != val || a.SponsorID != 0
+				a.Sponsor, a.SponsorID = val, 0
+				return changed
+			}
+			changes = append(changes, set)
 		case "max-messages":
 			c, err := intChange("max messages", val, func(a *message.MessageArea) *int { return &a.MaxMessages })
 			if err != nil {

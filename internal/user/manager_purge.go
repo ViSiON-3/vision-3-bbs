@@ -65,6 +65,17 @@ func (um *UserMgr) PurgeDeletedUsers(retentionDays int) ([]PurgeResult, error) {
 		return nil, nil
 	}
 
+	// The mark goes past every ID before any account goes, so none of
+	// theirs can be given out again (#1020). If it can't be stored, nothing
+	// is purged.
+	maxID := 0
+	for _, u := range um.users {
+		maxID = max(maxID, u.ID)
+	}
+	if err := raiseNextUserID(um.path, max(um.nextUserID, maxID+1)); err != nil {
+		return nil, fmt.Errorf("storing the next user ID before purging: %w", err)
+	}
+
 	// Phase 2: remove from in-memory store, then persist.
 	// Roll back in-memory changes if save fails so the store stays consistent.
 	for _, c := range candidates {

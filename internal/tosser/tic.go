@@ -361,7 +361,8 @@ func (t *Tosser) deliverTICFile(area file.FileArea, name, srcPath, crc string, s
 			r.CRC32 = crc
 			r.UploadedAt = now
 			r.UploadedBy = uploader
-			r.Reviewed = true // network-delivered content, as for a new record
+			r.UploadedByID = file.NoUploaderID // a network's file, nobody's here
+			r.Reviewed = true                  // network-delivered content, as for a new record
 		})
 		if err != nil {
 			undo()
@@ -378,6 +379,8 @@ func (t *Tosser) deliverTICFile(area file.FileArea, name, srcPath, crc string, s
 		Size:        size,
 		UploadedAt:  now,
 		UploadedBy:  uploader,
+		// A network's file: no local account owns it.
+		UploadedByID: file.NoUploaderID,
 		// The sysop chose to carry the echo; its files need no review.
 		Reviewed: true,
 		CRC32:    crc,

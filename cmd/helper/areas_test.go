@@ -167,3 +167,49 @@ func TestAreasSetAutocorrect(t *testing.T) {
 		t.Errorf("FD_LINUX Autocorrect = %v, want unset", a)
 	}
 }
+
+// A new sponsor set by name drops the old account binding, so the BBS binds
+// the new name (#1020) instead of leaving the old account in place.
+func TestAreasSetSponsorClearsBinding(t *testing.T) {
+	dir := setupAreasConfig(t)
+	areas := readAreas(t, dir)
+	g := areas["GENERAL"]
+	g.Sponsor, g.SponsorID = "Old", 5
+	writeJSONFile(t, filepath.Join(dir, "message_areas.json"), []message.MessageArea{g})
+	if rc := runAreasSet([]string{"--config", dir, "--tag", "GENERAL", "--sponsor", "New", "--quiet"}); rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	if got := readAreas(t, dir)["GENERAL"]; got.Sponsor != "New" || got.SponsorID != 0 {
+		t.Errorf("sponsor = %q, id %d; want New, 0", got.Sponsor, got.SponsorID)
+	}
+}
+
+// Naming the same sponsor again rebinds it: a sponsor bound to nobody before
+// the account existed is put right by setting it again.
+func TestAreasSetSameSponsorRebinds(t *testing.T) {
+	dir := setupAreasConfig(t)
+	g := readAreas(t, dir)["GENERAL"]
+	g.Sponsor, g.SponsorID = "Late", message.NoSponsorID
+	writeJSONFile(t, filepath.Join(dir, "message_areas.json"), []message.MessageArea{g})
+	if rc := runAreasSet([]string{"--config", dir, "--tag", "GENERAL", "--sponsor", "Late", "--quiet"}); rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	if got := readAreas(t, dir)["GENERAL"]; got.Sponsor != "Late" || got.SponsorID != 0 {
+		t.Errorf("sponsor = %q, id %d; want Late, 0", got.Sponsor, got.SponsorID)
+	}
+}
+
+// The same name on a working binding keeps it: re-running a command can't
+// hand the area to whoever took a renamed sponsor's old handle.
+func TestAreasSetSameSponsorKeepsBinding(t *testing.T) {
+	dir := setupAreasConfig(t)
+	g := readAreas(t, dir)["GENERAL"]
+	g.Sponsor, g.SponsorID = "Alice", 10
+	writeJSONFile(t, filepath.Join(dir, "message_areas.json"), []message.MessageArea{g})
+	if rc := runAreasSet([]string{"--config", dir, "--tag", "GENERAL", "--sponsor", "alice", "--quiet"}); rc != 0 {
+		t.Fatalf("rc = %d", rc)
+	}
+	if got := readAreas(t, dir)["GENERAL"]; got.SponsorID != 10 {
+		t.Errorf("sponsor id = %d, want 10 kept", got.SponsorID)
+	}
+}

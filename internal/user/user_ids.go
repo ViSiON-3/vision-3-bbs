@@ -1,0 +1,109 @@
+package user
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
+)
+
+// User IDs are never handed out twice (#1020). Sponsorship and upload
+// ownership name an account by ID, and the admin audit log records IDs, so
+// an ID that came back after its account was purged would hand the old
+// account's rights and history to a stranger. Taking the next ID from the
+// highest one in users.json alone reuses it as soon as the newest account is
+// purged, so the next ID is also kept in its own file beside users.json,
+// which only ever goes up.
+
+// NextUserIDFile is the high-water mark's file name, beside users.json.
+const NextUserIDFile = "next_user_id"
+
+func nextUserIDPath(usersPath string) string {
+	return filepath.Join(filepath.Dir(usersPath), NextUserIDFile)
+}
+
+// errNoMark is readNextUserID's result for a mark that has never been
+// written: a board from before the mark, or a new one.
+var errNoMark = errors.New("no next user ID stored")
+
+// readNextUserID is the stored mark. A mark that has never been written
+// returns errNoMark, and the caller has only users.json to go on. Any other
+// error, a mark that can't be read or doesn't hold a number, is returned as
+// it is: the mark may be higher than any ID left in users.json, and guessing
+// would hand out retired IDs.
+func readNextUserID(usersPath string) (int, error) {
+	if usersPath == "" {
+		return 0, errNoMark
+	}
+	path := nextUserIDPath(usersPath)
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, errNoMark
+	}
+	if err != nil {
+		return 0, fmt.Errorf("reading %s: %w", path, err)
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || n < 1 {
+		return 0, fmt.Errorf("%s holds %q, not a user ID; put the next unused ID in it (one more than the highest ever given out)", path, strings.TrimSpace(string(data)))
+	}
+	return n, nil
+}
+
+// raiseNextUserID stores next as the mark unless the stored one is already
+// at or past it. It never lowers the mark. The read and the write are one
+// step under the mark's own cross-process lock: the BBS and ./ue both raise
+// it, and without the lock one could write a lower mark over the other's
+// higher one. The lock is the mark's, not users.json's, so a caller already
+// holding that one can't deadlock here.
+func raiseNextUserID(usersPath string, next int) error {
+	if usersPath == "" {
+		return nil
+	}
+	path := nextUserIDPath(usersPath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return err
+	}
+	lock, err := filelock.Acquire(path, filelock.DefaultTimeout)
+	if err != nil {
+		return fmt.Errorf("locking %s: %w", path, err)
+	}
+	defer lock.Release()
+	stored, err := readNextUserID(usersPath)
+	if err != nil && !errors.Is(err, errNoMark) {
+		return err // never overwrite a mark that couldn't be read
+	}
+	if next <= stored {
+		return nil
+	}
+	return writeFileAtomic(path, []byte(strconv.Itoa(next)+"\n"), 0o600)
+}
+
+// RecordUserIDs raises the mark past every ID in users, for a tool that
+// edits users.json without a UserMgr (./ue), so an account it purges can't
+// have its ID given out again.
+func RecordUserIDs(usersPath string, users []*User) error {
+	maxID := 0
+	for _, u := range users {
+		if u != nil && u.ID > maxID {
+			maxID = u.ID
+		}
+	}
+	return raiseNextUserID(usersPath, maxID+1)
+}
+
+// noteNextUserID stores um.nextUserID as the mark. Called with um.mu held.
+func (um *UserMgr) noteNextUserID() error {
+	return raiseNextUserID(um.path, um.nextUserID)
+}
+
+// ErrUserIDMark is returned by AddUser when the next user ID can't be
+// trusted: next_user_id couldn't be read, or held something other than an
+// ID, when the users were loaded. No account is created until it is put
+// right and the BBS restarted.
+var ErrUserIDMark = errors.New("the next user ID can't be read, so no account can be created")

@@ -52,6 +52,7 @@ type UserMgr struct {
 	newUserLevel   int            // Access level assigned to new signups (from config)
 	autoValidate   bool           // Mark new signups validated on creation (from config)
 	nextUserID     int            // Added to track the next available user ID
+	idMarkErr      error          // why next_user_id couldn't be read at load; AddUser refuses while set
 	callHistory    []CallRecord   // Added slice for call history
 	nextCallNumber uint64         // Added counter for overall calls
 	activeUserIDs  map[int32]bool // Track which user IDs are currently online
@@ -223,7 +224,22 @@ func (um *UserMgr) determineNextUserID() { // Receiver uses renamed type
 	um.mu.RUnlock()
 
 	um.mu.Lock() // Need write lock to set nextUserID
-	um.nextUserID = maxID + 1
+	// Past every ID in use, and past every ID ever handed out: an account
+	// purged since keeps its ID retired (see user_ids.go).
+	stored, err := readNextUserID(um.path)
+	switch {
+	case err == nil || errors.Is(err, errNoMark):
+		um.nextUserID = max(maxID+1, stored)
+		if err := um.noteNextUserID(); err != nil {
+			slog.Error("can't store the next user ID", "error", err)
+		}
+	default:
+		// Without the mark, an ID past every account left could still be
+		// one a purged account had. Allocate nothing until it is fixed.
+		um.nextUserID = maxID + 1
+		um.idMarkErr = err
+		slog.Error("the next user ID can't be read, so new accounts are refused until it is fixed", "error", err)
+	}
 	slog.Debug("determined next user ID", "id", um.nextUserID)
 	um.mu.Unlock()
 }

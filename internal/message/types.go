@@ -44,6 +44,12 @@ type MessageArea struct {
 	OriginAddr   string `json:"origin_addr,omitempty"`     // FTN origin address (e.g., "21:3/110")
 	Network      string `json:"network,omitempty"`         // Network key (e.g., "fsxnet", "dovenet")
 	Sponsor      string `json:"sponsor,omitempty"`         // Handle of the area sponsor/moderator
+	// SponsorID is the sponsor's account ID, which decides who the sponsor
+	// is; Sponsor is the name shown and typed (#1020). 0 means not yet
+	// bound: the BBS binds it to the account holding Sponsor when it loads
+	// the areas. NoSponsorID means Sponsor named no account then. Anything
+	// that sets Sponsor sets this, or clears it to 0 to have it bound.
+	SponsorID int `json:"sponsor_id,omitempty"`
 	// QWKConference is the hub's conference number for a qwknet area. It is
 	// the only thing a QWK network routes on: the hub numbers its
 	// conferences, and every packet header carries that number. 0 = unset.
@@ -112,3 +118,23 @@ type DisplayMessage struct {
 const (
 	MsgToUserAll = "All" // Standard To value for public messages
 )
+
+// NoSponsorID is MessageArea.SponsorID when Sponsor named no account as the
+// areas were loaded. Nobody is that area's sponsor until it is set again.
+const NoSponsorID = -1
+
+// KeepsSponsorBinding reports whether setting a's sponsor to name leaves its
+// account binding as it is: the same name, already bound to an account. A
+// sponsor who was renamed keeps the area that way, and so does pressing
+// Enter on the field, even after someone else has taken the old handle. A
+// binding to nobody (NoSponsorID) is not kept, so entering the name again
+// binds it once the account exists. To hand an area to whoever holds the
+// name now, clear the sponsor and set it again.
+func (a MessageArea) KeepsSponsorBinding(name string) bool {
+	return a.SponsorID > 0 && strings.EqualFold(strings.TrimSpace(name), strings.TrimSpace(a.Sponsor))
+}
+
+// SponsoredBy reports whether the account with ID id is a's sponsor.
+func (a MessageArea) SponsoredBy(id int) bool {
+	return id > 0 && a.Sponsor != "" && a.SponsorID == id
+}

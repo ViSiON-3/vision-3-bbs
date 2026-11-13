@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 )
@@ -216,9 +217,16 @@ func (um *UserMgr) mergeExternalEditsFrom(onDisk map[string]*User) {
 
 	// AddUser hands out nextUserID directly, so adopting records with higher
 	// IDs must push the counter past them or the next registration collides.
+	raised := false
 	for _, u := range um.users {
 		if u.ID >= um.nextUserID {
 			um.nextUserID = u.ID + 1
+			raised = true
+		}
+	}
+	if raised {
+		if err := um.noteNextUserID(); err != nil {
+			slog.Error("can't store the next user ID", "error", err)
 		}
 	}
 }

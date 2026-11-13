@@ -514,27 +514,32 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 				uiPause(1 * time.Second)
 				break
 			}
-			prevSponsor := edited.Sponsor
+			prevSponsor, prevSponsorID := edited.Sponsor, edited.SponsorID
 			newHandle := promptAreaField(s, terminal, outputMode,
 				"Sponsor handle (- to clear)", edited.Sponsor, 30)
 			switch {
 			case newHandle == "-":
-				edited.Sponsor = ""
+				edited.Sponsor, edited.SponsorID = "", 0
+			case edited.KeepsSponsorBinding(newHandle):
+				// Enter (or the same name): the sponsor stays the account
+				// it is, even if another account now has that handle.
 			case newHandle != "":
 				if userManager != nil {
-					if _, exists := userManager.GetUser(newHandle); !exists {
+					if sponsor, exists := userManager.GetUser(newHandle); !exists {
 						msg := fmt.Sprintf("|01User '%s' not found - sponsor unchanged.|07", callerText(newHandle))
 						_ = terminalio.WriteProcessedBytes(terminal,
 							ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 						uiPause(1 * time.Second)
 					} else {
-						edited.Sponsor = newHandle
+						// The account, not the name, is the sponsor (#1020).
+						edited.Sponsor, edited.SponsorID = sponsor.Handle, sponsor.ID
 					}
 				} else {
-					edited.Sponsor = newHandle
+					// Bound to the account when the areas are next loaded.
+					edited.Sponsor, edited.SponsorID = newHandle, 0
 				}
 			}
-			if edited.Sponsor != prevSponsor {
+			if edited.Sponsor != prevSponsor || edited.SponsorID != prevSponsorID {
 				dirty = true
 			}
 			refreshFieldRow(9, fmt.Sprintf("|11S|07) Sponsor       : |15%s", callerText(edited.Sponsor)))

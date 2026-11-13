@@ -38,6 +38,12 @@ func LoadUsers(path string) ([]*user.User, string, error) {
 		return nil, "", fmt.Errorf("unmarshal %s: %w", path, err)
 	}
 
+	// Retire every ID ./ue has seen before it can purge any of them, so the
+	// BBS never hands a purged account's ID to someone new (#1020).
+	if err := user.RecordUserIDs(path, users); err != nil {
+		return nil, "", fmt.Errorf("record user IDs beside %s: %w", path, err)
+	}
+
 	// Sort by ID for consistent display
 	sort.Slice(users, func(i, j int) bool {
 		return users[i].ID < users[j].ID

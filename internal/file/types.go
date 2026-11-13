@@ -35,18 +35,34 @@ func (a FileArea) IsFileEcho() bool {
 
 // FileRecord holds metadata about a specific file within a FileArea.
 type FileRecord struct {
-	ID            uuid.UUID `json:"id"`          // Unique ID for the record
-	AreaID        int       `json:"area_id"`     // Link to FileArea.ID
-	Filename      string    `json:"filename"`    // Actual filename on disk (basename)
-	Description   string    `json:"description"` // User-provided description
-	Size          int64     `json:"size"`        // File size in bytes
-	UploadedAt    time.Time `json:"uploaded_at"`
-	UploadedBy    string    `json:"uploaded_by"` // User Handle
-	DownloadCount int       `json:"download_count"`
-	Reviewed      bool      `json:"reviewed,omitempty"`
+	ID          uuid.UUID `json:"id"`          // Unique ID for the record
+	AreaID      int       `json:"area_id"`     // Link to FileArea.ID
+	Filename    string    `json:"filename"`    // Actual filename on disk (basename)
+	Description string    `json:"description"` // User-provided description
+	Size        int64     `json:"size"`        // File size in bytes
+	UploadedAt  time.Time `json:"uploaded_at"`
+	UploadedBy  string    `json:"uploaded_by"` // User Handle
+	// UploadedByID is the uploading account's ID, which decides who owns
+	// the record; UploadedBy is only its name for display (#1020). 0 means
+	// not yet bound (a record from before IDs, bound once at startup);
+	// NoUploaderID means no local account uploaded it (TIC, an import).
+	UploadedByID  int  `json:"uploaded_by_id,omitempty"`
+	DownloadCount int  `json:"download_count"`
+	Reviewed      bool `json:"reviewed,omitempty"`
 	// CRC32 is the file's CRC-32 as 8 uppercase hex digits, recorded for
 	// files that arrived by TIC, whose control file carries it. Empty for
 	// other files.
 	CRC32 string `json:"crc32,omitempty"`
 	// TODO: Add []string Tags for keyword tagging later if needed
+}
+
+// NoUploaderID is FileRecord.UploadedByID for a file no local account
+// uploaded: it came by TIC or an import, or its uploader's handle matched no
+// account when old records were bound. Nobody owns such a record.
+const NoUploaderID = -1
+
+// UploadedByAccount reports whether the account with ID id uploaded r, and
+// so owns it.
+func (r FileRecord) UploadedByAccount(id int) bool {
+	return id > 0 && r.UploadedByID == id
 }

@@ -23,7 +23,7 @@ const sponsorHeaderMark = "SPONSOR MENU"
 func sponsorNewEnv(t *testing.T) *menuEnv {
 	t.Helper()
 	env := newMenuEnv(t)
-	sponsorAddArea(env, message.MessageArea{Tag: "THIRD", Name: "Third Area", ConferenceID: 1, Sponsor: "Caller"})
+	sponsorAddArea(env, message.MessageArea{Tag: "THIRD", Name: "Third Area", ConferenceID: 1, Sponsor: "Caller", SponsorID: 2})
 	sponsorAddArea(env, message.MessageArea{Tag: "FAR", Name: "Far Away", ConferenceID: 2})
 	sponsorSetSponsor(env, 1, "Caller")
 	for _, u := range []*user.User{env.sysop, env.caller} {
@@ -51,7 +51,13 @@ func sponsorAddArea(env *menuEnv, a message.MessageArea) int {
 func sponsorSetSponsor(env *menuEnv, id int, handle string) {
 	env.t.Helper()
 	a := sponsorArea(env, id)
-	a.Sponsor = handle
+	a.Sponsor, a.SponsorID = handle, 0
+	if handle != "" {
+		a.SponsorID = message.NoSponsorID
+		if u, ok := env.um.GetUser(handle); ok {
+			a.SponsorID = u.ID
+		}
+	}
 	if err := env.e.MessageMgr.UpdateAreaByID(id, a); err != nil {
 		env.t.Fatalf("UpdateAreaByID %d: %v", id, err)
 	}
@@ -526,7 +532,7 @@ func TestSponsorEditAreaSysopEditsEveryField(t *testing.T) {
 		ACSRead: "s30", ACSWrite: "s40", AllowAnon: &yes, RealNameOnly: true, ConferenceID: 2,
 		BasePath: "msgbases/new_base", MaxMessages: 500, MaxAge: 90, AutoJoin: false,
 		AreaType: "echomail", EchoTag: "NEW_ECHO", OriginAddr: "21:3/110", Network: "fsxnet",
-		Sponsor: "Sysop",
+		Sponsor: "Sysop", SponsorID: 1,
 	}
 	got := sponsorDiskArea(env, 1)
 	if got.AllowAnon == nil || !*got.AllowAnon {
@@ -606,6 +612,11 @@ func TestSponsorEditAreaSponsorField(t *testing.T) {
 			}
 			if got := sponsorDiskArea(env, 1).Sponsor; got != tc.want {
 				t.Errorf("saved sponsor = %q, want %q", got, tc.want)
+			}
+			// The account is stored with the name (#1020).
+			wantID := map[string]int{"Sysop": 1, "Caller": 2, "": 0}[tc.want]
+			if got := sponsorDiskArea(env, 1).SponsorID; got != wantID {
+				t.Errorf("saved sponsor ID = %d, want %d", got, wantID)
 			}
 			// Only a real change is saved.
 			if got, changed := r.has("saved."), tc.want != "Caller"; got != changed {
@@ -1189,5 +1200,23 @@ func TestSponsorEditAreaAreaType(t *testing.T) {
 		if got := sponsorDiskArea(env, 1).AreaType; got != tc.want {
 			t.Errorf("reply %q: saved type = %q, want %q", tc.reply, got, tc.want)
 		}
+	}
+}
+
+// Enter on the Sponsor field keeps the sponsor's account, even after it was
+// renamed and someone else registered the old handle (#1020).
+func TestSponsorEditAreaEnterKeepsRenamedSponsor(t *testing.T) {
+	env := sponsorNewEnv(t) // area 1 sponsored by Caller (#2)
+	renamed, _ := env.um.GetUserByID(2)
+	renamed.Handle = "Carl"
+	if err := env.um.UpdateUserByID(renamed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.um.AddUser("password1", "Caller", "New Person", ""); err != nil {
+		t.Fatal(err)
+	}
+	env.runCmd("SPONSOREDITAREA", env.sysop, "", "s\rq")
+	if got := sponsorDiskArea(env, 1); got.SponsorID != 2 {
+		t.Errorf("sponsor = %q #%d, want account #2 kept", got.Sponsor, got.SponsorID)
 	}
 }

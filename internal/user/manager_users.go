@@ -230,6 +230,16 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 		return nil, ErrHandleExists
 	}
 
+	// The mark goes past this ID before the account is saved: if it can't,
+	// there is no account, rather than one whose ID a later purge and
+	// restart could hand out again.
+	if um.idMarkErr != nil {
+		return nil, fmt.Errorf("%w: %v", ErrUserIDMark, um.idMarkErr)
+	}
+	if err := raiseNextUserID(um.path, um.nextUserID+1); err != nil {
+		return nil, fmt.Errorf("storing the next user ID: %w", err)
+	}
+
 	// Create new user
 	newUser := &User{
 		ID:            um.nextUserID,
