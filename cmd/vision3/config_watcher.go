@@ -446,7 +446,13 @@ func (cw *ConfigWatcher) applyFileAreas() error {
 	if cw.menuExecutor == nil || cw.menuExecutor.FileMgr == nil {
 		return fmt.Errorf("file manager not running")
 	}
-	return cw.menuExecutor.FileMgr.Reload()
+	if err := cw.menuExecutor.FileMgr.Reload(); err != nil {
+		return err
+	}
+	// A record that arrived without an uploader ID while the BBS ran is
+	// bound now, not at the next start (#1053).
+	bindUploaders(cw.userMgr, cw.menuExecutor.FileMgr)
+	return nil
 }
 
 // validateMessageAreas is the signal-time check for message_areas.json:

@@ -396,7 +396,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 		fmt.Fprintf(&b, "|11D|07) Description   : |15%s\r\n", edited.Description)
 		fmt.Fprintf(&b, "|11R|07) ACS Read      : |15%s\r\n", edited.ACSRead)
 		fmt.Fprintf(&b, "|11W|07) ACS Write     : |15%s\r\n", edited.ACSWrite)
-		fmt.Fprintf(&b, "|11S|07) Sponsor       : |15%s\r\n", callerText(edited.Sponsor))
+		fmt.Fprintf(&b, "|11S|07) Sponsor       : |15%s\r\n", callerText(sponsorLabel(userManager, edited)))
 		fmt.Fprintf(&b, "|11M|07) Max Messages  : |15%d\r\n", edited.MaxMessages)
 		fmt.Fprintf(&b, "|11G|07) Max Age (days): |15%d\r\n", edited.MaxAge)
 		fmt.Fprintf(&b, "|11A|07) Allow Anon    : |15%s\r\n", showAllowAnon())
@@ -542,7 +542,7 @@ func runSponsorEditArea(c *cmdCtx, args string) (*user.User, string, error) {
 			if edited.Sponsor != prevSponsor || edited.SponsorID != prevSponsorID {
 				dirty = true
 			}
-			refreshFieldRow(9, fmt.Sprintf("|11S|07) Sponsor       : |15%s", callerText(edited.Sponsor)))
+			refreshFieldRow(9, fmt.Sprintf("|11S|07) Sponsor       : |15%s", callerText(sponsorLabel(userManager, edited))))
 
 		case int('m'), int('M'):
 			prevMax := edited.MaxMessages
@@ -1061,4 +1061,16 @@ func (e *MenuExecutor) conferenceExists(id int) bool {
 	}
 	_, ok := e.ConferenceMgr.GetByID(id)
 	return ok
+}
+
+// sponsorLabel is the name to show for a's sponsor: the current handle of
+// the account it is bound to, so a renamed sponsor shows as they are now
+// (#1052), or the stored name for one unbound or whose account is gone.
+func sponsorLabel(um *user.UserMgr, a message.MessageArea) string {
+	if um != nil && a.Sponsor != "" && a.SponsorID > 0 {
+		if u, ok := um.GetUserByID(a.SponsorID); ok && !u.DeletedUser {
+			return u.Handle
+		}
+	}
+	return a.Sponsor
 }

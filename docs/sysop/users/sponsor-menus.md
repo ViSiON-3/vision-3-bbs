@@ -65,8 +65,12 @@ is renamed keeps the area.
 - **To hand an area to whoever holds the name now**, clear the sponsor
   (`-` in the Sponsor Menu), then set it again.
 - **Changing `"sponsor"` by hand:** delete `"sponsor_id"` too, or the old
-  account stays the sponsor. Doctor warns when the two disagree. That also
-  happens after a rename, and setting the sponsor again updates the name.
+  account stays the sponsor. Doctor warns when the two disagree.
+- **A renamed sponsor** keeps the area. The Sponsor Menu shows their new
+  handle at once, and the BBS updates `"sponsor"` in `message_areas.json`
+  the next time it loads the areas.
+- **A name that a purged or renamed account had** (a retired handle) is
+  bound to nobody while it stays retired: the name meant the old account.
 
 User IDs are never reused: the BBS keeps the next ID in
 `data/users/next_user_id`, so a purged account's ID isn't given to a new

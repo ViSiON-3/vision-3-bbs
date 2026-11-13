@@ -1221,3 +1221,18 @@ func TestSponsorEditAreaEnterKeepsRenamedSponsor(t *testing.T) {
 		t.Errorf("sponsor = %q #%d, want account #2 kept", got.Sponsor, got.SponsorID)
 	}
 }
+
+// The Sponsor field shows the sponsor's account as it is now: a renamed
+// sponsor under their new handle (#1052).
+func TestSponsorEditAreaShowsRenamedSponsor(t *testing.T) {
+	env := sponsorNewEnv(t) // area 1 sponsored by Caller (#2)
+	renamed, _ := env.um.GetUserByID(2)
+	renamed.Handle = "Carl"
+	if err := env.um.UpdateUserByID(renamed); err != nil {
+		t.Fatal(err)
+	}
+	r := env.runCmd("SPONSOREDITAREA", env.sysop, "", "q")
+	if !r.has("Sponsor       : Carl") {
+		t.Errorf("output:\n%s", r.text())
+	}
+}

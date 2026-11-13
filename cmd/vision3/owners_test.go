@@ -5,6 +5,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/file"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 type sponsorFinding struct {
@@ -96,5 +102,64 @@ func TestCheckHandleCollisions(t *testing.T) {
 	})
 	if len(got) != 1 || got[0].status != doctorWarn || !strings.Contains(got[0].message, `"Sam" (#1) and "ſam" (#2)`) {
 		t.Errorf("findings = %+v", got)
+	}
+}
+
+// Binding refuses a retired handle (#1053): a name from before IDs that a
+// purged or renamed account had meant that account, not whoever holds the
+// handle now. accountNameFor gives a bound account's current handle.
+func TestOwnerLookupsAndRetiredHandles(t *testing.T) {
+	dir := t.TempDir()
+	um, err := user.NewUserManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bob, err := um.AddUser("password1", "Bob", "Bob Smith", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idFor, nameFor := accountIDFor(um), accountNameFor(um)
+	if got := idFor("bob"); got != bob.ID {
+		t.Fatalf("idFor(bob) = %d, want %d", got, bob.ID)
+	}
+	if err := user.RetireHandles(filepath.Join(dir, "users.json"), "Bob"); err != nil {
+		t.Fatal(err)
+	}
+	if got := idFor("bob"); got != 0 {
+		t.Errorf("idFor(retired bob) = %d, want 0", got)
+	}
+	if name, ok := nameFor(bob.ID); !ok || name != "Bob" {
+		t.Errorf("nameFor = %q, %v", name, ok)
+	}
+	if _, ok := nameFor(999); ok {
+		t.Error("nameFor(unknown) found an account")
+	}
+}
+
+// A file-area reload binds records that arrived without an uploader ID while
+// the BBS ran, instead of leaving them for the next start (#1053).
+func TestFileAreasReloadBindsUploaders(t *testing.T) {
+	tmp := t.TempDir()
+	configDir, dataDir := filepath.Join(tmp, "configs"), filepath.Join(tmp, "data")
+	writeOwnersFile(t, tmp, "configs/file_areas.json", `[{"id":1,"tag":"ONE","name":"One","path":"one"}]`)
+	fileMgr, err := file.NewFileManager(dataDir, configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	um, err := user.NewUserManager(filepath.Join(tmp, "users"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ann, _ := um.AddUser("password1", "Ann", "Ann Here", "")
+	id := uuid.New()
+	if err := fileMgr.AddFileRecord(file.FileRecord{ID: id, AreaID: 1, Filename: "A.ZIP", UploadedBy: "Ann"}); err != nil {
+		t.Fatal(err)
+	}
+	cw := &ConfigWatcher{rootConfigPath: configDir, menuExecutor: &menu.MenuExecutor{FileMgr: fileMgr}, userMgr: um}
+	if err := cw.applyFileAreas(); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ := fileMgr.GetFileRecordByID(id); rec == nil || rec.UploadedByID != ann.ID {
+		t.Errorf("record = %+v, want uploader #%d", rec, ann.ID)
 	}
 }

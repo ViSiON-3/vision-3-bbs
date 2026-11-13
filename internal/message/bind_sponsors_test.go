@@ -30,7 +30,7 @@ func TestBindSponsors(t *testing.T) {
 	ids := map[string]int{"alice": 5, "bob": 6}
 	idFor := func(h string) int { return ids[strings.ToLower(h)] }
 
-	bound, unowned, err := mm.BindSponsors(idFor)
+	bound, unowned, err := mm.BindSponsors(idFor, nil)
 	if err != nil || bound != 1 || unowned != 1 {
 		t.Fatalf("BindSponsors = %d, %d, %v", bound, unowned, err)
 	}
@@ -47,7 +47,7 @@ func TestBindSponsors(t *testing.T) {
 
 	// The handle "Ghost" signing up later doesn't make them the sponsor.
 	ids["ghost"] = 7
-	if bound, unowned, _ := mm.BindSponsors(idFor); bound+unowned != 0 {
+	if bound, unowned, _ := mm.BindSponsors(idFor, nil); bound+unowned != 0 {
 		t.Errorf("second run bound %d, %d", bound, unowned)
 	}
 	if a, _ := mm.GetAreaByID(2); a.SponsoredBy(7) {
@@ -77,10 +77,42 @@ func TestBindSponsorsSaveFailureLeavesAreasUnbound(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(cfg, 0o755) })
-	if _, _, err := mm.BindSponsors(func(string) int { return 5 }); err == nil {
+	if _, _, err := mm.BindSponsors(func(string) int { return 5 }, nil); err == nil {
 		t.Fatal("BindSponsors saved into a read-only directory")
 	}
 	if a, _ := mm.GetAreaByID(1); a.SponsorID != 0 || a.SponsoredBy(5) {
 		t.Errorf("after a failed save, SponsorID = %d", a.SponsorID)
+	}
+}
+
+// A bound sponsor's stored name follows a rename of its account (#1052);
+// the binding itself is unchanged.
+func TestBindSponsorsFollowsRename(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "config")
+	if err := os.MkdirAll(cfg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeMsgAreas(t, cfg, `[
+		{"id":1,"position":1,"tag":"A","name":"A","sponsor":"Bob","sponsor_id":5},
+		{"id":2,"position":2,"tag":"B","name":"B","sponsor":"Gone","sponsor_id":9}]`)
+	mm, err := NewMessageManager(tmp, cfg, "TestBBS", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[int]string{5: "Robert"} // account 9 no longer exists
+	nameFor := func(id int) (string, bool) { n, ok := names[id]; return n, ok }
+	if _, _, err := mm.BindSponsors(func(string) int { return 0 }, nameFor); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := mm.GetAreaByID(1); a.Sponsor != "Robert" || a.SponsorID != 5 {
+		t.Errorf("area A sponsor = %q #%d, want Robert #5", a.Sponsor, a.SponsorID)
+	}
+	if a, _ := mm.GetAreaByID(2); a.Sponsor != "Gone" || a.SponsorID != 9 {
+		t.Errorf("area B sponsor = %q #%d, want it untouched", a.Sponsor, a.SponsorID)
+	}
+	data, _ := os.ReadFile(filepath.Join(cfg, "message_areas.json"))
+	if !strings.Contains(string(data), `"sponsor": "Robert"`) {
+		t.Errorf("rename not saved:\n%s", data)
 	}
 }

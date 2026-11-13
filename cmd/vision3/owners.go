@@ -15,14 +15,32 @@ import (
 )
 
 // accountIDFor is idFor for BindSponsors and BindUploaders: the ID of the
-// live account with handle, 0 when there is none.
+// live account with handle, 0 when there is none. A retired handle (a
+// purged or renamed account had it, #1048) binds to nobody, whoever might
+// hold it after a sysop released it: a name from before IDs that matches a
+// retired handle meant the old account (#1053).
 func accountIDFor(um *user.UserMgr) func(string) int {
 	return func(handle string) int {
+		if um.HandleRetired(handle) {
+			return 0
+		}
 		u, ok := um.GetUser(handle)
 		if !ok || u.DeletedUser {
 			return 0
 		}
 		return u.ID
+	}
+}
+
+// accountNameFor is nameFor for BindSponsors: the current handle of the
+// live account with ID id.
+func accountNameFor(um *user.UserMgr) func(int) (string, bool) {
+	return func(id int) (string, bool) {
+		u, ok := um.GetUserByID(id)
+		if !ok || u.DeletedUser {
+			return "", false
+		}
+		return u.Handle, true
 	}
 }
 
@@ -35,15 +53,17 @@ func bindSponsors(um *user.UserMgr, mm *message.MessageManager) error {
 	if um == nil || mm == nil {
 		return nil
 	}
-	if _, _, err := mm.BindSponsors(accountIDFor(um)); err != nil {
+	if _, _, err := mm.BindSponsors(accountIDFor(um), accountNameFor(um)); err != nil {
 		slog.Error("binding area sponsors to accounts failed; the areas left unbound have no sponsor until it succeeds", "error", err)
 		return err
 	}
 	return nil
 }
 
-// bindUploaders binds file records from before uploader IDs to the
-// accounts holding their uploaders' handles, once, at startup (#1020).
+// bindUploaders binds file records with no uploader ID to the accounts
+// holding their uploaders' handles (#1020): at startup, and after the file
+// areas reload (#1053), so a record restored or edited in while the BBS
+// runs isn't left unowned until the next start.
 func bindUploaders(um *user.UserMgr, fm *file.FileManager) {
 	if um == nil || fm == nil {
 		return
@@ -104,7 +124,7 @@ func checkSponsors(configDir, root string, add func(string, doctorSeverity, stri
 				"Set a new sponsor, or clear it.")
 		case !strings.EqualFold(handle, a.Sponsor):
 			add(name, doctorWarn, fmt.Sprintf("area %s: sponsor is account #%d, now %q, but the area names %q", a.Tag, a.SponsorID, handle, a.Sponsor),
-				"If the account was renamed, nothing is wrong; set the sponsor again to update the name. If you meant to change the sponsor, set it from the Sponsor Menu or the config editor: an edit to \"sponsor\" alone leaves \"sponsor_id\" on the old account.")
+				"If the account was renamed, nothing is wrong: the BBS updates the name the next time it loads the areas. If you meant to change the sponsor, set it from the Sponsor Menu or the config editor: an edit to \"sponsor\" alone leaves \"sponsor_id\" on the old account.")
 		default:
 			continue
 		}
