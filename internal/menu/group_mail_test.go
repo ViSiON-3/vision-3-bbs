@@ -1,11 +1,14 @@
 package menu
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -242,5 +245,92 @@ func TestGroupMailTooManyMembers(t *testing.T) {
 	r := env.runCmd("SENDPRIVMAIL", env.caller, "", "@ops\rHi\r")
 	if !r.has("@ops has more than 500 members") || r.has("Subject") {
 		t.Errorf("output:\n%s", r.text())
+	}
+}
+
+// The sender's copy names one member. With the group gone from roles.json,
+// the sender's reply is refused rather than sent privately to that member;
+// a member's reply, which only ever names the sender, goes to the sender.
+func TestGroupMailReplyAfterGroupRemoved(t *testing.T) {
+	env := newGroupMailEnv(t)
+	env.runCmd("SENDPRIVMAIL", env.caller, "", "@ops\rMeeting\rTonight.\x1a")
+	before := env.msgCount(privmailAreaID)
+	useRoles(t, `{"roles": [], "groups": []}`)
+
+	r := env.sub(t).run(runSentPrivateMail, env.caller, "", "R"+"Hello.\x1a"+"Q")
+	if !r.has("@ops is no longer a group.") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	if n := env.msgCount(privmailAreaID); n != before {
+		t.Fatalf("the sender's reply was written (%d messages, was %d): %+v", n, before, privmailCopies(env)[n-1])
+	}
+
+	ann, _ := env.um.GetUserByID(3)
+	r = env.sub(t).runCmd("READPRIVMAIL", ann, "", "R"+"Just you.\x1a"+"Q")
+	last := privmailCopies(env)[env.msgCount(privmailAreaID)-1]
+	if r.has("Reply to all") || last.From != "Ann" || last.To != "Caller" {
+		t.Errorf("member's reply = %+v\n%s", last, r.text())
+	}
+}
+
+// Sent mail lists a group letter once even when another letter landed
+// between its copies.
+func TestGroupMailSentOnceWhenCopiesAreApart(t *testing.T) {
+	env := newGroupMailEnv(t)
+	post := func(to, group string) {
+		t.Helper()
+		if _, err := env.e.MessageMgr.Post(privmailAreaID, "Caller", to, "Meeting", "Tonight.", message.PostOptions{
+			Private: true, SenderHandle: "Caller", MailGroup: group, MailGroupID: map[string]string{"ops": "abc"}[group],
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	post("Ann", "ops")
+	post("Outsider", "")
+	post("Bob", "ops")
+	r := env.run(runSentPrivateMail, env.caller, "", "L\x1bQ")
+	if !r.has("[1-2 of 2 messages]") {
+		t.Errorf("sent mail doesn't list two letters:\n%s", r.text())
+	}
+}
+
+// The group is looked up again when the letter is sent: a mail_acs
+// tightened, or the group removed, while the editor was open counts.
+func TestGroupMailRecheckedAtSend(t *testing.T) {
+	env := newGroupMailEnv(t)
+	ann, _ := env.um.GetUserByID(3)
+	g, _ := perm.Current().Group("ops")
+	if msg := env.e.checkGroupMail(env.um, ann, g, nil, time.Now()); msg != "" {
+		t.Fatalf("checkGroupMail = %q", msg)
+	}
+	send := func() error {
+		_, err := env.e.sendGroupMail(env.um, ann, g, privmailAreaID, "Ann", "News", "Hello.", nil, time.Now())
+		return err
+	}
+	useRoles(t, `{"roles": [], "groups": [{"name": "ops", "mail_acs": "S255"}]}`)
+	if err := send(); !errors.Is(err, errGroupMailNotAllowed) {
+		t.Errorf("tightened mail_acs: err = %v", err)
+	}
+	useRoles(t, `{"roles": [], "groups": []}`)
+	if err := send(); !errors.Is(err, errGroupMailGone) {
+		t.Errorf("removed group: err = %v", err)
+	}
+	if n := env.msgCount(privmailAreaID); n != 0 {
+		t.Errorf("%d copies written", n)
+	}
+}
+
+// A group reply checks mail_acs against the call as it is: time-left terms
+// count from when the call started, not from the reply.
+func TestGroupMailReplyUsesSessionStart(t *testing.T) {
+	env := newGroupMailEnv(t)
+	useRoles(t, `{"roles": [], "groups": [{"name": "ops", "mail_acs": "T50"}]}`)
+	env.runCmd("SENDPRIVMAIL", env.caller, "", "@ops\rMeeting\rTonight.\x1a")
+	ann, _ := env.um.GetUserByID(3)
+	late := env.sub(t)
+	late.calledFor = 30 * time.Minute
+	r := late.runCmd("READPRIVMAIL", ann, "", "RY"+"Q")
+	if !r.has("You may not send mail to @ops.") {
+		t.Errorf("30 minutes into a 60-minute call passed T50:\n%s", r.text())
 	}
 }

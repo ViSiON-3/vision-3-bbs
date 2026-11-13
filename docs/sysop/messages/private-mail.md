@@ -103,7 +103,12 @@ and when copying or forwarding mail.
   default) replies to the sender alone; Yes sends the reply to the group,
   under the same rule for who may send. The sender of a group letter always
   replies to the group from their sent mail, since their copy names one
-  member.
+  member. Once the group is removed from (or renamed in) `roles.json`, that
+  reply is refused with `@name is no longer a group.`, and a member's reply
+  goes to the sender without asking.
+- Who may send is checked again when the letter is saved, against the group
+  as `roles.json` has it then, so a `mail_acs` tightened while someone is
+  writing stops their letter.
 
 A recipient that is exactly someone's handle is that user, so an old
 account whose handle starts with `@` still gets its mail. New handles can't

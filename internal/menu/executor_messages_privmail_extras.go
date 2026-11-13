@@ -95,7 +95,8 @@ func runSentPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// A group letter (#1036) is listed once, by its first copy, not once per
 	// member; the first copy is also the first message found above.
-	letters := func(m *message.DisplayMessage) bool { return sent(m) && e.firstGroupCopy(m) }
+	groupLetters := newSentLetters(e, area.ID, currentUser.Handle)
+	letters := func(m *message.DisplayMessage) bool { return sent(m) && groupLetters.shows(m) }
 
 	origID, origTag := currentUser.CurrentMessageAreaID, currentUser.CurrentMessageAreaTag
 	currentUser.CurrentMessageAreaID, currentUser.CurrentMessageAreaTag = area.ID, area.Tag

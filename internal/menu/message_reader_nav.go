@@ -100,7 +100,8 @@ func privateReplyHandle(um *user.UserMgr, msg *message.DisplayMessage, replier, 
 func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, terminal *term.Terminal,
 	userManager *user.UserMgr, currentUser *user.User, nodeNumber int,
 	outputMode ansi.OutputMode, currentMsg *message.DisplayMessage,
-	currentAreaID int, totalMsgCount *int, confName, areaName string, termWidth, termHeight int) string {
+	currentAreaID int, totalMsgCount *int, confName, areaName string, termWidth, termHeight int,
+	sessionStartTime time.Time) string {
 
 	// Prepare quote data for /Q command
 	// Split message body into lines for quoting
@@ -125,11 +126,21 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 
 	// A member's copy of group mail (#1036) may be answered to the whole
 	// group. Its sender always answers the group: their copy names one member,
-	// and a private reply to them would show who that is.
+	// and a private reply to them would show who that is. That is decided by
+	// the copy's own marker, not by the group as roles.json has it now, so a
+	// group removed or renamed since refuses the sender's reply rather than
+	// sending it to the member.
 	group, toGroup := perm.Group{}, false
-	if g, ok := perm.Current().Group(currentMsg.MailGroup); ok && currentMsg.IsPrivate && currentMsg.MailGroup != "" {
-		toGroup = currentMsg.SentBy(currentUser.Handle) && !currentMsg.MailFor(currentUser.Handle)
-		if !toGroup {
+	if currentMsg.IsPrivate && currentMsg.MailGroup != "" {
+		senderCopy := currentMsg.SentBy(currentUser.Handle) && !currentMsg.MailFor(currentUser.Handle)
+		g, ok := perm.Current().Group(currentMsg.MailGroup)
+		if !ok && senderCopy {
+			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+groupMailRefusal(perm.Group{Name: currentMsg.MailGroup}, errGroupMailGone)+"\r\n")), outputMode)
+			uiPause(1 * time.Second)
+			return ""
+		}
+		toGroup = ok && senderCopy
+		if ok && !toGroup {
 			all, err := e.PromptYesNo(s, terminal, fmt.Sprintf("\r\n|07Reply to all of |15@%s|07 (No: only %s)? @", g.Name, callerText(currentMsg.From)), outputMode, nodeNumber, termWidth, termHeight, false)
 			if err != nil {
 				return ""
@@ -139,7 +150,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		group = g
 	}
 	if toGroup {
-		if refusal := e.checkGroupMail(userManager, currentUser, group, s, time.Now()); refusal != "" {
+		if refusal := e.checkGroupMail(userManager, currentUser, group, s, sessionStartTime); refusal != "" {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+refusal+"\r\n")), outputMode)
 			uiPause(1 * time.Second)
 			return ""
@@ -202,7 +213,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	// and records the replier's handle so a reply signed with the real name
 	// (netmail) stays visible to its sender too.
 	if toGroup {
-		sent, gerr := e.sendGroupMail(userManager, currentUser, group, currentAreaID, fromName, newSubject, replyBody, s, time.Now())
+		sent, gerr := e.sendGroupMail(userManager, currentUser, group, currentAreaID, fromName, newSubject, replyBody, s, sessionStartTime)
 		e.reportGroupMail(terminal, outputMode, userManager, currentUser, group, sent, gerr)
 		if sent > 0 {
 			*totalMsgCount += sent

@@ -35,6 +35,7 @@ var (
 	errGroupMailNoRecipients = errors.New("nobody in that group can receive mail")
 	errGroupMailTooMany      = fmt.Errorf("that group has more than %d members, the most one letter can go to", maxGroupMailRecipients)
 	errGroupMailNotAllowed   = errors.New("you may not send mail to that group")
+	errGroupMailGone         = errors.New("that group is no longer defined")
 )
 
 // mailGroupFor reports whether to addresses a user group: it starts with '@'
@@ -114,6 +115,8 @@ func groupMailRefusal(g perm.Group, err error) string {
 		return fmt.Sprintf("|01You may not send mail to @%s.|07", g.Name)
 	case errors.Is(err, errGroupMailNoRecipients):
 		return fmt.Sprintf("|01Nobody in @%s can receive mail.|07", g.Name)
+	case errors.Is(err, errGroupMailGone):
+		return fmt.Sprintf("|01@%s is no longer a group.|07", g.Name)
 	case errors.Is(err, errGroupMailTooMany):
 		return fmt.Sprintf("|01@%s has more than %d members, the most one letter can go to.|07", g.Name, maxGroupMailRecipients)
 	}
@@ -122,9 +125,15 @@ func groupMailRefusal(g perm.Group, err error) string {
 
 // sendGroupMail writes one copy of a letter to each member of g in area
 // areaID, checking again that sender may (the editor was open meanwhile).
-// sent is how many copies were written; err reports why it stopped short,
-// with sent > 0 when some members already have their copy.
+// The group is looked up again first: a mail_acs tightened, or the group
+// removed, while the letter was being written is what counts. sent is how
+// many copies were written; err reports why it stopped short, with sent > 0
+// when some members already have their copy.
 func (e *MenuExecutor) sendGroupMail(um *user.UserMgr, sender *user.User, g perm.Group, areaID int, fromName, subject, body string, s ssh.Session, start time.Time) (sent int, err error) {
+	g, ok := perm.Current().Group(g.Name)
+	if !ok {
+		return 0, errGroupMailGone
+	}
 	if !e.mayMailGroup(um, sender, g, s, start) {
 		return 0, errGroupMailNotAllowed
 	}
@@ -158,20 +167,67 @@ func mailTo(m *message.DisplayMessage) string {
 	return m.To
 }
 
-// firstGroupCopy reports whether m is the copy of its group letter the
-// sender's sent mail shows: every copy but the first is left out, so the
-// letter is listed once. The copies are written one after another, so a copy
-// is the first unless the message just before it is a copy of the same
-// letter. Mail that isn't a group copy is always shown.
-func (e *MenuExecutor) firstGroupCopy(m *message.DisplayMessage) bool {
-	if m.MailGroupID == "" || m.MsgNum <= 1 || e.MessageMgr == nil {
+// sentLetters decides which copy of each group letter the sender's sent mail
+// shows: the first still in the area, so the letter is listed once however
+// the copies lie (another post can land between two of them). It keeps an
+// index from letter id to that copy's number, built with one pass over the
+// area and built again when the area's message count changes (a post, an
+// unsend and pack) or a copy it names has been deleted.
+type sentLetters struct {
+	e      *MenuExecutor
+	areaID int
+	handle string
+	count  int
+	first  map[string]int
+}
+
+func newSentLetters(e *MenuExecutor, areaID int, handle string) *sentLetters {
+	return &sentLetters{e: e, areaID: areaID, handle: handle}
+}
+
+// shows reports whether m is listed: mail that isn't a group copy always is.
+func (l *sentLetters) shows(m *message.DisplayMessage) bool {
+	if m.MailGroupID == "" || l.e.MessageMgr == nil {
 		return true
 	}
-	prev, err := e.MessageMgr.GetMessage(m.AreaID, m.MsgNum-1)
-	if err != nil || prev == nil || prev.IsDeleted {
+	if l.stale(m.MailGroupID) {
+		l.build()
+	}
+	n, ok := l.first[m.MailGroupID]
+	return !ok || n == m.MsgNum
+}
+
+// stale reports whether the index must be built again before answering for
+// letter id.
+func (l *sentLetters) stale(id string) bool {
+	count, err := l.e.MessageMgr.GetMessageCountForArea(l.areaID)
+	if l.first == nil || err != nil || count != l.count {
 		return true
 	}
-	return prev.MailGroupID != m.MailGroupID
+	n, ok := l.first[id]
+	if !ok {
+		return true
+	}
+	cur, err := l.e.MessageMgr.GetMessage(l.areaID, n)
+	return err != nil || cur == nil || cur.IsDeleted || cur.MailGroupID != id
+}
+
+func (l *sentLetters) build() {
+	l.first = map[string]int{}
+	l.count, _ = l.e.MessageMgr.GetMessageCountForArea(l.areaID)
+	err := l.e.MessageMgr.EachMessage(l.areaID,
+		func(m *message.DisplayMessage) bool {
+			return !m.IsDeleted && m.MailGroupID != "" && m.SentBy(l.handle)
+		},
+		func(m *message.DisplayMessage) bool {
+			if _, seen := l.first[m.MailGroupID]; !seen {
+				l.first[m.MailGroupID] = m.MsgNum
+			}
+			return true
+		})
+	if err != nil {
+		slog.Warn("sent mail: indexing group letters", "area", l.areaID, "error", err)
+	}
 }
 
 // groupLetterCopies lists the copies of the group letter id that handle
