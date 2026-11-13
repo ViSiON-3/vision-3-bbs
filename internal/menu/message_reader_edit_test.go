@@ -1,10 +1,12 @@
 package menu
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -211,6 +213,77 @@ func TestReaderEditNotOtherCharset(t *testing.T) {
 	r := env.runCmd("READMSGS", env.caller, "", "E\r\x1aQ")
 	if r.has("Subject:") {
 		t.Errorf("edit offered on a CP437 message; output:\n%s", r.text())
+	}
+}
+
+// Unlabelled text that isn't valid UTF-8 is an older program's raw CP437:
+// the editor would rewrite its bytes, so it isn't offered either.
+func TestReaderEditNotUnlabelledCP437(t *testing.T) {
+	env := newMsgEnv(t)
+	if _, err := env.e.MessageMgr.Post(generalAreaID, "Caller", "All", "dos", "caf\x82 \xb2\xdb", message.PostOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	r := env.runCmd("READMSGS", env.sysop, "", "?E\r\x1aQ")
+	if r.has("dit Message") || r.has("Subject:") {
+		t.Errorf("edit offered on unlabelled CP437; output:\n%s", r.text())
+	}
+	if b := env.mustMsg(generalAreaID, 1).Body; b != "caf\x82 \xb2\xdb" {
+		t.Errorf("body = %q, want it unchanged", b)
+	}
+}
+
+// A private message that reached a local public area has been delivered, so
+// it isn't edited there either, by its sender or the sysop.
+func TestReaderEditNotPrivateInLocalArea(t *testing.T) {
+	env := newMsgEnv(t)
+	env.postMsgs(generalAreaID, testMsg{from: "Caller", to: "Sysop", subject: "psst", private: true})
+	for _, u := range []*user.User{env.caller, env.sysop} {
+		r := env.runCmd("READMSGS", u, "", "?E\r\x1aQ")
+		if r.has("dit Message") || r.has("Subject:") {
+			t.Errorf("%s was offered the edit; output:\n%s", u.Handle, r.text())
+		}
+	}
+	if b := env.mustMsg(generalAreaID, 1).Body; b != "psst-body" {
+		t.Errorf("body = %q, want it unchanged", b)
+	}
+}
+
+// numberedText is n lines, "line 1" to "line n".
+func numberedText(n int) string {
+	lines := make([]string, n)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line %d", i+1)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// A message longer than the editor holds, as from QWK, isn't opened in it:
+// saving would drop the lines past the end. One that just fits is.
+func TestReaderEditTooLong(t *testing.T) {
+	env := newMsgEnv(t)
+	long := numberedText(editor.MaxLines + 1)
+	if _, err := env.e.MessageMgr.Post(generalAreaID, "Caller", "All", "long", long, message.PostOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	r := env.runCmd("READMSGS", env.sysop, "", "E\r\x1aQ")
+	if !r.has(fmt.Sprintf("This message is %d lines long", editor.MaxLines+1)) || r.has("Subject:") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	if b := env.mustMsg(generalAreaID, 1).Body; b != long {
+		t.Errorf("body changed: %d lines, want it unchanged", strings.Count(b, "\n")+1)
+	}
+
+	env = newMsgEnv(t)
+	full := numberedText(editor.MaxLines)
+	if _, err := env.e.MessageMgr.Post(generalAreaID, "Caller", "All", "full", full, message.PostOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	r = env.runCmd("READMSGS", env.sysop, "", "E\r\x1aQ")
+	if !r.has("Message saved.") {
+		t.Errorf("a %d-line message wasn't edited; output:\n%s", editor.MaxLines, r.text())
+	}
+	if b := env.mustMsg(generalAreaID, 1).Body; !strings.HasPrefix(b, full+"\n\n * Edited by Sysop on ") {
+		t.Errorf("body = %q, want every line kept", b)
 	}
 }
 

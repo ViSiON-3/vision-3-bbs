@@ -1,6 +1,9 @@
 package message
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // IsNetworked reports whether area's messages are shared with other boards:
 // its type is anything but local (echomail, netmail, QWK, V3Net), or a V3Net
@@ -17,10 +20,17 @@ func (mm *MessageManager) IsNetworked(area *MessageArea) bool {
 	return mm.isV3NetArea(area)
 }
 
-// StoredAsUTF8 reports whether m's text is stored as UTF-8, or names no
-// character set, so it can be edited or reposted as it is. The reader
-// decodes other character sets for display only.
+// StoredAsUTF8 reports whether m's text is stored as UTF-8, so it can be
+// edited or reposted as it is: its CHRS kludge says UTF-8, or it names no
+// character set and the text is valid UTF-8 (unlabelled text from an older
+// program can be raw CP437). The reader decodes other character sets for
+// display only.
 func (m *DisplayMessage) StoredAsUTF8() bool {
-	cs := strings.ToUpper(strings.TrimSpace(m.Charset))
-	return cs == "" || cs == "UTF-8" || cs == "UTF8"
+	switch strings.ToUpper(strings.TrimSpace(m.Charset)) {
+	case "":
+		return utf8.ValidString(m.Body)
+	case "UTF-8", "UTF8":
+		return true
+	}
+	return false
 }

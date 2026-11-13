@@ -430,7 +430,7 @@ hot key:
 | `I` | Twit | Add the author to your Twit List (hidden while Twit Lists are off) |
 | `D` | Del | Delete the message (shown in red): any message for a sysop or co-sysop, any message in their own area for the area's [sponsor](users/sponsor-menus.md#moderating-messages), any message where an [admin role](users/admin-roles.md) grants `messages.moderate`, and a caller's own private mail ([Private mail](messages/private-mail.md#user-access)); greyed where the caller can't. On the bar for co-sysops, for a sponsor in their area, for a role's moderator where it applies, and for everyone in `PRIVMAIL` |
 | `V` | Move | Move the message to another local area ([Moving a message](#moving-a-message)): a sysop or co-sysop any message, an area's [sponsor](users/sponsor-menus.md#moderating-messages), or a holder of `messages.moderate` there through an [admin role](users/admin-roles.md), one out of that area. Not on the bar; `?` lists it where it applies |
-| `E` | Edit | Edit the message's subject and text ([Editing a posted message](#editing-a-posted-message)): a caller their own, and any for a sysop or co-sysop, an area's [sponsor](users/sponsor-menus.md#moderating-messages) in their area, or a holder of `messages.moderate` there through an [admin role](users/admin-roles.md), in local areas only. Not on the bar; `?` lists it on a message the caller may edit |
+| `E` | Edit | Edit the message's subject and text ([Editing a posted message](#editing-a-posted-message)): a caller their own, and any for a sysop or co-sysop, an area's [sponsor](users/sponsor-menus.md#moderating-messages) in their area, or a holder of `messages.moderate` there through an [admin role](users/admin-roles.md), in local areas only and never private ones. Not on the bar; `?` lists it on a message the caller may edit |
 | `K` | Kludges | Show the message's control information (sysop and co-sysop only; not on the bar) |
 | `?` | Help | List the commands |
 | `Q` | Quit | Leave the reader |
@@ -490,7 +490,8 @@ cancels), then asks `Move this message to ...? [Y/N]`.
   only take away this board's copy. A `local` area that a V3Net leaf lists
   in its `boards` counts as V3Net here. Private mail isn't moved, nor a
   message stored in a character set other than UTF-8 (its copy would lose
-  the `CHRS` kludge that says how to read it).
+  the `CHRS` kludge that says how to read it), nor one with no `CHRS`
+  kludge whose text isn't valid UTF-8.
 - **What arrives:** the message keeps its sender, recipient, subject, date
   and private flag, and gets a last line saying where it came from, who
   moved it and when, such as ` * Moved from General Discussion by Felonius
@@ -528,15 +529,22 @@ place in its thread.
   messages have already been sent to other boards, so an edit would change
   this board's copy alone; private mail has already been delivered. A
   `local` area that a V3Net leaf lists in its `boards` counts as V3Net
-  here. A message stored in a character set other than UTF-8 isn't offered
-  either.
+  here.
+- **What:** not a private message, wherever it is. Not a message stored in a
+  character set other than UTF-8, nor one with no `CHRS` kludge whose text
+  isn't valid UTF-8 (an older program's raw CP437): the editor would
+  rewrite its bytes. And not one longer than the editor holds, 100 lines,
+  as a QWK or `v3mail post` message can be: the caller is told, since
+  saving would drop the rest.
 - **Checked again on saving:** the right to edit, and that the message is
   still the one shown. If another session edited, deleted or moved it
   meanwhile, or the sysop removed the sponsor, nothing is saved and the
   caller is told.
 - **Storage:** the new text and header are written at the end of the JAM
   base and the index points to them; the old ones stay as unused space
-  until the base is next packed.
+  until the base is next packed. If writing fails before the index points
+  to the new header, the index is put back and the caller is told nothing
+  was saved; the message is as it was.
 
 ### Searching Messages
 

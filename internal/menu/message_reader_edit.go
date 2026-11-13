@@ -99,6 +99,14 @@ func (e *MenuExecutor) editPostedMessage(s ssh.Session, ih *editor.InputHandler,
 		e.showReaderNotice(terminal, outputMode, text, termHeight)
 	}
 
+	// The editor holds editor.MaxLines lines and drops the rest of a longer
+	// text, which can come in by QWK or v3mail. Saving would lose it.
+	text := withoutEditedLine(msg.Body)
+	if n := strings.Count(strings.TrimRight(text, "\n"), "\n") + 1; n > editor.MaxLines {
+		notice(fmt.Sprintf("|01This message is %d lines long, more than the editor holds (%d). It can't be edited here.|07", n, editor.MaxLines))
+		return false, nil
+	}
+
 	limit := max(minEditSubject, utf8.RuneCountInString(msg.Subject))
 	val, aborted, err := e.promptComposeField(s, terminal, "\r\n|07Subject: |15", limit, msg.Subject, "subject", outputMode, nodeNumber, termWidth, termHeight)
 	if err != nil {
@@ -118,7 +126,7 @@ func (e *MenuExecutor) editPostedMessage(s ssh.Session, ih *editor.InputHandler,
 		NextMsgNum: msg.MsgNum,
 		ConfArea:   fmt.Sprintf("%s > %s", confName, area.Name),
 	}
-	body, saved, err := editor.RunEditorWithMetadata(withoutEditedLine(msg.Body), s, sessionOutput(s), outputMode,
+	body, saved, err := editor.RunEditorWithMetadata(text, s, sessionOutput(s), outputMode,
 		subject, msg.To, msg.From, false, "", "", "", "", false, nil, ih,
 		withAutocorrect(e, ctx, area, currentUser, userManager))
 	if err != nil {
@@ -139,14 +147,14 @@ func (e *MenuExecutor) editPostedMessage(s ssh.Session, ih *editor.InputHandler,
 
 	// The right to edit is checked again now: the sysop may have changed the
 	// area's sponsor while the caller typed. Then, under the base's lock, the
-	// message must still be the one shown, and still theirs to edit.
-	isSponsor := sponsor()
-	if !may(msg, isSponsor) {
+	// message must still be the one shown, and still theirs to edit, with
+	// sponsorship read again there too.
+	if !may(msg, sponsor()) {
 		notice("|01You can no longer edit this message. Nothing was saved.|07")
 		return false, nil
 	}
 	err = e.MessageMgr.EditMessageIf(area.ID, msg.MsgNum, func(m *message.DisplayMessage) (string, string, bool) {
-		if !message.SameMessage(m, msg) || !may(m, isSponsor) {
+		if !message.SameMessage(m, msg) || !may(m, sponsor()) {
 			return "", "", false
 		}
 		return subject, body, true
