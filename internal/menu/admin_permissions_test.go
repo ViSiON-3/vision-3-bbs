@@ -277,3 +277,33 @@ func TestUserEditor_DemotedSysopTurnedAway(t *testing.T) {
 		t.Errorf("output:\n%s", r.text())
 	}
 }
+
+// The path the save rollback closes, by keys: a level staged with a role
+// that leaves roles.json before the save is refused; X discards both; a
+// later save of something else writes only that, not the discarded level.
+func TestUserEditor_RefusedSaveThenAbortWritesNothingDiscarded(t *testing.T) {
+	useRoles(t, validatorRole)
+	env := newMenuEnv(t)
+	env.whenOutput("Field marked for update.", func() { useRoles(t, `{"roles": []}`) })
+	input := "j" +
+		"r" + "Validator\r" + // staged; then roles.json loses it
+		"f" + "60\r" +
+		"s" + // refused: no role named validator
+		"x" +
+		"e" + "AB\r" +
+		"s" + "q"
+	r := env.runCmd("ADMINLISTUSERS", env.sysop, "", input)
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	if !r.has("no role named validator", "Changes discarded.", "Changes saved for Caller.") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	u, _ := env.diskUser(2)
+	if u.AccessLevel != 10 || len(u.Roles) != 0 || u.Flags != "AB" {
+		t.Fatalf("saved record: level %d, roles %v, flags %q; want 10, none, AB", u.AccessLevel, u.Roles, u.Flags)
+	}
+	if _, ok := modLogField(modAdminLog(t, env), 2, "level"); ok {
+		t.Error("a level change was audited")
+	}
+}

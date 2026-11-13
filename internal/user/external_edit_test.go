@@ -601,3 +601,30 @@ func TestEditorChangeSurvivesStaleSessionSave(t *testing.T) {
 		t.Errorf("MessagesPosted = %d, want the session's 1", got.MessagesPosted)
 	}
 }
+
+// A stale copy saved through UpdateUserByID keeps the stored sysop fields,
+// and takes them on itself, so saving it again can't write the old ones.
+func TestStaleCopySavedByIDCannotRevertLater(t *testing.T) {
+	um, path := mgrWithUser(t, &User{ID: 2, Handle: "Val", AccessLevel: 20, Validated: true, Roles: []string{"validator"}})
+	stale, _ := um.GetUserByID(2)
+
+	editor, _ := um.GetUserByID(2)
+	editor.Roles, editor.AccessLevel = nil, 10
+	if err := um.UpdateUserByID(editor); err != nil {
+		t.Fatal(err)
+	}
+	stale.MessagesPosted++
+	if err := um.UpdateUserByID(stale); err != nil {
+		t.Fatal(err)
+	}
+	if len(stale.Roles) != 0 || stale.AccessLevel != 10 {
+		t.Fatalf("caller's copy kept roles %v, level %d", stale.Roles, stale.AccessLevel)
+	}
+	if err := um.UpdateUser(stale); err != nil {
+		t.Fatal(err)
+	}
+	got := readUsersFile(t, path)["val"]
+	if len(got.Roles) != 0 || got.AccessLevel != 10 {
+		t.Errorf("revoked role or level came back: roles %v, level %d", got.Roles, got.AccessLevel)
+	}
+}

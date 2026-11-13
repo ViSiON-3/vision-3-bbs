@@ -99,8 +99,12 @@ func (um *UserMgr) updateUserByID(u *User, chatBar *bool) error {
 		um.users[oldKey] = current
 		return err
 	}
-	// The caller's copy is the one just stored, so it is current, and a
-	// second save from the same editor isn't mistaken for a stale one.
+	// The caller's copy becomes the one just stored, so a second save from
+	// the same editor isn't mistaken for a stale one. Its sysop-owned
+	// fields are taken back too: when it was stale, those came from the
+	// stored record, and a current generation on the old values would let
+	// a later UpdateUser write them back.
+	sysopOwnedFields(u, &userCopy)
 	u.gen = userCopy.gen
 	return nil
 }
