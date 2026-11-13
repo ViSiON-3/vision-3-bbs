@@ -181,6 +181,12 @@ Soft-delete (F2): sets `deletedUser=true` and records a `deletedAt` timestamp. A
 
 Permanent removal (F4 from list, or F4 from the field editor when the user is already deleted). Purge deletes the user's record from `users.json` and removes any infoform response files (`data/infoforms/responses/<id>_*.json`). Purged user IDs are not recycled. Mass purge via Shift-F4 removes all currently-deleted users at once.
 
+Purging retires the account's handle (`data/users/retired_handles`), as the
+BBS's own purge does, so it can't be registered or given to another account
+again: private mail is matched by handle and stays after a purge. The Handle
+field refuses a retired handle. See
+[Purging users](users/user-management.md) for releasing one.
+
 ### Sort Order
 
 F3 toggles between alphabetical sort (by handle) and numeric sort (by user ID).

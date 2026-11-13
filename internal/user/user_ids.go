@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 )
 
@@ -79,9 +80,13 @@ func raiseNextUserID(usersPath string, next int) error {
 		return err // never overwrite a mark that couldn't be read
 	}
 	if next <= stored {
-		return nil
+		// Already there, perhaps from an attempt whose directory sync
+		// failed: sync now, as RetireHandles does.
+		return syncDir(filepath.Dir(path))
 	}
-	return writeFileAtomic(path, []byte(strconv.Itoa(next)+"\n"), 0o600)
+	// Durable: an account is saved, and a purge removes accounts, once
+	// this returns.
+	return atomicfile.WriteFileDurable(path, []byte(strconv.Itoa(next)+"\n"), 0o600)
 }
 
 // RecordUserIDs raises the mark past every ID in users, for a tool that

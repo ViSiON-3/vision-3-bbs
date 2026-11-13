@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -318,4 +319,22 @@ func TestNewUser_DisconnectAtEachStep(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A purged account's retired handle reads as taken at signup (#1048).
+func TestNewUser_RejectsRetiredHandle(t *testing.T) {
+	env := newMenuEnv(t)
+	env.um.SetNewUserLevel(10)
+	if err := user.RetireHandles(filepath.Join(env.dataDir(), "users.json"), "Ghost"); err != nil {
+		t.Fatal(err)
+	}
+	in := "Y\r" + "ghost\r" + "Fresh\r" + "pw123\rpw123\r" + "Fresh Face\r\rHere\r\r"
+	r := env.runCmd("NEWUSER", nil, "", in)
+	if !r.has("Name is already in use!") {
+		t.Errorf("retired handle not refused: %q", r.text())
+	}
+	if _, ok := env.um.GetUser("ghost"); ok {
+		t.Error("a retired handle was registered")
+	}
+	mustGetUser(t, env, "Fresh")
 }

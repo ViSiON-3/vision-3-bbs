@@ -656,7 +656,14 @@ It is **Del User Days** in `./config` → **System Setup → Default Settings**.
 
 Users with no `deletedAt` timestamp (not yet soft-deleted) are never eligible for purge and are always skipped.
 
-**Important:** Purged user IDs are not recycled. The `nextUserID` counter continues to increment, leaving a gap. This is intentional to prevent new accounts from inheriting message attribution from old accounts.
+**Important:** Purging an account retires its ID and its handle:
+
+- **The ID** is never given out again. The next ID is kept in `data/users/next_user_id`, which only goes up, so sponsorships and uploads (owned by account ID) can't pass to a new account.
+- **The handle** is added to `data/users/retired_handles`, and nobody can register it or rename an account to it again. Private mail is matched to its sender and recipient by handle, and purging leaves the mail in place (the people the account wrote to keep their letters). A new account with the old handle would otherwise read that mail. Signup says the name is in use, and the admin editor and `./ue` refuse it.
+
+Renaming an account retires its old handle in the same way, since mail addressed to the old name stays where it is. A change in capitalisation only doesn't count as a rename.
+
+To release a retired handle, delete its line from `data/users/retired_handles`. Only do that once nothing still addressed to that handle should stay private. If the file can't be read, new accounts and renames are refused until it's fixed; `vision3 doctor` reports it.
 
 ##### CLI: `helper users purge`
 

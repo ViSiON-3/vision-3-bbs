@@ -416,8 +416,9 @@ func (e *MenuExecutor) promptForHandle(
 		e.writeString(terminal, outputMode, checkingMsg)
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
 
-		// Check for duplicate handle
-		if _, exists := userManager.GetUser(handle); exists {
+		// Check for duplicate handle, or a purged account's retired one
+		// (#1048), which reads the same to the caller.
+		if _, exists := userManager.GetUser(handle); exists || userManager.HandleRetired(handle) {
 			e.writeString(terminal, outputMode, nameUsedMsg)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
 			uiPause(500 * time.Millisecond)

@@ -52,3 +52,7 @@ func blockedByAnotherHandle(err error) bool {
 	}
 	return false
 }
+
+// syncDir is a no-op on Windows, which can't open a directory to sync it;
+// NTFS journals the rename itself.
+func syncDir(string) error { return nil }
