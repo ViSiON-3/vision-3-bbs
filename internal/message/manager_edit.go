@@ -16,7 +16,8 @@ import (
 // before they edited it: another session may have deleted or edited it, or
 // packed the base and moved another message into its number, meanwhile. It
 // returns ErrMessageChanged, changing nothing, when edit refuses or the
-// message is gone.
+// message is gone. An error wrapping ErrEditUncertain means the edit failed
+// partway and couldn't be undone, so the message may be either version.
 //
 // The body is the text as DisplayMessage.Body has it; kludge lines in the
 // stored text, which Body leaves out, are kept ahead of it. The message
@@ -31,7 +32,7 @@ func (mm *MessageManager) EditMessageIf(areaID, msgNum int, edit func(*DisplayMe
 			slog.Warn("closing JAM base", "error", cerr)
 		}
 	}()
-	err = b.ReplaceMessageIf(msgNum, func(m *jam.Message) (string, string, bool) {
+	err = replaceMessage(b, msgNum, func(m *jam.Message) (string, string, bool) {
 		subject, body, ok := edit(displayMessage(m, areaID, msgNum))
 		if !ok {
 			return "", "", false
@@ -42,11 +43,17 @@ func (mm *MessageManager) EditMessageIf(areaID, msgNum int, edit func(*DisplayMe
 		if errors.Is(err, ErrMessageChanged) {
 			return ErrMessageChanged
 		}
+		// Whatever is cached may describe either version now.
+		mm.invalidateThreadIndex(areaID)
 		return fmt.Errorf("edit message %d in area %d: %w", msgNum, areaID, err)
 	}
 	mm.invalidateThreadIndex(areaID)
 	return nil
 }
+
+// replaceMessage is jam.Base.ReplaceMessageIf; a test replaces it to make an
+// edit fail.
+var replaceMessage = (*jam.Base).ReplaceMessageIf
 
 // kludgeLines is the kludge lines of a stored message text, each ended by a
 // line break, in their order: what stripKludgeLines takes out.

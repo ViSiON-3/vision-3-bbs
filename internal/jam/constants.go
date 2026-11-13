@@ -91,4 +91,8 @@ var (
 	// ErrMessageChanged is DeleteMessageIf's answer when the message is
 	// gone or no longer the one its check expects.
 	ErrMessageChanged = errors.New("jam: message changed")
+	// ErrEditUncertain is ReplaceMessageIf's answer when a step failed and
+	// putting the index back failed too: the message may be the old one or
+	// the new.
+	ErrEditUncertain = errors.New("jam: edit may or may not have been made")
 )

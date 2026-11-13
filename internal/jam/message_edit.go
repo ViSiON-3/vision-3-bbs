@@ -23,7 +23,8 @@ import (
 //
 // The edit takes effect when the index, pointing to the new header, is
 // synced. A failure before that puts the index back, so an error means the
-// message is as it was. Retiring the old header and counting the change come
+// message is as it was, unless putting it back fails too: then the error is
+// ErrEditUncertain, and the message may be either. Retiring the old header and counting the change come
 // after: the edit has been made by then, so a failure there is not returned.
 // The old header is left looking live in the .jhr, which nothing that reads
 // through the index sees, and packing drops it.
@@ -112,12 +113,13 @@ func (b *Base) replaceMessageLocked(msgNum int, hdr *MessageHeader, subject, tex
 		})
 	}
 	if err != nil {
-		// Not made: the index goes back to the old header.
-		if rerr := b.writeIndexRecord(msgNum, idx); rerr != nil {
-			return fmt.Errorf("%w; and restoring the index failed: %v", err, rerr)
+		// Not made: the index goes back to the old header. If that fails
+		// too, the index on disk may point to either header.
+		if rerr := replaceStep("restore", func() error { return b.writeIndexRecord(msgNum, idx) }); rerr != nil {
+			return fmt.Errorf("%w: %w; and restoring the index failed: %v", ErrEditUncertain, err, rerr)
 		}
-		if rerr := b.jdxFile.Sync(); rerr != nil {
-			return fmt.Errorf("%w; and syncing the restored index failed: %v", err, rerr)
+		if rerr := replaceStep("restoresync", func() error { return b.jdxFile.Sync() }); rerr != nil {
+			return fmt.Errorf("%w: %w; and syncing the restored index failed: %v", ErrEditUncertain, err, rerr)
 		}
 		return err
 	}
@@ -135,7 +137,8 @@ func (b *Base) replaceMessageLocked(msgNum int, hdr *MessageHeader, subject, tex
 }
 
 // replaceFault, when set by a test, runs before each named step of
-// replaceMessageLocked ("index", "indexsync", "retire"), and an error it
+// replaceMessageLocked ("index", "indexsync", "restore", "restoresync",
+// "retire"), and an error it
 // returns stands in for that step failing.
 var replaceFault func(step string) error
 

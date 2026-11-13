@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -125,11 +126,11 @@ func TestReplaceMessageIfRetiresOldHeader(t *testing.T) {
 
 // failReplaceAt makes replaceMessageLocked's step fail for the rest of the
 // test.
-func failReplaceAt(t *testing.T, step string) {
+func failReplaceAt(t *testing.T, steps ...string) {
 	t.Helper()
 	replaceFault = func(s string) error {
-		if s == step {
-			return errors.New("injected " + step + " failure")
+		if slices.Contains(steps, s) {
+			return errors.New("injected " + s + " failure")
 		}
 		return nil
 	}
@@ -146,8 +147,12 @@ func TestReplaceMessageIfIndexFailure(t *testing.T) {
 			old := hdrOffset(t, b, 1)
 			failReplaceAt(t, step)
 
-			if err := b.ReplaceMessageIf(1, replaceWith("edited", "new body")); err == nil {
+			err := b.ReplaceMessageIf(1, replaceWith("edited", "new body"))
+			if err == nil {
 				t.Fatal("the edit reported success")
+			}
+			if errors.Is(err, ErrEditUncertain) {
+				t.Errorf("err = %v, want it certain: the index was put back", err)
 			}
 			if now := hdrOffset(t, b, 1); now != old {
 				t.Errorf("the index points at %d, want the old header at %d", now, old)
@@ -157,6 +162,22 @@ func TestReplaceMessageIfIndexFailure(t *testing.T) {
 			}
 			if m, err := b.ReadMessage(1); err != nil || m.Subject != "one" || m.Text != "one body" {
 				t.Errorf("message 1 = %+v, %v; want it unchanged", m, err)
+			}
+		})
+	}
+}
+
+// When putting the index back fails too, the outcome isn't known, and the
+// error says so.
+func TestReplaceMessageIfRestoreFailure(t *testing.T) {
+	for _, steps := range [][]string{{"index", "restore"}, {"indexsync", "restore"}, {"indexsync", "restoresync"}} {
+		t.Run(strings.Join(steps, "+"), func(t *testing.T) {
+			b := openTestBase(t)
+			writeSubjects(t, b, "one", "two")
+			failReplaceAt(t, steps...)
+
+			if err := b.ReplaceMessageIf(1, replaceWith("edited", "new body")); !errors.Is(err, ErrEditUncertain) {
+				t.Errorf("err = %v, want ErrEditUncertain", err)
 			}
 		})
 	}

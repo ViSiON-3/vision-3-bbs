@@ -368,6 +368,10 @@ func (mm *MessageManager) DeleteMessage(areaID, msgNum int) error {
 // no longer the one its check expects.
 var ErrMessageChanged = jam.ErrMessageChanged
 
+// ErrEditUncertain is EditMessageIf's answer when the edit failed partway and
+// couldn't be undone: the message may be as it was or as edited.
+var ErrEditUncertain = jam.ErrEditUncertain
+
 // DeleteMessageIf deletes message msgNum of an area only when check accepts
 // the message as it is at that moment, read under the same lock as the
 // delete (jam.Base.DeleteMessageIf). Use it when the message was shown to

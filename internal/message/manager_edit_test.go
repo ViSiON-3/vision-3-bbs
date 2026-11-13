@@ -2,7 +2,10 @@ package message
 
 import (
 	"errors"
+	"fmt"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 )
 
 // rawText is message msgNum's text as stored, kludge lines and all.
@@ -68,5 +71,29 @@ func TestEditMessageIfRefused(t *testing.T) {
 	}
 	if m, _ := mm.GetMessage(3, n); m.Subject != "kept" || m.Body != "body" {
 		t.Errorf("message = %q / %q, want it unchanged", m.Subject, m.Body)
+	}
+}
+
+// An edit that may or may not have been made drops the area's cached
+// threading, which may describe either version, and says the outcome is
+// uncertain.
+func TestEditMessageIfUncertain(t *testing.T) {
+	mm := newIndexTestManager(t)
+	n, err := mm.AddMessage(3, "alice", "All", "subject", "body", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	replaceMessage = func(*jam.Base, int, func(*jam.Message) (string, string, bool)) error {
+		return fmt.Errorf("%w: injected", jam.ErrEditUncertain)
+	}
+	t.Cleanup(func() { replaceMessage = (*jam.Base).ReplaceMessageIf })
+	mm.threadIndex[3] = &threadIndex{}
+
+	err = mm.EditMessageIf(3, n, func(m *DisplayMessage) (string, string, bool) { return "new", "new", true })
+	if !errors.Is(err, ErrEditUncertain) {
+		t.Errorf("err = %v, want ErrEditUncertain", err)
+	}
+	if _, ok := mm.threadIndex[3]; ok {
+		t.Error("the area's thread index is still cached")
 	}
 }
