@@ -123,6 +123,60 @@ func TestReplaceMessageIfRetiresOldHeader(t *testing.T) {
 	}
 }
 
+// failReplaceAt makes replaceMessageLocked's step fail for the rest of the
+// test.
+func failReplaceAt(t *testing.T, step string) {
+	t.Helper()
+	replaceFault = func(s string) error {
+		if s == step {
+			return errors.New("injected " + step + " failure")
+		}
+		return nil
+	}
+	t.Cleanup(func() { replaceFault = nil })
+}
+
+// A failure writing or syncing the index leaves the message as it was: the
+// error and the base agree, and the old header stays live.
+func TestReplaceMessageIfIndexFailure(t *testing.T) {
+	for _, step := range []string{"index", "indexsync"} {
+		t.Run(step, func(t *testing.T) {
+			b := openTestBase(t)
+			writeSubjects(t, b, "one", "two")
+			old := hdrOffset(t, b, 1)
+			failReplaceAt(t, step)
+
+			if err := b.ReplaceMessageIf(1, replaceWith("edited", "new body")); err == nil {
+				t.Fatal("the edit reported success")
+			}
+			if now := hdrOffset(t, b, 1); now != old {
+				t.Errorf("the index points at %d, want the old header at %d", now, old)
+			}
+			if attributeAt(t, b, old)&MsgDeleted != 0 {
+				t.Error("the old header was retired")
+			}
+			if m, err := b.ReadMessage(1); err != nil || m.Subject != "one" || m.Text != "one body" {
+				t.Errorf("message 1 = %+v, %v; want it unchanged", m, err)
+			}
+		})
+	}
+}
+
+// Once the index is synced the edit has been made, so a failure retiring
+// the old header after it isn't reported: the message reads as edited.
+func TestReplaceMessageIfRetireFailure(t *testing.T) {
+	b := openTestBase(t)
+	writeSubjects(t, b, "one", "two")
+	failReplaceAt(t, "retire")
+
+	if err := b.ReplaceMessageIf(1, replaceWith("edited", "new body")); err != nil {
+		t.Fatalf("err = %v, want the edit reported as made", err)
+	}
+	if m, err := b.ReadMessage(1); err != nil || m.Subject != "edited" || m.Text != "new body" {
+		t.Errorf("message 1 = %+v, %v; want the edit", m, err)
+	}
+}
+
 // A refused edit, a deleted message and a number past the end change
 // nothing and give ErrMessageChanged.
 func TestReplaceMessageIfRefusals(t *testing.T) {

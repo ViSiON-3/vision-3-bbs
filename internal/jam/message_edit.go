@@ -20,6 +20,13 @@ import (
 // is marked deleted, so a tool that walks the .jhr instead of the index skips
 // it; it and the old text stay as slack until the base is packed. The
 // message keeps its number, links and lastread position.
+//
+// The edit takes effect when the index, pointing to the new header, is
+// synced. A failure before that puts the index back, so an error means the
+// message is as it was. Retiring the old header and counting the change come
+// after: the edit has been made by then, so a failure there is not returned.
+// The old header is left looking live in the .jhr, which nothing that reads
+// through the index sees, and packing drops it.
 func (b *Base) ReplaceMessageIf(msgNum int, edit func(*Message) (subject, text string, ok bool)) error {
 	return b.withFileLock(func() error {
 		base := b
@@ -93,30 +100,52 @@ func (b *Base) replaceMessageLocked(msgNum int, hdr *MessageHeader, subject, tex
 			return fmt.Errorf("jam: sync %s: %w", f.Name(), err)
 		}
 	}
-	idx.HdrOffset = hdrOffset
-	if err := b.writeIndexRecord(msgNum, idx); err != nil {
-		return err
+	newIdx := *idx
+	newIdx.HdrOffset = hdrOffset
+	err = replaceStep("index", func() error { return b.writeIndexRecord(msgNum, &newIdx) })
+	if err == nil {
+		err = replaceStep("indexsync", func() error {
+			if err := b.jdxFile.Sync(); err != nil {
+				return fmt.Errorf("jam: sync %s: %w", b.jdxFile.Name(), err)
+			}
+			return nil
+		})
 	}
-	if err := b.jdxFile.Sync(); err != nil {
-		return fmt.Errorf("jam: sync %s: %w", b.jdxFile.Name(), err)
+	if err != nil {
+		// Not made: the index goes back to the old header.
+		if rerr := b.writeIndexRecord(msgNum, idx); rerr != nil {
+			return fmt.Errorf("%w; and restoring the index failed: %v", err, rerr)
+		}
+		if rerr := b.jdxFile.Sync(); rerr != nil {
+			return fmt.Errorf("%w; and syncing the restored index failed: %v", err, rerr)
+		}
+		return err
 	}
 
+	// Made. The rest is tidying, tried in full whatever fails.
 	old := *hdr
 	old.Attribute |= MsgDeleted
-	if err := b.writeFixedHeaderFieldsAt(int64(oldHdrOffset), &old); err != nil {
-		return err
+	_ = replaceStep("retire", func() error { return b.writeFixedHeaderFieldsAt(int64(oldHdrOffset), &old) })
+	if b.readFixedHeader() == nil {
+		b.fixedHeader.ModCounter++
+		_ = b.writeFixedHeader()
 	}
-	if err := b.readFixedHeader(); err != nil {
-		return err
-	}
-	b.fixedHeader.ModCounter++
-	if err := b.writeFixedHeader(); err != nil {
-		return err
-	}
-	if err := b.jhrFile.Sync(); err != nil {
-		return fmt.Errorf("jam: sync %s: %w", b.jhrFile.Name(), err)
-	}
+	_ = b.jhrFile.Sync()
 	return nil
+}
+
+// replaceFault, when set by a test, runs before each named step of
+// replaceMessageLocked ("index", "indexsync", "retire"), and an error it
+// returns stands in for that step failing.
+var replaceFault func(step string) error
+
+func replaceStep(step string, do func() error) error {
+	if replaceFault != nil {
+		if err := replaceFault(step); err != nil {
+			return err
+		}
+	}
+	return do()
 }
 
 // withSubject is subfields with the subject set to subject: the existing
