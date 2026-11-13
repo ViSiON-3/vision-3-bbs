@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log/slog"
 	"strconv"
-	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/jam"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -46,7 +45,7 @@ func (e *MenuExecutor) statsWaitingMail(u *user.User) string {
 		if err != nil {
 			return "N/A"
 		}
-		if !msg.IsDeleted() && msg.IsPrivate() && strings.EqualFold(msg.To, u.Handle) {
+		if !msg.IsDeleted() && msg.MailFor(u.Handle, u.ID) {
 			count++
 		}
 	}

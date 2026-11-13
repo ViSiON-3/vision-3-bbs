@@ -22,10 +22,10 @@ func TestRealNameNetmailVisibleToSender(t *testing.T) {
 	if !msg.IsPrivate {
 		t.Fatal("netmail should be private")
 	}
-	if !msg.VisibleTo("pat") {
+	if !msg.VisibleTo("pat", 0) {
 		t.Error("sender cannot see their own netmail")
 	}
-	if msg.VisibleTo("Pat Example") || msg.VisibleTo("someone") {
+	if msg.VisibleTo("Pat Example", 0) || msg.VisibleTo("someone", 0) {
 		t.Error("netmail visible to an account that is not its sender or recipient")
 	}
 }

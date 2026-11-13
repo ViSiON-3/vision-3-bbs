@@ -97,7 +97,7 @@ func sampleLoad(viewer string) func(int) *message.DisplayMessage {
 		m := sampleThread[n-1]
 		dm := &message.DisplayMessage{MsgNum: n, From: m.from, To: m.to, Subject: m.subject, Body: m.body,
 			IsPrivate: m.private, IsDeleted: m.deleted, ReplyToNum: m.parent, DateTime: time.Date(2026, 10, 19+n/4, 8, 0, 0, 0, time.UTC)}
-		if !dm.VisibleTo(viewer) {
+		if !dm.VisibleTo(viewer, 0) {
 			return nil
 		}
 		return dm

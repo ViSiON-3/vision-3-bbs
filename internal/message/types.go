@@ -118,6 +118,10 @@ type DisplayMessage struct {
 	// the id every copy of that letter shares, so the sender's sent mail
 	// shows it once and unsending reaches each unread copy.
 	MailGroup, MailGroupID string
+	// SenderID and RecipientID are the account IDs the BBS recorded for the
+	// local sender and, for private mail, the recipient (#1048); 0 when the
+	// message has none (older, or from another board). See VisibleTo.
+	SenderID, RecipientID int
 }
 
 // GroupAddress is how a header shows mail sent to a user group: "@name".

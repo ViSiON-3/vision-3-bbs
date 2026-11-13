@@ -67,7 +67,7 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		}
 		// Scripts run as the caller, so they see what the caller could read
 		// in the message reader: another user's private mail is absent.
-		if !msg.VisibleTo(eng.session.UserHandle) {
+		if !msg.VisibleTo(eng.session.UserHandle, eng.session.UserID) {
 			return goja.Null()
 		}
 		return displayMessageToJS(vm, msg)
@@ -107,7 +107,11 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 		if area, ok := mgr.GetAreaByID(areaID); ok {
 			from = area.PostingName(eng.session.UserHandle, eng.session.UserRealName)
 		}
-		msgNum, err := mgr.AddMessage(areaID, from, to, subject, body, replyTo)
+		// The account is recorded with the post (#1048), and its handle
+		// when it is signed with the real name.
+		msgNum, err := mgr.Post(areaID, from, to, subject, body, message.PostOptions{
+			ReplyToMsgID: replyTo, SenderHandle: eng.session.UserHandle, SenderID: eng.session.UserID,
+		})
 		if err != nil {
 			panic(vm.NewGoError(err))
 		}
@@ -132,12 +136,14 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 			panic(vm.NewGoError(err))
 		}
 
-		to, err := privateRecipient(mgr, eng.providers.UserMgr, areaID, to)
+		to, toID, err := privateRecipient(mgr, eng.providers.UserMgr, areaID, to)
 		if err != nil {
 			panic(vm.NewGoError(err))
 		}
 
-		msgNum, err := mgr.AddPrivateMessage(areaID, eng.session.UserHandle, to, subject, body, replyTo)
+		msgNum, err := mgr.Post(areaID, eng.session.UserHandle, to, subject, body, message.PostOptions{
+			Private: true, ReplyToMsgID: replyTo, SenderID: eng.session.UserID, RecipientID: toID,
+		})
 		if err != nil {
 			panic(vm.NewGoError(err))
 		}
@@ -158,22 +164,22 @@ func registerMessage(v3 *goja.Object, eng *Engine) {
 // an existing, non-deleted account (its handle, its real name if no other
 // account shares it, or "Sysop"), and that account's handle is returned.
 // Netmail goes by name and FTN address, so to is returned as given.
-func privateRecipient(mgr *message.MessageManager, um *user.UserMgr, areaID int, to string) (string, error) {
+func privateRecipient(mgr *message.MessageManager, um *user.UserMgr, areaID int, to string) (string, int, error) {
 	area, ok := mgr.GetAreaByID(areaID)
 	if !ok {
-		return "", fmt.Errorf("postPrivate: area %d: %w", areaID, message.ErrAreaNotFound)
+		return "", 0, fmt.Errorf("postPrivate: area %d: %w", areaID, message.ErrAreaNotFound)
 	}
 	if jam.DetermineMessageType(area.AreaType, area.EchoTag).IsNetmail() {
-		return to, nil
+		return to, 0, nil
 	}
 	if um == nil {
-		return "", fmt.Errorf("postPrivate: no user base to check recipient %q against", to)
+		return "", 0, fmt.Errorf("postPrivate: no user base to check recipient %q against", to)
 	}
 	u, ok := um.ResolveRecipient(to)
 	if !ok {
-		return "", fmt.Errorf("postPrivate: recipient %q is not a user of this BBS (or matches more than one)", to)
+		return "", 0, fmt.Errorf("postPrivate: recipient %q is not a user of this BBS (or matches more than one)", to)
 	}
-	return u.Handle, nil
+	return u.Handle, u.ID, nil
 }
 
 func messageAreaToJS(vm *goja.Runtime, a *message.MessageArea) goja.Value {

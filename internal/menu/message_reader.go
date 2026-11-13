@@ -136,15 +136,16 @@ func privateMailReaderFor(e *MenuExecutor, um *user.UserMgr, u *user.User) priva
 // undeliverable, so a missing directory never widens access.
 func withPrivacy(r privateMailReader, f msgOwnershipFilter) msgOwnershipFilter {
 	var handle string
+	var accountID int
 	sysop := false
 	if r.user != nil {
-		handle = r.user.Handle
+		handle, accountID = r.user.Handle, r.user.ID
 		sysop = r.sysOpLevel > 0 && r.user.AccessLevel >= r.sysOpLevel &&
 			r.handles != nil && r.handles.HandleExists(handle)
 	}
 	return func(m *message.DisplayMessage) bool {
 		undeliverable := sysop && !r.handles.HandleExists(m.To)
-		if !m.VisibleTo(handle) && !undeliverable {
+		if !m.VisibleTo(handle, accountID) && !undeliverable {
 			return false
 		}
 		return f == nil || f(m)
@@ -294,7 +295,7 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	isModerator := func() bool { return moderates().Allowed }
 	inMailbox := strings.EqualFold(currentAreaTag, "PRIVMAIL")
 	unsendable := func(m *message.DisplayMessage) bool {
-		return inMailbox && unsendableMail(e, currentAreaID, m, currentUser.Handle)
+		return inMailbox && unsendableMail(e, currentAreaID, m, currentUser.Handle, currentUser.ID)
 	}
 	// unsend says whether the caller may unsend m: the recipient hasn't read
 	// it. The delete works it out again inside its locked check (#1031):
@@ -302,7 +303,7 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	// it (the recipient opening the letter) does, so in there the answer
 	// can't change before the delete.
 	mayDelete := func(m *message.DisplayMessage, moderator, unsend bool) bool {
-		return moderator || m.MailFor(currentUser.Handle) || (unsend && m.SentBy(currentUser.Handle))
+		return moderator || m.MailFor(currentUser.Handle, currentUser.ID) || (unsend && m.SentBy(currentUser.Handle, currentUser.ID))
 	}
 	canDelete := func(m *message.DisplayMessage) bool { return mayDelete(m, isModerator(), unsendable(m)) }
 	if isModerator() || strings.EqualFold(currentAreaTag, "PRIVMAIL") {
@@ -415,7 +416,7 @@ readerLoop:
 		}
 		// In the mailbox, the caller's own mail on screen is their current
 		// mail, for DELETEPRIVMAIL on the mail menu.
-		if strings.EqualFold(currentAreaTag, "PRIVMAIL") && currentMsg.MailFor(currentUser.Handle) {
+		if strings.EqualFold(currentAreaTag, "PRIVMAIL") && currentMsg.MailFor(currentUser.Handle, currentUser.ID) {
 			setCurrentMail(s, currentMsg)
 		}
 
@@ -1055,7 +1056,7 @@ readerLoop:
 				unsend := unsendable(shown)
 				if !mayDelete(shown, mod.Allowed, unsend) {
 					notice := "|01You can no longer delete messages in this area. Nothing was deleted.|07"
-					if shown.SentBy(currentUser.Handle) {
+					if shown.SentBy(currentUser.Handle, currentUser.ID) {
 						notice = "|01That mail has been read, so it can't be unsent now. Nothing was deleted.|07"
 					}
 					e.showReaderNotice(terminal, outputMode, notice, termHeight)
@@ -1064,8 +1065,8 @@ readerLoop:
 				}
 				// Unsending a group letter (#1036) takes back every copy no
 				// member has read yet, not just the one shown.
-				if shown.MailGroupID != "" && unsend && shown.SentBy(currentUser.Handle) && !shown.MailFor(currentUser.Handle) {
-					removed, kept, uErr := e.unsendGroupLetter(currentAreaID, shown, currentUser.Handle)
+				if shown.MailGroupID != "" && unsend && shown.SentBy(currentUser.Handle, currentUser.ID) && !shown.MailFor(currentUser.Handle, currentUser.ID) {
+					removed, kept, uErr := e.unsendGroupLetter(currentAreaID, shown, currentUser.Handle, currentUser.ID)
 					notice := fmt.Sprintf("|02Unsent from %d member(s) of %s.|07", removed, shown.GroupAddress())
 					if kept > 0 {
 						notice = fmt.Sprintf("|02Unsent from %d member(s) of %s; %d had already read it.|07", removed, shown.GroupAddress(), kept)
@@ -1136,7 +1137,7 @@ readerLoop:
 				}
 				// A delete made as a moderator below co-sysop level is logged
 				// with the grant that allowed it.
-				if mod.Allowed && !mod.Level && !shown.MailFor(currentUser.Handle) && !shown.SentBy(currentUser.Handle) {
+				if mod.Allowed && !mod.Level && !shown.MailFor(currentUser.Handle, currentUser.ID) && !shown.SentBy(currentUser.Handle, currentUser.ID) {
 					slog.Info("message deleted by moderator", "node", nodeNumber, "handle", currentUser.Handle,
 						"area", mod.Area, "msg", shown.MsgNum, "from", shown.From, "subject", shown.Subject,
 						"via", string(perm.MessagesModerate)+" via "+mod.Source())

@@ -50,6 +50,8 @@ func (mm *MessageManager) MoveMessageIf(fromArea, msgNum, toArea int, check func
 		Private:      m.IsPrivate,
 		Date:         m.DateTime,
 		SenderHandle: m.SenderHandle,
+		SenderID:     m.SenderID,
+		RecipientID:  m.RecipientID,
 	})
 	if err == nil {
 		err = mm.fault("copy")

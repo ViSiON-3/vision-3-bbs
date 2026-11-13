@@ -146,6 +146,8 @@ func (e *MenuExecutor) sendGroupMail(um *user.UserMgr, sender *user.User, g perm
 		if _, perr := e.MessageMgr.Post(areaID, fromName, m.Handle, subject, body, message.PostOptions{
 			Private:      true,
 			SenderHandle: sender.Handle,
+			SenderID:     sender.ID,
+			RecipientID:  m.ID,
 			MailGroup:    g.Name,
 			MailGroupID:  id,
 		}); perr != nil {
@@ -174,15 +176,16 @@ func mailTo(m *message.DisplayMessage) string {
 // area and built again when the area's message count changes (a post, an
 // unsend and pack) or a copy it names has been deleted.
 type sentLetters struct {
-	e      *MenuExecutor
-	areaID int
-	handle string
-	count  int
-	first  map[string]int
+	e         *MenuExecutor
+	areaID    int
+	handle    string
+	accountID int
+	count     int
+	first     map[string]int
 }
 
-func newSentLetters(e *MenuExecutor, areaID int, handle string) *sentLetters {
-	return &sentLetters{e: e, areaID: areaID, handle: handle}
+func newSentLetters(e *MenuExecutor, areaID int, handle string, accountID int) *sentLetters {
+	return &sentLetters{e: e, areaID: areaID, handle: handle, accountID: accountID}
 }
 
 // shows reports whether m is listed: mail that isn't a group copy always is.
@@ -217,7 +220,7 @@ func (l *sentLetters) build() {
 	l.count, _ = l.e.MessageMgr.GetMessageCountForArea(l.areaID)
 	err := l.e.MessageMgr.EachMessage(l.areaID,
 		func(m *message.DisplayMessage) bool {
-			return !m.IsDeleted && m.MailGroupID != "" && m.SentBy(l.handle)
+			return !m.IsDeleted && m.MailGroupID != "" && m.SentBy(l.handle, l.accountID)
 		},
 		func(m *message.DisplayMessage) bool {
 			if _, seen := l.first[m.MailGroupID]; !seen {
@@ -232,10 +235,12 @@ func (l *sentLetters) build() {
 
 // groupLetterCopies lists the copies of the group letter id that handle
 // sent, still in area areaID, by number.
-func (e *MenuExecutor) groupLetterCopies(areaID int, id, handle string) []*message.DisplayMessage {
+func (e *MenuExecutor) groupLetterCopies(areaID int, id, handle string, accountID int) []*message.DisplayMessage {
 	var out []*message.DisplayMessage
 	err := e.MessageMgr.EachMessage(areaID,
-		func(m *message.DisplayMessage) bool { return !m.IsDeleted && m.MailGroupID == id && m.SentBy(handle) },
+		func(m *message.DisplayMessage) bool {
+			return !m.IsDeleted && m.MailGroupID == id && m.SentBy(handle, accountID)
+		},
 		func(m *message.DisplayMessage) bool { out = append(out, m); return true })
 	if err != nil {
 		slog.Warn("group mail: listing a letter's copies", "area", areaID, "id", id, "error", err)
@@ -256,8 +261,8 @@ func (e *MenuExecutor) unreadCopy(areaID int, m *message.DisplayMessage) bool {
 
 // groupLetterUnsendable reports whether any copy of m's group letter is
 // still unread, so its sender may unsend it.
-func (e *MenuExecutor) groupLetterUnsendable(areaID int, m *message.DisplayMessage, handle string) bool {
-	for _, c := range e.groupLetterCopies(areaID, m.MailGroupID, handle) {
+func (e *MenuExecutor) groupLetterUnsendable(areaID int, m *message.DisplayMessage, handle string, accountID int) bool {
+	for _, c := range e.groupLetterCopies(areaID, m.MailGroupID, handle, accountID) {
 		if e.unreadCopy(areaID, c) {
 			return true
 		}
@@ -268,8 +273,8 @@ func (e *MenuExecutor) groupLetterUnsendable(areaID int, m *message.DisplayMessa
 // unsendGroupLetter deletes every copy of m's group letter whose recipient
 // hasn't read it, each checked again as it is deleted, and packs the base
 // once. It reports how many copies went and how many had been read and stay.
-func (e *MenuExecutor) unsendGroupLetter(areaID int, m *message.DisplayMessage, handle string) (removed, kept int, err error) {
-	for _, c := range e.groupLetterCopies(areaID, m.MailGroupID, handle) {
+func (e *MenuExecutor) unsendGroupLetter(areaID int, m *message.DisplayMessage, handle string, accountID int) (removed, kept int, err error) {
+	for _, c := range e.groupLetterCopies(areaID, m.MailGroupID, handle, accountID) {
 		if !e.unreadCopy(areaID, c) {
 			kept++
 			continue
@@ -314,4 +319,18 @@ func (e *MenuExecutor) reportGroupMail(terminal *term.Terminal, outputMode ansi.
 	}
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 	uiPause(1 * time.Second)
+}
+
+// accountIDOf is the ID of the account with handle, for the RecipientID a
+// private message records (#1048); 0 when no account has it (netmail to
+// another board, or a user manager that isn't there). A purged or renamed
+// account's old handle is retired, so a handle names its account's ID.
+func accountIDOf(um *user.UserMgr, handle string) int {
+	if um == nil {
+		return 0
+	}
+	if u, ok := um.GetUser(handle); ok {
+		return u.ID
+	}
+	return 0
 }

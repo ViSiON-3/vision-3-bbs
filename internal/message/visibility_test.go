@@ -30,7 +30,7 @@ func TestVisibleTo(t *testing.T) {
 		{"real-name From does not match a handle equal to it", signed, "Pat Example", false},
 	}
 	for _, tc := range cases {
-		if got := tc.m.VisibleTo(tc.handle); got != tc.want {
+		if got := tc.m.VisibleTo(tc.handle, 0); got != tc.want {
 			t.Errorf("%s: VisibleTo(%q) = %v, want %v", tc.name, tc.handle, got, tc.want)
 		}
 	}
@@ -50,7 +50,7 @@ func TestMailFor(t *testing.T) {
 		{&DisplayMessage{IsPrivate: true}, " ", false},
 		{&DisplayMessage{From: "Sysop", To: "Bob"}, "Bob", false}, // public
 	} {
-		if got := tc.m.MailFor(tc.handle); got != tc.want {
+		if got := tc.m.MailFor(tc.handle, 0); got != tc.want {
 			t.Errorf("MailFor(%q) on %+v = %v, want %v", tc.handle, *tc.m, got, tc.want)
 		}
 	}

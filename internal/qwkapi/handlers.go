@@ -130,6 +130,7 @@ func (s *Server) handlePacket(w http.ResponseWriter, r *http.Request) {
 	res, err := s.deps.Service.BuildPacket(qwkservice.ExportOptions{
 		TwitList:   s.deps.TwitMatcherFor(u),
 		Handle:     u.Handle,
+		UserID:     u.ID,
 		TaggedTags: u.TaggedMessageAreaTags,
 	})
 	if err != nil {
@@ -187,6 +188,7 @@ func (s *Server) handleReply(w http.ResponseWriter, r *http.Request) {
 	}
 	opts := qwkservice.ImportOptions{
 		Handle:    u.Handle,
+		UserID:    u.ID,
 		Signature: u.OfflineSignature(),
 		Authorize: s.deps.AuthorizeFor(u),
 	}

@@ -119,6 +119,17 @@ type RecipientResolver interface {
 	ResolveRecipient(name string) (*User, bool)
 }
 
+// AccountByAddress is AddressByHandle with the account's ID: the handle and
+// ID of the account to resolves to through r, or to unchanged and 0.
+func AccountByAddress(r RecipientResolver, to string) (string, int) {
+	if r != nil {
+		if u, ok := r.ResolveRecipient(to); ok && u != nil {
+			return u.Handle, u.ID
+		}
+	}
+	return to, 0
+}
+
 // AddressByHandle returns the handle of the account to resolves to through r
 // (see UserMgr.ResolveRecipient), or to unchanged when r is nil or to names no
 // single account. Mail importers store the result as a private message's To so

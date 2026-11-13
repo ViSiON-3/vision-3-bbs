@@ -88,6 +88,10 @@ type Message struct {
 	// MailGroup is "name id" on a member's copy of mail sent to a user
 	// group (SfldV3MailGroup); local writes only, like SenderHandle.
 	MailGroup string
+	// SenderID and RecipientID are the local accounts that wrote the
+	// message and, for private mail, receive it (SfldV3SenderID,
+	// SfldV3RecipientID); 0 when not recorded. Local writes only.
+	SenderID, RecipientID int
 	// Unprocessed makes WriteMessage leave DateProcessed at 0, as
 	// WriteMessageExt does for echomail, so a later scan (the V3Net outbound
 	// sweep) knows the message still has to be sent. Not read back.

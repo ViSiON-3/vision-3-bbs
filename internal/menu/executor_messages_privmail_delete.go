@@ -41,17 +41,17 @@ func clearCurrentMail(s ssh.Session) {
 // number it was read at first; a pack since then (another caller's delete)
 // can have moved it to a lower number, so if that number now holds another
 // message it is looked for among handle's mail. Gone, it is forgotten.
-func currentMailOf(e *MenuExecutor, s ssh.Session, areaID int, handle string) *message.DisplayMessage {
+func currentMailOf(e *MenuExecutor, s ssh.Session, areaID int, handle string, accountID int) *message.DisplayMessage {
 	v, ok := sessionCurrentMail.Load(s)
 	if !ok {
 		return nil
 	}
 	shown := v.(*message.DisplayMessage)
 	if m, err := e.MessageMgr.GetMessage(areaID, shown.MsgNum); err == nil &&
-		!m.IsDeleted && message.SameMessage(m, shown) && m.MailFor(handle) {
+		!m.IsDeleted && message.SameMessage(m, shown) && m.MailFor(handle, accountID) {
 		return m
 	}
-	mail, err := ownPrivateMail(e, areaID, handle)
+	mail, err := ownPrivateMail(e, areaID, handle, accountID)
 	if err == nil {
 		for _, m := range mail {
 			if message.SameMessage(m, shown) {
@@ -66,9 +66,9 @@ func currentMailOf(e *MenuExecutor, s ssh.Session, areaID int, handle string) *m
 
 // ownPrivateMail returns the caller's undeleted private mail in the PRIVMAIL
 // area, oldest first, by the message numbers LISTPRIVMAIL shows.
-func ownPrivateMail(e *MenuExecutor, areaID int, handle string) ([]*message.DisplayMessage, error) {
+func ownPrivateMail(e *MenuExecutor, areaID int, handle string, accountID int) ([]*message.DisplayMessage, error) {
 	var mail []*message.DisplayMessage
-	theirs := func(m *message.DisplayMessage) bool { return !m.IsDeleted && m.MailFor(handle) }
+	theirs := func(m *message.DisplayMessage) bool { return !m.IsDeleted && m.MailFor(handle, accountID) }
 	err := e.MessageMgr.EachMessage(areaID, theirs, func(m *message.DisplayMessage) bool {
 		mail = append(mail, m)
 		return true
@@ -138,7 +138,7 @@ func runDeletePrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	shown := target
 	handle := currentUser.Handle
 	delErr := e.MessageMgr.DeleteMessageIf(area.ID, shown.MsgNum, func(m *message.DisplayMessage) bool {
-		return message.SameMessage(m, shown) && m.MailFor(handle)
+		return message.SameMessage(m, shown) && m.MailFor(handle, currentUser.ID)
 	})
 	if errors.Is(delErr, message.ErrMessageChanged) {
 		clearCurrentMail(s)
@@ -171,10 +171,10 @@ func chooseOwnMail(c *cmdCtx, areaID int, verb string) (*message.DisplayMessage,
 			slog.Debug("mail menu write", "node", c.nodeNumber, "error", err)
 		}
 	}
-	if target := currentMailOf(e, c.s, areaID, c.currentUser.Handle); target != nil {
+	if target := currentMailOf(e, c.s, areaID, c.currentUser.Handle, c.currentUser.ID); target != nil {
 		return target, nil
 	}
-	mail, err := ownPrivateMail(e, areaID, c.currentUser.Handle)
+	mail, err := ownPrivateMail(e, areaID, c.currentUser.Handle, c.currentUser.ID)
 	if err != nil {
 		slog.Error("mail menu: listing mail", "node", c.nodeNumber, "error", err)
 		say("\r\n|01Error loading private mail.|07\r\n")

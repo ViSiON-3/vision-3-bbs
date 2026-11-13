@@ -91,7 +91,7 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 		if msg.IsDeleted() {
 			continue
 		}
-		if msg.IsPrivate() && strings.EqualFold(msg.To, currentUser.Handle) {
+		if msg.MailFor(currentUser.Handle, currentUser.ID) {
 			newMailCount++
 		}
 	}

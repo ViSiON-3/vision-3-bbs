@@ -1,6 +1,9 @@
 package jam
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // Building the JAM subfield list that accompanies a message header, and the
 // origin-line parsing that feeds it.
@@ -40,6 +43,12 @@ func buildSubfields(msg *Message) []Subfield {
 	}
 	if msg.MailGroup != "" {
 		sfs = append(sfs, CreateSubfield(SfldV3MailGroup, msg.MailGroup))
+	}
+	if msg.SenderID > 0 {
+		sfs = append(sfs, CreateSubfield(SfldV3SenderID, strconv.Itoa(msg.SenderID)))
+	}
+	if msg.RecipientID > 0 {
+		sfs = append(sfs, CreateSubfield(SfldV3RecipientID, strconv.Itoa(msg.RecipientID)))
 	}
 	return sfs
 }

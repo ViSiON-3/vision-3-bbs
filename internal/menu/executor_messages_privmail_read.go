@@ -3,7 +3,6 @@ package menu
 import (
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -13,13 +12,12 @@ import (
 )
 
 // ownPrivateMailFilter returns a msgOwnershipFilter that accepts only private
-// messages addressed to handle (case-insensitive). It is the single source of
-// truth for "may this user see this PRIVMAIL message" used by both the reader
-// and the list, so navigation can never surface another user's mail.
-func ownPrivateMailFilter(handle string) msgOwnershipFilter {
-	return func(m *message.DisplayMessage) bool {
-		return m.IsPrivate && strings.EqualFold(m.To, handle)
-	}
+// messages addressed to the account (handle, id): by the ID a message
+// records, else by handle (#1048). It is the single source of truth for "may
+// this user see this PRIVMAIL message" used by both the reader and the list,
+// so navigation can never surface another user's mail.
+func ownPrivateMailFilter(handle string, id int) msgOwnershipFilter {
+	return func(m *message.DisplayMessage) bool { return m.MailFor(handle, id) }
 }
 
 // runReadPrivateMail handles reading private mail for the current user.
@@ -111,7 +109,7 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		// Check if message is private AND addressed to current user (case-insensitive)
-		if msg.IsPrivate() && strings.EqualFold(msg.To, currentUser.Handle) {
+		if msg.MailFor(currentUser.Handle, currentUser.ID) {
 			privateMessages = append(privateMessages, msgNum)
 		}
 	}
@@ -165,7 +163,7 @@ func runReadPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	// Constrain the reader to the current user's own private messages so that
 	// next/prev/jump navigation can never reveal another user's mail.
 	updatedUser, nextMenu, err := runMessageReader(e, s, terminal, userManager, currentUser, nodeNumber,
-		sessionStartTime, outputMode, startMsgNum, totalMessages, false, tw, th, ownPrivateMailFilter(currentUser.Handle))
+		sessionStartTime, outputMode, startMsgNum, totalMessages, false, tw, th, ownPrivateMailFilter(currentUser.Handle, currentUser.ID))
 
 	// Restore original area
 	if updatedUser != nil {
@@ -219,7 +217,7 @@ func runListPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// List only the current user's own private mail (filtered both in the list
 	// and in the reader it opens).
-	updatedUser, nextMenu, err := runListMsgsFiltered(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args, ownPrivateMailFilter(currentUser.Handle))
+	updatedUser, nextMenu, err := runListMsgsFiltered(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}, args, ownPrivateMailFilter(currentUser.Handle, currentUser.ID))
 
 	// Restore original area
 	if updatedUser != nil {

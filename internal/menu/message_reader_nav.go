@@ -132,7 +132,7 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 	// sending it to the member.
 	group, toGroup := perm.Group{}, false
 	if currentMsg.IsPrivate && currentMsg.MailGroup != "" {
-		senderCopy := currentMsg.SentBy(currentUser.Handle) && !currentMsg.MailFor(currentUser.Handle)
+		senderCopy := currentMsg.SentBy(currentUser.Handle, currentUser.ID) && !currentMsg.MailFor(currentUser.Handle, currentUser.ID)
 		g, ok := perm.Current().Group(currentMsg.MailGroup)
 		if !ok && senderCopy {
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n"+groupMailRefusal(perm.Group{Name: currentMsg.MailGroup}, errGroupMailGone)+"\r\n")), outputMode)
@@ -225,6 +225,8 @@ func handleReply(e *MenuExecutor, s ssh.Session, ih *editor.InputHandler, termin
 		ReplyToNum:   currentMsg.MsgNum,
 		ReplyToMsgID: currentMsg.MsgID,
 		SenderHandle: currentUser.Handle,
+		SenderID:     currentUser.ID,
+		RecipientID:  accountIDOf(userManager, replyTo),
 	})
 	if err != nil {
 		slog.Error("failed to save reply", "node", nodeNumber, "error", err)

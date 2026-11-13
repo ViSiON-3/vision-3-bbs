@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
@@ -113,7 +112,7 @@ func countSysopMailWaiting(mm *message.MessageManager, um *user.UserMgr) int {
 		if err != nil || msg.IsDeleted() {
 			continue
 		}
-		if msg.IsPrivate() && strings.EqualFold(msg.To, sysop.Handle) {
+		if msg.MailFor(sysop.Handle, sysop.ID) {
 			n++
 		}
 	}

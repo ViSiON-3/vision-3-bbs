@@ -18,7 +18,7 @@ func TestSentBy(t *testing.T) {
 		{"Caller", "", " ", true, false},       // blank handle
 	} {
 		m := &DisplayMessage{From: tc.from, SenderHandle: tc.sender, IsPrivate: tc.private}
-		if got := m.SentBy(tc.handle); got != tc.want {
+		if got := m.SentBy(tc.handle, 0); got != tc.want {
 			t.Errorf("SentBy(%q) on from %q sender %q private %v = %v, want %v", tc.handle, tc.from, tc.sender, tc.private, got, tc.want)
 		}
 	}

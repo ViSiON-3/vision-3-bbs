@@ -80,6 +80,13 @@ const (
 	// sent to a user group: the group's name and the id every copy of that
 	// letter shares, "name id". Local private mail only, never exported.
 	SfldV3MailGroup = 0x5634
+	// SfldV3SenderID and SfldV3RecipientID are ViSiON/3's subfields for the
+	// account IDs of a local message's sender and, for private mail, its
+	// recipient, as decimal text (#1048). User IDs are never reused, so they
+	// name an account when its handle has changed or passed to someone else.
+	// Local writes only, never exported.
+	SfldV3SenderID    = 0x5635
+	SfldV3RecipientID = 0x5636
 )
 
 // Sentinel errors

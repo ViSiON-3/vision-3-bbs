@@ -46,7 +46,7 @@ func (mm *MessageManager) isV3NetArea(area *MessageArea) bool {
 // addMessage is the shared implementation behind AddMessage, AddMessageWithDate,
 // AddPrivateMessage, and AddReply.
 func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyToMsgID string,
-	replyToNum int, dateTime time.Time, private bool, kludges []string, senderHandle, mailGroup string) (int, error) {
+	replyToNum int, dateTime time.Time, private bool, kludges []string, senderHandle, mailGroup string, ids accountIDs) (int, error) {
 	// Every local post and V3Net import comes through here. A subject typed at a
 	// prompt can hold U+009B, and one in a QWK reply packet or a script any
 	// control character.
@@ -77,6 +77,12 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 	}
 	if private && mailGroup != "" {
 		msg.MailGroup = mailGroup
+	}
+	if ids.sender > 0 {
+		msg.SenderID = ids.sender
+	}
+	if private && ids.recipient > 0 {
+		msg.RecipientID = ids.recipient
 	}
 
 	if private {
@@ -149,34 +155,34 @@ func (mm *MessageManager) addMessage(areaID int, from, to, subject, body, replyT
 // into the username and destination address.
 // Returns the 1-based message number assigned.
 func (mm *MessageManager) AddMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), false, nil, "", "")
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), false, nil, "", "", accountIDs{})
 }
 
 // AddMessageWithDate is like AddMessage but uses the provided timestamp instead
 // of time.Now(). Used by V3Net to preserve the original authored date.
 func (mm *MessageManager) AddMessageWithDate(areaID int, from, to, subject, body, replyToMsgID string, dateTime time.Time) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, dateTime, false, nil, "", "")
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, dateTime, false, nil, "", "", accountIDs{})
 }
 
 // AddPrivateMessage creates and writes a new private (MSG_PRIVATE) message.
 // For netmail areas, "user@zone:net/node" in the To field is automatically split
 // into the username and destination address. Returns the 1-based message number.
 func (mm *MessageManager) AddPrivateMessage(areaID int, from, to, subject, body, replyToMsgID string) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), true, nil, "", "")
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, 0, time.Now(), true, nil, "", "", accountIDs{})
 }
 
 // AddReply creates and writes a reply, recording the parent's message number
 // (replyToNum) as the JAM ReplyTo so local areas thread, and the parent's FTN
 // MSGID (replyToMsgID, may be "") as ReplyID so echomail links via jam.Link().
 func (mm *MessageManager) AddReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), false, nil, "", "")
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), false, nil, "", "", accountIDs{})
 }
 
 // AddPrivateReply is AddReply for private mail: it records the parent pointer
 // while preserving the MSG_PRIVATE flag, so a reply to a private message stays
 // private (and therefore visible to its recipient).
 func (mm *MessageManager) AddPrivateReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error) {
-	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), true, nil, "", "")
+	return mm.addMessage(areaID, from, to, subject, body, replyToMsgID, replyToNum, time.Now(), true, nil, "", "", accountIDs{})
 }
 
 // PostOptions holds the optional parts of a message written with Post.
@@ -205,7 +211,15 @@ type PostOptions struct {
 	// a letter sent to a user group: the group's name and the id all its
 	// copies share (see DisplayMessage.MailGroup). Ignored unless Private.
 	MailGroup, MailGroupID string
+	// SenderID is the posting local account's ID, and RecipientID the
+	// recipient's for private mail (ignored otherwise); 0 for none. They are
+	// stored with the message (#1048) so it stays with those accounts
+	// through a rename (see DisplayMessage.VisibleTo).
+	SenderID, RecipientID int
 }
+
+// accountIDs is addMessage's SenderID and RecipientID.
+type accountIDs struct{ sender, recipient int }
 
 // Post writes a message to the area like AddMessage, with the options that
 // method has no parameters for. It is what out-of-BBS tools such as
@@ -222,5 +236,5 @@ func (mm *MessageManager) Post(areaID int, from, to, subject, body string, opts 
 	if name, id := strings.TrimSpace(opts.MailGroup), strings.TrimSpace(opts.MailGroupID); name != "" && id != "" {
 		group = name + " " + id
 	}
-	return mm.addMessage(areaID, from, to, subject, body, opts.ReplyToMsgID, opts.ReplyToNum, date, opts.Private, opts.Kludges, opts.SenderHandle, group)
+	return mm.addMessage(areaID, from, to, subject, body, opts.ReplyToMsgID, opts.ReplyToNum, date, opts.Private, opts.Kludges, opts.SenderHandle, group, accountIDs{opts.SenderID, opts.RecipientID})
 }

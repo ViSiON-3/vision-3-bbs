@@ -2,6 +2,7 @@ package jam
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -158,6 +159,12 @@ func (b *Base) writeMessageExt(msg *Message, msgType MessageType, originText str
 		}
 		if local && msg.MailGroup != "" {
 			hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldV3MailGroup, msg.MailGroup))
+		}
+		if local && msg.SenderID > 0 {
+			hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldV3SenderID, strconv.Itoa(msg.SenderID)))
+		}
+		if local && msg.RecipientID > 0 {
+			hdr.Subfields = append(hdr.Subfields, CreateSubfield(SfldV3RecipientID, strconv.Itoa(msg.RecipientID)))
 		}
 
 		// Calculate total subfield length

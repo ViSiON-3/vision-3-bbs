@@ -7,7 +7,7 @@ import (
 )
 
 func TestOwnPrivateMailFilter(t *testing.T) {
-	filter := ownPrivateMailFilter("Alice")
+	filter := ownPrivateMailFilter("Alice", 0)
 	cases := []struct {
 		name string
 		msg  *message.DisplayMessage

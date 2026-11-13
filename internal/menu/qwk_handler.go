@@ -83,6 +83,7 @@ func runQWKDownload(c *cmdCtx, args string) (*user.User, string, error) {
 	// not move the pointers.
 	res, err := svc.BuildPacket(qwkservice.ExportOptions{
 		Handle:     currentUser.Handle,
+		UserID:     currentUser.ID,
 		TaggedTags: currentUser.TaggedMessageAreaTags,
 		TwitList:   twitMatcher(e, c.userManager, currentUser),
 	})
@@ -266,6 +267,7 @@ func runQWKUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	importRes, err := svc.ImportREP(repData, qwkservice.ImportOptions{
 		Posted:    alerts.posted,
 		Handle:    currentUser.Handle,
+		UserID:    currentUser.ID,
 		Signature: currentUser.OfflineSignature(),
 		Authorize: func(area *message.MessageArea) bool {
 			return area.ACSWrite == "" || checkACS(area.ACSWrite, currentUser, s, terminal, sessionStartTime)
