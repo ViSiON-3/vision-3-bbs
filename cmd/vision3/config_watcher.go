@@ -178,6 +178,12 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 	// a removal, between startup's read and the seed would otherwise never
 	// be seen, and a role the sysop removed in that gap would stay in force.
 	loadRoles(rootConfigPath)
+	// A sponsor binding that failed at startup is retried like a failed
+	// reload: run it again now, and if it still fails, queue the message
+	// areas so each idle poll tries again without the file having to change.
+	if cw.menuExecutor != nil && bindSponsors(userMgr, cw.menuExecutor.MessageMgr) != nil {
+		cw.pending["message_areas.json"] = true
+	}
 
 	go cw.pollLoop()
 
