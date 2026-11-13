@@ -149,14 +149,17 @@ func tagSet(tags []string) (map[string]bool, []string) {
 
 // file is configs/roles.json.
 type file struct {
-	Roles []Role `json:"roles"`
+	Roles  []Role  `json:"roles"`
+	Groups []Group `json:"groups,omitempty"`
 }
 
 // Diagnostic is one problem in configs/roles.json. None stops the file
 // loading: the role or permission it names is left out, so a mistake can
 // only ever grant less.
 type Diagnostic struct {
-	// Index and Role are the role's position in the file (1-based) and its
+	// Kind is "group" for an entry in groups, "" for one in roles.
+	Kind string
+	// Index and Role are the entry's position in its list (1-based) and its
 	// name as written.
 	Index int
 	Role  string
@@ -165,9 +168,13 @@ type Diagnostic struct {
 }
 
 // String is the diagnostic as the log and doctor print it:
-// `role 2 ("Validator"): ...`.
+// `role 2 ("Validator"): ...` or `group 1 ("ops"): ...`.
 func (d Diagnostic) String() string {
-	return fmt.Sprintf("role %d (%q): %s", d.Index, d.Role, d.Message)
+	kind := d.Kind
+	if kind == "" {
+		kind = "role"
+	}
+	return fmt.Sprintf("%s %d (%q): %s", kind, d.Index, d.Role, d.Message)
 }
 
 // Roles is the set of roles a board defines. The zero value and nil are
@@ -175,6 +182,9 @@ func (d Diagnostic) String() string {
 type Roles struct {
 	list   []Role // as loaded, names normalized, invalid entries left out
 	byName map[string]map[Permission][]scope
+	// groups are the user groups, as loaded, names normalized.
+	groups  []Group
+	inGroup map[string]bool
 }
 
 // Len is the number of roles defined.
@@ -299,6 +309,7 @@ func Parse(data []byte) (*Roles, []Diagnostic, error) {
 		r.byName[name] = grants
 		r.list = append(r.list, Role{Name: name, Description: strings.TrimSpace(role.Description), Permissions: kept})
 	}
+	diags = append(diags, r.parseGroups(f.Groups)...)
 	return r, diags, nil
 }
 
@@ -341,20 +352,23 @@ func NormalizeRoleName(name string) string { return strings.ToLower(strings.Trim
 // be used: a letter, then letters, digits, _ and -, up to 24 in all, not
 // ending in -. The same
 // characters are what the ACS term ROLE:name reads.
-func CheckRoleName(name string) error {
+func CheckRoleName(name string) error { return checkName("role", name) }
+
+// checkName is CheckRoleName for a role or a group (kind).
+func checkName(kind, name string) error {
 	if name == "" {
-		return errors.New("a role needs a name")
+		return errors.New("a " + kind + " needs a name")
 	}
 	if len(name) > maxRoleName {
-		return fmt.Errorf("role name %q is longer than %d characters", name, maxRoleName)
+		return fmt.Errorf("%s name %q is longer than %d characters", kind, name, maxRoleName)
 	}
 	for i, c := range name {
 		letter := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 		switch {
 		case i == 0 && !letter:
-			return fmt.Errorf("role name %q must start with a letter", name)
+			return fmt.Errorf("%s name %q must start with a letter", kind, name)
 		case !letter && (c < '0' || c > '9') && c != '_' && c != '-':
-			return fmt.Errorf("role name %q has %q in it; use letters, digits, _ and -", name, c)
+			return fmt.Errorf("%s name %q has %q in it; use letters, digits, _ and -", kind, name, c)
 		}
 	}
 	// ROLE:name- can't be read: a '-' joins an ACS term only when a term
@@ -386,17 +400,23 @@ func NormalizeRoles(names []string) []string {
 // sysop can't assign a role that would grant nothing without noticing. A
 // blank list is no roles.
 func ParseRoleList(s string, roles *Roles) ([]string, error) {
+	return parseNameList("role", s, roles.Defined, roles.Names())
+}
+
+// parseNameList is ParseRoleList for roles or groups (kind), checked against
+// defined, whose names are all.
+func parseNameList(kind, s string, defined func(string) bool, all []string) ([]string, error) {
 	fields := strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' })
 	names := NormalizeRoles(fields)
 	for _, n := range names {
-		if err := CheckRoleName(n); err != nil {
+		if err := checkName(kind, n); err != nil {
 			return nil, err
 		}
-		if !roles.Defined(n) {
-			if roles.Len() == 0 {
-				return nil, fmt.Errorf("no role named %s: configs/roles.json defines no roles", n)
+		if !defined(n) {
+			if len(all) == 0 {
+				return nil, fmt.Errorf("no %s named %s: configs/roles.json defines no %ss", kind, n, kind)
 			}
-			return nil, fmt.Errorf("no role named %s in configs/roles.json (defined: %s)", n, strings.Join(roles.Names(), ", "))
+			return nil, fmt.Errorf("no %s named %s in configs/roles.json (defined: %s)", kind, n, strings.Join(all, ", "))
 		}
 	}
 	return names, nil

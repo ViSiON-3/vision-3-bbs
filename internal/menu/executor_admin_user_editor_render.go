@@ -206,6 +206,13 @@ func (st *userEditorState) renderDetails(message string) error {
 	if rolesValue == "" {
 		rolesValue = "none"
 	}
+	groupsValue := callerText(adminTruncate(perm.FormatRoleList(sel.Groups), 24))
+	if val, ok := st.pendingChanges["groups"]; ok {
+		groupsValue = fmt.Sprintf("|14*|03%s|07", callerText(adminTruncate(val.(string), 23)))
+	}
+	if groupsValue == "" {
+		groupsValue = "none"
+	}
 
 	lines := []string{
 		// Editable fields (A-G) in LEFT column, read-only stats in RIGHT column
@@ -229,10 +236,10 @@ func (st *userEditorState) renderDetails(message string) error {
 			"|08[|14G|08]|11 Approve|08: |03" + getBoolFieldValue("validated", sel.Validated) + "|07",
 		}
 	}
-	// The ACS tester's key, under the fields when the terminal has a row
-	// to spare above the status row.
+	// Groups and the ACS tester's key, under the fields when the terminal
+	// has a row to spare above the status row (it does from 80x24 up).
 	if !st.cfg.validateOnly && st.layout.detailStartRow+len(lines) < st.layout.statusRow {
-		lines = append(lines, "|08[|14T|08]|11 ACS Test|08: |03test an expression for this user|07")
+		lines = append(lines, lineTwoCol("|08[|14U|08]|11 Groups", groupsValue, "|08[|14T|08]|11 ACS Test", "test this user"))
 	}
 	for i, line := range lines {
 		if err := st.writeAt(st.layout.detailStartRow+i, 1, line); err != nil {

@@ -70,9 +70,10 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 		ID          int      `json:"id"`
 		Handle      string   `json:"handle"`
 		Roles       []string `json:"roles"`
+		Groups      []string `json:"groups"`
 		DeletedUser bool     `json:"deletedUser"`
 	}
-	members := 0
+	members, grouped := 0, 0
 	// No users.json yet is a new board; one that can't be read or decoded
 	// means the members weren't checked, which the summary must not hide.
 	usersChecked := true
@@ -83,7 +84,7 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 	}
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		usersChecked = false
-		add("admin roles", doctorWarn, "data/users/users.json can't be read, so users' roles weren't checked: "+err.Error(), "")
+		add("admin roles", doctorWarn, "data/users/users.json can't be read, so users' roles and groups weren't checked: "+err.Error(), "")
 	}
 	if usersChecked {
 		for _, u := range users {
@@ -93,15 +94,27 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 			if len(perm.NormalizeRoles(u.Roles)) > 0 {
 				members++
 			}
+			if len(perm.NormalizeRoles(u.Groups)) > 0 {
+				grouped++
+			}
 			if undefined := perm.Undefined(u.Roles, roles); len(undefined) > 0 {
 				add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has role %s, which configs/roles.json doesn't define, so it grants nothing",
 					u.Handle, u.ID, strings.Join(undefined, ", ")),
 					"Define the role in configs/roles.json, or take it off the user in ./ue or the admin user editor.")
 			}
+			if undefined := perm.UndefinedGroups(u.Groups, roles); len(undefined) > 0 {
+				add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) is in group %s, which configs/roles.json doesn't define, so GROUP: never matches it",
+					u.Handle, u.ID, strings.Join(undefined, ", ")),
+					"Define the group in configs/roles.json, or take it off the user in ./ue or the admin user editor.")
+			}
 		}
 	}
 	if len(diags) == 0 && len(unknownTags) == 0 && usersChecked {
-		add("admin roles", doctorOK, fmt.Sprintf("%d role(s) defined, %d user(s) with a role", roles.Len(), members), "")
+		msg := fmt.Sprintf("%d role(s) defined, %d user(s) with a role", roles.Len(), members)
+		if n := len(roles.GroupNames()); n > 0 || grouped > 0 {
+			msg += fmt.Sprintf("; %d group(s) defined, %d user(s) in a group", n, grouped)
+		}
+		add("admin roles", doctorOK, msg, "")
 	}
 }
 

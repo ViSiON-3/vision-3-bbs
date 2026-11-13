@@ -150,11 +150,13 @@ The lower half of the screen shows the following for the highlighted user:
 | `G` | Validated (toggle) | Deleted status |
 | `N` | Network chat bar | |
 | `R` | [Admin roles](users/admin-roles.md) | |
+| `U` | [User groups](users/admin-roles.md#groups) | |
 
-### R — Roles
+### R — Roles, U — Groups
 
 Sets the user's [admin roles](users/admin-roles.md): type the role names
-separated by commas or spaces, or clear the line to remove them all. Each name
+separated by commas or spaces, or clear the line to remove them all. `U`
+does the same for the user's [groups](users/admin-roles.md#groups). Each name
 is checked against `configs/roles.json` as you press Enter, and one the file
 doesn't define is refused (`no role named ... in configs/roles.json`). Saved
 with `S` like any other field, and logged in the admin activity log.

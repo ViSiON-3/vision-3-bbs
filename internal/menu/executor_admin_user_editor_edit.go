@@ -122,6 +122,35 @@ func (st *userEditorState) stageFieldEdit(fieldKey, label, orig string, maxLen i
 	}
 }
 
+// stageNameList stages an edit of a list of role or group names (field,
+// shown as label), checked as typed against configs/roles.json with parse,
+// so a name that would never match isn't saved unnoticed.
+func (st *userEditorState) stageNameList(field, label string, stored []string, parse func(string, *perm.Roles) ([]string, error)) {
+	orig := perm.FormatRoleList(stored)
+	cur := orig
+	if staged, ok := st.pendingChanges[field].(string); ok {
+		cur = staged
+	}
+	newVal, editErr := st.readFieldInput(label, cur, 60, false)
+	if editErr != nil {
+		if editErr.Error() != "cancelled" {
+			st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
+		}
+		return
+	}
+	names, parseErr := parse(newVal, perm.Current())
+	switch formatted := perm.FormatRoleList(names); {
+	case parseErr != nil:
+		st.statusMessage = "|01" + parseErr.Error() + "|07"
+	case formatted != orig:
+		st.pendingChanges[field] = formatted
+		st.statusMessage = "|10Field marked for update.|07"
+	default:
+		delete(st.pendingChanges, field)
+		st.statusMessage = "|08No change.|07"
+	}
+}
+
 // postSaveReload reloads the user list after a successful save. For the
 // pending-validation queue it also handles the queue-emptied terminal case
 // (the "all users validated" screen and pause prompt) and clamps the
@@ -257,6 +286,13 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 		}
 		target.Roles = names
 	}
+	if val, ok := pendingChanges["groups"]; ok {
+		names, err := perm.ParseGroupList(val.(string), perm.Current())
+		if err != nil {
+			return "|01" + err.Error() + "|07", false
+		}
+		target.Groups = names
+	}
 	if val, ok := pendingChanges["validated"]; ok {
 		target.Validated = val.(bool)
 		// When validating, upgrade to regular user level if below it.
@@ -323,6 +359,8 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 			oldValue = currentUserData.Flags
 		case "roles":
 			oldValue = perm.FormatRoleList(currentUserData.Roles)
+		case "groups":
+			oldValue = perm.FormatRoleList(currentUserData.Groups)
 		case "level":
 			oldValue = fmt.Sprintf("%d", currentUserData.AccessLevel)
 		case "validated":

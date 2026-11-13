@@ -307,3 +307,26 @@ func TestUserEditor_RefusedSaveThenAbortWritesNothingDiscarded(t *testing.T) {
 		t.Error("a level change was audited")
 	}
 }
+
+// TestUserEditor_AssignsGroups pins the sysop's [U] key, as [R] for roles.
+func TestUserEditor_AssignsGroups(t *testing.T) {
+	useRoles(t, `{"roles": [], "groups": [{"name": "fsxnet-ops"}]}`)
+	env := newMenuEnv(t)
+	r := env.runCmd("ADMINLISTUSERS", env.sysop, "", "j"+"u"+"opz\r"+"u"+"FSXNET-OPS\r"+"s"+"q")
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	if !r.has("no group named opz in configs/roles.json (defined: fsxnet-ops)", "[U] Groups", "Changes saved for Caller.") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	u, _ := env.diskUser(2)
+	if strings.Join(u.Groups, ",") != "fsxnet-ops" || len(u.Roles) != 0 {
+		t.Fatalf("saved record: groups %v, roles %v", u.Groups, u.Roles)
+	}
+	if l, ok := modLogField(modAdminLog(t, env), 2, "groups"); !ok || l.NewValue != "fsxnet-ops" {
+		t.Errorf("groups audit entry = %+v (found %v)", l, ok)
+	}
+	if !checkACS("GROUP:fsxnet-ops", u, nil, nil, time.Now()) {
+		t.Error("GROUP: fails for the saved record")
+	}
+}

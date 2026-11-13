@@ -197,7 +197,7 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 		boardLoc = config.LoadTimezone(cfg.Timezone)
 	}
 
-	// Admin roles, for the Roles field and the ACS tester. A file that can't
+	// Admin roles and groups, for their fields and the ACS tester. A file that can't
 	// be read defines none, as the BBS treats it, and the field says why.
 	roles, _, rolesErr := perm.Load(configDir)
 
@@ -227,6 +227,18 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 					return err
 				}
 				u.Roles = names
+				return nil
+			}
+		case groupsField:
+			fields[i].Set = func(u *user.User, val string) error {
+				if rolesErr != nil {
+					return fmt.Errorf("configs/roles.json can't be read: %v", rolesErr)
+				}
+				names, err := perm.ParseGroupList(val, roles)
+				if err != nil {
+					return err
+				}
+				u.Groups = names
 				return nil
 			}
 		case "Auto Purge":

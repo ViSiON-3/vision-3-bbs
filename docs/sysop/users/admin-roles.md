@@ -8,7 +8,7 @@ validate new users would give them every other admin function too.
 A **role** hands out one admin job without raising anyone's level. You define
 roles in `configs/roles.json`, each a name and the **permissions** it grants,
 and give them to users in [`./ue`](users/user-editor.md) or the
-[Admin Menu's user editor](users/admin-menu.md#r--roles). The person keeps their
+[Admin Menu's user editor](users/admin-menu.md#r--roles-u--groups). The person keeps their
 level, their time limit and their door privileges; the role adds that one
 job and nothing else.
 
@@ -104,8 +104,32 @@ only ever grant less:
   Deleting the file removes every role.
 
 Each problem is logged when the file loads, and `vision3 doctor` lists them
-under **Access control**, with any user whose record names a role the file
-doesn't define.
+under **Access control**, with any user whose record names a role or group
+the file doesn't define.
+
+## Groups
+
+A **group** is a named list of people, for ACS strings: `GROUP:fsxnet-ops`
+on a menu command, a message area's `acs_read`, a door. Being in a group
+grants no admin permission; it only identifies who is in it. Groups go in the
+same file, under `groups`:
+
+```json
+{
+    "roles": [],
+    "groups": [
+        {"name": "fsxnet-ops", "description": "Runs the fsxNet echoes"},
+        {"name": "beta", "description": "Tries new doors first"}
+    ]
+}
+```
+
+Group names follow the same rules as role names. A group and a role may
+share a name; they are separate. A group with a bad or repeated name is
+ignored, and doctor reports it.
+
+Put someone in a group in `./ue` (the **Groups** field) or the Admin Menu's
+user editor (`U`), the same way as roles.
 
 ## Giving someone a role
 
@@ -136,6 +160,7 @@ follow roles:
   a co-SysOp, the area's sponsor, or a role that grants it there.
 - `ROLE:validator` passes for a member of the role. A SysOp is not a member
   of a role unless it is assigned to them.
+- `GROUP:fsxnet-ops` passes for a member of the group, in the same way.
 
 The shipped Admin Menu stays SysOp-only. To give a validator a way into the
 queue, add a command to a menu they can reach with
@@ -156,10 +181,10 @@ queue to anyone with `users.validate`, provided its `sec_level` lets them
 reach it. The shipped `login.json` sets 255; lower it, or remove it, to
 include your validators.
 
-A string that names a role `roles.json` doesn't define fails for every
-caller, SysOps included, and `!` can't make it pass. So a typo in
-`!ROLE:validatr` locks everyone out rather than letting everyone in. Doctor
-reports such strings as failures.
+A string that names a role or group `roles.json` doesn't define fails for
+every caller, SysOps included, and `!` can't make it pass. So a typo in
+`!ROLE:validatr` or `!GROUP:fsxnet-op` locks everyone out rather than
+letting everyone in. Doctor reports such strings as failures.
 
 ## The audit log
 

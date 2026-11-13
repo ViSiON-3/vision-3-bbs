@@ -177,25 +177,11 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 	case 'r', 'R':
 		// Admin roles (#610), checked against configs/roles.json as typed so
 		// a role that would grant nothing isn't assigned unnoticed.
-		sel := st.users[st.selectedIndex]
-		orig := perm.FormatRoleList(sel.Roles)
-		cur := orig
-		if staged, ok := st.pendingChanges["roles"].(string); ok {
-			cur = staged
-		}
-		if newVal, editErr := st.readFieldInput("Roles", cur, 60, false); editErr == nil {
-			if names, parseErr := perm.ParseRoleList(newVal, perm.Current()); parseErr != nil {
-				st.statusMessage = "|01" + parseErr.Error() + "|07"
-			} else if formatted := perm.FormatRoleList(names); formatted != orig {
-				st.pendingChanges["roles"] = formatted
-				st.statusMessage = "|10Field marked for update.|07"
-			} else {
-				delete(st.pendingChanges, "roles")
-				st.statusMessage = "|08No change.|07"
-			}
-		} else if editErr.Error() != "cancelled" {
-			st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
-		}
+		st.stageNameList("roles", "Roles", st.users[st.selectedIndex].Roles, perm.ParseRoleList)
+		refresh = true
+	case 'u', 'U':
+		// User groups (#1036), checked the same way.
+		st.stageNameList("groups", "Groups", st.users[st.selectedIndex].Groups, perm.ParseGroupList)
 		refresh = true
 	case 'p', 'P':
 		// Change password
