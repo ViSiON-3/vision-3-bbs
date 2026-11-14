@@ -115,6 +115,7 @@ func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use loc
 			termWidth, termHeight,
 			nodeNumber, sessionStartTime, outputMode,
 			doorConfig, doorName)
+		ctx.User.CreatedAt = currentUser.CreatedAt
 		ctx.UserManager = userManager
 		ctx.CurrentUser = currentUser
 

@@ -69,7 +69,7 @@ Connect, open the doors menu and press **M**. If the door starts but does not kn
 
 **Cleanup after exit.** Set **Cleanup Command** to a program and its arguments, separated like **Commands**, to run after the door exits, for example to process a score file. Placeholders are replaced in the arguments; the program path is used as written.
 
-**Time and idle limits.** The caller's time limit and the session idle timeout apply inside the door, and the BBS hangs the door up (`SIGHUP`, then `SIGKILL` five seconds later) when either runs out or the caller drops. CoSysOps and above are exempt from both. A door that reads `DROPFILE.INI` is told the idle limit as `IDLE_LIMIT`, so it can warn the caller first.
+**Time and idle limits.** The caller's time limit and the session idle timeout apply inside the door, and the BBS hangs the door up (`SIGHUP`, then `SIGKILL` five seconds later) when either runs out or the caller drops. CoSysOps and above are exempt from both. A door that reads `DOORDROP.INI` is told the idle limit as `IDLE_LIMIT`, so it can warn the caller first.
 
 ## See also
 

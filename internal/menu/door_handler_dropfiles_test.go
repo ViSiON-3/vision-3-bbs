@@ -29,7 +29,7 @@ func TestDropfileName(t *testing.T) {
 		{"door.sys lower", "DOOR.SYS", "lower", "door.sys"},
 		{"chain.txt lower", "CHAIN.TXT", "lower", "chain.txt"},
 		{"dorinfo lower", "DORINFO1.DEF", "lower", "dorinfo1.def"},
-		{"dropfile.ini lower", "DROPFILE.INI", "lower", "dropfile.ini"},
+		{"doordrop.ini lower", "DOORDROP.INI", "lower", "doordrop.ini"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -62,17 +62,17 @@ func TestGenerateDoor32SysCase(t *testing.T) {
 	}
 }
 
-// readDropfileIni generates a DROPFILE.INI for ctx and returns its raw bytes
+// readDoorDropIni generates a DOORDROP.INI for ctx and returns its raw bytes
 // and its keys.
-func readDropfileIni(t *testing.T, ctx *DoorCtx, tempDir string) (string, map[string]string) {
+func readDoorDropIni(t *testing.T, ctx *DoorCtx, tempDir string) (string, map[string]string) {
 	t.Helper()
 	dir := t.TempDir()
-	if err := generateDropfileIni(ctx, dir, "DROPFILE.INI", tempDir); err != nil {
-		t.Fatalf("generateDropfileIni: %v", err)
+	if err := generateDoorDropIni(ctx, dir, "DOORDROP.INI", tempDir); err != nil {
+		t.Fatalf("generateDoorDropIni: %v", err)
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "DROPFILE.INI"))
+	data, err := os.ReadFile(filepath.Join(dir, "DOORDROP.INI"))
 	if err != nil {
-		t.Fatalf("read DROPFILE.INI: %v", err)
+		t.Fatalf("read DOORDROP.INI: %v", err)
 	}
 	raw := string(data)
 	keys := map[string]string{}
@@ -87,7 +87,7 @@ func readDropfileIni(t *testing.T, ctx *DoorCtx, tempDir string) (string, map[st
 	return raw, keys
 }
 
-func TestGenerateDropfileIni(t *testing.T) {
+func TestGenerateDoorDropIni(t *testing.T) {
 	ctx := newTestDoorCtx()
 	ctx.Executor = newExecutorWithServerConfig(config.ServerConfig{
 		BoardName: "Test BBS", SysOpName: "Morpheus", SysOpLevel: 255, CoSysOpLevel: 250, MaxNodes: 4, QWKID: "testbbs",
@@ -97,7 +97,7 @@ func TestGenerateDropfileIni(t *testing.T) {
 	ctx.OutputMode = ansi.OutputModeCP437
 	ctx.Config.Code, ctx.Config.Name = "LORD", "Legend of the Red Dragon"
 
-	raw, keys := readDropfileIni(t, ctx, "/tmp/node2")
+	raw, keys := readDoorDropIni(t, ctx, "/tmp/node2")
 
 	if !strings.HasSuffix(raw, "\r\n") || strings.Contains(strings.ReplaceAll(raw, "\r\n", ""), "\n") {
 		t.Errorf("every line must end with CRLF")
@@ -115,8 +115,8 @@ func TestGenerateDropfileIni(t *testing.T) {
 		t.Errorf("sections = %s, want %s", got, want)
 	}
 	for _, line := range strings.Split(raw, "\r\n") {
-		if len(line) > dropfileIniMaxLine {
-			t.Errorf("line exceeds %d bytes: %q", dropfileIniMaxLine, line)
+		if len(line) > doorDropIniMaxLine {
+			t.Errorf("line exceeds %d bytes: %q", doorDropIniMaxLine, line)
 		}
 	}
 
@@ -131,6 +131,7 @@ func TestGenerateDropfileIni(t *testing.T) {
 		"COMM_CHARSET":    "CP437",
 		"USER_ALIAS":      "Neo",
 		"USER_NUMBER":     "1",
+		"USER_KEY":        "1",
 		"USER_ROLE":       "user",
 		"USER_REALNAME":   "Thomas Anderson",
 		"TERM_COLS":       "132",
@@ -166,7 +167,7 @@ func TestGenerateDropfileIni(t *testing.T) {
 	}
 }
 
-func TestGenerateDropfileIniSanitizesText(t *testing.T) {
+func TestGenerateDoorDropIniSanitizesText(t *testing.T) {
 	ctx := newTestDoorCtx()
 	ctx.Executor = newExecutorWithServerConfig(config.ServerConfig{BoardName: "  ", SysOpLevel: 255, CoSysOpLevel: 250})
 	ctx.User.Handle = " J\u00f6rg\tthe\x07Red\r\nCOMM_TYPE=local "
@@ -178,7 +179,7 @@ func TestGenerateDropfileIniSanitizesText(t *testing.T) {
 	ctx.User.GroupLocation = "\u00a0"
 	ctx.User.AccessLevel = 255
 
-	_, keys := readDropfileIni(t, ctx, "")
+	_, keys := readDoorDropIni(t, ctx, "")
 
 	if got, want := keys["USER_ALIAS"], "J\x94rg?the?Red??COMM_TYPE=local"; got != want {
 		t.Errorf("USER_ALIAS = %q, want %q", got, want)
@@ -189,8 +190,8 @@ func TestGenerateDropfileIniSanitizesText(t *testing.T) {
 	if got := keys["SYS_NAME"]; got != "?" {
 		t.Errorf("SYS_NAME = %q, want ? for an empty required key", got)
 	}
-	if got := len("USER_REALNAME=" + keys["USER_REALNAME"]); got != dropfileIniMaxLine {
-		t.Errorf("USER_REALNAME line is %d bytes, want %d", got, dropfileIniMaxLine)
+	if got := len("USER_REALNAME=" + keys["USER_REALNAME"]); got != doorDropIniMaxLine {
+		t.Errorf("USER_REALNAME line is %d bytes, want %d", got, doorDropIniMaxLine)
 	}
 	if _, ok := keys["USER_LOCATION"]; ok {
 		t.Errorf("USER_LOCATION should be left out when empty after sanitizing")
@@ -207,35 +208,35 @@ func TestGenerateDropfileIniSanitizesText(t *testing.T) {
 }
 
 // IDLE_LIMIT is the idle timeout executeDoor enforces, in seconds.
-func TestGenerateDropfileIniIdleLimit(t *testing.T) {
+func TestGenerateDoorDropIniIdleLimit(t *testing.T) {
 	ctx := newTestDoorCtx()
 	ctx.IdleTimeout = 5 * time.Minute
-	if _, keys := readDropfileIni(t, ctx, ""); keys["IDLE_LIMIT"] != "300" {
+	if _, keys := readDoorDropIni(t, ctx, ""); keys["IDLE_LIMIT"] != "300" {
 		t.Errorf("IDLE_LIMIT = %q, want 300", keys["IDLE_LIMIT"])
 	}
 }
 
-// dropfileIniSession is a session that reports a terminal type and a remote
+// doorDropIniSession is a session that reports a terminal type and a remote
 // address, as the SSH and telnet adapters do.
-type dropfileIniSession struct {
+type doorDropIniSession struct {
 	ssh.Session
 	term string
 }
 
-func (s dropfileIniSession) Pty() (ssh.Pty, <-chan ssh.Window, bool) {
+func (s doorDropIniSession) Pty() (ssh.Pty, <-chan ssh.Window, bool) {
 	return ssh.Pty{Term: s.term}, nil, s.term != ""
 }
 
-func (s dropfileIniSession) RemoteAddr() net.Addr {
+func (s doorDropIniSession) RemoteAddr() net.Addr {
 	return &net.TCPAddr{IP: net.IPv4(203, 0, 113, 7), Port: 51234}
 }
 
-func TestGenerateDropfileIniSessionKeys(t *testing.T) {
+func TestGenerateDoorDropIniSessionKeys(t *testing.T) {
 	ctx := newTestDoorCtx()
 	ctx.User.GroupLocation = "Zion"
-	ctx.Session = dropfileIniSession{term: "xterm-256color"}
+	ctx.Session = doorDropIniSession{term: "xterm-256color"}
 
-	_, keys := readDropfileIni(t, ctx, "")
+	_, keys := readDoorDropIni(t, ctx, "")
 	want := map[string]string{
 		"TERM_TERMINFO": "xterm-256color",
 		"USER_IP":       "203.0.113.7",
@@ -252,21 +253,21 @@ func TestGenerateDropfileIniSessionKeys(t *testing.T) {
 	// A type that isn't a valid ascii value is left out, and so is one from
 	// a client that sent none.
 	for _, term := range []string{"vt 100", ""} {
-		ctx.Session = dropfileIniSession{term: term}
-		if _, keys := readDropfileIni(t, ctx, ""); keys["TERM_TERMINFO"] != "" {
+		ctx.Session = doorDropIniSession{term: term}
+		if _, keys := readDoorDropIni(t, ctx, ""); keys["TERM_TERMINFO"] != "" {
 			t.Errorf("terminal type %q: TERM_TERMINFO = %q, want it left out", term, keys["TERM_TERMINFO"])
 		}
 	}
 }
 
 // The sysop can keep a door from seeing the user's personal details.
-func TestGenerateDropfileIniHidePersonal(t *testing.T) {
+func TestGenerateDoorDropIniHidePersonal(t *testing.T) {
 	ctx := newTestDoorCtx()
 	ctx.User.GroupLocation = "Zion"
-	ctx.Session = dropfileIniSession{term: "ansi"}
+	ctx.Session = doorDropIniSession{term: "ansi"}
 	ctx.Config.DropfileHidePersonal = true
 
-	_, keys := readDropfileIni(t, ctx, "")
+	_, keys := readDoorDropIni(t, ctx, "")
 	for _, k := range []string{"USER_REALNAME", "USER_LOCATION", "USER_IP"} {
 		if v, ok := keys[k]; ok {
 			t.Errorf("%s = %q written although personal details are hidden", k, v)
@@ -277,8 +278,8 @@ func TestGenerateDropfileIniHidePersonal(t *testing.T) {
 	}
 }
 
-func TestDropfileIniPath(t *testing.T) {
-	long := "/" + strings.Repeat("d", dropfileIniMaxLine-len("TEMP_DIR=")-1)
+func TestDoorDropIniPath(t *testing.T) {
+	long := "/" + strings.Repeat("d", doorDropIniMaxLine-len("TEMP_DIR=")-1)
 	tests := []struct {
 		name, val, want string
 	}{
@@ -305,14 +306,16 @@ func TestDropfileIniPath(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := dropfileIniPath("TEMP_DIR", tt.val); got != tt.want {
-				t.Errorf("dropfileIniPath(%q) = %q, want %q", tt.val, got, tt.want)
+			// The POSIX rules, whatever this test runs on: Windows keeps
+			// only ASCII paths (see TestDoorDropIniPathPerOS).
+			if got := doorDropIniPathFor("linux", "TEMP_DIR", tt.val); got != tt.want {
+				t.Errorf("doorDropIniPathFor(linux, %q) = %q, want %q", tt.val, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestGenerateDropfileIniComm(t *testing.T) {
+func TestGenerateDoorDropIniComm(t *testing.T) {
 	tests := []struct {
 		name        string
 		cfg         config.DoorConfig
@@ -333,7 +336,7 @@ func TestGenerateDropfileIniComm(t *testing.T) {
 			ctx.Config = tt.cfg
 			ctx.OutputMode = tt.mode
 			ctx.User.ScreenWidth, ctx.User.ScreenHeight = 132, 50
-			_, keys := readDropfileIni(t, ctx, "")
+			_, keys := readDoorDropIni(t, ctx, "")
 			if keys["COMM_TYPE"] != tt.wantType {
 				t.Errorf("COMM_TYPE = %q, want %q", keys["COMM_TYPE"], tt.wantType)
 			}
@@ -358,8 +361,8 @@ func TestDoorUsesNodeDir(t *testing.T) {
 	}{
 		{"startup door.sys", config.DoorConfig{DropfileType: "DOOR.SYS"}, false},
 		{"node door.sys", config.DoorConfig{DropfileType: "DOOR.SYS", DropfileLocation: "Node"}, true},
-		{"startup ini multi-node", config.DoorConfig{DropfileType: "dropfile.ini", DropfileLocation: "startup"}, true},
-		{"startup ini single instance", config.DoorConfig{DropfileType: "DROPFILE.INI", SingleInstance: true}, false},
+		{"startup ini multi-node", config.DoorConfig{DropfileType: "doordrop.ini", DropfileLocation: "startup"}, true},
+		{"startup ini single instance", config.DoorConfig{DropfileType: "DOORDROP.INI", SingleInstance: true}, false},
 		{"no dropfile", config.DoorConfig{}, false},
 	}
 	for _, tt := range tests {
@@ -368,5 +371,52 @@ func TestDoorUsesNodeDir(t *testing.T) {
 				t.Errorf("doorUsesNodeDir = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// USER_KEY is required and must never be reused, so it joins the user number
+// to the account's creation time when there is one.
+func TestDoorDropIniUserKey(t *testing.T) {
+	created := time.Unix(1693526400, 0)
+	tests := []struct {
+		name string
+		user doorUserInfo
+		want string
+	}{
+		{"number and creation time", doorUserInfo{ID: 42, CreatedAt: created}, "42-1693526400"},
+		{"no creation time", doorUserInfo{ID: 42}, "42"},
+		{"creation time before the epoch", doorUserInfo{ID: 42, CreatedAt: time.Unix(-5, 0)}, "42"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := doorDropIniUserKey(tt.user); got != tt.want {
+				t.Errorf("doorDropIniUserKey = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	ctx := newTestDoorCtx()
+	ctx.User.CreatedAt = created
+	if _, keys := readDoorDropIni(t, ctx, ""); keys["USER_KEY"] != "1-1693526400" {
+		t.Errorf("USER_KEY = %q, want 1-1693526400", keys["USER_KEY"])
+	}
+}
+
+// A Windows door reads paths in the system ANSI code page, so only an ASCII
+// path is written there; elsewhere the file system's bytes go through.
+func TestDoorDropIniPathPerOS(t *testing.T) {
+	tests := []struct {
+		goos, val, want string
+	}{
+		{"linux", "/tmp/n\u00f6de1", "/tmp/n\u00f6de1"},
+		{"windows", "C:\\bbs\\n\u00f6de1", ""},
+		{"windows", `C:\bbs\node1`, `C:\bbs\node1`},
+		{"linux", "/tmp/node1 ", ""},
+		{"linux", "/tmp/no\x07de", ""},
+	}
+	for _, tt := range tests {
+		if got := doorDropIniPathFor(tt.goos, "TEMP_DIR", tt.val); got != tt.want {
+			t.Errorf("doorDropIniPathFor(%s, %q) = %q, want %q", tt.goos, tt.val, got, tt.want)
+		}
 	}
 }

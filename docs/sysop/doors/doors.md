@@ -48,7 +48,7 @@ A dropfile is a small text file the BBS writes just before the door starts. It t
 | `DOOR32.SYS` | Mystic / Synchronet | 11 | `DOOR32.SYS` | 32-bit and modern doors, Synchronet-style doors |
 | `DORINFO1.DEF` | RBBS-PC / QuickBBS | 13 | `DORINFO1.DEF` | Older RBBS, QuickBBS, and RemoteAccess doors |
 | `CHAIN.TXT` | WWIV | 30 | `CHAIN.TXT` | WWIV chain programs |
-| `DROPFILE.INI` | Synchronet (draft) | named keys | `DROPFILE.INI` | Doors written for the named-value format. See [DROPFILE.INI](#dropfileini) |
+| `DOORDROP.INI` | Synchronet (v1.0) | named keys | `DOORDROP.INI` | Doors written for the named-value format. See [DOORDROP.INI](#doordropini) |
 | `(none)` | — | — | nothing | Doors that only need environment variables or command-line placeholders |
 
 All five formats carry the same core session data: node number, the caller's handle and real name, their access level and user record number, the time they have left and the board's name. Fields the BBS does not track, such as phone numbers and passwords, are filled with safe placeholders, so doors that key their save data on the user record number, real name, or handle work as expected. Users with no time limit, and CoSysOps and above, are reported as having 540 minutes left. The exact contents of each format are in [Dropfile Formats](#dropfile-formats).
@@ -56,13 +56,13 @@ All five formats carry the same core session data: node number, the caller's han
 **How each door type handles dropfiles:**
 
 - **Native doors** (Linux, macOS, Windows) write only the selected format. With `(none)` no file is written and `{DROPFILE}` expands to an empty string. The file is deleted when the door exits.
-- **DOS doors** always write every format to the per-node directory (`C:\NODES\TEMPn\`). `Dropfile Type` decides which file the `{DROPFILE}` and `{DOSDROPFILE}` placeholders point at; it defaults to `DOOR.SYS`. Selecting `DROPFILE.INI` also sets `DROPFILE_INI` inside DOS. `Dropfile Location` and `Dropfile Case` do not apply to DOS doors and the editor does not show them.
+- **DOS doors** always write every format to the per-node directory (`C:\NODES\TEMPn\`). `Dropfile Type` decides which file the `{DROPFILE}` and `{DOSDROPFILE}` placeholders point at; it defaults to `DOOR.SYS`. Selecting `DOORDROP.INI` also sets `DOORDROP_INI` inside DOS. `Dropfile Location` and `Dropfile Case` do not apply to DOS doors and the editor does not show them.
 - **Synchronet JS and VPL script doors** do not use dropfiles. The script runtime gets the session data directly. See [Synchronet JS Doors](doors/synchronet-js-doors.md).
 - **RLogin and Telnet doors** do not use dropfiles. There is no local process to read one; over RLogin the user is identified to the door server through the handshake instead, and over Telnet by whatever **Send On Connect** types for them. See [Door Servers](doors/door-servers.md).
 
-**DROPFILE.INI** is the named-value format [drafted by Synchronet](https://github.com/SynchronetBBS/sbbs/blob/master/docs/dropfile_ini.md). Instead of giving a value its meaning by line number, it writes `KEY=value` lines under INI sections, so a door reads only the keys it needs. It also carries things the positional formats cannot, such as the caller's IP address, terminal size and encoding, and the BBS's idle timeout. The door finds the file through the `DROPFILE_INI` environment variable or the `{DROPFILE}` placeholder. Every key ViSiON/3 writes is listed under [DROPFILE.INI](#dropfileini) in the Technical Reference.
+**DOORDROP.INI** is the named-value format [specified by Synchronet](https://github.com/SynchronetBBS/sbbs/blob/master/docs/doordrop_ini.md). Instead of giving a value its meaning by line number, it writes `KEY=value` lines under INI sections, so a door reads only the keys it needs. It also carries things the positional formats cannot, such as the caller's IP address, terminal size and encoding, and the BBS's idle timeout. The door finds the file through the `DOORDROP_INI` environment variable or the `{DROPFILE}` placeholder. Every key ViSiON/3 writes is listed under [DOORDROP.INI](#doordropini) in the Technical Reference.
 
-**Personal details.** Some doors are closed source, or send what they read to other systems. Set **Hide Personal** (`dropfile_hide_personal`) on such a door to leave the user's real name, location and IP address out of its `DROPFILE.INI`. The other dropfile formats are not affected.
+**Personal details.** Some doors are closed source, or send what they read to other systems. Set **Hide Personal** (`dropfile_hide_personal`) on such a door to leave the user's real name, location and IP address out of its `DOORDROP.INI`. The other dropfile formats are not affected.
 
 **Filename case.** Native doors on case-sensitive filesystems sometimes look for `door32.sys` rather than `DOOR32.SYS`. Set **Dropfile Case** (`dropfile_case`) to `lower` for those doors. The default, `upper`, writes the conventional uppercase name.
 
@@ -93,7 +93,7 @@ The menu commands that launch doors take no flags of their own. `DOOR:CODE` runs
 
 ## Dropfile Location
 
-By default (**Dropfile Location** `startup`, or `dropfile_location` blank), the dropfile is written to the door's **Working Dir**. A door with no working directory is treated as if it had `node`, so nodes running it at once never share a dropfile. Set `node` to write it to a fresh per-node temporary directory (named like `vision3_node1_XXXXXX` under the system temp directory) instead. The directory is removed when the door exits. This is useful for multi-instance doors where multiple nodes may run simultaneously and need isolated dropfiles. A `DROPFILE.INI` door that is not **Single Instance** always uses a per-node directory, whatever this setting says.
+By default (**Dropfile Location** `startup`, or `dropfile_location` blank), the dropfile is written to the door's **Working Dir**. A door with no working directory is treated as if it had `node`, so nodes running it at once never share a dropfile. Set `node` to write it to a fresh per-node temporary directory (named like `vision3_node1_XXXXXX` under the system temp directory) instead. The directory is removed when the door exits. This is useful for multi-instance doors where multiple nodes may run simultaneously and need isolated dropfiles. A `DOORDROP.INI` door that is not **Single Instance** always uses a per-node directory, whatever this setting says.
 
 For DOS doors the setting does not exist: every dropfile format is always written to the per-node directory inside `drive_c` (at `C:\NODES\TEMPn\`, which is `doors/drive_c/nodes/tempn/` on the host). The config editor does not show **Dropfile Location** for a DOS door, and `DOORINFO` shows a DOS door's dropfile type with no location. Point the door game at that directory using the `{DOSNODEDIR}` or `{DOSDROPFILE}` placeholder on its command line, or in the game's own configuration. A `dropfile_location` left in an older DOS door's record is ignored.
 
@@ -221,7 +221,7 @@ A door reads the caller's connection directly, so the BBS watches it on the door
 
 The session **Idle Timeout** (`sessionIdleTimeoutMinutes` in `config.json`) applies inside doors as it does in the menus. When a caller sends nothing for that long, the BBS ends the door, shows the idle timeout message and logs the caller off. Every key the caller presses restarts the countdown, as does anything else their terminal sends, such as a reply to a door's terminal query. Output from the door doesn't count. CoSysOps and above are exempt here too.
 
-Many doors have their own inactivity timer. If a door's timer is shorter, it ends the session first, as it always has. A door that reads `DROPFILE.INI` can use `IDLE_LIMIT` to match the BBS's timer or to warn the user.
+Many doors have their own inactivity timer. If a door's timer is shorter, it ends the session first, as it always has. A door that reads `DOORDROP.INI` can use `IDLE_LIMIT` to match the BBS's timer or to warn the user.
 
 ### Time Limit
 
@@ -324,10 +324,10 @@ These fields apply to every door type unless the table says otherwise.
 | `type` | string | blank | `synchronet_js`, `v3_script`, `rlogin`, `telnet`, or blank for a native or DOS door (DOS is `is_dos`) |
 | `working_directory` | string | blank | Native: directory to run the command in, absolute or relative to the directory the BBS was started from (normally the BBS root). DOS: DOS path to `cd` into before running commands (e.g., `C:\DOORS\LORD`). Script doors: the game's directory |
 | `commands` | []string | none | Native: `[0]`=executable, `[1:]`=args. DOS: each entry is a batch command line. Not used by script or remote doors |
-| `dropfile_type` | string | blank (none) | `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, `DROPFILE.INI`, or blank for none. See [Supported Dropfile Types](#supported-dropfile-types). Native and DOS doors |
+| `dropfile_type` | string | blank (none) | `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, `DOORDROP.INI`, or blank for none. See [Supported Dropfile Types](#supported-dropfile-types). Native and DOS doors |
 | `dropfile_location` | string | `startup` | `startup` (working dir; per-node temp dir if there is no working dir) or `node` (per-node temp dir). Native doors only; ignored for DOS |
 | `dropfile_case` | string | `upper` | `upper` (`DOOR32.SYS`) or `lower` (`door32.sys`). Native doors only |
-| `dropfile_hide_personal` | bool | `false` | Leave the user's real name, location and IP address out of `DROPFILE.INI`. See [DROPFILE.INI](#dropfileini) |
+| `dropfile_hide_personal` | bool | `false` | Leave the user's real name, location and IP address out of `DOORDROP.INI`. See [DOORDROP.INI](#doordropini) |
 | `min_access_level` | int | `0` | Minimum user access level required (0 = no restriction) |
 | `acs` | string | blank | ACS string the caller must also pass (blank = no further restriction). One that doesn't read cleanly denies the door to everyone. See [Access Control](#access-control) |
 | `single_instance` | bool | `false` | Only allow one node to run this door at a time |
@@ -446,7 +446,7 @@ Examples:
 
 ### Environment Variables
 
-The following environment variables are automatically set for native and Windows door processes. DOS doors receive only `DOSEMU_QUIET`, plus `DROPFILE_INI` inside DOS when **Dropfile Type** is `DROPFILE.INI`:
+The following environment variables are automatically set for native and Windows door processes. DOS doors receive only `DOSEMU_QUIET`, plus `DOORDROP_INI` inside DOS when **Dropfile Type** is `DOORDROP.INI`:
 
 | Variable | Value |
 | --- | --- |
@@ -458,10 +458,10 @@ The following environment variables are automatically set for native and Windows
 | `LINES` | Terminal height (Linux and macOS) |
 | `COLUMNS` | Terminal width (Linux and macOS) |
 | `DOOR_SOCKET_FD` | Socket FD (SOCKET mode only) |
-| `DROPFILE_INI` | Absolute path to the dropfile (**Dropfile Type** `DROPFILE.INI` only) |
+| `DOORDROP_INI` | Absolute path to the dropfile (**Dropfile Type** `DOORDROP.INI` only) |
 | `DOSEMU_QUIET` | `1` (DOS doors only, suppresses dosemu startup messages) |
 
-A `BBS_*` or `DROPFILE_INI` variable you set yourself in **Env Vars** wins over the automatic value. Additional variables can be configured per-door via the `environment_variables` field (**Env Vars** in the config editor, entered as `KEY=VALUE, KEY2=VALUE2`). These are set in the OS environment before a native door process is launched. Placeholders are substituted at runtime. DOS doors receive only `DOSEMU_QUIET`; pass session data to a DOS door through the dropfile or the batch command line instead.
+A `BBS_*` or `DOORDROP_INI` variable you set yourself in **Env Vars** wins over the automatic value. Additional variables can be configured per-door via the `environment_variables` field (**Env Vars** in the config editor, entered as `KEY=VALUE, KEY2=VALUE2`). These are set in the OS environment before a native door process is launched. Placeholders are substituted at runtime. DOS doors receive only `DOSEMU_QUIET`; pass session data to a DOS door through the dropfile or the batch command line instead.
 
 Example:
 
@@ -493,9 +493,9 @@ The four positional formats carry the same core session data:
 
 Fields the BBS does not track are filled with safe placeholders: phone numbers are `00-0000-0000`, the password is `SECRET`, dates are `01-01-1971`, and the sysop name in `DORINFO1.DEF` and `CHAIN.TXT` is `Sysop`. Doors that key their save data on the user record number, real name, or handle work as expected.
 
-#### DROPFILE.INI
+#### DOORDROP.INI
 
-`DROPFILE.INI` is the named-value drop file [drafted by Synchronet](https://github.com/SynchronetBBS/sbbs/blob/master/docs/dropfile_ini.md) (draft 0.6). Instead of giving a value its meaning by line number, it writes `KEY=value` lines under INI sections, so a door reads only the keys it needs. The format is still a draft and its keys may change.
+`DOORDROP.INI` is the named-value drop file [specified by Synchronet](https://github.com/SynchronetBBS/sbbs/blob/master/docs/doordrop_ini.md), version 1.0. Instead of giving a value its meaning by line number, it writes `KEY=value` lines under INI sections, so a door reads only the keys it needs.
 
 ViSiON/3 writes these keys:
 
@@ -504,7 +504,7 @@ ViSiON/3 writes these keys:
 | `[file]` | `FILE_TIME` |
 | `[system]` | `SYS_SOFTWARE`, `SYS_VENDOR` (`VISION3`), `SYS_VERSION`, `SYS_NAME`, `SYS_OP`, `SYS_NODE_NUM`, `SYS_NODE_COUNT`, `SYS_QWKID`, `SYS_LOCATION` |
 | `[comm]` | `COMM_TYPE`, `COMM_CHARSET`, plus `COMM_HANDLE` or `COMM_PORT` where the type needs one |
-| `[user]` | `USER_ALIAS`, `USER_NUMBER`, `USER_ROLE`, `USER_REALNAME`, `USER_LOCATION`, `USER_IP`, `USER_PROTOCOL` |
+| `[user]` | `USER_ALIAS`, `USER_NUMBER`, `USER_KEY`, `USER_ROLE`, `USER_REALNAME`, `USER_LOCATION`, `USER_IP`, `USER_PROTOCOL` |
 | `[terminal]` | `TERM_COLS`, `TERM_ROWS`, `TERM_TYPE` (`ansi`), `TERM_CHARSET`, `TERM_TERMINFO` |
 | `[session]` | `TIME_LEFT` (seconds), `TEMP_DIR`, `LOCAL_DISPLAY` (`0`), `IDLE_LIMIT` (seconds) |
 | `[door]` | `DOOR_CODE`, `DOOR_NAME` (the door's **Code** and **Name**) |
@@ -512,17 +512,18 @@ ViSiON/3 writes these keys:
 
 Optional keys with nothing to report are left out: `SYS_QWKID` needs an explicit `qwkID` in `config.json`, `TERM_TERMINFO` is written only when the caller's client sent a terminal type, and `TEMP_DIR` is written only when the file is in a per-node directory (any DOS door, or a native door as described below).
 
-`IDLE_LIMIT` is the [idle timeout](#idle-timeout) in seconds, so a door can warn the user before it runs out; it is left out for CoSysOps and above, who are exempt. One key the draft defines is never written: `SYS_FTN_ADDR` lists the board's FTN addresses with the primary one first, and FTN networks aren't configured with a primary.
+`IDLE_LIMIT` is the [idle timeout](#idle-timeout) in seconds, so a door can warn the user before it runs out; it is left out for CoSysOps and above, who are exempt. One key the spec defines is never written: `SYS_FTN_ADDR` lists the board's FTN addresses with the primary one first, and FTN networks aren't configured with a primary.
 
 - **`COMM_TYPE`** is `stdio` for a native door, `socket` with `COMM_HANDLE=3` in [SOCKET](#socket) I/O mode, and `fossil` with `COMM_PORT=1` for a DOS door with a **FOSSIL Driver** or a `dosemu_config` that sets `$_com1 = "virtual"`. A DOS door without one reads and writes the DOS console, which is reported as `stdio`.
 - **`COMM_CHARSET`** is the caller's terminal encoding, `CP437` or `UTF-8`, because the BBS relays a door's bytes untranslated. A DOS door in terminal mode (no **FOSSIL Driver** and no virtual COM1 in its `dosemu_config`) always gets `CP437`, since dosemu2 translates its screen.
+- **`USER_KEY`** is the key a door should store per-user data under. It is the user number joined to the account's creation time, such as `42-1693526400`, so it stays the same for the life of the account and is never handed to another one; an account with no recorded creation time gets the number alone.
 - **`USER_ROLE`** is `sysop` or `cosysop` when the user's access level reaches `sysOpLevel` or `coSysOpLevel`, otherwise `user`.
 - **`TERM_TERMINFO`** is the terminal type the caller's client sent, through Telnet TERMINAL-TYPE or the SSH pty request, such as `xterm-256color`, for doors that use curses or terminfo.
 - **Text values** are written in CP437; `FILE_UTF8` is never set. Control characters in a value become `?`, and values are cut to the 255-byte line limit.
-- **`TEMP_DIR`** is a path, written exactly as the file system gives it. A path that would need changing to fit the file, because it is too long or contains a control character, is left out rather than cut short.
+- **`TEMP_DIR`** is a path, written exactly as the file system gives it. A path that would need changing to fit the file, because it is too long or contains a control character, is left out rather than cut short. On Windows a path with non-ASCII characters is left out as well, since a door there reads paths in the system ANSI code page.
 - **Hide Personal** (`dropfile_hide_personal`) leaves out `USER_REALNAME`, `USER_LOCATION` and `USER_IP`.
 
-The door finds the file through the `DROPFILE_INI` environment variable, which holds its absolute path, or through `{DROPFILE}` on the command line. For a DOS door the BBS adds `SET DROPFILE_INI=C:\NODES\TEMPn\DROPFILE.INI` to the generated batch file when **Dropfile Type** is `DROPFILE.INI`; `{DOSDROPFILE}` gives the same path for the command line. No two nodes' files may share a path, so a native door always gets a per-node directory for `DROPFILE.INI`, as with **Dropfile Location** `node`, unless it is marked **Single Instance**. Only a single-instance door can have the file written to its working directory with `startup`.
+The door finds the file through the `DOORDROP_INI` environment variable, which holds its absolute path, or through `{DROPFILE}` on the command line. For a DOS door the BBS adds `SET DOORDROP_INI=C:\NODES\TEMPn\DOORDROP.INI` to the generated batch file when **Dropfile Type** is `DOORDROP.INI`; `{DOSDROPFILE}` gives the same path for the command line. No two nodes' files may share a path, so a native door always gets a per-node directory for `DOORDROP.INI`, as with **Dropfile Location** `node`, unless it is marked **Single Instance**. Only a single-instance door can have the file written to its working directory with `startup`.
 
 ### Generated dosemu2 Configuration
 
@@ -546,7 +547,7 @@ The C: drive is passed to dosemu2 on its command line rather than through `$_hdi
 
 1. `@echo off`, `SET PATH=%PATH%;D:\dosemu` and `c:`
 2. The **FOSSIL Driver** line, if set
-3. `SET DROPFILE_INI=C:\NODES\TEMPn\DROPFILE.INI`, when **Dropfile Type** is `DROPFILE.INI`
+3. `SET DOORDROP_INI=C:\NODES\TEMPn\DOORDROP.INI`, when **Dropfile Type** is `DOORDROP.INI`
 4. `cls`, and in serial mode `echo ESC[2J ESC[H >COM1` (the marker the output gate waits for)
 5. The drive letter and `cd` into **Working Dir**, if set
 6. Each line of **Commands**, with placeholders replaced and `CALL` added in front of a `.BAT`

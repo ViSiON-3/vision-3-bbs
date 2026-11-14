@@ -363,8 +363,8 @@ func generateAllDropfiles(ctx *DoorCtx, dir, doorDir string) error {
 	if err := generateChainTxt(ctx, dir, "CHAIN.TXT"); err != nil {
 		return fmt.Errorf("failed to generate CHAIN.TXT: %w", err)
 	}
-	if err := generateDropfileIni(ctx, dir, dropfileIniType, doorDir); err != nil {
-		return fmt.Errorf("failed to generate %s: %w", dropfileIniType, err)
+	if err := generateDoorDropIni(ctx, dir, doorDropIniType, doorDir); err != nil {
+		return fmt.Errorf("failed to generate %s: %w", doorDropIniType, err)
 	}
 
 	slog.Info("all dropfiles generated", "dir", dir)
@@ -373,7 +373,7 @@ func generateAllDropfiles(ctx *DoorCtx, dir, doorDir string) error {
 
 // cleanupDropfiles removes all generated dropfiles from the directory.
 func cleanupDropfiles(dir string) {
-	files := []string{"DOOR.SYS", "DOOR32.SYS", "DORINFO1.DEF", "CHAIN.TXT", dropfileIniType, "EXTERNAL.BAT"}
+	files := []string{"DOOR.SYS", "DOOR32.SYS", "DORINFO1.DEF", "CHAIN.TXT", doorDropIniType, "EXTERNAL.BAT"}
 	for _, f := range files {
 		path := filepath.Join(dir, f)
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {

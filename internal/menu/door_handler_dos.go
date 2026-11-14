@@ -26,8 +26,8 @@ func dosDropfileName(dropfileType string) string {
 		return "CHAIN.TXT"
 	case "DORINFO1.DEF":
 		return "DORINFO1.DEF"
-	case dropfileIniType:
-		return dropfileIniType
+	case doorDropIniType:
+		return doorDropIniType
 	default:
 		return "DOOR.SYS"
 	}
@@ -54,10 +54,10 @@ func writeBatchFile(ctx *DoorCtx, batchPath string) error {
 		b.WriteString(ctx.Config.FossilDriver + crlf)
 	}
 
-	// dosemu does not pass the host environment through, so a DROPFILE.INI
-	// door gets its DROPFILE_INI variable from the batch file instead.
-	if dosDropfileName(ctx.Config.DropfileType) == dropfileIniType && ctx.Subs["{DOSDROPFILE}"] != "" {
-		b.WriteString("SET " + dropfileIniEnvVar + "=" + ctx.Subs["{DOSDROPFILE}"] + crlf)
+	// dosemu does not pass the host environment through, so a DOORDROP.INI
+	// door gets its DOORDROP_INI variable from the batch file instead.
+	if dosDropfileName(ctx.Config.DropfileType) == doorDropIniType && ctx.Subs["{DOSDROPFILE}"] != "" {
+		b.WriteString("SET " + doorDropIniEnvVar + "=" + ctx.Subs["{DOSDROPFILE}"] + crlf)
 	}
 
 	// Clear screen — the PTY bridge detects this ESC[2J sequence to know

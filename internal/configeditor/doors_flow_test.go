@@ -162,8 +162,8 @@ func TestDoorFields_DOS(t *testing.T) {
 	}
 	m = setRecField(t, m, "Commands", "CD GAME, GAME.EXE")
 	m = pickRecField(t, m, "Dropfile Type", "DOOR.SYS")
-	// A DOS door gets every dropfile, DROPFILE.INI included, so it offers
-	// the DROPFILE.INI privacy switch whatever its dropfile type.
+	// A DOS door gets every dropfile, DOORDROP.INI included, so it offers
+	// the DOORDROP.INI privacy switch whatever its dropfile type.
 	m = press(t, gotoField(t, m, "Hide Personal"), "space")
 	m = setRecField(t, m, "Drive C Path", "/dos/c")
 	m = pickRecField(t, m, "DOS Emulator", "dosemu")
