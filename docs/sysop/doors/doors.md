@@ -497,8 +497,6 @@ Fields the BBS does not track are filled with safe placeholders: phone numbers a
 
 `DOORDROP.INI` is the named-value drop file [specified by Synchronet](https://github.com/SynchronetBBS/sbbs/blob/master/docs/doordrop_ini.md), version 1.0. Instead of giving a value its meaning by line number, it writes `KEY=value` lines under INI sections, so a door reads only the keys it needs.
 
-Through draft 0.6 the file was called `DROPFILE.INI` and its variable `DROPFILE_INI`. A door still configured with **Dropfile Type** `DROPFILE.INI` is treated as `DOORDROP.INI`: it gets the file and the variable under their new names, so a door written against the draft has to be updated to look for those.
-
 ViSiON/3 writes these keys:
 
 | Section | Keys |

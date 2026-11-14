@@ -19,15 +19,12 @@ import (
 // DOORDROP.INI is Synchronet's named-value drop file, version 1.0:
 // https://github.com/SynchronetBBS/sbbs/blob/master/docs/doordrop_ini.md
 //
-// Through draft 0.6 it was called DROPFILE.INI, a dropfile_type that
-// config.LoadDoors still accepts and rewrites to the current name.
-//
 // SYS_FTN_ADDR is the one key the spec defines that this writer leaves out:
 // it lists the primary address first, and FTN networks here are configured
 // with no primary among them.
 
 const (
-	doorDropIniType = config.DoorDropType
+	doorDropIniType = "DOORDROP.INI"
 	// doorDropIniEnvVar names the environment variable that carries the file's
 	// absolute path to the door.
 	doorDropIniEnvVar = "DOORDROP_INI"

@@ -22,7 +22,7 @@ type DoorConfig struct {
 	Name                 string            `json:"name"`                             // Display label shown to users (free-form, case preserved)
 	WorkingDirectory     string            `json:"working_directory,omitempty"`      // Directory to run the command in (optional)
 	Commands             []string          `json:"commands,omitempty"`               // Commands to execute (native: [0]=executable, [1:]=args; DOS: batch lines)
-	DropfileType         string            `json:"dropfile_type,omitempty"`          // Type of dropfile ("DOOR.SYS", "CHAIN.TXT", "DOORDROP.INI", "NONE"; the pre-1.0 name "DROPFILE.INI" is read as "DOORDROP.INI") (optional, defaults to NONE)
+	DropfileType         string            `json:"dropfile_type,omitempty"`          // Type of dropfile ("DOOR.SYS", "CHAIN.TXT", "DOORDROP.INI", "NONE") (optional, defaults to NONE)
 	DropfileLocation     string            `json:"dropfile_location,omitempty"`      // Where to write dropfile: "startup" (working dir, default; per-node temp dir if none) or "node" (per-node temp dir)
 	DropfileCase         string            `json:"dropfile_case,omitempty"`          // Dropfile filename case: "upper" (default) or "lower"
 	DropfileHidePersonal bool              `json:"dropfile_hide_personal,omitempty"` // DOORDROP.INI: leave out the user's real name, location and IP address
@@ -185,13 +185,6 @@ func NormalizeDoorCode(code string) (string, error) {
 	return code, nil
 }
 
-// DoorDropType is the dropfile_type of Synchronet's named-value drop file.
-const DoorDropType = "DOORDROP.INI"
-
-// legacyDoorDropType is the name DoorDropType had before version 1.0 of its
-// spec, still accepted in doors.json.
-const legacyDoorDropType = "DROPFILE.INI"
-
 // LoadDoors loads the door configuration from the specified file path.
 func LoadDoors(filePath string) (map[string]DoorConfig, error) {
 	data, err := os.ReadFile(filePath)
@@ -218,11 +211,6 @@ func LoadDoors(filePath string) (map[string]DoorConfig, error) {
 		// A hand-edited "acs": " " means no rule, as blank does; untrimmed it
 		// would fail to parse and deny everyone.
 		door.ACS = strings.TrimSpace(door.ACS)
-		// DOORDROP.INI was DROPFILE.INI through draft 0.6 of its spec. A door
-		// still configured with the old name gets the current file.
-		if strings.EqualFold(strings.TrimSpace(door.DropfileType), legacyDoorDropType) {
-			door.DropfileType = DoorDropType
-		}
 		if door.Category != "" {
 			// An unusable category is not worth refusing every door over:
 			// clear it, which lists the door under Other.

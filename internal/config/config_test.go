@@ -97,25 +97,6 @@ func TestLoadDoors_TrimsACS(t *testing.T) {
 	}
 }
 
-// DOORDROP.INI was called DROPFILE.INI before version 1.0 of its spec; a
-// door still configured with the old name gets the current one.
-func TestLoadDoors_RenamesLegacyDoorDropType(t *testing.T) {
-	tmpDir := t.TempDir()
-	data := []byte(`[{"code":"OLD","dropfile_type":"dropfile.ini"},{"code":"NEW","dropfile_type":"DOORDROP.INI"},{"code":"SYS","dropfile_type":"DOOR.SYS"}]`)
-	if err := os.WriteFile(filepath.Join(tmpDir, "doors.json"), data, 0644); err != nil {
-		t.Fatal(err)
-	}
-	result, err := LoadDoors(filepath.Join(tmpDir, "doors.json"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	for code, want := range map[string]string{"OLD": DoorDropType, "NEW": DoorDropType, "SYS": "DOOR.SYS"} {
-		if got := result[code].DropfileType; got != want {
-			t.Errorf("%s dropfile_type = %q, want %q", code, got, want)
-		}
-	}
-}
-
 // The loader must enforce the same code contract as the editor
 // ([A-Z0-9_-]{1,16}), or hand-edited files can create registry keys that
 // DOOR:CODE commands and DOORLIST alignment don't expect.
