@@ -2027,7 +2027,7 @@ func main() {
 	// Sponsors and uploads are owned by account ID; bind any still named
 	// only by handle (#1020).
 	_ = bindSponsors(userMgr, messageMgr) // logged; unbound areas have no sponsor
-	bindUploaders(userMgr, fileMgr)
+	_ = bindUploaders(userMgr, fileMgr)   // logged; unbound uploads are nobody's until a later run
 
 	// Initialize ConferenceManager (non-fatal if conferences.json is missing)
 	confMgr, err = conference.NewConferenceManager(rootConfigPath)

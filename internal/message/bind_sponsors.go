@@ -1,6 +1,9 @@
 package message
 
-import "log/slog"
+import (
+	"log/slog"
+	"strings"
+)
 
 // BindSponsors gives each area whose Sponsor has no account ID yet the ID
 // of the account holding that handle, as idFor returns it, or NoSponsorID
@@ -11,9 +14,15 @@ import "log/slog"
 // purged or renamed sponsor's area can't pass to whoever takes the old
 // handle (#1020). It reports how many it bound to an account and to nobody.
 //
-// If the save fails, the areas are put back unbound in memory too, so the
-// running BBS agrees with the file: no sponsor until the binding is saved.
-func (mm *MessageManager) BindSponsors(idFor func(handle string) int) (bound, unowned int, err error) {
+// A sponsor already bound keeps its account; when nameFor reports that the
+// account's handle has since changed (a rename), the stored name is updated
+// to it (#1052), so the file, the Sponsor Menu and doctor show who the
+// sponsor is now. nameFor may be nil.
+//
+// If the save fails, the areas are put back as they were in memory too, so
+// the running BBS agrees with the file: no sponsor until the binding is
+// saved.
+func (mm *MessageManager) BindSponsors(idFor func(handle string) int, nameFor func(id int) (string, bool)) (bound, unowned int, err error) {
 	var changed []MessageArea // the areas as they were before binding
 	defer func() {
 		if err == nil {
@@ -22,7 +31,7 @@ func (mm *MessageManager) BindSponsors(idFor func(handle string) int) (bound, un
 		for _, before := range changed {
 			if cur, ok := mm.GetAreaByID(before.ID); ok {
 				undo := *cur
-				undo.SponsorID = before.SponsorID
+				undo.SponsorID, undo.Sponsor = before.SponsorID, before.Sponsor
 				if uerr := mm.UpdateAreaByID(before.ID, undo); uerr != nil {
 					slog.Error("putting an area's sponsor back unbound", "area", before.Tag, "error", uerr)
 				}
@@ -30,8 +39,31 @@ func (mm *MessageManager) BindSponsors(idFor func(handle string) int) (bound, un
 		}
 		bound, unowned = 0, 0
 	}()
+	renamed := 0
 	for _, a := range mm.ListAreas() {
-		if a == nil || a.Sponsor == "" || a.SponsorID != 0 {
+		if a == nil || a.Sponsor == "" {
+			continue
+		}
+		if a.SponsorID > 0 {
+			// Bound: follow a rename of the account.
+			if nameFor == nil {
+				continue
+			}
+			name, ok := nameFor(a.SponsorID)
+			if !ok || name == "" || strings.EqualFold(name, a.Sponsor) {
+				continue
+			}
+			updated := *a
+			changed = append(changed, *a)
+			updated.Sponsor = name
+			renamed++
+			slog.Info("area sponsor's name follows a rename of its account", "area", a.Tag, "was", a.Sponsor, "now", name, "id", a.SponsorID)
+			if uerr := mm.UpdateAreaByID(a.ID, updated); uerr != nil {
+				return bound, unowned, uerr
+			}
+			continue
+		}
+		if a.SponsorID != 0 {
 			continue
 		}
 		updated := *a
@@ -49,7 +81,7 @@ func (mm *MessageManager) BindSponsors(idFor func(handle string) int) (bound, un
 			return bound, unowned, uerr
 		}
 	}
-	if bound+unowned > 0 {
+	if bound+unowned+renamed > 0 {
 		err = mm.SaveAreas()
 	}
 	return bound, unowned, err
