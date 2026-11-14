@@ -450,9 +450,9 @@ func (cw *ConfigWatcher) applyFileAreas() error {
 		return err
 	}
 	// A record that arrived without an uploader ID while the BBS ran is
-	// bound now, not at the next start (#1053).
-	bindUploaders(cw.userMgr, cw.menuExecutor.FileMgr)
-	return nil
+	// bound now, not at the next start (#1053). A failure keeps the reload
+	// queued, so it is tried again.
+	return bindUploaders(cw.userMgr, cw.menuExecutor.FileMgr)
 }
 
 // validateMessageAreas is the signal-time check for message_areas.json:

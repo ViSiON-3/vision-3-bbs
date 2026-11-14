@@ -71,25 +71,28 @@ func bindSponsors(um *user.UserMgr, mm *message.MessageManager) error {
 // holding their uploaders' handles (#1020): at startup, and after the file
 // areas reload (#1053), so a record restored or edited in while the BBS
 // runs isn't left unowned until the next start.
-func bindUploaders(um *user.UserMgr, fm *file.FileManager) {
+func bindUploaders(um *user.UserMgr, fm *file.FileManager) error {
 	if um == nil || fm == nil {
-		return
+		return nil
 	}
 	// As for sponsors: an unreadable retired list would bind every old
-	// upload to nobody for good; leave them for a later run.
+	// upload to nobody for good; leave them for a later run, and say so,
+	// so the config watcher keeps the reload queued.
 	if err := um.RetiredListError(); err != nil {
 		slog.Error("not binding uploads: the retired-handle list can't be read", "error", err)
-		return
+		return err
 	}
-	// A record left unbound is nobody's to edit until a later start binds
-	// it (UploadedByAccount needs an ID), so a failure grants nothing.
+	// A record left unbound is nobody's to edit until a later run binds it
+	// (UploadedByAccount needs an ID), so a failure grants nothing.
 	bound, unowned, err := fm.BindUploaders(accountIDFor(um))
 	if err != nil {
-		slog.Error("binding uploads to accounts failed; the uploads left unbound can be edited only by co-sysops until the next start binds them", "error", err)
+		slog.Error("binding uploads to accounts failed; the uploads left unbound can be edited only by co-sysops until a later run binds them", "error", err)
+		return err
 	}
 	if bound+unowned > 0 {
 		slog.Info("uploads bound to accounts", "bound", bound, "no_account", unowned)
 	}
+	return nil
 }
 
 // checkSponsors adds doctor's findings on message area sponsors (#1020): a

@@ -188,14 +188,23 @@ func TestBindingWaitsForAReadableRetiredList(t *testing.T) {
 	if err := os.Mkdir(retired, 0o700); err != nil { // unreadable as a file
 		t.Fatal(err)
 	}
-	bindUploaders(um, fileMgr)
+	if err := bindUploaders(um, fileMgr); err == nil {
+		t.Error("bindUploaders reported success with the list unreadable")
+	}
+	// The file-area reload reports it too, so the watcher retries.
+	cw := &ConfigWatcher{rootConfigPath: configDir, menuExecutor: &menu.MenuExecutor{FileMgr: fileMgr}, userMgr: um}
+	if err := cw.applyFileAreas(); err == nil {
+		t.Error("applyFileAreas reported success with the list unreadable")
+	}
 	if rec, _ := fileMgr.GetFileRecordByID(id); rec.UploadedByID != 0 {
 		t.Fatalf("bound to %d with the list unreadable, want left unbound", rec.UploadedByID)
 	}
 	if err := os.Remove(retired); err != nil {
 		t.Fatal(err)
 	}
-	bindUploaders(um, fileMgr)
+	if err := bindUploaders(um, fileMgr); err != nil {
+		t.Fatal(err)
+	}
 	if rec, _ := fileMgr.GetFileRecordByID(id); rec.UploadedByID != ann.ID {
 		t.Errorf("after the list was fixed, uploader = %d, want #%d", rec.UploadedByID, ann.ID)
 	}
