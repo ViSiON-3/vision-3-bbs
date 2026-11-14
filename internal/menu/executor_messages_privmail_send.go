@@ -10,6 +10,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -208,7 +209,9 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	// Save the private message with MSG_PRIVATE flag
-	msgNum, err := e.MessageMgr.AddPrivateMessage(privmailArea.ID, currentUser.Handle, recipientUser.Handle, subject, body, "")
+	msgNum, err := e.MessageMgr.Post(privmailArea.ID, currentUser.Handle, recipientUser.Handle, subject, body, message.PostOptions{
+		Private: true, SenderID: currentUser.ID, RecipientID: recipientUser.ID,
+	})
 	if err != nil {
 		slog.Error("failed to save private message", "node", nodeNumber, "handle", currentUser.Handle, "recipient", recipientUser.Handle, "error", err)
 		errorMsg := ansi.ReplacePipeCodes([]byte("\r\n|01Error saving private message!|07\r\n"))

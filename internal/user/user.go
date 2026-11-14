@@ -7,6 +7,7 @@
 package user
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -60,6 +61,10 @@ type User struct {
 	// as configs/roles.json defines them, for the ACS term GROUP:. Being in
 	// a group grants no admin permission.
 	Groups []string `json:"groups,omitempty"`
+	// PreviousHandles are the handles this account had before, oldest
+	// first, recorded on each rename (#1048). Lastread is kept per handle,
+	// so what the account read under an earlier handle is found by them.
+	PreviousHandles []string `json:"previousHandles,omitempty"`
 
 	// PreviousLogin is the LastLogin value from before the current session's
 	// authentication. Authenticate() overwrites LastLogin with time.Now()
@@ -229,4 +234,27 @@ type CallRecord struct {
 // time: on unless the user has turned it off.
 func (u *User) MorePromptsOn() bool {
 	return u.MorePrompts == nil || *u.MorePrompts
+}
+
+// NoteRenamed records old as one of u's previous handles, once. Handles
+// are compared as lastread records are keyed, by the lower-cased handle
+// (jam lastread uses its CRC): "Sam" and "ſam" are one name to private mail
+// but keep separate read pointers, so a rename between them is recorded.
+func (u *User) NoteRenamed(old string) {
+	old = strings.TrimSpace(old)
+	key := strings.ToLower(old)
+	if old == "" || key == strings.ToLower(strings.TrimSpace(u.Handle)) {
+		return
+	}
+	for _, h := range u.PreviousHandles {
+		if strings.ToLower(h) == key {
+			return
+		}
+	}
+	u.PreviousHandles = append(u.PreviousHandles, old)
+}
+
+// Handles is every handle u has had, the current one first.
+func (u *User) Handles() []string {
+	return append([]string{u.Handle}, u.PreviousHandles...)
 }

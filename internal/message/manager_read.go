@@ -62,6 +62,8 @@ func displayMessage(msg *jam.Message, areaID, msgNum int) *DisplayMessage {
 		SenderHandle: msg.SenderHandle,
 		MailGroup:    mailGroupName(msg.MailGroup),
 		MailGroupID:  mailGroupID(msg.MailGroup),
+		SenderID:     msg.SenderID,
+		RecipientID:  msg.RecipientID,
 	}
 }
 

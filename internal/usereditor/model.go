@@ -251,6 +251,7 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 					u.Handle = old
 					return err
 				}
+				u.NoteRenamed(old) // as the BBS's rename does (#1048)
 				return nil
 			}
 		case "InfoForms":

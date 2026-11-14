@@ -35,13 +35,19 @@ func editableArea(mm *message.MessageManager, area *message.MessageArea) bool {
 	return !mm.IsNetworked(area)
 }
 
-// ownMessage reports whether u wrote m. A post signed with a real name keeps
+// ownMessage reports whether u wrote m: by the account ID recorded with it,
+// or for a post from before IDs by handle. A post signed with a real name keeps
 // the poster's handle (DisplayMessage.SenderHandle); one signed with the
 // handle keeps nothing, and its From is the handle. An anonymous post keeps
 // no handle, so its author can't be told and it is never anyone's own.
 func ownMessage(m *message.DisplayMessage, u *user.User, anonymousName string) bool {
 	if u == nil {
 		return false
+	}
+	// The account recorded with the post decides (#1048): a renamed author
+	// keeps their posts, and a new account given an old handle gets none.
+	if m.SenderID > 0 {
+		return m.SenderID == u.ID
 	}
 	if m.SenderHandle != "" {
 		return strings.EqualFold(m.SenderHandle, u.Handle)

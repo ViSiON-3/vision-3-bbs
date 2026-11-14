@@ -112,11 +112,29 @@ func (um *UserMgr) handleTakenLocked(handle string, except int) bool {
 	return false
 }
 
+// AccountExists reports whether an account with ID id is on file, deleted
+// or not.
+func (um *UserMgr) AccountExists(id int) bool {
+	_, ok := um.GetUserByID(id)
+	return ok
+}
+
 // RecipientResolver is the part of UserMgr that writes private mail: mail
 // importers take one so tests can supply a fixed set of accounts, and so a
 // caller without the users file can pass nil and resolve nothing.
 type RecipientResolver interface {
 	ResolveRecipient(name string) (*User, bool)
+}
+
+// AccountByAddress is AddressByHandle with the account's ID: the handle and
+// ID of the account to resolves to through r, or to unchanged and 0.
+func AccountByAddress(r RecipientResolver, to string) (string, int) {
+	if r != nil {
+		if u, ok := r.ResolveRecipient(to); ok && u != nil {
+			return u.Handle, u.ID
+		}
+	}
+	return to, 0
 }
 
 // AddressByHandle returns the handle of the account to resolves to through r

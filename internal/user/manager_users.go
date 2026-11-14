@@ -94,6 +94,11 @@ func (um *UserMgr) updateUserByID(u *User, chatBar *bool) error {
 		sysopOwnedFields(&userCopy, current)
 		userCopy.gen = current.gen
 	}
+	// A rename records the old handle (#1048): any change of the lastread
+	// key, which is the map key's lower-cased handle.
+	if current != nil && newKey != oldKey {
+		userCopy.NoteRenamed(current.Handle)
+	}
 	// Devices are changed only through the device methods; see UpdateUser.
 	if current != nil {
 		userCopy.APIDevices = current.APIDevices

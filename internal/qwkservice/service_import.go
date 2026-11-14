@@ -18,6 +18,9 @@ import (
 type ImportOptions struct {
 	// Handle is the posting user's handle (becomes the message From).
 	Handle string
+	// UserID is the posting user's account ID, recorded on each message
+	// (#1048); 0 records none.
+	UserID int
 	// Signature, when non-empty, is appended to each imported message body.
 	Signature string
 	// Authorize, when set, gates posting per area (e.g. an ACS write check).
@@ -112,10 +115,14 @@ func (s *Service) ImportREP(data []byte, opts ImportOptions) (*ImportResult, err
 			// Private mail is readable only by the account whose handle it
 			// carries, and a reader's To is often a real name or the
 			// handle uppercased and cut to 25 characters.
-			to := user.AddressByHandle(s.recipients, msg.To)
-			_, perr = s.store.AddPrivateReply(area.ID, opts.Handle, to, msg.Subject, body, "", msg.ReplyToNumber)
+			to, toID := user.AccountByAddress(s.recipients, msg.To)
+			_, perr = s.store.Post(area.ID, opts.Handle, to, msg.Subject, body, message.PostOptions{
+				Private: true, ReplyToNum: msg.ReplyToNumber, SenderID: opts.UserID, RecipientID: toID,
+			})
 		} else {
-			_, perr = s.store.AddReply(area.ID, opts.Handle, msg.To, msg.Subject, body, "", msg.ReplyToNumber)
+			_, perr = s.store.Post(area.ID, opts.Handle, msg.To, msg.Subject, body, message.PostOptions{
+				ReplyToNum: msg.ReplyToNumber, SenderID: opts.UserID,
+			})
 		}
 		if perr != nil {
 			slog.Error("qwk import: failed to post", "area", area.ID, "error", perr)

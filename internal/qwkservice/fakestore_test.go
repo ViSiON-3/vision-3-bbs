@@ -28,6 +28,7 @@ type postedMessage struct {
 	areaID                       int
 	from, to, subject, body, rep string
 	replyToNum                   int
+	senderID, recipientID        int
 }
 
 type setRead struct {
@@ -86,20 +87,17 @@ func (f *fakeStore) GetMessage(areaID, msgNum int) (*message.DisplayMessage, err
 	return list[msgNum-1], nil
 }
 
-func (f *fakeStore) AddReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error) {
+func (f *fakeStore) Post(areaID int, from, to, subject, body string, opts message.PostOptions) (int, error) {
 	if err := f.addErr[areaID]; err != nil {
 		return 0, err
 	}
-	f.posted = append(f.posted, postedMessage{areaID, from, to, subject, body, replyToMsgID, replyToNum})
+	m := postedMessage{areaID, from, to, subject, body, opts.ReplyToMsgID, opts.ReplyToNum, opts.SenderID, opts.RecipientID}
+	if opts.Private {
+		f.privPosted = append(f.privPosted, m)
+		return len(f.privPosted), nil
+	}
+	f.posted = append(f.posted, m)
 	return len(f.posted), nil
-}
-
-func (f *fakeStore) AddPrivateReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error) {
-	if err := f.addErr[areaID]; err != nil {
-		return 0, err
-	}
-	f.privPosted = append(f.privPosted, postedMessage{areaID, from, to, subject, body, replyToMsgID, replyToNum})
-	return len(f.privPosted), nil
 }
 
 func key(areaID int, user string) string { return fmt.Sprintf("%d/%s", areaID, user) }

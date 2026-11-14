@@ -32,16 +32,23 @@ func TestImportREP_PrivateReplyAddressedByHandle(t *testing.T) {
 		&user.User{ID: 2, Handle: "Bob", RealName: "Bob Builder"},
 		&user.User{ID: 3, Handle: "Dark Knight", RealName: "Dan Knight"},
 	))
-	if _, err := svc.ImportREP(rep, ImportOptions{Handle: "tester"}); err != nil {
+	if _, err := svc.ImportREP(rep, ImportOptions{Handle: "tester", UserID: 7}); err != nil {
 		t.Fatal(err)
 	}
 	if len(store.privPosted) != 4 {
 		t.Fatalf("want 4 private posts, got %d", len(store.privPosted))
 	}
-	for i, want := range []string{"Bob", "Dark Knight", "Hermit", "STRANGER"} {
-		if got := store.privPosted[i].to; got != want {
-			t.Errorf("private reply %d stored To %q, want %q", i+1, got, want)
+	for i, want := range []struct {
+		to          string
+		recipientID int
+	}{{"Bob", 2}, {"Dark Knight", 3}, {"Hermit", 1}, {"STRANGER", 0}} {
+		got := store.privPosted[i]
+		if got.to != want.to || got.recipientID != want.recipientID || got.senderID != 7 {
+			t.Errorf("private reply %d stored To %q #%d from #%d, want %q #%d from #7", i+1, got.to, got.recipientID, got.senderID, want.to, want.recipientID)
 		}
+	}
+	if store.posted[0].senderID != 7 || store.posted[0].recipientID != 0 {
+		t.Errorf("public reply IDs: %+v", store.posted[0])
 	}
 	if len(store.posted) != 1 || store.posted[0].to != "BOB BUILDER" {
 		t.Errorf("public reply readdressed: %+v", store.posted)

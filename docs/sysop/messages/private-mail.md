@@ -156,32 +156,27 @@ The keys are the same as for any area; see
 
 ### Read Filter
 
-A private message is visible to a user when their **handle** matches its To
-field, or the sender, ignoring case:
-
-```go
-func (m *DisplayMessage) VisibleTo(handle string) bool {
-    if !m.IsPrivate {
-        return true
-    }
-    // ...
-    sender := m.From
-    if strings.TrimSpace(m.SenderHandle) != "" {
-        sender = m.SenderHandle
-    }
-    return strings.EqualFold(strings.TrimSpace(m.To), handle) ||
-        strings.EqualFold(strings.TrimSpace(sender), handle)
-}
-```
+A private message is visible to its recipient and its sender. The BBS
+records the sender's **account ID** with each message it writes (sent,
+replied, forwarded, group mail, QWK uploads, the script API), and the
+recipient's when the address names an account; a QWK upload to a name no
+account has records none for the recipient, and `helper post` records
+neither (both sides of its mail are matched by handle). Where an ID
+is recorded it decides: an account keeps its mail through a rename, and a
+new account given an old handle can't read it. Where it isn't (mail from
+before this, from other boards, or to an unresolved name), that side is
+matched by **handle**,
+ignoring case, against its To field or its sender (the handle a post signed
+with a real name records, else From).
 
 This means:
-- Only the handle counts. Real names are neither unique nor fixed, so a
-  message addressed by real name is visible to no ordinary user. Mail is
-  addressed by handle when it is written, tossed or imported;
-  `v3mail readdress` fixes mail stored before that
+- Account IDs, then handles, are the only identities. Real names are neither
+  unique nor fixed, so a message addressed by real name is visible to no
+  ordinary user. Mail is addressed by handle when it is written, tossed or
+  imported; `v3mail readdress` fixes mail stored before that
   (see [Readdressing private mail](messages/v3mail.md#readdressing-private-mail)).
 - `READPRIVMAIL` and `LISTPRIVMAIL` apply a narrower filter on top: private
-  messages whose To is the current user's handle.
+  messages for the current user (their ID, or their handle in To).
 - There is no sysop bypass for delivered mail. A user at or above
   `sysOpLevel` can also read **undeliverable** mail, whose To is no account's
   handle, in the message reader, list and newscan. QWK packets and the script

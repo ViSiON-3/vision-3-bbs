@@ -11,6 +11,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
@@ -212,7 +213,9 @@ func (e *MenuExecutor) requireNewUserSysopEmail(
 			continue
 		}
 
-		if _, err := e.MessageMgr.AddPrivateMessage(privmailArea.ID, newUser.Handle, sysop.Handle, subject, body, ""); err != nil {
+		if _, err := e.MessageMgr.Post(privmailArea.ID, newUser.Handle, sysop.Handle, subject, body, message.PostOptions{
+			Private: true, SenderID: newUser.ID, RecipientID: sysop.ID,
+		}); err != nil {
 			slog.Error("failed to save new-user sysop email", "node", nodeNumber, "handle", newUser.Handle, "error", err)
 			terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes(
 				[]byte("\r\n|01Error saving your message.|07\r\n")), outputMode)

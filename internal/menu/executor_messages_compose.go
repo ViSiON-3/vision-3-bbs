@@ -293,7 +293,12 @@ func runComposeMessageWithIH(e *MenuExecutor, s ssh.Session, ih *editor.InputHan
 	}
 	opts := message.PostOptions{Private: private}
 	if !isAnonymous {
-		opts.SenderHandle = currentUser.Handle
+		// The account is recorded with the post (#1048); an anonymous post
+		// records neither its handle nor its ID.
+		opts.SenderHandle, opts.SenderID = currentUser.Handle, currentUser.ID
+	}
+	if private {
+		opts.RecipientID = accountIDOf(userManager, toUser)
 	}
 	msgNum, err := e.MessageMgr.Post(area.ID, fromName, toUser, subject, body, opts)
 	if err != nil {

@@ -32,8 +32,7 @@ type MessageStore interface {
 	SetLastRead(areaID int, username string, msgNum int) error
 	GetMessageCountForArea(areaID int) (int, error)
 	GetMessage(areaID, msgNum int) (*message.DisplayMessage, error)
-	AddReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error)
-	AddPrivateReply(areaID int, from, to, subject, body, replyToMsgID string, replyToNum int) (int, error)
+	Post(areaID int, from, to, subject, body string, opts message.PostOptions) (int, error)
 }
 
 // ConferenceLister is the subset of *conference.ConferenceManager the service
@@ -112,6 +111,7 @@ type LastReadUpdate struct {
 type ExportOptions struct {
 	TwitList *user.TwitMatcher // resolved once by the caller, nil means no filtering
 	Handle   string            // user handle (used for PERSONAL.NDX, last-read and private-mail visibility)
+	UserID   int               // the user's account ID, for private-mail visibility (#1048); 0 matches by handle
 	// TaggedTags lists the area tags to export. When empty, the service falls
 	// back to every loaded area (ListAreas); note this is not access-filtered —
 	// callers that need ACS enforcement must pre-filter the tags they pass.
@@ -221,12 +221,12 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 			if msg.IsDeleted {
 				continue
 			}
-			if isPrivateConf && !ownsPrivateMessage(msg, opts.Handle) {
+			if isPrivateConf && !ownsPrivateMessage(msg, opts.Handle, opts.UserID) {
 				continue
 			}
 			// Other users' private messages never leave the board, whatever
 			// conference they sit in.
-			if !msg.VisibleTo(opts.Handle) || opts.TwitList.Hidden(msg.From, msg.OrigAddr) {
+			if !msg.VisibleTo(opts.Handle, opts.UserID) || opts.TwitList.Hidden(msg.From, msg.OrigAddr) {
 				continue
 			}
 
@@ -284,10 +284,10 @@ func (s *Service) BuildPacket(opts ExportOptions) (*ExportResult, error) {
 // once the conference is known to be private mail, so it gates purely on
 // ownership; an explicit IsPrivate check here would wrongly skip — and stall the
 // last-read pointer on — any conference-0 record lacking the flag.
-func ownsPrivateMessage(msg *message.DisplayMessage, handle string) bool {
+func ownsPrivateMessage(msg *message.DisplayMessage, handle string, id int) bool {
 	owned := *msg
 	owned.IsPrivate = true // in this conference every message is treated as private
-	return owned.VisibleTo(handle)
+	return owned.VisibleTo(handle, id)
 }
 
 // CommitExport applies the deferred newscan pointer advances from a successful

@@ -20,23 +20,23 @@ import (
 
 // sentMailFilter accepts only private mail handle sent, for the reader and
 // list SENTPRIVMAIL opens, so navigation never shows anything else.
-func sentMailFilter(handle string) msgOwnershipFilter {
-	return func(m *message.DisplayMessage) bool { return m.SentBy(handle) }
+func sentMailFilter(handle string, accountID int) msgOwnershipFilter {
+	return func(m *message.DisplayMessage) bool { return m.SentBy(handle, accountID) }
 }
 
 // unsendableMail reports whether handle may still unsend m from the mailbox
 // area: they sent it, and the recipient's lastread there hasn't reached it,
 // so they haven't read it. (Mail to oneself is deletable as its recipient
 // anyway.) If the recipient's lastread can't be read, it counts as read.
-func unsendableMail(e *MenuExecutor, areaID int, m *message.DisplayMessage, handle string) bool {
-	if !m.SentBy(handle) {
+func unsendableMail(e *MenuExecutor, um *user.UserMgr, areaID int, m *message.DisplayMessage, handle string, accountID int) bool {
+	if !m.SentBy(handle, accountID) {
 		return false
 	}
 	// A group letter (#1036) can be unsent while any member hasn't read it.
 	if m.MailGroupID != "" {
-		return e.groupLetterUnsendable(areaID, m, handle)
+		return e.groupLetterUnsendable(um, areaID, m, handle, accountID)
 	}
-	lastRead, err := e.MessageMgr.GetLastRead(areaID, strings.TrimSpace(m.To))
+	lastRead, err := e.recipientLastRead(um, areaID, m)
 	if err != nil {
 		slog.Warn("unsend: recipient's lastread", "area", areaID, "to", m.To, "error", err)
 		return false
@@ -71,7 +71,7 @@ func runSentPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	first, total := 0, 0
-	sent := sentMailFilter(currentUser.Handle)
+	sent := sentMailFilter(currentUser.Handle, currentUser.ID)
 	err := e.MessageMgr.EachMessage(area.ID, func(m *message.DisplayMessage) bool { return !m.IsDeleted && sent(m) },
 		func(m *message.DisplayMessage) bool {
 			// The first sent letter is all the reader needs to start; the
@@ -95,7 +95,7 @@ func runSentPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// A group letter (#1036) is listed once, by its first copy, not once per
 	// member; the first copy is also the first message found above.
-	groupLetters := newSentLetters(e, area.ID, currentUser.Handle)
+	groupLetters := newSentLetters(e, area.ID, currentUser.Handle, currentUser.ID)
 	letters := func(m *message.DisplayMessage) bool { return sent(m) && groupLetters.shows(m) }
 
 	origID, origTag := currentUser.CurrentMessageAreaID, currentUser.CurrentMessageAreaTag
@@ -268,7 +268,9 @@ func sendOnPrivateMail(c *cmdCtx, forward bool) (*user.User, string, error) {
 			uiPause(2 * time.Second)
 			return currentUser, "", nil
 		}
-	} else if _, err := e.MessageMgr.AddPrivateMessage(area.ID, currentUser.Handle, recipient.Handle, subject, body, ""); err != nil {
+	} else if _, err := e.MessageMgr.Post(area.ID, currentUser.Handle, recipient.Handle, subject, body, message.PostOptions{
+		Private: true, SenderID: currentUser.ID, RecipientID: recipient.ID,
+	}); err != nil {
 		slog.Error(cmd+": saving", "node", nodeNumber, "to", recipient.Handle, "error", err)
 		say("\r\n|01Error saving private message!|07\r\n")
 		uiPause(2 * time.Second)
@@ -284,7 +286,7 @@ func sendOnPrivateMail(c *cmdCtx, forward bool) (*user.User, string, error) {
 		shown := target
 		handle := currentUser.Handle
 		delErr := e.MessageMgr.DeleteMessageIf(area.ID, shown.MsgNum, func(m *message.DisplayMessage) bool {
-			return message.SameMessage(m, shown) && m.MailFor(handle)
+			return message.SameMessage(m, shown) && m.MailFor(handle, currentUser.ID)
 		})
 		clearCurrentMail(s)
 		switch {

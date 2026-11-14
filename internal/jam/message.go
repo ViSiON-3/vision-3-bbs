@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -71,6 +72,10 @@ func MessageFrom(hdr *MessageHeader, text string) *Message {
 			msg.SenderHandle = val
 		case SfldV3MailGroup:
 			msg.MailGroup = val
+		case SfldV3SenderID:
+			msg.SenderID = parseAccountID(val)
+		case SfldV3RecipientID:
+			msg.RecipientID = parseAccountID(val)
 		}
 	}
 
@@ -342,4 +347,35 @@ func (b *Base) ScanMessages(startMsg, maxMessages int) ([]*Message, error) {
 		read++
 	}
 	return messages, scanErr
+}
+
+// parseAccountID is a SenderID or RecipientID subfield's value, 0 when it
+// isn't a positive number.
+func parseAccountID(val string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(val))
+	if err != nil || n < 1 {
+		return 0
+	}
+	return n
+}
+
+// AddressedTo reports whether the account (handle, id) is the recipient of
+// a message with this To and RecipientID: by the ID when both have one
+// (#1048), else by handle, ignoring case and surrounding space. A blank
+// handle never matches. It is the one rule for whose mail a private message
+// is; message.DisplayMessage.MailFor uses it too.
+func AddressedTo(to string, recipientID int, handle string, id int) bool {
+	handle = strings.TrimSpace(handle)
+	if handle == "" {
+		return false
+	}
+	if recipientID > 0 && id > 0 {
+		return id == recipientID
+	}
+	return strings.EqualFold(strings.TrimSpace(to), handle)
+}
+
+// MailFor reports whether m is private mail for the account (handle, id).
+func (m *Message) MailFor(handle string, id int) bool {
+	return m.IsPrivate() && AddressedTo(m.To, m.RecipientID, handle, id)
 }
