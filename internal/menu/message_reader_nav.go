@@ -99,7 +99,8 @@ func privateReplyHandle(um *user.UserMgr, msg *message.DisplayMessage, replier, 
 // privateReplyHandle, by name.
 func privateReplyAccount(um *user.UserMgr, msg *message.DisplayMessage, replier *user.User, anonymousName string) (handle string, id int, reason string, ok bool) {
 	other := msg.SenderID
-	if replier != nil && msg.SentBy(replier.Handle, replier.ID) && !msg.MailFor(replier.Handle, replier.ID) {
+	replierSent := replier != nil && msg.SentBy(replier.Handle, replier.ID) && !msg.MailFor(replier.Handle, replier.ID)
+	if replierSent {
 		other = msg.RecipientID
 	}
 	if other > 0 && um != nil {
@@ -112,6 +113,13 @@ func privateReplyAccount(um *user.UserMgr, msg *message.DisplayMessage, replier 
 	name := ""
 	if replier != nil {
 		name = replier.Handle
+	}
+	// The replier sent this (decided by ID above), so the reply goes to its
+	// To: privateReplyHandle picks To when the replier's name is the From.
+	// Comparing a renamed sender's current handle with the old From would
+	// pick From instead, and reach whoever holds that name now.
+	if replierSent {
+		name = msg.From
 	}
 	handle, reason, ok = privateReplyHandle(um, msg, name, anonymousName)
 	if ok {

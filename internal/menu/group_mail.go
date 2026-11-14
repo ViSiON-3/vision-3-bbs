@@ -261,22 +261,33 @@ func (e *MenuExecutor) unreadCopy(um *user.UserMgr, areaID int, m *message.Displ
 
 // recipientLastRead is how far m's recipient has read in areaID. Lastread
 // is kept per handle, so for mail that records its recipient's account
-// (#1048) it is the further of the pointers under the handle in To and
-// under the account's handle now: a recipient renamed after reading keeps
-// the old pointer, and one renamed before reads under the new handle.
+// (#1048) it is the furthest of the pointers under the handle in To and
+// under every handle the account has had (User.Handles): a recipient who
+// read it under a handle they have since left behind, through any number of
+// renames, has still read it.
 func (e *MenuExecutor) recipientLastRead(um *user.UserMgr, areaID int, m *message.DisplayMessage) (int, error) {
-	lastRead, err := e.MessageMgr.GetLastRead(areaID, strings.TrimSpace(m.To))
-	if err != nil {
-		return 0, err
-	}
+	handles := []string{strings.TrimSpace(m.To)}
 	if m.RecipientID > 0 && um != nil {
-		if u, ok := um.GetUserByID(m.RecipientID); ok && !strings.EqualFold(u.Handle, strings.TrimSpace(m.To)) {
-			now, err := e.MessageMgr.GetLastRead(areaID, u.Handle)
-			if err != nil {
-				return 0, err
-			}
-			lastRead = max(lastRead, now)
+		if u, ok := um.GetUserByID(m.RecipientID); ok {
+			handles = append(handles, u.Handles()...)
 		}
+	}
+	lastRead := 0
+	var seen []string
+	for _, h := range handles {
+		dup := false
+		for _, s := range seen {
+			dup = dup || strings.EqualFold(s, h)
+		}
+		if dup || h == "" {
+			continue
+		}
+		seen = append(seen, h)
+		n, err := e.MessageMgr.GetLastRead(areaID, h)
+		if err != nil {
+			return 0, err
+		}
+		lastRead = max(lastRead, n)
 	}
 	return lastRead, nil
 }

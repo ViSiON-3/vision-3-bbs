@@ -138,3 +138,52 @@ func TestPrivateReplyGoesToTheRecordedAccount(t *testing.T) {
 		t.Errorf("reply to a deleted account: ok=%v %q", ok, reason)
 	}
 }
+
+// Read under a handle the recipient has since left behind, through two
+// renames, a letter still counts as read: lastread is checked under every
+// handle the account has had (#1061 review). Single letters and group
+// copies use the same lookup.
+func TestUnsendSeesReadThroughTwoRenames(t *testing.T) {
+	env := newMsgEnv(t)
+	env.runCmd("SENDPRIVMAIL", env.caller, "", "sysop\rLunch?\rNoon.\x1a")
+	rename := func(h string) {
+		t.Helper()
+		u, _ := env.um.GetUserByID(env.sysop.ID)
+		u.Handle = h
+		if err := env.um.UpdateUserByID(u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rename("Boss")
+	env.markRead(privmailAreaID, "Boss", 1)
+	rename("Chief")
+	if u, _ := env.um.GetUserByID(env.sysop.ID); strings.Join(u.PreviousHandles, ",") != "Sysop,Boss" {
+		t.Fatalf("PreviousHandles = %v", u.PreviousHandles)
+	}
+	m := env.mustMsg(privmailAreaID, 1)
+	if unsendableMail(env.e, env.um, privmailAreaID, m, env.caller.Handle, env.caller.ID) {
+		t.Error("a letter read under an earlier handle counts as unsendable")
+	}
+	if env.e.unreadCopy(env.um, privmailAreaID, m) {
+		t.Error("unreadCopy counts it unread")
+	}
+}
+
+// A renamed sender replying to their own letter that recorded no recipient
+// ID (a QWK upload to an unresolved name) addresses its To, not the old
+// From (#1061 review).
+func TestReplyToOwnLetterWithoutRecipientID(t *testing.T) {
+	env := newMsgEnv(t)
+	ann, _ := env.um.AddUser("password1", "Ann", "Ann Here", "")
+	m := &message.DisplayMessage{IsPrivate: true, From: "Caller", To: "Ann", SenderID: env.caller.ID}
+	carl, _ := env.um.GetUserByID(env.caller.ID)
+	carl.Handle = "Carl"
+	if err := env.um.UpdateUserByID(carl); err != nil {
+		t.Fatal(err)
+	}
+	carl, _ = env.um.GetUserByID(env.caller.ID)
+	handle, id, reason, ok := privateReplyAccount(env.um, m, carl, "Anonymous")
+	if !ok || handle != "Ann" || id != ann.ID {
+		t.Errorf("reply goes to %q #%d (%v %q), want Ann #%d", handle, id, ok, reason, ann.ID)
+	}
+}
