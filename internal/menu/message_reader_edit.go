@@ -95,10 +95,11 @@ const (
 
 // Why a message can't be edited. Each fits on the lightbar row, where a
 // notice stays for readerNoticePause: one that wraps scrolls the screen and
-// is gone before it's read.
+// is gone before it's read. They fit for any count a JAM message can hold
+// (its text length is 32 bits).
 const (
-	msgEditTooLong = "|01This message is %d lines, more than the editor's %d. It can't be edited.|07"
-	msgEditTooWide = "|01A line is %d characters wide, more than the editor's %d. It can't be edited.|07"
+	msgEditTooLong = "|01This message has %d lines; the editor holds %d. It can't be edited.|07"
+	msgEditTooWide = "|01A line is %d characters; the editor shows %d. It can't be edited.|07"
 )
 
 // minEditSubject is the shortest the subject prompt allows: what a new post
