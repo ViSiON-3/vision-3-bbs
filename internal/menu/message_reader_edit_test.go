@@ -30,7 +30,7 @@ func TestReaderAuthorEditsOwnPost(t *testing.T) {
 	if !strings.Contains(m.Body, "more") || !strings.Contains(m.Body, "mine-body") {
 		t.Errorf("body = %q, want the typed text and the old text", m.Body)
 	}
-	if !editedLine.MatchString(lastLine(m.Body)) || !strings.HasPrefix(lastLine(m.Body), " * Edited by Caller on "+time.Now().Format("01/02/06")) ||
+	if !editedLine.MatchString(lastLine(m.Body)) || !strings.HasPrefix(lastLine(m.Body), " * Edited by Caller on "+boardTime(time.Now()).Format("01/02/06")) ||
 		!strings.Contains(m.Body, "\n\n * Edited by ") {
 		t.Errorf("body = %q, want it to end with a blank line and the edited line", m.Body)
 	}
