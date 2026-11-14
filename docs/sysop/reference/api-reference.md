@@ -636,7 +636,7 @@ type DoorConfig struct {
     Name                string
     Commands            []string
     WorkingDirectory    string
-    DropfileType        string              // DOOR.SYS, DOOR32.SYS, CHAIN.TXT, DORINFO1.DEF, DROPFILE.INI
+    DropfileType        string              // DOOR.SYS, DOOR32.SYS, CHAIN.TXT, DORINFO1.DEF, DOORDROP.INI
     DropfileLocation    string              // "startup" or "node"
     IOMode              string              // "STDIO" or "SOCKET"
     RequiresRawTerminal bool
@@ -1118,7 +1118,7 @@ The system supports six door execution types:
 | RLogin        | `Type: "rlogin"`        | Outbound connection to a remote door server            |
 | Telnet        | `Type: "telnet"`        | Outbound connection to a remote door server, or a BBS  |
 
-**Dropfile formats:** `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, `DROPFILE.INI`, or none.
+**Dropfile formats:** `DOOR.SYS`, `DOOR32.SYS`, `CHAIN.TXT`, `DORINFO1.DEF`, `DOORDROP.INI`, or none.
 
 **I/O modes:** `STDIO` (default) or `SOCKET`.
 

@@ -13,6 +13,7 @@ import (
 // doorUserInfo holds the user fields needed for dropfile generation.
 type doorUserInfo struct {
 	ID            int
+	CreatedAt     time.Time // When the account was created; zero if unknown
 	Handle        string
 	RealName      string
 	AccessLevel   int

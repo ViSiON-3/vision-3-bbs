@@ -504,7 +504,7 @@ func (m *Model) fieldsDoor() []fieldDef {
 					{Value: "DOOR32.SYS", Display: "DOOR32.SYS"},
 					{Value: "CHAIN.TXT", Display: "CHAIN.TXT"},
 					{Value: "DORINFO1.DEF", Display: "DORINFO1.DEF"},
-					{Value: "DROPFILE.INI", Display: "DROPFILE.INI"},
+					{Value: "DOORDROP.INI", Display: "DOORDROP.INI"},
 				}
 			},
 		})
@@ -527,10 +527,10 @@ func (m *Model) fieldsDoor() []fieldDef {
 		}
 
 		// Offered for every native and DOS door: a DOS door is given every
-		// dropfile format, DROPFILE.INI included, whatever its type says.
+		// dropfile format, DOORDROP.INI included, whatever its type says.
 		row++
 		fields = append(fields, fieldDef{
-			Label: "Hide Personal", Help: "DROPFILE.INI: leave out the user's real name, location and IP address", Type: ftYesNo, Col: 3, Row: row, Width: 1,
+			Label: "Hide Personal", Help: "DOORDROP.INI: leave out the user's real name, location and IP address", Type: ftYesNo, Col: 3, Row: row, Width: 1,
 			Get: func() string { return uitext.BoolToYN(dPtr.DropfileHidePersonal) },
 			Set: func(val string) error { dPtr.DropfileHidePersonal = uitext.YNToBool(val); save(); return nil },
 		})

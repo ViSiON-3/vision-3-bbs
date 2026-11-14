@@ -308,6 +308,7 @@ func runOpenDoor(c *cmdCtx, args string) (*user.User, string, error) {
 			termWidth, termHeight,
 			nodeNumber, sessionStartTime, outputMode,
 			doorConfig, upperInput)
+		ctx.User.CreatedAt = currentUser.CreatedAt
 
 		handOffSessionIH(s)
 		cmdErr := executeDoor(ctx)

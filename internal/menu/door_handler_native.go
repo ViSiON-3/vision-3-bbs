@@ -52,13 +52,13 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			genErr = generateChainTxt(ctx, dropfileDir, fname)
 		case "DORINFO1.DEF":
 			genErr = generateDorInfo(ctx, dropfileDir, fname)
-		case dropfileIniType:
+		case doorDropIniType:
 			// Only a per-node directory is private enough to offer as TEMP_DIR.
 			tempDir := ""
 			if useNodeDir {
 				tempDir = dropfileDir
 			}
-			genErr = generateDropfileIni(ctx, dropfileDir, fname, tempDir)
+			genErr = generateDoorDropIni(ctx, dropfileDir, fname, tempDir)
 		}
 
 		if genErr != nil {
@@ -158,8 +158,8 @@ func executeNativeDoor(ctx *DoorCtx) error {
 	if _, exists := envMap["BBS_USERIP"]; !exists {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("BBS_USERIP=%s", ctx.Subs["{USERIP}"]))
 	}
-	if _, exists := envMap[dropfileIniEnvVar]; !exists && dropfileTypeUpper == dropfileIniType {
-		cmd.Env = append(cmd.Env, dropfileIniEnv(dropfilePath))
+	if _, exists := envMap[doorDropIniEnvVar]; !exists && dropfileTypeUpper == doorDropIniType {
+		cmd.Env = append(cmd.Env, doorDropIniEnv(dropfilePath))
 	}
 
 	// Set LINES and COLUMNS from user's saved preferences (for terminal size detection).

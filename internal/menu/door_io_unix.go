@@ -55,7 +55,7 @@ func pollableDoorFile(f *os.File) *os.File {
 // both ends close-on-exec. The door's end reaches it only as ExtraFiles fd 3,
 // which exec clears the flag on. Without the flag, every door started on any
 // node while the pair exists would inherit both ends, handing one caller's
-// session to another node's door; DROPFILE.INI requires a POSIX host to keep
+// session to another node's door; DOORDROP.INI requires a POSIX host to keep
 // other sessions' descriptors out of a door this way. ForkLock is held so no
 // fork lands between creating the pair and marking it.
 func doorSocketpair() ([2]int, error) {

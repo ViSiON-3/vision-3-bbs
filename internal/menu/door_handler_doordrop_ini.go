@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -15,22 +16,25 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
 
-// DROPFILE.INI is the named-value drop file drafted by Synchronet (draft 0.6):
-// https://github.com/SynchronetBBS/sbbs/blob/0fc1667377/docs/dropfile_ini.md
+// DOORDROP.INI is Synchronet's named-value drop file, version 1.0:
+// https://github.com/SynchronetBBS/sbbs/blob/master/docs/doordrop_ini.md
+//
+// Through draft 0.6 it was called DROPFILE.INI, a dropfile_type that
+// config.LoadDoors still accepts and rewrites to the current name.
 //
 // SYS_FTN_ADDR is the one key the spec defines that this writer leaves out:
 // it lists the primary address first, and FTN networks here are configured
 // with no primary among them.
 
 const (
-	dropfileIniType = "DROPFILE.INI"
-	// dropfileIniEnvVar names the environment variable that carries the file's
+	doorDropIniType = config.DoorDropType
+	// doorDropIniEnvVar names the environment variable that carries the file's
 	// absolute path to the door.
-	dropfileIniEnvVar = "DROPFILE_INI"
-	// dropfileIniVendor is the vendor name used in SYS_VENDOR and X_ keys.
-	dropfileIniVendor = "VISION3"
-	// dropfileIniMaxLine is the longest line the format allows, excluding CRLF.
-	dropfileIniMaxLine = 255
+	doorDropIniEnvVar = "DOORDROP_INI"
+	// doorDropIniVendor is the vendor name used in SYS_VENDOR and X_ keys.
+	doorDropIniVendor = "VISION3"
+	// doorDropIniMaxLine is the longest line the format allows, excluding CRLF.
+	doorDropIniMaxLine = 255
 	// doorSocketFD is the descriptor a SOCKET I/O door inherits its socket on.
 	doorSocketFD = 3
 )
@@ -42,7 +46,7 @@ var qwkIDPattern = regexp.MustCompile(`^[A-Z][A-Z0-9_-]{0,7}$`)
 // dropfile format the BBS knows how to write.
 func isGeneratedDropfileType(upperType string) bool {
 	switch upperType {
-	case "DOOR.SYS", "DOOR32.SYS", "CHAIN.TXT", "DORINFO1.DEF", dropfileIniType:
+	case "DOOR.SYS", "DOOR32.SYS", "CHAIN.TXT", "DORINFO1.DEF", doorDropIniType:
 		return true
 	}
 	return false
@@ -50,29 +54,29 @@ func isGeneratedDropfileType(upperType string) bool {
 
 // doorUsesNodeDir reports whether a native door's dropfile goes in a per-node
 // temporary directory instead of the working directory. That is the sysop's
-// choice, except that DROPFILE.INI may never share a path between nodes: a
+// choice, except that DOORDROP.INI may never share a path between nodes: a
 // door that several nodes can run at once always gets a per-node directory.
 func doorUsesNodeDir(cfg config.DoorConfig) bool {
 	if strings.EqualFold(cfg.DropfileLocation, "node") {
 		return true
 	}
-	return strings.EqualFold(cfg.DropfileType, dropfileIniType) && !cfg.SingleInstance
+	return strings.EqualFold(cfg.DropfileType, doorDropIniType) && !cfg.SingleInstance
 }
 
-// dropfileIniEnv returns the DROPFILE_INI environment entry for the dropfile at
+// doorDropIniEnv returns the DOORDROP_INI environment entry for the dropfile at
 // path. The door must be given an absolute path.
-func dropfileIniEnv(path string) string {
+func doorDropIniEnv(path string) string {
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
-	return dropfileIniEnvVar + "=" + path
+	return doorDropIniEnvVar + "=" + path
 }
 
-// dropfileIniText makes a stored string safe for a text value: it is converted
+// doorDropIniText makes a stored string safe for a text value: it is converted
 // to CP437 (the file never sets FILE_UTF8), control characters become '?',
 // non-breaking spaces become spaces, surrounding whitespace is removed and the
 // result is cut to fit the line limit for key.
-func dropfileIniText(key, val string) string {
+func doorDropIniText(key, val string) string {
 	b := []byte(toCP437Safe(strings.ReplaceAll(val, "\u00a0", " ")))
 	for i, c := range b {
 		switch {
@@ -82,17 +86,17 @@ func dropfileIniText(key, val string) string {
 			b[i] = '?'
 		}
 	}
-	if maxLen := dropfileIniMaxLine - len(key) - 1; len(b) > maxLen {
+	if maxLen := doorDropIniMaxLine - len(key) - 1; len(b) > maxLen {
 		b = b[:maxLen]
 	}
 	return strings.TrimSpace(string(b))
 }
 
-// dropfileIniASCII returns val if it is a valid ascii value (printable ASCII,
+// doorDropIniASCII returns val if it is a valid ascii value (printable ASCII,
 // no spaces) that fits the line limit for key, and "" otherwise.
-func dropfileIniASCII(key, val string) string {
+func doorDropIniASCII(key, val string) string {
 	val = strings.TrimSpace(val)
-	if len(val) > dropfileIniMaxLine-len(key)-1 {
+	if len(val) > doorDropIniMaxLine-len(key)-1 {
 		return ""
 	}
 	for i := 0; i < len(val); i++ {
@@ -103,35 +107,42 @@ func dropfileIniASCII(key, val string) string {
 	return val
 }
 
-// dropfileIniPath returns val if it can be written as a path value, and ""
-// otherwise. A path is written byte for byte as the file system gives it,
-// never converted to the file's text encoding and never cut, so one that
-// contains a control character or surrounding whitespace, or doesn't fit
-// the line limit for key, is left out.
-func dropfileIniPath(key, val string) string {
+// doorDropIniPath returns val if it can be written as a path value, and ""
+// otherwise. A path is written in the encoding the door's runtime expects
+// for file names, never converted to the file's text encoding and never cut,
+// so one that contains a control character or surrounding whitespace, or
+// doesn't fit the line limit for key, is left out. On Windows that encoding
+// is the system ANSI code page, which only an ASCII path is sure to survive,
+// so any other path is left out there too.
+func doorDropIniPath(key, val string) string {
+	return doorDropIniPathFor(runtime.GOOS, key, val)
+}
+
+// doorDropIniPathFor is doorDropIniPath for the named operating system.
+func doorDropIniPathFor(goos, key, val string) string {
 	// Whitespace here is the spec's: ASCII space and tab only. Other Unicode
 	// spaces are ordinary characters in a file name.
-	if val == "" || len(val) > dropfileIniMaxLine-len(key)-1 || strings.Trim(val, " \t") != val {
+	if val == "" || len(val) > doorDropIniMaxLine-len(key)-1 || strings.Trim(val, " \t") != val {
 		return ""
 	}
 	for i := 0; i < len(val); i++ {
-		if c := val[i]; c < 0x20 || c == 0x7F {
+		if c := val[i]; c < 0x20 || c == 0x7F || (c >= 0x80 && goos == "windows") {
 			return ""
 		}
 	}
 	// A UTF-8 path is checked for the control characters the spec defines
 	// for UTF-8 text, since those split lines in some readers.
-	if utf8.ValidString(val) && strings.IndexFunc(val, dropfileIniUTF8Control) >= 0 {
+	if utf8.ValidString(val) && strings.IndexFunc(val, doorDropIniUTF8Control) >= 0 {
 		return ""
 	}
 	return val
 }
 
-// dropfileIniUTF8Control reports whether r is a control character in UTF-8
+// doorDropIniUTF8Control reports whether r is a control character in UTF-8
 // text beyond the ASCII ones: C1 controls, the line and paragraph separators
 // (which Python's splitlines and JavaScript multiline regular expressions
 // treat as line breaks), and the bidirectional format characters.
-func dropfileIniUTF8Control(r rune) bool {
+func doorDropIniUTF8Control(r rune) bool {
 	switch {
 	case r >= 0x80 && r <= 0x9F,
 		r == 0x2028, r == 0x2029,
@@ -142,32 +153,32 @@ func dropfileIniUTF8Control(r rune) bool {
 	return false
 }
 
-// dropfileIniWriter accumulates the sections and keys of a DROPFILE.INI.
-type dropfileIniWriter struct {
+// doorDropIniWriter accumulates the sections and keys of a DOORDROP.INI.
+type doorDropIniWriter struct {
 	b strings.Builder
 }
 
 // line writes one CRLF-terminated line.
-func (w *dropfileIniWriter) line(s string) {
+func (w *doorDropIniWriter) line(s string) {
 	w.b.WriteString(s + "\r\n")
 }
 
 // section starts a new section, separated from the previous one by a blank line.
-func (w *dropfileIniWriter) section(name string) {
+func (w *doorDropIniWriter) section(name string) {
 	w.line("")
 	w.line("[" + name + "]")
 }
 
 // text writes an optional text key, leaving it out when the value is empty.
-func (w *dropfileIniWriter) text(key, val string) {
-	if v := dropfileIniText(key, val); v != "" {
+func (w *doorDropIniWriter) text(key, val string) {
+	if v := doorDropIniText(key, val); v != "" {
 		w.line(key + "=" + v)
 	}
 }
 
 // requiredText writes a required text key, substituting "?" for an empty value.
-func (w *dropfileIniWriter) requiredText(key, val string) {
-	v := dropfileIniText(key, val)
+func (w *doorDropIniWriter) requiredText(key, val string) {
+	v := doorDropIniText(key, val)
 	if v == "" {
 		v = "?"
 	}
@@ -176,26 +187,39 @@ func (w *dropfileIniWriter) requiredText(key, val string) {
 
 // ascii writes an optional ascii or token key, leaving it out when the value
 // is empty or not valid ASCII.
-func (w *dropfileIniWriter) ascii(key, val string) {
-	if v := dropfileIniASCII(key, val); v != "" {
+func (w *doorDropIniWriter) ascii(key, val string) {
+	if v := doorDropIniASCII(key, val); v != "" {
 		w.line(key + "=" + v)
 	}
 }
 
 // path writes an optional path key, leaving it out when the value can't be
 // written unchanged.
-func (w *dropfileIniWriter) path(key, val string) {
-	if v := dropfileIniPath(key, val); v != "" {
+func (w *doorDropIniWriter) path(key, val string) {
+	if v := doorDropIniPath(key, val); v != "" {
 		w.line(key + "=" + v)
 	}
 }
 
 // num writes an int key; a negative value is written as 0.
-func (w *dropfileIniWriter) num(key string, val int) {
+func (w *doorDropIniWriter) num(key string, val int) {
 	if val < 0 {
 		val = 0
 	}
 	w.line(key + "=" + strconv.Itoa(val))
+}
+
+// doorDropIniUserKey returns the USER_KEY for u: an opaque key that never
+// changes for the account and is never reused. A user number can be handed
+// out again after a purge when the stored next-ID record is lost, so the key
+// joins it to the account's creation time. An account with no creation time
+// gets the number alone, as the spec allows a host with nothing better.
+func doorDropIniUserKey(u doorUserInfo) string {
+	key := strconv.Itoa(max(u.ID, 0))
+	if !u.CreatedAt.IsZero() && u.CreatedAt.Unix() > 0 {
+		key += "-" + strconv.FormatInt(u.CreatedAt.Unix(), 10)
+	}
+	return key
 }
 
 // doorUsesSocketIO reports whether a native door is handed the caller's
@@ -213,11 +237,11 @@ func doorUsesSocketIO(ctx *DoorCtx) bool {
 	return true
 }
 
-// generateDropfileIni writes a DROPFILE.INI file. tempDir is a directory only
+// generateDoorDropIni writes a DOORDROP.INI file. tempDir is a directory only
 // this node uses, in the path syntax the door sees, or "" when there is none.
-func generateDropfileIni(ctx *DoorCtx, dir, filename, tempDir string) error {
+func generateDoorDropIni(ctx *DoorCtx, dir, filename, tempDir string) error {
 	path := filepath.Join(dir, filename)
-	slog.Info("generating dropfile", "type", dropfileIniType, "filename", filename, "path", path)
+	slog.Info("generating dropfile", "type", doorDropIniType, "filename", filename, "path", path)
 	cfg := ctx.Executor.GetServerConfig()
 	isDOS := ctx.Config.IsDOS
 	useFossil := isDOS && ctx.dosSerial()
@@ -234,7 +258,7 @@ func generateDropfileIni(ctx *DoorCtx, dir, filename, tempDir string) error {
 		commCharset = "CP437"
 	}
 
-	var w dropfileIniWriter
+	var w doorDropIniWriter
 	software := "ViSiON/3 " + strings.TrimSpace(version.Number)
 	w.b.WriteString("; Written by " + software + "\r\n")
 	w.line("[file]")
@@ -242,7 +266,7 @@ func generateDropfileIni(ctx *DoorCtx, dir, filename, tempDir string) error {
 
 	w.section("system")
 	w.requiredText("SYS_SOFTWARE", software)
-	w.line("SYS_VENDOR=" + dropfileIniVendor)
+	w.line("SYS_VENDOR=" + doorDropIniVendor)
 	w.ascii("SYS_VERSION", version.Number)
 	w.requiredText("SYS_NAME", cfg.BoardName)
 	w.requiredText("SYS_OP", cfg.SysOpName)
@@ -271,6 +295,7 @@ func generateDropfileIni(ctx *DoorCtx, dir, filename, tempDir string) error {
 	w.section("user")
 	w.requiredText("USER_ALIAS", ctx.User.Handle)
 	w.num("USER_NUMBER", ctx.User.ID)
+	w.line("USER_KEY=" + doorDropIniUserKey(ctx.User))
 	role := "user"
 	switch {
 	case cfg.SysOpLevel > 0 && ctx.User.AccessLevel >= cfg.SysOpLevel:
@@ -335,8 +360,8 @@ func generateDropfileIni(ctx *DoorCtx, dir, filename, tempDir string) error {
 	w.ascii("DOOR_CODE", ctx.Config.Code)
 	w.text("DOOR_NAME", ctx.Config.Name)
 
-	w.section("x-" + strings.ToLower(dropfileIniVendor))
-	w.num("X_"+dropfileIniVendor+"_LEVEL", ctx.User.AccessLevel)
+	w.section("x-" + strings.ToLower(doorDropIniVendor))
+	w.num("X_"+doorDropIniVendor+"_LEVEL", ctx.User.AccessLevel)
 
 	return os.WriteFile(path, []byte(w.b.String()), 0600)
 }
