@@ -2,6 +2,7 @@ package menu
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -342,7 +343,7 @@ func TestReaderEditTooLong(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := env.runCmd("READMSGS", env.sysop, "", "E\r\x1aQ")
-	if !r.has(fmt.Sprintf("This message is %d lines long", editor.MaxLines+1)) || r.has("Subject:") {
+	if !r.has(fmt.Sprintf("This message is %d lines", editor.MaxLines+1)) || r.has("Subject:") {
 		t.Errorf("output:\n%s", r.text())
 	}
 	if b := env.mustMsg(generalAreaID, 1).Body; b != long {
@@ -452,10 +453,24 @@ func TestReaderEditTooWide(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := env.runCmd("READMSGS", env.sysop, "", "E\r\x1aQ")
-	if !r.has(fmt.Sprintf("This message has a line %d characters wide", editor.MaxLineLength+1)) || r.has("Subject:") {
+	if !r.has(fmt.Sprintf("A line is %d characters wide", editor.MaxLineLength+1)) || r.has("Subject:") {
 		t.Errorf("output:\n%s", r.text())
 	}
 	if b := env.mustMsg(generalAreaID, 1).Body; b != wide {
 		t.Errorf("body changed: %q", b)
+	}
+}
+
+// Each refusal fits on the lightbar row, even for a message far past the
+// limits: one that wraps would scroll away before it's read.
+func TestEditRefusalsFitOneRow(t *testing.T) {
+	for name, text := range map[string]string{
+		"too long": fmt.Sprintf(msgEditTooLong, 99999, editor.MaxLines),
+		"too wide": fmt.Sprintf(msgEditTooWide, 99999, editor.MaxLineLength),
+	} {
+		plain := regexp.MustCompile(`\|\d\d`).ReplaceAllString(text, "")
+		if n := len(plain); n > editor.MaxLineLength {
+			t.Errorf("%s: %d columns, more than %d: %q", name, n, editor.MaxLineLength, plain)
+		}
 	}
 }

@@ -93,6 +93,14 @@ const (
 	editStale                   // the message changed elsewhere, or the save may have half gone through: read it again
 )
 
+// Why a message can't be edited. Each fits on the lightbar row, where a
+// notice stays for readerNoticePause: one that wraps scrolls the screen and
+// is gone before it's read.
+const (
+	msgEditTooLong = "|01This message is %d lines, more than the editor's %d. It can't be edited.|07"
+	msgEditTooWide = "|01A line is %d characters wide, more than the editor's %d. It can't be edited.|07"
+)
+
 // minEditSubject is the shortest the subject prompt allows: what a new post
 // is given. A longer subject, such as a reply's "Re: ...", gets its length.
 const minEditSubject = 30
@@ -118,7 +126,7 @@ func (e *MenuExecutor) editPostedMessage(s ssh.Session, ih *editor.InputHandler,
 	// text, which can come in by QWK or v3mail. Saving would lose it.
 	text := withoutEditedLine(msg.Body)
 	if n := strings.Count(strings.TrimRight(text, "\n"), "\n") + 1; n > editor.MaxLines {
-		notice(fmt.Sprintf("|01This message is %d lines long, more than the editor holds (%d). It can't be edited here.|07", n, editor.MaxLines))
+		notice(fmt.Sprintf(msgEditTooLong, n, editor.MaxLines))
 		return editNone, nil
 	}
 	// It keeps a line wider than its margin unwrapped, drawing it past the
@@ -127,7 +135,7 @@ func (e *MenuExecutor) editPostedMessage(s ssh.Session, ih *editor.InputHandler,
 	// the same way.
 	for _, line := range strings.Split(text, "\n") {
 		if w := utf8.RuneCountInString(strings.TrimRight(line, "\r")); w > editor.MaxLineLength {
-			notice(fmt.Sprintf("|01This message has a line %d characters wide, more than the editor shows (%d). It can't be edited here.|07", w, editor.MaxLineLength))
+			notice(fmt.Sprintf(msgEditTooWide, w, editor.MaxLineLength))
 			return editNone, nil
 		}
 	}
