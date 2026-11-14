@@ -187,3 +187,28 @@ func TestReplyToOwnLetterWithoutRecipientID(t *testing.T) {
 		t.Errorf("reply goes to %q #%d (%v %q), want Ann #%d", handle, id, ok, reason, ann.ID)
 	}
 }
+
+// A rename to a handle that folds equal to the old one ("Sysop" to
+// "ſysop") keeps a separate lastread record, so a letter read under the new
+// one still counts as read (#1061 review), for single letters and group
+// copies.
+func TestUnsendSeesReadAcrossAFoldEqualRename(t *testing.T) {
+	env := newMsgEnv(t)
+	env.runCmd("SENDPRIVMAIL", env.caller, "", "sysop\rLunch?\rNoon.\x1a")
+	u, _ := env.um.GetUserByID(env.sysop.ID)
+	u.Handle = "ſysop"
+	if err := env.um.UpdateUserByID(u); err != nil {
+		t.Fatal(err)
+	}
+	if u, _ := env.um.GetUserByID(env.sysop.ID); strings.Join(u.PreviousHandles, ",") != "Sysop" {
+		t.Fatalf("PreviousHandles = %v, want the old handle recorded", u.PreviousHandles)
+	}
+	env.markRead(privmailAreaID, "ſysop", 1)
+	m := env.mustMsg(privmailAreaID, 1)
+	if unsendableMail(env.e, env.um, privmailAreaID, m, env.caller.Handle, env.caller.ID) {
+		t.Error("a letter read under the fold-equal new handle counts as unsendable")
+	}
+	if env.e.unreadCopy(env.um, privmailAreaID, m) {
+		t.Error("unreadCopy counts it unread")
+	}
+}

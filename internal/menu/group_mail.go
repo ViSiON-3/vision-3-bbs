@@ -272,17 +272,17 @@ func (e *MenuExecutor) recipientLastRead(um *user.UserMgr, areaID int, m *messag
 			handles = append(handles, u.Handles()...)
 		}
 	}
+	// Each lastread record is keyed by the lower-cased handle, so that is
+	// what tells two handles apart here: "Sam" and "ſam" fold equal for
+	// mail but are two records.
 	lastRead := 0
-	var seen []string
+	seen := map[string]bool{}
 	for _, h := range handles {
-		dup := false
-		for _, s := range seen {
-			dup = dup || strings.EqualFold(s, h)
-		}
-		if dup || h == "" {
+		key := strings.ToLower(strings.TrimSpace(h))
+		if key == "" || seen[key] {
 			continue
 		}
-		seen = append(seen, h)
+		seen[key] = true
 		n, err := e.MessageMgr.GetLastRead(areaID, h)
 		if err != nil {
 			return 0, err

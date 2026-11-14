@@ -236,15 +236,18 @@ func (u *User) MorePromptsOn() bool {
 	return u.MorePrompts == nil || *u.MorePrompts
 }
 
-// NoteRenamed records old as one of u's previous handles, once, unless mail
-// would take it for u's handle now (strings.EqualFold).
+// NoteRenamed records old as one of u's previous handles, once. Handles
+// are compared as lastread records are keyed, by the lower-cased handle
+// (jam lastread uses its CRC): "Sam" and "ſam" are one name to private mail
+// but keep separate read pointers, so a rename between them is recorded.
 func (u *User) NoteRenamed(old string) {
 	old = strings.TrimSpace(old)
-	if old == "" || strings.EqualFold(old, strings.TrimSpace(u.Handle)) {
+	key := strings.ToLower(old)
+	if old == "" || key == strings.ToLower(strings.TrimSpace(u.Handle)) {
 		return
 	}
 	for _, h := range u.PreviousHandles {
-		if strings.EqualFold(h, old) {
+		if strings.ToLower(h) == key {
 			return
 		}
 	}
