@@ -249,7 +249,7 @@ Findings are grouped into five sections, each line tagged with a status and,
 where there is something to do, a `FIX →` line:
 
 ```text
-  ViSiON/3 Doctor Utility v0.9.7
+  ViSiON/3 Doctor Utility v0.9.8
 ────────────────────────────────────────────────────────────────────────
 BOARD  /opt/vision3
 

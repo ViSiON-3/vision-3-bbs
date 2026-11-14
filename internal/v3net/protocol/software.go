@@ -151,11 +151,11 @@ type FeatureRequirement struct {
 // feature, never a planned one.
 var FeatureRequirements = []FeatureRequirement{
 	{Feature: FeatureCentralDirectory, Title: "Central directory", MinVersion: "0.9.7"},
-	{Feature: FeatureCentralPresence, Title: "Who's Online"},
-	{Feature: FeatureCentralLastCallers, Title: "Last Callers"},
-	{Feature: FeatureCentralChat, Title: "Network chat"},
-	{Feature: FeatureCentralAlerts, Title: "Activity alerts"},
-	{Feature: FeatureCentralRoster, Title: "Board roster"},
+	{Feature: FeatureCentralPresence, Title: "Who's Online", MinVersion: "0.9.8"},
+	{Feature: FeatureCentralLastCallers, Title: "Last Callers", MinVersion: "0.9.8"},
+	{Feature: FeatureCentralChat, Title: "Network chat", MinVersion: "0.9.8"},
+	{Feature: FeatureCentralAlerts, Title: "Activity alerts", MinVersion: "0.9.8"},
+	{Feature: FeatureCentralRoster, Title: "Board roster", MinVersion: "0.9.8"},
 }
 
 // FeatureMinVersion returns FeatureRequirements' MinVersion for feature: the
