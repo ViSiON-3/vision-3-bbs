@@ -53,6 +53,13 @@ func bindSponsors(um *user.UserMgr, mm *message.MessageManager) error {
 	if um == nil || mm == nil {
 		return nil
 	}
+	// With the retired list unreadable, every handle would read as
+	// retired and bind to nobody for good. Leave the areas unbound, which
+	// grants nothing, and try again at the next load.
+	if err := um.RetiredListError(); err != nil {
+		slog.Error("not binding area sponsors: the retired-handle list can't be read", "error", err)
+		return err
+	}
 	if _, _, err := mm.BindSponsors(accountIDFor(um), accountNameFor(um)); err != nil {
 		slog.Error("binding area sponsors to accounts failed; the areas left unbound have no sponsor until it succeeds", "error", err)
 		return err
@@ -66,6 +73,12 @@ func bindSponsors(um *user.UserMgr, mm *message.MessageManager) error {
 // runs isn't left unowned until the next start.
 func bindUploaders(um *user.UserMgr, fm *file.FileManager) {
 	if um == nil || fm == nil {
+		return
+	}
+	// As for sponsors: an unreadable retired list would bind every old
+	// upload to nobody for good; leave them for a later run.
+	if err := um.RetiredListError(); err != nil {
+		slog.Error("not binding uploads: the retired-handle list can't be read", "error", err)
 		return
 	}
 	// A record left unbound is nobody's to edit until a later start binds

@@ -175,6 +175,18 @@ func (um *UserMgr) handleRetired(handle string) error {
 	return nil
 }
 
+// RetiredListError is the error reading this manager's retired-handle
+// list, nil when it reads (or has never been written). Something that would
+// record a lasting decision from HandleRetired, such as binding old owners
+// to accounts, checks it first rather than take "unreadable" for "retired".
+func (um *UserMgr) RetiredListError() error {
+	if um == nil {
+		return nil
+	}
+	_, err := readRetired(um.path)
+	return err
+}
+
 // HandleRetired reports whether handle belonged to a purged account and
 // can't be registered. A list that can't be read counts as retired.
 func (um *UserMgr) HandleRetired(handle string) bool {

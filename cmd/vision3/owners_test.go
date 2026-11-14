@@ -163,3 +163,40 @@ func TestFileAreasReloadBindsUploaders(t *testing.T) {
 		t.Errorf("record = %+v, want uploader #%d", rec, ann.ID)
 	}
 }
+
+// With the retired list unreadable, binding stops rather than record every
+// old owner as nobody for good: the records stay unbound for a later run.
+func TestBindingWaitsForAReadableRetiredList(t *testing.T) {
+	tmp := t.TempDir()
+	configDir, dataDir := filepath.Join(tmp, "configs"), filepath.Join(tmp, "data")
+	writeOwnersFile(t, tmp, "configs/file_areas.json", `[{"id":1,"tag":"ONE","name":"One","path":"one"}]`)
+	fileMgr, err := file.NewFileManager(dataDir, configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usersDir := filepath.Join(tmp, "users")
+	um, err := user.NewUserManager(usersDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ann, _ := um.AddUser("password1", "Ann", "Ann Here", "")
+	id := uuid.New()
+	if err := fileMgr.AddFileRecord(file.FileRecord{ID: id, AreaID: 1, Filename: "A.ZIP", UploadedBy: "Ann"}); err != nil {
+		t.Fatal(err)
+	}
+	retired := filepath.Join(usersDir, user.RetiredHandlesFile)
+	if err := os.Mkdir(retired, 0o700); err != nil { // unreadable as a file
+		t.Fatal(err)
+	}
+	bindUploaders(um, fileMgr)
+	if rec, _ := fileMgr.GetFileRecordByID(id); rec.UploadedByID != 0 {
+		t.Fatalf("bound to %d with the list unreadable, want left unbound", rec.UploadedByID)
+	}
+	if err := os.Remove(retired); err != nil {
+		t.Fatal(err)
+	}
+	bindUploaders(um, fileMgr)
+	if rec, _ := fileMgr.GetFileRecordByID(id); rec.UploadedByID != ann.ID {
+		t.Errorf("after the list was fixed, uploader = %d, want #%d", rec.UploadedByID, ann.ID)
+	}
+}
