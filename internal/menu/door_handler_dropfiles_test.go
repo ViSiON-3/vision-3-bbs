@@ -278,7 +278,7 @@ func TestGenerateDoorDropIniHidePersonal(t *testing.T) {
 	}
 }
 
-func TestDropfileIniPath(t *testing.T) {
+func TestDoorDropIniPath(t *testing.T) {
 	long := "/" + strings.Repeat("d", doorDropIniMaxLine-len("TEMP_DIR=")-1)
 	tests := []struct {
 		name, val, want string
@@ -306,8 +306,10 @@ func TestDropfileIniPath(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := doorDropIniPath("TEMP_DIR", tt.val); got != tt.want {
-				t.Errorf("doorDropIniPath(%q) = %q, want %q", tt.val, got, tt.want)
+			// The POSIX rules, whatever this test runs on: Windows keeps
+			// only ASCII paths (see TestDoorDropIniPathPerOS).
+			if got := doorDropIniPathFor("linux", "TEMP_DIR", tt.val); got != tt.want {
+				t.Errorf("doorDropIniPathFor(linux, %q) = %q, want %q", tt.val, got, tt.want)
 			}
 		})
 	}
