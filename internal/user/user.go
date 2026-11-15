@@ -133,7 +133,7 @@ type User struct {
 	// a plain bool that was never read, and never written as false, so an
 	// existing record keeps the pauses it always had.
 	MorePrompts     *bool  `json:"morePrompts,omitempty"`
-	CustomPrompt    string `json:"customPrompt,omitempty"`
+	CustomPrompt    string `json:"customPrompt,omitempty"` // replaces the menu prompt for this caller (CleanCustomPrompt); blank = the menu's own
 	OutputMode      string `json:"outputMode,omitempty"`
 	FileListingMode string `json:"fileListingMode,omitempty"` // "lightbar" or "classic" (empty = server default)
 	AutocorrectOff  bool   `json:"autocorrectOff,omitempty"`  // the caller turned the message editor's autocorrect off (Ctrl-O or User Konfig)

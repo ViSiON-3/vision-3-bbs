@@ -26,6 +26,7 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). F
 | Screen Width, Screen Height | `screenWidth`, `screenHeight` (applies straight away; height 24-60) |
 | Encoding | `preferredEncoding`: each press goes Auto → the encoding the session is using → the other one → Auto (applies from the next login) |
 | Hot Keys | `hotKeys` |
+| Menu Prompt | `customPrompt`: the caller's own menu prompt, in place of the menu's (see below). Shown only to callers the board's `customPromptACS` lets set one |
 | Header Style | `msgHdr` |
 | Auto-Signature | `autoSignature`, `autoSigAsk` |
 | Thread View | `threadViewClosed`: whether the message reader shows the thread pane under the header (the default) or only while `T` (Thread) has the thread menu open |
@@ -977,7 +978,7 @@ These are the fields behind the User Konfig (`K`) screen; see
 
 - `hotKeys` - Hot keys: menu commands run on a single keypress. A key that could start a longer command (a multi-key command, a number on a `##` menu, or `/G`) still waits for Enter. A menu's `FORCEHOTKEY` turns this on for everyone on that menu.
 - `morePrompts` - Whether long output pauses a screen at a time with the More prompt (`morePrompt` in `strings.json`): **Y**, Enter or Space shows one more screen, **C** the rest without stopping, **N** or **Q** stops. Left out of the record, it is on, which is how every existing account starts; `false` means the output runs straight through. It covers the text pager, the user list, file search, file newscan and the rumors list. The text pager keeps its own prompt, `fileMorePrompt`.
-- `customPrompt` - Stored but not yet shown; menus always use their own prompt ([#425](https://github.com/ViSiON-3/vision-3-bbs/issues/425)).
+- `customPrompt` - The caller's own menu prompt, up to 80 characters on one line. Blank means the menu's own. On a menu with `USEPROMPT` set it takes the place of `PROMPT1` (or of the default prompt, `defPrompt`, on a menu with no prompts of its own); the menu's `PROMPT2` is still shown after it. Screens that draw their own prompt, such as the generated door menu, the sponsor menu and the Twit List editor, keep theirs. Because the caller writes it, it keeps only colour codes (`|00`-`|15`, `|B0`-`|B7`) and the session placeholders (`|UH`, `|MN`, `|TL`, `|CAN` and the rest); every other code, `%%file%%` include, AT-code such as `@RR@`, and `|{...|}` group prints as written, and it is never run as a `!script` or shown as a `%file`. Control characters are removed when it is saved. It is shown, and offered in User Konfig, only to callers who pass the board's [`customPromptACS`](configuration/configuration.md#field-reference); a stored prompt stays on the record while a caller doesn't, and the sysop can clear it in `./ue`.
 - `outputMode` - Legacy field, not read by the board. The encoding that login applies is `preferredEncoding`.
 - `fileListingMode` - File listing style: `"lightbar"` or `"classic"` (empty = server default)
 - `file_list_columns` - Which columns the file lister shows. All `false` means every column is shown.

@@ -203,6 +203,12 @@ type ServerConfig struct {
 	// auto-signature editor, which have no area, follow it. Off unless set.
 	EditorAutocorrect bool `json:"editorAutocorrect"`
 
+	// CustomPromptACS is who may set a custom menu prompt in User Konfig, and
+	// whose stored one is shown in place of the menu's prompt. Blank or "*"
+	// is everyone. A string that doesn't parse lets nobody, as ACS strings
+	// elsewhere do.
+	CustomPromptACS string `json:"customPromptACS,omitempty"`
+
 	// ArchiveViewerDoor and TextViewerDoor are the codes of v3_script doors
 	// that view an archive, or any other file, in place of the built-in
 	// viewers (ZipLab's contents list and the text pager): from V in both

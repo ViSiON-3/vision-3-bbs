@@ -420,6 +420,10 @@ var StringFallbacks = map[string]string{
 	"konfigColumnDownloads":     "Downloads",
 	"konfigColumnUploader":      "Uploader",
 	"konfigColumnDescription":   "Description",
+	// The caller's own menu prompt (#425).
+	"konfigCustomPromptLabel":   "Menu Prompt",
+	"konfigCustomPromptHelp":    "Your own menu prompt: colours and codes like ||UH work. Blank: the board's.",
+	"konfigCustomPromptPreview": "|08Preview: |07",
 }
 
 // StringMissingDefaults maps a strings.json key to the value the runtime uses

@@ -51,7 +51,7 @@ Press Enter on any user to open the field editor. It lays the fields out in two 
 
 **Read-only block:** Num Uploads, Msgs Posted, InfoForms, Auto Purge, Created, Updated, Last Login, Bulletin
 
-Custom Prompt and Output Mode are stored but not currently used by the board; see [User Management](users/user-management.md#user-configuration-preferences). Encoding is the field login applies: blank means Auto (detect on every call), `utf8` or `cp437` forces that encoding.
+Custom Prompt is the caller's own [menu prompt](users/user-management.md#user-configuration-preferences): the field shows 22 characters and scrolls to take all 80, and emptying it gives the caller the menu's prompt back. Output Mode is stored but not currently used by the board; see [User Management](users/user-management.md#user-configuration-preferences). Encoding is the field login applies: blank means Auto (detect on every call), `utf8` or `cp437` forces that encoding.
 
 Time Limit is minutes per call, `0` for no limit. CoSysOps and above are never limited whatever the field says; see [Time Limits](users/user-management.md#time-limits). A change made while the caller is online applies from their next menu.
 
@@ -221,7 +221,7 @@ found or cannot be loaded.
 | Access Flags | `flags` | Single letters, used by ACS `F` |
 | Private Note | `privateNote` | |
 | File Points | `filePoints` | |
-| Custom Prompt | `customPrompt` | Stored, not used |
+| Custom Prompt | `customPrompt` | The caller's own menu prompt (blank = the menu's) |
 | Time Limit | `timeLimit` | Minutes per call, 0 = unlimited, max 1440 |
 | Password | `passwordHash` | bcrypt |
 | WFC Keys | `publicKeys` | OpenSSH public-key lines |

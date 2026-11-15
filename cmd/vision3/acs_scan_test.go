@@ -37,7 +37,7 @@ func writeACSFixture(t *testing.T) string {
 	write("configs/message_areas.json", `[{"id": 1, "tag": "GENERAL", "acs_read": "", "acs_write": "s20"}, {"id": 2, "tag": "SYSOP", "acs_read": "S@250", "acs_write": "SYSOP"}]`)
 	write("configs/file_areas.json", `[{"id": 1, "tag": "UTILS", "acs_list": "s10", "acs_upload": "s20&V", "acs_download": "H25"}]`)
 	write("configs/conferences.json", `[{"id": 1, "tag": "LOCAL", "acs": "s10)"}]`)
-	write("configs/config.json", `{"doorCategories": [{"code": "GAMES", "name": "Games", "acs": "S20&!Sx"}]}`)
+	write("configs/config.json", `{"doorCategories": [{"code": "GAMES", "name": "Games", "acs": "S20&!Sx"}], "customPromptACS": "S10&"}`)
 	write("configs/ftn.json", `{"networks": {"fsxnet": {"auto_create": {"enabled": true, "acs_read": "s10", "acs_write": "s20@"}}}}`)
 	write("configs/doors.json", `[{"code": "LORD", "name": "LORD", "acs": "s20&!Q"}]`)
 	return root
@@ -55,6 +55,7 @@ func TestScanACS(t *testing.T) {
 		{"configs/file_areas.json", "area UTILS", "acs_download", "hour from 0 to 23"},
 		{"configs/conferences.json", "conference 1 (LOCAL)", "acs", "no matching '('"},
 		{"configs/config.json", "door category GAMES", "acs", "S needs a whole number"},
+		{"configs/config.json", "board", "customPromptACS", "needs a term on each side"},
 		{"configs/ftn.json", "network fsxnet auto_create", "acs_write", "unexpected character '@'"},
 		{"configs/doors.json", "door 1 (LORD)", "acs", "Q is not an ACS term"},
 	}

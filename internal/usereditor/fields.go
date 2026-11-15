@@ -35,6 +35,10 @@ type fieldDef struct {
 	Max   int       // Maximum value (for ftInteger)
 	Get   func(u *user.User) string
 	Set   func(u *user.User, val string) error
+
+	// MaxLen is the most characters the field takes, when that is more than
+	// Width; the input scrolls. 0 means Width.
+	MaxLen int
 }
 
 // editFields returns the ordered list of editable fields.
@@ -118,9 +122,9 @@ func editFields() []fieldDef {
 			},
 		},
 		{
-			Label: "Custom Prompt", Type: ftString, Col: 3, Row: 12, Width: 22,
+			Label: "Custom Prompt", Type: ftString, Col: 3, Row: 12, Width: 22, MaxLen: user.CustomPromptMaxLen,
 			Get: func(u *user.User) string { return u.CustomPrompt },
-			Set: func(u *user.User, val string) error { u.CustomPrompt = val; return nil },
+			Set: func(u *user.User, val string) error { u.CustomPrompt = user.CleanCustomPrompt(val); return nil },
 		},
 		{
 			Label: "Time Limit", Type: ftInteger, Col: 3, Row: 13, Width: 6, Min: 0, Max: 1440,

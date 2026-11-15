@@ -2,7 +2,9 @@ package configeditor
 
 import (
 	"strconv"
+	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
@@ -109,6 +111,18 @@ func sysFieldsDefaults(cfg *config.ServerConfig) []fieldDef {
 			Label: "Autocorrect", Help: "Fix common typos as callers type in the message editor, in areas left at Default and in private mail", Type: ftYesNo, Col: 3, Row: 6, Width: 1,
 			Get: func() string { return uitext.BoolToYN(cfg.EditorAutocorrect) },
 			Set: func(val string) error { cfg.EditorAutocorrect = uitext.YNToBool(val); return nil },
+		},
+		{
+			Label: "Custom Prompt", Help: "ACS for setting your own menu prompt in User Konfig, and having it shown (blank or * = everyone)", Type: ftString, Col: 3, Row: 7, Width: 20, MaxLen: acsMaxLen,
+			Get: func() string { return cfg.CustomPromptACS },
+			Set: func(val string) error {
+				val = strings.TrimSpace(val)
+				if err := acs.FieldError(val); err != nil {
+					return err
+				}
+				cfg.CustomPromptACS = val
+				return nil
+			},
 		},
 	}
 	row := len(fields) + 1

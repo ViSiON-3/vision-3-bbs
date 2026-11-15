@@ -327,8 +327,15 @@ func (e *MenuExecutor) displayMenuPrompt(s ssh.Session, terminal *term.Terminal,
 // is the prompt kind a script in place of the default prompt is given.
 func (e *MenuExecutor) displayPromptKind(s ssh.Session, terminal *term.Terminal, menu *MenuRecord, currentUser *user.User, userManager *user.UserMgr, nodeNumber int, currentMenuName string, sessionStartTime time.Time, outputMode ansi.OutputMode, currentAreaName string, kind string) (promptAnswer, error) {
 	var none promptAnswer
+	// In the run loop, a caller's custom prompt takes PROMPT1's place;
+	// PROMPT2 still follows it. It is rendered on its own (see
+	// renderCustomPrompt), so it never reaches the default prompt's hooks.
+	custom := ""
+	if kind == scripting.PromptMenu {
+		custom = e.customPromptFor(currentUser, s, sessionStartTime)
+	}
 	promptParts := make([]string, 0, 2)
-	if strings.TrimSpace(menu.Prompt1) != "" {
+	if custom == "" && strings.TrimSpace(menu.Prompt1) != "" {
 		promptParts = append(promptParts, menu.Prompt1)
 	}
 	if strings.TrimSpace(menu.Prompt2) != "" {
@@ -354,7 +361,7 @@ func (e *MenuExecutor) displayPromptKind(s ssh.Session, terminal *term.Terminal,
 	promptString := strings.Join(promptParts, "\r\n")
 
 	leadWritten := false // the prompt's leading line break is already written
-	if promptString == "" {
+	if promptString == "" && custom == "" {
 		if e.Strings().DefPrompt != "" { // Use loaded strings
 			promptString = e.Strings().DefPrompt
 		} else {
@@ -402,8 +409,18 @@ func (e *MenuExecutor) displayPromptKind(s ssh.Session, terminal *term.Terminal,
 	if userManager != nil {
 		userCount = userManager.GetUserCount()
 	}
-	rawPromptBytes := e.renderPromptText(promptString, placeholders,
-		userCount, e.activeNodeCount(), rumorLevel)
+	var rawPromptBytes []byte
+	if promptString != "" {
+		rawPromptBytes = e.renderPromptText(promptString, placeholders,
+			userCount, e.activeNodeCount(), rumorLevel)
+	}
+	if custom != "" {
+		line := renderCustomPrompt(custom, placeholders)
+		if len(rawPromptBytes) > 0 {
+			line = append(line, "\r\n"...)
+		}
+		rawPromptBytes = append(line, rawPromptBytes...)
+	}
 
 	// 4. Process character encoding based on outputMode (Reverted to manual loop)
 	var finalBuf bytes.Buffer

@@ -27,9 +27,9 @@ import (
 //
 // All of its text comes from the konfig* strings in strings.json.
 //
-// Only settings the board actually honours are offered. User.OutputMode,
-// CustomPrompt and Colors are stored but nothing reads them, so they stay
-// out of the form until something does.
+// Only settings the board actually honours are offered. User.OutputMode and
+// Colors are stored but nothing reads them, so they stay out of the form
+// until something does.
 
 // konfigTone picks the colour a value is drawn in.
 type konfigTone int
@@ -82,7 +82,7 @@ type konfigHeading struct {
 const (
 	konfigHeaderRows = 5                    // rows reserved for KONFIG.ANS
 	konfigTopRow     = konfigHeaderRows + 2 // one blank row under the art
-	konfigFormRows   = 12                   // two sections a column, with their gaps
+	konfigFormRows   = 13                   // two sections a column, with their gaps
 	konfigColWidth   = 38
 	konfigLeftCol    = 2
 	konfigRightCol   = 42
@@ -118,6 +118,9 @@ type konfigState struct {
 	status   string
 	// hdrNames caches the header style names; see headerStyleNames.
 	hdrNames map[string]string
+	// onEdit, when set, is called with readField's text before each time
+	// the field is drawn; the custom prompt's preview uses it.
+	onEdit func(text string) error
 	// redraw asks for a full repaint after the current edit, for editors
 	// that take over the screen (the message editor, the header picker, the
 	// file-column box).
@@ -145,6 +148,9 @@ func runUserKonfig(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 	if !v3netSharingOffered(c.e) {
 		cols = withoutKonfigItem(cols, v3netSharingKonfigKey)
+	}
+	if !c.e.customPromptAllowed(c.currentUser, c.s, c.sessionStartTime) {
+		cols = withoutKonfigItem(cols, customPromptKonfigKey)
 	}
 	st.items, st.headings = layoutKonfig(cols)
 
@@ -310,6 +316,10 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					help:  str.KonfigHotKeysHelp,
 					value: func(st *konfigState) konfigValue { return st.onOffValue(st.user().HotKeys) },
 					edit:  toggleHotKeys},
+				{key: customPromptKonfigKey, label: str.KonfigCustomPromptLabel,
+					help:  str.KonfigCustomPromptHelp,
+					value: func(st *konfigState) konfigValue { return st.textValue(st.user().CustomPrompt) },
+					edit:  editCustomPrompt},
 			}},
 			{title: str.KonfigSectionMessages, items: []*konfigItem{
 				{key: 'E', label: str.KonfigHeaderStyleLabel,
@@ -947,4 +957,53 @@ func editAutoSig(st *konfigState) error {
 		st.status = str.KonfigAutoSigUpdated
 	}
 	return nil
+}
+
+// customPromptKonfigKey is the Menu Prompt item's hotkey. The item is left
+// out for a caller the board's customPromptACS doesn't let set one.
+const customPromptKonfigKey = 'T'
+
+// editCustomPrompt edits the caller's own menu prompt, previewing it on the
+// help row as it is typed. Emptying it goes back to the menu's prompt.
+func editCustomPrompt(st *konfigState) error {
+	str := st.c.e.Strings()
+	label := str.KonfigCustomPromptLabel
+	old := st.user().CustomPrompt
+	st.onEdit = st.previewCustomPrompt
+	defer func() {
+		st.onEdit = nil
+		_ = st.renderHelp()
+	}()
+	input, ok, err := st.readField(label, old, user.CustomPromptMaxLen, false, "")
+	if err != nil || !ok {
+		return err
+	}
+	v := user.CleanCustomPrompt(input)
+	if v == old {
+		return nil
+	}
+	if st.commit(label,
+		func(u *user.User) { u.CustomPrompt = v },
+		func(u *user.User) { u.CustomPrompt = old }) {
+		if v == "" {
+			st.status = fmt.Sprintf(str.KonfigClearedFormat, label)
+		} else {
+			st.status = fmt.Sprintf(str.KonfigUpdatedFormat, label)
+		}
+	}
+	return nil
+}
+
+// previewCustomPrompt draws text on the help row as a menu would show it,
+// with this call's placeholders, or the help line when it is blank.
+func (st *konfigState) previewCustomPrompt(text string) error {
+	if user.CleanCustomPrompt(text) == "" {
+		return st.renderHelp()
+	}
+	c := st.c
+	ph := c.e.sessionPlaceholders(c.s, c.currentUser, c.userManager, c.nodeNumber, "MAIN", c.sessionStartTime, "", false)
+	shown := ansi.ConvertCP437ToUTF8(renderCustomPrompt(text, ph))
+	label := string(ansi.ReplacePipeCodes([]byte(c.e.Strings().KonfigCustomPromptPreview)))
+	return st.raw(clearRow(konfigHelpRow) + moveTo(konfigHelpRow, 2) +
+		st.clipRow(label+string(shown)) + konfigReset)
 }

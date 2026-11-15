@@ -67,7 +67,7 @@ Choosing **System Setup** (key 1) opens an inner menu of seven numbered items, a
 |------|------|--------|
 | 1 | BBS Registration | Board Name, SysOp Name, BBS Location, Timezone, QWK ID |
 | 2 | Server Setup | SSH enabled/host/port/legacy-algorithms, Telnet enabled/host/port, V3Net enabled + keystore/dedup/registry paths, V3Net hub settings, Binkd mailer settings |
-| 3 | Default Settings | Allow New Users (Y/N), Require Email (Y/N), File List Mode (lightbar/classic), Deleted User Retention Days, Twit Lists (Y/N), Autocorrect (Y/N) |
+| 3 | Default Settings | Allow New Users (Y/N), Require Email (Y/N), File List Mode (lightbar/classic), Deleted User Retention Days, Twit Lists (Y/N), Autocorrect (Y/N), Custom Prompt (ACS) |
 | 4 | DOS Emulation | DOSemu Path |
 | 5 | Logging | Log Directory, Min Level, Rolling Type, Cache Writes, Max Files, Max Size KB |
 | 6 | QWK Mobile API | Enabled, Host, Port, Cert File, Key File, Token TTL Hours |
@@ -673,6 +673,7 @@ under Security Levels in `./config`, to silence it.
 - `twitExemptLevel` — Access level from which a user cannot be twit-listed (shipped: `0`, meaning only sysops and co-sysops are exempt). See the [Twit List Technical Reference](messages/twit-list.md#technical-reference)
 - `archiveViewerDoor`, `textViewerDoor` — Codes of `v3_script` doors that view a ZIP archive, or any other file, in place of the built-in viewers, from **V** in the file lists, `VIEW_FILE` and (text) `TYPE_TEXT_FILE`. See [Viewer doors](files/file-areas.md#viewer-doors) (shipped: `ARTVIEW` and `TEXTVIEW`; fallback: none, the built-in viewers)
 - `editorAutocorrect` — Board default for the message editor's [autocorrect](messages/message-areas.md#autocorrect), which fixes common typos as callers type. Applies to message areas whose own `autocorrect` is left out, to private mail when `PRIVMAIL` leaves it out, and to the auto-signature editor. Callers can still turn it off for themselves (shipped and fallback: `false`)
+- `customPromptACS` — [ACS](reference/acs.md) for setting your own [menu prompt](users/user-management.md#user-configuration-preferences) in User Konfig, and having a stored one shown. Blank or `*` is everyone; a string that doesn't parse lets nobody, as everywhere else, and the startup ACS check reports it. A caller who doesn't pass sees the menu's prompt and no Menu Prompt item, and keeps whatever they had stored (shipped and fallback: blank, everyone)
 
 **IP Blocklist/Allowlist:**
 

@@ -26,3 +26,17 @@ func TestTwitListsField(t *testing.T) {
 		t.Fatalf("set N: on=%v err=%v", cfg.TwitListsOn(), err)
 	}
 }
+
+// TestCustomPromptACSField checks the Default Settings ACS for custom menu
+// prompts stores a good string trimmed and refuses one the BBS would deny to
+// everyone, keeping the old value.
+func TestCustomPromptACSField(t *testing.T) {
+	var cfg config.ServerConfig
+	f := fieldByLabel(t, sysFieldsDefaults(&cfg), "Custom Prompt")
+	if err := f.Set(" s20&fA "); err != nil || cfg.CustomPromptACS != "s20&fA" {
+		t.Fatalf("Set(good) = %v, stored %q", err, cfg.CustomPromptACS)
+	}
+	if err := f.Set("s20&"); err == nil || cfg.CustomPromptACS != "s20&fA" {
+		t.Fatalf("Set(bad) = %v, stored %q", err, cfg.CustomPromptACS)
+	}
+}
