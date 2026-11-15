@@ -24,34 +24,8 @@ func IsKnownRunnableTarget(target string) bool {
 }
 
 // registerPlaceholderRunnables registers the runnables that are implemented
-// inline here rather than in their own file, including the production "DOOR:"
-// handler and the READMAIL placeholder.
+// inline here rather than in their own file: the production "DOOR:" handler.
 func registerPlaceholderRunnables(registry map[string]RunnableFunc) { // Use local RunnableFunc
-	// Keep READMAIL as a placeholder for now
-	registry["READMAIL"] = func(c *cmdCtx, args string) (*user.User, string, error) {
-		e := c.e
-		terminal := c.terminal
-		currentUser := c.currentUser
-		nodeNumber := c.nodeNumber
-		outputMode := c.outputMode
-
-		if currentUser == nil {
-			slog.Warn("readmail called without logged in user", "node", nodeNumber)
-			wErr := e.writeString(terminal, outputMode, e.Strings().ExecReadmailLogin)
-			if wErr != nil {
-				slog.Error("failed writing readmail error message", "error", wErr)
-			}
-			uiPause(1 * time.Second)
-			return nil, "", nil // No user change, no next action, no error
-		}
-		wErr := e.writeStringf(terminal, outputMode, e.Strings().ExecReadmailPlaceholder, currentUser.Handle)
-		if wErr != nil {
-			slog.Error("failed writing readmail placeholder message", "error", wErr)
-		}
-		uiPause(500 * time.Millisecond)
-		return nil, "", nil // No user change, no next action, no error
-	}
-
 	// Register DOOR handler — delegates to door_handler.go
 	registry["DOOR:"] = func(c *cmdCtx, doorName string) (*user.User, string, error) {
 		e := c.e
@@ -205,6 +179,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["SEARCHMSGS"] = runSearchMsgs                           // Text search of message subjects and bodies
 	registry["SENDPRIVMAIL"] = runSendPrivateMail                    // Send private mail to user
 	registry["READPRIVMAIL"] = runReadPrivateMail                    // Read private mail
+	registry["READMAIL"] = runReadPrivateMail                        // Old name for READPRIVMAIL, kept for boards' own menus
 	registry["LISTPRIVMAIL"] = runListPrivateMail                    // List private mail
 	registry["DELETEPRIVMAIL"] = runDeletePrivateMail                // Delete current private mail (ViSiON/2 mail menu D)
 	registry["SENTPRIVMAIL"] = runSentPrivateMail                    // Read the mail you sent; unsend unread mail (ViSiON/2 EV/EO, E!)
@@ -212,7 +187,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["FORWARDPRIVMAIL"] = runForwardPrivateMail              // Forward current mail to another user (ViSiON/2 EW)
 	registry["NEWSCANCONFIG"] = runNewscanConfig                     // Configure newscan tagged areas
 	registry["UPDATENEWSCAN"] = runUpdateNewscanPointers             // Update newscan pointers to a specific date
-	registry["NMAILSCAN"] = runNewMailScan                           // New mail scan
+	registry["NMAILSCAN"] = runNewMailScanMenu                       // New mail scan
 	registry["DISPLAYFILE"] = runLoginDisplayFile                    // Display ANSI file
 	registry["RUNDOOR"] = runLoginDoor                               // Run external script/door
 	registry["FASTLOGIN"] = runFastLogin                             // Inline fast login menu
