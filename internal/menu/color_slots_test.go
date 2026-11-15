@@ -47,6 +47,22 @@ func TestColorSlotsInPromptsAndTemplates(t *testing.T) {
 	}
 }
 
+// A slot's colour never runs into the text after it: a red background
+// before "0" is not |B10.
+func TestColorSlotKeepsTokensApart(t *testing.T) {
+	e := promptExecutor(t, nil)
+	e.SetStrings(config.StringsConfig{})
+	u := &user.User{Handle: "Neo"}
+	u.SetColorCode(7, "|15|B1")
+	ph := e.sessionPlaceholders(nil, u, nil, 1, "MAIN", time.Now(), "", false)
+	if got, want := string(e.renderPromptText("|C70 files", ph, 0, 0, 1)), esc("|15|B1")+"0 files"; got != want {
+		t.Errorf("prompt = %q, want %q", got, want)
+	}
+	if got, want := string(ansi.ReplacePipeCodes(e.applyCommonTemplateTokens([]byte("|C70"), u, 1))), esc("|15|B1")+"0"; got != want {
+		t.Errorf("template = %q, want %q", got, want)
+	}
+}
+
 // The Colours box saves a slot, a background, and a reset.
 func TestKonfigColoursBox(t *testing.T) {
 	um, u := newUserConfigTestUser(t)

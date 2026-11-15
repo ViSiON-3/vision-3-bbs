@@ -19,10 +19,11 @@ func (e *MenuExecutor) colorSlot(u *user.User, n int) string {
 }
 
 // addColorSlots puts |C1 to |C7 into placeholders as u's colours, so they
-// are filled in with the other placeholders and the pipe codes they become
-// are then expanded as usual.
+// are filled in with the other placeholders. Each is the colour's escape
+// sequence rather than its pipe code: a code put back into the text would be
+// read again with what follows it, and |B1 before "0 files" is |B10.
 func (e *MenuExecutor) addColorSlots(placeholders map[string]string, u *user.User) {
 	for n := 1; n <= user.ColorSlots; n++ {
-		placeholders[ansi.ColorSlotCode(n)] = e.colorSlot(u, n)
+		placeholders[ansi.ColorSlotCode(n)] = string(ansi.ReplacePipeCodes([]byte(e.colorSlot(u, n))))
 	}
 }
