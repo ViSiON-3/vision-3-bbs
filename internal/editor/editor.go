@@ -62,7 +62,9 @@ func resolveEditorPaths() (menuSetPath, rootConfigPath string) {
 		if name, err := config.ThemeNameFromConfigDir(rootConfigPath); err == nil && menuset.ValidThemeName(name) == nil {
 			themeName = name
 		}
-		menuSetPath = menuset.ThemeDir("", themeName)
+		// Relative to the working directory, with a forward slash on every
+		// platform, as the default has always been written.
+		menuSetPath = menuset.ThemesDir + "/" + themeName
 	}
 
 	if _, err := os.Stat(menuSetPath); err == nil {
@@ -77,6 +79,12 @@ func resolveEditorPaths() (menuSetPath, rootConfigPath string) {
 			themeName = name
 		}
 		candidateMenu := menuset.ThemeDir(cwd, themeName)
+		// Recovering the config path must not move a running server to
+		// another theme: the working directory's config.json may name one
+		// it has not restarted into.
+		if running := menuset.Running(); running != "" && os.Getenv("VISION3_MENU_PATH") == "" {
+			candidateMenu = running
+		}
 		if _, err := os.Stat(candidateMenu); err == nil {
 			if _, err := os.Stat(candidateConfig); err == nil {
 				return candidateMenu, candidateConfig

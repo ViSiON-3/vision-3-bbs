@@ -49,11 +49,12 @@ func runPreflight(basePath string) bool {
 		}
 		if r.critical {
 			criticalFails++
-			if r.name == menusCheckName {
+			switch r.name {
+			case menusCheckName:
 				menusMissing = true
-			} else if r.name == themeCheckName {
+			case themeCheckName:
 				themeInvalid = true
-			} else {
+			default:
 				otherCriticalFails++
 			}
 		} else {

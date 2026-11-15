@@ -332,7 +332,7 @@ func TestResolveEditorPaths(t *testing.T) {
 
 	t.Run("the theme config.json selects is used", func(t *testing.T) {
 		themedRoot(t)
-		if menu, cfg := resolveEditorPaths(); menu != filepath.Join("menus", "amber") || cfg != "configs" {
+		if menu, cfg := resolveEditorPaths(); menu != "menus/amber" || cfg != "configs" {
 			t.Errorf("resolveEditorPaths() = (%q, %q), want menus/amber and configs", menu, cfg)
 		}
 	})
@@ -347,12 +347,28 @@ func TestResolveEditorPaths(t *testing.T) {
 		}
 	})
 
+	t.Run("recovering a missing config path keeps the running theme", func(t *testing.T) {
+		root := themedRoot(t) // its config.json selects amber
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatal(err)
+		}
+		running := filepath.Join(root, "menus", "v3")
+		menuset.SetRunning(running)
+		t.Cleanup(func() { menuset.SetRunning("") })
+		t.Setenv("VISION3_CONFIG_PATH", filepath.Join(root, "gone"))
+		menu, cfg := resolveEditorPaths()
+		if menu != running || cfg != filepath.Join(cwd, "configs") {
+			t.Errorf("resolveEditorPaths() = (%q, %q), want the running set %q and the working directory's configs", menu, cfg, running)
+		}
+	})
+
 	t.Run("a selection that can't be used leaves the default theme", func(t *testing.T) {
 		root := themedRoot(t)
 		if err := os.WriteFile(filepath.Join(root, "configs", "config.json"), []byte(`{"theme": {"name": "../x"}}`), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if menu, _ := resolveEditorPaths(); menu != filepath.Join("menus", "v3") {
+		if menu, _ := resolveEditorPaths(); menu != "menus/v3" {
 			t.Errorf("resolveEditorPaths() menu = %q, want menus/v3", menu)
 		}
 	})

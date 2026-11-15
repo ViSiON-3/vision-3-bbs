@@ -133,7 +133,9 @@ func TestBoardColoursHotReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cw.Stop()
+	// Stopped before the reloads are driven by hand, so the watcher's own
+	// polling can't run one at the same time.
+	cw.Stop()
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)))
 	defer slog.SetDefault(prev)
@@ -260,7 +262,9 @@ func TestReloadKeepsTheRunningTheme(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cw.Stop()
+	// Stopped before the reloads are driven by hand, so the watcher's own
+	// polling can't run one at the same time.
+	cw.Stop()
 
 	var logged bytes.Buffer
 	prev := slog.Default()
