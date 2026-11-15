@@ -36,7 +36,7 @@ func runtimeStringKeys(t *testing.T) map[string]bool {
 	for i := 0; i < rt.NumField(); i++ {
 		f := rt.Field(i)
 		if f.Type.Kind() != reflect.String {
-			continue // e.g. the defColorN fields are uint8, not editable text
+			continue // e.g. LegacyColorSlots, which is not a strings.json string
 		}
 		if key, _, _ := strings.Cut(f.Tag.Get("json"), ","); key != "" {
 			keys[key] = true

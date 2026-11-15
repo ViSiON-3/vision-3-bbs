@@ -986,7 +986,7 @@ These are the fields behind the User Konfig (`K`) screen; see
 - `autoSignature` - Auto-signature appended to messages (max 5 lines)
 - `autoSigAsk` - Ask before adding the auto-signature to each message. QWK replies get no signature while it is on. See [Auto-Signature](messages/autosig.md#asking-before-each-post).
 - `autocorrectOff` - The caller turned the message editor's [autocorrect](messages/message-areas.md#autocorrect) off (omitted while it is on)
-- `colorCodes` - The caller's [colours](advanced/string-editor.md#caller-colours-c1--c7) for `|C1`–`|C7`, in order (prompt, input, text, stat, text2, stat2, bar): one pipe code each, a foreground `|00`–`|15` with an optional background `|B0`–`|B7`. A blank or missing entry is the board's default, and the key is left out when every slot is. Set under **U Colours** in User Konfig.
+- `colorCodes` - The caller's [colours](advanced/string-editor.md#caller-colours-c1--c7) for `|C1`–`|C7`, in order (prompt, input, text, stat, text2, stat2, bar): one pipe code each, a foreground `|00`–`|15` with an optional background `|B0`–`|B15`. A blank or missing entry, or the board's default chosen in the box, is the board's default, and the key is left out when every slot is. Set under **U Colours** in User Konfig.
 - `colors` - An array of 7 colours from ViSiON/2 that nothing ever wrote. It is ignored; `colorCodes` replaced it.
 
 ##### Soft Delete

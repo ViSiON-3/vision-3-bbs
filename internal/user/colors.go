@@ -1,24 +1,26 @@
 package user
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+)
 
 // ColorSlots is how many colour slots a caller has, |C1 to |C7: 1 prompt,
 // 2 input, 3 text, 4 stat, 5 text2, 6 stat2, 7 bar.
 const ColorSlots = 7
 
 // ValidColorCode reports whether code is one a colour slot can hold: a
-// foreground |00 to |15, optionally followed by a background |B0 to |B7.
+// foreground |00 to |15, optionally followed by a background |B0 to |B15. The
+// codes are read with ansi.ColorPipeCodeLen, as the rest of the board reads
+// them, so a code this takes is one the screens draw.
 func ValidColorCode(code string) bool {
-	if len(code) != 3 && len(code) != 6 {
+	fg := ansi.ColorPipeCodeLen(code)
+	if fg != 3 || code[1] == 'B' || code == "|23" {
 		return false
 	}
-	if code[0] != '|' || !foregroundDigits(code[1], code[2]) {
-		return false
-	}
-	if len(code) == 6 {
-		return code[3] == '|' && code[4] == 'B' && code[5] >= '0' && code[5] <= '7'
-	}
-	return true
+	bg := code[fg:]
+	return bg == "" || len(bg) > 2 && bg[1] == 'B' && ansi.ColorPipeCodeLen(bg) == len(bg)
 }
 
 // ColorCode returns the caller's code for slot n (1 to ColorSlots), or ""
@@ -52,15 +54,4 @@ func (u *User) SetColorCode(n int, code string) bool {
 	}
 	u.ColorCodes = codes
 	return true
-}
-
-// foregroundDigits reports whether a and b are the digits of 00 to 15.
-func foregroundDigits(a, b byte) bool {
-	switch a {
-	case '0':
-		return b >= '0' && b <= '9'
-	case '1':
-		return b >= '0' && b <= '5'
-	}
-	return false
 }

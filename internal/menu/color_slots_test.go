@@ -5,8 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor/testterm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -31,7 +34,7 @@ func TestColorSlotResolution(t *testing.T) {
 	}
 }
 
-// Prompts and templates fill in the caller's colours.
+// Prompts fill in the caller's colours; templates draw the board's.
 func TestColorSlotsInPromptsAndTemplates(t *testing.T) {
 	e := promptExecutor(t, nil)
 	e.SetStrings(config.StringsConfig{})
@@ -42,8 +45,9 @@ func TestColorSlotsInPromptsAndTemplates(t *testing.T) {
 	if got := string(e.renderPromptText("|C2>|C3x", ph, 0, 0, 1)); got != esc("|13")+">"+esc("|07")+"x" {
 		t.Errorf("prompt = %q", got)
 	}
-	if got := string(ansi.ReplacePipeCodes(e.applyCommonTemplateTokens([]byte("|C2>|C3x"), u, 1))); got != esc("|13")+">"+esc("|07")+"x" {
-		t.Errorf("template = %q", got)
+	// Templates are menu-set art: the board's defaults, not the caller's.
+	if got := string(ansi.ReplacePipeCodes(e.applyCommonTemplateTokens([]byte("|C2>|C3x"), u, 1))); got != esc("|15")+">"+esc("|07")+"x" {
+		t.Errorf("template = %q, want the board's defaults", got)
 	}
 }
 
@@ -57,9 +61,6 @@ func TestColorSlotKeepsTokensApart(t *testing.T) {
 	ph := e.sessionPlaceholders(nil, u, nil, 1, "MAIN", time.Now(), "", false)
 	if got, want := string(e.renderPromptText("|C70 files", ph, 0, 0, 1)), esc("|15|B1")+"0 files"; got != want {
 		t.Errorf("prompt = %q, want %q", got, want)
-	}
-	if got, want := string(ansi.ReplacePipeCodes(e.applyCommonTemplateTokens([]byte("|C70"), u, 1))), esc("|15|B1")+"0"; got != want {
-		t.Errorf("template = %q, want %q", got, want)
 	}
 }
 
@@ -111,5 +112,66 @@ func TestColorChoiceWraps(t *testing.T) {
 		if got := colorChoiceOf(c).code(); got != c {
 			t.Errorf("round trip %s = %s", c, got)
 		}
+	}
+}
+
+// A colour slot doesn't keep an optional group alive: |{|C4Conf: |CCN|}
+// vanishes with no conference, as |{|15Conf: |CCN|} does.
+func TestColorSlotInOptionalGroup(t *testing.T) {
+	ph := map[string]string{"|C4": esc("|15"), "|CCN": ""}
+	if got := expandOptionalGroups("a|{|C4Conf: |CCN|}b", ph); got != "ab" {
+		t.Errorf("empty group = %q, want ab", got)
+	}
+	ph["|CCN"] = "Local"
+	if got := expandOptionalGroups("a|{|C4Conf: |CCN|}b", ph); got != "a|C4Conf: |CCNb" {
+		t.Errorf("full group = %q", got)
+	}
+	if !onlyColorSlots([]string{"|C1", "|C7"}) || onlyColorSlots([]string{"|C1", "|UH"}) || onlyColorSlots(nil) {
+		t.Error("onlyColorSlots")
+	}
+}
+
+// The board's defColorN defaults are what |Cn draws with no caller too.
+func TestApplyColorSlotDefaults(t *testing.T) {
+	t.Cleanup(func() { ApplyColorSlotDefaults(config.StringsConfig{}) })
+	ApplyColorSlotDefaults(config.StringsConfig{LegacyColorSlots: [7]string{0: "|14"}})
+	if got := string(ansi.ReplacePipeCodes([]byte("|C1x|C2"))); got != esc("|14")+"x"+esc("|15") {
+		t.Errorf("got %q", got)
+	}
+}
+
+// Enter on the board's default leaves the slot unset, so the caller follows
+// the board if the sysop changes it.
+func TestKonfigColoursDefaultIsUnset(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	u.SetColorCode(1, "|12")
+	runKonfig(t, um, u, "u"+keyLeft5()+"\r"+keyEsc+"q", "")
+	if got := reloadUser(t, um); got.ColorCode(1) != "" {
+		t.Fatalf("slot 1 = %q, want unset after choosing the default |07", got.ColorCode(1))
+	}
+}
+
+// keyLeft5 moves |12 back to |07.
+func keyLeft5() string { return strings.Repeat("\x1b[D", 5) }
+
+// The box shows the "none" background whole and black as a visible shade.
+func TestKonfigColoursBoxSwatches(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	screen := testterm.New(80, 24)
+	sess := testterm.NewSession(screen, keyEsc)
+	t.Cleanup(func() { resetSessionIH(sess); sessionTermSizes.Delete(sess) })
+	c := &cmdCtx{e: konfigTestExecutor(t), s: sess, terminal: term.NewTerminal(sess, ""), userManager: um,
+		currentUser: u, nodeNumber: 1, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
+	if err := editColors(&konfigState{c: c, ih: getSessionIH(sess)}); err != nil {
+		t.Fatal(err)
+	}
+	var none, shade bool
+	for row := 1; row <= 24; row++ {
+		r := screen.Row(row)
+		none = none || strings.Contains(r, konfigTestStrings(t).KonfigColorsNoBG)
+		shade = shade || strings.Contains(r, "▒▒")
+	}
+	if !none || !shade {
+		t.Errorf("none label shown %v, black shade shown %v", none, shade)
 	}
 }

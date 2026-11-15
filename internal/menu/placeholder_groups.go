@@ -122,7 +122,9 @@ func placeholderKeysLongestFirst(placeholders map[string]string) []string {
 
 // groupIsEmpty reports whether inner holds at least one known placeholder and
 // every one of them resolves to blank. Whitespace counts as blank so a value
-// padded to a fixed width does not keep a group alive.
+// padded to a fixed width does not keep a group alive. A caller colour slot
+// (|C1-|C7) is a colour, not content: its value is never blank, but like a
+// plain |15 it neither keeps a group nor counts as a placeholder in it.
 //
 // Matching walks the string longest-key-first and consumes each match, so a
 // group containing |CAN is judged on |CAN alone and not also on the |CA that
@@ -137,6 +139,11 @@ func groupIsEmpty(inner string, placeholders map[string]string, keys []string) b
 		matched := false
 		for _, k := range keys {
 			if strings.HasPrefix(inner[i:], k) {
+				if isColorSlotKey(k) {
+					i += len(k)
+					matched = true
+					break
+				}
 				found = true
 				if strings.TrimSpace(placeholders[k]) != "" {
 					return false

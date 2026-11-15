@@ -625,6 +625,7 @@ func (cw *ConfigWatcher) reloadStrings() {
 
 	// Update MenuExecutor's LoadedStrings atomically
 	cw.menuExecutor.SetStrings(newStrings)
+	menu.ApplyColorSlotDefaults(newStrings)
 	slog.Info("strings.json reloaded")
 }
 

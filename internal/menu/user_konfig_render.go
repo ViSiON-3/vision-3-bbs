@@ -3,6 +3,7 @@ package menu
 import (
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -519,6 +520,7 @@ const (
 	colorBoxLeft   = (80-colorBoxWidth)/2 + 1
 	colorBoxTop    = konfigTopRow
 	colorNoBG      = -1
+	colorNoBGWidth = 4 // the "none" background label, between its brackets
 )
 
 // colorChoice is a colour being picked in the box: a foreground 0-15 and a
@@ -536,8 +538,10 @@ func colorChoiceOf(code string) colorChoice {
 	if len(code) >= 3 {
 		ch.fg = int(code[1]-'0')*10 + int(code[2]-'0')
 	}
-	if len(code) == 6 {
-		ch.bg = int(code[5] - '0')
+	if len(code) > 4 {
+		if n, err := strconv.Atoi(code[5:]); err == nil {
+			ch.bg = n
+		}
 	}
 	return ch
 }
@@ -618,7 +622,9 @@ func editColors(st *konfigState) error {
 		for n := 0; n < 16; n++ {
 			sw := expand(fmt.Sprintf("|%02d", n)) + "██"
 			if n == 0 {
-				sw = expand("|00|B7") + "██" + konfigReset
+				// Black as a shade over grey: a solid block of it would be
+				// a gap on a black screen.
+				sw = expand("|00|B7") + "▒▒" + konfigReset
 			}
 			b.WriteString(bracket(n == ch.fg, !ch.bgRow, sw))
 		}
@@ -627,11 +633,11 @@ func editColors(st *konfigState) error {
 	bgRow := func() string {
 		var b strings.Builder
 		b.WriteString(" ")
-		b.WriteString(bracket(ch.bg == colorNoBG, ch.bgRow, pc(7)+st.fit(str.KonfigColorsNoBG, 2)))
+		b.WriteString(bracket(ch.bg == colorNoBG, ch.bgRow, pc(7)+st.fit(str.KonfigColorsNoBG, colorNoBGWidth)))
 		for n := 0; n < 8; n++ {
 			b.WriteString(bracket(n == ch.bg, ch.bgRow, expand(fmt.Sprintf("|15|B%d", n))+"  "+konfigReset))
 		}
-		return b.String() + konfigReset + strings.Repeat(" ", inner-1-9*colorBoxSwatch)
+		return b.String() + konfigReset + strings.Repeat(" ", inner-1-(colorNoBGWidth+2)-8*colorBoxSwatch)
 	}
 
 	top := colorBoxTop
@@ -695,7 +701,13 @@ func editColors(st *konfigState) error {
 		case editor.KeyTab:
 			ch.bgRow = !ch.bgRow
 		case editor.KeyEnter, ' ':
-			save(ch.code())
+			// The board's own default is saved as "not set", so the caller
+			// follows it if the sysop changes it.
+			code := ch.code()
+			if code == st.c.e.colorSlot(nil, sel+1) {
+				code = ""
+			}
+			save(code)
 		case 'r', 'R':
 			save("")
 		default:

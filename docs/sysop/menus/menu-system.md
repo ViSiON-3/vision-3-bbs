@@ -325,8 +325,9 @@ ANSI files contain the visual display for menus. They support:
 |C5 - Text 2    |C6 - Stat 2    |C7 - Bar
 ```
 
-Each is the colour the caller chose for that slot in User Konfig, or the board's default. They act in menu
-prompts, `strings.json` values and templates; a menu's own `.ANS` screen draws the built-in default. See
+Each is the colour the caller chose for that slot in User Konfig, or the board's default. A caller's colours
+are filled in in menu prompts and `strings.json` values; templates and a menu's own `.ANS` screen draw the
+board's default. See
 [Caller Colours](advanced/string-editor.md#caller-colours-c1--c7).
 
 **Control Codes:**

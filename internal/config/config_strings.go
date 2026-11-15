@@ -30,11 +30,12 @@ func LoadStrings(configPath string) (StringsConfig, error) { // Return the loade
 		return StringsConfig{}, fmt.Errorf("failed to parse strings JSON from %s: %w", filePath, err)
 	}
 
-	loadedConfig.LegacyColorSlots = legacyColorSlots(data)
 	applySupersededStrings(&loadedConfig)
 	applyStringDefaults(&loadedConfig)
-	if values, err := stringValues(data); err == nil {
-		applyMissingStringDefaults(&loadedConfig, values)
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(data, &raw) == nil {
+		loadedConfig.LegacyColorSlots = legacyColorSlots(raw)
+		applyMissingStringDefaults(&loadedConfig, stringValuesOf(raw))
 	}
 	warnFormatMismatches(data, filePath)
 	slog.Info("successfully loaded strings configuration")
@@ -73,13 +74,18 @@ func warnFormatMismatches(data []byte, filePath string) {
 }
 
 // stringValues extracts the string-valued entries of a strings.json document.
-// Numeric entries such as the defColorN fields are skipped rather than failing
-// the whole extraction.
+// Other entries, such as an older file's numeric defColorN (see
+// legacyColorSlots), are skipped rather than failing the whole extraction.
 func stringValues(data []byte) (map[string]string, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}
+	return stringValuesOf(raw), nil
+}
+
+// stringValuesOf is stringValues for a document already parsed.
+func stringValuesOf(raw map[string]json.RawMessage) map[string]string {
 	out := make(map[string]string, len(raw))
 	for key, msg := range raw {
 		var s string
@@ -87,7 +93,7 @@ func stringValues(data []byte) (map[string]string, error) {
 			out[key] = s
 		}
 	}
-	return out, nil
+	return out
 }
 
 // StringFallbacks maps a strings.json key to the value the runtime substitutes
@@ -568,17 +574,19 @@ func applyStringDefaults(c *StringsConfig) {
 // legacyColorSlots reads the defColor1-defColor7 values a strings.json from
 // before the caller colour slots may still carry: DOS foreground colours,
 // which were the defaults |C1 to |C7 were meant to map to. Each one present
-// and 0-15 becomes its pipe code; the rest are "".
-func legacyColorSlots(data []byte) [7]string {
-	var raw map[string]json.RawMessage
+// and 1-15 becomes its pipe code; the Bar slot keeps the built-in bar's
+// background (|B3), so a foreground alone doesn't turn the bar into text on
+// black. 0 is what an unset field was saved as, so it counts as not set, as
+// does anything else: "".
+func legacyColorSlots(raw map[string]json.RawMessage) [7]string {
 	var out [7]string
-	if json.Unmarshal(data, &raw) != nil {
-		return out
-	}
 	for i := range out {
 		var n int
-		if v, ok := raw[fmt.Sprintf("defColor%d", i+1)]; ok && json.Unmarshal(v, &n) == nil && n >= 0 && n <= 15 {
+		if v, ok := raw[fmt.Sprintf("defColor%d", i+1)]; ok && json.Unmarshal(v, &n) == nil && n >= 1 && n <= 15 {
 			out[i] = fmt.Sprintf("|%02d", n)
+			if i == 6 {
+				out[i] += "|B3"
+			}
 		}
 	}
 	return out

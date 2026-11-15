@@ -402,7 +402,7 @@ func PipeCodeAt(data []byte, i int) (code, expansion string, n int) {
 		if i+n > len(data) {
 			continue
 		}
-		if replacement, ok := pipeCodeReplacements[string(data[i:i+n])]; ok {
+		if replacement, ok := pipeCodeReplacement(string(data[i : i+n])); ok {
 			return string(data[i : i+n]), replacement, n
 		}
 	}
@@ -488,7 +488,7 @@ func colorPipeCodeAt(data []byte, i int) (string, int) {
 		if c != 'B' && (c < '0' || c > '9') {
 			return "", 0
 		}
-		if replacement, ok := pipeCodeReplacements[code]; ok {
+		if replacement, ok := pipeCodeReplacement(code); ok {
 			return replacement, n
 		}
 	}
@@ -939,7 +939,7 @@ func processAnsi(rawContent []byte, outputMode OutputMode, wrapWidth int) (Proce
 
 				// Try 4-char code |BXX (bright backgrounds |B10..|B15), longest match first
 				if !pipeCodeFound && i+3 < len(content) {
-					if replacement, ok := pipeCodeReplacements[string(content[i:i+4])]; ok {
+					if replacement, ok := pipeCodeReplacement(string(content[i : i+4])); ok {
 						displayBuf.WriteString(replacement)
 						consumed = 4
 						pipeCodeFound = true
@@ -950,7 +950,7 @@ func processAnsi(rawContent []byte, outputMode OutputMode, wrapWidth int) (Proce
 				// Try 3-char code |XX (colors, commands)
 				if !pipeCodeFound && i+2 < len(content) {
 					codeStr := string(content[i : i+3])
-					if replacement, ok := pipeCodeReplacements[codeStr]; ok {
+					if replacement, ok := pipeCodeReplacement(codeStr); ok {
 						displayBuf.WriteString(replacement)
 						consumed = 3
 						pipeCodeFound = true
@@ -969,7 +969,7 @@ func processAnsi(rawContent []byte, outputMode OutputMode, wrapWidth int) (Proce
 
 				// Try 2-char code |X (e.g., |P save cursor)
 				if !pipeCodeFound {
-					if replacement, ok := pipeCodeReplacements[string(content[i:i+2])]; ok {
+					if replacement, ok := pipeCodeReplacement(string(content[i : i+2])); ok {
 						displayBuf.WriteString(replacement)
 						consumed = 2
 						pipeCodeFound = true
