@@ -2,6 +2,7 @@ package menu
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -73,20 +74,20 @@ func TestKonfigMenuPromptPreview(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	c, screen := konfigCtx(t, konfigWithACS(t, ""), um, u, "")
 	st := &konfigState{c: c, items: []*konfigItem{{help: "help line"}}}
-	if err := st.previewCustomPrompt("|11Hi |UH> |CL"); err != nil {
+	if err := st.previewCustomPrompt("|11Hi |UH> |CL", st.previewPlaceholders()); err != nil {
 		t.Fatal(err)
 	}
 	if row := screen.Row(konfigHelpRow); !strings.Contains(row, "Preview: Hi Tester> |CL") {
 		t.Errorf("help row = %q", row)
 	}
 	u.GroupLocation = "Montr\u00e9al"
-	if err := st.previewCustomPrompt("|GL>"); err != nil {
+	if err := st.previewCustomPrompt("|GL>", st.previewPlaceholders()); err != nil {
 		t.Fatal(err)
 	}
 	if row := screen.Row(konfigHelpRow); !strings.Contains(row, "Preview: Montr\u00e9al>") {
 		t.Errorf("help row = %q, want the location as typed", row)
 	}
-	if err := st.previewCustomPrompt("  "); err != nil {
+	if err := st.previewCustomPrompt("  ", nil); err != nil {
 		t.Fatal(err)
 	}
 	if row := screen.Row(konfigHelpRow); !strings.Contains(row, "help line") {
@@ -100,7 +101,7 @@ func TestKonfigMenuPromptFollowsACS(t *testing.T) {
 	_, probe := newUserConfigTestUser(t)
 	lvl := probe.AccessLevel
 	for acs, shown := range map[string]bool{
-		"": true, "*": true, fmt.Sprintf("S%d", lvl): true,
+		"": true, "*": true, " ": true, " * ": true, fmt.Sprintf("S%d", lvl): true,
 		fmt.Sprintf("S%d", lvl+1): false, "S1&": false,
 	} {
 		um, u := newUserConfigTestUser(t)
@@ -115,5 +116,32 @@ func TestKonfigMenuPromptFollowsACS(t *testing.T) {
 		if !shown && reloadUser(t, um).CustomPrompt != "" {
 			t.Errorf("acs %q: the hotkey still edited it", acs)
 		}
+	}
+}
+
+// A stored prompt from before the editor cleaned it (./ue kept values as
+// typed) is shown cleaned, so it can't garble the form.
+func TestKonfigMenuPromptValueIsCleaned(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	u.CustomPrompt = "Hi\x1b[2J\x1b[5;5Hthere"
+	screen := runKonfigOn(t, konfigWithACS(t, ""), um, u, "q")
+	if v := konfigFieldText(screen, konfigTestStrings(t).KonfigCustomPromptLabel); !strings.HasPrefix(v, "Hi[2J[5;5Hthere") {
+		t.Errorf("Menu Prompt value = %q", v)
+	}
+}
+
+// The preview hears the text when the field opens and when it changes, not
+// on cursor moves.
+func TestKonfigPreviewOnlyOnChange(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	c, _ := konfigCtx(t, konfigWithACS(t, ""), um, u, "ab\x1b[D"+keyRight+"\x1b[H\r")
+	st := &konfigState{c: c, ih: getSessionIH(c.s)}
+	var heard []string
+	st.onEdit = func(text string) error { heard = append(heard, text); return nil }
+	if _, ok, err := st.readField("Prompt", "", 10, false, ""); err != nil || !ok {
+		t.Fatalf("readField: %v %v", ok, err)
+	}
+	if want := []string{"", "a", "ab"}; !slices.Equal(heard, want) {
+		t.Errorf("onEdit heard %q, want %q", heard, want)
 	}
 }

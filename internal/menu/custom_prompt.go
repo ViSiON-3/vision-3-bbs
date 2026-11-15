@@ -2,6 +2,7 @@ package menu
 
 import (
 	"bytes"
+	"strings"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -19,7 +20,8 @@ import (
 // customPromptAllowed reports whether u may set a custom prompt, and have a
 // stored one shown, under the board's customPromptACS.
 func (e *MenuExecutor) customPromptAllowed(u *user.User, s ssh.Session, start time.Time) bool {
-	return u != nil && checkACS(e.GetServerConfig().CustomPromptACS, u, s, nil, start)
+	// Trimmed, so a hand-edited " " is blank (everyone), as the docs say.
+	return u != nil && checkACS(strings.TrimSpace(e.GetServerConfig().CustomPromptACS), u, s, nil, start)
 }
 
 // customPromptFor is the custom prompt to show u in place of PROMPT1, or ""
@@ -36,17 +38,19 @@ func (e *MenuExecutor) customPromptFor(u *user.User, s ssh.Session, start time.T
 }
 
 // renderCustomPrompt turns a custom prompt into the bytes to write, as
-// renderPromptText does for a sysop's: CP437, with colours expanded. Only
-// colour codes (|00-|15, |B0-|B7) and the keys of placeholders expand; every
-// other pipe prints, and include tags, AT-codes and @RR@ are never looked for.
-// Control characters are dropped and the rest go to CP437; one with no CP437
+// renderPromptText does for a sysop's: CP437, with colours expanded. text is
+// already cleaned (user.CleanCustomPrompt); customPromptFor and the Konfig
+// preview do that. Only colour codes, the full set the rest of the board takes
+// (ansi.ColorPipeCodeLen: |00-|15, |23, |B0-|B15), and the keys of
+// placeholders expand; every other pipe prints, and include tags, AT-codes and
+// @RR@ are never looked for. Its characters go to CP437; one with no CP437
 // form shows as "?".
 //
 // Each code and each placeholder's value is expanded on its own, so a value
 // never runs into the code before it (|B1 then a handle starting "0" is not
 // |B10), and a value is escaped first, so only its colour codes act.
 func renderCustomPrompt(text string, placeholders map[string]string) []byte {
-	src := []byte(toCP437Safe(user.CleanCustomPrompt(text)))
+	src := []byte(toCP437Safe(text))
 	keys := placeholderKeysLongestFirst(placeholders)
 	var b bytes.Buffer
 	b.Grow(len(src))
@@ -58,10 +62,12 @@ func renderCustomPrompt(text string, placeholders map[string]string) []byte {
 		case i+1 < len(src) && src[i+1] == '|':
 			b.WriteByte('|')
 			i += 2
-		case customPromptColourAt(src, i):
-			b.Write(ansi.ReplacePipeCodes(src[i : i+3]))
-			i += 3
 		default:
+			if n := ansi.ColorPipeCodeLen(string(src[i:min(i+4, len(src))])); n > 0 {
+				b.Write(ansi.ReplacePipeCodes(src[i : i+n]))
+				i += n
+				continue
+			}
 			k := placeholderKeyAt(src[i:], keys)
 			if k == "" {
 				b.WriteByte('|')
@@ -84,22 +90,4 @@ func placeholderKeyAt(src []byte, keys []string) string {
 		}
 	}
 	return ""
-}
-
-// customPromptColourAt reports whether src[i:] starts with a colour code a
-// custom prompt may use: |00 to |15, or |B0 to |B7.
-func customPromptColourAt(src []byte, i int) bool {
-	if i+3 > len(src) || src[i] != '|' {
-		return false
-	}
-	a, d := src[i+1], src[i+2]
-	switch a {
-	case 'B':
-		return d >= '0' && d <= '7'
-	case '0':
-		return d >= '0' && d <= '9'
-	case '1':
-		return d >= '0' && d <= '5'
-	}
-	return false
 }

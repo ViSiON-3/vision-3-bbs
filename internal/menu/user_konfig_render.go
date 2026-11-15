@@ -261,9 +261,12 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 		}
 	}
 
+	// onEdit hears the text only when it changes, not on a cursor move.
+	edited, lastText := false, ""
 	draw := func() error {
-		if st.onEdit != nil {
-			if err := st.onEdit(string(buf)); err != nil {
+		if text := string(buf); st.onEdit != nil && (!edited || text != lastText) {
+			edited, lastText = true, text
+			if err := st.onEdit(text); err != nil {
 				return err
 			}
 		}

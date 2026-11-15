@@ -118,8 +118,9 @@ type konfigState struct {
 	status   string
 	// hdrNames caches the header style names; see headerStyleNames.
 	hdrNames map[string]string
-	// onEdit, when set, is called with readField's text before each time
-	// the field is drawn; the custom prompt's preview uses it.
+	// onEdit, when set, is called with readField's text when the field is
+	// first drawn and whenever the text changes; the custom prompt's preview
+	// uses it.
 	onEdit func(text string) error
 	// redraw asks for a full repaint after the current edit, for editors
 	// that take over the screen (the message editor, the header picker, the
@@ -318,7 +319,7 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					edit:  toggleHotKeys},
 				{key: customPromptKonfigKey, label: str.KonfigCustomPromptLabel,
 					help:  str.KonfigCustomPromptHelp,
-					value: func(st *konfigState) konfigValue { return st.textValue(st.user().CustomPrompt) },
+					value: func(st *konfigState) konfigValue { return st.textValue(user.CleanCustomPrompt(st.user().CustomPrompt)) },
 					edit:  editCustomPrompt},
 			}},
 			{title: str.KonfigSectionMessages, items: []*konfigItem{
@@ -969,7 +970,8 @@ func editCustomPrompt(st *konfigState) error {
 	str := st.c.e.Strings()
 	label := str.KonfigCustomPromptLabel
 	old := st.user().CustomPrompt
-	st.onEdit = st.previewCustomPrompt
+	ph := st.previewPlaceholders()
+	st.onEdit = func(text string) error { return st.previewCustomPrompt(text, ph) }
 	defer func() {
 		st.onEdit = nil
 		_ = st.renderHelp()
@@ -994,16 +996,30 @@ func editCustomPrompt(st *konfigState) error {
 	return nil
 }
 
+// previewPlaceholders are the placeholders the preview fills in: this
+// call's, for the menu USERCONFIG was opened from. The area is the caller's
+// current one, as the menu prompt has it. They are built once per edit, not
+// on every key.
+func (st *konfigState) previewPlaceholders() map[string]string {
+	c := st.c
+	menuName := ""
+	if hs := lookupStringHookSession(c.terminal); hs != nil && hs.bbs != nil {
+		hs.bbs.Mutex.RLock()
+		menuName = hs.bbs.CurrentMenu
+		hs.bbs.Mutex.RUnlock()
+	}
+	return c.e.sessionPlaceholders(c.s, c.currentUser, c.userManager, c.nodeNumber, menuName, c.sessionStartTime, "", false)
+}
+
 // previewCustomPrompt draws text on the help row as a menu would show it,
-// with this call's placeholders, or the help line when it is blank.
-func (st *konfigState) previewCustomPrompt(text string) error {
-	if user.CleanCustomPrompt(text) == "" {
+// with the placeholders ph, or the help line when it is blank.
+func (st *konfigState) previewCustomPrompt(text string, ph map[string]string) error {
+	text = user.CleanCustomPrompt(text)
+	if text == "" {
 		return st.renderHelp()
 	}
-	c := st.c
-	ph := c.e.sessionPlaceholders(c.s, c.currentUser, c.userManager, c.nodeNumber, "MAIN", c.sessionStartTime, "", false)
 	shown := ansi.ConvertCP437ToUTF8(renderCustomPrompt(text, ph))
-	label := string(ansi.ReplacePipeCodes([]byte(c.e.Strings().KonfigCustomPromptPreview)))
+	label := string(ansi.ReplacePipeCodes([]byte(st.c.e.Strings().KonfigCustomPromptPreview)))
 	return st.raw(clearRow(konfigHelpRow) + moveTo(konfigHelpRow, 2) +
 		st.clipRow(label+string(shown)) + konfigReset)
 }

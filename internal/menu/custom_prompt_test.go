@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // screenEscapeRe matches an escape sequence that does anything but set colour.
@@ -18,7 +19,7 @@ func TestRenderCustomPromptKeepsOnlyColoursAndPlaceholders(t *testing.T) {
 	var got []byte
 	for _, tc := range []struct{ in, want string }{
 		{"|09|UH|B1@|MN |CA ||x %%inc.ans%% @RR@ @UC@ |{|UH|}", "Felonius@MAIN GEN |x %%inc.ans%% @RR@ @UC@ |{Felonius|}"},
-		{"|XY01,01|CL|P|PP|DE|CR |16|23", "|XY01,01|CL|P|PP|DE|CR |16|23"},
+		{"|XY01,01|CL|P|PP|DE|CR |16", "|XY01,01|CL|P|PP|DE|CR |16"},
 	} {
 		out := renderCustomPrompt(tc.in, ph)
 		if vis := visibleText(out); vis != tc.want {
@@ -39,20 +40,21 @@ func TestRenderCustomPromptKeepsOnlyColoursAndPlaceholders(t *testing.T) {
 // Control characters never reach the screen, and a character with no CP437
 // form is a "?" rather than a control code.
 func TestRenderCustomPromptDropsControls(t *testing.T) {
-	got := renderCustomPrompt("a\x1b[2Jb\x07c☺é€", nil)
+	got := renderCustomPrompt(user.CleanCustomPrompt("a\x1b[2Jb\x07c☺é€"), nil)
 	if want := []byte("a[2Jbc?\x82?"); !bytes.Equal(got, want) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
-func TestCustomPromptColourCodes(t *testing.T) {
-	for code, want := range map[string]bool{
-		"|00": true, "|07": true, "|15": true, "|B0": true, "|B7": true,
-		"|16": false, "|23": false, "|B8": false, "|CL": false, "|1": false,
-	} {
-		if got := customPromptColourAt([]byte(code), 0); got != want {
-			t.Errorf("%s: %v, want %v", code, got, want)
-		}
+// The caller's text takes the same colour codes as the rest of the board,
+// longest first: |B10 is a bright green background, |23 resets, and |16,
+// which the board has no code for, prints.
+func TestRenderCustomPromptFullColourSet(t *testing.T) {
+	got := renderCustomPrompt("|B10|15Ready>|B8x|23y|16", nil)
+	want := string(ansi.ReplacePipeCodes([]byte("|B10|15"))) + "Ready>" +
+		string(ansi.ReplacePipeCodes([]byte("|B8"))) + "x" + string(ansi.ReplacePipeCodes([]byte("|23"))) + "y|16"
+	if string(got) != want {
+		t.Errorf("got  %q\nwant %q", got, want)
 	}
 }
 
