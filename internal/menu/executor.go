@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -110,10 +111,16 @@ type MenuExecutor struct {
 	stringsCfg atomic.Pointer[config.StringsConfig]
 	themeCfg   atomic.Pointer[config.ThemeConfig] // as drawn: themeBase with the board's colours
 	themeBase  atomic.Pointer[config.ThemeConfig] // the theme's own theme.json
-	serverCfg  atomic.Pointer[config.ServerConfig]
-	doorReg    atomic.Pointer[map[string]config.DoorConfig]
-	loginSeq   atomic.Pointer[[]config.LoginItem]
-	protocols  atomic.Pointer[[]transfer.ProtocolConfig]
+	// themeMu serialises SetTheme and SetServerConfig, each of which stores
+	// its half and rebuilds themeCfg from both. They run on different
+	// goroutines (the watcher's reload, a session), and unserialised, a
+	// rebuild that read the old half could store its result last. Readers
+	// take no lock: they load themeCfg.
+	themeMu   sync.Mutex
+	serverCfg atomic.Pointer[config.ServerConfig]
+	doorReg   atomic.Pointer[map[string]config.DoorConfig]
+	loginSeq  atomic.Pointer[[]config.LoginItem]
+	protocols atomic.Pointer[[]transfer.ProtocolConfig]
 }
 
 // NewExecutor creates a new MenuExecutor.
@@ -284,6 +291,8 @@ func (e *MenuExecutor) Strings() *config.StringsConfig {
 // theme's theme.json. What Theme returns is that with the board's colour
 // overrides (config.json theme.colors) applied.
 func (e *MenuExecutor) SetTheme(theme config.ThemeConfig) {
+	e.themeMu.Lock()
+	defer e.themeMu.Unlock()
 	e.themeBase.Store(&theme)
 	e.applyBoardColors()
 }
@@ -291,7 +300,7 @@ func (e *MenuExecutor) SetTheme(theme config.ThemeConfig) {
 // applyBoardColors rebuilds the theme the board draws with from the
 // theme's own settings and the server config's theme.colors. It runs when
 // either changes, so an override reloads with config.json and a theme
-// edit reloads with theme.json.
+// edit reloads with theme.json. The caller holds themeMu.
 func (e *MenuExecutor) applyBoardColors() {
 	base := e.themeBase.Load()
 	if base == nil {
@@ -320,8 +329,10 @@ func (e *MenuExecutor) Theme() *config.ThemeConfig {
 func (e *MenuExecutor) SetServerConfig(serverCfg config.ServerConfig) {
 	serverCfg.DoorCategories = append([]config.DoorCategory(nil), serverCfg.DoorCategories...)
 	serverCfg.SanitizeAccessLevels()
+	e.themeMu.Lock()
 	e.serverCfg.Store(&serverCfg)
 	e.applyBoardColors()
+	e.themeMu.Unlock()
 	setACSSysOpLevels(serverCfg.SysOpLevel, serverCfg.CoSysOpLevel)
 	acsLocation.Store(config.LoadTimezone(serverCfg.Timezone))
 }
