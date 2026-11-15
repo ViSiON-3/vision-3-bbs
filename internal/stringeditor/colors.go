@@ -87,6 +87,19 @@ func parseColorCodes(s string) []styledSpan {
 			continue
 		}
 
+		// |P saves and |PP restores the caller's cursor; like |XY they draw
+		// nothing here. |PP is matched first, as the BBS does, so it is not
+		// read as |P and a "P". The placeholders that start with |P are
+		// filled in before pipe codes on the BBS, so they stay as written,
+		// as every placeholder does in the preview.
+		if s[i] == '|' && i+1 < len(s) && s[i+1] == 'P' && !hasPlaceholderPrefix(s[i:]) {
+			i += 2
+			if i < len(s) && s[i] == 'P' {
+				i++
+			}
+			continue
+		}
+
 		// Check for pipe codes: |XX
 		if s[i] == '|' && i+2 < len(s) {
 			code := s[i+1 : i+3]
@@ -109,6 +122,16 @@ func parseColorCodes(s string) []styledSpan {
 					i += 3
 					continue
 				}
+			}
+
+			// |23 resets every attribute (ESC[0m), which on a caller's
+			// terminal is light gray on the default background.
+			if code == "23" {
+				flushText()
+				curFG = dosColors[dosLightGray]
+				curBG = ""
+				i += 3
+				continue
 			}
 
 			// Special codes
@@ -313,4 +336,17 @@ func PlainTextLength(s string) int {
 		}
 	}
 	return total
+}
+
+// pPlaceholders are the session placeholders that begin like |P.
+var pPlaceholders = []string{"|POSTS", "|PV"}
+
+// hasPlaceholderPrefix reports whether s starts with one of pPlaceholders.
+func hasPlaceholderPrefix(s string) bool {
+	for _, p := range pPlaceholders {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
 }

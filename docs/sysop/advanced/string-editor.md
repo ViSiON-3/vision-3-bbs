@@ -434,9 +434,9 @@ String values support BBS pipe codes that are rendered with color in the editor.
 | `\|CR` | Carriage return and line feed (rendered as a space in the editor's preview) |
 | `\|CL` | Clear screen and home the cursor (hidden in the preview) |
 | `\|DE` | Clear to end of line (hidden in the preview) |
-| `\|P` | Save the cursor position |
-| `\|PP` | Restore the saved cursor position |
-| `\|23` | Reset all attributes to the terminal default |
+| `\|P` | Save the cursor position (hidden in the preview) |
+| `\|PP` | Restore the saved cursor position (hidden in the preview) |
+| `\|23` | Reset all attributes to the terminal default (the preview goes back to light gray on its own background) |
 | `\|XYcc,rr` | Move the cursor to column `cc` of row `rr` (hidden in the preview) |
 | `@` | At the end of a Yes/No prompt: where the Yes/No lightbar is drawn |
 
@@ -455,7 +455,7 @@ of the wrong shape, `|XY5,12` or `|XY15;12`, is not a code and prints as written
 }
 ```
 
-The editor's preview hides the code, as it does `|CL`, so the list is not disturbed; the value
+The editor's preview hides the code, and `|P` and `|PP`, as it does `|CL`, so the list is not disturbed; the value
 column shows the text that follows it. The code acts wherever the BBS expands pipe codes: strings,
 menu prompts, and display files and templates that take pipe codes. A menu's own `.ANS` screen is
 drawn with its field coordinates tracked and keeps the code as text; position art with its own
@@ -497,7 +497,7 @@ after the verbs are filled in, so a verb inside a group is never lost. A code th
 itself keeps its own meaning: in `yourUserNum`, `|UN` is the new caller's user number, not the
 user note. The description row names those codes.
 
-The `@U@` and `@UC@` AT-codes and `%%file.ans%%` includes are for prompts and display files only.
+The `@U@` and `@UC@` AT-codes and `%%file.ans%%` includes are for menu prompts only. Display files don't expand includes yet ([#647](https://github.com/ViSiON-3/vision-3-bbs/issues/647)).
 
 ### Building
 
