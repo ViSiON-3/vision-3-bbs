@@ -191,8 +191,12 @@ func TestRoleHelpers(t *testing.T) {
 	if got, want := env.e.lightbarRule("--"), colorCodeToAnsi(0x4f)+"--\x1b[0m|07"; got != want {
 		t.Errorf("rule with a background = %q, want %q", got, want)
 	}
-	if env.e.roleReset(roleBorder) != "\x1b[0m" || env.e.roleReset(roleSelected) != "" {
-		t.Errorf("roleReset: border %q, selected %q", env.e.roleReset(roleBorder), env.e.roleReset(roleSelected))
+	// roleText reads the role once, for the colour and the reset alike.
+	if got, want := env.e.roleText(roleBorder, "x"), colorCodeToAnsi(0x4f)+"x\x1b[0m"; got != want {
+		t.Errorf("roleText with a background = %q, want %q", got, want)
+	}
+	if got := env.e.roleText(roleSelected, "x"); got != "|00x" {
+		t.Errorf("roleText with a plain foreground = %q, want |00x", got)
 	}
 	if got := env.e.roleColor(roleSelected); got != 0 {
 		t.Errorf("lightbarSelected 0 read as %d", got)

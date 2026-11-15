@@ -33,36 +33,27 @@ func (e *MenuExecutor) roleAnsi(role config.ColorRole) string {
 	return colorCodeToAnsi(e.roleColor(role))
 }
 
-// rolePipe is a role's colour for text that goes on through the pipe-code
-// renderer. A plain foreground, 0-15, is the pipe code a generated screen
-// has always written for it, so the default theme's output is unchanged;
-// a colour with a background is the escape sequence.
+// roleText is text in a role's colour, for output that goes on through the
+// pipe-code renderer. For a plain foreground, 0-15, it is the pipe code a
+// generated screen has always written and then the text, so the default
+// theme's output is unchanged. For a colour with a background it is the
+// escape sequence, the text, and an attribute reset: a pipe code sets a
+// foreground and leaves the background alone, so without the reset the
+// background would stay behind whatever is drawn next.
 //
-// A pipe code sets a foreground and leaves the background alone, so text
-// in a background-bearing colour must be closed with roleReset before
-// anything else is drawn, and a pipe code must not follow one directly:
-// lightbarHint and lightbarRule see to both.
-func (e *MenuExecutor) rolePipe(role config.ColorRole) string {
+// The role is read once. Read for the colour and again for the reset, a
+// theme reload between the two could open a background and never close it.
+func (e *MenuExecutor) roleText(role config.ColorRole, text string) string {
 	c := e.roleColor(role)
 	if plainForeground(c) {
-		return fmt.Sprintf("|%02d", c)
+		return fmt.Sprintf("|%02d", c) + text
 	}
-	return colorCodeToAnsi(c)
+	return colorCodeToAnsi(c) + text + "\x1b[0m"
 }
 
 // plainForeground reports whether a DOS attribute is a foreground on the
 // default black background, which a pipe code can express.
 func plainForeground(c int) bool { return c >= 0 && c <= 15 }
-
-// roleReset closes text drawn with rolePipe(role): nothing for a plain
-// foreground, as the screens have always written, and an attribute reset
-// for a colour with a background, so the background ends with the text.
-func (e *MenuExecutor) roleReset(role config.ColorRole) string {
-	if plainForeground(e.roleColor(role)) {
-		return ""
-	}
-	return "\x1b[0m"
-}
 
 // lightbarHint colours a generated hint row. The hint is written the way
 // these rows always were, with |15 before a key name and |08 before the
@@ -92,5 +83,5 @@ func (e *MenuExecutor) lightbarHint(hint string) string {
 // lightbarRule colours a generated separator line with the border role,
 // and puts the colour back to light gray after it.
 func (e *MenuExecutor) lightbarRule(line string) string {
-	return e.rolePipe(roleBorder) + line + e.roleReset(roleBorder) + "|07"
+	return e.roleText(roleBorder, line) + "|07"
 }
