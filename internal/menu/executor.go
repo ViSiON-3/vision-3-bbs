@@ -108,7 +108,8 @@ type MenuExecutor struct {
 	// ever holds a reference into a shared snapshot; GetDoorConfig reads the
 	// shared map without cloning, which is safe because it returns a value.
 	stringsCfg atomic.Pointer[config.StringsConfig]
-	themeCfg   atomic.Pointer[config.ThemeConfig]
+	themeCfg   atomic.Pointer[config.ThemeConfig] // as drawn: themeBase with the board's colours
+	themeBase  atomic.Pointer[config.ThemeConfig] // the theme's own theme.json
 	serverCfg  atomic.Pointer[config.ServerConfig]
 	doorReg    atomic.Pointer[map[string]config.DoorConfig]
 	loginSeq   atomic.Pointer[[]config.LoginItem]
@@ -279,12 +280,32 @@ func (e *MenuExecutor) Strings() *config.StringsConfig {
 	return &config.StringsConfig{}
 }
 
-// SetTheme atomically updates the theme configuration.
+// SetTheme atomically updates the theme configuration: the selected
+// theme's theme.json. What Theme returns is that with the board's colour
+// overrides (config.json theme.colors) applied.
 func (e *MenuExecutor) SetTheme(theme config.ThemeConfig) {
-	e.themeCfg.Store(&theme)
+	e.themeBase.Store(&theme)
+	e.applyBoardColors()
 }
 
-// Theme returns the current theme configuration. Read-only.
+// applyBoardColors rebuilds the theme the board draws with from the
+// theme's own settings and the server config's theme.colors. It runs when
+// either changes, so an override reloads with config.json and a theme
+// edit reloads with theme.json.
+func (e *MenuExecutor) applyBoardColors() {
+	base := e.themeBase.Load()
+	if base == nil {
+		return
+	}
+	eff := *base
+	if cfg := e.serverCfg.Load(); cfg != nil {
+		eff = eff.WithBoardColors(cfg.Theme.Colors)
+	}
+	e.themeCfg.Store(&eff)
+}
+
+// Theme returns the current theme configuration, the board's colour
+// overrides included. Read-only.
 func (e *MenuExecutor) Theme() *config.ThemeConfig {
 	if p := e.themeCfg.Load(); p != nil {
 		return p
@@ -300,6 +321,7 @@ func (e *MenuExecutor) SetServerConfig(serverCfg config.ServerConfig) {
 	serverCfg.DoorCategories = append([]config.DoorCategory(nil), serverCfg.DoorCategories...)
 	serverCfg.SanitizeAccessLevels()
 	e.serverCfg.Store(&serverCfg)
+	e.applyBoardColors()
 	setACSSysOpLevels(serverCfg.SysOpLevel, serverCfg.CoSysOpLevel)
 	acsLocation.Store(config.LoadTimezone(serverCfg.Timezone))
 }

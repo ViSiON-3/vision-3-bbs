@@ -23,11 +23,64 @@ func themeMenuItems() []sysConfigMenuItem {
 		{Label: "Theme Selection", Build: func(m *Model) []fieldDef {
 			return themeFieldsSelection(&m.configs.Server, func() []string { return menuset.ListThemes(bbsRootFor(m.configPath)) })
 		}},
-		{Label: "Prompt Colors", Build: func(m *Model) []fieldDef { return themeFieldsPrompts(&m.configs.Theme) }},
-		{Label: "Split-Screen Chat", Build: func(m *Model) []fieldDef {
-			return themeFieldsChat(&m.configs.Theme, func() []themeChatScreen { return themeChatScreens(m.configs.themeSet) })
+		{Label: "Prompt Colors", Build: func(m *Model) []fieldDef {
+			return themeFieldsPrompts(&m.configs.Theme, &m.configs.Server.Theme.Colors)
 		}},
-		{Label: "Toasts", Build: func(m *Model) []fieldDef { return themeFieldsToasts(&m.configs.Theme) }},
+		{Label: "Lightbar Colors", Build: func(m *Model) []fieldDef {
+			return themeFieldsLightbar(&m.configs.Theme, &m.configs.Server.Theme.Colors)
+		}},
+		{Label: "Split-Screen Chat", Build: func(m *Model) []fieldDef {
+			return themeFieldsChat(&m.configs.Theme, &m.configs.Server.Theme.Colors, func() []themeChatScreen { return themeChatScreens(m.configs.themeSet) })
+		}},
+		{Label: "Toasts", Build: func(m *Model) []fieldDef {
+			return themeFieldsToasts(&m.configs.Theme, &m.configs.Server.Theme.Colors)
+		}},
+	}
+}
+
+// boardColorField edits one colour as a board override (#1078). It shows
+// the colour the board draws with, the board's override if it has one and
+// otherwise the theme's, and says which. Setting it stores an override in
+// config.json's theme.colors, never in the theme's theme.json; D on the
+// field ("Use theme default") removes the override again. th is the theme
+// as loaded, without the board's colours.
+func boardColorField(label, help string, row int, role config.ColorRole, th *config.ThemeConfig, board *config.ThemeColors) fieldDef {
+	resolve := func() (int, config.ColorSource) { return config.ResolveColor(role, *th, *board) }
+	return fieldDef{
+		Label: label, Help: help + "; Enter picks, T types a number, D uses the theme's",
+		Type: ftColorAttr, Col: 3, Row: row, Width: 3, Min: 0, Max: 255,
+		Get: func() string { v, _ := resolve(); return strconv.Itoa(v) },
+		Set: func(val string) error {
+			n, err := strconv.Atoi(val)
+			if err != nil {
+				return err
+			}
+			if n < 0 || n > 255 {
+				return fmt.Errorf("a colour is 0 to 255")
+			}
+			// Choosing the colour already shown is not an override.
+			if cur, src := resolve(); n == cur && src != config.SourceBoard {
+				return nil
+			}
+			board.Override(role, n)
+			return nil
+		},
+		Source:  func() string { _, src := resolve(); return src.String() },
+		Inherit: func() bool { return board.Inherit(role) },
+	}
+}
+
+// themeFieldsLightbar is the lightbar colour roles (#1077), which every
+// lightbar the BBS draws inherits.
+func themeFieldsLightbar(th *config.ThemeConfig, board *config.ThemeColors) []fieldDef {
+	return []fieldDef{
+		boardColorField("Selected", "The highlighted row or command on every lightbar", 1, config.RoleLightbarSelected, th, board),
+		boardColorField("Normal", "Unselected commands on the file list and message scan bars", 2, config.RoleLightbarNormal, th, board),
+		boardColorField("Command", "Unselected commands on the message reader bar", 3, config.RoleLightbarCommand, th, board),
+		boardColorField("Hotkey", "Key names in a lightbar's hint row", 4, config.RoleLightbarHotkey, th, board),
+		boardColorField("Hint", "The rest of a lightbar's hint row", 5, config.RoleLightbarHint, th, board),
+		boardColorField("Border", "The line between a list and its footer", 6, config.RoleLightbarBorder, th, board),
+		boardColorField("Destructive", "Del on the message reader bar", 7, config.RoleLightbarDestructive, th, board),
 	}
 }
 
@@ -66,35 +119,11 @@ func themeFieldsSelection(cfg *config.ServerConfig, themes func() []string) []fi
 	}
 }
 
-// themeColorField edits one DOS colour code.
-func themeColorField(label, help string, row int, v *int) fieldDef {
-	return fieldDef{
-		Label: label, Help: help + " (DOS colour 0-255)", Type: ftInteger, Col: 3, Row: row, Width: 3, Min: 0, Max: 255,
-		Get: func() string { return strconv.Itoa(*v) },
-		Set: func(val string) error {
-			n, err := strconv.Atoi(val)
-			if err != nil {
-				return err
-			}
-			*v = n
-			return nil
-		},
-	}
-}
-
-// themeAttrField is themeColorField picked with the colour picker: Enter
-// opens it, and T in it types the number as before.
-func themeAttrField(label, help string, row int, v *int) fieldDef {
-	f := themeColorField(label, help+"; Enter picks it, T types the number", row, v)
-	f.Type = ftColorAttr
-	return f
-}
-
-func themeFieldsPrompts(th *config.ThemeConfig) []fieldDef {
+func themeFieldsPrompts(th *config.ThemeConfig, board *config.ThemeColors) []fieldDef {
 	return []fieldDef{
-		themeAttrField("Yes/No Highlight", "The selected answer in Yes/No prompts", 1, &th.YesNoHighlightColor),
-		themeAttrField("Yes/No Regular", "The other answer in Yes/No prompts", 2, &th.YesNoRegularColor),
-		themeColorField("Autocorrect Fix", "A word the message editor just autocorrected, while the fix is shown", 3, &th.AutocorrectHighlightColor),
+		boardColorField("Yes/No Highlight", "The selected answer in Yes/No prompts", 1, config.RoleYesNoHighlight, th, board),
+		boardColorField("Yes/No Regular", "The other answer in Yes/No prompts", 2, config.RoleYesNoRegular, th, board),
+		boardColorField("Autocorrect Fix", "A word the message editor just autocorrected, while the fix is shown", 3, config.RoleAutocorrect, th, board),
 	}
 }
 
@@ -105,7 +134,7 @@ const (
 	themeChatRandom  = "random"
 )
 
-func themeFieldsChat(th *config.ThemeConfig, screens func() []themeChatScreen) []fieldDef {
+func themeFieldsChat(th *config.ThemeConfig, board *config.ThemeColors, screens func() []themeChatScreen) []fieldDef {
 	return []fieldDef{
 		{
 			Label: "Chat Screen", Help: "Screen chats open on; Alt-S on the WFC overrides it", Type: ftLookup, Col: 3, Row: 1, Width: 20,
@@ -133,8 +162,8 @@ func themeFieldsChat(th *config.ThemeConfig, screens func() []themeChatScreen) [
 				return items
 			},
 		},
-		themeColorField("Sysop Color", "Sysop's text where the chat screen sets no colour", 3, &th.ChatSysopColor),
-		themeColorField("Caller Color", "Caller's text where the chat screen sets no colour", 4, &th.ChatUserColor),
+		boardColorField("Sysop Color", "Sysop's text where the chat screen sets no colour", 3, config.RoleChatSysop, th, board),
+		boardColorField("Caller Color", "Caller's text where the chat screen sets no colour", 4, config.RoleChatUser, th, board),
 	}
 }
 
@@ -200,18 +229,40 @@ func themeChatScreens(menuSetPath string) []themeChatScreen {
 
 // themeFieldsToasts edits the theme's toast settings: the colours a toast
 // fades through when the board has fading on (System Setup -> Toasts).
-func themeFieldsToasts(th *config.ThemeConfig) []fieldDef {
+func themeFieldsToasts(th *config.ThemeConfig, board *config.ThemeColors) []fieldDef {
+	// The ramp is a board override like the colours: config.json's
+	// theme.colors.toastFadeColors, over the theme's.
+	current := func() string { return config.FormatToastFadeColors(th.WithBoardColors(*board).FadeColors()) }
 	return []fieldDef{
 		{
-			Label: "Fade Colors", Help: "Colours a toast fades in through, and out through in reverse, when Toast Fade is on; Enter edits them with the colour picker",
+			Label: "Fade Colors", Help: "Colours a toast fades in through, and out through in reverse, when Toast Fade is on; Enter edits them, D uses the theme's",
 			Type: ftColorRamp, Col: 3, Row: 1, Width: 4 * config.MaxToastFadeSteps,
-			Get: func() string { return config.FormatToastFadeColors(th.FadeColors()) },
+			Get: current,
 			Set: func(val string) error {
-				if _, ok := config.ParseToastFadeColors(val); !ok {
+				colors, ok := config.ParseToastFadeColors(val)
+				if !ok {
 					return fmt.Errorf("1 to %d colours 0-15", config.MaxToastFadeSteps)
 				}
-				th.ToastFadeColors = val
+				val = config.FormatToastFadeColors(colors)
+				if val == current() && board.ToastFadeColors == "" {
+					return nil // the ramp already shown is not an override
+				}
+				board.ToastFadeColors = val
 				return nil
+			},
+			Source: func() string {
+				switch {
+				case board.ToastFadeColors != "":
+					return config.SourceBoard.String()
+				case th.ToastFadeColors != "":
+					return config.SourceTheme.String()
+				}
+				return config.SourceBuiltin.String()
+			},
+			Inherit: func() bool {
+				had := board.ToastFadeColors != ""
+				board.ToastFadeColors = ""
+				return had
 			},
 		},
 	}

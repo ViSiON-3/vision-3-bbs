@@ -56,7 +56,7 @@ The editor opens to a main menu. Keys **1** through **7**, **B** and **C** open 
 | 0 | Event Scheduler | Automated event record list |
 | A | Login Sequence | Login step record list |
 | B | ZipLab Upload Processing | Sub-menu: General, Pipeline Steps, Virus Scan (see [ZipLab](files/ziplab.md)) |
-| C | Theme | Sub-menu: Theme Selection, Prompt Colors, Split-Screen Chat, Toasts (see [Theme Sub-menu](#theme-sub-menu)) |
+| C | Theme | Sub-menu: Theme Selection, Prompt Colors, Lightbar Colors, Split-Screen Chat, Toasts (see [Theme Sub-menu](#theme-sub-menu)) |
 | Q | Quit | Exit (prompts to save if there are unsaved changes) |
 
 ### System Setup Sub-menu
@@ -165,18 +165,34 @@ edits that theme's `theme.json` (see [Theme Configuration](#theme-configuration)
 | Item | What it edits |
 |------|---------------|
 | Theme Selection | The theme the board runs, picked from the directories under `menus/`. Saved to `config.json` as `theme.name`; restart the BBS to switch |
-| Prompt Colors | Yes/No highlight and regular colours, and the message editor's autocorrect highlight (DOS colour codes) |
+| Prompt Colors | Yes/No highlight and regular colours, and the message editor's autocorrect highlight |
+| Lightbar Colors | The seven [lightbar colour roles](#lightbar-colour-roles) every lightbar inherits |
 | Split-Screen Chat | The chat screen chat opens with, picked from the menu set's screens, the built-in layout or **random**; and the sysop's and caller's text colours where a screen sets none |
+| Toasts | The colours a toast fades through |
 
-The theme's settings are saved to its overlay, `menus.d/<theme>/theme.json`
-(`menus.d/v3/theme.json` for the default theme), so upgrading the shipped
-menus keeps them; the first save copies the shipped settings there. A theme
-you have not changed is not written. A running BBS picks a changed colour or
-chat screen up without a restart.
+**Colours are board overrides.** Each colour shows the value the board draws
+with, in that colour, and where it comes from: `built-in`, `theme` or
+`board override`. Changing one saves it to `config.json` under
+`theme.colors` (see [Board Colour Overrides](#board-colour-overrides)), and
+only the colours you change are stored. A colour edit never writes the
+theme's `theme.json` or its overlay.
 
-The colour and chat pages edit the theme that was selected when you opened
-`./config`. After changing **Theme Selection**, save, restart the BBS, and
-reopen `./config` to edit the new theme's settings.
+| Key (on a colour) | Action |
+|-----|--------|
+| Enter | Pick the colour: 16 foregrounds and 8 backgrounds |
+| T (in the picker) | Type the DOS colour number, 0-255 |
+| D or Del | **Use theme default**: remove the board's override, so the theme's colour shows again |
+
+A running BBS picks colour changes up without a restart.
+
+**Chat Screen** is not a colour and is still saved to the theme's overlay,
+`menus.d/<theme>/theme.json` (`menus.d/v3/theme.json` for the default
+theme), so upgrading the shipped menus keeps it; the first such save copies
+the shipped settings there. It is the setting of the theme that was selected
+when you opened `./config`: after changing **Theme Selection**, save,
+restart the BBS, and reopen `./config` to set the new theme's chat screen.
+Colours need no such care, since they are the board's and apply over
+whichever theme runs.
 
 ### Navigation
 
@@ -1300,6 +1316,53 @@ cp -R menus/v3 menus/mytheme
 Then choose it under **Theme → Theme Selection** in `./config` (or set
 `theme.name`), run `./vision3 doctor`, and restart the BBS.
 
+### Board Colour Overrides
+
+The board's own colours live in `config.json`, in `theme.colors`, apart from
+the theme:
+
+```json
+"theme": {
+  "name": "v3",
+  "colors": { "lightbarSelected": 31, "lightbarNormal": 13 }
+}
+```
+
+- **Only what you change is stored.** A colour left out inherits the
+  selected theme's. So when an upgrade changes the theme's defaults, or you
+  switch theme, every colour you have not overridden follows it.
+- **Keys.** The [lightbar colour roles](#lightbar-colour-roles), plus
+  `yesNoHighlightColor`, `yesNoRegularColor`, `chatSysopColor`,
+  `chatUserColor`, `autocorrectHighlightColor` and `toastFadeColors`, as in
+  [`theme.json`](#theme-configuration).
+- **`0` is a colour.** `"lightbarHint": 0` overrides with black. To inherit,
+  leave the key out (or set it to `null`); that is what **Use theme
+  default** in `./config` does.
+- **Reload.** A change takes effect on a running BBS without a restart. If
+  `config.json` has a colour that isn't one (not a number, outside 0-255,
+  or a fade ramp that isn't 1 to 8 colours from 0 to 15), the file is not
+  applied at all and the board keeps the configuration it was running; the
+  log says why.
+
+Colour precedence, lowest to highest:
+
+1. The built-in default.
+2. The selected theme: `menus/<theme>/theme.json`, or its overlay copy
+   `menus.d/<theme>/theme.json` when there is one.
+3. The board's override in `config.json` `theme.colors`.
+4. A screen's own BAR file, for that screen (see
+   [Lightbar Colour Roles](#lightbar-colour-roles)).
+
+**Boards with an overlay `theme.json`.** Before `theme.colors`, `./config`
+saved a colour change by copying the whole theme into
+`menus.d/<theme>/theme.json`. That file still works, as part of the theme
+(layer 2), so nothing looks different after upgrading. But it shadows the
+shipped `theme.json`, so the theme's later defaults never reach the board.
+`./vision3 doctor` notes an overlay that only repeats the shipped values;
+that one can simply be deleted. If yours holds colours you chose, either
+keep it, or set those colours under **Theme** in `./config` (which stores
+them in `theme.colors`) and then delete it. Nothing is moved for you.
+
 ### Theme Configuration
 
 The selected theme's `theme.json` (`menus/v3/theme.json` for the default
@@ -1333,7 +1396,9 @@ theme) controls color schemes:
 - `autocorrectHighlightColor` - color the message editor draws a word in right after [autocorrect](messages/message-areas.md#autocorrect) fixed it, for as long as the fix is shown on the prompt row; the screen only, the message is unchanged (default `15`, bright white). A background of 0 (black) leaves the terminal's own background behind the word
 - `sysopChatScreen` - the [chat screen](menus/menu-system.md#chat-screens) split-screen chat opens with: `cfg/NAME.json` and `ansi/NAME.ANS` in the menu set. Empty for the built-in layout, `random` for one of the set's screens each chat; the shipped set uses `V3CHAT1`
 
-The config editor's [Theme](#theme-sub-menu) page edits these fields.
+The config editor's [Theme](#theme-sub-menu) pages set the colours as
+[board overrides](#board-colour-overrides) in `config.json`, and
+`sysopChatScreen` here.
 
 A copy at `menus.d/<set>/theme.json` overrides the one in `menus/<set>/`.
 
@@ -1377,8 +1442,9 @@ brackets around the message reader's command bar (blue), a greyed-out
 command that does nothing on the current message, and the generated door
 menu's unselected entries, which use the terminal's default colour.
 
-Colour precedence, lowest to highest: the built-in default, then the
-theme's `theme.json` (its overlay copy first).
+The board can override any of these without touching the theme; see
+[Board Colour Overrides](#board-colour-overrides) for that and the full
+colour precedence.
 
 Standard DOS color codes range from 0-255, where:
 

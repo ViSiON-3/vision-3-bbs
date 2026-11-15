@@ -191,6 +191,15 @@ func (m Model) renderSysEditRow(row, boxW int) string {
 		fieldDisplayStyle.Render(strings.Repeat(" ", padAfter))
 }
 
+// fieldSourceText is where a colour field's value comes from, drawn after
+// its swatch; empty for a field that doesn't say.
+func fieldSourceText(f fieldDef) string {
+	if f.Source == nil {
+		return ""
+	}
+	return fieldDisplayStyle.Render(" " + padRight(f.Source(), len("screen override")+1))
+}
+
 // renderSysField renders a single system config field.
 func (m Model) renderSysField(fieldIdx int, f fieldDef) (string, int) {
 	isActive := m.editField == fieldIdx
@@ -213,7 +222,7 @@ func (m Model) renderSysField(fieldIdx int, f fieldDef) (string, int) {
 	// A colour attribute shows as itself, with its number.
 	if f.Type == ftColorAttr {
 		v := attrValue(f)
-		shown := tuiart.Style(byte(v)).Render(fmt.Sprintf(" %3d ", v))
+		shown := tuiart.Style(byte(v)).Render(fmt.Sprintf(" %3d ", v)) + fieldSourceText(f)
 		if isActive && m.mode == modeSysConfigEdit {
 			shown += fieldEditStyle.Render(" Enter to pick ")
 		}
@@ -227,6 +236,7 @@ func (m Model) renderSysField(fieldIdx int, f fieldDef) (string, int) {
 			steps, _ = config.ParseToastFadeColors(config.DefaultToastFadeColors)
 		}
 		swatches := rampSwatches(steps, 0, false, colorpick.Styles{Text: fieldDisplayStyle, Button: fieldDisplayStyle, Active: fieldDisplayStyle})
+		swatches += fieldSourceText(f)
 		if isActive && m.mode == modeSysConfigEdit {
 			swatches += fieldEditStyle.Render(" Enter to edit ")
 		}

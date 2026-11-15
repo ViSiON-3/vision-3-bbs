@@ -106,6 +106,115 @@ func TestDoctorReportsTheTheme(t *testing.T) {
 	}
 }
 
+// Board colour overrides (config.json theme.colors) reload with
+// config.json, over whatever theme.json holds, and a theme.json reload
+// keeps them. A config.json with a colour that isn't one is not applied:
+// the running configuration and colours stay.
+func TestBoardColoursHotReload(t *testing.T) {
+	root := themeBoard(t, `{"boardName": "Before"}`, "v3")
+	configDir := filepath.Join(root, "configs")
+	menuSet := filepath.Join(root, "menus", "v3")
+	themeJSON := filepath.Join(menuSet, "theme.json")
+	writeDoctorFixture(t, themeJSON, `{"yesNoHighlightColor": 31, "yesNoRegularColor": 13, "lightbarHint": 8}`)
+
+	serverCfg, err := config.LoadServerConfig(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	theme, err := config.LoadThemeConfig(menuSet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.RWMutex
+	e := &menu.MenuExecutor{}
+	e.SetTheme(theme)
+	e.SetServerConfig(serverCfg)
+	cw, err := NewConfigWatcher(configDir, menuSet, e, nil, &serverCfg, &mu, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cw.Stop()
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)))
+	defer slog.SetDefault(prev)
+
+	colour := func(role config.ColorRole) int { return e.Theme().Color(role) }
+	if colour(config.RoleLightbarSelected) != 31 || colour(config.RoleLightbarHint) != 8 {
+		t.Fatalf("before any override: selected %d, hint %d", colour(config.RoleLightbarSelected), colour(config.RoleLightbarHint))
+	}
+
+	writeDoctorFixture(t, filepath.Join(configDir, "config.json"), `{"boardName": "Overridden", "theme": {"colors": {"lightbarSelected": 78}}}`)
+	cw.reloadServerConfig()
+	if colour(config.RoleLightbarSelected) != 78 || colour(config.RoleLightbarHint) != 8 {
+		t.Errorf("after the override reloaded: selected %d, hint %d; want 78 and the theme's 8", colour(config.RoleLightbarSelected), colour(config.RoleLightbarHint))
+	}
+
+	// An invalid edit: nothing of it is applied.
+	writeDoctorFixture(t, filepath.Join(configDir, "config.json"), `{"boardName": "Broken", "theme": {"colors": {"lightbarSelected": 300, "lightbarHint": 3}}}`)
+	cw.reloadServerConfig()
+	if serverCfg.BoardName != "Overridden" || e.GetServerConfig().BoardName != "Overridden" {
+		t.Errorf("an invalid config.json replaced the running one: %q", serverCfg.BoardName)
+	}
+	if colour(config.RoleLightbarSelected) != 78 || colour(config.RoleLightbarHint) != 8 {
+		t.Errorf("after an invalid edit: selected %d, hint %d; want them unchanged", colour(config.RoleLightbarSelected), colour(config.RoleLightbarHint))
+	}
+
+	// The theme changes under the override: the override holds, the rest follows.
+	writeDoctorFixture(t, themeJSON, `{"yesNoHighlightColor": 47, "yesNoRegularColor": 13, "lightbarHint": 3}`)
+	cw.reloadTheme()
+	if colour(config.RoleLightbarSelected) != 78 || colour(config.RoleLightbarHint) != 3 || colour(config.RoleYesNoHighlight) != 47 {
+		t.Errorf("after theme.json reloaded: selected %d, hint %d, yes/no %d", colour(config.RoleLightbarSelected), colour(config.RoleLightbarHint), colour(config.RoleYesNoHighlight))
+	}
+
+	// The override removed (Use theme default): the theme's colour is back.
+	writeDoctorFixture(t, filepath.Join(configDir, "config.json"), `{"boardName": "Plain"}`)
+	cw.reloadServerConfig()
+	if colour(config.RoleLightbarSelected) != 47 {
+		t.Errorf("after the override was removed: selected %d, want the theme's 47", colour(config.RoleLightbarSelected))
+	}
+}
+
+// Doctor notes an overlay theme.json that only repeats the shipped theme,
+// as the config editor used to write, and says nothing about one that
+// holds a value of the sysop's own.
+func TestDoctorNotesRedundantThemeOverlay(t *testing.T) {
+	shipped := `{"yesNoHighlightColor": 31, "yesNoRegularColor": 13, "lightbarSelected": 31, "chatSysopColor": 11, "sysopChatScreen": "V3CHAT1"}`
+	note := "menus.d/v3/theme.json"
+	check := func(overlay string) []doctorCheck {
+		t.Helper()
+		root := themeBoard(t, "", "v3")
+		writeDoctorFixture(t, filepath.Join(root, "menus", "v3", "theme.json"), shipped)
+		if overlay != "" {
+			if err := os.MkdirAll(filepath.Join(root, "menus.d", "v3"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			writeDoctorFixture(t, filepath.Join(root, "menus.d", "v3", "theme.json"), overlay)
+		}
+		var checks []doctorCheck
+		checkThemeOverlay(filepath.Join(root, "menus", "v3"), func(name string, status doctorSeverity, message, fix string) {
+			checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+		})
+		return checks
+	}
+
+	// A full copy from before the roles: every key it has matches.
+	copyOf := "{\n    \"yesNoHighlightColor\": 31,\n    \"yesNoRegularColor\": 13,\n    \"chatSysopColor\": 11,\n    \"sysopChatScreen\": \"V3CHAT1\"\n}\n"
+	if checks := check(copyOf); !hasDoctorCheck(checks, note, doctorInfo, "only repeats the shipped theme's values") {
+		t.Errorf("a redundant overlay was not noted: %+v", checks)
+	}
+	for name, overlay := range map[string]string{
+		"no overlay":         "",
+		"a changed colour":   `{"yesNoHighlightColor": 79, "yesNoRegularColor": 13}`,
+		"a key of its own":   `{"yesNoHighlightColor": 31, "lightbarHint": 3}`,
+		"an empty overlay":   `{}`,
+		"an unreadable file": `{`,
+	} {
+		if checks := check(overlay); len(checks) != 0 {
+			t.Errorf("%s: %+v, want nothing said", name, checks)
+		}
+	}
+}
+
 // A running server keeps the theme it started with: a reload of a
 // config.json whose theme.name changed applies everything else, logs that a
 // restart is needed, and leaves the running selection in place.

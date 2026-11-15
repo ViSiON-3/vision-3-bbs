@@ -98,6 +98,21 @@ func (m Model) updateSysConfigEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case tea.KeyRunes, tea.KeyDelete:
+		// D or Del on a field that holds an override: use the inherited
+		// value again ("Use theme default").
+		f := m.sysFields[m.editField]
+		if f.Inherit == nil || (msg.Type == tea.KeyRunes && !strings.EqualFold(string(msg.Runes), "d")) {
+			return m, nil
+		}
+		if f.Inherit() {
+			m.dirty = true
+			m.message = f.Label + ": using the theme's default"
+		} else {
+			m.message = f.Label + " is already the theme's default"
+		}
+		return m, nil
+
 	case tea.KeyDown:
 		m.editField = m.nextSysEditableField(1)
 		m.clampFieldScroll(m.sysFields)

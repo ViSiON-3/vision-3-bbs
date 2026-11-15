@@ -10,13 +10,18 @@ import (
 )
 
 // ThemeSelection is the "theme" section of config.json: which theme, a menu
-// set under menus/, the board runs (#1076).
+// set under menus/, the board runs (#1076), and the board's own colours
+// over it (#1078).
 type ThemeSelection struct {
 	// Name is the theme's directory under menus/. Omitted or empty means
 	// menuset.DefaultTheme. One name selects artwork, templates, menus and
 	// colours together, with local changes in menus.d/<name>. Changing it
 	// takes effect when the BBS restarts.
 	Name string `json:"name,omitempty"`
+	// Colors are the board's colour overrides, over the selected theme's
+	// own; see ThemeColors. Unlike Name, a change reloads without a
+	// restart.
+	Colors ThemeColors `json:"colors,omitzero"`
 }
 
 // ThemeName returns the theme the config selects: theme.name, or the

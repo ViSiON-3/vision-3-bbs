@@ -42,6 +42,13 @@ type fieldDef struct {
 	Set         func(val string) error
 	AfterSet    func(m *Model, val string) // called after Set succeeds, on the current model
 	LookupItems func() []LookupItem        // provider for ftLookup
+	// Source, on a colour field, names where the value shown comes from
+	// ("theme", "board override", ...); it is drawn after the swatch.
+	Source func() string
+	// Inherit, on a field whose value can be an override, removes the
+	// override so the inherited value shows again ("Use theme default",
+	// the D key). It reports whether there was one to remove.
+	Inherit func() bool
 }
 
 // acsMaxLen is how long an ACS field accepts, whatever its width on screen:

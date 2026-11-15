@@ -13,7 +13,7 @@ import (
 func openRamp(t *testing.T) Model {
 	t.Helper()
 	m, _ := newThemeModel(t)
-	m = press(t, m, "C", "4")
+	m = press(t, m, "C", "5")
 	if m.mode != modeSysConfigEdit || m.sysFields[m.editField].Label != "Fade Colors" {
 		t.Fatalf("mode=%v field=%q", m.mode, m.sysFields[m.editField].Label)
 	}
@@ -55,8 +55,8 @@ func TestColorRampEdit(t *testing.T) {
 
 	// S keeps it.
 	m = press(t, m, "enter", "right", "enter", "left", "enter", "s")
-	if m.mode != modeSysConfigEdit || m.configs.Theme.ToastFadeColors != "8,6,15" || !m.dirty {
-		t.Fatalf("save: mode=%v colors=%q dirty=%v", m.mode, m.configs.Theme.ToastFadeColors, m.dirty)
+	if m.mode != modeSysConfigEdit || m.configs.Server.Theme.Colors.ToastFadeColors != "8,6,15" || m.configs.Theme.ToastFadeColors != "8,7,15" || !m.dirty {
+		t.Fatalf("save: mode=%v override=%q dirty=%v", m.mode, m.configs.Server.Theme.Colors.ToastFadeColors, m.dirty)
 	}
 }
 
