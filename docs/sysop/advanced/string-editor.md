@@ -455,7 +455,7 @@ of the wrong shape, `|XY5,12` or `|XY15;12`, is not a code and prints as written
 }
 ```
 
-The editor's preview hides the code, and `|P` and `|PP`, as it does `|CL`, so the list is not disturbed; the value
+The editor's preview hides `|XY` as it does `|CL`, so the list is not disturbed; the value
 column shows the text that follows it. The code acts wherever the BBS expands pipe codes: strings,
 menu prompts, and display files and templates that take pipe codes. A menu's own `.ANS` screen is
 drawn with its field coordinates tracked and keeps the code as text; position art with its own
@@ -497,7 +497,7 @@ after the verbs are filled in, so a verb inside a group is never lost. A code th
 itself keeps its own meaning: in `yourUserNum`, `|UN` is the new caller's user number, not the
 user note. The description row names those codes.
 
-The `@U@` and `@UC@` AT-codes and `%%file.ans%%` includes are for menu prompts only. Display files don't expand includes yet ([#647](https://github.com/ViSiON-3/vision-3-bbs/issues/647)).
+`strings.json` values don't expand the `@U@` (callers online) and `@UC@` (users on the board) AT-codes, or `%%file.ans%%` includes. The AT-codes work in menu prompts and in a menu's own `.ANS` screen, and the last-callers templates and the chat screen have an `@U@` of their own. Includes work in menu prompts only; display files don't expand them yet ([#647](https://github.com/ViSiON-3/vision-3-bbs/issues/647)).
 
 ### Building
 
