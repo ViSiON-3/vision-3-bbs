@@ -55,3 +55,36 @@ func TestCustomPromptColourCodes(t *testing.T) {
 		}
 	}
 }
+
+// A colour code and the placeholder after it are expanded apart: |B1 then a
+// handle starting "0" is a red background and "0Neo", not |B10 and "Neo".
+func TestRenderCustomPromptKeepsTokensApart(t *testing.T) {
+	got := renderCustomPrompt("|B1|UH", map[string]string{"|UH": "0Neo"})
+	want := append(ansi.ReplacePipeCodes([]byte("|B1")), "0Neo"...)
+	if !bytes.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// A placeholder's value keeps its colour codes, but its screen codes print.
+func TestRenderCustomPromptEscapesPlaceholderValues(t *testing.T) {
+	got := renderCustomPrompt("|CAN>", map[string]string{"|CAN": "|14Gen|CLeral|XY01,01"})
+	if vis := visibleText(got); vis != "Gen|CLeral|XY01,01>" {
+		t.Errorf("shown as %q", vis)
+	}
+	if !bytes.Contains(got, ansi.ReplacePipeCodes([]byte("|14"))) {
+		t.Errorf("the value's colour was lost: %q", got)
+	}
+	if m := screenEscapeRe.Find(got); m != nil {
+		t.Errorf("a screen code in the value acted: %q", m)
+	}
+}
+
+// A placeholder's value goes to CP437 like the caller's own text, so the
+// whole prompt is in one encoding.
+func TestRenderCustomPromptValuesAreCP437(t *testing.T) {
+	got := renderCustomPrompt("|GL>", map[string]string{"|GL": "Montréal"})
+	if want := []byte("Montr\x82al>"); !bytes.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

@@ -79,6 +79,13 @@ func TestKonfigMenuPromptPreview(t *testing.T) {
 	if row := screen.Row(konfigHelpRow); !strings.Contains(row, "Preview: Hi Tester> |CL") {
 		t.Errorf("help row = %q", row)
 	}
+	u.GroupLocation = "Montr\u00e9al"
+	if err := st.previewCustomPrompt("|GL>"); err != nil {
+		t.Fatal(err)
+	}
+	if row := screen.Row(konfigHelpRow); !strings.Contains(row, "Preview: Montr\u00e9al>") {
+		t.Errorf("help row = %q, want the location as typed", row)
+	}
 	if err := st.previewCustomPrompt("  "); err != nil {
 		t.Fatal(err)
 	}

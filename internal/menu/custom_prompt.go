@@ -1,7 +1,7 @@
 package menu
 
 import (
-	"strings"
+	"bytes"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -38,46 +38,52 @@ func (e *MenuExecutor) customPromptFor(u *user.User, s ssh.Session, start time.T
 // renderCustomPrompt turns a custom prompt into the bytes to write, as
 // renderPromptText does for a sysop's: CP437, with colours expanded. Only
 // colour codes (|00-|15, |B0-|B7) and the keys of placeholders expand; every
-// other pipe is doubled so it prints, and include tags, AT-codes and @RR@ are
-// never looked for. Control characters are dropped and the rest go to CP437
-// here, before any placeholder is filled in; one with no CP437 form shows as
-// "?".
+// other pipe prints, and include tags, AT-codes and @RR@ are never looked for.
+// Control characters are dropped and the rest go to CP437; one with no CP437
+// form shows as "?".
+//
+// Each code and each placeholder's value is expanded on its own, so a value
+// never runs into the code before it (|B1 then a handle starting "0" is not
+// |B10), and a value is escaped first, so only its colour codes act.
 func renderCustomPrompt(text string, placeholders map[string]string) []byte {
 	src := []byte(toCP437Safe(user.CleanCustomPrompt(text)))
 	keys := placeholderKeysLongestFirst(placeholders)
-	var b strings.Builder
+	var b bytes.Buffer
 	b.Grow(len(src))
 	for i := 0; i < len(src); {
-		if src[i] != '|' {
+		switch {
+		case src[i] != '|':
 			b.WriteByte(src[i])
 			i++
-			continue
-		}
-		if i+1 < len(src) && src[i+1] == '|' {
-			b.WriteString("||")
+		case i+1 < len(src) && src[i+1] == '|':
+			b.WriteByte('|')
 			i += 2
-			continue
-		}
-		if customPromptColourAt(src, i) {
-			b.Write(src[i : i+3])
+		case customPromptColourAt(src, i):
+			b.Write(ansi.ReplacePipeCodes(src[i : i+3]))
 			i += 3
-			continue
-		}
-		matched := false
-		for _, k := range keys {
-			if strings.HasPrefix(string(src[i:]), k) {
-				b.WriteString(placeholders[k])
-				i += len(k)
-				matched = true
-				break
+		default:
+			k := placeholderKeyAt(src[i:], keys)
+			if k == "" {
+				b.WriteByte('|')
+				i++
+				continue
 			}
-		}
-		if !matched {
-			b.WriteString("||")
-			i++
+			v := toCP437Safe(ansi.DropControls(ansi.EscapeScreenPipeCodes(placeholders[k])))
+			b.Write(ansi.ReplacePipeCodes([]byte(v)))
+			i += len(k)
 		}
 	}
-	return ansi.ReplacePipeCodes([]byte(b.String()))
+	return b.Bytes()
+}
+
+// placeholderKeyAt returns the first of keys that src starts with, or "".
+func placeholderKeyAt(src []byte, keys []string) string {
+	for _, k := range keys {
+		if bytes.HasPrefix(src, []byte(k)) {
+			return k
+		}
+	}
+	return ""
 }
 
 // customPromptColourAt reports whether src[i:] starts with a colour code a

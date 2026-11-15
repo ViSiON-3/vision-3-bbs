@@ -766,16 +766,16 @@ func stringCatalog() []StringEntry {
 		{Label: "Konfig: More Prompts Label", Key: "konfigMorePromptsLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},
 		{Label: "Konfig: More Prompts Help", Key: "konfigMorePromptsHelp", Description: "Help line shown while More Prompts is highlighted"},
 
-		// The caller's own menu prompt (#425)
-		{Label: "Konfig: Menu Prompt Label", Key: "konfigCustomPromptLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},
-		{Label: "Konfig: Menu Prompt Help", Key: "konfigCustomPromptHelp", Description: "Help line shown while Menu Prompt is highlighted. Write || for a pipe that should show"},
-		{Label: "Konfig: Prompt Preview", Key: "konfigCustomPromptPreview", Description: "Shown before the prompt being typed, on the help row"},
-
 		// V3Net Central activity alerts (#978)
 		{Label: "Alert: Network Logon", Key: "centralAlertLogon", Description: "Toast: a caller elsewhere logged on (%s=handle, %s=board, %s=network); blank = none"},
 		{Label: "Alert: Network Logoff", Key: "centralAlertLogoff", Description: "Toast: a caller elsewhere logged off (%s=handle, %s=board, %s=network); blank = none"},
 		{Label: "Alert: Network Chat", Key: "centralAlertChatJoin", Description: "Toast: a caller elsewhere joined net chat (%s=handle, %s=board, %s=room, %s=network)"},
 		{Label: "Alert: Network Post", Key: "centralAlertPost", Description: "Toast: a caller elsewhere posted (%s=handle, %s=board, %s=area, %s=network); blank = none"},
 		{Label: "Toast: Post", Key: "toastPost", Description: "Shown to other callers here when someone posts (%s=poster, %s=area); blank = none"},
+
+		// The caller's own menu prompt (#425)
+		{Label: "Konfig: Menu Prompt Label", Key: "konfigCustomPromptLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},
+		{Label: "Konfig: Menu Prompt Help", Key: "konfigCustomPromptHelp", Description: "Help line shown while Menu Prompt is highlighted. Write || for a pipe that should show"},
+		{Label: "Konfig: Prompt Preview", Key: "konfigCustomPromptPreview", Description: "Shown before the prompt being typed, on the help row"},
 	}
 }
