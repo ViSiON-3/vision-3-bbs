@@ -206,6 +206,11 @@ type User struct {
 	IntroPending  bool `json:"introPending,omitempty"`
 	IntroAttempts int  `json:"introAttempts,omitempty"`
 
+	// WelcomePending is set at signup and cleared at the first login after
+	// the account is validated, when the welcome letter (sendWelcomeMail)
+	// is sent. Session-owned, like IntroPending.
+	WelcomePending bool `json:"welcomePending,omitempty"`
+
 	// APIDevices are the phones paired with the QWK API (see api_devices.go).
 	// Owned by the BBS: ./ue does not edit them, so they are not part of the
 	// external-edit merge. Only the UserMgr device methods change them, and
