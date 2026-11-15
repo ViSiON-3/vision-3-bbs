@@ -1310,6 +1310,13 @@ theme) controls color schemes:
 {
   "yesNoHighlightColor": 31,
   "yesNoRegularColor": 15,
+  "lightbarSelected": 31,
+  "lightbarNormal": 13,
+  "lightbarCommand": 9,
+  "lightbarHotkey": 15,
+  "lightbarHint": 8,
+  "lightbarBorder": 8,
+  "lightbarDestructive": 4,
   "chatSysopColor": 11,
   "chatUserColor": 10,
   "autocorrectHighlightColor": 15,
@@ -1319,8 +1326,9 @@ theme) controls color schemes:
 
 #### Theme Fields
 
-- `yesNoHighlightColor` - DOS color code for highlighted yes/no prompts
-- `yesNoRegularColor` - DOS color code for regular yes/no prompts
+- `yesNoHighlightColor` - DOS color code for the selected answer of a Yes/No prompt
+- `yesNoRegularColor` - DOS color code for the other answer of a Yes/No prompt
+- `lightbarSelected` and the other `lightbar…` fields - the [lightbar colour roles](#lightbar-colour-roles) below
 - `chatSysopColor` - color of the sysop's text in split-screen chat where the chat screen sets none (default `11`)
 - `chatUserColor` - color of the caller's text in split-screen chat, likewise (default `10`)
 - `autocorrectHighlightColor` - color the message editor draws a word in right after [autocorrect](messages/message-areas.md#autocorrect) fixed it, for as long as the fix is shown on the prompt row; the screen only, the message is unchanged (default `15`, bright white). A background of 0 (black) leaves the terminal's own background behind the word
@@ -1329,6 +1337,49 @@ theme) controls color schemes:
 The config editor's [Theme](#theme-sub-menu) page edits these fields.
 
 A copy at `menus.d/<set>/theme.json` overrides the one in `menus/<set>/`.
+
+#### Lightbar Colour Roles
+
+The lightbars the BBS draws take their colours from roles named by purpose.
+Change a role in the theme and every screen that uses it changes, with no
+BAR file to edit.
+
+| Field | Default | What it colours | Screens |
+| ----- | ------- | --------------- | ------- |
+| `lightbarSelected` | `yesNoHighlightColor` | The highlighted row or command | File list (current file, selected command), message area, file area and conference selectors, BBS list, generated door menu, message reader and message scan command bars |
+| `lightbarNormal` | `yesNoRegularColor` | An unselected command | File list command bar, message scan command bar |
+| `lightbarCommand` | `9` | An unselected command | Message reader command bar |
+| `lightbarHotkey` | `15` | Key names in the hint row (`Up`, `Enter`, `Q`) | Message area, file area and conference selectors, BBS list |
+| `lightbarHint` | `8` | The rest of the hint row | The same screens |
+| `lightbarBorder` | `8` | The line between a list and its footer | File list, message area, file area and conference selectors, BBS list (its header rule and detail divider too) |
+| `lightbarDestructive` | `4` | An unselected command that destroys something | **Del** on the message reader command bar |
+
+- **A role left out inherits.** The Default column is what it inherits. A
+  `theme.json` written before the roles has none of them, so its lightbars
+  keep the Yes/No colours and the fixed colours they always had: nothing
+  changes on upgrade, with or without an overlay `theme.json`.
+- **`0` is a colour, not "unset".** `"lightbarHint": 0` is black; leave the
+  field out (or set it to `null`) to inherit. A value outside 0-255 or one
+  that is not a number makes `theme.json` invalid.
+- **Yes/No prompts keep their own colours.** `yesNoHighlightColor` and
+  `yesNoRegularColor` colour the prompt, and are only what
+  `lightbarSelected` and `lightbarNormal` fall back to.
+- **A BAR file still wins for its screen.** Where a `*HI.BAR` or
+  `FILELISTCMD.BAR` exists (`FILELISTHI`, `MSGAREAHI` and `MSGCONFHI` ship
+  with the default theme), that screen uses the BAR's colours, not the
+  role.
+
+Colours you authored are not touched. The roles colour only what the BBS
+generates: highlights, command bars, hint rows and separator lines. ANSI
+art, the `.TOP`, `.MID` and `.BOT` templates (so the unselected rows of a
+list, which are drawn from the `.MID` template), menu prompts and
+`strings.json` keep the colours written in them. Also unchanged: the
+brackets around the message reader's command bar (blue), a greyed-out
+command that does nothing on the current message, and the generated door
+menu's unselected entries, which use the terminal's default colour.
+
+Colour precedence, lowest to highest: the built-in default, then the
+theme's `theme.json` (its overlay copy first).
 
 Standard DOS color codes range from 0-255, where:
 

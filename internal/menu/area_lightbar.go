@@ -29,7 +29,7 @@ type areaLightbarPicker[T any] struct {
 	// buildItemLine renders one item row from the MID template. displayIdx
 	// is 1-based.
 	buildItemLine func(item T, displayIdx int) string
-	hint          string // pipe-coded hint line rendered at hintRow
+	hint          string // hint line rendered at hintRow, as lightbarHint takes it
 	headerName    string // value substituted for ^CN in the TOP template
 	topBytes      []byte // raw TOP template bytes
 	hiColorSeq    string // ANSI sequence for the highlighted (selected) row
@@ -108,7 +108,7 @@ func resolveAreaHiColor(e *MenuExecutor, barName string, nodeNumber int) string 
 	if len(hiBarOptions) > 0 {
 		return colorCodeToAnsi(hiBarOptions[0].HighlightColor)
 	}
-	return colorCodeToAnsi(e.Theme().YesNoHighlightColor)
+	return e.roleAnsi(roleSelected)
 }
 
 // computeLayout derives the item-area, separator, and hint rows from the

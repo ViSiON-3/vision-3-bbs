@@ -20,7 +20,11 @@ import (
 type MsgLightbarOption struct {
 	Label   string // Display text including padding, e.g. " Next "
 	HotKey  byte   // Single-char hotkey, e.g. 'N'
-	LoColor int    // Override unselected color (0 = use default loColor)
+	LoColor int    // Override unselected color (0 = use default loColor, unless LoSet)
+	// LoSet makes LoColor the unselected colour even when it is 0, which is
+	// a colour (black) and not only "no override": a theme may set a role
+	// to it.
+	LoSet bool
 }
 
 // drawMsgLightbarStatic draws the lightbar menu without waiting for input.
@@ -42,7 +46,7 @@ func drawMsgLightbarStatic(terminal *term.Terminal, options []MsgLightbarOption,
 		var colorSeq string
 		if i == selectedIdx {
 			colorSeq = colorCodeToAnsi(hiColor)
-		} else if opt.LoColor != 0 {
+		} else if opt.LoSet || opt.LoColor != 0 {
 			colorSeq = colorCodeToAnsi(opt.LoColor)
 		} else {
 			colorSeq = colorCodeToAnsi(loColor)

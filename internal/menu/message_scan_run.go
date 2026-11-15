@@ -69,8 +69,8 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return nil, "", nil
 	}
 
-	hiColor := e.Theme().YesNoHighlightColor
-	loColor := e.Theme().YesNoRegularColor
+	hiColor := e.roleColor(roleSelected)
+	loColor := e.roleColor(roleNormal)
 
 	// Per-message To/From/date/range filter (nil for a plain newscan). The
 	// reader and its message list both apply it, so navigation never lands on
