@@ -13,7 +13,7 @@ import (
 func openRamp(t *testing.T) Model {
 	t.Helper()
 	m, _ := newThemeModel(t)
-	m = press(t, m, "C", "3")
+	m = press(t, m, "C", "4")
 	if m.mode != modeSysConfigEdit || m.sysFields[m.editField].Label != "Fade Colors" {
 		t.Fatalf("mode=%v field=%q", m.mode, m.sysFields[m.editField].Label)
 	}

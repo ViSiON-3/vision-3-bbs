@@ -64,7 +64,7 @@ func newThemeModel(t *testing.T) (Model, string) {
 // random, and the save goes to the overlay theme.json, not the shipped one.
 func TestThemeChatScreenPickedAndSavedToOverlay(t *testing.T) {
 	m, root := newThemeModel(t)
-	m = press(t, m, "C", "2")
+	m = press(t, m, "C", "3")
 	if m.mode != modeSysConfigEdit || m.sysFields[m.editField].Label != "Chat Screen" {
 		t.Fatalf("mode=%v field=%q", m.mode, m.sysFields[m.editField].Label)
 	}
@@ -113,6 +113,86 @@ func TestThemeChatScreenPickedAndSavedToOverlay(t *testing.T) {
 		t.Errorf("built-in stored as %q", m.configs.Theme.SysopChatScreen)
 	}
 	wantScreen(t, m, "(built-in)")
+}
+
+// The Theme selector lists the directories under menus/, stores the choice
+// as config.json's theme.name (the default as an omitted name), and leaves
+// the theme the editor opened on as the one its colour screens edit.
+func TestThemeSelectorPicksFromMenusDirs(t *testing.T) {
+	m, root := newThemeModel(t)
+	if err := os.MkdirAll(filepath.Join(root, "menus", "amber"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m = press(t, m, "C", "1")
+	if m.mode != modeSysConfigEdit || m.sysFields[m.editField].Label != "Theme" {
+		t.Fatalf("mode=%v field=%q", m.mode, m.sysFields[m.editField].Label)
+	}
+	if got := m.sysFields[m.editField].Get(); got != "v3" {
+		t.Fatalf("selector shows %q with no theme.name, want v3", got)
+	}
+	m = press(t, m, "enter")
+	var values []string
+	for _, it := range m.pickerItems {
+		values = append(values, it.Value)
+	}
+	if got := strings.Join(values, ","); got != "amber,v3" {
+		t.Fatalf("picker = %s, want amber,v3", got)
+	}
+	m = press(t, m, "home", "enter")
+	if m.configs.Server.Theme.Name != "amber" || !m.dirty {
+		t.Fatalf("theme.name=%q dirty=%v", m.configs.Server.Theme.Name, m.dirty)
+	}
+	// A colour edit made now still belongs to v3, the theme loaded.
+	m.configs.Theme.ChatSysopColor = 14
+	if !m.saveAll() {
+		t.Fatalf("saveAll: %s", m.message)
+	}
+	configDir := filepath.Join(root, "configs")
+	if name, err := config.ThemeNameFromConfigDir(configDir); err != nil || name != "amber" {
+		t.Errorf("config.json theme.name = %q, %v", name, err)
+	}
+	if got, err := config.LoadThemeConfig(filepath.Join(root, "menus", "v3")); err != nil || got.ChatSysopColor != 14 {
+		t.Errorf("v3 theme after save: %+v, %v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "menus.d", "amber", "theme.json")); !os.IsNotExist(err) {
+		t.Errorf("v3's colours were written into amber's overlay (stat err %v)", err)
+	}
+
+	// Reopened, the editor is on amber; back to the default stores no name.
+	m2, err := New(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m2.configs.themeSet != filepath.Join(configDir, "..", "menus", "amber") {
+		t.Errorf("reopened editor edits %s", m2.configs.themeSet)
+	}
+	f := themeFieldsSelection(&m2.configs.Server, func() []string { return nil })[0]
+	if err := f.Set("v3"); err != nil || m2.configs.Server.Theme.Name != "" {
+		t.Errorf("default stored as %q, %v", m2.configs.Server.Theme.Name, err)
+	}
+	if err := f.Set("../v3"); err == nil {
+		t.Error("an invalid theme name was accepted")
+	}
+}
+
+// A theme.name that selects nothing still opens the editor, on the default
+// theme, so the selection can be put right there.
+func TestInvalidThemeSelectionStillOpens(t *testing.T) {
+	_, root := newThemeModel(t)
+	configDir := filepath.Join(root, "configs")
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{"theme": {"name": "neon"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := New(configDir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if m.configs.themeSet != filepath.Join(configDir, "..", "menus", "v3") {
+		t.Errorf("editing %s, want the default theme", m.configs.themeSet)
+	}
+	if got := themeFieldsSelection(&m.configs.Server, func() []string { return nil })[0].Get(); got != "neon" {
+		t.Errorf("selector shows %q, want the configured neon", got)
+	}
 }
 
 // Colours are DOS codes 0-255.
@@ -168,7 +248,7 @@ func TestThemeChatScreenPickerShowsLongEntries(t *testing.T) {
 		}
 	}
 	nm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 25})
-	m = press(t, nm.(Model), "C", "2", "enter")
+	m = press(t, nm.(Model), "C", "3", "enter")
 	wantScreen(t, m, "V3CHAT1 - ViSiON/3 Framed Chat by ViSiON/3 Dev Team")
 }
 

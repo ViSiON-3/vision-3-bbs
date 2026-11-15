@@ -308,6 +308,9 @@ func inspectBoard(root string) doctorReport {
 	}
 
 	for _, preflight := range collectPreflightResults(root) {
+		if preflight.name == themeCheckName {
+			continue // the theme check below reports it, with its own fix
+		}
 		status := doctorOK
 		fix := ""
 		if !preflight.ok {
@@ -389,8 +392,18 @@ func inspectBoard(root string) doctorReport {
 		checkUserAndSecurity(configDir, root, serverCfg, add)
 		checkBadUserNames(configDir, add, serverCfg)
 	}
-	checkMenuFiles(filepath.Join(root, "menus", "v3"), configDir, add)
-	checkChatScreens(filepath.Join(root, "menus", "v3"), add)
+	// The menu set of the selected theme. An unusable selection is a
+	// failure, as it is at startup, and leaves no menu set to check.
+	if menuRoot, themeName, err := config.SelectedMenuSet(root, configDir); err != nil {
+		if serverErr == nil { // an unreadable config.json is already reported
+			add("theme", doctorFail, err.Error(),
+				fmt.Sprintf("Set theme.name in configs/config.json to a directory under menus/, or remove it to run the default theme (%s). The server will not start until then.", menuset.DefaultTheme))
+		}
+	} else {
+		add("theme", doctorOK, fmt.Sprintf("%s (menus/%s)", themeName, themeName), "")
+		checkMenuFiles(menuRoot, configDir, add)
+		checkChatScreens(menuRoot, add)
+	}
 	checkDoors(configDir, root, add)
 	checkACSStrings(root, add)
 	checkRoles(root, add)
@@ -946,7 +959,7 @@ func checkMenuFiles(menuRoot, configDir string, add func(string, doctorSeverity,
 		}
 	}
 	if count == 0 {
-		add("menus/v3", doctorWarn, "no .CFG or .MNU files found", "Restore the menu set or run setup.")
+		add(filepath.ToSlash(filepath.Join("menus", filepath.Base(menuRoot))), doctorWarn, "no .CFG or .MNU files found", "Restore the menu set or run setup.")
 	}
 	areas := loadDoctorAreaTags(configDir)
 	doors, _ := config.LoadDoors(filepath.Join(configDir, "doors.json"))

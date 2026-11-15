@@ -16,6 +16,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 	"github.com/ViSiON-3/vision-3-bbs/internal/winch"
 	"github.com/gliderlabs/ssh"
 )
@@ -45,11 +46,23 @@ func resolveEditorPaths() (menuSetPath, rootConfigPath string) {
 	menuSetPath = os.Getenv("VISION3_MENU_PATH")
 	rootConfigPath = os.Getenv("VISION3_CONFIG_PATH")
 
-	if menuSetPath == "" {
-		menuSetPath = "menus/v3"
-	}
 	if rootConfigPath == "" {
 		rootConfigPath = "configs"
+	}
+	// The theme the server started with (menuset.Running), so the editor
+	// doesn't move to a theme.name changed since. Outside the server, the
+	// theme config.json selects; a selection that can't be read falls back
+	// to the default here, since the editor has no way to report it and the
+	// server and doctor do.
+	themeName := menuset.DefaultTheme
+	if menuSetPath == "" {
+		menuSetPath = menuset.Running()
+	}
+	if menuSetPath == "" {
+		if name, err := config.ThemeNameFromConfigDir(rootConfigPath); err == nil && menuset.ValidThemeName(name) == nil {
+			themeName = name
+		}
+		menuSetPath = menuset.ThemeDir("", themeName)
 	}
 
 	if _, err := os.Stat(menuSetPath); err == nil {
@@ -59,8 +72,11 @@ func resolveEditorPaths() (menuSetPath, rootConfigPath string) {
 	}
 
 	if cwd, err := os.Getwd(); err == nil {
-		candidateMenu := filepath.Join(cwd, "menus/v3")
 		candidateConfig := filepath.Join(cwd, "configs")
+		if name, err := config.ThemeNameFromConfigDir(candidateConfig); err == nil && menuset.ValidThemeName(name) == nil {
+			themeName = name
+		}
+		candidateMenu := menuset.ThemeDir(cwd, themeName)
 		if _, err := os.Stat(candidateMenu); err == nil {
 			if _, err := os.Stat(candidateConfig); err == nil {
 				return candidateMenu, candidateConfig

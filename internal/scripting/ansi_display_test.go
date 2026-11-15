@@ -10,6 +10,7 @@ import (
 	"github.com/dop251/goja"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 )
 
 // TestAnsiDisplayLookupOrder checks v3.ansi.display resolves art from the
@@ -40,6 +41,31 @@ func TestAnsiDisplayLookupOrder(t *testing.T) {
 		h.mustRun(tt.src)
 		if got := h.output(); got != tt.want {
 			t.Errorf("%s wrote %q, want %q", tt.src, got, tt.want)
+		}
+	}
+}
+
+// With the server running another theme (menuset.SetRunning), script art
+// comes from that theme's menu set and its overlay, not from v3.
+func TestAnsiDisplayFollowsTheRunningTheme(t *testing.T) {
+	h := newHarness(t, harnessOpts{})
+	h.writeFile("menus/v3/ansi/art.ans", "V3")
+	h.writeFile("menus/v3/ansi/v3only.ans", "V3ONLY")
+	h.writeFile("menus/amber/ansi/art.ans", "AMBER")
+	h.writeFile("menus/amber/ansi/both.ans", "AMBER-BASE")
+	h.writeFile("menus.d/amber/ansi/both.ans", "AMBER-OVERLAY")
+	menuset.SetRunning(filepath.Join(h.root, "menus", "amber"))
+	t.Cleanup(func() { menuset.SetRunning("") })
+
+	for src, want := range map[string]string{
+		`v3.ansi.display("art.ans")`:    "AMBER",
+		`v3.ansi.display("both.ans")`:   "AMBER-OVERLAY",
+		`v3.ansi.display("v3only.ans")`: "",
+	} {
+		h.resetOutput()
+		h.mustRun(src)
+		if got := h.output(); got != want {
+			t.Errorf("%s wrote %q, want %q", src, got, want)
 		}
 	}
 }

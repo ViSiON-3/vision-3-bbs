@@ -20,11 +20,49 @@ import (
 // themeMenuItems returns the Theme inner menu.
 func themeMenuItems() []sysConfigMenuItem {
 	return []sysConfigMenuItem{
+		{Label: "Theme Selection", Build: func(m *Model) []fieldDef {
+			return themeFieldsSelection(&m.configs.Server, func() []string { return menuset.ListThemes(bbsRootFor(m.configPath)) })
+		}},
 		{Label: "Prompt Colors", Build: func(m *Model) []fieldDef { return themeFieldsPrompts(&m.configs.Theme) }},
 		{Label: "Split-Screen Chat", Build: func(m *Model) []fieldDef {
-			return themeFieldsChat(&m.configs.Theme, func() []themeChatScreen { return themeChatScreens(m.configPath) })
+			return themeFieldsChat(&m.configs.Theme, func() []themeChatScreen { return themeChatScreens(m.configs.themeSet) })
 		}},
 		{Label: "Toasts", Build: func(m *Model) []fieldDef { return themeFieldsToasts(&m.configs.Theme) }},
+	}
+}
+
+// themeFieldsSelection is the theme the board runs: config.json's
+// theme.name, picked from the directories under menus/. The default theme
+// is stored as an omitted name, as a config written before the setting has
+// it. The other Theme screens go on editing the theme that was selected
+// when the editor opened (allConfigs.themeSet).
+func themeFieldsSelection(cfg *config.ServerConfig, themes func() []string) []fieldDef {
+	return []fieldDef{
+		{
+			Label: "Theme", Help: "Menu set under menus/ the board runs; restart the BBS to switch", Type: ftLookup, Col: 3, Row: 1, Width: 30,
+			Get: func() string { return cfg.ThemeName() },
+			Set: func(val string) error {
+				if err := menuset.ValidThemeName(val); err != nil {
+					return err
+				}
+				if val == menuset.DefaultTheme {
+					val = ""
+				}
+				cfg.Theme.Name = val
+				return nil
+			},
+			LookupItems: func() []LookupItem {
+				var items []LookupItem
+				for _, name := range themes() {
+					display := name
+					if name == menuset.DefaultTheme {
+						display += " - the default"
+					}
+					items = append(items, LookupItem{Value: name, Display: display})
+				}
+				return items
+			},
+		},
 	}
 }
 
@@ -124,8 +162,8 @@ func (sc themeChatScreen) label() string {
 // the BBS. Each carries the SAUCE of its art, ansi/NAME.ANS or the file the
 // layout's "art" names. A screen whose files cannot be read is still listed,
 // by name; the doctor reports it.
-func themeChatScreens(configPath string) []themeChatScreen {
-	set := menuset.FromPath(menuSetPath(configPath))
+func themeChatScreens(menuSetPath string) []themeChatScreen {
+	set := menuset.FromPath(menuSetPath)
 	entries, err := set.ReadDir("cfg")
 	if err != nil {
 		return nil

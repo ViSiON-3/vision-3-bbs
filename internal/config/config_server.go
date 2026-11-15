@@ -74,6 +74,8 @@ type ServerConfig struct {
 	// AutoValidateNewUsers: an auto-validated signup raises nothing to review,
 	// but a sysop still wants to know somebody joined.
 	NotifySysopNewUser bool `json:"notifySysopNewUser"`
+	// Theme selects the menu set the board runs; see ThemeSelection.
+	Theme ThemeSelection `json:"theme"`
 	// ToastLogons and ToastLogoffs announce callers coming and going to other
 	// online callers at or above ToastAnnounceLevel (#206). Off by default, so
 	// an upgrade does not start showing them unasked.
