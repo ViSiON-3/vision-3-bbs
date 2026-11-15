@@ -9,13 +9,17 @@ import (
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
+	"github.com/ViSiON-3/vision-3-bbs/internal/uitext"
 )
 
-// Field definitions for the Theme inner menu, which edits the menu set's
-// theme.json. It is saved to the set's overlay (menus.d/v3/theme.json) so an
-// upgrade of the shipped menus keeps the sysop's choices.
+// Field definitions for the Theme inner menu: the theme the board runs,
+// the board's colours over it (config.json theme.colors), the screens
+// whose own BAR file overrides them, and the theme's chat screen, which is
+// saved to the theme's overlay (menus.d/<theme>/theme.json) so an upgrade
+// of the shipped menus keeps the sysop's choice.
 
 // themeMenuItems returns the Theme inner menu.
 func themeMenuItems() []sysConfigMenuItem {
@@ -28,6 +32,12 @@ func themeMenuItems() []sysConfigMenuItem {
 		}},
 		{Label: "Lightbar Colors", Build: func(m *Model) []fieldDef {
 			return themeFieldsLightbar(&m.configs.Theme, &m.configs.Server.Theme.Colors)
+		}},
+		{Label: "Screen Overrides", Build: func(m *Model) []fieldDef {
+			if m.configs.barInherit == nil {
+				m.configs.barInherit = map[string]bool{}
+			}
+			return themeFieldsScreens(themeScreenBars(m.configs.themeSet), &m.configs.Theme, &m.configs.Server.Theme.Colors, m.configs.barInherit)
 		}},
 		{Label: "Split-Screen Chat", Build: func(m *Model) []fieldDef {
 			return themeFieldsChat(&m.configs.Theme, &m.configs.Server.Theme.Colors, func() []themeChatScreen { return themeChatScreens(m.configs.themeSet) })
@@ -117,6 +127,104 @@ func themeFieldsSelection(cfg *config.ServerConfig, themes func() []string) []fi
 			},
 		},
 	}
+}
+
+// screenBar is a per-screen highlight override the editor found: a
+// *HI.BAR in the menu set, the colour it sets, and the layer it is in.
+type screenBar struct {
+	menuset.ScreenBar
+	Highlight int
+	Overlay   bool // in menus.d rather than the shipped set
+}
+
+// themeScreenBars lists the *HI.BAR overrides present in the menu set, in
+// menuset.ScreenBars order. A screen with no BAR, or with an inherit
+// marker, has no override and is not listed.
+func themeScreenBars(menuSetPath string) []screenBar {
+	set := menuset.FromPath(menuSetPath)
+	var bars []screenBar
+	for _, sb := range menuset.ScreenBars {
+		path, layer, ok, err := set.Locate("bar", sb.Name+".BAR")
+		if err != nil || !ok {
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		hi, _, ok := menuset.BarHighlight(data)
+		if !ok {
+			continue
+		}
+		bars = append(bars, screenBar{ScreenBar: sb, Highlight: hi, Overlay: layer == menuset.LayerOverlay})
+	}
+	return bars
+}
+
+// themeFieldsScreens is the Screen Overrides page (#1079): the screens
+// whose own BAR file sets their highlight, over the shared Selected
+// colour. Each is a Y/N: Y makes the screen inherit the shared colours,
+// by writing an inherit marker to the overlay when the editor saves
+// (inherit holds the screens chosen). The BARs themselves are edited in
+// the menu editor, not here.
+func themeFieldsScreens(bars []screenBar, th *config.ThemeConfig, board *config.ThemeColors, inherit map[string]bool) []fieldDef {
+	if len(bars) == 0 {
+		return []fieldDef{{
+			Label: "Overrides", Help: "A screen's *HI.BAR file would be listed here; none is present", Type: ftDisplay, Col: 3, Row: 1, Width: 50,
+			Get: func() string { return "none: every lightbar inherits the shared colours" },
+		}}
+	}
+	var fields []fieldDef
+	for i, b := range bars {
+		layer := "shipped"
+		if b.Overlay {
+			layer = "menus.d"
+		}
+		fields = append(fields, fieldDef{
+			Label: b.Screen,
+			Help:  fmt.Sprintf("%s.BAR (%s) sets this screen's highlight, over the shared Selected colour; Y = inherit shared colours", b.Name, layer),
+			Type:  ftYesNo, Col: 3, Row: i + 1, Width: 1,
+			Get: func() string { return uitext.BoolToYN(inherit[b.Name]) },
+			Set: func(val string) error {
+				if uitext.YNToBool(val) {
+					inherit[b.Name] = true
+				} else {
+					delete(inherit, b.Name)
+				}
+				return nil
+			},
+			Source: func() string {
+				if inherit[b.Name] {
+					v, _ := config.ResolveColor(config.RoleLightbarSelected, *th, *board)
+					return fmt.Sprintf("will inherit colour %d when saved", v)
+				}
+				return fmt.Sprintf("%s, colour %d (%s)", config.SourceScreen, b.Highlight, layer)
+			},
+		})
+	}
+	return fields
+}
+
+// saveBarInherit writes an inherit marker to the overlay for each screen
+// chosen on the Screen Overrides page, so the screen takes the shared
+// colours even where the theme ships a BAR for it. Markers written are
+// dropped from inherit.
+func saveBarInherit(menuSetPath string, inherit map[string]bool) error {
+	set := menuset.FromPath(menuSetPath)
+	for _, sb := range menuset.ScreenBars {
+		if !inherit[sb.Name] {
+			continue
+		}
+		path := set.WritePath("bar", sb.Name+".BAR")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		if err := atomicfile.WriteFile(path, []byte(menuset.BarInheritFile), 0o644); err != nil {
+			return err
+		}
+		delete(inherit, sb.Name)
+	}
+	return nil
 }
 
 func themeFieldsPrompts(th *config.ThemeConfig, board *config.ThemeColors) []fieldDef {

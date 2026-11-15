@@ -100,7 +100,9 @@ file resolves through the usual menu-set overlay before shipped files.
   commands added under F10 are never read.
 - `bar/DOORMENUHI.BAR` (optional, not shipped): the first record supplies
   highlight and regular colors for this menu only; coordinates are ignored.
-  Without it the highlight is the theme's `yesNoHighlightColor`, as in the
+  Without it, or with an
+  [inherit marker](menus/menu-system.md#per-screen-lightbar-colors) in its
+  place, the highlight is the shared `lightbarSelected` colour, as in the
   other lightbars, and rows keep their template colors.
 - `templates/DOORMENU.TOP`, `.MID`, `.BOT`: door header, repeated row, footer,
   used for any list without its own per-category art, including **Other** and

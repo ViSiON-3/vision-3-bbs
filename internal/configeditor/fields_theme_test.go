@@ -65,7 +65,7 @@ func newThemeModel(t *testing.T) (Model, string) {
 // random, and the save goes to the overlay theme.json, not the shipped one.
 func TestThemeChatScreenPickedAndSavedToOverlay(t *testing.T) {
 	m, root := newThemeModel(t)
-	m = press(t, m, "C", "4")
+	m = press(t, m, "C", "5")
 	if m.mode != modeSysConfigEdit || m.sysFields[m.editField].Label != "Chat Screen" {
 		t.Fatalf("mode=%v field=%q", m.mode, m.sysFields[m.editField].Label)
 	}
@@ -357,7 +357,7 @@ func TestThemeChatScreenPickerShowsLongEntries(t *testing.T) {
 		}
 	}
 	nm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 25})
-	m = press(t, nm.(Model), "C", "4", "enter")
+	m = press(t, nm.(Model), "C", "5", "enter")
 	wantScreen(t, m, "V3CHAT1 - ViSiON/3 Framed Chat by ViSiON/3 Dev Team")
 }
 

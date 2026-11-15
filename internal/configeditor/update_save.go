@@ -193,6 +193,10 @@ func (m *Model) saveAll() bool {
 		}
 		conflicts = append(conflicts, c...)
 	}
+	if err := saveBarInherit(m.configs.themeSet, m.configs.barInherit); err != nil {
+		m.message = fmt.Sprintf("SAVE ERROR: %v", err)
+		return false
+	}
 
 	m.dirty = false
 

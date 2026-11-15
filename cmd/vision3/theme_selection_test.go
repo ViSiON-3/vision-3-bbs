@@ -215,6 +215,35 @@ func TestDoctorNotesRedundantThemeOverlay(t *testing.T) {
 	}
 }
 
+// Doctor notes a retired stock *HI.BAR left in the shipped set, which pins
+// its screen's highlight, and nothing else: not a BAR with colours of the
+// sysop's own, and not one the overlay already overrides or inherits past.
+func TestDoctorNotesRetiredScreenBars(t *testing.T) {
+	stock := "; File listing highlight bar colors\n0,0,31,7,*,*,FileHighlight\n"
+	root := themeBoard(t, "", "v3")
+	bar := func(layer, name, content string) {
+		t.Helper()
+		dir := filepath.Join(root, layer, "v3", "bar")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeDoctorFixture(t, filepath.Join(dir, name+".BAR"), content)
+	}
+	bar("menus", "FILELISTHI", stock)                   // left over: noted
+	bar("menus", "MSGAREAHI", "0,0,79,7,*,*,Mine\n")    // changed in place: the sysop's
+	bar("menus", "MSGCONFHI", stock)                    // left over, but
+	bar("menus.d", "MSGCONFHI", "; inherit\nINHERIT\n") // already inheriting
+	bar("menus", "FILEAREAHI", stock)                   // never a stock file
+
+	var checks []doctorCheck
+	checkRetiredScreenBars(filepath.Join(root, "menus", "v3"), func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	if len(checks) != 1 || !hasDoctorCheck(checks, "menus/v3/bar/FILELISTHI.BAR", doctorInfo, "no longer ships") {
+		t.Errorf("checks = %+v, want one note, for FILELISTHI", checks)
+	}
+}
+
 // A running server keeps the theme it started with: a reload of a
 // config.json whose theme.name changed applies everything else, logs that a
 // restart is needed, and leaves the running selection in place.
