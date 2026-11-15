@@ -2,6 +2,7 @@ package menu
 
 import (
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -54,8 +55,13 @@ func runRoleScreen(t *testing.T, i int, theme config.ThemeConfig) string {
 	if r.err != nil {
 		t.Fatalf("%s: %v", sc.name, r.err)
 	}
-	return r.raw
+	// Two runs are compared, and the clock may tick between them: a
+	// message header shows when its message was posted.
+	return clockRe.ReplaceAllString(r.raw, "TIME")
 }
+
+// clockRe matches a date or a time of day as the screens print them.
+var clockRe = regexp.MustCompile(`\d{2}/\d{2}/\d{2}|\d{1,2}:\d{2} [ap]m`)
 
 // A theme.json from before the roles draws every lightbar screen exactly
 // as the stock theme, which sets each role to the colour it used to be.
@@ -118,6 +124,31 @@ func TestLightbarSelectedReachesEveryLightbar(t *testing.T) {
 	}
 }
 
+// Del on the reader's bar is drawn in the destructive role, and a role of
+// 0 is black, not "no override": the bar's option keeps 0 apart from unset.
+func TestReaderDelUsesTheDestructiveRole(t *testing.T) {
+	del := func(theme config.ThemeConfig) string {
+		t.Helper()
+		env := newMsgEnv(t)
+		env.generalMsgs(1)
+		env.e.SetTheme(theme)
+		r := env.runCmd("READMSGS", env.sysop, "", "Q")
+		if r.err != nil {
+			t.Fatal(r.err)
+		}
+		return r.raw
+	}
+	if out := del(legacyTheme()); !strings.Contains(out, colorCodeToAnsi(4)+" Del ") {
+		t.Errorf("default Del is not dark red:\n%q", out)
+	}
+	black := legacyTheme()
+	black.LightbarDestructive = config.SetColor(0)
+	out := del(black)
+	if !strings.Contains(out, colorCodeToAnsi(0)+" Del ") || strings.Contains(out, colorCodeToAnsi(9)+" Del ") {
+		t.Errorf("lightbarDestructive 0 did not draw Del in colour 0:\n%q", out)
+	}
+}
+
 // The helpers that colour generated text: a plain foreground is the pipe
 // code the screens always wrote, a colour with a background the escape
 // sequence, and colour 0 is used, not taken for "unset".
@@ -138,11 +169,27 @@ func TestRoleHelpers(t *testing.T) {
 	theme.LightbarBorder = config.SetColor(0)
 	theme.LightbarSelected = config.SetColor(0)
 	env.e.SetTheme(theme)
-	if got, want := env.e.lightbarHint(hint), "|03[ "+colorCodeToAnsi(0x1e)+"Up|03/"+colorCodeToAnsi(0x1e)+"Dn|03 ] Nav"; got != want {
+	// A role with a background: every colour change in the row is then an
+	// escape sequence that resets first, so the key names' blue doesn't
+	// stay behind the words after them, and the row ends with a reset.
+	key, text := colorCodeToAnsi(0x1e), colorCodeToAnsi(3)
+	if got, want := env.e.lightbarHint(hint), text+"[ "+key+"Up"+text+"/"+key+"Dn"+text+" ] Nav\x1b[0m"; got != want {
 		t.Errorf("hint = %q, want %q", got, want)
+	}
+	if strings.Contains(env.e.lightbarHint(hint), "|") {
+		t.Error("a pipe code follows a background colour in the hint; it would keep the background")
 	}
 	if got, want := env.e.lightbarRule("--"), "|00--|07"; got != want {
 		t.Errorf("rule = %q, want %q", got, want)
+	}
+	// A border with a background is closed before the colour goes back.
+	theme.LightbarBorder = config.SetColor(0x4f)
+	env.e.SetTheme(theme)
+	if got, want := env.e.lightbarRule("--"), colorCodeToAnsi(0x4f)+"--\x1b[0m|07"; got != want {
+		t.Errorf("rule with a background = %q, want %q", got, want)
+	}
+	if env.e.roleReset(roleBorder) != "\x1b[0m" || env.e.roleReset(roleSelected) != "" {
+		t.Errorf("roleReset: border %q, selected %q", env.e.roleReset(roleBorder), env.e.roleReset(roleSelected))
 	}
 	if got := env.e.roleColor(roleSelected); got != 0 {
 		t.Errorf("lightbarSelected 0 read as %d", got)

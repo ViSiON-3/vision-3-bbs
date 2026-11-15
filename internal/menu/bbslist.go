@@ -200,7 +200,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 		emit(ansi.MoveCursor(1, 1) + "\x1b[2K")
 		emitPipe("|15BBS Listings Directory")
 		emit(ansi.MoveCursor(2, 1) + "\x1b[2K")
-		emitPipe(e.rolePipe(roleBorder) + strings.Repeat("\xc4", termWidth))
+		emitPipe(e.rolePipe(roleBorder) + strings.Repeat("\xc4", termWidth) + e.roleReset(roleBorder))
 	}
 
 	isCoSysOp := e.isCoSysOpOrAbove(currentUser)
@@ -214,7 +214,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 
 	renderFooter := func(sel int) {
 		emit(ansi.MoveCursor(separatorRow, 1) + "\x1b[2K")
-		emitPipe(e.rolePipe(roleBorder) + strings.Repeat("\xc4", termWidth))
+		emitPipe(e.rolePipe(roleBorder) + strings.Repeat("\xc4", termWidth) + e.roleReset(roleBorder))
 		emit(ansi.MoveCursor(hintRow, 1) + "\x1b[2K")
 		hint := "|08[|15\x18\x19|08]Nav [|15PgUp|08/|15PgDn|08]Page [|15Q|08]Quit"
 		if canEdit(sel) {
@@ -332,7 +332,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 				if sepWidth < 0 {
 					sepWidth = 0
 				}
-				emitPipe(e.rolePipe(roleBorder) + "\xb3 " + strings.Repeat("\xc4", sepWidth))
+				emitPipe(e.rolePipe(roleBorder) + "\xb3 " + strings.Repeat("\xc4", sepWidth) + e.roleReset(roleBorder))
 				detailRow++
 			}
 			for _, line := range strings.Split(entry.Description, "\n") {

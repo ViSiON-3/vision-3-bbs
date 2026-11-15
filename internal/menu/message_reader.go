@@ -558,7 +558,8 @@ readerLoop:
 					activeOptions[i].LoColor = msgReaderInactiveColor
 				}
 			case 'D':
-				activeOptions[i].LoColor = destructiveColor
+				// LoSet: the destructive role may be colour 0.
+				activeOptions[i].LoColor, activeOptions[i].LoSet = destructiveColor, true
 				if !canDelete(currentMsg) {
 					activeOptions[i].LoColor = msgReaderInactiveColor
 				}
