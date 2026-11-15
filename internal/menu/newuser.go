@@ -206,6 +206,8 @@ func (e *MenuExecutor) handleNewUserApplication(
 	// Set the private note with creation date
 	newUser.PrivateNote = userNote
 	newUser.CreatedAt = time.Now()
+	// Owed the welcome letter once validated; see deliverWelcomeMail.
+	newUser.WelcomePending = true
 
 	// Auto-join any message areas flagged with auto_join, seed their
 	// last-read pointers ~1 week back so the first newscan is manageable,
