@@ -91,7 +91,7 @@ Choosing **Access & Security** (key 2) opens an inner menu of seven numbered ite
 | 2 | Connection Limits | Max Nodes, Max Per IP, Failed Logins (0=off), Lockout Minutes, Idle Timeout, Chat Idle Timeout, Transfer Timeout |
 | 3 | Bot Defense | Challenge gate (enable, art file, key, timeout, required presses, stray keys, live countdown) and connection-rate limiter (enable, hits, window, ban minutes). See [Security](configuration/security.md#bot-defense) |
 | 4 | IP Blocklist/Allowlist | Blocklist Path, Allowlist Path |
-| 5 | New Users & Voting | Auto Validate, Notify SysOp, Use NUV, Auto Add NUV, NUV Use Level, Yes/No vote thresholds, Validate/Kill on threshold, NUV Level, NUV Form |
+| 5 | New Users & Voting | Auto Validate, Notify SysOp, Welcome Mail, Use NUV, Auto Add NUV, NUV Use Level, Yes/No vote thresholds, Validate/Kill on threshold, NUV Level, NUV Form |
 | 6 | Bad User Names | Bad Names Path — the list of handles refused at signup; the rules themselves are edited in that file. See [Bad user names](#bad-user-names) |
 | 7 | WFC & Paging | WFC Access, Page Timeout, Page Cooldown |
 
@@ -601,7 +601,7 @@ General BBS configuration. All settings in this file are managed through the **S
 | Max nodes, per-IP limits, timeouts | Access & Security → Connection Limits (item 2) |
 | Bot challenge gate and connection-rate limiter | Access & Security → Bot Defense (item 3) |
 | Blocklist / allowlist file paths | Access & Security → IP Blocklist/Allowlist (item 4) |
-| Auto Validate, Notify SysOp, NUV voting thresholds and behavior | Access & Security → New Users & Voting (item 5) |
+| Auto Validate, Notify SysOp, Welcome Mail, NUV voting thresholds and behavior | Access & Security → New Users & Voting (item 5) |
 | WFC console access, sysop page wait and cooldown | Access & Security → WFC & Paging (item 7) |
 
 #### Field Reference
@@ -657,10 +657,11 @@ built-in defaults and overlays whatever the file provides.
 | `logonLevel` | `10` | `10` | Minimum level required to log in |
 | `anonymousLevel` | `50` | `5` | Minimum level to post anonymously (`0` = disabled) |
 | `notifySysopNewUser` | `true` | `true` | Page every co-sysop-or-above who is online when a signup completes |
+| `sendWelcomeMail` | `false` | `false` | Send a new user the welcome letter, `templates/WELCOME.MSG`, as private mail once validated. See [Welcome Mail](users/user-management.md#welcome-mail) |
 | `pageSysopTimeout` | `60` | `60` | Seconds a caller waits for a sysop to answer a `PAGESYSOP` page before being told the SysOp is not available. Shown as **Page Timeout** in the config TUI, which accepts 5–600 |
 | `pageSysopCooldown` | `300` | `300` | Seconds a caller must wait between pages; `0` disables the cooldown. Shown as **Page Cooldown** in the config TUI, which accepts 0–86400 |
 
-In `./config`, `notifySysopNewUser` is on **New Users & Voting**, and the two
+In `./config`, `notifySysopNewUser` and `sendWelcomeMail` are on **New Users & Voting**, and the two
 page settings are on **WFC & Paging**.
 
 See [User Management](users/user-management.md#system-access-levels) for how

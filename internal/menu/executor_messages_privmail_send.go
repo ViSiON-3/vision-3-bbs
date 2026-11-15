@@ -49,7 +49,8 @@ func runSendPrivateMail(c *cmdCtx, args string) (*user.User, string, error) {
 
 	// Prompt for recipient username
 	terminalio.WriteProcessedBytes(terminal, []byte("\r\n"), outputMode)
-	recipientPrompt := "|07Send private mail to: |15"
+	// The hint is the only place a caller learns groups take mail (#325).
+	recipientPrompt := "|07Send private mail to |08(|07handle or @group|08)|07: |15"
 	var recipient string
 	for {
 		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(recipientPrompt)), outputMode)

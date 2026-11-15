@@ -74,6 +74,10 @@ type ServerConfig struct {
 	// AutoValidateNewUsers: an auto-validated signup raises nothing to review,
 	// but a sysop still wants to know somebody joined.
 	NotifySysopNewUser bool `json:"notifySysopNewUser"`
+	// SendWelcomeMail sends a new user the welcome letter, the menu set's
+	// templates/WELCOME.MSG, as private mail from the SysOp once their
+	// account is validated (#263). Off by default.
+	SendWelcomeMail bool `json:"sendWelcomeMail"`
 	// Theme selects the menu set the board runs; see ThemeSelection.
 	Theme ThemeSelection `json:"theme,omitzero"`
 	// ToastLogons and ToastLogoffs announce callers coming and going to other

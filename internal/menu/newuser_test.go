@@ -51,6 +51,9 @@ func TestNewUser_CompletedSignupCreatesAccount(t *testing.T) {
 	if u.CreatedAt.IsZero() {
 		t.Error("CreatedAt not set")
 	}
+	if !u.WelcomePending {
+		t.Error("a signup isn't owed the welcome letter")
+	}
 	if u.ID != 3 || !r.has("Your User # is 3") {
 		t.Errorf("ID = %d, want 3 and announced", u.ID)
 	}

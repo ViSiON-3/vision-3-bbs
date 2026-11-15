@@ -443,6 +443,17 @@ func TestExeccovNewMailScan(t *testing.T) {
 		t.Errorf("no user: user=%s output %q", execcovHandle(r.user), r.raw)
 	}
 
+	// RUN:NMAILSCAN on a menu is the same scan; it holds the "no new mail"
+	// notice a moment, since the menu clears the screen as it redraws.
+	var paused time.Duration
+	orig := uiPause
+	uiPause = func(d time.Duration) { paused += d }
+	r0 := env.runCmd("NMAILSCAN", env.caller, "", "")
+	uiPause = orig
+	if !r0.has("NO-NEW-MAIL") || paused == 0 {
+		t.Errorf("from a menu: paused %v, output:\n%s", paused, r0.text())
+	}
+
 	seedPrivmail(env)
 	r := env.run(runNewMailScan, env.caller, "", "N")
 	if r.next != "" || execcovHandle(r.user) != "Caller" || !r.has("NEW-MAIL=2", "Read it now?") || r.has("for-caller-1-body") {
