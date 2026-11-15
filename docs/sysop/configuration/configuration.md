@@ -1364,7 +1364,11 @@ shipped `theme.json`, so the theme's later defaults never reach the board.
 `./vision3 doctor` notes an overlay that only repeats the shipped values;
 that one can simply be deleted. If yours holds colours you chose, either
 keep it, or set those colours under **Theme** in `./config` (which stores
-them in `theme.colors`) and then delete it. Nothing is moved for you.
+them in `theme.colors`) and then take the colour entries out of the file.
+Leave any setting that is not a colour, such as a `sysopChatScreen` you
+picked: the overlay is still where that lives, and deleting the whole file
+would put the shipped chat screen back. Delete the file only when nothing
+of yours is left in it. Nothing is moved for you.
 
 ### Theme Configuration
 
