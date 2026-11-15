@@ -129,20 +129,13 @@ func TestExeccovShowStats_ScreenVariants(t *testing.T) {
 	}
 }
 
-// READMAIL is still a stub: it names the caller, or asks a caller who is not
-// logged in to log in.
-func TestExeccovReadMailPlaceholder(t *testing.T) {
-	env := newMenuEnv(t)
-	execcovStrings(env, func(s *config.StringsConfig) {
-		s.ExecReadmailLogin = "\r\nLOGIN-TO-READ\r\n"
-		s.ExecReadmailPlaceholder = "\r\nMAIL-STUB for %s\r\n"
-	})
-
-	if r := env.runCmd("READMAIL", nil, "", ""); r.err != nil || r.user != nil || !r.has("LOGIN-TO-READ") {
-		t.Errorf("no user: err=%v output:\n%s", r.err, r.text())
-	}
-	if r := env.runCmd("READMAIL", env.caller, "", ""); r.err != nil || r.next != "" || !r.has("MAIL-STUB for Caller") {
-		t.Errorf("caller: next=%q err=%v output:\n%s", r.next, r.err, r.text())
+// READMAIL is the old name for READPRIVMAIL (#325): a board's own menu that
+// still binds it gets the real mail reader.
+func TestReadMailIsReadPrivMail(t *testing.T) {
+	env := newMsgEnv(t)
+	seedPrivmail(env)
+	if r := env.runCmd("READMAIL", env.caller, "", "Q"); r.err != nil || !r.has("for-caller-1-body") {
+		t.Errorf("err=%v output:\n%s", r.err, r.text())
 	}
 }
 

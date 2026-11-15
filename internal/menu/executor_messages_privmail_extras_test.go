@@ -1,12 +1,17 @@
 package menu
 
 import (
+	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -211,10 +216,11 @@ func TestForwardedSubject(t *testing.T) {
 	}
 }
 
-// The stock mail menu binds C and V, which its art lists, and W, which it
-// doesn't, so W is hidden.
+// The stock mail menu binds, visibly, every key its art shows, and the art
+// shows no key the menu doesn't bind (#325).
 func TestStockMailMenuBindsExtras(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "menus", "v3", "cfg", "EMAILM.CFG"))
+	stock := filepath.Join("..", "..", "menus", "v3")
+	data, err := os.ReadFile(filepath.Join(stock, "cfg", "EMAILM.CFG"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,14 +234,44 @@ func TestStockMailMenuBindsExtras(t *testing.T) {
 	got := map[string]string{}
 	for _, it := range items {
 		got[it.KEYS] = it.CMD
-		if it.KEYS == "W" && !it.HIDDEN {
-			t.Error("W isn't hidden, though the art doesn't list it")
+		if it.HIDDEN {
+			t.Errorf("%s is hidden", it.KEYS)
 		}
 	}
-	for k, cmd := range map[string]string{"C": "RUN:COPYPRIVMAIL", "V": "RUN:SENTPRIVMAIL", "W": "RUN:FORWARDPRIVMAIL"} {
-		if got[k] != cmd {
-			t.Errorf("%s runs %q, want %s", k, got[k], cmd)
-		}
+	want := map[string]string{
+		"C": "RUN:COPYPRIVMAIL", "D": "RUN:DELETEPRIVMAIL", "W": "RUN:FORWARDPRIVMAIL",
+		"L": "RUN:LISTPRIVMAIL", "N": "RUN:NMAILSCAN", "R": "RUN:READPRIVMAIL",
+		"S": "RUN:SENDPRIVMAIL", "V": "RUN:SENTPRIVMAIL", "Q": "GOTO:MAIN",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("EMAILM.CFG binds %v, want %v", got, want)
+	}
+
+	// The art's options read "[K] Label" once its colour codes are dropped.
+	art, err := os.ReadFile(filepath.Join(stock, "ansi", "EMAILM.ANS"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The file keeps the length ViSiON/2's art had, so its SAUCE record,
+	// whose FileSize (offset 90) counts the bytes before the EOF mark, holds.
+	const size, sauceLen = 2066, 128
+	eof := bytes.IndexByte(art, 0x1a)
+	if _, ok := ansi.ReadSAUCE(art); !ok || len(art) != size || eof != size-sauceLen-1 ||
+		int(binary.LittleEndian.Uint32(art[size-sauceLen+90:])) != eof {
+		t.Fatalf("EMAILM.ANS: %d bytes, EOF mark at %d, SAUCE found %v; want %d bytes and a FileSize of %d", len(art), eof, ok, size, size-sauceLen-1)
+	}
+	plain := regexp.MustCompile(`\x1b\[[0-9;]*m`).ReplaceAll(ansi.StripSAUCE(art), nil)
+	shown := map[string]string{}
+	for _, m := range regexp.MustCompile(`\[(.)\] ([A-Za-z ]+[a-z])`).FindAllSubmatch(plain, -1) {
+		shown[string(m[1])] = string(m[2])
+	}
+	labels := map[string]string{
+		"C": "Copy Mail to User", "D": "Delete Current Mail", "W": "Forward Mail",
+		"L": "List All Mail", "N": "Newscan Your Mail", "R": "Read Your Mail",
+		"S": "Send Mail", "V": "View Outgoing Mail", "Q": "Quit to Previous",
+	}
+	if !reflect.DeepEqual(shown, labels) {
+		t.Errorf("EMAILM.ANS shows %v, want %v", shown, labels)
 	}
 }
 

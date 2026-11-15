@@ -16,6 +16,7 @@
   "newUserLevel": 10,
   "autoValidateNewUsers": false,
   "notifySysopNewUser": true,
+  "sendWelcomeMail": false,
   "toastLogons": false,
   "toastLogoffs": false,
   "toastAnnounceLevel": 0,

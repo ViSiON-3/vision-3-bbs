@@ -45,7 +45,6 @@ var FormattedKeys = []string{
 	"execMenuPasswordPrompt",
 	"execNewMailCount",
 	"execPendingValidation",
-	"execReadmailPlaceholder",
 	"execRunCommandError",
 	"execRunCommandNotFound",
 	"execRunDoorError",

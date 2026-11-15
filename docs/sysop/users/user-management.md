@@ -580,6 +580,46 @@ Since passwords are hashed, you cannot recover them. To reset: run `./ue`, selec
 
 **Alternative:** use `./ue`, highlight the user and press `F5` (auto-validate: level 10, validated, 100 file points, 60 minutes), or open the record and set the Validated field to `Y` and the Access Level yourself. `Shift-F5` validates every tagged user at once.
 
+### Welcome Mail
+
+Turn on **Welcome Mail** in `./config` (Access & Security → New Users &
+Voting; `sendWelcomeMail` in `config.json`) to send each new user a welcome
+letter once their account is validated. It is private mail from the SysOp
+(user #1), so a reply comes to you.
+
+The letter is the file `templates/WELCOME.MSG` in your menu set
+(`menus/v3/templates/WELCOME.MSG`). Edit it in any text or ANSI editor:
+
+- A first line `Subject: text` sets the subject. Without one it is
+  `Welcome to |BN`.
+- Colour pipe codes (`|00` to `|15`) and ANSI escape sequences are kept and
+  drawn by the message reader. Keep lines under 80 columns. The file may be
+  CP437, like other art, or UTF-8; either way the letter is stored as UTF-8,
+  so art in it and a name such as `Björn` both display correctly. A SAUCE
+  record is dropped.
+- These codes are filled in for the user, in the subject and the text:
+
+| Code | Becomes |
+| --- | --- |
+| `\|UH`, `\|HANDLE`, `\|ALIAS` | The user's handle |
+| `\|NAME` | Their real name |
+| `\|GL` | Their group or location |
+| `\|LEVEL` | Their access level |
+| `\|BN` | The board's name |
+| `\|SYSOP` | The SysOp's handle |
+| `\|DATE` | The date the letter is sent |
+
+The letter is written at the user's first login after validation, before the
+login sequence runs, so the new-mail scan reports it. That covers every way
+an account is validated: the Admin Menu, `./ue`, a New User Vote and **Auto
+Validate**. With Auto Validate it arrives at the first login after signup.
+
+Only accounts that sign up after you upgrade to a version with this setting
+are welcomed, and each one once; turning it on does not mail your existing
+users. An account validated while the setting is off is not mailed later.
+Nothing is sent if the template is missing or empty, or the board has no
+`PRIVMAIL` area; the log says which.
+
 ### Banning Users
 
 The ban feature sets a user's access level to 0 and marks them as unvalidated, preventing login.
@@ -796,6 +836,7 @@ key is missing.
 | `newUserLevel` | int | `10` | `1` | **New User Level**: level given to new signups |
 | `autoValidateNewUsers` | bool | `false` | `false` | **Auto Validate** (New Users & Voting screen): mark signups validated at creation. Cannot be combined with NUV |
 | `notifySysopNewUser` | bool | `true` | `true` | **Notify SysOp** (New Users & Voting screen): page online co-sysops and queue a notice for the others when someone signs up |
+| `sendWelcomeMail` | bool | `false` | `false` | **Welcome Mail** (New Users & Voting screen): mail `templates/WELCOME.MSG` to a new user once validated. See [Welcome Mail](#welcome-mail) |
 | `regularUserLevel` | int | `25` | `10` | **Regular Level**: level a user is raised to when validated |
 | `logonLevel` | int | `10` | `10` | **Logon Level**: minimum level to log in; `0` disables the check |
 | `anonymousLevel` | int | `50` | `5` | **Anonymous Lvl**: minimum level to post anonymously |
@@ -969,6 +1010,7 @@ Soft-deleted users cannot log in and are hidden from public user listings, but a
 - `fileNewscanSince` - Caller-set cutoff for the file newscan; absent means "since the previous call"
 - `seen_newscan_networks`, `seen_newscan_area_tags`, `newscan_seen_initialized` - Which networks and areas the caller has already been offered for newscan auto-join
 - `twitList` - The caller's private [Twit List](messages/twit-list.md) entries (omitted when empty). Not shown in `ue`; the caller manages it from `K` or the message menu
+- `welcomePending` - Set at signup and cleared at the first login after validation, when the [welcome letter](#welcome-mail) is sent
 - `introPending` / `introAttempts` - Set while a new caller still owes the SysOp the message that `requireNewUserEmail` demands, and how many sessions they have left it unsent
 
 ### Signup entry points

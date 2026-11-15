@@ -414,8 +414,6 @@ func stringCatalog() []StringEntry {
 
 		// Executor (V3)
 		{Label: "Exec: Unknown Command", Key: "execUnknownCommand", Description: "Shown for unrecognized menu commands"},
-		{Label: "Exec: Readmail Login", Key: "execReadmailLogin", Description: "Shown when not logged in for readmail"},
-		{Label: "Exec: Readmail Holder", Key: "execReadmailPlaceholder", Description: "Placeholder for readmail (%s=user)"},
 		{Label: "Exec: Door Login", Key: "execDoorLogin", Description: "Shown when not logged in for doors"},
 		{Label: "Exec: Door Not Config", Key: "execDoorNotConfigured", Description: "Shown when door not configured (%s=name)"},
 		{Label: "Exec: Goodbye", Key: "execGoodbye", Description: "Goodbye message on logoff"},

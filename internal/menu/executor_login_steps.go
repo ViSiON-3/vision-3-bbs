@@ -9,12 +9,23 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// runNewMailScan checks for new private mail and displays a count to the user.
+// runNewMailScan is the NMAILSCAN login step: it counts the caller's new
+// private mail and offers to read it.
 func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
+	return newMailScan(c, false)
+}
+
+// runNewMailScanMenu is NMAILSCAN run from a menu (RUN:NMAILSCAN).
+func runNewMailScanMenu(c *cmdCtx, args string) (*user.User, string, error) {
+	return newMailScan(c, true)
+}
+
+func newMailScan(c *cmdCtx, fromMenu bool) (*user.User, string, error) {
 	e := c.e
 	s := c.s
 	terminal := c.terminal
@@ -29,6 +40,15 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	slog.Debug("running NMAILSCAN", "node", nodeNumber, "handle", currentUser.Handle)
+
+	// From a menu the notice is held a moment: the menu clears the screen
+	// as it redraws. A login step leaves it for the next step to follow.
+	noNewMail := func() {
+		e.writeString(terminal, outputMode, e.Strings().ExecNoNewMail)
+		if fromMenu {
+			uiPause(1 * time.Second)
+		}
+	}
 
 	if e.MessageMgr == nil {
 		slog.Warn("MessageMgr not available for NMAILSCAN", "node", nodeNumber)
@@ -70,7 +90,7 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 	}
 
 	if totalMessages == 0 {
-		e.writeString(terminal, outputMode, e.Strings().ExecNoNewMail)
+		noNewMail()
 		return currentUser, "", nil
 	}
 
@@ -116,7 +136,7 @@ func runNewMailScan(c *cmdCtx, args string) (*user.User, string, error) {
 			return runReadPrivateMail(c, "")
 		}
 	} else {
-		e.writeString(terminal, outputMode, e.Strings().ExecNoNewMail)
+		noNewMail()
 	}
 
 	return currentUser, "", nil
