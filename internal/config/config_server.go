@@ -79,7 +79,7 @@ type ServerConfig struct {
 	// account is validated (#263). Off by default.
 	SendWelcomeMail bool `json:"sendWelcomeMail"`
 	// Theme selects the menu set the board runs; see ThemeSelection.
-	Theme ThemeSelection `json:"theme"`
+	Theme ThemeSelection `json:"theme,omitzero"`
 	// ToastLogons and ToastLogoffs announce callers coming and going to other
 	// online callers at or above ToastAnnounceLevel (#206). Off by default, so
 	// an upgrade does not start showing them unasked.
@@ -368,6 +368,11 @@ func ParseServerConfig(data []byte) (ServerConfig, error) {
 		config.AutoValidateNewUsers = false
 	}
 	config.SanitizeDoorMenu()
+	// A theme.colors value that isn't a colour fails the load, so a reload
+	// keeps the configuration that was running.
+	if err := config.Theme.Colors.validate(); err != nil {
+		return defaultServerConfig(), err
+	}
 	return config, nil
 }
 

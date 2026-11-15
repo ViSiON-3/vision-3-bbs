@@ -134,6 +134,10 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 
 	// Load theme colors for Yes/No lightbar prompts
 	theme, _ := config.LoadThemeConfig(menuSetPath)
+	// With the board's own colours (config.json theme.colors) over it.
+	if board, err := config.BoardColorsFromConfigDir(rootConfigPath); err == nil {
+		theme = theme.WithBoardColors(board)
+	}
 	yesNoHi := colorCodeToAnsi(theme.Color(config.RoleYesNoHighlight), true)
 	yesNoLo := colorCodeToAnsi(theme.Color(config.RoleYesNoRegular), true)
 

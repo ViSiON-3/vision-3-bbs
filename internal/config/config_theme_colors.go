@@ -118,7 +118,20 @@ const (
 	SourceBuiltin ColorSource = iota
 	// SourceTheme is the selected theme's theme.json, its overlay included.
 	SourceTheme
+	// SourceBoard is the board's override in config.json's theme.colors.
+	SourceBoard
 )
+
+// String names the source as the config editor shows it.
+func (s ColorSource) String() string {
+	switch s {
+	case SourceTheme:
+		return "theme"
+	case SourceBoard:
+		return "board override"
+	}
+	return "built-in"
+}
 
 // roleField returns the theme's own setting for role.
 func (t ThemeConfig) roleField(role ColorRole) OptColor {

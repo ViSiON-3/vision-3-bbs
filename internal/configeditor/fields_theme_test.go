@@ -1,6 +1,7 @@
 package configeditor
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,7 +65,7 @@ func newThemeModel(t *testing.T) (Model, string) {
 // random, and the save goes to the overlay theme.json, not the shipped one.
 func TestThemeChatScreenPickedAndSavedToOverlay(t *testing.T) {
 	m, root := newThemeModel(t)
-	m = press(t, m, "C", "3")
+	m = press(t, m, "C", "4")
 	if m.mode != modeSysConfigEdit || m.sysFields[m.editField].Label != "Chat Screen" {
 		t.Fatalf("mode=%v field=%q", m.mode, m.sysFields[m.editField].Label)
 	}
@@ -142,7 +143,7 @@ func TestThemeSelectorPicksFromMenusDirs(t *testing.T) {
 	if m.configs.Server.Theme.Name != "amber" || !m.dirty {
 		t.Fatalf("theme.name=%q dirty=%v", m.configs.Server.Theme.Name, m.dirty)
 	}
-	// A colour edit made now still belongs to v3, the theme loaded.
+	// A theme.json edit made now still belongs to v3, the theme loaded.
 	m.configs.Theme.ChatSysopColor = 14
 	if !m.saveAll() {
 		t.Fatalf("saveAll: %s", m.message)
@@ -195,15 +196,123 @@ func TestInvalidThemeSelectionStillOpens(t *testing.T) {
 	}
 }
 
-// Colours are DOS codes 0-255.
-func TestThemeColorFieldRange(t *testing.T) {
-	th := config.ThemeConfig{}
-	f := themeFieldsChat(&th, func() []themeChatScreen { return nil })[1]
-	if f.Type != ftInteger || f.Min != 0 || f.Max != 255 {
+// A colour field shows the colour the board draws with and where it comes
+// from. Setting it is a board override, which leaves the theme alone;
+// choosing the colour already shown is not one; 0 is a colour; and Inherit
+// ("Use theme default") takes the override away again.
+func TestBoardColorField(t *testing.T) {
+	th := config.ThemeConfig{ChatSysopColor: 11, YesNoHighlightColor: 31}
+	var board config.ThemeColors
+	f := themeFieldsChat(&th, &board, func() []themeChatScreen { return nil })[1]
+	if f.Label != "Sysop Color" || f.Type != ftColorAttr || f.Min != 0 || f.Max != 255 {
 		t.Fatalf("sysop colour field = %+v", f)
 	}
-	if err := f.Set("14"); err != nil || th.ChatSysopColor != 14 || f.Get() != "14" {
-		t.Fatalf("set 14: err=%v colour=%d", err, th.ChatSysopColor)
+	if f.Get() != "11" || f.Source() != "theme" {
+		t.Fatalf("opens as %s from %q, want 11 from the theme", f.Get(), f.Source())
+	}
+	if err := f.Set("11"); err != nil || board != (config.ThemeColors{}) {
+		t.Fatalf("setting the colour shown made an override: %+v, %v", board, err)
+	}
+	if err := f.Set("14"); err != nil || board.ChatSysopColor != config.SetColor(14) || th.ChatSysopColor != 11 {
+		t.Fatalf("set 14: board %+v theme %d err %v", board.ChatSysopColor, th.ChatSysopColor, err)
+	}
+	if f.Get() != "14" || f.Source() != "board override" {
+		t.Errorf("after the override: %s from %q", f.Get(), f.Source())
+	}
+	if err := f.Set("0"); err != nil || board.ChatSysopColor != config.SetColor(0) || f.Get() != "0" {
+		t.Errorf("set 0: %+v, %v", board.ChatSysopColor, err)
+	}
+	for _, bad := range []string{"256", "-1", "red"} {
+		if err := f.Set(bad); err == nil {
+			t.Errorf("Set(%q) was accepted", bad)
+		}
+	}
+	if !f.Inherit() || board != (config.ThemeColors{}) || f.Get() != "11" || f.Source() != "theme" {
+		t.Errorf("after Inherit: board %+v, shows %s from %q", board, f.Get(), f.Source())
+	}
+	if f.Inherit() {
+		t.Error("Inherit reported an override with none left")
+	}
+
+	// A role the theme leaves out comes from the built-in fallback.
+	sel := themeFieldsLightbar(&th, &board)[0]
+	if sel.Label != "Selected" || sel.Get() != "31" || sel.Source() != "built-in" {
+		t.Errorf("lightbar selected: %s from %q", sel.Get(), sel.Source())
+	}
+	hint := fieldByLabel(t, themeFieldsLightbar(&th, &board), "Hint")
+	if hint.Get() != "8" || hint.Source() != "built-in" {
+		t.Errorf("lightbar hint: %s from %q", hint.Get(), hint.Source())
+	}
+}
+
+// A colour edit in the editor is saved to config.json's theme.colors,
+// holding only that colour, and never to the theme's overlay theme.json.
+// The screen shows each colour's source, and D on a field removes its
+// override.
+func TestColourEditsGoToConfigJSON(t *testing.T) {
+	m, root := newThemeModel(t)
+	configJSON := filepath.Join(root, "configs", "config.json")
+	overlay := filepath.Join(root, "menus.d", "v3", "theme.json")
+
+	m = press(t, m, "C", "2")
+	wantScreen(t, m, "Yes/No Highlight", "theme")
+	// Foreground 15 -> 14 through the picker.
+	m = press(t, m, "enter", "left", "enter")
+	if got := m.configs.Server.Theme.Colors.YesNoHighlightColor; got != config.SetColor(30) || !m.dirty {
+		t.Fatalf("override = %+v dirty = %v, want 30", got, m.dirty)
+	}
+	if m.configs.Theme.YesNoHighlightColor != 31 {
+		t.Fatalf("the theme's own colour changed to %d", m.configs.Theme.YesNoHighlightColor)
+	}
+	wantScreen(t, m, "board override")
+	if !m.saveAll() {
+		t.Fatalf("saveAll: %s", m.message)
+	}
+	if _, err := os.Stat(overlay); !os.IsNotExist(err) {
+		t.Errorf("a colour edit wrote the overlay theme.json (stat err %v)", err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root, "menus", "v3", "theme.json")); string(data) != themeShipped {
+		t.Errorf("shipped theme.json changed: %s", data)
+	}
+	var saved struct {
+		Theme struct {
+			Colors map[string]int `json:"colors"`
+		} `json:"theme"`
+	}
+	data, err := os.ReadFile(configJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.Theme.Colors) != 1 || saved.Theme.Colors["yesNoHighlightColor"] != 30 {
+		t.Errorf("config.json theme.colors = %v, want only yesNoHighlightColor 30", saved.Theme.Colors)
+	}
+	board, err := config.BoardColorsFromConfigDir(filepath.Join(root, "configs"))
+	if err != nil || board.YesNoHighlightColor != config.SetColor(30) {
+		t.Errorf("read back: %+v, %v", board.YesNoHighlightColor, err)
+	}
+
+	// D: use the theme's default. The key goes from config.json.
+	m = press(t, m, "d")
+	if m.configs.Server.Theme.Colors != (config.ThemeColors{}) || !m.dirty || !strings.Contains(m.message, "theme's default") {
+		t.Fatalf("after D: %+v dirty=%v message=%q", m.configs.Server.Theme.Colors, m.dirty, m.message)
+	}
+	if got := m.sysFields[m.editField].Get(); got != "31" {
+		t.Errorf("field shows %s after D, want the theme's 31", got)
+	}
+	if !m.saveAll() {
+		t.Fatalf("saveAll: %s", m.message)
+	}
+	if data, _ := os.ReadFile(configJSON); strings.Contains(string(data), "yesNoHighlightColor") {
+		t.Errorf("config.json still has the override:\n%s", data)
+	}
+	// D again has nothing to remove and changes nothing.
+	m.dirty = false
+	m = press(t, m, "d")
+	if m.dirty || !strings.Contains(m.message, "already") {
+		t.Errorf("second D: dirty=%v message=%q", m.dirty, m.message)
 	}
 }
 
@@ -248,7 +357,7 @@ func TestThemeChatScreenPickerShowsLongEntries(t *testing.T) {
 		}
 	}
 	nm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 25})
-	m = press(t, nm.(Model), "C", "3", "enter")
+	m = press(t, nm.(Model), "C", "4", "enter")
 	wantScreen(t, m, "V3CHAT1 - ViSiON/3 Framed Chat by ViSiON/3 Dev Team")
 }
 

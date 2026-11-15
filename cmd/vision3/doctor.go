@@ -403,6 +403,7 @@ func inspectBoard(root string) doctorReport {
 		add("theme", doctorOK, fmt.Sprintf("%s (menus/%s)", themeName, themeName), "")
 		checkMenuFiles(menuRoot, configDir, add)
 		checkChatScreens(menuRoot, add)
+		checkThemeOverlay(menuRoot, add)
 	}
 	checkDoors(configDir, root, add)
 	checkACSStrings(root, add)
@@ -892,6 +893,55 @@ func checkChatScreens(menuRoot string, add func(string, doctorSeverity, string, 
 	}
 	add("theme.json", doctorWarn, fmt.Sprintf("sysopChatScreen %q has no cfg/%s.json; chat uses the built-in layout", def, def),
 		"Create the screen, or set sysopChatScreen to one that exists or to \"\" for the built-in layout.")
+}
+
+// checkThemeOverlay notes an overlay theme.json (menus.d/<theme>/theme.json)
+// that only repeats the shipped theme's values. The config editor used to
+// write the whole theme there on the first colour edit, and from then on
+// the overlay shadows the shipped file, so changes to the theme's defaults
+// never reach the board. Such a copy changes nothing and can go; an
+// overlay with a value of its own is the sysop's customisation and is
+// left unremarked. Board colours now belong in config.json's theme.colors
+// (#1078).
+func checkThemeOverlay(menuRoot string, add func(string, doctorSeverity, string, string)) {
+	set := menuset.FromPath(menuRoot)
+	if !set.HasOverlay() {
+		return
+	}
+	read := func(layer menuset.Layer) (map[string]json.RawMessage, bool) {
+		data, err := os.ReadFile(set.Path(layer, "theme.json"))
+		if err != nil {
+			return nil, false
+		}
+		doc := map[string]json.RawMessage{}
+		if json.Unmarshal(data, &doc) != nil {
+			return nil, false // an unreadable theme.json is reported by the theme load
+		}
+		return doc, true
+	}
+	overlay, ok := read(menuset.LayerOverlay)
+	if !ok || len(overlay) == 0 {
+		return
+	}
+	shipped, ok := read(menuset.LayerBase)
+	if !ok {
+		return
+	}
+	compact := func(raw json.RawMessage) string {
+		var buf bytes.Buffer
+		if json.Compact(&buf, raw) != nil {
+			return string(raw)
+		}
+		return buf.String()
+	}
+	for key, val := range overlay {
+		if base, has := shipped[key]; !has || compact(base) != compact(val) {
+			return
+		}
+	}
+	rel := filepath.ToSlash(filepath.Join("menus.d", filepath.Base(menuRoot), "theme.json"))
+	add(rel, doctorInfo, "only repeats the shipped theme's values, and hides any the theme has added or changed since",
+		"Remove this file so the theme's defaults reach the board again. Set the board's own colours under Theme in ./config, which saves them to config.json.")
 }
 
 func checkWritablePaths(root string, add func(string, doctorSeverity, string, string)) {

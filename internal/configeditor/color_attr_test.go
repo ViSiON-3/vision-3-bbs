@@ -5,7 +5,17 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
+
+// yesNoHi is the Yes/No highlight the board draws with: the board's
+// override (config.json theme.colors) if the editor has set one, else the
+// theme's.
+func yesNoHi(m Model) int {
+	v, _ := config.ResolveColor(config.RoleYesNoHighlight, m.configs.Theme, m.configs.Server.Theme.Colors)
+	return v
+}
 
 // openYesNo opens Theme -> Prompt Colors on Yes/No Highlight.
 func openYesNo(t *testing.T) Model {
@@ -31,7 +41,7 @@ func TestYesNoColorPicked(t *testing.T) {
 	wantScreen(t, m, "Yes/No Highlight", "Foreground:", "Background:", "Preview:", "= 31")
 	// Foreground 15 -> 14 (yellow); background row, blue -> the next one.
 	m = press(t, m, "left", "down", "right", "enter")
-	got := m.configs.Theme.YesNoHighlightColor
+	got := yesNoHi(m)
 	if got&0x0F != 14 || got>>4 == 1 || m.mode != modeSysConfigEdit || !m.dirty {
 		t.Errorf("value %d, mode %v, dirty %v", got, m.mode, m.dirty)
 	}
@@ -42,8 +52,8 @@ func TestYesNoColorEscAndTyped(t *testing.T) {
 	m := openYesNo(t)
 	m.configs.Theme.YesNoHighlightColor = 112
 	m = press(t, m, "enter", "right", "esc")
-	if m.configs.Theme.YesNoHighlightColor != 112 || m.dirty {
-		t.Errorf("esc changed it: %d dirty %v", m.configs.Theme.YesNoHighlightColor, m.dirty)
+	if yesNoHi(m) != 112 || m.dirty {
+		t.Errorf("esc changed it: %d dirty %v", yesNoHi(m), m.dirty)
 	}
 	m = press(t, m, "enter", "t")
 	if m.mode != modeSysConfigField {
@@ -51,15 +61,15 @@ func TestYesNoColorEscAndTyped(t *testing.T) {
 	}
 	m = replaceText(t, m, "300")
 	m = press(t, m, "enter")
-	if m.configs.Theme.YesNoHighlightColor != 112 {
-		t.Errorf("an out-of-range number was taken: %d", m.configs.Theme.YesNoHighlightColor)
+	if yesNoHi(m) != 112 {
+		t.Errorf("an out-of-range number was taken: %d", yesNoHi(m))
 	}
 	m = press(t, m, "esc")
 	m = press(t, m, "enter", "t")
 	m = replaceText(t, m, "79")
 	m = press(t, m, "enter")
-	if m.configs.Theme.YesNoHighlightColor != 79 {
-		t.Errorf("typed 79, got %d", m.configs.Theme.YesNoHighlightColor)
+	if yesNoHi(m) != 79 {
+		t.Errorf("typed 79, got %d", yesNoHi(m))
 	}
 }
 
@@ -80,7 +90,7 @@ func TestYesNoColorOutOfRangeMarkedDirty(t *testing.T) {
 	m := openYesNo(t)
 	m.configs.Theme.YesNoHighlightColor = 300
 	m = press(t, m, "enter", "enter")
-	if m.configs.Theme.YesNoHighlightColor != 0 || !m.dirty {
-		t.Errorf("value %d, dirty %v", m.configs.Theme.YesNoHighlightColor, m.dirty)
+	if yesNoHi(m) != 0 || !m.dirty {
+		t.Errorf("value %d, dirty %v", yesNoHi(m), m.dirty)
 	}
 }

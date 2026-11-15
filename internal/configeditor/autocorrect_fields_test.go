@@ -78,12 +78,14 @@ func TestBoardAutocorrectField(t *testing.T) {
 // The highlight colour is edited with the other prompt colours.
 func TestThemeAutocorrectColorField(t *testing.T) {
 	th := config.ThemeConfig{AutocorrectHighlightColor: 15}
-	f := fieldByLabel(t, themeFieldsPrompts(&th), "Autocorrect Fix")
+	var board config.ThemeColors
+	f := fieldByLabel(t, themeFieldsPrompts(&th, &board), "Autocorrect Fix")
 	if got := f.Get(); got != "15" {
 		t.Fatalf("Get = %q, want 15", got)
 	}
-	if err := f.Set("14"); err != nil || th.AutocorrectHighlightColor != 14 {
-		t.Fatalf("Set(14): color=%d err=%v", th.AutocorrectHighlightColor, err)
+	// Set as a board override; the theme's own value stays.
+	if err := f.Set("14"); err != nil || board.AutocorrectHighlightColor != config.SetColor(14) || th.AutocorrectHighlightColor != 15 || f.Get() != "14" {
+		t.Fatalf("Set(14): override=%+v theme=%d err=%v", board.AutocorrectHighlightColor, th.AutocorrectHighlightColor, err)
 	}
 }
 
