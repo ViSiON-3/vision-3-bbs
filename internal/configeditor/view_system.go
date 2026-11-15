@@ -197,7 +197,13 @@ func fieldSourceText(f fieldDef) string {
 	if f.Source == nil {
 		return ""
 	}
-	return fieldDisplayStyle.Render(" " + padRight(f.Source(), len("screen override")+1))
+	src := f.Source()
+	// Padded to the longest of the colour sources, so the "Enter to pick"
+	// hint after it stays in one column; a longer source is shown whole.
+	if pad := len("board override") + 1; len(src) < pad {
+		src = padRight(src, pad)
+	}
+	return fieldDisplayStyle.Render(" " + src)
 }
 
 // renderSysField renders a single system config field.
@@ -254,8 +260,8 @@ func (m Model) renderSysField(fieldIdx int, f fieldDef) (string, int) {
 		}
 		v = ansi.TruncateRunes(v, effectiveWidth, "")
 		fillStr := strings.Repeat(string(fieldFillChar), maxInt(0, effectiveWidth-utf8.RuneCountInString(v)))
-		return fieldLabelStyle.Render(label) + fieldEditStyle.Render(v+fillStr), rawW
+		return fieldLabelStyle.Render(label) + fieldEditStyle.Render(v+fillStr) + fieldSourceText(f), rawW
 	}
 
-	return fieldLabelStyle.Render(label) + fieldDisplayStyle.Render(displayValue), rawW
+	return fieldLabelStyle.Render(label) + fieldDisplayStyle.Render(displayValue) + fieldSourceText(f), rawW
 }

@@ -2,6 +2,7 @@ package menu
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"log/slog"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"golang.org/x/term"
 )
@@ -106,21 +108,25 @@ func loadLightbarOptions(menuName string, e *MenuExecutor) ([]LightbarOption, er
 }
 
 // loadBarFile loads and parses a standalone BAR file (no matching CFG required).
-// Returns nil, nil if the file does not exist.
+// Returns nil, nil if the file does not exist, and for an inherit marker
+// (menuset.BarInheritMarker): a file that says its screen takes the shared
+// colours, which in the overlay shadows a shipped BAR of the same name.
 func loadBarFile(barName string, e *MenuExecutor) ([]LightbarOption, error) {
 	barPath := e.menuFile("bar", barName+".BAR")
 
-	barFile, err := os.Open(barPath)
+	data, err := os.ReadFile(barPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to open BAR file %s: %w", barPath, err)
 	}
-	defer func() { _ = barFile.Close() }() // read-only
+	if menuset.BarInherits(data) {
+		return nil, nil
+	}
 
 	var options []LightbarOption
-	scanner := bufio.NewScanner(barFile)
+	scanner := bufio.NewScanner(bytes.NewReader(data))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, ";") {

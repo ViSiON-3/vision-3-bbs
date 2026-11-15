@@ -120,6 +120,9 @@ const (
 	SourceTheme
 	// SourceBoard is the board's override in config.json's theme.colors.
 	SourceBoard
+	// SourceScreen is a screen's own BAR file (menuset.ScreenBars), which
+	// colours that one screen over everything else (#1079).
+	SourceScreen
 )
 
 // String names the source as the config editor shows it.
@@ -129,6 +132,8 @@ func (s ColorSource) String() string {
 		return "theme"
 	case SourceBoard:
 		return "board override"
+	case SourceScreen:
+		return "screen override"
 	}
 	return "built-in"
 }

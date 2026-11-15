@@ -1059,23 +1059,59 @@ DOS colors: `31` is bright white (15) on blue (1).
 
 #### Per-screen lightbar colors
 
-Some lists can have their own highlight instead of the theme's. The first
-record of a `bar/<NAME>.BAR` file sets it from its highlight color field; the
+Every lightbar takes its highlight from the shared
+[lightbar colours](configuration/configuration.md#lightbar-colour-roles). A
+list can have a highlight of its own instead: the first record of a
+`bar/<NAME>.BAR` file sets it from its highlight color field; the
 coordinates are ignored. The generated door menu also uses the record's
 regular color for its rows. Like any menu file, a copy in
 `menus.d/<set>/bar/` overrides a shipped one.
 
-| File | Screen | Shipped |
-|------|--------|---------|
-| `FILELISTHI.BAR` | File listing | Yes |
-| `FILEAREAHI.BAR` | File area list | No |
-| `MSGAREAHI.BAR` | Message area list | Yes |
-| `MSGCONFHI.BAR` | Message conference list | Yes |
-| `DOORMENUHI.BAR` | [Generated door menu](doors/generated-menu.md) | No |
+| File | Screen |
+|------|--------|
+| `FILELISTHI.BAR` | File listing |
+| `FILEAREAHI.BAR` | File area list |
+| `MSGAREAHI.BAR` | Message area list |
+| `MSGCONFHI.BAR` | Message conference list |
+| `DOORMENUHI.BAR` | [Generated door menu](doors/generated-menu.md) |
 
-A screen with one of these files keeps its highlight when the theme changes.
-Delete the file, or your overlay copy of it, to have that screen follow the
-theme. There is no editor for these colors yet; see issue #611.
+The default theme ships none of these, so all five screens follow the shared
+colours. (`FILELISTHI`, `MSGAREAHI` and `MSGCONFHI` used to ship; they only
+repeated the shared highlight and were retired, with no change to how the
+screens look. A BAR of your own, in `menus/` or `menus.d/`, keeps working.)
+
+A screen with one of these files uses it over the theme's colours and the
+board's: it is the top layer of the
+[colour precedence](configuration/configuration.md#board-colour-overrides),
+and that screen keeps its highlight when the shared colours change.
+
+**Returning a screen to the shared colours.** Deleting your overlay copy is
+not enough when the theme ships a BAR of the same name: the shipped one shows
+through. Use an *inherit marker* instead, a BAR file in the overlay holding
+the single word `INHERIT`:
+
+```
+; menus.d/v3/bar/MSGAREAHI.BAR
+INHERIT
+```
+
+A screen whose BAR is a marker takes the shared colours, whatever the
+shipped set has for it. **Theme → Screen Overrides** in `./config` lists the
+overrides that are present, with each one's colour and whether it is shipped
+or in `menus.d`, and writes the marker for you when you set a screen to
+inherit. To go back to a BAR's own colours, delete the marker file (the
+shipped BAR, if any, applies again) or replace it with a BAR of your own.
+
+The colours inside a BAR are edited in the file itself or with `menuedit`;
+`./config` only shows where screen overrides exist and offers to inherit.
+
+`FILELISTCMD.BAR`, which is shipped, is not one of these: it defines the file
+listing's command bar, the commands as well as their colours.
+
+If you upgraded by copying new files over an old install, the three retired
+files may still be in `menus/v3/bar/`. They draw the same colour as before,
+but they pin those screens to it; `./vision3 doctor` notes each one, and
+deleting it lets the screen follow the lightbar colours.
 
 ### Chat screens
 

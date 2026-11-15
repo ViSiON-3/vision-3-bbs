@@ -34,6 +34,9 @@ var roleScreens = []struct {
 }{
 	{name: "message reader", cmd: "READMSGS", input: "Q", setup: func(env *menuEnv) { env.generalMsgs(2) }},
 	{name: "file area selector", cmd: "SELECTFILEAREA", input: "q", setup: func(env *menuEnv) { env.caller.CurrentFileConferenceID = 1 }},
+	// These two had a stock *HI.BAR until #1079 retired it.
+	{name: "message area selector", cmd: "SELECTMSGAREA", input: "q"},
+	{name: "message conference selector", cmd: "CHANGEMSGCONF", input: "q"},
 	{name: "BBS list", cmd: "BBSLIST", input: "q", setup: func(env *menuEnv) {
 		if err := saveBBSListData(env.dataDir(), &bbsListData{NextID: 2, Listings: []BBSListing{
 			{ID: 1, Name: "A Board", Address: "a.example", AddedBy: "Sysop"},

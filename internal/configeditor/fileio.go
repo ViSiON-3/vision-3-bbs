@@ -59,6 +59,10 @@ type allConfigs struct {
 	// selector has been changed to since, so one theme's colours are never
 	// written into another's theme.json.
 	themeSet string
+	// barInherit holds the screens chosen on the Screen Overrides page to
+	// inherit the shared colours: BAR file stems, written as inherit
+	// markers to themeSet's overlay on save.
+	barInherit map[string]bool
 }
 
 // configBases are the snapshots saveMergedFile merges against: each shared

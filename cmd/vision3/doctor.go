@@ -404,6 +404,7 @@ func inspectBoard(root string) doctorReport {
 		checkMenuFiles(menuRoot, configDir, add)
 		checkChatScreens(menuRoot, add)
 		checkThemeOverlay(menuRoot, add)
+		checkRetiredScreenBars(menuRoot, add)
 	}
 	checkDoors(configDir, root, add)
 	checkACSStrings(root, add)
@@ -942,6 +943,43 @@ func checkThemeOverlay(menuRoot string, add func(string, doctorSeverity, string,
 	rel := filepath.ToSlash(filepath.Join("menus.d", filepath.Base(menuRoot), "theme.json"))
 	add(rel, doctorInfo, "only repeats the shipped theme's values, and hides any the theme has added or changed since",
 		"Remove this file so the theme's defaults reach the board again. Set the board's own colours under Theme in ./config, which saves them to config.json.")
+}
+
+// retiredScreenBars are the highlight BARs the stock theme shipped until
+// the lightbar roles made them redundant (#1079): each only repeated the
+// shared highlight, colour 31 over regular 7.
+var retiredScreenBars = []string{"FILELISTHI", "MSGAREAHI", "MSGCONFHI"}
+
+// checkRetiredScreenBars notes a retired stock *HI.BAR left in the shipped
+// menu set by an upgrade that copied the new files over the old ones. It
+// still draws the colour it always did, but it pins its screen to that
+// colour, so a change to the shared lightbar colours passes the screen by.
+// A BAR with other colours, one in the overlay, or one in a theme other
+// than the stock one is the sysop's own and is not mentioned.
+func checkRetiredScreenBars(menuRoot string, add func(string, doctorSeverity, string, string)) {
+	// Only the stock theme shipped these files. In another theme a *HI.BAR
+	// with the same colours is that theme's own choice.
+	if filepath.Base(menuRoot) != menuset.DefaultTheme {
+		return
+	}
+	set := menuset.FromPath(menuRoot)
+	for _, name := range retiredScreenBars {
+		if set.HasOverlay() {
+			if _, err := os.Stat(set.Path(menuset.LayerOverlay, "bar", name+".BAR")); err == nil {
+				continue // the overlay's file is the one in use
+			}
+		}
+		data, err := os.ReadFile(set.Path(menuset.LayerBase, "bar", name+".BAR"))
+		if err != nil {
+			continue
+		}
+		if hi, lo, ok := menuset.BarHighlight(data); !ok || hi != 31 || lo != 7 {
+			continue
+		}
+		rel := filepath.ToSlash(filepath.Join("menus", filepath.Base(menuRoot), "bar", name+".BAR"))
+		add(rel, doctorInfo, "a stock file ViSiON/3 no longer ships; it keeps this screen's highlight at colour 31 whatever the shared lightbar colours are",
+			"Delete it, or choose Inherit for the screen under Theme > Screen Overrides in ./config, so the screen follows the lightbar colours.")
+	}
 }
 
 func checkWritablePaths(root string, add func(string, doctorSeverity, string, string)) {

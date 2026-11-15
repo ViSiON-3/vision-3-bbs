@@ -56,7 +56,7 @@ The editor opens to a main menu. Keys **1** through **7**, **B** and **C** open 
 | 0 | Event Scheduler | Automated event record list |
 | A | Login Sequence | Login step record list |
 | B | ZipLab Upload Processing | Sub-menu: General, Pipeline Steps, Virus Scan (see [ZipLab](files/ziplab.md)) |
-| C | Theme | Sub-menu: Theme Selection, Prompt Colors, Lightbar Colors, Split-Screen Chat, Toasts (see [Theme Sub-menu](#theme-sub-menu)) |
+| C | Theme | Sub-menu: Theme Selection, Prompt Colors, Lightbar Colors, Screen Overrides, Split-Screen Chat, Toasts (see [Theme Sub-menu](#theme-sub-menu)) |
 | Q | Quit | Exit (prompts to save if there are unsaved changes) |
 
 ### System Setup Sub-menu
@@ -167,6 +167,7 @@ edits that theme's `theme.json` (see [Theme Configuration](#theme-configuration)
 | Theme Selection | The theme the board runs, picked from the directories under `menus/`. Saved to `config.json` as `theme.name`; restart the BBS to switch |
 | Prompt Colors | Yes/No highlight and regular colours, and the message editor's autocorrect highlight |
 | Lightbar Colors | The seven [lightbar colour roles](#lightbar-colour-roles) every lightbar inherits |
+| Screen Overrides | The screens whose own `*HI.BAR` file sets their highlight over the shared colours: each one's colour and whether the file is shipped or in `menus.d`. Set a screen to **Y** to have it **inherit shared colours**; saving writes an inherit marker to `menus.d/<theme>/bar/` (see [Per-screen lightbar colors](menus/menu-system.md#per-screen-lightbar-colors)). The BARs themselves are edited with `menuedit` |
 | Split-Screen Chat | The chat screen chat opens with, picked from the menu set's screens, the built-in layout or **random**; and the sysop's and caller's text colours where a screen sets none |
 | Toasts | The colours a toast fades through |
 
@@ -1351,8 +1352,9 @@ Colour precedence, lowest to highest:
 2. The selected theme: `menus/<theme>/theme.json`, or its overlay copy
    `menus.d/<theme>/theme.json` when there is one.
 3. The board's override in `config.json` `theme.colors`.
-4. A screen's own BAR file, for that screen (see
-   [Lightbar Colour Roles](#lightbar-colour-roles)).
+4. A screen's own BAR file, for that screen, unless it is an inherit marker
+   (see [Per-screen lightbar colors](menus/menu-system.md#per-screen-lightbar-colors)).
+   `./config` shows these as `screen override`.
 
 **Boards with an overlay `theme.json`.** Before `theme.colors`, `./config`
 saved a colour change by copying the whole theme into
@@ -1433,10 +1435,12 @@ BAR file to edit.
 - **Yes/No prompts keep their own colours.** `yesNoHighlightColor` and
   `yesNoRegularColor` colour the prompt, and are only what
   `lightbarSelected` and `lightbarNormal` fall back to.
-- **A BAR file still wins for its screen.** Where a `*HI.BAR` or
-  `FILELISTCMD.BAR` exists (`FILELISTHI`, `MSGAREAHI` and `MSGCONFHI` ship
-  with the default theme), that screen uses the BAR's colours, not the
-  role.
+- **A BAR file still wins for its screen.** Where a `*HI.BAR` exists, that
+  screen uses the BAR's highlight, not the role; the default theme ships
+  none. `FILELISTCMD.BAR`, which it does ship, colours the file list's
+  command bar. See
+  [Per-screen lightbar colors](menus/menu-system.md#per-screen-lightbar-colors)
+  for the files and for returning a screen to the shared colours.
 
 Colours you authored are not touched. The roles colour only what the BBS
 generates: highlights, command bars, hint rows and separator lines. ANSI
