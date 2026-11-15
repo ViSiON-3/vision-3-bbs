@@ -140,6 +140,10 @@ itself — see the next section.
 
 ## Customising menus without losing your changes
 
+The paths below use `v3`, the default theme. A board running another
+[theme](configuration/configuration.md#theme-selection) uses `menus/<name>/`
+and `menus.d/<name>/` the same way.
+
 `menus/v3/` is part of the repository, so every upgrade wants to update it, and
 every file you have edited there is a merge conflict waiting to happen. Put your
 changes in **`menus.d/`** instead. It mirrors the layout of `menus/` and is

@@ -205,10 +205,10 @@ func artForSession(eng *Engine, data []byte) []byte {
 
 // resolveAnsiPath finds an ANSI file by checking multiple locations:
 //  1. Script's working directory
-//  2. menus/v3/ansi/
-//  3. menus/v3/templates/
+//  2. the selected theme's ansi/ (menus/<theme>/ansi/)
+//  3. the selected theme's templates/
 //
-// The menu set's overlay (menus.d/v3) is searched before the shipped tree
+// The menu set's overlay (menus.d/<theme>) is searched before the shipped tree
 // for the last two, as everywhere else in the BBS.
 //
 // Returns empty string if not found in any location.
@@ -228,12 +228,18 @@ func resolveAnsiPath(eng *Engine, filename string) string {
 		}
 	}
 
-	// Derive BBS root by walking up from working dir until we find a "menus" subdirectory.
-	bbsRoot := findBBSRoot(eng.cfg.WorkingDir)
-	if bbsRoot == "" {
-		return ""
+	// The menu set the server runs: the selected theme. Without one (the
+	// engine run outside the server), the default theme under the BBS root,
+	// found by walking up from the working dir to a "menus" subdirectory.
+	menuDir := menuset.Running()
+	if menuDir == "" {
+		bbsRoot := findBBSRoot(eng.cfg.WorkingDir)
+		if bbsRoot == "" {
+			return ""
+		}
+		menuDir = menuset.ThemeDir(bbsRoot, menuset.DefaultTheme)
 	}
-	menus := menuset.FromPath(filepath.Join(bbsRoot, "menus", "v3"))
+	menus := menuset.FromPath(menuDir)
 
 	// Try ansi/ then templates/, overlay before shipped set for each.
 	for _, sub := range []string{"ansi", "templates"} {

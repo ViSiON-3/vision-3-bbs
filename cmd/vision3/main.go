@@ -33,6 +33,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/mailer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwkapi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwkservice"
@@ -1879,7 +1880,6 @@ func main() {
 	if err != nil {
 		logging.Fatal("failed to get working directory", "error", err)
 	}
-	menuSetPath := filepath.Join(basePath, "menus", "v3") // Default menu set
 	rootConfigPath := filepath.Join(basePath, "configs")
 	rootAssetsPath := filepath.Join(basePath, "assets") // Keep this path definition for now
 	dataPath := filepath.Join(basePath, "data")         // For user data, logs, etc.
@@ -1906,6 +1906,17 @@ func main() {
 	}
 	defer func() { _ = closeLog() }() // best-effort log flush at exit
 	slog.Info("starting ViSiON/3 BBS server")
+
+	// The theme (config.json theme.name) is chosen once, here. A selection
+	// that can't be used stops the server: running another theme's menus
+	// and art in its place would hide the mistake.
+	menuSetPath, err := menuset.CheckTheme(basePath, serverConfig.ThemeName())
+	if err != nil {
+		logging.Fatal("cannot use the theme selected in config.json (theme.name); fix it, or remove it to run the default theme",
+			"error", err, "default", menuset.DefaultTheme)
+	}
+	menuset.SetRunning(menuSetPath)
+	slog.Info("theme selected", "name", serverConfig.ThemeName(), "path", menuSetPath)
 
 	// Initialize connection tracker with configured limits and IP filter file paths
 	// This will load the initial lists and start watching for file changes

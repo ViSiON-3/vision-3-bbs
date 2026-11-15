@@ -6,8 +6,9 @@
 //
 //	./menuedit [--menus path/to/menus/set] [--no-overlay]
 //
-// If no --menus flag is provided, it looks for menus/v3 relative to the
-// current working directory.
+// If no --menus flag is provided, it edits the theme the board runs: the
+// menu set configs/config.json selects (theme.name, v3 if omitted) under
+// menus/ in the current working directory.
 package main
 
 import (
@@ -16,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,8 +25,15 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/menueditor"
 )
 
+// defaultMenuSet is the menu set edited when --menus isn't given: the theme
+// the board in bbsRoot runs, config.json's theme.name, v3 if omitted.
+func defaultMenuSet(bbsRoot string) (string, error) {
+	dir, _, err := config.SelectedMenuSet(bbsRoot, filepath.Join(bbsRoot, "configs"))
+	return dir, err
+}
+
 func main() {
-	menusPath := flag.String("menus", "", "Path to menu set directory (default: menus/v3)")
+	menusPath := flag.String("menus", "", "Path to menu set directory (default: the theme config.json selects, menus/v3 if none)")
 	noOverlay := flag.Bool("no-overlay", false, "Read and write the shipped menu set directly instead of its menus.d overlay")
 	flag.Parse()
 
@@ -36,7 +45,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err) //nolint:errcheck
 			os.Exit(1)
 		}
-		path = filepath.Join(cwd, "menus", "v3")
+		path, err = defaultMenuSet(cwd)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\nFix theme.name in configs/config.json, or name a menu set with --menus.\n", err) //nolint:errcheck
+			os.Exit(1)
+		}
 	}
 
 	// Verify the directory exists and is accessible

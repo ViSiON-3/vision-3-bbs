@@ -64,6 +64,10 @@ type reloadTarget struct {
 type ConfigWatcher struct {
 	rootConfigPath string
 	menuSetPath    string
+	// runningTheme is the theme.name the server started with. The menu set
+	// is chosen once, at startup, so a reload keeps this one; see
+	// keepRunningTheme.
+	runningTheme   string
 	menuExecutor   *menu.MenuExecutor
 	userMgr        *user.UserMgr
 	serverConfig   *config.ServerConfig
@@ -125,6 +129,10 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 		pending:           make(map[string]bool),
 		stop:              make(chan struct{}),
 		done:              make(chan struct{}),
+	}
+
+	if serverConfig != nil {
+		cw.runningTheme = serverConfig.ThemeName()
 	}
 
 	cw.targets = []reloadTarget{
@@ -724,6 +732,20 @@ func (cw *ConfigWatcher) reloadFTNOrigins() {
 }
 
 // reloadServerConfig reloads the server configuration.
+// keepRunningTheme holds a reloaded config to the theme the server started
+// with. Menus, art, templates and the theme.json watches all hang off the
+// menu set chosen at startup, and switching some of them mid-run would mix
+// two themes, so a changed theme.name is logged as needing a restart and
+// the rest of the reload goes ahead.
+func (cw *ConfigWatcher) keepRunningTheme(newCfg *config.ServerConfig) {
+	if cw.runningTheme == "" || newCfg.ThemeName() == cw.runningTheme {
+		return
+	}
+	slog.Warn("config.json theme.name changed; restart the BBS to switch theme",
+		"running", cw.runningTheme, "configured", newCfg.ThemeName())
+	newCfg.Theme.Name = cw.runningTheme
+}
+
 func (cw *ConfigWatcher) reloadServerConfig() {
 	slog.Info("reloading config.json")
 
@@ -732,6 +754,7 @@ func (cw *ConfigWatcher) reloadServerConfig() {
 		slog.Error("failed to reload config.json", "error", err)
 		return
 	}
+	cw.keepRunningTheme(&newServerConfig)
 
 	// Update server config atomically
 	if cw.serverConfigMu != nil {

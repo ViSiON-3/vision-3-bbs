@@ -56,7 +56,7 @@ The editor opens to a main menu. Keys **1** through **7**, **B** and **C** open 
 | 0 | Event Scheduler | Automated event record list |
 | A | Login Sequence | Login step record list |
 | B | ZipLab Upload Processing | Sub-menu: General, Pipeline Steps, Virus Scan (see [ZipLab](files/ziplab.md)) |
-| C | Theme | Sub-menu: Prompt Colors, Split-Screen Chat (see [Theme Sub-menu](#theme-sub-menu)) |
+| C | Theme | Sub-menu: Theme Selection, Prompt Colors, Split-Screen Chat, Toasts (see [Theme Sub-menu](#theme-sub-menu)) |
 | Q | Quit | Exit (prompts to save if there are unsaved changes) |
 
 ### System Setup Sub-menu
@@ -159,17 +159,24 @@ Two things the editor does for you here:
 
 ### Theme Sub-menu
 
-Edits the menu set's `theme.json` (see [Theme Configuration](#theme-configuration)).
+Selects the theme the board runs (see [Theme Selection](#theme-selection)) and
+edits that theme's `theme.json` (see [Theme Configuration](#theme-configuration)).
 
 | Item | What it edits |
 |------|---------------|
+| Theme Selection | The theme the board runs, picked from the directories under `menus/`. Saved to `config.json` as `theme.name`; restart the BBS to switch |
 | Prompt Colors | Yes/No highlight and regular colours, and the message editor's autocorrect highlight (DOS colour codes) |
 | Split-Screen Chat | The chat screen chat opens with, picked from the menu set's screens, the built-in layout or **random**; and the sysop's and caller's text colours where a screen sets none |
 
-The theme is saved to the overlay, `menus.d/v3/theme.json`, so upgrading the
-shipped menus keeps it; the first save copies the shipped settings there. A
-theme you have not changed is not written. A running BBS picks the change up
-without a restart.
+The theme's settings are saved to its overlay, `menus.d/<theme>/theme.json`
+(`menus.d/v3/theme.json` for the default theme), so upgrading the shipped
+menus keeps them; the first save copies the shipped settings there. A theme
+you have not changed is not written. A running BBS picks a changed colour or
+chat screen up without a restart.
+
+The colour and chat pages edit the theme that was selected when you opened
+`./config`. After changing **Theme Selection**, save, restart the BBS, and
+reopen `./config` to edit the new theme's settings.
 
 ### Navigation
 
@@ -296,7 +303,8 @@ is piped or `NO_COLOR` is set.
 What each section covers:
 
 - **Board files** — the directories and files the BBS needs (`configs/`,
-  `data/users/`, `data/logs/`, `data/msgbases/`, `data/files/`, `menus/v3/`,
+  `data/users/`, `data/logs/`, `data/msgbases/`, `data/files/`, the selected
+  [theme](#theme-selection)'s menu set (`menus/v3/` by default),
   `config.json`) and the recommended ones, the SSH host key when SSH is
   enabled, that the data paths are writable, access levels, signup settings,
   InfoForms, the default sysop password, the bad-names list, and every menu
@@ -1250,9 +1258,53 @@ Located in `menus/v3/ansi/`
 
 ANSI art files displayed when the menu loads.
 
+### Theme Selection
+
+A theme is a menu set: one directory under `menus/` holding the artwork,
+templates, menus and colours together. The board runs the theme named by
+`theme.name` in `config.json`:
+
+```json
+"theme": { "name": "v3" }
+```
+
+- **Default.** With `theme` or `name` left out, the theme is `v3`, the set
+  ViSiON/3 ships. An existing `config.json` needs no change.
+- **Where files come from.** Theme `<name>` is read from `menus/<name>/`,
+  with your local changes in `menus.d/<name>/` searched first, file by file
+  (see [Customising menus](menus/menu-system.md#customising-menus-without-losing-your-changes)).
+  One name selects everything; there are no separate paths for art,
+  templates or menus.
+- **Names.** A name is a single directory name: letters, digits, `.`, `_`
+  and `-`, not starting with a dot.
+- **One selection for every program.** The server, `./vision3 doctor`, the
+  startup check, `./config`, the message editor and `./menuedit` all read
+  this setting. `./menuedit --menus <path>` still edits any set you name.
+- **An unusable selection stops the server.** If the name is invalid or
+  `menus/<name>/` does not exist, the server prints the problem and does not
+  start; it never falls back to another theme. `./vision3 doctor` reports
+  the same problem as a failed **theme** check. `./config` still opens, on
+  the default theme, so you can correct the selection there.
+- **Changing the theme needs a restart.** The theme is chosen once, when the
+  server starts. If `theme.name` changes while it is running, the rest of
+  `config.json` reloads as usual, the log warns
+  `config.json theme.name changed; restart the BBS to switch theme`, and the
+  board keeps running the theme it started with, art, menus and colours
+  alike, until you restart it.
+
+To add a theme, copy a set and select it:
+
+```bash
+cp -R menus/v3 menus/mytheme
+```
+
+Then choose it under **Theme → Theme Selection** in `./config` (or set
+`theme.name`), run `./vision3 doctor`, and restart the BBS.
+
 ### Theme Configuration
 
-The `menus/v3/theme.json` file controls color schemes:
+The selected theme's `theme.json` (`menus/v3/theme.json` for the default
+theme) controls color schemes:
 
 ```json
 {

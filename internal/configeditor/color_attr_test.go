@@ -11,7 +11,7 @@ import (
 func openYesNo(t *testing.T) Model {
 	t.Helper()
 	m, _ := newThemeModel(t)
-	m = press(t, m, "C", "1")
+	m = press(t, m, "C", "2")
 	if m.sysFields[m.editField].Label != "Yes/No Highlight" {
 		t.Fatalf("field %q", m.sysFields[m.editField].Label)
 	}

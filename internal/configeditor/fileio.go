@@ -18,6 +18,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/configmerge"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/transfer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ziplab"
@@ -53,6 +54,11 @@ type allConfigs struct {
 	// last loaded or saved, so an unedited theme is never written.
 	Theme      config.ThemeConfig
 	themeSaved config.ThemeConfig
+	// themeSet is the menu set Theme was loaded from: the theme selected
+	// when the editor opened. Theme is saved back to it, whatever the Theme
+	// selector has been changed to since, so one theme's colours are never
+	// written into another's theme.json.
+	themeSet string
 }
 
 // configBases are the snapshots saveMergedFile merges against: each shared
@@ -90,9 +96,21 @@ func (ac *allConfigs) snapshotBases() error {
 }
 
 // loadAllConfigs loads all configuration files from the given directory.
-// menuSetPath is the menu set the BBS runs, beside the configs directory.
+// menuSetPath is the menu set the BBS runs, beside the configs directory:
+// the theme config.json selects (theme.name). A selection that can't be
+// used gives the default theme's set, so the editor still opens and the
+// sysop can put the selection right in it.
 func menuSetPath(configPath string) string {
-	return filepath.Join(configPath, "..", "menus", "v3")
+	root := bbsRootFor(configPath)
+	if dir, _, err := config.SelectedMenuSet(root, configPath); err == nil {
+		return dir
+	}
+	return menuset.ThemeDir(root, menuset.DefaultTheme)
+}
+
+// bbsRootFor is the BBS root, the directory holding configs/ and menus/.
+func bbsRootFor(configPath string) string {
+	return filepath.Join(configPath, "..")
 }
 
 func loadAllConfigs(configPath string) (allConfigs, error) {
@@ -189,7 +207,8 @@ func loadAllConfigs(configPath string) (allConfigs, error) {
 
 	// theme.json lives in the menu set, not in configs. A file that does not
 	// parse stops the load for the same reason as doors.
-	ac.Theme, err = config.LoadThemeConfig(menuSetPath(configPath))
+	ac.themeSet = menuSetPath(configPath)
+	ac.Theme, err = config.LoadThemeConfig(ac.themeSet)
 	if err != nil {
 		return ac, fmt.Errorf("loading theme: %w", err)
 	}
@@ -263,8 +282,8 @@ func saveMergedFile[T any](f configmerge.File[T], known bool, base, cur *T) ([]s
 // it re-reads theme.json and merges three ways against base, so a field
 // changed on disk since loading (by another editor, or by hand) is kept
 // unless the editor changed it too. cur and base become the merged theme.
-func saveTheme(configPath string, base, cur *config.ThemeConfig) ([]string, error) {
-	path := menuSetPath(configPath)
+// path is the menu set the theme was loaded from (allConfigs.themeSet).
+func saveTheme(path string, base, cur *config.ThemeConfig) ([]string, error) {
 	disk, err := config.LoadThemeConfig(path)
 	if err != nil {
 		return nil, err

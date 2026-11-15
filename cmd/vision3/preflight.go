@@ -6,11 +6,18 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 )
 
 // menusCheckName labels the menu-set check so the failure report can tell an
 // empty menus/ bind mount apart from an unwritable volume.
-const menusCheckName = "menus/v3/"
+const menusCheckName = "menus/" + menuset.DefaultTheme + "/"
+
+// themeCheckName labels a config.json theme.name that selects no usable
+// theme: setup can't fix that, so the report gives its own advice.
+const themeCheckName = "configs/config.json theme.name"
 
 // preflightResult holds the outcome of a single preflight check.
 type preflightResult struct {
@@ -34,6 +41,7 @@ func runPreflight(basePath string) bool {
 	// both critical, but they need opposite advice, and chowning cannot fix the
 	// former.
 	menusMissing := false
+	themeInvalid := false
 	otherCriticalFails := 0
 	for _, r := range results {
 		if r.ok {
@@ -41,9 +49,12 @@ func runPreflight(basePath string) bool {
 		}
 		if r.critical {
 			criticalFails++
-			if r.name == menusCheckName {
+			switch r.name {
+			case menusCheckName:
 				menusMissing = true
-			} else {
+			case themeCheckName:
+				themeInvalid = true
+			default:
 				otherCriticalFails++
 			}
 		} else {
@@ -77,8 +88,19 @@ func runPreflight(basePath string) bool {
 	if criticalFails > 0 {
 		fmt.Fprintf(os.Stderr, "  %d critical issue(s), %d warning(s).\n", criticalFails, warnFails)
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "  It looks like the initial setup has not been completed.")
-		if os.Getenv("VISION3_CONTAINER") != "" {
+		if themeInvalid {
+			fmt.Fprintln(os.Stderr, "  The theme selected in configs/config.json can't be used. Set theme.name")
+			fmt.Fprintln(os.Stderr, "  to a directory under menus/, or remove it to run the default theme")
+			fmt.Fprintf(os.Stderr, "  (%s). The server does not fall back to another theme.\n", menuset.DefaultTheme)
+		}
+		// With nothing but the theme wrong, setup has nothing to do.
+		setupNeeded := !themeInvalid || criticalFails > 1
+		if setupNeeded {
+			fmt.Fprintln(os.Stderr, "  It looks like the initial setup has not been completed.")
+		}
+		switch {
+		case !setupNeeded:
+		case os.Getenv("VISION3_CONTAINER") != "":
 			// setup.sh is not shipped in the container image -- the entrypoint
 			// does its job instead. Pointing a Docker operator at it sends them
 			// looking for a file that does not exist.
@@ -102,7 +124,7 @@ func runPreflight(basePath string) bool {
 				fmt.Fprintln(os.Stderr, "    sudo chown -R 100:101 ./configs ./data")
 				fmt.Fprintln(os.Stderr, "    docker compose up -d")
 			}
-		} else {
+		default:
 			fmt.Fprintln(os.Stderr, "  Please run the setup script for your platform:")
 			fmt.Fprintln(os.Stderr, "")
 			if runtime.GOOS == "windows" {
@@ -158,7 +180,19 @@ func collectPreflightResults(basePath string) []preflightResult {
 	check("data/logs/", true, filepath.Join(dataPath, "logs"), true)
 	check("data/msgbases/", true, filepath.Join(dataPath, "msgbases"), true)
 	check("data/files/", true, filepath.Join(dataPath, "files"), true)
-	check(menusCheckName, true, filepath.Join(basePath, "menus", "v3"), true)
+	// The menu set of the theme config.json selects (theme.name). A
+	// config.json that doesn't parse is reported when the server loads it;
+	// here it leaves the default theme to check.
+	themeName, err := config.ThemeNameFromConfigDir(configPath)
+	if err != nil {
+		themeName = menuset.DefaultTheme
+	}
+	switch _, err := menuset.CheckTheme(basePath, themeName); {
+	case err == nil || themeName == menuset.DefaultTheme:
+		check("menus/"+themeName+"/", true, menuset.ThemeDir(basePath, themeName), true)
+	default:
+		results = append(results, preflightResult{name: themeCheckName, critical: true, message: err.Error()})
+	}
 
 	// --- Required config (critical) ---
 	check("configs/config.json", true, filepath.Join(configPath, "config.json"), false)

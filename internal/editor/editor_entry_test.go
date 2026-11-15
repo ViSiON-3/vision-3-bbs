@@ -9,6 +9,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor/testterm"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 	"github.com/ViSiON-3/vision-3-bbs/internal/winch"
 	"github.com/gliderlabs/ssh"
 )
@@ -308,6 +309,67 @@ func TestResolveEditorPaths(t *testing.T) {
 		menu, cfg := resolveEditorPaths()
 		if menu != filepath.Join(cwd, "menus/v3") || cfg != filepath.Join(cwd, "configs") {
 			t.Errorf("resolveEditorPaths() = (%q, %q), want the pair under %q", menu, cfg, cwd)
+		}
+	})
+
+	// A board root in the working directory with two themes, selecting amber.
+	themedRoot := func(t *testing.T) string {
+		t.Helper()
+		root := t.TempDir()
+		for _, dir := range []string{"menus/v3", "menus/amber", "configs"} {
+			if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(root, "configs", "config.json"), []byte(`{"theme": {"name": "amber"}}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Chdir(root)
+		t.Setenv("VISION3_MENU_PATH", "")
+		t.Setenv("VISION3_CONFIG_PATH", "")
+		return root
+	}
+
+	t.Run("the theme config.json selects is used", func(t *testing.T) {
+		themedRoot(t)
+		if menu, cfg := resolveEditorPaths(); menu != "menus/amber" || cfg != "configs" {
+			t.Errorf("resolveEditorPaths() = (%q, %q), want menus/amber and configs", menu, cfg)
+		}
+	})
+
+	t.Run("the theme the server started with wins over config.json", func(t *testing.T) {
+		root := themedRoot(t)
+		running := filepath.Join(root, "menus", "v3")
+		menuset.SetRunning(running)
+		t.Cleanup(func() { menuset.SetRunning("") })
+		if menu, _ := resolveEditorPaths(); menu != running {
+			t.Errorf("resolveEditorPaths() menu = %q, want the running set %q", menu, running)
+		}
+	})
+
+	t.Run("recovering a missing config path keeps the running theme", func(t *testing.T) {
+		root := themedRoot(t) // its config.json selects amber
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatal(err)
+		}
+		running := filepath.Join(root, "menus", "v3")
+		menuset.SetRunning(running)
+		t.Cleanup(func() { menuset.SetRunning("") })
+		t.Setenv("VISION3_CONFIG_PATH", filepath.Join(root, "gone"))
+		menu, cfg := resolveEditorPaths()
+		if menu != running || cfg != filepath.Join(cwd, "configs") {
+			t.Errorf("resolveEditorPaths() = (%q, %q), want the running set %q and the working directory's configs", menu, cfg, running)
+		}
+	})
+
+	t.Run("a selection that can't be used leaves the default theme", func(t *testing.T) {
+		root := themedRoot(t)
+		if err := os.WriteFile(filepath.Join(root, "configs", "config.json"), []byte(`{"theme": {"name": "../x"}}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if menu, _ := resolveEditorPaths(); menu != "menus/v3" {
+			t.Errorf("resolveEditorPaths() menu = %q, want menus/v3", menu)
 		}
 	})
 

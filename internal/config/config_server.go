@@ -78,6 +78,8 @@ type ServerConfig struct {
 	// templates/WELCOME.MSG, as private mail from the SysOp once their
 	// account is validated (#263). Off by default.
 	SendWelcomeMail bool `json:"sendWelcomeMail"`
+	// Theme selects the menu set the board runs; see ThemeSelection.
+	Theme ThemeSelection `json:"theme"`
 	// ToastLogons and ToastLogoffs announce callers coming and going to other
 	// online callers at or above ToastAnnounceLevel (#206). Off by default, so
 	// an upgrade does not start showing them unasked.
