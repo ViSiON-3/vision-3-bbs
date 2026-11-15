@@ -1,6 +1,13 @@
 {
     "yesNoHighlightColor": 31,
     "yesNoRegularColor": 13,
+    "lightbarSelected": 31,
+    "lightbarNormal": 13,
+    "lightbarCommand": 9,
+    "lightbarHotkey": 15,
+    "lightbarHint": 8,
+    "lightbarBorder": 8,
+    "lightbarDestructive": 4,
     "chatSysopColor": 11,
     "chatUserColor": 10,
     "autocorrectHighlightColor": 15,

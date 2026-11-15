@@ -190,7 +190,7 @@ func (lb *fileLightbar) renderSeparator() error {
 		dashes = 0
 	}
 	sep := "\xfa" + strings.Repeat("\xc4", dashes) + "\xfa"
-	sepLine := ansi.MoveCursor(lb.separatorRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte("|08"+sep+"|07")))
+	sepLine := ansi.MoveCursor(lb.separatorRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte(lb.e.lightbarRule(sep))))
 	return terminalio.WriteProcessedBytes(lb.terminal, []byte(sepLine), lb.outputMode)
 }
 

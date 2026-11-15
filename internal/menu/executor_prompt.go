@@ -120,8 +120,9 @@ func (e *MenuExecutor) promptYesNoLightbar(s ssh.Session, terminal *term.Termina
 		noOptionText := " " + noLabel + " "
 		yesNoSpacing := 2  // Spaces between prompt and first option
 		optionSpacing := 2 // Spaces between Yes and No
-		highlightColor := e.Theme().YesNoHighlightColor
-		regularColor := e.Theme().YesNoRegularColor
+		// The prompt's own two colours, not the lightbar roles.
+		highlightColor := e.roleColor(roleYesNoHi)
+		regularColor := e.roleColor(roleYesNoLo)
 
 		// Write the prompt text inline
 		yes, answered, err := prompt.write(e, terminal, outputMode, "", nodeNumber)

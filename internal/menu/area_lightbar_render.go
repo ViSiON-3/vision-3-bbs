@@ -27,13 +27,13 @@ func (p *areaLightbarPicker[T]) renderSeparator() error {
 		count = 0
 	}
 	sep := strings.Repeat("\xc4", count)
-	line := ansi.MoveCursor(p.separatorRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte("|08\xfa"+sep+"\xfa|07")))
+	line := ansi.MoveCursor(p.separatorRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte(p.e.lightbarRule("\xfa"+sep+"\xfa"))))
 	return terminalio.WriteProcessedBytes(p.terminal, []byte(line), p.outputMode)
 }
 
 // renderHint draws the key-hint line at the bottom row.
 func (p *areaLightbarPicker[T]) renderHint() error {
-	line := ansi.MoveCursor(p.hintRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte(p.hint)))
+	line := ansi.MoveCursor(p.hintRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte(p.e.lightbarHint(p.hint))))
 	return terminalio.WriteProcessedBytes(p.terminal, []byte(line), p.outputMode)
 }
 

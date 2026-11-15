@@ -126,8 +126,8 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 
 	// Load theme colors for Yes/No lightbar prompts
 	theme, _ := config.LoadThemeConfig(menuSetPath)
-	yesNoHi := colorCodeToAnsi(theme.YesNoHighlightColor, true)
-	yesNoLo := colorCodeToAnsi(theme.YesNoRegularColor, true)
+	yesNoHi := colorCodeToAnsi(theme.Color(config.RoleYesNoHighlight), true)
+	yesNoLo := colorCodeToAnsi(theme.Color(config.RoleYesNoRegular), true)
 
 	// Load configurable Yes/No labels for prompts.
 	stringsCfg, stringsErr := config.LoadStrings(rootConfigPath)

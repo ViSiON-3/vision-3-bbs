@@ -32,9 +32,9 @@ func buildFileListCmdBar(e *MenuExecutor, manages bool, cmdBarOptions, hiBarOpti
 			})
 		}
 	} else {
-		// Default entries using theme colors.
-		defHi := colorCodeToAnsi(e.Theme().YesNoHighlightColor)
-		defLo := colorCodeToAnsi(e.Theme().YesNoRegularColor)
+		// Default entries using the theme's lightbar roles.
+		defHi := e.roleAnsi(roleSelected)
+		defLo := e.roleAnsi(roleNormal)
 		defaults := []struct {
 			label  string
 			hotkey string
@@ -60,8 +60,8 @@ func buildFileListCmdBar(e *MenuExecutor, manages bool, cmdBarOptions, hiBarOpti
 	// whoever manages this area (files.manage, #1044).
 	isSysop = manages
 	if isSysop {
-		defHiSysop := colorCodeToAnsi(e.Theme().YesNoHighlightColor)
-		defLoSysop := colorCodeToAnsi(e.Theme().YesNoRegularColor)
+		defHiSysop := e.roleAnsi(roleSelected)
+		defLoSysop := e.roleAnsi(roleNormal)
 		sysopCmds := []struct {
 			label  string
 			hotkey string
@@ -85,7 +85,7 @@ func buildFileListCmdBar(e *MenuExecutor, manages bool, cmdBarOptions, hiBarOpti
 	copy(userEntries, cmdEntries)
 
 	// File-row highlight color.
-	hiColorSeq = colorCodeToAnsi(e.Theme().YesNoHighlightColor)
+	hiColorSeq = e.roleAnsi(roleSelected)
 	if len(hiBarOptions) > 0 {
 		hiColorSeq = colorCodeToAnsi(hiBarOptions[0].HighlightColor)
 	}

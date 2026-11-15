@@ -75,8 +75,9 @@ func dimmedOptions(opts []MsgLightbarOption) []MsgLightbarOption {
 
 // msgReaderDeleteOption is appended to the lightbar for sysop/co-sysop users,
 // and for everyone reading their mail (PRIVMAIL).
-// LoColor 4 (dark red) distinguishes it from regular options.
-var msgReaderDeleteOption = MsgLightbarOption{Label: " Del ", HotKey: 'D', LoColor: 4}
+// It is drawn in the theme's destructive role (dark red by default), set
+// for each message where the bar is built, to tell it from the others.
+var msgReaderDeleteOption = MsgLightbarOption{Label: " Del ", HotKey: 'D'}
 
 // msgOwnershipFilter reports whether a message may be shown to the current user.
 // A nil filter means no extra filtering; a non-nil filter is used for areas like
@@ -284,9 +285,11 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	sessionIH := getSessionIH(s)
 	reader := bufio.NewReader(sessionIH)
 
-	// Lightbar colors from theme
-	hiColor := e.Theme().YesNoHighlightColor
-	loColor := 9 // Bright blue unselected items
+	// Lightbar colours from the theme's roles. The bar's brackets keep
+	// their own blue.
+	hiColor := e.roleColor(roleSelected)
+	loColor := e.roleColor(roleCommand)
+	destructiveColor := e.roleColor(roleDestructive)
 	boundsColor := 1
 
 	// Build option set: append Delete option for sysop/co-sysop users
@@ -555,7 +558,7 @@ readerLoop:
 					activeOptions[i].LoColor = msgReaderInactiveColor
 				}
 			case 'D':
-				activeOptions[i].LoColor = msgReaderDeleteOption.LoColor
+				activeOptions[i].LoColor = destructiveColor
 				if !canDelete(currentMsg) {
 					activeOptions[i].LoColor = msgReaderInactiveColor
 				}

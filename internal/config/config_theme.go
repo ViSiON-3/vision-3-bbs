@@ -16,10 +16,23 @@ import (
 // ThemeConfig holds theme-related settings, loaded per menu set.
 // Colors are standard DOS color codes (0-255).
 type ThemeConfig struct {
+	// YesNoHighlightColor and YesNoRegularColor are the two answers of a
+	// Yes/No prompt. They are also what the lightbar selected and normal
+	// roles fall back to in a theme that sets neither.
 	YesNoHighlightColor int `json:"yesNoHighlightColor"`
 	YesNoRegularColor   int `json:"yesNoRegularColor"`
-	ChatSysopColor      int `json:"chatSysopColor"` // sysop pane in split-screen chat
-	ChatUserColor       int `json:"chatUserColor"`  // caller pane in split-screen chat
+	// The lightbar roles (see ColorRole). Each is optional: read them
+	// through Color, which fills in what the theme leaves out.
+	LightbarSelected    OptColor `json:"lightbarSelected,omitzero"`
+	LightbarNormal      OptColor `json:"lightbarNormal,omitzero"`
+	LightbarCommand     OptColor `json:"lightbarCommand,omitzero"`
+	LightbarHotkey      OptColor `json:"lightbarHotkey,omitzero"`
+	LightbarHint        OptColor `json:"lightbarHint,omitzero"`
+	LightbarBorder      OptColor `json:"lightbarBorder,omitzero"`
+	LightbarDestructive OptColor `json:"lightbarDestructive,omitzero"`
+
+	ChatSysopColor int `json:"chatSysopColor"` // sysop pane in split-screen chat
+	ChatUserColor  int `json:"chatUserColor"`  // caller pane in split-screen chat
 	// AutocorrectHighlightColor is the colour the message editor draws a
 	// word in just after autocorrect fixed it, while the fix is shown on the
 	// prompt row.

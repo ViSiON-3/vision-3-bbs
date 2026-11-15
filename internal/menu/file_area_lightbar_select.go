@@ -148,7 +148,7 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 		visibleRows = 3
 	}
 
-	hiColorSeq := colorCodeToAnsi(e.Theme().YesNoHighlightColor)
+	hiColorSeq := e.roleAnsi(roleSelected)
 	if len(hiBarOptions) > 0 {
 		hiColorSeq = colorCodeToAnsi(hiBarOptions[0].HighlightColor)
 	}
@@ -169,13 +169,13 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 			count = 0
 		}
 		sep := strings.Repeat("\xc4", count)
-		line := ansi.MoveCursor(separatorRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte("|08\xfa"+sep+"\xfa|07")))
+		line := ansi.MoveCursor(separatorRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte(e.lightbarRule("\xfa"+sep+"\xfa"))))
 		return terminalio.WriteProcessedBytes(terminal, []byte(line), outputMode)
 	}
 
 	renderHint := func() error {
 		hint := "|08[ |15Up|08/|15Dn|08 ] Nav  [ |15Lt|08/|15Rt|08 ] Conf  [ |15PgUp|08/|15PgDn|08 ] Page  [ |15Enter|08 ] Select  [ |15Q|08 ] Quit"
-		line := ansi.MoveCursor(hintRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte(hint)))
+		line := ansi.MoveCursor(hintRow, 1) + "\x1b[2K" + string(ansi.ReplacePipeCodes([]byte(e.lightbarHint(hint))))
 		return terminalio.WriteProcessedBytes(terminal, []byte(line), outputMode)
 	}
 
