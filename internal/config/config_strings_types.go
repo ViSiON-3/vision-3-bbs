@@ -597,8 +597,6 @@ type StringsConfig struct {
 
 	// Executor strings (V3-specific)
 	ExecUnknownCommand      string `json:"execUnknownCommand"`
-	ExecReadmailLogin       string `json:"execReadmailLogin"`
-	ExecReadmailPlaceholder string `json:"execReadmailPlaceholder"`
 	ExecDoorLogin           string `json:"execDoorLogin"`
 	ExecDoorNotConfigured   string `json:"execDoorNotConfigured"`
 	ExecGoodbye             string `json:"execGoodbye"`

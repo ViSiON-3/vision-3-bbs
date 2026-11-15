@@ -19,13 +19,21 @@ in the [Technical Reference](#technical-reference).
 
 Users access private mail through the Email Menu (press `E` from the main menu):
 
-- **SENDPRIVMAIL** — Send private mail to another user; validates recipient exists, prompts for subject, launches the full-screen editor
-- **READPRIVMAIL** — Read private mail; shows only messages addressed to the current user
-- **LISTPRIVMAIL** — List private mail headers, for the same messages
-- **DELETEPRIVMAIL** — Delete a mail (`D`): your current mail, the last of yours you read this call, after a Y/N; or, before you've read one, the mail whose number you give (the number `LISTPRIVMAIL` shows; `?` lists yours)
-- **SENTPRIVMAIL** — View the mail you sent (`V`, ViSiON/2's View Outgoing Mail) in the message reader; `L` lists it. Reading it there doesn't mark your own unread mail as read.
-- **COPYPRIVMAIL** — Copy a mail to another user (`C`): your current mail, or the one whose number you give, as `DELETEPRIVMAIL` picks it
-- **FORWARDPRIVMAIL** — Forward a mail (`W`, hidden: the stock menu art doesn't list it): a copy, after which your own is deleted
+| Key | Command | What it does |
+| --- | --- | --- |
+| `C` | `COPYPRIVMAIL` | Copy a mail to another user: your current mail, or the one whose number you give, as `DELETEPRIVMAIL` picks it |
+| `D` | `DELETEPRIVMAIL` | Delete a mail: your current mail, the last of yours you read this call, after a Y/N; or, before you've read one, the mail whose number you give (the number `LISTPRIVMAIL` shows; `?` lists yours) |
+| `W` | `FORWARDPRIVMAIL` | Forward a mail: a copy, after which your own is deleted |
+| `L` | `LISTPRIVMAIL` | List the headers of the mail addressed to you |
+| `N` | `NMAILSCAN` | Count your new mail and offer to read it now, as the login step does |
+| `R` | `READPRIVMAIL` | Read the mail addressed to you. In the reader, `R` replies to the mail on screen |
+| `S` | `SENDPRIVMAIL` | Send mail to a user by handle, or to a [group](#mail-to-a-group) by `@name`; checks the recipient, asks for a subject and opens the full-screen editor |
+| `V` | `SENTPRIVMAIL` | View the mail you sent (ViSiON/2's View Outgoing Mail) in the message reader; `L` lists it. Reading it there doesn't mark your own unread mail as read |
+| `Q` | `GOTO:MAIN` | Back to the main menu |
+
+These are the stock `menus/v3/cfg/EMAILM.CFG` and `menus/v3/ansi/EMAILM.ANS`.
+A board that has its own copies keeps them on an upgrade. `READMAIL`, the
+name older menus used, runs `READPRIVMAIL`.
 
 Mail you have sent is not in your mailbox. `V` shows it, and so does reading the `PRIVMAIL` area with the message reader, list or newscan.
 
@@ -82,7 +90,7 @@ authors on it as well.
 
 Address mail to `@name` to send it to every member of a
 [user group](users/admin-roles.md#groups), for example `@fsxnet-ops`. That
-works at **Send private mail to**, at **To:** when composing in `PRIVMAIL`,
+works at **Send private mail to**, whose prompt says so, at **To:** when composing in `PRIVMAIL`,
 and when copying or forwarding mail.
 
 - Each member gets their own copy, which behaves like any other private

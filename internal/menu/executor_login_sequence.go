@@ -85,6 +85,9 @@ func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
 	loginSequence := e.GetLoginSequence()
 	slog.Info("running FULL_LOGIN_SEQUENCE", "node", nodeNumber, "handle", currentUser.Handle, "count", len(loginSequence))
 
+	// Before the login items, so NMAILSCAN counts the letter.
+	e.deliverWelcomeMail(userManager, currentUser, nodeNumber)
+
 	// Offer newly flagged newscan-default areas before the login items run.
 	if updated, njErr := runNewscanAutoJoin(&cmdCtx{e: e, s: s, terminal: terminal, userManager: userManager, currentUser: currentUser, nodeNumber: nodeNumber, sessionStartTime: sessionStartTime, outputMode: outputMode, termWidth: termWidth, termHeight: termHeight}); njErr != nil {
 		if errors.Is(njErr, io.EOF) {
