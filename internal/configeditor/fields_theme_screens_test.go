@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 )
@@ -110,6 +113,32 @@ func TestScreenOverridesNone(t *testing.T) {
 	if len(fields) != 1 || fields[0].Type != ftDisplay || !strings.Contains(fields[0].Get(), "every lightbar inherits") {
 		t.Errorf("fields = %+v", fields)
 	}
+}
+
+// The Screen Overrides page fits an 80-column screen, with no override
+// present and with the longest source text it can show.
+func TestScreenOverridesFit80(t *testing.T) {
+	check := func(name string, m Model) {
+		t.Helper()
+		nm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 25})
+		m = press(t, nm.(Model), "C", "4")
+		for i, line := range strings.Split(m.View(), "\n") {
+			if w := lipgloss.Width(line); w > 80 {
+				t.Errorf("%s: line %d is %d wide", name, i, w)
+			}
+		}
+	}
+	m, root := newThemeModel(t)
+	check("no overrides", m)
+
+	writeBar(t, root, "menus.d/v3/bar/MSGAREAHI.BAR", "0,0,255,7,*,*,Highlight\n")
+	writeBar(t, root, "menus/v3/bar/FILELISTHI.BAR", "0,0,255,7,*,*,Highlight\n")
+	m, err := New(filepath.Join(root, "configs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("two overrides", m)
+	check("one set to inherit", press(t, m, "C", "4", "enter", "esc", "esc"))
 }
 
 // The inherited colour shown is the one the board draws with: its override

@@ -954,9 +954,14 @@ var retiredScreenBars = []string{"FILELISTHI", "MSGAREAHI", "MSGCONFHI"}
 // menu set by an upgrade that copied the new files over the old ones. It
 // still draws the colour it always did, but it pins its screen to that
 // colour, so a change to the shared lightbar colours passes the screen by.
-// A BAR with other colours, or one in the overlay, is the sysop's own and
-// is not mentioned.
+// A BAR with other colours, one in the overlay, or one in a theme other
+// than the stock one is the sysop's own and is not mentioned.
 func checkRetiredScreenBars(menuRoot string, add func(string, doctorSeverity, string, string)) {
+	// Only the stock theme shipped these files. In another theme a *HI.BAR
+	// with the same colours is that theme's own choice.
+	if filepath.Base(menuRoot) != menuset.DefaultTheme {
+		return
+	}
 	set := menuset.FromPath(menuRoot)
 	for _, name := range retiredScreenBars {
 		if set.HasOverlay() {

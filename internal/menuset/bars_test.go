@@ -18,7 +18,11 @@ func TestBarInheritsAndHighlight(t *testing.T) {
 		"empty":                {"", false, 0, 0, false},
 		"comments only":        {"; nothing\n\n", false, 0, 0, false},
 		"malformed record":     {"0,0,31\n", false, 0, 0, false},
-		"bad colours skipped":  {"0,0,red,7,*,*,X\n0,0,14,1,*,*,Y\n", false, 14, 1, true},
+		// As the BBS loads it: a record with unreadable colours is still
+		// the first record, with the default colours; one with unreadable
+		// coordinates is not a record.
+		"bad colours default":  {"0,0,red,7,*,*,X\n0,0,14,1,*,*,Y\n", false, BarDefaultHighlight, BarDefaultRegular, true},
+		"bad coordinates skip": {"x,0,31,7,*,*,X\n0,0,79,7,*,*,Y\n", false, 79, 7, true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if got := BarInherits([]byte(tc.data)); got != tc.inherits {

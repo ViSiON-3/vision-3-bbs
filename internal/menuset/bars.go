@@ -62,9 +62,20 @@ func BarInherits(data []byte) bool {
 	return false
 }
 
+// The colours the BBS gives a BAR record whose colour fields don't parse.
+const (
+	BarDefaultHighlight = 7
+	BarDefaultRegular   = 15
+)
+
 // BarHighlight returns the highlight and regular colours of a BAR file's
 // first record, which is all a *HI.BAR is read for. ok is false for an
 // inherit marker and for a file with no usable record.
+//
+// It picks the record the BBS picks when it loads the file: a line needs
+// seven fields and numeric coordinates to be a record at all, and a record
+// whose colours don't parse still counts, with the default colours. So the
+// editor and doctor see the override that is in force, not another one.
 func BarHighlight(data []byte) (highlight, regular int, ok bool) {
 	if BarInherits(data) {
 		return 0, 0, false
@@ -74,10 +85,15 @@ func BarHighlight(data []byte) (highlight, regular int, ok bool) {
 		if len(parts) != 7 {
 			continue
 		}
+		_, xErr := strconv.Atoi(strings.TrimSpace(parts[0]))
+		_, yErr := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if xErr != nil || yErr != nil {
+			continue
+		}
 		hi, hiErr := strconv.Atoi(strings.TrimSpace(parts[2]))
 		lo, loErr := strconv.Atoi(strings.TrimSpace(parts[3]))
 		if hiErr != nil || loErr != nil {
-			continue
+			return BarDefaultHighlight, BarDefaultRegular, true
 		}
 		return hi, lo, true
 	}

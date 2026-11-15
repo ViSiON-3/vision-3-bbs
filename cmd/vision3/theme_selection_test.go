@@ -244,6 +244,21 @@ func TestDoctorNotesRetiredScreenBars(t *testing.T) {
 	if len(checks) != 1 || !hasDoctorCheck(checks, "menus/v3/bar/FILELISTHI.BAR", doctorInfo, "no longer ships") {
 		t.Errorf("checks = %+v, want one note, for FILELISTHI", checks)
 	}
+
+	// Another theme never shipped these files: a BAR there with the same
+	// colours is that theme's own, and is left alone.
+	amber := filepath.Join(root, "menus", "amber", "bar")
+	if err := os.MkdirAll(amber, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeDoctorFixture(t, filepath.Join(amber, "FILELISTHI.BAR"), stock)
+	checks = nil
+	checkRetiredScreenBars(filepath.Join(root, "menus", "amber"), func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	if len(checks) != 0 {
+		t.Errorf("another theme's BAR was called retired stock: %+v", checks)
+	}
 }
 
 // A running server keeps the theme it started with: a reload of a

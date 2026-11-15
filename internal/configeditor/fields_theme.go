@@ -170,7 +170,7 @@ func themeScreenBars(menuSetPath string) []screenBar {
 func themeFieldsScreens(bars []screenBar, th *config.ThemeConfig, board *config.ThemeColors, inherit map[string]bool) []fieldDef {
 	if len(bars) == 0 {
 		return []fieldDef{{
-			Label: "Overrides", Help: "A screen's *HI.BAR file would be listed here; none is present", Type: ftDisplay, Col: 3, Row: 1, Width: 50,
+			Label: "Overrides", Help: "A screen's *HI.BAR file would be listed here; none is present", Type: ftDisplay, Col: 3, Row: 1, Width: 48,
 			Get: func() string { return "none: every lightbar inherits the shared colours" },
 		}}
 	}
