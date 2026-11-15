@@ -198,8 +198,6 @@
   "execPasswordAccepted": "\r\n|07Password accepted.|07\r\n",
   "execPasswordPrompt": "|07Password: |15",
   "execPendingValidation": "|11Pending validation: |15%d|07\r\n\r\n",
-  "execReadmailLogin": "\r\n|01Error: You must be logged in to read mail.|07\r\n",
-  "execReadmailPlaceholder": "\r\n|15Executing |11READMAIL|15 for |14%s|15... (Not Implemented)|07\r\n",
   "execRunCommandError": "\r\n|01Error running command '%s': %v|07\r\n",
   "execRunCommandNotFound": "\r\n|01Internal command '%s' not found.|07\r\n",
   "execRunDoorError": "\r\n|01Error running door '%s': %v|07\r\n",

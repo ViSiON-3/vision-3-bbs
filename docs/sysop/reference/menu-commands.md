@@ -52,7 +52,7 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | `MAINLOGOFF` | none | Asks to confirm, then logs off like `IMMEDIATELOGOFF`. | |
 | `IMMEDIATELOGOFF` | none | Shows `GOODBYE.ANS` and disconnects with no confirmation. | |
 | `PLACEHOLDER` | none | Prints the "undefined option" response. Use it as a stand-in for a key you have not wired yet. | |
-| `READMAIL` | none | Placeholder that prints a "read mail" notice and returns. Not a real mail reader. Use `READPRIVMAIL`. | |
+| `READMAIL` | none | The old name for `READPRIVMAIL`, and runs it. Use `READPRIVMAIL` in new menus. | Needs a `PRIVMAIL` area |
 
 ## System information
 
@@ -106,7 +106,7 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | `SENTPRIVMAIL` | none | The mail the caller sent, in the message reader (ViSiON/2's View Outgoing Mail). `D` there unsends a letter its recipient hasn't read yet. Reading it leaves the caller's own last-read pointer alone. | Needs a `PRIVMAIL` area |
 | `COPYPRIVMAIL` | none | Copies the caller's current mail (or the one they name by number) to another user as private mail titled `Fwd: <subject>`, with an optional note, a header naming the original sender, recipient and date, and the original text. | Needs a `PRIVMAIL` area |
 | `FORWARDPRIVMAIL` | none | As `COPYPRIVMAIL`, then deletes the caller's own copy, checked again under the base's lock. | Needs a `PRIVMAIL` area |
-| `NMAILSCAN` | none | Counts unread private mail and offers to read it now. Silent when mail is not configured. Shipped as a login step, not bound in any stock menu. | |
+| `NMAILSCAN` | none | Counts unread private mail and offers to read it now. Silent when mail is not configured. Shipped as a login step and as `N` on the Email Menu. | |
 
 ## QWK offline mail
 
