@@ -644,6 +644,19 @@ func stringCatalog() []StringEntry {
 		{Label: "Konfig: Uploader Column", Key: "konfigColumnUploader", Description: "File column name. Plain text, no colour codes"},
 		{Label: "Konfig: Descr. Column", Key: "konfigColumnDescription", Description: "File column name. Plain text, no colour codes"},
 
+		// The caller colour slots (#426)
+		{Label: "Konfig: Colours Label", Key: "konfigColorsLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},
+		{Label: "Konfig: Colours Help", Key: "konfigColorsHelp", Description: "Help line shown while Colours is highlighted"},
+		{Label: "Konfig: Colours Default", Key: "konfigColorsDefault", Description: "Colours value when the caller has set none. Plain text"},
+		{Label: "Konfig: Colours Custom", Key: "konfigColorsCustom", Description: "Colours value when the caller has set some. Plain text"},
+		{Label: "Konfig: Colours Box Title", Key: "konfigColorsTitle", Description: "Title of the colours box. Plain text, no colour codes"},
+		{Label: "Konfig: Colours Box Hint", Key: "konfigColorsHint", Description: "Hint at the foot of the colours box. Plain text, no colour codes"},
+		{Label: "Konfig: Colour Slot Names", Key: "konfigColorSlotNames", Description: "The seven slots |C1-|C7, comma-separated in order: prompt, input, text, stat, text2, stat2, bar. Plain text"},
+		{Label: "Konfig: Colours Sample", Key: "konfigColorsSample", Description: "Text each slot is drawn in, as a sample. Plain text"},
+		{Label: "Konfig: Colours No Background", Key: "konfigColorsNoBG", Description: "The background choice for none. Plain text; 4 characters fit"},
+		{Label: "Konfig: Colour Saved", Key: "konfigColorSaved", Description: "A slot's colour was saved (%s=slot name)"},
+		{Label: "Konfig: Colour Reset", Key: "konfigColorReset", Description: "A slot went back to the default (%s=slot name)"},
+
 		// Chat commands, help and scrollback (V3)
 		{Label: "Chat: Help", Key: "chatHelp", Description: "Command list shown by /? and /HELP, one chat line per line of text"},
 		{Label: "Chat: Unknown Command", Key: "chatUnknownCommand", Description: "Shown instead of posting a line that starts with an unknown /command (%s=command)"},

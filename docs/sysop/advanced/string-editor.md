@@ -240,7 +240,9 @@ The user settings form (**K** on the main menu, `RUN:USERCONFIG`) takes all
 of its text from `strings.json`: the title drawn when the menu set has no
 `KONFIG.ANS`, the key legend, the four section titles, each setting's name and
 help line, the values (`(default)`, `(not set)`, On/Off, `Auto (…)`), the
-status and error messages, the password prompts, and the file-columns box.
+status and error messages, the password prompts, the file-columns box, and the
+colours box (`konfigColor*`, with `konfigColorSlotNames` naming the seven
+[caller colours](#caller-colours-c1--c7) in order).
 They are the `konfig*` keys, listed under **Konfig:** in the editor, so the
 form can be reworded or translated like any other prompt. Every one has a
 built-in fallback, so a `strings.json` from before the form existed still
@@ -426,6 +428,24 @@ String values support BBS pipe codes that are rendered with color in the editor.
 | `\|B5` | Magenta background |
 | `\|B6` | Cyan background |
 | `\|B7` | Light Gray background |
+
+#### Caller Colours (`|C1` – `|C7`)
+
+Each of these is a colour the caller can choose under **U Colours** in User Konfig. A string, prompt or template written with them is drawn in that caller's colours, and in the board's defaults for a caller who hasn't chosen any.
+
+| Code | Slot | Built-in default |
+|------|------|------------------|
+| `\|C1` | Prompt | `\|07` |
+| `\|C2` | Input (what the caller types) | `\|15` |
+| `\|C3` | Text | `\|07` |
+| `\|C4` | Stat (a value or highlight) | `\|15` |
+| `\|C5` | Text 2 (dim text, frames) | `\|08` |
+| `\|C6` | Stat 2 (a second highlight) | `\|11` |
+| `\|C7` | Bar (a highlighted choice) | `\|00\|B3` |
+
+A slot holds a foreground and, optionally, a background. They are filled in where the session placeholders are: menu prompts, `strings.json` values and templates. Anywhere else, including a menu's own `.ANS` screen, they draw the built-in default, so authored art never takes a caller's colours. A screen picks a caller's colour up only where it uses the code, so `|C7` changes nothing that keeps its own lightbar colours. A caller's own text, such as a location or a message, can't use them: they print as typed there.
+
+A `strings.json` from before these codes may carry `defColor1`–`defColor7` (a DOS colour, 0–15). Each one present is that slot's default on the board in place of the built-in one. Nothing writes them any more.
 
 #### Screen Codes
 

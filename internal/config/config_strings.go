@@ -30,6 +30,7 @@ func LoadStrings(configPath string) (StringsConfig, error) { // Return the loade
 		return StringsConfig{}, fmt.Errorf("failed to parse strings JSON from %s: %w", filePath, err)
 	}
 
+	loadedConfig.LegacyColorSlots = legacyColorSlots(data)
 	applySupersededStrings(&loadedConfig)
 	applyStringDefaults(&loadedConfig)
 	if values, err := stringValues(data); err == nil {
@@ -381,6 +382,17 @@ var StringFallbacks = map[string]string{
 	"konfigSavedFormat":         "|10Saved.|07 %s is now |15%s|07.",
 	"konfigClearedFormat":       "|10Saved.|07 %s cleared.",
 	"konfigUpdatedFormat":       "|10Saved.|07 %s updated.",
+	"konfigColorsLabel":         "Colours",
+	"konfigColorsHelp":          "Your colours for prompts, what you type, text and bars, where screens use them.",
+	"konfigColorsDefault":       "default",
+	"konfigColorsCustom":        "custom",
+	"konfigColorsTitle":         "Your Colours",
+	"konfigColorsHint":          "Arrows choose  Tab: background  Enter saves  R default  Esc done",
+	"konfigColorSlotNames":      "Prompt,Input,Text,Stat,Text 2,Stat 2,Bar",
+	"konfigColorsSample":        "Sample text",
+	"konfigColorsNoBG":          "none",
+	"konfigColorSaved":          "|10Saved.|07 Your %s colour is set.",
+	"konfigColorReset":          "|10Saved.|07 Your %s colour is back to the default.",
 	"konfigRangeError":          "|12%s must be a number from %d to %d.|07",
 	"konfigRangeHint":           "|08(%d-%d)",
 	"konfigEncodingAuto":        "|10Saved.|07 Encoding is now |15Auto|07, detected on every call.",
@@ -551,4 +563,23 @@ func applyStringDefaults(c *StringsConfig) {
 			field.SetString(def)
 		}
 	}
+}
+
+// legacyColorSlots reads the defColor1-defColor7 values a strings.json from
+// before the caller colour slots may still carry: DOS foreground colours,
+// which were the defaults |C1 to |C7 were meant to map to. Each one present
+// and 0-15 becomes its pipe code; the rest are "".
+func legacyColorSlots(data []byte) [7]string {
+	var raw map[string]json.RawMessage
+	var out [7]string
+	if json.Unmarshal(data, &raw) != nil {
+		return out
+	}
+	for i := range out {
+		var n int
+		if v, ok := raw[fmt.Sprintf("defColor%d", i+1)]; ok && json.Unmarshal(v, &n) == nil && n >= 0 && n <= 15 {
+			out[i] = fmt.Sprintf("|%02d", n)
+		}
+	}
+	return out
 }

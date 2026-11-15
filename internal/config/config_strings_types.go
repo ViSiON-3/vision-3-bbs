@@ -646,14 +646,11 @@ type StringsConfig struct {
 	// Invisible login prompt (shown to SysOp/CoSysOp after authentication)
 	InvisibleLogonPrompt string `json:"invisibleLogonPrompt"`
 
-	// Default Colors (|C1 - |C7 map to these)
-	DefColor1 uint8 `json:"defColor1"`
-	DefColor2 uint8 `json:"defColor2"`
-	DefColor3 uint8 `json:"defColor3"`
-	DefColor4 uint8 `json:"defColor4"`
-	DefColor5 uint8 `json:"defColor5"`
-	DefColor6 uint8 `json:"defColor6"`
-	DefColor7 uint8 `json:"defColor7"`
+	// LegacyColorSlots are the board's defaults for the caller colour slots
+	// |C1 to |C7 from the defColor1-defColor7 values of a strings.json from
+	// before the slots were implemented, as pipe codes; "" where it has none.
+	// LoadStrings reads them; they are not strings, and nothing writes them.
+	LegacyColorSlots [7]string `json:"-"`
 
 	// User Konfig (K) form, USERCONFIG. Labels, section titles and values
 	// are plain text drawn into fixed-width cells; the rest take pipe codes.
@@ -743,6 +740,19 @@ type StringsConfig struct {
 	KonfigColumnDownloads     string `json:"konfigColumnDownloads"`
 	KonfigColumnUploader      string `json:"konfigColumnUploader"`
 	KonfigColumnDescription   string `json:"konfigColumnDescription"`
+
+	// The caller colour slots |C1-|C7 in Konfig (#426).
+	KonfigColorsLabel    string `json:"konfigColorsLabel"`
+	KonfigColorsHelp     string `json:"konfigColorsHelp"`
+	KonfigColorsDefault  string `json:"konfigColorsDefault"`
+	KonfigColorsCustom   string `json:"konfigColorsCustom"`
+	KonfigColorsTitle    string `json:"konfigColorsTitle"`
+	KonfigColorsHint     string `json:"konfigColorsHint"`
+	KonfigColorSlotNames string `json:"konfigColorSlotNames"`
+	KonfigColorsSample   string `json:"konfigColorsSample"`
+	KonfigColorsNoBG     string `json:"konfigColorsNoBG"`
+	KonfigColorSaved     string `json:"konfigColorSaved"`
+	KonfigColorReset     string `json:"konfigColorReset"`
 }
 
 // GlobalStrings holds the loaded configuration.

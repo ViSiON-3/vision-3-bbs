@@ -143,6 +143,7 @@ func (e *MenuExecutor) applyCommonTemplateTokens(data []byte, currentUser *user.
 		"|FC":        "None",
 		"|FCN":       "None",
 	}
+	e.addColorSlots(tokens, currentUser)
 	if currentUser != nil {
 		handle := callerText(currentUser.Handle)
 		tokens["|UH"] = handle

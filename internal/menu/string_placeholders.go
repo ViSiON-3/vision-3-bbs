@@ -25,6 +25,7 @@ var sessionPlaceholderKeys = []string{
 	"|UH", "|ALIAS", "|HANDLE", "|LEVEL", "|NAME", "|GL", "|UN",
 	"|UPLDS", "|DNLDS", "|POSTS", "|CALLS", "|LCALL", "|TL",
 	"|CA", "|CAN", "|CFA", "|CFAN", "|CC", "|CCN", "|FC", "|FCN",
+	"|C1", "|C2", "|C3", "|C4", "|C5", "|C6", "|C7", // the caller's colour slots
 }
 
 // sessionPlaceholders returns the |XX placeholders for a caller, as a menu
@@ -74,6 +75,7 @@ func (e *MenuExecutor) sessionPlaceholders(s ssh.Session, currentUser *user.User
 		"|FC":       "None",
 		"|FCN":      "None",
 	}
+	e.addColorSlots(placeholders, currentUser)
 	if currentUser == nil {
 		return placeholders
 	}

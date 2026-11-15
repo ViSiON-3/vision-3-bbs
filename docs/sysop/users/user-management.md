@@ -37,6 +37,7 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). F
 | Password | `passwordHash` (current password required) |
 | Listing Mode, File Columns | `fileListingMode`, `file_list_columns` |
 | More Prompts | `morePrompts`: whether long output pauses a screen at a time |
+| Colours | `colorCodes`: the caller's own colour for each of `\|C1`–`\|C7`, picked in a box with a sample of each and **R** to go back to the default |
 
 Each change is saved as soon as the caller confirms it. The screen's header is `KONFIG.ANS` in the menu set. Keep it to 5 rows or fewer; it can show the caller's details with tokens like `|UH` (handle) and `|LEVEL`. Its text (setting names, help lines, values and messages) is the `konfig*` strings in `strings.json`, under **Konfig:** in `./strings`. Setting names, section titles, values and prompts are plain text in fixed-width cells: longer text is cut to fit, and colour codes are not expanded there. Help lines and messages take pipe colour codes. See [User settings](reference/menu-commands.md#user-settings) for `USERCONFIG` and the `CFG_AUTOSIG`, `CFG_PASSWORD` and `CFG_FILECOLUMNS` shortcuts.
 
@@ -985,7 +986,8 @@ These are the fields behind the User Konfig (`K`) screen; see
 - `autoSignature` - Auto-signature appended to messages (max 5 lines)
 - `autoSigAsk` - Ask before adding the auto-signature to each message. QWK replies get no signature while it is on. See [Auto-Signature](messages/autosig.md#asking-before-each-post).
 - `autocorrectOff` - The caller turned the message editor's [autocorrect](messages/message-areas.md#autocorrect) off (omitted while it is on)
-- `colors` - Array of 7 color values: [prompt, input, text, stat, text2, stat2, bar]. Stored but not yet applied ([#426](https://github.com/ViSiON-3/vision-3-bbs/issues/426)).
+- `colorCodes` - The caller's [colours](advanced/string-editor.md#caller-colours-c1--c7) for `|C1`–`|C7`, in order (prompt, input, text, stat, text2, stat2, bar): one pipe code each, a foreground `|00`–`|15` with an optional background `|B0`–`|B7`. A blank or missing entry is the board's default, and the key is left out when every slot is. Set under **U Colours** in User Konfig.
+- `colors` - An array of 7 colours from ViSiON/2 that nothing ever wrote. It is ignored; `colorCodes` replaced it.
 
 ##### Soft Delete
 
