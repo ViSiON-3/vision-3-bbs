@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -146,6 +148,36 @@ func TestWelcomeMailFromTemplate(t *testing.T) {
 	}
 	if s, b := welcomeMailFromTemplate([]byte("Subject: x\n \n"), cfg, u, sysop); s != "" || b != "" {
 		t.Errorf("empty template: %q, %q", s, b)
+	}
+}
+
+// A CP437 template with art in it, and a name with a letter outside ASCII:
+// the letter is UTF-8 throughout, so the art and the name both read back as
+// they were written. A UTF-8 template is taken as it is.
+func TestWelcomeMailTemplateEncoding(t *testing.T) {
+	cfg := config.ServerConfig{BoardName: "Café BBS"}
+	u := &user.User{ID: 7, Handle: "Björn", RealName: "Björn Åkesson"}
+	sysop := &user.User{ID: 1, Handle: "Boss"}
+
+	cp437 := []byte("Subject: Hej |UH\r\n\xdb\xdb\xb2 Welcome |NAME to |BN \xb2\xdb\xdb\r\n")
+	subject, body := welcomeMailFromTemplate(cp437, cfg, u, sysop)
+	if !utf8.ValidString(body) || !utf8.ValidString(subject) {
+		t.Fatalf("letter is not valid UTF-8: %q / %q", subject, body)
+	}
+	if subject != "Hej Björn" {
+		t.Errorf("subject = %q", subject)
+	}
+	if want := "██▓ Welcome Björn Åkesson to Café BBS ▓██"; body != want {
+		t.Errorf("body = %q, want %q", body, want)
+	}
+	// As the reader decodes a stored body: nothing is read as CP437 twice.
+	if got := ansi.DecodeBody(body, ""); got != body {
+		t.Errorf("the reader would show %q", got)
+	}
+
+	_, body = welcomeMailFromTemplate([]byte("▓ Välkommen |UH ▓\n"), cfg, u, sysop)
+	if want := "▓ Välkommen Björn ▓"; body != want {
+		t.Errorf("UTF-8 template: body = %q, want %q", body, want)
 	}
 }
 

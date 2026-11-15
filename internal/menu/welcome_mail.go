@@ -85,13 +85,20 @@ func (e *MenuExecutor) deliverWelcomeMail(userManager *user.UserMgr, u *user.Use
 // filled in: the user codes a menu prompt has (|UH, |NAME, |LEVEL ...)
 // bar |UN, the SysOp's private note,
 // |BN for the board, |SYSOP for the sender and |DATE. Colour pipe codes and
-// ANSI escapes are left for the message reader to draw.
+// ANSI escapes are left for the message reader to draw. The body is UTF-8,
+// whichever of CP437 and UTF-8 the template is in.
 func welcomeMailFromTemplate(raw []byte, cfg config.ServerConfig, u, sysop *user.User) (subject, body string) {
 	data := ansi.StripSAUCE(raw)
 	if i := bytes.IndexByte(data, 0x1A); i >= 0 {
 		data = data[:i]
 	}
-	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	// The template may be CP437, as art is, or UTF-8; the values put into it
+	// (handles, real names, the board's name) are UTF-8. It is read as the
+	// reader would read it and the letter is UTF-8 throughout. Left as
+	// CP437 bytes with UTF-8 names among them, the body would be valid as
+	// neither, and the reader would draw "Björn" as "Bj├╢rn".
+	text := ansi.DecodeBody(string(data), "")
+	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
 
 	subject = welcomeMailDefaultSubject

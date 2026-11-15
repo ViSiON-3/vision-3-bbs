@@ -593,8 +593,10 @@ The letter is the file `templates/WELCOME.MSG` in your menu set
 - A first line `Subject: text` sets the subject. Without one it is
   `Welcome to |BN`.
 - Colour pipe codes (`|00` to `|15`) and ANSI escape sequences are kept and
-  drawn by the message reader. Keep lines under 80 columns. Save anything
-  beyond plain ASCII as CP437, like other art. A SAUCE record is dropped.
+  drawn by the message reader. Keep lines under 80 columns. The file may be
+  CP437, like other art, or UTF-8; either way the letter is stored as UTF-8,
+  so art in it and a name such as `Björn` both display correctly. A SAUCE
+  record is dropped.
 - These codes are filled in for the user, in the subject and the text:
 
 | Code | Becomes |
