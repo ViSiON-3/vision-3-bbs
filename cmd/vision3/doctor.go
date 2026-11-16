@@ -91,6 +91,7 @@ func runDoctor(root string, jsonOutput, fix, dryRun bool, stdout, stderr io.Writ
 	fixes := []doctorFix(nil)
 	if fix {
 		fixes = fixDoctorDirectories(root, dryRun)
+		fixes = append(fixes, fixThemeOverlay(root, dryRun, time.Now())...)
 	}
 	report := inspectBoard(root)
 	report.Fixes = fixes
@@ -152,12 +153,12 @@ func printDoctorText(w io.Writer, report doctorReport) error {
 		}
 		output.printf("%s\n", paint(doctorCyan+doctorBold, "  "+label))
 		if len(report.Fixes) == 0 {
-			output.println("  No safe directory fixes are needed.")
+			output.println("  No safe fixes are needed.")
 		}
 		for _, fix := range report.Fixes {
 			status, tint := "FIXED", doctorGreen
 			switch fix.Status {
-			case "would-create":
+			case "would-create", "would-fix":
 				status, tint = "WOULD", doctorCyan
 			case "skip":
 				status, tint = "SKIP", doctorYellow
@@ -896,53 +897,82 @@ func checkChatScreens(menuRoot string, add func(string, doctorSeverity, string, 
 		"Create the screen, or set sysopChatScreen to one that exists or to \"\" for the built-in layout.")
 }
 
-// checkThemeOverlay notes an overlay theme.json (menus.d/<theme>/theme.json)
-// that only repeats the shipped theme's values. The config editor used to
-// write the whole theme there on the first colour edit, and from then on
-// the overlay shadows the shipped file, so changes to the theme's defaults
-// never reach the board. Such a copy changes nothing and can go; an
-// overlay with a value of its own is the sysop's customisation and is
-// left unremarked. Board colours now belong in config.json's theme.colors
-// (#1078).
+// checkThemeOverlay notes the keys of an overlay theme.json
+// (menus.d/<theme>/theme.json) that only repeat what the shipped theme
+// gives, as the config editor used to write when it copied the whole file.
+// The overlay is merged over the shipped theme.json key by key, so those
+// keys change nothing today, but they pin the board to today's value when
+// a later theme changes it. doctor --fix removes them.
 func checkThemeOverlay(menuRoot string, add func(string, doctorSeverity, string, string)) {
-	set := menuset.FromPath(menuRoot)
-	if !set.HasOverlay() {
+	keys, total, err := redundantThemeOverlay(menuRoot)
+	if err != nil || len(keys) == 0 {
+		return // an unreadable theme.json is reported by the theme load
+	}
+	rel := themeOverlayRel(menuRoot)
+	if len(keys) == total {
+		add(rel, doctorInfo, "only repeats the shipped theme's values, so it pins them if a later theme changes one",
+			"Run ./vision3 doctor --fix to remove it (backed up first). Set the board's own colours under Theme in ./config, which saves them to config.json.")
 		return
 	}
-	read := func(layer menuset.Layer) (map[string]json.RawMessage, bool) {
-		data, err := os.ReadFile(set.Path(layer, "theme.json"))
-		if err != nil {
-			return nil, false
-		}
-		doc := map[string]json.RawMessage{}
-		if json.Unmarshal(data, &doc) != nil {
-			return nil, false // an unreadable theme.json is reported by the theme load
-		}
-		return doc, true
+	add(rel, doctorInfo,
+		fmt.Sprintf("%d of %d keys only repeat the shipped theme's values, so they pin them if a later theme changes one: %s", len(keys), total, strings.Join(keys, ", ")),
+		"Run ./vision3 doctor --fix to remove those keys (the file is backed up first). The rest stay.")
+}
+
+// redundantThemeOverlay returns the overlay theme.json's redundant keys
+// and how many keys it has.
+func redundantThemeOverlay(menuRoot string) (keys []string, total int, err error) {
+	keys, err = config.RedundantThemeOverlayKeys(menuRoot)
+	if err != nil || len(keys) == 0 {
+		return nil, 0, err
 	}
-	overlay, ok := read(menuset.LayerOverlay)
-	if !ok || len(overlay) == 0 {
-		return
+	data, err := os.ReadFile(menuset.FromPath(menuRoot).Path(menuset.LayerOverlay, "theme.json"))
+	if err != nil {
+		return nil, 0, err
 	}
-	shipped, ok := read(menuset.LayerBase)
-	if !ok {
-		return
+	doc := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, 0, err
 	}
-	compact := func(raw json.RawMessage) string {
-		var buf bytes.Buffer
-		if json.Compact(&buf, raw) != nil {
-			return string(raw)
-		}
-		return buf.String()
+	return keys, len(doc), nil
+}
+
+func themeOverlayRel(menuRoot string) string {
+	return filepath.ToSlash(filepath.Join("menus.d", filepath.Base(menuRoot), "theme.json"))
+}
+
+// fixThemeOverlay removes the redundant keys of the selected theme's
+// overlay theme.json, after copying the file to a dated backup beside it.
+func fixThemeOverlay(root string, dryRun bool, now time.Time) []doctorFix {
+	menuRoot, _, err := config.SelectedMenuSet(root, filepath.Join(root, "configs"))
+	if err != nil {
+		return nil // reported by the theme check
 	}
-	for key, val := range overlay {
-		if base, has := shipped[key]; !has || compact(base) != compact(val) {
-			return
-		}
+	keys, total, err := redundantThemeOverlay(menuRoot)
+	if err != nil || len(keys) == 0 {
+		return nil
 	}
-	rel := filepath.ToSlash(filepath.Join("menus.d", filepath.Base(menuRoot), "theme.json"))
-	add(rel, doctorInfo, "only repeats the shipped theme's values, and hides any the theme has added or changed since",
-		"Remove this file so the theme's defaults reach the board again. Set the board's own colours under Theme in ./config, which saves them to config.json.")
+	rel := themeOverlayRel(menuRoot)
+	action := fmt.Sprintf("remove %d key(s) that repeat the shipped theme: %s", len(keys), strings.Join(keys, ", "))
+	if len(keys) == total {
+		action = "remove (it only repeats the shipped theme)"
+	}
+	if dryRun {
+		return []doctorFix{{Path: rel, Action: action, Status: "would-fix"}}
+	}
+	path := menuset.FromPath(menuRoot).Path(menuset.LayerOverlay, "theme.json")
+	backup := path + ".bak-" + now.Format("20060102-150405")
+	data, err := os.ReadFile(path)
+	if err == nil {
+		err = os.WriteFile(backup, data, 0o644)
+	}
+	if err == nil {
+		err = config.TrimThemeOverlay(menuRoot, keys)
+	}
+	if err != nil {
+		return []doctorFix{{Path: rel, Action: action, Status: "failed", Message: err.Error()}}
+	}
+	return []doctorFix{{Path: rel, Action: action, Status: "fixed", Message: "backup: " + filepath.Base(backup)}}
 }
 
 // retiredScreenBars are the highlight BARs the stock theme shipped until

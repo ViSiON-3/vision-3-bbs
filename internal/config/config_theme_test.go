@@ -8,7 +8,7 @@ import (
 )
 
 // SaveThemeConfig writes the overlay, leaves the shipped theme.json alone,
-// keeps keys it does not know, and the result loads back.
+// writes only what differs from it, and the result loads back.
 func TestSaveThemeConfigWritesOverlay(t *testing.T) {
 	root := t.TempDir()
 	base := filepath.Join(root, "menus", "v3")
@@ -39,8 +39,8 @@ func TestSaveThemeConfigWritesOverlay(t *testing.T) {
 	if err := json.Unmarshal(data, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := doc["futureKey"]; !ok {
-		t.Errorf("unknown key dropped: %s", data)
+	if len(doc) != 1 || doc["sysopChatScreen"] != "random" {
+		t.Errorf("overlay = %s; want only the changed sysopChatScreen", data)
 	}
 	got, err := LoadThemeConfig(base)
 	if err != nil {

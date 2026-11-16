@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
@@ -177,8 +178,9 @@ func TestBoardColoursHotReload(t *testing.T) {
 }
 
 // Doctor notes an overlay theme.json that only repeats the shipped theme,
-// as the config editor used to write, and says nothing about one that
-// holds a value of the sysop's own.
+// as the config editor used to write, names the keys of one that partly
+// does, and says nothing about one that holds only values of the sysop's
+// own.
 func TestDoctorNotesRedundantThemeOverlay(t *testing.T) {
 	shipped := `{"yesNoHighlightColor": 31, "yesNoRegularColor": 13, "lightbarSelected": 31, "chatSysopColor": 11, "sysopChatScreen": "V3CHAT1"}`
 	note := "menus.d/v3/theme.json"
@@ -204,16 +206,66 @@ func TestDoctorNotesRedundantThemeOverlay(t *testing.T) {
 	if checks := check(copyOf); !hasDoctorCheck(checks, note, doctorInfo, "only repeats the shipped theme's values") {
 		t.Errorf("a redundant overlay was not noted: %+v", checks)
 	}
+	if checks := check(`{"yesNoHighlightColor": 79, "yesNoRegularColor": 13}`); !hasDoctorCheck(checks, note, doctorInfo, "1 of 2 keys only repeat the shipped theme's values, so they pin them if a later theme changes one: yesNoRegularColor") {
+		t.Errorf("a partly redundant overlay was not noted: %+v", checks)
+	}
 	for name, overlay := range map[string]string{
 		"no overlay":         "",
-		"a changed colour":   `{"yesNoHighlightColor": 79, "yesNoRegularColor": 13}`,
-		"a key of its own":   `{"yesNoHighlightColor": 31, "lightbarHint": 3}`,
+		"a changed colour":   `{"yesNoHighlightColor": 79}`,
+		"a key of its own":   `{"lightbarHint": 3}`,
 		"an empty overlay":   `{}`,
 		"an unreadable file": `{`,
 	} {
 		if checks := check(overlay); len(checks) != 0 {
 			t.Errorf("%s: %+v, want nothing said", name, checks)
 		}
+	}
+}
+
+// doctor --fix backs up the selected theme's overlay theme.json and takes
+// out the keys that repeat the shipped theme; --dry-run only says so.
+func TestDoctorFixTrimsThemeOverlay(t *testing.T) {
+	root := themeBoard(t, "", "v3")
+	writeDoctorFixture(t, filepath.Join(root, "menus", "v3", "theme.json"), `{"yesNoHighlightColor": 31, "chatUserColor": 10}`)
+	overlayDir := filepath.Join(root, "menus.d", "v3")
+	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	overlay := `{"yesNoHighlightColor": 31, "chatUserColor": 12}`
+	overlayFile := filepath.Join(overlayDir, "theme.json")
+	writeDoctorFixture(t, overlayFile, overlay)
+	now := time.Date(2026, 11, 16, 15, 4, 5, 0, time.UTC)
+
+	fixes := fixThemeOverlay(root, true, now)
+	if len(fixes) != 1 || fixes[0].Status != "would-fix" || !strings.Contains(fixes[0].Action, "yesNoHighlightColor") {
+		t.Fatalf("dry run = %+v", fixes)
+	}
+	if data, _ := os.ReadFile(overlayFile); string(data) != overlay {
+		t.Fatalf("dry run changed the overlay: %s", data)
+	}
+
+	fixes = fixThemeOverlay(root, false, now)
+	if len(fixes) != 1 || fixes[0].Status != "fixed" {
+		t.Fatalf("fix = %+v", fixes)
+	}
+	if data, _ := os.ReadFile(overlayFile + ".bak-20261116-150405"); string(data) != overlay {
+		t.Errorf("backup = %q; want the original overlay", data)
+	}
+	theme, err := config.LoadThemeConfig(filepath.Join(root, "menus", "v3"))
+	if err != nil || theme.ChatUserColor != 12 || theme.YesNoHighlightColor != 31 {
+		t.Errorf("after the fix: %+v, %v", theme, err)
+	}
+	if fixes := fixThemeOverlay(root, false, now); len(fixes) != 0 {
+		t.Errorf("a second fix = %+v; want nothing to do", fixes)
+	}
+
+	// An overlay that is all repetition goes entirely.
+	writeDoctorFixture(t, overlayFile, `{"chatUserColor": 10}`)
+	if fixes := fixThemeOverlay(root, false, now.Add(time.Second)); len(fixes) != 1 || !strings.HasPrefix(fixes[0].Action, "remove (") {
+		t.Fatalf("fix = %+v", fixes)
+	}
+	if _, err := os.Stat(overlayFile); !os.IsNotExist(err) {
+		t.Errorf("overlay still there: %v", err)
 	}
 }
 

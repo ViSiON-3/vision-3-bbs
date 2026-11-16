@@ -10,7 +10,9 @@
 //
 // Resolution is per file, not per directory. Overriding MAIN.ANS does not
 // require copying the rest of ansi/. There are no whiteouts: a file cannot be
-// removed from the shipped set by way of the overlay.
+// removed from the shipped set by way of the overlay. The one exception to
+// whole-file resolution is theme.json, which config.LoadThemeConfig merges
+// key by key, the overlay's keys over the shipped file's.
 package menuset
 
 import (

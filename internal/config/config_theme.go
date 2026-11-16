@@ -1,11 +1,17 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -96,15 +102,10 @@ func (t ThemeConfig) FadeColors() []int {
 	return colors
 }
 
-// LoadThemeConfig loads theme settings from theme.json within a specific menu
-// set path. A copy in the set's overlay (menus.d/<set>/theme.json) takes
-// precedence over the shipped one.
-func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
-	filePath, resolveErr := menuset.FromPath(menuSetPath).Resolve("theme.json")
-	slog.Info("loading theme configuration", "path", filePath)
-
-	// Default theme settings
-	defaultTheme := ThemeConfig{
+// builtinTheme is what a menu set without a theme.json gets, and what a
+// theme.json fills its missing keys from.
+func builtinTheme() ThemeConfig {
+	return ThemeConfig{
 		YesNoHighlightColor: 31, // Bright white on blue
 		YesNoRegularColor:   13, // Light magenta
 		ChatSysopColor:      11, // Light cyan
@@ -113,66 +114,268 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 		AutocorrectHighlightColor: 14, // Yellow
 		ToastFadeColors:           DefaultToastFadeColors,
 	}
+}
 
-	if resolveErr != nil {
-		return defaultTheme, resolveErr
-	}
-	data, err := os.ReadFile(filePath)
+// LoadThemeConfig loads the theme settings of a menu set. The shipped
+// menus/<set>/theme.json fills in the built-in defaults, and the overlay's
+// menus.d/<set>/theme.json is merged over it key by key: a key the overlay
+// leaves out, or sets to null, keeps the shipped value. Either file may be
+// missing.
+func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
+	set := menuset.FromPath(menuSetPath)
+	defaults := builtinTheme()
+	slog.Info("loading theme configuration", "path", set.Path(menuset.LayerBase, "theme.json"))
+
+	doc, err := themeLayers(set)
 	if err != nil {
-		if os.IsNotExist(err) {
-			slog.Warn("theme.json not found, using default theme settings", "path", filePath)
-			return defaultTheme, nil // Return defaults if file doesn't exist
-		}
-		slog.Error("failed to read theme file", "path", filePath, "error", err)
-		return defaultTheme, fmt.Errorf("failed to read theme file %s: %w", filePath, err)
+		slog.Error("failed to load theme, using default theme settings", "error", err)
+		return defaults, err
 	}
-
-	// Initialize theme with defaults before unmarshalling
-	theme := defaultTheme
-	err = json.Unmarshal(data, &theme)
+	theme, err := decodeTheme(defaults, doc)
 	if err != nil {
-		slog.Error("failed to parse theme JSON, using default theme settings", "path", filePath, "error", err)
-		return defaultTheme, fmt.Errorf("failed to parse theme JSON from %s: %w", filePath, err)
+		slog.Error("failed to parse theme JSON, using default theme settings", "error", err)
+		return defaults, err
 	}
-
-	slog.Info("loaded theme configuration", "path", filePath)
+	slog.Info("loaded theme configuration", "path", set.Path(menuset.LayerBase, "theme.json"))
 	return theme, nil
 }
 
-// SaveThemeConfig writes theme to the menu set's theme.json in its overlay
+// SaveThemeConfig writes theme to the menu set's overlay theme.json
 // (menus.d/<set>/theme.json), so an upgrade of the shipped set leaves it
-// alone. It starts from the theme.json in use, so keys ThemeConfig does not
-// know are kept.
+// alone. Only the keys whose value differs from what the shipped theme.json
+// (or, without one, the built-in defaults) gives are written, so later
+// changes to the shipped theme still reach the board. Keys ThemeConfig does
+// not know are kept. An overlay left with nothing to say is removed.
+//
+// A set with no overlay is written in place, in full.
 func SaveThemeConfig(menuSetPath string, theme ThemeConfig) error {
 	set := menuset.FromPath(menuSetPath)
-	current, err := set.Resolve("theme.json")
+	known, err := themeDoc(theme)
 	if err != nil {
 		return err
+	}
+	if !set.HasOverlay() {
+		path := set.Path(menuset.LayerBase, "theme.json")
+		doc, err := readThemeDoc(path)
+		if err != nil {
+			return err
+		}
+		if doc == nil {
+			doc = map[string]json.RawMessage{}
+		}
+		maps.Copy(doc, known)
+		return writeThemeDoc(path, doc)
+	}
+
+	shipped, err := readThemeDoc(set.Path(menuset.LayerBase, "theme.json"))
+	if err != nil {
+		return err
+	}
+	inheritedTheme, err := decodeTheme(builtinTheme(), shipped)
+	if err != nil {
+		return err
+	}
+	inherited, err := themeDoc(inheritedTheme)
+	if err != nil {
+		return err
+	}
+	// Unknown keys are compared with the shipped file as it is.
+	for k, v := range shipped {
+		if _, ok := inherited[k]; !ok {
+			inherited[k] = v
+		}
+	}
+
+	path := set.Path(menuset.LayerOverlay, "theme.json")
+	doc, err := readThemeDoc(path)
+	if err != nil {
+		return err
+	}
+	if doc == nil {
+		doc = map[string]json.RawMessage{}
+	}
+	for _, key := range themeKeys() {
+		delete(doc, key) // a role left unset clears its override
+	}
+	maps.Copy(doc, known)
+	for k, v := range doc {
+		if base, ok := inherited[k]; ok && sameJSON(base, v) {
+			delete(doc, k)
+		}
+	}
+	if len(doc) == 0 {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	return writeThemeDoc(path, doc)
+}
+
+// RedundantThemeOverlayKeys lists, sorted, the keys of a menu set's overlay
+// theme.json whose value only repeats what the shipped theme gives, and so
+// can be removed without changing anything. null values count, since they
+// already inherit.
+func RedundantThemeOverlayKeys(menuSetPath string) ([]string, error) {
+	set := menuset.FromPath(menuSetPath)
+	if !set.HasOverlay() {
+		return nil, nil
+	}
+	overlay, err := readThemeDoc(set.Path(menuset.LayerOverlay, "theme.json"))
+	if err != nil || len(overlay) == 0 {
+		return nil, err
+	}
+	shipped, err := readThemeDoc(set.Path(menuset.LayerBase, "theme.json"))
+	if err != nil {
+		return nil, err
+	}
+	inheritedTheme, err := decodeTheme(builtinTheme(), shipped)
+	if err != nil {
+		return nil, err
+	}
+	inherited, err := themeDoc(inheritedTheme)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range shipped {
+		if _, ok := inherited[k]; !ok {
+			inherited[k] = v
+		}
+	}
+	var keys []string
+	for k, v := range overlay {
+		if isJSONNull(v) {
+			keys = append(keys, k)
+			continue
+		}
+		if base, ok := inherited[k]; ok && sameJSON(base, v) {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	return keys, nil
+}
+
+// TrimThemeOverlay removes keys from a menu set's overlay theme.json, and
+// the file itself if nothing is left. It rewrites nothing else.
+func TrimThemeOverlay(menuSetPath string, keys []string) error {
+	set := menuset.FromPath(menuSetPath)
+	if !set.HasOverlay() || len(keys) == 0 {
+		return nil
+	}
+	path := set.Path(menuset.LayerOverlay, "theme.json")
+	doc, err := readThemeDoc(path)
+	if err != nil || doc == nil {
+		return err
+	}
+	for _, k := range keys {
+		delete(doc, k)
+	}
+	if len(doc) == 0 {
+		return os.Remove(path)
+	}
+	return writeThemeDoc(path, doc)
+}
+
+// themeLayers reads the shipped theme.json and merges the overlay's over
+// it. Overlay keys set to null are dropped, so they inherit.
+func themeLayers(set menuset.Set) (map[string]json.RawMessage, error) {
+	doc, err := readThemeDoc(set.Path(menuset.LayerBase, "theme.json"))
+	if err != nil {
+		return nil, err
+	}
+	if doc == nil {
+		doc = map[string]json.RawMessage{}
+	}
+	if !set.HasOverlay() {
+		return doc, nil
+	}
+	overlay, err := readThemeDoc(set.Path(menuset.LayerOverlay, "theme.json"))
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range overlay {
+		if !isJSONNull(v) {
+			doc[k] = v
+		}
+	}
+	return doc, nil
+}
+
+// readThemeDoc reads a theme.json as its top-level keys. A missing file is
+// nil with no error.
+func readThemeDoc(path string) (map[string]json.RawMessage, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read theme file %s: %w", path, err)
 	}
 	doc := map[string]json.RawMessage{}
-	data, err := os.ReadFile(current)
-	switch {
-	case err == nil:
-		if err := json.Unmarshal(data, &doc); err != nil {
-			return fmt.Errorf("parse %s: %w", current, err)
-		}
-	case !os.IsNotExist(err):
-		return err
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parse theme JSON %s: %w", path, err)
 	}
-	known, err := json.Marshal(theme)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(known, &doc); err != nil {
-		return err
-	}
+	return doc, nil
+}
+
+func writeThemeDoc(path string, doc map[string]json.RawMessage) error {
 	out, err := json.MarshalIndent(doc, "", "    ")
 	if err != nil {
 		return err
 	}
-	path := set.WritePath("theme.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	return atomicfile.WriteFile(path, append(out, '\n'), 0o644)
+}
+
+// decodeTheme applies doc's keys over base.
+func decodeTheme(base ThemeConfig, doc map[string]json.RawMessage) (ThemeConfig, error) {
+	if len(doc) == 0 {
+		return base, nil
+	}
+	data, err := json.Marshal(doc)
+	if err != nil {
+		return base, err
+	}
+	theme := base
+	if err := json.Unmarshal(data, &theme); err != nil {
+		return base, err
+	}
+	return theme, nil
+}
+
+// themeDoc is theme as top-level keys. Unset roles are left out.
+func themeDoc(theme ThemeConfig) (map[string]json.RawMessage, error) {
+	data, err := json.Marshal(theme)
+	if err != nil {
+		return nil, err
+	}
+	doc := map[string]json.RawMessage{}
+	return doc, json.Unmarshal(data, &doc)
+}
+
+// themeKeys lists the JSON keys ThemeConfig reads.
+func themeKeys() []string {
+	t := reflect.TypeFor[ThemeConfig]()
+	keys := make([]string, 0, t.NumField())
+	for f := range t.Fields() {
+		if name, _, _ := strings.Cut(f.Tag.Get("json"), ","); name != "" && name != "-" {
+			keys = append(keys, name)
+		}
+	}
+	return keys
+}
+
+func sameJSON(a, b json.RawMessage) bool {
+	var ca, cb bytes.Buffer
+	if json.Compact(&ca, a) != nil || json.Compact(&cb, b) != nil {
+		return bytes.Equal(a, b)
+	}
+	return bytes.Equal(ca.Bytes(), cb.Bytes())
+}
+
+func isJSONNull(v json.RawMessage) bool {
+	return string(bytes.TrimSpace(v)) == "null"
 }
