@@ -33,17 +33,15 @@ const (
 // colors ./config uses for its own chrome.
 var dosColors = tuiart.Palette
 
-// bgCodeToDOS maps a background code |B0-|B7 to its DOS palette index. The
-// codes follow the ANSI order the BBS emits (ESC[40m-ESC[47m: black, red,
-// green, brown, blue, magenta, cyan, gray), which is not the DOS order of the
-// foreground codes: |B1 is red, |B4 is blue.
-var bgCodeToDOS = [8]int{0, 4, 2, 6, 1, 5, 3, 7}
-
 // dosBgColors is the palette colour of each background code |B0-|B7, in code
-// order. The codes cannot address the bright half of the palette.
+// order. The codes follow the ANSI order the BBS emits (ESC[40m-ESC[47m:
+// black, red, green, brown, blue, magenta, cyan, gray), which is not the DOS
+// order of the palette and the foreground codes (ansi.ColorOrder converts):
+// |B1 is red, |B4 is blue. The codes cannot address the bright half of the
+// palette.
 var dosBgColors = func() (c [8]string) {
-	for code, dos := range bgCodeToDOS {
-		c[code] = tuiart.Palette[dos]
+	for code := range c {
+		c[code] = tuiart.Palette[ansi.ColorOrder(code)]
 	}
 	return c
 }()
@@ -168,7 +166,7 @@ var sgrRe = regexp.MustCompile(`\x1b\[([0-9;]*)m`)
 // apply applies the SGR sequences in seq, as a terminal would, and reports
 // whether there were any. 0 resets to light gray on the default background,
 // 1 brightens the foreground, 30-37 and 40-47 set the colours (in ANSI order,
-// which bgCodeToDOS maps to DOS), and 100-107 set a bright background.
+// which ansi.ColorOrder maps to DOS), and 100-107 set a bright background.
 func (c *previewColor) apply(seq string) bool {
 	found := false
 	for _, m := range sgrRe.FindAllStringSubmatch(seq, -1) {
@@ -187,11 +185,11 @@ func (c *previewColor) apply(seq string) bool {
 			case n == 22:
 				c.fg &^= 8
 			case n >= 30 && n <= 37:
-				c.fg = c.fg&8 | bgCodeToDOS[n-30]
+				c.fg = c.fg&8 | ansi.ColorOrder(n-30)
 			case n >= 40 && n <= 47:
-				c.bg = bgCodeToDOS[n-40]
+				c.bg = ansi.ColorOrder(n - 40)
 			case n >= 100 && n <= 107:
-				c.bg = bgCodeToDOS[n-100] | 8
+				c.bg = ansi.ColorOrder(n-100) | 8
 			case (n == 38 || n == 48) && j+1 < len(params) && params[j+1] == "5":
 				j += 2 // a 256-colour value the 16-colour code already set
 			}

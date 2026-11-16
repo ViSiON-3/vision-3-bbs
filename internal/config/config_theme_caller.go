@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 )
 
@@ -101,11 +102,6 @@ func ResolveCallerColor(role ColorRole, theme ThemeConfig, board ThemeColors, le
 	return c, src
 }
 
-// pipeBackground maps a DOS attribute's background (its high nibble, in DOS
-// colour order: 1 blue, 4 red) to the |B code that draws it (|B codes
-// follow ANSI order: |B1 red, |B4 blue).
-var pipeBackground = [8]int{0, 4, 2, 6, 1, 5, 3, 7}
-
 // AttrPipeCode returns the pipe code for a DOS attribute (background*16 +
 // foreground): the foreground |00 to |15, and the background as a |B code
 // when it isn't black. The blink bit is dropped, as the lightbars drop it.
@@ -115,7 +111,7 @@ func AttrPipeCode(attr int) string {
 	}
 	code := fmt.Sprintf("|%02d", attr%16)
 	if bg := (attr / 16) % 8; bg != 0 {
-		code += fmt.Sprintf("|B%d", pipeBackground[bg])
+		code += fmt.Sprintf("|B%d", ansi.ColorOrder(bg))
 	}
 	return code
 }
@@ -166,9 +162,9 @@ func PipeCodeAttr(code string) int {
 	attr := fg
 	if bg := code[3:]; len(bg) >= 3 && bg[:2] == "|B" {
 		if b, err := strconv.Atoi(bg[2:]); err == nil && b >= 0 && b <= 15 {
-			// pipeBackground maps either way: it swaps blue and red, and
-			// cyan and brown.
-			attr += pipeBackground[b%8] * 16
+			// ColorOrder maps either way: |B codes are in ANSI order, an
+			// attribute's background in DOS order.
+			attr += ansi.ColorOrder(b) * 16
 		}
 	}
 	return attr

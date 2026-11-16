@@ -3,6 +3,8 @@ package syncjs
 import (
 	"fmt"
 	"strings"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // Synchronet attribute byte layout:
@@ -18,9 +20,6 @@ const (
 	AttrBGMask = 0x70
 )
 
-// ANSI color index for the 8 base Synchronet colors.
-var syncColorToANSI = [8]int{0, 4, 2, 6, 1, 5, 3, 7} // K,B,G,C,R,M,Y,W
-
 // AttrToANSI converts a Synchronet attribute byte to an ANSI SGR escape sequence.
 func AttrToANSI(attr uint8) string {
 	fg := int(attr & AttrFGMask)
@@ -35,8 +34,8 @@ func AttrToANSI(attr uint8) string {
 	if blink {
 		parts = append(parts, "5")
 	}
-	parts = append(parts, fmt.Sprintf("%d", 30+syncColorToANSI[fg]))
-	parts = append(parts, fmt.Sprintf("%d", 40+syncColorToANSI[bg]))
+	parts = append(parts, fmt.Sprintf("%d", 30+ansi.ColorOrder(fg)))
+	parts = append(parts, fmt.Sprintf("%d", 40+ansi.ColorOrder(bg)))
 
 	return fmt.Sprintf("\x1b[%sm", strings.Join(parts, ";"))
 }
