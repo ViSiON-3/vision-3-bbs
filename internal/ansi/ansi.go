@@ -372,37 +372,10 @@ func ReplacePipeCodes(data []byte) []byte {
 			continue
 		}
 
-		if replacement, n := CursorPipeCodeAt(data, i); n > 0 {
+		if _, replacement, n := PipeCodeAt(data, i); n > 0 {
 			buf.WriteString(replacement)
 			i += n
 			continue
-		}
-
-		// Check for potential pipe codes (try longest match first)
-		if data[i] == '|' && i+1 < dataLen {
-			// Try 4-char code first (e.g., |B10)
-			if i+3 < dataLen {
-				if replacement, ok := pipeCodeReplacements[string(data[i:i+4])]; ok {
-					buf.WriteString(replacement)
-					i += 4
-					continue
-				}
-			}
-			// Try 3-char code (e.g., |PP, |CL, |01)
-			if i+2 < dataLen {
-				if replacement, ok := pipeCodeReplacements[string(data[i:i+3])]; ok {
-					buf.WriteString(replacement)
-					i += 3
-					continue
-				}
-			}
-			// Try 2-char code (e.g., |P save cursor)
-			if replacement, ok := pipeCodeReplacements[string(data[i:i+2])]; ok {
-				buf.WriteString(replacement)
-				i += 2
-				continue
-			}
-			// Not a valid pipe code; treat '|' as a literal byte
 		}
 
 		// Default: Write the current byte directly if it wasn't part of a valid |XX sequence
@@ -410,6 +383,30 @@ func ReplacePipeCodes(data []byte) []byte {
 		i++
 	}
 	return buf.Bytes()
+}
+
+// PipeCodeAt returns the pipe code ReplacePipeCodes expands at data[i]: the
+// code as written (|B10, |CL, |XY01,24), what it expands to, and its length,
+// or a zero length when there is none there. The longest code wins, so |B10 is
+// one code and |PP is not |P and a "P". "||" is the literal-pipe escape, not a
+// code; check for it first. Anything that reads pipe codes the way the BBS
+// draws them, such as an editor's preview, should go through this.
+func PipeCodeAt(data []byte, i int) (code, expansion string, n int) {
+	if i >= len(data) || data[i] != '|' {
+		return "", "", 0
+	}
+	if replacement, n := CursorPipeCodeAt(data, i); n > 0 {
+		return string(data[i : i+n]), replacement, n
+	}
+	for n := 4; n >= 2; n-- {
+		if i+n > len(data) {
+			continue
+		}
+		if replacement, ok := pipeCodeReplacements[string(data[i:i+n])]; ok {
+			return string(data[i : i+n]), replacement, n
+		}
+	}
+	return "", "", 0
 }
 
 // ReplaceColorPipeCodes expands only the colour pipe codes (|00-|23 and

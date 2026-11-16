@@ -1,6 +1,8 @@
 package stringeditor
 
 import (
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -64,17 +66,20 @@ func RenderColorString(s string, maxWidth int) string {
 }
 
 // parseColorCodes parses a BBS string with pipe/dollar color codes into spans.
+// Pipe codes are read with ansi.PipeCodeAt, the BBS's own longest-match
+// lookup, and their colours worked out from the escape sequence the BBS would
+// send (previewColor), so the preview draws what a caller sees.
 func parseColorCodes(s string) []styledSpan {
 	var spans []styledSpan
-	curFG := dosColors[dosLightBlue] // Pascal DataColor = 9
-	curBG := ""                      // Default: the panel's own background
+	col := previewColor{fg: dosLightBlue, bg: noPreviewBG} // Pascal DataColor = 9
+	data := []byte(s)
 
 	i := 0
 	textBuf := strings.Builder{}
 
 	flushText := func() {
 		if textBuf.Len() > 0 {
-			spans = append(spans, styledSpan{text: textBuf.String(), fg: curFG, bg: curBG})
+			spans = append(spans, styledSpan{text: textBuf.String(), fg: dosColors[col.fg], bg: col.bgColor()})
 			textBuf.Reset()
 		}
 	}
@@ -87,50 +92,32 @@ func parseColorCodes(s string) []styledSpan {
 			continue
 		}
 
-		// Check for pipe codes: |XX
-		if s[i] == '|' && i+2 < len(s) {
-			code := s[i+1 : i+3]
-
-			// Background: |B0 - |B7
-			if code[0] == 'B' && code[1] >= '0' && code[1] <= '7' {
-				flushText()
-				bgIdx := int(code[1] - '0')
-				curBG = dosBgColors[bgIdx]
-				i += 3
+		if s[i] == '|' {
+			// A strings.json value has its session placeholders filled in
+			// before its pipe codes, and the preview shows placeholders as
+			// written, so one that begins like a code (|PV, |POSTS) stays.
+			if k := placeholderAt(s[i:]); k != "" {
+				textBuf.WriteString(k)
+				i += len(k)
 				continue
 			}
-
-			// Foreground: |00 - |15
-			if code[0] >= '0' && code[0] <= '1' && code[1] >= '0' && code[1] <= '9' {
-				num := int(code[0]-'0')*10 + int(code[1]-'0')
-				if num >= 0 && num <= 15 {
-					flushText()
-					curFG = dosColors[num]
-					i += 3
-					continue
+			if _, expansion, n := ansi.PipeCodeAt(data, i); n > 0 {
+				if expansion == "\r\n" {
+					textBuf.WriteByte(' ') // |CR: the preview is one row
+				} else {
+					// Colours change the style; screen codes (|CL, |DE,
+					// |P, |PP, |XY) act on the caller's screen, so they
+					// draw nothing here.
+					next := col
+					if next.apply(expansion) && next != col {
+						flushText()
+						col = next
+					}
 				}
-			}
-
-			// Special codes
-			if code == "CR" {
-				textBuf.WriteByte(' ')
-				i += 3
-				continue
-			}
-			if code == "CL" || code == "DE" {
-				// Clear screen / clear to EOL — skip in TUI context
-				i += 3
-				continue
-			}
-
-			// |XYcc,rr moves the caller's cursor; here it would move the
-			// editor's, so it draws nothing.
-			if _, n := ansi.CursorPipeCodeAt([]byte(s), i); n > 0 {
 				i += n
 				continue
 			}
-
-			// Unrecognized pipe code — pass through as literal
+			// Unrecognized pipe code: the BBS prints it as written.
 			textBuf.WriteByte('|')
 			i++
 			continue
@@ -138,11 +125,9 @@ func parseColorCodes(s string) []styledSpan {
 
 		// Check for dollar-sign codes: $x
 		if s[i] == '$' && i+1 < len(s) {
-			ch := s[i+1]
-			colorIdx := dollarColorIndex(ch)
-			if colorIdx >= 0 {
+			if colorIdx := dollarColorIndex(s[i+1]); colorIdx >= 0 {
 				flushText()
-				curFG = dosColors[colorIdx]
+				col.fg = colorIdx
 				i += 2
 				continue
 			}
@@ -159,6 +144,60 @@ func parseColorCodes(s string) []styledSpan {
 
 	flushText()
 	return spans
+}
+
+// noPreviewBG is previewColor's background when none is set: the panel's own.
+const noPreviewBG = -1
+
+// previewColor is the colour a caller's terminal would be drawing in: a DOS
+// foreground 0-15 and a DOS background 0-15, or noPreviewBG.
+type previewColor struct {
+	fg, bg int
+}
+
+func (c previewColor) bgColor() string {
+	if c.bg == noPreviewBG {
+		return ""
+	}
+	return dosColors[c.bg]
+}
+
+// sgrRe matches one SGR escape sequence: ESC [ params m.
+var sgrRe = regexp.MustCompile(`\x1b\[([0-9;]*)m`)
+
+// apply applies the SGR sequences in seq, as a terminal would, and reports
+// whether there were any. 0 resets to light gray on the default background,
+// 1 brightens the foreground, 30-37 and 40-47 set the colours (in ANSI order,
+// which bgCodeToDOS maps to DOS), and 100-107 set a bright background.
+func (c *previewColor) apply(seq string) bool {
+	found := false
+	for _, m := range sgrRe.FindAllStringSubmatch(seq, -1) {
+		found = true
+		params := strings.Split(m[1], ";")
+		for j := 0; j < len(params); j++ {
+			n, err := strconv.Atoi(params[j])
+			if err != nil {
+				n = 0 // ESC[m is a reset
+			}
+			switch {
+			case n == 0:
+				c.fg, c.bg = dosLightGray, noPreviewBG
+			case n == 1:
+				c.fg |= 8
+			case n == 22:
+				c.fg &^= 8
+			case n >= 30 && n <= 37:
+				c.fg = c.fg&8 | bgCodeToDOS[n-30]
+			case n >= 40 && n <= 47:
+				c.bg = bgCodeToDOS[n-40]
+			case n >= 100 && n <= 107:
+				c.bg = bgCodeToDOS[n-100] | 8
+			case (n == 38 || n == 48) && j+1 < len(params) && params[j+1] == "5":
+				j += 2 // a 256-colour value the 16-colour code already set
+			}
+		}
+	}
+	return found
 }
 
 // dollarColorIndex maps a dollar-sign color code character to a DOS color index.
@@ -313,4 +352,20 @@ func PlainTextLength(s string) int {
 		}
 	}
 	return total
+}
+
+// PreviewPlaceholders are the session placeholders that begin with a pipe
+// code: |P is save-cursor, so |PV and |POSTS would otherwise preview as a
+// hidden code and text. A test in the menu package checks this covers every
+// such placeholder there.
+var PreviewPlaceholders = []string{"|POSTS", "|PV"}
+
+// placeholderAt returns the one of PreviewPlaceholders s starts with, or "".
+func placeholderAt(s string) string {
+	for _, p := range PreviewPlaceholders {
+		if strings.HasPrefix(s, p) {
+			return p
+		}
+	}
+	return ""
 }
