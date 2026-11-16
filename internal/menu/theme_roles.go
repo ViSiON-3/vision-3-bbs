@@ -10,7 +10,6 @@ import (
 
 // The theme's colour roles, under the names the lightbar code uses.
 const (
-	roleSelected    = config.RoleLightbarSelected
 	roleNormal      = config.RoleLightbarNormal
 	roleCommand     = config.RoleLightbarCommand
 	roleDestructive = config.RoleLightbarDestructive

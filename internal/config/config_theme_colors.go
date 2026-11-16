@@ -171,7 +171,7 @@ func (t ThemeConfig) roleField(role ColorRole) OptColor {
 	case RoleLightbarDestructive:
 		return t.LightbarDestructive
 	}
-	if f := t.callerField(role); f != nil {
+	if f := t.callerFieldPtr(role); f != nil {
 		return *f
 	}
 	return OptColor{}

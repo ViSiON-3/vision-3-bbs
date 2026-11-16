@@ -187,3 +187,19 @@ func TestPipeCodeAttr(t *testing.T) {
 		}
 	}
 }
+
+// The theme and the board each map every caller role to its own field, so
+// the two role switches can't drift apart.
+func TestCallerRoleFields(t *testing.T) {
+	var th ThemeConfig
+	var board ThemeColors
+	seenTheme := map[*OptColor]bool{}
+	seenBoard := map[*OptColor]bool{}
+	for _, role := range CallerColorRoles {
+		tf, bf := th.callerFieldPtr(role), board.field(role)
+		if tf == nil || bf == nil || seenTheme[tf] || seenBoard[bf] {
+			t.Errorf("%s: theme field %p, board field %p, or one shared with another role", role, tf, bf)
+		}
+		seenTheme[tf], seenBoard[bf] = true, true
+	}
+}

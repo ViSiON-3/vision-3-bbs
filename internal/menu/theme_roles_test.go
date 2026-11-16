@@ -195,10 +195,10 @@ func TestRoleHelpers(t *testing.T) {
 	if got, want := env.e.roleText(roleBorder, "x"), colorCodeToAnsi(0x4f)+"x\x1b[0m"; got != want {
 		t.Errorf("roleText with a background = %q, want %q", got, want)
 	}
-	if got := env.e.roleText(roleSelected, "x"); got != "|00x" {
+	if got := env.e.roleText(config.RoleLightbarSelected, "x"); got != "|00x" {
 		t.Errorf("roleText with a plain foreground = %q, want |00x", got)
 	}
-	if got := env.e.roleColor(roleSelected); got != 0 {
+	if got := env.e.roleColor(config.RoleLightbarSelected); got != 0 {
 		t.Errorf("lightbarSelected 0 read as %d", got)
 	}
 

@@ -61,11 +61,6 @@ func (t *ThemeConfig) callerFieldPtr(role ColorRole) *OptColor {
 	return nil
 }
 
-// callerField is callerFieldPtr for a theme read by value.
-func (t ThemeConfig) callerField(role ColorRole) *OptColor {
-	return t.callerFieldPtr(role)
-}
-
 // ColorSlotCodes returns the board's default for each caller colour slot,
 // |C1 to |C7, as a pipe code. A slot the theme or the board's theme.colors
 // sets is that colour; one neither sets is the slot's colour from an older
