@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // An older strings.json's defColorN become the slot defaults; Bar keeps its
@@ -27,6 +29,21 @@ func TestLegacyBarStaysReadable(t *testing.T) {
 		raw := map[string]json.RawMessage{"defColor7": json.RawMessage(fmt.Sprint(n))}
 		if got := legacyColorSlots(raw)[6]; got != want {
 			t.Errorf("defColor7 %d = %q, want %q", n, got, want)
+		}
+	}
+}
+
+// The legacy Bar background follows the built-in Bar slot's, so a change to
+// the default carries over, and the readability check goes with it: on a
+// blue bar, blue text gets cyan.
+func TestLegacyBarFollowsDefault(t *testing.T) {
+	old := ansi.ColorSlotDefaults[6]
+	t.Cleanup(func() { ansi.ColorSlotDefaults[6] = old })
+	ansi.ColorSlotDefaults[6] = "|15|B4"
+	for n, want := range map[int]string{15: "|15|B4", 3: "|03|B4", 1: "|01|B6", 9: "|09|B6"} {
+		raw := map[string]json.RawMessage{"defColor7": json.RawMessage(fmt.Sprint(n))}
+		if got := legacyColorSlots(raw)[6]; got != want {
+			t.Errorf("defColor7 %d on a blue bar = %q, want %q", n, got, want)
 		}
 	}
 }
