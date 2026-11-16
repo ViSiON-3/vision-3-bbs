@@ -296,11 +296,11 @@ func TestLoadThemeConfig_Defaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.YesNoHighlightColor != 112 {
-		t.Errorf("expected default highlight color 112, got %d", result.YesNoHighlightColor)
+	if result.YesNoHighlightColor != 31 {
+		t.Errorf("expected default highlight color 31, got %d", result.YesNoHighlightColor)
 	}
-	if result.YesNoRegularColor != 15 {
-		t.Errorf("expected default regular color 15, got %d", result.YesNoRegularColor)
+	if result.YesNoRegularColor != 13 {
+		t.Errorf("expected default regular color 13, got %d", result.YesNoRegularColor)
 	}
 }
 

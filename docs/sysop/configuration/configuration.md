@@ -1401,7 +1401,7 @@ theme) controls color schemes:
 - `lightbarSelected` and the other `lightbar…` fields - the [lightbar colour roles](#lightbar-colour-roles) below
 - `chatSysopColor` - color of the sysop's text in split-screen chat where the chat screen sets none (default `11`)
 - `chatUserColor` - color of the caller's text in split-screen chat, likewise (default `10`)
-- `autocorrectHighlightColor` - color the message editor draws a word in right after [autocorrect](messages/message-areas.md#autocorrect) fixed it, for as long as the fix is shown on the prompt row; the screen only, the message is unchanged (default `15`, bright white). A background of 0 (black) leaves the terminal's own background behind the word
+- `autocorrectHighlightColor` - color the message editor draws a word in right after [autocorrect](messages/message-areas.md#autocorrect) fixed it, for as long as the fix is shown on the prompt row; the screen only, the message is unchanged (default `14`, yellow). A background of 0 (black) leaves the terminal's own background behind the word
 - `sysopChatScreen` - the [chat screen](menus/menu-system.md#chat-screens) split-screen chat opens with: `cfg/NAME.json` and `ansi/NAME.ANS` in the menu set. Empty for the built-in layout, `random` for one of the set's screens each chat; the shipped set uses `V3CHAT1`
 
 The config editor's [Theme](#theme-sub-menu) pages set the colours as
