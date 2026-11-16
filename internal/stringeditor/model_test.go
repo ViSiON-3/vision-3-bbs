@@ -170,13 +170,14 @@ func TestModelRestoreDefault(t *testing.T) {
 	m.cursor = idx
 	m.page = idx / m.pageSize
 
+	m.values["defPrompt"] = "mine"
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyF4})
 	if m.mode != modeDefaultConfirm {
 		t.Fatalf("mode = %v, want default confirm", m.mode)
 	}
 	m = key(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
-	if m.values["defPrompt"] != "factory" {
-		t.Errorf("value = %q, want shipped default", m.values["defPrompt"])
+	if _, set := m.values["defPrompt"]; set || m.getValue("defPrompt") != "factory" {
+		t.Errorf("value = %q (set %v), want the key out and the shipped default shown", m.getValue("defPrompt"), set)
 	}
 }
 
@@ -219,9 +220,9 @@ func TestModelViewSmoke(t *testing.T) {
 	}
 }
 
-// TestNewUpgradesSupersededStrings checks the editor shows an unedited old
-// shipped value as the current default, which is what the BBS prints, and
-// leaves an edited one alone.
+// TestNewUpgradesSupersededStrings checks the editor treats an unedited old
+// shipped value as the default, which is what the BBS prints, taking the key
+// out, and leaves an edited one alone.
 func TestNewUpgradesSupersededStrings(t *testing.T) {
 	old := config.StringSuperseded["konfigAutoSigChoice"][0]
 	current := config.StringFallbacks["konfigAutoSigChoice"]
@@ -233,8 +234,8 @@ func TestNewUpgradesSupersededStrings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if got := m.values["konfigAutoSigChoice"]; got != current {
-		t.Errorf("konfigAutoSigChoice = %q, want the current default", got)
+	if _, set := m.values["konfigAutoSigChoice"]; set || m.getValue("konfigAutoSigChoice") != current {
+		t.Errorf("konfigAutoSigChoice = %q (set %v), want the key out and the current default", m.getValue("konfigAutoSigChoice"), set)
 	}
 	if m.stateOf("konfigAutoSigChoice") != stateDefault {
 		t.Errorf("upgraded value not shown as the default")

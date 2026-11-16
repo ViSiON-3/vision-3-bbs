@@ -226,11 +226,18 @@ example to list a new key in a prompt. A key your `strings.json` leaves out
 gets the new text. But an older install's `strings.json` is a full copy of the
 strings as they shipped then, so it has the key with the old text.
 
-If your value is still exactly the old shipped text, you never edited it, and
-the BBS uses the new text instead. `./strings` shows it as the default, and
-saving from there writes it to your file. If you changed the string in any way,
-even by one space, your version is kept. The release notes say when this
-happens, so you can update your own text by hand.
+`./vision3 doctor` says how many strings in your file still hold text they
+shipped with, from any release. `./vision3 doctor --fix` takes them out, after
+copying the file to `data/backups/`, and keeps every string you changed, so
+from then on new wording reaches every string you haven't touched
+(`--dry-run` shows what it would do first). It also removes keys the BBS no
+longer reads. The board prints the same afterwards, apart from strings whose
+shipped text had already been reworded.
+
+For a string you did change, your version is kept. When a later release
+changes that string's shipped default, `./vision3 doctor` names it and
+`./strings` marks it `!`, showing the new default; `F4` takes it, `F5` keeps
+yours.
 
 `QuotePrefix` is the exception. Its shipped value went from `"^I> "` to
 `" ^I> "`, so new quotes start with one space (` RW> text`), but it is not
@@ -259,8 +266,9 @@ failures, so a deploy script can stop on `2`. See
 [Doctor](configuration/configuration.md#doctor).
 
 If it notes keys in `menus.d/<theme>/theme.json` that only repeat the
-shipped theme, `./vision3 doctor --fix` removes them (after a backup), so the
-new theme's values reach the board. The overlay is merged over the shipped
+shipped theme, or strings in `configs/strings.json` that hold shipped text,
+`./vision3 doctor --fix` removes them (after a backup to `data/backups/`), so
+the new release's values reach the board. The overlay is merged over the shipped
 `theme.json` key by key, so only keys you set yourself stay ahead of it.
 
 ## Restarting

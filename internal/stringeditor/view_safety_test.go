@@ -63,7 +63,7 @@ func TestNoOpEditPreservesMultilineValue(t *testing.T) {
 		"scanInvalidDate",       // long value with CRLFs
 	} {
 		t.Run(key, func(t *testing.T) {
-			want := m.values[key]
+			want := m.getValue(key)
 			if want == "" {
 				t.Fatalf("%s is empty in the shipped template", key)
 			}
@@ -80,8 +80,11 @@ func TestNoOpEditPreservesMultilineValue(t *testing.T) {
 			if m.mode != modeNavigate {
 				t.Fatalf("mode = %v, want navigate after Enter", m.mode)
 			}
-			if got := m.values[key]; got != want {
+			if got := m.getValue(key); got != want {
 				t.Errorf("value changed by a no-op edit:\n got %q\nwant %q", got, want)
+			}
+			if _, set := m.values[key]; set {
+				t.Error("a no-op edit of a default put the key in strings.json")
 			}
 			if m.dirty {
 				t.Error("dirty = true after a no-op edit")

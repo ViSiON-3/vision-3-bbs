@@ -390,6 +390,14 @@ func (m Model) renderMessageBar(panelW int) string {
 				return panelStyle.Render(strings.Repeat(" ", panelW))
 			}
 			text = " " + state.marker() + "  " + state.label()
+			if state == stateChanged {
+				key := m.entries[m.cursor].Key
+				text = " " + state.marker() + "  default changed since you set this: F4 takes it, F5 keeps yours. Now: " +
+					EscapeForEdit(m.effective(key, "", false))
+				if was, ok := m.previousDefault(key); ok {
+					text += "  Was: " + EscapeForEdit(was)
+				}
+			}
 			style = fallbackStyle
 		}
 	}

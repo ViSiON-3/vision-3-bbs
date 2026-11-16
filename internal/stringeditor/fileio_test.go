@@ -10,39 +10,19 @@ import (
 	configtemplates "github.com/ViSiON-3/vision-3-bbs/templates/configs"
 )
 
-// testDefaults is a small stand-in for the shipped factory values.
-func testDefaults() map[string]string {
-	return map[string]string{
-		"defPrompt":   "|08factory prompt",
-		"pauseString": "|15factory pause",
-	}
-}
-
-// TestLoadStrings_MissingFileCreatesDefaults checks that a missing file is
-// created with default strings and no placeholder keys.
-func TestLoadStrings_MissingFileCreatesDefaults(t *testing.T) {
+// TestLoadStrings_MissingFileWritesNothing checks that a missing file is no
+// strings, and is not created: the BBS has the shipped strings built in.
+func TestLoadStrings_MissingFileWritesNothing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "strings.json")
-	got, err := LoadStrings(path, testDefaults())
+	got, err := LoadStrings(path)
 	if err != nil {
 		t.Fatalf("LoadStrings: %v", err)
 	}
-	if len(got) == 0 {
-		t.Fatal("expected non-empty defaults map")
+	if len(got) != 0 {
+		t.Errorf("got %d values; want none", len(got))
 	}
-	// The file must now exist and be valid JSON.
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("defaults file not created: %v", err)
-	}
-	var onDisk map[string]string
-	if err := json.Unmarshal(data, &onDisk); err != nil {
-		t.Fatalf("created file is not valid JSON: %v", err)
-	}
-	// No internal placeholder keys are persisted.
-	for k := range onDisk {
-		if strings.HasPrefix(k, "_") {
-			t.Errorf("placeholder key %q should not be persisted", k)
-		}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("strings.json created (%v)", err)
 	}
 }
 
@@ -52,7 +32,7 @@ func TestLoadStrings_InvalidJSON(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{broken"), 0644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if _, err := LoadStrings(path, testDefaults()); err == nil {
+	if _, err := LoadStrings(path); err == nil {
 		t.Fatal("invalid JSON should return an error")
 	}
 }
@@ -62,24 +42,25 @@ func TestLoadStrings_InvalidJSON(t *testing.T) {
 func TestSaveStrings_RoundTripSortedAndFiltered(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "strings.json")
 	in := map[string]string{
-		"zebra":     "last",
-		"alpha":     "first",
-		"_reserved": "must not persist",
-		"mid":       `has "quotes" and |07 codes`,
+		"zebra":   "last",
+		"alpha":   "first",
+		"_extra3": "must not persist",
+		"_note":   "a sysop's note persists",
+		"mid":     `has "quotes" and |07 codes`,
 	}
 	if err := SaveStrings(path, in); err != nil {
 		t.Fatalf("SaveStrings: %v", err)
 	}
 
-	got, err := LoadStrings(path, testDefaults())
+	got, err := LoadStrings(path)
 	if err != nil {
 		t.Fatalf("LoadStrings: %v", err)
 	}
-	if len(got) != 3 {
-		t.Fatalf("want 3 keys (placeholder dropped), got %d: %v", len(got), got)
+	if len(got) != 4 {
+		t.Fatalf("want 4 keys (placeholder dropped), got %d: %v", len(got), got)
 	}
-	if _, ok := got["_reserved"]; ok {
-		t.Error("_reserved should have been filtered out")
+	if _, ok := got["_extra3"]; ok {
+		t.Error("the reserved placeholder _extra3 should have been filtered out")
 	}
 	if got["mid"] != in["mid"] {
 		t.Errorf("mid = %q, want %q", got["mid"], in["mid"])
@@ -110,76 +91,28 @@ func TestMarshalOrdered_Empty(t *testing.T) {
 	}
 }
 
-// TestDefaultStrings_SkipsPlaceholders checks defaults exclude placeholder
-// keys but cover every non-placeholder metadata entry.
-func TestDefaultStrings_SkipsPlaceholders(t *testing.T) {
-	defaults := DefaultStrings(testDefaults())
-	if len(defaults) == 0 {
-		t.Fatal("expected non-empty defaults")
-	}
-	for k := range defaults {
-		if strings.HasPrefix(k, "_") {
-			t.Errorf("placeholder key %q should not be in defaults", k)
-		}
-	}
-	// Every non-placeholder metadata entry must have a default.
-	for _, e := range StringEntries() {
-		if strings.HasPrefix(e.Key, "_") {
-			continue
-		}
-		if _, ok := defaults[e.Key]; !ok {
-			t.Errorf("metadata key %q missing from defaults", e.Key)
-		}
-	}
-}
-
 // TestMissingTemplateInstallation covers an installed binary with no templates
-// directory on disk: F4 must still offer a factory value, and a missing
-// strings.json must still be created with real defaults rather than blanks.
-//
-// The editor binary passes the copy embedded in templates/configs/embed.go when
-// no file is found, which is what this simulates.
+// directory on disk and no strings.json: the editor shows the shipped
+// defaults from the copy embedded in the binary, and creates no file until
+// there is something to save.
 func TestMissingTemplateInstallation(t *testing.T) {
 	embedded, err := configtemplates.StringDefaults()
 	if err != nil {
 		t.Fatalf("embedded defaults unavailable: %v", err)
 	}
-	if len(embedded) == 0 {
-		t.Fatal("embedded defaults are empty")
-	}
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "strings.json")
+	path := filepath.Join(t.TempDir(), "strings.json")
 	m, err := New(path, embedded)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-
-	// The file was created from the shipped values, not from blanks.
-	if got := m.values["pageOnlineNodesHeader"]; got != embedded["pageOnlineNodesHeader"] {
-		t.Errorf("created file has %q for pageOnlineNodesHeader, want the shipped default %q",
-			got, embedded["pageOnlineNodesHeader"])
+	if got := m.getValue("pageOnlineNodesHeader"); got != embedded["pageOnlineNodesHeader"] {
+		t.Errorf("pageOnlineNodesHeader = %q, want the shipped default %q", got, embedded["pageOnlineNodesHeader"])
 	}
-	written, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("strings.json not created: %v", err)
+	if m.stateOf("pageOnlineNodesHeader") != stateDefault {
+		t.Error("pageOnlineNodesHeader not shown as the default")
 	}
-	var onDisk map[string]string
-	if err := json.Unmarshal(written, &onDisk); err != nil {
-		t.Fatalf("created file is not valid JSON: %v", err)
-	}
-	if onDisk["pageOnlineNodesHeader"] != embedded["pageOnlineNodesHeader"] {
-		t.Error("the created file does not carry the shipped defaults")
-	}
-
-	// And every catalog entry is present, so nothing is missing from the editor.
-	for _, e := range StringEntries() {
-		if isReservedKey(e.Key) {
-			continue
-		}
-		if _, ok := onDisk[e.Key]; !ok {
-			t.Errorf("catalog key %q missing from the created file", e.Key)
-		}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("strings.json created on open (%v)", err)
 	}
 }
 
