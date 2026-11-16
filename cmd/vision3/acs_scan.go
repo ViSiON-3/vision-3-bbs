@@ -245,9 +245,11 @@ func collectACSSources(root string) []acsSource {
 		}
 	}
 	var server struct {
-		DoorCategories []config.DoorCategory `json:"doorCategories"`
+		DoorCategories  []config.DoorCategory `json:"doorCategories"`
+		CustomPromptACS string                `json:"customPromptACS"`
 	}
 	if readJSON(filepath.Join(configDir, "config.json"), &server) {
+		out = append(out, acsSource{File: "configs/config.json", Record: "board", Field: "customPromptACS", ACS: server.CustomPromptACS})
 		for _, c := range server.DoorCategories {
 			out = append(out, acsSource{File: "configs/config.json", Record: "door category " + c.Code, Field: "acs", ACS: c.ACS})
 		}

@@ -46,6 +46,11 @@ type StringsConfig struct {
 	KonfigMorePromptsLabel string `json:"konfigMorePromptsLabel"`
 	KonfigMorePromptsHelp  string `json:"konfigMorePromptsHelp"`
 
+	// The caller's own menu prompt in Konfig.
+	KonfigCustomPromptLabel   string `json:"konfigCustomPromptLabel"`
+	KonfigCustomPromptHelp    string `json:"konfigCustomPromptHelp"`
+	KonfigCustomPromptPreview string `json:"konfigCustomPromptPreview"`
+
 	KonfigTwitListLabel string `json:"konfigTwitListLabel"`
 	KonfigTwitListHelp  string `json:"konfigTwitListHelp"`
 	TwitNamePrompt      string `json:"twitNamePrompt"`

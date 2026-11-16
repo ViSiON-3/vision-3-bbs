@@ -184,7 +184,12 @@ const konfigLineWidth = 78
 // line expands the pipe codes in a configured string and cuts it to the
 // width of a row, so a long translation cannot wrap onto the next one.
 func (st *konfigState) line(s string) string {
-	out := string(ansi.ReplacePipeCodes([]byte(s)))
+	return st.clipRow(string(ansi.ReplacePipeCodes([]byte(s))))
+}
+
+// clipRow cuts text whose codes are already expanded to the width of a row,
+// keeping its escape sequences.
+func (st *konfigState) clipRow(out string) string {
 	var b strings.Builder
 	w := 0
 	for i := 0; i < len(out); {
@@ -256,7 +261,15 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 		}
 	}
 
+	// onEdit hears the text only when it changes, not on a cursor move.
+	edited, lastText := false, ""
 	draw := func() error {
+		if text := string(buf); st.onEdit != nil && (!edited || text != lastText) {
+			edited, lastText = true, text
+			if err := st.onEdit(text); err != nil {
+				return err
+			}
+		}
 		if cur < off {
 			off = cur
 		}

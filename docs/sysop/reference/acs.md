@@ -19,6 +19,7 @@ The examples on this page are checked by `internal/menu/acs_reference_test.go`.
 | Conferences | `acs` in `conferences.json` |
 | Doors | `acs` in `doors.json`, together with `min_access_level` |
 | Door categories | `acs` in `doorCategories` (config.json) |
+| Custom menu prompts | `customPromptACS` in config.json: who may set their own [menu prompt](users/user-management.md#user-configuration-preferences) and have it shown |
 | Menu art | `{{acs}}...{{/}}` [conditional regions](menus/menu-system.md#conditional-regions-acs) |
 | QWK | `acs_write` gates each reply in an uploaded REP packet |
 
