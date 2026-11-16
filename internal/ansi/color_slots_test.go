@@ -31,3 +31,18 @@ func TestEscapeScreenPipeCodesEscapesColorSlots(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// PipeCodeAt, which the string editor's preview reads codes with, gives a slot
+// code the board's current default, the same as ReplacePipeCodes draws.
+func TestPipeCodeAtFollowsBoardSlotDefaults(t *testing.T) {
+	t.Cleanup(func() { SetColorSlotDefaults([7]string{}) })
+	SetColorSlotDefaults([7]string{"|12|B4"})
+	code, expansion, n := PipeCodeAt([]byte("|C1x"), 0)
+	want := string(ReplacePipeCodes([]byte("|12|B4")))
+	if code != "|C1" || n != 3 || expansion != want {
+		t.Errorf("PipeCodeAt = %q, %q, %d; want |C1, %q, 3", code, expansion, n, want)
+	}
+	if got := string(ReplacePipeCodes([]byte("|C1x"))); got != want+"x" {
+		t.Errorf("ReplacePipeCodes = %q, want %q", got, want+"x")
+	}
+}
