@@ -127,9 +127,12 @@ mkdir -p bin
 mkdir -p scripts
 echo "Directories created."
 
-# Copy template config files to configs/ if they don't exist
+# Copy template config files to configs/ if they don't exist. strings.json is
+# not copied: the BBS has the shipped strings built in, and configs/strings.json
+# holds only the strings the sysop changes (./strings writes it).
 echo "Setting up configuration files..."
 for template_file in templates/configs/*.json; do
+    [ "$(basename "$template_file")" = "strings.json" ] && continue
     if [ -f "$template_file" ]; then
         target_file="configs/$(basename "$template_file")"
         if [ ! -f "$target_file" ]; then

@@ -8,19 +8,6 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
-// legacyTemplateKeys are keys that ship in strings.json but have no field in
-// the runtime config and no editor entry: Vision/2 leftovers that nothing
-// reads. They are deliberately not in the catalog — listing dead prompts would
-// be noise — but they are recorded here rather than deleted, and SaveStrings
-// writes them back untouched.
-var legacyTemplateKeys = map[string]bool{
-	"Read_Feedback":         true,
-	"Ask_One_Liner":         true,
-	"Enter_One_Liner":       true,
-	"Show_Title_Or_Range":   true,
-	"List_Messages_For_You": true,
-}
-
 // legacyCatalogKeys are catalog entries kept for a feature ViSiON/3 does not
 // implement. They are listed so a sysop upgrading from Vision/2 can see the
 // string is recognised but inert, rather than wondering why it vanished.
@@ -88,29 +75,23 @@ func TestCatalogHasNoDeadEntries(t *testing.T) {
 }
 
 // TestTemplateKeysAreClassified checks that every key in the shipped template
-// is either editable or a recorded legacy leftover, so an unexplained key
-// cannot quietly accumulate.
+// is editable, so an unexplained key cannot quietly accumulate. (The
+// Vision/2 leftovers nothing read, such as Read_Feedback, left the template
+// in #1100; doctor lists them in an older strings.json as unknown keys.)
 func TestTemplateKeysAreClassified(t *testing.T) {
 	catalog := catalogKeys(t)
 	for key := range shippedTemplate(t) {
-		if catalog[key] || legacyTemplateKeys[key] {
+		if catalog[key] {
 			continue
 		}
-		t.Errorf("template key %q is neither in the catalog nor recorded as "+
-			"legacy in legacyTemplateKeys", key)
+		t.Errorf("template key %q is not in the catalog", key)
 	}
 }
 
-// TestLegacyKeysStillLegacy fails if a recorded leftover gains a runtime field
-// or a catalog entry, so the list cannot go stale in the other direction.
+// TestLegacyKeysStillLegacy fails if a recorded legacy catalog entry gains a
+// runtime field, so the list cannot go stale.
 func TestLegacyKeysStillLegacy(t *testing.T) {
-	catalog, runtime := catalogKeys(t), runtimeStringKeys(t)
-	for key := range legacyTemplateKeys {
-		if catalog[key] || runtime[key] {
-			t.Errorf("%q is recorded as legacy but is now live; remove it from "+
-				"legacyTemplateKeys", key)
-		}
-	}
+	runtime := runtimeStringKeys(t)
 	for key := range legacyCatalogKeys {
 		if runtime[key] {
 			t.Errorf("%q is recorded as legacy but now has a runtime field; "+

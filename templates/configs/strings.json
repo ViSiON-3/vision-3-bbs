@@ -52,13 +52,8 @@
   "twitEmpty": "\r\n|07  Your Twit List is empty.\r\n",
   "twitDisabled": "\r\nTwit Lists are turned off on this BBS.\r\n",
 
-  "Ask_One_Liner": "\r\n|07Add a one-liner? (Y/N): |15",
-  "Enter_One_Liner": "|07Enter One-Liner: |15",
-  "List_Messages_For_You": "List Messages only directed to you? ",
   "One_Liner_Legend": "|07Colors: |01||01 |02||02 |03||03 |04||04 |05||05 |06||06 |07||07 |08||08 |09||09 |10||10 |11||11 |12||12 |13||13 |14||14 |15||15 |07",
   "QuotePrefix": " ^I> ",
-  "Read_Feedback": "Read Feedback?",
-  "Show_Title_Or_Range": "Show title or range? ",
   "abortMessagePrompt": "|14Abort message?",
   "addBBSBaud": "|08H|07i|15ghest |13BPS|05: ",
   "addBBSName": "|08B|07B|15S |13Name|05: ",

@@ -381,6 +381,7 @@ func inspectBoard(root string) doctorReport {
 		}
 	}
 
+	checkStringsKeys(configDir, add)
 	checkAreasAndConferences(configDir, root, ftnCfg, add)
 	checkSponsors(configDir, root, add)
 	checkUserIDMark(root, add)
@@ -1742,6 +1743,44 @@ func checkQWKNet(configDir string, serverCfg config.ServerConfig, serverErr erro
 	if issues == 0 {
 		add("QWKnet configuration", doctorOK, fmt.Sprintf("%d network(s) pass existing validation", len(cfg.Networks)), "")
 	}
+}
+
+// checkStringsKeys notes keys in configs/strings.json that the BBS does
+// not read: strings an upgrade retired or renamed, and Vision/2 leftovers
+// older templates carried. They change nothing, but an older value under a
+// retired key can still trip the format check on reload.
+func checkStringsKeys(configDir string, add func(string, doctorSeverity, string, string)) {
+	data, err := os.ReadFile(filepath.Join(configDir, "strings.json"))
+	if err != nil {
+		return
+	}
+	var doc map[string]json.RawMessage
+	if json.Unmarshal(data, &doc) != nil {
+		return // the parse check reports it
+	}
+	known := map[string]bool{}
+	t := reflect.TypeOf(config.StringsConfig{})
+	for i := 0; i < t.NumField(); i++ {
+		if name, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ","); name != "" && name != "-" {
+			known[name] = true
+		}
+	}
+	for i := 1; i <= 7; i++ {
+		known[fmt.Sprintf("defColor%d", i)] = true // read as the caller colour slot defaults
+	}
+	var unknown []string
+	for key := range doc {
+		if !known[key] && !strings.HasPrefix(key, "_") {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) == 0 {
+		return
+	}
+	sort.Strings(unknown)
+	add("configs/strings.json", doctorInfo,
+		fmt.Sprintf("%d key(s) the BBS does not read: %s", len(unknown), strings.Join(unknown, ", ")),
+		"Delete them from configs/strings.json; nothing reads them. A misspelt key is a string that still shows the shipped text.")
 }
 
 func checkUnknownTopLevelKeys(path string, typ reflect.Type, add func(string, doctorSeverity, string, string)) {

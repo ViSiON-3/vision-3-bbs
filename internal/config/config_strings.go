@@ -2,8 +2,11 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -13,78 +16,120 @@ import (
 	configtemplates "github.com/ViSiON-3/vision-3-bbs/templates/configs"
 )
 
-// LoadStrings loads the string configuration from a JSON file.
-func LoadStrings(configPath string) (StringsConfig, error) { // Return the loaded config directly
+// LoadStrings loads the board's strings: the shipped defaults built into
+// the binary, with configs/strings.json's values over them. The file holds
+// the sysop's own wording; a key it leaves out gets the shipped text, so new
+// and changed shipped strings reach every key the sysop has not overridden.
+// A missing file means no overrides.
+//
+// A value from the file whose format directives no longer match what the
+// BBS passes it is replaced, for this run, by the shipped default, with a
+// warning; the file itself is never rewritten.
+func LoadStrings(configPath string) (StringsConfig, error) {
 	filePath := filepath.Join(configPath, "strings.json")
 	slog.Info("loading strings configuration", "path", filePath)
 	data, err := os.ReadFile(filePath)
-	if err != nil {
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		slog.Info("no strings.json; using the shipped strings", "path", filePath)
+		data = []byte("{}")
+	case err != nil:
 		slog.Error("failed to read strings file", "path", filePath, "error", err)
 		return StringsConfig{}, fmt.Errorf("failed to read strings file %s: %w", filePath, err)
 	}
 
-	var loadedConfig StringsConfig // Load into a local variable
-	err = json.Unmarshal(data, &loadedConfig)
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		slog.Error("failed to parse strings JSON", "path", filePath, "error", err)
+		return StringsConfig{}, fmt.Errorf("failed to parse strings JSON from %s: %w", filePath, err)
+	}
+
+	shipped, err := configtemplates.StringDefaults()
 	if err != nil {
+		// Only a broken build gets here; the compiled-in fallbacks still cover
+		// the strings a missing key would otherwise leave blank.
+		slog.Error("no shipped strings to fall back on", "error", err)
+	}
+	var loadedConfig StringsConfig
+	setStringFields(&loadedConfig, shipped)
+	if err := json.Unmarshal(data, &loadedConfig); err != nil {
 		slog.Error("failed to parse strings JSON", "path", filePath, "error", err)
 		return StringsConfig{}, fmt.Errorf("failed to parse strings JSON from %s: %w", filePath, err)
 	}
 
 	applySupersededStrings(&loadedConfig)
 	applyStringDefaults(&loadedConfig)
-	var raw map[string]json.RawMessage
-	if json.Unmarshal(data, &raw) == nil {
-		loadedConfig.LegacyColorSlots = legacyColorSlots(raw)
-		applyMissingStringDefaults(&loadedConfig, stringValuesOf(raw))
+	values := stringValuesOf(raw)
+	loadedConfig.LegacyColorSlots = legacyColorSlots(raw)
+	applyMissingStringDefaults(&loadedConfig, values)
+	for _, key := range formatMismatches(values, shipped, filePath) {
+		def := shipped[key]
+		if def == "" {
+			def = StringFallbacks[key]
+		}
+		setStringFields(&loadedConfig, map[string]string{key: def})
 	}
-	warnFormatMismatches(data, filePath)
 	slog.Info("successfully loaded strings configuration")
-	return loadedConfig, nil // Return the loaded struct
+	return loadedConfig, nil
 }
 
-// warnFormatMismatches reports any configured string whose format directives no
-// longer match the arguments its call site passes.
-//
-// It only warns. Sprintf does not fail on a mismatch, it prints %!d(MISSING)
-// into the middle of the message, so the sysop needs to be told -- but refusing
-// to start the BBS over a cosmetic prompt would be worse than the prompt, and
-// silently rewriting their string would discard an edit they meant to make.
-// This runs on hot reload too, since that path calls LoadStrings.
-func warnFormatMismatches(data []byte, filePath string) {
-	values, err := stringValues(data)
-	if err != nil {
-		return // the caller already surfaced any parse failure
-	}
-	shipped, err := configtemplates.StringDefaults()
-	if err != nil {
-		// The embedded template is unreadable, but the compiled-in fallbacks
-		// still describe the keys they cover, so validate against those rather
-		// than skipping the check entirely.
-		slog.Debug("no embedded defaults to validate strings against", "error", err)
-	}
-	defaults := stringformat.MergeDefaults(StringFallbacks, shipped)
-	if len(defaults) == 0 {
+// setStringFields sets each string field whose json key is in values.
+func setStringFields(c *StringsConfig, values map[string]string) {
+	if len(values) == 0 {
 		return
 	}
+	v := reflect.ValueOf(c).Elem()
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		field := v.Field(i)
+		if field.Kind() != reflect.String || !field.CanSet() {
+			continue
+		}
+		key, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+		if val, ok := values[key]; ok {
+			field.SetString(val)
+		}
+	}
+}
+
+// formatMismatches reports, and returns the keys of, each string in the file
+// whose format directives no longer match the arguments its call site
+// passes.
+//
+// Sprintf does not fail on a mismatch, it prints %!d(MISSING) into the
+// middle of the message, so the sysop needs to be told, and the BBS uses
+// the shipped default meanwhile. Refusing to start over a cosmetic prompt
+// would be worse than the prompt, and rewriting the file would discard an
+// edit the sysop meant to make. This runs on hot reload too, since that
+// path calls LoadStrings.
+//
+// The check runs over the strings as the BBS will print them: the shipped
+// values with the file's over them, so a key the file leaves out is not
+// taken for an empty one.
+func formatMismatches(file, shipped map[string]string, filePath string) []string {
+	defaults := stringformat.MergeDefaults(StringFallbacks, shipped)
+	if len(defaults) == 0 {
+		return nil
+	}
+	values := make(map[string]string, len(shipped)+len(file))
+	maps.Copy(values, shipped)
+	maps.Copy(values, file)
+	var keys []string
 	for _, p := range stringformat.Validate(values, StringFallbacks, StringMissingDefaults, defaults) {
+		if _, inFile := file[p.Key]; !inFile {
+			continue // a shipped default the template's own tests answer for
+		}
 		slog.Warn("configured string does not match the arguments the BBS passes it; "+
-			"it will print a malformed message until corrected",
+			"using the shipped default until it is corrected",
 			"path", filePath, "key", p.Key, "expected", p.Expected, "problem", p.Detail)
+		keys = append(keys, p.Key)
 	}
+	return keys
 }
 
-// stringValues extracts the string-valued entries of a strings.json document.
+// stringValuesOf extracts the string-valued entries of a parsed strings.json.
 // Other entries, such as an older file's numeric defColorN (see
-// legacyColorSlots), are skipped rather than failing the whole extraction.
-func stringValues(data []byte) (map[string]string, error) {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, err
-	}
-	return stringValuesOf(raw), nil
-}
-
-// stringValuesOf is stringValues for a document already parsed.
+// legacyColorSlots), are skipped.
 func stringValuesOf(raw map[string]json.RawMessage) map[string]string {
 	out := make(map[string]string, len(raw))
 	for key, msg := range raw {

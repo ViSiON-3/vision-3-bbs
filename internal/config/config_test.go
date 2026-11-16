@@ -712,11 +712,15 @@ func TestLoadStrings_ValidFile(t *testing.T) {
 	}
 }
 
+// A board without strings.json runs on the shipped strings.
 func TestLoadStrings_MissingFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	_, err := LoadStrings(tmpDir)
-	if err == nil {
-		t.Error("expected error for missing strings.json")
+	got, err := LoadStrings(tmpDir)
+	if err != nil {
+		t.Fatalf("missing strings.json: %v", err)
+	}
+	if got.PauseString == "" {
+		t.Error("missing strings.json left PauseString blank; want the shipped text")
 	}
 }
 

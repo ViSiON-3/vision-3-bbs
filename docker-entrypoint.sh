@@ -86,9 +86,12 @@ fi
 # Copy any missing template configs (runs on every start to pick up newly added
 # files). The .txt pass covers the IP blocklist/allowlist that config.json's
 # ipBlocklistPath / ipAllowlistPath point at -- keep both globs in step with
-# setup.sh, which seeds the same files for a native install.
+# setup.sh, which seeds the same files for a native install. strings.json is
+# skipped: the shipped strings are built in, and configs/strings.json holds
+# only the strings the sysop changes.
 for template_file in /vision3/templates/configs/*.json /vision3/templates/configs/*.txt; do
     [ -f "$template_file" ] || continue
+    [ "$(basename "$template_file")" = "strings.json" ] && continue
     target="/vision3/configs/$(basename "$template_file")"
     if [ ! -f "$target" ]; then
         echo "  Creating $(basename "$target") from template..."
