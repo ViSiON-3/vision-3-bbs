@@ -112,15 +112,21 @@ type MenuExecutor struct {
 	themeCfg   atomic.Pointer[config.ThemeConfig] // as drawn: themeBase with the board's colours
 	themeBase  atomic.Pointer[config.ThemeConfig] // the theme's own theme.json
 	// themeMu serialises SetTheme and SetServerConfig, each of which stores
-	// its half and rebuilds themeCfg from both. They run on different
-	// goroutines (the watcher's reload, a session), and unserialised, a
-	// rebuild that read the old half could store its result last. Readers
-	// take no lock: they load themeCfg.
+	// its half and rebuilds themeCfg from both, and SetStrings, which with
+	// them rebuilds slotDefaults. They run on different goroutines (the
+	// watcher's reload, a session), and unserialised, a rebuild that read
+	// the old half could store its result last. Readers take no lock: they
+	// load themeCfg.
 	themeMu   sync.Mutex
 	serverCfg atomic.Pointer[config.ServerConfig]
 	doorReg   atomic.Pointer[map[string]config.DoorConfig]
 	loginSeq  atomic.Pointer[[]config.LoginItem]
 	protocols atomic.Pointer[[]transfer.ProtocolConfig]
+
+	// slotDefaults is the board's default for each caller colour slot, as
+	// pipe codes, rebuilt with the theme and strings
+	// (applyColorSlotDefaults).
+	slotDefaults atomic.Pointer[[7]string]
 }
 
 // NewExecutor creates a new MenuExecutor.
@@ -145,7 +151,6 @@ func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners [
 	}
 	e.SetDoorRegistry(doorRegistry)
 	e.SetStrings(loadedStrings)
-	ApplyColorSlotDefaults(loadedStrings)
 	e.SetTheme(theme)
 	e.SetServerConfig(serverCfg)
 	e.SetLoginSequence(loginSequence)
@@ -270,7 +275,10 @@ func (e *MenuExecutor) GetLoginSequence() []config.LoginItem {
 
 // SetStrings atomically updates the strings configuration.
 func (e *MenuExecutor) SetStrings(strings config.StringsConfig) {
+	e.themeMu.Lock()
+	defer e.themeMu.Unlock()
 	e.stringsCfg.Store(&strings)
+	e.applyColorSlotDefaults()
 }
 
 // Strings returns the current strings configuration.
@@ -312,6 +320,7 @@ func (e *MenuExecutor) applyBoardColors() {
 		eff = eff.WithBoardColors(cfg.Theme.Colors)
 	}
 	e.themeCfg.Store(&eff)
+	e.applyColorSlotDefaults()
 }
 
 // Theme returns the current theme configuration, the board's colour

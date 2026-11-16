@@ -2,27 +2,46 @@ package menu
 
 import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
-// ApplyColorSlotDefaults makes the board's slot defaults from strings.json
-// (an older file's defColorN) what |C1 to |C7 draw where there is no caller:
-// before login, in a menu's own .ANS art, anywhere pipe codes are expanded
-// without a session. The BBS calls it whenever it loads strings.json.
-func ApplyColorSlotDefaults(s config.StringsConfig) {
-	ansi.SetColorSlotDefaults(s.LegacyColorSlots)
+// applyColorSlotDefaults works out the board's default for each caller
+// colour slot from the theme as drawn (its theme.colors included) and the
+// strings.json legacy defaults, and makes them what |C1 to |C7 draw where
+// there is no caller: before login, in a menu's own .ANS art, anywhere pipe
+// codes are expanded without a session. It runs whenever the theme,
+// config.json or strings.json loads. The caller holds themeMu.
+func (e *MenuExecutor) applyColorSlotDefaults() {
+	var legacy [7]string
+	if s := e.stringsCfg.Load(); s != nil {
+		legacy = s.LegacyColorSlots
+	}
+	var codes [7]string
+	if th := e.themeCfg.Load(); th != nil {
+		codes = th.ColorSlotCodes(legacy)
+	} else {
+		// No theme yet: the built-in colours, under any legacy ones.
+		for i, c := range legacy {
+			codes[i] = c
+			if c == "" {
+				codes[i] = ansi.ColorSlotDefaults[i]
+			}
+		}
+	}
+	e.slotDefaults.Store(&codes)
+	ansi.SetColorSlotDefaults(codes)
 }
 
 // colorSlot returns the colour u sees for slot n (1 to user.ColorSlots), as
-// a pipe code: u's own, else the board's default from an older strings.json,
-// else the built-in one. u may be nil, for a screen before login.
+// a pipe code: u's own, else the board's default (the theme's caller colour
+// role, else an older strings.json's defColorN, else the built-in one). u
+// may be nil, for a screen before login.
 func (e *MenuExecutor) colorSlot(u *user.User, n int) string {
 	if c := u.ColorCode(n); c != "" {
 		return c
 	}
-	if c := e.Strings().LegacyColorSlots[n-1]; c != "" {
-		return c
+	if d := e.slotDefaults.Load(); d != nil {
+		return d[n-1]
 	}
 	return ansi.ColorSlotDefaults[n-1]
 }

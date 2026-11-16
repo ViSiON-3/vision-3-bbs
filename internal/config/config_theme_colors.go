@@ -108,6 +108,16 @@ var builtinRoleColors = map[ColorRole]int{
 	RoleLightbarHint:        8,  // dark gray
 	RoleLightbarBorder:      8,  // dark gray
 	RoleLightbarDestructive: 4,  // red
+	// The caller colour roles have the colours the stock screens draw
+	// these parts in. callerBar is not here: it falls back to the
+	// lightbarSelected role, so a lightbar that takes a caller's bar colour
+	// looks as it did for every other caller.
+	RoleCallerPrompt: 7,  // light gray
+	RoleCallerInput:  15, // bright white
+	RoleCallerText:   7,  // light gray
+	RoleCallerStat:   15, // bright white
+	RoleCallerText2:  8,  // dark gray
+	RoleCallerStat2:  11, // light cyan
 }
 
 // ColorSource says which layer of the precedence a colour came from.
@@ -156,6 +166,9 @@ func (t ThemeConfig) roleField(role ColorRole) OptColor {
 	case RoleLightbarDestructive:
 		return t.LightbarDestructive
 	}
+	if f := t.callerField(role); f != nil {
+		return *f
+	}
 	return OptColor{}
 }
 
@@ -194,6 +207,9 @@ func (t ThemeConfig) ColorWithSource(role ColorRole) (int, ColorSource) {
 		return t.YesNoHighlightColor, SourceBuiltin
 	case RoleLightbarNormal:
 		return t.YesNoRegularColor, SourceBuiltin
+	case RoleCallerBar:
+		c, _ := t.ColorWithSource(RoleLightbarSelected)
+		return c, SourceBuiltin
 	}
 	return builtinRoleColors[role], SourceBuiltin
 }

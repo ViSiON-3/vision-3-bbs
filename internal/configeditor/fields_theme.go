@@ -45,6 +45,9 @@ func themeMenuItems() []sysConfigMenuItem {
 		{Label: "Toasts", Build: func(m *Model) []fieldDef {
 			return themeFieldsToasts(&m.configs.Theme, &m.configs.Server.Theme.Colors)
 		}},
+		{Label: "Caller Colors", Build: func(m *Model) []fieldDef {
+			return themeFieldsCaller(&m.configs.Theme, &m.configs.Server.Theme.Colors)
+		}},
 	}
 }
 
@@ -91,6 +94,21 @@ func themeFieldsLightbar(th *config.ThemeConfig, board *config.ThemeColors) []fi
 		boardColorField("Hint", "The rest of a lightbar's hint row", 5, config.RoleLightbarHint, th, board),
 		boardColorField("Border", "The line between a list and its footer", 6, config.RoleLightbarBorder, th, board),
 		boardColorField("Destructive", "Del on the message reader bar", 7, config.RoleLightbarDestructive, th, board),
+	}
+}
+
+// themeFieldsCaller is the board's default for each caller colour slot,
+// |C1 to |C7 (#426). A caller who picks their own in User Konfig sees
+// theirs instead, where a screen uses the code.
+func themeFieldsCaller(th *config.ThemeConfig, board *config.ThemeColors) []fieldDef {
+	return []fieldDef{
+		boardColorField("Prompt (|C1)", "A prompt's question", 1, config.RoleCallerPrompt, th, board),
+		boardColorField("Input (|C2)", "What a caller types at a prompt", 2, config.RoleCallerInput, th, board),
+		boardColorField("Text (|C3)", "Plain text", 3, config.RoleCallerText, th, board),
+		boardColorField("Stat (|C4)", "A value picked out of the text, such as a name or a number", 4, config.RoleCallerStat, th, board),
+		boardColorField("Text 2 (|C5)", "Secondary text, such as brackets and separators", 5, config.RoleCallerText2, th, board),
+		boardColorField("Stat 2 (|C6)", "A second kind of value, such as an area name", 6, config.RoleCallerStat2, th, board),
+		boardColorField("Bar (|C7)", "A highlighted choice; unset, the lightbar Selected colour", 7, config.RoleCallerBar, th, board),
 	}
 }
 

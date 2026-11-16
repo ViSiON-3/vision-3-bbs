@@ -14,6 +14,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -43,9 +45,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err) //nolint:errcheck
 		os.Exit(1)
 	}
-	// Prompts preview |C1-|C7 in the defaults the board's strings.json sets,
-	// as the BBS draws them, rather than the built-in ones.
-	ansi.SetColorSlotDefaults(config.LegacyColorSlotsFile(filepath.Join(cwd, "configs", "strings.json")))
+	// Prompts preview |C1-|C7 in the board's defaults, as the BBS draws
+	// them, rather than the built-in ones. Loading the theme logs, and
+	// nothing should print under the editor.
+	prevLog := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ansi.SetColorSlotDefaults(config.BoardColorSlotCodes(cwd, filepath.Join(cwd, "configs")))
+	slog.SetDefault(prevLog)
 
 	// Resolve menus path
 	path := *menusPath

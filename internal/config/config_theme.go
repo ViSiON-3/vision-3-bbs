@@ -37,6 +37,16 @@ type ThemeConfig struct {
 	LightbarHint        OptColor `json:"lightbarHint,omitzero"`
 	LightbarBorder      OptColor `json:"lightbarBorder,omitzero"`
 	LightbarDestructive OptColor `json:"lightbarDestructive,omitzero"`
+	// The caller colour roles: the board's default for each of |C1 to
+	// |C7 (see CallerColorRoles). Each is optional, like the lightbar
+	// roles.
+	CallerPrompt OptColor `json:"callerPrompt,omitzero"`
+	CallerInput  OptColor `json:"callerInput,omitzero"`
+	CallerText   OptColor `json:"callerText,omitzero"`
+	CallerStat   OptColor `json:"callerStat,omitzero"`
+	CallerText2  OptColor `json:"callerText2,omitzero"`
+	CallerStat2  OptColor `json:"callerStat2,omitzero"`
+	CallerBar    OptColor `json:"callerBar,omitzero"`
 
 	ChatSysopColor int `json:"chatSysopColor"` // sysop pane in split-screen chat
 	ChatUserColor  int `json:"chatUserColor"`  // caller pane in split-screen chat
