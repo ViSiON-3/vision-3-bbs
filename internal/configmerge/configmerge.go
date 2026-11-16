@@ -508,7 +508,7 @@ func blankStrings(vs ...val) []val {
 				continue
 			}
 			if filled == nil {
-				filled = make(map[string]any, len(obj)+len(strs))
+				filled = make(map[string]any)
 				for kk, x := range obj {
 					filled[kk] = x
 				}
