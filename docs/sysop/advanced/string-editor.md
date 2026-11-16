@@ -574,7 +574,7 @@ cmd/strings/main.go
 1. Add the field to `StringsConfig` in `internal/config/config_strings_types.go`
 2. Add a `StringEntry` struct to the appropriate position in `internal/stringeditor/metadata.go` (Label, Key, Description — name the format arguments in the description)
 3. Add the key and its default value to `templates/configs/strings.json`. It is embedded in the binary, and every board that doesn't set the key gets this value
-4. Add it to `config.StringFallbacks` only if a value the sysop leaves blank should still print the default, or to `config.StringMissingDefaults` if blank should switch the string off
+4. Add it to `config.StringFallbacks` only if a value the sysop sets blank should still print the default. Otherwise blank prints nothing, which switches the string off; formatted strings that may be blank need their call sites to check for it. `config.StringMissingDefaults` is for strings that predate the embedded defaults and needs no new entries
 5. The editor will pick up the new entry automatically on next run
 
 `TestCatalogCoversRuntimeStrings` fails if step 2 is skipped, so a new string cannot ship without

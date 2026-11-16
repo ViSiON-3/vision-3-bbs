@@ -1826,6 +1826,16 @@ func collectUnknownJSONKeys(raw json.RawMessage, typ reflect.Type, prefix string
 				continue
 			}
 			fieldType, ok := known[key]
+			if !ok {
+				// encoding/json matches field names without regard to
+				// case, so "PauseString" sets pauseString: it is read.
+				for name, t := range known {
+					if strings.EqualFold(name, key) {
+						fieldType, ok = t, true
+						break
+					}
+				}
+			}
 			path := key
 			if prefix != "" {
 				path = prefix + "." + key

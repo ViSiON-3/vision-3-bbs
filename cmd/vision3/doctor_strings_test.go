@@ -32,3 +32,19 @@ func TestDoctorNotesUnknownStringsKeys(t *testing.T) {
 		t.Errorf("broken file: %+v; want it left to the parse check", checks)
 	}
 }
+
+// A key spelt with other capitals is read (encoding/json ignores case), so
+// it is not reported.
+func TestDoctorStringsKeyCase(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "strings.json"), []byte(`{"PauseString": "custom pause"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var checks []doctorCheck
+	checkStringsKeys(dir, func(name string, status doctorSeverity, message, fix string) {
+		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+	})
+	if len(checks) != 0 {
+		t.Errorf("checks = %+v; want nothing said", checks)
+	}
+}
