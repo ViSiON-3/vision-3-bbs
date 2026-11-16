@@ -213,8 +213,9 @@ func (t ThemeConfig) ColorWithSource(role ColorRole) (int, ColorSource) {
 	case RoleLightbarNormal:
 		return t.YesNoRegularColor, SourceBuiltin
 	case RoleCallerBar:
-		c, _ := t.ColorWithSource(RoleLightbarSelected)
-		return c, SourceBuiltin
+		// Unset, it is the lightbarSelected role, from wherever that
+		// came from.
+		return t.ColorWithSource(RoleLightbarSelected)
 	}
 	return builtinRoleColors[role], SourceBuiltin
 }

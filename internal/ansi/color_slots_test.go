@@ -47,10 +47,10 @@ func TestPipeCodeAtFollowsBoardSlotDefaults(t *testing.T) {
 	}
 }
 
-// The Bar slot's built-in colour is black on cyan. |B codes follow ANSI
-// order, so cyan is |B6; |B3 is brown.
-func TestBarSlotIsBlackOnCyan(t *testing.T) {
-	if got, want := string(ReplacePipeCodes([]byte("|C7"))), "\x1b[0;30m\x1b[46m"; got != want {
-		t.Errorf("|C7 = %q, want black on cyan %q", got, want)
+// The Bar slot's built-in colour is the stock lightbar highlight, white on
+// blue. |B codes follow ANSI order, so blue is |B4.
+func TestBarSlotIsTheLightbarHighlight(t *testing.T) {
+	if got, want := string(ReplacePipeCodes([]byte("|C7"))), "\x1b[1;37m\x1b[44m"; got != want {
+		t.Errorf("|C7 = %q, want white on blue %q", got, want)
 	}
 }

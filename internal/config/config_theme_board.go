@@ -176,6 +176,11 @@ func ResolveColor(role ColorRole, theme ThemeConfig, board ThemeColors) (int, Co
 	if o := board.Get(role); o.Set {
 		return o.Value, SourceBoard
 	}
+	if role == RoleCallerBar && !theme.callerField(role).Set {
+		// Unset, the Bar slot is lightbarSelected, which the board may
+		// override too.
+		return ResolveColor(RoleLightbarSelected, theme, board)
+	}
 	return theme.WithBoardColors(board).ColorWithSource(role)
 }
 

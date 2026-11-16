@@ -200,3 +200,20 @@ func TestCallerBarColourOnLightbars(t *testing.T) {
 		t.Errorf("file list: bar %q row %q, want the caller's", cmd[0].highlightColor, rowHi)
 	}
 }
+
+// The lightbars and |C7 agree on the board's Bar colour, so User Konfig's
+// "Default" sample and its saved-as-unset check match what the bars draw:
+// an older strings.json's defColor7 colours both while the theme and board
+// leave the highlight unset, and neither once the theme sets it.
+func TestBarColourMatchesBarSlot(t *testing.T) {
+	e := &MenuExecutor{}
+	e.SetTheme(config.ThemeConfig{YesNoHighlightColor: 31})
+	e.SetStrings(config.StringsConfig{LegacyColorSlots: [7]string{6: "|14|B6"}})
+	if got, want := e.barColor(nil), config.PipeCodeAttr(e.colorSlot(nil, user.ColorSlots)); got != want || got != config.PipeCodeAttr("|14|B6") {
+		t.Errorf("legacy defColor7: bars %d, |C7 %d, want both defColor7's", got, want)
+	}
+	e.SetTheme(config.ThemeConfig{YesNoHighlightColor: 31, LightbarSelected: config.SetColor(0x1E)})
+	if got, slot := e.barColor(nil), e.colorSlot(nil, user.ColorSlots); got != 0x1E || slot != "|14|B4" {
+		t.Errorf("theme lightbarSelected: bars %d, |C7 %q, want the theme's 0x1E", got, slot)
+	}
+}

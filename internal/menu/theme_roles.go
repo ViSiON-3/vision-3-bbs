@@ -30,15 +30,12 @@ func (e *MenuExecutor) roleColor(role config.ColorRole) int {
 }
 
 // barColor is the DOS attribute of the highlighted row or command on a
-// lightbar u is looking at: u's own Bar colour (|C7) when they picked one,
-// else the board's callerBar role, which unset is the lightbarSelected
-// role. A screen's own BAR file still colours that screen over this. u may
-// be nil.
+// lightbar u is looking at: what |C7 draws for u (colorSlot), so u's own Bar
+// colour when they picked one, else the board's, which unset is the
+// lightbarSelected role. A screen's own BAR file still colours that screen
+// over this. u may be nil.
 func (e *MenuExecutor) barColor(u *user.User) int {
-	if c := u.ColorCode(user.ColorSlots); c != "" {
-		return config.PipeCodeAttr(c)
-	}
-	return e.roleColor(config.RoleCallerBar)
+	return config.PipeCodeAttr(e.colorSlot(u, user.ColorSlots))
 }
 
 // barAnsi is barColor's escape sequence.

@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // A DOS attribute becomes the pipe codes that draw it: |B codes are in ANSI
@@ -37,8 +39,28 @@ func TestColorSlotCodes(t *testing.T) {
 	if got := theme.ColorSlotCodes([7]string{})[6]; got != "|14|B4" {
 		t.Errorf("bar follows lightbarSelected: %q", got)
 	}
-	if c, src := theme.ColorWithSource(RoleCallerBar); c != 0x1E || src != SourceBuiltin {
+	// The source is lightbarSelected's, so a theme's highlight isn't
+	// reported as built-in, nor overridden by a legacy defColor7.
+	if c, src := theme.ColorWithSource(RoleCallerBar); c != 0x1E || src != SourceTheme {
 		t.Errorf("callerBar unset = %d from %v", c, src)
+	}
+	if got := theme.ColorSlotCodes([7]string{6: "|10|B6"})[6]; got != "|14|B4" {
+		t.Errorf("legacy defColor7 over the theme's lightbarSelected: %q", got)
+	}
+	if c, src := ResolveColor(RoleCallerBar, ThemeConfig{}, ThemeColors{LightbarSelected: SetColor(0x4E)}); c != 0x4E || src != SourceBoard {
+		t.Errorf("callerBar unset, board lightbarSelected = %d from %v", c, src)
+	}
+}
+
+// ansi's built-in slot colours, which draw |C1-|C7 before a theme loads,
+// are the caller roles' built-in colours, the Bar slot's being the
+// built-in lightbarSelected.
+func TestColorSlotDefaultsMatchBuiltinRoles(t *testing.T) {
+	th := builtinTheme()
+	for i, role := range CallerColorRoles {
+		if got, want := ansi.ColorSlotDefaults[i], AttrPipeCode(th.Color(role)); got != want {
+			t.Errorf("slot %d: ansi has %q, the %s role %q", i+1, got, role, want)
+		}
 	}
 }
 

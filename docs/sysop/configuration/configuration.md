@@ -1532,8 +1532,10 @@ wherever a screen uses the code.
   board that sets `callerBar`. A screen's own BAR file still colours that
   screen.
 - **An older `strings.json`.** Its `defColor1`–`defColor7`, where set,
-  stand in for a role the theme and `theme.colors` both leave out, in the
-  codes only, not on the lightbars.
+  stand in for a role the theme and `theme.colors` both leave out. For
+  `callerBar` that means `lightbarSelected` is left out too; the stock
+  theme sets it. User Konfig's highlighted row is the board's `callerBar`
+  as well.
 - **Set them** in the theme, or as board overrides under **Theme → Caller
   Colors** in `./config`. A value is a DOS colour, background and
   foreground, as for the other roles.

@@ -40,8 +40,10 @@ func (e *MenuExecutor) colorSlot(u *user.User, n int) string {
 	if c := u.ColorCode(n); c != "" {
 		return c
 	}
-	if d := e.slotDefaults.Load(); d != nil {
-		return d[n-1]
+	if e != nil {
+		if d := e.slotDefaults.Load(); d != nil {
+			return d[n-1]
+		}
 	}
 	return ansi.ColorSlotDefaults[n-1]
 }
