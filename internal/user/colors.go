@@ -16,7 +16,7 @@ const ColorSlots = 7
 // them, so a code this takes is one the screens draw.
 func ValidColorCode(code string) bool {
 	fg := ansi.ColorPipeCodeLen(code)
-	if fg != 3 || code[1] == 'B' || code == "|23" {
+	if fg != 3 || code[1] == 'B' || code[:fg] == "|23" {
 		return false
 	}
 	bg := code[fg:]

@@ -591,3 +591,20 @@ func legacyColorSlots(raw map[string]json.RawMessage) [7]string {
 	}
 	return out
 }
+
+// LegacyColorSlotsFile returns the colour slot defaults the strings.json at
+// path sets, read as LoadStrings reads them, for a tool such as the string
+// or menu editor that previews |C1-|C7 without loading the rest of the board.
+// A file that can't be read or parsed sets none, so the built-in defaults
+// apply.
+func LegacyColorSlotsFile(path string) [7]string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return [7]string{}
+	}
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(data, &raw) != nil {
+		return [7]string{}
+	}
+	return legacyColorSlots(raw)
+}

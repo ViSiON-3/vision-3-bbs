@@ -10,7 +10,7 @@ func TestValidColorCode(t *testing.T) {
 		"|00": true, "|07": true, "|15": true, "|14|B1": true, "|00|B7": true,
 		"|07|B8": true, "|07|B10": true, "|15|B15": true,
 		"": false, "|16": false, "|23": false, "|B1": false, "|07|B16": false, "|07|23": false,
-		"|07|07": false, "|7": false, "07": false, "|CL": false, "|C1": false, "|07|B1x": false,
+		"|07|07": false, "|23|B1": false, "|23|B10": false, "|7": false, "07": false, "|CL": false, "|C1": false, "|07|B1x": false,
 	} {
 		if got := ValidColorCode(code); got != want {
 			t.Errorf("ValidColorCode(%q) = %v, want %v", code, got, want)
