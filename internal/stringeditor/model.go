@@ -159,6 +159,17 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 	if err != nil {
 		return Model{}, fmt.Errorf("loading strings: %w", err)
 	}
+	// A key spelt with other capitals sets the same string for the BBS
+	// (encoding/json ignores case), so the editor shows it under its own
+	// key, and a save writes that spelling.
+	for k, v := range values {
+		if canon, ok := config.CanonicalStringKey(k); ok && canon != k {
+			if _, exact := values[canon]; !exact {
+				values[canon] = v
+			}
+			delete(values, k)
+		}
+	}
 	// A string still holding text it shipped with, in this release or an
 	// older one, was never edited by the sysop: it is the default, and a
 	// save leaves the key out so later wording reaches it, as doctor --fix

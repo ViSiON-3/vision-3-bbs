@@ -107,3 +107,12 @@ func mustJSON(s string) string {
 	b, _ := json.Marshal(s)
 	return strings.TrimSpace(string(b))
 }
+
+// A key in other capitals sets the same string, so the trim keeps it, in
+// the documented spelling.
+func TestTrimStringsKeyCase(t *testing.T) {
+	tr := TrimStrings(rawStrings(t, `{"PauseString": "custom pause"}`))
+	if len(tr.Unknown) != 0 || tr.Kept["pauseString"] == nil {
+		t.Errorf("unknown %v, kept %v; want PauseString kept as pauseString", tr.Unknown, tr.Kept)
+	}
+}

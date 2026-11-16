@@ -34,9 +34,26 @@ var stringKeys = sync.OnceValue(func() map[string]bool {
 	return keys
 })
 
-// IsStringKey reports whether the BBS reads key from strings.json.
+// IsStringKey reports whether key is the json tag of a string the BBS
+// reads from strings.json.
 func IsStringKey(key string) bool {
 	return stringKeys()[key]
+}
+
+// CanonicalStringKey returns the json tag a strings.json key sets.
+// encoding/json matches field names without regard to case, so
+// "PauseString" sets pauseString. ok is false for a key the BBS doesn't
+// read.
+func CanonicalStringKey(key string) (string, bool) {
+	if stringKeys()[key] {
+		return key, true
+	}
+	for k := range stringKeys() {
+		if strings.EqualFold(k, key) {
+			return k, true
+		}
+	}
+	return "", false
 }
 
 // StringDefault is what the BBS prints for key when strings.json leaves it
@@ -147,9 +164,17 @@ func TrimStrings(raw map[string]json.RawMessage) StringsTrim {
 				continue
 			}
 		}
-		if !IsStringKey(key) {
+		canon, ok := CanonicalStringKey(key)
+		if !ok {
 			t.Unknown = append(t.Unknown, key)
 			continue
+		}
+		if canon != key {
+			if _, exact := raw[canon]; exact {
+				t.Shipped = append(t.Shipped, key) // the exact spelling is the one kept
+				continue
+			}
+			key = canon // written back in the spelling the BBS documents
 		}
 		var v string
 		if json.Unmarshal(msg, &v) != nil {
