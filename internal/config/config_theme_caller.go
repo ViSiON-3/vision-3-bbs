@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 )
 
 // The caller colour roles (#426): the board's default for each caller
@@ -120,18 +122,32 @@ func AttrPipeCode(attr int) string {
 
 // BoardColorSlotCodes returns the board's caller colour slot defaults, as
 // ColorSlotCodes works them out, for a tool such as the string or menu
-// editor that previews |C1-|C7 without running the board: the theme that
-// configDir's config.json selects under bbsRoot, its theme.colors, and the
-// legacy defColorN in configDir's strings.json. A part that can't be read
-// adds nothing, so at worst the built-in colours apply.
-func BoardColorSlotCodes(bbsRoot, configDir string) [7]string {
+// editor that previews |C1-|C7 without running the board: the theme of
+// menuSet, or when that is "" the one configDir's config.json selects under
+// bbsRoot; config.json's theme.colors; and the legacy defColorN in
+// configDir's strings.json. A part that can't be read adds nothing, so at
+// worst the built-in colours apply. Nothing is logged, so it is safe to
+// call with an editor's screen up.
+func BoardColorSlotCodes(bbsRoot, configDir, menuSet string) [7]string {
 	legacy := LegacyColorSlotsFile(filepath.Join(configDir, "strings.json"))
-	theme := builtinTheme()
-	if dir, _, err := SelectedMenuSet(bbsRoot, configDir); err == nil {
-		theme, _ = LoadThemeConfig(dir)
+	sel, err := themeSelectionFromConfigDir(configDir)
+	if err != nil || sel.Colors.validate() != nil {
+		sel = ThemeSelection{}
 	}
-	board, _ := BoardColorsFromConfigDir(configDir)
-	return theme.WithBoardColors(board).ColorSlotCodes(legacy)
+	if menuSet == "" {
+		name := sel.Name
+		if name == "" {
+			name = menuset.DefaultTheme
+		}
+		if dir, err := menuset.CheckTheme(bbsRoot, name); err == nil {
+			menuSet = dir
+		}
+	}
+	theme := builtinTheme()
+	if menuSet != "" {
+		theme, _ = readThemeConfig(menuSet)
+	}
+	return theme.WithBoardColors(sel.Colors).ColorSlotCodes(legacy)
 }
 
 // PipeCodeAttr returns the DOS attribute a colour slot's pipe code draws,

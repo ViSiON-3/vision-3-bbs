@@ -1,10 +1,7 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 )
 
 // ThemeColors is config.json's theme.colors: the board's own colour
@@ -186,22 +183,12 @@ func ResolveColor(role ColorRole, theme ThemeConfig, board ThemeColors) (int, Co
 // config.json, for a program that needs the board's colours and nothing
 // else. A missing file or section gives no overrides.
 func BoardColorsFromConfigDir(configDir string) (ThemeColors, error) {
-	path := filepath.Join(configDir, "config.json")
-	data, err := os.ReadFile(path)
+	sel, err := themeSelectionFromConfigDir(configDir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return ThemeColors{}, nil
-		}
-		return ThemeColors{}, fmt.Errorf("reading %s: %w", path, err)
-	}
-	var raw struct {
-		Theme ThemeSelection `json:"theme"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return ThemeColors{}, fmt.Errorf("reading theme.colors from %s: %w", path, err)
-	}
-	if err := raw.Theme.Colors.validate(); err != nil {
 		return ThemeColors{}, err
 	}
-	return raw.Theme.Colors, nil
+	if err := sel.Colors.validate(); err != nil {
+		return ThemeColors{}, err
+	}
+	return sel.Colors, nil
 }

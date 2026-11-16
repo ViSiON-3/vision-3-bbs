@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -90,7 +92,7 @@ func TestResolveCallerColor(t *testing.T) {
 func TestBoardColorSlotCodes(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "configs")
-	if got := BoardColorSlotCodes(root, configDir); got[0] != "|07" || got[6] != AttrPipeCode(31) {
+	if got := BoardColorSlotCodes(root, configDir, ""); got[0] != "|07" || got[6] != AttrPipeCode(31) {
 		t.Errorf("empty board = %q", got)
 	}
 	for name, body := range map[string]string{
@@ -105,9 +107,45 @@ func TestBoardColorSlotCodes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got := BoardColorSlotCodes(root, configDir)
+	got := BoardColorSlotCodes(root, configDir, "")
 	if want := [7]string{"|12", "|13", "|07", "|10", "|08", "|11", "|14|B4"}; got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+
+	// A menu set named outright, as menuedit --menus does, is read in place
+	// of the selected one.
+	v3 := filepath.Join(root, "menus", "v3")
+	if err := os.MkdirAll(v3, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(v3, "theme.json"), []byte(`{"callerStat": 9}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := BoardColorSlotCodes(root, configDir, v3)[3]; got != "|09" {
+		t.Errorf("--menus v3 stat = %q, want v3's |09", got)
+	}
+}
+
+// Reading the slot defaults logs nothing, so an editor can call it with its
+// screen up without touching the process's logger.
+func TestBoardColorSlotCodesIsQuiet(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "configs")
+	if err := os.MkdirAll(filepath.Join(root, "menus", "v3"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "menus", "v3", "theme.json"), []byte(`{not json`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	if got := BoardColorSlotCodes(root, configDir, ""); got[0] != "|07" {
+		t.Errorf("a bad theme.json should leave the built-ins: %q", got)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("logged: %s", buf.String())
 	}
 }
 

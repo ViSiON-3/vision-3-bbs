@@ -132,21 +132,30 @@ func builtinTheme() ThemeConfig {
 // menus.d/<set>/theme.json is merged over it key by key (see mergeThemeDocs).
 // Either file may be missing.
 func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
-	set := menuset.FromPath(menuSetPath)
-	defaults := builtinTheme()
-	slog.Info("loading theme configuration", "path", set.Path(menuset.LayerBase, "theme.json"))
-
-	shipped, overlay, err := readThemeLayers(set)
+	path := menuset.FromPath(menuSetPath).Path(menuset.LayerBase, "theme.json")
+	slog.Info("loading theme configuration", "path", path)
+	theme, err := readThemeConfig(menuSetPath)
 	if err != nil {
 		slog.Error("failed to load theme, using default theme settings", "error", err)
+		return theme, err
+	}
+	slog.Info("loaded theme configuration", "path", path)
+	return theme, nil
+}
+
+// readThemeConfig is LoadThemeConfig without the logging, for a tool such
+// as an editor that reads the theme while its screen is up. On an error it
+// returns the built-in defaults.
+func readThemeConfig(menuSetPath string) (ThemeConfig, error) {
+	defaults := builtinTheme()
+	shipped, overlay, err := readThemeLayers(menuset.FromPath(menuSetPath))
+	if err != nil {
 		return defaults, err
 	}
 	theme, err := decodeTheme(defaults, mergeThemeDocs(shipped, overlay))
 	if err != nil {
-		slog.Error("failed to parse theme JSON, using default theme settings", "error", err)
-		return defaults, err
+		return defaults, fmt.Errorf("parsing theme JSON: %w", err)
 	}
-	slog.Info("loaded theme configuration", "path", set.Path(menuset.LayerBase, "theme.json"))
 	return theme, nil
 }
 

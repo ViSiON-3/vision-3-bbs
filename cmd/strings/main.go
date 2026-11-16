@@ -13,8 +13,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -49,11 +47,7 @@ func loadBoardColorSlots(path string) {
 		path = abs
 	}
 	configDir := filepath.Dir(path)
-	// Loading the theme logs; nothing should print under the editor.
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
-	defer slog.SetDefault(prev)
-	ansi.SetColorSlotDefaults(config.BoardColorSlotCodes(filepath.Dir(configDir), configDir))
+	ansi.SetColorSlotDefaults(config.BoardColorSlotCodes(filepath.Dir(configDir), configDir, ""))
 }
 
 func main() {

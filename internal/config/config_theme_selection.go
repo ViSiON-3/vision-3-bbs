@@ -37,24 +37,34 @@ func (c ServerConfig) ThemeName() string {
 // for the tools that need the selection and nothing else. A missing file or
 // an omitted name gives the default; a file that doesn't parse is an error.
 func ThemeNameFromConfigDir(configDir string) (string, error) {
+	sel, err := themeSelectionFromConfigDir(configDir)
+	if err != nil {
+		return "", err
+	}
+	if sel.Name == "" {
+		return menuset.DefaultTheme, nil
+	}
+	return sel.Name, nil
+}
+
+// themeSelectionFromConfigDir reads only the theme section of configDir's
+// config.json, unchecked. A missing file gives an empty section.
+func themeSelectionFromConfigDir(configDir string) (ThemeSelection, error) {
 	path := filepath.Join(configDir, "config.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return menuset.DefaultTheme, nil
+			return ThemeSelection{}, nil
 		}
-		return "", fmt.Errorf("reading %s: %w", path, err)
+		return ThemeSelection{}, fmt.Errorf("reading %s: %w", path, err)
 	}
 	var raw struct {
 		Theme ThemeSelection `json:"theme"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return "", fmt.Errorf("reading theme.name from %s: %w", path, err)
+		return ThemeSelection{}, fmt.Errorf("reading the theme section of %s: %w", path, err)
 	}
-	if raw.Theme.Name == "" {
-		return menuset.DefaultTheme, nil
-	}
-	return raw.Theme.Name, nil
+	return raw.Theme, nil
 }
 
 // SelectedMenuSet returns the menu set directory of the theme that
