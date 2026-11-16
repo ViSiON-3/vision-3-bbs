@@ -50,8 +50,9 @@ type allConfigs struct {
 	// ZipLab is ziplab.json alone. Its ArchiveTypes is left at the default:
 	// ZipLab takes archive formats from archivers.json when the BBS loads it.
 	ZipLab ziplab.Config
-	// Theme is the menu set's theme.json, overlay first; themeSaved is it as
-	// last loaded or saved, so an unedited theme is never written.
+	// Theme is the menu set's theme.json, the overlay merged over the
+	// shipped file; themeSaved is it as last loaded or saved, so an unedited
+	// theme is never written.
 	Theme      config.ThemeConfig
 	themeSaved config.ThemeConfig
 	// themeSet is the menu set Theme was loaded from: the theme selected

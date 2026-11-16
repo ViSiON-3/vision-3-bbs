@@ -1043,8 +1043,10 @@ them by hand.
 
 ### Theme (`theme.json`)
 
-`theme.json` in a menu set holds color settings. A copy in
-`menus.d/<set>/theme.json` overrides it. The color numbers are the same as
+`theme.json` in a menu set holds color settings. A `menus.d/<set>/theme.json`
+is merged over it key by key: put only the keys you change there, and the
+rest, including any a later release adds or changes, come from the shipped
+file. The color numbers are the same as
 for `yesNoHighlightColor`.
 
 In `./config`, under **Theme → Prompt Colors**, Enter on **Yes/No
@@ -1062,7 +1064,7 @@ colour's blink bit (backgrounds 8-15) is kept as it was.
 | `sysopChatScreen` | (none) | The [chat screen](#chat-screens) split-screen chat opens with; empty means the built-in layout, `random` one of the set's screens each chat |
 | `toastFadeColors` | `"8,7,15"` | The colours a [toast](users/login-sequence.md#toasts) fades in through, and out through in reverse, when the board has `toastFade` on: 1 to 8 foreground colours `0`-`15`, comma-separated, in fade-in order. A value that can't be read uses the default. Set it in `./config` under **Theme → Toasts → Fade Colors**, with the colour picker |
 
-The defaults apply to fields missing from `theme.json`. The shipped `v3`
+The defaults apply to fields missing from both files. The shipped `v3`
 set's `theme.json` sets `yesNoHighlightColor` to `31`, `yesNoRegularColor`
 to `13`, `sysopChatScreen` to `V3CHAT1` and `toastFadeColors` to the default.
 

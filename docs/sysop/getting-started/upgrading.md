@@ -261,6 +261,11 @@ have, a world-readable file holding passwords. Each finding comes with a
 failures, so a deploy script can stop on `2`. See
 [Doctor](configuration/configuration.md#doctor).
 
+If it notes keys in `menus.d/<theme>/theme.json` that only repeat the
+shipped theme, `./vision3 doctor --fix` removes them (after a backup), so the
+new theme's values reach the board. The overlay is merged over the shipped
+`theme.json` key by key, so only keys you set yourself stay ahead of it.
+
 ## Restarting
 
 Restart the BBS. A running `vision3` keeps executing the binary it started with,

@@ -188,8 +188,8 @@ A running BBS picks colour changes up without a restart.
 
 **Chat Screen** is not a colour and is still saved to the theme's overlay,
 `menus.d/<theme>/theme.json` (`menus.d/v3/theme.json` for the default
-theme), so upgrading the shipped menus keeps it; the first such save copies
-the shipped settings there. It is the setting of the theme that was selected
+theme), so upgrading the shipped menus keeps it. Only settings that differ
+from the shipped `theme.json` are written there. It is the setting of the theme that was selected
 when you opened `./config`: after changing **Theme Selection**, save,
 restart the BBS, and reopen `./config` to set the new theme's chat screen.
 Colours need no such care, since they are the board's and apply over
@@ -358,18 +358,28 @@ What each section covers:
 
 ### Safe Fixes (`--fix`)
 
-Doctor repairs one class of problem on request: the standard data
-directories. `--fix` creates whichever of `data/users`, `data/logs`,
-`data/msgbases` and `data/files` are missing, then runs the normal report.
-`--dry-run` shows what `--fix` would create without creating it:
+Doctor repairs two kinds of problem on request:
+
+- **Standard data directories.** `--fix` creates whichever of
+  `data/users`, `data/logs`, `data/msgbases` and `data/files` are missing.
+- **An overlay `theme.json` that repeats the shipped theme.** Keys of the
+  selected theme's `menus.d/<theme>/theme.json` that only repeat what the
+  shipped `theme.json` gives are removed, and the file goes if nothing is
+  left (see [Boards with an overlay `theme.json`](#board-colour-overrides)).
+  The file is first copied to
+  `data/backups/menus.d-<theme>-theme.json.<date>-<time>`. Keys with values
+  of your own are kept.
+
+It then runs the normal report. `--dry-run` shows what `--fix` would do
+without changing anything:
 
 ```bash
 ./vision3 doctor --fix --dry-run    # preview
-./vision3 doctor --fix              # create the missing directories
+./vision3 doctor --fix              # make the changes
 ```
 
-The report then opens with a `SAFE FIXES` block, one line per directory
-(`WOULD`, `FIXED`, `SKIP` or `ERROR`). A path that exists but is not a
+The report then opens with a `SAFE FIXES` block, one line per change
+(`WOULD`, `FIXED`, `SKIP` or `ERROR`). A data path that exists but is not a
 directory is skipped and left for you to look at. Nothing else is ever
 changed: every other finding is a `FIX →` suggestion you carry out yourself,
 usually in `./config`.
@@ -1350,26 +1360,33 @@ the theme:
 Colour precedence, lowest to highest:
 
 1. The built-in default.
-2. The selected theme: `menus/<theme>/theme.json`, or its overlay copy
-   `menus.d/<theme>/theme.json` when there is one.
+2. The selected theme: `menus/<theme>/theme.json`, with the keys of its
+   overlay `menus.d/<theme>/theme.json`, if there is one, applied over it.
 3. The board's override in `config.json` `theme.colors`.
 4. A screen's own BAR file, for that screen, unless it is an inherit marker
    (see [Per-screen lightbar colors](menus/menu-system.md#per-screen-lightbar-colors)).
    `./config` shows these as `screen override`.
 
-**Boards with an overlay `theme.json`.** Before `theme.colors`, `./config`
-saved a colour change by copying the whole theme into
-`menus.d/<theme>/theme.json`. That file still works, as part of the theme
-(layer 2), so nothing looks different after upgrading. But it shadows the
-shipped `theme.json`, so the theme's later defaults never reach the board.
-`./vision3 doctor` notes an overlay that only repeats the shipped values;
-that one can simply be deleted. If yours holds colours you chose, either
-keep it, or set those colours under **Theme** in `./config` (which stores
-them in `theme.colors`) and then take the colour entries out of the file.
-Leave any setting that is not a colour, such as a `sysopChatScreen` you
-picked: the overlay is still where that lives, and deleting the whole file
-would put the shipped chat screen back. Delete the file only when nothing
-of yours is left in it. Nothing is moved for you.
+**Boards with an overlay `theme.json`.** The overlay
+`menus.d/<theme>/theme.json` is merged over the shipped `theme.json` key by
+key: a key the overlay sets wins, and every other key, including ones a
+later release adds or changes, comes from the shipped file. One exception
+keeps an older overlay looking as it did: if the overlay sets
+`yesNoHighlightColor` and leaves out `lightbarSelected`, the selected bar
+follows the overlay's Yes/No colour, not the shipped role (likewise
+`yesNoRegularColor` and `lightbarNormal`). `null` for a lightbar role
+unsets it, so it falls back as in a theme that leaves it out.
+
+Before `theme.colors`, `./config` saved a colour change by copying the
+whole theme into the overlay. Those copied keys still work, but each one
+pins today's value if a later theme changes it. `./vision3 doctor` lists
+the overlay keys that only repeat the shipped values, and
+`./vision3 doctor --fix` removes them, after copying the file to
+`data/backups/`, and removes the file if nothing is left (`--dry-run` shows what it would do). Keys with values of your own
+stay. To move a colour you chose into `theme.colors`, set it under
+**Theme** in `./config` and then take its key out of the overlay. Leave
+any setting that is not a colour, such as a `sysopChatScreen` you picked:
+the overlay is where that lives.
 
 ### Theme Configuration
 
@@ -1390,7 +1407,8 @@ theme) controls color schemes:
   "chatSysopColor": 11,
   "chatUserColor": 10,
   "autocorrectHighlightColor": 14,
-  "sysopChatScreen": "V3CHAT1"
+  "sysopChatScreen": "V3CHAT1",
+  "toastFadeColors": "8,7,15"
 }
 ```
 
@@ -1408,7 +1426,9 @@ The config editor's [Theme](#theme-sub-menu) pages set the colours as
 [board overrides](#board-colour-overrides) in `config.json`, and
 `sysopChatScreen` here.
 
-A copy at `menus.d/<set>/theme.json` overrides the one in `menus/<set>/`.
+A `menus.d/<set>/theme.json` holding only the keys you change is merged
+over the one in `menus/<set>/`; keys it leaves out come from the shipped
+file.
 
 #### Lightbar Colour Roles
 

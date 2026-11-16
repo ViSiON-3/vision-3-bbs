@@ -229,7 +229,7 @@ vision3/
 ./vision3 --output-mode=<mode> # force an encoding for every session
 ./vision3 doctor               # check the board and exit (also: --doctor)
 ./vision3 doctor --json        # the same report as JSON
-./vision3 doctor --fix         # also create missing data/ directories (--dry-run to preview)
+./vision3 doctor --fix         # also create missing data/ directories and trim an overlay theme.json (--dry-run to preview)
 ```
 
 | Flag | Meaning |
@@ -237,5 +237,5 @@ vision3/
 | `--output-mode` | `auto` (default: detect per session), `utf8` or `cp437` for every caller. See [Encoding](advanced/encoding.md) |
 | `doctor`, `--doctor` | Read-only health check of the board in the current directory; exit `0` clean, `1` warnings, `2` failures. See [Doctor](configuration/configuration.md#doctor) |
 | `--json` | With `doctor`: JSON output |
-| `--fix` | With `doctor`: create missing standard data directories |
+| `--fix` | With `doctor`: create missing standard data directories, and remove the keys of an overlay `theme.json` that only repeat the shipped theme (backed up to `data/backups/` first) |
 | `--dry-run` | With `--fix`: preview only |
