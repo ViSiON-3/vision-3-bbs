@@ -344,3 +344,44 @@ func TestF3F4Guards(t *testing.T) {
 		t.Errorf("F4 with no default: mode %v, value %q; want the value kept", m.mode, m.values["quoteStartLine"])
 	}
 }
+
+// TestChangedDefaultBlank checks a deliberately blank string whose default
+// changed shows as changed, so F5 can keep it.
+func TestChangedDefaultBlank(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "strings.json")
+	if err := os.WriteFile(path, []byte(`{"quoteTopNet": "", "_defaults": {"quoteTopNet": "0000000000000000"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := New(path, map[string]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.stateOf("quoteTopNet") != stateChanged {
+		t.Fatalf("state = %v; want changed", m.stateOf("quoteTopNet"))
+	}
+	m.cursor = indexOfKey(t, m, "quoteTopNet")
+	m = key2(t, m, tea.KeyMsg{Type: tea.KeyF5})
+	if m.stateOf("quoteTopNet") != stateEmpty || !m.dirty {
+		t.Errorf("after F5: state %v, dirty %v; want empty, dirty", m.stateOf("quoteTopNet"), m.dirty)
+	}
+}
+
+// TestEditReplacesNonStringValue checks an edit of a key the file held as
+// a non-string survives the save.
+func TestEditReplacesNonStringValue(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "strings.json")
+	if err := os.WriteFile(path, []byte(`{"pauseString": 123}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := New(path, map[string]string{"pauseString": "factory"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.values["pauseString"] = "mine"
+	if err := m.save(); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := LoadStrings(path); got["pauseString"] != "mine" {
+		t.Errorf("after save pauseString = %q; want the edit", got["pauseString"])
+	}
+}

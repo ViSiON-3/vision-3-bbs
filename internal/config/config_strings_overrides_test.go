@@ -2,7 +2,9 @@ package config
 
 import (
 	"encoding/json"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -88,18 +90,19 @@ func TestChangedStringDefaults(t *testing.T) {
 	}
 }
 
-// Blank, for a key whose blank prints the fallback, prints the same as the
-// default and goes.
+// Blank, for a key with a fallback, goes when it prints the same as the
+// default and stays when it doesn't: every such key, in a fixed order.
 func TestTrimStringsBlankFallback(t *testing.T) {
-	for key := range StringFallbacks {
+	for _, key := range slices.Sorted(maps.Keys(StringFallbacks)) {
 		if !IsStringKey(key) {
 			continue
 		}
 		tr := TrimStrings(rawStrings(t, `{"`+key+`": ""}`))
-		if len(tr.Shipped) != 1 || len(tr.Kept) != 0 {
-			t.Errorf("%s blank: shipped %v, kept %v; want it removed", key, tr.Shipped, tr.Kept)
+		sameAsDefault := EffectiveString(key, "", true) == StringDefault(key)
+		if removed := len(tr.Shipped) == 1; removed != sameAsDefault {
+			t.Errorf("%s blank: removed %v; want %v (blank prints %q, default %q)",
+				key, removed, sameAsDefault, EffectiveString(key, "", true), StringDefault(key))
 		}
-		return
 	}
 }
 

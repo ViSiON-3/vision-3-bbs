@@ -676,6 +676,9 @@ func (m Model) save() error {
 		}
 	}
 	extra := maps.Clone(m.extra)
+	for k := range out {
+		delete(extra, k) // an edit replaces a non-string value the file held
+	}
 	if len(bases) > 0 {
 		data, err := json.Marshal(bases)
 		if err != nil {

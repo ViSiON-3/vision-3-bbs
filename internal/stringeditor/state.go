@@ -87,10 +87,10 @@ func (m Model) stateOf(key string) valueState {
 		}
 		return stateDefault
 	}
+	if m.defaultChanged(key) {
+		return stateChanged // a deliberate blank included: F5 keeps it
+	}
 	if value != "" {
-		if m.defaultChanged(key) {
-			return stateChanged
-		}
 		return stateCustom
 	}
 	// Set blank on purpose.
