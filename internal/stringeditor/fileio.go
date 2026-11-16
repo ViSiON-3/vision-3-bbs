@@ -52,7 +52,7 @@ func SaveStrings(path string, strings map[string]string) error {
 // saveStringsFile writes values, skipping the catalog's reserved placeholders,
 // and extra, the entries that are not strings, as one sorted object.
 func saveStringsFile(path string, values map[string]string, extra map[string]json.RawMessage) error {
-	all := make(map[string]json.RawMessage, len(values)+len(extra))
+	all := map[string]json.RawMessage{}
 	for k, v := range values {
 		if isReservedKey(k) && catalogKey(k) {
 			continue // the catalog's placeholder slots map to nothing
