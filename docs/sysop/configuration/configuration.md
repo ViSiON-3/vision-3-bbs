@@ -56,7 +56,7 @@ The editor opens to a main menu. Keys **1** through **7**, **B** and **C** open 
 | 0 | Event Scheduler | Automated event record list |
 | A | Login Sequence | Login step record list |
 | B | ZipLab Upload Processing | Sub-menu: General, Pipeline Steps, Virus Scan (see [ZipLab](files/ziplab.md)) |
-| C | Theme | Sub-menu: Theme Selection, Prompt Colors, Lightbar Colors, Screen Overrides, Split-Screen Chat, Toasts (see [Theme Sub-menu](#theme-sub-menu)) |
+| C | Theme | Sub-menu: Theme Selection, Prompt Colors, Lightbar Colors, Screen Overrides, Split-Screen Chat, Toasts, Caller Colors (see [Theme Sub-menu](#theme-sub-menu)) |
 | Q | Quit | Exit (prompts to save if there are unsaved changes) |
 
 ### System Setup Sub-menu
@@ -170,6 +170,7 @@ edits that theme's `theme.json` (see [Theme Configuration](#theme-configuration)
 | Screen Overrides | The screens whose own `*HI.BAR` file sets their highlight over the shared colours: each one's colour and whether the file is shipped or in `menus.d`. Set a screen to **Y** to have it **inherit shared colours**; saving writes an inherit marker to `menus.d/<theme>/bar/` (see [Per-screen lightbar colors](menus/menu-system.md#per-screen-lightbar-colors)). The BARs themselves are edited with `menuedit` |
 | Split-Screen Chat | The chat screen chat opens with, picked from the menu set's screens, the built-in layout or **random**; and the sysop's and caller's text colours where a screen sets none |
 | Toasts | The colours a toast fades through |
+| Caller Colors | The board's default for each [caller colour](#caller-colour-roles), `\|C1`–`\|C7` |
 
 **Colours are board overrides.** Each colour shows the value the board draws
 with, in that colour, and where it comes from: `built-in`, `theme` or
@@ -1369,7 +1370,8 @@ the theme:
 - **Only what you change is stored.** A colour left out inherits the
   selected theme's. So when an upgrade changes the theme's defaults, or you
   switch theme, every colour you have not overridden follows it.
-- **Keys.** The [lightbar colour roles](#lightbar-colour-roles), plus
+- **Keys.** The [lightbar colour roles](#lightbar-colour-roles), the
+  [caller colour roles](#caller-colour-roles), and
   `yesNoHighlightColor`, `yesNoRegularColor`, `chatSysopColor`,
   `chatUserColor`, `autocorrectHighlightColor` and `toastFadeColors`, as in
   [`theme.json`](#theme-configuration).
@@ -1442,6 +1444,7 @@ theme) controls color schemes:
 - `yesNoHighlightColor` - DOS color code for the selected answer of a Yes/No prompt
 - `yesNoRegularColor` - DOS color code for the other answer of a Yes/No prompt
 - `lightbarSelected` and the other `lightbar…` fields - the [lightbar colour roles](#lightbar-colour-roles) below
+- `callerPrompt` and the other `caller…` fields - the [caller colour roles](#caller-colour-roles) below
 - `chatSysopColor` - color of the sysop's text in split-screen chat where the chat screen sets none (default `11`)
 - `chatUserColor` - color of the caller's text in split-screen chat, likewise (default `10`)
 - `autocorrectHighlightColor` - color the message editor draws a word in right after [autocorrect](messages/message-areas.md#autocorrect) fixed it, for as long as the fix is shown on the prompt row; the screen only, the message is unchanged (default `14`, yellow). A background of 0 (black) leaves the terminal's own background behind the word
@@ -1500,6 +1503,40 @@ menu's unselected entries, which use the terminal's default colour.
 The board can override any of these without touching the theme; see
 [Board Colour Overrides](#board-colour-overrides) for that and the full
 colour precedence.
+
+#### Caller Colour Roles
+
+Each [caller colour code](advanced/string-editor.md#caller-colours-c1--c7),
+`|C1` to `|C7`, draws the board's colour for its role, and a caller who
+picks their own under **U Colours** in User Konfig sees theirs instead,
+wherever a screen uses the code.
+
+| Field | Code | Default | What it colours |
+| ----- | ---- | ------- | --------------- |
+| `callerPrompt` | `\|C1` | `7` | A prompt's question |
+| `callerInput` | `\|C2` | `15` | What the caller types at a prompt |
+| `callerText` | `\|C3` | `7` | Plain text |
+| `callerStat` | `\|C4` | `15` | A value picked out of the text, such as a name, a number or a key |
+| `callerText2` | `\|C5` | `8` | Secondary text, such as brackets and separators |
+| `callerStat2` | `\|C6` | `11` | A second kind of value, such as an area name |
+| `callerBar` | `\|C7` | `lightbarSelected` | A highlighted choice |
+
+- **The defaults are the stock colours.** The stock prompts that use the
+  codes look exactly as they did with fixed colours.
+- **`callerBar` is the lightbar highlight.** Left out, it is
+  `lightbarSelected`. The highlighted row or command on the message and
+  file conference and area selectors, the file list and its command bar,
+  the BBS list, the generated door menu, and the message reader and
+  message scan command bars is in the caller's Bar colour when they picked
+  one, else `callerBar`, so it only changes from `lightbarSelected` for a
+  board that sets `callerBar`. A screen's own BAR file still colours that
+  screen.
+- **An older `strings.json`.** Its `defColor1`–`defColor7`, where set,
+  stand in for a role the theme and `theme.colors` both leave out, in the
+  codes only, not on the lightbars.
+- **Set them** in the theme, or as board overrides under **Theme → Caller
+  Colors** in `./config`. A value is a DOS colour, background and
+  foreground, as for the other roles.
 
 Standard DOS color codes range from 0-255, where:
 
