@@ -8,7 +8,9 @@
 package stringeditor
 
 import (
+	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringformat"
+	"github.com/ViSiON-3/vision-3-bbs/internal/stringhistory"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart/colorpick"
 )
@@ -98,6 +101,16 @@ type Model struct {
 	filePath        string            // Path to strings.json
 	dirty           bool              // Whether values have been modified
 
+	// extra holds the file's entries that are not strings (an older file's
+	// numeric defColorN), kept as they are on save. bases is the
+	// config.StringBasesKey entry: per customised string, the fingerprint of
+	// the shipped default it replaced. kept marks strings whose fingerprint
+	// a save refreshes: edited this session, or kept with F5 after their
+	// default changed.
+	extra map[string]json.RawMessage
+	bases map[string]string
+	kept  map[string]bool
+
 	// Navigation
 	cursor   int // Current item index (0-based, across all pages)
 	page     int // Current page (0-based)
@@ -142,16 +155,25 @@ type Model struct {
 // shippedDefaults, if non-nil, provides factory default values for F4 restore.
 func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 	catalog := StringEntries()
-	values, err := LoadStrings(filePath, shippedDefaults)
+	values, extra, err := loadStringsFile(filePath)
 	if err != nil {
 		return Model{}, fmt.Errorf("loading strings: %w", err)
 	}
-	// An unedited string whose shipped text has since changed is shown, and
-	// saved, as the current default: it is what the BBS prints.
+	// An unedited string whose shipped text has since changed is the
+	// default: it is what the BBS prints, and a save leaves the key out so
+	// later wording reaches it too.
 	for k, v := range values {
-		if current, ok := config.SupersededString(k, v); ok {
-			values[k] = current
+		if _, ok := config.SupersededString(k, v); ok {
+			delete(values, k)
 		}
+	}
+	var bases map[string]string
+	if raw, ok := extra[config.StringBasesKey]; ok {
+		bases = config.StringBases(map[string]json.RawMessage{config.StringBasesKey: raw})
+		delete(extra, config.StringBasesKey)
+	}
+	if bases == nil {
+		bases = map[string]string{}
 	}
 
 	ti := textinput.New()
@@ -184,6 +206,9 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 		origValues:      origValues,
 		shippedDefaults: shippedDefaults,
 		filePath:        filePath,
+		extra:           extra,
+		bases:           bases,
+		kept:            map[string]bool{},
 		cursor:          0,
 		page:            0,
 		pageSize:        pageSize,
@@ -339,10 +364,6 @@ func (m Model) updateNavigate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.message = "This field is reserved"
 			return m, nil
 		}
-		if _, ok := m.origValues[entry.Key]; !ok {
-			m.message = "No original value to revert to"
-			return m, nil
-		}
 		m.mode = modeRevertConfirm
 		m.confirmYes = false
 		return m, nil
@@ -353,12 +374,23 @@ func (m Model) updateNavigate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.message = "This field is reserved"
 			return m, nil
 		}
-		if _, ok := m.defaultFor(entry.Key); !ok {
-			m.message = "No ViSiON/3 default for this string"
+		if _, set := m.values[entry.Key]; !set {
+			m.message = "Already the ViSiON/3 default"
 			return m, nil
 		}
 		m.mode = modeDefaultConfirm
 		m.confirmYes = false
+		return m, nil
+	case tea.KeyF5:
+		// Keep a customised string whose shipped default has changed.
+		entry := m.entries[m.cursor]
+		if m.stateOf(entry.Key) != stateChanged {
+			m.message = "F5 keeps your text when the shipped default changes under it"
+			return m, nil
+		}
+		m.kept[entry.Key] = true
+		m.message = fmt.Sprintf("Keeping yours: %s", entry.Label)
+		m.recomputeDirty()
 		return m, nil
 	case tea.KeyF10:
 		// Save and exit. Report format mismatches once before writing, but do
@@ -370,7 +402,7 @@ func (m Model) updateNavigate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				len(problems), problems[0].Key, plural(len(problems)))
 			return m, nil
 		}
-		if err := SaveStrings(m.filePath, m.values); err != nil {
+		if err := m.save(); err != nil {
 			m.message = fmt.Sprintf("ERROR: %v", err)
 			return m, nil
 		}
@@ -437,6 +469,7 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if newVal != m.editBase(m.editKey) {
 			m.values[m.editKey] = newVal
+			m.kept[m.editKey] = true
 			m.recomputeDirty()
 		}
 		m.mode = modeNavigate
@@ -499,19 +532,21 @@ func (m Model) executeConfirm() (tea.Model, tea.Cmd) {
 		entry := m.entries[m.cursor]
 		if orig, ok := m.origValues[entry.Key]; ok {
 			m.values[entry.Key] = orig
-			m.message = fmt.Sprintf("Reverted: %s", entry.Label)
-			m.recomputeDirty()
+		} else {
+			delete(m.values, entry.Key)
 		}
+		delete(m.kept, entry.Key)
+		m.message = fmt.Sprintf("Reverted: %s", entry.Label)
+		m.recomputeDirty()
 		m.mode = modeNavigate
 		return m, nil
 
 	case modeDefaultConfirm:
 		entry := m.entries[m.cursor]
-		if def, ok := m.defaultFor(entry.Key); ok {
-			m.values[entry.Key] = def
-			m.message = fmt.Sprintf("Restored default: %s", entry.Label)
-			m.recomputeDirty()
-		}
+		delete(m.values, entry.Key)
+		delete(m.kept, entry.Key)
+		m.message = fmt.Sprintf("Restored default: %s", entry.Label)
+		m.recomputeDirty()
 		m.mode = modeNavigate
 		return m, nil
 	}
@@ -564,20 +599,69 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-// defaultFor returns the factory value for a key. The shipped template wins;
-// where it has no entry the runtime's compiled-in fallback is offered instead,
-// so F4 still works for a string added after the template was last updated.
+// defaultFor returns what the BBS prints for key when strings.json leaves it
+// out: the shipped value, or for a string the template doesn't carry, the
+// runtime's compiled-in default. ok is false when there is none at all.
 func (m Model) defaultFor(key string) (string, bool) {
-	if def, ok := m.shippedDefaults[key]; ok {
-		return def, true
+	_, shipped := m.shippedDefaults[key]
+	_, fallback := config.StringFallbacks[key]
+	_, missing := config.StringMissingDefaults[key]
+	return m.effective(key, "", false), shipped || fallback || missing
+}
+
+// effective is what the BBS prints for key with the given value, as
+// config.EffectiveString works it out, against the editor's defaults.
+func (m Model) effective(key, value string, present bool) string {
+	return config.EffectiveStringWith(m.shippedDefaults, key, value, present)
+}
+
+// isDefault reports whether key's value prints the same as leaving it out,
+// so a save need not write it.
+func (m Model) isDefault(key string) bool {
+	v, present := m.values[key]
+	if !present {
+		return true
 	}
-	if def, ok := config.StringFallbacks[key]; ok {
-		return def, true
+	if isReservedKey(key) {
+		return false
 	}
-	if def, ok := config.StringMissingDefaults[key]; ok {
-		return def, true
+	if _, known := m.defaultFor(key); !known && v != "" {
+		return false
 	}
-	return "", false
+	return m.effective(key, v, true) == m.effective(key, "", false)
+}
+
+// save writes strings.json with only what is the sysop's: values that print
+// differently from the default, keys the editor doesn't know (doctor lists
+// those), the entries that are not strings, and a fingerprint of the
+// current default for each customised string, so a later release can tell
+// when its default changes.
+func (m Model) save() error {
+	out := map[string]string{}
+	bases := map[string]string{}
+	for k, v := range m.values {
+		if m.isDefault(k) {
+			continue
+		}
+		out[k] = v
+		if !config.IsStringKey(k) {
+			continue
+		}
+		if base, ok := m.bases[k]; ok && !m.kept[k] {
+			bases[k] = base
+		} else {
+			bases[k] = stringhistory.Hash(m.effective(k, "", false))
+		}
+	}
+	extra := maps.Clone(m.extra)
+	if len(bases) > 0 {
+		data, err := json.Marshal(bases)
+		if err != nil {
+			return err
+		}
+		extra[config.StringBasesKey] = data
+	}
+	return saveStringsFile(m.filePath, out, extra)
 }
 
 // formatProblem checks one value's directives against the shipped default's.
@@ -593,10 +677,23 @@ func (m Model) formatProblem(key, value string) error {
 }
 
 // formatProblems reports every configured string whose directives no longer
-// match the arguments its call site passes.
+// match the arguments its call site passes. It checks the strings as the
+// BBS prints them, the defaults with the file's values over them, and
+// reports only those the file sets.
 func (m Model) formatProblems() []stringformat.Problem {
 	defaults := stringformat.MergeDefaults(config.StringFallbacks, m.shippedDefaults)
-	return stringformat.Validate(m.values, config.StringFallbacks, config.StringMissingDefaults, defaults)
+	merged := maps.Clone(m.shippedDefaults)
+	if merged == nil {
+		merged = map[string]string{}
+	}
+	maps.Copy(merged, m.values)
+	var problems []stringformat.Problem
+	for _, p := range stringformat.Validate(merged, config.StringFallbacks, config.StringMissingDefaults, defaults) {
+		if _, set := m.values[p.Key]; set {
+			problems = append(problems, p)
+		}
+	}
+	return problems
 }
 
 // plural renders a "and N more" suffix for a warning naming one example.
@@ -610,16 +707,23 @@ func plural(n int) string {
 // recomputeDirty re-derives the dirty flag by comparing every current value
 // against the snapshot loaded from disk, so undoing an edit clears it.
 func (m *Model) recomputeDirty() {
-	m.dirty = false
+	m.dirty = len(m.values) != len(m.origValues)
 	for k, v := range m.values {
 		if ov, ok := m.origValues[k]; !ok || v != ov {
 			m.dirty = true
 			return
 		}
 	}
+	// Keeping a string with F5 refreshes its fingerprint, which is a change
+	// to save.
+	for k := range m.kept {
+		if _, set := m.values[k]; set && m.bases[k] != stringhistory.Hash(m.effective(k, "", false)) {
+			m.dirty = true
+			return
+		}
+	}
 }
 
-// getValue returns the current value for a key, or empty string.
 // editBase returns the value an edit of key starts from and is compared with:
 // the file's value, or for an absent key the default the BBS uses for it. An
 // absent key with a missing-key default can then be saved blank, which
@@ -628,12 +732,14 @@ func (m Model) editBase(key string) string {
 	if v, ok := m.values[key]; ok {
 		return v
 	}
-	return config.StringMissingDefaults[key]
+	return m.effective(key, "", false)
 }
 
+// getValue returns what the BBS prints for key: the file's value, or the
+// default when the file leaves it out.
 func (m Model) getValue(key string) string {
 	if v, ok := m.values[key]; ok {
 		return v
 	}
-	return ""
+	return m.effective(key, "", false)
 }

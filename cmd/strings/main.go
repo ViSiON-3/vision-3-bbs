@@ -11,7 +11,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -25,34 +24,10 @@ import (
 	configtemplates "github.com/ViSiON-3/vision-3-bbs/templates/configs"
 )
 
-// loadShippedDefaults returns the factory default strings used by F4 restore
-// and by the creation of a missing strings.json.
-//
-// An on-disk template wins so a distribution can ship adjusted defaults, but
-// the templates directory is not present in every installation, so the copy
-// embedded in this binary is the guaranteed fallback rather than giving up.
+// loadShippedDefaults returns the shipped strings built into this binary,
+// the same ones the BBS prints for every key strings.json leaves out, so the
+// editor and the BBS never disagree on what "default" means.
 func loadShippedDefaults() map[string]string {
-	candidates := []string{
-		"templates/configs/strings.json",
-	}
-	if exe, err := os.Executable(); err == nil {
-		dir := filepath.Dir(exe)
-		candidates = append(candidates,
-			filepath.Join(dir, "templates", "configs", "strings.json"),
-			filepath.Join(dir, "..", "templates", "configs", "strings.json"),
-		)
-	}
-	for _, path := range candidates {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		var defaults map[string]string
-		if err := json.Unmarshal(data, &defaults); err == nil {
-			return defaults
-		}
-	}
-
 	defaults, err := configtemplates.StringDefaults()
 	if err != nil {
 		// Unreachable unless the embedded asset itself is corrupt.
@@ -91,7 +66,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Load factory defaults from templates/, falling back to the embedded copy
 	shippedDefaults := loadShippedDefaults()
 
 	loadBoardColorSlots(path)

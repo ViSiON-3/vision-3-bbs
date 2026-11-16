@@ -71,7 +71,8 @@ the picture completely. It uses the shared shaded fill instead.
 | `Enter` | Edit selected string (blank input field) |
 | `F1` | Edit selected string (pre-filled with current value) |
 | `F3` | Revert selected string to its last-saved value |
-| `F4` | Restore selected string to ViSiON/3 default (from templates/) |
+| `F4` | Restore selected string to the ViSiON/3 default: its key leaves `strings.json`, so later shipped wording reaches it |
+| `F5` | Keep your text for a string whose shipped default has changed since you set it (marked `!`) |
 | `F10` | Save changes and exit |
 | `F2` (while editing) | Open the colour picker |
 | `Esc` | Abort — shows confirmation dialog if unsaved changes |
@@ -156,7 +157,7 @@ Several actions display a centered Yes/No confirmation dialog before proceeding:
 
 - **Esc** (with unsaved changes) — "Abort Without Saving?"
 - **F3** — "Revert to Last Saved?"
-- **F4** — "Restore ViSiON/3 Default?"
+- **F4** — "Restore ViSiON/3 Default?" (takes the string out of `strings.json`)
 
 In any confirmation dialog:
 
@@ -167,25 +168,32 @@ In any confirmation dialog:
 
 ## Value States
 
+`configs/strings.json` holds only the strings you change; every other string
+shows, and prints, the ViSiON/3 default built into the binary. Saving writes
+only what differs from the default, so a string you set back to the default
+leaves the file, and a later release's rewording reaches it.
+
 A blank value column does not mean the string is unused. The marker just right of the closing
-bracket says which of five states an entry is in, and the message row above the description spells it out
+bracket says which state an entry is in, and the message row above the description spells it out
 for the selected entry.
 
 | Marker | State | Meaning |
 |--------|-------|---------|
-| (none) | ViSiON/3 default | The value matches the shipped default |
+| (none) | ViSiON/3 default | Not in `strings.json` (or set to what prints the same); the BBS prints the shipped default, shown in the list |
 | `*` | Custom | You have changed it from the shipped default |
-| `~` | Runtime fallback | Blank in `strings.json`, but the BBS prints a built-in default. The list shows that default, dimmed |
-| `0` | Explicitly empty | Present in `strings.json` and set to nothing. The BBS prints nothing |
-| `-` | Not set | Absent from `strings.json` with no built-in default. The BBS prints nothing |
+| `!` | Custom, default changed | You changed it, and a later release changed the shipped default since. The message row shows the new default and, where known, the old one. `F4` takes the new default, `F5` keeps yours |
+| `~` | Runtime fallback | Set blank in `strings.json`, but the BBS prints a built-in default. The list shows that default, dimmed |
+| `0` | Explicitly empty | Set to nothing in `strings.json`. The BBS prints nothing |
+| `-` | Not set | No default at all, and not in `strings.json`. The BBS prints nothing |
 
-The `~` state is the common one after an upgrade: a release adds a string, your existing
-`strings.json` does not have it, and the BBS falls back to the value compiled into the binary.
-Nothing is broken — pressing `F4` writes that default into your file if you want it there
-explicitly.
+To notice a changed default, the editor records beside each string you
+customise a fingerprint of the default it replaced, in a `_defaults` entry in
+`strings.json`. The BBS ignores it. `./vision3 doctor` reports the same
+strings.
 
 Keys in `strings.json` that the editor has no entry for — a leftover from Vision/2, or something you
-added by hand — are written back unchanged when you save. Nothing is dropped.
+added by hand — are written back unchanged when you save. Nothing is dropped. `./vision3 doctor`
+lists the ones the BBS doesn't read.
 
 ## String Descriptions
 
@@ -244,9 +252,7 @@ status and error messages, the password prompts, the file-columns box, and the
 colours box (`konfigColor*`, with `konfigColorSlotNames` naming the seven
 [caller colours](#caller-colours-c1--c7) in order).
 They are the `konfig*` keys, listed under **Konfig:** in the editor, so the
-form can be reworded or translated like any other prompt. Every one has a
-built-in fallback, so a `strings.json` from before the form existed still
-draws it; `F4` writes the shipped text into your file. Names, titles and
+form can be reworded or translated like any other prompt. Names, titles and
 values are written into fixed cells, so keep them short, and the entries
 marked *Plain text, no colour codes* in their description are drawn without
 pipe-code processing.
@@ -545,35 +551,38 @@ This tool is a faithful recreation of the Vision/2 BBS `STRINGS.EXE` (Turbo Pasc
 
 The editor supports two layers of value restoration:
 
-1. **Last-Saved Values (F3 "Revert")** — When the editor starts, it snapshots all values from `configs/strings.json` into `origValues`. F3 restores the currently selected string to the value it had when the editor was opened (i.e., whatever is on disk). This snapshot lives in memory only and is set in `stringeditor.New()`.
+1. **Last-Saved Values (F3 "Revert")** — When the editor starts, it snapshots all values from `configs/strings.json` into `origValues`. F3 restores the currently selected string to the value it had when the editor was opened (i.e., whatever is on disk), taking the key back out if it was not there. This snapshot lives in memory only and is set in `stringeditor.New()`.
 
-2. **ViSiON/3 Defaults (F4 "Restore")** — A separate set of shipped default values loaded from `templates/configs/strings.json`, with the copy embedded in the binary as a fallback. This represents the canonical out-of-the-box string values that ship with ViSiON/3. F4 restores the selected string to this shipped value; where the template has no entry for a key, F4 offers the runtime fallback from `config.StringFallbacks` instead.
+2. **ViSiON/3 Defaults (F4 "Restore")** — The shipped strings embedded in the binary from `templates/configs/strings.json`, the same values the BBS prints for every key the file leaves out. F4 removes the key from the file, so the shipped value (or, for a key the template doesn't carry, the runtime fallback from `config.StringFallbacks`) applies.
 
 #### Default Loading Flow
 
 ```text
 cmd/strings/main.go
-  ├─ loadShippedDefaults()
-       ├─ Try:  ./templates/configs/strings.json  (relative to CWD)
-       ├─ Try:  <exe-dir>/templates/configs/strings.json  (relative to binary)
-       ├─ Try:  <exe-dir>/../templates/configs/strings.json  (bin/ layout)
-       └─ Else: the copy embedded in the binary (templates/configs/embed.go)
-
+  ├─ loadShippedDefaults()  — the copy embedded in the binary (templates/configs/embed.go)
   └─ stringeditor.New(configPath, shippedDefaults)
-       ├─ loads configs/strings.json into values
+       ├─ loads configs/strings.json into values (missing: none)
        ├─ copies values → origValues  (F3 revert source)
        └─ stores shippedDefaults      (F4 restore source)
 ```
 
-- `loadShippedDefaults()` in `cmd/strings/main.go` tries three on-disk locations in order: relative to the working directory (`cd /opt/vision3 && ./strings` during development), next to the executable, and one level up from it — the last covers an installed layout where the binary lives in `bin/` and the templates sit beside it in the install root. If you are diagnosing why `F4` offers an unexpected default on an installed system, those are the three files to check, in that order.
-- An on-disk template wins so a distribution can ship adjusted defaults, but the templates directory is not present in every installation, so `templates/configs/embed.go` embeds the same file into the binary as a guaranteed fallback. There is one canonical copy: the Go file sits alongside the JSON rather than the JSON being duplicated into a package.
-- The template file (`templates/configs/strings.json`) must be kept in sync with `configs/strings.json` when new string keys are added to the system.
+There is one canonical copy of the defaults: the Go file sits alongside the
+JSON rather than the JSON being duplicated into a package, and the editor and
+the BBS read the same embedded copy, so they never disagree on what a
+default is.
+
+`internal/stringhistory/history.json` records every value each key has shipped
+with, generated from the template's git history by
+`go generate ./internal/stringhistory`. `./vision3 doctor --fix` uses it to tell
+an older install's untouched strings from customisations. Regenerate it in the
+same commit as any change to the template; `TestHistoryHasCurrentTemplate`
+fails until you do.
 
 #### Adding a New String
 
 1. Add the field to `StringsConfig` in `internal/config/config_strings_types.go`
 2. Add a `StringEntry` struct to the appropriate position in `internal/stringeditor/metadata.go` (Label, Key, Description — name the format arguments in the description)
-3. Add the key and its default value to `templates/configs/strings.json`. It is embedded in the binary, and every board that doesn't set the key gets this value
+3. Add the key and its default value to `templates/configs/strings.json`. It is embedded in the binary, and every board that doesn't set the key gets this value. Then run `go generate ./internal/stringhistory`
 4. Add it to `config.StringFallbacks` only if a value the sysop sets blank should still print the default. Otherwise blank prints nothing, which switches the string off; formatted strings that may be blank need their call sites to check for it. `config.StringMissingDefaults` is for strings that predate the embedded defaults and needs no new entries
 5. The editor will pick up the new entry automatically on next run
 

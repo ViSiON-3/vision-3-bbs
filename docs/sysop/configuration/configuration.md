@@ -358,10 +358,15 @@ What each section covers:
 
 ### Safe Fixes (`--fix`)
 
-Doctor repairs two kinds of problem on request:
+Doctor repairs three kinds of problem on request:
 
 - **Standard data directories.** `--fix` creates whichever of
   `data/users`, `data/logs`, `data/msgbases` and `data/files` are missing.
+- **Shipped text in `strings.json`.** Strings in `configs/strings.json`
+  that hold text they shipped with, in this release or an older one, are
+  removed, along with keys the BBS doesn't read, so later wording reaches
+  them (see [strings.json](#stringsjson)). The strings you changed stay. The
+  file is first copied to `data/backups/strings.json.<date>-<time>`.
 - **An overlay `theme.json` that repeats the shipped theme.** Keys of the
   selected theme's `menus.d/<theme>/theme.json` that only repeat what the
   shipped `theme.json` gives are removed, and the file goes if nothing is
@@ -824,14 +829,18 @@ The text the BBS displays is built into it; `configs/strings.json` holds
 the strings you change. A key the file leaves out shows the shipped text, so
 new and reworded strings in a later release reach every string you haven't
 changed. A board with no `strings.json` at all runs on the shipped text, and
-a new install doesn't create one: `./strings` writes it.
+a new install doesn't create one: `./strings` writes it when you save a
+change.
 Removing the file, or a key from it, puts the shipped text back, without a
 restart.
 
 An older install's `strings.json` is a full copy of the strings as they
 shipped then. It still works, but each string in it keeps its old wording
-after an upgrade; see
+after an upgrade until `./vision3 doctor --fix` trims the file to the strings
+you changed; see
 [Changed shipped strings](getting-started/upgrading.md#changed-shipped-strings).
+The `_defaults` entry `./strings` writes records the default each of your
+strings replaced, so doctor and the editor can tell you when it changes.
 
 If a string's `%s`/`%d` codes no longer match what the BBS passes it (after
 an upgrade changed the string, for instance), the BBS uses the shipped text

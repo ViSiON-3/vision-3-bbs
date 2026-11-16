@@ -24,7 +24,7 @@ func stringField(t *testing.T, c StringsConfig, key string) string {
 	return ""
 }
 
-func shippedStrings(t *testing.T) map[string]string {
+func shippedStringsT(t *testing.T) map[string]string {
 	t.Helper()
 	shipped, err := configtemplates.StringDefaults()
 	if err != nil {
@@ -45,7 +45,7 @@ func writeStrings(t *testing.T, content string) string {
 // With no strings.json, or an empty one, every key gets the shipped text
 // (#1100): the file only has to hold the sysop's own wording.
 func TestLoadStringsShippedDefaults(t *testing.T) {
-	shipped := shippedStrings(t)
+	shipped := shippedStringsT(t)
 	for name, dir := range map[string]string{
 		"no file":    t.TempDir(),
 		"empty file": writeStrings(t, "{}"),
@@ -71,7 +71,7 @@ func TestLoadStringsShippedDefaults(t *testing.T) {
 // The file's value wins; a key it leaves out has the shipped text, so a
 // changed shipped default reaches it.
 func TestLoadStringsFileOverShipped(t *testing.T) {
-	shipped := shippedStrings(t)
+	shipped := shippedStringsT(t)
 	dir := writeStrings(t, `{"pauseString": "|15Hit a key"}`)
 	got, err := LoadStrings(dir)
 	if err != nil {
@@ -88,7 +88,7 @@ func TestLoadStringsFileOverShipped(t *testing.T) {
 // A value whose format directives don't match is replaced by the shipped
 // default for the run, and the file is left as it is.
 func TestLoadStringsMismatchedFormatUsesDefault(t *testing.T) {
-	shipped := shippedStrings(t)
+	shipped := shippedStringsT(t)
 	key := ""
 	for _, k := range stringformat.FormattedKeys {
 		if def := shipped[k]; strings.Contains(def, "%s") || strings.Contains(def, "%d") {

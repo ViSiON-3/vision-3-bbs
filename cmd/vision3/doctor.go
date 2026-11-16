@@ -23,6 +23,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
+	"github.com/ViSiON-3/vision-3-bbs/internal/atomicfile"
 	"github.com/ViSiON-3/vision-3-bbs/internal/conference"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
@@ -93,6 +94,7 @@ func runDoctor(root string, jsonOutput, fix, dryRun bool, stdout, stderr io.Writ
 	if fix {
 		fixes = fixDoctorDirectories(root, dryRun)
 		fixes = append(fixes, fixThemeOverlay(root, dryRun, time.Now())...)
+		fixes = append(fixes, fixStrings(root, dryRun, time.Now())...)
 	}
 	report := inspectBoard(root)
 	report.Fixes = fixes
@@ -1745,36 +1747,84 @@ func checkQWKNet(configDir string, serverCfg config.ServerConfig, serverErr erro
 	}
 }
 
-// checkStringsKeys notes keys in configs/strings.json that the BBS does
-// not read: strings an upgrade retired or renamed, and Vision/2 leftovers
-// older templates carried. They change nothing, but an older value under a
-// retired key can still trip the format check on reload.
+// checkStringsKeys looks at configs/strings.json against the shipped
+// strings (#1100). The file should hold only the sysop's own wording: a
+// string still holding text it shipped with, from this release or an older
+// one, keeps that text when a release rewords it, and a key the BBS doesn't
+// read (a retired or misspelt string) does nothing. doctor --fix removes
+// both. It also notes customised strings whose shipped default has changed
+// since the sysop set them.
 func checkStringsKeys(configDir string, add func(string, doctorSeverity, string, string)) {
 	data, err := os.ReadFile(filepath.Join(configDir, "strings.json"))
-	if err != nil || !json.Valid(data) {
-		return // a broken file is reported by the parse check
-	}
-	var unknown []string
-	for _, key := range collectUnknownJSONKeys(data, reflect.TypeOf(config.StringsConfig{}), "") {
-		if strings.HasPrefix(key, "_") || legacyColorSlotKey(key) {
-			continue
-		}
-		unknown = append(unknown, key)
-	}
-	if len(unknown) == 0 {
+	if err != nil {
 		return
 	}
-	sort.Strings(unknown)
-	add("configs/strings.json", doctorInfo,
-		fmt.Sprintf("%d key(s) the BBS does not read: %s", len(unknown), strings.Join(unknown, ", ")),
-		"Delete them from configs/strings.json; nothing reads them. A misspelt key is a string that still shows the shipped text.")
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(data, &raw) != nil {
+		return // a broken file is reported by the parse check
+	}
+	tr := config.TrimStrings(raw)
+	var parts []string
+	if n := len(tr.Shipped); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d string(s) hold text they shipped with, so they keep it when a release rewords them", n))
+	}
+	if n := len(tr.Unknown); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d key(s) the BBS does not read: %s", n, strings.Join(tr.Unknown, ", ")))
+	}
+	if len(parts) > 0 {
+		add("configs/strings.json", doctorInfo, strings.Join(parts, "; "),
+			"Run ./vision3 doctor --fix to remove them (the file is backed up to data/backups/ first). Your own strings stay.")
+	}
+	if changed := config.ChangedStringDefaults(raw); len(changed) > 0 {
+		add("configs/strings.json", doctorInfo,
+			fmt.Sprintf("the shipped default changed under %d string(s) you customised: %s", len(changed), strings.Join(changed, ", ")),
+			"Open ./strings to compare: F4 takes the new default, F5 keeps yours.")
+	}
 }
 
-// legacyColorSlotKey reports whether key is one of the defColor1-defColor7
-// keys LoadStrings reads as the caller colour slot defaults.
-func legacyColorSlotKey(key string) bool {
-	n, ok := strings.CutPrefix(key, "defColor")
-	return ok && len(n) == 1 && n[0] >= '1' && n[0] <= '7'
+// fixStrings trims configs/strings.json to the sysop's own strings, after
+// copying it to data/backups.
+func fixStrings(root string, dryRun bool, now time.Time) []doctorFix {
+	path := filepath.Join(root, "configs", "strings.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(data, &raw) != nil {
+		return nil
+	}
+	tr := config.TrimStrings(raw)
+	if len(tr.Shipped)+len(tr.Unknown) == 0 {
+		return nil
+	}
+	const rel = "configs/strings.json"
+	action := fmt.Sprintf("remove %d string(s) holding shipped text and %d key(s) the BBS does not read; keep %d of your own",
+		len(tr.Shipped), len(tr.Unknown), len(tr.Kept)-boolInt(tr.Kept[config.StringBasesKey] != nil))
+	if dryRun {
+		return []doctorFix{{Path: rel, Action: action, Status: "would-fix"}}
+	}
+	backup, err := backupForDoctor(root, path, "strings.json", now)
+	if err == nil {
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false)
+		enc.SetIndent("", "  ")
+		if err = enc.Encode(tr.Kept); err == nil {
+			err = atomicfile.WriteFile(path, buf.Bytes(), 0o644)
+		}
+	}
+	if err != nil {
+		return []doctorFix{{Path: rel, Action: action, Status: "failed", Message: err.Error()}}
+	}
+	return []doctorFix{{Path: rel, Action: action, Status: "fixed", Message: "backup: " + backup}}
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func checkUnknownTopLevelKeys(path string, typ reflect.Type, add func(string, doctorSeverity, string, string)) {

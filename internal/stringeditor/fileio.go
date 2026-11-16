@@ -1,57 +1,79 @@
 package stringeditor
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
 )
 
-// LoadStrings reads strings.json and returns a map of key -> value. If the file
-// doesn't exist it is created from shippedDefaults, so a fresh install starts
-// with the factory strings rather than a file full of empty values that the
-// sysop would have to fill in by hand.
+// LoadStrings reads strings.json and returns its string values. A missing
+// file is no strings: the BBS prints the shipped text for every key, and the
+// file is only written when there is something of the sysop's to save.
 func LoadStrings(path string, shippedDefaults map[string]string) (map[string]string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			defaults := DefaultStrings(shippedDefaults)
-			if writeErr := SaveStrings(path, defaults); writeErr != nil {
-				return nil, fmt.Errorf("creating default strings.json: %w", writeErr)
-			}
-			return defaults, nil
-		}
-		return nil, fmt.Errorf("reading %s: %w", path, err)
-	}
+	values, _, err := loadStringsFile(path)
+	return values, err
+}
 
-	var result map[string]string
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", path, err)
+// loadStringsFile reads strings.json as its string values and everything
+// else (numeric defColorN, the _defaults fingerprints), which a save keeps.
+func loadStringsFile(path string) (values map[string]string, extra map[string]json.RawMessage, err error) {
+	values, extra = map[string]string{}, map[string]json.RawMessage{}
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return values, extra, nil
 	}
-	return result, nil
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, nil, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	for k, v := range raw {
+		var s string
+		if json.Unmarshal(v, &s) == nil {
+			values[k] = s
+		} else {
+			extra[k] = v
+		}
+	}
+	return values, extra, nil
 }
 
 // SaveStrings writes the string map back to the JSON file with sorted keys and
 // pretty formatting. Keys the editor has no metadata for are written back
 // unchanged, so a legacy or hand-added string is never dropped by a save.
 func SaveStrings(path string, strings map[string]string) error {
-	// Use sorted keys for deterministic output
-	keys := make([]string, 0, len(strings))
-	for k := range strings {
+	return saveStringsFile(path, strings, nil)
+}
+
+// saveStringsFile writes values, skipping the reserved "_" placeholders,
+// and extra, the entries that are not strings, as one sorted object.
+func saveStringsFile(path string, values map[string]string, extra map[string]json.RawMessage) error {
+	all := make(map[string]json.RawMessage, len(values)+len(extra))
+	for k, v := range values {
+		if len(k) > 0 && k[0] == '_' {
+			continue // internal placeholder keys
+		}
+		data, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Errorf("encoding strings: %w", err)
+		}
+		all[k] = data
+	}
+	for k, v := range extra {
+		all[k] = v
+	}
+	keys := make([]string, 0, len(all))
+	for k := range all {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-
-	// Build ordered map manually for clean JSON output
-	// json.Marshal on map doesn't guarantee order, so we use json.Encoder
-	// with an ordered structure
 	ordered := make([]keyValue, 0, len(keys))
 	for _, k := range keys {
-		// Skip internal placeholder keys (those starting with _)
-		if len(k) > 0 && k[0] == '_' {
-			continue
-		}
-		ordered = append(ordered, keyValue{Key: k, Value: strings[k]})
+		ordered = append(ordered, keyValue{Key: k, Value: all[k]})
 	}
 
 	data, err := marshalOrdered(ordered)
@@ -67,7 +89,7 @@ func SaveStrings(path string, strings map[string]string) error {
 
 type keyValue struct {
 	Key   string
-	Value string
+	Value json.RawMessage
 }
 
 // marshalOrdered produces a JSON object with keys in the given order.
@@ -78,7 +100,7 @@ func marshalOrdered(pairs []keyValue) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		valJSON, err := json.Marshal(kv.Value)
+		valJSON, err := compactJSON(kv.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -93,6 +115,15 @@ func marshalOrdered(pairs []keyValue) ([]byte, error) {
 	}
 	buf = append(buf, "}\n"...)
 	return buf, nil
+}
+
+// compactJSON puts a raw value on one line, as the file keeps every entry.
+func compactJSON(raw json.RawMessage) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, raw); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // DefaultStrings returns the values a brand-new strings.json should hold: every
