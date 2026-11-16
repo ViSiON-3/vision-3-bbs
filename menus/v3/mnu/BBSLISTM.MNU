@@ -3,7 +3,7 @@
     "CLR": true,
     "USEPROMPT": true,
     "PROMPT1": "|15BBS Listings Directory",
-    "PROMPT2": "|08[|15BBS List|08] |07Command |08->|15 ",
+    "PROMPT2": "|C5[|C4BBS List|C5] |C1Command |C5->|C2 ",
     "FALLBACK": "",
     "ACS": "*",
     "PASS": "",

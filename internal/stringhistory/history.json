@@ -33,31 +33,38 @@
     "|12Enter hh:mm or yyyy-mm-dd hh:mm, or nothing for now.|07"
   ],
   "acsTestCreditPrompt": [
-    "|07Minutes of chat credit (for T): "
+    "|07Minutes of chat credit (for T): ",
+    "|C1Minutes of chat credit (for T): "
   ],
   "acsTestDenied": [
     "|12Only a SysOp can test ACS strings.|07"
   ],
   "acsTestElapsedPrompt": [
-    "|07Minutes into the call (for T): "
+    "|07Minutes into the call (for T): ",
+    "|C1Minutes into the call (for T): "
   ],
   "acsTestExprPrompt": [
-    "|07ACS expression: "
+    "|07ACS expression: ",
+    "|C1ACS expression: "
   ],
   "acsTestLocalPrompt": [
-    "|07Local call (for L)?"
+    "|07Local call (for L)?",
+    "|C1Local call (for L)?"
   ],
   "acsTestMenu": [
     "|08[|15E|08]|07xpression  |08[|15S|08]|07ession  |08[|15T|08]|07ime  |08[|15Q|08]|07uit: "
   ],
   "acsTestSessionPrompt": [
-    "|07Test with a session (a call in progress)?"
+    "|07Test with a session (a call in progress)?",
+    "|C1Test with a session (a call in progress)?"
   ],
   "acsTestTerminalPrompt": [
-    "|07Connection has a terminal (for A)?"
+    "|07Connection has a terminal (for A)?",
+    "|C1Connection has a terminal (for A)?"
   ],
   "acsTestTimePrompt": [
-    "|07Time to test at (|15hh:mm|07 or |15yyyy-mm-dd hh:mm|07, Enter for now): "
+    "|07Time to test at (|15hh:mm|07 or |15yyyy-mm-dd hh:mm|07, Enter for now): ",
+    "|C1Time to test at (|C4hh:mm|C1 or |C4yyyy-mm-dd hh:mm|C1, Enter for now): "
   ],
   "acsTestTitle": [
     "|15ACS Test|07"
@@ -155,7 +162,8 @@
     "\r\n|07%s Color set to |%02d%d|07.\r\n"
   ],
   "cfgCurrentPwPrompt": [
-    "\r\n|07Current Password: "
+    "\r\n|07Current Password: ",
+    "\r\n|C1Current Password: "
   ],
   "cfgCustomPromptHelp": [
     "\r\n|08Format codes: |07|MN|08=Menu |07|TL|08=Time Left |07|TN|08=Time |07|DN|08=Date |07|CR|08=Return\r\n"
@@ -469,7 +477,8 @@
     "\r\n|12Door '%s' not found. Use ? to list available doors.|07\r\n"
   ],
   "doorPrompt": [
-    "|07Door Name (?=List, Q=Quit): |15"
+    "|07Door Name (?=List, Q=Quit): |15",
+    "|C1Door Name (?=List, Q=Quit): |C2"
   ],
   "doorRemoteConnectFailed": [
     "\r\n|12Unable to connect to |11%s|12. Please try again later.|07\r\n"
@@ -545,7 +554,8 @@
     "|09Adding this exceeds your DL 'K' Limit of (|15|KL|09)"
   ],
   "execAbortLoginPrompt": [
-    "|07Abort Login? @"
+    "|07Abort Login? @",
+    "|C1Abort Login? @"
   ],
   "execAccessDenied": [
     "\r\n|01Access Denied.|07\r\n"
@@ -621,7 +631,8 @@
     "\r\n|07Password accepted.|07\r\n"
   ],
   "execPasswordPrompt": [
-    "|07Password: |15"
+    "|07Password: |15",
+    "|C1Password: |C2"
   ],
   "execPendingValidation": [
     "|11Pending validation: |15%d|07\r\n\r\n"
@@ -657,7 +668,8 @@
     "\r\n|01Error loading User List screen templates.|07\r\n"
   ],
   "execUsernamePrompt": [
-    "|07Username/Handle: |15"
+    "|07Username/Handle: |15",
+    "|C1Username/Handle: |C2"
   ],
   "execVersionString": [
     "|15ViSiON/3 Go Edition - %s|07",
@@ -729,16 +741,19 @@
     "|09Enter File Password|CR|08:"
   ],
   "filePausePrompt": [
-    "\r\n|07Press |15[ENTER]|07 to continue... "
+    "\r\n|07Press |15[ENTER]|07 to continue... ",
+    "\r\n|C1Press |C4[ENTER]|C1 to continue... "
   ],
   "filePointCommision": [
     "|09Giving |13|NA|09 a commision of |14|FP|09 point(s)!"
   ],
   "filePromptFormat": [
-    "\r\n|07Enter filename to %s (or |15ENTER|07 to cancel): |15"
+    "\r\n|07Enter filename to %s (or |15ENTER|07 to cancel): |15",
+    "\r\n|C1Enter filename to %s (or |C4ENTER|C1 to cancel): |C2"
   ],
   "fileScanDatePrompt": [
-    "\r\n|07File newscan since |08(|15MM/DD/YY|08, |15A|08=all files, |15R|08=reset to last logon|08)|07: |15"
+    "\r\n|07File newscan since |08(|15MM/DD/YY|08, |15A|08=all files, |15R|08=reset to last logon|08)|07: |15",
+    "\r\n|C1File newscan since |C5(|C4MM/DD/YY|C5, |C4A|C5=all files, |C4R|C5=reset to last logon|C5)|C1: |C2"
   ],
   "fileViewingHeader": [
     "\r\n|15--- Viewing: %s ---|07\r\n\r\n"
@@ -1196,7 +1211,8 @@
     "|08A|07n|15onymous? @"
   ],
   "msgAutoSigPrompt": [
-    "|07Add your Auto-Signature? @"
+    "|07Add your Auto-Signature? @",
+    "|C1Add your Auto-Signature? @"
   ],
   "msgBoardInfoFormat": [
     "|13%s |09\u003e |15%s |01[|13%d|05/|13%d|01]%s"
@@ -1313,7 +1329,8 @@
     "\r\n|07No messages match your search.|07\r\n"
   ],
   "msgSearchPagePrompt": [
-    "\r\n|07Page |15%d|07/|15%d|07  |15#|07 read  |15Enter|07 next  |15P|07rev  |15Q|07uit: |15"
+    "\r\n|07Page |15%d|07/|15%d|07  |15#|07 read  |15Enter|07 next  |15P|07rev  |15Q|07uit: |15",
+    "\r\n|C1Page |C4%d|C1/|C4%d|C1  |C4#|C1 read  |C4Enter|C1 next  |C4P|C1rev  |C4Q|C1uit: |C2"
   ],
   "msgSearchPartial": [
     "|08Only the first %d matches are shown; narrow the search to see more.|07\r\n"
@@ -1653,14 +1670,16 @@
   ],
   "scanDatePrompt": [
     "\r\n|07Scan From; |15A|07ll, |15N|07ew Messages, or Enter |15Date|07 (e.g. |15MM/DD/YY|07): |15",
-    "\r\n|07Scan From; |15A|07ll, |15N|07ew Messages, or Enter |15Date|07: |15"
+    "\r\n|07Scan From; |15A|07ll, |15N|07ew Messages, or Enter |15Date|07: |15",
+    "\r\n|C1Scan From; |C4A|C1ll, |C4N|C1ew Messages, or Enter |C4Date|C1 (e.g. |C4MM/DD/YY|C1): |C2"
   ],
   "scanFromLine": [
     "|08[|11F|08] |03From: |09%s|07\r\n"
   ],
   "scanFromPrompt": [
     "\r\n|07\"From\" string to Search for (Cr/none): |15",
-    "\r\n|07\"From\" string to Search for: |15"
+    "\r\n|07\"From\" string to Search for: |15",
+    "\r\n|C1\"From\" string to Search for (Cr/none): |C2"
   ],
   "scanHeader": [
     "\r\n|15Scanning Messages...|07\r\n"
@@ -1694,14 +1713,16 @@
   ],
   "scanRangeEndPrompt": [
     "\r\n|07Range End (|15%d-%d|07) : |15",
-    "\r\n|07Range End (|15%d-%d|07, Cr/none) : |15"
+    "\r\n|07Range End (|15%d-%d|07, Cr/none) : |15",
+    "\r\n|C1Range End (|C4%d-%d|C1, Cr/none) : |C2"
   ],
   "scanRangeLine": [
     "|08[|11R|08] |03Range: |09%s|07\r\n"
   ],
   "scanRangeStartPrompt": [
     "\r\n|07Range Start (|151-%d|07) : |15",
-    "\r\n|07Range Start (|151-%d|07, Cr/none) : |15"
+    "\r\n|07Range Start (|151-%d|07, Cr/none) : |15",
+    "\r\n|C1Range Start (|C41-%d|C1, Cr/none) : |C2"
   ],
   "scanSelectionPrompt": [
     "|03Selection; (|11Cr|13/|11Scan) : "
@@ -1711,7 +1732,8 @@
   ],
   "scanToPrompt": [
     "\r\n|07\"To\" string to Search for (Cr/cancel): |15",
-    "\r\n|07\"To\" string to Search for (Cr/none): |15"
+    "\r\n|07\"To\" string to Search for (Cr/none): |15",
+    "\r\n|C1\"To\" string to Search for (Cr/none): |C2"
   ],
   "scanUpdateLine": [
     "|08[|11U|08] |03Update NewScan Pointers: |09%s|07\r\n"
@@ -1720,7 +1742,8 @@
     "|08[|11S|08] |03Scan Which Areas?: |09%s|07\r\n"
   ],
   "scanWhichPrompt": [
-    "\r\n|15M|07arked Areas, |15A|07ll Areas, |15C|07urrent Area : |15"
+    "\r\n|15M|07arked Areas, |15A|07ll Areas, |15C|07urrent Area : |15",
+    "\r\n|C4M|C1arked Areas, |C4A|C1ll Areas, |C4C|C1urrent Area : |C2"
   ],
   "sendMailToWho": [
     "|08S|07e|15nd |08M|07a|15il |08T|07o? |09:"
