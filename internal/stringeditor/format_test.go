@@ -80,7 +80,7 @@ func TestSaveWarnsThenSaves(t *testing.T) {
 	}
 
 	m2 := key2(t, m, tea.KeyMsg{Type: tea.KeyF10})
-	reloaded, err := LoadStrings(m2.filePath, nil)
+	reloaded, err := LoadStrings(m2.filePath)
 	if err != nil {
 		t.Fatalf("LoadStrings: %v", err)
 	}

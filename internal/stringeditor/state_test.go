@@ -101,6 +101,84 @@ func TestPreviewValueShowsFallback(t *testing.T) {
 	}
 }
 
+// TestReservedFilter covers hiding and showing the placeholder entries while
+// keeping catalog numbering stable.
+func TestReservedFilter(t *testing.T) {
+	m := newTestModel(t)
+
+	if m.showReserved {
+		t.Fatal("reserved entries should be hidden by default")
+	}
+	for _, e := range m.entries {
+		if isReservedKey(e.Key) {
+			t.Fatalf("reserved entry %q listed while hidden", e.Key)
+		}
+	}
+	hidden := len(m.entries)
+	if hidden >= len(m.catalog) {
+		t.Fatalf("filter removed nothing: %d listed of %d catalog", hidden, len(m.catalog))
+	}
+
+	// Numbering follows the catalog, not the filtered position. The first
+	// reserved entry is at catalog index 22, so entries before it line up
+	// either way and only the ones after it prove anything.
+	if m.entries[0].Number != 1 {
+		t.Errorf("first entry Number = %d, want 1", m.entries[0].Number)
+	}
+	gaps := 0
+	for i, e := range m.entries {
+		if e.Number != i+1 {
+			gaps++
+		}
+		if isReservedKey(e.Key) {
+			t.Fatalf("reserved entry %q survived the filter", e.Key)
+		}
+	}
+	if gaps == 0 {
+		t.Error("every listed entry's Number equals its listed position, so the " +
+			"numbers are positional and would shift when reserved entries are hidden")
+	}
+	if want := len(m.catalog) - hidden; gaps != len(m.entries)-catalogIndexOfFirstReserved(t, m) {
+		t.Logf("%d entries carry a shifted number (%d reserved hidden)", gaps, want)
+	}
+
+	// Ctrl-R reveals them, and the cursor stays on the same string.
+	m.cursor = 30
+	key := m.entries[m.cursor].Key
+	m = key2(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
+	if !m.showReserved {
+		t.Fatal("ctrl+r did not enable reserved entries")
+	}
+	if len(m.entries) != len(m.catalog) {
+		t.Errorf("listed %d entries, want the full catalog of %d", len(m.entries), len(m.catalog))
+	}
+	if got := m.entries[m.cursor].Key; got != key {
+		t.Errorf("cursor moved to %q, want it kept on %q", got, key)
+	}
+	if m.page != m.cursor/m.pageSize {
+		t.Errorf("page %d does not show cursor %d", m.page, m.cursor)
+	}
+
+	// And toggling back hides them again.
+	m = key2(t, m, tea.KeyMsg{Type: tea.KeyCtrlR})
+	if m.showReserved || len(m.entries) != hidden {
+		t.Errorf("toggle back listed %d entries, want %d", len(m.entries), hidden)
+	}
+}
+
+// catalogIndexOfFirstReserved returns the catalog position of the first
+// reserved entry, which is where listed numbering starts to diverge.
+func catalogIndexOfFirstReserved(t *testing.T, m Model) int {
+	t.Helper()
+	for i, e := range m.catalog {
+		if isReservedKey(e.Key) {
+			return i
+		}
+	}
+	t.Fatal("the catalog has no reserved entries, so the filter proves nothing")
+	return 0
+}
+
 // TestRestoreDefaultUsesRuntimeFallback checks F4 works for a string the
 // shipped template does not carry: it takes the key out, and the runtime's
 // default prints.
@@ -144,7 +222,7 @@ func TestSavePreservesUnknownKeys(t *testing.T) {
 	if err := SaveStrings(m.filePath, m.values); err != nil {
 		t.Fatalf("SaveStrings: %v", err)
 	}
-	reloaded, err := LoadStrings(m.filePath, nil)
+	reloaded, err := LoadStrings(m.filePath)
 	if err != nil {
 		t.Fatalf("LoadStrings: %v", err)
 	}
@@ -229,5 +307,40 @@ func TestChangedDefault(t *testing.T) {
 	}
 	if bases := config.StringBases(doc); bases["pauseString"] != stringhistory.Hash("new pause") || len(bases) != 1 {
 		t.Errorf("bases = %v; want pauseString's refreshed to the new default", bases)
+	}
+}
+
+// TestNewTreatsOlderShippedTextAsDefault checks the editor agrees with
+// doctor --fix: text a key shipped with in an earlier release is the
+// default, not the sysop's, and a save leaves it out.
+func TestNewTreatsOlderShippedTextAsDefault(t *testing.T) {
+	old := config.StringSuperseded["chatHelp"][1]
+	data, _ := json.Marshal(map[string]string{"chatHelp": old})
+	path := filepath.Join(t.TempDir(), "strings.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := New(path, map[string]string{"chatHelp": "current help"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, set := m.values["chatHelp"]; set || m.stateOf("chatHelp") != stateDefault {
+		t.Errorf("older shipped chatHelp: set %v, state %v; want left out, default", set, m.stateOf("chatHelp"))
+	}
+}
+
+// TestF3F4Guards checks F3 with nothing to revert and F4 on a string with no
+// default at all say so rather than opening a dialog.
+func TestF3F4Guards(t *testing.T) {
+	m := newTestModel(t)
+	m.cursor = indexOfKey(t, m, "quoteStartLine")
+	m = key2(t, m, tea.KeyMsg{Type: tea.KeyF3})
+	if m.mode != modeNavigate || m.message != "Nothing to revert" {
+		t.Errorf("F3 on an untouched string: mode %v, message %q", m.mode, m.message)
+	}
+	m.values["quoteStartLine"] = "mine"
+	m = key2(t, m, tea.KeyMsg{Type: tea.KeyF4})
+	if m.mode != modeNavigate || m.values["quoteStartLine"] != "mine" {
+		t.Errorf("F4 with no default: mode %v, value %q; want the value kept", m.mode, m.values["quoteStartLine"])
 	}
 }

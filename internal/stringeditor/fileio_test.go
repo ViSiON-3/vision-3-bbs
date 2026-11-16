@@ -22,7 +22,7 @@ func testDefaults() map[string]string {
 // strings, and is not created: the BBS has the shipped strings built in.
 func TestLoadStrings_MissingFileWritesNothing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "strings.json")
-	got, err := LoadStrings(path, testDefaults())
+	got, err := LoadStrings(path)
 	if err != nil {
 		t.Fatalf("LoadStrings: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestLoadStrings_InvalidJSON(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{broken"), 0644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if _, err := LoadStrings(path, testDefaults()); err == nil {
+	if _, err := LoadStrings(path); err == nil {
 		t.Fatal("invalid JSON should return an error")
 	}
 }
@@ -50,24 +50,25 @@ func TestLoadStrings_InvalidJSON(t *testing.T) {
 func TestSaveStrings_RoundTripSortedAndFiltered(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "strings.json")
 	in := map[string]string{
-		"zebra":     "last",
-		"alpha":     "first",
-		"_reserved": "must not persist",
-		"mid":       `has "quotes" and |07 codes`,
+		"zebra":   "last",
+		"alpha":   "first",
+		"_extra3": "must not persist",
+		"_note":   "a sysop's note persists",
+		"mid":     `has "quotes" and |07 codes`,
 	}
 	if err := SaveStrings(path, in); err != nil {
 		t.Fatalf("SaveStrings: %v", err)
 	}
 
-	got, err := LoadStrings(path, testDefaults())
+	got, err := LoadStrings(path)
 	if err != nil {
 		t.Fatalf("LoadStrings: %v", err)
 	}
-	if len(got) != 3 {
-		t.Fatalf("want 3 keys (placeholder dropped), got %d: %v", len(got), got)
+	if len(got) != 4 {
+		t.Fatalf("want 4 keys (placeholder dropped), got %d: %v", len(got), got)
 	}
-	if _, ok := got["_reserved"]; ok {
-		t.Error("_reserved should have been filtered out")
+	if _, ok := got["_extra3"]; ok {
+		t.Error("the reserved placeholder _extra3 should have been filtered out")
 	}
 	if got["mid"] != in["mid"] {
 		t.Errorf("mid = %q, want %q", got["mid"], in["mid"])
@@ -95,29 +96,6 @@ func TestMarshalOrdered_Empty(t *testing.T) {
 	}
 	if len(m) != 0 {
 		t.Errorf("want empty object, got %v", m)
-	}
-}
-
-// TestDefaultStrings_SkipsPlaceholders checks defaults exclude placeholder
-// keys but cover every non-placeholder metadata entry.
-func TestDefaultStrings_SkipsPlaceholders(t *testing.T) {
-	defaults := DefaultStrings(testDefaults())
-	if len(defaults) == 0 {
-		t.Fatal("expected non-empty defaults")
-	}
-	for k := range defaults {
-		if strings.HasPrefix(k, "_") {
-			t.Errorf("placeholder key %q should not be in defaults", k)
-		}
-	}
-	// Every non-placeholder metadata entry must have a default.
-	for _, e := range StringEntries() {
-		if strings.HasPrefix(e.Key, "_") {
-			continue
-		}
-		if _, ok := defaults[e.Key]; !ok {
-			t.Errorf("metadata key %q missing from defaults", e.Key)
-		}
 	}
 }
 

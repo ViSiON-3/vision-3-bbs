@@ -159,11 +159,12 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 	if err != nil {
 		return Model{}, fmt.Errorf("loading strings: %w", err)
 	}
-	// An unedited string whose shipped text has since changed is the
-	// default: it is what the BBS prints, and a save leaves the key out so
-	// later wording reaches it too.
+	// A string still holding text it shipped with, in this release or an
+	// older one, was never edited by the sysop: it is the default, and a
+	// save leaves the key out so later wording reaches it, as doctor --fix
+	// does.
 	for k, v := range values {
-		if _, ok := config.SupersededString(k, v); ok {
+		if _, ok := config.SupersededString(k, v); ok || stringhistory.Shipped(k, v) {
 			delete(values, k)
 		}
 	}
@@ -364,6 +365,12 @@ func (m Model) updateNavigate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.message = "This field is reserved"
 			return m, nil
 		}
+		orig, inOrig := m.origValues[entry.Key]
+		cur, inCur := m.values[entry.Key]
+		if inOrig == inCur && orig == cur && !m.kept[entry.Key] {
+			m.message = "Nothing to revert"
+			return m, nil
+		}
 		m.mode = modeRevertConfirm
 		m.confirmYes = false
 		return m, nil
@@ -376,6 +383,10 @@ func (m Model) updateNavigate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if _, set := m.values[entry.Key]; !set {
 			m.message = "Already the ViSiON/3 default"
+			return m, nil
+		}
+		if _, ok := m.defaultFor(entry.Key); !ok {
+			m.message = "No ViSiON/3 default for this string; set it blank to print nothing"
 			return m, nil
 		}
 		m.mode = modeDefaultConfirm
@@ -717,7 +728,8 @@ func (m *Model) recomputeDirty() {
 	// Keeping a string with F5 refreshes its fingerprint, which is a change
 	// to save.
 	for k := range m.kept {
-		if _, set := m.values[k]; set && m.bases[k] != stringhistory.Hash(m.effective(k, "", false)) {
+		base, recorded := m.bases[k]
+		if _, set := m.values[k]; set && recorded && base != stringhistory.Hash(m.effective(k, "", false)) {
 			m.dirty = true
 			return
 		}

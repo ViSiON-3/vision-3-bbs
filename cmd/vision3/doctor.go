@@ -1800,7 +1800,7 @@ func fixStrings(root string, dryRun bool, now time.Time) []doctorFix {
 	}
 	const rel = "configs/strings.json"
 	action := fmt.Sprintf("remove %d string(s) holding shipped text and %d key(s) the BBS does not read; keep %d of your own",
-		len(tr.Shipped), len(tr.Unknown), len(tr.Kept)-boolInt(tr.Kept[config.StringBasesKey] != nil))
+		len(tr.Shipped), len(tr.Unknown), ownStrings(tr.Kept))
 	if dryRun {
 		return []doctorFix{{Path: rel, Action: action, Status: "would-fix"}}
 	}
@@ -1820,11 +1820,16 @@ func fixStrings(root string, dryRun bool, now time.Time) []doctorFix {
 	return []doctorFix{{Path: rel, Action: action, Status: "fixed", Message: "backup: " + backup}}
 }
 
-func boolInt(b bool) int {
-	if b {
-		return 1
+// ownStrings counts the strings in a trimmed strings.json, leaving out
+// metadata and the legacy colour slot numbers.
+func ownStrings(kept map[string]json.RawMessage) int {
+	n := 0
+	for k := range kept {
+		if config.IsStringKey(k) {
+			n++
+		}
 	}
-	return 0
+	return n
 }
 
 func checkUnknownTopLevelKeys(path string, typ reflect.Type, add func(string, doctorSeverity, string, string)) {

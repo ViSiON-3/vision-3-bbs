@@ -11,7 +11,7 @@ import (
 // LoadStrings reads strings.json and returns its string values. A missing
 // file is no strings: the BBS prints the shipped text for every key, and the
 // file is only written when there is something of the sysop's to save.
-func LoadStrings(path string, shippedDefaults map[string]string) (map[string]string, error) {
+func LoadStrings(path string) (map[string]string, error) {
 	values, _, err := loadStringsFile(path)
 	return values, err
 }
@@ -49,13 +49,13 @@ func SaveStrings(path string, strings map[string]string) error {
 	return saveStringsFile(path, strings, nil)
 }
 
-// saveStringsFile writes values, skipping the reserved "_" placeholders,
+// saveStringsFile writes values, skipping the catalog's reserved placeholders,
 // and extra, the entries that are not strings, as one sorted object.
 func saveStringsFile(path string, values map[string]string, extra map[string]json.RawMessage) error {
 	all := make(map[string]json.RawMessage, len(values)+len(extra))
 	for k, v := range values {
-		if len(k) > 0 && k[0] == '_' {
-			continue // internal placeholder keys
+		if isReservedKey(k) && catalogKey(k) {
+			continue // the catalog's placeholder slots map to nothing
 		}
 		data, err := json.Marshal(v)
 		if err != nil {
@@ -126,21 +126,12 @@ func compactJSON(raw json.RawMessage) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// DefaultStrings returns the values a brand-new strings.json should hold: every
-// shipped default, plus an empty entry for each catalog key the shipped set does
-// not cover so the file lists everything the editor can edit.
-func DefaultStrings(shippedDefaults map[string]string) map[string]string {
-	defaults := make(map[string]string, len(shippedDefaults))
-	for k, v := range shippedDefaults {
-		defaults[k] = v
-	}
+// catalogKey reports whether key has an entry in the editor's catalog.
+func catalogKey(key string) bool {
 	for _, e := range StringEntries() {
-		if isReservedKey(e.Key) {
-			continue
-		}
-		if _, ok := defaults[e.Key]; !ok {
-			defaults[e.Key] = ""
+		if e.Key == key {
+			return true
 		}
 	}
-	return defaults
+	return false
 }
