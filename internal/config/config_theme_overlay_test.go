@@ -293,3 +293,67 @@ func TestRedundantThemeOverlayKeysAndTrim(t *testing.T) {
 		t.Errorf("no overlay: %v, %v; want nothing", keys, err)
 	}
 }
+
+// encoding/json matches field names without regard to case, so an overlay
+// key spelt differently still overrides the shipped one.
+func TestThemeOverlayKeyCase(t *testing.T) {
+	base := themeSet(t, `{"chatUserColor": 2, "sysopChatScreen": "V3CHAT1"}`, `{"ChatUserColor": 12, "SysopChatScreen": "CUSTOM"}`)
+	got, err := LoadThemeConfig(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ChatUserColor != 12 || got.SysopChatScreen != "CUSTOM" {
+		t.Errorf("loaded chatUserColor %d, sysopChatScreen %q; want the overlay's 12, CUSTOM", got.ChatUserColor, got.SysopChatScreen)
+	}
+	if keys, _, err := RedundantThemeOverlayKeys(base); err != nil || len(keys) != 0 {
+		t.Errorf("redundant = %v, %v; want none", keys, err)
+	}
+}
+
+// Removing one key can make another removable: here the Yes/No colour
+// held the selected role to its fallback until it went.
+func TestRedundantThemeOverlayKeysRepeats(t *testing.T) {
+	both := `{"yesNoHighlightColor": 31, "lightbarSelected": 30}`
+	base := themeSet(t, both, both)
+	keys, total, err := RedundantThemeOverlayKeys(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"lightbarSelected", "yesNoHighlightColor"}; !reflect.DeepEqual(keys, want) || total != 2 {
+		t.Errorf("redundant = %v of %d; want %v of 2", keys, total, want)
+	}
+}
+
+// A link to a missing overlay is an error, not an absent overlay.
+func TestThemeOverlayDanglingLink(t *testing.T) {
+	base := themeSet(t, `{"chatUserColor": 2}`, "")
+	link := overlayPath(base)
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(t.TempDir(), "gone.json"), link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := LoadThemeConfig(base); err == nil {
+		t.Error("no error for a dangling overlay link")
+	}
+}
+
+// Saving in place, with no overlay, takes out a role the theme cleared.
+func TestSaveThemeConfigNoOverlayClearsRole(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("theme.json", []byte(`{"lightbarHint": 5}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	theme, err := LoadThemeConfig(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	theme.LightbarHint = OptColor{}
+	if err := SaveThemeConfig(".", theme); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := LoadThemeConfig("."); got.LightbarHint.Set {
+		t.Errorf("lightbarHint = %+v after clearing; want unset", got.LightbarHint)
+	}
+}

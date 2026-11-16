@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -163,6 +164,9 @@ func SaveThemeConfig(menuSetPath string, theme ThemeConfig) error {
 		if doc == nil {
 			doc = map[string]json.RawMessage{}
 		}
+		for _, k := range themeKeys() {
+			delete(doc, k) // a role left unset is written by leaving it out
+		}
 		maps.Copy(doc, known)
 		return writeThemeDoc(path, doc)
 	}
@@ -309,37 +313,66 @@ func minimizeThemeOverlay(shipped, overlay map[string]json.RawMessage) (map[stri
 	}
 	doc := maps.Clone(overlay)
 	var removed []string
-	for _, k := range slices.Sorted(maps.Keys(overlay)) {
-		if !slices.Contains(themeKeys(), k) {
-			if base, ok := shipped[k]; ok && sameJSON(base, doc[k]) {
-				delete(doc, k)
-				removed = append(removed, k)
+	// Removing one key can make another removable (a Yes/No colour that
+	// held a role to its fallback, say), so go round until a pass removes
+	// nothing.
+	for again := true; again; {
+		again = false
+		for _, k := range slices.Sorted(maps.Keys(doc)) {
+			if !slices.Contains(themeKeys(), k) {
+				if base, ok := shipped[k]; ok && sameJSON(base, doc[k]) {
+					delete(doc, k)
+					removed = append(removed, k)
+					again = true
+				}
+				continue
 			}
-			continue
-		}
-		trial := maps.Clone(doc)
-		delete(trial, k)
-		if got, err := load(trial); err == nil && drawnTheme(got) == drawnTheme(want) {
-			doc = trial
-			removed = append(removed, k)
+			trial := maps.Clone(doc)
+			delete(trial, k)
+			if got, err := load(trial); err == nil && drawnTheme(got) == drawnTheme(want) {
+				doc = trial
+				removed = append(removed, k)
+				again = true
+			}
 		}
 	}
+	sort.Strings(removed)
 	return doc, removed, nil
 }
 
-// readThemeDoc reads a theme.json as its top-level keys. A missing file is
-// nil with no error.
+// readThemeDoc reads a theme.json as its top-level keys, each key
+// ThemeConfig knows spelt as its json tag (encoding/json matches field
+// names without regard to case, so "ChatUserColor" sets chatUserColor; the
+// layers must agree on the spelling to merge). A missing file is nil with
+// no error; a link to a missing file is an error, never an absent file.
 func readThemeDoc(path string) (map[string]json.RawMessage, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
+		if _, linkErr := os.Lstat(path); linkErr == nil {
+			return nil, fmt.Errorf("read theme file %s: %w", path, err)
+		}
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read theme file %s: %w", path, err)
 	}
-	doc := map[string]json.RawMessage{}
-	if err := json.Unmarshal(data, &doc); err != nil {
+	raw := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parse theme JSON %s: %w", path, err)
+	}
+	doc := make(map[string]json.RawMessage, len(raw))
+	for _, k := range slices.Sorted(maps.Keys(raw)) {
+		key := k
+		for _, known := range themeKeys() {
+			if strings.EqualFold(k, known) {
+				key = known
+				break
+			}
+		}
+		if _, dup := doc[key]; dup && key != k {
+			continue // the exact spelling wins over another case of it
+		}
+		doc[key] = raw[k]
 	}
 	return doc, nil
 }
