@@ -184,7 +184,7 @@ func runBBSList(c *cmdCtx, args string) (*user.User, string, error) {
 		visibleRows = 3
 	}
 
-	hiColorSeq := e.roleAnsi(roleSelected)
+	hiColorSeq := e.barAnsi(c.currentUser)
 
 	// --- Render helpers ---
 

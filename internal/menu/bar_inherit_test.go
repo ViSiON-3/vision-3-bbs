@@ -8,6 +8,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // barEnv is an executor over a menu set of its own, <tmp>/menus/t with the
@@ -57,7 +58,7 @@ func hiBar(colour string) string {
 func TestScreenBarOverridesAndInherits(t *testing.T) {
 	e, write, remove := barEnv(t)
 	shared := colorCodeToAnsi(78) // the board's override of lightbarSelected
-	hi := func() string { return resolveAreaHiColor(e, "MSGAREAHI", 1) }
+	hi := func() string { return resolveAreaHiColor(e, nil, "MSGAREAHI", 1) }
 
 	if got := hi(); got != shared {
 		t.Fatalf("no BAR: %q, want the board's colour %q", got, shared)
@@ -166,5 +167,36 @@ func TestRetiredStockBarsLeaveTheLookUnchanged(t *testing.T) {
 				t.Errorf("highlight didn't follow lightbarSelected:\n%q", r.raw)
 			}
 		})
+	}
+}
+
+// A caller's own Bar colour (|C7) colours the highlight on the shared
+// lightbars, and the board's callerBar does for everyone else; a screen's
+// own BAR still wins over both.
+func TestCallerBarColourOnLightbars(t *testing.T) {
+	e, write, _ := barEnv(t)
+	u := &user.User{}
+	u.SetColorCode(user.ColorSlots, "|14|B1")
+	hi := func(u *user.User) string { return resolveAreaHiColor(e, u, "MSGAREAHI", 1) }
+
+	if got := hi(nil); got != colorCodeToAnsi(78) {
+		t.Errorf("no caller: %q, want lightbarSelected's 78", got)
+	}
+	if got := hi(u); got != colorCodeToAnsi(0x4E) {
+		t.Errorf("caller |14|B1: %q, want yellow on red %q", got, colorCodeToAnsi(0x4E))
+	}
+	e.SetServerConfig(config.ServerConfig{Theme: config.ThemeSelection{Colors: config.ThemeColors{
+		LightbarSelected: config.SetColor(78), CallerBar: config.SetColor(0x2F),
+	}}})
+	if got := hi(&user.User{}); got != colorCodeToAnsi(0x2F) {
+		t.Errorf("board callerBar: %q, want 0x2F", got)
+	}
+	write(false, "MSGAREAHI", hiBar("79"))
+	if got := hi(u); got != colorCodeToAnsi(79) {
+		t.Errorf("screen BAR: %q, want the BAR's 79 over the caller's", got)
+	}
+	cmd, _, _, rowHi, _ := buildFileListCmdBar(e, u, false, nil, nil)
+	if cmd[0].highlightColor != colorCodeToAnsi(0x4E) || rowHi != colorCodeToAnsi(0x4E) {
+		t.Errorf("file list: bar %q row %q, want the caller's", cmd[0].highlightColor, rowHi)
 	}
 }

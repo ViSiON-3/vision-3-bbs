@@ -85,3 +85,20 @@ func TestBoardColorSlotCodes(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+// A slot's pipe code reads back as the attribute a lightbar draws, and
+// AttrPipeCode undoes it.
+func TestPipeCodeAttr(t *testing.T) {
+	for code, want := range map[string]int{
+		"|07": 7, "|15|B4": 31, "|00|B6": 48, "|14|B1": 0x4E, "|15|B12": 31, "": 7, "|C1": 7, "|99": 7,
+	} {
+		if got := PipeCodeAttr(code); got != want {
+			t.Errorf("PipeCodeAttr(%q) = %d, want %d", code, got, want)
+		}
+	}
+	for attr := 0; attr < 128; attr++ {
+		if got := PipeCodeAttr(AttrPipeCode(attr)); got != attr {
+			t.Errorf("attribute %d round-trips to %d", attr, got)
+		}
+	}
+}

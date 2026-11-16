@@ -90,7 +90,7 @@ func runChangeMsgConferenceLightbar(c *cmdCtx, args string) (*user.User, string,
 		hint:       "|08[ |15Up|08/|15Dn|08 ] Navigate  [ |15PgUp|08/|15PgDn|08 ] Page  [ |15Enter|08 ] Select  [ |15Q|08 ] Quit",
 		headerName: currentConfName,
 		topBytes:   topBytes,
-		hiColorSeq: resolveAreaHiColor(e, "MSGCONFHI", nodeNumber),
+		hiColorSeq: resolveAreaHiColor(e, c.currentUser, "MSGCONFHI", nodeNumber),
 		termWidth:  termWidth,
 		termHeight: termHeight,
 	}

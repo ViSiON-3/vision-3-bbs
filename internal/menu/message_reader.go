@@ -287,7 +287,7 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 
 	// Lightbar colours from the theme's roles. The bar's brackets keep
 	// their own blue.
-	hiColor := e.roleColor(roleSelected)
+	hiColor := e.barColor(currentUser)
 	loColor := e.roleColor(roleCommand)
 	destructiveColor := e.roleColor(roleDestructive)
 	boundsColor := 1

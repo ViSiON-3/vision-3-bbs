@@ -99,8 +99,8 @@ func measureAreaHeaderRows(e *MenuExecutor, topBytes []byte, currentUser *user.U
 }
 
 // resolveAreaHiColor returns the highlight ANSI sequence, preferring the
-// optional BAR file (same pattern as FILELISTHI.BAR) over the theme default.
-func resolveAreaHiColor(e *MenuExecutor, barName string, nodeNumber int) string {
+// optional BAR file (same pattern as FILELISTHI.BAR) over u's bar colour.
+func resolveAreaHiColor(e *MenuExecutor, u *user.User, barName string, nodeNumber int) string {
 	hiBarOptions, err := loadBarFile(barName, e)
 	if err != nil {
 		slog.Warn("failed to load "+barName+".BAR", "node", nodeNumber, "error", err)
@@ -108,7 +108,7 @@ func resolveAreaHiColor(e *MenuExecutor, barName string, nodeNumber int) string 
 	if len(hiBarOptions) > 0 {
 		return colorCodeToAnsi(hiBarOptions[0].HighlightColor)
 	}
-	return e.roleAnsi(roleSelected)
+	return e.barAnsi(u)
 }
 
 // computeLayout derives the item-area, separator, and hint rows from the

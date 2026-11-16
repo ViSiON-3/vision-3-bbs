@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 )
 
 // The caller colour roles (#426): the board's default for each caller
@@ -114,4 +115,28 @@ func BoardColorSlotCodes(bbsRoot, configDir string) [7]string {
 	}
 	board, _ := BoardColorsFromConfigDir(configDir)
 	return theme.WithBoardColors(board).ColorSlotCodes(legacy)
+}
+
+// PipeCodeAttr returns the DOS attribute a colour slot's pipe code draws,
+// for a screen that colours by attribute, such as a lightbar: a foreground
+// |00 to |15 and an optional background |B0 to |B15. A bright background
+// (|B8 to |B15) becomes its plain one, as the lightbars draw it. Anything
+// else is light gray.
+func PipeCodeAttr(code string) int {
+	if len(code) < 3 || code[0] != '|' {
+		return 7
+	}
+	fg, err := strconv.Atoi(code[1:3])
+	if err != nil || fg < 0 || fg > 15 {
+		return 7
+	}
+	attr := fg
+	if bg := code[3:]; len(bg) >= 3 && bg[:2] == "|B" {
+		if b, err := strconv.Atoi(bg[2:]); err == nil && b >= 0 && b <= 15 {
+			// pipeBackground maps either way: it swaps blue and red, and
+			// cyan and brown.
+			attr += pipeBackground[b%8] * 16
+		}
+	}
+	return attr
 }
