@@ -90,7 +90,7 @@ func acsContext(u *user.User, s ssh.Session, startTime time.Time) acs.Context {
 // CheckUserACS evaluates an ACS string against a user outside of menu
 // execution (e.g., selecting default areas on login), in session s whose
 // call began at startTime. Pass the session when there is one: without it
-// (s nil) a string with L or A in it fails as a whole.
+// (s nil) a string with a session term in it fails as a whole.
 func CheckUserACS(acsString string, u *user.User, s ssh.Session, startTime time.Time) bool {
 	return checkACS(acsString, u, s, nil, startTime)
 }
