@@ -25,6 +25,7 @@ var sessionPlaceholderKeys = []string{
 	"|UH", "|ALIAS", "|HANDLE", "|LEVEL", "|NAME", "|GL", "|UN",
 	"|UPLDS", "|DNLDS", "|POSTS", "|CALLS", "|LCALL", "|TL",
 	"|CA", "|CAN", "|CFA", "|CFAN", "|CC", "|CCN", "|FC", "|FCN",
+	"|C1", "|C2", "|C3", "|C4", "|C5", "|C6", "|C7", // the caller's colour slots
 }
 
 // sessionPlaceholders returns the |XX placeholders for a caller, as a menu
@@ -74,6 +75,7 @@ func (e *MenuExecutor) sessionPlaceholders(s ssh.Session, currentUser *user.User
 		"|FC":       "None",
 		"|FCN":      "None",
 	}
+	e.addColorSlots(placeholders, currentUser)
 	if currentUser == nil {
 		return placeholders
 	}
@@ -146,6 +148,18 @@ func (e *MenuExecutor) expandStringPlaceholders(terminal *term.Terminal, text st
 	if len(named) > 0 || hasGroup {
 		if hs := lookupStringHookSession(terminal); hs != nil && hs.bbs != nil {
 			u := hs.currentUser()
+			// Only colour slots (a list row, say): fill in just those,
+			// without the area, conference and time-left lookups.
+			if !hasGroup && onlyColorSlots(named) {
+				colours := make(map[string]string, user.ColorSlots)
+				e.addColorSlots(colours, u)
+				for k, v := range colours {
+					if _, owned := placeholders[k]; !owned {
+						placeholders[k] = v
+					}
+				}
+				return replacePlaceholders(text, placeholders)
+			}
 			hs.bbs.Mutex.RLock()
 			menuName := hs.bbs.CurrentMenu
 			hs.bbs.Mutex.RUnlock()
@@ -166,4 +180,14 @@ func (e *MenuExecutor) expandStringPlaceholders(terminal *term.Terminal, text st
 		return text
 	}
 	return replacePlaceholders(expandOptionalGroups(text, placeholders), placeholders)
+}
+
+// onlyColorSlots reports whether every one of named is a caller colour slot.
+func onlyColorSlots(named []string) bool {
+	for _, k := range named {
+		if !isColorSlotKey(k) {
+			return false
+		}
+	}
+	return len(named) > 0
 }

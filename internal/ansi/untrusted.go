@@ -116,7 +116,7 @@ func screenPipeCodeAt(data []byte, i int) bool {
 	}
 	for n := 4; n >= 2; n-- {
 		if i+n <= len(data) {
-			if _, ok := pipeCodeReplacements[string(data[i:i+n])]; ok {
+			if _, ok := pipeCodeReplacement(string(data[i : i+n])); ok {
 				return true
 			}
 		}

@@ -27,9 +27,9 @@ import (
 //
 // All of its text comes from the konfig* strings in strings.json.
 //
-// Only settings the board actually honours are offered. User.OutputMode and
-// Colors are stored but nothing reads them, so they stay out of the form
-// until something does.
+// Only settings the board actually honours are offered. User.OutputMode
+// is stored but nothing reads it, so it stays out of the form until
+// something does.
 
 // konfigTone picks the colour a value is drawn in.
 type konfigTone int
@@ -375,6 +375,10 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					help:  str.KonfigV3NetSharingHelp,
 					value: v3netSharingValue,
 					edit:  editV3NetSharing},
+				{key: colorsKonfigKey, label: str.KonfigColorsLabel,
+					help:  str.KonfigColorsHelp,
+					value: colorsValue,
+					edit:  editColors},
 			}},
 			{title: str.KonfigSectionFiles, items: []*konfigItem{
 				{key: 'K', label: str.KonfigListingModeLabel, flips: true,

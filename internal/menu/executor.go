@@ -145,6 +145,7 @@ func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners [
 	}
 	e.SetDoorRegistry(doorRegistry)
 	e.SetStrings(loadedStrings)
+	ApplyColorSlotDefaults(loadedStrings)
 	e.SetTheme(theme)
 	e.SetServerConfig(serverCfg)
 	e.SetLoginSequence(loginSequence)

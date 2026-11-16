@@ -3,6 +3,7 @@ package menu
 import (
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -490,6 +491,232 @@ func editFileColumns(st *konfigState) error {
 			if err := drawItem(i); err != nil {
 				return err
 			}
+		}
+		if err := st.renderStatus(); err != nil {
+			return err
+		}
+	}
+}
+
+// colorsKonfigKey is the Colours item's hotkey.
+const colorsKonfigKey = 'U'
+
+// colorsValue is "default" until the caller sets a colour slot, then "custom".
+func colorsValue(st *konfigState) konfigValue {
+	str := st.c.e.Strings()
+	for n := 1; n <= user.ColorSlots; n++ {
+		if st.user().ColorCode(n) != "" {
+			return konfigValue{str.KonfigColorsCustom, toneValue}
+		}
+	}
+	return konfigValue{str.KonfigColorsDefault, toneDim}
+}
+
+// Colours box geometry: drawn over the form, wide enough for a row of the
+// sixteen foreground swatches.
+const (
+	colorBoxSwatch = 4
+	colorBoxWidth  = 16*colorBoxSwatch + 4 // including borders
+	colorBoxLeft   = (80-colorBoxWidth)/2 + 1
+	colorBoxTop    = konfigTopRow
+	colorNoBG      = -1
+	colorNoBGWidth = 4 // the "none" background label, between its brackets
+)
+
+// colorChoice is a colour being picked in the box: a foreground 0-15 and a
+// background 0-7 or colorNoBG, with row saying which of the two the arrows
+// move. It works as the TUI editors' colorpick.Picker does, drawn with pipe
+// codes for a caller's terminal.
+type colorChoice struct {
+	fg, bg int
+	bgRow  bool
+}
+
+// colorChoiceOf reads a slot's pipe code (see user.ValidColorCode).
+func colorChoiceOf(code string) colorChoice {
+	ch := colorChoice{bg: colorNoBG}
+	if len(code) >= 3 {
+		ch.fg = int(code[1]-'0')*10 + int(code[2]-'0')
+	}
+	if len(code) > 4 {
+		if n, err := strconv.Atoi(code[5:]); err == nil {
+			ch.bg = n
+		}
+	}
+	return ch
+}
+
+// code is the choice as a slot's pipe code.
+func (ch colorChoice) code() string {
+	s := fmt.Sprintf("|%02d", ch.fg)
+	if ch.bg != colorNoBG {
+		s += fmt.Sprintf("|B%d", ch.bg)
+	}
+	return s
+}
+
+// move steps the choice along its row, wrapping at the ends.
+func (ch *colorChoice) move(d int) {
+	if ch.bgRow {
+		ch.bg = (ch.bg+1+d+9)%9 - 1 // colorNoBG, then 0-7
+		return
+	}
+	ch.fg = (ch.fg + d + 16) % 16
+}
+
+// editColors opens a box of the caller's colour slots, |C1 to |C7, each drawn
+// in its colour. Arrows pick a slot and its colour, Tab moves between the
+// foreground and background rows, Enter saves the slot, R puts it back to the
+// board's default.
+func editColors(st *konfigState) error {
+	st.redraw = true
+	str := st.c.e.Strings()
+	names := strings.Split(str.KonfigColorSlotNames, ",")
+	for len(names) < user.ColorSlots {
+		names = append(names, fmt.Sprintf("C%d", len(names)+1))
+	}
+	inner := colorBoxWidth - 2
+	sel := 0
+	ch := colorChoiceOf(st.c.e.colorSlot(st.user(), 1))
+	pick := func(i int) {
+		sel = i
+		ch = colorChoiceOf(st.c.e.colorSlot(st.user(), i+1))
+	}
+
+	line := func(row int, s string) string {
+		return moveTo(row, colorBoxLeft) + pc(9) + "│" + s + pc(9) + "│"
+	}
+	expand := func(s string) string { return string(ansi.ReplacePipeCodes([]byte(s))) }
+	slotRow := func(i int) string {
+		code := st.c.e.colorSlot(st.user(), i+1)
+		if i == sel {
+			code = ch.code()
+		}
+		set := pc(8) + st.fit(str.KonfigColorsDefault, 9)
+		if st.user().ColorCode(i+1) != "" {
+			set = pc(7) + st.fit(str.KonfigColorsCustom, 9)
+		}
+		label := st.fit(strings.TrimSpace(names[i]), 10)
+		sample := expand(code) + " " + st.fit(str.KonfigColorsSample, 16) + " " + konfigReset
+		head := pc(8) + fmt.Sprintf(" [%s%d%s] ", pc(15), i+1, pc(8)) + pc(7) + label
+		if i == sel {
+			head = konfigBarStyle + fmt.Sprintf(" [%d] ", i+1) + label + konfigReset
+		}
+		used := 5 + 10 + 2 + 18 + 9
+		return head + "  " + sample + set + konfigReset + strings.Repeat(" ", inner-used)
+	}
+	bracket := func(on, active bool, body string) string {
+		l, r := " ", " "
+		if on {
+			l, r = "[", "]"
+		}
+		col := pc(8)
+		if active {
+			col = pc(15)
+		}
+		return col + l + body + col + r
+	}
+	fgRow := func() string {
+		var b strings.Builder
+		b.WriteString(" ")
+		for n := 0; n < 16; n++ {
+			sw := expand(fmt.Sprintf("|%02d", n)) + "██"
+			if n == 0 {
+				// Black as a shade over grey: a solid block of it would be
+				// a gap on a black screen.
+				sw = expand("|00|B7") + "▒▒" + konfigReset
+			}
+			b.WriteString(bracket(n == ch.fg, !ch.bgRow, sw))
+		}
+		return b.String() + konfigReset + " "
+	}
+	bgRow := func() string {
+		var b strings.Builder
+		b.WriteString(" ")
+		b.WriteString(bracket(ch.bg == colorNoBG, ch.bgRow, pc(7)+st.fit(str.KonfigColorsNoBG, colorNoBGWidth)))
+		for n := 0; n < 8; n++ {
+			b.WriteString(bracket(n == ch.bg, ch.bgRow, expand(fmt.Sprintf("|15|B%d", n))+"  "+konfigReset))
+		}
+		return b.String() + konfigReset + strings.Repeat(" ", inner-1-(colorNoBGWidth+2)-8*colorBoxSwatch)
+	}
+
+	top := colorBoxTop
+	pickRow := top + 1 + user.ColorSlots + 1
+	hintRow := pickRow + 2
+	drawSlots := func() string {
+		var b strings.Builder
+		for i := 0; i < user.ColorSlots; i++ {
+			b.WriteString(line(top+1+i, slotRow(i)))
+		}
+		return b.String()
+	}
+	drawPicker := func() string {
+		return line(pickRow, fgRow()) + line(pickRow+1, bgRow())
+	}
+	title := " " + st.clip(str.KonfigColorsTitle, inner-3, "..") + " "
+	var b strings.Builder
+	b.WriteString(moveTo(top, colorBoxLeft) + pc(9) + "┌─" + pc(15) + title + pc(9) + strings.Repeat("─", inner-st.cells(title)-1) + "┐")
+	b.WriteString(drawSlots())
+	b.WriteString(line(top+1+user.ColorSlots, konfigReset+strings.Repeat(" ", inner)))
+	b.WriteString(drawPicker())
+	b.WriteString(line(hintRow, pc(8)+st.fit(" "+str.KonfigColorsHint, inner)))
+	b.WriteString(moveTo(hintRow+1, colorBoxLeft) + pc(9) + "└" + strings.Repeat("─", inner) + "┘" + konfigReset)
+	if err := st.raw(b.String()); err != nil {
+		return err
+	}
+
+	save := func(code string) {
+		name := strings.TrimSpace(names[sel])
+		old := append([]string(nil), st.user().ColorCodes...)
+		if !st.commit(str.KonfigColorsLabel,
+			func(u *user.User) { u.SetColorCode(sel+1, code) },
+			func(u *user.User) { u.ColorCodes = old }) {
+			return
+		}
+		if code == "" {
+			st.status = fmt.Sprintf(str.KonfigColorReset, name)
+			pick(sel)
+		} else {
+			st.status = fmt.Sprintf(str.KonfigColorSaved, name)
+		}
+	}
+
+	for {
+		key, err := st.ih.ReadKey()
+		if err != nil {
+			return err
+		}
+		st.status = ""
+		switch key {
+		case editor.KeyEsc, 'q', 'Q':
+			return nil
+		case editor.KeyArrowUp:
+			pick((sel + user.ColorSlots - 1) % user.ColorSlots)
+		case editor.KeyArrowDown:
+			pick((sel + 1) % user.ColorSlots)
+		case editor.KeyArrowLeft:
+			ch.move(-1)
+		case editor.KeyArrowRight:
+			ch.move(1)
+		case editor.KeyTab:
+			ch.bgRow = !ch.bgRow
+		case editor.KeyEnter, ' ':
+			// The board's own default is saved as "not set", so the caller
+			// follows it if the sysop changes it.
+			code := ch.code()
+			if code == st.c.e.colorSlot(nil, sel+1) {
+				code = ""
+			}
+			save(code)
+		case 'r', 'R':
+			save("")
+		default:
+			if key >= '1' && key < '1'+user.ColorSlots {
+				pick(key - '1')
+			}
+		}
+		if err := st.raw(drawSlots() + drawPicker()); err != nil {
+			return err
 		}
 		if err := st.renderStatus(); err != nil {
 			return err

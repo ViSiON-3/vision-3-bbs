@@ -3,6 +3,8 @@ package stringeditor
 import (
 	"strings"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // A cursor code moves the caller's cursor, so the preview draws nothing for
@@ -99,5 +101,19 @@ func TestPreviewBrightBackgrounds(t *testing.T) {
 	spans := parseColorCodes("|B10x|B8y")
 	if len(spans) != 2 || spans[0].text != "x" || spans[0].bg != dosColors[10] || spans[1].bg != dosColors[8] {
 		t.Errorf("spans = %+v", spans)
+	}
+}
+
+// A caller colour code previews in the board's default for that slot, since a
+// string is drawn for every caller and the preview can't pick one of them.
+func TestPreviewDrawsColorSlotsInBoardDefaults(t *testing.T) {
+	t.Cleanup(func() { ansi.SetColorSlotDefaults([7]string{}) })
+	ansi.SetColorSlotDefaults([7]string{"|12|B4"})
+	if got := PlainTextLength("|C1x"); got != 1 {
+		t.Errorf("PlainTextLength(|C1x) = %d, want 1", got)
+	}
+	spans := parseColorCodes("|C1x")
+	if len(spans) != 1 || spans[0].text != "x" || spans[0].fg != dosColors[12] || spans[0].bg != dosBgColors[4] {
+		t.Errorf("spans = %+v, want x in light red on blue", spans)
 	}
 }

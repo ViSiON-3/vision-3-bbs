@@ -707,8 +707,8 @@ func TestLoadStrings_ValidFile(t *testing.T) {
 	if result.AnonymousName != "Anonymous Coward" {
 		t.Errorf("expected 'Anonymous Coward', got %s", result.AnonymousName)
 	}
-	if result.DefColor1 != 14 {
-		t.Errorf("expected DefColor1 14, got %d", result.DefColor1)
+	if result.LegacyColorSlots[0] != "|14" {
+		t.Errorf("expected defColor1 14 to be the |C1 default |14, got %q", result.LegacyColorSlots[0])
 	}
 }
 

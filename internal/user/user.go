@@ -147,7 +147,11 @@ type User struct {
 	} `json:"file_list_columns,omitempty"`
 	AutoSignature string `json:"autoSignature,omitempty"` // Auto-signature appended to messages (max 5 lines)
 	AutoSigAsk    bool   `json:"autoSigAsk,omitempty"`    // Ask before adding AutoSignature to each message
-	Colors        [7]int `json:"colors,omitempty"`
+	Colors        [7]int `json:"colors,omitempty"`        // from ViSiON/2 and never written; ColorCodes replaced it
+	// ColorCodes are the caller's colour slots, |C1 to |C7, one pipe code
+	// each (see ValidColorCode); "" or a missing entry is the board's
+	// default. Read them through ColorCode.
+	ColorCodes []string `json:"colorCodes,omitempty"`
 	// ThreadViewClosed starts the message reader with its thread pane
 	// closed; T in the reader still opens it for the rest of the call.
 	ThreadViewClosed bool `json:"threadViewClosed,omitempty"`

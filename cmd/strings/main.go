@@ -19,6 +19,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringeditor"
 	configtemplates "github.com/ViSiON-3/vision-3-bbs/templates/configs"
 )
@@ -60,6 +62,13 @@ func loadShippedDefaults() map[string]string {
 	return defaults
 }
 
+// loadBoardColorSlots makes the preview draw |C1-|C7 in the defaults the
+// board's strings.json at path sets, as the BBS draws them, rather than the
+// built-in ones.
+func loadBoardColorSlots(path string) {
+	ansi.SetColorSlotDefaults(config.LegacyColorSlotsFile(path))
+}
+
 func main() {
 	configPath := flag.String("config", "", "Path to strings.json (default: configs/strings.json)")
 	flag.Parse()
@@ -84,6 +93,8 @@ func main() {
 
 	// Load factory defaults from templates/, falling back to the embedded copy
 	shippedDefaults := loadShippedDefaults()
+
+	loadBoardColorSlots(path)
 
 	// Create the editor model
 	model, err := stringeditor.New(path, shippedDefaults)

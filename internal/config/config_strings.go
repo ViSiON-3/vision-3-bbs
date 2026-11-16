@@ -32,8 +32,10 @@ func LoadStrings(configPath string) (StringsConfig, error) { // Return the loade
 
 	applySupersededStrings(&loadedConfig)
 	applyStringDefaults(&loadedConfig)
-	if values, err := stringValues(data); err == nil {
-		applyMissingStringDefaults(&loadedConfig, values)
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(data, &raw) == nil {
+		loadedConfig.LegacyColorSlots = legacyColorSlots(raw)
+		applyMissingStringDefaults(&loadedConfig, stringValuesOf(raw))
 	}
 	warnFormatMismatches(data, filePath)
 	slog.Info("successfully loaded strings configuration")
@@ -72,13 +74,18 @@ func warnFormatMismatches(data []byte, filePath string) {
 }
 
 // stringValues extracts the string-valued entries of a strings.json document.
-// Numeric entries such as the defColorN fields are skipped rather than failing
-// the whole extraction.
+// Other entries, such as an older file's numeric defColorN (see
+// legacyColorSlots), are skipped rather than failing the whole extraction.
 func stringValues(data []byte) (map[string]string, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}
+	return stringValuesOf(raw), nil
+}
+
+// stringValuesOf is stringValues for a document already parsed.
+func stringValuesOf(raw map[string]json.RawMessage) map[string]string {
 	out := make(map[string]string, len(raw))
 	for key, msg := range raw {
 		var s string
@@ -86,7 +93,7 @@ func stringValues(data []byte) (map[string]string, error) {
 			out[key] = s
 		}
 	}
-	return out, nil
+	return out
 }
 
 // StringFallbacks maps a strings.json key to the value the runtime substitutes
@@ -381,6 +388,17 @@ var StringFallbacks = map[string]string{
 	"konfigSavedFormat":         "|10Saved.|07 %s is now |15%s|07.",
 	"konfigClearedFormat":       "|10Saved.|07 %s cleared.",
 	"konfigUpdatedFormat":       "|10Saved.|07 %s updated.",
+	"konfigColorsLabel":         "Colours",
+	"konfigColorsHelp":          "Your colours for prompts, what you type, text and bars, where screens use them.",
+	"konfigColorsDefault":       "default",
+	"konfigColorsCustom":        "custom",
+	"konfigColorsTitle":         "Your Colours",
+	"konfigColorsHint":          "Arrows choose  Tab: background  Enter saves  R default  Esc done",
+	"konfigColorSlotNames":      "Prompt,Input,Text,Stat,Text 2,Stat 2,Bar",
+	"konfigColorsSample":        "Sample text",
+	"konfigColorsNoBG":          "none",
+	"konfigColorSaved":          "|10Saved.|07 Your %s colour is set.",
+	"konfigColorReset":          "|10Saved.|07 Your %s colour is back to the default.",
 	"konfigRangeError":          "|12%s must be a number from %d to %d.|07",
 	"konfigRangeHint":           "|08(%d-%d)",
 	"konfigEncodingAuto":        "|10Saved.|07 Encoding is now |15Auto|07, detected on every call.",
@@ -551,4 +569,42 @@ func applyStringDefaults(c *StringsConfig) {
 			field.SetString(def)
 		}
 	}
+}
+
+// legacyColorSlots reads the defColor1-defColor7 values a strings.json from
+// before the caller colour slots may still carry: DOS foreground colours,
+// which were the defaults |C1 to |C7 were meant to map to. Each one present
+// and 1-15 becomes its pipe code; the Bar slot keeps the built-in bar's
+// background (|B3), so a foreground alone doesn't turn the bar into text on
+// black. 0 is what an unset field was saved as, so it counts as not set, as
+// does anything else: "".
+func legacyColorSlots(raw map[string]json.RawMessage) [7]string {
+	var out [7]string
+	for i := range out {
+		var n int
+		if v, ok := raw[fmt.Sprintf("defColor%d", i+1)]; ok && json.Unmarshal(v, &n) == nil && n >= 1 && n <= 15 {
+			out[i] = fmt.Sprintf("|%02d", n)
+			if i == 6 {
+				out[i] += "|B3"
+			}
+		}
+	}
+	return out
+}
+
+// LegacyColorSlotsFile returns the colour slot defaults the strings.json at
+// path sets, read as LoadStrings reads them, for a tool such as the string
+// or menu editor that previews |C1-|C7 without loading the rest of the board.
+// A file that can't be read or parsed sets none, so the built-in defaults
+// apply.
+func LegacyColorSlotsFile(path string) [7]string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return [7]string{}
+	}
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(data, &raw) != nil {
+		return [7]string{}
+	}
+	return legacyColorSlots(raw)
 }

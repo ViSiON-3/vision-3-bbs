@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 
@@ -37,14 +38,18 @@ func main() {
 	noOverlay := flag.Bool("no-overlay", false, "Read and write the shipped menu set directly instead of its menus.d overlay")
 	flag.Parse()
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err) //nolint:errcheck
+		os.Exit(1)
+	}
+	// Prompts preview |C1-|C7 in the defaults the board's strings.json sets,
+	// as the BBS draws them, rather than the built-in ones.
+	ansi.SetColorSlotDefaults(config.LegacyColorSlotsFile(filepath.Join(cwd, "configs", "strings.json")))
+
 	// Resolve menus path
 	path := *menusPath
 	if path == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err) //nolint:errcheck
-			os.Exit(1)
-		}
 		path, err = defaultMenuSet(cwd)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\nFix theme.name in configs/config.json, or name a menu set with --menus.\n", err) //nolint:errcheck
