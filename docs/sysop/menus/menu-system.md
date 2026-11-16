@@ -1055,8 +1055,8 @@ colour's blink bit (backgrounds 8-15) is kept as it was.
 
 | Field | Default | Meaning |
 |-------|---------|---------|
-| `yesNoHighlightColor` | `112` | The highlight bar in lightbars (message reader, message and file area lists, BBS list, message scan, file command bar, generated door menu) and the highlighted yes/no choice |
-| `yesNoRegularColor` | `15` | The unhighlighted yes/no choice and command bar options |
+| `yesNoHighlightColor` | `31` | The highlight bar in lightbars (message reader, message and file area lists, BBS list, message scan, file command bar, generated door menu) and the highlighted yes/no choice |
+| `yesNoRegularColor` | `13` | The unhighlighted yes/no choice and command bar options |
 | `chatSysopColor` | `11` | Sysop's text in [split-screen chat](how-to-guides/wfc-console.md#chat), where the chat screen sets no colour of its own |
 | `chatUserColor` | `10` | Caller's text in split-screen chat, likewise |
 | `sysopChatScreen` | (none) | The [chat screen](#chat-screens) split-screen chat opens with; empty means the built-in layout, `random` one of the set's screens each chat |

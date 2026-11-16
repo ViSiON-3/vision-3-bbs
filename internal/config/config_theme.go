@@ -105,12 +105,12 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 
 	// Default theme settings
 	defaultTheme := ThemeConfig{
-		YesNoHighlightColor: 112, // White on Black (inverse)
-		YesNoRegularColor:   15,  // Bright White on Black
-		ChatSysopColor:      11,  // Light cyan
-		ChatUserColor:       10,  // Light green
+		YesNoHighlightColor: 31, // Bright white on blue
+		YesNoRegularColor:   13, // Light magenta
+		ChatSysopColor:      11, // Light cyan
+		ChatUserColor:       10, // Light green
 
-		AutocorrectHighlightColor: 15, // Bright white
+		AutocorrectHighlightColor: 14, // Yellow
 		ToastFadeColors:           DefaultToastFadeColors,
 	}
 

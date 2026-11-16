@@ -10,7 +10,7 @@
     "lightbarDestructive": 4,
     "chatSysopColor": 11,
     "chatUserColor": 10,
-    "autocorrectHighlightColor": 15,
+    "autocorrectHighlightColor": 14,
     "sysopChatScreen": "V3CHAT1",
     "toastFadeColors": "8,7,15"
 }
