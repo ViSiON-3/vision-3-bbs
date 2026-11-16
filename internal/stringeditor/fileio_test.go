@@ -10,14 +10,6 @@ import (
 	configtemplates "github.com/ViSiON-3/vision-3-bbs/templates/configs"
 )
 
-// testDefaults is a small stand-in for the shipped factory values.
-func testDefaults() map[string]string {
-	return map[string]string{
-		"defPrompt":   "|08factory prompt",
-		"pauseString": "|15factory pause",
-	}
-}
-
 // TestLoadStrings_MissingFileWritesNothing checks that a missing file is no
 // strings, and is not created: the BBS has the shipped strings built in.
 func TestLoadStrings_MissingFileWritesNothing(t *testing.T) {
