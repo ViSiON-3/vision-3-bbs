@@ -46,7 +46,7 @@ func themeMenuItems() []sysConfigMenuItem {
 			return themeFieldsToasts(&m.configs.Theme, &m.configs.Server.Theme.Colors)
 		}},
 		{Label: "Caller Colors", Build: func(m *Model) []fieldDef {
-			return themeFieldsCaller(&m.configs.Theme, &m.configs.Server.Theme.Colors)
+			return themeFieldsCaller(&m.configs.Theme, &m.configs.Server.Theme.Colors, m.configs.legacySlots)
 		}},
 	}
 }
@@ -58,7 +58,15 @@ func themeMenuItems() []sysConfigMenuItem {
 // field ("Use theme default") removes the override again. th is the theme
 // as loaded, without the board's colours.
 func boardColorField(label, help string, row int, role config.ColorRole, th *config.ThemeConfig, board *config.ThemeColors) fieldDef {
-	resolve := func() (int, config.ColorSource) { return config.ResolveColor(role, *th, *board) }
+	return boardColorFieldResolved(label, help, row, role, board, func() (int, config.ColorSource) {
+		return config.ResolveColor(role, *th, *board)
+	})
+}
+
+// boardColorFieldResolved is boardColorField with the colour the board
+// draws worked out by resolve, for a role with a layer of its own, such as
+// a caller colour slot's legacy default.
+func boardColorFieldResolved(label, help string, row int, role config.ColorRole, board *config.ThemeColors, resolve func() (int, config.ColorSource)) fieldDef {
 	return fieldDef{
 		Label: label, Help: help + "; Enter picks, T types a number, D uses the theme's",
 		Type: ftColorAttr, Col: 3, Row: row, Width: 3, Min: 0, Max: 255,
@@ -99,16 +107,23 @@ func themeFieldsLightbar(th *config.ThemeConfig, board *config.ThemeColors) []fi
 
 // themeFieldsCaller is the board's default for each caller colour slot,
 // |C1 to |C7 (#426). A caller who picks their own in User Konfig sees
-// theirs instead, where a screen uses the code.
-func themeFieldsCaller(th *config.ThemeConfig, board *config.ThemeColors) []fieldDef {
+// theirs instead, where a screen uses the code. legacy is the slot
+// defaults from an older strings.json's defColorN, which a slot the theme
+// and board leave unset draws.
+func themeFieldsCaller(th *config.ThemeConfig, board *config.ThemeColors, legacy [7]string) []fieldDef {
+	field := func(label, help string, row int, role config.ColorRole) fieldDef {
+		return boardColorFieldResolved(label, help, row, role, board, func() (int, config.ColorSource) {
+			return config.ResolveCallerColor(role, *th, *board, legacy)
+		})
+	}
 	return []fieldDef{
-		boardColorField("Prompt (|C1)", "A prompt's question", 1, config.RoleCallerPrompt, th, board),
-		boardColorField("Input (|C2)", "What a caller types at a prompt", 2, config.RoleCallerInput, th, board),
-		boardColorField("Text (|C3)", "Plain text", 3, config.RoleCallerText, th, board),
-		boardColorField("Stat (|C4)", "A value picked out of the text, such as a name or a number", 4, config.RoleCallerStat, th, board),
-		boardColorField("Text 2 (|C5)", "Secondary text, such as brackets and separators", 5, config.RoleCallerText2, th, board),
-		boardColorField("Stat 2 (|C6)", "A second kind of value, such as an area name", 6, config.RoleCallerStat2, th, board),
-		boardColorField("Bar (|C7)", "A highlighted choice; unset, the lightbar Selected colour", 7, config.RoleCallerBar, th, board),
+		field("Prompt (|C1)", "A prompt's question", 1, config.RoleCallerPrompt),
+		field("Input (|C2)", "What a caller types at a prompt", 2, config.RoleCallerInput),
+		field("Text (|C3)", "Plain text", 3, config.RoleCallerText),
+		field("Stat (|C4)", "A value picked out of the text, such as a name or a number", 4, config.RoleCallerStat),
+		field("Text 2 (|C5)", "Secondary text, such as brackets and separators", 5, config.RoleCallerText2),
+		field("Stat 2 (|C6)", "A second kind of value, such as an area name", 6, config.RoleCallerStat2),
+		field("Bar (|C7)", "A highlighted choice; unset, the lightbar Selected colour", 7, config.RoleCallerBar),
 	}
 }
 

@@ -170,7 +170,7 @@ edits that theme's `theme.json` (see [Theme Configuration](#theme-configuration)
 | Screen Overrides | The screens whose own `*HI.BAR` file sets their highlight over the shared colours: each one's colour and whether the file is shipped or in `menus.d`. Set a screen to **Y** to have it **inherit shared colours**; saving writes an inherit marker to `menus.d/<theme>/bar/` (see [Per-screen lightbar colors](menus/menu-system.md#per-screen-lightbar-colors)). The BARs themselves are edited with `menuedit` |
 | Split-Screen Chat | The chat screen chat opens with, picked from the menu set's screens, the built-in layout or **random**; and the sysop's and caller's text colours where a screen sets none |
 | Toasts | The colours a toast fades through |
-| Caller Colors | The board's default for each [caller colour](#caller-colour-roles), `\|C1`–`\|C7` |
+| Caller Colors | The board's default for each [caller colour](#caller-colour-roles), `\|C1`–`\|C7`. A slot the theme leaves unset shows an older `strings.json`'s `defColorN`, marked `strings.json`, where it has one |
 
 **Colours are board overrides.** Each colour shows the value the board draws
 with, in that colour, and where it comes from: `built-in`, `theme` or

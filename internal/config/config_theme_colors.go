@@ -133,6 +133,9 @@ const (
 	// SourceScreen is a screen's own BAR file (menuset.ScreenBars), which
 	// colours that one screen over everything else (#1079).
 	SourceScreen
+	// SourceStrings is an older strings.json's defColorN, which a caller
+	// colour slot the theme and board leave unset still draws (#426).
+	SourceStrings
 )
 
 // String names the source as the config editor shows it.
@@ -144,6 +147,8 @@ func (s ColorSource) String() string {
 		return "board override"
 	case SourceScreen:
 		return "screen override"
+	case SourceStrings:
+		return "strings.json"
 	}
 	return "built-in"
 }

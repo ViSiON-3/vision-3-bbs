@@ -59,6 +59,31 @@ func TestCallerColorRolesParse(t *testing.T) {
 	}
 }
 
+// A caller role the theme and board leave unset resolves to the legacy
+// defColorN; a set one, and any other role, ignore it.
+func TestResolveCallerColor(t *testing.T) {
+	theme := ThemeConfig{YesNoHighlightColor: 31, CallerStat: SetColor(14)}
+	legacy := [7]string{"|12", "", "", "|10", "", "", "|00|B6"}
+	for _, tc := range []struct {
+		role ColorRole
+		v    int
+		src  ColorSource
+	}{
+		{RoleCallerPrompt, 12, SourceStrings},
+		{RoleCallerInput, 15, SourceBuiltin},
+		{RoleCallerStat, 14, SourceTheme},
+		{RoleCallerBar, 48, SourceStrings},
+		{RoleLightbarSelected, 31, SourceBuiltin},
+	} {
+		if v, src := ResolveCallerColor(tc.role, theme, ThemeColors{}, legacy); v != tc.v || src != tc.src {
+			t.Errorf("%s: %d from %v, want %d from %v", tc.role, v, src, tc.v, tc.src)
+		}
+	}
+	if v, src := ResolveCallerColor(RoleCallerPrompt, theme, ThemeColors{CallerPrompt: SetColor(7)}, legacy); v != 7 || src != SourceBoard {
+		t.Errorf("board override: %d from %v", v, src)
+	}
+}
+
 // The editors read a board's slot defaults from its files: the selected
 // theme, config.json's theme.colors and strings.json's defColorN. A board
 // with none of them gets the built-ins.

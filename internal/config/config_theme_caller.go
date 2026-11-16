@@ -82,6 +82,23 @@ func (t ThemeConfig) ColorSlotCodes(legacy [7]string) [7]string {
 	return out
 }
 
+// ResolveCallerColor is ResolveColor for a caller colour role, with the
+// legacy slot defaults from an older strings.json (as ColorSlotCodes takes
+// them): a slot the theme and board leave unset is its defColorN, as the
+// board draws it. Any other role resolves as ResolveColor does.
+func ResolveCallerColor(role ColorRole, theme ThemeConfig, board ThemeColors, legacy [7]string) (int, ColorSource) {
+	c, src := ResolveColor(role, theme, board)
+	if src != SourceBuiltin {
+		return c, src
+	}
+	for i, r := range CallerColorRoles {
+		if r == role && legacy[i] != "" {
+			return PipeCodeAttr(legacy[i]), SourceStrings
+		}
+	}
+	return c, src
+}
+
 // pipeBackground maps a DOS attribute's background (its high nibble, in DOS
 // colour order: 1 blue, 4 red) to the |B code that draws it (|B codes
 // follow ANSI order: |B1 red, |B4 blue).
