@@ -62,13 +62,17 @@ func LoadStrings(configPath string) (StringsConfig, error) {
 	values := stringValuesOf(raw)
 	loadedConfig.LegacyColorSlots = legacyColorSlots(raw)
 	applyMissingStringDefaults(&loadedConfig, values)
+	replace := map[string]string{}
 	for _, key := range formatMismatches(values, shipped, filePath) {
 		def := shipped[key]
 		if def == "" {
 			def = StringFallbacks[key]
 		}
-		setStringFields(&loadedConfig, map[string]string{key: def})
+		if def != "" { // with no default to use, the sysop's text is the better of two wrongs
+			replace[key] = def
+		}
 	}
+	setStringFields(&loadedConfig, replace)
 	slog.Info("successfully loaded strings configuration")
 	return loadedConfig, nil
 }
@@ -120,7 +124,7 @@ func formatMismatches(file, shipped map[string]string, filePath string) []string
 			continue // a shipped default the template's own tests answer for
 		}
 		slog.Warn("configured string does not match the arguments the BBS passes it; "+
-			"using the shipped default until it is corrected",
+			"using the shipped default, if there is one, until it is corrected",
 			"path", filePath, "key", p.Key, "expected", p.Expected, "problem", p.Detail)
 		keys = append(keys, p.Key)
 	}

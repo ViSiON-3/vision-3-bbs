@@ -11,6 +11,8 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"sync"
 )
 
 // FS holds every *.json template in this directory, keyed by bare file name
@@ -19,8 +21,14 @@ import (
 //go:embed *.json
 var FS embed.FS
 
-// StringDefaults returns the factory values for strings.json.
+// StringDefaults returns the factory values for strings.json. The template
+// is parsed once; each call gets its own copy.
 func StringDefaults() (map[string]string, error) {
+	values, err := stringDefaults()
+	return maps.Clone(values), err
+}
+
+var stringDefaults = sync.OnceValues(func() (map[string]string, error) {
 	data, err := FS.ReadFile("strings.json")
 	if err != nil {
 		return nil, fmt.Errorf("reading embedded strings.json: %w", err)
@@ -30,4 +38,4 @@ func StringDefaults() (map[string]string, error) {
 		return nil, fmt.Errorf("parsing embedded strings.json: %w", err)
 	}
 	return values, nil
-}
+})

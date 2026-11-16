@@ -824,7 +824,7 @@ The text the BBS displays is built into it; `configs/strings.json` holds
 the strings you change. A key the file leaves out shows the shipped text, so
 new and reworded strings in a later release reach every string you haven't
 changed. A board with no `strings.json` at all runs on the shipped text, and
-a new install doesn't create one: `./strings` writes it when you first save.
+a new install doesn't create one: `./strings` writes it.
 Removing the file, or a key from it, puts the shipped text back, without a
 restart.
 
