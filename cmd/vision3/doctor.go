@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/url"
@@ -922,29 +923,20 @@ func checkThemeOverlay(menuRoot string, add func(string, doctorSeverity, string,
 // redundantThemeOverlay returns the overlay theme.json's redundant keys
 // and how many keys it has.
 func redundantThemeOverlay(menuRoot string) (keys []string, total int, err error) {
-	keys, err = config.RedundantThemeOverlayKeys(menuRoot)
-	if err != nil || len(keys) == 0 {
-		return nil, 0, err
-	}
-	data, err := os.ReadFile(menuset.FromPath(menuRoot).Path(menuset.LayerOverlay, "theme.json"))
-	if err != nil {
-		return nil, 0, err
-	}
-	doc := map[string]json.RawMessage{}
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return nil, 0, err
-	}
-	return keys, len(doc), nil
+	return config.RedundantThemeOverlayKeys(menuRoot)
 }
 
 func themeOverlayRel(menuRoot string) string {
 	return filepath.ToSlash(filepath.Join("menus.d", filepath.Base(menuRoot), "theme.json"))
 }
 
+// doctorBackupDir is where doctor --fix copies a file before changing it.
+const doctorBackupDir = "data/backups"
+
 // fixThemeOverlay removes the redundant keys of the selected theme's
-// overlay theme.json, after copying the file to a dated backup beside it.
+// overlay theme.json, after copying the file to data/backups.
 func fixThemeOverlay(root string, dryRun bool, now time.Time) []doctorFix {
-	menuRoot, _, err := config.SelectedMenuSet(root, filepath.Join(root, "configs"))
+	menuRoot, themeName, err := config.SelectedMenuSet(root, filepath.Join(root, "configs"))
 	if err != nil {
 		return nil // reported by the theme check
 	}
@@ -961,18 +953,50 @@ func fixThemeOverlay(root string, dryRun bool, now time.Time) []doctorFix {
 		return []doctorFix{{Path: rel, Action: action, Status: "would-fix"}}
 	}
 	path := menuset.FromPath(menuRoot).Path(menuset.LayerOverlay, "theme.json")
-	backup := path + ".bak-" + now.Format("20060102-150405")
-	data, err := os.ReadFile(path)
-	if err == nil {
-		err = os.WriteFile(backup, data, 0o644)
-	}
+	backup, err := backupForDoctor(root, path, fmt.Sprintf("menus.d-%s-theme.json", themeName), now)
 	if err == nil {
 		err = config.TrimThemeOverlay(menuRoot, keys)
 	}
 	if err != nil {
 		return []doctorFix{{Path: rel, Action: action, Status: "failed", Message: err.Error()}}
 	}
-	return []doctorFix{{Path: rel, Action: action, Status: "fixed", Message: "backup: " + filepath.Base(backup)}}
+	return []doctorFix{{Path: rel, Action: action, Status: "fixed", Message: "backup: " + backup}}
+}
+
+// backupForDoctor copies src to data/backups/<name>.<date>-<time>, never
+// over an existing backup, and returns the backup's path relative to root.
+func backupForDoctor(root, src, name string, now time.Time) (string, error) {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(root, filepath.FromSlash(doctorBackupDir))
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return "", err
+	}
+	base := name + "." + now.Format("20060102-150405")
+	for i := 1; ; i++ {
+		file := base
+		if i > 1 {
+			file = fmt.Sprintf("%s-%d", base, i)
+		}
+		path := filepath.Join(dir, file)
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o640)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		_, err = f.Write(data)
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			return "", err
+		}
+		return filepath.ToSlash(filepath.Join(doctorBackupDir, file)), nil
+	}
 }
 
 // retiredScreenBars are the highlight BARs the stock theme shipped until

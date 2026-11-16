@@ -237,5 +237,5 @@ vision3/
 | `--output-mode` | `auto` (default: detect per session), `utf8` or `cp437` for every caller. See [Encoding](advanced/encoding.md) |
 | `doctor`, `--doctor` | Read-only health check of the board in the current directory; exit `0` clean, `1` warnings, `2` failures. See [Doctor](configuration/configuration.md#doctor) |
 | `--json` | With `doctor`: JSON output |
-| `--fix` | With `doctor`: create missing standard data directories, and remove the keys of an overlay `theme.json` that only repeat the shipped theme (backed up first) |
+| `--fix` | With `doctor`: create missing standard data directories, and remove the keys of an overlay `theme.json` that only repeat the shipped theme (backed up to `data/backups/` first) |
 | `--dry-run` | With `--fix`: preview only |

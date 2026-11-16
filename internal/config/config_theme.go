@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -118,20 +118,19 @@ func builtinTheme() ThemeConfig {
 
 // LoadThemeConfig loads the theme settings of a menu set. The shipped
 // menus/<set>/theme.json fills in the built-in defaults, and the overlay's
-// menus.d/<set>/theme.json is merged over it key by key: a key the overlay
-// leaves out, or sets to null, keeps the shipped value. Either file may be
-// missing.
+// menus.d/<set>/theme.json is merged over it key by key (see mergeThemeDocs).
+// Either file may be missing.
 func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 	set := menuset.FromPath(menuSetPath)
 	defaults := builtinTheme()
 	slog.Info("loading theme configuration", "path", set.Path(menuset.LayerBase, "theme.json"))
 
-	doc, err := themeLayers(set)
+	shipped, overlay, err := readThemeLayers(set)
 	if err != nil {
 		slog.Error("failed to load theme, using default theme settings", "error", err)
 		return defaults, err
 	}
-	theme, err := decodeTheme(defaults, doc)
+	theme, err := decodeTheme(defaults, mergeThemeDocs(shipped, overlay))
 	if err != nil {
 		slog.Error("failed to parse theme JSON, using default theme settings", "error", err)
 		return defaults, err
@@ -142,10 +141,11 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 
 // SaveThemeConfig writes theme to the menu set's overlay theme.json
 // (menus.d/<set>/theme.json), so an upgrade of the shipped set leaves it
-// alone. Only the keys whose value differs from what the shipped theme.json
-// (or, without one, the built-in defaults) gives are written, so later
-// changes to the shipped theme still reach the board. Keys ThemeConfig does
-// not know are kept. An overlay left with nothing to say is removed.
+// alone. Only the keys needed to turn what the shipped theme.json (or,
+// without one, the built-in defaults) gives into theme are written, so
+// later changes to the shipped theme still reach the board. Keys
+// ThemeConfig does not know are kept unless they repeat the shipped file.
+// An overlay left with nothing to say is removed.
 //
 // A set with no overlay is written in place, in full.
 func SaveThemeConfig(menuSetPath string, theme ThemeConfig) error {
@@ -167,42 +167,28 @@ func SaveThemeConfig(menuSetPath string, theme ThemeConfig) error {
 		return writeThemeDoc(path, doc)
 	}
 
-	shipped, err := readThemeDoc(set.Path(menuset.LayerBase, "theme.json"))
+	shipped, overlay, err := readThemeLayers(set)
 	if err != nil {
 		return err
 	}
-	inheritedTheme, err := decodeTheme(builtinTheme(), shipped)
-	if err != nil {
-		return err
-	}
-	inherited, err := themeDoc(inheritedTheme)
-	if err != nil {
-		return err
-	}
-	// Unknown keys are compared with the shipped file as it is.
-	for k, v := range shipped {
-		if _, ok := inherited[k]; !ok {
-			inherited[k] = v
+	// Start from an overlay that says everything: every known key, null for
+	// a role left unset, and the overlay's unknown keys. Then take out what
+	// changes nothing.
+	doc := map[string]json.RawMessage{}
+	for k, v := range overlay {
+		if !slices.Contains(themeKeys(), k) {
+			doc[k] = v
 		}
 	}
-
-	path := set.Path(menuset.LayerOverlay, "theme.json")
-	doc, err := readThemeDoc(path)
-	if err != nil {
-		return err
-	}
-	if doc == nil {
-		doc = map[string]json.RawMessage{}
-	}
-	for _, key := range themeKeys() {
-		delete(doc, key) // a role left unset clears its override
+	for _, k := range themeKeys() {
+		doc[k] = json.RawMessage("null")
 	}
 	maps.Copy(doc, known)
-	for k, v := range doc {
-		if base, ok := inherited[k]; ok && sameJSON(base, v) {
-			delete(doc, k)
-		}
+	doc, _, err = minimizeThemeOverlay(shipped, doc)
+	if err != nil {
+		return err
 	}
+	path := set.Path(menuset.LayerOverlay, "theme.json")
 	if len(doc) == 0 {
 		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
@@ -213,47 +199,20 @@ func SaveThemeConfig(menuSetPath string, theme ThemeConfig) error {
 }
 
 // RedundantThemeOverlayKeys lists, sorted, the keys of a menu set's overlay
-// theme.json whose value only repeats what the shipped theme gives, and so
-// can be removed without changing anything. null values count, since they
-// already inherit.
-func RedundantThemeOverlayKeys(menuSetPath string) ([]string, error) {
+// theme.json that can be removed without changing the theme: known keys
+// whose removal leaves the loaded theme as it is, and unknown keys that
+// repeat the shipped file. total is how many keys the overlay has.
+func RedundantThemeOverlayKeys(menuSetPath string) (keys []string, total int, err error) {
 	set := menuset.FromPath(menuSetPath)
 	if !set.HasOverlay() {
-		return nil, nil
+		return nil, 0, nil
 	}
-	overlay, err := readThemeDoc(set.Path(menuset.LayerOverlay, "theme.json"))
+	shipped, overlay, err := readThemeLayers(set)
 	if err != nil || len(overlay) == 0 {
-		return nil, err
+		return nil, 0, err
 	}
-	shipped, err := readThemeDoc(set.Path(menuset.LayerBase, "theme.json"))
-	if err != nil {
-		return nil, err
-	}
-	inheritedTheme, err := decodeTheme(builtinTheme(), shipped)
-	if err != nil {
-		return nil, err
-	}
-	inherited, err := themeDoc(inheritedTheme)
-	if err != nil {
-		return nil, err
-	}
-	for k, v := range shipped {
-		if _, ok := inherited[k]; !ok {
-			inherited[k] = v
-		}
-	}
-	var keys []string
-	for k, v := range overlay {
-		if isJSONNull(v) {
-			keys = append(keys, k)
-			continue
-		}
-		if base, ok := inherited[k]; ok && sameJSON(base, v) {
-			keys = append(keys, k)
-		}
-	}
-	sort.Strings(keys)
-	return keys, nil
+	_, keys, err = minimizeThemeOverlay(shipped, overlay)
+	return keys, len(overlay), err
 }
 
 // TrimThemeOverlay removes keys from a menu set's overlay theme.json, and
@@ -272,34 +231,100 @@ func TrimThemeOverlay(menuSetPath string, keys []string) error {
 		delete(doc, k)
 	}
 	if len(doc) == 0 {
-		return os.Remove(path)
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		return nil
 	}
 	return writeThemeDoc(path, doc)
 }
 
-// themeLayers reads the shipped theme.json and merges the overlay's over
-// it. Overlay keys set to null are dropped, so they inherit.
-func themeLayers(set menuset.Set) (map[string]json.RawMessage, error) {
-	doc, err := readThemeDoc(set.Path(menuset.LayerBase, "theme.json"))
-	if err != nil {
-		return nil, err
+// readThemeLayers reads the shipped and overlay theme.json, either of
+// which may be nil. Each is checked on its own, so an error names the file
+// that holds the bad value.
+func readThemeLayers(set menuset.Set) (shipped, overlay map[string]json.RawMessage, err error) {
+	read := func(layer menuset.Layer) (map[string]json.RawMessage, error) {
+		path := set.Path(layer, "theme.json")
+		doc, err := readThemeDoc(path)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := decodeTheme(builtinTheme(), doc); err != nil {
+			return nil, fmt.Errorf("parse theme JSON %s: %w", path, err)
+		}
+		return doc, nil
 	}
+	if shipped, err = read(menuset.LayerBase); err != nil {
+		return nil, nil, err
+	}
+	if set.HasOverlay() {
+		if overlay, err = read(menuset.LayerOverlay); err != nil {
+			return nil, nil, err
+		}
+	}
+	return shipped, overlay, nil
+}
+
+// legacyRoleFallbacks pairs each lightbar role that falls back to a Yes/No
+// colour with that colour (see ThemeConfig.ColorWithSource).
+var legacyRoleFallbacks = [][2]string{
+	{string(RoleLightbarSelected), string(RoleYesNoHighlight)},
+	{string(RoleLightbarNormal), string(RoleYesNoRegular)},
+}
+
+// mergeThemeDocs applies the overlay's keys over the shipped ones. A key
+// the overlay leaves out comes from the shipped file, with one exception
+// that keeps an overlay from before the lightbar roles looking as it did:
+// an overlay that sets a Yes/No colour and leaves out the role that falls
+// back to it leaves that role unset, so it follows the overlay's colour
+// rather than the shipped role. null in the overlay is the value null:
+// it unsets a role, and leaves any other key as the shipped file has it.
+func mergeThemeDocs(shipped, overlay map[string]json.RawMessage) map[string]json.RawMessage {
+	doc := maps.Clone(shipped)
 	if doc == nil {
 		doc = map[string]json.RawMessage{}
 	}
-	if !set.HasOverlay() {
-		return doc, nil
-	}
-	overlay, err := readThemeDoc(set.Path(menuset.LayerOverlay, "theme.json"))
-	if err != nil {
-		return nil, err
-	}
-	for k, v := range overlay {
-		if !isJSONNull(v) {
-			doc[k] = v
+	maps.Copy(doc, overlay)
+	for _, pair := range legacyRoleFallbacks {
+		role, yesNo := pair[0], pair[1]
+		_, hasRole := overlay[role]
+		if v, hasYesNo := overlay[yesNo]; hasYesNo && !isJSONNull(v) && !hasRole {
+			delete(doc, role)
 		}
 	}
-	return doc, nil
+	return doc
+}
+
+// minimizeThemeOverlay removes, one at a time in key order, each overlay
+// key whose removal leaves the theme it loads as unchanged; an unknown key
+// goes only when the shipped file has the same value. It returns what is
+// left and the keys removed.
+func minimizeThemeOverlay(shipped, overlay map[string]json.RawMessage) (map[string]json.RawMessage, []string, error) {
+	load := func(o map[string]json.RawMessage) (ThemeConfig, error) {
+		return decodeTheme(builtinTheme(), mergeThemeDocs(shipped, o))
+	}
+	want, err := load(overlay)
+	if err != nil {
+		return nil, nil, err
+	}
+	doc := maps.Clone(overlay)
+	var removed []string
+	for _, k := range slices.Sorted(maps.Keys(overlay)) {
+		if !slices.Contains(themeKeys(), k) {
+			if base, ok := shipped[k]; ok && sameJSON(base, doc[k]) {
+				delete(doc, k)
+				removed = append(removed, k)
+			}
+			continue
+		}
+		trial := maps.Clone(doc)
+		delete(trial, k)
+		if got, err := load(trial); err == nil && drawnTheme(got) == drawnTheme(want) {
+			doc = trial
+			removed = append(removed, k)
+		}
+	}
+	return doc, removed, nil
 }
 
 // readThemeDoc reads a theme.json as its top-level keys. A missing file is
@@ -354,6 +379,21 @@ func themeDoc(theme ThemeConfig) (map[string]json.RawMessage, error) {
 	}
 	doc := map[string]json.RawMessage{}
 	return doc, json.Unmarshal(data, &doc)
+}
+
+// drawnTheme is theme with each lightbar role set to the colour it draws
+// in, so a role left to fall back and one set to the same colour compare
+// equal.
+func drawnTheme(theme ThemeConfig) ThemeConfig {
+	drawn := func(role ColorRole) OptColor { return OptColor{Set: true, Value: theme.Color(role)} }
+	theme.LightbarSelected = drawn(RoleLightbarSelected)
+	theme.LightbarNormal = drawn(RoleLightbarNormal)
+	theme.LightbarCommand = drawn(RoleLightbarCommand)
+	theme.LightbarHotkey = drawn(RoleLightbarHotkey)
+	theme.LightbarHint = drawn(RoleLightbarHint)
+	theme.LightbarBorder = drawn(RoleLightbarBorder)
+	theme.LightbarDestructive = drawn(RoleLightbarDestructive)
+	return theme
 }
 
 // themeKeys lists the JSON keys ThemeConfig reads.

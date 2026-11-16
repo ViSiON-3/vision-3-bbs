@@ -248,7 +248,10 @@ func TestDoctorFixTrimsThemeOverlay(t *testing.T) {
 	if len(fixes) != 1 || fixes[0].Status != "fixed" {
 		t.Fatalf("fix = %+v", fixes)
 	}
-	if data, _ := os.ReadFile(overlayFile + ".bak-20261116-150405"); string(data) != overlay {
+	if fixes[0].Message != "backup: data/backups/menus.d-v3-theme.json.20261116-150405" {
+		t.Errorf("fix message = %q", fixes[0].Message)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root, "data", "backups", "menus.d-v3-theme.json.20261116-150405")); string(data) != overlay {
 		t.Errorf("backup = %q; want the original overlay", data)
 	}
 	theme, err := config.LoadThemeConfig(filepath.Join(root, "menus", "v3"))

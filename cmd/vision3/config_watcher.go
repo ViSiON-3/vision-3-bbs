@@ -142,10 +142,9 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 		{name: "strings.json", path: filepath.Join(rootConfigPath, "strings.json"), reload: cw.reloadStrings},
 		{name: "theme.json", path: filepath.Join(menuSetPath, "theme.json"), reload: cw.reloadTheme},
 	}
-	// theme.json can also live in the menu set's overlay, which shadows the
-	// shipped copy. Both are watched so that creating, editing or removing the
-	// overlay copy takes effect without a restart; reloadTheme resolves which
-	// one applies.
+	// theme.json can also live in the menu set's overlay, whose keys are
+	// merged over the shipped copy's. Both are watched so that editing either,
+	// or creating or removing the overlay, takes effect without a restart.
 	if overlay := menuset.OverlayFor(menuSetPath); overlay != "" {
 		cw.targets = append(cw.targets,
 			reloadTarget{name: "theme.json (overlay)", path: filepath.Join(overlay, "theme.json"), reload: cw.reloadTheme, reloadOnRemove: true})

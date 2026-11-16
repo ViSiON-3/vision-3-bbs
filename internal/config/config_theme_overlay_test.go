@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -57,8 +58,8 @@ func readOverlay(t *testing.T, base string) map[string]json.RawMessage {
 }
 
 // An overlay key replaces the shipped one, and a key the overlay leaves
-// out, or sets to null, comes from the shipped theme.json, not the built-in
-// defaults (#1100).
+// out comes from the shipped theme.json, not the built-in defaults (#1100).
+// null unsets a role, as it does in a single theme.json.
 func TestThemeOverlayMergesOverShipped(t *testing.T) {
 	base := themeSet(t,
 		`{"yesNoHighlightColor": 30, "chatUserColor": 2, "lightbarHint": 5, "toastFadeColors": "1,2"}`,
@@ -73,11 +74,51 @@ func TestThemeOverlayMergesOverShipped(t *testing.T) {
 	if got.YesNoHighlightColor != 30 || got.ToastFadeColors != "1,2" {
 		t.Errorf("keys the overlay leaves out = %d, %q; want the shipped 30, \"1,2\"", got.YesNoHighlightColor, got.ToastFadeColors)
 	}
-	if got.LightbarHint != (OptColor{Set: true, Value: 5}) {
-		t.Errorf("lightbarHint null in the overlay = %+v; want the shipped 5", got.LightbarHint)
+	if got.LightbarHint.Set {
+		t.Errorf("lightbarHint null in the overlay = %+v; want unset", got.LightbarHint)
 	}
 	if got.ChatSysopColor != builtinTheme().ChatSysopColor {
 		t.Errorf("a key neither file sets = %d; want the built-in %d", got.ChatSysopColor, builtinTheme().ChatSysopColor)
+	}
+}
+
+// An overlay from before the lightbar roles, which sets the Yes/No colours
+// and no role, draws its lightbars in its own Yes/No colours as it always
+// did, not in the shipped roles. A role the overlay does set still wins.
+func TestThemeOverlayBeforeRolesKeepsItsLightbars(t *testing.T) {
+	shipped := `{"yesNoHighlightColor": 31, "yesNoRegularColor": 13, "lightbarSelected": 31, "lightbarNormal": 13}`
+	base := themeSet(t, shipped, `{"yesNoHighlightColor": 79, "yesNoRegularColor": 7}`)
+	got, err := LoadThemeConfig(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s, n := got.Color(RoleLightbarSelected), got.Color(RoleLightbarNormal); s != 79 || n != 7 {
+		t.Errorf("selected, normal = %d, %d; want the overlay's 79, 7", s, n)
+	}
+
+	base = themeSet(t, shipped, `{"yesNoHighlightColor": 79, "lightbarSelected": 30}`)
+	got, err = LoadThemeConfig(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s, n := got.Color(RoleLightbarSelected), got.Color(RoleLightbarNormal); s != 30 || n != 13 {
+		t.Errorf("selected, normal = %d, %d; want the overlay's 30 and the shipped 13", s, n)
+	}
+
+	// Saving that theme writes the same Yes/No colours and no roles.
+	base = themeSet(t, shipped, `{"yesNoHighlightColor": 79, "yesNoRegularColor": 7, "chatUserColor": 1}`)
+	theme, err := LoadThemeConfig(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveThemeConfig(base, theme); err != nil {
+		t.Fatal(err)
+	}
+	if doc := readOverlay(t, base); len(doc) != 3 || doc["lightbarSelected"] != nil {
+		t.Errorf("overlay after save = %v; want the three keys it had", doc)
+	}
+	if again, _ := LoadThemeConfig(base); drawnTheme(again) != drawnTheme(theme) {
+		t.Errorf("after save %+v; want %+v", again, theme)
 	}
 }
 
@@ -106,6 +147,12 @@ func TestThemeOverlayBadJSON(t *testing.T) {
 	}
 	if got != builtinTheme() {
 		t.Errorf("loaded %+v; want the built-in defaults", got)
+	}
+
+	// A value of the wrong type names the file that holds it.
+	base = themeSet(t, `{"chatUserColor": 2}`, `{"chatUserColor": "blue"}`)
+	if _, err := LoadThemeConfig(base); err == nil || !strings.Contains(err.Error(), filepath.Join("menus.d", "v3", "theme.json")) {
+		t.Errorf("error = %v; want it to name the overlay", err)
 	}
 }
 
@@ -215,7 +262,7 @@ func TestRedundantThemeOverlayKeysAndTrim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys, err := RedundantThemeOverlayKeys(base)
+	keys, _, err := RedundantThemeOverlayKeys(base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +289,7 @@ func TestRedundantThemeOverlayKeysAndTrim(t *testing.T) {
 	if _, err := os.Stat(overlayPath(base)); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("overlay still there (%v)", err)
 	}
-	if keys, err := RedundantThemeOverlayKeys(base); err != nil || keys != nil {
+	if keys, _, err := RedundantThemeOverlayKeys(base); err != nil || keys != nil {
 		t.Errorf("no overlay: %v, %v; want nothing", keys, err)
 	}
 }

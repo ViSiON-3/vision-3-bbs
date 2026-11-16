@@ -366,8 +366,9 @@ Doctor repairs two kinds of problem on request:
   selected theme's `menus.d/<theme>/theme.json` that only repeat what the
   shipped `theme.json` gives are removed, and the file goes if nothing is
   left (see [Boards with an overlay `theme.json`](#board-colour-overrides)).
-  The file is first copied to `theme.json.bak-<date>-<time>` beside it.
-  Keys with values of your own are kept.
+  The file is first copied to
+  `data/backups/menus.d-<theme>-theme.json.<date>-<time>`. Keys with values
+  of your own are kept.
 
 It then runs the normal report. `--dry-run` shows what `--fix` would do
 without changing anything:
@@ -1369,16 +1370,19 @@ Colour precedence, lowest to highest:
 **Boards with an overlay `theme.json`.** The overlay
 `menus.d/<theme>/theme.json` is merged over the shipped `theme.json` key by
 key: a key the overlay sets wins, and every other key, including ones a
-later release adds or changes, comes from the shipped file. A key set to
-`null` counts as not set.
+later release adds or changes, comes from the shipped file. One exception
+keeps an older overlay looking as it did: if the overlay sets
+`yesNoHighlightColor` and leaves out `lightbarSelected`, the selected bar
+follows the overlay's Yes/No colour, not the shipped role (likewise
+`yesNoRegularColor` and `lightbarNormal`). `null` for a lightbar role
+unsets it, so it falls back as in a theme that leaves it out.
 
 Before `theme.colors`, `./config` saved a colour change by copying the
 whole theme into the overlay. Those copied keys still work, but each one
 pins today's value if a later theme changes it. `./vision3 doctor` lists
 the overlay keys that only repeat the shipped values, and
 `./vision3 doctor --fix` removes them, after copying the file to
-`theme.json.bak-<date>-<time>` beside it, and removes the file if nothing
-is left (`--dry-run` shows what it would do). Keys with values of your own
+`data/backups/`, and removes the file if nothing is left (`--dry-run` shows what it would do). Keys with values of your own
 stay. To move a colour you chose into `theme.colors`, set it under
 **Theme** in `./config` and then take its key out of the overlay. Leave
 any setting that is not a colour, such as a `sysopChatScreen` you picked:
