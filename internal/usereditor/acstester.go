@@ -143,7 +143,7 @@ func (t *acsTester) toggle(set *bool) bool {
 
 // tester builds the context from the form, or returns the message to show.
 func (t *acsTester) tester() (acs.Tester, string) {
-	at, err := acs.ParseTesterTime(t.inputs[acsTime].Value(), time.Now())
+	at, err := acs.ParseTesterTime(t.inputs[acsTime].Value(), time.Now(), t.location)
 	if err != nil {
 		return acs.Tester{}, "Time: enter hh:mm or yyyy-mm-dd hh:mm, or leave it blank for now."
 	}

@@ -263,8 +263,8 @@ func TestRender(t *testing.T) {
 		want   string
 	}{
 		{"S50&(FA|!FB)", Tester{At: at22}, `User:       Bob (#5), level 20
-Session:    none: L or A fails the string, T as if the call just started
-Time:       Wed 2026-11-04 22:00
+Session:    none: session terms fail, T as if the call just started
+Time:       Wed 2026-11-04 22:00 (the server's local zone)
 Expression: S50&(FA|!FB)
             ---  ++  --
 Result:     FAIL
@@ -280,8 +280,8 @@ A pass means this expression passed for this user in this context. It doesn't
 mean every access check on a resource passes: a conference, area or door can
 have rules of its own.`},
 		{"T30|H25-3", Tester{At: at22}, `User:       Bob (#5), level 20
-Session:    none: L or A fails the string, T as if the call just started
-Time:       Wed 2026-11-04 22:00
+Session:    none: session terms fail, T as if the call just started
+Time:       Wed 2026-11-04 22:00 (the server's local zone)
 Expression: T30|H25-3
                 XXXXX
 Result:     FAIL: the string has a problem
@@ -295,7 +295,8 @@ mean every access check on a resource passes: a conference, area or door can
 have rules of its own.`},
 		{"T30&A|S10", Tester{At: at22, Session: &TesterSession{Local: true, Elapsed: 40 * time.Minute}}, `User:       Bob (#5), level 20
 Session:    local call, no terminal, 40 min in, 0 min chat credit
-Time:       Wed 2026-11-04 22:00
+Call:       node 1, ssh from 127.0.0.1, cp437, 80 columns
+Time:       Wed 2026-11-04 22:00 (the server's local zone)
 Expression: T30&A|S10
             --- - +++
 Result:     PASS
@@ -310,8 +311,8 @@ A pass means this expression passed for this user in this context. It doesn't
 mean every access check on a resource passes: a conference, area or door can
 have rules of its own.`},
 		{"S10|!L", Tester{At: at22}, `User:       Bob (#5), level 20
-Session:    none: L or A fails the string, T as if the call just started
-Time:       Wed 2026-11-04 22:00
+Session:    none: session terms fail, T as if the call just started
+Time:       Wed 2026-11-04 22:00 (the server's local zone)
 Expression: S10|!L
             +++  ~
 Result:     FAIL: a part needs a session the context doesn't have
@@ -369,13 +370,13 @@ func TestParseTesterTime(t *testing.T) {
 		"22:00":            time.Date(2026, 11, 4, 22, 0, 0, 0, time.Local),
 		"2026-12-25 08:30": time.Date(2026, 12, 25, 8, 30, 0, 0, time.Local),
 	} {
-		got, err := ParseTesterTime(in, today)
+		got, err := ParseTesterTime(in, today, nil)
 		if err != nil || !got.Equal(want) {
 			t.Errorf("ParseTesterTime(%q) = %v, %v; want %v", in, got, err, want)
 		}
 	}
 	for _, in := range []string{"10pm", "25:00", "2026-13-01 00:00"} {
-		if _, err := ParseTesterTime(in, today); err == nil {
+		if _, err := ParseTesterTime(in, today, nil); err == nil {
 			t.Errorf("ParseTesterTime(%q) accepted", in)
 		}
 	}

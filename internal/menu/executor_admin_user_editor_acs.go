@@ -154,7 +154,7 @@ func (a *acsTesterScreen) readTime() error {
 	if err != nil {
 		return err
 	}
-	at, perr := acs.ParseTesterTime(line, time.Now())
+	at, perr := acs.ParseTesterTime(line, time.Now(), a.tester.Location)
 	if perr != nil {
 		a.notice = a.st.e.Strings().AcsTestBadTime
 		return nil

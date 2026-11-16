@@ -59,7 +59,7 @@ var (
 func TestACSTesterDefaultContext(t *testing.T) {
 	m := acsTesterOver(t, 80, 25)
 	view := stripANSIGolden(m.View())
-	for _, want := range []string{"ACS Tester: Bob", "Session:    none: L or A fails the string", "(now)", "Session   : N"} {
+	for _, want := range []string{"ACS Tester: Bob", "Session:    none: session terms fail,", "(now)", "Session   : N"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("screen lacks %q:\n%s", want, view)
 		}

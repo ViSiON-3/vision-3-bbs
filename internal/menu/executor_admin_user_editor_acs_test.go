@@ -24,7 +24,7 @@ func TestUserEditor_ACSTester(t *testing.T) {
 		"[T] ACS Test",
 		"ACS Test / Caller",
 		"User:       Caller (#2), level 10",
-		"Session:    none: L or A fails the string",
+		"Session:    none: session terms fail,",
 		"(now)",
 		"Expression: S50&(V|!FQ)",
 		"level 10 is below 50",

@@ -2,6 +2,8 @@ package acs
 
 import (
 	"fmt"
+	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -46,6 +48,7 @@ const (
 	nameCompare nameForm = iota // LEVEL>=20, HOUR=8-17
 	nameColon                   // FLAG:A, NOTE:text, TIME:22:00/06:00
 	nameAlone                   // VALIDATED
+	nameChoice                  // CONN=ssh, ENC=utf8: one of a few words
 )
 
 // termNames are the readable names, one per letter that has one. D (the same
@@ -81,6 +84,31 @@ var termNames = map[string]termName{
 	"PERM": {"PERM", nameColon},
 	// GROUP:name is membership in a user group configs/roles.json defines.
 	"GROUP": {"GROUP", nameColon},
+	// The session terms, read from the caller's connection (#1075).
+	"NODE":  {"NODE", nameCompare},
+	"CONN":  {"CONN", nameChoice},
+	"ENC":   {"ENC", nameChoice},
+	"WIDTH": {"WIDTH", nameCompare},
+	"IP":    {"IP", nameColon},
+	// The calendar terms, on the board's clock like H, W and Y.
+	"MONTH": {"MONTH", nameCompare},
+	"DATE":  {"DATE", nameColon},
+}
+
+// choices are the words a nameChoice term takes.
+var choices = map[string][]string{
+	"CONN": {TransportSSH, TransportTelnet, TransportLocal},
+	"ENC":  {EncodingUTF8, EncodingCP437},
+}
+
+// sessionCode reports whether a term reads the caller's session, so it
+// fails the whole string where there is none.
+func sessionCode(code string) bool {
+	switch code {
+	case "L", "A", "NODE", "CONN", "ENC", "WIDTH", "IP":
+		return true
+	}
+	return false
 }
 
 // numericCodes are the terms that take a number, with what a bare number
@@ -90,11 +118,13 @@ var numericCodes = map[string]string{
 	"S": ">=", "D": ">=", "P": ">=", "E": ">=", "B": ">=", "T": ">=",
 	"U": "=", "H": "=", "W": "=", "C": "=", "X": "=",
 	"CALLS": ">=", "POSTS": ">=", "UPLOADS": ">=", "DOWNLOADS": ">=", "AGE": ">=",
+	"NODE": "=", "WIDTH": ">=", "MONTH": "=",
 }
 
 // cyclic codes are the ones whose ranges may run past the top: H22-6 is
-// 22:00 to 06:59, W5-1 Friday to Monday.
-func cyclic(code string) bool { return code == "H" || code == "W" }
+// 22:00 to 06:59, W5-1 Friday to Monday, MONTH=11-2 November to February.
+// TIME (Y) and DATE wrap the same way, in their own form.
+func cyclic(code string) bool { return code == "H" || code == "W" || code == "MONTH" }
 
 // isCompareRune reports whether r is part of a comparison or a range. The
 // tokenizer takes them into a term only between term characters; anywhere
@@ -123,6 +153,8 @@ func parseTerm(text string) (t parsedTerm, problem string) {
 			return readValue(text, word, n.code, rest[1:])
 		case n.form == nameCompare && rest != "" && strings.ContainsRune("<>=", rune(rest[0])):
 			return readNumber(text, word, n.code, rest)
+		case n.form == nameChoice && rest != "" && strings.ContainsRune("<>=", rune(rest[0])):
+			return readChoice(text, word, n.code, rest)
 		case n.form == nameAlone && rest != "" && compares:
 			return parsedTerm{}, fmt.Sprintf("%q: %s takes nothing after it", text, word)
 		}
@@ -197,15 +229,47 @@ func readNumber(text, name, code, arg string) (parsedTerm, string) {
 		if t.lo < 0 || t.lo > 6 || t.hi < 0 || t.hi > 6 {
 			return bad(name + " needs a weekday from 0 (Sunday) to 6")
 		}
+	case "MONTH":
+		if t.lo < 1 || t.lo > 12 || t.hi < 1 || t.hi > 12 {
+			return bad(name + " needs a month from 1 (January) to 12")
+		}
 	}
 	if ranged && t.lo > t.hi && !cyclic(code) {
-		return bad(fmt.Sprintf("a %s range runs from low to high (%d-%d); only the hour and weekday wrap around", name, t.hi, t.lo))
+		return bad(fmt.Sprintf("a %s range runs from low to high (%d-%d); only the hour, weekday and month wrap around", name, t.hi, t.lo))
 	}
 	return t, ""
 }
 
-// readValue reads the argument of F, Z, Y, ROLE, GROUP and PERM, or of
-// their names.
+// readChoice reads a nameChoice term: = and one of its words, in any case.
+func readChoice(text, name, code, arg string) (parsedTerm, string) {
+	words := choices[code]
+	value, ok := strings.CutPrefix(arg, "=")
+	value = strings.ToLower(value)
+	if ok && slices.Contains(words, value) {
+		return parsedTerm{code: code, value: value}, ""
+	}
+	return parsedTerm{}, fmt.Sprintf("%q: %s takes = and one of %s", text, name, strings.Join(words, ", "))
+}
+
+// parseDateSpan reads DATE's argument, mm-dd/mm-dd, into its two ends as
+// monthDay numbers. Each must be a day the month can have (02-29 counts).
+func parseDateSpan(span string) (from, to int, ok bool) {
+	a, b, found := strings.Cut(span, "/")
+	if !found {
+		return 0, 0, false
+	}
+	day := func(s string) (int, bool) {
+		// 2024 is a leap year, so 02-29 reads.
+		t, err := time.Parse("2006-01-02", "2024-"+s)
+		return monthDay(t), err == nil && len(s) == 5
+	}
+	from, ok1 := day(a)
+	to, ok2 := day(b)
+	return from, to, ok1 && ok2
+}
+
+// readValue reads the argument of F, Z, Y, ROLE, GROUP, PERM, IP and DATE,
+// or of their names.
 func readValue(text, name, code, arg string) (parsedTerm, string) {
 	bad := func(msg string) (parsedTerm, string) {
 		return parsedTerm{}, fmt.Sprintf("%q: %s", text, msg)
@@ -255,6 +319,25 @@ func readValue(text, name, code, arg string) (parsedTerm, string) {
 		if !ok {
 			return bad(name + " needs a range written hh:mm/hh:mm")
 		}
+	case "IP":
+		// A single address is the prefix of just that address.
+		if a, err := netip.ParseAddr(arg); err == nil && a.Zone() == "" {
+			return parsedTerm{code: code, value: netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()).String()}, ""
+		}
+		p, err := netip.ParsePrefix(arg)
+		if err != nil {
+			return bad(name + ": needs an address or a network written address/bits, such as 10.0.0.0/8 or fd00::/8")
+		}
+		// An IPv4 network written in IPv6 form (::ffff:10.0.0.0/104) is
+		// that IPv4 network, as the addresses it is checked against are.
+		if p.Addr().Is4In6() && p.Bits() >= 96 {
+			p = netip.PrefixFrom(p.Addr().Unmap(), p.Bits()-96)
+		}
+		return parsedTerm{code: code, value: p.Masked().String()}, ""
+	case "DATE":
+		if _, _, ok := parseDateSpan(arg); !ok {
+			return bad(name + ": needs a range of days written mm-dd/mm-dd, such as 12-20/01-05")
+		}
 	}
 	return parsedTerm{code: code, value: arg}, ""
 }
@@ -302,9 +385,15 @@ func measure(t parsedTerm, ctx Context) measured {
 		// exactly as the duration does.
 		return measured{have: int(left / time.Minute)}
 	case "H":
-		return measured{have: ctx.now().Hour()}
+		return measured{have: ctx.clock().Hour()}
 	case "W":
-		return measured{have: int(ctx.now().Weekday())}
+		return measured{have: int(ctx.clock().Weekday())}
+	case "MONTH":
+		return measured{have: int(ctx.clock().Month())}
+	case "NODE": // lacking has checked there is a session
+		return measured{have: ctx.Session.Node()}
+	case "WIDTH":
+		return measured{have: ctx.Session.Width()}
 	case "C":
 		return measured{have: u.CurrentMsgConferenceID}
 	case "X":

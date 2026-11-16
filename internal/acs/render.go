@@ -102,7 +102,15 @@ func contextLines(ctx Context, current bool, width int) []string {
 		field("Groups:", perm.FormatRoleList(ctx.User.Groups))
 	}
 	field("Session:", describeSession(ctx))
-	when := ctx.Now.Format("Mon 2006-01-02 15:04")
+	if ctx.Session != nil {
+		field("Call:", describeCall(ctx.Session))
+	}
+	// The board's clock, which the clock terms read, with its zone.
+	zone := "the server's local zone"
+	if ctx.Location != nil && ctx.Location != time.Local {
+		zone = ctx.Location.String()
+	}
+	when := ctx.clock().Format("Mon 2006-01-02 15:04") + " (" + zone + ")"
 	if current {
 		when += " (now)"
 	}
@@ -121,7 +129,7 @@ func describeUser(u *user.User) string {
 func describeSession(ctx Context) string {
 	s := ctx.Session
 	if s == nil {
-		return "none: L or A fails the string, T as if the call just started"
+		return "none: session terms fail, T as if the call just started"
 	}
 	where := "remote"
 	if EvalTerm("L", ctx) {
@@ -133,6 +141,15 @@ func describeSession(ctx Context) string {
 	}
 	return fmt.Sprintf("%s call, %s, %d min in, %d min chat credit",
 		where, term, int(ctx.Now.Sub(ctx.Start)/time.Minute), int(s.ChatCredit()/time.Minute))
+}
+
+// describeCall says what NODE, CONN, IP, ENC and WIDTH read in a session.
+func describeCall(s Session) string {
+	addr := "no IP address"
+	if a, ok := addrIP(s.RemoteAddr()); ok {
+		addr = a.String()
+	}
+	return fmt.Sprintf("node %d, %s from %s, %s, %d columns", s.Node(), s.Transport(), addr, s.Encoding(), s.Width())
 }
 
 // verdict is the one-line result.

@@ -1,8 +1,10 @@
 package acs
 
 import (
+	"cmp"
 	"fmt"
 	"net"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -11,23 +13,48 @@ import (
 )
 
 // TesterSession is a session made up of values the sysop enters in the ACS
-// tester: what L, A and T read from a caller's connection. It stands in for
-// a call the selected user might make; it is never anyone's real session.
+// tester: what the session terms and T read from a caller's connection. It
+// stands in for a call the selected user might make; it is never anyone's
+// real session. The zero values of NodeNum, Conn, Enc and Cols read as node
+// 1, SSH, CP437 and 80 columns.
 type TesterSession struct {
 	Local    bool          // L: the call is local
 	Terminal bool          // A: the connection has a terminal
 	Elapsed  time.Duration // how long the call has run, for T
 	Credit   time.Duration // chat time credited back to the call, for T
+	NodeNum  int           // NODE
+	Conn     string        // CONN: TransportSSH, TransportTelnet or TransportLocal
+	Enc      string        // ENC: EncodingUTF8 or EncodingCP437
+	Cols     int           // WIDTH
+	// Addr is the caller's address, for IP and L. Unset, it is loopback
+	// for a local call and an address from the documentation range
+	// (192.0.2.1) for a remote one.
+	Addr netip.Addr
 }
 
-// RemoteAddr is loopback for a local call and an address from the
-// documentation range (192.0.2.0/24) for a remote one.
+// RemoteAddr is Addr, or loopback for a local call and 192.0.2.1 for a
+// remote one when Addr is unset.
 func (s *TesterSession) RemoteAddr() net.Addr {
-	if s.Local {
+	switch {
+	case s.Addr.IsValid():
+		return &net.TCPAddr{IP: net.IP(s.Addr.AsSlice()), Port: 23}
+	case s.Local:
 		return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 23}
 	}
 	return &net.TCPAddr{IP: net.IPv4(192, 0, 2, 1), Port: 23}
 }
+
+// Node is NodeNum, 1 when unset.
+func (s *TesterSession) Node() int { return cmp.Or(s.NodeNum, 1) }
+
+// Transport is Conn, SSH when unset.
+func (s *TesterSession) Transport() string { return cmp.Or(s.Conn, TransportSSH) }
+
+// Encoding is Enc, CP437 when unset.
+func (s *TesterSession) Encoding() string { return cmp.Or(s.Enc, EncodingCP437) }
+
+// Width is Cols, 80 when unset.
+func (s *TesterSession) Width() int { return cmp.Or(s.Cols, 80) }
 
 // HasPTY reports Terminal.
 func (s *TesterSession) HasPTY() bool { return s.Terminal }
@@ -78,22 +105,26 @@ func (t Tester) Explain(s string, u *user.User) Explanation {
 // testerTimeLayouts are the forms ParseTesterTime accepts.
 var testerTimeLayouts = []string{"2006-01-02 15:04", "15:04"}
 
-// ParseTesterTime reads a time typed into the tester, in the server's local
-// zone: blank for the current time (the zero Time), hh:mm for that time
-// today, or yyyy-mm-dd hh:mm.
-func ParseTesterTime(s string, today time.Time) (time.Time, error) {
+// ParseTesterTime reads a time typed into the tester, on the board's clock
+// (loc, nil for the server's local zone), the one the clock terms read:
+// blank for the current time (the zero Time), hh:mm for that time today, or
+// yyyy-mm-dd hh:mm.
+func ParseTesterTime(s string, today time.Time, loc *time.Location) (time.Time, error) {
+	if loc == nil {
+		loc = time.Local
+	}
 	s = strings.TrimSpace(s)
 	if s == "" || strings.EqualFold(s, "now") {
 		return time.Time{}, nil
 	}
 	for _, layout := range testerTimeLayouts {
-		t, err := time.ParseInLocation(layout, s, time.Local)
+		t, err := time.ParseInLocation(layout, s, loc)
 		if err != nil {
 			continue
 		}
 		if layout == "15:04" {
-			y, m, d := today.In(time.Local).Date()
-			t = time.Date(y, m, d, t.Hour(), t.Minute(), 0, 0, time.Local)
+			y, m, d := today.In(loc).Date()
+			t = time.Date(y, m, d, t.Hour(), t.Minute(), 0, 0, loc)
 		}
 		return t, nil
 	}
