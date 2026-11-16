@@ -624,9 +624,9 @@ func applyStringDefaults(c *StringsConfig) {
 // before the caller colour slots may still carry: DOS foreground colours,
 // which were the defaults |C1 to |C7 were meant to map to. Each one present
 // and 1-15 becomes its pipe code; the Bar slot keeps the built-in bar's
-// background (|B3), so a foreground alone doesn't turn the bar into text on
-// black. 0 is what an unset field was saved as, so it counts as not set, as
-// does anything else: "".
+// cyan background (|B6), so a foreground alone doesn't turn the bar into
+// text on black. 0 is what an unset field was saved as, so it counts as not
+// set, as does anything else: "".
 func legacyColorSlots(raw map[string]json.RawMessage) [7]string {
 	var out [7]string
 	for i := range out {
@@ -634,7 +634,7 @@ func legacyColorSlots(raw map[string]json.RawMessage) [7]string {
 		if v, ok := raw[fmt.Sprintf("defColor%d", i+1)]; ok && json.Unmarshal(v, &n) == nil && n >= 1 && n <= 15 {
 			out[i] = fmt.Sprintf("|%02d", n)
 			if i == 6 {
-				out[i] += "|B3"
+				out[i] += "|B6"
 			}
 		}
 	}

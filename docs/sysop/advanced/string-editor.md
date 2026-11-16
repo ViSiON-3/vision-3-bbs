@@ -449,7 +449,7 @@ Each of these is a colour the caller can choose under **U Colours** in User Konf
 | `\|C4` | Stat (a value or highlight) | `\|15` |
 | `\|C5` | Text 2 (dim text, frames) | `\|08` |
 | `\|C6` | Stat 2 (a second highlight) | `\|11` |
-| `\|C7` | Bar (a highlighted choice) | `\|00\|B3` |
+| `\|C7` | Bar (a highlighted choice) | `\|00\|B6` (black on cyan) |
 
 A slot holds a foreground and, optionally, a background. A caller's colours are filled in where the session placeholders are: menu prompts and `strings.json` values. Everywhere else they draw the board's default for the slot: templates, a menu's own `.ANS` screen, and anything shown before login, so menu-set art never takes a caller's colours. A colour slot doesn't keep a `|{...|}` group alive, any more than `|15` does. A screen picks a caller's colour up only where it uses the code, so `|C7` changes nothing that keeps its own lightbar colours. The editor's preview, and the menu editor's preview of prompts, draws each code in the board's default for its slot. A caller's own text, such as a location or a message, can't use them: they print as typed there.
 

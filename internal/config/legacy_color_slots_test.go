@@ -15,7 +15,7 @@ func TestLegacyColorSlots(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := legacyColorSlots(raw)
-	if got != [7]string{0: "|14", 6: "|15|B3"} {
+	if got != [7]string{0: "|14", 6: "|15|B6"} {
 		t.Errorf("got %q", got)
 	}
 }
@@ -31,7 +31,7 @@ func TestLegacyColorSlotsFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"defColor1": 12, "defColor7": 1}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := LegacyColorSlotsFile(path); got != ([7]string{0: "|12", 6: "|01|B3"}) {
+	if got := LegacyColorSlotsFile(path); got != ([7]string{0: "|12", 6: "|01|B6"}) {
 		t.Errorf("got %q", got)
 	}
 	if err := os.WriteFile(path, []byte(`not json`), 0o644); err != nil {
