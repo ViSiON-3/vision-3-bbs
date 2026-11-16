@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,6 +18,16 @@ func TestLegacyColorSlots(t *testing.T) {
 	got := legacyColorSlots(raw)
 	if got != [7]string{0: "|14", 6: "|15|B6"} {
 		t.Errorf("got %q", got)
+	}
+}
+
+// A cyan Bar foreground would vanish on the bar's cyan, so it gets blue.
+func TestLegacyBarStaysReadable(t *testing.T) {
+	for n, want := range map[int]string{3: "|03|B4", 11: "|11|B4", 15: "|15|B6", 1: "|01|B6"} {
+		raw := map[string]json.RawMessage{"defColor7": json.RawMessage(fmt.Sprint(n))}
+		if got := legacyColorSlots(raw)[6]; got != want {
+			t.Errorf("defColor7 %d = %q, want %q", n, got, want)
+		}
 	}
 }
 
