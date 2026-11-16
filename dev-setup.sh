@@ -138,8 +138,11 @@ mkdir -p "$TARGET"/doors/drive_c
 
 # ── Copy template configs ────────────────────────────────────────
 info "Setting up configuration files..."
+# strings.json is not copied: the shipped strings are built in, and
+# configs/strings.json holds only the strings the sysop changes.
 for f in "$REPO_DIR"/templates/configs/*.json; do
     [[ -f "$f" ]] || continue
+    [[ "$(basename "$f")" == "strings.json" ]] && continue
     dst="$TARGET/configs/$(basename "$f")"
     if [[ ! -f "$dst" ]]; then
         echo "  Creating $(basename "$f") from template..."

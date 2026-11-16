@@ -180,17 +180,13 @@ What that means depends on the file:
 | File | A missing key means |
 | ---- | ------------------- |
 | `config.json` | The built-in default applies. Usually nothing to do. |
-| `strings.json` | Usually a built-in fallback prints the shipped text. A key with no fallback prints nothing. |
+| `strings.json` | The shipped text applies. Nothing to do. |
 | `login.json` | **Nothing happens.** A login step that is not listed does not run. |
 | `doors.json`, `events.json` | Entries are lists, not settings; nothing is inherited. |
 
 So `login.json` is the one that always needs a decision, and `config.json` is
 usually informational — worth reading so you know a new setting exists, but it
 is already doing something sensible.
-
-For strings, `./strings` tells you which case you are in: an entry that is blank
-but still prints its shipped text is marked differently from one that is
-genuinely empty. You do not have to guess from the JSON.
 
 To list what your files are missing, run this from your BBS directory, with
 `TPL` pointing at the new version's templates — `templates/configs` in the repo,
@@ -199,7 +195,7 @@ or the extracted bundle's `configs`:
 ```bash
 TPL=~/git/vision3/templates/configs
 
-for f in config.json strings.json; do
+for f in config.json; do
   echo "== $f =="
   python3 -c "
 import json
@@ -226,8 +222,9 @@ system.
 ### Changed shipped strings
 
 Sometimes a release changes the text of a string that already shipped, for
-example to list a new key in a prompt. Your `strings.json` already has the key,
-so the fallbacks above don't apply.
+example to list a new key in a prompt. A key your `strings.json` leaves out
+gets the new text. But an older install's `strings.json` is a full copy of the
+strings as they shipped then, so it has the key with the old text.
 
 If your value is still exactly the old shipped text, you never edited it, and
 the BBS uses the new text instead. `./strings` shows it as the default, and

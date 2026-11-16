@@ -139,7 +139,9 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 		{name: "config.json", path: filepath.Join(rootConfigPath, "config.json"), reload: cw.reloadServerConfig},
 		{name: "doors.json", path: filepath.Join(rootConfigPath, "doors.json"), reload: cw.reloadDoors},
 		{name: "login.json", path: filepath.Join(rootConfigPath, "login.json"), reload: cw.reloadLoginSequence},
-		{name: "strings.json", path: filepath.Join(rootConfigPath, "strings.json"), reload: cw.reloadStrings},
+		// Removing strings.json is a change too: the board goes back to the
+		// shipped strings.
+		{name: "strings.json", path: filepath.Join(rootConfigPath, "strings.json"), reload: cw.reloadStrings, reloadOnRemove: true},
 		{name: "theme.json", path: filepath.Join(menuSetPath, "theme.json"), reload: cw.reloadTheme},
 	}
 	// theme.json can also live in the menu set's overlay, whose keys are

@@ -381,6 +381,7 @@ func inspectBoard(root string) doctorReport {
 		}
 	}
 
+	checkStringsKeys(configDir, add)
 	checkAreasAndConferences(configDir, root, ftnCfg, add)
 	checkSponsors(configDir, root, add)
 	checkUserIDMark(root, add)
@@ -1744,6 +1745,38 @@ func checkQWKNet(configDir string, serverCfg config.ServerConfig, serverErr erro
 	}
 }
 
+// checkStringsKeys notes keys in configs/strings.json that the BBS does
+// not read: strings an upgrade retired or renamed, and Vision/2 leftovers
+// older templates carried. They change nothing, but an older value under a
+// retired key can still trip the format check on reload.
+func checkStringsKeys(configDir string, add func(string, doctorSeverity, string, string)) {
+	data, err := os.ReadFile(filepath.Join(configDir, "strings.json"))
+	if err != nil || !json.Valid(data) {
+		return // a broken file is reported by the parse check
+	}
+	var unknown []string
+	for _, key := range collectUnknownJSONKeys(data, reflect.TypeOf(config.StringsConfig{}), "") {
+		if strings.HasPrefix(key, "_") || legacyColorSlotKey(key) {
+			continue
+		}
+		unknown = append(unknown, key)
+	}
+	if len(unknown) == 0 {
+		return
+	}
+	sort.Strings(unknown)
+	add("configs/strings.json", doctorInfo,
+		fmt.Sprintf("%d key(s) the BBS does not read: %s", len(unknown), strings.Join(unknown, ", ")),
+		"Delete them from configs/strings.json; nothing reads them. A misspelt key is a string that still shows the shipped text.")
+}
+
+// legacyColorSlotKey reports whether key is one of the defColor1-defColor7
+// keys LoadStrings reads as the caller colour slot defaults.
+func legacyColorSlotKey(key string) bool {
+	n, ok := strings.CutPrefix(key, "defColor")
+	return ok && len(n) == 1 && n[0] >= '1' && n[0] <= '7'
+}
+
 func checkUnknownTopLevelKeys(path string, typ reflect.Type, add func(string, doctorSeverity, string, string)) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -1793,6 +1826,16 @@ func collectUnknownJSONKeys(raw json.RawMessage, typ reflect.Type, prefix string
 				continue
 			}
 			fieldType, ok := known[key]
+			if !ok {
+				// encoding/json matches field names without regard to
+				// case, so "PauseString" sets pauseString: it is read.
+				for name, t := range known {
+					if strings.EqualFold(name, key) {
+						fieldType, ok = t, true
+						break
+					}
+				}
+			}
 			path := key
 			if prefix != "" {
 				path = prefix + "." + key

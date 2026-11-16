@@ -198,7 +198,6 @@ func collectPreflightResults(basePath string) []preflightResult {
 	check("configs/config.json", true, filepath.Join(configPath, "config.json"), false)
 
 	// --- Recommended config files (non-critical) ---
-	check("configs/strings.json", false, filepath.Join(configPath, "strings.json"), false)
 	check("configs/doors.json", false, filepath.Join(configPath, "doors.json"), false)
 	check("configs/message_areas.json", false, filepath.Join(configPath, "message_areas.json"), false)
 	check("configs/file_areas.json", false, filepath.Join(configPath, "file_areas.json"), false)

@@ -331,7 +331,9 @@ it is here for hand-editing `strings.json`, for scripts, and for developers addi
 
 ### File Format
 
-`configs/strings.json` is a flat JSON object mapping string keys to their values:
+`configs/strings.json` is a flat JSON object mapping string keys to their values. The BBS
+starts from the shipped strings built into it and applies the file's values over them, so a key
+the file leaves out shows the shipped text, and the file may be missing altogether:
 
 ```json
 {
@@ -571,10 +573,9 @@ cmd/strings/main.go
 
 1. Add the field to `StringsConfig` in `internal/config/config_strings_types.go`
 2. Add a `StringEntry` struct to the appropriate position in `internal/stringeditor/metadata.go` (Label, Key, Description — name the format arguments in the description)
-3. Add the key with its default value to `configs/strings.json`
-4. Add the same key and value to `templates/configs/strings.json` (the ViSiON/3 defaults template)
-5. If existing installations must keep working without the key, add it to `config.StringFallbacks`
-6. The editor will pick up the new entry automatically on next run
+3. Add the key and its default value to `templates/configs/strings.json`. It is embedded in the binary, and every board that doesn't set the key gets this value
+4. Add it to `config.StringFallbacks` only if a value the sysop sets blank should still print the default. Otherwise blank prints nothing, which switches the string off; formatted strings that may be blank need their call sites to check for it. `config.StringMissingDefaults` is for strings that predate the embedded defaults and needs no new entries
+5. The editor will pick up the new entry automatically on next run
 
 `TestCatalogCoversRuntimeStrings` fails if step 2 is skipped, so a new string cannot ship without
 being editable. `TestCatalogHasNoDeadEntries` fails in the other direction if an entry names no

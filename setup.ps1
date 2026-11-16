@@ -155,7 +155,10 @@ Write-Host "Directories created."
 Write-Host "Setting up configuration files..."
 $templateConfigs = Join-Path $scriptRoot "templates\configs"
 $configsDir = Join-Path $scriptRoot "configs"
-Get-ChildItem -Path $templateConfigs -Filter "*.json" -ErrorAction SilentlyContinue | ForEach-Object {
+# strings.json is not copied: the shipped strings are built in, and
+# configs\strings.json holds only the strings the sysop changes (./strings
+# writes it).
+Get-ChildItem -Path $templateConfigs -Filter "*.json" -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne "strings.json" } | ForEach-Object {
     $target = Join-Path $configsDir $_.Name
     if (-not (Test-Path $target)) {
         Write-Host "  Creating $($_.Name) from template..."

@@ -820,7 +820,24 @@ Leave paths empty (`""`) to disable the feature.
 
 > *Use the [String Editor](advanced/string-editor.md) (`./strings`) to edit display strings interactively. It is a Go reimplementation of the original Vision/2 `STRINGS.EXE` utility. The JSON structure below is for reference.*
 
-This file contains all the customizable text strings displayed by the BBS. You can modify these to personalize your system.
+The text the BBS displays is built into it; `configs/strings.json` holds
+the strings you change. A key the file leaves out shows the shipped text, so
+new and reworded strings in a later release reach every string you haven't
+changed. A board with no `strings.json` at all runs on the shipped text, and
+a new install doesn't create one: `./strings` writes it.
+Removing the file, or a key from it, puts the shipped text back, without a
+restart.
+
+An older install's `strings.json` is a full copy of the strings as they
+shipped then. It still works, but each string in it keeps its old wording
+after an upgrade; see
+[Changed shipped strings](getting-started/upgrading.md#changed-shipped-strings).
+
+If a string's `%s`/`%d` codes no longer match what the BBS passes it (after
+an upgrade changed the string, for instance), the BBS uses the shipped text
+for that string instead, logs a warning naming the key, and leaves the file
+alone for you to fix. `./vision3 doctor` lists keys in the file that the BBS
+doesn't read, such as strings a release retired.
 
 A value does not have to be text. Borrowing from PCBoard's text tables, a value
 that starts with `!CODE` runs the `v3_script` door `CODE` from `doors.json` in
@@ -832,8 +849,7 @@ The full rules, including which strings cannot take a hook, are under
 
 The user Konfig screen (**K** on the main menu) takes all of its text from the
 `konfig*` strings, listed under **Konfig:** in `./strings`, so it can be
-reworded or translated like any other prompt. A `strings.json` from before
-those keys existed still draws the form from built-in fallbacks.
+reworded or translated like any other prompt.
 
 Other groups documented with their features: the quote banners
 `quoteTopNet` (fallback `^N wrote:`) and `quoteBottomNet` (blank means no
