@@ -1379,7 +1379,7 @@ theme) controls color schemes:
 ```json
 {
   "yesNoHighlightColor": 31,
-  "yesNoRegularColor": 15,
+  "yesNoRegularColor": 13,
   "lightbarSelected": 31,
   "lightbarNormal": 13,
   "lightbarCommand": 9,
@@ -1389,7 +1389,7 @@ theme) controls color schemes:
   "lightbarDestructive": 4,
   "chatSysopColor": 11,
   "chatUserColor": 10,
-  "autocorrectHighlightColor": 15,
+  "autocorrectHighlightColor": 14,
   "sysopChatScreen": "V3CHAT1"
 }
 ```
