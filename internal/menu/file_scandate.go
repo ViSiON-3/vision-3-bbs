@@ -48,7 +48,7 @@ func runSetFileScanDate(c *cmdCtx, args string) (*user.User, string, error) {
 
 	prompt := e.Strings().FileScanDatePrompt
 	if prompt == "" {
-		prompt = "\r\n|07File newscan since |08(|15MM/DD/YY|08, |15A|08=all files, |15R|08=reset to last logon|08)|07: |15"
+		prompt = "\r\n|C1File newscan since |C5(|C4MM/DD/YY|C5, |C4A|C5=all files, |C4R|C5=reset to last logon|C5)|C1: |C2"
 	}
 	e.writeString(terminal, outputMode, prompt)
 

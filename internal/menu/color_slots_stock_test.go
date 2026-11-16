@@ -135,3 +135,23 @@ func TestStockMenuPromptsUseColorSlots(t *testing.T) {
 		}
 	}
 }
+
+// A converted key's fallback in code, used where strings.json leaves it out
+// or blank, is the shipped value, so it follows the caller's colours too.
+func TestConvertedStringFallbacksMatchTemplate(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "templates", "configs", "strings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var shipped map[string]string
+	if err := json.Unmarshal(data, &shipped); err != nil {
+		t.Fatal(err)
+	}
+	for key := range convertedStockStrings {
+		for name, m := range map[string]map[string]string{"StringFallbacks": config.StringFallbacks, "StringMissingDefaults": config.StringMissingDefaults} {
+			if v, ok := m[key]; ok && v != shipped[key] {
+				t.Errorf("%s[%s] = %q, want the shipped %q", name, key, v, shipped[key])
+			}
+		}
+	}
+}
