@@ -1,6 +1,8 @@
 package menu
 
 import (
+	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -211,6 +213,76 @@ func (a *acsTesterScreen) readSession() error {
 	if s.Credit, err = minutes(str.AcsTestCreditPrompt, s.Credit); err != nil {
 		return err
 	}
+	if err = a.readCall(&s); err != nil {
+		return err
+	}
 	a.tester.Session = &s
 	return nil
+}
+
+// readCall asks for the made-up call's values for the session terms: its
+// node, connection, encoding and width, and a remote call's address (a
+// local call's is loopback). Each shows the current value; a blank answer
+// keeps it, and one that can't be used asks again.
+func (a *acsTesterScreen) readCall(s *acs.TesterSession) error {
+	str := a.st.e.Strings()
+	ask := func(prompt, cur string, use func(string) bool) error {
+		for {
+			line, err := a.readLine(prompt, cur)
+			if err != nil {
+				return err
+			}
+			if line = strings.TrimSpace(line); line == "" || use(line) {
+				return nil
+			}
+			a.write("\r\n" + string(ansi.ReplacePipeCodes([]byte(str.AcsTestBadValue))) + "\r\n")
+		}
+	}
+	number := func(set *int) func(string) bool {
+		return func(line string) bool {
+			n, err := strconv.Atoi(line)
+			if err != nil || n < 1 {
+				return false
+			}
+			*set = n
+			return true
+		}
+	}
+	oneOf := func(set *string, words ...string) func(string) bool {
+		return func(line string) bool {
+			line = strings.ToLower(line)
+			if !slices.Contains(words, line) {
+				return false
+			}
+			*set = line
+			return true
+		}
+	}
+	if err := ask(str.AcsTestNodePrompt, strconv.Itoa(s.Node()), number(&s.NodeNum)); err != nil {
+		return err
+	}
+	if err := ask(str.AcsTestConnPrompt, s.Transport(), oneOf(&s.Conn, acs.TransportSSH, acs.TransportTelnet, acs.TransportLocal)); err != nil {
+		return err
+	}
+	if err := ask(str.AcsTestEncPrompt, s.Encoding(), oneOf(&s.Enc, acs.EncodingUTF8, acs.EncodingCP437)); err != nil {
+		return err
+	}
+	if err := ask(str.AcsTestWidthPrompt, strconv.Itoa(s.Width()), number(&s.Cols)); err != nil {
+		return err
+	}
+	if s.Local {
+		return nil
+	}
+	cur := ""
+	if s.Addr.IsValid() {
+		cur = s.Addr.String()
+	}
+	return ask(str.AcsTestAddrPrompt, cur, func(line string) bool {
+		addr, err := netip.ParseAddr(line)
+		if err != nil || addr.Zone() != "" {
+			return false
+		}
+		s.Addr = addr
+		return true
+	})
 }

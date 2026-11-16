@@ -1,6 +1,8 @@
 package usereditor
 
 import (
+	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,13 +28,21 @@ const (
 	acsTerminal
 	acsElapsed
 	acsCredit
+	// The call's values for the session terms (#1075), on a row of their
+	// own. A local call's address is loopback, so IP is asked only for a
+	// remote one.
+	acsNode
+	acsConn
+	acsEnc
+	acsWidth
+	acsAddr
 )
 
 // acsTester is the ACS tester's state (#608): an expression and an explicit
 // context for the user being edited, by default no session and the current
 // time. The result comes from acs.Render, the same lines the BBS shows.
 type acsTester struct {
-	inputs                   map[int]*textinput.Model // the text fields: expression, time, minutes
+	inputs                   map[int]*textinput.Model // the text fields: expression, time, minutes, call values
 	session, local, terminal bool
 	focus                    int
 	lines                    []string // what the output area shows
@@ -65,6 +75,11 @@ func (m *Model) openACSTester() {
 			{acsTime, 16, "now"},
 			{acsElapsed, 4, "0"},
 			{acsCredit, 4, "0"},
+			{acsNode, 4, "1"},
+			{acsConn, 6, acs.TransportSSH},
+			{acsEnc, 5, acs.EncodingCP437},
+			{acsWidth, 4, "80"},
+			{acsAddr, 39, "192.0.2.1"},
 		} {
 			ti := textinput.New()
 			ti.Prompt = ""
@@ -77,11 +92,17 @@ func (m *Model) openACSTester() {
 		t.inputs[acsTime].Width = 16
 		t.inputs[acsElapsed].Width = 4
 		t.inputs[acsCredit].Width = 4
+		t.inputs[acsNode].Width = 4
+		t.inputs[acsConn].Width = 6
+		t.inputs[acsEnc].Width = 5
+		t.inputs[acsWidth].Width = 4
+		t.inputs[acsAddr].Width = 13
 	}
 	t.session, t.local, t.terminal = false, false, true
 	t.inputs[acsTime].SetValue("")
-	t.inputs[acsElapsed].SetValue("")
-	t.inputs[acsCredit].SetValue("")
+	for _, id := range []int{acsElapsed, acsCredit, acsNode, acsConn, acsEnc, acsWidth, acsAddr} {
+		t.inputs[id].SetValue("")
+	}
 	t.sysOp, t.coSysOp, t.location = m.sysOpLevel, m.coSysOpLevel, m.boardLocation
 	t.roles = m.roles
 	t.scroll = 0
@@ -92,10 +113,14 @@ func (m *Model) openACSTester() {
 
 // order is the fields that can take focus now.
 func (t *acsTester) order() []int {
-	if t.session {
-		return []int{acsExpr, acsTime, acsSession, acsLocal, acsTerminal, acsElapsed, acsCredit}
+	if !t.session {
+		return []int{acsExpr, acsTime, acsSession}
 	}
-	return []int{acsExpr, acsTime, acsSession}
+	order := []int{acsExpr, acsTime, acsSession, acsLocal, acsTerminal, acsElapsed, acsCredit, acsNode, acsConn, acsEnc, acsWidth}
+	if !t.local {
+		order = append(order, acsAddr)
+	}
+	return order
 }
 
 func (t *acsTester) setFocus(f int) {
@@ -162,9 +187,46 @@ func (t *acsTester) tester() (acs.Tester, string) {
 		if !ok1 || !ok2 {
 			return acs.Tester{}, "Minutes In and Chat Credit take a whole number of minutes."
 		}
-		tc.Session = &acs.TesterSession{Local: t.local, Terminal: t.terminal, Elapsed: elapsed, Credit: credit}
+		s := &acs.TesterSession{Local: t.local, Terminal: t.terminal, Elapsed: elapsed, Credit: credit}
+		if msg := t.callValues(s); msg != "" {
+			return acs.Tester{}, msg
+		}
+		tc.Session = s
 	}
 	return tc, ""
+}
+
+// callValues reads the call's node, connection, encoding, width and, for
+// a remote call, address into s; a blank field is the default. It returns
+// the message to show for a value that can't be used.
+func (t *acsTester) callValues(s *acs.TesterSession) string {
+	value := func(id int) string { return strings.ToLower(strings.TrimSpace(t.inputs[id].Value())) }
+	whole := func(id int, set *int) bool {
+		v := value(id)
+		if v == "" {
+			return true
+		}
+		n, err := strconv.Atoi(v)
+		*set = n
+		return err == nil && n >= 1
+	}
+	if !whole(acsNode, &s.NodeNum) || !whole(acsWidth, &s.Cols) {
+		return "Node and Width take a whole number from 1."
+	}
+	if s.Conn = value(acsConn); s.Conn != "" && !slices.Contains([]string{acs.TransportSSH, acs.TransportTelnet, acs.TransportLocal}, s.Conn) {
+		return "Conn is ssh, telnet or local."
+	}
+	if s.Enc = value(acsEnc); s.Enc != "" && !slices.Contains([]string{acs.EncodingUTF8, acs.EncodingCP437}, s.Enc) {
+		return "Enc is utf8 or cp437."
+	}
+	if v := value(acsAddr); v != "" && !t.local {
+		a, err := netip.ParseAddr(v)
+		if err != nil || a.Zone() != "" {
+			return "IP takes an address, such as 10.0.0.5 or fd00::5."
+		}
+		s.Addr = a
+	}
+	return ""
 }
 
 // run tests the expression, or shows the context alone while there is none.
@@ -244,13 +306,18 @@ func (r *acsRow) add(s string, cells int) {
 // less a column of margin each side.
 const acsOutputWidth = 74
 
-// acsFormRows is the form above the output: expression, time, session and a
-// separator.
-const acsFormRows = 4
+// formRows is the form above the output: expression, time, session, the
+// call's values while there is a session, and a separator.
+func (t acsTester) formRows() int {
+	if t.session {
+		return 5
+	}
+	return 4
+}
 
 // acsOutputRows is how many output lines fit: the screen less the title and
 // help bars, the box borders and the form.
-func (m Model) acsOutputRows() int { return max(m.height-4-acsFormRows, 1) }
+func (m Model) acsOutputRows() int { return max(m.height-4-m.acsTest.formRows(), 1) }
 
 // viewACSTestScreen draws the tester in the edit screen's box.
 func (m Model) viewACSTestScreen() string {
@@ -310,9 +377,22 @@ func (m Model) viewACSTestScreen() string {
 		field(&r, acsElapsed, "  Mins In", 5, "")
 		field(&r, acsCredit, "  Credit", 5, "")
 	} else {
-		text(&r, "  none: L/A fail the string, T starts now")
+		text(&r, "  none: session terms fail, T starts now")
 	}
 	end(&r)
+	if t.session {
+		r = acsRow{}
+		field(&r, acsNode, " Node      ", 4, "")
+		field(&r, acsConn, "  Conn", 6, "")
+		field(&r, acsEnc, "  Enc", 5, "")
+		field(&r, acsWidth, "  Width", 4, "")
+		if t.local {
+			text(&r, "  IP: 127.0.0.1")
+		} else {
+			field(&r, acsAddr, "  IP", 14, "")
+		}
+		end(&r)
+	}
 	row(separatorStyle.Render(strings.Repeat("─", boxW)))
 
 	rows := m.acsOutputRows()

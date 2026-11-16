@@ -376,6 +376,13 @@ var StringFallbacks = map[string]string{
 	"acsTestBadNumber":      "|12Enter a whole number of minutes.|07",
 	"acsTestBadTime":        "|12Enter hh:mm or yyyy-mm-dd hh:mm, or nothing for now.|07",
 	"acsTestDenied":         "|12Only a SysOp can test ACS strings.|07",
+	// The made-up call's values for the session terms (#1075).
+	"acsTestNodePrompt":  "|07Node (for NODE): ",
+	"acsTestConnPrompt":  "|07Connection, |15ssh|07, |15telnet|07 or |15local|07 (for CONN): ",
+	"acsTestEncPrompt":   "|07Encoding, |15utf8|07 or |15cp437|07 (for ENC): ",
+	"acsTestWidthPrompt": "|07Width in columns (for WIDTH): ",
+	"acsTestAddrPrompt":  "|07Caller's address (for IP): ",
+	"acsTestBadValue":    "|12That can't be used: enter one of the choices shown, or nothing to keep it.|07",
 	// The shared More prompt and its Konfig switch (#424).
 	"morePrompt":                "|07More? |15Y|07es, |15N|07o, |15C|07ontinuous ",
 	"konfigMorePromptsLabel":    "More Prompts",

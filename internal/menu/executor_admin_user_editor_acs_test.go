@@ -45,8 +45,9 @@ func TestUserEditor_ACSTester(t *testing.T) {
 // TestUserEditor_ACSTesterSessionAndTime sets a made-up session and a time.
 func TestUserEditor_ACSTesterSessionAndTime(t *testing.T) {
 	env := newMenuEnv(t)
-	// Session: yes; local: yes; terminal: no; 15 minutes in; no credit.
-	input := "j" + "t" + "H22&L&!A\r" + "s" + "y" + "y" + "n" + ueBS + "15\r" + "\r" + "t" + "22:30\r" + "q" + "q"
+	// Session: yes; local: yes; terminal: no; 15 minutes in; no credit;
+	// node, connection, encoding and width kept.
+	input := "j" + "t" + "H22&L&!A\r" + "s" + "y" + "y" + "n" + ueBS + "15\r" + "\r" + keepCall + "t" + "22:30\r" + "q" + "q"
 	r := env.runCmd("ADMINLISTUSERS", env.sysop, "", input)
 	if r.err != nil {
 		t.Fatalf("err = %v", r.err)
@@ -62,9 +63,9 @@ func TestUserEditor_ACSTesterSessionAndTime(t *testing.T) {
 // answers before it.
 func TestUserEditor_ACSTesterSessionKeptAndReasked(t *testing.T) {
 	env := newMenuEnv(t)
-	set := "s" + "y" + "y" + "n" + ueBS + "15\r" + "\r"
-	keep := "s" + "\r" + "\r" + "\r" + "\r" + "\r"
-	retry := "s" + "\r" + "\r" + "\r" + ueBS + ueBS + "x\r" + ueBS + ueBS + "20\r" + "\r"
+	set := "s" + "y" + "y" + "n" + ueBS + "15\r" + "\r" + keepCall
+	keep := "s" + "\r" + "\r" + "\r" + "\r" + "\r" + keepCall
+	retry := "s" + "\r" + "\r" + "\r" + ueBS + ueBS + "x\r" + ueBS + ueBS + "20\r" + "\r" + keepCall
 	input := "j" + "t" + "L&!A\r" + set + keep + retry + "q" + "q"
 	r := env.runCmd("ADMINLISTUSERS", env.sysop, "", input)
 	if r.err != nil {
@@ -77,6 +78,32 @@ func TestUserEditor_ACSTesterSessionKeptAndReasked(t *testing.T) {
 	}
 	if !r.has("Enter a whole number of minutes.", "local call, no terminal, 20 min in", "Result:     PASS") {
 		t.Errorf("a bad minutes answer should re-ask only that prompt:\n%s", out)
+	}
+}
+
+// keepCall answers the made-up call's node, connection, encoding and width
+// prompts with Enter, keeping each; a local call isn't asked its address.
+const keepCall = "\r\r\r\r"
+
+// TestUserEditor_ACSTesterCallValues sets a remote call's node, connection,
+// encoding, width and address; an answer that can't be used asks that
+// prompt again.
+func TestUserEditor_ACSTesterCallValues(t *testing.T) {
+	env := newMenuEnv(t)
+	clear := func(n int) string { return strings.Repeat(ueBS, n) }
+	call := "s" + "y" + "n" + "y" + "\r" + "\r" + // session, remote, terminal, minutes kept
+		clear(1) + "4\r" +
+		clear(3) + "ftp\r" + clear(3) + "telnet\r" +
+		clear(5) + "utf8\r" +
+		clear(2) + "132\r" +
+		"10.1.2\r" + clear(6) + "10.1.2.3\r"
+	input := "j" + "t" + "NODE=4&IP:10.0.0.0/8\r" + call + "q" + "q"
+	r := env.runCmd("ADMINLISTUSERS", env.sysop, "", input)
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	if !r.has("That can't be used", "node 4, telnet from 10.1.2.3, utf8, 132 columns", "Result:     PASS") {
+		t.Errorf("output:\n%s", r.text())
 	}
 }
 

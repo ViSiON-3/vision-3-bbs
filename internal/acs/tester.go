@@ -26,20 +26,20 @@ type TesterSession struct {
 	Conn     string        // CONN: TransportSSH, TransportTelnet or TransportLocal
 	Enc      string        // ENC: EncodingUTF8 or EncodingCP437
 	Cols     int           // WIDTH
-	// Addr is the caller's address, for IP and L. Unset, it is loopback
-	// for a local call and an address from the documentation range
-	// (192.0.2.1) for a remote one.
+	// Addr is a remote call's address, for IP. Unset, it is an address
+	// from the documentation range, 192.0.2.1. A local call's address is
+	// always loopback, so L and IP agree.
 	Addr netip.Addr
 }
 
-// RemoteAddr is Addr, or loopback for a local call and 192.0.2.1 for a
-// remote one when Addr is unset.
+// RemoteAddr is loopback for a local call, else Addr, or 192.0.2.1 when
+// Addr is unset.
 func (s *TesterSession) RemoteAddr() net.Addr {
 	switch {
-	case s.Addr.IsValid():
-		return &net.TCPAddr{IP: net.IP(s.Addr.AsSlice()), Port: 23}
 	case s.Local:
 		return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 23}
+	case s.Addr.IsValid():
+		return &net.TCPAddr{IP: net.IP(s.Addr.AsSlice()), Port: 23}
 	}
 	return &net.TCPAddr{IP: net.IPv4(192, 0, 2, 1), Port: 23}
 }
