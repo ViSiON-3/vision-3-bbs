@@ -567,6 +567,7 @@ func stringCatalog() []StringEntry {
 		{Label: "Konfig: Messages Section", Key: "konfigSectionMessages", Description: "Section title. Plain text, no colour codes"},
 		{Label: "Konfig: Personal Section", Key: "konfigSectionPersonal", Description: "Section title. Plain text, no colour codes"},
 		{Label: "Konfig: Files Section", Key: "konfigSectionFiles", Description: "Section title. Plain text, no colour codes"},
+		{Label: "Konfig: Appearance Section", Key: "konfigSectionAppearance", Description: "Section title. Plain text, no colour codes"},
 		{Label: "Konfig: Width Label", Key: "konfigScreenWidthLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},
 		{Label: "Konfig: Width Help", Key: "konfigScreenWidthHelp", Description: "Help line shown while Screen Width is highlighted"},
 		{Label: "Konfig: Height Label", Key: "konfigScreenHeightLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},

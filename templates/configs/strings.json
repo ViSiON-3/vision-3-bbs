@@ -344,6 +344,7 @@
   "konfigScreenHeightLabel": "Screen Height",
   "konfigScreenWidthHelp": "Columns your terminal shows (80-255). Used for layout and word wrap.",
   "konfigScreenWidthLabel": "Screen Width",
+  "konfigSectionAppearance": "Appearance",
   "konfigSectionFiles": "Files",
   "konfigSectionMessages": "Messages",
   "konfigSectionPersonal": "Personal",

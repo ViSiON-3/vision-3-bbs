@@ -340,6 +340,7 @@ var StringFallbacks = map[string]string{
 	"konfigSectionMessages":   "Messages",
 	"konfigSectionPersonal":   "Personal",
 	"konfigSectionFiles":      "Files",
+	"konfigSectionAppearance": "Appearance",
 	"konfigScreenWidthLabel":  "Screen Width",
 	"konfigScreenWidthHelp":   "Columns your terminal shows (80-255). Used for layout and word wrap.",
 	"konfigScreenHeightLabel": "Screen Height",
