@@ -1113,7 +1113,9 @@ A screen whose BAR is a marker takes the shared colours, whatever the
 shipped set has for it. **Theme → Screen Overrides** in `./config` lists the
 overrides that are present, with each one's colour and whether it is shipped
 or in `menus.d`, and writes the marker for you when you set a screen to
-inherit. To go back to a BAR's own colours, delete the marker file (the
+inherit. **Theme → Lightbar Colors** names the same screens under the
+colour roles, so changing **Selected** there tells you which screens won't
+follow it. To go back to a BAR's own colours, delete the marker file (the
 shipped BAR, if any, applies again) or replace it with a BAR of your own.
 
 The colours inside a BAR are edited in the file itself or with `menuedit`;

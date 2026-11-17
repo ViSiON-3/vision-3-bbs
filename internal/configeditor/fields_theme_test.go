@@ -235,11 +235,11 @@ func TestBoardColorField(t *testing.T) {
 	}
 
 	// A role the theme leaves out comes from the built-in fallback.
-	sel := themeFieldsLightbar(&th, &board)[0]
+	sel := themeFieldsLightbar(&th, &board, nil)[0]
 	if sel.Label != "Selected" || sel.Get() != "31" || sel.Source() != "built-in" {
 		t.Errorf("lightbar selected: %s from %q", sel.Get(), sel.Source())
 	}
-	hint := fieldByLabel(t, themeFieldsLightbar(&th, &board), "Hint")
+	hint := fieldByLabel(t, themeFieldsLightbar(&th, &board, nil), "Hint")
 	if hint.Get() != "8" || hint.Source() != "built-in" {
 		t.Errorf("lightbar hint: %s from %q", hint.Get(), hint.Source())
 	}

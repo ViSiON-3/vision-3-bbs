@@ -31,7 +31,7 @@ func themeMenuItems() []sysConfigMenuItem {
 			return themeFieldsPrompts(&m.configs.Theme, &m.configs.Server.Theme.Colors)
 		}},
 		{Label: "Lightbar Colors", Build: func(m *Model) []fieldDef {
-			return themeFieldsLightbar(&m.configs.Theme, &m.configs.Server.Theme.Colors)
+			return themeFieldsLightbar(&m.configs.Theme, &m.configs.Server.Theme.Colors, overridingBars(themeScreenBars(m.configs.themeSet), m.configs.barInherit))
 		}},
 		{Label: "Screen Overrides", Build: func(m *Model) []fieldDef {
 			if m.configs.barInherit == nil {
@@ -92,10 +92,16 @@ func boardColorFieldResolved(label, help string, row int, role config.ColorRole,
 }
 
 // themeFieldsLightbar is the lightbar colour roles (#1077), which every
-// lightbar the BBS draws inherits.
-func themeFieldsLightbar(th *config.ThemeConfig, board *config.ThemeColors) []fieldDef {
-	return []fieldDef{
-		boardColorField("Selected", "The highlighted row or command on every lightbar", 1, config.RoleLightbarSelected, th, board),
+// lightbar the BBS draws inherits. bars is the screens whose own *HI.BAR
+// sets their highlight in place of Selected (#1091): the page names them,
+// so a sysop changing Selected knows those screens won't follow it.
+func themeFieldsLightbar(th *config.ThemeConfig, board *config.ThemeColors, bars []screenBar) []fieldDef {
+	selectedHelp := "The highlighted row or command on every lightbar"
+	if len(bars) > 0 {
+		selectedHelp = "The highlighted row or command on every lightbar without a screen override"
+	}
+	fields := []fieldDef{
+		boardColorField("Selected", selectedHelp, 1, config.RoleLightbarSelected, th, board),
 		boardColorField("Normal", "Unselected commands on the file list and message scan bars", 2, config.RoleLightbarNormal, th, board),
 		boardColorField("Command", "Unselected commands on the message reader bar", 3, config.RoleLightbarCommand, th, board),
 		boardColorField("Hotkey", "Key names in a lightbar's hint row", 4, config.RoleLightbarHotkey, th, board),
@@ -104,6 +110,58 @@ func themeFieldsLightbar(th *config.ThemeConfig, board *config.ThemeColors) []fi
 		boardColorField("Destructive", "Del on the message reader bar", 7, config.RoleLightbarDestructive, th, board),
 		boardColorField("Inactive", "A message reader command that does nothing on this message", 8, config.RoleLightbarInactive, th, board),
 		boardColorField("Bracket", "The brackets around the message reader bar", 9, config.RoleLightbarBracket, th, board),
+	}
+	if len(bars) > 0 {
+		fields = append(fields, screenOverridesNote(bars, 11))
+	}
+	return fields
+}
+
+// overridingBars is bars without the screens chosen on the Screen
+// Overrides page to inherit the shared colours, which no longer override
+// Selected once the editor saves.
+func overridingBars(bars []screenBar, inherit map[string]bool) []screenBar {
+	var out []screenBar
+	for _, b := range bars {
+		if !inherit[b.Name] {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// screenOverridesNoteWidth is as much of the note as fits the field box on
+// an 80-column screen, after its label.
+const screenOverridesNoteWidth = 46
+
+// screenOverridesNote is the Lightbar Colors page's line naming the
+// screens that don't follow Selected: "2 screens: File List, Message
+// Areas", or just the count where the names don't fit, when its help
+// names them instead. The help also says where DOORMENUHI.BAR sets the
+// door menu's regular colour.
+func screenOverridesNote(bars []screenBar, row int) fieldDef {
+	names := make([]string, len(bars))
+	door := false
+	for i, b := range bars {
+		names[i] = b.Screen
+		door = door || b.Name == "DOORMENUHI"
+	}
+	count := "1 screen"
+	if len(bars) > 1 {
+		count = fmt.Sprintf("%d screens", len(bars))
+	}
+	note := count + ": " + strings.Join(names, ", ")
+	help := "Their own BAR replaces Selected; see Screen Overrides"
+	if len(note) > screenOverridesNoteWidth {
+		note = count + ", see Screen Overrides"
+		help = "Own BAR replaces Selected: " + strings.Join(names, ", ")
+	}
+	if door {
+		help += "; the Door Menu's also sets its regular colour"
+	}
+	return fieldDef{
+		Label: "Overridden by", Help: help, Type: ftDisplay, Col: 3, Row: row, Width: screenOverridesNoteWidth,
+		Get: func() string { return note },
 	}
 }
 
