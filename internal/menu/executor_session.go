@@ -204,7 +204,6 @@ func sessionOutputMode(s ssh.Session) ansi.OutputMode {
 // not accumulate an entry per connection for the life of the process.
 func ClearSessionOutputMode(s ssh.Session) {
 	sessionOutputModes.Delete(s)
-	clearACSCall(s)
 }
 
 // sessionTermSizes carries a terminal size changed mid-session (the user

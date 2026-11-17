@@ -1,9 +1,12 @@
 package menu
 
 import (
+	"context"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/gliderlabs/ssh"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
@@ -11,21 +14,22 @@ import (
 )
 
 // The session terms read a call through the BBS's adapter: the node and
-// width the menu loop records, the output mode, the transport and the
-// address. A caller's IPv4 address arriving mapped into IPv6 matches its
+// width recorded in the session's context, the output mode, the transport
+// and the address. A caller's IPv4 address arriving mapped into IPv6 matches its
 // IPv4 network.
 func TestACSSessionTermsReadTheCall(t *testing.T) {
 	ts := newTestSession("")
 	ts.addr = &net.TCPAddr{IP: net.ParseIP("::ffff:10.20.30.40"), Port: 50000}
+	ts.ctx = &testCtx{Context: context.Background()}
 	SetSessionOutputMode(ts, ansi.OutputModeUTF8)
 	t.Cleanup(func() { ClearSessionOutputMode(ts) })
 	u := &user.User{AccessLevel: 20}
 
-	// Before the menu loop: no node yet, the terminal's width.
+	// Before the call is recorded: no node, the terminal's width.
 	if checkACS("NODE=2", u, ts, nil, time.Now()) || !checkACS("WIDTH=80", u, ts, nil, time.Now()) {
-		t.Error("before the menu loop: want no node and the terminal's 80 columns")
+		t.Error("unrecorded: want no node and the terminal's 80 columns")
 	}
-	setACSCall(ts, 2, 132)
+	SetACSCall(ts, 2, 132)
 	for acsStr, want := range map[string]bool{
 		"NODE=2": true, "NODE=3": false, "WIDTH>=132": true,
 		"CONN=ssh": true, "CONN=telnet": false, "CONN=local": false,
@@ -36,10 +40,20 @@ func TestACSSessionTermsReadTheCall(t *testing.T) {
 			t.Errorf("checkACS(%q) = %v, want %v", acsStr, got, want)
 		}
 	}
-	// A session that ends drops what the menu loop recorded.
-	ClearSessionOutputMode(ts)
-	if got := (acsSession{ts}).Node(); got != 0 {
-		t.Errorf("node after the session ended = %d", got)
+	// The width is clamped as the screens clamp it.
+	SetACSCall(ts, 2, 400)
+	if got := (acsSession{ts}).Width(); got != user.MaxScreenWidth {
+		t.Errorf("width 400 recorded as %d, want %d", got, user.MaxScreenWidth)
+	}
+	// A wrapped session reads the same call.
+	if got := (acsSession{wrappedTestSession{ts}}).Node(); got != 2 {
+		t.Errorf("wrapped session node = %d, want 2", got)
+	}
+	// A session with no context records nothing and reads node 0.
+	bare := newTestSession("")
+	SetACSCall(bare, 3, 80)
+	if got := (acsSession{bare}).Node(); got != 0 {
+		t.Errorf("no context: node = %d", got)
 	}
 	// With no session at all, every session term fails the string.
 	if checkACS("S10|!NODE=2", u, nil, nil, time.Now()) {
@@ -61,3 +75,9 @@ func TestACSSessionLocalTransport(t *testing.T) {
 		t.Error("loopback SSH: want L and not CONN=local")
 	}
 }
+
+// wrappedTestSession wraps a session the way the door watch and snoop
+// wrappers do, sharing its context.
+type wrappedTestSession struct{ *testSession }
+
+func (w wrappedTestSession) Unwrap() ssh.Session { return w.testSession }
