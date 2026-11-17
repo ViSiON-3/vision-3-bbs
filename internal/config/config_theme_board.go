@@ -22,6 +22,8 @@ type ThemeColors struct {
 	LightbarHint              OptColor `json:"lightbarHint,omitzero"`
 	LightbarBorder            OptColor `json:"lightbarBorder,omitzero"`
 	LightbarDestructive       OptColor `json:"lightbarDestructive,omitzero"`
+	LightbarInactive          OptColor `json:"lightbarInactive,omitzero"`
+	LightbarBracket           OptColor `json:"lightbarBracket,omitzero"`
 	ChatSysopColor            OptColor `json:"chatSysopColor,omitzero"`
 	ChatUserColor             OptColor `json:"chatUserColor,omitzero"`
 	AutocorrectHighlightColor OptColor `json:"autocorrectHighlightColor,omitzero"`
@@ -56,6 +58,10 @@ func (c *ThemeColors) field(role ColorRole) *OptColor {
 		return &c.LightbarBorder
 	case RoleLightbarDestructive:
 		return &c.LightbarDestructive
+	case RoleLightbarInactive:
+		return &c.LightbarInactive
+	case RoleLightbarBracket:
+		return &c.LightbarBracket
 	case RoleChatSysop:
 		return &c.ChatSysopColor
 	case RoleChatUser:
@@ -139,6 +145,10 @@ func (t ThemeConfig) WithBoardColors(c ThemeColors) ThemeConfig {
 			t.LightbarBorder = o
 		case RoleLightbarDestructive:
 			t.LightbarDestructive = o
+		case RoleLightbarInactive:
+			t.LightbarInactive = o
+		case RoleLightbarBracket:
+			t.LightbarBracket = o
 		}
 	}
 	if _, ok := ParseToastFadeColors(c.ToastFadeColors); ok {

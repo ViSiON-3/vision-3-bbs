@@ -166,7 +166,7 @@ edits that theme's `theme.json` (see [Theme Configuration](#theme-configuration)
 |------|---------------|
 | Theme Selection | The theme the board runs, picked from the directories under `menus/`. Saved to `config.json` as `theme.name`; restart the BBS to switch |
 | Prompt Colors | Yes/No highlight and regular colours, and the message editor's autocorrect highlight |
-| Lightbar Colors | The seven [lightbar colour roles](#lightbar-colour-roles) every lightbar inherits |
+| Lightbar Colors | The nine [lightbar colour roles](#lightbar-colour-roles) every lightbar inherits |
 | Screen Overrides | The screens whose own `*HI.BAR` file sets their highlight over the shared colours: each one's colour and whether the file is shipped or in `menus.d`. Set a screen to **Y** to have it **inherit shared colours**; saving writes an inherit marker to `menus.d/<theme>/bar/` (see [Per-screen lightbar colors](menus/menu-system.md#per-screen-lightbar-colors)). The BARs themselves are edited with `menuedit` |
 | Split-Screen Chat | The chat screen chat opens with, picked from the menu set's screens, the built-in layout or **random**; and the sysop's and caller's text colours where a screen sets none |
 | Toasts | The colours a toast fades through |
@@ -1459,6 +1459,8 @@ theme) controls color schemes:
   "lightbarHint": 8,
   "lightbarBorder": 8,
   "lightbarDestructive": 4,
+  "lightbarInactive": 8,
+  "lightbarBracket": 1,
   "chatSysopColor": 11,
   "chatUserColor": 10,
   "autocorrectHighlightColor": 14,
@@ -1500,6 +1502,8 @@ BAR file to edit.
 | `lightbarHint` | `8` | The rest of the hint row | The same screens |
 | `lightbarBorder` | `8` | The line between a list and its footer | File list, message area, file area and conference selectors, BBS list (its header rule and detail divider too) |
 | `lightbarDestructive` | `4` | An unselected command that destroys something | **Del** on the message reader command bar |
+| `lightbarInactive` | `8` | A command that does nothing where it is | **Thread** on a message with no thread and **Del** on a message the caller may not delete, on the message reader command bar; every command while the bar is dimmed |
+| `lightbarBracket` | `1` | The brackets around a command bar | Message reader command bar |
 
 - **A role left out inherits.** The Default column is what it inherits. A
   `theme.json` written before the roles has none of them, so its lightbars
@@ -1522,10 +1526,10 @@ Colours you authored are not touched. The roles colour only what the BBS
 generates: highlights, command bars, hint rows and separator lines. ANSI
 art, the `.TOP`, `.MID` and `.BOT` templates (so the unselected rows of a
 list, which are drawn from the `.MID` template), menu prompts and
-`strings.json` keep the colours written in them. Also unchanged: the
-brackets around the message reader's command bar (blue), a greyed-out
-command that does nothing on the current message, and the generated door
-menu's unselected entries, which use the terminal's default colour.
+`strings.json` keep the colours written in them. So do the generated door
+menu's unselected entries: they are drawn from its `.MID` template, in the
+colours written there (the terminal's default where it sets none), unless a
+`DOORMENUHI.BAR` gives them its regular colour.
 
 The board can override any of these without touching the theme; see
 [Board Colour Overrides](#board-colour-overrides) for that and the full
