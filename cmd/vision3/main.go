@@ -1472,6 +1472,9 @@ func sessionHandler(s ssh.Session) {
 	menuExecutor.ApplyUserIdleTimeout(s, authenticatedUser)
 	// Their time limit runs from connect, so the login screens count too.
 	menuExecutor.ApplyUserTimeLimit(s, authenticatedUser, sessionStartTime)
+	// From here the caller's own theme, if they chose one in Konfig
+	// (#1099); everything before login was the board's.
+	sessExec := menuExecutor.ForUser(authenticatedUser)
 
 	// Set default message area if not already set (handles both SSH pre-auth and normal login)
 	defaultsChanged := false
@@ -1529,7 +1532,7 @@ func sessionHandler(s ssh.Session) {
 		if invisPrompt == "" {
 			invisPrompt = " |03Invisible Logon?|07"
 		}
-		invisChoice, invisErr := menuExecutor.PromptYesNoString(s, terminal,
+		invisChoice, invisErr := sessExec.PromptYesNoString(s, terminal,
 			invisPrompt, effectiveMode, int(nodeID),
 			int(termWidth.Load()), int(termHeight.Load()), false)
 		if invisErr != nil {
@@ -1576,7 +1579,7 @@ func sessionHandler(s ssh.Session) {
 				"stored_h", authenticatedUser.ScreenHeight)
 			_, _ = terminal.Write([]byte("\r\n")) // best-effort display
 
-			useNew, promptErr := menuExecutor.PromptYesNof(s, terminal,
+			useNew, promptErr := sessExec.PromptYesNof(s, terminal,
 				effectiveMode, int(nodeID), detectedW, detectedH, false,
 				loadedStrings.TermSizeNewDetectedPrompt,
 				detectedW, detectedH, authenticatedUser.ScreenWidth, authenticatedUser.ScreenHeight)
@@ -1594,7 +1597,7 @@ func sessionHandler(s ssh.Session) {
 				termWidth.Store(int32(detectedW))
 				termHeight.Store(int32(detectedH))
 
-				saveDefault, saveErr := menuExecutor.PromptYesNoString(s, terminal,
+				saveDefault, saveErr := sessExec.PromptYesNoString(s, terminal,
 					loadedStrings.TermSizeUpdateDefaultsPrompt,
 					effectiveMode, int(nodeID), detectedW, detectedH, true)
 				if saveErr != nil && errors.Is(saveErr, io.EOF) {
@@ -1726,7 +1729,7 @@ func sessionHandler(s ssh.Session) {
 
 	// Run the configurable login sequence (login.json) directly after authentication.
 	// This replaces the old FASTLOGN menu routing — FASTLOGIN is now an optional login.json item.
-	loginNextMenu, loginErr := menuExecutor.RunLoginSequence(s, terminal, userMgr, authenticatedUser, int(nodeID), sessionStartTime, effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
+	loginNextMenu, loginErr := sessExec.RunLoginSequence(s, terminal, userMgr, authenticatedUser, int(nodeID), sessionStartTime, effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
 	if loginErr != nil {
 		if errors.Is(loginErr, io.EOF) {
 			slog.Info("user disconnected during login sequence", "node", nodeID)
@@ -1745,7 +1748,7 @@ func sessionHandler(s ssh.Session) {
 	// Queued toasts wait for the end of the login sequence, so none lands on
 	// login art. It is not a login.json step, so no install can miss it.
 	if currentMenuName != "LOGOFF" {
-		menuExecutor.DeliverLoginToasts(s, terminal, authenticatedUser, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
+		sessExec.DeliverLoginToasts(s, terminal, authenticatedUser, int(nodeID), effectiveMode, int(termWidth.Load()), int(termHeight.Load()))
 	}
 	bbsSession.SetToastsReady(true)
 	if currentMenuName != "LOGOFF" {
@@ -1790,7 +1793,25 @@ func sessionHandler(s ssh.Session) {
 		// Pass nodeID directly as int, use sessionStartTime from context
 		// Pass the session's autoRunLog
 		// Pass "" for currentAreaName for now (TODO: Pass actual session area name)
-		nextMenuName, _, execErr := menuExecutor.Run(s, terminal, userMgr, authenticatedUser, currentMenuName, int(nodeID), sessionStartTime, autoRunLog, effectiveMode, "", int(termWidth.Load()), int(termHeight.Load()))
+		// A theme the caller chose in Konfig applies from the next screen,
+		// as does the sysop turning the choice off. Run has returned to
+		// show this menu again on the right executor. The record is read
+		// afresh, as Run reads it, for a choice saved since.
+		if fresh, ok := userMgr.RefreshSessionUser(authenticatedUser); ok {
+			if next, menuName, switched := sessExec.SwitchTheme(fresh, currentMenuName); switched {
+				slog.Info("caller's theme changed", "node", nodeID, "user", fresh.Handle, "theme", next.Menus().Base)
+				sessExec, currentMenuName = next, menuName
+			}
+		}
+
+		nextMenuName, runUser, execErr := sessExec.Run(s, terminal, userMgr, authenticatedUser, currentMenuName, int(nodeID), sessionStartTime, autoRunLog, effectiveMode, "", int(termWidth.Load()), int(termHeight.Load()))
+		// The session's record as Run left it: areas chosen, scan pointers
+		// and the rest. Run returns mid-call for a theme switch, and the
+		// next Run must carry on from it, not from the copy taken at login.
+		// nil is a deleted account, which Run sends to LOGOFF.
+		if runUser != nil {
+			authenticatedUser = runUser
+		}
 		if execErr != nil {
 			slog.Error("error executing menu", "node", nodeID, "menu", currentMenuName, "error", execErr)
 			_, _ = fmt.Fprintf(terminal, "\r\nSystem error during menu execution: %v\r\n", execErr) // best-effort display

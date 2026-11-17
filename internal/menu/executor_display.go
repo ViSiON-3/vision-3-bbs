@@ -144,7 +144,11 @@ func (e *MenuExecutor) applyCommonTemplateTokens(data []byte, currentUser *user.
 		"|FCN":       "None",
 	}
 	// No caller colours (|C1-|C7) here: templates are menu-set art, which
-	// draws the board's defaults (ansi.SetColorSlotDefaults).
+	// draws the board's defaults (ansi.SetColorSlotDefaults). A session on
+	// a caller's own theme draws that theme's defaults instead.
+	if e.parent != nil && !e.sharesTheme {
+		e.addColorSlots(tokens, nil)
+	}
 	if currentUser != nil {
 		handle := callerText(currentUser.Handle)
 		tokens["|UH"] = handle

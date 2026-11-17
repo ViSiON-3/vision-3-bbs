@@ -127,6 +127,25 @@ type MenuExecutor struct {
 	// pipe codes, rebuilt with the theme and strings
 	// (applyColorSlotDefaults).
 	slotDefaults atomic.Pointer[[7]string]
+
+	// A caller's view of the board (ForUser, #1099) has the board as
+	// parent: it reads and writes the board's strings, server config,
+	// doors, login sequence and protocols through it, and has a theme of
+	// its own, the one forTheme names. sharesTheme is a view on the
+	// board's own theme, for a caller whose choice can't be used.
+	parent      *MenuExecutor
+	forTheme    string
+	sharesTheme bool
+	viewSlots   atomic.Pointer[viewSlotCache] // a view's slot defaults; see viewSlotDefaults
+}
+
+// shared is the executor that holds the board's hot-reloadable config:
+// the board itself, for a caller's view.
+func (e *MenuExecutor) shared() *MenuExecutor {
+	if e.parent != nil {
+		return e.parent
+	}
+	return e
 }
 
 // NewExecutor creates a new MenuExecutor.
@@ -227,6 +246,7 @@ func (e *MenuExecutor) chatHoldDropped(tap *snoop.Tap, sysop string, held time.D
 // store, so the caller keeping (and mutating) its own reference cannot reach
 // the shared snapshot.
 func (e *MenuExecutor) SetDoorRegistry(doors map[string]config.DoorConfig) {
+	e = e.shared()
 	cloned := make(map[string]config.DoorConfig, len(doors))
 	for k, v := range doors {
 		cloned[k] = v
@@ -238,6 +258,7 @@ func (e *MenuExecutor) SetDoorRegistry(doors map[string]config.DoorConfig) {
 // caller to hold or mutate. Per-door lookups should use GetDoorConfig, which
 // reads the shared snapshot without copying.
 func (e *MenuExecutor) DoorRegistry() map[string]config.DoorConfig {
+	e = e.shared()
 	p := e.doorReg.Load()
 	if p == nil {
 		return nil
@@ -259,6 +280,7 @@ func (e *MenuExecutor) GetDoorConfig(name string) (config.DoorConfig, bool) {
 // cloned on store, so the caller keeping its own reference cannot reach the
 // shared snapshot.
 func (e *MenuExecutor) SetLoginSequence(sequence []config.LoginItem) {
+	e = e.shared()
 	cloned := append([]config.LoginItem(nil), sequence...)
 	e.loginSeq.Store(&cloned)
 }
@@ -266,6 +288,7 @@ func (e *MenuExecutor) SetLoginSequence(sequence []config.LoginItem) {
 // GetLoginSequence returns a copy of the login sequence, safe for the caller
 // to hold or mutate.
 func (e *MenuExecutor) GetLoginSequence() []config.LoginItem {
+	e = e.shared()
 	p := e.loginSeq.Load()
 	if p == nil {
 		return nil
@@ -275,6 +298,7 @@ func (e *MenuExecutor) GetLoginSequence() []config.LoginItem {
 
 // SetStrings atomically updates the strings configuration.
 func (e *MenuExecutor) SetStrings(strings config.StringsConfig) {
+	e = e.shared()
 	e.themeMu.Lock()
 	defer e.themeMu.Unlock()
 	e.stringsCfg.Store(&strings)
@@ -287,6 +311,7 @@ func (e *MenuExecutor) SetStrings(strings config.StringsConfig) {
 // the hottest accessor in the package, called once per displayed string. The
 // value behind it is shared and must not be mutated.
 func (e *MenuExecutor) Strings() *config.StringsConfig {
+	e = e.shared()
 	if p := e.stringsCfg.Load(); p != nil {
 		return p
 	}
@@ -300,6 +325,9 @@ func (e *MenuExecutor) Strings() *config.StringsConfig {
 // theme's theme.json. What Theme returns is that with the board's colour
 // overrides (config.json theme.colors) applied.
 func (e *MenuExecutor) SetTheme(theme config.ThemeConfig) {
+	if e.sharesTheme {
+		e = e.parent
+	}
 	e.themeMu.Lock()
 	defer e.themeMu.Unlock()
 	e.themeBase.Store(&theme)
@@ -316,7 +344,9 @@ func (e *MenuExecutor) applyBoardColors() {
 		return
 	}
 	eff := *base
-	if cfg := e.serverCfg.Load(); cfg != nil {
+	// The board's colours are its own theme's: a caller's view of another
+	// theme draws that theme as it ships.
+	if cfg := e.serverCfg.Load(); cfg != nil && e.parent == nil {
 		eff = eff.WithBoardColors(cfg.Theme.Colors)
 	}
 	e.themeCfg.Store(&eff)
@@ -326,6 +356,9 @@ func (e *MenuExecutor) applyBoardColors() {
 // Theme returns the current theme configuration, the board's colour
 // overrides included. Read-only.
 func (e *MenuExecutor) Theme() *config.ThemeConfig {
+	if e.sharesTheme {
+		e = e.parent
+	}
 	if p := e.themeCfg.Load(); p != nil {
 		return p
 	}
@@ -339,6 +372,7 @@ func (e *MenuExecutor) Theme() *config.ThemeConfig {
 func (e *MenuExecutor) SetServerConfig(serverCfg config.ServerConfig) {
 	serverCfg.DoorCategories = append([]config.DoorCategory(nil), serverCfg.DoorCategories...)
 	serverCfg.SanitizeAccessLevels()
+	e = e.shared()
 	e.themeMu.Lock()
 	e.serverCfg.Store(&serverCfg)
 	e.applyBoardColors()
@@ -353,6 +387,7 @@ func (e *MenuExecutor) SetServerConfig(serverCfg config.ServerConfig) {
 // result to a local and some adjust fields on it before use, which would
 // corrupt the shared snapshot if they held a pointer into it.
 func (e *MenuExecutor) GetServerConfig() config.ServerConfig {
+	e = e.shared()
 	if p := e.serverCfg.Load(); p != nil {
 		cfg := *p
 		cfg.DoorCategories = append([]config.DoorCategory(nil), cfg.DoorCategories...)
@@ -365,6 +400,7 @@ func (e *MenuExecutor) GetServerConfig() config.ServerConfig {
 // slice is cloned on store, so the caller keeping its own reference cannot
 // reach the shared snapshot.
 func (e *MenuExecutor) SetProtocols(protocols []transfer.ProtocolConfig) {
+	e = e.shared()
 	cloned := append([]transfer.ProtocolConfig(nil), protocols...)
 	e.protocols.Store(&cloned)
 }
@@ -372,6 +408,7 @@ func (e *MenuExecutor) SetProtocols(protocols []transfer.ProtocolConfig) {
 // Protocols returns a copy of the transfer protocol configurations, safe for
 // the caller to hold or mutate.
 func (e *MenuExecutor) Protocols() []transfer.ProtocolConfig {
+	e = e.shared()
 	p := e.protocols.Load()
 	if p == nil {
 		return nil

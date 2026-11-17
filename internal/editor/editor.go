@@ -40,6 +40,13 @@ type EditorContext struct {
 	// SaveAutocorrect, if set, keeps the caller's choice when Ctrl-O
 	// switches autocorrect; on is the new state.
 	SaveAutocorrect func(on bool)
+
+	// MenuSetPath and Theme are the session's menu set and theme as
+	// drawn, which differ from the board's for a caller who chose their
+	// own theme (#1099). Unset, the editor uses the theme the server runs,
+	// with the board's colours over it.
+	MenuSetPath string
+	Theme       *config.ThemeConfig
 }
 
 func resolveEditorPaths() (menuSetPath, rootConfigPath string) {
@@ -131,12 +138,24 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 	termWidth, termHeight = clampTermSize(termWidth, termHeight)
 
 	menuSetPath, rootConfigPath := resolveEditorPaths()
+	var sessionTheme EditorContext
+	if len(ctx) > 0 {
+		sessionTheme = ctx[0]
+	}
+	if sessionTheme.MenuSetPath != "" {
+		menuSetPath = sessionTheme.MenuSetPath
+	}
 
 	// Load theme colors for Yes/No lightbar prompts
-	theme, _ := config.LoadThemeConfig(menuSetPath)
-	// With the board's own colours (config.json theme.colors) over it.
-	if board, err := config.BoardColorsFromConfigDir(rootConfigPath); err == nil {
-		theme = theme.WithBoardColors(board)
+	var theme config.ThemeConfig
+	if sessionTheme.Theme != nil {
+		theme = *sessionTheme.Theme
+	} else {
+		theme, _ = config.LoadThemeConfig(menuSetPath)
+		// With the board's own colours (config.json theme.colors) over it.
+		if board, err := config.BoardColorsFromConfigDir(rootConfigPath); err == nil {
+			theme = theme.WithBoardColors(board)
+		}
 	}
 	yesNoHi := colorCodeToAnsi(theme.Color(config.RoleYesNoHighlight), true)
 	yesNoLo := colorCodeToAnsi(theme.Color(config.RoleYesNoRegular), true)

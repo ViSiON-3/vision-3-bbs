@@ -24,6 +24,7 @@ func editorAutocorrect(ctx editor.EditorContext, area *message.MessageArea, boar
 // area, and a way to save the caller's choice when Ctrl-O changes it in the
 // editor. It returns ctx for use inline.
 func withAutocorrect(e *MenuExecutor, ctx editor.EditorContext, area *message.MessageArea, u *user.User, um *user.UserMgr) editor.EditorContext {
+	ctx = withSessionTheme(e, ctx)
 	ctx = editorAutocorrect(ctx, area, e.GetServerConfig().EditorAutocorrect, u)
 	if !ctx.Autocorrect || u == nil {
 		return ctx
