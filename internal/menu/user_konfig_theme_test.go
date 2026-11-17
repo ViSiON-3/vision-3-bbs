@@ -40,6 +40,18 @@ func TestInstalledThemes(t *testing.T) {
 	if got := e.installedThemes(); !slices.Equal(got, []string{"amber", "v3", "zed"}) {
 		t.Errorf("installed = %v", got)
 	}
+	// A theme installed as a symlink to its directory counts; a stray file
+	// doesn't.
+	menus := filepath.Dir(e.MenuSetPath)
+	if err := os.Symlink(filepath.Join(menus, "amber"), filepath.Join(menus, "linked")); err != nil {
+		t.Skipf("no symlinks here: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(menus, "README"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.installedThemes(); !slices.Equal(got, []string{"amber", "linked", "v3", "zed"}) {
+		t.Errorf("with a symlinked theme: %v", got)
+	}
 	view := e.ForUser(nil)
 	if view.boardThemeName() != "v3" {
 		t.Errorf("board theme = %q", view.boardThemeName())

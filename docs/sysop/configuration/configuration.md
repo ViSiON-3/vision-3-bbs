@@ -1403,7 +1403,7 @@ is the default, for a caller who hasn't picked one.
   who haven't chosen their own.
 - **Limits.** Toasts and split-screen sysop chat use the board's theme. An
   edit to a caller's theme's `theme.json` reaches them when they next log in
-  or pick a theme; the board's own theme reloads straight away, as before.
+  or pick another theme; the board's own theme reloads straight away, as before.
 
 ### Board Colour Overrides
 
