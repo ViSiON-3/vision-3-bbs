@@ -144,7 +144,7 @@ func TestACSTesterCallValues(t *testing.T) {
 	m = keys(t, m, tab)
 	m = keys(t, m, typed("ftp")...)
 	m = keys(t, m, enter)
-	if got := strings.Join(m.acsTest.lines, "\n"); !strings.Contains(got, "Conn is ssh, telnet or local") {
+	if got := strings.Join(m.acsTest.lines, "\n"); !strings.Contains(got, "Conn is one of ssh, telnet, local") {
 		t.Fatalf("a bad connection: %s", got)
 	}
 	m = keys(t, m, tea.KeyMsg{Type: tea.KeyBackspace}, tea.KeyMsg{Type: tea.KeyBackspace}, tea.KeyMsg{Type: tea.KeyBackspace})

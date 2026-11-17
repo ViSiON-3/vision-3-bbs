@@ -49,6 +49,13 @@ const (
 	EncodingCP437 = "cp437"
 )
 
+// Transports and Encodings are the words CONN and ENC take, in the order
+// they are offered. The parser and both ACS testers read these lists.
+var (
+	Transports = []string{TransportSSH, TransportTelnet, TransportLocal}
+	Encodings  = []string{EncodingUTF8, EncodingCP437}
+)
+
 // Context is what an expression is evaluated against.
 type Context struct {
 	// User is the caller. Check fails every non-empty string other than "*"
@@ -305,10 +312,7 @@ func evalTerm(t parsedTerm, ctx Context) bool {
 	case "COSYSOP":
 		return u.AccessLevel >= ctx.CoSysOpLevel
 	case "L": // Local connection; lacking has checked there is a session
-		network := s.RemoteAddr().Network()
-		addr := s.RemoteAddr().String()
-		isLoopback := strings.HasPrefix(addr, "127.") || strings.HasPrefix(addr, "[::1]")
-		return network == "pipe" || network == "unix" || isLoopback
+		return isLocalAddr(s.RemoteAddr())
 	case "A": // Session has a terminal: every telnet session, SSH with a PTY. Not an ANSI or encoding check.
 		return s.HasPTY()
 	case "F": // Flag is set
@@ -337,9 +341,9 @@ func evalTerm(t parsedTerm, ctx Context) bool {
 	case "ENC": // The output encoding
 		return s.Encoding() == t.value
 	case "IP": // The source address is in the prefix
-		return inPrefix(s.RemoteAddr(), t.value)
+		return inPrefix(s.RemoteAddr(), t.prefix)
 	case "DATE": // Within a calendar range mm-dd/mm-dd
-		return inDateRange(ctx.clock(), t.value)
+		return inDateRange(ctx.clock(), t.dateFrom, t.dateTo)
 	}
 	return t.compare(measure(t, ctx))
 }
@@ -358,28 +362,49 @@ func InTimeRange(now, start, end time.Time) bool {
 	return m >= from && m <= to
 }
 
-// inPrefix reports whether addr's IP is in prefix, which parseTerm checked.
-// An IPv4 address mapped into IPv6 (::ffff:10.0.0.1) counts as the IPv4
-// address, so it matches 10.0.0.0/8.
-func inPrefix(addr net.Addr, prefix string) bool {
-	p, err := netip.ParsePrefix(prefix)
-	if err != nil || addr == nil {
+// isLocalAddr reports whether addr is a local connection: a pipe, a Unix
+// socket or a loopback address. It reads the address as IP does, so a
+// loopback address mapped into IPv6 counts.
+func isLocalAddr(addr net.Addr) bool {
+	if addr == nil {
 		return false
 	}
+	if n := addr.Network(); n == "pipe" || n == "unix" {
+		return true
+	}
 	ip, ok := addrIP(addr)
-	return ok && p.Contains(ip)
+	return ok && ip.IsLoopback()
 }
 
-// addrIP is addr's IP, unmapped, or false for an address without one (a
-// pipe).
+// inPrefix reports whether addr's IP is in prefix, which parseTerm read.
+// An IPv4 address mapped into IPv6 (::ffff:10.0.0.1) counts as the IPv4
+// address, so it matches 10.0.0.0/8.
+func inPrefix(addr net.Addr, prefix netip.Prefix) bool {
+	ip, ok := addrIP(addr)
+	return ok && prefix.Contains(ip)
+}
+
+// addrIP is addr's IP, unmapped, or false for no address or one without an
+// IP (a pipe).
 func addrIP(addr net.Addr) (netip.Addr, bool) {
 	var ip net.IP
 	switch a := addr.(type) {
+	case nil:
+		return netip.Addr{}, false
 	case *net.TCPAddr:
+		if a == nil {
+			return netip.Addr{}, false
+		}
 		ip = a.IP
 	case *net.UDPAddr:
+		if a == nil {
+			return netip.Addr{}, false
+		}
 		ip = a.IP
 	case *net.IPAddr:
+		if a == nil {
+			return netip.Addr{}, false
+		}
 		ip = a.IP
 	default:
 		ap, err := netip.ParseAddrPort(addr.String())
@@ -396,14 +421,10 @@ func addrIP(addr net.Addr) (netip.Addr, bool) {
 // dates compare in calendar order.
 func monthDay(t time.Time) int { return int(t.Month())*100 + t.Day() }
 
-// inDateRange reports whether now's date falls within span, mm-dd/mm-dd,
-// both days included. A span whose end is before its start runs over the
-// new year.
-func inDateRange(now time.Time, span string) bool {
-	from, to, ok := parseDateSpan(span)
-	if !ok {
-		return false
-	}
+// inDateRange reports whether now's date falls within from..to, monthDay
+// numbers, both days included. A span whose end is before its start runs
+// over the new year.
+func inDateRange(now time.Time, from, to int) bool {
 	d := monthDay(now)
 	if to < from {
 		return d >= from || d <= to

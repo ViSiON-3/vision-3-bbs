@@ -87,7 +87,7 @@ const keepCall = "\r\r\r\r"
 
 // TestUserEditor_ACSTesterCallValues sets a remote call's node, connection,
 // encoding, width and address; an answer that can't be used asks that
-// prompt again.
+// prompt again. The address prompt shows the default address.
 func TestUserEditor_ACSTesterCallValues(t *testing.T) {
 	env := newMenuEnv(t)
 	clear := func(n int) string { return strings.Repeat(ueBS, n) }
@@ -96,13 +96,13 @@ func TestUserEditor_ACSTesterCallValues(t *testing.T) {
 		clear(3) + "ftp\r" + clear(3) + "telnet\r" +
 		clear(5) + "utf8\r" +
 		clear(2) + "132\r" +
-		"10.1.2\r" + clear(6) + "10.1.2.3\r"
+		clear(9) + "10.1.2\r" + clear(9) + "10.1.2.3\r" // the address starts as 192.0.2.1
 	input := "j" + "t" + "NODE=4&IP:10.0.0.0/8\r" + call + "q" + "q"
 	r := env.runCmd("ADMINLISTUSERS", env.sysop, "", input)
 	if r.err != nil {
 		t.Fatalf("err = %v", r.err)
 	}
-	if !r.has("That can't be used", "node 4, telnet from 10.1.2.3, utf8, 132 columns", "Result:     PASS") {
+	if !r.has("That can't be used", "192.0.2.1", "node 4, telnet from 10.1.2.3, utf8, 132 columns", "Result:     PASS") {
 		t.Errorf("output:\n%s", r.text())
 	}
 }

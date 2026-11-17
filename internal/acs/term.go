@@ -33,6 +33,10 @@ type parsedTerm struct {
 	// value is the argument of F, Z and Y, the role or group name of ROLE
 	// and GROUP (lower case) and the permission of PERM.
 	value string
+	// prefix is IP's network, read once here rather than on every check.
+	prefix netip.Prefix
+	// dateFrom and dateTo are DATE's ends as monthDay numbers.
+	dateFrom, dateTo int
 }
 
 // termName is a readable name: the letter it stands for and how it takes its
@@ -97,8 +101,8 @@ var termNames = map[string]termName{
 
 // choices are the words a nameChoice term takes.
 var choices = map[string][]string{
-	"CONN": {TransportSSH, TransportTelnet, TransportLocal},
-	"ENC":  {EncodingUTF8, EncodingCP437},
+	"CONN": Transports,
+	"ENC":  Encodings,
 }
 
 // sessionCode reports whether a term reads the caller's session, so it
@@ -322,7 +326,8 @@ func readValue(text, name, code, arg string) (parsedTerm, string) {
 	case "IP":
 		// A single address is the prefix of just that address.
 		if a, err := netip.ParseAddr(arg); err == nil && a.Zone() == "" {
-			return parsedTerm{code: code, value: netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()).String()}, ""
+			p := netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen())
+			return parsedTerm{code: code, value: p.String(), prefix: p}, ""
 		}
 		p, err := netip.ParsePrefix(arg)
 		if err != nil {
@@ -330,14 +335,22 @@ func readValue(text, name, code, arg string) (parsedTerm, string) {
 		}
 		// An IPv4 network written in IPv6 form (::ffff:10.0.0.0/104) is
 		// that IPv4 network, as the addresses it is checked against are.
-		if p.Addr().Is4In6() && p.Bits() >= 96 {
+		// One shorter than /96 would reach past the IPv4 part, and no
+		// caller's address can fall in it, so it is refused.
+		if p.Addr().Is4In6() {
+			if p.Bits() < 96 {
+				return bad(fmt.Sprintf("%s: %s is an IPv4-mapped network shorter than /96, which no address can match; write the IPv4 network (such as 10.0.0.0/8)", name, arg))
+			}
 			p = netip.PrefixFrom(p.Addr().Unmap(), p.Bits()-96)
 		}
-		return parsedTerm{code: code, value: p.Masked().String()}, ""
+		p = p.Masked()
+		return parsedTerm{code: code, value: p.String(), prefix: p}, ""
 	case "DATE":
-		if _, _, ok := parseDateSpan(arg); !ok {
+		from, to, ok := parseDateSpan(arg)
+		if !ok {
 			return bad(name + ": needs a range of days written mm-dd/mm-dd, such as 12-20/01-05")
 		}
+		return parsedTerm{code: code, value: arg, dateFrom: from, dateTo: to}, ""
 	}
 	return parsedTerm{code: code, value: arg}, ""
 }

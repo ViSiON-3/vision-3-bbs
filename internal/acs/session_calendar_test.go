@@ -1,6 +1,7 @@
 package acs
 
 import (
+	"net"
 	"net/netip"
 	"strings"
 	"testing"
@@ -189,9 +190,71 @@ func TestTesterSessionDefaults(t *testing.T) {
 	if got := s.RemoteAddr().String(); got != "192.0.2.1:23" {
 		t.Errorf("remote address %s", got)
 	}
+	// A local call left at the default connection is CONN=local, so the
+	// made-up call doesn't contradict itself; one set to SSH stays SSH.
+	if got := Check("L&CONN=local", sessionCtx(&TesterSession{Local: true})); !got {
+		t.Error("a local call with no connection set is not CONN=local")
+	}
+	if got := (&TesterSession{Local: true, Conn: TransportSSH}).Transport(); got != TransportSSH {
+		t.Errorf("a local call set to ssh reads %s", got)
+	}
 	loc := time.FixedZone("X", 5*3600)
 	at, err := ParseTesterTime("2026-11-04 10:00", time.Now(), loc)
 	if err != nil || at.Location() != loc || at.Hour() != 10 {
 		t.Errorf("ParseTesterTime in the board's zone = %v, %v", at, err)
+	}
+}
+
+// addrSession is a tester session whose remote address is set outright,
+// nil included.
+type addrSession struct {
+	*TesterSession
+	addr net.Addr
+}
+
+func (s addrSession) RemoteAddr() net.Addr { return s.addr }
+
+// L reads the address as IP does: a loopback address mapped into IPv6 is
+// local, so L and IP:127.0.0.0/8 agree.
+func TestLocalReadsMappedLoopback(t *testing.T) {
+	mapped := &net.TCPAddr{IP: net.ParseIP("::ffff:127.0.0.1"), Port: 5000}
+	ctx := sessionCtx(nil)
+	ctx.Session = addrSession{&TesterSession{}, mapped}
+	if !Check("L", ctx) || !Check("IP:127.0.0.0/8", ctx) {
+		t.Error("[::ffff:127.0.0.1]:5000: want L and IP:127.0.0.0/8")
+	}
+	ctx.Session = addrSession{&TesterSession{}, &net.TCPAddr{IP: net.ParseIP("10.0.0.1"), Port: 5000}}
+	if Check("L", ctx) {
+		t.Error("10.0.0.1 counted as local")
+	}
+}
+
+// A session with no remote address fails L and IP:, and the tester renders
+// and explains it without a panic.
+func TestNoRemoteAddress(t *testing.T) {
+	for _, addr := range []net.Addr{nil, (*net.TCPAddr)(nil)} {
+		ctx := sessionCtx(nil)
+		ctx.Session = addrSession{&TesterSession{}, addr}
+		if Check("L", ctx) || Check("IP:10.0.0.0/8", ctx) {
+			t.Errorf("%#v: L or IP: passed", addr)
+		}
+		if x := Explain("IP:10.0.0.0/8|L", ctx); x.Result {
+			t.Errorf("%#v: explained as a pass", addr)
+		}
+		if got := describeCall(ctx.Session); !strings.Contains(got, "no IP address") {
+			t.Errorf("%#v: call reads %q", addr, got)
+		}
+	}
+}
+
+// An IPv4-mapped network shorter than /96 reaches past the IPv4 part, so
+// no address could match it: it is refused, not left to deny everyone.
+func TestShortMappedPrefixRefused(t *testing.T) {
+	d := Validate("IP:::ffff:0.0.0.0/80")
+	if len(d) == 0 || !strings.Contains(d[0].Message, "shorter than /96") {
+		t.Errorf("Validate = %v", d)
+	}
+	if d := Validate("IP:::ffff:10.0.0.0/104"); len(d) != 0 {
+		t.Errorf("a /104 mapped network: %v", d)
 	}
 }

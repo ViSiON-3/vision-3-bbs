@@ -382,7 +382,7 @@ var StringFallbacks = map[string]string{
 	"acsTestEncPrompt":   "|07Encoding, |15utf8|07 or |15cp437|07 (for ENC): ",
 	"acsTestWidthPrompt": "|07Width in columns (for WIDTH): ",
 	"acsTestAddrPrompt":  "|07Caller's address (for IP): ",
-	"acsTestBadValue":    "|12That can't be used: enter one of the choices shown, or nothing to keep it.|07",
+	"acsTestBadValue":    "|12That can't be used here: try again, or enter nothing to keep it.|07",
 	// The shared More prompt and its Konfig switch (#424).
 	"morePrompt":                "|07More? |15Y|07es, |15N|07o, |15C|07ontinuous ",
 	"konfigMorePromptsLabel":    "More Prompts",

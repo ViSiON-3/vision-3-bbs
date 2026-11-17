@@ -212,13 +212,13 @@ These look at the caller's connection:
 
 | Term | Passes when | Notes |
 |---|---|---|
-| `L`, `LOCAL` | the caller is local | a local pipe or Unix socket, or a loopback address (`127.x.x.x` or `::1`) |
+| `L`, `LOCAL` | the caller is local | a local pipe or Unix socket, or a loopback address (`127.x.x.x` or `::1`, also in IPv6 form, `::ffff:127.0.0.1`), read as `IP:` reads it |
 | `A`, `TERMINAL` | the connection has a terminal | every telnet connection, and SSH that asked for a terminal (a PTY). It doesn't check the encoding or whether the terminal shows ANSI |
-| `NODE`*op n* | the node number compares | `NODE=1`, `NODE=1-4` |
+| `NODE`*op n* | the node number compares | `NODE=1`, `NODE=1-4`. The node is known from the moment the call connects, login screens included |
 | `CONN=`*how* | the caller connected that way: `ssh`, `telnet` or `local` | `local` is a pipe or Unix socket only, where `L` also counts a loopback address: an SSH call from `127.0.0.1` is `L` but `CONN=ssh` |
 | `ENC=`*encoding* | the call's output encoding is `utf8` or `cp437` | |
-| `WIDTH`*op n* | the width the menus render at compares | the width in use for this call, not the one saved in the caller's settings |
-| `IP:`*network* | the caller's address is in the network | `IP:10.0.0.0/8`, `IP:fd00::/8`, or one address, `IP:192.0.2.7`. An IPv4 address reported in IPv6 form (`::ffff:10.0.0.1`) matches its IPv4 network |
+| `WIDTH`*op n* | the width the menus render at compares | the width in use for this call, not the one saved in the caller's settings. Before the caller's own width is applied at login, it is the terminal's, kept within the widths the screens allow |
+| `IP:`*network* | the caller's address is in the network | `IP:10.0.0.0/8`, `IP:fd00::/8`, or one address, `IP:192.0.2.7`. An IPv4 address reported in IPv6 form (`::ffff:10.0.0.1`) matches its IPv4 network. An IPv4 network can be written in IPv6 form at `/96` or longer (`::ffff:10.0.0.0/104` is `10.0.0.0/8`); a shorter one could match no address and is refused |
 
 Checked without a session (replies uploaded through the QWK API), a string
 with any of these in it fails as a whole, whatever its other parts say:
@@ -380,8 +380,8 @@ own call as the selected user's. You can change both:
   minutes it has run and how much chat time was credited back (for `T`),
   its node, connection (`ssh`, `telnet` or `local`), encoding and width,
   and for a remote call its address (for `IP:`; a local call's is
-  loopback). Left as they are, a call is node 1, SSH from `192.0.2.1`,
-  CP437, 80 columns. The tester shows these on a **Call:** line.
+  loopback). Left as they are, a call is node 1, SSH from `192.0.2.1`
+  (`local` for a local call), CP437, 80 columns. The tester shows these on a **Call:** line.
 - **Time**, for the clock terms and `T`: `hh:mm` for that time today, or
   `yyyy-mm-dd hh:mm`, on the board's clock. The **Time:** line names the
   zone.

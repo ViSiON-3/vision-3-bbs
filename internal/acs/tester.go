@@ -16,7 +16,7 @@ import (
 // tester: what the session terms and T read from a caller's connection. It
 // stands in for a call the selected user might make; it is never anyone's
 // real session. The zero values of NodeNum, Conn, Enc and Cols read as node
-// 1, SSH, CP437 and 80 columns.
+// 1, SSH (local for a local call), CP437 and 80 columns.
 type TesterSession struct {
 	Local    bool          // L: the call is local
 	Terminal bool          // A: the connection has a terminal
@@ -26,14 +26,18 @@ type TesterSession struct {
 	Conn     string        // CONN: TransportSSH, TransportTelnet or TransportLocal
 	Enc      string        // ENC: EncodingUTF8 or EncodingCP437
 	Cols     int           // WIDTH
-	// Addr is a remote call's address, for IP. Unset, it is an address
-	// from the documentation range, 192.0.2.1. A local call's address is
-	// always loopback, so L and IP agree.
+	// Addr is a remote call's address, for IP. Unset, it is
+	// TesterDefaultAddr. A local call's address is always loopback, so L
+	// and IP agree.
 	Addr netip.Addr
 }
 
-// RemoteAddr is loopback for a local call, else Addr, or 192.0.2.1 when
-// Addr is unset.
+// TesterDefaultAddr is a remote made-up call's address when the sysop
+// gives none: one from the documentation range.
+var TesterDefaultAddr = netip.MustParseAddr("192.0.2.1")
+
+// RemoteAddr is loopback for a local call, else Addr, or TesterDefaultAddr
+// when Addr is unset.
 func (s *TesterSession) RemoteAddr() net.Addr {
 	switch {
 	case s.Local:
@@ -41,14 +45,20 @@ func (s *TesterSession) RemoteAddr() net.Addr {
 	case s.Addr.IsValid():
 		return &net.TCPAddr{IP: net.IP(s.Addr.AsSlice()), Port: 23}
 	}
-	return &net.TCPAddr{IP: net.IPv4(192, 0, 2, 1), Port: 23}
+	return &net.TCPAddr{IP: net.IP(TesterDefaultAddr.AsSlice()), Port: 23}
 }
 
 // Node is NodeNum, 1 when unset.
 func (s *TesterSession) Node() int { return cmp.Or(s.NodeNum, 1) }
 
-// Transport is Conn, SSH when unset.
-func (s *TesterSession) Transport() string { return cmp.Or(s.Conn, TransportSSH) }
+// Transport is Conn. Unset, it is local for a local call, so L and CONN
+// agree, else SSH.
+func (s *TesterSession) Transport() string {
+	if s.Conn == "" && s.Local {
+		return TransportLocal
+	}
+	return cmp.Or(s.Conn, TransportSSH)
+}
 
 // Encoding is Enc, CP437 when unset.
 func (s *TesterSession) Encoding() string { return cmp.Or(s.Enc, EncodingCP437) }

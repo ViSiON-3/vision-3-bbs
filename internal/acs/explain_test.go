@@ -295,7 +295,7 @@ mean every access check on a resource passes: a conference, area or door can
 have rules of its own.`},
 		{"T30&A|S10", Tester{At: at22, Session: &TesterSession{Local: true, Elapsed: 40 * time.Minute}}, `User:       Bob (#5), level 20
 Session:    local call, no terminal, 40 min in, 0 min chat credit
-Call:       node 1, ssh from 127.0.0.1, cp437, 80 columns
+Call:       node 1, local from 127.0.0.1, cp437, 80 columns
 Time:       Wed 2026-11-04 22:00 (the server's local zone)
 Expression: T30&A|S10
             --- - +++

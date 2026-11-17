@@ -261,10 +261,10 @@ func (a *acsTesterScreen) readCall(s *acs.TesterSession) error {
 	if err := ask(str.AcsTestNodePrompt, strconv.Itoa(s.Node()), number(&s.NodeNum)); err != nil {
 		return err
 	}
-	if err := ask(str.AcsTestConnPrompt, s.Transport(), oneOf(&s.Conn, acs.TransportSSH, acs.TransportTelnet, acs.TransportLocal)); err != nil {
+	if err := ask(str.AcsTestConnPrompt, s.Transport(), oneOf(&s.Conn, acs.Transports...)); err != nil {
 		return err
 	}
-	if err := ask(str.AcsTestEncPrompt, s.Encoding(), oneOf(&s.Enc, acs.EncodingUTF8, acs.EncodingCP437)); err != nil {
+	if err := ask(str.AcsTestEncPrompt, s.Encoding(), oneOf(&s.Enc, acs.Encodings...)); err != nil {
 		return err
 	}
 	if err := ask(str.AcsTestWidthPrompt, strconv.Itoa(s.Width()), number(&s.Cols)); err != nil {
@@ -273,7 +273,9 @@ func (a *acsTesterScreen) readCall(s *acs.TesterSession) error {
 	if s.Local {
 		return nil
 	}
-	cur := ""
+	// The address shows what the call uses, the default included, so a
+	// sysop who typed another can go back to it.
+	cur := acs.TesterDefaultAddr.String()
 	if s.Addr.IsValid() {
 		cur = s.Addr.String()
 	}

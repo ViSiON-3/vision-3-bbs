@@ -91,7 +91,7 @@ for what it shows.
 | Session | `N` (the default): no session. `Y`: a made-up call, with the fields below |
 | Local, Terminal | What `L` and `A` read from the call |
 | Mins In, Credit | How long the call has run and the chat time credited back, for `T` |
-| Node, Conn, Enc, Width | What `NODE`, `CONN` (`ssh`, `telnet` or `local`), `ENC` (`utf8` or `cp437`) and `WIDTH` read; blank is node 1, `ssh`, `cp437`, 80 |
+| Node, Conn, Enc, Width | What `NODE`, `CONN` (`ssh`, `telnet` or `local`), `ENC` (`utf8` or `cp437`) and `WIDTH` read; blank is node 1, `ssh` (`local` for a local call), `cp437`, 80 |
 | IP | A remote call's address, for `IP:`; blank is `192.0.2.1`. A local call's is loopback, so the field isn't offered |
 
 Enter tests the expression. Tab and Shift-Tab (or Down and Up) move between

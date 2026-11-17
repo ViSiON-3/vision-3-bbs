@@ -79,7 +79,7 @@ func (m *Model) openACSTester() {
 			{acsConn, 6, acs.TransportSSH},
 			{acsEnc, 5, acs.EncodingCP437},
 			{acsWidth, 4, "80"},
-			{acsAddr, 39, "192.0.2.1"},
+			{acsAddr, 39, acs.TesterDefaultAddr.String()},
 		} {
 			ti := textinput.New()
 			ti.Prompt = ""
@@ -213,11 +213,11 @@ func (t *acsTester) callValues(s *acs.TesterSession) string {
 	if !whole(acsNode, &s.NodeNum) || !whole(acsWidth, &s.Cols) {
 		return "Node and Width take a whole number from 1."
 	}
-	if s.Conn = value(acsConn); s.Conn != "" && !slices.Contains([]string{acs.TransportSSH, acs.TransportTelnet, acs.TransportLocal}, s.Conn) {
-		return "Conn is ssh, telnet or local."
+	if s.Conn = value(acsConn); s.Conn != "" && !slices.Contains(acs.Transports, s.Conn) {
+		return "Conn is one of " + strings.Join(acs.Transports, ", ") + "."
 	}
-	if s.Enc = value(acsEnc); s.Enc != "" && !slices.Contains([]string{acs.EncodingUTF8, acs.EncodingCP437}, s.Enc) {
-		return "Enc is utf8 or cp437."
+	if s.Enc = value(acsEnc); s.Enc != "" && !slices.Contains(acs.Encodings, s.Enc) {
+		return "Enc is one of " + strings.Join(acs.Encodings, ", ") + "."
 	}
 	if v := value(acsAddr); v != "" && !t.local {
 		a, err := netip.ParseAddr(v)
@@ -382,6 +382,8 @@ func (m Model) viewACSTestScreen() string {
 	end(&r)
 	if t.session {
 		r = acsRow{}
+		// A blank Conn is local for a local call; the field's hint says so.
+		t.inputs[acsConn].Placeholder = (&acs.TesterSession{Local: t.local}).Transport()
 		field(&r, acsNode, " Node      ", 4, "")
 		field(&r, acsConn, "  Conn", 6, "")
 		field(&r, acsEnc, "  Enc", 5, "")
