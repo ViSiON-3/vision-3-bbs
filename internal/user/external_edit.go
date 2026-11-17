@@ -83,6 +83,10 @@ func sysopOwnedFields(dst, src *User) {
 	dst.ThreadViewClosed = src.ThreadViewClosed
 	dst.MorePrompts = src.MorePrompts
 	dst.CustomPrompt = src.CustomPrompt
+	// Not a ./ue field, but read the same way: Konfig saves the caller's
+	// theme, and the session takes it from the record on the next screen
+	// to switch to it (#1099).
+	dst.Theme = src.Theme
 }
 
 // readUsersFromDisk parses users.json into a handle-keyed map without touching

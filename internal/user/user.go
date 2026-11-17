@@ -135,6 +135,7 @@ type User struct {
 	MorePrompts     *bool  `json:"morePrompts,omitempty"`
 	CustomPrompt    string `json:"customPrompt,omitempty"` // replaces the menu prompt for this caller (CleanCustomPrompt); blank = the menu's own
 	OutputMode      string `json:"outputMode,omitempty"`
+	Theme           string `json:"theme,omitempty"`           // the theme, a menu set under menus/, the caller chose in Konfig; blank = the board's
 	FileListingMode string `json:"fileListingMode,omitempty"` // "lightbar" or "classic" (empty = server default)
 	AutocorrectOff  bool   `json:"autocorrectOff,omitempty"`  // the caller turned the message editor's autocorrect off (Ctrl-O or User Konfig)
 	FileListColumns struct {

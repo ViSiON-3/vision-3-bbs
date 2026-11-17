@@ -114,6 +114,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 	// stores the value for getSessionIH to re-apply).
 	applySessionIdleTimeout(s, e.idleTimeout(st.currentUser))
 
+	loggedIn := currentUser != nil
 	for {
 		// A screen is about to replace this one, so a toast cut short by its row can have it.
 		e.deliverHeldToasts(s, terminal, nodeNumber, outputMode, termWidth, termHeight)
@@ -130,6 +131,14 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 			// gone, and handing it back would invite end-of-session code to
 			// save a deleted record.
 			return "LOGOFF", nil, nil
+		}
+
+		// A caller who chose another theme in Konfig, or whose choice the
+		// sysop just turned off, leaves for the session loop to show this
+		// menu on the executor for the theme now chosen (SwitchTheme). Not
+		// before login, when the theme is always the board's.
+		if loggedIn && st.currentUser != nil && e.CallerTheme(st.currentUser) != e.forTheme {
+			return st.currentMenuName, st.currentUser, nil
 		}
 
 		// Re-arm the time limit on every menu, so a limit the sysop changed

@@ -44,6 +44,9 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		Prompt:     ctx.Prompt,
 		MaxRunTime: v3ScriptRunLimit(ctx.Config),
 	}
+	if ctx.Executor != nil {
+		cfg.MenuSetPath = ctx.Executor.MenuSetPath
+	}
 
 	session := &scripting.SessionContext{
 		Session:          ctx.Session,

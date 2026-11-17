@@ -22,6 +22,16 @@ type ThemeSelection struct {
 	// own; see ThemeColors. Unlike Name, a change reloads without a
 	// restart.
 	Colors ThemeColors `json:"colors,omitzero"`
+	// CallerChoice lets callers choose another installed theme in User
+	// Konfig (#1099). Omitted means they may; false keeps every caller on
+	// Name. See CallersChooseTheme.
+	CallerChoice *bool `json:"callerChoice,omitempty"`
+}
+
+// CallersChooseTheme reports whether callers may choose their own theme:
+// theme.callerChoice, true when it is omitted.
+func (t ThemeSelection) CallersChooseTheme() bool {
+	return t.CallerChoice == nil || *t.CallerChoice
 }
 
 // ThemeName returns the theme the config selects: theme.name, or the

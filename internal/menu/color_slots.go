@@ -10,12 +10,11 @@ import (
 // strings.json legacy defaults, and makes them what |C1 to |C7 draw where
 // there is no caller: before login, in a menu's own .ANS art, anywhere pipe
 // codes are expanded without a session. It runs whenever the theme,
-// config.json or strings.json loads. The caller holds themeMu.
+// config.json or strings.json loads. The caller holds themeMu. A caller's
+// view of another theme has its own, and leaves those of the board, which
+// art and tools draw, alone.
 func (e *MenuExecutor) applyColorSlotDefaults() {
-	var legacy [7]string
-	if s := e.stringsCfg.Load(); s != nil {
-		legacy = s.LegacyColorSlots
-	}
+	legacy := e.Strings().LegacyColorSlots
 	var codes [7]string
 	if th := e.themeCfg.Load(); th != nil {
 		codes = th.ColorSlotCodes(legacy)
@@ -29,7 +28,9 @@ func (e *MenuExecutor) applyColorSlotDefaults() {
 		}
 	}
 	e.slotDefaults.Store(&codes)
-	ansi.SetColorSlotDefaults(codes)
+	if e.parent == nil {
+		ansi.SetColorSlotDefaults(codes)
+	}
 }
 
 // colorSlot returns the colour u sees for slot n (1 to user.ColorSlots), as
@@ -41,6 +42,9 @@ func (e *MenuExecutor) colorSlot(u *user.User, n int) string {
 		return c
 	}
 	if e != nil {
+		if e.sharesTheme {
+			e = e.parent
+		}
 		if d := e.slotDefaults.Load(); d != nil {
 			return d[n-1]
 		}

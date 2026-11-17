@@ -228,10 +228,14 @@ func resolveAnsiPath(eng *Engine, filename string) string {
 		}
 	}
 
-	// The menu set the server runs: the selected theme. Without one (the
-	// engine run outside the server), the default theme under the BBS root,
+	// The session's menu set (the caller's own theme), else the one the
+	// server runs: the selected theme. Without one (the engine run outside
+	// the server), the default theme under the BBS root,
 	// found by walking up from the working dir to a "menus" subdirectory.
-	menuDir := menuset.Running()
+	menuDir := eng.cfg.MenuSetPath
+	if menuDir == "" {
+		menuDir = menuset.Running()
+	}
 	if menuDir == "" {
 		bbsRoot := findBBSRoot(eng.cfg.WorkingDir)
 		if bbsRoot == "" {
