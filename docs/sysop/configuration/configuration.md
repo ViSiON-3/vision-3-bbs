@@ -1483,8 +1483,9 @@ BAR file to edit.
   `lightbarSelected` and `lightbarNormal` fall back to.
 - **A BAR file still wins for its screen.** Where a `*HI.BAR` exists, that
   screen uses the BAR's highlight, not the role; the default theme ships
-  none. `FILELISTCMD.BAR`, which it does ship, colours the file list's
-  command bar. See
+  none. Likewise a `FILELISTCMD.BAR` of your own defines the file list's
+  command bar, commands and colours; without one, which is how the default
+  theme ships, the bar uses `lightbarSelected` and `lightbarNormal`. See
   [Per-screen lightbar colors](menus/menu-system.md#per-screen-lightbar-colors)
   for the files and for returning a screen to the shared colours.
 

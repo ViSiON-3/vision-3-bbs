@@ -1007,35 +1007,58 @@ func backupForDoctor(root, src, name string, now time.Time) (string, error) {
 // shared highlight, colour 31 over regular 7.
 var retiredScreenBars = []string{"FILELISTHI", "MSGAREAHI", "MSGCONFHI"}
 
-// checkRetiredScreenBars notes a retired stock *HI.BAR left in the shipped
+// retiredFileListCmdBar is the records of the FILELISTCMD.BAR the stock
+// theme shipped until #1092: the file list's built-in commands, in colours
+// 31 and 7. Without the file the BBS builds the same commands in the
+// lightbar colours.
+var retiredFileListCmdBar = []string{
+	"0,0,31,7, ,mark,Mark",
+	"0,0,31,7,i,info,Info",
+	"0,0,31,7,v,view,View",
+	"0,0,31,7,d,download,Download",
+	"0,0,31,7,u,upload,Upload",
+	"0,0,31,7,q,quit,Quit",
+}
+
+// checkRetiredScreenBars notes a retired stock BAR left in the shipped
 // menu set by an upgrade that copied the new files over the old ones. It
-// still draws the colour it always did, but it pins its screen to that
-// colour, so a change to the shared lightbar colours passes the screen by.
-// A BAR with other colours, one in the overlay, or one in a theme other
-// than the stock one is the sysop's own and is not mentioned.
+// still draws the colours it always did, but it pins its screen to them,
+// so a change to the shared lightbar colours passes the screen by. A BAR
+// with other content, one in the overlay, or one in a theme other than
+// the stock one is the sysop's own and is not mentioned.
 func checkRetiredScreenBars(menuRoot string, add func(string, doctorSeverity, string, string)) {
-	// Only the stock theme shipped these files. In another theme a *HI.BAR
+	// Only the stock theme shipped these files. In another theme a BAR
 	// with the same colours is that theme's own choice.
 	if filepath.Base(menuRoot) != menuset.DefaultTheme {
 		return
 	}
 	set := menuset.FromPath(menuRoot)
-	for _, name := range retiredScreenBars {
+	shipped := func(name string) ([]byte, bool) {
 		if set.HasOverlay() {
 			if _, err := os.Stat(set.Path(menuset.LayerOverlay, "bar", name+".BAR")); err == nil {
-				continue // the overlay's file is the one in use
+				return nil, false // the overlay's file is the one in use
 			}
 		}
 		data, err := os.ReadFile(set.Path(menuset.LayerBase, "bar", name+".BAR"))
-		if err != nil {
+		return data, err == nil
+	}
+	rel := func(name string) string {
+		return filepath.ToSlash(filepath.Join("menus", filepath.Base(menuRoot), "bar", name+".BAR"))
+	}
+	for _, name := range retiredScreenBars {
+		data, ok := shipped(name)
+		if !ok {
 			continue
 		}
 		if hi, lo, ok := menuset.BarHighlight(data); !ok || hi != 31 || lo != 7 {
 			continue
 		}
-		rel := filepath.ToSlash(filepath.Join("menus", filepath.Base(menuRoot), "bar", name+".BAR"))
-		add(rel, doctorInfo, "a stock file ViSiON/3 no longer ships; it keeps this screen's highlight at colour 31 whatever the shared lightbar colours are",
+		add(rel(name), doctorInfo, "a stock file ViSiON/3 no longer ships; it keeps this screen's highlight at colour 31 whatever the shared lightbar colours are",
 			"Delete it, or choose Inherit for the screen under Theme > Screen Overrides in ./config, so the screen follows the lightbar colours.")
+	}
+	if data, ok := shipped("FILELISTCMD"); ok && slices.Equal(menuset.BarLines(data), retiredFileListCmdBar) {
+		add(rel("FILELISTCMD"), doctorInfo, "a stock file ViSiON/3 no longer ships; it keeps the file list's command bar at colours 31 and 7 whatever the shared lightbar colours are",
+			"Delete it: the file list builds the same commands in the lightbar colours without it.")
 	}
 }
 
