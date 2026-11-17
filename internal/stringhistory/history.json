@@ -1103,6 +1103,9 @@
   "konfigScreenWidthLabel": [
     "Screen Width"
   ],
+  "konfigSectionAppearance": [
+    "Appearance"
+  ],
   "konfigSectionFiles": [
     "Files"
   ],

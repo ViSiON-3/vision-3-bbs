@@ -660,6 +660,7 @@ type StringsConfig struct {
 	KonfigSectionMessages     string `json:"konfigSectionMessages"`
 	KonfigSectionPersonal     string `json:"konfigSectionPersonal"`
 	KonfigSectionFiles        string `json:"konfigSectionFiles"`
+	KonfigSectionAppearance   string `json:"konfigSectionAppearance"`
 	KonfigScreenWidthLabel    string `json:"konfigScreenWidthLabel"`
 	KonfigScreenWidthHelp     string `json:"konfigScreenWidthHelp"`
 	KonfigScreenHeightLabel   string `json:"konfigScreenHeightLabel"`

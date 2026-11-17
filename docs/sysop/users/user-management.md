@@ -19,7 +19,7 @@ User data is stored in `data/users/users.json`. The system automatically creates
 
 ## What callers can change themselves
 
-The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). From it a caller can change:
+The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). Its settings are in five sections: **Terminal**, **Appearance** (Colours and Menu Prompt) and **Files** in the left column, **Messages** and **Personal** in the right. From it a caller can change:
 
 | Setting | Field |
 | --- | --- |
@@ -39,7 +39,7 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). F
 | More Prompts | `morePrompts`: whether long output pauses a screen at a time |
 | Colours | `colorCodes`: the caller's own colour for each of `\|C1`–`\|C7`, picked in a box with a sample of each and **R** to go back to the default |
 
-Each change is saved as soon as the caller confirms it. The screen's header is `KONFIG.ANS` in the menu set. Keep it to 5 rows or fewer; it can show the caller's details with tokens like `|UH` (handle) and `|LEVEL`. Its text (setting names, help lines, values and messages) is the `konfig*` strings in `strings.json`, under **Konfig:** in `./strings`. Setting names, section titles, values and prompts are plain text in fixed-width cells: longer text is cut to fit, and colour codes are not expanded there. Help lines and messages take pipe colour codes. See [User settings](reference/menu-commands.md#user-settings) for `USERCONFIG` and the `CFG_AUTOSIG`, `CFG_PASSWORD` and `CFG_FILECOLUMNS` shortcuts.
+Each change is saved as soon as the caller confirms it. The screen's header is `KONFIG.ANS` in the menu set. Keep it to 4 rows or fewer: the form starts on the row straight under it, so the stock art ends with a rule. A taller header is drawn over by the form. The art can show the caller's details with tokens like `|UH` (handle) and `|LEVEL`. Its text (setting names, help lines, values and messages) is the `konfig*` strings in `strings.json`, under **Konfig:** in `./strings`. Setting names, section titles, values and prompts are plain text in fixed-width cells: longer text is cut to fit, and colour codes are not expanded there. Help lines and messages take pipe colour codes. See [User settings](reference/menu-commands.md#user-settings) for `USERCONFIG` and the `CFG_AUTOSIG`, `CFG_PASSWORD` and `CFG_FILECOLUMNS` shortcuts.
 
 ## Pipes in Names
 
