@@ -15,11 +15,12 @@ import (
 // themeKonfigKey is the Theme item's hotkey (#1099).
 const themeKonfigKey = 'V'
 
-// The themes box is centred on the 80 by 24 screen the form fills.
+// konfigScreenCols is the width the form is laid out for; themeBoxWidth
+// is the themes box's, borders included. Boxes are centred on the
+// caller's screen (boxAt).
 const (
 	konfigScreenCols = 80
-	konfigScreenRows = 24
-	themeBoxWidth    = 36 // including borders
+	themeBoxWidth    = 36
 )
 
 // themeKonfigOffered reports whether Konfig offers the Theme item: unless
@@ -98,11 +99,10 @@ func editTheme(st *konfigState) error {
 
 	inner := themeBoxWidth - 2
 	// The box fits the form: title, the list, a blank row, the hint and
-	// the bottom edge. A longer list scrolls. It is centred on the screen
-	// the form fills.
+	// the bottom edge. A longer list scrolls. It is centred on the
+	// caller's screen.
 	visible := min(len(themes), konfigFormRows-4)
-	boxTop := (konfigScreenRows-(visible+4))/2 + 1
-	boxLeft := (konfigScreenCols-themeBoxWidth)/2 + 1
+	boxTop, boxLeft := st.boxAt(themeBoxWidth, visible+4)
 	top := 0
 	line := func(row int, s string) string {
 		return moveTo(row, boxLeft) + pc(9) + "│" + s + pc(9) + "│"

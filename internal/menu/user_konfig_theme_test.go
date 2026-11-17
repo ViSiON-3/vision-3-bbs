@@ -185,3 +185,27 @@ func TestKonfigThemeOff(t *testing.T) {
 		t.Errorf("Theme = %q", got)
 	}
 }
+
+// On a taller screen the help, status and legend rows move to its foot;
+// the form stays at the top.
+func TestKonfigFooterAtTheFootOfTheScreen(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	e := konfigThemeExecutor(t)
+	screen := testterm.New(80, 40)
+	sess := testterm.NewSession(screen, "q")
+	t.Cleanup(func() { resetSessionIH(sess); sessionTermSizes.Delete(sess) })
+	c := &cmdCtx{e: e, s: sess, terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u,
+		nodeNumber: 1, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 40}
+	if _, _, err := runUserKonfig(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(screen.Row(40), "Done") {
+		t.Errorf("legend row 40 = %q", screen.Row(40))
+	}
+	if !strings.Contains(screen.Row(37), "Columns your terminal shows") {
+		t.Errorf("help row 37 = %q", screen.Row(37))
+	}
+	if !strings.Contains(screen.Row(konfigTopRow), "Terminal") {
+		t.Errorf("form's first row %d = %q", konfigTopRow, screen.Row(konfigTopRow))
+	}
+}

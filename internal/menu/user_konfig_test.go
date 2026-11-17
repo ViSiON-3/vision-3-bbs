@@ -194,8 +194,33 @@ func TestKonfigLayoutFitsMinimumHeight(t *testing.T) {
 			t.Errorf("item %c on row %d, outside rows %d-%d", it.key, it.row, konfigTopRow, konfigRuleRow-1)
 		}
 	}
-	if boxBottom := colBoxTop + len(fileColumns) + 3; boxBottom >= konfigRuleRow {
-		t.Errorf("file-column box ends on row %d, over the rule on row %d", boxBottom, konfigRuleRow)
+}
+
+// The footer sits at the foot of the caller's screen, and every box is
+// centred on it and clear of the rule, on the smallest screen and larger.
+func TestKonfigFitsTheCallersScreen(t *testing.T) {
+	boxes := map[string][2]int{ // width, height
+		"file columns": {colBoxWidth, len(fileColumns) + 4},
+		"colours":      {colorBoxWidth, user.ColorSlots + 6},
+		"themes":       {themeBoxWidth, konfigFormRows},
+	}
+	for _, size := range [][2]int{{80, 24}, {132, 50}, {80, 60}} {
+		st := &konfigState{c: &cmdCtx{termWidth: size[0], termHeight: size[1]}}
+		if st.legendRow() != size[1] || st.ruleRow() != size[1]-4 || st.editRow() != size[1]-2 {
+			t.Errorf("%dx%d: rule %d, status %d, legend %d", size[0], size[1], st.ruleRow(), st.editRow(), st.legendRow())
+		}
+		if size == [2]int{80, 24} && st.ruleRow() != konfigRuleRow {
+			t.Errorf("80x24: rule on row %d, want %d", st.ruleRow(), konfigRuleRow)
+		}
+		for name, b := range boxes {
+			top, left := st.boxAt(b[0], b[1])
+			if bottom := top + b[1] - 1; bottom >= st.ruleRow() || top < 1 {
+				t.Errorf("%dx%d: %s box on rows %d-%d, rule on %d", size[0], size[1], name, top, bottom, st.ruleRow())
+			}
+			if left < 1 || left+b[0]-1 > size[0] || (size[0]-b[0])/2+1 != left {
+				t.Errorf("%dx%d: %s box on columns %d-%d, not centred", size[0], size[1], name, left, left+b[0]-1)
+			}
+		}
 	}
 }
 

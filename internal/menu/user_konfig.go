@@ -130,6 +130,29 @@ type konfigState struct {
 
 func (st *konfigState) user() *user.User { return st.c.currentUser }
 
+// height and width are the screen the form fills: the caller's, at least
+// the 80 by 24 the layout needs. The form keeps to the top left; the rule,
+// help, status and legend rows sit at the foot of the caller's screen, and
+// the boxes are centred on it.
+func (st *konfigState) height() int {
+	return min(max(st.c.termHeight, konfigMinHeight), konfigMaxHeight)
+}
+
+func (st *konfigState) width() int { return max(st.c.termWidth, konfigScreenCols) }
+
+// The footer rows, counted up from the foot of the screen as they sit on
+// the smallest one.
+func (st *konfigState) ruleRow() int   { return st.height() - (konfigMinHeight - konfigRuleRow) }
+func (st *konfigState) helpRow() int   { return st.ruleRow() + 1 }
+func (st *konfigState) editRow() int   { return st.helpRow() + 1 }
+func (st *konfigState) legendRow() int { return st.height() }
+
+// boxAt is where a box w columns wide and h rows tall goes: centred on the
+// screen.
+func (st *konfigState) boxAt(w, h int) (top, left int) {
+	return max((st.height()-h)/2+1, 1), max((st.width()-w)/2+1, 1)
+}
+
 // runUserKonfig is the USERCONFIG runnable. An argument names the menu to
 // GOTO on exit; without one, control returns to the calling menu.
 func runUserKonfig(c *cmdCtx, args string) (*user.User, string, error) {
@@ -1033,6 +1056,6 @@ func (st *konfigState) previewCustomPrompt(text string, ph map[string]string) er
 	}
 	shown := ansi.ConvertCP437ToUTF8(renderCustomPrompt(text, ph))
 	label := string(ansi.ReplacePipeCodes([]byte(st.c.e.Strings().KonfigCustomPromptPreview)))
-	return st.raw(clearRow(konfigHelpRow) + moveTo(konfigHelpRow, 2) +
+	return st.raw(clearRow(st.helpRow()) + moveTo(st.helpRow(), 2) +
 		st.clipRow(label+string(shown)) + konfigReset)
 }

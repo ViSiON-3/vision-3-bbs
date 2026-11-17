@@ -85,7 +85,7 @@ func (e *MenuExecutor) viewSlotDefaults() [7]string {
 // read again with what follows it, and |B1 before "0 files" is |B10.
 func (e *MenuExecutor) addColorSlots(placeholders map[string]string, u *user.User) {
 	for n := 1; n <= user.ColorSlots; n++ {
-		placeholders[ansi.ColorSlotCode(n)] = string(ansi.ReplacePipeCodes([]byte(e.colorSlot(u, n))))
+		placeholders[ansi.ColorSlotCode(n)] = ansi.ColorSlotExpansion(e.colorSlot(u, n))
 	}
 }
 
