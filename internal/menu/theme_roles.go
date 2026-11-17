@@ -5,11 +5,11 @@ import (
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // The theme's colour roles, under the names the lightbar code uses.
 const (
-	roleSelected    = config.RoleLightbarSelected
 	roleNormal      = config.RoleLightbarNormal
 	roleCommand     = config.RoleLightbarCommand
 	roleDestructive = config.RoleLightbarDestructive
@@ -28,6 +28,20 @@ func (e *MenuExecutor) roleColor(role config.ColorRole) int {
 		return config.ThemeConfig{}.Color(role)
 	}
 	return e.Theme().Color(role)
+}
+
+// barColor is the DOS attribute of the highlighted row or command on a
+// lightbar u is looking at: what |C7 draws for u (colorSlot), so u's own Bar
+// colour when they picked one, else the board's, which unset is the
+// lightbarSelected role. A screen's own BAR file still colours that screen
+// over this. u may be nil.
+func (e *MenuExecutor) barColor(u *user.User) int {
+	return config.PipeCodeAttr(e.colorSlot(u, user.ColorSlots))
+}
+
+// barAnsi is barColor's escape sequence.
+func (e *MenuExecutor) barAnsi(u *user.User) string {
+	return colorCodeToAnsi(e.barColor(u))
 }
 
 // roleAnsi is the escape sequence that selects a role's colour.

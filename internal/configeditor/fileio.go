@@ -64,6 +64,11 @@ type allConfigs struct {
 	// inherit the shared colours: BAR file stems, written as inherit
 	// markers to themeSet's overlay on save.
 	barInherit map[string]bool
+
+	// legacySlots is the caller colour slot defaults from an older
+	// strings.json's defColorN, which the Caller Colors page shows for a
+	// slot the theme and board leave unset, as the board draws it.
+	legacySlots [7]string
 }
 
 // configBases are the snapshots saveMergedFile merges against: each shared
@@ -218,6 +223,7 @@ func loadAllConfigs(configPath string) (allConfigs, error) {
 		return ac, fmt.Errorf("loading theme: %w", err)
 	}
 	ac.themeSaved = ac.Theme
+	ac.legacySlots = config.LegacyColorSlotsFile(filepath.Join(configPath, "strings.json"))
 
 	// Login sequence
 	ac.LoginSeq, err = loadJSONSlice[config.LoginItem](configPath, "login.json")

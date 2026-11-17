@@ -37,7 +37,7 @@ func hotkeys(entries []cmdEntry) []string {
 
 func TestBuildFileListCmdBar_Defaults(t *testing.T) {
 	e := newExecutorWithServerConfig(config.ServerConfig{CoSysOpLevel: 100})
-	cmd, sysop, userBar, _, isSysop := buildFileListCmdBar(e, false, nil, nil)
+	cmd, sysop, userBar, _, isSysop := buildFileListCmdBar(e, nil, false, nil, nil)
 
 	if isSysop {
 		t.Error("a caller who doesn't manage the area got the management bar")
@@ -63,7 +63,7 @@ func TestBuildFileListCmdBar_Defaults(t *testing.T) {
 
 func TestBuildFileListCmdBar_SysopEntries(t *testing.T) {
 	e := newExecutorWithServerConfig(config.ServerConfig{CoSysOpLevel: 100})
-	_, sysop, _, _, isSysop := buildFileListCmdBar(e, true, nil, nil)
+	_, sysop, _, _, isSysop := buildFileListCmdBar(e, nil, true, nil, nil)
 	if !isSysop {
 		t.Fatal("a caller who manages the area has no management bar")
 	}
@@ -85,7 +85,7 @@ func TestBuildFileListCmdBar_UsesConfiguredOptions(t *testing.T) {
 		{Text: "Go", HotKey: "G"},
 		{Text: "Back", HotKey: "B"},
 	}
-	cmd, _, _, _, _ := buildFileListCmdBar(e, false, opts, nil)
+	cmd, _, _, _, _ := buildFileListCmdBar(e, nil, false, opts, nil)
 	if len(cmd) != 2 {
 		t.Fatalf("configured cmd bar = %d entries, want 2", len(cmd))
 	}

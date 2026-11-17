@@ -111,7 +111,7 @@ func runSelectMessageAreaLightbar(c *cmdCtx, args string) (*user.User, string, e
 		hint:       "|08[ |15Up|08/|15Dn|08 ] Nav  [ |15Lt|08/|15Rt|08 ] Conf  [ |15PgUp|08/|15PgDn|08 ] Page  [ |15Enter|08 ] Select  [ |15Q|08 ] Quit",
 		headerName: confNameFor(filterConfID),
 		topBytes:   topBytes,
-		hiColorSeq: resolveAreaHiColor(e, "MSGAREAHI", nodeNumber),
+		hiColorSeq: resolveAreaHiColor(e, c.currentUser, "MSGAREAHI", nodeNumber),
 		termWidth:  termWidth,
 		termHeight: termHeight,
 	}

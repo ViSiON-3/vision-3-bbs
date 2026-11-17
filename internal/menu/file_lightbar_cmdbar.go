@@ -6,6 +6,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // cmdEntry is one entry in the file-lightbar command bar.
@@ -21,7 +22,7 @@ type cmdEntry struct {
 // sysop-only bar (toggled with '*'), and a copy of the user bar used to restore
 // it. It also returns the file-row highlight color and whether the current user
 // is a sysop.
-func buildFileListCmdBar(e *MenuExecutor, manages bool, cmdBarOptions, hiBarOptions []LightbarOption) (cmdEntries, sysopEntries, userEntries []cmdEntry, hiColorSeq string, isSysop bool) {
+func buildFileListCmdBar(e *MenuExecutor, u *user.User, manages bool, cmdBarOptions, hiBarOptions []LightbarOption) (cmdEntries, sysopEntries, userEntries []cmdEntry, hiColorSeq string, isSysop bool) {
 	if len(cmdBarOptions) > 0 {
 		for _, opt := range cmdBarOptions {
 			cmdEntries = append(cmdEntries, cmdEntry{
@@ -33,7 +34,7 @@ func buildFileListCmdBar(e *MenuExecutor, manages bool, cmdBarOptions, hiBarOpti
 		}
 	} else {
 		// Default entries using the theme's lightbar roles.
-		defHi := e.roleAnsi(roleSelected)
+		defHi := e.barAnsi(u)
 		defLo := e.roleAnsi(roleNormal)
 		defaults := []struct {
 			label  string
@@ -60,7 +61,7 @@ func buildFileListCmdBar(e *MenuExecutor, manages bool, cmdBarOptions, hiBarOpti
 	// whoever manages this area (files.manage, #1044).
 	isSysop = manages
 	if isSysop {
-		defHiSysop := e.roleAnsi(roleSelected)
+		defHiSysop := e.barAnsi(u)
 		defLoSysop := e.roleAnsi(roleNormal)
 		sysopCmds := []struct {
 			label  string
@@ -85,7 +86,7 @@ func buildFileListCmdBar(e *MenuExecutor, manages bool, cmdBarOptions, hiBarOpti
 	copy(userEntries, cmdEntries)
 
 	// File-row highlight color.
-	hiColorSeq = e.roleAnsi(roleSelected)
+	hiColorSeq = e.barAnsi(u)
 	if len(hiBarOptions) > 0 {
 		hiColorSeq = colorCodeToAnsi(hiBarOptions[0].HighlightColor)
 	}

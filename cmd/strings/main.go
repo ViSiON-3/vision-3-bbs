@@ -37,11 +37,17 @@ func loadShippedDefaults() map[string]string {
 	return defaults
 }
 
-// loadBoardColorSlots makes the preview draw |C1-|C7 in the defaults the
-// board's strings.json at path sets, as the BBS draws them, rather than the
-// built-in ones.
+// loadBoardColorSlots makes the preview draw |C1-|C7 in the board's
+// defaults, as the BBS draws them, rather than the built-in ones: the board
+// whose strings.json is at path, which lives in its configs directory.
 func loadBoardColorSlots(path string) {
-	ansi.SetColorSlotDefaults(config.LegacyColorSlotsFile(path))
+	// An absolute path, so the board root is found from a relative one
+	// too, such as strings.json when run from the configs directory.
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	configDir := filepath.Dir(path)
+	ansi.SetColorSlotDefaults(config.BoardColorSlotCodes(filepath.Dir(configDir), configDir, path, ""))
 }
 
 func main() {

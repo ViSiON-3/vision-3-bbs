@@ -304,7 +304,7 @@ func runDoorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 		cellWidth := (min(w, ansi.ArtWidth) - 1) / cols
 		lightbar := cfg.DoorMenuMode != "list"
 		barColors := false
-		hi, normal := e.roleAnsi(roleSelected), "\x1b[0m"
+		hi, normal := e.barAnsi(c.currentUser), "\x1b[0m"
 		if bars, err := loadBarFile("DOORMENUHI", e); err == nil && len(bars) > 0 {
 			barColors = true
 			hi = colorCodeToAnsi(bars[0].HighlightColor)

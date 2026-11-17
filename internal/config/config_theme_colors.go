@@ -118,6 +118,16 @@ var builtinRoleColors = map[ColorRole]int{
 	RoleLightbarDestructive: 4,  // red
 	RoleLightbarInactive:    8,  // dark gray
 	RoleLightbarBracket:     1,  // blue
+	// The caller colour roles have the colours the stock screens draw
+	// these parts in. callerBar is not here: it falls back to the
+	// lightbarSelected role, so a lightbar that takes a caller's bar colour
+	// looks as it did for every other caller.
+	RoleCallerPrompt: 7,  // light gray
+	RoleCallerInput:  15, // bright white
+	RoleCallerText:   7,  // light gray
+	RoleCallerStat:   15, // bright white
+	RoleCallerText2:  8,  // dark gray
+	RoleCallerStat2:  11, // light cyan
 }
 
 // ColorSource says which layer of the precedence a colour came from.
@@ -133,6 +143,9 @@ const (
 	// SourceScreen is a screen's own BAR file (menuset.ScreenBars), which
 	// colours that one screen over everything else (#1079).
 	SourceScreen
+	// SourceStrings is an older strings.json's defColorN, which a caller
+	// colour slot the theme and board leave unset still draws (#426).
+	SourceStrings
 )
 
 // String names the source as the config editor shows it.
@@ -144,6 +157,8 @@ func (s ColorSource) String() string {
 		return "board override"
 	case SourceScreen:
 		return "screen override"
+	case SourceStrings:
+		return "strings.json"
 	}
 	return "built-in"
 }
@@ -169,6 +184,9 @@ func (t ThemeConfig) roleField(role ColorRole) OptColor {
 		return t.LightbarInactive
 	case RoleLightbarBracket:
 		return t.LightbarBracket
+	}
+	if f := t.callerFieldPtr(role); f != nil {
+		return *f
 	}
 	return OptColor{}
 }
@@ -208,6 +226,10 @@ func (t ThemeConfig) ColorWithSource(role ColorRole) (int, ColorSource) {
 		return t.YesNoHighlightColor, SourceBuiltin
 	case RoleLightbarNormal:
 		return t.YesNoRegularColor, SourceBuiltin
+	case RoleCallerBar:
+		// Unset, it is the lightbarSelected role, from wherever that
+		// came from.
+		return t.ColorWithSource(RoleLightbarSelected)
 	}
 	return builtinRoleColors[role], SourceBuiltin
 }

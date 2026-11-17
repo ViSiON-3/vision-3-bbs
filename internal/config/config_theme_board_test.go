@@ -178,7 +178,7 @@ func TestBoardColorRolesAllHaveFields(t *testing.T) {
 	if c != (ThemeColors{}) {
 		t.Errorf("after clearing every role: %+v", c)
 	}
-	if len(BoardColorRoles) != len(LightbarRoles)+5 {
-		t.Errorf("%d board roles, want the %d lightbar roles and 5 others", len(BoardColorRoles), len(LightbarRoles))
+	if len(BoardColorRoles) != len(LightbarRoles)+len(CallerColorRoles)+5 {
+		t.Errorf("%d board roles, want the %d lightbar roles, the %d caller roles and 5 others", len(BoardColorRoles), len(LightbarRoles), len(CallerColorRoles))
 	}
 }

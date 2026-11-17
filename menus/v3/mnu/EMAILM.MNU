@@ -2,7 +2,7 @@
     "TITLE": "Email Menu",
     "CLR": true,
     "USEPROMPT": true,
-    "PROMPT1": "|08[|07|TIME|08] |08[|15Email Menu|08] |07Command |08->|15 ",
+    "PROMPT1": "|C5[|C3|TIME|C5] |C5[|C4Email Menu|C5] |C1Command |C5->|C2 ",
     "PROMPT2": "",
     "FALLBACK": "",
     "ACS": "*",

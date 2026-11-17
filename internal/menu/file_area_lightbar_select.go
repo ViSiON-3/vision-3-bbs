@@ -148,7 +148,7 @@ func runSelectFileAreaLightbar(c *cmdCtx, args string) (*user.User, string, erro
 		visibleRows = 3
 	}
 
-	hiColorSeq := e.roleAnsi(roleSelected)
+	hiColorSeq := e.barAnsi(c.currentUser)
 	if len(hiBarOptions) > 0 {
 		hiColorSeq = colorCodeToAnsi(hiBarOptions[0].HighlightColor)
 	}

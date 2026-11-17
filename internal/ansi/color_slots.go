@@ -8,14 +8,16 @@ import (
 // ColorSlotDefaults are the built-in colours of the caller colour slots |C1
 // to |C7: 1 prompt, 2 input, 3 text, 4 stat, 5 text2, 6 stat2, 7 bar. They
 // match the stock screens' colours, so a screen written with the codes looks
-// as it did with fixed ones.
+// as it did with fixed ones; the bar is the stock lightbar highlight, white
+// on blue, the built-in lightbarSelected theme role, which a board's Bar
+// default falls back to.
 //
 // ReplacePipeCodes expands a |Cn code to its slot's board default: the
 // built-in colour, or the board's own (SetColorSlotDefaults). A caller's own
 // colour takes its place earlier, where a caller's placeholders are filled in
 // (see the menu package), so this is what a screen with no caller behind it
 // shows, and what authored ANSI art always shows.
-var ColorSlotDefaults = [7]string{"|07", "|15", "|07", "|15", "|08", "|11", "|00|B6"}
+var ColorSlotDefaults = [7]string{"|07", "|15", "|07", "|15", "|08", "|11", "|15|B4"}
 
 // ColorSlotCode returns the code |Cn for slot n (1 to 7).
 func ColorSlotCode(n int) string { return "|C" + strconv.Itoa(n) }

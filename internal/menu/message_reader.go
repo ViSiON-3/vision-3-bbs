@@ -283,7 +283,7 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	reader := bufio.NewReader(sessionIH)
 
 	// Lightbar colours from the theme's roles.
-	hiColor := e.roleColor(roleSelected)
+	hiColor := e.barColor(currentUser)
 	loColor := e.roleColor(roleCommand)
 	destructiveColor := e.roleColor(roleDestructive)
 	inactiveColor := e.roleColor(roleInactive)

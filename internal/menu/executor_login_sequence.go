@@ -194,7 +194,7 @@ func (e *MenuExecutor) confirmAbortLogin(s ssh.Session, terminal *term.Terminal,
 
 	prompt := e.Strings().ExecAbortLoginPrompt
 	if prompt == "" {
-		prompt = "|07Abort Login? @"
+		prompt = "|C1Abort Login? @"
 	}
 	abort, err := e.PromptYesNoString(s, terminal, prompt, outputMode, nodeNumber, termWidth, termHeight, false)
 	if err != nil {

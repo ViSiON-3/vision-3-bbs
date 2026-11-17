@@ -39,6 +39,16 @@ type ThemeConfig struct {
 	LightbarDestructive OptColor `json:"lightbarDestructive,omitzero"`
 	LightbarInactive    OptColor `json:"lightbarInactive,omitzero"`
 	LightbarBracket     OptColor `json:"lightbarBracket,omitzero"`
+	// The caller colour roles: the board's default for each of |C1 to
+	// |C7 (see CallerColorRoles). Each is optional, like the lightbar
+	// roles.
+	CallerPrompt OptColor `json:"callerPrompt,omitzero"`
+	CallerInput  OptColor `json:"callerInput,omitzero"`
+	CallerText   OptColor `json:"callerText,omitzero"`
+	CallerStat   OptColor `json:"callerStat,omitzero"`
+	CallerText2  OptColor `json:"callerText2,omitzero"`
+	CallerStat2  OptColor `json:"callerStat2,omitzero"`
+	CallerBar    OptColor `json:"callerBar,omitzero"`
 
 	ChatSysopColor int `json:"chatSysopColor"` // sysop pane in split-screen chat
 	ChatUserColor  int `json:"chatUserColor"`  // caller pane in split-screen chat
@@ -124,21 +134,30 @@ func builtinTheme() ThemeConfig {
 // menus.d/<set>/theme.json is merged over it key by key (see mergeThemeDocs).
 // Either file may be missing.
 func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
-	set := menuset.FromPath(menuSetPath)
-	defaults := builtinTheme()
-	slog.Info("loading theme configuration", "path", set.Path(menuset.LayerBase, "theme.json"))
-
-	shipped, overlay, err := readThemeLayers(set)
+	path := menuset.FromPath(menuSetPath).Path(menuset.LayerBase, "theme.json")
+	slog.Info("loading theme configuration", "path", path)
+	theme, err := readThemeConfig(menuSetPath)
 	if err != nil {
 		slog.Error("failed to load theme, using default theme settings", "error", err)
+		return theme, err
+	}
+	slog.Info("loaded theme configuration", "path", path)
+	return theme, nil
+}
+
+// readThemeConfig is LoadThemeConfig without the logging, for a tool such
+// as an editor that reads the theme while its screen is up. On an error it
+// returns the built-in defaults.
+func readThemeConfig(menuSetPath string) (ThemeConfig, error) {
+	defaults := builtinTheme()
+	shipped, overlay, err := readThemeLayers(menuset.FromPath(menuSetPath))
+	if err != nil {
 		return defaults, err
 	}
 	theme, err := decodeTheme(defaults, mergeThemeDocs(shipped, overlay))
 	if err != nil {
-		slog.Error("failed to parse theme JSON, using default theme settings", "error", err)
-		return defaults, err
+		return defaults, fmt.Errorf("parsing theme JSON: %w", err)
 	}
-	slog.Info("loaded theme configuration", "path", set.Path(menuset.LayerBase, "theme.json"))
 	return theme, nil
 }
 

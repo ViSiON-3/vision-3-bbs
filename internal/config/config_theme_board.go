@@ -1,10 +1,7 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 )
 
 // ThemeColors is config.json's theme.colors: the board's own colour
@@ -27,6 +24,13 @@ type ThemeColors struct {
 	ChatSysopColor            OptColor `json:"chatSysopColor,omitzero"`
 	ChatUserColor             OptColor `json:"chatUserColor,omitzero"`
 	AutocorrectHighlightColor OptColor `json:"autocorrectHighlightColor,omitzero"`
+	CallerPrompt              OptColor `json:"callerPrompt,omitzero"`
+	CallerInput               OptColor `json:"callerInput,omitzero"`
+	CallerText                OptColor `json:"callerText,omitzero"`
+	CallerStat                OptColor `json:"callerStat,omitzero"`
+	CallerText2               OptColor `json:"callerText2,omitzero"`
+	CallerStat2               OptColor `json:"callerStat2,omitzero"`
+	CallerBar                 OptColor `json:"callerBar,omitzero"`
 	// ToastFadeColors overrides the theme's fade ramp; "" inherits it.
 	ToastFadeColors string `json:"toastFadeColors,omitempty"`
 }
@@ -34,7 +38,7 @@ type ThemeColors struct {
 // BoardColorRoles lists every role theme.colors can override, in the order
 // the config editor shows them.
 var BoardColorRoles = append([]ColorRole{RoleYesNoHighlight, RoleYesNoRegular},
-	append(append([]ColorRole(nil), LightbarRoles...), RoleChatSysop, RoleChatUser, RoleAutocorrect)...)
+	append(append(append([]ColorRole(nil), LightbarRoles...), RoleChatSysop, RoleChatUser, RoleAutocorrect), CallerColorRoles...)...)
 
 // field returns a pointer to role's override, or nil for a role
 // theme.colors does not have.
@@ -68,6 +72,20 @@ func (c *ThemeColors) field(role ColorRole) *OptColor {
 		return &c.ChatUserColor
 	case RoleAutocorrect:
 		return &c.AutocorrectHighlightColor
+	case RoleCallerPrompt:
+		return &c.CallerPrompt
+	case RoleCallerInput:
+		return &c.CallerInput
+	case RoleCallerText:
+		return &c.CallerText
+	case RoleCallerStat:
+		return &c.CallerStat
+	case RoleCallerText2:
+		return &c.CallerText2
+	case RoleCallerStat2:
+		return &c.CallerStat2
+	case RoleCallerBar:
+		return &c.CallerBar
 	}
 	return nil
 }
@@ -149,6 +167,10 @@ func (t ThemeConfig) WithBoardColors(c ThemeColors) ThemeConfig {
 			t.LightbarInactive = o
 		case RoleLightbarBracket:
 			t.LightbarBracket = o
+		default:
+			if f := t.callerFieldPtr(role); f != nil {
+				*f = o
+			}
 		}
 	}
 	if _, ok := ParseToastFadeColors(c.ToastFadeColors); ok {
@@ -164,6 +186,11 @@ func ResolveColor(role ColorRole, theme ThemeConfig, board ThemeColors) (int, Co
 	if o := board.Get(role); o.Set {
 		return o.Value, SourceBoard
 	}
+	if role == RoleCallerBar && !theme.callerFieldPtr(role).Set {
+		// Unset, the Bar slot is lightbarSelected, which the board may
+		// override too.
+		return ResolveColor(RoleLightbarSelected, theme, board)
+	}
 	return theme.WithBoardColors(board).ColorWithSource(role)
 }
 
@@ -171,22 +198,12 @@ func ResolveColor(role ColorRole, theme ThemeConfig, board ThemeColors) (int, Co
 // config.json, for a program that needs the board's colours and nothing
 // else. A missing file or section gives no overrides.
 func BoardColorsFromConfigDir(configDir string) (ThemeColors, error) {
-	path := filepath.Join(configDir, "config.json")
-	data, err := os.ReadFile(path)
+	sel, err := themeSelectionFromConfigDir(configDir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return ThemeColors{}, nil
-		}
-		return ThemeColors{}, fmt.Errorf("reading %s: %w", path, err)
-	}
-	var raw struct {
-		Theme ThemeSelection `json:"theme"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return ThemeColors{}, fmt.Errorf("reading theme.colors from %s: %w", path, err)
-	}
-	if err := raw.Theme.Colors.validate(); err != nil {
 		return ThemeColors{}, err
 	}
-	return raw.Theme.Colors, nil
+	if err := sel.Colors.validate(); err != nil {
+		return ThemeColors{}, err
+	}
+	return sel.Colors, nil
 }

@@ -131,12 +131,33 @@ func TestColorSlotInOptionalGroup(t *testing.T) {
 	}
 }
 
-// The board's defColorN defaults are what |Cn draws with no caller too.
-func TestApplyColorSlotDefaults(t *testing.T) {
-	t.Cleanup(func() { ApplyColorSlotDefaults(config.StringsConfig{}) })
-	ApplyColorSlotDefaults(config.StringsConfig{LegacyColorSlots: [7]string{0: "|14"}})
-	if got := string(ansi.ReplacePipeCodes([]byte("|C1x|C2"))); got != esc("|14")+"x"+esc("|15") {
-		t.Errorf("got %q", got)
+// A slot's board default is the board's theme.colors, else the theme's
+// caller colour role, else an older strings.json's defColorN, else the
+// built-in; the Bar slot's built-in is the lightbar highlight. It is what
+// |Cn draws with no caller too.
+func TestColorSlotDefaultsFollowTheme(t *testing.T) {
+	t.Cleanup(func() { ansi.SetColorSlotDefaults([7]string{}) })
+	e := &MenuExecutor{}
+	e.SetStrings(config.StringsConfig{LegacyColorSlots: [7]string{0: "|14", 1: "|12", 2: "|12"}})
+	e.SetTheme(config.ThemeConfig{YesNoHighlightColor: 31, CallerInput: config.SetColor(13), CallerText: config.SetColor(9)})
+	var cfg config.ServerConfig
+	cfg.Theme.Colors.CallerText = config.SetColor(10)
+	e.SetServerConfig(cfg)
+	for n, want := range map[int]string{1: "|14", 2: "|13", 3: "|10", 4: "|15", 7: "|15|B4"} {
+		if got := e.colorSlot(nil, n); got != want {
+			t.Errorf("slot %d = %q, want %q", n, got, want)
+		}
+	}
+	if got := string(ansi.ReplacePipeCodes([]byte("|C1x|C2"))); got != esc("|14")+"x"+esc("|13") {
+		t.Errorf("no caller: got %q", got)
+	}
+	// A reload of strings.json keeps the theme's colours.
+	e.SetStrings(config.StringsConfig{})
+	if got := e.colorSlot(nil, 1); got != "|07" {
+		t.Errorf("slot 1 after the legacy default went = %q, want the built-in |07", got)
+	}
+	if got := e.colorSlot(nil, 2); got != "|13" {
+		t.Errorf("slot 2 after a strings reload = %q, want the theme's |13", got)
 	}
 }
 

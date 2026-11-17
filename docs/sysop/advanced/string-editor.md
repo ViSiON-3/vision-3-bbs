@@ -439,21 +439,23 @@ String values support BBS pipe codes that are rendered with color in the editor.
 
 #### Caller Colours (`|C1` – `|C7`)
 
-Each of these is a colour the caller can choose under **U Colours** in User Konfig. A menu prompt or `strings.json` value written with them is drawn in that caller's colours, and in the board's defaults for a caller who hasn't chosen any.
+Each of these is a colour the caller can choose under **U Colours** in User Konfig. A menu prompt or `strings.json` value written with them is drawn in that caller's colours, and in the board's defaults for a caller who hasn't chosen any. The board's defaults are the theme's [caller colour roles](configuration/configuration.md#caller-colour-roles), which the sysop can override under **Theme → Caller Colors** in `./config`.
 
-| Code | Slot | Built-in default |
-|------|------|------------------|
-| `\|C1` | Prompt | `\|07` |
-| `\|C2` | Input (what the caller types) | `\|15` |
-| `\|C3` | Text | `\|07` |
-| `\|C4` | Stat (a value or highlight) | `\|15` |
-| `\|C5` | Text 2 (dim text, frames) | `\|08` |
-| `\|C6` | Stat 2 (a second highlight) | `\|11` |
-| `\|C7` | Bar (a highlighted choice) | `\|00\|B6` (black on cyan) |
+| Code | Slot | Theme role | Default |
+|------|------|------------|---------|
+| `\|C1` | Prompt | `callerPrompt` | `\|07` |
+| `\|C2` | Input (what the caller types) | `callerInput` | `\|15` |
+| `\|C3` | Text | `callerText` | `\|07` |
+| `\|C4` | Stat (a value or highlight) | `callerStat` | `\|15` |
+| `\|C5` | Text 2 (dim text, frames) | `callerText2` | `\|08` |
+| `\|C6` | Stat 2 (a second highlight) | `callerStat2` | `\|11` |
+| `\|C7` | Bar (a highlighted choice) | `callerBar` | The lightbar highlight, `lightbarSelected` |
 
-A slot holds a foreground and, optionally, a background. A caller's colours are filled in where the session placeholders are: menu prompts and `strings.json` values. Everywhere else they draw the board's default for the slot: templates, a menu's own `.ANS` screen, and anything shown before login, so menu-set art never takes a caller's colours. A colour slot doesn't keep a `|{...|}` group alive, any more than `|15` does. A screen picks a caller's colour up only where it uses the code, so `|C7` changes nothing that keeps its own lightbar colours. User Konfig's own highlighted row is drawn in the board's default for `|C7`. The editor's preview, and the menu editor's preview of prompts, draws each code in the board's default for its slot. A caller's own text, such as a location or a message, can't use them: they print as typed there.
+The stock prompts that use them, in `strings.json` and the menus' Command prompts, look exactly as they did with fixed colours until a caller or the sysop picks different ones. The highlighted row or command on the stock lightbars takes the caller's Bar colour too.
 
-A `strings.json` from before these codes may carry `defColor1`–`defColor7` (a DOS colour). Each one from 1 to 15 is that slot's default on the board, in place of the built-in one, wherever `|Cn` is drawn; the Bar slot keeps the built-in bar's cyan background, or blue for a cyan colour, which wouldn't show on cyan. A 0 counts as not set, since an unset field was saved as 0. Nothing writes them any more.
+A slot holds a foreground and, optionally, a background. A caller's colours are filled in where the session placeholders are: menu prompts and `strings.json` values. Everywhere else they draw the board's default for the slot: templates, a menu's own `.ANS` screen, and anything shown before login, so menu-set art never takes a caller's colours. A colour slot doesn't keep a `|{...|}` group alive, any more than `|15` does. A screen picks a caller's colour up only where it uses the code, and the stock lightbars take the Bar colour; a screen with its own BAR file keeps that file's colours. User Konfig's own highlighted row is drawn in the board's default for `|C7`. The editor's preview, and the menu editor's preview of prompts, draws each code in the board's default for its slot. A caller's own text, such as a location or a message, can't use them: they print as typed there.
+
+A `strings.json` from before these codes may carry `defColor1`–`defColor7` (a DOS colour). Each one from 1 to 15 is that slot's default on the board where neither the theme nor `theme.colors` sets the slot, wherever `|Cn` is drawn. For the Bar slot that means neither sets `callerBar` or `lightbarSelected` either (the stock theme sets `lightbarSelected`), and it keeps the built-in bar's blue background, or cyan for a blue colour, which wouldn't show on blue. A 0 counts as not set, since an unset field was saved as 0. Nothing writes them any more.
 
 #### Screen Codes
 

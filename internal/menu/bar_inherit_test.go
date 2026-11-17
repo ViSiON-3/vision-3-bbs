@@ -8,6 +8,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // barEnv is an executor over a menu set of its own, <tmp>/menus/t with the
@@ -57,7 +58,7 @@ func hiBar(colour string) string {
 func TestScreenBarOverridesAndInherits(t *testing.T) {
 	e, write, remove := barEnv(t)
 	shared := colorCodeToAnsi(78) // the board's override of lightbarSelected
-	hi := func() string { return resolveAreaHiColor(e, "MSGAREAHI", 1) }
+	hi := func() string { return resolveAreaHiColor(e, nil, "MSGAREAHI", 1) }
 
 	if got := hi(); got != shared {
 		t.Fatalf("no BAR: %q, want the board's colour %q", got, shared)
@@ -169,6 +170,54 @@ func TestRetiredStockBarsLeaveTheLookUnchanged(t *testing.T) {
 	}
 }
 
+// A caller's own Bar colour (|C7) colours the highlight on the shared
+// lightbars, and the board's callerBar does for everyone else; a screen's
+// own BAR still wins over both.
+func TestCallerBarColourOnLightbars(t *testing.T) {
+	e, write, _ := barEnv(t)
+	u := &user.User{}
+	u.SetColorCode(user.ColorSlots, "|14|B1")
+	hi := func(u *user.User) string { return resolveAreaHiColor(e, u, "MSGAREAHI", 1) }
+
+	if got := hi(nil); got != colorCodeToAnsi(78) {
+		t.Errorf("no caller: %q, want lightbarSelected's 78", got)
+	}
+	if got := hi(u); got != colorCodeToAnsi(0x4E) {
+		t.Errorf("caller |14|B1: %q, want yellow on red %q", got, colorCodeToAnsi(0x4E))
+	}
+	e.SetServerConfig(config.ServerConfig{Theme: config.ThemeSelection{Colors: config.ThemeColors{
+		LightbarSelected: config.SetColor(78), CallerBar: config.SetColor(0x2F),
+	}}})
+	if got := hi(&user.User{}); got != colorCodeToAnsi(0x2F) {
+		t.Errorf("board callerBar: %q, want 0x2F", got)
+	}
+	write(false, "MSGAREAHI", hiBar("79"))
+	if got := hi(u); got != colorCodeToAnsi(79) {
+		t.Errorf("screen BAR: %q, want the BAR's 79 over the caller's", got)
+	}
+	cmd, _, _, rowHi, _ := buildFileListCmdBar(e, u, false, nil, nil)
+	if cmd[0].highlightColor != colorCodeToAnsi(0x4E) || rowHi != colorCodeToAnsi(0x4E) {
+		t.Errorf("file list: bar %q row %q, want the caller's", cmd[0].highlightColor, rowHi)
+	}
+}
+
+// The lightbars and |C7 agree on the board's Bar colour, so User Konfig's
+// "Default" sample and its saved-as-unset check match what the bars draw:
+// an older strings.json's defColor7 colours both while the theme and board
+// leave the highlight unset, and neither once the theme sets it.
+func TestBarColourMatchesBarSlot(t *testing.T) {
+	e := &MenuExecutor{}
+	e.SetTheme(config.ThemeConfig{YesNoHighlightColor: 31})
+	e.SetStrings(config.StringsConfig{LegacyColorSlots: [7]string{6: "|14|B6"}})
+	if got, want := e.barColor(nil), config.PipeCodeAttr(e.colorSlot(nil, user.ColorSlots)); got != want || got != config.PipeCodeAttr("|14|B6") {
+		t.Errorf("legacy defColor7: bars %d, |C7 %d, want both defColor7's", got, want)
+	}
+	e.SetTheme(config.ThemeConfig{YesNoHighlightColor: 31, LightbarSelected: config.SetColor(0x1E)})
+	if got, slot := e.barColor(nil), e.colorSlot(nil, user.ColorSlots); got != 0x1E || slot != "|14|B4" {
+		t.Errorf("theme lightbarSelected: bars %d, |C7 %q, want the theme's 0x1E", got, slot)
+	}
+}
+
 // The stock theme no longer ships FILELISTCMD.BAR (#1092): the file list
 // builds the same commands, and colours them with the lightbar roles, so a
 // change to lightbarSelected or lightbarNormal reaches the command bar. The
@@ -222,11 +271,11 @@ func TestFileListCommandBarFromASysopsBar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmds, _, _, _, _ := buildFileListCmdBar(e, false, opts, nil)
+	cmds, _, _, _, _ := buildFileListCmdBar(e, nil, false, opts, nil)
 	if len(cmds) != 2 || cmds[1].label != "Leave" || cmds[0].highlightColor != colorCodeToAnsi(79) || cmds[0].regularColor != colorCodeToAnsi(3) {
 		t.Errorf("command bar = %+v; want the BAR's two commands in 79 and 3", cmds)
 	}
-	cmds, _, _, _, _ = buildFileListCmdBar(e, false, nil, nil)
+	cmds, _, _, _, _ = buildFileListCmdBar(e, nil, false, nil, nil)
 	if len(cmds) != 6 || cmds[0].highlightColor != colorCodeToAnsi(78) || cmds[0].regularColor != colorCodeToAnsi(45) {
 		t.Errorf("without a BAR = %+v; want the six built-in commands in the roles", cmds)
 	}

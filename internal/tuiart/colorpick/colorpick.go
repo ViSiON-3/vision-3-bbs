@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/tuiart"
 )
 
@@ -31,9 +32,6 @@ const (
 	SwatchWidth = 4
 	Width       = 16*SwatchWidth + 2
 )
-
-// bgToDOS maps a |Bn background code to its DOS colour.
-var bgToDOS = [8]int{0, 4, 2, 6, 1, 5, 3, 7}
 
 // DOS colours the swatches use.
 const (
@@ -147,21 +145,14 @@ func FGStyle(n int) lipgloss.Style {
 
 // BGStyle draws background code |Bn behind white.
 func BGStyle(n int) lipgloss.Style {
-	return tuiart.Color(bgToDOS[n], dosWhite)
+	return tuiart.Color(ansi.ColorOrder(n), dosWhite)
 }
 
 // BGToDOS returns the DOS colour of background code |Bn.
-func BGToDOS(n int) int { return bgToDOS[n&7] }
+func BGToDOS(n int) int { return ansi.ColorOrder(n) }
 
 // DOSToBG returns the background code |Bn that draws DOS colour d (0-7).
-func DOSToBG(d int) int {
-	for n, c := range bgToDOS {
-		if c == d&7 {
-			return n
-		}
-	}
-	return 0
-}
+func DOSToBG(d int) int { return ansi.ColorOrder(d) }
 
 // FromAttr returns a picker on a DOS text attribute (bg*16 + fg), with a
 // required background.

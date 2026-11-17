@@ -69,7 +69,7 @@ func runNewScanAll(e *MenuExecutor, s ssh.Session, terminal *term.Terminal,
 		return nil, "", nil
 	}
 
-	hiColor := e.roleColor(roleSelected)
+	hiColor := e.barColor(currentUser)
 	loColor := e.roleColor(roleNormal)
 
 	// Per-message To/From/date/range filter (nil for a plain newscan). The

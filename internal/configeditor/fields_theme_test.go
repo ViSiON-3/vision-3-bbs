@@ -394,3 +394,53 @@ func TestSaveThemeMergesChangesMadeElsewhere(t *testing.T) {
 		t.Errorf("status = %q; want the chatUserColor conflict reported", m.message)
 	}
 }
+
+// The Caller Colors page edits the board's default of each |Cn as a board
+// override. The Bar slot unset shows the lightbar Selected colour, which it
+// falls back to.
+func TestCallerColorFields(t *testing.T) {
+	th := config.ThemeConfig{YesNoHighlightColor: 31, CallerStat: config.SetColor(14)}
+	var board config.ThemeColors
+	fields := themeFieldsCaller(&th, &board, [7]string{})
+	if len(fields) != len(config.CallerColorRoles) {
+		t.Fatalf("%d fields for %d slots", len(fields), len(config.CallerColorRoles))
+	}
+	bar := fieldByLabel(t, fields, "Bar (|C7)")
+	if bar.Get() != "31" || bar.Source() != "built-in" {
+		t.Errorf("bar: %s from %q, want the lightbar's 31", bar.Get(), bar.Source())
+	}
+	stat := fieldByLabel(t, fields, "Stat (|C4)")
+	if stat.Get() != "14" || stat.Source() != "theme" {
+		t.Errorf("stat: %s from %q", stat.Get(), stat.Source())
+	}
+	if err := fieldByLabel(t, fields, "Prompt (|C1)").Set("13"); err != nil || board.CallerPrompt != config.SetColor(13) {
+		t.Errorf("prompt override: %v, board %+v", err, board.CallerPrompt)
+	}
+}
+
+// A slot the theme and board leave unset shows an older strings.json's
+// defColorN, as the board draws it, and picking the built-in colour there
+// is a change that stores an override.
+func TestCallerColorFieldsLegacyDefault(t *testing.T) {
+	th := config.ThemeConfig{YesNoHighlightColor: 31, CallerStat: config.SetColor(14)}
+	var board config.ThemeColors
+	legacy := [7]string{"|12", "", "", "|10", "", "", "|00|B6"}
+	fields := themeFieldsCaller(&th, &board, legacy)
+	prompt := fieldByLabel(t, fields, "Prompt (|C1)")
+	if prompt.Get() != "12" || prompt.Source() != "strings.json" {
+		t.Errorf("prompt: %s from %q, want strings.json's 12", prompt.Get(), prompt.Source())
+	}
+	if bar := fieldByLabel(t, fields, "Bar (|C7)"); bar.Get() != "48" || bar.Source() != "strings.json" {
+		t.Errorf("bar: %s from %q, want strings.json's black on cyan, 48", bar.Get(), bar.Source())
+	}
+	// The theme's own value still wins over the legacy one.
+	if stat := fieldByLabel(t, fields, "Stat (|C4)"); stat.Get() != "14" || stat.Source() != "theme" {
+		t.Errorf("stat: %s from %q", stat.Get(), stat.Source())
+	}
+	if err := prompt.Set("7"); err != nil || board.CallerPrompt != config.SetColor(7) {
+		t.Errorf("picking the built-in 7 over strings.json's 12: %v, board %+v", err, board.CallerPrompt)
+	}
+	if prompt.Get() != "7" || prompt.Source() != "board override" {
+		t.Errorf("after the pick: %s from %q", prompt.Get(), prompt.Source())
+	}
+}
