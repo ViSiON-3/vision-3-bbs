@@ -8,6 +8,8 @@
     "lightbarHint": 8,
     "lightbarBorder": 8,
     "lightbarDestructive": 4,
+    "lightbarInactive": 8,
+    "lightbarBracket": 1,
     "chatSysopColor": 11,
     "chatUserColor": 10,
     "autocorrectHighlightColor": 14,

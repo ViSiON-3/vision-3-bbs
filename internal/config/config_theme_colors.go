@@ -71,6 +71,13 @@ const (
 	// RoleLightbarDestructive is an unselected command that destroys
 	// something: Del on the message reader's command bar.
 	RoleLightbarDestructive ColorRole = "lightbarDestructive"
+	// RoleLightbarInactive is a command that does nothing where the bar
+	// is: Thread on a message with no thread, Del on a message the caller
+	// may not delete, and every command while the reader's bar is dimmed.
+	RoleLightbarInactive ColorRole = "lightbarInactive"
+	// RoleLightbarBracket is the brackets around the message reader's
+	// command bar.
+	RoleLightbarBracket ColorRole = "lightbarBracket"
 )
 
 // The colours a theme has always had, as roles, so every colour is read
@@ -94,6 +101,7 @@ const (
 var LightbarRoles = []ColorRole{
 	RoleLightbarSelected, RoleLightbarNormal, RoleLightbarCommand,
 	RoleLightbarHotkey, RoleLightbarHint, RoleLightbarBorder, RoleLightbarDestructive,
+	RoleLightbarInactive, RoleLightbarBracket,
 }
 
 // builtinRoleColors is the lowest layer of the colour precedence: what a
@@ -108,6 +116,8 @@ var builtinRoleColors = map[ColorRole]int{
 	RoleLightbarHint:        8,  // dark gray
 	RoleLightbarBorder:      8,  // dark gray
 	RoleLightbarDestructive: 4,  // red
+	RoleLightbarInactive:    8,  // dark gray
+	RoleLightbarBracket:     1,  // blue
 }
 
 // ColorSource says which layer of the precedence a colour came from.
@@ -155,6 +165,10 @@ func (t ThemeConfig) roleField(role ColorRole) OptColor {
 		return t.LightbarBorder
 	case RoleLightbarDestructive:
 		return t.LightbarDestructive
+	case RoleLightbarInactive:
+		return t.LightbarInactive
+	case RoleLightbarBracket:
+		return t.LightbarBracket
 	}
 	return OptColor{}
 }

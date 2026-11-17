@@ -91,6 +91,8 @@ func themeFieldsLightbar(th *config.ThemeConfig, board *config.ThemeColors) []fi
 		boardColorField("Hint", "The rest of a lightbar's hint row", 5, config.RoleLightbarHint, th, board),
 		boardColorField("Border", "The line between a list and its footer", 6, config.RoleLightbarBorder, th, board),
 		boardColorField("Destructive", "Del on the message reader bar", 7, config.RoleLightbarDestructive, th, board),
+		boardColorField("Inactive", "A message reader command that does nothing on this message", 8, config.RoleLightbarInactive, th, board),
+		boardColorField("Bracket", "The brackets around the message reader bar", 9, config.RoleLightbarBracket, th, board),
 	}
 }
 

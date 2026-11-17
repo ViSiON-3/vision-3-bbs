@@ -37,6 +37,8 @@ type ThemeConfig struct {
 	LightbarHint        OptColor `json:"lightbarHint,omitzero"`
 	LightbarBorder      OptColor `json:"lightbarBorder,omitzero"`
 	LightbarDestructive OptColor `json:"lightbarDestructive,omitzero"`
+	LightbarInactive    OptColor `json:"lightbarInactive,omitzero"`
+	LightbarBracket     OptColor `json:"lightbarBracket,omitzero"`
 
 	ChatSysopColor int `json:"chatSysopColor"` // sysop pane in split-screen chat
 	ChatUserColor  int `json:"chatUserColor"`  // caller pane in split-screen chat
@@ -426,6 +428,8 @@ func drawnTheme(theme ThemeConfig) ThemeConfig {
 	theme.LightbarHint = drawn(RoleLightbarHint)
 	theme.LightbarBorder = drawn(RoleLightbarBorder)
 	theme.LightbarDestructive = drawn(RoleLightbarDestructive)
+	theme.LightbarInactive = drawn(RoleLightbarInactive)
+	theme.LightbarBracket = drawn(RoleLightbarBracket)
 	return theme
 }
 
