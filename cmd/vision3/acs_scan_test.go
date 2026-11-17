@@ -142,14 +142,16 @@ func TestCheckACSStringsClean(t *testing.T) {
 }
 
 // TestScanACSWithoutSession checks that a message area's acs_write, which
-// the QWK API checks without a session, is a warning when it uses L or A,
-// and that the same string elsewhere, checked with a session, is not.
+// the QWK API checks without a session, is a warning when it uses a
+// session term (L here, NODE in another area), and that the same string
+// elsewhere, checked with a session, is not.
 func TestScanACSWithoutSession(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "configs"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	areas := `[{"id": 1, "tag": "LOCALS", "acs_read": "S10|L", "acs_write": "S20|!L"}, {"id": 2, "tag": "PLAIN", "acs_write": "S20"}]`
+	areas := `[{"id": 1, "tag": "LOCALS", "acs_read": "S10|L", "acs_write": "S20|!L"}, {"id": 2, "tag": "PLAIN", "acs_write": "S20"},
+		{"id": 3, "tag": "NODE1", "acs_read": "NODE=1", "acs_write": "S20&NODE=1"}]`
 	if err := os.WriteFile(filepath.Join(root, "configs", "message_areas.json"), []byte(areas), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -161,13 +163,17 @@ func TestScanACSWithoutSession(t *testing.T) {
 	checkACSStrings(root, func(_ string, status doctorSeverity, message, remedy string) {
 		got = append(got, check{status, message, remedy})
 	})
-	if len(got) != 1 {
-		t.Fatalf("checks %v, want one warning for LOCALS acs_write", got)
+	if len(got) != 2 {
+		t.Fatalf("checks %v, want warnings for LOCALS and NODE1 acs_write", got)
 	}
 	c := got[0]
 	if c.status != doctorWarn || !strings.Contains(c.message, `area LOCALS, acs_write "S20|!L"`) ||
 		!strings.Contains(c.message, "QWK API") || !strings.Contains(c.remedy, "refused") {
 		t.Errorf("check = %+v", c)
+	}
+	if c := got[1]; c.status != doctorWarn || !strings.Contains(c.message, `area NODE1, acs_write "S20&NODE=1"`) ||
+		!strings.Contains(c.message, "session term") {
+		t.Errorf("NODE check = %+v", c)
 	}
 }
 

@@ -86,6 +86,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		currentAreaName:  currentAreaName,
 	}
 	setStringHookStartTime(terminal, sessionStartTime)
+	SetACSCall(s, nodeNumber, termWidth)
 	// previousMenuName starts at its zero value (""); tracked via st.previousMenuName below.
 	// var authenticatedUserResult *user.User // Unused
 
@@ -156,6 +157,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// from the next screen on.
 		if w, h, ok := takeSessionTermSize(s); ok {
 			st.termWidth, st.termHeight = w, h
+			SetACSCall(s, nodeNumber, w)
 		}
 
 		st.userInput = "" // Reset per iteration (Keep this one)

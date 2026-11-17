@@ -30,17 +30,18 @@ type acsSource struct {
 	ACS    string
 	// Headless says where the string is checked without a caller's session
 	// ("replies uploaded through the QWK API"), "" when it always has one.
-	// There, a string with L or A in it fails as a whole.
+	// There, a string with a session term (L, A, NODE, CONN, ENC, WIDTH,
+	// IP) in it fails as a whole.
 	Headless string
 }
 
 // acsFinding is the diagnostics for one source string, or, for a string
-// that reads cleanly, a note that it uses L or A where it is checked
+// that reads cleanly, a note that it uses a session term where it is checked
 // without a session.
 type acsFinding struct {
 	Source acsSource
 	Diags  []acs.Diagnostic
-	// NoSession is set for a valid string with L or A in it from a
+	// NoSession is set for a valid string with a session term in it from a
 	// Headless source: it denies every caller there.
 	NoSession bool
 	// Undefined lists the roles and groups a valid string's ROLE and GROUP
@@ -60,7 +61,7 @@ func (f acsFinding) failing() bool { return len(f.Diags) > 0 || len(f.Undefined)
 //	command 3 ("G"), ACS "S20 FA": column 5: no operator before "FA": put & or | between terms
 func (f acsFinding) Detail() string {
 	if f.NoSession {
-		return fmt.Sprintf("%s, %s %q: uses L or A, which fail the whole string for %s, where there is no session",
+		return fmt.Sprintf("%s, %s %q: uses a session term (L, A, NODE, CONN, ENC, WIDTH or IP), which fails the whole string for %s, where there is no session",
 			f.Source.Record, f.Source.Field, f.Source.ACS, f.Source.Headless)
 	}
 	if len(f.Undefined) > 0 {
@@ -302,8 +303,8 @@ const qwkAPIReplies = "replies uploaded through the QWK API"
 
 // checkACSStrings adds doctor's ACS section: a failing check for each string
 // with a problem, since it denies every caller; a warning for each string
-// that uses L or A where it is checked without a session; one passing check
-// when there are neither.
+// that uses a session term where it is checked without a session; one
+// passing check when there are neither.
 func checkACSStrings(root string, add func(string, doctorSeverity, string, string)) {
 	findings, checked := scanACS(root)
 	if len(findings) == 0 {
@@ -337,9 +338,9 @@ var acsLogged = struct {
 
 // logACSFindings scans the board and logs each problem the previous scan
 // didn't have, with the text doctor prints: a string with a problem at
-// error level, one using L or A without a session at warn. It never stops
-// the board and never changes a string: a bad string denies every caller
-// until it is fixed. Called at startup and after a config reload.
+// error level, one using a session term without a session at warn. It
+// never stops the board and never changes a string: a bad string denies
+// every caller until it is fixed. Called at startup and after a config reload.
 func logACSFindings(root string) {
 	findings, _ := scanACS(root)
 	acsLogged.Lock()

@@ -410,10 +410,11 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-// TestContextNow checks that the clock terms use Context.Now when it is set.
+// TestContextNow checks that the clock terms use Context.Now when it is set,
+// read on the board's clock (Location).
 func TestContextNow(t *testing.T) {
 	u := &user.User{AccessLevel: 10}
-	ctx := Context{User: u, Now: time.Date(2026, 11, 3, 14, 30, 0, 0, time.UTC)} // a Tuesday
+	ctx := Context{User: u, Now: time.Date(2026, 11, 3, 14, 30, 0, 0, time.UTC), Location: time.UTC} // a Tuesday
 	for acs, want := range map[string]bool{"H14": true, "H15": false, "W2": true, "Y14:00/15:00": true, "Y15:00/16:00": false} {
 		if got := Check(acs, ctx); got != want {
 			t.Errorf("Check(%q) at 14:30 Tuesday = %v, want %v", acs, got, want)

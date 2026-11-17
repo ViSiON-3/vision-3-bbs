@@ -82,8 +82,9 @@ unknown letter (`Q`).
 
 ### Comparisons and ranges
 
-The numeric terms (`S`, `D`, `U`, `P`, `E`, `B`, `T`, `C`, `X`, `H`, `W`)
-take a comparison before the number, or a range:
+The numeric terms (`S`, `D`, `U`, `P`, `E`, `B`, `T`, `C`, `X`, `H`, `W`,
+and the names `NODE`, `WIDTH` and `MONTH`) take a comparison before the
+number, or a range:
 
 | Form | Passes when the value is | Example |
 |---|---|---|
@@ -96,10 +97,10 @@ take a comparison before the number, or a range:
 There is no "not equal": write `!(S=20)`. A comparison is part of the term,
 with no spaces in it: `S < 20` is not `S<20`.
 
-A range runs from low to high. Only the clock terms wrap around: `H22-6` is
-10 pm through 6:59 am, and `W5-1` is Friday through Monday (`W1-5` is Monday
-through Friday). Any other backwards range, such as `LEVEL=99-20`, is an
-error.
+A range runs from low to high. Only the clock and calendar terms wrap
+around: `H22-6` is 10 pm through 6:59 am, `W5-1` is Friday through Monday
+(`W1-5` is Monday through Friday), and `MONTH=11-2` is November through
+February. Any other backwards range, such as `LEVEL=99-20`, is an error.
 
 `B` with no downloads yet and `T` for a user with no time limit have no
 number to compare: they count as above every number, so `B>=50` and `T>30`
@@ -116,6 +117,9 @@ A name stands for its letter, with the same test and the same argument:
   its own is `L`, not a level test.
 - `FLAG`, `NOTE` and `TIME` take a colon: `FLAG:A`, `NOTE:trusted`,
   `TIME:22:00/06:00`. `FLAG:` takes one flag letter or digit, like `F`.
+  So do `IP:` and `DATE:`, which have no letter.
+- `CONN` and `ENC` take `=` and a word: `CONN=telnet`, `ENC=utf8`, in any
+  case.
 - `VALIDATED`, `LOCAL` and `TERMINAL` take nothing.
 
 `D` and `I` have no names: `D` is the same test as `S`, and `I` the same as
@@ -184,9 +188,18 @@ limit of 0, or co-sysop level and up) always pass. Checked without a session
 
 ### Clock terms
 
-`H`, `W` and `Y` read the server's local clock: the zone in the `TZ`
-environment variable when ViSiON/3 started, or the system's. The board's
-`timezone` setting (and `VISION3_TIMEZONE`) does not affect them.
+`H`, `W`, `Y`, `MONTH` and `DATE` read the board's clock: its `timezone`
+setting (or `VISION3_TIMEZONE`), the zone `AGE` counts days in. A board that
+sets neither uses the server's zone, from `TZ` when ViSiON/3 started or the
+system's. One check reads the clock once, so the terms of one string never
+straddle a minute.
+
+The calendar terms are names only:
+
+| Term | Passes when | Notes |
+|---|---|---|
+| `MONTH`*op n* | the month compares | 1 (January) – 12. `MONTH=12`, `MONTH=6-8`; `MONTH=11-2` runs over the new year |
+| `DATE:`*mm-dd*/*mm-dd* | today is in the range, both days included | `DATE:12-24/12-26`. A range whose end is before its start runs over the new year: `DATE:12-20/01-05`. `02-29` is allowed |
 
 Both ends of a `Y` range are whole minutes and both are included:
 `Y08:00/17:00` runs from 8:00:00 to 17:00:59. A range whose end is before its
@@ -195,19 +208,24 @@ start runs past midnight: `Y22:00/06:00` is 10 pm through 6:00 am.
 
 ### Terms that need a session
 
-`L` and `A` look at the caller's connection:
+These look at the caller's connection:
 
-- `L` passes when the connection is a local pipe or Unix socket, or comes
-  from a loopback address (`127.x.x.x` or `::1`).
-- `A` passes for every telnet connection, and for an SSH connection that
-  asked for a terminal (a PTY). It doesn't check the terminal's encoding or
-  whether it shows ANSI.
+| Term | Passes when | Notes |
+|---|---|---|
+| `L`, `LOCAL` | the caller is local | a local pipe or Unix socket, or a loopback address (`127.x.x.x` or `::1`, also in IPv6 form, `::ffff:127.0.0.1`), read as `IP:` reads it |
+| `A`, `TERMINAL` | the connection has a terminal | every telnet connection, and SSH that asked for a terminal (a PTY). It doesn't check the encoding or whether the terminal shows ANSI |
+| `NODE`*op n* | the node number compares | `NODE=1`, `NODE=1-4`. The node is known from the moment the call connects, login screens included |
+| `CONN=`*how* | the caller connected that way: `ssh`, `telnet` or `local` | `local` is a pipe or Unix socket only, where `L` also counts a loopback address: an SSH call from `127.0.0.1` is `L` but `CONN=ssh` |
+| `ENC=`*encoding* | the call's output encoding is `utf8` or `cp437` | |
+| `WIDTH`*op n* | the width the menus render at compares | the width in use for this call, not the one saved in the caller's settings. Before the caller's own width is applied at login, it is the terminal's, kept within the widths the screens allow |
+| `IP:`*network* | the caller's address is in the network | `IP:10.0.0.0/8`, `IP:fd00::/8`, or one address, `IP:192.0.2.7`. An IPv4 address reported in IPv6 form (`::ffff:10.0.0.1`) matches its IPv4 network. An IPv4 network can be written in IPv6 form at `/96` or longer (`::ffff:10.0.0.0/104` is `10.0.0.0/8`); a shorter one could match no address and is refused |
 
 Checked without a session (replies uploaded through the QWK API), a string
-with `L` or `A` in it
-fails as a whole, whatever its other parts say: `L`, `!L` and `SYSOP|L` all
-fail there, for sysops too (see
-[Problems and missing context](#problems-and-missing-context)).
+with any of these in it fails as a whole, whatever its other parts say:
+`L`, `!L`, `SYSOP|L` and `S10|NODE=1` all fail there, for sysops too (see
+[Problems and missing context](#problems-and-missing-context)). Before
+login there is a session but no user, so a string with any term fails
+then anyway.
 
 ## Operators
 
@@ -233,7 +251,8 @@ Spaces around operators are allowed: `S20 & FA`.
   two terms with nothing between them.
 - **Only letters, digits, `/`, `:`, `.`, `_`, operators, parentheses and
   spaces are allowed.** `.` and `_` are for permission and role names
-  (`PERM:users.validate`, `ROLE:msg_ops`). The comparison characters `<`, `>`, `=` and `-` are allowed
+  (`PERM:users.validate`, `ROLE:msg_ops`) and addresses
+  (`IP:10.0.0.0/8`). The comparison characters `<`, `>`, `=` and `-` are allowed
   only inside a term, between term characters: `S<20` and `H8-17` are
   fine, `S20-` is not. Any other character is an error: `S@20`, `F(A)`
   (write `FA`) and a stray `-` all fail.
@@ -255,7 +274,8 @@ areas, conferences, doors, door categories, menu art and QWK.
 A term that needs something the check doesn't have fails the whole string
 in the same way, whatever the other parts say:
 
-- `L` and `A` checked without a session (see
+- a session term (`L`, `A`, `NODE`, `CONN`, `ENC`, `WIDTH`, `IP:`) checked
+  without a session (see
   [Terms that need a session](#terms-that-need-a-session));
 - `AGE` for a user with no sign-up date;
 - `ROLE:`*name* or `GROUP:`*name* for a role or group `configs/roles.json`
@@ -309,13 +329,13 @@ each problem:
 - **FAIL** (doctor exits 2): the string has a problem, so it denies every
   caller until it is fixed (see
   [Problems and missing context](#problems-and-missing-context)).
-- **WARN** (doctor exits 1): the string reads cleanly but uses `L` or `A`
+- **WARN** (doctor exits 1): the string reads cleanly but uses a session term
   where it is checked without a session, a message area's `acs_write` for
   replies uploaded through the QWK API. Callers in a session are checked as
   usual, but every QWK API reply to that area is refused.
 
 ```text
-[WARN]  ACS: configs/message_areas.json  area LOCALS, acs_write "S20|!L": uses L or A, which fail the whole string for replies uploaded through the QWK API, where there is no session
+[WARN]  ACS: configs/message_areas.json  area LOCALS, acs_write "S20|!L": uses a session term (L, A, NODE, CONN, ENC, WIDTH or IP), which fails the whole string for replies uploaded through the QWK API, where there is no session
 ```
 
 Doctor's **user sign-up dates** check lists users with no sign-up date: a
@@ -352,21 +372,26 @@ The context is the tester's own, shown on screen with every result. It
 starts as **no session** and **the current time**: the tester never uses your
 own call as the selected user's. You can change both:
 
-- **Session.** With none, a string with `L` or `A` in it fails and `T`
+- **Session.** With none, a string with a session term in it fails and `T`
   counts the call as just started, as for the checks the board makes
   outside a call (see
   [Terms that need a session](#terms-that-need-a-session)). Or set a made-up
   call: local or not (for `L`), with a terminal or not (for `A`), how many
-  minutes it has run and how much chat time was credited back (for `T`).
-- **Time**, for `H`, `W`, `Y` and `T`: `hh:mm` for that time today, or
-  `yyyy-mm-dd hh:mm`, in the server's clock.
+  minutes it has run and how much chat time was credited back (for `T`),
+  its node, connection (`ssh`, `telnet` or `local`), encoding and width,
+  and for a remote call its address (for `IP:`; a local call's is
+  loopback). Left as they are, a call is node 1, SSH from `192.0.2.1`
+  (`local` for a local call), CP437, 80 columns. The tester shows these on a **Call:** line.
+- **Time**, for the clock terms and `T`: `hh:mm` for that time today, or
+  `yyyy-mm-dd hh:mm`, on the board's clock. The **Time:** line names the
+  zone.
 
 For a level-20 user with flags A and C, no session, at 22:00:
 
 ```text
 User:       Bob (#5), level 20
-Session:    none: L or A fails the string, T as if the call just started
-Time:       Wed 2026-11-04 22:00
+Session:    none: session terms fail, T as if the call just started
+Time:       Wed 2026-11-04 22:00 (the server's local zone)
 Expression: S50&(FA|!FB)
             ---  ++  --
 Result:     FAIL

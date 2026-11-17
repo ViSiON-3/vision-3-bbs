@@ -180,8 +180,8 @@ context starts as no session and the current time, never your own call. Then:
 | Key | Action |
 |-----|--------|
 | `E` | Test another expression (the last one is filled in) |
-| `S` | Set a made-up session: local or not, with a terminal or not, minutes into the call and minutes of chat credit. Answer No to go back to no session |
-| `T` | Set the time: `hh:mm` today or `yyyy-mm-dd hh:mm`; Enter for now |
+| `S` | Set a made-up session: local or not, with a terminal or not, minutes into the call and minutes of chat credit, then its node, connection (`ssh`, `telnet` or `local`), encoding (`utf8` or `cp437`), width, and a remote call's address. Each prompt shows the current value, the default included, and Enter keeps it. A local call's connection starts as `local`. Answer No to go back to no session |
+| `T` | Set the time, on the board's clock: `hh:mm` today or `yyyy-mm-dd hh:mm`; Enter for now |
 | `Q` / Enter / Esc | Back to the user editor |
 
 The prompts are in `strings.json` under the `acsTest` keys and can be changed

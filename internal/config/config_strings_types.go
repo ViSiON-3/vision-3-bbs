@@ -40,6 +40,13 @@ type StringsConfig struct {
 	AcsTestBadNumber      string `json:"acsTestBadNumber"`
 	AcsTestBadTime        string `json:"acsTestBadTime"`
 	AcsTestDenied         string `json:"acsTestDenied"`
+	// The made-up call's values for the session terms (#1075).
+	AcsTestNodePrompt  string `json:"acsTestNodePrompt"`
+	AcsTestConnPrompt  string `json:"acsTestConnPrompt"`
+	AcsTestEncPrompt   string `json:"acsTestEncPrompt"`
+	AcsTestWidthPrompt string `json:"acsTestWidthPrompt"`
+	AcsTestAddrPrompt  string `json:"acsTestAddrPrompt"`
+	AcsTestBadValue    string `json:"acsTestBadValue"`
 
 	// The shared More prompt that pauses long output, and its Konfig switch.
 	MorePrompt             string `json:"morePrompt"`

@@ -1305,6 +1305,9 @@ func sessionHandler(s ssh.Session) {
 	// --- Authentication and Main Loop ---
 	slog.Info("starting BBS logic", "node", nodeID)
 	sessionStartTime := time.Now()
+	// The ACS session terms (NODE, WIDTH) read the call from here on,
+	// before the first menu runs.
+	menu.SetACSCall(s, int(nodeID), int(termWidth.Load()))
 
 	bbsSession = &session.BbsSession{
 		Tap:          tap,
@@ -1642,6 +1645,7 @@ func sessionHandler(s ssh.Session) {
 
 	_ = terminal.SetSize(effectiveWidth, effectiveHeight)
 	slog.Info("effective terminal size", "node", nodeID, "user", authenticatedUser.Handle, "width", effectiveWidth, "height", effectiveHeight)
+	menu.SetACSCall(s, int(nodeID), effectiveWidth)
 
 	// --- Post-Auth Terminal Setup Prompts ---
 	// If the user has no saved screen size, prompt for the terminal height.

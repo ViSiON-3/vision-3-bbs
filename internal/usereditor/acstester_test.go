@@ -2,6 +2,7 @@ package usereditor
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -59,7 +60,7 @@ var (
 func TestACSTesterDefaultContext(t *testing.T) {
 	m := acsTesterOver(t, 80, 25)
 	view := stripANSIGolden(m.View())
-	for _, want := range []string{"ACS Tester: Bob", "Session:    none: L or A fails the string", "(now)", "Session   : N"} {
+	for _, want := range []string{"ACS Tester: Bob", "Session:    none: session terms fail,", "(now)", "Session   : N"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("screen lacks %q:\n%s", want, view)
 		}
@@ -119,5 +120,48 @@ func TestACSTesterGolden(t *testing.T) {
 		m = keys(t, m, typed("2026-11-04 22:00")...)
 		m = keys(t, m, tab, enter)
 		checkGolden(t, fmt.Sprintf("acs_test_%dx%d", size.w, size.h), m.View())
+	}
+}
+
+// TestACSTesterCallValues sets the call's node, connection, encoding, width
+// and address on the second session row; a value that can't be used says
+// so, and a local call skips the address, which is loopback.
+func TestACSTesterCallValues(t *testing.T) {
+	m := acsTesterOver(t, 80, 25)
+	m = keys(t, m, typed("NODE=4&CONN=telnet&ENC=utf8&WIDTH>=132&IP:10.0.0.0/8")...)
+	m = keys(t, m, tab, tab, space) // Time, Session on
+	view := stripANSIGolden(m.View())
+	if !strings.Contains(view, "Node      :") || !strings.Contains(view, "IP:") {
+		t.Fatalf("no call row:\n%s", view)
+	}
+	for _, line := range strings.Split(view, "\n") {
+		if w := lipgloss.Width(line); w > 80 {
+			t.Errorf("a line is %d cells wide: %q", w, line)
+		}
+	}
+	m = keys(t, m, tab, tab, tab, tab, tab) // Local, Terminal, Mins In, Credit, Node
+	m = keys(t, m, typed("4")...)
+	m = keys(t, m, tab)
+	m = keys(t, m, typed("ftp")...)
+	m = keys(t, m, enter)
+	if got := strings.Join(m.acsTest.lines, "\n"); !strings.Contains(got, "Conn is one of ssh, telnet, local") {
+		t.Fatalf("a bad connection: %s", got)
+	}
+	m = keys(t, m, tea.KeyMsg{Type: tea.KeyBackspace}, tea.KeyMsg{Type: tea.KeyBackspace}, tea.KeyMsg{Type: tea.KeyBackspace})
+	m = keys(t, m, typed("telnet")...)
+	m = keys(t, m, tab)
+	m = keys(t, m, typed("utf8")...)
+	m = keys(t, m, tab)
+	m = keys(t, m, typed("132")...)
+	m = keys(t, m, tab)
+	m = keys(t, m, typed("10.1.2.3")...)
+	m = keys(t, m, enter)
+	got := strings.Join(m.acsTest.lines, "\n")
+	if !strings.Contains(got, "node 4, telnet from 10.1.2.3, utf8, 132 columns") || !strings.Contains(got, "Result:     PASS") {
+		t.Errorf("with the call's values:\n%s", got)
+	}
+	m.acsTest.local = true
+	if slices.Contains(m.acsTest.order(), acsAddr) {
+		t.Error("a local call still asks for its address")
 	}
 }
