@@ -1135,7 +1135,11 @@ management bar and the message scan's bar.
 If you upgraded by copying new files over an old install, the retired
 files may still be in `menus/v3/bar/`. They draw the same colours as
 before, but they pin those screens to them; `./vision3 doctor` notes each
-one, and deleting it lets the screen follow the lightbar colours.
+one, and deleting it lets the screen follow the lightbar colours. Doctor
+only names a file that is exactly as it shipped, in `menus/v3/bar/`: one
+you edited is taken for your own, and one a `menus.d/v3/bar/` file of the
+same name shadows is not in use. Check those yourself if you meant to go
+back to the shared colours.
 
 ### Chat screens
 
