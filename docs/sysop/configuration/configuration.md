@@ -358,7 +358,7 @@ What each section covers:
 
 ### Safe Fixes (`--fix`)
 
-Doctor repairs three kinds of problem on request:
+Doctor repairs four kinds of problem on request:
 
 - **Standard data directories.** `--fix` creates whichever of
   `data/users`, `data/logs`, `data/msgbases` and `data/files` are missing.
@@ -374,11 +374,12 @@ Doctor repairs three kinds of problem on request:
   The file is first copied to
   `data/backups/menus.d-<theme>-theme.json.<date>-<time>`. Keys with values
   of your own are kept.
-
-With `--theme-colors` as well, it also moves the colours the selected
-theme's overlay sets of its own into `config.json` `theme.colors`, backing up
-both files first. A plain `--fix` never does that; see
-[Moving an overlay's colours](#board-colour-overrides).
+- **Colours an overlay `theme.json` sets of its own.** They move into
+  `config.json` `theme.colors`, where `./config` edits them, and out of the
+  overlay; the board looks the same. A colour `theme.colors` already has is
+  not overwritten, and settings that are not colours stay in the overlay.
+  Both files are backed up first (see
+  [Moving an overlay's colours](#board-colour-overrides)).
 
 It then runs the normal report. `--dry-run` shows what `--fix` would do
 without changing anything:
@@ -1418,16 +1419,15 @@ stay.
 **Moving an overlay's colours into `theme.colors`.** Colours you chose in
 the overlay keep working, but they belong to that theme only, and
 `./config` edits the board's colours, not the overlay's. Doctor notes an
-overlay that sets colours of its own. To make them the board's colours:
+overlay that sets colours of its own, and `--fix` moves them:
 
 ```bash
-./vision3 doctor --fix --theme-colors --dry-run   # show what would move
-./vision3 doctor --fix --theme-colors
+./vision3 doctor --fix --dry-run   # show what would move
+./vision3 doctor --fix
 ```
 
-This works on the selected theme's overlay only, and only when you ask: a
-plain `--fix` never moves colours, and nothing moves them at startup or on
-an upgrade.
+This works on the selected theme's overlay only, and only when you run
+`--fix`: nothing moves colours at startup or on an upgrade.
 
 - Each colour the overlay changes from the shipped theme is written to
   `theme.colors`, and taken out of the overlay. The board looks the same
@@ -1440,8 +1440,8 @@ an upgrade.
 - `config.json` and the overlay are both copied to `data/backups/` first.
 
 Board colours apply whatever theme is selected, so after the move they
-also apply if you switch to another theme. Leave the overlay as it is if
-you want the colours to stay with this theme.
+also apply if you switch to another theme; reset them under **Theme** in
+`./config` (**Use theme default**) if you want another theme's own.
 
 ### Theme Configuration
 

@@ -369,7 +369,7 @@ func TestReloadKeepsTheRunningTheme(t *testing.T) {
 	}
 }
 
-// Doctor notes an overlay's own colours and names the opt-in fix, and says
+// Doctor notes an overlay's own colours and names the fix, and says
 // nothing when theme.colors already has them.
 func TestDoctorNotesThemeOverlayColors(t *testing.T) {
 	check := func(configJSON, overlay string) []doctorCheck {
@@ -388,7 +388,7 @@ func TestDoctorNotesThemeOverlayColors(t *testing.T) {
 	}
 	checks := check("", `{"chatUserColor": 12, "sysopChatScreen": "MYCHAT"}`)
 	if !hasDoctorCheck(checks, "menus.d/v3/theme.json", doctorInfo, "sets 1 colour(s) of its own, which apply to this theme only: chatUserColor") ||
-		!strings.Contains(checks[0].Fix, "--fix --theme-colors") {
+		!strings.Contains(checks[0].Fix, "doctor --fix") {
 		t.Errorf("checks = %+v", checks)
 	}
 	for name, c := range map[string][2]string{
@@ -403,9 +403,9 @@ func TestDoctorNotesThemeOverlayColors(t *testing.T) {
 	}
 }
 
-// doctor --fix --theme-colors moves the overlay's colours to config.json,
-// backing both files up; the board draws the same, sysopChatScreen stays,
-// and --dry-run changes nothing. A plain --fix leaves the colours alone.
+// doctor --fix moves the overlay's colours to config.json, backing both
+// files up; the board draws the same, sysopChatScreen stays, and --dry-run
+// changes nothing.
 func TestDoctorFixMovesThemeColors(t *testing.T) {
 	configJSON := `{"boardName": "Test", "theme": {"name": "v3", "colors": {"lightbarHint": 3}}}`
 	root := themeBoard(t, configJSON, "v3")
@@ -436,12 +436,6 @@ func TestDoctorFixMovesThemeColors(t *testing.T) {
 		return user, hint, theme.SysopChatScreen
 	}
 	u0, h0, s0 := look()
-
-	var out, errOut strings.Builder
-	runDoctor(root, false, doctorOptions{fix: true}, &out, &errOut)
-	if data, _ := os.ReadFile(overlayFile); string(data) != overlay {
-		t.Fatalf("a plain --fix changed the overlay: %s", data)
-	}
 
 	fixes := fixThemeColors(root, true, now)
 	if len(fixes) != 1 || fixes[0].Status != "would-fix" {

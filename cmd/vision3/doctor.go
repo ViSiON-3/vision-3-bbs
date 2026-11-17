@@ -83,19 +83,7 @@ type doctorFix struct {
 	Message string `json:"message,omitempty"`
 }
 
-// doctorOptions are the doctor flags that choose what --fix does.
-type doctorOptions struct {
-	fix    bool
-	dryRun bool
-	// themeColors also moves the colours of the selected theme's overlay
-	// theme.json into config.json's theme.colors (#1093). A plain --fix
-	// never does: board colours apply whatever theme is selected, so the
-	// move changes what a switch of theme does, and is the sysop's call.
-	themeColors bool
-}
-
-func runDoctor(root string, jsonOutput bool, opts doctorOptions, stdout, stderr io.Writer) int {
-	fix, dryRun := opts.fix, opts.dryRun
+func runDoctor(root string, jsonOutput, fix, dryRun bool, stdout, stderr io.Writer) int {
 	if fix {
 		rootAbs, err := filepath.Abs(root)
 		if err == nil {
@@ -106,9 +94,7 @@ func runDoctor(root string, jsonOutput bool, opts doctorOptions, stdout, stderr 
 	if fix {
 		fixes = fixDoctorDirectories(root, dryRun)
 		fixes = append(fixes, fixThemeOverlay(root, dryRun, time.Now())...)
-		if opts.themeColors {
-			fixes = append(fixes, fixThemeColors(root, dryRun, time.Now())...)
-		}
+		fixes = append(fixes, fixThemeColors(root, dryRun, time.Now())...)
 		fixes = append(fixes, fixStrings(root, dryRun, time.Now())...)
 	}
 	report := inspectBoard(root)
@@ -950,8 +936,7 @@ func themeOverlayRel(menuRoot string) string {
 }
 
 // checkThemeOverlayColors notes the colours an overlay theme.json sets
-// that theme.colors could hold instead. They work where they are, for this
-// theme only; the note says how to make them the board's.
+// that theme.colors could hold instead, which doctor --fix moves there.
 func checkThemeOverlayColors(menuRoot, configDir string, add func(string, doctorSeverity, string, string)) {
 	board, err := config.BoardColorsFromConfigDir(configDir)
 	if err != nil {
@@ -963,7 +948,7 @@ func checkThemeOverlayColors(menuRoot, configDir string, add func(string, doctor
 	}
 	add(themeOverlayRel(menuRoot), doctorInfo,
 		fmt.Sprintf("sets %d colour(s) of its own, which apply to this theme only: %s", len(move.Moved), strings.Join(move.Moved, ", ")),
-		"To make them the board's colours, kept in config.json theme.colors whatever theme is selected and edited under Theme in ./config, run ./vision3 doctor --fix --theme-colors (both files are backed up first; add --dry-run to preview). Otherwise leave them.")
+		"Run ./vision3 doctor --fix to move them to config.json theme.colors, where ./config edits them (both files are backed up first; add --dry-run to preview). Board colours apply whatever theme is selected.")
 }
 
 // fixThemeColors moves the colours of the selected theme's overlay
