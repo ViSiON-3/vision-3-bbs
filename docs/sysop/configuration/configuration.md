@@ -164,7 +164,7 @@ edits that theme's `theme.json` (see [Theme Configuration](#theme-configuration)
 
 | Item | What it edits |
 |------|---------------|
-| Theme Selection | The theme the board runs, picked from the directories under `menus/`. Saved to `config.json` as `theme.name`; restart the BBS to switch |
+| Theme Selection | The theme the board runs, picked from the directories under `menus/`. Saved to `config.json` as `theme.name`; restart the BBS to switch. **Caller Choice** (`theme.callerChoice`) sets whether callers may pick their own (see [Callers' own themes](#callers-own-themes)) |
 | Prompt Colors | Yes/No highlight and regular colours, and the message editor's autocorrect highlight |
 | Lightbar Colors | The nine [lightbar colour roles](#lightbar-colour-roles) every lightbar inherits. When a screen has its own `*HI.BAR`, an **Overridden by** line under the roles names the screens that don't follow **Selected** (or gives their count when the names don't fit, with the names in its help), and says when `DOORMENUHI.BAR` also sets the door menu's regular colour. Screens set to inherit on Screen Overrides aren't counted |
 | Screen Overrides | The screens whose own `*HI.BAR` file sets their highlight over the shared colours: each one's colour and whether the file is shipped or in `menus.d`. Set a screen to **Y** to have it **inherit shared colours**; saving writes an inherit marker to `menus.d/<theme>/bar/` (see [Per-screen lightbar colors](menus/menu-system.md#per-screen-lightbar-colors)). The BARs themselves are edited with `menuedit` |
@@ -1361,6 +1361,50 @@ cp -R menus/v3 menus/mytheme
 Then choose it under **Theme → Theme Selection** in `./config` (or set
 `theme.name`), run `./vision3 doctor`, and restart the BBS.
 
+### Callers' Own Themes
+
+When more than one theme is installed, a caller can pick their own under
+**V Theme** in User Konfig (`K` on the stock main menu). The board's theme
+is the default, for a caller who hasn't picked one.
+
+```json
+"theme": { "name": "v3", "callerChoice": false }
+```
+
+- **On by default.** With `callerChoice` left out, callers may choose; set
+  it to `false` (**Caller Choice** under **Theme → Theme Selection** in
+  `./config`) to keep everyone on `theme.name`. Konfig then has no Theme
+  item, and a caller who had picked a theme gets the board's from their next
+  screen; their choice is kept, and comes back if you turn the setting on
+  again. The change applies without a restart.
+- **What callers can pick.** Every directory under `menus/` with a valid
+  name and a `mnu/MAIN.MNU`, the board's own among them. With only one, the
+  Theme item shows it and says there is nothing else to choose. To offer a
+  theme, install it under `menus/`, with any changes of your own in
+  `menus.d/<name>/` as for the board's theme; to stop offering one, remove
+  it.
+- **When it applies.** A caller's theme takes over after they log in: their
+  menus, art, templates, BAR files and `theme.json` colours, and the message
+  editor and V3 scripts they run. Everything before login (the login and new
+  user screens, the matrix) is always the board's theme. Choosing a theme
+  in Konfig closes Konfig and draws the menu in the new theme straight away.
+  If the new theme doesn't have the menu the caller was on, they go to its
+  `MAIN`.
+- **Board colours stay the board's.** `theme.colors` overrides the board's
+  own theme. A caller on another theme sees that theme's colours as it
+  ships, with its `menus.d` overlay.
+- **A theme that goes away.** If a caller's theme is removed, or can't be
+  used (no `mnu/MAIN.MNU`, or a `theme.json` that doesn't load), they see
+  the board's theme and the log says why
+  (`caller's theme can't be used; showing the board's`). Their choice is
+  kept, so it applies again once the theme is back.
+- **Caller colours.** A caller's own colours (`|C1`–`|C7`, **U Colours** in
+  Konfig) apply under any theme; a theme only sets the defaults for callers
+  who haven't chosen their own.
+- **Limits.** Toasts and split-screen sysop chat use the board's theme. An
+  edit to a caller's theme's `theme.json` reaches them when they next log in
+  or pick another theme; the board's own theme reloads straight away, as before.
+
 ### Board Colour Overrides
 
 The board's own colours live in `config.json`, in `theme.colors`, apart from
@@ -1441,8 +1485,9 @@ This works on the selected theme's overlay only, and only when you run
   nothing is left.
 - `config.json` and the overlay are both copied to `data/backups/` first.
 
-Board colours apply whatever theme is selected, so after the move they
-also apply if you switch to another theme; reset them under **Theme** in
+Board colours apply whatever theme `theme.name` selects, so after the
+move they also apply if you switch to another theme (though not to a
+theme a caller picks for themselves); reset them under **Theme** in
 `./config` (**Use theme default**) if you want another theme's own.
 
 ### Theme Configuration

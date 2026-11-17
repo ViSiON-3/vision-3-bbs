@@ -444,3 +444,19 @@ func TestCallerColorFieldsLegacyDefault(t *testing.T) {
 		t.Errorf("after the pick: %s from %q", prompt.Get(), prompt.Source())
 	}
 }
+
+// Caller Choice is on while theme.callerChoice is omitted, and N stores it
+// as false; Y omits it again (#1099).
+func TestThemeCallerChoiceField(t *testing.T) {
+	var cfg config.ServerConfig
+	f := themeFieldsSelection(&cfg, func() []string { return nil })[1]
+	if f.Label != "Caller Choice" || f.Get() != "Y" {
+		t.Fatalf("%s = %s, want Y", f.Label, f.Get())
+	}
+	if err := f.Set("N"); err != nil || cfg.Theme.CallerChoice == nil || *cfg.Theme.CallerChoice || f.Get() != "N" {
+		t.Errorf("after N: %v, %v", cfg.Theme.CallerChoice, err)
+	}
+	if err := f.Set("Y"); err != nil || cfg.Theme.CallerChoice != nil || f.Get() != "Y" {
+		t.Errorf("after Y: %v, %v", cfg.Theme.CallerChoice, err)
+	}
+}

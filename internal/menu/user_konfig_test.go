@@ -146,7 +146,7 @@ func TestKonfigSectionLayout(t *testing.T) {
 		title string
 		keys  string
 	}{
-		{{str.KonfigSectionTerminal, "ABCD"}, {str.KonfigSectionAppearance, "UT"}, {str.KonfigSectionFiles, "KLS"}},
+		{{str.KonfigSectionTerminal, "ABCD"}, {str.KonfigSectionAppearance, "VUT"}, {str.KonfigSectionFiles, "KLS"}},
 		{{str.KonfigSectionMessages, "EFMNP"}, {str.KonfigSectionPersonal, "GHIJOR"}},
 	}
 	for c := range cols {
@@ -168,7 +168,7 @@ func TestKonfigSectionLayout(t *testing.T) {
 	for _, h := range headings {
 		rows[h.title] = h.row
 	}
-	if rows[str.KonfigSectionTerminal] != konfigTopRow || rows[str.KonfigSectionAppearance] != konfigTopRow+6 || rows[str.KonfigSectionFiles] != konfigTopRow+10 || rows[str.KonfigSectionPersonal] != konfigTopRow+7 {
+	if rows[str.KonfigSectionTerminal] != konfigTopRow || rows[str.KonfigSectionAppearance] != konfigTopRow+6 || rows[str.KonfigSectionFiles] != konfigTopRow+11 || rows[str.KonfigSectionPersonal] != konfigTopRow+7 {
 		t.Errorf("heading rows %v", rows)
 	}
 	// The form starts straight under the 4-row art: its last row is a rule.

@@ -188,7 +188,8 @@ func themeFieldsCaller(th *config.ThemeConfig, board *config.ThemeColors, legacy
 }
 
 // themeFieldsSelection is the theme the board runs: config.json's
-// theme.name, picked from the directories under menus/. The default theme
+// theme.name, picked from the directories under menus/, and whether
+// callers may pick their own (theme.callerChoice, #1099). The default theme
 // is stored as an omitted name, as a config written before the setting has
 // it. The other Theme screens go on editing the theme that was selected
 // when the editor opened (allConfigs.themeSet).
@@ -217,6 +218,20 @@ func themeFieldsSelection(cfg *config.ServerConfig, themes func() []string) []fi
 					items = append(items, LookupItem{Value: name, Display: display})
 				}
 				return items
+			},
+		},
+		{
+			Label: "Caller Choice", Help: "Y lets callers pick another installed theme in User Konfig (K); N keeps everyone on this one", Type: ftYesNo, Col: 3, Row: 2, Width: 1,
+			Get: func() string { return uitext.BoolToYN(cfg.Theme.CallersChooseTheme()) },
+			Set: func(val string) error {
+				// Omitted is on, as a config written before the setting has it.
+				if uitext.YNToBool(val) {
+					cfg.Theme.CallerChoice = nil
+				} else {
+					off := false
+					cfg.Theme.CallerChoice = &off
+				}
+				return nil
 			},
 		},
 	}

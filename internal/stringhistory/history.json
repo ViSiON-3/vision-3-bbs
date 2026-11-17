@@ -36,7 +36,8 @@
     "|12Enter hh:mm or yyyy-mm-dd hh:mm, or nothing for now.|07"
   ],
   "acsTestBadValue": [
-    "|12That can't be used here: try again, or enter nothing to keep it.|07"
+    "|12That can't be used here: try again, or enter nothing to keep it.|07",
+    "|12That can't be used: enter one of the choices shown, or nothing to keep it.|07"
   ],
   "acsTestConnPrompt": [
     "|07Connection, |15ssh|07, |15telnet|07 or |15local|07 (for CONN): "
@@ -1138,6 +1139,24 @@
   ],
   "konfigStyleFormat": [
     "Style %d"
+  ],
+  "konfigThemeBoardTag": [
+    "(board's)"
+  ],
+  "konfigThemeHelp": [
+    "How the board looks to you: menus, screens and colours. Applies at once."
+  ],
+  "konfigThemeHint": [
+    "Arrows, Enter picks, Esc done"
+  ],
+  "konfigThemeLabel": [
+    "Theme"
+  ],
+  "konfigThemeOnlyOne": [
+    "|07This board has one theme, |15%s|07, so there's nothing else to choose."
+  ],
+  "konfigThemeTitle": [
+    "Themes"
   ],
   "konfigThreadViewHelp": [
     "On: always show the reply tree under the message header.",

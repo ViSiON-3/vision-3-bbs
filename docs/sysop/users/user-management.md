@@ -19,7 +19,7 @@ User data is stored in `data/users/users.json`. The system automatically creates
 
 ## What callers can change themselves
 
-The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). Its settings are in five sections: **Terminal**, **Appearance** (Colours and Menu Prompt) and **Files** in the left column, **Messages** and **Personal** in the right. From it a caller can change:
+The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). Its settings are in five sections: **Terminal**, **Appearance** (Theme, Colours and Menu Prompt) and **Files** in the left column, **Messages** and **Personal** in the right. From it a caller can change:
 
 | Setting | Field |
 | --- | --- |
@@ -38,6 +38,7 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). I
 | Listing Mode, File Columns | `fileListingMode`, `file_list_columns` |
 | More Prompts | `morePrompts`: whether long output pauses a screen at a time |
 | Colours | `colorCodes`: the caller's own colour for each of `\|C1`–`\|C7`, picked in a box with a sample of each and **R** to go back to the default |
+| Theme | `theme`: the theme the caller sees after login, picked from the themes installed under `menus/`; blank is the board's. Choosing one closes Konfig and redraws the menu in it. Shown unless the sysop turned caller choice off (see [Callers' own themes](configuration/configuration.md#callers-own-themes)) |
 
 Each change is saved as soon as the caller confirms it. The screen's header is `KONFIG.ANS` in the menu set. Keep it to 4 rows or fewer: the form starts on the row straight under it, so the stock art ends with a rule. A taller header is drawn over by the form. The art can show the caller's details with tokens like `|UH` (handle) and `|LEVEL`. Its text (setting names, help lines, values and messages) is the `konfig*` strings in `strings.json`, under **Konfig:** in `./strings`. Setting names, section titles, values and prompts are plain text in fixed-width cells: longer text is cut to fit, and colour codes are not expanded there. Help lines and messages take pipe colour codes. See [User settings](reference/menu-commands.md#user-settings) for `USERCONFIG` and the `CFG_AUTOSIG`, `CFG_PASSWORD` and `CFG_FILECOLUMNS` shortcuts.
 
@@ -979,6 +980,7 @@ These are the fields behind the User Konfig (`K`) screen; see
 
 - `hotKeys` - Hot keys: menu commands run on a single keypress. A key that could start a longer command (a multi-key command, a number on a `##` menu, or `/G`) still waits for Enter. A menu's `FORCEHOTKEY` turns this on for everyone on that menu.
 - `morePrompts` - Whether long output pauses a screen at a time with the More prompt (`morePrompt` in `strings.json`): **Y**, Enter or Space shows one more screen, **C** the rest without stopping, **N** or **Q** stops. Left out of the record, it is on, which is how every existing account starts; `false` means the output runs straight through. It covers the text pager, the user list, file search, file newscan and the rumors list. The text pager keeps its own prompt, `fileMorePrompt`.
+- `theme` - The theme the caller chose in User Konfig: a directory name under `menus/`. Blank (and left out) means the board's `theme.name`. A theme that is no longer installed is ignored, and the caller sees the board's, until it is back; see [Callers' own themes](configuration/configuration.md#callers-own-themes).
 - `customPrompt` - The caller's own menu prompt, up to 80 characters on one line. Blank means the menu's own. On a menu with `USEPROMPT` set it takes the place of `PROMPT1` (or of the default prompt, `defPrompt`, on a menu with no prompts of its own); the menu's `PROMPT2` is still shown after it. Screens that draw their own prompt, such as the generated door menu, the sponsor menu and the Twit List editor, keep theirs. Because the caller writes it, it keeps only colour codes, the same set as everywhere else (`|00`-`|15`, `|23`, `|B0`-`|B15`), and the session placeholders (`|UH`, `|MN`, `|TL`, `|CAN` and the rest); every other code, `%%file%%` include, AT-code such as `@RR@`, and `|{...|}` group prints as written, and it is never run as a `!script` or shown as a `%file`. Control characters are removed when it is saved. It is shown, and offered in User Konfig, only to callers who pass the board's [`customPromptACS`](configuration/configuration.md#field-reference); a stored prompt stays on the record while a caller doesn't, and the sysop can clear it in `./ue`.
 - `outputMode` - Legacy field, not read by the board. The encoding that login applies is `preferredEncoding`.
 - `fileListingMode` - File listing style: `"lightbar"` or `"classic"` (empty = server default)
