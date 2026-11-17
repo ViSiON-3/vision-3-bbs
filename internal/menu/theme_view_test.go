@@ -362,3 +362,33 @@ func TestRunLeavesForANewTheme(t *testing.T) {
 		t.Error("no caller has a theme")
 	}
 }
+
+// login.json's destination is a menu of the board's theme: a caller on a
+// theme without it goes to that theme's MAIN instead of to an error on
+// every login. On the board's own theme the destination is as written.
+func TestLoginDestinationMissingFromCallersTheme(t *testing.T) {
+	env := newMenuEnv(t)
+	board := fastLoginMenuSet(t)
+	amber := filepath.Join(filepath.Dir(board), "amber")
+	if err := os.CopyFS(amber, os.DirFS(board)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(amber, "mnu", "MAIN.MNU"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env.e.MenuSetPath = board
+	env.e.SetLoginSequence([]config.LoginItem{{Command: "FASTLOGIN"}})
+
+	if _, menuName := execcovLoginSeq(env, env.caller, "4"); menuName != "MSGMENU" {
+		t.Errorf("board's theme: %q, want MSGMENU as login.json has it", menuName)
+	}
+	caller := *env.caller
+	caller.Theme = "amber"
+	env.e = env.e.ForUser(&caller)
+	if env.e.Menus().Base != amber {
+		t.Fatalf("view on %q", env.e.Menus().Base)
+	}
+	if _, menuName := execcovLoginSeq(env, &caller, "4"); menuName != "MAIN" {
+		t.Errorf("amber, which has no MSGMENU: %q, want MAIN", menuName)
+	}
+}
