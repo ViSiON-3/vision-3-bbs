@@ -327,7 +327,7 @@ func checkACSStrings(root string, add func(string, doctorSeverity, string, strin
 			continue
 		}
 		add("ACS: "+f.Source.File, doctorWarn, f.Detail(),
-			"Callers in a session are checked as usual, but every reply uploaded through the QWK API is refused. Take L and A out if those replies should go through; see docs/sysop/reference/acs.md.")
+			"Callers in a session are checked as usual, but every reply uploaded through the QWK API is refused. Take the session terms (L, A, NODE, CONN, ENC, WIDTH, IP:) out, or replace them, if those replies should go through; see docs/sysop/reference/acs.md.")
 	}
 }
 

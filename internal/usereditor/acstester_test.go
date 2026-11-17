@@ -2,6 +2,7 @@ package usereditor
 
 import (
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -163,5 +164,20 @@ func TestACSTesterCallValues(t *testing.T) {
 	m.acsTest.local = true
 	if slices.Contains(m.acsTest.order(), acsAddr) {
 		t.Error("a local call still asks for its address")
+	}
+}
+
+// The IP field takes the longest IPv6 text there is, an IPv4-mapped
+// address written out in full, without cutting off its last digit.
+func TestACSTesterLongIPv6(t *testing.T) {
+	m := acsTesterOver(t, 80, 25)
+	const long = "0000:0000:0000:0000:0000:ffff:192.0.2.10"
+	m.acsTest.inputs[acsAddr].SetValue(long)
+	s := &acs.TesterSession{}
+	if msg := m.acsTest.callValues(s); msg != "" {
+		t.Fatalf("callValues: %s", msg)
+	}
+	if want := netip.MustParseAddr(long); s.Addr != want {
+		t.Errorf("address = %s, want %s", s.Addr, want)
 	}
 }
