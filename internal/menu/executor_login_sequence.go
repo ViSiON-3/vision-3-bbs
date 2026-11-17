@@ -34,7 +34,15 @@ func (e *MenuExecutor) RunLoginSequence(s ssh.Session, terminal *term.Terminal, 
 	}
 	// Parse "GOTO:MAIN" -> "MAIN", pass through "LOGOFF" as-is
 	if strings.HasPrefix(nextAction, "GOTO:") {
-		return strings.ToUpper(strings.TrimPrefix(nextAction, "GOTO:")), nil
+		next := strings.ToUpper(strings.TrimPrefix(nextAction, "GOTO:"))
+		// login.json names menus of the board's theme. A caller on a theme
+		// of their own without that menu goes to its MAIN, as on a theme
+		// switch (SwitchTheme), rather than to an error on every login.
+		if e.parent != nil && !e.sharesTheme && next != "LOGOFF" && !e.hasMenu(next) {
+			slog.Info("login destination not in the caller's theme; going to MAIN", "node", nodeNumber, "menu", next, "theme", e.Menus().Base)
+			return "MAIN", nil
+		}
+		return next, nil
 	}
 	if nextAction == "LOGOFF" {
 		return "LOGOFF", nil
