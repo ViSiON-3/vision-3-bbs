@@ -15,7 +15,7 @@ import (
 // colour takes its place earlier, where a caller's placeholders are filled in
 // (see the menu package), so this is what a screen with no caller behind it
 // shows, and what authored ANSI art always shows.
-var ColorSlotDefaults = [7]string{"|07", "|15", "|07", "|15", "|08", "|11", "|00|B3"}
+var ColorSlotDefaults = [7]string{"|07", "|15", "|07", "|15", "|08", "|11", "|00|B6"}
 
 // ColorSlotCode returns the code |Cn for slot n (1 to 7).
 func ColorSlotCode(n int) string { return "|C" + strconv.Itoa(n) }

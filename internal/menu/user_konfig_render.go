@@ -20,9 +20,15 @@ import (
 // typed instead of being read as a colour code.
 const (
 	konfigReset      = "\x1b[0m"
-	konfigBarStyle   = "\x1b[0;30;46m"   // highlighted row
 	konfigFieldStyle = "\x1b[0;1;37;44m" // text being edited
 )
+
+// barStyle is the highlighted row's colour: the board's Bar colour slot,
+// |C7, so the form follows the board's default (or an older strings.json's
+// defColor7) like any other highlighted choice.
+func (st *konfigState) barStyle() string {
+	return konfigReset + string(ansi.ReplacePipeCodes([]byte(st.c.e.colorSlot(nil, user.ColorSlots))))
+}
 
 // pc returns the SGR sequence for pipe colour n.
 func pc(n int) string {
@@ -155,7 +161,7 @@ func (st *konfigState) itemCell(it *konfigItem, selected bool) string {
 	label := st.fit(it.label, konfigLabelWidth)
 	value := st.fit(v.text, konfigValueWidth)
 	if selected {
-		return konfigBarStyle + fmt.Sprintf("[%c] ", it.key) + label + value + konfigReset
+		return st.barStyle() + fmt.Sprintf("[%c] ", it.key) + label + value + konfigReset
 	}
 	return pc(8) + "[" + pc(15) + string(it.key) + pc(8) + "] " + pc(7) + label +
 		toneColor(v.tone) + value + konfigReset
@@ -406,7 +412,7 @@ func editFileColumns(st *konfigState) error {
 		v := st.onOffValue(on)
 		label := st.fit(fc.label(str), 14)
 		if i == sel {
-			return konfigBarStyle + st.fit(fmt.Sprintf(" [%c] %s%s", fc.key, label, v.text), inner) + konfigReset
+			return st.barStyle() + st.fit(fmt.Sprintf(" [%c] %s%s", fc.key, label, v.text), inner) + konfigReset
 		}
 		return pc(8) + " [" + pc(15) + string(fc.key) + pc(8) + "] " + pc(7) +
 			label + toneColor(v.tone) + st.fit(v.text, inner-20) + konfigReset
@@ -600,7 +606,7 @@ func editColors(st *konfigState) error {
 		sample := expand(code) + " " + st.fit(str.KonfigColorsSample, 16) + " " + konfigReset
 		head := pc(8) + fmt.Sprintf(" [%s%d%s] ", pc(15), i+1, pc(8)) + pc(7) + label
 		if i == sel {
-			head = konfigBarStyle + fmt.Sprintf(" [%d] ", i+1) + label + konfigReset
+			head = st.barStyle() + fmt.Sprintf(" [%d] ", i+1) + label + konfigReset
 		}
 		used := 5 + 10 + 2 + 18 + 9
 		return head + "  " + sample + set + konfigReset + strings.Repeat(" ", inner-used)

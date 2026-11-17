@@ -108,7 +108,7 @@ func TestColorChoiceWraps(t *testing.T) {
 	if ch.code() != "|00" {
 		t.Errorf("bg after 7 = %s", ch.code())
 	}
-	for _, c := range []string{"|07", "|14|B1", "|00|B3"} {
+	for _, c := range []string{"|07", "|14|B1", "|00|B6"} {
 		if got := colorChoiceOf(c).code(); got != c {
 			t.Errorf("round trip %s = %s", c, got)
 		}
@@ -173,5 +173,19 @@ func TestKonfigColoursBoxSwatches(t *testing.T) {
 	}
 	if !none || !shade {
 		t.Errorf("none label shown %v, black shade shown %v", none, shade)
+	}
+}
+
+// User Konfig's highlighted row is the board's Bar colour, |C7, so an older
+// strings.json's defColor7 recolours it too.
+func TestKonfigBarFollowsBarSlot(t *testing.T) {
+	e := konfigTestExecutor(t)
+	st := &konfigState{c: &cmdCtx{e: e}}
+	if got, want := st.barStyle(), konfigReset+esc(ansi.ColorSlotDefaults[6]); got != want {
+		t.Errorf("default bar = %q, want %q", got, want)
+	}
+	e.SetStrings(config.StringsConfig{LegacyColorSlots: [7]string{6: "|14|B1"}})
+	if got, want := st.barStyle(), konfigReset+esc("|14|B1"); got != want {
+		t.Errorf("legacy bar = %q, want %q", got, want)
 	}
 }

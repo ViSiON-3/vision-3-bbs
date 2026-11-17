@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringformat"
 	configtemplates "github.com/ViSiON-3/vision-3-bbs/templates/configs"
 )
@@ -624,9 +626,9 @@ func applyStringDefaults(c *StringsConfig) {
 // before the caller colour slots may still carry: DOS foreground colours,
 // which were the defaults |C1 to |C7 were meant to map to. Each one present
 // and 1-15 becomes its pipe code; the Bar slot keeps the built-in bar's
-// background (|B3), so a foreground alone doesn't turn the bar into text on
-// black. 0 is what an unset field was saved as, so it counts as not set, as
-// does anything else: "".
+// background (legacyBarBackground), so a foreground alone doesn't turn the
+// bar into text on black. 0 is what an unset field was saved as, so it
+// counts as not set, as does anything else: "".
 func legacyColorSlots(raw map[string]json.RawMessage) [7]string {
 	var out [7]string
 	for i := range out {
@@ -634,11 +636,27 @@ func legacyColorSlots(raw map[string]json.RawMessage) [7]string {
 		if v, ok := raw[fmt.Sprintf("defColor%d", i+1)]; ok && json.Unmarshal(v, &n) == nil && n >= 1 && n <= 15 {
 			out[i] = fmt.Sprintf("|%02d", n)
 			if i == 6 {
-				out[i] += "|B3"
+				out[i] += legacyBarBackground(n)
 			}
 		}
 	}
 	return out
+}
+
+// legacyBarBackground is the background a legacy Bar foreground n is drawn
+// on: the built-in Bar slot's (ansi.ColorSlotDefaults), unless n is that
+// same colour, plain or bright, and wouldn't show on it. Then it is blue, or
+// cyan when the bar itself is blue.
+func legacyBarBackground(n int) string {
+	bg, _ := ansi.PipeBackground(ansi.ColorSlotDefaults[6])
+	if ansi.ColorOrder(n) == bg {
+		if bg == 4 {
+			bg = 6
+		} else {
+			bg = 4
+		}
+	}
+	return "|B" + strconv.Itoa(bg)
 }
 
 // LegacyColorSlotsFile returns the colour slot defaults the strings.json at
