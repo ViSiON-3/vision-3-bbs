@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -36,11 +37,15 @@ func (s *toastSession) Write(p []byte) (int, error) {
 }
 
 type toastEnv struct {
-	e    *MenuExecutor
-	s    *toastSession
-	term *testterm.Term
-	sess *session.BbsSession
-	u    *user.User
+	// reads counts the key reads readKey started. A read still running
+	// after its test would read the toast timings the next test sets, so
+	// the cleanup waits for them before putting the timings back.
+	reads *sync.WaitGroup
+	e     *MenuExecutor
+	s     *toastSession
+	term  *testterm.Term
+	sess  *session.BbsSession
+	u     *user.User
 }
 
 func newToastEnv(t *testing.T) *toastEnv {
@@ -74,22 +79,26 @@ func newToastEnvWith(t *testing.T, mode ansi.OutputMode) *toastEnv {
 	SetSessionOutputMode(s, mode)
 	sess.SetToastsReady(true)
 	e.AttachToasts(s, sess)
+	reads := &sync.WaitGroup{}
 	t.Cleanup(func() {
 		resetSessionIH(s)
+		waitReads(t, reads)
 		DetachToasts(s)
 		ClearSessionOutput(s)
 		ClearSessionOutputMode(s)
 		s.tap.Close()
 	})
 	_, _ = s.Write([]byte("\x1b[2J\x1b[HFULL SCREEN\x1b[24;1HBOTTOM TEXT\x1b[5;7H"))
-	return &toastEnv{e: e, s: s, term: term, sess: sess, u: u}
+	return &toastEnv{reads: reads, e: e, s: s, term: term, sess: sess, u: u}
 }
 
 // readKey runs a key read as a screen would, returning its result on a channel.
 func (env *toastEnv) readKey() <-chan int {
 	ih := getSessionIH(env.s)
 	ch := make(chan int, 1)
+	env.reads.Add(1)
 	go func() {
+		defer env.reads.Done()
 		k, err := ih.ReadKey()
 		if err != nil {
 			k = -1
@@ -97,6 +106,19 @@ func (env *toastEnv) readKey() <-chan int {
 		ch <- k
 	}()
 	return ch
+}
+
+// waitReads waits for the key reads a test started, which end when the
+// session's input handler is reset.
+func waitReads(t *testing.T, reads *sync.WaitGroup) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() { reads.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(screenWait):
+		t.Errorf("a key read was still running %s after the test", screenWait)
+	}
 }
 
 func toastWaitFor(t *testing.T, what string, cond func() bool) {
