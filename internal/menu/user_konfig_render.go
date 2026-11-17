@@ -94,7 +94,7 @@ func (st *konfigState) renderAll() error {
 		return err
 	}
 	var b strings.Builder
-	for row := konfigHeaderRows + 1; row <= konfigLastRow; row++ {
+	for row := konfigHeaderRows + 1; row <= st.legendRow(); row++ {
 		b.WriteString(clearRow(row))
 	}
 	for _, h := range st.headings {
@@ -104,8 +104,8 @@ func (st *konfigState) renderAll() error {
 		b.WriteString(moveTo(it.row, it.col))
 		b.WriteString(st.itemCell(it, i == st.sel))
 	}
-	b.WriteString(moveTo(konfigRuleRow, 1) + pc(8) + strings.Repeat("─", 79))
-	b.WriteString(moveTo(konfigLegendRow, 2))
+	b.WriteString(moveTo(st.ruleRow(), 1) + pc(8) + strings.Repeat("─", 79))
+	b.WriteString(moveTo(st.legendRow(), 2))
 	b.WriteString(st.line(st.c.e.Strings().KonfigLegend) + konfigReset)
 	if err := st.raw(b.String()); err != nil {
 		return err
@@ -173,16 +173,16 @@ func (st *konfigState) renderItem(i int) error {
 }
 
 func (st *konfigState) renderHelp() error {
-	return st.raw(clearRow(konfigHelpRow) + moveTo(konfigHelpRow, 2) +
+	return st.raw(clearRow(st.helpRow()) + moveTo(st.helpRow(), 2) +
 		st.line("|07"+st.items[st.sel].help) + konfigReset)
 }
 
 // renderStatus shows st.status on the edit row, or clears it.
 func (st *konfigState) renderStatus() error {
 	if st.status == "" {
-		return st.raw(clearRow(konfigEditRow))
+		return st.raw(clearRow(st.editRow()))
 	}
-	return st.raw(clearRow(konfigEditRow) + moveTo(konfigEditRow, 2) + st.line(st.status+"|07"))
+	return st.raw(clearRow(st.editRow()) + moveTo(st.editRow(), 2) + st.line(st.status+"|07"))
 }
 
 // konfigLineWidth is the room on a row that starts at column 2.
@@ -258,12 +258,12 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 		width = room
 	}
 
-	if err := st.raw(clearRow(konfigEditRow) + moveTo(konfigEditRow, 2) +
+	if err := st.raw(clearRow(st.editRow()) + moveTo(st.editRow(), 2) +
 		pc(15) + label + pc(8) + ": "); err != nil {
 		return "", false, err
 	}
 	if hint != "" {
-		if err := st.pipe(moveTo(konfigEditRow, boxCol+width+1) + hint + "|07"); err != nil {
+		if err := st.pipe(moveTo(st.editRow(), boxCol+width+1) + hint + "|07"); err != nil {
 			return "", false, err
 		}
 	}
@@ -291,8 +291,8 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 		if mask {
 			shown = strings.Repeat("*", end-off)
 		}
-		return st.raw(moveTo(konfigEditRow, boxCol) + konfigFieldStyle + shown +
-			strings.Repeat(" ", width-(end-off)) + konfigReset + moveTo(konfigEditRow, boxCol+cur-off))
+		return st.raw(moveTo(st.editRow(), boxCol) + konfigFieldStyle + shown +
+			strings.Repeat(" ", width-(end-off)) + konfigReset + moveTo(st.editRow(), boxCol+cur-off))
 	}
 
 	st.showCursor(true)
@@ -367,7 +367,7 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 // readChoice shows prompt on the edit row and waits for one of keys (upper
 // case). It returns 0 for Esc, Enter or Q.
 func (st *konfigState) readChoice(prompt, keys string) (byte, error) {
-	if err := st.raw(clearRow(konfigEditRow) + moveTo(konfigEditRow, 2) + st.line(prompt+"|07")); err != nil {
+	if err := st.raw(clearRow(st.editRow()) + moveTo(st.editRow(), 2) + st.line(prompt+"|07")); err != nil {
 		return 0, err
 	}
 	for {
@@ -387,12 +387,9 @@ func (st *konfigState) readChoice(prompt, keys string) (byte, error) {
 	}
 }
 
-// File-column box geometry: drawn over the middle of the form.
-const (
-	colBoxTop   = konfigTopRow
-	colBoxLeft  = 22
-	colBoxWidth = 36 // including borders
-)
+// File-column box width, borders included. The box is centred on the
+// screen (boxAt).
+const colBoxWidth = 36
 
 // editFileColumns opens a box of switches, one per file-listing column.
 // Each switch is saved as it is flipped.
@@ -400,6 +397,7 @@ func editFileColumns(st *konfigState) error {
 	st.redraw = true
 	sel := 0
 	inner := colBoxWidth - 2
+	colBoxTop, colBoxLeft := st.boxAt(colBoxWidth, len(fileColumns)+4)
 
 	line := func(row int, s string) string {
 		return moveTo(row, colBoxLeft) + pc(9) + "│" + s + pc(9) + "│"
@@ -523,8 +521,6 @@ func colorsValue(st *konfigState) konfigValue {
 const (
 	colorBoxSwatch = 4
 	colorBoxWidth  = 16*colorBoxSwatch + 4 // including borders
-	colorBoxLeft   = (80-colorBoxWidth)/2 + 1
-	colorBoxTop    = konfigTopRow
 	colorNoBG      = -1
 	colorNoBGWidth = 4 // the "none" background label, between its brackets
 )
@@ -582,6 +578,9 @@ func editColors(st *konfigState) error {
 		names = append(names, fmt.Sprintf("C%d", len(names)+1))
 	}
 	inner := colorBoxWidth - 2
+	// Title, the slots, a blank row, the two picker rows, the hint and the
+	// bottom edge.
+	colorBoxTop, colorBoxLeft := st.boxAt(colorBoxWidth, user.ColorSlots+6)
 	sel := 0
 	ch := colorChoiceOf(st.c.e.colorSlot(st.user(), 1))
 	pick := func(i int) {

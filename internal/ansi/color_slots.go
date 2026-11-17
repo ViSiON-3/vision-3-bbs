@@ -2,6 +2,7 @@ package ansi
 
 import (
 	"strconv"
+	"strings"
 	"sync/atomic"
 )
 
@@ -22,6 +23,18 @@ var ColorSlotDefaults = [7]string{"|07", "|15", "|07", "|15", "|08", "|11", "|15
 // ColorSlotCode returns the code |Cn for slot n (1 to 7).
 func ColorSlotCode(n int) string { return "|C" + strconv.Itoa(n) }
 
+// ColorSlotExpansion is what a slot's colour, a pipe code, draws as: its
+// escape sequence, setting the background too. A colour with no background
+// of its own draws on black, so a background set by the slot before, such
+// as a prompt's, doesn't run on into the text, or the caller's typing,
+// after it.
+func ColorSlotExpansion(code string) string {
+	if !strings.Contains(code, "|B") {
+		code += "|B0"
+	}
+	return string(ReplacePipeCodes([]byte(code)))
+}
+
 // colorSlotExpansions holds what each |Cn expands to: the escape sequences
 // of the board's slot defaults.
 var colorSlotExpansions atomic.Pointer[[7]string]
@@ -37,7 +50,7 @@ func SetColorSlotDefaults(codes [7]string) {
 		if c == "" {
 			c = ColorSlotDefaults[i]
 		}
-		e[i] = string(ReplacePipeCodes([]byte(c)))
+		e[i] = ColorSlotExpansion(c)
 	}
 	colorSlotExpansions.Store(&e)
 }

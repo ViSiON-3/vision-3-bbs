@@ -1,13 +1,17 @@
 package menu
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor/testterm"
+	"golang.org/x/term"
 )
 
 // konfigThemeExecutor is a Konfig executor on a board running menus/v3,
@@ -58,30 +62,68 @@ func TestInstalledThemes(t *testing.T) {
 	}
 }
 
-// V opens the themes box, the board's marked; picking one saves it and
-// leaves Konfig at once, so the calling menu is drawn in it. The keys
-// below end without Q: had Konfig stayed open it would have run out of
-// input.
-func TestKonfigThemePicked(t *testing.T) {
+// V opens the themes box, centred on the form's 80 by 24 screen, the
+// board's theme marked as the default, and themes without a MAIN menu
+// left out.
+func TestKonfigThemeBox(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	e := konfigThemeExecutor(t, "amber", "zed", "nomain")
-	screen := runKonfigOn(t, e, um, u, "v"+keyUp+"\r")
+	screen := testterm.New(80, 24)
+	sess := &teeSession{Session: testterm.NewSession(screen, "v"+keyEsc+"q"), out: &bytes.Buffer{}}
+	t.Cleanup(func() { resetSessionIH(sess); sessionTermSizes.Delete(sess) })
+	c := &cmdCtx{e: e, s: sess, terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u,
+		nodeNumber: 1, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
+	if _, _, err := runUserKonfig(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	raw := sess.out.String()
+	// Three themes: a box of 7 rows and 36 columns, centred.
+	if !strings.Contains(raw, moveTo(9, 23)+pc(9)+"┌─") {
+		t.Errorf("box not centred at row 9, column 23")
+	}
+	for _, want := range []string{"Themes", "amber", "v3", "(default)", "zed", "Esc done"} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("box is missing %q", want)
+		}
+	}
+	if strings.Contains(raw, "nomain") {
+		t.Error("a menu set without a MAIN menu is offered")
+	}
+	if got := reloadUser(t, um).Theme; got != "" {
+		t.Errorf("Theme = %q after Esc", got)
+	}
+}
+
+// Picking a theme saves it and keeps Konfig open, redrawn in the new
+// theme straight away: its art, with the choice confirmed. Picking the
+// board's own stores none.
+func TestKonfigThemePicked(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	e := konfigThemeExecutor(t, "amber", "zed")
+	menus := filepath.Dir(e.MenuSetPath)
+	for name, art := range map[string]string{"v3": "V3-KONFIG-ART", "amber": "AMBER-KONFIG-ART"} {
+		dir := filepath.Join(menus, name, "ansi")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "KONFIG.ANS"), []byte(art+"\r\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	screen := runKonfigOn(t, e, um, u, "v"+keyUp+"\rq")
 	if got := reloadUser(t, um).Theme; got != "amber" {
 		t.Fatalf("Theme = %q, want amber", got)
 	}
 	snap := screen.Snapshot()
-	for _, want := range []string{"Themes", "amber", "(board's)", "zed", "Esc done"} {
-		if !strings.Contains(snap, want) {
-			t.Errorf("box is missing %q:\n%s", want, snap)
-		}
+	if !strings.Contains(snap, "AMBER-KONFIG-ART") || strings.Contains(snap, "V3-KONFIG-ART") {
+		t.Errorf("Konfig not redrawn in amber:\n%s", snap)
 	}
-	if strings.Contains(snap, "nomain") {
-		t.Error("a menu set without a MAIN menu is offered")
+	if !strings.Contains(snap, "[V] Theme           amber") || !strings.Contains(screen.Row(konfigEditRow), "Saved") {
+		t.Errorf("choice not shown as saved: status %q\n%s", screen.Row(konfigEditRow), snap)
 	}
 
-	// The value shows the choice; picking the board's own stores none.
-	u = reloadUser(t, um)
-	runKonfigOn(t, e, um, u, "v"+keyDown+"\r")
+	runKonfigOn(t, e, um, reloadUser(t, um), "v"+keyDown+"\rq")
 	if got := reloadUser(t, um).Theme; got != "" {
 		t.Errorf("Theme = %q after picking the board's, want none", got)
 	}
@@ -141,5 +183,78 @@ func TestKonfigThemeOff(t *testing.T) {
 	}
 	if got := reloadUser(t, um).Theme; got != "" {
 		t.Errorf("Theme = %q", got)
+	}
+}
+
+// On a taller screen the help, status and legend rows move to its foot;
+// the form stays at the top.
+func TestKonfigFooterAtTheFootOfTheScreen(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	e := konfigThemeExecutor(t)
+	screen := testterm.New(80, 40)
+	sess := testterm.NewSession(screen, "q")
+	t.Cleanup(func() { resetSessionIH(sess); sessionTermSizes.Delete(sess) })
+	c := &cmdCtx{e: e, s: sess, terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u,
+		nodeNumber: 1, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 40}
+	if _, _, err := runUserKonfig(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(screen.Row(40), "Done") {
+		t.Errorf("legend row 40 = %q", screen.Row(40))
+	}
+	if !strings.Contains(screen.Row(37), "Columns your terminal shows") {
+		t.Errorf("help row 37 = %q", screen.Row(37))
+	}
+	if !strings.Contains(screen.Row(konfigTopRow), "Terminal") {
+		t.Errorf("form's first row %d = %q", konfigTopRow, screen.Row(konfigTopRow))
+	}
+}
+
+// A screen height changed in Konfig moves the footer at once: the form is
+// drawn again on the new size.
+func TestKonfigFooterFollowsAHeightChange(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	e := konfigThemeExecutor(t)
+	screen := testterm.New(80, 40)
+	sess := testterm.NewSession(screen, "b"+keyClear+"40\rq")
+	t.Cleanup(func() { resetSessionIH(sess); sessionTermSizes.Delete(sess) })
+	c := &cmdCtx{e: e, s: sess, terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u,
+		nodeNumber: 1, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
+	if _, _, err := runUserKonfig(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := reloadUser(t, um).ScreenHeight; got != 40 {
+		t.Fatalf("ScreenHeight = %d", got)
+	}
+	if !strings.Contains(screen.Row(40), "Done") {
+		t.Errorf("legend row 40 = %q after the change", screen.Row(40))
+	}
+	if strings.Contains(screen.Row(24), "Done") {
+		t.Errorf("old legend left on row 24: %q", screen.Row(24))
+	}
+}
+
+// After a theme change, Header Style is named from the new theme's
+// MSGHDR.BAR, not the one read before.
+func TestKonfigThemeChangeRenamesHeaderStyle(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	e := konfigThemeExecutor(t, "amber")
+	menus := filepath.Dir(e.MenuSetPath)
+	for name, label := range map[string]string{"v3": "Classic", "amber": "Ambered"} {
+		dir := filepath.Join(menus, name, "bar")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "MSGHDR.BAR"), []byte("0,0,31,7,1,1,"+label+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	u.MsgHdr = 1
+	if err := um.UpdateUser(u); err != nil {
+		t.Fatal(err)
+	}
+	screen := runKonfigOn(t, e, um, reloadUser(t, um), "v"+keyUp+"\rq")
+	if snap := screen.Snapshot(); !strings.Contains(snap, "Ambered") || strings.Contains(snap, "Classic") {
+		t.Errorf("Header Style not renamed from amber's MSGHDR.BAR:\n%s", snap)
 	}
 }

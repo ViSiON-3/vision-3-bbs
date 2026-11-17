@@ -95,7 +95,10 @@ func TestStockStringsUseColorSlots(t *testing.T) {
 			t.Errorf("%s: %q uses no colour slot", key, v)
 			continue
 		}
-		if got, want := string(e.renderPromptText(v, ph, 0, 0, 1)), string(ansi.ReplacePipeCodes([]byte(old))); got != want {
+		// Each slot also sets a black background where its colour has none,
+		// so a slot's background can't run on: the same on a black screen.
+		got := strings.ReplaceAll(string(e.renderPromptText(v, ph, 0, 0, 1)), "\x1b[40m", "")
+		if want := string(ansi.ReplacePipeCodes([]byte(old))); got != want {
 			t.Errorf("%s draws %q with the default colours, want %q as before", key, got, want)
 		}
 		if strings.Contains(v, "|C1") && !strings.Contains(string(e.renderPromptText(v, mph, 0, 0, 1)), esc("|13")) {
@@ -126,11 +129,14 @@ func TestStockMenuPromptsUseColorSlots(t *testing.T) {
 		}
 		at := time.Date(2026, 11, 16, 9, 30, 0, 0, time.UTC)
 		ph := e.sessionPlaceholders(nil, plain, nil, 1, p.menu, at, "", false)
-		if got, want := string(e.renderPromptText(v, ph, 0, 0, 1)), string(e.renderPromptText(p.old, ph, 0, 0, 1)); got != want {
+		// The same on a black screen; each slot also sets black where its
+		// colour has no background, so a background can't run on.
+		got := strings.ReplaceAll(string(e.renderPromptText(v, ph, 0, 0, 1)), "\x1b[40m", "")
+		if want := string(e.renderPromptText(p.old, ph, 0, 0, 1)); got != want {
 			t.Errorf("%s %s draws %q, want %q as before", p.menu, p.key, got, want)
 		}
 		mph := e.sessionPlaceholders(nil, mine, nil, 1, p.menu, at, "", false)
-		if got := string(e.renderPromptText(v, mph, 0, 0, 1)); !strings.HasSuffix(got, esc("|13")+" ") {
+		if got := string(e.renderPromptText(v, mph, 0, 0, 1)); !strings.HasSuffix(got, slotEsc("|13")+" ") {
 			t.Errorf("%s %s: the caller's input colour isn't last: %q", p.menu, p.key, got)
 		}
 	}
@@ -153,5 +159,29 @@ func TestConvertedStringFallbacksMatchTemplate(t *testing.T) {
 				t.Errorf("%s[%s] = %q, want the shipped %q", name, key, v, shipped[key])
 			}
 		}
+	}
+}
+
+// MAIN's prompts are written with the caller colour codes, like the other
+// stock menus', so a caller's colours apply there too; what they type
+// after PROMPT2 is in their input colour.
+func TestStockMainPromptUsesColorSlots(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "menus", "v3", "mnu", "MAIN.MNU"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatal(err)
+	}
+	fixed := regexp.MustCompile(`\|[0-9]{2}`)
+	for _, key := range []string{"PROMPT1", "PROMPT2"} {
+		v, _ := m[key].(string)
+		if !slotCodeRe.MatchString(v) || fixed.MatchString(v) {
+			t.Errorf("MAIN %s = %q, want caller colour codes only", key, v)
+		}
+	}
+	if v, _ := m["PROMPT2"].(string); !strings.HasSuffix(v, "|C2 ") {
+		t.Errorf("MAIN PROMPT2 = %q, want it to end in the input colour", v)
 	}
 }

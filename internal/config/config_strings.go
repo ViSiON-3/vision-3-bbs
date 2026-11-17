@@ -462,7 +462,7 @@ var StringFallbacks = map[string]string{
 	"konfigThemeHelp":           "How the board looks to you: menus, screens and colours. Applies at once.",
 	"konfigThemeTitle":          "Themes",
 	"konfigThemeHint":           "Arrows, Enter picks, Esc done",
-	"konfigThemeBoardTag":       "(board's)",
+	"konfigThemeBoardTag":       "(default)",
 	"konfigThemeOnlyOne":        "|07This board has one theme, |15%s|07, so there's nothing else to choose.",
 	"konfigRangeError":          "|12%s must be a number from %d to %d.|07",
 	"konfigRangeHint":           "|08(%d-%d)",

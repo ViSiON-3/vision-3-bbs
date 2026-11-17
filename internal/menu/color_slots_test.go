@@ -16,6 +16,10 @@ import (
 // esc is what a pipe code draws.
 func esc(code string) string { return string(ansi.ReplacePipeCodes([]byte(code))) }
 
+// slotEsc is what a caller colour slot holding code draws: its colours,
+// with a black background where code sets none.
+func slotEsc(code string) string { return ansi.ColorSlotExpansion(code) }
+
 // A slot is the caller's colour, else the board's from an older strings.json,
 // else the built-in one; a caller who chose black gets black.
 func TestColorSlotResolution(t *testing.T) {
@@ -42,11 +46,11 @@ func TestColorSlotsInPromptsAndTemplates(t *testing.T) {
 	u.SetColorCode(2, "|13")
 
 	ph := e.sessionPlaceholders(nil, u, nil, 1, "MAIN", time.Now(), "", false)
-	if got := string(e.renderPromptText("|C2>|C3x", ph, 0, 0, 1)); got != esc("|13")+">"+esc("|07")+"x" {
+	if got := string(e.renderPromptText("|C2>|C3x", ph, 0, 0, 1)); got != slotEsc("|13")+">"+slotEsc("|07")+"x" {
 		t.Errorf("prompt = %q", got)
 	}
 	// Templates are menu-set art: the board's defaults, not the caller's.
-	if got := string(ansi.ReplacePipeCodes(e.applyCommonTemplateTokens([]byte("|C2>|C3x"), u, 1))); got != esc("|15")+">"+esc("|07")+"x" {
+	if got := string(ansi.ReplacePipeCodes(e.applyCommonTemplateTokens([]byte("|C2>|C3x"), u, 1))); got != slotEsc("|15")+">"+slotEsc("|07")+"x" {
 		t.Errorf("template = %q, want the board's defaults", got)
 	}
 }
@@ -80,16 +84,6 @@ func TestKonfigColoursBox(t *testing.T) {
 	}
 	if v := konfigFieldText(screen, konfigTestStrings(t).KonfigColorsLabel); !strings.HasPrefix(v, konfigTestStrings(t).KonfigColorsCustom) {
 		t.Errorf("Colours value = %q", v)
-	}
-}
-
-func TestKonfigColoursBoxFits(t *testing.T) {
-	bottom := colorBoxTop + 1 + user.ColorSlots + 1 + 2 + 1
-	if bottom >= konfigRuleRow {
-		t.Errorf("box ends on row %d, over the rule on row %d", bottom, konfigRuleRow)
-	}
-	if colorBoxLeft < 1 || colorBoxLeft+colorBoxWidth-1 > 80 {
-		t.Errorf("box spans columns %d-%d", colorBoxLeft, colorBoxLeft+colorBoxWidth-1)
 	}
 }
 
@@ -148,7 +142,7 @@ func TestColorSlotDefaultsFollowTheme(t *testing.T) {
 			t.Errorf("slot %d = %q, want %q", n, got, want)
 		}
 	}
-	if got := string(ansi.ReplacePipeCodes([]byte("|C1x|C2"))); got != esc("|14")+"x"+esc("|13") {
+	if got := string(ansi.ReplacePipeCodes([]byte("|C1x|C2"))); got != slotEsc("|14")+"x"+slotEsc("|13") {
 		t.Errorf("no caller: got %q", got)
 	}
 	// A reload of strings.json keeps the theme's colours.

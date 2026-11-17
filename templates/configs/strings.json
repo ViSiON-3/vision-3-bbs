@@ -350,7 +350,7 @@
   "konfigSectionPersonal": "Personal",
   "konfigSectionTerminal": "Terminal",
   "konfigStyleFormat": "Style %d",
-  "konfigThemeBoardTag": "(board's)",
+  "konfigThemeBoardTag": "(default)",
   "konfigThemeHelp": "How the board looks to you: menus, screens and colours. Applies at once.",
   "konfigThemeHint": "Arrows, Enter picks, Esc done",
   "konfigThemeLabel": "Theme",

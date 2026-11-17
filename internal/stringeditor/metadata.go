@@ -787,7 +787,7 @@ func stringCatalog() []StringEntry {
 		{Label: "Konfig: Theme Help", Key: "konfigThemeHelp", Description: "Help line shown while Theme is highlighted"},
 		{Label: "Konfig: Themes Box Title", Key: "konfigThemeTitle", Description: "Title of the themes box. Plain text, no colour codes"},
 		{Label: "Konfig: Themes Box Hint", Key: "konfigThemeHint", Description: "Hint at the foot of the themes box. Plain text, no colour codes"},
-		{Label: "Konfig: Board's Theme Tag", Key: "konfigThemeBoardTag", Description: "Shown beside the board's own theme in the themes box. Plain text"},
+		{Label: "Konfig: Board's Theme Tag", Key: "konfigThemeBoardTag", Description: "Shown beside the board's own theme, the default, in the themes box. Plain text"},
 		{Label: "Konfig: Only One Theme", Key: "konfigThemeOnlyOne", Description: "Shown when Theme is chosen and the board has only one theme (%s=its name)"},
 		{Label: "Konfig: Colours Custom", Key: "konfigColorsCustom", Description: "Colours value when the caller has set some. Plain text"},
 		{Label: "Konfig: Colours Box Title", Key: "konfigColorsTitle", Description: "Title of the colours box. Plain text, no colour codes"},

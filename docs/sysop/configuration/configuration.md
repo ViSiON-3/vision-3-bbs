@@ -1387,7 +1387,7 @@ is the default, for a caller who hasn't picked one.
   menus, art, templates, BAR files and `theme.json` colours, and the message
   editor and V3 scripts they run. Everything before login (the login and new
   user screens, the matrix) is always the board's theme. Choosing a theme
-  in Konfig closes Konfig and draws the menu in the new theme straight away.
+  in Konfig redraws Konfig in it straight away, and every screen after.
   If the new theme doesn't have the menu the caller was on, they go to its
   `MAIN`.
 - **Board colours stay the board's.** `theme.colors` overrides the board's
