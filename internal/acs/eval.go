@@ -3,6 +3,7 @@ package acs
 import (
 	"log/slog"
 	"net"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -21,7 +22,39 @@ type Session interface {
 	HasPTY() bool
 	// ChatCredit is the sysop chat time credited back to the call, for T.
 	ChatCredit() time.Duration
+	// Node is the node the call is on, for NODE.
+	Node() int
+	// Transport is how the caller connected, for CONN: TransportSSH,
+	// TransportTelnet or TransportLocal.
+	Transport() string
+	// Encoding is the output encoding, for ENC: EncodingUTF8 or
+	// EncodingCP437.
+	Encoding() string
+	// Width is the width the menus render at, for WIDTH: the one in use,
+	// not the user's saved preference.
+	Width() int
 }
+
+// The transports CONN tells apart. TransportLocal is a local connection,
+// a pipe or socket; L also counts a loopback address as local.
+const (
+	TransportSSH    = "ssh"
+	TransportTelnet = "telnet"
+	TransportLocal  = "local"
+)
+
+// The output encodings ENC tells apart.
+const (
+	EncodingUTF8  = "utf8"
+	EncodingCP437 = "cp437"
+)
+
+// Transports and Encodings are the words CONN and ENC take, in the order
+// they are offered. The parser and both ACS testers read these lists.
+var (
+	Transports = []string{TransportSSH, TransportTelnet, TransportLocal}
+	Encodings  = []string{EncodingUTF8, EncodingCP437}
+)
 
 // Context is what an expression is evaluated against.
 type Context struct {
@@ -29,16 +62,18 @@ type Context struct {
 	// for a nil User; Eval needs a non-nil one.
 	User *user.User
 	// Session is the caller's connection, nil when there is none: a string
-	// with L or A in it then fails as a whole, and T counts the call as just
-	// started, with no chat credit.
+	// with a session term in it (L, A, NODE, CONN, ENC, WIDTH, IP) then fails
+	// as a whole, and T counts the call as just started, with no chat
+	// credit.
 	Session Session
 	// Start is when the call began, for T.
 	Start time.Time
-	// Now, when set, is the time H, W, Y and T use; zero means the current
-	// time, read when each term is evaluated.
+	// Now, when set, is the time the clock terms (H, W, Y, MONTH, DATE) and
+	// T use; zero means the current time, read once for the whole check.
 	Now time.Time
-	// Location is the board's timezone (its timezone setting), which AGE counts
-	// calendar days in; nil is the server's local zone.
+	// Location is the board's timezone (its timezone setting), which the
+	// clock terms read the time in and AGE counts calendar days in; nil is
+	// the server's local zone.
 	Location *time.Location
 	// SysOpLevel and CoSysOpLevel are the thresholds for SYSOP and COSYSOP
 	// and the level from which T always passes (sysOpLevel and coSysOpLevel
@@ -85,11 +120,12 @@ func (c Context) permission(p perm.Permission) perm.Decision {
 	return perm.Check(c.User, p, at, perm.Levels{SysOp: c.SysOpLevel, CoSysOp: c.CoSysOpLevel}, c.roles())
 }
 
-// withRoles is ctx with its roles fixed for one evaluation: a reload of
-// roles.json part way through can't make one term see the old roles and
-// another the new.
-func (c Context) withRoles() Context {
+// fixed is ctx with its roles and time fixed for one evaluation: a reload
+// of roles.json part way through can't make one term see the old roles and
+// another the new, and every clock term reads the same moment.
+func (c Context) fixed() Context {
 	c.Roles = c.roles()
+	c.Now = c.now()
 	return c
 }
 
@@ -113,6 +149,9 @@ func (c Context) now() time.Time {
 	}
 	return c.Now
 }
+
+// clock is the time the clock terms read: now, on the board's clock.
+func (c Context) clock() time.Time { return c.now().In(c.location()) }
 
 // Check evaluates the ACS string s against ctx: true when it passes. An empty
 // string and a lone "*" pass for everyone, including a nil User; anything
@@ -192,7 +231,7 @@ func (e *Expr) Eval(ctx Context) bool {
 	if e.Root == nil {
 		return false
 	}
-	result, lacks := evalNode(e.Root, ctx.withRoles())
+	result, lacks := evalNode(e.Root, ctx.fixed())
 	return result && !lacks
 }
 
@@ -223,13 +262,13 @@ func evalNode(n *Node, ctx Context) (result, lacks bool) {
 }
 
 // lacking reports whether t needs context ctx doesn't have: a session for
-// L and A (NoSession), a sign-up date on the user's record for AGE
+// the session terms (NoSession), a sign-up date on the user's record for AGE
 // (Unavailable), or for ROLE and GROUP a role or group the board defines
 // (Undefined). The last is what keeps a misspelt name from passing through
 // '!' or another branch of '|'.
 func lacking(t parsedTerm, ctx Context) (Reason, bool) {
 	switch {
-	case (t.code == "L" || t.code == "A") && ctx.Session == nil:
+	case sessionCode(t.code) && ctx.Session == nil:
 		return NoSession, true
 	case t.code == "AGE" && ctx.User.CreatedAt.IsZero():
 		return Unavailable, true
@@ -255,7 +294,7 @@ func EvalTerm(condition string, ctx Context) bool {
 		slog.Warn("invalid ACS term", "condition", condition, "problem", problem)
 		return false
 	}
-	ctx = ctx.withRoles()
+	ctx = ctx.fixed()
 	if _, missing := lacking(t, ctx); missing {
 		return false
 	}
@@ -273,10 +312,7 @@ func evalTerm(t parsedTerm, ctx Context) bool {
 	case "COSYSOP":
 		return u.AccessLevel >= ctx.CoSysOpLevel
 	case "L": // Local connection; lacking has checked there is a session
-		network := s.RemoteAddr().Network()
-		addr := s.RemoteAddr().String()
-		isLoopback := strings.HasPrefix(addr, "127.") || strings.HasPrefix(addr, "[::1]")
-		return network == "pipe" || network == "unix" || isLoopback
+		return isLocalAddr(s.RemoteAddr())
 	case "A": // Session has a terminal: every telnet session, SSH with a PTY. Not an ANSI or encoding check.
 		return s.HasPTY()
 	case "F": // Flag is set
@@ -299,7 +335,15 @@ func evalTerm(t parsedTerm, ctx Context) bool {
 		from, to, _ := strings.Cut(t.value, "/")
 		start, _ := time.Parse("15:04", from) // parseTerm checked both
 		end, _ := time.Parse("15:04", to)
-		return InTimeRange(ctx.now(), start, end)
+		return InTimeRange(ctx.clock(), start, end)
+	case "CONN": // How the caller connected; lacking has checked there is a session
+		return s.Transport() == t.value
+	case "ENC": // The output encoding
+		return s.Encoding() == t.value
+	case "IP": // The source address is in the prefix
+		return inPrefix(s.RemoteAddr(), t.prefix)
+	case "DATE": // Within a calendar range mm-dd/mm-dd
+		return inDateRange(ctx.clock(), t.dateFrom, t.dateTo)
 	}
 	return t.compare(measure(t, ctx))
 }
@@ -316,4 +360,74 @@ func InTimeRange(now, start, end time.Time) bool {
 		return m >= from || m <= to
 	}
 	return m >= from && m <= to
+}
+
+// isLocalAddr reports whether addr is a local connection: a pipe, a Unix
+// socket or a loopback address. It reads the address as IP does, so a
+// loopback address mapped into IPv6 counts.
+func isLocalAddr(addr net.Addr) bool {
+	if addr == nil {
+		return false
+	}
+	if n := addr.Network(); n == "pipe" || n == "unix" {
+		return true
+	}
+	ip, ok := addrIP(addr)
+	return ok && ip.IsLoopback()
+}
+
+// inPrefix reports whether addr's IP is in prefix, which parseTerm read.
+// An IPv4 address mapped into IPv6 (::ffff:10.0.0.1) counts as the IPv4
+// address, so it matches 10.0.0.0/8.
+func inPrefix(addr net.Addr, prefix netip.Prefix) bool {
+	ip, ok := addrIP(addr)
+	return ok && prefix.Contains(ip)
+}
+
+// addrIP is addr's IP, unmapped, or false for no address or one without an
+// IP (a pipe).
+func addrIP(addr net.Addr) (netip.Addr, bool) {
+	var ip net.IP
+	switch a := addr.(type) {
+	case nil:
+		return netip.Addr{}, false
+	case *net.TCPAddr:
+		if a == nil {
+			return netip.Addr{}, false
+		}
+		ip = a.IP
+	case *net.UDPAddr:
+		if a == nil {
+			return netip.Addr{}, false
+		}
+		ip = a.IP
+	case *net.IPAddr:
+		if a == nil {
+			return netip.Addr{}, false
+		}
+		ip = a.IP
+	default:
+		ap, err := netip.ParseAddrPort(addr.String())
+		if err != nil {
+			return netip.Addr{}, false
+		}
+		return ap.Addr().Unmap(), true
+	}
+	a, ok := netip.AddrFromSlice(ip)
+	return a.Unmap(), ok
+}
+
+// monthDay is a date's month and day as one number, month*100+day, so
+// dates compare in calendar order.
+func monthDay(t time.Time) int { return int(t.Month())*100 + t.Day() }
+
+// inDateRange reports whether now's date falls within from..to, monthDay
+// numbers, both days included. A span whose end is before its start runs
+// over the new year.
+func inDateRange(now time.Time, from, to int) bool {
+	d := monthDay(now)
+	if to < from {
+		return d >= from || d <= to
+	}
+	return d >= from && d <= to
 }
