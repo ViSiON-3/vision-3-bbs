@@ -98,8 +98,16 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 	defer resetSessionIH(s)
 	defer clearSessionIdleTimeout(s)
 	defer sessionDeadlines.Delete(s)
-	defer sessionTermSizes.Delete(s)
-	defer sessionListModes.Delete(s)
+	// handoff is set when Run returns only so the session loop can carry
+	// on with another executor (a theme switch): what the session chose
+	// stays for the Run that follows.
+	handoff := false
+	defer func() {
+		if !handoff {
+			sessionTermSizes.Delete(s)
+			sessionListModes.Delete(s)
+		}
+	}()
 
 	if st.currentUser != nil {
 		slog.Debug("running menu for user", "handle", st.currentUser.Handle, "level", st.currentUser.AccessLevel)
@@ -134,14 +142,6 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 			return "LOGOFF", nil, nil
 		}
 
-		// A caller who chose another theme in Konfig, or whose choice the
-		// sysop just turned off, leaves for the session loop to show this
-		// menu on the executor for the theme now chosen (SwitchTheme). Not
-		// before login, when the theme is always the board's.
-		if loggedIn && st.currentUser != nil && e.CallerTheme(st.currentUser) != e.forTheme {
-			return st.currentMenuName, st.currentUser, nil
-		}
-
 		// Re-arm the time limit on every menu, so a limit the sysop changed
 		// while the caller is online (or a promotion to CoSysOp) applies from
 		// the next screen, and end the call here if it has run out.
@@ -158,6 +158,18 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		if w, h, ok := takeSessionTermSize(s); ok {
 			st.termWidth, st.termHeight = w, h
 			SetACSCall(s, nodeNumber, w)
+		}
+
+		// A caller who chose another theme in Konfig, or whose choice the
+		// sysop just turned off, leaves for the session loop to show this
+		// menu on the executor for the theme now chosen (SwitchTheme). Not
+		// before login, when the theme is always the board's. The screen
+		// size goes back as a pending change, since the session loop starts
+		// the next Run with the size it had at login.
+		if loggedIn && st.currentUser != nil && e.CallerTheme(st.currentUser) != e.forTheme {
+			setSessionTermSize(s, st.termWidth, st.termHeight)
+			handoff = true
+			return st.currentMenuName, st.currentUser, nil
 		}
 
 		st.userInput = "" // Reset per iteration (Keep this one)

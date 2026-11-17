@@ -1796,8 +1796,7 @@ func sessionHandler(s ssh.Session) {
 		// A theme the caller chose in Konfig applies from the next screen,
 		// as does the sysop turning the choice off. Run has returned to
 		// show this menu again on the right executor. The record is read
-		// afresh, as Run reads it, since authenticatedUser is the copy taken
-		// at login.
+		// afresh, as Run reads it, for a choice saved since.
 		if fresh, ok := userMgr.RefreshSessionUser(authenticatedUser); ok {
 			if next, menuName, switched := sessExec.SwitchTheme(fresh, currentMenuName); switched {
 				slog.Info("caller's theme changed", "node", nodeID, "user", fresh.Handle, "theme", next.Menus().Base)
@@ -1805,7 +1804,14 @@ func sessionHandler(s ssh.Session) {
 			}
 		}
 
-		nextMenuName, _, execErr := sessExec.Run(s, terminal, userMgr, authenticatedUser, currentMenuName, int(nodeID), sessionStartTime, autoRunLog, effectiveMode, "", int(termWidth.Load()), int(termHeight.Load()))
+		nextMenuName, runUser, execErr := sessExec.Run(s, terminal, userMgr, authenticatedUser, currentMenuName, int(nodeID), sessionStartTime, autoRunLog, effectiveMode, "", int(termWidth.Load()), int(termHeight.Load()))
+		// The session's record as Run left it: areas chosen, scan pointers
+		// and the rest. Run returns mid-call for a theme switch, and the
+		// next Run must carry on from it, not from the copy taken at login.
+		// nil is a deleted account, which Run sends to LOGOFF.
+		if runUser != nil {
+			authenticatedUser = runUser
+		}
 		if execErr != nil {
 			slog.Error("error executing menu", "node", nodeID, "menu", currentMenuName, "error", execErr)
 			_, _ = fmt.Fprintf(terminal, "\r\nSystem error during menu execution: %v\r\n", execErr) // best-effort display

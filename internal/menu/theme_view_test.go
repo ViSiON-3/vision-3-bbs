@@ -9,10 +9,12 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/types"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -124,6 +126,19 @@ func TestForUserViewOnTheCallersTheme(t *testing.T) {
 	}
 	if got := view.Theme().Color(config.RoleLightbarSelected); got != 30 {
 		t.Errorf("after the board's reload the view's selected = %d, want 30", got)
+	}
+	// A slot amber leaves unset takes an older strings.json's defColorN,
+	// and a strings reload reaches it.
+	board.SetStrings(config.StringsConfig{LegacyColorSlots: [7]string{1: "|02"}})
+	if got := view.colorSlot(nil, 2); got != "|02" {
+		t.Errorf("view's |C2 = %q, want the legacy |02", got)
+	}
+	board.SetStrings(config.StringsConfig{LegacyColorSlots: [7]string{1: "|04"}})
+	if got := view.colorSlot(nil, 2); got != "|04" {
+		t.Errorf("after the strings reload the view's |C2 = %q, want |04", got)
+	}
+	if got := view.colorSlot(nil, 1); got != "|12" {
+		t.Errorf("view's |C1 = %q, want amber's own |12 still", got)
 	}
 
 	ctx := withSessionTheme(view, editor.EditorContext{})
@@ -312,6 +327,33 @@ func TestRunLeavesForANewTheme(t *testing.T) {
 	r = execcovRun(env, execcovCall{user: caller, start: menuName, input: "q\r"})
 	if r.err != nil || r.next != "LOGOFF" || !r.has("AMBER-MAIN") {
 		t.Errorf("amber run: next %q, err %v:\n%s", r.next, r.err, r.text())
+	}
+
+	// What the session chose stays for the Run after a switch: a screen
+	// size changed in Konfig, and the message list mode.
+	ts := newTestSession("")
+	SetSessionOutputMode(ts, env.outputMode)
+	t.Cleanup(func() { ClearSessionOutputMode(ts); sessionTermSizes.Delete(ts); sessionListModes.Delete(ts) })
+	setSessionTermSize(ts, 100, 30)
+	sessionListModes.Store(ts, true)
+	caller.Theme = ""
+	if err := env.um.UpdateUser(caller); err != nil {
+		t.Fatal(err)
+	}
+	next, menuName, _ = env.e.SwitchTheme(caller, "MAIN")
+	caller.Theme = "amber"
+	if err := env.um.UpdateUser(caller); err != nil {
+		t.Fatal(err)
+	}
+	action, _, err := next.Run(ts, newTestTerminal(ts), env.um, caller, menuName, 1, time.Now(), types.AutoRunTracker{}, env.outputMode, "", 80, 24)
+	if err != nil || action != "MAIN" {
+		t.Fatalf("handoff run: %q, %v", action, err)
+	}
+	if w, h, ok := takeSessionTermSize(ts); !ok || w != 100 || h != 30 {
+		t.Errorf("screen size after the handoff: %d x %d, %v; want 100 x 30 still pending", w, h, ok)
+	}
+	if _, ok := sessionListModes.Load(ts); !ok {
+		t.Error("the message list mode was dropped at the handoff")
 	}
 
 	// Before login the theme is always the board's.

@@ -2,6 +2,7 @@ package menu
 
 import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -45,11 +46,37 @@ func (e *MenuExecutor) colorSlot(u *user.User, n int) string {
 		if e.sharesTheme {
 			e = e.parent
 		}
+		if e.parent != nil {
+			return e.viewSlotDefaults()[n-1]
+		}
 		if d := e.slotDefaults.Load(); d != nil {
 			return d[n-1]
 		}
 	}
 	return ansi.ColorSlotDefaults[n-1]
+}
+
+// viewSlotCache is a caller's view's slot defaults and the strings and
+// theme snapshots they were worked out from.
+type viewSlotCache struct {
+	strings *config.StringsConfig
+	theme   *config.ThemeConfig
+	codes   [7]string
+}
+
+// viewSlotDefaults is a caller's view's default for each slot: its theme's
+// caller colour roles over the board's current strings.json legacy
+// defaults. The board rebuilds its own when strings.json reloads, but
+// can't reach its views, so a view works them out again whenever the
+// strings or theme it reads are newer snapshots than the ones it used.
+func (e *MenuExecutor) viewSlotDefaults() [7]string {
+	s, th := e.Strings(), e.Theme()
+	if c := e.viewSlots.Load(); c != nil && c.strings == s && c.theme == th {
+		return c.codes
+	}
+	c := &viewSlotCache{strings: s, theme: th, codes: th.ColorSlotCodes(s.LegacyColorSlots)}
+	e.viewSlots.Store(c)
+	return c.codes
 }
 
 // addColorSlots puts |C1 to |C7 into placeholders as u's colours, so they

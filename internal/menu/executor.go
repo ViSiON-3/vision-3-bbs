@@ -136,6 +136,7 @@ type MenuExecutor struct {
 	parent      *MenuExecutor
 	forTheme    string
 	sharesTheme bool
+	viewSlots   atomic.Pointer[viewSlotCache] // a view's slot defaults; see viewSlotDefaults
 }
 
 // shared is the executor that holds the board's hot-reloadable config:
