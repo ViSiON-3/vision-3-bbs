@@ -31,9 +31,9 @@ func (f *stringHookFixture) showPrompt(t *testing.T, menu *MenuRecord, runLoop b
 	return f.term()
 }
 
-// On a USEPROMPT menu a caller's own prompt takes PROMPT1's place and PROMPT2
-// still follows; the board's customPromptACS decides whose is shown.
-func TestCustomPromptReplacesPrompt1(t *testing.T) {
+// On a USEPROMPT menu a caller's own prompt is the whole prompt, in place of
+// PROMPT1 and PROMPT2; the board's customPromptACS decides whose is shown.
+func TestCustomPromptIsTheWholePrompt(t *testing.T) {
 	menu := &MenuRecord{UsePrompt: true, Prompt1: "[P1]", Prompt2: "[P2]"}
 	for _, tc := range []struct {
 		name    string
@@ -57,11 +57,8 @@ func TestCustomPromptReplacesPrompt1(t *testing.T) {
 			mine := strings.Index(out, "Mine Neo>")
 			p2 := strings.Index(out, "[P2]")
 			if tc.mine {
-				if mine < 0 || strings.Contains(out, "[P1]") {
-					t.Errorf("want the caller's prompt in place of PROMPT1: %q", out)
-				}
-				if p2 < mine {
-					t.Errorf("want PROMPT2 after the caller's prompt: %q", out)
+				if mine < 0 || strings.Contains(out, "[P1]") || p2 >= 0 {
+					t.Errorf("want the caller's prompt in place of both menu prompts: %q", out)
 				}
 				return
 			}
@@ -69,6 +66,26 @@ func TestCustomPromptReplacesPrompt1(t *testing.T) {
 				t.Errorf("want the menu's own prompts: %q", out)
 			}
 		})
+	}
+}
+
+// A custom prompt without colours of its own is drawn in the caller's
+// prompt colour, and what they type after it, a space on, in their input
+// colour; colours in the text still win.
+func TestCustomPromptTakesTheCallersColours(t *testing.T) {
+	menu := &MenuRecord{UsePrompt: true, Prompt1: "[P1]", Prompt2: "[P2]"}
+	f := newStringHookFixture(t, "")
+	f.bbs.User.SetColorCode(1, "|13")
+	f.bbs.User.SetColorCode(2, "|12")
+	f.bbs.User.CustomPrompt = "CHOOSE:"
+	out := f.showPrompt(t, menu, true)
+	if want := slotEsc("|13") + "CHOOSE:" + slotEsc("|12") + " "; !strings.Contains(out, want) {
+		t.Errorf("output %q\nwant %q", out, want)
+	}
+	f.bbs.User.CustomPrompt = "|11Pick"
+	out = f.showPrompt(t, menu, true)
+	if !strings.Contains(out, esc("|11")+"Pick"+slotEsc("|12")+" ") {
+		t.Errorf("a colour in the text should win: %q", out)
 	}
 }
 

@@ -333,8 +333,8 @@ func (e *MenuExecutor) displayMenuPrompt(s ssh.Session, terminal *term.Terminal,
 // is the prompt kind a script in place of the default prompt is given.
 func (e *MenuExecutor) displayPromptKind(s ssh.Session, terminal *term.Terminal, menu *MenuRecord, currentUser *user.User, userManager *user.UserMgr, nodeNumber int, currentMenuName string, sessionStartTime time.Time, outputMode ansi.OutputMode, currentAreaName string, kind string) (promptAnswer, error) {
 	var none promptAnswer
-	// In the run loop, a caller's custom prompt takes PROMPT1's place;
-	// PROMPT2 still follows it. It is rendered on its own (see
+	// In the run loop, a caller's custom prompt is the whole prompt, in
+	// place of PROMPT1 and PROMPT2. It is rendered on its own (see
 	// renderCustomPrompt), so it never reaches the default prompt's hooks.
 	custom := ""
 	if kind == scripting.PromptMenu {
@@ -344,7 +344,7 @@ func (e *MenuExecutor) displayPromptKind(s ssh.Session, terminal *term.Terminal,
 	if custom == "" && strings.TrimSpace(menu.Prompt1) != "" {
 		promptParts = append(promptParts, menu.Prompt1)
 	}
-	if strings.TrimSpace(menu.Prompt2) != "" {
+	if custom == "" && strings.TrimSpace(menu.Prompt2) != "" {
 		promptParts = append(promptParts, menu.Prompt2)
 	}
 
@@ -421,10 +421,11 @@ func (e *MenuExecutor) displayPromptKind(s ssh.Session, terminal *term.Terminal,
 			userCount, e.activeNodeCount(), rumorLevel)
 	}
 	if custom != "" {
-		line := renderCustomPrompt(custom, placeholders)
-		if len(rawPromptBytes) > 0 {
-			line = append(line, "\r\n"...)
-		}
+		// In the caller's prompt colour unless the text sets its own, and
+		// what they type after it in their input colour, a space on.
+		line := []byte(placeholders[ansi.ColorSlotCode(1)])
+		line = append(line, renderCustomPrompt(custom, placeholders)...)
+		line = append(line, placeholders[ansi.ColorSlotCode(2)]+" "...)
 		rawPromptBytes = append(line, rawPromptBytes...)
 	}
 

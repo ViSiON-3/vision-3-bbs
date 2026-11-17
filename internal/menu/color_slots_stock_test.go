@@ -161,3 +161,27 @@ func TestConvertedStringFallbacksMatchTemplate(t *testing.T) {
 		}
 	}
 }
+
+// MAIN's prompts are written with the caller colour codes, like the other
+// stock menus', so a caller's colours apply there too; what they type
+// after PROMPT2 is in their input colour.
+func TestStockMainPromptUsesColorSlots(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "menus", "v3", "mnu", "MAIN.MNU"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatal(err)
+	}
+	fixed := regexp.MustCompile(`\|[0-9]{2}`)
+	for _, key := range []string{"PROMPT1", "PROMPT2"} {
+		v, _ := m[key].(string)
+		if !slotCodeRe.MatchString(v) || fixed.MatchString(v) {
+			t.Errorf("MAIN %s = %q, want caller colour codes only", key, v)
+		}
+	}
+	if v, _ := m["PROMPT2"].(string); !strings.HasSuffix(v, "|C2 ") {
+		t.Errorf("MAIN PROMPT2 = %q, want it to end in the input colour", v)
+	}
+}
