@@ -80,9 +80,9 @@ type konfigHeading struct {
 // Screen geometry. Everything fits in 24 rows, the smallest height the
 // board allows, so the form draws whatever size the caller has set.
 const (
-	konfigHeaderRows = 5                    // rows reserved for KONFIG.ANS
-	konfigTopRow     = konfigHeaderRows + 2 // one blank row under the art
-	konfigFormRows   = 13                   // two sections a column, with their gaps
+	konfigHeaderRows = 4                    // rows reserved for KONFIG.ANS
+	konfigTopRow     = konfigHeaderRows + 1 // the art's last row is a rule, so no blank row under it
+	konfigFormRows   = 15                   // three sections in the left column, with their gaps
 	konfigColWidth   = 38
 	konfigLeftCol    = 2
 	konfigRightCol   = 42
@@ -317,11 +317,33 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					help:  str.KonfigHotKeysHelp,
 					value: func(st *konfigState) konfigValue { return st.onOffValue(st.user().HotKeys) },
 					edit:  toggleHotKeys},
+			}},
+			{title: str.KonfigSectionAppearance, items: []*konfigItem{
+				{key: colorsKonfigKey, label: str.KonfigColorsLabel,
+					help:  str.KonfigColorsHelp,
+					value: colorsValue,
+					edit:  editColors},
 				{key: customPromptKonfigKey, label: str.KonfigCustomPromptLabel,
 					help:  str.KonfigCustomPromptHelp,
 					value: func(st *konfigState) konfigValue { return st.textValue(user.CleanCustomPrompt(st.user().CustomPrompt)) },
 					edit:  editCustomPrompt},
 			}},
+			{title: str.KonfigSectionFiles, items: []*konfigItem{
+				{key: 'K', label: str.KonfigListingModeLabel, flips: true,
+					help:  str.KonfigListingModeHelp,
+					value: listingModeValue,
+					edit:  toggleListingMode},
+				{key: 'L', label: str.KonfigFileColumnsLabel,
+					help:  str.KonfigFileColumnsHelp,
+					value: fileColumnsValue,
+					edit:  editFileColumns},
+				{key: morePromptsKonfigKey, label: str.KonfigMorePromptsLabel, flips: true,
+					help:  str.KonfigMorePromptsHelp,
+					value: func(st *konfigState) konfigValue { return st.onOffValue(st.user().MorePromptsOn()) },
+					edit:  toggleMorePrompts},
+			}},
+		},
+		{
 			{title: str.KonfigSectionMessages, items: []*konfigItem{
 				{key: 'E', label: str.KonfigHeaderStyleLabel,
 					help:  str.KonfigHeaderStyleHelp,
@@ -348,8 +370,6 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					value: func(st *konfigState) konfigValue { return st.onOffValue(!st.user().AutocorrectOff) },
 					edit:  toggleAutocorrect},
 			}},
-		},
-		{
 			{title: str.KonfigSectionPersonal, items: []*konfigItem{
 				{key: 'G', label: str.KonfigRealNameLabel,
 					help:  str.KonfigRealNameHelp,
@@ -375,24 +395,6 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					help:  str.KonfigV3NetSharingHelp,
 					value: v3netSharingValue,
 					edit:  editV3NetSharing},
-				{key: colorsKonfigKey, label: str.KonfigColorsLabel,
-					help:  str.KonfigColorsHelp,
-					value: colorsValue,
-					edit:  editColors},
-			}},
-			{title: str.KonfigSectionFiles, items: []*konfigItem{
-				{key: 'K', label: str.KonfigListingModeLabel, flips: true,
-					help:  str.KonfigListingModeHelp,
-					value: listingModeValue,
-					edit:  toggleListingMode},
-				{key: 'L', label: str.KonfigFileColumnsLabel,
-					help:  str.KonfigFileColumnsHelp,
-					value: fileColumnsValue,
-					edit:  editFileColumns},
-				{key: morePromptsKonfigKey, label: str.KonfigMorePromptsLabel, flips: true,
-					help:  str.KonfigMorePromptsHelp,
-					value: func(st *konfigState) konfigValue { return st.onOffValue(st.user().MorePromptsOn()) },
-					edit:  toggleMorePrompts},
 			}},
 		},
 	}

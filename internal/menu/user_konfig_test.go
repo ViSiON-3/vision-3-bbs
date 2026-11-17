@@ -79,7 +79,7 @@ func TestKonfigDrawsEverySettingInsideTheScreen(t *testing.T) {
 		"[A] Screen Width", "[B] Screen Height", "[C] Encoding", "[D] Hot Keys",
 		"[E] Header Style", "[F] Auto-Signature", "[G] Real Name", "[H] Location",
 		"[I] User Note", "[J] Password", "[K] Listing Mode", "[L] File Columns",
-		"Terminal", "Messages", "Personal", "Files",
+		"Terminal", "Appearance", "Messages", "Personal", "Files",
 	} {
 		if !strings.Contains(snap, want) {
 			t.Errorf("screen is missing %q", want)
@@ -90,7 +90,13 @@ func TestKonfigDrawsEverySettingInsideTheScreen(t *testing.T) {
 		t.Errorf("help row = %q", screen.Row(konfigHelpRow))
 	}
 	// Values the user already has are shown.
-	if !strings.Contains(screen.Row(konfigTopRow+2), "Loc") {
+	shown := false
+	for r := konfigTopRow; r < konfigRuleRow; r++ {
+		if row := strings.TrimRight(screen.Row(r), " "); strings.Contains(row, "[H] Location") && strings.HasSuffix(row, " Loc") {
+			shown = true
+		}
+	}
+	if !shown {
 		t.Error("existing values are not shown")
 	}
 	for r := 1; r <= 24; r++ {
@@ -128,6 +134,47 @@ func TestKonfigMorePromptsWithoutDevices(t *testing.T) {
 		}
 	}
 	t.Fatal("More Prompts missing once the Devices item is left out")
+}
+
+// The sections are laid out as #1099 sets them: Terminal, Appearance and
+// Files on the left, Messages and Personal on the right, each item in its
+// own section, with a blank row between sections.
+func TestKonfigSectionLayout(t *testing.T) {
+	str := konfigTestExecutor(t).Strings()
+	cols := konfigSections(str)
+	want := [2][]struct {
+		title string
+		keys  string
+	}{
+		{{str.KonfigSectionTerminal, "ABCD"}, {str.KonfigSectionAppearance, "UT"}, {str.KonfigSectionFiles, "KLS"}},
+		{{str.KonfigSectionMessages, "EFMNP"}, {str.KonfigSectionPersonal, "GHIJOR"}},
+	}
+	for c := range cols {
+		if len(cols[c]) != len(want[c]) {
+			t.Fatalf("column %d has %d sections, want %d", c, len(cols[c]), len(want[c]))
+		}
+		for i, sec := range cols[c] {
+			var keys []byte
+			for _, it := range sec.items {
+				keys = append(keys, it.key)
+			}
+			if sec.title != want[c][i].title || string(keys) != want[c][i].keys {
+				t.Errorf("column %d section %d = %q %s, want %q %s", c, i, sec.title, keys, want[c][i].title, want[c][i].keys)
+			}
+		}
+	}
+	_, headings := layoutKonfig(cols)
+	rows := map[string]int{}
+	for _, h := range headings {
+		rows[h.title] = h.row
+	}
+	if rows[str.KonfigSectionTerminal] != konfigTopRow || rows[str.KonfigSectionAppearance] != konfigTopRow+6 || rows[str.KonfigSectionFiles] != konfigTopRow+10 || rows[str.KonfigSectionPersonal] != konfigTopRow+7 {
+		t.Errorf("heading rows %v", rows)
+	}
+	// The form starts straight under the 4-row art: its last row is a rule.
+	if konfigHeaderRows != 4 || konfigTopRow != 5 {
+		t.Errorf("art rows %d, form from row %d; want 4 and 5", konfigHeaderRows, konfigTopRow)
+	}
 }
 
 // The form must fit the smallest screen a caller can set, and the items must
@@ -216,10 +263,11 @@ func TestKonfigArrowsAndEnterActivateHighlightedItem(t *testing.T) {
 
 func TestKonfigRightArrowCrossesColumns(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
-	// Right from Screen Width goes to Real Name; Down, Down reaches User Note.
-	_, got, _ := runKonfig(t, um, u, keyRight+keyDown+keyDown+"\r"+keyClear+"hello\rq", "")
-	if got.PrivateNote != "hello" {
-		t.Fatalf("PrivateNote = %q, want hello", got.PrivateNote)
+	// Right from Screen Width goes to Header Style, at the top of the right
+	// column; Down three times reaches Thread View, which Enter switches.
+	_, got, _ := runKonfig(t, um, u, keyRight+keyDown+keyDown+keyDown+"\rq", "")
+	if !got.ThreadViewClosed {
+		t.Fatal("Enter after Right, Down x3 did not switch Thread View")
 	}
 }
 
