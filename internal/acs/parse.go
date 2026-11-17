@@ -67,9 +67,10 @@ type Node struct {
 }
 
 // UsesSession reports whether any term in the expression reads the
-// caller's session (L or A), so it fails as a whole where there is none.
+// caller's session (L, A, NODE, CONN, ENC, WIDTH, IP), so it fails as a
+// whole where there is none.
 func (e *Expr) UsesSession() bool {
-	return e.uses(func(code string) bool { return code == "L" || code == "A" })
+	return e.uses(sessionCode)
 }
 
 // UsesAge reports whether any term in the expression is AGE, so it fails as

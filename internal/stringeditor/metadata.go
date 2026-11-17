@@ -790,5 +790,13 @@ func stringCatalog() []StringEntry {
 		{Label: "Konfig: Colours No Background", Key: "konfigColorsNoBG", Description: "The background choice for none. Plain text; 4 characters fit"},
 		{Label: "Konfig: Colour Saved", Key: "konfigColorSaved", Description: "A slot's colour was saved (%s=slot name)"},
 		{Label: "Konfig: Colour Reset", Key: "konfigColorReset", Description: "A slot went back to the default (%s=slot name)"},
+
+		// The ACS tester's made-up call, for the session terms (#1075)
+		{Label: "ACS Test: Node", Key: "acsTestNodePrompt", Description: "Prompt for the made-up call's node, for NODE"},
+		{Label: "ACS Test: Connection", Key: "acsTestConnPrompt", Description: "Prompt for how the made-up call connected (ssh, telnet or local), for CONN"},
+		{Label: "ACS Test: Encoding", Key: "acsTestEncPrompt", Description: "Prompt for the made-up call's encoding (utf8 or cp437), for ENC"},
+		{Label: "ACS Test: Width", Key: "acsTestWidthPrompt", Description: "Prompt for the width the made-up call's menus render at, for WIDTH"},
+		{Label: "ACS Test: Address", Key: "acsTestAddrPrompt", Description: "Prompt for a remote made-up call's IP address, for IP"},
+		{Label: "ACS Test: Bad Value", Key: "acsTestBadValue", Description: "Shown when a node, connection, encoding, width or address answer can't be used"},
 	}
 }

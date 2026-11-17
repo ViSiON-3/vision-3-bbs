@@ -108,7 +108,7 @@ func Explain(s string, ctx Context) Explanation {
 	if x.CurrentTime {
 		ctx.Now = time.Now()
 	}
-	ctx = ctx.withRoles()
+	ctx = ctx.fixed()
 	x.Context = ctx
 	if s == "" || s == "*" {
 		x.Result, x.Reason = true, Match
@@ -289,7 +289,7 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 		}
 		return fmt.Sprintf("doesn't have flag %s (flags: %s)", strings.ToUpper(flag), flags)
 	}
-	now := ctx.now()
+	now := ctx.clock()
 	var detail string
 	switch t.code {
 	case "SYSOP":
@@ -414,6 +414,39 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 			in = "inside"
 		}
 		detail = fmt.Sprintf("%s is %s %s-%s", now.Format("15:04"), in, from, to)
+	case "MONTH":
+		detail = compared("the month", int(now.Month()), "", t) + fmt.Sprintf(" (%s)", now.Month())
+	case "DATE":
+		from, to, _ := strings.Cut(t.value, "/")
+		in := "outside"
+		if result {
+			in = "inside"
+		}
+		detail = fmt.Sprintf("%s is %s %s to %s", now.Format("01-02"), in, from, to)
+	case "NODE":
+		detail = compared("the node", ctx.Session.Node(), "", t)
+	case "WIDTH":
+		detail = compared("the width", ctx.Session.Width(), " columns", t)
+	case "CONN":
+		detail = fmt.Sprintf("the connection is %s", ctx.Session.Transport())
+		if !result {
+			detail += ", not " + t.value
+		}
+	case "ENC":
+		detail = fmt.Sprintf("the encoding is %s", ctx.Session.Encoding())
+		if !result {
+			detail += ", not " + t.value
+		}
+	case "IP":
+		ip := "no IP address"
+		if a, ok := addrIP(ctx.Session.RemoteAddr()); ok {
+			ip = a.String()
+		}
+		if result {
+			detail = fmt.Sprintf("%s is in %s", ip, t.value)
+		} else {
+			detail = fmt.Sprintf("%s is not in %s", ip, t.value)
+		}
 	case "L", "A":
 		switch {
 		case t.code == "L" && result:

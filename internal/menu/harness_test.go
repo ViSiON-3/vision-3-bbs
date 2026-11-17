@@ -104,16 +104,24 @@ func (ts *testSession) hookFired(marker string) bool {
 type testCtx struct {
 	context.Context
 	sync.Mutex
+	values sync.Map // SetValue's values, which Value returns first
 }
 
-func (*testCtx) User() string                  { return "" }
-func (*testCtx) SessionID() string             { return "" }
-func (*testCtx) ClientVersion() string         { return "" }
-func (*testCtx) ServerVersion() string         { return "" }
-func (*testCtx) RemoteAddr() net.Addr          { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 2222} }
-func (*testCtx) LocalAddr() net.Addr           { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 2323} }
-func (*testCtx) Permissions() *ssh.Permissions { return &ssh.Permissions{} }
-func (*testCtx) SetValue(_, _ interface{})     {}
+func (*testCtx) User() string                      { return "" }
+func (*testCtx) SessionID() string                 { return "" }
+func (*testCtx) ClientVersion() string             { return "" }
+func (*testCtx) ServerVersion() string             { return "" }
+func (*testCtx) RemoteAddr() net.Addr              { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 2222} }
+func (*testCtx) LocalAddr() net.Addr               { return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 2323} }
+func (*testCtx) Permissions() *ssh.Permissions     { return &ssh.Permissions{} }
+func (c *testCtx) SetValue(key, value interface{}) { c.values.Store(key, value) }
+
+func (c *testCtx) Value(key interface{}) interface{} {
+	if v, ok := c.values.Load(key); ok {
+		return v
+	}
+	return c.Context.Value(key)
+}
 
 // Pty reports no PTY, so functions under test fall back to their default
 // dimensions (typically 80x24). Returning false avoids the nil-interface panic

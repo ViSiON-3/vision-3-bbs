@@ -26,11 +26,21 @@
   "abortMessagePrompt": [
     "|14Abort message?"
   ],
+  "acsTestAddrPrompt": [
+    "|07Caller's address (for IP): "
+  ],
   "acsTestBadNumber": [
     "|12Enter a whole number of minutes.|07"
   ],
   "acsTestBadTime": [
     "|12Enter hh:mm or yyyy-mm-dd hh:mm, or nothing for now.|07"
+  ],
+  "acsTestBadValue": [
+    "|12That can't be used here: try again, or enter nothing to keep it.|07",
+    "|12That can't be used: enter one of the choices shown, or nothing to keep it.|07"
+  ],
+  "acsTestConnPrompt": [
+    "|07Connection, |15ssh|07, |15telnet|07 or |15local|07 (for CONN): "
   ],
   "acsTestCreditPrompt": [
     "|07Minutes of chat credit (for T): ",
@@ -43,6 +53,9 @@
     "|07Minutes into the call (for T): ",
     "|C1Minutes into the call (for T): "
   ],
+  "acsTestEncPrompt": [
+    "|07Encoding, |15utf8|07 or |15cp437|07 (for ENC): "
+  ],
   "acsTestExprPrompt": [
     "|07ACS expression: ",
     "|C1ACS expression: "
@@ -53,6 +66,9 @@
   ],
   "acsTestMenu": [
     "|08[|15E|08]|07xpression  |08[|15S|08]|07ession  |08[|15T|08]|07ime  |08[|15Q|08]|07uit: "
+  ],
+  "acsTestNodePrompt": [
+    "|07Node (for NODE): "
   ],
   "acsTestSessionPrompt": [
     "|07Test with a session (a call in progress)?",
@@ -68,6 +84,9 @@
   ],
   "acsTestTitle": [
     "|15ACS Test|07"
+  ],
+  "acsTestWidthPrompt": [
+    "|07Width in columns (for WIDTH): "
   ],
   "addBBSBaud": [
     "|08H|07i|15ghest |13BPS|05: "
