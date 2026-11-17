@@ -304,7 +304,7 @@
   "konfigHeaderStyleLabel": "Header Style",
   "konfigHotKeysHelp": "On: menu commands run the moment you press their key, no Enter needed.",
   "konfigHotKeysLabel": "Hot Keys",
-  "konfigLegend": "|08[|15Q|08/|15ESC|08] |07Done",
+  "konfigLegend": "",
   "konfigLightbar": "Lightbar",
   "konfigLinesFormat": "%d lines",
   "konfigListingModeHelp": "Lightbar: arrow-key file browser. Classic: scrolling text list.",

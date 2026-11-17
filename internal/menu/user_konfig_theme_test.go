@@ -199,8 +199,8 @@ func TestKonfigFooterAtTheFootOfTheScreen(t *testing.T) {
 	if _, _, err := runUserKonfig(c, ""); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(screen.Row(40), "Done") {
-		t.Errorf("legend row 40 = %q", screen.Row(40))
+	if !strings.Contains(screen.Row(36), "────") {
+		t.Errorf("rule row 36 = %q", screen.Row(36))
 	}
 	if !strings.Contains(screen.Row(37), "Columns your terminal shows") {
 		t.Errorf("help row 37 = %q", screen.Row(37))
@@ -226,11 +226,11 @@ func TestKonfigFooterFollowsAHeightChange(t *testing.T) {
 	if got := reloadUser(t, um).ScreenHeight; got != 40 {
 		t.Fatalf("ScreenHeight = %d", got)
 	}
-	if !strings.Contains(screen.Row(40), "Done") {
-		t.Errorf("legend row 40 = %q after the change", screen.Row(40))
+	if !strings.Contains(screen.Row(37), "Rows your terminal shows") || !strings.Contains(screen.Row(36), "────") {
+		t.Errorf("footer not at the foot of 40 rows: rule %q, help %q", screen.Row(36), screen.Row(37))
 	}
-	if strings.Contains(screen.Row(24), "Done") {
-		t.Errorf("old legend left on row 24: %q", screen.Row(24))
+	if strings.Contains(screen.Row(20), "────") || strings.Contains(screen.Row(21), "Rows your") {
+		t.Errorf("old footer left on rows 20-21: %q / %q", screen.Row(20), screen.Row(21))
 	}
 }
 

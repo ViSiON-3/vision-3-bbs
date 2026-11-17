@@ -261,8 +261,9 @@ func TestKonfigShowsHeaderStyleName(t *testing.T) {
 	if !strings.Contains(screen.Snapshot(), "LiQUiD Blue Box") {
 		t.Errorf("header style name not shown:\n%s", screen.Snapshot())
 	}
-	if !strings.Contains(screen.Row(konfigLegendRow), "[Q/ESC] Done") {
-		t.Errorf("legend row = %q", screen.Row(konfigLegendRow))
+	// The stock KONFIG.ANS shows how to quit, so there is no key legend.
+	if got := strings.TrimSpace(screen.Row(konfigLegendRow)); got != "" {
+		t.Errorf("legend row = %q, want none", got)
 	}
 }
 
