@@ -47,7 +47,7 @@ func loadBoardColorSlots(path string) {
 		path = abs
 	}
 	configDir := filepath.Dir(path)
-	ansi.SetColorSlotDefaults(config.BoardColorSlotCodes(filepath.Dir(configDir), configDir, ""))
+	ansi.SetColorSlotDefaults(config.BoardColorSlotCodes(filepath.Dir(configDir), configDir, path, ""))
 }
 
 func main() {

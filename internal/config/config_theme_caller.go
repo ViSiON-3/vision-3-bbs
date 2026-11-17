@@ -115,12 +115,16 @@ func AttrPipeCode(attr int) string {
 // ColorSlotCodes works them out, for a tool such as the string or menu
 // editor that previews |C1-|C7 without running the board: the theme of
 // menuSet, or when that is "" the one configDir's config.json selects under
-// bbsRoot; config.json's theme.colors; and the legacy defColorN in
-// configDir's strings.json. A part that can't be read adds nothing, so at
+// bbsRoot; config.json's theme.colors; and the legacy defColorN in the
+// strings file at stringsPath, or configDir's strings.json when that is
+// "". A part that can't be read adds nothing, so at
 // worst the built-in colours apply. Nothing is logged, so it is safe to
 // call with an editor's screen up.
-func BoardColorSlotCodes(bbsRoot, configDir, menuSet string) [7]string {
-	legacy := LegacyColorSlotsFile(filepath.Join(configDir, "strings.json"))
+func BoardColorSlotCodes(bbsRoot, configDir, stringsPath, menuSet string) [7]string {
+	if stringsPath == "" {
+		stringsPath = filepath.Join(configDir, "strings.json")
+	}
+	legacy := LegacyColorSlotsFile(stringsPath)
 	sel, err := themeSelectionFromConfigDir(configDir)
 	if err != nil || sel.Colors.validate() != nil {
 		sel = ThemeSelection{}

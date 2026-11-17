@@ -89,7 +89,7 @@ func main() {
 	// Prompts preview |C1-|C7 in the board's defaults, as the BBS draws
 	// them, rather than the built-in ones: those of the menu set being
 	// edited.
-	ansi.SetColorSlotDefaults(config.BoardColorSlotCodes(cwd, filepath.Join(cwd, "configs"), path))
+	ansi.SetColorSlotDefaults(config.BoardColorSlotCodes(cwd, filepath.Join(cwd, "configs"), "", path))
 
 	// Menus are read through the overlay (menus.d/<set>) and saved into it,
 	// so edits survive a git pull of the shipped set. --no-overlay edits the

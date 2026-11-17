@@ -114,7 +114,7 @@ func TestResolveCallerColor(t *testing.T) {
 func TestBoardColorSlotCodes(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "configs")
-	if got := BoardColorSlotCodes(root, configDir, ""); got[0] != "|07" || got[6] != AttrPipeCode(31) {
+	if got := BoardColorSlotCodes(root, configDir, "", ""); got[0] != "|07" || got[6] != AttrPipeCode(31) {
 		t.Errorf("empty board = %q", got)
 	}
 	for name, body := range map[string]string{
@@ -129,7 +129,7 @@ func TestBoardColorSlotCodes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got := BoardColorSlotCodes(root, configDir, "")
+	got := BoardColorSlotCodes(root, configDir, "", "")
 	if want := [7]string{"|12", "|13", "|07", "|10", "|08", "|11", "|14|B4"}; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -143,8 +143,18 @@ func TestBoardColorSlotCodes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(v3, "theme.json"), []byte(`{"callerStat": 9}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := BoardColorSlotCodes(root, configDir, v3)[3]; got != "|09" {
+	if got := BoardColorSlotCodes(root, configDir, "", v3)[3]; got != "|09" {
 		t.Errorf("--menus v3 stat = %q, want v3's |09", got)
+	}
+
+	// A strings file named outright, as strings --config does, gives the
+	// legacy colours in place of configs/strings.json's.
+	alt := filepath.Join(configDir, "alternate.json")
+	if err := os.WriteFile(alt, []byte(`{"defColor1": 9}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := BoardColorSlotCodes(root, configDir, alt, ""); got[0] != "|09" || got[1] != "|13" {
+		t.Errorf("--config alternate.json = %q, want its |09 under theme.colors' |13", got)
 	}
 }
 
@@ -163,7 +173,7 @@ func TestBoardColorSlotCodesIsQuiet(t *testing.T) {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	if got := BoardColorSlotCodes(root, configDir, ""); got[0] != "|07" {
+	if got := BoardColorSlotCodes(root, configDir, "", ""); got[0] != "|07" {
 		t.Errorf("a bad theme.json should leave the built-ins: %q", got)
 	}
 	if buf.Len() != 0 {
