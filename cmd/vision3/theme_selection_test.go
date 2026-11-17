@@ -291,13 +291,33 @@ func TestDoctorNotesRetiredScreenBars(t *testing.T) {
 	bar("menus", "MSGCONFHI", stock)                    // left over, but
 	bar("menus.d", "MSGCONFHI", "; inherit\nINHERIT\n") // already inheriting
 	bar("menus", "FILEAREAHI", stock)                   // never a stock file
+	stockCmd := "; File listing command bar options\n0,0,31,7, ,mark,Mark\n0,0,31,7,i,info,Info\n0,0,31,7,v,view,View\n" +
+		"0,0,31,7,d,download,Download\n0,0,31,7,u,upload,Upload\n0,0,31,7,q,quit,Quit\n"
+	bar("menus", "FILELISTCMD", stockCmd) // left over: noted
 
 	var checks []doctorCheck
 	checkRetiredScreenBars(filepath.Join(root, "menus", "v3"), func(name string, status doctorSeverity, message, fix string) {
 		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
 	})
-	if len(checks) != 1 || !hasDoctorCheck(checks, "menus/v3/bar/FILELISTHI.BAR", doctorInfo, "no longer ships") {
-		t.Errorf("checks = %+v, want one note, for FILELISTHI", checks)
+	if len(checks) != 2 || !hasDoctorCheck(checks, "menus/v3/bar/FILELISTHI.BAR", doctorInfo, "no longer ships") ||
+		!hasDoctorCheck(checks, "menus/v3/bar/FILELISTCMD.BAR", doctorInfo, "command bar") {
+		t.Errorf("checks = %+v, want notes for FILELISTHI and FILELISTCMD", checks)
+	}
+
+	// An edited command bar is the sysop's own; so is a stock one the
+	// overlay replaces.
+	for name, edit := range map[string]func(){
+		"edited":   func() { bar("menus", "FILELISTCMD", strings.Replace(stockCmd, "Quit\n", "Leave\n", 1)) },
+		"shadowed": func() { bar("menus", "FILELISTCMD", stockCmd); bar("menus.d", "FILELISTCMD", "0,0,79,3,q,quit,Quit\n") },
+	} {
+		edit()
+		checks = nil
+		checkRetiredScreenBars(filepath.Join(root, "menus", "v3"), func(name string, status doctorSeverity, message, fix string) {
+			checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+		})
+		if hasDoctorCheck(checks, "menus/v3/bar/FILELISTCMD.BAR", doctorInfo, "command bar") {
+			t.Errorf("%s: noted as stock: %+v", name, checks)
+		}
 	}
 
 	// Another theme never shipped these files: a BAR there with the same
