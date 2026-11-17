@@ -253,7 +253,7 @@ func TestKonfigTextComesFromStrings(t *testing.T) {
 // string is read by the form, so none sits in the string editor doing nothing.
 func TestKonfigStringFieldsAreUsed(t *testing.T) {
 	var src strings.Builder
-	for _, f := range []string{"user_konfig.go", "user_konfig_render.go"} {
+	for _, f := range []string{"user_konfig.go", "user_konfig_render.go", "user_konfig_theme.go"} {
 		data, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

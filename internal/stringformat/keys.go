@@ -71,6 +71,7 @@ var FormattedKeys = []string{
 	"konfigSaveError",
 	"konfigSavedFormat",
 	"konfigStyleFormat",
+	"konfigThemeOnlyOne",
 	"konfigUpdatedFormat",
 	"matrixAccountCannotLogon",
 	"matrixAccountValidated",

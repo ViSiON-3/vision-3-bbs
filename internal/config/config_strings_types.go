@@ -761,6 +761,14 @@ type StringsConfig struct {
 	KonfigColorsNoBG     string `json:"konfigColorsNoBG"`
 	KonfigColorSaved     string `json:"konfigColorSaved"`
 	KonfigColorReset     string `json:"konfigColorReset"`
+
+	// The caller's theme in Konfig (#1099).
+	KonfigThemeLabel    string `json:"konfigThemeLabel"`
+	KonfigThemeHelp     string `json:"konfigThemeHelp"`
+	KonfigThemeTitle    string `json:"konfigThemeTitle"`
+	KonfigThemeHint     string `json:"konfigThemeHint"`
+	KonfigThemeBoardTag string `json:"konfigThemeBoardTag"`
+	KonfigThemeOnlyOne  string `json:"konfigThemeOnlyOne"`
 }
 
 // GlobalStrings holds the loaded configuration.
