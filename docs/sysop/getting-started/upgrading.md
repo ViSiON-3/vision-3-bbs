@@ -270,6 +270,11 @@ shipped theme, or strings in `configs/strings.json` that hold shipped text,
 `./vision3 doctor --fix` removes them (after a backup to `data/backups/`), so
 the new release's values reach the board. The overlay is merged over the shipped
 `theme.json` key by key, so only keys you set yourself stay ahead of it.
+If it notes colours the overlay sets of its own, they keep working as they
+are. `./vision3 doctor --fix --theme-colors` moves them into `config.json`
+`theme.colors` if you want them to be the board's colours, edited in
+`./config`; see
+[Board Colour Overrides](../configuration/configuration.md#board-colour-overrides).
 
 ## Restarting
 

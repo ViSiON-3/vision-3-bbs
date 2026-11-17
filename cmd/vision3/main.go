@@ -1831,6 +1831,7 @@ func main() {
 	doctorJSON := false
 	doctorFix := false
 	doctorDryRun := false
+	doctorThemeColors := false
 	if len(os.Args) > 1 && os.Args[1] == "doctor" {
 		// Accept both `vision3 doctor --json` and the flag form below.
 		os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
@@ -1841,6 +1842,7 @@ func main() {
 	flag.BoolVar(&doctorJSON, "json", false, "Write doctor output as JSON")
 	flag.BoolVar(&doctorFix, "fix", false, "Apply safe doctor repairs (requires --doctor)")
 	flag.BoolVar(&doctorDryRun, "dry-run", false, "Preview safe doctor repairs without applying them (requires --fix)")
+	flag.BoolVar(&doctorThemeColors, "theme-colors", false, "With --fix, also move the selected theme's overlay theme.json colours into config.json theme.colors")
 	var convertChatNfo string
 	flag.StringVar(&convertChatNfo, "convert-chatnfo", "", "Convert a Vision/2 CHATNFO.n chat layout to chat screen JSON on stdout and exit")
 	flag.Parse()
@@ -1849,6 +1851,10 @@ func main() {
 	}
 	if (doctorFix || doctorDryRun) && !doctorMode {
 		fmt.Fprintln(os.Stderr, "vision3: --fix and --dry-run require --doctor")
+		os.Exit(2)
+	}
+	if doctorThemeColors && !doctorFix {
+		fmt.Fprintln(os.Stderr, "vision3: --theme-colors requires --fix")
 		os.Exit(2)
 	}
 	if doctorDryRun && !doctorFix {
@@ -1861,7 +1867,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "vision3 doctor: cannot determine board directory: %v\n", err)
 			os.Exit(2)
 		}
-		os.Exit(runDoctor(basePath, doctorJSON, doctorFix, doctorDryRun, os.Stdout, os.Stderr))
+		os.Exit(runDoctor(basePath, doctorJSON, doctorOptions{fix: doctorFix, dryRun: doctorDryRun, themeColors: doctorThemeColors}, os.Stdout, os.Stderr))
 	}
 
 	// Validate output mode flag

@@ -83,7 +83,19 @@ type doctorFix struct {
 	Message string `json:"message,omitempty"`
 }
 
-func runDoctor(root string, jsonOutput, fix, dryRun bool, stdout, stderr io.Writer) int {
+// doctorOptions are the doctor flags that choose what --fix does.
+type doctorOptions struct {
+	fix    bool
+	dryRun bool
+	// themeColors also moves the colours of the selected theme's overlay
+	// theme.json into config.json's theme.colors (#1093). A plain --fix
+	// never does: board colours apply whatever theme is selected, so the
+	// move changes what a switch of theme does, and is the sysop's call.
+	themeColors bool
+}
+
+func runDoctor(root string, jsonOutput bool, opts doctorOptions, stdout, stderr io.Writer) int {
+	fix, dryRun := opts.fix, opts.dryRun
 	if fix {
 		rootAbs, err := filepath.Abs(root)
 		if err == nil {
@@ -94,6 +106,9 @@ func runDoctor(root string, jsonOutput, fix, dryRun bool, stdout, stderr io.Writ
 	if fix {
 		fixes = fixDoctorDirectories(root, dryRun)
 		fixes = append(fixes, fixThemeOverlay(root, dryRun, time.Now())...)
+		if opts.themeColors {
+			fixes = append(fixes, fixThemeColors(root, dryRun, time.Now())...)
+		}
 		fixes = append(fixes, fixStrings(root, dryRun, time.Now())...)
 	}
 	report := inspectBoard(root)
@@ -409,6 +424,7 @@ func inspectBoard(root string) doctorReport {
 		checkMenuFiles(menuRoot, configDir, add)
 		checkChatScreens(menuRoot, add)
 		checkThemeOverlay(menuRoot, add)
+		checkThemeOverlayColors(menuRoot, configDir, add)
 		checkRetiredScreenBars(menuRoot, add)
 	}
 	checkDoors(configDir, root, add)
@@ -931,6 +947,106 @@ func redundantThemeOverlay(menuRoot string) (keys []string, total int, err error
 
 func themeOverlayRel(menuRoot string) string {
 	return filepath.ToSlash(filepath.Join("menus.d", filepath.Base(menuRoot), "theme.json"))
+}
+
+// checkThemeOverlayColors notes the colours an overlay theme.json sets
+// that theme.colors could hold instead. They work where they are, for this
+// theme only; the note says how to make them the board's.
+func checkThemeOverlayColors(menuRoot, configDir string, add func(string, doctorSeverity, string, string)) {
+	board, err := config.BoardColorsFromConfigDir(configDir)
+	if err != nil {
+		return // reported by the config.json check
+	}
+	move, err := config.PlanThemeColorMove(menuRoot, board)
+	if err != nil || len(move.Moved) == 0 {
+		return
+	}
+	add(themeOverlayRel(menuRoot), doctorInfo,
+		fmt.Sprintf("sets %d colour(s) of its own, which apply to this theme only: %s", len(move.Moved), strings.Join(move.Moved, ", ")),
+		"To make them the board's colours, kept in config.json theme.colors whatever theme is selected and edited under Theme in ./config, run ./vision3 doctor --fix --theme-colors (both files are backed up first; add --dry-run to preview). Otherwise leave them.")
+}
+
+// fixThemeColors moves the colours of the selected theme's overlay
+// theme.json into config.json's theme.colors, after copying both files to
+// data/backups. config.json is written first, so the board looks the same
+// if the overlay cannot then be trimmed.
+func fixThemeColors(root string, dryRun bool, now time.Time) []doctorFix {
+	configDir := filepath.Join(root, "configs")
+	menuRoot, themeName, err := config.SelectedMenuSet(root, configDir)
+	if err != nil {
+		return nil // reported by the theme check
+	}
+	rel := themeOverlayRel(menuRoot)
+	fail := func(action string, err error) []doctorFix {
+		return []doctorFix{{Path: rel, Action: action, Status: "failed", Message: err.Error()}}
+	}
+	board, err := config.BoardColorsFromConfigDir(configDir)
+	if err != nil {
+		return fail("move colours to config.json theme.colors", err)
+	}
+	move, err := config.PlanThemeColorMove(menuRoot, board)
+	if err != nil {
+		return fail("move colours to config.json theme.colors", err)
+	}
+	if move.Empty() {
+		return nil
+	}
+	action := themeColorMoveAction(move)
+	if dryRun {
+		return []doctorFix{{Path: rel, Action: action, Status: "would-fix"}}
+	}
+
+	var backups []string
+	if len(move.Moved) > 0 {
+		path := filepath.Join(configDir, "config.json")
+		if _, statErr := os.Stat(path); statErr == nil {
+			b, err := backupForDoctor(root, path, "config.json", now)
+			if err != nil {
+				return fail(action, err)
+			}
+			backups = append(backups, b)
+		}
+	}
+	overlay := menuset.FromPath(menuRoot).Path(menuset.LayerOverlay, "theme.json")
+	b, err := backupForDoctor(root, overlay, fmt.Sprintf("menus.d-%s-theme.json", themeName), now)
+	if err != nil {
+		return fail(action, err)
+	}
+	backups = append(backups, b)
+
+	if len(move.Moved) > 0 {
+		_, err = config.UpdateServerConfig(configDir, func(cfg *config.ServerConfig) error {
+			if cfg.Theme.Colors != board {
+				return fmt.Errorf("config.json theme.colors changed while doctor ran; run it again")
+			}
+			cfg.Theme.Colors = move.Board
+			return nil
+		})
+		if err != nil {
+			return fail(action, err)
+		}
+	}
+	if err := config.ApplyThemeColorMove(menuRoot, move); err != nil {
+		return fail(action, err)
+	}
+	return []doctorFix{{Path: rel, Action: action, Status: "fixed", Message: "backup: " + strings.Join(backups, ", ")}}
+}
+
+// themeColorMoveAction describes a move for the fix report.
+func themeColorMoveAction(move config.ThemeColorMove) string {
+	var parts []string
+	if len(move.Moved) > 0 {
+		parts = append(parts, "move "+strings.Join(move.Moved, ", ")+" to config.json theme.colors")
+	}
+	if len(move.Overlay) == 0 {
+		parts = append(parts, "remove the file (nothing is left)")
+	} else if len(move.Removed) > 0 {
+		parts = append(parts, "remove "+strings.Join(move.Removed, ", ")+" from it")
+	}
+	if len(move.Kept) > 0 {
+		parts = append(parts, "keep "+strings.Join(move.Kept, ", ")+" (theme.colors already sets them)")
+	}
+	return strings.Join(parts, "; ")
 }
 
 // doctorBackupDir is where doctor --fix copies a file before changing it.
