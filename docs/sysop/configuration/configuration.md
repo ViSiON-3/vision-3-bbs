@@ -166,7 +166,7 @@ edits that theme's `theme.json` (see [Theme Configuration](#theme-configuration)
 |------|---------------|
 | Theme Selection | The theme the board runs, picked from the directories under `menus/`. Saved to `config.json` as `theme.name`; restart the BBS to switch |
 | Prompt Colors | Yes/No highlight and regular colours, and the message editor's autocorrect highlight |
-| Lightbar Colors | The nine [lightbar colour roles](#lightbar-colour-roles) every lightbar inherits |
+| Lightbar Colors | The nine [lightbar colour roles](#lightbar-colour-roles) every lightbar inherits. When a screen has its own `*HI.BAR`, an **Overridden by** line under the roles names the screens that don't follow **Selected** (or gives their count when the names don't fit, with the names in its help), and says when `DOORMENUHI.BAR` also sets the door menu's regular colour. Screens set to inherit on Screen Overrides aren't counted |
 | Screen Overrides | The screens whose own `*HI.BAR` file sets their highlight over the shared colours: each one's colour and whether the file is shipped or in `menus.d`. Set a screen to **Y** to have it **inherit shared colours**; saving writes an inherit marker to `menus.d/<theme>/bar/` (see [Per-screen lightbar colors](menus/menu-system.md#per-screen-lightbar-colors)). The BARs themselves are edited with `menuedit` |
 | Split-Screen Chat | The chat screen chat opens with, picked from the menu set's screens, the built-in layout or **random**; and the sysop's and caller's text colours where a screen sets none |
 | Toasts | The colours a toast fades through |
