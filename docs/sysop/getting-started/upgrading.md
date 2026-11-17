@@ -273,7 +273,7 @@ the new release's values reach the board. The overlay is merged over the shipped
 If it notes colours the overlay sets of its own, they keep working as they
 are; `./vision3 doctor --fix` moves them into `config.json`
 `theme.colors`, where `./config` edits them; see
-[Board Colour Overrides](../configuration/configuration.md#board-colour-overrides).
+[Board Colour Overrides](configuration/configuration.md#board-colour-overrides).
 
 ## Restarting
 

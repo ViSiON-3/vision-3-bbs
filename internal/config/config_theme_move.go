@@ -28,6 +28,10 @@ type ThemeColorMove struct {
 	// Overlay is the overlay theme.json afterwards; empty means the file
 	// goes.
 	Overlay map[string]json.RawMessage
+
+	// from is the overlay the plan was made from, so a write can tell
+	// that the file changed since (CheckThemeColorMove).
+	from map[string]json.RawMessage
 }
 
 // Empty reports whether the move would change nothing.
@@ -82,6 +86,7 @@ func PlanThemeColorMove(menuSetPath string, board ThemeColors) (ThemeColorMove, 
 	if err != nil {
 		return move, err
 	}
+	move.from = overlay
 
 	doc := maps.Clone(overlay)
 	for _, k := range boardColorKeys() {
@@ -105,6 +110,11 @@ func PlanThemeColorMove(menuSetPath string, board ThemeColors) (ThemeColorMove, 
 	for _, role := range BoardColorRoles {
 		want, _ := ResolveColor(role, before, board)
 		if got, _ := ResolveColor(role, after, move.Board); got != want {
+			// theme.json reads its older colours as plain numbers, so an
+			// overlay can hold one config.json would refuse to load.
+			if want < 0 || want > 255 {
+				return ThemeColorMove{Board: board}, fmt.Errorf("%s in %s is %d, not a colour from 0 to 255; correct it first", role, set.Path(menuset.LayerOverlay, "theme.json"), want)
+			}
 			move.Board.Override(role, want)
 			move.Moved = append(move.Moved, string(role))
 		}
@@ -151,14 +161,43 @@ func sameBoardColors(a ThemeConfig, ab ThemeColors, b ThemeConfig, bb ThemeColor
 	return slices.Equal(a.WithBoardColors(ab).FadeColors(), b.WithBoardColors(bb).FadeColors())
 }
 
+// CheckThemeColorMove reports an error when the overlay theme.json is no
+// longer what move was planned from, so a value changed since is not lost.
+// The caller checks before writing move.Board to config.json.
+func CheckThemeColorMove(menuSetPath string, move ThemeColorMove) error {
+	set := menuset.FromPath(menuSetPath)
+	if !set.HasOverlay() || move.Empty() {
+		return nil
+	}
+	path := set.Path(menuset.LayerOverlay, "theme.json")
+	now, err := readThemeDoc(path)
+	if err != nil {
+		return err
+	}
+	same := len(now) == len(move.from)
+	for k, v := range now {
+		if old, ok := move.from[k]; !ok || !sameJSON(old, v) {
+			same = false
+		}
+	}
+	if !same {
+		return fmt.Errorf("%s changed while the move was planned; run it again", path)
+	}
+	return nil
+}
+
 // ApplyThemeColorMove writes what is left of the overlay theme.json after
-// move, or removes the file when nothing is. The caller writes move.Board
-// to config.json first: board colours win over the theme, so the board
-// looks the same if this step then fails.
+// move, or removes the file when nothing is, unless the file changed since
+// the plan. The caller writes move.Board to config.json first: board
+// colours win over the theme, so the board looks the same if this step
+// then fails.
 func ApplyThemeColorMove(menuSetPath string, move ThemeColorMove) error {
 	set := menuset.FromPath(menuSetPath)
 	if !set.HasOverlay() || len(move.Removed) == 0 {
 		return nil
+	}
+	if err := CheckThemeColorMove(menuSetPath, move); err != nil {
+		return err
 	}
 	return TrimThemeOverlay(menuSetPath, move.Removed)
 }

@@ -109,6 +109,12 @@ func runDoctor(root string, jsonOutput, fix, dryRun bool, stdout, stderr io.Writ
 			report.Summary.Failures++
 		}
 	}
+	// A fix that could not be made fails the run, as a failed check does.
+	for _, f := range fixes {
+		if f.Status == "failed" {
+			report.Summary.Failures++
+		}
+	}
 
 	if jsonOutput {
 		enc := json.NewEncoder(stdout)
@@ -984,12 +990,15 @@ func fixThemeColors(root string, dryRun bool, now time.Time) []doctorFix {
 	var backups []string
 	if len(move.Moved) > 0 {
 		path := filepath.Join(configDir, "config.json")
-		if _, statErr := os.Stat(path); statErr == nil {
+		switch _, statErr := os.Stat(path); {
+		case statErr == nil:
 			b, err := backupForDoctor(root, path, "config.json", now)
 			if err != nil {
 				return fail(action, err)
 			}
 			backups = append(backups, b)
+		case !errors.Is(statErr, fs.ErrNotExist):
+			return fail(action, statErr)
 		}
 	}
 	overlay := menuset.FromPath(menuRoot).Path(menuset.LayerOverlay, "theme.json")
@@ -999,6 +1008,9 @@ func fixThemeColors(root string, dryRun bool, now time.Time) []doctorFix {
 	}
 	backups = append(backups, b)
 
+	if err := config.CheckThemeColorMove(menuRoot, move); err != nil {
+		return fail(action, err)
+	}
 	if len(move.Moved) > 0 {
 		_, err = config.UpdateServerConfig(configDir, func(cfg *config.ServerConfig) error {
 			if cfg.Theme.Colors != board {

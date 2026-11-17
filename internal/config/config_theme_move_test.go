@@ -166,3 +166,36 @@ func TestThemeColorMoveWithoutOverlay(t *testing.T) {
 		t.Error("an unreadable overlay planned a move")
 	}
 }
+
+// An overlay colour config.json could not load stops the move, which
+// writes nothing.
+func TestThemeColorMoveRejectsOutOfRangeColour(t *testing.T) {
+	set := moveBoard(t, moveShipped, `{"chatUserColor": 256}`)
+	move, err := PlanThemeColorMove(set, ThemeColors{})
+	if err == nil || !move.Empty() {
+		t.Errorf("plan = %+v, %v; want an error and nothing to do", move, err)
+	}
+}
+
+// A move whose overlay changed since it was planned is refused, so the
+// newer value is not lost.
+func TestThemeColorMoveRefusesAChangedOverlay(t *testing.T) {
+	set := moveBoard(t, moveShipped, `{"chatUserColor": 12}`)
+	move, err := PlanThemeColorMove(set, ThemeColors{})
+	if err != nil || move.Empty() {
+		t.Fatalf("plan = %+v, %v", move, err)
+	}
+	overlay := filepath.Join(filepath.Dir(filepath.Dir(set)), "menus.d", "v3", "theme.json")
+	if err := os.WriteFile(overlay, []byte(`{"chatUserColor": 14}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckThemeColorMove(set, move); err == nil {
+		t.Error("check passed a changed overlay")
+	}
+	if err := ApplyThemeColorMove(set, move); err == nil {
+		t.Error("apply trimmed a changed overlay")
+	}
+	if data, _ := os.ReadFile(overlay); string(data) != `{"chatUserColor": 14}` {
+		t.Errorf("overlay = %s", data)
+	}
+}
