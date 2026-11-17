@@ -15,6 +15,13 @@ import (
 // themeKonfigKey is the Theme item's hotkey (#1099).
 const themeKonfigKey = 'V'
 
+// The themes box is centred on the 80 by 24 screen the form fills.
+const (
+	konfigScreenCols = 80
+	konfigScreenRows = 24
+	themeBoxWidth    = 36 // including borders
+)
+
 // themeKonfigOffered reports whether Konfig offers the Theme item: unless
 // the sysop has turned caller choice off (theme.callerChoice).
 func themeKonfigOffered(e *MenuExecutor) bool {
@@ -65,8 +72,8 @@ func themeValue(st *konfigState) konfigValue {
 }
 
 // editTheme opens a box listing the installed themes. Choosing one saves
-// it and leaves Konfig, so the menu the caller came from is drawn in the
-// new theme straight away. With only the board's theme installed there is
+// it and redraws Konfig in the new theme straight away; every screen
+// after Konfig is drawn in it too. With only the board's theme installed there is
 // nothing to choose, and the status line says so.
 func editTheme(st *konfigState) error {
 	str := st.c.e.Strings()
@@ -89,13 +96,16 @@ func editTheme(st *konfigState) error {
 		}
 	}
 
-	inner := colBoxWidth - 2
+	inner := themeBoxWidth - 2
 	// The box fits the form: title, the list, a blank row, the hint and
-	// the bottom edge. A longer list scrolls.
+	// the bottom edge. A longer list scrolls. It is centred on the screen
+	// the form fills.
 	visible := min(len(themes), konfigFormRows-4)
+	boxTop := (konfigScreenRows-(visible+4))/2 + 1
+	boxLeft := (konfigScreenCols-themeBoxWidth)/2 + 1
 	top := 0
 	line := func(row int, s string) string {
-		return moveTo(row, colBoxLeft) + pc(9) + "│" + s + pc(9) + "│"
+		return moveTo(row, boxLeft) + pc(9) + "│" + s + pc(9) + "│"
 	}
 	cell := func(i int) string {
 		name, tag := st.fit(themes[i], 20), ""
@@ -110,18 +120,18 @@ func editTheme(st *konfigState) error {
 	drawList := func() error {
 		var b strings.Builder
 		for r := 0; r < visible; r++ {
-			b.WriteString(line(colBoxTop+1+r, cell(top+r)))
+			b.WriteString(line(boxTop+1+r, cell(top+r)))
 		}
 		return st.raw(b.String())
 	}
 	title := " " + st.clip(str.KonfigThemeTitle, inner-3, "..") + " "
 	rule := strings.Repeat("─", inner-st.cells(title)-1)
 	var b strings.Builder
-	b.WriteString(moveTo(colBoxTop, colBoxLeft) + pc(9) + "┌─" + pc(15) + title + pc(9) + rule + "┐")
-	hintRow := colBoxTop + 1 + visible
+	b.WriteString(moveTo(boxTop, boxLeft) + pc(9) + "┌─" + pc(15) + title + pc(9) + rule + "┐")
+	hintRow := boxTop + 1 + visible
 	b.WriteString(line(hintRow, konfigReset+strings.Repeat(" ", inner)))
 	b.WriteString(line(hintRow+1, pc(8)+st.fit(" "+str.KonfigThemeHint, inner)))
-	b.WriteString(moveTo(hintRow+2, colBoxLeft) + pc(9) + "└" + strings.Repeat("─", inner) + "┘" + konfigReset)
+	b.WriteString(moveTo(hintRow+2, boxLeft) + pc(9) + "└" + strings.Repeat("─", inner) + "┘" + konfigReset)
 	if err := st.raw(b.String()); err != nil {
 		return err
 	}
@@ -164,7 +174,9 @@ func editTheme(st *konfigState) error {
 }
 
 // chooseTheme saves theme as the caller's, stored as none for the board's
-// own, and leaves Konfig when it changed.
+// own. When it changed, Konfig carries on on the executor for the new
+// theme, so its art, bars and colours change at once; the menu loop
+// switches to it when Konfig closes (Run, SwitchTheme).
 func (st *konfigState) chooseTheme(theme, board string) error {
 	if theme == board {
 		theme = ""
@@ -176,9 +188,9 @@ func (st *konfigState) chooseTheme(theme, board string) error {
 	if st.commit(st.c.e.Strings().KonfigThemeLabel,
 		func(u *user.User) { u.Theme = theme },
 		func(u *user.User) { u.Theme = old }) {
-		// Konfig closes, and the menu it was opened from is drawn in the
-		// new theme.
-		st.leave = true
+		st.c.e = st.c.e.ForUser(st.user())
+		st.redraw = true
+		st.saved(st.c.e.Strings().KonfigThemeLabel, themeValue(st).text)
 	}
 	return nil
 }

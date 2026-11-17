@@ -1141,7 +1141,8 @@
     "Style %d"
   ],
   "konfigThemeBoardTag": [
-    "(board's)"
+    "(board's)",
+    "(default)"
   ],
   "konfigThemeHelp": [
     "How the board looks to you: menus, screens and colours. Applies at once."

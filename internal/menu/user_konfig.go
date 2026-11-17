@@ -126,9 +126,6 @@ type konfigState struct {
 	// that take over the screen (the message editor, the header picker, the
 	// file-column box).
 	redraw bool
-	// leave asks Konfig to close after the current edit, as choosing a
-	// theme does, so the calling menu is drawn in it.
-	leave bool
 }
 
 func (st *konfigState) user() *user.User { return st.c.currentUser }
@@ -181,7 +178,7 @@ func runUserKonfig(c *cmdCtx, args string) (*user.User, string, error) {
 		if err != nil {
 			return st.user(), "", err
 		}
-		if done || st.leave {
+		if done {
 			return st.user(), next, nil
 		}
 	}
@@ -272,9 +269,6 @@ func (st *konfigState) activate(i int) error {
 	st.redraw = false
 	if err := st.items[i].edit(st); err != nil {
 		return err
-	}
-	if st.leave {
-		return nil // Konfig is closing; the calling menu draws next
 	}
 	if st.redraw {
 		return st.renderAll()
