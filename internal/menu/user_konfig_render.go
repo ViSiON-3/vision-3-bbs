@@ -144,8 +144,15 @@ func (st *konfigState) renderHeader() error {
 		slog.Warn("failed to read KONFIG.ANS", "node", st.c.nodeNumber, "error", err)
 	}
 	title := st.clip(st.c.e.Strings().KonfigTitle, konfigLineWidth, "..")
-	return st.raw(ansi.ClearScreen() + moveTo(2, 2) + pc(15) + title +
-		moveTo(3, 2) + pc(8) + strings.Repeat("─", st.cells(title)) + konfigReset)
+	out := ansi.ClearScreen() + moveTo(2, 2) + pc(15) + title +
+		moveTo(3, 2) + pc(8) + strings.Repeat("─", st.cells(title)) + konfigReset
+	// Without art there is nothing else saying how to leave, the key
+	// legend being blank by default: the title row says, at its right, as
+	// the stock art does.
+	if quit := string(ansi.ReplacePipeCodes([]byte(st.c.e.Strings().KonfigTitleQuit))); quit != "" {
+		out += moveTo(2, max(konfigScreenCols-ansi.VisibleLength(quit), 2)) + quit + konfigReset
+	}
+	return st.raw(out)
 }
 
 // heading is a section title followed by a rule, konfigColWidth cells wide.

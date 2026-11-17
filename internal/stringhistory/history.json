@@ -1172,6 +1172,9 @@
   "konfigTitle": [
     "User Konfig"
   ],
+  "konfigTitleQuit": [
+    "|08[|15Q|08] |07Quit"
+  ],
   "konfigTwitListHelp": [
     "Hide messages from selected authors."
   ],

@@ -335,6 +335,7 @@ var StringFallbacks = map[string]string{
 	// The User Konfig form (#429). Its text was hard-coded until these keys
 	// existed, so every strings.json written before them lacks them all.
 	"konfigTitle":             "User Konfig",
+	"konfigTitleQuit":         "|08[|15Q|08] |07Quit",
 	"konfigSectionTerminal":   "Terminal",
 	"konfigSectionMessages":   "Messages",
 	"konfigSectionPersonal":   "Personal",

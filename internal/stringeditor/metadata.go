@@ -562,6 +562,7 @@ func stringCatalog() []StringEntry {
 
 		// User Konfig (K) form (V3)
 		{Label: "Konfig: Title", Key: "konfigTitle", Description: "Title drawn when the menu set has no KONFIG.ANS. Plain text, no colour codes"},
+		{Label: "Konfig: Title Quit Hint", Key: "konfigTitleQuit", Description: "How to leave, at the right of the title row, shown only when the menu set has no KONFIG.ANS"},
 		{Label: "Konfig: Key Legend", Key: "konfigLegend", Description: "Key legend on the form's last row. Blank by default: the stock KONFIG.ANS shows how to quit. Set one if your KONFIG.ANS doesn't"},
 		{Label: "Konfig: Terminal Section", Key: "konfigSectionTerminal", Description: "Section title. Plain text, no colour codes"},
 		{Label: "Konfig: Messages Section", Key: "konfigSectionMessages", Description: "Section title. Plain text, no colour codes"},

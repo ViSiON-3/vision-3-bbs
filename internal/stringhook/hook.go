@@ -218,6 +218,7 @@ var NoHookKeys = map[string]bool{
 	"konfigScreenWidthHelp":     true,
 	"konfigScreenWidthLabel":    true,
 	"konfigSectionAppearance":   true,
+	"konfigTitleQuit":           true,
 	"konfigThemeLabel":          true,
 	"konfigThemeHelp":           true,
 	"konfigThemeTitle":          true,

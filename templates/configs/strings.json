@@ -357,6 +357,7 @@
   "konfigThemeOnlyOne": "|07This board has one theme, |15%s|07, so there's nothing else to choose.",
   "konfigThemeTitle": "Themes",
   "konfigTitle": "User Konfig",
+  "konfigTitleQuit": "|08[|15Q|08] |07Quit",
   "konfigUpdatedFormat": "|10Saved.|07 %s updated.",
   "konfigUserNoteHelp": "A short line about you, shown in user lists and last callers.",
   "konfigUserNoteLabel": "User Note",

@@ -85,6 +85,10 @@ func TestKonfigDrawsEverySettingInsideTheScreen(t *testing.T) {
 			t.Errorf("screen is missing %q", want)
 		}
 	}
+	// With no KONFIG.ANS, the title row says how to leave, at its right.
+	if row := strings.TrimRight(screen.Row(2), " "); !strings.HasSuffix(row, "[Q] Quit") || !strings.Contains(row, "User Konfig") {
+		t.Errorf("title row = %q, want the quit hint at its right", row)
+	}
 	// The first item starts highlighted and its help is shown.
 	if !strings.Contains(screen.Row(konfigHelpRow), "Columns your terminal shows") {
 		t.Errorf("help row = %q", screen.Row(konfigHelpRow))
