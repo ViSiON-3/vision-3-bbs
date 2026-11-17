@@ -59,15 +59,12 @@ func readerBarSuffix(options []MsgLightbarOption, suffix string, termWidth int) 
 	return suffix
 }
 
-// msgReaderInactiveColor greys out a bar item that does nothing on the
-// current message (Thread, on a message with no thread to show).
-const msgReaderInactiveColor = 8
-
-// dimmedOptions is opts with every item greyed out.
-func dimmedOptions(opts []MsgLightbarOption) []MsgLightbarOption {
+// dimmedOptions is opts with every item in the inactive colour, which
+// may be 0 (black).
+func dimmedOptions(opts []MsgLightbarOption, inactive int) []MsgLightbarOption {
 	out := make([]MsgLightbarOption, len(opts))
 	for i, o := range opts {
-		o.LoColor = msgReaderInactiveColor
+		o.LoColor, o.LoSet = inactive, true
 		out[i] = o
 	}
 	return out
@@ -285,12 +282,12 @@ func runMessageReaderOpts(e *MenuExecutor, s ssh.Session, terminal *term.Termina
 	sessionIH := getSessionIH(s)
 	reader := bufio.NewReader(sessionIH)
 
-	// Lightbar colours from the theme's roles. The bar's brackets keep
-	// their own blue.
+	// Lightbar colours from the theme's roles.
 	hiColor := e.barColor(currentUser)
 	loColor := e.roleColor(roleCommand)
 	destructiveColor := e.roleColor(roleDestructive)
-	boundsColor := 1
+	inactiveColor := e.roleColor(roleInactive)
+	boundsColor := e.roleColor(roleBracket)
 
 	// Build option set: append Delete option for sysop/co-sysop users
 	cfg := e.GetServerConfig()
@@ -553,15 +550,16 @@ readerLoop:
 		for i := range activeOptions {
 			switch activeOptions[i].HotKey {
 			case 'T':
-				activeOptions[i].LoColor = 0
+				activeOptions[i].LoColor, activeOptions[i].LoSet = 0, false
 				if !canMenu {
-					activeOptions[i].LoColor = msgReaderInactiveColor
+					// LoSet: the inactive role may be colour 0.
+					activeOptions[i].LoColor, activeOptions[i].LoSet = inactiveColor, true
 				}
 			case 'D':
 				// LoSet: the destructive role may be colour 0.
 				activeOptions[i].LoColor, activeOptions[i].LoSet = destructiveColor, true
 				if !canDelete(currentMsg) {
-					activeOptions[i].LoColor = msgReaderInactiveColor
+					activeOptions[i].LoColor = inactiveColor
 				}
 			}
 		}
@@ -663,7 +661,7 @@ readerLoop:
 				// While the thread menu has the arrows and Enter, the bar is
 				// drawn greyed out with nothing selected.
 				if threadMenu {
-					drawMsgLightbarStatic(terminal, dimmedOptions(activeOptions), outputMode, hiColor, loColor, suffixText, -1, true, boundsColor)
+					drawMsgLightbarStatic(terminal, dimmedOptions(activeOptions, inactiveColor), outputMode, hiColor, loColor, suffixText, -1, true, boundsColor)
 				} else {
 					drawMsgLightbarStatic(terminal, activeOptions, outputMode, hiColor, loColor, suffixText, 0, true, boundsColor)
 				}

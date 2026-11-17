@@ -37,6 +37,8 @@ type ThemeConfig struct {
 	LightbarHint        OptColor `json:"lightbarHint,omitzero"`
 	LightbarBorder      OptColor `json:"lightbarBorder,omitzero"`
 	LightbarDestructive OptColor `json:"lightbarDestructive,omitzero"`
+	LightbarInactive    OptColor `json:"lightbarInactive,omitzero"`
+	LightbarBracket     OptColor `json:"lightbarBracket,omitzero"`
 	// The caller colour roles: the board's default for each of |C1 to
 	// |C7 (see CallerColorRoles). Each is optional, like the lightbar
 	// roles.
@@ -445,6 +447,8 @@ func drawnTheme(theme ThemeConfig) ThemeConfig {
 	theme.LightbarHint = drawn(RoleLightbarHint)
 	theme.LightbarBorder = drawn(RoleLightbarBorder)
 	theme.LightbarDestructive = drawn(RoleLightbarDestructive)
+	theme.LightbarInactive = drawn(RoleLightbarInactive)
+	theme.LightbarBracket = drawn(RoleLightbarBracket)
 	return theme
 }
 

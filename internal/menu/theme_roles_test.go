@@ -208,3 +208,53 @@ func TestRoleHelpers(t *testing.T) {
 		t.Errorf("nil executor rule = %q", got)
 	}
 }
+
+// The reader bar's brackets and its inactive commands (Thread on a message
+// with no thread, Del on one the caller may not delete) take their roles,
+// and 0 is black for both.
+func TestReaderBracketAndInactiveRoles(t *testing.T) {
+	read := func(theme config.ThemeConfig) string {
+		t.Helper()
+		env := newMsgEnv(t)
+		env.generalMsgs(1) // one message: no thread to open
+		env.e.SetTheme(theme)
+		r := env.runCmd("READMSGS", env.caller, "", "Q")
+		if r.err != nil {
+			t.Fatal(r.err)
+		}
+		return r.raw
+	}
+	// The bracket is CP437 0xB3, which the test terminal shows as UTF-8.
+	bracket := func(c int) string { return "\x1b[0m" + colorCodeToAnsi(c) + "│" }
+	thread := func(c int) string { return colorCodeToAnsi(c) + " Thread " }
+
+	out := read(legacyTheme())
+	if !strings.Contains(out, bracket(1)) || !strings.Contains(out, thread(8)) {
+		t.Fatalf("default bar: want brackets in 1 and Thread in 8:\n%q", out)
+	}
+	for _, c := range []int{0, 78} {
+		theme := legacyTheme()
+		theme.LightbarBracket, theme.LightbarInactive = config.SetColor(c), config.SetColor(c+2)
+		out := read(theme)
+		if !strings.Contains(out, bracket(c)) || strings.Contains(out, bracket(1)) {
+			t.Errorf("lightbarBracket %d: brackets not in it:\n%q", c, out)
+		}
+		if !strings.Contains(out, thread(c+2)) || strings.Contains(out, thread(8)) {
+			t.Errorf("lightbarInactive %d: Thread not in it:\n%q", c+2, out)
+		}
+	}
+	black := legacyTheme()
+	black.LightbarInactive = config.SetColor(0)
+	if out := read(black); !strings.Contains(out, thread(0)) {
+		t.Errorf("lightbarInactive 0 did not draw Thread in colour 0:\n%q", out)
+	}
+}
+
+// dimmedOptions puts every command in the inactive colour, 0 included.
+func TestDimmedOptionsKeepsColourZero(t *testing.T) {
+	for _, o := range dimmedOptions([]MsgLightbarOption{{Label: " A "}, {Label: " B ", LoColor: 4, LoSet: true}}, 0) {
+		if o.LoColor != 0 || !o.LoSet {
+			t.Errorf("%q = %d (set %v); want 0, set", o.Label, o.LoColor, o.LoSet)
+		}
+	}
+}

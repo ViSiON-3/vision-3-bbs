@@ -1119,13 +1119,27 @@ shipped BAR, if any, applies again) or replace it with a BAR of your own.
 The colours inside a BAR are edited in the file itself or with `menuedit`;
 `./config` only shows where screen overrides exist and offers to inherit.
 
-`FILELISTCMD.BAR`, which is shipped, is not one of these: it defines the file
-listing's command bar, the commands as well as their colours.
+`FILELISTCMD.BAR` is not one of these: it defines the file listing's
+command bar, the commands as well as their colours, and is not shipped.
+Without it the file list builds its six commands (Mark, Info, View,
+Download, Upload, Quit) and colours them with `lightbarSelected` and
+`lightbarNormal`, so the command bar follows the shared colours like the
+rest of the screen. To change the commands, write your own
+`menus.d/<set>/bar/FILELISTCMD.BAR`, one record per command
+(`X,Y,HiLitedColor,RegularColor,HotKey,ReturnValue,Text`; the coordinates
+are ignored). It then sets that bar's colours too. Releases up to v0.9.8
+shipped this file, with unselected commands in colour `7`; they are
+now drawn in `lightbarNormal` (`13` in the default theme), as on the file
+management bar and the message scan's bar.
 
-If you upgraded by copying new files over an old install, the three retired
-files may still be in `menus/v3/bar/`. They draw the same colour as before,
-but they pin those screens to it; `./vision3 doctor` notes each one, and
-deleting it lets the screen follow the lightbar colours.
+If you upgraded by copying new files over an old install, the retired
+files may still be in `menus/v3/bar/`. They draw the same colours as
+before, but they pin those screens to them; `./vision3 doctor` notes each
+one, and deleting it lets the screen follow the lightbar colours. Doctor
+only names a file that is exactly as it shipped, in `menus/v3/bar/`: one
+you edited is taken for your own, and one a `menus.d/v3/bar/` file of the
+same name shadows is not in use. Check those yourself if you meant to go
+back to the shared colours.
 
 ### Chat screens
 

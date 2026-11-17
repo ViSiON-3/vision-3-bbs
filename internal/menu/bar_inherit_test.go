@@ -217,3 +217,66 @@ func TestBarColourMatchesBarSlot(t *testing.T) {
 		t.Errorf("theme lightbarSelected: bars %d, |C7 %q, want the theme's 0x1E", got, slot)
 	}
 }
+
+// The stock theme no longer ships FILELISTCMD.BAR (#1092): the file list
+// builds the same commands, and colours them with the lightbar roles, so a
+// change to lightbarSelected or lightbarNormal reaches the command bar. The
+// unselected commands of a stock board draw lightbarNormal, 13, where the
+// retired file had 7: a deliberate change, matching the management bar and
+// the message scan's bar.
+func TestFileListCommandBarFollowsTheRoles(t *testing.T) {
+	stock := stockMenuSet(t)
+	if _, err := os.Stat(filepath.Join(stock, "bar", "FILELISTCMD.BAR")); !os.IsNotExist(err) {
+		t.Errorf("FILELISTCMD.BAR is still shipped (stat err %v)", err)
+	}
+	theme, err := config.LoadThemeConfig(stock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(theme config.ThemeConfig) string {
+		t.Helper()
+		env := lightbarListEnv(t)
+		addReviewUpload(t, env, 1, "A.ZIP", 4)
+		env.e.SetTheme(theme)
+		r := env.runCmd("LISTFILES", env.caller, "", "q")
+		if r.err != nil {
+			t.Fatal(r.err)
+		}
+		return r.raw
+	}
+	cmd := func(colour int, label string) string { return colorCodeToAnsi(colour) + " " + label + " " }
+
+	out := run(theme)
+	if !strings.Contains(out, cmd(31, "Mark")) || !strings.Contains(out, cmd(13, "Quit")) {
+		t.Errorf("stock command bar: want Mark selected in 31 and Quit in 13:\n%q", out)
+	}
+
+	changed := theme
+	changed.LightbarSelected, changed.LightbarNormal = config.SetColor(78), config.SetColor(45)
+	out = run(changed)
+	for _, want := range []string{cmd(78, "Mark"), cmd(45, "Info"), cmd(45, "Download"), cmd(45, "Quit")} {
+		if !strings.Contains(out, want) {
+			t.Errorf("command bar has no %q under changed roles:\n%q", want, out)
+		}
+	}
+}
+
+// A sysop's own FILELISTCMD.BAR still defines the command bar, commands
+// and colours both, whatever the roles are.
+func TestFileListCommandBarFromASysopsBar(t *testing.T) {
+	e, write, _ := barEnv(t)
+	e.SetTheme(config.ThemeConfig{LightbarSelected: config.SetColor(78), LightbarNormal: config.SetColor(45)})
+	write(true, "FILELISTCMD", "; mine\n0,0,79,3,i,info,Info\n0,0,79,3,q,quit,Leave\n")
+	opts, err := loadBarFile("FILELISTCMD", e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmds, _, _, _, _ := buildFileListCmdBar(e, nil, false, opts, nil)
+	if len(cmds) != 2 || cmds[1].label != "Leave" || cmds[0].highlightColor != colorCodeToAnsi(79) || cmds[0].regularColor != colorCodeToAnsi(3) {
+		t.Errorf("command bar = %+v; want the BAR's two commands in 79 and 3", cmds)
+	}
+	cmds, _, _, _, _ = buildFileListCmdBar(e, nil, false, nil, nil)
+	if len(cmds) != 6 || cmds[0].highlightColor != colorCodeToAnsi(78) || cmds[0].regularColor != colorCodeToAnsi(45) {
+		t.Errorf("without a BAR = %+v; want the six built-in commands in the roles", cmds)
+	}
+}

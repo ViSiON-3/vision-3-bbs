@@ -13,6 +13,8 @@ const (
 	roleNormal      = config.RoleLightbarNormal
 	roleCommand     = config.RoleLightbarCommand
 	roleDestructive = config.RoleLightbarDestructive
+	roleInactive    = config.RoleLightbarInactive
+	roleBracket     = config.RoleLightbarBracket
 	roleBorder      = config.RoleLightbarBorder
 	roleYesNoHi     = config.RoleYesNoHighlight
 	roleYesNoLo     = config.RoleYesNoRegular

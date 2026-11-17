@@ -19,7 +19,7 @@ copying the rest of `ansi/`; every other file still comes from `menus/`.
 - `menuedit` saves into this directory by default (files it wrote are marked
   with `*` in its menu list). Run it with `--no-overlay` to edit `menus/`
   directly.
-- `theme.json` here is merged over the shipped one key by key: hold only the keys you change, and the rest follow the shipped file. It hot-reloads like the shipped one. `./vision3 doctor --fix` removes keys that only repeat the shipped values.
+- `theme.json` here is merged over the shipped one key by key: hold only the keys you change, and the rest follow the shipped file. It hot-reloads like the shipped one. `./vision3 doctor --fix` removes keys that only repeat the shipped values. It also moves the colours you set here into `config.json` `theme.colors`, where `./config` edits them.
 - A lightbar menu's `.ANS`, `.BAR` and `.CFG` are drawn against each other.
   If you override one, check the others still line up; the BBS logs a warning
   when a lightbar menu's files come from different layers.

@@ -33,6 +33,7 @@ func TestLegacyThemeFileRoles(t *testing.T) {
 	want := map[ColorRole]int{
 		RoleLightbarSelected: 79, RoleLightbarNormal: 3, RoleLightbarCommand: 9,
 		RoleLightbarHotkey: 15, RoleLightbarHint: 8, RoleLightbarBorder: 8, RoleLightbarDestructive: 4,
+		RoleLightbarInactive: 8, RoleLightbarBracket: 1,
 	}
 	for _, role := range LightbarRoles {
 		got, src := th.ColorWithSource(role)

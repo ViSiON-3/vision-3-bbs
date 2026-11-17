@@ -619,3 +619,40 @@ func TestDoorMenuNoPagingAtOnePageBoundary(t *testing.T) {
 		t.Errorf("%d-door page reaches the bottom row", n)
 	}
 }
+
+// The door menu's highlight follows a changed lightbarSelected, and a
+// DOORMENUHI.BAR still wins over it, for the highlight and the rows.
+func TestDoorMenuHighlightUnderChangedRole(t *testing.T) {
+	theme := config.ThemeConfig{YesNoHighlightColor: 31, LightbarSelected: config.SetColor(78)}
+	c, s, _ := doorMenuHarness(t, "lightbar", "q", 3)
+	c.e.SetTheme(theme)
+	if _, _, err := runDoorMenu(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	if out := s.output(); !strings.Contains(out, colorCodeToAnsi(78)) || strings.Contains(out, colorCodeToAnsi(31)) {
+		t.Errorf("highlight did not follow lightbarSelected:\n%q", out)
+	}
+
+	c, s, _ = doorMenuHarness(t, "lightbar", "q", 3)
+	c.e.SetTheme(theme)
+	set := t.TempDir()
+	stock := c.e.MenuSetPath
+	for _, dir := range []string{"mnu", "templates"} {
+		if err := os.Symlink(filepath.Join(stock, dir), filepath.Join(set, dir)); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(set, "bar"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(set, "bar", "DOORMENUHI.BAR"), []byte("0,0,47,2,*,*,Highlight\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c.e.MenuSetPath = set
+	if _, _, err := runDoorMenu(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	if out := s.output(); !strings.Contains(out, colorCodeToAnsi(47)) || !strings.Contains(out, colorCodeToAnsi(2)) || strings.Contains(out, colorCodeToAnsi(78)) {
+		t.Errorf("DOORMENUHI.BAR did not win over lightbarSelected:\n%q", out)
+	}
+}

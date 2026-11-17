@@ -291,13 +291,33 @@ func TestDoctorNotesRetiredScreenBars(t *testing.T) {
 	bar("menus", "MSGCONFHI", stock)                    // left over, but
 	bar("menus.d", "MSGCONFHI", "; inherit\nINHERIT\n") // already inheriting
 	bar("menus", "FILEAREAHI", stock)                   // never a stock file
+	stockCmd := "; File listing command bar options\n0,0,31,7, ,mark,Mark\n0,0,31,7,i,info,Info\n0,0,31,7,v,view,View\n" +
+		"0,0,31,7,d,download,Download\n0,0,31,7,u,upload,Upload\n0,0,31,7,q,quit,Quit\n"
+	bar("menus", "FILELISTCMD", stockCmd) // left over: noted
 
 	var checks []doctorCheck
 	checkRetiredScreenBars(filepath.Join(root, "menus", "v3"), func(name string, status doctorSeverity, message, fix string) {
 		checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
 	})
-	if len(checks) != 1 || !hasDoctorCheck(checks, "menus/v3/bar/FILELISTHI.BAR", doctorInfo, "no longer ships") {
-		t.Errorf("checks = %+v, want one note, for FILELISTHI", checks)
+	if len(checks) != 2 || !hasDoctorCheck(checks, "menus/v3/bar/FILELISTHI.BAR", doctorInfo, "no longer ships") ||
+		!hasDoctorCheck(checks, "menus/v3/bar/FILELISTCMD.BAR", doctorInfo, "command bar") {
+		t.Errorf("checks = %+v, want notes for FILELISTHI and FILELISTCMD", checks)
+	}
+
+	// An edited command bar is the sysop's own; so is a stock one the
+	// overlay replaces.
+	for name, edit := range map[string]func(){
+		"edited":   func() { bar("menus", "FILELISTCMD", strings.Replace(stockCmd, "Quit\n", "Leave\n", 1)) },
+		"shadowed": func() { bar("menus", "FILELISTCMD", stockCmd); bar("menus.d", "FILELISTCMD", "0,0,79,3,q,quit,Quit\n") },
+	} {
+		edit()
+		checks = nil
+		checkRetiredScreenBars(filepath.Join(root, "menus", "v3"), func(name string, status doctorSeverity, message, fix string) {
+			checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+		})
+		if hasDoctorCheck(checks, "menus/v3/bar/FILELISTCMD.BAR", doctorInfo, "command bar") {
+			t.Errorf("%s: noted as stock: %+v", name, checks)
+		}
 	}
 
 	// Another theme never shipped these files: a BAR there with the same
@@ -366,5 +386,114 @@ func TestReloadKeepsTheRunningTheme(t *testing.T) {
 	cw.reloadServerConfig()
 	if strings.Contains(logged.String(), "restart the BBS") {
 		t.Errorf("warned with the theme unchanged:\n%s", logged.String())
+	}
+}
+
+// Doctor notes an overlay's own colours and names the fix, and says
+// nothing when theme.colors already has them.
+func TestDoctorNotesThemeOverlayColors(t *testing.T) {
+	check := func(configJSON, overlay string) []doctorCheck {
+		t.Helper()
+		root := themeBoard(t, configJSON, "v3")
+		writeDoctorFixture(t, filepath.Join(root, "menus", "v3", "theme.json"), `{"chatUserColor": 10, "sysopChatScreen": "V3CHAT1"}`)
+		if err := os.MkdirAll(filepath.Join(root, "menus.d", "v3"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeDoctorFixture(t, filepath.Join(root, "menus.d", "v3", "theme.json"), overlay)
+		var checks []doctorCheck
+		checkThemeOverlayColors(filepath.Join(root, "menus", "v3"), filepath.Join(root, "configs"), func(name string, status doctorSeverity, message, fix string) {
+			checks = append(checks, doctorCheck{Name: name, Status: status, Message: message, Fix: fix})
+		})
+		return checks
+	}
+	checks := check("", `{"chatUserColor": 12, "sysopChatScreen": "MYCHAT"}`)
+	if !hasDoctorCheck(checks, "menus.d/v3/theme.json", doctorInfo, "sets 1 colour(s) of its own, which apply to this theme only: chatUserColor") ||
+		!strings.Contains(checks[0].Fix, "doctor --fix") {
+		t.Errorf("checks = %+v", checks)
+	}
+	for name, c := range map[string][2]string{
+		"no colours":         {"", `{"sysopChatScreen": "MYCHAT"}`},
+		"board has it":       {`{"theme": {"colors": {"chatUserColor": 9}}}`, `{"chatUserColor": 12}`},
+		"repeats the theme":  {"", `{"chatUserColor": 10}`},
+		"unreadable overlay": {"", `{`},
+	} {
+		if checks := check(c[0], c[1]); len(checks) != 0 {
+			t.Errorf("%s: %+v, want nothing said", name, checks)
+		}
+	}
+}
+
+// doctor --fix moves the overlay's colours to config.json, backing both
+// files up; the board draws the same, sysopChatScreen stays, and --dry-run
+// changes nothing.
+func TestDoctorFixMovesThemeColors(t *testing.T) {
+	configJSON := `{"boardName": "Test", "theme": {"name": "v3", "colors": {"lightbarHint": 3}}}`
+	root := themeBoard(t, configJSON, "v3")
+	set := filepath.Join(root, "menus", "v3")
+	writeDoctorFixture(t, filepath.Join(set, "theme.json"), `{"chatUserColor": 10, "lightbarHint": 8, "sysopChatScreen": "V3CHAT1"}`)
+	overlayDir := filepath.Join(root, "menus.d", "v3")
+	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	overlayFile := filepath.Join(overlayDir, "theme.json")
+	overlay := `{"chatUserColor": 12, "lightbarHint": 5, "sysopChatScreen": "MYCHAT"}`
+	writeDoctorFixture(t, overlayFile, overlay)
+	configFile := filepath.Join(root, "configs", "config.json")
+	now := time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)
+
+	look := func() (int, int, string) {
+		t.Helper()
+		theme, err := config.LoadThemeConfig(set)
+		if err != nil {
+			t.Fatal(err)
+		}
+		board, err := config.BoardColorsFromConfigDir(filepath.Join(root, "configs"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		user, _ := config.ResolveColor(config.RoleChatUser, theme, board)
+		hint, _ := config.ResolveColor(config.RoleLightbarHint, theme, board)
+		return user, hint, theme.SysopChatScreen
+	}
+	u0, h0, s0 := look()
+
+	fixes := fixThemeColors(root, true, now)
+	if len(fixes) != 1 || fixes[0].Status != "would-fix" {
+		t.Fatalf("dry run = %+v", fixes)
+	}
+	want := "move chatUserColor to config.json theme.colors; remove chatUserColor from it; keep lightbarHint (theme.colors already sets them)"
+	if fixes[0].Action != want {
+		t.Errorf("action = %q\n want %q", fixes[0].Action, want)
+	}
+	if data, _ := os.ReadFile(overlayFile); string(data) != overlay {
+		t.Fatalf("dry run changed the overlay: %s", data)
+	}
+	if data, _ := os.ReadFile(configFile); string(data) != configJSON {
+		t.Fatalf("dry run changed config.json: %s", data)
+	}
+
+	fixes = fixThemeColors(root, false, now)
+	if len(fixes) != 1 || fixes[0].Status != "fixed" {
+		t.Fatalf("fix = %+v", fixes)
+	}
+	if want := "backup: data/backups/config.json.20261117-090000, data/backups/menus.d-v3-theme.json.20261117-090000"; fixes[0].Message != want {
+		t.Errorf("message = %q", fixes[0].Message)
+	}
+	if data, _ := os.ReadFile(filepath.Join(root, "data", "backups", "config.json.20261117-090000")); string(data) != configJSON {
+		t.Errorf("config.json backup = %q", data)
+	}
+	if u, h, s := look(); u != u0 || h != h0 || s != s0 || s != "MYCHAT" {
+		t.Errorf("after the move: user %d hint %d screen %q; before %d %d %q", u, h, s, u0, h0, s0)
+	}
+	board, _ := config.BoardColorsFromConfigDir(filepath.Join(root, "configs"))
+	if board.ChatUserColor != config.SetColor(12) || board.LightbarHint != config.SetColor(3) {
+		t.Errorf("theme.colors = %+v", board)
+	}
+	cfg, err := config.LoadServerConfig(filepath.Join(root, "configs"))
+	if err != nil || cfg.BoardName != "Test" {
+		t.Errorf("config.json after the move: %+v, %v", cfg.BoardName, err)
+	}
+	if fixes := fixThemeColors(root, false, now); len(fixes) != 0 {
+		t.Errorf("second fix = %+v", fixes)
 	}
 }

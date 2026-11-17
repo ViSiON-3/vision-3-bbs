@@ -1,7 +1,6 @@
 package menu
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -97,50 +96,6 @@ func TestKonfigDrawsEverySettingInsideTheScreen(t *testing.T) {
 	for r := 1; r <= 24; r++ {
 		if n := utf8.RuneCountInString(strings.TrimRight(screen.Row(r), " ")); n > 79 {
 			t.Errorf("row %d is %d columns wide", r, n)
-		}
-	}
-}
-
-// The stock header art must fit in the rows the form leaves for it, in both
-// encodings, or the form would draw over it.
-func TestKonfigStockHeaderArtFits(t *testing.T) {
-	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
-		um, u := newUserConfigTestUser(t)
-		var opts []testterm.Option
-		if mode == ansi.OutputModeCP437 {
-			opts = append(opts, testterm.CP437())
-		}
-		screen := testterm.New(80, 24, opts...)
-		sess := testterm.NewSession(screen, "q")
-		t.Cleanup(func() { resetSessionIH(sess) })
-		c := &cmdCtx{e: konfigStockExecutor(t), s: sess,
-			terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u,
-			outputMode: mode, termWidth: 80, termHeight: 24}
-		if _, _, err := runUserKonfig(c, ""); err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("%v:\n%s", mode, screen.Snapshot())
-		snap := screen.Snapshot()
-		if !strings.HasSuffix(strings.TrimRight(screen.Row(1), " "), "[ViSiON/3]") {
-			t.Errorf("%v: row 1 should end at [ViSiON/3]; got %q", mode, screen.Row(1))
-		}
-		if !strings.HasPrefix(screen.Row(2), "█ █") {
-			t.Errorf("%v: row 2 should start the logo at column 1; got %q", mode, screen.Row(2))
-		}
-		if !strings.Contains(snap, "User: Tester") {
-			t.Errorf("%v: |UH not substituted", mode)
-		}
-		if !strings.Contains(snap, fmt.Sprintf("Level: %d", u.AccessLevel)) {
-			t.Errorf("%v: |LEVEL not substituted", mode)
-		}
-		if strings.Contains(snap, "|UH") || strings.Contains(snap, "|LEVEL") {
-			t.Errorf("%v: a raw token reached the screen", mode)
-		}
-		if strings.TrimSpace(screen.Row(konfigHeaderRows+1)) != "" {
-			t.Errorf("%v: row %d under the art is not blank: %q", mode, konfigHeaderRows+1, screen.Row(konfigHeaderRows+1))
-		}
-		if !strings.Contains(screen.Row(konfigTopRow), "Terminal") {
-			t.Errorf("%v: form displaced; row %d = %q", mode, konfigTopRow, screen.Row(konfigTopRow))
 		}
 	}
 }

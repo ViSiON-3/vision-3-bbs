@@ -166,7 +166,7 @@ edits that theme's `theme.json` (see [Theme Configuration](#theme-configuration)
 |------|---------------|
 | Theme Selection | The theme the board runs, picked from the directories under `menus/`. Saved to `config.json` as `theme.name`; restart the BBS to switch |
 | Prompt Colors | Yes/No highlight and regular colours, and the message editor's autocorrect highlight |
-| Lightbar Colors | The seven [lightbar colour roles](#lightbar-colour-roles) every lightbar inherits |
+| Lightbar Colors | The nine [lightbar colour roles](#lightbar-colour-roles) every lightbar inherits |
 | Screen Overrides | The screens whose own `*HI.BAR` file sets their highlight over the shared colours: each one's colour and whether the file is shipped or in `menus.d`. Set a screen to **Y** to have it **inherit shared colours**; saving writes an inherit marker to `menus.d/<theme>/bar/` (see [Per-screen lightbar colors](menus/menu-system.md#per-screen-lightbar-colors)). The BARs themselves are edited with `menuedit` |
 | Split-Screen Chat | The chat screen chat opens with, picked from the menu set's screens, the built-in layout or **random**; and the sysop's and caller's text colours where a screen sets none |
 | Toasts | The colours a toast fades through |
@@ -359,7 +359,7 @@ What each section covers:
 
 ### Safe Fixes (`--fix`)
 
-Doctor repairs three kinds of problem on request:
+Doctor repairs four kinds of problem on request:
 
 - **Standard data directories.** `--fix` creates whichever of
   `data/users`, `data/logs`, `data/msgbases` and `data/files` are missing.
@@ -375,6 +375,12 @@ Doctor repairs three kinds of problem on request:
   The file is first copied to
   `data/backups/menus.d-<theme>-theme.json.<date>-<time>`. Keys with values
   of your own are kept.
+- **Colours an overlay `theme.json` sets of its own.** They move into
+  `config.json` `theme.colors`, where `./config` edits them, and out of the
+  overlay; the board looks the same. A colour `theme.colors` already has is
+  not overwritten, and settings that are not colours stay in the overlay.
+  Both files are backed up first (see
+  [Moving an overlay's colours](#board-colour-overrides)).
 
 It then runs the normal report. `--dry-run` shows what `--fix` would do
 without changing anything:
@@ -1410,10 +1416,34 @@ pins today's value if a later theme changes it. `./vision3 doctor` lists
 the overlay keys that only repeat the shipped values, and
 `./vision3 doctor --fix` removes them, after copying the file to
 `data/backups/`, and removes the file if nothing is left (`--dry-run` shows what it would do). Keys with values of your own
-stay. To move a colour you chose into `theme.colors`, set it under
-**Theme** in `./config` and then take its key out of the overlay. Leave
-any setting that is not a colour, such as a `sysopChatScreen` you picked:
-the overlay is where that lives.
+stay.
+
+**Moving an overlay's colours into `theme.colors`.** Colours you chose in
+the overlay keep working, but they belong to that theme only, and
+`./config` edits the board's colours, not the overlay's. Doctor notes an
+overlay that sets colours of its own, and `--fix` moves them:
+
+```bash
+./vision3 doctor --fix --dry-run   # show what would move
+./vision3 doctor --fix
+```
+
+This works on the selected theme's overlay only, and only when you run
+`--fix`: nothing moves colours at startup or on an upgrade.
+
+- Each colour the overlay changes from the shipped theme is written to
+  `theme.colors`, and taken out of the overlay. The board looks the same
+  afterwards.
+- A colour `theme.colors` already has is never overwritten. The overlay's
+  value for it stays in the overlay.
+- Settings that are not colours, such as a `sysopChatScreen` you picked,
+  stay in the overlay; that is where they live. The overlay is removed if
+  nothing is left.
+- `config.json` and the overlay are both copied to `data/backups/` first.
+
+Board colours apply whatever theme is selected, so after the move they
+also apply if you switch to another theme; reset them under **Theme** in
+`./config` (**Use theme default**) if you want another theme's own.
 
 ### Theme Configuration
 
@@ -1431,6 +1461,8 @@ theme) controls color schemes:
   "lightbarHint": 8,
   "lightbarBorder": 8,
   "lightbarDestructive": 4,
+  "lightbarInactive": 8,
+  "lightbarBracket": 1,
   "chatSysopColor": 11,
   "chatUserColor": 10,
   "autocorrectHighlightColor": 14,
@@ -1473,6 +1505,8 @@ BAR file to edit.
 | `lightbarHint` | `8` | The rest of the hint row | The same screens |
 | `lightbarBorder` | `8` | The line between a list and its footer | File list, message area, file area and conference selectors, BBS list (its header rule and detail divider too) |
 | `lightbarDestructive` | `4` | An unselected command that destroys something | **Del** on the message reader command bar |
+| `lightbarInactive` | `8` | A command that does nothing where it is | **Thread** on a message with no thread and **Del** on a message the caller may not delete, on the message reader command bar; every command while the bar is dimmed |
+| `lightbarBracket` | `1` | The brackets around a command bar | Message reader command bar |
 
 - **A role left out inherits.** The Default column is what it inherits. A
   `theme.json` written before the roles has none of them, so its lightbars
@@ -1486,8 +1520,9 @@ BAR file to edit.
   `lightbarSelected` and `lightbarNormal` fall back to.
 - **A BAR file still wins for its screen.** Where a `*HI.BAR` exists, that
   screen uses the BAR's highlight, not the role; the default theme ships
-  none. `FILELISTCMD.BAR`, which it does ship, colours the file list's
-  command bar. See
+  none. Likewise a `FILELISTCMD.BAR` of your own defines the file list's
+  command bar, commands and colours; without one, which is how the default
+  theme ships, the bar uses `lightbarSelected` and `lightbarNormal`. See
   [Per-screen lightbar colors](menus/menu-system.md#per-screen-lightbar-colors)
   for the files and for returning a screen to the shared colours.
 
@@ -1495,10 +1530,10 @@ Colours you authored are not touched. The roles colour only what the BBS
 generates: highlights, command bars, hint rows and separator lines. ANSI
 art, the `.TOP`, `.MID` and `.BOT` templates (so the unselected rows of a
 list, which are drawn from the `.MID` template), menu prompts and
-`strings.json` keep the colours written in them. Also unchanged: the
-brackets around the message reader's command bar (blue), a greyed-out
-command that does nothing on the current message, and the generated door
-menu's unselected entries, which use the terminal's default colour.
+`strings.json` keep the colours written in them. So do the generated door
+menu's unselected entries: they are drawn from its `.MID` template, in the
+colours written there (the terminal's default where it sets none), unless a
+`DOORMENUHI.BAR` gives them its regular colour.
 
 The board can override any of these without touching the theme; see
 [Board Colour Overrides](#board-colour-overrides) for that and the full
