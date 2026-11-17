@@ -189,6 +189,7 @@ func (st *konfigState) chooseTheme(theme, board string) error {
 		func(u *user.User) { u.Theme = theme },
 		func(u *user.User) { u.Theme = old }) {
 		st.c.e = st.c.e.ForUser(st.user())
+		st.hdrNames = nil // header style names are the new theme's
 		st.redraw = true
 		st.saved(st.c.e.Strings().KonfigThemeLabel, themeValue(st).text)
 	}

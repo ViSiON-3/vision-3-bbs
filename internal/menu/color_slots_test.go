@@ -87,7 +87,6 @@ func TestKonfigColoursBox(t *testing.T) {
 	}
 }
 
-
 func TestColorChoiceWraps(t *testing.T) {
 	ch := colorChoiceOf("|15")
 	ch.move(1)

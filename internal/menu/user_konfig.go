@@ -796,6 +796,11 @@ func (st *konfigState) applyTermSize() {
 	if u.ScreenHeight > 0 {
 		h = u.ScreenHeight
 	}
+	if h != st.c.termHeight || w != st.c.termWidth {
+		// The footer and the boxes follow the screen size, so the whole
+		// form is drawn again where they now go.
+		st.redraw = true
+	}
 	st.c.termWidth, st.c.termHeight = w, h
 	setSessionTermSize(st.c.s, w, h)
 	_ = st.c.terminal.SetSize(w, h)

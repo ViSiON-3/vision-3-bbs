@@ -209,3 +209,52 @@ func TestKonfigFooterAtTheFootOfTheScreen(t *testing.T) {
 		t.Errorf("form's first row %d = %q", konfigTopRow, screen.Row(konfigTopRow))
 	}
 }
+
+// A screen height changed in Konfig moves the footer at once: the form is
+// drawn again on the new size.
+func TestKonfigFooterFollowsAHeightChange(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	e := konfigThemeExecutor(t)
+	screen := testterm.New(80, 40)
+	sess := testterm.NewSession(screen, "b"+keyClear+"40\rq")
+	t.Cleanup(func() { resetSessionIH(sess); sessionTermSizes.Delete(sess) })
+	c := &cmdCtx{e: e, s: sess, terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u,
+		nodeNumber: 1, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
+	if _, _, err := runUserKonfig(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := reloadUser(t, um).ScreenHeight; got != 40 {
+		t.Fatalf("ScreenHeight = %d", got)
+	}
+	if !strings.Contains(screen.Row(40), "Done") {
+		t.Errorf("legend row 40 = %q after the change", screen.Row(40))
+	}
+	if strings.Contains(screen.Row(24), "Done") {
+		t.Errorf("old legend left on row 24: %q", screen.Row(24))
+	}
+}
+
+// After a theme change, Header Style is named from the new theme's
+// MSGHDR.BAR, not the one read before.
+func TestKonfigThemeChangeRenamesHeaderStyle(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	e := konfigThemeExecutor(t, "amber")
+	menus := filepath.Dir(e.MenuSetPath)
+	for name, label := range map[string]string{"v3": "Classic", "amber": "Ambered"} {
+		dir := filepath.Join(menus, name, "bar")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "MSGHDR.BAR"), []byte("0,0,31,7,1,1,"+label+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	u.MsgHdr = 1
+	if err := um.UpdateUser(u); err != nil {
+		t.Fatal(err)
+	}
+	screen := runKonfigOn(t, e, um, reloadUser(t, um), "v"+keyUp+"\rq")
+	if snap := screen.Snapshot(); !strings.Contains(snap, "Ambered") || strings.Contains(snap, "Classic") {
+		t.Errorf("Header Style not renamed from amber's MSGHDR.BAR:\n%s", snap)
+	}
+}
