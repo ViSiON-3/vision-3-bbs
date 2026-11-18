@@ -132,32 +132,49 @@ func TestInterruptBeforeTheDwellEndsIt(t *testing.T) {
 	}
 }
 
-// A wait of 0 reports what is already waiting every time, not at random
-// against a timer that has run out, and reports elapsed when nothing is.
-func TestWaitForZeroTakesWhatIsWaiting(t *testing.T) {
-	pr, pw := io.Pipe()
-	defer pw.Close() // so the handler's reader gets EOF and exits
-	ih := NewInputHandler(pr)
-	defer ih.Close()
-	if got := ih.WaitFor(0); got != WaitElapsed {
-		t.Fatalf("nothing waiting: got %v, want elapsed", got)
-	}
-	for i := 0; i < 100; i++ {
-		ih.Interrupt()
-		if got := ih.WaitFor(0); got != WaitInterrupted {
-			t.Fatalf("try %d: interrupt waiting: got %v, want interrupted", i, got)
-		}
-	}
-	go func() { _, _ = pw.Write([]byte("x")) }()
+// queueByte types b and returns once the handler's reader has queued it, so
+// a wait that follows finds it already waiting.
+func queueByte(t *testing.T, ih *InputHandler, pw *io.PipeWriter, b byte) {
+	t.Helper()
+	go func() { _, _ = pw.Write([]byte{b}) }()
 	deadline := time.Now().Add(5 * time.Second)
-	for ih.WaitFor(0) != WaitInput {
+	for len(ih.incoming) == 0 {
 		if time.Now().After(deadline) {
-			t.Fatal("a typed key was never reported")
+			t.Fatal("the typed byte never reached the handler")
 		}
 		time.Sleep(time.Millisecond)
 	}
-	if key, err := ih.ReadKey(); err != nil || key != 'x' {
-		t.Fatalf("ReadKey = %q, %v; want 'x'", rune(key), err)
+}
+
+// A wait of 0, or one shorter than any timer can measure, reports what is
+// already waiting every time, not at random against a timer that has run
+// out, and a wait of 0 reports elapsed when nothing is.
+func TestShortWaitTakesWhatIsWaiting(t *testing.T) {
+	for _, d := range []time.Duration{0, time.Nanosecond, 50 * time.Microsecond} {
+		pr, pw := io.Pipe()
+		ih := NewInputHandler(pr)
+		if d == 0 {
+			if got := ih.WaitFor(d); got != WaitElapsed {
+				t.Fatalf("wait %s, nothing waiting: got %v, want elapsed", d, got)
+			}
+		}
+		for i := 0; i < 100; i++ {
+			ih.Interrupt()
+			if got := ih.WaitFor(d); got != WaitInterrupted {
+				t.Fatalf("wait %s, try %d: interrupt waiting: got %v, want interrupted", d, i, got)
+			}
+		}
+		queueByte(t, ih, pw, 'x')
+		for i := 0; i < 100; i++ {
+			if got := ih.WaitFor(d); got != WaitInput {
+				t.Fatalf("wait %s, try %d: key waiting: got %v, want input", d, i, got)
+			}
+		}
+		if key, err := ih.ReadKey(); err != nil || key != 'x' {
+			t.Fatalf("wait %s: ReadKey = %q, %v; want 'x'", d, rune(key), err)
+		}
+		_ = pw.Close() // so the handler's reader gets EOF and exits
+		ih.Close()
 	}
 }
 

@@ -315,63 +315,70 @@ const (
 	WaitInterrupted
 )
 
-// WaitFor is WaitForInput, reporting what ended the wait. With d of 0 or less
-// it does not wait: it reports input or an interruption already waiting, or
-// WaitElapsed.
+// WaitFor is WaitForInput, reporting what ended the wait. Input or an
+// interruption already waiting ends it before any timer starts, however short
+// d is: a timer that has run out would leave the select to pick at random
+// between it and a waiting key. With d of 0 or less it does not wait.
 func (ih *InputHandler) WaitFor(d time.Duration) WaitOutcome {
 	if len(ih.unreadBuf) > 0 {
 		return WaitInput
 	}
-	if d <= 0 {
-		return ih.pollWait()
+	if out, done := ih.waitOn(nil); done || d <= 0 {
+		return out
 	}
 	timer := time.NewTimer(d)
 	defer timer.Stop()
+	out, _ := ih.waitOn(timer.C)
+	return out
+}
+
+// waitOn takes the first of input, a break-in or an Interrupt for WaitFor,
+// or reports WaitElapsed when timeout fires. With timeout nil it does not
+// block, and done is false when none is waiting.
+// Go's select has no default that can be switched off, so the two forms are
+// two selects over one set of channels and one set of handlers.
+func (ih *InputHandler) waitOn(timeout <-chan time.Time) (out WaitOutcome, done bool) {
+	breakIn := ih.breakInChan(true)
 	for {
-		select {
-		case b, ok := <-ih.incoming:
-			if !ok {
-				return WaitInput
+		var b byte
+		var open bool
+		if timeout == nil {
+			select {
+			case b, open = <-ih.incoming:
+			case <-breakIn:
+				return ih.waitBrokeIn(), true
+			case <-ih.interruptChan():
+				return WaitInterrupted, true
+			default:
+				return WaitElapsed, false
 			}
-			if ih.lateEnterTrailer(b) {
-				continue
+		} else {
+			select {
+			case b, open = <-ih.incoming:
+			case <-breakIn:
+				return ih.waitBrokeIn(), true
+			case <-ih.interruptChan():
+				return WaitInterrupted, true
+			case <-timeout:
+				return WaitElapsed, true
 			}
-			ih.unreadByte(b)
-			return WaitInput
-		case <-timer.C:
-			return WaitElapsed
-		case <-ih.breakInChan(true):
-			ih.breakInPending = true
-			return WaitInterrupted
-		case <-ih.interruptChan():
-			return WaitInterrupted
 		}
+		if !open {
+			return WaitInput, true
+		}
+		if ih.lateEnterTrailer(b) {
+			continue
+		}
+		ih.unreadByte(b)
+		return WaitInput, true
 	}
 }
 
-// pollWait is WaitFor with no time to wait. A timer that has already run out
-// would leave the select to pick at random between it and a waiting key.
-func (ih *InputHandler) pollWait() WaitOutcome {
-	for {
-		select {
-		case b, ok := <-ih.incoming:
-			if !ok {
-				return WaitInput
-			}
-			if ih.lateEnterTrailer(b) {
-				continue
-			}
-			ih.unreadByte(b)
-			return WaitInput
-		case <-ih.breakInChan(true):
-			ih.breakInPending = true
-			return WaitInterrupted
-		case <-ih.interruptChan():
-			return WaitInterrupted
-		default:
-			return WaitElapsed
-		}
-	}
+// waitBrokeIn notes a break-in taken by a wait, for runToastHook to hand to
+// the read that ran the hook.
+func (ih *InputHandler) waitBrokeIn() WaitOutcome {
+	ih.breakInPending = true
+	return WaitInterrupted
 }
 
 // PendingByte waits up to d for input, as WaitForInput does, and returns the
@@ -387,7 +394,7 @@ func (ih *InputHandler) PendingByte(d time.Duration) (b byte, ok bool, err error
 		return 0, false, *err
 	}
 	// Take what is already queued first: WaitForInput's select would pick
-	// at random between it and a timer that has already run out.
+	// at random between it and an Interrupt that is also waiting.
 	for len(ih.unreadBuf) == 0 {
 		select {
 		case b, ok := <-ih.incoming:
