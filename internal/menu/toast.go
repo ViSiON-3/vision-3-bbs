@@ -197,12 +197,12 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 		sess.WakeToasts()
 		return
 	}
+	f := &toastFader{ih: ih, lay: lay, w: w, step: step, deadline: deadline}
 	first := lay.line
 	if len(ramp) > 0 {
 		first = lay.frame(ramp[0])
 	}
-	err := lay.write(w, first)
-	shown := toastNow()
+	err := f.write(first)
 	if err == nil {
 		e.settleOverlayToast(sess, t, stored, lay.clipped)
 	}
@@ -215,15 +215,16 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	row := lay.row
 	// A key, or a sysop's chat request or a window change (which the read
 	// services once this returns), ends any wait here: the fade stops where
-	// it is and the row goes straight back.
-	ended := fadeToast(ih, lay, w, ramp, step, true, shown, deadline)
-	if ended == editor.WaitElapsed && toastLeft(deadline) > 0 && (len(ramp) == 0 || lay.write(w, lay.line) == nil) {
+	// it is and the row goes straight back. The fade in ends a step before
+	// the fade out begins, so the toast's own frame shows for a step at least.
+	ended := f.fade(ramp, true, deadline.Add(-fadeOut-step))
+	if ended == editor.WaitElapsed && f.fits(deadline) && (len(ramp) == 0 || f.write(lay.line) == nil) {
 		// Hold for what is left, keeping the fade-out's share.
 		if hold := toastLeft(deadline) - fadeOut; hold > 0 {
 			ended = toastWait(ih, hold)
 		}
 		if ended == editor.WaitElapsed {
-			ended = fadeToast(ih, lay, w, reversed(ramp), step, false, deadline.Add(-fadeOut), deadline)
+			ended = f.fade(reversed(ramp), false, deadline)
 		}
 	}
 	keyed := ended == editor.WaitInput
@@ -494,39 +495,76 @@ func (e *MenuExecutor) toastFade() (ramp []int, step time.Duration) {
 	return e.Theme().FadeColors(), cfg.ToastFadeStep()
 }
 
-// fadeToast draws lay through ramp, step apart from start, and reports what
-// ended it: WaitElapsed when it ran to the end or reached deadline, or the
-// key or interruption that cut it short. No frame is drawn, and no wait is
-// asked for, past deadline; a timer can still return up to a tick after it,
-// so the caller's restore can start that late. drawn says the first step is
-// on screen already. An empty ramp draws nothing. A write that fails ends it
-// as an interruption, so the caller restores the row.
+// toastFader draws a toast's frames and times the steps between them.
+type toastFader struct {
+	ih       *editor.InputHandler
+	lay      toastDraw
+	w        io.Writer
+	step     time.Duration
+	deadline time.Time
+	// slow is how long the last write took, when that was a step or more:
+	// a link that slow cannot show a frame for its step, and fits counts
+	// it. A shorter write counts as none, since a coarse clock (Windows'
+	// moves in 15.6ms ticks) can make even a quick write read that long.
+	slow time.Duration
+}
+
+// write draws text in the toast's cells and notes how long that took.
+func (f *toastFader) write(text string) error {
+	began := toastNow()
+	err := f.lay.write(f.w, text)
+	f.slow = 0
+	if took := toastNow().Sub(began); f.step > 0 && took >= f.step {
+		f.slow = took
+	}
+	return err
+}
+
+// fits reports whether a frame written now would be on screen before by,
+// going by how long the last write took.
+func (f *toastFader) fits(by time.Time) bool {
+	return toastNow().Add(f.slow).Before(by)
+}
+
+// fade draws the toast through ramp and reports what ended it: WaitElapsed
+// when it ran to the end or reached f.deadline, or the key or interruption
+// that cut it short. drawn says the first frame is on screen already. An
+// empty ramp draws nothing. A write that fails ends it as an interruption,
+// so the caller restores the row.
 //
-// Step i ends at start plus i+1 steps, not a step after its frame was
-// drawn, so a wait that runs late (Windows' timer moves in 15.6ms ticks)
-// shortens the next step instead of pushing the last frame past deadline.
-// A step already over still checks for a key or an interruption.
-func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, step time.Duration, drawn bool, start, deadline time.Time) editor.WaitOutcome {
+// Each frame shows for a step, but no step ends later than end less a step
+// for each frame after it. A frame or a wait that runs late (Windows' timer
+// moves in 15.6ms ticks) then shortens only the steps that are behind that
+// schedule, and the last frame still has its step before end. A frame whose
+// step is over, or would be by the time a slow link has carried it, is not
+// drawn: the frame before it stays up through that step. end is at or
+// before f.deadline, so no frame is drawn and no wait asked for past it; a
+// timer can still return up to a tick late, and the caller's restore start
+// that late. Every step, however short, checks for a key or an interruption.
+func (f *toastFader) fade(ramp []int, drawn bool, end time.Time) editor.WaitOutcome {
 	for i, c := range ramp {
-		if toastLeft(deadline) <= 0 {
+		if toastLeft(f.deadline) <= 0 {
 			return editor.WaitElapsed
 		}
-		if i > 0 || !drawn {
-			if lay.write(w, lay.frame(c)) != nil {
+		latest := end.Add(-time.Duration(len(ramp)-1-i) * f.step)
+		shown := i == 0 && drawn
+		if !shown && f.fits(latest) {
+			if f.write(f.lay.frame(c)) != nil {
 				return editor.WaitInterrupted
 			}
+			shown = true
 		}
 		// The write may have taken the time that was left. One reading of the
 		// clock decides both whether it did and how long this step waits.
 		now := toastNow()
-		if !now.Before(deadline) {
+		if !now.Before(f.deadline) {
 			return editor.WaitElapsed
 		}
-		end := start.Add(time.Duration(i+1) * step)
-		if deadline.Before(end) {
-			end = deadline
+		until := latest
+		if shown && now.Add(f.step).Before(latest) {
+			until = now.Add(f.step)
 		}
-		if out := toastWait(ih, end.Sub(now)); out != editor.WaitElapsed {
+		if out := toastWait(f.ih, until.Sub(now)); out != editor.WaitElapsed {
 			return out
 		}
 	}
