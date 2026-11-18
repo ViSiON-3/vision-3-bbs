@@ -43,6 +43,10 @@ var toastNow = time.Now
 // toastLeft is how long remains until deadline by toastNow.
 func toastLeft(deadline time.Time) time.Duration { return deadline.Sub(toastNow()) }
 
+// toastWait is the wait between a toast's frames and through its hold; tests
+// replace it to make every wait run late, as a coarse timer does.
+var toastWait = (*editor.InputHandler).WaitFor
+
 // toastRearm is how long a key that cleared an overlay holds off the next one,
 // so a queue of toasts does not flash past someone who is typing.
 var toastRearm = time.Second
@@ -198,6 +202,7 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 		first = lay.frame(ramp[0])
 	}
 	err := lay.write(w, first)
+	shown := toastNow()
 	if err == nil {
 		e.settleOverlayToast(sess, t, stored, lay.clipped)
 	}
@@ -211,14 +216,14 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	// A key, or a sysop's chat request or a window change (which the read
 	// services once this returns), ends any wait here: the fade stops where
 	// it is and the row goes straight back.
-	ended := fadeToast(ih, lay, w, ramp, step, true, deadline)
+	ended := fadeToast(ih, lay, w, ramp, step, true, shown, deadline)
 	if ended == editor.WaitElapsed && toastLeft(deadline) > 0 && (len(ramp) == 0 || lay.write(w, lay.line) == nil) {
 		// Hold for what is left, keeping the fade-out's share.
 		if hold := toastLeft(deadline) - fadeOut; hold > 0 {
-			ended = ih.WaitFor(hold)
+			ended = toastWait(ih, hold)
 		}
 		if ended == editor.WaitElapsed {
-			ended = fadeToast(ih, lay, w, reversed(ramp), step, false, deadline)
+			ended = fadeToast(ih, lay, w, reversed(ramp), step, false, deadline.Add(-fadeOut), deadline)
 		}
 	}
 	keyed := ended == editor.WaitInput
@@ -489,13 +494,19 @@ func (e *MenuExecutor) toastFade() (ramp []int, step time.Duration) {
 	return e.Theme().FadeColors(), cfg.ToastFadeStep()
 }
 
-// fadeToast draws lay through ramp, step apart, and reports what ended it:
-// WaitElapsed when it ran to the end or reached deadline, or the key or
-// interruption that cut it short. No frame is drawn, and no wait runs, past
-// deadline. drawn says the first step is on screen already. An empty ramp
-// draws nothing. A write that fails ends it as an interruption, so the
-// caller restores the row.
-func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, step time.Duration, drawn bool, deadline time.Time) editor.WaitOutcome {
+// fadeToast draws lay through ramp, step apart from start, and reports what
+// ended it: WaitElapsed when it ran to the end or reached deadline, or the
+// key or interruption that cut it short. No frame is drawn, and no wait is
+// asked for, past deadline; a timer can still return up to a tick after it,
+// so the caller's restore can start that late. drawn says the first step is
+// on screen already. An empty ramp draws nothing. A write that fails ends it
+// as an interruption, so the caller restores the row.
+//
+// Step i ends at start plus i+1 steps, not a step after its frame was
+// drawn, so a wait that runs late (Windows' timer moves in 15.6ms ticks)
+// shortens the next step instead of pushing the last frame past deadline.
+// A step already over still checks for a key or an interruption.
+func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, step time.Duration, drawn bool, start, deadline time.Time) editor.WaitOutcome {
 	for i, c := range ramp {
 		if toastLeft(deadline) <= 0 {
 			return editor.WaitElapsed
@@ -505,12 +516,17 @@ func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, 
 				return editor.WaitInterrupted
 			}
 		}
-		// The write may have taken the time that was left.
-		left := toastLeft(deadline)
-		if left <= 0 {
+		// The write may have taken the time that was left. One reading of the
+		// clock decides both whether it did and how long this step waits.
+		now := toastNow()
+		if !now.Before(deadline) {
 			return editor.WaitElapsed
 		}
-		if out := ih.WaitFor(min(step, left)); out != editor.WaitElapsed {
+		end := start.Add(time.Duration(i+1) * step)
+		if deadline.Before(end) {
+			end = deadline
+		}
+		if out := toastWait(ih, end.Sub(now)); out != editor.WaitElapsed {
 			return out
 		}
 	}

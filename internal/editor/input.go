@@ -315,10 +315,15 @@ const (
 	WaitInterrupted
 )
 
-// WaitFor is WaitForInput, reporting what ended the wait.
+// WaitFor is WaitForInput, reporting what ended the wait. With d of 0 or less
+// it does not wait: it reports input or an interruption already waiting, or
+// WaitElapsed.
 func (ih *InputHandler) WaitFor(d time.Duration) WaitOutcome {
 	if len(ih.unreadBuf) > 0 {
 		return WaitInput
+	}
+	if d <= 0 {
+		return ih.pollWait()
 	}
 	timer := time.NewTimer(d)
 	defer timer.Stop()
@@ -340,6 +345,31 @@ func (ih *InputHandler) WaitFor(d time.Duration) WaitOutcome {
 			return WaitInterrupted
 		case <-ih.interruptChan():
 			return WaitInterrupted
+		}
+	}
+}
+
+// pollWait is WaitFor with no time to wait. A timer that has already run out
+// would leave the select to pick at random between it and a waiting key.
+func (ih *InputHandler) pollWait() WaitOutcome {
+	for {
+		select {
+		case b, ok := <-ih.incoming:
+			if !ok {
+				return WaitInput
+			}
+			if ih.lateEnterTrailer(b) {
+				continue
+			}
+			ih.unreadByte(b)
+			return WaitInput
+		case <-ih.breakInChan(true):
+			ih.breakInPending = true
+			return WaitInterrupted
+		case <-ih.interruptChan():
+			return WaitInterrupted
+		default:
+			return WaitElapsed
 		}
 	}
 }

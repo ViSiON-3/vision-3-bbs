@@ -132,6 +132,35 @@ func TestInterruptBeforeTheDwellEndsIt(t *testing.T) {
 	}
 }
 
+// A wait of 0 reports what is already waiting every time, not at random
+// against a timer that has run out, and reports elapsed when nothing is.
+func TestWaitForZeroTakesWhatIsWaiting(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close() // so the handler's reader gets EOF and exits
+	ih := NewInputHandler(pr)
+	defer ih.Close()
+	if got := ih.WaitFor(0); got != WaitElapsed {
+		t.Fatalf("nothing waiting: got %v, want elapsed", got)
+	}
+	for i := 0; i < 100; i++ {
+		ih.Interrupt()
+		if got := ih.WaitFor(0); got != WaitInterrupted {
+			t.Fatalf("try %d: interrupt waiting: got %v, want interrupted", i, got)
+		}
+	}
+	go func() { _, _ = pw.Write([]byte("x")) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for ih.WaitFor(0) != WaitInput {
+		if time.Now().After(deadline) {
+			t.Fatal("a typed key was never reported")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if key, err := ih.ReadKey(); err != nil || key != 'x' {
+		t.Fatalf("ReadKey = %q, %v; want 'x'", rune(key), err)
+	}
+}
+
 // A chat request and a window change during the same dwell: the chat request
 // was taken off its channel, so it is serviced, and the event still arrives.
 func TestBreakInAndEventDuringOneDwell(t *testing.T) {
