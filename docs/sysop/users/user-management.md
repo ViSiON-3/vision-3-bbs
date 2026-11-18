@@ -938,6 +938,7 @@ Users are stored as a JSON array. Each user account contains:
 - `accessLevel` - Numeric access level (0-255)
 - `flags` - String of single-character flags for ACS checks (e.g., "ABC")
 - `roles` / `groups` - [Admin roles](users/admin-roles.md) and [user groups](users/admin-roles.md#groups) by name (omitted when empty)
+- `expiringRoles` - Roles given [until a time](users/admin-roles.md#until-a-date): each role's name and its expiry as an RFC 3339 time (omitted when empty)
 - `namedFlags` - [Named flags](users/admin-roles.md#named-flags) for `FLAG:`*name*, each with its expiry as an RFC 3339 time, `""` for none (omitted when empty)
 - `validated` - Whether user is validated by SysOp
 - `publicKeys` - OpenSSH public keys that may open the [WFC console](how-to-guides/wfc-console.md) (omitted when empty)

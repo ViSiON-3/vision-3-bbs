@@ -456,6 +456,10 @@ repository could impersonate your board.
   `configs/roles.json` and set per user, with an optional expiry, in
   `./ue` and the Admin Menu's user editor (`L`). One-character
   `FLAG:A` is still the legacy flag `FA`.
+- **Roles until a date.** A role can be given until a time
+  (`validator=2027-01-01` in either user editor), kept under
+  `expiringRoles` on the user record. A BBS older than this ignores that
+  field: going back to one, those roles grant nothing there.
 - **A handle can no longer start with `@`,** since `@name` addresses a
   group. Doctor warns when an existing handle matches a group's address.
 - **Sponsors and uploads belong to accounts.** At its first start the new

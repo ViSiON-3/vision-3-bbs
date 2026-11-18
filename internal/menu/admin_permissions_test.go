@@ -401,3 +401,64 @@ func TestUserEditor_LongFieldInputScrolls(t *testing.T) {
 		t.Errorf("the end of the value isn't in view:\n%q", r.raw)
 	}
 }
+
+// TestUserEditor_GivesRoleUntilATime pins [R] with an expiry (#1125): a
+// past expiry is refused, a future one saved apart from the roles held for
+// good, and the role stops granting at that instant.
+func TestUserEditor_GivesRoleUntilATime(t *testing.T) {
+	useRoles(t, validatorRole)
+	env := newMenuEnv(t)
+	r := env.runCmd("ADMINLISTUSERS", env.sysop, "", "j"+"r"+"validator=2001-01-01\r"+"r"+"Validator=2099-01-01\r"+"s"+"q")
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	if !r.has("role validator: 2001-01-01 has already passed", "Changes saved for Caller.") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	u, _ := env.diskUser(2)
+	expiry, err := time.Parse(time.RFC3339, u.ExpiringRoles["validator"])
+	if err != nil || len(u.Roles) != 0 || !expiry.Equal(time.Date(2099, 1, 1, 0, 0, 0, 0, boardLocation())) {
+		t.Fatalf("saved roles %v, expiring %v", u.Roles, u.ExpiringRoles)
+	}
+	if l, ok := modLogField(modAdminLog(t, env), 2, "roles"); !ok || l.NewValue != "validator=2099-01-01" {
+		t.Errorf("audit entry = %+v (found %v)", l, ok)
+	}
+	at := acsContext(u, nil, time.Now())
+	if !acs.Check("ROLE:validator&PERM:users.validate", at) {
+		t.Error("the role doesn't count before its expiry")
+	}
+	at.Now = expiry
+	if acs.Check("ROLE:validator", at) || acs.Check("PERM:users.validate", at) {
+		t.Error("the role still counts at its expiry")
+	}
+}
+
+// A validator whose role has expired is refused at the save, as one whose
+// role was taken away is: the check reads the stored record and the clock.
+func TestValidatorExpiredRoleStopsSave(t *testing.T) {
+	useRoles(t, validatorRole)
+	e, um := newUserEditorTestEnv(t)
+	val := addUserAt(t, um, "Val", 20, true)
+	pending := addUserAt(t, um, "Newbie", 1, false)
+	for _, tt := range []struct {
+		expiry string
+		saved  bool
+	}{
+		{time.Now().Add(-time.Minute).UTC().Format(time.RFC3339), false},
+		{time.Now().Add(time.Hour).UTC().Format(time.RFC3339), true},
+	} {
+		stored, _ := um.GetUserByID(val.ID)
+		stored.ExpiringRoles = map[string]string{"validator": tt.expiry}
+		if err := um.UpdateUserByID(stored); err != nil {
+			t.Fatal(err)
+		}
+		target, _ := um.GetUserByID(pending.ID)
+		msg, saved := e.applyPendingUserChanges(um, val, target, map[string]interface{}{"validated": true}, map[int]time.Time{target.ID: target.UpdatedAt})
+		if saved != tt.saved {
+			t.Errorf("expiry %s: saved = %v (%q), want %v", tt.expiry, saved, msg, tt.saved)
+		}
+		if !saved && msg != msgAdminNoLongerAllowed {
+			t.Errorf("expiry %s: msg = %q", tt.expiry, msg)
+		}
+	}
+}

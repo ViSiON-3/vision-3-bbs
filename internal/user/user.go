@@ -57,6 +57,12 @@ type User struct {
 	// configs/roles.json defines them (internal/perm). Only a sysop sets
 	// them; a role the file doesn't define grants nothing.
 	Roles []string `json:"roles,omitempty"`
+	// ExpiringRoles are roles given until a time: each role's name and the
+	// RFC 3339 instant it stops granting (#1125). A role is in Roles or
+	// here, not both; an expired one stays until the sysop takes it off. A
+	// BBS older than this field ignores it, so a role given until a time
+	// grants nothing there rather than lasting for ever.
+	ExpiringRoles map[string]string `json:"expiringRoles,omitempty"`
 	// Groups are the user groups the sysop has put this user in, by name,
 	// as configs/roles.json defines them, for the ACS term GROUP:. Being in
 	// a group grants no admin permission.

@@ -86,6 +86,10 @@ func TestHasFlag(t *testing.T) {
 			t.Errorf("HasFlag(%s, %v) = %v, want %v", tt.name, tt.now, got, tt.want)
 		}
 	}
+	// The zero instant is no expiry anyone wrote: unreadable, not "never".
+	if HasFlag(&user.User{NamedFlags: map[string]string{"beta": "0001-01-01T00:00:00Z"}}, "beta", r, before) {
+		t.Error("a zero-instant expiry passed")
+	}
 	if HasFlag(&user.User{AccessLevel: 255}, "beta", r, before) {
 		t.Error("a sysop has a flag they weren't given")
 	}
@@ -185,10 +189,10 @@ func TestFlagExpiryAcrossFallBack(t *testing.T) {
 	first, _ := time.Parse(time.RFC3339, "2027-11-07T01:30:00-04:00")
 	second, _ := time.Parse(time.RFC3339, "2027-11-07T01:30:00-05:00")
 	for _, at := range []time.Time{first, second} {
-		text := FormatFlagExpiry(at, loc)
-		back, err := ParseFlagExpiry(text, loc)
+		text := FormatExpiry(at, loc)
+		back, err := ParseExpiry(text, loc)
 		if err != nil || !back.Equal(at) {
-			t.Errorf("FormatFlagExpiry(%v) = %q, reads back as %v (%v)", at, text, back, err)
+			t.Errorf("FormatExpiry(%v) = %q, reads back as %v (%v)", at, text, back, err)
 		}
 	}
 	u := &user.User{NamedFlags: map[string]string{"donor": first.UTC().Format(time.RFC3339)}}
@@ -200,19 +204,6 @@ func TestFlagExpiryAcrossFallBack(t *testing.T) {
 	again, err := ParseFlagList(FormatFlagList(u, loc), r, loc, now, u)
 	if err != nil || !SameFlags(again, u.NamedFlags) {
 		t.Errorf("round trip = %v, %v", again, err)
-	}
-}
-
-// The zero instant is no expiry anyone means: it never counts, rather than
-// reading as "never expires".
-func TestFlagZeroExpiryIsUnreadable(t *testing.T) {
-	r := flagRoles(t)
-	u := &user.User{NamedFlags: map[string]string{"donor": "0001-01-01T00:00:00Z"}}
-	if g := FlagGrants(u); len(g) != 1 || !g[0].Bad {
-		t.Fatalf("grants = %+v", g)
-	}
-	if HasFlag(u, "donor", r, time.Now()) {
-		t.Error("a zero expiry passes")
 	}
 }
 

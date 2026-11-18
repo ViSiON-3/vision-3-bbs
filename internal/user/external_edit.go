@@ -53,6 +53,7 @@ func sysopOwnedFields(dst, src *User) {
 	dst.AccessLevel = src.AccessLevel
 	dst.Flags = src.Flags
 	dst.Roles = append([]string(nil), src.Roles...)
+	dst.ExpiringRoles = maps.Clone(src.ExpiringRoles)
 	dst.Groups = append([]string(nil), src.Groups...)
 	dst.NamedFlags = maps.Clone(src.NamedFlags)
 	dst.PreviousHandles = append([]string(nil), src.PreviousHandles...)

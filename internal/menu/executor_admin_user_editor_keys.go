@@ -181,7 +181,8 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 	case 'r', 'R':
 		// Admin roles (#610), checked against configs/roles.json as typed so
 		// a role that would grant nothing isn't assigned unnoticed.
-		st.stageNameList("roles", "Roles", st.users[st.selectedIndex].Roles, perm.ParseRoleList)
+		// A role may be given until a time (#1125): validator=2027-01-01.
+		st.stageRoles()
 		refresh = true
 	case 'u', 'U':
 		// User groups (#1036), checked the same way.

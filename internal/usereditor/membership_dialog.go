@@ -3,6 +3,7 @@ package usereditor
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -30,7 +31,7 @@ func membershipFieldDef() fieldDef {
 // membershipSummary is the field's value: how many roles and groups the user
 // has, "(none)" for neither.
 func membershipSummary(u *user.User) string {
-	r, g := len(perm.NormalizeRoles(u.Roles)), len(perm.NormalizeRoles(u.Groups))
+	r, g := len(perm.RoleGrants(u)), len(perm.NormalizeRoles(u.Groups))
 	if r == 0 && g == 0 {
 		return "(none)"
 	}
@@ -64,7 +65,7 @@ type membershipDialog struct {
 func (m *Model) openMembershipDialog() {
 	u := m.editingUser()
 	d := &m.membership
-	for i, v := range []string{perm.FormatRoleList(u.Roles), perm.FormatRoleList(u.Groups)} {
+	for i, v := range []string{perm.FormatRoleGrants(u, m.boardLocation), perm.FormatRoleList(u.Groups)} {
 		ti := textinput.New()
 		ti.Prompt = ""
 		// Set before the value, which textinput cuts to the limit, and
@@ -95,7 +96,8 @@ func (d *membershipDialog) setFocus(f int) {
 // updateMembership handles keys in the dialog. Enter checks both lists
 // against configs/roles.json and, when both are good, stores them on the
 // user; a name the file doesn't define is refused with the list of the ones
-// it does. Esc leaves the user as they were.
+// it does. A role may be given until a time (validator=2027-01-01), which
+// must not have passed. Esc leaves the user as they were.
 func (m Model) updateMembership(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	d := &m.membership
 	switch msg.Type {
@@ -110,7 +112,8 @@ func (m Model) updateMembership(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			d.err = fmt.Sprintf("configs/roles.json can't be read: %v", m.rolesErr)
 			return m, nil
 		}
-		roles, err := perm.ParseRoleList(d.inputs[memberRoles].Value(), m.roles)
+		u := m.editingUser()
+		roles, expiring, err := perm.ParseRoleGrants(d.inputs[memberRoles].Value(), m.roles, m.boardLocation, time.Now(), u)
 		if err != nil {
 			d.err = "Roles: " + err.Error()
 			d.setFocus(memberRoles)
@@ -122,9 +125,9 @@ func (m Model) updateMembership(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			d.setFocus(memberGroups)
 			return m, nil
 		}
-		u := m.editingUser()
-		if perm.FormatRoleList(roles) != perm.FormatRoleList(u.Roles) || perm.FormatRoleList(groups) != perm.FormatRoleList(u.Groups) {
-			u.Roles, u.Groups = roles, groups
+		next := &user.User{Roles: roles, ExpiringRoles: expiring}
+		if !perm.SameRoles(next, u) || perm.FormatRoleList(groups) != perm.FormatRoleList(u.Groups) {
+			u.Roles, u.ExpiringRoles, u.Groups = roles, expiring, groups
 			m.dirty, m.editDirty = true, true
 		}
 		m.mode = modeEdit
@@ -162,6 +165,10 @@ func (m Model) overlayMembershipDialog(background string) string {
 		return line(label + " defined: " + strings.Join(names, ", "))
 	}
 
+	zone := "the server's zone"
+	if m.boardLocation != nil && m.boardLocation != time.Local {
+		zone = m.boardLocation.String()
+	}
 	rows := []string{
 		dialogBorderStyle.Render("╔" + strings.Repeat("═", inner) + "╗"),
 		centered("Roles & Groups for " + m.editingUser().Handle),
@@ -169,12 +176,25 @@ func (m Model) overlayMembershipDialog(background string) string {
 		input("Roles", memberRoles),
 		input("Groups", memberGroups),
 		line(""),
+		line("A role until a time: name=YYYY-MM-DD [HH:MM], " + zone),
+	}
+	// Roles given until a time, with whether each still counts.
+	var timed []string
+	for _, g := range perm.RoleGrants(m.editingUser()) {
+		if g.Stored != "" {
+			timed = append(timed, perm.DescribeGrant(g, m.boardLocation, time.Now()))
+		}
+	}
+	if len(timed) > 0 {
+		rows = append(rows, line("Timed: "+strings.Join(timed, ", ")))
+	}
+	rows = append(rows,
 		defined("Roles", m.roles.Names()),
 		defined("Groups", m.roles.GroupNames()),
 		line(m.membership.err),
 		centered("Names separated by commas  [Tab] switch  [Enter] OK  [Esc] cancel"),
-		dialogBorderStyle.Render("╚" + strings.Repeat("═", inner) + "╝"),
-	}
+		dialogBorderStyle.Render("╚"+strings.Repeat("═", inner)+"╝"),
+	)
 
 	lines := strings.Split(background, "\n")
 	startRow := max((m.height-len(rows))/2, 0)
