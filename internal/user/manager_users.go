@@ -212,6 +212,16 @@ func (um *UserMgr) NextUserID() int {
 
 // AddUser creates a new user, hashes the password, assigns an ID, and saves.
 func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*User, error) {
+	return um.AddUserWith(password, handle, realName, groupLocation, nil)
+}
+
+// AddUserWith is AddUser with init, when not nil, filling in the rest of the
+// new record before its first save, so the account and its signup fields
+// (creation time, the welcome letter owed, the areas it joins) reach disk
+// together or not at all. init runs under the manager's lock: it only sets
+// fields on the record, and calls nothing on the manager. The ID, handle and
+// password it is given can't be changed.
+func (um *UserMgr) AddUserWith(password, handle, realName, groupLocation string, init func(*User)) (*User, error) {
 	handle = strings.TrimSpace(handle)
 	if handle == "" {
 		return nil, fmt.Errorf("handle cannot be blank")
@@ -281,6 +291,11 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 		Validated:     um.autoValidate,
 		LastLogin:     time.Time{},
 	}
+	if init != nil {
+		id, hash := newUser.ID, newUser.PasswordHash
+		init(newUser)
+		newUser.ID, newUser.Handle, newUser.PasswordHash = id, handle, hash
+	}
 
 	// Add to map and increment nextUserID
 	um.users[lowerHandle] = newUser
@@ -295,9 +310,8 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 	}
 
 	slog.Info("added user", "handle", newUser.Handle, "id", newUser.ID)
-	// A copy, as every getter returns: the caller fills in the rest of the
-	// record and saves it with UpdateUser, and must not write to the stored
-	// one without the lock while it does.
+	// A copy, as every getter returns: the caller must not write to the
+	// stored record without the lock.
 	return newUser.Clone(), nil
 }
 

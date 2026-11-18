@@ -188,12 +188,39 @@ func (e *MenuExecutor) handleNewUserApplication(
 		return nil, err
 	}
 
-	// 9. Create account
-	newUser, addErr := userManager.AddUser(
+	// 9. Create account. The signup fields go on the record before its
+	// first save, so a save that fails leaves no account rather than one
+	// without them.
+	var allAreas []*message.MessageArea
+	var autoJoinTags []string
+	if e.MessageMgr != nil {
+		allAreas = e.MessageMgr.ListAreas()
+		for _, area := range allAreas {
+			if area.AutoJoin {
+				autoJoinTags = append(autoJoinTags, area.Tag)
+			}
+		}
+	}
+	newUser, addErr := userManager.AddUserWith(
 		password,
 		handle,
 		realName,
 		location,
+		func(u *user.User) {
+			// The private note with creation date.
+			u.PrivateNote = userNote
+			u.CreatedAt = time.Now()
+			// Owed the welcome letter once validated; see deliverWelcomeMail.
+			u.WelcomePending = true
+			// Auto-join any message areas flagged with auto_join, and record
+			// the current areas/networks as offered.
+			if len(autoJoinTags) > 0 {
+				u.TaggedMessageAreaTags = autoJoinTags
+			}
+			if e.MessageMgr != nil {
+				initNewscanSeen(u, allAreas)
+			}
+		},
 	)
 	if addErr != nil {
 		slog.Error("failed to create new user", "node", nodeNumber, "handle", handle, "error", addErr)
@@ -203,37 +230,19 @@ func (e *MenuExecutor) handleNewUserApplication(
 		return nil, nil
 	}
 
-	// Set the private note with creation date
-	newUser.PrivateNote = userNote
-	newUser.CreatedAt = time.Now()
-	// Owed the welcome letter once validated; see deliverWelcomeMail.
-	newUser.WelcomePending = true
-
-	// Auto-join any message areas flagged with auto_join, seed their
-	// last-read pointers ~1 week back so the first newscan is manageable,
-	// and record the current areas/networks as offered.
-	if e.MessageMgr != nil {
-		allAreas := e.MessageMgr.ListAreas()
+	// Seed the auto-joined areas' last-read pointers ~1 week back so the
+	// first newscan is manageable.
+	if len(autoJoinTags) > 0 {
 		since := time.Now().AddDate(0, 0, -message.NewscanSeedDays)
-		var autoJoinTags []string
 		for _, area := range allAreas {
 			if !area.AutoJoin {
 				continue
 			}
-			autoJoinTags = append(autoJoinTags, area.Tag)
 			if err := e.MessageMgr.SeedLastRead(area.ID, newUser.Handle, since); err != nil {
 				slog.Warn("failed to seed lastread for new user", "node", nodeNumber, "area", area.ID, "handle", handle, "error", err)
 			}
 		}
-		if len(autoJoinTags) > 0 {
-			newUser.TaggedMessageAreaTags = autoJoinTags
-			slog.Info("auto-joining message areas for new user", "node", nodeNumber, "count", len(autoJoinTags), "handle", handle)
-		}
-		initNewscanSeen(newUser, allAreas)
-	}
-
-	if saveErr := userManager.UpdateUser(newUser); saveErr != nil {
-		slog.Error("failed to save user note", "node", nodeNumber, "handle", handle, "error", saveErr)
+		slog.Info("auto-joining message areas for new user", "node", nodeNumber, "count", len(autoJoinTags), "handle", handle)
 	}
 
 	slog.Info("new user created", "node", nodeNumber, "handle", newUser.Handle, "id", newUser.ID)

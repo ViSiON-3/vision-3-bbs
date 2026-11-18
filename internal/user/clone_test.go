@@ -1,7 +1,10 @@
 package user
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 )
@@ -142,5 +145,76 @@ func TestAddUserReturnsACopy(t *testing.T) {
 	}
 	if stored, _ := um.GetUserByID(u.ID); stored.PrivateNote != "set before the save" {
 		t.Errorf("UpdateUser didn't store the copy: %q", stored.PrivateNote)
+	}
+}
+
+// After UpdateUserByID the caller's record takes the stored sysop-owned
+// fields back, as copies: editing them in place leaves the stored record
+// as saved.
+func TestUpdateUserByIDLeavesCallerDetached(t *testing.T) {
+	um, err := NewUserManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	added, err := um.AddUser("password", "Tester", "Real Name", "Loc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	off := false
+	added.PublicKeys = []string{"ssh-ed25519 AAAA one"}
+	added.MorePrompts = &off
+	if err := um.UpdateUserByID(added); err != nil {
+		t.Fatal(err)
+	}
+	added.PublicKeys[0] = "ssh-ed25519 AAAA changed"
+	*added.MorePrompts = true
+	stored, _ := um.GetUserByID(added.ID)
+	if stored.PublicKeys[0] != "ssh-ed25519 AAAA one" || stored.MorePromptsOn() {
+		t.Errorf("stored record changed through the caller's copy: keys %v, more prompts %v", stored.PublicKeys, stored.MorePromptsOn())
+	}
+}
+
+// AddUserWith saves the account and the fields init sets in one write: they
+// are on disk after a reload, and when the save fails there is no account.
+func TestAddUserWithSavesSignupFields(t *testing.T) {
+	dir := t.TempDir()
+	um, err := NewUserManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	added, err := um.AddUserWith("password", "Tester", "Real Name", "Loc", func(u *User) {
+		u.CreatedAt = created
+		u.WelcomePending = true
+		u.TaggedMessageAreaTags = []string{"GENERAL"}
+		// What init may not change.
+		u.ID, u.Handle, u.PasswordHash = 99, "Other", ""
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if added.ID == 99 || added.Handle != "Tester" || added.PasswordHash == "" {
+		t.Errorf("init changed the identity: %d %q %q", added.ID, added.Handle, added.PasswordHash)
+	}
+	reloaded, err := NewUserManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, ok := reloaded.GetUser("Tester")
+	if !ok || !u.CreatedAt.Equal(created) || !u.WelcomePending || !slices.Equal(u.TaggedMessageAreaTags, []string{"GENERAL"}) {
+		t.Fatalf("after reload: %+v (found %v)", u, ok)
+	}
+
+	// A save that can't be written leaves no account.
+	blocker := filepath.Join(dir, "blocked")
+	if err := os.MkdirAll(blocker, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	um.path = blocker
+	if _, err := um.AddUserWith("password", "Second", "", "", func(u *User) { u.WelcomePending = true }); err == nil {
+		t.Fatal("AddUserWith succeeded with an unwritable store")
+	}
+	if _, ok := um.GetUser("Second"); ok {
+		t.Error("the failed account is in the cache")
 	}
 }

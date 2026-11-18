@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -72,7 +73,7 @@ func sysopOwnedFields(dst, src *User) {
 
 	// Credentials
 	dst.PasswordHash = src.PasswordHash
-	dst.PublicKeys = src.PublicKeys
+	dst.PublicKeys = slices.Clone(src.PublicKeys)
 	dst.WFCReadOnly = src.WFCReadOnly
 
 	// Terminal and display preferences
@@ -83,7 +84,11 @@ func sysopOwnedFields(dst, src *User) {
 	dst.MsgHdr = src.MsgHdr
 	dst.HotKeys = src.HotKeys
 	dst.ThreadViewClosed = src.ThreadViewClosed
-	dst.MorePrompts = src.MorePrompts
+	dst.MorePrompts = nil
+	if src.MorePrompts != nil {
+		prompts := *src.MorePrompts
+		dst.MorePrompts = &prompts
+	}
 	dst.CustomPrompt = src.CustomPrompt
 	// Not a ./ue field, but read the same way: Konfig saves the caller's
 	// theme, and the session takes it from the record on the next screen
