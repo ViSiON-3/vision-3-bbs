@@ -210,33 +210,72 @@ func editFileShowAndPrompt(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 	return strings.TrimSpace(input), nil
 }
 
-// editFileChangeDescription prompts for a new description and updates the record.
+// editFileChangeDescription asks for a new description and updates the
+// record. A one-line description is replaced by the line typed; a
+// multi-line one (a FILE_ID.DIZ) is edited in place in the full-screen
+// editor, as EDITUPLOAD does, so the other lines stay.
 func editFileChangeDescription(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, handle string, mayAct fileActGuard, nodeNumber int, outputMode ansi.OutputMode) error {
-	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|15New description: |07")), outputMode)
-	newDesc, err := readLineFromSessionIH(s, terminal)
-	if err != nil {
-		return err
-	}
-	newDesc = strings.TrimSpace(newDesc)
-	if newDesc == "" {
-		return nil
+	inPlace := multiLineDescription(rec.Description)
+	var newDesc string
+	truncated := false
+	if inPlace {
+		var saved bool
+		var err error
+		newDesc, saved, truncated, err = editDescription(s, terminal, outputMode, nodeNumber, rec.Filename, handle, rec.Description)
+		if errors.Is(err, errDescriptionEditorFailed) {
+			wv(terminal, "\r\n|12The editor couldn't open. Nothing was changed.\r\n", outputMode)
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if !saved || newDesc == rec.Description {
+			return nil
+		}
+	} else {
+		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|15New description: |07")), outputMode)
+		line, err := readLineFromSessionIH(s, terminal)
+		if err != nil {
+			return err
+		}
+		newDesc = strings.TrimSpace(line)
+		if newDesc == "" {
+			return nil
+		}
 	}
 	d, ok := mayAct(rec.AreaID)
 	if !ok {
 		return nil
 	}
+	changed := false
 	updateErr := e.FileMgr.UpdateFileRecordInArea(rec.ID, rec.AreaID, func(r *file.FileRecord) {
+		// An edit made in place starts from the description as it was
+		// read; one changed since would be lost under it.
+		if inPlace && r.Description != rec.Description {
+			changed = true
+			return
+		}
 		r.Description = newDesc
 	})
-	if errors.Is(updateErr, file.ErrRecordMoved) {
+	switch {
+	case errors.Is(updateErr, file.ErrRecordMoved):
 		wv(terminal, editFileMovedElsewhere, outputMode)
-	} else if updateErr != nil {
+	case updateErr != nil:
 		slog.Error("failed to update description", "node", nodeNumber, "file", rec.Filename, "error", updateErr)
-	} else {
+	case changed:
+		wv(terminal, editFileDescriptionChanged, outputMode)
+	default:
 		logFileAction(d, "description changed", nodeNumber, handle, rec)
+		if truncated {
+			wv(terminal, fmt.Sprintf("\r\n|07Only the first %d lines of the description were kept.\r\n", descriptionLineCap(rec.Description)), outputMode)
+		}
 	}
 	return nil
 }
+
+// editFileDescriptionChanged is the notice when the description was changed
+// elsewhere while it was being edited in place.
+const editFileDescriptionChanged = "\r\n|12That description was changed elsewhere. Nothing was saved.\r\n"
 
 // editFileMovedElsewhere is the notice when the file left the area it was
 // listed in while the caller was at a prompt.
