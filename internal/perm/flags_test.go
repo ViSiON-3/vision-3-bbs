@@ -215,3 +215,24 @@ func TestFlagZeroExpiryIsUnreadable(t *testing.T) {
 		t.Error("a zero expiry passes")
 	}
 }
+
+// Fractions of a second in an expiry are kept: stored as typed, shown in
+// full, and sent back unchanged once the grant has expired.
+func TestFlagExpiryKeepsFractionalSeconds(t *testing.T) {
+	r := flagRoles(t)
+	loc := time.FixedZone("PST", -8*3600)
+	now := time.Date(2026, 11, 18, 12, 0, 0, 0, loc)
+	got, err := ParseFlagList("donor=2027-01-01T00:00:00.5Z", r, loc, now, &user.User{})
+	if err != nil || got["donor"] != "2027-01-01T00:00:00.5Z" {
+		t.Fatalf("ParseFlagList = %v, %v", got, err)
+	}
+	u := &user.User{NamedFlags: got}
+	if s := FormatFlagList(u, loc); s != "donor=2026-12-31T16:00:00.5-08:00" {
+		t.Errorf("FormatFlagList = %q", s)
+	}
+	later := time.Date(2027, 2, 1, 0, 0, 0, 0, loc)
+	again, err := ParseFlagList(FormatFlagList(u, loc), r, loc, later, u)
+	if err != nil || !SameFlags(again, u.NamedFlags) {
+		t.Errorf("expired round trip = %v, %v", again, err)
+	}
+}

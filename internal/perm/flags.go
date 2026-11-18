@@ -249,7 +249,7 @@ func FormatFlagExpiry(t time.Time, loc *time.Location) string {
 		loc = time.Local
 	}
 	t = t.In(loc)
-	text := t.Format(time.RFC3339)
+	text := t.Format(time.RFC3339Nano)
 	switch {
 	case t.Hour() == 0 && t.Minute() == 0 && t.Second() == 0 && t.Nanosecond() == 0:
 		text = t.Format(expiryDate)
@@ -260,7 +260,7 @@ func FormatFlagExpiry(t time.Time, loc *time.Location) string {
 	// another instant: keep the offset then, so the text is always the
 	// instant it shows.
 	if back, err := ParseFlagExpiry(text, loc); err != nil || !back.Equal(t) {
-		text = t.Format(time.RFC3339)
+		text = t.Format(time.RFC3339Nano)
 	}
 	return text
 }
@@ -358,7 +358,7 @@ func ParseFlagList(s string, roles *Roles, loc *time.Location, now time.Time, u 
 		if !now.Before(t) {
 			return fmt.Errorf("flag %s: %s has already passed", name, FormatFlagExpiry(t, loc))
 		}
-		out[name] = t.UTC().Format(time.RFC3339)
+		out[name] = t.UTC().Format(time.RFC3339Nano)
 		return nil
 	}
 	for _, entry := range strings.Split(s, ",") {
