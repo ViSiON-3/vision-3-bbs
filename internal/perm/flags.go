@@ -144,7 +144,9 @@ func FlagGrants(u *user.User) []FlagGrant {
 		g := FlagGrant{Name: name, Stored: strings.TrimSpace(stored)}
 		if g.Stored != "" {
 			t, err := time.Parse(time.RFC3339, g.Stored)
-			g.Expires, g.Bad = t, err != nil
+			// The zero instant would read as "never": it is no expiry anyone
+			// wrote on purpose, so it is unreadable rather than permanent.
+			g.Expires, g.Bad = t, err != nil || t.IsZero()
 		}
 		if prev, ok := byName[name]; ok && !outlasts(g, prev) {
 			continue
@@ -241,18 +243,26 @@ func ParseFlagExpiry(s string, loc *time.Location) (time.Time, error) {
 
 // FormatFlagExpiry is t as the user editors show it, in loc: the date alone
 // at midnight, else the date and minute, else RFC 3339 so nothing is lost.
+// ParseFlagExpiry reads it back as t exactly.
 func FormatFlagExpiry(t time.Time, loc *time.Location) string {
 	if loc == nil {
 		loc = time.Local
 	}
 	t = t.In(loc)
+	text := t.Format(time.RFC3339)
 	switch {
 	case t.Hour() == 0 && t.Minute() == 0 && t.Second() == 0 && t.Nanosecond() == 0:
-		return t.Format(expiryDate)
+		text = t.Format(expiryDate)
 	case t.Second() == 0 && t.Nanosecond() == 0:
-		return t.Format(expiryMinute)
+		text = t.Format(expiryMinute)
 	}
-	return t.Format(time.RFC3339)
+	// A wall time a clock change passes twice, or skips, reads back as
+	// another instant: keep the offset then, so the text is always the
+	// instant it shows.
+	if back, err := ParseFlagExpiry(text, loc); err != nil || !back.Equal(t) {
+		text = t.Format(time.RFC3339)
+	}
+	return text
 }
 
 // FormatFlagList is a record's named flags as the user editors take them
@@ -341,7 +351,7 @@ func ParseFlagList(s string, roles *Roles, loc *time.Location, now time.Time, u 
 		if err != nil {
 			return fmt.Errorf("flag %s: %w", name, err)
 		}
-		if had && !old.Bad && !old.Expires.IsZero() && (t.Equal(old.Expires) || FormatFlagExpiry(old.Expires, loc) == FormatFlagExpiry(t, loc)) {
+		if had && !old.Bad && !old.Expires.IsZero() && t.Equal(old.Expires) {
 			out[name] = old.Stored
 			return nil
 		}

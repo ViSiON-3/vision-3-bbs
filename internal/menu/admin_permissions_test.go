@@ -381,3 +381,23 @@ func TestUserEditor_GrantsAndRevokesNamedFlags(t *testing.T) {
 		t.Errorf("after revoking donor: %v\n%s", u.NamedFlags, r.text())
 	}
 }
+
+// A value longer than the status row scrolls sideways in it rather than
+// wrapping onto the rows below.
+func TestUserEditor_LongFieldInputScrolls(t *testing.T) {
+	useRoles(t, `{"roles": [], "flags": [{"name": "donor"}]}`)
+	env := newMenuEnv(t)
+	long := strings.Repeat("a", 120) + strings.Repeat("b", 30)
+	r := env.runCmd("ADMINLISTUSERS", env.sysop, "", "j"+"l"+long+ueEsc+"q")
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	// "Named Flags: " takes 13 columns of the 80, leaving 66 for the value
+	// and the cursor after it.
+	if strings.Contains(r.raw, strings.Repeat("a", 67)) {
+		t.Errorf("more of the value than the row holds was drawn:\n%q", r.raw)
+	}
+	if !strings.Contains(r.raw, strings.Repeat("a", 35)+strings.Repeat("b", 30)) {
+		t.Errorf("the end of the value isn't in view:\n%q", r.raw)
+	}
+}

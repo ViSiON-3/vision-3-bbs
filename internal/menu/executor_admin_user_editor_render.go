@@ -225,9 +225,10 @@ func (st *userEditorState) renderDetails(message string) error {
 	if rolesValue == "" {
 		rolesValue = "none"
 	}
-	flagsValue := callerText(adminTruncate(perm.DescribeFlags(sel, boardLocation(), time.Now()), 24))
+	// "[L] Named Flags: " starts at column 46, leaving 18 columns.
+	flagsValue := callerText(adminTruncate(perm.DescribeFlags(sel, boardLocation(), time.Now()), 18))
 	if val, ok := st.pendingChanges["namedflags"]; ok {
-		flagsValue = fmt.Sprintf("|14*|03%s|07", callerText(adminTruncate(val.(string), 23)))
+		flagsValue = fmt.Sprintf("|14*|03%s|07", callerText(adminTruncate(val.(string), 17)))
 	}
 	if flagsValue == "" {
 		flagsValue = "none"

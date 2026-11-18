@@ -44,13 +44,15 @@ func loadRoles(configDir string) {
 func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 	configDir := filepath.Join(root, "configs")
 	data, err := os.ReadFile(perm.Path(configDir))
-	if errors.Is(err, fs.ErrNotExist) {
-		add("admin roles", doctorInfo, "configs/roles.json is absent: no roles are defined, so admin functions are the sysop's alone", "")
-		return
-	}
-	if err != nil {
+	// Without the file nothing is defined, but users can still carry roles,
+	// groups or flags from before it went, and those are reported below.
+	absent := errors.Is(err, fs.ErrNotExist)
+	if err != nil && !absent {
 		add("admin roles", doctorFail, "configs/roles.json can't be read: "+err.Error(), "Fix the file's permissions; until then no role grants anything.")
 		return
+	}
+	if absent {
+		data = []byte("{}")
 	}
 	roles, diags, err := perm.Parse(data)
 	if err != nil {
@@ -134,6 +136,10 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 					"Declare the flag in configs/roles.json, or take it off the user in ./ue or the admin user editor.")
 			}
 		}
+	}
+	if absent {
+		add("admin roles", doctorInfo, "configs/roles.json is absent: no roles are defined, so admin functions are the sysop's alone", "")
+		return
 	}
 	if len(diags) == 0 && len(unknownTags) == 0 && usersChecked {
 		msg := fmt.Sprintf("%d role(s) defined, %d user(s) with a role", roles.Len(), members)

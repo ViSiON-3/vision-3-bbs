@@ -201,7 +201,8 @@ declared in the same file, under `flags`, each with a description:
     "roles": [],
     "flags": [
         {"name": "donor", "description": "Supports the board; gets the extra doors"},
-        {"name": "beta_tester", "description": "Trying the new file areas"}
+        {"name": "beta_tester", "description": "Trying the new file areas"},
+        {"name": "helper", "description": "Answers new users over the holidays"}
     ]
 }
 ```

@@ -170,3 +170,48 @@ func TestFlagListRoundTrip(t *testing.T) {
 		t.Errorf("bad stored expiry: %v", err)
 	}
 }
+
+// A wall time a clock change passes twice reads back as one of the two
+// instants, so the editors write the other with its offset: what they show
+// and stage is always the instant stored, and changing a grant from one to
+// the other is a change.
+func TestFlagExpiryAcrossFallBack(t *testing.T) {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Skip("no tzdata:", err)
+	}
+	r := flagRoles(t)
+	now := time.Date(2026, 10, 1, 0, 0, 0, 0, loc)
+	first, _ := time.Parse(time.RFC3339, "2027-11-07T01:30:00-04:00")
+	second, _ := time.Parse(time.RFC3339, "2027-11-07T01:30:00-05:00")
+	for _, at := range []time.Time{first, second} {
+		text := FormatFlagExpiry(at, loc)
+		back, err := ParseFlagExpiry(text, loc)
+		if err != nil || !back.Equal(at) {
+			t.Errorf("FormatFlagExpiry(%v) = %q, reads back as %v (%v)", at, text, back, err)
+		}
+	}
+	u := &user.User{NamedFlags: map[string]string{"donor": first.UTC().Format(time.RFC3339)}}
+	got, err := ParseFlagList("donor="+second.Format(time.RFC3339), r, loc, now, u)
+	if err != nil || got["donor"] != second.UTC().Format(time.RFC3339) {
+		t.Errorf("moving the expiry an hour = %v, %v", got, err)
+	}
+	// What the editors show for the record goes back unchanged.
+	again, err := ParseFlagList(FormatFlagList(u, loc), r, loc, now, u)
+	if err != nil || !SameFlags(again, u.NamedFlags) {
+		t.Errorf("round trip = %v, %v", again, err)
+	}
+}
+
+// The zero instant is no expiry anyone means: it never counts, rather than
+// reading as "never expires".
+func TestFlagZeroExpiryIsUnreadable(t *testing.T) {
+	r := flagRoles(t)
+	u := &user.User{NamedFlags: map[string]string{"donor": "0001-01-01T00:00:00Z"}}
+	if g := FlagGrants(u); len(g) != 1 || !g[0].Bad {
+		t.Fatalf("grants = %+v", g)
+	}
+	if HasFlag(u, "donor", r, time.Now()) {
+		t.Error("a zero expiry passes")
+	}
+}

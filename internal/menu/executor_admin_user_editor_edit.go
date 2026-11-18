@@ -28,30 +28,42 @@ func (st *userEditorState) readFieldInput(fieldLabel string, currentValue string
 	}
 
 	prompt := fmt.Sprintf("|15%s:|07 ", fieldLabel)
-	if err := st.writeAt(st.layout.statusRow, 1, prompt); err != nil {
-		return "", err
-	}
-
-	// Position cursor after prompt
+	// The value is shown from column cursorPos to the row's last column but
+	// one, scrolled sideways to keep the cursor in view, so a long value
+	// never wraps onto the action row.
 	cursorPos := len(fieldLabel) + 3
-	cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos)
-	if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
-		return "", err
+	width := st.width
+	if width <= 0 {
+		width = 80
 	}
+	room := max(width-cursorPos, 10)
 
 	input := []rune(currentValue)
 	cursorIdx := len(input)
+	offset := 0
 
-	// display renders the editable buffer, masking it for secret fields.
-	display := func() string {
-		if mask {
-			return strings.Repeat("*", len(input))
+	// draw rewrites the status row: the visible part of the buffer, masked
+	// for secret fields, padded to clear what was there, and the cursor.
+	draw := func() error {
+		if cursorIdx < offset {
+			offset = cursorIdx
 		}
-		return string(input)
+		if cursorIdx-offset >= room {
+			offset = cursorIdx - room + 1
+		}
+		end := min(len(input), offset+room)
+		shown := string(input[offset:end])
+		if mask {
+			shown = strings.Repeat("*", end-offset)
+		}
+		shown += strings.Repeat(" ", room-(end-offset))
+		if err := st.writeAt(st.layout.statusRow, 1, prompt+shown); err != nil {
+			return err
+		}
+		cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos+cursorIdx-offset)
+		return terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode)
 	}
-
-	// Show current value
-	if err := terminalio.WriteProcessedBytes(st.terminal, []byte(display()), st.outputMode); err != nil {
+	if err := draw(); err != nil {
 		return "", err
 	}
 
@@ -70,11 +82,9 @@ func (st *userEditorState) readFieldInput(fieldLabel string, currentValue string
 			if cursorIdx > 0 {
 				input = append(input[:cursorIdx-1], input[cursorIdx:]...)
 				cursorIdx--
-				if err := st.writeAt(st.layout.statusRow, 1, prompt+display()+"  "); err != nil {
-					return "", err
-				}
-				cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos+cursorIdx)
-				if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
+				// Step back so the characters before the cursor show again.
+				offset = max(0, min(offset, cursorIdx-room/2))
+				if err := draw(); err != nil {
 					return "", err
 				}
 			}
@@ -83,11 +93,7 @@ func (st *userEditorState) readFieldInput(fieldLabel string, currentValue string
 				r := rune(key)
 				input = append(input[:cursorIdx], append([]rune{r}, input[cursorIdx:]...)...)
 				cursorIdx++
-				if err := st.writeAt(st.layout.statusRow, 1, prompt+display()); err != nil {
-					return "", err
-				}
-				cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos+cursorIdx)
-				if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
+				if err := draw(); err != nil {
 					return "", err
 				}
 			}
