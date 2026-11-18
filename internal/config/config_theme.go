@@ -145,6 +145,14 @@ func LoadThemeConfig(menuSetPath string) (ThemeConfig, error) {
 	return theme, nil
 }
 
+// CheckThemeConfig reports whether the theme.json of the menu set at
+// menuSetPath, with its overlay, loads, without logging: for a check
+// made on every screen, such as Konfig's list of themes.
+func CheckThemeConfig(menuSetPath string) error {
+	_, err := readThemeConfig(menuSetPath)
+	return err
+}
+
 // readThemeConfig is LoadThemeConfig without the logging, for a tool such
 // as an editor that reads the theme while its screen is up. On an error it
 // returns the built-in defaults.

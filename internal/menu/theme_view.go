@@ -64,17 +64,31 @@ func (e *MenuExecutor) loadCallerTheme(name string) (string, config.ThemeConfig,
 		return "", config.ThemeConfig{}, err
 	}
 	dir := filepath.Join(filepath.Dir(e.MenuSetPath), name)
-	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		return "", config.ThemeConfig{}, fmt.Errorf("%s is not a theme directory", dir)
-	}
-	if ok, err := menuset.FromPath(dir).Exists("mnu", "MAIN.MNU"); err != nil || !ok {
-		return "", config.ThemeConfig{}, fmt.Errorf("%s has no MAIN menu", dir)
+	if err := checkCallerTheme(dir); err != nil {
+		return "", config.ThemeConfig{}, err
 	}
 	theme, err := config.LoadThemeConfig(dir)
 	if err != nil {
 		return "", config.ThemeConfig{}, err
 	}
 	return dir, theme, nil
+}
+
+// checkCallerTheme reports why the menu set at dir can't be a caller's
+// theme, if it can't: it isn't a directory, has no MAIN menu, or its
+// theme.json doesn't load. Konfig offers only themes that pass, so it
+// shows what the session would draw.
+func checkCallerTheme(dir string) error {
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return fmt.Errorf("%s is not a theme directory", dir)
+	}
+	if ok, err := menuset.FromPath(dir).Exists("mnu", "MAIN.MNU"); err != nil || !ok {
+		return fmt.Errorf("%s has no MAIN menu", dir)
+	}
+	if err := config.CheckThemeConfig(dir); err != nil {
+		return fmt.Errorf("%s: %w", dir, err)
+	}
+	return nil
 }
 
 // newView makes a caller's view of the board e for the theme choice
