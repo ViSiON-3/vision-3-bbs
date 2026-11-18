@@ -79,7 +79,7 @@ func (m *Model) openACSTester() {
 			{acsConn, 6, acs.TransportSSH},
 			{acsEnc, 5, acs.EncodingCP437},
 			{acsWidth, 4, "80"},
-			{acsAddr, 45, acs.TesterDefaultAddr.String()}, // the longest address, 0000:...:ffff:255.255.255.255
+			{acsAddr, 0, acs.TesterDefaultAddr.String()}, // no limit: a cut could drop a zone and leave a different address; callValues refuses what it can't use
 		} {
 			ti := textinput.New()
 			ti.Prompt = ""

@@ -358,8 +358,10 @@ each problem:
 - **WARN** (doctor exits 1): the string reads cleanly but uses a session term
   where it is checked without a session, a message area's `acs_write` for
   replies uploaded through the QWK API. Callers in a session are checked as
-  usual, but every QWK API reply to that area is refused. The same goes for
-  an FTN network's `auto_create` `acs_write`, in every area it creates. The
+  usual, but every QWK API reply to that area is refused. An FTN network's
+  `auto_create` `acs_write` is warned about too: it is copied into each area
+  the network creates, and refuses replies there for as long as that area
+  keeps the copied rule. The
   warning names the session terms the string uses, as the string writes them
   (`LOCAL`, `IP:10.0.0.0/8`). Replacing them with other session terms
   doesn't help: without a session every one of them fails, `!L` and
