@@ -143,14 +143,23 @@ func (st *konfigState) renderHeader() error {
 		}
 		slog.Warn("failed to read KONFIG.ANS", "node", st.c.nodeNumber, "error", err)
 	}
-	title := st.clip(st.c.e.Strings().KonfigTitle, konfigLineWidth, "..")
-	out := ansi.ClearScreen() + moveTo(2, 2) + pc(15) + title +
-		moveTo(3, 2) + pc(8) + strings.Repeat("─", st.cells(title)) + konfigReset
 	// Without art there is nothing else saying how to leave, the key
 	// legend being blank by default: the title row says, at its right, as
-	// the stock art does.
-	if quit := string(ansi.ReplacePipeCodes([]byte(st.c.e.Strings().KonfigTitleQuit))); quit != "" {
-		out += moveTo(2, max(konfigScreenCols-ansi.VisibleLength(quit), 2)) + quit + konfigReset
+	// the stock art does. The title is cut short of it.
+	quit := ""
+	if s := st.c.e.Strings().KonfigTitleQuit; s != "" {
+		quit = st.line(s)
+	}
+	titleWidth, quitCol := konfigLineWidth, 0
+	if quit != "" {
+		quitCol = max(konfigScreenCols-ansi.VisibleLength(quit), 2)
+		titleWidth = max(min(titleWidth, quitCol-3), 0) // a space before the hint
+	}
+	title := st.clip(st.c.e.Strings().KonfigTitle, titleWidth, "..")
+	out := ansi.ClearScreen() + moveTo(2, 2) + pc(15) + title +
+		moveTo(3, 2) + pc(8) + strings.Repeat("─", st.cells(title)) + konfigReset
+	if quit != "" {
+		out += moveTo(2, quitCol) + quit + konfigReset
 	}
 	return st.raw(out)
 }
