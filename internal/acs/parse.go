@@ -73,15 +73,25 @@ func (e *Expr) UsesSession() bool {
 	return e.uses(sessionCode)
 }
 
-// SessionTerms lists the session terms the expression uses, as they are
-// written (IP:), each once, in the order SessionTerms gives them.
+// SessionTerms lists the session terms the expression uses, as the string
+// writes them (LOCAL, !L's L, IP:10.0.0.0/8), each once, in the order they
+// appear, so a sysop can find each one in the string.
 func (e *Expr) SessionTerms() []string {
 	var used []string
-	for _, c := range sessionCodes {
-		if e.uses(func(code string) bool { return code == c }) {
-			used = append(used, writtenCode(c))
+	seen := map[string]bool{}
+	var walk func(n *Node)
+	walk = func(n *Node) {
+		if n == nil {
+			return
 		}
+		if n.Kind == TermNode && sessionCode(n.term.code) && !seen[n.Text] {
+			seen[n.Text] = true
+			used = append(used, n.Text)
+		}
+		walk(n.X)
+		walk(n.Y)
 	}
+	walk(e.Root)
 	return used
 }
 

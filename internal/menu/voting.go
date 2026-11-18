@@ -15,6 +15,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
+	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
@@ -160,13 +161,6 @@ func totalVotes(topic *VoteTopic) int {
 	return n
 }
 
-func pluralS(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
-
 func wv(terminal *term.Terminal, msg string, outputMode ansi.OutputMode) {
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(msg)), outputMode)
 }
@@ -210,7 +204,7 @@ func voteListChoices(terminal *term.Terminal, topic *VoteTopic, outputMode ansi.
 
 func voteShowResults(terminal *term.Terminal, topic *VoteTopic, outputMode ansi.OutputMode) {
 	total := totalVotes(topic)
-	wv(terminal, fmt.Sprintf("\r\n|15%s |08(%d vote%s)\r\n", callerText(topic.Question), total, pluralS(total)), outputMode)
+	wv(terminal, fmt.Sprintf("\r\n|15%s |08(%d %s)\r\n", callerText(topic.Question), total, util.Plural(total, "vote", "votes")), outputMode)
 	for i, opt := range topic.Options {
 		count := len(topic.Votes[strconv.Itoa(i)])
 		pct := 0.0

@@ -143,16 +143,21 @@ func TestCheckACSStringsClean(t *testing.T) {
 
 // TestScanACSWithoutSession checks that a message area's acs_write, which
 // the QWK API checks without a session, is a warning when it uses a
-// session term (L here, NODE and L in another area), and that the same
-// string elsewhere, checked with a session, is not.
+// session term (LOCAL here, NODE=1 and L in another area, IP: in an FTN
+// network's auto_create rule), and that the same string elsewhere, checked
+// with a session, is not.
 func TestScanACSWithoutSession(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "configs"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	areas := `[{"id": 1, "tag": "LOCALS", "acs_read": "S10|L", "acs_write": "S20|!L"}, {"id": 2, "tag": "PLAIN", "acs_write": "S20"},
+	areas := `[{"id": 1, "tag": "LOCALS", "acs_read": "S10|L", "acs_write": "S20|!LOCAL"}, {"id": 2, "tag": "PLAIN", "acs_write": "S20"},
 		{"id": 3, "tag": "NODE1", "acs_read": "NODE=1", "acs_write": "S20&NODE=1|L"}]`
 	if err := os.WriteFile(filepath.Join(root, "configs", "message_areas.json"), []byte(areas), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ftn := `{"networks": {"fsxnet": {"auto_create": {"acs_read": "S10", "acs_write": "S20&IP:10.0.0.0/8"}}}}`
+	if err := os.WriteFile(filepath.Join(root, "configs", "ftn.json"), []byte(ftn), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	type check struct {
@@ -163,22 +168,27 @@ func TestScanACSWithoutSession(t *testing.T) {
 	checkACSStrings(root, func(_ string, status doctorSeverity, message, remedy string) {
 		got = append(got, check{status, message, remedy})
 	})
-	if len(got) != 2 {
-		t.Fatalf("checks %v, want warnings for LOCALS and NODE1 acs_write", got)
+	if len(got) != 3 {
+		t.Fatalf("checks %v, want warnings for LOCALS, NODE1 and fsxnet acs_write", got)
 	}
-	// The message and the advice name the terms the string uses and the
-	// area it guards; the advice lists every session term, from acs.
+	// The message and the advice name the terms the string uses as it
+	// writes them and what the rule guards; the advice lists every session
+	// term, from acs.
+	const all = "every session term fails without one, !L and CONN=ssh included " +
+		"(the session terms are L (LOCAL), A (TERMINAL), NODE, CONN, ENC, WIDTH and IP:); see docs/sysop/reference/acs.md."
 	want := []check{
 		{doctorWarn,
-			`area LOCALS, acs_write "S20|!L": uses the session term L, which fails the whole string for replies uploaded through the QWK API, where there is no session`,
-			"Callers in a session are checked as usual, but replies uploaded through the QWK API to area LOCALS are refused. " +
-				"If they should go through, take out L, or replace it with terms that don't need a session: " +
-				"every session term fails there, !L and CONN=ssh included (the session terms are L, A, NODE, CONN, ENC, WIDTH and IP:); see docs/sysop/reference/acs.md."},
+			`area LOCALS, acs_write "S20|!LOCAL": uses the session term LOCAL, which fails the whole string for replies uploaded through the QWK API, where there is no session`,
+			"Callers in a session are checked as usual, but for replies uploaded through the QWK API to area LOCALS there is no session, so the string fails there for every caller. " +
+				"If it should pass there, take out LOCAL, or replace it with terms that don't need a session: " + all},
 		{doctorWarn,
-			`area NODE1, acs_write "S20&NODE=1|L": uses the session terms L and NODE, which fails the whole string for replies uploaded through the QWK API, where there is no session`,
-			"Callers in a session are checked as usual, but replies uploaded through the QWK API to area NODE1 are refused. " +
-				"If they should go through, take out L and NODE, or replace them with terms that don't need a session: " +
-				"every session term fails there, !L and CONN=ssh included (the session terms are L, A, NODE, CONN, ENC, WIDTH and IP:); see docs/sysop/reference/acs.md."},
+			`area NODE1, acs_write "S20&NODE=1|L": uses the session terms NODE=1 and L, any of which fails the whole string for replies uploaded through the QWK API, where there is no session`,
+			"Callers in a session are checked as usual, but for replies uploaded through the QWK API to area NODE1 there is no session, so the string fails there for every caller. " +
+				"If it should pass there, take out NODE=1 and L, or replace them with terms that don't need a session: " + all},
+		{doctorWarn,
+			`network fsxnet auto_create, acs_write "S20&IP:10.0.0.0/8": uses the session term IP:10.0.0.0/8, which fails the whole string for replies uploaded through the QWK API, where there is no session`,
+			"Callers in a session are checked as usual, but for replies uploaded through the QWK API to the areas network fsxnet creates there is no session, so the string fails there for every caller. " +
+				"If it should pass there, take out IP:10.0.0.0/8, or replace it with terms that don't need a session: " + all},
 	}
 	for i := range want {
 		if got[i] != want[i] {

@@ -167,10 +167,9 @@ func TestACSTesterCallValues(t *testing.T) {
 	}
 }
 
-// The IP field takes any length, so nothing is cut short into a different
-// address: the longest IPv6 text reaches the session whole, and a longer
-// zoned address is refused with a message rather than cut to one that
-// parses.
+// The IP field holds 45 characters, the longest address, so that reaches
+// the session whole. A longer zoned address is cut but keeps its zone, so it
+// is refused with a message rather than taken as a different address.
 func TestACSTesterLongIPv6(t *testing.T) {
 	m := acsTesterOver(t, 80, 25)
 	const longest = "0000:0000:0000:0000:0000:ffff:255.255.255.255" // 45
@@ -184,8 +183,8 @@ func TestACSTesterLongIPv6(t *testing.T) {
 	}
 	const zoned = "fe80:0000:0000:0000:0000:0000:0a00:0001%enp0s31f6" // 49
 	m.acsTest.inputs[acsAddr].SetValue(zoned)
-	if got := m.acsTest.inputs[acsAddr].Value(); got != zoned {
-		t.Fatalf("field holds %q", got)
+	if got := m.acsTest.inputs[acsAddr].Value(); got != zoned[:45] {
+		t.Fatalf("field holds %q, want the first 45 characters", got)
 	}
 	if msg := m.acsTest.callValues(&acs.TesterSession{}); !strings.Contains(msg, "IP takes an address") {
 		t.Errorf("a zoned address: %q", msg)
