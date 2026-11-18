@@ -151,13 +151,15 @@ func tagSet(tags []string) (map[string]bool, []string) {
 type file struct {
 	Roles  []Role  `json:"roles"`
 	Groups []Group `json:"groups,omitempty"`
+	Flags  []Flag  `json:"flags,omitempty"`
 }
 
 // Diagnostic is one problem in configs/roles.json. None stops the file
 // loading: the role or permission it names is left out, so a mistake can
 // only ever grant less.
 type Diagnostic struct {
-	// Kind is "group" for an entry in groups, "" for one in roles.
+	// Kind is "group" for an entry in groups, "flag" for one in flags, ""
+	// for one in roles.
 	Kind string
 	// Index and Role are the entry's position in its list (1-based) and its
 	// name as written.
@@ -168,7 +170,7 @@ type Diagnostic struct {
 }
 
 // String is the diagnostic as the log and doctor print it:
-// `role 2 ("Validator"): ...` or `group 1 ("ops"): ...`.
+// `role 2 ("Validator"): ...`, `group 1 ("ops"): ...` or `flag 1 ("donor"): ...`.
 func (d Diagnostic) String() string {
 	kind := d.Kind
 	if kind == "" {
@@ -185,6 +187,9 @@ type Roles struct {
 	// groups are the user groups, as loaded, names normalized.
 	groups  []Group
 	inGroup map[string]bool
+	// flags are the named flags, as loaded, names normalized.
+	flags  []Flag
+	inFlag map[string]bool
 }
 
 // Len is the number of roles defined.
@@ -310,6 +315,7 @@ func Parse(data []byte) (*Roles, []Diagnostic, error) {
 		r.list = append(r.list, Role{Name: name, Description: strings.TrimSpace(role.Description), Permissions: kept})
 	}
 	diags = append(diags, r.parseGroups(f.Groups)...)
+	diags = append(diags, r.parseFlags(f.Flags)...)
 	return r, diags, nil
 }
 
@@ -354,7 +360,7 @@ func NormalizeRoleName(name string) string { return strings.ToLower(strings.Trim
 // characters are what the ACS term ROLE:name reads.
 func CheckRoleName(name string) error { return checkName("role", name) }
 
-// checkName is CheckRoleName for a role or a group (kind).
+// checkName is CheckRoleName for a role, a group or a flag (kind).
 func checkName(kind, name string) error {
 	if name == "" {
 		return errors.New("a " + kind + " needs a name")
@@ -374,7 +380,7 @@ func checkName(kind, name string) error {
 	// ROLE:name- can't be read: a '-' joins an ACS term only when a term
 	// character follows it.
 	if strings.HasSuffix(name, "-") {
-		return fmt.Errorf("role name %q ends in '-'; end it with a letter, digit or _", name)
+		return fmt.Errorf("%s name %q ends in '-'; end it with a letter, digit or _", kind, name)
 	}
 	return nil
 }

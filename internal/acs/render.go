@@ -101,6 +101,9 @@ func contextLines(ctx Context, current bool, width int) []string {
 	if ctx.User != nil && len(perm.NormalizeRoles(ctx.User.Groups)) > 0 {
 		field("Groups:", perm.FormatRoleList(ctx.User.Groups))
 	}
+	if flags := perm.DescribeFlags(ctx.User, ctx.location(), ctx.now()); flags != "" {
+		field("Flags:", flags)
+	}
 	field("Session:", describeSession(ctx))
 	if ctx.Session != nil {
 		field("Call:", describeCall(ctx.Session))
@@ -168,7 +171,7 @@ func verdict(x Explanation) string {
 	case x.Reason == Unavailable:
 		return v + ": a part needs a value the user's record doesn't have"
 	case x.Reason == Undefined:
-		return v + ": a part names a role or group configs/roles.json doesn't define"
+		return v + ": a part names a role, group or flag configs/roles.json doesn't define"
 	}
 	return v
 }

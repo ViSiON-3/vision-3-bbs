@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
 // loadRoles reads configs/roles.json into the roles every permission check
@@ -67,13 +68,14 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 	}
 
 	var users []struct {
-		ID          int      `json:"id"`
-		Handle      string   `json:"handle"`
-		Roles       []string `json:"roles"`
-		Groups      []string `json:"groups"`
-		DeletedUser bool     `json:"deletedUser"`
+		ID          int               `json:"id"`
+		Handle      string            `json:"handle"`
+		Roles       []string          `json:"roles"`
+		Groups      []string          `json:"groups"`
+		NamedFlags  map[string]string `json:"namedFlags"`
+		DeletedUser bool              `json:"deletedUser"`
 	}
-	members, grouped := 0, 0
+	members, grouped, flagged := 0, 0, 0
 	// No users.json yet is a new board; one that can't be read or decoded
 	// means the members weren't checked, which the summary must not hide.
 	usersChecked := true
@@ -113,12 +115,33 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 					u.Handle, u.ID, strings.Join(undefined, ", ")),
 					"Define the group in configs/roles.json, or take it off the user in ./ue or the admin user editor.")
 			}
+			grants := perm.FlagGrants(&user.User{NamedFlags: u.NamedFlags})
+			if len(grants) > 0 {
+				flagged++
+			}
+			var names []string
+			for _, g := range grants {
+				names = append(names, g.Name)
+				if g.Bad {
+					add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has flag %s with expiry %q, which isn't an RFC 3339 time, so FLAG:%s never matches it",
+						u.Handle, u.ID, g.Name, g.Stored, g.Name),
+						"Set the expiry again in ./ue or the admin user editor.")
+				}
+			}
+			if undefined := perm.UndefinedFlags(names, roles); len(undefined) > 0 {
+				add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has flag %s, which configs/roles.json doesn't declare, so FLAG: never matches it",
+					u.Handle, u.ID, strings.Join(undefined, ", ")),
+					"Declare the flag in configs/roles.json, or take it off the user in ./ue or the admin user editor.")
+			}
 		}
 	}
 	if len(diags) == 0 && len(unknownTags) == 0 && usersChecked {
 		msg := fmt.Sprintf("%d role(s) defined, %d user(s) with a role", roles.Len(), members)
 		if n := len(roles.GroupNames()); n > 0 || grouped > 0 {
 			msg += fmt.Sprintf("; %d group(s) defined, %d user(s) in a group", n, grouped)
+		}
+		if n := len(roles.FlagNames()); n > 0 || flagged > 0 {
+			msg += fmt.Sprintf("; %d flag(s) declared, %d user(s) with a named flag", n, flagged)
 		}
 		add("admin roles", doctorOK, msg, "")
 	}

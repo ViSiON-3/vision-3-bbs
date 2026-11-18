@@ -39,6 +39,7 @@ func TestUsersEditAndBanSaveRule(t *testing.T) {
 		{"edit group and note", editor, map[string]interface{}{"grouploc": "Here", "note": "hi"}, caller, "", "users.edit via role editor"},
 		{"edit can't set level", editor, map[string]interface{}{"level": 50}, caller, msgAdminFieldNotAllowed, ""},
 		{"edit can't set flags", editor, map[string]interface{}{"flags": "Z"}, caller, msgAdminFieldNotAllowed, ""},
+		{"edit can't set named flags", editor, map[string]interface{}{"namedflags": "donor"}, caller, msgAdminFieldNotAllowed, ""},
 		{"edit can't rename", editor, map[string]interface{}{"handle": "Other"}, caller, msgAdminFieldNotAllowed, ""},
 		{"edit can't change password", editor, map[string]interface{}{"password": "x"}, caller, msgAdminFieldNotAllowed, ""},
 		{"edit can't delete", editor, map[string]interface{}{"deleted": true}, caller, msgAdminFieldNotAllowed, ""},

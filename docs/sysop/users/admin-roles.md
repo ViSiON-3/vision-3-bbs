@@ -174,6 +174,10 @@ ignored, and doctor reports it.
 Put someone in a group in `./ue` (the **Roles/Groups** dialog) or the Admin Menu's
 user editor (`U`), the same way as roles.
 
+Groups and [named flags](#named-flags) both identify people for ACS without
+granting anything. A group is a list of people you name together, and has a
+mail address; a flag is a mark on one person, and can expire.
+
 A group can also be sent mail as `@fsxnet-ops`: see
 [Mail to a group](messages/private-mail.md#mail-to-a-group). `mail_acs`
 decides who may send it; without one, the group's members and co-SysOps
@@ -184,6 +188,75 @@ and up may:
 ```
 
 Doctor checks `mail_acs` like every other ACS string.
+
+## Named flags
+
+A **named flag** marks a user for ACS strings, like the one-letter flags
+(`FA`), but with a name and, if you like, an expiry: `FLAG:donor` on a door
+for supporters, `FLAG:beta_tester` on a menu until a test ends. Flags are
+declared in the same file, under `flags`, each with a description:
+
+```json
+{
+    "roles": [],
+    "flags": [
+        {"name": "donor", "description": "Supports the board; gets the extra doors"},
+        {"name": "beta_tester", "description": "Trying the new file areas"}
+    ]
+}
+```
+
+Flag names follow the rules for role names, and must be **two or more
+characters**: a one-character name is the legacy flag (`FLAG:A` is still
+`FA`, read from the user's **Flags**). The ACS term names (`LEVEL`, `NOTE`,
+`ROLE`, `GROUP`, `PERM` and the rest) are reserved. A flag with a bad,
+reserved or repeated name is ignored, and doctor reports it. A flag, a
+group and a role may share a name; they are separate.
+
+**A flag only marks a user; a role grants permissions.** Gating a menu
+command on `FLAG:validator` shows the command, but doesn't open the
+validation queue: the queue checks `users.validate`, which only a role
+gives. Use a flag to decide who sees or reaches something, and a role for
+what someone may do as an admin.
+
+### Granting, expiring and revoking
+
+Only a SysOp sets named flags: in `./ue` (**Named Flags** opens a dialog)
+or the Admin Menu's user editor (`L`). Both take the same list, separated
+by commas:
+
+```text
+beta_tester, donor=2027-01-01, helper=2026-12-24 18:00
+```
+
+A name alone never expires. `=` and a date, or a date and time, sets an
+expiry on the board's clock (its `timezone` setting): the flag passes until
+that instant and fails from it on. A date alone is midnight at its start, so
+`donor=2027-01-01` passes through 31 December. An RFC 3339 time
+(`2027-01-01T00:00:00Z`) is taken as it is. To revoke a flag, leave it out of
+the list.
+
+Each name is checked against `roles.json` as you type, and a new expiry that
+has already passed is refused. A grant that has expired stays on the record,
+shown as expired (`donor expired 2027-01-01`), until you take it off; the
+list can be saved again with it in.
+
+The record keeps each flag with its expiry as an RFC 3339 instant (UTC), in
+`namedFlags`:
+
+```json
+"namedFlags": {"beta_tester": "", "donor": "2027-01-01T08:00:00Z"}
+```
+
+Expiry is checked each time a string is: nothing needs to run to end a
+grant, and someone online loses the flag at the instant it expires. A grant
+or revocation made in `./ue` while the user is online reaches their session
+within a second, at its next check, and their session's next save can't
+bring a revoked flag back.
+
+Doctor's **admin roles** check reports a user with a flag `roles.json`
+doesn't declare, or with an expiry that isn't an RFC 3339 time (such a
+grant never passes).
 
 ## Giving someone a role
 

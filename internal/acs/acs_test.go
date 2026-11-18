@@ -344,7 +344,8 @@ func TestDiagnostics(t *testing.T) {
 		{"T30|H25-3", []d{{5, "hour from 0 to 23"}}},
 		{"(S<20", []d{{1, "never closed"}}},
 		{"S20-&FA", []d{{4, "unexpected character '-'"}}},
-		{"FLAG:AB", []d{{1, "exactly one flag"}}},
+		{"FLAG:level", []d{{1, "is reserved"}}},
+		{"FLAG:9x", []d{{1, "must start with a letter"}}},
 		{"TERMINAL|LOCAL", nil},
 		{"(S20)FA", []d{{6, `no operator before "FA"`}}},
 		{"S20FA", []d{{1, "needs a whole number"}}},
@@ -378,7 +379,7 @@ func TestDiagnostics(t *testing.T) {
 // TestTermProblemAgreesWithEvalTerm: a term parseTerm reports a problem for
 // is false for every caller, and a term it accepts is evaluated.
 func TestTermProblemAgreesWithEvalTerm(t *testing.T) {
-	bad := []string{"Q", "Sx", "S", "D", "Ux", "Px", "Ex", "Bx", "Tx", "Cx", "Xx", "H24", "Hx", "W7", "W", "F", "FAB", "Y", "Y8", "Y8/17", "Y25:00/26:00", "S20FA", "FLAG:AB", "FLAG:", "NOTE:", "TIME:8/17", "LEVEL=99-20", "S<<20", "S<20-30", "H25-3", "W7-1", "LOCAL=1", "FA=B"}
+	bad := []string{"Q", "Sx", "S", "D", "Ux", "Px", "Ex", "Bx", "Tx", "Cx", "Xx", "H24", "Hx", "W7", "W", "F", "FAB", "Y", "Y8", "Y8/17", "Y25:00/26:00", "S20FA", "FLAG:level", "FLAG:9x", "FLAG:", "FLAG:=", "NOTE:", "TIME:8/17", "LEVEL=99-20", "S<<20", "S<20-30", "H25-3", "W7-1", "LOCAL=1", "FA=B"}
 	for _, term := range bad {
 		if _, p := parseTerm(term); p == "" {
 			t.Errorf("parseTerm(%q) reports no problem, want one", term)

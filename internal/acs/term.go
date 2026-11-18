@@ -30,8 +30,8 @@ type parsedTerm struct {
 	// past the top (H22-6, W5-1); only the clock and calendar terms allow it.
 	lo, hi int
 	ranged bool
-	// value is the argument of F, Z and Y, the role or group name of ROLE
-	// and GROUP (lower case) and the permission of PERM.
+	// value is the argument of F, Z and Y, the role, group or named flag of
+	// ROLE, GROUP and FLAG (lower case) and the permission of PERM.
 	value string
 	// prefix is IP's network, read once here rather than on every check.
 	prefix netip.Prefix
@@ -68,7 +68,7 @@ var termNames = map[string]termName{
 	"WEEKDAY":        {"W", nameCompare},
 	"MSGCONF":        {"C", nameCompare},
 	"FILECONF":       {"X", nameCompare},
-	"FLAG":           {"F", nameColon},
+	"FLAG":           {"F", nameColon}, // FLAG:name, two or more characters, is a named flag (code FLAG)
 	"NOTE":           {"Z", nameColon},
 	"TIME":           {"Y", nameColon},
 	"VALIDATED":      {"V", nameAlone},
@@ -280,11 +280,19 @@ func readValue(text, name, code, arg string) (parsedTerm, string) {
 	}
 	switch code {
 	case "F":
+		// FLAG:name with a name of two or more characters is a named flag
+		// (FLAG below); one character is the legacy flag, as F takes it.
+		if name != "F" && len(arg) > 1 {
+			if err := perm.CheckFlagName(arg); err != nil {
+				return bad(name + ": " + err.Error())
+			}
+			return parsedTerm{code: "FLAG", value: perm.NormalizeRoleName(arg)}, ""
+		}
 		if len(arg) != 1 || isCompareRune(rune(arg[0])) {
 			if name == "F" {
 				return bad("F takes exactly one flag letter or digit (use FA&FB for two)")
 			}
-			return bad(name + ": takes exactly one flag letter or digit (use FLAG:A&FLAG:B for two)")
+			return bad(name + ": needs one flag letter or digit, or a named flag's name")
 		}
 	case "Z":
 		if strings.ContainsAny(arg, "<>=") {

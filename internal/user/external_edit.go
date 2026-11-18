@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"strings"
 )
@@ -52,6 +53,7 @@ func sysopOwnedFields(dst, src *User) {
 	dst.Flags = src.Flags
 	dst.Roles = append([]string(nil), src.Roles...)
 	dst.Groups = append([]string(nil), src.Groups...)
+	dst.NamedFlags = maps.Clone(src.NamedFlags)
 	dst.PreviousHandles = append([]string(nil), src.PreviousHandles...)
 	dst.Validated = src.Validated
 	dst.TimeLimit = src.TimeLimit

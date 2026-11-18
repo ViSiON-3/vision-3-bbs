@@ -246,8 +246,10 @@ func editFields() []fieldDef {
 			},
 		},
 		// Admin roles and user groups, edited in their own dialog
-		// (membership_dialog.go). Row 14 is free for the next setting.
+		// (membership_dialog.go), and named flags in theirs
+		// (flags_dialog.go).
 		membershipFieldDef(),
+		namedFlagsFieldDef(),
 		{
 			// Limits the account's WFC console to watching; the daemon
 			// refuses its kick, snoop, type-in and chat.

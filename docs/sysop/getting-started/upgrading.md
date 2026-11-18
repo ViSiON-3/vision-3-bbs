@@ -452,6 +452,10 @@ repository could impersonate your board.
   `files.manage` to named roles, the last two per area or conference, and
   defines groups for the `GROUP:` term and for mail to `@group`. Sysop,
   co-sysop and sponsor powers are as they were.
+- **Named flags.** `FLAG:donor` tests a flag declared under `flags` in
+  `configs/roles.json` and set per user, with an optional expiry, in
+  `./ue` and the Admin Menu's user editor (`L`). One-character
+  `FLAG:A` is still the legacy flag `FA`.
 - **A handle can no longer start with `@`,** since `@name` addresses a
   group. Doctor warns when an existing handle matches a group's address.
 - **Sponsors and uploads belong to accounts.** At its first start the new

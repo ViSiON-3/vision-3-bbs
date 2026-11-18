@@ -351,11 +351,11 @@ What each section covers:
   commands (stock and overlay), `{{acs}}` regions in menu art, message and
   file areas, conferences, doors, door categories and FTN auto-create. A
   string with any problem denies every caller and is a `FAIL`; a QWK-checked
-  `acs_write` that uses `L` or `A` is a `WARN`, and a `ROLE:` term for a role
-  `roles.json` doesn't define is a `FAIL`. See
-  [Checking your strings](reference/acs.md#checking-your-strings). **Admin
-  roles** checks `roles.json` and lists users with a role it doesn't define;
-  see [Admin Roles](users/admin-roles.md).
+  `acs_write` that uses `L` or `A` is a `WARN`, and a `ROLE:`, `GROUP:` or
+  named `FLAG:` term for something `roles.json` doesn't define is a `FAIL`.
+  See [Checking your strings](reference/acs.md#checking-your-strings).
+  **Admin roles** checks `roles.json` and lists users with a role, group or
+  named flag it doesn't define; see [Admin Roles](users/admin-roles.md).
 
 ### Safe Fixes (`--fix`)
 

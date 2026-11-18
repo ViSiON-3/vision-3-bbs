@@ -30,8 +30,8 @@ const (
 	// have (AGE without a sign-up date); for an operator, one with such a
 	// term under it. Either fails, and so does the whole string.
 	Unavailable
-	// Undefined is a ROLE or GROUP term naming a role or group
-	// configs/roles.json doesn't define; for an operator, one with such a
+	// Undefined is a ROLE, GROUP or FLAG term naming a role, group or
+	// named flag configs/roles.json doesn't define; for an operator, one with such a
 	// term under it. Either fails, and so does the whole string.
 	Undefined
 )
@@ -271,6 +271,9 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 			if t.code == "GROUP" {
 				return false, reason, undefinedName("group", t.value, ctx.roles().GroupNames())
 			}
+			if t.code == "FLAG" {
+				return false, reason, undefinedName("flag", t.value, ctx.roles().FlagNames())
+			}
 			return false, reason, undefinedName("role", t.value, ctx.roles().Names())
 		}
 		return false, reason, "the record has no sign-up date, so the account has no age and the whole string fails"
@@ -320,6 +323,8 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 		} else {
 			detail = fmt.Sprintf("isn't in group %s (groups: %s)", t.value, groups)
 		}
+	case "FLAG":
+		detail = flagDetail(u, t.value, ctx)
 	case "PERM":
 		detail = permDetail(ctx.permission(perm.Permission(t.value)), u, ctx)
 	case "U":
@@ -465,11 +470,42 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 // undefinedName explains a ROLE or GROUP term (kind) whose name isn't one
 // of defined.
 func undefinedName(kind, name string, defined []string) string {
-	list := "it defines none"
+	// Roles and groups are defined; flags are declared.
+	verb, verbs := "defined", "defines"
+	if kind == "flag" {
+		verb, verbs = "declared", "declares"
+	}
+	list := "it " + verbs + " none"
 	if len(defined) > 0 {
-		list = "defined: " + strings.Join(defined, ", ")
+		list = verb + ": " + strings.Join(defined, ", ")
 	}
 	return fmt.Sprintf("configs/roles.json has no %s named %s (%s), so the whole string fails", kind, name, list)
+}
+
+// flagDetail explains FLAG:name, a named flag configs/roles.json declares:
+// whether the record grants it and, for a grant with an expiry, when it
+// stops (or stopped) passing, in the board's timezone.
+func flagDetail(u *user.User, name string, ctx Context) string {
+	now, loc := ctx.now(), ctx.location()
+	for _, g := range perm.FlagGrants(u) {
+		if g.Name != name {
+			continue
+		}
+		switch {
+		case g.Bad:
+			return fmt.Sprintf("has flag %s, but its expiry %q can't be read, so it doesn't pass", name, g.Stored)
+		case g.Expires.IsZero():
+			return fmt.Sprintf("has flag %s, with no expiry", name)
+		case g.Live(now):
+			return fmt.Sprintf("has flag %s until %s", name, perm.FormatFlagExpiry(g.Expires, loc))
+		}
+		return fmt.Sprintf("had flag %s, which expired %s", name, perm.FormatFlagExpiry(g.Expires, loc))
+	}
+	flags := strings.Join(perm.FlagNamesOf(u), ", ")
+	if flags == "" {
+		flags = "none"
+	}
+	return fmt.Sprintf("doesn't have flag %s (named flags: %s)", name, flags)
 }
 
 // userRoles is a record's roles for an explanation: "validator, msgops" or

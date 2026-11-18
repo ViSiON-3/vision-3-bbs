@@ -44,9 +44,10 @@ type acsFinding struct {
 	// NoSession is set for a valid string with a session term in it from a
 	// Headless source: it denies every caller there.
 	NoSession bool
-	// Undefined lists the roles and groups a valid string's ROLE and GROUP
-	// terms name that configs/roles.json doesn't define, as the terms are
-	// written (ROLE:name, GROUP:name); any makes it deny every caller.
+	// Undefined lists the roles, groups and named flags a valid string's
+	// ROLE, GROUP and FLAG terms name that configs/roles.json doesn't
+	// define, as the terms are written (ROLE:name, GROUP:name, FLAG:name);
+	// any makes it deny every caller.
 	Undefined []string
 }
 
@@ -85,7 +86,7 @@ func (f acsFinding) String() string {
 // It reads the files itself, so it covers menus nobody has opened; a file it
 // can't read or parse is left to the checks that report on that file.
 //
-// ROLE and GROUP terms are checked against configs/roles.json as it is on
+// ROLE, GROUP and named FLAG terms are checked against configs/roles.json as it is on
 // disk; a file that can't be read defines none, as the BBS treats it.
 func scanACS(root string) (findings []acsFinding, checked int) {
 	roles, _, err := perm.Load(filepath.Join(root, "configs"))
@@ -107,6 +108,9 @@ func scanACS(root string) (findings []acsFinding, checked int) {
 		}
 		for _, g := range perm.UndefinedGroups(e.GroupNames(), roles) {
 			undefined = append(undefined, "GROUP:"+g)
+		}
+		for _, f := range perm.UndefinedFlags(e.FlagNames(), roles) {
+			undefined = append(undefined, "FLAG:"+f)
 		}
 		if len(undefined) > 0 {
 			findings = append(findings, acsFinding{Source: src, Undefined: undefined})
@@ -314,7 +318,7 @@ func checkACSStrings(root string, add func(string, doctorSeverity, string, strin
 	for _, f := range findings {
 		if len(f.Undefined) > 0 {
 			add("ACS: "+f.Source.File, doctorFail, f.Detail(),
-				"This string denies every caller, sysops included. Define the role or group in configs/roles.json or correct its name; see docs/sysop/users/admin-roles.md.")
+				"This string denies every caller, sysops included. Define the role, group or flag in configs/roles.json or correct its name; see docs/sysop/users/admin-roles.md.")
 			continue
 		}
 		if f.failing() {

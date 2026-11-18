@@ -151,6 +151,38 @@ func (st *userEditorState) stageNameList(field, label string, stored []string, p
 	}
 }
 
+// stageNamedFlags stages an edit of the selected user's named flags, typed
+// as perm.FormatFlagList writes them (beta, donor=2027-01-01) with times in
+// the board's zone, and checked as typed: an undeclared flag, or a new
+// expiry that has already passed, is refused. Leaving a flag out revokes it.
+func (st *userEditorState) stageNamedFlags() {
+	sel := st.users[st.selectedIndex]
+	loc := boardLocation()
+	orig := perm.FormatFlagList(sel, loc)
+	cur := orig
+	if staged, ok := st.pendingChanges["namedflags"].(string); ok {
+		cur = staged
+	}
+	newVal, editErr := st.readFieldInput("Named Flags", cur, 200, false)
+	if editErr != nil {
+		if editErr.Error() != "cancelled" {
+			st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
+		}
+		return
+	}
+	flags, parseErr := perm.ParseFlagList(newVal, perm.Current(), loc, time.Now(), sel)
+	switch {
+	case parseErr != nil:
+		st.statusMessage = "|01" + parseErr.Error() + "|07"
+	case !perm.SameFlags(flags, sel.NamedFlags):
+		st.pendingChanges["namedflags"] = perm.FormatFlagList(&user.User{NamedFlags: flags}, loc)
+		st.statusMessage = "|10Field marked for update.|07"
+	default:
+		delete(st.pendingChanges, "namedflags")
+		st.statusMessage = "|08No change.|07"
+	}
+}
+
 // postSaveReload reloads the user list after a successful save. For the
 // pending-validation queue it also handles the queue-emptied terminal case
 // (the "all users validated" screen and pause prompt) and clamps the
@@ -293,6 +325,15 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 		}
 		target.Groups = names
 	}
+	if val, ok := pendingChanges["namedflags"]; ok {
+		// Checked again against the stored record and the clock: an expiry
+		// staged a moment ago may have passed since.
+		flags, err := perm.ParseFlagList(val.(string), perm.Current(), boardLocation(), time.Now(), target)
+		if err != nil {
+			return "|01" + err.Error() + "|07", false
+		}
+		target.NamedFlags = flags
+	}
 	if val, ok := pendingChanges["validated"]; ok {
 		target.Validated = val.(bool)
 		// When validating, upgrade to regular user level if below it.
@@ -361,6 +402,8 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 			oldValue = perm.FormatRoleList(currentUserData.Roles)
 		case "groups":
 			oldValue = perm.FormatRoleList(currentUserData.Groups)
+		case "namedflags":
+			oldValue = perm.FormatFlagList(currentUserData, boardLocation())
 		case "level":
 			oldValue = fmt.Sprintf("%d", currentUserData.AccessLevel)
 		case "validated":
