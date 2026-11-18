@@ -187,6 +187,11 @@ func (st *userEditorState) handleEditorKey(key int, termWidth, termHeight int) (
 		// User groups (#1036), checked the same way.
 		st.stageNameList("groups", "Groups", st.users[st.selectedIndex].Groups, perm.ParseGroupList)
 		refresh = true
+	case 'l', 'L':
+		// Named flags (#1074), with their expiries, checked against
+		// configs/roles.json and the clock as typed.
+		st.stageNamedFlags()
+		refresh = true
 	case 'p', 'P':
 		// Change password
 		if newPassword, editErr := st.readFieldInput("New Password", "", 50, true); editErr == nil {

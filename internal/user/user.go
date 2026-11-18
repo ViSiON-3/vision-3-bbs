@@ -61,6 +61,11 @@ type User struct {
 	// as configs/roles.json defines them, for the ACS term GROUP:. Being in
 	// a group grants no admin permission.
 	Groups []string `json:"groups,omitempty"`
+	// NamedFlags are the named flags the sysop has given this user, for the
+	// ACS term FLAG:name: each flag's name, as configs/roles.json declares
+	// it, and the RFC 3339 instant it stops passing, "" for never. An
+	// expired grant stays here until the sysop takes it off (internal/perm).
+	NamedFlags map[string]string `json:"namedFlags,omitempty"`
 	// PreviousHandles are the handles this account had before, oldest
 	// first, recorded on each rename (#1048). Lastread is kept per handle,
 	// so what the account read under an earlier handle is found by them.

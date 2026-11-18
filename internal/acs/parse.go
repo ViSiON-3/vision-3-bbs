@@ -87,6 +87,10 @@ func (e *Expr) RoleNames() []string { return e.names("ROLE") }
 // GroupNames is RoleNames for GROUP terms.
 func (e *Expr) GroupNames() []string { return e.names("GROUP") }
 
+// FlagNames is RoleNames for named flags (FLAG:name), not the legacy
+// one-letter flags.
+func (e *Expr) FlagNames() []string { return e.names("FLAG") }
+
 // names lists the values of the terms with code, each once, in order.
 func (e *Expr) names(code string) []string {
 	var names []string

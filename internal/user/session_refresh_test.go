@@ -512,3 +512,23 @@ func TestSyncDoesNotUndoASaveThatOvertookIt(t *testing.T) {
 		t.Fatal("the sync put back the read-only flag the save had just cleared")
 	}
 }
+
+// A named flag revoked in ./ue reaches the holder's session at its next
+// refresh, as a demotion does.
+func TestRefreshPicksUpARevokedFlag(t *testing.T) {
+	um := refreshMgr(t, &User{ID: 1, Handle: "Felonius", NamedFlags: map[string]string{"donor": ""}})
+	session, ok := um.BeginSession("Felonius")
+	if !ok {
+		t.Fatal("BeginSession failed")
+	}
+	editOnDisk(t, um.path, func(u *User) { u.NamedFlags = map[string]string{"beta": ""} })
+	allowImmediateSync()
+
+	refreshed, ok := um.RefreshSessionUser(session)
+	if !ok {
+		t.Fatal("RefreshSessionUser reported the account gone")
+	}
+	if _, has := refreshed.NamedFlags["donor"]; has || refreshed.NamedFlags == nil {
+		t.Errorf("NamedFlags = %v, want the sysop's {beta}", refreshed.NamedFlags)
+	}
+}

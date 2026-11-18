@@ -60,7 +60,7 @@ comparison or a range: see [Comparisons and ranges](#comparisons-and-ranges).
 | `D`*n* | no name | access level ≥ *n* | number | the same test as `S`: there is no separate download level |
 | `SYSOP` | — | access level ≥ `sysOpLevel` | — | `sysOpLevel` in config.json, default 255 |
 | `COSYSOP` | — | access level ≥ `coSysOpLevel` | — | `coSysOpLevel` in config.json, default 250 |
-| `F`*x* | `FLAG:`*x* | the user has flag *x* | one letter or digit | case-insensitive; `FAB` (two letters) fails — use `FA&FB` |
+| `F`*x* | `FLAG:`*x* | the user has flag *x* | one letter or digit | case-insensitive; `FAB` (two letters) fails — use `FA&FB`. `FLAG:` with a longer name is a [named flag](#named-flags) |
 | `I` | no name | the user has flag `I` | ignored | the same test as `FI`; `I5` is `I` |
 | `V` | `VALIDATED` | the user is validated | ignored | `V5` is `V` |
 | `U`*n* | `USER` | the user's ID is *n* | number | |
@@ -116,7 +116,8 @@ A name stands for its letter, with the same test and the same argument:
   as its first letter with an argument, as it always has been, so `LEVEL` on
   its own is `L`, not a level test.
 - `FLAG`, `NOTE` and `TIME` take a colon: `FLAG:A`, `NOTE:trusted`,
-  `TIME:22:00/06:00`. `FLAG:` takes one flag letter or digit, like `F`.
+  `TIME:22:00/06:00`. `FLAG:` with one letter or digit is that flag, like
+  `F`; with a longer name it is a [named flag](#named-flags).
   So do `IP:` and `DATE:`, which have no letter.
 - `CONN` and `ENC` take `=` and a word: `CONN=telnet`, `ENC=utf8`, in any
   case.
@@ -167,6 +168,31 @@ then letters, digits, `_` and `-`, and so do group names. A `ROLE:` or
 whole string (see
 [Problems and missing context](#problems-and-missing-context)), so a
 misspelt `!ROLE:validatr` can't pass for everyone.
+
+### Named flags
+
+`FLAG:`*name*, with a name of two or more characters, passes when the
+user's record has the [named flag](users/admin-roles.md#named-flags) and its
+expiry, if it has one, hasn't come: `FLAG:donor`, `FLAG:beta_tester`. A
+one-character name is still the legacy flag: `FLAG:A` is `FA`, read from the
+user's **Flags**, which named flags don't touch. Names are case-insensitive
+and follow the role name rules; the ACS term names are reserved.
+
+Expiry is checked when the string is: `FLAG:donor` for a grant that
+expires at midnight on 1 January passes at 23:59 on 31 December and fails
+from midnight on, for a caller online across it too. An expired grant stays
+on the record and fails like a missing one. Being a SysOp doesn't give
+anyone a flag.
+
+A flag is declared in `configs/roles.json`, under `flags`. A `FLAG:` term
+naming a flag `roles.json` doesn't declare fails the whole string, as an
+undefined role does, so `!FLAG:donr` can't pass for everyone, and doctor
+reports it.
+
+A flag only marks a user: it grants no admin permission. A menu command
+gated on `FLAG:validator` shows to flagged users, but the validation queue
+still checks `users.validate`, which only a [role](users/admin-roles.md)
+gives. Use `PERM:` to offer an admin command.
 
 ### Ratios
 
@@ -278,8 +304,8 @@ in the same way, whatever the other parts say:
   without a session (see
   [Terms that need a session](#terms-that-need-a-session));
 - `AGE` for a user with no sign-up date;
-- `ROLE:`*name* or `GROUP:`*name* for a role or group `configs/roles.json`
-  doesn't define.
+- `ROLE:`*name*, `GROUP:`*name* or `FLAG:`*name* for a role, group or
+  named flag `configs/roles.json` doesn't define.
 
 So `!L`, `SYSOP|L`, `!AGE>=7` and `!ROLE:validatr` fail where those values
 are missing,
@@ -342,9 +368,9 @@ Doctor's **user sign-up dates** check lists users with no sign-up date: a
 warning when one of the board's strings uses `AGE`, since that whole string
 fails for them.
 
-A string with a `ROLE:` or `GROUP:` term for a role or group
-`configs/roles.json` doesn't define is a **FAIL**, since it denies every
-caller:
+A string with a `ROLE:`, `GROUP:` or named `FLAG:` term for a role, group
+or flag `configs/roles.json` doesn't define is a **FAIL**, since it denies
+every caller:
 
 ```text
 [FAIL]  ACS: menus/v3/cfg/MAIN.CFG  command 30 ("/VAL"), ACS "ROLE:validatr": names ROLE:validatr, which configs/roles.json doesn't define, so it fails for every caller
@@ -410,11 +436,21 @@ have rules of its own.
 
 The line under the expression marks each term: `+` passed, `-` failed, `~`
 needs a session the context doesn't have, a value the user's record
-doesn't (`AGE` with no sign-up date), or a role or group `roles.json`
+doesn't (`AGE` with no sign-up date), or a role, group or flag `roles.json`
 doesn't define.
 
 A user with roles or groups has a **Roles:** or **Groups:** line under
-**User:**. For `PERM:` the
+**User:**, and one with named flags a **Flags:** line, each flag with its
+expiry on the board's clock, or marked expired at the tester's time:
+
+```text
+Flags:      beta_tester, donor until 2027-01-01, helper expired 2026-10-01
+```
+
+For `FLAG:`*name* the tester says whether the user has the flag and until
+when: `has flag donor until 2027-01-01`, `had flag helper, which expired
+2026-10-01`, or `doesn't have flag donor (named flags: beta_tester)`. Set
+the tester's time past an expiry to see the string as it will be then. For `PERM:` the
 tester says where the permission came from:
 
 ```text
@@ -467,6 +503,7 @@ behind its level and category, private mail behind its own rules.
 | `V&!FX` | validated users without flag X |
 | `SYSOP\|U1` | sysops, and user 1 |
 | `PERM:users.validate` | sysops, and users with a role granting `users.validate` |
+| `FLAG:donor\|S50` | users with the named flag `donor`, until it expires, and level 50 and up |
 | `(S50\|FM)&T10` | level 50 or flag M, with 10 minutes or more left |
 | `S<20` | levels below 20 |
 | `CALLS>=10&AGE>=7` | users with 10 calls or more who signed up a week or more ago |

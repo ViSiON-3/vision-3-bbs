@@ -3,6 +3,7 @@ package menu
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
@@ -224,6 +225,14 @@ func (st *userEditorState) renderDetails(message string) error {
 	if rolesValue == "" {
 		rolesValue = "none"
 	}
+	// "[L] Named Flags: " starts at column 46, leaving 18 columns.
+	flagsValue := callerText(adminTruncate(perm.DescribeFlags(sel, boardLocation(), time.Now()), 18))
+	if val, ok := st.pendingChanges["namedflags"]; ok {
+		flagsValue = fmt.Sprintf("|14*|03%s|07", callerText(adminTruncate(val.(string), 17)))
+	}
+	if flagsValue == "" {
+		flagsValue = "none"
+	}
 	groupsValue := callerText(adminTruncate(perm.FormatRoleList(sel.Groups), 24))
 	if val, ok := st.pendingChanges["groups"]; ok {
 		groupsValue = fmt.Sprintf("|14*|03%s|07", callerText(adminTruncate(val.(string), 23)))
@@ -273,10 +282,18 @@ func (st *userEditorState) renderDetails(message string) error {
 			lines = append(lines, key("D", "Note", true)+"|08: |03"+getFieldValue("note", sel.PrivateNote)+"|07")
 		}
 	}
-	// Groups and the ACS tester's key, under the fields when the terminal
-	// has a row to spare above the status row (it does from 80x24 up).
-	if !st.cfg.validateOnly && !st.cfg.limited() && st.layout.detailStartRow+len(lines) < st.layout.statusRow {
-		lines = append(lines, lineTwoCol("|08[|14U|08]|11 Groups", groupsValue, "|08[|14T|08]|11 ACS Test", "test this user"))
+	// Groups, named flags and the ACS tester's key, under the fields when
+	// the terminal has rows to spare above the status row (it does from
+	// 80x24 up).
+	if !st.cfg.validateOnly && !st.cfg.limited() {
+		for _, extra := range []string{
+			lineTwoCol("|08[|14U|08]|11 Groups", groupsValue, "|08[|14L|08]|11 Named Flags", flagsValue),
+			"|08[|14T|08]|11 ACS Test|08: |03test this user|07",
+		} {
+			if st.layout.detailStartRow+len(lines) < st.layout.statusRow {
+				lines = append(lines, extra)
+			}
+		}
 	}
 	for i, line := range lines {
 		if err := st.writeAt(st.layout.detailStartRow+i, 1, line); err != nil {

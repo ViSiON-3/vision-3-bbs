@@ -628,3 +628,30 @@ func TestStaleCopySavedByIDCannotRevertLater(t *testing.T) {
 		t.Errorf("revoked role or level came back: roles %v, level %d", got.Roles, got.AccessLevel)
 	}
 }
+
+// A named flag revoked in ./ue stays revoked when the holder's session,
+// carrying its copy from before the edit, saves next, and one granted there
+// isn't taken away by it (#1074).
+func TestStaleSessionSaveCannotRestoreRevokedFlag(t *testing.T) {
+	um, path := mgrWithUser(t, &User{
+		ID: 2, Handle: "Val", AccessLevel: 20, Validated: true,
+		NamedFlags: map[string]string{"donor": "", "beta": "2027-01-01T00:00:00Z"},
+	})
+	sessionCopy, _ := um.GetUser("Val")
+
+	writeUsersFile(t, path, &User{
+		ID: 2, Handle: "Val", AccessLevel: 20, Validated: true,
+		NamedFlags: map[string]string{"beta": "2028-01-01T00:00:00Z", "helper": ""},
+	})
+	sessionCopy.MessagesPosted++
+	if err := um.UpdateUser(sessionCopy); err != nil {
+		t.Fatalf("UpdateUser: %v", err)
+	}
+	got := readUsersFile(t, path)["val"]
+	if _, back := got.NamedFlags["donor"]; back || got.NamedFlags["beta"] != "2028-01-01T00:00:00Z" || len(got.NamedFlags) != 2 {
+		t.Errorf("stale session save reverted the flags: %v", got.NamedFlags)
+	}
+	if got.MessagesPosted != 1 {
+		t.Errorf("MessagesPosted = %d, want the session's 1", got.MessagesPosted)
+	}
+}

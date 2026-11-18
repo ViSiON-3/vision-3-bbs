@@ -151,6 +151,7 @@ The lower half of the screen shows the following for the highlighted user:
 | `N` | Network chat bar | |
 | `R` | [Admin roles](users/admin-roles.md) | |
 | `U` | [User groups](users/admin-roles.md#groups) | |
+| `L` | [Named flags](users/admin-roles.md#named-flags) | |
 
 ### R — Roles, U — Groups
 
@@ -160,6 +161,20 @@ does the same for the user's [groups](users/admin-roles.md#groups). Each name
 is checked against `configs/roles.json` as you press Enter, and one the file
 doesn't define is refused (`no role named ... in configs/roles.json`). Saved
 with `S` like any other field, and logged in the admin activity log.
+
+### L — Named Flags
+
+Sets the user's [named flags](users/admin-roles.md#named-flags), with their
+expiries: `beta, donor=2027-01-01, helper=2026-12-24 18:00`, times on the
+board's clock. The prompt starts with the user's flags in that form; leave
+one out to revoke it. The detail panel shows each flag with its expiry, or
+as expired. Each name is checked against the flags `configs/roles.json`
+declares as you press Enter, and so is the expiry: one that has already
+passed is refused, unless it is the grant the user already has. Saved with
+`S`, checked again then, and logged in the admin activity log. Only a SysOp
+can set flags.
+
+`U`, `L` and the `T` key line show under the fields from 80x24 up.
 
 ### T — ACS Test
 

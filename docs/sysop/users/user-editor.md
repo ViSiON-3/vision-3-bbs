@@ -47,7 +47,7 @@ Press Enter on any user to open the field editor. It lays the fields out in two 
 
 **Left column:** Handle, Real Name, Access Level, Total Calls, Group/Location, Access Flags, Private Note, File Points, Custom Prompt, Time Limit, Password, WFC Keys
 
-**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted (read-only), Roles/Groups, WFC Read Only, ACS Test
+**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted (read-only), Roles/Groups, Named Flags, WFC Read Only, ACS Test
 
 **Read-only block:** Num Uploads, Msgs Posted, InfoForms, Auto Purge, Created, Updated, Last Login, Bulletin
 
@@ -70,8 +70,17 @@ move between them, Enter to keep them, Esc to leave them as they were. The
 dialog lists the roles and groups `roles.json` in the `--config` directory
 defines, and a name it doesn't define is refused with the reason.
 
-ACS Test opens the [ACS tester](#acs-test) for the user. `ROLE:`, `GROUP:`
-and `PERM:` read the same `roles.json`.
+Named Flags shows how many [named flags](users/admin-roles.md#named-flags)
+the user has and how many have expired, and Enter opens a dialog listing
+each with its expiry on the board's clock (`donor until 2027-01-01`,
+`beta expired 2026-10-01`). Edit the list on its one line, separated by
+commas: a name, or `name=YYYY-MM-DD` or `name=YYYY-MM-DD HH:MM` to expire
+then. Leave a flag out to revoke it. Enter checks each name against the
+flags `roles.json` declares and refuses a new expiry that has already
+passed; Esc leaves the flags as they were.
+
+ACS Test opens the [ACS tester](#acs-test) for the user. `ROLE:`, `GROUP:`,
+`FLAG:`*name* and `PERM:` read the same `roles.json`.
 
 **Read-only fields:** Deleted (`Y` with the date and time it was deleted,
 or `N`) and Auto Purge reflect the user's current deletion state and purge eligibility. InfoForms shows which infoform responses exist on disk (e.g., `1[x] 2[ ] 3[ ]`).
@@ -236,6 +245,7 @@ found or cannot be loaded.
 | Output Mode | `outputMode` | Legacy, not read |
 | Deleted | `deletedUser` / `deletedAt` | Read-only; set by F2 |
 | Roles/Groups | `roles` / `groups` | Dialog; checked against `roles.json` |
+| Named Flags | `namedFlags` | Dialog; each flag's expiry as RFC 3339, `""` for none; checked against `roles.json` |
 | WFC Read Only | `wfcReadOnly` | |
 
 The full record is described in

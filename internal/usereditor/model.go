@@ -58,6 +58,7 @@ const (
 	modeDeviceList                        // Paired QWK API devices: list/unpair
 	modeACSTest                           // ACS tester for the user being edited
 	modeMembership                        // Roles and groups dialog for the user being edited
+	modeNamedFlags                        // Named flags dialog for the user being edited
 )
 
 // Model is the BubbleTea model for the user editor TUI.
@@ -122,7 +123,10 @@ type Model struct {
 	rolesErr error
 	// membership is the roles and groups dialog (modeMembership).
 	membership membershipDialog
-	// boardLocation is config.json's timezone, for the ACS tester's AGE.
+	// flags is the named flags dialog (modeNamedFlags).
+	flags flagsDialog
+	// boardLocation is config.json's timezone, for the ACS tester's AGE
+	// and the named flags' expiries.
 	boardLocation *time.Location
 
 	// Terminal
@@ -360,6 +364,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateACSTest(msg)
 		case modeMembership:
 			return m.updateMembership(msg)
+		case modeNamedFlags:
+			return m.updateFlags(msg)
 		}
 	}
 	return m, nil
@@ -576,6 +582,10 @@ func (m Model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			if f.Label == membershipField {
 				m.openMembershipDialog()
+				return m, textinput.Blink
+			}
+			if f.Label == namedFlagsField {
+				m.openFlagsDialog()
 				return m, textinput.Blink
 			}
 			// Password field - enter password entry mode

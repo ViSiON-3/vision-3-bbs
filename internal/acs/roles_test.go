@@ -81,7 +81,7 @@ func TestUndefinedRoleFailsWholeString(t *testing.T) {
 	}
 	x := Explain("!ROLE:validatr", roleCtx(t, u))
 	lines := strings.Join(Render(x, 0), "\n")
-	for _, want := range []string{"FAIL: a part names a role or group configs/roles.json doesn't define", "no role named validatr (defined: validator, msg_ops, greeter-2)", "~"} {
+	for _, want := range []string{"FAIL: a part names a role, group or flag configs/roles.json doesn't define", "no role named validatr (defined: validator, msg_ops, greeter-2)", "~"} {
 		if !strings.Contains(lines, want) {
 			t.Errorf("render lacks %q:\n%s", want, lines)
 		}

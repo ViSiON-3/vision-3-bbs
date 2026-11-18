@@ -222,3 +222,64 @@ func TestDoctorGroupMail(t *testing.T) {
 		t.Errorf("findings = %v", findings)
 	}
 }
+
+// Without roles.json nothing is declared, and a user still carrying a flag
+// or role is told about, beside the note that the file is absent.
+func TestDoctorGrantsWithoutRolesFile(t *testing.T) {
+	root := t.TempDir()
+	writeBoardFile(t, root, "data/users/users.json", `[{"id": 2, "handle": "Op", "roles": ["validator"], "namedFlags": {"donor": ""}}]`)
+	var msgs []string
+	info := 0
+	for _, c := range collectChecks(root, checkRoles) {
+		msgs = append(msgs, c.message)
+		if c.status == doctorInfo {
+			info++
+		}
+	}
+	joined := strings.Join(msgs, "\n")
+	for _, want := range []string{
+		"configs/roles.json is absent",
+		"Op (#2) has role validator, which configs/roles.json doesn't define",
+		"Op (#2) has flag donor, which configs/roles.json doesn't declare",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("checks lack %q:\n%s", want, joined)
+		}
+	}
+	if info != 1 || len(msgs) != 3 {
+		t.Errorf("checks:\n%s", joined)
+	}
+}
+
+func TestDoctorNamedFlags(t *testing.T) {
+	root := t.TempDir()
+	writeBoardFile(t, root, "configs/roles.json", `{"roles": [], "flags": [{"name": "donor"}, {"name": "x"}, {"name": "perm"}]}`)
+	writeBoardFile(t, root, "data/users/users.json", `[{"id": 2, "handle": "Op", "namedFlags": {"donor": "soon", "gone": ""}}]`)
+	writeBoardFile(t, root, "menus/v3/mnu/MAIN.MNU", `{"ACS": ""}`)
+	writeBoardFile(t, root, "menus/v3/cfg/MAIN.CFG", `[{"KEYS": "O", "CMD": "GOTO:ADMIN", "ACS": "FLAG:donor|FLAG:donr|FLAG:A"}]`)
+	var msgs []string
+	for _, c := range collectChecks(root, checkRoles) {
+		msgs = append(msgs, c.message)
+	}
+	joined := strings.Join(msgs, "\n")
+	for _, want := range []string{
+		`flag 2 ("x"): flag name "x" is one character`,
+		`flag 3 ("perm"): flag name "perm" is reserved`,
+		`Op (#2) has flag donor with expiry "soon", which isn't an RFC 3339 time`,
+		"Op (#2) has flag gone, which configs/roles.json doesn't declare",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("checks lack %q:\n%s", want, joined)
+		}
+	}
+	findings, _ := scanACS(root)
+	if len(findings) != 1 || !strings.Contains(findings[0].Detail(), "names FLAG:donr, which configs/roles.json doesn't define") {
+		t.Errorf("findings = %v", findings)
+	}
+
+	writeBoardFile(t, root, "configs/roles.json", `{"roles": [], "flags": [{"name": "donor"}, {"name": "gone"}]}`)
+	writeBoardFile(t, root, "data/users/users.json", `[{"id": 2, "handle": "Op", "namedFlags": {"donor": "2020-01-01T00:00:00Z", "gone": ""}}]`)
+	if got := collectChecks(root, checkRoles); len(got) != 1 || got[0].message != "0 role(s) defined, 0 user(s) with a role; 2 flag(s) declared, 1 user(s) with a named flag" {
+		t.Errorf("clean: %+v", got)
+	}
+}

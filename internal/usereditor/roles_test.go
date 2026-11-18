@@ -113,10 +113,10 @@ func TestMembershipDialogWithoutRolesJSON(t *testing.T) {
 	}
 }
 
-// The edit screen keeps a row free for the next setting.
+// Roles and groups share one row, which left row 14 for the named flags.
 func TestMembershipFreesARow(t *testing.T) {
 	for _, f := range editFields() {
-		if f.Col == rightCol && f.Row == 14 {
+		if f.Col == rightCol && f.Row == 14 && f.Label != namedFlagsField {
 			t.Errorf("right column row 14 is taken by %q", f.Label)
 		}
 	}

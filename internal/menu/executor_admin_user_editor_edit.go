@@ -28,30 +28,42 @@ func (st *userEditorState) readFieldInput(fieldLabel string, currentValue string
 	}
 
 	prompt := fmt.Sprintf("|15%s:|07 ", fieldLabel)
-	if err := st.writeAt(st.layout.statusRow, 1, prompt); err != nil {
-		return "", err
-	}
-
-	// Position cursor after prompt
+	// The value is shown from column cursorPos to the row's last column but
+	// one, scrolled sideways to keep the cursor in view, so a long value
+	// never wraps onto the action row.
 	cursorPos := len(fieldLabel) + 3
-	cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos)
-	if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
-		return "", err
+	width := st.width
+	if width <= 0 {
+		width = 80
 	}
+	room := max(width-cursorPos, 10)
 
 	input := []rune(currentValue)
 	cursorIdx := len(input)
+	offset := 0
 
-	// display renders the editable buffer, masking it for secret fields.
-	display := func() string {
-		if mask {
-			return strings.Repeat("*", len(input))
+	// draw rewrites the status row: the visible part of the buffer, masked
+	// for secret fields, padded to clear what was there, and the cursor.
+	draw := func() error {
+		if cursorIdx < offset {
+			offset = cursorIdx
 		}
-		return string(input)
+		if cursorIdx-offset >= room {
+			offset = cursorIdx - room + 1
+		}
+		end := min(len(input), offset+room)
+		shown := string(input[offset:end])
+		if mask {
+			shown = strings.Repeat("*", end-offset)
+		}
+		shown += strings.Repeat(" ", room-(end-offset))
+		if err := st.writeAt(st.layout.statusRow, 1, prompt+shown); err != nil {
+			return err
+		}
+		cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos+cursorIdx-offset)
+		return terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode)
 	}
-
-	// Show current value
-	if err := terminalio.WriteProcessedBytes(st.terminal, []byte(display()), st.outputMode); err != nil {
+	if err := draw(); err != nil {
 		return "", err
 	}
 
@@ -70,11 +82,9 @@ func (st *userEditorState) readFieldInput(fieldLabel string, currentValue string
 			if cursorIdx > 0 {
 				input = append(input[:cursorIdx-1], input[cursorIdx:]...)
 				cursorIdx--
-				if err := st.writeAt(st.layout.statusRow, 1, prompt+display()+"  "); err != nil {
-					return "", err
-				}
-				cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos+cursorIdx)
-				if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
+				// Step back so the characters before the cursor show again.
+				offset = max(0, min(offset, cursorIdx-room/2))
+				if err := draw(); err != nil {
 					return "", err
 				}
 			}
@@ -83,11 +93,7 @@ func (st *userEditorState) readFieldInput(fieldLabel string, currentValue string
 				r := rune(key)
 				input = append(input[:cursorIdx], append([]rune{r}, input[cursorIdx:]...)...)
 				cursorIdx++
-				if err := st.writeAt(st.layout.statusRow, 1, prompt+display()); err != nil {
-					return "", err
-				}
-				cmd := fmt.Sprintf("\x1b[%d;%dH", st.layout.statusRow, cursorPos+cursorIdx)
-				if err := terminalio.WriteProcessedBytes(st.terminal, []byte(cmd), st.outputMode); err != nil {
+				if err := draw(); err != nil {
 					return "", err
 				}
 			}
@@ -147,6 +153,38 @@ func (st *userEditorState) stageNameList(field, label string, stored []string, p
 		st.statusMessage = "|10Field marked for update.|07"
 	default:
 		delete(st.pendingChanges, field)
+		st.statusMessage = "|08No change.|07"
+	}
+}
+
+// stageNamedFlags stages an edit of the selected user's named flags, typed
+// as perm.FormatFlagList writes them (beta, donor=2027-01-01) with times in
+// the board's zone, and checked as typed: an undeclared flag, or a new
+// expiry that has already passed, is refused. Leaving a flag out revokes it.
+func (st *userEditorState) stageNamedFlags() {
+	sel := st.users[st.selectedIndex]
+	loc := boardLocation()
+	orig := perm.FormatFlagList(sel, loc)
+	cur := orig
+	if staged, ok := st.pendingChanges["namedflags"].(string); ok {
+		cur = staged
+	}
+	newVal, editErr := st.readFieldInput("Named Flags", cur, 200, false)
+	if editErr != nil {
+		if editErr.Error() != "cancelled" {
+			st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
+		}
+		return
+	}
+	flags, parseErr := perm.ParseFlagList(newVal, perm.Current(), loc, time.Now(), sel)
+	switch {
+	case parseErr != nil:
+		st.statusMessage = "|01" + parseErr.Error() + "|07"
+	case !perm.SameFlags(flags, sel.NamedFlags):
+		st.pendingChanges["namedflags"] = perm.FormatFlagList(&user.User{NamedFlags: flags}, loc)
+		st.statusMessage = "|10Field marked for update.|07"
+	default:
+		delete(st.pendingChanges, "namedflags")
 		st.statusMessage = "|08No change.|07"
 	}
 }
@@ -293,6 +331,15 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 		}
 		target.Groups = names
 	}
+	if val, ok := pendingChanges["namedflags"]; ok {
+		// Checked again against the stored record and the clock: an expiry
+		// staged a moment ago may have passed since.
+		flags, err := perm.ParseFlagList(val.(string), perm.Current(), boardLocation(), time.Now(), target)
+		if err != nil {
+			return "|01" + err.Error() + "|07", false
+		}
+		target.NamedFlags = flags
+	}
 	if val, ok := pendingChanges["validated"]; ok {
 		target.Validated = val.(bool)
 		// When validating, upgrade to regular user level if below it.
@@ -361,6 +408,8 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 			oldValue = perm.FormatRoleList(currentUserData.Roles)
 		case "groups":
 			oldValue = perm.FormatRoleList(currentUserData.Groups)
+		case "namedflags":
+			oldValue = perm.FormatFlagList(currentUserData, boardLocation())
 		case "level":
 			oldValue = fmt.Sprintf("%d", currentUserData.AccessLevel)
 		case "validated":

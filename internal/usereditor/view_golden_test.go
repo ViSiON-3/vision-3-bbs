@@ -93,6 +93,7 @@ func TestViewGolden(t *testing.T) {
 		{"delete_confirm", modeDeleteConfirm, ""},
 		{"help", modeHelp, ""},
 		{"membership", modeMembership, "x"},
+		{"named_flags", modeNamedFlags, "x"},
 	}
 
 	for _, size := range []struct{ w, h int }{{80, 25}, {120, 45}} {

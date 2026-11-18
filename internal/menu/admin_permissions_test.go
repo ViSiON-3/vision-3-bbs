@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/acs"
 	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -328,5 +329,75 @@ func TestUserEditor_AssignsGroups(t *testing.T) {
 	}
 	if !checkACS("GROUP:fsxnet-ops", u, nil, nil, time.Now()) {
 		t.Error("GROUP: fails for the saved record")
+	}
+}
+
+// TestUserEditor_GrantsAndRevokesNamedFlags pins the sysop's [L] key
+// (#1074): an undeclared flag or a past expiry is refused as typed, a grant
+// with an expiry passes FLAG: until that instant, and leaving a flag out
+// revokes it.
+func TestUserEditor_GrantsAndRevokesNamedFlags(t *testing.T) {
+	useRoles(t, `{"roles": [], "flags": [{"name": "donor"}, {"name": "beta"}]}`)
+	env := newMenuEnv(t)
+	input := "j" +
+		"l" + "donr\r" +
+		"l" + "donor=2001-01-01\r" +
+		"l" + "donor=2099-01-01, BETA\r" +
+		"s" + "q"
+	r := env.runCmd("ADMINLISTUSERS", env.sysop, "", input)
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	if !r.has("no flag named donr in configs/roles.json (declared: donor, beta)", "already passed", "[L] Named Flags", "Changes saved for Caller.") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	u, _ := env.diskUser(2)
+	expiry, err := time.Parse(time.RFC3339, u.NamedFlags["donor"])
+	if err != nil || len(u.NamedFlags) != 2 || u.NamedFlags["beta"] != "" {
+		t.Fatalf("saved flags = %v", u.NamedFlags)
+	}
+	if !expiry.Equal(time.Date(2099, 1, 1, 0, 0, 0, 0, boardLocation())) {
+		t.Errorf("expiry = %v, want midnight 2099-01-01 on the board's clock", expiry)
+	}
+	if l, ok := modLogField(modAdminLog(t, env), 2, "namedflags"); !ok || l.OldValue != "" || l.NewValue != "beta, donor=2099-01-01" {
+		t.Errorf("audit entry = %+v (found %v)", l, ok)
+	}
+	if !checkACS("FLAG:donor&FLAG:beta", u, nil, nil, time.Now()) {
+		t.Error("FLAG: fails for the saved record")
+	}
+	// The same record, checked again at the expiry instant.
+	at := acsContext(u, nil, time.Now())
+	at.Now = expiry
+	if acs.Check("FLAG:donor", at) || !acs.Check("FLAG:beta", at) {
+		t.Error("FLAG:donor still passes at its expiry")
+	}
+
+	r = env.runCmd("ADMINLISTUSERS", env.sysop, "", "j"+"l"+strings.Repeat(ueBS, 40)+"beta\r"+"s"+"q")
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	u, _ = env.diskUser(2)
+	if _, kept := u.NamedFlags["donor"]; kept || len(u.NamedFlags) != 1 {
+		t.Errorf("after revoking donor: %v\n%s", u.NamedFlags, r.text())
+	}
+}
+
+// A value longer than the status row scrolls sideways in it rather than
+// wrapping onto the rows below.
+func TestUserEditor_LongFieldInputScrolls(t *testing.T) {
+	useRoles(t, `{"roles": [], "flags": [{"name": "donor"}]}`)
+	env := newMenuEnv(t)
+	long := strings.Repeat("a", 120) + strings.Repeat("b", 30)
+	r := env.runCmd("ADMINLISTUSERS", env.sysop, "", "j"+"l"+long+ueEsc+"q")
+	if r.err != nil {
+		t.Fatalf("err = %v", r.err)
+	}
+	// "Named Flags: " takes 13 columns of the 80, leaving 66 for the value
+	// and the cursor after it.
+	if strings.Contains(r.raw, strings.Repeat("a", 67)) {
+		t.Errorf("more of the value than the row holds was drawn:\n%q", r.raw)
+	}
+	if !strings.Contains(r.raw, strings.Repeat("a", 35)+strings.Repeat("b", 30)) {
+		t.Errorf("the end of the value isn't in view:\n%q", r.raw)
 	}
 }

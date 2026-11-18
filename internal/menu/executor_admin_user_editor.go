@@ -58,7 +58,7 @@ type userEditorLayout struct {
 // substituting a default before calling this (e.g. when the terminal reports
 // height <= 0).
 func computeUserEditorLayout(termHeight int) userEditorLayout {
-	pageSize := termHeight - 15 // header row, and eight detail lines below the list
+	pageSize := termHeight - 16 // header row, and the detail lines below the list
 	if pageSize < 3 {
 		pageSize = 3
 	}
@@ -111,6 +111,9 @@ type userEditorState struct {
 	outputMode  ansi.OutputMode
 	cfg         userEditorConfig
 	layout      userEditorLayout
+	// width is the terminal's width in columns; readFieldInput scrolls a
+	// value too long for the status row within it.
+	width int
 
 	users              []*user.User
 	selectedIndex      int
@@ -226,6 +229,7 @@ func runUserEditor(c *cmdCtx, cfg userEditorConfig) (*user.User, string, error) 
 		outputMode:        outputMode,
 		cfg:               cfg,
 		adminCursorHidden: adminCursorHidden,
+		width:             termWidth,
 	}
 
 	st.users = st.loadEditorUsers()
