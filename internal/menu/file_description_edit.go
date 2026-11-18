@@ -2,8 +2,6 @@ package menu
 
 import (
 	"errors"
-	"io"
-	"log/slog"
 	"strings"
 
 	"github.com/gliderlabs/ssh"
@@ -11,68 +9,73 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
-	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 )
 
 // minDescriptionLines is the most lines an edited multi-line description
 // keeps: FILE_ID.DIZ's convention. A description imported with more keeps
-// its own count, so an edit never cuts one short.
+// its own count, up to the most the editor holds, so an edit never cuts one
+// shorter than that.
 const minDescriptionLines = 10
 
 // errDescriptionEditorFailed is returned when the editor couldn't run; the
 // caller says so and leaves the description as it was.
 var errDescriptionEditorFailed = errors.New("description editor failed")
 
+// descriptionLines is desc as the editor shows it and an edit saves it:
+// split at CRLF, LF or a bare CR, as the file list breaks it, with control
+// characters stripped as at upload, trailing spaces trimmed and blank lines
+// at the end dropped.
+func descriptionLines(desc string) []string {
+	lines := textLines(desc)
+	for i, line := range lines {
+		lines[i] = cleanDescriptionLine(line)
+	}
+	return textLines(strings.Join(lines, "\n"))
+}
+
+// cleanDescriptionLine is one line of a description as an edit saves it.
+func cleanDescriptionLine(line string) string {
+	return strings.TrimRight(sanitizeControlChars(line), " \t")
+}
+
 // multiLineDescription reports whether desc has more than one line, as a
 // FILE_ID.DIZ description does. Those are edited in the full-screen editor,
 // so a one-line prompt doesn't replace every line with one.
 func multiLineDescription(desc string) bool {
-	return strings.Contains(strings.TrimRight(desc, "\r\n"), "\n")
+	return len(textLines(desc)) > 1
 }
 
 // descriptionLineCap is the most lines an edit of desc keeps.
 func descriptionLineCap(desc string) int {
-	return max(minDescriptionLines, strings.Count(strings.TrimRight(desc, "\r\n"), "\n")+1)
+	return min(max(minDescriptionLines, len(textLines(desc))), editor.MaxLines)
+}
+
+// oneLineDescription is a one-line description as the one-line prompt shows
+// it, with any line break at its end gone.
+func oneLineDescription(desc string) string {
+	return strings.Join(textLines(desc), " ")
 }
 
 // editDescription opens the full-screen editor on desc, a file's multi-line
-// description, titled with the file's name. It returns the edited text,
-// whether the caller saved it, and whether lines past descriptionLineCap
-// were dropped. An abort, or saving it empty, leaves it unchanged
-// (saved is false). Control characters are stripped as at upload.
+// description, titled with the file's name. It returns the edited text and
+// whether it differs from desc as the editor showed it; an abort, or a save
+// with nothing changed, is not a change, so nothing is rewritten.
+// truncated reports lines dropped past descriptionLineCap.
 func editDescription(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode, nodeNumber int,
-	filename, handle, desc string) (edited string, saved, truncated bool, err error) {
-	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-	editorCtx := editor.EditorContext{NodeNumber: nodeNumber, ConfArea: "File Description"}
-	body, ok, edErr := editor.RunEditorWithMetadata(
-		desc, s, sessionOutput(s), outputMode,
-		filename, "All", handle, false,
-		"", "", "", "", false, nil, getSessionIH(s), editorCtx,
-	)
-	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
-	if edErr != nil {
-		if errors.Is(edErr, io.EOF) || errors.Is(edErr, editor.ErrIdleTimeout) {
-			return "", false, false, edErr
-		}
-		slog.Error("editor failed for a file description", "node", nodeNumber, "file", filename, "error", edErr)
-		return "", false, false, errDescriptionEditorFailed
+	filename, handle, desc string) (edited string, changed, truncated bool, err error) {
+	shown := descriptionLines(desc)
+	lines, saved, truncated, err := runLineEditor(s, terminal, outputMode, lineEdit{
+		text: strings.Join(shown, "\n"), subject: filename, handle: handle,
+		ctx:      editor.EditorContext{NodeNumber: nodeNumber, ConfArea: "File Description"},
+		maxLines: descriptionLineCap(desc), clean: cleanDescriptionLine,
+		what: "a file description", failed: errDescriptionEditorFailed,
+	})
+	if err != nil || !saved || len(lines) == 0 {
+		return "", false, false, err
 	}
-	if !ok {
+	edited = strings.Join(lines, "\n")
+	if edited == strings.Join(shown[:min(len(shown), editor.MaxLines)], "\n") {
 		return "", false, false, nil
 	}
-	lines := strings.Split(strings.ReplaceAll(body, "\r", ""), "\n")
-	for i, line := range lines {
-		lines[i] = strings.TrimRight(sanitizeControlChars(line), " \t")
-	}
-	// Blank lines at the end are the editor's, not the description's.
-	for len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-	if len(lines) == 0 {
-		return "", false, false, nil
-	}
-	if limit := descriptionLineCap(desc); len(lines) > limit {
-		lines, truncated = lines[:limit], true
-	}
-	return strings.Join(lines, "\n"), true, truncated, nil
+	return edited, true, truncated, nil
 }

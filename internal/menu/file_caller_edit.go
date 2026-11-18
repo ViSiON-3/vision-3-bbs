@@ -90,22 +90,23 @@ func runEditUpload(c *cmdCtx, args string) (*user.User, string, error) {
 
 	var desc string
 	truncated := false
-	if multiLineDescription(rec.Description) {
-		// A FILE_ID.DIZ description: edited in place, so the lines the
-		// caller doesn't touch stay.
-		var ok bool
-		desc, ok, truncated, err = editDescription(s, terminal, outputMode, nodeNumber, rec.Filename, currentUser.Handle, rec.Description)
+	// A FILE_ID.DIZ description is edited in place, so the lines the caller
+	// doesn't touch stay.
+	inPlace := multiLineDescription(rec.Description)
+	if inPlace {
+		var changed bool
+		desc, changed, truncated, err = editDescription(s, terminal, outputMode, nodeNumber, rec.Filename, currentUser.Handle, rec.Description)
 		switch {
 		case errors.Is(err, errDescriptionEditorFailed):
 			return notice("\r\n|01The editor couldn't open. Nothing was changed.|07\r\n")
 		case err != nil:
 			return nil, "LOGOFF", io.EOF
-		case !ok || desc == rec.Description:
+		case !changed:
 			return notice("\r\n|07Description unchanged.\r\n")
 		}
 	} else {
 		say(fmt.Sprintf("\r\n|15%s|07\r\n|08Now:|07 %s\r\n|11New description:|07 ",
-			callerText(rec.Filename), callerText(rec.Description)))
+			callerText(rec.Filename), callerText(oneLineDescription(rec.Description))))
 		input, err = readLineFromSessionIHMax(s, terminal, maxUploadDescription)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -126,9 +127,9 @@ func runEditUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	var via perm.Decision
 	err = e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
 		via = manages(r.AreaID)
-		// An edit made in place starts from the description as it was
-		// read; one changed since would be lost under it.
-		if mayEditUpload(r, currentUser, via.Allowed) && (!multiLineDescription(rec.Description) || r.Description == rec.Description) {
+		// The edit starts from the description as it was read; one
+		// changed since would be lost under it.
+		if mayEditUpload(r, currentUser, via.Allowed) && r.Description == rec.Description {
 			r.Description = desc
 			saved = true
 		}

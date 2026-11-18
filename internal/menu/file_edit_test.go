@@ -89,12 +89,16 @@ func TestEditFileRecordChangeDescription(t *testing.T) {
 }
 
 // TestEditFileRecordBlankDescriptionKeepsOld pins that an empty C answer
-// leaves the description alone, and declining the mark leaves it unreviewed.
+// leaves the description alone and doesn't offer the review mark: nothing
+// was checked or saved to approve.
 func TestEditFileRecordBlankDescriptionKeepsOld(t *testing.T) {
 	env := newMenuEnv(t)
 	id, _ := addReviewUpload(t, env, 1, "KEEP.ZIP", 10)
 
-	env.runCmd("EDITFILERECORD", env.sysop, "", "Y\rC\r\rN\r")
+	r := env.runCmd("EDITFILERECORD", env.sysop, "", "Y\rC\r\rY\r")
+	if r.has("Mark as reviewed?") {
+		t.Errorf("review mark offered after nothing was saved:\n%s", r.text())
+	}
 	rec := reloadedFileRecord(t, env, id)
 	if rec == nil || rec.Description != "original desc" || rec.Reviewed {
 		t.Errorf("record = %+v, want original desc and unreviewed", rec)

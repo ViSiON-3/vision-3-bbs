@@ -102,10 +102,11 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 
 		switch strings.ToUpper(action) {
 		case "C":
-			if err := editFileChangeDescription(e, s, terminal, rec, currentUser.Handle, mayAct, nodeNumber, outputMode); err != nil {
+			changed, err := editFileChangeDescription(e, s, terminal, rec, currentUser.Handle, mayAct, nodeNumber, outputMode)
+			if err != nil {
 				return currentUser, "", err
 			}
-			markReviewed = true
+			markReviewed = changed // Only offer review after a description that was saved.
 
 		case "R":
 			renamed, err := editFileRename(e, s, terminal, rec, currentUser.Handle, mayAct, nodeNumber, outputMode)
@@ -147,11 +148,13 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 				return currentUser, "", err
 			}
 			if strings.EqualFold(reviewInput, "Y") {
-				// A moved file is reviewed in the area it is in now.
-				areaID := rec.AreaID
+				// A moved file is reviewed in the area it is in now, and
+				// logged as it is now, with any description just saved.
+				reviewed := rec
 				if cur, gErr := e.FileMgr.GetFileRecordByID(rec.ID); gErr == nil && cur != nil {
-					areaID = cur.AreaID
+					reviewed = *cur
 				}
+				areaID := reviewed.AreaID
 				d, ok := mayAct(areaID)
 				if !ok {
 					continue
@@ -164,8 +167,6 @@ func runEditFileRecord(c *cmdCtx, args string) (*user.User, string, error) {
 				} else if updateErr != nil {
 					slog.Error("failed to mark file as reviewed", "node", nodeNumber, "file", rec.Filename, "error", updateErr)
 				} else {
-					reviewed := rec
-					reviewed.AreaID = areaID // where it was approved, if it moved
 					logFileAction(d, "marked reviewed", nodeNumber, currentUser.Handle, reviewed)
 					e.writeString(terminal, outputMode, e.Strings().SysopReviewMarked)
 					terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
@@ -211,47 +212,45 @@ func editFileShowAndPrompt(e *MenuExecutor, s ssh.Session, terminal *term.Termin
 }
 
 // editFileChangeDescription asks for a new description and updates the
-// record. A one-line description is replaced by the line typed; a
-// multi-line one (a FILE_ID.DIZ) is edited in place in the full-screen
-// editor, as EDITUPLOAD does, so the other lines stay.
-func editFileChangeDescription(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, handle string, mayAct fileActGuard, nodeNumber int, outputMode ansi.OutputMode) error {
-	inPlace := multiLineDescription(rec.Description)
+// record, as EDITUPLOAD does: a one-line description is replaced by the line
+// typed, cut and cleaned as at upload; a multi-line one (a FILE_ID.DIZ) is
+// edited in place in the full-screen editor, so the other lines stay. Either
+// is refused if the description changed elsewhere meanwhile. It reports
+// whether the new description was saved.
+func editFileChangeDescription(e *MenuExecutor, s ssh.Session, terminal *term.Terminal, rec file.FileRecord, handle string, mayAct fileActGuard, nodeNumber int, outputMode ansi.OutputMode) (bool, error) {
 	var newDesc string
 	truncated := false
-	if inPlace {
-		var saved bool
+	if multiLineDescription(rec.Description) {
+		var changed bool
 		var err error
-		newDesc, saved, truncated, err = editDescription(s, terminal, outputMode, nodeNumber, rec.Filename, handle, rec.Description)
+		newDesc, changed, truncated, err = editDescription(s, terminal, outputMode, nodeNumber, rec.Filename, handle, rec.Description)
 		if errors.Is(err, errDescriptionEditorFailed) {
 			wv(terminal, "\r\n|12The editor couldn't open. Nothing was changed.\r\n", outputMode)
-			return nil
+			return false, nil
 		}
-		if err != nil {
-			return err
-		}
-		if !saved || newDesc == rec.Description {
-			return nil
+		if err != nil || !changed {
+			return false, err
 		}
 	} else {
 		terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n|15New description: |07")), outputMode)
-		line, err := readLineFromSessionIH(s, terminal)
+		line, err := readLineFromSessionIHMax(s, terminal, maxUploadDescription)
 		if err != nil {
-			return err
+			return false, err
 		}
-		newDesc = strings.TrimSpace(line)
+		newDesc = sanitizeControlChars(strings.TrimSpace(line))
 		if newDesc == "" {
-			return nil
+			return false, nil
 		}
 	}
 	d, ok := mayAct(rec.AreaID)
 	if !ok {
-		return nil
+		return false, nil
 	}
 	changed := false
 	updateErr := e.FileMgr.UpdateFileRecordInArea(rec.ID, rec.AreaID, func(r *file.FileRecord) {
-		// An edit made in place starts from the description as it was
-		// read; one changed since would be lost under it.
-		if inPlace && r.Description != rec.Description {
+		// The edit starts from the description as it was read; one
+		// changed since would be lost under it.
+		if r.Description != rec.Description {
 			changed = true
 			return
 		}
@@ -269,8 +268,9 @@ func editFileChangeDescription(e *MenuExecutor, s ssh.Session, terminal *term.Te
 		if truncated {
 			wv(terminal, fmt.Sprintf("\r\n|07Only the first %d lines of the description were kept.\r\n", descriptionLineCap(rec.Description)), outputMode)
 		}
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 // editFileDescriptionChanged is the notice when the description was changed

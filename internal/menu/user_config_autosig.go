@@ -144,37 +144,16 @@ var errAutoSigEditorFailed = errors.New("auto-signature editor failed")
 // maxAutoSigLines (truncated reports a cut). saved is false when the caller
 // abandoned the edit. Nothing is stored: that is the caller's job.
 func runAutoSigEditor(c *cmdCtx, u *user.User) (body string, saved, truncated bool, err error) {
-	terminalio.WriteProcessedBytes(c.terminal, []byte(ansi.ClearScreen()), c.outputMode)
 	editorCtx := editor.EditorContext{
 		NodeNumber: c.nodeNumber,
 		ConfArea:   "Auto-Signature",
 	}
-	body, saved, edErr := editor.RunEditorWithMetadata(
-		u.AutoSignature, c.s, sessionOutput(c.s), c.outputMode,
-		"Auto-Signature", "All", u.Handle, false,
-		"", "", "", "", false, nil, getSessionIH(c.s), withAutocorrect(c.e, editorCtx, nil, u, c.userManager),
-	)
-	terminalio.WriteProcessedBytes(c.terminal, []byte(ansi.ClearScreen()), c.outputMode)
-	if edErr != nil {
-		if errors.Is(edErr, io.EOF) || errors.Is(edErr, editor.ErrIdleTimeout) {
-			return "", false, false, edErr
-		}
-		slog.Error("editor failed for auto-sig", "node", c.nodeNumber, "error", edErr)
-		return "", false, false, errAutoSigEditorFailed
-	}
-	if !saved {
-		return "", false, false, nil
-	}
-	body = strings.TrimRight(body, "\r\n")
-	if body != "" {
-		lines := strings.Split(body, "\n")
-		if len(lines) > maxAutoSigLines {
-			lines = lines[:maxAutoSigLines]
-			truncated = true
-		}
-		body = strings.Join(lines, "\n")
-	}
-	return body, true, truncated, nil
+	lines, saved, truncated, err := runLineEditor(c.s, c.terminal, c.outputMode, lineEdit{
+		text: u.AutoSignature, subject: "Auto-Signature", handle: u.Handle,
+		ctx:      withAutocorrect(c.e, editorCtx, nil, u, c.userManager),
+		maxLines: maxAutoSigLines, what: "auto-sig", failed: errAutoSigEditorFailed,
+	})
+	return strings.Join(lines, "\n"), saved, truncated, err
 }
 
 // appendAutoSig adds the caller's Auto-Signature to a message body they have

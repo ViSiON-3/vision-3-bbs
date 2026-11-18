@@ -138,3 +138,108 @@ func TestEditFileRecordMultiLineDescription(t *testing.T) {
 		t.Errorf("record = %+v, want the edited DIZ, reviewed", rec)
 	}
 }
+
+// A DOS FILE_ID.DIZ is stored with CRLF, or with bare CRs, which the file
+// list also breaks lines at. Either is edited in place, opens in the editor
+// with plain line breaks, and saved unchanged is not a change (#1021).
+func TestEditUploadLineEndings(t *testing.T) {
+	env := newMenuEnv(t)
+	ids := addUploads(t, env, map[string]string{"GAME.ZIP": "Caller"})
+	env.caller.CurrentFileAreaID = 1
+	for _, stored := range []string{
+		"COOL GAME\r\nA game\r\n(c) 1994\r\n",
+		"COOL GAME\rA game\r(c) 1994",
+		"COOL GAME   \nA game\t\n(c) 1994\n\n",
+	} {
+		setDesc(t, env, ids["GAME.ZIP"], stored)
+		r := env.runCmd("EDITUPLOAD", env.caller, "", "GAME.ZIP\r"+editorSave)
+		if !r.has("Full Screen Message Editor", "Description unchanged.") || r.has("New description:") {
+			t.Errorf("%q unchanged: output:\n%s", stored, r.text())
+		}
+		if got := fileDesc(t, env, ids["GAME.ZIP"]); got != stored {
+			t.Errorf("%q was rewritten as %q", stored, got)
+		}
+		env.runCmd("EDITUPLOAD", env.caller, "", "GAME.ZIP\r!"+editorSave)
+		if got := fileDesc(t, env, ids["GAME.ZIP"]); got != "COOL GAME\nA game\n(c) 1994!" {
+			t.Errorf("%q edited: %q", stored, got)
+		}
+	}
+}
+
+// The editor holds 100 lines. A longer imported description saved unchanged
+// is left whole; edited, it keeps 100 lines and the caller is told.
+func TestEditUploadPastEditorLines(t *testing.T) {
+	env := newMenuEnv(t)
+	ids := addUploads(t, env, map[string]string{"GAME.ZIP": "Caller"})
+	env.caller.CurrentFileAreaID = 1
+	long := strings.TrimSuffix(strings.Repeat("line\n", 120), "\n")
+	setDesc(t, env, ids["GAME.ZIP"], long)
+
+	r := env.runCmd("EDITUPLOAD", env.caller, "", "GAME.ZIP\r"+editorSave)
+	if !r.has("Description unchanged.") || fileDesc(t, env, ids["GAME.ZIP"]) != long {
+		t.Errorf("unchanged save: output:\n%s", r.text())
+	}
+	r = env.runCmd("EDITUPLOAD", env.caller, "", "GAME.ZIP\r!"+editorSave)
+	if !r.has("Only its first 100 lines were kept.") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	if got := fileDesc(t, env, ids["GAME.ZIP"]); strings.Count(got, "\n")+1 != 100 || !strings.HasSuffix(got, "line!") {
+		t.Errorf("saved %d lines, ending %q", strings.Count(got, "\n")+1, got[len(got)-10:])
+	}
+}
+
+// A one-line description changed while the caller types a new one isn't
+// written over, the same as a multi-line one.
+func TestEditUploadOneLineChangedMeanwhile(t *testing.T) {
+	env := newMenuEnv(t)
+	ids := addUploads(t, env, map[string]string{"GAME.ZIP": "Caller"})
+	env.caller.CurrentFileAreaID = 1
+	env.whenOutput("New description:", func() { setDesc(t, env, ids["GAME.ZIP"], "the sysop's words") })
+
+	r := env.runCmd("EDITUPLOAD", env.caller, "", "GAME.ZIP\rmine\r")
+	if !r.has("That file was changed elsewhere. Nothing was saved.") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	if got := fileDesc(t, env, ids["GAME.ZIP"]); got != "the sysop's words" {
+		t.Errorf("description = %q", got)
+	}
+}
+
+// In the review queue, an aborted edit, or one saved unchanged, isn't
+// followed by the review mark: nothing was saved to approve.
+func TestEditFileRecordMultiLineAbortNoReview(t *testing.T) {
+	env := newMenuEnv(t)
+	id, _ := addReviewUpload(t, env, 1, "GAME.ZIP", 10)
+	for name, keys := range map[string]string{"abort": editorAbort, "unchanged": editorSave} {
+		setDesc(t, env, id, diz)
+		r := env.runCmd("EDITFILERECORD", env.sysop, "", "Y\rC\r"+keys+"Y\r")
+		if r.has("Mark as reviewed?") {
+			t.Errorf("%s: review mark offered:\n%s", name, r.text())
+		}
+		if rec := reloadedFileRecord(t, env, id); rec == nil || rec.Description != diz || rec.Reviewed {
+			t.Errorf("%s: record = %+v", name, rec)
+		}
+	}
+}
+
+// The review queue's one-line description is cut to 60 characters and
+// cleaned of control characters, as EDITUPLOAD's is, and isn't written over
+// a change made meanwhile.
+func TestEditFileRecordOneLineAsUpload(t *testing.T) {
+	env := newMenuEnv(t)
+	id, _ := addReviewUpload(t, env, 1, "GAME.ZIP", 10)
+	env.runCmd("EDITFILERECORD", env.sysop, "", "Y\rC\r"+strings.Repeat("x", 70)+"\rN\r")
+	if got := reloadedFileRecord(t, env, id).Description; got != strings.Repeat("x", maxUploadDescription) {
+		t.Errorf("description = %q, want 60 x", got)
+	}
+
+	setDesc(t, env, id, "original desc")
+	env.whenOutput("New description:", func() { setDesc(t, env, id, "the uploader's words") })
+	r := env.runCmd("EDITFILERECORD", env.sysop, "", "Y\rC\rmine\rY\r")
+	if !r.has("That description was changed elsewhere. Nothing was saved.") || r.has("Mark as reviewed?") {
+		t.Errorf("output:\n%s", r.text())
+	}
+	if rec := reloadedFileRecord(t, env, id); rec.Description != "the uploader's words" || rec.Reviewed {
+		t.Errorf("record = %+v", rec)
+	}
+}
