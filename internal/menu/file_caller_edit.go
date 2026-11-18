@@ -32,9 +32,10 @@ func mayEditUpload(rec *file.FileRecord, u *user.User, manages bool) bool {
 // runEditUpload is EDITUPLOAD, ViSiON/2's "Edit Upload" (FE): a caller
 // changes the description of a file they uploaded, in the current file area,
 // and a co-sysop any file's. The file is asked for by name, as the other file
-// commands do. The new description is one line of up to 60 characters, as at
-// upload; an empty line keeps the old one. The uploader is checked again as
-// it is saved.
+// commands do. A one-line description is replaced by one line of up to 60
+// characters, as at upload; an empty line keeps the old one. A multi-line
+// one (a FILE_ID.DIZ) is edited in place in the full-screen editor, so the
+// other lines stay (#1021). The uploader is checked again as it is saved.
 func runEditUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	e := c.e
 	s := c.s
@@ -87,18 +88,36 @@ func runEditUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		return notice("\r\n|01That file wasn't uploaded by you.|07\r\n")
 	}
 
-	say(fmt.Sprintf("\r\n|15%s|07\r\n|08Now:|07 %s\r\n|11New description:|07 ",
-		callerText(rec.Filename), callerText(strings.ReplaceAll(rec.Description, "\n", " "))))
-	input, err = readLineFromSessionIHMax(s, terminal, maxUploadDescription)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
+	var desc string
+	truncated := false
+	// A FILE_ID.DIZ description is edited in place, so the lines the caller
+	// doesn't touch stay.
+	inPlace := multiLineDescription(rec.Description)
+	if inPlace {
+		var changed bool
+		desc, changed, truncated, err = editDescription(s, terminal, outputMode, nodeNumber, rec.Filename, currentUser.Handle, rec.Description)
+		switch {
+		case errors.Is(err, errDescriptionEditorFailed):
+			return notice("\r\n|01The editor couldn't open. Nothing was changed.|07\r\n")
+		case err != nil:
 			return nil, "LOGOFF", io.EOF
+		case !changed:
+			return notice("\r\n|07Description unchanged.\r\n")
 		}
-		return currentUser, "", nil
-	}
-	desc := sanitizeControlChars(strings.TrimSpace(input))
-	if desc == "" {
-		return notice("\r\n|07Description unchanged.\r\n")
+	} else {
+		say(fmt.Sprintf("\r\n|15%s|07\r\n|08Now:|07 %s\r\n|11New description:|07 ",
+			callerText(rec.Filename), callerText(oneLineDescription(rec.Description))))
+		input, err = readLineFromSessionIHMax(s, terminal, maxUploadDescription)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, "LOGOFF", io.EOF
+			}
+			return currentUser, "", nil
+		}
+		desc = sanitizeControlChars(strings.TrimSpace(input))
+		if desc == "" {
+			return notice("\r\n|07Description unchanged.\r\n")
+		}
 	}
 
 	// The uploader is checked again as it's saved, on the record as it is
@@ -108,7 +127,9 @@ func runEditUpload(c *cmdCtx, args string) (*user.User, string, error) {
 	var via perm.Decision
 	err = e.FileMgr.UpdateFileRecord(rec.ID, func(r *file.FileRecord) {
 		via = manages(r.AreaID)
-		if mayEditUpload(r, currentUser, via.Allowed) {
+		// The edit starts from the description as it was read; one
+		// changed since would be lost under it.
+		if mayEditUpload(r, currentUser, via.Allowed) && r.Description == rec.Description {
 			r.Description = desc
 			saved = true
 		}
@@ -124,6 +145,9 @@ func runEditUpload(c *cmdCtx, args string) (*user.User, string, error) {
 		logFileAction(via, "description changed", nodeNumber, currentUser.Handle, *rec)
 	}
 	slog.Info("caller edited an upload's description", "node", nodeNumber, "handle", currentUser.Handle, "file", rec.Filename)
+	if truncated {
+		return notice(fmt.Sprintf("\r\n|07Description saved. Only its first %d lines were kept.\r\n", descriptionLineCap(rec.Description)))
+	}
 	return notice("\r\n|07Description saved.\r\n")
 }
 

@@ -140,6 +140,16 @@ file's download count and the caller's download count and byte total.
 4. **Record** — the file moves into the area, unreviewed, and the caller's
    upload count and byte total are credited.
 
+The uploader can change the description later with `EDITUPLOAD`, and a
+sysop can with `C` in the `EDITFILERECORD` review queue. A one-line
+description is replaced with a new line. A multi-line one, such as a
+`FILE_ID.DIZ`, opens in the full-screen editor, so a typo can be fixed
+without losing the other lines. It keeps at most 10 lines, or its own count
+if it already had more, up to the 100 lines the editor holds. If the
+description changes elsewhere while it is being edited, nothing is saved. In
+the review queue, the file is offered for marking reviewed only once the new
+description is saved.
+
 ### Viewing files and archives
 
 `VIEW_FILE` (and **V** in either listing) decides what a file is by looking
