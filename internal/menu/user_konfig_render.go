@@ -152,7 +152,9 @@ func (st *konfigState) renderHeader() error {
 	}
 	titleWidth, quitCol := konfigLineWidth, 0
 	if quit != "" {
-		quitCol = max(konfigScreenCols-ansi.VisibleLength(quit), 2)
+		// In screen cells, as clipRow measures, so a wide character counts
+		// twice in UTF-8.
+		quitCol = max(konfigScreenCols-st.cells(ansi.StripAnsi(quit)), 2)
 		titleWidth = max(min(titleWidth, quitCol-3), 0) // a space before the hint
 	}
 	title := st.clip(st.c.e.Strings().KonfigTitle, titleWidth, "..")
