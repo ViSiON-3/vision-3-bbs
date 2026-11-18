@@ -30,8 +30,8 @@ type acsSource struct {
 	ACS    string
 	// Headless says where the string is checked without a caller's session
 	// ("replies uploaded through the QWK API"), "" when it always has one.
-	// There, a string with a session term (L, A, NODE, CONN, ENC, WIDTH,
-	// IP) in it fails as a whole.
+	// There, a string with a session term (acs.SessionTerms) in it fails as
+	// a whole.
 	Headless string
 }
 
@@ -41,9 +41,10 @@ type acsSource struct {
 type acsFinding struct {
 	Source acsSource
 	Diags  []acs.Diagnostic
-	// NoSession is set for a valid string with a session term in it from a
-	// Headless source: it denies every caller there.
-	NoSession bool
+	// NoSession lists the session terms a valid string from a Headless
+	// source uses, as they are written; any makes it deny every caller
+	// there.
+	NoSession []string
 	// Undefined lists the roles, groups and named flags a valid string's
 	// ROLE, GROUP and FLAG terms name that configs/roles.json doesn't
 	// define, as the terms are written (ROLE:name, GROUP:name, FLAG:name);
@@ -61,9 +62,9 @@ func (f acsFinding) failing() bool { return len(f.Diags) > 0 || len(f.Undefined)
 //
 //	command 3 ("G"), ACS "S20 FA": column 5: no operator before "FA": put & or | between terms
 func (f acsFinding) Detail() string {
-	if f.NoSession {
-		return fmt.Sprintf("%s, %s %q: uses a session term (L, A, NODE, CONN, ENC, WIDTH or IP), which fails the whole string for %s, where there is no session",
-			f.Source.Record, f.Source.Field, f.Source.ACS, f.Source.Headless)
+	if len(f.NoSession) > 0 {
+		return fmt.Sprintf("%s, %s %q: uses the session %s %s, which fails the whole string for %s, where there is no session",
+			f.Source.Record, f.Source.Field, f.Source.ACS, plural(len(f.NoSession), "term", "terms"), andList(f.NoSession), f.Source.Headless)
 	}
 	if len(f.Undefined) > 0 {
 		return fmt.Sprintf("%s, %s %q: names %s, which configs/roles.json doesn't define, so it fails for every caller",
@@ -115,7 +116,7 @@ func scanACS(root string) (findings []acsFinding, checked int) {
 		if len(undefined) > 0 {
 			findings = append(findings, acsFinding{Source: src, Undefined: undefined})
 		} else if src.Headless != "" && src.ACS != "" && e.UsesSession() {
-			findings = append(findings, acsFinding{Source: src, NoSession: true})
+			findings = append(findings, acsFinding{Source: src, NoSession: e.SessionTerms()})
 		}
 	}
 	return findings, checked
@@ -326,9 +327,35 @@ func checkACSStrings(root string, add func(string, doctorSeverity, string, strin
 				"This string denies every caller, sysops included. Fix it; see docs/sysop/reference/acs.md.")
 			continue
 		}
-		add("ACS: "+f.Source.File, doctorWarn, f.Detail(),
-			"Callers in a session are checked as usual, but every reply uploaded through the QWK API is refused. Take the session terms (L, A, NODE, CONN, ENC, WIDTH, IP:) out, or replace them, if those replies should go through; see docs/sysop/reference/acs.md.")
+		add("ACS: "+f.Source.File, doctorWarn, f.Detail(), noSessionRemedy(f))
 	}
+}
+
+// noSessionRemedy is the advice for a string that uses session terms where
+// it is checked without a session. Any session term fails the string there,
+// !L and CONN=ssh included, so swapping one for another doesn't help.
+func noSessionRemedy(f acsFinding) string {
+	return fmt.Sprintf("Callers in a session are checked as usual, but %s to %s are refused. "+
+		"If they should go through, take out %s, or replace %s with terms that don't need a session: "+
+		"every session term fails there, !L and CONN=ssh included (the session terms are %s); see docs/sysop/reference/acs.md.",
+		f.Source.Headless, f.Source.Record, andList(f.NoSession), plural(len(f.NoSession), "it", "them"),
+		andList(acs.SessionTerms()))
+}
+
+// andList joins words as prose: "a", "a and b", "a, b and c".
+func andList(words []string) string {
+	if len(words) < 2 {
+		return strings.Join(words, "")
+	}
+	return strings.Join(words[:len(words)-1], ", ") + " and " + words[len(words)-1]
+}
+
+// plural is one when n is 1, else many.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // acsLogged is the set of findings in the last scan, so each problem is

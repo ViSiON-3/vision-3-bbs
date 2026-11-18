@@ -143,15 +143,15 @@ func TestCheckACSStringsClean(t *testing.T) {
 
 // TestScanACSWithoutSession checks that a message area's acs_write, which
 // the QWK API checks without a session, is a warning when it uses a
-// session term (L here, NODE in another area), and that the same string
-// elsewhere, checked with a session, is not.
+// session term (L here, NODE and L in another area), and that the same
+// string elsewhere, checked with a session, is not.
 func TestScanACSWithoutSession(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "configs"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	areas := `[{"id": 1, "tag": "LOCALS", "acs_read": "S10|L", "acs_write": "S20|!L"}, {"id": 2, "tag": "PLAIN", "acs_write": "S20"},
-		{"id": 3, "tag": "NODE1", "acs_read": "NODE=1", "acs_write": "S20&NODE=1"}]`
+		{"id": 3, "tag": "NODE1", "acs_read": "NODE=1", "acs_write": "S20&NODE=1|L"}]`
 	if err := os.WriteFile(filepath.Join(root, "configs", "message_areas.json"), []byte(areas), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -166,14 +166,24 @@ func TestScanACSWithoutSession(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("checks %v, want warnings for LOCALS and NODE1 acs_write", got)
 	}
-	c := got[0]
-	if c.status != doctorWarn || !strings.Contains(c.message, `area LOCALS, acs_write "S20|!L"`) ||
-		!strings.Contains(c.message, "QWK API") || !strings.Contains(c.remedy, "refused") {
-		t.Errorf("check = %+v", c)
+	// The message and the advice name the terms the string uses and the
+	// area it guards; the advice lists every session term, from acs.
+	want := []check{
+		{doctorWarn,
+			`area LOCALS, acs_write "S20|!L": uses the session term L, which fails the whole string for replies uploaded through the QWK API, where there is no session`,
+			"Callers in a session are checked as usual, but replies uploaded through the QWK API to area LOCALS are refused. " +
+				"If they should go through, take out L, or replace it with terms that don't need a session: " +
+				"every session term fails there, !L and CONN=ssh included (the session terms are L, A, NODE, CONN, ENC, WIDTH and IP:); see docs/sysop/reference/acs.md."},
+		{doctorWarn,
+			`area NODE1, acs_write "S20&NODE=1|L": uses the session terms L and NODE, which fails the whole string for replies uploaded through the QWK API, where there is no session`,
+			"Callers in a session are checked as usual, but replies uploaded through the QWK API to area NODE1 are refused. " +
+				"If they should go through, take out L and NODE, or replace them with terms that don't need a session: " +
+				"every session term fails there, !L and CONN=ssh included (the session terms are L, A, NODE, CONN, ENC, WIDTH and IP:); see docs/sysop/reference/acs.md."},
 	}
-	if c := got[1]; c.status != doctorWarn || !strings.Contains(c.message, `area NODE1, acs_write "S20&NODE=1"`) ||
-		!strings.Contains(c.message, "session term") {
-		t.Errorf("NODE check = %+v", c)
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("check %d:\n got %+v\nwant %+v", i, got[i], want[i])
+		}
 	}
 }
 

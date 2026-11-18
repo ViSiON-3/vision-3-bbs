@@ -67,10 +67,22 @@ type Node struct {
 }
 
 // UsesSession reports whether any term in the expression reads the
-// caller's session (L, A, NODE, CONN, ENC, WIDTH, IP), so it fails as a
-// whole where there is none.
+// caller's session (one of SessionTerms), so it fails as a whole where
+// there is none.
 func (e *Expr) UsesSession() bool {
 	return e.uses(sessionCode)
+}
+
+// SessionTerms lists the session terms the expression uses, as they are
+// written (IP:), each once, in the order SessionTerms gives them.
+func (e *Expr) SessionTerms() []string {
+	var used []string
+	for _, c := range sessionCodes {
+		if e.uses(func(code string) bool { return code == c }) {
+			used = append(used, writtenCode(c))
+		}
+	}
+	return used
 }
 
 // UsesAge reports whether any term in the expression is AGE, so it fails as

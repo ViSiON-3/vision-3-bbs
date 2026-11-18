@@ -62,9 +62,8 @@ type Context struct {
 	// for a nil User; Eval needs a non-nil one.
 	User *user.User
 	// Session is the caller's connection, nil when there is none: a string
-	// with a session term in it (L, A, NODE, CONN, ENC, WIDTH, IP) then fails
-	// as a whole, and T counts the call as just started, with no chat
-	// credit.
+	// with a session term in it (one of SessionTerms) then fails as a
+	// whole, and T counts the call as just started, with no chat credit.
 	Session Session
 	// Start is when the call began, for T.
 	Start time.Time

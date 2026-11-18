@@ -358,10 +358,13 @@ each problem:
 - **WARN** (doctor exits 1): the string reads cleanly but uses a session term
   where it is checked without a session, a message area's `acs_write` for
   replies uploaded through the QWK API. Callers in a session are checked as
-  usual, but every QWK API reply to that area is refused.
+  usual, but every QWK API reply to that area is refused. The warning names
+  the session terms the string uses. Replacing them with other session terms
+  doesn't help: without a session every one of them fails, `!L` and
+  `CONN=ssh` included.
 
 ```text
-[WARN]  ACS: configs/message_areas.json  area LOCALS, acs_write "S20|!L": uses a session term (L, A, NODE, CONN, ENC, WIDTH or IP), which fails the whole string for replies uploaded through the QWK API, where there is no session
+[WARN]  ACS: configs/message_areas.json  area LOCALS, acs_write "S20|!L": uses the session term L, which fails the whole string for replies uploaded through the QWK API, where there is no session
 ```
 
 Doctor's **user sign-up dates** check lists users with no sign-up date: a

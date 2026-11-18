@@ -258,3 +258,22 @@ func TestShortMappedPrefixRefused(t *testing.T) {
 		t.Errorf("a /104 mapped network: %v", d)
 	}
 }
+
+// SessionTerms lists every session term as written; an expression's lists
+// the ones it uses, each once, in the same order.
+func TestSessionTermsList(t *testing.T) {
+	if got := strings.Join(SessionTerms(), " "); got != "L A NODE CONN ENC WIDTH IP:" {
+		t.Errorf("SessionTerms() = %s", got)
+	}
+	for _, c := range sessionCodes {
+		if !sessionCode(c) {
+			t.Errorf("%s is not a session code", c)
+		}
+	}
+	if got := strings.Join(Parse("IP:10.0.0.0/8|S20&NODE=1|!LOCAL&IP:fd00::/8").SessionTerms(), " "); got != "L NODE IP:" {
+		t.Errorf("used = %s", got)
+	}
+	if got := Parse("S20&FA").SessionTerms(); len(got) != 0 {
+		t.Errorf("no session terms: %v", got)
+	}
+}

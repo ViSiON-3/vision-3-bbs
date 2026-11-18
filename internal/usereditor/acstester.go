@@ -79,7 +79,7 @@ func (m *Model) openACSTester() {
 			{acsConn, 6, acs.TransportSSH},
 			{acsEnc, 5, acs.EncodingCP437},
 			{acsWidth, 4, "80"},
-			{acsAddr, 45, acs.TesterDefaultAddr.String()}, // the longest IPv6 text, IPv4 tail included
+			{acsAddr, 0, acs.TesterDefaultAddr.String()}, // no limit: callValues refuses what it can't use, so nothing is cut
 		} {
 			ti := textinput.New()
 			ti.Prompt = ""
