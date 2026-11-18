@@ -392,7 +392,9 @@ func TestToastFadeKeepsToDeadline(t *testing.T) {
 	start := time.Now()
 	env.sess.AddPage("Hello there")
 	toastWaitFor(t, "the toast drawn", func() bool { return strings.Contains(log.String(), "Hello there") })
-	toastWaitFor(t, "the screen restored", func() bool { return strings.Contains(env.term.Row(24), "BOTTOM TEXT") })
+	// The log records a write before the screen gets it, so the row alone
+	// can still show BOTTOM TEXT from before the toast reached it.
+	waitFadeRestored(t, env, log)
 	took := time.Since(start)
 	// The fade in and the toast's own frame use up the dwell. Without the
 	// deadline the three fade-out frames would still be drawn, about 1.25s
