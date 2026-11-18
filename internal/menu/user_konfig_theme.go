@@ -36,8 +36,8 @@ func (e *MenuExecutor) boardThemeName() string {
 }
 
 // installedThemes lists the themes a caller can choose: the menu sets
-// beside the board's, under menus/, with valid names and a MAIN menu, the
-// board's own among them, sorted. A theme installed as a symlink to a
+// beside the board's, under menus/, with valid names that a session can
+// run on (checkCallerTheme), the board's own among them, sorted. A theme installed as a symlink to a
 // directory counts, as it does for the board (menuset.ListThemes).
 func (e *MenuExecutor) installedThemes() []string {
 	parent := filepath.Dir(e.shared().MenuSetPath)
@@ -48,13 +48,7 @@ func (e *MenuExecutor) installedThemes() []string {
 	var names []string
 	for _, de := range entries {
 		name := de.Name()
-		if menuset.ValidThemeName(name) != nil {
-			continue
-		}
-		if info, err := os.Stat(filepath.Join(parent, name)); err != nil || !info.IsDir() {
-			continue
-		}
-		if ok, err := menuset.FromPath(filepath.Join(parent, name)).Exists("mnu", "MAIN.MNU"); err != nil || !ok {
+		if menuset.ValidThemeName(name) != nil || checkCallerTheme(filepath.Join(parent, name)) != nil {
 			continue
 		}
 		names = append(names, name)

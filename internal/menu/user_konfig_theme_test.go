@@ -45,8 +45,9 @@ func TestInstalledThemes(t *testing.T) {
 		t.Errorf("installed = %v", got)
 	}
 	// A theme installed as a symlink to its directory counts; a stray file
-	// doesn't.
+	// doesn't, nor a theme whose theme.json doesn't load.
 	menus := filepath.Dir(e.MenuSetPath)
+	writeBroken(t, menus, "broken")
 	if err := os.Symlink(filepath.Join(menus, "amber"), filepath.Join(menus, "linked")); err != nil {
 		t.Skipf("no symlinks here: %v", err)
 	}
@@ -259,12 +260,41 @@ func TestKonfigThemeChangeRenamesHeaderStyle(t *testing.T) {
 	}
 }
 
+// writeBroken puts a theme with a MAIN menu but a theme.json that doesn't
+// load beside the others.
+func writeBroken(t *testing.T, menus, name string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(menus, name, "mnu"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for rel, body := range map[string]string{"mnu/MAIN.MNU": "{}", "theme.json": "{"} {
+		if err := os.WriteFile(filepath.Join(menus, name, rel), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // A caller whose theme was removed sees the board's, so Theme shows the
 // board's as the default; their choice is kept for when it comes back.
-// Picking the board's in the box clears it.
+// Picking the board's in the box clears it. A theme whose theme.json
+// doesn't load is the same: the session shows the board's.
 func TestKonfigThemeRemoved(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
 	e := konfigThemeExecutor(t, "amber")
+	writeBroken(t, filepath.Dir(e.MenuSetPath), "broken")
+	for _, gone := range []string{"test", "broken"} {
+		u.Theme = gone
+		if err := um.UpdateUser(u); err != nil {
+			t.Fatal(err)
+		}
+		screen := runKonfigOn(t, e, um, reloadUser(t, um), "q")
+		if snap := screen.Snapshot(); !strings.Contains(snap, "[V] Theme           v3 (default)") || strings.Contains(snap, gone) {
+			t.Errorf("%s shown:\n%s", gone, snap)
+		}
+		if view := e.ForUser(reloadUser(t, um)); view.Menus().Base != e.Menus().Base {
+			t.Errorf("%s: the session runs on %q, not the board's", gone, view.Menus().Base)
+		}
+	}
 	u.Theme = "test"
 	if err := um.UpdateUser(u); err != nil {
 		t.Fatal(err)
