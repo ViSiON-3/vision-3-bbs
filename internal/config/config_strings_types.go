@@ -663,6 +663,7 @@ type StringsConfig struct {
 	// are plain text drawn into fixed-width cells; the rest take pipe codes.
 	KonfigTitle               string `json:"konfigTitle"`
 	KonfigLegend              string `json:"konfigLegend"`
+	KonfigTitleQuit           string `json:"konfigTitleQuit"`
 	KonfigSectionTerminal     string `json:"konfigSectionTerminal"`
 	KonfigSectionMessages     string `json:"konfigSectionMessages"`
 	KonfigSectionPersonal     string `json:"konfigSectionPersonal"`

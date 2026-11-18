@@ -995,6 +995,7 @@
     "Hot Keys"
   ],
   "konfigLegend": [
+    "",
     "|08[|15Q|08/|15ESC|08] |07Done"
   ],
   "konfigLightbar": [
@@ -1170,6 +1171,9 @@
   ],
   "konfigTitle": [
     "User Konfig"
+  ],
+  "konfigTitleQuit": [
+    "|08[|15Q|08] |07Quit"
   ],
   "konfigTwitListHelp": [
     "Hide messages from selected authors."

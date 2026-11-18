@@ -246,7 +246,7 @@ See [WFC Sysop Console](how-to-guides/wfc-console.md#chat).
 
 The user settings form (**K** on the main menu, `RUN:USERCONFIG`) takes all
 of its text from `strings.json`: the title drawn when the menu set has no
-`KONFIG.ANS`, the key legend, the five section titles, each setting's name and
+`KONFIG.ANS`, the key legend (blank by default, since the stock `KONFIG.ANS` shows how to quit; set `konfigLegend` if yours doesn't), the five section titles, each setting's name and
 help line, the values (`(default)`, `(not set)`, On/Off, `Auto (…)`), the
 status and error messages, the password prompts, the file-columns box, and the
 colours box (`konfigColor*`, with `konfigColorSlotNames` naming the seven

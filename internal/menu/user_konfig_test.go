@@ -85,6 +85,12 @@ func TestKonfigDrawsEverySettingInsideTheScreen(t *testing.T) {
 			t.Errorf("screen is missing %q", want)
 		}
 	}
+	// With no KONFIG.ANS, the title row says how to leave, at its right;
+	// a title too long for the row is cut short of it (see
+	// TestKonfigLongTitleLeavesTheQuitHint).
+	if row := strings.TrimRight(screen.Row(2), " "); !strings.HasSuffix(row, "[Q] Quit") || !strings.Contains(row, "User Konfig") {
+		t.Errorf("title row = %q, want the quit hint at its right", row)
+	}
 	// The first item starts highlighted and its help is shown.
 	if !strings.Contains(screen.Row(konfigHelpRow), "Columns your terminal shows") {
 		t.Errorf("help row = %q", screen.Row(konfigHelpRow))
@@ -261,8 +267,9 @@ func TestKonfigShowsHeaderStyleName(t *testing.T) {
 	if !strings.Contains(screen.Snapshot(), "LiQUiD Blue Box") {
 		t.Errorf("header style name not shown:\n%s", screen.Snapshot())
 	}
-	if !strings.Contains(screen.Row(konfigLegendRow), "[Q/ESC] Done") {
-		t.Errorf("legend row = %q", screen.Row(konfigLegendRow))
+	// The stock KONFIG.ANS shows how to quit, so there is no key legend.
+	if got := strings.TrimSpace(screen.Row(konfigLegendRow)); got != "" {
+		t.Errorf("legend row = %q, want none", got)
 	}
 }
 
@@ -682,5 +689,20 @@ func TestKonfigAutoSigTruncatesAndAbandons(t *testing.T) {
 	}
 	if !r.has("Auto-Signature not changed.") {
 		t.Errorf("no not-changed notice:\n%s", r.text())
+	}
+}
+
+// A title as long as the row is cut short of the quit hint, a space
+// before it.
+func TestKonfigLongTitleLeavesTheQuitHint(t *testing.T) {
+	strs := konfigTestStrings(t)
+	strs.KonfigTitle = strings.Repeat("T", 78)
+	um, u := newUserConfigTestUser(t)
+	_, out := runKonfigCapture(t, um, u, "q", strs)
+	screen := testterm.New(80, 24)
+	_, _ = screen.Write([]byte(out))
+	row := strings.TrimRight(screen.Row(2), " ")
+	if !strings.HasSuffix(row, "T.. [Q] Quit") || len([]rune(row)) > 79 {
+		t.Errorf("title row = %q", row)
 	}
 }
