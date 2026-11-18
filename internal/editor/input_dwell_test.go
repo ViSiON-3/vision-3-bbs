@@ -132,6 +132,91 @@ func TestInterruptBeforeTheDwellEndsIt(t *testing.T) {
 	}
 }
 
+// queueByte types b and returns once the handler's reader has queued it, so
+// a wait that follows finds it already waiting.
+func queueByte(t *testing.T, ih *InputHandler, pw *io.PipeWriter, b byte) {
+	t.Helper()
+	go func() { _, _ = pw.Write([]byte{b}) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for len(ih.incoming) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the typed byte never reached the handler")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// A wait of 0, or one shorter than any timer can measure, reports what is
+// already waiting every time, not at random against a timer that has run
+// out, and a wait of 0 reports elapsed when nothing is.
+func TestShortWaitTakesWhatIsWaiting(t *testing.T) {
+	for _, d := range []time.Duration{0, time.Nanosecond, 50 * time.Microsecond} {
+		pr, pw := io.Pipe()
+		ih := NewInputHandler(pr)
+		if d == 0 {
+			if got := ih.WaitFor(d); got != WaitElapsed {
+				t.Fatalf("wait %s, nothing waiting: got %v, want elapsed", d, got)
+			}
+		}
+		for i := 0; i < 100; i++ {
+			ih.Interrupt()
+			if got := ih.WaitFor(d); got != WaitInterrupted {
+				t.Fatalf("wait %s, try %d: interrupt waiting: got %v, want interrupted", d, i, got)
+			}
+		}
+		queueByte(t, ih, pw, 'x')
+		for i := 0; i < 100; i++ {
+			if got := ih.WaitFor(d); got != WaitInput {
+				t.Fatalf("wait %s, try %d: key waiting: got %v, want input", d, i, got)
+			}
+		}
+		if key, err := ih.ReadKey(); err != nil || key != 'x' {
+			t.Fatalf("wait %s: ReadKey = %q, %v; want 'x'", d, rune(key), err)
+		}
+		_ = pw.Close() // so the handler's reader gets EOF and exits
+		ih.Close()
+	}
+}
+
+// A wait outside the toast hook leaves a sysop's chat request on its
+// channel: only the hook's caller services one a wait has taken, so taking
+// it here would strand it until a toast runs. The next read services it.
+func TestWaitOutsideTheHookLeavesABreakIn(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	ih := NewInputHandler(pr)
+	defer ih.Close()
+	brk := make(chan struct{}, 1)
+	ran := make(chan struct{})
+	ih.SetBreakIn(brk, func() { close(ran) })
+	brk <- struct{}{}
+	for _, d := range []time.Duration{0, 20 * time.Millisecond} {
+		if got := ih.WaitFor(d); got != WaitElapsed {
+			t.Fatalf("wait %s: got %v, want elapsed", d, got)
+		}
+	}
+	if _, ok, err := ih.PendingByte(0); ok || err != nil {
+		t.Fatalf("PendingByte: ok %v, err %v; want neither", ok, err)
+	}
+	if len(brk) != 1 || ih.breakInPending {
+		t.Fatalf("break-in taken outside the hook: queued %d, pending %v", len(brk), ih.breakInPending)
+	}
+	keyc := make(chan int, 1)
+	go func() {
+		k, _ := ih.ReadKey()
+		keyc <- k
+	}()
+	select {
+	case <-ran:
+	case <-time.After(time.Second):
+		t.Fatal("the next read did not service the break-in")
+	}
+	_, _ = pw.Write([]byte("z"))
+	if k := <-keyc; k != 'z' {
+		t.Errorf("key = %q, want z", rune(k))
+	}
+}
+
 // A chat request and a window change during the same dwell: the chat request
 // was taken off its channel, so it is serviced, and the event still arrives.
 func TestBreakInAndEventDuringOneDwell(t *testing.T) {

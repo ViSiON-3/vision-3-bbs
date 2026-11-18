@@ -159,8 +159,10 @@ type InputHandler struct {
 	toastRetry bool
 	// breakInPending notes a break-in that fired during WaitForInput, for the
 	// wait that ran the toast hook to service once the hook returns. Only the
-	// reading goroutine touches it.
+	// reading goroutine touches it, and inToastHook, which says the hook is
+	// running and so a WaitForInput may take a break-in.
 	breakInPending bool
+	inToastHook    bool
 	// interrupt, when it fires, ends a WaitForInput early (see Interrupt). It is
 	// buffered, so a wake sent while nothing waits is kept for the next wait.
 	interrupt     chan struct{}
@@ -261,7 +263,9 @@ func (ih *InputHandler) toastChan(allow bool) <-chan struct{} {
 // had fired on its own wait.
 func (ih *InputHandler) runToastHook(limit time.Duration) (breakIn bool) {
 	ih.toastRetry = false
+	ih.inToastHook = true
 	ih.toastFn(limit)
+	ih.inToastHook = false
 	breakIn, ih.breakInPending = ih.breakInPending, false
 	return breakIn
 }
@@ -294,10 +298,11 @@ func (ih *InputHandler) drainInterrupt() {
 
 // WaitForInput waits up to d for input, leaving it to be read, and reports
 // whether any came. A closed connection counts: the next read reports it. The
-// wait also ends early, reporting false, on a break-in or an Interrupt. The
-// break-in is left for the read that is running this wait's caller to service,
-// and an Interrupt sent before the wait began ends it at once. WaitFor says
-// which of those ended it.
+// wait also ends early, reporting false, on an Interrupt, and inside the toast
+// hook on a break-in. The break-in is left for the read that is running the
+// hook to service; outside the hook it stays queued for the next read. An
+// Interrupt sent before the wait began ends it at once. WaitFor says which of
+// those ended it.
 func (ih *InputHandler) WaitForInput(d time.Duration) bool {
 	return ih.WaitFor(d) == WaitInput
 }
@@ -315,33 +320,70 @@ const (
 	WaitInterrupted
 )
 
-// WaitFor is WaitForInput, reporting what ended the wait.
+// WaitFor is WaitForInput, reporting what ended the wait. Input or an
+// interruption already waiting ends it before any timer starts, however short
+// d is: a timer that has run out would leave the select to pick at random
+// between it and a waiting key. With d of 0 or less it does not wait.
 func (ih *InputHandler) WaitFor(d time.Duration) WaitOutcome {
 	if len(ih.unreadBuf) > 0 {
 		return WaitInput
 	}
+	if out, done := ih.waitOn(nil); done || d <= 0 {
+		return out
+	}
 	timer := time.NewTimer(d)
 	defer timer.Stop()
+	out, _ := ih.waitOn(timer.C)
+	return out
+}
+
+// waitOn takes the first of input, a break-in (inside the toast hook) or an
+// Interrupt for WaitFor, or reports WaitElapsed when timeout fires. With
+// timeout nil it does not block, and done is false when none is waiting.
+// Go's select has no default that can be switched off, so the two forms are
+// two selects over one set of channels and one set of handlers.
+func (ih *InputHandler) waitOn(timeout <-chan time.Time) (out WaitOutcome, done bool) {
+	breakIn := ih.breakInChan(ih.inToastHook)
 	for {
-		select {
-		case b, ok := <-ih.incoming:
-			if !ok {
-				return WaitInput
+		var b byte
+		var open bool
+		if timeout == nil {
+			select {
+			case b, open = <-ih.incoming:
+			case <-breakIn:
+				return ih.waitBrokeIn(), true
+			case <-ih.interruptChan():
+				return WaitInterrupted, true
+			default:
+				return WaitElapsed, false
 			}
-			if ih.lateEnterTrailer(b) {
-				continue
+		} else {
+			select {
+			case b, open = <-ih.incoming:
+			case <-breakIn:
+				return ih.waitBrokeIn(), true
+			case <-ih.interruptChan():
+				return WaitInterrupted, true
+			case <-timeout:
+				return WaitElapsed, true
 			}
-			ih.unreadByte(b)
-			return WaitInput
-		case <-timer.C:
-			return WaitElapsed
-		case <-ih.breakInChan(true):
-			ih.breakInPending = true
-			return WaitInterrupted
-		case <-ih.interruptChan():
-			return WaitInterrupted
 		}
+		if !open {
+			return WaitInput, true
+		}
+		if ih.lateEnterTrailer(b) {
+			continue
+		}
+		ih.unreadByte(b)
+		return WaitInput, true
 	}
+}
+
+// waitBrokeIn notes a break-in taken by a wait inside the toast hook, for
+// runToastHook to hand to the read that ran the hook.
+func (ih *InputHandler) waitBrokeIn() WaitOutcome {
+	ih.breakInPending = true
+	return WaitInterrupted
 }
 
 // PendingByte waits up to d for input, as WaitForInput does, and returns the
@@ -357,7 +399,7 @@ func (ih *InputHandler) PendingByte(d time.Duration) (b byte, ok bool, err error
 		return 0, false, *err
 	}
 	// Take what is already queued first: WaitForInput's select would pick
-	// at random between it and a timer that has already run out.
+	// at random between it and an Interrupt that is also waiting.
 	for len(ih.unreadBuf) == 0 {
 		select {
 		case b, ok := <-ih.incoming:
