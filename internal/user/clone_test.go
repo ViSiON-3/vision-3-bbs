@@ -183,15 +183,24 @@ func TestAddUserWithSavesSignupFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	created := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	tags := []string{"GENERAL"}
+	var kept *User
 	added, err := um.AddUserWith("password", "Tester", "Real Name", "Loc", func(u *User) {
 		u.CreatedAt = created
 		u.WelcomePending = true
-		u.TaggedMessageAreaTags = []string{"GENERAL"}
+		u.TaggedMessageAreaTags = tags
 		// What init may not change.
 		u.ID, u.Handle, u.PasswordHash = 99, "Other", ""
+		kept = u
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	// What init kept or put on the record isn't the stored record's.
+	tags[0] = "OTHER"
+	kept.RealName = "Changed"
+	if stored, _ := um.GetUser("Tester"); stored.TaggedMessageAreaTags[0] != "GENERAL" || stored.RealName != "Real Name" {
+		t.Errorf("stored record changed through init's references: %v %q", stored.TaggedMessageAreaTags, stored.RealName)
 	}
 	if added.ID == 99 || added.Handle != "Tester" || added.PasswordHash == "" {
 		t.Errorf("init changed the identity: %d %q %q", added.ID, added.Handle, added.PasswordHash)
@@ -216,5 +225,15 @@ func TestAddUserWithSavesSignupFields(t *testing.T) {
 	}
 	if _, ok := um.GetUser("Second"); ok {
 		t.Error("the failed account is in the cache")
+	}
+	reloaded, err = NewUserManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := reloaded.GetUser("Second"); ok {
+		t.Error("the failed account is on disk")
+	}
+	if _, ok := reloaded.GetUser("Tester"); !ok {
+		t.Error("the failed save lost the account before it")
 	}
 }

@@ -295,6 +295,9 @@ func (um *UserMgr) AddUserWith(password, handle, realName, groupLocation string,
 		id, hash := newUser.ID, newUser.PasswordHash
 		init(newUser)
 		newUser.ID, newUser.Handle, newUser.PasswordHash = id, handle, hash
+		// Stored as a copy: init may keep the record, or a slice or map it
+		// put on it.
+		newUser = newUser.Clone()
 	}
 
 	// Add to map and increment nextUserID
