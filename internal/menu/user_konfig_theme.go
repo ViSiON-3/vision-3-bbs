@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -62,14 +63,27 @@ func (e *MenuExecutor) installedThemes() []string {
 	return names
 }
 
-// themeValue shows the caller's theme: their choice, or the board's,
-// marked as the default, when they have none.
+// themeValue shows the theme the caller sees: their choice, or the
+// board's, marked as the default, when they have none or their choice is
+// no longer installed (the session shows the board's then; see ForUser).
 func themeValue(st *konfigState) konfigValue {
 	board := st.c.e.boardThemeName()
-	if t := st.user().Theme; t != "" && t != board {
+	if t := st.shownTheme(); t != board {
 		return konfigValue{t, toneValue}
 	}
 	return konfigValue{fmt.Sprintf(st.c.e.Strings().KonfigDefaultFormat, board), toneDim}
+}
+
+// shownTheme is the theme the caller sees: their choice while it is
+// installed, else the board's. The choice itself is kept, so it applies
+// again if the theme comes back.
+func (st *konfigState) shownTheme() string {
+	board := st.c.e.boardThemeName()
+	t := st.user().Theme
+	if t == "" || t == board || !slices.Contains(st.c.e.installedThemes(), t) {
+		return board
+	}
+	return t
 }
 
 // editTheme opens a box listing the installed themes. Choosing one saves
@@ -86,10 +100,7 @@ func editTheme(st *konfigState) error {
 	}
 	st.redraw = true
 
-	current := st.user().Theme
-	if current == "" {
-		current = board
-	}
+	current := st.shownTheme()
 	sel := 0
 	for i, t := range themes {
 		if t == current {

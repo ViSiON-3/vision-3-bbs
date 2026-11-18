@@ -258,3 +258,27 @@ func TestKonfigThemeChangeRenamesHeaderStyle(t *testing.T) {
 		t.Errorf("Header Style not renamed from amber's MSGHDR.BAR:\n%s", snap)
 	}
 }
+
+// A caller whose theme was removed sees the board's, so Theme shows the
+// board's as the default; their choice is kept for when it comes back.
+// Picking the board's in the box clears it.
+func TestKonfigThemeRemoved(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	e := konfigThemeExecutor(t, "amber")
+	u.Theme = "test"
+	if err := um.UpdateUser(u); err != nil {
+		t.Fatal(err)
+	}
+	screen := runKonfigOn(t, e, um, reloadUser(t, um), "q")
+	if snap := screen.Snapshot(); !strings.Contains(snap, "[V] Theme           v3 (default)") || strings.Contains(snap, "test") {
+		t.Errorf("removed theme shown:\n%s", snap)
+	}
+	if got := reloadUser(t, um).Theme; got != "test" {
+		t.Errorf("the choice was dropped: %q", got)
+	}
+	// The box opens on the board's theme; Enter there clears the choice.
+	runKonfigOn(t, e, um, reloadUser(t, um), "v\rq")
+	if got := reloadUser(t, um).Theme; got != "" {
+		t.Errorf("Theme = %q after picking the board's, want none", got)
+	}
+}

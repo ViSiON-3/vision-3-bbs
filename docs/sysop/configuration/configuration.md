@@ -1396,8 +1396,9 @@ is the default, for a caller who hasn't picked one.
 - **A theme that goes away.** If a caller's theme is removed, or can't be
   used (no `mnu/MAIN.MNU`, or a `theme.json` that doesn't load), they see
   the board's theme and the log says why
-  (`caller's theme can't be used; showing the board's`). Their choice is
-  kept, so it applies again once the theme is back.
+  (`caller's theme can't be used; showing the board's`). Konfig shows the
+  board's theme as theirs meanwhile. Their choice is kept, so it applies
+  again once the theme is back, unless they pick another.
 - **Caller colours.** A caller's own colours (`|C1`–`|C7`, **U Colours** in
   Konfig) apply under any theme; a theme only sets the defaults for callers
   who haven't chosen their own.
