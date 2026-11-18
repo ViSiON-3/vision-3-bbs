@@ -145,7 +145,7 @@ func TestSaveUsersCheckedRefusesAndForces(t *testing.T) {
 	}
 }
 
-func TestCloneUser_IsDeepCopy(t *testing.T) {
+func TestClone_IsDeepCopy(t *testing.T) {
 	now := time.Now()
 	orig := &user.User{
 		ID:                    7,
@@ -156,7 +156,7 @@ func TestCloneUser_IsDeepCopy(t *testing.T) {
 		DeletedAt:             &now,
 	}
 
-	clone := CloneUser(orig)
+	clone := orig.Clone()
 	if clone == orig {
 		t.Fatal("clone must be a distinct pointer")
 	}
@@ -182,9 +182,9 @@ func TestCloneUser_IsDeepCopy(t *testing.T) {
 	}
 }
 
-func TestCloneUser_Nil(t *testing.T) {
-	if CloneUser(nil) != nil {
-		t.Error("CloneUser(nil) should return nil")
+func TestClone_Nil(t *testing.T) {
+	if (*user.User)(nil).Clone() != nil {
+		t.Error("(*user.User)(nil).Clone() should return nil")
 	}
 }
 

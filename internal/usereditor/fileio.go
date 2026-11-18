@@ -7,12 +7,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/filelock"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
-	"github.com/google/uuid"
 )
 
 // ErrFileChanged reports that users.json was written by someone else -- in
@@ -169,46 +167,4 @@ func writeUsers(path string, users []*user.User) (string, error) {
 	// Fingerprint the bytes just written rather than re-reading: identical
 	// content, and it cannot pick up a write that landed in between.
 	return user.FingerprintBytes(data), nil
-}
-
-// CloneUser creates a deep copy of a user record.
-func CloneUser(u *user.User) *user.User {
-	if u == nil {
-		return nil
-	}
-	c := *u
-	// Deep copy map fields
-	if u.LastReadMessageIDs != nil {
-		c.LastReadMessageIDs = make(map[int]string, len(u.LastReadMessageIDs))
-		for k, v := range u.LastReadMessageIDs {
-			c.LastReadMessageIDs[k] = v
-		}
-	}
-	// Deep copy slice fields (uuid.UUID is [16]byte value type, simple copy works)
-	if u.TaggedFileIDs != nil {
-		c.TaggedFileIDs = make([]uuid.UUID, len(u.TaggedFileIDs))
-		copy(c.TaggedFileIDs, u.TaggedFileIDs)
-	}
-	if u.TaggedMessageAreaTags != nil {
-		c.TaggedMessageAreaTags = make([]string, len(u.TaggedMessageAreaTags))
-		copy(c.TaggedMessageAreaTags, u.TaggedMessageAreaTags)
-	}
-	// PublicKeys in particular must not share a backing array: removing a key
-	// shifts the slice in place, which would rewrite the copy F10 restores.
-	c.PublicKeys = slices.Clone(u.PublicKeys)
-	c.APIDevices = slices.Clone(u.APIDevices)
-	c.TaggedFileAreaIDs = slices.Clone(u.TaggedFileAreaIDs)
-	c.TaggedFileAreaTags = slices.Clone(u.TaggedFileAreaTags)
-	c.SeenNewscanNetworks = slices.Clone(u.SeenNewscanNetworks)
-	c.SeenNewscanAreaTags = slices.Clone(u.SeenNewscanAreaTags)
-	c.SeenNewsIDs = slices.Clone(u.SeenNewsIDs)
-	if u.DeletedAt != nil {
-		t := *u.DeletedAt
-		c.DeletedAt = &t
-	}
-	if u.FileNewscanSince != nil {
-		t := *u.FileNewscanSince
-		c.FileNewscanSince = &t
-	}
-	return &c
 }

@@ -80,8 +80,7 @@ func (um *UserMgr) RefreshSessionUser(current *User) (*User, bool) {
 		return nil, false
 	}
 
-	refreshed := *current
-	refreshed.TwitList = append([]TwitEntry(nil), current.TwitList...)
+	refreshed := *current.Clone()
 	sysopOwnedFields(&refreshed, &snapshot)
 	// Follow a rename. The handle is the map key, so a sysop changing it in
 	// ./ue re-keys the record; taking the stored handle here keeps the session
@@ -122,7 +121,7 @@ func (um *UserMgr) lookupForRefresh(current *User) (User, bool) {
 	defer um.mu.RUnlock()
 
 	if stored := um.users[key]; stored != nil {
-		return *stored, true
+		return *stored.Clone(), true
 	}
 	// Handle miss: the account may have been renamed rather than removed.
 	// ID 0 is not a real account, so it must not match one.
@@ -131,7 +130,7 @@ func (um *UserMgr) lookupForRefresh(current *User) (User, bool) {
 	}
 	for _, stored := range um.users {
 		if stored.ID == current.ID {
-			return *stored, true
+			return *stored.Clone(), true
 		}
 	}
 	return User{}, false
