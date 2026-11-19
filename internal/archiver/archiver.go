@@ -361,7 +361,9 @@ func (c *Config) IsSupported(filename string) bool {
 // reads only as far as the furthest valid signature ends; detection does not
 // validate the archive. Invalid hex signatures and negative offsets are
 // ignored. File open/read errors are returned without extension fallback so
-// callers can distinguish inaccessible files from unknowns.
+// callers can distinguish inaccessible files from unknowns. A file that
+// isn't a regular file (a FIFO, a device, a directory) is never opened and
+// is not an archive, whatever its name.
 func (c *Config) DetectFile(path string) (Archiver, bool, error) {
 	signatures := make([][]byte, len(c.Archivers))
 	maxSize := 0
@@ -375,6 +377,16 @@ func (c *Config) DetectFile(path string) (Archiver, bool, error) {
 		}
 		signatures[i] = signature
 		maxSize = max(maxSize, a.MagicOffset+len(signature))
+	}
+	// Only a regular file is read, or can be an archive: opening a FIFO
+	// waits for a writer, and a device or directory is no archive,
+	// whatever its name.
+	info, err := os.Stat(path)
+	if err != nil {
+		return Archiver{}, false, err
+	}
+	if !info.Mode().IsRegular() {
+		return Archiver{}, false, nil
 	}
 	f, err := os.Open(path)
 	if err != nil {

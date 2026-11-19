@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
@@ -328,5 +329,30 @@ func TestGetArchiveTypeByContent(t *testing.T) {
 	}
 	if at, ok := cfg.GetArchiveType(filepath.Join(dir, "NODELIST.Z75")); !ok || !at.Native {
 		t.Errorf("NODELIST.Z75 = %+v, want the native ZIP type", at)
+	}
+}
+
+// A pipeline finds the archive's type once and keeps it: ad removal can
+// rewrite a ZIP holding only an advert into an empty one, whose first bytes
+// (PK\x05\x06) no longer match ZIP's signature, and the later steps must
+// still take it for the ZIP it was, whatever it is named.
+func TestProcessorKeepsArchiveType(t *testing.T) {
+	cfg := DefaultConfig()
+	path := filepath.Join(t.TempDir(), "NODELIST.Z75")
+	if err := os.WriteFile(path, []byte("PK\x03\x04rest"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	p := NewProcessor(cfg, t.TempDir())
+	if at, ok := p.archiveType(path); !ok || at.ID != "zip" {
+		t.Fatalf("first look: %+v, %v", at, ok)
+	}
+	if err := os.WriteFile(path, []byte("PK\x05\x06"+strings.Repeat("\x00", 18)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := cfg.GetArchiveType(path); ok {
+		t.Fatal("test premise: an empty ZIP named .Z75 is still detected")
+	}
+	if at, ok := p.archiveType(path); !ok || at.ID != "zip" {
+		t.Errorf("after the rewrite: %+v, %v", at, ok)
 	}
 }

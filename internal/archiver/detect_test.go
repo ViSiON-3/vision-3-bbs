@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // TestDetectFile checks signature precedence, enabled extension fallback,
@@ -83,5 +84,33 @@ func TestDetectFileMagicOffset(t *testing.T) {
 	lha, _ := def.FindByID("lha")
 	if lha.Magic != "2D6C68" || lha.MagicOffset != 2 {
 		t.Errorf("built-in lha = %q at %d", lha.Magic, lha.MagicOffset)
+	}
+}
+
+// Only a regular file is opened or can be an archive: a FIFO would block
+// the open until something writes to it, and a directory named .zip is no
+// ZIP.
+func TestDetectFileNotRegular(t *testing.T) {
+	cfg := DefaultConfig()
+	dir := filepath.Join(t.TempDir(), "folder.zip")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if a, ok, err := cfg.DetectFile(dir); ok || err != nil {
+		t.Errorf("directory: %q, %v, %v", a.ID, ok, err)
+	}
+	fifo := filepath.Join(t.TempDir(), "notes.zip")
+	if err := mkfifo(fifo); err != nil {
+		t.Skipf("no FIFOs here: %v", err)
+	}
+	done := make(chan bool, 1)
+	go func() { done <- cfg.IsSupportedFile(fifo) }()
+	select {
+	case ok := <-done:
+		if ok {
+			t.Error("a FIFO is supported")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("DetectFile blocked opening a FIFO")
 	}
 }
