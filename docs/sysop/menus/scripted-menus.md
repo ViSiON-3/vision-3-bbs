@@ -264,14 +264,14 @@ The title comes from the door's `args`. `rows` is how many commands fit on the c
 ```javascript
 function drawRow(i) {
     var it = items[i];
-    var text = v3.util.padRight(" " + it.key + "  " + it.label, 34);
+    var text = v3.util.padRight((" " + it.key + "  " + it.label).substring(0, 34), 34);
     v3.console.gotoxy(3, 3 + i - top);
     v3.console.print(i === sel ? "|B4|15" + text : "|B0|07" + text);
     v3.console.print("|B0|07");
 }
 ```
 
-`drawRow` draws one command on its row: white on blue under the bar, grey on black otherwise.
+`drawRow` draws one command on its row, cut or padded to 34 columns: white on blue under the bar, grey on black otherwise.
 
 ```javascript
 function drawAll() {
