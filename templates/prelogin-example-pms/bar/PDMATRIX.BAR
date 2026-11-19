@@ -1,0 +1,7 @@
+; Pre-login matrix. FORMAT: X,Y,HiLitedColor,RegularColor,HotKey,ReturnValue,DisplayText
+; The positions match the [key] marks in ansi/PDMATRIX.ANS; on sixel terminals
+; the same four choices are drawn on the cube instead.
+12,13,93,7,L,UNUSED,login
+12,14,93,7,A,UNUSED,apply for account
+12,15,93,7,C,UNUSED,check access
+12,16,93,7,D,UNUSED,disconnect

@@ -41,6 +41,19 @@ only when the terminal said at connect that it draws sixel. Any other
 terminal gets the logo as dotted text. Everything else is text on every
 terminal.
 
+## Login matrix
+
+The login matrix is the board's, not the theme's, so selecting this theme
+does not change it. The PMS matrix (graffiti picture, pink cube, glitter,
+two tones) ships in `templates/prelogin-example-pms/`. Install it from the
+board root with:
+
+```bash
+mkdir -p prelogin && cp -R templates/prelogin-example-pms/. prelogin/
+```
+
+See **Pre-login screens** in `docs/sysop/configuration/adding-a-theme.md`.
+
 ## What it expects of a board
 
 The stock `configs/doors.json` lacks several doors the theme's menus and
