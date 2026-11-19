@@ -38,6 +38,18 @@ func (e *MenuExecutor) RunMatrixScreen(
 	termHeight int,
 ) (string, *user.User, error) {
 	const menuName = "PDMATRIX"
+	// A terminal whose answer to the connect probe is late gets it applied
+	// here, before the first draw if it is in by then and with one repaint
+	// if it comes while the matrix waits for a key. After the matrix the
+	// encoding stays as it is.
+	late := lateProbe(s)
+	defer late.settle()
+	// Sampled once: an answer that completes after this, even during the
+	// setup below, is applied by the repaint in the key loop.
+	awaitLate := late != nil && late.waiting()
+	if late != nil && !awaitLate {
+		outputMode = late.adoptEncoding(outputMode)
+	}
 	// The matrix's files and wording are the board's, whatever its theme
 	// (preloginView); what follows it (PRELOGON, login, the new-user form)
 	// is drawn by e.
@@ -70,22 +82,33 @@ func (e *MenuExecutor) RunMatrixScreen(
 	// Load the ANSI background (convention: PDMATRIX.ANS)
 	// Use GetAnsiFileContent to automatically strip SAUCE metadata
 	ansPath := pre.menuFile("ansi", menuName+".ANS")
-	ansBackground, err := ansi.GetAnsiFileContent(ansPath)
+	ansArt, err := ansi.GetAnsiFileContent(ansPath)
 	if err != nil {
 		slog.Warn("failed to load ANS file, skipping matrix", "node", nodeNumber, "menu", menuName, "error", err)
 		return "LOGIN", nil, nil
 	}
-	ansBackground = fitArt(terminal, ansi.ArtForOutput(ansBackground, outputMode), termWidth, outputMode == ansi.OutputModeUTF8)
-	graphic, graphicCol, graphicSize := pre.matrixGraphic(s, termWidth, termHeight)
+	var ansBackground, graphic []byte
+	var graphicCol int
 	var scene *matrixScene
-	if len(graphic) > 0 {
-		scene = pre.newMatrixScene(termWidth, termHeight, graphicCol, nodeNumber)
+	var drawnSixel, drawnAudio bool // the answers the screen was prepared for
+	// prepare fits the art to the encoding and loads the picture and scene
+	// the terminal's answers allow.
+	prepare := func() {
+		drawnSixel, drawnAudio = sessionSixel(s, nil), sessionAudio(s)
+		ansBackground = fitArt(terminal, ansi.ArtForOutput(ansArt, outputMode), termWidth, outputMode == ansi.OutputModeUTF8)
+		var graphicSize image.Point
+		graphic, graphicCol, graphicSize = pre.matrixGraphic(s, termWidth, termHeight)
+		scene = nil
+		if len(graphic) > 0 {
+			scene = pre.newMatrixScene(termWidth, termHeight, graphicCol, nodeNumber)
+		}
+		// Without a scene the picture is drawn above the choices, where only
+		// 640x160 fits; the larger side-layout picture would cover them.
+		if scene == nil && (graphicSize.X > 640 || graphicSize.Y > 160) {
+			graphic = nil
+		}
 	}
-	// Without a scene the picture is drawn above the choices, where only
-	// 640x160 fits; the larger side-layout picture would cover them.
-	if scene == nil && (graphicSize.X > 640 || graphicSize.Y > 160) {
-		graphic = nil
-	}
+	prepare()
 	animationStart := time.Now()
 
 	slog.Info("displaying pre-login matrix screen", "node", nodeNumber, "count", len(options))
@@ -141,12 +164,31 @@ func (e *MenuExecutor) RunMatrixScreen(
 	for tries < maxTries {
 		var key int
 		var err error
-		if scene == nil {
+		if scene == nil && !awaitLate {
 			key, err = sessionIH.ReadKey()
 		} else {
 			key, err = sessionIH.ReadKeyWithPoll(50*time.Millisecond, idleStart)
 		}
+		if awaitLate && !late.waiting() {
+			awaitLate = false
+			// The whole answer is in, or the wait for it is over: if it
+			// changed the encoding, sixel or audio, draw what it allows, in
+			// its encoding, before acting on a key typed behind it.
+			mode := late.adoptEncoding(outputMode)
+			if mode != outputMode || sessionSixel(s, nil) != drawnSixel || sessionAudio(s) != drawnAudio {
+				outputMode = mode
+				prepare()
+				slog.Info("repainting matrix for a late terminal answer", "node", nodeNumber, "sixel", len(graphic) > 0, "audio", sessionAudio(s))
+				_ = drawScreen() // best-effort redraw
+				if tones == nil {
+					tones = pre.loadMatrixTones(s, terminal, nodeNumber)
+				}
+			}
+		}
 		if errors.Is(err, editor.ErrReadPoll) {
+			if scene == nil {
+				continue
+			}
 			if err := scene.draw(terminal, time.Since(animationStart).Seconds(), options, selectedIndex, outputMode); err != nil {
 				return "DISCONNECT", nil, err
 			}

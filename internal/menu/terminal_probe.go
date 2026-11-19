@@ -110,14 +110,82 @@ type daReplies struct {
 	libsndfile []byte // reply to ansi.AudioLibsndfileQuery
 	wavU8      []byte // reply to ansi.AudioWAVU8Query
 	decided    bool
-	answered   chan struct{} // closed when the primary reply arrives
+	settled    bool                  // the login matrix has ended; a late cursor report changes nothing
+	onEncoding func(ansi.OutputMode) // told when the login matrix takes a late cursor report's encoding
+	answered   chan struct{}         // closed when the primary reply arrives
+}
+
+// sessionProbes holds, per session, the probe's replies until the login
+// matrix has ended, so the matrix can take answers that came after the
+// connect wait.
+var sessionProbes sync.Map
+
+// lateProbe returns s's probe while the login matrix may still take a late
+// answer from it, or nil.
+func lateProbe(s ssh.Session) *daReplies {
+	if v, ok := sessionProbes.Load(s); ok {
+		return v.(*daReplies)
+	}
+	return nil
+}
+
+// OnLateEncoding has f called, on the login matrix's goroutine, when the
+// matrix switches s to the encoding of a cursor report that came after the
+// connect wait. The session's input decoding (SetSessionOutputMode) is
+// switched before f is called.
+func OnLateEncoding(s ssh.Session, f func(ansi.OutputMode)) {
+	if d := lateProbe(s); d != nil {
+		d.mu.Lock()
+		d.onEncoding = f
+		d.mu.Unlock()
+	}
+}
+
+// waiting reports whether the terminal's whole answer, which ends with the
+// primary reply, can still arrive.
+func (d *daReplies) waiting() bool {
+	return !isClosed(d.answered) && time.Now().Before(d.lateUntil)
+}
+
+// adoptEncoding returns the encoding the cursor report gives, switching
+// the session to it when it differs from current. Without an encoding probe
+// or a report it returns current.
+func (d *daReplies) adoptEncoding(current ansi.OutputMode) ansi.OutputMode {
+	d.mu.Lock()
+	if !d.encoding || d.cpr == nil {
+		d.mu.Unlock()
+		return current
+	}
+	mode, f := encodingFromReport(d.cpr), d.onEncoding
+	d.mu.Unlock()
+	if mode == current {
+		return current
+	}
+	d.log.Info("encoding from late cursor report", "encoding", probeModeName(mode))
+	SetSessionOutputMode(d.session, mode)
+	if f != nil {
+		f(mode)
+	}
+	return mode
+}
+
+// settle ends the time in which a late cursor report can change the
+// encoding. A nil d does nothing.
+func (d *daReplies) settle() {
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	d.settled = true
+	d.mu.Unlock()
+	sessionProbes.CompareAndDelete(d.session, d)
 }
 
 // add takes a reply from the input goroutine. Once the probe has decided,
 // a sixel or audio answer that comes before lateUntil turns that capability
-// on (see applyLate); a late cursor report leaves the encoding as decided,
-// because the first screen is drawn in it as soon as the probe returns. A
-// reply after lateUntil, or one that is not an answer to the probe's
+// on (see applyLate). A late cursor report is recorded for the login matrix,
+// which draws in its encoding (see adoptEncoding); once the matrix has ended
+// it is logged and changes nothing. A reply after lateUntil, or one that is not an answer to the probe's
 // queries, is logged and changes nothing.
 func (d *daReplies) add(reply []byte, complete bool) {
 	d.mu.Lock()
@@ -130,7 +198,7 @@ func (d *daReplies) add(reply []byte, complete bool) {
 		d.log.Info("terminal reply after the probe ended, ignored", "reply", escapeReply(reply))
 		return
 	}
-	if d.decided && reply[len(reply)-1] == 'R' {
+	if d.settled && reply[len(reply)-1] == 'R' {
 		d.log.Info("late cursor report, encoding left as decided", "reply", escapeReply(reply))
 		return
 	}
@@ -292,8 +360,9 @@ func escapeReply(reply []byte) string {
 // of the session, and the one cursor report until it comes or replyWindow
 // passes. A late reply never reaches a prompt. A sixel or audio answer
 // that comes after the wait but within replyWindow turns that capability
-// on for the rest of the session; a late cursor report does not change the
-// encoding.
+// on for the rest of the session. The login matrix repaints when the whole
+// answer comes late, and takes the encoding of a late cursor report; after
+// the matrix a late cursor report changes nothing.
 func ProbeTerminal(s ssh.Session, timeout time.Duration, encoding bool, log *slog.Logger) ansi.OutputMode {
 	deadline := time.Now().Add(timeout)
 	replies := &daReplies{log: log, session: s, lateUntil: time.Now().Add(replyWindow), encoding: encoding,
@@ -306,6 +375,7 @@ func ProbeTerminal(s ssh.Session, timeout time.Duration, encoding bool, log *slo
 		query = ansi.EncodingProbe + query
 	}
 	sessionReplyTraps.Store(s, trap)
+	sessionProbes.Store(s, replies)
 
 	getSessionIH(s)               // reads the session, through the trap, while the probe waits
 	_, _ = s.Write([]byte(query)) // best-effort probe

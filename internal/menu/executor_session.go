@@ -89,6 +89,7 @@ func ClearSessionIdleTimeout(s ssh.Session) {
 	clearLoginFailures(s)
 	clearCurrentMail(s)
 	sessionReplyTraps.Delete(s)
+	sessionProbes.Delete(s)
 	sessionSixelCaps.Delete(s)
 	sessionAudioCaps.Delete(s)
 }

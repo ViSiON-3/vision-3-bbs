@@ -1132,6 +1132,14 @@ func sessionHandler(s ssh.Session) {
 		compat.SetDECCursor(effectiveMode == ansi.OutputModeUTF8)
 	}
 	applyPalette()
+	// A cursor report that comes after the connect wait is taken by the
+	// login matrix, which calls this on this goroutine before it repaints
+	// in that encoding; it then holds for the rest of the call.
+	menu.OnLateEncoding(s, func(mode ansi.OutputMode) {
+		effectiveMode = mode
+		slog.Info("output mode from late cursor report", "node", nodeID, "utf8", effectiveMode == ansi.OutputModeUTF8)
+		applyPalette()
+	})
 	defer func() {
 		if paletteSet {
 			_, _ = terminal.Write([]byte("\x1b[0m" + ansi.ResetPalette())) // best-effort display

@@ -689,9 +689,8 @@ func TestProbeTerminalSlowSplitReport(t *testing.T) {
 	}
 }
 
-// A cursor report after the timeout, whole or split, is not typed input and
-// does not change the encoding already decided: the first screen is drawn
-// in it as soon as the probe returns.
+// A cursor report that comes after the login matrix has ended, whole or
+// split, is not typed input and does not change the encoding.
 func TestProbeTerminalLateCursorReport(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -707,6 +706,7 @@ func TestProbeTerminalLateCursorReport(t *testing.T) {
 			if mode := ProbeTerminal(s, 50*time.Millisecond, true, log); mode != ansi.OutputModeCP437 {
 				t.Fatalf("silent probe gave %v, want CP437", mode)
 			}
+			lateProbe(s).settle() // the login matrix has ended
 			s.reply(tc.chunks...)
 			if k, err := readKeyBounded(s); err != nil || k != 'x' {
 				t.Fatalf("ReadKey = %q, %v; want 'x'", rune(k), err)
