@@ -307,8 +307,9 @@ func TestProbeTerminalSilent(t *testing.T) {
 	}
 }
 
-// A reply that comes after the timeout, whole or split, is not typed input
-// and does not change the decided answer.
+// A sixel answer that comes after the connect wait, whole or split, is not
+// typed input, turns sixel on for the rest of the call, and Konfig's Auto
+// setting shows it.
 func TestProbeTerminalLateReply(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -316,6 +317,7 @@ func TestProbeTerminalLateReply(t *testing.T) {
 	}{
 		{"whole", []string{"\x1b[<0;4c\x1b[?62;4cx"}},
 		{"split", []string{"\x1b[?6", "2;", "4c", "x"}},
+		{"SyncTERM", []string{"\x1b[<0;1;2;3;4;5;6;7c\x1b[=67;84;101;114;109;1;326cx"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newProbeSession("xterm")
@@ -323,21 +325,47 @@ func TestProbeTerminalLateReply(t *testing.T) {
 			logs, log := newSyncLog()
 			ProbeTerminal(s, 50*time.Millisecond, false, log)
 			if sessionSixel(s, nil) {
-				t.Fatal("silent terminal reported sixel")
+				t.Fatal("sixel on before any answer")
 			}
 			s.reply(tc.chunks...)
-			// What the login prompt reads next is the caller's key.
+			// What the login prompt reads next is the caller's key; the
+			// replies before it have been handled by then.
 			k, err := readKeyBounded(s)
 			if err != nil || k != 'x' {
 				t.Fatalf("ReadKey = %q, %v; want 'x'", rune(k), err)
 			}
-			if sessionSixel(s, nil) {
-				t.Error("late reply changed the decided answer")
+			if !sessionSixel(s, nil) {
+				t.Error("late answer did not turn sixel on")
 			}
-			if out := logs.String(); !strings.Contains(out, `\x1b[?62;4c`) {
+			st := &konfigState{c: &cmdCtx{e: konfigTestExecutor(t), s: s, currentUser: &user.User{}}}
+			if got, want := sixelValue(st).text, "Auto (On)"; got != want {
+				t.Errorf("Konfig shows Sixel as %q, want %q", got, want)
+			}
+			if out := logs.String(); !strings.Contains(out, "late terminal reply") {
 				t.Errorf("late reply not logged:\n%s", out)
 			}
 		})
+	}
+}
+
+// A late answer read by a handler made before the session ended stores
+// nothing for the ended session.
+func TestProbeTerminalLateReplyAfterSessionEnd(t *testing.T) {
+	s := newProbeSession("xterm")
+	s.cleanup(t)
+	_, log := newSyncLog()
+	ProbeTerminal(s, 50*time.Millisecond, false, log)
+	getSessionIH(s) // made while the session's trap is still registered
+	ClearSessionIdleTimeout(s)
+	s.reply("\x1b[=7;100;1n\x1b[=7;101;1;5;1n\x1b[?62;4cx")
+	if k, err := readKeyBounded(s); err != nil || k != 'x' {
+		t.Fatalf("ReadKey = %q, %v; want 'x'", rune(k), err)
+	}
+	if _, ok := sessionSixelCaps.Load(s); ok {
+		t.Error("late sixel answer stored for an ended session")
+	}
+	if _, ok := sessionAudioCaps.Load(s); ok {
+		t.Error("late audio answer stored for an ended session")
 	}
 }
 
@@ -359,7 +387,8 @@ func TestTypeAheadEndingInPartialReply(t *testing.T) {
 
 // A reply split across the end of the probe is not typed input either: the
 // probe's handler stops with the start of it, and the login prompt's
-// handler gets the rest.
+// handler gets the rest. Finished after the wait, it is a late answer and
+// turns sixel on.
 func TestProbeTerminalReplySplitAcrossDeadline(t *testing.T) {
 	s := newProbeSession("xterm")
 	s.cleanup(t)
@@ -373,8 +402,8 @@ func TestProbeTerminalReplySplitAcrossDeadline(t *testing.T) {
 	if k, err := readKeyBounded(s); err != nil || k != 'x' {
 		t.Fatalf("ReadKey = %q, %v; want 'x'", rune(k), err)
 	}
-	if sessionSixel(s, nil) {
-		t.Error("a reply finished after the deadline changed the answer")
+	if !sessionSixel(s, nil) {
+		t.Error("a reply finished after the deadline did not turn sixel on")
 	}
 }
 
@@ -518,8 +547,8 @@ func TestProbeTerminalAudioQueryOrder(t *testing.T) {
 	}
 }
 
-// Audio replies that come after the timeout, whole or split, are not typed
-// input and do not turn audio on.
+// Audio answers that come after the connect wait, whole or split, are not
+// typed input and turn audio on for the rest of the call.
 func TestProbeTerminalLateAudioReply(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -537,8 +566,8 @@ func TestProbeTerminalLateAudioReply(t *testing.T) {
 			if k, err := readKeyBounded(s); err != nil || k != 'x' {
 				t.Fatalf("ReadKey = %q, %v; want 'x'", rune(k), err)
 			}
-			if sessionAudio(s) {
-				t.Error("late reply turned audio on")
+			if !sessionAudio(s) {
+				t.Error("late answer did not turn audio on")
 			}
 			if out := logs.String(); !strings.Contains(out, `\x1b[=7;101;1;5;1n`) {
 				t.Errorf("late reply not logged:\n%s", out)
@@ -661,7 +690,8 @@ func TestProbeTerminalSlowSplitReport(t *testing.T) {
 }
 
 // A cursor report after the timeout, whole or split, is not typed input and
-// does not change the encoding already decided.
+// does not change the encoding already decided: the first screen is drawn
+// in it as soon as the probe returns.
 func TestProbeTerminalLateCursorReport(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -681,8 +711,8 @@ func TestProbeTerminalLateCursorReport(t *testing.T) {
 			if k, err := readKeyBounded(s); err != nil || k != 'x' {
 				t.Fatalf("ReadKey = %q, %v; want 'x'", rune(k), err)
 			}
-			if out := logs.String(); !strings.Contains(out, `\x1b[2;2R`) {
-				t.Errorf("late report not logged:\n%s", out)
+			if out := logs.String(); !strings.Contains(out, `\x1b[2;2R`) || !strings.Contains(out, "encoding left as decided") {
+				t.Errorf("late report not logged as left alone:\n%s", out)
 			}
 		})
 	}

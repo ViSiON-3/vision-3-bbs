@@ -17,7 +17,9 @@ import (
 // replyWindow is how long after the probe the session's input waits longer
 // on an ESC for a reply that may follow (see editor.ReplyTrap). It ends
 // early when the primary reply arrives. Replies are taken out of the input
-// for the whole session either way.
+// for the whole session either way. A sixel or audio answer that comes
+// after the probe's wait but within replyWindow still turns that
+// capability on.
 const replyWindow = 30 * time.Second
 
 // probeReport reports whether a cursor-report-shaped sequence can be the
@@ -34,12 +36,12 @@ func probeReport(report []byte) bool {
 // handler it creates.
 var sessionReplyTraps sync.Map
 
-// sessionSixelCaps holds, per session, whether the terminal said at connect
-// that it draws sixel graphics. A session with no entry was not probed.
+// sessionSixelCaps holds, per session, whether the terminal said at connect,
+// or within replyWindow after, that it draws sixel graphics. A session with no entry was not probed.
 var sessionSixelCaps sync.Map
 
-// sessionAudioCaps holds, per session, whether the terminal said at connect
-// that it plays the board's audio format. A session with no entry was not
+// sessionAudioCaps holds, per session, whether the terminal said at connect,
+// or within replyWindow after, that it plays the board's audio format. A session with no entry was not
 // probed.
 var sessionAudioCaps sync.Map
 
@@ -95,10 +97,11 @@ func replyTrapFor(s ssh.Session) *editor.ReplyTrap {
 // position report for the encoding, device attributes and the audio
 // queries.
 type daReplies struct {
-	log      *slog.Logger
-	deadline time.Time
-	encoding bool // the encoding probe was sent
-	trap     *editor.ReplyTrap
+	log       *slog.Logger
+	session   ssh.Session // where decide and late answers store sixel and audio
+	lateUntil time.Time   // end of replyWindow; later replies change nothing
+	encoding  bool        // the encoding probe was sent
+	trap      *editor.ReplyTrap
 
 	mu         sync.Mutex
 	cpr        []byte
@@ -110,9 +113,12 @@ type daReplies struct {
 	answered   chan struct{} // closed when the primary reply arrives
 }
 
-// add takes a reply from the input goroutine. A reply after the deadline,
-// or once the probe has decided, is logged and changes nothing; so is one
-// that is not an answer to the probe's queries.
+// add takes a reply from the input goroutine. Once the probe has decided,
+// a sixel or audio answer that comes before lateUntil turns that capability
+// on (see applyLate); a late cursor report leaves the encoding as decided,
+// because the first screen is drawn in it as soon as the probe returns. A
+// reply after lateUntil, or one that is not an answer to the probe's
+// queries, is logged and changes nothing.
 func (d *daReplies) add(reply []byte, complete bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -120,10 +126,26 @@ func (d *daReplies) add(reply []byte, complete bool) {
 		d.log.Info("incomplete terminal reply dropped", "reply", escapeReply(reply))
 		return
 	}
-	if d.decided || time.Now().After(d.deadline) {
+	if time.Now().After(d.lateUntil) {
 		d.log.Info("terminal reply after the probe ended, ignored", "reply", escapeReply(reply))
 		return
 	}
+	if d.decided && reply[len(reply)-1] == 'R' {
+		d.log.Info("late cursor report, encoding left as decided", "reply", escapeReply(reply))
+		return
+	}
+	if d.take(reply) {
+		if d.decided {
+			d.applyLate(reply)
+		}
+		return
+	}
+	d.log.Info("unexpected terminal reply, ignored", "reply", escapeReply(reply))
+}
+
+// take records reply as the answer it is, and reports whether it was one
+// still missing.
+func (d *daReplies) take(reply []byte) bool {
 	// Every query was sent before the primary one; after the primary reply
 	// the answer is settled.
 	switch {
@@ -131,53 +153,78 @@ func (d *daReplies) add(reply []byte, complete bool) {
 	case reply[len(reply)-1] == 'R':
 		if d.encoding && d.cpr == nil {
 			d.cpr = reply
-			return
+			return true
 		}
 	case ansi.IsAudioLibsndfileReply(reply):
 		if d.libsndfile == nil {
 			d.libsndfile = reply
-			return
+			return true
 		}
 	case ansi.IsAudioWAVU8Reply(reply):
 		if d.wavU8 == nil {
 			d.wavU8 = reply
-			return
+			return true
 		}
 	case reply[len(reply)-1] != 'c':
 	case reply[2] == '<':
 		if d.ext == nil {
 			d.ext = reply
-			return
+			return true
 		}
 	case reply[2] == '?' || reply[2] == '=':
 		if d.primary == nil {
 			d.primary = reply
 			close(d.answered)
+			if d.decided {
+				d.trap.StopExpecting()
+			}
 			// A cursor report should have come before this; one that comes
 			// later is still taken out of the input for the rest of
 			// replyWindow, and does not change the encoding.
-			return
+			return true
 		}
 	}
-	d.log.Info("unexpected terminal reply, ignored", "reply", escapeReply(reply))
+	return false
 }
 
 // decide fixes the answers from the replies received so far: the encoding
-// (OutputModeAuto when the encoding probe was not sent), sixel and audio.
-func (d *daReplies) decide() (mode ansi.OutputMode, sixel, audio bool) {
+// (OutputModeAuto when the encoding probe was not sent), sixel and audio,
+// and stores sixel and audio on the session. Storing them under d.mu keeps
+// a late answer from being overwritten by this one.
+func (d *daReplies) decide() ansi.OutputMode {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.decided = true
-	mode = ansi.OutputModeAuto
+	mode := ansi.OutputModeAuto
 	if d.encoding {
 		mode = encodingFromReport(d.cpr)
 	}
-	sixel = sixelFromReplies(d.ext, d.primary)
-	audio = audioFromReplies(d.libsndfile, d.wavU8)
+	sixel := sixelFromReplies(d.ext, d.primary)
+	audio := audioFromReplies(d.libsndfile, d.wavU8)
 	d.log.Info("terminal probe", "cursor", escapeReply(d.cpr), "encoding", probeModeName(mode),
 		"extended", escapeReply(d.ext), "primary", escapeReply(d.primary), "sixel", sixel,
 		"libsndfile", escapeReply(d.libsndfile), "wav_u8", escapeReply(d.wavU8), "audio", audio)
-	return mode, sixel, audio
+	storeSessionSixel(d.session, sixel)
+	storeSessionAudio(d.session, audio)
+	return mode
+}
+
+// applyLate turns sixel or audio on for the session when the replies, with
+// the late reply just taken, now say the terminal has it. It is called with
+// d.mu held, after decide. It only changes an answer decide stored, from
+// off to on, so it never brings back the entries of a session that has
+// ended, and the readers on other goroutines see either answer whole.
+func (d *daReplies) applyLate(reply []byte) {
+	key := unwrapSession(d.session)
+	sixel := sixelFromReplies(d.ext, d.primary)
+	audio := audioFromReplies(d.libsndfile, d.wavU8)
+	if sixel {
+		sessionSixelCaps.CompareAndSwap(key, false, true)
+	}
+	if audio {
+		sessionAudioCaps.CompareAndSwap(key, false, true)
+	}
+	d.log.Info("late terminal reply", "reply", escapeReply(reply), "sixel", sixel, "audio", audio)
 }
 
 // probeModeName names an encoding for the log.
@@ -233,7 +280,8 @@ func escapeReply(reply []byte) string {
 // including when no report came. With encoding false it returns
 // OutputModeAuto. Whether the terminal draws sixel is stored on the session
 // for sessionSixel, and whether it plays the board's audio format for
-// sessionAudio; no reply before the deadline means it does not. The
+// sessionAudio; no reply before the deadline means it does not, until a
+// late answer says it does. The
 // terminal's name plays no part. Replies are logged to log.
 //
 // It runs before sessionHandler reads from the session, and stops the input
@@ -242,11 +290,14 @@ func escapeReply(reply []byte) string {
 // otherwise. Replies are taken out of the session's input before any read
 // (see editor.ReplyTrap): device attributes and audio replies for the rest
 // of the session, and the one cursor report until it comes or replyWindow
-// passes. A late reply never reaches a
-// prompt, and it does not change the stored answers.
+// passes. A late reply never reaches a prompt. A sixel or audio answer
+// that comes after the wait but within replyWindow turns that capability
+// on for the rest of the session; a late cursor report does not change the
+// encoding.
 func ProbeTerminal(s ssh.Session, timeout time.Duration, encoding bool, log *slog.Logger) ansi.OutputMode {
 	deadline := time.Now().Add(timeout)
-	replies := &daReplies{log: log, deadline: deadline, encoding: encoding, answered: make(chan struct{})}
+	replies := &daReplies{log: log, session: s, lateUntil: time.Now().Add(replyWindow), encoding: encoding,
+		answered: make(chan struct{})}
 	trap := editor.NewReplyTrap(replyWindow, replies.add)
 	replies.trap = trap
 	query := ansi.DAExtendedQuery + ansi.AudioQueries + ansi.DAPrimaryQuery
@@ -267,9 +318,7 @@ func ProbeTerminal(s ssh.Session, timeout time.Duration, encoding bool, log *slo
 		}
 		timer.Stop()
 	}
-	mode, sixel, audio := replies.decide()
-	storeSessionSixel(s, sixel)
-	storeSessionAudio(s, audio)
+	mode := replies.decide()
 	if isClosed(replies.answered) {
 		trap.StopExpecting()
 	}
