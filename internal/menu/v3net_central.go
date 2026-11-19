@@ -245,7 +245,7 @@ func runV3NetCentral(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 
 		var buf strings.Builder
-		buf.WriteString(centralHeader("Menu", termWidth))
+		buf.WriteString(centralHeader("Menu |08(Preview)|12", termWidth))
 		names := make([]string, 0, len(enabled))
 		for _, n := range enabled {
 			names = append(names, n.Network)

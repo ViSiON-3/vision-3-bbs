@@ -1,7 +1,11 @@
 # V3Net Central
 
-> **Experimental — Development Only.** V3Net is under active development and
-> is not yet ready for production use. See [V3Net Configuration](v3net/configuration.md).
+> **Preview in 1.0.** V3Net Central ships in 1.0 as a preview. Its features
+> work and are supported, and every one of them is off until you turn it on.
+> Its protocol and storage may still change in a 1.x release; the release
+> notes will say how. A volunteer multi-board pilot on a live network is
+> still to come ([Pilot Status](#pilot-status)). For V3Net message networking
+> itself, see [V3Net Configuration](configuration.md).
 
 V3Net Central is the caller-facing side of a V3Net network: a shared place
 for callers to find the other boards on the network, and, in later phases,
@@ -921,8 +925,8 @@ one hub publish, discover and update each other's listings, a withdrawal
 removes a listing, a replayed event is ignored, a hub-altered listing is
 dropped by the leaf, and a leaf on a hub without the feature hides it.
 Evidence from a volunteer multi-board pilot on a live network is still to
-be gathered before Central is offered beyond development use; the pilot is
-tracked on the epic, [#669](https://github.com/ViSiON-3/vision-3-bbs/issues/669).
+be gathered before Central leaves preview; the pilot is tracked on the
+epic, [#669](https://github.com/ViSiON-3/vision-3-bbs/issues/669).
 
 Phase 2 has been exercised the same way: three boards on one hub, two
 offering both features and one offering neither, though its callers had
@@ -934,7 +938,7 @@ that drops off takes its callers off Who's Online at once and brings
 them back when it reconnects. A call older than 24 hours is never
 published. A leaf on a hub without the features never calls them.
 Turning a feature off on reload withdraws it. A volunteer pilot on a live
-network is still to come, tracked on the epic,
+network is still to come before Central leaves preview, tracked on the epic,
 [#669](https://github.com/ViSiON-3/vision-3-bbs/issues/669).
 
 Activity alerts have been exercised in automated tests: two boards on one
@@ -945,7 +949,8 @@ it; expired, forged and blocked alerts are dropped; a board that cannot
 reach its hub gives up once the alert would be stale. On the BBS side,
 only subscribed callers past login see an alert, a withdrawn choice
 stops the next one, post alerts follow the area's read ACS, and the
-Twit List and chat bar apply. A live multi-board pilot is still to come.
+Twit List and chat bar apply. A live multi-board pilot is still to come
+before Central leaves preview.
 
 ---
 
