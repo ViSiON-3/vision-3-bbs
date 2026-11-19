@@ -305,4 +305,10 @@ func TestExpiringRoleTerms(t *testing.T) {
 	if x := Explain("PERM:users.validate", ctx); x.Root == nil || !strings.Contains(x.Root.Detail, "no role grants it (roles: validator expired 2027-01-01)") {
 		t.Errorf("PERM detail = %+v", x.Root)
 	}
+	// A deleted account's role held for good doesn't count, and never
+	// expired: the explanation says why it fails, with no made-up date.
+	ctx.User = &user.User{ID: 4, AccessLevel: 20, Roles: []string{"validator"}, DeletedUser: true}
+	if x := Explain("ROLE:validator", ctx); x.Root == nil || x.Root.Detail != "has role validator, but the account is deleted, so it doesn't count (roles: validator)" {
+		t.Errorf("deleted detail = %+v", x.Root)
+	}
 }

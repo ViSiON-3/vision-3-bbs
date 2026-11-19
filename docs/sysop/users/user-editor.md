@@ -70,7 +70,8 @@ move between them, Enter to keep them, Esc to leave them as they were. The
 dialog lists the roles and groups `roles.json` in the `--config` directory
 defines, and a name it doesn't define is refused with the reason. A role can
 be given [until a date](users/admin-roles.md#until-a-date) with
-`validator=YYYY-MM-DD` or `validator=YYYY-MM-DD HH:MM`, on the board's clock;
+`validator=YYYY-MM-DD` or `validator=YYYY-MM-DD HH:MM`, on the board's clock,
+set off from the other roles by commas;
 the dialog lists such roles with whether each still counts, and refuses a
 new expiry that has already passed.
 

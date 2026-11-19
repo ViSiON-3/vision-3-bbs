@@ -526,11 +526,13 @@ func roleDetail(u *user.User, name string, member bool, ctx Context) string {
 			continue
 		}
 		switch {
+		case !member && u.DeletedUser:
+			return fmt.Sprintf("has role %s, but the account is deleted, so it doesn't count (roles: %s)", name, roles)
 		case g.Bad:
 			return fmt.Sprintf("has role %s, but its expiry %q can't be read, so it doesn't count (roles: %s)", name, g.Stored, roles)
 		case member && !g.Expires.IsZero():
 			return fmt.Sprintf("has role %s until %s (roles: %s)", name, perm.FormatExpiry(g.Expires, ctx.location()), roles)
-		case !member:
+		case !member && !g.Expires.IsZero():
 			return fmt.Sprintf("had role %s, which expired %s (roles: %s)", name, perm.FormatExpiry(g.Expires, ctx.location()), roles)
 		}
 	}

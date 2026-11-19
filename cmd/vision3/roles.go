@@ -113,13 +113,15 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 			for _, r := range perm.NormalizeRoles(u.Roles) {
 				permanent[r] = true
 			}
+			// Every unreadable entry, including one a readable entry for the
+			// same role under another case outlasts.
+			for _, g := range perm.UnreadableRoleExpiries(rec) {
+				add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has role %s with expiry %q, which isn't an RFC 3339 time, so it grants nothing",
+					u.Handle, u.ID, g.Name, g.Stored),
+					"Set the expiry again in ./ue or the admin user editor.")
+			}
 			for _, g := range perm.RoleGrants(rec) {
-				switch {
-				case g.Bad:
-					add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has role %s with expiry %q, which isn't an RFC 3339 time, so it grants nothing",
-						u.Handle, u.ID, g.Name, g.Stored),
-						"Set the expiry again in ./ue or the admin user editor.")
-				case permanent[g.Name] && hasExpiry(u.Expiring, g.Name):
+				if permanent[g.Name] && hasExpiry(u.Expiring, g.Name) {
 					add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has role %s both for good (roles) and until a time (expiringRoles), so the expiry is ignored",
 						u.Handle, u.ID, g.Name),
 						"Set the role again in ./ue or the admin user editor, which keeps it in one place.")
@@ -135,18 +137,19 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 					u.Handle, u.ID, strings.Join(undefined, ", ")),
 					"Define the group in configs/roles.json, or take it off the user in ./ue or the admin user editor.")
 			}
-			grants := perm.FlagGrants(&user.User{NamedFlags: u.NamedFlags})
+			flagRec := &user.User{NamedFlags: u.NamedFlags}
+			grants := perm.FlagGrants(flagRec)
 			if len(grants) > 0 {
 				flagged++
 			}
 			var names []string
 			for _, g := range grants {
 				names = append(names, g.Name)
-				if g.Bad {
-					add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has flag %s with expiry %q, which isn't an RFC 3339 time, so FLAG:%s never matches it",
-						u.Handle, u.ID, g.Name, g.Stored, g.Name),
-						"Set the expiry again in ./ue or the admin user editor.")
-				}
+			}
+			for _, g := range perm.UnreadableFlagExpiries(flagRec) {
+				add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has flag %s with expiry %q, which isn't an RFC 3339 time, so FLAG:%s never matches it",
+					u.Handle, u.ID, g.Name, g.Stored, g.Name),
+					"Set the expiry again in ./ue or the admin user editor.")
 			}
 			if undefined := perm.UndefinedFlags(names, roles); len(undefined) > 0 {
 				add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has flag %s, which configs/roles.json doesn't declare, so FLAG: never matches it",

@@ -263,7 +263,8 @@ grant never passes).
 
 - **`./ue`:** **Roles/Groups** on the edit screen opens a dialog. Type role
   names separated by commas or spaces, each with an optional
-  [expiry](#until-a-date); clear the line to remove them all.
+  [expiry](#until-a-date); a role with an expiry needs a comma on each side
+  (`msgops, validator=2027-01-01`). Clear the line to remove them all.
 - **Admin Menu:** `E` (Edit Users), select the user, press `R`.
 
 Both check each name against `roles.json` as you type it, so a misspelt or

@@ -35,8 +35,9 @@ func (g TimedGrant) Live(now time.Time) bool {
 // (name to stored expiry), one per name: a name given more than once,
 // under different cases or in both, keeps the grant that lasts longest.
 // The permanent ones come first, in their order, then the timed ones by
-// name.
-func timedGrants(permanent []string, timed map[string]string) []TimedGrant {
+// name. needExpiry is set when every entry in timed must have an expiry, as
+// expiringRoles must: a blank one is then unreadable, not "never".
+func timedGrants(permanent []string, timed map[string]string, needExpiry bool) []TimedGrant {
 	var out []TimedGrant
 	at := map[string]int{}
 	add := func(g TimedGrant) {
@@ -62,14 +63,39 @@ func timedGrants(permanent []string, timed map[string]string) []TimedGrant {
 		if name == "" {
 			continue
 		}
-		add(readGrant(name, timed[raw]))
+		add(readGrant(name, timed[raw], needExpiry))
 	}
 	return out
 }
 
-// readGrant is the grant of name with the stored expiry stored.
-func readGrant(name, stored string) TimedGrant {
+// unreadableGrants is every entry in timed whose expiry can't be read, by
+// name, including one that timedGrants drops for a readable entry of the
+// same name under another case. Doctor reports each.
+func unreadableGrants(timed map[string]string, needExpiry bool) []TimedGrant {
+	var out []TimedGrant
+	for raw, stored := range timed {
+		if name := NormalizeRoleName(raw); name != "" {
+			if g := readGrant(name, stored, needExpiry); g.Bad {
+				out = append(out, g)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].Stored < out[j].Stored
+	})
+	return out
+}
+
+// readGrant is the grant of name with the stored expiry stored. A blank
+// one is no expiry, unless needExpiry is set, and then it is unreadable.
+func readGrant(name, stored string, needExpiry bool) TimedGrant {
 	g := TimedGrant{Name: name, Stored: strings.TrimSpace(stored)}
+	if g.Stored == "" && needExpiry {
+		g.Bad = true
+	}
 	if g.Stored != "" {
 		t, err := time.Parse(time.RFC3339, g.Stored)
 		// The zero instant would read as "never": it is no expiry anyone

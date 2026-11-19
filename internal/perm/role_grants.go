@@ -8,12 +8,23 @@ import (
 
 // RoleGrants is the roles on u's record: those it holds for good (Roles),
 // in record order, then those given until a time (ExpiringRoles), by name,
-// expired or not. A role in both counts as held for good.
+// expired or not. A role in both counts as held for good. An entry in
+// ExpiringRoles with a blank expiry grants nothing: a role held for good
+// belongs in Roles, so a blank there is a damaged record, not "never".
 func RoleGrants(u *user.User) []TimedGrant {
 	if u == nil {
 		return nil
 	}
-	return timedGrants(u.Roles, u.ExpiringRoles)
+	return timedGrants(u.Roles, u.ExpiringRoles, true)
+}
+
+// UnreadableRoleExpiries is every entry in u's ExpiringRoles whose expiry
+// can't be read, even one another entry for the same role outlasts.
+func UnreadableRoleExpiries(u *user.User) []TimedGrant {
+	if u == nil {
+		return nil
+	}
+	return unreadableGrants(u.ExpiringRoles, true)
 }
 
 // ActiveRoles is the names of the roles on u's record that count at now:

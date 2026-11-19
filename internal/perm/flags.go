@@ -115,7 +115,16 @@ func FlagGrants(u *user.User) []TimedGrant {
 	if u == nil {
 		return nil
 	}
-	return timedGrants(nil, u.NamedFlags)
+	return timedGrants(nil, u.NamedFlags, false)
+}
+
+// UnreadableFlagExpiries is every entry in u's NamedFlags whose expiry
+// can't be read, even one another entry for the same flag outlasts.
+func UnreadableFlagExpiries(u *user.User) []TimedGrant {
+	if u == nil {
+		return nil
+	}
+	return unreadableGrants(u.NamedFlags, false)
 }
 
 // FlagNamesOf is the named flags on u's record, expired or not, sorted.
@@ -184,5 +193,5 @@ func ParseFlagList(s string, roles *Roles, loc *time.Location, now time.Time, u 
 // SameFlags reports whether two NamedFlags maps grant the same flags with
 // the same stored expiries, names compared normalized.
 func SameFlags(a, b map[string]string) bool {
-	return sameGrants(timedGrants(nil, a), timedGrants(nil, b))
+	return sameGrants(timedGrants(nil, a, false), timedGrants(nil, b, false))
 }

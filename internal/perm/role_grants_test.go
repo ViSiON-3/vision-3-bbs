@@ -44,11 +44,27 @@ func TestExpiringRoles(t *testing.T) {
 		t.Errorf("RoleGrants for a role in both = %+v", g)
 	}
 	// An unreadable expiry, or the zero instant, never counts.
-	for _, stored := range []string{"soon", "0001-01-01T00:00:00Z"} {
+	// So does a blank one: a role held for good goes in Roles.
+	for _, stored := range []string{"soon", "0001-01-01T00:00:00Z", "", "  "} {
 		bad := &user.User{AccessLevel: 20, ExpiringRoles: map[string]string{"validator": stored}}
 		if CheckAt(bad, UsersValidate, Scope{}, levels, r, before).Allowed || !RoleGrants(bad)[0].Bad {
 			t.Errorf("expiry %q granted", stored)
 		}
+	}
+	// A blank flag expiry is still "never": flags keep both kinds in one map.
+	if g := FlagGrants(&user.User{NamedFlags: map[string]string{"donor": ""}}); len(g) != 1 || g[0].Bad {
+		t.Errorf("a flag with no expiry = %+v", g)
+	}
+	// Every unreadable entry is listed, one a readable alias outlasts too.
+	alias := &user.User{ExpiringRoles: map[string]string{"validator": "soon", "Validator": expiry.Format(time.RFC3339)}}
+	if g := RoleGrants(alias); len(g) != 1 || g[0].Bad {
+		t.Errorf("RoleGrants for an alias = %+v", g)
+	}
+	if bad := UnreadableRoleExpiries(alias); len(bad) != 1 || bad[0].Stored != "soon" {
+		t.Errorf("UnreadableRoleExpiries = %+v", bad)
+	}
+	if bad := UnreadableFlagExpiries(&user.User{NamedFlags: map[string]string{"donor": "soon", "Donor": ""}}); len(bad) != 1 || bad[0].Stored != "soon" {
+		t.Errorf("UnreadableFlagExpiries = %+v", bad)
 	}
 }
 

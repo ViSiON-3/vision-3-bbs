@@ -158,7 +158,8 @@ The lower half of the screen shows the following for the highlighted user:
 Sets the user's [admin roles](users/admin-roles.md): type the role names
 separated by commas or spaces, or clear the line to remove them all. A role
 can be given [until a date](users/admin-roles.md#until-a-date):
-`validator=2027-01-01`, on the board's clock; an expiry that has already
+`validator=2027-01-01`, on the board's clock, set off from the other roles
+by commas (`msgops, validator=2027-01-01`); an expiry that has already
 passed is refused, and the detail panel shows each role with its expiry, or
 as expired. `U`
 does the same for the user's [groups](users/admin-roles.md#groups). Each name
