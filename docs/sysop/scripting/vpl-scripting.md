@@ -227,7 +227,7 @@ ffmpeg -i tune.mp3 -t 120 -map_metadata -1 -fflags +bitexact -ar 22050 -ac 1 -c:
 base64 -w0 tune.wav > hello-vision3-tune.b64   # macOS: base64 -i tune.wav | tr -d '\n' > ...
 ```
 
-The door writes `ESC _ SyncTERM:A;LoadBlob;S=253;<base64> ESC \`, then `ESC _ SyncTERM:A;Queue;C=3;S=253;L ESC \` to play and `ESC _ SyncTERM:A;Flush;C=3 ESC \` to stop, the sequences the login matrix uses for its tones on other slots. A missing or non-WAV file, or a terminal that did not answer the audio query, leaves the door silent and writes no audio bytes. Bytes go to the caller at the caller's link rate: a 2 minute tune is 3.5 MB of base64, and the animation pauses while it goes.
+The door writes `ESC _ SyncTERM:A;LoadBlob;S=253;<base64> ESC \`, then `ESC _ SyncTERM:A;Queue;C=3;S=253;L ESC \` to play and `ESC _ SyncTERM:A;Flush;C=3;O=900 ESC \` to stop, the sequences the login matrix uses for its tones on other slots. A missing or non-WAV file, or a terminal that did not answer the audio query, leaves the door silent and writes no audio bytes. Bytes go to the caller at the caller's link rate: a 2 minute tune is 3.5 MB of base64, and the animation pauses while it goes.
 
 A board installed before this door has the old `HELLO` entry. To switch, copy `scripts/hello-vision3.js` and the two pictures from the release, then set the entry's `script` to `hello-vision3.js` and its `working_directory` to `scripts`.
 
