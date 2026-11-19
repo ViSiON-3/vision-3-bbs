@@ -45,9 +45,12 @@ func StripUTF8BOM(data []byte) []byte {
 
 // UserMgr manages user data (Renamed from UserManager)
 type UserMgr struct {
-	users          map[string]*User
-	mu             sync.RWMutex
-	path           string         // Path to users.json
+	users map[string]*User
+	mu    sync.RWMutex
+	path  string // Path to users.json
+	// writeUsers, when set, writes users.json in place of writeFileAtomic:
+	// a test's way to make a save fail at the real path.
+	writeUsers     func(path string, data []byte, perm os.FileMode) error
 	dataPath       string         // Path to the data directory (for callhistory.json etc)
 	newUserLevel   int            // Access level assigned to new signups (from config)
 	autoValidate   bool           // Mark new signups validated on creation (from config)

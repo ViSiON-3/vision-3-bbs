@@ -1,10 +1,11 @@
 package user
 
 import (
+	"errors"
 	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -214,14 +215,11 @@ func TestAddUserWithSavesSignupFields(t *testing.T) {
 		t.Fatalf("after reload: %+v (found %v)", u, ok)
 	}
 
-	// A save that can't be written leaves no account.
-	blocker := filepath.Join(dir, "blocked")
-	if err := os.MkdirAll(blocker, 0o750); err != nil {
-		t.Fatal(err)
-	}
-	um.path = blocker
-	if _, err := um.AddUserWith("password", "Second", "", "", func(u *User) { u.WelcomePending = true }); err == nil {
-		t.Fatal("AddUserWith succeeded with an unwritable store")
+	// A save that can't be written leaves no account, in the cache or in
+	// users.json, which keeps the accounts saved before it.
+	um.writeUsers = func(string, []byte, os.FileMode) error { return errors.New("disk full") }
+	if _, err := um.AddUserWith("password", "Second", "", "", func(u *User) { u.WelcomePending = true }); err == nil || !strings.Contains(err.Error(), "disk full") {
+		t.Fatalf("AddUserWith with a failing write: %v", err)
 	}
 	if _, ok := um.GetUser("Second"); ok {
 		t.Error("the failed account is in the cache")
@@ -231,9 +229,9 @@ func TestAddUserWithSavesSignupFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok := reloaded.GetUser("Second"); ok {
-		t.Error("the failed account is on disk")
+		t.Error("the failed account is in users.json")
 	}
-	if _, ok := reloaded.GetUser("Tester"); !ok {
-		t.Error("the failed save lost the account before it")
+	if u, ok := reloaded.GetUser("Tester"); !ok || !u.WelcomePending {
+		t.Errorf("the account saved before the failure: %+v (found %v)", u, ok)
 	}
 }
