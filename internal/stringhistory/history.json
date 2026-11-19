@@ -1909,6 +1909,27 @@
   "toastPost": [
     "|15%s|07 posted in |14%s|07"
   ],
+  "topTenCalls": [
+    "Top Ten Callers"
+  ],
+  "topTenDownloaded": [
+    "Top Ten Downloaders by Size"
+  ],
+  "topTenDownloads": [
+    "Top Ten Downloaders"
+  ],
+  "topTenNobody": [
+    "|07Nobody is on this list yet.|07\r\n"
+  ],
+  "topTenPosts": [
+    "Top Ten Posters"
+  ],
+  "topTenUploaded": [
+    "Top Ten Uploaders by Size"
+  ],
+  "topTenUploads": [
+    "Top Ten Uploaders"
+  ],
   "totalQWKAdded": [
     "|09Total Processed|08: |15|TO"
   ],

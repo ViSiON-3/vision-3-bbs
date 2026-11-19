@@ -806,5 +806,14 @@ func stringCatalog() []StringEntry {
 		{Label: "ACS Test: Width", Key: "acsTestWidthPrompt", Description: "Prompt for the width the made-up call's menus render at, for WIDTH"},
 		{Label: "ACS Test: Address", Key: "acsTestAddrPrompt", Description: "Prompt for a remote made-up call's IP address, for IP"},
 		{Label: "ACS Test: Bad Value", Key: "acsTestBadValue", Description: "Shown when a node, connection, encoding, width or address answer can't be used"},
+
+		// The Top Ten screen, RUN:TOPTEN (#956)
+		{Label: "Top Ten: Posters", Key: "topTenPosts", Description: "Title of RUN:TOPTEN posts (@TITLE@ in the TOPTEN templates). Plain text"},
+		{Label: "Top Ten: Callers", Key: "topTenCalls", Description: "Title of RUN:TOPTEN calls (@TITLE@ in the TOPTEN templates). Plain text"},
+		{Label: "Top Ten: Uploaders", Key: "topTenUploads", Description: "Title of RUN:TOPTEN uploads, by files uploaded (@TITLE@). Plain text"},
+		{Label: "Top Ten: Downloaders", Key: "topTenDownloads", Description: "Title of RUN:TOPTEN downloads, by files downloaded (@TITLE@). Plain text"},
+		{Label: "Top Ten: Upload Size", Key: "topTenUploaded", Description: "Title of RUN:TOPTEN uploaded, by bytes uploaded (@TITLE@). Plain text"},
+		{Label: "Top Ten: Download Size", Key: "topTenDownloaded", Description: "Title of RUN:TOPTEN downloaded, by bytes downloaded (@TITLE@). Plain text"},
+		{Label: "Top Ten: Nobody Yet", Key: "topTenNobody", Description: "Shown when no user has any of what the Top Ten list counts"},
 	}
 }

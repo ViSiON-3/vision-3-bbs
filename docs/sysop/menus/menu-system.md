@@ -500,6 +500,7 @@ Add `|L`, `|R`, or `|C` between the code and width specifier to control alignmen
 - Menu ANSI files (`.ANS`)
 - Prompt strings (`PROMPT1` in `.CFG`)
 - Last Caller templates (`LASTCALL.TOP`, `LASTCALL.MID`, `LASTCALL.BOT`)
+- Top Ten templates (`TOPTEN.TOP`, `TOPTEN.MID`, `TOPTEN.BOT`); see [Top Ten](#top-ten-runtopten) for their codes
 - File list templates (`FILELIST.TOP`, `FILELIST.BOT`) — see [File Areas](files/file-areas.md#file-list-templates) for file-specific codes (`@FPAGE@`, `@FTOTAL@`, `@FCONFPATH@`)
 - Message header templates — see [Header Placeholders](messages/placeholders.md) for the full message-specific code list
 
@@ -985,6 +986,52 @@ fetched, the key help (`A`, `R`) on Last Callers, and the pause prompt.
   view (`--all`); blank in the network-only one. The stock `LASTNET.BOT` is
   empty, leaving every row below the header for calls
 - `@TT@` - (`WHONET` only) Callers in all, including any that did not fit
+
+### Top Ten (`RUN:TOPTEN`)
+
+`TOPTEN` shows the board's ten users with the most of one thing, as
+ViSiON/2's Top Ten did. Its argument picks the list:
+
+| Argument | Ranks users by |
+|----------|----------------|
+| `posts` (or none) | Messages posted |
+| `calls` | Calls made |
+| `uploads` | Files uploaded |
+| `downloads` | Files downloaded |
+| `uploaded` | Bytes uploaded, shown as a size (`5.0M`) |
+| `downloaded` | Bytes downloaded, shown as a size |
+
+```json
+{
+  "KEYS": "T",
+  "CMD": "RUN:TOPTEN uploads",
+  "ACS": "*"
+}
+```
+
+Only active accounts are listed: deleted, banned (level 0) and unvalidated
+users are left out, and so is anyone with none of what the list counts.
+Users with equal totals are listed by user number. An unknown argument shows
+the posts list and is logged. When nobody is on the list yet, the screen says
+so (`topTenNobody` in `strings.json`). The titles are the `topTen...` strings.
+
+The screen is laid out by three templates in `templates/`:
+
+- `TOPTEN.TOP` - Header (displayed once)
+- `TOPTEN.MID` - Row template (displayed once per user)
+- `TOPTEN.BOT` - Footer (displayed once)
+
+`@TITLE@`, the list's title, works in all three. In `TOPTEN.MID`:
+
+- `@RK@` - Rank, 1 to 10
+- `@UN@` - Handle
+- `@GL@` - Group / location
+- `@VA@` - The user's total for the list
+
+`@CODE:N@` pads or cuts a token to N characters. `@RK@` and `@VA@` are
+right-aligned, and a negative width right-aligns any token. Without
+`TOPTEN.TOP` the title is shown alone; without `TOPTEN.MID` each row is rank,
+handle and total.
 
 ## Special Menu Names
 

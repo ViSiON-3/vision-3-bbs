@@ -60,6 +60,7 @@ See [Login sequence steps](#login-sequence-steps) at the end of this page, and [
 | --- | --- | --- | --- |
 | `SHOWSTATS` | none | The caller's statistics on `YOURSTAT.ANS`, then a pause. Same screen as the `USERSTATS` login step. | |
 | `SYSTEMSTATS` | none | System totals from the `SYSSTATS.TOP` and `.BOT` templates. | |
+| `TOPTEN` | The list: `posts` (default), `calls`, `uploads`, `downloads`, `uploaded` or `downloaded` (the last two by bytes). | The ten users with the most of it, from the `TOPTEN` templates; see [Top Ten](../menus/menu-system.md#top-ten-runtopten). Deleted, banned and unvalidated accounts are left out. ViSiON/2's `ST`. Not on a stock menu. | |
 | `LASTCALLERS` | Row limit, whole number greater than 0. Default 20. Optionally `--network` or `--all`, e.g. `20 --all`. | Recent callers from the `LASTCALL` templates. Non-numeric data falls back to 20. Hidden logins never use a row. `--network` shows [V3Net Central](v3net/central.md#whos-online-and-last-callers)'s network Last Callers instead, from the `LASTNET` templates, and `--all` this board's callers and the network's together, each row flagged `local` or with its network's name; `A` on either screen switches between the two. With no network sharing Last Callers, `--all` is the local screen, with no `A` or `R` keys. The stock main menu binds `W` to `LASTCALLERS 20 --all`. | No login check |
 | `SHOWVERSION` | none | Clears the screen and prints the version string. | |
 | `LISTUSERS` | none | Public user list from the `USERLIST` templates, alphabetical. | No login check |

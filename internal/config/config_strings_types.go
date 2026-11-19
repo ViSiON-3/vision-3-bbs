@@ -770,6 +770,15 @@ type StringsConfig struct {
 	KonfigThemeHint     string `json:"konfigThemeHint"`
 	KonfigThemeBoardTag string `json:"konfigThemeBoardTag"`
 	KonfigThemeOnlyOne  string `json:"konfigThemeOnlyOne"`
+
+	// The Top Ten screen, RUN:TOPTEN (#956).
+	TopTenPosts      string `json:"topTenPosts"`
+	TopTenCalls      string `json:"topTenCalls"`
+	TopTenUploads    string `json:"topTenUploads"`
+	TopTenDownloads  string `json:"topTenDownloads"`
+	TopTenUploaded   string `json:"topTenUploaded"`
+	TopTenDownloaded string `json:"topTenDownloaded"`
+	TopTenNobody     string `json:"topTenNobody"`
 }
 
 // GlobalStrings holds the loaded configuration.
