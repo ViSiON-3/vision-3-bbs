@@ -893,7 +893,48 @@ func reflowQuotedSplits(prefix string, lines []string, max int) ([]string, []boo
 	for i, line := range lines {
 		_, bodies[i] = SplitQuotePrefix(line)
 	}
-	return wrapQuotedSplits(prefix+inner, strings.Join(bodies, " "), max)
+	return wrapQuotedSplits(prefix+inner, joinQuotedBodies(bodies), max)
+}
+
+// joinQuotedBodies joins a paragraph's source lines into one text. Lines
+// are joined with a space, except where the author hyphenated a word across
+// the break (see hyphenBreak): there the two halves are joined with no space
+// and the hyphen kept, so "net-" / "work" reads "net-work" and "well-" /
+// "known" "well-known" (#553). Telling a hyphen that was only a line break
+// from one in a compound word would take a dictionary; keeping it never
+// loses a hyphen the author meant.
+func joinQuotedBodies(bodies []string) string {
+	var b strings.Builder
+	for i, body := range bodies {
+		if i+1 < len(bodies) && hyphenBreak(body, bodies[i+1]) {
+			b.WriteString(strings.TrimRight(body, " \t"))
+			bodies[i+1] = strings.TrimLeft(bodies[i+1], " \t")
+			continue
+		}
+		b.WriteString(body)
+		if i+1 < len(bodies) {
+			b.WriteByte(' ')
+		}
+	}
+	return b.String()
+}
+
+// hyphenBreak reports whether line ends in a word hyphenated across the
+// break into next: its last word ends in one hyphen after a letter, and next
+// starts with a lower-case letter. A dash (a lone - or --), a hyphen after a
+// digit or other mark, and a next line starting with a capital or anything
+// else are left joined with a space.
+func hyphenBreak(line, next string) bool {
+	line = strings.TrimRight(line, " \t")
+	if !strings.HasSuffix(line, "-") {
+		return false
+	}
+	before := []rune(strings.TrimSuffix(line, "-"))
+	if len(before) == 0 || !unicode.IsLetter(before[len(before)-1]) {
+		return false
+	}
+	first, _ := utf8.DecodeRuneInString(strings.TrimLeft(next, " \t"))
+	return unicode.IsLower(first)
 }
 
 // quoteInnerPrefix returns the quote prefix a paragraph's lines already carry
