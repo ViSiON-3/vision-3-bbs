@@ -315,3 +315,33 @@ func TestQuoteModeUndoRestoresLineAboveFlag(t *testing.T) {
 		t.Errorf("buffer = %q", got)
 	}
 }
+
+// A word the author hyphenated across a line break is rejoined with its
+// hyphen and no space (#553); a dash, a hyphen after a digit and a capital on
+// the next line keep the space.
+func TestReflowHyphenatedWord(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		lines []string
+		want  string
+	}{
+		{"broken word", []string{"Sh> the whole net-", "Sh> work is down"}, "the whole net-work is down"},
+		{"compound word", []string{"Sh> a well-", "Sh> known board"}, "a well-known board"},
+		{"trailing blanks", []string{"Sh> the net-  ", "Sh>   work"}, "the net-work"},
+		{"three lines", []string{"Sh> super-", "Sh> cali-", "Sh> fragile"}, "super-cali-fragile"},
+		{"lone dash", []string{"Sh> one thing -", "Sh> and another"}, "one thing - and another"},
+		{"double dash", []string{"Sh> one thing--", "Sh> and another"}, "one thing-- and another"},
+		{"digit", []string{"Sh> from 1990-", "Sh> to now"}, "from 1990- to now"},
+		{"capital next", []string{"Sh> the end-", "Sh> New line"}, "the end- New line"},
+		{"accented", []string{"Sh> über-", "Sh> ëxample"}, "über-ëxample"},
+	} {
+		got := reflowQuoted(" ", tc.lines, 79)
+		if len(got) != 1 {
+			t.Errorf("%s: %q, want one line", tc.name, got)
+			continue
+		}
+		if _, body := SplitQuotePrefix(got[0]); body != tc.want {
+			t.Errorf("%s: %q, want %q", tc.name, body, tc.want)
+		}
+	}
+}

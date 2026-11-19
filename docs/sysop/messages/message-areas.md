@@ -707,7 +707,10 @@ Three things happen to the quoted text:
   line starts a new paragraph, so a quote never closes up over omitted text.
   Backspace takes the last line back out of its paragraph. A nested quote
   prefix (`Sh> `) is carried onto every wrapped line (` Bu> Sh> …`), with the
-  one leading space only at the start.
+  one leading space only at the start. A word hyphenated across a source line
+  break is joined back up with its hyphen and no space: `net-` / `work` gives
+  `net-work`, and `well-` / `known` gives `well-known`. A dash (`-` or `--`), a
+  hyphen after a digit, or a capital starting the next line keeps the space.
 - **Quoted paragraphs reflow under their prefix while editing.** Typing,
   Backspace, Delete, Ctrl-K and Ctrl-B refill a paragraph up to the margin, and
   words can move back onto the line above. In a quoted paragraph the prefix
