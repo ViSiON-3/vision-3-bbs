@@ -123,6 +123,33 @@ func (st *runLoopState) runMenuScript(menuRec *MenuRecord, commands []CommandRec
 	return line, act, nil, handled
 }
 
+// unmatchedScriptAnswer handles an answer from the menu's script that
+// matches no command. When the menu has no FALLBACK, or its FALLBACK is the
+// menu itself, the menu would come straight back and run the script again
+// with nothing from the caller in between, so a script that always answers
+// that way would never stop. Such an answer is not a usable one: the next
+// showing of the menu skips the script and shows the menu's own screen and
+// prompt, and true is returned. A FALLBACK to another menu is left to the
+// run loop (false).
+func (st *runLoopState) unmatchedScriptAnswer(menuRec *MenuRecord) bool {
+	if fallback := strings.TrimSpace(menuRec.Fallback); fallback != "" && !strings.EqualFold(fallback, st.currentMenuName) {
+		return false
+	}
+	code, _ := st.menuScriptDoor(menuRec, true)
+	st.warnMenuScriptOnce(code, "menu script answer matched no command, menu shows its screen", "answer", st.userInput)
+	st.scriptOff = st.currentMenuName
+	return true
+}
+
+// warnMenuScriptOnce logs msg for the current menu and its script's door
+// code or theme script name the first time it comes up, so a menu shown on
+// every visit does not flood the log.
+func (st *runLoopState) warnMenuScriptOnce(code, msg string, attrs ...any) {
+	if _, seen := menuScriptWarned.LoadOrStore(st.currentMenuName+"\x00"+code+"\x00"+msg, struct{}{}); !seen {
+		slog.Warn(msg, append([]any{"menu", st.currentMenuName, "door", code}, attrs...)...)
+	}
+}
+
 // menuScriptReady returns the v3_script door, or theme script, that draws
 // menuRec for the current caller and the words to add to its arguments. ok
 // is false when there is no caller, the menu has no script, or the door or
@@ -139,10 +166,7 @@ func (st *runLoopState) menuScriptReady(menuRec *MenuRecord, themed bool) (code 
 		return "", config.DoorConfig{}, nil, false
 	}
 	warn := func(reason string, attrs ...any) {
-		if _, seen := menuScriptWarned.LoadOrStore(st.currentMenuName+"\x00"+code+"\x00"+reason, struct{}{}); !seen {
-			slog.Warn("menu script not run, menu shows its screen: "+reason,
-				append([]any{"menu", st.currentMenuName, "door", code}, attrs...)...)
-		}
+		st.warnMenuScriptOnce(code, "menu script not run, menu shows its screen: "+reason, attrs...)
 	}
 	doorConfig, ok = st.e.GetDoorConfig(code)
 	if isThemeScript(code) {

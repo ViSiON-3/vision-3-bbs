@@ -48,6 +48,11 @@ type testSession struct {
 	// ctx is what Context returns; nil unless a test needs one, as a
 	// script door does.
 	ctx ssh.Context
+
+	// inMu serialises reads of in. An InputHandler stopped without a read
+	// interrupt, which a testSession lacks, may still be reading when the
+	// next reader starts.
+	inMu sync.Mutex
 }
 
 type outputHook struct {
@@ -60,7 +65,11 @@ func newTestSession(input string) *testSession {
 	return &testSession{in: bytes.NewReader([]byte(input))}
 }
 
-func (ts *testSession) Read(p []byte) (int, error) { return ts.in.Read(p) }
+func (ts *testSession) Read(p []byte) (int, error) {
+	ts.inMu.Lock()
+	defer ts.inMu.Unlock()
+	return ts.in.Read(p)
+}
 
 // Close records that the BBS hung up on the caller.
 func (ts *testSession) Close() error {

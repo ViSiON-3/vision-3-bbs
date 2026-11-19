@@ -549,8 +549,17 @@ The menu shows its `.ANS` and prompt as usual when the door or theme script does
 door, is not allowed for the caller by its level or ACS, is busy, or its file is missing; when the
 script fails; and when it ends without an answer or with an empty one. A missing door or file, or a
 door that is not a `v3_script` door, is logged once per menu; a failed or busy script is logged each
-time it is tried. A caller refused by level or ACS, and an empty answer, are not logged. Before
-login no script runs. A chained command line (`M;N`) runs its later commands
+time it is tried. A caller refused by level or ACS, and an empty answer, are not logged. The menu
+also shows its `.ANS` and prompt for that visit when the script answers a command line that matches
+no command and the menu's `FALLBACK` is empty or names the menu itself; the script runs again only
+after the caller has entered something at that prompt. This is logged once per menu and script:
+
+```text
+{"level":"WARN","msg":"menu script answer matched no command, menu shows its screen","menu":"MAIN","door":"DRAW","answer":"ZZZ"}
+```
+
+A `FALLBACK` that names another menu takes the caller there, as for a typed command that matches
+nothing. Before login no script runs. A chained command line (`M;N`) runs its later commands
 without drawing the menus in between.
 
 Built-in screens hand their drawing to a script the same way. Each does so only when its own

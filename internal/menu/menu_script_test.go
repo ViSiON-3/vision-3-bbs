@@ -159,3 +159,52 @@ func TestMenuViewShortcutsAreTheKeysMatchCommandAccepts(t *testing.T) {
 		t.Errorf("shortcuts %q, want %q", got, want)
 	}
 }
+
+// unmatchedScriptSrc counts its runs in v3.data and answers ZZZ, a key no
+// menu here has, until its third run, then Q, so that a loop of runs ends.
+const unmatchedScriptSrc = `var n = (v3.data.get("runs") || 0) + 1;
+v3.data.set("runs", n);
+v3.console.print("[run]");
+v3.prompt.answer(n < 3 ? "ZZZ" : "Q");`
+
+// A script answering a key the menu does not have, where that would bring
+// the same menu straight back, runs once for the visit: the menu then shows
+// its own screen and prompt, where the caller's Q logs off. This holds for a
+// script named as a door and for one in the theme's scripts/ directory. A
+// FALLBACK to another menu still takes the caller there.
+func TestScriptedMenuUnmatchedAnswer(t *testing.T) {
+	cases := []struct {
+		name, script, fallback string
+		wantScreen             string
+	}{
+		{"door, no fallback", "DRAW", "", "[art]"},
+		{"door, fallback to itself", "DRAW", "main", "[art]"},
+		{"theme script, no fallback", "loop.js", "", "[art]"},
+		{"theme script, fallback to itself", "loop.js", "MAIN", "[art]"},
+		{"door, fallback to another menu", "DRAW", "SUB", "[sub]"},
+		{"theme script, fallback to another menu", "loop.js", "SUB", "[sub]"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newMenuEnv(t)
+			env.sessionContext = true
+			dir := filepath.Join(t.TempDir(), "scripts")
+			writeThemeFile(t, []byte(unmatchedScriptSrc), dir, "draw.js")
+			env.e.SetDoorRegistry(map[string]config.DoorConfig{
+				"DRAW": {Type: "v3_script", Script: "draw.js", WorkingDirectory: dir},
+			})
+			m := execcovNewMenus(t, env)
+			writeThemeFile(t, []byte(unmatchedScriptSrc), m.dir, "scripts", "loop.js")
+			m.menu("MAIN", MenuRecord{Script: tc.script, Fallback: tc.fallback, UsePrompt: true, Prompt1: "[prompt]"}, "[art]",
+				CommandRecord{Keys: "Q", Command: "LOGOFF"})
+			m.menu("SUB", MenuRecord{}, "[sub]", CommandRecord{Keys: "Q", Command: "LOGOFF"})
+			r := execcovRun(env, execcovCall{user: env.caller, start: "MAIN", input: "Q\r"})
+			if n := strings.Count(r.text(), "[run]"); n != 1 || !r.has(tc.wantScreen) || r.next != "LOGOFF" {
+				t.Errorf("script ran %d times, next=%q\n%s", n, r.next, r.text())
+			}
+			if tc.wantScreen == "[art]" && !r.has("[prompt]") {
+				t.Errorf("menu prompt not shown\n%s", r.text())
+			}
+		})
+	}
+}
