@@ -16,12 +16,19 @@ import (
 const (
 	matrixMoveToneFile   = "PDMATRIX.MOVE.WAV"
 	matrixChooseToneFile = "PDMATRIX.CHOOSE.WAV"
+	// matrixMusicFile is a tune played once while the caller is on the
+	// matrix, in the same format as the tones. When it ends the cube
+	// comes to rest.
+	matrixMusicFile = "PDMATRIX.MUSIC.WAV"
 )
 
 // maxMatrixTone bounds a tone file the matrix sends. It is far inside the
 // terminals' own limits measured in testing (IcyTERM takes a LoadBlob of
 // up to 32 MiB) and still a second and more of sound in the board's format.
 const maxMatrixTone = 64 << 10
+
+// maxMatrixMusic bounds the tune: three minutes of the board's format.
+const maxMatrixMusic = 4 << 20
 
 // Where the tones live in the terminal. SyncTERM and IcyTERM have 256
 // sample slots; Queue in SyncTERM hands a slot's sound to the mixer and
@@ -36,6 +43,11 @@ const (
 	matrixToneMove     = 0
 	matrixToneChoose   = 1
 	matrixToneSampleHz = 22050
+	// The tune is kept in its own slot, copied to a play slot when it
+	// starts, and played on a channel of its own so a tone never cuts it.
+	matrixMusicSlot     = 248
+	matrixMusicPlaySlot = 249
+	matrixMusicChannel  = 3
 )
 
 // matrixTones plays the matrix's tones on one session. A nil *matrixTones
@@ -43,6 +55,9 @@ const (
 type matrixTones struct {
 	w      io.Writer
 	loaded [2]bool // by matrixToneMove, matrixToneChoose
+	tune   []byte  // the tune, read and not yet sent
+	length float64 // the tune's length in seconds
+	music  bool    // the tune was sent and may still be playing
 }
 
 // loadMatrixTones sends the theme's tones to s's terminal, through w, if
@@ -58,7 +73,7 @@ func (e *MenuExecutor) loadMatrixTones(s ssh.Session, w io.Writer, node int) *ma
 		name string
 		slot int
 	}{{matrixMoveToneFile, matrixMoveSlot}, {matrixChooseToneFile, matrixChooseSlot}} {
-		b, ok := e.matrixToneFile(f.name, node)
+		b, ok := e.matrixToneFile(f.name, maxMatrixTone, node)
 		if !ok {
 			continue
 		}
@@ -68,16 +83,49 @@ func (e *MenuExecutor) loadMatrixTones(s ssh.Session, w io.Writer, node int) *ma
 		}
 		t.loaded[i] = true
 	}
-	if !t.loaded[matrixToneMove] && !t.loaded[matrixToneChoose] {
+	// The tune is read now and sent by startMusic, once the picture is up.
+	if b, ok := e.matrixToneFile(matrixMusicFile, maxMatrixMusic, node); ok {
+		samples, _ := matrixToneSamples(b)
+		t.tune, t.length = b, float64(samples)/matrixToneSampleHz
+	}
+	if !t.loaded[matrixToneMove] && !t.loaded[matrixToneChoose] && t.tune == nil {
 		return nil
 	}
 	return t
 }
 
+// startMusic sends the tune and plays it through once. The matrix calls it
+// when its picture has been drawn, so the tune's bytes are not ahead of the
+// picture's on the way to the caller. It returns the tune's length in
+// seconds, or zero if there was none to start.
+func (t *matrixTones) startMusic() float64 {
+	if t == nil || t.tune == nil {
+		return 0
+	}
+	cmd := fmt.Sprintf("\x1b_SyncTERM:A;LoadBlob;S=%d;%s\x1b\\\x1b_SyncTERM:A;Copy;S=%d;D=%d\x1b\\\x1b_SyncTERM:A;Queue;C=%d;S=%d\x1b\\",
+		matrixMusicSlot, base64.StdEncoding.EncodeToString(t.tune),
+		matrixMusicSlot, matrixMusicPlaySlot, matrixMusicChannel, matrixMusicPlaySlot)
+	t.tune = nil
+	if _, err := io.WriteString(t.w, cmd); err != nil {
+		return 0
+	}
+	t.music = true
+	return t.length
+}
+
+// stopMusic ends the tune, if it was started. The tones are untouched.
+func (t *matrixTones) stopMusic() {
+	if t == nil || !t.music {
+		return
+	}
+	t.music = false
+	_, _ = fmt.Fprintf(t.w, "\x1b_SyncTERM:A;Flush;C=%d\x1b\\", matrixMusicChannel) // best-effort sound
+}
+
 // matrixToneFile reads a tone from the theme. A missing file is no tone;
 // one that is not in the board's format, or too large, is logged and is no
 // tone either, since the terminal said only that it plays that format.
-func (e *MenuExecutor) matrixToneFile(name string, node int) ([]byte, bool) {
+func (e *MenuExecutor) matrixToneFile(name string, limit int64, node int) ([]byte, bool) {
 	path, _, ok, err := e.Menus().Locate("ansi", name)
 	if err != nil {
 		slog.Warn("resolving matrix tone", "node", node, "file", name, "error", err)
@@ -92,9 +140,9 @@ func (e *MenuExecutor) matrixToneFile(name string, node int) ([]byte, bool) {
 		return nil, false
 	}
 	defer func() { _ = f.Close() }()
-	b, err := io.ReadAll(io.LimitReader(f, maxMatrixTone+1))
-	if err != nil || len(b) > maxMatrixTone {
-		slog.Warn("matrix tone too large or unreadable", "node", node, "file", path, "limit", maxMatrixTone, "error", err)
+	b, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err != nil || int64(len(b)) > limit {
+		slog.Warn("matrix tone too large or unreadable", "node", node, "file", path, "limit", limit, "error", err)
 		return nil, false
 	}
 	if _, ok := matrixToneSamples(b); !ok {

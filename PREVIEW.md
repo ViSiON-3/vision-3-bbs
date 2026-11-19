@@ -18,7 +18,7 @@ are not in it, and `.github/` is identical to `main`'s.
 | Pictures (`v3.gfx.image`) and a pixel canvas (`v3.gfx.canvas`), sent as sixel | [v3.gfx](docs/sysop/scripting/vpl-scripting.md#v3gfx) |
 | Sixel, audio and encoding read from the terminal's answers at connect, never its name. A sixel or audio answer that comes after the 750 ms wait still counts, and so does a late encoding answer while the login matrix is up | [v3.gfx](docs/sysop/scripting/vpl-scripting.md#v3gfx), [Encoding](docs/sysop/advanced/encoding.md), [Pre-Login Matrix](docs/sysop/menus/menu-system.md#pre-login-matrix-screen) |
 | Two shipped scripted themes: ViSiON3-Sixel (`menus/vision3`) and PMS (`menus/pms`) | [menus/vision3/README.md](menus/vision3/README.md), [menus/pms/README.md](menus/pms/README.md) |
-| Pre-login screens (connection check, login matrix) owned by the board in `prelogin/`, with a picture, a turning cube and two tones; two example sets in `templates/` | [Pre-login screens](docs/sysop/configuration/adding-a-theme.md#pre-login-screens) |
+| Pre-login screens (connection check, login matrix) owned by the board in `prelogin/`, with a picture, a turning cube, two tones and an optional tune; two example sets in `templates/` | [Pre-login screens](docs/sysop/configuration/adding-a-theme.md#pre-login-screens) |
 | Per-theme `strings.json`, a theme name and description in Konfig, `./vision3 doctor --theme` | [Theme Strings](docs/sysop/configuration/configuration.md#theme-strings), [Name and description](docs/sysop/configuration/adding-a-theme.md#name-and-description), [Checking a theme](docs/sysop/configuration/adding-a-theme.md#checking-a-theme) |
 | A test-account flag: its logins leave no caller history and are not announced | [Test Accounts](docs/sysop/users/user-management.md#test-accounts) |
 | Panic recovery in session goroutines (`internal/safego`) | none |
@@ -131,6 +131,9 @@ scripted sixel terminal on the same machine the ViSiON/3 matrix sent about
 The matrix tones are sent only to a terminal that answers yes to both audio
 queries (libsndfile present, 8-bit WAV playable). Neither terminal above
 answers yes. SyncTERM 1.10b on macOS does, and I have heard the tones there.
+The PMS set also plays a 28-second tune of mine, "Pirate Mind Ship", once
+the picture has drawn its opening; when it ends the cube stops turning and
+faces you.
 
 ## What a stock board lacks for the PMS theme
 

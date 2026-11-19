@@ -136,17 +136,20 @@ type matrixScene struct {
 	polygonPrevious  [2][]int16
 	textCubePrevious []int16
 	scrollFrames     int // frames drawn since the scrolling line began
-	selectionChange  float64
-	selectionActive  bool
-	activation       float64
-	weldLight        float64
-	cache            map[color.NRGBA]int16
-	burn             *matrixLogoBurn // the main menu's logo effects, made on first use
-	art              image.Rectangle // the picture without its black background
-	col              int
-	config           matrixEffectsConfig
-	node             int
-	seed             float64
+	// settleAt is the scene time at which the tune ends and the cube comes
+	// to rest facing the caller; zero while there is no tune.
+	settleAt        float64
+	selectionChange float64
+	selectionActive bool
+	activation      float64
+	weldLight       float64
+	cache           map[color.NRGBA]int16
+	burn            *matrixLogoBurn // the main menu's logo effects, made on first use
+	art             image.Rectangle // the picture without its black background
+	col             int
+	config          matrixEffectsConfig
+	node            int
+	seed            float64
 }
 
 // matrixEffects reads PDMATRIX.EFX. ok is false when the menu set has none,
@@ -666,6 +669,7 @@ func absInt(n int) int {
 func (s *matrixScene) cubeEffects(magnet float64) matrixCubeEffects {
 	fx := s.config.cubeEffects()
 	fx.magnet, fx.weld, fx.activate = magnet, s.weldLight, s.activation
+	fx.settleAt = s.settleAt
 	return fx
 }
 
@@ -708,6 +712,14 @@ func (s *matrixScene) drawCenteredMatrix(t *term.Terminal, elapsed float64, opti
 // lets the picture behind it show.
 const matrixTintedGlassLight = 80
 
+// The scene's opening: the logo fades in over matrixFadeSeconds, then the
+// cube rises; at matrixIntroSeconds both are in place and the scrolling
+// line starts.
+const (
+	matrixFadeSeconds  = 1.5
+	matrixIntroSeconds = matrixFadeSeconds + 2.8
+)
+
 // centeredMatrixFrame is the scene's 640x368 picture at elapsed seconds, with
 // the scrolling line showing the board time now.
 func (s *matrixScene) centeredMatrixFrame(elapsed float64, options []LightbarOption, selected int, now time.Time) *image.NRGBA {
@@ -723,7 +735,7 @@ func (s *matrixScene) centeredMatrixFrame(elapsed float64, options []LightbarOpt
 	place := matrixCubeLayout(s.config.Layout, s.source.Bounds(), s.art)
 	logoLeft, logoTop := place.logoLeft, place.logoTop
 	// Fade the centered logo up from black before introducing the cube.
-	const fadeDuration = 1.5
+	const fadeDuration = matrixFadeSeconds
 	fade := math.Max(0, math.Min(1, elapsed/fadeDuration))
 	fade = fade * fade * (3 - 2*fade)
 	if fade >= 1 {
@@ -803,7 +815,7 @@ func (s *matrixScene) centeredMatrixFrame(elapsed float64, options []LightbarOpt
 	if s.weldFrame != nil && fade >= 1 {
 		draw.Draw(frame, image.Rect(logoLeft, logoTop, logoLeft+s.weldFrame.Bounds().Dx(), logoTop+s.weldFrame.Bounds().Dy()), s.weldFrame, image.Point{}, draw.Over)
 	}
-	if elapsed >= fadeDuration+2.8 {
+	if elapsed >= matrixIntroSeconds {
 		s.scrollFrames++
 		drawMatrixScroller(frame, float64(s.scrollFrames)*3/42, s.node, now, s.config.cubeTint())
 	}

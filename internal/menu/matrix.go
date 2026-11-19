@@ -145,6 +145,9 @@ func (e *MenuExecutor) RunMatrixScreen(
 	// the last: the whole picture after a repaint, else the scene's next
 	// frame. It sends nothing while an answer is due; the scene then keeps
 	// the last frame sent as the one to draw the next from.
+	// frameSent is set by picture when it sends a frame, which it does only
+	// when the terminal has answered for the one before last.
+	frameSent := false
 	picture := func() error {
 		if scene == nil && (!repaint || len(graphic) == 0) {
 			repaint = false
@@ -153,6 +156,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 		if !frames.Begin() {
 			return nil
 		}
+		frameSent = true
 		var err error
 		if repaint {
 			repaint = false
@@ -198,6 +202,12 @@ func (e *MenuExecutor) RunMatrixScreen(
 	}
 	// Loaded after the first draw, so the screen does not wait for them.
 	tones := pre.loadMatrixTones(s, terminal, nodeNumber)
+	// The tune belongs to the matrix: it stops when the caller is handed on.
+	defer func() { tones.stopMusic() }()
+	if scene == nil {
+		// No animated picture to wait for.
+		tones.startMusic()
+	}
 
 	// Apply the pre-login idle timeout on the shared InputHandler.
 	// nil = no authenticated user yet; sysop exemption applies post-login only.
@@ -230,8 +240,19 @@ func (e *MenuExecutor) RunMatrixScreen(
 			}
 		}
 		if errors.Is(err, editor.ErrReadPoll) {
+			frameSent = false
 			if err := picture(); err != nil {
 				return "DISCONNECT", nil, err
+			}
+			// The tune waits for the picture: it starts with the first
+			// frame sent after the logo has faded in and the cube has
+			// risen, so the terminal is keeping up by then.
+			if now := time.Since(animationStart).Seconds(); frameSent && (scene == nil || now >= matrixIntroSeconds) {
+				// When the tune ends the cube stops turning and faces
+				// the caller.
+				if length := tones.startMusic(); length > 0 && scene != nil {
+					scene.settleAt = now + length
+				}
 			}
 			continue
 		}

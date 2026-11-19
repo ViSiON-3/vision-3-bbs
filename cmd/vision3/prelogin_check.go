@@ -42,6 +42,7 @@ func checkPrelogin(root string, serverCfg config.ServerConfig, serverErr error, 
 		{"ansi", "PDMATRIX.EFX", false, ""},
 		{"ansi", "PDMATRIX.MOVE.WAV", false, ""},
 		{"ansi", "PDMATRIX.CHOOSE.WAV", false, ""},
+		{"ansi", "PDMATRIX.MUSIC.WAV", false, ""},
 	}
 	if serverErr == nil && serverCfg.EnableChallengeGate && serverCfg.ChallengeGateFile != "" {
 		files = append(files, preloginFile{"ansi", serverCfg.ChallengeGateFile, true, "callers get the built-in connection check prompt"})

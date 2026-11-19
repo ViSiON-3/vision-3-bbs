@@ -3,6 +3,7 @@ package menu
 import (
 	"encoding/base64"
 	"encoding/binary"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -273,5 +274,99 @@ func TestMatrixToneSamplesAccepts(t *testing.T) {
 		if n, ok := matrixToneSamples(tc.wav); !ok || n != tc.want {
 			t.Errorf("%s: matrixToneSamples = %d, %v; want %d, true", tc.name, n, ok, tc.want)
 		}
+	}
+}
+
+// The tune is loaded once, played once on its own channel, and stopped
+// when the matrix hands the caller on.
+func TestMatrixMusicLoopsAndStops(t *testing.T) {
+	files := validTones()
+	files[matrixMusicFile] = testWAV(1, 1, 22050, 8, 9000)
+	r := runSoundMatrix(t, true, files, keyUp+"\r")
+	if r.err != nil || r.next != "DISCONNECT" {
+		t.Fatalf("matrix action=%q err=%v", r.next, r.err)
+	}
+	start := apcAudio + "LoadBlob;S=248;" + base64.StdEncoding.EncodeToString(files[matrixMusicFile]) + "\x1b\\" +
+		apcAudio + "Copy;S=248;D=249\x1b\\" + apcAudio + "Queue;C=3;S=249\x1b\\"
+	stop := apcAudio + "Flush;C=3\x1b\\"
+	if got := strings.Count(r.raw, start); got != 1 {
+		t.Fatalf("tune loaded and played %d times, want once", got)
+	}
+	if got := strings.Count(r.raw, stop); got != 1 {
+		t.Fatalf("tune stopped %d times, want once", got)
+	}
+	if strings.Index(r.raw, stop) < strings.Index(r.raw, start) {
+		t.Error("the tune was stopped before it started")
+	}
+	// The choose tone still plays over it, on its own channel.
+	if !strings.Contains(r.raw, playChooseTone) {
+		t.Error("the choose tone did not play")
+	}
+}
+
+func TestMatrixMusicNotSent(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		audio bool
+		tune  []byte
+	}{
+		{"no audio", false, testWAV(1, 1, 22050, 8, 9000)},
+		{"16-bit", true, testWAV(1, 1, 22050, 16, 9000)},
+		{"stereo", true, testWAV(1, 2, 22050, 8, 9000)},
+		{"over the limit", true, testWAV(1, 1, 22050, 8, maxMatrixMusic)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			files := validTones()
+			files[matrixMusicFile] = tc.tune
+			r := runSoundMatrix(t, tc.audio, files, "D")
+			if r.err != nil || r.next != "DISCONNECT" {
+				t.Fatalf("matrix action=%q err=%v", r.next, r.err)
+			}
+			for _, part := range []string{"LoadBlob;S=248", "Queue;C=3", "Flush;C=3"} {
+				if strings.Contains(r.raw, part) {
+					t.Errorf("%q was sent", part)
+				}
+			}
+		})
+	}
+}
+
+func TestPMSExampleMatrixMusic(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "templates", "prelogin-example-pms", "ansi", matrixMusicFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := matrixToneSamples(b); !ok {
+		t.Errorf("%s is not WAV, 8-bit unsigned PCM, 22050 Hz, mono", matrixMusicFile)
+	}
+	if len(b) > maxMatrixMusic {
+		t.Errorf("%s is %d bytes, over the %d the matrix sends", matrixMusicFile, len(b), maxMatrixMusic)
+	}
+}
+
+// After settleAt the cube stops turning and comes to rest with a face
+// square to the caller, and stays there.
+func TestMatrixCubeSettlesSquare(t *testing.T) {
+	const at = 20.0
+	y0, p0, r0 := matrixCubeAngles(at)
+	if p0 == 0 || r0 == 0 || math.Mod(y0, math.Pi/2) == 0 {
+		t.Fatal("the test needs a cube that is mid-turn at settleAt")
+	}
+	if y, p, r := matrixCubePose(at-1, at); y == 0 || p == 0 || r == 0 {
+		t.Error("the cube is at rest before settleAt")
+	}
+	for _, later := range []float64{matrixSettleSeconds, matrixSettleSeconds + 7.3, 600} {
+		yaw, pitch, roll := matrixCubePose(at+later, at)
+		quarter := yaw / (math.Pi / 2)
+		if pitch != 0 || roll != 0 || math.Abs(quarter-math.Round(quarter)) > 1e-9 {
+			t.Errorf("%.1f s after settleAt: yaw %.4f pitch %.4f roll %.4f, want a face square on", later, yaw, pitch, roll)
+		}
+		if math.Abs(yaw-y0) > math.Pi/4+1e-9 {
+			t.Errorf("%.1f s after settleAt: the cube turned %.3f to settle, more than to its nearest face", later, yaw-y0)
+		}
+	}
+	// With no settleAt the pose is the free turn.
+	if y, p, r := matrixCubePose(at+5, 0); y == y0 || p == p0 || r == r0 {
+		t.Error("a cube with no settleAt stopped")
 	}
 }

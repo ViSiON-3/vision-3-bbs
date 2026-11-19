@@ -701,12 +701,13 @@ is drawn again once with it, keeping the highlighted choice, and the board logs
 
 ### Sounds
 
-`prelogin/` may add two tones beside `PDMATRIX.ANS`:
+`prelogin/` may add two tones and a tune beside `PDMATRIX.ANS`:
 
 | File | Played |
 | --- | --- |
 | `ansi/PDMATRIX.MOVE.WAV` | when the highlight moves to another choice |
 | `ansi/PDMATRIX.CHOOSE.WAV` | when Enter, a hot key or a number picks a choice, before the matrix acts on it |
+| `ansi/PDMATRIX.MUSIC.WAV` | once, while the caller is on the matrix |
 
 They are sent only to a terminal that said at connect that libsndfile is present
 and that it plays WAV with 8-bit unsigned PCM (SyncTERM 1.10 nightlies, IcyTERM
@@ -720,6 +721,17 @@ seconds of it (about 44 KB):
 ```sh
 ffmpeg -i input.wav -t 2 -ac 1 -ar 22050 -c:a pcm_u8 -map_metadata -1 PDMATRIX.MOVE.WAV
 ```
+
+The tune is in the same format and may be up to 4 MiB, a little over three
+minutes. It is sent once the picture has drawn its opening (at once on a
+matrix with no animated picture) and plays through once, on a channel of
+its own so the tones play over it. When it ends the cube stops turning and
+comes to rest with a face square to the caller. It is cut off when the
+matrix hands the caller on. The whole file is sent to each caller whose
+terminal plays sound, so a long tune is a long upload on a slow link. Trim
+the silence from both ends of the file; an MP3 decoded to WAV has some at
+each end, and the cube would wait for it.
+
 
 Check that the result is no larger than 64 KiB (65,536 bytes); about 2.9
 seconds fit.

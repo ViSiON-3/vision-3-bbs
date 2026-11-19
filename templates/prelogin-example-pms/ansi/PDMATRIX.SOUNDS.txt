@@ -12,3 +12,10 @@ No attribution required.
 
 Converted to WAV, 8-bit unsigned PCM, 22050 Hz, mono; leading and trailing
 silence trimmed; peak set to 0.8.
+
+Login matrix tune
+
+PDMATRIX.MUSIC.WAV   "Pirate Mind Ship", 28 seconds, played once
+
+Made by Jim McBride with Suno for Pirate Mind Station.
+Converted to WAV, 8-bit unsigned PCM, 22050 Hz, mono.

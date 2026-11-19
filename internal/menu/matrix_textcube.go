@@ -30,6 +30,35 @@ type matrixCubeEffects struct {
 	// pixelAspect is the height of a screen pixel over its width; zero
 	// means square pixels.
 	pixelAspect float64
+	// settleAt, when above zero, is the scene time at which the cube stops
+	// turning: over the next matrixSettleSeconds it comes to rest with its
+	// nearest face square to the caller.
+	settleAt float64
+}
+
+// matrixSettleSeconds is how long the cube takes to come to rest.
+const matrixSettleSeconds = 1.6
+
+// matrixCubePose is the cube's yaw, pitch and roll at elapsed seconds. With
+// settleAt above zero the turn stops where it was then and eases, over
+// matrixSettleSeconds, to the nearest face, level and upright.
+func matrixCubePose(elapsed, settleAt float64) (yaw, pitch, roll float64) {
+	if settleAt <= 0 || elapsed <= settleAt {
+		return matrixCubeAngles(elapsed)
+	}
+	yaw, pitch, roll = matrixCubeAngles(settleAt)
+	k := math.Min(1, (elapsed-settleAt)/matrixSettleSeconds)
+	k = k * k * (3 - 2*k)
+	target := math.Round(yaw/(math.Pi/2)) * (math.Pi / 2)
+	return yaw + (target-yaw)*k, pitch * (1 - k), roll * (1 - k)
+}
+
+// matrixCubeAngles is the cube's yaw, pitch and roll at elapsed seconds
+// while it turns freely.
+func matrixCubeAngles(elapsed float64) (yaw, pitch, roll float64) {
+	return elapsed*.34 + .18*math.Sin(elapsed*.19),
+		.16 + .22*math.Sin(elapsed*.21),
+		.12*math.Sin(elapsed*.17) + .06*math.Sin(elapsed*.43)
 }
 
 func matrixTextCube(elapsed float64, options []LightbarOption, selected int, extras ...matrixCubeEffects) *image.NRGBA {
@@ -114,13 +143,11 @@ func matrixTextCube(elapsed float64, options []LightbarOption, selected int, ext
 	}
 	// Use a slow, continuous turn: each of the six faces carries the same
 	// choices, so a fresh face comes into view as the previous one turns away.
-	yaw := elapsed*.34 + .18*math.Sin(elapsed*.19)
+	yaw, pitch, roll := matrixCubePose(elapsed, fx.settleAt)
 	if fx.activate > 0 {
 		target := math.Round(yaw/(math.Pi/2)) * (math.Pi / 2)
 		yaw += (target - yaw) * math.Min(1, fx.activate)
 	}
-	pitch := .16 + .22*math.Sin(elapsed*.21)
-	roll := .12*math.Sin(elapsed*.17) + .06*math.Sin(elapsed*.43)
 	cs, sn := math.Cos(yaw), math.Sin(yaw)
 	ct, st := math.Cos(pitch), math.Sin(pitch)
 	cr, sr := math.Cos(roll), math.Sin(roll)
