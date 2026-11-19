@@ -104,7 +104,11 @@ fi
 # Check if SSH host key exists
 if [ ! -f "configs/ssh_host_rsa_key" ]; then
     echo "Generating SSH host key (RSA)..."
-    ssh-keygen -t rsa -b 4096 -f configs/ssh_host_rsa_key -N "" -q
+    mkdir -p configs
+    if ! ssh-keygen -t rsa -b 4096 -f configs/ssh_host_rsa_key -N "" -q; then
+        echo -e "${RED}Error: could not generate configs/ssh_host_rsa_key${NC}"
+        exit 1
+    fi
     echo "SSH host key generated."
 else
     echo "SSH host key already exists."
