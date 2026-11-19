@@ -1,5 +1,6 @@
 {
   "matrixAccountCannotLogon": "\r\n|13Account '%s' cannot log on yet |08(level |15%d|08, minimum |15%d|08)|13.\r\n|08A SysOp must raise your access.|07\r\n",
   "matrixAccountNotValidated": "\r\n|13Account '%s' is |01not yet validated|13. Please wait for SysOp approval.|07\r\n",
-  "matrixAccountValidated": "\r\n|11Account '%s' can log on. Access level: |15%d|07\r\n"
+  "matrixAccountValidated": "\r\n|11Account '%s' can log on. Access level: |15%d|07\r\n",
+  "pauseString": "!PAUSEBAR"
 }

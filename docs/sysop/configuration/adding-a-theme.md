@@ -131,11 +131,13 @@ prelogin/
 - A second set, `templates/prelogin-example-pms/`, is the PMS theme's
   matrix: the graffiti picture beside a pink cube with glitter, the
   board's lettering and lightbar (keys `L`, `A`, `C`, `D`), the same two
-  tones, and a `strings.json` that colours the check-access answers.
-  Install it the same way:
+  tones, and a `strings.json` that colours the check-access answers and
+  sets the pause after them to the `PAUSEBAR` door (defined in the stock
+  `configs/doors.json`). Install it the same way:
   `mkdir -p prelogin && cp -R templates/prelogin-example-pms/. prelogin/`.
-  Copy one set or the other, not both; a file left from the other set
-  would mix them.
+  Both sets hold the same eight matrix files, so copying one over the
+  other replaces them; going back from this set to the first, delete
+  `prelogin/strings.json` too.
 - Each file `prelogin/` doesn't hold comes from the shipped stock set,
   `menus/v3`, as it ships (its `menus.d/v3` overlay is not read). A board
   with no `prelogin/` directory gets the stock connection check and matrix.
