@@ -1,10 +1,12 @@
 # Preview: scripted menus, sixel pictures and two example themes
 
-This branch is a preview to try, cut from `main` at `59dd669d`. It is not
-meant to be merged as it is: the pieces you want will come as small pull
-requests, in the order under [How it would be split](#how-it-would-be-split).
-My board's configuration and site files are not in it, and `.github/` is
-identical to `main`'s.
+This is what I've been building on my board, Pirate Mind Station, pulled
+onto a branch so you can run it. I wanted to show you and hear what you
+think. I'm not asking you to merge it. If any of it looks like something
+ViSiON/3 should have, tell me which parts and we can work out how.
+
+It's cut from `main` at `59dd669d`. My board's configuration and site files
+are not in it, and `.github/` is identical to `main`'s.
 
 ## What is in it
 
@@ -137,7 +139,7 @@ then redraws the Doors menu at once, so the caller sees only a flash. The
 theme's two other doors, `PAUSEBAR` and `AMILC`, are in the stock
 `doors.json`.
 
-## Known defects
+## Rough edges I know about
 
 - A missing door's message is drawn over at once instead of waiting for Enter, on every theme.
 - `doctor --theme` checks that a `RUN:` command exists, not that the theme has the screens it reads: a theme without `ansi/YOURSTAT.ANS` passes, and `RUN:SHOWSTATS` then fails.
@@ -160,30 +162,29 @@ Measured at the branch head against `59dd669d`:
 | Theme files (`menus/vision3`, `menus/pms`) | 409 (199 and 210) | |
 | Scripts (`.js`) | 12 | +5,589 |
 
-The tests came over with the code. They are not proposed as they stand;
-each pull request will carry only the tests for what it changes.
+About half of the Go is tests that came over with the code from my board.
+I wouldn't ask you to take those as they are.
 
-## How it would be split
+## If you want any of it
 
-In this order, each a small pull request:
+Say which parts. It comes apart into small pieces, and this is roughly the
+order they build on each other:
 
 1. Scripted menus: a `.MNU`'s `SCRIPT` names a `v3_script` door that draws the menu; `v3.menu.items`, `LABEL`, `v3.prompt.answer`, and the fallback to the `.ANS`.
 2. Theme script folders: a `SCRIPT` ending in `.js` runs from the theme's `scripts/`, and `menuScript` in `theme.json`.
 3. More `v3.menu` fields (`name`, `title`, `shortcuts`, `expand`) and `v3.util.fitColumns`.
-4. The ViSiON3-Sixel example theme, which draws its text version until step 5 lands.
+4. The ViSiON3-Sixel example theme, which draws its text version until step 5 is in.
 5. `v3.gfx`, the pixel canvas and sixel detection from the terminal's answer.
 6. Toasts and the time-left warning inside a scripted menu.
 7. Konfig and the other built-in screens drawn by scripts.
-8. The login matrix picture, cube and tones: last, and only if you want it, pitched on its own first.
+8. The login matrix picture, cube and tones.
 
-Two parts of step 2 overlap issue #623 and need a conversation there before
-they are sent: a theme script's own data directory (script storage, its
-section 4), and running theme scripts with no run limit (its section 3).
-The file lookup can go without them. Step 5's picture reads would follow
-the per-call read limits #623 is adding.
+Steps 2 and 5 touch what issue #623 covers: a theme script's own data
+directory, running theme scripts with no run limit, and picture reads. Those
+would follow whatever you decide there.
 
-The PMS theme, the pre-login example sets, per-theme strings and names,
-`doctor --theme`, the test-account flag, panic recovery and the source
-engine are not yet sized or placed in this order.
+I haven't worked out where the PMS theme, the pre-login example sets,
+per-theme strings and names, `doctor --theme`, the test-account flag, panic
+recovery and the source engine would go in that list.
 
-Tell me what you dislike in it.
+Mostly I'd like to know what you think of it, and what you'd do differently.
