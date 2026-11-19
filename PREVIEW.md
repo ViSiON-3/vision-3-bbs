@@ -178,9 +178,9 @@ Measured at the branch head against `59dd669d`:
 
 | | Files | Lines |
 |-|-------|-------|
-| Everything | 743 changed, 579 of them new | +40,102, -1,047 |
-| Go code | 144 | +13,167, -752 |
-| Go tests | 104 | +14,125, -95 |
+| Everything | 760 changed, 588 of them new | +41,650, -1,054 |
+| Go code | 146 | +13,363, -752 |
+| Go tests | 106 | +14,867, -95 |
 | Theme files (`menus/vision3`, `menus/pms`) | 409 (199 and 210) | |
 | Scripts (`.js`) | 12 | +5,589 |
 
