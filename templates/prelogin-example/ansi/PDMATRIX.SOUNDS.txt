@@ -1,0 +1,14 @@
+Login matrix tones
+
+PDMATRIX.MOVE.WAV    from tick_001.ogg
+PDMATRIX.CHOOSE.WAV  from confirmation_001.ogg
+
+Both by Kenney (kenney.nl), pack "Interface Sounds":
+https://kenney.nl/assets/interface-sounds
+
+Licence: Creative Commons CC0 1.0 Universal (public domain dedication),
+https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required.
+
+Converted to WAV, 8-bit unsigned PCM, 22050 Hz, mono; leading and trailing
+silence trimmed; peak set to 0.8.

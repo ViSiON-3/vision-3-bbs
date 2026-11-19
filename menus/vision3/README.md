@@ -74,5 +74,7 @@ the board reads them from its `prelogin/` directory, else stock's, so
 this theme holds none of them. A board that wants the ViSiON/3 matrix puts
 its files in `prelogin/`: the logo as `prelogin/ansi/PDMATRIX.PNG` (the same
 picture as `data/vision3-logo.png`), with `prelogin/ansi/PDMATRIX.ANS`,
-`prelogin/ansi/PDMATRIX.EFX` and `prelogin/bar/PDMATRIX.BAR`. Without them
-the board shows the stock matrix from `menus/v3`.
+`prelogin/ansi/PDMATRIX.EFX` and `prelogin/bar/PDMATRIX.BAR`.
+`templates/prelogin-example/` holds that set, with two tones; copy it in with
+`mkdir -p prelogin && cp -R templates/prelogin-example/. prelogin/`. Without
+it the board shows the stock matrix from `menus/v3`.

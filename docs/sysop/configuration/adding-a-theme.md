@@ -120,6 +120,13 @@ prelogin/
 └── cfg/                PDMATRIX.CFG
 ```
 
+- An example set ships in `templates/prelogin-example/`: the ViSiON/3 logo
+  as the matrix picture with its effects file, lettering and lightbar, and
+  two tones (Kenney Interface Sounds, CC0; see `ansi/PDMATRIX.SOUNDS.txt`).
+  Copy its contents into the board's `prelogin/`, as in
+  `mkdir -p prelogin && cp -R templates/prelogin-example/. prelogin/` run in
+  a checkout that is also the BBS root. The picture needs a sixel terminal
+  and the tones a terminal that answers the audio query.
 - Each file `prelogin/` doesn't hold comes from the shipped stock set,
   `menus/v3`, as it ships (its `menus.d/v3` overlay is not read). A board
   with no `prelogin/` directory gets the stock connection check and matrix.
