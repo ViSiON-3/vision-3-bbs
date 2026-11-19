@@ -66,6 +66,13 @@ type Screen struct {
 	// escapes removed. The reader leaves a banner shaped like a quote line
 	// ("Buck> said:") as it stands, so the editor does too.
 	quoteBanners []string
+	// previewLines is how many rows the preview strip shows (see
+	// SetPreview), 0 for none; previewY is the divider's row while it is
+	// shown, 0 when the screen is too short for it; lastPreview is what
+	// its rows last showed, nil to draw it all.
+	previewLines int
+	previewY     int
+	lastPreview  []string
 }
 
 // NewScreen creates a new screen manager
@@ -776,6 +783,8 @@ func (s *Screen) RefreshScreen(buffer *MessageBuffer, topLine, currentLine, curr
 		}
 	}
 
+	s.drawPreview(buffer)
+
 	// Update status line only if values changed or forced
 	if forceStatusUpdate || insertMode != s.lastInsertMode || currentLine != s.lastCurrentLine {
 		s.DisplayStatusLine(insertMode, currentLine, lineCount)
@@ -814,6 +823,7 @@ func (s *Screen) FullRedraw(buffer *MessageBuffer, topLine, currentLine, current
 	// Clear physical state to force full redraw
 	s.physicalLines = make(map[int]string)
 	s.mark = nil
+	s.lastPreview = nil
 
 	// Clear screen and display header and footer
 	s.ClearScreen()
@@ -874,6 +884,7 @@ func (s *Screen) Resize(newWidth, newHeight int) {
 			s.screenLines = 5
 		}
 	}
+	s.reservePreview()
 	// Clear physical state to force full redraw on next refresh
 	s.physicalLines = make(map[int]string)
 	s.quoteLines = make(map[int]quoteDisplay)

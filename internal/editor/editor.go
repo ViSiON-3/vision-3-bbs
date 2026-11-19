@@ -47,6 +47,11 @@ type EditorContext struct {
 	// with the board's colours over it.
 	MenuSetPath string
 	Theme       *config.ThemeConfig
+
+	// PreviewLines, when set, shows that many of the text's first lines
+	// under it as they will be read, colour codes in colour, updated as the
+	// caller types (#352). The auto-signature editor sets it.
+	PreviewLines int
 }
 
 func resolveEditorPaths() (menuSetPath, rootConfigPath string) {

@@ -127,6 +127,7 @@ func (e *FSEditor) SetEditorContext(ctx EditorContext) {
 	e.screen.nodeNumber = ctx.NodeNumber
 	e.screen.nextMsgNum = ctx.NextMsgNum
 	e.screen.confArea = ctx.ConfArea
+	e.screen.SetPreview(ctx.PreviewLines)
 }
 
 // SetQuoteData sets message data to be used for the /Q quote command
@@ -173,6 +174,7 @@ func (e *FSEditor) Run() (string, bool, error) {
 	// Load footer template — adjusts statusLineY to reserve the bottom 2 rows.
 	// Must be called after LoadHeaderTemplate so editingStartY is already set from |#N.
 	_ = e.screen.LoadFooterTemplate(e.menuSetPath)
+	e.screen.reservePreview()
 
 	// Initial screen draw
 	e.screen.FullRedraw(e.buffer, e.topLine, e.currentLine, e.currentCol, e.insertMode)
