@@ -158,7 +158,9 @@ inside it: the first bytes are compared with the `magic` signatures of the
 the extension decide. A ZIP named `NODELIST.Z75` therefore opens as an archive
 rather than as a page of binary noise, while a text file called `README.ZIP`
 pages as text. Disabling an archiver in the Configuration Editor (section
-**9 — Archivers**) removes its format from detection.
+**9 — Archivers**) removes its format from detection. Upload processing
+(ZipLab) and `helper files import` / `reextract-diz` detect archives the
+same way.
 
 The contents viewer is ZipLab's and lists ZIP archives only; other formats
 page as text, so enable only the archivers you have tools for. In the viewer
@@ -406,7 +408,7 @@ file has changed, so the processes can run side by side.
 | --- | --- | --- |
 | `config.json` | `fileListingMode` | Default listing mode for callers who have not chosen one: `lightbar` (default) or `classic` |
 | `strings.json` | `fileScanDatePrompt` | Prompt text for `SETFILESCANDATE` |
-| `archivers.json` | `magic`, `enabled` | Content signatures used to identify archives for viewing; see [archivers.json](configuration/configuration.md#archiversjson) |
+| `archivers.json` | `magic`, `magicOffset`, `enabled` | Content signatures used to identify archives for viewing, upload processing and `helper files`; see [archivers.json](configuration/configuration.md#archiversjson) |
 
 ### File display templates
 

@@ -57,6 +57,9 @@ type StepsConfig struct {
 
 // ArchiveType defines how to handle a specific archive format.
 type ArchiveType struct {
+	// ID is the archivers.json archiver this type comes from ("zip"), for
+	// detection by content; "" for a type with no archiver behind it.
+	ID             string   `json:"-"`
 	Extension      string   `json:"extension"`                // e.g., ".zip", ".rar"
 	Native         bool     `json:"native"`                   // true = handled by Go stdlib
 	ExtractCommand string   `json:"extractCommand,omitempty"` // External extract command
@@ -79,6 +82,15 @@ type Config struct {
 	// ArchiveTypes is built from archivers.json when the config is loaded,
 	// and is never read from or written to ziplab.json.
 	ArchiveTypes []ArchiveType `json:"-"`
+	// archivers are the archivers ArchiveTypes come from, which
+	// GetArchiveType detects a file's format with.
+	archivers archiver.Config
+}
+
+// zipOnly is the archiver set when archivers.json can't be read: ZIP,
+// handled natively, as ArchiveTypes falls back to.
+func zipOnly() archiver.Config {
+	return archiver.Config{Archivers: archiver.DefaultConfig().Archivers[:1]}
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -96,8 +108,9 @@ func DefaultConfig() Config {
 			IncludeFile:   IncludeFileConfig{StepConfig: StepConfig{Enabled: true}, FilePath: "BBS.AD"},
 		},
 		ArchiveTypes: []ArchiveType{
-			{Extension: ".zip", Native: true},
+			{ID: "zip", Extension: ".zip", Native: true},
 		},
+		archivers: zipOnly(),
 	}
 }
 
@@ -118,6 +131,7 @@ func LoadConfig(configPath string) (Config, error) {
 		slog.Warn("failed to load archivers.json, using ziplab defaults", "error", arcErr)
 	} else {
 		cfg.ArchiveTypes = archiverTypesFromConfig(arcCfg)
+		cfg.archivers = arcCfg
 	}
 
 	slog.Info("loaded ziplab config", "enabled", cfg.Enabled, "runOnUpload", cfg.RunOnUpload, "scanFailBehavior", cfg.ScanFailBehavior, "archiveTypes", len(cfg.ArchiveTypes))
@@ -166,6 +180,7 @@ func archiverTypesFromConfig(cfg archiver.Config) []ArchiveType {
 	var types []ArchiveType
 	for _, a := range cfg.EnabledArchivers() {
 		at := ArchiveType{
+			ID:             a.ID,
 			Extension:      a.Extension,
 			Native:         a.Native,
 			ExtractCommand: a.Unpack.Command,
@@ -189,23 +204,42 @@ func archiverTypesFromConfig(cfg archiver.Config) []ArchiveType {
 	}
 	if len(types) == 0 {
 		// Fallback: always have native ZIP
-		types = []ArchiveType{{Extension: ".zip", Native: true}}
+		types = []ArchiveType{{ID: "zip", Extension: ".zip", Native: true}}
 	}
 	return types
 }
 
-// IsArchiveSupported checks if a filename matches a configured archive type.
-func (c *Config) IsArchiveSupported(filename string) bool {
-	_, ok := c.GetArchiveType(filename)
+// IsArchiveSupported reports whether the file at path is an archive of a
+// configured type (see GetArchiveType).
+func (c *Config) IsArchiveSupported(path string) bool {
+	_, ok := c.GetArchiveType(path)
 	return ok
 }
 
-// GetArchiveType returns the ArchiveType config for a given filename.
-func (c *Config) GetArchiveType(filename string) (ArchiveType, bool) {
-	if filename == "" {
+// GetArchiveType returns the ArchiveType for the file at path. The file's
+// first bytes decide, matched against the archivers' signatures, so a ZIP
+// named NODELIST.Z75 is a ZIP; its name decides only when no signature
+// matches, or when the file can't be read. A type with no archiver behind
+// it is found by its name.
+func (c *Config) GetArchiveType(path string) (ArchiveType, bool) {
+	if path == "" {
 		return ArchiveType{}, false
 	}
-	lowerName := strings.ToLower(filename)
+	if len(c.archivers.Archivers) > 0 {
+		if a, ok, err := c.archivers.DetectFile(path); err == nil && ok {
+			for _, at := range c.ArchiveTypes {
+				if strings.EqualFold(at.ID, a.ID) {
+					return at, true
+				}
+			}
+		}
+	}
+	return c.typeByExtension(path)
+}
+
+// typeByExtension returns the ArchiveType whose extension path ends in.
+func (c *Config) typeByExtension(path string) (ArchiveType, bool) {
+	lowerName := strings.ToLower(path)
 	for _, at := range c.ArchiveTypes {
 		if strings.HasSuffix(lowerName, strings.ToLower(at.Extension)) {
 			return at, true

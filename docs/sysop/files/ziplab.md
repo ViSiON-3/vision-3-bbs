@@ -208,8 +208,10 @@ with the placeholders filled in:
 
 `{ARCHIVE}` is the uploaded archive's path and `{OUTDIR}` the temporary
 extraction directory. Upload processing picks the format by the file's
-extension against the enabled archivers; the contents viewer uses the
-`magic` signatures.
+content, the `magic` signatures of the enabled archivers, as the contents
+viewer does, and by its extension only when no signature matches: a ZIP
+uploaded as `NODELIST.Z75` is tested, has its `FILE_ID.DIZ` read and gets
+its comment like any ZIP.
 
 ### ZIPLAB.NFO
 

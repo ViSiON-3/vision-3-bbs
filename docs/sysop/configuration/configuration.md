@@ -994,7 +994,8 @@ If `archivers.json` is missing, built-in defaults are used (ZIP native via Go st
 - `name` - Human-readable display name
 - `extension` - Primary file extension including the dot (e.g., ".zip")
 - `extensions` - Additional file extensions for this format (e.g., `[".lzh"]` for LHA)
-- `magic` - Hex-encoded magic bytes at file offset 0 for format detection (e.g., "504B0304" for ZIP). The file viewer (**V** in file listings) identifies an archive by the signatures of the enabled archivers first and by extension only when none matches, so a ZIP named `NODELIST.Z75` opens as an archive. Invalid hex is ignored. Upload processing and `helper files` still choose the format by extension
+- `magic` - Hex-encoded magic bytes for format detection, at `magicOffset` (e.g., "504B0304" for ZIP). The file viewer (**V** in file listings), upload processing (ZipLab) and `helper files import` / `reextract-diz` identify an archive by the signatures of the enabled archivers first and by extension only when none matches, so a ZIP named `NODELIST.Z75` is handled as a ZIP and an LHA file named `NODELIST.L75` as LHA. Invalid hex is ignored.
+- `magicOffset` - The byte in the file where `magic` starts; 0 (the default) for most formats. LHA's signature is the `-lh` of its method ID at offset 2.
 - `native` - When `true`, Go's built-in `archive/zip` stdlib is used for core operations and external commands are ignored for basic pack/unpack. Currently only ZIP supports native mode.
 - `enabled` - Controls whether this archiver is active. Disabled archivers are skipped during detection and processing.
 - `pack` - Command to create an archive. Placeholders: `{ARCHIVE}`, `{FILES}`, `{WORKDIR}`
@@ -1012,7 +1013,7 @@ If `archivers.json` is missing, built-in defaults are used (ZIP native via Go st
 | `7z`  | 7-Zip Archive   | .7z          | `377ABCAF271C` | No     | Disabled      |
 | `rar` | RAR Archive     | .rar         | `526172211A07` | No     | Disabled      |
 | `arj` | ARJ Archive     | .arj         | `60EA`         | No     | Disabled      |
-| `lha` | LHA/LZH Archive | .lha, .lzh   | —              | No     | Disabled      |
+| `lha` | LHA/LZH Archive | .lha, .lzh   | `2D6C68` at 2  | No     | Disabled      |
 
 To enable additional archive formats, set `"enabled": true` and ensure the corresponding external tool is installed on the system.
 

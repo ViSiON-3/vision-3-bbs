@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
 )
 
 func TestDefaultConfig_AllStepsEnabled(t *testing.T) {
@@ -274,5 +276,57 @@ func TestTemplateMatchesDefaults(t *testing.T) {
 	}
 	if want := DefaultConfig(); !reflect.DeepEqual(cfg, want) {
 		t.Errorf("templates/configs/ziplab.json differs from DefaultConfig:\n got  %+v\n want %+v", cfg, want)
+	}
+}
+
+// The archive type comes from the file's content: a ZIP named NODELIST.Z75
+// is a native ZIP, a .zip that is really a RAR is a RAR, and the name
+// decides only when no signature matches or the file can't be read (#594).
+func TestGetArchiveTypeByContent(t *testing.T) {
+	cfgDir := t.TempDir()
+	arc := archiver.DefaultConfig()
+	for i := range arc.Archivers {
+		if arc.Archivers[i].ID == "rar" {
+			arc.Archivers[i].Enabled = true
+		}
+	}
+	data, err := json.Marshal(arc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "archivers.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(cfgDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	for _, tt := range []struct {
+		path, want string
+	}{
+		{write("NODELIST.Z75", "PK\x03\x04rest"), "zip"},
+		{write("misnamed.zip", "Rar!\x1a\x07\x00rest"), "rar"},
+		{write("plain.zip", "not an archive"), "zip"},
+		{write("notes.txt", "PK is not at the start"), ""},
+		{filepath.Join(dir, "missing.rar"), "rar"},
+	} {
+		at, ok := cfg.GetArchiveType(tt.path)
+		if ok != (tt.want != "") || at.ID != tt.want {
+			t.Errorf("%s: got %q, %v; want %q", filepath.Base(tt.path), at.ID, ok, tt.want)
+		}
+		if got := cfg.IsArchiveSupported(tt.path); got != (tt.want != "") {
+			t.Errorf("%s: IsArchiveSupported = %v", filepath.Base(tt.path), got)
+		}
+	}
+	if at, ok := cfg.GetArchiveType(filepath.Join(dir, "NODELIST.Z75")); !ok || !at.Native {
+		t.Errorf("NODELIST.Z75 = %+v, want the native ZIP type", at)
 	}
 }

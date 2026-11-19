@@ -44,3 +44,44 @@ func TestDetectFile(t *testing.T) {
 		t.Fatalf("missing: %v, %v", ok, err)
 	}
 }
+
+// A signature can sit past the start of the file: LHA's "-lh" method ID
+// follows a two-byte header, so an LHA nodelist named NODELIST.L75 is found
+// by content. A file too short to reach the offset doesn't match it.
+func TestDetectFileMagicOffset(t *testing.T) {
+	cfg := Config{Archivers: []Archiver{
+		{ID: "zip", Extension: ".zip", Magic: "504B0304", Enabled: true},
+		{ID: "lha", Extension: ".lha", Magic: "2D6C68", MagicOffset: 2, Enabled: true},
+		{ID: "neg", Extension: ".neg", Magic: "41", MagicOffset: -1, Enabled: true},
+	}}
+	for _, tt := range []struct{ name, data, want string }{
+		{"NODELIST.L75", "\x2a\x10-lh5-payload", "lha"},
+		{"lzh.zip", "\x2a\x10-lh0-", "lha"},
+		{"short.bin", "\x2a\x10-l", ""},
+		{"lh-at-start.bin", "-lh5-", ""},
+		{"NODELIST.Z75", "PK\x03\x04", "zip"},
+		{"negative.bin", "A", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), tt.name)
+			if err := os.WriteFile(path, []byte(tt.data), 0600); err != nil {
+				t.Fatal(err)
+			}
+			a, ok, err := cfg.DetectFile(path)
+			if err != nil || ok != (tt.want != "") || a.ID != tt.want {
+				t.Fatalf("got %q, %v, %v; want %q", a.ID, ok, err, tt.want)
+			}
+			if got := cfg.IsSupportedFile(path); got != (tt.want != "") {
+				t.Errorf("IsSupportedFile = %v", got)
+			}
+		})
+	}
+	if cfg.IsSupportedFile(filepath.Join(t.TempDir(), "missing.zip")) {
+		t.Error("a missing file is supported")
+	}
+	def := DefaultConfig()
+	lha, _ := def.FindByID("lha")
+	if lha.Magic != "2D6C68" || lha.MagicOffset != 2 {
+		t.Errorf("built-in lha = %q at %d", lha.Magic, lha.MagicOffset)
+	}
+}
