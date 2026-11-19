@@ -5,8 +5,7 @@ onto a branch so you can run it. I wanted to show you and hear what you
 think. I'm not asking you to merge it. If any of it looks like something
 ViSiON/3 should have, tell me which parts and we can work out how.
 
-It's cut from `main` at `59dd669d`. My board's configuration and site files
-are not in it, and `.github/` is identical to `main`'s.
+It's cut from `main` at `59dd669d`.
 
 ## What is in it
 
@@ -22,13 +21,13 @@ are not in it, and `.github/` is identical to `main`'s.
 | Per-theme `strings.json`, a theme name and description in Konfig, `./vision3 doctor --theme` | [Theme Strings](docs/sysop/configuration/configuration.md#theme-strings), [Name and description](docs/sysop/configuration/adding-a-theme.md#name-and-description), [Checking a theme](docs/sysop/configuration/adding-a-theme.md#checking-a-theme) |
 | A test-account flag: its logins leave no caller history and are not announced | [Test Accounts](docs/sysop/users/user-management.md#test-accounts) |
 | Panic recovery in session goroutines (`internal/safego`) | none |
+| A Hello door: an animated greeting on the sixel canvas, ANSI elsewhere, with a tune where the terminal plays sound; `v3.gfx.audio`; a login step that runs for one theme only | [The Hello door](docs/sysop/scripting/vpl-scripting.md#the-hello-door-hello-vision3js), [Login sequence](docs/sysop/users/login-sequence.md) |
 | A source engine that copies Reddit, Hacker News, NASA GCN and NNTP groups into message areas. The template's one Reddit feed and three NNTP groups are disabled, and so is its sync event | [Source Gateway](docs/sysop/messages/source-gateway.md), [NNTP](docs/sysop/messages/nntp.md) |
 
 ## What it looks like
 
-Captured from a board built from this branch, with the commands under
-[Try it](#try-it), through a relay on port 48700. SyncTERM 1.9 draws sixel;
-xterm 390 does not.
+Captured from a board built from this branch with the commands under
+[Try it](#try-it). SyncTERM 1.9 draws sixel; xterm 390 does not.
 
 ### ViSiON3-Sixel
 
@@ -96,8 +95,9 @@ cp -R "$SRC/templates/prelogin-example-pms/." prelogin/
 - `doctor --theme pms` warns once for each of the seven game doors (see
   [below](#what-a-stock-board-lacks-for-the-pms-theme)) and passes the rest:
   `CHECK WARNINGS  40 passed  ·  7 warning(s)  ·  0 failure(s)`.
-- Going back to the first pre-login set, delete `prelogin/strings.json` as
-  well; only the PMS set has one.
+- Going back to the first pre-login set, delete `prelogin/strings.json` and
+  `prelogin/ansi/PDMATRIX.MUSIC.WAV` as well; only the PMS set has them, and
+  the tune would otherwise play on the ViSiON/3 matrix.
 - A caller can also pick either theme in Konfig without a restart; the
   pre-login set is the board's and does not change with it.
 
@@ -106,7 +106,7 @@ cp -R "$SRC/templates/prelogin-example-pms/." prelogin/
 | Step | Sixel terminal (SyncTERM) | Plain terminal (xterm) |
 |------|---------------------------|------------------------|
 | 1. The login matrix, on connecting | The ViSiON/3 logo picture beside a turning amber cube carrying the four choices | FIGlet lettering and a four-line lightbar |
-| 2. The main menu: log in, then `2` at Fast Logon | The logo picture over a framed three-column menu, a small turning cube beside the selected command | A FIGlet text logo over the same menu, no cube |
+| 2. The main menu: log in, press a key to leave the Hello door (it opens login on this theme), then `2` at Fast Logon | The logo picture over a framed three-column menu, a small turning cube beside the selected command | A FIGlet text logo over the same menu, no cube |
 | 3. `K` for Konfig, then `V` for Theme | A list of themes, with a line describing the highlighted one; Enter applies it at once | The same |
 | 4. Pick PMS, then `Q` | Konfig is redrawn by the PMS script; `Q` gives the PMS main menu: a graffiti picture, three columns of commands, a star mascot | Konfig the same; the main menu with a dotted text logo in place of the picture |
 | 5. A scripted built-in screen | In PMS, Konfig (step 4) and, at the next login, Fast Logon are drawn by the theme's `submenu.js`; both are text | The same |
@@ -134,7 +134,7 @@ the audio query. Where it did, the door plays a two-minute tune of mine from
 first frame). Any key leaves.
 
 The stock login sequence runs it first for a caller on the ViSiON3-Sixel
-theme and for nobody else: a login step may now carry `"theme"`, and
+theme and for nobody else: a login step can have a `"theme"`, and
 `templates/configs/login.json` opens with
 `{"command": "DOOR:HELLO", "theme": "vision3"}`.
 
@@ -156,8 +156,7 @@ faces you.
 
 Its Doors menu names seven games that do not ship: `DANK`, `USURPER`,
 `LORD`, `LORD2`, `SYNCDOOM`, `OOII` and `CARRIER`. Choosing one sends
-`Error: Door 'LORD' is not configured.` and `Press Enter to continue...`,
-then redraws the Doors menu at once, so the caller sees only a flash. The
+`Error: Door 'LORD' is not configured.` and returns to the Doors menu. The
 theme's two other doors, `PAUSEBAR` and `AMILC`, are in the stock
 `doors.json`.
 
@@ -178,11 +177,11 @@ Measured at the branch head against `59dd669d`:
 
 | | Files | Lines |
 |-|-------|-------|
-| Everything | 760 changed, 588 of them new | +41,650, -1,054 |
+| Everything | 760 changed, 588 of them new | +41,647, -1,054 |
 | Go code | 146 | +13,363, -752 |
 | Go tests | 106 | +14,867, -95 |
 | Theme files (`menus/vision3`, `menus/pms`) | 409 (199 and 210) | |
-| Scripts (`.js`) | 12 | +5,589 |
+| Scripts (`.js`) | 13 | +6,089 |
 
 About half of the Go is tests that came over with the code from my board.
 I wouldn't ask you to take those as they are.
@@ -208,5 +207,3 @@ would follow whatever you decide there.
 I haven't worked out where the PMS theme, the pre-login example sets,
 per-theme strings and names, `doctor --theme`, the test-account flag, panic
 recovery and the source engine would go in that list.
-
-Mostly I'd like to know what you think of it, and what you'd do differently.
