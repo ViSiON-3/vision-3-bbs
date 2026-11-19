@@ -83,18 +83,6 @@ func TestTransferHelperProcess(t *testing.T) {
 		os.Stdin.Read(key[:])
 		fmt.Fprintf(os.Stdout, "key=%s tty=%v;", key[:], term.IsTerminal(int(os.Stdin.Fd())))
 		os.Stdin.Read(key[:])
-	case "ptysize":
-		// Announce, then report the terminal's size after each key until
-		// it reads a q.
-		os.Stdout.WriteString("READY")
-		var key [1]byte
-		for {
-			if _, err := os.Stdin.Read(key[:]); err != nil || key[0] == 'q' {
-				break
-			}
-			w, h, _ := term.GetSize(int(os.Stdin.Fd()))
-			fmt.Fprintf(os.Stdout, "size=%dx%d;", w, h)
-		}
 	default:
 		os.Exit(6)
 	}
