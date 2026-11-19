@@ -185,7 +185,11 @@ These cases end the call or the script instead:
 | The caller's time runs out while the script runs | The time-limit notice is shown and the call ends | `door ended by the BBS` with `"reason":"time limit reached"`, then `time limit reached, disconnecting` |
 | The caller's time ran out before the menu was shown | The call ends before the script would run | `time limit reached, disconnecting` |
 
-A script that answers a command line matching no command is treated as a typed command that matches nothing. With a `FALLBACK` set, the caller goes to that menu and the log records `no command match, using fallback menu`. Without one, the BBS shows its unknown-command string and shows the menu again. When `FALLBACK` is empty or names the menu itself, as it does for the stock `MAIN`, the script runs again at once. A script that answers that way without waiting for a key runs over and over with no pause until the script, the door or the menu is changed; on a test board it ran about 400 times a second.
+A script that answers a command line matching no command gets one of two results. When the menu's `FALLBACK` names another menu, the caller goes there, as for a typed command that matches nothing, and the log records `no command match, using fallback menu`. When `FALLBACK` is empty or names the menu itself, as it does for the stock `MAIN`, the answer is not used: the menu shows its own screen and prompt, and the script runs again only when the menu is next shown, after the caller has entered something at that prompt. The log records this once for each menu and door until the BBS is restarted:
+
+```text
+{"level":"WARN","msg":"menu script answer matched no command, menu shows its screen","menu":"MAIN","door":"NOMATCH","answer":"ZZZ"}
+```
 
 ---
 

@@ -5,6 +5,7 @@ package menu
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
@@ -85,5 +86,39 @@ func TestStockMenuLightbar(t *testing.T) {
 	r := execcovRun(env, execcovCall{user: env.caller, start: "MAIN", input: "\x1b[B\x1b[A\rQ\r", hold: true})
 	if r.has("[art]") || !r.has("G  Go", "Q  Leaving") || !r.has("[other]") || r.next != "LOGOFF" {
 		t.Errorf("next=%q\n%s", r.next, r.text())
+	}
+}
+
+// A script answering a key the menu does not have, where that would bring
+// the same menu straight back, runs once for the visit: the menu then shows
+// its own screen and prompt. The script answers Q on its third run so that
+// the loop this guards against ends.
+func TestScriptedMenuUnmatchedAnswer(t *testing.T) {
+	for _, fallback := range []string{"", "MAIN"} {
+		t.Run("fallback="+fallback, func(t *testing.T) {
+			env := newMenuEnv(t)
+			env.sessionContext = true
+			dir := filepath.Join(t.TempDir(), "scripts")
+			js := `var n = (v3.data.get("runs") || 0) + 1;
+v3.data.set("runs", n);
+v3.console.print("[run]");
+v3.prompt.answer(n < 3 ? "ZZZ" : "Q");`
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "menu.js"), []byte(js), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			env.e.SetDoorRegistry(map[string]config.DoorConfig{
+				"DRAW": {Type: "v3_script", Script: "menu.js", WorkingDirectory: dir},
+			})
+			m := execcovNewMenus(t, env)
+			m.menu("MAIN", MenuRecord{Script: "DRAW", Fallback: fallback, UsePrompt: true, Prompt1: "[prompt]"}, "[art]",
+				CommandRecord{Keys: "Q", Command: "LOGOFF"})
+			r := execcovRun(env, execcovCall{user: env.caller, start: "MAIN", input: "Q\r"})
+			if n := strings.Count(r.text(), "[run]"); n != 1 || !r.has("[art]", "[prompt]") || r.next != "LOGOFF" {
+				t.Errorf("script ran %d times, next=%q\n%s", n, r.next, r.text())
+			}
+		})
 	}
 }

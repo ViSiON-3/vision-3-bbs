@@ -52,6 +52,11 @@ type testSession struct {
 	// hold, when set, makes a read past the end of the input wait until it
 	// is closed, as a caller who stops typing does, instead of hanging up.
 	hold chan struct{}
+
+	// inMu serialises reads of in. An InputHandler stopped without a read
+	// interrupt, which a testSession lacks, may still be reading when the
+	// next reader starts.
+	inMu sync.Mutex
 }
 
 type outputHook struct {
@@ -65,7 +70,9 @@ func newTestSession(input string) *testSession {
 }
 
 func (ts *testSession) Read(p []byte) (int, error) {
+	ts.inMu.Lock()
 	n, err := ts.in.Read(p)
+	ts.inMu.Unlock()
 	if n == 0 && ts.hold != nil {
 		<-ts.hold
 	}

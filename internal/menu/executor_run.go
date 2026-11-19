@@ -53,6 +53,9 @@ type runLoopState struct {
 	// caller still comes from the keyboard. Being part of this per-Run state,
 	// they go when the run ends, however it ends.
 	pending []string
+	// scriptOff names a menu whose next showing skips its SCRIPT and shows
+	// the menu's own screen and prompt (see unmatchedScriptAnswer).
+	scriptOff string
 }
 
 // userHandle returns the current user's handle for logging, or "" when no user
@@ -270,7 +273,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		var act loopAction
 		var retErr error
 		scripted := false
-		if len(st.pending) == 0 {
+		skipScript := st.scriptOff == st.currentMenuName
+		st.scriptOff = ""
+		if len(st.pending) == 0 && !skipScript {
 			input, act, retErr, scripted = st.runMenuScript(menuRec, commands)
 		}
 
@@ -375,6 +380,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				continue
 			}
 
+			if scripted && st.unmatchedScriptAnswer(menuRec) {
+				continue
+			}
 			fallbackMenu := menuRec.Fallback
 			if fallbackMenu != "" {
 				slog.Info("no command match, using fallback menu", "menu", fallbackMenu)

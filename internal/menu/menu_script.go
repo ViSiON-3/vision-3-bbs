@@ -33,10 +33,7 @@ func (st *runLoopState) runMenuScript(menuRec *MenuRecord, commands []CommandRec
 		return "", loopFallthrough, nil, false
 	}
 	warn := func(reason string, attrs ...any) {
-		if _, seen := menuScriptWarned.LoadOrStore(st.currentMenuName+"\x00"+code+"\x00"+reason, struct{}{}); !seen {
-			slog.Warn("menu script not run, menu shows its screen: "+reason,
-				append([]any{"menu", st.currentMenuName, "door", code}, attrs...)...)
-		}
+		st.warnMenuScriptOnce(code, "menu script not run, menu shows its screen: "+reason, attrs...)
 	}
 	doorConfig, ok := st.e.GetDoorConfig(code)
 	switch {
@@ -97,6 +94,34 @@ func (st *runLoopState) runMenuScript(menuRec *MenuRecord, commands []CommandRec
 		return "", loopFallthrough, nil, false
 	}
 	return line, act, nil, handled
+}
+
+// unmatchedScriptAnswer handles an answer from the menu's script that
+// matches no command. When the menu has no FALLBACK, or its FALLBACK is the
+// menu itself, the menu would come straight back and run the script again
+// with nothing from the caller in between, so a script that always answers
+// that way would never stop. Such an answer is not a usable one: the next
+// showing of the menu skips the script and shows the menu's own screen and
+// prompt, and true is returned. A FALLBACK to another menu is left to the
+// run loop (false).
+func (st *runLoopState) unmatchedScriptAnswer(menuRec *MenuRecord) bool {
+	fallback := strings.ToUpper(menuRec.Fallback)
+	if fallback != "" && fallback != strings.ToUpper(st.currentMenuName) {
+		return false
+	}
+	st.warnMenuScriptOnce(strings.ToUpper(strings.TrimSpace(menuRec.Script)),
+		"menu script answer matched no command, menu shows its screen", "answer", st.userInput)
+	st.scriptOff = st.currentMenuName
+	return true
+}
+
+// warnMenuScriptOnce logs msg for the current menu and its script door code
+// the first time it comes up, so a menu shown on every visit does not flood
+// the log.
+func (st *runLoopState) warnMenuScriptOnce(code, msg string, attrs ...any) {
+	if _, seen := menuScriptWarned.LoadOrStore(st.currentMenuName+"\x00"+code+"\x00"+msg, struct{}{}); !seen {
+		slog.Warn(msg, append([]any{"menu", st.currentMenuName, "door", code}, attrs...)...)
+	}
 }
 
 // menuItems returns the commands of a menu its script lists: those with a
