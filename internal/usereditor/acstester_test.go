@@ -174,13 +174,16 @@ func TestACSTesterCallValues(t *testing.T) {
 func TestACSTesterLongIPv6(t *testing.T) {
 	m := acsTesterOver(t, 80, 25)
 	const longest = "0000:0000:0000:0000:0000:ffff:255.255.255.255" // 45
-	m.acsTest.inputs[acsAddr].SetValue(longest)
-	s := &acs.TesterSession{}
-	if msg := m.acsTest.callValues(s); msg != "" {
-		t.Fatalf("callValues(%s): %s", longest, msg)
-	}
-	if want := netip.MustParseAddr(longest); s.Addr != want {
-		t.Errorf("address = %s, want %s", s.Addr, want)
+	// #1114's address (40) was cut at 39 to another valid one, ...:192.0.2.1.
+	for _, addr := range []string{"0000:0000:0000:0000:0000:ffff:192.0.2.10", longest} {
+		m.acsTest.inputs[acsAddr].SetValue(addr)
+		s := &acs.TesterSession{}
+		if msg := m.acsTest.callValues(s); msg != "" {
+			t.Fatalf("callValues(%s): %s", addr, msg)
+		}
+		if want := netip.MustParseAddr(addr); s.Addr != want {
+			t.Errorf("address = %s, want %s", s.Addr, want)
+		}
 	}
 	for _, zoned := range []string{
 		longest + "%eth0", // 50: a cut at 45 would leave the address above
