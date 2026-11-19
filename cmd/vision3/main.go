@@ -1204,43 +1204,12 @@ func sessionHandler(s ssh.Session) {
 	if isPty && winCh != nil {
 		hub, resizes := winch.Own(s, winCh)
 		defer hub.Close()
-		go func() {
-			type transferChecker interface{ IsTransferActive() bool }
-			var pendingResize atomic.Bool
-			var pendingW, pendingH atomic.Int32
-			// When a resize is suppressed during a transfer, spin up a
-			// short-lived goroutine that polls for transfer completion and
-			// replays the suppressed resize so the terminal doesn't stay at
-			// the wrong dimensions for the rest of the session.
-			var replayOnce sync.Once
-			var replayDone atomic.Bool
-			spawnReplayWaiter := func() {
-				tc, ok := s.(transferChecker)
-				if !ok {
-					return
-				}
-				replayOnce.Do(func() {
-					go func() {
-						ticker := time.NewTicker(250 * time.Millisecond)
-						defer ticker.Stop()
-						for range ticker.C {
-							if !tc.IsTransferActive() {
-								if pendingResize.Load() {
-									w := int(pendingW.Load())
-									h := int(pendingH.Load())
-									slog.Debug("replaying pending resize after transfer ended", "node", nodeID, "width", w, "height", h)
-									_ = terminal.SetSize(w, h)
-									pendingResize.Store(false)
-								}
-								replayDone.Store(true)
-								return
-							}
-						}
-					}()
-				})
-			}
-			for win := range resizes {
-				slog.Debug("window resize event", "node", nodeID, "width", win.Width, "height", win.Height)
+		rw := &resizeWatcher{
+			node: nodeID,
+			setSize: func(w, h int) {
+				_ = terminal.SetSize(w, h) // best-effort repaint
+			},
+			onSize: func(win ssh.Window) {
 				if win.Width > 0 {
 					termWidth.Store(int32(win.Width))
 					physicalWidth.Store(int32(win.Width))
@@ -1248,36 +1217,13 @@ func sessionHandler(s ssh.Session) {
 				if win.Height > 0 {
 					termHeight.Store(int32(win.Height))
 				}
-				if win.Width > 0 && win.Height > 0 {
-					// Skip terminal repaint during binary transfers — SetSize
-					// writes ANSI sequences via session.Write() which does CRLF
-					// conversion, corrupting the RawWrite binary data stream.
-					if tc, ok := s.(transferChecker); ok && tc.IsTransferActive() {
-						slog.Debug("suppressed terminal.SetSize during active transfer", "node", nodeID)
-						pendingResize.Store(true)
-						pendingW.Store(int32(win.Width))
-						pendingH.Store(int32(win.Height))
-						spawnReplayWaiter()
-					} else {
-						// Replay any suppressed resize now that the transfer is done.
-						if pendingResize.Load() {
-							w := int(pendingW.Load())
-							h := int(pendingH.Load())
-							slog.Debug("replaying pending resize after transfer ended", "node", nodeID, "width", w, "height", h)
-							pendingResize.Store(false)
-							_ = terminal.SetSize(w, h)
-						}
-						// Reset the one-shot replay waiter for the next transfer.
-						if replayDone.Load() {
-							replayOnce = sync.Once{}
-							replayDone.Store(false)
-						}
-						_ = terminal.SetSize(win.Width, win.Height)
-					}
-				}
-			}
-			slog.Debug("window change channel closed", "node", nodeID)
-		}()
+			},
+			replayPoll: 250 * time.Millisecond,
+		}
+		if tc, ok := s.(interface{ IsTransferActive() bool }); ok {
+			rw.transferActive = tc.IsTransferActive
+		}
+		go rw.run(resizes)
 	}
 
 	// Attempt to set raw mode (might fail, proceed anyway)
