@@ -22,6 +22,7 @@ func (u *User) Clone() *User {
 	c.TwitList = slices.Clone(u.TwitList)
 	c.PublicKeys = slices.Clone(u.PublicKeys)
 	c.Roles = slices.Clone(u.Roles)
+	c.ExpiringRoles = maps.Clone(u.ExpiringRoles)
 	c.Groups = slices.Clone(u.Groups)
 	c.NamedFlags = maps.Clone(u.NamedFlags)
 	c.PreviousHandles = slices.Clone(u.PreviousHandles)

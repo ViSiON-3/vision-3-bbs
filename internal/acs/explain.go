@@ -312,7 +312,7 @@ func explainTerm(n *Node, ctx Context) (bool, Reason, string) {
 			detail = "not validated"
 		}
 	case "ROLE":
-		detail = roleDetail(u, t.value, result)
+		detail = roleDetail(u, t.value, result, ctx)
 	case "GROUP":
 		groups := perm.FormatRoleList(u.Groups)
 		if groups == "" {
@@ -497,9 +497,9 @@ func flagDetail(u *user.User, name string, ctx Context) string {
 		case g.Expires.IsZero():
 			return fmt.Sprintf("has flag %s, with no expiry", name)
 		case g.Live(now):
-			return fmt.Sprintf("has flag %s until %s", name, perm.FormatFlagExpiry(g.Expires, loc))
+			return fmt.Sprintf("has flag %s until %s", name, perm.FormatExpiry(g.Expires, loc))
 		}
-		return fmt.Sprintf("had flag %s, which expired %s", name, perm.FormatFlagExpiry(g.Expires, loc))
+		return fmt.Sprintf("had flag %s, which expired %s", name, perm.FormatExpiry(g.Expires, loc))
 	}
 	flags := strings.Join(perm.FlagNamesOf(u), ", ")
 	if flags == "" {
@@ -508,21 +508,38 @@ func flagDetail(u *user.User, name string, ctx Context) string {
 	return fmt.Sprintf("doesn't have flag %s (named flags: %s)", name, flags)
 }
 
-// userRoles is a record's roles for an explanation: "validator, msgops" or
-// "none".
-func userRoles(u *user.User) string {
-	if r := perm.FormatRoleList(u.Roles); r != "" {
+// userRoles is a record's roles for an explanation, each with its expiry
+// at ctx's time: "msgops, validator until 2027-01-01", or "none".
+func userRoles(u *user.User, ctx Context) string {
+	if r := perm.DescribeRoles(u, ctx.location(), ctx.now()); r != "" {
 		return r
 	}
 	return "none"
 }
 
-// roleDetail explains a ROLE term for a defined role.
-func roleDetail(u *user.User, name string, member bool) string {
-	if member {
-		return fmt.Sprintf("has role %s (roles: %s)", name, userRoles(u))
+// roleDetail explains a ROLE term for a defined role, saying until when a
+// role given until a time counts, or when it stopped.
+func roleDetail(u *user.User, name string, member bool, ctx Context) string {
+	roles := userRoles(u, ctx)
+	for _, g := range perm.RoleGrants(u) {
+		if g.Name != name {
+			continue
+		}
+		switch {
+		case !member && u.DeletedUser:
+			return fmt.Sprintf("has role %s, but the account is deleted, so it doesn't count (roles: %s)", name, roles)
+		case g.Bad:
+			return fmt.Sprintf("has role %s, but its expiry %q can't be read, so it doesn't count (roles: %s)", name, g.Stored, roles)
+		case member && !g.Expires.IsZero():
+			return fmt.Sprintf("has role %s until %s (roles: %s)", name, perm.FormatExpiry(g.Expires, ctx.location()), roles)
+		case !member && !g.Expires.IsZero():
+			return fmt.Sprintf("had role %s, which expired %s (roles: %s)", name, perm.FormatExpiry(g.Expires, ctx.location()), roles)
+		}
 	}
-	return fmt.Sprintf("doesn't have role %s (roles: %s); a sysop's level doesn't make them a member", name, userRoles(u))
+	if member {
+		return fmt.Sprintf("has role %s (roles: %s)", name, roles)
+	}
+	return fmt.Sprintf("doesn't have role %s (roles: %s); a sysop's level doesn't make them a member", name, roles)
 }
 
 // permDetail explains a PERM term: where the permission came from, or why
@@ -550,7 +567,7 @@ func permDetail(d perm.Decision, u *user.User, ctx Context) string {
 	if perm.LevelOf(d.Permission) == perm.CoSysOpLevel && ctx.CoSysOpLevel > 0 {
 		threshold, name = ctx.CoSysOpLevel, "coSysOpLevel"
 	}
-	return fmt.Sprintf("doesn't have %s%s: level %d is below %d (%s) and no role grants it (roles: %s)", d.Permission, where, u.AccessLevel, threshold, name, userRoles(u))
+	return fmt.Sprintf("doesn't have %s%s: level %d is below %d (%s) and no role grants it (roles: %s)", d.Permission, where, u.AccessLevel, threshold, name, userRoles(u, ctx))
 }
 
 // compared describes a numeric term's comparison of have, the caller's value

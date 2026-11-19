@@ -95,8 +95,8 @@ func contextLines(ctx Context, current bool, width int) []string {
 		out = append(out, wrap(fmt.Sprintf("%-*s", labelWidth, label), text, width)...)
 	}
 	field("User:", describeUser(ctx.User))
-	if ctx.User != nil && len(perm.NormalizeRoles(ctx.User.Roles)) > 0 {
-		field("Roles:", perm.FormatRoleList(ctx.User.Roles))
+	if roles := perm.DescribeRoles(ctx.User, ctx.location(), ctx.now()); roles != "" {
+		field("Roles:", roles)
 	}
 	if ctx.User != nil && len(perm.NormalizeRoles(ctx.User.Groups)) > 0 {
 		field("Groups:", perm.FormatRoleList(ctx.User.Groups))

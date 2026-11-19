@@ -155,7 +155,7 @@ func (m Model) overlayFlagsDialog(background string) string {
 		if i == 0 {
 			label = "Has: "
 		}
-		rows = append(rows, line(label+perm.DescribeFlagGrant(g, m.boardLocation, m.flags.now)))
+		rows = append(rows, line(label+perm.DescribeGrant(g, m.boardLocation, m.flags.now)))
 	}
 	declared := "none"
 	if names := m.roles.FlagNames(); len(names) > 0 {

@@ -218,7 +218,7 @@ func (st *userEditorState) renderDetails(message string) error {
 		return err
 	}
 
-	rolesValue := callerText(adminTruncate(perm.FormatRoleList(sel.Roles), 24))
+	rolesValue := callerText(adminTruncate(perm.DescribeRoles(sel, boardLocation(), time.Now()), 24))
 	if val, ok := st.pendingChanges["roles"]; ok {
 		rolesValue = fmt.Sprintf("|14*|03%s|07", callerText(adminTruncate(val.(string), 23)))
 	}

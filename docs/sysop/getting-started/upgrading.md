@@ -455,7 +455,14 @@ repository could impersonate your board.
 - **Named flags.** `FLAG:donor` tests a flag declared under `flags` in
   `configs/roles.json` and set per user, with an optional expiry, in
   `./ue` and the Admin Menu's user editor (`L`). One-character
-  `FLAG:A` is still the legacy flag `FA`.
+  `FLAG:A` is still the legacy flag `FA`. Users' flags are kept under
+  `namedFlags`, which an older BBS also drops at its first save.
+- **Roles until a date.** A role can be given until a time
+  (`validator=2027-01-01` in either user editor), kept under
+  `expiringRoles` on the user record. A BBS older than this ignores that
+  field: going back to one, those roles grant nothing there, and its
+  first save of `users.json` drops them for good. Back up `users.json`
+  before going back, or give those roles again afterwards.
 - **A handle can no longer start with `@`,** since `@name` addresses a
   group. Doctor warns when an existing handle matches a group's address.
 - **Sponsors and uploads belong to accounts.** At its first start the new

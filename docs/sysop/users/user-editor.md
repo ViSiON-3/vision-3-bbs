@@ -68,7 +68,12 @@ Roles/Groups shows how many [admin roles](users/admin-roles.md) and
 dialog with one line for each: names separated by commas or spaces, Tab to
 move between them, Enter to keep them, Esc to leave them as they were. The
 dialog lists the roles and groups `roles.json` in the `--config` directory
-defines, and a name it doesn't define is refused with the reason.
+defines, and a name it doesn't define is refused with the reason. A role can
+be given [until a date](users/admin-roles.md#until-a-date) with
+`validator=YYYY-MM-DD` or `validator=YYYY-MM-DD HH:MM`, on the board's clock,
+set off from the other roles by commas;
+the dialog lists such roles with whether each still counts, and refuses a
+new expiry that has already passed.
 
 Named Flags shows how many [named flags](users/admin-roles.md#named-flags)
 the user has and how many have expired, and Enter opens a dialog listing
@@ -244,7 +249,7 @@ found or cannot be loaded.
 | Msg Header | `msgHdr` | 0–99 |
 | Output Mode | `outputMode` | Legacy, not read |
 | Deleted | `deletedUser` / `deletedAt` | Read-only; set by F2 |
-| Roles/Groups | `roles` / `groups` | Dialog; checked against `roles.json` |
+| Roles/Groups | `roles`, `expiringRoles` / `groups` | Dialog; checked against `roles.json`. A role with an expiry is in `expiringRoles` |
 | Named Flags | `namedFlags` | Dialog; each flag's expiry as RFC 3339, `""` for none; checked against `roles.json` |
 | WFC Read Only | `wfcReadOnly` | |
 

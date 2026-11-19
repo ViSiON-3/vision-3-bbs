@@ -262,16 +262,55 @@ grant never passes).
 ## Giving someone a role
 
 - **`./ue`:** **Roles/Groups** on the edit screen opens a dialog. Type role
-  names separated by commas or spaces; clear the line to remove them all.
+  names separated by commas or spaces, each with an optional
+  [expiry](#until-a-date); a role with an expiry needs a comma on each side
+  (`msgops, validator=2027-01-01`). Clear the line to remove them all.
 - **Admin Menu:** `E` (Edit Users), select the user, press `R`.
 
 Both check each name against `roles.json` as you type it, so a misspelt or
 undefined role is refused instead of saved. Only a SysOp can assign roles.
 
+### Until a date
+
+A role can be given until a time, for a temporary validator or a
+moderator covering a holiday: write `=` and the date, or the date and time,
+after its name, as for [named flags](#granting-expiring-and-revoking):
+
+```text
+msgops, validator=2027-01-01, greeter=2026-12-24 18:00
+```
+
+Times are on the board's clock (its `timezone` setting), and a date alone is
+midnight at its start. The role grants its permissions until that instant
+and nothing from it on: an admin command, `ROLE:` and `PERM:` all stop
+then, for someone online too, and a save they started in the validation
+queue before it is refused after it. Nothing needs to run to end the grant.
+A new expiry that has already passed is refused; to hold the role for good
+again, write its name without one.
+
+An expired role stays on the record, shown as expired
+(`validator expired 2027-01-01`), until you take it off. The editors list
+the user's roles with their expiries, and the ACS tester shows them on its
+**Roles:** line.
+
+A role given until a time is kept apart from those held for good, under
+`expiringRoles`, with its expiry as an RFC 3339 instant (UTC):
+
+```json
+"roles": ["msgops"],
+"expiringRoles": {"validator": "2027-01-01T08:00:00Z"}
+```
+
+A BBS older than this ignores `expiringRoles`, so if you go back to one, a
+role given until a time grants nothing there, rather than lasting for ever,
+and that BBS drops it on its next save. Doctor's **admin roles** check
+reports an expiry that isn't an RFC 3339 time (the role grants nothing) and
+a role in both lists (it is held for good).
+
 ## Taking a role away
 
-Take the role off the user, or remove it or its permission from
-`roles.json`. The change applies from the next protected action, even for
+Take the role off the user, let its [expiry](#until-a-date) pass, or remove
+it or its permission from `roles.json`. The change applies from the next protected action, even for
 someone who is online with the validation queue already open: their next
 save is refused. The BBS rereads the user's record just before each save,
 picking up a `./ue` edit within a second.

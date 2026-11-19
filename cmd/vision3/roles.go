@@ -73,6 +73,7 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 		ID          int               `json:"id"`
 		Handle      string            `json:"handle"`
 		Roles       []string          `json:"roles"`
+		Expiring    map[string]string `json:"expiringRoles"`
 		Groups      []string          `json:"groups"`
 		NamedFlags  map[string]string `json:"namedFlags"`
 		DeletedUser bool              `json:"deletedUser"`
@@ -95,7 +96,8 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 			if u.DeletedUser {
 				continue
 			}
-			if len(perm.NormalizeRoles(u.Roles)) > 0 {
+			rec := &user.User{Roles: u.Roles, ExpiringRoles: u.Expiring}
+			if len(perm.RoleGrants(rec)) > 0 {
 				members++
 			}
 			if len(perm.NormalizeRoles(u.Groups)) > 0 {
@@ -107,7 +109,25 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 					u.Handle, u.ID, strings.TrimPrefix(h, "@"), h),
 					"Rename the user (new handles can't start with @), or rename the group in configs/roles.json.")
 			}
-			if undefined := perm.Undefined(u.Roles, roles); len(undefined) > 0 {
+			permanent := map[string]bool{}
+			for _, r := range perm.NormalizeRoles(u.Roles) {
+				permanent[r] = true
+			}
+			// Every unreadable entry, including one a readable entry for the
+			// same role under another case outlasts.
+			for _, g := range perm.UnreadableRoleExpiries(rec) {
+				add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has role %s with expiry %q, which isn't an RFC 3339 time, so it grants nothing",
+					u.Handle, u.ID, g.Name, g.Stored),
+					"Set the expiry again in ./ue or the admin user editor.")
+			}
+			for _, g := range perm.RoleGrants(rec) {
+				if permanent[g.Name] && hasExpiry(u.Expiring, g.Name) {
+					add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has role %s both for good (roles) and until a time (expiringRoles), so the expiry is ignored",
+						u.Handle, u.ID, g.Name),
+						"Set the role again in ./ue or the admin user editor, which keeps it in one place.")
+				}
+			}
+			if undefined := perm.Undefined(perm.RoleNamesOf(rec), roles); len(undefined) > 0 {
 				add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has role %s, which configs/roles.json doesn't define, so it grants nothing",
 					u.Handle, u.ID, strings.Join(undefined, ", ")),
 					"Define the role in configs/roles.json, or take it off the user in ./ue or the admin user editor.")
@@ -117,18 +137,19 @@ func checkRoles(root string, add func(string, doctorSeverity, string, string)) {
 					u.Handle, u.ID, strings.Join(undefined, ", ")),
 					"Define the group in configs/roles.json, or take it off the user in ./ue or the admin user editor.")
 			}
-			grants := perm.FlagGrants(&user.User{NamedFlags: u.NamedFlags})
+			flagRec := &user.User{NamedFlags: u.NamedFlags}
+			grants := perm.FlagGrants(flagRec)
 			if len(grants) > 0 {
 				flagged++
 			}
 			var names []string
 			for _, g := range grants {
 				names = append(names, g.Name)
-				if g.Bad {
-					add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has flag %s with expiry %q, which isn't an RFC 3339 time, so FLAG:%s never matches it",
-						u.Handle, u.ID, g.Name, g.Stored, g.Name),
-						"Set the expiry again in ./ue or the admin user editor.")
-				}
+			}
+			for _, g := range perm.UnreadableFlagExpiries(flagRec) {
+				add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has flag %s with expiry %q, which isn't an RFC 3339 time, so FLAG:%s never matches it",
+					u.Handle, u.ID, g.Name, g.Stored, g.Name),
+					"Set the expiry again in ./ue or the admin user editor.")
 			}
 			if undefined := perm.UndefinedFlags(names, roles); len(undefined) > 0 {
 				add("admin roles", doctorWarn, fmt.Sprintf("%s (#%d) has flag %s, which configs/roles.json doesn't declare, so FLAG: never matches it",
@@ -201,4 +222,15 @@ func checkGrantTags(configDir string, roles *perm.Roles) []string {
 		}
 	}
 	return out
+}
+
+// hasExpiry reports whether expiring, a record's expiringRoles, names role
+// (normalized), in any case.
+func hasExpiry(expiring map[string]string, role string) bool {
+	for name := range expiring {
+		if perm.NormalizeRoleName(name) == role {
+			return true
+		}
+	}
+	return false
 }

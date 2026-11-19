@@ -3,6 +3,7 @@ package acs
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -256,5 +257,58 @@ func TestPermFilesManageUsesFileArea(t *testing.T) {
 	ctx.Roles = roles
 	if x := Explain("PERM:files.manage", ctx); x.Root == nil || !strings.Contains(x.Root.Detail, "with no current file area") {
 		t.Errorf("detail = %+v", x.Root)
+	}
+}
+
+// A role given until a time passes ROLE: and grants PERM: until that
+// instant, on the tester's clock, and the explanation says so.
+func TestExpiringRoleTerms(t *testing.T) {
+	expiry := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	u := &user.User{ID: 2, AccessLevel: 20, Roles: []string{"msg_ops"}, ExpiringRoles: map[string]string{"validator": expiry.Format(time.RFC3339)}}
+	ctx := roleCtx(t, u)
+	ctx.Location = time.UTC
+	for _, tt := range []struct {
+		acs  string
+		now  time.Time
+		want bool
+	}{
+		{"ROLE:validator&PERM:users.validate", expiry.Add(-time.Minute), true},
+		{"ROLE:validator", expiry, false},
+		{"PERM:users.validate", expiry, true}, // msg_ops grants it too
+		{"ROLE:msg_ops", expiry.AddDate(5, 0, 0), true},
+	} {
+		ctx.Now = tt.now
+		if got := Check(tt.acs, ctx); got != tt.want {
+			t.Errorf("Check(%q) at %v = %v, want %v", tt.acs, tt.now, got, tt.want)
+		}
+		if x := Explain(tt.acs, ctx); x.Result != tt.want {
+			t.Errorf("Explain(%q) = %v", tt.acs, x.Result)
+		} else if x.Root != nil {
+			checkSteps(t, tt.acs, x.Root, ctx)
+		}
+	}
+
+	ctx.Now = expiry.Add(-time.Minute)
+	if x := Explain("ROLE:validator", ctx); x.Root == nil || x.Root.Detail != "has role validator until 2027-01-01 (roles: msg_ops, validator until 2027-01-01)" {
+		t.Errorf("live detail = %+v", x.Root)
+	}
+	ctx.Now = expiry
+	if x := Explain("ROLE:validator", ctx); x.Root == nil || x.Root.Detail != "had role validator, which expired 2027-01-01 (roles: msg_ops, validator expired 2027-01-01)" {
+		t.Errorf("expired detail = %+v", x.Root)
+	}
+	lines := strings.Join(Render(Explain("ROLE:msg_ops", ctx), 0), "\n")
+	if !strings.Contains(lines, "Roles:      msg_ops, validator expired 2027-01-01") {
+		t.Errorf("render:\n%s", lines)
+	}
+	// Only msg_ops counts now.
+	ctx.User = &user.User{ID: 3, AccessLevel: 20, ExpiringRoles: map[string]string{"validator": expiry.Format(time.RFC3339)}}
+	if x := Explain("PERM:users.validate", ctx); x.Root == nil || !strings.Contains(x.Root.Detail, "no role grants it (roles: validator expired 2027-01-01)") {
+		t.Errorf("PERM detail = %+v", x.Root)
+	}
+	// A deleted account's role held for good doesn't count, and never
+	// expired: the explanation says why it fails, with no made-up date.
+	ctx.User = &user.User{ID: 4, AccessLevel: 20, Roles: []string{"validator"}, DeletedUser: true}
+	if x := Explain("ROLE:validator", ctx); x.Root == nil || x.Root.Detail != "has role validator, but the account is deleted, so it doesn't count (roles: validator)" {
+		t.Errorf("deleted detail = %+v", x.Root)
 	}
 }

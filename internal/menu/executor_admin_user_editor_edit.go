@@ -157,6 +157,39 @@ func (st *userEditorState) stageNameList(field, label string, stored []string, p
 	}
 }
 
+// stageRoles stages an edit of the selected user's admin roles, typed as
+// perm.FormatRoleGrants writes them (msgops, validator=2027-01-01) with
+// times in the board's zone, checked as typed: an undefined role, or a new
+// expiry that has already passed, is refused.
+func (st *userEditorState) stageRoles() {
+	sel := st.users[st.selectedIndex]
+	loc := boardLocation()
+	orig := perm.FormatRoleGrants(sel, loc)
+	cur := orig
+	if staged, ok := st.pendingChanges["roles"].(string); ok {
+		cur = staged
+	}
+	newVal, editErr := st.readFieldInput("Roles", cur, 200, false)
+	if editErr != nil {
+		if editErr.Error() != "cancelled" {
+			st.statusMessage = fmt.Sprintf("|01Error: %v|07", editErr)
+		}
+		return
+	}
+	roles, expiring, parseErr := perm.ParseRoleGrants(newVal, perm.Current(), loc, time.Now(), sel)
+	next := &user.User{Roles: roles, ExpiringRoles: expiring}
+	switch {
+	case parseErr != nil:
+		st.statusMessage = "|01" + parseErr.Error() + "|07"
+	case !perm.SameRoles(next, sel):
+		st.pendingChanges["roles"] = perm.FormatRoleGrants(next, loc)
+		st.statusMessage = "|10Field marked for update.|07"
+	default:
+		delete(st.pendingChanges, "roles")
+		st.statusMessage = "|08No change.|07"
+	}
+}
+
 // stageNamedFlags stages an edit of the selected user's named flags, typed
 // as perm.FormatFlagList writes them (beta, donor=2027-01-01) with times in
 // the board's zone, and checked as typed: an undeclared flag, or a new
@@ -318,11 +351,11 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 	if val, ok := pendingChanges["roles"]; ok {
 		// Checked again here: roles.json may have changed since the edit was
 		// staged.
-		names, err := perm.ParseRoleList(val.(string), perm.Current())
+		roles, expiring, err := perm.ParseRoleGrants(val.(string), perm.Current(), boardLocation(), time.Now(), target)
 		if err != nil {
 			return "|01" + err.Error() + "|07", false
 		}
-		target.Roles = names
+		target.Roles, target.ExpiringRoles = roles, expiring
 	}
 	if val, ok := pendingChanges["groups"]; ok {
 		names, err := perm.ParseGroupList(val.(string), perm.Current())
@@ -405,7 +438,7 @@ func (e *MenuExecutor) applyPendingUserChanges(userManager *user.UserMgr, adminU
 		case "flags":
 			oldValue = currentUserData.Flags
 		case "roles":
-			oldValue = perm.FormatRoleList(currentUserData.Roles)
+			oldValue = perm.FormatRoleGrants(currentUserData, boardLocation())
 		case "groups":
 			oldValue = perm.FormatRoleList(currentUserData.Groups)
 		case "namedflags":

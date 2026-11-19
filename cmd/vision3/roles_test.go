@@ -283,3 +283,38 @@ func TestDoctorNamedFlags(t *testing.T) {
 		t.Errorf("clean: %+v", got)
 	}
 }
+
+func TestDoctorExpiringRoles(t *testing.T) {
+	root := t.TempDir()
+	writeBoardFile(t, root, "configs/roles.json", `{"roles": [{"name": "validator", "permissions": ["users.validate"]}]}`)
+	writeBoardFile(t, root, "data/users/users.json", `[
+		{"id": 2, "handle": "Op", "roles": ["validator"], "expiringRoles": {"Validator": "2027-01-01T00:00:00Z", "gone": "2027-01-01T00:00:00Z"}},
+		{"id": 3, "handle": "Bad", "expiringRoles": {"validator": "soon"}},
+		{"id": 4, "handle": "Alias", "expiringRoles": {"validator": "soon", "Validator": "2027-01-01T00:00:00Z"}},
+		{"id": 5, "handle": "Blank", "expiringRoles": {"validator": " "}},
+		{"id": 6, "handle": "Flagged", "namedFlags": {"donor": "soon", "Donor": ""}}
+	]`)
+	var msgs []string
+	for _, c := range collectChecks(root, checkRoles) {
+		msgs = append(msgs, c.message)
+	}
+	joined := strings.Join(msgs, "\n")
+	for _, want := range []string{
+		"Op (#2) has role validator both for good (roles) and until a time (expiringRoles), so the expiry is ignored",
+		"Op (#2) has role gone, which configs/roles.json doesn't define",
+		`Bad (#3) has role validator with expiry "soon", which isn't an RFC 3339 time, so it grants nothing`,
+		// Hidden by a readable entry for the same role under another case.
+		`Alias (#4) has role validator with expiry "soon"`,
+		// A role in expiringRoles must have an expiry.
+		`Blank (#5) has role validator with expiry ""`,
+		`Flagged (#6) has flag donor with expiry "soon"`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("checks lack %q:\n%s", want, joined)
+		}
+	}
+	writeBoardFile(t, root, "data/users/users.json", `[{"id": 2, "handle": "Op", "expiringRoles": {"validator": "2020-01-01T00:00:00Z"}}]`)
+	if got := collectChecks(root, checkRoles); len(got) != 1 || got[0].message != "1 role(s) defined, 1 user(s) with a role" {
+		t.Errorf("clean: %+v", got)
+	}
+}

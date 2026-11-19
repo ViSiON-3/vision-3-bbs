@@ -655,3 +655,25 @@ func TestStaleSessionSaveCannotRestoreRevokedFlag(t *testing.T) {
 		t.Errorf("MessagesPosted = %d, want the session's 1", got.MessagesPosted)
 	}
 }
+
+// A role given until a time, revoked or re-dated in ./ue, stays as the
+// sysop left it when the holder's stale session saves (#1125).
+func TestStaleSessionSaveCannotRestoreExpiringRole(t *testing.T) {
+	um, path := mgrWithUser(t, &User{
+		ID: 2, Handle: "Val", AccessLevel: 20, Validated: true,
+		ExpiringRoles: map[string]string{"validator": "2027-01-01T00:00:00Z", "msgops": "2027-01-01T00:00:00Z"},
+	})
+	sessionCopy, _ := um.GetUser("Val")
+	writeUsersFile(t, path, &User{
+		ID: 2, Handle: "Val", AccessLevel: 20, Validated: true,
+		ExpiringRoles: map[string]string{"validator": "2026-01-01T00:00:00Z"},
+	})
+	sessionCopy.MessagesPosted++
+	if err := um.UpdateUser(sessionCopy); err != nil {
+		t.Fatal(err)
+	}
+	got := readUsersFile(t, path)["val"]
+	if len(got.ExpiringRoles) != 1 || got.ExpiringRoles["validator"] != "2026-01-01T00:00:00Z" {
+		t.Errorf("stale session save reverted the roles: %v", got.ExpiringRoles)
+	}
+}

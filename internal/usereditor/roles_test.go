@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -146,5 +147,39 @@ func TestMembershipDialogKeepsLongLists(t *testing.T) {
 	m = press(t, m, key(tea.KeyEnter))
 	if got := strings.Join(m.editingUser().Groups, ", "); got != want || m.dirty {
 		t.Errorf("after Enter: groups %q, dirty %v", got, m.dirty)
+	}
+}
+
+// A role can be given until a time in the dialog; a past expiry is refused,
+// and the timed roles are listed with whether each still counts (#1125).
+func TestMembershipDialogGivesRoleUntilATime(t *testing.T) {
+	m := rolesModel(t, membershipRoles, &user.User{ID: 2, Handle: "Val", AccessLevel: 20})
+	m = typeInto(t, m, "validator=2001-01-01")
+	m = press(t, m, key(tea.KeyEnter))
+	if m.mode != modeMembership || !strings.Contains(m.membership.err, "Roles: role validator: 2001-01-01 has already passed") {
+		t.Fatalf("past expiry: mode %v, err %q", m.mode, m.membership.err)
+	}
+	next := time.Now().AddDate(1, 0, 0).Format("2006-01-02")
+	m = typeInto(t, m, "validator="+next)
+	m = press(t, m, key(tea.KeyEnter))
+	u := m.editingUser()
+	if m.mode != modeEdit || !m.dirty || len(u.Roles) != 0 || u.ExpiringRoles["validator"] == "" {
+		t.Fatalf("timed role: mode %v, dirty %v, roles %v, expiring %v", m.mode, m.dirty, u.Roles, u.ExpiringRoles)
+	}
+	if got := membershipSummary(u); got != "1 role, 0 groups" {
+		t.Errorf("summary = %q", got)
+	}
+	m.openMembershipDialog()
+	if v := m.membership.inputs[memberRoles].Value(); v != "validator="+next {
+		t.Errorf("dialog reopened with %q", v)
+	}
+	if view := m.View(); !strings.Contains(view, "Timed: validator until "+next) {
+		t.Errorf("dialog lacks the timed role:\n%s", view)
+	}
+	// Enter with nothing changed leaves the record alone.
+	m.dirty = false
+	m = press(t, m, key(tea.KeyEnter))
+	if m.dirty {
+		t.Error("an unchanged Enter marked the user dirty")
 	}
 }

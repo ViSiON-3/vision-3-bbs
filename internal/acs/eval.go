@@ -117,7 +117,7 @@ func (c Context) permission(p perm.Permission) perm.Decision {
 	if perm.IsScoped(p) {
 		at = c.scope(perm.KindOf(p))
 	}
-	return perm.Check(c.User, p, at, perm.Levels{SysOp: c.SysOpLevel, CoSysOp: c.CoSysOpLevel}, c.roles())
+	return perm.CheckAt(c.User, p, at, perm.Levels{SysOp: c.SysOpLevel, CoSysOp: c.CoSysOpLevel}, c.roles(), c.now())
 }
 
 // fixed is ctx with its roles and time fixed for one evaluation: a reload
@@ -324,7 +324,7 @@ func evalTerm(t parsedTerm, ctx Context) bool {
 	case "V": // User is validated
 		return u.Validated
 	case "ROLE": // The record lists the role; lacking has checked it is defined
-		return perm.Member(u, t.value, ctx.roles())
+		return perm.MemberAt(u, t.value, ctx.roles(), ctx.now())
 	case "GROUP": // The record lists the group; lacking has checked it is defined
 		return perm.InGroup(u, t.value, ctx.roles())
 	case "FLAG": // The record grants the named flag and it hasn't expired; lacking has checked it is declared

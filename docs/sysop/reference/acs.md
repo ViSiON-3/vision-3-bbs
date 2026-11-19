@@ -157,8 +157,8 @@ These are names only, taking a colon, for the
 
 | Term | Passes when | Notes |
 |---|---|---|
-| `PERM:`*permission* | the user holds the permission: a SysOp (level ≥ `sysOpLevel`), or a user with a role that grants it | `PERM:users.validate`. Use this to offer an admin command: the command checks the same thing. `PERM:messages.moderate` answers for the caller's current message area, where a co-SysOp and the area's sponsor hold it too, and `PERM:files.manage` for their current file area, where a co-SysOp holds it too |
-| `ROLE:`*name* | the user's record lists the role | `ROLE:validator`. Being a SysOp doesn't make anyone a member |
+| `PERM:`*permission* | the user holds the permission: a SysOp (level ≥ `sysOpLevel`), or a user with an unexpired role that grants it | `PERM:users.validate`. Use this to offer an admin command: the command checks the same thing. `PERM:messages.moderate` answers for the caller's current message area, where a co-SysOp and the area's sponsor hold it too, and `PERM:files.manage` for their current file area, where a co-SysOp holds it too |
+| `ROLE:`*name* | the user's record lists the role, and its [expiry](users/admin-roles.md#until-a-date), if it has one, hasn't come | `ROLE:validator`. Being a SysOp doesn't make anyone a member |
 | `GROUP:`*name* | the user's record lists the group | `GROUP:fsxnet-ops`. A [group](users/admin-roles.md#groups) only identifies people; it grants nothing |
 
 A permission the BBS doesn't define (`PERM:users.vaildate`) is an error, like
@@ -440,8 +440,10 @@ doesn't (`AGE` with no sign-up date), or a role, group or flag `roles.json`
 doesn't define.
 
 A user with roles or groups has a **Roles:** or **Groups:** line under
-**User:**, and one with named flags a **Flags:** line, each flag with its
-expiry on the board's clock, or marked expired at the tester's time:
+**User:**, and one with named flags a **Flags:** line. Flags, and roles
+given until a time, show their expiry on the board's clock, or are marked
+expired at the tester's time, and `ROLE:` says so too (`had role validator,
+which expired 2027-01-01`):
 
 ```text
 Flags:      beta_tester, donor until 2027-01-01, helper expired 2026-10-01

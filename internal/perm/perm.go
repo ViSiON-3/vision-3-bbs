@@ -26,6 +26,7 @@ package perm
 import (
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -242,8 +243,15 @@ func (d Decision) Source() string {
 //
 // Callers that guard a write pass the stored record, read just before the
 // write, so a role or level taken away mid-session stops the next protected
-// action rather than the next call.
+// action rather than the next call. A role given until a time counts until
+// that instant (CheckAt, at the current time).
 func Check(u *user.User, p Permission, at Scope, lv Levels, roles *Roles) Decision {
+	return CheckAt(u, p, at, lv, roles, time.Now())
+}
+
+// CheckAt is Check with the time a role's expiry is checked against: the
+// ACS tester's, which can be set.
+func CheckAt(u *user.User, p Permission, at Scope, lv Levels, roles *Roles, now time.Time) Decision {
 	d := Decision{Permission: p, Area: at.Area}
 	if u == nil || u.DeletedUser {
 		return d
@@ -266,7 +274,7 @@ func Check(u *user.User, p Permission, at Scope, lv Levels, roles *Roles) Decisi
 	if roles == nil {
 		roles = Current()
 	}
-	for _, name := range NormalizeRoles(u.Roles) {
+	for _, name := range ActiveRoles(u, now) {
 		if roles.grants(name, p, at) {
 			d.Roles = append(d.Roles, name)
 		}
@@ -276,9 +284,14 @@ func Check(u *user.User, p Permission, at Scope, lv Levels, roles *Roles) Decisi
 	return d
 }
 
-// Member reports whether u's record lists the role name and roles defines
-// it. Being a sysop doesn't make anyone a member.
+// Member reports whether u's record lists the role name, unexpired, and
+// roles defines it. Being a sysop doesn't make anyone a member.
 func Member(u *user.User, name string, roles *Roles) bool {
+	return MemberAt(u, name, roles, time.Now())
+}
+
+// MemberAt is Member with the time a role's expiry is checked against.
+func MemberAt(u *user.User, name string, roles *Roles, now time.Time) bool {
 	if u == nil || u.DeletedUser {
 		return false
 	}
@@ -289,10 +302,5 @@ func Member(u *user.User, name string, roles *Roles) bool {
 	if !roles.Defined(name) {
 		return false
 	}
-	for _, r := range NormalizeRoles(u.Roles) {
-		if r == name {
-			return true
-		}
-	}
-	return false
+	return liveGrant(RoleGrants(u), name, now)
 }
