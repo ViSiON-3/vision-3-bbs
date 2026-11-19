@@ -5,6 +5,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -56,6 +57,9 @@ type DoorCtx struct {
 	Prompt   string
 	Answer   any
 	Answered bool
+	// Menu is the menu a .MNU's script draws (scripting.ScriptConfig.Menu);
+	// nil for every other door.
+	Menu []scripting.MenuItem
 
 	// watch decides when the BBS must end the door. Set by executeDoor.
 	watch *doorWatch

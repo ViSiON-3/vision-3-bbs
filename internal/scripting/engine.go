@@ -117,6 +117,9 @@ func NewEngine(ctx context.Context, session *SessionContext, cfg ScriptConfig, p
 	registerConsole(v3, eng)
 	registerSession(v3, eng)
 	registerPrompt(v3, eng)
+	if cfg.Menu != nil {
+		registerMenu(v3, eng)
+	}
 	if providers.UserMgr != nil && providers.CurrentUser != nil {
 		registerUser(v3, eng)
 		registerUsers(v3, eng)

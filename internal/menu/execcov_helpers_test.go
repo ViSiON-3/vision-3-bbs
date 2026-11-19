@@ -2,6 +2,7 @@ package menu
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net"
@@ -103,6 +104,11 @@ func execcovRun(env *menuEnv, c execcovCall) runResult {
 	ts := newTestSession(c.input)
 	if env.remoteIP != "" {
 		ts.addr = &net.TCPAddr{IP: net.ParseIP(env.remoteIP), Port: 2222}
+	}
+	if env.sessionContext {
+		ctx, cancel := context.WithCancel(context.Background())
+		env.t.Cleanup(cancel)
+		ts.ctx = &testCtx{Context: ctx}
 	}
 	SetSessionOutputMode(ts, env.outputMode)
 	env.t.Cleanup(func() { ClearSessionOutputMode(ts) })

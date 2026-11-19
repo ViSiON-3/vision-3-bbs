@@ -22,6 +22,10 @@ type ScriptConfig struct {
 	// place of a strings.json value: PromptYesNo, PromptPause, or "" for a
 	// script that is not replacing a prompt. Exposed as v3.prompt.kind.
 	Prompt string
+	// Menu is the menu the script draws in place of its screen (a .MNU's
+	// SCRIPT): the commands the caller may choose, exposed as
+	// v3.menu.items. Nil for any other script, which has no v3.menu.
+	Menu []MenuItem
 	// MenuSetPath is the menu set the session draws from, where the script
 	// looks up art: the caller's own theme (#1099), or "" for the one the
 	// server runs.

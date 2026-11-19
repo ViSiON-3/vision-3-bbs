@@ -18,6 +18,10 @@ type MenuRecord struct {
 	// ForceHotKey makes the menu take single-key input for every caller,
 	// whatever their Hot Keys setting.
 	ForceHotKey bool `json:"FORCEHOTKEY"`
+	// Script is the code of a v3_script door that draws the menu and
+	// answers its prompt in place of the .ANS screen and the prompt (see
+	// runMenuScript). Empty for a menu that shows its screen.
+	Script string `json:"SCRIPT,omitempty"`
 }
 
 // GetClrScrBefore reports whether the screen is cleared before the menu is
