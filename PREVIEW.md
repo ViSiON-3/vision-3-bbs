@@ -133,6 +133,11 @@ the audio query. Where it did, the door plays a two-minute tune of mine from
 `scripts/data/hello-vision3-tune.b64` (3.5 MB, sent to the caller after the
 first frame). Any key leaves.
 
+The stock login sequence runs it first for a caller on the ViSiON3-Sixel
+theme and for nobody else: a login step may now carry `"theme"`, and
+`templates/configs/login.json` opens with
+`{"command": "DOOR:HELLO", "theme": "vision3"}`.
+
 ## Terminals
 
 | Terminal | Its answer at connect | What the board did |

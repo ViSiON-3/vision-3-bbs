@@ -1,5 +1,9 @@
 [
     {
+        "command": "DOOR:HELLO",
+        "theme": "vision3"
+    },
+    {
         "command": "SYSOPNOTICES"
     },
     {

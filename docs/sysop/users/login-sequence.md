@@ -404,6 +404,7 @@ Each item in `configs/login.json` is an object with these fields:
 | **clear_screen** | boolean | No       | `false` | Clear the screen before executing this item                     |
 | **pause_after**  | boolean | No       | `false` | Show a "Press [ENTER] to continue" prompt after this item       |
 | **sec_level**    | integer | No       | `0`     | Minimum security level required to see this item (0 = everyone) |
+| **theme**        | string  | No       | `""`    | Run this item only for a caller whose session is on this theme, named by its directory under `menus/` (empty = every theme) |
 
 A `DOOR:CODE` command also works as a step. Any unknown `command` is logged
 as `unknown login sequence command` and skipped. The full list of step names
@@ -415,6 +416,7 @@ The login sequence is loaded at BBS startup from `configs/login.json` and stored
 
 1. For each item in the array (in order):
    - Check `sec_level` against the user's access level — skip if too low
+   - Check `theme` against the theme the caller's session is on (their own choice, else the board's) — skip if it is another
    - Clear the screen if `clear_screen` is `true`
    - Execute the command handler; if it returns an updated user record (e.g. `NEWUSERVAL` promoting access level), that updated record is used for all remaining steps
    - Show pause prompt if `pause_after` is `true`

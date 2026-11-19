@@ -16,6 +16,7 @@ type LoginItem struct {
 	ClearScreen bool   `json:"clear_screen,omitempty"` // Optional: clear screen before this item (default false)
 	PauseAfter  bool   `json:"pause_after,omitempty"`  // Optional: show pause prompt after this item (default false)
 	SecLevel    int    `json:"sec_level,omitempty"`    // Optional: minimum security level required (default 0 = everyone)
+	Theme       string `json:"theme,omitempty"`        // Optional: run only for a caller on this theme (default "" = every theme)
 }
 
 // LoadLoginSequence loads the login sequence configuration from login.json.

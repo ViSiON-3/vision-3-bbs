@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -13,6 +14,23 @@ import (
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 )
+
+// loginItemForTheme reports whether a login step whose "theme" is itemTheme
+// runs for a caller whose session is on callerTheme. A step with no theme
+// runs for everyone; names are compared without regard to case.
+func loginItemForTheme(itemTheme, callerTheme string) bool {
+	return itemTheme == "" || strings.EqualFold(itemTheme, callerTheme)
+}
+
+// sessionThemeName is the directory name of the theme u's session runs on:
+// u's own choice, or the board's theme when u has none or callers may not
+// choose.
+func (e *MenuExecutor) sessionThemeName(u *user.User) string {
+	if t := e.CallerTheme(u); t != "" {
+		return t
+	}
+	return filepath.Base(e.shared().MenuSetPath)
+}
 
 // loginPausePrompt displays the configured pause prompt (centered) and waits for Enter.
 func (e *MenuExecutor) loginPausePrompt(s ssh.Session, terminal *term.Terminal, _ int, outputMode ansi.OutputMode, termWidth int, termHeight int) error {
@@ -110,6 +128,12 @@ func runFullLoginSequence(c *cmdCtx, args string) (*user.User, string, error) {
 		// Check security level requirement
 		if item.SecLevel > 0 && currentUser.AccessLevel < item.SecLevel {
 			slog.Debug("skipping login item - insufficient user level", "node", nodeNumber, "item", i+1, "command", item.Command, "level", currentUser.AccessLevel, "required", item.SecLevel)
+			continue
+		}
+
+		// A step may be for callers on one theme only.
+		if !loginItemForTheme(item.Theme, e.sessionThemeName(currentUser)) {
+			slog.Debug("skipping login item - caller is on another theme", "node", nodeNumber, "item", i+1, "command", item.Command, "theme", item.Theme)
 			continue
 		}
 
