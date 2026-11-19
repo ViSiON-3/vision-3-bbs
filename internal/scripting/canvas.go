@@ -238,11 +238,13 @@ func registerCanvas(gfx *goja.Object, eng *Engine) {
 	})
 }
 
-// HeatCanvas approximates the Authentik heat shader's two animated FBM fields
-// on an eight-pixel grid, then interpolates displacement at each pixel. The
-// source uses bilinear sampling with edge protection. The final sixel encoder
-// maps its colours to the shared palette. Coordinates are converted from image
-// top-down to GLSL UVs.
+// HeatCanvas warps img in place with a rising heat haze at time t (seconds).
+// Two animated four-octave noise fields are sampled on an eight-pixel grid and
+// interpolated at each pixel; each pixel is displaced by that amount scaled by
+// strength and the image size, and read back with bilinear sampling and edge
+// protection. With hotOnly, only warm or bright pixels move. Rows are counted
+// from the bottom, as in a shader's texture coordinates. The sixel encoder
+// later maps the colours to the canvas palette.
 func HeatCanvas(img *image.NRGBA, t, strength float64, hotOnly bool) {
 	w, h := img.Bounds().Dx(), img.Bounds().Dy()
 	if strength == 0 {

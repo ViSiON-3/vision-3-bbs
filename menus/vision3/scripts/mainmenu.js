@@ -77,7 +77,7 @@ function emberSource(u) {
   }
   return emberSources[lo];
 }
-// Authentik-inspired embers rise from hot metal on the convection above it.
+// Embers rise from hot metal on the convection above it.
 // Each ember has its own stamina, cooling curve and burn-out, so some wink
 // out low while others ride an updraft to the top, flaring and guttering as
 // they cross warmer and cooler air; a slow shared current carries
@@ -132,8 +132,8 @@ function paintEmbers(canvas, time) {
     }
   }
 }
-// Brief tack-weld bursts, modelled on the Authentik prototype's cold arc and
-// orange spatter. A cropped, uneven star avoids a circular flashlight halo.
+// Brief tack-weld bursts: a cold arc and orange spatter. A cropped, uneven
+// star avoids a circular flashlight halo.
 function paintWeld(canvas, tick, step) {
   var strengths = [1, 0.12, 0.9, 0.15, 0.65];
   var power = step < strengths.length ? strengths[step] : 0;
