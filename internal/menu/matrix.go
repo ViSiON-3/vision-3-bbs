@@ -17,6 +17,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/pace"
 	"github.com/ViSiON-3/vision-3-bbs/internal/sixel"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -122,31 +123,74 @@ func (e *MenuExecutor) RunMatrixScreen(
 	maxTries := 10
 	tries := 0
 
+	// Picture frames go to the terminal one at a time, each once it has
+	// answered for the last, so a terminal that reads slowly gets fewer
+	// frames and the loop goes on reading keys (see pace.Gate).
+	frames := frameGateFor(s)
+
 	// The optional pre-login effect plays only once, before the first draw.
 	if scene != nil && scene.config.CRTOn {
 		if err := drawMatrixCRTOn(terminal, termWidth, termHeight); err != nil {
 			return "DISCONNECT", nil, err
 		}
-		if err := drawMatrixCRTWarp(terminal, scene, options, selectedIndex); err != nil {
+		if err := drawMatrixCRTWarp(terminal, scene, options, selectedIndex, frames); err != nil {
 			return "DISCONNECT", nil, err
 		}
 	}
 
+	// repaint says the screen was drawn without its picture, which the next
+	// frame draws whole.
+	repaint := false
+	// picture sends the next picture frame if the terminal has answered for
+	// the last: the whole picture after a repaint, else the scene's next
+	// frame. It sends nothing while an answer is due; the scene then keeps
+	// the last frame sent as the one to draw the next from.
+	picture := func() error {
+		if scene == nil && (!repaint || len(graphic) == 0) {
+			repaint = false
+			return nil
+		}
+		if !frames.Begin() {
+			return nil
+		}
+		var err error
+		if repaint {
+			repaint = false
+			if scene != nil && scene.config.ProjectText {
+				// The scene fills the screen and carries the choices on
+				// its cube: the screen is cleared only as the frame that
+				// covers it goes.
+				terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()+"\x1b[?25l"), outputMode)
+			} else {
+				if err = drawMatrixHeaderGraphic(terminal, graphic, graphicCol, outputMode); err == nil {
+					err = drawMatrixOptions(terminal, options, selectedIndex, outputMode)
+				}
+			}
+			if scene != nil {
+				scene.reset()
+			}
+		}
+		if err == nil && scene != nil {
+			err = scene.draw(terminal, time.Since(animationStart).Seconds(), options, selectedIndex, outputMode)
+		}
+		if _, qerr := terminal.Write(frames.Query()); err == nil {
+			err = qerr
+		}
+		return err
+	}
+
 	// Draw the initial screen
 	drawScreen := func() error {
-		if scene != nil && scene.config.ProjectText {
-			// The scene fills the screen and carries the choices on its
-			// cube, so the text screen is not sent at all; drawn first, it
-			// shows until the scene covers it.
-			terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()+"\x1b[?25l"), outputMode)
-		} else if err := drawMatrixScreenGraphic(terminal, ansBackground, options, selectedIndex, outputMode, graphic, graphicCol); err != nil {
-			return err
+		// The projectText scene has no text screen: the repaint is the
+		// picture frame, which clears the screen as it goes (see picture),
+		// so nothing is drawn while the terminal owes an answer.
+		if scene == nil || !scene.config.ProjectText {
+			if err := drawMatrixScreenGraphic(terminal, ansBackground, options, selectedIndex, outputMode); err != nil {
+				return err
+			}
 		}
-		if scene != nil {
-			scene.reset()
-			return scene.draw(terminal, time.Since(animationStart).Seconds(), options, selectedIndex, outputMode)
-		}
-		return nil
+		repaint = true
+		return picture()
 	}
 	if err := drawScreen(); err != nil {
 		slog.Error("failed to draw matrix screen", "node", nodeNumber, "error", err)
@@ -164,7 +208,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 	for tries < maxTries {
 		var key int
 		var err error
-		if scene == nil && !awaitLate {
+		if scene == nil && !awaitLate && !repaint {
 			key, err = sessionIH.ReadKey()
 		} else {
 			key, err = sessionIH.ReadKeyWithPoll(50*time.Millisecond, idleStart)
@@ -186,10 +230,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 			}
 		}
 		if errors.Is(err, editor.ErrReadPoll) {
-			if scene == nil {
-				continue
-			}
-			if err := scene.draw(terminal, time.Since(animationStart).Seconds(), options, selectedIndex, outputMode); err != nil {
+			if err := picture(); err != nil {
 				return "DISCONNECT", nil, err
 			}
 			continue
@@ -257,7 +298,11 @@ func (e *MenuExecutor) RunMatrixScreen(
 				scene.selectionChange = time.Since(animationStart).Seconds()
 			}
 			if scene != nil && scene.config.ProjectText {
-				_ = scene.draw(terminal, time.Since(animationStart).Seconds(), options, selectedIndex, outputMode)
+				// The choices are on the cube: the move shows in the next
+				// frame, now if the terminal has answered for the last,
+				// else at the first poll after its answer. Nothing is
+				// written over the picture meanwhile.
+				_ = picture()
 			} else if scene != nil && scene.config.TextFade {
 				_ = drawMatrixFadedOptions(terminal, options, selectedIndex, time.Since(animationStart).Seconds(), outputMode)
 			} else {
@@ -281,7 +326,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 				// Briefly turn the selected face toward the caller and flare it.
 				for frame := 1; frame <= 6; frame++ {
 					scene.activation = float64(frame) / 6
-					if err := scene.draw(terminal, time.Since(animationStart).Seconds(), options, selectedIndex, outputMode); err != nil {
+					if err := picture(); err != nil {
 						break
 					}
 					time.Sleep(45 * time.Millisecond)
@@ -554,7 +599,9 @@ func (e *MenuExecutor) matrixGraphic(s ssh.Session, width, height int) ([]byte, 
 	return sixel.Encode(img), (width-(cfg.Width+7)/8)/2 + 1, img.Bounds().Size()
 }
 
-func drawMatrixScreenGraphic(terminal *term.Terminal, ansBackground []byte, options []LightbarOption, selectedIndex int, outputMode ansi.OutputMode, graphic []byte, graphicCol int) error {
+// drawMatrixScreenGraphic draws the text screen: the background and the
+// choices. The picture is drawn over it as a frame (drawMatrixHeaderGraphic).
+func drawMatrixScreenGraphic(terminal *term.Terminal, ansBackground []byte, options []LightbarOption, selectedIndex int, outputMode ansi.OutputMode) error {
 	// Clear screen and draw background
 	terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	// For CP437 mode, write raw bytes directly to avoid UTF-8 false positives
@@ -563,20 +610,21 @@ func drawMatrixScreenGraphic(terminal *term.Terminal, ansBackground []byte, opti
 	} else {
 		terminalio.WriteProcessedBytes(terminal, ansBackground, outputMode)
 	}
-	if len(graphic) > 0 {
-		// The text fallback may be wider than the picture. Clear the entire
-		// reserved header, not just the graphic's rectangle, before drawing it.
-		for row := 1; row <= 10; row++ {
-			terminalio.WriteProcessedBytes(terminal, []byte(fmt.Sprintf("\x1b[%d;1H\x1b[2K", row)), outputMode)
-		}
-		terminalio.WriteProcessedBytes(terminal, []byte(fmt.Sprintf("\x1b[1;%dH", graphicCol)), outputMode)
-		if _, err := terminal.Write(graphic); err != nil {
-			return err
-		}
-	}
 
 	// Draw options with highlighting
 	return drawMatrixOptions(terminal, options, selectedIndex, outputMode)
+}
+
+// drawMatrixHeaderGraphic draws the picture in the header rows.
+func drawMatrixHeaderGraphic(terminal *term.Terminal, graphic []byte, graphicCol int, outputMode ansi.OutputMode) error {
+	// The text fallback may be wider than the picture. Clear the entire
+	// reserved header, not just the graphic's rectangle, before drawing it.
+	for row := 1; row <= 10; row++ {
+		terminalio.WriteProcessedBytes(terminal, []byte(fmt.Sprintf("\x1b[%d;1H\x1b[2K", row)), outputMode)
+	}
+	terminalio.WriteProcessedBytes(terminal, []byte(fmt.Sprintf("\x1b[1;%dH", graphicCol)), outputMode)
+	_, err := terminal.Write(graphic)
+	return err
 }
 
 // drawMatrixOptions redraws the menu option text with the current selection highlighted.
@@ -653,8 +701,9 @@ func drawMatrixCRTOn(t *term.Terminal, width, height int) error {
 }
 
 // drawMatrixCRTWarp expands the actual matrix artwork from the centre of the
-// raster, stretching the picture vertically as a CRT's scan opens up.
-func drawMatrixCRTWarp(t *term.Terminal, scene *matrixScene, options []LightbarOption, selected int) error {
+// raster, stretching the picture vertically as a CRT's scan opens up. A
+// frame the terminal is not ready for (see pace.Gate) is skipped.
+func drawMatrixCRTWarp(t *term.Terminal, scene *matrixScene, options []LightbarOption, selected int, frames *pace.Gate) error {
 	const w, h = 640, 384
 	artwork := image.NewNRGBA(image.Rect(0, 0, w, h))
 	draw.Draw(artwork, artwork.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
@@ -671,6 +720,10 @@ func drawMatrixCRTWarp(t *term.Terminal, scene *matrixScene, options []LightbarO
 	}
 	scales := [][2]float64{{.10, .025}, {.28, .06}, {.48, .16}, {.70, .38}, {.88, .70}, {1, 1}}
 	for _, scale := range scales {
+		if !frames.Begin() {
+			time.Sleep(45 * time.Millisecond)
+			continue
+		}
 		frame := image.NewNRGBA(artwork.Bounds())
 		for y := 0; y < h; y++ {
 			sy := int(float64(h)/2 + (float64(y)-float64(h)/2)/scale[1])
@@ -687,7 +740,7 @@ func drawMatrixCRTWarp(t *term.Terminal, scene *matrixScene, options []LightbarO
 		if _, err := t.Write([]byte("\x1b[1;1H")); err != nil {
 			return err
 		}
-		if _, err := t.Write(sixel.EncodePalette(frame, scene.pal)); err != nil {
+		if _, err := t.Write(append(sixel.EncodePalette(frame, scene.pal), frames.Query()...)); err != nil {
 			return err
 		}
 		time.Sleep(45 * time.Millisecond)

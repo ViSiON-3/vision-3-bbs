@@ -66,6 +66,18 @@ func NewReplyTrap(expect time.Duration, onReply func(reply []byte, complete bool
 	return t
 }
 
+// Take passes reply to the trap if it is a whole reply the trap takes, and
+// reports whether it was. It is for a reply put back together from pieces
+// that passed the trap apart, such as one split after its ESC across a
+// script's reads. A reply the trap holds cut off is left as it is.
+func (t *ReplyTrap) Take(reply []byte) bool {
+	if matchReply(reply, false) != replyWhole {
+		return false
+	}
+	t.onReply(append([]byte(nil), reply...), true)
+	return true
+}
+
 // StopExpecting says no more replies are due; ESC is then held only for
 // idleGap.
 func (t *ReplyTrap) StopExpecting() { t.expectUntil.Store(0) }
@@ -253,6 +265,7 @@ func NewTrappedInputHandler(input io.Reader, trap *ReplyTrap) *InputHandler {
 		return NewInputHandler(input)
 	}
 	ih := newInputHandler(input)
+	ih.trap = trap
 	raw := make(chan byte, 256)
 	safego.Go(safego.KindInput, input, func() {
 		defer close(raw)

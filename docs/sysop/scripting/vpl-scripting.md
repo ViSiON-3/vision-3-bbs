@@ -1151,6 +1151,13 @@ transmits the full image; `presentDelta()` sends changed pixels and sixel bands
 using the previously defined palette. Tune animation to the caller's connection; this
 is not GPU rendering or a browser shader.
 
+Frames are paced by the caller's terminal. After each frame the board asks the terminal for its
+device attributes, and it sends no further frame until the answer comes back, so the terminal
+never has more than one frame it has not read. While an answer is due, `present()` and
+`presentDelta()` send nothing and return `true`; the next frame that goes is drawn from the last
+one the terminal was sent (a skipped `present()` makes the next `presentDelta()` draw the whole
+canvas). A slow terminal gets fewer frames and the script keeps reading keys.
+
 The example below draws a wavy copy of a logo in the top rows of the screen and waits for a key.
 It reads `logo.png` from `scripts/data/` and uses it both as the picture and as the palette, so the
 file must have 1 to 256 opaque colours, and at 480x160 pixels it fills the canvas. The board ships

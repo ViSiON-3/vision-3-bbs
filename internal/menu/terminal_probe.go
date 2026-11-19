@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"log/slog"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/pace"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -85,6 +87,20 @@ func sessionSixel(s ssh.Session, u *user.User) bool {
 	return ok && v.(bool)
 }
 
+// sessionFrameGates holds, per session, the gate its picture frames go
+// through (see pace.Gate). The probe makes it, with the reply trap that
+// takes the terminal's answers to it.
+var sessionFrameGates sync.Map
+
+// frameGateFor returns s's frame gate, or nil for a session that was not
+// probed, whose frames go unpaced.
+func frameGateFor(s ssh.Session) *pace.Gate {
+	if v, ok := sessionFrameGates.Load(unwrapSession(s)); ok {
+		return v.(*pace.Gate)
+	}
+	return nil
+}
+
 // replyTrapFor returns s's reply trap, or nil before the probe.
 func replyTrapFor(s ssh.Session) *editor.ReplyTrap {
 	if v, ok := sessionReplyTraps.Load(s); ok {
@@ -102,17 +118,21 @@ type daReplies struct {
 	lateUntil time.Time   // end of replyWindow; later replies change nothing
 	encoding  bool        // the encoding probe was sent
 	trap      *editor.ReplyTrap
+	frames    *pace.Gate // takes the answers to the queries sent after picture frames
 
-	mu         sync.Mutex
-	cpr        []byte
-	ext        []byte
-	primary    []byte
-	libsndfile []byte // reply to ansi.AudioLibsndfileQuery
-	wavU8      []byte // reply to ansi.AudioWAVU8Query
-	decided    bool
-	settled    bool                  // the login matrix has ended; a late cursor report changes nothing
-	onEncoding func(ansi.OutputMode) // told when the login matrix takes a late cursor report's encoding
-	answered   chan struct{}         // closed when the primary reply arrives
+	mu      sync.Mutex
+	cpr     []byte
+	ext     []byte
+	primary []byte
+	// primaryLost: the primary reply came cut short, or after replyWindow,
+	// and was dropped; the probe takes no later one for its own.
+	primaryLost bool
+	libsndfile  []byte // reply to ansi.AudioLibsndfileQuery
+	wavU8       []byte // reply to ansi.AudioWAVU8Query
+	decided     bool
+	settled     bool                  // the login matrix has ended; a late cursor report changes nothing
+	onEncoding  func(ansi.OutputMode) // told when the login matrix takes a late cursor report's encoding
+	answered    chan struct{}         // closed when the primary reply arrives
 }
 
 // sessionProbes holds, per session, the probe's replies until the login
@@ -139,6 +159,15 @@ func OnLateEncoding(s ssh.Session, f func(ansi.OutputMode)) {
 		d.onEncoding = f
 		d.mu.Unlock()
 	}
+}
+
+// awaitingPrimary reports whether the terminal still owes the answer to
+// the probe's primary device attributes query. It answers in order, so the
+// next primary reply is that one, however late it comes.
+func (d *daReplies) awaitingPrimary() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.primary == nil && !d.primaryLost
 }
 
 // waiting reports whether the terminal's whole answer, which ends with the
@@ -187,14 +216,35 @@ func (d *daReplies) settle() {
 // which draws in its encoding (see adoptEncoding); once the matrix has ended
 // it is logged and changes nothing. A reply after lateUntil, or one that is not an answer to the probe's
 // queries, is logged and changes nothing.
+//
+// The first primary device attributes reply is the probe's, whenever it
+// comes; no frame goes before it (awaitingPrimary). Each one after it
+// answers a picture frame's query and goes to the frame gate, also when it
+// comes cut short. One that comes after replyWindow while the probe's is
+// still owed is the probe's and changes nothing.
 func (d *daReplies) add(reply []byte, complete bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	primaryShaped := len(reply) >= 3 && (reply[2] == '?' || reply[2] == '=') &&
+		(complete && pace.IsAnswer(reply) || !complete && !mayBeAudioReply(reply))
+	probeDone := d.primary != nil || d.primaryLost
+	if primaryShaped && probeDone && d.frames.Answer() {
+		if !complete {
+			d.log.Info("incomplete answer to a picture frame's query taken", "reply", escapeReply(reply))
+		}
+		return
+	}
 	if !complete {
+		if primaryShaped && !probeDone {
+			d.primaryLost = true
+		}
 		d.log.Info("incomplete terminal reply dropped", "reply", escapeReply(reply))
 		return
 	}
 	if time.Now().After(d.lateUntil) {
+		if primaryShaped && !probeDone {
+			d.primaryLost = true // the probe's own, too late to use
+		}
 		d.log.Info("terminal reply after the probe ended, ignored", "reply", escapeReply(reply))
 		return
 	}
@@ -295,6 +345,18 @@ func (d *daReplies) applyLate(reply []byte) {
 	d.log.Info("late terminal reply", "reply", escapeReply(reply), "sixel", sixel, "audio", audio)
 }
 
+// mayBeAudioReply reports whether reply, cut short, could be the start of
+// an answer to the audio queries, which share CSI = with CTerm's primary
+// device attributes reply.
+func mayBeAudioReply(reply []byte) bool {
+	for _, a := range []string{ansi.AudioLibsndfileYes, ansi.AudioLibsndfileNo, ansi.AudioWAVU8Yes, ansi.AudioWAVU8No} {
+		if strings.HasPrefix(a, string(reply)) {
+			return true
+		}
+	}
+	return false
+}
+
 // probeModeName names an encoding for the log.
 func probeModeName(mode ansi.OutputMode) string {
 	switch mode {
@@ -363,12 +425,18 @@ func escapeReply(reply []byte) string {
 // on for the rest of the session. The login matrix repaints when the whole
 // answer comes late, and takes the encoding of a late cursor report; after
 // the matrix a late cursor report changes nothing.
+//
+// It makes the session's picture frame gate (frameGateFor); the trap takes
+// the terminal's answers to the gate's queries for the rest of the session.
 func ProbeTerminal(s ssh.Session, timeout time.Duration, encoding bool, log *slog.Logger) ansi.OutputMode {
 	deadline := time.Now().Add(timeout)
 	replies := &daReplies{log: log, session: s, lateUntil: time.Now().Add(replyWindow), encoding: encoding,
-		answered: make(chan struct{})}
+		frames: pace.NewGate(), answered: make(chan struct{})}
 	trap := editor.NewReplyTrap(replyWindow, replies.add)
 	replies.trap = trap
+	// Until the probe's primary reply is in, the next one is the probe's,
+	// so no frame goes.
+	replies.frames.HoldWhile(replies.awaitingPrimary)
 	query := ansi.DAExtendedQuery + ansi.AudioQueries + ansi.DAPrimaryQuery
 	if encoding {
 		trap.ExpectCursorReport(replyWindow, probeReport)
@@ -376,6 +444,7 @@ func ProbeTerminal(s ssh.Session, timeout time.Duration, encoding bool, log *slo
 	}
 	sessionReplyTraps.Store(s, trap)
 	sessionProbes.Store(s, replies)
+	sessionFrameGates.Store(unwrapSession(s), replies.frames)
 
 	getSessionIH(s)               // reads the session, through the trap, while the probe waits
 	_, _ = s.Write([]byte(query)) // best-effort probe

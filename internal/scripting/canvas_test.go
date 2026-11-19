@@ -7,6 +7,10 @@ import (
 	"image/color"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/pace"
 )
 
 func TestCanvasDrawingAndSixel(t *testing.T) {
@@ -185,5 +189,117 @@ func TestCanvasSizeLimit(t *testing.T) {
 		if got := h.eval(code).ToBoolean(); got != tc.ok {
 			t.Errorf("v3.gfx.canvas(%d,%d) created=%v, want %v", tc.w, tc.h, got, tc.ok)
 		}
+	}
+}
+
+// Canvases presented in turn share the paced frames: each draws in its
+// turn, and one the script stops presenting does not hold the others.
+func TestCanvasesTakeTurnsAtPacedFrames(t *testing.T) {
+	gate := pace.NewGate()
+	h := newHarness(t, harnessOpts{session: func(sc *SessionContext) { sc.Sixel, sc.Frames = true, gate }})
+	h.eval(`var cs = [v3.gfx.canvas(2, 2), v3.gfx.canvas(2, 2), v3.gfx.canvas(2, 2)]; cs.forEach(function (c) { c.clear(255, 0, 0); })`)
+	// drew reports whether the last call sent a frame.
+	drew := func() bool {
+		ok := strings.Contains(h.output(), "\x1bP")
+		h.resetOutput()
+		return ok
+	}
+	// answer lets one frame go: the test holds the other slot.
+	answer := func() {
+		for gate.Answer() {
+		}
+		gate.Begin()
+	}
+	order := ""
+	for range 6 {
+		answer()
+		for i := range 3 {
+			if h.eval(fmt.Sprintf(`cs[%d].present()`, i)); drew() {
+				order += string(rune('a' + i))
+			}
+		}
+	}
+	if order != "abcabc" {
+		t.Errorf("canvases drew in the order %q, want abcabc", order)
+	}
+	order = ""
+	for range 3 {
+		answer()
+		if h.eval(`cs[0].present()`); drew() {
+			order += "a"
+		}
+	}
+	if order != "aaa" {
+		t.Errorf("a alone drew %q, want aaa", order)
+	}
+
+	// a draws and b skips, then b is no longer presented: a yields to it
+	// once only.
+	answer()
+	h.eval(`cs[0].present(); cs[1].present()`)
+	if !drew() {
+		t.Fatal("a did not draw")
+	}
+	order = ""
+	for range 3 {
+		answer()
+		if h.eval(`cs[0].present()`); drew() {
+			order += "a"
+		}
+	}
+	if order != "aa" {
+		t.Errorf("a drew %q after b stopped, want aa (one yield, then every frame)", order)
+	}
+}
+
+// A frame's answer split after its ESC or its ESC [ reaches the gate,
+// through readkey or getkey, and is not read as keys.
+func TestCanvasAnswerSplitAfterEsc(t *testing.T) {
+	for _, split := range [][]string{{"\x1b", "[?62;4cq"}, {"\x1b[", "?62;4cq"}} {
+		for _, read := range []string{"readkey", "getkey"} {
+			gate := pace.NewGate()
+			trap := editor.NewReplyTrap(0, func(reply []byte, complete bool) {
+				if complete && pace.IsAnswer(reply) {
+					gate.Answer()
+				}
+			})
+			h := newHarness(t, harnessOpts{inputChunks: split, session: func(sc *SessionContext) {
+				sc.Sixel, sc.Frames, sc.StripReplies, sc.TakeReply = true, gate, trap.StripReplies, trap.Take
+			}})
+			keys := h.eval(`var c = v3.gfx.canvas(2, 2); c.clear(255, 0, 0); c.present();
+var keys = []; for (;;) { var k = v3.console.` + read + `(2000); keys.push(JSON.stringify(k)); if (k === 'q' || k === '') break; } keys.join(',')`).String()
+			if keys != `"q"` {
+				t.Errorf("%s after %q read %s, want \"q\"", read, split[0], keys)
+			}
+			if gate.Waiting() {
+				t.Errorf("%s: the answer split after %q did not reach the gate", read, split[0])
+			}
+		}
+	}
+}
+
+func TestCanvasAnswerSplitAfterEscWithoutKeyReads(t *testing.T) {
+	gate := pace.NewGate()
+	trap := editor.NewReplyTrap(0, func(reply []byte, complete bool) {
+		if complete && pace.IsAnswer(reply) {
+			gate.Answer()
+		}
+	})
+	h := newHarness(t, harnessOpts{inputChunks: []string{"\x1b", "[?62;4cq"}, session: func(sc *SessionContext) {
+		sc.Sixel, sc.Frames, sc.StripReplies, sc.TakeReply = true, gate, trap.StripReplies, trap.Take
+	}})
+	h.eval(`var c = v3.gfx.canvas(2, 2); c.clear(255, 0, 0); c.present()`)
+	// The script only draws: the second frame goes once the split answer
+	// is taken while the canvas waits.
+	deadline := time.Now().Add(2 * time.Second)
+	for strings.Count(h.output(), "\x1bP") < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("the split answer never let the second frame go")
+		}
+		h.eval(`c.present()`)
+		time.Sleep(10 * time.Millisecond)
+	}
+	if k := h.eval(`v3.console.readkey(1000)`).String(); k != "q" {
+		t.Errorf("key after the answer = %q, want q", k)
 	}
 }

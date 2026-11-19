@@ -96,6 +96,11 @@ const (
 // reader into a buffered channel. This makes select-based timeouts reliable
 // regardless of whether the reader supports SetReadDeadline (e.g. ssh.Session).
 type InputHandler struct {
+	// trap is the reply trap the input passes through, or nil. A reply
+	// split so that its ESC went on as typed is put back together by the
+	// key reader and given to it (see readKeyOnce).
+	trap *ReplyTrap
+
 	incoming  chan byte     // raw bytes from background reader goroutine
 	done      chan struct{} // closed when background goroutine fully exits
 	unreadBuf []byte        // bytes pushed back for re-reading
@@ -1175,7 +1180,8 @@ func (ih *InputHandler) ReadKeyWithTimeout(idleTimeout time.Duration) (int, erro
 // ReadKeyWithPoll waits at most poll for a key without restarting the session
 // idle countdown. The caller retains idleStart across polls and resets it only
 // after input. Session deadlines, break-ins, disconnects and escape decoding
-// follow the normal ReadKey path.
+// follow the normal ReadKey path. A terminal reply that reaches the key
+// reader is skipped and the poll goes on, ending at poll as with no key.
 func (ih *InputHandler) ReadKeyWithPoll(poll time.Duration, idleStart time.Time) (int, error) {
 	if poll <= 0 {
 		return ih.ReadKey()
@@ -1186,7 +1192,10 @@ func (ih *InputHandler) ReadKeyWithPoll(poll time.Duration, idleStart time.Time)
 			return 0, failure
 		}
 		if len(ih.unreadBuf) > 0 {
-			return ih.ReadKey()
+			if key, err := ih.readKeyOnce(); err != nil || key != keyReplySkipped {
+				return key, err
+			}
+			continue // a reply, not a key: the poll goes on
 		}
 		wait, onTimeout, expired := ih.keyWait(idleStart)
 		if expired {
@@ -1215,7 +1224,9 @@ func (ih *InputHandler) ReadKeyWithPoll(poll time.Duration, idleStart time.Time)
 			return 0, err
 		}
 		ih.unreadByte(b)
-		return ih.ReadKey()
+		if key, err := ih.readKeyOnce(); err != nil || key != keyReplySkipped {
+			return key, err
+		}
 	}
 }
 
@@ -1257,7 +1268,12 @@ func (ih *InputHandler) parseCSISequence() (int, error) {
 		return key, nil
 	}
 	// A terminal's device attributes reply is not a key (see ReplyTrap).
+	// One that reaches here came apart across reads, its ESC longer before
+	// the rest than the trap waits; whole again, it goes to the trap.
 	if IsReplyCSI(sequence) {
+		if ih.trap != nil {
+			ih.trap.Take(append([]byte{0x1b, '['}, sequence...))
+		}
 		return keyReplySkipped, nil
 	}
 	return int(KeyEsc), nil

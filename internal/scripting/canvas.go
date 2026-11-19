@@ -19,6 +19,47 @@ const (
 	maxCanvasHeight = 1024
 )
 
+// beginFrame reports whether canvas id may send a frame now (see
+// pace.Gate.Begin). While the gate is not ready it keeps the session read, so
+// the reply that readies it is taken whether or not the script reads keys.
+//
+// Canvases take turns: when the gate is open, a canvas lets it go to any
+// other that has skipped a frame since the last one went and has drawn
+// less recently, so one presented first in a loop does not take every
+// frame. A canvas the script no longer presents stops counting once a frame
+// has gone without it, or once the canvas that yielded to it comes back.
+func (eng *Engine) beginFrame(id int) bool {
+	gate := eng.session.Frames
+	if gate == nil {
+		return true
+	}
+	if !gate.Ready() {
+		eng.takeInput() // the answer, or the probe's reply that releases a hold
+	}
+	if eng.frameSkipped == nil {
+		eng.frameSkipped, eng.frameSent, eng.frameYielded = map[int]int{}, map[int]int{}, map[int]int{}
+	}
+	// A canvas yields once per frame sent: if it comes back with no frame
+	// sent since, the one it yielded to has stopped presenting.
+	if gate.Ready() && eng.frameYielded[id] != eng.frameSeq+1 {
+		for other, at := range eng.frameSkipped {
+			if other != id && at == eng.frameSeq && eng.frameSent[other] < eng.frameSent[id] {
+				eng.frameSkipped[id] = eng.frameSeq
+				eng.frameYielded[id] = eng.frameSeq + 1
+				return false
+			}
+		}
+	}
+	if !gate.Begin() {
+		eng.frameSkipped[id] = eng.frameSeq
+		return false
+	}
+	eng.frameSeq++
+	eng.frameSent[id] = eng.frameSeq
+	delete(eng.frameSkipped, id)
+	return true
+}
+
 // registerCanvas installs a small server-side bitmap API. The size limit and
 // canvas count bound memory even when a script keeps every canvas alive.
 func registerCanvas(gfx *goja.Object, eng *Engine) {
@@ -48,6 +89,7 @@ func registerCanvas(gfx *goja.Object, eng *Engine) {
 			pal = sixel.DefaultPalette()
 		}
 		count++
+		id := count
 		img := image.NewNRGBA(image.Rect(0, 0, int(w), int(h)))
 		var previous []int16
 		previousOpaque := false
@@ -185,7 +227,13 @@ func registerCanvas(gfx *goja.Object, eng *Engine) {
 			if !eng.session.Sixel {
 				return false
 			}
-			eng.writeBytes(sixel.EncodePalette(img, pal))
+			if !eng.beginFrame(id) {
+				// The terminal has not taken the last frame: this one is
+				// skipped, and the next presentDelta draws whole.
+				previous = nil
+				return true
+			}
+			eng.writeBytes(append(sixel.EncodePalette(img, pal), eng.session.Frames.Query()...))
 			previous = paletteIndexes()
 			previousOpaque = true
 			for i := 3; i < len(img.Pix); i += 4 {
@@ -209,7 +257,10 @@ func registerCanvas(gfx *goja.Object, eng *Engine) {
 				}
 			}
 			if previous == nil {
-				eng.writeBytes(sixel.EncodePalette(img, pal))
+				if !eng.beginFrame(id) {
+					return true // skipped; drawn whole when the terminal is ready
+				}
+				eng.writeBytes(append(sixel.EncodePalette(img, pal), eng.session.Frames.Query()...))
 				previous = paletteIndexes()
 				previousOpaque = true
 				return true
@@ -229,7 +280,12 @@ func registerCanvas(gfx *goja.Object, eng *Engine) {
 				}
 			}
 			if changed {
-				eng.writeBytes(sixel.EncodeIndexedReuse(img.Bounds(), pal, delta))
+				if !eng.beginFrame(id) {
+					// Skipped: the next delta is from the frame the
+					// terminal was last sent.
+					return true
+				}
+				eng.writeBytes(append(sixel.EncodeIndexedReuse(img.Bounds(), pal, delta), eng.session.Frames.Query()...))
 			}
 			previous = current
 			return true

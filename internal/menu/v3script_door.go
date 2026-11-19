@@ -72,6 +72,12 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		BoardName:        ctx.Executor.GetServerConfig().BoardName,
 		SysOpName:        ctx.Executor.GetServerConfig().SysOpName,
 		BBSVersion:       version.Number,
+		// The canvas's frames are paced by the session's gate; the script
+		// reads the session itself, so the answers are taken out there.
+		Frames: frameGateFor(ctx.Session),
+	}
+	if trap := replyTrapFor(unwrapSession(ctx.Session)); trap != nil {
+		session.StripReplies, session.TakeReply = trap.StripReplies, trap.Take
 	}
 
 	// Derive from the SSH session context so scripts cancel on disconnect.

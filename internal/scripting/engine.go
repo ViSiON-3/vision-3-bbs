@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
@@ -59,6 +60,14 @@ type Engine struct {
 	// the LF or NUL at the start of the next chunk is part of that Enter,
 	// not a key of its own.
 	crTrailer bool
+	// frameSeq counts the paced frames sent; frameSent holds, per canvas,
+	// the number of the last it sent, frameSkipped the count when it last
+	// skipped one, and frameYielded one more than the count when it last
+	// yielded (see beginFrame).
+	frameSeq     int
+	frameSent    map[int]int
+	frameSkipped map[int]int
+	frameYielded map[int]int
 
 	// answer and answered record v3.prompt.answer (see prompt.go).
 	answer   any
@@ -431,12 +440,11 @@ func (eng *Engine) startReader() {
 			defer close(eng.copierDone)
 			safego.TestPoint(safego.KindScriptInput)
 			for {
-				buf := make([]byte, 256)
-				n, err := eng.session.Session.Read(buf)
+				data, err := eng.readSession()
 				// A Read can return bytes with its error. The bytes go first,
 				// on their own, so readKeyEcho, which stops at an error,
 				// still sees them, and Close can return them if it does not.
-				if n > 0 && !offer(readResult{data: buf[:n]}) {
+				if len(data) > 0 && !offer(readResult{data: data}) {
 					return
 				}
 				if err != nil {
@@ -449,6 +457,96 @@ func (eng *Engine) startReader() {
 			}
 		}, eng.cancel)
 	})
+}
+
+// readSession reads the session once, without the terminal's replies
+// (SessionContext.StripReplies). What a read holds may be all replies, so
+// the bytes returned can be none without an error.
+func (eng *Engine) readSession() ([]byte, error) {
+	buf := make([]byte, 256)
+	n, err := eng.session.Session.Read(buf)
+	data := buf[:n]
+	if strip := eng.session.StripReplies; strip != nil && n > 0 {
+		data = strip(data)
+	}
+	return data, err
+}
+
+// maxTakenInput bounds the keys takeInput holds for a script that does not
+// read them. Keys past it are dropped: the reader goes on reading, so the
+// terminal's answers are still taken.
+const maxTakenInput = 4096
+
+// takeInput moves what the session reader has read, without waiting, into
+// inputBuf, where the script's next key reads find it. A script that draws
+// paced frames (SessionContext.Frames) without reading keys calls it so the
+// reader goes on reading the session, and so taking the terminal's answers.
+func (eng *Engine) takeInput() {
+	eng.startReader()
+	if eng.readRequests != nil && !eng.readPending {
+		eng.readRequests <- struct{}{}
+		eng.readPending = true
+	}
+	for {
+		select {
+		case r := <-eng.rawInputCh:
+			eng.readPending = false
+			data := r.data
+			// The LF or NUL of an Enter split across two reads, as
+			// readKeyEcho drops it.
+			if eng.crTrailer && len(eng.inputBuf) == 0 && len(data) > 0 {
+				eng.crTrailer = false
+				if data[0] == '\n' || data[0] == 0x00 {
+					data = data[1:]
+				}
+			}
+			eng.inputBuf = append(eng.inputBuf, data[:min(len(data), max(0, maxTakenInput-len(eng.inputBuf)))]...)
+			if r.err != nil {
+				eng.cancel()
+				return
+			}
+			if eng.readRequests != nil && !eng.readPending {
+				eng.readRequests <- struct{}{}
+				eng.readPending = true
+			}
+		default:
+			eng.takeSplitReplies()
+			return
+		}
+	}
+}
+
+// answerDue reports whether a paced frame's answer is due and replies
+// split across reads can be taken (SessionContext.TakeReply).
+func (eng *Engine) answerDue() bool {
+	return eng.session != nil && eng.session.TakeReply != nil && eng.session.Frames.Waiting()
+}
+
+// takeReply passes seq, a whole CSI sequence, to SessionContext.TakeReply
+// if it has a terminal reply's shape: one split after its ESC passed the
+// trap in pieces.
+func (eng *Engine) takeReply(seq []byte) bool {
+	return eng.session != nil && eng.session.TakeReply != nil && len(seq) > 2 &&
+		editor.IsReplyCSI(seq[2:]) && eng.session.TakeReply(seq)
+}
+
+// takeSplitReplies takes the whole terminal replies out of inputBuf (see
+// takeReply), keeping the other bytes in order.
+func (eng *Engine) takeSplitReplies() {
+	buf := eng.inputBuf
+	out := buf[:0:0]
+	for i := 0; i < len(buf); {
+		if buf[i] == 0x1b && i+2 < len(buf) && buf[i+1] == '[' {
+			end := i + skipCSI(buf[i:])
+			if c := buf[end-1]; c >= 0x40 && c <= 0x7e && eng.takeReply(buf[i:end]) {
+				i = end
+				continue
+			}
+		}
+		out = append(out, buf[i])
+		i++
+	}
+	eng.inputBuf = out
 }
 
 // startDemandReader starts a demand-driven reader. It never takes another key until
@@ -467,13 +565,16 @@ func (eng *Engine) startDemandReader() {
 					return
 				case <-eng.readRequests:
 				}
-				buf := make([]byte, 256)
-				n, err := eng.session.Session.Read(buf)
+				var data []byte
+				var err error
+				for len(data) == 0 && err == nil && eng.ctx.Err() == nil {
+					data, err = eng.readSession()
+				}
 				select {
-				case eng.rawInputCh <- readResult{data: buf[:n], err: err}:
+				case eng.rawInputCh <- readResult{data: data, err: err}:
 				case <-eng.ctx.Done():
 					// Keep the result available for Close to return to its owner.
-					eng.rawInputCh <- readResult{data: buf[:n], err: err}
+					eng.rawInputCh <- readResult{data: data, err: err}
 					return
 				}
 				if err != nil {
@@ -487,9 +588,43 @@ func (eng *Engine) startDemandReader() {
 // readKey reads a single key from the session with optional timeout.
 // Timeout of 0 means block indefinitely. See readKeyEcho for how keys are
 // decoded.
+//
+// While a paced frame's answer is due, an escape sequence a read ends
+// partway through may be that answer, split across reads (parseInput
+// returns its ESC alone): the rest is gathered as readkey gathers a
+// sequence (completeEscape). A whole reply goes to the trap (takeReply)
+// and is not a key; any other whole sequence is read as if it had come in
+// one read; an unfinished one is the Esc key, and what was gathered is
+// read next.
 func (eng *Engine) readKey(timeout time.Duration) (string, error) {
-	key, _, err := eng.readKeyEcho(timeout)
-	return key, err
+	var deadline time.Time
+	if timeout > 0 {
+		deadline = time.Now().Add(timeout)
+	}
+	for {
+		key, _, err := eng.readKeyEcho(timeout)
+		if err != nil || key != "\x1b" || !eng.answerDue() {
+			return key, err
+		}
+		seq, rest, err := eng.completeEscape(deadline)
+		if err != nil {
+			return "", err
+		}
+		if escapePending(seq) {
+			eng.inputBuf = append(append(append([]byte(nil), seq[1:]...), rest...), eng.inputBuf...)
+			return key, nil
+		}
+		if eng.takeReply(seq) {
+			eng.inputBuf = append(rest, eng.inputBuf...)
+		} else {
+			eng.inputBuf = append(append(seq, rest...), eng.inputBuf...)
+		}
+		if !deadline.IsZero() {
+			if timeout = time.Until(deadline); timeout <= 0 {
+				return "", nil
+			}
+		}
+	}
 }
 
 // readKeyEcho reads a single key and also returns the bytes that echo it in
@@ -714,7 +849,9 @@ func (eng *Engine) parseInput(data []byte) string {
 	// rune (0xA9 -> "©", C2 A9). readKeyEcho decodes bytes >= 0x80.
 	result := string(data[:1])
 
-	if data[0] == 0x1b && eng.holdEscape && escapePending(data) {
+	if data[0] == 0x1b && (eng.holdEscape || eng.answerDue()) && escapePending(data) {
+		// readkey, or getkey while a frame's answer is due (see readKey):
+		// the ESC alone, the rest gathered by the caller
 		consumed = 1
 	} else if data[0] == 0x1b && len(data) > 1 {
 		switch {
@@ -724,6 +861,9 @@ func (eng *Engine) parseInput(data []byte) string {
 			consumed = skipCSI(data)
 			eng.keyName = csiKeyName(data[:consumed])
 			result = ""
+			// A terminal reply split after ESC or ESC [ passed the trap
+			// in pieces; whole again here, it goes to the trap.
+			eng.takeReply(data[:consumed])
 		case data[1] == 'O' && len(data) > 2:
 			// SS3: arrows in application cursor mode, and F1-F4
 			consumed = 3
@@ -741,8 +881,8 @@ func (eng *Engine) parseInput(data []byte) string {
 			result = ""
 		}
 	} else if data[0] == '\r' {
-		if len(data) > 1 && data[1] == '\n' {
-			consumed = 2
+		if len(data) > 1 && (data[1] == '\n' || data[1] == 0x00) {
+			consumed = 2 // Enter as CR LF or CR NUL
 		}
 		// A CR that ends the chunk may have its LF or NUL in the next one.
 		eng.crTrailer = len(data) == 1

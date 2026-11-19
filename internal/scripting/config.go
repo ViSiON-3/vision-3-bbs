@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/pace"
 )
 
 // ScriptConfig holds the configuration for a V3 script execution.
@@ -70,6 +71,17 @@ type SessionContext struct {
 	// Sixel reports that the caller's terminal draws sixel graphics, read
 	// by scripts as v3.gfx.sixel.
 	Sixel bool
+	// Frames paces the canvas's picture frames (see pace.Gate); nil sends
+	// every frame.
+	Frames *pace.Gate
+	// StripReplies takes the terminal's replies, the answers to Frames'
+	// queries among them, out of input read from Session. nil leaves the
+	// input as read.
+	StripReplies func([]byte) []byte
+	// TakeReply takes a whole terminal reply that came apart across reads
+	// and so passed StripReplies, and reports whether it was one. nil
+	// takes none.
+	TakeReply func([]byte) bool
 
 	// Session info
 	NodeNumber       int
