@@ -102,6 +102,7 @@
 * [Door Servers (RLogin, Telnet)](doors/door-servers.md)
 
 * **SCRIPTING (VPL)**
+* [Scripted Menus & Themes](scripting/scripted-themes.md)
 * [VPL Scripting](scripting/vpl-scripting.md)
 * [Programming Reference](scripting/vpl-scripting.md#programming-reference)
 

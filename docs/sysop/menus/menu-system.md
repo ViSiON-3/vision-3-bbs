@@ -684,12 +684,20 @@ After 10 actions without logging in, the session is automatically disconnected (
 Place a `PDMATRIX.ANS` file in `prelogin/ansi/` with the visual layout. The option text from the BAR file is drawn over the ANSI art at the specified X,Y coordinates — design the art to leave space for option text at those positions.
 
 Optionally add `ansi/PDMATRIX.PNG` to `prelogin/`.
-On a known sixel-capable terminal, the matrix draws that PNG at the top of the
-screen, centered horizontally, before its native options. It must be no larger
+On a terminal that answered at connect that it draws sixel (see
+[v3.gfx](scripting/vpl-scripting.md#v3gfx)), the matrix draws that PNG at the top of the
+screen, centered horizontally, before its native options. A caller's **Sixel Graphics**
+setting in Konfig does not apply here, since the caller has not logged in. It must be no larger
 than 640×160 pixels and 8 MiB. Other terminals, small screens, and missing or
 invalid images use `PDMATRIX.ANS` alone. Keep the fallback art and BAR layout
 coordinated with the picture. The native matrix handles login, signup, access
 checking, and disconnect.
+
+A terminal can answer the connect queries after the board's 750 ms wait. If the
+answer arrives while the matrix waits for a key and allows something the matrix
+did not draw (the picture, the scene, the tones or another encoding), the matrix
+is drawn again once with it, keeping the highlighted choice, and the board logs
+`repainting matrix for a late terminal answer`.
 
 ### Sounds
 
@@ -1156,6 +1164,7 @@ colour's blink bit (backgrounds 8-15) is kept as it was.
 | `chatUserColor` | `10` | Caller's text in split-screen chat, likewise |
 | `name` | (the directory name) | The theme's name in Konfig's theme list and Theme value; see [Name and description](configuration/adding-a-theme.md#name-and-description) |
 | `description` | (none) | One line, up to 60 columns, shown under Konfig's theme list for the highlighted theme |
+| `menuScript` | (none) | The script that draws every menu of the set whose `.MNU` has no `SCRIPT`, in the same form as `SCRIPT`; see [Menus drawn by a script](scripting/vpl-scripting.md#menus-drawn-by-a-script) |
 | `sysopChatScreen` | (none) | The [chat screen](#chat-screens) split-screen chat opens with; empty means the built-in layout, `random` one of the set's screens each chat |
 | `toastFadeColors` | `"8,7,15"` | The colours a [toast](users/login-sequence.md#toasts) fades in through, and out through in reverse, when the board has `toastFade` on: 1 to 8 foreground colours `0`-`15`, comma-separated, in fade-in order. A value that can't be read uses the default. Set it in `./config` under **Theme → Toasts → Fade Colors**, with the colour picker |
 
@@ -1363,7 +1372,7 @@ Menu configuration files are JSON files that define menu behavior and prompts.
 - `MES_CONF` - Auto-switch user's active message conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.Mes_Conf`)*
 - `FILE_CONF` - Auto-switch user's active file conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.File_Conf`)*
 - `FORCEHOTKEY` - Force single-keypress (hotkey) input for this menu regardless of the user's Hot Keys setting. A key that could start a longer command (a multi-key command, a number on a `##` menu, `/G`, or `;` to [chain commands](#chaining-commands)) still waits for Enter.
-- `SCRIPT` - Optional. A `v3_script` door that draws the menu and answers its prompt, in place of the `.ANS` screen and the prompt: the door's code from `doors.json`, then any words to pass it as arguments (`"SUBMENU blue"`). See [Menus drawn by a script](../scripting/vpl-scripting.md#menus-drawn-by-a-script). Without it the menu takes `menuScript` from the menu set's `theme.json`; `"NONE"` turns that off for this menu.
+- `SCRIPT` - Optional. A script that draws the menu and answers its prompt, in place of the `.ANS` screen and the prompt: a file name ending in `.js`, run from the theme's `scripts/` directory (`"mainmenu.js"`), or the code of a `v3_script` door from `doors.json`; then any words to pass it as arguments (`"SUBMENU blue"`). See [Menus drawn by a script](scripting/vpl-scripting.md#menus-drawn-by-a-script) and [Scripted Menus and Themes](scripting/scripted-themes.md). Without it the menu takes `menuScript` from the menu set's `theme.json`; `"NONE"` turns that off for this menu.
 
 ### Command Definition Files (.CFG)
 

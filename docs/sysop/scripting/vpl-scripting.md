@@ -471,7 +471,8 @@ The first word is the door's code in `doors.json`; the rest are added to the doo
 script every menu of a menu set at once, put the same value in the set's `theme.json` as
 `menuScript`. A `.MNU` with its own `SCRIPT` uses that one, and `"SCRIPT": "NONE"` keeps a menu on
 its `.ANS`. A menu set with a `menuScript` and the scripts it names is a theme: switching the set
-switches how every menu is drawn.
+switches how every menu is drawn. [Scripted Menus and Themes](scripting/scripted-themes.md) builds
+one step by step.
 
 A toast sent to the caller, or the time-left warning (given once per menu, from five minutes left),
 is shown over a menu drawn by a script (a `SCRIPT` or `menuScript` menu; not the built-in screens
@@ -546,8 +547,10 @@ v3.prompt.answer(v3.console.getstr(10));
 
 The menu shows its `.ANS` and prompt as usual when the door or theme script does not exist, is not a `v3_script`
 door, is not allowed for the caller by its level or ACS, is busy, or its file is missing; when the
-script fails; and when it ends without an answer or with an empty one. The reason is logged once
-per menu. Before login no script runs. A chained command line (`M;N`) runs its later commands
+script fails; and when it ends without an answer or with an empty one. A missing door or file, or a
+door that is not a `v3_script` door, is logged once per menu; a failed or busy script is logged each
+time it is tried. A caller refused by level or ACS, and an empty answer, are not logged. Before
+login no script runs. A chained command line (`M;N`) runs its later commands
 without drawing the menus in between.
 
 Built-in screens hand their drawing to a script the same way. Each does so only when its own
@@ -1101,18 +1104,21 @@ Pixel graphics, for terminals that draw sixel. At connect the board asks the ter
 device attributes (`CSI < c`, then `CSI c`); `sixel` is `true` when the primary reply lists
 attribute 4, CTerm's extended reply lists feature 4, or the reply is CTerm 1.189 or later. The
 terminal's announced type plays no part. The probe waits at most 750 ms and stops as soon as the
-primary reply arrives; a reply after that, including an extended reply that follows the primary
-one, does not count. A terminal with no primary reply in time gets `false`. A caller can force sixel on or off with **Sixel Graphics** in Konfig
-(**K**), which overrides the answer. A script should always have a text version to draw.
+primary reply arrives; an extended reply that follows the primary one does not count. A terminal
+with no primary reply in time gets `false` until its answer arrives: an answer within 30 seconds of
+connecting turns sixel on for the rest of the call. `sixel` is read once, when the script starts. A
+caller can force sixel on or off with **Sixel Graphics** in Konfig (**K**), which overrides the
+answer. A script should always have a text version to draw.
 
 | Member | Type | Description |
 |--------|------|-------------|
 | `sixel` | boolean | Whether the caller's terminal draws sixel graphics |
-| `image(path[, palette])` | function | Draws a PNG, GIF (first frame) or JPEG from the script's data directory with its top-left corner at the cursor's cell. Returns `false`, having drawn nothing, when `sixel` is `false` or a file is missing, outside the data directory, not a picture, or larger than 1280x1024 pixels. `palette` names a picture whose colours, in the order they first appear, are the colours to draw with |
+| `image(path[, palette])` | function | Draws a PNG, GIF (first frame) or JPEG from the script's data directory with its top-left corner at the cursor's cell. Returns `false`, having drawn nothing, when `sixel` is `false` or a file is missing, outside the data directory, not a picture, or more than 1,310,720 pixels (1280x1024) in area. `palette` names a picture whose colours, in the order they first appear, are the colours to draw with |
 | `canvas(width, height[, palette])` | function | Creates a server-side pixel canvas; `palette` is an optional image in the data directory with 1–256 opaque colours. Invalid dimensions, an invalid palette, or a fifth canvas in one script throws an error. |
 
 The canvas is a small Vision/3 API, not the browser Canvas API. Coordinates and
-dimensions are pixels; images are read from `scripts/data/`. A canvas is at
+dimensions are pixels; images are read from the script's data directory (`scripts/data/` for a
+door, the theme's `data/` for a [theme script](#theme-scripts)). A canvas is at
 most 1280 pixels wide and 1024 high, and each script can create at most four
 canvases.
 
@@ -1124,8 +1130,8 @@ canvases.
 | `setPixel(x, y, r, g, b[, a])` | Set one pixel; out-of-bounds writes are ignored. |
 | `getPixel(x, y)` | Return `[r,g,b,a]`, or `null` outside the canvas. |
 | `drawImage(path, x, y)` | Composite an image at a pixel position; an invalid or inaccessible image throws. |
-| `wave(amplitude, period, phase[, opaqueBlack])` | Shift each row by a sine wave, with amplitude and period in pixels and phase in radians. Exposed edges are transparent, or opaque black when `opaqueBlack` is true. |
-| `heat(time, strength[, hotOnly])` | Apply an animated rising heat haze to the canvas. `time` is in seconds; `strength` is a fraction from 0 to 0.1. Set `hotOnly` to concentrate displacement on warm or bright pixels anywhere in the image. The effect uses a coarsely sampled noise field and smooth, edge-protected sampling. |
+| `wave(amplitude, period, phase[, opaqueBlack])` | Shift each row by a sine wave, with amplitude and period in pixels and phase in radians. Exposed edges are transparent, or opaque black when `opaqueBlack` is true. A period below 0.001, an amplitude larger than the canvas width, or a value that is not a finite number throws. |
+| `heat(time, strength[, hotOnly])` | Apply an animated rising heat haze to the canvas. `time` is in seconds, from -1,000,000 to 1,000,000, so pass the time since the script started rather than `Date.now() / 1000`; `strength` is a fraction from 0 to 0.1. A value outside either range throws `invalid heat parameters`. Set `hotOnly` to concentrate displacement on warm or bright pixels anywhere in the image. The effect uses a coarsely sampled noise field and smooth, edge-protected sampling. |
 | `present()` | Draw the canvas at the terminal cursor and return `true`, or return `false` without output when sixel is unavailable. |
 | `presentDelta()` | Draw changed pixels since this canvas's previous presentation. The first frame is complete; position the cursor at the same canvas origin for later frames. Both frames must be fully opaque. Returns `false` on non-sixel terminals; transparent frames throw. If other output overwrites the image or changes the sixel palette, call `present()` for a full redraw. |
 

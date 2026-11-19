@@ -76,6 +76,7 @@ its files in `prelogin/`: the logo as `prelogin/ansi/PDMATRIX.PNG` (`data/vision
 scaled to 320x107 on its own palette, so it fits beside the cube), with
 `prelogin/ansi/PDMATRIX.ANS`, `prelogin/ansi/PDMATRIX.EFX`,
 `prelogin/bar/PDMATRIX.BAR` and `prelogin/cfg/PDMATRIX.CFG`.
-`templates/prelogin-example/` holds that set, with two tones; copy it in with
-`mkdir -p prelogin && cp -R templates/prelogin-example/. prelogin/`. Without
+`templates/prelogin-example/` holds that set, with two tones. From the board
+root, with `SRC` set to this checkout, copy it in with
+`mkdir -p prelogin && cp -R "$SRC/templates/prelogin-example/." prelogin/`. Without
 it the board shows the stock matrix from `menus/v3`.

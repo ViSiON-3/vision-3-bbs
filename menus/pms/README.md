@@ -46,10 +46,10 @@ terminal.
 The login matrix is the board's, not the theme's, so selecting this theme
 does not change it. The PMS matrix (graffiti picture, pink cube, glitter,
 two tones) ships in `templates/prelogin-example-pms/`. Install it from the
-board root with:
+board root, with `SRC` set to this checkout:
 
 ```bash
-mkdir -p prelogin && cp -R templates/prelogin-example-pms/. prelogin/
+mkdir -p prelogin && cp -R "$SRC/templates/prelogin-example-pms/." prelogin/
 ```
 
 See **Pre-login screens** in `docs/sysop/configuration/adding-a-theme.md`.

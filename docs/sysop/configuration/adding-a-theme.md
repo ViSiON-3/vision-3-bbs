@@ -7,6 +7,8 @@ yours in step with the theme ViSiON/3 ships (`menus/v3`). How the board
 selects a theme and how callers choose one are in
 [Theme Selection](configuration/configuration.md#theme-selection) and
 [Callers' Own Themes](configuration/configuration.md#callers-own-themes).
+To build a theme whose menus are drawn by scripts, start with
+[Scripted Menus and Themes](scripting/scripted-themes.md).
 
 ## What a theme holds
 
@@ -124,17 +126,19 @@ prelogin/
   scaled to 320x107, beside the cube (the side layout), with its effects
   file, lettering, lightbar and command list, and
   two tones (Kenney Interface Sounds, CC0; see `ansi/PDMATRIX.SOUNDS.txt`).
-  Copy its contents into the board's `prelogin/`, as in
-  `mkdir -p prelogin && cp -R templates/prelogin-example/. prelogin/` run in
-  a checkout that is also the BBS root. The picture needs a sixel terminal
-  and the tones a terminal that answers the audio query.
+  Copy its contents into the board's `prelogin/`. From the BBS directory,
+  with `SRC` set to the source checkout (`dev-setup.sh` does not copy the
+  example sets into the BBS directory):
+  `mkdir -p prelogin && cp -R "$SRC/templates/prelogin-example/." prelogin/`.
+  The picture needs a sixel terminal and the tones a terminal that answers
+  the audio query.
 - A second set, `templates/prelogin-example-pms/`, is the PMS theme's
   matrix: the graffiti picture beside a pink cube with glitter, the
   board's lettering and lightbar (keys `L`, `A`, `C`, `D`), the same two
   tones, and a `strings.json` that colours the check-access answers and
   sets the pause after them to the `PAUSEBAR` door (defined in the stock
   `configs/doors.json`). Install it the same way:
-  `mkdir -p prelogin && cp -R templates/prelogin-example-pms/. prelogin/`.
+  `mkdir -p prelogin && cp -R "$SRC/templates/prelogin-example-pms/." prelogin/`.
   Both sets hold the same eight matrix files, so copying one over the
   other replaces them; going back from this set to the first, delete
   `prelogin/strings.json` too.
