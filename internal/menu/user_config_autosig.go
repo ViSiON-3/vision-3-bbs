@@ -147,6 +147,8 @@ func runAutoSigEditor(c *cmdCtx, u *user.User) (body string, saved, truncated bo
 	editorCtx := editor.EditorContext{
 		NodeNumber: c.nodeNumber,
 		ConfArea:   "Auto-Signature",
+		// The signature as messages will show it, colours and all (#352).
+		PreviewLines: maxAutoSigLines,
 	}
 	lines, saved, truncated, err := runLineEditor(c.s, c.terminal, c.outputMode, lineEdit{
 		text: u.AutoSignature, subject: "Auto-Signature", handle: u.Handle,

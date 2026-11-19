@@ -215,6 +215,20 @@ func TestCfgAutoSigCreateAndDelete(t *testing.T) {
 	}
 }
 
+// TestCfgAutoSigPreview pins that the auto-signature editor shows the
+// signature under the text as messages will show it, colour codes expanded
+// (#352).
+func TestCfgAutoSigPreview(t *testing.T) {
+	env := newMenuEnv(t)
+	r := env.runCmd("CFG_AUTOSIG", env.caller, "", "C\r|12-- Carl\x1aQ\r")
+	if !r.has("Preview") || !strings.Contains(r.raw, "\x1b[1;31m-- Carl") {
+		t.Errorf("no coloured preview:\n%q", r.raw)
+	}
+	if got := env.mustDiskUser(2).AutoSignature; got != "|12-- Carl" {
+		t.Fatalf("saved sig = %q", got)
+	}
+}
+
 // TestCfgAutoSigTruncatesAndAbandons pins that CFG_AUTOSIG cuts a signature
 // to five lines and says so, that an abandoned edit keeps the old one, and
 // that a disconnect at the menu logs off.

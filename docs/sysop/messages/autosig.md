@@ -71,7 +71,9 @@ Change/create  Delete  Ask each post  Quit :
 
 ### Editor
 
-Pressing `C` launches the full-screen ANSI message editor with the current signature pre-loaded. The editor supports pipe color codes, so users can create colorful signatures. On save, the signature is truncated to a maximum of **5 lines** to prevent abuse.
+Pressing `C` (or **F** in User Konfig) launches the full-screen ANSI message editor with the current signature pre-loaded. The editor supports pipe color codes, so users can create colorful signatures. On save, the signature is truncated to a maximum of **5 lines** to prevent abuse.
+
+Under the text, a **Preview** strip shows the signature's five lines as messages will show it, with the colour codes in colour, and redraws as the caller types. The text above keeps the codes as typed, so they can still be edited. Only colour codes are drawn: a screen code such as `|CL` is left out of the preview. The strip takes six rows (a divider and five lines) from the editing area, and is left off on a screen too short to keep five rows of text above it.
 
 If the user saves an empty editor session, the signature is cleared.
 
