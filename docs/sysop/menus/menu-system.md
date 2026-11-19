@@ -1268,7 +1268,7 @@ Menu configuration files are JSON files that define menu behavior and prompts.
 - `MES_CONF` - Auto-switch user's active message conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.Mes_Conf`)*
 - `FILE_CONF` - Auto-switch user's active file conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.File_Conf`)*
 - `FORCEHOTKEY` - Force single-keypress (hotkey) input for this menu regardless of the user's Hot Keys setting. A key that could start a longer command (a multi-key command, a number on a `##` menu, `/G`, or `;` to [chain commands](#chaining-commands)) still waits for Enter.
-- `SCRIPT` - Optional. The code of a `v3_script` door in `doors.json` that draws the menu in place of its `.ANS` screen and prompt, and answers with the caller's choice. If the door is missing, is not a `v3_script` door, has no script file, its access settings refuse the caller, or the script fails or gives no answer, the menu shows its screen and prompt as usual, so keep the `.ANS`. See [v3.menu](../scripting/vpl-scripting.md#v3menu).
+- `SCRIPT` - Optional. The code of a `v3_script` door in `doors.json` that draws the menu in place of its `.ANS` screen and prompt, and answers with the caller's choice. If the door is missing, is not a `v3_script` door, has no script file, its access settings refuse the caller, or the script fails or gives no answer, the menu shows its screen and prompt as usual, so keep the `.ANS`. See [Scripted Menus](menus/scripted-menus.md).
 
 ### Command Definition Files (.CFG)
 
@@ -1306,7 +1306,7 @@ Command files are JSON arrays that define what happens when users press keys.
 - `ACS` - Access control string
 - `HIDDEN` - Whether command is hidden from display
 - `NODE_ACTIVITY` - Optional text shown in Who's Online while the command runs; it reverts to the menu's default when the command finishes. On a `//` or `~~` entry it sets that default for the whole menu (otherwise the default is the menu name).
-- `LABEL` - Optional text a menu's `SCRIPT` shows for the command; without it the script is given `NODE_ACTIVITY`.
+- `LABEL` - Optional text a menu's `SCRIPT` shows for the command; without it the script is given `NODE_ACTIVITY`. See [Scripted Menus](menus/scripted-menus.md).
 
 #### Example: a Main Menu entry
 

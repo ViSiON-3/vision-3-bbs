@@ -462,7 +462,7 @@ expects it, normally at the start of a new line.
 ### v3.menu
 
 For a script a menu's `.MNU` names in `SCRIPT` (see
-[Configuration Fields](../menus/menu-system.md#configuration-fields)). The script runs each time the
+[Scripted Menus](menus/scripted-menus.md), which sets one up step by step). The script runs each time the
 menu is shown, in place of the menu's `.ANS` screen and prompt, with `v3.prompt.kind` set to
 `"menu"`, and answers with the caller's choice through `v3.prompt.answer`, as described for the
 `menu` kind above. Other scripts have no `v3.menu`.

@@ -69,3 +69,21 @@ func TestScriptedMenuFallback(t *testing.T) {
 		})
 	}
 }
+
+// The shipped scripts/examples/menu-lightbar.js lists the menu's commands,
+// moves its bar with the arrow keys and answers with the key under it.
+func TestStockMenuLightbar(t *testing.T) {
+	env := scriptedMenuEnv(t, "LIGHTBAR")
+	scripts, err := filepath.Abs(filepath.Join("..", "..", "scripts", "examples"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.e.SetDoorRegistry(map[string]config.DoorConfig{
+		"LIGHTBAR": {Type: "v3_script", Script: "menu-lightbar.js", WorkingDirectory: scripts},
+	})
+	// Down, Up, Enter picks G, which goes to OTHER; Q there logs off.
+	r := execcovRun(env, execcovCall{user: env.caller, start: "MAIN", input: "\x1b[B\x1b[A\rQ\r", hold: true})
+	if r.has("[art]") || !r.has("G  Go", "Q  Leaving") || !r.has("[other]") || r.next != "LOGOFF" {
+		t.Errorf("next=%q\n%s", r.next, r.text())
+	}
+}

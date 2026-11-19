@@ -48,6 +48,10 @@ type testSession struct {
 	// ctx is what Context returns; nil unless a test needs one, as a
 	// script door does.
 	ctx ssh.Context
+
+	// hold, when set, makes a read past the end of the input wait until it
+	// is closed, as a caller who stops typing does, instead of hanging up.
+	hold chan struct{}
 }
 
 type outputHook struct {
@@ -60,7 +64,13 @@ func newTestSession(input string) *testSession {
 	return &testSession{in: bytes.NewReader([]byte(input))}
 }
 
-func (ts *testSession) Read(p []byte) (int, error) { return ts.in.Read(p) }
+func (ts *testSession) Read(p []byte) (int, error) {
+	n, err := ts.in.Read(p)
+	if n == 0 && ts.hold != nil {
+		<-ts.hold
+	}
+	return n, err
+}
 
 // Close records that the BBS hung up on the caller.
 func (ts *testSession) Close() error {

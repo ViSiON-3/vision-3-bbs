@@ -90,6 +90,7 @@ type execcovCall struct {
 	user    *user.User // nil for a caller who has not logged in
 	start   string     // menu to start in
 	input   string     // keystrokes; reads report a disconnect once they run out
+	hold    bool       // reads wait once the keystrokes run out, until Run ends
 	height  int        // terminal rows; 0 means 24
 	started time.Time  // when the session connected; zero means now
 	tracker types.AutoRunTracker
@@ -109,6 +110,10 @@ func execcovRun(env *menuEnv, c execcovCall) runResult {
 		ctx, cancel := context.WithCancel(context.Background())
 		env.t.Cleanup(cancel)
 		ts.ctx = &testCtx{Context: ctx}
+	}
+	if c.hold {
+		ts.hold = make(chan struct{})
+		defer close(ts.hold)
 	}
 	SetSessionOutputMode(ts, env.outputMode)
 	env.t.Cleanup(func() { ClearSessionOutputMode(ts) })
