@@ -138,6 +138,11 @@ All menu files are located in `menus/v3/`:
 Any of them can be overridden from `menus.d/v3/` without editing `menus/v3/`
 itself — see the next section.
 
+A caller who goes to a menu whose `.ANS` file does not exist sees
+`Error reading screen file: NAME.ANS`, presses Enter and is back on the menu
+they came from. Where there is no menu to go back to, such as the first menu
+after login, the caller is logged off.
+
 ## Customising menus without losing your changes
 
 The paths below use `v3`, the default theme. A board running another

@@ -53,6 +53,11 @@ type runLoopState struct {
 	// caller still comes from the keyboard. Being part of this per-Run state,
 	// they go when the run ends, however it ends.
 	pending []string
+	// sentBack is set when backFromMissingScreen has sent the caller back
+	// and cleared once a menu screen is drawn, so the way back is not taken
+	// again before the caller has seen a menu (an every-entry autorun on the
+	// menu they went back to could send them to the same missing screen).
+	sentBack bool
 }
 
 // userHandle returns the current user's handle for logging, or "" when no user
@@ -180,6 +185,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// regions, pipe/token substitution, CP437/encoding conversion).
 		ansiProcessResult, renderErr := st.renderMenuAnsi()
 		if renderErr != nil {
+			if st.backFromMissingScreen(renderErr) {
+				continue
+			}
 			return "", st.currentUser, renderErr
 		}
 
@@ -271,6 +279,7 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		if err := st.displayMenuScreen(ansiProcessResult, menuRec); err != nil {
 			return "", st.currentUser, err
 		}
+		st.sentBack = false
 
 		// --- Check for Lightbar Menu (.BAR) ---
 		// Check if a .BAR file exists for this menu in the MENU SET directory
