@@ -111,6 +111,26 @@ func addLight(img, layer *image.NRGBA, x, y int, r, g, bl float64) {
 	}
 }
 
+// laySpark draws a spark of colour r, g, bl over the pixel at x, y, at
+// strength a from 0 to 1, and copies the result to layer when layer is not
+// nil and the pixel changed. Over black it is the light addLight would add;
+// over a bright pixel the spark covers it, where added light would be lost.
+func laySpark(img, layer *image.NRGBA, x, y int, r, g, bl, a float64) {
+	if !image.Pt(x, y).In(img.Bounds()) {
+		return
+	}
+	a = math.Max(0, math.Min(1, a))
+	old := img.NRGBAAt(x, y)
+	mix := func(under uint8, spark float64) uint8 {
+		return uint8(math.Min(255, math.Round(float64(under)*(1-a)+spark*a)))
+	}
+	c := color.NRGBA{R: mix(old.R, r), G: mix(old.G, g), B: mix(old.B, bl), A: 255}
+	img.SetNRGBA(x, y, c)
+	if layer != nil && c != old {
+		layer.SetNRGBA(x, y, c)
+	}
+}
+
 // paintLight lights only visible metal round x, y, leaving the black
 // background untouched, as the script's paintLight. radius is in pixels.
 func paintLight(img, layer *image.NRGBA, x, y int, radius, red, green, blue, intensity float64) {
@@ -256,7 +276,7 @@ func (b *matrixLogoBurn) paintWeld(img, weld *image.NRGBA, tick, step int) float
 			if light < 0.025 {
 				continue
 			}
-			addLight(img, weld, cx+x, cy+y, 205*light, 225*light, 255*light)
+			laySpark(img, weld, cx+x, cy+y, 205, 225, 255, light)
 		}
 	}
 	// Each spatter particle has its own launch time, velocity, cooling and
@@ -277,7 +297,7 @@ func (b *matrixLogoBurn) paintWeld(img, weld *image.NRGBA, tick, step int) float
 			sx := int(math.Round(float64(cx) + vx*t*k))
 			sy := int(math.Round(float64(cy) + (vy*t+0.22*t*t)*k))
 			glow := math.Max(0, 1-age/11) * (1 - float64(trail)*0.25)
-			addLight(img, weld, sx, sy, 255*glow, (65+145*glow)*glow, 50*glow*glow)
+			laySpark(img, weld, sx, sy, 255, 65+145*glow, 50*glow, glow)
 		}
 	}
 	return power

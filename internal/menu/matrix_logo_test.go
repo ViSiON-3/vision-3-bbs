@@ -64,3 +64,23 @@ func TestMatrixEmbersRiseAsFarAsMainMenu(t *testing.T) {
 		}
 	}
 }
+
+// A spark covers a bright pixel with its own colour and is, over black, the
+// light that used to be added.
+func TestLaySparkIsInFront(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 2, 1))
+	img.SetNRGBA(0, 0, color.NRGBA{255, 255, 255, 255})
+	img.SetNRGBA(1, 0, color.NRGBA{0, 0, 0, 255})
+	layer := image.NewNRGBA(img.Bounds())
+	laySpark(img, layer, 0, 0, 255, 210, 50, 1)
+	laySpark(img, layer, 1, 0, 255, 210, 50, 0.5)
+	if got, want := img.NRGBAAt(0, 0), (color.NRGBA{255, 210, 50, 255}); got != want {
+		t.Errorf("full-strength spark over white: %v, want the spark's colour %v", got, want)
+	}
+	if got, want := img.NRGBAAt(1, 0), (color.NRGBA{128, 105, 25, 255}); got != want {
+		t.Errorf("half-strength spark over black: %v, want %v, the light added before", got, want)
+	}
+	if layer.NRGBAAt(0, 0) != img.NRGBAAt(0, 0) || layer.NRGBAAt(1, 0) != img.NRGBAAt(1, 0) {
+		t.Error("changed pixels were not copied to the layer")
+	}
+}

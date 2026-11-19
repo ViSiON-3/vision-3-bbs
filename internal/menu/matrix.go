@@ -203,7 +203,7 @@ func (e *MenuExecutor) RunMatrixScreen(
 	}
 	// Loaded after the first draw, so the screen does not wait for them.
 	tones := pre.loadMatrixTones(s, terminal, nodeNumber)
-	// The tune belongs to the matrix: it stops when the caller is handed on.
+	// Whatever way the matrix ends, the tune ends with it.
 	defer func() { tones.stopMusic() }()
 	if scene == nil {
 		// No animated picture to wait for.
@@ -251,8 +251,11 @@ func (e *MenuExecutor) RunMatrixScreen(
 			if now := time.Since(animationStart).Seconds(); frameSent && (scene == nil || now >= matrixIntroSeconds) {
 				// The cube slows as the tune ends, and is at rest facing
 				// the caller on its last sound.
+				// The clock is read after the tune has been written, so the
+				// time it took to send is not counted as playing time.
 				if length := tones.startMusic(); length > 0 && scene != nil {
-					scene.settleAt = math.Max(now, now+length-matrixSettleSeconds)
+					sent := time.Since(animationStart).Seconds()
+					scene.settleAt = math.Max(sent, sent+length-matrixSettleSeconds)
 				}
 			}
 			continue
@@ -344,6 +347,10 @@ func (e *MenuExecutor) RunMatrixScreen(
 				continue
 			}
 			tones.play(matrixToneChoose)
+			// The tune is the matrix's: it does not play on into the
+			// login prompt, the new-user application or any other screen
+			// the choice leads to.
+			tones.stopMusic()
 			if scene != nil && scene.config.ProjectText {
 				// Briefly turn the selected face toward the caller and flare it.
 				for frame := 1; frame <= 6; frame++ {
