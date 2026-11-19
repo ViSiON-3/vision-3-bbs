@@ -23,6 +23,36 @@ come as small pull requests, in the order under
 | Panic recovery in session goroutines (`internal/safego`) | none |
 | A source engine that copies Reddit, Hacker News, NASA GCN and NNTP groups into message areas. The template's one Reddit feed and three NNTP groups are disabled, and so is its sync event | [Source Gateway](docs/sysop/messages/source-gateway.md), [NNTP](docs/sysop/messages/nntp.md) |
 
+## What it looks like
+
+Captured from a board built from this branch, with the commands under
+[Try it](#try-it), through a relay on port 48700. SyncTERM 1.9 draws sixel;
+xterm 390 does not.
+
+### ViSiON3-Sixel
+
+![ViSiON3-Sixel login matrix on SyncTERM](docs/preview/vision3-matrix-syncterm.png)
+
+The login matrix from `templates/prelogin-example/`, on SyncTERM: the logo picture beside the turning cube with the four choices.
+
+![ViSiON3-Sixel main menu on SyncTERM](docs/preview/vision3-main-menu-syncterm.png)
+
+The main menu on SyncTERM: the sixel logo over the framed menu, with the small cube beside the selected command.
+
+![ViSiON3-Sixel main menu on xterm](docs/preview/vision3-main-menu-xterm.png)
+
+The same main menu on xterm, which does not draw sixel: the text logo, no cube.
+
+### PMS
+
+![PMS login matrix on SyncTERM](docs/preview/pms-matrix-syncterm.png)
+
+The login matrix from `templates/prelogin-example-pms/`, on SyncTERM: the graffiti picture beside the pink cube with glitter.
+
+![PMS main menu on SyncTERM](docs/preview/pms-main-menu-syncterm.png)
+
+The PMS main menu on SyncTERM: the graffiti picture, three columns of commands and the star mascot.
+
 ## Try it
 
 These are the commands I ran on a fresh clone on Linux, with Go and `jq`
@@ -129,7 +159,7 @@ Measured at the branch head against `59dd669d`:
 
 | | Files | Lines |
 |-|-------|-------|
-| Everything | 733 changed, 570 of them new | +38,555, -1,034 |
+| Everything | 738 changed, 575 of them new | +38,585, -1,034 |
 | Go code | 142 | +12,410, -740 |
 | Go tests | 101 | +13,288, -94 |
 | Theme files (`menus/vision3`, `menus/pms`) | 409 (199 and 210) | |
