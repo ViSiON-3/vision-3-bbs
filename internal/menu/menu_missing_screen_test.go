@@ -1,6 +1,8 @@
 package menu
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -48,5 +50,43 @@ func TestRunMissingScreenDisconnectAtPause(t *testing.T) {
 	r := execcovRun(env, execcovCall{user: env.caller, start: "HOME", input: "G\r"})
 	if r.err == nil || !strings.Contains(r.err.Error(), "NOART.ANS") {
 		t.Fatalf("err=%v, want the NOART.ANS error; output:\n%s", r.err, r.text())
+	}
+}
+
+// A logged-in caller run from LOGIN is sent to MAIN with LOGIN as the menu
+// before it. If MAIN's screen is missing, going back to LOGIN would only send
+// them to MAIN again, so the run ends with the error after one error line.
+func TestRunMissingScreenNotBackToLogin(t *testing.T) {
+	env, m := execcovRunEnv(t)
+	m.menu("LOGIN", MenuRecord{}, "LOGIN-SCREEN\r\n")
+	if err := os.Remove(filepath.Join(m.dir, "ansi", "MAIN.ANS")); err != nil {
+		t.Fatal(err)
+	}
+	r := execcovRun(env, execcovCall{user: env.caller, start: "LOGIN", input: "\r\r\r"})
+	if r.err == nil || !strings.Contains(r.err.Error(), "MAIN.ANS") {
+		t.Fatalf("err=%v, want the MAIN.ANS error; output:\n%s", r.err, r.text())
+	}
+	if n := execcovCount(r, "Error reading screen file: MAIN.ANS"); n != 1 {
+		t.Errorf("error line shown %d times, want 1; output:\n%s", n, r.text())
+	}
+}
+
+// An every-entry autorun that sends the caller to a menu whose screen is
+// missing sends them there again on the way back. The way back is not taken a
+// second time before a menu has been drawn, so the run ends with the error at
+// the second error line, with Enters still unread, instead of repeating until
+// the caller hangs up.
+func TestRunMissingScreenAutorunNoLoop(t *testing.T) {
+	env, m := execcovRunEnv(t)
+	m.menu("HOME", MenuRecord{}, "HOME-SCREEN\r\n",
+		CommandRecord{Keys: "G", Command: "GOTO:AUTO"})
+	m.menu("AUTO", MenuRecord{}, "AUTO-SCREEN\r\n",
+		CommandRecord{Keys: "~~", Command: "GOTO:NOART"})
+	r := execcovRun(env, execcovCall{user: env.caller, start: "HOME", input: "G\r\r\r\r"})
+	if r.err == nil || !strings.Contains(r.err.Error(), "NOART.ANS") {
+		t.Fatalf("err=%v, want the NOART.ANS error; output:\n%s", r.err, r.text())
+	}
+	if n := execcovCount(r, "Error reading screen file: NOART.ANS"); n != 2 {
+		t.Errorf("error line shown %d times, want 2; output:\n%s", n, r.text())
 	}
 }

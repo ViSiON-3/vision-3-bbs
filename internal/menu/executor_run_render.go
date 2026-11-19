@@ -18,16 +18,19 @@ import (
 // asked to press Enter and the run carries on at the previous menu, with any
 // chained commands still pending dropped. It reports false, and the run is
 // left to end with err as before, for any other error, before login, on the
-// LOGIN menu, when there is no menu to go back to, or when the caller
+// LOGIN menu, when there is no menu to go back to, when that menu is LOGIN
+// (which sends a logged-in caller straight to MAIN again), or when the caller
 // disconnects at the pause. The way back is used once (previousMenuName is
 // cleared), so two menus that have both lost their screens cannot pass the
-// caller between them.
+// caller between them, and it is not taken again until a menu screen has
+// been drawn (sentBack), so an every-entry autorun that leads to the missing
+// screen cannot send the caller round in a loop.
 func (st *runLoopState) backFromMissingScreen(err error) bool {
 	if !errors.Is(err, fs.ErrNotExist) {
 		return false
 	}
 	back := st.previousMenuName
-	if st.currentUser == nil || st.currentMenuName == "LOGIN" || back == "" || back == st.currentMenuName {
+	if st.sentBack || st.currentUser == nil || st.currentMenuName == "LOGIN" || back == "" || back == "LOGIN" || back == st.currentMenuName {
 		return false
 	}
 	if perr := st.e.loginPausePrompt(st.s, st.terminal, st.nodeNumber, st.outputMode, st.termWidth, st.termHeight); perr != nil {
@@ -36,6 +39,7 @@ func (st *runLoopState) backFromMissingScreen(err error) bool {
 	slog.Warn("menu screen missing; caller sent back", "menu", st.currentMenuName, "back", back, "node", st.nodeNumber)
 	st.pending = nil
 	st.currentMenuName, st.previousMenuName = back, ""
+	st.sentBack = true
 	return true
 }
 
