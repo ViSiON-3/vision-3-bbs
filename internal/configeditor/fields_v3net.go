@@ -161,7 +161,7 @@ func (m *Model) fieldsV3NetLeaf() []fieldDef {
 		// V3Net Central. Each switch is its own consent and defaults to N;
 		// the block is only written once a sysop touches it.
 		{
-			Label: "Central", Help: "Let callers open V3Net Central (the board directory) for this network; sends nothing about them", Type: ftYesNo, Col: 3, Row: 13, Width: 1,
+			Label: "Central", Help: "Preview in 1.0. Let callers open V3Net Central (the board directory) for this network; sends nothing about them", Type: ftYesNo, Col: 3, Row: 13, Width: 1,
 			Get: func() string { return uitext.BoolToYN(l.CentralEnabled()) },
 			Set: func(val string) error { v3netCentral(l).Enabled = uitext.YNToBool(val); return nil },
 		},

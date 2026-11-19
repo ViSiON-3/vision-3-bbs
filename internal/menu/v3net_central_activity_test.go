@@ -228,3 +228,11 @@ func TestLastCallersNetworkScreens(t *testing.T) {
 		t.Errorf("--network without the feature: %q", out)
 	}
 }
+
+// Central ships in 1.0 as a preview (#1082), and its menu says so.
+func TestCentralMenuSaysPreview(t *testing.T) {
+	on := &centralFake{nets: []CentralNetworkInfo{activityNet("testnet")}}
+	if out := runCentralScreen(t, on, "q\r", runV3NetCentral, ""); !strings.Contains(stripANSIForTest(out), "V3Net Central: Menu (Preview)") {
+		t.Errorf("no preview marker: %q", out)
+	}
+}

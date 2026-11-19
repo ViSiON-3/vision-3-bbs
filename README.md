@@ -133,6 +133,7 @@ Your reward? The satisfaction of knowing that somewhere, someone is reliving the
 | FTN Setup Wizard              | ✅ Working | Guided setup in `./config`: pick network, download echo list, auto-create areas + `binkd.conf`                     |
 | QWK Networking (QWKnet)       | ✅ Working | Node on QWK-based networks such as DOVE-Net: FTP poll of the hub, REP/QWK packing and tossing with HEADERS.DAT and Synchronet kludges, dupe and loop protection, setup wizard in `./config`. See [QWK Networking](docs/sysop/messages/qwk-networking.md). |
 | V3Net Networking              | 🧪 Experimental | Native inter-BBS message networking via REST+SSE (hub/leaf, signed area lists) — see the [V3Net docs](docs/sysop/v3net/message-areas.md)                                 |
+| V3Net Central                 | 🔬 Preview | Opt-in network board directory, Who's Online, Last Callers, network chat and activity alerts; a preview in 1.0 — see the [Central docs](docs/sysop/v3net/central.md) |
 | **Community Features**        |           |                                                                                                                     |
 | Voting System                 | ✅ Working | Voting booths, mandatory topics, SysOp management                                                                   |
 | News System                   | ✅ Working | SysOp-managed news items, auto-display on login                                                                     |
