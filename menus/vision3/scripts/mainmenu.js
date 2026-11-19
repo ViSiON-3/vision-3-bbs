@@ -25,7 +25,7 @@ var cubeCanvas = null, cubePosition = "";
 var cubeSeed = Math.random() * Math.PI * 2;
 // Shapes hold for a random interval, then blend over 1.8 seconds.
 var cubeMorph = {from: 0, to: 0, begin: 0, next: 3 + Math.random() * 4};
-var emberSources = [];
+var emberSources = [], emberReach = [];
 
 function at(x, y, text) { v3.console.gotoxy(x, y); v3.console.print(text); }
 function rgb(r, g, b) { return '\x1b[38;2;' + r + ';' + g + ';' + b + 'm'; }
@@ -56,30 +56,66 @@ function findEmberSources(canvas) {
       if (p && p[0] > 150 && p[1] > 55 && p[0] > p[2] * 1.5) points.push([x, y]);
     }
   }
+  // The metal is hottest at the far-left V and cools along the word, so
+  // embers come off thickest there and thin out to the right. emberReach
+  // holds each source's running share of that heat.
+  var left = 1e9, total = 0;
+  for (var i = 0; i < points.length; i++) left = Math.min(left, points[i][0]);
+  emberReach = [];
+  for (var j = 0; j < points.length; j++) {
+    total += Math.exp(-(points[j][0] - left) / 65);
+    emberReach.push(total);
+  }
   return points;
 }
-// Authentik-inspired embers rise from hot metal, with drag-limited flight and
-// a white-hot to red cooling ramp.
+// The source that share u (0 to 1) of the heat reaches.
+function emberSource(u) {
+  var want = u * emberReach[emberReach.length - 1], lo = 0, hi = emberReach.length - 1;
+  while (lo < hi) {
+    var mid = (lo + hi) >> 1;
+    if (emberReach[mid] < want) lo = mid + 1; else hi = mid;
+  }
+  return emberSources[lo];
+}
+// Authentik-inspired embers rise from hot metal on the convection above it.
+// Each ember has its own stamina, cooling curve and burn-out, so some wink
+// out low while others ride an updraft to the top, flaring and guttering as
+// they cross warmer and cooler air; a slow shared current carries
+// neighbouring embers the same way.
 function paintEmbers(canvas, time) {
   function random(n) { var v = Math.sin(n * 127.1 + 311.7) * 43758.5453123; return v - Math.floor(v); }
+  // The current at a point: -1 pushes left, 1 right. It meanders with
+  // height and drifts over time, so a plume leans and breaks up.
+  function current(x, y) { return Math.sin(x * 0.021 + Math.sin(y * 0.047 - time * 0.7) * 1.6 + time * 0.33); }
   for (var i = 0; i < 64; i++) {
     var seed = i * 7 + 1, phase = random(seed), kind = random(seed + 1);
     var rate = kind < 0.45 ? 0.23 : kind < 0.86 ? 0.13 : 0.08;
-    var life = (time * rate + phase) % 1;
+    // Stamina is how much of the full flight this ember lasts; a spent
+    // ember is relit at a source straight away, so the count holds.
+    var stamina = 0.3 + 0.7 * Math.pow(random(seed + 5), 0.8);
+    var burn = (time * rate / stamina + phase) % 1;
+    var life = burn * stamina;
     var climb = 1 - Math.exp(-(kind < 0.45 ? 4.0 : 1.7) * life);
     var rise = kind < 0.45 ? 24 : kind < 0.86 ? 88 : 120;
     if (!emberSources.length) continue;
-    var source = emberSources[Math.floor(random(seed + 3) * emberSources.length)];
-    var wander = Math.sin(life * 6.28 + phase * 6.28) * (3 + 15 * climb);
-    var x = Math.round(source[0] + wander);
+    // Each relight picks a new source, weighted to the hottest metal.
+    var source = emberSource(random(seed + 3 + Math.floor(time * rate / stamina + phase) * 17.3));
     var y = Math.round(source[1] - climb * rise - life * 8);
-    var fade = Math.min(1, life / 0.045) * Math.min(1, (1 - life) / 0.14);
-    var temp = Math.pow(1 - life, 1.9);
-    var intensity = fade * (0.35 + 0.65 * temp);
+    var sway = Math.sin(life * 6.28 + phase * 6.28) * (2 + 6 * climb);
+    var drift = current(source[0], y);
+    var x = Math.round(source[0] + sway + drift * (4 + 22 * climb));
+    // Lit quickly; the burn-out is a snap for some and a long gutter for others.
+    var fade = Math.min(1, burn / 0.05) * Math.min(1, (1 - burn) / (0.05 + 0.3 * random(seed + 8)));
+    var temp = Math.pow(1 - burn, 0.6 + 1.6 * random(seed + 6));
+    // Gusts are each ember's own; the draft is the shared current, hottest
+    // where the air rises straight.
+    var gust = 0.5 + 0.5 * Math.sin(time * (2.1 + 3.7 * random(seed + 7)) + phase * 40 + y * 0.09);
+    var draft = 1 - Math.abs(drift);
+    var intensity = fade * (0.6 + 0.4 * temp) * (0.65 + 0.8 * (0.6 * gust + 0.4 * draft));
     var radius = kind < 0.45 ? 1 : kind < 0.86 ? 2 : 3;
-    var red = Math.round(110 + 145 * Math.min(1, temp * 3));
-    var green = Math.round(12 + 210 * temp);
-    var blue = Math.round(3 + 140 * Math.pow(temp, 2));
+    var red = Math.round(150 + 105 * Math.min(1, temp * 3));
+    var green = Math.round(45 + 177 * temp);
+    var blue = Math.round(8 + 135 * Math.pow(temp, 2));
     if (i % 2 === 0 && intensity > 0.12) paintLight(canvas, x, y, 4, 105, 35, 4, intensity * 0.55);
     for (var dy = -radius; dy <= radius; dy++) {
       for (var dx = -radius; dx <= radius; dx++) {
