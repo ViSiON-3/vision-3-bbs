@@ -1,3 +1,6 @@
+This branch is a preview to try, not a pull request.
+See [PREVIEW.md](PREVIEW.md) for what is in it and how to run it.
+
 # ViSiON/3 BBS Software
 
 ![ViSiON/3](docs/ViSiON3.png)

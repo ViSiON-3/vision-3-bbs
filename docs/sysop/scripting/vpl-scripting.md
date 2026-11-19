@@ -374,7 +374,7 @@ Read-only session and BBS information.
 |----------|------|-------------|
 | `node` | number | Current node number |
 | `startTime` | number | Session start time (Unix timestamp) |
-| `timeLeft` | number | Seconds remaining in session (dynamic, recalculated on each access) |
+| `timeLeft` | number | Seconds remaining in session (dynamic, recalculated on each access). A caller with no time limit reads 3600 |
 | `online` | boolean | `true` if user is still connected (dynamic) |
 
 #### v3.session.bbs
