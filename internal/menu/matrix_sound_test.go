@@ -370,3 +370,18 @@ func TestMatrixCubeSettlesSquare(t *testing.T) {
 		t.Error("a cube with no settleAt stopped")
 	}
 }
+
+// A tune's sounding length leaves out the silence at its end.
+func TestMatrixTuneSounding(t *testing.T) {
+	wav := testWAV(1, 1, 22050, 8, 22050*3)
+	data := wav[len(wav)-22050*3:]
+	for i := 0; i < 22050*2; i++ {
+		data[i] = 200
+	}
+	if got := matrixTuneSounding(wav); got != 2 {
+		t.Errorf("sounding length %.3f s, want 2: one of the three seconds is silence", got)
+	}
+	if got := matrixTuneSounding([]byte("not a wav")); got != 0 {
+		t.Errorf("sounding length of a file that is not a tune is %.3f, want 0", got)
+	}
+}

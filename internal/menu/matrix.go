@@ -10,6 +10,7 @@ import (
 	"image/png"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -248,10 +249,10 @@ func (e *MenuExecutor) RunMatrixScreen(
 			// frame sent after the logo has faded in and the cube has
 			// risen, so the terminal is keeping up by then.
 			if now := time.Since(animationStart).Seconds(); frameSent && (scene == nil || now >= matrixIntroSeconds) {
-				// When the tune ends the cube stops turning and faces
-				// the caller.
+				// The cube slows as the tune ends, and is at rest facing
+				// the caller on its last sound.
 				if length := tones.startMusic(); length > 0 && scene != nil {
-					scene.settleAt = now + length
+					scene.settleAt = math.Max(now, now+length-matrixSettleSeconds)
 				}
 			}
 			continue

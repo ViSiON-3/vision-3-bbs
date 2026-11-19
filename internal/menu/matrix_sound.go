@@ -56,7 +56,7 @@ type matrixTones struct {
 	w      io.Writer
 	loaded [2]bool // by matrixToneMove, matrixToneChoose
 	tune   []byte  // the tune, read and not yet sent
-	length float64 // the tune's length in seconds
+	length float64 // seconds until the tune's last sound
 	music  bool    // the tune was sent and may still be playing
 }
 
@@ -85,8 +85,7 @@ func (e *MenuExecutor) loadMatrixTones(s ssh.Session, w io.Writer, node int) *ma
 	}
 	// The tune is read now and sent by startMusic, once the picture is up.
 	if b, ok := e.matrixToneFile(matrixMusicFile, maxMatrixMusic, node); ok {
-		samples, _ := matrixToneSamples(b)
-		t.tune, t.length = b, float64(samples)/matrixToneSampleHz
+		t.tune, t.length = b, matrixTuneSounding(b)
 	}
 	if !t.loaded[matrixToneMove] && !t.loaded[matrixToneChoose] && t.tune == nil {
 		return nil
@@ -96,8 +95,8 @@ func (e *MenuExecutor) loadMatrixTones(s ssh.Session, w io.Writer, node int) *ma
 
 // startMusic sends the tune and plays it through once. The matrix calls it
 // when its picture has been drawn, so the tune's bytes are not ahead of the
-// picture's on the way to the caller. It returns the tune's length in
-// seconds, or zero if there was none to start.
+// picture's on the way to the caller. It returns the seconds until the
+// tune's last sound, or zero if there was none to start.
 func (t *matrixTones) startMusic() float64 {
 	if t == nil || t.tune == nil {
 		return 0
@@ -217,4 +216,30 @@ func matrixToneSamples(b []byte) (int, bool) {
 		p = body + n + n%2
 	}
 	return samples, formatOK && haveData && samples > 0
+}
+
+// matrixTuneSounding is how many seconds of tune b, a file matrixToneSamples
+// accepts, pass before its last sound: its length less the silence at its
+// end. A tune may end in silence so the terminal plays its last note out.
+func matrixTuneSounding(b []byte) float64 {
+	samples, ok := matrixToneSamples(b)
+	if !ok {
+		return 0
+	}
+	// The data chunk is the last samples bytes before any trailing chunk;
+	// find it as the parser does.
+	for p := 12; p+8 <= len(b); {
+		size := int(binary.LittleEndian.Uint32(b[p+4 : p+8]))
+		if string(b[p:p+4]) == "data" {
+			data := b[p+8 : p+8+samples]
+			n := len(data)
+			// 8-bit silence is 128; a step either side is noise.
+			for n > 0 && data[n-1] >= 127 && data[n-1] <= 129 {
+				n--
+			}
+			return float64(n) / matrixToneSampleHz
+		}
+		p += 8 + size + size%2
+	}
+	return 0
 }
