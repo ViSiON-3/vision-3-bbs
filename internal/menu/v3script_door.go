@@ -42,6 +42,7 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		WorkingDir: workDir,
 		Args:       ctx.Config.Args,
 		Prompt:     ctx.Prompt,
+		Menu:       ctx.Menu,
 		MaxRunTime: v3ScriptRunLimit(ctx.Config),
 	}
 	if ctx.Executor != nil {

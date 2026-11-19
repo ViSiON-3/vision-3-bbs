@@ -53,6 +53,9 @@ type runLoopState struct {
 	// caller still comes from the keyboard. Being part of this per-Run state,
 	// they go when the run ends, however it ends.
 	pending []string
+	// scriptOff names a menu whose next showing skips its SCRIPT and shows
+	// the menu's own screen and prompt (see unmatchedScriptAnswer).
+	scriptOff string
 }
 
 // userHandle returns the current user's handle for logging, or "" when no user
@@ -263,13 +266,28 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		}
 		// --- End AutoRun Command Execution ---
 
+		// A menu whose .MNU names a SCRIPT has the script draw it and answer
+		// in place of its screen and prompt (see runMenuScript). The next
+		// command of a chain stands in for a selection, so no script runs.
+		var input string
+		var act loopAction
+		var retErr error
+		scripted := false
+		skipScript := st.scriptOff == st.currentMenuName
+		st.scriptOff = ""
+		if len(st.pending) == 0 && !skipScript {
+			input, act, retErr, scripted = st.runMenuScript(menuRec, commands)
+		}
+
 		// 3. Display ANSI Screen (Processed Bytes) - Moved display logic here for ALL menus
 		// (Avoid double-display for LOGIN which handles its own display before prompt)
 		// We still need the raw content for potential lightbar background
 		// Note: ansBackgroundBytes is currently unused but will be needed for full lightbar implementation
 		// ansBackgroundBytes := ansiProcessResult.DisplayBytes
-		if err := st.displayMenuScreen(ansiProcessResult, menuRec); err != nil {
-			return "", st.currentUser, err
+		if !scripted {
+			if err := st.displayMenuScreen(ansiProcessResult, menuRec); err != nil {
+				return "", st.currentUser, err
+			}
 		}
 
 		// --- Check for Lightbar Menu (.BAR) ---
@@ -287,10 +305,15 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// 4. Determine Input Mode / Method
 		// The next command of a chain stands in for the caller's selection;
 		// otherwise read one, which may itself start a chain.
-		var input string
-		var act loopAction
-		var retErr error
-		if st.nextChained() {
+		if scripted {
+			if act == loopFallthrough {
+				st.userInput = input
+				if !st.startChain() {
+					continue
+				}
+				input, act, retErr = st.specialInput()
+			}
+		} else if st.nextChained() {
 			slog.Debug("running chained command", "menu", st.currentMenuName, "input", st.userInput, "left", len(st.pending))
 			if retAction, ended, endErr := st.chainedSessionEnded(); ended {
 				return retAction, st.currentUser, endErr
@@ -357,6 +380,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 				continue
 			}
 
+			if scripted && st.unmatchedScriptAnswer(menuRec) {
+				continue
+			}
 			fallbackMenu := menuRec.Fallback
 			if fallbackMenu != "" {
 				slog.Info("no command match, using fallback menu", "menu", fallbackMenu)

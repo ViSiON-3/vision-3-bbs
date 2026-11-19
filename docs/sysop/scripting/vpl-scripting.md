@@ -422,7 +422,7 @@ from the caller.
 | `menu` | A string: `GOTO:NAME` goes to menu `NAME`, `LOGOFF` ends the call, and anything else is the command line the caller would have typed (`W`, `MR`, an empty string for Enter). Anything but a string is logged and ignored | The BBS reads the caller's command after the script |
 
 The `menu` kind is the default prompt (`defPrompt`) of a menu without a lightbar, as the main run
-loop shows it; the sponsor, door and twit-list menus draw the same prompt but read the command
+loop shows it, and a script a menu's `SCRIPT` names (see [v3.menu](#v3menu)); the sponsor, door and twit-list menus draw the same prompt but read the command
 themselves, so a script there sees kind `""`. A `GOTO:` to a menu that does not exist, or whose
 screen file cannot be read, is logged and the caller is asked for a command as usual; one to a menu
 the caller's access does not allow shows the access-denied string and does the same, rather than
@@ -456,6 +456,36 @@ An answer counts only when the script runs to its end: a script that answers and
 is ended by a disconnect or the time limit, leaves the prompt to the BBS. When a script answers,
 the BBS prints nothing more for the prompt, so the script should leave the cursor where the caller
 expects it, normally at the start of a new line.
+
+---
+
+### v3.menu
+
+For a script a menu's `.MNU` names in `SCRIPT` (see
+[Scripted Menus](menus/scripted-menus.md), which sets one up step by step). The script runs each time the
+menu is shown, in place of the menu's `.ANS` screen and prompt, with `v3.prompt.kind` set to
+`"menu"`, and answers with the caller's choice through `v3.prompt.answer`, as described for the
+`menu` kind above. Other scripts have no `v3.menu`.
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `items` | array | The commands the caller may choose, in `.CFG` order, each `{key, label, activity}`: `key` is the first of the command's `KEYS`, `label` its `LABEL` (or `NODE_ACTIVITY` without one), and `activity` its `NODE_ACTIVITY`. Commands the caller's access does not allow, `HIDDEN` commands and the `//` and `~~` entries are left out |
+
+The menu shows its own screen and prompt instead when the door is missing, is not a `v3_script`
+door, has no script file or refuses the caller, and when the script fails or ends without an answer
+(or answers with an empty command). The
+menu's ACS, password and `//` commands are checked and run before the script, as they are before
+the screen.
+
+```javascript
+// menu.js — a menu drawn as a list of its commands
+v3.console.cls();
+v3.menu.items.forEach(function (item) {
+    v3.console.println("|08[|15" + item.key + "|08] |07" + item.label);
+});
+v3.console.print("|15Choice: ");
+v3.prompt.answer(v3.console.getstr(10));
+```
 
 ---
 

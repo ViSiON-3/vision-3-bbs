@@ -41,6 +41,9 @@ type MenuData struct {
 	MesConf        int    `json:"MES_CONF"`
 	FileConf       int    `json:"FILE_CONF"`
 	ForceHotKey    bool   `json:"FORCEHOTKEY"`
+	// Script is the menu's SCRIPT door. The editor has no field for it; it
+	// is kept so saving a menu does not drop it.
+	Script string `json:"SCRIPT,omitempty"`
 }
 
 // CmdData represents a single entry in a .CFG JSON array.
@@ -51,6 +54,9 @@ type CmdData struct {
 	Hidden       bool   `json:"HIDDEN"`
 	AutoRun      string `json:"AUTORUN,omitempty"`
 	NodeActivity string `json:"NODE_ACTIVITY,omitempty"`
+	// Label is the command's LABEL, kept for the same reason as
+	// MenuData.Script.
+	Label string `json:"LABEL,omitempty"`
 }
 
 // menuEntry holds a loaded menu with its on-disk name.

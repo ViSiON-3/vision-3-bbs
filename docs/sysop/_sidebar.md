@@ -33,6 +33,7 @@
 
 * **MENU SYSTEM**
 * [Menus & ACS](menus/menu-system.md)
+* [Scripted Menus](menus/scripted-menus.md)
 * [News](menus/news.md)
 * [BBS Listings](menus/bbs-list.md)
 * [Rumors](menus/rumors.md)
