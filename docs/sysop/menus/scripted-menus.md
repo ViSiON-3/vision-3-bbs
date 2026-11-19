@@ -13,7 +13,7 @@ A scripted menu is a menu whose screen is drawn by a [VPL script](scripting/vpl-
 | Who reads the caller's choice | The BBS, at the menu prompt or lightbar | The script, which answers with `v3.prompt.answer()` |
 | Scope | Every menu of the board | The menus whose `.MNU` sets `SCRIPT` |
 
-A theme can make any of its menus a scripted menu by setting `SCRIPT` in that menu's `.MNU`. The menu keeps its `.CFG` commands, so what each key does is unchanged. The stock `v3` theme sets no `SCRIPT`, so it looks and works as before.
+A theme can make any of its menus a scripted menu by setting `SCRIPT` in that menu's `.MNU`. The menu keeps its `.CFG` commands, so what each key does is unchanged.
 
 ---
 
