@@ -54,7 +54,14 @@ func matrixTextCube(elapsed float64, options []LightbarOption, selected int, ext
 	}
 	const tw, th = 336, 152
 	parsed, _ := opentype.Parse(gobold.TTF)
-	typeface, _ := opentype.NewFace(parsed, &opentype.FaceOptions{Size: 20, DPI: 72, Hinting: font.HintingFull})
+	// The amber cube's choices are larger and white; a tinted cube keeps
+	// the size and colours its look was approved with.
+	amber := fx.tint.A == 0
+	size := 20.
+	if amber {
+		size = 23
+	}
+	typeface, _ := opentype.NewFace(parsed, &opentype.FaceOptions{Size: size, DPI: 72, Hinting: font.HintingFull})
 	defer func() { _ = typeface.Close() }()
 	tex := image.NewRGBA(image.Rect(0, 0, tw, th))
 	for i, opt := range options {
@@ -80,6 +87,7 @@ func matrixTextCube(elapsed float64, options []LightbarOption, selected int, ext
 			}
 			v := uint8(math.Round(base + (255-base)*glow))
 			// Dark orange lettering heats up as the highlight moves across it.
+			// Dark orange lettering heats up as the highlight moves across it.
 			ink := color.RGBA{
 				uint8(220 + 35*glow),
 				uint8(105 + 65*glow),
@@ -87,6 +95,18 @@ func matrixTextCube(elapsed float64, options []LightbarOption, selected int, ext
 			}
 			if i == selected {
 				ink = color.RGBA{255, uint8(225 + float64(v)*.11), uint8(175 + float64(v)*.31), 255}
+			}
+			if amber {
+				// White. An unselected choice at rest is 205, which the
+				// compositor's engraving guard (red above 205) does not
+				// pass, so it is laid on as glass and reads as a dim grey;
+				// the highlight lifts it over the guard to full strength as
+				// it crosses. The selected choice is always over it.
+				w := uint8(205 + 50*glow)
+				if i == selected {
+					w = 255
+				}
+				ink = color.RGBA{w, w, w, 255}
 			}
 			d.Src = image.NewUniform(ink)
 			d.DrawString(string(r))
@@ -181,8 +201,13 @@ func matrixTextCube(elapsed float64, options []LightbarOption, selected int, ext
 							through = .3
 						}
 						alpha := float64(sample.A) / 255 * through
+						// The amber cube's lettering is white, front and rear.
+						rearG, rearB := 1., 1.
+						if fx.tint.A != 0 {
+							rearG, rearB = .78, .52
+						}
 						if old.R < 150 {
-							img.SetNRGBA(x, y, color.NRGBA{uint8(float64(old.R)*(1-alpha) + float64(sample.R)*through), uint8(float64(old.G)*(1-alpha) + float64(sample.G)*through*.78), uint8(float64(old.B)*(1-alpha) + float64(sample.B)*through*.52), 255})
+							img.SetNRGBA(x, y, color.NRGBA{uint8(float64(old.R)*(1-alpha) + float64(sample.R)*through), uint8(float64(old.G)*(1-alpha) + float64(sample.G)*through*rearG), uint8(float64(old.B)*(1-alpha) + float64(sample.B)*through*rearB), 255})
 						}
 					}
 					continue
@@ -208,9 +233,14 @@ func matrixTextCube(elapsed float64, options []LightbarOption, selected int, ext
 				distanceToLogo := math.Hypot((px+45)/190, (py+65)/190)
 				light := math.Max(0, 1-distanceToLogo/2.7)
 				light *= .88 + .08*math.Sin(elapsed*3.1) + .04*math.Sin(elapsed*7.3)
+				// The amber cube carries more green, so it reads orange.
+				green, greenLight := .60, 48.
+				if fx.tint.A == 0 {
+					green, greenLight = .78, 60
+				}
 				c0 := color.NRGBA{
 					uint8(math.Min(255, glow*1.6+100*light)),
-					uint8(math.Min(255, glow*.60+48*light)),
+					uint8(math.Min(255, glow*green+greenLight*light)),
 					uint8(math.Min(255, glow*.16+8*light)), 255,
 				}
 				if fx.tint.A != 0 {
@@ -257,9 +287,16 @@ func matrixTextCube(elapsed float64, options []LightbarOption, selected int, ext
 							}
 						}
 						strength := float64(halo) / 255 * (.72 + .12*math.Sin(elapsed*4))
-						c0.R = uint8(math.Min(255, float64(c0.R)+105*strength))
-						c0.G = uint8(math.Min(255, float64(c0.G)+40*strength))
-						c0.B = uint8(math.Min(255, float64(c0.B)+5*strength))
+						if fx.tint.A == 0 {
+							// White lettering takes a white halo.
+							c0.R = uint8(math.Min(255, float64(c0.R)+90*strength))
+							c0.G = uint8(math.Min(255, float64(c0.G)+90*strength))
+							c0.B = uint8(math.Min(255, float64(c0.B)+90*strength))
+						} else {
+							c0.R = uint8(math.Min(255, float64(c0.R)+105*strength))
+							c0.G = uint8(math.Min(255, float64(c0.G)+40*strength))
+							c0.B = uint8(math.Min(255, float64(c0.B)+5*strength))
+						}
 					}
 					if sample.A == 0 && !onSelectedRow {
 						// A fine dark outline separates lettering from bright glass.
@@ -284,10 +321,20 @@ func matrixTextCube(elapsed float64, options []LightbarOption, selected int, ext
 							// drawn white, is the brightest thing on the face.
 							ink = .62
 						}
-						c0 = color.NRGBA{
-							uint8(math.Min(255, float64(c0.R)*(1-alpha)+float64(sample.R)*ink)),
-							uint8(math.Min(255, float64(c0.G)*(1-alpha)+float64(sample.G)*ink)),
-							uint8(math.Min(255, float64(c0.B)*(1-alpha)+float64(sample.B)*.92*ink)), 255,
+						if fx.tint.A == 0 {
+							// The amber glass shows through a letter's soft
+							// edge as an orange rim, so the edge is drawn
+							// harder and in the letter's own white.
+							hard := math.Min(1, alpha*1.7)
+							w := math.Min(255, float64(sample.R)/alpha)
+							mix := func(c uint8) uint8 { return uint8(math.Min(255, float64(c)*(1-hard)+w*hard)) }
+							c0 = color.NRGBA{mix(c0.R), mix(c0.G), mix(c0.B), 255}
+						} else {
+							c0 = color.NRGBA{
+								uint8(math.Min(255, float64(c0.R)*(1-alpha)+float64(sample.R)*ink)),
+								uint8(math.Min(255, float64(c0.G)*(1-alpha)+float64(sample.G)*ink)),
+								uint8(math.Min(255, float64(c0.B)*(1-alpha)+float64(sample.B)*.92*ink)), 255,
+							}
 						}
 					}
 				}

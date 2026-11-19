@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
-	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 	"github.com/ViSiON-3/vision-3-bbs/internal/sixel"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
@@ -136,13 +135,13 @@ type matrixScene struct {
 	previous         []int16
 	polygonPrevious  [2][]int16
 	textCubePrevious []int16
-	lastHeatFrame    int
+	scrollFrames     int // frames drawn since the scrolling line began
 	selectionChange  float64
 	selectionActive  bool
 	activation       float64
 	weldLight        float64
 	cache            map[color.NRGBA]int16
-	sources          []image.Point
+	burn             *matrixLogoBurn // the main menu's logo effects, made on first use
 	art              image.Rectangle // the picture without its black background
 	col              int
 	config           matrixEffectsConfig
@@ -337,17 +336,9 @@ func (e *MenuExecutor) newMatrixScene(width, height, col, node int) *matrixScene
 			return nil
 		}
 	} // deltas need opaque base
-	scene := &matrixScene{source: img, pal: pal, col: col, config: cfg, node: node, cache: make(map[color.NRGBA]int16), seed: rand.Float64() * 6.28, lastHeatFrame: -1}
+	scene := &matrixScene{source: img, pal: pal, col: col, config: cfg, node: node, cache: make(map[color.NRGBA]int16), seed: rand.Float64() * 6.28}
 	scene.art = matrixPictureArt(img)
 	scene.previous = scene.indices(img)
-	for y := 4; y < b.Dy(); y += 4 {
-		for x := 4; x < b.Dx()*2/3; x += 4 {
-			p := img.NRGBAAt(x, y)
-			if p.R > 150 && p.G > 55 && int(p.R) > int(p.B)*3/2 {
-				scene.sources = append(scene.sources, image.Pt(x, y))
-			}
-		}
-	}
 	return scene
 }
 func (s *matrixScene) indices(img *image.NRGBA) []int16 {
@@ -370,130 +361,20 @@ func (s *matrixScene) reset() {
 	s.previous = s.indices(s.source)
 	s.polygonPrevious = [2][]int16{}
 	s.textCubePrevious = nil
-	s.lastHeatFrame = -1
 	s.logoFrame = s.source
 }
 func (s *matrixScene) draw(t *term.Terminal, elapsed float64, options []LightbarOption, selected int, outputMode ansi.OutputMode) error {
-	heatFrame := int(elapsed * 8)
-	if s.config.Heat && heatFrame != s.lastHeatFrame {
-		s.lastHeatFrame = heatFrame
+	// The logo layer is redrawn on every frame. On a clock of its own it
+	// fell on some frames and not others, and the embers moved in uneven steps.
+	if s.config.Heat {
 		img := image.NewNRGBA(s.source.Bounds())
 		copy(img.Pix, s.source.Pix)
 		weld := image.NewNRGBA(img.Bounds())
-		s.weldLight = 0
-		scripting.HeatCanvas(img, elapsed*1.8, 0.04, true)
-		for i := 0; i < 180 && len(s.sources) > 0; i++ {
-			p := s.sources[(i*131+37)%len(s.sources)]
-			phase := float64(i)*2.399 + s.seed
-			life := math.Mod(elapsed*(0.08+float64(i%5)*0.035)+float64(i)*0.137, 1)
-			climb := 1 - math.Exp(-2.5*life)
-			x := p.X + int(math.Round(math.Sin(phase+life*6.28)*(2+8*climb)))
-			y := p.Y - int(math.Round(climb*(12+float64(i%7)*5)))
-			if !image.Pt(x, y).In(img.Bounds()) {
-				continue
-			}
-			hot := math.Pow(1-life, 1.15)
-			add := func(a uint8, b float64) uint8 { return uint8(math.Min(255, float64(a)+b)) }
-			// A hot core with a short trailing streak reads as rising ember,
-			// rather than a round, snow-like dot.
-			for dy := 0; dy <= 2; dy++ {
-				q := image.Pt(x, y+dy)
-				if !q.In(img.Bounds()) {
-					continue
-				}
-				strength := hot
-				switch dy {
-				case 1:
-					strength *= .43
-				case 2:
-					strength *= .14
-				}
-				old := img.NRGBAAt(q.X, q.Y)
-				img.SetNRGBA(q.X, q.Y, color.NRGBA{R: add(old.R, 255*strength), G: add(old.G, (105+float64(i%4)*15)*strength), B: add(old.B, 12*strength), A: 255})
-			}
+		// Heat, embers and weld bursts as the main menu's logo.
+		if s.burn == nil {
+			s.burn = newMatrixLogoBurn(s.source)
 		}
-		// A brief welding flash and its falling spatter on the finished side.
-		if img.Bounds().Dx() >= 400 && img.Bounds().Dy() >= 140 {
-			phase := math.Mod(elapsed+s.seed, 4.5)
-			if phase < 1.5 {
-				// Snap the weld torch to a silhouette edge of N, / or 3.
-				spots := []image.Point{{290, 22}, {353, 21}, {293, 139}, {400, 22}, {367, 139}, {416, 24}, {469, 48}, {414, 112}, {458, 139}}
-				target := spots[int((elapsed+s.seed)/4.5)%len(spots)]
-				lo, hi := 286, 359
-				if target.X >= 360 && target.X < 410 {
-					lo, hi = 360, 409
-				} else if target.X >= 410 {
-					lo, hi = 410, 479
-				}
-				origin := matrixLogoEdge(s.source, target, lo, hi)
-				power := 0.0
-				if phase < 0.65 {
-					power = 0.35 + 0.65*math.Abs(math.Sin(phase*24))
-					s.weldLight = power
-				}
-				for y := -7; y <= 7; y++ {
-					for x := -9; x <= 9; x++ {
-						d := math.Hypot(float64(x), float64(y)*1.3)
-						if d > 9 || power == 0 {
-							continue
-						}
-						p := origin.Add(image.Pt(x, y))
-						if !p.In(img.Bounds()) {
-							continue
-						}
-						angle := math.Atan2(float64(y), float64(x))
-						// Offset and deform each flash, avoiding a symmetric star.
-						jitter := math.Sin(float64(x*7+y*13) + math.Floor(phase*20)*3.7)
-						ray := math.Pow(math.Max(0, math.Cos(angle*3+phase*19+jitter*.35)), 14)
-						light := power * math.Max(0, 1-d/9) * math.Min(1, ray+math.Max(0, 1-d/3))
-						old := img.NRGBAAt(p.X, p.Y)
-						add := func(a uint8, b float64) uint8 { return uint8(math.Min(255, float64(a)+b)) }
-						flash := color.NRGBA{add(old.R, 205*light), add(old.G, 225*light), add(old.B, 255*light), 255}
-						img.SetNRGBA(p.X, p.Y, flash)
-						if light > .04 {
-							weld.SetNRGBA(p.X, p.Y, flash)
-						}
-					}
-				}
-				// Short crooked branches jump unpredictably from the weld pool.
-				if power > .3 {
-					tick := math.Floor(phase * 18)
-					for branch := 0; branch < 3; branch++ {
-						angle := float64(branch)*2.2 + math.Sin(tick*1.7+float64(branch))*1.4
-						x, y := float64(origin.X), float64(origin.Y)
-						for step := 0; step < 4+branch; step++ {
-							angle += .65 * math.Sin(tick*2.3+float64(branch*11+step*7))
-							x += math.Cos(angle) * 1.6
-							y += math.Sin(angle) * 1.6
-							p := image.Pt(int(math.Round(x)), int(math.Round(y)))
-							if !p.In(img.Bounds()) {
-								continue
-							}
-							strength := power * (1 - float64(step)/8)
-							old := img.NRGBAAt(p.X, p.Y)
-							c := color.NRGBA{uint8(float64(old.R)*(1-strength) + 235*strength), uint8(float64(old.G)*(1-strength) + 245*strength), uint8(float64(old.B)*(1-strength) + 255*strength), 255}
-							img.SetNRGBA(p.X, p.Y, c)
-							weld.SetNRGBA(p.X, p.Y, c)
-						}
-					}
-				}
-				for i := 0; i < 22; i++ {
-					age := phase - float64(i%4)*.10
-					if age < 0 || age > 1.3 {
-						continue
-					}
-					dx := float64(12+i%5*4) * age
-					dy := float64(i%5-2)*7*age + 22*age*age
-					p := origin.Add(image.Pt(int(dx), int(dy)))
-					if p.In(img.Bounds()) {
-						fade := math.Max(0, 1-age/1.3)
-						spark := color.NRGBA{255, uint8(70 + 150*fade), uint8(20 + 70*fade), 255}
-						img.SetNRGBA(p.X, p.Y, spark)
-						weld.SetNRGBA(p.X, p.Y, spark)
-					}
-				}
-			}
-		}
+		s.weldLight = s.burn.paint(img, weld, elapsed)
 		// An infrequent clean white "ting" on the finished 3.
 		glintPhase := math.Mod(elapsed+s.seed*2, 23)
 		if glintPhase < .8 && img.Bounds().Dx() >= 480 && img.Bounds().Dy() >= 140 {
@@ -901,9 +782,14 @@ func (s *matrixScene) centeredMatrixFrame(elapsed float64, options []LightbarOpt
 			}
 			// Transmitted light adds the glass tint without darkening the logo
 			// edge. A hard brightness cutoff here creates black moving bands.
+			// The amber cube is clearer than a tinted one.
+			glassShare := .58
+			if !tinted {
+				glassShare = .44
+			}
 			transmit := func(background, glass uint8) uint8 {
 				b, g := float64(background), float64(glass)
-				return uint8(math.Min(255, b+g*.58*(1-b/255)))
+				return uint8(math.Min(255, b+g*glassShare*(1-b/255)))
 			}
 			out := color.NRGBA{transmit(bg.R, p.R), transmit(bg.G, p.G), transmit(bg.B, p.B), 255}
 			// Keep the bright front-face engraving readable above the logo.
@@ -918,7 +804,8 @@ func (s *matrixScene) centeredMatrixFrame(elapsed float64, options []LightbarOpt
 		draw.Draw(frame, image.Rect(logoLeft, logoTop, logoLeft+s.weldFrame.Bounds().Dx(), logoTop+s.weldFrame.Bounds().Dy()), s.weldFrame, image.Point{}, draw.Over)
 	}
 	if elapsed >= fadeDuration+2.8 {
-		drawMatrixScroller(frame, elapsed-(fadeDuration+2.8), s.node, now, s.config.cubeTint())
+		s.scrollFrames++
+		drawMatrixScroller(frame, float64(s.scrollFrames)*3/42, s.node, now, s.config.cubeTint())
 	}
 	return frame
 }
