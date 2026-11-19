@@ -1,9 +1,9 @@
 # PMS theme
 
-The theme of the Pirate Mind Station board, shipped as a second example of a
-scripted theme beside `menus/vision3`. Magenta and grey graffiti: a graffiti
-picture on the main menu, every menu drawn by a script in a dashed frame,
-and an animated pause prompt. The board's name is part of its art and
+This is the theme of the Pirate Mind Station board, shipped as a second
+example of a scripted theme beside `menus/vision3`. It is magenta and grey
+graffiti: a graffiti picture on the main menu, every menu drawn by a script
+in a dashed frame, and an animated pause prompt. The board's name is part of its art and
 footers.
 
 ## Select it
@@ -43,8 +43,8 @@ terminal.
 
 ## Login matrix
 
-The login matrix is the board's, not the theme's, so selecting this theme
-does not change it. The PMS matrix (graffiti picture, pink cube, glitter,
+The login matrix belongs to the board, so selecting this theme does not
+change it. The PMS matrix (graffiti picture, pink cube, glitter,
 two tones) ships in `templates/prelogin-example-pms/`. Install it from the
 board root, with `SRC` set to this checkout:
 

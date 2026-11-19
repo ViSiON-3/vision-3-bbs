@@ -2,9 +2,7 @@
 
 A theme is one directory under `menus/` that holds everything callers see
 after they log in: screens, menus, scripts, pictures, colours and wording.
-This page covers installing one someone else made, checking it, and keeping
-yours in step with the theme ViSiON/3 ships (`menus/v3`). How the board
-selects a theme and how callers choose one are in
+How the board selects a theme and how callers choose one are in
 [Theme Selection](configuration/configuration.md#theme-selection) and
 [Callers' Own Themes](configuration/configuration.md#callers-own-themes).
 To build a theme whose menus are drawn by scripts, start with

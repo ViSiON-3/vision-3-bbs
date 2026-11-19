@@ -3,7 +3,7 @@
 The name is always styled `ViSiON/3`: lowercase i's, the other letters
 uppercase.
 
-A theme in warm gold and steel built on the ViSiON/3 logo. It is a complete
+This theme is warm gold and steel, built on the ViSiON/3 logo. It is a complete
 menu set: everything the stock `v3` theme has, plus its own scripts and
 pictures, so it needs nothing from any other directory.
 
@@ -69,9 +69,9 @@ copy leaves `menus.d/` alone.
 
 ## Not in this theme
 
-The connection check and the login matrix are the board's, not a theme's:
-the board reads them from its `prelogin/` directory, else stock's, so
-this theme holds none of them. A board that wants the ViSiON/3 matrix puts
+The connection check and the login matrix belong to the board, which reads
+them from its `prelogin/` directory, else from stock's, so this theme holds
+none of them. A board that wants the ViSiON/3 matrix puts
 its files in `prelogin/`: the logo as `prelogin/ansi/PDMATRIX.PNG` (`data/vision3-logo.png`
 scaled to 320x107 on its own palette, so it fits beside the cube), with
 `prelogin/ansi/PDMATRIX.ANS`, `prelogin/ansi/PDMATRIX.EFX`,

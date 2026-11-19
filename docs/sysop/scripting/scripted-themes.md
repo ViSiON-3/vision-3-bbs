@@ -1,10 +1,8 @@
 # Scripted Menus and Themes
 
 A theme can hand its menus to scripts, show pictures on terminals that draw
-sixel, animate them, and word the board's prompts its own way. This page
-lists each of those with the smallest example that works, walks through
-building a small theme from an empty directory, and shows where the two
-shipped scripted themes use each one. The full rules are in
+sixel, animate them, and word the board's prompts its own way. The full
+rules are in
 [VPL Scripting](scripting/vpl-scripting.md),
 [Adding a Theme](configuration/adding-a-theme.md) and
 [Menus & ACS](menus/menu-system.md).
@@ -25,8 +23,8 @@ shipped scripted themes use each one. The full rules are in
 | Show a name and a line about the theme in Konfig | `"name"` and `"description"` in `theme.json` | [Name and description](configuration/adding-a-theme.md#name-and-description) |
 | Check it | `./vision3 doctor --theme <name>` | [Checking a theme](configuration/adding-a-theme.md#checking-a-theme) |
 
-The login matrix is the board's, not a theme's. Its picture, effects and
-tones go in the board's `prelogin/` directory; see
+The login matrix belongs to the board. Its picture, effects and tones go in
+the board's `prelogin/` directory; see
 [Pre-login screens](#pre-login-screens) below.
 
 ## What the board knows about the terminal
@@ -409,15 +407,14 @@ Doctor's pre-login line then reads:
   [PASS]  pre-login  login matrix and connection check: 7 from prelogin/, the rest from menus/v3
 ```
 
-The board reads `prelogin/` on each connection; no restart. Terminals
+The board reads `prelogin/` on each connection, so no restart is needed. Terminals
 without sixel get `PDMATRIX.ANS` and the lightbar. The files and the effect
 settings are described under [Pre-login screens](configuration/adding-a-theme.md#pre-login-screens)
 and [Pre-Login Matrix](menus/menu-system.md#pre-login-matrix-screen).
 
 ## How the shipped themes use this
 
-Two scripted themes ship in `menus/`. Open their files to see each feature
-at full size.
+Two scripted themes ship in `menus/`.
 
 | Feature | ViSiON3-Sixel (`menus/vision3`) | PMS (`menus/pms`) |
 |---------|---------------------------------|-------------------|

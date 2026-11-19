@@ -1,4 +1,4 @@
-This branch is a preview to try, not a pull request.
+This branch is a preview to try.
 See [PREVIEW.md](PREVIEW.md) for what is in it and how to run it.
 
 # ViSiON/3 BBS Software

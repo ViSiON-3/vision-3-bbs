@@ -1,11 +1,10 @@
 # Preview: scripted menus, sixel pictures and two example themes
 
-## What this branch is
-
-A preview to try. It is cut from `main` at `59dd669d`. It is not a pull
-request and is not meant to be merged as it is. The pieces you want will
-come as small pull requests, in the order under
-[How it would be split](#how-it-would-be-split).
+This branch is a preview to try, cut from `main` at `59dd669d`. It is not
+meant to be merged as it is: the pieces you want will come as small pull
+requests, in the order under [How it would be split](#how-it-would-be-split).
+My board's configuration and site files are not in it, and `.github/` is
+identical to `main`'s.
 
 ## What is in it
 
@@ -55,13 +54,14 @@ The PMS main menu on SyncTERM: the graffiti picture, three columns of commands a
 
 ## Try it
 
-These are the commands I ran on a fresh clone on Linux, with Go and `jq`
-installed. They clone into your home directory, which `SRC` relies on. The `jq` line selects the ViSiON3-Sixel theme and makes the
-board listen on 127.0.0.1 only.
+These commands were run on a fresh clone on Linux, with Go and `jq`
+installed. They clone into your home directory, which `SRC` relies on. The
+`jq` line selects the ViSiON3-Sixel theme and makes the board listen on
+127.0.0.1 only.
 
 ```bash
 cd ~
-git clone -b feat/scripted-menus-sixel-preview <URL you were given> vision-3-preview
+git clone -b feat/scripted-menus-sixel-preview https://github.com/ViSiON-3/vision-3-bbs.git vision-3-preview
 cd vision-3-preview
 ./dev-setup.sh ~/v3-preview
 cd ~/v3-preview
@@ -125,8 +125,8 @@ in front of the board, it sent about 212,000 bytes a second to SyncTERM and
 | xterm 390, telnet | `ESC[?64;1;2;6;9;15;16;17;18;21;22;28c`; no answer to the audio queries | sixel off, audio off, UTF-8 |
 
 The matrix tones are sent only to a terminal that answers yes to both audio
-queries (libsndfile present, 8-bit WAV playable). Neither terminal I ran
-answers yes, so I have not heard the tones.
+queries (libsndfile present, 8-bit WAV playable). Neither terminal above
+answers yes, so the tones have not been heard from this branch.
 
 ## What a stock board lacks for the PMS theme
 
@@ -146,12 +146,7 @@ theme's two other doors, `PAUSEBAR` and `AMILC`, are in the stock
 - PMS `submenu.js`: a label that is not selected is not cut to its column width, so a long one runs into the next column (found by reading the code).
 - PMS `userlist.js` draws an 80x24 layout on a smaller terminal (found by reading the code).
 - On SyncTERM, the unselected choices on the PMS matrix cube are hard to read at the board's real size.
-- `setup.sh` runs `ssh-keygen` before it creates `configs/`, so on a fresh clone the SSH host key is not written and the board will not start. This is also on `main`; `dev-setup.sh`, used above, is not affected.
-
-## What is not in the branch
-
-- The board's own configuration and site files.
-- Changes to CI: `.github/` is identical to `main`'s.
+- `setup.sh` runs `ssh-keygen` before it creates `configs/`, so on a fresh clone the SSH host key is not written and the board will not start. This is also on `main`, where pull request #1131 fixes it; `dev-setup.sh`, used above, is not affected.
 
 ## Size
 
@@ -191,4 +186,4 @@ The PMS theme, the pre-login example sets, per-theme strings and names,
 `doctor --theme`, the test-account flag, panic recovery and the source
 engine are not yet sized or placed in this order.
 
-Tell us whatever you dislike in it.
+Tell me what you dislike in it.
