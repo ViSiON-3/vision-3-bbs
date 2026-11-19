@@ -5,6 +5,7 @@ package transfer
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/winch"
 	"github.com/gliderlabs/ssh"
 )
 
@@ -265,4 +267,58 @@ func TestExecuteZmodemReceive(t *testing.T) {
 			t.Fatalf("err = %v, want wrapped exit error", err)
 		}
 	})
+}
+
+// With the session loop owning the window channel through winch, as it does
+// on a live board, every window change during a command reaches both the
+// loop and the command's PTY (#629).
+func TestRunCommandWithPTY_sharesWindowChangesWithTheSessionLoop(t *testing.T) {
+	s := newRawSession()
+	s.hasPty = true
+	s.window = ssh.Window{Width: 80, Height: 25}
+	s.winCh = make(chan ssh.Window) // never closed, like a live session's
+	hub, loop := winch.Own(s, s.winCh)
+	defer hub.Close()
+	cmd := helperCommand(t, "ptysize")
+	done := make(chan error, 1)
+	go func() { done <- RunCommandWithPTY(nilCtx, s, cmd, 0) }()
+	s.waitForWrite(t, "READY")
+
+	for _, size := range [][2]int{{100, 30}, {120, 40}} {
+		select {
+		case s.winCh <- ssh.Window{Width: size[0], Height: size[1]}:
+		case <-time.After(helperTimeout):
+			t.Fatalf("the %dx%d change was not taken", size[0], size[1])
+		}
+		select {
+		case w := <-loop:
+			if w.Width != size[0] || w.Height != size[1] {
+				t.Errorf("session loop got %dx%d, want %dx%d", w.Width, w.Height, size[0], size[1])
+			}
+		case <-time.After(helperTimeout):
+			t.Fatalf("session loop never saw the %dx%d change made during the command", size[0], size[1])
+		}
+		// The PTY is resized on another goroutine: ask until it reports
+		// the new size.
+		want := fmt.Sprintf("size=%dx%d;", size[0], size[1])
+		deadline := time.Now().Add(helperTimeout)
+		for !strings.Contains(s.written(), want) {
+			if time.Now().After(deadline) {
+				out := s.written()
+				t.Fatalf("the command's PTY never became %dx%d; last output %q", size[0], size[1], out[max(0, len(out)-40):])
+			}
+			s.in <- []byte("k")
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	s.in <- []byte("q")
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("RunCommandWithPTY: %v", err)
+		}
+	case <-time.After(helperTimeout):
+		t.Fatal("RunCommandWithPTY did not return")
+	}
 }
