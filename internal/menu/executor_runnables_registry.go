@@ -135,6 +135,7 @@ func registerAppRunnables(registry map[string]RunnableFunc) { // Use local Runna
 	registry["IMMEDIATELOGOFF"] = runImmediateLogoffCommand
 	registry["SHOWSTATS"] = runShowStats
 	registry["SYSTEMSTATS"] = runSystemStats
+	registry["TOPTEN"] = runTopTen // Top Ten users by posts, calls, uploads or downloads (ViSiON/2 ST)
 	registry["LASTCALLERS"] = runLastCallers
 	registry["AUTHENTICATE"] = runAuthenticate
 	registry["ONELINER"] = runOneliners                              // Register new placeholder
