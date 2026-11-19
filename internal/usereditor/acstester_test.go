@@ -2,6 +2,7 @@ package usereditor
 
 import (
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -163,5 +164,37 @@ func TestACSTesterCallValues(t *testing.T) {
 	m.acsTest.local = true
 	if slices.Contains(m.acsTest.order(), acsAddr) {
 		t.Error("a local call still asks for its address")
+	}
+}
+
+// The IP field takes any length, so nothing is cut into a different
+// address: the longest IPv6 text reaches the session whole, and a zoned
+// address, even one whose address part alone fills 45 characters, is
+// refused with a message rather than cut to one that parses.
+func TestACSTesterLongIPv6(t *testing.T) {
+	m := acsTesterOver(t, 80, 25)
+	const longest = "0000:0000:0000:0000:0000:ffff:255.255.255.255" // 45
+	// #1114's address (40) was cut at 39 to another valid one, ...:192.0.2.1.
+	for _, addr := range []string{"0000:0000:0000:0000:0000:ffff:192.0.2.10", longest} {
+		m.acsTest.inputs[acsAddr].SetValue(addr)
+		s := &acs.TesterSession{}
+		if msg := m.acsTest.callValues(s); msg != "" {
+			t.Fatalf("callValues(%s): %s", addr, msg)
+		}
+		if want := netip.MustParseAddr(addr); s.Addr != want {
+			t.Errorf("address = %s, want %s", s.Addr, want)
+		}
+	}
+	for _, zoned := range []string{
+		longest + "%eth0", // 50: a cut at 45 would leave the address above
+		"fe80:0000:0000:0000:0000:0000:0a00:0001%enp0s31f6", // 49
+	} {
+		m.acsTest.inputs[acsAddr].SetValue(zoned)
+		if got := m.acsTest.inputs[acsAddr].Value(); got != zoned {
+			t.Fatalf("field holds %q, want %q", got, zoned)
+		}
+		if msg := m.acsTest.callValues(&acs.TesterSession{}); !strings.Contains(msg, "IP takes an address") {
+			t.Errorf("%s: %q", zoned, msg)
+		}
 	}
 }

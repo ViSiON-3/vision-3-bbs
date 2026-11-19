@@ -258,3 +258,78 @@ func TestShortMappedPrefixRefused(t *testing.T) {
 		t.Errorf("a /104 mapped network: %v", d)
 	}
 }
+
+// SessionTerms lists every session term as a sysop writes it; an
+// expression's lists the ones it uses as the string writes them, each once,
+// in the order they appear.
+func TestSessionTermsList(t *testing.T) {
+	if got := strings.Join(SessionTerms(), ", "); got != "L (LOCAL), A (TERMINAL), NODE, CONN, ENC, WIDTH, IP:" {
+		t.Errorf("SessionTerms() = %s", got)
+	}
+	if got := strings.Join(Parse("IP:10.0.0.0/8|S20&NODE=1|!LOCAL&!l&IP:10.0.0.0/8&terminal").SessionTerms(), " "); got != "IP:10.0.0.0/8 NODE=1 LOCAL l terminal" {
+		t.Errorf("used = %s", got)
+	}
+	if got := Parse("S20&FA").SessionTerms(); len(got) != 0 {
+		t.Errorf("no session terms: %v", got)
+	}
+}
+
+// spySession records whether a term read the session. ChatCredit doesn't
+// count: T reads it when there is a session and does without when there
+// isn't, so T is not a session term.
+type spySession struct{ read bool }
+
+func (s *spySession) RemoteAddr() net.Addr {
+	s.read = true
+	return &net.TCPAddr{IP: net.IPv4(10, 1, 2, 3), Port: 5000}
+}
+func (s *spySession) HasPTY() bool              { s.read = true; return true }
+func (s *spySession) ChatCredit() time.Duration { return 0 }
+func (s *spySession) Node() int                 { s.read = true; return 1 }
+func (s *spySession) Transport() string         { s.read = true; return TransportSSH }
+func (s *spySession) Encoding() string          { s.read = true; return EncodingUTF8 }
+func (s *spySession) Width() int                { s.read = true; return 80 }
+
+// Every term that reads the session is in sessionCodes, and no other is,
+// checked by evaluating every term and watching what it reads rather than
+// against the list itself. A new term that reads the session without being
+// listed would otherwise slip past UsesSession, SessionTerms and doctor.
+func TestSessionCodesMatchEval(t *testing.T) {
+	samples := map[string]string{
+		"FLAG": "FLAG:A", "NOTE": "NOTE:x", "TIME": "TIME:00:00/23:59", "ROLE": "ROLE:x",
+		"PERM": "PERM:users.edit", "GROUP": "GROUP:x", "IP": "IP:10.0.0.0/8", "DATE": "DATE:01-01/12-31",
+		"CONN": "CONN=ssh", "ENC": "ENC=utf8",
+	}
+	terms := []string{"SYSOP", "COSYSOP"}
+	for name, n := range termNames {
+		switch {
+		case samples[name] != "":
+			terms = append(terms, samples[name])
+		case n.form == nameCompare:
+			terms = append(terms, name+">=1")
+		case n.form == nameAlone:
+			terms = append(terms, name)
+		default:
+			t.Errorf("%s: no sample term; add one to samples", name)
+		}
+	}
+	for c := 'A'; c <= 'Z'; c++ {
+		if _, problem := parseTerm(string(c) + "1"); problem == "" {
+			terms = append(terms, string(c)+"1")
+		}
+	}
+	now := time.Date(2026, 11, 4, 22, 0, 0, 0, time.UTC)
+	u := &user.User{AccessLevel: 20, CreatedAt: now.AddDate(-1, 0, 0)}
+	for _, text := range terms {
+		term, problem := parseTerm(text)
+		if problem != "" {
+			t.Errorf("%s: %s", text, problem)
+			continue
+		}
+		spy := &spySession{}
+		Parse(text).Eval(Context{User: u, Session: spy, Now: now, Start: now, Location: time.UTC})
+		if spy.read != sessionCode(term.code) {
+			t.Errorf("%s reads the session: %v, but sessionCode(%s) = %v", text, spy.read, term.code, sessionCode(term.code))
+		}
+	}
+}

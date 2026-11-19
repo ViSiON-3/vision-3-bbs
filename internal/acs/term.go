@@ -105,14 +105,41 @@ var choices = map[string][]string{
 	"ENC":  Encodings,
 }
 
-// sessionCode reports whether a term reads the caller's session, so it
-// fails the whole string where there is none.
-func sessionCode(code string) bool {
-	switch code {
-	case "L", "A", "NODE", "CONN", "ENC", "WIDTH", "IP":
-		return true
+// sessionCodes are the terms that read the caller's session, so they fail
+// the whole string where there is none, in the order the docs list them.
+var sessionCodes = []string{"L", "A", "NODE", "CONN", "ENC", "WIDTH", "IP"}
+
+// sessionCode reports whether a term reads the caller's session.
+func sessionCode(code string) bool { return slices.Contains(sessionCodes, code) }
+
+// SessionTerms lists the session terms as a sysop may write them, a letter
+// with its readable name ("L (LOCAL)") and a name that takes a colon with
+// it ("IP:"), in the order the docs list them. Messages that name them
+// build from this.
+func SessionTerms() []string {
+	out := make([]string, len(sessionCodes))
+	for i, c := range sessionCodes {
+		out[i] = writtenCode(c)
 	}
-	return false
+	return out
+}
+
+// writtenCode is code as a sysop writes it: with its colon for a term that
+// takes one after its name (IP:), and with its readable name after a letter
+// that has one (L (LOCAL)).
+func writtenCode(code string) string {
+	for name, n := range termNames {
+		if n.code != code {
+			continue
+		}
+		switch {
+		case name != code:
+			return code + " (" + name + ")"
+		case n.form == nameColon:
+			return code + ":"
+		}
+	}
+	return code
 }
 
 // numericCodes are the terms that take a number, with what a bare number

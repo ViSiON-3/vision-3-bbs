@@ -300,7 +300,7 @@ areas, conferences, doors, door categories, menu art and QWK.
 A term that needs something the check doesn't have fails the whole string
 in the same way, whatever the other parts say:
 
-- a session term (`L`, `A`, `NODE`, `CONN`, `ENC`, `WIDTH`, `IP:`) checked
+- a session term (`L` or `LOCAL`, `A` or `TERMINAL`, `NODE`, `CONN`, `ENC`, `WIDTH`, `IP:`) checked
   without a session (see
   [Terms that need a session](#terms-that-need-a-session));
 - `AGE` for a user with no sign-up date;
@@ -358,10 +358,17 @@ each problem:
 - **WARN** (doctor exits 1): the string reads cleanly but uses a session term
   where it is checked without a session, a message area's `acs_write` for
   replies uploaded through the QWK API. Callers in a session are checked as
-  usual, but every QWK API reply to that area is refused.
+  usual, but every QWK API reply to that area is refused. An FTN network's
+  `auto_create` `acs_write` is warned about too: it is copied into each area
+  the network creates, and refuses replies there for as long as that area
+  keeps the copied rule. The
+  warning names the session terms the string uses, as the string writes them
+  (`LOCAL`, `IP:10.0.0.0/8`). Replacing them with other session terms
+  doesn't help: without a session every one of them fails, `!L` and
+  `CONN=ssh` included.
 
 ```text
-[WARN]  ACS: configs/message_areas.json  area LOCALS, acs_write "S20|!L": uses a session term (L, A, NODE, CONN, ENC, WIDTH or IP), which fails the whole string for replies uploaded through the QWK API, where there is no session
+[WARN]  ACS: configs/message_areas.json  area LOCALS, acs_write "S20|!LOCAL": uses the session term LOCAL, which fails the whole string for replies uploaded through the QWK API, where there is no session
 ```
 
 Doctor's **user sign-up dates** check lists users with no sign-up date: a

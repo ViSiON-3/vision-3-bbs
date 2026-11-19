@@ -19,6 +19,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/perm"
+	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 )
 
 // acsSource is one ACS string in the board's configuration: which file holds
@@ -30,9 +31,12 @@ type acsSource struct {
 	ACS    string
 	// Headless says where the string is checked without a caller's session
 	// ("replies uploaded through the QWK API"), "" when it always has one.
-	// There, a string with a session term (L, A, NODE, CONN, ENC, WIDTH,
-	// IP) in it fails as a whole.
+	// There, a string with a session term (acs.SessionTerms) in it fails as
+	// a whole.
 	Headless string
+	// Target narrows Headless to what this record guards ("to area
+	// LOCALS"), for the advice; "" when Headless needs no narrowing.
+	Target string
 }
 
 // acsFinding is the diagnostics for one source string, or, for a string
@@ -41,9 +45,10 @@ type acsSource struct {
 type acsFinding struct {
 	Source acsSource
 	Diags  []acs.Diagnostic
-	// NoSession is set for a valid string with a session term in it from a
-	// Headless source: it denies every caller there.
-	NoSession bool
+	// NoSession lists the session terms a valid string from a Headless
+	// source uses, as the string writes them (LOCAL, IP:10.0.0.0/8); any
+	// makes it deny every caller there.
+	NoSession []string
 	// Undefined lists the roles, groups and named flags a valid string's
 	// ROLE, GROUP and FLAG terms name that configs/roles.json doesn't
 	// define, as the terms are written (ROLE:name, GROUP:name, FLAG:name);
@@ -61,9 +66,10 @@ func (f acsFinding) failing() bool { return len(f.Diags) > 0 || len(f.Undefined)
 //
 //	command 3 ("G"), ACS "S20 FA": column 5: no operator before "FA": put & or | between terms
 func (f acsFinding) Detail() string {
-	if f.NoSession {
-		return fmt.Sprintf("%s, %s %q: uses a session term (L, A, NODE, CONN, ENC, WIDTH or IP), which fails the whole string for %s, where there is no session",
-			f.Source.Record, f.Source.Field, f.Source.ACS, f.Source.Headless)
+	if len(f.NoSession) > 0 {
+		return fmt.Sprintf("%s, %s %q: uses the session %s %s, %s the whole string for %s, where there is no session",
+			f.Source.Record, f.Source.Field, f.Source.ACS, util.Plural(len(f.NoSession), "term", "terms"), util.AndList(f.NoSession),
+			util.Plural(len(f.NoSession), "which fails", "any of which fails"), f.Source.Headless)
 	}
 	if len(f.Undefined) > 0 {
 		return fmt.Sprintf("%s, %s %q: names %s, which configs/roles.json doesn't define, so it fails for every caller",
@@ -102,6 +108,10 @@ func scanACS(root string) (findings []acsFinding, checked int) {
 			continue
 		}
 		e := acs.Parse(src.ACS)
+		var noSession []string
+		if src.Headless != "" {
+			noSession = e.SessionTerms()
+		}
 		var undefined []string
 		for _, r := range perm.Undefined(e.RoleNames(), roles) {
 			undefined = append(undefined, "ROLE:"+r)
@@ -114,8 +124,8 @@ func scanACS(root string) (findings []acsFinding, checked int) {
 		}
 		if len(undefined) > 0 {
 			findings = append(findings, acsFinding{Source: src, Undefined: undefined})
-		} else if src.Headless != "" && src.ACS != "" && e.UsesSession() {
-			findings = append(findings, acsFinding{Source: src, NoSession: true})
+		} else if len(noSession) > 0 {
+			findings = append(findings, acsFinding{Source: src, NoSession: noSession})
 		}
 	}
 	return findings, checked
@@ -225,7 +235,8 @@ func collectACSSources(root string) []acsSource {
 			rec := "area " + a.Tag
 			out = append(out,
 				acsSource{File: "configs/message_areas.json", Record: rec, Field: "acs_read", ACS: a.ACSRead},
-				acsSource{File: "configs/message_areas.json", Record: rec, Field: "acs_write", ACS: a.ACSWrite, Headless: qwkAPIReplies})
+				acsSource{File: "configs/message_areas.json", Record: rec, Field: "acs_write", ACS: a.ACSWrite,
+					Headless: qwkAPIReplies, Target: "to " + rec})
 		}
 	}
 	// File-echo areas are file areas like any other; the wizard and helper
@@ -273,7 +284,8 @@ func collectACSSources(root string) []acsSource {
 			rec := "network " + name + " auto_create"
 			out = append(out,
 				acsSource{File: "configs/ftn.json", Record: rec, Field: "acs_read", ACS: ac.ACSRead},
-				acsSource{File: "configs/ftn.json", Record: rec, Field: "acs_write", ACS: ac.ACSWrite, Headless: qwkAPIReplies})
+				acsSource{File: "configs/ftn.json", Record: rec, Field: "acs_write", ACS: ac.ACSWrite,
+					Headless: qwkAPIReplies, Target: "to the areas network " + name + " creates"})
 		}
 	}
 	// roles.json: who may mail each user group (#1036).
@@ -326,9 +338,23 @@ func checkACSStrings(root string, add func(string, doctorSeverity, string, strin
 				"This string denies every caller, sysops included. Fix it; see docs/sysop/reference/acs.md.")
 			continue
 		}
-		add("ACS: "+f.Source.File, doctorWarn, f.Detail(),
-			"Callers in a session are checked as usual, but every reply uploaded through the QWK API is refused. Take L and A out if those replies should go through; see docs/sysop/reference/acs.md.")
+		add("ACS: "+f.Source.File, doctorWarn, f.Detail(), noSessionRemedy(f))
 	}
+}
+
+// noSessionRemedy is the advice for a string that uses session terms where
+// it is checked without a session. Any session term fails the string there,
+// !L and CONN=ssh included, so swapping one for another doesn't help. It
+// reads for any Headless: it says where, not who is refused.
+func noSessionRemedy(f acsFinding) string {
+	where := f.Source.Headless
+	if f.Source.Target != "" {
+		where += " " + f.Source.Target
+	}
+	return fmt.Sprintf("Callers in a session are checked as usual, but for %s there is no session, so the string fails there for every caller. "+
+		"If it should pass there, take out %s, or replace %s with terms that don't need a session: "+
+		"every session term fails without one, !L and CONN=ssh included (the session terms are %s); see docs/sysop/reference/acs.md.",
+		where, util.AndList(f.NoSession), util.Plural(len(f.NoSession), "it", "them"), util.AndList(acs.SessionTerms()))
 }
 
 // acsLogged is the set of findings in the last scan, so each problem is
